@@ -143,7 +143,7 @@ type CutoverReadSwitchPort interface {
 }
 
 type CutoverReadVerification struct {
-	UserID            string `json:"userId"`
+	SpaceID           string `json:"spaceId"`
 	DeviceID          string `json:"deviceId"`
 	InstallationID    string `json:"installationId"`
 	ReleaseID         string `json:"releaseId"`

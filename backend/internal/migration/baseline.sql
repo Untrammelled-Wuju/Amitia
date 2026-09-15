@@ -8,107 +8,31 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
     finished_at TEXT NOT NULL DEFAULT ''
 );
 
-CREATE TABLE IF NOT EXISTS auth_users (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    username TEXT UNIQUE NOT NULL,
-    password_hash TEXT NOT NULL,
-    role TEXT DEFAULT 'admin',
-    nickname TEXT NOT NULL DEFAULT '',
-    user_label TEXT NOT NULL DEFAULT '',
-    bio TEXT NOT NULL DEFAULT '',
-    is_active INTEGER DEFAULT 1,
-    created_at TEXT DEFAULT '',
-    last_login_at TEXT
-);
-
-CREATE TABLE IF NOT EXISTS auth_sessions (
-id INTEGER PRIMARY KEY AUTOINCREMENT,
-user_id INTEGER NOT NULL,
-username TEXT NOT NULL DEFAULT '',
-role TEXT NOT NULL DEFAULT 'user',
-token_hash TEXT NOT NULL,
-device_name TEXT DEFAULT '',
-ip_address TEXT DEFAULT '',
-user_agent TEXT DEFAULT '',
-    last_active_at DATETIME,
-expires_at DATETIME,
-    created_at DATETIME,
-public_id TEXT UNIQUE,
-status TEXT NOT NULL DEFAULT 'active',
-revision INTEGER NOT NULL DEFAULT 1,
-absolute_expires_at DATETIME,
-revoked_at DATETIME,
-revoke_reason TEXT,
-last_refreshed_at DATETIME
-);
-
-CREATE TABLE IF NOT EXISTS auth_refresh_tokens (
-    token_id TEXT PRIMARY KEY,
-    session_id TEXT NOT NULL,
-    token_hash TEXT NOT NULL UNIQUE,
-    status TEXT NOT NULL DEFAULT 'active',
-    issued_at DATETIME NOT NULL,
-    expires_at DATETIME NOT NULL,
-    used_at DATETIME,
-    revoked_at DATETIME,
-    replaced_by_token_id TEXT,
-    created_at DATETIME NOT NULL DEFAULT ''
-);
-
-CREATE TABLE IF NOT EXISTS auth_login_guards (
-    guard_key TEXT NOT NULL,
-    dimension TEXT NOT NULL,
-    failure_count INTEGER NOT NULL DEFAULT 0,
-    window_started_at DATETIME NOT NULL,
-    blocked_until DATETIME,
-    updated_at DATETIME NOT NULL DEFAULT '',
-    PRIMARY KEY(guard_key, dimension)
-);
-
 CREATE TABLE IF NOT EXISTS security_audit_events (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    event_id TEXT NOT NULL UNIQUE,
-    user_id TEXT,
-    session_id TEXT,
+    event_id TEXT PRIMARY KEY,
     event_type TEXT NOT NULL,
-    outcome TEXT NOT NULL DEFAULT 'success',
     severity TEXT NOT NULL DEFAULT 'info',
-    actor_type TEXT,
-    auth_method TEXT,
-    ip_address TEXT,
-    user_agent TEXT,
-    device_name TEXT,
-    reason_code TEXT,
-    detail TEXT,
-    details_json TEXT,
-    occurred_at TEXT,
-    created_at DATETIME NOT NULL DEFAULT ''
+    outcome TEXT NOT NULL DEFAULT 'success',
+    space_id TEXT NOT NULL DEFAULT '',
+    device_id TEXT NOT NULL DEFAULT '',
+    runtime_id TEXT NOT NULL DEFAULT '',
+    session_id TEXT NOT NULL DEFAULT '',
+    principal_type TEXT NOT NULL DEFAULT '',
+    auth_method TEXT NOT NULL DEFAULT '',
+    ip_address TEXT NOT NULL DEFAULT '',
+    user_agent TEXT NOT NULL DEFAULT '',
+    reason_code TEXT NOT NULL DEFAULT '',
+    details_json TEXT NOT NULL DEFAULT '',
+    occurred_at TEXT NOT NULL DEFAULT ''
 );
-
-CREATE TABLE IF NOT EXISTS auth_recovery_codes (
-    code_id TEXT PRIMARY KEY,
-    user_id INTEGER NOT NULL,
-    code_hash TEXT NOT NULL UNIQUE,
-    status TEXT NOT NULL DEFAULT 'active',
-    created_at DATETIME NOT NULL DEFAULT '',
-    used_at DATETIME,
-    expires_at DATETIME,
-    generation INTEGER NOT NULL DEFAULT 1
-);
-
-CREATE TABLE IF NOT EXISTS auth_recovery_grants (
-    grant_id TEXT PRIMARY KEY,
-    user_id INTEGER NOT NULL,
-    grant_hash TEXT NOT NULL UNIQUE,
-    status TEXT NOT NULL DEFAULT 'active',
-    created_at DATETIME NOT NULL DEFAULT '',
-    expires_at DATETIME NOT NULL,
-    consumed_at DATETIME
-);
+CREATE INDEX IF NOT EXISTS idx_audit_space ON security_audit_events(space_id);
+CREATE INDEX IF NOT EXISTS idx_audit_device ON security_audit_events(device_id);
+CREATE INDEX IF NOT EXISTS idx_audit_type ON security_audit_events(event_type);
+CREATE INDEX IF NOT EXISTS idx_audit_time ON security_audit_events(occurred_at);
 
 CREATE TABLE IF NOT EXISTS characters (
     id TEXT PRIMARY KEY,
-    user_id TEXT NOT NULL DEFAULT 'default',
+    space_id TEXT NOT NULL DEFAULT '',
     name TEXT NOT NULL,
     avatar TEXT DEFAULT '',
     identity TEXT DEFAULT '',
@@ -156,7 +80,7 @@ CREATE TABLE IF NOT EXISTS characters (
 
 CREATE TABLE IF NOT EXISTS reminders (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id TEXT NOT NULL DEFAULT 'default',
+    space_id TEXT NOT NULL DEFAULT '',
     title TEXT DEFAULT '',
     content TEXT DEFAULT '',
     channel TEXT DEFAULT 'web',
@@ -170,11 +94,11 @@ CREATE TABLE IF NOT EXISTS reminders (
     updated_at TEXT DEFAULT ''
 );
 
-CREATE INDEX IF NOT EXISTS idx_reminders_user ON reminders(user_id, enabled, remind_at);
+CREATE INDEX IF NOT EXISTS idx_reminders_user ON reminders(space_id, enabled, remind_at);
 
 CREATE TABLE IF NOT EXISTS trigger_histories (
     id TEXT PRIMARY KEY,
-    user_id TEXT NOT NULL DEFAULT 'default',
+    space_id TEXT NOT NULL DEFAULT '',
     trigger_id TEXT DEFAULT '',
     trigger_type TEXT DEFAULT 'reminder',
     title TEXT DEFAULT '',
@@ -188,7 +112,7 @@ CREATE TABLE IF NOT EXISTS trigger_histories (
     updated_at TEXT DEFAULT ''
 );
 
-CREATE INDEX IF NOT EXISTS idx_trigger_histories_user ON trigger_histories(user_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_trigger_histories_user ON trigger_histories(space_id, created_at);
 
 CREATE TABLE IF NOT EXISTS character_templates (
     id TEXT PRIMARY KEY,
@@ -202,7 +126,7 @@ CREATE TABLE IF NOT EXISTS character_templates (
 
 CREATE TABLE IF NOT EXISTS conversations (
     id TEXT PRIMARY KEY,
-    user_id TEXT NOT NULL DEFAULT 'default',
+    space_id TEXT NOT NULL DEFAULT '',
     character_id TEXT DEFAULT '',
     title TEXT DEFAULT '',
     channel TEXT DEFAULT 'web',
@@ -353,7 +277,7 @@ CREATE TABLE IF NOT EXISTS tts_configs (
 );
 
 CREATE TABLE IF NOT EXISTS tts_cloned_voices (
-    user_id TEXT NOT NULL,
+    space_id TEXT NOT NULL,
     speaker_id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
     tts_config_id INTEGER NOT NULL DEFAULT 0,
@@ -362,7 +286,7 @@ CREATE TABLE IF NOT EXISTS tts_cloned_voices (
     created_at TEXT NOT NULL DEFAULT '',
     updated_at TEXT NOT NULL DEFAULT ''
 );
-CREATE INDEX IF NOT EXISTS idx_tts_cloned_voices_user_created ON tts_cloned_voices(user_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_tts_cloned_voices_user_created ON tts_cloned_voices(space_id, created_at);
 
 CREATE TABLE IF NOT EXISTS asr_configs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -377,7 +301,7 @@ CREATE TABLE IF NOT EXISTS asr_configs (
 );
 
 CREATE TABLE IF NOT EXISTS emotion_states (
-    user_id TEXT NOT NULL DEFAULT '',
+    space_id TEXT NOT NULL DEFAULT '',
     character_id TEXT NOT NULL DEFAULT '',
     user_affect_json TEXT NOT NULL DEFAULT '{}',
     relationship_emotion_json TEXT NOT NULL DEFAULT '{}',
@@ -385,7 +309,7 @@ CREATE TABLE IF NOT EXISTS emotion_states (
     baseline_json TEXT NOT NULL DEFAULT '{}',
     version INTEGER NOT NULL DEFAULT 0,
     updated_at DATETIME NOT NULL,
-    PRIMARY KEY (user_id, character_id)
+    PRIMARY KEY (space_id, character_id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_emotion_states_character ON emotion_states(character_id);
@@ -418,7 +342,7 @@ CREATE TABLE IF NOT EXISTS role_profiles (
 
 CREATE TABLE IF NOT EXISTS memories (
     id TEXT PRIMARY KEY,
-    user_id TEXT NOT NULL DEFAULT 'default',
+    space_id TEXT NOT NULL DEFAULT '',
     key TEXT DEFAULT '',
     value TEXT DEFAULT '',
     memory_type TEXT DEFAULT 'fact',
@@ -486,7 +410,7 @@ CREATE TABLE IF NOT EXISTS memory_events (
 
 CREATE TABLE IF NOT EXISTS memory_candidates (
     id TEXT PRIMARY KEY,
-    user_id TEXT NOT NULL DEFAULT 'default',
+    space_id TEXT NOT NULL DEFAULT '',
     key TEXT NOT NULL DEFAULT '',
     value TEXT NOT NULL DEFAULT '',
     memory_type TEXT DEFAULT 'custom',
@@ -518,7 +442,7 @@ CREATE TABLE IF NOT EXISTS memory_candidates (
     reason TEXT NOT NULL DEFAULT ''
 );
 
-CREATE INDEX IF NOT EXISTS idx_memory_candidates_user ON memory_candidates(user_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_memory_candidates_user ON memory_candidates(space_id, created_at);
 
 CREATE TABLE IF NOT EXISTS memory_derivations (
     id TEXT PRIMARY KEY,
@@ -537,7 +461,7 @@ CREATE INDEX IF NOT EXISTS idx_memory_derivations_output ON memory_derivations(o
 CREATE INDEX IF NOT EXISTS idx_memory_derivations_input ON memory_derivations(input_memory_id);
 CREATE INDEX IF NOT EXISTS idx_memory_events_operation ON memory_events(operation_id);
 
-CREATE INDEX IF NOT EXISTS idx_memories_user_character ON memories(user_id, character_id);
+CREATE INDEX IF NOT EXISTS idx_memories_user_character ON memories(space_id, character_id);
 CREATE INDEX IF NOT EXISTS idx_memories_confidence ON memories(character_id, confidence);
 CREATE INDEX IF NOT EXISTS idx_memories_verified ON memories(character_id, verified_status);
 CREATE INDEX IF NOT EXISTS idx_memories_entity ON memories(entity_id, entity_type);
@@ -555,7 +479,7 @@ CREATE TABLE IF NOT EXISTS memory_embeddings (
 
 CREATE TABLE IF NOT EXISTS episodic_memories (
     id TEXT PRIMARY KEY,
-    user_id TEXT NOT NULL DEFAULT 'default',
+    space_id TEXT NOT NULL DEFAULT '',
     character_id TEXT NOT NULL DEFAULT '',
     scene_type TEXT NOT NULL,
     title TEXT NOT NULL,
@@ -580,15 +504,15 @@ CREATE TABLE IF NOT EXISTS episodic_memories (
     archived_at TEXT
 );
 
-CREATE INDEX IF NOT EXISTS idx_episodic_user_id ON episodic_memories(user_id);
-CREATE INDEX IF NOT EXISTS idx_episodic_user_character ON episodic_memories(user_id, character_id);
-CREATE INDEX IF NOT EXISTS idx_episodic_scene_type ON episodic_memories(user_id, scene_type);
-CREATE INDEX IF NOT EXISTS idx_episodic_created ON episodic_memories(user_id, created_at);
-CREATE INDEX IF NOT EXISTS idx_episodic_retention_state ON episodic_memories(user_id, decay_state, retention_level);
+CREATE INDEX IF NOT EXISTS idx_episodic_space_id ON episodic_memories(space_id);
+CREATE INDEX IF NOT EXISTS idx_episodic_user_character ON episodic_memories(space_id, character_id);
+CREATE INDEX IF NOT EXISTS idx_episodic_scene_type ON episodic_memories(space_id, scene_type);
+CREATE INDEX IF NOT EXISTS idx_episodic_created ON episodic_memories(space_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_episodic_retention_state ON episodic_memories(space_id, decay_state, retention_level);
 
 CREATE TABLE IF NOT EXISTS user_profiles (
     id TEXT PRIMARY KEY,
-    user_id TEXT NOT NULL DEFAULT 'default',
+    space_id TEXT NOT NULL DEFAULT '',
     character_id TEXT NOT NULL DEFAULT '',
     category TEXT NOT NULL,
     attribute_name TEXT NOT NULL,
@@ -603,15 +527,15 @@ CREATE TABLE IF NOT EXISTS user_profiles (
     projection_status TEXT NOT NULL DEFAULT 'active'
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS idx_user_profiles_uid_cat_attr ON user_profiles(user_id, character_id, category, attribute_name);
-CREATE INDEX IF NOT EXISTS idx_user_profiles_user_id ON user_profiles(user_id);
-CREATE INDEX IF NOT EXISTS idx_user_profiles_confidence ON user_profiles(user_id, confidence);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_user_profiles_uid_cat_attr ON user_profiles(space_id, character_id, category, attribute_name);
+CREATE INDEX IF NOT EXISTS idx_user_profiles_space_id ON user_profiles(space_id);
+CREATE INDEX IF NOT EXISTS idx_user_profiles_confidence ON user_profiles(space_id, confidence);
 CREATE INDEX IF NOT EXISTS idx_user_profiles_source_memory ON user_profiles(source_memory_id);
-CREATE INDEX IF NOT EXISTS idx_user_profiles_projection_status ON user_profiles(user_id, character_id, projection_status);
+CREATE INDEX IF NOT EXISTS idx_user_profiles_projection_status ON user_profiles(space_id, character_id, projection_status);
 
 CREATE TABLE IF NOT EXISTS world_book (
     id TEXT PRIMARY KEY,
-    user_id TEXT NOT NULL DEFAULT 'default',
+    space_id TEXT NOT NULL DEFAULT '',
     match_type TEXT NOT NULL DEFAULT 'keyword',
     match_pattern TEXT NOT NULL DEFAULT '',
     match_scope TEXT NOT NULL DEFAULT 'full_context',
@@ -628,8 +552,8 @@ CREATE INDEX IF NOT EXISTS idx_world_book_match_type ON world_book(match_type);
 CREATE INDEX IF NOT EXISTS idx_world_book_priority ON world_book(priority);
 CREATE INDEX IF NOT EXISTS idx_world_book_character_id ON world_book(character_id);
 CREATE INDEX IF NOT EXISTS idx_world_book_character_priority ON world_book(character_id, priority);
-CREATE INDEX IF NOT EXISTS idx_world_book_user_character ON world_book(user_id, character_id);
-CREATE INDEX IF NOT EXISTS idx_world_book_user_priority ON world_book(user_id, priority);
+CREATE INDEX IF NOT EXISTS idx_world_book_user_character ON world_book(space_id, character_id);
+CREATE INDEX IF NOT EXISTS idx_world_book_user_priority ON world_book(space_id, priority);
 
 CREATE TABLE IF NOT EXISTS conversation_summaries (
     id TEXT PRIMARY KEY,
@@ -704,8 +628,8 @@ CREATE INDEX IF NOT EXISTS idx_messages_conv_ctx_role_created ON messages(conver
 CREATE INDEX IF NOT EXISTS idx_messages_request ON messages(conversation_id, role, request_id);
 CREATE INDEX IF NOT EXISTS idx_pipeline_checkpoints_conversation ON pipeline_checkpoints(conversation_id);
 CREATE INDEX IF NOT EXISTS idx_pipeline_checkpoints_updated ON pipeline_checkpoints(updated_at);
-CREATE INDEX IF NOT EXISTS idx_conversations_user_updated ON conversations(user_id, updated_at);
-CREATE INDEX IF NOT EXISTS idx_conversations_user_character ON conversations(user_id, character_id);
+CREATE INDEX IF NOT EXISTS idx_conversations_user_updated ON conversations(space_id, updated_at);
+CREATE INDEX IF NOT EXISTS idx_conversations_user_character ON conversations(space_id, character_id);
 CREATE INDEX IF NOT EXISTS idx_conversations_character ON conversations(character_id);
 CREATE INDEX IF NOT EXISTS idx_conversations_channel_peer ON conversations(channel, peer_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_conversations_channel_peer_unique ON conversations(channel, peer_id) WHERE peer_id <> '';
@@ -714,7 +638,7 @@ CREATE INDEX IF NOT EXISTS idx_conversations_character_updated ON conversations(
 
 CREATE TABLE IF NOT EXISTS retrieval_logs (
     id TEXT PRIMARY KEY,
-    user_id TEXT NOT NULL DEFAULT 'default',
+    space_id TEXT NOT NULL DEFAULT '',
     conversation_id TEXT NOT NULL DEFAULT '',
     character_id TEXT NOT NULL DEFAULT '',
     request_id TEXT NOT NULL DEFAULT '',
@@ -727,7 +651,7 @@ CREATE TABLE IF NOT EXISTS retrieval_logs (
     created_at TEXT DEFAULT ''
 );
 
-CREATE INDEX IF NOT EXISTS idx_retrieval_logs_user_created ON retrieval_logs(user_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_retrieval_logs_user_created ON retrieval_logs(space_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_retrieval_logs_conv_created ON retrieval_logs(conversation_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_retrieval_logs_request_created ON retrieval_logs(request_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_retrieval_logs_character_created ON retrieval_logs(character_id, created_at);
@@ -811,7 +735,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_action_definitions (
 
 CREATE TABLE IF NOT EXISTS desktop_pet_generation_tasks (
     id TEXT PRIMARY KEY,
-    user_id TEXT NOT NULL DEFAULT '',
+    space_id TEXT NOT NULL DEFAULT '',
     character_id TEXT NOT NULL DEFAULT '',
     model_config_id INTEGER NOT NULL DEFAULT 0,
     name TEXT NOT NULL DEFAULT '',
@@ -864,7 +788,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_generation_tasks (
     actual_output_image_count INTEGER NOT NULL DEFAULT 0
 );
 
-CREATE INDEX IF NOT EXISTS idx_dpgt_user ON desktop_pet_generation_tasks(user_id);
+CREATE INDEX IF NOT EXISTS idx_dpgt_user ON desktop_pet_generation_tasks(space_id);
 CREATE INDEX IF NOT EXISTS idx_dpgt_char ON desktop_pet_generation_tasks(character_id);
 CREATE INDEX IF NOT EXISTS idx_dpgt_status ON desktop_pet_generation_tasks(status);
 CREATE INDEX IF NOT EXISTS idx_dpgt_created ON desktop_pet_generation_tasks(created_at);
@@ -1023,7 +947,7 @@ CREATE INDEX IF NOT EXISTS idx_dpgcl_exec ON desktop_pet_generation_call_logs(ex
 CREATE TABLE IF NOT EXISTS desktop_pet_processing_tasks (
     id TEXT PRIMARY KEY,
     generation_task_id TEXT NOT NULL DEFAULT '',
-    user_id TEXT NOT NULL DEFAULT '',
+    space_id TEXT NOT NULL DEFAULT '',
     character_id TEXT NOT NULL DEFAULT '',
     processing_version INTEGER NOT NULL DEFAULT 1,
     status TEXT NOT NULL DEFAULT 'pending',
@@ -1201,7 +1125,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_dppf_attempt_frame ON desktop_pet_processed
 
 CREATE TABLE IF NOT EXISTS desktop_pet_packages (
     id TEXT PRIMARY KEY,
-    user_id TEXT NOT NULL DEFAULT '',
+    space_id TEXT NOT NULL DEFAULT '',
     character_id TEXT NOT NULL DEFAULT '',
     generation_task_id TEXT NOT NULL DEFAULT '',
     processing_task_id TEXT NOT NULL DEFAULT '',
@@ -1229,7 +1153,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_packages (
     migrated_release_id TEXT NOT NULL DEFAULT ''
 );
 
-CREATE INDEX IF NOT EXISTS idx_dppkg_user ON desktop_pet_packages(user_id);
+CREATE INDEX IF NOT EXISTS idx_dppkg_user ON desktop_pet_packages(space_id);
 CREATE INDEX IF NOT EXISTS idx_dppkg_gen ON desktop_pet_packages(generation_task_id);
 CREATE INDEX IF NOT EXISTS idx_dppkg_proc ON desktop_pet_packages(processing_task_id);
 CREATE INDEX IF NOT EXISTS idx_dppkg_status ON desktop_pet_packages(status);
@@ -1237,7 +1161,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_dppkg_proc_version ON desktop_pet_packages
 
 CREATE TABLE IF NOT EXISTS desktop_pet_installations (
     id TEXT PRIMARY KEY,
-    user_id TEXT NOT NULL DEFAULT '',
+    space_id TEXT NOT NULL DEFAULT '',
     character_id TEXT NOT NULL DEFAULT '',
     package_id TEXT NOT NULL DEFAULT '',
     package_version TEXT NOT NULL DEFAULT '',
@@ -1274,7 +1198,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_installations (
     integrity_status TEXT NOT NULL DEFAULT 'verified'
 );
 
-CREATE INDEX IF NOT EXISTS idx_dpinst_user ON desktop_pet_installations(user_id);
+CREATE INDEX IF NOT EXISTS idx_dpinst_user ON desktop_pet_installations(space_id);
 CREATE INDEX IF NOT EXISTS idx_dpinst_character ON desktop_pet_installations(character_id);
 CREATE INDEX IF NOT EXISTS idx_dpinst_package ON desktop_pet_installations(package_id);
 CREATE INDEX IF NOT EXISTS idx_dpinst_status ON desktop_pet_installations(status);
@@ -1284,7 +1208,7 @@ CREATE INDEX IF NOT EXISTS idx_dpinst_release ON desktop_pet_installations(curre
 CREATE INDEX IF NOT EXISTS idx_dpinst_lifecycle ON desktop_pet_installations(lifecycle_state);
 CREATE INDEX IF NOT EXISTS idx_dpinst_desired ON desktop_pet_installations(desired_state);
 CREATE INDEX IF NOT EXISTS idx_dpinst_device ON desktop_pet_installations(device_id);
-CREATE INDEX IF NOT EXISTS idx_dpinst_user_device_pet ON desktop_pet_installations(user_id, device_id, pet_id);
+CREATE INDEX IF NOT EXISTS idx_dpinst_user_device_pet ON desktop_pet_installations(space_id, device_id, pet_id);
 
 CREATE TABLE IF NOT EXISTS desktop_pet_runtime_settings (
     id TEXT PRIMARY KEY,
@@ -1318,7 +1242,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_dprts_installation ON desktop_pet_runtime_
 CREATE TABLE IF NOT EXISTS desktop_pet_runtime_clients (
   runtime_id TEXT PRIMARY KEY,
   device_id TEXT NOT NULL DEFAULT '',
-  user_id TEXT NOT NULL DEFAULT '',
+  space_id TEXT NOT NULL DEFAULT '',
   display_name TEXT NOT NULL DEFAULT '',
   platform TEXT NOT NULL DEFAULT '',
   arch TEXT NOT NULL DEFAULT '',
@@ -1337,7 +1261,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_runtime_clients (
 CREATE TABLE IF NOT EXISTS desktop_pet_runtime_commands (
   id TEXT PRIMARY KEY,
   runtime_id TEXT NOT NULL DEFAULT '',
-  user_id TEXT NOT NULL DEFAULT '',
+  space_id TEXT NOT NULL DEFAULT '',
   installation_id TEXT NOT NULL DEFAULT '',
   pet_instance_id TEXT NOT NULL DEFAULT '',
   name TEXT NOT NULL DEFAULT '',
@@ -1385,7 +1309,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_runtime_actual_states (
 );
 
 CREATE TABLE IF NOT EXISTS desktop_pet_behavior_contexts (
-    user_id TEXT NOT NULL DEFAULT '',
+    space_id TEXT NOT NULL DEFAULT '',
     character_id TEXT NOT NULL DEFAULT '',
     revision INTEGER NOT NULL DEFAULT 1,
     stable_state_json TEXT NOT NULL DEFAULT '{}',
@@ -1400,7 +1324,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_behavior_contexts (
     desired_state_json TEXT NOT NULL DEFAULT '{}',
     last_source_revisions_json TEXT NOT NULL DEFAULT '{}',
     updated_at TEXT NOT NULL DEFAULT '',
-    PRIMARY KEY(user_id, character_id)
+    PRIMARY KEY(space_id, character_id)
 );
 
 CREATE TABLE IF NOT EXISTS desktop_pet_behavior_inbox (
@@ -1408,7 +1332,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_behavior_inbox (
     dedup_key TEXT NOT NULL DEFAULT '',
     event_type TEXT NOT NULL DEFAULT '',
     schema_version INTEGER NOT NULL DEFAULT 0,
-    user_id TEXT NOT NULL DEFAULT '',
+    space_id TEXT NOT NULL DEFAULT '',
     character_id TEXT NOT NULL DEFAULT '',
     conversation_id TEXT NOT NULL DEFAULT '',
     interaction_id TEXT NOT NULL DEFAULT '',
@@ -1446,7 +1370,7 @@ CREATE INDEX IF NOT EXISTS idx_behavior_inbox_status_lease ON desktop_pet_behavi
 CREATE TABLE IF NOT EXISTS desktop_pet_behavior_decisions (
     decision_id TEXT PRIMARY KEY,
     event_id TEXT NOT NULL DEFAULT '',
-    user_id TEXT NOT NULL DEFAULT '',
+    space_id TEXT NOT NULL DEFAULT '',
     character_id TEXT NOT NULL DEFAULT '',
     installation_id TEXT NOT NULL DEFAULT '',
     context_revision INTEGER NOT NULL DEFAULT 0,
@@ -1473,18 +1397,18 @@ CREATE INDEX IF NOT EXISTS idx_behavior_decisions_char ON desktop_pet_behavior_d
 CREATE INDEX IF NOT EXISTS idx_behavior_decisions_event ON desktop_pet_behavior_decisions(event_id, created_at);
 
 CREATE TABLE IF NOT EXISTS desktop_pet_behavior_cooldowns (
-    user_id TEXT NOT NULL DEFAULT '',
+    space_id TEXT NOT NULL DEFAULT '',
     character_id TEXT NOT NULL DEFAULT '',
     cooldown_key TEXT NOT NULL DEFAULT '',
     until_at TEXT NOT NULL DEFAULT '',
     source_decision_id TEXT NOT NULL DEFAULT '',
     updated_at TEXT NOT NULL DEFAULT '',
-    PRIMARY KEY(user_id, character_id, cooldown_key)
+    PRIMARY KEY(space_id, character_id, cooldown_key)
 );
 
 CREATE TABLE IF NOT EXISTS desktop_pet_behavior_bindings (
     id TEXT PRIMARY KEY,
-    user_id TEXT NOT NULL DEFAULT '',
+    space_id TEXT NOT NULL DEFAULT '',
     character_id TEXT NOT NULL DEFAULT '',
     installation_id TEXT NOT NULL DEFAULT '',
     event_type TEXT NOT NULL DEFAULT '',
@@ -1499,11 +1423,11 @@ CREATE TABLE IF NOT EXISTS desktop_pet_behavior_bindings (
     updated_at TEXT DEFAULT ''
 );
 
-CREATE INDEX IF NOT EXISTS idx_behavior_bindings_user_char ON desktop_pet_behavior_bindings(user_id, character_id);
+CREATE INDEX IF NOT EXISTS idx_behavior_bindings_user_char ON desktop_pet_behavior_bindings(space_id, character_id);
 
 CREATE TABLE IF NOT EXISTS desktop_pet_identities (
     id TEXT PRIMARY KEY,
-    owner_user_id TEXT NOT NULL DEFAULT '',
+    owner_space_id TEXT NOT NULL DEFAULT '',
     source_character_id TEXT NOT NULL DEFAULT '',
     name TEXT NOT NULL DEFAULT '',
     slug TEXT NOT NULL DEFAULT '',
@@ -1514,14 +1438,14 @@ CREATE TABLE IF NOT EXISTS desktop_pet_identities (
     created_at TEXT DEFAULT '',
     updated_at TEXT DEFAULT ''
 );
-CREATE INDEX IF NOT EXISTS idx_dpident_owner ON desktop_pet_identities(owner_user_id);
+CREATE INDEX IF NOT EXISTS idx_dpident_owner ON desktop_pet_identities(owner_space_id);
 CREATE INDEX IF NOT EXISTS idx_dpident_character ON desktop_pet_identities(source_character_id);
 CREATE INDEX IF NOT EXISTS idx_dpident_slug ON desktop_pet_identities(slug);
 
 CREATE TABLE IF NOT EXISTS desktop_pet_package_releases (
     id TEXT PRIMARY KEY,
     pet_id TEXT NOT NULL DEFAULT '',
-    owner_user_id TEXT NOT NULL DEFAULT '',
+    owner_space_id TEXT NOT NULL DEFAULT '',
     version TEXT NOT NULL DEFAULT '',
     release_sequence INTEGER NOT NULL DEFAULT 0,
     schema_version INTEGER NOT NULL DEFAULT 2,
@@ -1555,7 +1479,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_package_releases (
     UNIQUE(pet_id, version)
 );
 CREATE INDEX IF NOT EXISTS idx_dprel_pet ON desktop_pet_package_releases(pet_id);
-CREATE INDEX IF NOT EXISTS idx_dprel_owner ON desktop_pet_package_releases(owner_user_id);
+CREATE INDEX IF NOT EXISTS idx_dprel_owner ON desktop_pet_package_releases(owner_space_id);
 CREATE INDEX IF NOT EXISTS idx_dprel_status ON desktop_pet_package_releases(status);
 CREATE INDEX IF NOT EXISTS idx_dprel_content_hash ON desktop_pet_package_releases(content_root_hash);
 CREATE INDEX IF NOT EXISTS idx_dprel_legacy ON desktop_pet_package_releases(legacy_package_id);
@@ -1579,7 +1503,7 @@ CREATE INDEX IF NOT EXISTS idx_dprf_release ON desktop_pet_release_files(release
 CREATE TABLE IF NOT EXISTS desktop_pet_package_operations (
     id TEXT PRIMARY KEY,
     operation_type TEXT NOT NULL DEFAULT '',
-    user_id TEXT NOT NULL DEFAULT '',
+    space_id TEXT NOT NULL DEFAULT '',
     pet_id TEXT NOT NULL DEFAULT '',
     release_id TEXT NOT NULL DEFAULT '',
     idempotency_key TEXT NOT NULL DEFAULT '',
@@ -1599,15 +1523,15 @@ CREATE TABLE IF NOT EXISTS desktop_pet_package_operations (
     started_at TEXT DEFAULT '',
     updated_at TEXT DEFAULT '',
     completed_at TEXT NOT NULL DEFAULT '',
-    UNIQUE(user_id, idempotency_key, operation_type)
+    UNIQUE(space_id, idempotency_key, operation_type)
 );
-CREATE INDEX IF NOT EXISTS idx_dppkgop_user ON desktop_pet_package_operations(user_id);
+CREATE INDEX IF NOT EXISTS idx_dppkgop_user ON desktop_pet_package_operations(space_id);
 CREATE INDEX IF NOT EXISTS idx_dppkgop_status ON desktop_pet_package_operations(status);
 CREATE INDEX IF NOT EXISTS idx_dppkgop_release ON desktop_pet_package_operations(release_id);
 
 CREATE TABLE IF NOT EXISTS desktop_pet_release_build_snapshots (
     id TEXT PRIMARY KEY,
-    user_id TEXT NOT NULL DEFAULT '',
+    space_id TEXT NOT NULL DEFAULT '',
     pet_id TEXT NOT NULL DEFAULT '',
     character_id TEXT NOT NULL DEFAULT '',
     processing_task_id TEXT NOT NULL DEFAULT '',
@@ -1642,7 +1566,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_drbs_snapshot_hash ON desktop_pet_release_b
 
 CREATE TABLE IF NOT EXISTS desktop_pet_release_build_operations (
     id TEXT PRIMARY KEY,
-    user_id TEXT NOT NULL DEFAULT '',
+    space_id TEXT NOT NULL DEFAULT '',
     pet_id TEXT NOT NULL DEFAULT '',
     snapshot_id TEXT NOT NULL DEFAULT '',
     release_id TEXT NOT NULL DEFAULT '',
@@ -1663,9 +1587,9 @@ CREATE TABLE IF NOT EXISTS desktop_pet_release_build_operations (
     started_at TEXT NOT NULL DEFAULT '',
     updated_at TEXT NOT NULL DEFAULT '',
     completed_at TEXT NOT NULL DEFAULT '',
-    UNIQUE(user_id, idempotency_key)
+    UNIQUE(space_id, idempotency_key)
 );
-CREATE INDEX IF NOT EXISTS idx_drbo_user ON desktop_pet_release_build_operations(user_id);
+CREATE INDEX IF NOT EXISTS idx_drbo_user ON desktop_pet_release_build_operations(space_id);
 CREATE INDEX IF NOT EXISTS idx_drbo_state ON desktop_pet_release_build_operations(state);
 CREATE INDEX IF NOT EXISTS idx_drbo_release ON desktop_pet_release_build_operations(release_id);
 CREATE INDEX IF NOT EXISTS idx_drbo_lease ON desktop_pet_release_build_operations(lease_expires_at);
@@ -1707,7 +1631,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_legacy_package_mappings (
     migrated_release_id TEXT NOT NULL DEFAULT '',
     migration_status TEXT NOT NULL DEFAULT 'pending',
     source_content_hash TEXT NOT NULL DEFAULT '',
-    owner_user_id TEXT NOT NULL DEFAULT '',
+    owner_space_id TEXT NOT NULL DEFAULT '',
     source_manifest_hash TEXT NOT NULL DEFAULT '',
     migration_operation_id TEXT NOT NULL DEFAULT '',
     error_message TEXT NOT NULL DEFAULT '',
@@ -1716,12 +1640,12 @@ CREATE TABLE IF NOT EXISTS desktop_pet_legacy_package_mappings (
     UNIQUE(legacy_package_id)
 );
 CREATE INDEX IF NOT EXISTS idx_dlpm_status ON desktop_pet_legacy_package_mappings(migration_status);
-CREATE UNIQUE INDEX IF NOT EXISTS uq_dlpm_owner_legacy ON desktop_pet_legacy_package_mappings(owner_user_id, legacy_package_id);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_dlpm_owner_legacy ON desktop_pet_legacy_package_mappings(owner_space_id, legacy_package_id);
 
 CREATE TABLE IF NOT EXISTS desktop_pet_legacy_package_migration_operations (
     id TEXT PRIMARY KEY,
     legacy_package_id TEXT NOT NULL DEFAULT '',
-    user_id TEXT NOT NULL DEFAULT '',
+    space_id TEXT NOT NULL DEFAULT '',
     state TEXT NOT NULL DEFAULT 'pending',
     staging_path TEXT NOT NULL DEFAULT '',
     error_code TEXT NOT NULL DEFAULT '',
@@ -1736,7 +1660,7 @@ CREATE INDEX IF NOT EXISTS idx_dlpmo_state ON desktop_pet_legacy_package_migrati
 CREATE TABLE IF NOT EXISTS desktop_pet_installation_operations (
 id TEXT PRIMARY KEY,
 operation_type TEXT NOT NULL DEFAULT '',
-user_id TEXT NOT NULL DEFAULT '',
+space_id TEXT NOT NULL DEFAULT '',
 device_id TEXT NOT NULL DEFAULT '',
 installation_id TEXT NOT NULL DEFAULT '',
 pet_id TEXT NOT NULL DEFAULT '',
@@ -1759,17 +1683,17 @@ created_at TEXT DEFAULT '',
 started_at TEXT DEFAULT '',
 updated_at TEXT DEFAULT '',
 completed_at TEXT NOT NULL DEFAULT '',
-UNIQUE(user_id, idempotency_key, operation_type)
+UNIQUE(space_id, idempotency_key, operation_type)
 );
-CREATE INDEX IF NOT EXISTS idx_dpinstop_user ON desktop_pet_installation_operations(user_id);
+CREATE INDEX IF NOT EXISTS idx_dpinstop_user ON desktop_pet_installation_operations(space_id);
 CREATE INDEX IF NOT EXISTS idx_dpinstop_installation ON desktop_pet_installation_operations(installation_id);
 CREATE INDEX IF NOT EXISTS idx_dpinstop_status ON desktop_pet_installation_operations(status);
 CREATE INDEX IF NOT EXISTS idx_dpinstop_device ON desktop_pet_installation_operations(device_id);
 CREATE INDEX IF NOT EXISTS idx_dpinstop_lease ON desktop_pet_installation_operations(lease_owner, lease_expires_at);
-CREATE UNIQUE INDEX IF NOT EXISTS idx_dpinstop_idempotency_unique ON desktop_pet_installation_operations(user_id, device_id, operation_type, idempotency_key) WHERE idempotency_key <> '';
+CREATE UNIQUE INDEX IF NOT EXISTS idx_dpinstop_idempotency_unique ON desktop_pet_installation_operations(space_id, device_id, operation_type, idempotency_key) WHERE idempotency_key <> '';
 
 CREATE TABLE IF NOT EXISTS desktop_pet_active_bindings (
-    user_id TEXT PRIMARY KEY,
+    space_id TEXT PRIMARY KEY,
     device_id TEXT NOT NULL DEFAULT '',
     installation_id TEXT NOT NULL DEFAULT '',
     pet_id TEXT NOT NULL DEFAULT '',
@@ -1784,7 +1708,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_active_bindings (
     updated_at TEXT DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_dpab_installation ON desktop_pet_active_bindings(installation_id);
-CREATE INDEX IF NOT EXISTS idx_dpab_user_device ON desktop_pet_active_bindings(user_id, device_id);
+CREATE INDEX IF NOT EXISTS idx_dpab_user_device ON desktop_pet_active_bindings(space_id, device_id);
 
 CREATE TABLE IF NOT EXISTS desktop_pet_installation_release_history (
     id TEXT PRIMARY KEY,
@@ -1848,14 +1772,14 @@ CREATE TABLE IF NOT EXISTS desktop_pet_action_revisions (
   quality_source_content_hash TEXT NOT NULL DEFAULT '',
   quality_evaluated_at TEXT NOT NULL DEFAULT '',
   quality_profile_id TEXT NOT NULL DEFAULT '',
-  created_by_user_id TEXT NOT NULL DEFAULT '',
+  created_by_space_id TEXT NOT NULL DEFAULT '',
   created_from_session_id TEXT NOT NULL DEFAULT '',
   change_summary TEXT NOT NULL DEFAULT '',
   source_summary_json TEXT NOT NULL DEFAULT '{}',
     created_at TEXT NOT NULL DEFAULT '',
     updated_at TEXT NOT NULL DEFAULT '',
   ready_at TEXT NOT NULL DEFAULT '',
-  user_id TEXT NOT NULL DEFAULT '',
+  space_id TEXT NOT NULL DEFAULT '',
   source_type TEXT NOT NULL DEFAULT '',
   content_hash TEXT NOT NULL DEFAULT '',
   content_hash_version TEXT NOT NULL DEFAULT '',
@@ -1896,7 +1820,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_action_active_revisions (
   reason TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL DEFAULT '',
     updated_at TEXT NOT NULL DEFAULT '',
-  user_id TEXT NOT NULL DEFAULT '',
+  space_id TEXT NOT NULL DEFAULT '',
   active_action_revision_id TEXT NOT NULL DEFAULT '',
   binding_revision INTEGER NOT NULL DEFAULT 0,
   bound_reason TEXT NOT NULL DEFAULT '',
@@ -1922,7 +1846,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_frame_assets (
   created_by TEXT NOT NULL DEFAULT '',
   status TEXT NOT NULL DEFAULT 'staging',
     created_at TEXT NOT NULL DEFAULT '',
-  user_id TEXT NOT NULL DEFAULT '',
+  space_id TEXT NOT NULL DEFAULT '',
   storage_key TEXT NOT NULL DEFAULT '',
   source_processing_revision_id TEXT NOT NULL DEFAULT '',
   source_processing_artifact_id TEXT NOT NULL DEFAULT ''
@@ -1965,7 +1889,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_dparf_rev_frame_id ON desktop_pet_action_re
 
 CREATE TABLE IF NOT EXISTS desktop_pet_edit_sessions (
   id TEXT PRIMARY KEY,
-  user_id TEXT NOT NULL DEFAULT '',
+  space_id TEXT NOT NULL DEFAULT '',
   character_id TEXT NOT NULL DEFAULT '',
   action_stream_id TEXT NOT NULL DEFAULT '',
   processing_task_id TEXT NOT NULL DEFAULT '',
@@ -1988,7 +1912,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_edit_sessions (
   base_binding_revision INTEGER NOT NULL DEFAULT 0
 );
 
-CREATE INDEX IF NOT EXISTS idx_des_user ON desktop_pet_edit_sessions(user_id);
+CREATE INDEX IF NOT EXISTS idx_des_user ON desktop_pet_edit_sessions(space_id);
 CREATE INDEX IF NOT EXISTS idx_des_character ON desktop_pet_edit_sessions(character_id);
 CREATE INDEX IF NOT EXISTS idx_des_task_action ON desktop_pet_edit_sessions(processing_task_id, action_key);
 CREATE INDEX IF NOT EXISTS idx_des_status ON desktop_pet_edit_sessions(status);
@@ -2059,7 +1983,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_regeneration_jobs (
   reject_reason TEXT NOT NULL DEFAULT '',
   rejected_by TEXT NOT NULL DEFAULT '',
   rejected_at TEXT NOT NULL DEFAULT '',
-  user_id TEXT NOT NULL DEFAULT '',
+  space_id TEXT NOT NULL DEFAULT '',
   action_stream_id TEXT NOT NULL DEFAULT '',
   draft_snapshot_id TEXT NOT NULL DEFAULT '',
   draft_snapshot_hash TEXT NOT NULL DEFAULT '',
@@ -2080,7 +2004,7 @@ CREATE INDEX IF NOT EXISTS idx_drj_status ON desktop_pet_regeneration_jobs(statu
 CREATE UNIQUE INDEX IF NOT EXISTS uq_drj_idempotency ON desktop_pet_regeneration_jobs(session_id, idempotency_key);
 CREATE INDEX IF NOT EXISTS idx_drj_lease ON desktop_pet_regeneration_jobs(lease_owner, lease_expires_at);
 CREATE INDEX IF NOT EXISTS idx_drj_candidate ON desktop_pet_regeneration_jobs(candidate_revision_id);
-CREATE INDEX IF NOT EXISTS idx_drj_user ON desktop_pet_regeneration_jobs(user_id);
+CREATE INDEX IF NOT EXISTS idx_drj_user ON desktop_pet_regeneration_jobs(space_id);
 CREATE INDEX IF NOT EXISTS idx_drj_execution ON desktop_pet_regeneration_jobs(execution_id);
 CREATE INDEX IF NOT EXISTS idx_drj_stage ON desktop_pet_regeneration_jobs(stage);
 
@@ -2109,7 +2033,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_edit_candidates (
   accepted_at TEXT NOT NULL DEFAULT '',
   rejected_at TEXT NOT NULL DEFAULT '',
   reject_reason TEXT NOT NULL DEFAULT '',
-  user_id TEXT NOT NULL DEFAULT '',
+  space_id TEXT NOT NULL DEFAULT '',
   action_stream_id TEXT NOT NULL DEFAULT '',
   candidate_version INTEGER NOT NULL DEFAULT 0,
   draft_snapshot_id TEXT NOT NULL DEFAULT '',
@@ -2123,7 +2047,7 @@ CREATE INDEX IF NOT EXISTS idx_dec_session_job ON desktop_pet_edit_candidates(se
 CREATE INDEX IF NOT EXISTS idx_dec_status ON desktop_pet_edit_candidates(status);
 CREATE INDEX IF NOT EXISTS idx_dec_revision ON desktop_pet_edit_candidates(candidate_revision_id);
 CREATE INDEX IF NOT EXISTS idx_dec_status_quality ON desktop_pet_edit_candidates(status, quality_status);
-CREATE INDEX IF NOT EXISTS idx_dec_user ON desktop_pet_edit_candidates(user_id);
+CREATE INDEX IF NOT EXISTS idx_dec_user ON desktop_pet_edit_candidates(space_id);
 CREATE INDEX IF NOT EXISTS idx_dec_candidate_rev ON desktop_pet_edit_candidates(candidate_revision_id);
 
 CREATE TABLE IF NOT EXISTS desktop_pet_regeneration_journals (
@@ -2166,7 +2090,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_edit_draft_snapshots (
   id TEXT PRIMARY KEY,
   session_id TEXT NOT NULL DEFAULT '',
   session_version INTEGER NOT NULL DEFAULT 0,
-  user_id TEXT NOT NULL DEFAULT '',
+  space_id TEXT NOT NULL DEFAULT '',
   character_id TEXT NOT NULL DEFAULT '',
   action_stream_id TEXT NOT NULL DEFAULT '',
   action_key TEXT NOT NULL DEFAULT '',
@@ -2213,7 +2137,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_candidate_acceptance_operations (
   id TEXT PRIMARY KEY,
   candidate_id TEXT NOT NULL DEFAULT '',
   session_id TEXT NOT NULL DEFAULT '',
-  user_id TEXT NOT NULL DEFAULT '',
+  space_id TEXT NOT NULL DEFAULT '',
   action TEXT NOT NULL DEFAULT '',
   idempotency_key TEXT NOT NULL DEFAULT '',
   status TEXT NOT NULL DEFAULT 'pending',
@@ -2232,7 +2156,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_editing_event_outbox (
   event_type TEXT NOT NULL DEFAULT '',
   aggregate_type TEXT NOT NULL DEFAULT 'editing_job',
   aggregate_id TEXT NOT NULL DEFAULT '',
-  user_id TEXT NOT NULL DEFAULT '',
+  space_id TEXT NOT NULL DEFAULT '',
   payload_json TEXT NOT NULL DEFAULT '{}',
   payload_hash TEXT NOT NULL DEFAULT '',
   status TEXT NOT NULL DEFAULT 'pending',
@@ -2245,12 +2169,12 @@ CREATE TABLE IF NOT EXISTS desktop_pet_editing_event_outbox (
 
 CREATE UNIQUE INDEX IF NOT EXISTS uq_deeo_event ON desktop_pet_editing_event_outbox(event_id);
 CREATE INDEX IF NOT EXISTS idx_deeo_status ON desktop_pet_editing_event_outbox(status, available_at);
-CREATE INDEX IF NOT EXISTS idx_deeo_user ON desktop_pet_editing_event_outbox(user_id);
+CREATE INDEX IF NOT EXISTS idx_deeo_user ON desktop_pet_editing_event_outbox(space_id);
 
 CREATE TABLE IF NOT EXISTS desktop_pet_edit_audit_logs (
   id TEXT PRIMARY KEY,
   event_type TEXT NOT NULL DEFAULT '',
-  user_id TEXT NOT NULL DEFAULT '',
+  space_id TEXT NOT NULL DEFAULT '',
   character_id TEXT NOT NULL DEFAULT '',
   action_key TEXT NOT NULL DEFAULT '',
   edit_session_id TEXT NOT NULL DEFAULT '',
@@ -2306,7 +2230,7 @@ CREATE INDEX IF NOT EXISTS idx_dpj_status ON desktop_pet_publish_journal(status)
 
 CREATE TABLE IF NOT EXISTS desktop_pet_edit_idempotency (
   id TEXT PRIMARY KEY,
-  user_id TEXT NOT NULL DEFAULT '',
+  space_id TEXT NOT NULL DEFAULT '',
   session_id TEXT NOT NULL DEFAULT '',
   idempotency_key TEXT NOT NULL DEFAULT '',
   endpoint TEXT NOT NULL DEFAULT '',
@@ -2315,7 +2239,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_edit_idempotency (
     created_at TEXT NOT NULL DEFAULT ''
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS uq_dei_user_session_key ON desktop_pet_edit_idempotency(user_id, session_id, idempotency_key);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_dei_user_session_key ON desktop_pet_edit_idempotency(space_id, session_id, idempotency_key);
 
 CREATE TABLE IF NOT EXISTS desktop_pet_processing_revisions (
   id TEXT PRIMARY KEY,
@@ -2461,7 +2385,7 @@ CREATE INDEX IF NOT EXISTS idx_dppeo_created ON desktop_pet_processing_event_out
 CREATE TABLE IF NOT EXISTS desktop_pet_processing_source_manifests (
   id TEXT PRIMARY KEY,
   schema_version INTEGER NOT NULL DEFAULT 1,
-  user_id TEXT NOT NULL DEFAULT '',
+  space_id TEXT NOT NULL DEFAULT '',
   character_id TEXT NOT NULL DEFAULT '',
   processing_task_id TEXT NOT NULL DEFAULT '',
   processing_action_id TEXT NOT NULL DEFAULT '',
@@ -2608,7 +2532,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_quality_evaluations (
   is_active INTEGER NOT NULL DEFAULT 0,
   started_at TEXT DEFAULT '',
   completed_at TEXT DEFAULT '',
-  user_id TEXT NOT NULL DEFAULT '',
+  space_id TEXT NOT NULL DEFAULT '',
   action_content_hash TEXT NOT NULL DEFAULT '',
   processing_revision_id TEXT NOT NULL DEFAULT '',
   profile_id TEXT NOT NULL DEFAULT '',
@@ -2806,7 +2730,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_reference_assets (
     subject_box TEXT NOT NULL DEFAULT '{}',
     anchor TEXT NOT NULL DEFAULT '{}',
     coordinate_space TEXT NOT NULL DEFAULT '',
-    user_id TEXT NOT NULL DEFAULT '',
+    space_id TEXT NOT NULL DEFAULT '',
     source_artifact_id TEXT NOT NULL DEFAULT '',
     storage_path TEXT NOT NULL DEFAULT '',
     status TEXT NOT NULL DEFAULT 'staging',
@@ -3019,7 +2943,7 @@ CREATE TABLE IF NOT EXISTS output_leases (
 				id TEXT PRIMARY KEY,
 				interaction_id TEXT DEFAULT '',
 				character_id TEXT DEFAULT '',
-				user_id TEXT DEFAULT '',
+				space_id TEXT DEFAULT '',
 				channel TEXT DEFAULT '',
 				owner_token TEXT DEFAULT '',
 				generation INTEGER DEFAULT 0,
@@ -3045,7 +2969,7 @@ created_at TEXT NOT NULL DEFAULT '',
 updated_at TEXT NOT NULL DEFAULT '',
 archived_at TEXT NOT NULL DEFAULT ''
 ,
-    owner_user_id TEXT NOT NULL DEFAULT '',
+    owner_space_id TEXT NOT NULL DEFAULT '',
     scope_type TEXT NOT NULL DEFAULT 'global',
     scope_id TEXT NOT NULL DEFAULT '',
     lifecycle_status TEXT NOT NULL DEFAULT 'registered',
@@ -3119,7 +3043,7 @@ run_id TEXT PRIMARY KEY,
 extension_id TEXT NOT NULL,
 extension_version TEXT NOT NULL DEFAULT '',
 skill_id TEXT NOT NULL,
-user_id TEXT NOT NULL DEFAULT '',
+space_id TEXT NOT NULL DEFAULT '',
 character_id TEXT NOT NULL DEFAULT '',
 conversation_id TEXT NOT NULL DEFAULT '',
 channel TEXT NOT NULL DEFAULT '',
@@ -3143,7 +3067,7 @@ UNIQUE(skill_id, character_id, conversation_id, idempotency_key)
 CREATE TABLE IF NOT EXISTS extension_agent_skill_metadata (
 id TEXT PRIMARY KEY,
 extension_id TEXT NOT NULL UNIQUE,
-user_id TEXT NOT NULL,
+space_id TEXT NOT NULL,
 name TEXT NOT NULL,
 description TEXT NOT NULL,
 license TEXT NOT NULL DEFAULT '',
@@ -3171,7 +3095,7 @@ enabled INTEGER NOT NULL DEFAULT 0,
 created_at TEXT NOT NULL,
 updated_at TEXT NOT NULL,
 removed_at TEXT NOT NULL DEFAULT '',
-UNIQUE(user_id, name, scope_type, scope_id)
+UNIQUE(space_id, name, scope_type, scope_id)
 );
 
 -- 来源: extension_agent_skills.go
@@ -3179,7 +3103,7 @@ CREATE TABLE IF NOT EXISTS extension_agent_skill_activations (
 id TEXT PRIMARY KEY,
 activation_id TEXT NOT NULL UNIQUE,
 extension_id TEXT NOT NULL,
-user_id TEXT NOT NULL,
+space_id TEXT NOT NULL,
 character_id TEXT NOT NULL DEFAULT '',
 conversation_id TEXT NOT NULL DEFAULT '',
 channel TEXT NOT NULL DEFAULT '',
@@ -3224,7 +3148,7 @@ UNIQUE(extension_id, resource_type, resource_id)
 -- 来源: extension_packages.go
 CREATE TABLE IF NOT EXISTS extension_package_import_sessions (
 id TEXT PRIMARY KEY,
-user_id TEXT NOT NULL,
+space_id TEXT NOT NULL,
 scope_type TEXT NOT NULL,
 scope_id TEXT NOT NULL DEFAULT '',
 format TEXT NOT NULL,
@@ -3251,7 +3175,7 @@ signature_status TEXT NOT NULL DEFAULT '',
 signer_fingerprint TEXT NOT NULL DEFAULT '',
 previous_version TEXT NOT NULL DEFAULT '',
 target_version TEXT NOT NULL DEFAULT '',
-user_id TEXT NOT NULL,
+space_id TEXT NOT NULL,
 scope_type TEXT NOT NULL,
 scope_id TEXT NOT NULL DEFAULT '',
 status TEXT NOT NULL,
@@ -3289,7 +3213,7 @@ UNIQUE(extension_id, extension_version, dependency_id)
 -- 来源: extension_packages.go
 CREATE TABLE IF NOT EXISTS extension_package_exports (
 id TEXT PRIMARY KEY,
-user_id TEXT NOT NULL,
+space_id TEXT NOT NULL,
 extension_id TEXT NOT NULL,
 file_name TEXT NOT NULL,
 mime TEXT NOT NULL,
@@ -3334,7 +3258,7 @@ UNIQUE(extension_id, scope_type, scope_id)
 -- 来源: extension_workshop.go
 CREATE TABLE IF NOT EXISTS extension_workshop_sessions (
 id TEXT PRIMARY KEY,
-user_id TEXT NOT NULL,
+space_id TEXT NOT NULL,
 character_id TEXT NOT NULL DEFAULT '',
 status TEXT NOT NULL DEFAULT 'draft',
 requirement TEXT NOT NULL,
@@ -3388,7 +3312,7 @@ UNIQUE(session_id, revision)
 CREATE TABLE IF NOT EXISTS extension_workshop_test_runs (
 id TEXT PRIMARY KEY,
 test_run_id TEXT NOT NULL UNIQUE,
-user_id TEXT NOT NULL,
+space_id TEXT NOT NULL,
 character_id TEXT NOT NULL DEFAULT '',
 session_id TEXT NOT NULL,
 revision INTEGER NOT NULL,
@@ -3441,7 +3365,7 @@ UNIQUE(extension_id, extension_version)
 -- 来源: interaction_records_create.go
 CREATE TABLE IF NOT EXISTS interaction_records (
 				id TEXT PRIMARY KEY,
-				user_id TEXT,
+				space_id TEXT,
 				character_id TEXT,
 				conversation_id TEXT,
 				channel TEXT,
@@ -3673,8 +3597,8 @@ UNIQUE(owner_type, owner_id)
 -- 来源: temporal_core.go
 CREATE TABLE IF NOT EXISTS temporal_anchors (
 id TEXT PRIMARY KEY,
-scope_type TEXT NOT NULL DEFAULT 'user',
-user_id TEXT NOT NULL DEFAULT '',
+scope_type TEXT NOT NULL DEFAULT 'space',
+space_id TEXT NOT NULL DEFAULT '',
 character_id TEXT NOT NULL DEFAULT '',
 anchor_type TEXT NOT NULL DEFAULT 'custom',
 title TEXT NOT NULL DEFAULT '',
@@ -3709,7 +3633,7 @@ updated_at_utc DATETIME NOT NULL
 CREATE TABLE IF NOT EXISTS temporal_events (
 id TEXT PRIMARY KEY,
 event_type TEXT NOT NULL,
-user_id TEXT NOT NULL DEFAULT '',
+space_id TEXT NOT NULL DEFAULT '',
 character_id TEXT NOT NULL DEFAULT '',
 anchor_id TEXT NOT NULL DEFAULT '',
 occurred_at_utc DATETIME NOT NULL,
@@ -3746,7 +3670,7 @@ CREATE INDEX IF NOT EXISTS idx_memory_temporal_local_date ON memory_temporal_met
 
 -- 来源: temporal_relationship_time.go
 CREATE TABLE IF NOT EXISTS temporal_global_presence_states (
-user_id TEXT PRIMARY KEY,
+space_id TEXT PRIMARY KEY,
 first_user_activity_at_utc TEXT NOT NULL DEFAULT '',
 last_observed_user_activity_at_utc TEXT NOT NULL DEFAULT '',
 last_committed_user_interaction_at_utc TEXT NOT NULL DEFAULT '',
@@ -3762,7 +3686,7 @@ updated_at_utc TEXT NOT NULL DEFAULT ''
 -- 来源: temporal_relationship_time.go
 CREATE TABLE IF NOT EXISTS temporal_relationship_presence_states (
 id TEXT PRIMARY KEY,
-user_id TEXT NOT NULL DEFAULT 'default',
+space_id TEXT NOT NULL DEFAULT '',
 character_id TEXT NOT NULL DEFAULT '',
 first_interaction_at_utc TEXT NOT NULL DEFAULT '',
 last_observed_user_activity_at_utc TEXT NOT NULL DEFAULT '',
@@ -3785,7 +3709,7 @@ updated_at_utc TEXT NOT NULL DEFAULT ''
 -- 来源: temporal_relationship_time.go
 CREATE TABLE IF NOT EXISTS temporal_cadence_samples (
 id TEXT PRIMARY KEY,
-user_id TEXT NOT NULL DEFAULT 'default',
+space_id TEXT NOT NULL DEFAULT '',
 character_id TEXT NOT NULL DEFAULT '',
 interaction_id TEXT NOT NULL DEFAULT '',
 previous_interaction_at_utc TEXT NOT NULL DEFAULT '',
@@ -3799,7 +3723,7 @@ created_at_utc TEXT NOT NULL DEFAULT ''
 -- 来源: temporal_relationship_time.go
 CREATE TABLE IF NOT EXISTS temporal_reunion_episodes (
 id TEXT PRIMARY KEY,
-user_id TEXT NOT NULL DEFAULT 'default',
+space_id TEXT NOT NULL DEFAULT '',
 character_id TEXT NOT NULL DEFAULT '',
 reunion_kind TEXT NOT NULL DEFAULT '',
 reunion_level TEXT NOT NULL DEFAULT '',
@@ -3829,7 +3753,7 @@ CREATE TABLE IF NOT EXISTS temporal_interaction_receipts (
 id TEXT PRIMARY KEY,
 request_id TEXT NOT NULL DEFAULT '',
 interaction_id TEXT NOT NULL DEFAULT '',
-user_id TEXT NOT NULL DEFAULT 'default',
+space_id TEXT NOT NULL DEFAULT '',
 character_id TEXT NOT NULL DEFAULT '',
 channel TEXT NOT NULL DEFAULT '',
 peer_id TEXT NOT NULL DEFAULT '',
@@ -3847,7 +3771,7 @@ CREATE TABLE IF NOT EXISTS temporal_effect_ledger (
 id TEXT PRIMARY KEY,
 effect_key TEXT NOT NULL DEFAULT '',
 effect_type TEXT NOT NULL DEFAULT '',
-user_id TEXT NOT NULL DEFAULT 'default',
+space_id TEXT NOT NULL DEFAULT '',
 character_id TEXT NOT NULL DEFAULT '',
 reunion_episode_id TEXT NOT NULL DEFAULT '',
 interaction_id TEXT NOT NULL DEFAULT '',
@@ -4286,7 +4210,7 @@ CREATE INDEX IF NOT EXISTS idx_dpqoe_status ON desktop_pet_quality_outbox_events
 CREATE TABLE IF NOT EXISTS desktop_pet_runtime_sessions (
   id TEXT DEFAULT '',
   runtime_instance_id TEXT PRIMARY KEY,
-  user_id TEXT NOT NULL DEFAULT '',
+  space_id TEXT NOT NULL DEFAULT '',
   device_id TEXT NOT NULL DEFAULT '',
   runtime_id TEXT NOT NULL DEFAULT '',
   protocol_version TEXT NOT NULL DEFAULT '',
@@ -4355,7 +4279,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_runtime_protocol_errors (
 CREATE TABLE IF NOT EXISTS desktop_pet_runtime_desired_states (
     id TEXT PRIMARY KEY,
     installation_id TEXT NOT NULL DEFAULT '',
-    user_id TEXT NOT NULL DEFAULT '',
+    space_id TEXT NOT NULL DEFAULT '',
     device_id TEXT NOT NULL DEFAULT '',
     runtime_id TEXT NOT NULL DEFAULT '',
     pet_id TEXT NOT NULL DEFAULT '',
@@ -4383,16 +4307,16 @@ CREATE TABLE IF NOT EXISTS desktop_pet_runtime_desired_states (
     UNIQUE(installation_id)
 );
 CREATE INDEX IF NOT EXISTS idx_dprds_installation ON desktop_pet_runtime_desired_states(installation_id);
-CREATE INDEX IF NOT EXISTS idx_dprds_user ON desktop_pet_runtime_desired_states(user_id);
-CREATE UNIQUE INDEX IF NOT EXISTS uq_dprds_user_device ON desktop_pet_runtime_desired_states(user_id, device_id) WHERE user_id <> '' AND device_id <> '';
+CREATE INDEX IF NOT EXISTS idx_dprds_user ON desktop_pet_runtime_desired_states(space_id);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_dprds_user_device ON desktop_pet_runtime_desired_states(space_id, device_id) WHERE space_id <> '' AND device_id <> '';
 CREATE INDEX IF NOT EXISTS idx_dprds_runtime ON desktop_pet_runtime_desired_states(runtime_id);
-CREATE INDEX IF NOT EXISTS idx_dprds_desired_revision ON desktop_pet_runtime_desired_states(user_id, device_id, desired_revision);
+CREATE INDEX IF NOT EXISTS idx_dprds_desired_revision ON desktop_pet_runtime_desired_states(space_id, device_id, desired_revision);
 
 CREATE TABLE IF NOT EXISTS desktop_pet_installation_commit_journals (
     id TEXT PRIMARY KEY,
     operation_id TEXT NOT NULL DEFAULT '',
     installation_id TEXT NOT NULL DEFAULT '',
-    user_id TEXT NOT NULL DEFAULT '',
+    space_id TEXT NOT NULL DEFAULT '',
     device_id TEXT NOT NULL DEFAULT '',
     operation_type TEXT NOT NULL DEFAULT '',
     release_id TEXT NOT NULL DEFAULT '',
@@ -4415,7 +4339,7 @@ CREATE INDEX IF NOT EXISTS idx_dpicj_state ON desktop_pet_installation_commit_jo
 CREATE TABLE IF NOT EXISTS desktop_pet_installation_switch_journals (
     id TEXT PRIMARY KEY,
     operation_id TEXT NOT NULL DEFAULT '',
-    user_id TEXT NOT NULL DEFAULT '',
+    space_id TEXT NOT NULL DEFAULT '',
     device_id TEXT NOT NULL DEFAULT '',
     old_installation_id TEXT NOT NULL DEFAULT '',
     new_installation_id TEXT NOT NULL DEFAULT '',
@@ -4432,7 +4356,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_legacy_installation_mappings (
     id TEXT PRIMARY KEY,
     legacy_installation_id TEXT NOT NULL DEFAULT '',
     new_installation_id TEXT NOT NULL DEFAULT '',
-    user_id TEXT NOT NULL DEFAULT '',
+    space_id TEXT NOT NULL DEFAULT '',
     legacy_package_id TEXT NOT NULL DEFAULT '',
     pet_id TEXT NOT NULL DEFAULT '',
     release_id TEXT NOT NULL DEFAULT '',
@@ -4445,7 +4369,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_legacy_installation_mappings (
     UNIQUE(legacy_installation_id)
 );
 CREATE INDEX IF NOT EXISTS idx_dplim_legacy ON desktop_pet_legacy_installation_mappings(legacy_installation_id);
-CREATE INDEX IF NOT EXISTS idx_dplim_user ON desktop_pet_legacy_installation_mappings(user_id);
+CREATE INDEX IF NOT EXISTS idx_dplim_user ON desktop_pet_legacy_installation_mappings(space_id);
 CREATE INDEX IF NOT EXISTS idx_dplim_status ON desktop_pet_legacy_installation_mappings(migration_status);
 
 CREATE TABLE IF NOT EXISTS desktop_pet_generation_task_plans (
@@ -4556,7 +4480,7 @@ CREATE INDEX IF NOT EXISTS idx_generation_outbox_attempt_id ON desktop_pet_gener
 
 CREATE TABLE IF NOT EXISTS desktop_pet_action_streams (
   id TEXT PRIMARY KEY,
-  user_id TEXT NOT NULL DEFAULT '',
+  space_id TEXT NOT NULL DEFAULT '',
   character_id TEXT NOT NULL DEFAULT '',
   action_key TEXT NOT NULL DEFAULT '',
   root_processing_task_id TEXT NOT NULL DEFAULT '',
@@ -4579,7 +4503,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_revision_bridge_journals (
     created_at TEXT NOT NULL DEFAULT '',
     updated_at TEXT NOT NULL DEFAULT '',
   event_id TEXT NOT NULL DEFAULT '',
-  user_id TEXT NOT NULL DEFAULT '',
+  space_id TEXT NOT NULL DEFAULT '',
   character_id TEXT NOT NULL DEFAULT '',
   action_key TEXT NOT NULL DEFAULT '',
   payload_json TEXT NOT NULL DEFAULT '',
@@ -4593,7 +4517,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_drbj_proc_rev ON desktop_pet_revision_bridg
 
 CREATE TABLE IF NOT EXISTS desktop_pet_active_action_revision_bindings (
   id TEXT PRIMARY KEY,
-  user_id TEXT NOT NULL DEFAULT '',
+  space_id TEXT NOT NULL DEFAULT '',
   character_id TEXT NOT NULL DEFAULT '',
   action_key TEXT NOT NULL DEFAULT '',
   active_action_revision_id TEXT NOT NULL DEFAULT '',
@@ -4710,7 +4634,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_dpqe_idempotency_nonempty ON desktop_pet_qu
 
 CREATE TABLE IF NOT EXISTS desktop_pet_quality_input_snapshots (
   id TEXT PRIMARY KEY,
-  user_id TEXT NOT NULL DEFAULT '',
+  space_id TEXT NOT NULL DEFAULT '',
   character_id TEXT NOT NULL DEFAULT '',
   action_stream_id TEXT NOT NULL DEFAULT '',
   action_revision_id TEXT NOT NULL DEFAULT '',
@@ -4812,7 +4736,7 @@ CREATE INDEX IF NOT EXISTS idx_dpaqbh_rev ON desktop_pet_active_quality_binding_
 
 CREATE TABLE IF NOT EXISTS desktop_pet_quality_gate_snapshots (
   id TEXT PRIMARY KEY,
-  user_id TEXT NOT NULL DEFAULT '',
+  space_id TEXT NOT NULL DEFAULT '',
   character_id TEXT NOT NULL DEFAULT '',
   processing_task_id TEXT NOT NULL DEFAULT '',
   active_revision_set_hash TEXT NOT NULL DEFAULT '',
@@ -4949,7 +4873,7 @@ CREATE INDEX IF NOT EXISTS idx_drevo_available ON desktop_pet_release_event_outb
 CREATE TABLE IF NOT EXISTS desktop_pet_release_build_request_inbox (
   id TEXT PRIMARY KEY,
   request_id TEXT NOT NULL DEFAULT '',
-  user_id TEXT NOT NULL DEFAULT '',
+  space_id TEXT NOT NULL DEFAULT '',
   idempotency_key TEXT NOT NULL DEFAULT '',
   input_hash TEXT NOT NULL DEFAULT '',
   payload_json TEXT NOT NULL DEFAULT '',
@@ -4961,7 +4885,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_release_build_request_inbox (
   last_error TEXT NOT NULL DEFAULT ''
 );
 CREATE UNIQUE INDEX IF NOT EXISTS uq_drbrbi_request_id ON desktop_pet_release_build_request_inbox(request_id);
-CREATE UNIQUE INDEX IF NOT EXISTS uq_drbrbi_idempotent ON desktop_pet_release_build_request_inbox(user_id, idempotency_key);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_drbrbi_idempotent ON desktop_pet_release_build_request_inbox(space_id, idempotency_key);
 CREATE INDEX IF NOT EXISTS idx_drbrbi_status ON desktop_pet_release_build_request_inbox(status);
 
 CREATE TABLE IF NOT EXISTS desktop_pet_import_package_snapshots (
@@ -4975,7 +4899,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_import_package_snapshots (
   binding_decision TEXT NOT NULL DEFAULT '',
   license_decision TEXT NOT NULL DEFAULT '',
   runtime_compatibility TEXT NOT NULL DEFAULT '',
-  user_id TEXT NOT NULL DEFAULT '',
+  space_id TEXT NOT NULL DEFAULT '',
   pet_id TEXT NOT NULL DEFAULT '',
   release_id TEXT NOT NULL DEFAULT '',
   operation_id TEXT NOT NULL DEFAULT '',
@@ -4990,7 +4914,7 @@ CREATE INDEX IF NOT EXISTS idx_dips_operation ON desktop_pet_import_package_snap
 CREATE INDEX IF NOT EXISTS idx_dips_status ON desktop_pet_import_package_snapshots(status);
 
 CREATE TABLE IF NOT EXISTS desktop_pet_device_active_installation_bindings (
-    user_id TEXT NOT NULL,
+    space_id TEXT NOT NULL,
     device_id TEXT NOT NULL,
     installation_id TEXT NOT NULL DEFAULT '',
     pet_id TEXT NOT NULL DEFAULT '',
@@ -5001,14 +4925,14 @@ CREATE TABLE IF NOT EXISTS desktop_pet_device_active_installation_bindings (
     bound_by TEXT NOT NULL DEFAULT '',
     created_at TEXT DEFAULT '',
     updated_at TEXT DEFAULT '',
-    PRIMARY KEY(user_id, device_id)
+    PRIMARY KEY(space_id, device_id)
 );
 CREATE INDEX IF NOT EXISTS idx_dpdainst_installation ON desktop_pet_device_active_installation_bindings(installation_id);
 CREATE INDEX IF NOT EXISTS idx_dpdainst_pet ON desktop_pet_device_active_installation_bindings(pet_id);
 
 CREATE TABLE IF NOT EXISTS desktop_pet_device_installation_binding_history (
     id TEXT PRIMARY KEY,
-    user_id TEXT NOT NULL,
+    space_id TEXT NOT NULL,
     device_id TEXT NOT NULL,
     previous_installation_id TEXT NOT NULL DEFAULT '',
     new_installation_id TEXT NOT NULL DEFAULT '',
@@ -5018,20 +4942,20 @@ CREATE TABLE IF NOT EXISTS desktop_pet_device_installation_binding_history (
     operation_id TEXT NOT NULL DEFAULT '',
     occurred_at TEXT NOT NULL DEFAULT ''
 );
-CREATE INDEX IF NOT EXISTS idx_dpbih_user_device ON desktop_pet_device_installation_binding_history(user_id, device_id);
+CREATE INDEX IF NOT EXISTS idx_dpbih_user_device ON desktop_pet_device_installation_binding_history(space_id, device_id);
 CREATE INDEX IF NOT EXISTS idx_dpbih_operation ON desktop_pet_device_installation_binding_history(operation_id);
 
 CREATE TABLE IF NOT EXISTS desktop_pet_device_desired_revision_counters (
-    user_id TEXT NOT NULL,
+    space_id TEXT NOT NULL,
     device_id TEXT NOT NULL,
     current_revision INTEGER NOT NULL DEFAULT 0,
     updated_at TEXT DEFAULT '',
-    PRIMARY KEY(user_id, device_id)
+    PRIMARY KEY(space_id, device_id)
 );
 
 CREATE TABLE IF NOT EXISTS desktop_pet_installation_runtime_projections (
     id TEXT PRIMARY KEY,
-    user_id TEXT NOT NULL,
+    space_id TEXT NOT NULL,
     device_id TEXT NOT NULL,
     runtime_id TEXT NOT NULL DEFAULT '',
     installation_id TEXT NOT NULL DEFAULT '',
@@ -5048,14 +4972,14 @@ CREATE TABLE IF NOT EXISTS desktop_pet_installation_runtime_projections (
     created_at TEXT DEFAULT '',
     updated_at TEXT DEFAULT ''
 );
-CREATE UNIQUE INDEX IF NOT EXISTS uq_drirp_user_device ON desktop_pet_installation_runtime_projections(user_id, device_id);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_drirp_user_device ON desktop_pet_installation_runtime_projections(space_id, device_id);
 CREATE INDEX IF NOT EXISTS idx_drirp_installation ON desktop_pet_installation_runtime_projections(installation_id);
 CREATE INDEX IF NOT EXISTS idx_drirp_runtime ON desktop_pet_installation_runtime_projections(runtime_id);
 
 CREATE TABLE IF NOT EXISTS desktop_pet_runtime_desired_state_outbox (
     event_id TEXT PRIMARY KEY,
     event_type TEXT NOT NULL DEFAULT 'desired_state_changed',
-    user_id TEXT NOT NULL,
+    space_id TEXT NOT NULL,
     device_id TEXT NOT NULL,
     runtime_id TEXT NOT NULL DEFAULT '',
     installation_id TEXT NOT NULL DEFAULT '',
@@ -5070,13 +4994,13 @@ CREATE TABLE IF NOT EXISTS desktop_pet_runtime_desired_state_outbox (
     created_at TEXT DEFAULT '',
     published_at TEXT NOT NULL DEFAULT ''
 );
-CREATE INDEX IF NOT EXISTS idx_drdso_user_device_status ON desktop_pet_runtime_desired_state_outbox(user_id, device_id, status);
+CREATE INDEX IF NOT EXISTS idx_drdso_user_device_status ON desktop_pet_runtime_desired_state_outbox(space_id, device_id, status);
 CREATE INDEX IF NOT EXISTS idx_drdso_available ON desktop_pet_runtime_desired_state_outbox(status, available_at);
 
 --- 来源: desktop_pet_runtime_v2_tables.go ---
 CREATE TABLE IF NOT EXISTS desktop_pet_runtime_sessions (
   id TEXT PRIMARY KEY,
-  user_id TEXT NOT NULL DEFAULT '',
+  space_id TEXT NOT NULL DEFAULT '',
   device_id TEXT NOT NULL DEFAULT '',
   runtime_id TEXT NOT NULL DEFAULT '',
   connection_generation INTEGER NOT NULL DEFAULT 0,
@@ -5096,13 +5020,13 @@ CREATE TABLE IF NOT EXISTS desktop_pet_runtime_sessions (
     created_at TEXT DEFAULT '',
     updated_at TEXT DEFAULT ''
 );
-CREATE INDEX IF NOT EXISTS idx_rtsessv2_user_device ON desktop_pet_runtime_sessions(user_id, device_id);
-CREATE INDEX IF NOT EXISTS idx_rtsessv2_user_device_runtime_status ON desktop_pet_runtime_sessions(user_id, device_id, runtime_id, status);
+CREATE INDEX IF NOT EXISTS idx_rtsessv2_user_device ON desktop_pet_runtime_sessions(space_id, device_id);
+CREATE INDEX IF NOT EXISTS idx_rtsessv2_user_device_runtime_status ON desktop_pet_runtime_sessions(space_id, device_id, runtime_id, status);
 
 --- 来源: desktop_pet_runtime_v2_tables.go ---
 CREATE TABLE IF NOT EXISTS desktop_pet_runtime_commands_v2 (
   id TEXT PRIMARY KEY,
-  user_id TEXT NOT NULL DEFAULT '',
+  space_id TEXT NOT NULL DEFAULT '',
   device_id TEXT NOT NULL DEFAULT '',
   runtime_id TEXT NOT NULL DEFAULT '',
   runtime_session_id TEXT NOT NULL DEFAULT '',
@@ -5143,17 +5067,17 @@ CREATE TABLE IF NOT EXISTS desktop_pet_runtime_commands_v2 (
   superseded_at TEXT NOT NULL DEFAULT '',
   superseded_by TEXT NOT NULL DEFAULT '',
   superseded_by_command_id TEXT NOT NULL DEFAULT '',
-  UNIQUE(user_id, device_id, idempotency_key)
+  UNIQUE(space_id, device_id, idempotency_key)
 );
-CREATE INDEX IF NOT EXISTS idx_rtcv2_user_device_type ON desktop_pet_runtime_commands_v2(user_id, device_id, command_type);
+CREATE INDEX IF NOT EXISTS idx_rtcv2_user_device_type ON desktop_pet_runtime_commands_v2(space_id, device_id, command_type);
 CREATE INDEX IF NOT EXISTS idx_rtcv2_status ON desktop_pet_runtime_commands_v2(status, inserted_at);
-CREATE INDEX IF NOT EXISTS idx_rtcv2_device_seq ON desktop_pet_runtime_commands_v2(user_id, device_id, device_sequence);
-CREATE INDEX IF NOT EXISTS idx_rtcv2_user_device_runtime_status ON desktop_pet_runtime_commands_v2(user_id, device_id, runtime_id, status);
+CREATE INDEX IF NOT EXISTS idx_rtcv2_device_seq ON desktop_pet_runtime_commands_v2(space_id, device_id, device_sequence);
+CREATE INDEX IF NOT EXISTS idx_rtcv2_user_device_runtime_status ON desktop_pet_runtime_commands_v2(space_id, device_id, runtime_id, status);
 
 --- 来源: desktop_pet_import_stagings.go ---
 CREATE TABLE IF NOT EXISTS desktop_pet_import_stagings (
   id TEXT PRIMARY KEY,
-  owner_user_id TEXT NOT NULL,
+  owner_space_id TEXT NOT NULL,
   source_filename TEXT NOT NULL DEFAULT '',
   source_type TEXT NOT NULL DEFAULT '',
   source_content_hash TEXT NOT NULL DEFAULT '',
@@ -5175,7 +5099,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_import_stagings (
   rejected_reason TEXT NOT NULL DEFAULT '',
   correlation_id TEXT NOT NULL DEFAULT ''
 );
-CREATE INDEX IF NOT EXISTS idx_dpis_owner_status ON desktop_pet_import_stagings(owner_user_id, status);
+CREATE INDEX IF NOT EXISTS idx_dpis_owner_status ON desktop_pet_import_stagings(owner_space_id, status);
 
 --- 来源: desktop_pet_migration_control.go ---
 CREATE TABLE IF NOT EXISTS desktop_pet_migration_operations (
@@ -5282,13 +5206,13 @@ CREATE INDEX IF NOT EXISTS idx_rtcr_runtime ON desktop_pet_runtime_command_resul
 
 --- 来源: desktop_pet_runtime_v2_tables.go ---
 CREATE TABLE IF NOT EXISTS desktop_pet_runtime_device_command_sequences (
-  user_id TEXT NOT NULL DEFAULT '',
+  space_id TEXT NOT NULL DEFAULT '',
   device_id TEXT NOT NULL DEFAULT '',
   sequence INTEGER NOT NULL DEFAULT 0,
   last_reserved_at TEXT NOT NULL DEFAULT '',
     inserted_at TEXT DEFAULT '',
     updated_at TEXT DEFAULT '',
-  PRIMARY KEY(user_id, device_id)
+  PRIMARY KEY(space_id, device_id)
 );
 
 --- 来源: desktop_pet_runtime_v2_tables.go ---
@@ -5312,7 +5236,7 @@ CREATE INDEX IF NOT EXISTS idx_rter_session_delivered ON desktop_pet_runtime_eve
 
 --- 来源: desktop_pet_runtime_v2_tables.go ---
 CREATE TABLE IF NOT EXISTS desktop_pet_runtime_actual_states_v2 (
-  user_id TEXT NOT NULL DEFAULT '',
+  space_id TEXT NOT NULL DEFAULT '',
   device_id TEXT NOT NULL DEFAULT '',
   runtime_id TEXT NOT NULL DEFAULT '',
   runtime_session_id TEXT NOT NULL DEFAULT '',
@@ -5337,9 +5261,9 @@ CREATE TABLE IF NOT EXISTS desktop_pet_runtime_actual_states_v2 (
   health_status TEXT NOT NULL DEFAULT '',
   last_error_code TEXT NOT NULL DEFAULT '',
     updated_at TEXT DEFAULT '',
-  PRIMARY KEY(user_id, device_id, runtime_id)
+  PRIMARY KEY(space_id, device_id, runtime_id)
 );
-CREATE INDEX IF NOT EXISTS idx_rtasv2_user_device ON desktop_pet_runtime_actual_states_v2(user_id, device_id);
+CREATE INDEX IF NOT EXISTS idx_rtasv2_user_device ON desktop_pet_runtime_actual_states_v2(space_id, device_id);
 
 --- 来源: desktop_pet_runtime_v2_tables.go ---
 CREATE TABLE IF NOT EXISTS desktop_pet_runtime_domain_event_outbox (
@@ -5361,7 +5285,7 @@ CREATE INDEX IF NOT EXISTS idx_dteo_status ON desktop_pet_runtime_domain_event_o
 --- 来源: desktop_pet_runtime_v2_tables.go ---
 CREATE TABLE IF NOT EXISTS desktop_pet_runtime_command_dedup (
   id TEXT PRIMARY KEY,
-  user_id TEXT NOT NULL DEFAULT '',
+  space_id TEXT NOT NULL DEFAULT '',
   device_id TEXT NOT NULL DEFAULT '',
   idempotency_key TEXT NOT NULL DEFAULT '',
   nak_count INTEGER NOT NULL DEFAULT 0,
@@ -5369,7 +5293,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_runtime_command_dedup (
     inserted_at TEXT DEFAULT '',
     updated_at TEXT DEFAULT ''
 );
-CREATE UNIQUE INDEX IF NOT EXISTS uq_rtcdd_user_device_idem ON desktop_pet_runtime_command_dedup(user_id, device_id, idempotency_key);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_rtcdd_user_device_idem ON desktop_pet_runtime_command_dedup(space_id, device_id, idempotency_key);
 
 --- 来源: desktop_pet_runtime_v2_tables.go ---
 CREATE TABLE IF NOT EXISTS desktop_pet_runtime_reconcile_leases (
@@ -5440,12 +5364,12 @@ CREATE TABLE IF NOT EXISTS extension_package_user_data_restore_journal (
     PRIMARY KEY (operation_id, table_name)
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS uq_dpinst_user_device_pet ON desktop_pet_installations(user_id, device_id, pet_id);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_dpinst_user_device_pet ON desktop_pet_installations(space_id, device_id, pet_id);
 
 --- 来源: desktop_session.go ---
 CREATE TABLE IF NOT EXISTS desktop_pet_local_sessions (
     id TEXT PRIMARY KEY,
-    user_id TEXT NOT NULL DEFAULT '',
+    space_id TEXT NOT NULL DEFAULT '',
     desktop_instance_id TEXT NOT NULL DEFAULT '',
     token_hash TEXT NOT NULL DEFAULT '',
     status TEXT NOT NULL DEFAULT 'active',
@@ -5455,12 +5379,12 @@ CREATE TABLE IF NOT EXISTS desktop_pet_local_sessions (
     revoked_at DATETIME
 );
 CREATE INDEX IF NOT EXISTS idx_dpls_token ON desktop_pet_local_sessions(token_hash, status);
-CREATE INDEX IF NOT EXISTS idx_dpls_user ON desktop_pet_local_sessions(user_id, status);
+CREATE INDEX IF NOT EXISTS idx_dpls_user ON desktop_pet_local_sessions(space_id, status);
 
 CREATE TABLE IF NOT EXISTS desktop_pet_runtime_bootstrap_tickets (
     id TEXT PRIMARY KEY,
     ticket_hash TEXT UNIQUE NOT NULL,
-    user_id TEXT NOT NULL DEFAULT '',
+    space_id TEXT NOT NULL DEFAULT '',
     device_id TEXT NOT NULL DEFAULT '',
     runtime_id TEXT NOT NULL DEFAULT '',
     status TEXT NOT NULL DEFAULT 'active',
@@ -5471,7 +5395,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_runtime_bootstrap_tickets (
     created_at TEXT NOT NULL DEFAULT '',
     updated_at TEXT NOT NULL DEFAULT ''
 );
-CREATE INDEX IF NOT EXISTS idx_bt_user ON desktop_pet_runtime_bootstrap_tickets(user_id, status);
+CREATE INDEX IF NOT EXISTS idx_bt_user ON desktop_pet_runtime_bootstrap_tickets(space_id, status);
 CREATE INDEX IF NOT EXISTS idx_bt_device ON desktop_pet_runtime_bootstrap_tickets(device_id);
 CREATE INDEX IF NOT EXISTS idx_bt_status ON desktop_pet_runtime_bootstrap_tickets(status);
 CREATE INDEX IF NOT EXISTS idx_dprbt_runtime ON desktop_pet_runtime_bootstrap_tickets(runtime_id);
@@ -5492,7 +5416,7 @@ CREATE INDEX IF NOT EXISTS idx_dptrj_stage ON desktop_pet_token_rotation_journal
 
 CREATE TABLE IF NOT EXISTS desktop_pet_devices (
     id TEXT PRIMARY KEY,
-    user_id TEXT NOT NULL,
+    space_id TEXT NOT NULL,
     device_id TEXT NOT NULL,
     desktop_instance_id TEXT NOT NULL,
     platform TEXT NOT NULL DEFAULT '',
@@ -5501,9 +5425,9 @@ CREATE TABLE IF NOT EXISTS desktop_pet_devices (
     first_seen_at TEXT NOT NULL,
     last_seen_at TEXT NOT NULL,
     revoked_at TEXT NOT NULL DEFAULT '',
-    UNIQUE(user_id, device_id)
+    UNIQUE(space_id, device_id)
 );
-CREATE UNIQUE INDEX IF NOT EXISTS idx_dpd_user_device ON desktop_pet_devices(user_id, device_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_dpd_user_device ON desktop_pet_devices(space_id, device_id);
 CREATE INDEX IF NOT EXISTS idx_dpd_status ON desktop_pet_devices(status);
 
 CREATE TABLE IF NOT EXISTS workspace_mounts (
@@ -5586,7 +5510,7 @@ CREATE TABLE IF NOT EXISTS production_cutover_state (
 --- 来源: device_runtime_session.go ---
 CREATE TABLE IF NOT EXISTS kernel_device_runtime_sessions (
     runtime_session_id TEXT PRIMARY KEY,
-    user_id TEXT NOT NULL,
+    space_id TEXT NOT NULL,
     device_id TEXT NOT NULL,
     runtime_id TEXT NOT NULL,
     platform TEXT NOT NULL DEFAULT '',
@@ -5607,14 +5531,14 @@ CREATE TABLE IF NOT EXISTS kernel_device_runtime_sessions (
     closed_at INTEGER NOT NULL DEFAULT 0,
     close_reason TEXT NOT NULL DEFAULT ''
 );
-CREATE INDEX IF NOT EXISTS idx_kernel_device_runtime_sessions_identity ON kernel_device_runtime_sessions(user_id, device_id, runtime_id);
+CREATE INDEX IF NOT EXISTS idx_kernel_device_runtime_sessions_identity ON kernel_device_runtime_sessions(space_id, device_id, runtime_id);
 CREATE INDEX IF NOT EXISTS idx_kernel_device_runtime_sessions_status ON kernel_device_runtime_sessions(status);
 CREATE INDEX IF NOT EXISTS idx_kernel_device_runtime_sessions_heartbeat ON kernel_device_runtime_sessions(last_heartbeat_at);
 
 --- 来源: artifact/migration.go ---
 CREATE TABLE IF NOT EXISTS artifacts (
     artifact_id TEXT PRIMARY KEY,
-    owner_user_id TEXT NOT NULL,
+    owner_space_id TEXT NOT NULL,
     workspace_id TEXT NOT NULL DEFAULT '',
     kind TEXT NOT NULL,
     blob_digest TEXT NOT NULL,
@@ -5639,7 +5563,7 @@ CREATE TABLE IF NOT EXISTS artifact_references (
     created_at DATETIME NOT NULL,
     PRIMARY KEY(artifact_id, reference_type, reference_id)
 );
-CREATE INDEX IF NOT EXISTS idx_artifacts_owner ON artifacts(owner_user_id);
+CREATE INDEX IF NOT EXISTS idx_artifacts_owner ON artifacts(owner_space_id);
 CREATE INDEX IF NOT EXISTS idx_artifacts_blob_digest ON artifacts(blob_digest);
 CREATE INDEX IF NOT EXISTS idx_artifacts_status ON artifacts(status);
 CREATE INDEX IF NOT EXISTS idx_artifacts_created_at ON artifacts(created_at);
@@ -5648,7 +5572,7 @@ CREATE INDEX IF NOT EXISTS idx_artifacts_created_at ON artifacts(created_at);
 CREATE TABLE IF NOT EXISTS sync_changes (
 	change_id TEXT PRIMARY KEY,
 	seq INTEGER NOT NULL,
-	user_id TEXT NOT NULL,
+	space_id TEXT NOT NULL,
 	scope TEXT NOT NULL DEFAULT 'device',
 	entity_type TEXT NOT NULL,
 	entity_id TEXT NOT NULL,
@@ -5661,29 +5585,29 @@ CREATE TABLE IF NOT EXISTS sync_changes (
 	created_at DATETIME NOT NULL
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_sync_changes_seq ON sync_changes(seq);
-CREATE UNIQUE INDEX IF NOT EXISTS idx_sync_changes_user_scope_mutation ON sync_changes(user_id, scope, mutation_id);
-CREATE INDEX IF NOT EXISTS idx_sync_changes_user ON sync_changes(user_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_sync_changes_user_scope_mutation ON sync_changes(space_id, scope, mutation_id);
+CREATE INDEX IF NOT EXISTS idx_sync_changes_user ON sync_changes(space_id);
 CREATE INDEX IF NOT EXISTS idx_sync_changes_scope ON sync_changes(scope);
 CREATE INDEX IF NOT EXISTS idx_sync_changes_entity ON sync_changes(entity_type, entity_id);
 CREATE INDEX IF NOT EXISTS idx_sync_changes_origin ON sync_changes(origin_device);
 CREATE TABLE IF NOT EXISTS sync_cursors (
     device_id TEXT NOT NULL,
-    user_id TEXT NOT NULL,
+    space_id TEXT NOT NULL,
     scope TEXT NOT NULL DEFAULT 'device',
     last_applied INTEGER NOT NULL DEFAULT 0,
     last_pushed INTEGER NOT NULL DEFAULT 0,
     updated_at DATETIME NOT NULL,
-    PRIMARY KEY (user_id, scope, device_id)
+    PRIMARY KEY (space_id, scope, device_id)
 );
-CREATE INDEX IF NOT EXISTS idx_sync_cursors_user ON sync_cursors(user_id);
+CREATE INDEX IF NOT EXISTS idx_sync_cursors_user ON sync_cursors(space_id);
 
 CREATE TABLE IF NOT EXISTS sync_mutation_claims (
-    user_id TEXT NOT NULL,
+    space_id TEXT NOT NULL,
     scope TEXT NOT NULL DEFAULT 'device',
     mutation_id TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'pending',
     created_at DATETIME NOT NULL DEFAULT '',
-    PRIMARY KEY (user_id, scope, mutation_id)
+    PRIMARY KEY (space_id, scope, mutation_id)
 );
 CREATE INDEX IF NOT EXISTS idx_sync_mutation_claims_status ON sync_mutation_claims(status);
 
@@ -5740,17 +5664,17 @@ ALTER TABLE desktop_pet_runtime_actual_states_v2 ADD COLUMN window_height INTEGE
 ALTER TABLE desktop_pet_runtime_actual_states_v2 ADD COLUMN scale REAL NOT NULL DEFAULT 0;
 
 CREATE TABLE IF NOT EXISTS desktop_pet_owner_mappings (
-  cloud_user_id TEXT NOT NULL DEFAULT '',
+  cloud_space_id TEXT NOT NULL DEFAULT '',
   device_id TEXT NOT NULL DEFAULT '',
   local_owner_id TEXT NOT NULL DEFAULT '',
   created_at DATETIME NOT NULL,
   updated_at DATETIME NOT NULL,
-  PRIMARY KEY(cloud_user_id, device_id)
+  PRIMARY KEY(cloud_space_id, device_id)
 );
 CREATE INDEX IF NOT EXISTS idx_dpom_local_owner ON desktop_pet_owner_mappings(local_owner_id);
 
 CREATE TABLE IF NOT EXISTS desktop_pet_behavior_mesh_affinities (
-  cloud_user_id TEXT NOT NULL DEFAULT '',
+  cloud_space_id TEXT NOT NULL DEFAULT '',
   character_id TEXT NOT NULL DEFAULT '',
   device_id TEXT NOT NULL DEFAULT '',
   installation_id TEXT NOT NULL DEFAULT '',
@@ -5758,13 +5682,13 @@ CREATE TABLE IF NOT EXISTS desktop_pet_behavior_mesh_affinities (
   verified_at DATETIME NOT NULL,
   created_at DATETIME NOT NULL,
   updated_at DATETIME NOT NULL,
-  PRIMARY KEY(cloud_user_id, character_id)
+  PRIMARY KEY(cloud_space_id, character_id)
 );
-CREATE INDEX IF NOT EXISTS idx_dpbma_device ON desktop_pet_behavior_mesh_affinities(cloud_user_id, device_id);
+CREATE INDEX IF NOT EXISTS idx_dpbma_device ON desktop_pet_behavior_mesh_affinities(cloud_space_id, device_id);
 
 CREATE TABLE IF NOT EXISTS desktop_pet_behavior_mesh_outbox (
   event_id TEXT NOT NULL DEFAULT '',
-  cloud_user_id TEXT NOT NULL DEFAULT '',
+  cloud_space_id TEXT NOT NULL DEFAULT '',
   character_id TEXT NOT NULL DEFAULT '',
   target_device_id TEXT NOT NULL DEFAULT '',
   target_installation_id TEXT NOT NULL DEFAULT '',
@@ -5780,14 +5704,38 @@ CREATE TABLE IF NOT EXISTS desktop_pet_behavior_mesh_outbox (
   created_at DATETIME NOT NULL,
   updated_at DATETIME NOT NULL,
   delivered_at DATETIME,
-  PRIMARY KEY(cloud_user_id, event_id)
+  PRIMARY KEY(cloud_space_id, event_id)
 );
 CREATE INDEX IF NOT EXISTS idx_dpbmo_due ON desktop_pet_behavior_mesh_outbox(status, available_at);
 CREATE INDEX IF NOT EXISTS idx_dpbmo_claim ON desktop_pet_behavior_mesh_outbox(status, claim_expires_at);
 CREATE INDEX IF NOT EXISTS idx_dpbmo_expiry ON desktop_pet_behavior_mesh_outbox(status, expires_at);
-CREATE INDEX IF NOT EXISTS idx_dpbmo_character ON desktop_pet_behavior_mesh_outbox(cloud_user_id, character_id, status);
-CREATE INDEX IF NOT EXISTS idx_dpbmo_device ON desktop_pet_behavior_mesh_outbox(cloud_user_id, target_device_id, status);
+CREATE INDEX IF NOT EXISTS idx_dpbmo_character ON desktop_pet_behavior_mesh_outbox(cloud_space_id, character_id, status);
+CREATE INDEX IF NOT EXISTS idx_dpbmo_device ON desktop_pet_behavior_mesh_outbox(cloud_space_id, target_device_id, status);
 
 -- Tenant ownership indexes kept in the baseline so fresh installs and upgraded databases converge.
-CREATE INDEX IF NOT EXISTS idx_characters_user_updated ON characters(user_id, updated_at);
-CREATE INDEX IF NOT EXISTS idx_characters_user_active ON characters(user_id, is_active, is_default);
+CREATE INDEX IF NOT EXISTS idx_characters_user_updated ON characters(space_id, updated_at);
+CREATE INDEX IF NOT EXISTS idx_characters_user_active ON characters(space_id, is_active, is_default);
+
+--- 来源: conversation_workspace_bindings.go ---
+CREATE TABLE IF NOT EXISTS conversation_workspace_bindings (
+    conversation_id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL,
+    device_id TEXT NOT NULL DEFAULT '',
+    workspace_name TEXT NOT NULL DEFAULT '',
+    workspace_kind TEXT NOT NULL DEFAULT 'local',
+    root_uri TEXT NOT NULL DEFAULT '',
+    updated_at DATETIME NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_conversation_workspace_bindings_workspace ON conversation_workspace_bindings(workspace_id);
+CREATE INDEX IF NOT EXISTS idx_conversation_workspace_bindings_device ON conversation_workspace_bindings(device_id);
+
+--- 来源: sandbox_environment.go ---
+CREATE TABLE IF NOT EXISTS sandbox_environment_variables (
+    scope_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    value TEXT NOT NULL DEFAULT '',
+    created_at DATETIME NOT NULL DEFAULT '',
+    updated_at DATETIME NOT NULL DEFAULT '',
+    PRIMARY KEY (scope_id, name)
+);
+CREATE INDEX IF NOT EXISTS idx_sandbox_environment_scope ON sandbox_environment_variables(scope_id);

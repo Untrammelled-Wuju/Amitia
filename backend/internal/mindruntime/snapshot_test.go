@@ -85,7 +85,7 @@ func TestBuildRuntimeSnapshotIsStableForRepeatedInput(t *testing.T) {
 func completeSnapshotInput() RuntimeSnapshotInput {
 	now := time.Date(2026, 7, 1, 10, 30, 0, 0, time.FixedZone("CST", 8*60*60))
 	return RuntimeSnapshotInput{
-		UserID:        "user-1",
+		SpaceID:       "user-1",
 		CharacterID:   "char-1",
 		InteractionID: "interaction-1",
 		CreatedAt:     now,

@@ -1,4 +1,4 @@
-﻿package decision
+package decision
 
 type ContinuationDisposition string
 

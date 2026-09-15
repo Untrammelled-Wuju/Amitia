@@ -77,8 +77,8 @@ func TestToolSaveUsesConversationCharacterScope(t *testing.T) {
 	if err != nil {
 		t.Fatalf("save from tool: %v", err)
 	}
-	if item.UserID != "char-a" {
-		t.Fatalf("tool episodic scope = %q, want char-a", item.UserID)
+	if item.SpaceID != "char-a" {
+		t.Fatalf("tool episodic scope = %q, want char-a", item.SpaceID)
 	}
 
 	prompt := svc.ToSystemPrompt("default", "char-b")

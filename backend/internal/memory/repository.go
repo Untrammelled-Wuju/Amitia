@@ -22,7 +22,7 @@ type Repository interface {
 	Update(id string, updates map[string]interface{}) error
 	Delete(id string) error
 	DeleteAll(characterID string) error
-	Search(keyword, characterID, userID string, limit int) ([]Memory, error)
+	Search(keyword, characterID, spaceID string, limit int) ([]Memory, error)
 	SearchByKey(key, characterID string) ([]Memory, error)
 	RecordUse(id string) error
 	VectorStatus() (totalMem, embedded int64)
@@ -64,7 +64,7 @@ func NewRepository(ctx *app.AppContext) Repository {
 
 func (r *repository) List(q MemoryListQuery) ([]Memory, int64, error) {
 	query := r.db.Model(&Memory{})
-	query = applyMemoryScopeQuery(query, q.CharacterID, q.UserID)
+	query = applyMemoryScopeQuery(query, q.CharacterID, q.SpaceID)
 	if q.Source != "" {
 		query = query.Where("source = ?", q.Source)
 	}
@@ -188,9 +188,9 @@ func (r *repository) DeleteAll(characterID string) error {
 	return r.db.Where("1=1").Delete(&Memory{}).Error
 }
 
-func (r *repository) Search(keyword, characterID, userID string, limit int) ([]Memory, error) {
+func (r *repository) Search(keyword, characterID, spaceID string, limit int) ([]Memory, error) {
 	query := r.db.Where("(key LIKE ? OR value LIKE ?)", "%"+keyword+"%", "%"+keyword+"%")
-	query = applyMemoryScopeQuery(query, characterID, userID)
+	query = applyMemoryScopeQuery(query, characterID, spaceID)
 	var items []Memory
 	err := query.Order("importance DESC, confidence DESC, updated_at DESC").Limit(limit).Find(&items).Error
 	if items == nil {
@@ -272,14 +272,14 @@ func (r *repository) GetRankedByImportance(characterID string, limit int) ([]Mem
 	return items, err
 }
 
-func applyMemoryScopeQuery(query *gorm.DB, characterID, userID string) *gorm.DB {
+func applyMemoryScopeQuery(query *gorm.DB, characterID, spaceID string) *gorm.DB {
 	characterID = strings.TrimSpace(characterID)
-	userID = strings.TrimSpace(userID)
-	if userID != "" {
+	spaceID = strings.TrimSpace(spaceID)
+	if spaceID != "" {
 		if config.AppCfg != nil && strings.EqualFold(strings.TrimSpace(config.AppCfg.Security.Mode), "local_single_user") {
-			query = query.Where("(user_id = ? OR user_id = '' OR user_id IS NULL OR user_id = 'default')", userID)
+			query = query.Where("(space_id = ? OR space_id = '' OR space_id IS NULL OR space_id = 'default')", spaceID)
 		} else {
-			query = query.Where("user_id = ?", userID)
+			query = query.Where("space_id = ?", spaceID)
 		}
 	}
 	if characterID != "" {

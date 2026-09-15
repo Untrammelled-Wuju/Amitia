@@ -51,8 +51,8 @@ func goalEntity(g decision.Goal) mindruntime.ReconciliationEntity {
 		fields["lastObservationId"] = g.LastObservationID
 	}
 	refs := map[string]string{}
-	if g.UserID != "" {
-		refs["userId"] = g.UserID
+	if g.SpaceID != "" {
+		refs["spaceId"] = g.SpaceID
 	}
 	if g.CharacterID != "" {
 		refs["characterId"] = g.CharacterID
@@ -98,8 +98,8 @@ func observationEntity(o decision.Observation) mindruntime.ReconciliationEntity 
 	if o.RequestID != "" {
 		refs["requestId"] = o.RequestID
 	}
-	if o.UserID != "" {
-		refs["userId"] = o.UserID
+	if o.SpaceID != "" {
+		refs["spaceId"] = o.SpaceID
 	}
 	if o.CharacterID != "" {
 		refs["characterId"] = o.CharacterID

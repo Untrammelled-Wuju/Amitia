@@ -187,7 +187,7 @@ func ApplyBaseline(current Baseline, signals Signals) Baseline {
 }
 
 type State struct {
-	UserID              string
+	SpaceID             string
 	CharacterID         string
 	UserAffect          UserAffect
 	RelationshipEmotion RelationshipEmotion
@@ -198,7 +198,7 @@ type State struct {
 }
 
 type Record struct {
-	UserID                  string    `gorm:"column:user_id;primaryKey"`
+	SpaceID                 string    `gorm:"column:space_id;primaryKey"`
 	CharacterID             string    `gorm:"column:character_id;primaryKey"`
 	UserAffectJSON          string    `gorm:"column:user_affect_json"`
 	RelationshipEmotionJSON string    `gorm:"column:relationship_emotion_json"`

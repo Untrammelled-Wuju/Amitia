@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/artifact"
 	"github.com/u-ai/backend/internal/interaction"
+	"github.com/u-ai/backend/internal/requestidentity"
 	"gorm.io/gorm"
 )
 
@@ -98,7 +99,7 @@ func (s *service) commitAttachmentsTx(tx *gorm.DB, plan messageCommitPlan, userM
 	if len(plan.Request.Attachments) == 0 {
 		return nil
 	}
-	actor := userIDForRequest(plan.Request)
+	actor := spaceIDForRequest(plan.Request)
 	for i, input := range plan.Request.Attachments {
 		resolved, err := s.ResolveAttachment(context.Background(), actor, input)
 		if err != nil {
@@ -144,11 +145,11 @@ func relationshipTypeForRequest(req *ProcessMessageRequest) string {
 	return "user_character"
 }
 
-func userIDForRequest(req *ProcessMessageRequest) string {
-	if req != nil && strings.TrimSpace(req.UserID) != "" {
-		return req.UserID
+func spaceIDForRequest(req *ProcessMessageRequest) string {
+	if req != nil {
+		return requestidentity.NormalizeSpaceID(req.SpaceID)
 	}
-	return "default"
+	return requestidentity.CanonicalSpaceID()
 }
 
 func channelForRequest(req *ProcessMessageRequest) string {

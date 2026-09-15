@@ -257,7 +257,7 @@ func TestIdempotentExecutorDuplicate(t *testing.T) {
 	ie := NewIdempotentExecutor()
 	input := IdempotentCommitInput{
 		Kind:         IdempotentOpMessage,
-		UserID:       "u1",
+		SpaceID:      "u1",
 		CharacterID:  "c1",
 		OperationID:  "op1",
 		StateVersion: 1,
@@ -279,7 +279,7 @@ func TestIdempotentExecutorSupersededDiscard(t *testing.T) {
 	ie := NewIdempotentExecutor()
 	input := IdempotentCommitInput{
 		Kind:         IdempotentOpTool,
-		UserID:       "u1",
+		SpaceID:      "u1",
 		CharacterID:  "c1",
 		OperationID:  "op2",
 		StateVersion: 2,
@@ -304,7 +304,7 @@ func TestIdempotentExecutorCancelledDiscard(t *testing.T) {
 	ie := NewIdempotentExecutor()
 	input := IdempotentCommitInput{
 		Kind:         IdempotentOpOutbox,
-		UserID:       "u1",
+		SpaceID:      "u1",
 		CharacterID:  "c1",
 		OperationID:  "op3",
 		StateVersion: 3,
@@ -328,7 +328,7 @@ func TestIdempotentExecutorCommitWithLock(t *testing.T) {
 
 	input := IdempotentCommitInput{
 		Kind:            IdempotentOpSend,
-		UserID:          "u1",
+		SpaceID:         "u1",
 		CharacterID:     "c1",
 		OperationID:     "op4",
 		StateVersion:    5,
@@ -348,7 +348,7 @@ func TestIdempotentExecutorCommitWithLockConflict(t *testing.T) {
 
 	input := IdempotentCommitInput{
 		Kind:         IdempotentOpDelete,
-		UserID:       "u1",
+		SpaceID:      "u1",
 		CharacterID:  "c1",
 		OperationID:  "op5",
 		StateVersion: 6,
@@ -366,7 +366,7 @@ func TestIdempotentExecutorDifferentKindsDifferentKeys(t *testing.T) {
 
 	r1 := ie.Commit(IdempotentCommitInput{
 		Kind:        IdempotentOpMessage,
-		UserID:      "u1",
+		SpaceID:     "u1",
 		CharacterID: "c1",
 		OperationID: "op",
 		Status:      "active",
@@ -374,7 +374,7 @@ func TestIdempotentExecutorDifferentKindsDifferentKeys(t *testing.T) {
 
 	r2 := ie.Commit(IdempotentCommitInput{
 		Kind:        IdempotentOpEvent,
-		UserID:      "u1",
+		SpaceID:     "u1",
 		CharacterID: "c1",
 		OperationID: "op",
 		Status:      "active",
@@ -398,7 +398,7 @@ func TestIdempotentExecutorIsCommitted(t *testing.T) {
 
 	ie.Commit(IdempotentCommitInput{
 		Kind:        IdempotentOpMessage,
-		UserID:      "u1",
+		SpaceID:     "u1",
 		CharacterID: "c1",
 		OperationID: "op",
 		Status:      "active",
@@ -414,7 +414,7 @@ func TestIdempotentExecutorGetRecord(t *testing.T) {
 
 	ie.Commit(IdempotentCommitInput{
 		Kind:         IdempotentOpReflection,
-		UserID:       "u1",
+		SpaceID:      "u1",
 		CharacterID:  "c1",
 		OperationID:  "reflect-1",
 		StateVersion: 7,
@@ -464,7 +464,7 @@ func TestIdempotentExecutorReset(t *testing.T) {
 
 	ie.Commit(IdempotentCommitInput{
 		Kind:        IdempotentOpIndex,
-		UserID:      "u1",
+		SpaceID:     "u1",
 		CharacterID: "c1",
 		OperationID: "idx-1",
 		Status:      "active",
@@ -493,7 +493,7 @@ func TestIdempotentExecutorParallelSubmits(t *testing.T) {
 			defer wg.Done()
 			results[idx] = ie.Commit(IdempotentCommitInput{
 				Kind:        IdempotentOpMessage,
-				UserID:      "u1",
+				SpaceID:     "u1",
 				CharacterID: "c1",
 				OperationID: "parallel",
 				Status:      "active",

@@ -14,10 +14,10 @@ func feedbackLocalSingleUserMode() bool {
 	return config.AppCfg != nil && strings.EqualFold(strings.TrimSpace(config.AppCfg.Security.Mode), "local_single_user")
 }
 
-func feedbackOwnerScope(query *gorm.DB, userID string) *gorm.DB {
-	owner := requestidentity.NormalizeUserID(userID)
+func feedbackOwnerScope(query *gorm.DB, spaceID string) *gorm.DB {
+	owner := requestidentity.NormalizeSpaceID(spaceID)
 	if feedbackLocalSingleUserMode() {
-		return query.Where("c.user_id = ? OR c.user_id = '' OR c.user_id IS NULL OR c.user_id = ?", owner, requestidentity.DefaultUserID)
+		return query.Where("c.space_id = ? OR c.space_id = '' OR c.space_id IS NULL OR c.space_id = ?", owner, requestidentity.LegacySpaceID)
 	}
-	return query.Where("c.user_id = ?", owner)
+	return query.Where("c.space_id = ?", owner)
 }

@@ -63,7 +63,7 @@ func TestBuildToolSuccess(t *testing.T) {
 		Action:      action,
 		State:       ActionExecutionCompleted,
 		CompletedAt: now,
-		ToolResult: &kernel.LegacyToolResult{
+		ToolResult: &kernel.ToolDispatchResult{
 			RunID:       "inv-1",
 			Status:      "SUCCESS",
 			VisibleText: "search result",
@@ -71,7 +71,7 @@ func TestBuildToolSuccess(t *testing.T) {
 			DurationMS:  100,
 		},
 	}
-	obs, err := b.Build(ObservationBuildInput{Plan: plan, Execution: exec, Scope: ObservationBuildScope{InteractionID: "I1", UserID: "u-1", CharacterID: "c-1", ConversationID: "conv-1"}})
+	obs, err := b.Build(ObservationBuildInput{Plan: plan, Execution: exec, Scope: ObservationBuildScope{InteractionID: "I1", SpaceID: "u-1", CharacterID: "c-1", ConversationID: "conv-1"}})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -190,10 +190,10 @@ func TestBuildToolFailed(t *testing.T) {
 		Action:      action,
 		State:       ActionExecutionCompleted,
 		CompletedAt: time.Now().UTC(),
-		ToolResult: &kernel.LegacyToolResult{
+		ToolResult: &kernel.ToolDispatchResult{
 			RunID:  "inv-1",
 			Status: "FAILED",
-			Error:  &kernel.LegacyToolError{Code: "PROVIDER_ERROR", Message: "provider failed", Retryable: false},
+			Error:  &kernel.ToolDispatchError{Code: "PROVIDER_ERROR", Message: "provider failed", Retryable: false},
 		},
 	}
 	obs, err := b.Build(ObservationBuildInput{Plan: plan, Execution: exec, Scope: ObservationBuildScope{InteractionID: "I1", ConversationID: "c1"}})
@@ -216,10 +216,10 @@ func TestBuildToolCancelled(t *testing.T) {
 		Action:      action,
 		State:       ActionExecutionCompleted,
 		CompletedAt: time.Now().UTC(),
-		ToolResult: &kernel.LegacyToolResult{
+		ToolResult: &kernel.ToolDispatchResult{
 			RunID:       "inv-1",
 			Status:      "CANCELLED",
-			Error:       &kernel.LegacyToolError{Code: "CANCELLED", Message: "user cancelled"},
+			Error:       &kernel.ToolDispatchError{Code: "CANCELLED", Message: "user cancelled"},
 			VisibleText: "partial output",
 		},
 	}
@@ -243,10 +243,10 @@ func TestBuildToolTimedOut(t *testing.T) {
 		Action:      action,
 		State:       ActionExecutionCompleted,
 		CompletedAt: time.Now().UTC(),
-		ToolResult: &kernel.LegacyToolResult{
+		ToolResult: &kernel.ToolDispatchResult{
 			RunID:  "inv-1",
 			Status: "TIMED_OUT",
-			Error:  &kernel.LegacyToolError{Code: "TIMEOUT", Message: "timed out"},
+			Error:  &kernel.ToolDispatchError{Code: "TIMEOUT", Message: "timed out"},
 		},
 	}
 	obs, err := b.Build(ObservationBuildInput{Plan: plan, Execution: exec, Scope: ObservationBuildScope{InteractionID: "I1", ConversationID: "c1"}})
@@ -305,7 +305,7 @@ func TestBuildUnknownStatus(t *testing.T) {
 		Action:      action,
 		State:       ActionExecutionCompleted,
 		CompletedAt: time.Now().UTC(),
-		ToolResult:  &kernel.LegacyToolResult{Status: "WTF", Error: &kernel.LegacyToolError{Code: "X"}},
+		ToolResult:  &kernel.ToolDispatchResult{Status: "WTF", Error: &kernel.ToolDispatchError{Code: "X"}},
 	}
 	_, err := b.Build(ObservationBuildInput{Plan: plan, Execution: exec, Scope: ObservationBuildScope{}})
 	if err == nil {
@@ -336,7 +336,7 @@ func TestBuildDeepCopyEvidence(t *testing.T) {
 		Action:      action,
 		State:       ActionExecutionCompleted,
 		CompletedAt: time.Now().UTC(),
-		ToolResult:  &kernel.LegacyToolResult{Status: "SUCCESS", Output: original, RunID: "inv-1"},
+		ToolResult:  &kernel.ToolDispatchResult{Status: "SUCCESS", Output: original, RunID: "inv-1"},
 	}
 	obs, err := b.Build(ObservationBuildInput{Plan: plan, Execution: exec, Scope: ObservationBuildScope{InteractionID: "I1", ConversationID: "c1"}})
 	if err != nil {
@@ -373,7 +373,7 @@ func TestBuildPreservesAllScopeFields(t *testing.T) {
 	action := MaterializedAction{ID: "a1", PlanID: "p1", Kind: MaterializedActionWait}
 	exec := ActionExecutionResult{Action: action, State: ActionExecutionSkipped, CompletedAt: time.Now().UTC()}
 	scope := ObservationBuildScope{
-		UserID:         "u-1",
+		SpaceID:        "u-1",
 		CharacterID:    "c-1",
 		ConversationID: "conv-1",
 		InteractionID:  "I1",
@@ -382,7 +382,7 @@ func TestBuildPreservesAllScopeFields(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if obs.UserID != "u-1" || obs.CharacterID != "c-1" || obs.ConversationID != "conv-1" || obs.InteractionID != "I1" {
+	if obs.SpaceID != "u-1" || obs.CharacterID != "c-1" || obs.ConversationID != "conv-1" || obs.InteractionID != "I1" {
 		t.Fatalf("expected scope fields preserved, got %+v", obs)
 	}
 }
@@ -428,7 +428,7 @@ func TestBuildMissingErrorForFailedStatus(t *testing.T) {
 		Action:      action,
 		State:       ActionExecutionCompleted,
 		CompletedAt: time.Now().UTC(),
-		ToolResult:  &kernel.LegacyToolResult{Status: "FAILED"},
+		ToolResult:  &kernel.ToolDispatchResult{Status: "FAILED"},
 	}
 	_, err := b.Build(ObservationBuildInput{Plan: plan, Execution: exec, Scope: ObservationBuildScope{}})
 	if err == nil || !strings.Contains(err.Error(), string(decision.ErrObservationResultInvalid)) {

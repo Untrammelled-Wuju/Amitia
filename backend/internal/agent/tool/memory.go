@@ -31,11 +31,11 @@ func SetEpisodicService(svc episodicsvc.Service) {
 }
 
 type userScopedMemoryToolService interface {
-	SearchForUser(req *memorysvc.SearchMemoryRequest, userID string) ([]memorysvc.Memory, error)
-	VectorSearchForUser(req *memorysvc.VectorSearchRequest, userID string) ([]memorysvc.VectorSearchResult, error)
-	HybridSearchForUser(req *memorysvc.VectorSearchRequest, userID string) ([]memorysvc.HybridSearchResult, error)
-	UpdateForUser(id, userID string, req *memorysvc.UpdateMemoryRequest) (*memorysvc.Memory, error)
-	CreateForUser(req *memorysvc.CreateMemoryRequest, userID string) (*memorysvc.Memory, error)
+	SearchForSpace(req *memorysvc.SearchMemoryRequest, spaceID string) ([]memorysvc.Memory, error)
+	VectorSearchForSpace(req *memorysvc.VectorSearchRequest, spaceID string) ([]memorysvc.VectorSearchResult, error)
+	HybridSearchForSpace(req *memorysvc.VectorSearchRequest, spaceID string) ([]memorysvc.HybridSearchResult, error)
+	UpdateForSpace(id, spaceID string, req *memorysvc.UpdateMemoryRequest) (*memorysvc.Memory, error)
+	CreateForSpace(req *memorysvc.CreateMemoryRequest, spaceID string) (*memorysvc.Memory, error)
 }
 
 func init() {
@@ -97,7 +97,7 @@ func saveMemory(callCtx context.Context, execCtx ToolExecutionContext, args map[
 		result.Audit = map[string]interface{}{"service": "memory"}
 		return result
 	}
-	userID, userErr := effectiveToolUserID(execCtx)
+	spaceID, userErr := effectiveToolSpaceID(execCtx)
 	if userErr != nil {
 		return *userErr
 	}
@@ -159,11 +159,11 @@ func saveMemory(callCtx context.Context, execCtx ToolExecutionContext, args map[
 		result.Audit = map[string]interface{}{"field": "entityId", "value": entityID}
 		return result
 	}
-	searchResults, err := scopedMemoryService.SearchForUser(&memorysvc.SearchMemoryRequest{
+	searchResults, err := scopedMemoryService.SearchForSpace(&memorysvc.SearchMemoryRequest{
 		Keyword:     key,
 		CharacterID: characterID,
 		Limit:       50,
-	}, userID)
+	}, spaceID)
 	if err != nil {
 		result := ErrorResult("memory_service_error", fmt.Sprintf("ERROR: %s", err.Error()))
 		result.Audit = map[string]interface{}{"operation": "search", "key": key, "character_id": characterID}
@@ -197,7 +197,7 @@ func saveMemory(callCtx context.Context, execCtx ToolExecutionContext, args map[
 		if entityID != "" {
 			updateReq.EntityID = stringPtr(entityID)
 		}
-		updated, err := scopedMemoryService.UpdateForUser(existing.ID, userID, updateReq)
+		updated, err := scopedMemoryService.UpdateForSpace(existing.ID, spaceID, updateReq)
 		if err != nil {
 			result := ErrorResult("memory_service_error", fmt.Sprintf("ERROR: %s", err.Error()))
 			result.Audit = map[string]interface{}{"operation": "update", "memory_id": existing.ID, "key": key}
@@ -216,7 +216,7 @@ func saveMemory(callCtx context.Context, execCtx ToolExecutionContext, args map[
 		return result
 	}
 
-	created, err := scopedMemoryService.CreateForUser(&memorysvc.CreateMemoryRequest{
+	created, err := scopedMemoryService.CreateForSpace(&memorysvc.CreateMemoryRequest{
 		CharacterID:    characterID,
 		MemoryType:     memoryType,
 		Key:            key,
@@ -230,7 +230,7 @@ func saveMemory(callCtx context.Context, execCtx ToolExecutionContext, args map[
 		Scope:          "character",
 		SourceConvID:   execCtx.ConversationID,
 		SourceMsgID:    execCtx.RequestID,
-	}, userID)
+	}, spaceID)
 	if err != nil {
 		result := ErrorResult("memory_service_error", fmt.Sprintf("ERROR: %s", err.Error()))
 		result.Audit = map[string]interface{}{"operation": "create", "key": key, "character_id": characterID}
@@ -336,7 +336,7 @@ func saveProfile(callCtx context.Context, execCtx ToolExecutionContext, args map
 	if toolProfileService == nil {
 		return ErrorResult("profile_service_not_initialized", "ERROR: profile service not initialized")
 	}
-	userID, userErr := effectiveToolUserID(execCtx)
+	spaceID, userErr := effectiveToolSpaceID(execCtx)
 	if userErr != nil {
 		return *userErr
 	}
@@ -358,11 +358,11 @@ func saveProfile(callCtx context.Context, execCtx ToolExecutionContext, args map
 		confidence = 100
 	}
 	profileItem, err := toolProfileService.UpsertFromTool(
-		userID, category, attrName, attrValue, int(confidence), execCtx.ConversationID, execCtx.CharacterID,
+		spaceID, category, attrName, attrValue, int(confidence), execCtx.ConversationID, execCtx.CharacterID,
 	)
 	if err != nil {
 		result := ErrorResult("profile_service_error", fmt.Sprintf("ERROR: %s", err.Error()))
-		result.Audit = map[string]interface{}{"category": category, "attribute_name": attrName, "user_id": userID, "character_id": execCtx.CharacterID, "conversation_id": execCtx.ConversationID}
+		result.Audit = map[string]interface{}{"category": category, "attribute_name": attrName, "space_id": spaceID, "character_id": execCtx.CharacterID, "conversation_id": execCtx.ConversationID}
 		return result
 	}
 	if OnProfileSaved != nil {
@@ -371,7 +371,7 @@ func saveProfile(callCtx context.Context, execCtx ToolExecutionContext, args map
 	result := TextResult(fmt.Sprintf("OK %s/%s: %s (confidence %d)", category, attrName, attrValue, profileItem.Confidence))
 	result.ExternalOperationID = profileItem.ID
 	result.SideEffects = []ToolSideEffect{{Type: "profile_upsert", TargetID: profileItem.ID, Confirmed: true}}
-	result.Audit = map[string]interface{}{"category": category, "attribute_name": attrName, "conversation_id": execCtx.ConversationID, "character_id": execCtx.CharacterID, "user_id": userID}
+	result.Audit = map[string]interface{}{"category": category, "attribute_name": attrName, "conversation_id": execCtx.ConversationID, "character_id": execCtx.CharacterID, "space_id": spaceID}
 	return result
 }
 
@@ -419,7 +419,7 @@ func saveEpisodicMemory(callCtx context.Context, execCtx ToolExecutionContext, a
 	if toolEpisodicService == nil {
 		return ErrorResult("episodic_service_not_initialized", "ERROR: episodic service not initialized")
 	}
-	userID, userErr := effectiveToolUserID(execCtx)
+	spaceID, userErr := effectiveToolSpaceID(execCtx)
 	if userErr != nil {
 		return *userErr
 	}
@@ -441,11 +441,11 @@ func saveEpisodicMemory(callCtx context.Context, execCtx ToolExecutionContext, a
 		score = 10
 	}
 	item, err := toolEpisodicService.SaveFromTool(
-		userID, sceneType, title, content, int(score), execCtx.ConversationID, execCtx.RequestID, execCtx.RequestID, execCtx.CharacterID,
+		spaceID, sceneType, title, content, int(score), execCtx.ConversationID, execCtx.RequestID, execCtx.RequestID, execCtx.CharacterID,
 	)
 	if err != nil {
 		result := ErrorResult("episodic_service_error", fmt.Sprintf("ERROR: %s", err.Error()))
-		result.Audit = map[string]interface{}{"scene_type": sceneType, "user_id": userID, "character_id": execCtx.CharacterID, "conversation_id": execCtx.ConversationID}
+		result.Audit = map[string]interface{}{"scene_type": sceneType, "space_id": spaceID, "character_id": execCtx.CharacterID, "conversation_id": execCtx.ConversationID}
 		return result
 	}
 	if OnEpisodicSaved != nil {
@@ -454,6 +454,6 @@ func saveEpisodicMemory(callCtx context.Context, execCtx ToolExecutionContext, a
 	result := TextResult(fmt.Sprintf("OK (created) %s: %s (score %d)", sceneType, title, int(score)))
 	result.ExternalOperationID = item.ID
 	result.SideEffects = []ToolSideEffect{{Type: "episodic_memory_create", TargetID: item.ID, Confirmed: true}}
-	result.Audit = map[string]interface{}{"scene_type": sceneType, "conversation_id": execCtx.ConversationID, "character_id": execCtx.CharacterID, "user_id": userID}
+	result.Audit = map[string]interface{}{"scene_type": sceneType, "conversation_id": execCtx.ConversationID, "character_id": execCtx.CharacterID, "space_id": spaceID}
 	return result
 }

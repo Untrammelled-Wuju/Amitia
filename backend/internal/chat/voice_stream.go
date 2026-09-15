@@ -36,7 +36,7 @@ func (s *voiceStreamSink) Emit(ctx context.Context, event ModelEvent) error {
 	return s.onDelta(event.TextDelta)
 }
 
-func (s *service) GenerateVoiceStream(ctx context.Context, userID, characterID uuid.UUID, systemPrompt string, history []VoiceStreamTurn, rollingSummary string, userText string, onDelta func(string) error) error {
+func (s *service) GenerateVoiceStream(ctx context.Context, spaceID, characterID uuid.UUID, systemPrompt string, history []VoiceStreamTurn, rollingSummary string, userText string, onDelta func(string) error) error {
 	if onDelta == nil {
 		return fmt.Errorf("voice stream delta sink is required")
 	}

@@ -110,7 +110,7 @@ func createInteractionRecord(t *testing.T, db *gorm.DB, interactionID, charID, c
 	t.Helper()
 	if err := db.Create(&interaction.InteractionRecordModel{
 		ID:             interactionID,
-		UserID:         "user:web",
+		SpaceID:        "user:web",
 		CharacterID:    charID,
 		ConversationID: convID,
 		Channel:        "web",

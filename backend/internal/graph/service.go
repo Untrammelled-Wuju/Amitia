@@ -17,16 +17,16 @@ type Service interface {
 	SyncNode(entityType, entityID, label string, properties map[string]interface{}) error
 	SyncEdge(sourceID, targetID, relationType string, weight float64) error
 	DeleteNode(entityID string) error
-	DeleteNodeForUser(entityID, userID string) error
+	DeleteNodeForSpace(entityID, spaceID string) error
 	DeleteNodeIfOrphan(entityID string) error
 	DeleteNodesByProperty(entityType, propertyKey, propertyValue string) error
-	QueryNeighbors(entityID string, depth int, userID string) (map[string]interface{}, error)
+	QueryNeighbors(entityID string, depth int, spaceID string) (map[string]interface{}, error)
 	FindPaths(sourceID, targetID string, maxDepth int) ([]map[string]interface{}, error)
-	FindPathsForUser(sourceID, targetID string, maxDepth int, userID string) ([]map[string]interface{}, error)
+	FindPathsForSpace(sourceID, targetID string, maxDepth int, spaceID string) ([]map[string]interface{}, error)
 	DeleteOrphanNodes() error
-	GetStats(userID string) (map[string]interface{}, error)
-	GetAllNodes(userID string) ([]map[string]interface{}, error)
-	GetAllEdges(userID string) ([]map[string]interface{}, error)
+	GetStats(spaceID string) (map[string]interface{}, error)
+	GetAllNodes(spaceID string) ([]map[string]interface{}, error)
+	GetAllEdges(spaceID string) ([]map[string]interface{}, error)
 	Name() string
 	Process(ctx context.Context, convID string, messages []map[string]string, newReply string) error
 }
@@ -101,11 +101,11 @@ func (s *service) DeleteNode(entityID string) error {
 	return nil
 }
 
-func (s *service) DeleteNodeForUser(entityID, userID string) error {
+func (s *service) DeleteNodeForSpace(entityID, spaceID string) error {
 	if s.client == nil || s.client.DB() == nil {
 		return nil
 	}
-	owned, err := s.nodeOwnedByUser(entityID, userID)
+	owned, err := s.nodeOwnedBySpace(entityID, spaceID)
 	if err != nil {
 		return err
 	}
@@ -115,12 +115,12 @@ func (s *service) DeleteNodeForUser(entityID, userID string) error {
 	return s.DeleteNode(entityID)
 }
 
-func (s *service) nodeOwnedByUser(entityID, userID string) (bool, error) {
-	if strings.TrimSpace(userID) == "" {
+func (s *service) nodeOwnedBySpace(entityID, spaceID string) (bool, error) {
+	if strings.TrimSpace(spaceID) == "" {
 		return false, nil
 	}
-	uid, _ := json.Marshal(strings.TrimSpace(userID))
-	query := fmt.Sprintf("SELECT count() FROM entity_node:`%s` WHERE properties.user_id = %s GROUP ALL", sanitizeRecordID(entityID), string(uid))
+	uid, _ := json.Marshal(strings.TrimSpace(spaceID))
+	query := fmt.Sprintf("SELECT count() FROM entity_node:`%s` WHERE properties.space_id = %s GROUP ALL", sanitizeRecordID(entityID), string(uid))
 	results, err := surrealdb.Query[any](context.Background(), s.client.DB(), query, nil)
 	if err != nil {
 		return false, err
@@ -157,7 +157,7 @@ func (s *service) DeleteNodesByProperty(entityType, propertyKey, propertyValue s
 	return nil
 }
 
-func (s *service) QueryNeighbors(entityID string, depth int, userID string) (map[string]interface{}, error) {
+func (s *service) QueryNeighbors(entityID string, depth int, spaceID string) (map[string]interface{}, error) {
 	if s.client == nil || s.client.DB() == nil {
 		return map[string]interface{}{}, nil
 	}
@@ -167,13 +167,13 @@ func (s *service) QueryNeighbors(entityID string, depth int, userID string) (map
 	if depth > 4 {
 		depth = 4
 	}
-	uid, _ := json.Marshal(strings.TrimSpace(userID))
+	uid, _ := json.Marshal(strings.TrimSpace(spaceID))
 	types := []string{"memory:", "profile:", "episodic:", "worldbook:"}
 
 	queryWithFilter := func(id string) (map[string]interface{}, error) {
 		id = sanitizeRecordID(id)
 		query := fmt.Sprintf(
-			"SELECT ->entity_edge->entity_node AS neighbors FROM entity_node:`%s` WHERE properties.user_id = %s LIMIT 100",
+			"SELECT ->entity_edge->entity_node AS neighbors FROM entity_node:`%s` WHERE properties.space_id = %s LIMIT 100",
 			id, string(uid),
 		)
 		results, err := surrealdb.Query[any](context.Background(), s.client.DB(), query, nil)
@@ -181,7 +181,7 @@ func (s *service) QueryNeighbors(entityID string, depth int, userID string) (map
 			return nil, err
 		}
 		result := s.toMap(results)
-		filterGraphNeighbors(result, strings.TrimSpace(userID))
+		filterGraphNeighbors(result, strings.TrimSpace(spaceID))
 		return result, nil
 	}
 
@@ -209,7 +209,7 @@ func graphResultHasItems(result map[string]interface{}) bool {
 	return ok && len(arr) > 0
 }
 
-func filterGraphNeighbors(result map[string]interface{}, userID string) {
+func filterGraphNeighbors(result map[string]interface{}, spaceID string) {
 	rows, ok := result["result"].([]interface{})
 	if !ok {
 		return
@@ -230,7 +230,7 @@ func filterGraphNeighbors(result map[string]interface{}, userID string) {
 				continue
 			}
 			props, _ := node["properties"].(map[string]interface{})
-			if fmt.Sprint(props["user_id"]) == userID {
+			if fmt.Sprint(props["space_id"]) == spaceID {
 				filtered = append(filtered, neighbor)
 			}
 		}
@@ -260,15 +260,15 @@ func (s *service) FindPaths(sourceID, targetID string, maxDepth int) ([]map[stri
 	return nil, nil
 }
 
-func (s *service) FindPathsForUser(sourceID, targetID string, maxDepth int, userID string) ([]map[string]interface{}, error) {
+func (s *service) FindPathsForSpace(sourceID, targetID string, maxDepth int, spaceID string) ([]map[string]interface{}, error) {
 	if s.client == nil || s.client.DB() == nil {
 		return nil, nil
 	}
-	uid, _ := json.Marshal(strings.TrimSpace(userID))
+	uid, _ := json.Marshal(strings.TrimSpace(spaceID))
 	source := sanitizeRecordID(sourceID)
 	target := sanitizeRecordID(targetID)
 	query := fmt.Sprintf(
-		"SELECT id, in, out, relation_type, weight FROM entity_edge WHERE in = entity_node:`%s` AND out = entity_node:`%s` AND in IN (SELECT VALUE id FROM entity_node WHERE properties.user_id = %s) AND out IN (SELECT VALUE id FROM entity_node WHERE properties.user_id = %s) LIMIT 20",
+		"SELECT id, in, out, relation_type, weight FROM entity_edge WHERE in = entity_node:`%s` AND out = entity_node:`%s` AND in IN (SELECT VALUE id FROM entity_node WHERE properties.space_id = %s) AND out IN (SELECT VALUE id FROM entity_node WHERE properties.space_id = %s) LIMIT 20",
 		source, target, string(uid), string(uid),
 	)
 	results, err := surrealdb.Query[any](context.Background(), s.client.DB(), query, nil)
@@ -297,15 +297,15 @@ func (s *service) DeleteOrphanNodes() error {
 	return err
 }
 
-func (s *service) GetStats(userID string) (map[string]interface{}, error) {
+func (s *service) GetStats(spaceID string) (map[string]interface{}, error) {
 	nodeCount := 0
 	edgeCount := 0
 	var byType []map[string]interface{}
 
 	nodeFilter := ""
-	if userID != "" {
-		uid, _ := json.Marshal(strings.TrimSpace(userID))
-		nodeFilter = fmt.Sprintf(" WHERE properties.user_id = %s", string(uid))
+	if spaceID != "" {
+		uid, _ := json.Marshal(strings.TrimSpace(spaceID))
+		nodeFilter = fmt.Sprintf(" WHERE properties.space_id = %s", string(uid))
 	}
 
 	nodeResult, err := surrealdb.Query[any](context.Background(), s.client.DB(),
@@ -331,9 +331,9 @@ func (s *service) GetStats(userID string) (map[string]interface{}, error) {
 	}
 
 	edgeQuery := "SELECT count() FROM entity_edge GROUP ALL"
-	if strings.TrimSpace(userID) != "" {
-		uid, _ := json.Marshal(strings.TrimSpace(userID))
-		edgeQuery = fmt.Sprintf("SELECT count() FROM entity_edge WHERE in IN (SELECT VALUE id FROM entity_node WHERE properties.user_id = %s) AND out IN (SELECT VALUE id FROM entity_node WHERE properties.user_id = %s) GROUP ALL", string(uid), string(uid))
+	if strings.TrimSpace(spaceID) != "" {
+		uid, _ := json.Marshal(strings.TrimSpace(spaceID))
+		edgeQuery = fmt.Sprintf("SELECT count() FROM entity_edge WHERE in IN (SELECT VALUE id FROM entity_node WHERE properties.space_id = %s) AND out IN (SELECT VALUE id FROM entity_node WHERE properties.space_id = %s) GROUP ALL", string(uid), string(uid))
 	}
 	edgeResult, err := surrealdb.Query[any](context.Background(), s.client.DB(), edgeQuery, nil)
 	if err == nil && edgeResult != nil && len(*edgeResult) > 0 {
@@ -377,14 +377,14 @@ func (s *service) GetStats(userID string) (map[string]interface{}, error) {
 	}, nil
 }
 
-func (s *service) GetAllNodes(userID string) ([]map[string]interface{}, error) {
+func (s *service) GetAllNodes(spaceID string) ([]map[string]interface{}, error) {
 	if s.client == nil || s.client.DB() == nil {
 		return nil, nil
 	}
 	nodeFilter := ""
-	if userID != "" {
-		uid, _ := json.Marshal(strings.TrimSpace(userID))
-		nodeFilter = fmt.Sprintf(" WHERE properties.user_id = %s", string(uid))
+	if spaceID != "" {
+		uid, _ := json.Marshal(strings.TrimSpace(spaceID))
+		nodeFilter = fmt.Sprintf(" WHERE properties.space_id = %s", string(uid))
 	}
 	query := fmt.Sprintf("SELECT id, entity_type, label, properties FROM entity_node%s", nodeFilter)
 	results, err := surrealdb.Query[any](context.Background(), s.client.DB(), query, nil)
@@ -407,14 +407,14 @@ func (s *service) GetAllNodes(userID string) ([]map[string]interface{}, error) {
 	return nil, nil
 }
 
-func (s *service) GetAllEdges(userID string) ([]map[string]interface{}, error) {
+func (s *service) GetAllEdges(spaceID string) ([]map[string]interface{}, error) {
 	if s.client == nil || s.client.DB() == nil {
 		return nil, nil
 	}
 	query := "SELECT id, in, out, relation_type, weight FROM entity_edge"
-	if strings.TrimSpace(userID) != "" {
-		uid, _ := json.Marshal(strings.TrimSpace(userID))
-		query = fmt.Sprintf("SELECT id, in, out, relation_type, weight FROM entity_edge WHERE in IN (SELECT VALUE id FROM entity_node WHERE properties.user_id = %s) AND out IN (SELECT VALUE id FROM entity_node WHERE properties.user_id = %s)", string(uid), string(uid))
+	if strings.TrimSpace(spaceID) != "" {
+		uid, _ := json.Marshal(strings.TrimSpace(spaceID))
+		query = fmt.Sprintf("SELECT id, in, out, relation_type, weight FROM entity_edge WHERE in IN (SELECT VALUE id FROM entity_node WHERE properties.space_id = %s) AND out IN (SELECT VALUE id FROM entity_node WHERE properties.space_id = %s)", string(uid), string(uid))
 	}
 	results, err := surrealdb.Query[any](context.Background(), s.client.DB(), query, nil)
 	if err != nil {
@@ -529,8 +529,8 @@ func (r *retryingService) DeleteNode(entityID string) error {
 	return r.get().DeleteNode(entityID)
 }
 
-func (r *retryingService) DeleteNodeForUser(entityID, userID string) error {
-	return r.get().DeleteNodeForUser(entityID, userID)
+func (r *retryingService) DeleteNodeForSpace(entityID, spaceID string) error {
+	return r.get().DeleteNodeForSpace(entityID, spaceID)
 }
 
 func (r *retryingService) DeleteNodeIfOrphan(entityID string) error {
@@ -541,32 +541,32 @@ func (r *retryingService) DeleteNodesByProperty(entityType, propertyKey, propert
 	return r.get().DeleteNodesByProperty(entityType, propertyKey, propertyValue)
 }
 
-func (r *retryingService) QueryNeighbors(entityID string, depth int, userID string) (map[string]interface{}, error) {
-	return r.get().QueryNeighbors(entityID, depth, userID)
+func (r *retryingService) QueryNeighbors(entityID string, depth int, spaceID string) (map[string]interface{}, error) {
+	return r.get().QueryNeighbors(entityID, depth, spaceID)
 }
 
 func (r *retryingService) FindPaths(sourceID, targetID string, maxDepth int) ([]map[string]interface{}, error) {
 	return r.get().FindPaths(sourceID, targetID, maxDepth)
 }
 
-func (r *retryingService) FindPathsForUser(sourceID, targetID string, maxDepth int, userID string) ([]map[string]interface{}, error) {
-	return r.get().FindPathsForUser(sourceID, targetID, maxDepth, userID)
+func (r *retryingService) FindPathsForSpace(sourceID, targetID string, maxDepth int, spaceID string) ([]map[string]interface{}, error) {
+	return r.get().FindPathsForSpace(sourceID, targetID, maxDepth, spaceID)
 }
 
 func (r *retryingService) DeleteOrphanNodes() error {
 	return r.get().DeleteOrphanNodes()
 }
 
-func (r *retryingService) GetStats(userID string) (map[string]interface{}, error) {
-	return r.get().GetStats(userID)
+func (r *retryingService) GetStats(spaceID string) (map[string]interface{}, error) {
+	return r.get().GetStats(spaceID)
 }
 
-func (r *retryingService) GetAllNodes(userID string) ([]map[string]interface{}, error) {
-	return r.get().GetAllNodes(userID)
+func (r *retryingService) GetAllNodes(spaceID string) ([]map[string]interface{}, error) {
+	return r.get().GetAllNodes(spaceID)
 }
 
-func (r *retryingService) GetAllEdges(userID string) ([]map[string]interface{}, error) {
-	return r.get().GetAllEdges(userID)
+func (r *retryingService) GetAllEdges(spaceID string) ([]map[string]interface{}, error) {
+	return r.get().GetAllEdges(spaceID)
 }
 
 type stubService struct{}
@@ -593,7 +593,7 @@ func (s *stubService) DeleteNode(entityID string) error {
 	return nil
 }
 
-func (s *stubService) DeleteNodeForUser(entityID, userID string) error {
+func (s *stubService) DeleteNodeForSpace(entityID, spaceID string) error {
 	return nil
 }
 
@@ -605,7 +605,7 @@ func (s *stubService) DeleteNodesByProperty(entityType, propertyKey, propertyVal
 	return nil
 }
 
-func (s *stubService) QueryNeighbors(entityID string, depth int, userID string) (map[string]interface{}, error) {
+func (s *stubService) QueryNeighbors(entityID string, depth int, spaceID string) (map[string]interface{}, error) {
 	return nil, nil
 }
 
@@ -613,7 +613,7 @@ func (s *stubService) FindPaths(sourceID, targetID string, maxDepth int) ([]map[
 	return nil, nil
 }
 
-func (s *stubService) FindPathsForUser(sourceID, targetID string, maxDepth int, userID string) ([]map[string]interface{}, error) {
+func (s *stubService) FindPathsForSpace(sourceID, targetID string, maxDepth int, spaceID string) ([]map[string]interface{}, error) {
 	return nil, nil
 }
 
@@ -621,15 +621,15 @@ func (s *stubService) DeleteOrphanNodes() error {
 	return nil
 }
 
-func (s *stubService) GetStats(userID string) (map[string]interface{}, error) {
+func (s *stubService) GetStats(spaceID string) (map[string]interface{}, error) {
 	return map[string]interface{}{"nodeCount": 0, "edgeCount": 0, "byType": nil}, nil
 }
 
-func (s *stubService) GetAllNodes(userID string) ([]map[string]interface{}, error) {
+func (s *stubService) GetAllNodes(spaceID string) ([]map[string]interface{}, error) {
 	return nil, nil
 }
 
-func (s *stubService) GetAllEdges(userID string) ([]map[string]interface{}, error) {
+func (s *stubService) GetAllEdges(spaceID string) ([]map[string]interface{}, error) {
 	return nil, nil
 }
 

@@ -23,8 +23,8 @@ func (s *p0SessionStore) Get(_ context.Context, id runtimeidentity.RuntimeSessio
 	}
 	return s.active, nil
 }
-func (s *p0SessionStore) GetActiveByRuntime(_ context.Context, userID runtimeidentity.UserID, deviceID runtimeidentity.DeviceID, runtimeID runtimeidentity.RuntimeID) (RuntimeSession, error) {
-	if s.active.UserID != userID || s.active.DeviceID != deviceID || s.active.RuntimeID != runtimeID || !s.active.IsActive() {
+func (s *p0SessionStore) GetActiveByRuntime(_ context.Context, spaceID runtimeidentity.SpaceID, deviceID runtimeidentity.DeviceID, runtimeID runtimeidentity.RuntimeID) (RuntimeSession, error) {
+	if s.active.SpaceID != spaceID || s.active.DeviceID != deviceID || s.active.RuntimeID != runtimeID || !s.active.IsActive() {
 		return RuntimeSession{}, ErrRuntimeSessionNotFound
 	}
 	return s.active, nil
@@ -73,7 +73,7 @@ func TestAcquireClientCursorAheadForcesFullResumeAndStillFencesOldGeneration(t *
 	now := time.Now().UTC()
 	store := &p0SessionStore{active: RuntimeSession{
 		ID:                           "session-1",
-		UserID:                       "user-1",
+		SpaceID:                      "user-1",
 		DeviceID:                     "device-1",
 		RuntimeID:                    "runtime-1",
 		Platform:                     runtimeidentity.PlatformWindows,
@@ -95,7 +95,7 @@ func TestAcquireClientCursorAheadForcesFullResumeAndStillFencesOldGeneration(t *
 	}
 
 	result, err := service.Acquire(context.Background(), AcquireRequest{
-		Identity: protocol.SessionIdentity{UserID: "user-1", DeviceID: "device-1", RuntimeID: "runtime-1"},
+		Identity: protocol.SessionIdentity{SpaceID: "user-1", DeviceID: "device-1", RuntimeID: "runtime-1"},
 		Platform: runtimeidentity.PlatformWindows,
 		Cursor: protocol.SessionCursor{
 			LastAppliedStateRevision:     7,

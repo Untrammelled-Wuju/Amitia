@@ -14,8 +14,8 @@ const (
 	HandlerInfo  = OperationInfo
 	HandlerImage = OperationImage
 
-	toolVersion     = "0.1.0"
-	permissionRead  = "android.media.read"
+	toolVersion    = "0.1.0"
+	permissionRead = "android.media.read"
 )
 
 func BuildInfoToolDefinition() (capability.ToolDefinition, error) {
@@ -49,12 +49,12 @@ func BuildInfoToolDefinition() (capability.ToolDefinition, error) {
 }`)
 
 	return capability.ToolDefinition{
-		ID:          ToolIDInfo,
-		ModelName:   ToolIDInfo,
-		Source:      capability.ToolSourceBuiltin,
-		Name:        "Android Media Read Info",
-		Description: "Read image resource metadata without running OCR. Returns format, dimensions, size, alpha, and detected source. Supports amitia:// URIs from Camera, Screenshot, Workspace, Attachments, and Temp.",
-		Version:     toolVersion,
+		ID:           ToolIDInfo,
+		ModelName:    ToolIDInfo,
+		Source:       capability.ToolSourceBuiltin,
+		Name:         "Android Media Read Info",
+		Description:  "Read image resource metadata without running OCR. Returns format, dimensions, size, alpha, and detected source. Supports amitia:// URIs from Camera, Screenshot, Workspace, Attachments, and Temp.",
+		Version:      toolVersion,
 		InputSchema:  inputSchema,
 		OutputSchema: outputSchema,
 		Permissions: []capability.PermissionRequirement{
@@ -66,7 +66,7 @@ func BuildInfoToolDefinition() (capability.ToolDefinition, error) {
 		},
 		RiskLevel:      capability.RiskLow,
 		SideEffect:     capability.SideEffectNone,
-		Scope:          capability.ScopeRule{Type: "user"},
+		Scope:          capability.ScopeRule{Type: "space"},
 		Enabled:        true,
 		HasSideEffects: false,
 		Idempotent:     true,
@@ -157,12 +157,12 @@ func BuildImageToolDefinition() (capability.ToolDefinition, error) {
 }`)
 
 	return capability.ToolDefinition{
-		ID:          ToolIDImage,
-		ModelName:   ToolIDImage,
-		Source:      capability.ToolSourceBuiltin,
-		Name:        "Android Media Read Image",
-		Description: "Normalize an Android media image (decode safely, fix orientation, strip sensitive metadata). Returns a canonical resource URI ready for downstream OCR or Image Understand. Reuses the original artifact when no change is needed.",
-		Version:     toolVersion,
+		ID:           ToolIDImage,
+		ModelName:    ToolIDImage,
+		Source:       capability.ToolSourceBuiltin,
+		Name:         "Android Media Read Image",
+		Description:  "Normalize an Android media image (decode safely, fix orientation, strip sensitive metadata). Returns a canonical resource URI ready for downstream OCR or Image Understand. Reuses the original artifact when no change is needed.",
+		Version:      toolVersion,
 		InputSchema:  inputSchema,
 		OutputSchema: outputSchema,
 		Permissions: []capability.PermissionRequirement{
@@ -174,7 +174,7 @@ func BuildImageToolDefinition() (capability.ToolDefinition, error) {
 		},
 		RiskLevel:      capability.RiskLow,
 		SideEffect:     capability.SideEffectWrite,
-		Scope:          capability.ScopeRule{Type: "user"},
+		Scope:          capability.ScopeRule{Type: "space"},
 		Enabled:        true,
 		HasSideEffects: true,
 		Idempotent:     true,

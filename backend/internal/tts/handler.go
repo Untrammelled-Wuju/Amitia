@@ -167,8 +167,8 @@ func (h *Handler) TestConnectionStandalone(c *gin.Context) {
 	}
 	util.SuccessMsgResponse(c, "语音服务测试成功", nil)
 }
-func requestUserID(c *gin.Context) string {
-	return requestidentity.NormalizeUserID(requestidentity.ResolveGin(c, ""))
+func requestSpaceID(c *gin.Context) string {
+	return requestidentity.NormalizeSpaceID(requestidentity.ResolveGin(c))
 }
 
 func (h *Handler) Preview(c *gin.Context) {
@@ -194,11 +194,11 @@ func (h *Handler) Synthesize(c *gin.Context) {
 	var result *SynthesizeResponse
 	var err error
 	if req.CharacterID != "" {
-		result, err = h.service.SynthesizeForCharacter(requestUserID(c), req.CharacterID, req.Text)
+		result, err = h.service.SynthesizeForCharacter(requestSpaceID(c), req.CharacterID, req.Text)
 	} else if req.VoiceID > 0 {
 		result, err = h.service.Synthesize(req.VoiceID, req.Text)
 	} else if req.SpeakerID != "" {
-		result, err = h.service.SynthesizeWithSpeaker(requestUserID(c), req.SpeakerID, req.Text)
+		result, err = h.service.SynthesizeWithSpeaker(requestSpaceID(c), req.SpeakerID, req.Text)
 	} else {
 		result, err = h.service.SynthesizeWithActive(req.Text)
 	}
@@ -211,7 +211,7 @@ func (h *Handler) Synthesize(c *gin.Context) {
 }
 
 func (h *Handler) ListClonedVoices(c *gin.Context) {
-	voices, err := h.service.ListClonedVoices(requestUserID(c))
+	voices, err := h.service.ListClonedVoices(requestSpaceID(c))
 	if err != nil {
 		util.ErrorResponse(c, response.InternalError, "查询复刻音色失败", nil)
 		return
@@ -276,12 +276,12 @@ func (h *Handler) CloneVoice(c *gin.Context) {
 	}
 	requestedSpeakerID := strings.TrimSpace(c.PostForm("speakerId"))
 	requestedConfigID := strings.TrimSpace(c.PostForm("voiceConfigId"))
-	userID := requestUserID(c)
+	spaceID := requestSpaceID(c)
 
 	var cfg *TtsConfig
 	if requestedSpeakerID != "" {
-		if _, ownerErr := h.service.GetClonedVoice(userID, requestedSpeakerID); ownerErr == nil {
-			boundCfg, _, resolveErr := h.service.ResolveClonedVoiceProviderConfig(userID, requestedSpeakerID)
+		if _, ownerErr := h.service.GetClonedVoice(spaceID, requestedSpeakerID); ownerErr == nil {
+			boundCfg, _, resolveErr := h.service.ResolveClonedVoiceProviderConfig(spaceID, requestedSpeakerID)
 			if resolveErr != nil {
 				util.ErrorResponse(c, response.OperationFailed, resolveErr.Error(), nil)
 				return
@@ -390,7 +390,7 @@ func (h *Handler) CloneVoice(c *gin.Context) {
 
 	result.SpeakerID = strings.TrimSpace(result.SpeakerID)
 	resultWasOwned := false
-	if _, ownerErr := h.service.GetClonedVoice(userID, result.SpeakerID); ownerErr == nil {
+	if _, ownerErr := h.service.GetClonedVoice(spaceID, result.SpeakerID); ownerErr == nil {
 		resultWasOwned = true
 	} else if errors.Is(ownerErr, gorm.ErrRecordNotFound) {
 		if existing, globalErr := h.service.GetClonedVoiceBySpeakerID(result.SpeakerID); globalErr == nil && existing != nil {
@@ -407,7 +407,7 @@ func (h *Handler) CloneVoice(c *gin.Context) {
 
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	voice := &ClonedVoice{
-		UserID:      userID,
+		SpaceID:     spaceID,
 		SpeakerID:   result.SpeakerID,
 		Name:        displayName,
 		TtsConfigID: cfg.ID,
@@ -435,13 +435,13 @@ func (h *Handler) DeleteClonedVoice(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, "缺少 speakerId", nil)
 		return
 	}
-	userID := requestUserID(c)
-	if _, err := h.service.GetClonedVoice(userID, speakerID); err != nil {
+	spaceID := requestSpaceID(c)
+	if _, err := h.service.GetClonedVoice(spaceID, speakerID); err != nil {
 		util.ErrorResponse(c, response.NotFound, "复刻音色不存在或不属于当前用户", nil)
 		return
 	}
 
-	cfg, _, err := h.service.ResolveClonedVoiceProviderConfig(userID, speakerID)
+	cfg, _, err := h.service.ResolveClonedVoiceProviderConfig(spaceID, speakerID)
 	if err != nil {
 		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
 		return
@@ -455,7 +455,7 @@ func (h *Handler) DeleteClonedVoice(c *gin.Context) {
 		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
 		return
 	}
-	if err := h.service.DeleteClonedVoiceMetadata(userID, speakerID); err != nil {
+	if err := h.service.DeleteClonedVoiceMetadata(spaceID, speakerID); err != nil {
 		util.ErrorResponse(c, response.InternalError, "服务商音色已删除，但清理 Core 元数据失败", nil)
 		return
 	}

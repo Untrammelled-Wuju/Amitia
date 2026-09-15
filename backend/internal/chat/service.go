@@ -69,10 +69,10 @@ type Service interface {
 	ReplayPostProcess(eventType string, payload []byte) error
 	TestChat(ctx context.Context, characterID string, userMessage string) (string, error)
 	GenerateWorkshopJSON(ctx context.Context, systemPrompt string, userPrompt string) (string, string, string, error)
-	GenerateVoiceStream(ctx context.Context, userID, characterID uuid.UUID, systemPrompt string, history []VoiceStreamTurn, rollingSummary string, userText string, onDelta func(string) error) error
+	GenerateVoiceStream(ctx context.Context, spaceID, characterID uuid.UUID, systemPrompt string, history []VoiceStreamTurn, rollingSummary string, userText string, onDelta func(string) error) error
 	SummarizeRealtimeVoiceRollingContext(ctx context.Context, existingSummary, rawTurns string) (string, error)
 	RealtimeVoiceReady() error
-	LoadRealtimeEmotionContext(ctx context.Context, userID, characterID string) (*RealtimeEmotionContext, error)
+	LoadRealtimeEmotionContext(ctx context.Context, spaceID, characterID string) (*RealtimeEmotionContext, error)
 	CommitRealtimeEmotion(ctx context.Context, commit RealtimeEmotionCommit) error
 	GenerateMCPSampling(ctx context.Context, request json.RawMessage) (any, error)
 	ExportConversation(convID string, format string) (string, error)
@@ -130,15 +130,15 @@ type ArtifactResolver interface {
 }
 
 type ArtifactResolution struct {
-	ID          string
-	OwnerUserID string
-	Kind        string
-	BlobDigest  string
-	SizeBytes   int64
-	MIMEType    string
-	Filename    string
-	Status      string
-	Revision    int64
+	ID           string
+	OwnerSpaceID string
+	Kind         string
+	BlobDigest   string
+	SizeBytes    int64
+	MIMEType     string
+	Filename     string
+	Status       string
+	Revision     int64
 }
 
 type service struct {
@@ -194,8 +194,8 @@ var _ interaction.MessageProcessor = (*service)(nil)
 type DeliveryStore interface {
 	CreateDeliveryIntent(interactionID, channel, peerID, contentType string, payload []byte) error
 	PreemptActiveOutputLeases(characterID string) error
-	CreateOutputLease(interactionID, characterID, userID, channel string) error
-	AcquireOutputLease(interactionID, characterID, userID, channel string) (leaseID string, ownerToken string, err error)
+	CreateOutputLease(interactionID, characterID, spaceID, channel string) error
+	AcquireOutputLease(interactionID, characterID, spaceID, channel string) (leaseID string, ownerToken string, err error)
 	ReleaseOutputLease(leaseID, ownerToken string) error
 }
 

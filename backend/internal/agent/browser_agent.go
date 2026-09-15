@@ -41,8 +41,8 @@ func (s *service) RunBrowserAgent(ctx context.Context, execCtx tool.ToolExecutio
 	ctx, cancel := context.WithTimeout(ctx, time.Duration(req.TimeoutMS)*time.Millisecond)
 	defer cancel()
 
-	scope := extensionkernel.LegacyScope{
-		UserID:         execCtx.User,
+	scope := extensionkernel.InvocationScope{
+		SpaceID:        execCtx.SpaceID,
 		CharacterID:    execCtx.CharacterID,
 		ConversationID: execCtx.ConversationID,
 		Channel:        execCtx.Channel,
@@ -216,7 +216,7 @@ func (s *service) RunBrowserAgent(ctx context.Context, execCtx tool.ToolExecutio
 	return result, nil
 }
 
-func (s *service) browserAgentExecute(ctx context.Context, scope extensionkernel.LegacyScope, runKey string, index int, toolID string, input json.RawMessage) (json.RawMessage, error) {
+func (s *service) browserAgentExecute(ctx context.Context, scope extensionkernel.InvocationScope, runKey string, index int, toolID string, input json.RawMessage) (json.RawMessage, error) {
 	callID := fmt.Sprintf("%s:browser:%s:%d", runKey, toolID, index)
 	idempotency := fmt.Sprintf("browser-agent:%s:%s:%d", runKey, toolID, index)
 	toolResult, found := s.toolFacade.ExecuteTool(ctx, capability.CapabilityID(toolID), input, scope, callID, idempotency)
@@ -247,7 +247,7 @@ func (s *service) browserAgentExecute(ctx context.Context, scope extensionkernel
 	return json.RawMessage(`{}`), nil
 }
 
-func (s *service) browserAgentObservation(ctx context.Context, scope extensionkernel.LegacyScope, runKey string, index int, sessionID, tabID string) (json.RawMessage, string, error) {
+func (s *service) browserAgentObservation(ctx context.Context, scope extensionkernel.InvocationScope, runKey string, index int, sessionID, tabID string) (json.RawMessage, string, error) {
 	input, _ := json.Marshal(map[string]any{"sessionId": sessionID, "tabId": tabID, "maxDepth": 28})
 	raw, err := s.browserAgentExecute(ctx, scope, runKey, index, "browser_dom_snapshot", input)
 	if err != nil {

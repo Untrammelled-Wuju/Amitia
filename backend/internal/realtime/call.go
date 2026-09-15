@@ -40,7 +40,7 @@ type RealtimeCallSession struct {
 	SessionID      string                   `json:"sessionId"`
 	ConversationID string                   `json:"conversationId,omitempty"`
 	CharacterID    string                   `json:"characterId,omitempty"`
-	UserID         string                   `json:"userId,omitempty"`
+	SpaceID        string                   `json:"spaceId,omitempty"`
 	Sources        MediaSourceState         `json:"sources"`
 	Capabilities   RealtimeCallCapabilities `json:"capabilities"`
 	CreatedAt      time.Time                `json:"createdAt"`
@@ -54,14 +54,14 @@ type RealtimeCallSession struct {
 	closed                 bool
 }
 
-func NewRealtimeCallSession(callID, sessionID, conversationID, characterID, userID, visualTicket string) *RealtimeCallSession {
+func NewRealtimeCallSession(callID, sessionID, conversationID, characterID, spaceID, visualTicket string) *RealtimeCallSession {
 	now := time.Now().UTC()
 	return &RealtimeCallSession{
 		CallID:         callID,
 		SessionID:      sessionID,
 		ConversationID: conversationID,
 		CharacterID:    characterID,
-		UserID:         userID,
+		SpaceID:        spaceID,
 		Sources:        MediaSourceState{Audio: true},
 		Capabilities: RealtimeCallCapabilities{
 			AudioInput:        true,

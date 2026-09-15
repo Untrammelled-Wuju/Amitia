@@ -23,16 +23,16 @@ type Service interface {
 	Test(id int) error
 	Synthesize(voiceID int, text string) (*SynthesizeResponse, error)
 	SynthesizePreview(req *SynthesizePreviewRequest) (*SynthesizeResponse, error)
-	SynthesizeForCharacter(userID, charID string, text string) (*SynthesizeResponse, error)
-	SynthesizeWithSpeaker(userID, speakerID, text string) (*SynthesizeResponse, error)
+	SynthesizeForCharacter(spaceID, charID string, text string) (*SynthesizeResponse, error)
+	SynthesizeWithSpeaker(spaceID, speakerID, text string) (*SynthesizeResponse, error)
 	SynthesizeWithActive(text string) (*SynthesizeResponse, error)
 	ListProviders() []ProviderInfo
-	ListClonedVoices(userID string) ([]ClonedVoice, error)
-	GetClonedVoice(userID, speakerID string) (*ClonedVoice, error)
+	ListClonedVoices(spaceID string) ([]ClonedVoice, error)
+	GetClonedVoice(spaceID, speakerID string) (*ClonedVoice, error)
 	GetClonedVoiceBySpeakerID(speakerID string) (*ClonedVoice, error)
-	ResolveClonedVoiceProviderConfig(userID, speakerID string) (*TtsConfig, *ClonedVoice, error)
+	ResolveClonedVoiceProviderConfig(spaceID, speakerID string) (*TtsConfig, *ClonedVoice, error)
 	SaveClonedVoice(voice *ClonedVoice) error
-	DeleteClonedVoiceMetadata(userID, speakerID string) error
+	DeleteClonedVoiceMetadata(spaceID, speakerID string) error
 }
 
 type service struct{ repo Repository }
@@ -199,8 +199,8 @@ func (s *service) SynthesizePreview(req *SynthesizePreviewRequest) (*SynthesizeR
 	cfg.SilenceDuration = req.SilenceDuration
 	return Synthesize(&cfg, req.Text)
 }
-func (s *service) SynthesizeWithSpeaker(userID, speakerID, text string) (*SynthesizeResponse, error) {
-	cfg, _, err := s.repo.ResolveClonedVoiceConfig(userID, speakerID)
+func (s *service) SynthesizeWithSpeaker(spaceID, speakerID, text string) (*SynthesizeResponse, error) {
+	cfg, _, err := s.repo.ResolveClonedVoiceConfig(spaceID, speakerID)
 	if err != nil {
 		return nil, fmt.Errorf("复刻音色不存在或不属于当前用户")
 	}
@@ -221,36 +221,36 @@ func (s *service) SynthesizeWithActive(text string) (*SynthesizeResponse, error)
 	return Synthesize(cfg, text)
 }
 
-func (s *service) SynthesizeForCharacter(userID, charID string, text string) (*SynthesizeResponse, error) {
-	cfg, err := s.repo.GetByCharacterID(userID, charID)
+func (s *service) SynthesizeForCharacter(spaceID, charID string, text string) (*SynthesizeResponse, error) {
+	cfg, err := s.repo.GetByCharacterID(spaceID, charID)
 	if err != nil {
 		return nil, fmt.Errorf("没有可用的音色配置")
 	}
 	return Synthesize(cfg, text)
 }
 
-func (s *service) ListClonedVoices(userID string) ([]ClonedVoice, error) {
-	return s.repo.ListClonedVoices(userID)
+func (s *service) ListClonedVoices(spaceID string) ([]ClonedVoice, error) {
+	return s.repo.ListClonedVoices(spaceID)
 }
 
-func (s *service) GetClonedVoice(userID, speakerID string) (*ClonedVoice, error) {
-	return s.repo.GetClonedVoice(userID, speakerID)
+func (s *service) GetClonedVoice(spaceID, speakerID string) (*ClonedVoice, error) {
+	return s.repo.GetClonedVoice(spaceID, speakerID)
 }
 
 func (s *service) GetClonedVoiceBySpeakerID(speakerID string) (*ClonedVoice, error) {
 	return s.repo.GetClonedVoiceBySpeakerID(speakerID)
 }
 
-func (s *service) ResolveClonedVoiceProviderConfig(userID, speakerID string) (*TtsConfig, *ClonedVoice, error) {
-	return s.repo.ResolveClonedVoiceConfig(userID, speakerID)
+func (s *service) ResolveClonedVoiceProviderConfig(spaceID, speakerID string) (*TtsConfig, *ClonedVoice, error) {
+	return s.repo.ResolveClonedVoiceConfig(spaceID, speakerID)
 }
 
 func (s *service) SaveClonedVoice(voice *ClonedVoice) error {
 	return s.repo.UpsertClonedVoice(voice)
 }
 
-func (s *service) DeleteClonedVoiceMetadata(userID, speakerID string) error {
-	return s.repo.DeleteClonedVoice(userID, speakerID)
+func (s *service) DeleteClonedVoiceMetadata(spaceID, speakerID string) error {
+	return s.repo.DeleteClonedVoice(spaceID, speakerID)
 }
 
 func (s *service) ListProviders() []ProviderInfo {

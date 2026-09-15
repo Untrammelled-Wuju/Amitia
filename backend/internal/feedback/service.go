@@ -11,11 +11,11 @@ import (
 )
 
 type Service interface {
-	CreateForUser(msgID, userID string, req *CreateFeedbackRequest) (*MessageFeedback, error)
-	GetByMessageForUser(msgID, userID string) ([]MessageFeedback, error)
+	CreateForSpace(msgID, spaceID string, req *CreateFeedbackRequest) (*MessageFeedback, error)
+	GetByMessageForSpace(msgID, spaceID string) ([]MessageFeedback, error)
 	GetStats() (map[string]interface{}, error)
 	GetRecent(limit int) ([]MessageFeedback, error)
-	DeleteForUser(id int, userID string) error
+	DeleteForSpace(id int, spaceID string) error
 }
 
 type service struct {
@@ -27,12 +27,12 @@ func NewService(repo Repository, ctx *app.AppContext) Service {
 	return &service{repo: repo, db: ctx.DB}
 }
 
-func (s *service) CreateForUser(msgID, userID string, req *CreateFeedbackRequest) (*MessageFeedback, error) {
+func (s *service) CreateForSpace(msgID, spaceID string, req *CreateFeedbackRequest) (*MessageFeedback, error) {
 	if req == nil || !ValidFeedbackTypes[req.FeedbackType] {
 		return nil, fmt.Errorf("无效的反馈类型")
 	}
 
-	role, convID, err := s.repo.GetMessageForUser(msgID, userID)
+	role, convID, err := s.repo.GetMessageForSpace(msgID, spaceID)
 	if err != nil || role != "assistant" {
 		return nil, fmt.Errorf("只能对自己的 AI 回复进行反馈")
 	}
@@ -61,8 +61,8 @@ func (s *service) CreateForUser(msgID, userID string, req *CreateFeedbackRequest
 	return fb, nil
 }
 
-func (s *service) GetByMessageForUser(msgID, userID string) ([]MessageFeedback, error) {
-	return s.repo.GetByMessageForUser(msgID, userID)
+func (s *service) GetByMessageForSpace(msgID, spaceID string) ([]MessageFeedback, error) {
+	return s.repo.GetByMessageForSpace(msgID, spaceID)
 }
 
 func (s *service) GetStats() (map[string]interface{}, error) {
@@ -77,6 +77,6 @@ func (s *service) GetRecent(limit int) ([]MessageFeedback, error) {
 	return s.repo.GetRecent(limit)
 }
 
-func (s *service) DeleteForUser(id int, userID string) error {
-	return s.repo.DeleteForUser(id, userID)
+func (s *service) DeleteForSpace(id int, spaceID string) error {
+	return s.repo.DeleteForSpace(id, spaceID)
 }

@@ -33,8 +33,8 @@ func (h *Handler) MessagesStream(c *gin.Context) {
 		c.Writer.Flush()
 		return
 	}
-	userID := webChatUserID(c)
-	if _, err := h.requireWebChatConversation(convID, userID); err != nil {
+	spaceID := webChatSpaceID(c)
+	if _, err := h.requireWebChatConversation(convID, spaceID); err != nil {
 		c.Header("Content-Type", "text/event-stream")
 		c.Writer.WriteString("event: error\ndata: conversation not found\n\n")
 		c.Writer.Flush()
@@ -47,10 +47,10 @@ func (h *Handler) MessagesStream(c *gin.Context) {
 	sinceID := c.Query("since")
 	var sinceSequence int64
 	if sinceID != "" {
-		h.webChatOwnedMessageQuery(userID).Select("messages.sequence").Where("messages.id = ? AND messages.conversation_id = ?", sinceID, convID).Row().Scan(&sinceSequence)
+		h.webChatOwnedMessageQuery(spaceID).Select("messages.sequence").Where("messages.id = ? AND messages.conversation_id = ?", sinceID, convID).Row().Scan(&sinceSequence)
 	}
 	for {
-		msgs, _ := loadMessagesAfterSequenceForUser(h.db, convID, userID, sinceSequence)
+		msgs, _ := loadMessagesAfterSequenceForSpace(h.db, convID, spaceID, sinceSequence)
 		for _, m := range msgs {
 			if sequence, ok := messageSequence(m["sequence"]); ok {
 				sinceSequence = sequence
@@ -131,14 +131,14 @@ func loadMessagesAfterSequence(db *gorm.DB, conversationID string, sinceSequence
 	return msgs, rows.Err()
 }
 
-func loadMessagesAfterSequenceForUser(db *gorm.DB, conversationID, userID string, sinceSequence int64) ([]map[string]interface{}, error) {
+func loadMessagesAfterSequenceForSpace(db *gorm.DB, conversationID, spaceID string, sinceSequence int64) ([]map[string]interface{}, error) {
 	q := db.Table("messages").Joins("JOIN conversations ON conversations.id = messages.conversation_id").
 		Where("messages.conversation_id = ? AND messages.sequence > ? AND messages.deleted_at IS NULL AND conversations.deleted_at IS NULL", conversationID, sinceSequence)
-	owner := requestidentity.NormalizeUserID(userID)
+	owner := requestidentity.NormalizeSpaceID(spaceID)
 	if webChatLocalSingleUserMode() {
-		q = q.Where("(conversations.user_id = ? OR conversations.user_id = '' OR conversations.user_id IS NULL OR conversations.user_id = ?)", owner, requestidentity.DefaultUserID)
+		q = q.Where("(conversations.space_id = ? OR conversations.space_id = '' OR conversations.space_id IS NULL OR conversations.space_id = ?)", owner, requestidentity.LegacySpaceID)
 	} else {
-		q = q.Where("conversations.user_id = ?", owner)
+		q = q.Where("conversations.space_id = ?", owner)
 	}
 	rows, err := q.Select("messages.*").Order("messages.sequence ASC").Rows()
 	if err != nil {
@@ -191,12 +191,12 @@ func (h *Handler) WebChatSendStream(c *gin.Context) {
 	if sessionID == "" {
 		sessionID = convID
 	}
-	userID := requestidentity.ResolveGin(c, body.UserID)
-	if err := h.requireWebChatConversationOrAbsent(convID, userID); err != nil {
+	spaceID := requestidentity.ResolveGin(c)
+	if err := h.requireWebChatConversationOrAbsent(convID, spaceID); err != nil {
 		util.ErrorResponse(c, response.DataNotFound, "对话不存在", nil)
 		return
 	}
-	if err := h.requireWebChatCharacter(body.CharacterID, userID); err != nil {
+	if err := h.requireWebChatCharacter(body.CharacterID, spaceID); err != nil {
 		util.ErrorResponse(c, response.DataNotFound, "角色不存在", nil)
 		return
 	}
@@ -211,11 +211,11 @@ func (h *Handler) WebChatSendStream(c *gin.Context) {
 	c.Header("X-Source", source)
 
 	applog.Info(fmt.Sprintf("[Webhook] ImageUrl=%s VideoUrl=%s", body.ImageUrl[:min(len(body.ImageUrl), 60)], body.VideoUrl[:min(len(body.VideoUrl), 60)]))
-	visionError := chat.GetBuffer().AnalyzeImage(convID, userID, body.ImageUrl)
+	visionError := chat.GetBuffer().AnalyzeImage(convID, spaceID, body.ImageUrl)
 	if visionError != "" {
 		h.publishModelError(modelerror.Event{ModelType: "vision", ConversationID: convID, RequestID: requestID, Channel: "web", RawError: visionError})
 	}
-	chat.GetBuffer().AnalyzeVideo(convID, userID, body.VideoUrl)
+	chat.GetBuffer().AnalyzeVideo(convID, spaceID, body.VideoUrl)
 
 	bufferedMsgs, bufErr := chat.GetBuffer().Buffer(convID, msgContent)
 	if bufErr != nil {
@@ -231,12 +231,12 @@ func (h *Handler) WebChatSendStream(c *gin.Context) {
 	characterID := body.CharacterID
 	if characterID == "" && body.ConversationID != "" {
 		var dbCharID string
-		if scanErr := h.webChatOwnedConversationQuery(userID).Select("character_id").Where("id = ?", body.ConversationID).Limit(1).Row().Scan(&dbCharID); scanErr == nil && strings.TrimSpace(dbCharID) != "" {
+		if scanErr := h.webChatOwnedConversationQuery(spaceID).Select("character_id").Where("id = ?", body.ConversationID).Limit(1).Row().Scan(&dbCharID); scanErr == nil && strings.TrimSpace(dbCharID) != "" {
 			characterID = dbCharID
 		}
 	}
 	if characterID == "" {
-		h.webChatCharacterQuery(userID).Select("id").Where("is_active = 1").Limit(1).Row().Scan(&characterID)
+		h.webChatCharacterQuery(spaceID).Select("id").Where("is_active = 1").Limit(1).Row().Scan(&characterID)
 	}
 	if characterID == "" {
 		util.ErrorResponse(c, response.InvalidParams, "请先创建并启用角色", nil)
@@ -248,11 +248,11 @@ func (h *Handler) WebChatSendStream(c *gin.Context) {
 		return
 	}
 
-	workspaceBinding := h.workspaceBindingForRequest(convID, body, userID)
+	workspaceBinding := h.workspaceBindingForRequest(convID, body, spaceID)
 	orchResult, err := h.handleUnifiedEntryWithWorkspace(c.Request.Context(), &interaction.UnifiedEntryRequest{
 		CharacterID: characterID, Message: mergedContent,
 		ConversationID: convID, Channel: "web", Source: source,
-		UserID: userID, PeerID: peerID, RequestID: requestID, SessionID: sessionID,
+		SpaceID: spaceID, PeerID: peerID, RequestID: requestID, SessionID: sessionID,
 		DeviceTimezone: deviceTimezone,
 		AudioUrl:       body.AudioUrl, AudioDuration: body.AudioDuration,
 		VoiceMessage:     body.VoiceMessage,
@@ -274,7 +274,7 @@ func (h *Handler) WebChatSendStream(c *gin.Context) {
 		util.ErrorResponse(c, response.InternalError, "统一入口未返回回复", nil)
 		return
 	}
-	h.persistConversationWorkspaceBinding(orchResult.Response.ConversationID, workspaceBinding, userID)
+	h.persistConversationWorkspaceBinding(orchResult.Response.ConversationID, workspaceBinding, spaceID)
 	result := orchResult.Response
 	c.Header("Content-Type", "text/event-stream")
 	c.Header("Cache-Control", "no-cache")
@@ -295,7 +295,7 @@ func (h *Handler) WebChatSendStream(c *gin.Context) {
 	var ttsCfg *tts.TtsConfig
 	if (rand.Float64() < voiceChance || result.ForceVoice) && result.Reply != "" {
 		ttsRepo := tts.NewRepository(h.db)
-		charCfg, cfgErr := ttsRepo.GetByCharacterID(requestidentity.NormalizeUserID(userID), characterID)
+		charCfg, cfgErr := ttsRepo.GetByCharacterID(requestidentity.NormalizeSpaceID(spaceID), characterID)
 		if cfgErr != nil {
 			applog.Info(fmt.Sprintf("[Voice] GetByCharacterID err: %v", cfgErr))
 		} else {
@@ -310,7 +310,7 @@ func (h *Handler) WebChatSendStream(c *gin.Context) {
 
 	userMessageID := ""
 	if strings.TrimSpace(requestID) != "" {
-		h.webChatOwnedMessageQuery(userID).
+		h.webChatOwnedMessageQuery(spaceID).
 			Select("messages.id").
 			Where("messages.conversation_id = ? AND messages.request_id = ? AND messages.role = ?", result.ConversationID, requestID, "user").
 			Order("messages.sequence ASC").
@@ -331,7 +331,7 @@ func (h *Handler) WebChatSendStream(c *gin.Context) {
 			AudioUrl      string  `gorm:"column:audio_url"`
 			AudioDuration float64 `gorm:"column:audio_duration"`
 		}
-		if err := h.webChatOwnedMessageQuery(userID).Select("messages.content, messages.audio_url, messages.audio_duration").Where("messages.id = ?", msgID).Scan(&msg).Error; err != nil || msg.Content == "" {
+		if err := h.webChatOwnedMessageQuery(spaceID).Select("messages.content, messages.audio_url, messages.audio_duration").Where("messages.id = ?", msgID).Scan(&msg).Error; err != nil || msg.Content == "" {
 			continue
 		}
 		line := strings.TrimSpace(msg.Content)
@@ -357,7 +357,7 @@ func (h *Handler) WebChatSendStream(c *gin.Context) {
 			} else {
 				audioURL = synthResult.AudioURL
 				audioDuration = synthResult.Duration
-				h.db.Table("messages").Where("id = ? AND conversation_id IN (SELECT id FROM conversations WHERE user_id = ?)", msgID, requestidentity.NormalizeUserID(userID)).Updates(map[string]interface{}{
+				h.db.Table("messages").Where("id = ? AND conversation_id IN (SELECT id FROM conversations WHERE space_id = ?)", msgID, requestidentity.NormalizeSpaceID(spaceID)).Updates(map[string]interface{}{
 					"audio_url":      audioURL,
 					"audio_duration": audioDuration,
 				})
@@ -383,7 +383,7 @@ func (h *Handler) WebChatSendStream(c *gin.Context) {
 			flusher.Flush()
 		}
 	}
-	doneData := gin.H{"conversationId": result.ConversationID, "requestId": requestID, "sessionId": sessionID, "userId": userID, "source": source}
+	doneData := gin.H{"conversationId": result.ConversationID, "requestId": requestID, "sessionId": sessionID, "spaceId": spaceID, "source": source}
 
 	lastMsgID := ""
 	if len(result.MessageIDs) > 0 {

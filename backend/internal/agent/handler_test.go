@@ -43,7 +43,7 @@ func TestWebhookHandlerPassesEnvelopeAndContext(t *testing.T) {
 		"accountId":      "account-1",
 		"conversationId": "conv-1",
 		"senderId":       "peer-1",
-		"userId":         "user-1",
+		"spaceId":        "user-1",
 		"messageId":      "message-1",
 		"requestId":      "request-1",
 		"sessionId":      "session-1",
@@ -75,7 +75,7 @@ func TestWebhookHandlerPassesEnvelopeAndContext(t *testing.T) {
 	if svc.req.Channel != "qq" || svc.req.AccountID != "account-1" || svc.req.ConversationID != "conv-1" {
 		t.Fatalf("unexpected channel envelope: %#v", svc.req)
 	}
-	if svc.req.SenderID != "peer-1" || svc.req.UserID != "user-1" {
+	if svc.req.SenderID != "peer-1" || svc.req.SpaceID != "user-1" {
 		t.Fatalf("unexpected user envelope: %#v", svc.req)
 	}
 	if svc.req.MessageID != "message-1" || svc.req.RequestID != "request-1" || svc.req.SessionID != "session-1" {

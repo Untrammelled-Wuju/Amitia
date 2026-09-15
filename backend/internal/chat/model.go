@@ -68,7 +68,7 @@ type ModelCapabilities = modelprotocol.ModelCapabilities
 
 type Conversation struct {
 	ID           string `gorm:"column:id;primaryKey" json:"id"`
-	UserID       string `gorm:"column:user_id;not null;default:default;index" json:"-"`
+	SpaceID      string `gorm:"column:space_id;not null;index" json:"-"`
 	CharacterID  string `gorm:"column:character_id" json:"characterId"`
 	Title        string `gorm:"column:title" json:"title"`
 	Channel      string `gorm:"column:channel;default:web" json:"channel"`
@@ -222,7 +222,7 @@ type ChatRequest struct {
 	Channel        string `json:"channel"`
 	Source         string `json:"source"`
 	PeerID         string `json:"peerId"`
-	UserID         string `json:"userId"`
+	SpaceID        string `json:"spaceId"`
 	DeviceTimezone string `json:"deviceTimezone"`
 	SessionID      string `json:"sessionId"`
 	RequestID      string `json:"requestId"`
@@ -233,7 +233,7 @@ type WebChatRequest struct {
 	Message          string  `json:"message" binding:"required"`
 	ConversationID   string  `json:"conversationId"`
 	Sequence         int64   `gorm:"column:sequence;not null;default:0;index" json:"sequence"`
-	UserID           string  `json:"userId"`
+	SpaceID          string  `json:"spaceId"`
 	DeviceTimezone   string  `json:"deviceTimezone"`
 	SessionID        string  `json:"sessionId"`
 	RequestID        string  `json:"requestId"`
@@ -249,7 +249,7 @@ type CreateConversationRequest struct {
 }
 
 type ConversationQuery struct {
-	UserID               string `form:"-" json:"-"`
+	SpaceID              string `form:"-" json:"-"`
 	IncludeLegacyDefault bool   `form:"-" json:"-"`
 	Page                 int    `form:"page"`
 	PageSize             int    `form:"pageSize"`
@@ -260,7 +260,7 @@ type ConversationQuery struct {
 }
 
 type MessageSearchQuery struct {
-	UserID               string `form:"-" json:"-"`
+	SpaceID              string `form:"-" json:"-"`
 	IncludeLegacyDefault bool   `form:"-" json:"-"`
 	Keyword              string `form:"keyword" binding:"required"`
 	ConversationID       string `form:"conversationId"`
@@ -341,7 +341,7 @@ type ProcessMessageRequest struct {
 	RequestID                string                       `json:"requestId"`
 	ReplyToMessageID         *string                      `json:"replyToMessageId,omitempty"`
 	ImageContext             string                       `json:"-"`
-	UserID                   string                       `json:"-"`
+	SpaceID                  string                       `json:"-"`
 	DeviceTimezone           string                       `json:"-"`
 	SessionID                string                       `json:"-"`
 	InteractionID            string                       `json:"-"`

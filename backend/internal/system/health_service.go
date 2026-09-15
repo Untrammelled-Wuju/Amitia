@@ -37,15 +37,15 @@ func (s *service) Health() map[string]interface{} {
 func (s *service) Diagnostics() map[string]interface{} {
 	var memStats runtime.MemStats
 	runtime.ReadMemStats(&memStats)
-	var userCount, convCount, msgCount int64
-	s.db.Table("auth_users").Count(&userCount)
+	var deviceCount, convCount, msgCount int64
+	s.db.Table("kernel_devices").Count(&deviceCount)
 	s.db.Table("conversations").Count(&convCount)
 	s.db.Table("messages").Count(&msgCount)
 	return map[string]interface{}{
 		"version": "1.0.0-go", "goVersion": runtime.Version(),
 		"uptime": time.Since(s.startTime).String(), "goroutines": runtime.NumGoroutine(),
 		"memory": map[string]interface{}{"allocMB": memStats.Alloc / 1024 / 1024, "totalAllocMB": memStats.TotalAlloc / 1024 / 1024},
-		"stats":  map[string]interface{}{"users": userCount, "conversations": convCount, "messages": msgCount},
+		"stats":  map[string]interface{}{"devices": deviceCount, "conversations": convCount, "messages": msgCount},
 	}
 }
 

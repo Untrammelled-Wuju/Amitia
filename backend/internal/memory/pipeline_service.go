@@ -155,7 +155,7 @@ func (s *service) runConsolidation(charID string) {
 		uuid.New().String(), charID, now, result.OperationID).Error
 }
 
-func (s *service) logRetrieval(conversationID, characterID, requestID, channel, queryText string, memoryIDs []string, results []HybridSearchResult, userIDs ...string) {
+func (s *service) logRetrieval(conversationID, characterID, requestID, channel, queryText string, memoryIDs []string, results []HybridSearchResult, spaceIDs ...string) {
 	id := uuid.New().String()
 	now := time.Now().Format("2006-01-02 15:04:05")
 	memIDsJSON, _ := json.Marshal(memoryIDs)
@@ -170,14 +170,14 @@ func (s *service) logRetrieval(conversationID, characterID, requestID, channel, 
 		})
 	}
 	detailsJSON, _ := json.Marshal(scoringDetails)
-	userID := "default"
-	if len(userIDs) > 0 {
-		userID = normalizeMemoryOwnerID(userIDs[0])
+	spaceID := normalizeMemoryOwnerID("")
+	if len(spaceIDs) > 0 {
+		spaceID = normalizeMemoryOwnerID(spaceIDs[0])
 	}
-	if s.db.Migrator().HasColumn("retrieval_logs", "user_id") {
+	if s.db.Migrator().HasColumn("retrieval_logs", "space_id") {
 		s.db.Exec(
-			"INSERT INTO retrieval_logs (id, user_id, conversation_id, character_id, request_id, channel, query_text, retrieved_memory_ids, scoring_details, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-			id, userID, conversationID, characterID, requestID, channel, queryText, string(memIDsJSON), string(detailsJSON), now,
+			"INSERT INTO retrieval_logs (id, space_id, conversation_id, character_id, request_id, channel, query_text, retrieved_memory_ids, scoring_details, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+			id, spaceID, conversationID, characterID, requestID, channel, queryText, string(memIDsJSON), string(detailsJSON), now,
 		)
 		return
 	}

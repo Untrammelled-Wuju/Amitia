@@ -40,13 +40,13 @@ func (s *service) systemTimeResult(body map[string]interface{}) map[string]inter
 		return fallback
 	}
 	characterID, _ := body["characterId"].(string)
-	userID := requestidentity.DefaultUserID
+	spaceID := requestidentity.CanonicalSpaceID()
 	channel, _ := body["channel"].(string)
 	if channel == "" {
 		channel = "web"
 	}
 	snapshot, err := s.temporalSvc.ResolveSnapshot(context.Background(), temporal.SnapshotInput{
-		UserID:      userID,
+		SpaceID:     spaceID,
 		CharacterID: characterID,
 		Channel:     channel,
 	})

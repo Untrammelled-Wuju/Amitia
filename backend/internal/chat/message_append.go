@@ -15,7 +15,7 @@ import (
 const MaxConversationMessageParts = 16
 
 type AppendConversationMessagesRequest struct {
-	UserID           string
+	SpaceID          string
 	CharacterID      string
 	ConversationID   string
 	Channel          string
@@ -37,15 +37,15 @@ func (s *service) AppendConversationMessages(ctx context.Context, request *Appen
 	if request == nil {
 		return nil, fmt.Errorf("append message request is required")
 	}
-	request.UserID = strings.TrimSpace(request.UserID)
+	request.SpaceID = strings.TrimSpace(request.SpaceID)
 	request.CharacterID = strings.TrimSpace(request.CharacterID)
 	request.ConversationID = strings.TrimSpace(request.ConversationID)
 	request.Channel = strings.TrimSpace(request.Channel)
 	request.Role = strings.ToLower(strings.TrimSpace(request.Role))
 	request.Source = strings.TrimSpace(request.Source)
 	request.RequestID = strings.TrimSpace(request.RequestID)
-	if request.ConversationID == "" || request.CharacterID == "" || request.UserID == "" {
-		return nil, fmt.Errorf("conversationId, characterId and userId are required")
+	if request.ConversationID == "" || request.CharacterID == "" || request.SpaceID == "" {
+		return nil, fmt.Errorf("conversationId, characterId and spaceId are required")
 	}
 	if request.Role == "" {
 		request.Role = "assistant"
@@ -71,7 +71,7 @@ func (s *service) AppendConversationMessages(ctx context.Context, request *Appen
 	if err := s.db.WithContext(ctx).Where("id = ?", request.ConversationID).First(&conversation).Error; err != nil {
 		return nil, err
 	}
-	if !conversationOwnerMatches(conversation.UserID, request.UserID) {
+	if !conversationOwnerMatches(conversation.SpaceID, request.SpaceID) {
 		return nil, gorm.ErrRecordNotFound
 	}
 	if conversation.CharacterID != request.CharacterID {
@@ -97,7 +97,7 @@ func (s *service) AppendConversationMessages(ctx context.Context, request *Appen
 			if err := tx.Create(message).Error; err != nil {
 				return err
 			}
-			if err := s.recordMessageChangeTx(tx, message, syncapi.OpCreate, 1, request.UserID); err != nil {
+			if err := s.recordMessageChangeTx(tx, message, syncapi.OpCreate, 1, request.SpaceID); err != nil {
 				return err
 			}
 			messageIDs = append(messageIDs, message.ID)

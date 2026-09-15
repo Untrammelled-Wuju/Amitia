@@ -14,26 +14,26 @@ func worldbookLocalSingleUserMode() bool {
 	return config.AppCfg != nil && strings.EqualFold(strings.TrimSpace(config.AppCfg.Security.Mode), "local_single_user")
 }
 
-func normalizeWorldbookOwner(userID string) string {
-	return requestidentity.NormalizeUserID(userID)
+func normalizeWorldbookOwner(spaceID string) string {
+	return requestidentity.NormalizeSpaceID(spaceID)
 }
 
-func worldbookOwnerScope(db *gorm.DB, column, userID string) *gorm.DB {
-	owner := normalizeWorldbookOwner(userID)
+func worldbookOwnerScope(db *gorm.DB, column, spaceID string) *gorm.DB {
+	owner := normalizeWorldbookOwner(spaceID)
 	if worldbookLocalSingleUserMode() {
-		return db.Where("("+column+" = ? OR "+column+" = '' OR "+column+" IS NULL OR "+column+" = ?)", owner, requestidentity.DefaultUserID)
+		return db.Where("("+column+" = ? OR "+column+" = '' OR "+column+" IS NULL OR "+column+" = ?)", owner, requestidentity.LegacySpaceID)
 	}
 	return db.Where(column+" = ?", owner)
 }
 
-func requireWorldbookCharacterOwner(db *gorm.DB, characterID, userID string) error {
+func requireWorldbookCharacterOwner(db *gorm.DB, characterID, spaceID string) error {
 	characterID = strings.TrimSpace(characterID)
 	if characterID == "" {
 		return nil
 	}
 	var count int64
 	q := db.Table("characters").Where("id = ? AND deleted_at IS NULL", characterID)
-	q = worldbookOwnerScope(q, "user_id", userID)
+	q = worldbookOwnerScope(q, "space_id", spaceID)
 	if err := q.Count(&count).Error; err != nil {
 		return err
 	}

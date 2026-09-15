@@ -7,9 +7,9 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/internal/belief"
+	coreexec "github.com/u-ai/backend/internal/execution"
 	"github.com/u-ai/backend/internal/personality"
 	"github.com/u-ai/backend/internal/safety"
-	coreexec "github.com/u-ai/backend/internal/execution"
 
 	"github.com/u-ai/backend/internal/decision"
 

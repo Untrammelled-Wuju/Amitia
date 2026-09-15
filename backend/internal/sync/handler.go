@@ -11,7 +11,7 @@ import (
 )
 
 type DeviceOwnershipValidator interface {
-	RequireOwned(ctx context.Context, userID string, deviceID string) error
+	RequireOwned(ctx context.Context, spaceID string, deviceID string) error
 }
 
 type Handler struct {
@@ -42,15 +42,15 @@ func (h *Handler) HandlePull(c *gin.Context) {
 	}
 
 	actor := security.GetActor(c)
-	if actor == nil || actor.UserID == "" {
+	if actor == nil || actor.SpaceID == "" {
 		c.JSON(401, gin.H{"code": "unauthorized", "message": "authentication required"})
 		return
 	}
-	req.UserID = string(actor.UserID)
+	req.SpaceID = string(actor.SpaceID)
 
 	if req.DeviceID != "" && h.ownDevices != nil {
-		if err := h.ownDevices.RequireOwned(c.Request.Context(), req.UserID, req.DeviceID); err != nil {
-			c.JSON(403, gin.H{"code": "forbidden", "message": "device not owned by user"})
+		if err := h.ownDevices.RequireOwned(c.Request.Context(), req.SpaceID, req.DeviceID); err != nil {
+			c.JSON(403, gin.H{"code": "forbidden", "message": "device not owned by space"})
 			return
 		}
 	}
@@ -72,15 +72,15 @@ func (h *Handler) HandlePush(c *gin.Context) {
 	}
 
 	actor := security.GetActor(c)
-	if actor == nil || actor.UserID == "" {
+	if actor == nil || actor.SpaceID == "" {
 		c.JSON(401, gin.H{"code": "unauthorized", "message": "authentication required"})
 		return
 	}
-	req.UserID = string(actor.UserID)
+	req.SpaceID = string(actor.SpaceID)
 
 	if req.DeviceID != "" && h.ownDevices != nil {
-		if err := h.ownDevices.RequireOwned(c.Request.Context(), req.UserID, req.DeviceID); err != nil {
-			c.JSON(403, gin.H{"code": "forbidden", "message": "device not owned by user"})
+		if err := h.ownDevices.RequireOwned(c.Request.Context(), req.SpaceID, req.DeviceID); err != nil {
+			c.JSON(403, gin.H{"code": "forbidden", "message": "device not owned by space"})
 			return
 		}
 	}
@@ -105,19 +105,19 @@ func (h *Handler) HandleAck(c *gin.Context) {
 	}
 
 	actor := security.GetActor(c)
-	if actor == nil || actor.UserID == "" {
+	if actor == nil || actor.SpaceID == "" {
 		c.JSON(401, gin.H{"code": "unauthorized", "message": "authentication required"})
 		return
 	}
 
 	if req.DeviceID != "" && h.ownDevices != nil {
-		if err := h.ownDevices.RequireOwned(c.Request.Context(), string(actor.UserID), req.DeviceID); err != nil {
-			c.JSON(403, gin.H{"code": "forbidden", "message": "device not owned by user"})
+		if err := h.ownDevices.RequireOwned(c.Request.Context(), string(actor.SpaceID), req.DeviceID); err != nil {
+			c.JSON(403, gin.H{"code": "forbidden", "message": "device not owned by space"})
 			return
 		}
 	}
 
-	if err := h.svc.Pull.MarkApplied(string(actor.UserID), req.DeviceID, ScopeDevice, req.LastApplied); err != nil {
+	if err := h.svc.Pull.MarkApplied(string(actor.SpaceID), req.DeviceID, ScopeDevice, req.LastApplied); err != nil {
 		c.JSON(500, gin.H{"code": "ack_failed", "message": err.Error()})
 		return
 	}
@@ -133,19 +133,19 @@ func (h *Handler) HandleStatus(c *gin.Context) {
 	}
 
 	actor := security.GetActor(c)
-	if actor == nil || actor.UserID == "" {
+	if actor == nil || actor.SpaceID == "" {
 		c.JSON(401, gin.H{"code": "unauthorized", "message": "authentication required"})
 		return
 	}
 
 	if h.ownDevices != nil {
-		if err := h.ownDevices.RequireOwned(c.Request.Context(), string(actor.UserID), deviceID); err != nil {
-			c.JSON(403, gin.H{"code": "forbidden", "message": "device not owned by user"})
+		if err := h.ownDevices.RequireOwned(c.Request.Context(), string(actor.SpaceID), deviceID); err != nil {
+			c.JSON(403, gin.H{"code": "forbidden", "message": "device not owned by space"})
 			return
 		}
 	}
 
-	status, err := h.svc.Pull.GetStatus(string(actor.UserID), deviceID, ScopeDevice)
+	status, err := h.svc.Pull.GetStatus(string(actor.SpaceID), deviceID, ScopeDevice)
 	if err != nil {
 		c.JSON(500, gin.H{"code": "status_failed", "message": err.Error()})
 		return

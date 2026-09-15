@@ -32,9 +32,9 @@ func (h *Handler) Test(c *gin.Context) {
 	var result map[string]interface{}
 	var err error
 	if scoped, ok := h.service.(interface {
-		TestForUser(userID, characterID, message string) (map[string]interface{}, error)
+		TestForSpace(spaceID, characterID, message string) (map[string]interface{}, error)
 	}); ok {
-		result, err = scoped.TestForUser(requestidentity.ResolveGin(c, ""), body.CharacterID, body.Message)
+		result, err = scoped.TestForSpace(requestidentity.ResolveGin(c), body.CharacterID, body.Message)
 	} else {
 		result, err = h.service.Test(body.CharacterID, body.Message)
 	}
@@ -53,7 +53,7 @@ func (h *Handler) Webhook(c *gin.Context) {
 		AccountID      string `json:"accountId"`
 		ConversationID string `json:"conversationId"`
 		SenderID       string `json:"senderId"`
-		UserID         string `json:"userId"`
+		SpaceID        string `json:"spaceId"`
 		MessageID      string `json:"messageId"`
 		RequestID      string `json:"requestId"`
 		SessionID      string `json:"sessionId"`
@@ -69,13 +69,13 @@ func (h *Handler) Webhook(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, "无效请求体", nil)
 		return
 	}
-	body.UserID = requestidentity.ResolveGin(c, "")
+	body.SpaceID = requestidentity.ResolveGin(c)
 	result, err := h.service.Webhook(c.Request.Context(), WebhookRequest{
 		Channel:        body.Channel,
 		AccountID:      body.AccountID,
 		ConversationID: body.ConversationID,
 		SenderID:       body.SenderID,
-		UserID:         body.UserID,
+		SpaceID:        body.SpaceID,
 		MessageID:      body.MessageID,
 		RequestID:      body.RequestID,
 		SessionID:      body.SessionID,
@@ -102,9 +102,9 @@ func (h *Handler) ContextPreview(c *gin.Context) {
 	var result map[string]interface{}
 	var err error
 	if scoped, ok := h.service.(interface {
-		ContextPreviewForUser(userID, convID string) (map[string]interface{}, error)
+		ContextPreviewForSpace(spaceID, convID string) (map[string]interface{}, error)
 	}); ok {
-		result, err = scoped.ContextPreviewForUser(requestidentity.ResolveGin(c, ""), convID)
+		result, err = scoped.ContextPreviewForSpace(requestidentity.ResolveGin(c), convID)
 	} else {
 		result, err = h.service.ContextPreview(convID)
 	}

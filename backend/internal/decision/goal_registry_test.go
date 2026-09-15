@@ -10,7 +10,7 @@ func TestGoalRegistryRegisterAndGet(t *testing.T) {
 	registry := NewGoalRegistry()
 	goal := Goal{
 		ID:        "goal-1",
-		UserID:    "user-1",
+		SpaceID:   "user-1",
 		Type:      GoalTypeConnection,
 		Priority:  GoalPriorityHigh,
 		Status:    GoalStatusActive,
@@ -74,13 +74,13 @@ func TestGoalRegistryRemove(t *testing.T) {
 	}
 }
 
-func TestGoalRegistryByUser(t *testing.T) {
+func TestGoalRegistryBySpace(t *testing.T) {
 	registry := NewGoalRegistry()
-	registry.Register(Goal{ID: "u1-g1", UserID: "u1", Priority: GoalPriorityNormal})
-	registry.Register(Goal{ID: "u1-g2", UserID: "u1", Priority: GoalPriorityHigh})
-	registry.Register(Goal{ID: "u2-g1", UserID: "u2", Priority: GoalPriorityLow})
+	registry.Register(Goal{ID: "u1-g1", SpaceID: "u1", Priority: GoalPriorityNormal})
+	registry.Register(Goal{ID: "u1-g2", SpaceID: "u1", Priority: GoalPriorityHigh})
+	registry.Register(Goal{ID: "u2-g1", SpaceID: "u2", Priority: GoalPriorityLow})
 
-	u1Goals := registry.ByUser("u1")
+	u1Goals := registry.BySpace("u1")
 	if len(u1Goals) != 2 {
 		t.Fatalf("用户 u1 应有 2 个目标, 实际 %d", len(u1Goals))
 	}
@@ -216,8 +216,8 @@ func TestUpdateStatusProgress1RequiresAchieved(t *testing.T) {
 
 func TestApplyProgressBatchBasic(t *testing.T) {
 	registry := NewGoalRegistry()
-	registry.Register(Goal{ID: "g1", Status: GoalStatusActive, Progress: 0.2, Revision: 1, UserID: "u1"})
-	registry.Register(Goal{ID: "g2", Status: GoalStatusPending, Progress: 0, Revision: 1, UserID: "u1"})
+	registry.Register(Goal{ID: "g1", Status: GoalStatusActive, Progress: 0.2, Revision: 1, SpaceID: "u1"})
+	registry.Register(Goal{ID: "g2", Status: GoalStatusPending, Progress: 0, Revision: 1, SpaceID: "u1"})
 
 	appliedAt := time.Now().UTC()
 	updates := []GoalProgressUpdate{
@@ -403,7 +403,7 @@ func TestGoalRegistryDefensiveCloneRegister(t *testing.T) {
 
 func TestApplyProgressBatchConcurrentDuplicateObservation(t *testing.T) {
 	registry := NewGoalRegistry()
-	registry.Register(Goal{ID: "g1", Status: GoalStatusActive, Progress: 0, Revision: 1, UserID: "u1"})
+	registry.Register(Goal{ID: "g1", Status: GoalStatusActive, Progress: 0, Revision: 1, SpaceID: "u1"})
 
 	const N = 100
 	var wg sync.WaitGroup

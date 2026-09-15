@@ -19,7 +19,7 @@ import (
 const realtimeAccessTicketTTL = 60 * time.Second
 
 type realtimeAccessTicketRecord struct {
-	UserID         string
+	SpaceID        string
 	ConversationID string
 	DialogID       string
 	VoiceType      string
@@ -46,15 +46,15 @@ func IssueRealtimeAccessTicket(c *gin.Context) {
 		return
 	}
 
-	userID := ""
-	if value, exists := c.Get("userId"); exists && value != nil {
-		userID = strings.TrimSpace(fmt.Sprint(value))
+	spaceID := ""
+	if value, exists := c.Get("spaceId"); exists && value != nil {
+		spaceID = strings.TrimSpace(fmt.Sprint(value))
 	}
-	if userID == "" {
+	if spaceID == "" {
 		c.JSON(http.StatusUnauthorized, gin.H{"code": http.StatusUnauthorized, "message": "authenticated user is required"})
 		return
 	}
-	if _, err := requireRealtimeConversationOwner(request.ConversationID, userID); err != nil {
+	if _, err := requireRealtimeConversationOwner(request.ConversationID, spaceID); err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"code": http.StatusNotFound, "message": "conversation not found"})
 		return
 	}
@@ -70,7 +70,7 @@ func IssueRealtimeAccessTicket(c *gin.Context) {
 	}
 	expiresAt := time.Now().UTC().Add(realtimeAccessTicketTTL)
 	realtimeTickets.put(token, realtimeAccessTicketRecord{
-		UserID:         userID,
+		SpaceID:        spaceID,
 		ConversationID: strings.TrimSpace(request.ConversationID),
 		DialogID:       strings.TrimSpace(request.DialogID),
 		VoiceType:      strings.TrimSpace(request.VoiceType),
@@ -111,7 +111,7 @@ func HandleTicketedSession(c *gin.Context) {
 		query.Set("resourceId", record.ResourceID)
 	}
 	c.Request.URL.RawQuery = query.Encode()
-	c.Set("realtimeUserId", record.UserID)
+	c.Set("realtimeUserId", record.SpaceID)
 	c.Set("realtimeVisualEndpoint", "/api/realtime/v2/ws/visual")
 	HandleSession(c)
 }

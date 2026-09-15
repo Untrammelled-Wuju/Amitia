@@ -12,7 +12,7 @@ import (
 	"github.com/u-ai/backend/internal/prompt/textlib"
 )
 
-func (s *service) GetTimeline(page, pageSize int, userID, source, memoryType, timelineType string) ([]map[string]interface{}, int64, error) {
+func (s *service) GetTimeline(page, pageSize int, spaceID, source, memoryType, timelineType string) ([]map[string]interface{}, int64, error) {
 	if page <= 0 {
 		page = 1
 	}
@@ -47,8 +47,8 @@ func (s *service) GetTimeline(page, pageSize int, userID, source, memoryType, ti
 	if timelineType == "" || timelineType == "episodic" {
 		var episodics []map[string]interface{}
 		eq := s.db.Table("episodic_memories")
-		if userID != "" {
-			eq = eq.Where("user_id = ?", userID)
+		if spaceID != "" {
+			eq = eq.Where("space_id = ?", spaceID)
 		}
 		err := eq.Order("created_at DESC").Find(&episodics).Error
 		if err != nil {
@@ -86,7 +86,7 @@ func (s *service) GetTimeline(page, pageSize int, userID, source, memoryType, ti
 	return allEvents[start:end], total, nil
 }
 
-func (s *service) GenerateEpisode(dialogue, characterID, userID string) (map[string]interface{}, error) {
+func (s *service) GenerateEpisode(dialogue, characterID, spaceID string) (map[string]interface{}, error) {
 	cfg := s.getActiveModel()
 	if cfg == nil {
 		return nil, fmt.Errorf("no active model")
@@ -117,8 +117,8 @@ func (s *service) GenerateEpisode(dialogue, characterID, userID string) (map[str
 	id := uuid.New().String()
 	emotionsJSON, _ := json.Marshal(episode.EmotionKeywords)
 	s.db.Exec(
-		"INSERT INTO episodic_memories (id, user_id, character_id, summary, emotion_keywords, key_quote, time_context, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-		id, userID, characterID, episode.Summary, string(emotionsJSON), episode.KeyQuote, episode.TimeContext, now,
+		"INSERT INTO episodic_memories (id, space_id, character_id, summary, emotion_keywords, key_quote, time_context, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+		id, spaceID, characterID, episode.Summary, string(emotionsJSON), episode.KeyQuote, episode.TimeContext, now,
 	)
 
 	return map[string]interface{}{
@@ -185,7 +185,7 @@ func (s *service) InferUserDimensions(characterID string) (map[string]interface{
 	return dimensions, nil
 }
 
-func (s *service) getTimelineOwned(page, pageSize int, userID, source, memoryType, timelineType string) ([]map[string]interface{}, int64, error) {
+func (s *service) getTimelineOwned(page, pageSize int, spaceID, source, memoryType, timelineType string) ([]map[string]interface{}, int64, error) {
 	if page <= 0 {
 		page = 1
 	}
@@ -196,9 +196,9 @@ func (s *service) getTimelineOwned(page, pageSize int, userID, source, memoryTyp
 	if timelineType == "" || timelineType == "memory" || timelineType == "structured" {
 		q := s.db.Table("memory_events AS e").Select("e.*").Joins("JOIN memories AS m ON m.id = e.memory_id")
 		if localSingleUserMode() {
-			q = q.Where("m.user_id = ? OR m.user_id = '' OR m.user_id IS NULL OR m.user_id = 'default'", userID)
+			q = q.Where("m.space_id = ? OR m.space_id = '' OR m.space_id IS NULL OR m.space_id = 'default'", spaceID)
 		} else {
-			q = q.Where("m.user_id = ?", userID)
+			q = q.Where("m.space_id = ?", spaceID)
 		}
 		if source != "" {
 			q = q.Where("e.source = ?", source)
@@ -218,9 +218,9 @@ func (s *service) getTimelineOwned(page, pageSize int, userID, source, memoryTyp
 	if timelineType == "" || timelineType == "episodic" {
 		q := s.db.Table("episodic_memories")
 		if localSingleUserMode() {
-			q = q.Where("user_id = ? OR user_id = '' OR user_id IS NULL OR user_id = 'default'", userID)
+			q = q.Where("space_id = ? OR space_id = '' OR space_id IS NULL OR space_id = 'default'", spaceID)
 		} else {
-			q = q.Where("user_id = ?", userID)
+			q = q.Where("space_id = ?", spaceID)
 		}
 		var episodics []map[string]interface{}
 		if err := q.Order("created_at DESC").Find(&episodics).Error; err != nil {

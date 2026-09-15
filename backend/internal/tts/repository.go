@@ -21,14 +21,14 @@ type Repository interface {
 	Delete(id int) error
 	Activate(id int) error
 	GetActive() (*TtsConfig, error)
-	GetByCharacterID(userID, charID string) (*TtsConfig, error)
+	GetByCharacterID(spaceID, charID string) (*TtsConfig, error)
 	ListProviders() []ProviderInfo
-	ListClonedVoices(userID string) ([]ClonedVoice, error)
-	GetClonedVoice(userID, speakerID string) (*ClonedVoice, error)
+	ListClonedVoices(spaceID string) ([]ClonedVoice, error)
+	GetClonedVoice(spaceID, speakerID string) (*ClonedVoice, error)
 	GetClonedVoiceBySpeakerID(speakerID string) (*ClonedVoice, error)
-	ResolveClonedVoiceConfig(userID, speakerID string) (*TtsConfig, *ClonedVoice, error)
+	ResolveClonedVoiceConfig(spaceID, speakerID string) (*TtsConfig, *ClonedVoice, error)
 	UpsertClonedVoice(voice *ClonedVoice) error
-	DeleteClonedVoice(userID, speakerID string) error
+	DeleteClonedVoice(spaceID, speakerID string) error
 }
 
 type repository struct {
@@ -103,28 +103,28 @@ func ttsLocalSingleUserMode() bool {
 	return config.AppCfg != nil && strings.EqualFold(strings.TrimSpace(config.AppCfg.Security.Mode), "local_single_user")
 }
 
-func ttsOwnerQuery(db *gorm.DB, column, userID string) *gorm.DB {
-	owner := requestidentity.NormalizeUserID(userID)
+func ttsOwnerQuery(db *gorm.DB, column, spaceID string) *gorm.DB {
+	owner := requestidentity.NormalizeSpaceID(spaceID)
 	if ttsLocalSingleUserMode() {
 		return db.Where(
 			fmt.Sprintf("(%s = ? OR %s = '' OR %s IS NULL OR %s = ?)", column, column, column, column),
 			owner,
-			requestidentity.DefaultUserID,
+			requestidentity.LegacySpaceID,
 		)
 	}
 	return db.Where(fmt.Sprintf("%s = ?", column), owner)
 }
 
-func ttsSameOwner(existingUserID, requestedUserID string) bool {
-	existingUserID = strings.TrimSpace(existingUserID)
-	requestedUserID = requestidentity.NormalizeUserID(requestedUserID)
-	if existingUserID == requestedUserID {
+func ttsSameOwner(existingSpaceID, requestedSpaceID string) bool {
+	existingSpaceID = strings.TrimSpace(existingSpaceID)
+	requestedSpaceID = requestidentity.NormalizeSpaceID(requestedSpaceID)
+	if existingSpaceID == requestedSpaceID {
 		return true
 	}
-	return ttsLocalSingleUserMode() && (existingUserID == "" || existingUserID == requestidentity.DefaultUserID)
+	return ttsLocalSingleUserMode() && (existingSpaceID == "" || existingSpaceID == requestidentity.LegacySpaceID)
 }
 
-func (r *repository) GetByCharacterID(userID, charID string) (*TtsConfig, error) {
+func (r *repository) GetByCharacterID(spaceID, charID string) (*TtsConfig, error) {
 	var char struct {
 		VoiceType       string
 		VoiceSpeed      float64
@@ -137,7 +137,7 @@ func (r *repository) GetByCharacterID(userID, charID string) (*TtsConfig, error)
 		EmotionScale    int
 		SilenceDuration int
 	}
-	row := ttsOwnerQuery(r.db.Table("characters"), "user_id", userID).Select(
+	row := ttsOwnerQuery(r.db.Table("characters"), "space_id", spaceID).Select(
 		"voice_type, voice_speed, voice_pitch, voice_volume, custom_voice_id, voice_mode, voice_config_id, emotion, emotion_scale, silence_duration",
 	).Where("id = ?", strings.TrimSpace(charID)).Row()
 	if err := row.Scan(
@@ -167,7 +167,7 @@ func (r *repository) GetByCharacterID(userID, charID string) (*TtsConfig, error)
 	cloneID := ""
 	if char.VoiceMode == "clone" && strings.TrimSpace(char.CustomVoiceID) != "" {
 		cloneID = strings.TrimSpace(char.CustomVoiceID)
-		cloneVoice, cloneErr := r.GetClonedVoice(userID, cloneID)
+		cloneVoice, cloneErr := r.GetClonedVoice(spaceID, cloneID)
 		if cloneErr != nil {
 			// Local single-user deployments can have characters created before clone
 			// metadata existed. Preserve that legacy path locally, but cloud mode
@@ -233,18 +233,18 @@ func (r *repository) GetByCharacterID(userID, charID string) (*TtsConfig, error)
 	return &cfg, nil
 }
 
-func (r *repository) ListClonedVoices(userID string) ([]ClonedVoice, error) {
+func (r *repository) ListClonedVoices(spaceID string) ([]ClonedVoice, error) {
 	var voices []ClonedVoice
-	err := ttsOwnerQuery(r.db.Model(&ClonedVoice{}), "user_id", userID).Order("created_at DESC").Find(&voices).Error
+	err := ttsOwnerQuery(r.db.Model(&ClonedVoice{}), "space_id", spaceID).Order("created_at DESC").Find(&voices).Error
 	if voices == nil {
 		voices = []ClonedVoice{}
 	}
 	return voices, err
 }
 
-func (r *repository) GetClonedVoice(userID, speakerID string) (*ClonedVoice, error) {
+func (r *repository) GetClonedVoice(spaceID, speakerID string) (*ClonedVoice, error) {
 	var voice ClonedVoice
-	err := ttsOwnerQuery(r.db.Model(&ClonedVoice{}), "user_id", userID).Where("speaker_id = ?", speakerID).First(&voice).Error
+	err := ttsOwnerQuery(r.db.Model(&ClonedVoice{}), "space_id", spaceID).Where("speaker_id = ?", speakerID).First(&voice).Error
 	return &voice, err
 }
 
@@ -254,8 +254,8 @@ func (r *repository) GetClonedVoiceBySpeakerID(speakerID string) (*ClonedVoice, 
 	return &voice, err
 }
 
-func (r *repository) ResolveClonedVoiceConfig(userID, speakerID string) (*TtsConfig, *ClonedVoice, error) {
-	voice, err := r.GetClonedVoice(userID, speakerID)
+func (r *repository) ResolveClonedVoiceConfig(spaceID, speakerID string) (*TtsConfig, *ClonedVoice, error) {
+	voice, err := r.GetClonedVoice(spaceID, speakerID)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -277,18 +277,18 @@ func (r *repository) ResolveClonedVoiceConfig(userID, speakerID string) (*TtsCon
 }
 
 func (r *repository) UpsertClonedVoice(voice *ClonedVoice) error {
-	if voice == nil || strings.TrimSpace(voice.UserID) == "" || strings.TrimSpace(voice.SpeakerID) == "" {
+	if voice == nil || strings.TrimSpace(voice.SpaceID) == "" || strings.TrimSpace(voice.SpeakerID) == "" {
 		return gorm.ErrInvalidData
 	}
 	var existing ClonedVoice
 	err := r.db.Where("speaker_id = ?", voice.SpeakerID).First(&existing).Error
 	if err == nil {
-		if !ttsSameOwner(existing.UserID, voice.UserID) {
+		if !ttsSameOwner(existing.SpaceID, voice.SpaceID) {
 			return fmt.Errorf("speakerId 已属于其他用户")
 		}
 		return r.db.Model(&ClonedVoice{}).Where("speaker_id = ?", voice.SpeakerID).Updates(map[string]interface{}{
-			"user_id": requestidentity.NormalizeUserID(voice.UserID),
-			"name":    voice.Name, "tts_config_id": voice.TtsConfigID, "language": voice.Language, "status": voice.Status, "updated_at": voice.UpdatedAt,
+			"space_id": requestidentity.NormalizeSpaceID(voice.SpaceID),
+			"name":     voice.Name, "tts_config_id": voice.TtsConfigID, "language": voice.Language, "status": voice.Status, "updated_at": voice.UpdatedAt,
 		}).Error
 	}
 	if !errors.Is(err, gorm.ErrRecordNotFound) {
@@ -297,8 +297,8 @@ func (r *repository) UpsertClonedVoice(voice *ClonedVoice) error {
 	return r.db.Create(voice).Error
 }
 
-func (r *repository) DeleteClonedVoice(userID, speakerID string) error {
-	return ttsOwnerQuery(r.db.Model(&ClonedVoice{}), "user_id", userID).Where("speaker_id = ?", speakerID).Delete(&ClonedVoice{}).Error
+func (r *repository) DeleteClonedVoice(spaceID, speakerID string) error {
+	return ttsOwnerQuery(r.db.Model(&ClonedVoice{}), "space_id", spaceID).Where("speaker_id = ?", speakerID).Delete(&ClonedVoice{}).Error
 }
 
 func (r *repository) ListProviders() []ProviderInfo {

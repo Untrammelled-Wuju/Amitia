@@ -77,7 +77,7 @@ func (s *service) SyncEmbedding(memID, key, value, characterID, memoryType strin
 	characterID = mem.CharacterID
 	memoryType = mem.MemoryType
 	scopeType := mem.Scope
-	userID := strings.TrimSpace(mem.UserID)
+	spaceID := strings.TrimSpace(mem.SpaceID)
 	signature := memoryEmbeddingSignature(*mem)
 	text := key + " " + value
 	vector, err := s.embeddingSvc.Embed(text)
@@ -104,7 +104,7 @@ func (s *service) SyncEmbedding(memID, key, value, characterID, memoryType strin
 		"memory_type":  memoryType,
 		"scope_type":   scopeType,
 		"memory_kind":  memoryType,
-		"user_id":      userID,
+		"space_id":     spaceID,
 		"value":        value,
 	}
 	collectionName := collectionNameForMemoryType(memoryType)
@@ -145,7 +145,7 @@ func (s *service) acquireEmbeddingLock(memID string) func() {
 func memoryEmbeddingSignature(m Memory) string {
 	return strings.Join([]string{
 		m.ID,
-		m.UserID,
+		m.SpaceID,
 		m.Key,
 		m.Value,
 		m.CharacterID,

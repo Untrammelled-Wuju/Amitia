@@ -38,7 +38,7 @@ func (p *agentReconciliationProcessor) Capture(ctx context.Context, scope Reconc
 		return nil, nil
 	}
 	snap := &AgentReconciliationSnapshot{
-		UserID:         scope.UserID,
+		SpaceID:        scope.SpaceID,
 		CharacterID:    scope.CharacterID,
 		ConversationID: scope.ConversationID,
 		InteractionID:  scope.InteractionID,
@@ -49,8 +49,8 @@ func (p *agentReconciliationProcessor) Capture(ctx context.Context, scope Reconc
 		Invocations:    make([]AgentInvocationRef, 0),
 		CapturedAt:     p.now(),
 	}
-	if p.goals != nil && scope.UserID != "" {
-		snap.Goals = p.goals.ActiveForScope(ctx, scope.UserID, scope.CharacterID, scope.ConversationID)
+	if p.goals != nil && scope.SpaceID != "" {
+		snap.Goals = p.goals.ActiveForScope(ctx, scope.SpaceID, scope.CharacterID, scope.ConversationID)
 	}
 	if p.observations != nil && scope.InteractionID != "" {
 		snap.Observations = p.observations.ListObservationsByInteraction(ctx, scope.InteractionID)

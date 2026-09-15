@@ -12,16 +12,16 @@ import (
 )
 
 type Repository interface {
-	List(q WorldBookListQuery, userID string) ([]WorldBookEntry, int64, error)
-	FindByID(id, userID string) (*WorldBookEntry, error)
+	List(q WorldBookListQuery, spaceID string) ([]WorldBookEntry, int64, error)
+	FindByID(id, spaceID string) (*WorldBookEntry, error)
 	Create(e *WorldBookEntry) error
-	Update(id, userID string, updates map[string]interface{}) error
-	Delete(id, userID string) error
-	GetAll(userID string) ([]WorldBookEntry, error)
-	GetByCharacterID(userID, characterID string) ([]WorldBookEntry, error)
-	GetByMatchType(userID, matchType string) ([]WorldBookEntry, error)
-	IncrementHitCount(id, userID string) error
-	DeleteAll(userID string) error
+	Update(id, spaceID string, updates map[string]interface{}) error
+	Delete(id, spaceID string) error
+	GetAll(spaceID string) ([]WorldBookEntry, error)
+	GetByCharacterID(spaceID, characterID string) ([]WorldBookEntry, error)
+	GetByMatchType(spaceID, matchType string) ([]WorldBookEntry, error)
+	IncrementHitCount(id, spaceID string) error
+	DeleteAll(spaceID string) error
 }
 
 type repository struct {
@@ -32,8 +32,8 @@ func NewRepository(ctx *app.AppContext) Repository {
 	return &repository{db: ctx.DB}
 }
 
-func (r *repository) List(q WorldBookListQuery, userID string) ([]WorldBookEntry, int64, error) {
-	query := worldbookOwnerScope(r.db.Model(&WorldBookEntry{}), "user_id", userID)
+func (r *repository) List(q WorldBookListQuery, spaceID string) ([]WorldBookEntry, int64, error) {
+	query := worldbookOwnerScope(r.db.Model(&WorldBookEntry{}), "space_id", spaceID)
 	if q.MatchType != "" {
 		query = query.Where("match_type = ?", q.MatchType)
 	}
@@ -65,9 +65,9 @@ func (r *repository) List(q WorldBookListQuery, userID string) ([]WorldBookEntry
 	return items, total, err
 }
 
-func (r *repository) FindByID(id, userID string) (*WorldBookEntry, error) {
+func (r *repository) FindByID(id, spaceID string) (*WorldBookEntry, error) {
 	var e WorldBookEntry
-	query := worldbookOwnerScope(r.db.Where("id = ?", id), "user_id", userID)
+	query := worldbookOwnerScope(r.db.Where("id = ?", id), "space_id", spaceID)
 	err := query.First(&e).Error
 	return &e, err
 }
@@ -76,16 +76,16 @@ func (r *repository) Create(e *WorldBookEntry) error {
 	if e.ID == "" {
 		e.ID = uuid.New().String()
 	}
-	e.UserID = normalizeWorldbookOwner(e.UserID)
+	e.SpaceID = normalizeWorldbookOwner(e.SpaceID)
 	return r.db.Create(e).Error
 }
 
-func (r *repository) Update(id, userID string, updates map[string]interface{}) error {
+func (r *repository) Update(id, spaceID string, updates map[string]interface{}) error {
 	if len(updates) == 0 {
 		return nil
 	}
 	updates["updated_at"] = time.Now().Format("2006-01-02 15:04:05")
-	query := worldbookOwnerScope(r.db.Model(&WorldBookEntry{}).Where("id = ?", id), "user_id", userID)
+	query := worldbookOwnerScope(r.db.Model(&WorldBookEntry{}).Where("id = ?", id), "space_id", spaceID)
 	result := query.Updates(updates)
 	if result.Error != nil {
 		return result.Error
@@ -96,8 +96,8 @@ func (r *repository) Update(id, userID string, updates map[string]interface{}) e
 	return nil
 }
 
-func (r *repository) Delete(id, userID string) error {
-	query := worldbookOwnerScope(r.db.Where("id = ?", id), "user_id", userID)
+func (r *repository) Delete(id, spaceID string) error {
+	query := worldbookOwnerScope(r.db.Where("id = ?", id), "space_id", spaceID)
 	result := query.Delete(&WorldBookEntry{})
 	if result.Error != nil {
 		return result.Error
@@ -108,9 +108,9 @@ func (r *repository) Delete(id, userID string) error {
 	return nil
 }
 
-func (r *repository) GetAll(userID string) ([]WorldBookEntry, error) {
+func (r *repository) GetAll(spaceID string) ([]WorldBookEntry, error) {
 	var items []WorldBookEntry
-	query := worldbookOwnerScope(r.db.Order("priority DESC, created_at DESC"), "user_id", userID)
+	query := worldbookOwnerScope(r.db.Order("priority DESC, created_at DESC"), "space_id", spaceID)
 	err := query.Find(&items).Error
 	if items == nil {
 		items = []WorldBookEntry{}
@@ -118,9 +118,9 @@ func (r *repository) GetAll(userID string) ([]WorldBookEntry, error) {
 	return items, err
 }
 
-func (r *repository) GetByCharacterID(userID, characterID string) ([]WorldBookEntry, error) {
+func (r *repository) GetByCharacterID(spaceID, characterID string) ([]WorldBookEntry, error) {
 	var items []WorldBookEntry
-	query := worldbookOwnerScope(r.db.Order("priority DESC, created_at DESC"), "user_id", userID)
+	query := worldbookOwnerScope(r.db.Order("priority DESC, created_at DESC"), "space_id", spaceID)
 	if characterID != "" {
 		query = query.Where("character_id = ? OR character_id = ''", characterID)
 	} else {
@@ -133,9 +133,9 @@ func (r *repository) GetByCharacterID(userID, characterID string) ([]WorldBookEn
 	return items, err
 }
 
-func (r *repository) GetByMatchType(userID, matchType string) ([]WorldBookEntry, error) {
+func (r *repository) GetByMatchType(spaceID, matchType string) ([]WorldBookEntry, error) {
 	var items []WorldBookEntry
-	query := worldbookOwnerScope(r.db.Order("priority DESC, created_at DESC"), "user_id", userID)
+	query := worldbookOwnerScope(r.db.Order("priority DESC, created_at DESC"), "space_id", spaceID)
 	if matchType != "" {
 		query = query.Where("match_type = ?", matchType)
 	}
@@ -146,12 +146,12 @@ func (r *repository) GetByMatchType(userID, matchType string) ([]WorldBookEntry,
 	return items, err
 }
 
-func (r *repository) IncrementHitCount(id, userID string) error {
-	query := worldbookOwnerScope(r.db.Model(&WorldBookEntry{}).Where("id = ?", id), "user_id", userID)
+func (r *repository) IncrementHitCount(id, spaceID string) error {
+	query := worldbookOwnerScope(r.db.Model(&WorldBookEntry{}).Where("id = ?", id), "space_id", spaceID)
 	return query.UpdateColumn("hit_count", gorm.Expr("hit_count + 1")).Error
 }
 
-func (r *repository) DeleteAll(userID string) error {
-	query := worldbookOwnerScope(r.db.Where("1 = 1"), "user_id", userID)
+func (r *repository) DeleteAll(spaceID string) error {
+	query := worldbookOwnerScope(r.db.Where("1 = 1"), "space_id", spaceID)
 	return query.Delete(&WorldBookEntry{}).Error
 }

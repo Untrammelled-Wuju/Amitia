@@ -45,12 +45,12 @@ func BuildStatusToolDefinition() (capability.ToolDefinition, error) {
 }`)
 
 	return capability.ToolDefinition{
-		ID:          toolIDStatus,
-		ModelName:   toolIDStatus,
-		Source:      capability.ToolSourceBuiltin,
-		Name:        "Android Camera Status",
-		Description: "Query Android camera capability and permission state. Does not trigger capture.",
-		Version:     toolVersion,
+		ID:           toolIDStatus,
+		ModelName:    toolIDStatus,
+		Source:       capability.ToolSourceBuiltin,
+		Name:         "Android Camera Status",
+		Description:  "Query Android camera capability and permission state. Does not trigger capture.",
+		Version:      toolVersion,
 		InputSchema:  inputSchema,
 		OutputSchema: outputSchema,
 		Permissions: []capability.PermissionRequirement{
@@ -62,7 +62,7 @@ func BuildStatusToolDefinition() (capability.ToolDefinition, error) {
 		},
 		RiskLevel:      capability.RiskLow,
 		SideEffect:     capability.SideEffectNone,
-		Scope:          capability.ScopeRule{Type: "user"},
+		Scope:          capability.ScopeRule{Type: "space"},
 		Enabled:        true,
 		HasSideEffects: false,
 		Idempotent:     true,
@@ -129,12 +129,12 @@ func BuildListToolDefinition() (capability.ToolDefinition, error) {
 }`)
 
 	return capability.ToolDefinition{
-		ID:          toolIDList,
-		ModelName:   toolIDList,
-		Source:      capability.ToolSourceBuiltin,
-		Name:        "Android Camera List",
-		Description: "List available physical cameras on the Android device with their capabilities.",
-		Version:     toolVersion,
+		ID:           toolIDList,
+		ModelName:    toolIDList,
+		Source:       capability.ToolSourceBuiltin,
+		Name:         "Android Camera List",
+		Description:  "List available physical cameras on the Android device with their capabilities.",
+		Version:      toolVersion,
 		InputSchema:  inputSchema,
 		OutputSchema: outputSchema,
 		Permissions: []capability.PermissionRequirement{
@@ -146,7 +146,7 @@ func BuildListToolDefinition() (capability.ToolDefinition, error) {
 		},
 		RiskLevel:      capability.RiskLow,
 		SideEffect:     capability.SideEffectNone,
-		Scope:          capability.ScopeRule{Type: "user"},
+		Scope:          capability.ScopeRule{Type: "space"},
 		Enabled:        true,
 		HasSideEffects: false,
 		Idempotent:     true,
@@ -286,12 +286,12 @@ func BuildCaptureToolDefinition() (capability.ToolDefinition, error) {
 }`)
 
 	return capability.ToolDefinition{
-		ID:          toolIDCapture,
-		ModelName:   toolIDCapture,
-		Source:      capability.ToolSourceBuiltin,
-		Name:        "Android Camera Capture",
-		Description: "Capture a single still photo from an Android device camera via CameraX. Returns an amitia:// resource reference, never raw pixels. Requires explicit user approval.",
-		Version:     toolVersion,
+		ID:           toolIDCapture,
+		ModelName:    toolIDCapture,
+		Source:       capability.ToolSourceBuiltin,
+		Name:         "Android Camera Capture",
+		Description:  "Capture a single still photo from an Android device camera via CameraX. Returns an amitia:// resource reference, never raw pixels. Requires explicit user approval.",
+		Version:      toolVersion,
 		InputSchema:  inputSchema,
 		OutputSchema: outputSchema,
 		Permissions: []capability.PermissionRequirement{
@@ -303,7 +303,7 @@ func BuildCaptureToolDefinition() (capability.ToolDefinition, error) {
 		},
 		RiskLevel:      capability.RiskHigh,
 		SideEffect:     capability.SideEffectWrite,
-		Scope:          capability.ScopeRule{Type: "user"},
+		Scope:          capability.ScopeRule{Type: "space"},
 		Enabled:        true,
 		HasSideEffects: true,
 		Idempotent:     false,

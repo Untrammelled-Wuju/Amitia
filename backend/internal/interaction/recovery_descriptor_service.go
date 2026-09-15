@@ -81,8 +81,8 @@ func (s *RecoveryDescriptorService) Associate(ctx context.Context, input Recover
 }
 
 func (s *RecoveryDescriptorService) checkScopeMatch(existing *RecoveryDescriptor, record *InteractionRecord) error {
-	if existing.Scope.UserID != record.Scope.UserID {
-		return fmt.Errorf("recovery: scope_mismatch: userId")
+	if existing.Scope.SpaceID != record.Scope.SpaceID {
+		return fmt.Errorf("recovery: scope_mismatch: spaceId")
 	}
 	if existing.Scope.CharacterID != "" && record.Scope.CharacterID != "" && existing.Scope.CharacterID != record.Scope.CharacterID {
 		return fmt.Errorf("recovery: scope_mismatch: characterId")

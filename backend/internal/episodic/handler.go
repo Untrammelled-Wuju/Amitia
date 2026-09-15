@@ -11,15 +11,15 @@ import (
 
 type Handler struct{ service Service }
 type scopedEpisodicService interface {
-	ListForUser(EpisodicListQuery, string) (*EpisodicListResponse, error)
-	CreateForUser(*CreateEpisodicRequest, string) (*EpisodicMemory, error)
-	DeleteForUser(string, string) error
-	UpdateRetentionForUser(string, string, int) (*EpisodicMemory, error)
-	RestoreForUser(string, string) (*EpisodicMemory, error)
-	GetByUserForUser(string, string) ([]EpisodicMemory, error)
-	GetDetailForUser(string, string) (*EpisodicMemory, []map[string]interface{}, error)
-	ExtractForUser(string, string, []map[string]string, string) error
-	SystemPromptForUser(string, string) string
+	ListForSpace(EpisodicListQuery, string) (*EpisodicListResponse, error)
+	CreateForSpace(*CreateEpisodicRequest, string) (*EpisodicMemory, error)
+	DeleteForSpace(string, string) error
+	UpdateRetentionForSpace(string, string, int) (*EpisodicMemory, error)
+	RestoreForSpace(string, string) (*EpisodicMemory, error)
+	GetForSpace(string, string) ([]EpisodicMemory, error)
+	GetDetailForSpace(string, string) (*EpisodicMemory, []map[string]interface{}, error)
+	ExtractForSpace(string, string, []map[string]string, string) error
+	SystemPromptForSpace(string, string) string
 }
 
 func NewHandler(srv Service) *Handler { return &Handler{service: srv} }
@@ -29,7 +29,7 @@ func (h *Handler) scoped(c *gin.Context) (scopedEpisodicService, string, bool) {
 		util.ErrorResponse(c, response.InternalError, "episodic service does not provide user-scoped operations", nil)
 		return nil, "", false
 	}
-	return s, requestidentity.ResolveGin(c, ""), true
+	return s, requestidentity.ResolveGin(c), true
 }
 func (h *Handler) List(c *gin.Context) {
 	var q EpisodicListQuery
@@ -38,7 +38,7 @@ func (h *Handler) List(c *gin.Context) {
 	if !ok {
 		return
 	}
-	r, e := s.ListForUser(q, u)
+	r, e := s.ListForSpace(q, u)
 	if e != nil {
 		util.ErrorResponse(c, response.InternalError, "查询失败", nil)
 		return
@@ -55,7 +55,7 @@ func (h *Handler) Create(c *gin.Context) {
 	if !ok {
 		return
 	}
-	m, e := s.CreateForUser(&q, u)
+	m, e := s.CreateForSpace(&q, u)
 	if e != nil {
 		util.ErrorResponse(c, response.InternalError, e.Error(), nil)
 		return
@@ -67,7 +67,7 @@ func (h *Handler) Delete(c *gin.Context) {
 	if !ok {
 		return
 	}
-	if e := s.DeleteForUser(c.Param("id"), u); e != nil {
+	if e := s.DeleteForSpace(c.Param("id"), u); e != nil {
 		util.ErrorResponse(c, response.OperationFailed, e.Error(), nil)
 		return
 	}
@@ -85,7 +85,7 @@ func (h *Handler) UpdateRetention(c *gin.Context) {
 	if !ok {
 		return
 	}
-	m, e := s.UpdateRetentionForUser(c.Param("id"), u, b.RetentionLevel)
+	m, e := s.UpdateRetentionForSpace(c.Param("id"), u, b.RetentionLevel)
 	if e != nil {
 		util.ErrorResponse(c, response.OperationFailed, e.Error(), nil)
 		return
@@ -97,19 +97,19 @@ func (h *Handler) Restore(c *gin.Context) {
 	if !ok {
 		return
 	}
-	m, e := s.RestoreForUser(c.Param("id"), u)
+	m, e := s.RestoreForSpace(c.Param("id"), u)
 	if e != nil {
 		util.ErrorResponse(c, response.OperationFailed, e.Error(), nil)
 		return
 	}
 	util.SuccessMsgResponse(c, "情景记忆已恢复", m)
 }
-func (h *Handler) GetByUserID(c *gin.Context) {
+func (h *Handler) GetBySpaceID(c *gin.Context) {
 	s, u, ok := h.scoped(c)
 	if !ok {
 		return
 	}
-	m, e := s.GetByUserForUser(u, c.Query("characterId"))
+	m, e := s.GetForSpace(u, c.Query("characterId"))
 	if e != nil {
 		util.ErrorResponse(c, response.InternalError, e.Error(), nil)
 		return
@@ -121,7 +121,7 @@ func (h *Handler) GetDetail(c *gin.Context) {
 	if !ok {
 		return
 	}
-	m, msg, e := s.GetDetailForUser(c.Param("id"), u)
+	m, msg, e := s.GetDetailForSpace(c.Param("id"), u)
 	if e != nil {
 		util.ErrorResponse(c, response.OperationFailed, e.Error(), nil)
 		return
@@ -142,7 +142,7 @@ func (h *Handler) Extract(c *gin.Context) {
 	if !ok {
 		return
 	}
-	if e := s.ExtractForUser(u, b.ConversationID, b.Messages, b.CharacterID); e != nil {
+	if e := s.ExtractForSpace(u, b.ConversationID, b.Messages, b.CharacterID); e != nil {
 		util.ErrorResponse(c, response.InternalError, e.Error(), nil)
 		return
 	}
@@ -153,5 +153,5 @@ func (h *Handler) SystemPrompt(c *gin.Context) {
 	if !ok {
 		return
 	}
-	util.SuccessResponse(c, map[string]string{"prompt": s.SystemPromptForUser(u, c.Query("characterId"))})
+	util.SuccessResponse(c, map[string]string{"prompt": s.SystemPromptForSpace(u, c.Query("characterId"))})
 }

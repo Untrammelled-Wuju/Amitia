@@ -6,7 +6,7 @@ import "encoding/json"
 
 type Character struct {
 	ID                  string  `gorm:"column:id;primaryKey" json:"id"`
-	UserID              string  `gorm:"column:user_id;not null;default:default;index" json:"-"`
+	SpaceID             string  `gorm:"column:space_id;not null;index" json:"-"`
 	Name                string  `gorm:"column:name;not null" json:"name"`
 	Avatar              string  `gorm:"column:avatar" json:"avatar"`
 	Identity            string  `gorm:"column:identity" json:"identity"`

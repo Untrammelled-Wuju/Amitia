@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/u-ai/backend/internal/requestidentity"
 	"gorm.io/gorm"
 )
 
@@ -27,16 +28,16 @@ func (c *RelationshipTimeCoordinator) PrepareInbound(ctx context.Context, input 
 	if c == nil || c.repo == nil {
 		return result, errors.New("relationship time repository is required")
 	}
-	input.UserID = strings.TrimSpace(input.UserID)
+	input.SpaceID = strings.TrimSpace(input.SpaceID)
 	input.CharacterID = strings.TrimSpace(input.CharacterID)
 	input.RequestID = strings.TrimSpace(input.RequestID)
 	input.InteractionID = strings.TrimSpace(input.InteractionID)
-	if input.UserID == "" || input.CharacterID == "" || input.InteractionID == "" {
+	if input.SpaceID == "" || input.CharacterID == "" || input.InteractionID == "" {
 		return result, errors.New("user id, character id and interaction id are required")
 	}
 	settings, settingsErr := c.repo.GetSettings(ctx, input.CharacterID)
 	if settingsErr == nil && settings != nil && !settings.Enabled {
-		return RelationshipTimeContext{Version: RelationshipTimeVersion, UserID: input.UserID, CharacterID: input.CharacterID}, nil
+		return RelationshipTimeContext{Version: RelationshipTimeVersion, SpaceID: input.SpaceID, CharacterID: input.CharacterID}, nil
 	}
 	if input.RequestID == "" {
 		input.RequestID = input.InteractionID
@@ -50,7 +51,7 @@ func (c *RelationshipTimeCoordinator) PrepareInbound(ctx context.Context, input 
 			ID:            uuid.NewString(),
 			RequestID:     input.RequestID,
 			InteractionID: input.InteractionID,
-			UserID:        input.UserID,
+			SpaceID:       input.SpaceID,
 			CharacterID:   input.CharacterID,
 			Channel:       input.Channel,
 			PeerID:        input.PeerID,
@@ -64,18 +65,18 @@ func (c *RelationshipTimeCoordinator) PrepareInbound(ctx context.Context, input 
 			return createErr
 		}
 		if !created {
-			existing, getErr := repo.GetReceipt(ctx, input.UserID, input.RequestID)
+			existing, getErr := repo.GetReceipt(ctx, input.SpaceID, input.RequestID)
 			if getErr != nil {
 				return getErr
 			}
 			result, getErr = c.contextFromReceipt(ctx, repo, existing)
 			return getErr
 		}
-		global, getErr := repo.GetGlobalPresence(ctx, input.UserID)
+		global, getErr := repo.GetGlobalPresence(ctx, input.SpaceID)
 		if getErr != nil {
 			return getErr
 		}
-		relationship, getErr := repo.GetRelationshipPresence(ctx, input.UserID, input.CharacterID)
+		relationship, getErr := repo.GetRelationshipPresence(ctx, input.SpaceID, input.CharacterID)
 		if getErr != nil {
 			return getErr
 		}
@@ -88,17 +89,17 @@ func (c *RelationshipTimeCoordinator) PrepareInbound(ctx context.Context, input 
 			previousRelationship = ParseRelationshipTime(relationship.LastCommittedUserInteractionAtUTC)
 		}
 		if !input.IsInternal && !isProactiveSource(input.Source) {
-			if saveErr := repo.SaveObservedPresence(ctx, ObservePresenceInput{UserID: input.UserID, CharacterID: input.CharacterID, Channel: input.Channel, ObservedAt: input.ObservedAt}); saveErr != nil {
+			if saveErr := repo.SaveObservedPresence(ctx, ObservePresenceInput{SpaceID: input.SpaceID, CharacterID: input.CharacterID, Channel: input.Channel, ObservedAt: input.ObservedAt}); saveErr != nil {
 				return saveErr
 			}
 		}
-		cadence, cadenceErr := c.loadCadence(ctx, repo, input.UserID, input.CharacterID)
+		cadence, cadenceErr := c.loadCadence(ctx, repo, input.SpaceID, input.CharacterID)
 		if cadenceErr != nil {
 			return cadenceErr
 		}
 		globalGap, _, _, globalDiagnostics := gapMetrics(input.ObservedAt, previousGlobal, cadence)
 		relationshipGap, normalizedGap, deviation, relationshipDiagnostics := gapMetrics(input.ObservedAt, previousRelationship, cadence)
-		result = c.baseContext(input.UserID, input.CharacterID, input.ObservedAt, global, relationship, globalGap, relationshipGap, normalizedGap, deviation, cadence)
+		result = c.baseContext(input.SpaceID, input.CharacterID, input.ObservedAt, global, relationship, globalGap, relationshipGap, normalizedGap, deviation, cadence)
 		result.Diagnostics = append(globalDiagnostics, relationshipDiagnostics...)
 		eligible := !previousRelationship.IsZero() && !input.IsInternal && !isProactiveSource(input.Source)
 		if eligible && settings != nil && !settings.ReunionEnabled {
@@ -121,7 +122,7 @@ func (c *RelationshipTimeCoordinator) PrepareInbound(ctx context.Context, input 
 			policyJSON, _ := json.Marshal(policy)
 			episode, _, episodeErr := repo.CreateOrGetReunionEpisode(ctx, &ReunionEpisode{
 				ID:                                   uuid.NewString(),
-				UserID:                               input.UserID,
+				SpaceID:                              input.SpaceID,
 				CharacterID:                          input.CharacterID,
 				ReunionKind:                          kind,
 				ReunionLevel:                         level,
@@ -136,7 +137,7 @@ func (c *RelationshipTimeCoordinator) PrepareInbound(ctx context.Context, input 
 				DeviationScore:                       deviation,
 				ContinuityBefore:                     result.ContinuityScore,
 				PolicyJSON:                           string(policyJSON),
-				IdempotencyKey:                       reunionIdempotencyKey(input.UserID, input.CharacterID, FormatRelationshipTime(previousRelationship)),
+				IdempotencyKey:                       reunionIdempotencyKey(input.SpaceID, input.CharacterID, FormatRelationshipTime(previousRelationship)),
 				CreatedAtUTC:                         FormatRelationshipTime(input.ObservedAt),
 				UpdatedAtUTC:                         FormatRelationshipTime(input.ObservedAt),
 			})
@@ -152,7 +153,7 @@ func (c *RelationshipTimeCoordinator) PrepareInbound(ctx context.Context, input 
 			}
 			result.Reunion = reunionContextFromEpisode(episode, shouldExpress && didClaim)
 			if didClaim {
-				if updateErr := repo.db.WithContext(ctx).Model(&RelationshipPresenceState{}).Where("user_id = ? AND character_id = ?", input.UserID, input.CharacterID).Update("active_reunion_episode_id", episode.ID).Error; updateErr != nil {
+				if updateErr := repo.db.WithContext(ctx).Model(&RelationshipPresenceState{}).Where("space_id = ? AND character_id = ?", input.SpaceID, input.CharacterID).Update("active_reunion_episode_id", episode.ID).Error; updateErr != nil {
 					return updateErr
 				}
 			}
@@ -164,7 +165,7 @@ func (c *RelationshipTimeCoordinator) PrepareInbound(ctx context.Context, input 
 		if result.Reunion != nil {
 			updateFields["reunion_episode_id"] = result.Reunion.EpisodeID
 		}
-		if updateErr := repo.db.WithContext(ctx).Model(&InteractionReceipt{}).Where("user_id = ? AND request_id = ?", input.UserID, input.RequestID).Updates(updateFields).Error; updateErr != nil {
+		if updateErr := repo.db.WithContext(ctx).Model(&InteractionReceipt{}).Where("space_id = ? AND request_id = ?", input.SpaceID, input.RequestID).Updates(updateFields).Error; updateErr != nil {
 			return updateErr
 		}
 		return nil
@@ -180,21 +181,21 @@ func (c *RelationshipTimeCoordinator) ReleaseClaim(ctx context.Context, interact
 }
 
 func (c *RelationshipTimeCoordinator) Resolve(ctx context.Context, input SnapshotInput, nowUTC time.Time) (*RelationshipTimeContext, error) {
-	if c == nil || c.repo == nil || strings.TrimSpace(input.UserID) == "" || strings.TrimSpace(input.CharacterID) == "" {
+	if c == nil || c.repo == nil || strings.TrimSpace(input.SpaceID) == "" || strings.TrimSpace(input.CharacterID) == "" {
 		return nil, nil
 	}
 	if nowUTC.IsZero() {
 		nowUTC = c.clock.Now()
 	}
-	global, err := c.repo.GetGlobalPresence(ctx, input.UserID)
+	global, err := c.repo.GetGlobalPresence(ctx, input.SpaceID)
 	if err != nil {
 		return nil, err
 	}
-	relationship, err := c.repo.GetRelationshipPresence(ctx, input.UserID, input.CharacterID)
+	relationship, err := c.repo.GetRelationshipPresence(ctx, input.SpaceID, input.CharacterID)
 	if err != nil {
 		return nil, err
 	}
-	cadence, err := c.loadCadence(ctx, c.repo, input.UserID, input.CharacterID)
+	cadence, err := c.loadCadence(ctx, c.repo, input.SpaceID, input.CharacterID)
 	if err != nil {
 		return nil, err
 	}
@@ -208,7 +209,7 @@ func (c *RelationshipTimeCoordinator) Resolve(ctx context.Context, input Snapsho
 	}
 	globalGap, _, _, globalDiagnostics := gapMetrics(nowUTC, previousGlobal, cadence)
 	relationshipGap, normalized, deviation, relationshipDiagnostics := gapMetrics(nowUTC, previousRelationship, cadence)
-	result := c.baseContext(input.UserID, input.CharacterID, nowUTC, global, relationship, globalGap, relationshipGap, normalized, deviation, cadence)
+	result := c.baseContext(input.SpaceID, input.CharacterID, nowUTC, global, relationship, globalGap, relationshipGap, normalized, deviation, cadence)
 	result.Diagnostics = append(globalDiagnostics, relationshipDiagnostics...)
 	if relationship != nil && relationship.ActiveReunionEpisodeID != "" {
 		episode, getErr := c.repo.GetReunionEpisode(ctx, relationship.ActiveReunionEpisodeID)
@@ -243,18 +244,18 @@ func (c *RelationshipTimeCoordinator) SaveSettings(ctx context.Context, settings
 	return c.repo.SaveSettings(ctx, settings)
 }
 
-func (c *RelationshipTimeCoordinator) GetPresenceState(ctx context.Context, userID, characterID string) (*RelationshipPresenceState, error) {
+func (c *RelationshipTimeCoordinator) GetPresenceState(ctx context.Context, spaceID, characterID string) (*RelationshipPresenceState, error) {
 	if c == nil || c.repo == nil {
 		return nil, errors.New("relationship time repository is required")
 	}
-	return c.repo.GetRelationshipPresence(ctx, userID, characterID)
+	return c.repo.GetRelationshipPresence(ctx, spaceID, characterID)
 }
 
-func (c *RelationshipTimeCoordinator) ListReunionEpisodes(ctx context.Context, userID, characterID string, limit int) ([]ReunionEpisode, error) {
+func (c *RelationshipTimeCoordinator) ListReunionEpisodes(ctx context.Context, spaceID, characterID string, limit int) ([]ReunionEpisode, error) {
 	if c == nil || c.repo == nil {
 		return nil, errors.New("relationship time repository is required")
 	}
-	return c.repo.ListReunionEpisodes(ctx, userID, characterID, limit)
+	return c.repo.ListReunionEpisodes(ctx, spaceID, characterID, limit)
 }
 
 func (c *RelationshipTimeCoordinator) GetReunionEpisode(ctx context.Context, episodeID string) (*ReunionEpisode, error) {
@@ -264,31 +265,29 @@ func (c *RelationshipTimeCoordinator) GetReunionEpisode(ctx context.Context, epi
 	return c.repo.GetReunionEpisode(ctx, episodeID)
 }
 
-func (c *RelationshipTimeCoordinator) GetState(ctx context.Context, userID, characterID string) (*RelationshipTimeContext, error) {
+func (c *RelationshipTimeCoordinator) GetState(ctx context.Context, spaceID, characterID string) (*RelationshipTimeContext, error) {
 	if c == nil || c.repo == nil {
 		return nil, errors.New("relationship time repository is required")
 	}
-	result, err := c.Resolve(ctx, SnapshotInput{UserID: userID, CharacterID: characterID}, c.clock.Now())
+	result, err := c.Resolve(ctx, SnapshotInput{SpaceID: spaceID, CharacterID: characterID}, c.clock.Now())
 	return result, err
 }
 
-func (c *RelationshipTimeCoordinator) RecordAssistantContact(ctx context.Context, userID, characterID string, at time.Time) error {
+func (c *RelationshipTimeCoordinator) RecordAssistantContact(ctx context.Context, spaceID, characterID string, at time.Time) error {
 	if c == nil || c.repo == nil {
 		return errors.New("relationship time repository is required")
 	}
-	if strings.TrimSpace(userID) == "" {
-		userID = "default"
-	}
+	spaceID = requestidentity.NormalizeSpaceID(spaceID)
 	if strings.TrimSpace(characterID) == "" {
 		return errors.New("character id is required")
 	}
 	if at.IsZero() {
 		at = c.clock.Now()
 	}
-	return c.repo.RecordAssistantContact(ctx, userID, characterID, at.UTC())
+	return c.repo.RecordAssistantContact(ctx, spaceID, characterID, at.UTC())
 }
 
-func (c *RelationshipTimeCoordinator) FinalizeCommittedTx(ctx context.Context, tx *gorm.DB, userID, characterID, interactionID string, relationshipTime *RelationshipTimeContext, suppress bool, reason string, assistantInitiated bool) error {
+func (c *RelationshipTimeCoordinator) FinalizeCommittedTx(ctx context.Context, tx *gorm.DB, spaceID, characterID, interactionID string, relationshipTime *RelationshipTimeContext, suppress bool, reason string, assistantInitiated bool) error {
 	if c == nil || c.repo == nil {
 		return errors.New("relationship time repository is required")
 	}
@@ -305,26 +304,26 @@ func (c *RelationshipTimeCoordinator) FinalizeCommittedTx(ctx context.Context, t
 	previousGlobal := ParseRelationshipTime(receipt.PreviousGlobalCommittedAtUTC)
 	var relationshipSample *CadenceSample
 	if gap := committedAt.Sub(previousRelationship); !previousRelationship.IsZero() && gap >= SessionBreakThreshold {
-		relationshipSample = cadenceSample(userID, characterID, interactionID, "relationship", previousRelationship, committedAt)
+		relationshipSample = cadenceSample(spaceID, characterID, interactionID, "relationship", previousRelationship, committedAt)
 	}
 	if gap := committedAt.Sub(previousGlobal); !previousGlobal.IsZero() && gap >= SessionBreakThreshold {
-		if _, err := repo.AddCadenceSample(ctx, cadenceSample(userID, "", interactionID, "global", previousGlobal, committedAt)); err != nil {
+		if _, err := repo.AddCadenceSample(ctx, cadenceSample(spaceID, "", interactionID, "global", previousGlobal, committedAt)); err != nil {
 			return err
 		}
 	}
-	relationshipSamples, err := repo.ListCadenceSamples(ctx, userID, characterID, "relationship", MaximumCadenceSamples)
+	relationshipSamples, err := repo.ListCadenceSamples(ctx, spaceID, characterID, "relationship", MaximumCadenceSamples)
 	if err != nil {
 		return err
 	}
 	if relationshipSample != nil {
 		relationshipSamples = append(relationshipSamples, *relationshipSample)
 	}
-	globalSamples, err := repo.ListCadenceSamples(ctx, userID, "", "global", MaximumCadenceSamples)
+	globalSamples, err := repo.ListCadenceSamples(ctx, spaceID, "", "global", MaximumCadenceSamples)
 	if err != nil {
 		return err
 	}
 	cadence := selectCadence(relationshipSamples, globalSamples)
-	input := FinalizeInteractionInput{UserID: userID, CharacterID: characterID, InteractionID: interactionID, CommittedAt: committedAt, ExpectedGapSeconds: cadence.ExpectedGap.Seconds(), GapMADSeconds: cadence.MAD.Seconds(), CadenceSample: relationshipSample, SuppressReunion: suppress, SuppressionReason: reason, AssistantInitiated: assistantInitiated}
+	input := FinalizeInteractionInput{SpaceID: spaceID, CharacterID: characterID, InteractionID: interactionID, CommittedAt: committedAt, ExpectedGapSeconds: cadence.ExpectedGap.Seconds(), GapMADSeconds: cadence.MAD.Seconds(), CadenceSample: relationshipSample, SuppressReunion: suppress, SuppressionReason: reason, AssistantInitiated: assistantInitiated}
 	if relationshipTime != nil && relationshipTime.Reunion != nil {
 		input.ReunionEpisodeID = relationshipTime.Reunion.EpisodeID
 		input.ReacclimationTurns = reacclimationTurns(relationshipTime.Reunion.Level)
@@ -338,12 +337,12 @@ func (c *RelationshipTimeCoordinator) FinalizeCommittedTx(ctx context.Context, t
 	return repo.FinalizeInteractionTx(ctx, tx, input)
 }
 
-func (c *RelationshipTimeCoordinator) loadCadence(ctx context.Context, repo *RelationshipTimeRepository, userID, characterID string) (cadenceEstimate, error) {
-	relationship, err := repo.ListCadenceSamples(ctx, userID, characterID, "relationship", MaximumCadenceSamples)
+func (c *RelationshipTimeCoordinator) loadCadence(ctx context.Context, repo *RelationshipTimeRepository, spaceID, characterID string) (cadenceEstimate, error) {
+	relationship, err := repo.ListCadenceSamples(ctx, spaceID, characterID, "relationship", MaximumCadenceSamples)
 	if err != nil {
 		return cadenceEstimate{}, err
 	}
-	global, err := repo.ListCadenceSamples(ctx, userID, "", "global", MaximumCadenceSamples)
+	global, err := repo.ListCadenceSamples(ctx, spaceID, "", "global", MaximumCadenceSamples)
 	if err != nil {
 		return cadenceEstimate{}, err
 	}
@@ -351,22 +350,22 @@ func (c *RelationshipTimeCoordinator) loadCadence(ctx context.Context, repo *Rel
 }
 
 func (c *RelationshipTimeCoordinator) contextFromReceipt(ctx context.Context, repo *RelationshipTimeRepository, receipt *InteractionReceipt) (RelationshipTimeContext, error) {
-	global, err := repo.GetGlobalPresence(ctx, receipt.UserID)
+	global, err := repo.GetGlobalPresence(ctx, receipt.SpaceID)
 	if err != nil {
 		return RelationshipTimeContext{}, err
 	}
-	relationship, err := repo.GetRelationshipPresence(ctx, receipt.UserID, receipt.CharacterID)
+	relationship, err := repo.GetRelationshipPresence(ctx, receipt.SpaceID, receipt.CharacterID)
 	if err != nil {
 		return RelationshipTimeContext{}, err
 	}
-	cadence, err := c.loadCadence(ctx, repo, receipt.UserID, receipt.CharacterID)
+	cadence, err := c.loadCadence(ctx, repo, receipt.SpaceID, receipt.CharacterID)
 	if err != nil {
 		return RelationshipTimeContext{}, err
 	}
 	now := ParseRelationshipTime(receipt.ObservedAtUTC)
 	globalGap, _, _, globalDiagnostics := gapMetrics(now, ParseRelationshipTime(receipt.PreviousGlobalCommittedAtUTC), cadence)
 	relationshipGap, normalized, deviation, relationshipDiagnostics := gapMetrics(now, ParseRelationshipTime(receipt.PreviousRelationshipCommittedAtUTC), cadence)
-	result := c.baseContext(receipt.UserID, receipt.CharacterID, now, global, relationship, globalGap, relationshipGap, normalized, deviation, cadence)
+	result := c.baseContext(receipt.SpaceID, receipt.CharacterID, now, global, relationship, globalGap, relationshipGap, normalized, deviation, cadence)
 	result.Diagnostics = append(globalDiagnostics, relationshipDiagnostics...)
 	if receipt.ReunionEpisodeID != "" {
 		episode, getErr := repo.GetReunionEpisode(ctx, receipt.ReunionEpisodeID)
@@ -380,8 +379,8 @@ func (c *RelationshipTimeCoordinator) contextFromReceipt(ctx context.Context, re
 	return result, nil
 }
 
-func (c *RelationshipTimeCoordinator) baseContext(userID, characterID string, now time.Time, global *GlobalPresenceState, relationship *RelationshipPresenceState, globalGap, relationshipGap, normalized, deviation float64, cadence cadenceEstimate) RelationshipTimeContext {
-	result := RelationshipTimeContext{Version: RelationshipTimeVersion, UserID: userID, CharacterID: characterID, NowUTC: now.UTC(), GlobalGapSeconds: globalGap, RelationshipGapSeconds: relationshipGap, ExpectedGapSeconds: roundFinite(cadence.ExpectedGap.Seconds()), GapDeviationScore: deviation, NormalizedGap: normalized, ContinuityScore: continuityScore(relationshipGap, cadence.ExpectedGap.Seconds())}
+func (c *RelationshipTimeCoordinator) baseContext(spaceID, characterID string, now time.Time, global *GlobalPresenceState, relationship *RelationshipPresenceState, globalGap, relationshipGap, normalized, deviation float64, cadence cadenceEstimate) RelationshipTimeContext {
+	result := RelationshipTimeContext{Version: RelationshipTimeVersion, SpaceID: spaceID, CharacterID: characterID, NowUTC: now.UTC(), GlobalGapSeconds: globalGap, RelationshipGapSeconds: relationshipGap, ExpectedGapSeconds: roundFinite(cadence.ExpectedGap.Seconds()), GapDeviationScore: deviation, NormalizedGap: normalized, ContinuityScore: continuityScore(relationshipGap, cadence.ExpectedGap.Seconds())}
 	if global != nil {
 		result.GlobalLastCommittedAt = ParseRelationshipTime(global.LastCommittedUserInteractionAtUTC)
 	}
@@ -410,8 +409,8 @@ func reunionContextFromEpisode(episode *ReunionEpisode, shouldExpress bool) *Reu
 	return &ReunionContext{EpisodeID: episode.ID, Kind: episode.ReunionKind, Level: episode.ReunionLevel, State: episode.Status, RelationshipGapSeconds: episode.RelationshipGapSeconds, GlobalGapSeconds: episode.GlobalGapSeconds, ExpectedGapSeconds: episode.ExpectedGapSeconds, NormalizedGap: episode.NormalizedGap, ClaimedByInteractionID: episode.ClaimInteractionID, ClaimExpiresAt: ParseRelationshipTime(episode.ClaimExpiresAtUTC), ShouldExpress: shouldExpress && episode.Status == ReunionStateClaimed}
 }
 
-func cadenceSample(userID, characterID, interactionID, kind string, previous, current time.Time) *CadenceSample {
-	return &CadenceSample{ID: uuid.NewString(), UserID: userID, CharacterID: characterID, InteractionID: interactionID, PreviousInteractionAtUTC: FormatRelationshipTime(previous), CurrentInteractionAtUTC: FormatRelationshipTime(current), GapSeconds: roundFinite(current.Sub(previous).Seconds()), SampleKind: kind, Included: true, CreatedAtUTC: FormatRelationshipTime(current)}
+func cadenceSample(spaceID, characterID, interactionID, kind string, previous, current time.Time) *CadenceSample {
+	return &CadenceSample{ID: uuid.NewString(), SpaceID: spaceID, CharacterID: characterID, InteractionID: interactionID, PreviousInteractionAtUTC: FormatRelationshipTime(previous), CurrentInteractionAtUTC: FormatRelationshipTime(current), GapSeconds: roundFinite(current.Sub(previous).Seconds()), SampleKind: kind, Included: true, CreatedAtUTC: FormatRelationshipTime(current)}
 }
 
 func isProactiveSource(source string) bool {

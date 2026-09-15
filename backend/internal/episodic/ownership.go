@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/u-ai/backend/config"
+	"github.com/u-ai/backend/internal/requestidentity"
 	"gorm.io/gorm"
 )
 
@@ -21,38 +22,38 @@ func episodicOwnerMatches(stored, requested string) bool {
 	return episodicLocalMode() && requested != "" && (stored == "" || stored == "default")
 }
 
-func (s *service) requireEpisodicCharacterOwner(characterID, userID string) error {
+func (s *service) requireEpisodicCharacterOwner(characterID, spaceID string) error {
 	characterID = strings.TrimSpace(characterID)
 	if characterID == "" {
 		return nil
 	}
 	var owner string
-	if err := s.db.Table("characters").Select("user_id").Where("id = ?", characterID).Take(&owner).Error; err != nil {
+	if err := s.db.Table("characters").Select("space_id").Where("id = ?", characterID).Take(&owner).Error; err != nil {
 		return err
 	}
-	if !episodicOwnerMatches(owner, userID) {
+	if !episodicOwnerMatches(owner, spaceID) {
 		return gorm.ErrRecordNotFound
 	}
 	return nil
 }
 
-func (s *service) requireEpisodicConversationOwner(conversationID, userID, requestedCharacterID string) (string, error) {
+func (s *service) requireEpisodicConversationOwner(conversationID, spaceID, requestedCharacterID string) (string, error) {
 	conversationID = strings.TrimSpace(conversationID)
 	requestedCharacterID = cleanScope(requestedCharacterID)
 	if conversationID == "" {
-		if err := s.requireEpisodicCharacterOwner(requestedCharacterID, userID); err != nil {
+		if err := s.requireEpisodicCharacterOwner(requestedCharacterID, spaceID); err != nil {
 			return "", err
 		}
 		return requestedCharacterID, nil
 	}
 	var row struct {
-		UserID      string `gorm:"column:user_id"`
+		SpaceID     string `gorm:"column:space_id"`
 		CharacterID string `gorm:"column:character_id"`
 	}
-	if err := s.db.Table("conversations").Select("user_id, character_id").Where("id = ? AND deleted_at IS NULL", conversationID).Take(&row).Error; err != nil {
+	if err := s.db.Table("conversations").Select("space_id, character_id").Where("id = ? AND deleted_at IS NULL", conversationID).Take(&row).Error; err != nil {
 		return "", err
 	}
-	if !episodicOwnerMatches(row.UserID, userID) {
+	if !episodicOwnerMatches(row.SpaceID, spaceID) {
 		return "", gorm.ErrRecordNotFound
 	}
 	conversationCharacterID := cleanScope(row.CharacterID)
@@ -65,34 +66,30 @@ func (s *service) requireEpisodicConversationOwner(conversationID, userID, reque
 func (s *service) conversationOwnerForEpisodic(conversationID string) string {
 	conversationID = strings.TrimSpace(conversationID)
 	if s.db == nil || conversationID == "" {
-		return "default"
+		return requestidentity.CanonicalSpaceID()
 	}
 	var owner string
-	if err := s.db.Table("conversations").Select("user_id").Where("id = ? AND deleted_at IS NULL", conversationID).Row().Scan(&owner); err != nil {
-		return "default"
+	if err := s.db.Table("conversations").Select("space_id").Where("id = ? AND deleted_at IS NULL", conversationID).Row().Scan(&owner); err != nil {
+		return requestidentity.CanonicalSpaceID()
 	}
-	owner = strings.TrimSpace(owner)
-	if owner == "" {
-		return "default"
-	}
-	return owner
+	return requestidentity.NormalizeSpaceID(owner)
 }
 
-func (s *service) owned(id, userID string) (*EpisodicMemory, error) {
+func (s *service) owned(id, spaceID string) (*EpisodicMemory, error) {
 	m, err := s.repo.FindByID(id)
 	if err != nil {
 		return nil, err
 	}
-	if m == nil || !episodicOwnerMatches(m.UserID, userID) {
+	if m == nil || !episodicOwnerMatches(m.SpaceID, spaceID) {
 		return nil, gorm.ErrRecordNotFound
 	}
 	return m, nil
 }
-func (s *service) ListForUser(q EpisodicListQuery, userID string) (*EpisodicListResponse, error) {
-	q.UserID = userID
+func (s *service) ListForSpace(q EpisodicListQuery, spaceID string) (*EpisodicListResponse, error) {
+	q.SpaceID = spaceID
 	if episodicLocalMode() {
 		// Local legacy rows are owned by the single local user even when the old schema stored default.
-		base := s.db.Model(&EpisodicMemory{}).Where("user_id = ? OR user_id = '' OR user_id IS NULL OR user_id = 'default'", userID)
+		base := s.db.Model(&EpisodicMemory{}).Where("space_id = ? OR space_id = '' OR space_id IS NULL OR space_id = 'default'", spaceID)
 		if q.CharacterID != "" {
 			base = base.Where("character_id = ?", q.CharacterID)
 		}
@@ -131,58 +128,58 @@ func (s *service) ListForUser(q EpisodicListQuery, userID string) (*EpisodicList
 	}
 	return s.List(q)
 }
-func (s *service) CreateForUser(req *CreateEpisodicRequest, userID string) (*EpisodicMemory, error) {
+func (s *service) CreateForSpace(req *CreateEpisodicRequest, spaceID string) (*EpisodicMemory, error) {
 	if req == nil {
 		return nil, gorm.ErrInvalidData
 	}
-	userID = cleanOwner(userID)
-	characterID, err := s.requireEpisodicConversationOwner(req.SourceConvID, userID, req.CharacterID)
+	spaceID = cleanOwner(spaceID)
+	characterID, err := s.requireEpisodicConversationOwner(req.SourceConvID, spaceID, req.CharacterID)
 	if err != nil {
 		return nil, err
 	}
 	cp := *req
-	cp.UserID = userID
+	cp.SpaceID = spaceID
 	cp.CharacterID = characterID
 	return s.Create(&cp)
 }
-func (s *service) DeleteForUser(id, userID string) error {
-	if _, err := s.owned(id, userID); err != nil {
+func (s *service) DeleteForSpace(id, spaceID string) error {
+	if _, err := s.owned(id, spaceID); err != nil {
 		return err
 	}
 	return s.Delete(id)
 }
-func (s *service) UpdateRetentionForUser(id, userID string, level int) (*EpisodicMemory, error) {
-	if _, err := s.owned(id, userID); err != nil {
+func (s *service) UpdateRetentionForSpace(id, spaceID string, level int) (*EpisodicMemory, error) {
+	if _, err := s.owned(id, spaceID); err != nil {
 		return nil, err
 	}
 	return s.UpdateRetention(id, level)
 }
-func (s *service) RestoreForUser(id, userID string) (*EpisodicMemory, error) {
-	if _, err := s.owned(id, userID); err != nil {
+func (s *service) RestoreForSpace(id, spaceID string) (*EpisodicMemory, error) {
+	if _, err := s.owned(id, spaceID); err != nil {
 		return nil, err
 	}
 	return s.Restore(id)
 }
-func (s *service) GetDetailForUser(id, userID string) (*EpisodicMemory, []map[string]interface{}, error) {
-	if _, err := s.owned(id, userID); err != nil {
+func (s *service) GetDetailForSpace(id, spaceID string) (*EpisodicMemory, []map[string]interface{}, error) {
+	if _, err := s.owned(id, spaceID); err != nil {
 		return nil, nil, err
 	}
 	return s.GetDetail(id)
 }
-func (s *service) GetByUserForUser(userID, characterID string) ([]EpisodicMemory, error) {
-	r, err := s.ListForUser(EpisodicListQuery{CharacterID: characterID, Page: 1, PageSize: 100}, userID)
+func (s *service) GetForSpace(spaceID, characterID string) ([]EpisodicMemory, error) {
+	r, err := s.ListForSpace(EpisodicListQuery{CharacterID: characterID, Page: 1, PageSize: 100}, spaceID)
 	if err != nil {
 		return nil, err
 	}
 	return r.Items, nil
 }
-func (s *service) ExtractForUser(userID, convID string, messages []map[string]string, characterID string) error {
-	userID = cleanOwner(userID)
-	if _, err := s.requireEpisodicConversationOwner(convID, userID, characterID); err != nil {
+func (s *service) ExtractForSpace(spaceID, convID string, messages []map[string]string, characterID string) error {
+	spaceID = cleanOwner(spaceID)
+	if _, err := s.requireEpisodicConversationOwner(convID, spaceID, characterID); err != nil {
 		return err
 	}
-	return s.ExtractFromConversation(userID, convID, messages, characterID)
+	return s.ExtractFromConversation(spaceID, convID, messages, characterID)
 }
-func (s *service) SystemPromptForUser(userID, characterID string) string {
-	return s.ToSystemPrompt(userID, characterID)
+func (s *service) SystemPromptForSpace(spaceID, characterID string) string {
+	return s.ToSystemPrompt(spaceID, characterID)
 }

@@ -13,7 +13,7 @@ import (
 type VoiceWorkflowTriggerEvent struct {
 	EventID   string
 	EventType string
-	UserID    string
+	SpaceID   string
 	Source    string
 	Payload   json.RawMessage
 }
@@ -61,10 +61,10 @@ func validVoiceWorkflowEventID(value string) bool {
 	return true
 }
 
-func PublishASRWorkflowFinal(ctx context.Context, userID, sessionID, turnID, conversationID, characterID, transcript, eventID string) error {
-	userID = strings.TrimSpace(userID)
+func PublishASRWorkflowFinal(ctx context.Context, spaceID, sessionID, turnID, conversationID, characterID, transcript, eventID string) error {
+	spaceID = strings.TrimSpace(spaceID)
 	transcript = strings.TrimSpace(transcript)
-	if userID == "" {
+	if spaceID == "" {
 		return fmt.Errorf("voice asr workflow user is required")
 	}
 	if transcript == "" {
@@ -93,7 +93,7 @@ func PublishASRWorkflowFinal(ctx context.Context, userID, sessionID, turnID, con
 	return publishVoiceWorkflowTrigger(ctx, VoiceWorkflowTriggerEvent{
 		EventID:   eventID,
 		EventType: string(VoiceEventASRFinal),
-		UserID:    userID,
+		SpaceID:   spaceID,
 		Source:    "voice.asr",
 		Payload:   payload,
 	})

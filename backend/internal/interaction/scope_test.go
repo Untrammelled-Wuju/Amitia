@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"testing"
+
+	"github.com/u-ai/backend/internal/requestidentity"
 )
 
 func TestInteractionScopeNormalizeAssignsDefaultUserOnlyWhenMissing(t *testing.T) {
@@ -19,8 +21,8 @@ func TestInteractionScopeNormalizeAssignsDefaultUserOnlyWhenMissing(t *testing.T
 
 	normalized := scope.Normalize()
 
-	if normalized.UserID != DefaultUserID {
-		t.Fatalf("expected default user id, got %q", normalized.UserID)
+	if normalized.SpaceID != requestidentity.CanonicalSpaceID() {
+		t.Fatalf("expected default user id, got %q", normalized.SpaceID)
 	}
 	if normalized.CharacterID != "char-1" || normalized.ConversationID != "conv-1" {
 		t.Fatalf("expected trimmed ids, got %#v", normalized)
@@ -31,28 +33,28 @@ func TestInteractionScopeNormalizeAssignsDefaultUserOnlyWhenMissing(t *testing.T
 	if normalized.PeerID != "peer-1" || normalized.SessionID != "sess-1" || normalized.RequestID != "req-1" {
 		t.Fatalf("expected trimmed peer/session/request ids, got %#v", normalized)
 	}
-	if scope.UserID != "" {
-		t.Fatalf("normalize must not mutate original scope, got %q", scope.UserID)
+	if scope.SpaceID != "" {
+		t.Fatalf("normalize must not mutate original scope, got %q", scope.SpaceID)
 	}
 }
 
-func TestInteractionScopeNormalizeKeepsExplicitUserID(t *testing.T) {
+func TestInteractionScopeNormalizeKeepsExplicitSpaceID(t *testing.T) {
 	scope := InteractionScope{
-		UserID:         " user-1 ",
+		SpaceID:        " user-1 ",
 		CharacterID:    "char-1",
 		ConversationID: "conv-1",
 	}
 
 	normalized := scope.Normalize()
 
-	if normalized.UserID != "user-1" {
-		t.Fatalf("expected explicit user id to be preserved, got %q", normalized.UserID)
+	if normalized.SpaceID != "user-1" {
+		t.Fatalf("expected explicit user id to be preserved, got %q", normalized.SpaceID)
 	}
 }
 
 func TestInteractionScopeValidateRejectsMissingTarget(t *testing.T) {
 	scope := InteractionScope{
-		UserID:  "user-1",
+		SpaceID: "user-1",
 		Channel: "web",
 	}
 
@@ -64,7 +66,7 @@ func TestInteractionScopeValidateRejectsMissingTarget(t *testing.T) {
 
 func TestInteractionScopeValidateRejectsPeerWithoutChannel(t *testing.T) {
 	scope := InteractionScope{
-		UserID:      "user-1",
+		SpaceID:     "user-1",
 		CharacterID: "char-1",
 		PeerID:      "peer-1",
 	}
@@ -91,7 +93,7 @@ func TestInteractionScopeValidateAcceptsCharacterOrConversationBoundary(t *testi
 
 func TestInteractionScopeContextRoundTrip(t *testing.T) {
 	scope := InteractionScope{
-		UserID:         " user-1 ",
+		SpaceID:        " user-1 ",
 		CharacterID:    " char-1 ",
 		ConversationID: " conv-1 ",
 		Channel:        " Web ",
@@ -104,7 +106,7 @@ func TestInteractionScopeContextRoundTrip(t *testing.T) {
 	if !ok {
 		t.Fatal("expected scope in context")
 	}
-	if stored.UserID != "user-1" || stored.CharacterID != "char-1" || stored.ConversationID != "conv-1" {
+	if stored.SpaceID != "user-1" || stored.CharacterID != "char-1" || stored.ConversationID != "conv-1" {
 		t.Fatalf("unexpected scope from context: %#v", stored)
 	}
 	if stored.Channel != "web" || stored.Source != "api" || stored.RequestID != "req-1" {

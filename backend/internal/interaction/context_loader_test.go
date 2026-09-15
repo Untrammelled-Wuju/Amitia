@@ -78,7 +78,7 @@ func TestRegistryRegisterAndLoadAll(t *testing.T) {
 	})
 
 	ctx := context.Background()
-	scope := InteractionScope{UserID: "u1", CharacterID: "c1"}
+	scope := InteractionScope{SpaceID: "u1", CharacterID: "c1"}
 	snapshot := reg.LoadAll(ctx, scope, "v1")
 
 	if snapshot.Version != "v1" {
@@ -116,7 +116,7 @@ func TestRequiredLoaderError(t *testing.T) {
 	})
 
 	ctx := context.Background()
-	scope := InteractionScope{UserID: "u1", CharacterID: "c1"}
+	scope := InteractionScope{SpaceID: "u1", CharacterID: "c1"}
 	snapshot := reg.LoadAll(ctx, scope, "v1")
 
 	if snapshot.RuntimeProfile.Status != LoadStatusError {
@@ -138,7 +138,7 @@ func TestOptionalLoaderError(t *testing.T) {
 	})
 
 	ctx := context.Background()
-	scope := InteractionScope{UserID: "u1", CharacterID: "c1"}
+	scope := InteractionScope{SpaceID: "u1", CharacterID: "c1"}
 	snapshot := reg.LoadAll(ctx, scope, "v1")
 
 	if snapshot.Relationship.Status != LoadStatusUnavailable {
@@ -167,7 +167,7 @@ func TestContextCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	scope := InteractionScope{UserID: "u1", CharacterID: "c1"}
+	scope := InteractionScope{SpaceID: "u1", CharacterID: "c1"}
 	snapshot := reg.LoadAll(ctx, scope, "v1")
 
 	if snapshot.RuntimeProfile.Status != "" {
@@ -194,7 +194,7 @@ func TestLoaderTimeout(t *testing.T) {
 	})
 
 	ctx := context.Background()
-	scope := InteractionScope{UserID: "u1", CharacterID: "c1"}
+	scope := InteractionScope{SpaceID: "u1", CharacterID: "c1"}
 	snapshot := reg.LoadAll(ctx, scope, "v1")
 
 	if snapshot.Life.Status != LoadStatusUnavailable {
@@ -243,7 +243,7 @@ func TestStatsAllHealthModes(t *testing.T) {
 	})
 
 	ctx := context.Background()
-	scope := InteractionScope{UserID: "u1", CharacterID: "c1"}
+	scope := InteractionScope{SpaceID: "u1", CharacterID: "c1"}
 	reg.LoadAll(ctx, scope, "v1")
 
 	stats := reg.Stats()
@@ -282,7 +282,7 @@ func TestParallelLoading(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	scope := InteractionScope{UserID: "u1", CharacterID: "c1"}
+	scope := InteractionScope{SpaceID: "u1", CharacterID: "c1"}
 	start := time.Now()
 	reg.LoadAll(ctx, scope, "v1")
 	elapsed := time.Since(start)
@@ -339,7 +339,7 @@ func TestLoadAllConcurrentSnapshotWrites(t *testing.T) {
 		},
 	})
 
-	snapshot := reg.LoadAll(context.Background(), InteractionScope{UserID: "u1", CharacterID: "c1", ConversationID: "conv-1"}, "v1")
+	snapshot := reg.LoadAll(context.Background(), InteractionScope{SpaceID: "u1", CharacterID: "c1", ConversationID: "conv-1"}, "v1")
 	if snapshot.RuntimeProfile.Status != LoadStatusReady ||
 		snapshot.Conversation.Status != LoadStatusReady ||
 		snapshot.Psyche.Status != LoadStatusReady ||

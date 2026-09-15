@@ -74,8 +74,8 @@ type CascadeEmotionContext struct {
 }
 
 type CascadeEmotionProvider interface {
-	Load(ctx context.Context, userID, characterID string) (*CascadeEmotionContext, error)
-	Commit(ctx context.Context, userID, characterID string, commit CascadeEmotionCommit) error
+	Load(ctx context.Context, spaceID, characterID string) (*CascadeEmotionContext, error)
+	Commit(ctx context.Context, spaceID, characterID string, commit CascadeEmotionCommit) error
 }
 
 var cascadeEmotionRegistry struct {
@@ -102,7 +102,7 @@ func (s *cascadeCall) loadEmotionContext(ctx context.Context) {
 	}
 	loadCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
-	emotionContext, err := provider.Load(loadCtx, s.params.UserID, s.params.CharacterID)
+	emotionContext, err := provider.Load(loadCtx, s.params.SpaceID, s.params.CharacterID)
 	if err != nil {
 		appLog.Warn("failed to load realtime emotion context:", err.Error())
 		return
@@ -129,11 +129,11 @@ func (s *cascadeCall) commitEmotion(tracker *cascadePlaybackTracker, deliveredTe
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		if err := s.emotionProvider.Commit(ctx, s.params.UserID, s.params.CharacterID, commit); err != nil {
+		if err := s.emotionProvider.Commit(ctx, s.params.SpaceID, s.params.CharacterID, commit); err != nil {
 			appLog.Warn("failed to commit realtime emotion state:", err.Error())
 			return
 		}
-		emotionContext, err := s.emotionProvider.Load(ctx, s.params.UserID, s.params.CharacterID)
+		emotionContext, err := s.emotionProvider.Load(ctx, s.params.SpaceID, s.params.CharacterID)
 		if err == nil {
 			s.setEmotionContext(emotionContext)
 		}

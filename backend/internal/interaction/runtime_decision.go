@@ -22,7 +22,7 @@ func (p *RuntimePipeline) runDecision(ctx context.Context, scope InteractionScop
 	personalityWeights, personalityStyle := derivePersonalityWeights(compiledPersonality), derivePersonalityStyle(compiledPersonality)
 	var relSnapshot decision.RelationshipSnapshot
 	if snapshot.Relationship.Status == LoadStatusReady {
-		relSnapshot = decision.RelationshipSnapshot{UserID: scope.UserID, CharacterID: scope.CharacterID, Dimensions: map[decision.RelationshipDimension]decision.RelationshipDimensionValue{decision.RelationshipTrust: {Value: snapshot.Relationship.Value.Trust}, decision.RelationshipFamiliarity: {Value: snapshot.Relationship.Value.Familiarity}, decision.RelationshipSafety: {Value: snapshot.Relationship.Value.Security}}}
+		relSnapshot = decision.RelationshipSnapshot{SpaceID: scope.SpaceID, CharacterID: scope.CharacterID, Dimensions: map[decision.RelationshipDimension]decision.RelationshipDimensionValue{decision.RelationshipTrust: {Value: snapshot.Relationship.Value.Trust}, decision.RelationshipFamiliarity: {Value: snapshot.Relationship.Value.Familiarity}, decision.RelationshipSafety: {Value: snapshot.Relationship.Value.Security}}}
 	}
 	var lifeSnapshot decision.LifeSnapshot
 	if snapshot.Life.Status == LoadStatusReady {
@@ -39,7 +39,7 @@ func (p *RuntimePipeline) runDecision(ctx context.Context, scope InteractionScop
 	}
 
 	decisionCtx := decision.CandidateGenerationContext{
-		UserID:             scope.UserID,
+		SpaceID:            scope.SpaceID,
 		CharacterID:        scope.CharacterID,
 		Goals:              goalsForDecision(goalContext),
 		Intentions:         append([]decision.Intention(nil), goalContext.Intentions...),
@@ -107,7 +107,7 @@ func (p *RuntimePipeline) runDecision(ctx context.Context, scope InteractionScop
 	}
 
 	buildInput := decision.BehaviorPlanBuildInput{
-		UserID:         scope.UserID,
+		SpaceID:        scope.SpaceID,
 		CharacterID:    scope.CharacterID,
 		ConversationID: scope.ConversationID,
 		RequestID:      scope.RequestID,

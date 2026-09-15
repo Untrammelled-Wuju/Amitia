@@ -8,15 +8,15 @@ import (
 )
 
 const (
-	toolIDStatus  = "android.screen_frame.status"
-	toolIDStart   = "android.screen_frame.start"
-	toolIDLatest  = "android.screen_frame.latest"
-	toolIDStop    = "android.screen_frame.stop"
+	toolIDStatus = "android.screen_frame.status"
+	toolIDStart  = "android.screen_frame.start"
+	toolIDLatest = "android.screen_frame.latest"
+	toolIDStop   = "android.screen_frame.stop"
 
-	handlerStatus  = "screen_frame.status"
-	handlerStart   = "screen_frame.start"
-	handlerLatest  = "screen_frame.latest"
-	handlerStop    = "screen_frame.stop"
+	handlerStatus = "screen_frame.status"
+	handlerStart  = "screen_frame.start"
+	handlerLatest = "screen_frame.latest"
+	handlerStop   = "screen_frame.stop"
 
 	toolVersion = "0.1.0"
 )
@@ -74,13 +74,13 @@ func BuildStartToolDefinition() (capability.ToolDefinition, error) {
 }`)
 
 	return capability.ToolDefinition{
-		ID:          toolIDStart,
-		ModelName:   toolIDStart,
-		Source:      capability.ToolSourceBuiltin,
-		Name:        "Android Screen Frame Start",
-		Description: "Start a short-lived Android screen frame capture session via MediaProjection. Requires user grant and android.media.screen_capture permission.",
-		Version:     toolVersion,
-		InputSchema: inputSchema,
+		ID:           toolIDStart,
+		ModelName:    toolIDStart,
+		Source:       capability.ToolSourceBuiltin,
+		Name:         "Android Screen Frame Start",
+		Description:  "Start a short-lived Android screen frame capture session via MediaProjection. Requires user grant and android.media.screen_capture permission.",
+		Version:      toolVersion,
+		InputSchema:  inputSchema,
 		OutputSchema: outputSchema,
 		Permissions: []capability.PermissionRequirement{
 			{
@@ -91,7 +91,7 @@ func BuildStartToolDefinition() (capability.ToolDefinition, error) {
 		},
 		RiskLevel:      capability.RiskHigh,
 		SideEffect:     capability.SideEffectWrite,
-		Scope:          capability.ScopeRule{Type: "user"},
+		Scope:          capability.ScopeRule{Type: "space"},
 		Enabled:        true,
 		HasSideEffects: true,
 		Idempotent:     true,
@@ -160,13 +160,13 @@ func BuildLatestToolDefinition() (capability.ToolDefinition, error) {
 }`)
 
 	return capability.ToolDefinition{
-		ID:          toolIDLatest,
-		ModelName:   toolIDLatest,
-		Source:      capability.ToolSourceBuiltin,
-		Name:        "Android Screen Frame Latest",
-		Description: "On-demand read the newest frame from an active screen frame capture session. Returns an amitia:// resource reference, never raw pixels.",
-		Version:     toolVersion,
-		InputSchema: inputSchema,
+		ID:           toolIDLatest,
+		ModelName:    toolIDLatest,
+		Source:       capability.ToolSourceBuiltin,
+		Name:         "Android Screen Frame Latest",
+		Description:  "On-demand read the newest frame from an active screen frame capture session. Returns an amitia:// resource reference, never raw pixels.",
+		Version:      toolVersion,
+		InputSchema:  inputSchema,
 		OutputSchema: outputSchema,
 		Permissions: []capability.PermissionRequirement{
 			{
@@ -177,7 +177,7 @@ func BuildLatestToolDefinition() (capability.ToolDefinition, error) {
 		},
 		RiskLevel:      capability.RiskHigh,
 		SideEffect:     capability.SideEffectWrite,
-		Scope:          capability.ScopeRule{Type: "user"},
+		Scope:          capability.ScopeRule{Type: "space"},
 		Enabled:        true,
 		HasSideEffects: true,
 		Idempotent:     true,
@@ -231,13 +231,13 @@ func BuildStopToolDefinition() (capability.ToolDefinition, error) {
 }`)
 
 	return capability.ToolDefinition{
-		ID:          toolIDStop,
-		ModelName:   toolIDStop,
-		Source:      capability.ToolSourceBuiltin,
-		Name:        "Android Screen Frame Stop",
-		Description: "Explicitly stop an active screen frame capture session. Idempotent on repeated calls.",
-		Version:     toolVersion,
-		InputSchema: inputSchema,
+		ID:           toolIDStop,
+		ModelName:    toolIDStop,
+		Source:       capability.ToolSourceBuiltin,
+		Name:         "Android Screen Frame Stop",
+		Description:  "Explicitly stop an active screen frame capture session. Idempotent on repeated calls.",
+		Version:      toolVersion,
+		InputSchema:  inputSchema,
 		OutputSchema: outputSchema,
 		Permissions: []capability.PermissionRequirement{
 			{
@@ -248,7 +248,7 @@ func BuildStopToolDefinition() (capability.ToolDefinition, error) {
 		},
 		RiskLevel:      capability.RiskHigh,
 		SideEffect:     capability.SideEffectWrite,
-		Scope:          capability.ScopeRule{Type: "user"},
+		Scope:          capability.ScopeRule{Type: "space"},
 		Enabled:        true,
 		HasSideEffects: true,
 		Idempotent:     true,
@@ -310,13 +310,13 @@ func BuildStatusToolDefinition() (capability.ToolDefinition, error) {
 }`)
 
 	return capability.ToolDefinition{
-		ID:          toolIDStatus,
-		ModelName:   toolIDStatus,
-		Source:      capability.ToolSourceBuiltin,
-		Name:        "Android Screen Frame Status",
-		Description: "Read Android frame capture capability and projection authorization state.",
-		Version:     toolVersion,
-		InputSchema: inputSchema,
+		ID:           toolIDStatus,
+		ModelName:    toolIDStatus,
+		Source:       capability.ToolSourceBuiltin,
+		Name:         "Android Screen Frame Status",
+		Description:  "Read Android frame capture capability and projection authorization state.",
+		Version:      toolVersion,
+		InputSchema:  inputSchema,
 		OutputSchema: outputSchema,
 		Permissions: []capability.PermissionRequirement{
 			{
@@ -327,7 +327,7 @@ func BuildStatusToolDefinition() (capability.ToolDefinition, error) {
 		},
 		RiskLevel:      capability.RiskMedium,
 		SideEffect:     capability.SideEffectNone,
-		Scope:          capability.ScopeRule{Type: "user"},
+		Scope:          capability.ScopeRule{Type: "space"},
 		Enabled:        true,
 		HasSideEffects: false,
 		Idempotent:     true,

@@ -21,7 +21,7 @@ const (
 
 type DeviceRuntimeCredential struct {
 	ID             string
-	UserID         runtimeidentity.UserID
+	SpaceID        runtimeidentity.SpaceID
 	DeviceID       runtimeidentity.DeviceID
 	RuntimeID      runtimeidentity.RuntimeID
 	CredentialHash string

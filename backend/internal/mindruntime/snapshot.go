@@ -72,7 +72,7 @@ type TraceFrameMetadata struct {
 }
 
 type RuntimeSnapshotInput struct {
-	UserID            string
+	SpaceID           string
 	CharacterID       string
 	InteractionID     string
 	CreatedAt         time.Time
@@ -89,7 +89,7 @@ type RuntimeSnapshotInput struct {
 type RuntimeSnapshot struct {
 	Version           SnapshotVersion     `json:"version"`
 	ID                string              `json:"id"`
-	UserID            string              `json:"userId,omitempty"`
+	SpaceID           string              `json:"spaceId,omitempty"`
 	CharacterID       string              `json:"characterId,omitempty"`
 	InteractionID     string              `json:"interactionId,omitempty"`
 	StateVersion      int                 `json:"stateVersion"`
@@ -121,7 +121,7 @@ func BuildRuntimeSnapshot(input RuntimeSnapshotInput) RuntimeSnapshot {
 
 	snapshot := RuntimeSnapshot{
 		Version:           SnapshotVersionV1,
-		UserID:            input.UserID,
+		SpaceID:           input.SpaceID,
 		CharacterID:       input.CharacterID,
 		InteractionID:     input.InteractionID,
 		StateVersion:      stateVersion,
@@ -218,7 +218,7 @@ func traceStageOrder(stage TraceStage) int {
 func snapshotID(snapshot RuntimeSnapshot) string {
 	parts := []string{
 		string(snapshot.Version),
-		snapshot.UserID,
+		snapshot.SpaceID,
 		snapshot.CharacterID,
 		snapshot.InteractionID,
 		fmt.Sprint(snapshot.StateVersion),

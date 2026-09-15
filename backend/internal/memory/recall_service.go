@@ -87,10 +87,10 @@ func (s *service) dynamicRecall(req *VectorSearchRequest) ([]HybridSearchResult,
 	fetchLimit := maxInt(limit*4, 30)
 	var sourceItems []recallSourceItem
 	blockedMemoryIDs := s.blockedMemoryIDs()
-	policy := retrievalAuthorityPolicy{CharacterID: req.CharacterID, UserID: req.UserID, ProactiveMention: req.ProactiveMention, Now: time.Now()}
+	policy := retrievalAuthorityPolicy{CharacterID: req.CharacterID, SpaceID: req.SpaceID, ProactiveMention: req.ProactiveMention, Now: time.Now()}
 
 	vectorResults, _ := s.VectorSearch(&VectorSearchRequest{
-		Query: queryText, CharacterID: req.CharacterID, UserID: req.UserID, Limit: fetchLimit,
+		Query: queryText, CharacterID: req.CharacterID, SpaceID: req.SpaceID, Limit: fetchLimit,
 		ConversationID: req.ConversationID, RequestID: req.RequestID, Channel: req.Channel, ProactiveMention: req.ProactiveMention,
 	})
 	for rank, r := range vectorResults {
@@ -105,7 +105,7 @@ func (s *service) dynamicRecall(req *VectorSearchRequest) ([]HybridSearchResult,
 		}})
 	}
 
-	keywordResults, _ := s.repo.Search(queryText, req.CharacterID, req.UserID, fetchLimit)
+	keywordResults, _ := s.repo.Search(queryText, req.CharacterID, req.SpaceID, fetchLimit)
 	qLower := strings.ToLower(queryText)
 	for rank, m := range keywordResults {
 		s.maintainRetentionForMemory(&m, time.Now())
@@ -156,7 +156,7 @@ func (s *service) dynamicRecall(req *VectorSearchRequest) ([]HybridSearchResult,
 	}
 
 	if len(merged) == 0 {
-		s.logRetrieval(req.ConversationID, req.CharacterID, req.RequestID, req.Channel, queryText, nil, nil, req.UserID)
+		s.logRetrieval(req.ConversationID, req.CharacterID, req.RequestID, req.Channel, queryText, nil, nil, req.SpaceID)
 		return []HybridSearchResult{}, nil
 	}
 
@@ -225,7 +225,7 @@ func (s *service) dynamicRecall(req *VectorSearchRequest) ([]HybridSearchResult,
 	for _, r := range results {
 		memoryIDs = append(memoryIDs, r.Memory.ID)
 	}
-	s.logRetrieval(req.ConversationID, req.CharacterID, req.RequestID, req.Channel, queryText, memoryIDs, results, req.UserID)
+	s.logRetrieval(req.ConversationID, req.CharacterID, req.RequestID, req.Channel, queryText, memoryIDs, results, req.SpaceID)
 	return results, nil
 }
 
@@ -278,11 +278,11 @@ func (s *service) profileRecallItems(query string, req *VectorSearchRequest, int
 	var rows []row
 	like := "%" + query + "%"
 	profileScopes := []string{strings.TrimSpace(req.CharacterID)}
-	if userID := strings.TrimSpace(req.UserID); userID != "" && userID != strings.TrimSpace(req.CharacterID) {
-		profileScopes = append(profileScopes, userID)
+	if spaceID := strings.TrimSpace(req.SpaceID); spaceID != "" && spaceID != strings.TrimSpace(req.CharacterID) {
+		profileScopes = append(profileScopes, spaceID)
 	}
 	q := s.db.Table("user_profiles").Select("id, category, attribute_name, attribute_value, confidence, source_memory_id, projection_status, created_at").
-		Where("(user_id IN ? OR character_id IN ?)", profileScopes, profileScopes).
+		Where("(space_id IN ? OR character_id IN ?)", profileScopes, profileScopes).
 		Where("(projection_status IS NULL OR projection_status = '' OR projection_status = 'active')")
 	if strings.TrimSpace(query) != "" && !intent.Profile && !intent.Relationship {
 		q = q.Where("attribute_name LIKE ? OR attribute_value LIKE ?", like, like)
@@ -295,7 +295,7 @@ func (s *service) profileRecallItems(query string, req *VectorSearchRequest, int
 		if r.SourceMemoryID != "" {
 			if m, err := s.repo.FindByID(r.SourceMemoryID); err == nil && m != nil {
 				s.maintainRetentionForMemory(m, time.Now())
-				policy := retrievalAuthorityPolicy{CharacterID: req.CharacterID, UserID: req.UserID, ProactiveMention: req.ProactiveMention, Now: time.Now()}
+				policy := retrievalAuthorityPolicy{CharacterID: req.CharacterID, SpaceID: req.SpaceID, ProactiveMention: req.ProactiveMention, Now: time.Now()}
 				if !recallMemoryAllowed(*m, intent, policy, s.blockedMemoryIDs()) {
 					continue
 				}
@@ -323,7 +323,7 @@ func (s *service) episodicRecallItems(query string, req *VectorSearchRequest, in
 	if s.db == nil {
 		return nil
 	}
-	userScope := strings.TrimSpace(req.UserID)
+	userScope := strings.TrimSpace(req.SpaceID)
 	if userScope == "" {
 		return nil
 	}
@@ -348,7 +348,7 @@ func (s *service) episodicRecallItems(query string, req *VectorSearchRequest, in
 		CreatedAt         string
 	}
 	var rows []row
-	q := s.db.Table("episodic_memories").Select("id, scene_type, title, content, trigger_keywords, sentiment_score, retention_level, memory_strength, strength_updated_at, last_reinforced_at, reinforce_count, decay_state, message_time_start, created_at").Where("user_id = ?", userScope)
+	q := s.db.Table("episodic_memories").Select("id, scene_type, title, content, trigger_keywords, sentiment_score, retention_level, memory_strength, strength_updated_at, last_reinforced_at, reinforce_count, decay_state, message_time_start, created_at").Where("space_id = ?", userScope)
 	if characterID := strings.TrimSpace(req.CharacterID); characterID != "" {
 		q = q.Where("character_id = ?", characterID)
 	}
@@ -375,7 +375,7 @@ func (s *service) episodicRecallItems(query string, req *VectorSearchRequest, in
 		if occurredAt == "" {
 			occurredAt = r.CreatedAt
 		}
-		m := Memory{ID: "episodic:" + r.ID, UserID: userScope, CharacterID: req.CharacterID, MemoryType: "fact", MemorySubtype: "EPISODIC", Key: r.Title, Value: r.Content, Importance: 6,
+		m := Memory{ID: "episodic:" + r.ID, SpaceID: userScope, CharacterID: req.CharacterID, MemoryType: "fact", MemorySubtype: "EPISODIC", Key: r.Title, Value: r.Content, Importance: 6,
 			Confidence: 75, Source: "episodic", Scope: "character", RetentionLevel: level, MemoryStrength: strength, StrengthUpdatedAt: r.StrengthUpdatedAt,
 			LastReinforcedAt: r.LastReinforcedAt, ReinforceCount: r.ReinforceCount, DecayState: r.DecayState, CreatedAt: occurredAt}
 		s.maintainEpisodicRetention(r.ID, &m, time.Now())
@@ -394,7 +394,7 @@ func (s *service) graphRecallItems(query string, req *VectorSearchRequest, inten
 	if s.graphSvc == nil || (!intent.Relationship && !intent.ExplicitMemoryRequest) {
 		return nil
 	}
-	userScope := strings.TrimSpace(req.UserID)
+	userScope := strings.TrimSpace(req.SpaceID)
 	if userScope == "" {
 		return nil
 	}
@@ -418,7 +418,7 @@ func (s *service) graphRecallItems(query string, req *VectorSearchRequest, inten
 		weight = 1.15
 	}
 	blocked := s.blockedMemoryIDs()
-	policy := retrievalAuthorityPolicy{CharacterID: req.CharacterID, UserID: req.UserID, ProactiveMention: req.ProactiveMention, Now: time.Now()}
+	policy := retrievalAuthorityPolicy{CharacterID: req.CharacterID, SpaceID: req.SpaceID, ProactiveMention: req.ProactiveMention, Now: time.Now()}
 	capacity := limit
 	if len(nodes) < capacity {
 		capacity = len(nodes)

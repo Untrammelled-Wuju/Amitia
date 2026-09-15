@@ -175,7 +175,7 @@ func TestWebChatEnvelopeResolvesStableIDs(t *testing.T) {
 	body := webChatSendRequest{
 		RequestID: "body-request",
 		SessionID: "body-session",
-		UserID:    "body-user",
+		SpaceID:   "body-user",
 		PeerID:    "body-peer",
 	}
 	if got := resolveRequestID(c, body.RequestID, body.ClientMessageID, body.MessageID); got != "body-request" {
@@ -184,7 +184,7 @@ func TestWebChatEnvelopeResolvesStableIDs(t *testing.T) {
 	if got := resolveHeaderBackedValue(c, body.SessionID, "X-Session-ID"); got != "body-session" {
 		t.Fatalf("unexpected session id: %s", got)
 	}
-	if got := resolveHeaderBackedValue(c, body.UserID, "X-User-ID"); got != "body-user" {
+	if got := resolveHeaderBackedValue(c, body.SpaceID, "X-User-ID"); got != "body-user" {
 		t.Fatalf("unexpected user id: %s", got)
 	}
 	if got := resolveHeaderBackedValue(c, body.PeerID, "X-Peer-ID"); got != "body-peer" {
@@ -201,7 +201,7 @@ func TestWebChatEnvelopeResolvesStableIDs(t *testing.T) {
 	if got := resolveHeaderBackedValue(c, body.SessionID, "X-Session-ID"); got != "header-session" {
 		t.Fatalf("unexpected header session id: %s", got)
 	}
-	if got := resolveHeaderBackedValue(c, body.UserID, "X-User-ID"); got != "header-user" {
+	if got := resolveHeaderBackedValue(c, body.SpaceID, "X-User-ID"); got != "header-user" {
 		t.Fatalf("unexpected header user id: %s", got)
 	}
 	if got := resolveHeaderBackedValue(c, body.PeerID, "X-Peer-ID"); got != "header-peer" {
@@ -211,7 +211,7 @@ func TestWebChatEnvelopeResolvesStableIDs(t *testing.T) {
 
 func TestWebChatEnvelopeResolvesQueryAndSource(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	req := httptest.NewRequest(http.MethodPost, "/web-chat/send?requestId=query-request&sessionId=query-session&userId=query-user&peerId=query-peer&source=wechat", bytes.NewReader(nil))
+	req := httptest.NewRequest(http.MethodPost, "/web-chat/send?requestId=query-request&sessionId=query-session&spaceId=query-user&peerId=query-peer&source=wechat", bytes.NewReader(nil))
 	c, _ := gin.CreateTestContext(httptest.NewRecorder())
 	c.Request = req
 
@@ -222,7 +222,7 @@ func TestWebChatEnvelopeResolvesQueryAndSource(t *testing.T) {
 	if got := resolveRequestBackedValue(c, body.SessionID, "X-Session-ID", "sessionId", "session_id"); got != "query-session" {
 		t.Fatalf("unexpected query session id: %s", got)
 	}
-	if got := resolveRequestBackedValue(c, body.UserID, "X-User-ID", "userId", "user_id"); got != "query-user" {
+	if got := resolveRequestBackedValue(c, body.SpaceID, "X-User-ID", "spaceId", "space_id"); got != "query-user" {
 		t.Fatalf("unexpected query user id: %s", got)
 	}
 	if got := resolveRequestBackedValue(c, body.PeerID, "X-Peer-ID", "peerId", "peer_id"); got != "query-peer" {

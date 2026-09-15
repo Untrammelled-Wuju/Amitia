@@ -5,6 +5,8 @@ package memory
 import (
 	"strings"
 	"time"
+
+	"github.com/u-ai/backend/internal/requestidentity"
 )
 
 func (s *service) SyncGraphMemory(id string) bool {
@@ -24,10 +26,7 @@ func (s *service) syncGraph(m *Memory) {
 		s.deleteGraph(m)
 		return
 	}
-	userID := strings.TrimSpace(m.UserID)
-	if userID == "" || userID == "default" {
-		return
-	}
+	spaceID := requestidentity.NormalizeSpaceID(m.SpaceID)
 	label := strings.TrimSpace(m.Key)
 	if label == "" {
 		label = strings.TrimSpace(m.Value)
@@ -41,7 +40,7 @@ func (s *service) syncGraph(m *Memory) {
 		"importance":       m.Importance,
 		"confidence":       m.Confidence,
 		"character_id":     m.CharacterID,
-		"user_id":          userID,
+		"space_id":         spaceID,
 		"entity_type":      m.EntityType,
 		"source_msg_id":    m.SourceMsgID,
 		"source_conv_id":   m.SourceConvID,
@@ -53,19 +52,19 @@ func (s *service) syncGraph(m *Memory) {
 		"created_at":       m.CreatedAt,
 		"updated_at":       m.UpdatedAt,
 	})
-	_ = s.graphSvc.SyncNode("user", userID, userID, map[string]interface{}{"user_id": userID})
+	_ = s.graphSvc.SyncNode("space", spaceID, spaceID, map[string]interface{}{"space_id": spaceID})
 	if m.CharacterID != "" {
-		_ = s.graphSvc.SyncNode("character", m.CharacterID, m.CharacterID, map[string]interface{}{"character_id": m.CharacterID, "user_id": userID})
+		_ = s.graphSvc.SyncNode("character", m.CharacterID, m.CharacterID, map[string]interface{}{"character_id": m.CharacterID, "space_id": spaceID})
 	}
 	if m.EntityID != "" {
 		entityType := strings.TrimSpace(m.EntityType)
 		if entityType == "" {
 			entityType = "entity"
 		}
-		_ = s.graphSvc.SyncNode(entityType, m.EntityID, m.EntityID, map[string]interface{}{"user_id": userID})
+		_ = s.graphSvc.SyncNode(entityType, m.EntityID, m.EntityID, map[string]interface{}{"space_id": spaceID})
 		_ = s.graphSvc.SyncEdge(entityType+":"+m.EntityID, "memory:"+m.ID, "described_by", float64(m.Confidence)/100.0)
 	}
-	_ = s.graphSvc.SyncEdge("user:"+userID, "memory:"+m.ID, "has_memory", float64(m.Confidence)/100.0)
+	_ = s.graphSvc.SyncEdge("space:"+spaceID, "memory:"+m.ID, "has_memory", float64(m.Confidence)/100.0)
 	if m.CharacterID != "" {
 		_ = s.graphSvc.SyncEdge("character:"+m.CharacterID, "memory:"+m.ID, "context_memory", float64(m.Confidence)/100.0)
 	}

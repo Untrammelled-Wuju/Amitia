@@ -101,14 +101,6 @@ func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, chatSvc chat.
 	r.DELETE("/safety/events", sharedCoreAdminOnly(), handler.DeleteSafetyEvents)
 	r.PUT("/safety/events/:id/handle", sharedCoreAdminOnly(), handler.HandleSafetyEvent)
 
-	r.GET("/auth/current-session", handler.CurrentSession)
-	r.GET("/auth/login-history", handler.LoginHistory)
-	r.GET("/auth/recovery-codes/status", handler.RecoveryCodesStatus)
-	r.POST("/auth/recovery-codes/generate", handler.GenerateRecoveryCodes)
-	r.POST("/auth/recovery-codes/verify", handler.VerifyRecoveryCode)
-	r.GET("/auth/session-settings", sharedCoreAdminOnly(), handler.SessionSettings)
-	r.PUT("/auth/session-settings", sharedCoreAdminOnly(), handler.UpdateSessionSettings)
-
 	r.GET("/runtime/health", sharedCoreAdminOnly(), handler.RuntimeHealth)
 	r.GET("/runtime/modules/health", sharedCoreAdminOnly(), handler.RuntimeModulesHealth)
 	r.GET("/runtime/debug/snapshot", sharedCoreAdminOnly(), handler.RuntimeDebugSnapshot)
@@ -167,7 +159,7 @@ func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, chatSvc chat.
 	r.GET("/security/access-config", sharedCoreAdminOnly(), handler.SecurityAccessConfig)
 	r.PUT("/security/access-config", sharedCoreAdminOnly(), handler.UpdateSecurityAccessConfig)
 	r.GET("/security/access-status", sharedCoreAdminOnly(), handler.SecurityAccessStatus)
-	r.GET("/security/account-check", sharedCoreAdminOnly(), handler.SecurityAccountCheck)
+	r.GET("/security/identity-check", sharedCoreAdminOnly(), handler.SecurityIdentityCheck)
 	r.GET("/security/exposure-check", sharedCoreAdminOnly(), handler.SecurityExposureCheck)
 	r.GET("/security/status", sharedCoreAdminOnly(), handler.SecurityStatus)
 

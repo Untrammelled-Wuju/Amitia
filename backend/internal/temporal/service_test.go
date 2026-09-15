@@ -40,7 +40,7 @@ func saveTemporalProfile(t *testing.T, service *Service, ownerType, ownerID, zon
 
 func TestSnapshotResolvesUserAndCharacterAcrossDate(t *testing.T) {
 	service, _ := temporalTestService(t, time.Date(2026, 7, 18, 16, 30, 0, 0, time.UTC))
-	saveTemporalProfile(t, service, OwnerUser, DefaultUserOwnerID, "America/Los_Angeles", TimezoneFixed)
+	saveTemporalProfile(t, service, OwnerSpace, defaultSpaceOwnerID(), "America/Los_Angeles", TimezoneFixed)
 	saveTemporalProfile(t, service, OwnerCharacter, "character-a", "Asia/Shanghai", TimezoneFixed)
 	snapshot, err := service.ResolveSnapshot(context.Background(), SnapshotInput{CharacterID: "character-a", Channel: "web"})
 	if err != nil {
@@ -59,7 +59,7 @@ func TestSnapshotResolvesUserAndCharacterAcrossDate(t *testing.T) {
 
 func TestSnapshotFollowUserTimezone(t *testing.T) {
 	service, _ := temporalTestService(t, time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
-	saveTemporalProfile(t, service, OwnerUser, DefaultUserOwnerID, "Asia/Tokyo", TimezoneFixed)
+	saveTemporalProfile(t, service, OwnerSpace, defaultSpaceOwnerID(), "Asia/Tokyo", TimezoneFixed)
 	saveTemporalProfile(t, service, OwnerCharacter, "character-a", "Europe/London", TimezoneFollowUser)
 	snapshot, err := service.ResolveSnapshot(context.Background(), SnapshotInput{CharacterID: "character-a"})
 	if err != nil {
@@ -73,7 +73,7 @@ func TestSnapshotFollowUserTimezone(t *testing.T) {
 func TestPatchProfilePreservesOmittedBooleans(t *testing.T) {
 	service, _ := temporalTestService(t, time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
 	timezone := "Europe/Paris"
-	profile, err := service.PatchProfile(context.Background(), OwnerUser, DefaultUserOwnerID, ProfilePatch{Timezone: &timezone})
+	profile, err := service.PatchProfile(context.Background(), OwnerSpace, defaultSpaceOwnerID(), ProfilePatch{Timezone: &timezone})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -85,7 +85,7 @@ func TestPatchProfilePreservesOmittedBooleans(t *testing.T) {
 func TestPatchProfileCanDisableBoolean(t *testing.T) {
 	service, _ := temporalTestService(t, time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
 	disabled := false
-	profile, err := service.PatchProfile(context.Background(), OwnerUser, DefaultUserOwnerID, ProfilePatch{MemoryResonance: &disabled})
+	profile, err := service.PatchProfile(context.Background(), OwnerSpace, defaultSpaceOwnerID(), ProfilePatch{MemoryResonance: &disabled})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -163,7 +163,7 @@ func TestDailyRecurrenceKeepsLocalTimeAcrossDSTStart(t *testing.T) {
 
 func TestPluginAnchorAlwaysRequiresConfirmation(t *testing.T) {
 	service, _ := temporalTestService(t, time.Date(2026, 7, 18, 0, 0, 0, 0, time.UTC))
-	anchor, err := service.SaveAnchor(context.Background(), DefaultUserOwnerID, "", Anchor{Source: "plugin", SourceRef: "calendar-plugin", AnchorType: "custom", Title: "插件日期", TimeKind: "local_date", LocalDate: "2026-08-01", Timezone: "Asia/Shanghai", AllowProactiveMention: true})
+	anchor, err := service.SaveAnchor(context.Background(), defaultSpaceOwnerID(), "", Anchor{Source: "plugin", SourceRef: "calendar-plugin", AnchorType: "custom", Title: "插件日期", TimeKind: "local_date", LocalDate: "2026-08-01", Timezone: "Asia/Shanghai", AllowProactiveMention: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -191,7 +191,7 @@ func TestAnnualLeapDayUsesFebruaryTwentyEight(t *testing.T) {
 
 func TestQuietHoursUseUserCivilTime(t *testing.T) {
 	service, _ := temporalTestService(t, time.Date(2026, 7, 18, 16, 0, 0, 0, time.UTC))
-	saveTemporalProfile(t, service, OwnerUser, DefaultUserOwnerID, "Asia/Shanghai", TimezoneFixed)
+	saveTemporalProfile(t, service, OwnerSpace, defaultSpaceOwnerID(), "Asia/Shanghai", TimezoneFixed)
 	snapshot, err := service.ResolveSnapshot(context.Background(), SnapshotInput{CharacterID: "character-a"})
 	if err != nil {
 		t.Fatal(err)
@@ -203,7 +203,7 @@ func TestQuietHoursUseUserCivilTime(t *testing.T) {
 
 func TestCandidateAnchorDoesNotEnterSnapshot(t *testing.T) {
 	service, _ := temporalTestService(t, time.Date(2026, 7, 18, 0, 0, 0, 0, time.UTC))
-	anchor, err := service.SaveAnchor(context.Background(), DefaultUserOwnerID, "character-a", Anchor{AnchorType: "birthday", Title: "候选生日", TimeKind: "annual_date", LocalDate: "07-18", Timezone: "Asia/Shanghai", Importance: 100, Confidence: 100, AllowPromptMention: true, RequiresConfirmation: true})
+	anchor, err := service.SaveAnchor(context.Background(), defaultSpaceOwnerID(), "character-a", Anchor{AnchorType: "birthday", Title: "候选生日", TimeKind: "annual_date", LocalDate: "07-18", Timezone: "Asia/Shanghai", Importance: 100, Confidence: 100, AllowPromptMention: true, RequiresConfirmation: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -214,7 +214,7 @@ func TestCandidateAnchorDoesNotEnterSnapshot(t *testing.T) {
 	if len(snapshot.SalientAnchors) != 0 {
 		t.Fatal("candidate anchor must not enter snapshot")
 	}
-	if _, err = service.ConfirmAnchor(context.Background(), DefaultUserOwnerID, "character-a", anchor.ID); err != nil {
+	if _, err = service.ConfirmAnchor(context.Background(), defaultSpaceOwnerID(), "character-a", anchor.ID); err != nil {
 		t.Fatal(err)
 	}
 	snapshot, err = service.ResolveSnapshot(context.Background(), SnapshotInput{CharacterID: "character-a"})

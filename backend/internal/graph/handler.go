@@ -21,8 +21,8 @@ func NewHandler(svc Service) *Handler {
 func (h *Handler) Neighbors(c *gin.Context) {
 	id := c.Param("id")
 	depth, _ := strconv.Atoi(c.DefaultQuery("depth", "2"))
-	userID := requestidentity.ResolveGin(c, "")
-	result, err := h.svc.QueryNeighbors(id, depth, userID)
+	spaceID := requestidentity.ResolveGin(c)
+	result, err := h.svc.QueryNeighbors(id, depth, spaceID)
 	if err != nil {
 		util.ErrorResponse(c, 500, err.Error(), nil)
 		return
@@ -38,7 +38,7 @@ func (h *Handler) FindPath(c *gin.Context) {
 		util.ErrorResponse(c, 400, "from和to不能为空", nil)
 		return
 	}
-	result, err := h.svc.FindPathsForUser(from, to, maxDepth, requestidentity.ResolveGin(c, ""))
+	result, err := h.svc.FindPathsForSpace(from, to, maxDepth, requestidentity.ResolveGin(c))
 	if err != nil {
 		util.ErrorResponse(c, 500, err.Error(), nil)
 		return
@@ -47,8 +47,8 @@ func (h *Handler) FindPath(c *gin.Context) {
 }
 
 func (h *Handler) Stats(c *gin.Context) {
-	userID := requestidentity.ResolveGin(c, "")
-	result, err := h.svc.GetStats(userID)
+	spaceID := requestidentity.ResolveGin(c)
+	result, err := h.svc.GetStats(spaceID)
 	if err != nil {
 		util.ErrorResponse(c, 500, err.Error(), nil)
 		return
@@ -58,7 +58,7 @@ func (h *Handler) Stats(c *gin.Context) {
 
 func (h *Handler) DeleteNode(c *gin.Context) {
 	id := c.Param("id")
-	if err := h.svc.DeleteNodeForUser(id, requestidentity.ResolveGin(c, "")); err != nil {
+	if err := h.svc.DeleteNodeForSpace(id, requestidentity.ResolveGin(c)); err != nil {
 		util.ErrorResponse(c, 500, err.Error(), nil)
 		return
 	}
@@ -66,8 +66,8 @@ func (h *Handler) DeleteNode(c *gin.Context) {
 }
 
 func (h *Handler) AllNodes(c *gin.Context) {
-	userID := requestidentity.ResolveGin(c, "")
-	result, err := h.svc.GetAllNodes(userID)
+	spaceID := requestidentity.ResolveGin(c)
+	result, err := h.svc.GetAllNodes(spaceID)
 	if err != nil {
 		util.ErrorResponse(c, 500, err.Error(), nil)
 		return
@@ -76,8 +76,8 @@ func (h *Handler) AllNodes(c *gin.Context) {
 }
 
 func (h *Handler) AllEdges(c *gin.Context) {
-	userID := requestidentity.ResolveGin(c, "")
-	result, err := h.svc.GetAllEdges(userID)
+	spaceID := requestidentity.ResolveGin(c)
+	result, err := h.svc.GetAllEdges(spaceID)
 	if err != nil {
 		util.ErrorResponse(c, 500, err.Error(), nil)
 		return

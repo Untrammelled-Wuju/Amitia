@@ -21,11 +21,11 @@ type Repository interface {
 	FindByID(id string) (*EpisodicMemory, error)
 	Create(m *EpisodicMemory) error
 	Delete(id string) error
-	GetByUserID(userID string, limit int) ([]EpisodicMemory, error)
-	GetRecent(userID string, limit int) ([]EpisodicMemory, error)
-	GetRecentScoped(userID string, limit int) ([]EpisodicMemory, error)
+	GetBySpaceID(spaceID string, limit int) ([]EpisodicMemory, error)
+	GetRecent(spaceID string, limit int) ([]EpisodicMemory, error)
+	GetRecentScoped(spaceID string, limit int) ([]EpisodicMemory, error)
 	GetDetailWithMessages(id string, db *gorm.DB) (*EpisodicMemory, []map[string]interface{}, error)
-	FindByTime(filter EpisodicTimeFilter, userID string, limit int) ([]EpisodicMemory, int64, error)
+	FindByTime(filter EpisodicTimeFilter, spaceID string, limit int) ([]EpisodicMemory, int64, error)
 }
 
 type repository struct {
@@ -38,8 +38,8 @@ func NewRepository(ctx *app.AppContext) Repository {
 
 func (r *repository) List(q EpisodicListQuery) ([]EpisodicMemory, int64, error) {
 	query := r.db.Model(&EpisodicMemory{})
-	if q.UserID != "" {
-		query = query.Where("user_id = ?", q.UserID)
+	if q.SpaceID != "" {
+		query = query.Where("space_id = ?", q.SpaceID)
 	}
 	if q.CharacterID != "" {
 		query = query.Where("character_id = ?", q.CharacterID)
@@ -93,44 +93,45 @@ func (r *repository) Delete(id string) error {
 	return r.db.Where("id = ?", id).Delete(&EpisodicMemory{}).Error
 }
 
-func (r *repository) GetByUserID(userID string, limit int) ([]EpisodicMemory, error) {
+func (r *repository) GetBySpaceID(spaceID string, limit int) ([]EpisodicMemory, error) {
 	if limit <= 0 {
 		limit = 20
 	}
 	var items []EpisodicMemory
-	err := r.db.Where("user_id = ?", userID).Order("created_at DESC").Limit(limit).Find(&items).Error
+	err := r.db.Where("space_id = ?", spaceID).Order("created_at DESC").Limit(limit).Find(&items).Error
 	if items == nil {
 		items = []EpisodicMemory{}
 	}
 	return items, err
 }
 
-func (r *repository) GetRecent(userID string, limit int) ([]EpisodicMemory, error) {
+func (r *repository) GetRecent(spaceID string, limit int) ([]EpisodicMemory, error) {
 	if limit <= 0 {
 		limit = 5
 	}
 	var items []EpisodicMemory
-	err := r.db.Where("user_id = ?", userID).Order("created_at DESC").Limit(limit).Find(&items).Error
+	err := r.db.Where("space_id = ?", spaceID).Order("created_at DESC").Limit(limit).Find(&items).Error
 	if items == nil {
 		items = []EpisodicMemory{}
 	}
 	return items, err
 }
 
-func (r *repository) GetRecentScoped(userID string, limit int) ([]EpisodicMemory, error) {
-	if userID == "" || userID == "default" {
+func (r *repository) GetRecentScoped(spaceID string, limit int) ([]EpisodicMemory, error) {
+	spaceID = strings.TrimSpace(spaceID)
+	if spaceID == "" {
 		return []EpisodicMemory{}, nil
 	}
-	return r.GetRecent(userID, limit)
+	return r.GetRecent(spaceID, limit)
 }
 
-func (r *repository) FindByTime(filter EpisodicTimeFilter, userID string, limit int) ([]EpisodicMemory, int64, error) {
+func (r *repository) FindByTime(filter EpisodicTimeFilter, spaceID string, limit int) ([]EpisodicMemory, int64, error) {
 	if limit <= 0 {
 		limit = 20
 	}
 	query := r.db.Model(&EpisodicMemory{})
-	if userID != "" && userID != "default" {
-		query = query.Where("user_id = ?", userID)
+	if strings.TrimSpace(spaceID) != "" {
+		query = query.Where("space_id = ?", strings.TrimSpace(spaceID))
 	}
 	switch filter.Basis {
 	case "validity":

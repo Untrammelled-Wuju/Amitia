@@ -13,19 +13,19 @@ type Handler struct{ service Service }
 func NewHandler(srv Service) *Handler { return &Handler{service: srv} }
 
 func (h *Handler) List(c *gin.Context) {
-	util.SuccessResponse(c, h.service.ListForUser(requestidentity.ResolveGin(c, "")))
+	util.SuccessResponse(c, h.service.ListForSpace(requestidentity.ResolveGin(c)))
 }
 
 func (h *Handler) GetByConversation(c *gin.Context) {
-	util.SuccessResponse(c, h.service.GetByConversationForUser(c.Param("id"), requestidentity.ResolveGin(c, "")))
+	util.SuccessResponse(c, h.service.GetByConversationForSpace(c.Param("id"), requestidentity.ResolveGin(c)))
 }
 
 func (h *Handler) Delete(c *gin.Context) {
-	deleted := h.service.DeleteForUser(c.Param("id"), requestidentity.ResolveGin(c, ""))
+	deleted := h.service.DeleteForSpace(c.Param("id"), requestidentity.ResolveGin(c))
 	util.SuccessResponse(c, map[string]interface{}{"deleted": deleted})
 }
 
 func (h *Handler) DeleteByConversation(c *gin.Context) {
-	deleted := h.service.DeleteByConversationForUser(c.Param("id"), requestidentity.ResolveGin(c, ""))
+	deleted := h.service.DeleteByConversationForSpace(c.Param("id"), requestidentity.ResolveGin(c))
 	util.SuccessResponse(c, map[string]interface{}{"deleted": deleted})
 }

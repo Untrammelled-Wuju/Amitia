@@ -17,9 +17,9 @@ type Repository interface {
 	UpsertConfidence(profile *UserProfile) (*UserProfile, error)
 	Update(id string, updates map[string]interface{}) error
 	Delete(id string) error
-	GetByUserID(userID string) ([]UserProfile, error)
-	GetScopedByUserID(userID, characterID string) ([]UserProfile, error)
-	GetUserFactSummary(userID string, characterID ...string) ([]UserProfile, error)
+	GetBySpaceID(spaceID string) ([]UserProfile, error)
+	GetScopedBySpaceID(spaceID, characterID string) ([]UserProfile, error)
+	GetUserFactSummary(spaceID string, characterID ...string) ([]UserProfile, error)
 }
 
 type repository struct {
@@ -32,8 +32,8 @@ func NewRepository(ctx *app.AppContext) Repository {
 
 func (r *repository) List(q ProfileListQuery) ([]UserProfile, int64, error) {
 	query := r.db.Model(&UserProfile{})
-	if q.UserID != "" {
-		query = query.Where("user_id = ?", q.UserID)
+	if q.SpaceID != "" {
+		query = query.Where("space_id = ?", q.SpaceID)
 	}
 	if q.CharacterID != "" {
 		query = query.Where("character_id = ?", q.CharacterID)
@@ -74,8 +74,8 @@ func (r *repository) UpsertConfidence(profile *UserProfile) (*UserProfile, error
 	profile.Confidence = clampProfileConfidence(profile.Confidence)
 	clampedConfidence := profile.Confidence
 	var existing UserProfile
-	err := r.db.Where("user_id = ? AND character_id = ? AND category = ? AND attribute_name = ?",
-		profile.UserID, profile.CharacterID, profile.Category, profile.AttributeName).First(&existing).Error
+	err := r.db.Where("space_id = ? AND character_id = ? AND category = ? AND attribute_name = ?",
+		profile.SpaceID, profile.CharacterID, profile.Category, profile.AttributeName).First(&existing).Error
 	if err != nil {
 		if profile.ID == "" {
 			profile.ID = uuid.New().String()
@@ -176,30 +176,30 @@ func (r *repository) Delete(id string) error {
 	return r.db.Where("id = ?", id).Delete(&UserProfile{}).Error
 }
 
-func (r *repository) GetByUserID(userID string) ([]UserProfile, error) {
+func (r *repository) GetBySpaceID(spaceID string) ([]UserProfile, error) {
 	var items []UserProfile
-	err := r.db.Where("user_id = ? AND character_id = ''", userID).Order("confidence DESC").Find(&items).Error
+	err := r.db.Where("space_id = ? AND character_id = ''", spaceID).Order("confidence DESC").Find(&items).Error
 	if items == nil {
 		items = []UserProfile{}
 	}
 	return items, err
 }
 
-func (r *repository) GetScopedByUserID(userID, characterID string) ([]UserProfile, error) {
-	return r.getScopedProfiles(userID, characterID, "confidence DESC", 0, false)
+func (r *repository) GetScopedBySpaceID(spaceID, characterID string) ([]UserProfile, error) {
+	return r.getScopedProfiles(spaceID, characterID, "confidence DESC", 0, false)
 }
 
-func (r *repository) GetUserFactSummary(userID string, characterID ...string) ([]UserProfile, error) {
+func (r *repository) GetUserFactSummary(spaceID string, characterID ...string) ([]UserProfile, error) {
 	scope := ""
 	if len(characterID) > 0 {
 		scope = characterID[0]
 	}
-	return r.getScopedProfiles(userID, scope, "confidence DESC", 20, true)
+	return r.getScopedProfiles(spaceID, scope, "confidence DESC", 20, true)
 }
 
-func (r *repository) getScopedProfiles(userID, characterID, order string, limit int, onlyFacts bool) ([]UserProfile, error) {
+func (r *repository) getScopedProfiles(spaceID, characterID, order string, limit int, onlyFacts bool) ([]UserProfile, error) {
 	var items []UserProfile
-	query := r.db.Where("user_id = ?", userID)
+	query := r.db.Where("space_id = ?", spaceID)
 	if characterID != "" {
 		query = query.Where("character_id IN ?", []string{characterID, ""})
 	} else {

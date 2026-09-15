@@ -42,9 +42,9 @@ func (t *fakeTracker) Get(ctx context.Context, id string) (*InteractionRecord, b
 	return r, ok, nil
 }
 
-func (t *fakeTracker) GetByRequestID(ctx context.Context, userID string, requestID string) (*InteractionRecord, bool, error) {
+func (t *fakeTracker) GetByRequestID(ctx context.Context, spaceID string, requestID string) (*InteractionRecord, bool, error) {
 	for _, r := range t.records {
-		if r.Scope.UserID == userID && r.Scope.ConversationID != "" {
+		if r.Scope.SpaceID == spaceID && r.Scope.ConversationID != "" {
 			return r, true, nil
 		}
 	}
@@ -260,7 +260,7 @@ func TestMultiAgentCoordinator_Start_And_Aggregate(t *testing.T) {
 
 	goal := decision.Goal{
 		ID:        "goal-1",
-		UserID:    "user-1",
+		SpaceID:   "user-1",
 		Status:    decision.GoalStatusActive,
 		Revision:  1,
 		CreatedAt: time.Now().UTC(),

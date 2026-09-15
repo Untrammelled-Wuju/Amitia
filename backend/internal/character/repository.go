@@ -149,13 +149,13 @@ func (r *repository) GetRuntimeProfile(id string) (*RoleRuntimeProfile, error) {
 	}, nil
 }
 
-func (r *repository) GetRuntimeProfileForUser(id, userID string, includeLegacyDefault bool) (*RoleRuntimeProfile, error) {
+func (r *repository) GetRuntimeProfileForSpace(id, spaceID string, includeLegacyDefault bool) (*RoleRuntimeProfile, error) {
 	var c Character
 	base := r.db.Where("status = ? AND deleted_at IS NULL", "enabled")
 	if includeLegacyDefault {
-		base = base.Where("(user_id = ? OR user_id = '' OR user_id IS NULL OR user_id = 'default')", strings.TrimSpace(userID))
+		base = base.Where("(space_id = ? OR space_id = '' OR space_id IS NULL OR space_id = 'default')", strings.TrimSpace(spaceID))
 	} else {
-		base = base.Where("user_id = ?", strings.TrimSpace(userID))
+		base = base.Where("space_id = ?", strings.TrimSpace(spaceID))
 	}
 	var err error
 	if strings.TrimSpace(id) != "" {

@@ -95,9 +95,9 @@ func (s *SwitchableService) DeleteNode(entityID string) error {
 	})
 }
 
-func (s *SwitchableService) DeleteNodeForUser(entityID, userID string) error {
+func (s *SwitchableService) DeleteNodeForSpace(entityID, spaceID string) error {
 	return s.withService(func(current Service) error {
-		return current.DeleteNodeForUser(entityID, userID)
+		return current.DeleteNodeForSpace(entityID, spaceID)
 	})
 }
 
@@ -113,9 +113,9 @@ func (s *SwitchableService) DeleteNodesByProperty(entityType, propertyKey, prope
 	})
 }
 
-func (s *SwitchableService) QueryNeighbors(entityID string, depth int, userID string) (result map[string]interface{}, err error) {
+func (s *SwitchableService) QueryNeighbors(entityID string, depth int, spaceID string) (result map[string]interface{}, err error) {
 	err = s.withService(func(current Service) error {
-		result, err = current.QueryNeighbors(entityID, depth, userID)
+		result, err = current.QueryNeighbors(entityID, depth, spaceID)
 		return err
 	})
 	return result, err
@@ -129,9 +129,9 @@ func (s *SwitchableService) FindPaths(sourceID, targetID string, maxDepth int) (
 	return result, err
 }
 
-func (s *SwitchableService) FindPathsForUser(sourceID, targetID string, maxDepth int, userID string) (result []map[string]interface{}, err error) {
+func (s *SwitchableService) FindPathsForSpace(sourceID, targetID string, maxDepth int, spaceID string) (result []map[string]interface{}, err error) {
 	err = s.withService(func(current Service) error {
-		result, err = current.FindPathsForUser(sourceID, targetID, maxDepth, userID)
+		result, err = current.FindPathsForSpace(sourceID, targetID, maxDepth, spaceID)
 		return err
 	})
 	return result, err
@@ -143,25 +143,25 @@ func (s *SwitchableService) DeleteOrphanNodes() error {
 	})
 }
 
-func (s *SwitchableService) GetStats(userID string) (result map[string]interface{}, err error) {
+func (s *SwitchableService) GetStats(spaceID string) (result map[string]interface{}, err error) {
 	err = s.withService(func(current Service) error {
-		result, err = current.GetStats(userID)
+		result, err = current.GetStats(spaceID)
 		return err
 	})
 	return result, err
 }
 
-func (s *SwitchableService) GetAllNodes(userID string) (result []map[string]interface{}, err error) {
+func (s *SwitchableService) GetAllNodes(spaceID string) (result []map[string]interface{}, err error) {
 	err = s.withService(func(current Service) error {
-		result, err = current.GetAllNodes(userID)
+		result, err = current.GetAllNodes(spaceID)
 		return err
 	})
 	return result, err
 }
 
-func (s *SwitchableService) GetAllEdges(userID string) (result []map[string]interface{}, err error) {
+func (s *SwitchableService) GetAllEdges(spaceID string) (result []map[string]interface{}, err error) {
 	err = s.withService(func(current Service) error {
-		result, err = current.GetAllEdges(userID)
+		result, err = current.GetAllEdges(spaceID)
 		return err
 	})
 	return result, err

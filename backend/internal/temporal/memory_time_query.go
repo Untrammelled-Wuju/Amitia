@@ -15,21 +15,21 @@ const (
 )
 
 type MemoryTemporalQuery struct {
-	MemoryIDs        []string
-	Basis            MemoryTimeBasis
-	OccurredFromUTC  *time.Time
-	OccurredToUTC    *time.Time
-	ValidAtUTC       *time.Time
-	ValidFromUTC     *time.Time
-	ValidToUTC       *time.Time
-	LocalDateFrom    string
-	LocalDateTo      string
-	Dayparts         []string
-	Precisions       []string
-	AnchorIDs        []string
-	Limit            int
-	Cursor           string
-	Order            string
+	MemoryIDs       []string
+	Basis           MemoryTimeBasis
+	OccurredFromUTC *time.Time
+	OccurredToUTC   *time.Time
+	ValidAtUTC      *time.Time
+	ValidFromUTC    *time.Time
+	ValidToUTC      *time.Time
+	LocalDateFrom   string
+	LocalDateTo     string
+	Dayparts        []string
+	Precisions      []string
+	AnchorIDs       []string
+	Limit           int
+	Cursor          string
+	Order           string
 }
 
 func (r *SQLiteRepository) QueryMemoryIDsByTime(query MemoryTemporalQuery) ([]string, int64, error) {
@@ -85,7 +85,7 @@ func (r *SQLiteRepository) QueryMemoryIDsByTime(query MemoryTemporalQuery) ([]st
 
 type RelativeMemoryTimeQuery struct {
 	Expression       string
-	UserID           string
+	SpaceID          string
 	CharacterID      string
 	ReferenceTimeUTC *time.Time
 }

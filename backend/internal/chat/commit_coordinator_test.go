@@ -51,7 +51,7 @@ func setupCommitCoordinatorTest(t *testing.T, withOutbox bool) (*gorm.DB, *servi
 	}
 	if err := db.Create(&interaction.InteractionRecordModel{
 		ID:             "interaction-commit",
-		UserID:         "user:web",
+		SpaceID:        "user:web",
 		CharacterID:    "char-commit",
 		ConversationID: convID,
 		Channel:        "web",

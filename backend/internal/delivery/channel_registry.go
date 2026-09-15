@@ -145,13 +145,13 @@ func (a *capabilityChannelAdapter) Deliver(intent DeliveryIntent) error {
 // mechanism: channel.deliver.* → CapabilityService → ProviderInvocation.
 type ProviderInvocationCapabilityInvoker struct {
 	invocationService *capability.ProviderInvocationService
-	userID            string
+	spaceID           string
 }
 
-func NewProviderInvocationCapabilityInvoker(svc *capability.ProviderInvocationService, userID string) *ProviderInvocationCapabilityInvoker {
+func NewProviderInvocationCapabilityInvoker(svc *capability.ProviderInvocationService, spaceID string) *ProviderInvocationCapabilityInvoker {
 	return &ProviderInvocationCapabilityInvoker{
 		invocationService: svc,
-		userID:            userID,
+		spaceID:           spaceID,
 	}
 }
 
@@ -163,7 +163,7 @@ func (p *ProviderInvocationCapabilityInvoker) InvokeCapability(ctx context.Conte
 	req := capability.ProviderInvocationRequest{
 		CapabilityID: capID,
 		Input:        input,
-		UserID:       runtimeidentity.UserID(p.userID),
+		SpaceID:      runtimeidentity.SpaceID(p.spaceID),
 		AllowCore:    true,
 	}
 	result, err := p.invocationService.Invoke(ctx, req)

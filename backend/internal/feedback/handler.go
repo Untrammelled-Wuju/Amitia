@@ -26,7 +26,7 @@ func (h *Handler) Create(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
 		return
 	}
-	fb, err := h.service.CreateForUser(msgID, requestidentity.ResolveGin(c, ""), &req)
+	fb, err := h.service.CreateForSpace(msgID, requestidentity.ResolveGin(c), &req)
 	if err != nil {
 		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
 		return
@@ -36,7 +36,7 @@ func (h *Handler) Create(c *gin.Context) {
 
 func (h *Handler) GetByMessage(c *gin.Context) {
 	msgID := c.Param("id")
-	items, err := h.service.GetByMessageForUser(msgID, requestidentity.ResolveGin(c, ""))
+	items, err := h.service.GetByMessageForSpace(msgID, requestidentity.ResolveGin(c))
 	if err != nil {
 		util.ErrorResponse(c, response.NotFound, "反馈不存在", nil)
 		return
@@ -72,7 +72,7 @@ func (h *Handler) Delete(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, "无效反馈 ID", nil)
 		return
 	}
-	if err := h.service.DeleteForUser(id, requestidentity.ResolveGin(c, "")); err != nil {
+	if err := h.service.DeleteForSpace(id, requestidentity.ResolveGin(c)); err != nil {
 		util.ErrorResponse(c, response.NotFound, "反馈不存在", nil)
 		return
 	}

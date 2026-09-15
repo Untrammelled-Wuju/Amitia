@@ -45,13 +45,13 @@ func (h *Handler) Upload(c *gin.Context) {
 		c.JSON(401, gin.H{"error": "artifact.unauthorized", "message": "authentication required"})
 		return
 	}
-	owner := string(actor.UserID)
+	owner := string(actor.SpaceID)
 	req := CreateRequest{
-		OwnerUserID: owner,
-		Kind:        Kind(kindVal),
-		Filename:    header.Filename,
-		Source:      Source(sourceVal),
-		Reader:      file,
+		OwnerSpaceID: owner,
+		Kind:         Kind(kindVal),
+		Filename:     header.Filename,
+		Source:       Source(sourceVal),
+		Reader:       file,
 	}
 	if header.Size > 0 {
 		req.MaxBytes = 0
@@ -73,7 +73,7 @@ func (h *Handler) GetMetadata(c *gin.Context) {
 		c.JSON(401, gin.H{"error": "artifact.unauthorized"})
 		return
 	}
-	owner := string(actor.UserID)
+	owner := string(actor.SpaceID)
 	art, err := h.svc.GetOwned(c.Request.Context(), owner, id)
 	if err != nil {
 		handleArtifactError(c, err)
@@ -89,7 +89,7 @@ func (h *Handler) GetContent(c *gin.Context) {
 		c.JSON(401, gin.H{"error": "artifact.unauthorized"})
 		return
 	}
-	owner := string(actor.UserID)
+	owner := string(actor.SpaceID)
 	art, err := h.svc.GetOwned(c.Request.Context(), owner, id)
 	if err != nil {
 		handleArtifactError(c, err)
@@ -126,7 +126,7 @@ func (h *Handler) Delete(c *gin.Context) {
 		c.JSON(401, gin.H{"error": "artifact.unauthorized"})
 		return
 	}
-	owner := string(actor.UserID)
+	owner := string(actor.SpaceID)
 	err = h.svc.Delete(c.Request.Context(), owner, id)
 	if err != nil {
 		handleArtifactError(c, err)
@@ -167,4 +167,3 @@ func sanitizeDispositionFilename(name string) string {
 	name = strings.ReplaceAll(name, `"`, "")
 	return name
 }
-

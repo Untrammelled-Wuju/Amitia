@@ -9,7 +9,7 @@ import (
 
 type retrievalAuthorityPolicy struct {
 	CharacterID      string
-	UserID           string
+	SpaceID          string
 	ProactiveMention bool
 	Now              time.Time
 }
@@ -18,7 +18,7 @@ func memoryAllowedBySQLiteAuthority(m Memory, policy retrievalAuthorityPolicy) b
 	if !memoryContextUseAllowed(m) {
 		return false
 	}
-	if !memoryMatchesRetrievalScope(m, policy.CharacterID, policy.UserID) {
+	if !memoryMatchesRetrievalScope(m, policy.CharacterID, policy.SpaceID) {
 		return false
 	}
 	if !memoryAllowedForDerivedContent(m, policy.Now) {
@@ -61,15 +61,15 @@ func memoryAllowedForDerivedContent(m Memory, now time.Time) bool {
 	return true
 }
 
-func memoryMatchesRetrievalScope(m Memory, characterID, userID string) bool {
+func memoryMatchesRetrievalScope(m Memory, characterID, spaceID string) bool {
 	characterID = strings.TrimSpace(characterID)
-	userID = strings.TrimSpace(userID)
-	if userID != "" && !memoryOwnerMatches(m.UserID, userID) {
+	spaceID = strings.TrimSpace(spaceID)
+	if spaceID != "" && !memoryOwnerMatches(m.SpaceID, spaceID) {
 		return false
 	}
 	scope := strings.ToLower(strings.TrimSpace(m.Scope))
 	if scope == "user" || scope == "user_global" {
-		return userID != "" || characterID == ""
+		return spaceID != "" || characterID == ""
 	}
 	if characterID != "" {
 		return strings.TrimSpace(m.CharacterID) == characterID

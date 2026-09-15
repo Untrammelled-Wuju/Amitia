@@ -36,7 +36,7 @@ type ProcessRequest struct {
 	ProactiveEmotion         string                     `json:"-"`
 	ProactiveMemory          string                     `json:"-"`
 	PeerID                   string                     `json:"peerId,omitempty"`
-	UserID                   string                     `json:"userId,omitempty"`
+	SpaceID                  string                     `json:"spaceId,omitempty"`
 	DeviceTimezone           string                     `json:"deviceTimezone,omitempty"`
 	SessionID                string                     `json:"sessionId,omitempty"`
 	AudioUrl                 string                     `json:"audioUrl,omitempty"`
@@ -217,7 +217,7 @@ func (o *Orchestrator) GetOutbox() *outbox.SQLiteOutboxStore {
 
 func (o *Orchestrator) buildScope(req *ProcessRequest) InteractionScope {
 	return InteractionScope{
-		UserID:         req.UserID,
+		SpaceID:        req.SpaceID,
 		CharacterID:    req.CharacterID,
 		ConversationID: req.ConversationID,
 		Channel:        req.Channel,

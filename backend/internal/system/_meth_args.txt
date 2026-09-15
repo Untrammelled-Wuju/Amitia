@@ -105,7 +105,7 @@ RunNow|||
 RunReleaseCheck|||
 SafetyEvents|||
 SafetyImportCheck|||body
-SecurityAccountCheck|||
+SecurityIdentityCheck|||
 SecurityExposureCheck|||
 SetupChecks|||
 SetupFinish|||

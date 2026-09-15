@@ -35,7 +35,7 @@ func TestRuntimeInputLoadersLoadRoleLifeNeedAndUnresolvedThreads(t *testing.T) {
 	reg.Register(NewNeedContextLoader(db))
 	reg.Register(NewUnresolvedThreadContextLoader(db))
 
-	snapshot := reg.LoadAll(context.Background(), InteractionScope{CharacterID: "char-runtime", UserID: "user-1"}, "v-test")
+	snapshot := reg.LoadAll(context.Background(), InteractionScope{CharacterID: "char-runtime", SpaceID: "user-1"}, "v-test")
 
 	if snapshot.RuntimeProfile.Status != LoadStatusReady {
 		t.Fatalf("expected runtime profile ready, got %s", snapshot.RuntimeProfile.Status)
@@ -218,7 +218,7 @@ func createRuntimeLoaderTestSchema(t *testing.T, db *gorm.DB) {
 		`CREATE TABLE unresolved_threads (
 			id TEXT PRIMARY KEY,
 			character_id TEXT,
-			user_id TEXT,
+			space_id TEXT,
 			topic TEXT,
 			reason TEXT,
 			severity REAL,
@@ -269,7 +269,7 @@ func insertRuntimeLoaderTestData(t *testing.T, db *gorm.DB) {
 			t.Fatalf("insert need: %v", err)
 		}
 	}
-	if err := db.Exec(`INSERT INTO unresolved_threads (id, character_id, user_id, topic, reason, severity, escalation_level, created_at, resolved_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
+	if err := db.Exec(`INSERT INTO unresolved_threads (id, character_id, space_id, topic, reason, severity, escalation_level, created_at, resolved_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
 		"thr-1", "char-runtime", "user-1", "boundary repair", "pending apology", 0.67, 2, "2026-07-01 09:00:00").Error; err != nil {
 		t.Fatalf("insert unresolved thread: %v", err)
 	}

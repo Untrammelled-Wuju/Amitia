@@ -55,14 +55,14 @@ func (s *service) Search(req *SearchMemoryRequest) ([]Memory, error) {
 		timeScopedIDs = scopedIDs
 	}
 
-	items, err := s.repo.Search(req.Keyword, req.CharacterID, req.UserID, fetchLimit)
+	items, err := s.repo.Search(req.Keyword, req.CharacterID, req.SpaceID, fetchLimit)
 	if err != nil {
 		return nil, err
 	}
 	tombstoneBlocked := tombstoneTargetsFromMemorySearch(s.dataLifecycleCoordinator, req.CharacterID)
 	policy := retrievalAuthorityPolicy{
 		CharacterID: req.CharacterID,
-		UserID:      req.UserID,
+		SpaceID:     req.SpaceID,
 		Now:         time.Now(),
 	}
 	filtered := make([]Memory, 0, min(limit, len(items)))
@@ -174,10 +174,10 @@ func (s *service) VectorSearch(req *VectorSearchRequest) ([]VectorSearchResult, 
 	if limit <= 0 {
 		limit = 5
 	}
-	filters := rankedMemoryVectorFilters(req.CharacterID, req.UserID)
+	filters := rankedMemoryVectorFilters(req.CharacterID, req.SpaceID)
 	log.Info("VectorSearch with filter",
 		"characterID", req.CharacterID,
-		"userID", req.UserID,
+		"spaceID", req.SpaceID,
 		"query", queryText,
 		"limit", limit,
 	)
@@ -201,7 +201,7 @@ func (s *service) VectorSearch(req *VectorSearchRequest) ([]VectorSearchResult, 
 	seen := map[string]bool{}
 	policy := retrievalAuthorityPolicy{
 		CharacterID:      req.CharacterID,
-		UserID:           req.UserID,
+		SpaceID:          req.SpaceID,
 		ProactiveMention: req.ProactiveMention,
 		Now:              time.Now(),
 	}
@@ -237,7 +237,7 @@ func (s *service) VectorSearch(req *VectorSearchRequest) ([]VectorSearchResult, 
 	}
 	log.Info("VectorSearch completed",
 		"characterID", req.CharacterID,
-		"userID", req.UserID,
+		"spaceID", req.SpaceID,
 		"results", len(vsResults),
 		"total", len(results),
 	)

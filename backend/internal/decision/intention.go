@@ -32,7 +32,7 @@ type Intention struct {
 	GoalID      string             `json:"goalId"`
 	GoalType    GoalType           `json:"goalType"`
 	GoalDesc    string             `json:"goalDesc,omitempty"`
-	UserID      string             `json:"userId,omitempty"`
+	SpaceID     string             `json:"spaceId,omitempty"`
 	CharacterID string             `json:"characterId,omitempty"`
 	Commitment  CommitmentStrength `json:"commitment"`
 	Status      IntentionStatus    `json:"status"`
@@ -64,7 +64,7 @@ func DeriveIntentionAt(goal Goal, commitment CommitmentStrength, deadline time.T
 		GoalID:      goal.ID,
 		GoalType:    goal.Type,
 		GoalDesc:    goal.Description,
-		UserID:      goal.UserID,
+		SpaceID:     goal.SpaceID,
 		CharacterID: goal.CharacterID,
 		Commitment:  strength,
 		Status:      IntentionStatusFormed,

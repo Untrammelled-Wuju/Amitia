@@ -37,7 +37,7 @@ const (
 )
 
 type SessionOwner struct {
-	UserID         string
+	SpaceID        string
 	CharacterID    string
 	ConversationID string
 }
@@ -58,12 +58,12 @@ type Session struct {
 	ExitCode             *int
 	CreationInvocationID string
 
-	ptmx      *os.File
-	cmd       *exec.Cmd
-	cancel    context.CancelFunc
+	ptmx   *os.File
+	cmd    *exec.Cmd
+	cancel context.CancelFunc
 
-	writeMu   sync.Mutex
-	stateMu   sync.RWMutex
+	writeMu sync.Mutex
+	stateMu sync.RWMutex
 	closeCh chan struct{}
 	output  *OutputBuffer
 }
@@ -158,7 +158,7 @@ func (s *Session) GetState() SessionState {
 func (s *Session) BelongsTo(owner SessionOwner) bool {
 	s.stateMu.RLock()
 	defer s.stateMu.RUnlock()
-	return s.Owner.UserID == owner.UserID &&
+	return s.Owner.SpaceID == owner.SpaceID &&
 		s.Owner.CharacterID == owner.CharacterID &&
 		s.Owner.ConversationID == owner.ConversationID
 }

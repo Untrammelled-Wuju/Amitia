@@ -9,12 +9,12 @@ import (
 	"github.com/google/uuid"
 )
 
-func (s *service) GetRankedMemories(characterID, userID, query string, limit int) ([]RankedMemory, error) {
+func (s *service) GetRankedMemories(characterID, spaceID, query string, limit int) ([]RankedMemory, error) {
 	if limit <= 0 {
 		limit = 10
 	}
 	results, err := s.dynamicRecall(&VectorSearchRequest{
-		Query: query, CharacterID: characterID, UserID: userID, Limit: limit,
+		Query: query, CharacterID: characterID, SpaceID: spaceID, Limit: limit,
 	})
 	if err != nil {
 		return nil, err
@@ -30,18 +30,18 @@ func (s *service) GetRankedMemories(characterID, userID, query string, limit int
 	return ranked, nil
 }
 
-func rankedMemoryVectorFilters(characterID, userID string) []map[string]interface{} {
+func rankedMemoryVectorFilters(characterID, spaceID string) []map[string]interface{} {
 	characterID = strings.TrimSpace(characterID)
-	userID = strings.TrimSpace(userID)
+	spaceID = strings.TrimSpace(spaceID)
 	filters := make([]map[string]interface{}, 0, 2)
-	if userID != "" && characterID != "" {
-		filters = append(filters, map[string]interface{}{"user_id": userID, "character_id": characterID})
+	if spaceID != "" && characterID != "" {
+		filters = append(filters, map[string]interface{}{"space_id": spaceID, "character_id": characterID})
 	}
-	if userID != "" {
-		filters = append(filters, map[string]interface{}{"user_id": userID, "scope_type": "user"})
+	if spaceID != "" {
+		filters = append(filters, map[string]interface{}{"space_id": spaceID, "scope_type": "user"})
 	} else if characterID != "" {
 		// Internal/local legacy callers that have no authenticated user remain
-		// character-scoped. Public handlers always provide userID.
+		// character-scoped. Public handlers always provide spaceID.
 		filters = append(filters, map[string]interface{}{"character_id": characterID})
 	}
 	if len(filters) == 0 {

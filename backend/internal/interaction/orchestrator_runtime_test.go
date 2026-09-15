@@ -131,7 +131,7 @@ func TestOrchestratorPersistsRuntimeExecutorIDToSQLite(t *testing.T) {
 	orch.SetReady(true)
 
 	result, err := orch.Process(context.Background(), &ProcessRequest{
-		UserID:         "user-sqlite",
+		SpaceID:        "user-sqlite",
 		CharacterID:    "char-sqlite",
 		ConversationID: "conv-sqlite",
 		Channel:        "web",
@@ -205,7 +205,7 @@ func TestOrchestratorDuplicateRequestIDDoesNotReprocess(t *testing.T) {
 	orch := NewOrchestratorWithStores(DefaultOrchestratorConfig(), processor, tracker, nil)
 	orch.SetReady(true)
 	req := ProcessRequest{
-		UserID:         "user-1",
+		SpaceID:        "user-1",
 		CharacterID:    "char-duplicate",
 		ConversationID: "conv-duplicate",
 		Channel:        "web",
@@ -222,7 +222,7 @@ func TestOrchestratorDuplicateRequestIDDoesNotReprocess(t *testing.T) {
 		t.Fatalf("unexpected first outcome: %s", first.Outcome)
 	}
 	second, err := orch.Process(context.Background(), &ProcessRequest{
-		UserID:         "user-1",
+		SpaceID:        "user-1",
 		CharacterID:    "char-duplicate",
 		ConversationID: "conv-duplicate",
 		Channel:        "web",
@@ -384,7 +384,7 @@ func TestOrchestratorQueuePolicySerializesSameScope(t *testing.T) {
 	firstDone := make(chan error, 1)
 	go func() {
 		_, err := orch.Process(context.Background(), &ProcessRequest{
-			UserID:         "user-queue",
+			SpaceID:        "user-queue",
 			CharacterID:    "char-queue",
 			ConversationID: "conv-queue",
 			Channel:        "web",
@@ -404,7 +404,7 @@ func TestOrchestratorQueuePolicySerializesSameScope(t *testing.T) {
 	secondDone := make(chan error, 1)
 	go func() {
 		_, err := orch.Process(context.Background(), &ProcessRequest{
-			UserID:         "user-queue",
+			SpaceID:        "user-queue",
 			CharacterID:    "char-queue",
 			ConversationID: "conv-queue",
 			Channel:        "web",
@@ -445,7 +445,7 @@ func TestOrchestratorQueueTurnWaitsForOlderQueuedRecord(t *testing.T) {
 	cfg.SupersedePolicy = SupersedePolicyQueue
 	orch := NewOrchestratorWithStores(cfg, &runtimeCaptureProcessor{}, tracker, nil)
 	scope := InteractionScope{
-		UserID:         "user-queued-order",
+		SpaceID:        "user-queued-order",
 		CharacterID:    "char-queued-order",
 		ConversationID: "conv-queued-order",
 		Channel:        "web",
@@ -577,7 +577,7 @@ func TestOrchestratorSuccessReturnDoesNotCompleteWhenInteractionDrifts(t *testin
 			name: "superseded",
 			mutate: func(ctx context.Context, tracker *InMemoryTracker, req *ProcessRequest) error {
 				scope := InteractionScope{
-					UserID:         req.UserID,
+					SpaceID:        req.SpaceID,
 					CharacterID:    req.CharacterID,
 					ConversationID: req.ConversationID,
 					Channel:        req.Channel,
@@ -611,7 +611,7 @@ func TestOrchestratorSuccessReturnDoesNotCompleteWhenInteractionDrifts(t *testin
 			orch.SetReady(true)
 
 			result, err := orch.Process(context.Background(), &ProcessRequest{
-				UserID:         "user-drift",
+				SpaceID:        "user-drift",
 				CharacterID:    "char-drift",
 				ConversationID: "conv-drift",
 				Channel:        "web",
@@ -661,7 +661,7 @@ func TestOrchestratorSuccessReturnDoesNotCompleteWhenStatusVersionChanges(t *tes
 	orch.SetReady(true)
 
 	result, err := orch.Process(context.Background(), &ProcessRequest{
-		UserID:         "user-version-drift",
+		SpaceID:        "user-version-drift",
 		CharacterID:    "char-version-drift",
 		ConversationID: "conv-version-drift",
 		Channel:        "web",
@@ -701,7 +701,7 @@ func TestOrchestratorMapsFinalCompleteCancelConflict(t *testing.T) {
 	orch.SetReady(true)
 
 	result, err := orch.Process(context.Background(), &ProcessRequest{
-		UserID:         "user-final-cancel",
+		SpaceID:        "user-final-cancel",
 		CharacterID:    "char-final-cancel",
 		ConversationID: "conv-final-cancel",
 		Channel:        "web",
@@ -729,7 +729,7 @@ func TestOrchestratorCancelIgnoresCompletedTransitionRace(t *testing.T) {
 	tracker := &cancelTransitionConflictTracker{InteractionTracker: base, base: base}
 	orch := NewOrchestratorWithStores(DefaultOrchestratorConfig(), &runtimeCaptureProcessor{}, tracker, nil)
 	record := NewInteractionRecord(InteractionScope{
-		UserID:         "user-cancel-race",
+		SpaceID:        "user-cancel-race",
 		CharacterID:    "char-cancel-race",
 		ConversationID: "conv-cancel-race",
 		Channel:        "web",
@@ -770,7 +770,7 @@ func TestOrchestratorLatestSupersedeExcludesCurrentSQLiteRecord(t *testing.T) {
 	firstErr := make(chan error, 1)
 	go func() {
 		result, err := orch.Process(context.Background(), &ProcessRequest{
-			UserID:         "user-1",
+			SpaceID:        "user-1",
 			CharacterID:    "char-1",
 			ConversationID: "conv-1",
 			Channel:        "web",
@@ -789,7 +789,7 @@ func TestOrchestratorLatestSupersedeExcludesCurrentSQLiteRecord(t *testing.T) {
 	}
 
 	second, err := orch.Process(context.Background(), &ProcessRequest{
-		UserID:         "user-1",
+		SpaceID:        "user-1",
 		CharacterID:    "char-1",
 		ConversationID: "conv-1",
 		Channel:        "web",
@@ -843,7 +843,7 @@ func TestOrchestratorCompletedEventFallbackUsesSQLiteTransaction(t *testing.T) {
 	orch.SetReady(true)
 
 	result, err := orch.Process(context.Background(), &ProcessRequest{
-		UserID:         "user-events",
+		SpaceID:        "user-events",
 		CharacterID:    "char-events",
 		ConversationID: "conv-events",
 		Channel:        "web",
@@ -900,7 +900,7 @@ func TestOrchestratorCompletedEventAppendFailureRollsBackSQLiteComplete(t *testi
 	orch.SetReady(true)
 
 	result, err := orch.Process(context.Background(), &ProcessRequest{
-		UserID:         "user-append-fail",
+		SpaceID:        "user-append-fail",
 		CharacterID:    "char-append-fail",
 		ConversationID: "conv-append-fail",
 		Channel:        "web",

@@ -11,7 +11,7 @@ import (
 )
 
 type captureProfileService struct {
-	userID    string
+	spaceID   string
 	convID    string
 	charID    string
 	messages  []map[string]string
@@ -34,13 +34,13 @@ func (s *captureProfileService) Delete(id string) error {
 	return nil
 }
 
-func (s *captureProfileService) GetByUserID(userID string, characterID ...string) ([]profile.UserProfile, error) {
+func (s *captureProfileService) GetBySpaceID(spaceID string, characterID ...string) ([]profile.UserProfile, error) {
 	return nil, nil
 }
 
-func (s *captureProfileService) ExtractFromConversation(userID, convID string, messages []map[string]string, characterID ...string) error {
+func (s *captureProfileService) ExtractFromConversation(spaceID, convID string, messages []map[string]string, characterID ...string) error {
 	s.callCount++
-	s.userID = userID
+	s.spaceID = spaceID
 	s.convID = convID
 	s.messages = messages
 	if len(characterID) > 0 {
@@ -49,11 +49,11 @@ func (s *captureProfileService) ExtractFromConversation(userID, convID string, m
 	return nil
 }
 
-func (s *captureProfileService) ToSystemPrompt(userID string, characterID ...string) string {
+func (s *captureProfileService) ToSystemPrompt(spaceID string, characterID ...string) string {
 	return ""
 }
 
-func (s *captureProfileService) UpsertFromTool(userID, category, attrName, attrValue string, confidence int, convID string, characterID ...string) (*profile.UserProfile, error) {
+func (s *captureProfileService) UpsertFromTool(spaceID, category, attrName, attrValue string, confidence int, convID string, characterID ...string) (*profile.UserProfile, error) {
 	return nil, nil
 }
 
@@ -103,8 +103,8 @@ func TestExtractProfileUsesConversationPeerID(t *testing.T) {
 	if profSvc.callCount != 1 {
 		t.Fatalf("ExtractFromConversation call count = %d, want 1", profSvc.callCount)
 	}
-	if profSvc.userID != "user-1" {
-		t.Fatalf("profile userID = %q, want user-1", profSvc.userID)
+	if profSvc.spaceID != "user-1" {
+		t.Fatalf("profile spaceID = %q, want user-1", profSvc.spaceID)
 	}
 	if profSvc.charID != "char-1" {
 		t.Fatalf("profile characterID = %q, want char-1", profSvc.charID)
@@ -126,7 +126,7 @@ func TestExtractProfileFallsBackToCharacterIDWithoutPeerID(t *testing.T) {
 
 	svc.extractProfile("conv-1", "char-1")
 
-	if profSvc.userID != "char-1" {
-		t.Fatalf("profile userID = %q, want char-1", profSvc.userID)
+	if profSvc.spaceID != "char-1" {
+		t.Fatalf("profile spaceID = %q, want char-1", profSvc.spaceID)
 	}
 }

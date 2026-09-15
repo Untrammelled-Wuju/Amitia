@@ -21,12 +21,12 @@ func HandlePlayMessage(c *gin.Context, db interface{}) {
 	}
 	var msg Msg
 	gdb := db.(*gorm.DB)
-	owner := requestidentity.NormalizeUserID(requestidentity.ResolveGin(c, ""))
+	owner := requestidentity.NormalizeSpaceID(requestidentity.ResolveGin(c))
 	query := gdb.Table("messages AS m").Select("m.content, m.msg_type").Joins("JOIN conversations AS conv ON conv.id = m.conversation_id").Where("m.id = ? AND conv.deleted_at IS NULL", msgID)
 	if config.AppCfg != nil && strings.EqualFold(strings.TrimSpace(config.AppCfg.Security.Mode), "local_single_user") {
-		query = query.Where("(conv.user_id = ? OR conv.user_id = '' OR conv.user_id IS NULL OR conv.user_id = ?)", owner, requestidentity.DefaultUserID)
+		query = query.Where("(conv.space_id = ? OR conv.space_id = '' OR conv.space_id IS NULL OR conv.space_id = ?)", owner, requestidentity.LegacySpaceID)
 	} else {
-		query = query.Where("conv.user_id = ?", owner)
+		query = query.Where("conv.space_id = ?", owner)
 	}
 	if err := query.Row().Scan(&msg.Content, &msg.MsgType); err != nil {
 		c.JSON(404, gin.H{"error": "message not found"})

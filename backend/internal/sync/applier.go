@@ -7,7 +7,7 @@ import (
 )
 
 type EntityMutationApplier interface {
-	Apply(tx *gorm.DB, userID string, mutation ClientMutation) (int64, error)
+	Apply(tx *gorm.DB, spaceID string, mutation ClientMutation) (int64, error)
 	Supports(entityType EntityType) bool
 }
 
@@ -19,10 +19,10 @@ func NewCompositeApplier(appliers ...EntityMutationApplier) *CompositeApplier {
 	return &CompositeApplier{appliers: appliers}
 }
 
-func (c *CompositeApplier) Apply(tx *gorm.DB, userID string, mutation ClientMutation) (int64, error) {
+func (c *CompositeApplier) Apply(tx *gorm.DB, spaceID string, mutation ClientMutation) (int64, error) {
 	for _, a := range c.appliers {
 		if a.Supports(mutation.EntityType) {
-			return a.Apply(tx, userID, mutation)
+			return a.Apply(tx, spaceID, mutation)
 		}
 	}
 	return 0, &ApplierError{

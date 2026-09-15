@@ -33,7 +33,7 @@ func (s *RealEventSink) PublishCreated(ctx context.Context, tx *sql.Tx, artifact
 	evt := ArtifactEvent{
 		Type:       "artifact.created",
 		ArtifactID: artifact.ID,
-		OwnerID:    artifact.OwnerUserID,
+		OwnerID:    artifact.OwnerSpaceID,
 		Kind:       artifact.Kind,
 		SizeBytes:  artifact.SizeBytes,
 		MimeType:   artifact.MIMEType,
@@ -48,7 +48,7 @@ func (s *RealEventSink) PublishCreated(ctx context.Context, tx *sql.Tx, artifact
 		ProducerType:  event.EventProducerTypeSystem,
 		AggregateType: "artifact",
 		AggregateID:   string(artifact.ID),
-		PartitionKey:  artifact.OwnerUserID,
+		PartitionKey:  artifact.OwnerSpaceID,
 	})
 	return err
 }
@@ -60,7 +60,7 @@ func (s *RealEventSink) PublishDeleted(ctx context.Context, tx *sql.Tx, artifact
 	evt := ArtifactEvent{
 		Type:       "artifact.deleted",
 		ArtifactID: artifact.ID,
-		OwnerID:    artifact.OwnerUserID,
+		OwnerID:    artifact.OwnerSpaceID,
 		Kind:       artifact.Kind,
 		SizeBytes:  artifact.SizeBytes,
 		MimeType:   artifact.MIMEType,
@@ -75,7 +75,7 @@ func (s *RealEventSink) PublishDeleted(ctx context.Context, tx *sql.Tx, artifact
 		ProducerType:  event.EventProducerTypeSystem,
 		AggregateType: "artifact",
 		AggregateID:   string(artifact.ID),
-		PartitionKey:  artifact.OwnerUserID,
+		PartitionKey:  artifact.OwnerSpaceID,
 	})
 	return err
 }

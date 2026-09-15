@@ -91,16 +91,16 @@ func RegisterVoiceEntryRouter(r *gin.RouterGroup, db *gorm.DB, voiceEntry *inter
 			return
 		}
 		actor := security.GetActor(c)
-		if actor == nil || actor.UserID == "" {
+		if actor == nil || actor.SpaceID == "" {
 			util.ErrorResponse(c, response.Unauthorized, "authenticated user is required", nil)
 			return
 		}
-		userID := actor.UserID.String()
-		if err := requireVoiceScope(db, userID, body.ConversationID, body.CharacterID); err != nil {
+		spaceID := actor.SpaceID.String()
+		if err := requireVoiceScope(db, spaceID, body.ConversationID, body.CharacterID); err != nil {
 			util.ErrorResponse(c, response.NotFound, "conversation or character not found", nil)
 			return
 		}
-		session := voiceEntry.CreateSession(body.SessionID, body.ConversationID, body.CharacterID, userID)
+		session := voiceEntry.CreateSession(body.SessionID, body.ConversationID, body.CharacterID, spaceID)
 		util.SuccessMsgResponse(c, "session created", gin.H{
 			"sessionId":      session.SessionID,
 			"conversationId": session.ConversationID,
@@ -117,21 +117,21 @@ func RegisterVoiceEntryRouter(r *gin.RouterGroup, db *gorm.DB, voiceEntry *inter
 		}
 
 		actor := security.GetActor(c)
-		if actor == nil || actor.UserID == "" {
+		if actor == nil || actor.SpaceID == "" {
 			util.ErrorResponse(c, response.Unauthorized, "authenticated user is required", nil)
 			return
 		}
-		req.UserID = actor.UserID.String()
-		if err := requireVoiceScope(db, req.UserID, req.ConversationID, req.CharacterID); err != nil {
+		req.SpaceID = actor.SpaceID.String()
+		if err := requireVoiceScope(db, req.SpaceID, req.ConversationID, req.CharacterID); err != nil {
 			util.ErrorResponse(c, response.NotFound, "conversation or character not found", nil)
 			return
 		}
-		if existing := voiceEntry.GetSession(req.SessionID); existing != nil && (existing.UserID != req.UserID || existing.ConversationID != req.ConversationID || existing.CharacterID != req.CharacterID) {
+		if existing := voiceEntry.GetSession(req.SessionID); existing != nil && (existing.SpaceID != req.SpaceID || existing.ConversationID != req.ConversationID || existing.CharacterID != req.CharacterID) {
 			util.ErrorResponse(c, response.NotFound, "voice session not found", nil)
 			return
 		}
 		if req.IsFinal && strings.TrimSpace(req.Text) != "" {
-			if err := realtime.PublishASRWorkflowFinal(c.Request.Context(), req.UserID, req.SessionID, req.TurnID, req.ConversationID, req.CharacterID, req.Text, ""); err != nil {
+			if err := realtime.PublishASRWorkflowFinal(c.Request.Context(), req.SpaceID, req.SessionID, req.TurnID, req.ConversationID, req.CharacterID, req.Text, ""); err != nil {
 				log.Printf("voice workflow asr final publish failed: %v", err)
 			}
 		}
@@ -156,7 +156,7 @@ func RegisterVoiceEntryRouter(r *gin.RouterGroup, db *gorm.DB, voiceEntry *inter
 
 		var audioUrl string
 		if reply != "" {
-			lease := delivery.NewOutputLease(result.InteractionID, req.CharacterID, req.UserID, req.Channel)
+			lease := delivery.NewOutputLease(result.InteractionID, req.CharacterID, req.SpaceID, req.Channel)
 			_ = deliveryStore.CreateLease(lease)
 
 			ttsResult, ttsErr := ttsService.SynthesizeWithActive(reply)
@@ -224,14 +224,14 @@ func RegisterVoiceEntryRouter(r *gin.RouterGroup, db *gorm.DB, voiceEntry *inter
 	})
 }
 
-func requireVoiceScope(db *gorm.DB, userID, conversationID, characterID string) error {
+func requireVoiceScope(db *gorm.DB, spaceID, conversationID, characterID string) error {
 	conversationID = strings.TrimSpace(conversationID)
 	characterID = strings.TrimSpace(characterID)
 	if conversationID == "" || characterID == "" {
 		return gorm.ErrRecordNotFound
 	}
 	var conversation struct{ CharacterID string }
-	if err := webChatOwnerQuery(db.Table("conversations").Where("deleted_at IS NULL"), userID).
+	if err := webChatOwnerQuery(db.Table("conversations").Where("deleted_at IS NULL"), spaceID).
 		Select("character_id").Where("id = ?", conversationID).Take(&conversation).Error; err != nil {
 		return err
 	}
@@ -239,7 +239,7 @@ func requireVoiceScope(db *gorm.DB, userID, conversationID, characterID string) 
 		return gorm.ErrRecordNotFound
 	}
 	var count int64
-	if err := webChatOwnerQuery(db.Table("characters").Where("deleted_at IS NULL"), userID).
+	if err := webChatOwnerQuery(db.Table("characters").Where("deleted_at IS NULL"), spaceID).
 		Where("id = ?", characterID).Count(&count).Error; err != nil {
 		return err
 	}
@@ -254,7 +254,7 @@ func voiceSessionOwned(c *gin.Context, session *interaction.VoiceSession) bool {
 		return false
 	}
 	actor := security.GetActor(c)
-	return actor != nil && actor.UserID != "" && session.UserID == actor.UserID.String()
+	return actor != nil && actor.SpaceID != "" && session.SpaceID == actor.SpaceID.String()
 }
 
 func serializeVoiceDeliveryPayload(audioUrl string, duration float64, text string) []byte {

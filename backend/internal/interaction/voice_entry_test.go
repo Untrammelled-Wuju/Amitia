@@ -16,7 +16,7 @@ func TestVoiceEntryFinalTurnUsesUnifiedEntryAndPreservesVoiceEnvelope(t *testing
 	unifiedEntry := NewUnifiedEntry(orch, NewScopeResolver(fakeScopeBindingLookup{bindings: []ScopeBinding{
 		{
 			ID:             "bind-voice",
-			UserID:         "user-bound",
+			SpaceID:        "user-bound",
 			CharacterID:    "char-bound",
 			ConversationID: "conv-bound",
 			Channel:        "voice",

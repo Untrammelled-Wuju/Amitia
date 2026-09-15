@@ -83,8 +83,8 @@ func relationshipGapToNormalized(globalGap, expectedGap float64) float64 {
 	return globalGap / expectedGap
 }
 
-func reunionIdempotencyKey(userID, characterID, previousCommitted string) string {
-	sum := sha256.Sum256([]byte(strings.TrimSpace(userID) + "\x00" + strings.TrimSpace(characterID) + "\x00" + previousCommitted))
+func reunionIdempotencyKey(spaceID, characterID, previousCommitted string) string {
+	sum := sha256.Sum256([]byte(strings.TrimSpace(spaceID) + "\x00" + strings.TrimSpace(characterID) + "\x00" + previousCommitted))
 	return hex.EncodeToString(sum[:])
 }
 

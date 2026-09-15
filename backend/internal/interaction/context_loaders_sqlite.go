@@ -9,6 +9,7 @@ import (
 
 	"github.com/u-ai/backend/internal/character"
 	"github.com/u-ai/backend/internal/extensioncontext"
+	"github.com/u-ai/backend/internal/requestidentity"
 	"gorm.io/gorm"
 )
 
@@ -119,8 +120,8 @@ func (l *ConversationContextLoader) Load(ctx context.Context, scope InteractionS
 		UpdatedAt    string
 	}
 	query := l.db.WithContext(ctx).Table("conversations").Select("id, message_count, updated_at").Where("id = ?", scope.ConversationID)
-	if strings.TrimSpace(scope.UserID) != "" {
-		query = query.Where("user_id = ?", strings.TrimSpace(scope.UserID))
+	if strings.TrimSpace(scope.SpaceID) != "" {
+		query = query.Where("space_id = ?", strings.TrimSpace(scope.SpaceID))
 	}
 	err := query.Take(&row).Error
 	if err != nil {
@@ -207,17 +208,14 @@ func (l *RelationshipContextLoader) Name() string           { return "relationsh
 func (l *RelationshipContextLoader) IsRequired() bool       { return false }
 func (l *RelationshipContextLoader) Timeout() time.Duration { return 800 * time.Millisecond }
 func (l *RelationshipContextLoader) CacheKey(scope InteractionScope, version string) string {
-	return version + ":relationship:" + scope.CharacterID + ":" + scope.UserID
+	return version + ":relationship:" + scope.CharacterID + ":" + scope.SpaceID
 }
 func (l *RelationshipContextLoader) Load(ctx context.Context, scope InteractionScope, version string) (SnapshotField[any], error) {
 	var row struct {
 		RelationData string
 	}
-	userID := scope.UserID
-	if userID == "" {
-		userID = "default"
-	}
-	err := l.db.WithContext(ctx).Table("relationship_states").Select("relation_data").Where("character_id = ? AND user_id = ?", scope.CharacterID, userID).Order("CASE WHEN channel = '*' AND relation_type = 'user_character' THEN 0 ELSE 1 END, updated_at DESC").Take(&row).Error
+	spaceID := requestidentity.NormalizeSpaceID(scope.SpaceID)
+	err := l.db.WithContext(ctx).Table("relationship_states").Select("relation_data").Where("character_id = ? AND space_id = ?", scope.CharacterID, spaceID).Order("CASE WHEN channel = '*' AND relation_type = 'user_character' THEN 0 ELSE 1 END, updated_at DESC").Take(&row).Error
 	if err != nil {
 		return FieldUnavailable[any](l.Name()), err
 	}
@@ -284,7 +282,7 @@ func (l *LifeContextLoader) Load(ctx context.Context, scope InteractionScope, ve
 		return FieldUnavailable[any](l.Name()), nil
 	}
 	raw, err := l.provider.Resolve(ctx, "chat.realtime.schedule", extensioncontext.Request{
-		UserID:         scope.UserID,
+		SpaceID:        scope.SpaceID,
 		CharacterID:    scope.CharacterID,
 		ConversationID: scope.ConversationID,
 		At:             time.Now(),
@@ -378,7 +376,7 @@ func (l *UnresolvedThreadContextLoader) Name() string           { return "unreso
 func (l *UnresolvedThreadContextLoader) IsRequired() bool       { return false }
 func (l *UnresolvedThreadContextLoader) Timeout() time.Duration { return 800 * time.Millisecond }
 func (l *UnresolvedThreadContextLoader) CacheKey(scope InteractionScope, version string) string {
-	return version + ":unresolvedThreads:" + scope.CharacterID + ":" + scope.UserID
+	return version + ":unresolvedThreads:" + scope.CharacterID + ":" + scope.SpaceID
 }
 func (l *UnresolvedThreadContextLoader) Load(ctx context.Context, scope InteractionScope, version string) (SnapshotField[any], error) {
 	if l.db == nil {

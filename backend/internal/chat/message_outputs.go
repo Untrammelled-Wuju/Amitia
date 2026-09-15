@@ -19,7 +19,7 @@ type MessageOutputPlanningEvent struct {
 	UserMessage    string
 	Reply          string
 	Lines          []string
-	UserID         string
+	SpaceID        string
 	PeerID         string
 	RequestID      string
 	ForceVoice     bool
@@ -64,7 +64,7 @@ func (s *service) planMessageOutputs(ctx context.Context, plan messageCommitPlan
 		requestID = plan.Request.InteractionID
 	}
 	outputs, err := planner.PlanMessageOutputs(ctx, SkillScope{
-		UserID:         plan.Request.UserID,
+		SpaceID:        plan.Request.SpaceID,
 		CharacterID:    plan.Character,
 		ConversationID: plan.Conversation,
 		Channel:        plan.Request.Channel,
@@ -82,7 +82,7 @@ func (s *service) planMessageOutputs(ctx context.Context, plan messageCommitPlan
 		UserMessage:    plan.Request.Message,
 		Reply:          plan.Reply,
 		Lines:          append([]string(nil), plan.Lines...),
-		UserID:         plan.Request.UserID,
+		SpaceID:        plan.Request.SpaceID,
 		PeerID:         plan.Request.PeerID,
 		RequestID:      requestID,
 		ForceVoice:     plan.ForceVoice,

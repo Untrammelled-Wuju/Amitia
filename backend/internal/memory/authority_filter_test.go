@@ -58,7 +58,7 @@ func TestMemoryAllowedBySQLiteAuthorityFiltersScopeExpiryStatusAndProactiveMenti
 				VerifiedStatus:        "user_verified",
 				AllowProactiveMention: true,
 			},
-			policy: retrievalAuthorityPolicy{CharacterID: "char-a", UserID: "user-1", ProactiveMention: true, Now: now},
+			policy: retrievalAuthorityPolicy{CharacterID: "char-a", SpaceID: "user-1", ProactiveMention: true, Now: now},
 			want:   true,
 		},
 		{

@@ -256,8 +256,8 @@ func (h *ShortcutsHandler) handleActionExecute(ctx context.Context, request nati
 	if executionMode := getString(request.Payload, "executionMode"); executionMode != "" {
 		payload["executionMode"] = executionMode
 	}
-	if userID := getString(request.Payload, "userId"); userID != "" {
-		payload["userId"] = userID
+	if spaceID := getString(request.Payload, "spaceId"); spaceID != "" {
+		payload["spaceId"] = spaceID
 	}
 	if sessionID := getString(request.Payload, "sessionId"); sessionID != "" {
 		payload["sessionId"] = sessionID

@@ -39,7 +39,7 @@ type CleanupResult struct {
 }
 
 type cleanupPlan struct {
-	UserID          string
+	SpaceID         string
 	ConversationIDs []string
 	MessageCount    int64
 	MemoryCount     int64
@@ -47,9 +47,9 @@ type cleanupPlan struct {
 	ExpiresAt       time.Time
 }
 
-func (s *service) PreviewCleanup(req CleanupRequest, userID string) (*CleanupPreview, error) {
+func (s *service) PreviewCleanup(req CleanupRequest, spaceID string) (*CleanupPreview, error) {
 	query := s.db.Table("conversations").Where("deleted_at IS NULL")
-	query = applyConversationOwnerScope(query, userID)
+	query = applyConversationOwnerScope(query, spaceID)
 	threshold := strings.TrimSpace(req.BeforeDate)
 	if req.OlderThanDays > 0 {
 		candidate := time.Now().Add(-time.Duration(req.OlderThanDays) * 24 * time.Hour).Format("2006-01-02 15:04:05")
@@ -88,11 +88,11 @@ func (s *service) PreviewCleanup(req CleanupRequest, userID string) (*CleanupPre
 		}
 		if req.IncludeMemories {
 			memoryQuery := s.db.Model(&memorymodel.Memory{}).Where("source_conv_id IN ?", ids)
-			owner := normalizeConversationOwner(userID)
+			owner := normalizeConversationOwner(spaceID)
 			if chatLocalSingleUserMode() {
-				memoryQuery = memoryQuery.Where("user_id = ? OR user_id = '' OR user_id IS NULL OR user_id = 'default'", owner)
+				memoryQuery = memoryQuery.Where("space_id = ? OR space_id = '' OR space_id IS NULL OR space_id = 'default'", owner)
 			} else {
-				memoryQuery = memoryQuery.Where("user_id = ?", owner)
+				memoryQuery = memoryQuery.Where("space_id = ?", owner)
 			}
 			if err := memoryQuery.Count(&memoryCount).Error; err != nil {
 				return nil, err
@@ -112,7 +112,7 @@ func (s *service) PreviewCleanup(req CleanupRequest, userID string) (*CleanupPre
 		}
 	}
 	s.cleanupPlans[previewID] = cleanupPlan{
-		UserID: userID, ConversationIDs: append([]string(nil), ids...), MessageCount: messageCount,
+		SpaceID: spaceID, ConversationIDs: append([]string(nil), ids...), MessageCount: messageCount,
 		MemoryCount: memoryCount, IncludeMemories: req.IncludeMemories, ExpiresAt: expiresAt,
 	}
 	s.cleanupMu.Unlock()
@@ -123,7 +123,7 @@ func (s *service) PreviewCleanup(req CleanupRequest, userID string) (*CleanupPre
 	}, nil
 }
 
-func (s *service) ConfirmCleanup(previewID, confirmText, userID string) (*CleanupResult, error) {
+func (s *service) ConfirmCleanup(previewID, confirmText, spaceID string) (*CleanupResult, error) {
 	if strings.TrimSpace(confirmText) != "确认清理" {
 		return nil, fmt.Errorf("确认文本不匹配")
 	}
@@ -140,14 +140,14 @@ func (s *service) ConfirmCleanup(previewID, confirmText, userID string) (*Cleanu
 	if !ok || time.Now().After(plan.ExpiresAt) {
 		return nil, fmt.Errorf("清理预览不存在或已过期，请重新预览")
 	}
-	if strings.TrimSpace(plan.UserID) != strings.TrimSpace(userID) {
+	if strings.TrimSpace(plan.SpaceID) != strings.TrimSpace(spaceID) {
 		return nil, fmt.Errorf("清理预览不属于当前用户")
 	}
 
 	deletedMemories := int64(0)
 	err := s.db.Transaction(func(tx *gorm.DB) error {
 		for _, id := range plan.ConversationIDs {
-			if _, err := s.tombstoneConversationTx(tx, id, userID); err != nil {
+			if _, err := s.tombstoneConversationTx(tx, id, spaceID); err != nil {
 				if err == gorm.ErrRecordNotFound {
 					continue
 				}
@@ -156,11 +156,11 @@ func (s *service) ConfirmCleanup(previewID, confirmText, userID string) (*Cleanu
 		}
 		if plan.IncludeMemories && len(plan.ConversationIDs) > 0 {
 			memoryQuery := tx.Where("source_conv_id IN ?", plan.ConversationIDs)
-			owner := normalizeConversationOwner(userID)
+			owner := normalizeConversationOwner(spaceID)
 			if chatLocalSingleUserMode() {
-				memoryQuery = memoryQuery.Where("user_id = ? OR user_id = '' OR user_id IS NULL OR user_id = 'default'", owner)
+				memoryQuery = memoryQuery.Where("space_id = ? OR space_id = '' OR space_id IS NULL OR space_id = 'default'", owner)
 			} else {
-				memoryQuery = memoryQuery.Where("user_id = ?", owner)
+				memoryQuery = memoryQuery.Where("space_id = ?", owner)
 			}
 			result := memoryQuery.Delete(&memorymodel.Memory{})
 			if result.Error != nil {

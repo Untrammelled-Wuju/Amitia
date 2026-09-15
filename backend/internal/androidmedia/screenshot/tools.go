@@ -94,15 +94,15 @@ func BuildToolDefinition() (capability.ToolDefinition, error) {
 }`)
 
 	return capability.ToolDefinition{
-		ID:            toolID,
-		ModelName:     toolModelName,
-		Source:        capability.ToolSourceBuiltin,
-		Name:          "Android Screen Screenshot",
-		Description:   "Capture a single static screenshot from an Android device via the native accessibility bridge. Returns an amitia:// resource reference, never raw pixels.",
-		Version:       toolVersion,
-		InputSchema:   inputSchema,
-		OutputSchema:  outputSchema,
-		Permissions:   []capability.PermissionRequirement{
+		ID:           toolID,
+		ModelName:    toolModelName,
+		Source:       capability.ToolSourceBuiltin,
+		Name:         "Android Screen Screenshot",
+		Description:  "Capture a single static screenshot from an Android device via the native accessibility bridge. Returns an amitia:// resource reference, never raw pixels.",
+		Version:      toolVersion,
+		InputSchema:  inputSchema,
+		OutputSchema: outputSchema,
+		Permissions: []capability.PermissionRequirement{
 			{
 				Capability:  permissionID,
 				Description: "grants the agent permission to read the device screen via Android accessibility screenshot",
@@ -111,7 +111,7 @@ func BuildToolDefinition() (capability.ToolDefinition, error) {
 		},
 		RiskLevel:      capability.RiskHigh,
 		SideEffect:     capability.SideEffectWrite,
-		Scope:          capability.ScopeRule{Type: "user"},
+		Scope:          capability.ScopeRule{Type: "space"},
 		Enabled:        true,
 		HasSideEffects: true,
 		Idempotent:     true,

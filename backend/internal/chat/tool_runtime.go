@@ -11,7 +11,7 @@ import (
 )
 
 type SkillScope struct {
-	UserID         string
+	SpaceID        string
 	CharacterID    string
 	ConversationID string
 	Channel        string
@@ -87,7 +87,7 @@ type ModelToolRuntime interface {
 
 func toolScopeFromExtension(es extension.ExecutionScope) SkillScope {
 	return SkillScope{
-		UserID:         es.UserID,
+		SpaceID:        es.SpaceID,
 		CharacterID:    es.CharacterID,
 		ConversationID: es.ConversationID,
 		Channel:        es.Channel,

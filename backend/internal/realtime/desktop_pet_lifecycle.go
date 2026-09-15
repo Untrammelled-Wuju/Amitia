@@ -10,7 +10,7 @@ type DesktopPetVoiceLifecycle struct {
 	SessionID      string
 	TurnID         string
 	CharacterID    string
-	UserID         string
+	SpaceID        string
 	ConversationID string
 	Phase          string
 	StateVersion   int64
@@ -44,7 +44,7 @@ func emitDesktopPetVoice(ctx context.Context, sess *ContinuousVoiceSession, phas
 	}
 	observer.OnVoiceLifecycle(ctx, DesktopPetVoiceLifecycle{
 		SessionID: sess.SessionID, TurnID: sess.CurrentTurnID, CharacterID: sess.CharacterID,
-		UserID: sess.UserID, ConversationID: sess.ConversationID, Phase: phase,
+		SpaceID: sess.SpaceID, ConversationID: sess.ConversationID, Phase: phase,
 		StateVersion: int64(sess.CaptureGeneration + sess.PlaybackGeneration + 1), OccurredAt: time.Now().UTC(),
 	})
 }

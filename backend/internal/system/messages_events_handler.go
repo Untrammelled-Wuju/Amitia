@@ -26,7 +26,7 @@ func (h *Handler) MessagesEventsStream(c *gin.Context) {
 		return
 	}
 
-	userID := webChatUserID(c)
+	spaceID := webChatSpaceID(c)
 	bus := GetMessageEventBus()
 	subID := fmt.Sprintf("sse-%d", c.Request.Context().Value(nil))
 	if sID, exists := c.Get("X-Session-ID"); exists {
@@ -57,7 +57,7 @@ func (h *Handler) MessagesEventsStream(c *gin.Context) {
 			}
 			// The event bus is process-global. Never forward an event until its
 			// conversation is confirmed to belong to this authenticated user.
-			if _, err := h.requireWebChatConversation(event.ConversationID, userID); err != nil {
+			if _, err := h.requireWebChatConversation(event.ConversationID, spaceID); err != nil {
 				continue
 			}
 			eventData := gin.H{

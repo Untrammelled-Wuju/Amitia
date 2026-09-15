@@ -49,8 +49,8 @@ func (s *service) RunAndroidUIAgent(ctx context.Context, execCtx tool.ToolExecut
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	scope := extensionkernel.LegacyScope{
-		UserID: execCtx.User, CharacterID: execCtx.CharacterID, ConversationID: execCtx.ConversationID,
+	scope := extensionkernel.InvocationScope{
+		SpaceID: execCtx.SpaceID, CharacterID: execCtx.CharacterID, ConversationID: execCtx.ConversationID,
 		Channel: execCtx.Channel, TraceID: execCtx.CorrelationID, RequestID: execCtx.RequestID,
 		ToolCallID: execCtx.ToolCallID, CorrelationID: execCtx.CorrelationID, CausationID: execCtx.CausationID,
 	}
@@ -257,18 +257,18 @@ func (s *service) RunAndroidUIAgent(ctx context.Context, execCtx tool.ToolExecut
 
 func (s *service) executeAndroidUIActionWithRecovery(
 	ctx context.Context,
-	scope extensionkernel.LegacyScope,
+	scope extensionkernel.InvocationScope,
 	req androiduiagent.Request,
 	action plannedAndroidUIAction,
 	baseline androidUITreeEnvelope,
 	runKey string,
 	index int,
-) (string, json.RawMessage, extensionkernel.LegacyToolResult, bool, int) {
+) (string, json.RawMessage, extensionkernel.ToolDispatchResult, bool, int) {
 	toolID, input, err := mapAndroidUIAction(req, action)
 	if err != nil {
-		return "", nil, extensionkernel.LegacyToolResult{Status: "FAILED", VisibleText: err.Error()}, true, 0
+		return "", nil, extensionkernel.ToolDispatchResult{Status: "FAILED", VisibleText: err.Error()}, true, 0
 	}
-	execute := func(callSuffix string, id string, in json.RawMessage) (extensionkernel.LegacyToolResult, bool) {
+	execute := func(callSuffix string, id string, in json.RawMessage) (extensionkernel.ToolDispatchResult, bool) {
 		return s.toolFacade.ExecuteTool(ctx, capability.CapabilityID(id), in, scope,
 			fmt.Sprintf("%s:android-ui:%d:%s", runKey, index, callSuffix),
 			fmt.Sprintf("android-ui-agent:%s:%d:%s", runKey, index, callSuffix))
@@ -317,7 +317,7 @@ func (s *service) executeAndroidUIActionWithRecovery(
 	return toolID, input, result, found, 0
 }
 
-func (s *service) waitForAndroidUISettle(ctx context.Context, scope extensionkernel.LegacyScope, runKey string, index int) (json.RawMessage, string, androidUIObservationQuality, androidUITreeEnvelope, error) {
+func (s *service) waitForAndroidUISettle(ctx context.Context, scope extensionkernel.InvocationScope, runKey string, index int) (json.RawMessage, string, androidUIObservationQuality, androidUITreeEnvelope, error) {
 	delays := []time.Duration{100 * time.Millisecond, 200 * time.Millisecond, 400 * time.Millisecond, 800 * time.Millisecond}
 	var previousHash string
 	var lastRaw json.RawMessage
@@ -344,7 +344,7 @@ func (s *service) waitForAndroidUISettle(ctx context.Context, scope extensionker
 	return lastRaw, lastSummary, lastQuality, lastTree, nil
 }
 
-func (s *service) androidUIObservation(ctx context.Context, scope extensionkernel.LegacyScope, runKey string, index int) (json.RawMessage, string, androidUIObservationQuality, androidUITreeEnvelope, error) {
+func (s *service) androidUIObservation(ctx context.Context, scope extensionkernel.InvocationScope, runKey string, index int) (json.RawMessage, string, androidUIObservationQuality, androidUITreeEnvelope, error) {
 	input := json.RawMessage(`{"source":"auto","includeAllWindows":true,"includeInvisible":false,"maxDepth":32,"excludeOwnPackage":true,"allowRootFallback":false}`)
 	result, found := s.toolFacade.ExecuteTool(ctx, "android.ui_tree.snapshot", input, scope, fmt.Sprintf("%s:uiagent-observe:%d", runKey, index), fmt.Sprintf("%s:uiagent-observe:%d", runKey, index))
 	if !found {
@@ -607,7 +607,7 @@ func decodeSingleJSONObject(content string, target any) error {
 	return nil
 }
 
-func androidUIInteractionBlocked(result extensionkernel.LegacyToolResult) (bool, string) {
+func androidUIInteractionBlocked(result extensionkernel.ToolDispatchResult) (bool, string) {
 	code := ""
 	message := strings.TrimSpace(result.VisibleText)
 	if result.Error != nil {
@@ -632,7 +632,7 @@ func androidUIInteractionBlocked(result extensionkernel.LegacyToolResult) (bool,
 	return false, ""
 }
 
-func legacyToolSucceeded(result extensionkernel.LegacyToolResult) bool {
+func legacyToolSucceeded(result extensionkernel.ToolDispatchResult) bool {
 	status := strings.ToUpper(strings.TrimSpace(result.Status))
 	return status == "SUCCESS" || status == "SUCCEEDED" || status == "OK"
 }

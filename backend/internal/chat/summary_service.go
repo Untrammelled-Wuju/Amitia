@@ -13,29 +13,29 @@ import (
 	"gorm.io/gorm"
 )
 
-func (s *service) GetConversationSummaryForUser(convID, userID string) (*ConversationSummary, error) {
-	if _, err := s.requireConversationOwner(convID, userID); err != nil {
+func (s *service) GetConversationSummaryForSpace(convID, spaceID string) (*ConversationSummary, error) {
+	if _, err := s.requireConversationOwner(convID, spaceID); err != nil {
 		return nil, err
 	}
 	return s.GetConversationSummary(convID)
 }
 
-func (s *service) UpdateConversationSummaryForUser(convID, summaryText, userID string) (*ConversationSummary, error) {
-	if _, err := s.requireConversationOwner(convID, userID); err != nil {
+func (s *service) UpdateConversationSummaryForSpace(convID, summaryText, spaceID string) (*ConversationSummary, error) {
+	if _, err := s.requireConversationOwner(convID, spaceID); err != nil {
 		return nil, err
 	}
 	return s.UpdateConversationSummary(convID, summaryText)
 }
 
-func (s *service) DeleteConversationSummaryForUser(convID, userID string) error {
-	if _, err := s.requireConversationOwner(convID, userID); err != nil {
+func (s *service) DeleteConversationSummaryForSpace(convID, spaceID string) error {
+	if _, err := s.requireConversationOwner(convID, spaceID); err != nil {
 		return err
 	}
 	return s.DeleteConversationSummary(convID)
 }
 
-func (s *service) GenerateConversationSummaryForUser(ctx context.Context, convID, userID string) (*ConversationSummary, error) {
-	if _, err := s.requireConversationOwner(convID, userID); err != nil {
+func (s *service) GenerateConversationSummaryForSpace(ctx context.Context, convID, spaceID string) (*ConversationSummary, error) {
+	if _, err := s.requireConversationOwner(convID, spaceID); err != nil {
 		return nil, err
 	}
 	return s.GenerateConversationSummary(ctx, convID)

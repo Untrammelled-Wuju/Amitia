@@ -4,9 +4,9 @@ import (
 	"context"
 	"errors"
 	"strings"
-)
 
-const DefaultUserID = "default"
+	"github.com/u-ai/backend/internal/requestidentity"
+)
 
 var (
 	ErrScopeMissingTarget  = errors.New("interaction scope requires character_id or conversation_id")
@@ -14,7 +14,7 @@ var (
 )
 
 type InteractionScope struct {
-	UserID         string `json:"userId,omitempty"`
+	SpaceID        string `json:"spaceId,omitempty"`
 	CharacterID    string `json:"characterId,omitempty"`
 	ConversationID string `json:"conversationId,omitempty"`
 	Channel        string `json:"channel,omitempty"`
@@ -27,7 +27,7 @@ type InteractionScope struct {
 type interactionScopeContextKey struct{}
 
 func (s InteractionScope) Normalize() InteractionScope {
-	s.UserID = normalizeScopeValue(s.UserID)
+	s.SpaceID = normalizeScopeValue(s.SpaceID)
 	s.CharacterID = normalizeScopeValue(s.CharacterID)
 	s.ConversationID = normalizeScopeValue(s.ConversationID)
 	s.Channel = strings.ToLower(normalizeScopeValue(s.Channel))
@@ -35,9 +35,7 @@ func (s InteractionScope) Normalize() InteractionScope {
 	s.SessionID = normalizeScopeValue(s.SessionID)
 	s.Source = strings.ToLower(normalizeScopeValue(s.Source))
 	s.RequestID = normalizeScopeValue(s.RequestID)
-	if s.UserID == "" {
-		s.UserID = DefaultUserID
-	}
+	s.SpaceID = requestidentity.NormalizeSpaceID(s.SpaceID)
 	return s
 }
 

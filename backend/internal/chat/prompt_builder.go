@@ -53,12 +53,12 @@ func (s *service) sys1Builder(convID string, profile *character.RoleRuntimeProfi
 	// memories are recalled dynamically so relevance and retention decide what is
 	// remembered in this turn instead of being injected unconditionally.
 	var profileCtx, epiCtx, wbCtx string
-	userID := s.profileExtractionUserID(convID, characterID)
+	spaceID := s.profileExtractionSpaceID(convID, characterID)
 	if s.profilePort != nil && characterID != "" {
-		profileCtx = s.profilePort.ToSystemPrompt(userID, characterID)
+		profileCtx = s.profilePort.ToSystemPrompt(spaceID, characterID)
 	}
 	if s.worldBookPort != nil {
-		wbPrompt := s.worldBookPort.ToSystemPromptForUser(userID, characterID, userMessage, "")
+		wbPrompt := s.worldBookPort.ToSystemPromptForSpace(spaceID, characterID, userMessage, "")
 		if wbPrompt != "" {
 			wbCtx = wbPrompt
 		}
@@ -111,11 +111,11 @@ func (s *service) sys2Builder(convID, charID, requestID, channel, userMessage st
 		}
 	}
 	if s.memoryPort != nil && shouldRetrieveMemory(userMessage) {
-		userID := s.profileExtractionUserID(convID, charID)
+		spaceID := s.profileExtractionSpaceID(convID, charID)
 		results, err := s.memoryPort.HybridSearch(&memory.VectorSearchRequest{
 			Query:          userMessage,
 			CharacterID:    charID,
-			UserID:         userID,
+			SpaceID:        spaceID,
 			ConversationID: convID,
 			RequestID:      requestID,
 			Channel:        channel,
@@ -357,17 +357,17 @@ func toneLabel(tone decision.ExpressionTone) string {
 	}
 }
 
-func (s *service) getRoleRuntimeProfileForUser(characterID, userID string) (*character.RoleRuntimeProfile, error) {
+func (s *service) getRoleRuntimeProfileForSpace(characterID, spaceID string) (*character.RoleRuntimeProfile, error) {
 	type scopedRuntimeProfileRepository interface {
-		GetRuntimeProfileForUser(id, userID string, includeLegacyDefault bool) (*character.RoleRuntimeProfile, error)
+		GetRuntimeProfileForSpace(id, spaceID string, includeLegacyDefault bool) (*character.RoleRuntimeProfile, error)
 	}
 	if scoped, ok := s.charRepo.(scopedRuntimeProfileRepository); ok {
-		return scoped.GetRuntimeProfileForUser(characterID, normalizeConversationOwner(userID), chatLocalSingleUserMode())
+		return scoped.GetRuntimeProfileForSpace(characterID, normalizeConversationOwner(spaceID), chatLocalSingleUserMode())
 	}
 	if strings.TrimSpace(characterID) != "" {
 		var owner string
-		query := s.db.Table("characters").Select("user_id").Where("id = ? AND deleted_at IS NULL", strings.TrimSpace(characterID))
-		if err := query.Row().Scan(&owner); err != nil || !conversationOwnerMatches(owner, userID) {
+		query := s.db.Table("characters").Select("space_id").Where("id = ? AND deleted_at IS NULL", strings.TrimSpace(characterID))
+		if err := query.Row().Scan(&owner); err != nil || !conversationOwnerMatches(owner, spaceID) {
 			return nil, gorm.ErrRecordNotFound
 		}
 	}

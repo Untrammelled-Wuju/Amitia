@@ -64,7 +64,7 @@ type asrExportRecord struct {
 }
 
 type clonedVoiceExportRecord struct {
-	UserID        string `json:"userId"`
+	SpaceID       string `json:"spaceId"`
 	SpeakerID     string `json:"speakerId"`
 	Name          string `json:"name"`
 	TtsConfigID   int    `json:"voiceConfigId,omitempty"`
@@ -186,7 +186,7 @@ func (c *VoiceBackupContributor) Export(ctx context.Context, req dataportability
 	defer cloneW.Close()
 
 	cloneRows, err := c.DB.WithContext(ctx).Table("tts_cloned_voices AS cv").Select(
-		"cv.user_id, cv.speaker_id, cv.name, cv.tts_config_id, COALESCE(tc.name, '') AS tts_config_name, cv.language, cv.status, cv.created_at, cv.updated_at",
+		"cv.space_id, cv.speaker_id, cv.name, cv.tts_config_id, COALESCE(tc.name, '') AS tts_config_name, cv.language, cv.status, cv.created_at, cv.updated_at",
 	).Joins(
 		"LEFT JOIN tts_configs AS tc ON tc.id = cv.tts_config_id",
 	).Rows()
@@ -324,19 +324,19 @@ func (c *VoiceBackupContributor) previewClonedVoices(ctx context.Context, rc io.
 		}
 		preview.ItemCount++
 
-		userID := rec.UserID
-		if userID == "" {
-			userID = "local_user"
+		spaceID := rec.SpaceID
+		if spaceID == "" {
+			spaceID = "local_user"
 		}
 		var existing struct {
-			UserID    string
+			SpaceID   string
 			SpeakerID string
 		}
-		c.DB.WithContext(ctx).Table("tts_cloned_voices").Select("user_id, speaker_id").Where("speaker_id = ?", rec.SpeakerID).Scan(&existing)
+		c.DB.WithContext(ctx).Table("tts_cloned_voices").Select("space_id, speaker_id").Where("speaker_id = ?", rec.SpeakerID).Scan(&existing)
 		if existing.SpeakerID != "" {
 			preview.Collisions = append(preview.Collisions, dataportability.ComponentCollision{
-				SourceID:   userID + ":" + rec.SpeakerID,
-				TargetID:   existing.UserID + ":" + existing.SpeakerID,
+				SourceID:   spaceID + ":" + rec.SpeakerID,
+				TargetID:   existing.SpaceID + ":" + existing.SpeakerID,
 				EntityType: "tts_cloned_voice",
 				Policy:     dataportability.CollisionDuplicate,
 			})
@@ -524,27 +524,27 @@ func (c *VoiceBackupContributor) restoreClonedVoices(ctx context.Context, rc io.
 			continue
 		}
 
-		userID := rec.UserID
-		if userID == "" {
-			userID = "local_user"
+		spaceID := rec.SpaceID
+		if spaceID == "" {
+			spaceID = "local_user"
 		}
 		ttsConfigID := c.resolveRestoredCloneTTSConfigID(ctx, rec)
 		var existing struct {
-			UserID    string
+			SpaceID   string
 			SpeakerID string
 		}
-		c.DB.WithContext(ctx).Table("tts_cloned_voices").Select("user_id, speaker_id").Where("speaker_id = ?", rec.SpeakerID).Scan(&existing)
+		c.DB.WithContext(ctx).Table("tts_cloned_voices").Select("space_id, speaker_id").Where("speaker_id = ?", rec.SpeakerID).Scan(&existing)
 		if existing.SpeakerID != "" {
 			// Provider speaker IDs are globally unique within the provider account.
 			// Never transfer an existing provider identity to another user during restore.
-			if existing.UserID != userID {
+			if existing.SpaceID != spaceID {
 				continue
 			}
 			switch opts.CharacterPolicy {
 			case dataportability.CollisionSkip:
 				continue
 			case dataportability.CollisionReplace:
-				c.DB.WithContext(ctx).Table("tts_cloned_voices").Where("user_id = ? AND speaker_id = ?", userID, rec.SpeakerID).Updates(map[string]interface{}{
+				c.DB.WithContext(ctx).Table("tts_cloned_voices").Where("space_id = ? AND speaker_id = ?", spaceID, rec.SpeakerID).Updates(map[string]interface{}{
 					"name": rec.Name, "tts_config_id": ttsConfigID, "language": rec.Language, "status": rec.Status, "updated_at": rec.UpdatedAt,
 				})
 				continue
@@ -569,7 +569,7 @@ func (c *VoiceBackupContributor) restoreClonedVoices(ctx context.Context, rc io.
 			status = "ready"
 		}
 		c.DB.WithContext(ctx).Table("tts_cloned_voices").Create(map[string]interface{}{
-			"user_id": userID, "speaker_id": rec.SpeakerID, "name": rec.Name, "tts_config_id": ttsConfigID, "language": rec.Language, "status": status,
+			"space_id": spaceID, "speaker_id": rec.SpeakerID, "name": rec.Name, "tts_config_id": ttsConfigID, "language": rec.Language, "status": status,
 			"created_at": createdAt, "updated_at": updatedAt,
 		})
 	}

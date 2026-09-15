@@ -8,7 +8,7 @@ import (
 func TestGenerateCandidatesProducesAllActions(t *testing.T) {
 	registry := DefaultCandidateRegistry()
 	ctx := CandidateGenerationContext{
-		UserID:      "user-1",
+		SpaceID:     "user-1",
 		CharacterID: "char-1",
 		Trigger:     GoalTrigger{Kind: GoalTriggerInternal},
 		Now:         time.Now().UTC(),
@@ -28,7 +28,7 @@ func TestGenerateCandidatesProducesAllActions(t *testing.T) {
 func TestGenerateCandidatesDoesNotScoreCandidates(t *testing.T) {
 	registry := DefaultCandidateRegistry()
 	ctx := CandidateGenerationContext{
-		UserID:      "user-1",
+		SpaceID:     "user-1",
 		CharacterID: "char-1",
 		Goals: []Goal{
 			{ID: "g1", Type: GoalTypeConnection, Status: GoalStatusActive, Priority: GoalPriorityHigh},
@@ -74,7 +74,7 @@ func TestGenerateCandidatesDoesNotScoreCandidates(t *testing.T) {
 func TestGenerateCandidatesWithExcludes(t *testing.T) {
 	registry := DefaultCandidateRegistry()
 	ctx := CandidateGenerationContext{
-		UserID:      "user-1",
+		SpaceID:     "user-1",
 		CharacterID: "char-1",
 		Trigger:     GoalTrigger{Kind: GoalTriggerInternal},
 		Now:         time.Now().UTC(),
@@ -91,7 +91,7 @@ func TestGenerateCandidatesWithExcludes(t *testing.T) {
 func TestGenerateCandidatesExcludesDuplicateAndUnknown(t *testing.T) {
 	registry := DefaultCandidateRegistry()
 	ctx := CandidateGenerationContext{
-		UserID:      "user-1",
+		SpaceID:     "user-1",
 		CharacterID: "char-1",
 		Trigger:     GoalTrigger{Kind: GoalTriggerInternal},
 		Now:         time.Now().UTC(),

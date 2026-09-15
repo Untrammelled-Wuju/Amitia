@@ -38,7 +38,7 @@ type WebhookRequest struct {
 	AccountID      string
 	ConversationID string
 	SenderID       string
-	UserID         string
+	SpaceID        string
 	Source         string
 	MessageID      string
 	RequestID      string
@@ -75,29 +75,29 @@ func NewService(ctx *app.AppContext, unifiedEntry *interaction.UnifiedEntry, fac
 	return &service{db: ctx.DB, unifiedEntry: unifiedEntry, toolFacade: facade}
 }
 
-func (s *service) ownerQuery(db *gorm.DB, userID string) *gorm.DB {
-	owner := requestidentity.NormalizeUserID(userID)
+func (s *service) ownerQuery(db *gorm.DB, spaceID string) *gorm.DB {
+	owner := requestidentity.NormalizeSpaceID(spaceID)
 	if config.AppCfg != nil && strings.EqualFold(strings.TrimSpace(config.AppCfg.Security.Mode), "local_single_user") {
-		return db.Where("(user_id = ? OR user_id = '' OR user_id IS NULL OR user_id = ?)", owner, requestidentity.DefaultUserID)
+		return db.Where("(space_id = ? OR space_id = '' OR space_id IS NULL OR space_id = ?)", owner, requestidentity.LegacySpaceID)
 	}
-	return db.Where("user_id = ?", owner)
+	return db.Where("space_id = ?", owner)
 }
 
-func (s *service) TestForUser(userID, characterID, message string) (map[string]interface{}, error) {
+func (s *service) TestForSpace(spaceID, characterID, message string) (map[string]interface{}, error) {
 	characterID = strings.TrimSpace(characterID)
 	if characterID == "" {
-		characterID = s.getDefaultCharacterIDForUser(userID)
+		characterID = s.getDefaultCharacterIDForSpace(spaceID)
 	}
 	var count int64
-	if err := s.ownerQuery(s.db.Table("characters").Where("deleted_at IS NULL"), userID).Where("id = ?", characterID).Count(&count).Error; err != nil || count == 0 {
+	if err := s.ownerQuery(s.db.Table("characters").Where("deleted_at IS NULL"), spaceID).Where("id = ?", characterID).Count(&count).Error; err != nil || count == 0 {
 		return nil, fmt.Errorf("角色不存在")
 	}
 	return s.Test(characterID, message)
 }
 
-func (s *service) ContextPreviewForUser(userID, convID string) (map[string]interface{}, error) {
+func (s *service) ContextPreviewForSpace(spaceID, convID string) (map[string]interface{}, error) {
 	var count int64
-	if err := s.ownerQuery(s.db.Table("conversations").Where("deleted_at IS NULL"), userID).Where("id = ?", strings.TrimSpace(convID)).Count(&count).Error; err != nil || count == 0 {
+	if err := s.ownerQuery(s.db.Table("conversations").Where("deleted_at IS NULL"), spaceID).Where("id = ?", strings.TrimSpace(convID)).Count(&count).Error; err != nil || count == 0 {
 		return nil, fmt.Errorf("对话不存在")
 	}
 	return s.ContextPreview(convID)
@@ -224,16 +224,16 @@ func (s *service) Webhook(ctx context.Context, req WebhookRequest) (map[string]i
 	if req.Text == "" && req.ImageUrl == "" && req.VideoUrl == "" {
 		return map[string]interface{}{"outgoingMessage": map[string]interface{}{"text": ""}, "requestId": requestID}, nil
 	}
-	userID := stableWebhookUserID(req)
+	spaceID := stableWebhookSpaceID(req)
 	convID := strings.TrimSpace(req.ConversationID)
 	if convID == "" {
-		convID = "channel-" + strings.TrimSpace(req.Channel) + "-" + requestidentity.NormalizeUserID(userID)
+		convID = "channel-" + strings.TrimSpace(req.Channel) + "-" + requestidentity.NormalizeSpaceID(spaceID)
 	}
-	characterID := s.getDefaultCharacterIDForUser(userID)
+	characterID := s.getDefaultCharacterIDForSpace(spaceID)
 	if characterID == "" {
 		return nil, fmt.Errorf("当前用户没有可用角色")
 	}
-	if err := s.ensureWebhookConversation(convID, characterID, req.Channel, req.Text, userID); err != nil {
+	if err := s.ensureWebhookConversation(convID, characterID, req.Channel, req.Text, spaceID); err != nil {
 		return nil, err
 	}
 	sessionID := stableWebhookSessionID(req, convID)
@@ -273,7 +273,7 @@ func (s *service) Webhook(ctx context.Context, req WebhookRequest) (map[string]i
 		Channel:        req.Channel,
 		Source:         source,
 		PeerID:         req.SenderID,
-		UserID:         userID,
+		SpaceID:        spaceID,
 		SessionID:      sessionID,
 		RequestID:      requestID,
 		VoiceMessage:   req.VoiceMessage,
@@ -303,7 +303,7 @@ func (s *service) Webhook(ctx context.Context, req WebhookRequest) (map[string]i
 		outMsg["messagePlanManaged"] = result.Response.MessagePlan.Managed
 	}
 	log.Printf("[DIAG-Webhook] 返回: replyLen=%d forceVoice=%v lines=%d", len(replyText), forceVoice, len(result.Response.Lines))
-	return map[string]interface{}{"outgoingMessage": outMsg, "conversationId": convID, "requestId": requestID, "sessionId": sessionID, "userId": userID, "source": source}, nil
+	return map[string]interface{}{"outgoingMessage": outMsg, "conversationId": convID, "requestId": requestID, "sessionId": sessionID, "spaceId": spaceID, "source": source}, nil
 }
 
 func stableWebhookRequestID(req WebhookRequest) string {
@@ -326,11 +326,11 @@ func stableWebhookSessionID(req WebhookRequest, convID string) string {
 	return "channel-" + strings.TrimSpace(req.Channel)
 }
 
-func stableWebhookUserID(req WebhookRequest) string {
-	if strings.TrimSpace(req.UserID) == "" {
-		return requestidentity.DefaultUserID
+func stableWebhookSpaceID(req WebhookRequest) string {
+	if strings.TrimSpace(req.SpaceID) == "" {
+		return requestidentity.CanonicalSpaceID()
 	}
-	return requestidentity.NormalizeUserID(req.UserID)
+	return requestidentity.NormalizeSpaceID(req.SpaceID)
 }
 
 func stableWebhookSource(req WebhookRequest) string {
@@ -360,17 +360,17 @@ func (s *service) getActiveModel() map[string]string {
 }
 
 func (s *service) getDefaultCharacterID() string {
-	return s.getDefaultCharacterIDForUser(requestidentity.DefaultUserID)
+	return s.getDefaultCharacterIDForSpace(requestidentity.CanonicalSpaceID())
 }
 
-func (s *service) getDefaultCharacterIDForUser(userID string) string {
+func (s *service) getDefaultCharacterIDForSpace(spaceID string) string {
 	var id string
-	query := s.ownerQuery(s.db.Table("characters").Select("id").Where("deleted_at IS NULL"), userID)
+	query := s.ownerQuery(s.db.Table("characters").Select("id").Where("deleted_at IS NULL"), spaceID)
 	if err := query.Where("is_active = 1").Limit(1).Row().Scan(&id); err == nil && id != "" {
 		return id
 	}
 	id = ""
-	if err := s.ownerQuery(s.db.Table("characters").Select("id").Where("deleted_at IS NULL"), userID).Limit(1).Row().Scan(&id); err == nil && id != "" {
+	if err := s.ownerQuery(s.db.Table("characters").Select("id").Where("deleted_at IS NULL"), spaceID).Limit(1).Row().Scan(&id); err == nil && id != "" {
 		return id
 	}
 	return ""
@@ -462,9 +462,9 @@ func truncate(s string, n int) string {
 	return string(runes[:n]) + "..."
 }
 
-func (s *service) ensureWebhookConversation(convID, characterID, channel, text, userID string) error {
+func (s *service) ensureWebhookConversation(convID, characterID, channel, text, spaceID string) error {
 	var count int64
-	if err := s.ownerQuery(s.db.Table("conversations").Where("deleted_at IS NULL"), userID).Where("id = ?", convID).Count(&count).Error; err != nil {
+	if err := s.ownerQuery(s.db.Table("conversations").Where("deleted_at IS NULL"), spaceID).Where("id = ?", convID).Count(&count).Error; err != nil {
 		return err
 	}
 	if count > 0 {
@@ -482,6 +482,6 @@ func (s *service) ensureWebhookConversation(convID, characterID, channel, text, 
 		title = string([]rune(title)[:50])
 	}
 	now := time.Now().Format("2006-01-02 15:04:05")
-	owner := requestidentity.NormalizeUserID(userID)
-	return s.db.Exec("INSERT OR IGNORE INTO conversations (id, user_id, title, channel, character_id, source, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'webhook', ?, ?)", convID, owner, title, channel, characterID, now, now).Error
+	owner := requestidentity.NormalizeSpaceID(spaceID)
+	return s.db.Exec("INSERT OR IGNORE INTO conversations (id, space_id, title, channel, character_id, source, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'webhook', ?, ?)", convID, owner, title, channel, characterID, now, now).Error
 }

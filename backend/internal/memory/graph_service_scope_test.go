@@ -36,7 +36,7 @@ func (s *captureGraphService) DeleteNodesByProperty(entityType, propertyKey, pro
 	return nil
 }
 
-func (s *captureGraphService) QueryNeighbors(entityID string, depth int, userID string) (map[string]interface{}, error) {
+func (s *captureGraphService) QueryNeighbors(entityID string, depth int, spaceID string) (map[string]interface{}, error) {
 	return nil, nil
 }
 
@@ -48,15 +48,15 @@ func (s *captureGraphService) DeleteOrphanNodes() error {
 	return nil
 }
 
-func (s *captureGraphService) GetStats(userID string) (map[string]interface{}, error) {
+func (s *captureGraphService) GetStats(spaceID string) (map[string]interface{}, error) {
 	return nil, nil
 }
 
-func (s *captureGraphService) GetAllNodes(userID string) ([]map[string]interface{}, error) {
+func (s *captureGraphService) GetAllNodes(spaceID string) ([]map[string]interface{}, error) {
 	return nil, nil
 }
 
-func (s *captureGraphService) GetAllEdges(userID string) ([]map[string]interface{}, error) {
+func (s *captureGraphService) GetAllEdges(spaceID string) ([]map[string]interface{}, error) {
 	return nil, nil
 }
 
@@ -102,7 +102,7 @@ func TestSyncGraphMemoryUsesCharacterScopeAsUserScope(t *testing.T) {
 	}
 	for _, node := range graphSvc.nodes {
 		properties, _ := node["properties"].(map[string]interface{})
-		if properties["user_id"] == "default" {
+		if properties["space_id"] == "default" {
 			t.Fatalf("graph node used default user scope: %+v", node)
 		}
 	}

@@ -68,11 +68,11 @@ func TestCommitInteractionAppliesGenericMessageOutputs(t *testing.T) {
 
 func TestAppendConversationMessagesPersistsGenericParts(t *testing.T) {
 	db, svc, convID := setupCommitCoordinatorTest(t, false)
-	if err := db.Model(&Conversation{}).Where("id = ?", convID).Update("user_id", "user:web").Error; err != nil {
+	if err := db.Model(&Conversation{}).Where("id = ?", convID).Update("space_id", "user:web").Error; err != nil {
 		t.Fatal(err)
 	}
 	result, err := svc.AppendConversationMessages(context.Background(), &AppendConversationMessagesRequest{
-		UserID:         "user:web",
+		SpaceID:        "user:web",
 		CharacterID:    "char-commit",
 		ConversationID: convID,
 		Channel:        "web",

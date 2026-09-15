@@ -29,7 +29,7 @@ type webChatSendRequest struct {
 	Content           string  `json:"content"`
 	Message           string  `json:"message"`
 	CharacterID       string  `json:"characterId"`
-	UserID            string  `json:"userId"`
+	SpaceID           string  `json:"spaceId"`
 	PeerID            string  `json:"peerId"`
 	RequestID         string  `json:"requestId"`
 	SessionID         string  `json:"sessionId"`
@@ -58,7 +58,7 @@ func (h *Handler) WebChatListConversations(c *gin.Context) {
 		util.ErrorResponse(c, response.InternalError, "chat service does not provide user-scoped operations", nil)
 		return
 	}
-	resp, err := scoped.ListConversationsForUser(q, webChatUserID(c))
+	resp, err := scoped.ListConversationsForSpace(q, webChatSpaceID(c))
 	if err != nil {
 		util.ErrorResponse(c, response.InternalError, "查询失败", nil)
 		return
@@ -75,7 +75,7 @@ func (h *Handler) WebChatGetMessages(c *gin.Context) {
 		util.ErrorResponse(c, response.InternalError, "chat service does not provide user-scoped operations", nil)
 		return
 	}
-	msgs, total, err := scoped.GetMessagesForUser(id, webChatUserID(c), page, pageSize)
+	msgs, total, err := scoped.GetMessagesForSpace(id, webChatSpaceID(c), page, pageSize)
 	if err != nil {
 		util.ErrorResponse(c, response.InternalError, "查询失败", nil)
 		return
@@ -95,12 +95,12 @@ func (h *Handler) WebChatCreateConv(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, "无效请求体", nil)
 		return
 	}
-	userID := webChatUserID(c)
+	spaceID := webChatSpaceID(c)
 	if body.Title == "" {
 		body.Title = "新对话"
 		if body.CharacterID != "" {
 			var charName string
-			h.webChatCharacterQuery(userID).Select("name").Where("id = ?", body.CharacterID).Limit(1).Row().Scan(&charName)
+			h.webChatCharacterQuery(spaceID).Select("name").Where("id = ?", body.CharacterID).Limit(1).Row().Scan(&charName)
 			if charName != "" {
 				body.Title = charName
 			}
@@ -118,13 +118,13 @@ func (h *Handler) WebChatCreateConv(c *gin.Context) {
 			util.ErrorResponse(c, response.InternalError, "chat service does not provide user-scoped operations", nil)
 			return
 		}
-		existingChannelConv, err := scoped.EnsureChannelConversationForUser(body.Channel, userID)
+		existingChannelConv, err := scoped.EnsureChannelConversationForSpace(body.Channel, spaceID)
 		if err == nil && existingChannelConv != nil {
 			util.SuccessResponse(c, gin.H{"id": existingChannelConv.ID, "title": existingChannelConv.Title, "channel": existingChannelConv.Channel, "source": existingChannelConv.Source, "characterId": existingChannelConv.CharacterID})
 			return
 		}
 	}
-	if err := h.requireWebChatCharacter(body.CharacterID, userID); err != nil {
+	if err := h.requireWebChatCharacter(body.CharacterID, spaceID); err != nil {
 		util.ErrorResponse(c, response.NotFound, "角色不存在", nil)
 		return
 	}
@@ -134,13 +134,13 @@ func (h *Handler) WebChatCreateConv(c *gin.Context) {
 		util.ErrorResponse(c, response.InternalError, "chat service does not provide user-scoped operations", nil)
 		return
 	}
-	conv, err := scoped.CreateConversationForUser(request, userID)
+	conv, err := scoped.CreateConversationForSpace(request, spaceID)
 	if err != nil {
 		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
 	}
 	if body.CharacterID != "" {
-		h.webChatCharacterQuery(userID).Where("id = ?", body.CharacterID).Update("conversation_id", conv.ID)
+		h.webChatCharacterQuery(spaceID).Where("id = ?", body.CharacterID).Update("conversation_id", conv.ID)
 	}
 	util.SuccessResponse(c, gin.H{"id": conv.ID, "title": conv.Title, "channel": conv.Channel, "source": conv.Source, "characterId": conv.CharacterID})
 }
@@ -152,7 +152,7 @@ func (h *Handler) WebChatDeleteConv(c *gin.Context) {
 		util.ErrorResponse(c, response.InternalError, "chat service does not provide user-scoped operations", nil)
 		return
 	}
-	_, err := scoped.DeleteConversationForUser(id, webChatUserID(c))
+	_, err := scoped.DeleteConversationForSpace(id, webChatSpaceID(c))
 	if err != nil {
 		util.ErrorResponse(c, response.OperationFailed, "删除失败", nil)
 		return
@@ -171,13 +171,13 @@ func (h *Handler) WebChatUpdateConv(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, "无效请求体", nil)
 		return
 	}
-	userID := webChatUserID(c)
-	if _, err := h.requireWebChatConversation(id, userID); err != nil {
+	spaceID := webChatSpaceID(c)
+	if _, err := h.requireWebChatConversation(id, spaceID); err != nil {
 		util.ErrorResponse(c, response.NotFound, "会话不存在", nil)
 		return
 	}
 	if body.CharacterID != "" {
-		if err := h.requireWebChatCharacter(body.CharacterID, userID); err != nil {
+		if err := h.requireWebChatCharacter(body.CharacterID, spaceID); err != nil {
 			util.ErrorResponse(c, response.NotFound, "角色不存在", nil)
 			return
 		}
@@ -186,7 +186,7 @@ func (h *Handler) WebChatUpdateConv(c *gin.Context) {
 			util.ErrorResponse(c, response.InternalError, "chat service does not provide user-scoped operations", nil)
 			return
 		}
-		_, err := scoped.ChangeCharacterForUser(id, body.CharacterID, userID)
+		_, err := scoped.ChangeCharacterForSpace(id, body.CharacterID, spaceID)
 		if err != nil {
 			util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
 			return
@@ -198,7 +198,7 @@ func (h *Handler) WebChatUpdateConv(c *gin.Context) {
 			util.ErrorResponse(c, response.InvalidParams, "会话标题不能为空", nil)
 			return
 		}
-		if err := h.webChatOwnedConversationQuery(userID).Where("id = ?", id).Update("title", title).Error; err != nil {
+		if err := h.webChatOwnedConversationQuery(spaceID).Where("id = ?", id).Update("title", title).Error; err != nil {
 			util.ErrorResponse(c, response.OperationFailed, "重命名失败", nil)
 			return
 		}
@@ -213,7 +213,7 @@ func (h *Handler) WebChatDeleteConvMessages(c *gin.Context) {
 		util.ErrorResponse(c, response.InternalError, "chat service does not provide user-scoped operations", nil)
 		return
 	}
-	err := scoped.DeleteMessagesForUser(id, webChatUserID(c))
+	err := scoped.DeleteMessagesForSpace(id, webChatSpaceID(c))
 	if err != nil {
 		applog.Error(fmt.Sprintf("[WebChatDeleteConvMessages] clear messages failed: conversation=%s err=%v", id, err))
 		util.ErrorResponse(c, response.OperationFailed, "清空失败", nil)
@@ -228,8 +228,8 @@ func (h *Handler) WebChatRegenerate(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, "缺少会话ID", nil)
 		return
 	}
-	userID := webChatUserID(c)
-	conversation, ownerErr := h.requireWebChatConversation(convID, userID)
+	spaceID := webChatSpaceID(c)
+	conversation, ownerErr := h.requireWebChatConversation(convID, spaceID)
 	if ownerErr != nil {
 		util.ErrorResponse(c, response.DataNotFound, "会话不存在", nil)
 		return
@@ -304,14 +304,14 @@ func (h *Handler) WebChatRegenerate(c *gin.Context) {
 
 	imageContext := ""
 	if strings.TrimSpace(userMsg.ImageUrl) != "" {
-		if visionError := chat.GetBuffer().AnalyzeImage(convID, userID, userMsg.ImageUrl); visionError != "" {
+		if visionError := chat.GetBuffer().AnalyzeImage(convID, spaceID, userMsg.ImageUrl); visionError != "" {
 			h.publishModelError(modelerror.Event{ModelType: "vision", ConversationID: convID, RequestID: requestID, Channel: "web", RawError: visionError})
 		}
 		imageContext = chat.GetBuffer().GetImageContexts(convID)
 		chat.GetBuffer().ClearImageContexts(convID)
 	}
 	if strings.TrimSpace(userMsg.VideoUrl) != "" {
-		chat.GetBuffer().AnalyzeVideo(convID, userID, userMsg.VideoUrl)
+		chat.GetBuffer().AnalyzeVideo(convID, spaceID, userMsg.VideoUrl)
 	}
 
 	source := strings.TrimSpace(userMsg.Source)
@@ -324,7 +324,7 @@ func (h *Handler) WebChatRegenerate(c *gin.Context) {
 		Source:           source,
 		RequestID:        requestID,
 		SessionID:        convID,
-		UserID:           userID,
+		SpaceID:          spaceID,
 		CharacterID:      conversation.CharacterID,
 		Message:          userMsg.Content,
 		AudioUrl:         userMsg.AudioUrl,
@@ -334,7 +334,7 @@ func (h *Handler) WebChatRegenerate(c *gin.Context) {
 		VideoUrl:         userMsg.VideoUrl,
 		ImageContext:     imageContext,
 		ReplyToMessageID: userMsg.ReplyToMessageID,
-	}, h.workspaceBindingForRequest(convID, webChatSendRequest{}, userID))
+	}, h.workspaceBindingForRequest(convID, webChatSendRequest{}, spaceID))
 	if err != nil || orchResult == nil || orchResult.Response == nil {
 		restorePreviousState()
 		if errors.Is(err, interaction.ErrOrchestratorProcessing) {
@@ -373,7 +373,7 @@ func (h *Handler) WebChatRegenerate(c *gin.Context) {
 }
 
 func (h *Handler) WebChatReplyTimingForce(c *gin.Context) {
-	if _, err := h.requireWebChatConversation(c.Param("id"), webChatUserID(c)); err != nil {
+	if _, err := h.requireWebChatConversation(c.Param("id"), webChatSpaceID(c)); err != nil {
 		util.ErrorResponse(c, response.DataNotFound, "对话不存在", nil)
 		return
 	}
@@ -381,7 +381,7 @@ func (h *Handler) WebChatReplyTimingForce(c *gin.Context) {
 }
 
 func (h *Handler) WebChatReplyTimingHold(c *gin.Context) {
-	if _, err := h.requireWebChatConversation(c.Param("id"), webChatUserID(c)); err != nil {
+	if _, err := h.requireWebChatConversation(c.Param("id"), webChatSpaceID(c)); err != nil {
 		util.ErrorResponse(c, response.DataNotFound, "对话不存在", nil)
 		return
 	}
@@ -389,7 +389,7 @@ func (h *Handler) WebChatReplyTimingHold(c *gin.Context) {
 }
 
 func (h *Handler) WebChatReplyTimingResume(c *gin.Context) {
-	if _, err := h.requireWebChatConversation(c.Param("id"), webChatUserID(c)); err != nil {
+	if _, err := h.requireWebChatConversation(c.Param("id"), webChatSpaceID(c)); err != nil {
 		util.ErrorResponse(c, response.DataNotFound, "对话不存在", nil)
 		return
 	}
@@ -397,7 +397,7 @@ func (h *Handler) WebChatReplyTimingResume(c *gin.Context) {
 }
 
 func (h *Handler) WebChatReplyTimingStatus(c *gin.Context) {
-	if _, err := h.requireWebChatConversation(c.Param("id"), webChatUserID(c)); err != nil {
+	if _, err := h.requireWebChatConversation(c.Param("id"), webChatSpaceID(c)); err != nil {
 		util.ErrorResponse(c, response.DataNotFound, "对话不存在", nil)
 		return
 	}
@@ -420,7 +420,7 @@ func (h *Handler) WebChatMessageStatus(c *gin.Context) {
 		CreatedAt      string `gorm:"column:created_at"`
 		UpdatedAt      string `gorm:"column:updated_at"`
 	}
-	if err := h.webChatOwnedMessageQuery(webChatUserID(c)).Select("messages.id, messages.conversation_id, messages.status, messages.request_id, messages.role, messages.created_at, messages.updated_at").Where("messages.id = ?", msgID).Take(&msg).Error; err != nil {
+	if err := h.webChatOwnedMessageQuery(webChatSpaceID(c)).Select("messages.id, messages.conversation_id, messages.status, messages.request_id, messages.role, messages.created_at, messages.updated_at").Where("messages.id = ?", msgID).Take(&msg).Error; err != nil {
 		util.ErrorResponse(c, response.DataNotFound, "消息不存在", nil)
 		return
 	}
@@ -429,7 +429,7 @@ func (h *Handler) WebChatMessageStatus(c *gin.Context) {
 
 	if msg.RequestID != "" {
 		var interactionStatus string
-		if scanErr := h.db.Table("interaction_records").Select("status").Where("user_id = ? AND request_id = ?", requestidentity.NormalizeUserID(webChatUserID(c)), msg.RequestID).Limit(1).Row().Scan(&interactionStatus); scanErr == nil && interactionStatus != "" {
+		if scanErr := h.db.Table("interaction_records").Select("status").Where("space_id = ? AND request_id = ?", requestidentity.NormalizeSpaceID(webChatSpaceID(c)), msg.RequestID).Limit(1).Row().Scan(&interactionStatus); scanErr == nil && interactionStatus != "" {
 			result["interactionStatus"] = interactionStatus
 			if msg.Status == "processing" && strings.Contains(interactionStatus, "committed") {
 				result["status"] = "completed"
@@ -464,12 +464,12 @@ func (h *Handler) WebChatSend(c *gin.Context) {
 	if sessionID == "" {
 		sessionID = convID
 	}
-	userID := requestidentity.ResolveGin(c, body.UserID)
-	if err := h.requireWebChatConversationOrAbsent(convID, userID); err != nil {
+	spaceID := requestidentity.ResolveGin(c)
+	if err := h.requireWebChatConversationOrAbsent(convID, spaceID); err != nil {
 		util.ErrorResponse(c, response.DataNotFound, "对话不存在", nil)
 		return
 	}
-	if err := h.requireWebChatCharacter(body.CharacterID, userID); err != nil {
+	if err := h.requireWebChatCharacter(body.CharacterID, spaceID); err != nil {
 		util.ErrorResponse(c, response.DataNotFound, "角色不存在", nil)
 		return
 	}
@@ -484,11 +484,11 @@ func (h *Handler) WebChatSend(c *gin.Context) {
 	c.Header("X-Source", source)
 
 	applog.Info(fmt.Sprintf("[Webhook] ImageUrl=%s VideoUrl=%s", body.ImageUrl[:min(len(body.ImageUrl), 60)], body.VideoUrl[:min(len(body.VideoUrl), 60)]))
-	visionError := chat.GetBuffer().AnalyzeImage(convID, userID, body.ImageUrl)
+	visionError := chat.GetBuffer().AnalyzeImage(convID, spaceID, body.ImageUrl)
 	if visionError != "" {
 		h.publishModelError(modelerror.Event{ModelType: "vision", ConversationID: convID, RequestID: requestID, Channel: "web", RawError: visionError})
 	}
-	chat.GetBuffer().AnalyzeVideo(convID, userID, body.VideoUrl)
+	chat.GetBuffer().AnalyzeVideo(convID, spaceID, body.VideoUrl)
 
 	bufferedMsgs, bufErr := chat.GetBuffer().Buffer(convID, msgContent)
 	if bufErr != nil {
@@ -504,22 +504,22 @@ func (h *Handler) WebChatSend(c *gin.Context) {
 	characterID := body.CharacterID
 	if characterID == "" && body.ConversationID != "" {
 		var dbCharID string
-		if scanErr := h.webChatOwnedConversationQuery(userID).Select("character_id").Where("id = ?", body.ConversationID).Limit(1).Row().Scan(&dbCharID); scanErr == nil && strings.TrimSpace(dbCharID) != "" {
+		if scanErr := h.webChatOwnedConversationQuery(spaceID).Select("character_id").Where("id = ?", body.ConversationID).Limit(1).Row().Scan(&dbCharID); scanErr == nil && strings.TrimSpace(dbCharID) != "" {
 			characterID = dbCharID
 		}
 	}
 	if characterID == "" {
-		h.webChatCharacterQuery(userID).Select("id").Where("is_active = 1").Limit(1).Row().Scan(&characterID)
+		h.webChatCharacterQuery(spaceID).Select("id").Where("is_active = 1").Limit(1).Row().Scan(&characterID)
 	}
 	if characterID == "" {
 		util.ErrorResponse(c, response.InvalidParams, "请先创建并启用角色", nil)
 		return
 	}
 
-	workspaceBinding := h.workspaceBindingForRequest(convID, body, userID)
+	workspaceBinding := h.workspaceBindingForRequest(convID, body, spaceID)
 	orchResult, err := h.handleUnifiedEntryWithWorkspace(c.Request.Context(), &interaction.UnifiedEntryRequest{
 		ConversationID: convID, Channel: "web", Source: source,
-		UserID: userID, PeerID: peerID, RequestID: requestID, SessionID: sessionID,
+		SpaceID: spaceID, PeerID: peerID, RequestID: requestID, SessionID: sessionID,
 		DeviceTimezone: deviceTimezone,
 		CharacterID:    characterID, Message: mergedContent,
 		AudioUrl: body.AudioUrl, AudioDuration: body.AudioDuration,
@@ -530,7 +530,7 @@ func (h *Handler) WebChatSend(c *gin.Context) {
 		ReplyToMessageID: body.ReplyToMessageID,
 	}, workspaceBinding)
 	if errors.Is(err, interaction.ErrOrchestratorProcessing) {
-		util.SuccessResponse(c, gin.H{"status": "processing", "requestId": requestID, "sessionId": sessionID, "userId": userID, "source": source})
+		util.SuccessResponse(c, gin.H{"status": "processing", "requestId": requestID, "sessionId": sessionID, "spaceId": spaceID, "source": source})
 		return
 	}
 	if err != nil {
@@ -539,9 +539,9 @@ func (h *Handler) WebChatSend(c *gin.Context) {
 		return
 	}
 	if orchResult != nil && orchResult.Response != nil {
-		h.persistConversationWorkspaceBinding(orchResult.Response.ConversationID, workspaceBinding, userID)
+		h.persistConversationWorkspaceBinding(orchResult.Response.ConversationID, workspaceBinding, spaceID)
 	}
-	util.SuccessResponse(c, gin.H{"conversationId": orchResult.Response.ConversationID, "reply": orchResult.Response.Reply, "messageIds": orchResult.Response.MessageIDs, "characterName": orchResult.Response.CharacterName, "requestId": requestID, "sessionId": sessionID, "userId": userID, "source": source})
+	util.SuccessResponse(c, gin.H{"conversationId": orchResult.Response.ConversationID, "reply": orchResult.Response.Reply, "messageIds": orchResult.Response.MessageIDs, "characterName": orchResult.Response.CharacterName, "requestId": requestID, "sessionId": sessionID, "spaceId": spaceID, "source": source})
 }
 
 func (h *Handler) WebChatSubmitMessage(c *gin.Context) {
@@ -572,12 +572,12 @@ func (h *Handler) WebChatSubmitMessage(c *gin.Context) {
 	if sessionID == "" {
 		sessionID = convID
 	}
-	userID := requestidentity.ResolveGin(c, body.UserID)
-	if err := h.requireWebChatConversationOrAbsent(convID, userID); err != nil {
+	spaceID := requestidentity.ResolveGin(c)
+	if err := h.requireWebChatConversationOrAbsent(convID, spaceID); err != nil {
 		util.ErrorResponse(c, response.DataNotFound, "对话不存在", nil)
 		return
 	}
-	if err := h.requireWebChatCharacter(body.CharacterID, userID); err != nil {
+	if err := h.requireWebChatCharacter(body.CharacterID, spaceID); err != nil {
 		util.ErrorResponse(c, response.DataNotFound, "角色不存在", nil)
 		return
 	}
@@ -591,12 +591,12 @@ func (h *Handler) WebChatSubmitMessage(c *gin.Context) {
 	characterID := body.CharacterID
 	if characterID == "" && body.ConversationID != "" {
 		var dbCharID string
-		if scanErr := h.webChatOwnedConversationQuery(userID).Select("character_id").Where("id = ?", body.ConversationID).Limit(1).Row().Scan(&dbCharID); scanErr == nil && strings.TrimSpace(dbCharID) != "" {
+		if scanErr := h.webChatOwnedConversationQuery(spaceID).Select("character_id").Where("id = ?", body.ConversationID).Limit(1).Row().Scan(&dbCharID); scanErr == nil && strings.TrimSpace(dbCharID) != "" {
 			characterID = dbCharID
 		}
 	}
 	if characterID == "" {
-		h.webChatCharacterQuery(userID).Select("id").Where("is_active = 1").Limit(1).Row().Scan(&characterID)
+		h.webChatCharacterQuery(spaceID).Select("id").Where("is_active = 1").Limit(1).Row().Scan(&characterID)
 	}
 	if characterID == "" {
 		util.ErrorResponse(c, response.InvalidParams, "请先创建并启用角色", nil)
@@ -607,7 +607,7 @@ func (h *Handler) WebChatSubmitMessage(c *gin.Context) {
 	var replyToExcerpt *string
 	if body.ReplyToMessageID != nil && *body.ReplyToMessageID != "" {
 		var targetMsg chat.Message
-		if err := h.webChatOwnedMessageQuery(userID).Where("messages.id = ? AND messages.conversation_id = ?", *body.ReplyToMessageID, convID).First(&targetMsg).Error; err == nil {
+		if err := h.webChatOwnedMessageQuery(spaceID).Where("messages.id = ? AND messages.conversation_id = ?", *body.ReplyToMessageID, convID).First(&targetMsg).Error; err == nil {
 			role := targetMsg.Role
 			excerpt := chat.BuildMessageExcerpt(&targetMsg)
 			replyToRole = &role
@@ -615,19 +615,19 @@ func (h *Handler) WebChatSubmitMessage(c *gin.Context) {
 		}
 	}
 
-	userMsg, err := h.persistQueuedWebChatMessage(body, convID, characterID, source, requestID, msgContent, userID, replyToRole, replyToExcerpt)
+	userMsg, err := h.persistQueuedWebChatMessage(body, convID, characterID, source, requestID, msgContent, spaceID, replyToRole, replyToExcerpt)
 	if err != nil {
 		applog.Error(fmt.Sprintf("[WebChatSubmitMessage] persist user message failed: %v", err))
 		util.ErrorResponse(c, response.InternalError, "消息存储失败", nil)
 		return
 	}
 	msgID := userMsg.ID
-	h.webChatCharacterQuery(userID).Where("id = ?", characterID).Update("conversation_id", convID)
+	h.webChatCharacterQuery(spaceID).Where("id = ?", characterID).Update("conversation_id", convID)
 	// The queued-message transaction has created the conversation at this point,
 	// so persist the workspace binding synchronously before generation starts.
 	// This makes the first turn durable even if the client disconnects immediately
 	// after receiving the submit acknowledgement.
-	workspaceBinding := h.workspaceBindingForRequest(convID, body, userID)
+	workspaceBinding := h.workspaceBindingForRequest(convID, body, spaceID)
 
 	c.Header("X-Request-ID", requestID)
 	genID := chat.GetGenerationQueue().StartCollection(convID)
@@ -639,11 +639,11 @@ func (h *Handler) WebChatSubmitMessage(c *gin.Context) {
 				h.db.Exec("UPDATE messages SET status = 'failed', updated_at = ? WHERE id = ?", time.Now().Format("2006-01-02 15:04:05"), msgID)
 			}
 		}()
-		visionError := chat.GetBuffer().AnalyzeImage(convID, userID, body.ImageUrl)
+		visionError := chat.GetBuffer().AnalyzeImage(convID, spaceID, body.ImageUrl)
 		if visionError != "" {
 			h.publishModelError(modelerror.Event{ModelType: "vision", ConversationID: convID, RequestID: requestID, Channel: "web", RawError: visionError})
 		}
-		chat.GetBuffer().AnalyzeVideo(convID, userID, body.VideoUrl)
+		chat.GetBuffer().AnalyzeVideo(convID, spaceID, body.VideoUrl)
 
 		bufferedMsgs, bufErr := chat.GetBuffer().Buffer(convID, msgContent)
 		if bufErr != nil {
@@ -672,7 +672,7 @@ func (h *Handler) WebChatSubmitMessage(c *gin.Context) {
 
 		orchResult, err := h.handleUnifiedEntryWithWorkspace(genCtx, &interaction.UnifiedEntryRequest{
 			ConversationID: convID, Channel: "web", Source: source,
-			UserID: userID, PeerID: peerID, RequestID: requestID, SessionID: sessionID,
+			SpaceID: spaceID, PeerID: peerID, RequestID: requestID, SessionID: sessionID,
 			DeviceTimezone: deviceTimezone,
 			CharacterID:    characterID, Message: mergedContent,
 			AudioUrl: body.AudioUrl, AudioDuration: body.AudioDuration,
@@ -701,7 +701,7 @@ func (h *Handler) WebChatSubmitMessage(c *gin.Context) {
 	})
 }
 
-func (h *Handler) persistQueuedWebChatMessage(body webChatSendRequest, convID, characterID, source, requestID, msgContent, userID string, replyToRole, replyToExcerpt *string) (*chat.Message, error) {
+func (h *Handler) persistQueuedWebChatMessage(body webChatSendRequest, convID, characterID, source, requestID, msgContent, spaceID string, replyToRole, replyToExcerpt *string) (*chat.Message, error) {
 	now := time.Now().Format("2006-01-02 15:04:05")
 	msg := &chat.Message{
 		ID:               uuid.New().String(),
@@ -724,7 +724,7 @@ func (h *Handler) persistQueuedWebChatMessage(body webChatSendRequest, convID, c
 	}
 	err := h.db.Transaction(func(tx *gorm.DB) error {
 		var existingConv chat.Conversation
-		lookup := webChatOwnerQuery(tx.Model(&chat.Conversation{}).Where("id = ? AND deleted_at IS NULL", convID), userID).Limit(1).Find(&existingConv)
+		lookup := webChatOwnerQuery(tx.Model(&chat.Conversation{}).Where("id = ? AND deleted_at IS NULL", convID), spaceID).Limit(1).Find(&existingConv)
 		if lookup.Error != nil {
 			return lookup.Error
 		}
@@ -736,11 +736,11 @@ func (h *Handler) persistQueuedWebChatMessage(body webChatSendRequest, convID, c
 			if foreignCount > 0 {
 				return gorm.ErrRecordNotFound
 			}
-			conv := &chat.Conversation{ID: convID, UserID: requestidentity.NormalizeUserID(userID), Title: msgContent, CharacterID: characterID, Channel: "web", Source: source, CreatedAt: now, UpdatedAt: now}
+			conv := &chat.Conversation{ID: convID, SpaceID: requestidentity.NormalizeSpaceID(spaceID), Title: msgContent, CharacterID: characterID, Channel: "web", Source: source, CreatedAt: now, UpdatedAt: now}
 			if err := tx.Create(conv).Error; err != nil {
 				return err
 			}
-		} else if err := webChatOwnerQuery(tx.Model(&chat.Conversation{}).Where("id = ?", convID), userID).Update("updated_at", now).Error; err != nil {
+		} else if err := webChatOwnerQuery(tx.Model(&chat.Conversation{}).Where("id = ?", convID), spaceID).Update("updated_at", now).Error; err != nil {
 			return err
 		}
 		var existing chat.Message
@@ -827,7 +827,7 @@ func (h *Handler) WebChatGenerationStatus(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, "缺少会话ID", nil)
 		return
 	}
-	if _, err := h.requireWebChatConversation(convID, webChatUserID(c)); err != nil {
+	if _, err := h.requireWebChatConversation(convID, webChatSpaceID(c)); err != nil {
 		util.ErrorResponse(c, response.DataNotFound, "会话不存在", nil)
 		return
 	}
@@ -843,7 +843,7 @@ func (h *Handler) WebChatCancelGeneration(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, "缺少会话ID", nil)
 		return
 	}
-	if _, err := h.requireWebChatConversation(convID, webChatUserID(c)); err != nil {
+	if _, err := h.requireWebChatConversation(convID, webChatSpaceID(c)); err != nil {
 		util.ErrorResponse(c, response.DataNotFound, "会话不存在", nil)
 		return
 	}

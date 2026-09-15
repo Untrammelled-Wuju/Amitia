@@ -32,7 +32,7 @@ type Service interface {
 	HybridSearch(req *VectorSearchRequest) ([]HybridSearchResult, error)
 	RecordUse(id string) (*Memory, error)
 	GetVectorStatus() map[string]interface{}
-	GetTimeline(page, pageSize int, userID, source, memoryType, timelineType string) ([]map[string]interface{}, int64, error)
+	GetTimeline(page, pageSize int, spaceID, source, memoryType, timelineType string) ([]map[string]interface{}, int64, error)
 	GenerateCandidates(conversationID string) ([]MemoryCandidate, error)
 	SubmitCandidate(req *SubmitCandidateRequest) (*MemoryCandidate, error)
 	ListCandidates() []MemoryCandidate
@@ -44,7 +44,7 @@ type Service interface {
 	CheckConflict(req *CheckConflictRequest) (*CheckConflictResponse, error)
 	ResolveConflict(req *ResolveConflictRequest) (*ResolveConflictResponse, error)
 	AutoResolveConflict(key, value, characterID string, newConfidence int) (*ResolveConflictResponse, error)
-	GetRankedMemories(characterID, userID, query string, limit int) ([]RankedMemory, error)
+	GetRankedMemories(characterID, spaceID, query string, limit int) ([]RankedMemory, error)
 	ExtractCandidates() ([]MemoryCandidate, error)
 	RebuildIndex() (map[string]interface{}, error)
 	RebuildEmbeddings() (map[string]interface{}, error)
@@ -98,7 +98,7 @@ type UpdateCandidateRequest struct {
 }
 
 type CheckConflictRequest struct {
-	UserID      string `json:"userId"`
+	SpaceID     string `json:"spaceId"`
 	Key         string `json:"key"`
 	Value       string `json:"value"`
 	MemoryType  string `json:"memoryType"`
@@ -117,7 +117,7 @@ type ConflictItem struct {
 }
 
 type ResolveConflictRequest struct {
-	UserID      string `json:"userId"`
+	SpaceID     string `json:"spaceId"`
 	Action      string `json:"action"`
 	NewKey      string `json:"newKey"`
 	NewValue    string `json:"newValue"`
@@ -133,7 +133,7 @@ type ResolveConflictResponse struct {
 }
 type MemoryCandidate struct {
 	ID                    string  `json:"id"`
-	UserID                string  `json:"userId"`
+	SpaceID               string  `json:"spaceId"`
 	Key                   string  `json:"key"`
 	Value                 string  `json:"value"`
 	MemoryType            string  `json:"memoryType"`
@@ -160,7 +160,7 @@ type MemoryCandidate struct {
 }
 
 type SubmitCandidateRequest struct {
-	UserID                string  `json:"userId"`
+	SpaceID               string  `json:"spaceId"`
 	Key                   string  `json:"key"`
 	Value                 string  `json:"value"`
 	MemoryType            string  `json:"memoryType"`

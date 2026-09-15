@@ -28,31 +28,31 @@ func HandleSession(c *gin.Context) {
 
 	conversationID := strings.TrimSpace(c.Query("conversationId"))
 	dialogID := strings.TrimSpace(c.Query("dialogId"))
-	requestUserID := ""
+	requestSpaceID := ""
 	if value, exists := c.Get("realtimeUserId"); exists && value != nil {
-		requestUserID = strings.TrimSpace(fmt.Sprint(value))
-	} else if value, exists := c.Get("userId"); exists && value != nil {
-		requestUserID = strings.TrimSpace(fmt.Sprint(value))
+		requestSpaceID = strings.TrimSpace(fmt.Sprint(value))
+	} else if value, exists := c.Get("spaceId"); exists && value != nil {
+		requestSpaceID = strings.TrimSpace(fmt.Sprint(value))
 	}
-	requestUserID = realtimeEffectiveUserID(requestUserID)
-	if requestUserID == "" {
+	requestSpaceID = realtimeEffectiveSpaceID(requestSpaceID)
+	if requestSpaceID == "" {
 		c.JSON(http.StatusUnauthorized, gin.H{"code": http.StatusUnauthorized, "message": "authenticated user is required"})
 		return
 	}
-	ownedCharacterID, ownerErr := requireRealtimeConversationOwner(conversationID, requestUserID)
+	ownedCharacterID, ownerErr := requireRealtimeConversationOwner(conversationID, requestSpaceID)
 	if ownerErr != nil {
 		c.JSON(http.StatusNotFound, gin.H{"code": http.StatusNotFound, "message": "conversation not found"})
 		return
 	}
 	desktopPetCharacterID := ownedCharacterID
-	desktopPetUserID := requestUserID
+	desktopPetSpaceID := requestSpaceID
 
 	characterName := "AI"
 	characterBase := ""
 	speakingStyle := ""
 	if dbInstance != nil && desktopPetCharacterID != "" {
 		var ch struct{ N, SP, SS, VT, CVID, VM string }
-		dbInstance.Table("characters").Where("id = ? AND user_id = ?", desktopPetCharacterID, requestUserID).Select("name as n, character_base as sp, speaking_style as ss, voice_type as vt, custom_voice_id as cvid, voice_mode as vm").First(&ch)
+		dbInstance.Table("characters").Where("id = ? AND space_id = ?", desktopPetCharacterID, requestSpaceID).Select("name as n, character_base as sp, speaking_style as ss, voice_type as vt, custom_voice_id as cvid, voice_mode as vm").First(&ch)
 		if ch.VM == "clone" && ch.CVID != "" {
 			voiceType = ch.CVID
 		} else if ch.VT != "" {
@@ -72,11 +72,11 @@ func HandleSession(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": "failed to create realtime visual authorization"})
 		return
 	}
-	callUserID := requestUserID
-	if callUserID == "" {
-		callUserID = desktopPetUserID
+	callSpaceID := requestSpaceID
+	if callSpaceID == "" {
+		callSpaceID = desktopPetSpaceID
 	}
-	call := NewRealtimeCallSession(callID, sessionID, conversationID, desktopPetCharacterID, callUserID, visualTicket)
+	call := NewRealtimeCallSession(callID, sessionID, conversationID, desktopPetCharacterID, callSpaceID, visualTicket)
 
 	visualEndpoint := "/api/realtime/v2/visual"
 	if value, exists := c.Get("realtimeVisualEndpoint"); exists {
@@ -89,7 +89,7 @@ func HandleSession(c *gin.Context) {
 		SessionID:      sessionID,
 		ConversationID: conversationID,
 		CharacterID:    desktopPetCharacterID,
-		UserID:         desktopPetUserID,
+		SpaceID:        desktopPetSpaceID,
 		CurrentTurnID:  "turn-" + sessionID,
 		State:          ContinuousVoiceSessionStatusListening,
 		LastActivityAt: time.Now(),
@@ -98,7 +98,7 @@ func HandleSession(c *gin.Context) {
 	serveCascadeCall(c, cascadeCallParams{
 		CallID:          callID,
 		SessionID:       sessionID,
-		UserID:          requestUserID,
+		SpaceID:         requestSpaceID,
 		CharacterID:     desktopPetCharacterID,
 		ConversationID:  conversationID,
 		CharacterName:   characterName,

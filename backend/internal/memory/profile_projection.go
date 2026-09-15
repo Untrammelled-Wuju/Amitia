@@ -4,6 +4,8 @@ package memory
 
 import (
 	"strings"
+
+	"github.com/u-ai/backend/internal/requestidentity"
 	"time"
 
 	"github.com/google/uuid"
@@ -22,8 +24,8 @@ func (s *service) syncProfileProjection(m *Memory) {
 	if memoryStatusBlocksRetrieval(m.VerifiedStatus) || strings.EqualFold(m.DecayState, DecayStateArchived) {
 		status = "archived"
 	}
-	userID, characterID := s.profileProjectionScope(m)
-	if userID == "" {
+	spaceID, characterID := s.profileProjectionScope(m)
+	if spaceID == "" {
 		return
 	}
 	now := time.Now().Format("2006-01-02 15:04:05")
@@ -32,12 +34,12 @@ func (s *service) syncProfileProjection(m *Memory) {
 	_ = s.db.Table("user_profiles").Select("id").Where("source_memory_id = ?", m.ID).Limit(1).Row().Scan(&existingID)
 	if existingID == "" {
 		_ = s.db.Table("user_profiles").Select("id").Where(
-			"user_id = ? AND character_id = ? AND category = ? AND attribute_name = ?",
-			userID, characterID, category, strings.TrimSpace(m.Key),
+			"space_id = ? AND character_id = ? AND category = ? AND attribute_name = ?",
+			spaceID, characterID, category, strings.TrimSpace(m.Key),
 		).Limit(1).Row().Scan(&existingID)
 	}
 	values := map[string]interface{}{
-		"user_id":           userID,
+		"space_id":          spaceID,
 		"character_id":      characterID,
 		"category":          category,
 		"attribute_name":    strings.TrimSpace(m.Key),
@@ -62,24 +64,22 @@ func (s *service) profileProjectionScope(m *Memory) (string, string) {
 	if m == nil {
 		return "", ""
 	}
-	userID := strings.TrimSpace(m.UserID)
+	spaceID := strings.TrimSpace(m.SpaceID)
 	characterID := strings.TrimSpace(m.CharacterID)
 	if s != nil && s.db != nil && strings.TrimSpace(m.SourceConvID) != "" {
 		var peerID, convCharacterID string
 		_ = s.db.Table("conversations").Select("peer_id, character_id").Where("id = ?", m.SourceConvID).Row().Scan(&peerID, &convCharacterID)
 		peerID = strings.TrimSpace(peerID)
 		convCharacterID = strings.TrimSpace(convCharacterID)
-		if userID == "" && peerID != "" && peerID != "default" {
-			userID = peerID
+		if spaceID == "" && peerID != "" && peerID != "default" {
+			spaceID = peerID
 		}
 		if convCharacterID != "" {
 			characterID = convCharacterID
 		}
 	}
-	if userID == "" {
-		userID = "default"
-	}
-	return userID, characterID
+	spaceID = requestidentity.NormalizeSpaceID(spaceID)
+	return spaceID, characterID
 }
 
 func (s *service) invalidateProfileProjection(memoryID string) {

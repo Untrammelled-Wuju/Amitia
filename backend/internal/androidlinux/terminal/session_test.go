@@ -59,7 +59,7 @@ func (c *testCaps) RequirementSatisfied(req runtimehost.CapabilityRequirement) b
 
 func newTestRuntimeHost() *testRuntimeHost {
 	return &testRuntimeHost{
-		desc: platform.NewRuntimeDescriptor(platform.HostPlatformAndroid, platform.RuntimeKindProot, platform.GuestPlatformLinux),
+		desc:  platform.NewRuntimeDescriptor(platform.HostPlatformAndroid, platform.RuntimeKindProot, platform.GuestPlatformLinux),
 		paths: util.RuntimePaths{WorkspaceDir: "/tmp/test-workspace"},
 		caps: map[runtimehost.HostCapabilityID]runtimehost.CapabilitySupport{
 			runtimehost.CapProcessSpawn:         runtimehost.SupportSupported,
@@ -224,21 +224,21 @@ func TestSessionStateTransitions(t *testing.T) {
 
 func TestSessionOwnership(t *testing.T) {
 	owner := SessionOwner{
-		UserID:         "user123",
+		SpaceID:        "user123",
 		CharacterID:    "char456",
 		ConversationID: "conv789",
 	}
 
 	sess := &Session{
-		Owner: owner,
+		Owner:        owner,
 		SessionOwner: owner,
-		State: SessionRunning,
+		State:        SessionRunning,
 	}
 
 	assert.True(t, sess.BelongsTo(owner))
 
 	otherOwner := SessionOwner{
-		UserID:         "user999",
+		SpaceID:        "user999",
 		CharacterID:    "char456",
 		ConversationID: "conv789",
 	}
@@ -273,7 +273,7 @@ func TestSessionManagerCloseAll(t *testing.T) {
 
 	for i := 0; i < 3; i++ {
 		_, _, _, _, err := manager.Open(ctx, OpenParams{
-			Owner:      SessionOwner{UserID: "testuser"},
+			Owner:      SessionOwner{SpaceID: "testuser"},
 			Shell:      "/bin/sh",
 			WorkingDir: host.paths.WorkspaceDir,
 		})

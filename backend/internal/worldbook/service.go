@@ -17,21 +17,21 @@ import (
 
 type Service interface {
 	List(q WorldBookListQuery) (*WorldBookListResponse, error)
-	ListForUser(userID string, q WorldBookListQuery) (*WorldBookListResponse, error)
+	ListForSpace(spaceID string, q WorldBookListQuery) (*WorldBookListResponse, error)
 	Create(req *CreateWorldBookRequest) (*WorldBookEntry, error)
-	CreateForUser(userID string, req *CreateWorldBookRequest) (*WorldBookEntry, error)
+	CreateForSpace(spaceID string, req *CreateWorldBookRequest) (*WorldBookEntry, error)
 	Update(id string, req *UpdateWorldBookRequest) (*WorldBookEntry, error)
-	UpdateForUser(userID, id string, req *UpdateWorldBookRequest) (*WorldBookEntry, error)
+	UpdateForSpace(spaceID, id string, req *UpdateWorldBookRequest) (*WorldBookEntry, error)
 	Delete(id string) error
-	DeleteForUser(userID, id string) error
+	DeleteForSpace(spaceID, id string) error
 	TestMatch(text string) (*TestMatchResponse, error)
-	TestMatchForUser(userID, text string) (*TestMatchResponse, error)
+	TestMatchForSpace(spaceID, text string) (*TestMatchResponse, error)
 	MatchAndCollect(userMessage, assistantReply string) []MatchResult
-	MatchAndCollectForUser(userID, characterID, userMessage, assistantReply string) []MatchResult
+	MatchAndCollectForSpace(spaceID, characterID, userMessage, assistantReply string) []MatchResult
 	ToSystemPrompt(userMessage, assistantReply string) string
-	ToSystemPromptForUser(userID, characterID, userMessage, assistantReply string) string
+	ToSystemPromptForSpace(spaceID, characterID, userMessage, assistantReply string) string
 	DeleteAll() error
-	DeleteAllForUser(userID string) error
+	DeleteAllForSpace(spaceID string) error
 }
 
 type regexCacheEntry struct {
@@ -57,16 +57,16 @@ func NewService(repo Repository, ctx *app.AppContext, graphSvc graph.Service) Se
 }
 
 func (s *service) List(q WorldBookListQuery) (*WorldBookListResponse, error) {
-	return s.ListForUser("default", q)
+	return s.ListForSpace("default", q)
 }
 
-func (s *service) ListForUser(userID string, q WorldBookListQuery) (*WorldBookListResponse, error) {
+func (s *service) ListForSpace(spaceID string, q WorldBookListQuery) (*WorldBookListResponse, error) {
 	if q.CharacterID != "" {
-		if err := requireWorldbookCharacterOwner(s.db, q.CharacterID, userID); err != nil {
+		if err := requireWorldbookCharacterOwner(s.db, q.CharacterID, spaceID); err != nil {
 			return nil, err
 		}
 	}
-	items, total, err := s.repo.List(q, userID)
+	items, total, err := s.repo.List(q, spaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -86,20 +86,20 @@ func (s *service) ListForUser(userID string, q WorldBookListQuery) (*WorldBookLi
 }
 
 func (s *service) Create(req *CreateWorldBookRequest) (*WorldBookEntry, error) {
-	return s.CreateForUser("default", req)
+	return s.CreateForSpace("default", req)
 }
 
-func (s *service) CreateForUser(userID string, req *CreateWorldBookRequest) (*WorldBookEntry, error) {
+func (s *service) CreateForSpace(spaceID string, req *CreateWorldBookRequest) (*WorldBookEntry, error) {
 	if req.MatchType == "" || req.MatchPattern == "" || req.InjectContent == "" {
 		return nil, fmt.Errorf("matchType、matchPattern和injectContent不能为空")
 	}
-	if err := requireWorldbookCharacterOwner(s.db, req.CharacterID, userID); err != nil {
+	if err := requireWorldbookCharacterOwner(s.db, req.CharacterID, spaceID); err != nil {
 		return nil, err
 	}
 	if req.MatchScope == "" {
 		req.MatchScope = "full_context"
 	}
-	e := &WorldBookEntry{UserID: normalizeWorldbookOwner(userID), MatchType: req.MatchType, MatchPattern: req.MatchPattern, MatchScope: req.MatchScope, InjectContent: req.InjectContent, Priority: req.Priority, CharacterID: req.CharacterID}
+	e := &WorldBookEntry{SpaceID: normalizeWorldbookOwner(spaceID), MatchType: req.MatchType, MatchPattern: req.MatchPattern, MatchScope: req.MatchScope, InjectContent: req.InjectContent, Priority: req.Priority, CharacterID: req.CharacterID}
 	if err := s.repo.Create(e); err != nil {
 		return nil, err
 	}
@@ -109,10 +109,10 @@ func (s *service) CreateForUser(userID string, req *CreateWorldBookRequest) (*Wo
 }
 
 func (s *service) Update(id string, req *UpdateWorldBookRequest) (*WorldBookEntry, error) {
-	return s.UpdateForUser("default", id, req)
+	return s.UpdateForSpace("default", id, req)
 }
 
-func (s *service) UpdateForUser(userID, id string, req *UpdateWorldBookRequest) (*WorldBookEntry, error) {
+func (s *service) UpdateForSpace(spaceID, id string, req *UpdateWorldBookRequest) (*WorldBookEntry, error) {
 	updates := map[string]interface{}{}
 	if req.MatchType != nil {
 		updates["match_type"] = *req.MatchType
@@ -130,41 +130,41 @@ func (s *service) UpdateForUser(userID, id string, req *UpdateWorldBookRequest) 
 		updates["priority"] = *req.Priority
 	}
 	if req.CharacterID != nil {
-		if err := requireWorldbookCharacterOwner(s.db, *req.CharacterID, userID); err != nil {
+		if err := requireWorldbookCharacterOwner(s.db, *req.CharacterID, spaceID); err != nil {
 			return nil, err
 		}
 		updates["character_id"] = *req.CharacterID
 	}
-	if err := s.repo.Update(id, userID, updates); err != nil {
+	if err := s.repo.Update(id, spaceID, updates); err != nil {
 		return nil, err
 	}
 	s.invalidateCache()
-	e, err := s.repo.FindByID(id, userID)
+	e, err := s.repo.FindByID(id, spaceID)
 	if err == nil {
 		s.syncGraph(e)
 	}
 	return e, err
 }
 
-func (s *service) Delete(id string) error { return s.DeleteForUser("default", id) }
+func (s *service) Delete(id string) error { return s.DeleteForSpace("default", id) }
 
-func (s *service) DeleteForUser(userID, id string) error {
-	err := s.repo.Delete(id, userID)
+func (s *service) DeleteForSpace(spaceID, id string) error {
+	err := s.repo.Delete(id, spaceID)
 	if err == nil {
-		s.deleteGraph(id, userID)
+		s.deleteGraph(id, spaceID)
 		s.invalidateCache()
 	}
 	return err
 }
 
-func (s *service) DeleteAll() error { return s.DeleteAllForUser("default") }
+func (s *service) DeleteAll() error { return s.DeleteAllForSpace("default") }
 
-func (s *service) DeleteAllForUser(userID string) error {
-	rules := s.loadRules(userID)
-	err := s.repo.DeleteAll(userID)
+func (s *service) DeleteAllForSpace(spaceID string) error {
+	rules := s.loadRules(spaceID)
+	err := s.repo.DeleteAll(spaceID)
 	if err == nil {
 		for _, rule := range rules {
-			s.deleteGraph(rule.ID, userID)
+			s.deleteGraph(rule.ID, spaceID)
 		}
 		s.invalidateCache()
 	}
@@ -176,19 +176,19 @@ func (s *service) invalidateCache() {
 	// compilation remains safely shared because it contains no tenant data.
 }
 
-func (s *service) loadRules(userID string) []WorldBookEntry {
-	rules, err := s.repo.GetAll(userID)
+func (s *service) loadRules(spaceID string) []WorldBookEntry {
+	rules, err := s.repo.GetAll(spaceID)
 	if err != nil {
 		return []WorldBookEntry{}
 	}
 	return rules
 }
 
-func (s *service) loadRulesForCharacter(userID, characterID string) []WorldBookEntry {
+func (s *service) loadRulesForCharacter(spaceID, characterID string) []WorldBookEntry {
 	if characterID == "" {
-		return s.loadRules(userID)
+		return s.loadRules(spaceID)
 	}
-	rules, err := s.repo.GetByCharacterID(userID, characterID)
+	rules, err := s.repo.GetByCharacterID(spaceID, characterID)
 	if err != nil {
 		return []WorldBookEntry{}
 	}
@@ -217,11 +217,11 @@ func (s *service) getRegex(pattern string) (*regexp.Regexp, error) {
 }
 
 func (s *service) TestMatch(text string) (*TestMatchResponse, error) {
-	return s.TestMatchForUser("default", text)
+	return s.TestMatchForSpace("default", text)
 }
 
-func (s *service) TestMatchForUser(userID, text string) (*TestMatchResponse, error) {
-	rules := s.loadRules(userID)
+func (s *service) TestMatchForSpace(spaceID, text string) (*TestMatchResponse, error) {
+	rules := s.loadRules(spaceID)
 	var results []MatchResult
 	for _, rule := range rules {
 		scopedText := s.getScopedText(text, text, text, rule.MatchScope)
@@ -236,15 +236,15 @@ func (s *service) TestMatchForUser(userID, text string) (*TestMatchResponse, err
 }
 
 func (s *service) MatchAndCollect(userMessage, assistantReply string) []MatchResult {
-	return s.MatchAndCollectForUser("default", "", userMessage, assistantReply)
+	return s.MatchAndCollectForSpace("default", "", userMessage, assistantReply)
 }
 
 func (s *service) MatchAndCollectForCharacter(userMessage, assistantReply, characterID string) []MatchResult {
-	return s.MatchAndCollectForUser("default", characterID, userMessage, assistantReply)
+	return s.MatchAndCollectForSpace("default", characterID, userMessage, assistantReply)
 }
 
-func (s *service) MatchAndCollectForUser(userID, characterID, userMessage, assistantReply string) []MatchResult {
-	rules := s.loadRulesForCharacter(userID, characterID)
+func (s *service) MatchAndCollectForSpace(spaceID, characterID, userMessage, assistantReply string) []MatchResult {
+	rules := s.loadRulesForCharacter(spaceID, characterID)
 	var results []MatchResult
 	for _, rule := range rules {
 		fullText := userMessage
@@ -254,14 +254,14 @@ func (s *service) MatchAndCollectForUser(userID, characterID, userMessage, assis
 		scopedText := s.getScopedText(userMessage, assistantReply, fullText, rule.MatchScope)
 		if matched, hitText := s.tryMatch(rule, scopedText); matched {
 			results = append(results, MatchResult{Entry: rule, MatchScope: rule.MatchScope, HitText: hitText})
-			go s.repo.IncrementHitCount(rule.ID, userID)
+			go s.repo.IncrementHitCount(rule.ID, spaceID)
 		}
 	}
 	if s.graphSvc != nil {
 		for _, r := range results {
 			s.syncGraph(&r.Entry)
-			triggerID := triggerNodeID(r.Entry.UserID, r.Entry.ID, r.HitText)
-			s.graphSvc.SyncNode("worldbook_trigger", triggerID, r.HitText, map[string]interface{}{"worldbook_id": r.Entry.ID, "hit_text": r.HitText, "match_scope": r.MatchScope, "user_id": normalizeWorldbookOwner(userID)})
+			triggerID := triggerNodeID(r.Entry.SpaceID, r.Entry.ID, r.HitText)
+			s.graphSvc.SyncNode("worldbook_trigger", triggerID, r.HitText, map[string]interface{}{"worldbook_id": r.Entry.ID, "hit_text": r.HitText, "match_scope": r.MatchScope, "space_id": normalizeWorldbookOwner(spaceID)})
 			s.graphSvc.SyncEdge("worldbook:"+r.Entry.ID, "worldbook_trigger:"+triggerID, "triggered_by", float64(r.Entry.Priority)/10.0)
 		}
 	}
@@ -279,29 +279,29 @@ func (s *service) syncGraph(e *WorldBookEntry) {
 		"inject_content": e.InjectContent,
 		"priority":       e.Priority,
 		"hit_count":      e.HitCount,
-		"user_id":        normalizeWorldbookOwner(e.UserID),
+		"space_id":       normalizeWorldbookOwner(e.SpaceID),
 	})
 }
 
-func (s *service) deleteGraph(id, userID string) {
+func (s *service) deleteGraph(id, spaceID string) {
 	if s.graphSvc == nil || id == "" {
 		return
 	}
-	_ = s.graphSvc.DeleteNodeForUser("worldbook:"+id, normalizeWorldbookOwner(userID))
+	_ = s.graphSvc.DeleteNodeForSpace("worldbook:"+id, normalizeWorldbookOwner(spaceID))
 	_ = s.graphSvc.DeleteNodesByProperty("worldbook_trigger", "worldbook_id", id)
 }
 
-func triggerNodeID(userID, entryID, hitText string) string {
-	sum := sha1.Sum([]byte(normalizeWorldbookOwner(userID) + ":" + entryID + ":" + hitText))
+func triggerNodeID(spaceID, entryID, hitText string) string {
+	sum := sha1.Sum([]byte(normalizeWorldbookOwner(spaceID) + ":" + entryID + ":" + hitText))
 	return fmt.Sprintf("%x", sum)
 }
 
 func (s *service) ToSystemPrompt(userMessage, assistantReply string) string {
-	return s.ToSystemPromptForUser("default", "", userMessage, assistantReply)
+	return s.ToSystemPromptForSpace("default", "", userMessage, assistantReply)
 }
 
-func (s *service) ToSystemPromptForUser(userID, characterID, userMessage, assistantReply string) string {
-	matches := s.MatchAndCollectForUser(userID, characterID, userMessage, assistantReply)
+func (s *service) ToSystemPromptForSpace(spaceID, characterID, userMessage, assistantReply string) string {
+	matches := s.MatchAndCollectForSpace(spaceID, characterID, userMessage, assistantReply)
 	if len(matches) == 0 {
 		return ""
 	}

@@ -20,13 +20,13 @@ func (l *TemporalContextLoader) Name() string           { return "temporal" }
 func (l *TemporalContextLoader) IsRequired() bool       { return false }
 func (l *TemporalContextLoader) Timeout() time.Duration { return 800 * time.Millisecond }
 func (l *TemporalContextLoader) CacheKey(scope InteractionScope, version string) string {
-	return version + ":temporal:" + scope.UserID + ":" + scope.CharacterID + ":" + scope.Channel
+	return version + ":temporal:" + scope.SpaceID + ":" + scope.CharacterID + ":" + scope.Channel
 }
 func (l *TemporalContextLoader) Load(ctx context.Context, scope InteractionScope, version string) (SnapshotField[any], error) {
 	if l.resolver == nil {
 		return FieldUnavailable[any](l.Name()), nil
 	}
-	snapshot, err := l.resolver.ResolveSnapshot(ctx, temporal.SnapshotInput{UserID: scope.UserID, CharacterID: scope.CharacterID, Channel: scope.Channel, DeviceTimezone: temporal.DeviceTimezoneFromContext(ctx)})
+	snapshot, err := l.resolver.ResolveSnapshot(ctx, temporal.SnapshotInput{SpaceID: scope.SpaceID, CharacterID: scope.CharacterID, Channel: scope.Channel, DeviceTimezone: temporal.DeviceTimezoneFromContext(ctx)})
 	if err != nil {
 		return FieldUnavailable[any](l.Name()), err
 	}

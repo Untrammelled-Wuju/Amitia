@@ -14,24 +14,24 @@ import (
 )
 
 type CreateRequest struct {
-	OwnerUserID string
-	WorkspaceID string
-	Kind        Kind
-	MIMEType    string
-	Filename    string
-	Source      Source
-	Width       int
-	Height      int
-	DurationMS  int64
-	Reader      io.Reader
-	MaxBytes    int64
+	OwnerSpaceID string
+	WorkspaceID  string
+	Kind         Kind
+	MIMEType     string
+	Filename     string
+	Source       Source
+	Width        int
+	Height       int
+	DurationMS   int64
+	Reader       io.Reader
+	MaxBytes     int64
 }
 
 type Service struct {
-	blobStore  BlobStore
-	repo       Repository
-	limits     UploadLimits
-	eventSink  *RealEventSink
+	blobStore BlobStore
+	repo      Repository
+	limits    UploadLimits
+	eventSink *RealEventSink
 }
 
 func NewService(blobStore BlobStore, repo Repository, limits UploadLimits) *Service {
@@ -48,7 +48,7 @@ func (s *Service) SetEventSink(sink *RealEventSink) {
 }
 
 func (s *Service) Create(ctx context.Context, req CreateRequest) (Artifact, error) {
-	if req.OwnerUserID == "" {
+	if req.OwnerSpaceID == "" {
 		return Artifact{}, ErrInvalidUpload("missing owner")
 	}
 	if req.Reader == nil {
@@ -89,23 +89,23 @@ func (s *Service) Create(ctx context.Context, req CreateRequest) (Artifact, erro
 	}
 	now := time.Now()
 	art := &Artifact{
-		ID:          ID("art_" + uuid.New().String()),
-		OwnerUserID: req.OwnerUserID,
-		WorkspaceID: req.WorkspaceID,
-		Kind:        kind,
-		BlobDigest:  blobInfo.Digest,
-		SizeBytes:   blobInfo.SizeBytes,
-		MIMEType:    mimeType,
-		Filename:    filename,
-		Extension:   ext,
-		Status:      StatusReady,
-		Source:      req.Source,
-		Width:       req.Width,
-		Height:      req.Height,
-		DurationMS:  req.DurationMS,
-		Revision:    1,
-		CreatedAt:   now,
-		UpdatedAt:   now,
+		ID:           ID("art_" + uuid.New().String()),
+		OwnerSpaceID: req.OwnerSpaceID,
+		WorkspaceID:  req.WorkspaceID,
+		Kind:         kind,
+		BlobDigest:   blobInfo.Digest,
+		SizeBytes:    blobInfo.SizeBytes,
+		MIMEType:     mimeType,
+		Filename:     filename,
+		Extension:    ext,
+		Status:       StatusReady,
+		Source:       req.Source,
+		Width:        req.Width,
+		Height:       req.Height,
+		DurationMS:   req.DurationMS,
+		Revision:     1,
+		CreatedAt:    now,
+		UpdatedAt:    now,
 	}
 
 	sqlDB, err := s.repo.SqlDB()
@@ -147,8 +147,8 @@ func (s *Service) GetByID(ctx context.Context, id ID) (Artifact, error) {
 	return *art, nil
 }
 
-func (s *Service) GetOwned(ctx context.Context, ownerUserID string, id ID) (Artifact, error) {
-	art, err := s.repo.GetByOwnerAndID(ownerUserID, id)
+func (s *Service) GetOwned(ctx context.Context, ownerSpaceID string, id ID) (Artifact, error) {
+	art, err := s.repo.GetByOwnerAndID(ownerSpaceID, id)
 	if err != nil {
 		return Artifact{}, ErrNotFound(id)
 	}
@@ -158,8 +158,8 @@ func (s *Service) GetOwned(ctx context.Context, ownerUserID string, id ID) (Arti
 	return *art, nil
 }
 
-func (s *Service) Delete(ctx context.Context, ownerUserID string, id ID) error {
-	art, err := s.repo.GetByOwnerAndID(ownerUserID, id)
+func (s *Service) Delete(ctx context.Context, ownerSpaceID string, id ID) error {
+	art, err := s.repo.GetByOwnerAndID(ownerSpaceID, id)
 	if err != nil {
 		return ErrNotFound(id)
 	}

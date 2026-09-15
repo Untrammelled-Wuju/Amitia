@@ -6,7 +6,7 @@ func TestUpsertConfidenceClampsCreatedConfidence(t *testing.T) {
 	svc, _ := newProfileTestService(t)
 
 	low, err := svc.repo.UpsertConfidence(&UserProfile{
-		UserID:         "user-1",
+		SpaceID:        "user-1",
 		Category:       "preference",
 		AttributeName:  "低置信度",
 		AttributeValue: "测试",
@@ -20,7 +20,7 @@ func TestUpsertConfidenceClampsCreatedConfidence(t *testing.T) {
 	}
 
 	high, err := svc.repo.UpsertConfidence(&UserProfile{
-		UserID:         "user-1",
+		SpaceID:        "user-1",
 		Category:       "preference",
 		AttributeName:  "高置信度",
 		AttributeValue: "测试",
@@ -38,7 +38,7 @@ func TestRepositoryUpdateClampsConfidence(t *testing.T) {
 	svc, _ := newProfileTestService(t)
 
 	item, err := svc.repo.UpsertConfidence(&UserProfile{
-		UserID:         "user-1",
+		SpaceID:        "user-1",
 		Category:       "preference",
 		AttributeName:  "更新置信度",
 		AttributeValue: "测试",
@@ -75,7 +75,7 @@ func TestUpsertConfidenceDoesNotIncreaseForSameEvidence(t *testing.T) {
 	svc, _ := newProfileTestService(t)
 
 	item, err := svc.repo.UpsertConfidence(&UserProfile{
-		UserID:         "user-1",
+		SpaceID:        "user-1",
 		Category:       "preference",
 		AttributeName:  "饮料",
 		AttributeValue: "茶",
@@ -91,7 +91,7 @@ func TestUpsertConfidenceDoesNotIncreaseForSameEvidence(t *testing.T) {
 	}
 
 	item, err = svc.repo.UpsertConfidence(&UserProfile{
-		UserID:         "user-1",
+		SpaceID:        "user-1",
 		Category:       "preference",
 		AttributeName:  "饮料",
 		AttributeValue: "茶",
@@ -111,7 +111,7 @@ func TestUpsertConfidenceDoesNotIncreaseWithoutEvidence(t *testing.T) {
 	svc, _ := newProfileTestService(t)
 
 	_, err := svc.repo.UpsertConfidence(&UserProfile{
-		UserID:         "user-1",
+		SpaceID:        "user-1",
 		Category:       "preference",
 		AttributeName:  "颜色",
 		AttributeValue: "蓝色",
@@ -122,7 +122,7 @@ func TestUpsertConfidenceDoesNotIncreaseWithoutEvidence(t *testing.T) {
 	}
 
 	item, err := svc.repo.UpsertConfidence(&UserProfile{
-		UserID:         "user-1",
+		SpaceID:        "user-1",
 		Category:       "preference",
 		AttributeName:  "颜色",
 		AttributeValue: "蓝色",
@@ -140,7 +140,7 @@ func TestUpsertConfidenceIncreasesForNewConversationEvidence(t *testing.T) {
 	svc, _ := newProfileTestService(t)
 
 	_, err := svc.repo.UpsertConfidence(&UserProfile{
-		UserID:         "user-1",
+		SpaceID:        "user-1",
 		Category:       "preference",
 		AttributeName:  "音乐",
 		AttributeValue: "爵士",
@@ -152,7 +152,7 @@ func TestUpsertConfidenceIncreasesForNewConversationEvidence(t *testing.T) {
 	}
 
 	item, err := svc.repo.UpsertConfidence(&UserProfile{
-		UserID:         "user-1",
+		SpaceID:        "user-1",
 		Category:       "preference",
 		AttributeName:  "音乐",
 		AttributeValue: "爵士",
@@ -171,7 +171,7 @@ func TestUpsertConfidenceIncreasesForDifferentSourceWhenNoConversationEvidence(t
 	svc, _ := newProfileTestService(t)
 
 	_, err := svc.repo.UpsertConfidence(&UserProfile{
-		UserID:         "user-1",
+		SpaceID:        "user-1",
 		Category:       "habit",
 		AttributeName:  "运动",
 		AttributeValue: "跑步",
@@ -183,7 +183,7 @@ func TestUpsertConfidenceIncreasesForDifferentSourceWhenNoConversationEvidence(t
 	}
 
 	item, err := svc.repo.UpsertConfidence(&UserProfile{
-		UserID:         "user-1",
+		SpaceID:        "user-1",
 		Category:       "habit",
 		AttributeName:  "运动",
 		AttributeValue: "跑步",
@@ -201,7 +201,7 @@ func TestUpsertConfidenceDoesNotIncreaseAtHighConfidence(t *testing.T) {
 	svc, _ := newProfileTestService(t)
 
 	_, err := svc.repo.UpsertConfidence(&UserProfile{
-		UserID:         "user-1",
+		SpaceID:        "user-1",
 		Category:       "preference",
 		AttributeName:  "高置信度锁定",
 		AttributeValue: "测试值",
@@ -213,7 +213,7 @@ func TestUpsertConfidenceDoesNotIncreaseAtHighConfidence(t *testing.T) {
 	}
 
 	item, err := svc.repo.UpsertConfidence(&UserProfile{
-		UserID:         "user-1",
+		SpaceID:        "user-1",
 		Category:       "preference",
 		AttributeName:  "高置信度锁定",
 		AttributeValue: "测试值",
@@ -232,7 +232,7 @@ func TestUpsertConfidenceDoesNotIncreaseForLowerAuthority(t *testing.T) {
 	svc, _ := newProfileTestService(t)
 
 	_, err := svc.repo.UpsertConfidence(&UserProfile{
-		UserID:         "user-1",
+		SpaceID:        "user-1",
 		Category:       "preference",
 		AttributeName:  "管理员设置",
 		AttributeValue: "正式值",
@@ -245,7 +245,7 @@ func TestUpsertConfidenceDoesNotIncreaseForLowerAuthority(t *testing.T) {
 	}
 
 	item, err := svc.repo.UpsertConfidence(&UserProfile{
-		UserID:         "user-1",
+		SpaceID:        "user-1",
 		Category:       "preference",
 		AttributeName:  "管理员设置",
 		AttributeValue: "正式值",
@@ -265,7 +265,7 @@ func TestUpsertConfidenceIncreasesForHigherAuthority(t *testing.T) {
 	svc, _ := newProfileTestService(t)
 
 	_, err := svc.repo.UpsertConfidence(&UserProfile{
-		UserID:         "user-1",
+		SpaceID:        "user-1",
 		Category:       "preference",
 		AttributeName:  "工具提取",
 		AttributeValue: "旧值",
@@ -278,7 +278,7 @@ func TestUpsertConfidenceIncreasesForHigherAuthority(t *testing.T) {
 	}
 
 	item, err := svc.repo.UpsertConfidence(&UserProfile{
-		UserID:         "user-1",
+		SpaceID:        "user-1",
 		Category:       "preference",
 		AttributeName:  "工具提取",
 		AttributeValue: "旧值",

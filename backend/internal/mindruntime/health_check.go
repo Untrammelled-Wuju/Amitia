@@ -33,7 +33,7 @@ type ComponentCheck struct {
 
 type HealthCheckInput struct {
 	Target      HealthCheckTarget
-	UserID      string
+	SpaceID     string
 	CharacterID string
 	ActorID     string
 }

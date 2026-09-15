@@ -22,37 +22,37 @@ func profileOwnerMatches(stored, requested string) bool {
 	return profileLocalSingleUserMode() && requested != "" && (stored == "" || stored == "default")
 }
 
-func (s *service) requireProfileCharacterOwner(characterID, userID string) error {
+func (s *service) requireProfileCharacterOwner(characterID, spaceID string) error {
 	characterID = strings.TrimSpace(characterID)
 	if characterID == "" {
 		return nil
 	}
 	var owner string
-	if err := s.db.Table("characters").Select("user_id").Where("id = ?", characterID).Take(&owner).Error; err != nil {
+	if err := s.db.Table("characters").Select("space_id").Where("id = ?", characterID).Take(&owner).Error; err != nil {
 		return err
 	}
-	if !profileOwnerMatches(owner, userID) {
+	if !profileOwnerMatches(owner, spaceID) {
 		return gorm.ErrRecordNotFound
 	}
 	return nil
 }
 
-func (s *service) requireProfileConversationOwner(conversationID, userID, requestedCharacterID string) (string, error) {
+func (s *service) requireProfileConversationOwner(conversationID, spaceID, requestedCharacterID string) (string, error) {
 	conversationID = strings.TrimSpace(conversationID)
 	if conversationID == "" {
-		if err := s.requireProfileCharacterOwner(requestedCharacterID, userID); err != nil {
+		if err := s.requireProfileCharacterOwner(requestedCharacterID, spaceID); err != nil {
 			return "", err
 		}
 		return strings.TrimSpace(requestedCharacterID), nil
 	}
 	var row struct {
-		UserID      string `gorm:"column:user_id"`
+		SpaceID     string `gorm:"column:space_id"`
 		CharacterID string `gorm:"column:character_id"`
 	}
-	if err := s.db.Table("conversations").Select("user_id, character_id").Where("id = ? AND deleted_at IS NULL", conversationID).Take(&row).Error; err != nil {
+	if err := s.db.Table("conversations").Select("space_id, character_id").Where("id = ? AND deleted_at IS NULL", conversationID).Take(&row).Error; err != nil {
 		return "", err
 	}
-	if !profileOwnerMatches(row.UserID, userID) {
+	if !profileOwnerMatches(row.SpaceID, spaceID) {
 		return "", gorm.ErrRecordNotFound
 	}
 	conversationCharacterID := strings.TrimSpace(row.CharacterID)
@@ -63,16 +63,16 @@ func (s *service) requireProfileConversationOwner(conversationID, userID, reques
 	return conversationCharacterID, nil
 }
 
-func (s *service) CreateForUser(req *CreateProfileRequest, userID string) (*UserProfile, error) {
+func (s *service) CreateForSpace(req *CreateProfileRequest, spaceID string) (*UserProfile, error) {
 	if req == nil {
 		return nil, gorm.ErrInvalidData
 	}
-	characterID, err := s.requireProfileConversationOwner(req.SourceConvID, userID, req.CharacterID)
+	characterID, err := s.requireProfileConversationOwner(req.SourceConvID, spaceID, req.CharacterID)
 	if err != nil {
 		return nil, err
 	}
 	copyReq := *req
-	copyReq.UserID = strings.TrimSpace(userID)
+	copyReq.SpaceID = strings.TrimSpace(spaceID)
 	copyReq.CharacterID = characterID
 	return s.Create(&copyReq)
 }

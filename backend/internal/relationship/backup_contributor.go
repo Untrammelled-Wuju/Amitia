@@ -32,7 +32,7 @@ func (r *RelationshipBackupContributor) Dependencies() []string {
 type relationshipRecordV1 struct {
 	ID               string  `json:"id"`
 	CharacterID      string  `json:"characterId"`
-	UserID           string  `json:"userId"`
+	SpaceID          string  `json:"spaceId"`
 	Channel          string  `json:"channel"`
 	RelationType     string  `json:"relationType"`
 	Trust            float64 `json:"trust"`
@@ -48,7 +48,7 @@ type relationshipRecordV1 struct {
 type relationshipStateDB struct {
 	ID           string `gorm:"column:id"`
 	CharacterID  string `gorm:"column:character_id"`
-	UserID       string `gorm:"column:user_id"`
+	SpaceID      string `gorm:"column:space_id"`
 	Channel      string `gorm:"column:channel"`
 	RelationType string `gorm:"column:relation_type"`
 	RelationData string `gorm:"column:relation_data"`
@@ -85,7 +85,7 @@ func (r *RelationshipBackupContributor) Export(ctx context.Context, req dataport
 	defer compW.Close()
 
 	query := r.DB.WithContext(ctx).Table("relationship_states").Select(
-		"id, character_id, user_id, channel, relation_type, relation_data, created_at, updated_at",
+		"id, character_id, space_id, channel, relation_type, relation_data, created_at, updated_at",
 	)
 	if req.Scope == dataportability.ScopeCharacter && req.CharacterID != "" {
 		query = query.Where("character_id = ?", req.CharacterID)
@@ -112,7 +112,7 @@ func (r *RelationshipBackupContributor) Export(ctx context.Context, req dataport
 		rec := relationshipRecordV1{
 			ID:               dbRec.ID,
 			CharacterID:      dbRec.CharacterID,
-			UserID:           dbRec.UserID,
+			SpaceID:          dbRec.SpaceID,
 			Channel:          dbRec.Channel,
 			RelationType:     dbRec.RelationType,
 			Trust:            state.Trust,
@@ -234,7 +234,7 @@ func (r *RelationshipBackupContributor) RestoreRelationships(ctx context.Context
 		if newID == rec.ID && existing.ID != "" {
 			r.DB.WithContext(ctx).Table("relationship_states").Where("id = ?", rec.ID).Updates(map[string]interface{}{
 				"character_id":  rec.CharacterID,
-				"user_id":       rec.UserID,
+				"space_id":      rec.SpaceID,
 				"channel":       rec.Channel,
 				"relation_type": rec.RelationType,
 				"relation_data": string(relDataBytes),
@@ -245,7 +245,7 @@ func (r *RelationshipBackupContributor) RestoreRelationships(ctx context.Context
 			r.DB.WithContext(ctx).Table("relationship_states").Create(map[string]interface{}{
 				"id":            newID,
 				"character_id":  rec.CharacterID,
-				"user_id":       rec.UserID,
+				"space_id":      rec.SpaceID,
 				"channel":       rec.Channel,
 				"relation_type": rec.RelationType,
 				"relation_data": string(relDataBytes),

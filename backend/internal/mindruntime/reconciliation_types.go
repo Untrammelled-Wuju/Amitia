@@ -16,7 +16,7 @@ const (
 	ReconciliationLeaseDelivery        ReconciliationTarget = "lease_delivery"
 	ReconciliationTombstoneDerivedData ReconciliationTarget = "tombstone_derived_data"
 
-	ReconciliationAgentGoalAction       ReconciliationTarget = "agent_goal_action"
+	ReconciliationAgentGoalAction        ReconciliationTarget = "agent_goal_action"
 	ReconciliationAgentActionObservation ReconciliationTarget = "agent_action_observation"
 	ReconciliationAgentObservationGoal   ReconciliationTarget = "agent_observation_goal"
 	ReconciliationAgentTask              ReconciliationTarget = "agent_task"
@@ -99,11 +99,11 @@ type ReconciliationCheckRequest struct {
 	CursorID  string                 `json:"cursorId,omitempty"`
 	BatchSize int                    `json:"batchSize"`
 	StartedAt time.Time              `json:"startedAt"`
-	Scope     *ReconciliationScope  `json:"scope,omitempty"`
+	Scope     *ReconciliationScope   `json:"scope,omitempty"`
 }
 
 type ReconciliationScope struct {
-	UserID         string   `json:"userId"`
+	SpaceID        string   `json:"spaceId"`
 	CharacterID    string   `json:"characterId"`
 	ConversationID string   `json:"conversationId"`
 	InteractionID  string   `json:"interactionId,omitempty"`
@@ -116,7 +116,7 @@ func (s *ReconciliationScope) Normalize() *ReconciliationScope {
 		return nil
 	}
 	return &ReconciliationScope{
-		UserID:         strings.TrimSpace(s.UserID),
+		SpaceID:        strings.TrimSpace(s.SpaceID),
 		CharacterID:    strings.TrimSpace(s.CharacterID),
 		ConversationID: strings.TrimSpace(s.ConversationID),
 		InteractionID:  strings.TrimSpace(s.InteractionID),
@@ -161,6 +161,7 @@ func (s *ReconciliationScope) HasGoal(goalID string) bool {
 func DefaultAgentFactSettleDelay() time.Duration {
 	return 3 * time.Second
 }
+
 type ReconciliationChecker interface {
 	CheckReconciliation(context.Context, ReconciliationCheckRequest) ([]ReconciliationDiff, error)
 }

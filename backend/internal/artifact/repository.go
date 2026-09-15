@@ -11,7 +11,7 @@ type Repository interface {
 	Create(tx *gorm.DB, artifact *Artifact) error
 	CreateSqlTx(tx *sql.Tx, artifact *Artifact) error
 	GetByID(id ID) (*Artifact, error)
-	GetByOwnerAndID(ownerUserID string, id ID) (*Artifact, error)
+	GetByOwnerAndID(ownerSpaceID string, id ID) (*Artifact, error)
 	SoftDelete(tx *gorm.DB, id ID) error
 	SoftDeleteSqlTx(tx *sql.Tx, id ID) error
 	InsertReference(tx *gorm.DB, ref *ArtifactReference) error
@@ -46,12 +46,12 @@ func (r *sqliteRepository) Create(tx *gorm.DB, artifact *Artifact) error {
 func (r *sqliteRepository) CreateSqlTx(tx *sql.Tx, artifact *Artifact) error {
 	_, err := tx.Exec(
 		`INSERT INTO artifacts (
-			artifact_id, owner_user_id, workspace_id, kind, blob_digest,
+			artifact_id, owner_space_id, workspace_id, kind, blob_digest,
 			size_bytes, mime_type, filename, file_extension, status,
 			source, width, height, duration_ms, revision,
 			created_at, updated_at
 		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		artifact.ID, artifact.OwnerUserID, artifact.WorkspaceID, artifact.Kind, artifact.BlobDigest,
+		artifact.ID, artifact.OwnerSpaceID, artifact.WorkspaceID, artifact.Kind, artifact.BlobDigest,
 		artifact.SizeBytes, artifact.MIMEType, artifact.Filename, artifact.Extension, artifact.Status,
 		artifact.Source, artifact.Width, artifact.Height, artifact.DurationMS, artifact.Revision,
 		artifact.CreatedAt, artifact.UpdatedAt,
@@ -65,9 +65,9 @@ func (r *sqliteRepository) GetByID(id ID) (*Artifact, error) {
 	return &a, err
 }
 
-func (r *sqliteRepository) GetByOwnerAndID(ownerUserID string, id ID) (*Artifact, error) {
+func (r *sqliteRepository) GetByOwnerAndID(ownerSpaceID string, id ID) (*Artifact, error) {
 	var a Artifact
-	err := r.db.Where("artifact_id = ? AND owner_user_id = ?", id, ownerUserID).First(&a).Error
+	err := r.db.Where("artifact_id = ? AND owner_space_id = ?", id, ownerSpaceID).First(&a).Error
 	return &a, err
 }
 

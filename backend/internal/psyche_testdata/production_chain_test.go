@@ -97,7 +97,7 @@ func productionUnifiedEntryRequest(c Case, requestID string) *interaction.Unifie
 	return &interaction.UnifiedEntryRequest{
 		Channel:        channel,
 		Source:         channel,
-		UserID:         "user-" + c.ID,
+		SpaceID:        "user-" + c.ID,
 		CharacterID:    "char-" + c.Category,
 		ConversationID: "conv-" + c.ID,
 		PeerID:         "peer-" + c.ID,

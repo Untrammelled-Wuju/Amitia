@@ -28,13 +28,13 @@ func (h *Handler) VoiceUpload(c *gin.Context) {
 	defer file.Close()
 
 	if h.artifactSvc != nil {
-		owner := currentUserID(c)
+		owner := currentSpaceID(c)
 		art, err := h.artifactSvc.Create(c.Request.Context(), artifact.CreateRequest{
-			OwnerUserID: owner,
-			Kind:        artifact.KindAudio,
-			Filename:    header.Filename,
-			Source:      artifact.SourceUserUpload,
-			Reader:      file,
+			OwnerSpaceID: owner,
+			Kind:         artifact.KindAudio,
+			Filename:     header.Filename,
+			Source:       artifact.SourceUserUpload,
+			Reader:       file,
 		})
 		if err != nil {
 			util.ErrorResponse(c, response.InternalError, "上传失败: "+err.Error(), nil)
@@ -86,13 +86,13 @@ func (h *Handler) ImageUpload(c *gin.Context) {
 	defer file.Close()
 
 	if h.artifactSvc != nil {
-		owner := currentUserID(c)
+		owner := currentSpaceID(c)
 		art, err := h.artifactSvc.Create(c.Request.Context(), artifact.CreateRequest{
-			OwnerUserID: owner,
-			Kind:        artifact.KindImage,
-			Filename:    header.Filename,
-			Source:      artifact.SourceUserUpload,
-			Reader:      file,
+			OwnerSpaceID: owner,
+			Kind:         artifact.KindImage,
+			Filename:     header.Filename,
+			Source:       artifact.SourceUserUpload,
+			Reader:       file,
 		})
 		if err != nil {
 			util.ErrorResponse(c, response.InternalError, "上传失败: "+err.Error(), nil)
@@ -143,13 +143,13 @@ func (h *Handler) VideoUpload(c *gin.Context) {
 	defer file.Close()
 
 	if h.artifactSvc != nil {
-		owner := currentUserID(c)
+		owner := currentSpaceID(c)
 		art, err := h.artifactSvc.Create(c.Request.Context(), artifact.CreateRequest{
-			OwnerUserID: owner,
-			Kind:        artifact.KindVideo,
-			Filename:    header.Filename,
-			Source:      artifact.SourceUserUpload,
-			Reader:      file,
+			OwnerSpaceID: owner,
+			Kind:         artifact.KindVideo,
+			Filename:     header.Filename,
+			Source:       artifact.SourceUserUpload,
+			Reader:       file,
 		})
 		if err != nil {
 			util.ErrorResponse(c, response.InternalError, "上传失败: "+err.Error(), nil)
@@ -200,7 +200,7 @@ func resolveAudioURL(c *gin.Context, h *Handler, audioURL string) (string, error
 		if err != nil {
 			return "", err
 		}
-		art, err := h.artifactSvc.GetOwned(c.Request.Context(), currentUserID(c), id)
+		art, err := h.artifactSvc.GetOwned(c.Request.Context(), currentSpaceID(c), id)
 		if err != nil {
 			return "", err
 		}
@@ -240,8 +240,8 @@ func resolveAudioURL(c *gin.Context, h *Handler, audioURL string) (string, error
 	return audioURL, nil
 }
 
-func currentUserID(c *gin.Context) string {
-	return requestidentity.ResolveGin(c, "")
+func currentSpaceID(c *gin.Context) string {
+	return requestidentity.ResolveGin(c)
 }
 
 func (h *Handler) VoiceTranscribe(c *gin.Context) {

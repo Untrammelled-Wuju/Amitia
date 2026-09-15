@@ -57,7 +57,7 @@ func (s *service) checkConflictOwned(req *CheckConflictRequest) (*CheckConflictR
 	}
 	var existing []Memory
 	q := s.db.Model(&Memory{}).Where("key = ?", req.Key)
-	q = applyMemoryScopeQuery(q, req.CharacterID, req.UserID)
+	q = applyMemoryScopeQuery(q, req.CharacterID, req.SpaceID)
 	if err := q.Find(&existing).Error; err != nil {
 		return nil, err
 	}
@@ -81,8 +81,8 @@ func (s *service) checkConflictOwned(req *CheckConflictRequest) (*CheckConflictR
 	return &CheckConflictResponse{HasConflict: len(conflicts) > 0, Conflicts: conflicts}, nil
 }
 
-func (s *service) autoResolveConflictOwned(key, value, characterID, userID string, newConfidence int) (*ResolveConflictResponse, error) {
-	check, err := s.checkConflictOwned(&CheckConflictRequest{UserID: userID, Key: key, Value: value, CharacterID: characterID})
+func (s *service) autoResolveConflictOwned(key, value, characterID, spaceID string, newConfidence int) (*ResolveConflictResponse, error) {
+	check, err := s.checkConflictOwned(&CheckConflictRequest{SpaceID: spaceID, Key: key, Value: value, CharacterID: characterID})
 	if err != nil || check == nil || !check.HasConflict {
 		return nil, err
 	}
@@ -92,10 +92,10 @@ func (s *service) autoResolveConflictOwned(key, value, characterID, userID strin
 		if conflict.Memory.ID == "" {
 			continue
 		}
-		return s.ResolveConflictForUser(&ResolveConflictRequest{
-			UserID: userID, Action: "replace_old", NewKey: key, NewValue: value,
+		return s.ResolveConflictForSpace(&ResolveConflictRequest{
+			SpaceID: spaceID, Action: "replace_old", NewKey: key, NewValue: value,
 			CharacterID: characterID, ConflictID: conflict.Memory.ID, Importance: conflict.Memory.Importance,
-		}, userID)
+		}, spaceID)
 	}
 	return nil, nil
 }
@@ -167,7 +167,7 @@ func (s *service) ResolveConflict(req *ResolveConflictRequest) (*ResolveConflict
 		}
 		operationID := uuid.New().String()
 		m, err := s.createCanonicalMemory(canonicalCreateRequest{
-			UserID:         req.UserID,
+			SpaceID:        req.SpaceID,
 			CharacterID:    characterID,
 			MemoryType:     memoryType,
 			Source:         "manual",
@@ -193,7 +193,7 @@ func (s *service) ResolveConflict(req *ResolveConflictRequest) (*ResolveConflict
 	case "keep_both":
 		operationID := uuid.New().String()
 		m, err := s.createCanonicalMemory(canonicalCreateRequest{
-			UserID:         req.UserID,
+			SpaceID:        req.SpaceID,
 			CharacterID:    characterID,
 			MemoryType:     memoryType,
 			Source:         "manual",
@@ -241,7 +241,7 @@ func (s *service) ResolveConflict(req *ResolveConflictRequest) (*ResolveConflict
 		}
 		operationID := uuid.New().String()
 		m, err := s.createCanonicalMemory(canonicalCreateRequest{
-			UserID:         req.UserID,
+			SpaceID:        req.SpaceID,
 			CharacterID:    characterID,
 			MemoryType:     memoryType,
 			Source:         "manual",

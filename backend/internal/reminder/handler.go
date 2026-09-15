@@ -164,9 +164,5 @@ func (h *Handler) ClearBackpressure(c *gin.Context) {
 }
 
 func owner(c *gin.Context) string {
-	value := requestidentity.ResolveGin(c, "")
-	if value == "" {
-		return "default"
-	}
-	return value
+	return requestidentity.ResolveGin(c)
 }

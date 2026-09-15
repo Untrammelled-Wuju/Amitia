@@ -10,7 +10,7 @@ type DesktopPetChatLifecycle struct {
 	InteractionID  string
 	MessageID      string
 	CharacterID    string
-	UserID         string
+	SpaceID        string
 	ConversationID string
 	Phase          string
 	StatusVersion  int64
@@ -22,7 +22,7 @@ type DesktopPetChatLifecycle struct {
 type DesktopPetToolLifecycle struct {
 	InteractionID string
 	CharacterID   string
-	UserID        string
+	SpaceID       string
 	OperationID   string
 	ToolCallID    string
 	ToolName      string
@@ -56,7 +56,7 @@ func (s *service) emitDesktopPetChat(ctx context.Context, req *ProcessMessageReq
 	}
 	s.desktopPetLifecycle.OnDesktopPetChatLifecycle(ctx, DesktopPetChatLifecycle{
 		InteractionID: interactionID, MessageID: messageID, CharacterID: charID,
-		UserID: req.UserID, ConversationID: convID, Phase: phase, StatusVersion: version,
+		SpaceID: req.SpaceID, ConversationID: convID, Phase: phase, StatusVersion: version,
 		Origin: req.Source, CorrelationID: req.RequestID, OccurredAt: time.Now().UTC(),
 	})
 }
@@ -70,7 +70,7 @@ func (s *service) emitDesktopPetTool(ctx context.Context, scope SkillScope, tool
 		operationID = strings.TrimSpace(scope.RequestID) + ":" + strings.TrimSpace(toolName)
 	}
 	s.desktopPetLifecycle.OnDesktopPetToolLifecycle(ctx, DesktopPetToolLifecycle{
-		InteractionID: scope.RequestID, CharacterID: scope.CharacterID, UserID: scope.UserID,
+		InteractionID: scope.RequestID, CharacterID: scope.CharacterID, SpaceID: scope.SpaceID,
 		OperationID: operationID, ToolCallID: toolCallID, ToolName: toolName,
 		ToolCategory: inferDesktopPetToolCategory(toolName), DisplayClass: inferDesktopPetToolDisplayClass(toolName),
 		Phase: phase, Depth: depth, ErrorClass: errorClass, OccurredAt: time.Now().UTC(),

@@ -20,8 +20,8 @@ func (s *service) GetMessages(convID string, page, pageSize int) ([]Message, int
 	return s.repo.GetMessages(convID, page, pageSize)
 }
 
-func (s *service) GetMessagesForUser(convID, userID string, page, pageSize int) ([]Message, int64, error) {
-	if _, err := s.requireConversationOwner(convID, userID); err != nil {
+func (s *service) GetMessagesForSpace(convID, spaceID string, page, pageSize int) ([]Message, int64, error) {
+	if _, err := s.requireConversationOwner(convID, spaceID); err != nil {
 		return nil, 0, err
 	}
 	return s.repo.GetMessages(convID, page, pageSize)
@@ -50,11 +50,11 @@ func (s *service) removeAttachmentReferences(tx *gorm.DB, attachments []MessageA
 }
 
 func (s *service) DeleteMessages(convID string) error {
-	return s.DeleteMessagesForUser(convID, requestidentity.DefaultUserID)
+	return s.DeleteMessagesForSpace(convID, requestidentity.CanonicalSpaceID())
 }
 
-func (s *service) DeleteMessagesForUser(convID string, userID string) error {
-	if _, err := s.requireConversationOwner(convID, userID); err != nil {
+func (s *service) DeleteMessagesForSpace(convID string, spaceID string) error {
+	if _, err := s.requireConversationOwner(convID, spaceID); err != nil {
 		return err
 	}
 	var attachments []MessageAttachment
@@ -93,7 +93,7 @@ func (s *service) DeleteMessagesForUser(convID string, userID string) error {
 			if result.RowsAffected == 0 {
 				return fmt.Errorf("消息版本冲突")
 			}
-			if err := s.recordMessageChangeTx(tx, message, syncapi.OpDelete, row.Revision+1, userID); err != nil {
+			if err := s.recordMessageChangeTx(tx, message, syncapi.OpDelete, row.Revision+1, spaceID); err != nil {
 				return err
 			}
 		}
@@ -116,11 +116,11 @@ func (s *service) DeleteMessagesScoped(convID string, characterID string) error 
 }
 
 func (s *service) DeleteSingleMessage(id string) error {
-	return s.DeleteSingleMessageForUser(id, requestidentity.DefaultUserID)
+	return s.DeleteSingleMessageForSpace(id, requestidentity.CanonicalSpaceID())
 }
 
-func (s *service) DeleteSingleMessageForUser(id string, userID string) error {
-	owned, err := s.requireMessageOwner(id, userID)
+func (s *service) DeleteSingleMessageForSpace(id string, spaceID string) error {
+	owned, err := s.requireMessageOwner(id, spaceID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return fmt.Errorf("消息不存在")
@@ -152,7 +152,7 @@ func (s *service) DeleteSingleMessageForUser(id string, userID string) error {
 		if result.RowsAffected == 0 {
 			return fmt.Errorf("消息版本冲突")
 		}
-		if err := s.recordMessageChangeTx(tx, &msg, syncapi.OpDelete, revision+1, userID); err != nil {
+		if err := s.recordMessageChangeTx(tx, &msg, syncapi.OpDelete, revision+1, spaceID); err != nil {
 			return err
 		}
 		if err := tx.Where("message_id = ?", id).Delete(&MessageAttachment{}).Error; err != nil {
@@ -198,11 +198,11 @@ func (s *service) SearchMessages(q MessageSearchQuery) (*MessageSearchResponse, 
 	return &MessageSearchResponse{Items: items, Total: total, Page: q.Page, PageSize: q.PageSize, TotalPages: totalPages}, nil
 }
 
-func (s *service) SearchMessagesForUser(q MessageSearchQuery, userID string) (*MessageSearchResponse, error) {
-	q.UserID = normalizeConversationOwner(userID)
+func (s *service) SearchMessagesForSpace(q MessageSearchQuery, spaceID string) (*MessageSearchResponse, error) {
+	q.SpaceID = normalizeConversationOwner(spaceID)
 	q.IncludeLegacyDefault = chatLocalSingleUserMode()
 	if q.ConversationID != "" {
-		if _, err := s.requireConversationOwner(q.ConversationID, userID); err != nil {
+		if _, err := s.requireConversationOwner(q.ConversationID, spaceID); err != nil {
 			return nil, err
 		}
 	}
@@ -255,7 +255,7 @@ func (s *service) Chat(req *ChatRequest) (*ChatResponse, error) {
 		Channel:        channel,
 		Source:         source,
 		PeerID:         req.PeerID,
-		UserID:         req.UserID,
+		SpaceID:        req.SpaceID,
 		RequestID:      req.RequestID,
 	})
 	if err != nil {
@@ -282,7 +282,7 @@ func (s *service) Chat(req *ChatRequest) (*ChatResponse, error) {
 	}, nil
 }
 
-func (s *service) validateConversationScope(convID, characterID, channel, userID string) error {
+func (s *service) validateConversationScope(convID, characterID, channel, spaceID string) error {
 	convID = strings.TrimSpace(convID)
 	if convID == "" {
 		return nil
@@ -294,8 +294,8 @@ func (s *service) validateConversationScope(convID, characterID, channel, userID
 		}
 		return err
 	}
-	if !conversationOwnerMatches(conv.UserID, userID) {
-		return fmt.Errorf("%w: user_id", ErrConversationScopeMismatch)
+	if !conversationOwnerMatches(conv.SpaceID, spaceID) {
+		return fmt.Errorf("%w: space_id", ErrConversationScopeMismatch)
 	}
 	actualCharacterID := strings.TrimSpace(conv.CharacterID)
 	expectedCharacterID := strings.TrimSpace(characterID)

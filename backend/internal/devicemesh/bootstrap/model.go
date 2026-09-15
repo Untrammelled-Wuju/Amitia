@@ -23,7 +23,7 @@ const (
 type BootstrapTicket struct {
 	TicketID   string
 	TicketHash string
-	UserID     runtimeidentity.UserID
+	SpaceID    runtimeidentity.SpaceID
 	DeviceID   runtimeidentity.DeviceID
 	RuntimeID  runtimeidentity.RuntimeID
 	Platform   runtimeidentity.Platform

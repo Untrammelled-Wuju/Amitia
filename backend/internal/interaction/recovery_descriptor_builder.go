@@ -147,7 +147,7 @@ func (b *RecoveryDescriptorBuilder) Build(ctx context.Context, input RecoveryDes
 			CommitID:      commitID,
 		},
 		Scope: RecoveryScopeRef{
-			UserID:         scope.UserID,
+			SpaceID:        scope.SpaceID,
 			CharacterID:    scope.CharacterID,
 			ConversationID: scope.ConversationID,
 			Channel:        scope.Channel,
@@ -209,7 +209,7 @@ func (b *RecoveryDescriptorBuilder) attachGoals(ctx context.Context, desc *Recov
 		if !ok {
 			return fmt.Errorf("goal_missing: %s", ref.ID)
 		}
-		if g.UserID != scope.UserID {
+		if g.SpaceID != scope.SpaceID {
 			return fmt.Errorf("goal_scope_mismatch: %s", ref.ID)
 		}
 		if g.CharacterID != "" && scope.CharacterID != "" && g.CharacterID != scope.CharacterID {

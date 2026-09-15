@@ -76,11 +76,11 @@ func (h *psycheSnapshotHandler) handleMessageSnapshot(c *gin.Context) {
 		Select("c.character_id, m.created_at").
 		Joins("JOIN conversations AS c ON c.id = m.conversation_id").
 		Where("m.id = ?", messageID)
-	owner := requestidentity.NormalizeUserID(requestidentity.ResolveGin(c, ""))
+	owner := requestidentity.NormalizeSpaceID(requestidentity.ResolveGin(c))
 	if webChatLocalSingleUserMode() {
-		query = query.Where("(c.user_id = ? OR c.user_id = '' OR c.user_id IS NULL OR c.user_id = ?)", owner, requestidentity.DefaultUserID)
+		query = query.Where("(c.space_id = ? OR c.space_id = '' OR c.space_id IS NULL OR c.space_id = ?)", owner, requestidentity.LegacySpaceID)
 	} else {
-		query = query.Where("c.user_id = ?", owner)
+		query = query.Where("c.space_id = ?", owner)
 	}
 	err := query.Take(&row).Error
 	if err != nil || row.CharacterID == "" {
@@ -200,7 +200,7 @@ func (h *psycheSnapshotHandler) handle(c *gin.Context) {
 
 func (h *psycheSnapshotHandler) characterOwned(c *gin.Context, characterID string) bool {
 	var count int64
-	query := webChatOwnerQuery(h.db.Table("characters").Where("deleted_at IS NULL"), requestidentity.ResolveGin(c, ""))
+	query := webChatOwnerQuery(h.db.Table("characters").Where("deleted_at IS NULL"), requestidentity.ResolveGin(c))
 	if err := query.Where("id = ?", characterID).Count(&count).Error; err != nil {
 		return false
 	}

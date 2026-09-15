@@ -17,7 +17,7 @@ func TestSQLiteInteractionTrackerPersistsFullScopeAndCAS(t *testing.T) {
 	tracker := newTestSQLiteInteractionTracker(t)
 	ctx := context.Background()
 	record := NewInteractionRecord(InteractionScope{
-		UserID:         "user-1",
+		SpaceID:        "user-1",
 		CharacterID:    "char-1",
 		ConversationID: "conv-1",
 		Channel:        "web",
@@ -40,7 +40,7 @@ func TestSQLiteInteractionTrackerPersistsFullScopeAndCAS(t *testing.T) {
 	if !ok {
 		t.Fatal("record missing")
 	}
-	if got.Scope.UserID != "user-1" || got.Scope.PeerID != "peer-1" || got.Scope.SessionID != "session-1" || got.Scope.RequestID != "request-1" {
+	if got.Scope.SpaceID != "user-1" || got.Scope.PeerID != "peer-1" || got.Scope.SessionID != "session-1" || got.Scope.RequestID != "request-1" {
 		t.Fatalf("scope was not fully restored: %#v", got.Scope)
 	}
 
@@ -60,7 +60,7 @@ func TestSQLiteInteractionTrackerUpdateMetadata(t *testing.T) {
 	tracker := newTestSQLiteInteractionTracker(t)
 	ctx := context.Background()
 	record := NewInteractionRecord(InteractionScope{
-		UserID:         "user-1",
+		SpaceID:        "user-1",
 		CharacterID:    "char-1",
 		ConversationID: "conv-1",
 		Channel:        "web",
@@ -110,7 +110,7 @@ func TestSQLiteInteractionTrackerGetByRequestID(t *testing.T) {
 	tracker := newTestSQLiteInteractionTracker(t)
 	ctx := context.Background()
 	record := NewInteractionRecord(InteractionScope{
-		UserID:         "user-1",
+		SpaceID:        "user-1",
 		CharacterID:    "char-1",
 		ConversationID: "conv-1",
 		Channel:        "web",
@@ -127,7 +127,7 @@ func TestSQLiteInteractionTrackerGetByRequestID(t *testing.T) {
 	if !ok {
 		t.Fatal("record missing by request id")
 	}
-	if got.ID != record.ID || got.Scope.UserID != "user-1" || got.Scope.RequestID != "request-1" {
+	if got.ID != record.ID || got.Scope.SpaceID != "user-1" || got.Scope.RequestID != "request-1" {
 		t.Fatalf("unexpected record: %#v", got)
 	}
 	if _, ok, err := tracker.GetByRequestID(ctx, "user-2", "request-1"); err != nil || ok {
@@ -142,7 +142,7 @@ func TestSQLiteInteractionTrackerRejectsDuplicateRequestID(t *testing.T) {
 	tracker := newTestSQLiteInteractionTracker(t)
 	ctx := context.Background()
 	first := NewInteractionRecord(InteractionScope{
-		UserID:         "user-1",
+		SpaceID:        "user-1",
 		CharacterID:    "char-1",
 		ConversationID: "conv-1",
 		Channel:        "web",
@@ -152,7 +152,7 @@ func TestSQLiteInteractionTrackerRejectsDuplicateRequestID(t *testing.T) {
 		t.Fatal(err)
 	}
 	duplicate := NewInteractionRecord(InteractionScope{
-		UserID:         "user-1",
+		SpaceID:        "user-1",
 		CharacterID:    "char-2",
 		ConversationID: "conv-2",
 		Channel:        "web",
@@ -173,16 +173,16 @@ func TestSQLiteInteractionTrackerRejectsDuplicateRequestID(t *testing.T) {
 func TestSQLiteInteractionTrackerAllowsSameRequestIDForDifferentUsers(t *testing.T) {
 	tracker := newTestSQLiteInteractionTracker(t)
 	ctx := context.Background()
-	for _, userID := range []string{"user-1", "user-2"} {
+	for _, spaceID := range []string{"user-1", "user-2"} {
 		record := NewInteractionRecord(InteractionScope{
-			UserID:         userID,
+			SpaceID:        spaceID,
 			CharacterID:    "char-1",
-			ConversationID: "conv-" + userID,
+			ConversationID: "conv-" + spaceID,
 			Channel:        "web",
 			RequestID:      "request-1",
 		})
 		if err := tracker.Create(ctx, record); err != nil {
-			t.Fatalf("create for %s: %v", userID, err)
+			t.Fatalf("create for %s: %v", spaceID, err)
 		}
 	}
 }
@@ -190,7 +190,7 @@ func TestSQLiteInteractionTrackerAllowsSameRequestIDForDifferentUsers(t *testing
 func TestSQLiteInteractionTrackerListActiveIncludesDelivered(t *testing.T) {
 	tracker := newTestSQLiteInteractionTracker(t)
 	ctx := context.Background()
-	scope := InteractionScope{UserID: "user-1", CharacterID: "char-1", ConversationID: "conv-1", Channel: "web"}
+	scope := InteractionScope{SpaceID: "user-1", CharacterID: "char-1", ConversationID: "conv-1", Channel: "web"}
 	record := NewInteractionRecord(scope)
 	if err := tracker.Create(ctx, record); err != nil {
 		t.Fatal(err)
@@ -235,7 +235,7 @@ func TestSQLiteInteractionTrackerConcurrentDuplicateRequestID(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			record := NewInteractionRecord(InteractionScope{
-				UserID:         "user-1",
+				SpaceID:        "user-1",
 				CharacterID:    "char-1",
 				ConversationID: "conv-1",
 				Channel:        "web",
@@ -262,7 +262,7 @@ func TestSQLiteInteractionTrackerConcurrentDuplicateRequestID(t *testing.T) {
 		t.Fatalf("unexpected results: successes=%d duplicates=%d", successes, duplicates)
 	}
 	var count int64
-	if err := tracker.db.Model(&InteractionRecordModel{}).Where("user_id = ? AND request_id = ?", "user-1", "request-concurrent").Count(&count).Error; err != nil {
+	if err := tracker.db.Model(&InteractionRecordModel{}).Where("space_id = ? AND request_id = ?", "user-1", "request-concurrent").Count(&count).Error; err != nil {
 		t.Fatal(err)
 	}
 	if count != 1 {
@@ -273,7 +273,7 @@ func TestSQLiteInteractionTrackerConcurrentDuplicateRequestID(t *testing.T) {
 func TestSQLiteInteractionTrackerCancelAndArchiveKeepsRecord(t *testing.T) {
 	tracker := newTestSQLiteInteractionTracker(t)
 	ctx := context.Background()
-	record := NewInteractionRecord(InteractionScope{UserID: "user-1", CharacterID: "char-1", ConversationID: "conv-1", Channel: "web"})
+	record := NewInteractionRecord(InteractionScope{SpaceID: "user-1", CharacterID: "char-1", ConversationID: "conv-1", Channel: "web"})
 	if err := tracker.Create(ctx, record); err != nil {
 		t.Fatal(err)
 	}
@@ -315,7 +315,7 @@ func TestSQLiteInteractionTrackerCancelAndArchiveKeepsRecord(t *testing.T) {
 func TestSQLiteInteractionTrackerTerminalOperationsRespectStateMachine(t *testing.T) {
 	tracker := newTestSQLiteInteractionTracker(t)
 	ctx := context.Background()
-	record := NewInteractionRecord(InteractionScope{UserID: "user-1", CharacterID: "char-1", ConversationID: "conv-1", Channel: "web"})
+	record := NewInteractionRecord(InteractionScope{SpaceID: "user-1", CharacterID: "char-1", ConversationID: "conv-1", Channel: "web"})
 	if err := tracker.Create(ctx, record); err != nil {
 		t.Fatal(err)
 	}
@@ -355,7 +355,7 @@ func TestSQLiteInteractionTrackerTerminalOperationsRespectStateMachine(t *testin
 func TestSQLiteInteractionTrackerMarkSupersededRequiresValidSuperseder(t *testing.T) {
 	tracker := newTestSQLiteInteractionTracker(t)
 	ctx := context.Background()
-	scope := InteractionScope{UserID: "user-1", CharacterID: "char-1", ConversationID: "conv-1", Channel: "web"}
+	scope := InteractionScope{SpaceID: "user-1", CharacterID: "char-1", ConversationID: "conv-1", Channel: "web"}
 	target := NewInteractionRecord(scope)
 	if err := tracker.Create(ctx, target); err != nil {
 		t.Fatal(err)
@@ -371,7 +371,7 @@ func TestSQLiteInteractionTrackerMarkSupersededRequiresValidSuperseder(t *testin
 		t.Fatalf("target should remain active after failed supersede: ok=%v record=%#v", ok, got)
 	}
 
-	otherScope := NewInteractionRecord(InteractionScope{UserID: "user-1", CharacterID: "char-2", ConversationID: "conv-2", Channel: "web"})
+	otherScope := NewInteractionRecord(InteractionScope{SpaceID: "user-1", CharacterID: "char-2", ConversationID: "conv-2", Channel: "web"})
 	if err := tracker.Create(ctx, otherScope); err != nil {
 		t.Fatal(err)
 	}
@@ -401,7 +401,7 @@ func TestSQLiteInteractionTrackerMarkSupersededRequiresValidSuperseder(t *testin
 func TestSQLiteInteractionTrackerMarkSupersededValidSupersederIsAtomic(t *testing.T) {
 	tracker := newTestSQLiteInteractionTracker(t)
 	ctx := context.Background()
-	scope := InteractionScope{UserID: "user-1", CharacterID: "char-1", ConversationID: "conv-1", Channel: "web"}
+	scope := InteractionScope{SpaceID: "user-1", CharacterID: "char-1", ConversationID: "conv-1", Channel: "web"}
 	target := NewInteractionRecord(scope)
 	if err := tracker.Create(ctx, target); err != nil {
 		t.Fatal(err)
@@ -438,7 +438,7 @@ func TestSQLiteInteractionTrackerMarkSupersededValidSupersederIsAtomic(t *testin
 func TestInMemoryInteractionTrackerTerminalGuardsMatchSQLite(t *testing.T) {
 	tracker := NewInMemoryTracker()
 	ctx := context.Background()
-	scope := InteractionScope{UserID: "user-1", CharacterID: "char-1", ConversationID: "conv-1", Channel: "web"}
+	scope := InteractionScope{SpaceID: "user-1", CharacterID: "char-1", ConversationID: "conv-1", Channel: "web"}
 	target := NewInteractionRecord(scope)
 	if err := tracker.Create(ctx, target); err != nil {
 		t.Fatal(err)
@@ -485,7 +485,7 @@ func TestInteractionTrackerImplementationsShareTerminalSemantics(t *testing.T) {
 	for _, impl := range implementations {
 		t.Run(impl.name+"/cancel_archive_keeps_record", func(t *testing.T) {
 			tracker := impl.new(t)
-			record := NewInteractionRecord(InteractionScope{UserID: "user-1", CharacterID: "char-1", ConversationID: "conv-1", Channel: "web"})
+			record := NewInteractionRecord(InteractionScope{SpaceID: "user-1", CharacterID: "char-1", ConversationID: "conv-1", Channel: "web"})
 			if err := tracker.Create(ctx, record); err != nil {
 				t.Fatal(err)
 			}
@@ -523,7 +523,7 @@ func TestInteractionTrackerImplementationsShareTerminalSemantics(t *testing.T) {
 
 		t.Run(impl.name+"/committed_rejects_late_cancel", func(t *testing.T) {
 			tracker := impl.new(t)
-			record := NewInteractionRecord(InteractionScope{UserID: "user-1", CharacterID: "char-1", ConversationID: "conv-2", Channel: "web"})
+			record := NewInteractionRecord(InteractionScope{SpaceID: "user-1", CharacterID: "char-1", ConversationID: "conv-2", Channel: "web"})
 			if err := tracker.Create(ctx, record); err != nil {
 				t.Fatal(err)
 			}
@@ -553,7 +553,7 @@ func TestInteractionTrackerImplementationsShareTerminalSemantics(t *testing.T) {
 
 		t.Run(impl.name+"/completed_late_cancel_is_idempotent", func(t *testing.T) {
 			tracker := impl.new(t)
-			record := NewInteractionRecord(InteractionScope{UserID: "user-1", CharacterID: "char-1", ConversationID: "conv-3", Channel: "web"})
+			record := NewInteractionRecord(InteractionScope{SpaceID: "user-1", CharacterID: "char-1", ConversationID: "conv-3", Channel: "web"})
 			if err := tracker.Create(ctx, record); err != nil {
 				t.Fatal(err)
 			}
@@ -595,7 +595,7 @@ func TestInteractionTrackerTerminalOperationsRejectStaleVersion(t *testing.T) {
 	for _, impl := range implementations {
 		t.Run(impl.name+"/complete", func(t *testing.T) {
 			tracker := impl.new(t)
-			record := NewInteractionRecord(InteractionScope{UserID: "user-1", CharacterID: "char-1", ConversationID: "conv-stale-complete", Channel: "web"})
+			record := NewInteractionRecord(InteractionScope{SpaceID: "user-1", CharacterID: "char-1", ConversationID: "conv-stale-complete", Channel: "web"})
 			if err := tracker.Create(ctx, record); err != nil {
 				t.Fatal(err)
 			}
@@ -618,7 +618,7 @@ func TestInteractionTrackerTerminalOperationsRejectStaleVersion(t *testing.T) {
 
 		t.Run(impl.name+"/fail", func(t *testing.T) {
 			tracker := impl.new(t)
-			record := NewInteractionRecord(InteractionScope{UserID: "user-1", CharacterID: "char-1", ConversationID: "conv-stale-fail", Channel: "web"})
+			record := NewInteractionRecord(InteractionScope{SpaceID: "user-1", CharacterID: "char-1", ConversationID: "conv-stale-fail", Channel: "web"})
 			if err := tracker.Create(ctx, record); err != nil {
 				t.Fatal(err)
 			}
@@ -641,7 +641,7 @@ func TestInteractionTrackerTerminalOperationsRejectStaleVersion(t *testing.T) {
 
 		t.Run(impl.name+"/archive", func(t *testing.T) {
 			tracker := impl.new(t)
-			record := NewInteractionRecord(InteractionScope{UserID: "user-1", CharacterID: "char-1", ConversationID: "conv-stale-archive", Channel: "web"})
+			record := NewInteractionRecord(InteractionScope{SpaceID: "user-1", CharacterID: "char-1", ConversationID: "conv-stale-archive", Channel: "web"})
 			if err := tracker.Create(ctx, record); err != nil {
 				t.Fatal(err)
 			}
@@ -681,7 +681,7 @@ func TestInteractionTrackerRequestCancelBumpsVersion(t *testing.T) {
 	for _, impl := range implementations {
 		t.Run(impl.name, func(t *testing.T) {
 			tracker := impl.new(t)
-			record := NewInteractionRecord(InteractionScope{UserID: "user-1", CharacterID: "char-1", ConversationID: "conv-cancel-version", Channel: "web"})
+			record := NewInteractionRecord(InteractionScope{SpaceID: "user-1", CharacterID: "char-1", ConversationID: "conv-cancel-version", Channel: "web"})
 			if err := tracker.Create(ctx, record); err != nil {
 				t.Fatal(err)
 			}
@@ -723,7 +723,7 @@ func TestInteractionTrackerCompleteRejectsCancelledAndSuperseded(t *testing.T) {
 	for _, impl := range implementations {
 		t.Run(impl.name+"/cancelled", func(t *testing.T) {
 			tracker := impl.new(t)
-			record := NewInteractionRecord(InteractionScope{UserID: "user-1", CharacterID: "char-1", ConversationID: "conv-complete-cancelled", Channel: "web"})
+			record := NewInteractionRecord(InteractionScope{SpaceID: "user-1", CharacterID: "char-1", ConversationID: "conv-complete-cancelled", Channel: "web"})
 			if err := tracker.Create(ctx, record); err != nil {
 				t.Fatal(err)
 			}
@@ -755,7 +755,7 @@ func TestInteractionTrackerCompleteRejectsCancelledAndSuperseded(t *testing.T) {
 
 		t.Run(impl.name+"/superseded", func(t *testing.T) {
 			tracker := impl.new(t)
-			scope := InteractionScope{UserID: "user-1", CharacterID: "char-1", ConversationID: "conv-complete-superseded", Channel: "web"}
+			scope := InteractionScope{SpaceID: "user-1", CharacterID: "char-1", ConversationID: "conv-complete-superseded", Channel: "web"}
 			target := NewInteractionRecord(scope)
 			if err := tracker.Create(ctx, target); err != nil {
 				t.Fatal(err)
@@ -801,7 +801,7 @@ func TestInteractionTrackerMarkSupersededRejectsCommittedAndTerminalTargets(t *t
 	for _, impl := range implementations {
 		t.Run(impl.name+"/committed_status", func(t *testing.T) {
 			tracker := impl.new(t)
-			scope := InteractionScope{UserID: "user-1", CharacterID: "char-1", ConversationID: "conv-supersede-committed", Channel: "web"}
+			scope := InteractionScope{SpaceID: "user-1", CharacterID: "char-1", ConversationID: "conv-supersede-committed", Channel: "web"}
 			target := NewInteractionRecord(scope)
 			if err := tracker.Create(ctx, target); err != nil {
 				t.Fatal(err)
@@ -836,7 +836,7 @@ func TestInteractionTrackerMarkSupersededRejectsCommittedAndTerminalTargets(t *t
 
 		t.Run(impl.name+"/commit_marker", func(t *testing.T) {
 			tracker := impl.new(t)
-			scope := InteractionScope{UserID: "user-1", CharacterID: "char-1", ConversationID: "conv-supersede-commit-marker", Channel: "web"}
+			scope := InteractionScope{SpaceID: "user-1", CharacterID: "char-1", ConversationID: "conv-supersede-commit-marker", Channel: "web"}
 			target := NewInteractionRecord(scope)
 			if err := tracker.Create(ctx, target); err != nil {
 				t.Fatal(err)
@@ -864,7 +864,7 @@ func TestInteractionTrackerMarkSupersededRejectsCommittedAndTerminalTargets(t *t
 
 		t.Run(impl.name+"/terminal", func(t *testing.T) {
 			tracker := impl.new(t)
-			scope := InteractionScope{UserID: "user-1", CharacterID: "char-1", ConversationID: "conv-supersede-terminal", Channel: "web"}
+			scope := InteractionScope{SpaceID: "user-1", CharacterID: "char-1", ConversationID: "conv-supersede-terminal", Channel: "web"}
 			target := NewInteractionRecord(scope)
 			if err := tracker.Create(ctx, target); err != nil {
 				t.Fatal(err)
@@ -909,7 +909,7 @@ func TestInteractionTrackerArchiveOnlyAllowsTerminalStatuses(t *testing.T) {
 				}
 				t.Run(string(status), func(t *testing.T) {
 					tracker := impl.new(t)
-					record := NewInteractionRecord(InteractionScope{UserID: "user-1", CharacterID: "char-1", ConversationID: "conv-archive-" + string(status), Channel: "web"})
+					record := NewInteractionRecord(InteractionScope{SpaceID: "user-1", CharacterID: "char-1", ConversationID: "conv-archive-" + string(status), Channel: "web"})
 					record.Status = status
 					if status != InteractionStatusReceived {
 						record.StatusVersion = 1
@@ -950,7 +950,7 @@ func TestInteractionTrackerArchiveOnlyAllowsTerminalStatuses(t *testing.T) {
 func TestSQLiteInteractionTrackerListActiveMatchesIsActive(t *testing.T) {
 	tracker := newTestSQLiteInteractionTracker(t)
 	ctx := context.Background()
-	scope := InteractionScope{UserID: "user-1", CharacterID: "char-1", ConversationID: "conv-active-consistency", Channel: "web"}
+	scope := InteractionScope{SpaceID: "user-1", CharacterID: "char-1", ConversationID: "conv-active-consistency", Channel: "web"}
 	wantActive := map[string]bool{}
 	for _, status := range allInteractionStatusesForTest() {
 		record := NewInteractionRecord(scope)
@@ -1004,7 +1004,7 @@ func allInteractionStatusesForTest() []InteractionStatus {
 func TestSupersedeResolverExcludesCurrentRecord(t *testing.T) {
 	tracker := newTestSQLiteInteractionTracker(t)
 	ctx := context.Background()
-	scope := InteractionScope{UserID: "user-1", CharacterID: "char-1", ConversationID: "conv-1", Channel: "web"}.Normalize()
+	scope := InteractionScope{SpaceID: "user-1", CharacterID: "char-1", ConversationID: "conv-1", Channel: "web"}.Normalize()
 	oldRecord := NewInteractionRecord(scope)
 	if err := tracker.Create(ctx, oldRecord); err != nil {
 		t.Fatal(err)

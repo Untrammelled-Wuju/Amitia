@@ -20,7 +20,7 @@ import (
 type RealtimeEmotionContext = emotionstate.Context
 
 type RealtimeEmotionCommit struct {
-	UserID        string
+	SpaceID       string
 	CharacterID   string
 	UserText      string
 	DeliveredText string
@@ -28,11 +28,11 @@ type RealtimeEmotionCommit struct {
 	Signals       emotionstate.Signals
 }
 
-func (s *service) LoadRealtimeEmotionContext(ctx context.Context, userID, characterID string) (*RealtimeEmotionContext, error) {
+func (s *service) LoadRealtimeEmotionContext(ctx context.Context, spaceID, characterID string) (*RealtimeEmotionContext, error) {
 	if s == nil {
 		return nil, fmt.Errorf("chat service is unavailable")
 	}
-	state, err := s.emotion.Load(ctx, userID, characterID)
+	state, err := s.emotion.Load(ctx, spaceID, characterID)
 	if err != nil {
 		return nil, err
 	}
@@ -42,7 +42,7 @@ func (s *service) LoadRealtimeEmotionContext(ctx context.Context, userID, charac
 			psycheState = loaded
 		}
 	}
-	relationState, relationErr := s.loadRealtimeRelationshipState(ctx, userID, characterID)
+	relationState, relationErr := s.loadRealtimeRelationshipState(ctx, spaceID, characterID)
 	if relationErr != nil && !errors.Is(relationErr, gorm.ErrRecordNotFound) {
 		return nil, relationErr
 	}
@@ -54,7 +54,7 @@ func (s *service) CommitRealtimeEmotion(ctx context.Context, commit RealtimeEmot
 	if s == nil || s.emotion == nil {
 		return fmt.Errorf("emotion service is unavailable")
 	}
-	relationState, err := s.loadRealtimeRelationshipState(ctx, commit.UserID, commit.CharacterID)
+	relationState, err := s.loadRealtimeRelationshipState(ctx, commit.SpaceID, commit.CharacterID)
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		return err
 	}
@@ -73,7 +73,7 @@ func (s *service) CommitRealtimeEmotion(ctx context.Context, commit RealtimeEmot
 		userAffect = inferUserAffect(appraisal)
 	}
 	delta := relationshipEmotionDeltaFromAppraisal(appraisal)
-	if _, err := s.emotion.Commit(ctx, commit.UserID, commit.CharacterID, userAffect, delta, commit.Signals); err != nil {
+	if _, err := s.emotion.Commit(ctx, commit.SpaceID, commit.CharacterID, userAffect, delta, commit.Signals); err != nil {
 		return err
 	}
 	if s.psycheStore != nil {
@@ -89,16 +89,16 @@ func (s *service) CommitRealtimeEmotion(ctx context.Context, commit RealtimeEmot
 			return err
 		}
 	}
-	return s.commitRealtimeRelationshipState(ctx, commit.UserID, commit.CharacterID, appraisal)
+	return s.commitRealtimeRelationshipState(ctx, commit.SpaceID, commit.CharacterID, appraisal)
 }
 
-func (s *service) loadRealtimeRelationshipState(ctx context.Context, userID, characterID string) (*relationship.RelationshipState, error) {
+func (s *service) loadRealtimeRelationshipState(ctx context.Context, spaceID, characterID string) (*relationship.RelationshipState, error) {
 	if s == nil || s.db == nil {
 		return nil, nil
 	}
 	var record RelationshipStateRecord
 	err := s.db.WithContext(ctx).
-		Where("character_id = ? AND user_id = ? AND channel = ? AND relation_type = ?", characterID, userID, "*", "user_character").
+		Where("character_id = ? AND space_id = ? AND channel = ? AND relation_type = ?", characterID, spaceID, "*", "user_character").
 		Order("updated_at DESC").
 		Take(&record).Error
 	if err != nil {
@@ -118,7 +118,7 @@ func (s *service) loadRealtimeRelationshipState(ctx context.Context, userID, cha
 	}, nil
 }
 
-func (s *service) commitRealtimeRelationshipState(ctx context.Context, userID, characterID string, appraisal *interaction.AppraisalResult) error {
+func (s *service) commitRealtimeRelationshipState(ctx context.Context, spaceID, characterID string, appraisal *interaction.AppraisalResult) error {
 	if s == nil || s.db == nil || appraisal == nil {
 		return nil
 	}
@@ -132,7 +132,7 @@ func (s *service) commitRealtimeRelationshipState(ctx context.Context, userID, c
 	}
 	var existing RelationshipStateRecord
 	err := s.db.WithContext(ctx).
-		Where("character_id = ? AND user_id = ? AND channel = ? AND relation_type = ?", characterID, userID, "*", "user_character").
+		Where("character_id = ? AND space_id = ? AND channel = ? AND relation_type = ?", characterID, spaceID, "*", "user_character").
 		Order("updated_at DESC").
 		Take(&existing).Error
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
@@ -166,7 +166,7 @@ func (s *service) commitRealtimeRelationshipState(ctx context.Context, userID, c
 		existing = RelationshipStateRecord{
 			ID:           uuid.New().String(),
 			CharacterID:  characterID,
-			UserID:       userID,
+			SpaceID:      spaceID,
 			Channel:      "*",
 			RelationType: "user_character",
 			CreatedAt:    now,
@@ -202,7 +202,7 @@ func appraisalNeedSnapshot(appraisal *interaction.AppraisalResult) map[string]fl
 	return appraisal.NeedDeltas
 }
 
-func (s *service) trackUserAffectFromMessage(userID, characterID, message string) {
+func (s *service) trackUserAffectFromMessage(spaceID, characterID, message string) {
 	if s == nil || s.emotion == nil || strings.TrimSpace(message) == "" {
 		return
 	}
@@ -214,7 +214,7 @@ func (s *service) trackUserAffectFromMessage(userID, characterID, message string
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		defer cancel()
-		_, _ = s.emotion.Commit(ctx, userID, characterID, affect, relationshipEmotionDeltaFromAppraisal(appraisal), emotionstate.Signals{})
+		_, _ = s.emotion.Commit(ctx, spaceID, characterID, affect, relationshipEmotionDeltaFromAppraisal(appraisal), emotionstate.Signals{})
 	}()
 }
 

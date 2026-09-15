@@ -4,7 +4,7 @@ package memory
 
 type Memory struct {
 	ID                    string  `gorm:"column:id;primaryKey" json:"id"`
-	UserID                string  `gorm:"column:user_id;not null;default:default;index" json:"userId"`
+	SpaceID               string  `gorm:"column:space_id;not null;index" json:"spaceId"`
 	CharacterID           string  `gorm:"column:character_id" json:"characterId"`
 	MemoryType            string  `gorm:"column:memory_type;default:custom" json:"memoryType"`
 	MemorySubtype         string  `gorm:"column:memory_subtype;default:''" json:"memorySubtype"`
@@ -47,7 +47,7 @@ type Memory struct {
 func (Memory) TableName() string { return "memories" }
 
 type CreateMemoryRequest struct {
-	UserID                string  `json:"userId"`
+	SpaceID               string  `json:"spaceId"`
 	CharacterID           string  `json:"characterId"`
 	MemoryType            string  `json:"memoryType"`
 	MemorySubtype         string  `json:"memorySubtype"`
@@ -97,7 +97,7 @@ type UpdateMemoryRequest struct {
 type SearchMemoryRequest struct {
 	Keyword          string            `json:"keyword"`
 	CharacterID      string            `json:"characterId"`
-	UserID           string            `json:"userId"`
+	SpaceID          string            `json:"spaceId"`
 	SensitivityLevel string            `json:"sensitivityLevel"`
 	Limit            int               `json:"limit"`
 	Layers           []MemoryLayer     `json:"layers"`
@@ -133,7 +133,7 @@ type VectorSearchRequest struct {
 	Keyword          string `json:"keyword"`
 	Query            string `json:"query"`
 	CharacterID      string `json:"characterId"`
-	UserID           string `json:"userId"`
+	SpaceID          string `json:"spaceId"`
 	Limit            int    `json:"limit"`
 	ConversationID   string `json:"conversationId"`
 	RequestID        string `json:"requestId"`
@@ -145,7 +145,7 @@ type MemoryListQuery struct {
 	Page           int    `form:"page"`
 	PageSize       int    `form:"pageSize"`
 	CharacterID    string `form:"characterId"`
-	UserID         string `form:"userId"`
+	SpaceID        string `form:"spaceId"`
 	Source         string `form:"source"`
 	MemoryType     string `form:"memoryType"`
 	Type           string `form:"type"`
@@ -169,7 +169,7 @@ type MemoryListResponse struct {
 
 type MemoryCandidateModel struct {
 	ID                    string  `gorm:"column:id;primaryKey" json:"id"`
-	UserID                string  `gorm:"column:user_id;not null;default:default;index" json:"userId"`
+	SpaceID               string  `gorm:"column:space_id;not null;index" json:"spaceId"`
 	Key                   string  `gorm:"column:key" json:"key"`
 	Value                 string  `gorm:"column:value" json:"value"`
 	MemoryType            string  `gorm:"column:memory_type;default:custom" json:"memoryType"`

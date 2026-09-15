@@ -203,9 +203,9 @@ func TestEvidenceSelectorDeterministic(t *testing.T) {
 }
 
 func TestReflectionScopeKeyNormalize(t *testing.T) {
-	k := ReflectionScopeKey{UserID: "  user1  ", CharacterID: " char1 ", ConversationID: " conv1 "}
+	k := ReflectionScopeKey{SpaceID: "  user1  ", CharacterID: " char1 ", ConversationID: " conv1 "}
 	n := k.Normalize()
-	if n.UserID != "user1" || n.CharacterID != "char1" || n.ConversationID != "conv1" {
+	if n.SpaceID != "user1" || n.CharacterID != "char1" || n.ConversationID != "conv1" {
 		t.Errorf("normalize failed: %+v", n)
 	}
 }

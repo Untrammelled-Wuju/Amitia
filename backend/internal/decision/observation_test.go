@@ -190,7 +190,7 @@ func TestObservationJSONRoundTrip(t *testing.T) {
 		ActionID:       "action-1",
 		InteractionID:  "i-1",
 		RequestID:      "req-1",
-		UserID:         "u-1",
+		SpaceID:        "u-1",
 		CharacterID:    "c-1",
 		ConversationID: "conv-1",
 		CandidateID:    "cand-1",

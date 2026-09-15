@@ -24,7 +24,7 @@ func SetGlobalArtifactResolver(resolver ArtifactResolver) {
 	globalArtifactResolver = resolver
 }
 
-func analyzeImageInternal(ownerUserID, imageUrl string) (string, string) {
+func analyzeImageInternal(ownerSpaceID, imageUrl string) (string, string) {
 	cfg, err := getVisionModelConfig()
 	if err != nil {
 		return "", err.Error()
@@ -32,7 +32,7 @@ func analyzeImageInternal(ownerUserID, imageUrl string) (string, string) {
 	imageData := imageUrl
 	if strings.HasPrefix(imageUrl, "amitia://artifacts/") {
 		if globalArtifactResolver != nil {
-			rc, res, openErr := globalArtifactResolver.Open(context.Background(), ownerUserID, imageUrl)
+			rc, res, openErr := globalArtifactResolver.Open(context.Background(), ownerSpaceID, imageUrl)
 			if openErr == nil {
 				defer rc.Close()
 				data, readErr := io.ReadAll(rc)
@@ -71,7 +71,7 @@ func analyzeImageInternal(ownerUserID, imageUrl string) (string, string) {
 	return callDoubaoVision(cfg.BaseUrl, cfg.ApiKey, cfg.ModelName, content)
 }
 
-func analyzeVideoInternal(ownerUserID, videoUrl string) (string, string) {
+func analyzeVideoInternal(ownerSpaceID, videoUrl string) (string, string) {
 	cfg, err := getVisionModelConfig()
 	if err != nil {
 		return "", err.Error()
@@ -85,7 +85,7 @@ func analyzeVideoInternal(ownerUserID, videoUrl string) (string, string) {
 	}
 	if strings.HasPrefix(videoUrl, "amitia://artifacts/") {
 		if globalArtifactResolver != nil {
-			fileID, uploadErr := uploadArtifactToArk(cfg.BaseUrl, cfg.ApiKey, globalArtifactResolver, ownerUserID, videoUrl)
+			fileID, uploadErr := uploadArtifactToArk(cfg.BaseUrl, cfg.ApiKey, globalArtifactResolver, ownerSpaceID, videoUrl)
 			if uploadErr != nil {
 				return "", fmt.Sprintf("视频上传失败: %s", uploadErr.Error())
 			}
@@ -113,8 +113,8 @@ func analyzeVideoInternal(ownerUserID, videoUrl string) (string, string) {
 	return "", fmt.Sprintf("不支持的视频URL格式: %s", videoUrl[:min(len(videoUrl), 100)])
 }
 
-func uploadArtifactToArk(baseURL, apiKey string, resolver ArtifactResolver, ownerUserID, resourceURI string) (string, error) {
-	rc, res, openErr := resolver.Open(context.Background(), ownerUserID, resourceURI)
+func uploadArtifactToArk(baseURL, apiKey string, resolver ArtifactResolver, ownerSpaceID, resourceURI string) (string, error) {
+	rc, res, openErr := resolver.Open(context.Background(), ownerSpaceID, resourceURI)
 	if openErr != nil {
 		return "", openErr
 	}

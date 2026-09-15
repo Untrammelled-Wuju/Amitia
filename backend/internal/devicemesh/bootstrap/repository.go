@@ -21,11 +21,11 @@ func NewRepository(db *sql.DB) *Repository {
 func (r *Repository) Create(ctx context.Context, ticket *BootstrapTicket) error {
 	_, err := r.db.ExecContext(ctx,
 		`INSERT INTO kernel_device_mesh_bootstrap_tickets (
-			ticket_id, ticket_hash, user_id, device_id, runtime_id, platform,
+			ticket_id, ticket_hash, space_id, device_id, runtime_id, platform,
 			status, expires_at, consumed_at, created_at, updated_at
 		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		ticket.TicketID, ticket.TicketHash,
-		ticket.UserID.String(), ticket.DeviceID.String(), ticket.RuntimeID.String(),
+		ticket.SpaceID.String(), ticket.DeviceID.String(), ticket.RuntimeID.String(),
 		ticket.Platform.String(), ticket.Status,
 		ticket.ExpiresAt.UTC().Format(time.RFC3339Nano),
 		formatTimePtr(ticket.ConsumedAt),
@@ -40,7 +40,7 @@ func (r *Repository) Create(ctx context.Context, ticket *BootstrapTicket) error 
 
 func (r *Repository) GetByHash(ctx context.Context, hash string) (*BootstrapTicket, error) {
 	row := r.db.QueryRowContext(ctx,
-		`SELECT ticket_id, ticket_hash, user_id, device_id, runtime_id, platform,
+		`SELECT ticket_id, ticket_hash, space_id, device_id, runtime_id, platform,
 			status, expires_at, consumed_at, created_at, updated_at
 		FROM kernel_device_mesh_bootstrap_tickets WHERE ticket_hash = ?`,
 		hash,
@@ -50,7 +50,7 @@ func (r *Repository) GetByHash(ctx context.Context, hash string) (*BootstrapTick
 
 func (r *Repository) GetByID(ctx context.Context, ticketID string) (*BootstrapTicket, error) {
 	row := r.db.QueryRowContext(ctx,
-		`SELECT ticket_id, ticket_hash, user_id, device_id, runtime_id, platform,
+		`SELECT ticket_id, ticket_hash, space_id, device_id, runtime_id, platform,
 			status, expires_at, consumed_at, created_at, updated_at
 		FROM kernel_device_mesh_bootstrap_tickets WHERE ticket_id = ?`,
 		ticketID,
@@ -152,13 +152,13 @@ type ticketScanner interface {
 
 func scanTicket(s ticketScanner) (*BootstrapTicket, error) {
 	var t BootstrapTicket
-	var userID, deviceID, runtimeID, platform, status string
+	var spaceID, deviceID, runtimeID, platform, status string
 	var expiresStr, createdStr, updatedStr string
 	var consumedStr sql.NullString
 
 	err := s.Scan(
 		&t.TicketID, &t.TicketHash,
-		&userID, &deviceID, &runtimeID, &platform,
+		&spaceID, &deviceID, &runtimeID, &platform,
 		&status, &expiresStr, &consumedStr, &createdStr, &updatedStr,
 	)
 	if err != nil {
@@ -168,7 +168,7 @@ func scanTicket(s ticketScanner) (*BootstrapTicket, error) {
 		return nil, fmt.Errorf("bootstrap: scan ticket: %w", err)
 	}
 
-	t.UserID = runtimeidentity.UserID(userID)
+	t.SpaceID = runtimeidentity.SpaceID(spaceID)
 	t.DeviceID = runtimeidentity.DeviceID(deviceID)
 	t.RuntimeID = runtimeidentity.RuntimeID(runtimeID)
 	t.Platform = runtimeidentity.Platform(platform)

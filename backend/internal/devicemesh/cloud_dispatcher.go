@@ -57,7 +57,7 @@ func (d *cloudRuntimeDispatcher) Resolve(_ string) agent.RuntimeInvokeHandler {
 
 		invocation := capability.ToolInvocationContext{
 			InvocationID: invoke.InvocationID,
-			UserID:       string(invoke.UserID),
+			SpaceID:      string(invoke.SpaceID),
 		}
 		result := adapter.Execute(ctx, binding, invocation, invoke.Input)
 		now := time.Now().UTC()

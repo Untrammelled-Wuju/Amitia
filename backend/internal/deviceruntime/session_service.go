@@ -98,7 +98,7 @@ func (s *Service) txEnabled() (SessionUnitOfWork, bool) {
 func (s *Service) Acquire(ctx context.Context, req AcquireRequest) (AcquireResult, error) {
 	now := s.normalizeTime(req.Now)
 
-	if req.Identity.UserID == "" || req.Identity.DeviceID == "" || req.Identity.RuntimeID == "" {
+	if req.Identity.SpaceID == "" || req.Identity.DeviceID == "" || req.Identity.RuntimeID == "" {
 		return AcquireResult{}, ErrRuntimeSessionInvalid
 	}
 
@@ -110,7 +110,7 @@ func (s *Service) Acquire(ctx context.Context, req AcquireRequest) (AcquireResul
 
 	uow, txOn := s.txEnabled()
 
-	existing, err := s.store.GetActiveByRuntime(ctx, req.Identity.UserID, req.Identity.DeviceID, req.Identity.RuntimeID)
+	existing, err := s.store.GetActiveByRuntime(ctx, req.Identity.SpaceID, req.Identity.DeviceID, req.Identity.RuntimeID)
 	if err != nil && !errors.Is(err, ErrRuntimeSessionNotFound) {
 		return AcquireResult{}, err
 	}
@@ -144,7 +144,7 @@ func (s *Service) Acquire(ctx context.Context, req AcquireRequest) (AcquireResul
 			}
 		}
 		if presenceErr := s.presence.SessionDisconnected(ctx, PresenceSnapshot{
-			UserID:               prev.UserID,
+			SpaceID:              prev.SpaceID,
 			DeviceID:             prev.DeviceID,
 			RuntimeID:            prev.RuntimeID,
 			RuntimeSessionID:     prev.ID,
@@ -275,7 +275,7 @@ func (s *Service) createNewSession(
 
 	session := RuntimeSession{
 		ID:                           sessionID,
-		UserID:                       req.Identity.UserID,
+		SpaceID:                      req.Identity.SpaceID,
 		DeviceID:                     req.Identity.DeviceID,
 		RuntimeID:                    req.Identity.RuntimeID,
 		Platform:                     req.Platform,
@@ -376,7 +376,7 @@ func (s *Service) MarkReady(
 	}
 
 	presenceErr := s.presence.SessionReady(ctx, PresenceSnapshot{
-		UserID:               session.UserID,
+		SpaceID:              session.SpaceID,
 		DeviceID:             session.DeviceID,
 		RuntimeID:            session.RuntimeID,
 		RuntimeSessionID:     session.ID,
@@ -482,7 +482,7 @@ func (s *Service) Close(
 	}
 
 	presenceErr := s.presence.SessionDisconnected(ctx, PresenceSnapshot{
-		UserID:               session.UserID,
+		SpaceID:              session.SpaceID,
 		DeviceID:             session.DeviceID,
 		RuntimeID:            session.RuntimeID,
 		RuntimeSessionID:     session.ID,
@@ -548,11 +548,11 @@ func (s *Service) GetSession(
 
 func (s *Service) GetActiveSession(
 	ctx context.Context,
-	userID runtimeidentity.UserID,
+	spaceID runtimeidentity.SpaceID,
 	deviceID runtimeidentity.DeviceID,
 	runtimeID runtimeidentity.RuntimeID,
 ) (RuntimeSession, error) {
-	return s.store.GetActiveByRuntime(ctx, userID, deviceID, runtimeID)
+	return s.store.GetActiveByRuntime(ctx, spaceID, deviceID, runtimeID)
 }
 
 // ListActiveSessions 返回所有活动的 Session 列表

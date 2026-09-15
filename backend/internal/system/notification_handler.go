@@ -11,10 +11,10 @@ import (
 )
 
 func notificationScope(c *gin.Context, body map[string]interface{}) (string, string) {
-	userID := ""
+	spaceID := ""
 	deviceID := strings.TrimSpace(c.Query("deviceId"))
 	if actor, ok := auth.FromContext(c.Request.Context()); ok && actor != nil {
-		userID = strings.TrimSpace(actor.UserID.String())
+		spaceID = strings.TrimSpace(actor.SpaceID.String())
 		if deviceID == "" {
 			deviceID = strings.TrimSpace(actor.DeviceID.String())
 		}
@@ -24,43 +24,43 @@ func notificationScope(c *gin.Context, body map[string]interface{}) (string, str
 			deviceID = strings.TrimSpace(value)
 		}
 	}
-	return userID, deviceID
+	return spaceID, deviceID
 }
 
 func (h *Handler) NotificationsSettings(c *gin.Context) {
-	userID, deviceID := notificationScope(c, nil)
-	util.SuccessResponse(c, h.service.GetNotificationsSettings(userID, deviceID))
+	spaceID, deviceID := notificationScope(c, nil)
+	util.SuccessResponse(c, h.service.GetNotificationsSettings(spaceID, deviceID))
 }
 
 func (h *Handler) UpdateNotificationsSettings(c *gin.Context) {
 	var body map[string]interface{}
 	_ = c.ShouldBindJSON(&body)
-	userID, deviceID := notificationScope(c, body)
-	util.SuccessResponse(c, h.service.UpdateNotificationsSettings(body, userID, deviceID))
+	spaceID, deviceID := notificationScope(c, body)
+	util.SuccessResponse(c, h.service.UpdateNotificationsSettings(body, spaceID, deviceID))
 }
 
 func (h *Handler) NotificationsStatus(c *gin.Context) {
-	userID, deviceID := notificationScope(c, nil)
-	util.SuccessResponse(c, h.service.GetNotificationsStatus(userID, deviceID))
+	spaceID, deviceID := notificationScope(c, nil)
+	util.SuccessResponse(c, h.service.GetNotificationsStatus(spaceID, deviceID))
 }
 
 func (h *Handler) NotificationsSubscribe(c *gin.Context) {
 	var body map[string]interface{}
 	_ = c.ShouldBindJSON(&body)
-	userID, deviceID := notificationScope(c, body)
-	util.SuccessResponse(c, h.service.NotificationsSubscribe(body, userID, deviceID))
+	spaceID, deviceID := notificationScope(c, body)
+	util.SuccessResponse(c, h.service.NotificationsSubscribe(body, spaceID, deviceID))
 }
 
 func (h *Handler) NotificationsTest(c *gin.Context) {
 	var body map[string]interface{}
 	_ = c.ShouldBindJSON(&body)
-	userID, deviceID := notificationScope(c, body)
-	util.SuccessResponse(c, h.service.NotificationsTest(userID, deviceID))
+	spaceID, deviceID := notificationScope(c, body)
+	util.SuccessResponse(c, h.service.NotificationsTest(spaceID, deviceID))
 }
 
 func (h *Handler) NotificationsUnsubscribe(c *gin.Context) {
 	var body map[string]interface{}
 	_ = c.ShouldBindJSON(&body)
-	userID, deviceID := notificationScope(c, body)
-	util.SuccessResponse(c, h.service.NotificationsUnsubscribe(userID, deviceID))
+	spaceID, deviceID := notificationScope(c, body)
+	util.SuccessResponse(c, h.service.NotificationsUnsubscribe(spaceID, deviceID))
 }

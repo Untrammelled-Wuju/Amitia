@@ -7,7 +7,7 @@ import (
 )
 
 type Request struct {
-	UserID         string
+	SpaceID        string
 	CharacterID    string
 	ConversationID string
 	At             time.Time

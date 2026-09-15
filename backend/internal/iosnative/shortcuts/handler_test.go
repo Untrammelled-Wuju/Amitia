@@ -317,7 +317,7 @@ func TestHandler_ActionExecute_Success(t *testing.T) {
 	req.Payload["parameters"] = map[string]any{"title": "Morning"}
 	req.Payload["invocationId"] = "inv-001"
 	req.Payload["executionMode"] = "foreground_immediate"
-	req.Payload["userId"] = "user-001"
+	req.Payload["spaceId"] = "user-001"
 	resp := h.Execute(context.Background(), req)
 
 	if resp.Status != "ok" {

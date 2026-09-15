@@ -113,14 +113,14 @@ func (mb *MessageBuffer) Buffer(convID, text string) ([]string, error) {
 	return msgs, nil
 }
 
-func (mb *MessageBuffer) AnalyzeImage(convID, ownerUserID, imageUrl string) string {
+func (mb *MessageBuffer) AnalyzeImage(convID, ownerSpaceID, imageUrl string) string {
 	if imageUrl == "" {
 		return ""
 	}
 	buf := mb.getOrCreate(convID)
 
 	applog.Info(fmt.Sprintf("[Image] Analyzing image: %s", imageUrl[:min(len(imageUrl), 80)]))
-	desc, errDetail := analyzeImageInternal(ownerUserID, imageUrl)
+	desc, errDetail := analyzeImageInternal(ownerSpaceID, imageUrl)
 	if desc == "" && errDetail != "" {
 		applog.Warn(fmt.Sprintf("[Image] Analysis failed: %s", errDetail))
 		desc = "图片解析失败：" + errDetail
@@ -137,14 +137,14 @@ func (mb *MessageBuffer) AnalyzeImage(convID, ownerUserID, imageUrl string) stri
 	return errDetail
 }
 
-func (mb *MessageBuffer) AnalyzeVideo(convID, ownerUserID, videoUrl string) {
+func (mb *MessageBuffer) AnalyzeVideo(convID, ownerSpaceID, videoUrl string) {
 	if videoUrl == "" {
 		return
 	}
 	buf := mb.getOrCreate(convID)
 
 	applog.Info(fmt.Sprintf("[Video] Analyzing video: %s", videoUrl[:min(len(videoUrl), 80)]))
-	desc, errDetail := analyzeVideoInternal(ownerUserID, videoUrl)
+	desc, errDetail := analyzeVideoInternal(ownerSpaceID, videoUrl)
 	if desc == "" && errDetail != "" {
 		applog.Warn(fmt.Sprintf("[Video] Analysis failed: %s", errDetail))
 		desc = "视频解析失败：" + errDetail

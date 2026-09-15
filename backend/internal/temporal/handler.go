@@ -22,7 +22,7 @@ func NewHandlerWithRelationshipTime(service *Service, coordinator *RelationshipT
 }
 
 func (h *Handler) GetUserProfile(c *gin.Context) {
-	profile, err := h.service.GetProfile(c.Request.Context(), OwnerUser, apiUserID(c))
+	profile, err := h.service.GetProfile(c.Request.Context(), OwnerSpace, apiSpaceID(c))
 	h.respond(c, profile, err)
 }
 
@@ -32,7 +32,7 @@ func (h *Handler) UpdateUserProfile(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": "时间设置格式无效"})
 		return
 	}
-	profile, err := h.service.PatchProfile(c.Request.Context(), OwnerUser, apiUserID(c), input)
+	profile, err := h.service.PatchProfile(c.Request.Context(), OwnerSpace, apiSpaceID(c), input)
 	h.respond(c, profile, err)
 }
 
@@ -76,7 +76,7 @@ func (h *Handler) GetDiagnostics(c *gin.Context) {
 		h.respond(c, nil, err)
 		return
 	}
-	events, err := h.service.ListEvents(c.Request.Context(), apiUserID(c), strings.TrimSpace(c.Query("characterId")), 50)
+	events, err := h.service.ListEvents(c.Request.Context(), apiSpaceID(c), strings.TrimSpace(c.Query("characterId")), 50)
 	if err != nil {
 		h.respond(c, nil, err)
 		return
@@ -90,7 +90,7 @@ func (h *Handler) ListAnchors(c *gin.Context) {
 		return
 	}
 	limit, _ := strconv.Atoi(c.Query("limit"))
-	anchors, err := h.service.ListAnchors(c.Request.Context(), AnchorQuery{UserID: apiUserID(c), CharacterID: characterID, Status: strings.TrimSpace(c.Query("status")), Limit: limit})
+	anchors, err := h.service.ListAnchors(c.Request.Context(), AnchorQuery{SpaceID: apiSpaceID(c), CharacterID: characterID, Status: strings.TrimSpace(c.Query("status")), Limit: limit})
 	h.respond(c, anchors, err)
 }
 
@@ -104,7 +104,7 @@ func (h *Handler) CreateAnchor(c *gin.Context) {
 	if !h.requireCharacterOwner(c, characterID) {
 		return
 	}
-	anchor, err := h.service.SaveAnchor(c.Request.Context(), apiUserID(c), characterID, input)
+	anchor, err := h.service.SaveAnchor(c.Request.Context(), apiSpaceID(c), characterID, input)
 	h.respond(c, anchor, err)
 }
 
@@ -119,7 +119,7 @@ func (h *Handler) UpdateAnchor(c *gin.Context) {
 	if !h.requireCharacterOwner(c, characterID) {
 		return
 	}
-	anchor, err := h.service.SaveAnchor(c.Request.Context(), apiUserID(c), characterID, input)
+	anchor, err := h.service.SaveAnchor(c.Request.Context(), apiSpaceID(c), characterID, input)
 	h.respond(c, anchor, err)
 }
 
@@ -128,7 +128,7 @@ func (h *Handler) DeleteAnchor(c *gin.Context) {
 	if !h.requireCharacterOwner(c, characterID) {
 		return
 	}
-	err := h.service.DeleteAnchor(c.Request.Context(), apiUserID(c), characterID, c.Param("id"))
+	err := h.service.DeleteAnchor(c.Request.Context(), apiSpaceID(c), characterID, c.Param("id"))
 	h.respond(c, gin.H{"deleted": err == nil}, err)
 }
 
@@ -137,7 +137,7 @@ func (h *Handler) ConfirmAnchor(c *gin.Context) {
 	if !h.requireCharacterOwner(c, characterID) {
 		return
 	}
-	anchor, err := h.service.ConfirmAnchor(c.Request.Context(), apiUserID(c), characterID, c.Param("id"))
+	anchor, err := h.service.ConfirmAnchor(c.Request.Context(), apiSpaceID(c), characterID, c.Param("id"))
 	h.respond(c, anchor, err)
 }
 
@@ -147,7 +147,7 @@ func (h *Handler) ListEvents(c *gin.Context) {
 		return
 	}
 	limit, _ := strconv.Atoi(c.Query("limit"))
-	events, err := h.service.ListEvents(c.Request.Context(), apiUserID(c), characterID, limit)
+	events, err := h.service.ListEvents(c.Request.Context(), apiSpaceID(c), characterID, limit)
 	h.respond(c, events, err)
 }
 
@@ -167,11 +167,11 @@ func (h *Handler) Recompute(c *gin.Context) {
 }
 
 func (h *Handler) AcceptTimezoneSuggestion(c *gin.Context) {
-	profile, err := h.service.ResolveTimezoneSuggestion(c.Request.Context(), apiUserID(c), true)
+	profile, err := h.service.ResolveTimezoneSuggestion(c.Request.Context(), apiSpaceID(c), true)
 	h.respond(c, profile, err)
 }
 func (h *Handler) RejectTimezoneSuggestion(c *gin.Context) {
-	profile, err := h.service.ResolveTimezoneSuggestion(c.Request.Context(), apiUserID(c), false)
+	profile, err := h.service.ResolveTimezoneSuggestion(c.Request.Context(), apiSpaceID(c), false)
 	h.respond(c, profile, err)
 }
 
@@ -183,7 +183,7 @@ func (h *Handler) SuggestTimezone(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": "时区建议格式无效"})
 		return
 	}
-	profile, err := h.service.SuggestTimezone(c.Request.Context(), apiUserID(c), input.Timezone)
+	profile, err := h.service.SuggestTimezone(c.Request.Context(), apiSpaceID(c), input.Timezone)
 	h.respond(c, profile, err)
 }
 
@@ -268,7 +268,7 @@ func (h *Handler) UpdateRelationshipTimeSettings(c *gin.Context) {
 }
 
 func (h *Handler) GetRelationshipTimeState(c *gin.Context) {
-	userID := apiUserID(c)
+	spaceID := apiSpaceID(c)
 	characterID := strings.TrimSpace(c.Param("characterId"))
 	if !h.requireCharacterOwner(c, characterID) {
 		return
@@ -277,12 +277,12 @@ func (h *Handler) GetRelationshipTimeState(c *gin.Context) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"code": 503, "msg": "关系时间服务未启用"})
 		return
 	}
-	state, err := h.relTimeCoordinator.GetState(c.Request.Context(), userID, characterID)
+	state, err := h.relTimeCoordinator.GetState(c.Request.Context(), spaceID, characterID)
 	h.respond(c, state, err)
 }
 
 func (h *Handler) ListReunionEpisodes(c *gin.Context) {
-	userID := apiUserID(c)
+	spaceID := apiSpaceID(c)
 	characterID := strings.TrimSpace(c.Param("characterId"))
 	if !h.requireCharacterOwner(c, characterID) {
 		return
@@ -292,7 +292,7 @@ func (h *Handler) ListReunionEpisodes(c *gin.Context) {
 		return
 	}
 	limit, _ := strconv.Atoi(c.Query("limit"))
-	episodes, err := h.relTimeCoordinator.ListReunionEpisodes(c.Request.Context(), userID, characterID, limit)
+	episodes, err := h.relTimeCoordinator.ListReunionEpisodes(c.Request.Context(), spaceID, characterID, limit)
 	h.respond(c, episodes, err)
 }
 
@@ -301,7 +301,7 @@ func (h *Handler) GetReunionEpisode(c *gin.Context) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"code": 503, "msg": "关系时间服务未启用"})
 		return
 	}
-	userID := apiUserID(c)
+	spaceID := apiSpaceID(c)
 	characterID := strings.TrimSpace(c.Param("characterId"))
 	if !h.requireCharacterOwner(c, characterID) {
 		return
@@ -312,7 +312,7 @@ func (h *Handler) GetReunionEpisode(c *gin.Context) {
 		h.respond(c, nil, err)
 		return
 	}
-	if episode == nil || episode.UserID != userID || episode.CharacterID != characterID {
+	if episode == nil || episode.SpaceID != spaceID || episode.CharacterID != characterID {
 		c.JSON(http.StatusNotFound, gin.H{"code": 404, "msg": "重聚记录不存在"})
 		return
 	}
@@ -324,7 +324,7 @@ func (h *Handler) requireCharacterOwner(c *gin.Context, characterID string) bool
 	if characterID == "" {
 		return true
 	}
-	owned, err := h.service.CharacterOwnedBy(characterID, apiUserID(c))
+	owned, err := h.service.CharacterOwnedBy(characterID, apiSpaceID(c))
 	if err != nil {
 		h.respond(c, nil, err)
 		return false
@@ -357,10 +357,10 @@ func (h *Handler) respond(c *gin.Context, data interface{}, err error) {
 	c.JSON(status, gin.H{"code": status, "msg": message})
 }
 
-func apiUserID(c *gin.Context) string {
-	return requestidentity.ResolveGin(c, "")
+func apiSpaceID(c *gin.Context) string {
+	return requestidentity.ResolveGin(c)
 }
 
 func snapshotInput(c *gin.Context) SnapshotInput {
-	return SnapshotInput{UserID: apiUserID(c), CharacterID: strings.TrimSpace(c.Query("characterId")), Channel: strings.TrimSpace(c.Query("channel")), DeviceTimezone: strings.TrimSpace(c.GetHeader("X-Device-Timezone"))}
+	return SnapshotInput{SpaceID: apiSpaceID(c), CharacterID: strings.TrimSpace(c.Query("characterId")), Channel: strings.TrimSpace(c.Query("channel")), DeviceTimezone: strings.TrimSpace(c.GetHeader("X-Device-Timezone"))}
 }

@@ -19,9 +19,9 @@ type SystemClock struct{}
 func (SystemClock) Now() time.Time { return time.Now().UTC() }
 
 type Service struct {
-	repo      *Repository
+	repo       *Repository
 	ttlSeconds int64
-	clock     Clock
+	clock      Clock
 }
 
 func NewService(repo *Repository, ttlSeconds int64) *Service {
@@ -52,7 +52,7 @@ func (s *Service) Exchange(ctx context.Context, ticket *ExchangeTicketView) (*De
 	expires := now.Add(time.Duration(s.ttlSeconds) * time.Second)
 	cred := &DeviceRuntimeCredential{
 		ID:             uuid.New().String(),
-		UserID:         ticket.UserID,
+		SpaceID:        ticket.SpaceID,
 		DeviceID:       ticket.DeviceID,
 		RuntimeID:      ticket.RuntimeID,
 		CredentialHash: hash,
@@ -63,7 +63,7 @@ func (s *Service) Exchange(ctx context.Context, ticket *ExchangeTicketView) (*De
 		Revision:       1,
 	}
 
-	if err := s.repo.ExchangeAtomic(ctx, ticket.UserID, ticket.DeviceID, ticket.RuntimeID, now, cred); err != nil {
+	if err := s.repo.ExchangeAtomic(ctx, ticket.SpaceID, ticket.DeviceID, ticket.RuntimeID, now, cred); err != nil {
 		return nil, "", fmt.Errorf("credential: exchange atomic: %w", err)
 	}
 
@@ -94,7 +94,7 @@ func (s *Service) Validate(ctx context.Context, rawCredential string) (*DeviceRu
 	return cred, nil
 }
 
-func (s *Service) Revoke(ctx context.Context, callerID runtimeidentity.UserID, credentialID string) error {
+func (s *Service) Revoke(ctx context.Context, callerID runtimeidentity.SpaceID, credentialID string) error {
 	cred, err := s.repo.GetByID(ctx, credentialID)
 	if err != nil {
 		return fmt.Errorf("credential: get: %w", err)
@@ -102,22 +102,22 @@ func (s *Service) Revoke(ctx context.Context, callerID runtimeidentity.UserID, c
 	if cred == nil {
 		return errors.New("credential: not found")
 	}
-	if cred.UserID != callerID {
+	if cred.SpaceID != callerID {
 		return errors.New("credential: forbidden")
 	}
 	return s.repo.RevokeByID(ctx, credentialID, s.clock.Now())
 }
 
-func (s *Service) RevokeAllForDevice(ctx context.Context, callerID runtimeidentity.UserID, deviceID runtimeidentity.DeviceID) error {
+func (s *Service) RevokeAllForDevice(ctx context.Context, callerID runtimeidentity.SpaceID, deviceID runtimeidentity.DeviceID) error {
 	return s.repo.RevokeAllForDevice(ctx, callerID, deviceID, s.clock.Now())
 }
 
-func (s *Service) ListByUser(ctx context.Context, callerID runtimeidentity.UserID) ([]*DeviceRuntimeCredential, error) {
-	return s.repo.ListByUser(ctx, callerID)
+func (s *Service) ListBySpace(ctx context.Context, callerID runtimeidentity.SpaceID) ([]*DeviceRuntimeCredential, error) {
+	return s.repo.ListBySpace(ctx, callerID)
 }
 
 type ExchangeTicketView struct {
-	UserID    runtimeidentity.UserID
+	SpaceID   runtimeidentity.SpaceID
 	DeviceID  runtimeidentity.DeviceID
 	RuntimeID runtimeidentity.RuntimeID
 	Status    string

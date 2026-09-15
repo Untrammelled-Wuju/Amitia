@@ -2,32 +2,32 @@ package runtimeidentity
 
 import "strings"
 
-type UserID string
+type SpaceID string
 type DeviceID string
 type RuntimeID string
 type RuntimeSessionID string
 
 type Identity struct {
-	UserID           UserID
+	SpaceID          SpaceID
 	DeviceID         DeviceID
 	RuntimeID        RuntimeID
 	RuntimeSessionID RuntimeSessionID
 }
 
 func (i Identity) IsDeviceScoped() bool {
-	return i.UserID != "" && i.DeviceID != ""
+	return i.SpaceID != "" && i.DeviceID != ""
 }
 
 func (i Identity) IsRuntimeScoped() bool {
-	return i.UserID != "" && i.DeviceID != "" && i.RuntimeID != ""
+	return i.SpaceID != "" && i.DeviceID != "" && i.RuntimeID != ""
 }
 
 func (i Identity) IsSessionScoped() bool {
-	return i.UserID != "" && i.DeviceID != "" && i.RuntimeID != "" && i.RuntimeSessionID != ""
+	return i.SpaceID != "" && i.DeviceID != "" && i.RuntimeID != "" && i.RuntimeSessionID != ""
 }
 
-func ParseUserID(raw string) UserID {
-	return UserID(strings.TrimSpace(raw))
+func ParseSpaceID(raw string) SpaceID {
+	return SpaceID(strings.TrimSpace(raw))
 }
 
 func ParseDeviceID(raw string) DeviceID {
@@ -42,7 +42,7 @@ func ParseRuntimeSessionID(raw string) RuntimeSessionID {
 	return RuntimeSessionID(strings.TrimSpace(raw))
 }
 
-func (id UserID) String() string {
+func (id SpaceID) String() string {
 	return string(id)
 }
 

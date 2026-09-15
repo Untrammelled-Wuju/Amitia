@@ -107,7 +107,7 @@ type UnifiedEntryRequest struct {
 	Channel                  string          `json:"channel"`
 	Message                  string          `json:"message"`
 	PeerID                   string          `json:"peerId,omitempty"`
-	UserID                   string          `json:"userId,omitempty"`
+	SpaceID                  string          `json:"spaceId,omitempty"`
 	DeviceTimezone           string          `json:"deviceTimezone,omitempty"`
 	Source                   string          `json:"source,omitempty"`
 	ProactiveTaskInstruction string          `json:"-"`
@@ -193,7 +193,7 @@ func (e *UnifiedEntry) Handle(ctx context.Context, req *UnifiedEntryRequest) (*O
 	requestID := stableRequestID(req.RequestID)
 	source := parseOptionalEntrySource(req.Source)
 	scopeInput := ScopeResolveInput{
-		UserID:         req.UserID,
+		SpaceID:        req.SpaceID,
 		CharacterID:    req.CharacterID,
 		ConversationID: req.ConversationID,
 		Channel:        req.Channel,
@@ -211,11 +211,11 @@ func (e *UnifiedEntry) Handle(ctx context.Context, req *UnifiedEntryRequest) (*O
 	var execCtx *coreexec.ExecutionContext
 	if execService != nil {
 		rootID := ""
-		userID := req.UserID
-		if userID == "" {
-			userID = resolution.Scope.UserID
+		spaceID := req.SpaceID
+		if spaceID == "" {
+			spaceID = resolution.Scope.SpaceID
 		}
-		created := execService.StartExecution(ctx, rootID, userID)
+		created := execService.StartExecution(ctx, rootID, spaceID)
 		created.ConversationID = resolution.Scope.ConversationID
 		created.WorkspaceID = strings.TrimSpace(req.WorkspaceID)
 		if created.Metadata == nil {
@@ -230,7 +230,7 @@ func (e *UnifiedEntry) Handle(ctx context.Context, req *UnifiedEntryRequest) (*O
 		if deviceID := strings.TrimSpace(req.WorkspaceDeviceID); deviceID != "" {
 			created.RuntimeTarget = &coreexec.RuntimeTarget{
 				Placement: "device",
-				UserID:    runtimeidentity.UserID(userID),
+				SpaceID:   runtimeidentity.SpaceID(spaceID),
 				DeviceID:  runtimeidentity.DeviceID(deviceID),
 			}
 		}
@@ -244,7 +244,7 @@ func (e *UnifiedEntry) Handle(ctx context.Context, req *UnifiedEntryRequest) (*O
 		Channel:                  resolution.Scope.Channel,
 		Source:                   resolution.Source,
 		PeerID:                   resolution.Scope.PeerID,
-		UserID:                   resolution.Scope.UserID,
+		SpaceID:                  resolution.Scope.SpaceID,
 		DeviceTimezone:           req.DeviceTimezone,
 		SessionID:                resolution.Scope.SessionID,
 		RequestID:                requestID,
@@ -273,7 +273,7 @@ func (e *UnifiedEntry) Handle(ctx context.Context, req *UnifiedEntryRequest) (*O
 func (e *UnifiedEntry) ResolveScope(ctx context.Context, req *UnifiedEntryRequest) (ScopeResolution, error) {
 	source := parseOptionalEntrySource(req.Source)
 	scopeInput := ScopeResolveInput{
-		UserID:         req.UserID,
+		SpaceID:        req.SpaceID,
 		CharacterID:    req.CharacterID,
 		ConversationID: req.ConversationID,
 		Channel:        req.Channel,

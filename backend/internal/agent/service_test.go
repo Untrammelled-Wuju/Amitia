@@ -21,7 +21,7 @@ func TestWebhookRejectsNilContextBeforeUnifiedEntry(t *testing.T) {
 		Channel:        "web",
 		ConversationID: "conv-1",
 		SenderID:       "peer-1",
-		UserID:         "user-1",
+		SpaceID:        "user-1",
 		Source:         "web",
 		Text:           "hello",
 		SkipTiming:     true,
@@ -43,17 +43,17 @@ func (p *agentTestProcessor) ProcessMessageCtx(ctx context.Context, req *interac
 	return nil, errors.New("unexpected call")
 }
 
-func TestStableWebhookUserIDUsesAuthenticatedScope(t *testing.T) {
-	if got := stableWebhookUserID(WebhookRequest{}); got != requestidentity.DefaultUserID {
-		t.Fatalf("expected %q, got %q", requestidentity.DefaultUserID, got)
+func TestStableWebhookSpaceIDUsesAuthenticatedScope(t *testing.T) {
+	if got := stableWebhookSpaceID(WebhookRequest{}); got != requestidentity.LegacySpaceID {
+		t.Fatalf("expected %q, got %q", requestidentity.LegacySpaceID, got)
 	}
-	if got := stableWebhookUserID(WebhookRequest{UserID: "web-user"}); got != "web-user" {
+	if got := stableWebhookSpaceID(WebhookRequest{SpaceID: "web-user"}); got != "web-user" {
 		t.Fatalf("expected %q, got %q", "web-user", got)
 	}
-	if got := stableWebhookUserID(WebhookRequest{SenderID: "wechat-openid"}); got != requestidentity.DefaultUserID {
-		t.Fatalf("expected %q, got %q", requestidentity.DefaultUserID, got)
+	if got := stableWebhookSpaceID(WebhookRequest{SenderID: "wechat-openid"}); got != requestidentity.LegacySpaceID {
+		t.Fatalf("expected %q, got %q", requestidentity.LegacySpaceID, got)
 	}
-	if got := stableWebhookUserID(WebhookRequest{AccountID: "qq-account"}); got != requestidentity.DefaultUserID {
-		t.Fatalf("expected %q, got %q", requestidentity.DefaultUserID, got)
+	if got := stableWebhookSpaceID(WebhookRequest{AccountID: "qq-account"}); got != requestidentity.LegacySpaceID {
+		t.Fatalf("expected %q, got %q", requestidentity.LegacySpaceID, got)
 	}
 }

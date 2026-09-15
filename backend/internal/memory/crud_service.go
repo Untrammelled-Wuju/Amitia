@@ -10,7 +10,7 @@ import (
 )
 
 func (s *service) List(q MemoryListQuery) (*MemoryListResponse, error) {
-	s.refreshRetentionForListScope(q.CharacterID, q.UserID)
+	s.refreshRetentionForListScope(q.CharacterID, q.SpaceID)
 	items, total, err := s.repo.List(q)
 	if err != nil {
 		return nil, err
@@ -49,7 +49,7 @@ func (s *service) Create(req *CreateMemoryRequest) (*Memory, error) {
 		req.Confidence = 50
 	}
 
-	resp, err := s.autoResolveConflictOwned(req.Key, req.Value, req.CharacterID, req.UserID, req.Confidence)
+	resp, err := s.autoResolveConflictOwned(req.Key, req.Value, req.CharacterID, req.SpaceID, req.Confidence)
 	if err == nil && resp != nil && resp.Resolved {
 		// Conflict resolution may reuse an existing canonical memory. Preserve
 		// explicit retention choices from the create request instead of silently
@@ -95,7 +95,7 @@ func (s *service) Create(req *CreateMemoryRequest) (*Memory, error) {
 	operationID := uuid.New().String()
 
 	m, err := s.createCanonicalMemory(canonicalCreateRequest{
-		UserID:                req.UserID,
+		SpaceID:               req.SpaceID,
 		CharacterID:           req.CharacterID,
 		MemoryType:            memoryType,
 		MemorySubtype:         req.MemorySubtype,

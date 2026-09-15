@@ -21,11 +21,11 @@ func NewRepository(db *sql.DB) *Repository {
 func (r *Repository) Create(ctx context.Context, cred *DeviceRuntimeCredential) error {
 	_, err := r.db.ExecContext(ctx,
 		`INSERT INTO kernel_device_runtime_credentials (
-			credential_id, credential_hash, user_id, device_id, runtime_id,
+			credential_id, credential_hash, space_id, device_id, runtime_id,
 			status, created_at, expires_at, last_used_at, revoked_at, revision
 		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		cred.ID, cred.CredentialHash,
-		cred.UserID.String(), cred.DeviceID.String(), cred.RuntimeID.String(),
+		cred.SpaceID.String(), cred.DeviceID.String(), cred.RuntimeID.String(),
 		cred.Status,
 		cred.CreatedAt.UTC().Format(time.RFC3339Nano),
 		cred.ExpiresAt.UTC().Format(time.RFC3339Nano),
@@ -41,7 +41,7 @@ func (r *Repository) Create(ctx context.Context, cred *DeviceRuntimeCredential) 
 
 func (r *Repository) GetByHash(ctx context.Context, hash string) (*DeviceRuntimeCredential, error) {
 	row := r.db.QueryRowContext(ctx,
-		`SELECT credential_id, credential_hash, user_id, device_id, runtime_id,
+		`SELECT credential_id, credential_hash, space_id, device_id, runtime_id,
 			status, created_at, expires_at, last_used_at, revoked_at, revision
 		FROM kernel_device_runtime_credentials WHERE credential_hash = ?`,
 		hash,
@@ -51,7 +51,7 @@ func (r *Repository) GetByHash(ctx context.Context, hash string) (*DeviceRuntime
 
 func (r *Repository) GetByID(ctx context.Context, id string) (*DeviceRuntimeCredential, error) {
 	row := r.db.QueryRowContext(ctx,
-		`SELECT credential_id, credential_hash, user_id, device_id, runtime_id,
+		`SELECT credential_id, credential_hash, space_id, device_id, runtime_id,
 			status, created_at, expires_at, last_used_at, revoked_at, revision
 		FROM kernel_device_runtime_credentials WHERE credential_id = ?`,
 		id,
@@ -59,25 +59,25 @@ func (r *Repository) GetByID(ctx context.Context, id string) (*DeviceRuntimeCred
 	return scanCredential(row)
 }
 
-func (r *Repository) GetActiveByRuntime(ctx context.Context, userID runtimeidentity.UserID, deviceID runtimeidentity.DeviceID, runtimeID runtimeidentity.RuntimeID) (*DeviceRuntimeCredential, error) {
+func (r *Repository) GetActiveByRuntime(ctx context.Context, spaceID runtimeidentity.SpaceID, deviceID runtimeidentity.DeviceID, runtimeID runtimeidentity.RuntimeID) (*DeviceRuntimeCredential, error) {
 	row := r.db.QueryRowContext(ctx,
-		`SELECT credential_id, credential_hash, user_id, device_id, runtime_id,
+		`SELECT credential_id, credential_hash, space_id, device_id, runtime_id,
 			status, created_at, expires_at, last_used_at, revoked_at, revision
 		FROM kernel_device_runtime_credentials
-		WHERE user_id = ? AND device_id = ? AND runtime_id = ? AND status = ?`,
-		userID.String(), deviceID.String(), runtimeID.String(), string(CredentialActive),
+		WHERE space_id = ? AND device_id = ? AND runtime_id = ? AND status = ?`,
+		spaceID.String(), deviceID.String(), runtimeID.String(), string(CredentialActive),
 	)
 	return scanCredential(row)
 }
 
-func (r *Repository) ExchangeAtomic(ctx context.Context, userID runtimeidentity.UserID, deviceID runtimeidentity.DeviceID, runtimeID runtimeidentity.RuntimeID, now time.Time, newCred *DeviceRuntimeCredential) error {
+func (r *Repository) ExchangeAtomic(ctx context.Context, spaceID runtimeidentity.SpaceID, deviceID runtimeidentity.DeviceID, runtimeID runtimeidentity.RuntimeID, now time.Time, newCred *DeviceRuntimeCredential) error {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("credential: begin tx: %w", err)
 	}
 	defer tx.Rollback()
 
-	if err := r.ExchangeAtomicTx(ctx, tx, userID, deviceID, runtimeID, now, newCred); err != nil {
+	if err := r.ExchangeAtomicTx(ctx, tx, spaceID, deviceID, runtimeID, now, newCred); err != nil {
 		return err
 	}
 
@@ -87,14 +87,14 @@ func (r *Repository) ExchangeAtomic(ctx context.Context, userID runtimeidentity.
 	return nil
 }
 
-func (r *Repository) ExchangeAtomicTx(ctx context.Context, tx *sql.Tx, userID runtimeidentity.UserID, deviceID runtimeidentity.DeviceID, runtimeID runtimeidentity.RuntimeID, now time.Time, newCred *DeviceRuntimeCredential) error {
+func (r *Repository) ExchangeAtomicTx(ctx context.Context, tx *sql.Tx, spaceID runtimeidentity.SpaceID, deviceID runtimeidentity.DeviceID, runtimeID runtimeidentity.RuntimeID, now time.Time, newCred *DeviceRuntimeCredential) error {
 	if _, err := tx.ExecContext(ctx,
 		`UPDATE kernel_device_runtime_credentials
 		SET status = ?, revoked_at = ?, revision = revision + 1
-		WHERE user_id = ? AND device_id = ? AND runtime_id = ? AND status = ?`,
+		WHERE space_id = ? AND device_id = ? AND runtime_id = ? AND status = ?`,
 		string(CredentialRevoked),
 		now.UTC().Format(time.RFC3339Nano),
-		userID.String(), deviceID.String(), runtimeID.String(),
+		spaceID.String(), deviceID.String(), runtimeID.String(),
 		string(CredentialActive),
 	); err != nil {
 		return fmt.Errorf("credential: revoke existing: %w", err)
@@ -102,11 +102,11 @@ func (r *Repository) ExchangeAtomicTx(ctx context.Context, tx *sql.Tx, userID ru
 
 	if _, err := tx.ExecContext(ctx,
 		`INSERT INTO kernel_device_runtime_credentials (
-			credential_id, credential_hash, user_id, device_id, runtime_id,
+			credential_id, credential_hash, space_id, device_id, runtime_id,
 			status, created_at, expires_at, last_used_at, revoked_at, revision
 		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		newCred.ID, newCred.CredentialHash,
-		newCred.UserID.String(), newCred.DeviceID.String(), newCred.RuntimeID.String(),
+		newCred.SpaceID.String(), newCred.DeviceID.String(), newCred.RuntimeID.String(),
 		newCred.Status,
 		newCred.CreatedAt.UTC().Format(time.RFC3339Nano),
 		newCred.ExpiresAt.UTC().Format(time.RFC3339Nano),
@@ -120,15 +120,15 @@ func (r *Repository) ExchangeAtomicTx(ctx context.Context, tx *sql.Tx, userID ru
 	return nil
 }
 
-func (r *Repository) ListByUser(ctx context.Context, userID runtimeidentity.UserID) ([]*DeviceRuntimeCredential, error) {
+func (r *Repository) ListBySpace(ctx context.Context, spaceID runtimeidentity.SpaceID) ([]*DeviceRuntimeCredential, error) {
 	rows, err := r.db.QueryContext(ctx,
-		`SELECT credential_id, credential_hash, user_id, device_id, runtime_id,
+		`SELECT credential_id, credential_hash, space_id, device_id, runtime_id,
 			status, created_at, expires_at, last_used_at, revoked_at, revision
-		FROM kernel_device_runtime_credentials WHERE user_id = ?`,
-		userID.String(),
+		FROM kernel_device_runtime_credentials WHERE space_id = ?`,
+		spaceID.String(),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("credential: list by user: %w", err)
+		return nil, fmt.Errorf("credential: list by space: %w", err)
 	}
 	defer rows.Close()
 
@@ -145,14 +145,14 @@ func (r *Repository) ListByUser(ctx context.Context, userID runtimeidentity.User
 	return creds, rows.Err()
 }
 
-func (r *Repository) RevokeExisting(ctx context.Context, userID runtimeidentity.UserID, deviceID runtimeidentity.DeviceID, runtimeID runtimeidentity.RuntimeID, revokedAt time.Time, reason string) error {
+func (r *Repository) RevokeExisting(ctx context.Context, spaceID runtimeidentity.SpaceID, deviceID runtimeidentity.DeviceID, runtimeID runtimeidentity.RuntimeID, revokedAt time.Time, reason string) error {
 	_, err := r.db.ExecContext(ctx,
 		`UPDATE kernel_device_runtime_credentials
 		SET status = ?, revoked_at = ?, revision = revision + 1
-		WHERE user_id = ? AND device_id = ? AND runtime_id = ? AND status = ?`,
+		WHERE space_id = ? AND device_id = ? AND runtime_id = ? AND status = ?`,
 		string(CredentialRevoked),
 		revokedAt.UTC().Format(time.RFC3339Nano),
-		userID.String(), deviceID.String(), runtimeID.String(),
+		spaceID.String(), deviceID.String(), runtimeID.String(),
 		string(CredentialActive),
 	)
 	if err != nil {
@@ -178,14 +178,14 @@ func (r *Repository) RevokeByID(ctx context.Context, credentialID string, revoke
 	return nil
 }
 
-func (r *Repository) RevokeAllForDevice(ctx context.Context, userID runtimeidentity.UserID, deviceID runtimeidentity.DeviceID, revokedAt time.Time) error {
+func (r *Repository) RevokeAllForDevice(ctx context.Context, spaceID runtimeidentity.SpaceID, deviceID runtimeidentity.DeviceID, revokedAt time.Time) error {
 	_, err := r.db.ExecContext(ctx,
 		`UPDATE kernel_device_runtime_credentials
 		SET status = ?, revoked_at = ?, revision = revision + 1
-		WHERE user_id = ? AND device_id = ? AND status = ?`,
+		WHERE space_id = ? AND device_id = ? AND status = ?`,
 		string(CredentialRevoked),
 		revokedAt.UTC().Format(time.RFC3339Nano),
-		userID.String(), deviceID.String(),
+		spaceID.String(), deviceID.String(),
 		string(CredentialActive),
 	)
 	if err != nil {
@@ -214,13 +214,13 @@ type credentialScanner interface {
 
 func scanCredential(s credentialScanner) (*DeviceRuntimeCredential, error) {
 	var c DeviceRuntimeCredential
-	var userID, deviceID, runtimeID, status string
+	var spaceID, deviceID, runtimeID, status string
 	var createdStr, expiresStr, lastUsedStr string
 	var revokedStr sql.NullString
 
 	err := s.Scan(
 		&c.ID, &c.CredentialHash,
-		&userID, &deviceID, &runtimeID,
+		&spaceID, &deviceID, &runtimeID,
 		&status, &createdStr, &expiresStr, &lastUsedStr, &revokedStr, &c.Revision,
 	)
 	if err != nil {
@@ -230,7 +230,7 @@ func scanCredential(s credentialScanner) (*DeviceRuntimeCredential, error) {
 		return nil, fmt.Errorf("credential: scan: %w", err)
 	}
 
-	c.UserID = runtimeidentity.UserID(userID)
+	c.SpaceID = runtimeidentity.SpaceID(spaceID)
 	c.DeviceID = runtimeidentity.DeviceID(deviceID)
 	c.RuntimeID = runtimeidentity.RuntimeID(runtimeID)
 	c.Status = CredentialStatus(status)

@@ -106,7 +106,7 @@ func queryMemory(callCtx context.Context, execCtx ToolExecutionContext, args map
 	if toolMemoryService == nil {
 		return ErrorResult("service_not_initialized", "ERROR: memory service not initialized")
 	}
-	userID, userErr := effectiveToolUserID(execCtx)
+	spaceID, userErr := effectiveToolSpaceID(execCtx)
 	if userErr != nil {
 		return *userErr
 	}
@@ -136,7 +136,7 @@ func queryMemory(callCtx context.Context, execCtx ToolExecutionContext, args map
 		}
 	}
 	timeFilter := memoryTimeFilterFromArgs(args)
-	allowedTimeIDs, timeErr := timeScopedMemoryIDs(scopedMemoryService, execCtx, userID, timeFilter)
+	allowedTimeIDs, timeErr := timeScopedMemoryIDs(scopedMemoryService, execCtx, spaceID, timeFilter)
 	if timeErr != nil {
 		return ErrorResult("memory_time_filter_failed", "ERROR: "+timeErr.Error())
 	}
@@ -153,18 +153,18 @@ func queryMemory(callCtx context.Context, execCtx ToolExecutionContext, args map
 	switch mode {
 	case "keyword":
 		var memories []memorysvc.Memory
-		memories, searchErr = scopedMemoryService.SearchForUser(&memorysvc.SearchMemoryRequest{
+		memories, searchErr = scopedMemoryService.SearchForSpace(&memorysvc.SearchMemoryRequest{
 			Keyword: query, CharacterID: execCtx.CharacterID, Limit: fetchLimit,
-		}, userID)
+		}, spaceID)
 		for _, memory := range memories {
 			items = append(items, queryItemFromMemory(memory, 0, "keyword"))
 		}
 	case "vector":
 		var results []memorysvc.VectorSearchResult
-		results, searchErr = scopedMemoryService.VectorSearchForUser(&memorysvc.VectorSearchRequest{
+		results, searchErr = scopedMemoryService.VectorSearchForSpace(&memorysvc.VectorSearchRequest{
 			Query: query, Keyword: query, CharacterID: execCtx.CharacterID,
 			Limit: fetchLimit, ConversationID: execCtx.ConversationID, RequestID: execCtx.RequestID, Channel: execCtx.Channel,
-		}, userID)
+		}, spaceID)
 		for _, result := range results {
 			item := queryItemFromMemory(result.Memory, float64(result.Score), result.MatchType)
 			if result.MemoryLayer != "" {
@@ -174,10 +174,10 @@ func queryMemory(callCtx context.Context, execCtx ToolExecutionContext, args map
 		}
 	default:
 		var results []memorysvc.HybridSearchResult
-		results, searchErr = scopedMemoryService.HybridSearchForUser(&memorysvc.VectorSearchRequest{
+		results, searchErr = scopedMemoryService.HybridSearchForSpace(&memorysvc.VectorSearchRequest{
 			Query: query, Keyword: query, CharacterID: execCtx.CharacterID,
 			Limit: fetchLimit, ConversationID: execCtx.ConversationID, RequestID: execCtx.RequestID, Channel: execCtx.Channel,
-		}, userID)
+		}, spaceID)
 		for _, result := range results {
 			items = append(items, queryItemFromMemory(result.Memory, result.Score, result.MatchType))
 		}
@@ -244,7 +244,7 @@ func getMemoryByTitle(callCtx context.Context, execCtx ToolExecutionContext, arg
 	offset := boundedIntArg(args, "offset", 0, 0, 10_000_000)
 	maxChars := boundedIntArg(args, "max_chars", 20_000, 1, 50_000)
 
-	userID, userErr := effectiveToolUserID(execCtx)
+	spaceID, userErr := effectiveToolSpaceID(execCtx)
 	if userErr != nil {
 		return *userErr
 	}
@@ -255,7 +255,7 @@ func getMemoryByTitle(callCtx context.Context, execCtx ToolExecutionContext, arg
 	seenIDs := make(map[string]struct{})
 	if toolMemoryService != nil {
 		if scopedMemoryService, ok := toolMemoryService.(userScopedMemoryToolService); ok {
-			memories, err := scopedMemoryService.SearchForUser(&memorysvc.SearchMemoryRequest{Keyword: title, CharacterID: execCtx.CharacterID, Limit: 100}, userID)
+			memories, err := scopedMemoryService.SearchForSpace(&memorysvc.SearchMemoryRequest{Keyword: title, CharacterID: execCtx.CharacterID, Limit: 100}, spaceID)
 			if err == nil {
 				for _, memory := range memories {
 					if !strings.EqualFold(strings.TrimSpace(memory.Key), title) {
@@ -274,10 +274,10 @@ func getMemoryByTitle(callCtx context.Context, execCtx ToolExecutionContext, arg
 	}
 	if toolEpisodicService != nil {
 		type scopedEpisodicQueryService interface {
-			GetByUserForUser(userID, characterID string) ([]episodic.EpisodicMemory, error)
+			GetForSpace(spaceID, characterID string) ([]episodic.EpisodicMemory, error)
 		}
 		if scopedEpisodic, ok := toolEpisodicService.(scopedEpisodicQueryService); ok {
-			episodes, err := scopedEpisodic.GetByUserForUser(userID, execCtx.CharacterID)
+			episodes, err := scopedEpisodic.GetForSpace(spaceID, execCtx.CharacterID)
 			if err == nil {
 				for _, episode := range episodes {
 					if strings.EqualFold(strings.TrimSpace(episode.Title), title) {
@@ -374,11 +374,11 @@ func memoryTimeFilterFromArgs(args map[string]interface{}) *memorysvc.MemoryTime
 	return filter
 }
 
-func timeScopedMemoryIDs(service userScopedMemoryToolService, execCtx ToolExecutionContext, userID string, filter *memorysvc.MemoryTimeFilter) (map[string]struct{}, error) {
+func timeScopedMemoryIDs(service userScopedMemoryToolService, execCtx ToolExecutionContext, spaceID string, filter *memorysvc.MemoryTimeFilter) (map[string]struct{}, error) {
 	if filter == nil {
 		return nil, nil
 	}
-	memories, err := service.SearchForUser(&memorysvc.SearchMemoryRequest{Keyword: "", CharacterID: execCtx.CharacterID, Limit: 500, Time: filter}, userID)
+	memories, err := service.SearchForSpace(&memorysvc.SearchMemoryRequest{Keyword: "", CharacterID: execCtx.CharacterID, Limit: 500, Time: filter}, spaceID)
 	if err != nil {
 		return nil, err
 	}

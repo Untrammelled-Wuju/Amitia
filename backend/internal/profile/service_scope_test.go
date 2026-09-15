@@ -40,7 +40,7 @@ func TestCreatePreservesCharacterScope(t *testing.T) {
 	svc, _ := newProfileTestService(t)
 
 	item, err := svc.Create(&CreateProfileRequest{
-		UserID:         "user-1",
+		SpaceID:        "user-1",
 		CharacterID:    "char-a",
 		Category:       "preference",
 		AttributeName:  "颜色",
@@ -58,7 +58,7 @@ func TestCreateClampsConfidence(t *testing.T) {
 	svc, _ := newProfileTestService(t)
 
 	low, err := svc.Create(&CreateProfileRequest{
-		UserID:         "user-1",
+		SpaceID:        "user-1",
 		Category:       "preference",
 		AttributeName:  "低置信度",
 		AttributeValue: "测试",
@@ -72,7 +72,7 @@ func TestCreateClampsConfidence(t *testing.T) {
 	}
 
 	high, err := svc.Create(&CreateProfileRequest{
-		UserID:         "user-1",
+		SpaceID:        "user-1",
 		Category:       "preference",
 		AttributeName:  "高置信度",
 		AttributeValue: "测试",
@@ -90,7 +90,7 @@ func TestServiceUpdateClampsConfidence(t *testing.T) {
 	svc, _ := newProfileTestService(t)
 
 	item, err := svc.Create(&CreateProfileRequest{
-		UserID:         "user-1",
+		SpaceID:        "user-1",
 		Category:       "preference",
 		AttributeName:  "服务更新置信度",
 		AttributeValue: "测试",
@@ -220,7 +220,7 @@ func TestToolUpsertUsesConversationCharacterScope(t *testing.T) {
 		t.Fatalf("tool profile scope = %q, want char-a", item.CharacterID)
 	}
 
-	items, err := svc.repo.GetScopedByUserID("user-1", "char-b")
+	items, err := svc.repo.GetScopedBySpaceID("user-1", "char-b")
 	if err != nil {
 		t.Fatalf("query char-b profiles: %v", err)
 	}
@@ -241,8 +241,8 @@ func TestDefaultUserInputDerivesProfileUserScopeFromCharacter(t *testing.T) {
 	if err != nil {
 		t.Fatalf("upsert from tool: %v", err)
 	}
-	if item.UserID != "char-a" {
-		t.Fatalf("tool profile user scope = %q, want char-a", item.UserID)
+	if item.SpaceID != "char-a" {
+		t.Fatalf("tool profile user scope = %q, want char-a", item.SpaceID)
 	}
 	if item.CharacterID != "char-a" {
 		t.Fatalf("tool profile character scope = %q, want char-a", item.CharacterID)
@@ -257,7 +257,7 @@ func TestDefaultUserInputDerivesProfileUserScopeFromCharacter(t *testing.T) {
 func TestSystemPromptUsesRequestedCharacterScope(t *testing.T) {
 	svc, _ := newProfileTestService(t)
 	_, err := svc.Create(&CreateProfileRequest{
-		UserID:         "user-1",
+		SpaceID:        "user-1",
 		CharacterID:    "char-a",
 		Category:       "preference",
 		AttributeName:  "称呼",
@@ -268,7 +268,7 @@ func TestSystemPromptUsesRequestedCharacterScope(t *testing.T) {
 		t.Fatalf("create char-a profile: %v", err)
 	}
 	_, err = svc.Create(&CreateProfileRequest{
-		UserID:         "user-1",
+		SpaceID:        "user-1",
 		CharacterID:    "char-b",
 		Category:       "preference",
 		AttributeName:  "称呼",
@@ -279,7 +279,7 @@ func TestSystemPromptUsesRequestedCharacterScope(t *testing.T) {
 		t.Fatalf("create char-b profile: %v", err)
 	}
 	_, err = svc.Create(&CreateProfileRequest{
-		UserID:         "user-1",
+		SpaceID:        "user-1",
 		Category:       "preference",
 		AttributeName:  "语言",
 		AttributeValue: "中文",
@@ -304,7 +304,7 @@ func TestSystemPromptUsesRequestedCharacterScope(t *testing.T) {
 func TestSystemPromptDoesNotFallbackToDefaultUser(t *testing.T) {
 	svc, _ := newProfileTestService(t)
 	_, err := svc.repo.UpsertConfidence(&UserProfile{
-		UserID:         "default",
+		SpaceID:        "default",
 		Category:       "preference",
 		AttributeName:  "内部默认偏好",
 		AttributeValue: "不应进入提示",

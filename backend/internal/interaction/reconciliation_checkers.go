@@ -17,7 +17,7 @@ type agentCheckerBase struct {
 func (b *agentCheckerBase) captureScope(req mindruntime.ReconciliationCheckRequest) ReconciliationCaptureScope {
 	scope := ReconciliationCaptureScope{}
 	if req.Scope != nil {
-		scope.UserID = req.Scope.UserID
+		scope.SpaceID = req.Scope.SpaceID
 		scope.CharacterID = req.Scope.CharacterID
 		scope.ConversationID = req.Scope.ConversationID
 		scope.InteractionID = req.Scope.InteractionID
@@ -48,7 +48,7 @@ func (c *goalActionChecker) CheckReconciliation(ctx context.Context, req mindrun
 		return nil, nil
 	}
 	scope := c.base.captureScope(req)
-	if scope.UserID == "" || scope.InteractionID == "" {
+	if scope.SpaceID == "" || scope.InteractionID == "" {
 		return nil, nil
 	}
 	snap, err := c.base.processor.Capture(ctx, scope)

@@ -50,11 +50,11 @@ func NewRepository(ctx *app.AppContext) Repository {
 
 func (r *repository) ListConversations(q ConversationQuery) ([]Conversation, int64, error) {
 	query := r.db.Model(&Conversation{}).Where("deleted_at IS NULL")
-	if q.UserID != "" {
+	if q.SpaceID != "" {
 		if q.IncludeLegacyDefault {
-			query = query.Where("user_id = ? OR user_id = '' OR user_id IS NULL OR user_id = 'default'", q.UserID)
+			query = query.Where("space_id = ? OR space_id = '' OR space_id IS NULL OR space_id = 'default'", q.SpaceID)
 		} else {
-			query = query.Where("user_id = ?", q.UserID)
+			query = query.Where("space_id = ?", q.SpaceID)
 		}
 	}
 	if q.Channel != "" {
@@ -144,12 +144,12 @@ func (r *repository) DeleteMessagesByConv(convID string) error {
 
 func (r *repository) SearchMessages(q MessageSearchQuery) ([]Message, int64, error) {
 	query := r.db.Model(&Message{}).Select("messages.*").Where("messages.deleted_at IS NULL AND messages.content LIKE ?", "%"+q.Keyword+"%")
-	if q.UserID != "" {
+	if q.SpaceID != "" {
 		query = query.Joins("JOIN conversations ON conversations.id = messages.conversation_id").Where("conversations.deleted_at IS NULL")
 		if q.IncludeLegacyDefault {
-			query = query.Where("conversations.user_id = ? OR conversations.user_id = '' OR conversations.user_id IS NULL OR conversations.user_id = 'default'", q.UserID)
+			query = query.Where("conversations.space_id = ? OR conversations.space_id = '' OR conversations.space_id IS NULL OR conversations.space_id = 'default'", q.SpaceID)
 		} else {
-			query = query.Where("conversations.user_id = ?", q.UserID)
+			query = query.Where("conversations.space_id = ?", q.SpaceID)
 		}
 	}
 	if q.ConversationID != "" {

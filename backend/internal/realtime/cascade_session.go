@@ -28,7 +28,7 @@ type cascadeVoiceTurn struct {
 }
 
 type cascadeVoiceGenerationRequest struct {
-	UserID         string
+	SpaceID        string
 	CharacterID    string
 	SystemPrompt   string
 	History        []cascadeVoiceTurn
@@ -46,7 +46,7 @@ type CascadeVoiceTurn struct {
 }
 
 type CascadeVoiceGenerationRequest struct {
-	UserID         string
+	SpaceID        string
 	CharacterID    string
 	SystemPrompt   string
 	History        []CascadeVoiceTurn
@@ -72,7 +72,7 @@ func SetCascadeVoiceProvider(gen func(ctx context.Context, req CascadeVoiceGener
 			for _, turn := range req.History {
 				history = append(history, CascadeVoiceTurn{UserText: turn.UserText, SpeechText: turn.SpeechText})
 			}
-			return gen(ctx, CascadeVoiceGenerationRequest{UserID: req.UserID, CharacterID: req.CharacterID, SystemPrompt: req.SystemPrompt, History: history, RollingSummary: req.RollingSummary, UserText: req.UserText}, onDelta)
+			return gen(ctx, CascadeVoiceGenerationRequest{SpaceID: req.SpaceID, CharacterID: req.CharacterID, SystemPrompt: req.SystemPrompt, History: history, RollingSummary: req.RollingSummary, UserText: req.UserText}, onDelta)
 		}
 	}
 	cascadeVoiceRegistry.readiness = readiness
@@ -113,7 +113,7 @@ func CascadeVoiceReadiness() error {
 type cascadeCallParams struct {
 	CallID          string
 	SessionID       string
-	UserID          string
+	SpaceID         string
 	CharacterID     string
 	ConversationID  string
 	CharacterName   string
@@ -689,7 +689,7 @@ func (s *cascadeCall) startAssistantTurn(userText string, turnIndex int) {
 			systemPrompt += "\n\n" + prompt
 		}
 		req := cascadeVoiceGenerationRequest{
-			UserID:         s.params.UserID,
+			SpaceID:        s.params.SpaceID,
 			CharacterID:    s.params.CharacterID,
 			SystemPrompt:   systemPrompt,
 			History:        turns,
@@ -869,7 +869,7 @@ func serveCascadeCall(c *gin.Context, params cascadeCallParams) {
 		if payload, ok := value.(map[string]any); ok {
 			payload["event_id"] = uuid.NewString()
 			payload["session_id"] = params.SessionID
-			payload["user_id"] = params.UserID
+			payload["space_id"] = params.SpaceID
 			payload["character_id"] = params.CharacterID
 		}
 		_ = conn.SetWriteDeadline(time.Now().Add(5 * time.Second))

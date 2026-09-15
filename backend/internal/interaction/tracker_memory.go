@@ -59,19 +59,19 @@ func (t *InMemoryTracker) Get(ctx context.Context, id string) (*InteractionRecor
 	return &snap, true, nil
 }
 
-func (t *InMemoryTracker) GetByRequestID(ctx context.Context, userID string, requestID string) (*InteractionRecord, bool, error) {
+func (t *InMemoryTracker) GetByRequestID(ctx context.Context, spaceID string, requestID string) (*InteractionRecord, bool, error) {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 	if err := ctx.Err(); err != nil {
 		return nil, false, err
 	}
-	scope := InteractionScope{UserID: userID, RequestID: requestID}.Normalize()
+	scope := InteractionScope{SpaceID: spaceID, RequestID: requestID}.Normalize()
 	if scope.RequestID == "" {
 		return nil, false, nil
 	}
 	var selected *InteractionRecord
 	for _, rec := range t.records {
-		if rec.Scope.UserID != scope.UserID || rec.Scope.RequestID != scope.RequestID {
+		if rec.Scope.SpaceID != scope.SpaceID || rec.Scope.RequestID != scope.RequestID {
 			continue
 		}
 		if selected == nil || rec.CreatedAt.After(selected.CreatedAt) {

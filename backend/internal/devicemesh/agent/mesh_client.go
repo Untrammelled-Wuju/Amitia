@@ -23,7 +23,7 @@ import (
 type MeshClientConfig struct {
 	CloudBaseURL      string
 	Credential        string
-	UserID            runtimeidentity.UserID
+	SpaceID           runtimeidentity.SpaceID
 	Identity          *LocalIdentity
 	Cursor            *SessionCursor
 	OnState           func(AgentState)
@@ -262,7 +262,7 @@ func (c *MeshClient) sendHello() error {
 		Protocol:             meshprotocol.ProtocolName,
 		MessageType:          protocol.MessageTypeHello,
 		MessageID:            uuid.New().String(),
-		UserID:               c.conf.UserID,
+		SpaceID:              c.conf.SpaceID,
 		DeviceID:             c.conf.Identity.DeviceID,
 		RuntimeID:            c.conf.Identity.RuntimeID,
 		RuntimeSessionID:     lastSessionID,
@@ -435,7 +435,7 @@ func (c *MeshClient) handlePing(env *protocol.Envelope) {
 		Protocol:             meshprotocol.ProtocolName,
 		MessageType:          protocol.MessageTypePong,
 		MessageID:            env.MessageID,
-		UserID:               c.conf.UserID,
+		SpaceID:              c.conf.SpaceID,
 		DeviceID:             c.conf.Identity.DeviceID,
 		RuntimeID:            c.conf.Identity.RuntimeID,
 		RuntimeSessionID:     c.sessionID,
@@ -491,7 +491,7 @@ func (c *MeshClient) sendPing() error {
 		Protocol:             meshprotocol.ProtocolName,
 		MessageType:          protocol.MessageTypePing,
 		MessageID:            uuid.New().String(),
-		UserID:               c.conf.UserID,
+		SpaceID:              c.conf.SpaceID,
 		DeviceID:             c.conf.Identity.DeviceID,
 		RuntimeID:            c.conf.Identity.RuntimeID,
 		RuntimeSessionID:     c.sessionID,
@@ -602,7 +602,7 @@ func (c *MeshClient) sendRuntimeResult(result *protocol.RuntimeResultPayload) {
 		Protocol:             meshprotocol.ProtocolName,
 		MessageType:          protocol.MessageTypeRuntimeResult,
 		MessageID:            uuid.New().String(),
-		UserID:               c.conf.UserID,
+		SpaceID:              c.conf.SpaceID,
 		DeviceID:             c.conf.Identity.DeviceID,
 		RuntimeID:            c.conf.Identity.RuntimeID,
 		RuntimeSessionID:     c.sessionID,
@@ -632,7 +632,7 @@ func (c *MeshClient) sendRuntimeError(errPayload *protocol.RuntimeErrorPayload) 
 		Protocol:             meshprotocol.ProtocolName,
 		MessageType:          protocol.MessageTypeRuntimeError,
 		MessageID:            uuid.New().String(),
-		UserID:               c.conf.UserID,
+		SpaceID:              c.conf.SpaceID,
 		DeviceID:             c.conf.Identity.DeviceID,
 		RuntimeID:            c.conf.Identity.RuntimeID,
 		RuntimeSessionID:     c.sessionID,
@@ -782,7 +782,7 @@ func (c *MeshClient) sendTaskEnvelope(msgType protocol.MessageType, payload inte
 		Protocol:             meshprotocol.ProtocolName,
 		MessageType:          msgType,
 		MessageID:            uuid.New().String(),
-		UserID:               c.conf.UserID,
+		SpaceID:              c.conf.SpaceID,
 		DeviceID:             c.conf.Identity.DeviceID,
 		RuntimeID:            c.conf.Identity.RuntimeID,
 		RuntimeSessionID:     c.sessionID,
@@ -813,7 +813,7 @@ func (c *MeshClient) sendTaskError(messageID, taskRunID, code, message string) {
 		Protocol:             meshprotocol.ProtocolName,
 		MessageType:          protocol.MessageTypeError,
 		MessageID:            messageID,
-		UserID:               c.conf.UserID,
+		SpaceID:              c.conf.SpaceID,
 		DeviceID:             c.conf.Identity.DeviceID,
 		RuntimeID:            c.conf.Identity.RuntimeID,
 		RuntimeSessionID:     c.sessionID,
@@ -896,7 +896,7 @@ func (c *MeshClient) sendCommandAck(cmd *protocol.CommandPayload, result *Comman
 		Protocol:             meshprotocol.ProtocolName,
 		MessageType:          protocol.MessageTypeCommandAck,
 		MessageID:            uuid.New().String(),
-		UserID:               c.conf.UserID,
+		SpaceID:              c.conf.SpaceID,
 		DeviceID:             c.conf.Identity.DeviceID,
 		RuntimeID:            c.conf.Identity.RuntimeID,
 		RuntimeSessionID:     c.sessionID,
@@ -927,7 +927,7 @@ func (c *MeshClient) sendCommandReject(env *protocol.Envelope, code, reason stri
 		Protocol:             meshprotocol.ProtocolName,
 		MessageType:          protocol.MessageTypeError,
 		MessageID:            env.MessageID,
-		UserID:               c.conf.UserID,
+		SpaceID:              c.conf.SpaceID,
 		DeviceID:             c.conf.Identity.DeviceID,
 		RuntimeID:            c.conf.Identity.RuntimeID,
 		RuntimeSessionID:     c.sessionID,

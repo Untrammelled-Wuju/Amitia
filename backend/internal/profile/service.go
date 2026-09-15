@@ -15,6 +15,7 @@ import (
 	"github.com/u-ai/backend/internal/graph"
 	"github.com/u-ai/backend/internal/mindruntime"
 	"github.com/u-ai/backend/internal/pipelinecheckpoint"
+	"github.com/u-ai/backend/internal/requestidentity"
 	"github.com/u-ai/backend/pkg/app"
 	"gorm.io/gorm"
 )
@@ -26,10 +27,10 @@ type Service interface {
 	Create(req *CreateProfileRequest) (*UserProfile, error)
 	Update(id string, req *UpdateProfileRequest) (*UserProfile, error)
 	Delete(id string) error
-	GetByUserID(userID string, characterID ...string) ([]UserProfile, error)
-	ExtractFromConversation(userID, convID string, messages []map[string]string, characterID ...string) error
-	ToSystemPrompt(userID string, characterID ...string) string
-	UpsertFromTool(userID, category, attrName, attrValue string, confidence int, convID string, characterID ...string) (*UserProfile, error)
+	GetBySpaceID(spaceID string, characterID ...string) ([]UserProfile, error)
+	ExtractFromConversation(spaceID, convID string, messages []map[string]string, characterID ...string) error
+	ToSystemPrompt(spaceID string, characterID ...string) string
+	UpsertFromTool(spaceID, category, attrName, attrValue string, confidence int, convID string, characterID ...string) (*UserProfile, error)
 	SyncGraphProfile(id string) bool
 }
 
@@ -75,13 +76,13 @@ func (s *service) Create(req *CreateProfileRequest) (*UserProfile, error) {
 	if req.Category == "" {
 		return nil, fmt.Errorf("category不能为空")
 	}
-	userID := s.profileUserScope("", req.UserID, req.CharacterID)
-	if userID == "" {
-		return nil, fmt.Errorf("user scope required")
+	spaceID := s.profileSpaceScope("", req.SpaceID, req.CharacterID)
+	if spaceID == "" {
+		return nil, fmt.Errorf("space scope required")
 	}
 	req.Confidence = clampProfileConfidence(req.Confidence)
 	p := &UserProfile{
-		UserID:         userID,
+		SpaceID:        spaceID,
 		CharacterID:    req.CharacterID,
 		Category:       req.Category,
 		AttributeName:  req.AttributeName,
@@ -124,59 +125,59 @@ func (s *service) Delete(id string) error {
 		return err
 	}
 	if s.graphSvc != nil && p != nil {
-		userID := s.profileUserScope(p.SourceConvID, p.UserID, p.CharacterID)
-		if userID == "" {
+		spaceID := s.profileSpaceScope(p.SourceConvID, p.SpaceID, p.CharacterID)
+		if spaceID == "" {
 			return nil
 		}
-		nodeID := userID + ":" + p.Category + ":" + p.AttributeName
+		nodeID := spaceID + ":" + p.Category + ":" + p.AttributeName
 		if p.CharacterID != "" {
-			nodeID = userID + ":" + p.CharacterID + ":" + p.Category + ":" + p.AttributeName
+			nodeID = spaceID + ":" + p.CharacterID + ":" + p.Category + ":" + p.AttributeName
 		}
 		_ = s.graphSvc.DeleteNode("profile:" + nodeID)
-		_ = s.graphSvc.DeleteNodeIfOrphan("user:" + userID)
+		_ = s.graphSvc.DeleteNodeIfOrphan("space:" + spaceID)
 	}
 	return nil
 }
 
-func (s *service) UpdateForUser(id, userID string, req *UpdateProfileRequest) (*UserProfile, error) {
+func (s *service) UpdateForSpace(id, spaceID string, req *UpdateProfileRequest) (*UserProfile, error) {
 	p, err := s.repo.FindByID(id)
 	if err != nil {
 		return nil, err
 	}
-	if p == nil || strings.TrimSpace(p.UserID) != strings.TrimSpace(userID) {
+	if p == nil || strings.TrimSpace(p.SpaceID) != strings.TrimSpace(spaceID) {
 		return nil, gorm.ErrRecordNotFound
 	}
 	return s.Update(id, req)
 }
 
-func (s *service) DeleteForUser(id, userID string) error {
+func (s *service) DeleteForSpace(id, spaceID string) error {
 	p, err := s.repo.FindByID(id)
 	if err != nil {
 		return err
 	}
-	if p == nil || strings.TrimSpace(p.UserID) != strings.TrimSpace(userID) {
+	if p == nil || strings.TrimSpace(p.SpaceID) != strings.TrimSpace(spaceID) {
 		return gorm.ErrRecordNotFound
 	}
 	return s.Delete(id)
 }
 
-func (s *service) GetByUserID(userID string, characterID ...string) ([]UserProfile, error) {
+func (s *service) GetBySpaceID(spaceID string, characterID ...string) ([]UserProfile, error) {
 	if s.dataLifecycleCoordinator != nil && len(characterID) > 0 && characterID[0] != "" && s.dataLifecycleCoordinator.IsRetrievalBlocked(characterID[0]) {
 		return []UserProfile{}, nil
 	}
 	if len(characterID) > 0 && characterID[0] != "" {
-		return s.repo.GetScopedByUserID(userID, characterID[0])
+		return s.repo.GetScopedBySpaceID(spaceID, characterID[0])
 	}
-	return s.repo.GetByUserID(userID)
+	return s.repo.GetBySpaceID(spaceID)
 }
 
-func (s *service) UpsertFromTool(userID, category, attrName, attrValue string, confidence int, convID string, characterID ...string) (*UserProfile, error) {
-	userID = cleanUserScope(userID)
-	if userID == "" {
-		return nil, fmt.Errorf("user scope required")
+func (s *service) UpsertFromTool(spaceID, category, attrName, attrValue string, confidence int, convID string, characterID ...string) (*UserProfile, error) {
+	spaceID = cleanScopeValue(spaceID)
+	if spaceID == "" {
+		return nil, fmt.Errorf("space scope required")
 	}
 	requestedScope := firstScope(characterID...)
-	scope, err := s.requireProfileConversationOwner(convID, userID, requestedScope)
+	scope, err := s.requireProfileConversationOwner(convID, spaceID, requestedScope)
 	if err != nil {
 		return nil, err
 	}
@@ -188,7 +189,7 @@ func (s *service) UpsertFromTool(userID, category, attrName, attrValue string, c
 	}
 	confidence = clampProfileConfidence(confidence)
 	p := &UserProfile{
-		UserID:         userID,
+		SpaceID:        spaceID,
 		CharacterID:    scope,
 		Category:       category,
 		AttributeName:  attrName,
@@ -212,16 +213,16 @@ func (s *service) SyncGraphProfile(id string) bool {
 	return true
 }
 
-func (s *service) ExtractFromConversation(userID, convID string, messages []map[string]string, characterID ...string) error {
+func (s *service) ExtractFromConversation(spaceID, convID string, messages []map[string]string, characterID ...string) error {
 	if len(messages) == 0 {
 		return nil
 	}
-	userID = cleanUserScope(userID)
-	if userID == "" {
-		return fmt.Errorf("user scope required")
+	spaceID = cleanScopeValue(spaceID)
+	if spaceID == "" {
+		return fmt.Errorf("space scope required")
 	}
 	requestedScope := firstScope(characterID...)
-	scope, err := s.requireProfileConversationOwner(convID, userID, requestedScope)
+	scope, err := s.requireProfileConversationOwner(convID, spaceID, requestedScope)
 	if err != nil {
 		return err
 	}
@@ -271,7 +272,7 @@ func (s *service) ExtractFromConversation(userID, convID string, messages []map[
 			continue
 		}
 		result, err := s.repo.UpsertConfidence(&UserProfile{
-			UserID:         userID,
+			SpaceID:        spaceID,
 			CharacterID:    scope,
 			Category:       cat,
 			AttributeName:  name,
@@ -289,18 +290,18 @@ func (s *service) ExtractFromConversation(userID, convID string, messages []map[
 	return nil
 }
 
-func (s *service) ToSystemPrompt(userID string, characterID ...string) string {
-	requestedUserID := strings.TrimSpace(userID)
+func (s *service) ToSystemPrompt(spaceID string, characterID ...string) string {
+	requestedSpaceID := strings.TrimSpace(spaceID)
 	scope := firstScope(characterID...)
-	userID = cleanUserScope(userID)
-	if userID == "" {
-		userID = scope
+	spaceID = cleanScopeValue(spaceID)
+	if spaceID == "" {
+		spaceID = scope
 	}
-	if userID == "" {
+	if spaceID == "" {
 		return ""
 	}
-	profiles, err := s.repo.GetUserFactSummary(userID, scope)
-	if (err != nil || len(profiles) == 0) && requestedUserID == "default" && scope != "" {
+	profiles, err := s.repo.GetUserFactSummary(spaceID, scope)
+	if (err != nil || len(profiles) == 0) && requestedSpaceID == requestidentity.LegacySpaceID && scope != "" {
 		profiles, err = s.legacyDefaultCharacterProfiles(scope)
 	}
 	if err != nil || len(profiles) == 0 {
@@ -357,7 +358,7 @@ func (s *service) legacyDefaultCharacterProfiles(scope string) ([]UserProfile, e
 		return []UserProfile{}, nil
 	}
 	var items []UserProfile
-	err := s.db.Where("user_id = ? AND character_id = ? AND confidence >= 50", "default", scope).Order("confidence DESC").Limit(20).Find(&items).Error
+	err := s.db.Where("space_id = ? AND character_id = ? AND confidence >= 50", "default", scope).Order("confidence DESC").Limit(20).Find(&items).Error
 	if items == nil {
 		items = []UserProfile{}
 	}
@@ -509,7 +510,7 @@ func (s *service) Process(ctx context.Context, convID string, messages []map[str
 		_ = manager.ReleaseLease(convID, "profile", leaseOwner)
 		return err
 	}
-	if err := s.ExtractFromConversation(s.profileExtractionUserID(convID), convID, pending); err != nil {
+	if err := s.ExtractFromConversation(s.profileExtractionSpaceID(convID), convID, pending); err != nil {
 		_ = manager.ReleaseLease(convID, "profile", leaseOwner)
 		return err
 	}
@@ -520,19 +521,15 @@ func (s *service) Process(ctx context.Context, convID string, messages []map[str
 	return nil
 }
 
-func (s *service) profileExtractionUserID(convID string) string {
+func (s *service) profileExtractionSpaceID(convID string) string {
 	if s.db == nil || strings.TrimSpace(convID) == "" {
-		return "default"
+		return requestidentity.CanonicalSpaceID()
 	}
-	var userID string
-	if err := s.db.Table("conversations").Select("user_id").Where("id = ? AND deleted_at IS NULL", convID).Row().Scan(&userID); err != nil {
-		return "default"
+	var spaceID string
+	if err := s.db.Table("conversations").Select("space_id").Where("id = ? AND deleted_at IS NULL", convID).Row().Scan(&spaceID); err != nil {
+		return requestidentity.CanonicalSpaceID()
 	}
-	userID = strings.TrimSpace(userID)
-	if userID == "" {
-		return "default"
-	}
-	return userID
+	return requestidentity.NormalizeSpaceID(spaceID)
 }
 
 func (s *service) profileScope(convID string, characterID ...string) string {
@@ -549,8 +546,8 @@ func (s *service) profileScope(convID string, characterID ...string) string {
 	return scope
 }
 
-func (s *service) profileUserScope(convID, userID string, characterID ...string) string {
-	if scope := cleanUserScope(userID); scope != "" {
+func (s *service) profileSpaceScope(convID, spaceID string, characterID ...string) string {
+	if scope := cleanScopeValue(spaceID); scope != "" {
 		return scope
 	}
 	if scope := firstScope(characterID...); scope != "" {
@@ -563,13 +560,10 @@ func firstScope(characterID ...string) string {
 	if len(characterID) == 0 {
 		return ""
 	}
-	return cleanUserScope(characterID[0])
+	return cleanScopeValue(characterID[0])
 }
 
-func cleanUserScope(scope string) string {
-	// "default" is the legitimate owner of a local single-user installation.
-	// Only an actually empty value means that an internal caller did not supply
-	// an owner and may need legacy scope fallback.
+func cleanScopeValue(scope string) string {
 	return strings.TrimSpace(scope)
 }
 
@@ -577,22 +571,22 @@ func (s *service) syncGraph(p *UserProfile) {
 	if s.graphSvc == nil || p == nil {
 		return
 	}
-	userID := s.profileUserScope(p.SourceConvID, p.UserID, p.CharacterID)
-	if userID == "" {
+	spaceID := s.profileSpaceScope(p.SourceConvID, p.SpaceID, p.CharacterID)
+	if spaceID == "" {
 		return
 	}
-	p.UserID = userID
-	nodeID := p.UserID + ":" + p.Category + ":" + p.AttributeName
+	p.SpaceID = spaceID
+	nodeID := p.SpaceID + ":" + p.Category + ":" + p.AttributeName
 	if p.CharacterID != "" {
-		nodeID = p.UserID + ":" + p.CharacterID + ":" + p.Category + ":" + p.AttributeName
+		nodeID = p.SpaceID + ":" + p.CharacterID + ":" + p.Category + ":" + p.AttributeName
 	}
-	_ = s.graphSvc.SyncNode("user", p.UserID, p.UserID, map[string]interface{}{"user_id": p.UserID})
+	_ = s.graphSvc.SyncNode("space", p.SpaceID, p.SpaceID, map[string]interface{}{"space_id": p.SpaceID})
 	_ = s.graphSvc.SyncNode("profile", nodeID, p.AttributeValue, map[string]interface{}{
 		"category":       p.Category,
 		"character_id":   p.CharacterID,
 		"confidence":     p.Confidence,
-		"user_id":        p.UserID,
+		"space_id":       p.SpaceID,
 		"source_conv_id": p.SourceConvID,
 	})
-	_ = s.graphSvc.SyncEdge("user:"+p.UserID, "profile:"+nodeID, "has_profile", float64(p.Confidence)/100.0)
+	_ = s.graphSvc.SyncEdge("space:"+p.SpaceID, "profile:"+nodeID, "has_profile", float64(p.Confidence)/100.0)
 }

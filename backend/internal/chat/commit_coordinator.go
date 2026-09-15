@@ -36,7 +36,7 @@ type MessageCommitEvent struct {
 	UserMessage         string
 	Reply               string
 	Lines               []string
-	UserID              string
+	SpaceID             string
 	PeerID              string
 	RequestID           string
 	MessagePlan         *interaction.MessagePlan
@@ -97,7 +97,7 @@ func (s *service) commitInteraction(ctx context.Context, plan messageCommitPlan)
 
 	if s.deliveryStore != nil && plan.Request != nil && plan.Request.InteractionID != "" {
 		leaseID, ownerToken, err := s.deliveryStore.AcquireOutputLease(
-			plan.Request.InteractionID, plan.Character, plan.Request.UserID, plan.Request.Channel)
+			plan.Request.InteractionID, plan.Character, plan.Request.SpaceID, plan.Request.Channel)
 		if err != nil {
 			return nil, fmt.Errorf("failed to acquire output lease: %w", err)
 		}
@@ -124,7 +124,7 @@ func (s *service) commitInteraction(ctx context.Context, plan messageCommitPlan)
 					if err := tx.Create(message).Error; err != nil {
 						return err
 					}
-					if err := s.recordMessageChangeTx(tx, message, syncapi.OpCreate, 1, plan.Request.UserID); err != nil {
+					if err := s.recordMessageChangeTx(tx, message, syncapi.OpCreate, 1, plan.Request.SpaceID); err != nil {
 						return err
 					}
 					messageSequences[message.ID] = message.Sequence
@@ -156,7 +156,7 @@ func (s *service) commitInteraction(ctx context.Context, plan messageCommitPlan)
 				if err := tx.Create(aiMsg).Error; err != nil {
 					return err
 				}
-				if err := s.recordMessageChangeTx(tx, aiMsg, syncapi.OpCreate, 1, plan.Request.UserID); err != nil {
+				if err := s.recordMessageChangeTx(tx, aiMsg, syncapi.OpCreate, 1, plan.Request.SpaceID); err != nil {
 					return err
 				}
 				messageSequences[aiMsgID] = aiMsg.Sequence
@@ -174,7 +174,7 @@ func (s *service) commitInteraction(ctx context.Context, plan messageCommitPlan)
 				if err := tx.Create(aiMsg).Error; err != nil {
 					return err
 				}
-				if err := s.recordMessageChangeTx(tx, aiMsg, syncapi.OpCreate, 1, plan.Request.UserID); err != nil {
+				if err := s.recordMessageChangeTx(tx, aiMsg, syncapi.OpCreate, 1, plan.Request.SpaceID); err != nil {
 					return err
 				}
 				messageSequences[aiMsgID] = aiMsg.Sequence
@@ -256,7 +256,7 @@ func (s *service) commitInteraction(ctx context.Context, plan messageCommitPlan)
 			UserMessage:         plan.Request.Message,
 			Reply:               plan.Reply,
 			Lines:               plan.Lines,
-			UserID:              plan.Request.UserID,
+			SpaceID:             plan.Request.SpaceID,
 			PeerID:              plan.Request.PeerID,
 			RequestID:           plan.Request.RequestID,
 			MessagePlan:         result.MessagePlan,
@@ -267,7 +267,7 @@ func (s *service) commitInteraction(ctx context.Context, plan messageCommitPlan)
 		}
 	}
 	if !plan.Request.IsInternal && plan.Source != "proactive" {
-		s.trackUserAffectFromMessage(plan.Request.UserID, plan.Character, plan.Request.Message)
+		s.trackUserAffectFromMessage(plan.Request.SpaceID, plan.Character, plan.Request.Message)
 	}
 	return result, nil
 }
@@ -287,5 +287,5 @@ func (s *service) finalizeRelationshipTimeTx(tx *gorm.DB, plan messageCommitPlan
 			reason = relTimeCtx.Policy.SuppressionReason
 		}
 	}
-	return s.relTimeCoordinator.FinalizeCommittedTx(context.Background(), tx, plan.Request.UserID, plan.Character, plan.Request.InteractionID, relTimeCtx, suppress, reason, plan.Request.IsInternal)
+	return s.relTimeCoordinator.FinalizeCommittedTx(context.Background(), tx, plan.Request.SpaceID, plan.Character, plan.Request.InteractionID, relTimeCtx, suppress, reason, plan.Request.IsInternal)
 }

@@ -134,7 +134,7 @@ const (
 type BehaviorPlan struct {
 	Version              PlanVersion               `json:"version"`
 	ID                   string                    `json:"id,omitempty"`
-	UserID               string                    `json:"userId,omitempty"`
+	SpaceID              string                    `json:"spaceId,omitempty"`
 	CharacterID          string                    `json:"characterId,omitempty"`
 	ConversationID       string                    `json:"conversationId,omitempty"`
 	InteractionID        string                    `json:"interactionId,omitempty"`
@@ -166,14 +166,14 @@ type BehaviorPlan struct {
 }
 
 type CoordinationPlanRef struct {
-	CoordinationID       string   `json:"coordinationId"`
-	ParentGoalID         string   `json:"parentGoalId"`
-	ParentGoalRevision   int64    `json:"parentGoalRevision"`
-	Strategy             string   `json:"strategy"`
-	CompletionPlan       string   `json:"completionPlan"`
-	WorkerCount          int      `json:"workerCount"`
-	MaxWorkers           int      `json:"maxWorkers"`
-	SourceCharacterIDs   []string `json:"sourceCharacterIds,omitempty"`
+	CoordinationID     string   `json:"coordinationId"`
+	ParentGoalID       string   `json:"parentGoalId"`
+	ParentGoalRevision int64    `json:"parentGoalRevision"`
+	Strategy           string   `json:"strategy"`
+	CompletionPlan     string   `json:"completionPlan"`
+	WorkerCount        int      `json:"workerCount"`
+	MaxWorkers         int      `json:"maxWorkers"`
+	SourceCharacterIDs []string `json:"sourceCharacterIds,omitempty"`
 }
 
 type PsycheSignalSet struct {
@@ -222,7 +222,7 @@ type RegulationSignal struct {
 }
 
 type RelationshipSnapshot struct {
-	UserID        string                                               `json:"userId,omitempty"`
+	SpaceID       string                                               `json:"spaceId,omitempty"`
 	CharacterID   string                                               `json:"characterId,omitempty"`
 	Dimensions    map[RelationshipDimension]RelationshipDimensionValue `json:"dimensions,omitempty"`
 	LastChangedAt time.Time                                            `json:"lastChangedAt,omitempty"`

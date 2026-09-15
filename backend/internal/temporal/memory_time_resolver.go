@@ -22,7 +22,7 @@ func NewMemoryTimeResolver(temporalSvc *Service, clock Clock) *MemoryTimeResolve
 
 type RelativeMemoryTimeInput struct {
 	Expression       string
-	UserID           string
+	SpaceID          string
 	CharacterID      string
 	ReferenceTimeUTC *time.Time
 }
@@ -32,7 +32,7 @@ func (r *MemoryTimeResolver) Resolve(input RelativeMemoryTimeInput) (ResolvedMem
 	if input.ReferenceTimeUTC != nil {
 		refTime = *input.ReferenceTimeUTC
 	}
-	loc, timezone, err := r.resolveLocation(input.UserID, input.CharacterID)
+	loc, timezone, err := r.resolveLocation(input.SpaceID, input.CharacterID)
 	if err != nil {
 		return ResolvedMemoryTimeRange{}, err
 	}
@@ -98,11 +98,11 @@ func (r *MemoryTimeResolver) resolveExpression(expr string, localRef time.Time, 
 	}
 }
 
-func (r *MemoryTimeResolver) resolveLocation(userID, characterID string) (*time.Location, string, error) {
+func (r *MemoryTimeResolver) resolveLocation(spaceID, characterID string) (*time.Location, string, error) {
 	if r.temporal == nil || r.temporal.repo == nil {
 		return time.UTC, "UTC", nil
 	}
-	profile, err := r.temporal.GetProfile(context.Background(), OwnerUser, userID)
+	profile, err := r.temporal.GetProfile(context.Background(), OwnerSpace, spaceID)
 	if err != nil || profile == nil {
 		return time.UTC, "UTC", nil
 	}

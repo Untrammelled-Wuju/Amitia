@@ -134,7 +134,7 @@ func (h *LatestHandler) Handle(ctx context.Context, owner SessionOwner, rawReque
 	if !session.Active() {
 		return LatestResult{}, NewFrameError(ErrSessionNotRunning, "frame capture session not running")
 	}
-	if session.Owner.UserID != owner.UserID {
+	if session.Owner.SpaceID != owner.SpaceID {
 		return LatestResult{}, NewFrameError(ErrSessionNotFound, "frame capture session not found for this user")
 	}
 	if session.Owner.ConversationID != owner.ConversationID {
@@ -169,7 +169,7 @@ func (h *StopHandler) Handle(ctx context.Context, owner SessionOwner, sessionID 
 	if err != nil {
 		return StopResult{}, err
 	}
-	if session.Owner.UserID != owner.UserID {
+	if session.Owner.SpaceID != owner.SpaceID {
 		return StopResult{}, NewFrameError(ErrSessionNotFound, "frame capture session not found for this user")
 	}
 	if session.Owner.ConversationID != owner.ConversationID {
@@ -211,7 +211,7 @@ func (h *StatusHandler) CapabilityID() capability.CapabilityID {
 }
 
 func (h *StatusHandler) Handle(ctx context.Context, owner SessionOwner) (StatusResult, error) {
-	sessions, err := h.store.ListByUser(ctx, owner.UserID)
+	sessions, err := h.store.ListBySpace(ctx, owner.SpaceID)
 	if err != nil {
 		return StatusResult{}, err
 	}

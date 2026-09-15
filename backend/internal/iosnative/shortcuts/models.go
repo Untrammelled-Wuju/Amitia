@@ -87,7 +87,7 @@ type ShortcutInvocationScope struct {
 	RequestId      string `json:"RequestId"`
 	CorrelationID  string `json:"correlationId"`
 	CausationID    string `json:"causationId"`
-	UserID         string `json:"userId"`
+	SpaceID        string `json:"spaceId"`
 	CharacterID    string `json:"characterId,omitempty"`
 	ConversationID string `json:"conversationId,omitempty"`
 	SessionID      string `json:"sessionId,omitempty"`

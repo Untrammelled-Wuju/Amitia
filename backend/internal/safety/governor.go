@@ -14,7 +14,7 @@ type SafetyDecision struct {
 
 type PreGenInput struct {
 	CharacterID  string            `json:"characterId"`
-	UserID       string            `json:"userId"`
+	SpaceID      string            `json:"spaceId"`
 	Scope        string            `json:"scope"`
 	Permissions  []string          `json:"permissions"`
 	CoreBoundary string            `json:"coreBoundary"`
@@ -55,7 +55,7 @@ type PostGenOutput struct {
 type PreDeliverInput struct {
 	InteractionID string `json:"interactionId"`
 	CharacterID   string `json:"characterId"`
-	UserID        string `json:"userId"`
+	SpaceID       string `json:"spaceId"`
 	OutputLeaseID string `json:"outputLeaseId"`
 	TombstoneHit  bool   `json:"tombstoneHit"`
 }

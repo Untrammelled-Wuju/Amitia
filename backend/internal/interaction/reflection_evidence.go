@@ -190,8 +190,8 @@ func buildEventTags(
 	if observation.CharacterID != "" {
 		tags = append(tags, "char:"+observation.CharacterID)
 	}
-	if observation.UserID != "" {
-		tags = append(tags, "user:"+observation.UserID)
+	if observation.SpaceID != "" {
+		tags = append(tags, "space:"+observation.SpaceID)
 	}
 	if observation.ConversationID != "" {
 		tags = append(tags, "conv:"+observation.ConversationID)
@@ -305,7 +305,7 @@ func (s *ReflectionEvidenceSelector) Select(window *ReflectionEvidenceWindow) mi
 }
 
 type InteractionScopeKey struct {
-	UserID         string
+	SpaceID        string
 	CharacterID    string
 	ConversationID string
 	RequestID      string
@@ -313,37 +313,37 @@ type InteractionScopeKey struct {
 
 func (k InteractionScopeKey) ToReflectionScopeKey() ReflectionScopeKey {
 	return ReflectionScopeKey{
-		UserID:         k.UserID,
+		SpaceID:        k.SpaceID,
 		CharacterID:    k.CharacterID,
 		ConversationID: k.ConversationID,
 	}
 }
 
 type ReflectionScopeKey struct {
-	UserID         string
+	SpaceID        string
 	CharacterID    string
 	ConversationID string
 }
 
 func (k ReflectionScopeKey) Normalize() ReflectionScopeKey {
 	return ReflectionScopeKey{
-		UserID:         strings.TrimSpace(k.UserID),
+		SpaceID:        strings.TrimSpace(k.SpaceID),
 		CharacterID:    strings.TrimSpace(k.CharacterID),
 		ConversationID: strings.TrimSpace(k.ConversationID),
 	}
 }
 
 func (k ReflectionScopeKey) IsZero() bool {
-	return k.UserID == "" && k.CharacterID == "" && k.ConversationID == ""
+	return k.SpaceID == "" && k.CharacterID == "" && k.ConversationID == ""
 }
 
 func (k ReflectionScopeKey) String() string {
-	return fmt.Sprintf("%s|%s|%s", k.UserID, k.CharacterID, k.ConversationID)
+	return fmt.Sprintf("%s|%s|%s", k.SpaceID, k.CharacterID, k.ConversationID)
 }
 
 func NewReflectionScopeKey(scope InteractionScope) ReflectionScopeKey {
 	return ReflectionScopeKey{
-		UserID:         strings.TrimSpace(scope.UserID),
+		SpaceID:        strings.TrimSpace(scope.SpaceID),
 		CharacterID:    strings.TrimSpace(scope.CharacterID),
 		ConversationID: strings.TrimSpace(scope.ConversationID),
 	}

@@ -110,7 +110,7 @@ func interactionRunSource(db *gorm.DB) GormReconciliationSource {
 				StatusColumn:  "status",
 				VersionColumn: "status_version",
 				HashColumns:   []string{"status", "status_version", "result_ref", "error_code", "error_message"},
-				FieldColumns:  []string{"user_id", "character_id", "conversation_id", "request_id", "status", "result_ref"},
+				FieldColumns:  []string{"space_id", "character_id", "conversation_id", "request_id", "status", "result_ref"},
 			},
 		},
 	}

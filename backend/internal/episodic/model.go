@@ -9,7 +9,7 @@ import (
 
 type EpisodicMemory struct {
 	ID                string  `gorm:"column:id;primaryKey" json:"id"`
-	UserID            string  `gorm:"column:user_id;not null;default:default;index" json:"userId"`
+	SpaceID           string  `gorm:"column:space_id;not null;index" json:"spaceId"`
 	CharacterID       string  `gorm:"column:character_id;not null;default:'';index" json:"characterId"`
 	SceneType         string  `gorm:"column:scene_type;not null" json:"sceneType"`
 	Title             string  `gorm:"column:title;not null" json:"title"`
@@ -65,7 +65,7 @@ func (e *EpisodicMemory) BeforeCreate(tx *gorm.DB) error {
 }
 
 type CreateEpisodicRequest struct {
-	UserID          string `json:"userId"`
+	SpaceID         string `json:"spaceId"`
 	CharacterID     string `json:"characterId"`
 	SceneType       string `json:"sceneType" binding:"required"`
 	Title           string `json:"title" binding:"required"`
@@ -80,7 +80,7 @@ type CreateEpisodicRequest struct {
 }
 
 type EpisodicListQuery struct {
-	UserID         string `form:"userId"`
+	SpaceID        string `form:"spaceId"`
 	CharacterID    string `form:"characterId"`
 	SceneType      string `form:"sceneType"`
 	RetentionLevel int    `form:"retentionLevel"`

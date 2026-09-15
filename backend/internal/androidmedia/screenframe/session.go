@@ -11,17 +11,17 @@ type ScreenFrameSessionID string
 type SessionState string
 
 const (
-	SessionStateStarting          SessionState = "starting"
+	SessionStateStarting           SessionState = "starting"
 	SessionStateAwaitingPermission SessionState = "awaiting_permission"
-	SessionStateRunning           SessionState = "running"
-	SessionStateStopping          SessionState = "stopping"
-	SessionStateStopped           SessionState = "stopped"
-	SessionStateProjectionRevoked SessionState = "projection_revoked"
-	SessionStateFailed            SessionState = "failed"
+	SessionStateRunning            SessionState = "running"
+	SessionStateStopping           SessionState = "stopping"
+	SessionStateStopped            SessionState = "stopped"
+	SessionStateProjectionRevoked  SessionState = "projection_revoked"
+	SessionStateFailed             SessionState = "failed"
 )
 
 type SessionOwner struct {
-	UserID         string `json:"userId"`
+	SpaceID        string `json:"spaceId"`
 	CharacterID    string `json:"characterId"`
 	ConversationID string `json:"conversationId"`
 }
@@ -35,8 +35,8 @@ type ScreenFrameSession struct {
 
 	TargetFPS float64 `json:"targetFps"`
 
-	State       SessionState `json:"state"`
-	CaptureGeneration uint64 `json:"generation"`
+	State             SessionState `json:"state"`
+	CaptureGeneration uint64       `json:"generation"`
 
 	LastFrameSequence uint64    `json:"lastFrameSequence"`
 	LastFrameAt       time.Time `json:"lastFrameAt"`
@@ -55,7 +55,7 @@ type ScreenFrameSessionStore interface {
 	Create(ctx context.Context, session ScreenFrameSession) (*ScreenFrameSession, error)
 	Get(ctx context.Context, id ScreenFrameSessionID) (*ScreenFrameSession, error)
 	ListActive(ctx context.Context) ([]*ScreenFrameSession, error)
-	ListByUser(ctx context.Context, userID string) ([]*ScreenFrameSession, error)
+	ListBySpace(ctx context.Context, spaceID string) ([]*ScreenFrameSession, error)
 	ListByConversation(ctx context.Context, conversationID string) ([]*ScreenFrameSession, error)
 	UpdateState(ctx context.Context, id ScreenFrameSessionID, state SessionState, generation uint64) error
 	Delete(ctx context.Context, id ScreenFrameSessionID) error
@@ -125,13 +125,13 @@ func (s *blockedSessionStore) ListActive(ctx context.Context) ([]*ScreenFrameSes
 	return result, nil
 }
 
-func (s *blockedSessionStore) ListByUser(ctx context.Context, userID string) ([]*ScreenFrameSession, error) {
+func (s *blockedSessionStore) ListBySpace(ctx context.Context, spaceID string) ([]*ScreenFrameSession, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	var result []*ScreenFrameSession
 	for _, sess := range s.sessions {
-		if sess.Owner.UserID == userID {
+		if sess.Owner.SpaceID == spaceID {
 			result = append(result, sess)
 		}
 	}
@@ -194,14 +194,14 @@ func NewFrameErrorAsValue[T any](value T, err error) (T, error) {
 }
 
 type LatestRequest struct {
-	SessionID      ScreenFrameSessionID `json:"sessionId"`
-	AfterSequence  *uint64              `json:"afterSequence,omitempty"`
-	WaitMs         int                  `json:"waitMs,omitempty"`
-	Format         *ScreenshotFormat    `json:"format,omitempty"`
-	Quality        *int                 `json:"quality,omitempty"`
-	MaxWidth       *int                 `json:"maxWidth,omitempty"`
-	MaxHeight      *int                 `json:"maxHeight,omitempty"`
-	AllowStale     bool                 `json:"allowStale,omitempty"`
+	SessionID     ScreenFrameSessionID `json:"sessionId"`
+	AfterSequence *uint64              `json:"afterSequence,omitempty"`
+	WaitMs        int                  `json:"waitMs,omitempty"`
+	Format        *ScreenshotFormat    `json:"format,omitempty"`
+	Quality       *int                 `json:"quality,omitempty"`
+	MaxWidth      *int                 `json:"maxWidth,omitempty"`
+	MaxHeight     *int                 `json:"maxHeight,omitempty"`
+	AllowStale    bool                 `json:"allowStale,omitempty"`
 }
 
 func (r LatestRequest) WaitDuration() time.Duration {
@@ -222,17 +222,17 @@ func (r LatestRequest) ResolveFormat() ScreenshotFormat {
 }
 
 type LatestResult struct {
-	HasFrame     bool   `json:"hasFrame"`
-	SessionID    ScreenFrameSessionID `json:"sessionId"`
-	Sequence     uint64 `json:"sequence,omitempty"`
-	Generation   uint64 `json:"generation,omitempty"`
-	ResourceURI  string `json:"resourceUri,omitempty"`
-	MIMEType     string `json:"mimeType,omitempty"`
-	Width        int    `json:"width,omitempty"`
-	Height       int    `json:"height,omitempty"`
-	CapturedAt   int64  `json:"capturedAt,omitempty"`
-	AgeMs        int64  `json:"ageMs,omitempty"`
-	DroppedSincePrevious int64 `json:"droppedSincePrevious,omitempty"`
+	HasFrame             bool                 `json:"hasFrame"`
+	SessionID            ScreenFrameSessionID `json:"sessionId"`
+	Sequence             uint64               `json:"sequence,omitempty"`
+	Generation           uint64               `json:"generation,omitempty"`
+	ResourceURI          string               `json:"resourceUri,omitempty"`
+	MIMEType             string               `json:"mimeType,omitempty"`
+	Width                int                  `json:"width,omitempty"`
+	Height               int                  `json:"height,omitempty"`
+	CapturedAt           int64                `json:"capturedAt,omitempty"`
+	AgeMs                int64                `json:"ageMs,omitempty"`
+	DroppedSincePrevious int64                `json:"droppedSincePrevious,omitempty"`
 }
 
 type FrameSnapshot struct {
@@ -250,10 +250,10 @@ func (f FrameSnapshot) IsValid() bool {
 }
 
 type StartRequest struct {
-	DisplayID *int           `json:"displayId,omitempty"`
-	TargetFPS *float64       `json:"targetFps,omitempty"`
-	MaxWidth  *int           `json:"maxWidth,omitempty"`
-	MaxHeight *int           `json:"maxHeight,omitempty"`
+	DisplayID *int     `json:"displayId,omitempty"`
+	TargetFPS *float64 `json:"targetFps,omitempty"`
+	MaxWidth  *int     `json:"maxWidth,omitempty"`
+	MaxHeight *int     `json:"maxHeight,omitempty"`
 }
 
 func (r StartRequest) Validate(p ScreenFramePolicy) error {
@@ -307,13 +307,13 @@ func (r StartRequest) ResolveDisplayID() int {
 }
 
 type StartResult struct {
-	SessionID ScreenFrameSessionID `json:"sessionId"`
-	State     SessionState         `json:"state"`
-	DisplayID int                  `json:"displayId"`
-	Width     int                  `json:"width"`
-	Height    int                  `json:"height"`
-	TargetFPS float64              `json:"targetFps"`
-	Generation uint64             `json:"generation"`
+	SessionID  ScreenFrameSessionID `json:"sessionId"`
+	State      SessionState         `json:"state"`
+	DisplayID  int                  `json:"displayId"`
+	Width      int                  `json:"width"`
+	Height     int                  `json:"height"`
+	TargetFPS  float64              `json:"targetFps"`
+	Generation uint64               `json:"generation"`
 }
 
 type StopResult struct {

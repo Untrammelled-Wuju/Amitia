@@ -24,7 +24,7 @@ func newScopeLookupTestDB(t *testing.T) *gorm.DB {
 	})
 	if err := db.Exec(`CREATE TABLE conversations (
 		id TEXT PRIMARY KEY,
-		user_id TEXT NOT NULL DEFAULT 'default',
+		space_id TEXT NOT NULL DEFAULT 'default',
 		character_id TEXT DEFAULT '',
 		channel TEXT DEFAULT 'web',
 		source TEXT DEFAULT 'manual',

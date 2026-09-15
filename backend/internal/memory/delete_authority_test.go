@@ -54,10 +54,10 @@ func (r *memoryAuthorityRepo) Delete(id string) error {
 
 func (r *memoryAuthorityRepo) DeleteAll(characterID string) error { return nil }
 
-func (r *memoryAuthorityRepo) Search(keyword, characterID, userID string, limit int) ([]Memory, error) {
+func (r *memoryAuthorityRepo) Search(keyword, characterID, spaceID string, limit int) ([]Memory, error) {
 	out := make([]Memory, 0, len(r.items))
 	for _, item := range r.items {
-		if !memoryMatchesRetrievalScope(item, characterID, userID) {
+		if !memoryMatchesRetrievalScope(item, characterID, spaceID) {
 			continue
 		}
 		out = append(out, item)
@@ -189,7 +189,7 @@ func TestGetRankedMemoriesFiltersDeletedInvalidatedAndTombstone(t *testing.T) {
 	}
 }
 
-func TestSearchRequiresMatchingUserIDForUserScope(t *testing.T) {
+func TestSearchRequiresMatchingSpaceIDForSpaceScope(t *testing.T) {
 	repo := &memoryAuthorityRepo{items: []Memory{
 		{ID: "character-memory", CharacterID: "char-a", Scope: "character", Key: "favorite", Value: "tea", VerifiedStatus: "user_verified"},
 		{ID: "own-user-memory", CharacterID: "user-1", Scope: "user", Key: "favorite", Value: "cake", VerifiedStatus: "user_verified"},
@@ -197,7 +197,7 @@ func TestSearchRequiresMatchingUserIDForUserScope(t *testing.T) {
 	}}
 	svc := &service{repo: repo}
 
-	got, err := svc.Search(&SearchMemoryRequest{Keyword: "favorite", CharacterID: "char-a", UserID: "user-1", Limit: 10})
+	got, err := svc.Search(&SearchMemoryRequest{Keyword: "favorite", CharacterID: "char-a", SpaceID: "user-1", Limit: 10})
 	if err != nil {
 		t.Fatalf("Search error = %v", err)
 	}

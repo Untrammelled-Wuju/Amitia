@@ -27,7 +27,7 @@ type InteractionMetadataUpdate struct {
 type InteractionTracker interface {
 	Create(ctx context.Context, record *InteractionRecord) error
 	Get(ctx context.Context, id string) (*InteractionRecord, bool, error)
-	GetByRequestID(ctx context.Context, userID string, requestID string) (*InteractionRecord, bool, error)
+	GetByRequestID(ctx context.Context, spaceID string, requestID string) (*InteractionRecord, bool, error)
 	ListActive(ctx context.Context, scope InteractionScope) ([]*InteractionRecord, error)
 	ListByScope(ctx context.Context, scope InteractionScope) ([]*InteractionRecord, error)
 	UpdateMetadata(ctx context.Context, id string, update InteractionMetadataUpdate) (*InteractionRecord, error)
@@ -66,7 +66,7 @@ func canSupersedeStatus(status InteractionStatus) bool {
 func sameSupersedeScope(a InteractionScope, b InteractionScope) bool {
 	a = a.Normalize()
 	b = b.Normalize()
-	return a.UserID == b.UserID &&
+	return a.SpaceID == b.SpaceID &&
 		a.CharacterID == b.CharacterID &&
 		a.ConversationID == b.ConversationID &&
 		a.Channel == b.Channel &&

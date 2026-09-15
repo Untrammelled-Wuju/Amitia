@@ -182,7 +182,7 @@ func TestMaterializeScopeMismatch(t *testing.T) {
 	plan := &decision.BehaviorPlan{
 		ID:             "plan-7",
 		Version:        decision.PlanVersionV2,
-		UserID:         "user-a",
+		SpaceID:        "user-a",
 		ConversationID: "conv-a",
 		InteractionID:  "intr-a",
 		Selected:       decision.BehaviorCandidate{ID: "chat_reply", ActionType: decision.CandidateActionChat},
@@ -191,7 +191,7 @@ func TestMaterializeScopeMismatch(t *testing.T) {
 	cat := fakeToolCatalog{tools: map[string]kernel.ResolvedToolReference{}}
 	m := NewActionMaterializer(cat)
 	scope := ActionMaterializationScope{
-		UserID:         "user-b",
+		SpaceID:        "user-b",
 		ConversationID: "conv-b",
 		InteractionID:  "intr-b",
 	}

@@ -114,7 +114,7 @@ type VoiceCloneResponse struct {
 }
 
 type ClonedVoice struct {
-	UserID      string `gorm:"column:user_id;not null;index" json:"-"`
+	SpaceID     string `gorm:"column:space_id;not null;index" json:"-"`
 	SpeakerID   string `gorm:"column:speaker_id;primaryKey" json:"speakerId"`
 	Name        string `gorm:"column:name;not null" json:"name"`
 	TtsConfigID int    `gorm:"column:tts_config_id;not null;default:0" json:"voiceConfigId"`

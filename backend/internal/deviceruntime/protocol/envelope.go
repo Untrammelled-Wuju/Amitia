@@ -18,7 +18,7 @@ type Envelope struct {
 	MessageID            string                           `json:"messageId"`
 	CorrelationID        string                           `json:"correlationId,omitempty"`
 	CausationID          string                           `json:"causationId,omitempty"`
-	UserID               runtimeidentity.UserID           `json:"userId"`
+	SpaceID              runtimeidentity.SpaceID          `json:"spaceId"`
 	DeviceID             runtimeidentity.DeviceID         `json:"deviceId"`
 	RuntimeID            runtimeidentity.RuntimeID        `json:"runtimeId"`
 	RuntimeSessionID     runtimeidentity.RuntimeSessionID `json:"runtimeSessionId"`
@@ -44,8 +44,8 @@ func (e *Envelope) ValidateBase(descriptor Descriptor) error {
 	if e.MessageID == "" {
 		return fmt.Errorf("messageId is required")
 	}
-	if e.UserID == "" {
-		return fmt.Errorf("userId is required")
+	if e.SpaceID == "" {
+		return fmt.Errorf("spaceId is required")
 	}
 	if e.DeviceID == "" {
 		return fmt.Errorf("deviceId is required")

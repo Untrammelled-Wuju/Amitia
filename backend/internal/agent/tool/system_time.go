@@ -51,7 +51,7 @@ func init() {
 			result.Audit = map[string]interface{}{"clockSource": "system_fallback", "userTimezoneConfirmed": false}
 			return result
 		}
-		snapshot, err := service.ResolveSnapshot(callCtx, temporal.SnapshotInput{UserID: execCtx.User, CharacterID: execCtx.CharacterID, Channel: execCtx.Channel})
+		snapshot, err := service.ResolveSnapshot(callCtx, temporal.SnapshotInput{SpaceID: execCtx.SpaceID, CharacterID: execCtx.CharacterID, Channel: execCtx.Channel})
 		if err != nil {
 			now := time.Now()
 			result := TextResult(fmt.Sprintf("系统参考时间: %s | UTC: %s | 用户时区解析失败，使用系统参考时间", now.Format("2006-01-02 15:04:05 MST"), now.UTC().Format("2006-01-02 15:04:05Z07:00")))

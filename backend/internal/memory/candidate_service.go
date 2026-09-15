@@ -73,8 +73,8 @@ func (s *service) SubmitCandidate(req *SubmitCandidateRequest) (*MemoryCandidate
 		decayState = ""
 	}
 	model := &MemoryCandidateModel{
-		UserID: normalizeMemoryOwnerID(req.UserID),
-		ID:     uuid.New().String(), Key: strings.TrimSpace(req.Key), Value: strings.TrimSpace(req.Value), MemoryType: string(memoryType), MemorySubtype: strings.TrimSpace(req.MemorySubtype), Importance: req.Importance,
+		SpaceID: normalizeMemoryOwnerID(req.SpaceID),
+		ID:      uuid.New().String(), Key: strings.TrimSpace(req.Key), Value: strings.TrimSpace(req.Value), MemoryType: string(memoryType), MemorySubtype: strings.TrimSpace(req.MemorySubtype), Importance: req.Importance,
 		RetentionLevel: retentionLevel, MemoryStrength: memoryStrength, StrengthUpdatedAt: req.StrengthUpdatedAt, LastReinforcedAt: req.LastReinforcedAt, ReinforceCount: req.ReinforceCount, DecayState: decayState, Pinned: req.Pinned, ArchivedAt: req.ArchivedAt,
 		Scope: scope, SensitivityLevel: sensitivity, AllowProactiveMention: req.AllowProactiveMention, RequiresConfirmation: req.RequiresConfirmation, SourceText: strings.TrimSpace(req.SourceText), ConversationID: req.ConversationID, CharacterID: req.CharacterID, CreatedAt: now, CandidateKind: req.CandidateKind, ConfidenceReal: float64(confidence) / 100.0, DerivationKey: req.DerivationKey, Reason: req.Reason,
 	}
@@ -103,7 +103,7 @@ func (s *service) buildExtractionUserMsg(messages []map[string]string) (userPart
 	return userParts, assistantParts
 }
 
-func (s *service) generateCandidatesForUser(conversationID, userID string) ([]MemoryCandidate, error) {
+func (s *service) generateCandidatesForSpace(conversationID, spaceID string) ([]MemoryCandidate, error) {
 	messages, err := s.repo.GetConversationMessages(conversationID, 100)
 	if err != nil || len(messages) == 0 {
 		return nil, err
@@ -114,16 +114,16 @@ func (s *service) generateCandidatesForUser(conversationID, userID string) ([]Me
 		content, _ := msg["content"].(string)
 		typedMessages = append(typedMessages, map[string]string{"role": role, "content": content})
 	}
-	return s.generateCandidatesFromMessages(conversationID, typedMessages, userID)
+	return s.generateCandidatesFromMessages(conversationID, typedMessages, spaceID)
 }
 
-func (s *service) generateCandidatesFromMessages(conversationID string, messages []map[string]string, ownerIDs ...string) ([]MemoryCandidate, error) {
+func (s *service) generateCandidatesFromMessages(conversationID string, messages []map[string]string, spaceIDs ...string) ([]MemoryCandidate, error) {
 	if len(messages) == 0 {
 		return nil, nil
 	}
-	ownerID := "default"
-	if len(ownerIDs) > 0 {
-		ownerID = normalizeMemoryOwnerID(ownerIDs[0])
+	ownerID := normalizeMemoryOwnerID("")
+	if len(spaceIDs) > 0 {
+		ownerID = normalizeMemoryOwnerID(spaceIDs[0])
 	}
 	userParts, assistantParts := s.buildExtractionUserMsg(messages)
 	if len(userParts) == 0 {
@@ -157,7 +157,7 @@ func (s *service) generateCandidatesFromMessages(conversationID string, messages
 	valid := make([]MemoryCandidate, 0, len(candidates))
 	for i := range candidates {
 		candidates[i].ID = uuid.New().String()
-		candidates[i].UserID = ownerID
+		candidates[i].SpaceID = ownerID
 		candidates[i].SourceText = userText
 		candidates[i].ConversationID = conversationID
 		candidates[i].CharacterID = characterID
@@ -199,7 +199,7 @@ func (s *service) generateCandidatesFromMessages(conversationID string, messages
 	for i := range valid {
 		if valid[i].DerivationKey != "" {
 			var existingCandidate MemoryCandidateModel
-			err := s.db.Where("derivation_key = ? AND derivation_key != '' AND user_id = ?", valid[i].DerivationKey, ownerID).First(&existingCandidate).Error
+			err := s.db.Where("derivation_key = ? AND derivation_key != '' AND space_id = ?", valid[i].DerivationKey, ownerID).First(&existingCandidate).Error
 			if err == nil && existingCandidate.ID != "" {
 				persisted = append(persisted, *candidateModelToDTO(&existingCandidate))
 				continue
@@ -212,8 +212,8 @@ func (s *service) generateCandidatesFromMessages(conversationID string, messages
 			}
 		}
 		model := &MemoryCandidateModel{
-			UserID: valid[i].UserID,
-			ID:     valid[i].ID, Key: valid[i].Key, Value: valid[i].Value,
+			SpaceID: valid[i].SpaceID,
+			ID:      valid[i].ID, Key: valid[i].Key, Value: valid[i].Value,
 			MemoryType: valid[i].MemoryType, MemorySubtype: valid[i].MemorySubtype, Importance: valid[i].Importance,
 			Scope: valid[i].Scope, SensitivityLevel: valid[i].SensitivityLevel, AllowProactiveMention: valid[i].AllowProactiveMention, RequiresConfirmation: valid[i].RequiresConfirmation,
 			SourceText: valid[i].SourceText, ConversationID: valid[i].ConversationID,
@@ -253,7 +253,7 @@ func (s *service) AcceptCandidate(id string) (*Memory, error) {
 	if model.DerivationKey != "" {
 		candidateKey = model.DerivationKey
 	}
-	if existing, _ := s.repo.FindByDerivationKey(candidateKey); existing != nil && existing.ID != "" && memoryOwnerMatches(existing.UserID, model.UserID) {
+	if existing, _ := s.repo.FindByDerivationKey(candidateKey); existing != nil && existing.ID != "" && memoryOwnerMatches(existing.SpaceID, model.SpaceID) {
 		s.repo.DeleteCandidate(id)
 		return existing, nil
 	}
@@ -284,7 +284,7 @@ func (s *service) AcceptCandidate(id string) (*Memory, error) {
 	}
 
 	m, err := s.createCanonicalMemory(canonicalCreateRequest{
-		UserID:                model.UserID,
+		SpaceID:               model.SpaceID,
 		CharacterID:           model.CharacterID,
 		MemoryType:            memoryType,
 		MemorySubtype:         model.MemorySubtype,
@@ -421,7 +421,7 @@ func candidateModelToDTO(model *MemoryCandidateModel) *MemoryCandidate {
 		return nil
 	}
 	return &MemoryCandidate{
-		ID: model.ID, UserID: model.UserID, Key: model.Key, Value: model.Value, MemoryType: model.MemoryType, MemorySubtype: model.MemorySubtype,
+		ID: model.ID, SpaceID: model.SpaceID, Key: model.Key, Value: model.Value, MemoryType: model.MemoryType, MemorySubtype: model.MemorySubtype,
 		Importance: model.Importance, Confidence: candidateModelConfidence(model), RetentionLevel: model.RetentionLevel, MemoryStrength: model.MemoryStrength,
 		StrengthUpdatedAt: model.StrengthUpdatedAt, LastReinforcedAt: model.LastReinforcedAt, ReinforceCount: model.ReinforceCount, DecayState: model.DecayState, Pinned: model.Pinned, ArchivedAt: model.ArchivedAt,
 		Scope: model.Scope, SensitivityLevel: model.SensitivityLevel, AllowProactiveMention: model.AllowProactiveMention, RequiresConfirmation: model.RequiresConfirmation, SourceText: model.SourceText,

@@ -62,8 +62,8 @@ func (s *Service) Running() bool {
 	return s.running
 }
 
-func (s *Service) List(userID string) ([]Reminder, error) {
-	items, err := s.repo.List(userID)
+func (s *Service) List(spaceID string) ([]Reminder, error) {
+	items, err := s.repo.List(spaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -73,8 +73,8 @@ func (s *Service) List(userID string) ([]Reminder, error) {
 	return items, nil
 }
 
-func (s *Service) Find(id int, userID string) (*Reminder, error) {
-	item, err := s.repo.Find(id, userID)
+func (s *Service) Find(id int, spaceID string) (*Reminder, error) {
+	item, err := s.repo.Find(id, spaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -82,7 +82,7 @@ func (s *Service) Find(id int, userID string) (*Reminder, error) {
 	return item, nil
 }
 
-func (s *Service) Create(req *CreateReminderRequest, userID string) (*Reminder, error) {
+func (s *Service) Create(req *CreateReminderRequest, spaceID string) (*Reminder, error) {
 	title := strings.TrimSpace(req.Title)
 	remindAt := strings.TrimSpace(req.RemindAt)
 	if title == "" || remindAt == "" {
@@ -108,7 +108,7 @@ func (s *Service) Create(req *CreateReminderRequest, userID string) (*Reminder, 
 		enabled = 0
 	}
 	item := &Reminder{
-		UserID:         userID,
+		SpaceID:        spaceID,
 		Title:          title,
 		Content:        strings.TrimSpace(req.Content),
 		Channel:        channel,
@@ -126,7 +126,7 @@ func (s *Service) Create(req *CreateReminderRequest, userID string) (*Reminder, 
 	return item, nil
 }
 
-func (s *Service) Update(id int, userID string, updates map[string]interface{}) (*Reminder, error) {
+func (s *Service) Update(id int, spaceID string, updates map[string]interface{}) (*Reminder, error) {
 	if len(updates) == 0 {
 		return nil, fmt.Errorf("没有可更新的字段")
 	}
@@ -151,18 +151,18 @@ func (s *Service) Update(id int, userID string, updates map[string]interface{}) 
 		}
 	}
 	clean["updated_at"] = nowString()
-	if err := s.repo.Update(id, userID, clean); err != nil {
+	if err := s.repo.Update(id, spaceID, clean); err != nil {
 		return nil, fmt.Errorf("更新提醒失败: %w", err)
 	}
-	return s.Find(id, userID)
+	return s.Find(id, spaceID)
 }
 
-func (s *Service) Delete(id int, userID string) error {
-	return s.repo.Delete(id, userID)
+func (s *Service) Delete(id int, spaceID string) error {
+	return s.repo.Delete(id, spaceID)
 }
 
-func (s *Service) Toggle(id int, userID string) (*Reminder, error) {
-	item, err := s.repo.Toggle(id, userID)
+func (s *Service) Toggle(id int, spaceID string) (*Reminder, error) {
+	item, err := s.repo.Toggle(id, spaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -170,8 +170,8 @@ func (s *Service) Toggle(id int, userID string) (*Reminder, error) {
 	return item, nil
 }
 
-func (s *Service) Status(userID string) (map[string]interface{}, error) {
-	items, err := s.List(userID)
+func (s *Service) Status(spaceID string) (map[string]interface{}, error) {
+	items, err := s.List(spaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -231,7 +231,7 @@ func (s *Service) TriggerNow(ctx context.Context, item *Reminder) (string, strin
 	}
 	requestID := fmt.Sprintf("reminder:%d:%d", item.ID, time.Now().UnixNano())
 	response, err := s.dispatch.ProcessMessage(ctx, &chat.ProcessMessageRequest{
-		UserID:                   item.UserID,
+		SpaceID:                  item.SpaceID,
 		CharacterID:              item.CharacterID,
 		ConversationID:           conversationID,
 		Channel:                  item.Channel,
@@ -251,12 +251,12 @@ func (s *Service) TriggerNow(ctx context.Context, item *Reminder) (string, strin
 	return messageID, conversationID, nil
 }
 
-func (s *Service) History(userID string, page, pageSize int, state string) ([]TriggerHistory, int64, error) {
-	return s.repo.ListHistory(userID, page, pageSize, state)
+func (s *Service) History(spaceID string, page, pageSize int, state string) ([]TriggerHistory, int64, error) {
+	return s.repo.ListHistory(spaceID, page, pageSize, state)
 }
 
-func (s *Service) QueueSummary(userID string) (map[string]interface{}, error) {
-	items, err := s.List(userID)
+func (s *Service) QueueSummary(spaceID string) (map[string]interface{}, error) {
+	items, err := s.List(spaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -295,12 +295,12 @@ func (s *Service) SetCleanupDays(value string) error {
 		normalized, nowString()).Error
 }
 
-func (s *Service) CleanupHistory(userID string) {
+func (s *Service) CleanupHistory(spaceID string) {
 	days, err := strconv.Atoi(s.GetCleanupDays())
 	if err != nil || days <= 0 {
 		return
 	}
-	_ = s.repo.DeleteHistoryBefore(userID, time.Now().AddDate(0, 0, -days))
+	_ = s.repo.DeleteHistoryBefore(spaceID, time.Now().AddDate(0, 0, -days))
 }
 
 func (s *Service) processDue(ctx context.Context) {
@@ -327,7 +327,7 @@ func (s *Service) processDue(ctx context.Context) {
 		now := nowString()
 		history := &TriggerHistory{
 			ID:          historyID,
-			UserID:      item.UserID,
+			SpaceID:     item.SpaceID,
 			TriggerID:   strconv.Itoa(item.ID),
 			TriggerType: "reminder",
 			Title:       item.Title,
@@ -376,7 +376,7 @@ func (s *Service) advance(item *Reminder) {
 	default:
 		updates["enabled"] = 0
 	}
-	_ = s.repo.Update(item.ID, item.UserID, updates)
+	_ = s.repo.Update(item.ID, item.SpaceID, updates)
 }
 
 func (s *Service) resolveConversation(item *Reminder) string {
@@ -386,7 +386,7 @@ func (s *Service) resolveConversation(item *Reminder) string {
 	if item.ConversationID != "" {
 		return item.ConversationID
 	}
-	query := ownerQuery(s.db.Table("conversations").Select("id"), item.UserID).Where("deleted_at IS NULL")
+	query := ownerQuery(s.db.Table("conversations").Select("id"), item.SpaceID).Where("deleted_at IS NULL")
 	if item.CharacterID != "" {
 		query = query.Where("character_id = ?", item.CharacterID)
 	}
@@ -395,7 +395,7 @@ func (s *Service) resolveConversation(item *Reminder) string {
 		return conversationID
 	}
 	if item.Channel != "" {
-		query = ownerQuery(s.db.Table("conversations").Select("id"), item.UserID).Where("channel = ? AND deleted_at IS NULL", item.Channel)
+		query = ownerQuery(s.db.Table("conversations").Select("id"), item.SpaceID).Where("channel = ? AND deleted_at IS NULL", item.Channel)
 		if item.CharacterID != "" {
 			query = query.Where("character_id = ?", item.CharacterID)
 		}

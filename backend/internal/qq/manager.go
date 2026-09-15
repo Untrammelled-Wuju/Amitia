@@ -193,13 +193,13 @@ func (m *Manager) Disconnect() {
 	m.mu.Unlock()
 }
 
-func (m *Manager) SendPrivateMsg(userID string, text string) error {
+func (m *Manager) SendPrivateMsg(spaceID string, text string) error {
 	if !m.IsOnline() {
 		return fmt.Errorf("QQBot未连接")
 	}
 
 	reqBody, _ := json.Marshal(map[string]string{
-		"toUserId": userID,
+		"toUserId": spaceID,
 		"text":     text,
 	})
 
@@ -215,7 +215,7 @@ func (m *Manager) SendPrivateMsg(userID string, text string) error {
 		return fmt.Errorf("发送失败 (%d): %s", resp.StatusCode, string(bodyBytes))
 	}
 
-	logrus.Infof("[QQ] 私聊已发送 to=%s", userID)
+	logrus.Infof("[QQ] 私聊已发送 to=%s", spaceID)
 	return nil
 }
 

@@ -17,26 +17,26 @@ func capabilityID(s string) capability.CapabilityID {
 type ActionExecutionState string
 
 const (
-	ActionExecutionCompleted        ActionExecutionState = "completed"
-	ActionExecutionSkipped          ActionExecutionState = "skipped"
-	ActionExecutionFailedToDispatch ActionExecutionState = "failed_to_dispatch"
+	ActionExecutionCompleted          ActionExecutionState = "completed"
+	ActionExecutionSkipped            ActionExecutionState = "skipped"
+	ActionExecutionFailedToDispatch   ActionExecutionState = "failed_to_dispatch"
 	ActionExecutionAcceptedBackground ActionExecutionState = "accepted_background"
 )
 
 type ActionExecutionResult struct {
-	Action          MaterializedAction       `json:"action"`
-	State           ActionExecutionState     `json:"state"`
-	ToolResult      *kernel.LegacyToolResult `json:"toolResult,omitempty"`
-	TaskRunID       string                   `json:"taskRunId,omitempty"`
-	TaskDefinitionID string                  `json:"taskDefinitionId,omitempty"`
-	Background      bool                     `json:"background,omitempty"`
-	Err             error                    `json:"-"`
-	ErrCode         string                   `json:"errCode,omitempty"`
-	CompletedAt     time.Time                `json:"completedAt"`
+	Action           MaterializedAction         `json:"action"`
+	State            ActionExecutionState       `json:"state"`
+	ToolResult       *kernel.ToolDispatchResult `json:"toolResult,omitempty"`
+	TaskRunID        string                     `json:"taskRunId,omitempty"`
+	TaskDefinitionID string                     `json:"taskDefinitionId,omitempty"`
+	Background       bool                       `json:"background,omitempty"`
+	Err              error                      `json:"-"`
+	ErrCode          string                     `json:"errCode,omitempty"`
+	CompletedAt      time.Time                  `json:"completedAt"`
 }
 
 type actionToolFacade interface {
-	ExecuteTool(ctx context.Context, toolID capability.CapabilityID, input json.RawMessage, scope kernel.LegacyScope, externalCallID string, idempotencyKey string) (kernel.LegacyToolResult, bool)
+	ExecuteTool(ctx context.Context, toolID capability.CapabilityID, input json.RawMessage, scope kernel.InvocationScope, externalCallID string, idempotencyKey string) (kernel.ToolDispatchResult, bool)
 }
 
 type ActionDispatcher struct {
@@ -105,8 +105,8 @@ func (d ActionDispatcher) dispatchTool(
 		}
 	}
 
-	toolScope := kernel.LegacyScope{
-		UserID:         scope.UserID,
+	toolScope := kernel.InvocationScope{
+		SpaceID:        scope.SpaceID,
 		CharacterID:    scope.CharacterID,
 		ConversationID: scope.ConversationID,
 		Channel:        scope.Channel,
@@ -157,7 +157,7 @@ func (d ActionDispatcher) dispatchTool(
 	}
 }
 
-func extractTaskRunID(toolResult *kernel.LegacyToolResult) string {
+func extractTaskRunID(toolResult *kernel.ToolDispatchResult) string {
 	if toolResult == nil || len(toolResult.Output) == 0 {
 		return ""
 	}

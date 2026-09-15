@@ -34,15 +34,12 @@ type Service interface {
 	DeleteStorageBackup(name string) map[string]interface{}
 	Diagnostics() map[string]interface{}
 	ExportReleaseCheck() map[string]interface{}
-	GenerateRecoveryCodes(userID int64) map[string]interface{}
 	GetAuditActions() []string
 	GetAuditLogs(limit int) []auditLogRecord
 	ClearAuditLogs() int64
 	GetAuditSettings() map[string]interface{}
 	GetAuditStats() map[string]interface{}
 	GetAbout() map[string]interface{}
-	GetCurrentSession(userID int64, sessionID string) map[string]interface{}
-	GetLoginHistory(userID int64) []map[string]interface{}
 	GetLogsFileContent(name string) string
 	GetLogsFiles() map[string]interface{}
 	GetLogsModelErrors() map[string]interface{}
@@ -52,10 +49,9 @@ type Service interface {
 	GetLongRunningConfig() map[string]interface{}
 	GetLongRunningStatus() map[string]interface{}
 	GetMaintenanceStatus() map[string]interface{}
-	GetNotificationsSettings(userID, deviceID string) map[string]interface{}
-	GetNotificationsStatus(userID, deviceID string) map[string]interface{}
+	GetNotificationsSettings(spaceID, deviceID string) map[string]interface{}
+	GetNotificationsStatus(spaceID, deviceID string) map[string]interface{}
 	GetPrivacyScanResult(id string) map[string]interface{}
-	GetRecoveryCodesStatus(userID int64) map[string]interface{}
 	GetReleaseCheckHistory() map[string]interface{}
 	GetReleaseCheckLatest() map[string]interface{}
 	GetRuntimeHealth() map[string]interface{}
@@ -66,7 +62,6 @@ type Service interface {
 	GetSecurityAccessConfig() map[string]interface{}
 	GetSecurityAccessStatus() map[string]interface{}
 	GetSecurityStatus() map[string]interface{}
-	GetSessionSettings() map[string]interface{}
 	GetStorageBackups() map[string]interface{}
 	GetStorageInfo() map[string]interface{}
 	GetStorageMigrations() map[string]interface{}
@@ -97,9 +92,9 @@ type Service interface {
 	MaintenanceRestartQQBridge() map[string]interface{}
 	MoodDetectionConfig() map[string]interface{}
 	UpdateMoodDetectionConfig(body map[string]interface{}) map[string]interface{}
-	NotificationsSubscribe(body map[string]interface{}, userID, deviceID string) map[string]interface{}
-	NotificationsTest(userID, deviceID string) map[string]interface{}
-	NotificationsUnsubscribe(userID, deviceID string) map[string]interface{}
+	NotificationsSubscribe(body map[string]interface{}, spaceID, deviceID string) map[string]interface{}
+	NotificationsTest(spaceID, deviceID string) map[string]interface{}
+	NotificationsUnsubscribe(spaceID, deviceID string) map[string]interface{}
 	OnboardingComplete() map[string]interface{}
 	OnboardingReset() map[string]interface{}
 	OnboardingStatus() map[string]interface{}
@@ -114,7 +109,7 @@ type Service interface {
 	DeleteSafetyEvents() map[string]interface{}
 	HandleSafetyEvent(id string) map[string]interface{}
 	SafetyImportCheck(body map[string]interface{}) map[string]interface{}
-	SecurityAccountCheck() map[string]interface{}
+	SecurityIdentityCheck() map[string]interface{}
 	SecurityExposureCheck() map[string]interface{}
 	SetupChecks() map[string]interface{}
 	SetupFinish() map[string]interface{}
@@ -130,15 +125,13 @@ type Service interface {
 	UpdateAuditSettings(body map[string]interface{}) map[string]interface{}
 	UpdateLongRunningConfig(body map[string]interface{}) map[string]interface{}
 	ValidateIdentityCorePatch(characterID string, body map[string]interface{}) map[string]interface{}
-	UpdateNotificationsSettings(body map[string]interface{}, userID, deviceID string) map[string]interface{}
+	UpdateNotificationsSettings(body map[string]interface{}, spaceID, deviceID string) map[string]interface{}
 	UpdateRuntimeMode(body map[string]interface{}) map[string]interface{}
 	UpdateSecurityAccessConfig(body map[string]interface{}) map[string]interface{}
-	UpdateSessionSettings(body map[string]interface{}) map[string]interface{}
 	UpdateTheme(body map[string]interface{}) map[string]interface{}
 	UpdateUpdateConfig(body map[string]interface{}) map[string]interface{}
 	UpdateWechatBridgeConfig(body map[string]interface{}) map[string]interface{}
 	ValidateMode() map[string]interface{}
-	VerifyRecoveryCode(userID int64, code string) map[string]interface{}
 	WechatBridgeRecover() map[string]interface{}
 	QQBridgeRecover() map[string]interface{}
 	WechatCloudCheck() map[string]interface{}

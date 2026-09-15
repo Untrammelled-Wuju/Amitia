@@ -19,22 +19,22 @@ func NewService(db *gorm.DB) *Service {
 	return &Service{db: db}
 }
 
-func (s *Service) Load(ctx context.Context, userID, characterID string) (*State, error) {
+func (s *Service) Load(ctx context.Context, spaceID, characterID string) (*State, error) {
 	if s == nil || s.db == nil {
-		return defaultState(userID, characterID, time.Now().UTC()), nil
+		return defaultState(spaceID, characterID, time.Now().UTC()), nil
 	}
 	var record Record
 	err := s.db.WithContext(ctx).
-		Where("user_id = ? AND character_id = ?", userID, characterID).
+		Where("space_id = ? AND character_id = ?", spaceID, characterID).
 		Take(&record).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return defaultState(userID, characterID, time.Now().UTC()), nil
+		return defaultState(spaceID, characterID, time.Now().UTC()), nil
 	}
 	if err != nil {
 		return nil, err
 	}
 	state := &State{
-		UserID:      record.UserID,
+		SpaceID:     record.SpaceID,
 		CharacterID: record.CharacterID,
 		Version:     record.Version,
 		UpdatedAt:   record.UpdatedAt,
@@ -60,16 +60,16 @@ func (s *Service) Load(ctx context.Context, userID, characterID string) (*State,
 	return state, nil
 }
 
-func (s *Service) Commit(ctx context.Context, userID, characterID string, affect UserAffect, delta RelationshipEmotionDelta, signals Signals) (*State, error) {
+func (s *Service) Commit(ctx context.Context, spaceID, characterID string, affect UserAffect, delta RelationshipEmotionDelta, signals Signals) (*State, error) {
 	if s == nil || s.db == nil {
-		state := defaultState(userID, characterID, time.Now().UTC())
+		state := defaultState(spaceID, characterID, time.Now().UTC())
 		state.UserAffect = NormalizeUserAffect(affect)
 		state.RelationshipEmotion = ApplyRelationshipDelta(state.RelationshipEmotion, delta, time.Now().UTC())
 		state.Signals = signals
 		return state, nil
 	}
 	for attempt := 0; attempt < 4; attempt++ {
-		state, err := s.Load(ctx, userID, characterID)
+		state, err := s.Load(ctx, spaceID, characterID)
 		if err != nil {
 			return nil, err
 		}
@@ -90,13 +90,13 @@ func (s *Service) Commit(ctx context.Context, userID, characterID string, affect
 		var result *gorm.DB
 		if state.Version <= 1 {
 			result = s.db.WithContext(ctx).Clauses(clause.OnConflict{
-				Columns:   []clause.Column{{Name: "user_id"}, {Name: "character_id"}},
+				Columns:   []clause.Column{{Name: "space_id"}, {Name: "character_id"}},
 				DoUpdates: clause.AssignmentColumns([]string{"user_affect_json", "relationship_emotion_json", "signals_json", "baseline_json", "version", "updated_at"}),
 			}).Create(record)
 		} else {
 			result = s.db.WithContext(ctx).
 				Model(&Record{}).
-				Where("user_id = ? AND character_id = ? AND version = ?", userID, characterID, state.Version-1).
+				Where("space_id = ? AND character_id = ? AND version = ?", spaceID, characterID, state.Version-1).
 				Updates(map[string]any{
 					"user_affect_json":          record.UserAffectJSON,
 					"relationship_emotion_json": record.RelationshipEmotionJSON,
@@ -116,9 +116,9 @@ func (s *Service) Commit(ctx context.Context, userID, characterID string, affect
 	return nil, fmt.Errorf("emotion state update conflicted too many times")
 }
 
-func defaultState(userID, characterID string, now time.Time) *State {
+func defaultState(spaceID, characterID string, now time.Time) *State {
 	return &State{
-		UserID:      userID,
+		SpaceID:     spaceID,
 		CharacterID: characterID,
 		UserAffect:  EmptyUserAffect(),
 		RelationshipEmotion: RelationshipEmotion{
@@ -147,7 +147,7 @@ func stateRecord(state *State) (*Record, error) {
 		return nil, err
 	}
 	return &Record{
-		UserID:                  state.UserID,
+		SpaceID:                 state.SpaceID,
 		CharacterID:             state.CharacterID,
 		UserAffectJSON:          string(userAffect),
 		RelationshipEmotionJSON: string(relationshipEmotion),

@@ -64,7 +64,7 @@ func (o *Orchestrator) acquireQueueScope(scope InteractionScope) func() {
 
 func queueScopeKey(scope InteractionScope) string {
 	scope = scope.Normalize()
-	return strings.Join([]string{scope.UserID, scope.CharacterID, scope.ConversationID, scope.Channel, scope.PeerID}, "\x00")
+	return strings.Join([]string{scope.SpaceID, scope.CharacterID, scope.ConversationID, scope.Channel, scope.PeerID}, "\x00")
 }
 
 func outcomeFromQueueWaitError(err error) Outcome {

@@ -15,9 +15,9 @@ import (
 // Empty device IDs still remain user-scoped on a shared Core. Only the
 // historical local single-user path, where both user and device are empty,
 // falls back to the legacy global keys.
-func (s *service) GetNotificationsSettings(userID, deviceID string) map[string]interface{} {
-	enabledKey := notificationSettingKey(userID, deviceID, "enabled")
-	subscribedKey := notificationSettingKey(userID, deviceID, "subscribed")
+func (s *service) GetNotificationsSettings(spaceID, deviceID string) map[string]interface{} {
+	enabledKey := notificationSettingKey(spaceID, deviceID, "enabled")
+	subscribedKey := notificationSettingKey(spaceID, deviceID, "subscribed")
 	enabled := s.getAppSetting(enabledKey) != "false"
 	subscribed := s.getAppSetting(subscribedKey) == "true"
 	return map[string]interface{}{
@@ -28,20 +28,20 @@ func (s *service) GetNotificationsSettings(userID, deviceID string) map[string]i
 	}
 }
 
-func (s *service) UpdateNotificationsSettings(body map[string]interface{}, userID, deviceID string) map[string]interface{} {
-	enabledKey := notificationSettingKey(userID, deviceID, "enabled")
-	subscribedKey := notificationSettingKey(userID, deviceID, "subscribed")
+func (s *service) UpdateNotificationsSettings(body map[string]interface{}, spaceID, deviceID string) map[string]interface{} {
+	enabledKey := notificationSettingKey(spaceID, deviceID, "enabled")
+	subscribedKey := notificationSettingKey(spaceID, deviceID, "subscribed")
 	if v, ok := body["enabled"].(bool); ok {
 		s.setAppSetting(enabledKey, boolSetting(v))
 		if !v {
 			s.setAppSetting(subscribedKey, "false")
 		}
 	}
-	return s.GetNotificationsSettings(userID, deviceID)
+	return s.GetNotificationsSettings(spaceID, deviceID)
 }
 
-func (s *service) GetNotificationsStatus(userID, deviceID string) map[string]interface{} {
-	settings := s.GetNotificationsSettings(userID, deviceID)
+func (s *service) GetNotificationsStatus(spaceID, deviceID string) map[string]interface{} {
+	settings := s.GetNotificationsSettings(spaceID, deviceID)
 	return map[string]interface{}{
 		"enabled":      settings["enabled"],
 		"subscribed":   settings["subscribed"],
@@ -50,9 +50,9 @@ func (s *service) GetNotificationsStatus(userID, deviceID string) map[string]int
 	}
 }
 
-func (s *service) NotificationsSubscribe(body map[string]interface{}, userID, deviceID string) map[string]interface{} {
-	s.setAppSetting(notificationSettingKey(userID, deviceID, "enabled"), "true")
-	s.setAppSetting(notificationSettingKey(userID, deviceID, "subscribed"), "true")
+func (s *service) NotificationsSubscribe(body map[string]interface{}, spaceID, deviceID string) map[string]interface{} {
+	s.setAppSetting(notificationSettingKey(spaceID, deviceID, "enabled"), "true")
+	s.setAppSetting(notificationSettingKey(spaceID, deviceID, "subscribed"), "true")
 	return map[string]interface{}{
 		"enabled":      true,
 		"subscribed":   true,
@@ -61,9 +61,9 @@ func (s *service) NotificationsSubscribe(body map[string]interface{}, userID, de
 	}
 }
 
-func (s *service) NotificationsUnsubscribe(userID, deviceID string) map[string]interface{} {
-	s.setAppSetting(notificationSettingKey(userID, deviceID, "subscribed"), "false")
-	s.setAppSetting(notificationSettingKey(userID, deviceID, "enabled"), "false")
+func (s *service) NotificationsUnsubscribe(spaceID, deviceID string) map[string]interface{} {
+	s.setAppSetting(notificationSettingKey(spaceID, deviceID, "subscribed"), "false")
+	s.setAppSetting(notificationSettingKey(spaceID, deviceID, "enabled"), "false")
 	return map[string]interface{}{
 		"enabled":      false,
 		"subscribed":   false,
@@ -72,8 +72,8 @@ func (s *service) NotificationsUnsubscribe(userID, deviceID string) map[string]i
 	}
 }
 
-func (s *service) NotificationsTest(userID, deviceID string) map[string]interface{} {
-	settings := s.GetNotificationsSettings(userID, deviceID)
+func (s *service) NotificationsTest(spaceID, deviceID string) map[string]interface{} {
+	settings := s.GetNotificationsSettings(spaceID, deviceID)
 	enabled, _ := settings["enabled"].(bool)
 	subscribed, _ := settings["subscribed"].(bool)
 	accepted := enabled && subscribed
@@ -92,13 +92,13 @@ func (s *service) NotificationsTest(userID, deviceID string) map[string]interfac
 	return result
 }
 
-func notificationSettingKey(userID, deviceID, suffix string) string {
-	userID = strings.TrimSpace(userID)
+func notificationSettingKey(spaceID, deviceID, suffix string) string {
+	spaceID = strings.TrimSpace(spaceID)
 	deviceID = strings.TrimSpace(deviceID)
-	if userID == "" && deviceID == "" {
+	if spaceID == "" && deviceID == "" {
 		return "notifications_" + suffix
 	}
-	scope := userID + "\x00" + deviceID
+	scope := spaceID + "\x00" + deviceID
 	sum := sha256.Sum256([]byte(scope))
 	return "notifications_device_" + hex.EncodeToString(sum[:12]) + "_" + suffix
 }

@@ -11,7 +11,7 @@ import (
 )
 
 type ObservationBuildScope struct {
-	UserID         string
+	SpaceID        string
 	CharacterID    string
 	ConversationID string
 	InteractionID  string
@@ -85,7 +85,7 @@ func (b ObservationBuilder) buildAcceptedBackground(input ObservationBuildInput)
 		PlanID:           action.PlanID,
 		ActionID:         action.ID,
 		InteractionID:    safeInteractionID(action),
-		UserID:           input.Scope.UserID,
+		SpaceID:          input.Scope.SpaceID,
 		CharacterID:      input.Scope.CharacterID,
 		ConversationID:   input.Scope.ConversationID,
 		CandidateID:      action.CandidateID,
@@ -154,7 +154,7 @@ func (b ObservationBuilder) buildSkippedNoAction(input ObservationBuildInput, ou
 		PlanID:         action.PlanID,
 		ActionID:       action.ID,
 		InteractionID:  action.InteractionID,
-		UserID:         input.Scope.UserID,
+		SpaceID:        input.Scope.SpaceID,
 		CharacterID:    input.Scope.CharacterID,
 		ConversationID: input.Scope.ConversationID,
 		CandidateID:    action.CandidateID,
@@ -197,7 +197,7 @@ func (b ObservationBuilder) buildToolResult(input ObservationBuildInput, observe
 		PlanID:         action.PlanID,
 		ActionID:       action.ID,
 		InteractionID:  safeInteractionID(action),
-		UserID:         input.Scope.UserID,
+		SpaceID:        input.Scope.SpaceID,
 		CharacterID:    input.Scope.CharacterID,
 		ConversationID: input.Scope.ConversationID,
 		CandidateID:    action.CandidateID,
@@ -234,7 +234,7 @@ func (b ObservationBuilder) buildDispatchFailure(input ObservationBuildInput) (*
 		PlanID:         action.PlanID,
 		ActionID:       action.ID,
 		InteractionID:  safeInteractionID(action),
-		UserID:         input.Scope.UserID,
+		SpaceID:        input.Scope.SpaceID,
 		CharacterID:    input.Scope.CharacterID,
 		ConversationID: input.Scope.ConversationID,
 		CandidateID:    action.CandidateID,
@@ -259,7 +259,7 @@ func (b ObservationBuilder) buildDispatchFailure(input ObservationBuildInput) (*
 	return obs, nil
 }
 
-func buildEvidence(toolResult *kernel.LegacyToolResult) decision.ObservationEvidence {
+func buildEvidence(toolResult *kernel.ToolDispatchResult) decision.ObservationEvidence {
 	evidence := decision.ObservationEvidence{}
 	if toolResult.VisibleText != "" {
 		evidence.Contents = append(evidence.Contents, decision.ObservationContent{

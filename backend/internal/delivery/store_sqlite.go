@@ -40,7 +40,7 @@ type OutputLeaseModel struct {
 	ID            string `gorm:"primaryKey;column:id"`
 	InteractionID string `gorm:"column:interaction_id;index"`
 	CharacterID   string `gorm:"column:character_id;index"`
-	UserID        string `gorm:"column:user_id"`
+	SpaceID       string `gorm:"column:space_id"`
 	Channel       string `gorm:"column:channel"`
 	OwnerToken    string `gorm:"column:owner_token"`
 	Generation    int    `gorm:"column:generation"`
@@ -160,11 +160,11 @@ func (s *SQLiteDeliveryStore) CreateLease(lease OutputLease) error {
 	return s.db.Create(&model).Error
 }
 
-func (s *SQLiteDeliveryStore) GetActiveLease(characterID, userID, channel string) (*OutputLease, error) {
+func (s *SQLiteDeliveryStore) GetActiveLease(characterID, spaceID, channel string) (*OutputLease, error) {
 	var model OutputLeaseModel
 	now := time.Now().UTC().Format("2006-01-02 15:04:05")
-	err := s.db.Where("character_id = ? AND user_id = ? AND channel = ? AND status = ? AND expires_at > ?",
-		characterID, userID, channel, "active", now).Order("acquired_at DESC").Take(&model).Error
+	err := s.db.Where("character_id = ? AND space_id = ? AND channel = ? AND status = ? AND expires_at > ?",
+		characterID, spaceID, channel, "active", now).Order("acquired_at DESC").Take(&model).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil
 	}
@@ -442,7 +442,7 @@ func leaseToModel(l *OutputLease) *OutputLeaseModel {
 		ID:            l.ID,
 		InteractionID: l.InteractionID,
 		CharacterID:   l.CharacterID,
-		UserID:        l.UserID,
+		SpaceID:       l.SpaceID,
 		Channel:       l.Channel,
 		OwnerToken:    l.OwnerToken,
 		Generation:    l.Generation,
@@ -465,7 +465,7 @@ func modelToLease(m *OutputLeaseModel) *OutputLease {
 		ID:            m.ID,
 		InteractionID: m.InteractionID,
 		CharacterID:   m.CharacterID,
-		UserID:        m.UserID,
+		SpaceID:       m.SpaceID,
 		Channel:       m.Channel,
 		OwnerToken:    m.OwnerToken,
 		Generation:    m.Generation,

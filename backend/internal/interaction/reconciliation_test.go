@@ -20,10 +20,10 @@ func (f *fakeGoalReader) GetGoal(ctx context.Context, goalID string) (decision.G
 	return g, ok
 }
 
-func (f *fakeGoalReader) ActiveForScope(ctx context.Context, userID, characterID, conversationID string) []decision.Goal {
+func (f *fakeGoalReader) ActiveForScope(ctx context.Context, spaceID, characterID, conversationID string) []decision.Goal {
 	out := make([]decision.Goal, 0, len(f.scopeRes))
 	for _, g := range f.scopeRes {
-		if g.UserID != userID {
+		if g.SpaceID != spaceID {
 			continue
 		}
 		if characterID != "" && g.CharacterID != "" && g.CharacterID != characterID {
@@ -85,7 +85,7 @@ func TestGoalActionChecker_ActiveGoalWithinSettleWindow_NotFlagged(t *testing.T)
 		scopeRes: []decision.Goal{
 			{
 				ID:             "goal-1",
-				UserID:         "u1",
+				SpaceID:        "u1",
 				CharacterID:    "c1",
 				ConversationID: "conv1",
 				Status:         decision.GoalStatusActive,
@@ -103,7 +103,7 @@ func TestGoalActionChecker_ActiveGoalWithinSettleWindow_NotFlagged(t *testing.T)
 	diffs, err := checker.CheckReconciliation(context.Background(), mindruntime.ReconciliationCheckRequest{
 		ScanID: "s1",
 		Target: mindruntime.ReconciliationAgentGoalAction,
-		Scope:  &mindruntime.ReconciliationScope{UserID: "u1", CharacterID: "c1", ConversationID: "conv1", InteractionID: "i1"},
+		Scope:  &mindruntime.ReconciliationScope{SpaceID: "u1", CharacterID: "c1", ConversationID: "conv1", InteractionID: "i1"},
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -119,7 +119,7 @@ func TestGoalActionChecker_ActiveGoalPastSettle_Flagged(t *testing.T) {
 		scopeRes: []decision.Goal{
 			{
 				ID:             "goal-1",
-				UserID:         "u1",
+				SpaceID:        "u1",
 				CharacterID:    "c1",
 				ConversationID: "conv1",
 				Status:         decision.GoalStatusActive,
@@ -135,7 +135,7 @@ func TestGoalActionChecker_ActiveGoalPastSettle_Flagged(t *testing.T) {
 	diffs, err := checker.CheckReconciliation(context.Background(), mindruntime.ReconciliationCheckRequest{
 		ScanID: "s1",
 		Target: mindruntime.ReconciliationAgentGoalAction,
-		Scope:  &mindruntime.ReconciliationScope{UserID: "u1", CharacterID: "c1", ConversationID: "conv1", InteractionID: "i1"},
+		Scope:  &mindruntime.ReconciliationScope{SpaceID: "u1", CharacterID: "c1", ConversationID: "conv1", InteractionID: "i1"},
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -157,7 +157,7 @@ func TestGoalActionChecker_DifferentCharacter_ScopeIsolated(t *testing.T) {
 		scopeRes: []decision.Goal{
 			{
 				ID:             "goal-1",
-				UserID:         "u1",
+				SpaceID:        "u1",
 				CharacterID:    "OTHER",
 				ConversationID: "conv1",
 				Status:         decision.GoalStatusActive,
@@ -172,7 +172,7 @@ func TestGoalActionChecker_DifferentCharacter_ScopeIsolated(t *testing.T) {
 	diffs, err := checker.CheckReconciliation(context.Background(), mindruntime.ReconciliationCheckRequest{
 		ScanID: "s1",
 		Target: mindruntime.ReconciliationAgentGoalAction,
-		Scope:  &mindruntime.ReconciliationScope{UserID: "u1", CharacterID: "c1", ConversationID: "conv1", InteractionID: "i1"},
+		Scope:  &mindruntime.ReconciliationScope{SpaceID: "u1", CharacterID: "c1", ConversationID: "conv1", InteractionID: "i1"},
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -184,12 +184,12 @@ func TestGoalActionChecker_DifferentCharacter_ScopeIsolated(t *testing.T) {
 
 func TestAgentSnapshotEntities_StableHash(t *testing.T) {
 	snap := &AgentReconciliationSnapshot{
-		UserID:         "u1",
+		SpaceID:        "u1",
 		CharacterID:    "c1",
 		ConversationID: "conv1",
 		InteractionID:  "i1",
 		Goals: []decision.Goal{
-			{ID: "g1", UserID: "u1", Status: decision.GoalStatusActive, Revision: 2, Priority: decision.GoalPriorityNormal},
+			{ID: "g1", SpaceID: "u1", Status: decision.GoalStatusActive, Revision: 2, Priority: decision.GoalPriorityNormal},
 		},
 	}
 	entities := AgentSnapshotEntities(snap)
@@ -200,15 +200,15 @@ func TestAgentSnapshotEntities_StableHash(t *testing.T) {
 	if e.Store != "agent_goal" {
 		t.Fatalf("expected store agent_goal, got %s", e.Store)
 	}
-	if e.References["userId"] != "u1" {
-		t.Fatalf("expected userId reference u1, got %s", e.References["userId"])
+	if e.References["spaceId"] != "u1" {
+		t.Fatalf("expected spaceId reference u1, got %s", e.References["spaceId"])
 	}
 	if !strings.HasPrefix(e.Hash, "sha256:") {
 		t.Fatalf("expected sha256: prefix on hash, got %s", e.Hash)
 	}
 	snap2 := &AgentReconciliationSnapshot{
-		UserID: "u1",
-		Goals:  []decision.Goal{{ID: "g1", UserID: "u1", Status: decision.GoalStatusActive, Revision: 2, Priority: decision.GoalPriorityNormal}},
+		SpaceID: "u1",
+		Goals:   []decision.Goal{{ID: "g1", SpaceID: "u1", Status: decision.GoalStatusActive, Revision: 2, Priority: decision.GoalPriorityNormal}},
 	}
 	if AgentSnapshotEntities(snap2)[0].Hash != e.Hash {
 		t.Fatalf("hash must be deterministic across snapshot instances")
@@ -234,7 +234,7 @@ func TestAgentSnapshotEntities_AllDiffsDefaultNonRepairable(t *testing.T) {
 	req := mindruntime.ReconciliationCheckRequest{
 		ScanID: "s1",
 		Target: mindruntime.ReconciliationAgentGoalAction,
-		Scope:  &mindruntime.ReconciliationScope{UserID: "u1", InteractionID: "i1"},
+		Scope:  &mindruntime.ReconciliationScope{SpaceID: "u1", InteractionID: "i1"},
 	}
 	if d, err := goalChecker.CheckReconciliation(context.Background(), req); err != nil {
 		t.Fatalf("goal checker err: %v", err)

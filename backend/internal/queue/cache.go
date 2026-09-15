@@ -241,8 +241,8 @@ func (c *Cache) evictOldestLocked() {
 }
 
 func (c *Cache) isUserStateScope(scope string) bool {
-	userStateScopes := []string{"user:", "current:", "active:", "session:"}
-	for _, prefix := range userStateScopes {
+	spaceStateScopes := []string{"space:", "current:", "active:", "session:"}
+	for _, prefix := range spaceStateScopes {
 		if strings.HasPrefix(strings.ToLower(scope), prefix) {
 			return true
 		}

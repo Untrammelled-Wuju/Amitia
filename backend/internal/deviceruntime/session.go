@@ -10,7 +10,7 @@ import (
 type RuntimeSession struct {
 	ID runtimeidentity.RuntimeSessionID
 
-	UserID    runtimeidentity.UserID
+	SpaceID   runtimeidentity.SpaceID
 	DeviceID  runtimeidentity.DeviceID
 	RuntimeID runtimeidentity.RuntimeID
 	Platform  runtimeidentity.Platform
@@ -42,7 +42,7 @@ type RuntimeSession struct {
 
 func (s RuntimeSession) Identity() protocol.SessionIdentity {
 	return protocol.SessionIdentity{
-		UserID:           s.UserID,
+		SpaceID:          s.SpaceID,
 		DeviceID:         s.DeviceID,
 		RuntimeID:        s.RuntimeID,
 		RuntimeSessionID: s.ID,
@@ -51,7 +51,7 @@ func (s RuntimeSession) Identity() protocol.SessionIdentity {
 
 func (s RuntimeSession) RuntimeIdentity() runtimeidentity.Identity {
 	return runtimeidentity.Identity{
-		UserID:           s.UserID,
+		SpaceID:          s.SpaceID,
 		DeviceID:         s.DeviceID,
 		RuntimeID:        s.RuntimeID,
 		RuntimeSessionID: s.ID,

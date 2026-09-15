@@ -29,9 +29,9 @@ func setupToolTestDB(t *testing.T) (*gorm.DB, *gorm.DB, func()) {
 	schema := []string{
 		`CREATE TABLE memory_events (id TEXT PRIMARY KEY, memory_id TEXT, event_type TEXT, key TEXT, value TEXT, memory_type TEXT, importance INTEGER, source TEXT, character_id TEXT, created_at TEXT)`,
 		`CREATE TABLE schedules (id TEXT PRIMARY KEY, title TEXT, description TEXT, due_time TEXT, repeat_mode TEXT, channel TEXT, status TEXT, created_at TEXT, updated_at TEXT)`,
-		`CREATE TABLE user_profiles (id TEXT PRIMARY KEY, user_id TEXT NOT NULL DEFAULT 'default', category TEXT NOT NULL, attribute_name TEXT NOT NULL, attribute_value TEXT NOT NULL, confidence INTEGER DEFAULT 50, source_conv_id TEXT DEFAULT '', verified_at TEXT DEFAULT '', created_at TEXT, updated_at TEXT)`,
-		`CREATE UNIQUE INDEX idx_user_profiles_uid_cat_attr ON user_profiles(user_id, category, attribute_name)`,
-		`CREATE TABLE episodic_memories (id TEXT PRIMARY KEY, user_id TEXT NOT NULL DEFAULT 'default', scene_type TEXT NOT NULL, title TEXT NOT NULL, content TEXT NOT NULL, context_before TEXT DEFAULT '', context_after TEXT DEFAULT '', trigger_keywords TEXT DEFAULT '', sentiment_score INTEGER DEFAULT 0, message_id_start TEXT DEFAULT '', message_id_end TEXT DEFAULT '', source_conv_id TEXT DEFAULT '', created_at TEXT, updated_at TEXT)`,
+		`CREATE TABLE user_profiles (id TEXT PRIMARY KEY, space_id TEXT NOT NULL DEFAULT 'default', category TEXT NOT NULL, attribute_name TEXT NOT NULL, attribute_value TEXT NOT NULL, confidence INTEGER DEFAULT 50, source_conv_id TEXT DEFAULT '', verified_at TEXT DEFAULT '', created_at TEXT, updated_at TEXT)`,
+		`CREATE UNIQUE INDEX idx_user_profiles_uid_cat_attr ON user_profiles(space_id, category, attribute_name)`,
+		`CREATE TABLE episodic_memories (id TEXT PRIMARY KEY, space_id TEXT NOT NULL DEFAULT 'default', scene_type TEXT NOT NULL, title TEXT NOT NULL, content TEXT NOT NULL, context_before TEXT DEFAULT '', context_after TEXT DEFAULT '', trigger_keywords TEXT DEFAULT '', sentiment_score INTEGER DEFAULT 0, message_id_start TEXT DEFAULT '', message_id_end TEXT DEFAULT '', source_conv_id TEXT DEFAULT '', created_at TEXT, updated_at TEXT)`,
 		`CREATE TABLE tool_call_intents (id TEXT PRIMARY KEY, request_id TEXT, conversation_id TEXT, character_id TEXT, channel TEXT, tool_call_id TEXT, tool_name TEXT, args_json TEXT, idempotency_key TEXT, status TEXT, created_at TEXT, updated_at TEXT)`,
 		`CREATE TABLE tool_call_results (id TEXT PRIMARY KEY, intent_id TEXT, request_id TEXT, conversation_id TEXT, character_id TEXT, channel TEXT, tool_call_id TEXT, tool_name TEXT, status TEXT, content TEXT, error_code TEXT, visible_text TEXT, side_effects_json TEXT, external_operation_id TEXT, idempotency_key TEXT, audit_json TEXT, confidence REAL, force_voice INTEGER, created_at TEXT)`,
 	}
@@ -203,7 +203,7 @@ func TestProfileAndEpisodicToolsStayInCharacterScope(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rows, err := db.Query("SELECT user_id, attribute_value, source_conv_id FROM user_profiles ORDER BY user_id")
+	rows, err := db.Query("SELECT space_id, attribute_value, source_conv_id FROM user_profiles ORDER BY space_id")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -211,12 +211,12 @@ func TestProfileAndEpisodicToolsStayInCharacterScope(t *testing.T) {
 	gotProfiles := map[string]string{}
 	gotProfileConvs := map[string]string{}
 	for rows.Next() {
-		var userID, value, convID string
-		if err := rows.Scan(&userID, &value, &convID); err != nil {
+		var spaceID, value, convID string
+		if err := rows.Scan(&spaceID, &value, &convID); err != nil {
 			t.Fatal(err)
 		}
-		gotProfiles[userID] = value
-		gotProfileConvs[userID] = convID
+		gotProfiles[spaceID] = value
+		gotProfileConvs[spaceID] = convID
 	}
 	if gotProfiles["char-profile-a"] != "蓝色" || gotProfiles["char-profile-b"] != "绿色" {
 		t.Fatalf("profile context crossed roles: %#v", gotProfiles)
@@ -225,10 +225,10 @@ func TestProfileAndEpisodicToolsStayInCharacterScope(t *testing.T) {
 		t.Fatalf("profile conversation context crossed roles: %#v", gotProfileConvs)
 	}
 	var episodicA, episodicB int
-	if err := db.QueryRow("SELECT COUNT(*) FROM episodic_memories WHERE user_id = ? AND source_conv_id = ?", "char-profile-a", "conv-profile-a").Scan(&episodicA); err != nil {
+	if err := db.QueryRow("SELECT COUNT(*) FROM episodic_memories WHERE space_id = ? AND source_conv_id = ?", "char-profile-a", "conv-profile-a").Scan(&episodicA); err != nil {
 		t.Fatal(err)
 	}
-	if err := db.QueryRow("SELECT COUNT(*) FROM episodic_memories WHERE user_id = ? AND source_conv_id = ?", "char-profile-b", "conv-profile-b").Scan(&episodicB); err != nil {
+	if err := db.QueryRow("SELECT COUNT(*) FROM episodic_memories WHERE space_id = ? AND source_conv_id = ?", "char-profile-b", "conv-profile-b").Scan(&episodicB); err != nil {
 		t.Fatal(err)
 	}
 	if episodicA != 1 || episodicB != 1 {

@@ -8,7 +8,7 @@ import (
 	"gorm.io/gorm"
 )
 
-type ApplyFunc func(tx *gorm.DB, userID string, mutation ClientMutation) (int64, error)
+type ApplyFunc func(tx *gorm.DB, spaceID string, mutation ClientMutation) (int64, error)
 
 type PushService struct {
 	db        *gorm.DB
@@ -39,11 +39,11 @@ type funcApplier struct {
 	fn ApplyFunc
 }
 
-func (f *funcApplier) Apply(tx *gorm.DB, userID string, mutation ClientMutation) (int64, error) {
+func (f *funcApplier) Apply(tx *gorm.DB, spaceID string, mutation ClientMutation) (int64, error) {
 	if f.fn == nil {
 		return 0, &ApplierError{Code: "no_apply_handler", Message: "no apply handler configured"}
 	}
-	return f.fn(tx, userID, mutation)
+	return f.fn(tx, spaceID, mutation)
 }
 
 func (f *funcApplier) Supports(entityType EntityType) bool {
@@ -65,7 +65,7 @@ func (s *PushService) Push(req PushRequest) (*PushResult, error) {
 			if err := tx.SavePoint(savepoint).Error; err != nil {
 				return fmt.Errorf("push: create mutation savepoint: %w", err)
 			}
-			mutResult, txErr := s.applyMutation(tx, req.DeviceID, req.UserID, scope, mutation)
+			mutResult, txErr := s.applyMutation(tx, req.DeviceID, req.SpaceID, scope, mutation)
 			if txErr != nil {
 				return txErr
 			}
@@ -86,7 +86,7 @@ func (s *PushService) Push(req PushRequest) (*PushResult, error) {
 
 		if maxSeq > 0 {
 			identity := CursorIdentity{
-				UserID:   req.UserID,
+				SpaceID:  req.SpaceID,
 				Scope:    scope,
 				DeviceID: req.DeviceID,
 			}
@@ -110,7 +110,7 @@ func (s *PushService) Push(req PushRequest) (*PushResult, error) {
 	return result, nil
 }
 
-func (s *PushService) applyMutation(tx *gorm.DB, deviceID, userID string, scope CursorScope, mutation ClientMutation) (*MutationResult, error) {
+func (s *PushService) applyMutation(tx *gorm.DB, deviceID, spaceID string, scope CursorScope, mutation ClientMutation) (*MutationResult, error) {
 	if s.applier == nil {
 		return &MutationResult{
 			MutationID: mutation.MutationID,
@@ -121,13 +121,13 @@ func (s *PushService) applyMutation(tx *gorm.DB, deviceID, userID string, scope 
 	}
 
 	if mutation.MutationID != "" {
-		claimed, claim, err := s.changelog.ClaimMutationTx(tx, mutation.MutationID, userID, scope)
+		claimed, claim, err := s.changelog.ClaimMutationTx(tx, mutation.MutationID, spaceID, scope)
 		if err != nil {
 			return nil, fmt.Errorf("changelog: claim mutation: %w", err)
 		}
 		if !claimed {
 			if claim.Status == MutationClaimStatusCommitted {
-				existingRecord, err := s.changelog.GetByMutationIDUserScopeTx(tx, mutation.MutationID, userID, scope)
+				existingRecord, err := s.changelog.GetByMutationIDSpaceScopeTx(tx, mutation.MutationID, spaceID, scope)
 				if err != nil {
 					return nil, fmt.Errorf("changelog: get committed mutation record: %w", err)
 				}
@@ -156,10 +156,10 @@ func (s *PushService) applyMutation(tx *gorm.DB, deviceID, userID string, scope 
 		}
 	}
 
-	revision, err := s.applier.Apply(tx, userID, mutation)
+	revision, err := s.applier.Apply(tx, spaceID, mutation)
 	if err != nil {
 		if mutation.MutationID != "" {
-			if rollbackErr := s.changelog.RollbackClaimTx(tx, mutation.MutationID, userID, scope); rollbackErr != nil {
+			if rollbackErr := s.changelog.RollbackClaimTx(tx, mutation.MutationID, spaceID, scope); rollbackErr != nil {
 				return nil, fmt.Errorf("changelog: rollback mutation claim: %w", rollbackErr)
 			}
 		}
@@ -186,13 +186,13 @@ func (s *PushService) applyMutation(tx *gorm.DB, deviceID, userID string, scope 
 		revision,
 		mutation.MutationID,
 		deviceID,
-		userID,
+		spaceID,
 		scope,
 		mutation.Payload,
 	)
 	if err != nil {
 		if mutation.MutationID != "" {
-			if rollbackErr := s.changelog.RollbackClaimTx(tx, mutation.MutationID, userID, scope); rollbackErr != nil {
+			if rollbackErr := s.changelog.RollbackClaimTx(tx, mutation.MutationID, spaceID, scope); rollbackErr != nil {
 				return nil, fmt.Errorf("changelog: append failed and rollback claim failed: %v: %w", err, rollbackErr)
 			}
 		}
@@ -200,7 +200,7 @@ func (s *PushService) applyMutation(tx *gorm.DB, deviceID, userID string, scope 
 	}
 
 	if mutation.MutationID != "" {
-		if err := s.changelog.CommitClaimTx(tx, mutation.MutationID, userID, scope); err != nil {
+		if err := s.changelog.CommitClaimTx(tx, mutation.MutationID, spaceID, scope); err != nil {
 			return nil, fmt.Errorf("changelog commit claim: %w", err)
 		}
 	}

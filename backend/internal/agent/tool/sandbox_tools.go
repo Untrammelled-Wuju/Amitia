@@ -225,13 +225,13 @@ func executeSandboxScriptDirect(callCtx context.Context, execCtx ToolExecutionCo
 }
 
 func sandboxScope(execCtx ToolExecutionContext) (string, *ToolCallResult) {
-	user := strings.TrimSpace(execCtx.User)
+	user := strings.TrimSpace(execCtx.SpaceID)
 	character := strings.TrimSpace(execCtx.CharacterID)
 	switch {
 	case user != "" && character != "":
-		return "user:" + user + "|character:" + character, nil
+		return "space:" + user + "|character:" + character, nil
 	case user != "":
-		return "user:" + user, nil
+		return "space:" + user, nil
 	case character != "":
 		return "character:" + character, nil
 	default:

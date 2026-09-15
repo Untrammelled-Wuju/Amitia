@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/u-ai/backend/config"
+	"github.com/u-ai/backend/internal/requestidentity"
 	"gorm.io/gorm"
 )
 
@@ -22,18 +23,18 @@ func realtimeOwnerMatches(stored, requested string) bool {
 	return realtimeLocalSingleUserMode() && requested != "" && (stored == "" || stored == "default")
 }
 
-func realtimeEffectiveUserID(userID string) string {
-	userID = strings.TrimSpace(userID)
-	if userID != "" {
-		return userID
+func realtimeEffectiveSpaceID(spaceID string) string {
+	spaceID = strings.TrimSpace(spaceID)
+	if spaceID != "" {
+		return requestidentity.NormalizeSpaceID(spaceID)
 	}
 	if config.AppCfg == nil || realtimeLocalSingleUserMode() {
-		return "default"
+		return requestidentity.CanonicalSpaceID()
 	}
 	return ""
 }
 
-func requireRealtimeConversationOwner(conversationID, userID string) (string, error) {
+func requireRealtimeConversationOwner(conversationID, spaceID string) (string, error) {
 	conversationID = strings.TrimSpace(conversationID)
 	if conversationID == "" {
 		return "", nil
@@ -42,19 +43,19 @@ func requireRealtimeConversationOwner(conversationID, userID string) (string, er
 		return "", gorm.ErrInvalidDB
 	}
 	var row struct {
-		UserID      string `gorm:"column:user_id"`
+		SpaceID     string `gorm:"column:space_id"`
 		CharacterID string `gorm:"column:character_id"`
 	}
-	if err := dbInstance.Table("conversations").Select("user_id, character_id").Where("id = ? AND deleted_at IS NULL", conversationID).Take(&row).Error; err != nil {
+	if err := dbInstance.Table("conversations").Select("space_id, character_id").Where("id = ? AND deleted_at IS NULL", conversationID).Take(&row).Error; err != nil {
 		return "", err
 	}
-	if !realtimeOwnerMatches(row.UserID, userID) {
+	if !realtimeOwnerMatches(row.SpaceID, spaceID) {
 		return "", gorm.ErrRecordNotFound
 	}
 	return strings.TrimSpace(row.CharacterID), nil
 }
 
-func requireRealtimeCharacterOwner(characterID, userID string) error {
+func requireRealtimeCharacterOwner(characterID, spaceID string) error {
 	characterID = strings.TrimSpace(characterID)
 	if characterID == "" {
 		return nil
@@ -63,12 +64,12 @@ func requireRealtimeCharacterOwner(characterID, userID string) error {
 		return gorm.ErrInvalidDB
 	}
 	var row struct {
-		UserID string `gorm:"column:user_id"`
+		SpaceID string `gorm:"column:space_id"`
 	}
-	if err := dbInstance.Table("characters").Select("user_id").Where("id = ?", characterID).Take(&row).Error; err != nil {
+	if err := dbInstance.Table("characters").Select("space_id").Where("id = ?", characterID).Take(&row).Error; err != nil {
 		return err
 	}
-	if !realtimeOwnerMatches(row.UserID, userID) {
+	if !realtimeOwnerMatches(row.SpaceID, spaceID) {
 		return gorm.ErrRecordNotFound
 	}
 	return nil

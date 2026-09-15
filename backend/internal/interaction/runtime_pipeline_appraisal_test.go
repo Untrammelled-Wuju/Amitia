@@ -156,7 +156,7 @@ func TestAppraisalDifferentEventTypesProduceDistinctResults(t *testing.T) {
 		p.SetPersonalityCompiler(pc)
 
 		scope := InteractionScope{
-			UserID:         fmt.Sprintf("user-%d", i),
+			SpaceID:        fmt.Sprintf("user-%d", i),
 			CharacterID:    fmt.Sprintf("char-%d", i),
 			ConversationID: fmt.Sprintf("conv-%d", i),
 			Channel:        "web",
@@ -168,7 +168,7 @@ func TestAppraisalDifferentEventTypesProduceDistinctResults(t *testing.T) {
 			Message:     tc.message,
 			Channel:     "web",
 			Source:      "web",
-			UserID:      scope.UserID,
+			SpaceID:     scope.SpaceID,
 			CharacterID: scope.CharacterID,
 			RequestID:   scope.RequestID,
 		})
@@ -276,14 +276,14 @@ func TestAppraisalPersonalitySensitivityModulatesResult(t *testing.T) {
 		p.SetPersonalityCompiler(personality.NewCompiler(personality.DefaultCompilerConfig()))
 
 		scope := InteractionScope{
-			UserID: "user-boundary", CharacterID: "char-boundary",
+			SpaceID: "user-boundary", CharacterID: "char-boundary",
 			ConversationID: "conv-boundary", Channel: "web", Source: "web",
 			RequestID: "req-boundary",
 		}.Normalize()
 
 		assembly := p.Assemble(context.Background(), scope, &ProcessRequest{
 			Message: message, Channel: "web", Source: "web",
-			UserID: scope.UserID, CharacterID: scope.CharacterID,
+			SpaceID: scope.SpaceID, CharacterID: scope.CharacterID,
 			RequestID: scope.RequestID,
 		})
 		return assembly.Appraisal
@@ -347,14 +347,14 @@ func TestAppraisalRejectionSensitivityAffectsColdResponse(t *testing.T) {
 		p.SetPersonalityCompiler(personality.NewCompiler(personality.DefaultCompilerConfig()))
 
 		scope := InteractionScope{
-			UserID: "user-reject", CharacterID: "char-reject",
+			SpaceID: "user-reject", CharacterID: "char-reject",
 			ConversationID: "conv-reject", Channel: "web", Source: "web",
 			RequestID: "req-reject",
 		}.Normalize()
 
 		assembly := p.Assemble(context.Background(), scope, &ProcessRequest{
 			Message: message, Channel: "web", Source: "web",
-			UserID: scope.UserID, CharacterID: scope.CharacterID,
+			SpaceID: scope.SpaceID, CharacterID: scope.CharacterID,
 			RequestID: scope.RequestID,
 		})
 		return assembly.Appraisal
@@ -409,14 +409,14 @@ func TestAppraisalNeedDeltasVaryByEventType(t *testing.T) {
 			p.SetPersonalityCompiler(personality.NewCompiler(personality.DefaultCompilerConfig()))
 
 			scope := InteractionScope{
-				UserID: "user-need", CharacterID: "char-need",
+				SpaceID: "user-need", CharacterID: "char-need",
 				ConversationID: "conv-need", Channel: "web", Source: "web",
 				RequestID: "req-need-" + tc.label,
 			}.Normalize()
 
 			assembly := p.Assemble(context.Background(), scope, &ProcessRequest{
 				Message: tc.message, Channel: "web", Source: "web",
-				UserID: scope.UserID, CharacterID: scope.CharacterID,
+				SpaceID: scope.SpaceID, CharacterID: scope.CharacterID,
 				RequestID: scope.RequestID,
 			})
 

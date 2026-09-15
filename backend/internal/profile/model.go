@@ -4,7 +4,7 @@ package profile
 
 type UserProfile struct {
 	ID               string `gorm:"column:id;primaryKey" json:"id"`
-	UserID           string `gorm:"column:user_id;not null" json:"userId"`
+	SpaceID          string `gorm:"column:space_id;not null" json:"spaceId"`
 	CharacterID      string `gorm:"column:character_id;not null;default:''" json:"characterId"`
 	Category         string `gorm:"column:category;not null" json:"category"`
 	AttributeName    string `gorm:"column:attribute_name;not null" json:"attributeName"`
@@ -62,7 +62,7 @@ func clampProfileConfidenceValue(value interface{}) interface{} {
 }
 
 type CreateProfileRequest struct {
-	UserID         string `json:"userId"`
+	SpaceID        string `json:"spaceId"`
 	CharacterID    string `json:"characterId"`
 	Category       string `json:"category"`
 	AttributeName  string `json:"attributeName" binding:"required"`
@@ -79,7 +79,7 @@ type UpdateProfileRequest struct {
 }
 
 type ProfileListQuery struct {
-	UserID      string `form:"userId"`
+	SpaceID     string `form:"spaceId"`
 	CharacterID string `form:"characterId"`
 	Category    string `form:"category"`
 	Keyword     string `form:"keyword"`

@@ -87,11 +87,11 @@ func (s *service) maintainRetentionForMemory(m *Memory, now time.Time) {
 	}
 }
 
-func (s *service) refreshRetentionForListScope(characterID, userID string) {
+func (s *service) refreshRetentionForListScope(characterID, spaceID string) {
 	if s == nil || s.db == nil {
 		return
 	}
-	key := strings.TrimSpace(characterID) + "|" + strings.TrimSpace(userID)
+	key := strings.TrimSpace(characterID) + "|" + strings.TrimSpace(spaceID)
 	now := time.Now()
 	s.retentionRefreshMu.Lock()
 	if s.retentionRefreshed == nil {
@@ -104,7 +104,7 @@ func (s *service) refreshRetentionForListScope(characterID, userID string) {
 	s.retentionRefreshed[key] = now
 	s.retentionRefreshMu.Unlock()
 
-	query := applyMemoryScopeQuery(s.db.Model(&Memory{}), characterID, userID).
+	query := applyMemoryScopeQuery(s.db.Model(&Memory{}), characterID, spaceID).
 		Where("pinned = 0").
 		Where("(decay_state IS NULL OR decay_state = '' OR decay_state != ?)", DecayStateArchived).
 		Where("verified_status NOT IN (?, ?)", "replaced", "tombstone")

@@ -7,7 +7,7 @@ import (
 
 func TestCurrentTimeUsesSystemFallbackWithoutTemporalService(t *testing.T) {
 	SetTemporalService(nil)
-	result, found := ExecuteWithContext(ToolExecutionContext{User: "user-1", CharacterID: "character-1", Channel: "web"}, "get_current_time", `{}`)
+	result, found := ExecuteWithContext(ToolExecutionContext{SpaceID: "user-1", CharacterID: "character-1", Channel: "web"}, "get_current_time", `{}`)
 	if !found {
 		t.Fatal("get_current_time not found")
 	}

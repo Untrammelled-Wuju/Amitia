@@ -83,7 +83,7 @@ func (a *HookAdapter) InvokeToolAfterExecute(ctx context.Context, payload json.R
 	return a.integrator.InvokeToolAfterExecute(ctx, payload, hookCtx)
 }
 
-func buildHookContext(ctx context.Context, invocationID, operationID, extensionID, userID, characterID, conversationID, sessionID, channel string) hook.HookContextSnapshot {
+func buildHookContext(ctx context.Context, invocationID, operationID, extensionID, spaceID, characterID, conversationID, sessionID, channel string) hook.HookContextSnapshot {
 	var charID *string
 	if characterID != "" {
 		c := characterID
@@ -145,12 +145,12 @@ func (s *service) SetHookInvoker(invoker HookInvoker) {
 	s.hookInvoker = invoker
 }
 
-func (s *service) invokeMessageHook(ctx context.Context, hookPoint string, payload map[string]interface{}, invocationID, userID, characterID, conversationID, sessionID, channel string) (map[string]interface{}, bool, error) {
+func (s *service) invokeMessageHook(ctx context.Context, hookPoint string, payload map[string]interface{}, invocationID, spaceID, characterID, conversationID, sessionID, channel string) (map[string]interface{}, bool, error) {
 	if s.hookInvoker == nil {
 		return payload, false, nil
 	}
 
-	hookCtx := buildHookContext(ctx, invocationID, "", "", userID, characterID, conversationID, sessionID, channel)
+	hookCtx := buildHookContext(ctx, invocationID, "", "", spaceID, characterID, conversationID, sessionID, channel)
 	rawPayload := mapToHookPayload(payload)
 
 	var result json.RawMessage

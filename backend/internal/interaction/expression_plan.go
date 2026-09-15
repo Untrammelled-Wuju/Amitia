@@ -50,7 +50,7 @@ type ExpressionPlan struct {
 	Version             ExpressionPlanVersion `json:"version"`
 	ID                  string                `json:"id,omitempty"`
 	BehaviorPlanID      string                `json:"behaviorPlanId,omitempty"`
-	UserID              string                `json:"userId,omitempty"`
+	SpaceID             string                `json:"spaceId,omitempty"`
 	CharacterID         string                `json:"characterId,omitempty"`
 	CreatedAt           time.Time             `json:"createdAt"`
 	Policy              ExpressionPolicy      `json:"policy"`

@@ -9,11 +9,11 @@ import (
 
 type Repository interface {
 	Create(fb *MessageFeedback) error
-	GetByMessageForUser(msgID, userID string) ([]MessageFeedback, error)
+	GetByMessageForSpace(msgID, spaceID string) ([]MessageFeedback, error)
 	GetStats() (total int64, byType map[string]int64, recent []MessageFeedback, err error)
 	GetRecent(limit int) ([]MessageFeedback, error)
-	DeleteForUser(id int, userID string) error
-	GetMessageForUser(msgID, userID string) (role, convID string, err error)
+	DeleteForSpace(id int, spaceID string) error
+	GetMessageForSpace(msgID, spaceID string) (role, convID string, err error)
 }
 
 type repository struct {
@@ -28,8 +28,8 @@ func (r *repository) Create(fb *MessageFeedback) error {
 	return r.db.Create(fb).Error
 }
 
-func (r *repository) GetByMessageForUser(msgID, userID string) ([]MessageFeedback, error) {
-	if _, _, err := r.GetMessageForUser(msgID, userID); err != nil {
+func (r *repository) GetByMessageForSpace(msgID, spaceID string) ([]MessageFeedback, error) {
+	if _, _, err := r.GetMessageForSpace(msgID, spaceID); err != nil {
 		return nil, err
 	}
 	var items []MessageFeedback
@@ -83,12 +83,12 @@ func (r *repository) GetRecent(limit int) ([]MessageFeedback, error) {
 	return items, err
 }
 
-func (r *repository) DeleteForUser(id int, userID string) error {
+func (r *repository) DeleteForSpace(id int, spaceID string) error {
 	var fb MessageFeedback
 	if err := r.db.Where("id = ?", id).Take(&fb).Error; err != nil {
 		return err
 	}
-	if _, _, err := r.GetMessageForUser(fb.MessageID, userID); err != nil {
+	if _, _, err := r.GetMessageForSpace(fb.MessageID, spaceID); err != nil {
 		return err
 	}
 	result := r.db.Where("id = ?", id).Delete(&MessageFeedback{})
@@ -101,11 +101,11 @@ func (r *repository) DeleteForUser(id int, userID string) error {
 	return nil
 }
 
-func (r *repository) GetMessageForUser(msgID, userID string) (role, convID string, err error) {
+func (r *repository) GetMessageForSpace(msgID, spaceID string) (role, convID string, err error) {
 	q := r.db.Table("messages AS m").
 		Joins("JOIN conversations AS c ON c.id = m.conversation_id").
 		Where("m.id = ? AND m.deleted_at IS NULL AND c.deleted_at IS NULL", msgID)
-	q = feedbackOwnerScope(q, userID)
+	q = feedbackOwnerScope(q, spaceID)
 	err = q.Select("m.role, m.conversation_id").Row().Scan(&role, &convID)
 	return
 }

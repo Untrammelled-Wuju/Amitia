@@ -33,7 +33,7 @@ func (c *EpisodicBackupContributor) Dependencies() []string {
 
 type episodicRecordV1 struct {
 	ID                string  `json:"id"`
-	UserID            string  `json:"userId"`
+	SpaceID           string  `json:"spaceId"`
 	SceneType         string  `json:"sceneType"`
 	Title             string  `json:"title"`
 	Content           string  `json:"content"`
@@ -81,7 +81,7 @@ func (c *EpisodicBackupContributor) Export(ctx context.Context, req dataportabil
 	defer compW.Close()
 
 	query := c.DB.WithContext(ctx).Table("episodic_memories").Select(
-		"id, user_id, scene_type, title, content, context_before, context_after, trigger_keywords, sentiment_score, message_id_start, message_id_end, message_time_start, message_time_end, source_conv_id, created_at, updated_at, retention_level, memory_strength, strength_updated_at, last_reinforced_at, reinforce_count, decay_state, archived_at",
+		"id, space_id, scene_type, title, content, context_before, context_after, trigger_keywords, sentiment_score, message_id_start, message_id_end, message_time_start, message_time_end, source_conv_id, created_at, updated_at, retention_level, memory_strength, strength_updated_at, last_reinforced_at, reinforce_count, decay_state, archived_at",
 	)
 
 	rows, err := query.Rows()
@@ -186,7 +186,7 @@ func (c *EpisodicBackupContributor) RestoreEpisodic(ctx context.Context, in data
 
 		m := EpisodicMemory{
 			ID:                rec.ID,
-			UserID:            rec.UserID,
+			SpaceID:           rec.SpaceID,
 			SceneType:         rec.SceneType,
 			Title:             rec.Title,
 			Content:           rec.Content,

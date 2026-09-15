@@ -17,10 +17,10 @@ type BackgroundTaskReader interface {
 }
 
 type BackgroundTaskCoordinator struct {
-	tracker     InteractionTracker
-	recovery    *RecoveryDescriptorService
-	tasks       BackgroundTaskReader
-	now         func() time.Time
+	tracker  InteractionTracker
+	recovery *RecoveryDescriptorService
+	tasks    BackgroundTaskReader
+	now      func() time.Time
 }
 
 func (c *BackgroundTaskCoordinator) Resume(ctx context.Context, taskRunID string) error {
@@ -126,7 +126,7 @@ func (c *BackgroundTaskCoordinator) HandleTerminalTask(ctx context.Context, task
 		PlanID:           descriptor.Plan.PlanID,
 		ActionID:         descriptor.Action.ActionID,
 		InteractionID:    descriptor.Interaction.InteractionID,
-		UserID:           descriptor.Scope.UserID,
+		SpaceID:          descriptor.Scope.SpaceID,
 		CharacterID:      descriptor.Scope.CharacterID,
 		ConversationID:   descriptor.Scope.ConversationID,
 		GoalIDs:          extractGoalIDs(descriptor.Goals),

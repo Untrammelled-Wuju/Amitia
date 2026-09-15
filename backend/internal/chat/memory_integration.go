@@ -28,7 +28,7 @@ func (s *service) extractProfile(convID, charID string) {
 	if len(messages) == 0 {
 		return
 	}
-	s.profilePort.ExtractFromConversation(s.profileExtractionUserID(convID, charID), convID, messages, charID)
+	s.profilePort.ExtractFromConversation(s.profileExtractionSpaceID(convID, charID), convID, messages, charID)
 }
 
 func (s *service) autoExtractMemories(convID, charID string) {
@@ -59,7 +59,7 @@ func (s *service) autoExtractMemories(convID, charID string) {
 	}
 }
 
-func (s *service) profileExtractionUserID(convID, charID string) string {
+func (s *service) profileExtractionSpaceID(convID, charID string) string {
 	fallback := strings.TrimSpace(charID)
 	if s.db == nil || strings.TrimSpace(convID) == "" {
 		return fallback

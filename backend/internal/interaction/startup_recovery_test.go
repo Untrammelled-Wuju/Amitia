@@ -18,7 +18,7 @@ func TestRecoverStaleInteractionsFailsStaleRuntimeRecords(t *testing.T) {
 	}
 	for _, status := range statuses {
 		record := NewInteractionRecord(InteractionScope{
-			UserID:         "user-1",
+			SpaceID:        "user-1",
 			CharacterID:    "char-1",
 			ConversationID: "conv-" + string(status),
 			Channel:        "web",
@@ -57,13 +57,13 @@ func TestRecoverStaleInteractionsSkipsFreshAndTerminalRecords(t *testing.T) {
 	ctx := context.Background()
 	cutoff := time.Now().Add(-time.Minute)
 
-	fresh := NewInteractionRecord(InteractionScope{UserID: "user-1", CharacterID: "char-1", ConversationID: "conv-fresh", Channel: "web", RequestID: "req-fresh"})
+	fresh := NewInteractionRecord(InteractionScope{SpaceID: "user-1", CharacterID: "char-1", ConversationID: "conv-fresh", Channel: "web", RequestID: "req-fresh"})
 	fresh.Status = InteractionStatusProcessing
 	fresh.UpdatedAt = cutoff.Add(time.Second)
 	if err := tracker.Create(ctx, fresh); err != nil {
 		t.Fatal(err)
 	}
-	terminal := NewInteractionRecord(InteractionScope{UserID: "user-1", CharacterID: "char-1", ConversationID: "conv-terminal", Channel: "web", RequestID: "req-terminal"})
+	terminal := NewInteractionRecord(InteractionScope{SpaceID: "user-1", CharacterID: "char-1", ConversationID: "conv-terminal", Channel: "web", RequestID: "req-terminal"})
 	terminal.Status = InteractionStatusCompleted
 	terminal.CompletedAt = cutoff.Add(-time.Minute)
 	terminal.UpdatedAt = cutoff.Add(-time.Minute)

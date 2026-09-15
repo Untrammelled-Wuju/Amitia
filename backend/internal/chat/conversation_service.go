@@ -36,8 +36,8 @@ func (s *service) ListConversations(q ConversationQuery) (*ConversationListRespo
 	return &ConversationListResponse{Items: convs, Total: total, Page: q.Page, PageSize: q.PageSize, TotalPages: totalPages}, nil
 }
 
-func (s *service) ListConversationsForUser(q ConversationQuery, userID string) (*ConversationListResponse, error) {
-	q.UserID = normalizeConversationOwner(userID)
+func (s *service) ListConversationsForSpace(q ConversationQuery, spaceID string) (*ConversationListResponse, error) {
+	q.SpaceID = normalizeConversationOwner(spaceID)
 	q.IncludeLegacyDefault = chatLocalSingleUserMode()
 	return s.ListConversations(q)
 }
@@ -50,8 +50,8 @@ func (s *service) GetConversation(id string) (*Conversation, error) {
 	return c, nil
 }
 
-func (s *service) GetConversationForUser(id, userID string) (*Conversation, error) {
-	c, err := s.requireConversationOwner(id, userID)
+func (s *service) GetConversationForSpace(id, spaceID string) (*Conversation, error) {
+	c, err := s.requireConversationOwner(id, spaceID)
 	if err != nil {
 		return nil, fmt.Errorf("对话不存在")
 	}
@@ -59,15 +59,15 @@ func (s *service) GetConversationForUser(id, userID string) (*Conversation, erro
 }
 
 func (s *service) CreateConversation(req *CreateConversationRequest) (*Conversation, error) {
-	return s.CreateConversationForUser(req, requestidentity.DefaultUserID)
+	return s.CreateConversationForSpace(req, requestidentity.CanonicalSpaceID())
 }
 
-func (s *service) CreateConversationForUser(req *CreateConversationRequest, userID string) (*Conversation, error) {
+func (s *service) CreateConversationForSpace(req *CreateConversationRequest, spaceID string) (*Conversation, error) {
 	if req == nil {
 		return nil, fmt.Errorf("conversation request is required")
 	}
 	if strings.TrimSpace(req.CharacterID) != "" {
-		if _, err := s.getRoleRuntimeProfileForUser(req.CharacterID, userID); err != nil {
+		if _, err := s.getRoleRuntimeProfileForSpace(req.CharacterID, spaceID); err != nil {
 			return nil, fmt.Errorf("角色不存在")
 		}
 	}
@@ -80,16 +80,16 @@ func (s *service) CreateConversationForUser(req *CreateConversationRequest, user
 	if req.Source == "" {
 		req.Source = "manual"
 	}
-	owner := normalizeConversationOwner(userID)
-	c := &Conversation{ID: uuid.New().String(), UserID: owner, CharacterID: req.CharacterID, Title: req.Title, Channel: req.Channel, Source: req.Source, PeerID: req.PeerID}
+	owner := normalizeConversationOwner(spaceID)
+	c := &Conversation{ID: uuid.New().String(), SpaceID: owner, CharacterID: req.CharacterID, Title: req.Title, Channel: req.Channel, Source: req.Source, PeerID: req.PeerID}
 
 	err := s.db.Transaction(func(tx *gorm.DB) error {
 		now := time.Now().Format("2006-01-02 15:04:05")
-		if err := tx.Exec("INSERT INTO conversations (id, user_id, character_id, title, channel, source, peer_id, created_at, updated_at, revision) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)",
-			c.ID, c.UserID, c.CharacterID, c.Title, c.Channel, c.Source, c.PeerID, now, now).Error; err != nil {
+		if err := tx.Exec("INSERT INTO conversations (id, space_id, character_id, title, channel, source, peer_id, created_at, updated_at, revision) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)",
+			c.ID, c.SpaceID, c.CharacterID, c.Title, c.Channel, c.Source, c.PeerID, now, now).Error; err != nil {
 			return err
 		}
-		if err := s.recordConversationChangeTx(tx, c, sync.OpCreate, 1, userID); err != nil {
+		if err := s.recordConversationChangeTx(tx, c, sync.OpCreate, 1, spaceID); err != nil {
 			return err
 		}
 		return nil
@@ -101,11 +101,11 @@ func (s *service) CreateConversationForUser(req *CreateConversationRequest, user
 }
 
 func (s *service) EnsureChannelConversation(channel string) (*Conversation, error) {
-	return s.EnsureChannelConversationForUser(channel, requestidentity.DefaultUserID)
+	return s.EnsureChannelConversationForSpace(channel, requestidentity.CanonicalSpaceID())
 }
 
-func (s *service) EnsureChannelConversationForUser(channel, userID string) (*Conversation, error) {
-	owner := normalizeConversationOwner(userID)
+func (s *service) EnsureChannelConversationForSpace(channel, spaceID string) (*Conversation, error) {
+	owner := normalizeConversationOwner(spaceID)
 	title := "微信对话"
 	if channel == "qq" {
 		title = "QQ对话"
@@ -113,14 +113,14 @@ func (s *service) EnsureChannelConversationForUser(channel, userID string) (*Con
 
 	var c Conversation
 	query := s.db.Where("channel = ? AND deleted_at IS NULL", channel)
-	query = applyConversationOwnerScope(query, userID)
+	query = applyConversationOwnerScope(query, spaceID)
 	if err := query.Order("CASE WHEN source = 'system' THEN 0 ELSE 1 END, updated_at DESC").First(&c).Error; err == nil {
 		if err := s.db.Model(&Conversation{}).Where("id = ?", c.ID).Updates(map[string]interface{}{
-			"user_id": owner, "channel": channel, "title": title, "source": "system",
+			"space_id": owner, "channel": channel, "title": title, "source": "system",
 		}).Error; err != nil {
 			return nil, err
 		}
-		c.UserID = owner
+		c.SpaceID = owner
 		c.Channel = channel
 		c.Title = title
 		c.Source = "system"
@@ -132,7 +132,7 @@ func (s *service) EnsureChannelConversationForUser(channel, userID string) (*Con
 	now := time.Now().Format("2006-01-02 15:04:05")
 	c = Conversation{
 		ID:          uuid.New().String(),
-		UserID:      owner,
+		SpaceID:     owner,
 		CharacterID: "",
 		Title:       title,
 		Channel:     channel,
@@ -153,7 +153,7 @@ func (s *service) RecalculateMessageCounts() (int64, error) {
 
 func (s *service) BackfillMissingConversations() (int64, error) {
 	now := time.Now().Format("2006-01-02 15:04:05")
-	result := s.db.Exec(`INSERT OR IGNORE INTO conversations (id, user_id, title, channel, source, created_at, updated_at)
+	result := s.db.Exec(`INSERT OR IGNORE INTO conversations (id, space_id, title, channel, source, created_at, updated_at)
 		SELECT DISTINCT m.conversation_id, 'default', m.conversation_id,
 		CASE
 			WHEN m.conversation_id LIKE '%wechat%' THEN 'wechat'
@@ -168,13 +168,13 @@ func (s *service) BackfillMissingConversations() (int64, error) {
 }
 
 func (s *service) DeleteConversation(id string) (bool, error) {
-	return s.DeleteConversationForUser(id, requestidentity.DefaultUserID)
+	return s.DeleteConversationForSpace(id, requestidentity.CanonicalSpaceID())
 }
 
-func (s *service) DeleteConversationForUser(id string, userID string) (bool, error) {
+func (s *service) DeleteConversationForSpace(id string, spaceID string) (bool, error) {
 	characterDeleted := false
 	err := s.db.Transaction(func(tx *gorm.DB) error {
-		linked, err := s.tombstoneConversationTx(tx, id, userID)
+		linked, err := s.tombstoneConversationTx(tx, id, spaceID)
 		characterDeleted = linked
 		return err
 	})
@@ -187,10 +187,10 @@ func (s *service) DeleteConversationForUser(id string, userID string) (bool, err
 	return characterDeleted, nil
 }
 
-func (s *service) tombstoneConversationTx(tx *gorm.DB, id string, userID string) (bool, error) {
+func (s *service) tombstoneConversationTx(tx *gorm.DB, id string, spaceID string) (bool, error) {
 	var convRow struct {
 		ID          string
-		UserID      string
+		SpaceID     string
 		CharacterID string
 		Title       string
 		Channel     string
@@ -199,10 +199,10 @@ func (s *service) tombstoneConversationTx(tx *gorm.DB, id string, userID string)
 		Revision    int64
 	}
 	if err := tx.Table("conversations").Where("id = ? AND deleted_at IS NULL", id).
-		Select("id", "user_id", "character_id", "title", "channel", "source", "peer_id", "COALESCE(revision, 1) AS revision").Take(&convRow).Error; err != nil {
+		Select("id", "space_id", "character_id", "title", "channel", "source", "peer_id", "COALESCE(revision, 1) AS revision").Take(&convRow).Error; err != nil {
 		return false, err
 	}
-	if !conversationOwnerMatches(convRow.UserID, userID) {
+	if !conversationOwnerMatches(convRow.SpaceID, spaceID) {
 		return false, gorm.ErrRecordNotFound
 	}
 
@@ -237,7 +237,7 @@ func (s *service) tombstoneConversationTx(tx *gorm.DB, id string, userID string)
 			return false, err
 		}
 		m := &Message{ID: row.ID, ConversationID: row.ConversationID, Role: row.Role, Content: row.Content, Sequence: row.Sequence, MsgType: row.MsgType, Source: row.Source}
-		if err := s.recordMessageChangeTx(tx, m, sync.OpDelete, row.Revision+1, userID); err != nil {
+		if err := s.recordMessageChangeTx(tx, m, sync.OpDelete, row.Revision+1, spaceID); err != nil {
 			return false, err
 		}
 	}
@@ -268,7 +268,7 @@ func (s *service) tombstoneConversationTx(tx *gorm.DB, id string, userID string)
 				if err != nil {
 					return false, err
 				}
-				if _, err := s.changeRecorder.RecordChange(tx, sync.EntityTypeCharacter, sync.EntityID(characterRow.ID), sync.OpUpdate, newCharacterRevision, newBusinessMutationID(sync.EntityTypeCharacter, characterRow.ID, sync.OpUpdate), normalizeChangeUserID(userID), sync.ScopeDevice, payload); err != nil {
+				if _, err := s.changeRecorder.RecordChange(tx, sync.EntityTypeCharacter, sync.EntityID(characterRow.ID), sync.OpUpdate, newCharacterRevision, newBusinessMutationID(sync.EntityTypeCharacter, characterRow.ID, sync.OpUpdate), normalizeChangeSpaceID(spaceID), sync.ScopeDevice, payload); err != nil {
 					return false, err
 				}
 			}
@@ -288,27 +288,27 @@ func (s *service) tombstoneConversationTx(tx *gorm.DB, id string, userID string)
 	if result.RowsAffected == 0 {
 		return false, fmt.Errorf("会话版本冲突")
 	}
-	conversation := &Conversation{ID: convRow.ID, UserID: convRow.UserID, CharacterID: convRow.CharacterID, Title: convRow.Title, Channel: convRow.Channel, Source: convRow.Source, PeerID: convRow.PeerID}
-	if err := s.recordConversationChangeTx(tx, conversation, sync.OpDelete, newRevision, userID); err != nil {
+	conversation := &Conversation{ID: convRow.ID, SpaceID: convRow.SpaceID, CharacterID: convRow.CharacterID, Title: convRow.Title, Channel: convRow.Channel, Source: convRow.Source, PeerID: convRow.PeerID}
+	if err := s.recordConversationChangeTx(tx, conversation, sync.OpDelete, newRevision, spaceID); err != nil {
 		return false, err
 	}
 	return characterChanged, nil
 }
 
 func (s *service) DeleteAllConversations() error {
-	return s.DeleteAllConversationsForUser(requestidentity.DefaultUserID)
+	return s.DeleteAllConversationsForSpace(requestidentity.CanonicalSpaceID())
 }
 
-func (s *service) DeleteAllConversationsForUser(userID string) error {
+func (s *service) DeleteAllConversationsForSpace(spaceID string) error {
 	var ids []string
 	err := s.db.Transaction(func(tx *gorm.DB) error {
 		query := tx.Table("conversations").Where("deleted_at IS NULL")
-		query = applyConversationOwnerScope(query, userID)
+		query = applyConversationOwnerScope(query, spaceID)
 		if err := query.Pluck("id", &ids).Error; err != nil {
 			return err
 		}
 		for _, id := range ids {
-			if _, err := s.tombstoneConversationTx(tx, id, userID); err != nil {
+			if _, err := s.tombstoneConversationTx(tx, id, spaceID); err != nil {
 				return err
 			}
 		}
@@ -327,18 +327,18 @@ func (s *service) DeleteAllConversationsForUser(userID string) error {
 }
 
 func (s *service) ChangeCharacter(convID, charID string) (*Conversation, error) {
-	return s.ChangeCharacterForUser(convID, charID, requestidentity.DefaultUserID)
+	return s.ChangeCharacterForSpace(convID, charID, requestidentity.CanonicalSpaceID())
 }
 
-func (s *service) ChangeCharacterForUser(convID, charID, userID string) (*Conversation, error) {
+func (s *service) ChangeCharacterForSpace(convID, charID, spaceID string) (*Conversation, error) {
 	charID = strings.TrimSpace(charID)
 	if charID == "" {
 		return nil, fmt.Errorf("角色不存在")
 	}
-	if _, err := s.getRoleRuntimeProfileForUser(charID, userID); err != nil {
+	if _, err := s.getRoleRuntimeProfileForSpace(charID, spaceID); err != nil {
 		return nil, fmt.Errorf("角色不存在")
 	}
-	conv, err := s.requireConversationOwner(convID, userID)
+	conv, err := s.requireConversationOwner(convID, spaceID)
 	if err != nil {
 		return nil, fmt.Errorf("会话不存在")
 	}
@@ -367,12 +367,12 @@ func (s *service) ChangeCharacterForUser(convID, charID, userID string) (*Conver
 		}
 		updated := *conv
 		updated.CharacterID = charID
-		return s.recordConversationChangeTx(tx, &updated, sync.OpUpdate, newRevision, userID)
+		return s.recordConversationChangeTx(tx, &updated, sync.OpUpdate, newRevision, spaceID)
 	})
 	if err != nil {
 		return nil, err
 	}
-	return s.requireConversationOwner(convID, userID)
+	return s.requireConversationOwner(convID, spaceID)
 }
 
 func (s *service) GetStats() (*ChatStatsResponse, error) {
@@ -383,20 +383,20 @@ func (s *service) GetStats() (*ChatStatsResponse, error) {
 	return &ChatStatsResponse{TodayMessages: todayMessages, TotalConversations: totalConvs}, nil
 }
 
-func (s *service) GetStatsForUser(userID string) (*ChatStatsResponse, error) {
+func (s *service) GetStatsForSpace(spaceID string) (*ChatStatsResponse, error) {
 	convQuery := s.db.Table("conversations").Where("deleted_at IS NULL")
-	convQuery = applyConversationOwnerScope(convQuery, userID)
+	convQuery = applyConversationOwnerScope(convQuery, spaceID)
 	var totalConvs int64
 	if err := convQuery.Count(&totalConvs).Error; err != nil {
 		return nil, err
 	}
 	msgQuery := s.db.Table("messages AS m").Joins("JOIN conversations AS c ON c.id = m.conversation_id").
 		Where("m.deleted_at IS NULL AND c.deleted_at IS NULL AND date(m.created_at) = date('now', 'localtime')")
-	owner := normalizeConversationOwner(userID)
+	owner := normalizeConversationOwner(spaceID)
 	if chatLocalSingleUserMode() {
-		msgQuery = msgQuery.Where("c.user_id = ? OR c.user_id = '' OR c.user_id IS NULL OR c.user_id = ?", owner, requestidentity.DefaultUserID)
+		msgQuery = msgQuery.Where("c.space_id = ? OR c.space_id = '' OR c.space_id IS NULL OR c.space_id = ?", owner, requestidentity.LegacySpaceID)
 	} else {
-		msgQuery = msgQuery.Where("c.user_id = ?", owner)
+		msgQuery = msgQuery.Where("c.space_id = ?", owner)
 	}
 	var todayMessages int64
 	if err := msgQuery.Count(&todayMessages).Error; err != nil {
@@ -405,8 +405,8 @@ func (s *service) GetStatsForUser(userID string) (*ChatStatsResponse, error) {
 	return &ChatStatsResponse{TodayMessages: todayMessages, TotalConversations: totalConvs}, nil
 }
 
-func (s *service) ExportConversationForUser(convID, format, userID string) (string, error) {
-	if _, err := s.requireConversationOwner(convID, userID); err != nil {
+func (s *service) ExportConversationForSpace(convID, format, spaceID string) (string, error) {
+	if _, err := s.requireConversationOwner(convID, spaceID); err != nil {
 		return "", fmt.Errorf("对话不存在")
 	}
 	return s.ExportConversation(convID, format)
