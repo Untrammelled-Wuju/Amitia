@@ -4,13 +4,7 @@ server:
   mode: "debug"
 
 storage:
-  dataDir: "data"
-
-jwt:
-  secret: ""
-  expireDays: 7
-  issuer: "amitia"
-  audience: "amitia-api"
+  dataDir: "AmitiaData"
 
 security:
   mode: "local_single_user"

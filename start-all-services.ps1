@@ -11,6 +11,7 @@ $surrealPass = "AmitiaSurrealDBRootPassword20260831Securex"
 
 $env:AMITIA_RUNTIME_ROOT = $root
 $env:AMITIA_WORKSPACE_DIR = $root
+$env:AMITIA_DATA_DIR = Join-Path $root "AmitiaData"
 
 function Stop-ProjectProcess {
     param([int]$ProcessId)
