@@ -45,7 +45,7 @@ await extension.activate({
 });
 
 const command = (action, payload = {}) =>
-  toolHandler({ action, payload: { ...payload, scope: { userId: "user-1", characterId: "char-1" } } });
+  toolHandler({ action, payload: { ...payload, scope: { spaceId: "user-1", characterId: "char-1" } } });
 
 const settings = await command("settings.get");
 assert.equal(settings.enabled, true);

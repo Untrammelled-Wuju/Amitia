@@ -124,7 +124,7 @@
             "inputSchema": {
               "type": "object",
               "properties": {
-                "userId": {
+                "spaceId": {
                   "type": "string"
                 },
                 "characterId": {

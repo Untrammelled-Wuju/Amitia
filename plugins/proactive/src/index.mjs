@@ -188,13 +188,13 @@ function ruleDue(rule, settings, history, now) {
 async function dispatchMessage(host, settings, rule, now) {
   const characterId = String(rule.characterId || "").trim();
   if (!characterId) throw new Error("缺少角色");
-  const userId = String(rule.userId || "").trim();
+  const spaceId = String(rule.spaceId || "").trim();
   const conversationId = String(rule.conversationId || "").trim();
   const channel = String(rule.channel || settings.channel || "all");
   const content = String(rule.promptTemplate || "发一条自然、简短的主动消息。").trim();
   const requestId = `proactive:${rule.id}:${now.getTime()}`;
   const response = await host.call("host.conversation.message.send", {
-    userId,
+    spaceId,
     characterId,
     conversationId,
     channel,
@@ -329,7 +329,7 @@ async function dispatchCommand(host, logger, input) {
         created = normalizeRule({
           ...payload,
           id,
-          userId: String(scope.userId || payload.userId || ""),
+          spaceId: String(scope.spaceId || payload.spaceId || ""),
           characterId: payload.characterId || characterId,
           createdAt: now,
           updatedAt: now,
@@ -444,7 +444,7 @@ async function dispatchCommand(host, logger, input) {
         let nextId = state.nextRuleId || 1;
         for (const rule of rules) {
           rule.id = nextId;
-          rule.userId = String(scope.userId || "");
+          rule.spaceId = String(scope.spaceId || "");
           nextId += 1;
         }
         state.nextRuleId = nextId;

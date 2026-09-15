@@ -278,7 +278,7 @@ export interface UIDeviceRequirements {
 }
 
 export interface UIProfileScope {
-  userId?: string;
+  spaceId?: string;
   deviceId?: string;
   platform?: string;
   runtimeProfile?: string;
