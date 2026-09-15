@@ -47,7 +47,7 @@ func (r *kernelCharacterReader) ReadCharacter(ctx context.Context, characterID s
 	if err != nil || c == nil {
 		return nil, false, nil
 	}
-	if scopeCtx.UserID == "" || (strings.TrimSpace(c.UserID) != "" && strings.TrimSpace(c.UserID) != strings.TrimSpace(scopeCtx.UserID)) {
+	if scopeCtx.SpaceID == "" || (strings.TrimSpace(c.SpaceID) != "" && strings.TrimSpace(c.SpaceID) != strings.TrimSpace(scopeCtx.SpaceID)) {
 		return nil, false, nil
 	}
 	summary := c.Description
@@ -63,16 +63,16 @@ func (r *kernelCharacterReader) ReadCharacter(ctx context.Context, characterID s
 	return data, true, nil
 }
 
-func (r *kernelCharacterReader) ListCharacters(_ context.Context, userID string, includeDisabled bool) ([]json.RawMessage, error) {
+func (r *kernelCharacterReader) ListCharacters(_ context.Context, spaceID string, includeDisabled bool) ([]json.RawMessage, error) {
 	characters, err := r.repo.List(includeDisabled)
 	if err != nil {
 		return nil, err
 	}
-	userID = strings.TrimSpace(userID)
+	spaceID = strings.TrimSpace(spaceID)
 	items := make([]json.RawMessage, 0, len(characters))
 	for _, character := range characters {
-		owner := strings.TrimSpace(character.UserID)
-		if userID != "" && owner != "" && owner != userID && owner != "default" {
+		owner := strings.TrimSpace(character.SpaceID)
+		if spaceID != "" && owner != "" && owner != spaceID && owner != "default" {
 			continue
 		}
 		data, _ := json.Marshal(map[string]any{
@@ -112,17 +112,17 @@ func (r *kernelConversationReader) ReadConversation(ctx context.Context, convers
 	if offset > 0 && limit > 0 {
 		page = offset/limit + 1
 	}
-	if strings.TrimSpace(scopeCtx.UserID) == "" {
+	if strings.TrimSpace(scopeCtx.SpaceID) == "" {
 		return []json.RawMessage{}, false, nil
 	}
 	type scopedConversationReader interface {
-		GetMessagesForUser(conversationID, userID string, page, pageSize int) ([]chat.Message, int64, error)
+		GetMessagesForSpace(conversationID, spaceID string, page, pageSize int) ([]chat.Message, int64, error)
 	}
 	scopedChat, ok := r.chatSvc.(scopedConversationReader)
 	if !ok {
 		return nil, false, fmt.Errorf("chat service does not support authenticated ownership")
 	}
-	messages, total, err := scopedChat.GetMessagesForUser(conversationID, scopeCtx.UserID, page, limit)
+	messages, total, err := scopedChat.GetMessagesForSpace(conversationID, scopeCtx.SpaceID, page, limit)
 	if err != nil {
 		return nil, false, err
 	}
@@ -161,7 +161,7 @@ func (a *conversationMessageSenderAdapter) SendConversationMessage(ctx context.C
 		return kernel.ConversationMessageResult{}, fmt.Errorf("conversation message appender is not configured")
 	}
 	_, err := a.appender.AppendConversationMessages(ctx, kernel.ConversationMessageAppendRequest{
-		UserID:         request.UserID,
+		SpaceID:        request.SpaceID,
 		CharacterID:    request.CharacterID,
 		ConversationID: request.ConversationID,
 		Channel:        request.Channel,
@@ -210,7 +210,7 @@ func (a *conversationMessageAppenderAdapter) AppendConversationMessages(ctx cont
 		}
 	}
 	result, err := a.service.AppendConversationMessages(ctx, &chat.AppendConversationMessagesRequest{
-		UserID:           request.UserID,
+		SpaceID:          request.SpaceID,
 		CharacterID:      request.CharacterID,
 		ConversationID:   request.ConversationID,
 		Channel:          request.Channel,
@@ -284,17 +284,17 @@ func (s *kernelMemoryQueryService) Query(ctx context.Context, extensionID string
 		CharacterID: scopeCtx.CharacterID,
 		Limit:       limit,
 	}
-	if strings.TrimSpace(scopeCtx.UserID) == "" {
+	if strings.TrimSpace(scopeCtx.SpaceID) == "" {
 		return []json.RawMessage{}, nil
 	}
 	type scopedMemoryReader interface {
-		SearchForUser(req *memory.SearchMemoryRequest, userID string) ([]memory.Memory, error)
+		SearchForSpace(req *memory.SearchMemoryRequest, spaceID string) ([]memory.Memory, error)
 	}
 	scopedMemory, ok := s.memSvc.(scopedMemoryReader)
 	if !ok {
 		return nil, fmt.Errorf("memory service does not support authenticated ownership")
 	}
-	memories, err := scopedMemory.SearchForUser(req, scopeCtx.UserID)
+	memories, err := scopedMemory.SearchForSpace(req, scopeCtx.SpaceID)
 	if err != nil {
 		return nil, err
 	}

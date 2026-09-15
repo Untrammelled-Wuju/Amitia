@@ -15,7 +15,7 @@ import (
 
 type Client struct {
 	ID        string
-	UserID    string
+	SpaceID   string
 	Events    chan map[string]interface{}
 	closeOnce sync.Once
 }
@@ -47,13 +47,13 @@ func (h *Hub) Subscribe(clientID string) *Client {
 	return h.SubscribeScoped(clientID, "")
 }
 
-func (h *Hub) SubscribeScoped(clientID string, userID string) *Client {
+func (h *Hub) SubscribeScoped(clientID string, spaceID string) *Client {
 	clientID = strings.TrimSpace(clientID)
 	if clientID == "" {
 		clientID = newAnonymousClientID()
 	}
 
-	c := &Client{ID: clientID, UserID: strings.TrimSpace(userID), Events: make(chan map[string]interface{}, 20)}
+	c := &Client{ID: clientID, SpaceID: strings.TrimSpace(spaceID), Events: make(chan map[string]interface{}, 20)}
 
 	h.mu.Lock()
 	previous := h.clients[clientID]
@@ -115,13 +115,13 @@ func (h *Hub) Broadcast(event string, data map[string]interface{}) {
 	}
 }
 
-// BroadcastToUser delivers an event only to SSE subscriptions authenticated as
+// BroadcastToSpace delivers an event only to SSE subscriptions authenticated as
 // the requested user. It is intended for user-content events such as proactive
 // messages; global UI/catalog invalidation events should continue to use
 // Broadcast. Empty user IDs fail closed and are never broadcast.
-func (h *Hub) BroadcastToUser(userID string, event string, data map[string]interface{}) int {
-	userID = strings.TrimSpace(userID)
-	if userID == "" {
+func (h *Hub) BroadcastToSpace(spaceID string, event string, data map[string]interface{}) int {
+	spaceID = strings.TrimSpace(spaceID)
+	if spaceID == "" {
 		return 0
 	}
 	h.mu.RLock()
@@ -129,7 +129,7 @@ func (h *Hub) BroadcastToUser(userID string, event string, data map[string]inter
 	msg := map[string]interface{}{"event": event, "data": data}
 	delivered := 0
 	for _, c := range h.clients {
-		if c.UserID != userID {
+		if c.SpaceID != spaceID {
 			continue
 		}
 		select {
@@ -209,11 +209,11 @@ func SSEHandler(c *gin.Context) {
 	c.Header("Connection", "keep-alive")
 	c.Header("X-Accel-Buffering", "no")
 
-	userID := ""
-	if raw, ok := c.Get("userId"); ok && raw != nil {
-		userID = strings.TrimSpace(fmt.Sprint(raw))
+	spaceID := ""
+	if raw, ok := c.Get("spaceId"); ok && raw != nil {
+		spaceID = strings.TrimSpace(fmt.Sprint(raw))
 	}
-	client := Global.SubscribeScoped(c.Query("clientId"), userID)
+	client := Global.SubscribeScoped(c.Query("clientId"), spaceID)
 	defer Global.UnsubscribeClient(client)
 
 	c.Writer.Flush()

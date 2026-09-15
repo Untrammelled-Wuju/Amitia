@@ -17,7 +17,6 @@ import (
 type Config struct {
 	Server            ServerConfig            `mapstructure:"server"`
 	Storage           StorageConfig           `mapstructure:"storage"`
-	JWT               JWTConfig               `mapstructure:"jwt"`
 	Security          SecurityRuntimeConfig   `mapstructure:"security"`
 	App               AppConfig               `mapstructure:"app"`
 	Chat              ChatConfig              `mapstructure:"chat"`
@@ -116,16 +115,6 @@ func (c *ServerConfig) Addr() string {
 
 type StorageConfig struct {
 	DataDir string `mapstructure:"dataDir"`
-}
-
-type JWTConfig struct {
-	Secret              string `mapstructure:"secret"`
-	Issuer              string `mapstructure:"issuer"`
-	Audience            string `mapstructure:"audience"`
-	ExpireDays          int    `mapstructure:"expireDays"`
-	AccessTokenMinutes  int    `mapstructure:"accessTokenMinutes"`
-	RefreshTokenDays    int    `mapstructure:"refreshTokenDays"`
-	AbsoluteSessionDays int    `mapstructure:"absoluteSessionDays"`
 }
 
 type AppConfig struct {
@@ -267,7 +256,6 @@ type SecurityRuntimeConfig struct {
 	AllowRemoteAccess bool     `mapstructure:"allowRemoteAccess"`
 	LocalToken        string   `mapstructure:"localToken"`
 	LocalTokenFile    string   `mapstructure:"localTokenFile"`
-	LocalUserID       string   `mapstructure:"localUserId"`
 	AllowedOrigins    []string `mapstructure:"allowedOrigins"`
 	AuditHmacSecret   string   `mapstructure:"auditHmacSecret"`
 	RecoveryPepper    string   `mapstructure:"recoveryPepper"`
@@ -340,15 +328,6 @@ func loadConfig(configPath string) (*Config, error) {
 		return nil, err
 	}
 
-	securityMode := strings.ToLower(strings.TrimSpace(cfg.Security.Mode))
-	if securityMode == "network" {
-		if !isStrongSecret(cfg.JWT.Secret) {
-			return nil, fmt.Errorf("network 安全模式要求强 JWT Secret，请通过安全配置或 AMITIA_JWT_SECRET 提供")
-		}
-	} else if strings.TrimSpace(cfg.JWT.Secret) != "" && !isStrongSecret(cfg.JWT.Secret) {
-		return nil, fmt.Errorf("JWT Secret 过弱或使用了默认模板值")
-	}
-
 	v.WatchConfig()
 	return cfg, nil
 }
@@ -358,11 +337,6 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("server.host", "127.0.0.1")
 	v.SetDefault("server.mode", "debug")
 	v.SetDefault("storage.dataDir", "../data")
-	v.SetDefault("jwt.secret", "")
-	v.SetDefault("jwt.expireDays", 7)
-	v.SetDefault("jwt.accessTokenMinutes", 15)
-	v.SetDefault("jwt.refreshTokenDays", 30)
-	v.SetDefault("jwt.absoluteSessionDays", 90)
 	v.SetDefault("app.name", "U-Ai")
 	v.SetDefault("app.version", "1.0.0-beta")
 	v.SetDefault("app.deployMode", "desktop-local")
@@ -382,7 +356,6 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("security.allowRemoteAccess", false)
 	v.SetDefault("security.localToken", "")
 	v.SetDefault("security.localTokenFile", "security/local-token")
-	v.SetDefault("security.localUserId", "1")
 	v.SetDefault("security.allowedOrigins", []string{"app://amitia", "http://127.0.0.1", "http://localhost"})
 	v.SetDefault("desktopPetRuntime.enabled", true)
 	v.SetDefault("desktopPetRuntime.loopbackOnly", true)
@@ -517,13 +490,11 @@ var runtimeEnvEntries = []runtimeEnvEntry{
 	{key: "server.port", environments: []string{"AMITIA_SERVER_PORT"}},
 	{key: "server.mode", environments: []string{"AMITIA_SERVER_MODE"}},
 	{key: "storage.dataDir", environments: []string{"AMITIA_DATA_DIR"}},
-	{key: "jwt.secret", environments: []string{"AMITIA_JWT_SECRET"}},
 	{key: "app.deployMode", environments: []string{"AMITIA_DEPLOY_MODE"}},
 	{key: "security.mode", environments: []string{"AMITIA_SECURITY_MODE"}},
 	{key: "security.allowRemoteAccess", environments: []string{"AMITIA_ALLOW_REMOTE_ACCESS"}},
 	{key: "security.localToken", environments: []string{"AMITIA_LOCAL_TOKEN"}},
 	{key: "security.localTokenFile", environments: []string{"AMITIA_LOCAL_TOKEN_FILE"}},
-	{key: "security.localUserId", environments: []string{"AMITIA_LOCAL_USER_ID"}},
 	{key: "runtime.node.binaryPath", environments: []string{"AMITIA_NODE_BIN"}},
 	{key: "runtime.node.npmPath", environments: []string{"AMITIA_NPM_BIN"}},
 	{key: "runtime.node.npxPath", environments: []string{"AMITIA_NPX_BIN"}},
@@ -758,22 +729,4 @@ func validateComponentURI(raw string) error {
 	}
 	_, err := resourceuri.Parse(raw)
 	return err
-}
-
-var knownInsecureJWTSecrets = map[string]struct{}{
-	"IJ8ffa4-WAmfBfTFnmEdwdRx1k2kooXHgFQpYMVMUjs": {},
-	"gIWcNHCKHdZWQyOanUhLvhLOVFgz1Z64G0xDYsUNWGA": {},
-	"zTMPXMQGsKBp0WuYlEWHZNLaUOd2lPbFeRSu1fRNrBU": {},
-}
-
-func isStrongSecret(secret string) bool {
-	secret = strings.TrimSpace(secret)
-	if len(secret) < 32 {
-		return false
-	}
-	if _, compromised := knownInsecureJWTSecrets[secret]; compromised {
-		return false
-	}
-	lower := strings.ToLower(secret)
-	return !strings.Contains(lower, "change") && !strings.Contains(lower, "default")
 }

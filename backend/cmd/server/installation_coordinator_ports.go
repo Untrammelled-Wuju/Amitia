@@ -19,12 +19,12 @@ type coordinatorReleaseValidator struct {
 	releases release.ReleaseRepository
 }
 
-func (p *coordinatorReleaseValidator) ValidateRelease(ctx context.Context, userID, releaseID string) (*coordinator.ReleaseValidationResult, error) {
+func (p *coordinatorReleaseValidator) ValidateRelease(ctx context.Context, spaceID, releaseID string) (*coordinator.ReleaseValidationResult, error) {
 	item, err := p.releases.GetRelease(releaseID)
 	if err != nil {
 		return nil, err
 	}
-	if item.OwnerUserID != "" && item.OwnerUserID != userID {
+	if item.OwnerSpaceID != "" && item.OwnerSpaceID != spaceID {
 		return &coordinator.ReleaseValidationResult{
 			ReleaseID:     item.ID,
 			IsInstallable: false,
@@ -62,7 +62,7 @@ func (p *coordinatorReleaseValidator) ValidateRelease(ctx context.Context, userI
 }
 
 type coordinatorInstallationLookup interface {
-	GetInstallation(ctx context.Context, userID, deviceID, installationID string) (*coordinator.InstallationRecord, error)
+	GetInstallation(ctx context.Context, spaceID, deviceID, installationID string) (*coordinator.InstallationRecord, error)
 }
 
 type coordinatorRuntimePublisher struct {
@@ -77,7 +77,7 @@ func (p *coordinatorRuntimePublisher) PublishDesiredState(ctx context.Context, d
 	if !deviceCtx.IsValid() {
 		return fmt.Errorf("invalid device context")
 	}
-	seq, err := p.facade.Commands().AllocateDeviceSequence(nil, deviceCtx.UserID, deviceCtx.DeviceID, time.Now())
+	seq, err := p.facade.Commands().AllocateDeviceSequence(nil, deviceCtx.SpaceID, deviceCtx.DeviceID, time.Now())
 	if err != nil {
 		return fmt.Errorf("allocate sequence: %w", err)
 	}
@@ -105,7 +105,7 @@ func (p *coordinatorRuntimePublisher) PublishDesiredState(ctx context.Context, d
 		commandType = runtimev1.CommandTypeEnsureAbsent
 	}
 	_, err = p.facade.Commands().CreateDurableCommand(
-		deviceCtx.UserID,
+		deviceCtx.SpaceID,
 		deviceCtx.DeviceID,
 		string(commandType),
 		fmt.Sprintf("desired:%s:%d", deviceCtx.DeviceID, snapshot.DesiredRevision),
@@ -127,7 +127,7 @@ func (p *coordinatorRuntimePublisher) activeRuntimeConnection(deviceCtx device.D
 		return nil, "", 0, fmt.Errorf("runtime v1 unavailable")
 	}
 	targetRuntimeID := strings.TrimSpace(deviceCtx.RuntimeID)
-	for _, conn := range p.facade.ListConnections(deviceCtx.UserID) {
+	for _, conn := range p.facade.ListConnections(deviceCtx.SpaceID) {
 		if conn == nil || conn.GetState() != runtimev1.ConnStateConnected {
 			continue
 		}
@@ -168,7 +168,7 @@ func (p *coordinatorRuntimePublisher) PublishRecenter(ctx context.Context, devic
 		return "", fmt.Errorf("marshal recenter payload: %w", err)
 	}
 	cmd, err := p.facade.Commands().CreateEphemeralCommandForSession(
-		deviceCtx.UserID,
+		deviceCtx.SpaceID,
 		deviceCtx.DeviceID,
 		string(targetConn.RuntimeID),
 		targetSessionID,
@@ -212,7 +212,7 @@ func (p *coordinatorRuntimePublisher) PublishPlayAction(ctx context.Context, dev
 	if p.installations == nil {
 		return fmt.Errorf("play action installation lookup unavailable")
 	}
-	_, err = p.installations.GetInstallation(ctx, deviceCtx.UserID, deviceCtx.DeviceID, installationID)
+	_, err = p.installations.GetInstallation(ctx, deviceCtx.SpaceID, deviceCtx.DeviceID, installationID)
 	if err != nil {
 		return fmt.Errorf("resolve play action installation: %w", err)
 	}
@@ -237,7 +237,7 @@ func (p *coordinatorRuntimePublisher) PublishPlayAction(ctx context.Context, dev
 		return fmt.Errorf("marshal play action payload: %w", err)
 	}
 	created, err := p.facade.Commands().CreateEphemeralCommandForSession(
-		deviceCtx.UserID,
+		deviceCtx.SpaceID,
 		deviceCtx.DeviceID,
 		targetRuntimeID,
 		targetSessionID,

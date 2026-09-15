@@ -200,7 +200,6 @@ type AppServices struct {
 	DataPortability              *dataportability.Coordinator
 	Artifact                     *ArtifactRuntime
 	Sync                         *syncpkg.Service
-	AccountSession               *AccountSessionRuntime
 	NativeBridgeRelay            *nativeBridgeRelay
 }
 
@@ -1240,12 +1239,12 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 			if cred == nil {
 				return nil
 			}
-			return bindDesktopPetOwnerFromCredential(context.Background(), services, cred.UserID.String(), cred.DeviceID.String())
+			return bindDesktopPetOwnerFromCredential(context.Background(), services, cred.SpaceID.String(), cred.DeviceID.String())
 		})
 		if cred, loadErr := deviceMeshRuntime.LocalHandler.LoadCredential(); loadErr != nil {
 			return nil, fmt.Errorf("load device-agent credential for desktop pet owner mapping: %w", loadErr)
 		} else if cred != nil {
-			if bindErr := bindDesktopPetOwnerFromCredential(context.Background(), services, cred.UserID.String(), cred.DeviceID.String()); bindErr != nil {
+			if bindErr := bindDesktopPetOwnerFromCredential(context.Background(), services, cred.SpaceID.String(), cred.DeviceID.String()); bindErr != nil {
 				return nil, fmt.Errorf("restore desktop pet owner mapping: %w", bindErr)
 			}
 		}
@@ -1272,13 +1271,13 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		services.DeviceMesh = deviceMeshRuntime
 		services.Extension.AttachWorkflowDeviceControl(newWorkflowDeviceControlPlane(deviceMeshRuntime))
 		if deviceMeshRuntime.Handler != nil && kernelContainer != nil && kernelContainer.WorkflowExecutor != nil {
-			deviceMeshRuntime.Handler.SetOnReady(func(userID runtimeidentity.UserID, deviceID runtimeidentity.DeviceID) {
+			deviceMeshRuntime.Handler.SetOnReady(func(spaceID runtimeidentity.SpaceID, deviceID runtimeidentity.DeviceID) {
 				go func() {
-					if _, resumeErr := kernelContainer.WorkflowExecutor.ResumeWaitingDevice(context.Background(), userID.String(), deviceID.String()); resumeErr != nil {
-						log.Warn(fmt.Sprintf("workflow waiting-device resume failed: userId=%s deviceId=%s err=%v", userID, deviceID, resumeErr))
+					if _, resumeErr := kernelContainer.WorkflowExecutor.ResumeWaitingDevice(context.Background(), spaceID.String(), deviceID.String()); resumeErr != nil {
+						log.Warn(fmt.Sprintf("workflow waiting-device resume failed: spaceId=%s deviceId=%s err=%v", spaceID, deviceID, resumeErr))
 					}
 				}()
-				services.Extension.StartWorkflowDeviceSync(userID.String(), deviceID.String())
+				services.Extension.StartWorkflowDeviceSync(spaceID.String(), deviceID.String())
 			})
 		}
 		if behaviorMeshPublisher != nil {
@@ -1476,7 +1475,7 @@ type characterOwnerPort struct {
 	installRepo installation.Repository
 }
 
-func (p *characterOwnerPort) ResolveUserID(ctx context.Context, characterID string) string {
+func (p *characterOwnerPort) ResolveSpaceID(ctx context.Context, characterID string) string {
 	return ""
 }
 
@@ -1489,7 +1488,7 @@ func (p *petInfoPort) ResolvePetInfo(ctx context.Context, petInstanceID string) 
 		return "", ""
 	}
 	if inst, err := p.installRepo.GetInstallation(petInstanceID); err == nil && inst != nil {
-		return inst.UserID, ""
+		return inst.SpaceID, ""
 	}
 	return "", ""
 }
@@ -1561,13 +1560,13 @@ func (a *chatDeliveryAdapter) CreateDeliveryIntent(interactionID, channel, peerI
 	return a.store.CreateIntent(intent)
 }
 
-func (a *chatDeliveryAdapter) CreateOutputLease(interactionID, characterID, userID, channel string) error {
-	lease := delivery.NewOutputLease(interactionID, characterID, userID, channel)
+func (a *chatDeliveryAdapter) CreateOutputLease(interactionID, characterID, spaceID, channel string) error {
+	lease := delivery.NewOutputLease(interactionID, characterID, spaceID, channel)
 	return a.store.CreateLease(lease)
 }
 
-func (a *chatDeliveryAdapter) AcquireOutputLease(interactionID, characterID, userID, channel string) (string, string, error) {
-	lease := delivery.NewOutputLease(interactionID, characterID, userID, channel)
+func (a *chatDeliveryAdapter) AcquireOutputLease(interactionID, characterID, spaceID, channel string) (string, string, error) {
+	lease := delivery.NewOutputLease(interactionID, characterID, spaceID, channel)
 	if err := a.store.CreateLease(lease); err != nil {
 		return "", "", err
 	}
@@ -1730,7 +1729,7 @@ func (s *BehaviorRuntimeEventSink) OnRuntimeEvent(ctx context.Context, event run
 			dedupOrdinal = fmt.Sprintf("s%d", event.Sequence)
 		}
 		builder := events.NewEnvelope(canonicalEventType, behavior.OriginDesktop).
-			UserID(event.UserID).
+			SpaceID(event.SpaceID).
 			CharacterID(characterID).
 			SessionID(event.SessionID).
 			PetInstanceID(petInstanceID).
@@ -1781,7 +1780,7 @@ func (s *BehaviorRuntimeEventSink) submitPlaybackEvent(ctx context.Context, even
 		dedupOrdinal = fmt.Sprintf("s%d", event.Sequence)
 	}
 	builder := events.NewEnvelope(eventType, behavior.OriginPlayback).
-		UserID(event.UserID).
+		SpaceID(event.SpaceID).
 		CharacterID(characterID).
 		SessionID(event.SessionID).
 		PetInstanceID(petInstanceID).

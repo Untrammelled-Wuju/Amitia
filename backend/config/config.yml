@@ -6,15 +6,6 @@ server:
 storage:
   dataDir: "AmitiaData/data"
 
-jwt:
-  secret: "AmitiaLocalDevSecret20260831x9Zq7mKp3wRv5nTc8yB"
-  issuer: "amitia"
-  audience: "amitia-api"
-  expireDays: 7
-  accessTokenMinutes: 15
-  refreshTokenDays: 30
-  absoluteSessionDays: 90
-
 app:
   name: "U-Ai"
   version: "1.0.0-beta"

@@ -10,7 +10,6 @@ import (
 )
 
 func TestConfigTemplatesUseProviderLayout(t *testing.T) {
-	t.Setenv("AMITIA_JWT_SECRET", testJWTSecret)
 	dirs := []string{
 		".",
 		"../../config",
@@ -113,7 +112,6 @@ func TestConfigTemplatesDoNotHardcodeHostRuntime(t *testing.T) {
 }
 
 func TestConfigTemplatePreservesExistingProviderValues(t *testing.T) {
-	t.Setenv("AMITIA_JWT_SECRET", testJWTSecret)
 	tests := []struct {
 		name       string
 		dir        string

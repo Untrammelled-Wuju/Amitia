@@ -21,9 +21,16 @@ func newChatToolRuntimeAdapter(facade *kernel.ToolFacade) *chatToolRuntimeAdapte
 	return &chatToolRuntimeAdapter{facade: facade}
 }
 
-func (a *chatToolRuntimeAdapter) toLegacyScope(scope chat.SkillScope) kernel.LegacyScope {
-	return kernel.LegacyScope{
-		UserID:         scope.UserID,
+func (a *chatToolRuntimeAdapter) toInvocationScope(scope chat.SkillScope) kernel.InvocationScope {
+	deviceID, runtimeID := "", ""
+	if scope.ExecContext != nil && scope.ExecContext.RuntimeTarget != nil {
+		deviceID = string(scope.ExecContext.RuntimeTarget.DeviceID)
+		runtimeID = string(scope.ExecContext.RuntimeTarget.RuntimeID)
+	}
+	return kernel.InvocationScope{
+		SpaceID:        scope.SpaceID,
+		DeviceID:       deviceID,
+		RuntimeID:      runtimeID,
 		CharacterID:    scope.CharacterID,
 		ConversationID: scope.ConversationID,
 		Channel:        scope.Channel,
@@ -41,7 +48,7 @@ func (a *chatToolRuntimeAdapter) toLegacyScope(scope chat.SkillScope) kernel.Leg
 	}
 }
 
-func (a *chatToolRuntimeAdapter) toChatActivated(items []kernel.LegacyActivatedSkill) []chat.ActivatedSkill {
+func (a *chatToolRuntimeAdapter) toChatActivated(items []kernel.ActivatedSkill) []chat.ActivatedSkill {
 	result := make([]chat.ActivatedSkill, 0, len(items))
 	for _, item := range items {
 		result = append(result, chat.ActivatedSkill{
@@ -60,7 +67,7 @@ func (a *chatToolRuntimeAdapter) toChatActivated(items []kernel.LegacyActivatedS
 	return result
 }
 
-func (a *chatToolRuntimeAdapter) toChatContributions(items []kernel.LegacyContextContribution) []chat.ContextContribution {
+func (a *chatToolRuntimeAdapter) toChatContributions(items []kernel.ContextContribution) []chat.ContextContribution {
 	result := make([]chat.ContextContribution, 0, len(items))
 	for _, c := range items {
 		result = append(result, chat.ContextContribution{
@@ -75,7 +82,7 @@ func (a *chatToolRuntimeAdapter) toChatContributions(items []kernel.LegacyContex
 	return result
 }
 
-func (a *chatToolRuntimeAdapter) toChatResult(r kernel.LegacyToolResult) chat.ToolResult {
+func (a *chatToolRuntimeAdapter) toChatResult(r kernel.ToolDispatchResult) chat.ToolResult {
 	result := chat.ToolResult{
 		RunID:       r.RunID,
 		Status:      r.Status,
@@ -96,29 +103,29 @@ func (a *chatToolRuntimeAdapter) toChatResult(r kernel.LegacyToolResult) chat.To
 }
 
 func (a *chatToolRuntimeAdapter) PrepareAgentSkillPrompt(ctx context.Context, scope chat.SkillScope, message string) (string, []chat.ActivatedSkill, []string) {
-	catalog, activated, errs := a.facade.PrepareAgentSkillPrompt(ctx, a.toLegacyScope(scope), message)
+	catalog, activated, errs := a.facade.PrepareAgentSkillPrompt(ctx, a.toInvocationScope(scope), message)
 	return catalog, a.toChatActivated(activated), errs
 }
 
 func (a *chatToolRuntimeAdapter) EndAgentSkillRound(scope chat.SkillScope) {
-	a.facade.EndAgentSkillRound(a.toLegacyScope(scope))
+	a.facade.EndAgentSkillRound(a.toInvocationScope(scope))
 }
 
 func (a *chatToolRuntimeAdapter) BeforePrompt(ctx context.Context, scope chat.SkillScope) []chat.ContextContribution {
-	return a.toChatContributions(a.facade.BeforePrompt(ctx, a.toLegacyScope(scope)))
+	return a.toChatContributions(a.facade.BeforePrompt(ctx, a.toInvocationScope(scope)))
 }
 
 func (a *chatToolRuntimeAdapter) ModelTools(ctx context.Context, scope chat.SkillScope) ([]tool.Tool, error) {
-	return a.facade.ModelTools(ctx, a.toLegacyScope(scope))
+	return a.facade.ModelTools(ctx, a.toInvocationScope(scope))
 }
 
 func (a *chatToolRuntimeAdapter) ExecuteModelTool(ctx context.Context, modelName string, input json.RawMessage, scope chat.SkillScope, idempotencyKey string) (chat.ToolResult, bool) {
-	result, found := a.facade.ExecuteModelTool(ctx, modelName, input, a.toLegacyScope(scope), idempotencyKey)
+	result, found := a.facade.ExecuteModelTool(ctx, modelName, input, a.toInvocationScope(scope), idempotencyKey)
 	return a.toChatResult(result), found
 }
 
 func (a *chatToolRuntimeAdapter) AfterReply(scope chat.SkillScope, reply chat.ReplyView) bool {
-	return a.facade.AfterReply(a.toLegacyScope(scope), kernel.LegacyReplyView{
+	return a.facade.AfterReply(a.toInvocationScope(scope), kernel.ReplyView{
 		MessageID:      reply.MessageID,
 		CharacterID:    reply.CharacterID,
 		ConversationID: reply.ConversationID,
@@ -140,7 +147,7 @@ func (a *chatToolRuntimeAdapter) PlanMessageOutputs(ctx context.Context, scope c
 		"userMessage":    event.UserMessage,
 		"reply":          event.Reply,
 		"lines":          event.Lines,
-		"userId":         event.UserID,
+		"spaceId":        event.SpaceID,
 		"peerId":         event.PeerID,
 		"requestId":      event.RequestID,
 		"forceVoice":     event.ForceVoice,
@@ -148,7 +155,7 @@ func (a *chatToolRuntimeAdapter) PlanMessageOutputs(ctx context.Context, scope c
 	if err != nil {
 		return nil, err
 	}
-	results := a.facade.ExecuteMessageOutputProviders(ctx, a.toLegacyScope(scope), input)
+	results := a.facade.ExecuteMessageOutputProviders(ctx, a.toInvocationScope(scope), input)
 	outputs := make([]chat.MessageOutput, 0)
 	for _, providerResult := range results {
 		if providerResult.Result.Error != nil || !strings.EqualFold(providerResult.Result.Status, "SUCCESS") || len(providerResult.Result.Output) == 0 {

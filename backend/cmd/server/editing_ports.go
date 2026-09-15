@@ -280,7 +280,7 @@ func (a *editingGenerationPort) findProcessingTaskForAttempt(generationTaskID, a
 	return &task, nil
 }
 
-func (a *editingGenerationPort) ensureProcessingTask(ctx context.Context, jobID, generationTaskID, actionKey, userID string, attemptNumber int) (*processing.ProcessingTask, error) {
+func (a *editingGenerationPort) ensureProcessingTask(ctx context.Context, jobID, generationTaskID, actionKey, spaceID string, attemptNumber int) (*processing.ProcessingTask, error) {
 	if a.processingService == nil {
 		return nil, errors.New("desktop pet processing service is unavailable")
 	}
@@ -310,7 +310,7 @@ func (a *editingGenerationPort) ensureProcessingTask(ctx context.Context, jobID,
 	}
 	created, err := a.processingService.CreateProcessingTask(&processing.CreateProcessingTaskRequest{
 		GenerationTaskID:           generationTaskID,
-		UserID:                     userID,
+		SpaceID:                    spaceID,
 		OutputWidth:                source.OutputWidth,
 		OutputHeight:               source.OutputHeight,
 		TargetCharacterHeightRatio: source.TargetCharacterHeightRatio,
@@ -409,12 +409,12 @@ func (a *editingGenerationPort) waitProcessedFrames(ctx context.Context, task *p
 	}
 }
 
-func (a *editingGenerationPort) generateProcessedFrames(ctx context.Context, jobID, generationTaskID, actionKey, userID, stableSubmissionID string) (*editingGenerationAttempt, []editing.GenerationArtifactInfo, error) {
+func (a *editingGenerationPort) generateProcessedFrames(ctx context.Context, jobID, generationTaskID, actionKey, spaceID, stableSubmissionID string) (*editingGenerationAttempt, []editing.GenerationArtifactInfo, error) {
 	attempt, err := a.submitAndWait(ctx, jobID, generationTaskID, actionKey, stableSubmissionID)
 	if err != nil {
 		return nil, nil, err
 	}
-	processingTask, err := a.ensureProcessingTask(ctx, jobID, generationTaskID, actionKey, userID, attempt.AttemptNumber)
+	processingTask, err := a.ensureProcessingTask(ctx, jobID, generationTaskID, actionKey, spaceID, attempt.AttemptNumber)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -429,7 +429,7 @@ func (a *editingGenerationPort) generateProcessedFrames(ctx context.Context, job
 }
 
 func (a *editingGenerationPort) GenerateSingleFrame(ctx context.Context, req editing.SingleFrameGenerationRequest) (*editing.SingleFrameGenerationResult, error) {
-	attempt, frames, err := a.generateProcessedFrames(ctx, req.JobID, req.GenerationTaskID, req.ActionKey, req.UserID, req.AttemptID)
+	attempt, frames, err := a.generateProcessedFrames(ctx, req.JobID, req.GenerationTaskID, req.ActionKey, req.SpaceID, req.AttemptID)
 	if err != nil {
 		return nil, err
 	}
@@ -452,7 +452,7 @@ func (a *editingGenerationPort) GenerateSingleFrame(ctx context.Context, req edi
 }
 
 func (a *editingGenerationPort) GenerateFullAction(ctx context.Context, req editing.FullActionGenerationRequest) (*editing.FullActionGenerationResult, error) {
-	attempt, frames, err := a.generateProcessedFrames(ctx, req.JobID, req.GenerationTaskID, req.ActionKey, req.UserID, req.AttemptID)
+	attempt, frames, err := a.generateProcessedFrames(ctx, req.JobID, req.GenerationTaskID, req.ActionKey, req.SpaceID, req.AttemptID)
 	if err != nil {
 		return nil, err
 	}
