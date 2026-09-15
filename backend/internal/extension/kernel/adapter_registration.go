@@ -451,7 +451,7 @@ func makeTaskEnqueueFunc(svc *task_runtime.TaskRuntimeService) capability.TaskEn
 		var trustedTarget *task_runtime.TrustedExecutionTargetRequest
 		if placement == task_runtime.TaskExecutionPlacementDevice {
 			target := request.Invocation.ExecutionTarget
-			if target.ProviderID == "" || target.ProviderInstanceID == "" || target.UserID == "" || target.DeviceID == "" || target.RuntimeID == "" {
+			if target.ProviderID == "" || target.ProviderInstanceID == "" || target.SpaceID == "" || target.DeviceID == "" || target.RuntimeID == "" {
 				return "", fmt.Errorf("device task execution target is incomplete")
 			}
 			trustedTarget = &task_runtime.TrustedExecutionTargetRequest{
@@ -459,7 +459,7 @@ func makeTaskEnqueueFunc(svc *task_runtime.TaskRuntimeService) capability.TaskEn
 				Target: task_runtime.TaskExecutionTarget{
 					ProviderID:         capability.ProviderID(target.ProviderID),
 					ProviderInstanceID: capability.ProviderInstanceID(target.ProviderInstanceID),
-					UserID:             target.UserID,
+					SpaceID:            target.SpaceID,
 					DeviceID:           target.DeviceID,
 					RuntimeID:          target.RuntimeID,
 				},

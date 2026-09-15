@@ -11,7 +11,7 @@ func TestBuildIdempotencyKeySHA_Deterministic(t *testing.T) {
 	id := IdempotencyIdentity{
 		ToolID:         "tool-A",
 		Generation:     1,
-		UserID:         "user-1",
+		SpaceID:        "user-1",
 		CharacterID:    "char-1",
 		ConversationID: "conv-1",
 		Source:         capability.InvocationSourceModel,
@@ -29,14 +29,14 @@ func TestBuildIdempotencyKeySHA_Deterministic(t *testing.T) {
 
 func TestBuildIdempotencyKeySHA_Sensitivity(t *testing.T) {
 	base := IdempotencyIdentity{
-		ToolID: "tool-A", Generation: 1, UserID: "u", CharacterID: "c", ConversationID: "cv", Source: capability.InvocationSourceModel, CallerKey: "k",
+		ToolID: "tool-A", Generation: 1, SpaceID: "u", CharacterID: "c", ConversationID: "cv", Source: capability.InvocationSourceModel, CallerKey: "k",
 	}
 	keyBase := BuildIdempotencyKeySHA(base)
 
 	cases := []nameDiff{
 		{"tool", func(i *IdempotencyIdentity) { i.ToolID = "tool-B" }},
 		{"generation", func(i *IdempotencyIdentity) { i.Generation = 2 }},
-		{"user", func(i *IdempotencyIdentity) { i.UserID = "u2" }},
+		{"user", func(i *IdempotencyIdentity) { i.SpaceID = "u2" }},
 		{"character", func(i *IdempotencyIdentity) { i.CharacterID = "c2" }},
 		{"conversation", func(i *IdempotencyIdentity) { i.ConversationID = "cv2" }},
 		{"source", func(i *IdempotencyIdentity) { i.Source = capability.InvocationSourceWorkflow }},

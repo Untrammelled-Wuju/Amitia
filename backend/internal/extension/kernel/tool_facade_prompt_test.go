@@ -7,8 +7,8 @@ import (
 
 func TestBuildBeforePromptPayloadIncludesMessageAndSource(t *testing.T) {
 	facade := &ToolFacade{}
-	raw := facade.buildBeforePromptPayload(LegacyScope{
-		UserID:         "user-1",
+	raw := facade.buildBeforePromptPayload(InvocationScope{
+		SpaceID:        "user-1",
 		CharacterID:    "char-1",
 		ConversationID: "conv-1",
 		Channel:        "web",

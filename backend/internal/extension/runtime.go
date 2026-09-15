@@ -75,13 +75,13 @@ type workflowTriggerIngressWindow struct {
 	Count     int
 }
 
-func (r *Runtime) AllowWorkflowTriggerIngress(userID, eventType string) (bool, time.Duration) {
+func (r *Runtime) AllowWorkflowTriggerIngress(spaceID, eventType string) (bool, time.Duration) {
 	if r == nil {
 		return false, time.Minute
 	}
-	userID = strings.TrimSpace(userID)
+	spaceID = strings.TrimSpace(spaceID)
 	eventType = strings.TrimSpace(eventType)
-	if userID == "" || eventType == "" {
+	if spaceID == "" || eventType == "" {
 		return false, time.Minute
 	}
 	now := time.Now().UTC()
@@ -90,8 +90,8 @@ func (r *Runtime) AllowWorkflowTriggerIngress(userID, eventType string) (bool, t
 		key   string
 		limit int
 	}{
-		{key: "user:" + userID, limit: 600},
-		{key: "event:" + userID + "\x00" + eventType, limit: 120},
+		{key: "space:" + spaceID, limit: 600},
+		{key: "event:" + spaceID + "\x00" + eventType, limit: 120},
 	}
 	r.workflowTriggerIngressMu.Lock()
 	defer r.workflowTriggerIngressMu.Unlock()

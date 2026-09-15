@@ -57,11 +57,11 @@ func BuildUserWorkflowAgentTool(def workflow.WorkflowDefinition) (capability.Too
 	if def.Source != "user" {
 		return capability.ToolDefinition{}, fmt.Errorf("workflow %s is not a user workflow", def.ID)
 	}
-	ownerUserID := ""
+	ownerSpaceID := ""
 	if def.Metadata != nil {
-		ownerUserID = strings.TrimSpace(fmt.Sprint(def.Metadata["ownerUserId"]))
+		ownerSpaceID = strings.TrimSpace(fmt.Sprint(def.Metadata["ownerSpaceId"]))
 	}
-	if ownerUserID == "" {
+	if ownerSpaceID == "" {
 		return capability.ToolDefinition{}, fmt.Errorf("workflow %s has no owner user", def.ID)
 	}
 
@@ -126,7 +126,7 @@ func BuildUserWorkflowAgentTool(def workflow.WorkflowDefinition) (capability.Too
 		Retryable:      def.Idempotent,
 		TimeoutMS:      timeout.Milliseconds(),
 		Metadata: map[string]any{
-			"ownerUserId":  ownerUserID,
+			"ownerSpaceId": ownerSpaceID,
 			"workflowId":   def.ID,
 			"userWorkflow": true,
 		},
@@ -188,17 +188,17 @@ func normalizedWorkflowOutputSchema(raw json.RawMessage) json.RawMessage {
 	return json.RawMessage(`{}`)
 }
 
-func workflowToolOwnerUserID(def capability.ToolDefinition) string {
+func workflowToolOwnerSpaceID(def capability.ToolDefinition) string {
 	if def.Source != capability.ToolSourceWorkflow || def.Metadata == nil {
 		return ""
 	}
 	if flag, ok := def.Metadata["userWorkflow"].(bool); !ok || !flag {
 		return ""
 	}
-	return strings.TrimSpace(fmt.Sprint(def.Metadata["ownerUserId"]))
+	return strings.TrimSpace(fmt.Sprint(def.Metadata["ownerSpaceId"]))
 }
 
-func workflowToolAllowedForUser(def capability.ToolDefinition, userID string) bool {
-	owner := workflowToolOwnerUserID(def)
-	return owner == "" || (strings.TrimSpace(userID) != "" && owner == strings.TrimSpace(userID))
+func workflowToolAllowedForSpace(def capability.ToolDefinition, spaceID string) bool {
+	owner := workflowToolOwnerSpaceID(def)
+	return owner == "" || (strings.TrimSpace(spaceID) != "" && owner == strings.TrimSpace(spaceID))
 }

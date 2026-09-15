@@ -13,7 +13,7 @@ import (
 //go:embed schema/openapi.json
 var openAPIFS embed.FS
 
-const authenticatedUserKey = "extension_authenticated_user_id"
+const authenticatedSpaceKey = "extension_authenticated_space_id"
 
 type Handler struct{}
 
@@ -31,9 +31,9 @@ func (h *Handler) OpenAPI(c *gin.Context) {
 }
 
 func (h *Handler) baseScope(c *gin.Context) ExecutionScope {
-	userID := fmt.Sprint(c.GetInt(authenticatedUserKey))
+	spaceID := fmt.Sprint(c.GetInt(authenticatedSpaceKey))
 	traceID, _ := c.Get(middleware.CtxKeyRequestID)
-	return ExecutionScope{UserID: userID, TraceID: fmt.Sprint(traceID), RequestID: fmt.Sprint(traceID)}
+	return ExecutionScope{SpaceID: spaceID, TraceID: fmt.Sprint(traceID), RequestID: fmt.Sprint(traceID)}
 }
 
 func (h *Handler) problem(c *gin.Context, err error) {

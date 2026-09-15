@@ -11,7 +11,7 @@ import (
 
 var explicitSkillPattern = regexp.MustCompile(`(?:^|[\s])\$([a-z0-9]+(?:-[a-z0-9]+)*)(?:\b|$)`)
 
-func (f *ToolFacade) buildAgentSkillPrompt(ctx context.Context, scope LegacyScope, message string) (string, []LegacyActivatedSkill, []string) {
+func (f *ToolFacade) buildAgentSkillPrompt(ctx context.Context, scope InvocationScope, message string) (string, []ActivatedSkill, []string) {
 	if f.agentSkillCatalog == nil {
 		return "", nil, nil
 	}
@@ -25,14 +25,14 @@ func (f *ToolFacade) buildAgentSkillPrompt(ctx context.Context, scope LegacyScop
 	}
 
 	errorsList := []string{}
-	activated := []LegacyActivatedSkill{}
+	activated := []ActivatedSkill{}
 
 	explicitNames := parseExplicitSkillNames(message)
 	for _, name := range explicitNames {
 		found := false
 		for _, skill := range unique {
 			if strings.EqualFold(skill.Name, name) || strings.EqualFold(skill.ExtensionID, name) {
-				activated = append(activated, skillToLegacyActivated(skill, true))
+				activated = append(activated, skillToActivated(skill, true))
 				found = true
 				break
 			}
@@ -56,7 +56,7 @@ func (f *ToolFacade) buildAgentSkillPrompt(ctx context.Context, scope LegacyScop
 				}
 			}
 			if !alreadyActivated {
-				activated = append(activated, skillToLegacyActivated(c.Definition, false))
+				activated = append(activated, skillToActivated(c.Definition, false))
 			}
 		}
 	}
@@ -98,9 +98,9 @@ func renderSkillCatalog(skills []agent_skill.AgentSkillDefinition) string {
 	return sb.String()
 }
 
-func skillToLegacyActivated(def agent_skill.AgentSkillDefinition, explicit bool) LegacyActivatedSkill {
+func skillToActivated(def agent_skill.AgentSkillDefinition, explicit bool) ActivatedSkill {
 	prompt := def.Instructions.Text
-	return LegacyActivatedSkill{
+	return ActivatedSkill{
 		ActivationID:        fmt.Sprintf("kernel-%s", def.ExtensionID),
 		ExtensionID:         def.ExtensionID,
 		Name:                def.Name,

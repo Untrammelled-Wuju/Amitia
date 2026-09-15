@@ -63,7 +63,7 @@ func (r *Runtime) ExecutePackageUpdate(ctx context.Context, request PackageInsta
 		_ = r.container.PackageRepository.SetOperation(context.Background(), "package-operation-"+uuid.NewString(), "failed", "check_installed", "PACKAGE_NOT_INSTALLED", fmt.Sprintf("extension %s is not installed", confirmed.session.ExtensionID), true, PackageWriteGuard{})
 		return KernelInstallResult{}, fmt.Errorf("PACKAGE_NOT_INSTALLED: extension %s is not installed", confirmed.session.ExtensionID)
 	}
-	if err := validatePackageOwner(current, request.UserID, request.ScopeType, request.ScopeID); err != nil {
+	if err := validatePackageOwner(current, request.SpaceID, request.ScopeType, request.ScopeID); err != nil {
 		return KernelInstallResult{}, err
 	}
 	idempotencyKey := request.IdempotencyKey
@@ -85,7 +85,7 @@ func (r *Runtime) ExecutePackageUpdate(ctx context.Context, request PackageInsta
 		SnapshotRequirementHash:   confirmed.claims.SnapshotRequirementHash,
 		RequiredConfirmationsHash: confirmed.claims.RequiredConfirmationsHash,
 		DependenciesHash:          confirmed.claims.DependenciesHash,
-		UserID:                    request.UserID,
+		SpaceID:                   request.SpaceID,
 		ScopeType:                 request.ScopeType,
 		ScopeID:                   request.ScopeID,
 		ConfirmedItems:            confirmedItemsFromMap(confirmed.claims.Confirmations),
@@ -100,7 +100,7 @@ func (r *Runtime) ExecutePackageUpdate(ctx context.Context, request PackageInsta
 		TargetVersion:             confirmed.session.Version,
 		TargetVersionID:           confirmed.session.Version,
 	})
-	updateOp := PackageOperationRecord{OperationID: operationID, TraceID: traceID, UserID: request.UserID,
+	updateOp := PackageOperationRecord{OperationID: operationID, TraceID: traceID, SpaceID: request.SpaceID,
 		ScopeType: request.ScopeType, ScopeID: request.ScopeID, ExtensionID: confirmed.session.ExtensionID,
 		TargetVersion: confirmed.session.Version, FromVersion: current.InstalledVersion.String(),
 		OperationType: "update", Status: "created",
@@ -113,7 +113,7 @@ func (r *Runtime) ExecutePackageUpdate(ctx context.Context, request PackageInsta
 			ScopeType: request.ScopeType, ScopeID: request.ScopeID,
 		}), StartedAt: now, UpdatedAt: now}
 	existing, created, createErr := r.container.PackageRepository.CreateOrGetOperationWithConfirmationNonce(ctx, updateOp, PackageConfirmationNonceBinding{
-		Nonce: confirmed.claims.Nonce, OperationType: updateOp.OperationType, ExtensionID: updateOp.ExtensionID, UserID: updateOp.UserID,
+		Nonce: confirmed.claims.Nonce, OperationType: updateOp.OperationType, ExtensionID: updateOp.ExtensionID, SpaceID: updateOp.SpaceID,
 		IssuedAt: confirmationTimestamp(confirmed.claims.IssuedAt), ExpiresAt: confirmationTimestamp(confirmed.claims.ExpiresAt),
 	})
 	if createErr != nil {
@@ -152,13 +152,13 @@ func (r *Runtime) ExecutePackageUpdate(ctx context.Context, request PackageInsta
 	}()
 	ctx = sagaCtx
 	guard := packageWriteGuard(lease)
-	lockedSession, err := r.container.PackageRepository.GetPreview(ctx, request.SessionID, request.UserID, request.ScopeType, request.ScopeID)
+	lockedSession, err := r.container.PackageRepository.GetPreview(ctx, request.SessionID, request.SpaceID, request.ScopeType, request.ScopeID)
 	if err != nil {
 		_ = r.container.PackageRepository.SetOperation(context.Background(), operationID, "failed", "lock_preview_session", "PACKAGE_PREVIEW_SESSION_LOCK_FAILED", err.Error(), true, guard)
 		return KernelInstallResult{}, err
 	}
 	if lockedSession.Status == "consumed" {
-		return r.completedPackageInstallResult(ctx, request.UserID, request.SessionID)
+		return r.completedPackageInstallResult(ctx, request.SpaceID, request.SessionID)
 	}
 	if lockedSession.Status != "ready" && lockedSession.Status != "awaiting_confirmation" {
 		_ = r.container.PackageRepository.SetOperation(context.Background(), operationID, "failed", "lock_preview_session", "PACKAGE_PREVIEW_SESSION_STATUS", fmt.Sprintf("status %s", lockedSession.Status), true, guard)
@@ -419,7 +419,7 @@ func (r *Runtime) validateConfirmedPackageUpdate(ctx context.Context, request Pa
 	if r.container == nil || r.container.PackageRepository == nil || r.container.PackageArtifactStore == nil || r.container.PackageGenerationStore == nil {
 		return confirmedPackageUpdate{}, fmt.Errorf("kernel: package services unavailable")
 	}
-	session, err := r.container.PackageRepository.GetPreview(ctx, request.SessionID, request.UserID, request.ScopeType, request.ScopeID)
+	session, err := r.container.PackageRepository.GetPreview(ctx, request.SessionID, request.SpaceID, request.ScopeType, request.ScopeID)
 	if err != nil {
 		return confirmedPackageUpdate{}, fmt.Errorf("kernel: preview session unavailable: %w", err)
 	}
@@ -441,7 +441,7 @@ func (r *Runtime) validateConfirmedPackageUpdate(ctx context.Context, request Pa
 		return confirmedPackageUpdate{}, fmt.Errorf("kernel: package preview is unavailable or not installable")
 	}
 	if preview.DevOnly {
-		if err := r.validateUnsignedDeveloperSession(preview.DeveloperSessionID, request.UserID, preview.ExtensionID); err != nil {
+		if err := r.validateUnsignedDeveloperSession(preview.DeveloperSessionID, request.SpaceID, preview.ExtensionID); err != nil {
 			return confirmedPackageUpdate{}, fmt.Errorf("kernel: developer session no longer valid: %w", err)
 		}
 	}
@@ -449,7 +449,7 @@ func (r *Runtime) validateConfirmedPackageUpdate(ctx context.Context, request Pa
 	if err != nil {
 		return confirmedPackageUpdate{}, err
 	}
-	if claims.SessionID != session.SessionID || claims.ArtifactID != session.ArtifactID || claims.ArchiveHash != session.ArchiveHash || claims.ManifestHash != session.ManifestHash || claims.ContentTreeHash != session.ContentTreeHash || claims.UserID != request.UserID || claims.ScopeType != request.ScopeType || claims.ScopeID != request.ScopeID || claims.PolicyVersion != session.PolicyVersion || claims.SecurityPolicyHash != computeSecurityPolicyHash() || claims.DeveloperSessionID != preview.DeveloperSessionID || claims.MigrationPlanHash != preview.MigrationPlanHash {
+	if claims.SessionID != session.SessionID || claims.ArtifactID != session.ArtifactID || claims.ArchiveHash != session.ArchiveHash || claims.ManifestHash != session.ManifestHash || claims.ContentTreeHash != session.ContentTreeHash || claims.SpaceID != request.SpaceID || claims.ScopeType != request.ScopeType || claims.ScopeID != request.ScopeID || claims.PolicyVersion != session.PolicyVersion || claims.SecurityPolicyHash != computeSecurityPolicyHash() || claims.DeveloperSessionID != preview.DeveloperSessionID || claims.MigrationPlanHash != preview.MigrationPlanHash {
 		return confirmedPackageUpdate{}, fmt.Errorf("kernel: confirmation token binding mismatch")
 	}
 	var required []string

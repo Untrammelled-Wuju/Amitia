@@ -45,9 +45,9 @@ func (h *DefaultClipboardHost) ReadText(ctx context.Context) (string, error) {
 	return "", ErrClipboardHostUnavailable
 }
 
-func clipboardHostUserID(ctx context.Context) string {
+func clipboardHostSpaceID(ctx context.Context) string {
 	if actor, ok := auth.FromContext(ctx); ok && actor != nil {
-		return strings.TrimSpace(actor.UserID.String())
+		return strings.TrimSpace(actor.SpaceID.String())
 	}
 	return ""
 }
@@ -102,7 +102,7 @@ func (h *BridgeClipboardHost) sendClipboardRequest(ctx context.Context, operatio
 	}
 
 	if h.hostRegistry != nil {
-		target, err := h.hostRegistry.FindTargetHostString(ctx, clipboardHostUserID(ctx), capability, "", "")
+		target, err := h.hostRegistry.FindTargetHostString(ctx, clipboardHostSpaceID(ctx), capability, "", "")
 		if err != nil {
 			return "", nil, err
 		}

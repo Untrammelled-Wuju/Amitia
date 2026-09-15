@@ -41,7 +41,7 @@ type PackageArtifact struct {
 
 type PackagePreviewSession struct {
 	SessionID                 string
-	UserID                    string
+	SpaceID                   string
 	ScopeType                 string
 	ScopeID                   string
 	ArtifactID                string
@@ -67,7 +67,7 @@ type PackagePreviewSession struct {
 type PackageOperationRecord struct {
 	OperationID             string
 	TraceID                 string
-	UserID                  string
+	SpaceID                 string
 	ScopeType               string
 	ScopeID                 string
 	ExtensionID             string
@@ -155,7 +155,7 @@ type PackageRollbackPoint struct {
 
 type PackageExportTicket struct {
 	ExportID    string
-	UserID      string
+	SpaceID     string
 	ExtensionID string
 	ArtifactID  string
 	FileName    string
@@ -172,7 +172,7 @@ func NewPackageRepository(db *sql.DB) *PackageRepository {
 	return &PackageRepository{db: db}
 }
 
-const packageOperationSelectColumns = `operation_id, trace_id, user_id, scope_type, scope_id,
+const packageOperationSelectColumns = `operation_id, trace_id, space_id, scope_type, scope_id,
 	extension_id, target_version, operation_type, status, current_step, artifact_id,
 	preview_session_id, confirmations_json, confirmation_claims_json, error_code, error_detail, started_at, updated_at,
 	completed_at, stable_generation, target_generation, current_pointer_json, snapshot_requirement_hash, fencing_token`
@@ -186,7 +186,7 @@ func scanPackageOperation(scanner sqlScanner) (*PackageOperationRecord, error) {
 	if err := scanner.Scan(
 		&op.OperationID,
 		&op.TraceID,
-		&op.UserID,
+		&op.SpaceID,
 		&op.ScopeType,
 		&op.ScopeID,
 		&op.ExtensionID,
@@ -320,12 +320,12 @@ func (r *PackageRepository) PutPreview(ctx context.Context, s PackagePreviewSess
 	}
 	defer tx.Rollback()
 	_, err = tx.ExecContext(ctx, `INSERT INTO extension_package_preview_sessions (
-		session_id, user_id, scope_type, scope_id, artifact_id, extension_id, version, status,
+		session_id, space_id, scope_type, scope_id, artifact_id, extension_id, version, status,
 		archive_hash, manifest_hash, content_tree_hash, risk_flags_json, required_confirmations_json,
 		dependency_result_json, preview_result_json, verification_report_json, policy_version,
 		security_policy_hash, verified_at, expires_at, consumed_at, created_at
 	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		s.SessionID, s.UserID, s.ScopeType, s.ScopeID, s.ArtifactID, s.ExtensionID, s.Version,
+		s.SessionID, s.SpaceID, s.ScopeType, s.ScopeID, s.ArtifactID, s.ExtensionID, s.Version,
 		s.Status, s.ArchiveHash, s.ManifestHash, s.ContentTreeHash, s.RiskFlagsJSON,
 		s.RequiredConfirmationsJSON, s.DependencyResultJSON, s.PreviewResultJSON,
 		s.VerificationReportJSON, s.PolicyVersion, s.SecurityPolicyHash, s.VerifiedAt, s.ExpiresAt, s.ConsumedAt, s.CreatedAt)
@@ -342,14 +342,14 @@ func (r *PackageRepository) PutPreview(ctx context.Context, s PackagePreviewSess
 	return tx.Commit()
 }
 
-func (r *PackageRepository) GetPreview(ctx context.Context, id, userID, scopeType, scopeID string) (PackagePreviewSession, error) {
+func (r *PackageRepository) GetPreview(ctx context.Context, id, spaceID, scopeType, scopeID string) (PackagePreviewSession, error) {
 	var s PackagePreviewSession
-	err := r.db.QueryRowContext(ctx, `SELECT session_id, user_id, scope_type, scope_id, artifact_id,
+	err := r.db.QueryRowContext(ctx, `SELECT session_id, space_id, scope_type, scope_id, artifact_id,
 		extension_id, version, status, archive_hash, manifest_hash, content_tree_hash, risk_flags_json,
 		required_confirmations_json, dependency_result_json, preview_result_json,
 		verification_report_json, policy_version, security_policy_hash, verified_at, expires_at, consumed_at, created_at
-		FROM extension_package_preview_sessions WHERE session_id = ? AND user_id = ? AND scope_type = ? AND scope_id = ?`,
-		id, userID, scopeType, scopeID).Scan(&s.SessionID, &s.UserID, &s.ScopeType, &s.ScopeID,
+		FROM extension_package_preview_sessions WHERE session_id = ? AND space_id = ? AND scope_type = ? AND scope_id = ?`,
+		id, spaceID, scopeType, scopeID).Scan(&s.SessionID, &s.SpaceID, &s.ScopeType, &s.ScopeID,
 		&s.ArtifactID, &s.ExtensionID, &s.Version, &s.Status, &s.ArchiveHash, &s.ManifestHash,
 		&s.ContentTreeHash, &s.RiskFlagsJSON, &s.RequiredConfirmationsJSON, &s.DependencyResultJSON,
 		&s.PreviewResultJSON, &s.VerificationReportJSON, &s.PolicyVersion, &s.SecurityPolicyHash,
@@ -476,17 +476,17 @@ func (r *PackageRepository) ConsumePreview(ctx context.Context, id string) error
 	return tx.Commit()
 }
 
-func (r *PackageRepository) CancelPreview(ctx context.Context, id, userID, scopeType, scopeID string) error {
+func (r *PackageRepository) CancelPreview(ctx context.Context, id, spaceID, scopeType, scopeID string) error {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
 	var artifactID string
-	if err := tx.QueryRowContext(ctx, `SELECT artifact_id FROM extension_package_preview_sessions WHERE session_id=? AND user_id=? AND scope_type=? AND scope_id=?`, id, userID, scopeType, scopeID).Scan(&artifactID); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT artifact_id FROM extension_package_preview_sessions WHERE session_id=? AND space_id=? AND scope_type=? AND scope_id=?`, id, spaceID, scopeType, scopeID).Scan(&artifactID); err != nil {
 		return err
 	}
-	result, err := tx.ExecContext(ctx, `UPDATE extension_package_preview_sessions SET status = 'cancelled' WHERE session_id = ? AND user_id = ? AND scope_type = ? AND scope_id = ? AND status IN ('ready','awaiting_confirmation')`, id, userID, scopeType, scopeID)
+	result, err := tx.ExecContext(ctx, `UPDATE extension_package_preview_sessions SET status = 'cancelled' WHERE session_id = ? AND space_id = ? AND scope_type = ? AND scope_id = ? AND status IN ('ready','awaiting_confirmation')`, id, spaceID, scopeType, scopeID)
 	if err != nil {
 		return err
 	}
@@ -610,17 +610,17 @@ func (r *PackageRepository) ListIncompleteOperations(ctx context.Context) ([]Pac
 	return operations, nil
 }
 
-func (r *PackageRepository) ListOperations(ctx context.Context, userID string, limit int) ([]PackageOperationRecord, error) {
+func (r *PackageRepository) ListOperations(ctx context.Context, spaceID string, limit int) ([]PackageOperationRecord, error) {
 	if limit < 1 || limit > 100 {
 		limit = 50
 	}
 	query := `
 		SELECT ` + packageOperationSelectColumns + `
 		FROM extension_package_operations
-		WHERE user_id = ?
+		WHERE space_id = ?
 		ORDER BY started_at DESC
 		LIMIT ?`
-	rows, err := r.db.QueryContext(ctx, query, userID, limit)
+	rows, err := r.db.QueryContext(ctx, query, spaceID, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -631,14 +631,14 @@ func (r *PackageRepository) ListOperations(ctx context.Context, userID string, l
 	return operations, nil
 }
 
-func (r *PackageRepository) GetOperation(ctx context.Context, userID, operationID string) (PackageOperationRecord, []PackageOperationStep, error) {
+func (r *PackageRepository) GetOperation(ctx context.Context, spaceID, operationID string) (PackageOperationRecord, []PackageOperationStep, error) {
 	var op PackageOperationRecord
 	query := `
 		SELECT ` + packageOperationSelectColumns + `
 		FROM extension_package_operations
-		WHERE user_id = ? AND operation_id = ?`
-	err := r.db.QueryRowContext(ctx, query, userID, operationID).Scan(
-		&op.OperationID, &op.TraceID, &op.UserID, &op.ScopeType, &op.ScopeID, &op.ExtensionID,
+		WHERE space_id = ? AND operation_id = ?`
+	err := r.db.QueryRowContext(ctx, query, spaceID, operationID).Scan(
+		&op.OperationID, &op.TraceID, &op.SpaceID, &op.ScopeType, &op.ScopeID, &op.ExtensionID,
 		&op.TargetVersion, &op.OperationType, &op.Status, &op.CurrentStep, &op.ArtifactID,
 		&op.PreviewSessionID, &op.ConfirmationsJSON, &op.ConfirmationClaimsJSON, &op.ErrorCode, &op.ErrorDetail,
 		&op.StartedAt, &op.UpdatedAt, &op.CompletedAt, &op.StableGeneration, &op.TargetGeneration,
@@ -669,15 +669,15 @@ func (r *PackageRepository) GetOperation(ctx context.Context, userID, operationI
 	return op, steps, rows.Err()
 }
 
-func (r *PackageRepository) GetCompletedOperationByPreview(ctx context.Context, userID, sessionID string) (PackageOperationRecord, error) {
+func (r *PackageRepository) GetCompletedOperationByPreview(ctx context.Context, spaceID, sessionID string) (PackageOperationRecord, error) {
 	query := `
 		SELECT ` + packageOperationSelectColumns + `
 		FROM extension_package_operations
-		WHERE user_id = ? AND preview_session_id = ?
+		WHERE space_id = ? AND preview_session_id = ?
 			AND status = 'completed'
 		ORDER BY completed_at DESC
 		LIMIT 1`
-	row := r.db.QueryRowContext(ctx, query, userID, sessionID)
+	row := r.db.QueryRowContext(ctx, query, spaceID, sessionID)
 	operation, err := scanPackageOperation(row)
 	if err != nil {
 		return PackageOperationRecord{}, err
@@ -767,8 +767,8 @@ func (r *PackageRepository) PutExport(ctx context.Context, ticket PackageExportT
 	}
 	defer tx.Rollback()
 	_, err = tx.ExecContext(ctx, `INSERT INTO extension_package_exports
-		(export_id, user_id, extension_id, artifact_id, file_name, mime_type, expires_at, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, ticket.ExportID, ticket.UserID, ticket.ExtensionID,
+		(export_id, space_id, extension_id, artifact_id, file_name, mime_type, expires_at, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, ticket.ExportID, ticket.SpaceID, ticket.ExtensionID,
 		ticket.ArtifactID, ticket.FileName, ticket.MIMEType, ticket.ExpiresAt, ticket.CreatedAt)
 	if err != nil {
 		return err
@@ -935,12 +935,12 @@ func (r *PackageRepository) ListSteps(ctx context.Context, operationID string) (
 	return steps, rows.Err()
 }
 
-func (r *PackageRepository) GetExport(ctx context.Context, exportID, userID, extensionID string) (PackageExportTicket, error) {
+func (r *PackageRepository) GetExport(ctx context.Context, exportID, spaceID, extensionID string) (PackageExportTicket, error) {
 	var ticket PackageExportTicket
-	err := r.db.QueryRowContext(ctx, `SELECT export_id, user_id, extension_id, artifact_id,
+	err := r.db.QueryRowContext(ctx, `SELECT export_id, space_id, extension_id, artifact_id,
 		file_name, mime_type, expires_at, created_at FROM extension_package_exports
-		WHERE export_id = ? AND user_id = ? AND extension_id = ?`, exportID, userID, extensionID).
-		Scan(&ticket.ExportID, &ticket.UserID, &ticket.ExtensionID, &ticket.ArtifactID,
+		WHERE export_id = ? AND space_id = ? AND extension_id = ?`, exportID, spaceID, extensionID).
+		Scan(&ticket.ExportID, &ticket.SpaceID, &ticket.ExtensionID, &ticket.ArtifactID,
 			&ticket.FileName, &ticket.MIMEType, &ticket.ExpiresAt, &ticket.CreatedAt)
 	return ticket, err
 }

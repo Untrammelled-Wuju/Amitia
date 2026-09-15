@@ -20,7 +20,7 @@ func BuildIdempotencyKeySHA(identity IdempotencyIdentity) string {
 	b.WriteByte('|')
 	b.WriteString(fmt.Sprintf("%d", identity.Generation))
 	b.WriteByte('|')
-	b.WriteString(identity.UserID)
+	b.WriteString(identity.SpaceID)
 	b.WriteByte('|')
 	b.WriteString(identity.CharacterID)
 	b.WriteByte('|')
@@ -36,7 +36,7 @@ func BuildIdempotencyIdentity(toolID string, inv capability.ToolInvocationContex
 	return IdempotencyIdentity{
 		ToolID:         toolID,
 		Generation:     inv.Generation,
-		UserID:         inv.UserID,
+		SpaceID:        inv.SpaceID,
 		CharacterID:    inv.CharacterID,
 		ConversationID: inv.ConversationID,
 		Source:         inv.Source,

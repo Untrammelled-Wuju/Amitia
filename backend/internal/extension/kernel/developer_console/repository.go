@@ -115,7 +115,7 @@ type ScopeRecord struct {
 	Scope          string `json:"scope"`
 	CharacterID    string `json:"characterId,omitempty"`
 	ConversationID string `json:"conversationId,omitempty"`
-	UserID         string `json:"userId,omitempty"`
+	SpaceID        string `json:"spaceId,omitempty"`
 	Active         bool   `json:"active"`
 }
 

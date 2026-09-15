@@ -71,7 +71,7 @@ func newFinalizationOperation(
 			dependencies,
 		),
 		PolicyVersion:  packagePolicyVersion,
-		UserID:         operation.UserID,
+		SpaceID:        operation.SpaceID,
 		ScopeType:      operation.ScopeType,
 		ScopeID:        operation.ScopeID,
 		ConfirmedItems: requiredConfirmations,
@@ -193,7 +193,7 @@ func newFinalizationOperation(
 
 	authoritative, _, err := container.PackageRepository.GetOperation(
 		ctx,
-		operation.UserID,
+		operation.SpaceID,
 		operation.OperationID,
 	)
 	if err != nil {
@@ -552,7 +552,7 @@ func TestFinalizationFixturePersistsCompleteNonceBinding(t *testing.T) {
 			operation_id,
 			operation_type,
 			extension_id,
-			user_id,
+			space_id,
 			issued_at,
 			expires_at,
 			consumed_at
@@ -564,7 +564,7 @@ func TestFinalizationFixturePersistsCompleteNonceBinding(t *testing.T) {
 		&record.OperationID,
 		&record.OperationType,
 		&record.ExtensionID,
-		&record.UserID,
+		&record.SpaceID,
 		&record.IssuedAt,
 		&record.ExpiresAt,
 		&record.ConsumedAt,
@@ -578,7 +578,7 @@ func TestFinalizationFixturePersistsCompleteNonceBinding(t *testing.T) {
 		record.OperationID != operation.OperationID ||
 		record.OperationType != operation.OperationType ||
 		record.ExtensionID != operation.ExtensionID ||
-		record.UserID != operation.UserID {
+		record.SpaceID != operation.SpaceID {
 		t.Fatalf("finalization nonce identity mismatch: %+v", record)
 	}
 

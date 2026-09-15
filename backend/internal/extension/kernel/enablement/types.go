@@ -148,7 +148,7 @@ type StateRuntimeContext struct {
 	Scope          string
 	CharacterID    string
 	ConversationID string
-	UserID         string
+	SpaceID        string
 	Platform       string
 	Now            time.Time
 	Metadata       map[string]any

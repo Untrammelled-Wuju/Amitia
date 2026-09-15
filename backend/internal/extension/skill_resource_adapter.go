@@ -22,7 +22,7 @@ func NewSkillResourceAdapter(service *AgentSkillService, baseURL string) *SkillR
 	return &SkillResourceAdapter{service: service, baseURL: baseURL}
 }
 
-func (a *SkillResourceAdapter) HasResourceCapableSkills(ctx context.Context, scope kernel.LegacyScope) (bool, []string, error) {
+func (a *SkillResourceAdapter) HasResourceCapableSkills(ctx context.Context, scope kernel.InvocationScope) (bool, []string, error) {
 	execScope := legacyScopeToExecutionScope(scope)
 	definitions := a.service.ActiveSkillDefinitions(execScope)
 	names := make([]string, 0, len(definitions))
@@ -34,7 +34,7 @@ func (a *SkillResourceAdapter) HasResourceCapableSkills(ctx context.Context, sco
 	return len(names) > 0, names, nil
 }
 
-func (a *SkillResourceAdapter) HandleListSkillResources(ctx context.Context, input kernel.ListSkillResourcesInput, scope kernel.LegacyScope) (kernel.ListSkillResourcesOutput, error) {
+func (a *SkillResourceAdapter) HandleListSkillResources(ctx context.Context, input kernel.ListSkillResourcesInput, scope kernel.InvocationScope) (kernel.ListSkillResourcesOutput, error) {
 	execScope := legacyScopeToExecutionScope(scope)
 	kind := AgentSkillResourceKind(input.Kind)
 	resources, err := a.service.ListResources(ctx, ListAgentSkillResourcesRequest{
@@ -101,12 +101,12 @@ func (a *SkillResourceAdapter) HandleListSkillResources(ctx context.Context, inp
 	}, nil
 }
 
-func (a *SkillResourceAdapter) HandleReadSkillResource(ctx context.Context, input kernel.ReadSkillResourceInput, scope kernel.LegacyScope) (kernel.ReadSkillResourceOutput, error) {
+func (a *SkillResourceAdapter) HandleReadSkillResource(ctx context.Context, input kernel.ReadSkillResourceInput, scope kernel.InvocationScope) (kernel.ReadSkillResourceOutput, error) {
 	execScope := legacyScopeToExecutionScope(scope)
 	content, err := a.service.ReadResource(ctx, ReadAgentSkillResourceRequest{
 		Scope:    execScope,
 		NameOrID: input.Skill,
-		Path:      input.Path,
+		Path:     input.Path,
 	})
 	if err != nil {
 		return kernel.ReadSkillResourceOutput{
@@ -166,7 +166,7 @@ func (a *SkillResourceAdapter) HandleReadSkillResource(ctx context.Context, inpu
 	}, nil
 }
 
-func (a *SkillResourceAdapter) HandleMaterializeSkillResource(ctx context.Context, input kernel.MaterializeSkillResourceInput, scope kernel.LegacyScope) (kernel.MaterializeSkillResourceOutput, error) {
+func (a *SkillResourceAdapter) HandleMaterializeSkillResource(ctx context.Context, input kernel.MaterializeSkillResourceInput, scope kernel.InvocationScope) (kernel.MaterializeSkillResourceOutput, error) {
 	execScope := legacyScopeToExecutionScope(scope)
 	definition, err := a.service.activeDefinition(execScope, input.Skill)
 	if err != nil {
@@ -230,9 +230,9 @@ func (a *SkillResourceAdapter) HandleMaterializeSkillResource(ctx context.Contex
 	}, nil
 }
 
-func legacyScopeToExecutionScope(scope kernel.LegacyScope) ExecutionScope {
+func legacyScopeToExecutionScope(scope kernel.InvocationScope) ExecutionScope {
 	return ExecutionScope{
-		UserID:         scope.UserID,
+		SpaceID:        scope.SpaceID,
 		CharacterID:    scope.CharacterID,
 		ConversationID: scope.ConversationID,
 		Channel:        scope.Channel,

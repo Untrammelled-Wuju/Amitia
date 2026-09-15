@@ -2,7 +2,6 @@ package extension
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -398,10 +397,7 @@ func (api *KernelAPI) install(c *gin.Context) {
 }
 
 func kernelAPIUser(c *gin.Context) string {
-	if value, exists := c.Get(authenticatedUserKey); exists {
-		return fmt.Sprint(value)
-	}
-	return ""
+	return authenticatedSpaceID(c)
 }
 
 func kernelAPIScopeType(c *gin.Context) string {
@@ -524,7 +520,7 @@ func (api *KernelAPI) confirmUninstall(c *gin.Context) {
 	kr := api.runtime.Kernel
 	result, err := kr.ConfirmPackageUninstall(ctx, kernelruntime.ConfirmPackageUninstallRequest{
 		ExtensionID:   req.ExtensionID,
-		UserID:        kernelAPIUser(c),
+		SpaceID:       kernelAPIUser(c),
 		ScopeType:     scopeType,
 		ScopeID:       req.ScopeID,
 		Confirmations: req.Confirmations,
@@ -562,7 +558,7 @@ func (api *KernelAPI) uninstall(c *gin.Context) {
 	if idempotencyKey == "" {
 		idempotencyKey = strings.TrimSpace(c.GetHeader("Idempotency-Key"))
 	}
-	op, err := api.runtime.Kernel.ExecutePackageUninstall(c.Request.Context(), kernelruntime.ExecutePackageUninstallRequest{ExtensionID: req.ExtensionID, UserID: kernelAPIUser(c), ScopeType: scopeType, ScopeID: req.ScopeID, ConfirmationToken: req.ConfirmationToken, IdempotencyKey: idempotencyKey})
+	op, err := api.runtime.Kernel.ExecutePackageUninstall(c.Request.Context(), kernelruntime.ExecutePackageUninstallRequest{ExtensionID: req.ExtensionID, SpaceID: kernelAPIUser(c), ScopeType: scopeType, ScopeID: req.ScopeID, ConfirmationToken: req.ConfirmationToken, IdempotencyKey: idempotencyKey})
 	if err != nil {
 		status, code, msg := kernelruntime.PackageErrorResponse(err)
 		c.JSON(status, gin.H{"error": msg, "code": code})
@@ -587,7 +583,7 @@ func (api *KernelAPI) resumeUninstall(c *gin.Context) {
 		c.JSON(status, gin.H{"error": msg, "code": code})
 		return
 	}
-	op, err := api.runtime.Kernel.ExecutePackageUninstall(c.Request.Context(), kernelruntime.ExecutePackageUninstallRequest{ExtensionID: claims.ExtensionID, UserID: claims.UserID, ScopeType: claims.ScopeType, ScopeID: claims.ScopeID, ConfirmationToken: req.ConfirmationToken})
+	op, err := api.runtime.Kernel.ExecutePackageUninstall(c.Request.Context(), kernelruntime.ExecutePackageUninstallRequest{ExtensionID: claims.ExtensionID, SpaceID: claims.SpaceID, ScopeType: claims.ScopeType, ScopeID: claims.ScopeID, ConfirmationToken: req.ConfirmationToken})
 	if err != nil {
 		status, code, msg := kernelruntime.PackageErrorResponse(err)
 		c.JSON(status, gin.H{"error": msg, "code": code})

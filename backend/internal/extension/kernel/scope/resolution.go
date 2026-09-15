@@ -8,7 +8,7 @@ import (
 
 type ScopeResolveRequest struct {
 	Expression     ScopeExpression `json:"expression"`
-	UserID         string          `json:"userId,omitempty"`
+	SpaceID        string          `json:"spaceId,omitempty"`
 	CharacterID    string          `json:"characterId,omitempty"`
 	ConversationID string          `json:"conversationId,omitempty"`
 	ExtensionID    string          `json:"extensionId,omitempty"`
@@ -150,9 +150,9 @@ func CreateSnapshot(invocationID string, scopes []ScopeRef, characterID, convers
 	}
 }
 
-func CreateSnapshotWithOwner(invocationID string, scopes []ScopeRef, userID, characterID, conversationID, extensionID, moduleID string, generation ...int64) ScopeSnapshot {
+func CreateSnapshotWithOwner(invocationID string, scopes []ScopeRef, spaceID, characterID, conversationID, extensionID, moduleID string, generation ...int64) ScopeSnapshot {
 	snapshot := CreateSnapshot(invocationID, scopes, characterID, conversationID, extensionID, moduleID, generation...)
-	snapshot.UserID = userID
+	snapshot.SpaceID = spaceID
 	return snapshot
 }
 

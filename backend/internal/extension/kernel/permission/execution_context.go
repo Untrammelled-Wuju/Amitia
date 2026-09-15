@@ -41,7 +41,7 @@ func ParseExecutionPlacement(raw string) ExecutionPlacement {
 type PermissionExecutionContext struct {
 	Placement ExecutionPlacement `json:"placement,omitempty"`
 
-	UserID           runtimeidentity.UserID           `json:"userId,omitempty"`
+	SpaceID          runtimeidentity.SpaceID          `json:"spaceId,omitempty"`
 	DeviceID         runtimeidentity.DeviceID         `json:"deviceId,omitempty"`
 	RuntimeID        runtimeidentity.RuntimeID        `json:"runtimeId,omitempty"`
 	RuntimeSessionID runtimeidentity.RuntimeSessionID `json:"runtimeSessionId,omitempty"`
@@ -57,7 +57,7 @@ type PermissionExecutionContext struct {
 
 func (c PermissionExecutionContext) Normalize() PermissionExecutionContext {
 	c.Placement = ParseExecutionPlacement(c.Placement.String())
-	c.UserID = runtimeidentity.ParseUserID(c.UserID.String())
+	c.SpaceID = runtimeidentity.ParseSpaceID(c.SpaceID.String())
 	c.DeviceID = runtimeidentity.ParseDeviceID(c.DeviceID.String())
 	c.RuntimeID = runtimeidentity.ParseRuntimeID(c.RuntimeID.String())
 	c.RuntimeSessionID = runtimeidentity.ParseRuntimeSessionID(c.RuntimeSessionID.String())
@@ -75,7 +75,7 @@ func (c PermissionExecutionContext) Validate() error {
 	}
 
 	if c.Placement == ExecutionPlacementDevice {
-		if c.UserID == "" || c.DeviceID == "" || c.RuntimeID == "" {
+		if c.SpaceID == "" || c.DeviceID == "" || c.RuntimeID == "" {
 			return ErrPermissionExecutionContextInvalid
 		}
 	}
@@ -104,17 +104,17 @@ func (c PermissionExecutionContext) HasProviderInstance() bool {
 }
 
 func (c PermissionExecutionContext) HasRuntimeIdentity() bool {
-	return c.UserID != "" || c.DeviceID != "" || c.RuntimeID != ""
+	return c.SpaceID != "" || c.DeviceID != "" || c.RuntimeID != ""
 }
 
 func (c PermissionExecutionContext) IsEmpty() bool {
-	return c.Placement == "" && c.UserID == "" && c.DeviceID == "" && c.RuntimeID == "" && c.RuntimeSessionID == "" && c.ProviderID == "" && c.ProviderInstanceID == "" && c.ExtensionID == "" && c.ModuleID == "" && c.Source == ""
+	return c.Placement == "" && c.SpaceID == "" && c.DeviceID == "" && c.RuntimeID == "" && c.RuntimeSessionID == "" && c.ProviderID == "" && c.ProviderInstanceID == "" && c.ExtensionID == "" && c.ModuleID == "" && c.Source == ""
 }
 
 func (c PermissionExecutionContext) BindingKey() string {
 	input := strings.Join([]string{
 		c.Placement.String(),
-		c.UserID.String(),
+		c.SpaceID.String(),
 		c.DeviceID.String(),
 		c.RuntimeID.String(),
 		c.RuntimeSessionID.String(),
@@ -130,7 +130,7 @@ func (c PermissionExecutionContext) BindingKey() string {
 func (c PermissionExecutionContext) StableBindingKey() string {
 	input := strings.Join([]string{
 		c.Placement.String(),
-		c.UserID.String(),
+		c.SpaceID.String(),
 		c.DeviceID.String(),
 		c.RuntimeID.String(),
 		c.ProviderID,
@@ -153,14 +153,14 @@ func ExecutionContextFromInvocation(inv capability.ToolInvocationContext) Permis
 		moduleID = inv.ModuleID
 	}
 
-	userID := inv.ExecutionTarget.UserID
-	if userID == "" {
-		userID = runtimeidentity.ParseUserID(inv.UserID)
+	spaceID := inv.ExecutionTarget.SpaceID
+	if spaceID == "" {
+		spaceID = runtimeidentity.ParseSpaceID(inv.SpaceID)
 	}
 
 	return PermissionExecutionContext{
 		Placement:          ParseExecutionPlacement(inv.ExecutionTarget.Placement),
-		UserID:             userID,
+		SpaceID:            spaceID,
 		DeviceID:           inv.ExecutionTarget.DeviceID,
 		RuntimeID:          inv.ExecutionTarget.RuntimeID,
 		RuntimeSessionID:   inv.ExecutionTarget.RuntimeSessionID,

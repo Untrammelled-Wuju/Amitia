@@ -19,7 +19,7 @@ import (
 
 // AgentAdminToolController bridges kernel-owned model tools to application
 // services without making the extension kernel depend on the chat/server layer.
-// Implementations must enforce the invocation user scope and must never return
+// Implementations must enforce the invocation space scope and must never return
 // stored secrets in tool results.
 type AgentAdminToolController interface {
 	CanExecuteAgentAdminTool(toolName string) bool
@@ -108,7 +108,7 @@ func (s *agentAdminToolService) dispatchWorkflow(ctx context.Context, name strin
 		defs := s.workflowRegistry.List(workflow.WorkflowFilter{})
 		out := make([]workflow.WorkflowDefinition, 0, len(defs))
 		for _, def := range defs {
-			if workflowVisibleToInvocation(def, invocation.UserID) {
+			if workflowVisibleToInvocation(def, invocation.SpaceID) {
 				out = append(out, def)
 			}
 		}
@@ -120,7 +120,7 @@ func (s *agentAdminToolService) dispatchWorkflow(ctx context.Context, name strin
 		if err := decodeToolInput(input, &req); err != nil {
 			return nil, err
 		}
-		def, err := s.getWorkflowForInvocation(req.ID, invocation.UserID, false)
+		def, err := s.getWorkflowForInvocation(req.ID, invocation.SpaceID, false)
 		if err != nil {
 			return nil, err
 		}
@@ -150,8 +150,8 @@ func (s *agentAdminToolService) dispatchWorkflow(ctx context.Context, name strin
 		if metadata == nil {
 			metadata = map[string]any{}
 		}
-		if strings.TrimSpace(invocation.UserID) != "" {
-			metadata["ownerUserId"] = strings.TrimSpace(invocation.UserID)
+		if strings.TrimSpace(invocation.SpaceID) != "" {
+			metadata["ownerSpaceId"] = strings.TrimSpace(invocation.SpaceID)
 		}
 		raw["metadata"] = metadata
 		encoded, _ := json.Marshal(raw)
@@ -182,7 +182,7 @@ func (s *agentAdminToolService) dispatchWorkflow(ctx context.Context, name strin
 		if err := decodeToolInput(input, &req); err != nil {
 			return nil, err
 		}
-		current, err := s.getWorkflowForInvocation(req.ID, invocation.UserID, true)
+		current, err := s.getWorkflowForInvocation(req.ID, invocation.SpaceID, true)
 		if err != nil {
 			return nil, err
 		}
@@ -198,7 +198,7 @@ func (s *agentAdminToolService) dispatchWorkflow(ctx context.Context, name strin
 		if def.Metadata == nil {
 			def.Metadata = map[string]any{}
 		}
-		def.Metadata["ownerUserId"] = workflowOwner(current)
+		def.Metadata["ownerSpaceId"] = workflowOwner(current)
 		normalized, err := workflow.NormalizeDefinition(def)
 		if err != nil {
 			return nil, err
@@ -218,7 +218,7 @@ func (s *agentAdminToolService) dispatchWorkflow(ctx context.Context, name strin
 		if err := decodeToolInput(input, &req); err != nil {
 			return nil, err
 		}
-		current, err := s.getWorkflowForInvocation(req.ID, invocation.UserID, true)
+		current, err := s.getWorkflowForInvocation(req.ID, invocation.SpaceID, true)
 		if err != nil {
 			return nil, err
 		}
@@ -237,7 +237,7 @@ func (s *agentAdminToolService) dispatchWorkflow(ctx context.Context, name strin
 		if metadata == nil {
 			metadata = map[string]any{}
 		}
-		metadata["ownerUserId"] = workflowOwner(current)
+		metadata["ownerSpaceId"] = workflowOwner(current)
 		base["metadata"] = metadata
 		merged, _ := json.Marshal(base)
 		var def workflow.WorkflowDefinition
@@ -262,7 +262,7 @@ func (s *agentAdminToolService) dispatchWorkflow(ctx context.Context, name strin
 		if err := decodeToolInput(input, &req); err != nil {
 			return nil, err
 		}
-		def, err := s.getWorkflowForInvocation(req.ID, invocation.UserID, true)
+		def, err := s.getWorkflowForInvocation(req.ID, invocation.SpaceID, true)
 		if err != nil {
 			return nil, err
 		}
@@ -284,7 +284,7 @@ func (s *agentAdminToolService) dispatchWorkflow(ctx context.Context, name strin
 		if err := decodeToolInput(input, &req); err != nil {
 			return nil, err
 		}
-		def, err := s.getWorkflowForInvocation(req.ID, invocation.UserID, false)
+		def, err := s.getWorkflowForInvocation(req.ID, invocation.SpaceID, false)
 		if err != nil {
 			return nil, err
 		}
@@ -297,7 +297,7 @@ func (s *agentAdminToolService) dispatchWorkflow(ctx context.Context, name strin
 		result, err := s.workflowExecutor.Execute(ctx, workflow.ExecuteRequest{
 			WorkflowID: def.ID,
 			Input:      req.Input,
-			Context:    workflow.ExecutionContext{UserID: invocation.UserID, CharacterID: invocation.CharacterID, ConversationID: invocation.ConversationID, InvocationID: invocation.InvocationID},
+			Context:    workflow.ExecutionContext{SpaceID: invocation.SpaceID, CharacterID: invocation.CharacterID, ConversationID: invocation.ConversationID, InvocationID: invocation.InvocationID},
 		})
 		if err != nil {
 			return nil, err
@@ -308,7 +308,7 @@ func (s *agentAdminToolService) dispatchWorkflow(ctx context.Context, name strin
 	}
 }
 
-func (s *agentAdminToolService) getWorkflowForInvocation(id, userID string, requireOwner bool) (workflow.WorkflowDefinition, error) {
+func (s *agentAdminToolService) getWorkflowForInvocation(id, spaceID string, requireOwner bool) (workflow.WorkflowDefinition, error) {
 	id = strings.TrimSpace(id)
 	if id == "" {
 		return workflow.WorkflowDefinition{}, fmt.Errorf("workflow id is required")
@@ -318,10 +318,10 @@ func (s *agentAdminToolService) getWorkflowForInvocation(id, userID string, requ
 		return workflow.WorkflowDefinition{}, fmt.Errorf("workflow %s not found", id)
 	}
 	if requireOwner {
-		if def.Source != "user" || !workflowOwnedBy(def, userID) {
+		if def.Source != "user" || !workflowOwnedBy(def, spaceID) {
 			return workflow.WorkflowDefinition{}, fmt.Errorf("workflow %s is not editable by this user", id)
 		}
-	} else if !workflowVisibleToInvocation(def, userID) {
+	} else if !workflowVisibleToInvocation(def, spaceID) {
 		return workflow.WorkflowDefinition{}, fmt.Errorf("workflow %s is not visible to this user", id)
 	}
 	return def, nil
@@ -331,23 +331,23 @@ func workflowOwner(def workflow.WorkflowDefinition) string {
 	if def.Metadata == nil {
 		return ""
 	}
-	return strings.TrimSpace(fmt.Sprint(def.Metadata["ownerUserId"]))
+	return strings.TrimSpace(fmt.Sprint(def.Metadata["ownerSpaceId"]))
 }
 
-func workflowOwnedBy(def workflow.WorkflowDefinition, userID string) bool {
+func workflowOwnedBy(def workflow.WorkflowDefinition, spaceID string) bool {
 	owner := workflowOwner(def)
-	userID = strings.TrimSpace(userID)
+	spaceID = strings.TrimSpace(spaceID)
 	if owner == "" {
-		return userID == ""
+		return spaceID == ""
 	}
-	return owner == userID
+	return owner == spaceID
 }
 
-func workflowVisibleToInvocation(def workflow.WorkflowDefinition, userID string) bool {
+func workflowVisibleToInvocation(def workflow.WorkflowDefinition, spaceID string) bool {
 	if def.Source != "user" {
 		return true
 	}
-	return workflowOwnedBy(def, userID)
+	return workflowOwnedBy(def, spaceID)
 }
 
 func mergeJSONObjects(dst, patch map[string]any) {
@@ -572,10 +572,10 @@ func registerAgentAdminTools(ctx context.Context, registry *capability.ToolRegis
 		{name: "sleep", description: "Wait for a bounded duration while remaining cancellation-aware.", input: `{"type":"object","additionalProperties":false,"properties":{"duration_ms":{"type":"integer","minimum":0,"maximum":300000},"milliseconds":{"type":"integer","minimum":0,"maximum":300000}}}`, risk: capability.RiskLow, side: capability.SideEffectReadOnly, timeout: 5 * time.Minute},
 		{name: "get_all_workflows", description: "List workflows visible to the current user, including system workflows and only that user's private workflows.", input: `{"type":"object","additionalProperties":false,"properties":{}}`, risk: capability.RiskLow, side: capability.SideEffectReadOnly, timeout: 5 * time.Second},
 		{name: "get_workflow", description: "Get one visible workflow definition by id.", input: `{"type":"object","required":["id"],"additionalProperties":false,"properties":{"id":{"type":"string"}}}`, risk: capability.RiskLow, side: capability.SideEffectReadOnly, timeout: 5 * time.Second},
-		{name: "create_workflow", description: "Create and persist a user-owned workflow definition. Agent-callable workflows are immediately synchronized into the model tool registry.", input: `{"type":"object","required":["definition"],"additionalProperties":false,"properties":{"definition":{"type":"object"}}}`, risk: capability.RiskHigh, side: capability.SideEffectSystem, approval: true, timeout: 10 * time.Second},
-		{name: "update_workflow", description: "Replace a user-owned workflow definition while preserving its id and owner.", input: `{"type":"object","required":["id","definition"],"additionalProperties":false,"properties":{"id":{"type":"string"},"definition":{"type":"object"}}}`, risk: capability.RiskHigh, side: capability.SideEffectSystem, approval: true, timeout: 10 * time.Second},
-		{name: "patch_workflow", description: "Apply a JSON merge-style patch to a user-owned workflow definition and resynchronize its agent tool exposure.", input: `{"type":"object","required":["id","patch"],"additionalProperties":false,"properties":{"id":{"type":"string"},"patch":{"type":"object"}}}`, risk: capability.RiskHigh, side: capability.SideEffectSystem, approval: true, timeout: 10 * time.Second},
-		{name: "delete_workflow", description: "Delete a user-owned workflow and remove its model tool registration.", input: `{"type":"object","required":["id"],"additionalProperties":false,"properties":{"id":{"type":"string"}}}`, risk: capability.RiskHigh, side: capability.SideEffectSystem, approval: true, timeout: 10 * time.Second},
+		{name: "create_workflow", description: "Create and persist a space-owned workflow definition. Agent-callable workflows are immediately synchronized into the model tool registry.", input: `{"type":"object","required":["definition"],"additionalProperties":false,"properties":{"definition":{"type":"object"}}}`, risk: capability.RiskHigh, side: capability.SideEffectSystem, approval: true, timeout: 10 * time.Second},
+		{name: "update_workflow", description: "Replace a space-owned workflow definition while preserving its id and owner.", input: `{"type":"object","required":["id","definition"],"additionalProperties":false,"properties":{"id":{"type":"string"},"definition":{"type":"object"}}}`, risk: capability.RiskHigh, side: capability.SideEffectSystem, approval: true, timeout: 10 * time.Second},
+		{name: "patch_workflow", description: "Apply a JSON merge-style patch to a space-owned workflow definition and resynchronize its agent tool exposure.", input: `{"type":"object","required":["id","patch"],"additionalProperties":false,"properties":{"id":{"type":"string"},"patch":{"type":"object"}}}`, risk: capability.RiskHigh, side: capability.SideEffectSystem, approval: true, timeout: 10 * time.Second},
+		{name: "delete_workflow", description: "Delete a space-owned workflow and remove its model tool registration.", input: `{"type":"object","required":["id"],"additionalProperties":false,"properties":{"id":{"type":"string"}}}`, risk: capability.RiskHigh, side: capability.SideEffectSystem, approval: true, timeout: 10 * time.Second},
 		{name: "trigger_workflow", description: "Run a visible enabled workflow with explicit JSON input under the current invocation scope.", input: `{"type":"object","required":["id"],"additionalProperties":false,"properties":{"id":{"type":"string"},"input":{}}}`, risk: capability.RiskHigh, side: capability.SideEffectExternal, approval: true, timeout: 30 * time.Minute},
 	}
 	// Application-backed handlers are registered only when the server
@@ -627,7 +627,7 @@ func applicationAdminToolSpec(name string) agentAdminToolSpec {
 		"list_tts_configs": "List TTS configurations with credentials redacted.", "create_tts_config": "Create a TTS configuration.", "update_tts_config": "Update a TTS configuration.", "delete_tts_config": "Delete a TTS configuration.", "activate_tts_config": "Activate a TTS configuration.", "list_asr_configs": "List ASR configurations with credentials redacted.", "create_asr_config": "Create an ASR configuration.", "update_asr_config": "Update an ASR configuration.", "delete_asr_config": "Delete an ASR configuration.", "activate_asr_config": "Activate an ASR configuration.",
 		"get_speech_services_config": "Read active TTS/STT service configuration with credentials redacted.", "set_speech_services_config": "Update active TTS/STT service configuration through the existing repositories.",
 		"list_sandbox_packages": "List installed Amitia extension packages and their enablement state.", "set_sandbox_package_enabled": "Enable or disable an installed Amitia extension package through the kernel lifecycle.", "restart_mcp_with_logs": "Reconnect all enabled MCP servers and return bounded per-server status/error logs.",
-		"link_memories": "Create a typed graph relation between two memory nodes.", "query_memory_links": "Query graph neighbors for a memory node within the current user scope.",
+		"link_memories": "Create a typed graph relation between two memory nodes.", "query_memory_links": "Query graph neighbors for a memory node within the current space scope.",
 	}[name]
 	if readOnly[name] {
 		return agentAdminToolSpec{name: name, description: desc, risk: capability.RiskLow, side: capability.SideEffectReadOnly, timeout: 60 * time.Second}

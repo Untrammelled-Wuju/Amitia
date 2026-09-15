@@ -15,7 +15,7 @@ func TestB19InvocationValidatorRejectsMissingInvocationID(t *testing.T) {
 			RootID:      "inv-1",
 			TraceID:     "trace-1",
 			OperationID: "op-1",
-			UserID:      "user1",
+			SpaceID:     "user1",
 			Source:      capability.InvocationSourceModel,
 		},
 	})
@@ -32,7 +32,7 @@ func TestB19InvocationValidatorRejectsMissingToolID(t *testing.T) {
 			RootID:       "inv-1",
 			TraceID:      "trace-1",
 			OperationID:  "op-1",
-			UserID:       "user1",
+			SpaceID:      "user1",
 			Source:       capability.InvocationSourceModel,
 		},
 	})
@@ -50,7 +50,7 @@ func TestB19InvocationValidatorRejectsInvalidSource(t *testing.T) {
 			RootID:       "root-1",
 			TraceID:      "trace-1",
 			OperationID:  "op-1",
-			UserID:       "user1",
+			SpaceID:      "user1",
 			Source:       capability.InvocationSource("invalid"),
 		},
 	})
@@ -59,7 +59,7 @@ func TestB19InvocationValidatorRejectsInvalidSource(t *testing.T) {
 	}
 }
 
-func TestB19InvocationValidatorRejectsMissingUserID(t *testing.T) {
+func TestB19InvocationValidatorRejectsMissingSpaceID(t *testing.T) {
 	v := NewInvocationValidator()
 	err := v.Validate(context.Background(), ToolExecutionRequest{
 		ToolID: "test-tool",
@@ -72,11 +72,11 @@ func TestB19InvocationValidatorRejectsMissingUserID(t *testing.T) {
 		},
 	})
 	if err == nil {
-		t.Fatal("expected error for missing user_id")
+		t.Fatal("expected error for missing space_id")
 	}
 }
 
-func TestB19InvocationValidatorAllowsScheduledTaskWithoutUserID(t *testing.T) {
+func TestB19InvocationValidatorAllowsScheduledTaskWithoutSpaceID(t *testing.T) {
 	v := NewInvocationValidator()
 	err := v.Validate(context.Background(), ToolExecutionRequest{
 		ToolID: "test-tool",
@@ -89,7 +89,7 @@ func TestB19InvocationValidatorAllowsScheduledTaskWithoutUserID(t *testing.T) {
 		},
 	})
 	if err != nil {
-		t.Fatalf("scheduled task should not require user_id, got: %v", err)
+		t.Fatalf("scheduled task should not require space_id, got: %v", err)
 	}
 }
 
@@ -101,7 +101,7 @@ func TestB19InvocationValidatorRejectsMissingRootID(t *testing.T) {
 			InvocationID: "inv-1",
 			TraceID:      "trace-1",
 			OperationID:  "op-1",
-			UserID:       "user1",
+			SpaceID:      "user1",
 			Source:       capability.InvocationSourceModel,
 		},
 	})
@@ -118,7 +118,7 @@ func TestB19InvocationValidatorRejectsMissingTraceID(t *testing.T) {
 			InvocationID: "inv-1",
 			RootID:       "root-1",
 			OperationID:  "op-1",
-			UserID:       "user1",
+			SpaceID:      "user1",
 			Source:       capability.InvocationSourceModel,
 		},
 	})
@@ -135,7 +135,7 @@ func TestB19InvocationValidatorRejectsMissingOperationID(t *testing.T) {
 			InvocationID: "inv-1",
 			RootID:       "root-1",
 			TraceID:      "trace-1",
-			UserID:       "user1",
+			SpaceID:      "user1",
 			Source:       capability.InvocationSourceModel,
 		},
 	})
@@ -154,7 +154,7 @@ func TestB19InvocationValidatorRejectsSelfParent(t *testing.T) {
 			RootID:       "inv-1",
 			TraceID:      "trace-1",
 			OperationID:  "op-1",
-			UserID:       "user1",
+			SpaceID:      "user1",
 			Source:       capability.InvocationSourceModel,
 		},
 	})
@@ -173,7 +173,7 @@ func TestB19InvocationValidatorRejectsParentWithSameRootAsInvocation(t *testing.
 			RootID:       "inv-2",
 			TraceID:      "trace-1",
 			OperationID:  "op-1",
-			UserID:       "user1",
+			SpaceID:      "user1",
 			Source:       capability.InvocationSourceModel,
 		},
 	})
@@ -191,7 +191,7 @@ func TestB19InvocationValidatorPassesWithValidRootInvocation(t *testing.T) {
 			RootID:       "inv-1",
 			TraceID:      "trace-1",
 			OperationID:  "op-1",
-			UserID:       "user1",
+			SpaceID:      "user1",
 			Source:       capability.InvocationSourceModel,
 		},
 	})
@@ -210,7 +210,7 @@ func TestB19InvocationValidatorPassesWithValidChildInvocation(t *testing.T) {
 			RootID:       "inv-1",
 			TraceID:      "trace-1",
 			OperationID:  "op-1",
-			UserID:       "user1",
+			SpaceID:      "user1",
 			Source:       capability.InvocationSourceModel,
 		},
 	})

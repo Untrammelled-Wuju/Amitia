@@ -71,7 +71,7 @@ func newWorkflowPreflightReport(def workflow.WorkflowDefinition) WorkflowPreflig
 	}
 }
 
-func (api *WorkflowAPI) preflightDefinition(ctx context.Context, def workflow.WorkflowDefinition, userID string) WorkflowPreflightReport {
+func (api *WorkflowAPI) preflightDefinition(ctx context.Context, def workflow.WorkflowDefinition, spaceID string) WorkflowPreflightReport {
 	report := newWorkflowPreflightReport(def)
 	if api == nil || api.runtime == nil || api.runtime.Kernel == nil || api.runtime.Kernel.Container() == nil {
 		report.add("kernel.available", WorkflowPreflightBlocked, "workflow kernel is unavailable", "", nil)
@@ -106,10 +106,10 @@ func (api *WorkflowAPI) preflightDefinition(ctx context.Context, def workflow.Wo
 		report.add("definition.compile", WorkflowPreflightPass, "definition, dependencies and DAG compile successfully", "", map[string]any{"nodeCount": len(def.Nodes)})
 	}
 
-	api.preflightWorkflowPermissions(ctx, kc, def, userID, &report)
+	api.preflightWorkflowPermissions(ctx, kc, def, spaceID, &report)
 	router := kernelruntime.NewWorkflowExecutionRouter(kc.CapabilityService, kc.ToolRegistry, kc.TaskRuntimeService, kc.DeviceRuntimeSessions)
 	execCtx := workflow.ExecutionContext{
-		UserID:       strings.TrimSpace(userID),
+		SpaceID:      strings.TrimSpace(spaceID),
 		WorkflowID:   def.ID,
 		ExtensionID:  def.ExtensionID,
 		ModuleID:     def.ModuleID,
@@ -139,7 +139,7 @@ func (api *WorkflowAPI) preflightDefinition(ctx context.Context, def workflow.Wo
 	return report
 }
 
-func (api *WorkflowAPI) preflightWorkflowPermissions(ctx context.Context, kc *kernelruntime.Container, def workflow.WorkflowDefinition, userID string, report *WorkflowPreflightReport) {
+func (api *WorkflowAPI) preflightWorkflowPermissions(ctx context.Context, kc *kernelruntime.Container, def workflow.WorkflowDefinition, spaceID string, report *WorkflowPreflightReport) {
 	permissionsRequired := make([]string, 0, len(def.Permissions))
 	permissionsRequired = append(permissionsRequired, def.Permissions...)
 	for _, node := range def.Nodes {
@@ -187,7 +187,7 @@ func (api *WorkflowAPI) preflightWorkflowNode(ctx context.Context, kc *kernelrun
 		targetID := strings.TrimSpace(node.TargetID)
 		if targetID == "" {
 			report.add("node.nestedWorkflow", WorkflowPreflightBlocked, "nested workflow target is missing", node.ID, nil)
-		} else if nested, ok := kc.WorkflowRegistry.Get(targetID); !ok || !workflowOwnedBy(nested, execCtx.UserID) {
+		} else if nested, ok := kc.WorkflowRegistry.Get(targetID); !ok || !workflowOwnedBy(nested, execCtx.SpaceID) {
 			report.add("node.nestedWorkflow", WorkflowPreflightBlocked, "nested workflow target does not exist or is not accessible", node.ID, map[string]any{"targetId": targetID})
 		} else {
 			report.add("node.nestedWorkflow", WorkflowPreflightPass, "nested workflow target is available", node.ID, map[string]any{"targetId": targetID})
@@ -236,7 +236,7 @@ func (api *WorkflowAPI) preflightWorkflowNode(ctx context.Context, kc *kernelrun
 			"deviceId":  string(resolved.Route.DeviceID),
 			"runtimeId": string(resolved.Route.RuntimeID),
 		})
-		api.preflightResolvedAndroidDeviceHealth(ctx, node, execCtx.UserID, string(resolved.Route.DeviceID), report)
+		api.preflightResolvedAndroidDeviceHealth(ctx, node, execCtx.SpaceID, string(resolved.Route.DeviceID), report)
 		return
 	}
 	report.add("node.targetReachable", WorkflowPreflightPass, "core execution target is reachable", node.ID, map[string]any{"placement": placement})
@@ -293,11 +293,11 @@ func (api *WorkflowAPI) preflightWorkflowToolNode(ctx context.Context, kc *kerne
 	}
 }
 
-func (api *WorkflowAPI) preflightResolvedAndroidDeviceHealth(ctx context.Context, node workflow.WorkflowNode, userID, deviceID string, report *WorkflowPreflightReport) {
+func (api *WorkflowAPI) preflightResolvedAndroidDeviceHealth(ctx context.Context, node workflow.WorkflowNode, spaceID, deviceID string, report *WorkflowPreflightReport) {
 	if api == nil || api.runtime == nil || api.runtime.WorkflowDeviceControl == nil || report == nil {
 		return
 	}
-	userID = strings.TrimSpace(userID)
+	spaceID = strings.TrimSpace(spaceID)
 	deviceID = strings.TrimSpace(deviceID)
 	if deviceID == "" {
 		return
@@ -308,14 +308,14 @@ func (api *WorkflowAPI) preflightResolvedAndroidDeviceHealth(ctx context.Context
 	// device nodes merely because they do not expose the Android health mesh
 	// operation. If registry platform metadata is unavailable, only probe nodes
 	// that explicitly require Android-specific capabilities.
-	isAndroid, platformKnown := api.workflowPreflightDeviceIsAndroid(ctx, userID, deviceID)
+	isAndroid, platformKnown := api.workflowPreflightDeviceIsAndroid(ctx, spaceID, deviceID)
 	if platformKnown && !isAndroid {
 		return
 	}
 	if !platformKnown && !workflowNodeExplicitlyRequiresAndroid(node) {
 		return
 	}
-	raw, err := api.runtime.WorkflowDeviceControl.Invoke(ctx, userID, deviceID, WorkflowMeshAndroidRuntimeHealth, json.RawMessage(`{}`))
+	raw, err := api.runtime.WorkflowDeviceControl.Invoke(ctx, spaceID, deviceID, WorkflowMeshAndroidRuntimeHealth, json.RawMessage(`{}`))
 	if err != nil {
 		status := WorkflowPreflightWarning
 		if node.ExecutionTarget.OfflinePolicy != workflow.WorkflowOfflineWait {
@@ -395,11 +395,11 @@ func (api *WorkflowAPI) preflightResolvedAndroidDeviceHealth(ctx context.Context
 	report.add("node.deviceHealth", WorkflowPreflightPass, "device runtime capability health is ready", node.ID, details)
 }
 
-func (api *WorkflowAPI) workflowPreflightDeviceIsAndroid(ctx context.Context, userID, deviceID string) (bool, bool) {
+func (api *WorkflowAPI) workflowPreflightDeviceIsAndroid(ctx context.Context, spaceID, deviceID string) (bool, bool) {
 	if api == nil || api.runtime == nil || api.runtime.WorkflowDeviceControl == nil {
 		return false, false
 	}
-	devices, err := api.runtime.WorkflowDeviceControl.ListDevices(ctx, strings.TrimSpace(userID))
+	devices, err := api.runtime.WorkflowDeviceControl.ListDevices(ctx, strings.TrimSpace(spaceID))
 	if err != nil {
 		return false, false
 	}

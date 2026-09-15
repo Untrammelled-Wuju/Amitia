@@ -13,7 +13,7 @@ type PendingTask struct {
 	TaskRunID        string
 	AttemptID        string
 	TaskDefID        string
-	UserID           string
+	SpaceID          string
 	DeviceID         string
 	RuntimeID        string
 	SessionID        string
@@ -60,7 +60,7 @@ func (m *PendingTaskManager) Register(request TaskExecutionRequest, sessionID st
 		TaskRunID:   taskRunID,
 		AttemptID:   request.AttemptID.String(),
 		TaskDefID:   request.Run.TaskDefinitionID,
-		UserID:      string(target.UserID),
+		SpaceID:     string(target.SpaceID),
 		DeviceID:    string(target.DeviceID),
 		RuntimeID:   string(target.RuntimeID),
 		SessionID:   sessionID,

@@ -183,7 +183,7 @@ func TestR41RollbackConfirmationRejectsMissingDependenciesHash(t *testing.T) {
 
 		DependenciesHash: "",
 
-		UserID: "user-1",
+		SpaceID: "user-1",
 
 		ScopeType: "global",
 
@@ -266,7 +266,7 @@ func TestR41RollbackConfirmationAcceptsCurrentDependenciesHash(t *testing.T) {
 
 		DependenciesHash: dependenciesHash,
 
-		UserID: "user-1",
+		SpaceID: "user-1",
 
 		ScopeType: "global",
 

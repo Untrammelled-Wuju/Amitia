@@ -156,10 +156,10 @@ func (tm *TriggerManager) HandleStructuredEvent(ctx context.Context, event Workf
 	var bindingErrors []error
 	for _, binding := range bindings {
 		bindingEvent := event
-		if strings.TrimSpace(bindingEvent.OwnerUserID) == "" {
-			bindingEvent.OwnerUserID = ownerFromQualifiedWorkflowEventType(binding.EventType, event.EventType)
+		if strings.TrimSpace(bindingEvent.OwnerSpaceID) == "" {
+			bindingEvent.OwnerSpaceID = ownerFromQualifiedWorkflowEventType(binding.EventType, event.EventType)
 		}
-		if strings.TrimSpace(bindingEvent.EventType) == "" || !strings.HasPrefix(strings.TrimSpace(bindingEvent.EventType), "user:") {
+		if strings.TrimSpace(bindingEvent.EventType) == "" || !strings.HasPrefix(strings.TrimSpace(bindingEvent.EventType), "space:") {
 			bindingEvent.EventType = binding.EventType
 		}
 		match, err := registry.Match(ctx, bindingEvent, binding, resolver)
@@ -190,8 +190,8 @@ func (tm *TriggerManager) HandleStructuredEvent(ctx context.Context, event Workf
 			}
 		}
 		bindingExecution := execution
-		if bindingExecution.UserID == "" {
-			bindingExecution.UserID = bindingEvent.OwnerUserID
+		if bindingExecution.SpaceID == "" {
+			bindingExecution.SpaceID = bindingEvent.OwnerSpaceID
 		}
 		if bindingExecution.DeviceID == "" {
 			bindingExecution.DeviceID = event.DeviceID
@@ -240,7 +240,7 @@ func validStructuredWorkflowEventID(value string) bool {
 }
 
 func (tm *TriggerManager) structuredEventBindings(ctx context.Context, event WorkflowTriggerEvent) ([]TriggerBinding, error) {
-	if strings.TrimSpace(event.OwnerUserID) != "" || strings.HasPrefix(strings.TrimSpace(event.EventType), "user:") {
+	if strings.TrimSpace(event.OwnerSpaceID) != "" || strings.HasPrefix(strings.TrimSpace(event.EventType), "space:") {
 		return tm.list(ctx, TriggerTypeEvent, event.EventType, "")
 	}
 	all, err := tm.list(ctx, TriggerTypeEvent, "", "")
@@ -261,14 +261,14 @@ func (tm *TriggerManager) structuredEventBindings(ctx context.Context, event Wor
 func ownerFromQualifiedWorkflowEventType(qualified, eventType string) string {
 	qualified = strings.TrimSpace(qualified)
 	eventType = strings.TrimSpace(eventType)
-	if eventType == "" || !strings.HasPrefix(qualified, "user:") {
+	if eventType == "" || !strings.HasPrefix(qualified, "space:") {
 		return ""
 	}
 	suffix := ":" + eventType
 	if !strings.HasSuffix(qualified, suffix) {
 		return ""
 	}
-	owner := strings.TrimSuffix(strings.TrimPrefix(qualified, "user:"), suffix)
+	owner := strings.TrimSuffix(strings.TrimPrefix(qualified, "space:"), suffix)
 	return strings.TrimSpace(owner)
 }
 

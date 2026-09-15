@@ -2,16 +2,13 @@ package extension
 
 import (
 	"net/http"
-	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/u-ai/backend/internal/middleware/security"
-	"github.com/u-ai/backend/internal/user"
 	"github.com/u-ai/backend/pkg/app"
 )
 
 func RegisterRouter(group *gin.RouterGroup, ctx *app.AppContext, runtime *Runtime) {
-	userService := user.NewService(user.NewRepository(ctx), ctx)
 	handler := NewHandler()
 	agentSkillHandler := NewAgentSkillHandler(runtime.AgentSkills, handler)
 	kernelAPI := NewKernelAPI(runtime)
@@ -34,7 +31,7 @@ func RegisterRouter(group *gin.RouterGroup, ctx *app.AppContext, runtime *Runtim
 	registerRetiredLegacyRoutes(extensions, retiredExtensionLegacyRoutes)
 	registerRetiredLegacyRoutes(group, retiredRootLegacyRoutes)
 
-	extensions.Use(extensionAuth(userService))
+	extensions.Use(extensionAuth())
 	registerExtensionPackageRoutes(extensions, runtime)
 	kernelAPI.RegisterRoutes(extensions)
 	devModeAPI.RegisterRoutes(extensions)
@@ -65,26 +62,23 @@ func RegisterRouter(group *gin.RouterGroup, ctx *app.AppContext, runtime *Runtim
 	extensions.GET("/agent-skills/:id/activations", agentSkillHandler.Activations)
 }
 
-func extensionAuth(service user.Service) gin.HandlerFunc {
+func extensionAuth() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if actor := security.GetActor(c); actor != nil && actor.UserID != "" && actor.IsLocalTrusted {
-			c.Set(authenticatedUserKey, string(actor.UserID))
-			c.Next()
+		actor := security.GetActor(c)
+		if actor == nil || actor.SpaceID == "" {
+			writeAuthProblem(c, "Space principal required")
 			return
 		}
-		auth := c.GetHeader("Authorization")
-		if !strings.HasPrefix(auth, "Bearer ") {
-			writeAuthProblem(c, "Authentication required")
-			return
-		}
-		me, err := service.GetMe(strings.TrimPrefix(auth, "Bearer "))
-		if err != nil || me == nil || me.ID == 0 {
-			writeAuthProblem(c, "Invalid authentication token")
-			return
-		}
-		c.Set(authenticatedUserKey, me.ID)
 		c.Next()
 	}
+}
+
+func authenticatedSpaceID(c *gin.Context) string {
+	actor := security.GetActor(c)
+	if actor == nil || actor.SpaceID == "" {
+		return ""
+	}
+	return actor.SpaceID.String()
 }
 
 func writeAuthProblem(c *gin.Context, detail string) {

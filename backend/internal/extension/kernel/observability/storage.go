@@ -91,7 +91,7 @@ type InvocationFilter struct {
 	CapabilityID   string
 	CharacterID    string
 	ConversationID string
-	UserID         string
+	SpaceID        string
 	RuntimeID      string
 	Status         ExecutionStatus
 	RiskLevel      RiskLevel
@@ -465,7 +465,7 @@ func matchInvocation(inv InvocationRecord, f InvocationFilter) bool {
 	if f.ConversationID != "" && inv.ConversationID != f.ConversationID {
 		return false
 	}
-	if f.UserID != "" && inv.UserID != f.UserID {
+	if f.SpaceID != "" && inv.SpaceID != f.SpaceID {
 		return false
 	}
 	if f.RuntimeID != "" && inv.RuntimeID != f.RuntimeID {

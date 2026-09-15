@@ -21,11 +21,10 @@ func RegisterDeviceExecutionPackageRoutes(group *gin.RouterGroup, runtime *Runti
 	}
 	group.Use(func(c *gin.Context) {
 		actor := security.GetActor(c)
-		if actor == nil || actor.UserID == "" || !actor.IsLocalTrusted {
+		if actor == nil || actor.SpaceID == "" || !actor.IsLocalTrusted {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "device-local desktop session required"})
 			return
 		}
-		c.Set(authenticatedUserKey, string(actor.UserID))
 		c.Next()
 	})
 
@@ -49,11 +48,10 @@ func RegisterDeviceExecutionWorkflowRoutes(group *gin.RouterGroup, runtime *Runt
 	api := NewWorkflowAPIForLocation(runtime, workflow.WorkflowLocationLocal)
 	trustedActor := func(c *gin.Context) {
 		actor := security.GetActor(c)
-		if actor == nil || actor.UserID == "" || !actor.IsLocalTrusted {
+		if actor == nil || actor.SpaceID == "" || !actor.IsLocalTrusted {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "device-local authenticated session required"})
 			return
 		}
-		c.Set(authenticatedUserKey, string(actor.UserID))
 		c.Next()
 	}
 

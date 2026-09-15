@@ -373,7 +373,7 @@ func (r *Resolver) deviceInstanceSupportsAll(primary CapabilityProviderInstance,
 				continue
 			}
 			for _, candidate := range r.catalog.ListInstancesByProvider(def.ID) {
-				if candidate.UserID != primary.UserID || candidate.DeviceID != primary.DeviceID || !candidate.IsExecutable() {
+				if candidate.SpaceID != primary.SpaceID || candidate.DeviceID != primary.DeviceID || !candidate.IsExecutable() {
 					continue
 				}
 				if candidate.RuntimeID != "" && r.availability != nil {
@@ -449,7 +449,7 @@ func buildExecutionTarget(def *CapabilityProviderDefinition, inst *CapabilityPro
 	return InvocationExecutionTarget{
 		Placement: string(inst.Placement),
 
-		UserID:    inst.UserID,
+		SpaceID:   inst.SpaceID,
 		DeviceID:  inst.DeviceID,
 		RuntimeID: inst.RuntimeID,
 

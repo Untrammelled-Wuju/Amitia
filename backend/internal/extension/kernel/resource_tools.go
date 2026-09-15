@@ -19,10 +19,10 @@ const (
 )
 
 type SkillResourceHandler interface {
-	HandleListSkillResources(ctx context.Context, input ListSkillResourcesInput, scope LegacyScope) (ListSkillResourcesOutput, error)
-	HandleReadSkillResource(ctx context.Context, input ReadSkillResourceInput, scope LegacyScope) (ReadSkillResourceOutput, error)
-	HandleMaterializeSkillResource(ctx context.Context, input MaterializeSkillResourceInput, scope LegacyScope) (MaterializeSkillResourceOutput, error)
-	HasResourceCapableSkills(ctx context.Context, scope LegacyScope) (bool, []string, error)
+	HandleListSkillResources(ctx context.Context, input ListSkillResourcesInput, scope InvocationScope) (ListSkillResourcesOutput, error)
+	HandleReadSkillResource(ctx context.Context, input ReadSkillResourceInput, scope InvocationScope) (ReadSkillResourceOutput, error)
+	HandleMaterializeSkillResource(ctx context.Context, input MaterializeSkillResourceInput, scope InvocationScope) (MaterializeSkillResourceOutput, error)
+	HasResourceCapableSkills(ctx context.Context, scope InvocationScope) (bool, []string, error)
 }
 
 type ListSkillResourcesInput struct {
@@ -171,7 +171,7 @@ func buildMaterializeSkillResourceTool() tool.Tool {
 	}
 }
 
-func (f *ToolFacade) handleListSkillResources(ctx context.Context, input json.RawMessage, scope LegacyScope) (LegacyToolResult, error) {
+func (f *ToolFacade) handleListSkillResources(ctx context.Context, input json.RawMessage, scope InvocationScope) (ToolDispatchResult, error) {
 	var req ListSkillResourcesInput
 	if err := json.Unmarshal(input, &req); err != nil {
 		return legacyResourceError(fmt.Sprintf("invalid list_skill_resources input: %v", err))
@@ -187,7 +187,7 @@ func (f *ToolFacade) handleListSkillResources(ctx context.Context, input json.Ra
 		return legacyResourceError(err.Error())
 	}
 	resultJSON, _ := json.Marshal(output)
-	return LegacyToolResult{
+	return ToolDispatchResult{
 		RunID:       "list-resources",
 		Status:      "SUCCEEDED",
 		Output:      resultJSON,
@@ -195,7 +195,7 @@ func (f *ToolFacade) handleListSkillResources(ctx context.Context, input json.Ra
 	}, nil
 }
 
-func (f *ToolFacade) handleReadSkillResource(ctx context.Context, input json.RawMessage, scope LegacyScope) (LegacyToolResult, error) {
+func (f *ToolFacade) handleReadSkillResource(ctx context.Context, input json.RawMessage, scope InvocationScope) (ToolDispatchResult, error) {
 	var req ReadSkillResourceInput
 	if err := json.Unmarshal(input, &req); err != nil {
 		return legacyResourceError(fmt.Sprintf("invalid read_skill_resource input: %v", err))
@@ -214,7 +214,7 @@ func (f *ToolFacade) handleReadSkillResource(ctx context.Context, input json.Raw
 		return legacyResourceError(err.Error())
 	}
 	resultJSON, _ := json.Marshal(output)
-	return LegacyToolResult{
+	return ToolDispatchResult{
 		RunID:       "read-resource",
 		Status:      "SUCCEEDED",
 		Output:      resultJSON,
@@ -222,7 +222,7 @@ func (f *ToolFacade) handleReadSkillResource(ctx context.Context, input json.Raw
 	}, nil
 }
 
-func (f *ToolFacade) handleMaterializeSkillResource(ctx context.Context, input json.RawMessage, scope LegacyScope) (LegacyToolResult, error) {
+func (f *ToolFacade) handleMaterializeSkillResource(ctx context.Context, input json.RawMessage, scope InvocationScope) (ToolDispatchResult, error) {
 	var req MaterializeSkillResourceInput
 	if err := json.Unmarshal(input, &req); err != nil {
 		return legacyResourceError(fmt.Sprintf("invalid materialize_skill_resource input: %v", err))
@@ -241,7 +241,7 @@ func (f *ToolFacade) handleMaterializeSkillResource(ctx context.Context, input j
 		return legacyResourceError(err.Error())
 	}
 	resultJSON, _ := json.Marshal(output)
-	return LegacyToolResult{
+	return ToolDispatchResult{
 		RunID:       "materialize-resource",
 		Status:      "SUCCEEDED",
 		Output:      resultJSON,
@@ -249,7 +249,7 @@ func (f *ToolFacade) handleMaterializeSkillResource(ctx context.Context, input j
 	}, nil
 }
 
-func (f *ToolFacade) resolveResourceCapableSkillNames(ctx context.Context, scope LegacyScope) ([]string, error) {
+func (f *ToolFacade) resolveResourceCapableSkillNames(ctx context.Context, scope InvocationScope) ([]string, error) {
 	if f.skillResourceHandler == nil {
 		return nil, nil
 	}
@@ -260,10 +260,10 @@ func (f *ToolFacade) resolveResourceCapableSkillNames(ctx context.Context, scope
 	return names, nil
 }
 
-func legacyResourceError(msg string) (LegacyToolResult, error) {
-	return LegacyToolResult{
+func legacyResourceError(msg string) (ToolDispatchResult, error) {
+	return ToolDispatchResult{
 		Status:      "FAILED",
 		VisibleText: msg,
-		Error:       &LegacyToolError{Code: "SKILL_RESOURCE_ERROR", Message: msg},
+		Error:       &ToolDispatchError{Code: "SKILL_RESOURCE_ERROR", Message: msg},
 	}, fmt.Errorf("%s", msg)
 }

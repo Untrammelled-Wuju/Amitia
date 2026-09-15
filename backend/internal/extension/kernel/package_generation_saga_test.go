@@ -77,7 +77,7 @@ func TestPackageGenerationRecoveryCompensatesCurrentDBSplit(t *testing.T) {
 		t.Fatal(err)
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	operation := PackageOperationRecord{OperationID: operationID, TraceID: "trace-generation-split", UserID: "user-1", ScopeType: "global", ExtensionID: installed.ExtensionID, TargetVersion: installed.Version, OperationType: "update", Status: "in_progress", CurrentStep: "switch_current_pointer", ArtifactID: artifact.ArtifactID, ConfirmationsJSON: "{}", StartedAt: now, UpdatedAt: now, StableGeneration: stable.GenerationID, TargetGeneration: target.Current.GenerationID, CurrentPointerJSON: packageGenerationJSON(target.Current)}
+	operation := PackageOperationRecord{OperationID: operationID, TraceID: "trace-generation-split", SpaceID: "user-1", ScopeType: "global", ExtensionID: installed.ExtensionID, TargetVersion: installed.Version, OperationType: "update", Status: "in_progress", CurrentStep: "switch_current_pointer", ArtifactID: artifact.ArtifactID, ConfirmationsJSON: "{}", StartedAt: now, UpdatedAt: now, StableGeneration: stable.GenerationID, TargetGeneration: target.Current.GenerationID, CurrentPointerJSON: packageGenerationJSON(target.Current)}
 	if err := container.PackageRepository.CreateOperation(ctx, operation); err != nil {
 		t.Fatal(err)
 	}
@@ -156,7 +156,7 @@ func TestPackageGenerationRecoveryRestoresUninstallQuarantine(t *testing.T) {
 	}
 	operationID := "package-operation-uninstall-recovery"
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	operation := PackageOperationRecord{OperationID: operationID, TraceID: "trace-uninstall-recovery", UserID: "user-1", ScopeType: "global", ExtensionID: installed.ExtensionID, TargetVersion: installed.Version, OperationType: "uninstall", Status: "in_progress", CurrentStep: "move_to_quarantine", ArtifactID: artifact.ArtifactID, ConfirmationsJSON: "{}", StartedAt: now, UpdatedAt: now, StableGeneration: stable.GenerationID, CurrentPointerJSON: packageGenerationJSON(stable)}
+	operation := PackageOperationRecord{OperationID: operationID, TraceID: "trace-uninstall-recovery", SpaceID: "user-1", ScopeType: "global", ExtensionID: installed.ExtensionID, TargetVersion: installed.Version, OperationType: "uninstall", Status: "in_progress", CurrentStep: "move_to_quarantine", ArtifactID: artifact.ArtifactID, ConfirmationsJSON: "{}", StartedAt: now, UpdatedAt: now, StableGeneration: stable.GenerationID, CurrentPointerJSON: packageGenerationJSON(stable)}
 	if err := container.PackageRepository.CreateOperation(ctx, operation); err != nil {
 		t.Fatal(err)
 	}

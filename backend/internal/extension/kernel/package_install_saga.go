@@ -28,7 +28,7 @@ func (r *Runtime) ExecutePackageInstall(ctx context.Context, request PackageInst
 	if r.container == nil || r.container.PackageRepository == nil || r.container.PackageArtifactStore == nil || r.container.PackageGenerationStore == nil {
 		return KernelInstallResult{}, fmt.Errorf("kernel: package services unavailable")
 	}
-	session, err := r.container.PackageRepository.GetPreview(ctx, request.SessionID, request.UserID, request.ScopeType, request.ScopeID)
+	session, err := r.container.PackageRepository.GetPreview(ctx, request.SessionID, request.SpaceID, request.ScopeType, request.ScopeID)
 	if err != nil {
 		return KernelInstallResult{}, fmt.Errorf("kernel: preview session unavailable: %w", err)
 	}
@@ -37,7 +37,7 @@ func (r *Runtime) ExecutePackageInstall(ctx context.Context, request PackageInst
 		return KernelInstallResult{}, fmt.Errorf("kernel: preview session expired")
 	}
 	if session.Status == "consumed" {
-		return r.completedPackageInstallResult(ctx, request.UserID, request.SessionID)
+		return r.completedPackageInstallResult(ctx, request.SpaceID, request.SessionID)
 	}
 	if session.Status != "ready" && session.Status != "awaiting_confirmation" {
 		return KernelInstallResult{}, fmt.Errorf("kernel: preview session status %s", session.Status)
@@ -56,7 +56,7 @@ func (r *Runtime) ExecutePackageInstall(ctx context.Context, request PackageInst
 		return KernelInstallResult{}, fmt.Errorf("kernel: package is not installable")
 	}
 	if preview.DevOnly {
-		if err := r.validateUnsignedDeveloperSession(preview.DeveloperSessionID, request.UserID, preview.ExtensionID); err != nil {
+		if err := r.validateUnsignedDeveloperSession(preview.DeveloperSessionID, request.SpaceID, preview.ExtensionID); err != nil {
 			return KernelInstallResult{}, fmt.Errorf("kernel: developer session no longer valid: %w", err)
 		}
 	}
@@ -65,7 +65,7 @@ func (r *Runtime) ExecutePackageInstall(ctx context.Context, request PackageInst
 		return KernelInstallResult{}, err
 	}
 	if claims.SessionID != session.SessionID || claims.ArtifactID != session.ArtifactID || claims.ArchiveHash != session.ArchiveHash ||
-		claims.ManifestHash != session.ManifestHash || claims.ContentTreeHash != session.ContentTreeHash || claims.UserID != request.UserID ||
+		claims.ManifestHash != session.ManifestHash || claims.ContentTreeHash != session.ContentTreeHash || claims.SpaceID != request.SpaceID ||
 		claims.ScopeType != request.ScopeType || claims.ScopeID != request.ScopeID || claims.PolicyVersion != session.PolicyVersion ||
 		claims.SecurityPolicyHash != computeSecurityPolicyHash() || claims.DeveloperSessionID != preview.DeveloperSessionID || claims.MigrationPlanHash != preview.MigrationPlanHash {
 		return KernelInstallResult{}, fmt.Errorf("kernel: confirmation token binding mismatch")
@@ -119,7 +119,7 @@ func (r *Runtime) ExecutePackageInstall(ctx context.Context, request PackageInst
 		DependenciesHash:          claims.DependenciesHash,
 		InstalledPath:             preview.InstalledPath,
 		InstalledTreeHash:         preview.InstalledTreeHash,
-		UserID:                    session.UserID,
+		SpaceID:                   session.SpaceID,
 		ScopeType:                 session.ScopeType,
 		ScopeID:                   session.ScopeID,
 		ConfirmedItems:            confirmedItemsFromMap(claims.Confirmations),
@@ -132,7 +132,7 @@ func (r *Runtime) ExecutePackageInstall(ctx context.Context, request PackageInst
 		ContentTreeHash:           session.ContentTreeHash,
 		TargetVersion:             session.Version,
 	})
-	op := PackageOperationRecord{OperationID: operationID, TraceID: traceID, UserID: request.UserID,
+	op := PackageOperationRecord{OperationID: operationID, TraceID: traceID, SpaceID: request.SpaceID,
 		ScopeType: request.ScopeType, ScopeID: request.ScopeID, ExtensionID: session.ExtensionID,
 		TargetVersion: session.Version, OperationType: "install", Status: "created",
 		CurrentStep: "create_operation", ArtifactID: artifact.ArtifactID,
@@ -144,7 +144,7 @@ func (r *Runtime) ExecutePackageInstall(ctx context.Context, request PackageInst
 			ScopeType: request.ScopeType, ScopeID: request.ScopeID,
 		}), StartedAt: now, UpdatedAt: now}
 	existing, created, err := r.container.PackageRepository.CreateOrGetOperationWithConfirmationNonce(ctx, op, PackageConfirmationNonceBinding{
-		Nonce: claims.Nonce, OperationType: op.OperationType, ExtensionID: op.ExtensionID, UserID: op.UserID,
+		Nonce: claims.Nonce, OperationType: op.OperationType, ExtensionID: op.ExtensionID, SpaceID: op.SpaceID,
 		IssuedAt: confirmationTimestamp(claims.IssuedAt), ExpiresAt: confirmationTimestamp(claims.ExpiresAt),
 	})
 	if err != nil {
@@ -183,13 +183,13 @@ func (r *Runtime) ExecutePackageInstall(ctx context.Context, request PackageInst
 	}()
 	ctx = sagaCtx
 	guard := packageWriteGuard(lease)
-	lockedSession, err := r.container.PackageRepository.GetPreview(ctx, request.SessionID, request.UserID, request.ScopeType, request.ScopeID)
+	lockedSession, err := r.container.PackageRepository.GetPreview(ctx, request.SessionID, request.SpaceID, request.ScopeType, request.ScopeID)
 	if err != nil {
 		_ = r.container.PackageRepository.SetOperation(context.Background(), operationID, "failed", "lock_preview_session", "PACKAGE_PREVIEW_SESSION_LOCK_FAILED", err.Error(), true, guard)
 		return KernelInstallResult{}, err
 	}
 	if lockedSession.Status == "consumed" {
-		return r.completedPackageInstallResult(ctx, request.UserID, request.SessionID)
+		return r.completedPackageInstallResult(ctx, request.SpaceID, request.SessionID)
 	}
 	if lockedSession.Status != "ready" && lockedSession.Status != "awaiting_confirmation" {
 		_ = r.container.PackageRepository.SetOperation(context.Background(), operationID, "failed", "lock_preview_session", "PACKAGE_PREVIEW_SESSION_STATUS", fmt.Sprintf("status %s", lockedSession.Status), true, guard)
@@ -350,7 +350,7 @@ func (r *Runtime) ExecutePackageInstall(ctx context.Context, request PackageInst
 			"contentTreeHash": artifact.ContentTreeHash, "artifactHash": artifact.ArtifactHash,
 			"installedTreeHash": generationTreeHash,
 			"devOnly":           preview.DevOnly,
-			"ownerUserId":       request.UserID, "scopeType": request.ScopeType, "scopeId": request.ScopeID}, targetGeneration.Current, targetPath, operationID)}
+			"ownerSpaceId":      request.SpaceID, "scopeType": request.ScopeType, "scopeId": request.ScopeID}, targetGeneration.Current, targetPath, operationID)}
 	if r.container.ExtensionProviderReconciler != nil {
 		providerSnapshot = r.container.ExtensionProviderReconciler.SnapshotExtension(string(definition.ID))
 	}
@@ -438,7 +438,7 @@ func (r *Runtime) ConfirmPackagePreview(ctx context.Context, request PackagePrev
 	if r.container == nil || r.container.PackageRepository == nil {
 		return PackagePreviewConfirmation{}, fmt.Errorf("kernel: package services unavailable")
 	}
-	session, err := r.container.PackageRepository.GetPreview(ctx, request.SessionID, request.UserID, request.ScopeType, request.ScopeID)
+	session, err := r.container.PackageRepository.GetPreview(ctx, request.SessionID, request.SpaceID, request.ScopeType, request.ScopeID)
 	if err != nil {
 		return PackagePreviewConfirmation{}, fmt.Errorf("kernel: preview session unavailable: %w", err)
 	}
@@ -468,7 +468,7 @@ func (r *Runtime) ConfirmPackagePreview(ctx context.Context, request PackagePrev
 		return PackagePreviewConfirmation{}, fmt.Errorf("kernel: preview session corrupt: %w", err)
 	}
 	if preview.DevOnly {
-		if err := r.validateUnsignedDeveloperSession(preview.DeveloperSessionID, request.UserID, preview.ExtensionID); err != nil {
+		if err := r.validateUnsignedDeveloperSession(preview.DeveloperSessionID, request.SpaceID, preview.ExtensionID); err != nil {
 			return PackagePreviewConfirmation{}, fmt.Errorf("kernel: developer session no longer valid: %w", err)
 		}
 	}
@@ -488,7 +488,7 @@ func (r *Runtime) ConfirmPackagePreview(ctx context.Context, request PackagePrev
 	token, err := signPackageConfirmation(packageConfirmationClaims{SessionID: session.SessionID, ArtifactID: session.ArtifactID,
 		ExtensionID: session.ExtensionID,
 		ArchiveHash: session.ArchiveHash, ManifestHash: session.ManifestHash, ContentTreeHash: session.ContentTreeHash,
-		UserID: session.UserID, ScopeType: session.ScopeType, ScopeID: session.ScopeID, PolicyVersion: session.PolicyVersion,
+		SpaceID: session.SpaceID, ScopeType: session.ScopeType, ScopeID: session.ScopeID, PolicyVersion: session.PolicyVersion,
 		SecurityPolicyHash: computeSecurityPolicyHash(), DeveloperSessionID: preview.DeveloperSessionID, MigrationPlanHash: preview.MigrationPlanHash,
 		SnapshotRequirementHash:   installReq.RequirementHash,
 		RequiredConfirmationsHash: requiredHash, DependenciesHash: dependenciesHash,
@@ -501,8 +501,8 @@ func (r *Runtime) ConfirmPackagePreview(ctx context.Context, request PackagePrev
 	return PackagePreviewConfirmation{ConfirmationToken: token, ExpiresAt: tokenExpiry}, nil
 }
 
-func (r *Runtime) completedPackageInstallResult(ctx context.Context, userID, sessionID string) (KernelInstallResult, error) {
-	op, err := r.container.PackageRepository.GetCompletedOperationByPreview(ctx, userID, sessionID)
+func (r *Runtime) completedPackageInstallResult(ctx context.Context, spaceID, sessionID string) (KernelInstallResult, error) {
+	op, err := r.container.PackageRepository.GetCompletedOperationByPreview(ctx, spaceID, sessionID)
 	if err != nil {
 		return KernelInstallResult{}, fmt.Errorf("kernel: consumed session has no completed operation: %w", err)
 	}

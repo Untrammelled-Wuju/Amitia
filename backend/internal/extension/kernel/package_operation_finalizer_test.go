@@ -124,7 +124,7 @@ func TestRecoveryUsesAtomicFinalizer(t *testing.T) {
 	now := "2025-01-01T00:00:00Z"
 	op := PackageOperationRecord{
 		OperationID: "op-atomic-finalizer-test", TraceID: "trace-atomic",
-		UserID: "user-1", ScopeType: "global", ExtensionID: installed.ExtensionID,
+		SpaceID: "user-1", ScopeType: "global", ExtensionID: installed.ExtensionID,
 		TargetVersion: installed.Version, OperationType: "install", Status: "in_progress",
 		CurrentStep: "commit_installed_tree", ArtifactID: artifact.ArtifactID,
 		StartedAt: now, UpdatedAt: now, ConfirmationsJSON: "{}",

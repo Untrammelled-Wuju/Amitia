@@ -29,7 +29,7 @@ func amitiaLinuxCall(ctx context.Context, provider interface{}, invocation capab
 		requestID = fmt.Sprintf("amitia-linux-%d", time.Now().UnixNano())
 	}
 	payload = normalizeJSONLikeMap(payload)
-	payload["userId"] = invocation.UserID
+	payload["spaceId"] = invocation.SpaceID
 	payload["characterId"] = invocation.CharacterID
 	payload["conversationId"] = invocation.ConversationID
 	resp := linuxProvider.Execute(ctx, terminal.AndroidLinuxRequest{

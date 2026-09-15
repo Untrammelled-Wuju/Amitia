@@ -121,7 +121,7 @@ func TestUIActionSnapshotDeriverSwitchesModuleWithinExtension(t *testing.T) {
 		Lifetime:     time.Hour,
 		ExecutionContext: permission.PermissionExecutionContext{
 			Placement:   permission.ExecutionPlacementDevice,
-			UserID:      "1",
+			SpaceID:     "1",
 			DeviceID:    "device-1",
 			RuntimeID:   "runtime-1",
 			ExtensionID: "com.amitia/emote",

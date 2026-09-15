@@ -110,7 +110,7 @@ func (r *providerInstanceReconciler) ActivateExtension(def domain.ExtensionDefin
 			Availability:      availability,
 			ExtensionID:       string(d.ExtensionID),
 			ModuleID:          d.ModuleID,
-			UserID:            r.runtimeIdent.UserID,
+			SpaceID:           r.runtimeIdent.SpaceID,
 			DeviceID:          r.runtimeIdent.DeviceID,
 			RuntimeID:         r.runtimeIdent.RuntimeID,
 			RuntimeInstanceID: result.InstanceID,

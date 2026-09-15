@@ -7,7 +7,7 @@ import (
 type CapabilityResolutionRequest struct {
 	CapabilityID CapabilityID
 
-	UserID runtimeidentity.UserID
+	SpaceID runtimeidentity.SpaceID
 
 	PreferredProviderID ProviderID
 	RequiredProviderID  ProviderID

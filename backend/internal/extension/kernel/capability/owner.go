@@ -4,7 +4,7 @@ type OwnerType string
 
 const (
 	OwnerTypeSystem    OwnerType = "system"
-	OwnerTypeUser      OwnerType = "user"
+	OwnerTypeSpace     OwnerType = "space"
 	OwnerTypeExtension OwnerType = "extension"
 	OwnerTypeShared    OwnerType = "shared"
 	OwnerTypeTemporary OwnerType = "temporary"

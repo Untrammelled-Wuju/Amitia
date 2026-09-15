@@ -91,7 +91,7 @@ type ManifestExecution struct {
 }
 
 type ExecutionScope struct {
-	UserID           string                     `json:"userId"`
+	SpaceID          string                     `json:"spaceId"`
 	CharacterID      string                     `json:"characterId"`
 	ConversationID   string                     `json:"conversationId"`
 	Channel          string                     `json:"channel"`

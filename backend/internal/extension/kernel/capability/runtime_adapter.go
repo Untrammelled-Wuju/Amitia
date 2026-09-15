@@ -107,7 +107,7 @@ type RuntimeExecutionRoute struct {
 
 	ProviderRuntimeInstanceID string
 
-	UserID           runtimeidentity.UserID
+	SpaceID          runtimeidentity.SpaceID
 	DeviceID         runtimeidentity.DeviceID
 	RuntimeID        runtimeidentity.RuntimeID
 	RuntimeSessionID runtimeidentity.RuntimeSessionID

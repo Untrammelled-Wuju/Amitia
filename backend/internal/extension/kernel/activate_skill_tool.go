@@ -36,30 +36,30 @@ type activateSkillInput struct {
 	Name string `json:"name"`
 }
 
-func (f *ToolFacade) handleActivateSkill(ctx context.Context, input json.RawMessage, scope LegacyScope) (LegacyToolResult, error) {
+func (f *ToolFacade) handleActivateSkill(ctx context.Context, input json.RawMessage, scope InvocationScope) (ToolDispatchResult, error) {
 	var req activateSkillInput
 	if err := json.Unmarshal(input, &req); err != nil {
-		return LegacyToolResult{
+		return ToolDispatchResult{
 			Status:      "FAILED",
 			VisibleText: fmt.Sprintf("invalid activate_skill input: %v", err),
-			Error:       &LegacyToolError{Code: "INVALID_INPUT", Message: err.Error()},
+			Error:       &ToolDispatchError{Code: "INVALID_INPUT", Message: err.Error()},
 		}, err
 	}
 
 	if strings.TrimSpace(req.Name) == "" {
-		return LegacyToolResult{
+		return ToolDispatchResult{
 			Status:      "FAILED",
 			VisibleText: "skill name is required",
-			Error:       &LegacyToolError{Code: "INVALID_INPUT", Message: "skill name is required"},
+			Error:       &ToolDispatchError{Code: "INVALID_INPUT", Message: "skill name is required"},
 		}, fmt.Errorf("skill name is required")
 	}
 
 	result, err := f.agentSkillBackend.Activate(ctx, scope, req.Name, true)
 	if err != nil {
-		return LegacyToolResult{
+		return ToolDispatchResult{
 			Status:      "FAILED",
 			VisibleText: fmt.Sprintf("failed to activate skill %q: %v", req.Name, err),
-			Error:       &LegacyToolError{Code: "ACTIVATION_FAILED", Message: err.Error()},
+			Error:       &ToolDispatchError{Code: "ACTIVATION_FAILED", Message: err.Error()},
 		}, err
 	}
 
@@ -75,7 +75,7 @@ func (f *ToolFacade) handleActivateSkill(ctx context.Context, input json.RawMess
 		"status":              "activated",
 	})
 
-	return LegacyToolResult{
+	return ToolDispatchResult{
 		RunID:       result.ActivationID,
 		Status:      "SUCCESS",
 		Output:      output,
@@ -83,7 +83,7 @@ func (f *ToolFacade) handleActivateSkill(ctx context.Context, input json.RawMess
 	}, nil
 }
 
-func (f *ToolFacade) resolveVisibleSkillNames(ctx context.Context, scope LegacyScope) ([]string, error) {
+func (f *ToolFacade) resolveVisibleSkillNames(ctx context.Context, scope InvocationScope) ([]string, error) {
 	if f.agentSkillBackend == nil {
 		return nil, nil
 	}

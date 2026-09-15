@@ -8,85 +8,12 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
-	"github.com/u-ai/backend/internal/extension/kernel/domain"
 	"github.com/u-ai/backend/internal/extension/kernel/execution"
-	"github.com/u-ai/backend/internal/extension/kernel/host_api"
 	"github.com/u-ai/backend/internal/extension/kernel/runtime_supervisor"
 	"github.com/u-ai/backend/internal/extension/kernel/schedule"
 	"github.com/u-ai/backend/internal/extension/kernel/task_runtime"
 	"github.com/u-ai/backend/internal/extension/kernel/workflow"
 )
-
-type HostAPIToolExecutorAdapter struct {
-	Gateway host_api.Gateway
-}
-
-func NewHostAPIToolExecutorAdapter(gateway host_api.Gateway) *HostAPIToolExecutorAdapter {
-	return &HostAPIToolExecutorAdapter{Gateway: gateway}
-}
-
-func (a *HostAPIToolExecutorAdapter) ExecuteTool(ctx context.Context, toolID string, input []byte, operationID string, scheduleCtx schedule.ScheduleToolContext) (*schedule.ToolExecutionResult, error) {
-	if a == nil || a.Gateway == nil {
-		return &schedule.ToolExecutionResult{
-			ErrorCode:    schedule.ErrCodeTargetNotFound,
-			ErrorMessage: "tool executor not configured",
-		}, nil
-	}
-
-	inputPayload := input
-	if len(inputPayload) == 0 {
-		inputPayload = []byte(`{}`)
-	}
-	requestBody, err := json.Marshal(map[string]any{
-		"toolId": toolID,
-		"input":  json.RawMessage(inputPayload),
-	})
-	if err != nil {
-		return &schedule.ToolExecutionResult{
-			ErrorCode:    schedule.ErrCodeTargetExecutionFailed,
-			ErrorMessage: fmt.Sprintf("marshal tool request: %v", err),
-		}, nil
-	}
-
-	callID := fmt.Sprintf("sched-tool-%s", operationID)
-	if callID == "sched-tool-" {
-		callID = fmt.Sprintf("sched-tool-%s", uuid.NewString())
-	}
-
-	invocationID := operationID
-	if invocationID == "" {
-		invocationID = scheduleCtx.TraceID
-	}
-	if invocationID == "" {
-		invocationID = fmt.Sprintf("sched-tool-%s", uuid.NewString())
-	}
-
-	result := a.Gateway.Call(ctx, host_api.CallRequest{
-		CallID: callID,
-		RuntimeIdentity: runtime_supervisor.RuntimeIdentity{
-			ExtensionID: domain.ExtensionID(scheduleCtx.ExtensionID),
-			ModuleID:    domain.ModuleID(scheduleCtx.ModuleID),
-			Generation:  scheduleCtx.Generation,
-		},
-		Method:          host_api.MethodToolExecute,
-		Version:         1,
-		Input:           requestBody,
-		ScopeSnapshotID: scheduleCtx.ScopeSnapshotID,
-		TraceID:         scheduleCtx.TraceID,
-		InvocationID:    invocationID,
-	})
-
-	if result.Error != nil {
-		return &schedule.ToolExecutionResult{
-			ErrorCode:    result.Error.Code,
-			ErrorMessage: result.Error.Message,
-		}, nil
-	}
-
-	return &schedule.ToolExecutionResult{
-		ResultJSON: result.Output,
-	}, nil
-}
 
 type KernelToolExecutorAdapter struct {
 	Kernel *execution.ExecutionPipeline
@@ -398,6 +325,5 @@ func BuildScheduleRuntimeHandlerFn(supervisor runtime_supervisor.Supervisor) sch
 	return adapter.Invoke
 }
 
-var _ schedule.ToolExecutor = (*HostAPIToolExecutorAdapter)(nil)
 var _ schedule.ToolExecutor = (*KernelToolExecutorAdapter)(nil)
 var _ schedule.WorkflowExecutor = (*KernelWorkflowFacadeAdapter)(nil)

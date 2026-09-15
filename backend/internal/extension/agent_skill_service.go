@@ -18,7 +18,7 @@ import (
 type agentSkillPreviewState struct {
 	parsed    parsedAgentSkill
 	expiresAt time.Time
-	userID    string
+	spaceID   string
 }
 type agentSkillRoundState struct {
 	active        map[string]ActivatedAgentSkill
@@ -55,7 +55,7 @@ func NewAgentSkillService(repository *Repository, validator *SchemaValidator) *A
 	return &AgentSkillService{repository: repository, validator: validator, limits: DefaultAgentSkillLimits(), previews: map[string]agentSkillPreviewState{}, rounds: map[string]*agentSkillRoundState{}, artifacts: map[string]agentSkillArtifactCacheEntry{}, catalogs: map[string][]AgentSkillCatalogEntry{}}
 }
 
-func (s *AgentSkillService) PreviewZIP(ctx context.Context, userID string, raw []byte) (preview AgentSkillImportPreview, err error) {
+func (s *AgentSkillService) PreviewZIP(ctx context.Context, spaceID string, raw []byte) (preview AgentSkillImportPreview, err error) {
 	defer func() {
 		if err != nil {
 			addAgentSkillMetric(agentSkillMetricImportFailure, 1)
@@ -69,9 +69,9 @@ func (s *AgentSkillService) PreviewZIP(ctx context.Context, userID string, raw [
 	if err != nil {
 		return AgentSkillImportPreview{}, err
 	}
-	return s.storePreview(userID, parsed), nil
+	return s.storePreview(spaceID, parsed), nil
 }
-func (s *AgentSkillService) PreviewDirectory(ctx context.Context, userID, root string, files map[string][]byte) (preview AgentSkillImportPreview, err error) {
+func (s *AgentSkillService) PreviewDirectory(ctx context.Context, spaceID, root string, files map[string][]byte) (preview AgentSkillImportPreview, err error) {
 	defer func() {
 		if err != nil {
 			addAgentSkillMetric(agentSkillMetricImportFailure, 1)
@@ -103,9 +103,9 @@ func (s *AgentSkillService) PreviewDirectory(ctx context.Context, userID, root s
 	if err != nil {
 		return AgentSkillImportPreview{}, err
 	}
-	return s.storePreview(userID, parsed), nil
+	return s.storePreview(spaceID, parsed), nil
 }
-func (s *AgentSkillService) storePreview(userID string, parsed parsedAgentSkill) AgentSkillImportPreview {
+func (s *AgentSkillService) storePreview(spaceID string, parsed parsedAgentSkill) AgentSkillImportPreview {
 	id := uuid.NewString()
 	expires := time.Now().Add(30 * time.Minute)
 	s.mu.Lock()
@@ -114,7 +114,7 @@ func (s *AgentSkillService) storePreview(userID string, parsed parsedAgentSkill)
 			delete(s.previews, key)
 		}
 	}
-	s.previews[id] = agentSkillPreviewState{parsed: parsed, expiresAt: expires, userID: userID}
+	s.previews[id] = agentSkillPreviewState{parsed: parsed, expiresAt: expires, spaceID: spaceID}
 	s.mu.Unlock()
 	addAgentSkillMetric(agentSkillMetricImportTotal, 1)
 	if parsed.Report.Status == AgentSkillBlocked {
@@ -140,14 +140,14 @@ func (s *AgentSkillService) Install(ctx context.Context, request InstallAgentSki
 		delete(s.previews, request.PreviewID)
 	}
 	s.mu.Unlock()
-	if !ok || time.Now().After(preview.expiresAt) || preview.userID != request.UserID {
+	if !ok || time.Now().After(preview.expiresAt) || preview.spaceID != request.SpaceID {
 		return AgentSkillDefinition{}, NewExtensionError(ErrAgentSkillArtifactInvalid, "import preview is missing or expired", "", false, nil)
 	}
 	definition := preview.parsed.Definition
-	definition.UserID = request.UserID
+	definition.SpaceID = request.SpaceID
 	definition.Scope = AgentSkillScopeGlobal
 	definition.ScopeID = ""
-	scopeHash := hashAgentSkillFiles(map[string][]byte{"owner": []byte(request.UserID)})[:12]
+	scopeHash := hashAgentSkillFiles(map[string][]byte{"owner": []byte(request.SpaceID)})[:12]
 	definition.ExtensionID = "local.agentskill." + scopeHash + "." + definition.Name
 	if existing, existingErr := s.repository.GetAgentSkillRecord(ctx, definition.ExtensionID); existingErr == nil {
 		if existing.ContentHash != definition.ContentHash {
@@ -163,7 +163,7 @@ func (s *AgentSkillService) Install(ctx context.Context, request InstallAgentSki
 		loaded.Scope = AgentSkillScopeGlobal
 		loaded.ScopeID = ""
 		if request.Enable {
-			if err := s.Enable(ctx, ExecutionScope{UserID: request.UserID}, definition.ExtensionID); err != nil {
+			if err := s.Enable(ctx, ExecutionScope{SpaceID: request.SpaceID}, definition.ExtensionID); err != nil {
 				return AgentSkillDefinition{}, err
 			}
 			loaded.Enabled = true
@@ -193,7 +193,7 @@ func (s *AgentSkillService) Install(ctx context.Context, request InstallAgentSki
 	}
 	s.invalidateAgentSkillCaches()
 	if request.Enable {
-		if err := s.Enable(ctx, ExecutionScope{UserID: request.UserID}, definition.ExtensionID); err != nil {
+		if err := s.Enable(ctx, ExecutionScope{SpaceID: request.SpaceID}, definition.ExtensionID); err != nil {
 			return AgentSkillDefinition{}, err
 		}
 		definition.Enabled = true
@@ -456,7 +456,7 @@ func (s *AgentSkillService) Activate(ctx context.Context, request ActivateAgentS
 }
 
 func (s *AgentSkillService) newAgentSkillActivationRecord(request ActivateAgentSkillRequest, definition AgentSkillDefinition, activationID, status string, tokens int, tokenLimitHit bool, errorCode string) AgentSkillActivation {
-	return AgentSkillActivation{ID: uuid.NewString(), ActivationID: activationID, ExtensionID: definition.ExtensionID, AgentSkillName: definition.Name, Source: definition.Source, Scope: definition.Scope, CompatibilityStatus: definition.CompatibilityStatus, UserID: request.Scope.UserID, CharacterID: request.Scope.CharacterID, ConversationID: request.Scope.ConversationID, Channel: request.Scope.Channel, TriggerType: map[bool]string{true: "explicit", false: "automatic"}[request.Explicit], Explicit: request.Explicit, Status: status, LoadedTokens: tokens, ScriptsUsed: false, ToolMappings: definition.ToolMappings, InstructionPosition: "after_character_rules", TokenLimitHit: tokenLimitHit, TraceID: request.Scope.TraceID, ErrorCode: errorCode, CreatedAt: time.Now().UTC()}
+	return AgentSkillActivation{ID: uuid.NewString(), ActivationID: activationID, ExtensionID: definition.ExtensionID, AgentSkillName: definition.Name, Source: definition.Source, Scope: definition.Scope, CompatibilityStatus: definition.CompatibilityStatus, SpaceID: request.Scope.SpaceID, CharacterID: request.Scope.CharacterID, ConversationID: request.Scope.ConversationID, Channel: request.Scope.Channel, TriggerType: map[bool]string{true: "explicit", false: "automatic"}[request.Explicit], Explicit: request.Explicit, Status: status, LoadedTokens: tokens, ScriptsUsed: false, ToolMappings: definition.ToolMappings, InstructionPosition: "after_character_rules", TokenLimitHit: tokenLimitHit, TraceID: request.Scope.TraceID, ErrorCode: errorCode, CreatedAt: time.Now().UTC()}
 }
 
 func (s *AgentSkillService) saveFailedAgentSkillActivation(ctx context.Context, request ActivateAgentSkillRequest, definition AgentSkillDefinition, tokenLimitHit bool, activationErr error) {
@@ -658,7 +658,7 @@ func (s *AgentSkillService) invalidateAgentSkillCaches() {
 }
 
 func agentSkillCatalogCacheKey(scope ExecutionScope) string {
-	return scope.UserID + "\x00" + scope.CharacterID + "\x00" + scope.Channel
+	return scope.SpaceID + "\x00" + scope.CharacterID + "\x00" + scope.Channel
 }
 func (s *AgentSkillService) roundState(scope ExecutionScope) *agentSkillRoundState {
 	s.mu.Lock()
@@ -679,7 +679,7 @@ func roundKey(scope ExecutionScope) string {
 	if key == "" {
 		key = scope.RequestID
 	}
-	return scope.UserID + "\x00" + scope.CharacterID + "\x00" + scope.ConversationID + "\x00" + key
+	return scope.SpaceID + "\x00" + scope.CharacterID + "\x00" + scope.ConversationID + "\x00" + key
 }
 func (s *AgentSkillService) clearExtensionFromRounds(id string) {
 	s.mu.Lock()

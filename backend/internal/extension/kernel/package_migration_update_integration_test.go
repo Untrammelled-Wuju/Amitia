@@ -109,7 +109,7 @@ func TestPackageMigrationPreviewPersistsPlanEvidence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	preview, err := runtime.PreviewPackage(context.Background(), PackagePreviewRequest{UserID: "user-1", ScopeType: "global", FileName: "migration.amitiax"}, archive)
+	preview, err := runtime.PreviewPackage(context.Background(), PackagePreviewRequest{SpaceID: "user-1", ScopeType: "global", FileName: "migration.amitiax"}, archive)
 	archive.Close()
 	if err != nil {
 		t.Fatal(err)
@@ -210,7 +210,7 @@ func TestPackageMigrationUpdateReverseFailureRequiresManualRecovery(t *testing.T
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	packageOperationID := "package-operation-reverse-fail"
-	if err := container.PackageRepository.CreateOperation(context.Background(), PackageOperationRecord{OperationID: packageOperationID, TraceID: "trace-reverse-fail", UserID: "user-1", ScopeType: "global", ExtensionID: manifest.Extension.ID, OperationType: "update", Status: "created", CurrentStep: "create_operation", StartedAt: now, UpdatedAt: now}); err != nil {
+	if err := container.PackageRepository.CreateOperation(context.Background(), PackageOperationRecord{OperationID: packageOperationID, TraceID: "trace-reverse-fail", SpaceID: "user-1", ScopeType: "global", ExtensionID: manifest.Extension.ID, OperationType: "update", Status: "created", CurrentStep: "create_operation", StartedAt: now, UpdatedAt: now}); err != nil {
 		t.Fatal(err)
 	}
 	if err := container.PackageRepository.SetOperation(context.Background(), packageOperationID, "in_progress", "execute_migrations", "", "", false, PackageWriteGuard{}); err != nil {

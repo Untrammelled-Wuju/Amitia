@@ -250,7 +250,7 @@ func TestPackageRepositoryInvalidatesMatchingUnconsumedPreviews(t *testing.T) {
 	if err := repository.PutArtifact(context.Background(), artifact); err != nil {
 		t.Fatal(err)
 	}
-	preview := PackagePreviewSession{SessionID: "preview-1", UserID: "user-1", ScopeType: "global",
+	preview := PackagePreviewSession{SessionID: "preview-1", SpaceID: "user-1", ScopeType: "global",
 		ArtifactID: artifact.ArtifactID, ExtensionID: artifact.ExtensionID, Version: artifact.Version,
 		Status: "ready", ArchiveHash: artifact.ArchiveHash, ManifestHash: artifact.ManifestHash,
 		ContentTreeHash: artifact.ContentTreeHash, RiskFlagsJSON: "[]", RequiredConfirmationsJSON: "[]",
@@ -264,7 +264,7 @@ func TestPackageRepositoryInvalidatesMatchingUnconsumedPreviews(t *testing.T) {
 	if err != nil || len(extensions) != 1 || extensions[0] != "extension-1" {
 		t.Fatalf("unexpected invalidation result: %v err=%v", extensions, err)
 	}
-	stored, err := repository.GetPreview(context.Background(), preview.SessionID, preview.UserID, preview.ScopeType, preview.ScopeID)
+	stored, err := repository.GetPreview(context.Background(), preview.SessionID, preview.SpaceID, preview.ScopeType, preview.ScopeID)
 	if err != nil || stored.Status != "invalidated" {
 		t.Fatalf("preview was not invalidated: %#v err=%v", stored, err)
 	}

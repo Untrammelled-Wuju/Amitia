@@ -114,7 +114,7 @@ func (b *DesktopActionBridge) buildInvocation(extensionID string, scopeCtx deskt
 	invocationID := fmt.Sprintf("desktop-%s-%d", extensionID, time.Now().UnixNano())
 	inv := capability.ToolInvocationContext{
 		InvocationID:   invocationID,
-		UserID:         "desktop-host",
+		SpaceID:        "desktop-host",
 		ExtensionID:    extensionID,
 		CharacterID:    scopeCtx.CharacterID,
 		ConversationID: scopeCtx.ConversationID,

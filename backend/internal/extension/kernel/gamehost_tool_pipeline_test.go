@@ -195,8 +195,8 @@ func TestGameHostToolRunsThroughAgentExecutionPipeline(t *testing.T) {
 		ctx,
 		capability.CapabilityID(toolDef.ID),
 		json.RawMessage(`{"direction":"north"}`),
-		LegacyScope{
-			UserID:         "user-1",
+		InvocationScope{
+			SpaceID:        "user-1",
 			CharacterID:    "character-1",
 			ConversationID: "conversation-1",
 			Channel:        "web",

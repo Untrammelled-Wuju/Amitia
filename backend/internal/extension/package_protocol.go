@@ -225,7 +225,7 @@ type PackageDryRunCaseReport struct {
 }
 
 type PreviewPackageImportRequest struct {
-	UserID      string
+	SpaceID     string
 	ScopeType   string
 	ScopeID     string
 	FileName    string
@@ -237,7 +237,7 @@ type PreviewPackageImportRequest struct {
 
 type InstallPackageRequest struct {
 	SessionID              string          `json:"sessionId"`
-	UserID                 string          `json:"-"`
+	SpaceID                string          `json:"-"`
 	ScopeType              string          `json:"scopeType"`
 	ScopeID                string          `json:"scopeId"`
 	ConfirmUnsigned        bool            `json:"confirmUnsigned"`
@@ -251,7 +251,7 @@ type InstallPackageRequest struct {
 }
 
 type ExportPackageRequest struct {
-	UserID      string `json:"-"`
+	SpaceID     string `json:"-"`
 	ExtensionID string `json:"-"`
 	Version     string `json:"version,omitempty"`
 	Format      string `json:"format"`

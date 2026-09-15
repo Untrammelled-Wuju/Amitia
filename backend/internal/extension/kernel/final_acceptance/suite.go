@@ -472,8 +472,8 @@ func verifySingleChain(ctx context.Context) ([]string, error) {
 		return nil, fmt.Errorf("ToolFacade must be non-nil")
 	}
 
-	scope := kernel.LegacyScope{
-		UserID:    "acceptance",
+	scope := kernel.InvocationScope{
+		SpaceID:   "acceptance",
 		Channel:   "test",
 		SessionID: "single-chain",
 	}
@@ -733,8 +733,8 @@ func verifyCutover(ctx context.Context) ([]string, error) {
 	defer container.Close()
 
 	facade := kernel.NewToolFacade(container.ToolRegistry, container.ExecutionKernel, kernel.DefaultToolFacadeConfig())
-	scope := kernel.LegacyScope{
-		UserID:    "cutover",
+	scope := kernel.InvocationScope{
+		SpaceID:   "cutover",
 		Channel:   "test",
 		SessionID: "cutover-verify",
 	}
@@ -1053,7 +1053,7 @@ func verifyEquivalence(ctx context.Context) ([]string, error) {
 	defer container.Close()
 
 	facade := kernel.NewToolFacade(container.ToolRegistry, container.ExecutionKernel, kernel.DefaultToolFacadeConfig())
-	scope := kernel.LegacyScope{UserID: "eq", Channel: "test", SessionID: "eq-verify"}
+	scope := kernel.InvocationScope{SpaceID: "eq", Channel: "test", SessionID: "eq-verify"}
 
 	tools, err := facade.ModelTools(ctx, scope)
 	if err != nil {
@@ -1092,7 +1092,7 @@ func verifyStability(ctx context.Context) ([]string, error) {
 			return nil, fmt.Errorf("iteration %d Build failed: %w", i, err)
 		}
 		facade := kernel.NewToolFacade(container.ToolRegistry, container.ExecutionKernel, kernel.DefaultToolFacadeConfig())
-		scope := kernel.LegacyScope{UserID: "stability", Channel: "test", SessionID: fmt.Sprintf("stab-%d", i)}
+		scope := kernel.InvocationScope{SpaceID: "stability", Channel: "test", SessionID: fmt.Sprintf("stab-%d", i)}
 		_, _ = facade.ModelTools(ctx, scope)
 		container.Close()
 	}

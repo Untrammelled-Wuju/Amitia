@@ -15,7 +15,7 @@ type AcquisitionRequest struct {
 
 	RequestedCandidateID string `json:"candidateId,omitempty"`
 
-	UserID runtimeidentity.UserID `json:"userId"`
+	SpaceID runtimeidentity.SpaceID `json:"spaceId"`
 
 	ExecContext *execution.ExecutionContext `json:"-"`
 

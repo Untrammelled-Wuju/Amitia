@@ -513,7 +513,7 @@ func standardConfirmationClaimsFromRollback(
 		RequiredConfirmationsHash: claims.RequiredConfirmationsHash,
 		DependenciesHash:          claims.DependenciesHash,
 		PolicyVersion:             claims.PolicyVersion,
-		UserID:                    claims.UserID,
+		SpaceID:                   claims.SpaceID,
 		ScopeType:                 claims.ScopeType,
 		ScopeID:                   claims.ScopeID,
 		ConfirmedItems:            claims.ConfirmedItems,
@@ -660,7 +660,7 @@ func (
 		if err :=
 			r.validateUnsignedDeveloperSession(
 				current.DeveloperSessionID,
-				session.UserID,
+				session.SpaceID,
 				current.ExtensionID,
 			); err != nil {
 			return InstallPreview{},

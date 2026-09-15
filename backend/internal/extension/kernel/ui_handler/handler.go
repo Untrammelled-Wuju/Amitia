@@ -39,8 +39,8 @@ type ClientRuntimeCommandResolver interface {
 
 type ScopedClientRuntimeCommandResolver interface {
 	ResolveClientRuntimeCommandWithHost(commandID, hostClientID, hostSessionID string, result map[string]interface{}, commandErr string) bool
-	ClientRuntimeSessionState(userID, conversationID string) map[string]interface{}
-	AcknowledgeClientRuntimeSession(userID, conversationID string, revision int64) (map[string]interface{}, error)
+	ClientRuntimeSessionState(spaceID, conversationID string) map[string]interface{}
+	AcknowledgeClientRuntimeSession(spaceID, conversationID string, revision int64) (map[string]interface{}, error)
 }
 
 type ClipboardResolver interface {
@@ -453,11 +453,11 @@ func (h *HTTPHandler) handleProfile(w http.ResponseWriter, r *http.Request) {
 	resolveContext := h.resolveProviderContext(r, platform)
 	scopeKind := ui_provider.ProfileScopeKind(strings.TrimSpace(r.URL.Query().Get("scope")))
 	if scopeKind == "" {
-		scopeKind = ui_provider.ProfileScopeUser
+		scopeKind = ui_provider.ProfileScopeSpace
 	}
 	if scopeKind == ui_provider.ProfileScopeGlobal && r.Method != http.MethodGet {
 		actor, ok := auth.FromContext(r.Context())
-		if !ok || actor == nil || (!actor.HasRole("admin") && !actor.IsSystemActor()) {
+		if !ok || actor == nil || (!actor.HasPermission(auth.PermSystemAdmin) && !actor.IsSystemActor()) {
 			writeError(w, http.StatusForbidden, "global_profile_forbidden", "global UI profile requires administrator privileges")
 			return
 		}
@@ -571,7 +571,7 @@ func (h *HTTPHandler) handleSessionsCollection(w http.ResponseWriter, r *http.Re
 		return
 	}
 	if actor, ok := auth.FromContext(r.Context()); ok && actor != nil {
-		_ = h.uiHost.Bridge().SetSessionExecutionIdentity(sess.SessionID, actor.UserID.String(), strings.TrimSpace(r.Header.Get("X-Amitia-Device-ID")))
+		_ = h.uiHost.Bridge().SetSessionExecutionIdentity(sess.SessionID, actor.SpaceID.String(), strings.TrimSpace(r.Header.Get("X-Amitia-Device-ID")))
 	}
 	writeJSON(w, http.StatusOK, bridgeSessionResponse{
 		SessionID:       sess.SessionID,
@@ -858,10 +858,10 @@ func (h *HTTPHandler) handleWebUISessionCollection(w http.ResponseWriter, r *htt
 		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
 		return
 	}
-	actorUserID := ""
+	actorSpaceID := ""
 	actorDeviceID := strings.TrimSpace(r.Header.Get("X-Amitia-Device-ID"))
 	if actor, ok := auth.FromContext(r.Context()); ok && actor != nil {
-		actorUserID = actor.UserID.String()
+		actorSpaceID = actor.SpaceID.String()
 	}
 	var req struct {
 		ContributionID string                      `json:"contributionId"`
@@ -947,7 +947,7 @@ func (h *HTTPHandler) handleWebUISessionCollection(w http.ResponseWriter, r *htt
 		GrantedScopes:      auth.GrantedScopes,
 		ScopeSnapshotID:    scopeSnapshotID,
 	}
-	sreq.UserID = actorUserID
+	sreq.SpaceID = actorSpaceID
 	sreq.DeviceID = actorDeviceID
 	result, err := h.sandboxHost.CreateSession(sreq)
 	if err != nil {
@@ -1221,19 +1221,19 @@ func (h *HTTPHandler) handleWebUIBridge(w http.ResponseWriter, r *http.Request) 
 		writeError(w, http.StatusNotFound, "webui_session_not_found", err.Error())
 		return
 	}
-	if sess.UserID == "" || sess.DeviceID == "" {
-		bindUserID := ""
+	if sess.SpaceID == "" || sess.DeviceID == "" {
+		bindSpaceID := ""
 		bindDeviceID := ""
 		if actor, ok := auth.FromContext(r.Context()); ok && actor != nil {
-			bindUserID = actor.UserID.String()
+			bindSpaceID = actor.SpaceID.String()
 			bindDeviceID = actor.DeviceID.String()
 		}
 		if bindDeviceID == "" {
 			bindDeviceID = strings.TrimSpace(r.Header.Get("X-Amitia-Device-ID"))
 		}
-		if bindUserID != "" || bindDeviceID != "" {
-			if sess.BindIdentityIfNeeded(bindUserID, bindDeviceID) {
-				log.Printf("[ui-action] bridge identity backfill: session=%s user=%q device=%q", sessionID, sess.UserID, sess.DeviceID)
+		if bindSpaceID != "" || bindDeviceID != "" {
+			if sess.BindIdentityIfNeeded(bindSpaceID, bindDeviceID) {
+				log.Printf("[ui-action] bridge identity backfill: session=%s user=%q device=%q", sessionID, sess.SpaceID, sess.DeviceID)
 			}
 		}
 	}
@@ -1342,7 +1342,7 @@ func (h *HTTPHandler) handleHostSession(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	actor, ok := auth.FromContext(r.Context())
-	if !ok || actor == nil || strings.TrimSpace(actor.UserID.String()) == "" {
+	if !ok || actor == nil || strings.TrimSpace(actor.SpaceID.String()) == "" {
 		writeError(w, http.StatusUnauthorized, "unauthorized", "authenticated user is required")
 		return
 	}
@@ -1384,7 +1384,7 @@ func (h *HTTPHandler) handleHostSession(w http.ResponseWriter, r *http.Request) 
 	entry := &host_registry.HostEntry{
 		EntryID:         hostClientID,
 		Kind:            host_registry.RegistryEntryKindUIHost,
-		UserID:          actor.UserID,
+		SpaceID:         actor.SpaceID,
 		DeviceID:        deviceID,
 		Platform:        platform,
 		Features:        features,
@@ -1449,7 +1449,7 @@ func (h *HTTPHandler) handleHostSessionDisconnect(w http.ResponseWriter, r *http
 
 func (h *HTTPHandler) authorizedHostSessionRequest(w http.ResponseWriter, r *http.Request) (string, string, bool) {
 	actor, ok := auth.FromContext(r.Context())
-	if !ok || actor == nil || strings.TrimSpace(actor.UserID.String()) == "" {
+	if !ok || actor == nil || strings.TrimSpace(actor.SpaceID.String()) == "" {
 		writeError(w, http.StatusUnauthorized, "unauthorized", "authenticated user is required")
 		return "", "", false
 	}
@@ -1472,7 +1472,7 @@ func (h *HTTPHandler) authorizedHostSessionRequest(w http.ResponseWriter, r *htt
 		writeError(w, http.StatusNotFound, "host_session_not_found", "UI host session not found")
 		return "", "", false
 	}
-	if entry.UserID != actor.UserID || entry.HostSessionID != req.HostSessionID {
+	if entry.SpaceID != actor.SpaceID || entry.HostSessionID != req.HostSessionID {
 		writeError(w, http.StatusForbidden, "host_session_mismatch", "UI host session does not belong to this actor")
 		return "", "", false
 	}
@@ -1603,11 +1603,11 @@ func (h *HTTPHandler) handleClientRuntimeState(w http.ResponseWriter, r *http.Re
 		writeError(w, http.StatusBadRequest, "missing_param", "conversationId is required")
 		return
 	}
-	userID := ""
+	spaceID := ""
 	if actor, ok := auth.FromContext(r.Context()); ok && actor != nil {
-		userID = actor.UserID.String()
+		spaceID = actor.SpaceID.String()
 	}
-	writeJSON(w, http.StatusOK, scoped.ClientRuntimeSessionState(userID, conversationID))
+	writeJSON(w, http.StatusOK, scoped.ClientRuntimeSessionState(spaceID, conversationID))
 }
 
 func (h *HTTPHandler) handleClientRuntimeSessionAck(w http.ResponseWriter, r *http.Request) {
@@ -1633,11 +1633,11 @@ func (h *HTTPHandler) handleClientRuntimeSessionAck(w http.ResponseWriter, r *ht
 		writeError(w, http.StatusBadRequest, "missing_param", "conversationId is required")
 		return
 	}
-	userID := ""
+	spaceID := ""
 	if actor, ok := auth.FromContext(r.Context()); ok && actor != nil {
-		userID = actor.UserID.String()
+		spaceID = actor.SpaceID.String()
 	}
-	state, err := scoped.AcknowledgeClientRuntimeSession(userID, req.ConversationID, req.Revision)
+	state, err := scoped.AcknowledgeClientRuntimeSession(spaceID, req.ConversationID, req.Revision)
 	if err != nil {
 		writeJSON(w, http.StatusConflict, map[string]any{"error": "client_runtime_revision_conflict", "message": err.Error(), "state": state})
 		return

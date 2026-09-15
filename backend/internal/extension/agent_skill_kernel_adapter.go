@@ -14,7 +14,7 @@ func NewAgentSkillKernelAdapter(service *AgentSkillService) kernel.AgentSkillBac
 	return &agentSkillServiceAdapter{service: service}
 }
 
-func (a *agentSkillServiceAdapter) ResolveCatalog(ctx context.Context, scope kernel.LegacyScope) ([]kernel.SkillCatalogEntry, error) {
+func (a *agentSkillServiceAdapter) ResolveCatalog(ctx context.Context, scope kernel.InvocationScope) ([]kernel.SkillCatalogEntry, error) {
 	extScope := legacyScopeToKernel(scope)
 	catalog, err := a.service.ResolveCatalog(ctx, extScope)
 	if err != nil {
@@ -33,7 +33,7 @@ func (a *agentSkillServiceAdapter) ResolveCatalog(ctx context.Context, scope ker
 	return result, nil
 }
 
-func (a *agentSkillServiceAdapter) Activate(ctx context.Context, scope kernel.LegacyScope, name string, explicit bool) (kernel.SkillActivationResult, error) {
+func (a *agentSkillServiceAdapter) Activate(ctx context.Context, scope kernel.InvocationScope, name string, explicit bool) (kernel.SkillActivationResult, error) {
 	extScope := legacyScopeToKernel(scope)
 	activated, err := a.service.Activate(ctx, ActivateAgentSkillRequest{
 		Scope:    extScope,
@@ -55,7 +55,7 @@ func (a *agentSkillServiceAdapter) Activate(ctx context.Context, scope kernel.Le
 	}, nil
 }
 
-func (a *agentSkillServiceAdapter) ActivePrompts(ctx context.Context, scope kernel.LegacyScope) ([]kernel.SkillActivePrompt, error) {
+func (a *agentSkillServiceAdapter) ActivePrompts(ctx context.Context, scope kernel.InvocationScope) ([]kernel.SkillActivePrompt, error) {
 	extScope := legacyScopeToKernel(scope)
 	_, activatedSkills, _ := a.service.PreparePrompt(ctx, extScope, "")
 	result := make([]kernel.SkillActivePrompt, 0, len(activatedSkills))
@@ -75,13 +75,13 @@ func (a *agentSkillServiceAdapter) ActivePrompts(ctx context.Context, scope kern
 	return result, nil
 }
 
-func (a *agentSkillServiceAdapter) EndRound(scope kernel.LegacyScope) {
+func (a *agentSkillServiceAdapter) EndRound(scope kernel.InvocationScope) {
 	a.service.EndRound(legacyScopeToKernel(scope))
 }
 
-func legacyScopeToKernel(scope kernel.LegacyScope) ExecutionScope {
+func legacyScopeToKernel(scope kernel.InvocationScope) ExecutionScope {
 	return ExecutionScope{
-		UserID:         scope.UserID,
+		SpaceID:        scope.SpaceID,
 		CharacterID:    scope.CharacterID,
 		ConversationID: scope.ConversationID,
 		Channel:        scope.Channel,

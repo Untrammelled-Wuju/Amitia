@@ -87,7 +87,7 @@ func createPackageArtifactPreview(c *gin.Context, runtime *Runtime) {
 		return
 	}
 	defer file.Close()
-	request := kernelruntime.PackagePreviewRequest{UserID: kernelAPIUser(c), ScopeType: c.Request.FormValue("scopeType"), ScopeID: c.Request.FormValue("scopeId"), FileName: header.Filename,
+	request := kernelruntime.PackagePreviewRequest{SpaceID: kernelAPIUser(c), ScopeType: c.Request.FormValue("scopeType"), ScopeID: c.Request.FormValue("scopeId"), FileName: header.Filename,
 		AllowUnsignedDev: strings.EqualFold(c.Request.FormValue("allowUnsignedDev"), "true"), DeveloperSessionID: c.Request.FormValue("developerSessionId")}
 	if request.ScopeType == "" {
 		request.ScopeType = "global"
@@ -98,7 +98,7 @@ func createPackageArtifactPreview(c *gin.Context, runtime *Runtime) {
 		c.JSON(status, gin.H{"error": msg, "code": code})
 		return
 	}
-	presentation, err := kernelReadImportSession(c.Request.Context(), runtime, preview.SessionID, request.UserID, request.ScopeType, request.ScopeID)
+	presentation, err := kernelReadImportSession(c.Request.Context(), runtime, preview.SessionID, request.SpaceID, request.ScopeType, request.ScopeID)
 	if err != nil {
 		status, code, msg := kernelruntime.PackageErrorResponse(err)
 		c.JSON(status, gin.H{"error": msg, "code": code})
@@ -124,7 +124,7 @@ func confirmPackagePreview(c *gin.Context, runtime *Runtime) {
 	if body.ScopeType == "" {
 		body.ScopeType = "global"
 	}
-	confirmation, err := runtime.Kernel.ConfirmPackagePreview(c.Request.Context(), kernelruntime.PackagePreviewConfirmationRequest{SessionID: c.Param("sessionId"), UserID: kernelAPIUser(c), ScopeType: body.ScopeType, ScopeID: body.ScopeID, Confirmations: body.Confirmations})
+	confirmation, err := runtime.Kernel.ConfirmPackagePreview(c.Request.Context(), kernelruntime.PackagePreviewConfirmationRequest{SessionID: c.Param("sessionId"), SpaceID: kernelAPIUser(c), ScopeType: body.ScopeType, ScopeID: body.ScopeID, Confirmations: body.Confirmations})
 	if err != nil {
 		status, code, msg := kernelruntime.PackageErrorResponse(err)
 		c.JSON(status, gin.H{"error": msg, "code": code})
@@ -143,7 +143,7 @@ func executePackageInstallOperation(c *gin.Context, runtime *Runtime) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "install operation request invalid"})
 		return
 	}
-	request.UserID = kernelAPIUser(c)
+	request.SpaceID = kernelAPIUser(c)
 	if request.ScopeType == "" {
 		request.ScopeType = "global"
 	}
@@ -170,7 +170,7 @@ func executePackageUpdateOperation(c *gin.Context, runtime *Runtime) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "update operation request invalid"})
 		return
 	}
-	request.UserID = kernelAPIUser(c)
+	request.SpaceID = kernelAPIUser(c)
 	if request.ScopeType == "" {
 		request.ScopeType = "global"
 	}

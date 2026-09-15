@@ -1428,7 +1428,7 @@ func (s *BuiltinUtilityService) getSSH(invocation capability.ToolInvocationConte
 }
 
 func sshScopeKey(invocation capability.ToolInvocationContext) (string, bool) {
-	parts := []string{invocation.UserID, invocation.ConversationID, invocation.CharacterID, invocation.SessionID}
+	parts := []string{invocation.SpaceID, invocation.ConversationID, invocation.CharacterID, invocation.SessionID}
 	nonEmpty := false
 	for i := range parts {
 		parts[i] = strings.TrimSpace(parts[i])

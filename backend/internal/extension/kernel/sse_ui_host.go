@@ -60,7 +60,7 @@ type clientRuntimePackageState struct {
 }
 
 type clientRuntimeSessionState struct {
-	UserID         string                                `json:"userId"`
+	SpaceID        string                                `json:"spaceId"`
 	ConversationID string                                `json:"conversationId"`
 	Revision       int64                                 `json:"revision"`
 	Packages       map[string]*clientRuntimePackageState `json:"packages"`
@@ -121,7 +121,7 @@ func (n *SSEUIHostNotifier) SetClientRuntimeDatabase(db *sql.DB) {
 
 func (n *SSEUIHostNotifier) Notify(ctx context.Context, extensionID string, title string, body string, severity string) error {
 	if n.hostRegistry != nil {
-		target, err := n.hostRegistry.FindTargetHostString(ctx, uiHostUserID(ctx), host_registry.CapUINotify, "", "")
+		target, err := n.hostRegistry.FindTargetHostString(ctx, uiHostSpaceID(ctx), host_registry.CapUINotify, "", "")
 		if err != nil {
 			return err
 		}
@@ -168,7 +168,7 @@ func (n *SSEUIHostNotifier) Dialog(ctx context.Context, extensionID string, dial
 	}
 
 	if n.hostRegistry != nil {
-		target, err := n.hostRegistry.FindTargetHostString(ctx, uiHostUserID(ctx), host_registry.CapUIDialog, "", "")
+		target, err := n.hostRegistry.FindTargetHostString(ctx, uiHostSpaceID(ctx), host_registry.CapUIDialog, "", "")
 		if err != nil {
 			return "", err
 		}
@@ -232,7 +232,7 @@ func (n *SSEUIHostNotifier) Dialog(ctx context.Context, extensionID string, dial
 
 func (n *SSEUIHostNotifier) Navigate(ctx context.Context, extensionID string, target string) error {
 	if n.hostRegistry != nil {
-		host, err := n.hostRegistry.FindTargetHostString(ctx, uiHostUserID(ctx), host_registry.CapUINavigate, "", "")
+		host, err := n.hostRegistry.FindTargetHostString(ctx, uiHostSpaceID(ctx), host_registry.CapUINavigate, "", "")
 		if err != nil {
 			return err
 		}
@@ -332,26 +332,26 @@ func (n *SSEUIHostNotifier) HasPendingDialog(dialogID string) bool {
 	return ok
 }
 
-func (n *SSEUIHostNotifier) cloneClientRuntimeSessionForScope(userID, conversationID string) *clientRuntimeSessionState {
+func (n *SSEUIHostNotifier) cloneClientRuntimeSessionForScope(spaceID, conversationID string) *clientRuntimeSessionState {
 	n.mu.Lock()
 	defer n.mu.Unlock()
-	return cloneClientRuntimeSessionState(n.runtimeSessionLocked(userID, conversationID))
+	return cloneClientRuntimeSessionState(n.runtimeSessionLocked(spaceID, conversationID))
 }
 
-func (n *SSEUIHostNotifier) restoreClientRuntimeSession(userID, conversationID string, previous *clientRuntimeSessionState) (map[string]interface{}, error) {
+func (n *SSEUIHostNotifier) restoreClientRuntimeSession(spaceID, conversationID string, previous *clientRuntimeSessionState) (map[string]interface{}, error) {
 	if previous == nil {
 		return nil, fmt.Errorf("previous client runtime state is unavailable")
 	}
 	n.mu.Lock()
 	defer n.mu.Unlock()
-	key := clientRuntimeScopeKey(userID, conversationID)
-	current := n.runtimeSessionLocked(userID, conversationID)
+	key := clientRuntimeScopeKey(spaceID, conversationID)
+	current := n.runtimeSessionLocked(spaceID, conversationID)
 	currentClone := cloneClientRuntimeSessionState(current)
 	restored := cloneClientRuntimeSessionState(previous)
 	if restored == nil {
 		return nil, fmt.Errorf("previous client runtime state is invalid")
 	}
-	restored.UserID, restored.ConversationID = userID, conversationID
+	restored.SpaceID, restored.ConversationID = spaceID, conversationID
 	if restored.Revision <= current.Revision {
 		restored.Revision = current.Revision + 1
 	}
@@ -374,10 +374,10 @@ func clientRuntimeActionIsActivation(action string) bool {
 	}
 }
 
-func (n *SSEUIHostNotifier) markClientRuntimeTransitionAwaiting(userID, conversationID, packageID, runID string) (map[string]interface{}, error) {
+func (n *SSEUIHostNotifier) markClientRuntimeTransitionAwaiting(spaceID, conversationID, packageID, runID string) (map[string]interface{}, error) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
-	state := n.runtimeSessionLocked(userID, conversationID)
+	state := n.runtimeSessionLocked(spaceID, conversationID)
 	original := cloneClientRuntimeSessionState(state)
 	record := state.Packages[strings.TrimSpace(packageID)]
 	if record == nil || record.TransitionRunID == "" || record.TransitionRunID != strings.TrimSpace(runID) {
@@ -388,17 +388,17 @@ func (n *SSEUIHostNotifier) markClientRuntimeTransitionAwaiting(userID, conversa
 	state.Revision++
 	if err := n.persistClientRuntimeSessionLocked(state); err != nil {
 		if original != nil {
-			n.clientRuntimeSessions[clientRuntimeScopeKey(userID, conversationID)] = original
+			n.clientRuntimeSessions[clientRuntimeScopeKey(spaceID, conversationID)] = original
 		}
 		return nil, err
 	}
 	return snapshotClientRuntimeState(state), nil
 }
 
-func (n *SSEUIHostNotifier) commitClientRuntimeTransition(userID, conversationID, packageID, runID string) (map[string]interface{}, error) {
+func (n *SSEUIHostNotifier) commitClientRuntimeTransition(spaceID, conversationID, packageID, runID string) (map[string]interface{}, error) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
-	state := n.runtimeSessionLocked(userID, conversationID)
+	state := n.runtimeSessionLocked(spaceID, conversationID)
 	original := cloneClientRuntimeSessionState(state)
 	record := state.Packages[strings.TrimSpace(packageID)]
 	if record == nil {
@@ -416,7 +416,7 @@ func (n *SSEUIHostNotifier) commitClientRuntimeTransition(userID, conversationID
 	state.Revision++
 	if err := n.persistClientRuntimeSessionLocked(state); err != nil {
 		if original != nil {
-			n.clientRuntimeSessions[clientRuntimeScopeKey(userID, conversationID)] = original
+			n.clientRuntimeSessions[clientRuntimeScopeKey(spaceID, conversationID)] = original
 		}
 		return nil, err
 	}
@@ -424,7 +424,7 @@ func (n *SSEUIHostNotifier) commitClientRuntimeTransition(userID, conversationID
 }
 
 func (n *SSEUIHostNotifier) failClientRuntimeTransition(
-	userID, conversationID, packageID, runID, reason string,
+	spaceID, conversationID, packageID, runID, reason string,
 	previous *clientRuntimeSessionState,
 ) (map[string]interface{}, error) {
 	if previous == nil {
@@ -432,15 +432,15 @@ func (n *SSEUIHostNotifier) failClientRuntimeTransition(
 	}
 	n.mu.Lock()
 	defer n.mu.Unlock()
-	key := clientRuntimeScopeKey(userID, conversationID)
-	current := n.runtimeSessionLocked(userID, conversationID)
+	key := clientRuntimeScopeKey(spaceID, conversationID)
+	current := n.runtimeSessionLocked(spaceID, conversationID)
 	currentClone := cloneClientRuntimeSessionState(current)
 	currentRecord := current.Packages[strings.TrimSpace(packageID)]
 	restored := cloneClientRuntimeSessionState(previous)
 	if restored == nil {
 		return nil, fmt.Errorf("previous client runtime state is invalid")
 	}
-	restored.UserID, restored.ConversationID = userID, conversationID
+	restored.SpaceID, restored.ConversationID = spaceID, conversationID
 	if restored.Packages == nil {
 		restored.Packages = make(map[string]*clientRuntimePackageState)
 	}
@@ -508,10 +508,10 @@ func clientRuntimeActionRequiresRollback(action string) bool {
 	}
 }
 
-func (n *SSEUIHostNotifier) clientRuntimeSelectedVersion(userID, conversationID, packageID, requested string) (string, bool, error) {
+func (n *SSEUIHostNotifier) clientRuntimeSelectedVersion(spaceID, conversationID, packageID, requested string) (string, bool, error) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
-	state := n.runtimeSessionLocked(userID, conversationID)
+	state := n.runtimeSessionLocked(spaceID, conversationID)
 	record := state.Packages[strings.TrimSpace(packageID)]
 	if record == nil {
 		return "", false, fmt.Errorf("client package %s is not defined in this conversation", packageID)
@@ -530,10 +530,10 @@ func (n *SSEUIHostNotifier) clientRuntimeSelectedVersion(userID, conversationID,
 	return version, approved, nil
 }
 
-func (n *SSEUIHostNotifier) approveClientRuntimeVersion(userID, conversationID, packageID, version string, futureVersions bool) error {
+func (n *SSEUIHostNotifier) approveClientRuntimeVersion(spaceID, conversationID, packageID, version string, futureVersions bool) error {
 	n.mu.Lock()
 	defer n.mu.Unlock()
-	state := n.runtimeSessionLocked(userID, conversationID)
+	state := n.runtimeSessionLocked(spaceID, conversationID)
 	original := cloneClientRuntimeSessionState(state)
 	record := state.Packages[packageID]
 	if record == nil || record.Versions[version] == nil {
@@ -552,18 +552,18 @@ func (n *SSEUIHostNotifier) approveClientRuntimeVersion(userID, conversationID, 
 	state.Revision++
 	if err := n.persistClientRuntimeSessionLocked(state); err != nil {
 		if original != nil {
-			n.clientRuntimeSessions[clientRuntimeScopeKey(userID, conversationID)] = original
+			n.clientRuntimeSessions[clientRuntimeScopeKey(spaceID, conversationID)] = original
 		}
 		return err
 	}
 	return nil
 }
 
-func (n *SSEUIHostNotifier) requestClientRuntimeApproval(ctx context.Context, userID, conversationID, packageID, version string) (string, error) {
+func (n *SSEUIHostNotifier) requestClientRuntimeApproval(ctx context.Context, spaceID, conversationID, packageID, version string) (string, error) {
 	if n.hostRegistry == nil {
 		return "version", nil
 	}
-	target, err := n.hostRegistry.FindTargetHostString(ctx, userID, host_registry.CapUIDialog, "", "")
+	target, err := n.hostRegistry.FindTargetHostString(ctx, spaceID, host_registry.CapUIDialog, "", "")
 	if err != nil {
 		return "", err
 	}
@@ -625,7 +625,7 @@ func (n *SSEUIHostNotifier) ExecuteClientRuntimeCommand(ctx context.Context, act
 	if action == "" {
 		return nil, fmt.Errorf("client runtime command action is required")
 	}
-	userID, conversationID := clientRuntimeScopeFromPayload(payload)
+	spaceID, conversationID := clientRuntimeScopeFromPayload(payload)
 	if conversationID == "" {
 		return nil, fmt.Errorf("client runtime command conversation scope is required")
 	}
@@ -636,44 +636,44 @@ func (n *SSEUIHostNotifier) ExecuteClientRuntimeCommand(ctx context.Context, act
 		if requestedVersion == "<nil>" {
 			requestedVersion = ""
 		}
-		version, approved, approvalErr := n.clientRuntimeSelectedVersion(userID, conversationID, packageID, requestedVersion)
+		version, approved, approvalErr := n.clientRuntimeSelectedVersion(spaceID, conversationID, packageID, requestedVersion)
 		if approvalErr != nil {
 			return nil, approvalErr
 		}
 		if !approved {
-			decision, approvalErr := n.requestClientRuntimeApproval(ctx, userID, conversationID, packageID, version)
+			decision, approvalErr := n.requestClientRuntimeApproval(ctx, spaceID, conversationID, packageID, version)
 			if approvalErr != nil {
 				return nil, approvalErr
 			}
 			if decision == "deny" {
 				return nil, fmt.Errorf("dynamic client package %s@%s was denied by the user", packageID, version)
 			}
-			if approvalErr := n.approveClientRuntimeVersion(userID, conversationID, packageID, version, decision == "future"); approvalErr != nil {
+			if approvalErr := n.approveClientRuntimeVersion(spaceID, conversationID, packageID, version, decision == "future"); approvalErr != nil {
 				return nil, approvalErr
 			}
 			payload["version"] = version
 		}
 	}
 
-	previousState := n.cloneClientRuntimeSessionForScope(userID, conversationID)
+	previousState := n.cloneClientRuntimeSessionForScope(spaceID, conversationID)
 
 	var serverResult map[string]interface{}
 	var err error
 	if action == "define" {
-		if err = n.recordClientRuntimeDefinition(userID, conversationID, payload); err != nil {
+		if err = n.recordClientRuntimeDefinition(spaceID, conversationID, payload); err != nil {
 			return nil, err
 		}
-		serverResult, err = n.applyClientRuntimeState(userID, conversationID, action, payload, nil)
+		serverResult, err = n.applyClientRuntimeState(spaceID, conversationID, action, payload, nil)
 	} else {
-		serverResult, err = n.applyClientRuntimeState(userID, conversationID, action, payload, nil)
+		serverResult, err = n.applyClientRuntimeState(spaceID, conversationID, action, payload, nil)
 	}
 	if err != nil {
 		return nil, err
 	}
-	authoritativeState := n.ClientRuntimeSessionState(userID, conversationID)
+	authoritativeState := n.ClientRuntimeSessionState(spaceID, conversationID)
 	serverResult["serverState"] = authoritativeState
 
-	targets, err := n.clientRuntimeTargets(ctx, userID)
+	targets, err := n.clientRuntimeTargets(ctx, spaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -684,7 +684,7 @@ func (n *SSEUIHostNotifier) ExecuteClientRuntimeCommand(ctx context.Context, act
 	transitionRunID := runtimeMapString(serverResult, "pluginRunId", "runId")
 	if len(targets) == 0 {
 		if clientRuntimeActionIsActivation(action) && transitionRunID != "" {
-			awaitingState, awaitingErr := n.markClientRuntimeTransitionAwaiting(userID, conversationID, transitionPackageID, transitionRunID)
+			awaitingState, awaitingErr := n.markClientRuntimeTransitionAwaiting(spaceID, conversationID, transitionPackageID, transitionRunID)
 			if awaitingErr != nil {
 				return nil, awaitingErr
 			}
@@ -729,7 +729,7 @@ func (n *SSEUIHostNotifier) ExecuteClientRuntimeCommand(ctx context.Context, act
 			"reconcileOnly":  true,
 			"hostClientId":   target.HostClientID,
 			"hostSessionId":  target.HostSessionID,
-			"userId":         userID,
+			"spaceId":        spaceID,
 			"conversationId": conversationID,
 			"sessionState":   authoritativeState,
 			"expectResponse": true,
@@ -800,7 +800,7 @@ collect:
 	if clientRuntimeActionIsActivation(action) && transitionRunID != "" {
 		if hostErrors > 0 {
 			reason := fmt.Sprintf("%d active host(s) rejected runtime activation", hostErrors)
-			failedState, failErr := n.failClientRuntimeTransition(userID, conversationID, transitionPackageID, transitionRunID, reason, previousState)
+			failedState, failErr := n.failClientRuntimeTransition(spaceID, conversationID, transitionPackageID, transitionRunID, reason, previousState)
 			if failErr != nil {
 				return nil, fmt.Errorf("client runtime activation failed and failure state could not be persisted: %w", failErr)
 			}
@@ -808,22 +808,22 @@ collect:
 			serverResult["delivery"] = "failed"
 			serverResult["state"] = "failed"
 			serverResult["lastError"] = reason
-			n.broadcastClientRuntimeSnapshot(targets, userID, conversationID, failedState)
+			n.broadcastClientRuntimeSnapshot(targets, spaceID, conversationID, failedState)
 			return serverResult, fmt.Errorf("client runtime activation failed on %d host(s)", hostErrors)
 		}
 		if activeSuccesses == 0 {
-			awaitingState, awaitingErr := n.markClientRuntimeTransitionAwaiting(userID, conversationID, transitionPackageID, transitionRunID)
+			awaitingState, awaitingErr := n.markClientRuntimeTransitionAwaiting(spaceID, conversationID, transitionPackageID, transitionRunID)
 			if awaitingErr != nil {
 				return nil, awaitingErr
 			}
 			serverResult["serverState"] = awaitingState
 			serverResult["delivery"] = "deferred"
 			serverResult["state"] = "awaiting_client"
-			n.broadcastClientRuntimeSnapshot(targets, userID, conversationID, awaitingState)
+			n.broadcastClientRuntimeSnapshot(targets, spaceID, conversationID, awaitingState)
 			return serverResult, nil
 		}
 
-		committedState, commitErr := n.commitClientRuntimeTransition(userID, conversationID, transitionPackageID, transitionRunID)
+		committedState, commitErr := n.commitClientRuntimeTransition(spaceID, conversationID, transitionPackageID, transitionRunID)
 		if commitErr != nil {
 			return nil, commitErr
 		}
@@ -837,19 +837,19 @@ collect:
 		default:
 			serverResult["delivery"] = "partial"
 		}
-		n.broadcastClientRuntimeSnapshot(targets, userID, conversationID, committedState)
+		n.broadcastClientRuntimeSnapshot(targets, spaceID, conversationID, committedState)
 		return serverResult, nil
 	}
 
 	if hostErrors > 0 && clientRuntimeActionRequiresRollback(action) {
-		rollbackState, rollbackErr := n.restoreClientRuntimeSession(userID, conversationID, previousState)
+		rollbackState, rollbackErr := n.restoreClientRuntimeSession(spaceID, conversationID, previousState)
 		if rollbackErr != nil {
 			return nil, fmt.Errorf("client runtime reconciliation failed on %d host(s); rollback failed: %w", hostErrors, rollbackErr)
 		}
 		serverResult["serverState"] = rollbackState
 		serverResult["delivery"] = "rolled_back"
 		serverResult["rollbackReason"] = fmt.Sprintf("%d active host(s) rejected runtime revision", hostErrors)
-		n.broadcastClientRuntimeSnapshot(targets, userID, conversationID, rollbackState)
+		n.broadcastClientRuntimeSnapshot(targets, spaceID, conversationID, rollbackState)
 		return serverResult, fmt.Errorf("client runtime transition rolled back after %d host reconciliation error(s)", hostErrors)
 	}
 	switch {
@@ -865,7 +865,7 @@ collect:
 
 func (n *SSEUIHostNotifier) broadcastClientRuntimeSnapshot(
 	targets []*host_registry.HostEntry,
-	userID, conversationID string,
+	spaceID, conversationID string,
 	state map[string]interface{},
 ) {
 	if n.hub == nil || len(targets) == 0 || state == nil {
@@ -884,7 +884,7 @@ func (n *SSEUIHostNotifier) broadcastClientRuntimeSnapshot(
 			"expectResponse": false,
 			"hostClientId":   target.HostClientID,
 			"hostSessionId":  target.HostSessionID,
-			"userId":         userID,
+			"spaceId":        spaceID,
 			"conversationId": conversationID,
 			"sessionState":   state,
 		}
@@ -893,11 +893,11 @@ func (n *SSEUIHostNotifier) broadcastClientRuntimeSnapshot(
 	}
 }
 
-func (n *SSEUIHostNotifier) clientRuntimeTargets(ctx context.Context, userID string) ([]*host_registry.HostEntry, error) {
+func (n *SSEUIHostNotifier) clientRuntimeTargets(ctx context.Context, spaceID string) ([]*host_registry.HostEntry, error) {
 	if n.hub == nil || n.hostRegistry == nil {
 		return nil, nil
 	}
-	hosts, err := n.hostRegistry.ListReadyHostsString(ctx, userID, host_registry.CapUINotify)
+	hosts, err := n.hostRegistry.ListReadyHostsString(ctx, spaceID, host_registry.CapUINotify)
 	if err != nil {
 		return nil, err
 	}
@@ -910,9 +910,9 @@ func (n *SSEUIHostNotifier) clientRuntimeTargets(ctx context.Context, userID str
 	return result, nil
 }
 
-func uiHostUserID(ctx context.Context) string {
+func uiHostSpaceID(ctx context.Context) string {
 	if actor, ok := auth.FromContext(ctx); ok && actor != nil {
-		return strings.TrimSpace(actor.UserID.String())
+		return strings.TrimSpace(actor.SpaceID.String())
 	}
 	return ""
 }
@@ -922,29 +922,29 @@ func clientRuntimeScopeFromPayload(payload map[string]interface{}) (string, stri
 	if raw == nil {
 		return "", ""
 	}
-	userID, conversationID := strings.TrimSpace(fmt.Sprint(raw["userId"])), strings.TrimSpace(fmt.Sprint(raw["conversationId"]))
-	if userID == "<nil>" {
-		userID = ""
+	spaceID, conversationID := strings.TrimSpace(fmt.Sprint(raw["spaceId"])), strings.TrimSpace(fmt.Sprint(raw["conversationId"]))
+	if spaceID == "<nil>" {
+		spaceID = ""
 	}
 	if conversationID == "<nil>" {
 		conversationID = ""
 	}
-	return userID, conversationID
+	return spaceID, conversationID
 }
 
-func clientRuntimeScopeKey(userID, conversationID string) string {
-	return strings.TrimSpace(userID) + "\x00" + strings.TrimSpace(conversationID)
+func clientRuntimeScopeKey(spaceID, conversationID string) string {
+	return strings.TrimSpace(spaceID) + "\x00" + strings.TrimSpace(conversationID)
 }
 
-func (n *SSEUIHostNotifier) runtimeSessionLocked(userID, conversationID string) *clientRuntimeSessionState {
-	key := clientRuntimeScopeKey(userID, conversationID)
+func (n *SSEUIHostNotifier) runtimeSessionLocked(spaceID, conversationID string) *clientRuntimeSessionState {
+	key := clientRuntimeScopeKey(spaceID, conversationID)
 	state := n.clientRuntimeSessions[key]
 	if state != nil {
 		return state
 	}
 	if n.clientRuntimeDB != nil {
 		var raw string
-		err := n.clientRuntimeDB.QueryRow(`SELECT state_json FROM extension_client_runtime_sessions WHERE user_id = ? AND conversation_id = ?`, userID, conversationID).Scan(&raw)
+		err := n.clientRuntimeDB.QueryRow(`SELECT state_json FROM extension_client_runtime_sessions WHERE space_id = ? AND conversation_id = ?`, spaceID, conversationID).Scan(&raw)
 		if err == nil {
 			var loaded clientRuntimeSessionState
 			if json.Unmarshal([]byte(raw), &loaded) == nil {
@@ -962,13 +962,13 @@ func (n *SSEUIHostNotifier) runtimeSessionLocked(userID, conversationID string) 
 						record.ApprovedVersions = make(map[string]bool)
 					}
 				}
-				loaded.UserID, loaded.ConversationID = userID, conversationID
+				loaded.SpaceID, loaded.ConversationID = spaceID, conversationID
 				state = &loaded
 			}
 		}
 	}
 	if state == nil {
-		state = &clientRuntimeSessionState{UserID: userID, ConversationID: conversationID, Packages: make(map[string]*clientRuntimePackageState)}
+		state = &clientRuntimeSessionState{SpaceID: spaceID, ConversationID: conversationID, Packages: make(map[string]*clientRuntimePackageState)}
 	}
 	n.clientRuntimeSessions[key] = state
 	return state
@@ -983,14 +983,14 @@ func (n *SSEUIHostNotifier) persistClientRuntimeSessionLocked(state *clientRunti
 		return err
 	}
 	_, err = n.clientRuntimeDB.Exec(`
-		INSERT INTO extension_client_runtime_sessions(user_id, conversation_id, state_json, updated_at)
+		INSERT INTO extension_client_runtime_sessions(space_id, conversation_id, state_json, updated_at)
 		VALUES (?, ?, ?, ?)
-		ON CONFLICT(user_id, conversation_id) DO UPDATE SET state_json = excluded.state_json, updated_at = excluded.updated_at
-	`, state.UserID, state.ConversationID, string(raw), time.Now().UTC())
+		ON CONFLICT(space_id, conversation_id) DO UPDATE SET state_json = excluded.state_json, updated_at = excluded.updated_at
+	`, state.SpaceID, state.ConversationID, string(raw), time.Now().UTC())
 	return err
 }
 
-func (n *SSEUIHostNotifier) recordClientRuntimeDefinition(userID, conversationID string, payload map[string]interface{}) error {
+func (n *SSEUIHostNotifier) recordClientRuntimeDefinition(spaceID, conversationID string, payload map[string]interface{}) error {
 	pkg, ok := payload["package"].(map[string]interface{})
 	if !ok {
 		return fmt.Errorf("define requires package")
@@ -1005,7 +1005,7 @@ func (n *SSEUIHostNotifier) recordClientRuntimeDefinition(userID, conversationID
 	copyValue := cloneInterfaceMap(pkg)
 	n.mu.Lock()
 	defer n.mu.Unlock()
-	state := n.runtimeSessionLocked(userID, conversationID)
+	state := n.runtimeSessionLocked(spaceID, conversationID)
 	original := cloneClientRuntimeSessionState(state)
 	record := state.Packages[id]
 	if record == nil {
@@ -1028,7 +1028,7 @@ func (n *SSEUIHostNotifier) recordClientRuntimeDefinition(userID, conversationID
 	state.Revision++
 	if err := n.persistClientRuntimeSessionLocked(state); err != nil {
 		if original != nil {
-			n.clientRuntimeSessions[clientRuntimeScopeKey(userID, conversationID)] = original
+			n.clientRuntimeSessions[clientRuntimeScopeKey(spaceID, conversationID)] = original
 		}
 		return err
 	}
@@ -1303,17 +1303,17 @@ func clearClientRuntimeTransition(record *clientRuntimePackageState) {
 	record.LastTransitionAt = time.Now().UTC().Format(time.RFC3339Nano)
 }
 
-func (n *SSEUIHostNotifier) applyClientRuntimeState(userID, conversationID, action string, payload, browserResult map[string]interface{}) (map[string]interface{}, error) {
+func (n *SSEUIHostNotifier) applyClientRuntimeState(spaceID, conversationID, action string, payload, browserResult map[string]interface{}) (map[string]interface{}, error) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
-	state := n.runtimeSessionLocked(userID, conversationID)
+	state := n.runtimeSessionLocked(spaceID, conversationID)
 	original := cloneClientRuntimeSessionState(state)
 	id := strings.TrimSpace(fmt.Sprint(payload["id"]))
 	if id == "<nil>" {
 		id = ""
 	}
 	result := cloneInterfaceMap(browserResult)
-	result["scope"] = map[string]interface{}{"userId": userID, "conversationId": conversationID}
+	result["scope"] = map[string]interface{}{"spaceId": spaceID, "conversationId": conversationID}
 	mutated := false
 	switch action {
 	case "inspect":
@@ -1432,7 +1432,7 @@ func (n *SSEUIHostNotifier) applyClientRuntimeState(userID, conversationID, acti
 	}
 	if err := n.persistClientRuntimeSessionLocked(state); err != nil {
 		if original != nil {
-			n.clientRuntimeSessions[clientRuntimeScopeKey(userID, conversationID)] = original
+			n.clientRuntimeSessions[clientRuntimeScopeKey(spaceID, conversationID)] = original
 		}
 		return nil, err
 	}
@@ -1478,20 +1478,20 @@ func snapshotClientRuntimeState(state *clientRuntimeSessionState) map[string]int
 			"running":               record.Running,
 		})
 	}
-	return map[string]interface{}{"userId": state.UserID, "conversationId": state.ConversationID, "revision": state.Revision, "packages": packages}
+	return map[string]interface{}{"spaceId": state.SpaceID, "conversationId": state.ConversationID, "revision": state.Revision, "packages": packages}
 }
 
-func (n *SSEUIHostNotifier) ClientRuntimeSessionState(userID, conversationID string) map[string]interface{} {
+func (n *SSEUIHostNotifier) ClientRuntimeSessionState(spaceID, conversationID string) map[string]interface{} {
 	n.mu.Lock()
 	defer n.mu.Unlock()
-	state := n.runtimeSessionLocked(userID, conversationID)
+	state := n.runtimeSessionLocked(spaceID, conversationID)
 	return snapshotClientRuntimeState(state)
 }
 
-func (n *SSEUIHostNotifier) AcknowledgeClientRuntimeSession(userID, conversationID string, revision int64) (map[string]interface{}, error) {
+func (n *SSEUIHostNotifier) AcknowledgeClientRuntimeSession(spaceID, conversationID string, revision int64) (map[string]interface{}, error) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
-	state := n.runtimeSessionLocked(userID, conversationID)
+	state := n.runtimeSessionLocked(spaceID, conversationID)
 	if revision > 0 && state.Revision != revision {
 		return snapshotClientRuntimeState(state), fmt.Errorf("client runtime session revision changed from %d to %d", revision, state.Revision)
 	}
@@ -1515,7 +1515,7 @@ func (n *SSEUIHostNotifier) AcknowledgeClientRuntimeSession(userID, conversation
 	state.Revision++
 	if err := n.persistClientRuntimeSessionLocked(state); err != nil {
 		if original != nil {
-			n.clientRuntimeSessions[clientRuntimeScopeKey(userID, conversationID)] = original
+			n.clientRuntimeSessions[clientRuntimeScopeKey(spaceID, conversationID)] = original
 		}
 		return nil, err
 	}

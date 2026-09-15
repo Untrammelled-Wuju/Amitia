@@ -179,15 +179,15 @@ func TestAgentSkillInstallActivateResourceAndRestore(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	installed, err := service.Install(ctx, InstallAgentSkillRequest{UserID: "user-1", PreviewID: preview.PreviewID})
+	installed, err := service.Install(ctx, InstallAgentSkillRequest{SpaceID: "user-1", PreviewID: preview.PreviewID})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if installed.Enabled {
 		t.Fatal("Agent Skill must be disabled by default")
 	}
-	scope := ExecutionScope{UserID: "user-1", CharacterID: "char-1", ConversationID: "conv-1", Channel: "web", TraceID: "trace-1", Trigger: TriggerLLM}
-	if err := service.Enable(ctx, ExecutionScope{UserID: "user-1"}, installed.ExtensionID); err != nil {
+	scope := ExecutionScope{SpaceID: "user-1", CharacterID: "char-1", ConversationID: "conv-1", Channel: "web", TraceID: "trace-1", Trigger: TriggerLLM}
+	if err := service.Enable(ctx, ExecutionScope{SpaceID: "user-1"}, installed.ExtensionID); err != nil {
 		t.Fatal(err)
 	}
 	catalog, err := service.ResolveCatalog(ctx, scope)
@@ -227,7 +227,7 @@ func TestAgentSkillInstallActivateResourceAndRestore(t *testing.T) {
 	if err := restored.Restore(ctx); err != nil {
 		t.Fatal(err)
 	}
-	item, _, err := restored.Get(ctx, ExecutionScope{UserID: "user-1", CharacterID: "char-1"}, installed.ExtensionID)
+	item, _, err := restored.Get(ctx, ExecutionScope{SpaceID: "user-1", CharacterID: "char-1"}, installed.ExtensionID)
 	if err != nil || !item.Enabled {
 		t.Fatalf("restore failed: %+v %v", item, err)
 	}

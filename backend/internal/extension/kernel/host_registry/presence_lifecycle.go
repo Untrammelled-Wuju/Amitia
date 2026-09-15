@@ -19,7 +19,7 @@ func NewHostPresenceLifecycleService(registry *Registry, events PresenceEventSin
 }
 
 func (s *HostPresenceLifecycleService) Bind(ctx context.Context, binding RuntimeSessionBinding) (*RuntimeEntry, error) {
-	if binding.UserID == "" || binding.DeviceID == "" || binding.RuntimeID == "" {
+	if binding.SpaceID == "" || binding.DeviceID == "" || binding.RuntimeID == "" {
 		return nil, ErrInvalidRegistryEntry
 	}
 
@@ -60,7 +60,7 @@ func (s *HostPresenceLifecycleService) Disconnect(ctx context.Context, binding R
 		at = time.Now().UTC()
 	}
 
-	entryID := RuntimeEntryID(binding.UserID, binding.DeviceID, binding.RuntimeID)
+	entryID := RuntimeEntryID(binding.SpaceID, binding.DeviceID, binding.RuntimeID)
 	existing, err := s.registry.GetEntry(ctx, entryID)
 	if err != nil && !errors.Is(err, ErrRegistryEntryNotFound) {
 		return err

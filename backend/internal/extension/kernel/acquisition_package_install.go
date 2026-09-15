@@ -41,12 +41,12 @@ func (a *acquisitionPackageInstaller) runtime() (*Runtime, *Container, error) {
 	return rt, c, nil
 }
 
-func (a *acquisitionPackageInstaller) InstallArtifact(ctx context.Context, artifactID, extensionID, version, expectedHash, userID string) (string, error) {
+func (a *acquisitionPackageInstaller) InstallArtifact(ctx context.Context, artifactID, extensionID, version, expectedHash, spaceID string) (string, error) {
 	if strings.TrimSpace(artifactID) == "" {
 		return "", fmt.Errorf("acquisition package installer: artifact id required")
 	}
-	if strings.TrimSpace(userID) == "" {
-		userID = "system:capability-acquisition"
+	if strings.TrimSpace(spaceID) == "" {
+		spaceID = "system:capability-acquisition"
 	}
 	rt, c, err := a.runtime()
 	if err != nil {
@@ -66,7 +66,7 @@ func (a *acquisitionPackageInstaller) InstallArtifact(ctx context.Context, artif
 	defer f.Close()
 
 	preview, err := rt.PreviewPackage(ctx, PackagePreviewRequest{
-		UserID:    userID,
+		SpaceID:   spaceID,
 		ScopeType: "global",
 		FileName:  filepath.Base(artifact.ArchivePath),
 	}, f)
@@ -88,7 +88,7 @@ func (a *acquisitionPackageInstaller) InstallArtifact(ctx context.Context, artif
 	}
 	confirmation, err := rt.ConfirmPackagePreview(ctx, PackagePreviewConfirmationRequest{
 		SessionID:     preview.SessionID,
-		UserID:        userID,
+		SpaceID:       spaceID,
 		ScopeType:     "global",
 		Confirmations: confirmations,
 	})
@@ -97,12 +97,12 @@ func (a *acquisitionPackageInstaller) InstallArtifact(ctx context.Context, artif
 	}
 	result, err := rt.ExecutePackageInstall(ctx, PackageInstallRequest{
 		SessionID:           preview.SessionID,
-		UserID:              userID,
+		SpaceID:             spaceID,
 		ScopeType:           "global",
 		Confirmations:       confirmations,
 		ConfirmationToken:   confirmation.ConfirmationToken,
 		ExpectedExtensionID: extensionID,
-		IdempotencyKey:      "capability-acquisition:" + artifactID + ":" + userID,
+		IdempotencyKey:      "capability-acquisition:" + artifactID + ":" + spaceID,
 	})
 	if err != nil {
 		return "", fmt.Errorf("acquisition package installer: canonical install saga: %w", err)
@@ -110,18 +110,18 @@ func (a *acquisitionPackageInstaller) InstallArtifact(ctx context.Context, artif
 	return result.OperationID, nil
 }
 
-func (a *acquisitionPackageInstaller) UninstallExtension(ctx context.Context, extensionID, userID string) error {
+func (a *acquisitionPackageInstaller) UninstallExtension(ctx context.Context, extensionID, spaceID string) error {
 	if strings.TrimSpace(extensionID) == "" {
 		return nil
 	}
-	if strings.TrimSpace(userID) == "" {
-		userID = "system:capability-acquisition"
+	if strings.TrimSpace(spaceID) == "" {
+		spaceID = "system:capability-acquisition"
 	}
 	rt, _, err := a.runtime()
 	if err != nil {
 		return err
 	}
-	preview, err := rt.PreviewPackageUninstall(ctx, extensionID, userID, "global", "")
+	preview, err := rt.PreviewPackageUninstall(ctx, extensionID, spaceID, "global", "")
 	if err != nil {
 		return fmt.Errorf("acquisition package installer: uninstall preview: %w", err)
 	}
@@ -134,7 +134,7 @@ func (a *acquisitionPackageInstaller) UninstallExtension(ctx context.Context, ex
 	}
 	confirmation, err := rt.ConfirmPackageUninstall(ctx, ConfirmPackageUninstallRequest{
 		ExtensionID:   extensionID,
-		UserID:        userID,
+		SpaceID:       spaceID,
 		ScopeType:     "global",
 		Confirmations: confirmations,
 	})
@@ -143,7 +143,7 @@ func (a *acquisitionPackageInstaller) UninstallExtension(ctx context.Context, ex
 	}
 	if _, err := rt.ExecutePackageUninstall(ctx, ExecutePackageUninstallRequest{
 		ExtensionID:       extensionID,
-		UserID:            userID,
+		SpaceID:           spaceID,
 		ScopeType:         "global",
 		ConfirmationToken: confirmation.Token,
 	}); err != nil {

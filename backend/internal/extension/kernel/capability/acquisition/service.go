@@ -288,7 +288,7 @@ func (s *AcquisitionService) Acquire(ctx context.Context, request AcquisitionReq
 			CapabilityID:             plan.Request.CapabilityID,
 			AcquisitionTransactionID: resumeToken,
 			ConversationID:           request.ConversationID(),
-			UserID:                   string(request.UserID),
+			SpaceID:                  string(request.SpaceID),
 			ExecContext:              request.ExecContext,
 		}
 		s.mu.Lock()
@@ -306,7 +306,7 @@ func (s *AcquisitionService) Acquire(ctx context.Context, request AcquisitionReq
 						resume.Metadata = map[string]any{}
 					}
 					resume.Metadata["conversationId"] = resumeContext.ConversationID
-					resume.Metadata["userId"] = resumeContext.UserID
+					resume.Metadata["spaceId"] = resumeContext.SpaceID
 					resume.Metadata["executionId"] = acqExecCtx.ExecutionID
 					_ = s.resumeRepo.Save(ctx, *resume)
 				}
@@ -519,9 +519,9 @@ func (s *AcquisitionService) ResumeAcquire(ctx context.Context, resumeToken stri
 						resumeCtx.ConversationID = convID
 						restoredExec.ConversationID = convID
 					}
-					if userID, ok := persisted.Metadata["userId"].(string); ok {
-						resumeCtx.UserID = userID
-						restoredExec.UserID = runtimeidentity.UserID(userID)
+					if spaceID, ok := persisted.Metadata["spaceId"].(string); ok {
+						resumeCtx.SpaceID = spaceID
+						restoredExec.SpaceID = runtimeidentity.SpaceID(spaceID)
 					}
 				}
 				ok = true
@@ -542,7 +542,7 @@ func (s *AcquisitionService) ResumeAcquire(ctx context.Context, resumeToken stri
 
 	request := AcquisitionRequest{
 		CapabilityID: resumeCtx.CapabilityID,
-		UserID:       runtimeidentity.UserID(resumeCtx.UserID),
+		SpaceID:      runtimeidentity.SpaceID(resumeCtx.SpaceID),
 		ExecContext:  resumeCtx.ExecContext,
 	}
 

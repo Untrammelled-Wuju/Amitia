@@ -19,7 +19,7 @@ type CapabilityResumeContext struct {
 
 	State       ResumeState                 `json:"state"`
 	Approved    bool                        `json:"approved"`
-	UserID      string                      `json:"userId,omitempty"`
+	SpaceID     string                      `json:"spaceId,omitempty"`
 	ExecContext *execution.ExecutionContext `json:"-"`
 }
 

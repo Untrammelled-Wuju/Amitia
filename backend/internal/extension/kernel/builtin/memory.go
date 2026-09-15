@@ -171,8 +171,8 @@ type MemoryProvider interface {
 }
 
 type ProfileProvider interface {
-	Get(ctx context.Context, userID string) ([]byte, error)
-	Update(ctx context.Context, userID string, data []byte) error
+	Get(ctx context.Context, spaceID string) ([]byte, error)
+	Update(ctx context.Context, spaceID string, data []byte) error
 }
 
 type EpisodicProvider interface {

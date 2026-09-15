@@ -15,7 +15,7 @@ type Lease struct {
 	Purpose              string
 	InvocationID         string
 	RuntimeInstanceID    string
-	UserID               string
+	SpaceID              string
 	CharacterID          string
 	ConversationID       string
 	ExtensionID          string
@@ -70,7 +70,7 @@ type LeaseRequest struct {
 	Purpose              string
 	InvocationID         string
 	RuntimeInstanceID    string
-	UserID               string
+	SpaceID              string
 	CharacterID          string
 	ConversationID       string
 	ExtensionID          string

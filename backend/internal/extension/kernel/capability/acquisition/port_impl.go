@@ -74,8 +74,8 @@ type packagePortBridge struct {
 // Acquisition uses it to enter the same Preview -> Confirmation -> PackageInstallSaga
 // path as all other package installs instead of maintaining a second install saga.
 type CanonicalPackageInstallPort interface {
-	InstallArtifact(ctx context.Context, artifactID, extensionID, version, expectedHash, userID string) (string, error)
-	UninstallExtension(ctx context.Context, extensionID, userID string) error
+	InstallArtifact(ctx context.Context, artifactID, extensionID, version, expectedHash, spaceID string) (string, error)
+	UninstallExtension(ctx context.Context, extensionID, spaceID string) error
 }
 
 // NewPackagePortBridgeFromManager creates a PackageInstallPort backed by the lifecycle Manager.
@@ -94,9 +94,9 @@ func NewPackagePortBridgeWithCanonicalResolver(manager *lifecycle_manager.Manage
 	return &packagePortBridge{manager: manager, artifactStore: store, artifactRegistry: registry, canonical: canonical}
 }
 
-func (b *packagePortBridge) InstallPackage(ctx context.Context, extID string, version string, packageID string, hash string, userID string) (string, error) {
+func (b *packagePortBridge) InstallPackage(ctx context.Context, extID string, version string, packageID string, hash string, spaceID string) (string, error) {
 	if b.canonical != nil {
-		return b.canonical.InstallArtifact(ctx, packageID, extID, version, hash, userID)
+		return b.canonical.InstallArtifact(ctx, packageID, extID, version, hash, spaceID)
 	}
 	if b.manager == nil {
 		return "", fmt.Errorf("package port bridge: manager not configured")
@@ -122,9 +122,9 @@ func (b *packagePortBridge) InstallPackage(ctx context.Context, extID string, ve
 	return result.OperationID, nil
 }
 
-func (b *packagePortBridge) UninstallPackage(ctx context.Context, extID string, userID string) error {
+func (b *packagePortBridge) UninstallPackage(ctx context.Context, extID string, spaceID string) error {
 	if b.canonical != nil {
-		return b.canonical.UninstallExtension(ctx, extID, userID)
+		return b.canonical.UninstallExtension(ctx, extID, spaceID)
 	}
 	if b.manager == nil {
 		return fmt.Errorf("package port bridge: manager not configured")

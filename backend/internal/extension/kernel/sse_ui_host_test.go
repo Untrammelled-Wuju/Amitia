@@ -337,7 +337,7 @@ func TestSSEEventEnvelope_ToMap(t *testing.T) {
 func TestSSEUIHostNotifier_ClientRuntimeSessionRevisionIsAuthoritative(t *testing.T) {
 	n := NewSSEUIHostNotifier(nil)
 	scope := map[string]interface{}{
-		"userId":         "user-1",
+		"spaceId":        "user-1",
 		"conversationId": "conversation-1",
 		"requestId":      "request-1",
 	}
@@ -472,23 +472,23 @@ func TestSSEUIHostNotifier_ClientRuntimeActiveResponseEnforcesRevisionGate(t *te
 
 func TestSSEUIHostNotifier_ClientRuntimeRollbackRestoresCommittedStateWithNewRevision(t *testing.T) {
 	n := NewSSEUIHostNotifier(nil)
-	userID, conversationID := "user-rollback", "conversation-rollback"
+	spaceID, conversationID := "user-rollback", "conversation-rollback"
 	definePayload := map[string]interface{}{
 		"package": map[string]interface{}{"id": "demo", "version": "1", "contributions": []interface{}{}},
 	}
-	if err := n.recordClientRuntimeDefinition(userID, conversationID, definePayload); err != nil {
+	if err := n.recordClientRuntimeDefinition(spaceID, conversationID, definePayload); err != nil {
 		t.Fatalf("define: %v", err)
 	}
-	committed := n.cloneClientRuntimeSessionForScope(userID, conversationID)
-	if _, err := n.applyClientRuntimeState(userID, conversationID, "run", map[string]interface{}{"id": "demo", "version": "1"}, nil); err != nil {
+	committed := n.cloneClientRuntimeSessionForScope(spaceID, conversationID)
+	if _, err := n.applyClientRuntimeState(spaceID, conversationID, "run", map[string]interface{}{"id": "demo", "version": "1"}, nil); err != nil {
 		t.Fatalf("run mutation: %v", err)
 	}
-	mutated := n.ClientRuntimeSessionState(userID, conversationID)
+	mutated := n.ClientRuntimeSessionState(spaceID, conversationID)
 	if got := mutated["revision"]; got != int64(2) {
 		t.Fatalf("mutated revision = %v, want 2", got)
 	}
 
-	restored, err := n.restoreClientRuntimeSession(userID, conversationID, committed)
+	restored, err := n.restoreClientRuntimeSession(spaceID, conversationID, committed)
 	if err != nil {
 		t.Fatalf("restore: %v", err)
 	}
@@ -544,14 +544,14 @@ func TestValidateClientRuntimePackageDefinitionRejectsDuplicateChildSlotDeclarat
 
 func TestSSEUIHostNotifier_ClientRuntimeCurrentAdvancesOnlyAfterBrowserAck(t *testing.T) {
 	n := NewSSEUIHostNotifier(nil)
-	userID, conversationID := "user-current-next", "conversation-current-next"
+	spaceID, conversationID := "user-current-next", "conversation-current-next"
 	definePayload := map[string]interface{}{
 		"package": map[string]interface{}{"id": "demo", "version": "1", "contributions": []interface{}{}},
 	}
-	if err := n.recordClientRuntimeDefinition(userID, conversationID, definePayload); err != nil {
+	if err := n.recordClientRuntimeDefinition(spaceID, conversationID, definePayload); err != nil {
 		t.Fatalf("define: %v", err)
 	}
-	result, err := n.applyClientRuntimeState(userID, conversationID, "run", map[string]interface{}{"id": "demo", "version": "1"}, nil)
+	result, err := n.applyClientRuntimeState(spaceID, conversationID, "run", map[string]interface{}{"id": "demo", "version": "1"}, nil)
 	if err != nil {
 		t.Fatalf("begin run: %v", err)
 	}
@@ -559,7 +559,7 @@ func TestSSEUIHostNotifier_ClientRuntimeCurrentAdvancesOnlyAfterBrowserAck(t *te
 	if runID == "" {
 		t.Fatal("run did not allocate pluginRunId")
 	}
-	state := n.ClientRuntimeSessionState(userID, conversationID)
+	state := n.ClientRuntimeSessionState(spaceID, conversationID)
 	pkg := state["packages"].([]map[string]interface{})[0]
 	if got := pkg["activeVersion"]; got != "" {
 		t.Fatalf("activeVersion before activation = %v, want empty", got)
@@ -571,7 +571,7 @@ func TestSSEUIHostNotifier_ClientRuntimeCurrentAdvancesOnlyAfterBrowserAck(t *te
 		t.Fatalf("transitionState = %v, want starting", got)
 	}
 
-	awaiting, err := n.markClientRuntimeTransitionAwaiting(userID, conversationID, "demo", runID)
+	awaiting, err := n.markClientRuntimeTransitionAwaiting(spaceID, conversationID, "demo", runID)
 	if err != nil {
 		t.Fatalf("mark awaiting: %v", err)
 	}
@@ -584,7 +584,7 @@ func TestSSEUIHostNotifier_ClientRuntimeCurrentAdvancesOnlyAfterBrowserAck(t *te
 	}
 
 	revision := awaiting["revision"].(int64)
-	committed, err := n.AcknowledgeClientRuntimeSession(userID, conversationID, revision)
+	committed, err := n.AcknowledgeClientRuntimeSession(spaceID, conversationID, revision)
 	if err != nil {
 		t.Fatalf("browser ack: %v", err)
 	}
@@ -605,19 +605,19 @@ func TestSSEUIHostNotifier_ClientRuntimeCurrentAdvancesOnlyAfterBrowserAck(t *te
 
 func TestSSEUIHostNotifier_ClientRuntimeFailedUpdateKeepsCurrentAndNextDiagnostics(t *testing.T) {
 	n := NewSSEUIHostNotifier(nil)
-	userID, conversationID := "user-failed-next", "conversation-failed-next"
+	spaceID, conversationID := "user-failed-next", "conversation-failed-next"
 	for _, version := range []string{"1", "2"} {
-		if err := n.recordClientRuntimeDefinition(userID, conversationID, map[string]interface{}{
+		if err := n.recordClientRuntimeDefinition(spaceID, conversationID, map[string]interface{}{
 			"package": map[string]interface{}{"id": "demo", "version": version, "contributions": []interface{}{}},
 		}); err != nil {
 			t.Fatalf("define %s: %v", version, err)
 		}
 	}
-	first, err := n.applyClientRuntimeState(userID, conversationID, "run", map[string]interface{}{"id": "demo", "version": "1"}, nil)
+	first, err := n.applyClientRuntimeState(spaceID, conversationID, "run", map[string]interface{}{"id": "demo", "version": "1"}, nil)
 	if err != nil {
 		t.Fatalf("run v1: %v", err)
 	}
-	committed, err := n.commitClientRuntimeTransition(userID, conversationID, "demo", runtimeMapString(first, "pluginRunId"))
+	committed, err := n.commitClientRuntimeTransition(spaceID, conversationID, "demo", runtimeMapString(first, "pluginRunId"))
 	if err != nil {
 		t.Fatalf("commit v1: %v", err)
 	}
@@ -625,12 +625,12 @@ func TestSSEUIHostNotifier_ClientRuntimeFailedUpdateKeepsCurrentAndNextDiagnosti
 		t.Fatalf("current after v1 = %v, want 1", got)
 	}
 
-	previous := n.cloneClientRuntimeSessionForScope(userID, conversationID)
-	second, err := n.applyClientRuntimeState(userID, conversationID, "run", map[string]interface{}{"id": "demo", "version": "2", "mode": "update"}, nil)
+	previous := n.cloneClientRuntimeSessionForScope(spaceID, conversationID)
+	second, err := n.applyClientRuntimeState(spaceID, conversationID, "run", map[string]interface{}{"id": "demo", "version": "2", "mode": "update"}, nil)
 	if err != nil {
 		t.Fatalf("run v2: %v", err)
 	}
-	failed, err := n.failClientRuntimeTransition(userID, conversationID, "demo", runtimeMapString(second, "pluginRunId"), "synthetic activation failure", previous)
+	failed, err := n.failClientRuntimeTransition(spaceID, conversationID, "demo", runtimeMapString(second, "pluginRunId"), "synthetic activation failure", previous)
 	if err != nil {
 		t.Fatalf("fail v2: %v", err)
 	}
@@ -651,27 +651,27 @@ func TestSSEUIHostNotifier_ClientRuntimeFailedUpdateKeepsCurrentAndNextDiagnosti
 
 func TestSSEUIHostNotifier_ClientRuntimeRunModeRestartsCurrentAndRequiresUpdateForVersionSwitch(t *testing.T) {
 	n := NewSSEUIHostNotifier(nil)
-	userID, conversationID := "user-run-mode", "conversation-run-mode"
+	spaceID, conversationID := "user-run-mode", "conversation-run-mode"
 	for _, version := range []string{"1", "2"} {
-		if err := n.recordClientRuntimeDefinition(userID, conversationID, map[string]interface{}{
+		if err := n.recordClientRuntimeDefinition(spaceID, conversationID, map[string]interface{}{
 			"package": map[string]interface{}{"id": "demo", "version": version, "contributions": []interface{}{}},
 		}); err != nil {
 			t.Fatalf("define %s: %v", version, err)
 		}
 	}
-	first, err := n.applyClientRuntimeState(userID, conversationID, "run", map[string]interface{}{"id": "demo", "version": "1", "mode": "run"}, nil)
+	first, err := n.applyClientRuntimeState(spaceID, conversationID, "run", map[string]interface{}{"id": "demo", "version": "1", "mode": "run"}, nil)
 	if err != nil {
 		t.Fatalf("initial run v1: %v", err)
 	}
-	if _, err := n.commitClientRuntimeTransition(userID, conversationID, "demo", runtimeMapString(first, "pluginRunId")); err != nil {
+	if _, err := n.commitClientRuntimeTransition(spaceID, conversationID, "demo", runtimeMapString(first, "pluginRunId")); err != nil {
 		t.Fatalf("commit v1: %v", err)
 	}
 
-	restart, err := n.applyClientRuntimeState(userID, conversationID, "run", map[string]interface{}{"id": "demo", "version": "1", "mode": "run"}, nil)
+	restart, err := n.applyClientRuntimeState(spaceID, conversationID, "run", map[string]interface{}{"id": "demo", "version": "1", "mode": "run"}, nil)
 	if err != nil {
 		t.Fatalf("restart current v1: %v", err)
 	}
-	state := n.ClientRuntimeSessionState(userID, conversationID)
+	state := n.ClientRuntimeSessionState(spaceID, conversationID)
 	pkg := state["packages"].([]map[string]interface{})[0]
 	if got := pkg["activeVersion"]; got != "1" {
 		t.Fatalf("current during restart = %v, want 1", got)
@@ -686,10 +686,10 @@ func TestSSEUIHostNotifier_ClientRuntimeRunModeRestartsCurrentAndRequiresUpdateF
 		t.Fatal("restart did not allocate a new pluginRunId")
 	}
 
-	if _, err := n.applyClientRuntimeState(userID, conversationID, "run", map[string]interface{}{"id": "demo", "version": "2", "mode": "run"}, nil); err == nil || !strings.Contains(err.Error(), "use update mode") {
+	if _, err := n.applyClientRuntimeState(spaceID, conversationID, "run", map[string]interface{}{"id": "demo", "version": "2", "mode": "run"}, nil); err == nil || !strings.Contains(err.Error(), "use update mode") {
 		t.Fatalf("cross-version run error = %v, want explicit update-mode rejection", err)
 	}
-	updated, err := n.applyClientRuntimeState(userID, conversationID, "run", map[string]interface{}{"id": "demo", "version": "2", "mode": "update"}, nil)
+	updated, err := n.applyClientRuntimeState(spaceID, conversationID, "run", map[string]interface{}{"id": "demo", "version": "2", "mode": "update"}, nil)
 	if err != nil {
 		t.Fatalf("update v2: %v", err)
 	}
@@ -700,25 +700,25 @@ func TestSSEUIHostNotifier_ClientRuntimeRunModeRestartsCurrentAndRequiresUpdateF
 
 func TestSSEUIHostNotifier_ClientRuntimeFutureVersionApprovalCoversLaterImmutablePackages(t *testing.T) {
 	n := NewSSEUIHostNotifier(nil)
-	userID, conversationID := "user-future-approval", "conversation-future-approval"
+	spaceID, conversationID := "user-future-approval", "conversation-future-approval"
 	for _, version := range []string{"1", "2"} {
-		if err := n.recordClientRuntimeDefinition(userID, conversationID, map[string]interface{}{
+		if err := n.recordClientRuntimeDefinition(spaceID, conversationID, map[string]interface{}{
 			"package": map[string]interface{}{"id": "demo", "version": version, "contributions": []interface{}{}},
 		}); err != nil {
 			t.Fatalf("define %s: %v", version, err)
 		}
 	}
-	if err := n.approveClientRuntimeVersion(userID, conversationID, "demo", "1", true); err != nil {
+	if err := n.approveClientRuntimeVersion(spaceID, conversationID, "demo", "1", true); err != nil {
 		t.Fatalf("approve future versions: %v", err)
 	}
-	selected, approved, err := n.clientRuntimeSelectedVersion(userID, conversationID, "demo", "2")
+	selected, approved, err := n.clientRuntimeSelectedVersion(spaceID, conversationID, "demo", "2")
 	if err != nil {
 		t.Fatalf("select v2: %v", err)
 	}
 	if selected != "2" || !approved {
 		t.Fatalf("future-version approval = (%q, %v), want (2, true)", selected, approved)
 	}
-	state := n.ClientRuntimeSessionState(userID, conversationID)
+	state := n.ClientRuntimeSessionState(spaceID, conversationID)
 	pkg := state["packages"].([]map[string]interface{})[0]
 	if pkg["approveFutureVersions"] != true {
 		t.Fatalf("approveFutureVersions = %v, want true", pkg["approveFutureVersions"])

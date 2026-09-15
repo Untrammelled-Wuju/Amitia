@@ -901,9 +901,9 @@ CREATE TABLE ext_log (id INTEGER);`
 
 	t.Run("完整DDL脚本解析", func(t *testing.T) {
 		raw := `CREATE TABLE IF NOT EXISTS ext_users (id INTEGER PRIMARY KEY, name TEXT);
-CREATE TABLE IF NOT EXISTS ext_orders (id INTEGER PRIMARY KEY, user_id INTEGER);
-CREATE INDEX IF NOT EXISTS ext_idx_orders_user ON ext_orders (user_id);
-CREATE VIEW ext_user_orders AS SELECT u.name, o.id FROM ext_users u JOIN ext_orders o ON u.id = o.user_id;
+CREATE TABLE IF NOT EXISTS ext_orders (id INTEGER PRIMARY KEY, space_id INTEGER);
+CREATE INDEX IF NOT EXISTS ext_idx_orders_user ON ext_orders (space_id);
+CREATE VIEW ext_user_orders AS SELECT u.name, o.id FROM ext_users u JOIN ext_orders o ON u.id = o.space_id;
 ALTER TABLE ext_users ADD COLUMN email TEXT;
 DROP INDEX IF EXISTS ext_old_idx;
 DROP TABLE IF EXISTS ext_old_table;`

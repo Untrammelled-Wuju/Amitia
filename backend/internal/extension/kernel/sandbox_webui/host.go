@@ -142,7 +142,7 @@ type WebSession struct {
 	GrantedScopes        []string
 	ScopeSnapshotID      string
 	PermissionSnapshotID string
-	UserID               string
+	SpaceID              string
 	DeviceID             string
 	UIContext            map[string]any
 	mu                   sync.Mutex
@@ -158,12 +158,12 @@ type ThemeSnapshot struct {
 	Tokens  map[string]string `json:"tokens"`
 }
 
-func (s *WebSession) BindIdentityIfNeeded(userID, deviceID string) bool {
+func (s *WebSession) BindIdentityIfNeeded(spaceID, deviceID string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	bound := false
-	if s.UserID == "" && userID != "" {
-		s.UserID = userID
+	if s.SpaceID == "" && spaceID != "" {
+		s.SpaceID = spaceID
 		bound = true
 	}
 	if s.DeviceID == "" && deviceID != "" {
@@ -361,7 +361,7 @@ type CreateSessionRequest struct {
 	GrantedScopes        []string
 	ScopeSnapshotID      string
 	PermissionSnapshotID string
-	UserID               string
+	SpaceID              string
 	DeviceID             string
 	UIContext            map[string]any
 }
@@ -488,7 +488,7 @@ func (h *Host) CreateSession(req CreateSessionRequest) (*CreateSessionResult, er
 		ConversationID:       req.ConversationID,
 		GrantedPerms:         req.GrantedPerms,
 		GrantedScopes:        req.GrantedScopes,
-		UserID:               req.UserID,
+		SpaceID:              req.SpaceID,
 		DeviceID:             req.DeviceID,
 		UIContext:            req.UIContext,
 		ScopeSnapshotID:      scopeSnapshotID,

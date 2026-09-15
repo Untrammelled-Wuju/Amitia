@@ -44,7 +44,7 @@ func TestAndroidLinuxRuntimeAdapterExecuteNilProvider(t *testing.T) {
 	adapter := NewAndroidLinuxRuntimeAdapter(nil)
 	invocation := ToolInvocationContext{
 		InvocationID: "test-123",
-		UserID:       "user-1",
+		SpaceID:      "user-1",
 	}
 
 	result := adapter.Execute(context.Background(), RuntimeBinding{
@@ -74,7 +74,7 @@ func TestAndroidLinuxRuntimeAdapterExecuteSuccess(t *testing.T) {
 
 	invocation := ToolInvocationContext{
 		InvocationID:   "test-123",
-		UserID:         "user-1",
+		SpaceID:        "user-1",
 		CharacterID:    "char-1",
 		ConversationID: "conv-1",
 	}
@@ -90,7 +90,7 @@ func TestAndroidLinuxRuntimeAdapterExecuteSuccess(t *testing.T) {
 
 	provider.AssertCalled(t, "Execute", mock.Anything, mock.MatchedBy(func(req terminal.AndroidLinuxRequest) bool {
 		return req.Operation == "terminal.open" &&
-			req.Payload["userId"] == "user-1" &&
+			req.Payload["spaceId"] == "user-1" &&
 			req.Payload["characterId"] == "char-1" &&
 			req.Payload["conversationId"] == "conv-1"
 	}))
@@ -111,7 +111,7 @@ func TestAndroidLinuxRuntimeAdapterExecuteError(t *testing.T) {
 
 	invocation := ToolInvocationContext{
 		InvocationID: "test-456",
-		UserID:       "user-2",
+		SpaceID:      "user-2",
 	}
 
 	result := adapter.Execute(context.Background(), RuntimeBinding{
@@ -135,7 +135,7 @@ func TestAndroidLinuxRuntimeAdapterExecuteCancelled(t *testing.T) {
 
 	invocation := ToolInvocationContext{
 		InvocationID: "test-789",
-		UserID:       "user-3",
+		SpaceID:      "user-3",
 	}
 
 	result := adapter.Execute(context.Background(), RuntimeBinding{

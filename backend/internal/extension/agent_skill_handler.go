@@ -23,7 +23,7 @@ func NewAgentSkillHandler(service *AgentSkillService, problems *Handler) *AgentS
 }
 func (h *AgentSkillHandler) scope(c *gin.Context) ExecutionScope {
 	trace, _ := c.Get(middleware.CtxKeyRequestID)
-	return ExecutionScope{UserID: fmt.Sprint(c.GetInt(authenticatedUserKey)), ConversationID: c.Query("conversationId"), Channel: c.DefaultQuery("channel", "web"), TraceID: fmt.Sprint(trace), RequestID: fmt.Sprint(trace), Trigger: TriggerManual}
+	return ExecutionScope{SpaceID: authenticatedSpaceID(c), ConversationID: c.Query("conversationId"), Channel: c.DefaultQuery("channel", "web"), TraceID: fmt.Sprint(trace), RequestID: fmt.Sprint(trace), Trigger: TriggerManual}
 }
 
 func (h *AgentSkillHandler) Preview(c *gin.Context) {
@@ -32,7 +32,7 @@ func (h *AgentSkillHandler) Preview(c *gin.Context) {
 		h.problems.problem(c, NewExtensionError(ErrAgentSkillArchiveLimit, "import request exceeds limit", err.Error(), false, err))
 		return
 	}
-	userID := fmt.Sprint(c.GetInt(authenticatedUserKey))
+	spaceID := authenticatedSpaceID(c)
 	source := c.PostForm("source")
 	if source == "directory" {
 		headers := c.Request.MultipartForm.File["files"]
@@ -56,7 +56,7 @@ func (h *AgentSkillHandler) Preview(c *gin.Context) {
 			}
 			files[paths[index]] = content
 		}
-		preview, err := h.service.PreviewDirectory(c.Request.Context(), userID, c.PostForm("rootName"), files)
+		preview, err := h.service.PreviewDirectory(c.Request.Context(), spaceID, c.PostForm("rootName"), files)
 		if err != nil {
 			h.problems.problem(c, err)
 			return
@@ -80,7 +80,7 @@ func (h *AgentSkillHandler) Preview(c *gin.Context) {
 		h.problems.problem(c, readErr)
 		return
 	}
-	preview, err := h.service.PreviewZIP(c.Request.Context(), userID, raw)
+	preview, err := h.service.PreviewZIP(c.Request.Context(), spaceID, raw)
 	if err != nil {
 		h.problems.problem(c, err)
 		return
@@ -96,7 +96,7 @@ func (h *AgentSkillHandler) Install(c *gin.Context) {
 		h.problems.problem(c, NewExtensionError(ErrSkillInputInvalid, "invalid install request", err.Error(), false, err))
 		return
 	}
-	definition, err := h.service.Install(c.Request.Context(), InstallAgentSkillRequest{UserID: fmt.Sprint(c.GetInt(authenticatedUserKey)), PreviewID: request.PreviewID, Enable: request.Enable})
+	definition, err := h.service.Install(c.Request.Context(), InstallAgentSkillRequest{SpaceID: authenticatedSpaceID(c), PreviewID: request.PreviewID, Enable: request.Enable})
 	if err != nil {
 		h.problems.problem(c, err)
 		return
@@ -121,7 +121,7 @@ func (h *AgentSkillHandler) Get(c *gin.Context) {
 		h.problems.problem(c, err)
 		return
 	}
-	activations, _ := h.service.repository.ListAgentSkillActivations(c.Request.Context(), definition.ExtensionID, scope.UserID, 20)
+	activations, _ := h.service.repository.ListAgentSkillActivations(c.Request.Context(), definition.ExtensionID, scope.SpaceID, 20)
 	success(c, map[string]interface{}{"definition": definition, "compatibilityReport": report, "activations": activations})
 }
 func (h *AgentSkillHandler) Enable(c *gin.Context) {
@@ -226,7 +226,7 @@ func (h *AgentSkillHandler) Activations(c *gin.Context) {
 		h.problems.problem(c, err)
 		return
 	}
-	items, err := h.service.repository.ListAgentSkillActivations(c.Request.Context(), definition.ExtensionID, h.scope(c).UserID, 50)
+	items, err := h.service.repository.ListAgentSkillActivations(c.Request.Context(), definition.ExtensionID, h.scope(c).SpaceID, 50)
 	if err != nil {
 		h.problems.problem(c, err)
 		return

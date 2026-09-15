@@ -215,8 +215,8 @@ func TestBaseline_Fault_Exec_MCPTransportDisconnect(t *testing.T) {
 	}
 
 	facade := container.ToolFacade
-	tools, err := facade.ModelTools(ctx, kernel.LegacyScope{
-		UserID:    "mcp-fault",
+	tools, err := facade.ModelTools(ctx, kernel.InvocationScope{
+		SpaceID:   "mcp-fault",
 		Channel:   "test",
 		SessionID: "mcp-disconnect",
 	})
@@ -393,8 +393,8 @@ func TestBaseline_Fault_Exec_DesktopSnapshotFailure(t *testing.T) {
 		t.Fatalf("legacy_fallback_total must be 0 before desktop snapshot, got %d", snap["legacy_fallback_total"])
 	}
 
-	_, err = facade.ModelTools(ctx, kernel.LegacyScope{
-		UserID:    "desktop-snapshot-fault",
+	_, err = facade.ModelTools(ctx, kernel.InvocationScope{
+		SpaceID:   "desktop-snapshot-fault",
 		Channel:   "test",
 		SessionID: "snapshot-fault",
 	})

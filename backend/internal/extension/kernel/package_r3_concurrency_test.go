@@ -97,7 +97,7 @@ func TestR3ConcurrentRecoveryFinalizesExactlyOnceAcrossRuntimes(t *testing.T) {
 	run := func(runtime *Runtime, container *Container) {
 		defer waitGroup.Done()
 
-		operation, _, err := container.PackageRepository.GetOperation(ctx, fixture.Operation.UserID, fixture.Operation.OperationID)
+		operation, _, err := container.PackageRepository.GetOperation(ctx, fixture.Operation.SpaceID, fixture.Operation.OperationID)
 		if err != nil {
 			results <- err
 			return
@@ -139,7 +139,7 @@ func TestR3ConcurrentRecoveryFinalizesExactlyOnceAcrossRuntimes(t *testing.T) {
 
 	require.GreaterOrEqual(t, successCount, 1, "at least one Runtime must complete recovery")
 
-	finalOperation, _, err := containerA.PackageRepository.GetOperation(ctx, fixture.Operation.UserID, fixture.Operation.OperationID)
+	finalOperation, _, err := containerA.PackageRepository.GetOperation(ctx, fixture.Operation.SpaceID, fixture.Operation.OperationID)
 	require.NoError(t, err)
 
 	assertR3RecoveryFinalState(t, runtimeA, containerA, fixture.InstallResult, finalOperation)

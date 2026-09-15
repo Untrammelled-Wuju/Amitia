@@ -205,7 +205,7 @@ type CharacterReader interface {
 }
 
 type CharacterLister interface {
-	ListCharacters(ctx context.Context, userID string, includeDisabled bool) ([]json.RawMessage, error)
+	ListCharacters(ctx context.Context, spaceID string, includeDisabled bool) ([]json.RawMessage, error)
 }
 
 type ConversationReader interface {
@@ -221,7 +221,7 @@ type RuntimeHealthReader interface {
 }
 
 type ConversationMessageRequest struct {
-	UserID         string
+	SpaceID        string
 	CharacterID    string
 	ConversationID string
 	Channel        string
@@ -253,7 +253,7 @@ type ConversationMessagePart struct {
 }
 
 type ConversationMessageAppendRequest struct {
-	UserID           string
+	SpaceID          string
 	CharacterID      string
 	ConversationID   string
 	Channel          string
@@ -425,7 +425,7 @@ const maxClipboardPayloadSize = 1 * 1024 * 1024
 func conversationMessageRouteHandler(deps HostAPIRouteDeps) host_api.Handler {
 	return func(ctx context.Context, req host_api.CallRequest) (host_api.CallResult, error) {
 		var p struct {
-			UserID         string `json:"userId"`
+			SpaceID        string `json:"spaceId"`
 			CharacterID    string `json:"characterId"`
 			ConversationID string `json:"conversationId"`
 			Channel        string `json:"channel"`
@@ -447,14 +447,14 @@ func conversationMessageRouteHandler(deps HostAPIRouteDeps) host_api.Handler {
 		}
 		ctx = resolveHostAPIScope(ctx, deps.ScopeSnapshotStore, req.ScopeSnapshotID)
 		scope := GetHostAPIScope(ctx)
-		if scope.UserID != "" {
-			if p.UserID != "" && p.UserID != scope.UserID {
+		if scope.SpaceID != "" {
+			if p.SpaceID != "" && p.SpaceID != scope.SpaceID {
 				return host_api.CallResult{
 					Status: host_api.StatusRejected,
-					Error:  &host_api.Error{Code: host_api.ErrorCodeScopeDenied, Message: "userId does not match current scope"},
+					Error:  &host_api.Error{Code: host_api.ErrorCodeScopeDenied, Message: "spaceId does not match current scope"},
 				}, nil
 			}
-			p.UserID = scope.UserID
+			p.SpaceID = scope.SpaceID
 		}
 		if scope.CharacterID != "" {
 			if p.CharacterID != "" && p.CharacterID != scope.CharacterID {
@@ -485,7 +485,7 @@ func conversationMessageRouteHandler(deps HostAPIRouteDeps) host_api.Handler {
 			requestID = uuid.NewString()
 		}
 		result, err := deps.ConversationMessageSender.SendConversationMessage(ctx, ConversationMessageRequest{
-			UserID:         p.UserID,
+			SpaceID:        p.SpaceID,
 			CharacterID:    p.CharacterID,
 			ConversationID: p.ConversationID,
 			Channel:        p.Channel,
@@ -515,7 +515,7 @@ func conversationMessageRouteHandler(deps HostAPIRouteDeps) host_api.Handler {
 func conversationMessageAppendRouteHandler(deps HostAPIRouteDeps) host_api.Handler {
 	return func(ctx context.Context, req host_api.CallRequest) (host_api.CallResult, error) {
 		var p struct {
-			UserID           string                    `json:"userId"`
+			SpaceID          string                    `json:"spaceId"`
 			CharacterID      string                    `json:"characterId"`
 			ConversationID   string                    `json:"conversationId"`
 			Channel          string                    `json:"channel"`
@@ -539,14 +539,14 @@ func conversationMessageAppendRouteHandler(deps HostAPIRouteDeps) host_api.Handl
 		}
 		ctx = resolveHostAPIScope(ctx, deps.ScopeSnapshotStore, req.ScopeSnapshotID)
 		scope := GetHostAPIScope(ctx)
-		if scope.UserID != "" {
-			if p.UserID != "" && p.UserID != scope.UserID {
+		if scope.SpaceID != "" {
+			if p.SpaceID != "" && p.SpaceID != scope.SpaceID {
 				return host_api.CallResult{
 					Status: host_api.StatusRejected,
-					Error:  &host_api.Error{Code: host_api.ErrorCodeScopeDenied, Message: "userId does not match current scope"},
+					Error:  &host_api.Error{Code: host_api.ErrorCodeScopeDenied, Message: "spaceId does not match current scope"},
 				}, nil
 			}
-			p.UserID = scope.UserID
+			p.SpaceID = scope.SpaceID
 		}
 		if scope.CharacterID != "" {
 			if p.CharacterID != "" && p.CharacterID != scope.CharacterID {
@@ -577,7 +577,7 @@ func conversationMessageAppendRouteHandler(deps HostAPIRouteDeps) host_api.Handl
 			requestID = uuid.NewString()
 		}
 		result, err := deps.ConversationMessageAppender.AppendConversationMessages(ctx, ConversationMessageAppendRequest{
-			UserID:           p.UserID,
+			SpaceID:          p.SpaceID,
 			CharacterID:      p.CharacterID,
 			ConversationID:   p.ConversationID,
 			Channel:          p.Channel,
@@ -1383,7 +1383,7 @@ func setupDefaultHostAPIRoutes(gateway *host_api.DefaultGateway, deps HostAPIRou
 				}
 				ctx = resolveHostAPIScope(ctx, deps.ScopeSnapshotStore, req.ScopeSnapshotID)
 				scope := GetHostAPIScope(ctx)
-				items, err := deps.CharacterLister.ListCharacters(ctx, scope.UserID, p.IncludeDisabled)
+				items, err := deps.CharacterLister.ListCharacters(ctx, scope.SpaceID, p.IncludeDisabled)
 				if err != nil {
 					return host_api.CallResult{
 						Status: host_api.StatusFailed,
@@ -1810,7 +1810,7 @@ func setupDefaultHostAPIRoutes(gateway *host_api.DefaultGateway, deps HostAPIRou
 				invocation := capability.ToolInvocationContext{
 					InvocationID: req.InvocationID,
 					ParentID:     req.ParentID,
-					UserID:       req.ExecutionContext.UserID.String(),
+					SpaceID:      req.ExecutionContext.SpaceID.String(),
 					ExtensionID:  string(req.RuntimeIdentity.ExtensionID),
 					ModuleID:     string(req.RuntimeIdentity.ModuleID),
 					Source:       capability.InvocationSourcePlugin,

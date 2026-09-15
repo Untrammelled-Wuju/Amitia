@@ -37,7 +37,7 @@ type LifecycleCommand struct {
 	Reason         string
 	DryRun         bool
 	Force          bool
-	UserID         string
+	SpaceID        string
 	RequestID      string
 	Metadata       map[string]any
 }

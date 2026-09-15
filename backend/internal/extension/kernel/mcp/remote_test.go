@@ -642,25 +642,6 @@ func TestCanonicalRemoteRegistry_List(t *testing.T) {
 	}
 }
 
-func TestCanonicalRemoteRegistry_IsOwnedByLegacy(t *testing.T) {
-	factory := NewCanonicalRemoteFactory()
-	registry := NewCanonicalRemoteRegistry(factory)
-
-	if !registry.IsOwnedByLegacy("any-server") {
-		t.Error("expected IsOwnedByLegacy to return true when server not in registry")
-	}
-}
-
-func TestCanonicalRemoteRegistry_RegisterLegacyOwnership(t *testing.T) {
-	factory := NewCanonicalRemoteFactory()
-	registry := NewCanonicalRemoteRegistry(factory)
-
-	err := registry.RegisterLegacyOwnership("some-server")
-	if err != nil {
-		t.Errorf("expected nil error, got: %v", err)
-	}
-}
-
 func TestValidateRemoteSessionID_Valid(t *testing.T) {
 	err := validateRemoteSessionID("valid-session-id-123")
 	if err != nil {

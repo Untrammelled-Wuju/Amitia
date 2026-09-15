@@ -15,7 +15,7 @@ func kernelSignatureStatus(status string) PackageSignatureStatus {
 
 type packageImportSessionRecord struct {
 	ID          string `gorm:"column:id;primaryKey"`
-	UserID      string `gorm:"column:user_id"`
+	SpaceID     string `gorm:"column:space_id"`
 	ScopeType   string `gorm:"column:scope_type"`
 	ScopeID     string `gorm:"column:scope_id"`
 	Format      string `gorm:"column:format"`

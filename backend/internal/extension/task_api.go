@@ -203,15 +203,15 @@ func (api *TaskAPI) resolvePublicExecutionTarget(c *gin.Context, req *task_runti
 		return nil
 	}
 
-	userID := strings.TrimSpace(workflowUserID(c))
-	if userID == "" {
+	spaceID := strings.TrimSpace(workflowSpaceID(c))
+	if spaceID == "" {
 		return task_runtime.NewTaskError(task_runtime.ErrTaskDeviceBindingInvalid, "authenticated user is required for device execution")
 	}
 	control := api.runtime.WorkflowDeviceControl
 	if control == nil {
 		return task_runtime.NewTaskError(task_runtime.ErrRemoteTaskExecutorUnavailable, "device control plane unavailable")
 	}
-	devices, err := control.ListDevices(c.Request.Context(), userID)
+	devices, err := control.ListDevices(c.Request.Context(), spaceID)
 	if err != nil {
 		return task_runtime.NewTaskError(task_runtime.ErrRemoteTaskExecutorUnavailable, "list devices: "+err.Error())
 	}
@@ -257,7 +257,7 @@ func (api *TaskAPI) resolvePublicExecutionTarget(c *gin.Context, req *task_runti
 	}
 	providerByDevice := make(map[string]providerBinding, len(online))
 	for _, instance := range instances {
-		if instance == nil || !instance.IsExecutable() || string(instance.UserID) != userID {
+		if instance == nil || !instance.IsExecutable() || string(instance.SpaceID) != spaceID {
 			continue
 		}
 		if strings.TrimSpace(def.ExtensionID) != "" && strings.TrimSpace(instance.ExtensionID) != strings.TrimSpace(def.ExtensionID) {
@@ -332,7 +332,7 @@ func (api *TaskAPI) resolvePublicExecutionTarget(c *gin.Context, req *task_runti
 		Target: task_runtime.TaskExecutionTarget{
 			ProviderID:         providerInstance.ProviderID,
 			ProviderInstanceID: providerInstance.ID,
-			UserID:             runtimeidentity.UserID(userID),
+			SpaceID:            runtimeidentity.SpaceID(spaceID),
 			DeviceID:           runtimeidentity.DeviceID(descriptor.DeviceID),
 			RuntimeID:          runtimeidentity.RuntimeID(descriptor.RuntimeID),
 			RuntimeInstanceID:  providerInstance.RuntimeInstanceID,

@@ -47,7 +47,7 @@ const (
 
 type WorkflowSyncOutboxEvent struct {
 	EventID        string                `json:"eventId"`
-	OwnerUserID    string                `json:"ownerUserId"`
+	OwnerSpaceID   string                `json:"ownerSpaceId"`
 	WorkflowID     string                `json:"workflowId"`
 	Revision       int64                 `json:"revision"`
 	BaseRevision   int64                 `json:"baseRevision"`
@@ -62,7 +62,7 @@ type WorkflowSyncOutboxEvent struct {
 }
 
 type WorkflowSyncState struct {
-	OwnerUserID    string    `json:"ownerUserId"`
+	OwnerSpaceID   string    `json:"ownerSpaceId"`
 	WorkflowID     string    `json:"workflowId"`
 	Revision       int64     `json:"revision"`
 	DefinitionHash string    `json:"definitionHash,omitempty"`
@@ -82,7 +82,7 @@ type WorkflowSyncApplyResult struct {
 type WorkflowSyncConflictRecord struct {
 	EventID           string                `json:"eventId"`
 	SourceDeviceID    string                `json:"sourceDeviceId"`
-	OwnerUserID       string                `json:"ownerUserId"`
+	OwnerSpaceID      string                `json:"ownerSpaceId"`
 	WorkflowID        string                `json:"workflowId"`
 	Revision          int64                 `json:"revision"`
 	BaseRevision      int64                 `json:"baseRevision"`
@@ -98,7 +98,7 @@ func workflowSyncOwner(def workflow.WorkflowDefinition) string {
 	if def.Source != "user" || def.Metadata == nil {
 		return ""
 	}
-	return strings.TrimSpace(fmt.Sprint(def.Metadata["ownerUserId"]))
+	return strings.TrimSpace(fmt.Sprint(def.Metadata["ownerSpaceId"]))
 }
 
 func (r *WorkflowDefinitionRepository) enqueueWorkflowSyncUpsertTx(ctx context.Context, tx *sql.Tx, def workflow.WorkflowDefinition, hash string, now time.Time) error {
@@ -130,7 +130,7 @@ func (r *WorkflowDefinitionRepository) enqueueWorkflowSyncEventTx(ctx context.Co
 	err := tx.QueryRowContext(ctx, `
 		SELECT revision, definition_hash, deleted
 		FROM extension_workflow_sync_state
-		WHERE owner_user_id = ? AND workflow_id = ?
+		WHERE owner_space_id = ? AND workflow_id = ?
 	`, owner, workflowID).Scan(&currentRevision, &currentHash, &currentDeleted)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return fmt.Errorf("read workflow sync state: %w", err)
@@ -143,9 +143,9 @@ func (r *WorkflowDefinitionRepository) enqueueWorkflowSyncEventTx(ctx context.Co
 	eventID := "wfsync-" + uuid.NewString()
 	if _, err := tx.ExecContext(ctx, `
 		INSERT INTO extension_workflow_sync_state
-			(owner_user_id, workflow_id, revision, definition_hash, deleted, updated_at)
+			(owner_space_id, workflow_id, revision, definition_hash, deleted, updated_at)
 		VALUES (?, ?, ?, ?, ?, ?)
-		ON CONFLICT(owner_user_id, workflow_id) DO UPDATE SET
+		ON CONFLICT(owner_space_id, workflow_id) DO UPDATE SET
 			revision = excluded.revision,
 			definition_hash = excluded.definition_hash,
 			deleted = excluded.deleted,
@@ -155,7 +155,7 @@ func (r *WorkflowDefinitionRepository) enqueueWorkflowSyncEventTx(ctx context.Co
 	}
 	if _, err := tx.ExecContext(ctx, `
 		INSERT INTO extension_workflow_sync_outbox
-			(event_id, owner_user_id, workflow_id, revision, base_revision, event_type, definition_hash,
+			(event_id, owner_space_id, workflow_id, revision, base_revision, event_type, definition_hash,
 			 payload_json, created_at, sent_at, acked_at, retry_count, next_retry_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, 0, ?)
 	`, eventID, owner, workflowID, revision, baseRevision, string(eventType), hash, payload, now, now); err != nil {
@@ -164,9 +164,9 @@ func (r *WorkflowDefinitionRepository) enqueueWorkflowSyncEventTx(ctx context.Co
 	return nil
 }
 
-func (r *WorkflowDefinitionRepository) ListWorkflowSyncOutbox(ctx context.Context, ownerUserID string, limit int) ([]WorkflowSyncOutboxEvent, error) {
-	ownerUserID = strings.TrimSpace(ownerUserID)
-	if ownerUserID == "" {
+func (r *WorkflowDefinitionRepository) ListWorkflowSyncOutbox(ctx context.Context, ownerSpaceID string, limit int) ([]WorkflowSyncOutboxEvent, error) {
+	ownerSpaceID = strings.TrimSpace(ownerSpaceID)
+	if ownerSpaceID == "" {
 		return nil, errors.New("workflow sync owner is required")
 	}
 	if limit <= 0 {
@@ -177,13 +177,13 @@ func (r *WorkflowDefinitionRepository) ListWorkflowSyncOutbox(ctx context.Contex
 	}
 	now := time.Now().UTC()
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT event_id, owner_user_id, workflow_id, revision, base_revision, event_type, definition_hash,
+		SELECT event_id, owner_space_id, workflow_id, revision, base_revision, event_type, definition_hash,
 			payload_json, created_at, sent_at, acked_at, retry_count, next_retry_at
 		FROM extension_workflow_sync_outbox
-		WHERE owner_user_id = ? AND acked_at IS NULL AND next_retry_at <= ?
+		WHERE owner_space_id = ? AND acked_at IS NULL AND next_retry_at <= ?
 		ORDER BY created_at ASC, revision ASC, event_id ASC
 		LIMIT ?
-	`, ownerUserID, now, limit)
+	`, ownerSpaceID, now, limit)
 	if err != nil {
 		return nil, fmt.Errorf("list workflow sync outbox: %w", err)
 	}
@@ -194,7 +194,7 @@ func (r *WorkflowDefinitionRepository) ListWorkflowSyncOutbox(ctx context.Contex
 		var eventType string
 		var payload string
 		var sentAt, ackedAt sql.NullTime
-		if err := rows.Scan(&item.EventID, &item.OwnerUserID, &item.WorkflowID, &item.Revision, &item.BaseRevision,
+		if err := rows.Scan(&item.EventID, &item.OwnerSpaceID, &item.WorkflowID, &item.Revision, &item.BaseRevision,
 			&eventType, &item.DefinitionHash, &payload, &item.CreatedAt, &sentAt, &ackedAt, &item.RetryCount, &item.NextRetryAt); err != nil {
 			return nil, fmt.Errorf("scan workflow sync outbox: %w", err)
 		}
@@ -236,9 +236,9 @@ func (r *WorkflowDefinitionRepository) MarkWorkflowSyncSent(ctx context.Context,
 	return nil
 }
 
-func (r *WorkflowDefinitionRepository) AckWorkflowSyncEvents(ctx context.Context, ownerUserID string, eventIDs []string) error {
-	ownerUserID = strings.TrimSpace(ownerUserID)
-	if ownerUserID == "" {
+func (r *WorkflowDefinitionRepository) AckWorkflowSyncEvents(ctx context.Context, ownerSpaceID string, eventIDs []string) error {
+	ownerSpaceID = strings.TrimSpace(ownerSpaceID)
+	if ownerSpaceID == "" {
 		return errors.New("workflow sync owner is required")
 	}
 	now := time.Now().UTC()
@@ -250,42 +250,42 @@ func (r *WorkflowDefinitionRepository) AckWorkflowSyncEvents(ctx context.Context
 		if _, err := r.db.ExecContext(ctx, `
 			UPDATE extension_workflow_sync_outbox
 			SET acked_at = ?, next_retry_at = ?
-			WHERE owner_user_id = ? AND event_id = ?
-		`, now, now, ownerUserID, eventID); err != nil {
+			WHERE owner_space_id = ? AND event_id = ?
+		`, now, now, ownerSpaceID, eventID); err != nil {
 			return fmt.Errorf("ack workflow sync event: %w", err)
 		}
 	}
 	return nil
 }
 
-func (r *WorkflowDefinitionRepository) SetWorkflowSyncState(ctx context.Context, ownerUserID, workflowID string, revision int64, definitionHash string, deleted bool) error {
-	ownerUserID = strings.TrimSpace(ownerUserID)
+func (r *WorkflowDefinitionRepository) SetWorkflowSyncState(ctx context.Context, ownerSpaceID, workflowID string, revision int64, definitionHash string, deleted bool) error {
+	ownerSpaceID = strings.TrimSpace(ownerSpaceID)
 	workflowID = strings.TrimSpace(workflowID)
-	if ownerUserID == "" || workflowID == "" || revision <= 0 {
+	if ownerSpaceID == "" || workflowID == "" || revision <= 0 {
 		return errors.New("workflow sync state requires owner, workflow and positive revision")
 	}
 	_, err := r.db.ExecContext(ctx, `
-		INSERT INTO extension_workflow_sync_state(owner_user_id, workflow_id, revision, definition_hash, deleted, updated_at)
+		INSERT INTO extension_workflow_sync_state(owner_space_id, workflow_id, revision, definition_hash, deleted, updated_at)
 		VALUES (?, ?, ?, ?, ?, ?)
-		ON CONFLICT(owner_user_id, workflow_id) DO UPDATE SET
+		ON CONFLICT(owner_space_id, workflow_id) DO UPDATE SET
 			revision = excluded.revision,
 			definition_hash = excluded.definition_hash,
 			deleted = excluded.deleted,
 			updated_at = excluded.updated_at
-	`, ownerUserID, workflowID, revision, definitionHash, boolToInt(deleted), time.Now().UTC())
+	`, ownerSpaceID, workflowID, revision, definitionHash, boolToInt(deleted), time.Now().UTC())
 	if err != nil {
 		return fmt.Errorf("set workflow sync state: %w", err)
 	}
 	return nil
 }
 
-func (r *WorkflowDefinitionRepository) ListWorkflowSyncStates(ctx context.Context, ownerUserID string) ([]WorkflowSyncState, error) {
+func (r *WorkflowDefinitionRepository) ListWorkflowSyncStates(ctx context.Context, ownerSpaceID string) ([]WorkflowSyncState, error) {
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT owner_user_id, workflow_id, revision, definition_hash, deleted, updated_at
+		SELECT owner_space_id, workflow_id, revision, definition_hash, deleted, updated_at
 		FROM extension_workflow_sync_state
-		WHERE owner_user_id = ?
+		WHERE owner_space_id = ?
 		ORDER BY workflow_id
-	`, strings.TrimSpace(ownerUserID))
+	`, strings.TrimSpace(ownerSpaceID))
 	if err != nil {
 		return nil, err
 	}
@@ -294,7 +294,7 @@ func (r *WorkflowDefinitionRepository) ListWorkflowSyncStates(ctx context.Contex
 	for rows.Next() {
 		var item WorkflowSyncState
 		var deleted int
-		if err := rows.Scan(&item.OwnerUserID, &item.WorkflowID, &item.Revision, &item.DefinitionHash, &deleted, &item.UpdatedAt); err != nil {
+		if err := rows.Scan(&item.OwnerSpaceID, &item.WorkflowID, &item.Revision, &item.DefinitionHash, &deleted, &item.UpdatedAt); err != nil {
 			return nil, err
 		}
 		item.Deleted = deleted != 0
@@ -308,7 +308,7 @@ func (r *WorkflowDefinitionRepository) ListWorkflowSyncStates(ctx context.Contex
 // cannot acknowledge an event without also committing its conflict/merge state.
 func (r *WorkflowDefinitionRepository) ApplyWorkflowSyncEvent(ctx context.Context, sourceDeviceID string, event WorkflowSyncOutboxEvent) (WorkflowSyncApplyResult, error) {
 	result := WorkflowSyncApplyResult{EventID: event.EventID, WorkflowID: event.WorkflowID}
-	if strings.TrimSpace(sourceDeviceID) == "" || strings.TrimSpace(event.EventID) == "" || strings.TrimSpace(event.OwnerUserID) == "" || strings.TrimSpace(event.WorkflowID) == "" {
+	if strings.TrimSpace(sourceDeviceID) == "" || strings.TrimSpace(event.EventID) == "" || strings.TrimSpace(event.OwnerSpaceID) == "" || strings.TrimSpace(event.WorkflowID) == "" {
 		return result, errors.New("workflow sync inbox requires device, event, owner and workflow")
 	}
 	if event.Revision <= 0 || event.BaseRevision < 0 || event.Revision <= event.BaseRevision {
@@ -344,8 +344,8 @@ func (r *WorkflowDefinitionRepository) ApplyWorkflowSyncEvent(ctx context.Contex
 	canonicalErr := tx.QueryRowContext(ctx, `
 		SELECT revision, definition_hash, deleted
 		FROM extension_workflow_sync_canonical
-		WHERE owner_user_id = ? AND workflow_id = ?
-	`, event.OwnerUserID, event.WorkflowID).Scan(&currentRevision, &currentHash, &currentDeleted)
+		WHERE owner_space_id = ? AND workflow_id = ?
+	`, event.OwnerSpaceID, event.WorkflowID).Scan(&currentRevision, &currentHash, &currentDeleted)
 	canonicalExists := canonicalErr == nil
 	if canonicalErr != nil && !errors.Is(canonicalErr, sql.ErrNoRows) {
 		return result, canonicalErr
@@ -382,25 +382,25 @@ func (r *WorkflowDefinitionRepository) ApplyWorkflowSyncEvent(ctx context.Contex
 		canonicalHash = event.DefinitionHash
 		if _, err := tx.ExecContext(ctx, `
 			INSERT INTO extension_workflow_sync_canonical
-				(owner_user_id, workflow_id, revision, definition_hash, deleted, source_device_id, payload_json, updated_at)
+				(owner_space_id, workflow_id, revision, definition_hash, deleted, source_device_id, payload_json, updated_at)
 			VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-			ON CONFLICT(owner_user_id, workflow_id) DO UPDATE SET
+			ON CONFLICT(owner_space_id, workflow_id) DO UPDATE SET
 				revision = excluded.revision,
 				definition_hash = excluded.definition_hash,
 				deleted = excluded.deleted,
 				source_device_id = excluded.source_device_id,
 				payload_json = excluded.payload_json,
 				updated_at = excluded.updated_at
-		`, event.OwnerUserID, event.WorkflowID, event.Revision, event.DefinitionHash, boolToInt(deleted), sourceDeviceID, event.Payload, time.Now().UTC()); err != nil {
+		`, event.OwnerSpaceID, event.WorkflowID, event.Revision, event.DefinitionHash, boolToInt(deleted), sourceDeviceID, event.Payload, time.Now().UTC()); err != nil {
 			return result, err
 		}
 	}
 	if _, err := tx.ExecContext(ctx, `
 		INSERT INTO extension_workflow_sync_inbox
-			(event_id, source_device_id, owner_user_id, workflow_id, revision, base_revision, event_type,
+			(event_id, source_device_id, owner_space_id, workflow_id, revision, base_revision, event_type,
 			 definition_hash, payload_json, status, accepted, canonical_revision, received_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, event.EventID, sourceDeviceID, event.OwnerUserID, event.WorkflowID, event.Revision, event.BaseRevision,
+	`, event.EventID, sourceDeviceID, event.OwnerSpaceID, event.WorkflowID, event.Revision, event.BaseRevision,
 		string(event.EventType), event.DefinitionHash, event.Payload, string(status), boolToInt(accepted), canonicalRevision, time.Now().UTC()); err != nil {
 		return result, err
 	}
@@ -414,22 +414,22 @@ func (r *WorkflowDefinitionRepository) ApplyWorkflowSyncEvent(ctx context.Contex
 	return result, nil
 }
 
-func (r *WorkflowDefinitionRepository) ListWorkflowSyncConflicts(ctx context.Context, ownerUserID string, limit int) ([]WorkflowSyncConflictRecord, error) {
-	ownerUserID = strings.TrimSpace(ownerUserID)
-	if ownerUserID == "" {
+func (r *WorkflowDefinitionRepository) ListWorkflowSyncConflicts(ctx context.Context, ownerSpaceID string, limit int) ([]WorkflowSyncConflictRecord, error) {
+	ownerSpaceID = strings.TrimSpace(ownerSpaceID)
+	if ownerSpaceID == "" {
 		return nil, errors.New("workflow sync owner is required")
 	}
 	if limit <= 0 || limit > 500 {
 		limit = 100
 	}
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT event_id, source_device_id, owner_user_id, workflow_id, revision, base_revision,
+		SELECT event_id, source_device_id, owner_space_id, workflow_id, revision, base_revision,
 			event_type, definition_hash, status, canonical_revision, payload_json, received_at
 		FROM extension_workflow_sync_inbox
-		WHERE owner_user_id = ? AND accepted = 0 AND status IN (?, ?, ?)
+		WHERE owner_space_id = ? AND accepted = 0 AND status IN (?, ?, ?)
 		ORDER BY received_at DESC
 		LIMIT ?
-	`, ownerUserID, string(WorkflowSyncConflict), string(WorkflowSyncDiverged), string(WorkflowSyncCloudAhead), limit)
+	`, ownerSpaceID, string(WorkflowSyncConflict), string(WorkflowSyncDiverged), string(WorkflowSyncCloudAhead), limit)
 	if err != nil {
 		return nil, fmt.Errorf("list workflow sync conflicts: %w", err)
 	}
@@ -438,7 +438,7 @@ func (r *WorkflowDefinitionRepository) ListWorkflowSyncConflicts(ctx context.Con
 	for rows.Next() {
 		var item WorkflowSyncConflictRecord
 		var eventType, status, payload string
-		if err := rows.Scan(&item.EventID, &item.SourceDeviceID, &item.OwnerUserID, &item.WorkflowID,
+		if err := rows.Scan(&item.EventID, &item.SourceDeviceID, &item.OwnerSpaceID, &item.WorkflowID,
 			&item.Revision, &item.BaseRevision, &eventType, &item.DefinitionHash, &status,
 			&item.CanonicalRevision, &payload, &item.ReceivedAt); err != nil {
 			return nil, err
@@ -451,13 +451,13 @@ func (r *WorkflowDefinitionRepository) ListWorkflowSyncConflicts(ctx context.Con
 	return items, rows.Err()
 }
 
-func (r *WorkflowDefinitionRepository) ListWorkflowSyncCanonical(ctx context.Context, ownerUserID string) ([]WorkflowSyncOutboxEvent, error) {
+func (r *WorkflowDefinitionRepository) ListWorkflowSyncCanonical(ctx context.Context, ownerSpaceID string) ([]WorkflowSyncOutboxEvent, error) {
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT workflow_id, revision, definition_hash, deleted, source_device_id, payload_json, updated_at
 		FROM extension_workflow_sync_canonical
-		WHERE owner_user_id = ?
+		WHERE owner_space_id = ?
 		ORDER BY workflow_id
-	`, strings.TrimSpace(ownerUserID))
+	`, strings.TrimSpace(ownerSpaceID))
 	if err != nil {
 		return nil, err
 	}
@@ -471,7 +471,7 @@ func (r *WorkflowDefinitionRepository) ListWorkflowSyncCanonical(ctx context.Con
 		if err := rows.Scan(&item.WorkflowID, &item.Revision, &item.DefinitionHash, &deleted, &sourceDeviceID, &payload, &item.CreatedAt); err != nil {
 			return nil, err
 		}
-		item.OwnerUserID = strings.TrimSpace(ownerUserID)
+		item.OwnerSpaceID = strings.TrimSpace(ownerSpaceID)
 		item.BaseRevision = item.Revision - 1
 		if deleted != 0 {
 			item.EventType = WorkflowSyncDelete

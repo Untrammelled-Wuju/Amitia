@@ -37,14 +37,14 @@ type ToolCancellationReason struct {
 }
 
 type CancellationExternalScope struct {
-	UserID         string
+	SpaceID        string
 	CharacterID    string
 	ConversationID string
 	SessionID      string
 }
 
 func (s CancellationExternalScope) Key() string {
-	return s.UserID + "|" + s.CharacterID + "|" + s.ConversationID + "|" + s.SessionID
+	return s.SpaceID + "|" + s.CharacterID + "|" + s.ConversationID + "|" + s.SessionID
 }
 
 type WorkflowCancelFunc func(ctx context.Context, invocationID string, reason string) error

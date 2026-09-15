@@ -11,7 +11,7 @@ import (
 
 func newB21TestInvocation(parentID string) capability.ToolInvocationContext {
 	inv := capability.NewToolInvocationContext(capability.ToolInvocationOptions{
-		UserID:         "user-1",
+		SpaceID:        "user-1",
 		CharacterID:    "char-1",
 		ConversationID: "conv-1",
 		Source:         capability.InvocationSourceModel,
@@ -305,7 +305,7 @@ func TestB21ExternalCallScope(t *testing.T) {
 	ctrl := NewCancellationController()
 
 	scopeA := capability.CancellationExternalScope{
-		UserID:         "user-1",
+		SpaceID:        "user-1",
 		CharacterID:    "char-1",
 		ConversationID: "conv-A",
 		SessionID:      "",
@@ -314,14 +314,14 @@ func TestB21ExternalCallScope(t *testing.T) {
 	scopeB.ConversationID = "conv-B"
 
 	invA := capability.NewToolInvocationContext(capability.ToolInvocationOptions{
-		UserID:         "user-1",
+		SpaceID:        "user-1",
 		CharacterID:    "char-1",
 		ConversationID: "conv-A",
 		ExternalCallID: "call-123",
 		Source:         capability.InvocationSourceModel,
 	})
 	invB := capability.NewToolInvocationContext(capability.ToolInvocationOptions{
-		UserID:         "user-1",
+		SpaceID:        "user-1",
 		CharacterID:    "char-1",
 		ConversationID: "conv-B",
 		ExternalCallID: "call-123",

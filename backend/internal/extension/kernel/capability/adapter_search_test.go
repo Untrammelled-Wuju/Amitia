@@ -26,7 +26,7 @@ func TestSearchRuntimeAdapter_Supports_RejectOther(t *testing.T) {
 
 func TestSearchRuntimeAdapter_Execute_NilCall(t *testing.T) {
 	a := NewSearchRuntimeAdapter(nil, nil)
-	inv := ToolInvocationContext{InvocationID: "i1", UserID: "u1"}
+	inv := ToolInvocationContext{InvocationID: "i1", SpaceID: "u1"}
 	res := a.Execute(context.Background(), RuntimeBinding{RuntimeType: RuntimeTypeSearch}, inv, json.RawMessage(`{}`))
 	if res.Status != ToolResultStatusFailed {
 		t.Fatalf("expected failed, got %s", res.Status)
@@ -59,7 +59,7 @@ func TestSearchRuntimeAdapter_Execute_Success(t *testing.T) {
 		}
 		return expected, nil
 	}, nil)
-	inv := ToolInvocationContext{InvocationID: "i2", UserID: "u1"}
+	inv := ToolInvocationContext{InvocationID: "i2", SpaceID: "u1"}
 	res := a.Execute(context.Background(),
 		RuntimeBinding{RuntimeType: RuntimeTypeSearch, RuntimeID: "myprovider", HandlerName: "search.general"},
 		inv, json.RawMessage(`{"query":"test"}`))
@@ -84,7 +84,7 @@ func TestSearchRuntimeAdapter_Execute_DefaultProviderID(t *testing.T) {
 		}
 		return json.RawMessage(`{}`), nil
 	}, nil)
-	inv := ToolInvocationContext{InvocationID: "i3", UserID: "u1"}
+	inv := ToolInvocationContext{InvocationID: "i3", SpaceID: "u1"}
 	a.Execute(context.Background(),
 		RuntimeBinding{RuntimeType: RuntimeTypeSearch},
 		inv, json.RawMessage(`{}`))
@@ -100,7 +100,7 @@ func TestSearchRuntimeAdapter_Execute_ToolError(t *testing.T) {
 	) (json.RawMessage, error) {
 		return nil, &ToolError{Code: ErrorCodePermissionDenied, Message: "no network", UserVisible: true}
 	}, nil)
-	inv := ToolInvocationContext{InvocationID: "i4", UserID: "u1"}
+	inv := ToolInvocationContext{InvocationID: "i4", SpaceID: "u1"}
 	res := a.Execute(context.Background(),
 		RuntimeBinding{RuntimeType: RuntimeTypeSearch},
 		inv, json.RawMessage(`{}`))
@@ -122,7 +122,7 @@ func TestSearchRuntimeAdapter_Execute_WrapGenericError(t *testing.T) {
 	) (json.RawMessage, error) {
 		return nil, errors.New("network down")
 	}, nil)
-	inv := ToolInvocationContext{InvocationID: "i5", UserID: "u1"}
+	inv := ToolInvocationContext{InvocationID: "i5", SpaceID: "u1"}
 	res := a.Execute(context.Background(),
 		RuntimeBinding{RuntimeType: RuntimeTypeSearch},
 		inv, json.RawMessage(`{}`))

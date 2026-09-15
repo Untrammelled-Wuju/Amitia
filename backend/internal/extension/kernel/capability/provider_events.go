@@ -75,7 +75,7 @@ type ProviderInstanceEventPayload struct {
 
 	Placement ProviderPlacement `json:"placement"`
 
-	UserID    runtimeidentity.UserID    `json:"userId,omitempty"`
+	SpaceID   runtimeidentity.SpaceID   `json:"spaceId,omitempty"`
 	DeviceID  runtimeidentity.DeviceID  `json:"deviceId,omitempty"`
 	RuntimeID runtimeidentity.RuntimeID `json:"runtimeId,omitempty"`
 

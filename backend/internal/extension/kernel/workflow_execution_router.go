@@ -150,12 +150,12 @@ func (r *WorkflowExecutionRouter) resolveRuntimeNode(ctx context.Context, node w
 		return ResolvedWorkflowExecutionTarget{
 			InvocationTarget: capability.InvocationExecutionTarget{
 				Placement: string(capability.ProviderPlacementCore),
-				UserID:    runtimeidentity.UserID(execCtx.UserID),
+				SpaceID:   runtimeidentity.SpaceID(execCtx.SpaceID),
 			},
 			Route: capability.RuntimeExecutionRoute{
 				Binding:   binding,
 				Placement: capability.ProviderPlacementCore,
-				UserID:    runtimeidentity.UserID(execCtx.UserID),
+				SpaceID:   runtimeidentity.SpaceID(execCtx.SpaceID),
 			},
 			Explicit: true,
 		}, nil
@@ -210,7 +210,7 @@ func (r *WorkflowExecutionRouter) resolveRuntimeNode(ctx context.Context, node w
 				Route: capability.RuntimeExecutionRoute{
 					Binding:   binding,
 					Placement: capability.ProviderPlacementCore,
-					UserID:    runtimeidentity.UserID(execCtx.UserID),
+					SpaceID:   runtimeidentity.SpaceID(execCtx.SpaceID),
 				},
 				Explicit: true,
 			}, nil
@@ -251,7 +251,7 @@ func (r *WorkflowExecutionRouter) resolveCapability(ctx context.Context, capID c
 func (r *WorkflowExecutionRouter) resolveCapabilityWithDeviceRequirements(ctx context.Context, capID capability.CapabilityID, requiredProvider capability.ProviderID, target workflow.WorkflowExecutionTarget, execCtx workflow.ExecutionContext, requiredDeviceCapabilities []capability.CapabilityID) (capability.CapabilityResolution, error) {
 	request := capability.CapabilityResolutionRequest{
 		CapabilityID:               capID,
-		UserID:                     runtimeidentity.UserID(execCtx.UserID),
+		SpaceID:                    runtimeidentity.SpaceID(execCtx.SpaceID),
 		AllowCore:                  true,
 		AllowDevice:                true,
 		RequiredDeviceCapabilities: requiredDeviceCapabilities,
@@ -360,24 +360,24 @@ func (r *WorkflowExecutionRouter) ensureDeviceWorkflowCompatibility(ctx context.
 	if r == nil || r.sessions == nil || resolution.Provider.Placement != capability.ProviderPlacementDevice {
 		return nil
 	}
-	userID := runtimeidentity.UserID(execCtx.UserID)
+	spaceID := runtimeidentity.SpaceID(execCtx.SpaceID)
 	deviceID := resolution.ProviderInstance.DeviceID
 	runtimeID := resolution.ProviderInstance.RuntimeID
-	if userID == "" || deviceID == "" {
+	if spaceID == "" || deviceID == "" {
 		return fmt.Errorf("workflow execution router: resolved device provider is missing session identity")
 	}
 
 	var session deviceruntime.RuntimeSession
 	var err error
 	if runtimeID != "" {
-		session, err = r.sessions.GetActiveSession(ctx, userID, deviceID, runtimeID)
+		session, err = r.sessions.GetActiveSession(ctx, spaceID, deviceID, runtimeID)
 	} else {
 		var sessions []deviceruntime.RuntimeSession
 		sessions, err = r.sessions.ListActiveSessions(ctx)
 		if err == nil {
 			err = fmt.Errorf("active runtime session not found")
 			for _, candidate := range sessions {
-				if candidate.UserID == userID && candidate.DeviceID == deviceID {
+				if candidate.SpaceID == spaceID && candidate.DeviceID == deviceID {
 					session = candidate
 					err = nil
 					break
@@ -433,7 +433,7 @@ func (r *WorkflowExecutionRouter) resolvedFromCapability(node workflow.WorkflowN
 			ProviderID:                resolution.Provider.ID,
 			ProviderInstanceID:        resolution.ProviderInstance.ID,
 			ProviderRuntimeInstanceID: resolution.ProviderInstance.RuntimeInstanceID,
-			UserID:                    resolution.ProviderInstance.UserID,
+			SpaceID:                   resolution.ProviderInstance.SpaceID,
 			DeviceID:                  resolution.ProviderInstance.DeviceID,
 			RuntimeID:                 resolution.ProviderInstance.RuntimeID,
 			RemoteDevice:              resolution.Provider.Placement == capability.ProviderPlacementDevice,

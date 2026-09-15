@@ -4,7 +4,7 @@ type OwnerType string
 
 const (
 	OwnerSystem    OwnerType = "system"
-	OwnerUser      OwnerType = "user"
+	OwnerSpace     OwnerType = "space"
 	OwnerExtension OwnerType = "extension"
 	OwnerModule    OwnerType = "module"
 	OwnerShared    OwnerType = "shared"
@@ -14,7 +14,7 @@ const (
 
 func (ot OwnerType) IsValid() bool {
 	switch ot {
-	case OwnerSystem, OwnerUser, OwnerExtension, OwnerModule, OwnerShared, OwnerTemporary, OwnerMigration:
+	case OwnerSystem, OwnerSpace, OwnerExtension, OwnerModule, OwnerShared, OwnerTemporary, OwnerMigration:
 		return true
 	}
 	return false
@@ -31,8 +31,8 @@ func NewSystemOwner() ResourceOwner {
 	return ResourceOwner{OwnerType: OwnerSystem, OwnerID: "system"}
 }
 
-func NewUserOwner(userID string) ResourceOwner {
-	return ResourceOwner{OwnerType: OwnerUser, OwnerID: userID}
+func NewSpaceOwner(spaceID string) ResourceOwner {
+	return ResourceOwner{OwnerType: OwnerSpace, OwnerID: spaceID}
 }
 
 func NewExtensionOwner(extensionID string) ResourceOwner {
@@ -56,7 +56,7 @@ func NewMigrationOwner(ownerID string) ResourceOwner {
 }
 
 func (ro ResourceOwner) IsSystem() bool    { return ro.OwnerType == OwnerSystem }
-func (ro ResourceOwner) IsUser() bool      { return ro.OwnerType == OwnerUser }
+func (ro ResourceOwner) IsSpace() bool     { return ro.OwnerType == OwnerSpace }
 func (ro ResourceOwner) IsExtension() bool { return ro.OwnerType == OwnerExtension }
 func (ro ResourceOwner) IsModule() bool    { return ro.OwnerType == OwnerModule }
 func (ro ResourceOwner) IsShared() bool    { return ro.OwnerType == OwnerShared }

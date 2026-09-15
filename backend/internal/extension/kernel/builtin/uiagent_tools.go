@@ -245,7 +245,7 @@ func uiagentClientRuntimeHandler(ctx context.Context, execCtx tool.ToolExecution
 		return tool.ErrorResult("invalid_input", action+" requires id")
 	}
 	payload["_runtimeScope"] = map[string]interface{}{
-		"userId":         strings.TrimSpace(execCtx.User),
+		"spaceId":        strings.TrimSpace(execCtx.SpaceID),
 		"conversationId": strings.TrimSpace(execCtx.ConversationID),
 		"requestId":      strings.TrimSpace(execCtx.RequestID),
 	}

@@ -31,7 +31,7 @@ func (c *ExtensionBackupContributor) Dependencies() []string {
 type extensionSkillExportRecord struct {
 	ID                   string `json:"id"`
 	ExtensionID          string `json:"extension_id"`
-	UserID               string `json:"user_id"`
+	SpaceID              string `json:"space_id"`
 	Name                 string `json:"name"`
 	Description          string `json:"description"`
 	License              string `json:"license"`
@@ -84,7 +84,7 @@ func (c *ExtensionBackupContributor) Export(ctx context.Context, req dataportabi
 	defer compW.Close()
 
 	query := c.DB.WithContext(ctx).Table("extension_agent_skill_metadata").Select(
-		"id, extension_id, user_id, name, description, license, compatibility, metadata_json, allowed_tools, display_name, short_description, default_prompt, openai_metadata_json, scope_type, scope_id, source, compatibility_status, content_hash, raw_frontmatter_json, extra_frontmatter_json, tool_mappings_json, scripts_present, scripts_required, enabled, created_at, updated_at",
+		"id, extension_id, space_id, name, description, license, compatibility, metadata_json, allowed_tools, display_name, short_description, default_prompt, openai_metadata_json, scope_type, scope_id, source, compatibility_status, content_hash, raw_frontmatter_json, extra_frontmatter_json, tool_mappings_json, scripts_present, scripts_required, enabled, created_at, updated_at",
 	).Where("removed_at = ''").Order("name ASC, scope_type ASC, scope_id ASC")
 
 	rows, err := query.Rows()
@@ -206,7 +206,7 @@ func (c *ExtensionBackupContributor) RestoreExtensions(ctx context.Context, in d
 			metadata := agentSkillMetadataRecord{
 				ID:                      rec.ID,
 				ExtensionID:             rec.ExtensionID,
-				UserID:                  rec.UserID,
+				SpaceID:                 rec.SpaceID,
 				Name:                    rec.Name,
 				Description:             rec.Description,
 				License:                 rec.License,

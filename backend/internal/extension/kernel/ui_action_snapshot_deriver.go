@@ -81,7 +81,7 @@ func newUIActionSnapshotDeriver(scopeStore scope.ScopeStore, permissionStore per
 			Lifetime:       lifetime,
 			ExecutionContext: permission.PermissionExecutionContext{
 				Placement:          sourcePermission.ExecutionPlacement,
-				UserID:             sourcePermission.UserID,
+				SpaceID:            sourcePermission.SpaceID,
 				DeviceID:           sourcePermission.DeviceID,
 				RuntimeID:          sourcePermission.RuntimeID,
 				ProviderID:         sourcePermission.ProviderID,

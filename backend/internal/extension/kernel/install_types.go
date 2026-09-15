@@ -105,7 +105,7 @@ type InstallPreview struct {
 }
 
 type PackagePreviewRequest struct {
-	UserID             string
+	SpaceID            string
 	ScopeType          string
 	ScopeID            string
 	FileName           string
@@ -115,7 +115,7 @@ type PackagePreviewRequest struct {
 
 type PackageInstallRequest struct {
 	SessionID           string          `json:"sessionId"`
-	UserID              string          `json:"-"`
+	SpaceID             string          `json:"-"`
 	ScopeType           string          `json:"scopeType"`
 	ScopeID             string          `json:"scopeId"`
 	Confirmations       map[string]bool `json:"confirmations"`
@@ -126,7 +126,7 @@ type PackageInstallRequest struct {
 
 type PackagePreviewConfirmationRequest struct {
 	SessionID     string          `json:"sessionId"`
-	UserID        string          `json:"-"`
+	SpaceID       string          `json:"-"`
 	ScopeType     string          `json:"scopeType"`
 	ScopeID       string          `json:"scopeId"`
 	Confirmations map[string]bool `json:"confirmations"`
@@ -203,7 +203,7 @@ type packageConfirmationClaims struct {
 	ArchiveHash               string          `json:"archiveHash"`
 	ManifestHash              string          `json:"manifestHash"`
 	ContentTreeHash           string          `json:"contentTreeHash"`
-	UserID                    string          `json:"userId"`
+	SpaceID                   string          `json:"spaceId"`
 	ScopeType                 string          `json:"scopeType"`
 	ScopeID                   string          `json:"scopeId"`
 	ExtensionID               string          `json:"extensionId"`
@@ -300,7 +300,7 @@ func verifyPackageConfirmation(token string) (packageConfirmationClaims, error) 
 
 type ExecutePackageUninstallRequest struct {
 	ExtensionID       string `json:"extensionId"`
-	UserID            string `json:"userId"`
+	SpaceID           string `json:"spaceId"`
 	ScopeType         string `json:"scopeType"`
 	ScopeID           string `json:"scopeId"`
 	ConfirmationToken string `json:"confirmationToken"`
@@ -485,7 +485,7 @@ type PackageConfirmationClaims struct {
 	RequiredConfirmationsHash string          `json:"requiredConfirmationsHash,omitempty"`
 	DependenciesHash          string          `json:"dependenciesHash,omitempty"`
 	PolicyVersion             string          `json:"policyVersion"`
-	UserID                    string          `json:"userId"`
+	SpaceID                   string          `json:"spaceId"`
 	ScopeType                 string          `json:"scopeType"`
 	ScopeID                   string          `json:"scopeId"`
 	ConfirmedItems            []string        `json:"confirmedItems"`
@@ -529,7 +529,7 @@ type PackageRollbackConfirmationClaims struct {
 	SnapshotRequirementHash   string          `json:"snapshotRequirementHash"`
 	RequiredConfirmationsHash string          `json:"requiredConfirmationsHash"`
 	DependenciesHash          string          `json:"dependenciesHash"`
-	UserID                    string          `json:"userId"`
+	SpaceID                   string          `json:"spaceId"`
 	ScopeType                 string          `json:"scopeType"`
 	ScopeID                   string          `json:"scopeId"`
 	ConfirmedItems            []string        `json:"confirmedItems"`
@@ -616,7 +616,7 @@ func verifyPackageRollbackConfirmation(token string) (PackageRollbackConfirmatio
 				),
 			)
 	}
-	if claims.UserID == "" || claims.ScopeType == "" {
+	if claims.SpaceID == "" || claims.ScopeType == "" {
 		return claims, NewPackageError(PackageErrCodeConfirmationClaimsInvalid, 403, fmt.Errorf("%w: user and scope binding required", ErrPackageConfirmationClaimsInvalid))
 	}
 	if len(claims.ConfirmedItems) == 0 || !validateConfirmedItemsConsistency(claims.ConfirmedItems, claims.Confirmations) {
@@ -755,8 +755,8 @@ func parseAndValidateOperationConfirmationClaims(operation PackageOperationRecor
 	if claims.ArtifactID != operation.ArtifactID {
 		return claims, NewPackageError(PackageErrCodeConfirmationClaimsInvalid, 403, fmt.Errorf("%w: artifactId mismatch", ErrPackageConfirmationClaimsInvalid))
 	}
-	if claims.UserID != operation.UserID {
-		return claims, NewPackageError(PackageErrCodeConfirmationClaimsInvalid, 403, fmt.Errorf("%w: userId mismatch", ErrPackageConfirmationClaimsInvalid))
+	if claims.SpaceID != operation.SpaceID {
+		return claims, NewPackageError(PackageErrCodeConfirmationClaimsInvalid, 403, fmt.Errorf("%w: spaceId mismatch", ErrPackageConfirmationClaimsInvalid))
 	}
 	if claims.ScopeType != operation.ScopeType {
 		return claims, NewPackageError(PackageErrCodeConfirmationClaimsInvalid, 403, fmt.Errorf("%w: scopeType mismatch", ErrPackageConfirmationClaimsInvalid))
@@ -807,7 +807,7 @@ type PackageUninstallPreviewIdentity struct {
 	DependentsHash          string
 	SecurityPolicyHash      string
 	SnapshotRequirementHash string
-	UserID                  string
+	SpaceID                 string
 	ScopeType               string
 	ScopeID                 string
 	PolicyVersion           string

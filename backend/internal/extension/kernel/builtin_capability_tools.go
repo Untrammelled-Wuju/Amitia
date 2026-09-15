@@ -36,19 +36,19 @@ type usePackageInput struct {
 	PackageName string `json:"package_name"`
 }
 
-func (f *ToolFacade) handleUsePackage(ctx context.Context, input json.RawMessage, scope LegacyScope) (LegacyToolResult, error) {
+func (f *ToolFacade) handleUsePackage(ctx context.Context, input json.RawMessage, scope InvocationScope) (ToolDispatchResult, error) {
 	var req usePackageInput
 	if err := json.Unmarshal(input, &req); err != nil {
-		return LegacyToolResult{
+		return ToolDispatchResult{
 			Status:      "FAILED",
 			VisibleText: fmt.Sprintf("invalid use_package input: %v", err),
-			Error:       &LegacyToolError{Code: "INVALID_INPUT", Message: err.Error()},
+			Error:       &ToolDispatchError{Code: "INVALID_INPUT", Message: err.Error()},
 		}, err
 	}
 	name := strings.TrimSpace(req.PackageName)
 	if name == "" {
 		err := fmt.Errorf("package_name is required")
-		return LegacyToolResult{Status: "FAILED", VisibleText: err.Error(), Error: &LegacyToolError{Code: "INVALID_INPUT", Message: err.Error()}}, err
+		return ToolDispatchResult{Status: "FAILED", VisibleText: err.Error(), Error: &ToolDispatchError{Code: "INVALID_INPUT", Message: err.Error()}}, err
 	}
 
 	// Skills are the highest-confidence package-name lookup because the skill
@@ -66,7 +66,7 @@ func (f *ToolFacade) handleUsePackage(ctx context.Context, input json.RawMessage
 				"compatibilityStatus": result.CompatibilityStatus,
 				"contentHash":         result.ContentHash,
 			})
-			return LegacyToolResult{RunID: result.ActivationID, Status: "SUCCESS", Output: output, VisibleText: fmt.Sprintf("Dynamic package activated as Skill: %s", result.Name)}, nil
+			return ToolDispatchResult{RunID: result.ActivationID, Status: "SUCCESS", Output: output, VisibleText: fmt.Sprintf("Dynamic package activated as Skill: %s", result.Name)}, nil
 		} else {
 			skillErr = err
 		}
@@ -94,7 +94,7 @@ func (f *ToolFacade) handleUsePackage(ctx context.Context, input json.RawMessage
 			found, findErr := f.acquisitionBridge.FindCapabilities(ctx, acquisition.FindCapabilitiesInput{
 				CapabilityID: query,
 				Description:  "Activate dynamic package " + name,
-			}, scope.UserID)
+			}, scope.SpaceID)
 			if findErr != nil || found == nil || found.TotalFound == 0 {
 				continue
 			}
@@ -107,7 +107,7 @@ func (f *ToolFacade) handleUsePackage(ctx context.Context, input json.RawMessage
 			acquired, acquireErr := f.acquisitionBridge.AcquireCapability(ctx, acquisition.AcquireInput{
 				CapabilityID: capabilityID,
 				CandidateID:  candidate.ID,
-			}, scope.UserID, scope.ExecContext)
+			}, scope.SpaceID, scope.ExecContext)
 			if acquireErr != nil {
 				activationErr = acquireErr
 				continue
@@ -126,11 +126,11 @@ func (f *ToolFacade) handleUsePackage(ctx context.Context, input json.RawMessage
 			})
 			if acquired.NeedsApproval {
 				visible := fmt.Sprintf("Dynamic package %s requires user approval before activation", name)
-				return LegacyToolResult{
+				return ToolDispatchResult{
 					Status:      "WAITING_APPROVAL",
 					Output:      output,
 					VisibleText: visible,
-					Error: &LegacyToolError{
+					Error: &ToolDispatchError{
 						Code:      "PACKAGE_APPROVAL_REQUIRED",
 						Message:   name,
 						Detail:    acquired.ResumeToken,
@@ -140,7 +140,7 @@ func (f *ToolFacade) handleUsePackage(ctx context.Context, input json.RawMessage
 			}
 			if acquired.Success {
 				visible := fmt.Sprintf("Dynamic package %s activated as %s %s", name, candidate.Kind, candidate.Name)
-				return LegacyToolResult{Status: "SUCCESS", Output: output, VisibleText: visible}, nil
+				return ToolDispatchResult{Status: "SUCCESS", Output: output, VisibleText: visible}, nil
 			}
 
 			message := fmt.Sprintf("dynamic package %q is not ready after activation attempt (state: %s)", name, acquired.State)
@@ -148,11 +148,11 @@ func (f *ToolFacade) handleUsePackage(ctx context.Context, input json.RawMessage
 				message += ": " + acquired.ErrorMessage
 			}
 			err := fmt.Errorf("%s", message)
-			return LegacyToolResult{
+			return ToolDispatchResult{
 				Status:      "FAILED",
 				Output:      output,
 				VisibleText: message,
-				Error: &LegacyToolError{
+				Error: &ToolDispatchError{
 					Code:      "PACKAGE_NOT_READY",
 					Message:   name,
 					Detail:    string(acquired.State),
@@ -165,10 +165,10 @@ func (f *ToolFacade) handleUsePackage(ctx context.Context, input json.RawMessage
 	if matchedCandidate && activationErr != nil {
 		message := fmt.Sprintf("dynamic package %q was found but activation failed: %v", name, activationErr)
 		err := fmt.Errorf("%s", message)
-		return LegacyToolResult{
+		return ToolDispatchResult{
 			Status:      "FAILED",
 			VisibleText: message,
-			Error:       &LegacyToolError{Code: "PACKAGE_ACTIVATION_FAILED", Message: name, Detail: activationErr.Error(), Retryable: true},
+			Error:       &ToolDispatchError{Code: "PACKAGE_ACTIVATION_FAILED", Message: name, Detail: activationErr.Error(), Retryable: true},
 		}, err
 	}
 
@@ -177,7 +177,7 @@ func (f *ToolFacade) handleUsePackage(ctx context.Context, input json.RawMessage
 		message += fmt.Sprintf(" (skill activation: %v)", skillErr)
 	}
 	err := fmt.Errorf("%s", message)
-	return LegacyToolResult{Status: "FAILED", VisibleText: message, Error: &LegacyToolError{Code: "PACKAGE_NOT_FOUND", Message: message}}, err
+	return ToolDispatchResult{Status: "FAILED", VisibleText: message, Error: &ToolDispatchError{Code: "PACKAGE_NOT_FOUND", Message: message}}, err
 }
 
 func selectUsePackageCandidate(candidates []acquisition.CapabilityCandidate, packageName, query string) (*acquisition.CapabilityCandidate, string) {

@@ -75,7 +75,7 @@ func (r *Runtime) PreviewPackage(ctx context.Context, request PackagePreviewRequ
 	if r.container == nil || r.container.PackageRepository == nil || r.container.PackageArtifactStore == nil {
 		return InstallPreview{}, fmt.Errorf("kernel: package services unavailable")
 	}
-	if request.UserID == "" || request.ScopeType == "" {
+	if request.SpaceID == "" || request.ScopeType == "" {
 		return InstallPreview{}, fmt.Errorf("kernel: preview owner and scope required")
 	}
 	artifact, err := r.container.PackageArtifactStore.PutArchive(ctx, reader, package_security.DefaultArchivePolicy().MaxArchiveBytes)
@@ -232,7 +232,7 @@ func (r *Runtime) PreviewPackage(ctx context.Context, request PackagePreviewRequ
 	if len(preview.RequiredConfirmations) > 0 {
 		status = "awaiting_confirmation"
 	}
-	session := PackagePreviewSession{SessionID: preview.SessionID, UserID: request.UserID,
+	session := PackagePreviewSession{SessionID: preview.SessionID, SpaceID: request.SpaceID,
 		ScopeType: request.ScopeType, ScopeID: request.ScopeID, ArtifactID: artifact.ArtifactID,
 		ExtensionID: preview.ExtensionID, Version: preview.Version, Status: status,
 		ArchiveHash: preview.ArchiveHash, ManifestHash: preview.ManifestHash,
@@ -298,17 +298,17 @@ func (r *Runtime) packageUnsignedDevAllowed(request PackagePreviewRequest, exten
 	if !request.AllowUnsignedDev {
 		return false
 	}
-	return r.validateUnsignedDeveloperSession(request.DeveloperSessionID, request.UserID, extensionID) == nil
+	return r.validateUnsignedDeveloperSession(request.DeveloperSessionID, request.SpaceID, extensionID) == nil
 }
 
-func (r *Runtime) validateUnsignedDeveloperSession(sessionID, userID, extensionID string) error {
+func (r *Runtime) validateUnsignedDeveloperSession(sessionID, spaceID, extensionID string) error {
 	if packageDevelopmentModeEnabled() {
 		return nil
 	}
 	if r.container == nil {
 		return fmt.Errorf("kernel: developer session binding unavailable")
 	}
-	return validateDeveloperSessionBinding(r.container.DevModeSessions, r.container.DevModeRegistry, sessionID, userID, extensionID)
+	return validateDeveloperSessionBinding(r.container.DevModeSessions, r.container.DevModeRegistry, sessionID, spaceID, extensionID)
 }
 
 func (r *Runtime) evaluatePackageUpdateRisks(ctx context.Context, preview *InstallPreview) {

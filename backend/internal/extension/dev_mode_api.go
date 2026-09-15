@@ -152,7 +152,7 @@ func (api *DevModeAPI) registerWorkspace(c *gin.Context) {
 	ws, err := container.DevModeRegistry.Register(ctx, dev_mode.RegisterWorkspaceInput{
 		WorkspaceID:   generateWorkspaceID(),
 		ExtensionID:   dev_mode.ExtensionID(req.ExtensionID),
-		OwnerUserID:   kernelAPIUser(c),
+		OwnerSpaceID:  kernelAPIUser(c),
 		PathReference: req.Path,
 		ManifestPath:  req.ManifestPath,
 		WatchEnabled:  req.WatchEnabled,
@@ -206,7 +206,7 @@ func (api *DevModeAPI) grantTrust(c *gin.Context) {
 	}
 	id := dev_mode.WorkspaceID(c.Param("id"))
 	workspace, err := container.DevModeRegistry.Get(id)
-	if err != nil || workspace.OwnerUserID != kernelAPIUser(c) {
+	if err != nil || workspace.OwnerSpaceID != kernelAPIUser(c) {
 		c.JSON(http.StatusForbidden, gin.H{"error": "workspace ownership mismatch"})
 		return
 	}
@@ -225,7 +225,7 @@ func (api *DevModeAPI) revokeTrust(c *gin.Context) {
 	}
 	id := dev_mode.WorkspaceID(c.Param("id"))
 	workspace, err := container.DevModeRegistry.Get(id)
-	if err != nil || workspace.OwnerUserID != kernelAPIUser(c) {
+	if err != nil || workspace.OwnerSpaceID != kernelAPIUser(c) {
 		c.JSON(http.StatusForbidden, gin.H{"error": "workspace ownership mismatch"})
 		return
 	}
@@ -538,8 +538,8 @@ func (api *DevModeAPI) openSession(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
 	}
-	userID := kernelAPIUser(c)
-	if workspace.OwnerUserID != userID {
+	spaceID := kernelAPIUser(c)
+	if workspace.OwnerSpaceID != spaceID {
 		c.JSON(http.StatusForbidden, gin.H{"error": "workspace ownership mismatch"})
 		return
 	}
@@ -547,7 +547,7 @@ func (api *DevModeAPI) openSession(c *gin.Context) {
 		c.JSON(http.StatusForbidden, gin.H{"error": "developer trust is required"})
 		return
 	}
-	sess, err := container.DevModeSessions.Open(ctx, id, workspace.ExtensionID, userID, req.DeviceID, req.UserAgent, kernel.CurrentPackagePolicyVersion(), workspace.DevTrust, workspace.DevTrustVersion)
+	sess, err := container.DevModeSessions.Open(ctx, id, workspace.ExtensionID, spaceID, req.DeviceID, req.UserAgent, kernel.CurrentPackagePolicyVersion(), workspace.DevTrust, workspace.DevTrustVersion)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -562,7 +562,7 @@ func (api *DevModeAPI) closeSession(c *gin.Context) {
 	}
 	id := dev_mode.WorkspaceID(c.Param("id"))
 	workspace, workspaceErr := container.DevModeRegistry.Get(id)
-	if workspaceErr != nil || workspace.OwnerUserID != kernelAPIUser(c) {
+	if workspaceErr != nil || workspace.OwnerSpaceID != kernelAPIUser(c) {
 		c.JSON(http.StatusForbidden, gin.H{"error": "workspace ownership mismatch"})
 		return
 	}

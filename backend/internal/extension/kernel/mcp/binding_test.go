@@ -80,7 +80,7 @@ func TestMCPBindingScope_Values(t *testing.T) {
 		scope MCPBindingScope
 		want  string
 	}{
-		{MCPScopeUser, "user"},
+		{MCPScopeSpace, "space"},
 		{MCPScopeExtension, "extension"},
 		{MCPScopeBuiltin, "builtin"},
 	}

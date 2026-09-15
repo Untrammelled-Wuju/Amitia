@@ -23,7 +23,7 @@ func NewSkillScriptHandler(service *AgentSkillService, runtime *skill.ScriptRunt
 	}
 }
 
-func (h *skillScriptHandler) HandleRunSkillScript(ctx context.Context, input kernel.RunSkillScriptInput, scope kernel.LegacyScope) (kernel.RunSkillScriptOutput, error) {
+func (h *skillScriptHandler) HandleRunSkillScript(ctx context.Context, input kernel.RunSkillScriptInput, scope kernel.InvocationScope) (kernel.RunSkillScriptOutput, error) {
 	extScope := legacyScopeToKernel(scope)
 
 	_, activatedSkills, _ := h.service.PreparePrompt(ctx, extScope, "")
@@ -102,7 +102,7 @@ func (h *skillScriptHandler) HandleRunSkillScript(ctx context.Context, input ker
 	}, nil
 }
 
-func (h *skillScriptHandler) HasScriptCapableSkills(ctx context.Context, scope kernel.LegacyScope) (bool, []string, error) {
+func (h *skillScriptHandler) HasScriptCapableSkills(ctx context.Context, scope kernel.InvocationScope) (bool, []string, error) {
 	extScope := legacyScopeToKernel(scope)
 
 	_, activatedSkills, _ := h.service.PreparePrompt(ctx, extScope, "")

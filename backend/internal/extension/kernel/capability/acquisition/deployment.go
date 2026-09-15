@@ -32,7 +32,7 @@ func (p *DeploymentPlanner) PlanTarget(
 	request AcquisitionRequest,
 ) (DeploymentTarget, error) {
 	target := DeploymentTarget{
-		UserID: request.UserID,
+		SpaceID: request.SpaceID,
 	}
 
 	switch {

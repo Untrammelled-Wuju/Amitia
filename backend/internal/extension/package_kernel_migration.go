@@ -14,7 +14,7 @@ type legacyPackageMigrationCandidate struct {
 	ExtensionID string `gorm:"column:extension_id"`
 	Version     string `gorm:"column:version"`
 	PackageBlob []byte `gorm:"column:package_blob"`
-	UserID      string `gorm:"column:user_id"`
+	SpaceID     string `gorm:"column:space_id"`
 	ScopeType   string `gorm:"column:scope_type"`
 	ScopeID     string `gorm:"column:scope_id"`
 }
@@ -43,7 +43,7 @@ func (d *LegacyMigrationDetector) Detect(ctx context.Context) (LegacyMigrationRe
 	var candidates []legacyPackageMigrationCandidate
 	err := d.db.WithContext(ctx).Raw(`
 		SELECT e.extension_id, e.current_version AS version, COALESCE(v.package_blob, X'') AS package_blob,
-		COALESCE(e.owner_user_id, '') AS user_id, COALESCE(e.scope_type, 'global') AS scope_type,
+		COALESCE(e.owner_space_id, '') AS space_id, COALESCE(e.scope_type, 'global') AS scope_type,
 		COALESCE(e.scope_id, '') AS scope_id
 		FROM extensions e
 		LEFT JOIN extension_versions v ON v.extension_id = e.extension_id AND v.version = e.current_version
@@ -58,7 +58,7 @@ func (d *LegacyMigrationDetector) Detect(ctx context.Context) (LegacyMigrationRe
 		return report, fmt.Errorf("extension kernel installation repository unavailable")
 	}
 	for _, candidate := range candidates {
-		candidate.UserID = strings.TrimSpace(candidate.UserID)
+		candidate.SpaceID = strings.TrimSpace(candidate.SpaceID)
 		candidate.ScopeType = strings.TrimSpace(candidate.ScopeType)
 		candidate.ScopeID = strings.TrimSpace(candidate.ScopeID)
 		if candidate.ScopeType == "" {

@@ -10,7 +10,7 @@ import (
 type PendingInvocation struct {
 	InvocationID   string
 	CommandID      string
-	UserID         string
+	SpaceID        string
 	DeviceID       string
 	RuntimeID      string
 	SessionID      string
@@ -46,7 +46,7 @@ func (m *PendingInvocationManager) Register(req DeviceRuntimeInvocationRequest, 
 	pi := &PendingInvocation{
 		InvocationID:   invocationID,
 		CommandID:      commandID,
-		UserID:         string(req.Route.UserID),
+		SpaceID:        string(req.Route.SpaceID),
 		DeviceID:       string(req.Route.DeviceID),
 		RuntimeID:      string(req.Route.RuntimeID),
 		SessionID:      sessionID,

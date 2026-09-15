@@ -8,10 +8,10 @@ import (
 	"github.com/u-ai/backend/internal/runtimeidentity"
 )
 
-type ProviderInstanceUnavailableFunc func(userID runtimeidentity.UserID, deviceID runtimeidentity.DeviceID, runtimeID runtimeidentity.RuntimeID)
+type ProviderInstanceUnavailableFunc func(spaceID runtimeidentity.SpaceID, deviceID runtimeidentity.DeviceID, runtimeID runtimeidentity.RuntimeID)
 
 type DeviceRuntimePresenceAdapter struct {
-	registry    *Registry
+	registry       *Registry
 	onDisconnected ProviderInstanceUnavailableFunc
 }
 
@@ -55,7 +55,7 @@ func (a *DeviceRuntimePresenceAdapter) Close(
 
 func (a *DeviceRuntimePresenceAdapter) SessionReady(ctx context.Context, snapshot protocol.PresenceSnapshot) error {
 	_, err := a.registry.BindRuntimeSession(ctx, RuntimeSessionBinding{
-		UserID:               snapshot.UserID,
+		SpaceID:              snapshot.SpaceID,
 		DeviceID:             snapshot.DeviceID,
 		RuntimeID:            snapshot.RuntimeID,
 		RuntimeSessionID:     snapshot.RuntimeSessionID,
@@ -68,7 +68,7 @@ func (a *DeviceRuntimePresenceAdapter) SessionReady(ctx context.Context, snapsho
 
 func (a *DeviceRuntimePresenceAdapter) SessionDisconnected(ctx context.Context, snapshot protocol.PresenceSnapshot, reason string) error {
 	err := a.registry.DisconnectRuntimeSession(ctx, RuntimeSessionBinding{
-		UserID:               snapshot.UserID,
+		SpaceID:              snapshot.SpaceID,
 		DeviceID:             snapshot.DeviceID,
 		RuntimeID:            snapshot.RuntimeID,
 		RuntimeSessionID:     snapshot.RuntimeSessionID,
@@ -78,7 +78,7 @@ func (a *DeviceRuntimePresenceAdapter) SessionDisconnected(ctx context.Context, 
 	})
 
 	if err == nil && a.onDisconnected != nil {
-		a.onDisconnected(snapshot.UserID, snapshot.DeviceID, snapshot.RuntimeID)
+		a.onDisconnected(snapshot.SpaceID, snapshot.DeviceID, snapshot.RuntimeID)
 	}
 
 	return err

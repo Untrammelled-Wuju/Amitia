@@ -48,10 +48,10 @@ func integTool(id string) capability.ToolDefinition {
 	}
 }
 
-func integInvocation(userID, idemKey string) capability.ToolInvocationContext {
+func integInvocation(spaceID, idemKey string) capability.ToolInvocationContext {
 	return capability.ToolInvocationContext{
-		InvocationID:   "integ-" + userID,
-		UserID:         userID,
+		InvocationID:   "integ-" + spaceID,
+		SpaceID:        spaceID,
 		CharacterID:    "char-x",
 		ConversationID: "conv-x",
 		Source:         capability.InvocationSourceModel,

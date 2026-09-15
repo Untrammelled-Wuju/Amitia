@@ -1,10 +1,7 @@
-// migration-only: temporary compatibility adapter
-// remove at step 65 cutover
 package mcp
 
 import (
 	"context"
-	"fmt"
 	"sync"
 )
 
@@ -100,23 +97,4 @@ func (r *CanonicalStdioRegistry) List() map[string]*CanonicalStdioConnection {
 		result[k] = v
 	}
 	return result
-}
-
-// RegisterLegacyOwnership marks a serverId as owned by Legacy Manager.
-// This prevents double-start during migration.
-func (r *CanonicalStdioRegistry) RegisterLegacyOwnership(serverID string) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if _, exists := r.connections[serverID]; exists {
-		return fmt.Errorf("MCP server already owned by Kernel: %s", serverID)
-	}
-	return nil
-}
-
-// IsOwnedByLegacy checks if a serverId is owned by Legacy Manager.
-func (r *CanonicalStdioRegistry) IsOwnedByLegacy(serverID string) bool {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	_, exists := r.connections[serverID]
-	return !exists
 }

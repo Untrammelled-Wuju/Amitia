@@ -173,8 +173,8 @@ func TestBaseline_E2E_FullChain_Lifecycle(t *testing.T) {
 		if container.ToolFacade == nil {
 			t.Fatalf("ToolFacade must not be nil")
 		}
-		tools, err := container.ToolFacade.ModelTools(ctx, kernel.LegacyScope{
-			UserID:    "fullchain",
+		tools, err := container.ToolFacade.ModelTools(ctx, kernel.InvocationScope{
+			SpaceID:   "fullchain",
 			Channel:   "test",
 			SessionID: "fullchain-exec",
 		})
@@ -467,8 +467,8 @@ func TestBaseline_E2E_FullChain_LegacyZeroCallThroughout(t *testing.T) {
 	}
 
 	facade := kernel.NewToolFacade(container.ToolRegistry, container.ExecutionKernel, kernel.DefaultToolFacadeConfig())
-	scope := kernel.LegacyScope{
-		UserID:    "zerocall",
+	scope := kernel.InvocationScope{
+		SpaceID:   "zerocall",
 		Channel:   "test",
 		SessionID: "zerocall-verify",
 	}

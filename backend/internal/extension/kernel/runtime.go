@@ -45,7 +45,7 @@ type PackageUninstallConfirmationClaims struct {
 	DependenciesHash          string          `json:"dependenciesHash"`
 	InstalledPath             string          `json:"installedPath,omitempty"`
 	InstalledTreeHash         string          `json:"installedTreeHash,omitempty"`
-	UserID                    string          `json:"userId"`
+	SpaceID                   string          `json:"spaceId"`
 	ScopeType                 string          `json:"scopeType"`
 	ScopeID                   string          `json:"scopeId"`
 	Confirmations             map[string]bool `json:"confirmations"`
@@ -125,7 +125,7 @@ func (r *Runtime) VerifyUninstallConfirmation(token string) (PackageUninstallCon
 				),
 			)
 	}
-	if claims.UserID == "" || claims.ScopeType == "" {
+	if claims.SpaceID == "" || claims.ScopeType == "" {
 		return claims, NewPackageError(PackageErrCodeConfirmationClaimsInvalid, 403, fmt.Errorf("%w: user and scope binding required", ErrPackageConfirmationClaimsInvalid))
 	}
 	if len(claims.ConfirmedItems) == 0 || !validateConfirmedItemsConsistency(claims.ConfirmedItems, claims.Confirmations) {
@@ -141,7 +141,7 @@ func (r *Runtime) VerifyUninstallConfirmation(token string) (PackageUninstallCon
 
 type ConfirmPackageUninstallRequest struct {
 	ExtensionID   string
-	UserID        string
+	SpaceID       string
 	ScopeType     string
 	ScopeID       string
 	Confirmations map[string]bool
@@ -154,7 +154,7 @@ type ConfirmPackageUninstallResult struct {
 }
 
 func (r *Runtime) ConfirmPackageUninstall(ctx context.Context, req ConfirmPackageUninstallRequest) (ConfirmPackageUninstallResult, error) {
-	preview, err := r.PreviewPackageUninstall(ctx, req.ExtensionID, req.UserID, req.ScopeType, req.ScopeID)
+	preview, err := r.PreviewPackageUninstall(ctx, req.ExtensionID, req.SpaceID, req.ScopeType, req.ScopeID)
 	if err != nil {
 		return ConfirmPackageUninstallResult{}, err
 	}
@@ -198,7 +198,7 @@ func (r *Runtime) ConfirmPackageUninstall(ctx context.Context, req ConfirmPackag
 		DependenciesHash:          computePackageDependenciesHash(preview.Dependents),
 		InstalledPath:             preview.InstalledPath,
 		InstalledTreeHash:         preview.InstalledHash,
-		UserID:                    req.UserID,
+		SpaceID:                   req.SpaceID,
 		ScopeType:                 req.ScopeType,
 		ScopeID:                   req.ScopeID,
 		Confirmations:             confirmed,

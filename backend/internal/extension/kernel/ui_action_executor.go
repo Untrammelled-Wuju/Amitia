@@ -31,7 +31,7 @@ type UIActionExecContext struct {
 	PermissionSnapshotID string
 	CharacterID          string
 	ConversationID       string
-	UserID               string
+	SpaceID              string
 	DeviceID             string
 	TraceID              string
 }
@@ -200,20 +200,20 @@ func normalizeUIActionInput(input json.RawMessage) (json.RawMessage, error) {
 
 func uiActionExecutionContext(ctx context.Context, execCtx UIActionExecContext) permission.PermissionExecutionContext {
 	actor, ok := auth.FromContext(ctx)
-	userID := runtimeidentity.ParseUserID(execCtx.UserID)
+	spaceID := runtimeidentity.ParseSpaceID(execCtx.SpaceID)
 	deviceID := runtimeidentity.ParseDeviceID(execCtx.DeviceID)
-	if ok && actor != nil && actor.UserID != "" {
-		userID = actor.UserID
+	if ok && actor != nil && actor.SpaceID != "" {
+		spaceID = actor.SpaceID
 	}
 	if ok && actor != nil && actor.DeviceID != "" {
 		deviceID = actor.DeviceID
 	}
-	if userID == "" || deviceID == "" {
+	if spaceID == "" || deviceID == "" {
 		return permission.PermissionExecutionContext{}
 	}
 	return permission.PermissionExecutionContext{
 		Placement:   permission.ExecutionPlacementDevice,
-		UserID:      userID,
+		SpaceID:     spaceID,
 		DeviceID:    deviceID,
 		RuntimeID:   runtimeidentity.ParseRuntimeID(execCtx.SessionID),
 		ExtensionID: execCtx.ExtensionID,

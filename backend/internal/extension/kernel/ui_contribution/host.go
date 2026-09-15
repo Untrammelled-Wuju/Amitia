@@ -496,7 +496,7 @@ type BridgeSession struct {
 	Surface              string
 	CharacterID          string
 	ConversationID       string
-	UserID               string
+	SpaceID              string
 	DeviceID             string
 	ScopeSnapshotID      string
 	PermissionSnapshotID string
@@ -610,14 +610,14 @@ func (b *UIBridge) CreateSession(def *UIContributionDefinition, origin string, g
 	return sess, nil
 }
 
-func (b *UIBridge) SetSessionExecutionIdentity(sessionID, userID, deviceID string) error {
+func (b *UIBridge) SetSessionExecutionIdentity(sessionID, spaceID, deviceID string) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	sess, ok := b.sessions[sessionID]
 	if !ok {
 		return fmt.Errorf("ui_contribution: bridge session %s not found", sessionID)
 	}
-	sess.UserID = userID
+	sess.SpaceID = spaceID
 	sess.DeviceID = deviceID
 	return nil
 }

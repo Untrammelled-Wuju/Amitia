@@ -94,7 +94,7 @@ func (c *CancellationController) Register(ctx context.Context, inv capability.To
 
 	if inv.ExternalCallID != "" {
 		scope := capability.CancellationExternalScope{
-			UserID:         inv.UserID,
+			SpaceID:        inv.SpaceID,
 			CharacterID:    inv.CharacterID,
 			ConversationID: inv.ConversationID,
 			SessionID:      inv.SessionID,
@@ -145,7 +145,7 @@ func (c *CancellationController) cleanup(invID string) {
 
 	if ac.Invocation.ExternalCallID != "" {
 		scope := capability.CancellationExternalScope{
-			UserID:         ac.Invocation.UserID,
+			SpaceID:        ac.Invocation.SpaceID,
 			CharacterID:    ac.Invocation.CharacterID,
 			ConversationID: ac.Invocation.ConversationID,
 			SessionID:      ac.Invocation.SessionID,

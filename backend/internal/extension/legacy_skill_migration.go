@@ -18,7 +18,7 @@ type legacyWorkflowSkillArtifact struct {
 	ExtensionVersion string `gorm:"column:extension_version"`
 	ManifestJSON     string `gorm:"column:manifest_json"`
 	WorkflowJSON     string `gorm:"column:workflow_json"`
-	OwnerUserID      string `gorm:"column:owner_user_id"`
+	OwnerSpaceID     string `gorm:"column:owner_space_id"`
 	Enabled          int    `gorm:"column:enabled"`
 }
 
@@ -40,7 +40,7 @@ func MigrateLegacyWorkflowSkills(ctx context.Context, db *gorm.DB, container *ex
 	var rows []legacyWorkflowSkillArtifact
 	err := db.WithContext(ctx).
 		Table("extension_artifacts AS artifacts").
-		Select("artifacts.artifact_id, artifacts.extension_id, artifacts.extension_version, artifacts.manifest_json, artifacts.workflow_json, COALESCE(sessions.user_id, '') AS owner_user_id, extensions.enabled AS enabled").
+		Select("artifacts.artifact_id, artifacts.extension_id, artifacts.extension_version, artifacts.manifest_json, artifacts.workflow_json, COALESCE(sessions.space_id, '') AS owner_space_id, extensions.enabled AS enabled").
 		Joins("JOIN extensions ON extensions.extension_id = artifacts.extension_id AND extensions.current_version = artifacts.extension_version").
 		Joins("LEFT JOIN extension_workshop_sessions AS sessions ON sessions.id = artifacts.session_id").
 		Where("artifacts.archived_at = '' AND artifacts.source = ?", "workshop").
@@ -49,7 +49,7 @@ func MigrateLegacyWorkflowSkills(ctx context.Context, db *gorm.DB, container *ex
 		return report, fmt.Errorf("scan legacy workflow skills: %w", err)
 	}
 	for _, row := range rows {
-		if row.OwnerUserID == "" {
+		if row.OwnerSpaceID == "" {
 			report.Skipped++
 			continue
 		}
@@ -87,14 +87,14 @@ func MigrateLegacyWorkflowSkills(ctx context.Context, db *gorm.DB, container *ex
 		if definition.Metadata == nil {
 			definition.Metadata = map[string]any{}
 		}
-		definition.Metadata["ownerUserId"] = row.OwnerUserID
+		definition.Metadata["ownerSpaceId"] = row.OwnerSpaceID
 		definition.Metadata["legacySkillId"] = row.ExtensionID
 		if err := container.WorkflowDefRepo.Save(ctx, definition); err != nil {
 			report.Failed++
 			report.Errors = append(report.Errors, row.ExtensionID+": save definition: "+err.Error())
 			continue
 		}
-		if _, err := container.WorkflowDefRepo.EnsurePublishedRevision(ctx, row.OwnerUserID, definition, "旧兼容技能迁移"); err != nil {
+		if _, err := container.WorkflowDefRepo.EnsurePublishedRevision(ctx, row.OwnerSpaceID, definition, "旧兼容技能迁移"); err != nil {
 			report.Failed++
 			report.Errors = append(report.Errors, row.ExtensionID+": save revision: "+err.Error())
 			continue
@@ -104,7 +104,7 @@ func MigrateLegacyWorkflowSkills(ctx context.Context, db *gorm.DB, container *ex
 			report.Errors = append(report.Errors, row.ExtensionID+": register workflow: "+err.Error())
 			continue
 		}
-		if _, err := container.WorkflowInstallationRepo.EnsureLegacy(ctx, definition, row.OwnerUserID, kernelworkflow.WorkflowLocationLocal); err != nil {
+		if _, err := container.WorkflowInstallationRepo.EnsureLegacy(ctx, definition, row.OwnerSpaceID, kernelworkflow.WorkflowLocationLocal); err != nil {
 			report.Failed++
 			report.Errors = append(report.Errors, row.ExtensionID+": save installation: "+err.Error())
 			continue

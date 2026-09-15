@@ -129,16 +129,16 @@ func meshWorkflowID(input json.RawMessage) (string, int64, error) {
 	return request.WorkflowID, request.ExpectedRevision, nil
 }
 
-func (api *WorkflowAPI) meshOwned(ctx context.Context, userID, workflowID string) (workflow.WorkflowDefinition, *workflow.WorkflowInstallation, error) {
+func (api *WorkflowAPI) meshOwned(ctx context.Context, spaceID, workflowID string) (workflow.WorkflowDefinition, *workflow.WorkflowInstallation, error) {
 	registry, _, err := api.kernelContainer()
 	if err != nil {
 		return workflow.WorkflowDefinition{}, nil, err
 	}
 	def, ok := registry.Get(workflowID)
-	if !ok || !workflowOwnedBy(def, userID) {
+	if !ok || !workflowOwnedBy(def, spaceID) {
 		return workflow.WorkflowDefinition{}, nil, errors.New("workflow not found")
 	}
-	inst, err := api.installationFor(ctx, def, userID)
+	inst, err := api.installationFor(ctx, def, spaceID)
 	if err != nil {
 		return workflow.WorkflowDefinition{}, nil, err
 	}
@@ -191,7 +191,7 @@ func (api *WorkflowAPI) workflowTriggerCapabilitiesSnapshot(ctx context.Context)
 }
 
 func (api *WorkflowAPI) meshToolCatalog(ctx context.Context, invoke protocol.RuntimeInvokePayload) (*protocol.RuntimeResultPayload, error) {
-	items, err := api.workflowToolCatalogSnapshot(ctx, invoke.UserID.String())
+	items, err := api.workflowToolCatalogSnapshot(ctx, invoke.SpaceID.String())
 	if err != nil {
 		return nil, err
 	}
@@ -241,7 +241,7 @@ func (api *WorkflowAPI) meshCreateTriggerSecret(ctx context.Context, invoke prot
 	if strings.TrimSpace(request.Kind) != "tasker" {
 		return nil, errors.New("unsupported workflow trigger secret kind")
 	}
-	value, err := api.newTaskerTriggerSecret(ctx, invoke.UserID.String())
+	value, err := api.newTaskerTriggerSecret(ctx, invoke.SpaceID.String())
 	if err != nil {
 		return nil, err
 	}
@@ -253,14 +253,14 @@ func (api *WorkflowAPI) meshRunRerun(ctx context.Context, invoke protocol.Runtim
 	if err != nil {
 		return nil, err
 	}
-	previous, executor, err := api.meshOwnedRun(ctx, invoke.UserID.String(), runID)
+	previous, executor, err := api.meshOwnedRun(ctx, invoke.SpaceID.String(), runID)
 	if err != nil {
 		return nil, err
 	}
 	if !previous.Status.IsTerminal() {
 		return nil, errors.New("workflow run must be terminal before rerun")
 	}
-	def, inst, err := api.meshOwned(ctx, strings.TrimSpace(invoke.UserID.String()), previous.WorkflowID)
+	def, inst, err := api.meshOwned(ctx, strings.TrimSpace(invoke.SpaceID.String()), previous.WorkflowID)
 	if err != nil {
 		return nil, err
 	}
@@ -274,7 +274,7 @@ func (api *WorkflowAPI) meshRunRerun(ctx context.Context, invoke protocol.Runtim
 	executionID := "wf-run-" + uuid.NewString()
 	opts := workflow.ExecutionOptionsForRerun(previous)
 	execution := workflow.ExecutionContext{
-		UserID: strings.TrimSpace(invoke.UserID.String()), WorkflowID: def.ID, InstallationID: inst.InstallationID,
+		SpaceID: strings.TrimSpace(invoke.SpaceID.String()), WorkflowID: def.ID, InstallationID: inst.InstallationID,
 		RootID: executionID, InvocationID: executionID, OperationID: "wf-op-" + uuid.NewString(),
 		TraceID: "trace-" + uuid.NewString(), IdempotencyKey: executionID,
 	}
@@ -307,7 +307,7 @@ func (api *WorkflowAPI) meshSyncOutbox(ctx context.Context, invoke protocol.Runt
 		Limit int `json:"limit"`
 	}
 	_ = json.Unmarshal(invoke.Input, &request)
-	items, err := api.runtime.Kernel.Container().WorkflowDefRepo.ListWorkflowSyncOutbox(ctx, invoke.UserID.String(), request.Limit)
+	items, err := api.runtime.Kernel.Container().WorkflowDefRepo.ListWorkflowSyncOutbox(ctx, invoke.SpaceID.String(), request.Limit)
 	if err != nil {
 		return nil, err
 	}
@@ -331,7 +331,7 @@ func (api *WorkflowAPI) meshSyncAck(ctx context.Context, invoke protocol.Runtime
 	if err := json.Unmarshal(invoke.Input, &request); err != nil {
 		return nil, err
 	}
-	if err := api.runtime.Kernel.Container().WorkflowDefRepo.AckWorkflowSyncEvents(ctx, invoke.UserID.String(), request.EventIDs); err != nil {
+	if err := api.runtime.Kernel.Container().WorkflowDefRepo.AckWorkflowSyncEvents(ctx, invoke.SpaceID.String(), request.EventIDs); err != nil {
 		return nil, err
 	}
 	return meshResult(invoke, map[string]any{"acked": len(request.EventIDs)})
@@ -341,7 +341,7 @@ func (api *WorkflowAPI) meshSyncState(ctx context.Context, invoke protocol.Runti
 	if api == nil || api.runtime == nil || api.runtime.Kernel == nil || api.runtime.Kernel.Container() == nil || api.runtime.Kernel.Container().WorkflowDefRepo == nil {
 		return nil, errors.New("workflow sync repository unavailable")
 	}
-	items, err := api.runtime.Kernel.Container().WorkflowDefRepo.ListWorkflowSyncStates(ctx, invoke.UserID.String())
+	items, err := api.runtime.Kernel.Container().WorkflowDefRepo.ListWorkflowSyncStates(ctx, invoke.SpaceID.String())
 	if err != nil {
 		return nil, err
 	}
@@ -360,15 +360,15 @@ func (api *WorkflowAPI) meshCatalog(ctx context.Context, invoke protocol.Runtime
 	if err != nil {
 		return nil, err
 	}
-	userID := strings.TrimSpace(invoke.UserID.String())
-	installations, err := api.runtime.Kernel.Container().WorkflowInstallationRepo.List(ctx, userID, workflow.WorkflowLocationLocal, "")
+	spaceID := strings.TrimSpace(invoke.SpaceID.String())
+	installations, err := api.runtime.Kernel.Container().WorkflowInstallationRepo.List(ctx, spaceID, workflow.WorkflowLocationLocal, "")
 	if err != nil {
 		return nil, err
 	}
 	items := make([]workflowAPIResponse, 0, len(installations))
 	for _, inst := range installations {
 		def, ok := registry.Get(inst.WorkflowID)
-		if !ok || !workflowOwnedBy(def, userID) {
+		if !ok || !workflowOwnedBy(def, spaceID) {
 			continue
 		}
 		items = append(items, workflowResponse(def, &inst))
@@ -381,7 +381,7 @@ func (api *WorkflowAPI) meshGet(ctx context.Context, invoke protocol.RuntimeInvo
 	if err != nil {
 		return nil, err
 	}
-	def, inst, err := api.meshOwned(ctx, invoke.UserID.String(), workflowID)
+	def, inst, err := api.meshOwned(ctx, invoke.SpaceID.String(), workflowID)
 	if err != nil {
 		return nil, err
 	}
@@ -412,10 +412,10 @@ func (api *WorkflowAPI) meshUpsert(ctx context.Context, invoke protocol.RuntimeI
 		}
 		request.Definition = bare
 	}
-	userID := strings.TrimSpace(invoke.UserID.String())
+	spaceID := strings.TrimSpace(invoke.SpaceID.String())
 	incomingID := strings.TrimSpace(request.Definition.ID)
 	if incomingID == "" {
-		def, err := api.prepareValidatedUserWorkflow(request.Definition, userID, "")
+		def, err := api.prepareValidatedUserWorkflow(request.Definition, spaceID, "")
 		if err != nil {
 			return nil, err
 		}
@@ -425,10 +425,10 @@ func (api *WorkflowAPI) meshUpsert(ctx context.Context, invoke protocol.RuntimeI
 		if _, exists := registry.Get(def.ID); exists {
 			return nil, errors.New("workflow id already exists")
 		}
-		if err := api.registerNewUserWorkflow(ctx, registry, def, userID, "远程安装"); err != nil {
+		if err := api.registerNewUserWorkflow(ctx, registry, def, spaceID, "远程安装"); err != nil {
 			return nil, err
 		}
-		inst, err := api.installationFor(ctx, def, userID)
+		inst, err := api.installationFor(ctx, def, spaceID)
 		if err != nil {
 			return nil, err
 		}
@@ -436,7 +436,7 @@ func (api *WorkflowAPI) meshUpsert(ctx context.Context, invoke protocol.RuntimeI
 	}
 
 	if _, exists := registry.Get(incomingID); !exists {
-		def, err := api.prepareValidatedUserWorkflow(request.Definition, userID, incomingID)
+		def, err := api.prepareValidatedUserWorkflow(request.Definition, spaceID, incomingID)
 		if err != nil {
 			return nil, err
 		}
@@ -447,24 +447,24 @@ func (api *WorkflowAPI) meshUpsert(ctx context.Context, invoke protocol.RuntimeI
 		if request.SyncRevision > 0 {
 			mutationCtx = sqlite.SuppressWorkflowSync(ctx)
 		}
-		if err := api.registerNewUserWorkflow(mutationCtx, registry, def, userID, "远程同步安装"); err != nil {
+		if err := api.registerNewUserWorkflow(mutationCtx, registry, def, spaceID, "远程同步安装"); err != nil {
 			return nil, err
 		}
 		if request.SyncRevision > 0 {
-			if err := api.runtime.Kernel.Container().WorkflowDefRepo.SetWorkflowSyncState(ctx, userID, def.ID, request.SyncRevision, workflow.ComputeDefinitionHash(def), false); err != nil {
+			if err := api.runtime.Kernel.Container().WorkflowDefRepo.SetWorkflowSyncState(ctx, spaceID, def.ID, request.SyncRevision, workflow.ComputeDefinitionHash(def), false); err != nil {
 				return nil, err
 			}
 		}
-		inst, err := api.installationFor(ctx, def, userID)
+		inst, err := api.installationFor(ctx, def, spaceID)
 		if err != nil {
 			return nil, err
 		}
 		return meshResult(invoke, workflowResponse(def, inst))
 	}
 
-	unlock := api.lockWorkflowMutation(userID, incomingID)
+	unlock := api.lockWorkflowMutation(spaceID, incomingID)
 	defer unlock()
-	old, inst, err := api.meshOwned(ctx, userID, incomingID)
+	old, inst, err := api.meshOwned(ctx, spaceID, incomingID)
 	if err != nil {
 		return nil, err
 	}
@@ -475,7 +475,7 @@ func (api *WorkflowAPI) meshUpsert(ctx context.Context, invoke protocol.RuntimeI
 	if err := requireWorkflowRevision(expected, inst.Revision); err != nil {
 		return nil, fmt.Errorf("WORKFLOW_REVISION_CONFLICT: %w", err)
 	}
-	def, err := api.prepareValidatedUserWorkflow(request.Definition, userID, old.ID)
+	def, err := api.prepareValidatedUserWorkflow(request.Definition, spaceID, old.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -483,7 +483,7 @@ func (api *WorkflowAPI) meshUpsert(ctx context.Context, invoke protocol.RuntimeI
 		return nil, err
 	}
 	if old.DefinitionHash != def.DefinitionHash {
-		if _, err := api.runtime.Kernel.Container().WorkflowDefRepo.SaveRevision(ctx, userID, old, "远程保存前自动快照"); err != nil {
+		if _, err := api.runtime.Kernel.Container().WorkflowDefRepo.SaveRevision(ctx, spaceID, old, "远程保存前自动快照"); err != nil {
 			return nil, err
 		}
 	}
@@ -495,14 +495,14 @@ func (api *WorkflowAPI) meshUpsert(ctx context.Context, invoke protocol.RuntimeI
 		return nil, err
 	}
 	rollback := func() {
-		_ = api.syncTriggers(ctx, def, old, userID)
+		_ = api.syncTriggers(ctx, def, old, spaceID)
 		_ = registry.UpsertContext(mutationCtx, old)
 	}
-	if err := api.syncTriggers(ctx, old, def, userID); err != nil {
+	if err := api.syncTriggers(ctx, old, def, spaceID); err != nil {
 		rollback()
 		return nil, err
 	}
-	updatedInst, err := api.updateInstallationCAS(ctx, def, userID, inst, expected)
+	updatedInst, err := api.updateInstallationCAS(ctx, def, spaceID, inst, expected)
 	if err != nil {
 		rollback()
 		if errors.Is(err, sqlite.ErrWorkflowRevisionConflict) {
@@ -511,7 +511,7 @@ func (api *WorkflowAPI) meshUpsert(ctx context.Context, invoke protocol.RuntimeI
 		return nil, err
 	}
 	if request.SyncRevision > 0 {
-		if err := api.runtime.Kernel.Container().WorkflowDefRepo.SetWorkflowSyncState(ctx, userID, def.ID, request.SyncRevision, workflow.ComputeDefinitionHash(def), false); err != nil {
+		if err := api.runtime.Kernel.Container().WorkflowDefRepo.SetWorkflowSyncState(ctx, spaceID, def.ID, request.SyncRevision, workflow.ComputeDefinitionHash(def), false); err != nil {
 			return nil, err
 		}
 	}
@@ -530,13 +530,13 @@ func (api *WorkflowAPI) meshDelete(ctx context.Context, invoke protocol.RuntimeI
 	if workflowID == "" {
 		return nil, errors.New("workflowId is required")
 	}
-	userID := invoke.UserID.String()
-	unlock := api.lockWorkflowMutation(userID, workflowID)
+	spaceID := invoke.SpaceID.String()
+	unlock := api.lockWorkflowMutation(spaceID, workflowID)
 	defer unlock()
-	def, inst, err := api.meshOwned(ctx, userID, workflowID)
+	def, inst, err := api.meshOwned(ctx, spaceID, workflowID)
 	if err != nil {
 		if request.SyncRevision > 0 && strings.Contains(strings.ToLower(err.Error()), "not found") {
-			if stateErr := api.runtime.Kernel.Container().WorkflowDefRepo.SetWorkflowSyncState(ctx, userID, workflowID, request.SyncRevision, "", true); stateErr != nil {
+			if stateErr := api.runtime.Kernel.Container().WorkflowDefRepo.SetWorkflowSyncState(ctx, spaceID, workflowID, request.SyncRevision, "", true); stateErr != nil {
 				return nil, stateErr
 			}
 			return meshResult(invoke, map[string]any{"deleted": true, "id": workflowID, "alreadyMissing": true})
@@ -544,7 +544,7 @@ func (api *WorkflowAPI) meshDelete(ctx context.Context, invoke protocol.RuntimeI
 		return nil, err
 	}
 	registry, _, _ := api.kernelContainer()
-	if err := api.syncTriggers(ctx, def, workflow.WorkflowDefinition{}, userID); err != nil {
+	if err := api.syncTriggers(ctx, def, workflow.WorkflowDefinition{}, spaceID); err != nil {
 		return nil, err
 	}
 	mutationCtx := ctx
@@ -552,11 +552,11 @@ func (api *WorkflowAPI) meshDelete(ctx context.Context, invoke protocol.RuntimeI
 		mutationCtx = sqlite.SuppressWorkflowSync(ctx)
 	}
 	if err := registry.UnregisterContext(mutationCtx, def.ID); err != nil {
-		_ = api.syncTriggers(ctx, workflow.WorkflowDefinition{}, def, userID)
+		_ = api.syncTriggers(ctx, workflow.WorkflowDefinition{}, def, spaceID)
 		return nil, err
 	}
 	if request.SyncRevision > 0 {
-		if err := api.runtime.Kernel.Container().WorkflowDefRepo.SetWorkflowSyncState(ctx, userID, def.ID, request.SyncRevision, workflow.ComputeDefinitionHash(def), true); err != nil {
+		if err := api.runtime.Kernel.Container().WorkflowDefRepo.SetWorkflowSyncState(ctx, spaceID, def.ID, request.SyncRevision, workflow.ComputeDefinitionHash(def), true); err != nil {
 			return nil, err
 		}
 	}
@@ -577,10 +577,10 @@ func (api *WorkflowAPI) meshSetEnabled(ctx context.Context, invoke protocol.Runt
 	if request.WorkflowID == "" {
 		return nil, errors.New("workflowId is required")
 	}
-	userID := invoke.UserID.String()
-	unlock := api.lockWorkflowMutation(userID, request.WorkflowID)
+	spaceID := invoke.SpaceID.String()
+	unlock := api.lockWorkflowMutation(spaceID, request.WorkflowID)
 	defer unlock()
-	old, inst, err := api.meshOwned(ctx, userID, request.WorkflowID)
+	old, inst, err := api.meshOwned(ctx, spaceID, request.WorkflowID)
 	if err != nil {
 		return nil, err
 	}
@@ -597,13 +597,13 @@ func (api *WorkflowAPI) meshSetEnabled(ctx context.Context, invoke protocol.Runt
 	if err := registry.Upsert(def); err != nil {
 		return nil, err
 	}
-	if err := api.syncTriggers(ctx, old, def, userID); err != nil {
+	if err := api.syncTriggers(ctx, old, def, spaceID); err != nil {
 		_ = registry.Upsert(old)
 		return nil, err
 	}
-	updated, err := api.updateInstallationCAS(ctx, def, userID, inst, expected)
+	updated, err := api.updateInstallationCAS(ctx, def, spaceID, inst, expected)
 	if err != nil {
-		_ = api.syncTriggers(ctx, def, old, userID)
+		_ = api.syncTriggers(ctx, def, old, spaceID)
 		_ = registry.Upsert(old)
 		return nil, err
 	}
@@ -629,7 +629,7 @@ func (api *WorkflowAPI) meshRun(ctx context.Context, invoke protocol.RuntimeInvo
 	if request.WorkflowID == "" {
 		return nil, errors.New("workflowId is required")
 	}
-	def, inst, err := api.meshOwned(ctx, invoke.UserID.String(), request.WorkflowID)
+	def, inst, err := api.meshOwned(ctx, invoke.SpaceID.String(), request.WorkflowID)
 	if err != nil {
 		return nil, err
 	}
@@ -641,10 +641,10 @@ func (api *WorkflowAPI) meshRun(ctx context.Context, invoke protocol.RuntimeInvo
 	}
 	_, executor, _ := api.kernelContainer()
 	execution := request.Context
-	if execution.UserID != "" && strings.TrimSpace(execution.UserID) != invoke.UserID.String() {
+	if execution.SpaceID != "" && strings.TrimSpace(execution.SpaceID) != invoke.SpaceID.String() {
 		return nil, errors.New("remote workflow context owner mismatch")
 	}
-	execution.UserID = invoke.UserID.String()
+	execution.SpaceID = invoke.SpaceID.String()
 	execution.WorkflowID = def.ID
 	execution.InstallationID = inst.InstallationID
 	execution.DeviceID = invoke.DeviceID.String()
@@ -688,7 +688,7 @@ func (api *WorkflowAPI) prepareMeshRun(ctx context.Context, invoke protocol.Runt
 	if request.WorkflowID == "" {
 		return workflow.WorkflowDefinition{}, nil, request, workflow.ExecutionContext{}, nil, errors.New("workflowId is required")
 	}
-	def, inst, err := api.meshOwned(ctx, invoke.UserID.String(), request.WorkflowID)
+	def, inst, err := api.meshOwned(ctx, invoke.SpaceID.String(), request.WorkflowID)
 	if err != nil {
 		return workflow.WorkflowDefinition{}, nil, request, workflow.ExecutionContext{}, nil, err
 	}
@@ -706,11 +706,11 @@ func (api *WorkflowAPI) prepareMeshRun(ctx context.Context, invoke protocol.Runt
 		return workflow.WorkflowDefinition{}, nil, request, workflow.ExecutionContext{}, nil, err
 	}
 	execution := request.Context
-	userID := strings.TrimSpace(invoke.UserID.String())
-	if execution.UserID != "" && strings.TrimSpace(execution.UserID) != userID {
+	spaceID := strings.TrimSpace(invoke.SpaceID.String())
+	if execution.SpaceID != "" && strings.TrimSpace(execution.SpaceID) != spaceID {
 		return workflow.WorkflowDefinition{}, nil, request, workflow.ExecutionContext{}, nil, errors.New("remote workflow context owner mismatch")
 	}
-	execution.UserID = userID
+	execution.SpaceID = spaceID
 	execution.WorkflowID = def.ID
 	execution.InstallationID = inst.InstallationID
 	execution.DeviceID = strings.TrimSpace(invoke.DeviceID.String())
@@ -780,7 +780,7 @@ func meshRunID(input json.RawMessage) (string, error) {
 	return request.RunID, nil
 }
 
-func (api *WorkflowAPI) meshOwnedRun(ctx context.Context, userID, runID string) (*workflow.WorkflowRun, *workflow.WorkflowExecutor, error) {
+func (api *WorkflowAPI) meshOwnedRun(ctx context.Context, spaceID, runID string) (*workflow.WorkflowRun, *workflow.WorkflowExecutor, error) {
 	_, executor, err := api.kernelContainer()
 	if err != nil {
 		return nil, nil, err
@@ -790,23 +790,23 @@ func (api *WorkflowAPI) meshOwnedRun(ctx context.Context, userID, runID string) 
 	if err != nil || run == nil {
 		return nil, nil, errors.New("workflow run not found")
 	}
-	requestedUserID := strings.TrimSpace(userID)
-	if owner := strings.TrimSpace(run.Context.UserID); owner != "" {
-		if owner != requestedUserID {
+	requestedSpaceID := strings.TrimSpace(spaceID)
+	if owner := strings.TrimSpace(run.Context.SpaceID); owner != "" {
+		if owner != requestedSpaceID {
 			return nil, nil, errors.New("workflow run not found")
 		}
 		return run, executor, nil
 	}
-	// Legacy runs may predate persisted Context.UserID. Prefer their immutable
+	// Legacy runs may predate persisted Context.SpaceID. Prefer their immutable
 	// definition snapshot before falling back to the mutable registry.
 	var def workflow.WorkflowDefinition
 	owned := false
 	if len(run.Context.DefinitionSnapshot) > 0 && json.Unmarshal(run.Context.DefinitionSnapshot, &def) == nil {
-		owned = workflowOwnedBy(def, requestedUserID)
+		owned = workflowOwnedBy(def, requestedSpaceID)
 	}
 	if !owned {
 		if current, ok := kc.WorkflowRegistry.Get(run.WorkflowID); ok {
-			owned = workflowOwnedBy(current, requestedUserID)
+			owned = workflowOwnedBy(current, requestedSpaceID)
 		}
 	}
 	if !owned {
@@ -815,8 +815,8 @@ func (api *WorkflowAPI) meshOwnedRun(ctx context.Context, userID, runID string) 
 	return run, executor, nil
 }
 
-func (api *WorkflowAPI) meshRunEnvelope(ctx context.Context, userID, runID string) (map[string]any, error) {
-	run, executor, err := api.meshOwnedRun(ctx, userID, runID)
+func (api *WorkflowAPI) meshRunEnvelope(ctx context.Context, spaceID, runID string) (map[string]any, error) {
+	run, executor, err := api.meshOwnedRun(ctx, spaceID, runID)
 	if err != nil {
 		return nil, err
 	}
@@ -873,7 +873,7 @@ func (api *WorkflowAPI) meshRunList(ctx context.Context, invoke protocol.Runtime
 	if request.WorkflowID == "" {
 		return nil, errors.New("workflowId is required")
 	}
-	if _, _, err := api.meshOwned(ctx, invoke.UserID.String(), request.WorkflowID); err != nil {
+	if _, _, err := api.meshOwned(ctx, invoke.SpaceID.String(), request.WorkflowID); err != nil {
 		return nil, err
 	}
 	if request.Limit <= 0 || request.Limit > 200 {
@@ -894,7 +894,7 @@ func (api *WorkflowAPI) meshRunGet(ctx context.Context, invoke protocol.RuntimeI
 	if err != nil {
 		return nil, err
 	}
-	envelope, err := api.meshRunEnvelope(ctx, invoke.UserID.String(), runID)
+	envelope, err := api.meshRunEnvelope(ctx, invoke.SpaceID.String(), runID)
 	if err != nil {
 		return nil, err
 	}
@@ -906,7 +906,7 @@ func (api *WorkflowAPI) meshRunSteps(ctx context.Context, invoke protocol.Runtim
 	if err != nil {
 		return nil, err
 	}
-	run, _, err := api.meshOwnedRun(ctx, invoke.UserID.String(), runID)
+	run, _, err := api.meshOwnedRun(ctx, invoke.SpaceID.String(), runID)
 	if err != nil {
 		return nil, err
 	}
@@ -922,7 +922,7 @@ func (api *WorkflowAPI) meshRunAttempts(ctx context.Context, invoke protocol.Run
 	if err != nil {
 		return nil, err
 	}
-	run, _, err := api.meshOwnedRun(ctx, invoke.UserID.String(), runID)
+	run, _, err := api.meshOwnedRun(ctx, invoke.SpaceID.String(), runID)
 	if err != nil {
 		return nil, err
 	}
@@ -938,7 +938,7 @@ func (api *WorkflowAPI) meshRunCheckpoints(ctx context.Context, invoke protocol.
 	if err != nil {
 		return nil, err
 	}
-	run, executor, err := api.meshOwnedRun(ctx, invoke.UserID.String(), runID)
+	run, executor, err := api.meshOwnedRun(ctx, invoke.SpaceID.String(), runID)
 	if err != nil {
 		return nil, err
 	}
@@ -957,7 +957,7 @@ func (api *WorkflowAPI) meshRunLogs(ctx context.Context, invoke protocol.Runtime
 	if err != nil {
 		return nil, err
 	}
-	run, _, err := api.meshOwnedRun(ctx, invoke.UserID.String(), runID)
+	run, _, err := api.meshOwnedRun(ctx, invoke.SpaceID.String(), runID)
 	if err != nil {
 		return nil, err
 	}
@@ -989,7 +989,7 @@ func (api *WorkflowAPI) meshRunPause(ctx context.Context, invoke protocol.Runtim
 	if request.RunID == "" {
 		return nil, errors.New("runId is required")
 	}
-	_, executor, err := api.meshOwnedRun(ctx, invoke.UserID.String(), request.RunID)
+	_, executor, err := api.meshOwnedRun(ctx, invoke.SpaceID.String(), request.RunID)
 	if err != nil {
 		return nil, err
 	}
@@ -1005,7 +1005,7 @@ func (api *WorkflowAPI) meshRunResume(ctx context.Context, invoke protocol.Runti
 	if err != nil {
 		return nil, err
 	}
-	_, executor, err := api.meshOwnedRun(ctx, invoke.UserID.String(), runID)
+	_, executor, err := api.meshOwnedRun(ctx, invoke.SpaceID.String(), runID)
 	if err != nil {
 		return nil, err
 	}
@@ -1028,7 +1028,7 @@ func (api *WorkflowAPI) meshRunConfirm(ctx context.Context, invoke protocol.Runt
 	if request.RunID == "" {
 		return nil, errors.New("runId is required")
 	}
-	_, executor, err := api.meshOwnedRun(ctx, invoke.UserID.String(), request.RunID)
+	_, executor, err := api.meshOwnedRun(ctx, invoke.SpaceID.String(), request.RunID)
 	if err != nil {
 		return nil, err
 	}
@@ -1044,7 +1044,7 @@ func (api *WorkflowAPI) meshRunCancel(ctx context.Context, invoke protocol.Runti
 	if err != nil {
 		return nil, err
 	}
-	_, executor, err := api.meshOwnedRun(ctx, invoke.UserID.String(), runID)
+	_, executor, err := api.meshOwnedRun(ctx, invoke.SpaceID.String(), runID)
 	if err != nil {
 		return nil, err
 	}
@@ -1060,7 +1060,7 @@ func (api *WorkflowAPI) meshRunRecover(ctx context.Context, invoke protocol.Runt
 	if err != nil {
 		return nil, err
 	}
-	run, executor, err := api.meshOwnedRun(ctx, invoke.UserID.String(), runID)
+	run, executor, err := api.meshOwnedRun(ctx, invoke.SpaceID.String(), runID)
 	if err != nil {
 		return nil, err
 	}
@@ -1096,7 +1096,7 @@ func (api *WorkflowAPI) meshRunRecover(ctx context.Context, invoke protocol.Runt
 		return nil, errors.New("this run has no checkpoint to recover from")
 	}
 	execution := run.Context
-	execution.UserID = strings.TrimSpace(invoke.UserID.String())
+	execution.SpaceID = strings.TrimSpace(invoke.SpaceID.String())
 	execution.InvocationID = run.ExecutionID
 	execution.Recovery = true
 	execution.Generation = run.Generation + 1

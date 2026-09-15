@@ -220,10 +220,10 @@ func messageOutputProviderEnabled(definition capability.ToolDefinition) bool {
 
 type MessageOutputProviderResult struct {
 	Provider capability.ToolDefinition
-	Result   LegacyToolResult
+	Result   ToolDispatchResult
 }
 
-func (f *ToolFacade) ExecuteMessageOutputProviders(ctx context.Context, scope LegacyScope, input json.RawMessage) []MessageOutputProviderResult {
+func (f *ToolFacade) ExecuteMessageOutputProviders(ctx context.Context, scope InvocationScope, input json.RawMessage) []MessageOutputProviderResult {
 	providers := f.ListMessageOutputProviders(ctx)
 	results := make([]MessageOutputProviderResult, 0, len(providers))
 	for _, provider := range providers {
@@ -285,7 +285,7 @@ func (f *ToolFacade) TryRecoverMissingCapability(ctx context.Context, err error,
 	return f.recoveryService.RecoverFromError(ctx, err, invocation)
 }
 
-func (f *ToolFacade) PrepareAgentSkillPrompt(ctx context.Context, scope LegacyScope, message string) (string, []LegacyActivatedSkill, []string) {
+func (f *ToolFacade) PrepareAgentSkillPrompt(ctx context.Context, scope InvocationScope, message string) (string, []ActivatedSkill, []string) {
 	f.counters.IncPrepareAgentSkillPrompt()
 	if f.agentSkillBackend != nil {
 		return f.prepareAgentSkillPromptFromBackend(ctx, scope, message)
@@ -296,21 +296,21 @@ func (f *ToolFacade) PrepareAgentSkillPrompt(ctx context.Context, scope LegacySc
 	return f.buildAgentSkillPrompt(ctx, scope, message)
 }
 
-func (f *ToolFacade) EndAgentSkillRound(scope LegacyScope) {
+func (f *ToolFacade) EndAgentSkillRound(scope InvocationScope) {
 	f.counters.IncEndAgentSkillRound()
 	if f.agentSkillBackend != nil {
 		f.agentSkillBackend.EndRound(scope)
 	}
 }
 
-func (f *ToolFacade) prepareAgentSkillPromptFromBackend(ctx context.Context, scope LegacyScope, message string) (string, []LegacyActivatedSkill, []string) {
+func (f *ToolFacade) prepareAgentSkillPromptFromBackend(ctx context.Context, scope InvocationScope, message string) (string, []ActivatedSkill, []string) {
 	catalog, err := f.agentSkillBackend.ResolveCatalog(ctx, scope)
 	if err != nil {
 		return "", nil, []string{err.Error()}
 	}
 
 	errorsList := []string{}
-	activated := []LegacyActivatedSkill{}
+	activated := []ActivatedSkill{}
 
 	explicitNames := parseExplicitSkillNames(message)
 	for _, name := range explicitNames {
@@ -326,7 +326,7 @@ func (f *ToolFacade) prepareAgentSkillPromptFromBackend(ctx context.Context, sco
 		}
 		for _, p := range prompts {
 			if p.ActivationID == result.ActivationID {
-				activated = append(activated, LegacyActivatedSkill{
+				activated = append(activated, ActivatedSkill{
 					ActivationID:        p.ActivationID,
 					ExtensionID:         p.ExtensionID,
 					Name:                p.Name,
@@ -360,9 +360,9 @@ func renderSkillCatalogFromEntries(catalog []SkillCatalogEntry) string {
 	return sb.String()
 }
 
-func (f *ToolFacade) BeforePrompt(ctx context.Context, scope LegacyScope) []LegacyContextContribution {
+func (f *ToolFacade) BeforePrompt(ctx context.Context, scope InvocationScope) []ContextContribution {
 	f.counters.IncBeforePrompt()
-	contributions := make([]LegacyContextContribution, 0, 4)
+	contributions := make([]ContextContribution, 0, 4)
 	if workspaceContribution, ok := workspacePromptContribution(scope); ok {
 		contributions = append(contributions, workspaceContribution)
 	}
@@ -381,9 +381,9 @@ func (f *ToolFacade) BeforePrompt(ctx context.Context, scope LegacyScope) []Lega
 	return contributions
 }
 
-func workspacePromptContribution(scope LegacyScope) (LegacyContextContribution, bool) {
+func workspacePromptContribution(scope InvocationScope) (ContextContribution, bool) {
 	if scope.ExecContext == nil || strings.TrimSpace(scope.ExecContext.WorkspaceID) == "" {
-		return LegacyContextContribution{}, false
+		return ContextContribution{}, false
 	}
 	workspaceID := strings.TrimSpace(scope.ExecContext.WorkspaceID)
 	rootURI := "amitia://workspace/@" + workspaceID + "/"
@@ -409,7 +409,7 @@ func workspacePromptContribution(scope LegacyScope) (LegacyContextContribution, 
 		content += " Display name: " + name + "."
 	}
 	content += " Treat relative project paths as relative to this workspace. Use this workspace for file/search/edit operations unless the user explicitly changes the chat workspace. Do not access another workspace ID."
-	return LegacyContextContribution{
+	return ContextContribution{
 		Source:     "conversation_workspace",
 		Priority:   95,
 		Content:    content,
@@ -424,7 +424,7 @@ func workspacePromptContribution(scope LegacyScope) (LegacyContextContribution, 
 	}, true
 }
 
-func (f *ToolFacade) ModelTools(ctx context.Context, scope LegacyScope) ([]tool.Tool, error) {
+func (f *ToolFacade) ModelTools(ctx context.Context, scope InvocationScope) ([]tool.Tool, error) {
 	f.counters.IncModelTools()
 	if f.toolRegistry == nil {
 		return nil, nil
@@ -490,23 +490,23 @@ func (f *ToolFacade) ResolveModelTool(modelName string) (ResolvedToolReference, 
 	}, nil
 }
 
-func (f *ToolFacade) ExecuteTool(ctx context.Context, toolID capability.CapabilityID, input json.RawMessage, scope LegacyScope, externalCallID string, idempotencyKey string) (LegacyToolResult, bool) {
+func (f *ToolFacade) ExecuteTool(ctx context.Context, toolID capability.CapabilityID, input json.RawMessage, scope InvocationScope, externalCallID string, idempotencyKey string) (ToolDispatchResult, bool) {
 	f.counters.IncExecuteModelTool()
 	if f.toolRegistry == nil {
-		return LegacyToolResult{Status: "FAILED", VisibleText: "tool registry not configured", Error: &LegacyToolError{Code: "TOOL_REGISTRY_UNAVAILABLE"}}, false
+		return ToolDispatchResult{Status: "FAILED", VisibleText: "tool registry not configured", Error: &ToolDispatchError{Code: "TOOL_REGISTRY_UNAVAILABLE"}}, false
 	}
 	def, ok := f.toolRegistry.Get(ctx, string(toolID))
 	if !ok {
-		return LegacyToolResult{Status: "FAILED", VisibleText: fmt.Sprintf("tool %s not found in kernel registry", toolID), Error: &LegacyToolError{Code: "TOOL_NOT_FOUND", Message: string(toolID)}}, false
+		return ToolDispatchResult{Status: "FAILED", VisibleText: fmt.Sprintf("tool %s not found in kernel registry", toolID), Error: &ToolDispatchError{Code: "TOOL_NOT_FOUND", Message: string(toolID)}}, false
 	}
-	if !workflowToolAllowedForUser(def, scope.UserID) {
-		return LegacyToolResult{Status: "FAILED", VisibleText: "workflow tool is not available for this user", Error: &LegacyToolError{Code: "TOOL_NOT_FOUND", Message: string(toolID)}}, false
+	if !workflowToolAllowedForSpace(def, scope.SpaceID) {
+		return ToolDispatchResult{Status: "FAILED", VisibleText: "workflow tool is not available for this Space", Error: &ToolDispatchError{Code: "TOOL_NOT_FOUND", Message: string(toolID)}}, false
 	}
 	f.counters.IncPipelineExecution()
 	return f.executeResolvedTool(ctx, def, input, scope, externalCallID, idempotencyKey), true
 }
 
-func (f *ToolFacade) ExecuteModelTool(ctx context.Context, modelName string, input json.RawMessage, scope LegacyScope, idempotencyKey string) (LegacyToolResult, bool) {
+func (f *ToolFacade) ExecuteModelTool(ctx context.Context, modelName string, input json.RawMessage, scope InvocationScope, idempotencyKey string) (ToolDispatchResult, bool) {
 	f.counters.IncExecuteModelTool()
 	if modelName == ActivateSkillToolName && f.agentSkillBackend != nil {
 		result, _ := f.handleActivateSkill(ctx, input, scope)
@@ -541,20 +541,20 @@ func (f *ToolFacade) ExecuteModelTool(ctx context.Context, modelName string, inp
 		return result, true
 	}
 	if f.toolRegistry == nil {
-		return LegacyToolResult{Status: "FAILED", VisibleText: "tool registry not configured", Error: &LegacyToolError{Code: "TOOL_REGISTRY_UNAVAILABLE"}}, false
+		return ToolDispatchResult{Status: "FAILED", VisibleText: "tool registry not configured", Error: &ToolDispatchError{Code: "TOOL_REGISTRY_UNAVAILABLE"}}, false
 	}
 	def, ok := f.toolRegistry.GetByModelName(ctx, modelName)
 	if !ok {
-		return LegacyToolResult{Status: "FAILED", VisibleText: fmt.Sprintf("tool %s not found in kernel registry", modelName), Error: &LegacyToolError{Code: "TOOL_NOT_FOUND", Message: modelName}}, false
+		return ToolDispatchResult{Status: "FAILED", VisibleText: fmt.Sprintf("tool %s not found in kernel registry", modelName), Error: &ToolDispatchError{Code: "TOOL_NOT_FOUND", Message: modelName}}, false
 	}
-	if !workflowToolAllowedForUser(def, scope.UserID) {
-		return LegacyToolResult{Status: "FAILED", VisibleText: fmt.Sprintf("tool %s not found in kernel registry", modelName), Error: &LegacyToolError{Code: "TOOL_NOT_FOUND", Message: modelName}}, false
+	if !workflowToolAllowedForSpace(def, scope.SpaceID) {
+		return ToolDispatchResult{Status: "FAILED", VisibleText: fmt.Sprintf("tool %s not found in kernel registry", modelName), Error: &ToolDispatchError{Code: "TOOL_NOT_FOUND", Message: modelName}}, false
 	}
 	f.counters.IncPipelineExecution()
 	return f.executeResolvedTool(ctx, def, input, scope, scope.ToolCallID, idempotencyKey), true
 }
 
-func (f *ToolFacade) AfterReply(scope LegacyScope, reply LegacyReplyView) bool {
+func (f *ToolFacade) AfterReply(scope InvocationScope, reply ReplyView) bool {
 	f.counters.IncAfterReply()
 	if f.hookService != nil && f.hookService.Integrator != nil {
 		hookCtx := f.buildHookContext(scope)
@@ -568,46 +568,46 @@ func (f *ToolFacade) AfterReply(scope LegacyScope, reply LegacyReplyView) bool {
 	return false
 }
 
-func (f *ToolFacade) handleFindCapability(ctx context.Context, input json.RawMessage, scope LegacyScope) (LegacyToolResult, error) {
+func (f *ToolFacade) handleFindCapability(ctx context.Context, input json.RawMessage, scope InvocationScope) (ToolDispatchResult, error) {
 	var req acquisition.FindCapabilitiesInput
 	if err := json.Unmarshal(input, &req); err != nil {
-		return LegacyToolResult{
+		return ToolDispatchResult{
 			Status:      "FAILED",
 			VisibleText: fmt.Sprintf("invalid find_capability input: %v", err),
-			Error:       &LegacyToolError{Code: "INVALID_INPUT", Message: err.Error()},
+			Error:       &ToolDispatchError{Code: "INVALID_INPUT", Message: err.Error()},
 		}, err
 	}
-	output, err := f.acquisitionBridge.FindCapabilities(ctx, req, scope.UserID)
+	output, err := f.acquisitionBridge.FindCapabilities(ctx, req, scope.SpaceID)
 	if err != nil {
-		return LegacyToolResult{
+		return ToolDispatchResult{
 			Status:      "FAILED",
 			VisibleText: fmt.Sprintf("find_capability failed: %v", err),
-			Error:       &LegacyToolError{Code: "FIND_CAPABILITY_FAILED", Message: err.Error()},
+			Error:       &ToolDispatchError{Code: "FIND_CAPABILITY_FAILED", Message: err.Error()},
 		}, err
 	}
 	resultJSON, _ := json.Marshal(output)
-	return LegacyToolResult{
+	return ToolDispatchResult{
 		Status:      "SUCCESS",
 		Output:      resultJSON,
 		VisibleText: fmt.Sprintf("Found %d candidate(s) for capability %s", output.TotalFound, req.CapabilityID),
 	}, nil
 }
 
-func (f *ToolFacade) handleAcquireCapability(ctx context.Context, input json.RawMessage, scope LegacyScope) (LegacyToolResult, error) {
+func (f *ToolFacade) handleAcquireCapability(ctx context.Context, input json.RawMessage, scope InvocationScope) (ToolDispatchResult, error) {
 	var req acquisition.AcquireInput
 	if err := json.Unmarshal(input, &req); err != nil {
-		return LegacyToolResult{
+		return ToolDispatchResult{
 			Status:      "FAILED",
 			VisibleText: fmt.Sprintf("invalid acquire_capability input: %v", err),
-			Error:       &LegacyToolError{Code: "INVALID_INPUT", Message: err.Error()},
+			Error:       &ToolDispatchError{Code: "INVALID_INPUT", Message: err.Error()},
 		}, err
 	}
-	output, err := f.acquisitionBridge.AcquireCapability(ctx, req, scope.UserID, scope.ExecContext)
+	output, err := f.acquisitionBridge.AcquireCapability(ctx, req, scope.SpaceID, scope.ExecContext)
 	if err != nil {
-		return LegacyToolResult{
+		return ToolDispatchResult{
 			Status:      "FAILED",
 			VisibleText: fmt.Sprintf("acquire_capability failed: %v", err),
-			Error:       &LegacyToolError{Code: "ACQUIRE_CAPABILITY_FAILED", Message: err.Error()},
+			Error:       &ToolDispatchError{Code: "ACQUIRE_CAPABILITY_FAILED", Message: err.Error()},
 		}, err
 	}
 	resultJSON, _ := json.Marshal(output)
@@ -615,14 +615,24 @@ func (f *ToolFacade) handleAcquireCapability(ctx context.Context, input json.Raw
 	if output.Success {
 		visibleText = fmt.Sprintf("Capability %s acquired successfully", output.CapabilityID)
 	}
-	return LegacyToolResult{
+	return ToolDispatchResult{
 		Status:      "SUCCESS",
 		Output:      resultJSON,
 		VisibleText: visibleText,
 	}, nil
 }
 
-func (f *ToolFacade) buildHookContext(scope LegacyScope) hook.HookContextSnapshot {
+func (f *ToolFacade) buildHookContext(scope InvocationScope) hook.HookContextSnapshot {
+	deviceID := strings.TrimSpace(scope.DeviceID)
+	runtimeID := strings.TrimSpace(scope.RuntimeID)
+	if scope.ExecContext != nil && scope.ExecContext.RuntimeTarget != nil {
+		if deviceID == "" {
+			deviceID = string(scope.ExecContext.RuntimeTarget.DeviceID)
+		}
+		if runtimeID == "" {
+			runtimeID = string(scope.ExecContext.RuntimeTarget.RuntimeID)
+		}
+	}
 	var charID *string
 	if scope.CharacterID != "" {
 		c := scope.CharacterID
@@ -637,6 +647,10 @@ func (f *ToolFacade) buildHookContext(scope LegacyScope) hook.HookContextSnapsho
 		TraceID:        scope.TraceID,
 		OperationID:    scope.RequestID,
 		InvocationID:   scope.ToolCallID,
+		SpaceID:        strings.TrimSpace(scope.SpaceID),
+		DeviceID:       deviceID,
+		RuntimeID:      runtimeID,
+		PrincipalType:  strings.TrimSpace(scope.PrincipalType),
 		CharacterID:    charID,
 		ConversationID: convID,
 		Platform:       scope.Channel,
@@ -645,11 +659,11 @@ func (f *ToolFacade) buildHookContext(scope LegacyScope) hook.HookContextSnapsho
 	}
 }
 
-func (f *ToolFacade) buildBeforePromptPayload(scope LegacyScope) json.RawMessage {
+func (f *ToolFacade) buildBeforePromptPayload(scope InvocationScope) json.RawMessage {
 	payload := map[string]interface{}{
 		"sections": map[string]interface{}{},
 		"context": map[string]interface{}{
-			"userId":         scope.UserID,
+			"spaceId":        scope.SpaceID,
 			"characterId":    scope.CharacterID,
 			"conversationId": scope.ConversationID,
 			"channel":        scope.Channel,
@@ -663,7 +677,7 @@ func (f *ToolFacade) buildBeforePromptPayload(scope LegacyScope) json.RawMessage
 	return b
 }
 
-func (f *ToolFacade) buildAfterReplyPayload(reply LegacyReplyView) json.RawMessage {
+func (f *ToolFacade) buildAfterReplyPayload(reply ReplyView) json.RawMessage {
 	payload := map[string]interface{}{
 		"response": map[string]interface{}{
 			"content":      reply.Content,
@@ -674,7 +688,7 @@ func (f *ToolFacade) buildAfterReplyPayload(reply LegacyReplyView) json.RawMessa
 	return b
 }
 
-func (f *ToolFacade) parseContextContributions(result json.RawMessage) []LegacyContextContribution {
+func (f *ToolFacade) parseContextContributions(result json.RawMessage) []ContextContribution {
 	if len(result) == 0 {
 		return nil
 	}
@@ -686,12 +700,12 @@ func (f *ToolFacade) parseContextContributions(result json.RawMessage) []LegacyC
 	if err := json.Unmarshal(result, &parsed); err != nil {
 		return nil
 	}
-	contributions := make([]LegacyContextContribution, 0)
+	contributions := make([]ContextContribution, 0)
 	if parsed.Sections != nil {
 		if extCtx, ok := parsed.Sections["extension_context"].(map[string]interface{}); ok {
 			for source, val := range extCtx {
 				if content, ok := val.(string); ok {
-					contributions = append(contributions, LegacyContextContribution{
+					contributions = append(contributions, ContextContribution{
 						Source:  source,
 						Content: content,
 					})
@@ -701,7 +715,7 @@ func (f *ToolFacade) parseContextContributions(result json.RawMessage) []LegacyC
 						if p, ok := obj["priority"].(float64); ok {
 							priority = int(p)
 						}
-						contributions = append(contributions, LegacyContextContribution{
+						contributions = append(contributions, ContextContribution{
 							Source:   source,
 							Content:  content,
 							Priority: priority,
@@ -714,14 +728,14 @@ func (f *ToolFacade) parseContextContributions(result json.RawMessage) []LegacyC
 	return contributions
 }
 
-func (f *ToolFacade) buildKernelModelTools(ctx context.Context, scope LegacyScope) ([]tool.Tool, error) {
+func (f *ToolFacade) buildKernelModelTools(ctx context.Context, scope InvocationScope) ([]tool.Tool, error) {
 	defs := f.toolRegistry.List(ctx, capability.ToolFilter{Enabled: boolPtr(true)})
 	tools := make([]tool.Tool, 0, len(defs))
 	for _, def := range defs {
 		if !def.Enabled {
 			continue
 		}
-		if !workflowToolAllowedForUser(def, scope.UserID) {
+		if !workflowToolAllowedForSpace(def, scope.SpaceID) {
 			continue
 		}
 		if def.ModelName == "" {
@@ -744,9 +758,9 @@ func (f *ToolFacade) buildKernelModelTools(ctx context.Context, scope LegacyScop
 }
 
 type resolvedExecution struct {
-	target            capability.InvocationExecutionTarget
-	legacyUnresolved  bool
-	missingCapability capability.CapabilityID
+	target              capability.InvocationExecutionTarget
+	missingCapability   capability.CapabilityID
+	resolverUnavailable bool
 }
 
 func (f *ToolFacade) SetCapabilityService(svc *capability.CapabilityService) {
@@ -755,12 +769,12 @@ func (f *ToolFacade) SetCapabilityService(svc *capability.CapabilityService) {
 	}
 }
 
-func (f *ToolFacade) resolveExecutionTarget(ctx context.Context, def capability.ToolDefinition, scope LegacyScope) resolvedExecution {
+func (f *ToolFacade) resolveExecutionTarget(ctx context.Context, def capability.ToolDefinition, scope InvocationScope) resolvedExecution {
 	if def.Runtime.RuntimeType == capability.RuntimeTypeGameHost {
 		return resolvedExecution{}
 	}
 	if f.capabilityResolver == nil {
-		return resolvedExecution{legacyUnresolved: true}
+		return resolvedExecution{resolverUnavailable: true}
 	}
 	capID := def.CapabilityID
 	if capID == "" {
@@ -791,27 +805,28 @@ func (f *ToolFacade) resolveExecutionTarget(ctx context.Context, def capability.
 		}
 	}
 	result, err := f.capabilityResolver.Resolve(req)
-	if err != nil {
-		if def.CapabilityID != "" {
-			return resolvedExecution{missingCapability: def.CapabilityID}
-		}
-		return resolvedExecution{legacyUnresolved: true}
-	}
-	if !result.HasResult() {
-		if def.CapabilityID != "" {
-			return resolvedExecution{missingCapability: def.CapabilityID}
-		}
-		return resolvedExecution{legacyUnresolved: true}
+	if err != nil || !result.HasResult() {
+		return resolvedExecution{missingCapability: capID}
 	}
 	return resolvedExecution{target: result.ExecutionTarget}
 }
 
-func (f *ToolFacade) executeResolvedTool(ctx context.Context, def capability.ToolDefinition, input json.RawMessage, scope LegacyScope, externalCallID string, idempotencyKey string) LegacyToolResult {
+func (f *ToolFacade) executeResolvedTool(ctx context.Context, def capability.ToolDefinition, input json.RawMessage, scope InvocationScope, externalCallID string, idempotencyKey string) ToolDispatchResult {
 	if f.executionKernel == nil {
-		return LegacyToolResult{Status: "FAILED", VisibleText: "execution kernel not configured", Error: &LegacyToolError{Code: "EXECUTION_KERNEL_UNAVAILABLE"}}
+		return ToolDispatchResult{Status: "FAILED", VisibleText: "execution kernel not configured", Error: &ToolDispatchError{Code: "EXECUTION_KERNEL_UNAVAILABLE"}}
 	}
 	isBackground := def.Runtime.RuntimeType == capability.RuntimeTypeTask && def.ExecutionPolicy.AllowBackground
 	resolved := f.resolveExecutionTarget(ctx, def, scope)
+	if resolved.resolverUnavailable {
+		return ToolDispatchResult{
+			Status:      "FAILED",
+			VisibleText: "capability resolver unavailable",
+			Error: &ToolDispatchError{
+				Code:    "CAPABILITY_RESOLVER_UNAVAILABLE",
+				Message: string(def.ID),
+			},
+		}
+	}
 
 	if resolved.missingCapability != "" {
 		if f.recoveryService != nil {
@@ -820,7 +835,7 @@ func (f *ToolFacade) executeResolvedTool(ctx context.Context, def capability.Too
 			}
 			invocation := capability.NewToolInvocationContext(capability.ToolInvocationOptions{
 				ExternalCallID: externalCallID,
-				UserID:         scope.UserID,
+				SpaceID:        scope.SpaceID,
 				CharacterID:    scope.CharacterID,
 				ConversationID: scope.ConversationID,
 				Channel:        scope.Channel,
@@ -840,11 +855,11 @@ func (f *ToolFacade) executeResolvedTool(ctx context.Context, def capability.Too
 			if recoverErr != nil {
 				if errors.Is(recoverErr, acquisition.ErrApprovalRequired) && recoveryResult != nil {
 					payload, _ := json.Marshal(recoveryResult)
-					return LegacyToolResult{
+					return ToolDispatchResult{
 						Status:      "WAITING_APPROVAL",
 						Output:      payload,
 						VisibleText: fmt.Sprintf("approval required to acquire capability %s", resolved.missingCapability),
-						Error: &LegacyToolError{
+						Error: &ToolDispatchError{
 							Code:      "CAPABILITY_APPROVAL_REQUIRED",
 							Message:   string(resolved.missingCapability),
 							Detail:    recoveryResult.ResumeToken,
@@ -852,10 +867,10 @@ func (f *ToolFacade) executeResolvedTool(ctx context.Context, def capability.Too
 						},
 					}
 				}
-				return LegacyToolResult{
+				return ToolDispatchResult{
 					Status:      "FAILED",
 					VisibleText: fmt.Sprintf("capability recovery failed: %s", recoverErr),
-					Error: &LegacyToolError{
+					Error: &ToolDispatchError{
 						Code:    "CAPABILITY_RECOVERY_FAILED",
 						Message: string(resolved.missingCapability),
 						Detail:  recoverErr.Error(),
@@ -865,11 +880,18 @@ func (f *ToolFacade) executeResolvedTool(ctx context.Context, def capability.Too
 			resolved = f.resolveExecutionTarget(ctx, def, scope)
 		}
 
+		if resolved.resolverUnavailable {
+			return ToolDispatchResult{
+				Status:      "FAILED",
+				VisibleText: "capability resolver unavailable",
+				Error:       &ToolDispatchError{Code: "CAPABILITY_RESOLVER_UNAVAILABLE", Message: string(def.ID)},
+			}
+		}
 		if resolved.missingCapability != "" {
-			return LegacyToolResult{
+			return ToolDispatchResult{
 				Status:      "FAILED",
 				VisibleText: fmt.Sprintf("capability not available: %s", resolved.missingCapability),
-				Error: &LegacyToolError{
+				Error: &ToolDispatchError{
 					Code:    "CAPABILITY_NOT_REGISTERED",
 					Message: string(resolved.missingCapability),
 					Detail:  fmt.Sprintf("capability %s has no executable provider", resolved.missingCapability),
@@ -878,13 +900,10 @@ func (f *ToolFacade) executeResolvedTool(ctx context.Context, def capability.Too
 		}
 	}
 
-	metadata := map[string]any{}
-	if resolved.legacyUnresolved {
-		metadata["execution_mode"] = "legacy_unresolved_provider"
-	}
+	metadata := map[string]any{"execution_mode": "capability_resolved"}
 	invocation := capability.NewToolInvocationContext(capability.ToolInvocationOptions{
 		ExternalCallID:  externalCallID,
-		UserID:          scope.UserID,
+		SpaceID:         scope.SpaceID,
 		CharacterID:     scope.CharacterID,
 		ConversationID:  scope.ConversationID,
 		Channel:         scope.Channel,
@@ -907,23 +926,23 @@ func (f *ToolFacade) executeResolvedTool(ctx context.Context, def capability.Too
 		Invocation: invocation,
 	}
 	result := f.executionKernel.Execute(ctx, req)
-	return unifiedResultToLegacy(result)
+	return unifiedResultToDispatch(result)
 }
 
-func (f *ToolFacade) ExecuteModelToolStream(ctx context.Context, modelName string, input json.RawMessage, scope LegacyScope, idempotencyKey string, sink capability.ToolStreamSink) (LegacyToolResult, bool, error) {
+func (f *ToolFacade) ExecuteModelToolStream(ctx context.Context, modelName string, input json.RawMessage, scope InvocationScope, idempotencyKey string, sink capability.ToolStreamSink) (ToolDispatchResult, bool, error) {
 	if f.toolRegistry == nil {
-		return LegacyToolResult{Status: "FAILED", VisibleText: "tool registry not configured", Error: &LegacyToolError{Code: "TOOL_REGISTRY_UNAVAILABLE"}}, false, nil
+		return ToolDispatchResult{Status: "FAILED", VisibleText: "tool registry not configured", Error: &ToolDispatchError{Code: "TOOL_REGISTRY_UNAVAILABLE"}}, false, nil
 	}
 	if sink == nil {
-		return LegacyToolResult{Status: "FAILED", VisibleText: "stream sink is required", Error: &LegacyToolError{Code: "STREAM_SINK_REQUIRED"}}, false, fmt.Errorf("stream sink is nil")
+		return ToolDispatchResult{Status: "FAILED", VisibleText: "stream sink is required", Error: &ToolDispatchError{Code: "STREAM_SINK_REQUIRED"}}, false, fmt.Errorf("stream sink is nil")
 	}
 
 	def, ok := f.toolRegistry.GetByModelName(ctx, modelName)
 	if !ok {
 		def, ok = f.toolRegistry.Get(ctx, modelName)
 	}
-	if !ok || !workflowToolAllowedForUser(def, scope.UserID) {
-		return LegacyToolResult{Status: "FAILED", VisibleText: fmt.Sprintf("tool %s not found in kernel registry", modelName), Error: &LegacyToolError{Code: "TOOL_NOT_FOUND", Message: modelName}}, false, nil
+	if !ok || !workflowToolAllowedForSpace(def, scope.SpaceID) {
+		return ToolDispatchResult{Status: "FAILED", VisibleText: fmt.Sprintf("tool %s not found in kernel registry", modelName), Error: &ToolDispatchError{Code: "TOOL_NOT_FOUND", Message: modelName}}, false, nil
 	}
 
 	var kernelInterface interface{} = f.executionKernel
@@ -935,13 +954,16 @@ func (f *ToolFacade) ExecuteModelToolStream(ctx context.Context, modelName strin
 
 	isBackground := def.Runtime.RuntimeType == capability.RuntimeTypeTask && def.ExecutionPolicy.AllowBackground
 	resolved := f.resolveExecutionTarget(ctx, def, scope)
-	streamMetadata := map[string]any{}
-	if resolved.legacyUnresolved {
-		streamMetadata["execution_mode"] = "legacy_unresolved_provider"
+	if resolved.resolverUnavailable {
+		return ToolDispatchResult{Status: "FAILED", VisibleText: "capability resolver unavailable", Error: &ToolDispatchError{Code: "CAPABILITY_RESOLVER_UNAVAILABLE", Message: string(def.ID)}}, true, nil
 	}
+	if resolved.missingCapability != "" {
+		return ToolDispatchResult{Status: "FAILED", VisibleText: fmt.Sprintf("capability not available: %s", resolved.missingCapability), Error: &ToolDispatchError{Code: "CAPABILITY_NOT_REGISTERED", Message: string(resolved.missingCapability)}}, true, nil
+	}
+	streamMetadata := map[string]any{"execution_mode": "capability_resolved"}
 	invocation := capability.NewToolInvocationContext(capability.ToolInvocationOptions{
 		ExternalCallID:  scope.ToolCallID,
-		UserID:          scope.UserID,
+		SpaceID:         scope.SpaceID,
 		CharacterID:     scope.CharacterID,
 		ConversationID:  scope.ConversationID,
 		Channel:         scope.Channel,
@@ -966,12 +988,12 @@ func (f *ToolFacade) ExecuteModelToolStream(ctx context.Context, modelName strin
 
 	f.counters.IncPipelineExecution()
 	result, err := streamingKernel.ExecuteStream(ctx, req, sink)
-	legacy := unifiedResultToLegacy(result)
+	legacy := unifiedResultToDispatch(result)
 	return legacy, true, err
 }
 
-func unifiedResultToLegacy(result capability.UnifiedToolResult) LegacyToolResult {
-	legacy := LegacyToolResult{
+func unifiedResultToDispatch(result capability.UnifiedToolResult) ToolDispatchResult {
+	dispatch := ToolDispatchResult{
 		RunID:      result.InvocationID,
 		Status:     string(result.Status),
 		Output:     result.Structured,
@@ -988,16 +1010,16 @@ func unifiedResultToLegacy(result capability.UnifiedToolResult) LegacyToolResult
 				}
 			}
 		}
-		legacy.VisibleText = text
+		dispatch.VisibleText = text
 	}
 	if result.Error != nil {
-		legacy.Error = &LegacyToolError{
+		dispatch.Error = &ToolDispatchError{
 			Code:      result.Error.Code,
 			Message:   result.Error.Message,
 			Retryable: result.Error.Retryable,
 		}
 	}
-	return legacy
+	return dispatch
 }
 
 func boolPtr(v bool) *bool {
@@ -1015,14 +1037,14 @@ func (f *ToolFacade) CancelInvocation(ctx context.Context, invocationID string) 
 	return execution.CancellationResult{Requested: false, TargetInvocationID: invocationID}
 }
 
-func (f *ToolFacade) CancelModelTool(ctx context.Context, scope LegacyScope, toolCallID string) execution.CancellationResult {
+func (f *ToolFacade) CancelModelTool(ctx context.Context, scope InvocationScope, toolCallID string) execution.CancellationResult {
 	reason := capability.ToolCancellationReason{
 		Code: capability.CancellationReasonUserRequested,
 	}
 	var kernelInterface interface{} = f.executionKernel
 	if cancellable, ok := kernelInterface.(execution.CancellableExecutionSecurityKernel); ok {
 		externalScope := capability.CancellationExternalScope{
-			UserID:         scope.UserID,
+			SpaceID:        scope.SpaceID,
 			CharacterID:    scope.CharacterID,
 			ConversationID: scope.ConversationID,
 			SessionID:      scope.SessionID,

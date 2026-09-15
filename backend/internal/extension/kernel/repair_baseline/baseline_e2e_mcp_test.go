@@ -87,8 +87,8 @@ func TestBaseline_E2E_MCP_ToolsAppearOnceInModelList(t *testing.T) {
 		t.Fatalf("SyncMCPTools must succeed: %v", err)
 	}
 
-	scope := kernel.LegacyScope{
-		UserID:         "test-user",
+	scope := kernel.InvocationScope{
+		SpaceID:        "test-user",
 		CharacterID:    "test-character",
 		ConversationID: "test-conversation",
 		Channel:        "test",
@@ -184,8 +184,8 @@ func TestBaseline_E2E_MCP_DisableRemovesFromModelList(t *testing.T) {
 		t.Fatalf("SyncMCPTools must succeed: %v", err)
 	}
 
-	scope := kernel.LegacyScope{
-		UserID:         "test-user",
+	scope := kernel.InvocationScope{
+		SpaceID:        "test-user",
 		CharacterID:    "test-character",
 		ConversationID: "test-conversation",
 		Channel:        "test",
@@ -260,8 +260,8 @@ func TestBaseline_E2E_MCP_NoDuplicateExposure(t *testing.T) {
 		t.Fatalf("re-syncing same MCP tools must not duplicate (Phase 10 section 19.7.6), got %d tools", len(mcpTools))
 	}
 
-	scope := kernel.LegacyScope{
-		UserID:    "test-user",
+	scope := kernel.InvocationScope{
+		SpaceID:   "test-user",
 		Channel:   "test",
 		SessionID: "test-session",
 	}
@@ -306,8 +306,8 @@ func TestBaseline_E2E_MCP_LegacyCounterZero(t *testing.T) {
 		t.Fatalf("SyncMCPTools must succeed: %v", err)
 	}
 
-	scope := kernel.LegacyScope{
-		UserID:    "test-user",
+	scope := kernel.InvocationScope{
+		SpaceID:   "test-user",
 		Channel:   "test",
 		SessionID: "test-session",
 	}

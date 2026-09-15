@@ -45,7 +45,7 @@ type PackageRollbackConfirmation struct {
 	PreviewSessionID  string    `json:"previewSessionId"`
 }
 
-func (r *Runtime) PreviewPackageRollback(ctx context.Context, extensionID, version, userID, scopeType, scopeID string) (PackageRollbackPreviewResult, error) {
+func (r *Runtime) PreviewPackageRollback(ctx context.Context, extensionID, version, spaceID, scopeType, scopeID string) (PackageRollbackPreviewResult, error) {
 	result := PackageRollbackPreviewResult{
 		ExtensionID:   extensionID,
 		TargetVersion: version,
@@ -82,7 +82,7 @@ func (r *Runtime) PreviewPackageRollback(ctx context.Context, extensionID, versi
 	result.CurrentVersion = current.InstalledVersion.String()
 	result.CurrentGeneration = current.Generation
 
-	if err := validatePackageOwner(current, userID, scopeType, scopeID); err != nil {
+	if err := validatePackageOwner(current, spaceID, scopeType, scopeID); err != nil {
 		return result, err
 	}
 
@@ -297,7 +297,7 @@ func (r *Runtime) ConfirmPackageRollback(ctx context.Context, request PackageRol
 		return PackageRollbackConfirmation{}, fmt.Errorf("kernel: package services unavailable")
 	}
 
-	preview, err := r.PreviewPackageRollback(ctx, request.ExtensionID, request.TargetVersion, request.UserID, request.ScopeType, request.ScopeID)
+	preview, err := r.PreviewPackageRollback(ctx, request.ExtensionID, request.TargetVersion, request.SpaceID, request.ScopeType, request.ScopeID)
 	if err != nil {
 		return PackageRollbackConfirmation{}, err
 	}
@@ -369,7 +369,7 @@ func (r *Runtime) ConfirmPackageRollback(ctx context.Context, request PackageRol
 		SnapshotRequirementHash:   preview.SnapshotRequirementHash,
 		RequiredConfirmationsHash: preview.RequiredConfirmationsHash,
 		DependenciesHash:          preview.DependenciesHash,
-		UserID:                    request.UserID,
+		SpaceID:                   request.SpaceID,
 		ScopeType:                 request.ScopeType,
 		ScopeID:                   request.ScopeID,
 		ConfirmedItems:            confirmedItemsFromMap(confirmed),
@@ -394,7 +394,7 @@ func (r *Runtime) ConfirmPackageRollback(ctx context.Context, request PackageRol
 type PackageRollbackConfirmationRequest struct {
 	ExtensionID      string          `json:"extensionId"`
 	TargetVersion    string          `json:"targetVersion"`
-	UserID           string          `json:"-"`
+	SpaceID          string          `json:"-"`
 	ScopeType        string          `json:"scopeType"`
 	ScopeID          string          `json:"scopeId"`
 	PreviewSessionID string          `json:"previewSessionId,omitempty"`

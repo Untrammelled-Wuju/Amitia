@@ -12,7 +12,7 @@ func newBoundDeveloperSession(t *testing.T, container *Container, owner string) 
 	t.Helper()
 	workspaceID := dev_mode.WorkspaceID("unsigned-security")
 	_, err := container.DevModeRegistry.Register(context.Background(), dev_mode.RegisterWorkspaceInput{
-		WorkspaceID: workspaceID, ExtensionID: dev_mode.ExtensionID("com.example/pipeline"), OwnerUserID: owner,
+		WorkspaceID: workspaceID, ExtensionID: dev_mode.ExtensionID("com.example/pipeline"), OwnerSpaceID: owner,
 		PathReference: t.TempDir(), ManifestPath: "manifest.json",
 	})
 	if err != nil {

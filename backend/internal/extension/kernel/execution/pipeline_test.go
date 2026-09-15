@@ -68,13 +68,13 @@ func newTestTool(id string) capability.ToolDefinition {
 	}
 }
 
-func newTestInvocation(userID string) capability.ToolInvocationContext {
+func newTestInvocation(spaceID string) capability.ToolInvocationContext {
 	return capability.ToolInvocationContext{
 		InvocationID:   "inv-001",
 		RootID:         "inv-001",
 		TraceID:        "trace-001",
 		OperationID:    "op-001",
-		UserID:         userID,
+		SpaceID:        spaceID,
 		CharacterID:    "char-001",
 		ConversationID: "conv-001",
 		Source:         capability.InvocationSourceModel,
@@ -369,7 +369,7 @@ func TestPipelineMissingInvocationID(t *testing.T) {
 		Input:  json.RawMessage(`{}`),
 		Invocation: capability.ToolInvocationContext{
 			InvocationID: "",
-			UserID:       "user-001",
+			SpaceID:      "user-001",
 			Source:       capability.InvocationSourceModel,
 		},
 	}
@@ -969,8 +969,8 @@ func TestInvocationValidatorAllFields(t *testing.T) {
 			request: ToolExecutionRequest{
 				ToolID: "test/tool",
 				Invocation: capability.ToolInvocationContext{
-					UserID: "user-001",
-					Source: capability.InvocationSourceModel,
+					SpaceID: "user-001",
+					Source:  capability.InvocationSourceModel,
 				},
 			},
 			wantErr: true,
@@ -999,7 +999,7 @@ func TestInvocationValidatorAllFields(t *testing.T) {
 				ToolID: "test/tool",
 				Invocation: capability.ToolInvocationContext{
 					InvocationID: "inv-001",
-					UserID:       "user-001",
+					SpaceID:      "user-001",
 				},
 			},
 			wantErr: true,
@@ -1023,7 +1023,7 @@ func TestResultValidatorOutputSize(t *testing.T) {
 	tool := newTestTool("test/tool")
 
 	inv := capability.NewToolInvocationContext(capability.ToolInvocationOptions{
-		UserID: "user1",
+		SpaceID: "user1",
 	})
 
 	result := capability.UnifiedToolResult{

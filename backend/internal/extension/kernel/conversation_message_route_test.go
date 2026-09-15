@@ -82,7 +82,7 @@ func TestConversationMessageRouteSendsWithResolvedScope(t *testing.T) {
 		ScopeSnapshotStore: &fixedConversationScopeStore{
 			snapshot: &scope.ScopeSnapshot{
 				SnapshotID:     "scope-1",
-				UserID:         "user-1",
+				SpaceID:        "user-1",
 				CharacterID:    "char-1",
 				ConversationID: "conv-1",
 			},
@@ -105,7 +105,7 @@ func TestConversationMessageRouteSendsWithResolvedScope(t *testing.T) {
 	if !sender.called {
 		t.Fatal("expected conversation message sender to be called")
 	}
-	if sender.request.UserID != "user-1" || sender.request.CharacterID != "char-1" || sender.request.ConversationID != "conv-1" {
+	if sender.request.SpaceID != "user-1" || sender.request.CharacterID != "char-1" || sender.request.ConversationID != "conv-1" {
 		t.Fatalf("expected scope target, got %+v", sender.request)
 	}
 	if sender.request.Content != "你好" {
@@ -130,7 +130,7 @@ func TestConversationMessageRouteRejectsScopeMismatch(t *testing.T) {
 		ScopeSnapshotStore: &fixedConversationScopeStore{
 			snapshot: &scope.ScopeSnapshot{
 				SnapshotID:     "scope-1",
-				UserID:         "user-1",
+				SpaceID:        "user-1",
 				CharacterID:    "char-1",
 				ConversationID: "conv-1",
 			},
@@ -189,7 +189,7 @@ func TestConversationMessageAppendRouteUsesResolvedScope(t *testing.T) {
 		ScopeSnapshotStore: &fixedConversationScopeStore{
 			snapshot: &scope.ScopeSnapshot{
 				SnapshotID:     "scope-1",
-				UserID:         "user-1",
+				SpaceID:        "user-1",
 				CharacterID:    "char-1",
 				ConversationID: "conv-1",
 			},
@@ -212,7 +212,7 @@ func TestConversationMessageAppendRouteUsesResolvedScope(t *testing.T) {
 	if !appender.called {
 		t.Fatal("expected appender to be called")
 	}
-	if appender.request.UserID != "user-1" || appender.request.CharacterID != "char-1" || appender.request.ConversationID != "conv-1" {
+	if appender.request.SpaceID != "user-1" || appender.request.CharacterID != "char-1" || appender.request.ConversationID != "conv-1" {
 		t.Fatalf("expected resolved scope, got %+v", appender.request)
 	}
 	if len(appender.request.Parts) != 1 || appender.request.Parts[0].Type != "image" {

@@ -256,7 +256,7 @@ type RollbackRequest struct {
 	ExtensionID string
 	PointID     string
 	Reason      string
-	UserID      string
+	SpaceID     string
 }
 
 type RollbackResult struct {

@@ -83,7 +83,7 @@ func taskOptions(e task_runtime.TaskDomainEvent) event.PublishOptions {
 }
 
 func taskPartitionKey(e task_runtime.TaskDomainEvent) string {
-	uid := e.Run.ExecutionTarget.UserID
+	uid := e.Run.ExecutionTarget.SpaceID
 	if uid != "" {
 		return uid.String()
 	}

@@ -202,7 +202,7 @@ func createUninstallRecoveryOp(t *testing.T, ctx context.Context, container *Con
 	op := PackageOperationRecord{
 		OperationID:        operationID,
 		TraceID:            "trace-" + operationID,
-		UserID:             "user-1",
+		SpaceID:            "user-1",
 		ScopeType:          "global",
 		ExtensionID:        res.ExtensionID,
 		TargetVersion:      res.Version,
@@ -317,7 +317,7 @@ func (f *r3RecoveryFixture) Restart(t *testing.T) {
 func (f *r3RecoveryFixture) ReloadOperation(t *testing.T) PackageOperationRecord {
 	t.Helper()
 
-	operation, _, err := f.Container.PackageRepository.GetOperation(context.Background(), f.Operation.UserID, f.Operation.OperationID)
+	operation, _, err := f.Container.PackageRepository.GetOperation(context.Background(), f.Operation.SpaceID, f.Operation.OperationID)
 	require.NoError(t, err)
 
 	f.Operation = operation
@@ -336,7 +336,7 @@ func assertR3RecoveryFinalState(
 
 	ctx := context.Background()
 
-	finalOperation, steps, err := container.PackageRepository.GetOperation(ctx, operation.UserID, operation.OperationID)
+	finalOperation, steps, err := container.PackageRepository.GetOperation(ctx, operation.SpaceID, operation.OperationID)
 	require.NoError(t, err)
 
 	require.Equal(t, string(PackageOperationCompleted), string(finalOperation.Status))

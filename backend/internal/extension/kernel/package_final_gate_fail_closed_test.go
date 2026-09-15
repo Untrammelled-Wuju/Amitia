@@ -161,7 +161,7 @@ func setupR46FgOperation(t *testing.T, ctx context.Context, container *Container
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	op := PackageOperationRecord{
 		OperationID: operationID, TraceID: "trace-r46-fg-" + operationID,
-		UserID: "user-1", ScopeType: "global", ExtensionID: extensionID,
+		SpaceID: "user-1", ScopeType: "global", ExtensionID: extensionID,
 		TargetVersion: "1.0.0", TargetGeneration: "gen-new",
 		OperationType: "uninstall", Status: "completed",
 		CurrentStep: "completed", StartedAt: now, UpdatedAt: now,
@@ -182,7 +182,7 @@ func r46FgConfirmationClaimsJSON(extensionID, artifactID, artifactPolicy string)
 	now := time.Now().UTC()
 	securityHash := computeSecurityPolicyHash()
 	emptyConfHash := computePackageRequiredConfirmationsHash([]string{})
-	return fmt.Sprintf(`{"schemaVersion":1,"operationType":"uninstall","extensionId":%q,"artifactId":%q,"artifactPolicy":%q,"previewHash":"sha256:r46-test-preview","securityPolicyHash":"%s","policyVersion":"2026-07-30-v1","userId":"user-1","scopeType":"global","scopeId":"","confirmedItems":[],"confirmations":{},"issuedAt":%d,"expiresAt":%d,"nonce":"r46-fg-test-nonce","requiredConfirmationsHash":"%s","dependenciesHash":"sha256:r46-test-deps"}`,
+	return fmt.Sprintf(`{"schemaVersion":1,"operationType":"uninstall","extensionId":%q,"artifactId":%q,"artifactPolicy":%q,"previewHash":"sha256:r46-test-preview","securityPolicyHash":"%s","policyVersion":"2026-07-30-v1","spaceId":"user-1","scopeType":"global","scopeId":"","confirmedItems":[],"confirmations":{},"issuedAt":%d,"expiresAt":%d,"nonce":"r46-fg-test-nonce","requiredConfirmationsHash":"%s","dependenciesHash":"sha256:r46-test-deps"}`,
 		extensionID, artifactID, artifactPolicy, securityHash,
 		now.Add(-time.Minute).Unix(), now.Add(time.Hour).Unix(),
 		emptyConfHash)
@@ -194,7 +194,7 @@ func putR46FgNonceBinding(t *testing.T, ctx context.Context, container *Containe
 	issuedAtStr := time.Unix(issuedAt, 0).UTC().Format(time.RFC3339Nano)
 	expiresAtStr := time.Unix(expiresAt, 0).UTC().Format(time.RFC3339Nano)
 	_, err := container.PackageRepository.DB().ExecContext(ctx,
-		`INSERT INTO extension_package_confirmation_nonces (nonce, operation_id, operation_type, extension_id, user_id, issued_at, expires_at, consumed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO extension_package_confirmation_nonces (nonce, operation_id, operation_type, extension_id, space_id, issued_at, expires_at, consumed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
 		nonce, operationID, "uninstall", extensionID, "user-1", issuedAtStr, expiresAtStr, now)
 	if err != nil {
 		t.Fatalf("put confirmation nonce: %v", err)
@@ -285,7 +285,7 @@ func TestR46FinalGateRetainRollbackExactBindingPasses(t *testing.T) {
 	emptyDepsHash := computePackageDependenciesHash([]string{})
 
 	claimsJSON := fmt.Sprintf(`{"artifactId":%q,"artifactPolicy":"retainForRollback","versionId":"1.0.0","currentGenerationId":"r46-fg-generation","confirm":true,"expiresAt":9999999999}`, artifactID)
-	confirmationClaimsJSON := fmt.Sprintf(`{"schemaVersion":1,"operationType":"uninstall","extensionId":%q,"artifactId":%q,"artifactPolicy":"retainForRollback","previewHash":%q,"securityPolicyHash":"%s","policyVersion":"2026-07-30-v1","userId":"user-1","scopeType":"global","scopeId":"","confirmedItems":[],"confirmations":{},"issuedAt":%d,"expiresAt":%d,"nonce":%q,"requiredConfirmationsHash":"%s","dependenciesHash":"%s"}`,
+	confirmationClaimsJSON := fmt.Sprintf(`{"schemaVersion":1,"operationType":"uninstall","extensionId":%q,"artifactId":%q,"artifactPolicy":"retainForRollback","previewHash":%q,"securityPolicyHash":"%s","policyVersion":"2026-07-30-v1","spaceId":"user-1","scopeType":"global","scopeId":"","confirmedItems":[],"confirmations":{},"issuedAt":%d,"expiresAt":%d,"nonce":%q,"requiredConfirmationsHash":"%s","dependenciesHash":"%s"}`,
 		extensionID, artifactID, previewHash, securityHash, issuedAt, expiresAt, nonce, emptyConfHash, emptyDepsHash)
 	setupR46FgOperation(t, ctx, container, extensionID, operationID, artifactID, claimsJSON, confirmationClaimsJSON)
 
@@ -910,7 +910,7 @@ func TestFinalGateUninstallArtifactNotFoundPasses(t *testing.T) {
 
 	op := PackageOperationRecord{
 		OperationID: operationID, TraceID: "trace-fail-closed-artifact",
-		UserID: "user-1", ScopeType: "global", ExtensionID: extensionID,
+		SpaceID: "user-1", ScopeType: "global", ExtensionID: extensionID,
 		OperationType: "uninstall", Status: "completed",
 		CurrentStep: "completed", StartedAt: now, UpdatedAt: now,
 		ConfirmationsJSON: "{}", FencingToken: 1,
@@ -969,7 +969,7 @@ func TestFinalGateRollbackSnapshotFailClosedOnMissingRollbackPoint(t *testing.T)
 
 	op := PackageOperationRecord{
 		OperationID: operationID, TraceID: "trace-fail-closed-rollback",
-		UserID: "user-1", ScopeType: "global", ExtensionID: extensionID,
+		SpaceID: "user-1", ScopeType: "global", ExtensionID: extensionID,
 		TargetVersion: "2.0.0", FromVersion: "1.0.0",
 		OperationType: "rollback", Status: "completed",
 		CurrentStep: "completed", StartedAt: now, UpdatedAt: now,
@@ -1019,11 +1019,11 @@ func TestFinalGateUpdateMissingRollbackPointFailsWithoutSnapshotHash(t *testing.
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	confirmKey := "confirm.update"
 	securityHash := computeSecurityPolicyHash()
-	claimsJSON := fmt.Sprintf(`{"schemaVersion":1,"operationType":"update","extensionId":%q,"artifactId":"","previewHash":"sha256:0000000000000000000000000000000000000000000000000000000000000000","securityPolicyHash":"%s","policyVersion":"2026-07-30-v1","userId":"user-1","scopeType":"global","scopeId":"","confirmedItems":[%q],"confirmations":{%q:true},"issuedAt":%d,"expiresAt":%d,"nonce":"test-nonce"}`, extensionID, securityHash, confirmKey, confirmKey, time.Now().Unix(), time.Now().Add(time.Hour).Unix())
+	claimsJSON := fmt.Sprintf(`{"schemaVersion":1,"operationType":"update","extensionId":%q,"artifactId":"","previewHash":"sha256:0000000000000000000000000000000000000000000000000000000000000000","securityPolicyHash":"%s","policyVersion":"2026-07-30-v1","spaceId":"user-1","scopeType":"global","scopeId":"","confirmedItems":[%q],"confirmations":{%q:true},"issuedAt":%d,"expiresAt":%d,"nonce":"test-nonce"}`, extensionID, securityHash, confirmKey, confirmKey, time.Now().Unix(), time.Now().Add(time.Hour).Unix())
 
 	op := PackageOperationRecord{
 		OperationID: operationID, TraceID: "trace-fail-closed-update-norp",
-		UserID: "user-1", ScopeType: "global", ExtensionID: extensionID,
+		SpaceID: "user-1", ScopeType: "global", ExtensionID: extensionID,
 		TargetVersion: "2.0.0", FromVersion: "1.0.0",
 		OperationType: "update", Status: "completed",
 		CurrentStep: "completed", StartedAt: now, UpdatedAt: now,
@@ -1084,11 +1084,11 @@ func TestFinalGateUpdateMissingRollbackPointPassesWithValidSnapshotHash(t *testi
 	}
 	securityHash := computeSecurityPolicyHash()
 	confirmKey := "confirm.update"
-	claimsJSON := fmt.Sprintf(`{"schemaVersion":1,"operationType":"update","extensionId":%q,"artifactId":"test-artifact","previewHash":"sha256:0000000000000000000000000000000000000000000000000000000000000000","securityPolicyHash":"%s","policyVersion":"2026-07-30-v1","snapshotRequirementHash":"%s","userId":"user-1","scopeType":"global","scopeId":"","confirmedItems":[%q],"confirmations":{%q:true},"issuedAt":%d,"expiresAt":%d,"nonce":"test-nonce"}`, extensionID, securityHash, reqHashOrEmpty, confirmKey, confirmKey, time.Now().Unix(), time.Now().Add(time.Hour).Unix())
+	claimsJSON := fmt.Sprintf(`{"schemaVersion":1,"operationType":"update","extensionId":%q,"artifactId":"test-artifact","previewHash":"sha256:0000000000000000000000000000000000000000000000000000000000000000","securityPolicyHash":"%s","policyVersion":"2026-07-30-v1","snapshotRequirementHash":"%s","spaceId":"user-1","scopeType":"global","scopeId":"","confirmedItems":[%q],"confirmations":{%q:true},"issuedAt":%d,"expiresAt":%d,"nonce":"test-nonce"}`, extensionID, securityHash, reqHashOrEmpty, confirmKey, confirmKey, time.Now().Unix(), time.Now().Add(time.Hour).Unix())
 
 	op := PackageOperationRecord{
 		OperationID: operationID, TraceID: "trace-fail-closed-update-hash",
-		UserID: "user-1", ScopeType: "global", ExtensionID: extensionID,
+		SpaceID: "user-1", ScopeType: "global", ExtensionID: extensionID,
 		TargetVersion: "2.0.0", FromVersion: "1.0.0",
 		OperationType: "update", Status: "completed",
 		CurrentStep: "completed", StartedAt: now, UpdatedAt: now,
@@ -1147,7 +1147,7 @@ func TestFinalGateRetainArtifactPolicyFailsWhenArtifactNotFound(t *testing.T) {
 
 	op := PackageOperationRecord{
 		OperationID: operationID, TraceID: "trace-retain-notfound",
-		UserID: "user-1", ScopeType: "global", ExtensionID: extensionID,
+		SpaceID: "user-1", ScopeType: "global", ExtensionID: extensionID,
 		OperationType: "uninstall", Status: "completed",
 		CurrentStep: "completed", StartedAt: now, UpdatedAt: now,
 		ArtifactID:        artifactID,
@@ -1206,7 +1206,7 @@ func TestFinalGateRetainForRollbackPolicyFailsWhenArtifactNotFound(t *testing.T)
 
 	op := PackageOperationRecord{
 		OperationID: operationID, TraceID: "trace-retain-rollback-notfound",
-		UserID: "user-1", ScopeType: "global", ExtensionID: extensionID,
+		SpaceID: "user-1", ScopeType: "global", ExtensionID: extensionID,
 		OperationType: "uninstall", Status: "completed",
 		CurrentStep: "completed", StartedAt: now, UpdatedAt: now,
 		ArtifactID:        artifactID,
@@ -1264,7 +1264,7 @@ func TestFinalGateRetainForExportPolicyFailsWhenArtifactNotFound(t *testing.T) {
 
 	op := PackageOperationRecord{
 		OperationID: operationID, TraceID: "trace-retain-export-notfound",
-		UserID: "user-1", ScopeType: "global", ExtensionID: extensionID,
+		SpaceID: "user-1", ScopeType: "global", ExtensionID: extensionID,
 		OperationType: "uninstall", Status: "completed",
 		CurrentStep: "completed", StartedAt: now, UpdatedAt: now,
 		ArtifactID:        artifactID,
@@ -1321,7 +1321,7 @@ func TestFinalGateDeleteStepArtifactIDMismatchFailsClosed(t *testing.T) {
 
 	op := PackageOperationRecord{
 		OperationID: operationID, TraceID: "trace-step-mismatch",
-		UserID: "user-1", ScopeType: "global", ExtensionID: extensionID,
+		SpaceID: "user-1", ScopeType: "global", ExtensionID: extensionID,
 		OperationType: "uninstall", Status: "completed",
 		CurrentStep: "completed", StartedAt: now, UpdatedAt: now,
 		ArtifactID:        "art-expected",
@@ -1391,7 +1391,7 @@ func TestFinalGateUninstallVersionIDMismatchFailsClosed(t *testing.T) {
 
 	op := PackageOperationRecord{
 		OperationID: operationID, TraceID: "trace-version-mismatch",
-		UserID: "user-1", ScopeType: "global", ExtensionID: extensionID,
+		SpaceID: "user-1", ScopeType: "global", ExtensionID: extensionID,
 		OperationType: "uninstall", Status: "completed",
 		CurrentStep: "completed", StartedAt: now, UpdatedAt: now,
 		ArtifactID: "art-version-mismatch", TargetVersion: "1.0.0",
@@ -1449,7 +1449,7 @@ func TestFinalGateUninstallGenerationIDMismatchFailsClosed(t *testing.T) {
 
 	op := PackageOperationRecord{
 		OperationID: operationID, TraceID: "trace-gen-mismatch",
-		UserID: "user-1", ScopeType: "global", ExtensionID: extensionID,
+		SpaceID: "user-1", ScopeType: "global", ExtensionID: extensionID,
 		OperationType: "uninstall", Status: "completed",
 		CurrentStep: "completed", StartedAt: now, UpdatedAt: now,
 		ArtifactID: "art-gen-mismatch", TargetVersion: "1.0.0",
@@ -1506,14 +1506,14 @@ func TestFinalGateUpdateRequirementHashMismatchFails(t *testing.T) {
 
 	op := PackageOperationRecord{
 		OperationID: operationID, TraceID: "trace-reqhash-mismatch",
-		UserID: "user-1", ScopeType: "global", ExtensionID: extensionID,
+		SpaceID: "user-1", ScopeType: "global", ExtensionID: extensionID,
 		TargetVersion: "2.0.0", FromVersion: "1.0.0",
 		TargetGeneration: "gen-2",
 		OperationType:    "update", Status: "completed",
 		CurrentStep: "completed", StartedAt: now, UpdatedAt: now,
 		ArtifactID:              "art-reqhash",
 		SnapshotRequirementHash: "sha256:deadbeef",
-		ConfirmationClaimsJSON:  fmt.Sprintf(`{"schemaVersion":1,"operationType":"update","extensionId":%q,"artifactId":"art-reqhash","previewHash":"sha256:0000000000000000000000000000000000000000000000000000000000000000","securityPolicyHash":"%s","policyVersion":"2026-07-30-v1","snapshotRequirementHash":"sha256:deadbeef","userId":"user-1","scopeType":"global","scopeId":"","confirmedItems":["confirm.update"],"confirmations":{"confirm.update":true},"issuedAt":%d,"expiresAt":%d,"nonce":"test-nonce"}`, extensionID, secHash, time.Now().Unix(), time.Now().Add(time.Hour).Unix()),
+		ConfirmationClaimsJSON:  fmt.Sprintf(`{"schemaVersion":1,"operationType":"update","extensionId":%q,"artifactId":"art-reqhash","previewHash":"sha256:0000000000000000000000000000000000000000000000000000000000000000","securityPolicyHash":"%s","policyVersion":"2026-07-30-v1","snapshotRequirementHash":"sha256:deadbeef","spaceId":"user-1","scopeType":"global","scopeId":"","confirmedItems":["confirm.update"],"confirmations":{"confirm.update":true},"issuedAt":%d,"expiresAt":%d,"nonce":"test-nonce"}`, extensionID, secHash, time.Now().Unix(), time.Now().Add(time.Hour).Unix()),
 		FencingToken:            1,
 	}
 	if err := container.PackageRepository.CreateOperation(ctx, op); err != nil {
@@ -1565,7 +1565,7 @@ func TestFinalGateUpdatePreviewHashDriftDetected(t *testing.T) {
 
 	op := PackageOperationRecord{
 		OperationID: operationID, TraceID: "trace-previewhash-drift",
-		UserID: "user-1", ScopeType: "global", ExtensionID: extensionID,
+		SpaceID: "user-1", ScopeType: "global", ExtensionID: extensionID,
 		TargetVersion: "2.0.0", FromVersion: "1.0.0",
 		TargetGeneration: "gen-2",
 		OperationType:    "update", Status: "completed",
@@ -1642,11 +1642,11 @@ func TestFinalGateSnapshotRealDiffNonEmptyFails(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	claimsJSON := `{"schemaVersion":1,"operationType":"update","extensionId":"com.example/fail-closed-real-diff","artifactId":"art-real-diff","artifactPolicy":"deleteArtifact","policyVersion":"2026-07-30-v1","userId":"user-1","scopeType":"global","scopeId":"","previewHash":"sha256:preview-real-diff","securityPolicyHash":"sha256:sec-real-diff","confirmedItems":["confirm.update"],"confirmations":{"confirm.update":true},"issuedAt":1700000000,"expiresAt":9999999999,"nonce":"test-nonce-real-diff"}`
+	claimsJSON := `{"schemaVersion":1,"operationType":"update","extensionId":"com.example/fail-closed-real-diff","artifactId":"art-real-diff","artifactPolicy":"deleteArtifact","policyVersion":"2026-07-30-v1","spaceId":"user-1","scopeType":"global","scopeId":"","previewHash":"sha256:preview-real-diff","securityPolicyHash":"sha256:sec-real-diff","confirmedItems":["confirm.update"],"confirmations":{"confirm.update":true},"issuedAt":1700000000,"expiresAt":9999999999,"nonce":"test-nonce-real-diff"}`
 
 	op := PackageOperationRecord{
 		OperationID: operationID, TraceID: "trace-real-diff",
-		UserID: "user-1", ScopeType: "global", ExtensionID: extensionID,
+		SpaceID: "user-1", ScopeType: "global", ExtensionID: extensionID,
 		TargetVersion: "2.0.0", FromVersion: "1.0.0",
 		TargetGeneration: "gen-2",
 		OperationType:    "update", Status: "completed",
@@ -1732,7 +1732,7 @@ func TestFinalGateSnapshotExemptClaimsHashMatchWithRollbackPoint(t *testing.T) {
 
 	op := PackageOperationRecord{
 		OperationID: operationID, TraceID: "trace-exempt-match",
-		UserID: "user-1", ScopeType: "global", ExtensionID: extensionID,
+		SpaceID: "user-1", ScopeType: "global", ExtensionID: extensionID,
 		TargetVersion: "2.0.0", FromVersion: "1.0.0",
 		TargetGeneration: "gen-2",
 		OperationType:    "update", Status: "completed",
@@ -1781,7 +1781,7 @@ func TestFinalGateSnapshotExemptMissingClaimsFails(t *testing.T) {
 
 	op := PackageOperationRecord{
 		OperationID: operationID, TraceID: "trace-missing-claims",
-		UserID: "user-1", ScopeType: "global", ExtensionID: extensionID,
+		SpaceID: "user-1", ScopeType: "global", ExtensionID: extensionID,
 		TargetVersion: "2.0.0", FromVersion: "1.0.0",
 		TargetGeneration: "gen-2",
 		OperationType:    "update", Status: "completed",
@@ -1865,11 +1865,11 @@ func TestFinalGateSnapshotExemptMigrationEmptyConfigNonEmptyFails(t *testing.T) 
 		t.Fatal(err)
 	}
 
-	claimsJSON := `{"schemaVersion":1,"operationType":"update","extensionId":"com.example/snapshot-exempt-config-diff","artifactId":"art-config-diff","artifactPolicy":"deleteArtifact","previewHash":"sha256:preview-config","policyVersion":"2026-07-30-v1","userId":"user-1","scopeType":"global","scopeId":"","securityPolicyHash":"sha256:sec-config","confirmedItems":["confirm.update"],"confirmations":{"confirm.update":true},"issuedAt":1700000000,"expiresAt":9999999999,"nonce":"test-nonce-config-diff"}`
+	claimsJSON := `{"schemaVersion":1,"operationType":"update","extensionId":"com.example/snapshot-exempt-config-diff","artifactId":"art-config-diff","artifactPolicy":"deleteArtifact","previewHash":"sha256:preview-config","policyVersion":"2026-07-30-v1","spaceId":"user-1","scopeType":"global","scopeId":"","securityPolicyHash":"sha256:sec-config","confirmedItems":["confirm.update"],"confirmations":{"confirm.update":true},"issuedAt":1700000000,"expiresAt":9999999999,"nonce":"test-nonce-config-diff"}`
 
 	op := PackageOperationRecord{
 		OperationID: operationID, TraceID: "trace-config-diff",
-		UserID: "user-1", ScopeType: "global", ExtensionID: extensionID,
+		SpaceID: "user-1", ScopeType: "global", ExtensionID: extensionID,
 		TargetVersion: "2.0.0", FromVersion: "1.0.0",
 		TargetGeneration: "gen-2",
 		OperationType:    "update", Status: "completed",

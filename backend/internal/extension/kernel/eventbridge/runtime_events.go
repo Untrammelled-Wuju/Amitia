@@ -19,7 +19,7 @@ const (
 type RuntimeSessionPayload struct {
 	RuntimeSessionID runtimeidentity.RuntimeSessionID `json:"runtimeSessionId"`
 
-	UserID    runtimeidentity.UserID    `json:"userId"`
+	SpaceID   runtimeidentity.SpaceID   `json:"spaceId"`
 	DeviceID  runtimeidentity.DeviceID  `json:"deviceId"`
 	RuntimeID runtimeidentity.RuntimeID `json:"runtimeId"`
 	Platform  runtimeidentity.Platform  `json:"platform,omitempty"`
@@ -87,7 +87,7 @@ func runtimeEventTypeID(t deviceruntime.SessionDomainEventType) (event.EventType
 func buildRuntimePayload(e deviceruntime.SessionDomainEvent) RuntimeSessionPayload {
 	return RuntimeSessionPayload{
 		RuntimeSessionID:             e.Session.ID,
-		UserID:                       e.Session.UserID,
+		SpaceID:                      e.Session.SpaceID,
 		DeviceID:                     e.Session.DeviceID,
 		RuntimeID:                    e.Session.RuntimeID,
 		Platform:                     e.Session.Platform,
@@ -119,8 +119,8 @@ func runtimeOptions(e deviceruntime.SessionDomainEvent) event.PublishOptions {
 }
 
 func runtimePartitionKey(e deviceruntime.SessionDomainEvent) string {
-	if e.Session.UserID != "" {
-		return e.Session.UserID.String()
+	if e.Session.SpaceID != "" {
+		return e.Session.SpaceID.String()
 	}
 	return "system"
 }

@@ -38,12 +38,12 @@ type PackageUninstallPreviewResult struct {
 	PreviewHash             string         `json:"previewHash,omitempty"`
 	SecurityPolicyHash      string         `json:"securityPolicyHash,omitempty"`
 	SnapshotRequirementHash string         `json:"snapshotRequirementHash,omitempty"`
-	UserID                  string         `json:"userId,omitempty"`
+	SpaceID                 string         `json:"spaceId,omitempty"`
 	ScopeType               string         `json:"scopeType,omitempty"`
 	ScopeID                 string         `json:"scopeId,omitempty"`
 }
 
-func (r *Runtime) ExecutePackageRollback(ctx context.Context, extensionID, version, userID, scopeType, scopeID, confirmationToken string) (KernelInstallResult, error) {
+func (r *Runtime) ExecutePackageRollback(ctx context.Context, extensionID, version, spaceID, scopeType, scopeID, confirmationToken string) (KernelInstallResult, error) {
 	rollbackClaims, err := verifyPackageRollbackConfirmation(confirmationToken)
 	if err != nil {
 		return KernelInstallResult{}, NewPackageError(PackageErrCodeRollbackTokenInvalid, 403, err)
@@ -60,7 +60,7 @@ func (r *Runtime) ExecutePackageRollback(ctx context.Context, extensionID, versi
 	if rollbackClaims.TargetVersionID != version {
 		return KernelInstallResult{}, NewPackageError(PackageErrCodeRollbackTokenInvalid, 403, ErrPackageRollbackTokenInvalid)
 	}
-	if rollbackClaims.UserID != userID {
+	if rollbackClaims.SpaceID != spaceID {
 		return KernelInstallResult{}, NewPackageError(PackageErrCodeRollbackTokenInvalid, 403, ErrPackageRollbackTokenInvalid)
 	}
 	if rollbackClaims.ScopeType != scopeType || rollbackClaims.ScopeID != scopeID {
@@ -91,7 +91,7 @@ func (r *Runtime) ExecutePackageRollback(ctx context.Context, extensionID, versi
 	if err != nil {
 		return KernelInstallResult{}, err
 	}
-	if err := validatePackageOwner(current, userID, scopeType, scopeID); err != nil {
+	if err := validatePackageOwner(current, spaceID, scopeType, scopeID); err != nil {
 		return KernelInstallResult{}, err
 	}
 	currentDefinition, err := r.container.DefinitionRepository.GetExtension(ctx, current.ExtensionID, current.InstalledVersion)
@@ -106,13 +106,13 @@ func (r *Runtime) ExecutePackageRollback(ctx context.Context, extensionID, versi
 	if err != nil {
 		return KernelInstallResult{}, err
 	}
-	idempotencyKey := computePackageIdempotencyKeyFromRequest(PackageOperationRecord{OperationType: "rollback", ExtensionID: extensionID, TargetVersion: version, ArtifactID: artifact.ArtifactID, PreviewSessionID: rollbackClaims.PreviewSessionID, ScopeType: scopeType, ScopeID: scopeID}, userID)
+	idempotencyKey := computePackageIdempotencyKeyFromRequest(PackageOperationRecord{OperationType: "rollback", ExtensionID: extensionID, TargetVersion: version, ArtifactID: artifact.ArtifactID, PreviewSessionID: rollbackClaims.PreviewSessionID, ScopeType: scopeType, ScopeID: scopeID}, spaceID)
 	operationID := "package-operation-" + uuid.NewString()
 	traceID := "package-trace-" + uuid.NewString()
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	confirmedItemsJSON, _ := json.Marshal(confirmedItemsToMap(rollbackClaims.ConfirmedItems))
 	rollbackOp := PackageOperationRecord{OperationID: operationID, TraceID: traceID,
-		UserID: userID, ScopeType: scopeType, ScopeID: scopeID, ExtensionID: extensionID,
+		SpaceID: spaceID, ScopeType: scopeType, ScopeID: scopeID, ExtensionID: extensionID,
 		TargetVersion: version, FromVersion: current.InstalledVersion.String(),
 		OperationType: "rollback", Status: "created", CurrentStep: "created",
 		ArtifactID: artifact.ArtifactID, ConfirmationsJSON: string(confirmedItemsJSON),
@@ -124,7 +124,7 @@ func (r *Runtime) ExecutePackageRollback(ctx context.Context, extensionID, versi
 			PreviewSessionID: rollbackClaims.PreviewSessionID,
 		}), StartedAt: now, UpdatedAt: now}
 	existing, created, createErr := r.container.PackageRepository.CreateOrGetOperationWithConfirmationNonce(ctx, rollbackOp, PackageConfirmationNonceBinding{
-		Nonce: rollbackClaims.Nonce, OperationType: rollbackOp.OperationType, ExtensionID: rollbackOp.ExtensionID, UserID: rollbackOp.UserID,
+		Nonce: rollbackClaims.Nonce, OperationType: rollbackOp.OperationType, ExtensionID: rollbackOp.ExtensionID, SpaceID: rollbackOp.SpaceID,
 		IssuedAt: confirmationTimestamp(rollbackClaims.IssuedAt), ExpiresAt: confirmationTimestamp(rollbackClaims.ExpiresAt),
 	})
 	if createErr != nil {
@@ -164,7 +164,7 @@ func (r *Runtime) ExecutePackageRollback(ctx context.Context, extensionID, versi
 	ctx = sagaCtx
 	guard := packageWriteGuard(lease)
 	op := PackageOperationRecord{OperationID: operationID, TraceID: traceID}
-	postLeasePreview, previewErr := r.PreviewPackageRollback(ctx, extensionID, version, userID, scopeType, scopeID)
+	postLeasePreview, previewErr := r.PreviewPackageRollback(ctx, extensionID, version, spaceID, scopeType, scopeID)
 	if previewErr != nil {
 		failErr := r.container.PackageRepository.SetOperation(context.Background(), op.OperationID, "failed", "post_lease_preview", "PACKAGE_CONFIRMATION_STALE", fmt.Sprintf("post-lease preview failed: %v", previewErr), true, guard)
 		_ = r.releasePackageExtensionLease(context.Background(), extensionID, operationID)
@@ -363,7 +363,7 @@ func (r *Runtime) ExecutePackageRollback(ctx context.Context, extensionID, versi
 		"archiveHash": artifact.ArchiveHash, "manifestHash": artifact.ManifestHash,
 		"contentTreeHash": artifact.ContentTreeHash, "artifactHash": artifact.ArtifactHash,
 		"installedTreeHash": targetGeneration.Current.TreeHash,
-		"ownerUserId":       userID, "scopeType": scopeType, "scopeId": scopeID}, targetGeneration.Current, targetGeneration.GenerationPath, op.OperationID)
+		"ownerSpaceId":      spaceID, "scopeType": scopeType, "scopeId": scopeID}, targetGeneration.Current, targetGeneration.GenerationPath, op.OperationID)
 	if err := leaseGuard.AssertAlive(ctx); err != nil {
 		return KernelInstallResult{}, compensateRollback("renew_lease", err)
 	}
@@ -510,12 +510,12 @@ func (r *Runtime) failPackageRollbackWithForwardRecovery(operationID string, for
 	return errors.Join(cause, persistErr)
 }
 
-func (r *Runtime) PreviewPackageUninstall(ctx context.Context, extensionID, userID, scopeType, scopeID string) (PackageUninstallPreviewResult, error) {
+func (r *Runtime) PreviewPackageUninstall(ctx context.Context, extensionID, spaceID, scopeType, scopeID string) (PackageUninstallPreviewResult, error) {
 	installation, err := r.container.InstallationRepository.GetInstallation(ctx, domain.ExtensionID(extensionID))
 	if err != nil {
 		return PackageUninstallPreviewResult{}, err
 	}
-	if err := validatePackageOwner(installation, userID, scopeType, scopeID); err != nil {
+	if err := validatePackageOwner(installation, spaceID, scopeType, scopeID); err != nil {
 		return PackageUninstallPreviewResult{}, err
 	}
 	result := PackageUninstallPreviewResult{ExtensionID: extensionID,
@@ -566,7 +566,7 @@ func (r *Runtime) PreviewPackageUninstall(ctx context.Context, extensionID, user
 	uninstallReq := ComputeUninstallSnapshotRequirement(computeUninstallSnapshotRequirementInput(
 		result.InstalledPath, result.InstalledHash, result.ArtifactID, result.ExtensionID, result.CurrentVersionID))
 	result.SnapshotRequirementHash = uninstallReq.RequirementHash
-	result.UserID = userID
+	result.SpaceID = spaceID
 	result.ScopeType = scopeType
 	result.ScopeID = scopeID
 	if result.CurrentVersionID == "" || result.CurrentGenerationID == "" || result.SecurityPolicyHash == "" || result.SnapshotRequirementHash == "" {
@@ -768,12 +768,12 @@ func (r *Runtime) computeUninstallArtifactPolicy(
 func computeUninstallPreviewHash(preview PackageUninstallPreviewResult) string {
 	sort.Strings(preview.Dependents)
 	dependentsJSON, _ := json.Marshal(preview.Dependents)
-	canonical := fmt.Sprintf(`{"extensionId":%q,"currentVersion":%q,"currentVersionId":%q,"currentGenerationId":%q,"generation":%d,"artifactId":%q,"generationId":%q,"installedPath":%q,"installedTreeHash":%q,"artifactPolicy":%q,"securityPolicyHash":%q,"snapshotRequirementHash":%q,"dependents":%q,"userId":%q,"scopeType":%q,"scopeId":%q}`,
+	canonical := fmt.Sprintf(`{"extensionId":%q,"currentVersion":%q,"currentVersionId":%q,"currentGenerationId":%q,"generation":%d,"artifactId":%q,"generationId":%q,"installedPath":%q,"installedTreeHash":%q,"artifactPolicy":%q,"securityPolicyHash":%q,"snapshotRequirementHash":%q,"dependents":%q,"spaceId":%q,"scopeType":%q,"scopeId":%q}`,
 		preview.ExtensionID, preview.CurrentVersion, preview.CurrentVersionID, preview.CurrentGenerationID,
 		preview.Generation, preview.ArtifactID, preview.GenerationID, preview.InstalledPath,
 		preview.InstalledHash, string(preview.ArtifactPolicy),
 		preview.SecurityPolicyHash, preview.SnapshotRequirementHash, string(dependentsJSON),
-		preview.UserID, preview.ScopeType, preview.ScopeID)
+		preview.SpaceID, preview.ScopeType, preview.ScopeID)
 	h := sha256.Sum256([]byte(canonical))
 	return "sha256:" + hex.EncodeToString(h[:])
 }
@@ -826,7 +826,7 @@ func buildUninstallPreviewIdentity(preview PackageUninstallPreviewResult, policy
 		DependentsHash:          "sha256:" + hex.EncodeToString(dependentsHash[:]),
 		SecurityPolicyHash:      preview.SecurityPolicyHash,
 		SnapshotRequirementHash: preview.SnapshotRequirementHash,
-		UserID:                  preview.UserID,
+		SpaceID:                 preview.SpaceID,
 		ScopeType:               preview.ScopeType,
 		ScopeID:                 preview.ScopeID,
 		PolicyVersion:           policyVersion,
@@ -868,7 +868,7 @@ func compareUninstallPreviewIdentity(left, right PackageUninstallPreviewIdentity
 	if left.SnapshotRequirementHash != right.SnapshotRequirementHash {
 		return false, "snapshot_requirement_changed"
 	}
-	if left.UserID != right.UserID {
+	if left.SpaceID != right.SpaceID {
 		return false, "user_changed"
 	}
 	if left.ScopeType != right.ScopeType {
@@ -887,7 +887,7 @@ func compareUninstallPreviewIdentity(left, right PackageUninstallPreviewIdentity
 }
 
 func (r *Runtime) ExecutePackageUninstall(ctx context.Context, req ExecutePackageUninstallRequest) (PackageOperationRecord, error) {
-	extensionID, userID, scopeType, scopeID := req.ExtensionID, req.UserID, req.ScopeType, req.ScopeID
+	extensionID, spaceID, scopeType, scopeID := req.ExtensionID, req.SpaceID, req.ScopeType, req.ScopeID
 
 	if req.ConfirmationToken == "" {
 		return PackageOperationRecord{}, NewPackageError(PackageErrCodeConfirmationTokenInvalid, 400, ErrPackageConfirmationTokenInvalid)
@@ -896,7 +896,7 @@ func (r *Runtime) ExecutePackageUninstall(ctx context.Context, req ExecutePackag
 	if err != nil {
 		return PackageOperationRecord{}, NewPackageError(PackageErrCodeConfirmationTokenInvalid, 400, err)
 	}
-	if claims.ExtensionID != extensionID || claims.UserID != userID || claims.ScopeType != scopeType || claims.ScopeID != scopeID {
+	if claims.ExtensionID != extensionID || claims.SpaceID != spaceID || claims.ScopeType != scopeType || claims.ScopeID != scopeID {
 		return PackageOperationRecord{}, NewPackageError(PackageErrCodeConfirmationBindingMismatch, 400, ErrPackageConfirmationBindingMismatch)
 	}
 
@@ -907,7 +907,7 @@ func (r *Runtime) ExecutePackageUninstall(ctx context.Context, req ExecutePackag
 		return PackageOperationRecord{}, NewPackageError(PackageErrCodeConfirmationPolicyVersionStale, 409, ErrPackageConfirmationPolicyVersionStale)
 	}
 
-	initialPreview, err := r.PreviewPackageUninstall(ctx, extensionID, userID, scopeType, scopeID)
+	initialPreview, err := r.PreviewPackageUninstall(ctx, extensionID, spaceID, scopeType, scopeID)
 	if err != nil {
 		return PackageOperationRecord{}, err
 	}
@@ -937,7 +937,7 @@ func (r *Runtime) ExecutePackageUninstall(ctx context.Context, req ExecutePackag
 
 	idempotencyKey := strings.TrimSpace(req.IdempotencyKey)
 	if idempotencyKey == "" {
-		idempotencyKey = computePackageIdempotencyKeyFromRequest(PackageOperationRecord{OperationType: "uninstall", ExtensionID: extensionID, TargetVersion: initialPreview.CurrentVersion, ArtifactID: initialPreview.ArtifactID, ScopeType: scopeType, ScopeID: scopeID}, userID)
+		idempotencyKey = computePackageIdempotencyKeyFromRequest(PackageOperationRecord{OperationType: "uninstall", ExtensionID: extensionID, TargetVersion: initialPreview.CurrentVersion, ArtifactID: initialPreview.ArtifactID, ScopeType: scopeType, ScopeID: scopeID}, spaceID)
 	}
 	operationID := "package-operation-" + uuid.NewString()
 	traceID := "package-trace-" + uuid.NewString()
@@ -957,7 +957,7 @@ func (r *Runtime) ExecutePackageUninstall(ctx context.Context, req ExecutePackag
 		RequiredConfirmationsHash: claims.RequiredConfirmationsHash,
 		DependenciesHash:          claims.DependenciesHash,
 		PolicyVersion:             claims.PolicyVersion,
-		UserID:                    claims.UserID,
+		SpaceID:                   claims.SpaceID,
 		ScopeType:                 claims.ScopeType,
 		ScopeID:                   claims.ScopeID,
 		ConfirmedItems:            claims.ConfirmedItems,
@@ -979,7 +979,7 @@ func (r *Runtime) ExecutePackageUninstall(ctx context.Context, req ExecutePackag
 	}
 
 	uninstallOp := PackageOperationRecord{OperationID: operationID, TraceID: traceID,
-		UserID: userID, ScopeType: scopeType, ScopeID: scopeID, ExtensionID: extensionID,
+		SpaceID: spaceID, ScopeType: scopeType, ScopeID: scopeID, ExtensionID: extensionID,
 		TargetVersion: initialPreview.CurrentVersion, OperationType: "uninstall", Status: "created", CurrentStep: "created",
 		ArtifactID: initialPreview.ArtifactID, ConfirmationsJSON: string(confirmationsJSON),
 		ConfirmationClaimsJSON:  string(claimsJSON),
@@ -990,7 +990,7 @@ func (r *Runtime) ExecutePackageUninstall(ctx context.Context, req ExecutePackag
 		}), StartedAt: now, UpdatedAt: now,
 	}
 	existing, created, createErr := r.container.PackageRepository.CreateOrGetOperationWithConfirmationNonce(ctx, uninstallOp, PackageConfirmationNonceBinding{
-		Nonce: claims.Nonce, OperationType: uninstallOp.OperationType, ExtensionID: uninstallOp.ExtensionID, UserID: uninstallOp.UserID,
+		Nonce: claims.Nonce, OperationType: uninstallOp.OperationType, ExtensionID: uninstallOp.ExtensionID, SpaceID: uninstallOp.SpaceID,
 		IssuedAt: confirmationTimestamp(claims.IssuedAt), ExpiresAt: confirmationTimestamp(claims.ExpiresAt),
 	})
 	if createErr != nil {
@@ -1036,7 +1036,7 @@ func (r *Runtime) ExecutePackageUninstall(ctx context.Context, req ExecutePackag
 	}()
 	ctx = sagaCtx
 	uninstallGuard := packageWriteGuard(lease)
-	preview, err := r.PreviewPackageUninstall(ctx, extensionID, userID, scopeType, scopeID)
+	preview, err := r.PreviewPackageUninstall(ctx, extensionID, spaceID, scopeType, scopeID)
 	if err != nil {
 		persistErr := r.container.PackageRepository.SetOperation(context.Background(), operationID, "failed", "recheck_preflight", "PACKAGE_UNINSTALL_PREFLIGHT_FAILED", err.Error(), true, uninstallGuard)
 		return PackageOperationRecord{}, errors.Join(err, persistErr)
@@ -1413,20 +1413,20 @@ func (r *Runtime) completePackageStepWithResult(ctx context.Context, operationID
 	return r.container.PackageRepository.SetOperation(ctx, operationID, "in_progress", name, "", "", false, guard)
 }
 
-func validatePackageOwner(installation domain.ExtensionInstallation, userID, scopeType, scopeID string) error {
-	owner, _ := installation.Metadata["ownerUserId"].(string)
+func validatePackageOwner(installation domain.ExtensionInstallation, spaceID, scopeType, scopeID string) error {
+	owner, _ := installation.Metadata["ownerSpaceId"].(string)
 	storedScopeType, _ := installation.Metadata["scopeType"].(string)
 	storedScopeID, _ := installation.Metadata["scopeId"].(string)
-	if owner == "" || owner != userID || storedScopeType != scopeType || storedScopeID != scopeID {
+	if owner == "" || owner != spaceID || storedScopeType != scopeType || storedScopeID != scopeID {
 		return fmt.Errorf("kernel: package scope mismatch")
 	}
 	return nil
 }
 
-func (r *Runtime) beginSimplePackageOperation(ctx context.Context, userID, scopeType, scopeID, extensionID, version, operationType, artifactID string) (PackageOperationRecord, error) {
+func (r *Runtime) beginSimplePackageOperation(ctx context.Context, spaceID, scopeType, scopeID, extensionID, version, operationType, artifactID string) (PackageOperationRecord, error) {
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	op := PackageOperationRecord{OperationID: "package-operation-" + uuid.NewString(), TraceID: "package-trace-" + uuid.NewString(),
-		UserID: userID, ScopeType: scopeType, ScopeID: scopeID, ExtensionID: extensionID,
+		SpaceID: spaceID, ScopeType: scopeType, ScopeID: scopeID, ExtensionID: extensionID,
 		TargetVersion: version, OperationType: operationType, Status: "created", CurrentStep: "created",
 		ArtifactID: artifactID, ConfirmationsJSON: "{}",
 		StartedAt: now, UpdatedAt: now}

@@ -8,7 +8,7 @@ import (
 )
 
 func TestOwnerTypes(t *testing.T) {
-	owners := []OwnerType{OwnerSystem, OwnerUser, OwnerExtension, OwnerModule, OwnerShared, OwnerTemporary, OwnerMigration}
+	owners := []OwnerType{OwnerSystem, OwnerSpace, OwnerExtension, OwnerModule, OwnerShared, OwnerTemporary, OwnerMigration}
 	for _, ot := range owners {
 		if !ot.IsValid() {
 			t.Errorf("expected %q to be valid", ot)
@@ -25,8 +25,8 @@ func TestResourceOwnerConstructors(t *testing.T) {
 		t.Error("expected system owner")
 	}
 
-	user := NewUserOwner("u1")
-	if !user.IsUser() || user.OwnerID != "u1" {
+	user := NewSpaceOwner("u1")
+	if !user.IsSpace() || user.OwnerID != "u1" {
 		t.Error("expected user owner")
 	}
 
@@ -57,9 +57,9 @@ func TestResourceOwnerConstructors(t *testing.T) {
 }
 
 func TestResourceOwnerEquals(t *testing.T) {
-	a := NewUserOwner("u1")
-	b := NewUserOwner("u1")
-	c := NewUserOwner("u2")
+	a := NewSpaceOwner("u1")
+	b := NewSpaceOwner("u1")
+	c := NewSpaceOwner("u2")
 
 	if !a.Equals(b) {
 		t.Error("expected equal owners")
@@ -371,7 +371,7 @@ func TestMemoryStoreUpdateResource(t *testing.T) {
 	_ = store.SaveResource(ctx, rec)
 
 	updated := rec
-	updated.Owner = NewUserOwner("u1")
+	updated.Owner = NewSpaceOwner("u1")
 	updated.State = StateSuspended
 
 	err := store.UpdateResource(ctx, "res-update", updated)
@@ -380,7 +380,7 @@ func TestMemoryStoreUpdateResource(t *testing.T) {
 	}
 
 	got, _ := store.GetResource(ctx, "res-update")
-	if !got.Owner.IsUser() {
+	if !got.Owner.IsSpace() {
 		t.Errorf("expected user owner, got %q", got.Owner.OwnerType)
 	}
 	if got.State != StateSuspended {
@@ -498,7 +498,7 @@ func TestMemoryStoreTransfer(t *testing.T) {
 		TransferID: "trf-1",
 		ResourceID: "res-1",
 		FromOwner:  NewExtensionOwner("ext-old"),
-		ToOwner:    NewUserOwner("u1"),
+		ToOwner:    NewSpaceOwner("u1"),
 		Action:     TransferAdopt,
 		CreatedAt:  time.Now(),
 	}
@@ -723,7 +723,7 @@ func TestServiceTransferOwnershipAdopt(t *testing.T) {
 	err := svc.TransferOwnership(ctx, OwnershipTransferRequest{
 		ResourceID: "res-adopt",
 		FromOwner:  NewExtensionOwner("ext-1"),
-		ToOwner:    NewUserOwner("u1"),
+		ToOwner:    NewSpaceOwner("u1"),
 		Action:     TransferAdopt,
 	})
 	if err != nil {
@@ -731,7 +731,7 @@ func TestServiceTransferOwnershipAdopt(t *testing.T) {
 	}
 
 	got, _ := svc.GetResource(ctx, "res-adopt")
-	if !got.Owner.IsUser() {
+	if !got.Owner.IsSpace() {
 		t.Errorf("expected user owner, got %q", got.Owner.OwnerType)
 	}
 }
@@ -750,7 +750,7 @@ func TestServiceTransferOwnershipClone(t *testing.T) {
 	err := svc.TransferOwnership(ctx, OwnershipTransferRequest{
 		ResourceID: "res-clone",
 		FromOwner:  NewExtensionOwner("ext-1"),
-		ToOwner:    NewUserOwner("u1"),
+		ToOwner:    NewSpaceOwner("u1"),
 		Action:     TransferClone,
 		CloneID:    "res-clone-user",
 	})
@@ -764,7 +764,7 @@ func TestServiceTransferOwnershipClone(t *testing.T) {
 	}
 
 	clone, _ := svc.GetResource(ctx, "res-clone-user")
-	if !clone.Owner.IsUser() {
+	if !clone.Owner.IsSpace() {
 		t.Errorf("clone should be user-owned, got %q", clone.Owner.OwnerType)
 	}
 }

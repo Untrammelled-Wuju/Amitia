@@ -572,7 +572,7 @@ func TestTrustServiceSnapshotAndRestore(t *testing.T) {
 	})
 	service.UserTrust().Grant(UserTrustDecision{
 		DecisionID:   "d1",
-		UserID:       "user-1",
+		SpaceID:      "user-1",
 		PublisherID:  "com.example",
 		Scope:        TrustScopePublisher,
 		GrantedLevel: TrustLevelUserTrusted,

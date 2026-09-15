@@ -79,12 +79,12 @@ func TestKernelAPIUserUsesExtensionAuthenticationIdentity(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
 	ctx.Set(authenticatedUserKey, 42)
-	if userID := kernelAPIUser(ctx); userID != "42" {
-		t.Fatalf("unexpected authenticated user: %s", userID)
+	if spaceID := kernelAPIUser(ctx); spaceID != "42" {
+		t.Fatalf("unexpected authenticated user: %s", spaceID)
 	}
 	missing, _ := gin.CreateTestContext(httptest.NewRecorder())
-	if userID := kernelAPIUser(missing); userID != "" {
-		t.Fatalf("missing authentication must not use a shared fallback identity: %s", userID)
+	if spaceID := kernelAPIUser(missing); spaceID != "" {
+		t.Fatalf("missing authentication must not use a shared fallback identity: %s", spaceID)
 	}
 }
 

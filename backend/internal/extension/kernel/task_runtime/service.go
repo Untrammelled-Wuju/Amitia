@@ -1215,7 +1215,7 @@ func (s *TaskRuntimeService) Retry(ctx context.Context, taskRunID string) (*Task
 		ExecutionTarget: TaskExecutionTarget{
 			ProviderID:         run.ExecutionTarget.ProviderID,
 			ProviderInstanceID: run.ExecutionTarget.ProviderInstanceID,
-			UserID:             run.ExecutionTarget.UserID,
+			SpaceID:            run.ExecutionTarget.SpaceID,
 			DeviceID:           run.ExecutionTarget.DeviceID,
 			RuntimeID:          run.ExecutionTarget.RuntimeID,
 			RuntimeInstanceID:  run.ExecutionTarget.RuntimeInstanceID,

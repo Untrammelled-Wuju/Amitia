@@ -42,7 +42,7 @@ func TestMigrateLegacyWorkflowSkillsPersistsKernelWorkflow(t *testing.T) {
 	}
 	statements := []string{
 		`CREATE TABLE extensions (id TEXT PRIMARY KEY, extension_id TEXT NOT NULL UNIQUE, kind TEXT NOT NULL DEFAULT 'Skill', name TEXT NOT NULL DEFAULT '', current_version TEXT NOT NULL DEFAULT '', source TEXT NOT NULL DEFAULT '', enabled INTEGER NOT NULL DEFAULT 0, manifest_json TEXT NOT NULL DEFAULT '{}', normalized_manifest_json TEXT NOT NULL DEFAULT '{}', created_at TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL DEFAULT '', archived_at TEXT NOT NULL DEFAULT '')`,
-		`CREATE TABLE extension_workshop_sessions (id TEXT PRIMARY KEY, user_id TEXT NOT NULL DEFAULT '')`,
+		`CREATE TABLE extension_workshop_sessions (id TEXT PRIMARY KEY, space_id TEXT NOT NULL DEFAULT '')`,
 		`CREATE TABLE extension_artifacts (artifact_id TEXT PRIMARY KEY, extension_id TEXT NOT NULL, extension_version TEXT NOT NULL, source TEXT NOT NULL DEFAULT '', session_id TEXT NOT NULL DEFAULT '', manifest_json TEXT NOT NULL DEFAULT '{}', workflow_json TEXT NOT NULL DEFAULT '{}', archived_at TEXT NOT NULL DEFAULT '')`,
 	}
 	for _, statement := range statements {
@@ -55,7 +55,7 @@ func TestMigrateLegacyWorkflowSkillsPersistsKernelWorkflow(t *testing.T) {
 	if err := db.Exec(`INSERT INTO extensions (id, extension_id, current_version, source, enabled) VALUES ('ext-1', 'dev.amitia.skill.example', '1.0.0', 'workshop', 0)`).Error; err != nil {
 		t.Fatal(err)
 	}
-	if err := db.Exec(`INSERT INTO extension_workshop_sessions (id, user_id) VALUES ('session-1', 'user-1')`).Error; err != nil {
+	if err := db.Exec(`INSERT INTO extension_workshop_sessions (id, space_id) VALUES ('session-1', 'user-1')`).Error; err != nil {
 		t.Fatal(err)
 	}
 	if err := db.Exec(`INSERT INTO extension_artifacts (artifact_id, extension_id, extension_version, source, session_id, manifest_json, workflow_json) VALUES ('artifact-1', 'dev.amitia.skill.example', '1.0.0', 'workshop', 'session-1', ?, ?)`, manifest, workflow).Error; err != nil {
@@ -93,7 +93,7 @@ func TestMigrateLegacyWorkflowSkillsPersistsKernelWorkflow(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if definition.Name != "Example" || len(definition.Nodes) != 1 || definition.Metadata["ownerUserId"] != "user-1" {
+	if definition.Name != "Example" || len(definition.Nodes) != 1 || definition.Metadata["ownerSpaceId"] != "user-1" {
 		t.Fatalf("migrated workflow mismatch: %+v", definition)
 	}
 }

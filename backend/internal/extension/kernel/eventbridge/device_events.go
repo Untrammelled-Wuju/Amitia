@@ -15,7 +15,7 @@ const (
 type DevicePresencePayload struct {
 	EntryID   string `json:"entryId"`
 	Kind      string `json:"kind"`
-	UserID    string `json:"userId"`
+	SpaceID   string `json:"spaceId"`
 	DeviceID  string `json:"deviceId"`
 	RuntimeID string `json:"runtimeId"`
 	Platform  string `json:"platform"`
@@ -65,7 +65,7 @@ func buildDevicePayload(e host_registry.PresenceDomainEvent) DevicePresencePaylo
 	return DevicePresencePayload{
 		EntryID:              e.Entry.EntryID,
 		Kind:                 e.Entry.Kind.String(),
-		UserID:               e.Entry.UserID.String(),
+		SpaceID:              e.Entry.SpaceID.String(),
 		DeviceID:             e.Entry.DeviceID.String(),
 		RuntimeID:            e.Entry.RuntimeID.String(),
 		Platform:             e.Entry.Platform.String(),
@@ -96,8 +96,8 @@ func deviceOptions(e host_registry.PresenceDomainEvent) event.PublishOptions {
 }
 
 func devicePartitionKey(e host_registry.PresenceDomainEvent) string {
-	if e.Entry.UserID != "" {
-		return e.Entry.UserID.String()
+	if e.Entry.SpaceID != "" {
+		return e.Entry.SpaceID.String()
 	}
 	return "system"
 }

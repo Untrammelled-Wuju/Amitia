@@ -58,7 +58,7 @@ func (a *androidLinuxRuntimeAdapter) Execute(
 		}
 	}
 
-	payload["userId"] = invocation.UserID
+	payload["spaceId"] = invocation.SpaceID
 	payload["characterId"] = invocation.CharacterID
 	payload["conversationId"] = invocation.ConversationID
 

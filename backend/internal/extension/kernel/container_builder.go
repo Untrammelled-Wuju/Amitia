@@ -460,24 +460,24 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		if def.Source != "user" || def.Metadata == nil {
 			continue
 		}
-		ownerUserID := strings.TrimSpace(fmt.Sprint(def.Metadata["ownerUserId"]))
-		if ownerUserID == "" {
+		ownerSpaceID := strings.TrimSpace(fmt.Sprint(def.Metadata["ownerSpaceId"]))
+		if ownerSpaceID == "" {
 			continue
 		}
-		if _, ensureErr := workflowInstallationRepo.EnsureLegacy(ctx, def, ownerUserID, legacyWorkflowLocation); ensureErr != nil {
+		if _, ensureErr := workflowInstallationRepo.EnsureLegacy(ctx, def, ownerSpaceID, legacyWorkflowLocation); ensureErr != nil {
 			return nil, fmt.Errorf("migrate workflow installation %s: %w", def.ID, ensureErr)
 		}
 	}
 	workflowExecutor := workflow.NewWorkflowExecutor(workflowRegistry)
-	workflowExecutor.SetRevisionBinder(func(ctx context.Context, ownerUserID string, def workflow.WorkflowDefinition) (string, error) {
-		ownerUserID = strings.TrimSpace(ownerUserID)
-		if ownerUserID == "" {
+	workflowExecutor.SetRevisionBinder(func(ctx context.Context, ownerSpaceID string, def workflow.WorkflowDefinition) (string, error) {
+		ownerSpaceID = strings.TrimSpace(ownerSpaceID)
+		if ownerSpaceID == "" {
 			// System/internal workflows can legitimately have no user owner. Their
 			// immutable definition snapshot/hash is still persisted on the run, but
 			// there is no user-scoped revision row to bind.
 			return "", nil
 		}
-		revision, err := workflowDefRepo.EnsurePublishedRevision(ctx, ownerUserID, def, "执行时自动绑定")
+		revision, err := workflowDefRepo.EnsurePublishedRevision(ctx, ownerSpaceID, def, "执行时自动绑定")
 		if err != nil {
 			return "", err
 		}
@@ -556,7 +556,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		return nil, fmt.Errorf("kernel: build secret broker: %w", err)
 	}
 	workflowTriggerManager.SetSecretResolver(func(ctx context.Context, rawRef string, event workflow.WorkflowTriggerEvent, binding workflow.TriggerBinding) ([]byte, error) {
-		if !workflow.TriggerSecretRefOwnedByUser(rawRef, event.OwnerUserID) {
+		if !workflow.TriggerSecretRefOwnedBySpace(rawRef, event.OwnerSpaceID) {
 			return nil, fmt.Errorf("workflow trigger secret does not belong to event owner")
 		}
 		ref, err := secret.ParseRef(rawRef)
@@ -567,7 +567,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		const runtimeInstanceID = "workflow-trigger-manager"
 		lease, err := kernelSecretBroker.Issue(ctx, secret.LeaseRequest{
 			Ref: ref, Purpose: "workflow-trigger-match", InvocationID: invocationID, RuntimeInstanceID: runtimeInstanceID,
-			UserID: event.OwnerUserID, Generation: binding.Generation, TTL: 30 * time.Second, MaxUses: 1,
+			SpaceID: event.OwnerSpaceID, Generation: binding.Generation, TTL: 30 * time.Second, MaxUses: 1,
 		})
 		if err != nil {
 			return nil, err
@@ -772,8 +772,8 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 				Domain:        event.EventDomainSync,
 				AggregateType: "workflow_run",
 				AggregateID:   lifecycle.ExecutionID,
-				PartitionKey:  lifecycle.UserID,
-				OrderingKey:   lifecycle.UserID,
+				PartitionKey:  lifecycle.SpaceID,
+				OrderingKey:   lifecycle.SpaceID,
 			})
 		})
 		eventResolver := BuildEventEffectiveResolver(permBroker, scopeManager, dependencyResolver, supervisor, eventSvc.GetDispatcher(), enablementResolver, instRepo)
@@ -898,7 +898,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	}
 	providerLifecycle := capability.NewProviderLifecycleService(capabilityProviderRegistry, providerEventSink)
 
-	deviceRuntimePresence := host_registry.NewDeviceRuntimePresenceAdapterWithCallback(deviceRegistry, func(userID runtimeidentity.UserID, deviceID runtimeidentity.DeviceID, runtimeID runtimeidentity.RuntimeID) {
+	deviceRuntimePresence := host_registry.NewDeviceRuntimePresenceAdapterWithCallback(deviceRegistry, func(spaceID runtimeidentity.SpaceID, deviceID runtimeidentity.DeviceID, runtimeID runtimeidentity.RuntimeID) {
 		allInstances := capabilityProviderRegistry.SnapshotInstances()
 		for _, inst := range allInstances {
 			if inst == nil {
@@ -907,7 +907,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 			if inst.Availability != capability.ProviderAvailabilityAvailable {
 				continue
 			}
-			if userID != "" && inst.UserID != userID {
+			if spaceID != "" && inst.SpaceID != spaceID {
 				continue
 			}
 			if deviceID != "" && inst.DeviceID != deviceID {
@@ -1171,7 +1171,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 			Context:        ctx,
 			ConversationID: invocation.ConversationID,
 			CharacterID:    invocation.CharacterID,
-			User:           invocation.UserID,
+			SpaceID:        invocation.SpaceID,
 			Path:           "kernel.builtin",
 			ToolCallID:     invocation.InvocationID,
 			IdempotencyKey: invocation.IdempotencyKey,
@@ -1546,7 +1546,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 				PermissionSnapshotID: session.PermissionSnapshotID,
 				CharacterID:          session.CharacterID,
 				ConversationID:       session.ConversationID,
-				UserID:               session.UserID,
+				SpaceID:              session.SpaceID,
 				DeviceID:             session.DeviceID,
 			}, action, input)
 		},

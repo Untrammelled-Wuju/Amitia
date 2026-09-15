@@ -761,7 +761,7 @@ func serializeExecutionTarget(target task_runtime.TaskExecutionTarget) string {
 	type targetJSON struct {
 		ProviderID           string `json:"providerId,omitempty"`
 		ProviderInstanceID   string `json:"providerInstanceId,omitempty"`
-		UserID               string `json:"userId,omitempty"`
+		SpaceID              string `json:"spaceId,omitempty"`
 		DeviceID             string `json:"deviceId,omitempty"`
 		RuntimeID            string `json:"runtimeId,omitempty"`
 		RuntimeSessionID     string `json:"runtimeSessionId,omitempty"`
@@ -771,7 +771,7 @@ func serializeExecutionTarget(target task_runtime.TaskExecutionTarget) string {
 	return mustMarshalJSON(targetJSON{
 		ProviderID:           target.ProviderID.String(),
 		ProviderInstanceID:   target.ProviderInstanceID.String(),
-		UserID:               target.UserID.String(),
+		SpaceID:              target.SpaceID.String(),
 		DeviceID:             target.DeviceID.String(),
 		RuntimeID:            target.RuntimeID.String(),
 		RuntimeSessionID:     target.RuntimeSessionID.String(),
@@ -787,7 +787,7 @@ func deserializeExecutionTarget(s string) task_runtime.TaskExecutionTarget {
 	type targetJSON struct {
 		ProviderID           string `json:"providerId,omitempty"`
 		ProviderInstanceID   string `json:"providerInstanceId,omitempty"`
-		UserID               string `json:"userId,omitempty"`
+		SpaceID              string `json:"spaceId,omitempty"`
 		DeviceID             string `json:"deviceId,omitempty"`
 		RuntimeID            string `json:"runtimeId,omitempty"`
 		RuntimeSessionID     string `json:"runtimeSessionId,omitempty"`
@@ -801,7 +801,7 @@ func deserializeExecutionTarget(s string) task_runtime.TaskExecutionTarget {
 	return task_runtime.TaskExecutionTarget{
 		ProviderID:           capability.ParseProviderID(j.ProviderID),
 		ProviderInstanceID:   capability.ParseProviderInstanceID(j.ProviderInstanceID),
-		UserID:               runtimeidentity.ParseUserID(j.UserID),
+		SpaceID:              runtimeidentity.ParseSpaceID(j.SpaceID),
 		DeviceID:             runtimeidentity.ParseDeviceID(j.DeviceID),
 		RuntimeID:            runtimeidentity.ParseRuntimeID(j.RuntimeID),
 		RuntimeSessionID:     runtimeidentity.ParseRuntimeSessionID(j.RuntimeSessionID),

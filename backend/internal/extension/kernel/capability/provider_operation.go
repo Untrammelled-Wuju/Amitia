@@ -47,7 +47,7 @@ func (s *ProviderInvocationService) Invoke(
 
 	resolveReq := CapabilityResolutionRequest{
 		CapabilityID:       request.CapabilityID,
-		UserID:             request.UserID,
+		SpaceID:            request.SpaceID,
 		PreferredPlacement: request.PreferredPlacement,
 		RequiredPlacement:  request.RequiredPlacement,
 		PreferredDeviceID:  request.PreferredDeviceID,
@@ -83,7 +83,7 @@ func (s *ProviderInvocationService) Invoke(
 		ProviderID:                resolution.Provider.ID,
 		ProviderInstanceID:        resolution.ProviderInstance.ID,
 		ProviderRuntimeInstanceID: resolution.ProviderInstance.RuntimeInstanceID,
-		UserID:                    request.UserID,
+		SpaceID:                   request.SpaceID,
 		DeviceID:                  resolution.ProviderInstance.DeviceID,
 		RuntimeID:                 resolution.ProviderInstance.RuntimeID,
 	}
@@ -97,7 +97,7 @@ func (s *ProviderInvocationService) Invoke(
 
 	invocation := NewToolInvocationContext(ToolInvocationOptions{
 		Source:          InvocationSourceUser,
-		UserID:          string(request.UserID),
+		SpaceID:         string(request.SpaceID),
 		ExecutionTarget: resolution.ExecutionTarget,
 	})
 
@@ -130,12 +130,12 @@ func (s *ProviderInvocationService) Invoke(
 func (s *ProviderInvocationService) InvokeLocal(
 	ctx context.Context,
 	op ProviderOperation,
-	userID runtimeidentity.UserID,
+	spaceID runtimeidentity.SpaceID,
 ) (ProviderOperationResult, error) {
 	req := ProviderInvocationRequest{
 		CapabilityID:       op.CapabilityID,
 		Input:              op.Input,
-		UserID:             userID,
+		SpaceID:            spaceID,
 		PreferredPlacement: ProviderPlacementCore,
 		AllowCore:          true,
 	}
