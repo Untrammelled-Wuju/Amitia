@@ -17,7 +17,7 @@ function getStoredId(key: string, prefix: string): string {
   return next;
 }
 
-export function getRequestUserId(): string {
+export function getRequestSpaceId(): string {
   return "default";
 }
 
@@ -30,7 +30,7 @@ export function createRequestEnvelope() {
   return {
     requestId: createId("req"),
     sessionId: getStoredId(SESSION_KEY, "sess"),
-    userId: getRequestUserId(),
+    spaceId: getRequestSpaceId(),
     deviceTimezone: getDeviceTimezone(),
   };
 }

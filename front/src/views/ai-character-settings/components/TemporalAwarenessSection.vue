@@ -172,8 +172,8 @@ async function save() {
       birthdayAnchor.value = null;
     } else if (birthday.value) {
       if (profile.timezoneMode === "follow_user") {
-        const currentUserProfile = await getTemporalProfile();
-        userTimezone.value = currentUserProfile.timezone;
+        const currentSpaceProfile = await getTemporalProfile();
+        userTimezone.value = currentSpaceProfile.timezone;
       }
       const payload = {
         ...(birthdayAnchor.value || {}),

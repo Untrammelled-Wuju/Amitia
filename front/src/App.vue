@@ -18,7 +18,6 @@ SPDX-License-Identifier: AGPL-3.0-only
       v-else
       key="public"
       class="public-root"
-      :class="{ 'no-leave': route.path === '/login' }"
     >
       <router-view />
     </div>
@@ -37,8 +36,6 @@ import { useTheme } from "./ui-index";
 import { isDesktopShell } from "./runtime/runtime-capabilities";
 import NotFoundView from "./views/NotFoundView.vue";
 import { useExtensionUIStore } from "./stores/extensionUI";
-import { saveCurrentUser } from "./stores/refresh-coordinator";
-import { useSessionStore } from "./stores/session-store";
 import { syncProviderRoutes } from "./ui-runtime/providerRoutes";
 import { applyProviderTheme } from "./ui-runtime/providerTheme";
 import RouteSurfaceHost from "./components/ui-runtime/RouteSurfaceHost.vue";
@@ -51,8 +48,8 @@ const extensionUIStore = useExtensionUIStore();
 const themeRuntime = useTheme();
 
 const publicPaths = [
+  "/web-access",
   "/onboarding",
-  "/login",
   "/privacy",
   "/usage-boundary",
 ];
@@ -109,38 +106,10 @@ onMounted(async () => {
     }
   } catch {}
 
-  try {
-    const authRes = await apiClient.get("/api/public/auth/status");
-    const authData = authRes.data?.data || authRes.data;
-    if (!authData?.hasAdmin) {
-      router.replace("/onboarding");
-      return;
-    }
-  } catch {}
-
-  try {
-    const meRes = await apiClient.get("/api/auth/me");
-    const userData = meRes.data?.data || meRes.data;
-    if (!userData?.id) {
-      router.replace("/login");
-    } else {
-      const { state, setSession } = useSessionStore();
-      saveCurrentUser({
-        userId: userData.id,
-        username: userData.username,
-        role: userData.role,
-      });
-      setSession({
-        ...state.value,
-        userId: String(userData.id),
-        username: userData.username || null,
-        role: userData.role || null,
-      });
-      extensionUIStore.refreshSnapshot(true).then(() => syncProviderRoutes(router, extensionUIStore)).catch(() => {});
-    }
-  } catch {
-    router.replace("/login");
-  }
+  extensionUIStore
+    .refreshSnapshot(true)
+    .then(() => syncProviderRoutes(router, extensionUIStore))
+    .catch(() => {});
 });
 
 watch(

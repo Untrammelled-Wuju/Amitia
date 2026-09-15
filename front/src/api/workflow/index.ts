@@ -50,7 +50,7 @@ export interface WorkflowPreflightReport {
 export interface WorkflowInstallation {
   installationId: string;
   workflowId: string;
-  ownerUserId?: string;
+  ownerSpaceId?: string;
   location: "local" | "cloud";
   hostDeviceId?: string;
   enabled: boolean;
@@ -304,7 +304,7 @@ export interface WorkflowSyncPage { cursor: number; items: WorkflowSyncEvent[] }
 export interface WorkflowSyncConflict {
   eventId: string;
   sourceDeviceId: string;
-  ownerUserId: string;
+  ownerSpaceId: string;
   workflowId: string;
   revision: number;
   baseRevision: number;

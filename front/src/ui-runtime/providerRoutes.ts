@@ -25,7 +25,6 @@ const registeredRouteNames = new Set<string>();
 
 const BOOTSTRAP_ROUTE_PREFIXES = [
   "/onboarding",
-  "/login",
   "/privacy",
   "/usage-boundary",
   "/404",

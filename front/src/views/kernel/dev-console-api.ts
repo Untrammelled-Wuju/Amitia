@@ -116,7 +116,7 @@ export interface ScopeRecord {
   scope: string;
   characterId?: string;
   conversationId?: string;
-  userId?: string;
+  spaceId?: string;
   active: boolean;
 }
 

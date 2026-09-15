@@ -92,6 +92,7 @@ export interface AmitiaDesktopAPI {
   zoomReset(): Promise<void>;
   getZoomFactor(): Promise<number>;
   writeClipboardText(text: string): Promise<void>;
+  readClipboardText(): Promise<string>;
   notifyDesktopPetChatState(payload: {
     state:
       | "assistant_listening"
@@ -132,11 +133,13 @@ export interface AmitiaDesktopAPI {
     callback: (event: unknown, data: unknown) => void,
   ): () => void;
   onUpdateError(callback: (event: unknown, data: unknown) => void): () => void;
-  setAuthToken(token: string): Promise<void>;
-  getBackendAuthHeaders(): Promise<Record<string, string>>;
+  getBackendAuthHeaders(target?: "local" | "business"): Promise<Record<string, string>>;
   publishLocalVoiceASRFinal(event: LocalVoiceASRFinalEvent): Promise<{ accepted: boolean; eventId: string; eventType: string }>;
   getMeshIdentity(): Promise<{ deviceId: string; runtimeId: string; platform: string } | null>;
-  getMeshStatus(): Promise<{ state: string; deviceId: string; runtimeId: string; runtimeSessionId: string } | null>;
+  getMeshStatus(): Promise<{ state: string; cloudBaseUrl: string; deviceId: string; runtimeId: string; runtimeSessionId: string } | null>;
+  getMeshPairingStatus(cloudBaseUrl: string): Promise<{ spaceId: string; trustedDeviceCount: number; firstDeviceSetupRequired: boolean }>;
+  createMeshPairingOffer(cloudBaseUrl: string, ttlSeconds?: number): Promise<{ offerId: string; offerToken: string; qrPayload: string; expiresAt: string }>;
+  provisionMesh(cloudBaseUrl: string, pairing?: { offerToken?: string; setupCode?: string }): Promise<{ ok: boolean }>;
   deprovisionMesh(): Promise<{ ok: boolean }>;
   onUINavigate(callback: (target: string) => void): () => void;
 }

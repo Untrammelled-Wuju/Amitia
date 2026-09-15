@@ -35,7 +35,6 @@ export const NAVIGATION_WHITELIST: readonly string[] = [
 ];
 
 const NAVIGATION_BLACKLIST: readonly string[] = [
-  "/login",
   "/onboarding",
   "/privacy",
   "/usage-boundary",

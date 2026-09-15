@@ -11,7 +11,6 @@ export { default as ChatInput } from "./components/ChatInput.vue";
 export { default as ErrorPanel } from "./components/ErrorPanel.vue";
 
 // Shared Views
-export { default as LoginView } from "./views/login/LoginView.vue";
 export { default as WebChatView } from "./views/web-chat/WebChatView.vue";
 export { default as WechatConnectView } from "./views/wechat-connect/WechatConnectView.vue";
 export { default as ModelConfigView } from "./views/model-config/ModelConfigView.vue";

@@ -1247,7 +1247,7 @@ export interface BrowserClientRuntimeSessionPackage {
 }
 
 export interface BrowserClientRuntimeSessionState {
-  userId?: string;
+  spaceId?: string;
   conversationId: string;
   revision?: number;
   packages: BrowserClientRuntimeSessionPackage[];

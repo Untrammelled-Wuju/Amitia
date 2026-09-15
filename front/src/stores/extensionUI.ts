@@ -16,7 +16,6 @@ import { loadLastKnownGoodSnapshot, saveLastKnownGoodSnapshot } from "@/ui-runti
 import { isProviderCompatible } from "@/ui-runtime/providerRuntime";
 import { resolveHostEnvironment } from "@/composables/useHostEnvironment";
 import { getRuntimeConnection } from "@/runtime/runtime-adapter";
-import { useSessionStore } from "@/stores/session-store";
 
 export interface UIContributionSummary {
   contributionId: string;
@@ -130,12 +129,11 @@ export interface LayoutPreference {
 }
 
 export const useExtensionUIStore = defineStore("extensionUI", () => {
-  const sessionStore = useSessionStore();
   const snapshot = ref<UIContributionSnapshot | null>(null);
   const lastFetchAt = ref<number>(0);
   const loading = ref(false);
   const usingLastKnownGood = ref(false);
-  const profileScope = ref<UIProfileScopeKind>("user");
+  const profileScope = ref<UIProfileScopeKind>("space");
   const scopeProfile = ref<UIProfile | null>(null);
   const scopeExists = ref(false);
   const errors = ref<SlotError[]>([]);
@@ -331,7 +329,7 @@ export const useExtensionUIStore = defineStore("extensionUI", () => {
     const platform = resolveHostEnvironment().platform;
     const deviceId = await resolveUIHostDeviceId();
     const backendNamespace = await getRuntimeConnection().then((connection) => connection.apiBaseURL).catch(() => window.location.origin);
-    const cacheNamespace = `${backendNamespace}|user=${sessionStore.state.value.userId || "anonymous"}`;
+    const cacheNamespace = `${backendNamespace}|device=${deviceId || "browser"}`;
     try {
       const next = await fetchUISnapshot(platform, deviceId);
       snapshot.value = next;

@@ -937,7 +937,7 @@ function openRpc(service: GameService) {
 
 async function invokeRpc() {
   if (!developerAccess.value) {
-    ElMessage.error("当前账号没有 GameHost 开发者访问权限");
+    ElMessage.error("当前 Space 没有 GameHost 开发者访问权限");
     rpcDialogVisible.value = false;
     return;
   }

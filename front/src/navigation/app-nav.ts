@@ -93,7 +93,6 @@ export const mobileNavItems = desktopNavGroups.flatMap((group) =>
 const titleItems = desktopNavGroups.flatMap((group) => group.items);
 
 const extraTitles = [
-  { path: "/login", label: "登录" },
   { path: "/onboarding", label: "引导" },
   { path: "/privacy", label: "隐私说明" },
   { path: "/usage-boundary", label: "使用边界" },

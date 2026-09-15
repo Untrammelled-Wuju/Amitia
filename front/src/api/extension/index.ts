@@ -153,7 +153,7 @@ export async function fetchConversationUIEventsBeforeSequence(
 }
 
 export interface ClientRuntimeSessionState {
-  userId?: string;
+  spaceId?: string;
   conversationId: string;
   revision: number;
   packages: Array<{

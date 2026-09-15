@@ -18,7 +18,7 @@ SPDX-License-Identifier: AGPL-3.0-only
       <section class="legal-section">
         <h3>数据收集与存储</h3>
         <ul>
-          <li>Amitia 会保存维持账号、对话、角色、记忆、扩展与运行配置所需的数据。</li>
+          <li>Amitia 会保存维持个人空间、对话、角色、记忆、扩展与运行配置所需的数据。</li>
           <li><strong>本地模式：</strong>业务数据由当前设备上的 Runtime/Core 处理并存储。</li>
           <li><strong>云端模式：</strong>Electron/Flutter 的业务 API 与 WebSocket 连接你配置的 Cloud Core，业务数据由 Cloud Core 处理；设备本地 Runtime/Device Agent 仍保留并处理明确标记为设备本地的能力。</li>
           <li>聊天、记忆、导入记录及相关业务数据可以通过应用提供的删除、清理、备份或恢复功能管理。</li>
@@ -53,7 +53,7 @@ SPDX-License-Identifier: AGPL-3.0-only
         <ul>
           <li>绑定设备后，Device Mesh 会使用设备凭据维护云端与该设备之间的受控协同连接。</li>
           <li>你可以在“我的设备”中查看、管理或移除云端登记设备，并可在设备端解除本机云端凭据。</li>
-          <li>设备凭据与云端账号凭据具有不同用途，客户端不会因为进入云端模式而停用本地 Runtime/Device Agent。</li>
+          <li>设备凭据用于云端设备认证；第三方服务凭据只属于对应 Service Connection。客户端不会因为进入云端模式而停用本地 Runtime/Device Agent。</li>
         </ul>
       </section>
 

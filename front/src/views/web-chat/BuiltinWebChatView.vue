@@ -216,7 +216,6 @@ import { useRouter } from "vue-router";
 import { ElMessage } from "element-plus";
 import { Menu as MenuIcon } from "@element-plus/icons-vue";
 import { useApi } from "../../composables/useApi";
-import { useSessionStore } from "../../stores/session-store";
 import { useCachedApi } from "../../composables/useCachedApi";
 import { useWebChatSSE } from "../../composables/useWebChatSSE";
 import { useWebChatScroll } from "../../composables/useWebChatScroll";
@@ -706,13 +705,6 @@ onMounted(async () => {
   updateViewport();
 
   const h = await get<any>("/api/health").catch(() => null);
-  if (h?.deployMode === "cloud-web") {
-    const { isAuthenticated } = useSessionStore();
-    if (!isAuthenticated.value) {
-      router.push("/login");
-      return;
-    }
-  }
   if (h?.model === "not_configured") {
     modelMissing.value = true;
   }

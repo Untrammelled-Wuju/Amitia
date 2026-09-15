@@ -2,8 +2,6 @@ import { ref, reactive, computed, watch, onMounted, onUnmounted } from "vue";
 import { useRouter } from "vue-router";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { useApi } from "../../../composables/useApi";
-import { useSessionStore } from "../../../stores/session-store";
-import { saveAuthenticatedSession } from "../../../stores/refresh-coordinator";
 import { getApiBaseURL, saveDeploymentConfig } from "@/runtime/runtime-adapter";
 
 export function useImmersiveOnboarding() {
@@ -14,16 +12,10 @@ export function useImmersiveOnboarding() {
   const maxStage = ref(0);
   const stageError = ref("");
 
-  const deployMode = ref("local");
-  const serverURL = ref("");
+  const deployMode = ref(typeof window !== "undefined" && !window.amitiaDesktop ? "remote" : "local");
+  const serverURL = ref(typeof window !== "undefined" && !window.amitiaDesktop ? window.location.origin : "");
   const remoteChecked = ref(false);
 
-  const adminStep = ref("environment");
-  const isAdminLogin = ref(false);
-  const hasAdmin = ref(false);
-  const accountName = ref("");
-  const accountPassword = ref("");
-  const accountDone = ref(false);
 
   const detectingModels = ref(false);
   const modelReady = ref(false);
@@ -128,7 +120,7 @@ export function useImmersiveOnboarding() {
 
   const stageCaptions = [
     "选择运行方式",
-    "创建账号",
+    "连接运行环境与设备",
     "连接语言模型",
   ];
 
@@ -209,15 +201,6 @@ export function useImmersiveOnboarding() {
 
     maxStage.value = Math.max(maxStage.value, stage);
 
-    if (stage === 1) {
-      if (accountDone.value) {
-        hasAdmin.value = true;
-        adminStep.value = "account";
-      } else {
-        adminStep.value = "environment";
-      }
-    }
-
     if (stage === currentStage.value) return;
     currentStage.value = stage;
   }
@@ -225,7 +208,7 @@ export function useImmersiveOnboarding() {
   async function nextStage() {
     if (currentStage.value >= stageCount - 1) return;
 
-    if (currentStage.value === 0 && window.amitiaDesktop) {
+    if (currentStage.value === 0) {
       try {
         const config = deployMode.value === "remote"
           ? {
@@ -246,114 +229,8 @@ export function useImmersiveOnboarding() {
   }
 
   function prevStage() {
-    if (currentStage.value === 1 && adminStep.value !== "environment") {
-      adminStep.value = "environment";
-      return;
-    }
-
     if (currentStage.value > 0) {
       goToStage(currentStage.value - 1);
-    }
-  }
-
-  function isLoginFlow(): boolean {
-    return hasAdmin.value;
-  }
-
-  async function checkAdminExists() {
-    try {
-      const apiBase = await getApiBaseURL();
-      const res = await fetch(`${apiBase}/api/public/auth/status`, {
-      method: "GET",
-      headers: {
-        Accept: "application/json",
-      },
-    });
-      if (!res.ok) return;
-      const json = await res.json();
-      hasAdmin.value = !!(json?.data?.hasAdmin || json?.hasAdmin);
-    } catch {}
-  }
-
-  async function handleAdminSubmit(data: {
-    username: string;
-    password: string;
-    password2: string;
-    setupToken: string;
-    isLogin: boolean;
-    deployMode: string;
-  }) {
-    stageError.value = "";
-
-    try {
-      accountName.value = data.username;
-      accountPassword.value = data.password;
-
-      let loginRes: any;
-      if (!data.isLogin) {
-        try {
-          loginRes = await post<any>(
-            "/api/public/auth/setup",
-            {
-              username: data.username,
-              password: data.password,
-            },
-            data.setupToken.trim()
-              ? { headers: { "X-Amitia-Setup-Token": data.setupToken.trim() } }
-              : undefined,
-          );
-        } catch (setupErr: any) {
-          if (setupErr?.code === 600 || setupErr?.response?.status === 409) {
-            hasAdmin.value = true;
-            loginRes = await post<any>("/api/public/auth/login", {
-              username: data.username,
-              password: data.password,
-            });
-          } else {
-            throw setupErr;
-          }
-        }
-      } else {
-        loginRes = await post<any>("/api/public/auth/login", {
-          username: data.username,
-          password: data.password,
-        });
-      }
-      if (loginRes?.token || loginRes?.accessToken) {
-        const { setSession } = useSessionStore();
-        const accessToken = loginRes.accessToken || loginRes.token;
-        const sessionUser = loginRes.user || loginRes;
-        setSession({
-          accessToken,
-          accessTokenExpiresAt: loginRes.accessTokenExpiresAt || null,
-          sessionId: loginRes.sessionId || (loginRes.session?.sessionId) || null,
-          userId: (sessionUser?.id || loginRes.userId)?.toString() || null,
-          username: sessionUser?.username || loginRes.username || data.username || null,
-          role: sessionUser?.role || loginRes.role || null,
-        });
-        saveAuthenticatedSession({
-          accessToken,
-          accessTokenExpiresAt: loginRes.accessTokenExpiresAt,
-          refreshToken: loginRes.refreshToken,
-          sessionId: loginRes.sessionId || loginRes.session?.sessionId,
-          userId: loginRes.user?.id || loginRes.userId,
-          username: loginRes.user?.username || loginRes.username || data.username,
-          role: loginRes.user?.role || loginRes.role,
-        });
-      }
-
-      accountDone.value = true;
-      accountName.value = data.username;
-      await nextStage();
-    } catch (e: any) {
-      const msg =
-        e?.response?.data?.message ||
-        e?.message ||
-        (hasAdmin.value ? "登录失败，请检查密码" : "创建账号失败，请重试");
-      stageError.value = msg;
-      if (e?.severity === "fatal" || !e?.severity) {
-        ElMessage.error(msg);
-      }
     }
   }
 
@@ -691,11 +568,6 @@ const res = await post<any>("/api/model/detect-models", {
       }
 
       if (memoryItems.value.some((item) => item)) {
-        let userId = "";
-        try {
-          const me = await get<any>("/api/auth/me");
-          userId = me?.id ? String(me.id) : "";
-        } catch {}
         const memoryAttrNames = ["称呼", "交流风格", "初始记忆"];
         for (let i = 0; i < memoryItems.value.length; i++) {
           const item = memoryItems.value[i];
@@ -704,7 +576,6 @@ const res = await post<any>("/api/model/detect-models", {
             category: "memory",
             attributeName: memoryAttrNames[i],
             attributeValue: item,
-            userId: userId,
           }).catch(() => {});
         }
       }
@@ -728,8 +599,6 @@ const res = await post<any>("/api/model/detect-models", {
               modelName: modelName.value,
             }
           : undefined,
-        username: accountName.value,
-        password: accountPassword.value || undefined,
       });
 
       localStorage.removeItem("webchat-last-conv");
@@ -761,11 +630,6 @@ const res = await post<any>("/api/model/detect-models", {
     deployMode,
     serverURL,
     remoteChecked,
-    adminStep,
-    isAdminLogin,
-    hasAdmin,
-    accountName,
-    accountDone,
     detectingModels,
     modelReady,
     modelDetected,
@@ -811,9 +675,6 @@ const res = await post<any>("/api/model/detect-models", {
     goToStage,
     nextStage,
     prevStage,
-    checkAdminExists,
-    isLoginFlow,
-    handleAdminSubmit,
     detectModel,
     handleEnterAmitia,
     startEntryTransition,

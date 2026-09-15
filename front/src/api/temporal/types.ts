@@ -1,4 +1,4 @@
-export type TemporalOwnerType = "user" | "character";
+export type TemporalOwnerType = "space" | "character";
 export type TemporalTimezoneMode =
   | "follow_device"
   | "fixed"
@@ -158,7 +158,7 @@ export interface ReunionContext {
 
 export interface RelationshipTimeContext {
   version: string;
-  userId: string;
+  spaceId: string;
   characterId: string;
   nowUtc: string;
   firstInteractionAt?: string;
@@ -185,7 +185,7 @@ export interface RelationshipTimeContext {
 
 export interface ReunionEpisode {
   id: string;
-  userId: string;
+  spaceId: string;
   characterId: string;
   reunionKind: ReunionKind;
   reunionLevel: ReunionLevel;
@@ -223,8 +223,8 @@ export interface RelationshipTimeDiagnostics {
 
 export interface TemporalAnchor {
   id: string;
-  scopeType: "user" | "character" | "relationship";
-  userId: string;
+  scopeType: "space" | "character" | "relationship";
+  spaceId: string;
   characterId: string;
   anchorType: string;
   title: string;

@@ -19,22 +19,31 @@ import { initializeRuntimeCapabilities, shouldRegisterServiceWorker } from "./ru
 import { setErrorPanelHandler, setErrorBannerHandler } from "./ui-index";
 import { useExtensionUIStore } from "./stores/extensionUI";
 import { browserClientPluginRuntime, syncBrowserClientSlots } from "./ui-runtime/clientPluginRuntime";
-import { restoreSessionOnStartup } from "./stores/refresh-coordinator";
 
 async function bootstrap() {
   await getRuntimeConnection();
-  const isAuthenticated = await restoreSessionOnStartup();
   const app = createApp(App);
   const pinia = createPinia();
   app.use(pinia);
   app.use(router);
   app.use(ElementPlus, { locale: zhCn });
   const extensionUI = useExtensionUIStore(pinia);
-  if (isAuthenticated) {
-    void initializeRuntimeCapabilities(true);
-    await extensionUI.refreshSnapshot().catch(() => undefined);
+  void initializeRuntimeCapabilities(true);
+  await router.isReady();
+
+  if (typeof window !== "undefined" && !window.amitiaDesktop) {
+    window.addEventListener("amitia:web-access-expired", () => {
+      const current = router.currentRoute.value;
+      if (current.path === "/web-access") return;
+      void router.replace({ path: "/web-access", query: { redirect: current.fullPath } });
+    });
   }
-  await syncBrowserClientSlots(extensionUI.snapshot);
+
+  const bootstrapPublicRoute = ["/web-access", "/onboarding", "/privacy", "/usage-boundary"].includes(router.currentRoute.value.path);
+  if (!bootstrapPublicRoute) {
+    await extensionUI.refreshSnapshot().catch(() => undefined);
+    await syncBrowserClientSlots(extensionUI.snapshot);
+  }
   extensionUI.$subscribe((_mutation, state) => { void syncBrowserClientSlots(state.snapshot); });
   window.amitiaClientPlugins = browserClientPluginRuntime;
   setErrorPanelHandler((err) => {
@@ -56,12 +65,11 @@ async function bootstrap() {
     });
   });
 
-  await router.isReady();
   app.mount("#app");
-  if (isAuthenticated) {
-    void import("./components/extension/WebComposerActionProxy.vue");
-    void import("./components/extension/SandboxWebUIFrame.vue");
-  }
+  // There is no product-account gate. In Cloud browser mode the lightweight
+  // Web access gate is already resolved before private extension UI boots.
+  void import("./components/extension/WebComposerActionProxy.vue");
+  void import("./components/extension/SandboxWebUIFrame.vue");
 }
 
 void bootstrap();

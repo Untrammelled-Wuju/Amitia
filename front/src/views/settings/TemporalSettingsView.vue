@@ -394,7 +394,7 @@ const anchorFormRef = ref<FormInstance>();
 
 const profile = reactive<TemporalProfile>({
   id: "",
-  ownerType: "user",
+  ownerType: "space",
   ownerId: "",
   timezoneMode: "follow_device",
   timezone: "Asia/Shanghai",
@@ -454,7 +454,7 @@ const anchorTypes = [
 function emptyAnchor(): Partial<TemporalAnchor> {
   return {
     id: "",
-    scopeType: "user",
+    scopeType: "space",
     characterId: "",
     anchorType: "custom",
     title: "",

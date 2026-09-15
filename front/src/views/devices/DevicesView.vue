@@ -7,13 +7,22 @@
       </div>
       <div class="head-actions">
         <el-button
-          v-if="desktopAvailable"
+          v-if="!localMeshBound"
           type="primary"
           :loading="joinBusy"
           :disabled="deploymentMode !== 'cloud' || !localIdentity"
           @click="joinCurrentDevice"
         >
-          将当前设备加入 Mesh
+          配对当前设备
+        </el-button>
+        <el-button
+          v-if="localMeshBound"
+          type="primary"
+          :loading="offerBusy"
+          :disabled="deploymentMode !== 'cloud'"
+          @click="generatePairingOffer"
+        >
+          生成新设备配对 Offer
         </el-button>
         <el-button :loading="loading" @click="refreshAll">刷新</el-button>
       </div>
@@ -28,13 +37,19 @@
     />
     <el-alert v-if="localError" :title="localError" type="warning" show-icon :closable="false" />
     <el-alert v-if="error" :title="error" type="error" show-icon :closable="false" />
+    <el-card v-if="pairingOffer" shadow="never" class="pairing-offer-card">
+      <template #header><strong>一次性设备配对 Offer</strong></template>
+      <p class="muted">新设备扫描二维码时使用下面的 URI；当前版本也可以直接复制粘贴。Offer 使用一次或过期后失效。</p>
+      <el-input :model-value="pairingOffer" readonly type="textarea" :rows="3" />
+      <div class="card-actions"><el-button size="small" @click="copyPairingOffer">复制 Offer</el-button></div>
+    </el-card>
 
-    <el-card v-if="desktopAvailable" shadow="never" class="current-device-card">
+    <el-card shadow="never" class="current-device-card">
       <template #header>
         <div class="device-head">
           <div>
-            <strong>当前桌面 Runtime</strong>
-            <div class="muted">本机身份来自 127.0.0.1:18899，不由云端猜测</div>
+            <strong>{{ desktopAvailable ? "当前桌面 Runtime" : "当前 Web 设备" }}</strong>
+            <div class="muted">{{ desktopAvailable ? "本机身份来自 Device Agent，不由云端猜测" : "浏览器作为独立 Device Mesh 成员，以 DeviceCredential 访问 Cloud Core" }}</div>
           </div>
           <div class="device-head-actions">
             <el-tag :type="localMeshState === 'connected' ? 'success' : 'info'">{{ localMeshStateLabel }}</el-tag>
@@ -100,7 +115,15 @@
 import { computed, onMounted, ref } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { useApi } from "@/composables/useApi";
-import { getDeploymentConfig, getRuntimeConnection } from "@/runtime/runtime-adapter";
+import {
+  createCurrentDevicePairingOffer,
+  deprovisionCurrentDeviceMesh,
+  getCurrentDevicePairingStatus,
+  getDeploymentConfig,
+  getRuntimeConnection,
+  provisionCurrentDeviceMesh,
+} from "@/runtime/runtime-adapter";
+import { getWebDeviceCredential, getWebDeviceMeshIdentity } from "@/runtime/web-device-mesh";
 
 type Runtime = { runtimeId: string; presence: string; runtimeSessionId?: string };
 type Device = { deviceId: string; platform: string; label: string; trustState: string; presence: string; lastHeartbeat?: string; runtimes?: Runtime[] };
@@ -109,6 +132,8 @@ type LocalIdentity = { deviceId?: string; runtimeId?: string; platform?: string;
 const api = useApi();
 const loading = ref(false);
 const joinBusy = ref(false);
+const offerBusy = ref(false);
+const pairingOffer = ref("");
 const leaveBusy = ref(false);
 const busy = ref("");
 const error = ref("");
@@ -122,7 +147,7 @@ const desktopAvailable = computed(() => Boolean(window.amitiaDesktop));
 const localMeshState = computed(() => String(localMeshStatus.value?.state || "unknown").toLowerCase());
 const localMeshBound = computed(() => !["", "unknown", "unprovisioned"].includes(localMeshState.value));
 const localMeshStateLabel = computed(() => {
-  if (localMeshState.value === "connected") return "已加入 Mesh";
+  if (["connected", "ready"].includes(localMeshState.value)) return "已加入 Mesh";
   if (localMeshState.value === "connecting") return "连接中";
   if (localMeshState.value === "unprovisioned") return "未绑定";
   return localMeshState.value === "unknown" ? "未知" : localMeshState.value;
@@ -143,26 +168,42 @@ async function refresh() {
 }
 
 async function loadCurrentDevice() {
-  if (!desktopAvailable.value) return;
   localError.value = "";
   try {
     const deployment = await getDeploymentConfig();
     deploymentMode.value = deployment.mode || "local";
-    const [identity, status] = await Promise.all([
-      api.get<LocalIdentity>("/internal/device-mesh/identity"),
-      api.get<Record<string, any>>("/internal/device-mesh/status"),
-    ]);
-    localIdentity.value = identity || null;
-    localMeshStatus.value = status || {};
+    if (desktopAvailable.value) {
+      const [identity, status] = await Promise.all([
+        window.amitiaDesktop?.getMeshIdentity?.(),
+        window.amitiaDesktop?.getMeshStatus?.(),
+      ]);
+      localIdentity.value = identity || null;
+      localMeshStatus.value = status || {};
+      return;
+    }
+
+    const connection = await getRuntimeConnection();
+    const identity = getWebDeviceMeshIdentity();
+    const credential = getWebDeviceCredential(connection.apiBaseURL);
+    localIdentity.value = identity;
+    localMeshStatus.value = credential
+      ? { state: "connected", cloudBaseUrl: credential.cloudBaseURL, deviceId: credential.deviceId, runtimeId: credential.runtimeId }
+      : { state: "unprovisioned", deviceId: identity.deviceId, runtimeId: identity.runtimeId };
   } catch (err: any) {
     localIdentity.value = null;
     localMeshStatus.value = {};
-    localError.value = err?.message || "无法读取当前桌面 Runtime 的 Device Mesh 身份";
+    localError.value = err?.message || "无法读取当前设备的 Device Mesh 身份";
   }
 }
 
 async function refreshAll() {
-  await Promise.all([refresh(), loadCurrentDevice()]);
+  await loadCurrentDevice();
+  if (deploymentMode.value === "cloud" && localMeshBound.value) {
+    await refresh();
+  } else {
+    devices.value = [];
+    error.value = "";
+  }
 }
 
 async function joinCurrentDevice() {
@@ -171,46 +212,79 @@ async function joinCurrentDevice() {
     ElMessage.warning("请先切换到云端部署模式");
     return;
   }
-  const deviceId = String(localIdentity.value.deviceId || "").trim();
-  const runtimeId = String(localIdentity.value.runtimeId || "").trim();
-  const platform = String(localIdentity.value.platform || "").trim();
-  if (!deviceId || !runtimeId || !platform) {
-    ElMessage.error("本机 Device Mesh 身份不完整");
-    return;
-  }
   joinBusy.value = true;
   try {
     const connection = await getRuntimeConnection();
-    const ticket = await api.post<{ ticket?: string }>("/api/device-mesh/v1/bootstrap-tickets", {
-      deviceId,
-      runtimeId,
-      platform,
-      label: `Desktop ${platform}`,
-    });
-    const rawTicket = String(ticket?.ticket || "").trim();
-    if (!rawTicket) throw new Error("Cloud Core 未返回有效的一次性绑定票据");
-    await api.post("/internal/device-mesh/bootstrap", {
-      cloudBaseUrl: connection.apiBaseURL,
-      bootstrapTicket: rawTicket,
-    });
-    ElMessage.success("当前桌面 Runtime 已加入 Device Mesh");
+    const status = await getCurrentDevicePairingStatus(connection.apiBaseURL);
+    const first = status.firstDeviceSetupRequired === true;
+    const prompt = await ElMessageBox.prompt(
+      first
+        ? "这是 Cloud Core 的第一台可信设备。请输入 Cloud Core 主机本地生成的一次性设置码。"
+        : "粘贴已信任设备生成的 amitia://pair?... 内容或 Offer Token。",
+      first ? "首设备配对" : "设备配对",
+      {
+        confirmButtonText: "配对",
+        cancelButtonText: "取消",
+        inputPlaceholder: first ? "首设备设置码" : "amitia://pair?endpoint=...&offer=...",
+        inputValidator: (value) => String(value || "").trim().length > 0 || "请输入配对信息",
+      },
+    );
+    const raw = String(prompt.value || "").trim();
+    let offerToken = "";
+    if (!first) {
+      if (raw.startsWith("amitia://")) {
+        const uri = new URL(raw);
+        const endpoint = uri.searchParams.get("endpoint") || "";
+        if (endpoint && new URL(endpoint).origin !== new URL(connection.apiBaseURL).origin) {
+          throw new Error("配对 Offer 属于另一个 Cloud Core");
+        }
+        offerToken = uri.searchParams.get("offer") || "";
+      } else {
+        offerToken = raw;
+      }
+      if (!offerToken) throw new Error("配对 Offer 无效");
+    }
+    await provisionCurrentDeviceMesh(connection.apiBaseURL, first ? { setupCode: raw } : { offerToken });
+    ElMessage.success("当前设备已加入 Device Mesh");
     await refreshAll();
   } catch (err: any) {
+    if (err === "cancel" || err === "close") return;
     ElMessage.error(err?.message || "当前设备加入 Device Mesh 失败");
   } finally {
     joinBusy.value = false;
   }
 }
 
-async function leaveCurrentDeviceMesh() {
-  if (!window.amitiaDesktop?.deprovisionMesh) {
-    ElMessage.error("当前桌面桥接不支持解除 Device Mesh 绑定");
-    return;
+async function generatePairingOffer() {
+  offerBusy.value = true;
+  try {
+    const connection = await getRuntimeConnection();
+    const offer = await createCurrentDevicePairingOffer(connection.apiBaseURL, 600);
+    pairingOffer.value = String(offer.qrPayload || offer.offerToken || "").trim();
+    if (!pairingOffer.value) throw new Error("Cloud Core 未返回配对 Offer");
+    ElMessage.success("一次性配对 Offer 已生成");
+  } catch (err: any) {
+    ElMessage.error(err?.message || "生成配对 Offer 失败");
+  } finally {
+    offerBusy.value = false;
   }
+}
+
+async function copyPairingOffer() {
+  if (!pairingOffer.value) return;
+  if (window.amitiaDesktop?.writeClipboardText) {
+    await window.amitiaDesktop.writeClipboardText(pairingOffer.value);
+  } else {
+    await navigator.clipboard.writeText(pairingOffer.value);
+  }
+  ElMessage.success("配对 Offer 已复制");
+}
+
+async function leaveCurrentDeviceMesh() {
   try {
     await ElMessageBox.confirm(
-      "确定解除当前桌面 Runtime 的云端绑定吗？这只会清除本机 Device Agent 的 Mesh 凭据，不会切换 Cloud Core 登录状态。",
-      "解除本机云端绑定",
+      "确定解除当前设备的云端绑定吗？Cloud Core 会立即撤销该设备的所有 DeviceCredential，然后清除本机凭据；个人 Space 数据不会被删除。",
+      "解除当前设备云端绑定",
       { type: "warning", confirmButtonText: "解除绑定", cancelButtonText: "取消" },
     );
   } catch {
@@ -219,8 +293,9 @@ async function leaveCurrentDeviceMesh() {
 
   leaveBusy.value = true;
   try {
-    await window.amitiaDesktop.deprovisionMesh();
-    ElMessage.success("本机 Device Mesh 凭据已清除");
+    const connection = await getRuntimeConnection();
+    await deprovisionCurrentDeviceMesh(connection.apiBaseURL);
+    ElMessage.success("当前设备的 Device Mesh 凭据已清除");
     await refreshAll();
   } catch (err: any) {
     ElMessage.error(err?.message || "解除本机 Device Mesh 绑定失败");

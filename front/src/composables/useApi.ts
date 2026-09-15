@@ -14,24 +14,27 @@ import {
 import { getDeviceTimezone } from "@/utils/requestEnvelope";
 import { resolveUIHostDeviceId } from "@/ui-runtime/deviceIdentity";
 import { classifyError, displayError } from "./request";
-import { ensureValidToken, initRefreshCoordinator, stopRefreshCoordinator, forceCleanupSession } from "@/stores/refresh-coordinator";
 
 const BASE_URL = (import.meta as any).env?.VITE_API_URL || "";
+
+function notifyWebAccessExpired(error: any): boolean {
+  if (typeof window === "undefined" || window.amitiaDesktop || Number(error?.response?.status) !== 401) return false;
+  const body = error?.response?.data as any;
+  const message = String(body?.msg || body?.message || "");
+  if (!message.includes("Web 登录已失效")) return false;
+  window.dispatchEvent(new CustomEvent("amitia:web-access-expired"));
+  return true;
+}
 
 function isGameCenterApiPath(path: string): boolean {
   const normalized = String(path || "").split("?", 1)[0];
   return normalized === "/api/game-center" || normalized.startsWith("/api/game-center/");
 }
 
-const PUBLIC_AUTH_PATHS = new Set([
-  "/api/public/auth/status",
-  "/api/public/auth/setup",
-  "/api/public/auth/login",
-  "/api/public/auth/refresh",
-  "/api/public/auth/logout/revoke",
-  "/api/public/onboarding/status",
-  "/api/public/runtime/capabilities",
-]);
+function isPublicApiPath(path: string): boolean {
+  const normalized = String(path || "").split("?", 1)[0];
+  return normalized.startsWith("/api/public/") || normalized === "/livez" || normalized === "/readyz";
+}
 
 export const apiClient: AxiosInstance = axios.create({
   baseURL: BASE_URL,
@@ -41,6 +44,7 @@ export const apiClient: AxiosInstance = axios.create({
 apiClient.interceptors.request.use(async (config) => {
   const runtime = await getRuntimeConnection();
   const deployment = await getDeploymentConfig();
+  config.withCredentials = !window.amitiaDesktop;
   const requestPath = String(config.url ?? "");
   config.headers = config.headers ?? {};
   const managementTarget = String(
@@ -61,12 +65,12 @@ apiClient.interceptors.request.use(async (config) => {
   delete (config.headers as any)["X-Amitia-Management-Target"];
   (config.headers as any)?.delete?.("X-Amitia-Management-Target");
 
-  if (PUBLIC_AUTH_PATHS.has(requestPath)) {
+  if (isPublicApiPath(requestPath)) {
     delete config.headers.Authorization;
     delete config.headers["X-Amitia-Desktop-Session"];
     delete config.headers["X-Amitia-Desktop-Instance"];
-    config.headers["X-Amitia-Client-Type"] = "desktop";
-    (config as AxiosRequestConfig & { __amitiaPublicAuth?: boolean; __amitiaDeviceLocal?: boolean }).__amitiaPublicAuth = true;
+    config.headers["X-Amitia-Client-Type"] = window.amitiaDesktop ? "desktop" : "web";
+    (config as AxiosRequestConfig & { __amitiaPublic?: boolean; __amitiaDeviceLocal?: boolean }).__amitiaPublic = true;
     return config;
   }
 
@@ -74,14 +78,11 @@ apiClient.interceptors.request.use(async (config) => {
     (config as AxiosRequestConfig & { __amitiaDeviceLocal?: boolean }).__amitiaDeviceLocal = true;
   }
 
-  if ((deployment.mode === "local" || deviceLocal) && window.amitiaDesktop) {
-    const desktopHeaders = await getBackendAuthHeaders();
-    for (const [key, value] of Object.entries(desktopHeaders)) {
-      config.headers[key] = value;
-    }
+  const authHeaders = await getBackendAuthHeaders(deviceLocal ? "local" : "business");
+  for (const [key, value] of Object.entries(authHeaders)) {
+    if (value) config.headers[key] = value;
   }
-
-  config.headers["X-Amitia-Client-Type"] = "desktop";
+  config.headers["X-Amitia-Client-Type"] = window.amitiaDesktop ? "desktop" : "web";
 
   const deviceId = await resolveUIHostDeviceId();
   if (deviceId) {
@@ -95,17 +96,6 @@ apiClient.interceptors.request.use(async (config) => {
     config.headers["X-Amitia-Target-Device-ID"] = deviceId;
   }
 
-  if (deviceLocal) {
-    // Desktop-pet package/runtime authority is always the local device agent,
-    // including cloud deployments. Do not leak the cloud bearer token to the
-    // loopback runtime.
-    delete config.headers.Authorization;
-  } else {
-    const token = await ensureValidToken();
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-  }
 
   const deviceTimezone = getDeviceTimezone();
   if (deviceTimezone) {
@@ -135,21 +125,15 @@ apiClient.interceptors.response.use(
     }
     const requestConfig = error?.config as
       | (AxiosRequestConfig & {
-          __amitiaPublicAuth?: boolean;
+          __amitiaPublic?: boolean;
           __amitiaDeviceLocal?: boolean;
         })
       | undefined;
-    if (
-      error?.response?.status === 401 &&
-      !requestConfig?.__amitiaPublicAuth &&
-      !requestConfig?.__amitiaDeviceLocal
-    ) {
-      forceCleanupSession();
-    }
     const body = (error.response?.data as ApiResponse) || null;
+    const webAccessExpired = notifyWebAccessExpired(error);
     const err = classifyError(body, error as AxiosError);
     err.raw = body;
-    displayError(err);
+    if (!webAccessExpired) displayError(err);
     return Promise.reject(err);
   },
 );
@@ -218,4 +202,3 @@ export function useApi() {
   return { loading, get, post, postUpload, put, del };
 }
 
-export { ensureValidToken, initRefreshCoordinator, stopRefreshCoordinator, forceCleanupSession };

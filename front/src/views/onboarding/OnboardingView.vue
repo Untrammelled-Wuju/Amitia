@@ -32,16 +32,11 @@
           @checkRemote="checkRemoteConnection"
         />
 
-        <StageAdminSetup
+        <StageRuntimeSetup
           v-else-if="currentStage === 1"
-          ref="adminStageRef"
           :deployMode="deployMode"
-          :step="adminStep"
-          :isLogin="isLoginFlow()"
-          :accountName="accountName"
           :serverURL="serverURL"
           @healthCheckDone="onHealthCheckDone"
-          @submit="handleAdminSubmit"
         />
 
         <StageModelConfig
@@ -74,14 +69,6 @@
           下一步
         </button>
         <button
-          v-else-if="currentStage === 1 && adminStep === 'account'"
-          class="ob-stage-action ob-setup-inline-action"
-          type="button"
-          @click="adminStageRef?.submit()"
-        >
-          下一步
-        </button>
-        <button
           v-else-if="currentStage === 2"
           class="ob-model-setup-next"
           type="button"
@@ -99,9 +86,11 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
+import { useRouter } from "vue-router";
+import { apiClient } from "@/ui-index";
 import StarfieldBg from "./components/StarfieldBg.vue";
 import StageDeployMode from "./components/StageDeployMode.vue";
-import StageAdminSetup from "./components/StageAdminSetup.vue";
+import StageRuntimeSetup from "./components/StageRuntimeSetup.vue";
 import StageModelConfig from "./components/StageModelConfig.vue";
 import AmitiaEntryTransition from "./components/AmitiaEntryTransition.vue";
 import { useImmersiveOnboarding } from "./composables/useImmersiveOnboarding";
@@ -112,12 +101,12 @@ import "./styles/typography.css";
 import "./styles/stage-specific.css";
 import "./styles/entry-transition.css";
 
+const router = useRouter();
+
 const {
   currentStage,
   deployMode,
   serverURL,
-  adminStep,
-  accountName,
   detectingModels,
   modelReady,
   modelDetected,
@@ -132,15 +121,11 @@ const {
   enteringState,
   nextStage,
   prevStage,
-  checkAdminExists,
-  isLoginFlow,
-  handleAdminSubmit,
   detectModel,
   startEntryTransition,
 } = useImmersiveOnboarding();
 
 const deployStageRef = ref<{ continueFlow: () => void } | null>(null);
-const adminStageRef = ref<{ submit: () => void } | null>(null);
 const detectingRemote = ref(false);
 const remoteStatusText = ref("");
 
@@ -155,8 +140,17 @@ watch(serverURL, () => {
 });
 
 async function onHealthCheckDone() {
-  await checkAdminExists();
-  adminStep.value = "account";
+  try {
+    const response = await apiClient.get("/api/public/onboarding/status");
+    const data = response.data?.data || response.data;
+    if (data?.completed) {
+      await router.replace("/chat");
+      return;
+    }
+  } catch {
+    // If status cannot be read, stay in the normal onboarding flow.
+  }
+  await nextStage();
 }
 
 function handleStartUsing() {

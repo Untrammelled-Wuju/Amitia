@@ -1,34 +1,27 @@
-const DEVICE_ID_KEY = "amitia.ui.device-id.v1";
+import { getWebDeviceMeshIdentity } from "@/runtime/web-device-mesh";
 
-function randomDeviceId(): string {
-  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-    return `ui-${crypto.randomUUID()}`;
-  }
-  return `ui-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 14)}`;
-}
+const LEGACY_DEVICE_ID_KEY = "amitia.ui.device-id.v1";
 
 export function getUIHostDeviceId(): string {
   if (typeof window === "undefined") return "";
+  if (!window.amitiaDesktop) {
+    return getWebDeviceMeshIdentity().deviceId;
+  }
   try {
-    const existing = window.localStorage.getItem(DEVICE_ID_KEY)?.trim();
-    if (existing) return existing;
-    const created = randomDeviceId();
-    window.localStorage.setItem(DEVICE_ID_KEY, created);
-    return created;
+    return window.localStorage.getItem(LEGACY_DEVICE_ID_KEY)?.trim() || "";
   } catch {
     return "";
   }
 }
 
 export async function resolveUIHostDeviceId(): Promise<string> {
-  if (typeof window !== "undefined") {
-    try {
-      const identity = await window.amitiaDesktop?.getMeshIdentity?.();
-      const meshDeviceId = identity?.deviceId?.trim() ?? "";
-      if (meshDeviceId) return meshDeviceId;
-    } catch {
-      // Browser/local fallback below remains stable for UI profile scoping.
-    }
+  if (typeof window === "undefined") return "";
+  try {
+    const identity = await window.amitiaDesktop?.getMeshIdentity?.();
+    const meshDeviceId = identity?.deviceId?.trim() ?? "";
+    if (meshDeviceId) return meshDeviceId;
+  } catch {
+    // The browser identity below remains stable when Desktop Agent is unavailable.
   }
-  return getUIHostDeviceId();
+  return getWebDeviceMeshIdentity().deviceId;
 }

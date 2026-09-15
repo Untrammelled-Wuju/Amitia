@@ -187,7 +187,7 @@ export interface BackendUIProfile {
   profileId: string;
   name: string;
   selections: Record<string, string>;
-  scope?: { userId?: string; deviceId?: string; platform?: string; runtimeProfile?: string };
+  scope?: { spaceId?: string; deviceId?: string; platform?: string; runtimeProfile?: string };
   revision?: number;
   updatedAt?: number;
 }

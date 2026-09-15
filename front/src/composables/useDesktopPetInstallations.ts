@@ -26,7 +26,7 @@ export type InstallationRuntimeStatus =
 
 export interface DesktopPetInstallation {
   id: string;
-  userId?: string;
+  spaceId?: string;
   packageId: string;
   packageVersion: string;
   name: string;

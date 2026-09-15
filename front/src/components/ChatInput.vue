@@ -879,6 +879,67 @@ function handleComposerKeydown(event: KeyboardEvent) {
   }
 }
 
+function isEditableTarget(target: Element | null): boolean {
+  if (!target) return false;
+  if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) return true;
+  return target instanceof HTMLElement && target.isContentEditable;
+}
+
+function isModalInteractionTarget(target: Element | null): boolean {
+  return Boolean(target?.closest('.el-overlay, [role="dialog"], [aria-modal="true"]'));
+}
+
+async function readClipboardText(): Promise<string> {
+  if (window.amitiaDesktop?.readClipboardText) {
+    return window.amitiaDesktop.readClipboardText();
+  }
+  if (navigator.clipboard?.readText) {
+    return navigator.clipboard.readText();
+  }
+  return "";
+}
+
+async function insertComposerText(content: string) {
+  const input = inputRef.value;
+  if (!input || !content) return;
+  input.focus();
+  const start = input.selectionStart ?? text.value.length;
+  const end = input.selectionEnd ?? start;
+  setText(`${text.value.slice(0, start)}${content}${text.value.slice(end)}`);
+  await nextTick();
+  input.focus();
+  const caret = start + content.length;
+  input.setSelectionRange(caret, caret);
+}
+
+async function handleGlobalChatPaste(event: KeyboardEvent) {
+  if (event.defaultPrevented || (!event.ctrlKey && !event.metaKey) || event.altKey || event.key.toLowerCase() !== "v") return;
+  const active = document.activeElement;
+  if (active === inputRef.value || isEditableTarget(active) || isModalInteractionTarget(active)) return;
+  if (isInputDisabled.value || voiceMode.value) return;
+  event.preventDefault();
+  const pasted = await readClipboardText();
+  await insertComposerText(pasted);
+}
+
+function handleGlobalComposerKey(event: KeyboardEvent) {
+  if (
+    event.defaultPrevented ||
+    event.isComposing ||
+    event.ctrlKey ||
+    event.metaKey ||
+    event.altKey ||
+    event.key.length !== 1
+  ) {
+    return;
+  }
+  const active = document.activeElement;
+  if (active === inputRef.value || isEditableTarget(active) || isModalInteractionTarget(active)) return;
+  if (isInputDisabled.value || voiceMode.value) return;
+  event.preventDefault();
+  void insertComposerText(event.key);
+}
+
 function selectSlashSkill(name: string) {
   const range = slashRange.value;
   if (!range) return;
@@ -987,9 +1048,13 @@ onMounted(() => {
   loadAgentSkills();
   refreshRecentWorkspaces();
   document.addEventListener("pointerdown", handleComposerOutsidePointer);
+  window.addEventListener("keydown", handleGlobalChatPaste, true);
+  window.addEventListener("keydown", handleGlobalComposerKey, true);
 });
 onUnmounted(() => {
   document.removeEventListener("pointerdown", handleComposerOutsidePointer);
+  window.removeEventListener("keydown", handleGlobalChatPaste, true);
+  window.removeEventListener("keydown", handleGlobalComposerKey, true);
 });
 
 defineExpose({ focus, setText, clear: clearText });

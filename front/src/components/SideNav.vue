@@ -86,7 +86,7 @@ SPDX-License-Identifier: AGPL-3.0-only
         v-if="profileMenuOpen"
         class="profile-menu"
         role="menu"
-        aria-label="账户选项"
+        aria-label="个人空间选项"
         @click.stop
       >
         <button type="button" role="menuitem" class="profile-menu__item" @click="openSettings">
@@ -95,7 +95,7 @@ SPDX-License-Identifier: AGPL-3.0-only
         </button>
         <button type="button" role="menuitem" class="profile-menu__item" @click="openUserProfile">
           <el-icon><UserFilled /></el-icon>
-          <span>用户信息</span>
+          <span>个人资料</span>
         </button>
         <button type="button" role="menuitem" class="profile-menu__item" @click="openDevices">
           <el-icon><Connection /></el-icon>
@@ -111,32 +111,22 @@ SPDX-License-Identifier: AGPL-3.0-only
           <el-icon><Moon v-if="theme === 'light'" /><Sunny v-else /></el-icon>
           <span>{{ theme === 'dark' ? '切换为亮色模式' : '切换为暗色模式' }}</span>
         </button>
-        <button
-          type="button"
-          role="menuitem"
-          class="profile-menu__item profile-menu__item--logout"
-          :disabled="logoutLoading"
-          @click="handleLogout"
-        >
-          <el-icon><SwitchButton /></el-icon>
-          <span>{{ logoutLoading ? '正在退出…' : '退出登录' }}</span>
-        </button>
       </div>
       <button
         class="user-profile"
         type="button"
-        :title="username || '管理员'"
+        :title="username || '个人空间'"
         :aria-expanded="profileMenuOpen"
         aria-haspopup="menu"
         @click.stop="profileMenuOpen = !profileMenuOpen"
       >
         <span class="user-avatar">
-          <img v-if="avatar" :src="avatar" alt="用户头像" />
+          <img v-if="avatar" :src="avatar" alt="个人头像" />
           <el-icon v-else><UserFilled /></el-icon>
         </span>
         <span v-show="!appStore.sidebarCollapsed" class="user-copy">
-          <strong>{{ username || "管理员" }}</strong>
-          <span>当前用户</span>
+          <strong>{{ username || "个人空间" }}</strong>
+          <span>个人空间</span>
         </span>
       </button>
     </div>
@@ -153,15 +143,13 @@ import {
   Search,
   Setting,
   Sunny,
-  SwitchButton,
   UserFilled,
 } from "@element-plus/icons-vue";
-import { ElMessage, ElMessageBox } from "element-plus";
+import { ElMessage } from "element-plus";
 import { useAppStore } from "@/stores/app";
 import { useExtensionUIStore } from "@/stores/extensionUI";
 import { useBrandLogo } from "@/composables/useBrandLogo";
-import { apiClient, useApi } from "@/composables/useApi";
-import { forceCleanupSession } from "@/stores/refresh-coordinator";
+import { useApi } from "@/composables/useApi";
 import { isDesktopShell } from "@/runtime/runtime-capabilities";
 import SearchModal from "./SearchModal.vue";
 import { isUINavigationItemActive, useUINavigationRegistry, type UINavigationItem } from "@/ui-runtime/navigationRegistry";
@@ -189,7 +177,6 @@ const searchModal = ref<InstanceType<typeof SearchModal> | null>(null);
 const recentConversations = ref<any[]>([]);
 const activeConversationId = ref(localStorage.getItem("webchat-conv-id") || "");
 const profileMenuOpen = ref(false);
-const logoutLoading = ref(false);
 let isMounted = false;
 
 async function fetchRecentConversations() {
@@ -290,27 +277,6 @@ function prewarmItem(item: UINavigationItem) {
   prewarmNavigationItem(extensionUIStore, item);
 }
 
-async function handleLogout() {
-  try {
-    await ElMessageBox.confirm("退出后需要重新登录，确定继续吗？", "退出登录", {
-      confirmButtonText: "退出登录",
-      cancelButtonText: "取消",
-      type: "warning",
-      confirmButtonClass: "el-button--danger",
-    });
-  } catch {
-    return;
-  }
-  profileMenuOpen.value = false;
-  logoutLoading.value = true;
-  try {
-    await apiClient.post("/api/auth/logout");
-  } catch {}
-  forceCleanupSession();
-  await router.replace("/login");
-  logoutLoading.value = false;
-}
-
 function closeProfileMenu() {
   profileMenuOpen.value = false;
 }
@@ -380,8 +346,6 @@ onUnmounted(() => {
 .profile-menu__item { display: flex; align-items: center; gap: 9px; min-height: 34px; width: 100%; padding: 0 8px; border: 0; border-radius: 7px; background: transparent; color: var(--text-secondary); cursor: pointer; font: inherit; font-size: 12px; text-align: left; transition: background-color 0.18s ease, color 0.18s ease; }
 .profile-menu__item:hover, .profile-menu__item:focus-visible { background: var(--workbench-sidebar-hover); color: var(--text-primary); outline: none; }
 .profile-menu__item .el-icon { font-size: 15px; }
-.profile-menu__item--logout { margin-top: 4px; border-top: 1px solid var(--surface-border); border-radius: 0 0 7px 7px; color: var(--el-color-danger); }
-.profile-menu__item--logout:hover, .profile-menu__item--logout:focus-visible { background: color-mix(in srgb, var(--el-color-danger) 10%, transparent); color: var(--el-color-danger); }
 .profile-menu__item:disabled { cursor: wait; opacity: 0.7; }
 .user-profile { display: flex; align-items: center; width: 100%; border: 0; border-radius: 7px; background: transparent; color: var(--text-secondary); cursor: pointer; text-align: left; }
 .user-profile { gap: 9px; min-height: 38px; padding: 4px 7px; }

@@ -107,14 +107,6 @@ SPDX-License-Identifier: AGPL-3.0-only
             />
           </el-tab-pane>
         </el-tabs>
-        <ExtensionSlot
-          slot-id="character.detail.tab"
-          :context="characterExtensionContext"
-          fallback="none"
-          layout="tabs"
-          surface-role="main"
-          class="character-detail-slot"
-        />
       </template>
       <el-empty
         v-else
@@ -914,13 +906,20 @@ async function deleteCurrent() {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
   padding: 12px;
   border-bottom: 1px solid var(--el-border-color-lighter);
 }
 .sidebar-actions {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 6px;
+  width: 100%;
+}
+.sidebar-actions :deep(.el-button + .el-button) {
+  margin-left: 0;
 }
 
 .sidebar-header h3 {

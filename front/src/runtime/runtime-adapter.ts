@@ -1,7 +1,20 @@
 import type { RuntimeConnection, DeploymentModeConfig, LocalVoiceASRFinalEvent } from "./runtime-types";
+import {
+  getWebDeviceAuthHeaders,
+  getWebDeviceCredential,
+  getWebDeviceMeshIdentity,
+  getWebPairingStatus,
+  provisionWebDevice,
+  createWebPairingOffer,
+  clearWebDeviceCredential,
+  type PairingInput,
+  type PairingStatus,
+  type PairingOffer,
+} from "./web-device-mesh";
 
 let cachedConnection: RuntimeConnection | null = null;
 let cachedConfig: DeploymentModeConfig | null = null;
+const WEB_DEPLOYMENT_CONFIG_KEY = "amitia.web.deployment.v1";
 
 export const LOCAL_DEVICE_RUNTIME_BASE_URL = "http://127.0.0.1:18899";
 
@@ -55,8 +68,11 @@ export async function getRuntimeConnection(): Promise<RuntimeConnection> {
 
   const api = window.amitiaDesktop;
   if (!api) {
-    const base =
-      (import.meta as any).env?.VITE_API_URL || window.location.origin;
+    const config = await getDeploymentConfig();
+    const configuredBase = config.mode === "cloud" && config.serverURL
+      ? config.serverURL
+      : (import.meta as any).env?.VITE_API_URL || window.location.origin;
+    const base = normalizeHTTPBaseURL(configuredBase);
     cachedConnection = {
       apiBaseURL: base,
       websocketBaseURL: toWebSocketBaseURL(base),
@@ -121,12 +137,14 @@ export async function resolveWebSocketUrl(path: string): Promise<string> {
   return conn.websocketBaseURL + path;
 }
 
-export async function getBackendAuthHeaders(): Promise<
-  Record<string, string>
-> {
+export async function getBackendAuthHeaders(
+  target: "local" | "business" = "business",
+): Promise<Record<string, string>> {
   const api = window.amitiaDesktop;
-  if (!api) return {};
-  return api.getBackendAuthHeaders();
+  if (api) return api.getBackendAuthHeaders(target);
+  if (target === "local") return {};
+  const baseURL = await getApiBaseURL();
+  return getWebDeviceAuthHeaders(baseURL);
 }
 
 export async function getDeploymentConfig(): Promise<DeploymentModeConfig> {
@@ -134,7 +152,23 @@ export async function getDeploymentConfig(): Promise<DeploymentModeConfig> {
 
   const api = window.amitiaDesktop;
   if (!api) {
-    cachedConfig = { mode: "local" };
+    try {
+      const raw = window.localStorage.getItem(WEB_DEPLOYMENT_CONFIG_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw) as DeploymentModeConfig;
+        if (parsed?.mode === "cloud" && parsed.serverURL) {
+          cachedConfig = { mode: "cloud", serverURL: normalizeHTTPBaseURL(parsed.serverURL) };
+          return cachedConfig;
+        }
+        if (parsed?.mode === "local") {
+          cachedConfig = { mode: "local" };
+          return cachedConfig;
+        }
+      }
+    } catch {
+      // Invalid browser-local deployment config falls back to same-origin Cloud UI.
+    }
+    cachedConfig = { mode: "cloud", serverURL: normalizeHTTPBaseURL(window.location.origin) };
     return cachedConfig;
   }
 
@@ -150,7 +184,12 @@ export async function saveDeploymentConfig(
 
   const api = window.amitiaDesktop;
   if (!api) {
-    throw new Error("当前环境不支持保存部署配置");
+    const normalized: DeploymentModeConfig = config.mode === "cloud"
+      ? { mode: "cloud", serverURL: normalizeHTTPBaseURL(config.serverURL || window.location.origin) }
+      : { mode: "local" };
+    window.localStorage.setItem(WEB_DEPLOYMENT_CONFIG_KEY, JSON.stringify(normalized));
+    cachedConfig = normalized;
+    return normalized;
   }
 
   cachedConfig = await api.saveDeploymentConfig(config);
@@ -165,6 +204,85 @@ export function clearRuntimeCache(): void {
 export function resetRuntimeConnectionCache(): void {
   cachedConnection = null;
   cachedConfig = null;
+}
+
+
+function sameOrigin(a: string, b: string): boolean {
+  try {
+    return new URL(a).origin === new URL(b).origin;
+  } catch {
+    return false;
+  }
+}
+
+export async function getCurrentDevicePairingStatus(baseURL: string): Promise<PairingStatus> {
+  const api = window.amitiaDesktop;
+  if (api?.getMeshPairingStatus) return api.getMeshPairingStatus(baseURL);
+  return getWebPairingStatus(baseURL);
+}
+
+export async function isCurrentDevicePaired(baseURL: string): Promise<boolean> {
+  const api = window.amitiaDesktop;
+  if (api?.getMeshStatus) {
+    const status = await api.getMeshStatus();
+    const state = String(status?.state || "").toLowerCase();
+    if (!status || ["", "unprovisioned", "revoked", "stopped"].includes(state)) return false;
+    const boundURL = String(status.cloudBaseUrl || "").trim();
+    return Boolean(boundURL) && sameOrigin(boundURL, baseURL);
+  }
+  return Boolean(getWebDeviceCredential(baseURL));
+}
+
+export async function provisionCurrentDeviceMesh(baseURL: string, pairing: PairingInput): Promise<void> {
+  const api = window.amitiaDesktop;
+  if (api?.provisionMesh) {
+    await api.provisionMesh(baseURL, pairing);
+    return;
+  }
+  await provisionWebDevice(baseURL, pairing);
+}
+
+export async function createCurrentDevicePairingOffer(baseURL: string, ttlSeconds = 600): Promise<PairingOffer> {
+  const api = window.amitiaDesktop;
+  if (api?.createMeshPairingOffer) return api.createMeshPairingOffer(baseURL, ttlSeconds);
+  return createWebPairingOffer(baseURL, ttlSeconds);
+}
+
+export async function deprovisionCurrentDeviceMesh(baseURL: string): Promise<void> {
+  const api = window.amitiaDesktop;
+  const identity = api?.getMeshIdentity
+    ? await api.getMeshIdentity()
+    : getWebDeviceMeshIdentity();
+  const authHeaders = api?.getBackendAuthHeaders
+    ? await api.getBackendAuthHeaders("business")
+    : getWebDeviceAuthHeaders(baseURL);
+
+  if (identity?.deviceId && authHeaders.Authorization) {
+    let response: Response;
+    try {
+      response = await fetch(`${baseURL.replace(/\/+$/, "")}/api/device-mesh/v1/devices/${encodeURIComponent(identity.deviceId)}`, {
+        method: "DELETE",
+        headers: { ...authHeaders, Accept: "application/json" },
+        credentials: api ? undefined : "include",
+      });
+    } catch (error: any) {
+      throw new Error(error?.message || "无法连接 Cloud Core，云端设备凭证尚未撤销");
+    }
+    if (!response.ok && response.status !== 401 && response.status !== 404) {
+      let message = `Cloud Core 撤销设备失败 (${response.status})`;
+      try {
+        const payload = await response.json();
+        message = String(payload?.message || payload?.msg || message);
+      } catch {}
+      throw new Error(message);
+    }
+  }
+
+  if (api?.deprovisionMesh) {
+    await api.deprovisionMesh();
+  } else {
+    clearWebDeviceCredential(baseURL);
+  }
 }
 
 export async function publishLocalVoiceASRFinal(

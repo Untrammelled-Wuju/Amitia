@@ -8,6 +8,7 @@
     <div class="ob-deploy-container">
       <div class="ob-deploy-options">
         <button
+          v-if="desktopAvailable"
           class="ob-deploy-option"
           :class="{ selected: deployMode === 'local' }"
           @click="$emit('update:deployMode', 'local')"
@@ -102,6 +103,7 @@ const emit = defineEmits<{
   checkRemote: [];
 }>();
 
+const desktopAvailable = typeof window !== "undefined" && Boolean(window.amitiaDesktop);
 const urlWarn = ref(false);
 const urlWarnMsg = ref("");
 

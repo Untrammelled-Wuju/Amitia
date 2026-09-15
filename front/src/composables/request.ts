@@ -14,11 +14,19 @@ import {
   isDeviceLocalApiPath,
   LOCAL_DEVICE_RUNTIME_BASE_URL,
 } from "@/runtime/runtime-adapter";
-import { ensureValidToken, forceCleanupSession } from "@/stores/refresh-coordinator";
 import { getDeviceTimezone } from "@/utils/requestEnvelope";
 import { resolveUIHostDeviceId } from "@/ui-runtime/deviceIdentity";
 
 const BASE_URL = (import.meta as any).env?.VITE_API_URL || "";
+
+function notifyWebAccessExpired(error: any): boolean {
+  if (typeof window === "undefined" || window.amitiaDesktop || Number(error?.response?.status) !== 401) return false;
+  const body = error?.response?.data as any;
+  const message = String(body?.msg || body?.message || "");
+  if (!message.includes("Web 登录已失效")) return false;
+  window.dispatchEvent(new CustomEvent("amitia:web-access-expired"));
+  return true;
+}
 
 export type ErrorSeverity = "toast" | "banner" | "panel" | "fatal";
 
@@ -94,12 +102,12 @@ export function classifyError(
       code === ERR.TOKEN_EXPIRED ||
       code === ERR.TOKEN_INVALID
     ) {
-      forceCleanupSession();
-      const PUBLIC_PATHS = ["/login", "/onboarding", "/privacy", "/usage-boundary"];
-      if (!PUBLIC_PATHS.includes(window.location.pathname)) {
-        window.location.href = "/login";
-      }
-      return { code, message: message || "Please login", severity: "fatal" };
+      return {
+        code,
+        message: message || "设备凭证无效或已过期，请重新配对当前设备",
+        detail,
+        severity: "toast",
+      };
     }
     return { code, message, detail, severity: "toast" };
   }
@@ -171,6 +179,7 @@ function isGameCenterApiPath(path: string): boolean {
 request.interceptors.request.use(async (config) => {
   const runtime = await getRuntimeConnection();
   const deployment = await getDeploymentConfig();
+  config.withCredentials = !window.amitiaDesktop;
   const requestPath = String(config.url ?? "");
   config.headers = config.headers ?? {};
 
@@ -195,14 +204,15 @@ request.interceptors.request.use(async (config) => {
   (config.headers as any)?.delete?.("X-Amitia-Management-Target");
   (config as any).__amitiaDeviceLocal = deviceLocal;
 
-  if ((deployment.mode === "local" || deviceLocal) && window.amitiaDesktop) {
-    const desktopHeaders = await getBackendAuthHeaders();
-    for (const [key, value] of Object.entries(desktopHeaders)) {
+  const publicPath = requestPath.split("?", 1)[0].startsWith("/api/public/");
+  if (!publicPath) {
+    const authHeaders = await getBackendAuthHeaders(deviceLocal ? "local" : "business");
+    for (const [key, value] of Object.entries(authHeaders)) {
       if (value) (config.headers as any)[key] = value;
     }
   }
 
-  (config.headers as any)["X-Amitia-Client-Type"] = "desktop";
+  (config.headers as any)["X-Amitia-Client-Type"] = window.amitiaDesktop ? "desktop" : "web";
   const deviceId = await resolveUIHostDeviceId();
   if (deviceId) {
     (config.headers as any)["X-Amitia-Device-ID"] = deviceId;
@@ -211,13 +221,6 @@ request.interceptors.request.use(async (config) => {
     }
   }
 
-  if (deviceLocal) {
-    delete (config.headers as any).Authorization;
-    (config.headers as any)?.delete?.("Authorization");
-  } else if (!(deployment.mode === "local" && window.amitiaDesktop)) {
-    const token = await ensureValidToken();
-    if (token) (config.headers as any).Authorization = `Bearer ${token}`;
-  }
 
   const timezone = getDeviceTimezone();
   if (timezone) (config.headers as any)["X-Device-Timezone"] = timezone;
@@ -238,13 +241,11 @@ request.interceptors.response.use(
     return response.data;
   },
   (error: AxiosError) => {
-    if (error?.response?.status === 401 && !(error.config as any)?.__amitiaDeviceLocal) {
-      forceCleanupSession();
-    }
     const body = (error.response?.data as ApiResponse) || null;
+    const webAccessExpired = notifyWebAccessExpired(error);
     const err = classifyError(body, error);
     err.raw = body;
-    displayError(err);
+    if (!webAccessExpired) displayError(err);
     return Promise.reject(err);
   },
 );

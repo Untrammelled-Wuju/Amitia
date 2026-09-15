@@ -10,7 +10,7 @@ SPDX-License-Identifier: AGPL-3.0-only
       </el-button>
       <div>
         <h2>用户协议与使用边界</h2>
-        <p>覆盖服务使用、账号设备、扩展工具、AI 安全边界和开源许可。</p>
+        <p>覆盖服务使用、个人空间与设备、扩展工具、AI 安全边界和开源许可。</p>
       </div>
     </div>
 
@@ -24,10 +24,10 @@ SPDX-License-Identifier: AGPL-3.0-only
       <el-divider />
 
       <section class="legal-section">
-        <h3>账号与设备</h3>
+        <h3>个人空间与设备</h3>
         <ul>
-          <li>账号用于身份鉴权、会话安全和云端设备归属。</li>
-          <li>设备绑定、登录会话、设备凭据和解除绑定应通过应用提供的真实接口完成。</li>
+          <li>Space ID 仅用于数据归属；云端认证由 Device Credential 完成。</li>
+          <li>设备配对、设备凭据、撤销与解除绑定应通过应用提供的真实 Device Mesh 接口完成。</li>
           <li>云端模式下业务 WebSocket 连接 Cloud Core，但设备本地 Runtime/Device Agent 仍可以承担设备侧能力。</li>
         </ul>
       </section>

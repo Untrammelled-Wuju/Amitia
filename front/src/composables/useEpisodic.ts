@@ -5,7 +5,7 @@ import { apiClient } from "../ui-index";
 
 export interface EpisodicMemory {
   id: string;
-  userId: string;
+  spaceId: string;
   sceneType: string;
   title: string;
   content: string;
@@ -57,7 +57,7 @@ export function useEpisodic() {
   const total = ref(0);
 
   async function fetchMemories(params?: {
-    userId?: string;
+    spaceId?: string;
     sceneType?: string;
     retentionLevel?: number;
     decayState?: string;

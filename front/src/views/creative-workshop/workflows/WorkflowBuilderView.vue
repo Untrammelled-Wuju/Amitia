@@ -599,7 +599,7 @@
               <template v-if="workflow.callableByAgent">
                 <label>Agent Tool 名称<el-input v-model="workflow.agentTool.name" placeholder="留空则自动生成" maxlength="64" @change="markDirty" /></label>
                 <label>Agent Tool 描述<el-input v-model="workflow.agentTool.description" type="textarea" :rows="3" placeholder="告诉模型何时调用这个工作流" maxlength="500" @change="markDirty" /></label>
-                <p class="panel-tip">启用并保存后，此工作流会按当前用户隔离注册到 Agent Tool Registry；禁用、关闭或删除时自动撤销。</p>
+                <p class="panel-tip">启用并保存后，此工作流会按当前 Space 隔离注册到 Agent Tool Registry；禁用、关闭或删除时自动撤销。</p>
               </template>
               <div class="reliability-card">
                 <div class="panel-title small">并发策略</div>
@@ -877,7 +877,7 @@ const mappingSourceGroups = computed(() => {
   groups.push({
     label: "运行时上下文",
     items: [
-      { label: "当前用户 · userId", ref: "runtime.userId" },
+      { label: "当前空间 · spaceId", ref: "runtime.spaceId" },
       { label: "当前会话 · conversationId", ref: "runtime.conversationId" },
       { label: "当前角色 · characterId", ref: "runtime.characterId" },
       { label: "根任务 · rootId", ref: "runtime.rootId" },

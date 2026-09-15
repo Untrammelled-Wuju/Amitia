@@ -58,6 +58,21 @@ export function useWebChatConversation(
     return id.startsWith("user-") || id.startsWith("failed-");
   }
 
+  async function conversationExistsOnServer(conversationID: string): Promise<boolean> {
+    try {
+      const page = await get<any>("/api/web-chat/conversations", {
+        page: 1,
+        pageSize: 100,
+      });
+      const items = page?.conversations || page?.items || [];
+      const total = Number(page?.total ?? items.length);
+      if (total > items.length) return true;
+      return items.some((item: any) => String(item?.id || "") === conversationID);
+    } catch {
+      return true;
+    }
+  }
+
   async function fetchLatestMessagesPage(conversationID: string) {
     const url = `/api/web-chat/conversations/${encodeURIComponent(conversationID)}/messages`;
     const first = await get<any>(url, { page: 1, pageSize: HISTORY_PAGE_SIZE });
@@ -158,6 +173,10 @@ export function useWebChatConversation(
     if (!characterId.value) return;
     const c = characters.value.find((x: any) => x.id === characterId.value);
     let dedicatedConvId = localStorage.getItem("webchat-conv-id") || c?.conversationId;
+    if (dedicatedConvId && !(await conversationExistsOnServer(dedicatedConvId))) {
+      localStorage.removeItem("webchat-conv-id");
+      dedicatedConvId = "";
+    }
     if (!dedicatedConvId) {
       try {
         const created = await post<any>("/api/web-chat/conversations", {

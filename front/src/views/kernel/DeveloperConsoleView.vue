@@ -309,7 +309,7 @@
           <el-table-column prop="scope" label="作用域" min-width="200" show-overflow-tooltip />
           <el-table-column prop="characterId" label="角色 ID" min-width="160" show-overflow-tooltip />
           <el-table-column prop="conversationId" label="会话 ID" min-width="160" show-overflow-tooltip />
-          <el-table-column prop="userId" label="用户 ID" min-width="160" show-overflow-tooltip />
+          <el-table-column prop="spaceId" label="Space ID" min-width="160" show-overflow-tooltip />
           <el-table-column label="活跃" width="80">
             <template #default="{ row }">
               <el-tag :type="row.active ? 'success' : 'info'" size="small">{{ row.active ? '是' : '否' }}</el-tag>
