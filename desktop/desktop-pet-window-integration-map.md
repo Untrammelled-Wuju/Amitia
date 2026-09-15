@@ -83,7 +83,7 @@ RuntimeSettings 实际归属:`backend/internal/desktoppet/installation/`(非顶�
 | 3.2 | click_through_mode 默认值冲突 | 迁移 SQL 默认 `'alpha'`,`service.go` 常量 `"off"` | 统一为单一值 + 迁移历史数据 |
 | 3.3 | 设置更新缺类型/范围校验 | `filterRuntimeSettingsUpdates` 仅校验列名(snake_case 白名单),无类型/范围 | 强类型 DTO + 校验 |
 | 3.4 | 设置接口未接受 camelCase | JSON 输出 camelCase,PATCH 仅接受 snake_case | 边界归一化层 |
-| 3.5 | UpdateRuntimeSettings 缺用户归属 | 无 userId 参数,仅校验 installation 存在 | 补 userId + `inst.UserID != userId` |
+| 3.5 | UpdateRuntimeSettings 缺 Space 归属 | 无 spaceId 参数,仅校验 installation 存在 | 补 spaceId + `inst.SpaceID != spaceId` |
 | 3.6 | Recenter 缺用户归属 | 同上 | 同上 |
 | 3.7 | Recenter 写 0 无几何语义 | `position_x=0/position_y=0/screen_id=""` | 改命令语义,Electron 计算后回报 |
 | 3.8 | screen_id 不稳定 | 仅 `String(display.id)` | 补 display_fingerprint + 归一化位置 |

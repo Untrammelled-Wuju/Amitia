@@ -1,5 +1,6 @@
 import { BrowserWindow } from "electron";
-import { getAccessToken } from "../auth-token-store";
+import { getDesktopAuthHeaders } from "../backend-session-client";
+import { getMeshCloudAuth } from "../device-mesh/local-agent-client";
 import {
   ArtifactMetadata,
   ArtifactKind,
@@ -12,7 +13,6 @@ import {
 
 export interface ArtifactClientOptions {
   baseURL: string;
-  tokenProvider?: () => string | null;
   mainWindow?: BrowserWindow;
 }
 
@@ -30,26 +30,33 @@ export class BusinessCoreArtifactClient {
     return this.options.baseURL.replace(/\/$/, "");
   }
 
-  private get token(): string | null {
-    if (this.options.tokenProvider) {
-      return this.options.tokenProvider();
-    }
-    return getAccessToken();
-  }
-
-  private headers(extra?: Record<string, string>): Record<string, string> {
+  private async headers(extra?: Record<string, string>): Promise<Record<string, string>> {
     const headers: Record<string, string> = { ...extra };
-    const token = this.token;
-    if (token) {
-      headers["Authorization"] = `Bearer ${token}`;
+    const cloudAuth = await getMeshCloudAuth();
+    let useCloudCredential = false;
+    if (cloudAuth?.authorization) {
+      try {
+        useCloudCredential = new URL(cloudAuth.cloudBaseUrl).origin === new URL(this.baseURL).origin;
+      } catch {}
     }
-    return headers;
+    if (useCloudCredential && cloudAuth) {
+      headers["Authorization"] = cloudAuth.authorization;
+      headers["X-Amitia-Space-ID"] = cloudAuth.spaceId;
+      headers["X-Amitia-Device-ID"] = cloudAuth.deviceId;
+      headers["X-Amitia-Runtime-ID"] = cloudAuth.runtimeId;
+      return headers;
+    }
+    try {
+      return { ...getDesktopAuthHeaders(), ...headers };
+    } catch {
+      return headers;
+    }
   }
 
   async getMetadata(artifactId: string): Promise<ArtifactMetadata> {
     const res = await fetch(`${this.baseURL}/api/artifacts/v1/${artifactId}`, {
       method: "GET",
-      headers: this.headers(),
+      headers: await this.headers(),
     });
     if (!res.ok) {
       throw new Error(`artifact_metadata_failed: ${res.status}`);
@@ -61,7 +68,7 @@ export class BusinessCoreArtifactClient {
   async delete(artifactId: string): Promise<void> {
     const res = await fetch(`${this.baseURL}/api/artifacts/v1/${artifactId}`, {
       method: "DELETE",
-      headers: this.headers(),
+      headers: await this.headers(),
     });
     if (!res.ok) {
       throw new Error(`artifact_delete_failed: ${res.status}`);
@@ -109,36 +116,33 @@ export class BusinessCoreArtifactClient {
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
       xhr.open("POST", `${this.baseURL}/api/artifacts/v1`);
-      const token = this.token;
-      if (token) {
-        xhr.setRequestHeader("Authorization", `Bearer ${token}`);
-      }
+      void this.headers().then((authHeaders) => {
+        for (const [key, value] of Object.entries(authHeaders)) xhr.setRequestHeader(key, value);
 
-      xhr.upload.onprogress = (event) => {
-        if (event.lengthComputable && onProgress) {
-          onProgress({ loaded: event.loaded, total: event.total });
-        }
-      };
-
-      xhr.onload = () => {
-        if (xhr.status >= 200 && xhr.status < 300) {
-          try {
-            const data = JSON.parse(xhr.responseText);
-            resolve(data.artifact as ArtifactMetadata);
-          } catch (e) {
-            reject(new Error("invalid_artifact_response"));
+        xhr.upload.onprogress = (event) => {
+          if (event.lengthComputable && onProgress) {
+            onProgress({ loaded: event.loaded, total: event.total });
           }
-        } else {
-          reject(new Error(`artifact_upload_failed: ${xhr.status}`));
-        }
-      };
+        };
 
-      xhr.onerror = () => reject(new Error("artifact_upload_network_error"));
-      xhr.onabort = () => reject(new Error("artifact_upload_aborted"));
-      xhr.timeout = 600000;
-      xhr.ontimeout = () => reject(new Error("artifact_upload_timeout"));
-
-      xhr.send(fd);
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            try {
+              const data = JSON.parse(xhr.responseText);
+              resolve(data.artifact as ArtifactMetadata);
+            } catch {
+              reject(new Error("invalid_artifact_response"));
+            }
+          } else {
+            reject(new Error(`artifact_upload_failed: ${xhr.status}`));
+          }
+        };
+        xhr.onerror = () => reject(new Error("artifact_upload_network_error"));
+        xhr.onabort = () => reject(new Error("artifact_upload_aborted"));
+        xhr.timeout = 600000;
+        xhr.ontimeout = () => reject(new Error("artifact_upload_timeout"));
+        xhr.send(fd);
+      }).catch(reject);
     });
   }
 }

@@ -7,15 +7,15 @@ import type { DeploymentModeConfig } from "../shared/types";
 import { ConfigStore } from "./config-store";
 import type { DesktopRuntimeManager } from "../runtime/runtime-manager";
 import { refreshTrayMenu } from "./tray";
-import { setAuthToken } from "./auth-token-store";
 import { getDesktopAuthHeaders } from "./backend-session-client";
 import { getMeshCoordinator } from "./device-mesh/coordinator";
-import { getMeshIdentity, getMeshStatus, publishLocalVoiceASRFinal } from "./device-mesh/local-agent-client";
+import { getMeshCloudAuth, getMeshIdentity, getMeshStatus, publishLocalVoiceASRFinal } from "./device-mesh/local-agent-client";
 import {
   listDevices as cloudListDevices,
   revokeDevice as cloudRevokeDevice,
   probeRuntime as cloudProbeRuntime,
-  createBootstrapTicket,
+  getPairingStatus as cloudGetPairingStatus,
+  createPairingOffer as cloudCreatePairingOffer,
 } from "./device-mesh/remote-bootstrap-client";
 
 export function registerIpcHandlers(
@@ -269,6 +269,34 @@ export function registerIpcHandlers(
     BrowserWindow.fromWebContents(event.sender)?.close();
   });
 
+  ipcMain.handle(IPC_CHANNELS.editCommand, (event, command: string) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (!win) return;
+    switch (command) {
+      case "undo":
+        win.webContents.undo();
+        break;
+      case "redo":
+        win.webContents.redo();
+        break;
+      case "cut":
+        win.webContents.cut();
+        break;
+      case "copy":
+        win.webContents.copy();
+        break;
+      case "paste":
+        win.webContents.paste();
+        break;
+      case "selectAll":
+        win.webContents.selectAll();
+        break;
+      case "delete":
+        win.webContents.delete();
+        break;
+    }
+  });
+
   ipcMain.handle(IPC_CHANNELS.quitApp, () => {
     app.quit();
   });
@@ -342,11 +370,27 @@ export function registerIpcHandlers(
     clipboard.writeText(text);
   });
 
-  ipcMain.handle(IPC_CHANNELS.setAuthToken, async (_event, token: string) => {
-    setAuthToken(token || null);
+  ipcMain.handle(IPC_CHANNELS.clipboardReadText, () => {
+    return clipboard.readText();
   });
 
-  ipcMain.handle(IPC_CHANNELS.getBackendAuthHeaders, async () => {
+  ipcMain.handle(IPC_CHANNELS.getBackendAuthHeaders, async (_event, target: "local" | "business" = "business") => {
+    if (target === "local") {
+      return getDesktopAuthHeaders();
+    }
+    const deployment = await configStore.getDeploymentConfig();
+    if (deployment.mode === "cloud") {
+      const cloudAuth = await getMeshCloudAuth();
+      if (!cloudAuth?.authorization) {
+        return {};
+      }
+      return {
+        Authorization: cloudAuth.authorization,
+        "X-Amitia-Device-ID": cloudAuth.deviceId,
+        "X-Amitia-Runtime-ID": cloudAuth.runtimeId,
+        "X-Amitia-Space-ID": cloudAuth.spaceId,
+      };
+    }
     return getDesktopAuthHeaders();
   });
 
@@ -362,12 +406,12 @@ export function registerIpcHandlers(
     return getMeshIdentity();
   });
 
-  ipcMain.handle(IPC_CHANNELS.meshProvision, async (_event, cloudBaseUrl: string) => {
+  ipcMain.handle(IPC_CHANNELS.meshProvision, async (_event, cloudBaseUrl: string, pairing?: { offerToken?: string; setupCode?: string }) => {
     if (!cloudBaseUrl || typeof cloudBaseUrl !== "string") {
       throw new Error("cloudBaseUrl is required");
     }
     const coordinator = getMeshCoordinator(getMainWindow ?? (() => null));
-    await coordinator.provision(cloudBaseUrl);
+    await coordinator.provision(cloudBaseUrl, pairing);
     return { ok: true };
   });
 
@@ -375,6 +419,15 @@ export function registerIpcHandlers(
     const coordinator = getMeshCoordinator(getMainWindow ?? (() => null));
     await coordinator.deprovision();
     return { ok: true };
+  });
+
+
+  ipcMain.handle(IPC_CHANNELS.meshPairingStatus, async (_event, cloudBaseUrl: string) => {
+    return cloudGetPairingStatus(cloudBaseUrl);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.meshCreatePairingOffer, async (_event, cloudBaseUrl: string, ttlSeconds = 600) => {
+    return cloudCreatePairingOffer(cloudBaseUrl, ttlSeconds);
   });
 
   ipcMain.handle(IPC_CHANNELS.meshCloudListDevices, async (_event, cloudBaseUrl: string) => {
@@ -390,16 +443,4 @@ export function registerIpcHandlers(
     return cloudProbeRuntime(cloudBaseUrl, deviceId, runtimeId);
   });
 
-  ipcMain.handle("amitia:mesh:cloud:create-ticket", async (_event, cloudBaseUrl: string, label?: string) => {
-    const identity = await getMeshIdentity();
-    if (!identity) {
-      throw new Error("local device-mesh identity unavailable");
-    }
-    return createBootstrapTicket(cloudBaseUrl, {
-      deviceId: identity.deviceId,
-      runtimeId: identity.runtimeId,
-      platform: identity.platform,
-      label: label ?? `Desktop ${identity.deviceId}`,
-    });
-  });
 }

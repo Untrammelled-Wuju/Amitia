@@ -86,6 +86,9 @@ const api = {
   writeClipboardText(text: string): Promise<void> {
     return ipcRenderer.invoke(IPC_CHANNELS.clipboardWriteText, text);
   },
+  readClipboardText(): Promise<string> {
+    return ipcRenderer.invoke(IPC_CHANNELS.clipboardReadText);
+  },
   notifyDesktopPetChatState(payload: {
     state:
       | "assistant_listening"
@@ -98,11 +101,8 @@ const api = {
   }): void {
     ipcRenderer.send("chat:state-change", payload);
   },
-  setAuthToken(token: string): Promise<void> {
-    return ipcRenderer.invoke(IPC_CHANNELS.setAuthToken, token);
-  },
-  getBackendAuthHeaders(): Promise<Record<string, string>> {
-    return ipcRenderer.invoke(IPC_CHANNELS.getBackendAuthHeaders);
+  getBackendAuthHeaders(target: "local" | "business" = "business"): Promise<Record<string, string>> {
+    return ipcRenderer.invoke(IPC_CHANNELS.getBackendAuthHeaders, target);
   },
   publishLocalVoiceASRFinal(event: LocalVoiceASRFinalEvent): Promise<{ accepted: boolean; eventId: string; eventType: string }> {
     return ipcRenderer.invoke(IPC_CHANNELS.publishLocalVoiceASRFinal, event);
@@ -110,8 +110,17 @@ const api = {
   getMeshIdentity(): Promise<{ deviceId: string; runtimeId: string; platform: string } | null> {
     return ipcRenderer.invoke(IPC_CHANNELS.meshGetIdentity);
   },
-  getMeshStatus(): Promise<{ state: string; deviceId: string; runtimeId: string; runtimeSessionId: string } | null> {
+  getMeshStatus(): Promise<{ state: string; cloudBaseUrl: string; deviceId: string; runtimeId: string; runtimeSessionId: string } | null> {
     return ipcRenderer.invoke(IPC_CHANNELS.meshGetStatus);
+  },
+  getMeshPairingStatus(cloudBaseUrl: string): Promise<{ spaceId: string; trustedDeviceCount: number; firstDeviceSetupRequired: boolean }> {
+    return ipcRenderer.invoke(IPC_CHANNELS.meshPairingStatus, cloudBaseUrl);
+  },
+  createMeshPairingOffer(cloudBaseUrl: string, ttlSeconds = 600): Promise<{ offerId: string; offerToken: string; qrPayload: string; expiresAt: string }> {
+    return ipcRenderer.invoke(IPC_CHANNELS.meshCreatePairingOffer, cloudBaseUrl, ttlSeconds);
+  },
+  provisionMesh(cloudBaseUrl: string, pairing?: { offerToken?: string; setupCode?: string }): Promise<{ ok: boolean }> {
+    return ipcRenderer.invoke(IPC_CHANNELS.meshProvision, cloudBaseUrl, pairing);
   },
   deprovisionMesh(): Promise<{ ok: boolean }> {
     return ipcRenderer.invoke(IPC_CHANNELS.meshDeprovision);
@@ -228,6 +237,9 @@ contextBridge.exposeInMainWorld("electronWindowApi", {
       return ipcRenderer.invoke("window-close", "main");
     }
     return ipcRenderer.invoke("window-close", "child");
+  },
+  editCommand: (command: "undo" | "redo" | "cut" | "copy" | "paste" | "selectAll" | "delete") => {
+    return ipcRenderer.invoke(IPC_CHANNELS.editCommand, command);
   },
   isMaximized: () => ipcRenderer.invoke("window-is-maximized"),
   getWindowType: () => ipcRenderer.invoke("get-window-type"),

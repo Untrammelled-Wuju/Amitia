@@ -11,7 +11,6 @@ export interface RuntimeConnection {
   mode: RuntimeMode;
   apiBaseURL: string;
   websocketBaseURL: string;
-  accessToken?: string;
 }
 
 export type RuntimeState =

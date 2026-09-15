@@ -132,7 +132,7 @@ async function connectHandler(
     {
       url: "ws://127.0.0.1/runtime?deviceId=device-1&runtimeId=runtime-1",
       bootstrapTicket: "ticket-1",
-      userId: "user-1",
+      spaceId: "user-1",
       deviceId: "device-1",
       runtimeId: "runtime-1",
       autoReconnect: false,
@@ -160,7 +160,7 @@ async function connectHandler(
 
   const hello = JSON.parse(ws.sent[0] ?? "{}") as RuntimeEnvelope;
   expect(hello.messageType).toBe("hello");
-  expect(hello.userId).toBe("user-1");
+  expect(hello.spaceId).toBe("user-1");
   expect(hello.deviceId).toBe("device-1");
   expect(hello.runtimeId).toBe("runtime-1");
 
@@ -228,7 +228,7 @@ describe("DesktopRuntimeHandlerV1", () => {
         {
           url: "ws://127.0.0.1/runtime?deviceId=device-1&runtimeId=runtime-1",
           bootstrapTicket: "ticket-1",
-          userId: "user-1",
+          spaceId: "user-1",
           deviceId: "device-1",
           runtimeId: "runtime-1",
           autoReconnect: false,
@@ -324,7 +324,7 @@ describe("DesktopRuntimeHandlerV1", () => {
       {
         url: "ws://127.0.0.1/runtime?deviceId=device-1&runtimeId=runtime-1",
         bootstrapTicket: "ticket-1",
-        userId: "user-1",
+        spaceId: "user-1",
         deviceId: "device-1",
         runtimeId: "runtime-1",
         autoReconnect: false,
@@ -786,7 +786,7 @@ describe("DesktopRuntimeHandlerV1", () => {
       {
         url: "ws://127.0.0.1/runtime?deviceId=device-1&runtimeId=runtime-1",
         bootstrapTicket: "ticket-1",
-        userId: "user-1",
+        spaceId: "user-1",
         deviceId: "device-1",
         runtimeId: "runtime-1",
         autoReconnect: true,

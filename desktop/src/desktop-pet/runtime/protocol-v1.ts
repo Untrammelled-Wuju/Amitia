@@ -90,7 +90,7 @@ export interface RuntimeEnvelope {
   messageId: string;
   correlationId?: string;
   causationId?: string;
-  userId: string;
+  spaceId: string;
   deviceId: string;
   runtimeId: string;
   runtimeSessionId: string;
@@ -285,7 +285,7 @@ export function buildHelloPayload(input: {
 export function buildEnvelope<T>(
   msgType: RuntimeMessageType,
   msgName: string,
-  userId: string,
+  spaceId: string,
   deviceId: string,
   runtimeId: string,
   sessionId: string,
@@ -302,7 +302,7 @@ export function buildEnvelope<T>(
     messageId: `msg_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`,
     correlationId: undefined,
     causationId: undefined,
-    userId,
+    spaceId,
     deviceId,
     runtimeId,
     runtimeSessionId: sessionId,

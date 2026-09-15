@@ -83,6 +83,34 @@ export async function getMeshIdentity(): Promise<DeviceMeshLocalIdentity | null>
   }
 }
 
+
+export interface DeviceMeshCloudAuth {
+  authorization: string;
+  cloudBaseUrl: string;
+  spaceId: string;
+  deviceId: string;
+  runtimeId: string;
+  expiresAt: string;
+}
+
+export async function getMeshCloudAuth(): Promise<DeviceMeshCloudAuth | null> {
+  try {
+    const res = await httpRequest(
+      LOCAL_MESH_BASE_URL,
+      "/internal/device-mesh/cloud-auth",
+      "GET",
+      undefined,
+      getAuthHeaders(),
+    );
+    if (res.status !== 200) return null;
+    const parsed = JSON.parse(res.data) as DeviceMeshCloudAuth;
+    if (!parsed.authorization?.startsWith("AmitiaDevice ")) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
 export async function getMeshStatus(): Promise<DeviceMeshStatusResponse | null> {
   try {
     const res = await httpRequest(

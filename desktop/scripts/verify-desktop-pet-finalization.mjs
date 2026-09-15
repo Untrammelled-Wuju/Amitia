@@ -301,8 +301,8 @@ assert(
 assert(
   runtimeRouter.includes("RUNTIME_ID_AMBIGUOUS") &&
     runtimeRouter.includes('strings.TrimSpace(c.Query("deviceId"))') &&
-    runtimeRouter.includes("facade.ListConnections(userID)") &&
-    !runtimeRouter.includes('facade.GetConnection(userID, "", runtimeID)') &&
+    runtimeRouter.includes("facade.ListConnections(spaceID)") &&
+    !runtimeRouter.includes('facade.GetConnection(spaceID, "", runtimeID)') &&
     runtimeRouter.includes("websocket.CloseProtocolError") &&
     runtimeRouter.includes("malformed runtime envelope"),
   "runtime status lookup must honor device ownership and malformed websocket frames must fail-close with protocol error",
@@ -321,10 +321,10 @@ assert(
   "runtime settings must fail closed on malformed authoritative flags and installation identity mismatches",
 );
 assert(
-  backendInstallationRepository.includes('Where("id = ? AND user_id = ?", installationID, userID)') &&
+  backendInstallationRepository.includes('Where("id = ? AND space_id = ?", installationID, spaceID)') &&
     backendInstallationRepository.includes(`Where("device_id = ? OR device_id = ''", deviceID)`) &&
     backendInstallationRepository.includes("UpdateRuntimeSettingsCAS"),
-  "runtime settings repository must enforce installation user/device ownership before read or CAS update",
+  "runtime settings repository must enforce installation Space/device ownership before read or CAS update",
 );
 assert(
   manager.includes("ack.currentDesiredRevision") &&
@@ -352,7 +352,7 @@ assert(
     migrationBaseline.includes("ALTER TABLE desktop_pet_runtime_actual_states_v2 ADD COLUMN scale") &&
     migrationBaseline.includes("CREATE TABLE IF NOT EXISTS desktop_pet_behavior_mesh_affinities") &&
     migrationBaseline.includes("CREATE TABLE IF NOT EXISTS desktop_pet_behavior_mesh_outbox") &&
-    migrationBaseline.includes("PRIMARY KEY(cloud_user_id, event_id)") &&
+    migrationBaseline.includes("PRIMARY KEY(cloud_space_id, event_id)") &&
     migrationBaseline.includes("payload_hash TEXT NOT NULL DEFAULT ''") &&
     migrationBaseline.includes("target_installation_id TEXT NOT NULL DEFAULT ''") &&
     migrationBaseline.includes("idx_dpbmo_claim") &&

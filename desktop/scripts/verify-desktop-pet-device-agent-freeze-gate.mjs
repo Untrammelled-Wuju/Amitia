@@ -130,10 +130,10 @@ assert(
 );
 assert(
   meshRuntime.includes("InvokeDeviceHandlerWithRuntimeType") &&
-    meshHub.includes("ListByUser") &&
+    meshHub.includes("ListBySpace") &&
     localHandler.includes("SetCredentialObserver") &&
-    !behaviorMesh.includes("GetPreferredByUser"),
-  "Desktop Pet behavior routing must enumerate authenticated user devices and must never select by freshest heartbeat",
+    !behaviorMesh.includes("GetPreferredBySpace"),
+  "Desktop Pet behavior routing must enumerate authenticated Space devices and must never select by freshest heartbeat",
 );
 assert(
   runtimeBehaviorMigration.includes('"target_installation_id"') ||
@@ -162,7 +162,7 @@ assert(
     behaviorMesh.includes("outbox claim lost before target fence persistence") &&
     behaviorMesh.includes("resolveOnDevice") &&
     behaviorMesh.includes("desktopPetBehaviorMeshResolveHandler") &&
-    behaviorMesh.includes("GetActiveBindingForUserDeviceTx") &&
+    behaviorMesh.includes("GetActiveBindingForSpaceDeviceTx") &&
     behaviorMesh.includes("target device %s is offline") &&
     behaviorMesh.includes("concrete outbox target is an execution fence") &&
     behaviorMesh.includes("pinned target device %s no longer owns the active installation"),

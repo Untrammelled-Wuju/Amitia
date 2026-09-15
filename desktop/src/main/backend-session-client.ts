@@ -239,7 +239,7 @@ export function getLocalRootTokenForMainProcess(): string {
 export interface RuntimeBootstrapTicketResponse {
   ticketId: string;
   ticket: string;
-  userId: string;
+  spaceId: string;
   deviceId: string;
   runtimeId: string;
   expiresAt: string;

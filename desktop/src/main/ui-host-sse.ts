@@ -64,12 +64,6 @@ export class UIHostSSE {
   private async connect(): Promise<void> {
     if (this.stopped) return;
 
-    const token = this.businessCore.authHeaders().Authorization;
-    if (!token) {
-      this.scheduleReconnect();
-      return;
-    }
-
     this.abortController = new AbortController();
     const path = "/api/proactive-sse?clientId=electron-ui-host";
 

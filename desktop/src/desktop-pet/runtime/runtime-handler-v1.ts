@@ -75,7 +75,7 @@ export interface RuntimePendingOutboundEntry {
 export interface RuntimeHandlerConfig {
   url: string;
   bootstrapTicket: string;
-  userId: string;
+  spaceId: string;
   deviceId: string;
   runtimeId: string;
   runtimeVersion?: string;
@@ -236,7 +236,7 @@ export class DesktopRuntimeHandlerV1 {
     this.config = {
       url: config.url,
       bootstrapTicket: config.bootstrapTicket,
-      userId: config.userId,
+      spaceId: config.spaceId,
       deviceId: config.deviceId,
       runtimeId: config.runtimeId,
       runtimeVersion: config.runtimeVersion ?? DESKTOP_PET_RUNTIME_VERSION,
@@ -734,7 +734,7 @@ export class DesktopRuntimeHandlerV1 {
     const envelope = buildEnvelope(
       type,
       name,
-      this.config.userId,
+      this.config.spaceId,
       this.config.deviceId,
       this.config.runtimeId,
       this.sessionId,
@@ -816,7 +816,7 @@ export class DesktopRuntimeHandlerV1 {
     if (!envelope || envelope.envelopeVersion !== 1 || envelope.protocol !== "amitia.desktop-pet.runtime") {
       throw new Error("invalid runtime server envelope protocol");
     }
-    if (envelope.userId !== this.config.userId ||
+    if (envelope.spaceId !== this.config.spaceId ||
         envelope.deviceId !== this.config.deviceId ||
         envelope.runtimeId !== this.config.runtimeId) {
       throw new Error("runtime server envelope identity mismatch");
@@ -1059,7 +1059,7 @@ export class DesktopRuntimeHandlerV1 {
     const expiryValidation = isEphemeralRuntimeCommand(command.commandType)
       ? validateAuthoritativeExpiry(command.expiresAt)
       : { ok: true as const };
-    if (!expiryValidation.ok) {
+    if (expiryValidation.ok === false) {
       result = {
         commandId: command.commandId,
         status: expiryValidation.status,
@@ -1288,7 +1288,7 @@ export class DesktopRuntimeHandlerV1 {
       messageType: "state_snapshot",
       messageName: "state_snapshot",
       messageId: `snap_${Date.now()}`,
-      userId: this.config.userId,
+      spaceId: this.config.spaceId,
       deviceId: this.config.deviceId,
       runtimeId: this.config.runtimeId,
       runtimeSessionId: this.sessionId,

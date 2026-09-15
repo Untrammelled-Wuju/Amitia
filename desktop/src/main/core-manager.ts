@@ -143,12 +143,6 @@ function migrateConfig(configPath: string): void {
   }
 }
 
-const KNOWN_INSECURE_JWT_SECRETS = new Set([
-  "IJ8ffa4-WAmfBfTFnmEdwdRx1k2kooXHgFQpYMVMUjs",
-  "gIWcNHCKHdZWQyOanUhLvhLOVFgz1Z64G0xDYsUNWGA",
-  "zTMPXMQGsKBp0WuYlEWHZNLaUOd2lPbFeRSu1fRNrBU",
-]);
-
 type YamlScalarLocation = {
   index: number;
   indent: number;
@@ -226,15 +220,6 @@ function ensureGeneratedRuntimeSecrets(configPath: string): void {
 
     const { randomBytes } = require("crypto");
     let changed = false;
-
-    const jwtPath = ["jwt", "secret"];
-    const jwt = findYamlScalar(lines, jwtPath);
-    const jwtSecret = jwt?.value.trim() ?? "";
-    if (jwtSecret.length < 32 || KNOWN_INSECURE_JWT_SECRETS.has(jwtSecret)) {
-      setYamlScalar(lines, jwtPath, randomBytes(48).toString("base64url"));
-      changed = true;
-      console.warn("[CoreManager] 检测到缺失/不安全的 JWT Secret，已完成本机随机轮换；现有登录会话需要重新登录");
-    }
 
     const surrealPasswordPath = ["providers", "graphStore", "surrealdb", "password"];
     const surrealPassword = findYamlScalar(lines, surrealPasswordPath)?.value.trim() ?? "";

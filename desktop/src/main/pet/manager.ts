@@ -80,7 +80,7 @@ const CORE_BASE_HOST = "127.0.0.1";
 const CORE_BASE_PORT = 18899;
 const API_BASE_PATH = "/api/desktop-pets";
 const HEALTH_CHECK_PATH = "/livez";
-const DEFAULT_USER_ID = "default";
+const DEFAULT_SPACE_ID = "default";
 const DEFAULT_ALPHA_THRESHOLD = 10;
 const DRAG_RUNTIME_MOVE_MIN_INTERVAL_MS = 150;
 
@@ -130,7 +130,7 @@ export type PetManagerState =
 
 export interface InstallationInfo {
   id: string;
-  userId: string;
+  spaceId: string;
   packageId: string;
   packageVersion: string;
   name: string;
@@ -176,7 +176,7 @@ export interface RuntimeSettingsInfo {
 }
 
 export interface PetManagerDeps {
-  userId?: string;
+  spaceId?: string;
   resourceLoader?: ResourceLoader;
   resourceCache?: ResourceCache;
   alphaThreshold?: number;
@@ -220,7 +220,7 @@ export interface PetStatePayload {
 }
 
 export interface PetManagerOptions {
-  userId?: string;
+  spaceId?: string;
 }
 
 interface ApiEnvelope<T> {
@@ -231,7 +231,7 @@ interface ApiEnvelope<T> {
 
 interface InstallationApiPayload {
   id: string;
-  userId: string;
+  spaceId: string;
   packageId: string;
   packageVersion: string;
   name: string;
@@ -347,7 +347,7 @@ function normalizePositionMode(value: string | undefined): "absolute" | "relativ
 function mapInstallationPayload(payload: InstallationApiPayload): InstallationInfo {
   return {
     id: payload.id,
-    userId: payload.userId,
+    spaceId: payload.spaceId,
     packageId: payload.packageId,
     packageVersion: payload.packageVersion,
     name: payload.name,
@@ -415,7 +415,7 @@ function mapRuntimeSettingsPayload(payload: RuntimeSettingsApiPayload): RuntimeS
 }
 
 export class DesktopPetManager {
-  private readonly userId: string;
+  private readonly spaceId: string;
   private readonly coreHost: string;
   private readonly corePort: number;
   private readonly resourceLoader: ResourceLoader;
@@ -504,7 +504,7 @@ export class DesktopPetManager {
 
   constructor(deps?: PetManagerDeps) {
     const opts = deps ?? {};
-    this.userId = opts.userId ?? DEFAULT_USER_ID;
+    this.spaceId = opts.spaceId ?? DEFAULT_SPACE_ID;
     this.coreHost = opts.coreHost ?? CORE_BASE_HOST;
     this.corePort = opts.corePort ?? CORE_BASE_PORT;
     this.runtimeVersion = opts.runtimeVersion ?? DESKTOP_PET_RUNTIME_VERSION;
@@ -522,8 +522,8 @@ export class DesktopPetManager {
     this.authToken = token && token.length > 0 ? token : null;
   }
 
-  getUserId(): string {
-    return this.userId;
+  getSpaceId(): string {
+    return this.spaceId;
   }
 
   getState(): PetManagerState {
@@ -3519,7 +3519,7 @@ export class DesktopPetManager {
       const handlerConfig: RuntimeHandlerConfig = {
         url: wsUrl,
         bootstrapTicket: issued.ticket,
-        userId: issued.userId,
+        spaceId: issued.spaceId,
         deviceId,
         runtimeId,
         runtimeVersion: this.runtimeVersion,
@@ -4335,7 +4335,7 @@ export {
   PET_ACTION_SWITCH_CHANNEL,
   PET_LOAD_ERROR_CHANNEL,
   PET_STATE_CHANNEL,
-  DEFAULT_USER_ID,
+  DEFAULT_SPACE_ID,
 };
 
 export type {
