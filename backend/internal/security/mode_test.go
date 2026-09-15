@@ -38,19 +38,9 @@ func TestSecurityConfigValidate(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name: "network mode empty secret",
+			name: "network mode uses paired device credential middleware",
 			cfg: SecurityConfig{
 				Mode:          SecurityModeNetwork,
-				JWTSecret:     "",
-				ListenAddress: "127.0.0.1:8080",
-			},
-			wantErr: true,
-		},
-		{
-			name: "network mode with secret",
-			cfg: SecurityConfig{
-				Mode:          SecurityModeNetwork,
-				JWTSecret:     "test-secret-key-that-is-long-enough-for-security",
 				ListenAddress: "0.0.0.0:8080",
 			},
 			wantErr: false,
@@ -99,15 +89,6 @@ func TestSecurityConfigValidate(t *testing.T) {
 				ListenAddress: "127.0.0.1:8080",
 			},
 			wantErr: true,
-		},
-		{
-			name: "maintenance with jwt",
-			cfg: SecurityConfig{
-				Mode:          SecurityModeMaintenance,
-				JWTSecret:     "test-secret",
-				ListenAddress: "127.0.0.1:8080",
-			},
-			wantErr: false,
 		},
 		{
 			name: "maintenance with local token",

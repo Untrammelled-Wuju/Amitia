@@ -28,8 +28,8 @@ func (l *SanitizedLogger) LogRequest(c *gin.Context, duration time.Duration, sta
 		zap.String("user-agent", c.Request.UserAgent()),
 	}
 	if actor, err := GetActorFromContext(c); err == nil {
-		fields = append(fields, zap.String("actor", string(actor.UserID)))
-		fields = append(fields, zap.String("actorType", string(actor.ActorType)))
+		fields = append(fields, zap.String("actor", string(actor.SpaceID)))
+		fields = append(fields, zap.String("principalType", string(actor.PrincipalType)))
 		fields = append(fields, zap.String("requestID", actor.RequestID))
 	}
 	l.base.Info("request", fields...)

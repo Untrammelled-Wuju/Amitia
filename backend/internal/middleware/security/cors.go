@@ -59,6 +59,7 @@ func CorsMiddleware(cfg CorsConfig) gin.HandlerFunc {
 				return
 			}
 			c.Header("Access-Control-Allow-Origin", origin)
+			c.Header("Access-Control-Allow-Credentials", "true")
 			c.Header("Vary", "Origin, Access-Control-Request-Headers")
 		}
 

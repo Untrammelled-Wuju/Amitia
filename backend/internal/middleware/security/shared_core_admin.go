@@ -8,6 +8,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/u-ai/backend/config"
+	"github.com/u-ai/backend/internal/auth"
 )
 
 // SharedCoreAdminOnly protects server-global configuration and control surfaces.
@@ -20,10 +21,10 @@ func SharedCoreAdminOnly() gin.HandlerFunc {
 			return
 		}
 		actor := GetActor(c)
-		if actor == nil || !actor.HasRole("admin") {
+		if actor == nil || !actor.HasPermission(auth.PermSystemAdmin) {
 			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
 				"code": http.StatusForbidden,
-				"msg":  "shared Cloud Core administration requires admin role",
+				"msg":  "shared Cloud Core administration requires system.admin capability",
 			})
 			return
 		}

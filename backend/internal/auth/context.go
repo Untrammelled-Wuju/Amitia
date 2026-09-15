@@ -9,26 +9,26 @@ import (
 	"github.com/u-ai/backend/internal/runtimeidentity"
 )
 
-type ActorType string
+type PrincipalType string
 
 const (
-	ActorTypeUser          ActorType = "user"
-	ActorTypeLocalUser     ActorType = "local_user"
-	ActorTypeLocalAdmin    ActorType = "local_admin"
-	ActorTypeAdmin         ActorType = "admin"
-	ActorTypeSystemWorker  ActorType = "system_worker"
-	ActorTypeRuntimeClient ActorType = "runtime_client"
-	ActorTypeMigration     ActorType = "migration"
-	ActorTypeRepair        ActorType = "repair"
-	ActorTypeTest          ActorType = "test"
+	PrincipalLocalUI       PrincipalType = "local_ui"
+	PrincipalTrustedDevice PrincipalType = "trusted_device"
+	PrincipalDeviceRuntime PrincipalType = "device_runtime"
+	PrincipalSystemWorker  PrincipalType = "system_worker"
+	PrincipalAutomation    PrincipalType = "automation"
+	PrincipalExtension     PrincipalType = "extension"
+	PrincipalMigration     PrincipalType = "migration"
+	PrincipalRepair        PrincipalType = "repair"
+	PrincipalTest          PrincipalType = "test"
 )
 
 type ActorContext struct {
-	ActorType        ActorType
-	UserID           runtimeidentity.UserID
+	PrincipalType    PrincipalType
+	SpaceID          runtimeidentity.SpaceID
 	DeviceID         runtimeidentity.DeviceID
 	RuntimeID        runtimeidentity.RuntimeID
-	Roles            []string
+	Capabilities     []string
 	Permissions      []string
 	AuthMethod       string
 	SessionID        string
@@ -45,12 +45,10 @@ var actorContextKey = contextKey{}
 func WithActor(ctx context.Context, actor *ActorContext) context.Context {
 	return context.WithValue(ctx, actorContextKey, actor)
 }
-
 func FromContext(ctx context.Context) (*ActorContext, bool) {
 	actor, ok := ctx.Value(actorContextKey).(*ActorContext)
 	return actor, ok
 }
-
 func RequireActor(ctx context.Context) (*ActorContext, error) {
 	actor, ok := FromContext(ctx)
 	if !ok || actor == nil {
@@ -58,55 +56,37 @@ func RequireActor(ctx context.Context) (*ActorContext, error) {
 	}
 	return actor, nil
 }
-
 func (a *ActorContext) HasPermission(perm string) bool {
 	for _, p := range a.Permissions {
-		if p == perm {
+		if p == perm || p == "*" {
 			return true
 		}
 	}
 	return false
 }
-
-func (a *ActorContext) HasRole(role string) bool {
-	for _, r := range a.Roles {
-		if r == role {
+func (a *ActorContext) HasCapability(cap string) bool {
+	for _, c := range a.Capabilities {
+		if c == cap || c == "*" {
 			return true
 		}
 	}
 	return false
 }
-
 func (a *ActorContext) IsSystemActor() bool {
-	switch a.ActorType {
-	case ActorTypeSystemWorker, ActorTypeMigration, ActorTypeRepair:
-		return true
-	}
-	return false
+	return a != nil && (a.PrincipalType == PrincipalSystemWorker || a.PrincipalType == PrincipalMigration || a.PrincipalType == PrincipalRepair)
 }
-
 func (a *ActorContext) Clone() *ActorContext {
 	if a == nil {
 		return nil
 	}
-	clone := *a
-	if a.Roles != nil {
-		clone.Roles = append([]string(nil), a.Roles...)
-	}
-	if a.Permissions != nil {
-		clone.Permissions = append([]string(nil), a.Permissions...)
-	}
-	return &clone
+	c := *a
+	c.Capabilities = append([]string(nil), a.Capabilities...)
+	c.Permissions = append([]string(nil), a.Permissions...)
+	return &c
 }
-
 func (a *ActorContext) RuntimeIdentity() runtimeidentity.Identity {
 	if a == nil {
 		return runtimeidentity.Identity{}
 	}
-	return runtimeidentity.Identity{
-		UserID:           a.UserID,
-		DeviceID:         a.DeviceID,
-		RuntimeID:        a.RuntimeID,
-		RuntimeSessionID: a.RuntimeSessionID,
-	}
+	return runtimeidentity.Identity{SpaceID: a.SpaceID, DeviceID: a.DeviceID, RuntimeID: a.RuntimeID, RuntimeSessionID: a.RuntimeSessionID}
 }
