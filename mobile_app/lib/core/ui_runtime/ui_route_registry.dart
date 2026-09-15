@@ -20,7 +20,6 @@ class ProviderRouteUnavailable extends StatelessWidget {
 
 const _protectedRouteNamespaces = <String>{
   AppRoutes.onboarding,
-  AppRoutes.login,
   AppRoutes.privacy,
   '/usage-boundary',
   AppRoutes.chat,

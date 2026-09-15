@@ -247,7 +247,7 @@ class DesktopPetMobileRuntimeNotifier
   int _attachEpoch = 0;
   Future<void> _inboundSerial = Future<void>.value();
 
-  String _userId = '';
+  String _spaceId = '';
   String _deviceId = '';
   String _runtimeId = '';
   String _sessionId = '';
@@ -452,8 +452,8 @@ class DesktopPetMobileRuntimeNotifier
       );
       if (ticket == null) throw StateError('runtime bootstrap ticket is empty');
       final rawTicket = ticket['ticket']?.toString().trim() ?? '';
-      _userId = ticket['userId']?.toString().trim() ?? '';
-      if (rawTicket.isEmpty || _userId.isEmpty) {
+      _spaceId = ticket['spaceId']?.toString().trim() ?? '';
+      if (rawTicket.isEmpty || _spaceId.isEmpty) {
         throw StateError('runtime bootstrap ticket is invalid');
       }
       if (!RegExp(r'^[A-Za-z0-9._~-]+$').hasMatch(rawTicket)) {
@@ -576,7 +576,7 @@ class DesktopPetMobileRuntimeNotifier
     if (envelope['envelopeVersion'] != 1 || envelope['protocol'] != _runtimeProtocol) {
       throw const FormatException('invalid runtime protocol envelope');
     }
-    if (envelope['userId']?.toString() != _userId ||
+    if (envelope['spaceId']?.toString() != _spaceId ||
         envelope['deviceId']?.toString() != _deviceId ||
         envelope['runtimeId']?.toString() != _runtimeId) {
       throw const FormatException('runtime envelope identity mismatch');
@@ -1870,7 +1870,7 @@ class DesktopPetMobileRuntimeNotifier
       'messageType': messageType,
       'messageName': messageName,
       'messageId': 'msg_${DateTime.now().microsecondsSinceEpoch}_${_randomToken(8)}',
-      'userId': _userId,
+      'spaceId': _spaceId,
       'deviceId': _deviceId,
       'runtimeId': _runtimeId,
       'runtimeSessionId': _sessionId,

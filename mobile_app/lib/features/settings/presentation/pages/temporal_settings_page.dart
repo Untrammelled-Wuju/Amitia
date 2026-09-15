@@ -1406,7 +1406,7 @@ class _TemporalContentState extends ConsumerState<_TemporalContent> {
                           : '';
                       final payload = <String, dynamic>{
                         'characterId': scopeCharacterId,
-                        'scopeType': scopeCharacterId.isEmpty ? 'user' : 'relationship',
+                        'scopeType': scopeCharacterId.isEmpty ? 'space' : 'relationship',
                         'anchorType': anchorType,
                         'title': title,
                         'description': descriptionController.text.trim(),

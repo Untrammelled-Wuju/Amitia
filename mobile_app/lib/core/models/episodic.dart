@@ -1,6 +1,6 @@
 class EpisodicDto {
   final String id;
-  final String userId;
+  final String spaceId;
   final String sceneType;
   final String title;
   final String content;
@@ -25,7 +25,7 @@ class EpisodicDto {
 
   const EpisodicDto({
     required this.id,
-    this.userId = '',
+    this.spaceId = '',
     this.sceneType = '',
     this.title = '',
     this.content = '',
@@ -51,7 +51,7 @@ class EpisodicDto {
 
   factory EpisodicDto.fromJson(Map<String, dynamic> json) => EpisodicDto(
         id: (json['id'] ?? '').toString(),
-        userId: (json['userId'] ?? '').toString(),
+        spaceId: (json['spaceId'] ?? '').toString(),
         sceneType: (json['sceneType'] ?? '').toString(),
         title: (json['title'] ?? '').toString(),
         content: (json['content'] ?? '').toString(),
@@ -77,7 +77,7 @@ class EpisodicDto {
 
   Map<String, dynamic> toJson() => {
         'id': id,
-        'userId': userId,
+        'spaceId': spaceId,
         'sceneType': sceneType,
         'title': title,
         'content': content,

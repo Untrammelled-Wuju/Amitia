@@ -1,6 +1,6 @@
 class ProfileDto {
   final String id;
-  final String userId;
+  final String spaceId;
   final String characterId;
   final String category;
   final String attributeName;
@@ -14,7 +14,7 @@ class ProfileDto {
 
   const ProfileDto({
     required this.id,
-    this.userId = '',
+    this.spaceId = '',
     this.characterId = '',
     this.category = 'personal_info',
     this.attributeName = '',
@@ -30,7 +30,7 @@ class ProfileDto {
   factory ProfileDto.fromJson(Map<String, dynamic> json) {
     return ProfileDto(
       id: (json['id'] ?? '').toString(),
-      userId: (json['userId'] ?? '').toString(),
+      spaceId: (json['spaceId'] ?? '').toString(),
       characterId: (json['characterId'] ?? '').toString(),
       category: (json['category'] ?? 'personal_info').toString(),
       attributeName: (json['attributeName'] ?? '').toString(),
@@ -46,7 +46,7 @@ class ProfileDto {
 
   Map<String, dynamic> toJson() => {
         'id': id,
-        'userId': userId,
+        'spaceId': spaceId,
         'characterId': characterId,
         'category': category,
         'attributeName': attributeName,

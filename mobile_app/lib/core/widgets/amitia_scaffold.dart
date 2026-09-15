@@ -66,7 +66,7 @@ class _AmitiaScaffoldState extends State<AmitiaScaffold> {
     final router = GoRouter.of(context);
     final currentLocation = router.routerDelegate.currentConfiguration.fullPath;
     final isChatPage = currentLocation == AppRoutes.chat;
-    final isTopLevelPage = currentLocation == '/onboarding' || currentLocation == '/login' || currentLocation == '/privacy';
+    final isTopLevelPage = currentLocation == '/onboarding' || currentLocation == '/privacy';
     final canPop = router.canPop();
 
     return PopScope(

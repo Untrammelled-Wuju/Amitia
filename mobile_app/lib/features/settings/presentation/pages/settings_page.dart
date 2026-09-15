@@ -21,14 +21,14 @@ List<SettingGroup> _settingsGroups({required String modelSummary, required Strin
     SettingItem(title: '外观设置', icon: Icons.palette_outlined, value: appearanceSummary, route: AppRoutes.settingsAppearance),
     SettingItem(title: '主题设置', icon: Icons.color_lens_outlined, route: AppRoutes.settingsTheme),
     SettingItem(title: '界面提供者', icon: Icons.dashboard_customize_outlined, route: AppRoutes.settingsUIProviders),
-    SettingItem(title: '用户设置', icon: Icons.person_outline, route: AppRoutes.settingsUser),
+    SettingItem(title: '个人空间', icon: Icons.person_outline, route: AppRoutes.settingsUser),
     SettingItem(title: '时间感知', icon: Icons.schedule_outlined, route: AppRoutes.settingsTemporal),
   ]),
   SettingGroup(title: '系统与维护', items: [
     SettingItem(title: 'Runtime', icon: Icons.terminal, route: AppRoutes.settingsRuntime),
     SettingItem(title: '运行模式', icon: Icons.hub_outlined, subtitle: '桌面本地 / 私有云部署模式', route: AppRoutes.settingsRuntimeMode),
     SettingItem(title: '长期运行维护', icon: Icons.schedule_send_outlined, subtitle: '长期任务、健康历史与日志维护', route: AppRoutes.settingsLongRunning),
-    SettingItem(title: '高级系统', icon: Icons.admin_panel_settings_outlined, subtitle: '账号、审计、Usage、Bridge 与 Voice Session', route: AppRoutes.settingsAdvanced),
+    SettingItem(title: '高级系统', icon: Icons.admin_panel_settings_outlined, subtitle: 'Space、设备审计、Usage、Bridge 与 Voice Session', route: AppRoutes.settingsAdvanced),
     SettingItem(title: 'BDI 决策可视化', icon: Icons.account_tree_outlined, subtitle: 'BehaviorPlan、ExpressionPlan 与降级状态', route: AppRoutes.settingsDecisionViz),
     SettingItem(title: '系统权限', icon: Icons.lock_outlined, route: AppRoutes.settingsPermissions),
     SettingItem(title: 'Android Automation', icon: Icons.smartphone_outlined, subtitle: '执行通道、视觉能力与 Virtual Display 健康状态', route: AppRoutes.settingsAndroidAutomation),
@@ -114,11 +114,14 @@ class SettingsPage extends ConsumerWidget {
 }
 
 Widget _buildUserInfoCard(BuildContext context, WidgetRef ref) {
-  final userAsync = ref.watch(currentUserProvider);
-  return userAsync.when(
-    data: (user) {
-      final username = user?.username ?? '未登录';
-      final initial = username.isNotEmpty ? username.characters.first : '?';
+  final profileAsync = ref.watch(currentSpaceProfileProvider);
+  return profileAsync.when(
+    data: (profile) {
+      final displayName = (profile?.displayName ?? '').trim().isEmpty
+          ? '我的空间'
+          : profile!.displayName.trim();
+      final initial = displayName.characters.first;
+      final spaceId = (profile?.spaceId ?? '').trim();
       return GestureDetector(
         onTap: () => context.push(AppRoutes.settingsUser),
         child: Container(
@@ -159,7 +162,7 @@ Widget _buildUserInfoCard(BuildContext context, WidgetRef ref) {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      username,
+                      displayName,
                       style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
@@ -167,26 +170,11 @@ Widget _buildUserInfoCard(BuildContext context, WidgetRef ref) {
                       ),
                     ),
                     const SizedBox(height: 2),
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(
-                          width: 6,
-                          height: 6,
-                          decoration: BoxDecoration(
-                            color: context.success,
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          '已登录',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: context.textTertiary,
-                          ),
-                        ),
-                      ],
+                    Text(
+                      spaceId.isEmpty ? '本地个人空间' : spaceId,
+                      style: TextStyle(fontSize: 11, color: context.textTertiary),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ],
                 ),
@@ -217,38 +205,10 @@ Widget _buildUserInfoCard(BuildContext context, WidgetRef ref) {
         ),
         child: Row(
           children: [
-            Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(16),
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [context.accentPrimary, context.accentSecondary],
-                ),
-              ),
-              child: const Center(
-                child: Text(
-                  '?',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ),
+            Icon(Icons.person_outline, color: context.textTertiary),
             const SizedBox(width: 12),
             Expanded(
-              child: Text(
-                '未登录',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: context.textPrimary,
-                ),
-              ),
+              child: Text('个人空间资料暂不可用', style: AppTypography.body(context)),
             ),
             Icon(Icons.chevron_right, size: 20, color: context.textTertiary),
           ],
@@ -256,78 +216,6 @@ Widget _buildUserInfoCard(BuildContext context, WidgetRef ref) {
       ),
     ),
   );
-}
-
-class _DevModeToggle extends StatelessWidget {
-  final bool isDevMode;
-  final VoidCallback onTap;
-
-  const _DevModeToggle({required this.isDevMode, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        decoration: BoxDecoration(
-          color: isDevMode
-              ? context.accentPrimary.withValues(alpha: 0.12)
-              : context.surfacePrimary,
-          borderRadius: AppRadius.brMedium,
-          border: Border.all(color: context.borderPrimary, width: 0.5),
-        ),
-        child: Row(
-          children: [
-            Icon(
-              Icons.developer_mode,
-              size: 20,
-              color: isDevMode ? context.accentPrimary : context.textTertiary,
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                '开发者模式',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                  color: isDevMode
-                      ? context.accentPrimary
-                      : context.textPrimary,
-                ),
-              ),
-            ),
-            Container(
-              width: 36,
-              height: 20,
-              decoration: BoxDecoration(
-                color: isDevMode
-                    ? context.accentPrimary
-                    : context.borderPrimary,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: AnimatedAlign(
-                duration: AppMotion.standard,
-                curve: AppMotion.standardCurve,
-                alignment: isDevMode
-                    ? Alignment.centerRight
-                    : Alignment.centerLeft,
-                child: Container(
-                  width: 16,
-                  height: 16,
-                  margin: EdgeInsets.symmetric(horizontal: 2),
-                  decoration: const BoxDecoration(
-                    color: Colors.white,
-                    shape: BoxShape.circle,
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 }
 
 class _SettingGroup extends StatelessWidget {

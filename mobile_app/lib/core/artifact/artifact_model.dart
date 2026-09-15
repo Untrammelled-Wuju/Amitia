@@ -28,7 +28,7 @@ enum ArtifactStatus {
 
 class ArtifactMetadata {
   final String id;
-  final String ownerUserId;
+  final String ownerSpaceId;
   final String workspaceId;
   final ArtifactKind kind;
   final String blobDigest;
@@ -47,7 +47,7 @@ class ArtifactMetadata {
 
   const ArtifactMetadata({
     required this.id,
-    required this.ownerUserId,
+    required this.ownerSpaceId,
     required this.workspaceId,
     required this.kind,
     required this.blobDigest,
@@ -68,7 +68,7 @@ class ArtifactMetadata {
   factory ArtifactMetadata.fromJson(Map<String, dynamic> json) {
     return ArtifactMetadata(
       id: (json['artifactId'] ?? json['artifact_id'] ?? json['id'])?.toString() ?? '',
-      ownerUserId: (json['ownerUserId'] ?? json['owner_user_id'])?.toString() ?? '',
+      ownerSpaceId: (json['ownerSpaceId'] ?? json['owner_space_id'])?.toString() ?? '',
       workspaceId: (json['workspaceId'] ?? json['workspace_id'])?.toString() ?? '',
       kind: ArtifactKind.values.firstWhere(
         (k) => k.value == json['kind'],
@@ -97,7 +97,7 @@ class ArtifactMetadata {
 
   Map<String, dynamic> toJson() => {
         'id': id,
-        'owner_user_id': ownerUserId,
+        'owner_space_id': ownerSpaceId,
         'workspace_id': workspaceId,
         'kind': kind.value,
         'blob_digest': blobDigest,

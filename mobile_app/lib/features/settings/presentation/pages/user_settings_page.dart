@@ -3,12 +3,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../app/app_routes.dart';
 import '../../../../app/theme/app_colors.dart';
-import '../../../../app/theme/app_typography.dart';
-import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_radius.dart';
-import '../../../../core/widgets/amitia_scaffold.dart';
-import '../../../../core/widgets/amitia_button.dart';
+import '../../../../app/theme/app_spacing.dart';
+import '../../../../app/theme/app_typography.dart';
 import '../../../../core/services/providers.dart';
+import '../../../../core/services/space_profile_service.dart';
+import '../../../../core/widgets/amitia_button.dart';
+import '../../../../core/widgets/amitia_misc.dart';
+import '../../../../core/widgets/amitia_scaffold.dart';
 
 class UserSettingsPage extends ConsumerStatefulWidget {
   const UserSettingsPage({super.key});
@@ -18,72 +20,65 @@ class UserSettingsPage extends ConsumerStatefulWidget {
 }
 
 class _UserSettingsPageState extends ConsumerState<UserSettingsPage> {
-  late String _username;
-  late String _nickname;
-  late String _userLabel;
-  late String _bio;
+  SpaceProfile? _profile;
   bool _loading = true;
 
   @override
   void initState() {
     super.initState();
-    _username = '';
-    _nickname = '';
-    _userLabel = '';
-    _bio = '';
-    _loadUser();
+    _load();
   }
 
-  Future<void> _loadUser() async {
+  Future<void> _load() async {
     try {
-      final auth = ref.read(authServiceProvider);
-      final user = await auth.fetchProfile();
+      final profile = await ref.read(spaceProfileServiceProvider).fetch();
       if (!mounted) return;
       setState(() {
-        _username = user.username;
-        _nickname = user.nickname.isEmpty ? user.username : user.nickname;
-        _userLabel = user.userLabel.isEmpty ? user.username : user.userLabel;
-        _bio = user.bio;
+        _profile = profile;
         _loading = false;
       });
     } catch (error) {
-      final localUser = await ref.read(authServiceProvider).currentUser;
       if (!mounted) return;
-      setState(() {
-        _username = localUser?.username ?? '';
-        _nickname = localUser?.username ?? '';
-        _userLabel = localUser?.username ?? '';
-        _loading = false;
-      });
+      setState(() => _loading = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('用户资料加载失败：$error')),
+        SnackBar(content: Text('个人空间资料加载失败：$error')),
       );
     }
   }
 
-  Future<void> _saveProfile({
-    String? nickname,
+  Future<void> _save({
+    String? displayName,
     String? userLabel,
     String? bio,
   }) async {
-    final updated = await ref.read(authServiceProvider).updateProfile(
-          nickname: nickname ?? _nickname,
-          userLabel: userLabel ?? _userLabel,
-          bio: bio ?? _bio,
+    final current = _profile;
+    if (current == null) return;
+    final updated = await ref.read(spaceProfileServiceProvider).update(
+          displayName: displayName ?? current.displayName,
+          userLabel: userLabel ?? current.userLabel,
+          bio: bio ?? current.bio,
+          avatar: current.avatar,
+          preferences: current.preferences,
         );
     if (!mounted) return;
-    setState(() {
-      _nickname = updated.nickname.isEmpty ? updated.username : updated.nickname;
-      _userLabel = updated.userLabel.isEmpty ? updated.username : updated.userLabel;
-      _bio = updated.bio;
-    });
-    ref.invalidate(currentUserProvider);
+    setState(() => _profile = updated);
+    ref.invalidate(currentSpaceProfileProvider);
   }
 
   @override
   Widget build(BuildContext context) {
+    final profile = _profile;
+    final displayName = (profile?.displayName ?? '').trim().isEmpty
+        ? '我的空间'
+        : profile!.displayName.trim();
+    final initial = displayName.characters.first;
+
     return AmitiaScaffold(
-      appBar: AmitiaAppBar(title: '用户设置', showBackButton: true, fallbackRoute: AppRoutes.settings),
+      appBar: AmitiaAppBar(
+        title: '个人空间',
+        showBackButton: true,
+        fallbackRoute: AppRoutes.settings,
+      ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : ListView(
@@ -100,45 +95,92 @@ class _UserSettingsPageState extends ConsumerState<UserSettingsPage> {
                     ),
                     child: Center(
                       child: Text(
-                        _nickname.isNotEmpty ? _nickname.substring(0, 1) : 'U',
-                        style: const TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.w600),
+                        initial,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 32,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ),
                   ),
                 ),
                 SizedBox(height: AppSpacing.md),
-                Center(child: Text(_nickname, style: AppTypography.sectionTitle(context))),
+                Center(
+                  child: Text(displayName, style: AppTypography.sectionTitle(context)),
+                ),
                 const SizedBox(height: 4),
-                Center(child: Text('@$_username', style: AppTypography.caption(context))),
+                Center(
+                  child: Text(
+                    profile?.spaceId.isNotEmpty == true ? profile!.spaceId : '本地个人空间',
+                    style: AppTypography.caption(context),
+                  ),
+                ),
                 SizedBox(height: AppSpacing.sectionGap),
-                _SectionLabel(text: '基础资料'),
+                const _SectionLabel(text: '本地资料'),
                 SizedBox(height: AppSpacing.sm),
                 _buildCard([
-                  _buildEditTile('昵称', _nickname, () => _showEditSheet('昵称', _nickname, (v) => _saveProfile(nickname: v))),
+                  _buildEditTile(
+                    '显示名称',
+                    displayName,
+                    () => _showEditSheet(
+                      '显示名称',
+                      displayName,
+                      (value) => _save(displayName: value),
+                    ),
+                  ),
                   _divider(),
-                  _buildEditTile('用户名', _username, null),
+                  _buildEditTile(
+                    'AI 对你的称呼',
+                    (profile?.userLabel ?? '').trim().isEmpty ? '未设置' : profile!.userLabel,
+                    () => _showEditSheet(
+                      'AI 对你的称呼',
+                      profile?.userLabel ?? '',
+                      (value) => _save(userLabel: value),
+                      allowEmpty: true,
+                    ),
+                  ),
                   _divider(),
-                  _buildEditTile('用户称呼', _userLabel, () => _showEditSheet('用户称呼', _userLabel, (v) => _saveProfile(userLabel: v))),
-                  _divider(),
-                  _buildEditTile('个人简介', _bio.isEmpty ? '未设置' : _bio, () => _showEditSheet('个人简介', _bio, (v) => _saveProfile(bio: v), maxLines: 3, allowEmpty: true)),
+                  _buildEditTile(
+                    '个人简介',
+                    (profile?.bio ?? '').trim().isEmpty ? '未设置' : profile!.bio,
+                    () => _showEditSheet(
+                      '个人简介',
+                      profile?.bio ?? '',
+                      (value) => _save(bio: value),
+                      maxLines: 3,
+                      allowEmpty: true,
+                    ),
+                  ),
                 ]),
                 SizedBox(height: AppSpacing.sectionGap),
-                _SectionLabel(text: '账号安全'),
+                const _SectionLabel(text: '身份与设备'),
                 SizedBox(height: AppSpacing.sm),
                 _buildCard([
-                  _buildNavTile(icon: Icons.lock_outline, title: '修改密码', onTap: _showPasswordSheet),
+                  _buildInfoTile('Space ID', profile?.spaceId ?? ''),
                   _divider(),
-                  _buildNavTile(icon: Icons.devices_outlined, title: '登录设备管理', onTap: _showSessionsSheet),
+                  _buildInfoTile('Instance ID', profile?.instanceId ?? ''),
+                  _divider(),
+                  _buildNavTile(
+                    icon: Icons.devices_outlined,
+                    title: '设备管理',
+                    subtitle: '可信设备、云端配对与撤销',
+                    onTap: () => context.push(AppRoutes.settingsDevices),
+                  ),
+                  _divider(),
+                  _buildNavTile(
+                    icon: Icons.hub_outlined,
+                    title: '运行模式',
+                    subtitle: '本地 Core / Cloud Core',
+                    onTap: () => context.push(AppRoutes.settingsRuntimeMode),
+                  ),
                 ]),
-                SizedBox(height: AppSpacing.sectionGap),
+                SizedBox(height: AppSpacing.md),
                 Padding(
                   padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
-                  child: AmitiaButton(
-                    label: '退出登录',
-                    icon: Icons.logout,
-                    isDestructive: true,
-                    isFullWidth: true,
-                    onPressed: _confirmLogout,
+                  child: Text(
+                    'Amitia 不使用产品账号。Space ID 只表示数据归属；设备身份由 Device ID + Device Credential 管理。',
+                    style: AppTypography.caption(context),
                   ),
                 ),
                 SizedBox(height: AppSpacing.xl),
@@ -166,7 +208,7 @@ class _UserSettingsPageState extends ConsumerState<UserSettingsPage> {
     );
   }
 
-  Widget _buildEditTile(String title, String value, VoidCallback? onTap) {
+  Widget _buildEditTile(String title, String value, VoidCallback onTap) {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
@@ -175,18 +217,47 @@ class _UserSettingsPageState extends ConsumerState<UserSettingsPage> {
         child: Row(
           children: [
             Expanded(child: Text(title, style: AppTypography.body(context))),
-            Text(value, style: AppTypography.caption(context), maxLines: 1, overflow: TextOverflow.ellipsis),
-            if (onTap != null) ...[
-              const SizedBox(width: 4),
-              Icon(Icons.chevron_right, size: 20, color: context.textTertiary),
-            ],
+            Flexible(
+              child: Text(
+                value,
+                style: AppTypography.caption(context),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            const SizedBox(width: 4),
+            Icon(Icons.chevron_right, size: 20, color: context.textTertiary),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildNavTile({required IconData icon, required String title, required VoidCallback onTap}) {
+  Widget _buildInfoTile(String title, String value) {
+    return Padding(
+      padding: EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: 13),
+      child: Row(
+        children: [
+          Expanded(child: Text(title, style: AppTypography.body(context))),
+          Flexible(
+            child: Text(
+              value.trim().isEmpty ? '未获取' : value,
+              style: AppTypography.caption(context),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNavTile({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+  }) {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
@@ -201,7 +272,16 @@ class _UserSettingsPageState extends ConsumerState<UserSettingsPage> {
               child: Icon(icon, size: 17, color: context.accentPrimary),
             ),
             const SizedBox(width: 12),
-            Expanded(child: Text(title, style: AppTypography.body(context))),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: AppTypography.body(context)),
+                  const SizedBox(height: 2),
+                  Text(subtitle, style: AppTypography.caption(context)),
+                ],
+              ),
+            ),
             Icon(Icons.chevron_right, size: 20, color: context.textTertiary),
           ],
         ),
@@ -216,35 +296,46 @@ class _UserSettingsPageState extends ConsumerState<UserSettingsPage> {
     int maxLines = 1,
     bool allowEmpty = false,
   }) {
-    final ctrl = TextEditingController(text: current);
+    final controller = TextEditingController(text: current);
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: context.surfacePrimary,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (ctx) => SafeArea(
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetContext) => SafeArea(
         child: Padding(
-          padding: EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.lg, AppSpacing.lg, MediaQuery.of(ctx).viewInsets.bottom + AppSpacing.lg),
+          padding: EdgeInsets.fromLTRB(
+            AppSpacing.lg,
+            AppSpacing.lg,
+            AppSpacing.lg,
+            MediaQuery.of(sheetContext).viewInsets.bottom + AppSpacing.lg,
+          ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text('编辑$title', style: AppTypography.sectionTitle(context)),
               SizedBox(height: AppSpacing.lg),
-              AmitiaTextField(hintText: '请输入$title', controller: ctrl, maxLines: maxLines),
+              AmitiaTextField(
+                hintText: '请输入$title',
+                controller: controller,
+                maxLines: maxLines,
+              ),
               SizedBox(height: AppSpacing.lg),
               AmitiaButton(
                 label: '保存',
                 isFullWidth: true,
                 onPressed: () async {
-                  final value = ctrl.text.trim();
+                  final value = controller.text.trim();
                   if (!allowEmpty && value.isEmpty) return;
                   try {
                     await onSave(value);
-                    if (!ctx.mounted || !mounted) return;
-                    Navigator.pop(ctx);
+                    if (!sheetContext.mounted || !mounted) return;
+                    Navigator.pop(sheetContext);
                     ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('$title已更新'), duration: const Duration(seconds: 1)),
+                      SnackBar(content: Text('$title已更新')),
                     );
                   } catch (error) {
                     if (!mounted) return;
@@ -260,244 +351,22 @@ class _UserSettingsPageState extends ConsumerState<UserSettingsPage> {
       ),
     );
   }
-
-  void _showPasswordSheet() {
-    final oldCtrl = TextEditingController();
-    final newCtrl = TextEditingController();
-    final confirmCtrl = TextEditingController();
-    bool saving = false;
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: context.surfacePrimary,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (sheetContext) => StatefulBuilder(
-        builder: (sheetContext, setSheetState) => SafeArea(
-          child: Padding(
-            padding: EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.lg, AppSpacing.lg, MediaQuery.of(sheetContext).viewInsets.bottom + AppSpacing.lg),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('修改密码', style: AppTypography.sectionTitle(context)),
-                SizedBox(height: AppSpacing.lg),
-                Text('当前密码', style: AppTypography.label(context)),
-                const SizedBox(height: 4),
-                AmitiaTextField(hintText: '输入当前密码', controller: oldCtrl, obscureText: true),
-                SizedBox(height: AppSpacing.md),
-                Text('新密码', style: AppTypography.label(context)),
-                const SizedBox(height: 4),
-                AmitiaTextField(hintText: '至少 6 位', controller: newCtrl, obscureText: true),
-                SizedBox(height: AppSpacing.md),
-                Text('确认密码', style: AppTypography.label(context)),
-                const SizedBox(height: 4),
-                AmitiaTextField(hintText: '再次输入新密码', controller: confirmCtrl, obscureText: true),
-                SizedBox(height: AppSpacing.lg),
-                AmitiaButton(
-                  label: saving ? '修改中...' : '确认修改',
-                  isFullWidth: true,
-                  onPressed: saving
-                      ? null
-                      : () async {
-                          if (newCtrl.text.length < 6) {
-                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('新密码至少 6 位')));
-                            return;
-                          }
-                          if (newCtrl.text != confirmCtrl.text) {
-                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('两次输入的新密码不一致')));
-                            return;
-                          }
-                          setSheetState(() => saving = true);
-                          try {
-                            await ref.read(authServiceProvider).changePassword(oldCtrl.text, newCtrl.text);
-                            if (!mounted) return;
-                            Navigator.pop(sheetContext);
-                            ref.invalidate(currentUserProvider);
-                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('密码已修改，其他登录会话已按安全策略处理')));
-                          } catch (e) {
-                            if (mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('修改失败：$e')));
-                            }
-                          } finally {
-                            if (sheetContext.mounted) setSheetState(() => saving = false);
-                          }
-                        },
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Future<void> _showSessionsSheet() async {
-    List<Map<String, dynamic>> sessions;
-    try {
-      sessions = await ref.read(authServiceProvider).sessions();
-    } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('加载登录会话失败：$e')));
-      return;
-    }
-    if (!mounted) return;
-    await showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: context.surfacePrimary,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (sheetContext) => SafeArea(
-        child: SizedBox(
-          height: MediaQuery.sizeOf(sheetContext).height * 0.68,
-          child: Column(
-            children: [
-              Padding(
-                padding: EdgeInsets.all(AppSpacing.lg),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Text('登录设备管理', style: AppTypography.sectionTitle(sheetContext)),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      alignment: WrapAlignment.end,
-                      spacing: 8,
-                      children: [
-                        TextButton(
-                          onPressed: sessions.length <= 1
-                              ? null
-                              : () async {
-                                  try {
-                                    final count = await ref.read(authServiceProvider).revokeOtherSessions();
-                                    if (!sheetContext.mounted) return;
-                                    Navigator.pop(sheetContext);
-                                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已退出 $count 个其他登录会话')));
-                                  } catch (e) {
-                                    if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('操作失败：$e')));
-                                  }
-                                },
-                          child: const Text('退出其他设备'),
-                        ),
-                        TextButton(
-                          onPressed: () => _confirmLogoutAll(sheetContext),
-                          child: Text('退出全部设备', style: TextStyle(color: context.error)),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              Expanded(
-                child: sessions.isEmpty
-                    ? Center(child: Text('暂无活跃登录会话', style: AppTypography.caption(sheetContext)))
-                    : ListView.separated(
-                        padding: EdgeInsets.fromLTRB(AppSpacing.lg, 0, AppSpacing.lg, AppSpacing.lg),
-                        itemCount: sessions.length,
-                        separatorBuilder: (_, __) => const Divider(height: 1),
-                        itemBuilder: (_, index) {
-                          final session = sessions[index];
-                          final current = session['current'] == true;
-                          final sessionId = (session['sessionId'] ?? '').toString();
-                          final device = (session['deviceName'] ?? '').toString();
-                          final agent = (session['userAgent'] ?? '').toString();
-                          final ip = (session['ipAddress'] ?? '').toString();
-                          final lastActive = (session['lastActiveAt'] ?? session['createdAt'] ?? '').toString();
-                          return ListTile(
-                            contentPadding: EdgeInsets.zero,
-                            leading: Icon(current ? Icons.devices : Icons.devices_other_outlined, color: current ? sheetContext.accentPrimary : sheetContext.textTertiary),
-                            title: Text(device.isEmpty ? (current ? '当前设备' : '登录会话') : device),
-                            subtitle: Text([if (ip.isNotEmpty) ip, if (agent.isNotEmpty) agent, if (lastActive.isNotEmpty) lastActive].join(' · '), maxLines: 2, overflow: TextOverflow.ellipsis),
-                            trailing: current
-                                ? const Text('当前')
-                                : IconButton(
-                                    tooltip: '退出该会话',
-                                    icon: const Icon(Icons.logout),
-                                    onPressed: sessionId.isEmpty
-                                        ? null
-                                        : () async {
-                                            try {
-                                              await ref.read(authServiceProvider).revokeSession(sessionId);
-                                              if (!sheetContext.mounted) return;
-                                              Navigator.pop(sheetContext);
-                                              _showSessionsSheet();
-                                            } catch (e) {
-                                              if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('退出失败：$e')));
-                                            }
-                                          },
-                                  ),
-                          );
-                        },
-                      ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _confirmLogout() {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: AppRadius.brMedium),
-        title: Text('退出登录', style: AppTypography.cardTitle(context)),
-        content: Text('确定要退出登录吗？', style: AppTypography.body(context)),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
-          TextButton(
-            onPressed: () async {
-              Navigator.pop(ctx);
-              await ref.read(authServiceProvider).logout();
-              if (!mounted) return;
-              ref.invalidate(currentUserProvider);
-              context.go('/login');
-            },
-            child: Text('退出', style: TextStyle(color: context.error)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _confirmLogoutAll(BuildContext sheetContext) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: AppRadius.brMedium),
-        title: Text('退出全部设备', style: AppTypography.cardTitle(context)),
-        content: Text('这会撤销当前账号的全部登录会话，并回到登录页。', style: AppTypography.body(context)),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: Text('全部退出', style: TextStyle(color: context.error)),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true) return;
-    try {
-      await ref.read(authServiceProvider).logoutAll();
-      if (!mounted) return;
-      if (sheetContext.mounted) Navigator.pop(sheetContext);
-      ref.invalidate(currentUserProvider);
-      context.go('/login');
-    } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('退出全部设备失败：$error')),
-      );
-    }
-  }
 }
 
 class _SectionLabel extends StatelessWidget {
   final String text;
+
   const _SectionLabel({required this.text});
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.fromLTRB(AppSpacing.pagePadding, AppSpacing.sm, AppSpacing.pagePadding, AppSpacing.sm),
+      padding: EdgeInsets.fromLTRB(
+        AppSpacing.pagePadding,
+        AppSpacing.sm,
+        AppSpacing.pagePadding,
+        AppSpacing.sm,
+      ),
       child: Text(text, style: AppTypography.caption(context)),
     );
   }

@@ -114,8 +114,8 @@ class _AmitiaDrawerState extends ConsumerState<AmitiaDrawer> {
     final character = selectedCharacter == null
         ? const _CharInfo('暂无角色', '角')
         : _CharInfo.fromCharacter(selectedCharacter);
-    final currentUser = ref.watch(currentUserProvider).valueOrNull;
-    final userName = (currentUser?.username ?? '').trim().isEmpty ? '未登录' : currentUser!.username.trim();
+    final spaceProfile = ref.watch(currentSpaceProfileProvider).valueOrNull;
+    final userName = (spaceProfile?.displayName ?? '').trim().isEmpty ? '我' : spaceProfile!.displayName.trim();
     final userInitial = userName.characters.first;
     final deployment = ref.watch(mobileDeploymentConfigProvider);
     final runtimeLabel = deployment.mode == MobileDeploymentMode.cloud ? '云端运行' : '本地运行';

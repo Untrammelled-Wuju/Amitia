@@ -73,7 +73,6 @@ abstract final class AppRoutes {
   static const toolboxDatabaseStatus = '/settings/toolbox/database-status';
   static const toolboxDeviceStatus = '/settings/toolbox/device-status';
   static const onboarding = '/onboarding';
-  static const login = '/login';
   static const privacy = '/privacy';
   static const developer = '/developer';
   static const developerKernel = '/developer/kernel';

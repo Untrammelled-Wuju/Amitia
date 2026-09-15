@@ -97,8 +97,8 @@ class NativeBridgeRelayClient {
       switch (connectionConfig.authStrategy) {
         case BackendAuthStrategy.localToken:
           headers[BackendAuthHeader.localToken] = token;
-        case BackendAuthStrategy.bearer:
-          headers[BackendAuthHeader.authorization] = 'Bearer $token';
+        case BackendAuthStrategy.deviceCredential:
+          headers[BackendAuthHeader.authorization] = 'AmitiaDevice $token';
       }
       final socket = await WebSocket.connect(
         uri.toString(),

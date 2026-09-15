@@ -339,7 +339,7 @@ class MemoryService {
 
   Future<List<Map<String, dynamic>>> ranked({
     String? characterId,
-    String? userId,
+    String? spaceId,
     String query = '',
     int limit = 20,
   }) async {
@@ -347,7 +347,7 @@ class MemoryService {
       '/api/memories/ranked',
       queryParameters: {
         if (characterId != null && characterId.isNotEmpty) 'characterId': characterId,
-        if (userId != null && userId.isNotEmpty) 'userId': userId,
+        if (spaceId != null && spaceId.isNotEmpty) 'spaceId': spaceId,
         if (query.trim().isNotEmpty) 'query': query.trim(),
         'limit': limit,
       },

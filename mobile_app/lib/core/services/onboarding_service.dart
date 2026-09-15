@@ -75,6 +75,45 @@ class OnboardingService {
     }
   }
 
+
+  Future<Map<String, dynamic>> pairingStatusAt(String coreUri) async {
+    final dio = _publicClientAt(coreUri);
+    try {
+      final response = await dio.get<dynamic>('/api/public/device-mesh/v1/pairing/status');
+      return _unwrapPublicResponse(response.data);
+    } finally {
+      dio.close(force: true);
+    }
+  }
+
+  Future<Map<String, dynamic>> claimPairingAt(
+    String coreUri, {
+    required String deviceId,
+    required String runtimeId,
+    required String platform,
+    String label = '',
+    String offerToken = '',
+    String setupCode = '',
+  }) async {
+    final dio = _publicClientAt(coreUri);
+    try {
+      final response = await dio.post<dynamic>(
+        '/api/public/device-mesh/v1/pairing/claim',
+        data: <String, dynamic>{
+          'deviceId': deviceId.trim(),
+          'runtimeId': runtimeId.trim(),
+          'platform': platform.trim(),
+          if (label.trim().isNotEmpty) 'label': label.trim(),
+          if (offerToken.trim().isNotEmpty) 'offerToken': offerToken.trim(),
+          if (setupCode.trim().isNotEmpty) 'setupCode': setupCode.trim(),
+        },
+      );
+      return _unwrapPublicResponse(response.data);
+    } finally {
+      dio.close(force: true);
+    }
+  }
+
   Future<Map<String, dynamic>> health() async {
     return await _api.get<Map<String, dynamic>>('/api/public/health') ??
         const <String, dynamic>{};
@@ -115,15 +154,11 @@ class OnboardingService {
         .toList(growable: false);
   }
 
-  Future<void> complete({
-    required String deployMode,
-    required String username,
-  }) async {
+  Future<void> complete({required String deployMode}) async {
     await _api.post<Map<String, dynamic>>(
       '/api/onboarding/complete',
       data: <String, dynamic>{
         'deployMode': deployMode,
-        'username': username,
         'webChatEnabled': true,
       },
     );

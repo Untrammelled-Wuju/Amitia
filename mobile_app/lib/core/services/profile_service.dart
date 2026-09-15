@@ -7,7 +7,7 @@ class ProfileService {
   ProfileService(this._api);
 
   Future<List<ProfileDto>> list({
-    String userId = '',
+    String spaceId = '',
     String characterId = '',
     String category = '',
     String keyword = '',
@@ -17,7 +17,7 @@ class ProfileService {
     final resp = await _api.get<Map<String, dynamic>>(
       '/api/profiles',
       queryParameters: {
-        if (userId.isNotEmpty) 'userId': userId,
+        if (spaceId.isNotEmpty) 'spaceId': spaceId,
         if (characterId.isNotEmpty) 'characterId': characterId,
         if (category.isNotEmpty) 'category': category,
         if (keyword.trim().isNotEmpty) 'keyword': keyword.trim(),
@@ -48,14 +48,14 @@ class ProfileService {
     return true;
   }
 
-  Future<List<ProfileDto>> getByUser({
-    String userId = 'default',
+  Future<List<ProfileDto>> getBySpace({
+    String spaceId = 'default',
     String characterId = '',
   }) async {
     final resp = await _api.get<List<dynamic>>(
-      '/api/profiles/by-user',
+      '/api/profiles/by-space',
       queryParameters: {
-        'userId': userId,
+        'spaceId': spaceId,
         if (characterId.isNotEmpty) 'characterId': characterId,
       },
     );
@@ -67,7 +67,7 @@ class ProfileService {
   }
 
   Future<bool> extract({
-    String userId = 'default',
+    String spaceId = 'default',
     String characterId = '',
     required String conversationId,
     required List<Map<String, String>> messages,
@@ -75,7 +75,7 @@ class ProfileService {
     await _api.post(
       '/api/profiles/extract',
       data: {
-        'userId': userId,
+        'spaceId': spaceId,
         'characterId': characterId,
         'conversationId': conversationId,
         'messages': messages,
@@ -85,13 +85,13 @@ class ProfileService {
   }
 
   Future<Map<String, dynamic>?> systemPrompt({
-    String userId = 'default',
+    String spaceId = 'default',
     String characterId = '',
   }) {
     return _api.get<Map<String, dynamic>>(
       '/api/profiles/system-prompt',
       queryParameters: {
-        'userId': userId,
+        'spaceId': spaceId,
         if (characterId.isNotEmpty) 'characterId': characterId,
       },
     );

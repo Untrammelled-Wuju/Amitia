@@ -264,7 +264,7 @@ class ExtensionService {
         .toList();
   }
 
-  Future<Map<String, dynamic>> getUIProfile({required String platform, String deviceId = '', String scope = 'user'}) async {
+  Future<Map<String, dynamic>> getUIProfile({required String platform, String deviceId = '', String scope = 'space'}) async {
     final client = currentUIClientInfo();
     return await _api.get<Map<String, dynamic>>(
       '/api/extensions/ui/profile',
@@ -277,7 +277,7 @@ class ExtensionService {
     ) ?? <String, dynamic>{};
   }
 
-  Future<Map<String, dynamic>> updateUIProfile(Map<String, dynamic> profile, {required String platform, String deviceId = '', String scope = 'user'}) async {
+  Future<Map<String, dynamic>> updateUIProfile(Map<String, dynamic> profile, {required String platform, String deviceId = '', String scope = 'space'}) async {
     final client = currentUIClientInfo();
     return await _api.put<Map<String, dynamic>>(
       '/api/extensions/ui/profile', data: profile,

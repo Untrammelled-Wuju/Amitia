@@ -6,7 +6,7 @@ enum UIProviderPlacement { any, cloud, device, hybrid }
 
 enum UIProfileScopeKind {
   global,
-  user,
+  space,
   platform,
   device,
   devicePlatform,
@@ -164,24 +164,24 @@ class UIDeviceRequirements {
 }
 
 class UIProfileScope {
-  final String? userId;
+  final String? spaceId;
   final String? deviceId;
   final String? platform;
   final String? runtimeProfile;
   const UIProfileScope({
-    this.userId,
+    this.spaceId,
     this.deviceId,
     this.platform,
     this.runtimeProfile,
   });
   factory UIProfileScope.fromJson(Map<String, dynamic> json) => UIProfileScope(
-    userId: json['userId']?.toString(),
+    spaceId: json['spaceId']?.toString(),
     deviceId: json['deviceId']?.toString(),
     platform: json['platform']?.toString(),
     runtimeProfile: json['runtimeProfile']?.toString(),
   );
   Map<String, dynamic> toJson() => {
-    if (userId?.isNotEmpty == true) 'userId': userId,
+    if (spaceId?.isNotEmpty == true) 'spaceId': spaceId,
     if (deviceId?.isNotEmpty == true) 'deviceId': deviceId,
     if (platform?.isNotEmpty == true) 'platform': platform,
     if (runtimeProfile?.isNotEmpty == true) 'runtimeProfile': runtimeProfile,
@@ -196,7 +196,7 @@ class UIProviderResolveContext extends UIProfileScope {
   final bool localRuntime;
   final List<String> deviceCapabilities;
   const UIProviderResolveContext({
-    super.userId,
+    super.spaceId,
     super.deviceId,
     super.platform,
     super.runtimeProfile,
@@ -209,7 +209,7 @@ class UIProviderResolveContext extends UIProfileScope {
   });
   factory UIProviderResolveContext.fromJson(Map<String, dynamic> json) =>
       UIProviderResolveContext(
-        userId: json['userId']?.toString(),
+        spaceId: json['spaceId']?.toString(),
         deviceId: json['deviceId']?.toString(),
         platform: json['platform']?.toString(),
         runtimeProfile: json['runtimeProfile']?.toString(),
@@ -226,7 +226,7 @@ class UIProviderResolveContext extends UIProfileScope {
 
 String uiProfileScopeKindValue(UIProfileScopeKind kind) => switch (kind) {
   UIProfileScopeKind.global => 'global',
-  UIProfileScopeKind.user => 'user',
+  UIProfileScopeKind.space => 'space',
   UIProfileScopeKind.platform => 'platform',
   UIProfileScopeKind.device => 'device',
   UIProfileScopeKind.devicePlatform => 'device_platform',
@@ -465,14 +465,14 @@ class UIProfileEnvelope {
     required this.scopeExists,
   });
   factory UIProfileEnvelope.fromJson(Map<String, dynamic> json) {
-    final rawScope = (json['scope'] ?? 'user').toString();
+    final rawScope = (json['scope'] ?? 'space').toString();
     final scope = switch (rawScope) {
       'global' => UIProfileScopeKind.global,
       'platform' => UIProfileScopeKind.platform,
       'device' => UIProfileScopeKind.device,
       'device_platform' => UIProfileScopeKind.devicePlatform,
       'runtime' => UIProfileScopeKind.runtime,
-      _ => UIProfileScopeKind.user,
+      _ => UIProfileScopeKind.space,
     };
     return UIProfileEnvelope(
       profile: UIProfile.fromJson(

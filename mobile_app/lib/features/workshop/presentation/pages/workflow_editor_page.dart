@@ -1372,7 +1372,7 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
       sources.add(<String, String>{'label': '工作流输入 · $path', 'ref': 'input.$path'});
     }
     sources.addAll(const <Map<String, String>>[
-      <String, String>{'label': 'Runtime · userId', 'ref': 'runtime.userId'},
+      <String, String>{'label': 'Runtime · spaceId', 'ref': 'runtime.spaceId'},
       <String, String>{'label': 'Runtime · conversationId', 'ref': 'runtime.conversationId'},
       <String, String>{'label': 'Runtime · characterId', 'ref': 'runtime.characterId'},
       <String, String>{'label': 'Runtime · traceId', 'ref': 'runtime.traceId'},
@@ -1859,7 +1859,7 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 title: const Text('允许 AI 调用'),
-                subtitle: const Text('保存后按当前用户隔离注册为 Agent Tool'),
+                subtitle: const Text('保存后按当前 Space 隔离注册为 Agent Tool'),
                 value: callableByAgent,
                 onChanged: (v) => setSheetState(() => callableByAgent = v),
               ),
@@ -2020,7 +2020,7 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
                             DropdownButtonFormField<String>(
                               initialValue: _devices.any((item) => (item['deviceId'] ?? '').toString() == executionDeviceId) ? executionDeviceId : null,
                               decoration: const InputDecoration(labelText: '目标设备'),
-                              hint: const Text('选择账号下设备'),
+                              hint: const Text('选择当前 Space 下设备'),
                               items: _devices.map((item) {
                                 final id = (item['deviceId'] ?? '').toString();
                                 final labelText = (item['label'] ?? item['name'] ?? id).toString();

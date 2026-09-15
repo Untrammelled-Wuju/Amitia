@@ -80,22 +80,6 @@ class ThemeSettings {
   });
 }
 
-class UserSettings {
-  final String avatar;
-  final String username;
-  final String nickname;
-  final String userLabel;
-  final String bio;
-
-  UserSettings({
-    this.avatar = 'U',
-    this.username = 'user',
-    this.nickname = '用户',
-    this.userLabel = '主人',
-    this.bio = '',
-  });
-}
-
 class PrivacyScanResult {
   final String category;
   final int riskCount;
@@ -137,7 +121,7 @@ class TimeAnchor {
 
   const TimeAnchor({
     required this.id,
-    this.scopeType = 'user',
+    this.scopeType = 'space',
     this.characterId = '',
     this.anchorType = 'custom',
     required this.title,
@@ -166,7 +150,7 @@ class TimeAnchor {
   factory TimeAnchor.fromJson(Map<String, dynamic> json) {
     return TimeAnchor(
       id: (json['id'] ?? '').toString(),
-      scopeType: (json['scopeType'] ?? 'user').toString(),
+      scopeType: (json['scopeType'] ?? 'space').toString(),
       characterId: (json['characterId'] ?? '').toString(),
       anchorType: (json['anchorType'] ?? 'custom').toString(),
       title: (json['title'] ?? '').toString(),

@@ -2,7 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../backend_transport/backend_service_api.dart';
 import '../backend_transport/providers/backend_transport_providers.dart';
 import '../ui_runtime/ui_runtime_invalidation.dart';
-import 'auth_service.dart';
+import 'space_profile_service.dart';
 import 'character_service.dart';
 import 'character_detail_service.dart';
 import 'chat_service.dart';
@@ -38,8 +38,8 @@ BackendServiceApi _getDynamicServiceApi(Ref ref) {
   return ref.read(backendServiceProvider);
 }
 
-final authServiceProvider = Provider<AuthService>(
-  (ref) => AuthService(_getDynamicServiceApi(ref)),
+final spaceProfileServiceProvider = Provider<SpaceProfileService>(
+  (ref) => SpaceProfileService(_getDynamicServiceApi(ref)),
 );
 
 final onboardingServiceProvider = Provider<OnboardingService>(
@@ -204,14 +204,12 @@ final moodServiceProvider = Provider<MoodService>(
   (ref) => MoodService(_getDynamicServiceApi(ref)),
 );
 
-final authStateProvider = FutureProvider<bool>((ref) async {
-  final auth = ref.read(authServiceProvider);
-  return auth.isLoggedIn;
-});
-
-final currentUserProvider = FutureProvider.autoDispose<UserInfo?>((ref) async {
-  final auth = ref.read(authServiceProvider);
-  return auth.currentUser;
+final currentSpaceProfileProvider = FutureProvider.autoDispose<SpaceProfile?>((ref) async {
+  try {
+    return await ref.read(spaceProfileServiceProvider).fetch();
+  } catch (_) {
+    return null;
+  }
 });
 
 final characterListProvider = FutureProvider.autoDispose<List<CharacterDto>>((
@@ -417,12 +415,7 @@ final companionStateByCharacterProvider = FutureProvider.autoDispose
       };
     });
 
-final startupStageProvider = FutureProvider<String>((ref) async {
-  final auth = ref.read(authServiceProvider);
-  final loggedIn = await auth.isLoggedIn;
-  if (!loggedIn) return 'needsLogin';
-  return 'ready';
-});
+final startupStageProvider = FutureProvider<String>((ref) async => 'ready');
 
 final extensionViewInvalidatorProvider = Provider<ExtensionViewInvalidator>(
   (ref) => ExtensionViewInvalidatorImpl(),

@@ -30,7 +30,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
     '欢迎',
     '运行环境检查',
     '部署模式选择',
-    '管理员初始化',
+    '个人空间与设备',
     '使用边界确认',
     '文本模型配置',
     '视觉模型配置',
@@ -45,9 +45,8 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
     '进入Amitia',
   ];
 
-  final _adminUserController = TextEditingController();
-  final _adminPassController = TextEditingController();
-  final _setupTokenController = TextEditingController();
+  final _profileNameController = TextEditingController(text: '我');
+  final _pairingCodeController = TextEditingController();
   final _textProviderCtrl = TextEditingController(text: 'OpenAI');
   final _textModelCtrl = TextEditingController(text: 'GPT-4o');
   final _textKeyCtrl = TextEditingController();
@@ -73,8 +72,8 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
   int _selectedAvatarColor = 0;
   final List<bool> _selectedTraits = List.filled(8, false);
   bool _submitting = false;
-  bool _adminInitialized = false;
-  bool _adminExists = false;
+  bool _devicePaired = false;
+  bool _firstDeviceSetupRequired = false;
   String? _textConfigId;
   String? _visionConfigId;
   String? _ttsConfigId;
@@ -86,9 +85,8 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
 
   @override
   void dispose() {
-    _adminUserController.dispose();
-    _adminPassController.dispose();
-    _setupTokenController.dispose();
+    _profileNameController.dispose();
+    _pairingCodeController.dispose();
     _textProviderCtrl.dispose();
     _textModelCtrl.dispose();
     _textKeyCtrl.dispose();
@@ -206,21 +204,22 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
       }
 
       final onboarding = ref.read(onboardingServiceProvider);
-      final auth = ref.read(authServiceProvider);
       final health = _deployMode == 0
           ? await onboarding.health()
           : await onboarding.healthAt(_remoteCoreCtrl.text.trim());
       if (health.isEmpty) {
         throw StateError(_deployMode == 0 ? '本地 Business Core 不可用' : 'Cloud Core 不可用');
       }
-      final adminExists = _deployMode == 0
-          ? await auth.hasAdmin()
-          : await auth.hasAdminAt(_remoteCoreCtrl.text.trim());
+      var firstDeviceSetupRequired = false;
+      if (_deployMode == 1) {
+        final pairing = await onboarding.pairingStatusAt(_remoteCoreCtrl.text.trim());
+        firstDeviceSetupRequired = pairing['firstDeviceSetupRequired'] == true;
+      }
       if (mounted) {
         setState(() {
-          _adminExists = adminExists;
-          _adminInitialized = false;
-          _setupTokenController.clear();
+          _firstDeviceSetupRequired = firstDeviceSetupRequired;
+          _devicePaired = _deployMode == 0;
+          _pairingCodeController.clear();
         });
       }
     } catch (_) {
@@ -243,44 +242,61 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
         await _applyDeploymentSelection();
         return;
       case 3:
-        if (_adminInitialized) return;
-        final auth = ref.read(authServiceProvider);
-        final username = _adminUserController.text.trim();
-        final password = _adminPassController.text;
-        final isCloud = _deployMode == 1;
-        final remoteCore = _remoteCoreCtrl.text.trim();
-        final adminExists = isCloud
-            ? await auth.hasAdminAt(remoteCore)
-            : await auth.hasAdmin();
-        if (adminExists) {
-          if (isCloud) {
-            await auth.loginAt(remoteCore, username, password);
-          } else {
-            await auth.login(username, password);
-          }
-        } else {
-          final setupToken = _setupTokenController.text.trim();
-          if (isCloud) {
-            await auth.setupAndLoginAt(
-              remoteCore,
-              username,
-              password,
-              setupToken: setupToken,
-            );
-          } else {
-            await auth.setupAndLogin(username, password);
-          }
+        final displayName = _profileNameController.text.trim();
+        if (displayName.isEmpty) {
+          throw StateError('请填写个人空间显示名称');
         }
-        if (isCloud) {
+        if (_deployMode == 1 && !_devicePaired) {
+          final remoteCore = _remoteCoreCtrl.text.trim();
+          final localMesh = ref.read(deviceMeshLocalServiceProvider);
+          if (localMesh == null) {
+            throw StateError('本机 Device Agent 不可用，无法完成云端设备配对');
+          }
+          final identity = await localMesh.identity();
+          final deviceId = (identity['deviceId'] ?? '').toString().trim();
+          final runtimeId = (identity['runtimeId'] ?? '').toString().trim();
+          final platform = (identity['platform'] ?? '').toString().trim();
+          if (deviceId.isEmpty || runtimeId.isEmpty || platform.isEmpty) {
+            throw StateError('本机 Device Mesh 身份不完整');
+          }
+          final rawPairing = _pairingCodeController.text.trim();
+          if (rawPairing.isEmpty) {
+            throw StateError(_firstDeviceSetupRequired ? '请输入 Cloud 首设备设置码' : '请粘贴设备配对二维码内容或 Offer Token');
+          }
+          var offerToken = '';
+          var setupCode = '';
+          if (_firstDeviceSetupRequired) {
+            setupCode = rawPairing;
+          } else {
+            offerToken = _extractPairingOffer(rawPairing, remoteCore);
+          }
+          final claimed = await ref.read(onboardingServiceProvider).claimPairingAt(
+                remoteCore,
+                deviceId: deviceId,
+                runtimeId: runtimeId,
+                platform: platform,
+                label: 'Mobile',
+                offerToken: offerToken,
+                setupCode: setupCode,
+              );
+          final ticket = (claimed['ticket'] ?? '').toString().trim();
+          if (ticket.isEmpty) throw StateError('Cloud Core 未返回 Bootstrap Ticket');
+          await localMesh.bootstrap(cloudBaseUrl: remoteCore, bootstrapTicket: ticket);
           ref.invalidate(backendConnectionProvider);
           ref.invalidate(backendTransportProvider);
           await ref.read(backendConnectionProvider.future);
           await ref.read(backendTransportProvider.future);
-          await auth.fetchProfile();
+          _devicePaired = true;
         }
-        _adminExists = true;
-        _adminInitialized = true;
-        ref.invalidate(currentUserProvider);
+        final current = await ref.read(spaceProfileServiceProvider).fetch();
+        await ref.read(spaceProfileServiceProvider).update(
+              displayName: displayName,
+              userLabel: current.userLabel,
+              bio: current.bio,
+              avatar: current.avatar,
+              preferences: current.preferences,
+            );
+        ref.invalidate(currentSpaceProfileProvider);
         return;
       case 5:
         await _persistTextModel();
@@ -436,12 +452,10 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
     await ref.read(characterServiceProvider).setActive(characterId);
     final memory = _initMemoryCtrl.text.trim();
     if (memory.isNotEmpty) {
-      final user = await ref.read(authServiceProvider).currentUser;
       await ref.read(profileServiceProvider).create({
         'category': 'memory',
         'attributeName': '初始记忆',
         'attributeValue': memory,
-        if (user?.id.isNotEmpty == true) 'userId': user!.id,
         'characterId': characterId,
         'confidence': 1.0,
         'source': 'onboarding',
@@ -449,7 +463,6 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
     }
     await ref.read(onboardingServiceProvider).complete(
           deployMode: _deployMode == 0 ? 'mobile-local' : 'cloud-web',
-          username: _adminUserController.text.trim(),
         );
     ref.invalidate(characterListProvider);
     ref.read(currentCharacterIdProvider.notifier).state = characterId;
@@ -493,11 +506,9 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
       case 2:
         return _deployMode == 0 || _remoteCoreCtrl.text.trim().isNotEmpty;
       case 3:
-        final credentialsReady =
-            _adminUserController.text.isNotEmpty && _adminPassController.text.isNotEmpty;
-        if (!credentialsReady) return false;
-        if (_deployMode == 1 && !_adminExists) {
-          return _setupTokenController.text.trim().length >= 32;
+        if (_profileNameController.text.trim().isEmpty) return false;
+        if (_deployMode == 1 && !_devicePaired) {
+          return _pairingCodeController.text.trim().isNotEmpty;
         }
         return true;
       case 4:
@@ -629,7 +640,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
       case 2:
         return _buildDeployMode();
       case 3:
-        return _buildAdminInit();
+        return _buildSpaceAndDevice();
       case 4:
         return _buildBoundary();
       case 5:
@@ -723,7 +734,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
               SizedBox(height: AppSpacing.md),
               ...[
                 '运行环境与部署模式',
-                '管理员账号初始化',
+                '个人空间与设备配对',
                 '文本 / 视觉 / 语音 / 向量模型',
                 'AI 角色头像、名字与性格',
                 '初始记忆设定',
@@ -967,22 +978,17 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
     );
   }
 
-  Widget _buildAdminInit() {
-    final creatingRemoteAdmin = _deployMode == 1 && !_adminExists;
+  Widget _buildSpaceAndDevice() {
+    final isCloud = _deployMode == 1;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          _adminExists ? '管理员登录' : '管理员账号初始化',
-          style: AppTypography.sectionTitle(context),
-        ),
+        Text('个人空间与设备', style: AppTypography.sectionTitle(context)),
         SizedBox(height: AppSpacing.sm),
         Text(
-          _adminExists
-              ? '目标 Business Core 已存在管理员，请登录后继续。'
-              : creatingRemoteAdmin
-                  ? '该 Cloud Core 尚无管理员，需要使用服务器配置的初始化令牌创建首个管理员。'
-                  : '创建管理员账号用于管理 Amitia 平台。',
+          isCloud
+              ? '不创建产品账号。当前设备通过 Device Mesh 配对加入 Cloud Core，个人资料归属于该 Space。'
+              : '本地模式不需要账号。个人资料保存在本地 Space，设备身份由 Device Mesh 独立管理。',
           style: AppTypography.caption(context),
         ),
         SizedBox(height: AppSpacing.lg),
@@ -990,38 +996,34 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('用户名', style: AppTypography.label(context)),
+              Text('显示名称', style: AppTypography.label(context)),
               SizedBox(height: AppSpacing.xs),
               AmitiaTextField(
-                hintText: _adminExists ? '请输入管理员用户名' : '设置管理员用户名',
-                controller: _adminUserController,
+                hintText: '例如：无拘',
+                controller: _profileNameController,
                 prefixIcon: Icon(Icons.person_outline, size: 20, color: context.textTertiary),
                 onChanged: (_) => setState(() {}),
               ),
-              SizedBox(height: AppSpacing.lg),
-              Text('密码', style: AppTypography.label(context)),
-              SizedBox(height: AppSpacing.xs),
-              AmitiaTextField(
-                hintText: _adminExists ? '请输入密码' : '设置管理员密码',
-                controller: _adminPassController,
-                obscureText: true,
-                prefixIcon: Icon(Icons.lock_outline, size: 20, color: context.textTertiary),
-                onChanged: (_) => setState(() {}),
-              ),
-              if (creatingRemoteAdmin) ...[
+              if (isCloud) ...[
                 SizedBox(height: AppSpacing.lg),
-                Text('Cloud 初始化令牌', style: AppTypography.label(context)),
+                Text(
+                  _firstDeviceSetupRequired ? 'Cloud 首设备设置码' : '设备配对信息',
+                  style: AppTypography.label(context),
+                ),
                 SizedBox(height: AppSpacing.xs),
                 AmitiaTextField(
-                  hintText: 'AMITIA_SETUP_TOKEN（至少 32 位）',
-                  controller: _setupTokenController,
-                  obscureText: true,
-                  prefixIcon: Icon(Icons.key_outlined, size: 20, color: context.textTertiary),
+                  hintText: _firstDeviceSetupRequired
+                      ? '输入 Cloud Core 本机显示的一次性设置码'
+                      : '粘贴 amitia://pair?... 二维码内容或 Offer Token',
+                  controller: _pairingCodeController,
+                  prefixIcon: Icon(Icons.qr_code_2, size: 20, color: context.textTertiary),
                   onChanged: (_) => setState(() {}),
                 ),
                 SizedBox(height: AppSpacing.sm),
                 Text(
-                  '该值必须与 Cloud Core 环境变量 AMITIA_SETUP_TOKEN 完全一致。',
+                  _firstDeviceSetupRequired
+                      ? '这是该 Cloud Core 的第一台可信设备。设置码只能从 Cloud Core 本机安全界面获取。'
+                      : '可在任意已信任设备上生成一次性配对二维码；二维码只用于签发当前设备的 Device Credential。',
                   style: AppTypography.caption(context),
                 ),
               ],
@@ -1038,9 +1040,9 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
                     SizedBox(width: AppSpacing.sm),
                     Expanded(
                       child: Text(
-                        _adminExists
-                            ? '登录成功后，后续模型配置和初始化完成操作都会使用该管理员会话。'
-                            : '首管理员创建完成后会直接保存服务端返回的会话，不再额外重复登录。',
+                        isCloud
+                            ? 'Device ID 只用于设备寻址，真正的云端认证由一次性配对后签发的 Device Credential 完成。'
+                            : 'Space ID 负责数据归属；Device ID / Runtime ID 负责执行位置，两者不再混用。',
                         style: AppTypography.label(context).copyWith(color: context.accentPrimary),
                       ),
                     ),
@@ -1052,6 +1054,22 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
         ),
       ],
     );
+  }
+
+  String _extractPairingOffer(String raw, String cloudUri) {
+    final value = raw.trim();
+    if (!value.startsWith('amitia://')) return value;
+    final uri = Uri.tryParse(value);
+    if (uri == null) return '';
+    final endpoint = uri.queryParameters['endpoint']?.trim() ?? '';
+    if (endpoint.isNotEmpty) {
+      final expected = Uri.tryParse(cloudUri);
+      final offered = Uri.tryParse(endpoint);
+      if (expected == null || offered == null || expected.scheme != offered.scheme || expected.host != offered.host || expected.port != offered.port) {
+        throw StateError('配对 Offer 属于另一个 Cloud Core');
+      }
+    }
+    return uri.queryParameters['offer']?.trim() ?? '';
   }
 
   Widget _buildBoundary() {
@@ -1509,7 +1527,8 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
         .join('、');
     final items = <(String, String)>[
       ('部署模式', _deployMode == 0 ? '本地部署' : '云端部署'),
-      ('管理员账号', _adminUserController.text.isNotEmpty ? _adminUserController.text : '未设置'),
+      ('个人空间', _profileNameController.text.trim().isNotEmpty ? _profileNameController.text.trim() : '未设置'),
+      if (_deployMode == 1) ('设备配对', _devicePaired ? '已完成' : '待完成'),
       ('文本模型', '${_textProviderCtrl.text} / ${_textModelCtrl.text}'),
       ('视觉模型', '${_visionProviderCtrl.text} / ${_visionModelCtrl.text}'),
       ('语音模型', '${_voiceProviderCtrl.text} / ${_voiceModelCtrl.text}'),

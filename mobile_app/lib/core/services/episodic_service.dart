@@ -7,7 +7,7 @@ class EpisodicService {
   EpisodicService(this._api);
 
   Future<List<EpisodicDto>> list({
-    String userId = '',
+    String spaceId = '',
     String characterId = '',
     String sceneType = '',
     int retentionLevel = 0,
@@ -19,7 +19,7 @@ class EpisodicService {
     final resp = await _api.get<Map<String, dynamic>>(
       '/api/episodic',
       queryParameters: {
-        if (userId.isNotEmpty) 'userId': userId,
+        if (spaceId.isNotEmpty) 'spaceId': spaceId,
         if (characterId.isNotEmpty) 'characterId': characterId,
         if (sceneType.isNotEmpty) 'sceneType': sceneType,
         if (retentionLevel >= 1 && retentionLevel <= 5) 'retentionLevel': retentionLevel,
@@ -60,14 +60,14 @@ class EpisodicService {
     return resp == null ? null : EpisodicDto.fromJson(resp);
   }
 
-  Future<List<EpisodicDto>> getByUser({
-    String userId = 'default',
+  Future<List<EpisodicDto>> getBySpace({
+    String spaceId = 'default',
     String characterId = '',
   }) async {
     final resp = await _api.get<List<dynamic>>(
-      '/api/episodic/by-user',
+      '/api/episodic/by-space',
       queryParameters: {
-        'userId': userId,
+        'spaceId': spaceId,
         if (characterId.isNotEmpty) 'characterId': characterId,
       },
     );
@@ -83,7 +83,7 @@ class EpisodicService {
   }
 
   Future<bool> extract({
-    String userId = 'default',
+    String spaceId = 'default',
     String characterId = '',
     required String conversationId,
     required List<Map<String, String>> messages,
@@ -91,7 +91,7 @@ class EpisodicService {
     await _api.post(
       '/api/episodic/extract',
       data: {
-        'userId': userId,
+        'spaceId': spaceId,
         'characterId': characterId,
         'conversationId': conversationId,
         'messages': messages,
@@ -101,13 +101,13 @@ class EpisodicService {
   }
 
   Future<Map<String, dynamic>?> systemPrompt({
-    String userId = 'default',
+    String spaceId = 'default',
     String characterId = '',
   }) {
     return _api.get<Map<String, dynamic>>(
       '/api/episodic/system-prompt',
       queryParameters: {
-        'userId': userId,
+        'spaceId': spaceId,
         if (characterId.isNotEmpty) 'characterId': characterId,
       },
     );

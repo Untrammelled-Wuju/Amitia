@@ -43,8 +43,7 @@ class _McpInteractionGuardState extends ConsumerState<McpInteractionGuard> {
     if (!mounted || !_available || _loading || _dialogOpen) return;
     _loading = true;
     try {
-      final loggedIn = await ref.read(authServiceProvider).isLoggedIn;
-      if (!loggedIn || !mounted) return;
+      if (!mounted) return;
       final items = await ref.read(mcpServiceProvider).interactions();
       if (!mounted || items.isEmpty || _dialogOpen) return;
       _dialogOpen = true;

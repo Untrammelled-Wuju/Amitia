@@ -657,7 +657,7 @@ class _ChatLogsPageState extends ConsumerState<ChatLogsPage> {
   }
 
   Future<void> _deleteAll() async {
-    final ok = await _confirm('删除全部聊天记录', '确定删除当前账号的全部会话和消息吗？此操作不可撤销。');
+    final ok = await _confirm('删除全部聊天记录', '确定删除当前 Space 的全部会话和消息吗？此操作不可撤销。');
     if (!ok) return;
     try {
       await ref.read(chatServiceProvider).deleteAllConversations();
