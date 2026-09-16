@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 vi.mock("electron", () => ({
   app: {
     getPath: vi.fn(() => "/tmp/amitia-test"),
-    getVersion: vi.fn(() => "26.1.8"),
+    getVersion: vi.fn(() => "26.2.0-beta"),
     setLoginItemSettings: vi.fn(),
   },
   BrowserWindow: class {},

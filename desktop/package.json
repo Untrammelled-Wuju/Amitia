@@ -1,6 +1,6 @@
 {
   "name": "@amitia/desktop",
-  "version": "26.1.8",
+  "version": "26.2.0-beta",
   "desktopPetRuntimeVersion": "1.0.0",
   "desktopPetRuntimeContractVersion": "1.0.0",
   "private": true,
