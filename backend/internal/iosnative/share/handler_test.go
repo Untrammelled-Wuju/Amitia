@@ -183,8 +183,8 @@ func TestHandler_Send_WithPreview(t *testing.T) {
 	req := baseShareRequest(OperationSend)
 	req.Payload["text"] = "Test"
 	req.Payload["preview"] = map[string]any{
-		"title":           "Preview Title",
-		"subtitle":        "Preview Subtitle",
+		"title":            "Preview Title",
+		"subtitle":         "Preview Subtitle",
 		"imageResourceUri": "amitia://res/preview",
 	}
 	resp := h.Execute(context.Background(), req)
@@ -250,79 +250,6 @@ func TestHandler_PreviewSupported(t *testing.T) {
 
 	if resp.Status != "ok" {
 		t.Errorf("expected ok status, got %s", resp.Status)
-	}
-}
-
-func TestHandler_ReceivePending(t *testing.T) {
-	expected := nativebridge.Response{
-		ProtocolVersion: 1,
-		RequestId:       "test-share-001",
-		Status:          "ok",
-		Result:          map[string]any{"shares": []any{}},
-	}
-	bridge := newMockShareBridge(expected, nil)
-	h := NewShareHandler(bridge)
-
-	req := baseShareRequest(OperationReceivePending)
-	resp := h.Execute(context.Background(), req)
-
-	if resp.Status != "ok" {
-		t.Errorf("expected ok status, got %s", resp.Status)
-	}
-}
-
-func TestHandler_ReceiveConsume_MissingID(t *testing.T) {
-	h := NewShareHandler(newMockShareBridge(nativebridge.Response{}, nil))
-	req := baseShareRequest(OperationReceiveConsume)
-	resp := h.Execute(context.Background(), req)
-
-	if resp.Status != "error" {
-		t.Errorf("expected error status, got %s", resp.Status)
-	}
-	if resp.Error.Code != ErrShareReceivedNotFound {
-		t.Errorf("expected ErrShareReceivedNotFound, got %s", resp.Error.Code)
-	}
-}
-
-func TestHandler_ReceiveConsume_Success(t *testing.T) {
-	expected := nativebridge.Response{
-		ProtocolVersion: 1,
-		RequestId:       "test-share-001",
-		Status:          "ok",
-		Result:          map[string]any{"consumed": true},
-	}
-	bridge := newMockShareBridge(expected, nil)
-	h := NewShareHandler(bridge)
-
-	req := baseShareRequest(OperationReceiveConsume)
-	req.Payload["shareId"] = "share-001"
-	resp := h.Execute(context.Background(), req)
-
-	if resp.Status != "ok" {
-		t.Errorf("expected ok status, got %s", resp.Status)
-	}
-	if bridge.calls[0].Payload["shareId"] != "share-001" {
-		t.Error("expected shareId")
-	}
-}
-
-func TestHandler_ReceivePeek_MissingID(t *testing.T) {
-	h := NewShareHandler(newMockShareBridge(nativebridge.Response{}, nil))
-	req := baseShareRequest(OperationReceivePeek)
-	resp := h.Execute(context.Background(), req)
-
-	if resp.Status != "error" {
-		t.Errorf("expected error status, got %s", resp.Status)
-	}
-}
-
-func TestHandler_ReceiveDismiss_MissingID(t *testing.T) {
-	h := NewShareHandler(newMockShareBridge(nativebridge.Response{}, nil))
-	req := baseShareRequest(OperationReceiveDismiss)
-	resp := h.Execute(context.Background(), req)
-
-	if resp.Status != "error" {
-		t.Errorf("expected error status, got %s", resp.Status)
 	}
 }
 

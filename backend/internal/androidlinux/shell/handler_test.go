@@ -1,3 +1,5 @@
+//go:build linux && !android
+
 package shell
 
 import (
@@ -82,8 +84,8 @@ func TestIsExitSignal(t *testing.T) {
 
 func TestExtractSignalFromCode(t *testing.T) {
 	tests := []struct {
-		code       int
-		expectSig  string
+		code      int
+		expectSig string
 	}{
 		{137, "SIGKILL"},
 		{130, "SIGINT"},

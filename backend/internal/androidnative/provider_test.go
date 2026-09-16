@@ -18,7 +18,7 @@ func (m *mockBridge) Execute(ctx context.Context, req NativeBridgeRequest) (Nati
 	}
 	return NativeBridgeResponse{
 		ProtocolVersion: req.ProtocolVersion,
-		RequestID:       req.RequestID,
+		RequestId:       req.RequestId,
 		Status:          "success",
 	}, nil
 }
@@ -70,7 +70,7 @@ func TestProvider_Execute_RegisteredHandler(t *testing.T) {
 		executeFunc: func(ctx context.Context, req NativeBridgeRequest) (NativeBridgeResponse, error) {
 			return NativeBridgeResponse{
 				ProtocolVersion: req.ProtocolVersion,
-				RequestID:       req.RequestID,
+				RequestId:       req.RequestId,
 				Status:          "success",
 				Result: map[string]any{
 					"state": "connected",

@@ -2,6 +2,7 @@ package background
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"testing"
 	"time"
@@ -153,9 +154,9 @@ func TestHandler_TaskSubmit_ContinuedNotUserInitiated(t *testing.T) {
 	h := NewBackgroundHandler(newMockBackgroundBridge(nativebridge.Response{}, nil))
 	req := baseBackgroundRequest(OperationTaskSubmit)
 	req.Payload["systemClass"] = string(BackgroundClassContinued)
-	req.Payload["identifierClass"] = "continued_export"
+	req.Payload["identifier"] = "continued_export"
 	req.Payload["taskRunId"] = "task-001"
-	req.Payload["initiator"] = string(InitiatorScheduler)
+	req.Payload["initiator"] = "scheduler"
 	req.Payload["title"] = "Export"
 	resp := h.Execute(context.Background(), req)
 
@@ -171,7 +172,7 @@ func TestHandler_TaskSubmit_ContinuedMissingTaskRunID(t *testing.T) {
 	h := NewBackgroundHandler(newMockBackgroundBridge(nativebridge.Response{}, nil))
 	req := baseBackgroundRequest(OperationTaskSubmit)
 	req.Payload["systemClass"] = string(BackgroundClassContinued)
-	req.Payload["identifierClass"] = "continued_export"
+	req.Payload["identifier"] = "continued_export"
 	req.Payload["initiator"] = string(InitiatorUser)
 	req.Payload["title"] = "Export"
 	resp := h.Execute(context.Background(), req)
@@ -196,7 +197,7 @@ func TestHandler_TaskSubmit_ContinuedSuccess(t *testing.T) {
 
 	req := baseBackgroundRequest(OperationTaskSubmit)
 	req.Payload["systemClass"] = string(BackgroundClassContinued)
-	req.Payload["identifierClass"] = "continued_export"
+	req.Payload["identifier"] = "continued_export"
 	req.Payload["taskRunId"] = "task-001"
 	req.Payload["initiator"] = string(InitiatorUser)
 	req.Payload["strategy"] = string(ContinuedStrategyQueueIfNeeded)
@@ -221,7 +222,7 @@ func TestHandler_TaskSubmit_RefreshMissingIDs(t *testing.T) {
 	h := NewBackgroundHandler(newMockBackgroundBridge(nativebridge.Response{}, nil))
 	req := baseBackgroundRequest(OperationTaskSubmit)
 	req.Payload["systemClass"] = string(BackgroundClassRefresh)
-	req.Payload["identifierClass"] = "maintenance"
+	req.Payload["identifier"] = "maintenance"
 	resp := h.Execute(context.Background(), req)
 
 	if resp.Status != "error" {
@@ -241,7 +242,7 @@ func TestHandler_TaskSubmit_RefreshWithTaskDefinitionID(t *testing.T) {
 
 	req := baseBackgroundRequest(OperationTaskSubmit)
 	req.Payload["systemClass"] = string(BackgroundClassRefresh)
-	req.Payload["identifierClass"] = "maintenance"
+	req.Payload["identifier"] = "maintenance"
 	req.Payload["taskDefinitionID"] = "def-001"
 	resp := h.Execute(context.Background(), req)
 
@@ -356,7 +357,7 @@ func TestHandler_TaskProgress_Success(t *testing.T) {
 
 	req := baseBackgroundRequest(OperationTaskProgress)
 	req.Payload["taskRunId"] = "task-001"
-	req.Payload["identifierClass"] = "export"
+	req.Payload["identifier"] = "export"
 	req.Payload["totalUnits"] = float64(100)
 	req.Payload["completedUnits"] = float64(45)
 	req.Payload["phase"] = "exporting"
@@ -786,7 +787,7 @@ func TestHandler_FileAccessWrite_TooLarge(t *testing.T) {
 	req := baseBackgroundRequest(OperationFileAccessWrite)
 	req.Payload["mountId"] = "mount-001"
 	req.Payload["relativePath"] = "docs/file.txt"
-	req.Payload["content"] = make([]byte, MaxContentBytes+1)
+	req.Payload["contentBase64"] = base64.StdEncoding.EncodeToString(make([]byte, MaxContentBytes+1))
 	resp := h.Execute(context.Background(), req)
 
 	if resp.Status != "error" {
@@ -810,7 +811,7 @@ func TestHandler_FileAccessWrite_Success(t *testing.T) {
 	req := baseBackgroundRequest(OperationFileAccessWrite)
 	req.Payload["mountId"] = "mount-001"
 	req.Payload["relativePath"] = "docs/file.txt"
-	req.Payload["content"] = []byte("hello world")
+	req.Payload["contentBase64"] = base64.StdEncoding.EncodeToString([]byte("hello world"))
 	req.Payload["atomic"] = true
 	resp := h.Execute(context.Background(), req)
 
@@ -1193,21 +1194,21 @@ func TestValidateRelativePath(t *testing.T) {
 
 func TestValidateSubmission(t *testing.T) {
 	err := ValidateSubmission(BackgroundSubmissionRequest{
-		SystemClass:      BackgroundClassContinued,
-		IdentifierClass:  "export",
-		TaskRunID:        "task-001",
-		Initiator:        InitiatorUser,
-		Title:            "Export",
-		Strategy:         ContinuedStrategyQueueIfNeeded,
+		SystemClass: BackgroundClassContinued,
+		Identifier:  "export",
+		TaskRunID:   "task-001",
+		Initiator:   InitiatorUser,
+		Title:       "Export",
+		Strategy:    ContinuedStrategyQueueIfNeeded,
 	})
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
 
 	err = ValidateSubmission(BackgroundSubmissionRequest{
-		SystemClass:      BackgroundClassContinued,
-		IdentifierClass:  "export",
-		Initiator:        InitiatorScheduler,
+		SystemClass: BackgroundClassContinued,
+		Identifier:  "export",
+		Initiator:   TaskInitiator("scheduler"),
 	})
 	if err == nil {
 		t.Error("expected error for scheduler-initiated continued task")
@@ -1215,11 +1216,11 @@ func TestValidateSubmission(t *testing.T) {
 
 	longTitle := make([]byte, MaxTitleLength+1)
 	err = ValidateSubmission(BackgroundSubmissionRequest{
-		SystemClass:      BackgroundClassContinued,
-		IdentifierClass:  "export",
-		TaskRunID:        "task-001",
-		Initiator:        InitiatorUser,
-		Title:            string(longTitle),
+		SystemClass: BackgroundClassContinued,
+		Identifier:  "export",
+		TaskRunID:   "task-001",
+		Initiator:   InitiatorUser,
+		Title:       string(longTitle),
 	})
 	if err == nil {
 		t.Error("expected error for too long title")
@@ -1285,7 +1286,7 @@ func TestIsValidContinuedInitiator(t *testing.T) {
 			t.Errorf("expected %s to be valid", i)
 		}
 	}
-	if IsValidContinuedInitiator(InitiatorScheduler) {
+	if IsValidContinuedInitiator(TaskInitiator("scheduler")) {
 		t.Error("expected scheduler to be invalid for continued")
 	}
 }

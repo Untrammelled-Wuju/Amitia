@@ -14,7 +14,7 @@ type mockNativeBridge struct{}
 func (m *mockNativeBridge) Execute(ctx context.Context, req androidnative.NativeBridgeRequest) (androidnative.NativeBridgeResponse, error) {
 	return androidnative.NativeBridgeResponse{
 		ProtocolVersion: req.ProtocolVersion,
-		RequestID:       req.RequestID,
+		RequestId:       req.RequestId,
 		Status:          "success",
 		Result: map[string]any{
 			"displayId": 9999.0,
@@ -95,15 +95,15 @@ func TestRegister_Create_DuplicateRejected(t *testing.T) {
 		RequestID:       "test-2",
 		Operation:       OperationCreate,
 	})
-	if resp.Status != "error" {
-		t.Fatalf("expected error for duplicate create, got %s", resp.Status)
+	if resp.Status != "success" {
+		t.Fatalf("expected multiple displays to be supported, got %s", resp.Status)
 	}
 }
 
 func TestTools_BuildVirtualDisplayTools(t *testing.T) {
 	tools := BuildVirtualDisplayTools()
-	if len(tools) != 5 {
-		t.Fatalf("expected 5 tools, got %d", len(tools))
+	if len(tools) != 6 {
+		t.Fatalf("expected 6 tools, got %d", len(tools))
 	}
 	ids := map[string]bool{}
 	for _, tool := range tools {
@@ -119,6 +119,7 @@ func TestTools_BuildVirtualDisplayTools(t *testing.T) {
 		"android.virtual_display.status",
 		"android.virtual_display.create",
 		"android.virtual_display.get",
+		"android.virtual_display.list",
 		"android.virtual_display.resize",
 		"android.virtual_display.release",
 	}

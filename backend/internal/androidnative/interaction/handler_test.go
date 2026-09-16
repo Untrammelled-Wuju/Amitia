@@ -30,8 +30,8 @@ func (m *mockNodeResolver) ResolveNode(ctx context.Context, snapshotID, nodeID s
 }
 
 type mockSnapshotResolver struct {
-	latestFunc   func(ctx context.Context) (uitree.UITreeSnapshot, error)
-	getSnapFunc  func(ctx context.Context, snapshotID string) (uitree.UITreeSnapshot, error)
+	latestFunc  func(ctx context.Context) (uitree.UITreeSnapshot, error)
+	getSnapFunc func(ctx context.Context, snapshotID string) (uitree.UITreeSnapshot, error)
 }
 
 func (m *mockSnapshotResolver) Latest(ctx context.Context) (uitree.UITreeSnapshot, error) {
@@ -104,18 +104,18 @@ func (m *mockVisualLocator) Locate(ctx context.Context, request VisualLocateRequ
 	}
 	return []VisualCandidate{
 		{
-			Source:      StrategyVisualOCR,
-			Text:        "Test",
-			Bounds:      uitree.Rect{Left: 10, Top: 10, Right: 110, Bottom: 40},
-			CenterX:     60,
-			CenterY:     25,
-			Confidence:  0.95,
+			Source:     StrategyVisualOCR,
+			Text:       "Test",
+			Bounds:     uitree.Rect{Left: 10, Top: 10, Right: 110, Bottom: 40},
+			CenterX:    60,
+			CenterY:    25,
+			Confidence: 0.95,
 		},
 	}, nil
 }
 
 type mockRootExecutor struct {
-	tapFunc  func(ctx context.Context, x, y int) error
+	tapFunc   func(ctx context.Context, x, y int) error
 	swipeFunc func(ctx context.Context, startX, startY, endX, endY, durationMS int) error
 	inputFunc func(ctx context.Context, text string) error
 }
@@ -142,7 +142,7 @@ func (m *mockRootExecutor) InputText(ctx context.Context, text string) error {
 }
 
 type mockADBExecutor struct {
-	tapFunc  func(ctx context.Context, x, y int) error
+	tapFunc   func(ctx context.Context, x, y int) error
 	swipeFunc func(ctx context.Context, startX, startY, endX, endY, durationMS int) error
 	inputFunc func(ctx context.Context, text string) error
 }
@@ -169,10 +169,10 @@ func (m *mockADBExecutor) InputText(ctx context.Context, text string) error {
 }
 
 type mockShizukuExecutor struct {
-	tapFunc      func(ctx context.Context, x, y int) error
+	tapFunc       func(ctx context.Context, x, y int) error
 	longPressFunc func(ctx context.Context, x, y, duration int) error
-	inputFunc    func(ctx context.Context, text string) error
-	swipeFunc    func(ctx context.Context, startX, startY, endX, endY, duration int) error
+	inputFunc     func(ctx context.Context, text string) error
+	swipeFunc     func(ctx context.Context, startX, startY, endX, endY, duration int) error
 }
 
 func (m *mockShizukuExecutor) Tap(ctx context.Context, x, y int) error {
@@ -374,6 +374,7 @@ func TestHandler_Click_NodeNotFound(t *testing.T) {
 		&mockVisualLocator{},
 		&mockRootExecutor{},
 		&mockADBExecutor{},
+		&mockShizukuExecutor{},
 		&mockVerifier{},
 		DefaultPolicy(),
 	)
@@ -446,6 +447,7 @@ func TestHandler_InputText_NodeTarget(t *testing.T) {
 		&mockVisualLocator{},
 		&mockRootExecutor{},
 		&mockADBExecutor{},
+		&mockShizukuExecutor{},
 		&mockVerifier{},
 		DefaultPolicy(),
 	)
@@ -479,10 +481,10 @@ func TestHandler_InputText_PasswordFieldDenied(t *testing.T) {
 				SnapshotID: snapshotID,
 				Generation: 1,
 				Node: uitree.UINode{
-					NodeID:    nodeID,
-					Editable:  true,
-					Password:  true,
-					Bounds:    uitree.Rect{Left: 0, Top: 0, Right: 100, Bottom: 50},
+					NodeID:   nodeID,
+					Editable: true,
+					Password: true,
+					Bounds:   uitree.Rect{Left: 0, Top: 0, Right: 100, Bottom: 50},
 				},
 			}, nil
 		},
@@ -495,6 +497,7 @@ func TestHandler_InputText_PasswordFieldDenied(t *testing.T) {
 		&mockVisualLocator{},
 		&mockRootExecutor{},
 		&mockADBExecutor{},
+		&mockShizukuExecutor{},
 		&mockVerifier{},
 		DefaultPolicy(),
 	)
@@ -543,6 +546,7 @@ func TestHandler_ClearText_NodeTarget(t *testing.T) {
 		&mockVisualLocator{},
 		&mockRootExecutor{},
 		&mockADBExecutor{},
+		&mockShizukuExecutor{},
 		&mockVerifier{},
 		DefaultPolicy(),
 	)
@@ -698,6 +702,7 @@ func TestHandler_RootFallback(t *testing.T) {
 		&mockVisualLocator{},
 		root,
 		nil,
+		nil,
 		&mockVerifier{},
 		policy,
 	)
@@ -754,6 +759,7 @@ func TestHandler_ADBFallback(t *testing.T) {
 		&mockVisualLocator{},
 		nil,
 		adb,
+		nil,
 		&mockVerifier{},
 		policy,
 	)
@@ -805,7 +811,7 @@ func (m *mockAndroidNativeBridge) Execute(ctx context.Context, req androidnative
 	}
 	return androidnative.NativeBridgeResponse{
 		ProtocolVersion: req.ProtocolVersion,
-		RequestID:       req.RequestID,
+		RequestId:       req.RequestId,
 		Status:          "success",
 	}, nil
 }

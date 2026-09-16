@@ -39,8 +39,8 @@ func TestStore_HasActive(t *testing.T) {
 		t.Error("expected active display")
 	}
 	s.Insert(&VirtualDisplayRecord{State: StateReleased})
-	if s.HasActive() {
-		t.Error("expected no active display after release")
+	if !s.HasActive() {
+		t.Error("expected original active display to remain after inserting a released record")
 	}
 }
 
