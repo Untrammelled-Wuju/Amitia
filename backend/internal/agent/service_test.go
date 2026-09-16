@@ -44,16 +44,17 @@ func (p *agentTestProcessor) ProcessMessageCtx(ctx context.Context, req *interac
 }
 
 func TestStableWebhookSpaceIDUsesAuthenticatedScope(t *testing.T) {
-	if got := stableWebhookSpaceID(WebhookRequest{}); got != requestidentity.LegacySpaceID {
-		t.Fatalf("expected %q, got %q", requestidentity.LegacySpaceID, got)
+	canonical := requestidentity.CanonicalSpaceID()
+	if got := stableWebhookSpaceID(WebhookRequest{}); got != canonical {
+		t.Fatalf("expected %q, got %q", canonical, got)
 	}
 	if got := stableWebhookSpaceID(WebhookRequest{SpaceID: "web-user"}); got != "web-user" {
 		t.Fatalf("expected %q, got %q", "web-user", got)
 	}
-	if got := stableWebhookSpaceID(WebhookRequest{SenderID: "wechat-openid"}); got != requestidentity.LegacySpaceID {
-		t.Fatalf("expected %q, got %q", requestidentity.LegacySpaceID, got)
+	if got := stableWebhookSpaceID(WebhookRequest{SenderID: "wechat-openid"}); got != canonical {
+		t.Fatalf("expected %q, got %q", canonical, got)
 	}
-	if got := stableWebhookSpaceID(WebhookRequest{AccountID: "qq-account"}); got != requestidentity.LegacySpaceID {
-		t.Fatalf("expected %q, got %q", requestidentity.LegacySpaceID, got)
+	if got := stableWebhookSpaceID(WebhookRequest{AccountID: "qq-account"}); got != canonical {
+		t.Fatalf("expected %q, got %q", canonical, got)
 	}
 }

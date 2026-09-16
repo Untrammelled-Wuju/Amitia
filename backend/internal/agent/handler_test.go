@@ -9,6 +9,8 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	authctx "github.com/u-ai/backend/internal/auth"
+	"github.com/u-ai/backend/internal/runtimeidentity"
 )
 
 type fakeWebhookService struct {
@@ -63,6 +65,7 @@ func TestWebhookHandlerPassesEnvelopeAndContext(t *testing.T) {
 	rec := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(rec)
 	c.Request = req
+	c.Set("actorContext", &authctx.ActorContext{SpaceID: runtimeidentity.SpaceID("user-1")})
 
 	h.Webhook(c)
 

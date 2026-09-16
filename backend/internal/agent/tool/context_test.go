@@ -8,7 +8,12 @@ import (
 	"testing"
 
 	"github.com/glebarez/sqlite"
+	episodicsvc "github.com/u-ai/backend/internal/episodic"
+	"github.com/u-ai/backend/internal/graph"
 	memorysvc "github.com/u-ai/backend/internal/memory"
+	profilesvc "github.com/u-ai/backend/internal/profile"
+	"github.com/u-ai/backend/internal/requestidentity"
+	"github.com/u-ai/backend/internal/spaceidentity"
 	"github.com/u-ai/backend/pkg/app"
 	"gorm.io/gorm"
 )
@@ -26,27 +31,62 @@ func setupToolTestDB(t *testing.T) (*gorm.DB, *gorm.DB, func()) {
 	if err := gormDB.AutoMigrate(&memorysvc.Memory{}); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := spaceidentity.InitializeDefault(t.TempDir()); err != nil {
+		t.Fatal(err)
+	}
+	canonical := requestidentity.CanonicalSpaceID()
 	schema := []string{
-		`CREATE TABLE memory_events (id TEXT PRIMARY KEY, memory_id TEXT, event_type TEXT, key TEXT, value TEXT, memory_type TEXT, importance INTEGER, source TEXT, character_id TEXT, created_at TEXT)`,
+		`CREATE TABLE memory_events (id TEXT PRIMARY KEY, memory_id TEXT, event_type TEXT, key TEXT, value TEXT, memory_type TEXT, importance INTEGER, confidence INTEGER DEFAULT 0, source TEXT, character_id TEXT, created_at TEXT, version INTEGER DEFAULT 0, operation_id TEXT DEFAULT '', snapshot_hash TEXT DEFAULT '', event_reason TEXT DEFAULT '')`,
 		`CREATE TABLE schedules (id TEXT PRIMARY KEY, title TEXT, description TEXT, due_time TEXT, repeat_mode TEXT, channel TEXT, status TEXT, created_at TEXT, updated_at TEXT)`,
-		`CREATE TABLE user_profiles (id TEXT PRIMARY KEY, space_id TEXT NOT NULL DEFAULT 'default', category TEXT NOT NULL, attribute_name TEXT NOT NULL, attribute_value TEXT NOT NULL, confidence INTEGER DEFAULT 50, source_conv_id TEXT DEFAULT '', verified_at TEXT DEFAULT '', created_at TEXT, updated_at TEXT)`,
-		`CREATE UNIQUE INDEX idx_user_profiles_uid_cat_attr ON user_profiles(space_id, category, attribute_name)`,
-		`CREATE TABLE episodic_memories (id TEXT PRIMARY KEY, space_id TEXT NOT NULL DEFAULT 'default', scene_type TEXT NOT NULL, title TEXT NOT NULL, content TEXT NOT NULL, context_before TEXT DEFAULT '', context_after TEXT DEFAULT '', trigger_keywords TEXT DEFAULT '', sentiment_score INTEGER DEFAULT 0, message_id_start TEXT DEFAULT '', message_id_end TEXT DEFAULT '', source_conv_id TEXT DEFAULT '', created_at TEXT, updated_at TEXT)`,
+		`CREATE TABLE user_profiles (id TEXT PRIMARY KEY, space_id TEXT NOT NULL DEFAULT 'default', character_id TEXT NOT NULL DEFAULT '', category TEXT NOT NULL, attribute_name TEXT NOT NULL, attribute_value TEXT NOT NULL, confidence INTEGER DEFAULT 50, source TEXT NOT NULL DEFAULT '', source_conv_id TEXT DEFAULT '', verified_at TEXT DEFAULT '', created_at TEXT, updated_at TEXT, source_memory_id TEXT DEFAULT '', projection_status TEXT DEFAULT 'active')`,
+		`CREATE UNIQUE INDEX idx_user_profiles_uid_cat_attr ON user_profiles(space_id, character_id, category, attribute_name)`,
+		`CREATE TABLE episodic_memories (id TEXT PRIMARY KEY, space_id TEXT NOT NULL DEFAULT 'default', character_id TEXT NOT NULL DEFAULT '', scene_type TEXT NOT NULL, title TEXT NOT NULL, content TEXT NOT NULL, context_before TEXT DEFAULT '', context_after TEXT DEFAULT '', trigger_keywords TEXT DEFAULT '', sentiment_score INTEGER DEFAULT 0, message_id_start TEXT DEFAULT '', message_id_end TEXT DEFAULT '', message_time_start TEXT DEFAULT '', message_time_end TEXT DEFAULT '', source_conv_id TEXT DEFAULT '', created_at TEXT, updated_at TEXT, retention_level INTEGER DEFAULT 4, memory_strength REAL DEFAULT 0.5, strength_updated_at TEXT, last_reinforced_at TEXT, reinforce_count INTEGER DEFAULT 0, decay_state TEXT DEFAULT 'active', archived_at TEXT)`,
 		`CREATE TABLE tool_call_intents (id TEXT PRIMARY KEY, request_id TEXT, conversation_id TEXT, character_id TEXT, channel TEXT, tool_call_id TEXT, tool_name TEXT, args_json TEXT, idempotency_key TEXT, status TEXT, created_at TEXT, updated_at TEXT)`,
 		`CREATE TABLE tool_call_results (id TEXT PRIMARY KEY, intent_id TEXT, request_id TEXT, conversation_id TEXT, character_id TEXT, channel TEXT, tool_call_id TEXT, tool_name TEXT, status TEXT, content TEXT, error_code TEXT, visible_text TEXT, side_effects_json TEXT, external_operation_id TEXT, idempotency_key TEXT, audit_json TEXT, confidence REAL, force_voice INTEGER, created_at TEXT)`,
+		`CREATE TABLE conversations (id TEXT PRIMARY KEY, space_id TEXT NOT NULL DEFAULT '', character_id TEXT NOT NULL DEFAULT '', deleted_at DATETIME)`,
 	}
 	for _, stmt := range schema {
 		if _, err := sqlDB.Exec(stmt); err != nil {
 			t.Fatal(err)
 		}
 	}
+	for _, conv := range []struct {
+		id          string
+		characterID string
+	}{
+		{"conv-char-a", "char-a"},
+		{"conv-char-b", "char-b"},
+		{"conv-profile-a", "char-profile-a"},
+		{"conv-profile-b", "char-profile-b"},
+		{"conv-memory", "char-memory"},
+		{"conv-invalid", "char-invalid"},
+		{"conv-cancel", "char-cancel"},
+		{"conv-audit", "char-audit"},
+		{"conv-force-web", "char-force"},
+		{"conv-force-wechat", "char-force"},
+		{"conv-force-qq", "char-force"},
+		{"conv-summary-1", "char-1"},
+		{"conv-summary-2", "char-2"},
+		{"conv-summary-3", "char-1"},
+		{"conv-summary-4", "char-1"},
+		{"conv-summary-5", "char-1"},
+		{"conv-summary-6", "char-1"},
+	} {
+		if _, err := sqlDB.Exec(`INSERT INTO conversations (id, space_id, character_id) VALUES (?, ?, ?)`, conv.id, canonical, conv.characterID); err != nil {
+			t.Fatal(err)
+		}
+	}
 	SetDB(sqlDB)
 	ctx := app.NewAppContext(gormDB, nil)
 	SetMemoryService(memorysvc.NewService(memorysvc.NewRepository(ctx), ctx, nil))
+	SetProfileService(profilesvc.NewService(profilesvc.NewRepository(ctx), ctx, graph.NewStubService()))
+	SetEpisodicService(episodicsvc.NewService(episodicsvc.NewRepository(ctx), ctx, graph.NewStubService()))
 	cleanup := func() {
 		sqlDB.Close()
 		SetDB(nil)
 		SetMemoryService(nil)
+		SetProfileService(nil)
+		SetEpisodicService(nil)
 	}
 	return gormDB, gormDB, cleanup
 }
@@ -203,7 +243,7 @@ func TestProfileAndEpisodicToolsStayInCharacterScope(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rows, err := db.Query("SELECT space_id, attribute_value, source_conv_id FROM user_profiles ORDER BY space_id")
+	rows, err := db.Query("SELECT character_id, attribute_value, source_conv_id FROM user_profiles ORDER BY character_id")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -211,12 +251,12 @@ func TestProfileAndEpisodicToolsStayInCharacterScope(t *testing.T) {
 	gotProfiles := map[string]string{}
 	gotProfileConvs := map[string]string{}
 	for rows.Next() {
-		var spaceID, value, convID string
-		if err := rows.Scan(&spaceID, &value, &convID); err != nil {
+		var characterID, value, convID string
+		if err := rows.Scan(&characterID, &value, &convID); err != nil {
 			t.Fatal(err)
 		}
-		gotProfiles[spaceID] = value
-		gotProfileConvs[spaceID] = convID
+		gotProfiles[characterID] = value
+		gotProfileConvs[characterID] = convID
 	}
 	if gotProfiles["char-profile-a"] != "蓝色" || gotProfiles["char-profile-b"] != "绿色" {
 		t.Fatalf("profile context crossed roles: %#v", gotProfiles)
@@ -225,10 +265,10 @@ func TestProfileAndEpisodicToolsStayInCharacterScope(t *testing.T) {
 		t.Fatalf("profile conversation context crossed roles: %#v", gotProfileConvs)
 	}
 	var episodicA, episodicB int
-	if err := db.QueryRow("SELECT COUNT(*) FROM episodic_memories WHERE space_id = ? AND source_conv_id = ?", "char-profile-a", "conv-profile-a").Scan(&episodicA); err != nil {
+	if err := db.QueryRow("SELECT COUNT(*) FROM episodic_memories WHERE character_id = ? AND source_conv_id = ?", "char-profile-a", "conv-profile-a").Scan(&episodicA); err != nil {
 		t.Fatal(err)
 	}
-	if err := db.QueryRow("SELECT COUNT(*) FROM episodic_memories WHERE space_id = ? AND source_conv_id = ?", "char-profile-b", "conv-profile-b").Scan(&episodicB); err != nil {
+	if err := db.QueryRow("SELECT COUNT(*) FROM episodic_memories WHERE character_id = ? AND source_conv_id = ?", "char-profile-b", "conv-profile-b").Scan(&episodicB); err != nil {
 		t.Fatal(err)
 	}
 	if episodicA != 1 || episodicB != 1 {

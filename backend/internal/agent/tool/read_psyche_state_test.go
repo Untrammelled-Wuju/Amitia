@@ -193,7 +193,7 @@ func TestReadPsycheStateWithBeliefs(t *testing.T) {
 	if _, err := toolDB.Exec("CREATE TABLE resolved_beliefs (character_id TEXT NOT NULL, key TEXT NOT NULL, value TEXT NOT NULL, confidence REAL NOT NULL DEFAULT 0, created_at TEXT NOT NULL, PRIMARY KEY (character_id, key))"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := toolDB.Exec("INSERT INTO resolved_beliefs (character_id, key, value, confidence) VALUES (?, ?, ?, ?)", "char-belief", "self-worth", "觉得自己不够好", 0.85); err != nil {
+	if _, err := toolDB.Exec("INSERT INTO resolved_beliefs (character_id, key, value, confidence, created_at) VALUES (?, ?, ?, ?, ?)", "char-belief", "self-worth", "觉得自己不够好", 0.85, "2026-07-05 08:00:00"); err != nil {
 		t.Fatal(err)
 	}
 
