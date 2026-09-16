@@ -9,7 +9,7 @@
       "sensitivity": "internal",
       "trimmable": false,
       "dataOnly": false,
-      "content": "You are a helpful assistant. Follow safety rules. Be respectful. Do not share personal data."
+      "content": "You are a helpful assistant. Follow safety rules."
     },
     {
       "type": "current_input",
@@ -24,22 +24,12 @@
     {
       "type": "memory",
       "priority": 40,
-      "tokenBudget": 6,
+      "tokenBudget": 3,
       "source": "memory",
       "sensitivity": "user_data",
       "trimmable": true,
       "dataOnly": true,
-      "content": "User likes tea. User lives in"
-    },
-    {
-      "type": "history",
-      "priority": 20,
-      "tokenBudget": 1,
-      "source": "history",
-      "sensitivity": "user_data",
-      "trimmable": true,
-      "dataOnly": true,
-      "content": "User:"
+      "content": "User likes"
     }
   ],
   "audit": {
@@ -53,20 +43,28 @@
     ],
     "trimRecords": [
       {
+        "sectionType": "system",
+        "source": "system",
+        "reason": "prompt_budget_trimmed",
+        "beforeTokens": 26,
+        "afterTokens": 15,
+        "summary": "Be respectful. Do not share personal data."
+      },
+      {
         "sectionType": "memory",
         "source": "memory",
         "reason": "low_priority_memory_trimmed",
-        "beforeTokens": 11,
-        "afterTokens": 6,
-        "summary": "Beijing. User jogs every morning."
+        "beforeTokens": 17,
+        "afterTokens": 3,
+        "summary": "tea. User lives in Beijing. User jogs every morn"
       },
       {
         "sectionType": "history",
         "source": "history",
         "reason": "old_history_trimmed",
-        "beforeTokens": 9,
-        "afterTokens": 1,
-        "summary": "Hi Assistant: Hello! User: How are you today?"
+        "beforeTokens": 15,
+        "afterTokens": 0,
+        "summary": "User: Hi\nAssistant: Hello! User: How are you tod"
       }
     ]
   }
