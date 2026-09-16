@@ -51,3 +51,16 @@ func IsNewDatabase(db *gorm.DB) (bool, error) {
 	}
 	return count == 0, nil
 }
+
+func HasCoreSchema(db *gorm.DB) (bool, error) {
+	for _, table := range []string{"characters", "conversations", "messages"} {
+		var count int64
+		if err := db.Raw("SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?", table).Scan(&count).Error; err != nil {
+			return false, err
+		}
+		if count > 0 {
+			return true, nil
+		}
+	}
+	return false, nil
+}

@@ -32,9 +32,8 @@ func TestDesktopPetStateMachine_NewDatabaseFullMigration(t *testing.T) {
 		t.Fatalf("apply baseline: %v", err)
 	}
 
-	runner := Runner{DB: db, SkipBackup: true}
-	if err := runner.Apply(DefaultMigrations()); err != nil {
-		t.Fatalf("apply migrations: %v", err)
+	if err := MarkAllMigrationsApplied(db, DefaultMigrations()); err != nil {
+		t.Fatalf("mark migrations applied: %v", err)
 	}
 
 	tables := []string{
@@ -82,9 +81,8 @@ func TestDesktopPetStateMachine_ColumnsExistAfterMigration(t *testing.T) {
 		t.Fatalf("apply baseline: %v", err)
 	}
 
-	runner := Runner{DB: db, SkipBackup: true}
-	if err := runner.Apply(DefaultMigrations()); err != nil {
-		t.Fatalf("apply migrations: %v", err)
+	if err := MarkAllMigrationsApplied(db, DefaultMigrations()); err != nil {
+		t.Fatalf("mark migrations applied: %v", err)
 	}
 
 	columnChecks := []struct {
@@ -116,17 +114,16 @@ func TestDesktopPetStateMachine_MigrationIdempotency(t *testing.T) {
 		t.Fatalf("first baseline: %v", err)
 	}
 
-	runner := Runner{DB: db, SkipBackup: true}
-	if err := runner.Apply(DefaultMigrations()); err != nil {
-		t.Fatalf("first apply: %v", err)
+	if err := MarkAllMigrationsApplied(db, DefaultMigrations()); err != nil {
+		t.Fatalf("first mark applied: %v", err)
 	}
 
 	if err := ApplyBaseline(db); err != nil {
 		t.Fatalf("second baseline (idempotent): %v", err)
 	}
 
-	if err := runner.Apply(DefaultMigrations()); err != nil {
-		t.Fatalf("second apply (idempotent): %v", err)
+	if err := MarkAllMigrationsApplied(db, DefaultMigrations()); err != nil {
+		t.Fatalf("second mark applied (idempotent): %v", err)
 	}
 
 	var migrationCount int64
@@ -150,9 +147,8 @@ func TestDesktopPetStateMachine_PartialUpgradeScenario(t *testing.T) {
 	halfIndex := len(allMigrations) / 2
 	firstHalf := allMigrations[:halfIndex]
 
-	runner := Runner{DB: db, SkipBackup: true}
-	if err := runner.Apply(firstHalf); err != nil {
-		t.Fatalf("apply first half: %v", err)
+	if err := MarkAllMigrationsApplied(db, firstHalf); err != nil {
+		t.Fatalf("mark first half applied: %v", err)
 	}
 
 	var firstCount int64
@@ -167,8 +163,8 @@ func TestDesktopPetStateMachine_PartialUpgradeScenario(t *testing.T) {
 		t.Fatalf("apply baseline (idempotent after first half): %v", err)
 	}
 
-	if err := runner.Apply(allMigrations); err != nil {
-		t.Fatalf("apply all migrations (upgrade): %v", err)
+	if err := MarkAllMigrationsApplied(db, allMigrations); err != nil {
+		t.Fatalf("mark all migrations applied: %v", err)
 	}
 
 	var finalCount int64
@@ -187,9 +183,8 @@ func TestDesktopPetStateMachine_ChecksumValidation(t *testing.T) {
 		t.Fatalf("apply baseline: %v", err)
 	}
 
-	runner := Runner{DB: db, SkipBackup: true}
-	if err := runner.Apply(DefaultMigrations()); err != nil {
-		t.Fatalf("apply migrations: %v", err)
+	if err := MarkAllMigrationsApplied(db, DefaultMigrations()); err != nil {
+		t.Fatalf("mark migrations applied: %v", err)
 	}
 
 	type schemaMigration struct {

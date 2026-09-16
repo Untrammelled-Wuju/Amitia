@@ -220,10 +220,10 @@ func copyFileWithChecksum(sourcePath, backupPath string) (int64, string, error) 
 }
 
 func ensureBackupTables(db *gorm.DB) error {
-	if err := db.Exec("CREATE TABLE IF NOT EXISTS backup_records (id TEXT PRIMARY KEY, backup_path TEXT NOT NULL DEFAULT '', backup_size INTEGER DEFAULT 0, checksum TEXT DEFAULT '', status TEXT NOT NULL DEFAULT 'pending', started_at TEXT DEFAULT '', finished_at TEXT DEFAULT '', error_message TEXT DEFAULT '')").Error; err != nil {
+	if err := db.Exec("CREATE TABLE IF NOT EXISTS backup_records (id TEXT PRIMARY KEY, backup_path TEXT NOT NULL DEFAULT '', backup_size INTEGER DEFAULT 0, checksum TEXT DEFAULT '', status TEXT NOT NULL DEFAULT 'pending', started_at TEXT DEFAULT '', finished_at TEXT DEFAULT '', error_message TEXT DEFAULT '', purpose TEXT DEFAULT 'user', format_version INTEGER DEFAULT 1, profile TEXT DEFAULT 'full', scope TEXT DEFAULT 'all', encrypted INTEGER DEFAULT 0, manifest_checksum TEXT DEFAULT '', app_version TEXT DEFAULT '', schema_fingerprint TEXT DEFAULT '')").Error; err != nil {
 		return err
 	}
-	return db.Exec("CREATE TABLE IF NOT EXISTS backup_contents (id TEXT PRIMARY KEY, backup_id TEXT NOT NULL DEFAULT '', table_name TEXT NOT NULL DEFAULT '', row_count INTEGER DEFAULT 0, checksum TEXT DEFAULT '')").Error
+	return db.Exec("CREATE TABLE IF NOT EXISTS backup_contents (id TEXT PRIMARY KEY, backup_id TEXT NOT NULL DEFAULT '', table_name TEXT NOT NULL DEFAULT '', row_count INTEGER DEFAULT 0, checksum TEXT DEFAULT '', component_id TEXT DEFAULT '', kind TEXT DEFAULT '', logical_name TEXT DEFAULT '', size_bytes INTEGER DEFAULT 0, item_count INTEGER DEFAULT 0, required INTEGER DEFAULT 1, source_of_truth INTEGER DEFAULT 0, rebuildable INTEGER DEFAULT 0)").Error
 }
 
 func sqliteMainPath(db *gorm.DB) (string, error) {

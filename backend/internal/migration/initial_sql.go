@@ -64,7 +64,7 @@ func ApplyInitialSQL(db *gorm.DB, raw string) error {
 			}
 			if err := tx.Exec(item.sql).Error; err != nil {
 				if shouldDeferInitialSQL(item.sql, err) {
-					continue
+					return fmt.Errorf("execute deferred initial sql statement %d failed after retry: %w", item.number, err)
 				}
 				return fmt.Errorf("execute deferred initial sql statement %d failed after retry: %w", item.number, err)
 			}

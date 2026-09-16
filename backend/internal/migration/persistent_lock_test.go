@@ -21,6 +21,11 @@ func newPersistentLockTestDB(t *testing.T) *gorm.DB {
 	if err := db.AutoMigrate(&migrationLockRecord{}); err != nil {
 		t.Fatalf("migrate lock table: %v", err)
 	}
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatalf("get sql db: %v", err)
+	}
+	t.Cleanup(func() { _ = sqlDB.Close() })
 	return db
 }
 

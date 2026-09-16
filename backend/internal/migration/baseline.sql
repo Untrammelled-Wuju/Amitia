@@ -3812,6 +3812,14 @@ manifest_checksum TEXT DEFAULT '',
 app_version TEXT DEFAULT '',
 schema_fingerprint TEXT DEFAULT ''
 );
+ALTER TABLE backup_records ADD COLUMN purpose TEXT DEFAULT 'user';
+ALTER TABLE backup_records ADD COLUMN format_version INTEGER DEFAULT 1;
+ALTER TABLE backup_records ADD COLUMN profile TEXT DEFAULT 'full';
+ALTER TABLE backup_records ADD COLUMN scope TEXT DEFAULT 'all';
+ALTER TABLE backup_records ADD COLUMN encrypted INTEGER DEFAULT 0;
+ALTER TABLE backup_records ADD COLUMN manifest_checksum TEXT DEFAULT '';
+ALTER TABLE backup_records ADD COLUMN app_version TEXT DEFAULT '';
+ALTER TABLE backup_records ADD COLUMN schema_fingerprint TEXT DEFAULT '';
 CREATE INDEX IF NOT EXISTS idx_backup_records_purpose ON backup_records(purpose);
 CREATE INDEX IF NOT EXISTS idx_backup_records_created ON backup_records(started_at);
 
@@ -3831,6 +3839,14 @@ required INTEGER DEFAULT 1,
 source_of_truth INTEGER DEFAULT 0,
 rebuildable INTEGER DEFAULT 0
 );
+ALTER TABLE backup_contents ADD COLUMN component_id TEXT DEFAULT '';
+ALTER TABLE backup_contents ADD COLUMN kind TEXT DEFAULT '';
+ALTER TABLE backup_contents ADD COLUMN logical_name TEXT DEFAULT '';
+ALTER TABLE backup_contents ADD COLUMN size_bytes INTEGER DEFAULT 0;
+ALTER TABLE backup_contents ADD COLUMN item_count INTEGER DEFAULT 0;
+ALTER TABLE backup_contents ADD COLUMN required INTEGER DEFAULT 1;
+ALTER TABLE backup_contents ADD COLUMN source_of_truth INTEGER DEFAULT 0;
+ALTER TABLE backup_contents ADD COLUMN rebuildable INTEGER DEFAULT 0;
 CREATE INDEX IF NOT EXISTS idx_backup_contents_backup_id ON backup_contents(backup_id);
 CREATE INDEX IF NOT EXISTS idx_backup_contents_component ON backup_contents(component_id);
 
@@ -3893,9 +3909,11 @@ created_at TEXT DEFAULT ''
 --- 来源: migrations.go
 CREATE TABLE IF NOT EXISTS relationship_states (
 id TEXT PRIMARY KEY,
+space_id TEXT NOT NULL DEFAULT '',
 character_id TEXT NOT NULL DEFAULT '',
 relation_type TEXT NOT NULL DEFAULT '',
 relation_data TEXT DEFAULT '{}',
+channel TEXT NOT NULL DEFAULT '',
 created_at TEXT DEFAULT '',
 updated_at TEXT DEFAULT ''
 );
@@ -5158,11 +5176,6 @@ CREATE INDEX IF NOT EXISTS idx_dprc_operation ON desktop_pet_read_cutovers(opera
 CREATE INDEX IF NOT EXISTS idx_dpmc_write_op ON desktop_pet_write_cutovers(operation_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_dprc_operation_step_unique ON desktop_pet_read_cutovers(operation_id, step_name);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_dpwc_operation_step_unique ON desktop_pet_write_cutovers(operation_id, step_name);
-
-INSERT OR IGNORE INTO desktop_pet_migration_operations (id, kind, status, started_at, updated_at, completed_at, error, metadata) VALUES ('baseline-desktop-pet-v2', 'desktop-pet-v2-cutover', 'completed', '2026-09-03T00:00:00Z', '2026-09-03T00:00:00Z', '2026-09-03T00:00:00Z', '', '{"planId":"desktop-pet-v2-cutover","sourceVersion":"baseline","targetVersion":"v2"}');
-INSERT OR IGNORE INTO desktop_pet_read_cutovers (id, operation_id, step_name, cutover_at, verified) VALUES ('baseline-desktop-pet-v2-read', 'baseline-desktop-pet-v2', 'v2_read_path', '2026-09-03T00:00:00Z', 1);
-INSERT OR IGNORE INTO desktop_pet_write_cutovers (id, operation_id, step_name, cutover_at, verified) VALUES ('baseline-desktop-pet-v2-write-installation', 'baseline-desktop-pet-v2', 'installation', '2026-09-03T00:00:00Z', 1);
-INSERT OR IGNORE INTO desktop_pet_write_cutovers (id, operation_id, step_name, cutover_at, verified) VALUES ('baseline-desktop-pet-v2-write-editing', 'baseline-desktop-pet-v2', 'editing', '2026-09-03T00:00:00Z', 1);
 
 --- 来源: desktop_pet_runtime_v2_tables.go ---
 CREATE TABLE IF NOT EXISTS desktop_pet_runtime_command_attempts (

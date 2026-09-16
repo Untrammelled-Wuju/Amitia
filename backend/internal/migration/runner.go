@@ -48,6 +48,7 @@ type Step struct {
 	db         *gorm.DB
 	commands   []string
 	operations []string
+	addedCols  map[string]map[string]struct{}
 	err        error
 }
 
@@ -197,6 +198,7 @@ func (r Runner) applyOne(migration Migration) error {
 		step.db = tx
 		step.commands = nil
 		step.operations = nil
+		step.addedCols = nil
 		step.err = nil
 		if err := migration.Up(step); err != nil {
 			return err
@@ -272,6 +274,13 @@ func (s *Step) AddColumn(table, column, definition string) error {
 	if exists || !tableExists {
 		return nil
 	}
+	if s.addedCols == nil {
+		s.addedCols = make(map[string]map[string]struct{})
+	}
+	if s.addedCols[table] == nil {
+		s.addedCols[table] = make(map[string]struct{})
+	}
+	s.addedCols[table][column] = struct{}{}
 	s.commands = append(s.commands, "ALTER TABLE "+table+" ADD COLUMN "+column+" "+definition)
 	return nil
 }
@@ -293,6 +302,27 @@ func (s *Step) CreateIndex(name, table string, columns []string, unique bool) er
 	s.operations = append(s.operations, operation)
 	if exists {
 		return nil
+	}
+	tableExists, err := s.TableExists(table)
+	if err != nil {
+		return s.recordError(err)
+	}
+	if tableExists {
+		for _, column := range columns {
+			columnExists, err := s.ColumnExists(table, column)
+			if err != nil {
+				return s.recordError(err)
+			}
+			if columnExists {
+				continue
+			}
+			if pending := s.addedCols[table]; pending != nil {
+				if _, ok := pending[column]; ok {
+					continue
+				}
+			}
+			return nil
+		}
 	}
 	prefix := "CREATE INDEX "
 	if unique {
