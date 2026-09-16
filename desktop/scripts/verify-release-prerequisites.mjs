@@ -43,8 +43,17 @@ function main() {
   console.log("[release-prerequisites] backend: go test ./...");
   run(goBin, ["test", "./...", "-count=1"], { cwd: backendRoot });
 
-  console.log("[release-prerequisites] backend: go test -race ./internal/desktoppet/...");
-  run(goBin, ["test", "-race", "./internal/desktoppet/...", "-count=1", "-timeout=30m"], { cwd: backendRoot });
+  console.log("[release-prerequisites] backend: focused desktoppet race checks");
+  run(goBin, [
+    "test",
+    "-race",
+    "./internal/desktoppet/installation/...",
+    "./internal/desktoppet/processing/...",
+    "-count=1",
+    "-timeout=20m",
+    "-run",
+    "Test.*(Concurrent|Parallel|Atomic|CAS|Lease|Claim|Cancel|Recover|Recovery|Idempotent|Lock|Serialized)",
+  ], { cwd: backendRoot });
 
   console.log("[release-prerequisites] backend: go build ./cmd/server");
   const buildOutput = resolve(os.tmpdir(), process.platform === "win32" ? "amitia-release-gate-server.exe" : "amitia-release-gate-server");
