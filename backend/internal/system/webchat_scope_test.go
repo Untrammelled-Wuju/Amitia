@@ -11,7 +11,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
+	"github.com/u-ai/backend/config"
 	"github.com/u-ai/backend/internal/chat"
+	"github.com/u-ai/backend/internal/spaceidentity"
 	"github.com/u-ai/backend/pkg/comment/response"
 	"gorm.io/gorm"
 )
@@ -29,31 +31,42 @@ func newWebChatScopeTestHandler(t *testing.T) (*Handler, *gorm.DB) {
 	t.Cleanup(func() {
 		sqlDB.Close()
 	})
+	if _, err := spaceidentity.InitializeDefault(filepath.Join(t.TempDir(), "data")); err != nil {
+		t.Fatal(err)
+	}
+	originalCfg := config.AppCfg
+	config.AppCfg = &config.Config{Security: config.SecurityRuntimeConfig{Mode: "local_single_user"}}
+	t.Cleanup(func() { config.AppCfg = originalCfg })
 	if err := db.Exec(`CREATE TABLE characters (
 		id TEXT PRIMARY KEY,
+		space_id TEXT DEFAULT '',
 		name TEXT DEFAULT '',
 		conversation_id TEXT DEFAULT '',
+		deleted_at DATETIME,
 		updated_at TEXT DEFAULT ''
 	)`).Error; err != nil {
 		t.Fatal(err)
 	}
 	if err := db.Exec(`CREATE TABLE conversations (
 		id TEXT PRIMARY KEY,
+		space_id TEXT DEFAULT '',
 		title TEXT DEFAULT '',
 		character_id TEXT DEFAULT '',
 		channel TEXT DEFAULT 'web',
 		source TEXT DEFAULT 'manual',
 		peer_id TEXT DEFAULT '',
 		created_at TEXT DEFAULT '',
+		deleted_at DATETIME,
 		updated_at TEXT DEFAULT ''
 	)`).Error; err != nil {
 		t.Fatal(err)
 	}
-	return &Handler{db: db, chatSvc: &fakeWebChatService{}}, db
+	return &Handler{db: db, chatSvc: &fakeWebChatService{db: db}}, db
 }
 
 type fakeWebChatService struct {
 	chat.Service
+	db  *gorm.DB
 	seq int
 }
 
@@ -70,6 +83,49 @@ func (f *fakeWebChatService) CreateConversation(req *chat.CreateConversationRequ
 		Channel:     req.Channel,
 		Source:      req.Source,
 	}, nil
+}
+
+func (f *fakeWebChatService) ListConversationsForSpace(chat.ConversationQuery, string) (*chat.ConversationListResponse, error) {
+	return &chat.ConversationListResponse{}, nil
+}
+
+func (f *fakeWebChatService) GetConversationForSpace(string, string) (*chat.Conversation, error) {
+	return nil, gorm.ErrRecordNotFound
+}
+
+func (f *fakeWebChatService) GetMessagesForSpace(string, string, int, int) ([]chat.Message, int64, error) {
+	return nil, 0, nil
+}
+
+func (f *fakeWebChatService) CreateConversationForSpace(req *chat.CreateConversationRequest, spaceID string) (*chat.Conversation, error) {
+	conv, err := f.CreateConversation(req)
+	if conv != nil {
+		conv.SpaceID = spaceID
+	}
+	return conv, err
+}
+
+func (f *fakeWebChatService) EnsureChannelConversationForSpace(channel, _ string) (*chat.Conversation, error) {
+	var conv chat.Conversation
+	if f.db == nil {
+		return nil, gorm.ErrRecordNotFound
+	}
+	if err := f.db.Where("channel = ? AND deleted_at IS NULL", channel).Order("updated_at DESC").First(&conv).Error; err != nil {
+		return nil, err
+	}
+	return &conv, nil
+}
+
+func (f *fakeWebChatService) DeleteConversationForSpace(string, string) (bool, error) {
+	return true, nil
+}
+
+func (f *fakeWebChatService) ChangeCharacterForSpace(string, string, string) (*chat.Conversation, error) {
+	return nil, nil
+}
+
+func (f *fakeWebChatService) DeleteMessagesForSpace(string, string) error {
+	return nil
 }
 
 func postWebChatCreateConv(t *testing.T, h *Handler, body map[string]any) map[string]any {

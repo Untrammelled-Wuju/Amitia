@@ -26,7 +26,7 @@ func (s *service) Health() map[string]interface{} {
 		s.healthLog = s.healthLog[1:]
 	}
 	return map[string]interface{}{
-		"health": true, "version": "1.0.0", "deployMode": "desktop-local",
+		"health": true, "version": "26.2.0-beta", "deployMode": "desktop-local",
 		"database": dbStatus, "model": modelStatus,
 		"wechat": s.getWechatHealthStatus(), "qq": s.getQQHealthStatus(), "web": "enabled",
 		"wechat_running": s.isWechatSidecarRunning(), "qq_running": s.isQQSidecarRunning(),
@@ -42,7 +42,7 @@ func (s *service) Diagnostics() map[string]interface{} {
 	s.db.Table("conversations").Count(&convCount)
 	s.db.Table("messages").Count(&msgCount)
 	return map[string]interface{}{
-		"version": "1.0.0-go", "goVersion": runtime.Version(),
+		"version": "26.2.0-beta", "goVersion": runtime.Version(),
 		"uptime": time.Since(s.startTime).String(), "goroutines": runtime.NumGoroutine(),
 		"memory": map[string]interface{}{"allocMB": memStats.Alloc / 1024 / 1024, "totalAllocMB": memStats.TotalAlloc / 1024 / 1024},
 		"stats":  map[string]interface{}{"devices": deviceCount, "conversations": convCount, "messages": msgCount},
