@@ -25,6 +25,23 @@ func TestGetRuntimeProfileLoadsCompleteConfig(t *testing.T) {
 	if err := db.AutoMigrate(&Character{}); err != nil {
 		t.Fatal(err)
 	}
+	if err := db.Exec(`CREATE TABLE IF NOT EXISTS conversations (
+		id TEXT PRIMARY KEY,
+		space_id TEXT NOT NULL DEFAULT '',
+		character_id TEXT NOT NULL DEFAULT '',
+		title TEXT NOT NULL DEFAULT '',
+		channel TEXT NOT NULL DEFAULT 'web',
+		source TEXT NOT NULL DEFAULT 'system',
+		peer_id TEXT NOT NULL DEFAULT '',
+		message_count INTEGER NOT NULL DEFAULT 0,
+		state_version TEXT NOT NULL DEFAULT '',
+		created_at TEXT NOT NULL DEFAULT '',
+		updated_at TEXT NOT NULL DEFAULT '',
+		revision INTEGER NOT NULL DEFAULT 1,
+		deleted_at DATETIME
+	)`).Error; err != nil {
+		t.Fatal(err)
+	}
 	repo := NewRepository(app.NewAppContext(db, nil))
 	if err := repo.Create(&Character{
 		ID:                "char-1",
@@ -113,6 +130,23 @@ func TestCreateThenUpdatePersonalityConfigRoundTrip(t *testing.T) {
 		sqlDB.Close()
 	})
 	if err := db.AutoMigrate(&Character{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Exec(`CREATE TABLE IF NOT EXISTS conversations (
+		id TEXT PRIMARY KEY,
+		space_id TEXT NOT NULL DEFAULT '',
+		character_id TEXT NOT NULL DEFAULT '',
+		title TEXT NOT NULL DEFAULT '',
+		channel TEXT NOT NULL DEFAULT 'web',
+		source TEXT NOT NULL DEFAULT 'system',
+		peer_id TEXT NOT NULL DEFAULT '',
+		message_count INTEGER NOT NULL DEFAULT 0,
+		state_version TEXT NOT NULL DEFAULT '',
+		created_at TEXT NOT NULL DEFAULT '',
+		updated_at TEXT NOT NULL DEFAULT '',
+		revision INTEGER NOT NULL DEFAULT 1,
+		deleted_at DATETIME
+	)`).Error; err != nil {
 		t.Fatal(err)
 	}
 	ctx := app.NewAppContext(db, nil)

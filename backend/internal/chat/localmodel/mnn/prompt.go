@@ -11,8 +11,8 @@ import (
 type ToolCallMode string
 
 const (
-	ToolCallModeNative ToolCallMode = "native_template"
-	ToolCallModePrompt ToolCallMode = "prompt_json"
+	ToolCallModeNative   ToolCallMode = "native_template"
+	ToolCallModePrompt   ToolCallMode = "prompt_json"
 	ToolCallModeDisabled ToolCallMode = "disabled"
 )
 

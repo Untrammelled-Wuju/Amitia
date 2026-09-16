@@ -23,6 +23,9 @@ func normalizeConversationOwner(spaceID string) string {
 func conversationOwnerMatches(stored, requested string) bool {
 	stored = strings.TrimSpace(stored)
 	requested = normalizeConversationOwner(requested)
+	if stored == "" && requested == "" {
+		return true
+	}
 	if stored != "" && stored == requested {
 		return true
 	}

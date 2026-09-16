@@ -67,17 +67,19 @@ type ModelEventSink = modelprotocol.ModelEventSink
 type ModelCapabilities = modelprotocol.ModelCapabilities
 
 type Conversation struct {
-	ID           string `gorm:"column:id;primaryKey" json:"id"`
-	SpaceID      string `gorm:"column:space_id;not null;index" json:"-"`
-	CharacterID  string `gorm:"column:character_id" json:"characterId"`
-	Title        string `gorm:"column:title" json:"title"`
-	Channel      string `gorm:"column:channel;default:web" json:"channel"`
-	Source       string `gorm:"column:source;default:manual" json:"source"`
-	PeerID       string `gorm:"column:peer_id" json:"peerId"`
-	MessageCount int    `gorm:"column:message_count;default:0" json:"messageCount"`
-	StateVersion string `gorm:"column:state_version" json:"stateVersion"`
-	CreatedAt    string `gorm:"column:created_at" json:"createdAt"`
-	UpdatedAt    string `gorm:"column:updated_at" json:"updatedAt"`
+	ID           string  `gorm:"column:id;primaryKey" json:"id"`
+	SpaceID      string  `gorm:"column:space_id;not null;index" json:"-"`
+	CharacterID  string  `gorm:"column:character_id" json:"characterId"`
+	Title        string  `gorm:"column:title" json:"title"`
+	Channel      string  `gorm:"column:channel;default:web" json:"channel"`
+	Source       string  `gorm:"column:source;default:manual" json:"source"`
+	PeerID       string  `gorm:"column:peer_id" json:"peerId"`
+	MessageCount int     `gorm:"column:message_count;default:0" json:"messageCount"`
+	StateVersion string  `gorm:"column:state_version" json:"stateVersion"`
+	CreatedAt    string  `gorm:"column:created_at" json:"createdAt"`
+	UpdatedAt    string  `gorm:"column:updated_at" json:"updatedAt"`
+	Revision     int64   `gorm:"column:revision;not null;default:1" json:"revision"`
+	DeletedAt    *string `gorm:"column:deleted_at" json:"-"`
 }
 
 func (Conversation) TableName() string { return "conversations" }
@@ -127,6 +129,8 @@ type Message struct {
 	ReplyToExcerpt   *string `gorm:"column:reply_to_excerpt" json:"replyToExcerpt,omitempty"`
 	CreatedAt        string  `gorm:"column:created_at" json:"createdAt"`
 	UpdatedAt        string  `gorm:"column:updated_at" json:"updatedAt"`
+	Revision         int64   `gorm:"column:revision;not null;default:1" json:"revision"`
+	DeletedAt        *string `gorm:"column:deleted_at" json:"-"`
 }
 
 func (Message) TableName() string { return "messages" }

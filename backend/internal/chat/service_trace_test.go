@@ -33,7 +33,7 @@ func setupProcessTraceService(t *testing.T, modelStatus int) (*service, *bytes.B
 		}
 		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"choices": []map[string]interface{}{
-				{"message": map[string]interface{}{"content": "第一段\n第二段"}},
+				{"message": map[string]interface{}{"content": "第一段[AMITIA_BR]第二段"}},
 			},
 			"usage": map[string]interface{}{"total_tokens": 12},
 		})

@@ -10,9 +10,9 @@ import (
 )
 
 var (
-	globalHost       runtimehost.RuntimeHost
-	globalHostMu     sync.RWMutex
-	globalMaterializer media.ResourceMaterializer
+	globalHost           runtimehost.RuntimeHost
+	globalHostMu         sync.RWMutex
+	globalMaterializer   media.ResourceMaterializer
 	globalMaterializerMu sync.RWMutex
 )
 

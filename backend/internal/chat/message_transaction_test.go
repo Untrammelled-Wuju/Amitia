@@ -47,10 +47,13 @@ response_group_id TEXT DEFAULT '',
 delivery_sequence INTEGER DEFAULT 0,
 request_id TEXT DEFAULT '',
 reply_to_message_id TEXT,
-reply_to_role TEXT,
-reply_to_excerpt TEXT,
-created_at TEXT DEFAULT '',
-updated_at TEXT DEFAULT ''
+	reply_to_role TEXT,
+	reply_to_excerpt TEXT,
+	created_at TEXT DEFAULT '',
+	updated_at TEXT DEFAULT '',
+	extension_type TEXT NOT NULL DEFAULT '',
+	revision INTEGER NOT NULL DEFAULT 1,
+	deleted_at DATETIME
 )`).Error; err != nil {
 		t.Fatal(err)
 	}

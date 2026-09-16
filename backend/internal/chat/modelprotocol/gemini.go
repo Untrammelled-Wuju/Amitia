@@ -29,12 +29,12 @@ func (a *GeminiAdapter) Capabilities(ctx context.Context, cfg ProviderConfig) Mo
 
 func (a *GeminiAdapter) Generate(ctx context.Context, cfg ProviderConfig, req ModelRequest) (*ModelResult, error) {
 	baseURL := strings.TrimRight(cfg.BaseURL, "/")
-	
+
 	requestBody := map[string]interface{}{
 		"contents":         a.buildContents(req),
 		"generationConfig": a.buildGenConfig(cfg),
 	}
-	
+
 	if len(req.Instructions) > 0 {
 		requestBody["systemInstruction"] = map[string]interface{}{
 			"parts": []map[string]interface{}{
@@ -42,48 +42,48 @@ func (a *GeminiAdapter) Generate(ctx context.Context, cfg ProviderConfig, req Mo
 			},
 		}
 	}
-	
+
 	if len(req.Tools) > 0 {
 		requestBody["tools"] = []map[string]interface{}{
 			{"functionDeclarations": a.buildTools(req.Tools)},
 		}
 	}
-	
+
 	jsonBody, _ := json.Marshal(requestBody)
 	url := fmt.Sprintf("%s/v1beta/models/%s:generateContent", baseURL, cfg.ModelName)
 	httpReq, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(jsonBody))
 	if err != nil {
 		return nil, err
 	}
-	
+
 	httpReq.Header.Set("Content-Type", "application/json")
 	q := httpReq.URL.Query()
 	q.Set("key", cfg.APIKey)
 	httpReq.URL.RawQuery = q.Encode()
-	
+
 	client := &http.Client{Timeout: time.Duration(cfg.TimeoutSeconds) * time.Second}
 	resp, err := client.Do(httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("请求失败: %w", err)
 	}
 	defer resp.Body.Close()
-	
+
 	respBytes, _ := io.ReadAll(io.LimitReader(resp.Body, 16*1024*1024))
 	if resp.StatusCode != 200 {
 		return nil, fmt.Errorf("API 返回 %d: %s", resp.StatusCode, string(respBytes))
 	}
-	
+
 	return a.parseResponse(respBytes)
 }
 
 func (a *GeminiAdapter) Stream(ctx context.Context, cfg ProviderConfig, req ModelRequest, sink ModelEventSink) (*ModelResult, error) {
 	baseURL := strings.TrimRight(cfg.BaseURL, "/")
-	
+
 	requestBody := map[string]interface{}{
 		"contents":         a.buildContents(req),
 		"generationConfig": a.buildGenConfig(cfg),
 	}
-	
+
 	if len(req.Instructions) > 0 {
 		requestBody["systemInstruction"] = map[string]interface{}{
 			"parts": []map[string]interface{}{
@@ -91,49 +91,49 @@ func (a *GeminiAdapter) Stream(ctx context.Context, cfg ProviderConfig, req Mode
 			},
 		}
 	}
-	
+
 	if len(req.Tools) > 0 {
 		requestBody["tools"] = []map[string]interface{}{
 			{"functionDeclarations": a.buildTools(req.Tools)},
 		}
 	}
-	
+
 	jsonBody, _ := json.Marshal(requestBody)
 	url := fmt.Sprintf("%s/v1beta/models/%s:streamGenerateContent?alt=sse", baseURL, cfg.ModelName)
 	httpReq, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(jsonBody))
 	if err != nil {
 		return nil, err
 	}
-	
+
 	httpReq.Header.Set("Content-Type", "application/json")
 	q := httpReq.URL.Query()
 	q.Set("key", cfg.APIKey)
 	httpReq.URL.RawQuery = q.Encode()
-	
+
 	client := &http.Client{Timeout: time.Duration(cfg.TimeoutSeconds) * time.Second}
 	resp, err := client.Do(httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("请求失败: %w", err)
 	}
 	defer resp.Body.Close()
-	
+
 	if resp.StatusCode != 200 {
 		respBytes, _ := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
 		return nil, fmt.Errorf("API 返回 %d: %s", resp.StatusCode, string(respBytes))
 	}
-	
+
 	return a.parseStream(resp.Body, sink)
 }
 
 func (a *GeminiAdapter) buildContents(req ModelRequest) []map[string]interface{} {
 	var contents []map[string]interface{}
-	
+
 	for _, msg := range req.Messages {
 		role := msg.Role
 		if role == "assistant" {
 			role = "model"
 		}
-		
+
 		var parts []map[string]interface{}
 		for _, part := range msg.Parts {
 			switch part.Type {
@@ -150,13 +150,13 @@ func (a *GeminiAdapter) buildContents(req ModelRequest) []map[string]interface{}
 				})
 			}
 		}
-		
+
 		contents = append(contents, map[string]interface{}{
 			"role":  role,
 			"parts": parts,
 		})
 	}
-	
+
 	for _, tr := range req.ToolResults {
 		contents = append(contents, map[string]interface{}{
 			"role": "user",
@@ -170,7 +170,7 @@ func (a *GeminiAdapter) buildContents(req ModelRequest) []map[string]interface{}
 			},
 		})
 	}
-	
+
 	return contents
 }
 
@@ -179,11 +179,11 @@ func (a *GeminiAdapter) buildGenConfig(cfg ProviderConfig) map[string]interface{
 		"temperature":     cfg.Temperature,
 		"maxOutputTokens": cfg.MaxOutputTokens,
 	}
-	
+
 	if cfg.TopP > 0 && cfg.TopP < 1 {
 		config["topP"] = cfg.TopP
 	}
-	
+
 	return config
 }
 
@@ -218,17 +218,17 @@ func (a *GeminiAdapter) parseResponse(respBytes []byte) (*ModelResult, error) {
 			TotalTokenCount      int `json:"totalTokenCount"`
 		} `json:"usageMetadata"`
 	}
-	
+
 	if err := json.Unmarshal(respBytes, &result); err != nil {
 		return nil, fmt.Errorf("解析响应失败: %w", err)
 	}
-	
+
 	if len(result.Candidates) == 0 {
 		return nil, fmt.Errorf("API 未返回有效回复")
 	}
-	
+
 	res := &ModelResult{}
-	
+
 	for _, part := range result.Candidates[0].Content.Parts {
 		if part.Text != "" {
 			res.Text += part.Text
@@ -240,13 +240,13 @@ func (a *GeminiAdapter) parseResponse(respBytes []byte) (*ModelResult, error) {
 			})
 		}
 	}
-	
+
 	res.Usage = ModelUsage{
 		InputTokens:  result.UsageMetadata.PromptTokenCount,
 		OutputTokens: result.UsageMetadata.CandidatesTokenCount,
 		TotalTokens:  result.UsageMetadata.TotalTokenCount,
 	}
-	
+
 	return res, nil
 }
 
@@ -254,31 +254,31 @@ func (a *GeminiAdapter) parseStream(body io.Reader, sink ModelEventSink) (*Model
 	result := &ModelResult{
 		ToolCalls: []ModelToolCall{},
 	}
-	
+
 	buf := make([]byte, 4096)
 	var buffer strings.Builder
-	
+
 	for {
 		n, err := body.Read(buf)
 		if n > 0 {
 			buffer.Write(buf[:n])
 			data := buffer.String()
-			
+
 			lines := strings.Split(data, "\n")
 			buffer.Reset()
 			if len(lines) > 0 {
 				buffer.WriteString(lines[len(lines)-1])
 				lines = lines[:len(lines)-1]
 			}
-			
+
 			for _, line := range lines {
 				line = strings.TrimSpace(line)
 				if line == "" || !strings.HasPrefix(line, "data:") {
 					continue
 				}
-				
+
 				content := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
-				
+
 				var chunk struct {
 					Candidates []struct {
 						Content struct {
@@ -292,20 +292,20 @@ func (a *GeminiAdapter) parseStream(body io.Reader, sink ModelEventSink) (*Model
 						} `json:"content"`
 					} `json:"candidates"`
 				}
-				
+
 				if err := json.Unmarshal([]byte(content), &chunk); err != nil {
 					continue
 				}
-				
+
 				if len(chunk.Candidates) == 0 {
 					continue
 				}
-				
+
 				for _, part := range chunk.Candidates[0].Content.Parts {
 					if part.Text != "" {
 						result.Text += part.Text
-					sink.Emit(context.Background(), ModelEvent{
-						Type:      ModelEventTextDelta,
+						sink.Emit(context.Background(), ModelEvent{
+							Type:      ModelEventTextDelta,
 							TextDelta: part.Text,
 						})
 					}
@@ -325,10 +325,10 @@ func (a *GeminiAdapter) parseStream(body io.Reader, sink ModelEventSink) (*Model
 			return result, err
 		}
 	}
-	
+
 	sink.Emit(context.Background(), ModelEvent{
 		Type: ModelEventCompleted,
 	})
-	
+
 	return result, nil
 }

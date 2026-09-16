@@ -8,6 +8,7 @@ import (
 
 	"github.com/glebarez/sqlite"
 	"github.com/u-ai/backend/internal/delivery"
+	"github.com/u-ai/backend/internal/extension/runtimegate"
 	"github.com/u-ai/backend/internal/interaction"
 	newoutbox "github.com/u-ai/backend/internal/outbox"
 	"github.com/u-ai/backend/internal/psyche"
@@ -16,6 +17,8 @@ import (
 
 func setupCommitCoordinatorTest(t *testing.T, withOutbox bool) (*gorm.DB, *service, string) {
 	t.Helper()
+	runtimegate.Set(runtimegate.EmotionExtensionID, true)
+	t.Cleanup(func() { runtimegate.Set(runtimegate.EmotionExtensionID, false) })
 	db, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "commit.db")), &gorm.Config{})
 	if err != nil {
 		t.Fatal(err)
@@ -43,7 +46,7 @@ func setupCommitCoordinatorTest(t *testing.T, withOutbox bool) (*gorm.DB, *servi
 		}
 	}
 	convID := "conv-commit"
-	if err := db.Create(&Conversation{ID: convID, CharacterID: "char-commit", Channel: "web", Source: "system"}).Error; err != nil {
+	if err := db.Create(&Conversation{ID: convID, SpaceID: normalizeConversationOwner(""), CharacterID: "char-commit", Channel: "web", Source: "system"}).Error; err != nil {
 		t.Fatal(err)
 	}
 	if err := db.Create(&Message{ID: "user-commit", ConversationID: convID, Role: "user", Content: "hello", MsgType: "text", Source: "system", Status: "processing", RequestID: "req-commit"}).Error; err != nil {
@@ -87,6 +90,17 @@ func runtimeForCommitTest() *interaction.RuntimeAssembly {
 
 func TestCommitInteractionPersistsMessagesStateRelationshipAndOutboxAtomically(t *testing.T) {
 	db, svc, convID := setupCommitCoordinatorTest(t, true)
+	if err := svc.psycheStore.SaveState(&psyche.PsycheState{
+		CharacterID:  "char-commit",
+		Version:      psyche.StateVersionV1(),
+		StateVersion: 1,
+		Stress:       0.2,
+		Energy:       0.6,
+		CreatedAt:    time.Now(),
+		UpdatedAt:    time.Now(),
+	}); err != nil {
+		t.Fatal(err)
+	}
 	req := &ProcessMessageRequest{
 		CharacterID:           "char-commit",
 		ConversationID:        convID,

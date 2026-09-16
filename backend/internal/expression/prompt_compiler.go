@@ -2,6 +2,8 @@ package expression
 
 import (
 	"strings"
+
+	"github.com/u-ai/backend/internal/prompt/textlib"
 )
 
 type CompiledPrompt struct {
@@ -64,7 +66,7 @@ func compileWithPolicy(policy ChannelPolicy) CompiledPrompt {
 		styleParts = append(styleParts,
 			"用口语化方式回复，自然流畅像真人说话。",
 			"使用简短的句子，符合语音对话的习惯。",
-			voiceReactionRules,
+			textlib.VoiceReactionRules,
 		)
 	default:
 		instructionParts = append(instructionParts,
@@ -119,6 +121,10 @@ func ApplyPostValidation(raw string, kind ChannelKind) string {
 }
 
 func stripMarkdown(input string) string {
+	const (
+		messageBreak = "[AMITIA_BR]"
+		placeholder  = "\x00AMITIABRPLACEHOLDER\x00"
+	)
 	replacements := []struct{ old, new string }{
 		{"**", ""},
 		{"__", ""},
@@ -127,9 +133,9 @@ func stripMarkdown(input string) string {
 		{"`", ""},
 		{"#", ""},
 	}
-	result := input
+	result := strings.ReplaceAll(input, messageBreak, placeholder)
 	for _, r := range replacements {
 		result = strings.ReplaceAll(result, r.old, r.new)
 	}
-	return result
+	return strings.ReplaceAll(result, placeholder, messageBreak)
 }
