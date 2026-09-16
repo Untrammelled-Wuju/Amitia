@@ -7,21 +7,21 @@ import (
 	"testing"
 )
 
-func emoteIntent(t *testing.T, animated bool) DeliveryIntent {
+func imageIntent(t *testing.T, animated bool) DeliveryIntent {
 	t.Helper()
 	payload, err := json.Marshal(map[string]interface{}{"messageId": "m1", "originalPath": "/emote-assets/e/original.gif", "fallbackPath": "/emote-assets/e/fallback.png", "isAnimated": animated, "altText": "[表情：开心]"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	return DeliveryIntent{Channel: "web", PeerID: "peer", ContentType: "emote", Payload: payload}
+	return DeliveryIntent{Channel: "web", PeerID: "peer", ContentType: "image", Payload: payload}
 }
 
-func TestWebEmoteAdapterAndFailures(t *testing.T) {
+func TestWebImageAdapterAndFailures(t *testing.T) {
 	adapter := NewWebChannelAdapter()
-	if err := adapter.Deliver(emoteIntent(t, true)); err != nil {
+	if err := adapter.Deliver(imageIntent(t, true)); err != nil {
 		t.Fatal(err)
 	}
-	if err := adapter.Deliver(DeliveryIntent{ContentType: "emote", Payload: []byte(`{"altText":"missing"}`)}); err == nil {
+	if err := adapter.Deliver(DeliveryIntent{ContentType: "image", Payload: []byte(`{"altText":"missing"}`)}); err == nil {
 		t.Fatal("缺少 messageId 时不应假成功")
 	}
 	if err := adapter.Deliver(DeliveryIntent{ContentType: "video", Payload: []byte(`{"messageId":"m1"}`)}); err == nil {
@@ -29,7 +29,7 @@ func TestWebEmoteAdapterAndFailures(t *testing.T) {
 	}
 }
 
-func TestQQAndWechatEmoteAssetSelection(t *testing.T) {
+func TestQQAndWechatImageAssetSelection(t *testing.T) {
 	requests := make(chan map[string]interface{}, 2)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/send-image" {
@@ -45,7 +45,7 @@ func TestQQAndWechatEmoteAssetSelection(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer server.Close()
-	intent := emoteIntent(t, true)
+	intent := imageIntent(t, true)
 	if err := NewQQChannelAdapter(server.URL).Deliver(intent); err != nil {
 		t.Fatal(err)
 	}
@@ -67,7 +67,7 @@ func TestQQAndWechatPropagateSendFailure(t *testing.T) {
 		w.WriteHeader(http.StatusBadGateway)
 	}))
 	defer server.Close()
-	intent := emoteIntent(t, false)
+	intent := imageIntent(t, false)
 	if err := NewQQChannelAdapter(server.URL).Deliver(intent); err == nil {
 		t.Fatal("QQ 发送失败必须返回错误")
 	}
@@ -121,7 +121,7 @@ func TestWechatTextDeliverySendsIdempotencyKey(t *testing.T) {
 	}
 }
 
-func TestWechatEmoteDeliverySendsIdempotencyKey(t *testing.T) {
+func TestWechatImageDeliverySendsIdempotencyKey(t *testing.T) {
 	type capturedRequest struct {
 		body           map[string]interface{}
 		idempotencyKey string
@@ -143,18 +143,18 @@ func TestWechatEmoteDeliverySendsIdempotencyKey(t *testing.T) {
 	}))
 	defer server.Close()
 
-	intent := emoteIntent(t, false)
-	intent.ID = "di-emote-001"
+	intent := imageIntent(t, false)
+	intent.ID = "di-image-001"
 	intent.Channel = "wechat"
 	if err := NewWechatChannelAdapter(server.URL).Deliver(intent); err != nil {
 		t.Fatal(err)
 	}
 	req := <-requests
 	if req.body["deliveryKey"] != intent.ID {
-		t.Errorf("expected deliveryKey=%s in emote body, got %v", intent.ID, req.body["deliveryKey"])
+		t.Errorf("expected deliveryKey=%s in image body, got %v", intent.ID, req.body["deliveryKey"])
 	}
 	if req.idempotencyKey != intent.ID {
-		t.Errorf("expected Idempotency-Key=%s in emote header, got %s", intent.ID, req.idempotencyKey)
+		t.Errorf("expected Idempotency-Key=%s in image header, got %s", intent.ID, req.idempotencyKey)
 	}
 }
 
