@@ -8,11 +8,8 @@ storage:
 
 app:
   name: "U-Ai"
-  version: "1.0.0-beta"
+  version: "26.2.0-beta"
   deployMode: "desktop-local"
-
-desktopPetRuntime:
-  enabled: false
 
 security:
   mode: "local_single_user"

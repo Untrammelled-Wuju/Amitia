@@ -27,7 +27,7 @@ func TestNewAppServicesBuildsCoreServicesOnce(t *testing.T) {
 	if err := migration.ApplyBaseline(db); err != nil {
 		t.Fatalf("apply baseline: %v", err)
 	}
-	if err := (migration.Runner{DB: db, SkipBackup: true}).Apply(migration.DefaultMigrations()); err != nil {
+	if err := migration.MarkAllMigrationsApplied(db, migration.DefaultMigrations()); err != nil {
 		t.Fatal(err)
 	}
 	profile := runtimeprofile.ProfileLocal

@@ -338,7 +338,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("server.mode", "debug")
 	v.SetDefault("storage.dataDir", "../data")
 	v.SetDefault("app.name", "U-Ai")
-	v.SetDefault("app.version", "1.0.0-beta")
+	v.SetDefault("app.version", "26.2.0-beta")
 	v.SetDefault("app.deployMode", "desktop-local")
 	v.SetDefault("chat.contextWindowMaxRounds", 20)
 	v.SetDefault("chat.mergeWindowMs", 6000)

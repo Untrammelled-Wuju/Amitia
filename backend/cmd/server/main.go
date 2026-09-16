@@ -480,6 +480,10 @@ func applyDatabaseStartupMigrations(db *gorm.DB, dataDir string) error {
 	if err != nil {
 		return fmt.Errorf("check existing database: %w", err)
 	}
+	hasCoreSchema, err := migration.HasCoreSchema(db)
+	if err != nil {
+		return fmt.Errorf("check core schema: %w", err)
+	}
 	migrations := migration.DefaultMigrations()
 	lockDir := filepath.Join(dataDir, "locks")
 	if err := os.MkdirAll(lockDir, 0o700); err != nil {
@@ -494,13 +498,20 @@ func applyDatabaseStartupMigrations(db *gorm.DB, dataDir string) error {
 		SkipBackup:                  !isNew,
 		AllowUnknownAppliedChecksum: true,
 	}
-	if isNew {
+	if isNew || !hasCoreSchema {
+		if !isNew {
+			if err := migRunner.CreatePreMigrationBackup(); err != nil {
+				return fmt.Errorf("预迁移备份失败: %w", err)
+			}
+		}
 		log.Info("检测到新数据库，执行基线快通道...")
 		if err := migration.ApplyBaseline(db); err != nil {
 			return fmt.Errorf("apply baseline: %w", err)
 		}
-		if err := migration.MarkDesktopPetCanonicalBaselineCutover(db); err != nil {
-			return fmt.Errorf("mark desktop pet canonical baseline cutover: %w", err)
+		if isNew {
+			if err := migration.MarkDesktopPetCanonicalBaselineCutover(db); err != nil {
+				return fmt.Errorf("mark desktop pet canonical baseline cutover: %w", err)
+			}
 		}
 		log.Info("基线建表完成，标记所有迁移为已应用")
 		if err := migration.MarkAllMigrationsApplied(db, migrations); err != nil {

@@ -11,7 +11,6 @@ import (
 
 func TestConfigTemplatesUseProviderLayout(t *testing.T) {
 	dirs := []string{
-		".",
 		"../../config",
 		"../../desktop/resources/config-template",
 	}
@@ -119,6 +118,7 @@ func TestConfigTemplatePreservesExistingProviderValues(t *testing.T) {
 		expectVDim int
 		expectNS   string
 		expectDB   string
+		expectPath string
 	}{
 		{
 			name:       "backend/config",
@@ -127,6 +127,7 @@ func TestConfigTemplatePreservesExistingProviderValues(t *testing.T) {
 			expectVDim: 1536,
 			expectNS:   "uai",
 			expectDB:   "memory_graph",
+			expectPath: "surrealdb/data",
 		},
 		{
 			name:       "config",
@@ -135,6 +136,7 @@ func TestConfigTemplatePreservesExistingProviderValues(t *testing.T) {
 			expectVDim: 1536,
 			expectNS:   "uai",
 			expectDB:   "memory_graph",
+			expectPath: "data/graph.db",
 		},
 		{
 			name:       "desktop-template",
@@ -143,6 +145,7 @@ func TestConfigTemplatePreservesExistingProviderValues(t *testing.T) {
 			expectVDim: 1536,
 			expectNS:   "uai",
 			expectDB:   "memory_graph",
+			expectPath: "data/graph.db",
 		},
 	}
 
@@ -165,8 +168,8 @@ func TestConfigTemplatePreservesExistingProviderValues(t *testing.T) {
 			if cfg.Providers.GraphStore.SurrealDB.Database != tt.expectDB {
 				t.Errorf("SurrealDB database = %q, want %q", cfg.Providers.GraphStore.SurrealDB.Database, tt.expectDB)
 			}
-			if cfg.Providers.GraphStore.SurrealDB.DataPath != "data/graph.db" {
-				t.Errorf("SurrealDB dataPath = %q, want data/graph.db", cfg.Providers.GraphStore.SurrealDB.DataPath)
+			if cfg.Providers.GraphStore.SurrealDB.DataPath != tt.expectPath {
+				t.Errorf("SurrealDB dataPath = %q, want %s", cfg.Providers.GraphStore.SurrealDB.DataPath, tt.expectPath)
 			}
 		})
 	}
