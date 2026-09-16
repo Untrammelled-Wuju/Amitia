@@ -143,6 +143,38 @@ func TestDefinitionMapper_DevelopmentTrustUsesApprovedRuntimeTrust(t *testing.T)
 	}
 }
 
+func TestDefinitionMapper_DevelopmentEnvironmentDisablesUnrestrictedSandbox(t *testing.T) {
+	mapper := NewDefinitionMapper()
+	view := ServiceRuntimeView{
+		ExtensionID:    "com.example.user-trusted",
+		ModuleID:       "runtime",
+		RuntimeType:    "service",
+		PublisherTrust: "user_trusted",
+		EntryPoint:     "./bin/runtime",
+		Network: trusted_service.ServiceNetworkPolicy{
+			Mode:          "unrestricted",
+			Enforce:       true,
+			AllowOutbound: true,
+		},
+	}
+	t.Setenv("AMITIA_EXTENSION_DEV_MODE", "true")
+	developmentDefinition, err := mapper.MapToDefinition(view)
+	if err != nil {
+		t.Fatalf("MapToDefinition() error = %v", err)
+	}
+	if developmentDefinition.Network.Enforce {
+		t.Fatal("development environment must use the direct unrestricted runtime path")
+	}
+	t.Setenv("AMITIA_EXTENSION_DEV_MODE", "false")
+	productionDefinition, err := mapper.MapToDefinition(view)
+	if err != nil {
+		t.Fatalf("MapToDefinition() error = %v", err)
+	}
+	if !productionDefinition.Network.Enforce {
+		t.Fatal("production environment must keep the unrestricted network boundary enforced")
+	}
+}
+
 func TestDefinitionMapper_DevelopmentTrustKeepsRestrictedNetworkEnforced(t *testing.T) {
 	mapper := NewDefinitionMapper()
 	def, err := mapper.MapToDefinition(ServiceRuntimeView{

@@ -4,7 +4,9 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"os"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -50,7 +52,7 @@ func (m *DefinitionMapper) MapToDefinition(view ServiceRuntimeView) (*trusted_se
 	trustLevel := authoritativeServiceTrustLevel(view.PublisherTrust)
 	signatureTrusted := trustLevel.AllowedForService()
 	networkPolicy := resolveNetworkPolicy(view.Network)
-	if view.PublisherTrust == "development" && strings.EqualFold(strings.TrimSpace(networkPolicy.Mode), "unrestricted") {
+	if (view.PublisherTrust == "development" || serviceRuntimeDevelopmentModeEnabled()) && strings.EqualFold(strings.TrimSpace(networkPolicy.Mode), "unrestricted") {
 		networkPolicy.Enforce = false
 	}
 
@@ -273,6 +275,11 @@ func resolveNetworkPolicy(policy trusted_service.ServiceNetworkPolicy) trusted_s
 	// Missing network policy is deny-by-default. A plugin must explicitly request
 	// loopback or unrestricted access; unsupported policies never degrade open.
 	return trusted_service.ServiceNetworkPolicy{Mode: "none", Enforce: true}
+}
+
+func serviceRuntimeDevelopmentModeEnabled() bool {
+	enabled, err := strconv.ParseBool(strings.TrimSpace(os.Getenv("AMITIA_EXTENSION_DEV_MODE")))
+	return err == nil && enabled
 }
 
 func CanonicalizeEnv(env map[string]string) []string {
