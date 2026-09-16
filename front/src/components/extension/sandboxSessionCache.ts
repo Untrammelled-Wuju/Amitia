@@ -20,6 +20,22 @@ export interface SandboxSessionOptions {
   slotId: string;
 }
 
+export function isSandboxSessionMissingError(error: unknown): boolean {
+  const candidate = error as {
+    response?: { status?: number; data?: { code?: unknown } };
+    raw?: { code?: unknown };
+    message?: unknown;
+  } | null;
+  if (!candidate) return false;
+  if (candidate.response?.status === 404 && candidate.response.data?.code === "webui_session_not_found") {
+    return true;
+  }
+  if (candidate.raw?.code === "webui_session_not_found") {
+    return true;
+  }
+  return String(candidate.message ?? "").includes("sandbox_webui: session not found");
+}
+
 interface CachedSandboxSession extends SandboxSessionRecord {
   expiresAt: number;
   timer: ReturnType<typeof setTimeout> | null;

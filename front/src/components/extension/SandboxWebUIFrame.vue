@@ -9,6 +9,7 @@ import {
   buildSandboxThemeTokens,
   claimSandboxSession,
   getOrCreateSandboxSession,
+  isSandboxSessionMissingError,
   putCachedSandboxSession,
   releaseSandboxSessionClaim,
   sandboxSessionKey,
@@ -97,6 +98,7 @@ let serverGrantedScopes: string[] = [];
 let activeSessionKey = "";
 
 let restartToken = 0;
+let restartPromise: Promise<void> | null = null;
 
 function applySession(data: SandboxSessionRecord, cacheKey: string) {
   sessionId.value = data.sessionId;
@@ -125,9 +127,22 @@ async function createSession(expectedToken: number) {
     claimSandboxSession(cacheKey);
     const cached = takeCachedSandboxSession(cacheKey);
     if (cached) {
-      applySession(cached, cacheKey);
-      loading.value = false;
-      return;
+      try {
+        await apiClient.get(`/api/extension/webui/session/${cached.sessionId}`);
+        if (expectedToken !== restartToken) {
+          releaseSandboxSessionClaim(cacheKey);
+          return;
+        }
+        applySession(cached, cacheKey);
+        loading.value = false;
+        return;
+      } catch (e) {
+        if (!isSandboxSessionMissingError(e)) {
+          applySession(cached, cacheKey);
+          loading.value = false;
+          return;
+        }
+      }
     }
     const data = await getOrCreateSandboxSession({
       contribution: props.contribution,
@@ -213,10 +228,28 @@ function stashSession() {
 }
 
 async function restartSession() {
+  if (restartPromise) return restartPromise;
   const token = ++restartToken;
-  stashSession();
-  if (token !== restartToken) return;
-  await createSession(token);
+  restartPromise = (async () => {
+    await destroySession();
+    if (token !== restartToken) return;
+    await createSession(token);
+  })().finally(() => {
+    restartPromise = null;
+  });
+  return restartPromise;
+}
+
+async function handleBridgeFailure(msg: Record<string, unknown>, error: unknown, requestSessionId: string) {
+  if (requestSessionId !== sessionId.value) return;
+  if (isSandboxSessionMissingError(error)) {
+    await restartSession();
+    return;
+  }
+  sendBridgeResponse(msg, {
+    ok: false,
+    error: error instanceof Error ? error.message : String(error),
+  });
 }
 
 function onMessage(event: MessageEvent) {
@@ -234,7 +267,7 @@ function onMessage(event: MessageEvent) {
   bridgePort.onmessage = (portEvent) => {
     const message = portEvent.data;
     if (!message || typeof message !== "object") return;
-    void handleBridgeMessage(message as Record<string, unknown>);
+    void handleBridgeMessage(message as Record<string, unknown>, sessionId.value);
   };
   bridgePort.start();
   const env = resolveHostEnvironment();
@@ -266,7 +299,7 @@ function onMessage(event: MessageEvent) {
   );
 }
 
-async function handleBridgeMessage(msg: Record<string, unknown>) {
+async function handleBridgeMessage(msg: Record<string, unknown>, requestSessionId: string) {
   const method = msg.method as string;
   if (method === "ui_ready" || method === "ui.ready") {
     try {
@@ -275,10 +308,7 @@ async function handleBridgeMessage(msg: Record<string, unknown>) {
       emit("ready", sessionId.value);
       sendBridgeResponse(msg, res.data as Record<string, unknown>);
     } catch (e) {
-      sendBridgeResponse(msg, {
-        ok: false,
-        error: e instanceof Error ? e.message : String(e),
-      });
+      await handleBridgeFailure(msg, e, requestSessionId);
     }
     return;
   }
@@ -293,10 +323,7 @@ async function handleBridgeMessage(msg: Record<string, unknown>) {
       }
       sendBridgeResponse(msg, data);
     } catch (e) {
-      sendBridgeResponse(msg, {
-        ok: false,
-        error: e instanceof Error ? e.message : String(e),
-      });
+      await handleBridgeFailure(msg, e, requestSessionId);
     }
     return;
   }
@@ -340,10 +367,7 @@ async function handleBridgeMessage(msg: Record<string, unknown>) {
     const data = res.data as Record<string, unknown>;
     sendBridgeResponse(msg, data);
   } catch (e) {
-    sendBridgeResponse(msg, {
-      ok: false,
-      error: e instanceof Error ? e.message : String(e),
-    });
+    await handleBridgeFailure(msg, e, requestSessionId);
   }
 }
 

@@ -28,7 +28,7 @@ async function bootstrap() {
   app.use(router);
   app.use(ElementPlus, { locale: zhCn });
   const extensionUI = useExtensionUIStore(pinia);
-  void initializeRuntimeCapabilities(true);
+  await initializeRuntimeCapabilities(true);
   await router.isReady();
 
   if (typeof window !== "undefined" && !window.amitiaDesktop) {
