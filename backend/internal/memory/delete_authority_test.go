@@ -191,9 +191,9 @@ func TestGetRankedMemoriesFiltersDeletedInvalidatedAndTombstone(t *testing.T) {
 
 func TestSearchRequiresMatchingSpaceIDForSpaceScope(t *testing.T) {
 	repo := &memoryAuthorityRepo{items: []Memory{
-		{ID: "character-memory", CharacterID: "char-a", Scope: "character", Key: "favorite", Value: "tea", VerifiedStatus: "user_verified"},
-		{ID: "own-user-memory", CharacterID: "user-1", Scope: "user", Key: "favorite", Value: "cake", VerifiedStatus: "user_verified"},
-		{ID: "other-user-memory", CharacterID: "user-2", Scope: "user", Key: "favorite", Value: "coffee", VerifiedStatus: "user_verified"},
+		{ID: "character-memory", SpaceID: "user-1", CharacterID: "char-a", Scope: "character", Key: "favorite", Value: "tea", VerifiedStatus: "user_verified"},
+		{ID: "own-user-memory", SpaceID: "user-1", Scope: "user", Key: "favorite", Value: "cake", VerifiedStatus: "user_verified"},
+		{ID: "other-user-memory", SpaceID: "user-2", Scope: "user", Key: "favorite", Value: "coffee", VerifiedStatus: "user_verified"},
 	}}
 	svc := &service{repo: repo}
 

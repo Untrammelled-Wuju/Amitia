@@ -1,8 +1,13 @@
 package memory
 
-import "context"
+import (
+	"context"
+	"path/filepath"
+	"testing"
 
-import "testing"
+	"github.com/u-ai/backend/internal/requestidentity"
+	"github.com/u-ai/backend/internal/spaceidentity"
+)
 
 type captureGraphService struct {
 	nodes   []map[string]interface{}
@@ -28,6 +33,10 @@ func (s *captureGraphService) DeleteNode(entityID string) error {
 	return nil
 }
 
+func (s *captureGraphService) DeleteNodeForSpace(entityID, spaceID string) error {
+	return s.DeleteNode(entityID)
+}
+
 func (s *captureGraphService) DeleteNodeIfOrphan(entityID string) error {
 	return nil
 }
@@ -42,6 +51,10 @@ func (s *captureGraphService) QueryNeighbors(entityID string, depth int, spaceID
 
 func (s *captureGraphService) FindPaths(sourceID, targetID string, maxDepth int) ([]map[string]interface{}, error) {
 	return nil, nil
+}
+
+func (s *captureGraphService) FindPathsForSpace(sourceID, targetID string, maxDepth int, spaceID string) ([]map[string]interface{}, error) {
+	return s.FindPaths(sourceID, targetID, maxDepth)
 }
 
 func (s *captureGraphService) DeleteOrphanNodes() error {
@@ -68,20 +81,33 @@ func (s *captureGraphService) Process(ctx context.Context, convID string, messag
 	return nil
 }
 
-func TestSyncGraphMemorySkipsDefaultUserScope(t *testing.T) {
+func TestSyncGraphMemoryNormalizesDefaultUserScope(t *testing.T) {
+	if _, err := spaceidentity.InitializeDefault(filepath.Join(t.TempDir(), "data")); err != nil {
+		t.Fatal(err)
+	}
 	graphSvc := &captureGraphService{}
 	svc := &service{graphSvc: graphSvc}
 
 	svc.syncGraph(&Memory{
 		ID:          "mem-a",
 		CharacterID: "default",
+		SpaceID:     "default",
 		Scope:       "user",
 		Key:         "称呼",
 		Value:       "姐姐",
 	})
 
-	if len(graphSvc.nodes) != 0 {
-		t.Fatalf("default scoped memory should not sync graph nodes: %+v", graphSvc.nodes)
+	if len(graphSvc.nodes) == 0 {
+		t.Fatal("memory should sync graph nodes")
+	}
+	for _, node := range graphSvc.nodes {
+		properties, _ := node["properties"].(map[string]interface{})
+		if properties["space_id"] == "default" {
+			t.Fatalf("graph node used legacy default space: %+v", node)
+		}
+		if node["type"] == "space" && node["id"] != requestidentity.CanonicalSpaceID() {
+			t.Fatalf("unexpected canonical space node: %+v", node)
+		}
 	}
 }
 

@@ -156,6 +156,9 @@ func (s *service) runConsolidation(charID string) {
 }
 
 func (s *service) logRetrieval(conversationID, characterID, requestID, channel, queryText string, memoryIDs []string, results []HybridSearchResult, spaceIDs ...string) {
+	if s.db == nil {
+		return
+	}
 	id := uuid.New().String()
 	now := time.Now().Format("2006-01-02 15:04:05")
 	memIDsJSON, _ := json.Marshal(memoryIDs)

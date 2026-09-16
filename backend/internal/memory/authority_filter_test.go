@@ -53,7 +53,7 @@ func TestMemoryAllowedBySQLiteAuthorityFiltersScopeExpiryStatusAndProactiveMenti
 		{
 			name: "user scope allowed by user id",
 			memory: Memory{
-				CharacterID:           "user-1",
+				SpaceID:               "user-1",
 				Scope:                 "user",
 				VerifiedStatus:        "user_verified",
 				AllowProactiveMention: true,

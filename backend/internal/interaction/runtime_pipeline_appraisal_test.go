@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/u-ai/backend/internal/extension/runtimegate"
 	"github.com/u-ai/backend/internal/personality"
 	"github.com/u-ai/backend/internal/psyche/appraisal"
 	"github.com/u-ai/backend/internal/psyche/budget"
@@ -59,6 +60,8 @@ func (l testRuntimeProfileLoader) Load(ctx context.Context, scope InteractionSco
 }
 
 func TestAppraisalDifferentEventTypesProduceDistinctResults(t *testing.T) {
+	runtimegate.Set(runtimegate.EmotionExtensionID, true)
+	t.Cleanup(func() { runtimegate.Set(runtimegate.EmotionExtensionID, false) })
 	eng := appraisal.NewEngine(appraisal.DefaultAppraisalConfig())
 	pc := personality.NewCompiler(personality.DefaultCompilerConfig())
 
@@ -241,6 +244,8 @@ func TestAppraisalDifferentEventTypesProduceDistinctResults(t *testing.T) {
 }
 
 func TestAppraisalPersonalitySensitivityModulatesResult(t *testing.T) {
+	runtimegate.Set(runtimegate.EmotionExtensionID, true)
+	t.Cleanup(func() { runtimegate.Set(runtimegate.EmotionExtensionID, false) })
 	eng := appraisal.NewEngine(appraisal.DefaultAppraisalConfig())
 
 	highBoundaryConfig := map[string]interface{}{
@@ -312,6 +317,8 @@ func TestAppraisalPersonalitySensitivityModulatesResult(t *testing.T) {
 }
 
 func TestAppraisalRejectionSensitivityAffectsColdResponse(t *testing.T) {
+	runtimegate.Set(runtimegate.EmotionExtensionID, true)
+	t.Cleanup(func() { runtimegate.Set(runtimegate.EmotionExtensionID, false) })
 	eng := appraisal.NewEngine(appraisal.DefaultAppraisalConfig())
 
 	highRejectConfig := map[string]interface{}{
@@ -378,6 +385,8 @@ func TestAppraisalRejectionSensitivityAffectsColdResponse(t *testing.T) {
 }
 
 func TestAppraisalNeedDeltasVaryByEventType(t *testing.T) {
+	runtimegate.Set(runtimegate.EmotionExtensionID, true)
+	t.Cleanup(func() { runtimegate.Set(runtimegate.EmotionExtensionID, false) })
 	eng := appraisal.NewEngine(appraisal.DefaultAppraisalConfig())
 	config := map[string]interface{}{
 		"boundary": 0.7, "warmth": 0.55, "affection": 0.45,

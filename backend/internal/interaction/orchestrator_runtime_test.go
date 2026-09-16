@@ -897,6 +897,9 @@ func TestOrchestratorCompletedEventAppendFailureRollsBackSQLiteComplete(t *testi
 	if err := db.AutoMigrate(&outbox.OutboxRecordModel{}, &outbox.DeadLetterRecordModel{}); err != nil {
 		t.Fatal(err)
 	}
+	if err := db.Migrator().DropTable(&outbox.OutboxRecordModel{}); err != nil {
+		t.Fatal(err)
+	}
 	orch.SetReady(true)
 
 	result, err := orch.Process(context.Background(), &ProcessRequest{

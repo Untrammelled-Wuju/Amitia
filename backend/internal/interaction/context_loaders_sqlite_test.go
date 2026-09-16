@@ -192,7 +192,8 @@ func createRuntimeLoaderTestSchema(t *testing.T, db *gorm.DB) {
 			status TEXT,
 			is_default INTEGER,
 			sort_order INTEGER,
-			created_at TEXT
+			created_at TEXT,
+			deleted_at TEXT
 		)`,
 		`CREATE TABLE moods (
 			character_id TEXT,

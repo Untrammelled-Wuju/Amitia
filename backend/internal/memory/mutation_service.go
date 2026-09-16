@@ -355,6 +355,12 @@ func (s *service) updateCanonicalMemory(id string, req canonicalUpdateRequest) (
 
 	now := time.Now().Format("2006-01-02 15:04:05")
 	var result *Memory
+	if s.db == nil {
+		if err := s.repo.Update(id, req.Updates); err != nil {
+			return nil, err
+		}
+		return s.repo.FindByID(id)
+	}
 
 	err := s.db.Transaction(func(tx *gorm.DB) error {
 		var current Memory
@@ -437,6 +443,9 @@ func (s *service) deleteCanonicalMemory(id string, req canonicalDeleteRequest) e
 
 	eventType := "memory_deleted"
 	now := time.Now().Format("2006-01-02 15:04:05")
+	if s.db == nil {
+		return s.repo.Delete(id)
+	}
 
 	err := s.db.Transaction(func(tx *gorm.DB) error {
 		var current Memory
