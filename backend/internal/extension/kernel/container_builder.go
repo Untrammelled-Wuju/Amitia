@@ -151,7 +151,10 @@ type WorkshopModelGenerator interface {
 
 func NewContainerBuilder() *ContainerBuilder {
 	authority.MustValidate()
-	return &ContainerBuilder{}
+	return &ContainerBuilder{
+		runtimeProfile: runtimeprofile.ProfileLocal,
+		runtimePolicy:  runtimeprofile.PolicyFor(runtimeprofile.ProfileLocal),
+	}
 }
 
 func (b *ContainerBuilder) WithDBPath(path string) *ContainerBuilder {
@@ -1561,7 +1564,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	if b.extRoot == "" {
 		updateBaseDir = filepath.Join(os.TempDir(), "amitia-update-downloads")
 	}
-	updateManager := desktop_update.NewUpdateManager(updateBaseDir, "26.1.8")
+	updateManager := desktop_update.NewUpdateManager(updateBaseDir, "26.2.0-beta")
 	updateAdapter := NewUpdateManagerAdapter(updateManager, desktopHost)
 	desktopActionBridge := NewDesktopActionBridge(permBroker, scopeManager, executionKernel)
 	desktopHost.SetPermissionChecker(desktopActionBridge)

@@ -9,6 +9,7 @@ import (
 
 	"github.com/u-ai/backend/internal/extension/kernel"
 	"github.com/u-ai/backend/internal/extension/kernel/schedule"
+	"github.com/u-ai/backend/internal/runtimeprofile"
 )
 
 func makeScheduleDefinition(scheduleID, extensionID string, triggerType schedule.TriggerType, targetType schedule.TargetType) *schedule.ScheduleContributionDefinition {
@@ -55,6 +56,7 @@ func TestBaseline_E2E_Schedule_InstallOneShot(t *testing.T) {
 	container, err := kernel.NewContainerBuilder().
 		WithDBPath(filepath.Join(tempDir, "kernel.db")).
 		WithExtensionRoot(filepath.Join(tempDir, "extensions")).
+		WithRuntimeProfile(runtimeprofile.ProfileLocal).
 		Build(ctx)
 	if err != nil {
 		t.Fatalf("ContainerBuilder.Build must succeed: %v", err)
@@ -92,6 +94,7 @@ func TestBaseline_E2E_Schedule_EnableDisable(t *testing.T) {
 	container, err := kernel.NewContainerBuilder().
 		WithDBPath(filepath.Join(tempDir, "kernel.db")).
 		WithExtensionRoot(filepath.Join(tempDir, "extensions")).
+		WithRuntimeProfile(runtimeprofile.ProfileLocal).
 		Build(ctx)
 	if err != nil {
 		t.Fatalf("ContainerBuilder.Build must succeed: %v", err)
@@ -137,6 +140,7 @@ func TestBaseline_E2E_Schedule_ManualTrigger(t *testing.T) {
 	container, err := kernel.NewContainerBuilder().
 		WithDBPath(filepath.Join(tempDir, "kernel.db")).
 		WithExtensionRoot(filepath.Join(tempDir, "extensions")).
+		WithRuntimeProfile(runtimeprofile.ProfileLocal).
 		Build(ctx)
 	if err != nil {
 		t.Fatalf("ContainerBuilder.Build must succeed: %v", err)
@@ -180,6 +184,7 @@ func TestBaseline_E2E_Schedule_ListByExtension(t *testing.T) {
 	container, err := kernel.NewContainerBuilder().
 		WithDBPath(filepath.Join(tempDir, "kernel.db")).
 		WithExtensionRoot(filepath.Join(tempDir, "extensions")).
+		WithRuntimeProfile(runtimeprofile.ProfileLocal).
 		Build(ctx)
 	if err != nil {
 		t.Fatalf("ContainerBuilder.Build must succeed: %v", err)
@@ -218,6 +223,7 @@ func TestBaseline_E2E_Schedule_UninstallRemovesSchedule(t *testing.T) {
 	container, err := kernel.NewContainerBuilder().
 		WithDBPath(filepath.Join(tempDir, "kernel.db")).
 		WithExtensionRoot(filepath.Join(tempDir, "extensions")).
+		WithRuntimeProfile(runtimeprofile.ProfileLocal).
 		Build(ctx)
 	if err != nil {
 		t.Fatalf("ContainerBuilder.Build must succeed: %v", err)
@@ -256,6 +262,7 @@ func TestBaseline_E2E_Schedule_DeleteAllByExtension(t *testing.T) {
 	container, err := kernel.NewContainerBuilder().
 		WithDBPath(filepath.Join(tempDir, "kernel.db")).
 		WithExtensionRoot(filepath.Join(tempDir, "extensions")).
+		WithRuntimeProfile(runtimeprofile.ProfileLocal).
 		Build(ctx)
 	if err != nil {
 		t.Fatalf("ContainerBuilder.Build must succeed: %v", err)
@@ -297,6 +304,7 @@ func TestBaseline_E2E_Schedule_PauseResume(t *testing.T) {
 	container, err := kernel.NewContainerBuilder().
 		WithDBPath(filepath.Join(tempDir, "kernel.db")).
 		WithExtensionRoot(filepath.Join(tempDir, "extensions")).
+		WithRuntimeProfile(runtimeprofile.ProfileLocal).
 		Build(ctx)
 	if err != nil {
 		t.Fatalf("ContainerBuilder.Build must succeed: %v", err)

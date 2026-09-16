@@ -1,6 +1,7 @@
 package final_acceptance
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"os"
@@ -83,7 +84,7 @@ func writeJSON(report *FinalReport, path string) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, data, 0o644)
+	return writeFileIfChanged(path, data)
 }
 
 func writeMarkdown(report *FinalReport, path string) error {
@@ -146,7 +147,18 @@ func writeMarkdown(report *FinalReport, path string) error {
 	b.WriteString("## 已知限制\n\n")
 	b.WriteString("详见 `docs/extension-kernel/known-limitations.md`。\n")
 
-	return os.WriteFile(path, []byte(b.String()), 0o644)
+	return writeFileIfChanged(path, []byte(b.String()))
+}
+
+func writeFileIfChanged(path string, data []byte) error {
+	existing, err := os.ReadFile(path)
+	if err == nil && bytes.Equal(existing, data) {
+		return nil
+	}
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return os.WriteFile(path, data, 0o644)
 }
 
 func itoa(i int) string {

@@ -25,9 +25,14 @@ import (
 )
 
 const packagePolicyVersion = "2026-09-04-v5"
+const localUnsignedDeveloperSessionID = "local-trusted-unsigned-dev"
 
 func CurrentPackagePolicyVersion() string {
 	return packagePolicyVersion
+}
+
+func PackageDevelopmentModeEnabled() bool {
+	return packageDevelopmentModeEnabled()
 }
 
 func computeSecurityPolicyHash() string {
@@ -153,9 +158,12 @@ func (r *Runtime) PreviewPackage(ctx context.Context, request PackagePreviewRequ
 		preview.TrustDecision = "rejected"
 		preview.Issues = append(preview.Issues, PreviewIssue{Category: PreviewNotInstallable, Code: "package_signature_required", Message: "Manifest v1 signature is required"})
 	} else {
-		if packageDevelopmentModeEnabled() || r.packageUnsignedDevAllowed(request, preview.ExtensionID) {
+		if r.packageUnsignedDevAllowed(request, preview.ExtensionID) {
 			preview.DevOnly = true
 			preview.DeveloperSessionID = request.DeveloperSessionID
+			if request.AllowUnsignedLocal && packageDevelopmentModeEnabled() {
+				preview.DeveloperSessionID = localUnsignedDeveloperSessionID
+			}
 			preview.TrustDecision = string(trust.TrustLevelDevelopment)
 			preview.RequiredConfirmations = append(preview.RequiredConfirmations, "confirm.unsigned_dev")
 			preview.RiskFlags = append(preview.RiskFlags, "unsigned_dev", "dev_only")
@@ -295,6 +303,9 @@ func packageManifestHasMigrations(manifest manifest_v1.Manifest) bool {
 }
 
 func (r *Runtime) packageUnsignedDevAllowed(request PackagePreviewRequest, extensionID string) bool {
+	if request.AllowUnsignedLocal && packageDevelopmentModeEnabled() {
+		return true
+	}
 	if !request.AllowUnsignedDev {
 		return false
 	}
@@ -302,7 +313,10 @@ func (r *Runtime) packageUnsignedDevAllowed(request PackagePreviewRequest, exten
 }
 
 func (r *Runtime) validateUnsignedDeveloperSession(sessionID, spaceID, extensionID string) error {
-	if packageDevelopmentModeEnabled() {
+	if !packageDevelopmentModeEnabled() {
+		return fmt.Errorf("kernel: developer mode is disabled")
+	}
+	if sessionID == localUnsignedDeveloperSessionID {
 		return nil
 	}
 	if r.container == nil {

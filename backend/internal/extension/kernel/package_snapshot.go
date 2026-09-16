@@ -656,6 +656,26 @@ func captureUserDataTableSnapshot(
 	return result, nil
 }
 
+func packageUserDataRestoreRequired(raw string) bool {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return false
+	}
+	var state packageUserDataMigrationState
+	if err := json.Unmarshal([]byte(raw), &state); err != nil {
+		return true
+	}
+	if state.Mode == "none" {
+		return len(state.Snapshots) != 0 ||
+			len(state.Completed) != 0 ||
+			len(state.AffectedTables) != 0 ||
+			len(state.RecordCounts) != 0 ||
+			len(state.DataExports) != 0 ||
+			len(state.TableManifests) != 0
+	}
+	return true
+}
+
 func extractResourceStringField(resource domain.ResourceOwnership, field string) string {
 	if resource.Metadata == nil {
 		return ""

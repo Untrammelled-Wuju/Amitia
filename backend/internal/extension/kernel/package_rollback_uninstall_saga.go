@@ -487,6 +487,9 @@ func (r *Runtime) ExecutePackageRollback(ctx context.Context, extensionID, versi
 		}
 		return KernelInstallResult{}, err
 	}
+	if err := r.container.PackageRepository.ConsumeRollbackPoint(ctx, point); err != nil {
+		return KernelInstallResult{}, fmt.Errorf("kernel: consume rollback point: %w", err)
+	}
 	if r.container.ResourceSnapshotStore != nil {
 		if err := r.container.ResourceSnapshotStore.PurgeQuarantinedResources(ctx, op.OperationID); err != nil {
 			persistErr := r.container.PackageRepository.SetOperation(context.Background(), op.OperationID, "requires_recovery", "purge_resource_quarantine", "PACKAGE_RECOVERY_REQUIRED", err.Error(), false, guard)

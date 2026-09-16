@@ -12,6 +12,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/amitiax"
 	"github.com/u-ai/backend/internal/extension/kernel/event"
 	"github.com/u-ai/backend/internal/extension/kernel/schedule"
+	"github.com/u-ai/backend/internal/runtimeprofile"
 )
 
 func registerTestEventType(t *testing.T, ctx context.Context, svc *event.Service) {
@@ -70,6 +71,7 @@ func TestBaseline_E2E_Uninstall_ScheduleCleanedUp(t *testing.T) {
 
 	tempDir := t.TempDir()
 	container, err := kernel.NewContainerBuilder().
+		WithRuntimeProfile(runtimeprofile.ProfileLocal).
 		WithDBPath(filepath.Join(tempDir, "kernel.db")).
 		WithExtensionRoot(filepath.Join(tempDir, "extensions")).
 		Build(ctx)
@@ -114,6 +116,7 @@ func TestBaseline_E2E_Uninstall_EventSubscriptionCleanedUp(t *testing.T) {
 
 	tempDir := t.TempDir()
 	container, err := kernel.NewContainerBuilder().
+		WithRuntimeProfile(runtimeprofile.ProfileLocal).
 		WithDBPath(filepath.Join(tempDir, "kernel.db")).
 		WithExtensionRoot(filepath.Join(tempDir, "extensions")).
 		Build(ctx)
@@ -171,6 +174,7 @@ func TestBaseline_E2E_Uninstall_DeliveriesCancelled(t *testing.T) {
 
 	tempDir := t.TempDir()
 	container, err := kernel.NewContainerBuilder().
+		WithRuntimeProfile(runtimeprofile.ProfileLocal).
 		WithDBPath(filepath.Join(tempDir, "kernel.db")).
 		WithExtensionRoot(filepath.Join(tempDir, "extensions")).
 		Build(ctx)
@@ -206,6 +210,7 @@ func TestBaseline_E2E_Uninstall_ExtensionDefinitionRemoved(t *testing.T) {
 	tempDir := t.TempDir()
 	extRoot := filepath.Join(tempDir, "extensions")
 	container, err := kernel.NewContainerBuilder().
+		WithRuntimeProfile(runtimeprofile.ProfileLocal).
 		WithDBPath(filepath.Join(tempDir, "kernel.db")).
 		WithExtensionRoot(extRoot).
 		Build(ctx)
@@ -265,6 +270,7 @@ func TestBaseline_E2E_Uninstall_FilesystemTargetRemoved(t *testing.T) {
 	tempDir := t.TempDir()
 	extRoot := filepath.Join(tempDir, "extensions")
 	container, err := kernel.NewContainerBuilder().
+		WithRuntimeProfile(runtimeprofile.ProfileLocal).
 		WithDBPath(filepath.Join(tempDir, "kernel.db")).
 		WithExtensionRoot(extRoot).
 		Build(ctx)
@@ -307,6 +313,7 @@ func TestBaseline_E2E_Uninstall_FullCleanupSequence(t *testing.T) {
 
 	tempDir := t.TempDir()
 	container, err := kernel.NewContainerBuilder().
+		WithRuntimeProfile(runtimeprofile.ProfileLocal).
 		WithDBPath(filepath.Join(tempDir, "kernel.db")).
 		WithExtensionRoot(filepath.Join(tempDir, "extensions")).
 		Build(ctx)

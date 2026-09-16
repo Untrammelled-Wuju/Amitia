@@ -56,7 +56,6 @@ func setupEnableTestRuntime(t *testing.T, ctx context.Context, extID string, fak
 	if err := container.InstallationRepository.PutInstallation(ctx, inst); err != nil {
 		t.Fatalf("PutInstallation must succeed: %v", err)
 	}
-
 	mod := domain.ModuleDefinition{
 		ID:          "main",
 		ExtensionID: domain.ExtensionID(extID),
@@ -68,6 +67,17 @@ func setupEnableTestRuntime(t *testing.T, ctx context.Context, extID string, fak
 	}
 	if err := container.ModuleRepository.PutModule(ctx, mod); err != nil {
 		t.Fatalf("PutModule must succeed: %v", err)
+	}
+	def := domain.ExtensionDefinition{
+		ID:              domain.ExtensionID(extID),
+		Name:            domain.LocalizedText{Default: extID},
+		Version:         version,
+		ManifestVersion: 1,
+		Domain:          domain.ExtensionDomainGeneral,
+		Modules:         []domain.ModuleDefinition{mod},
+	}
+	if err := container.DefinitionRepository.PutExtension(ctx, def); err != nil {
+		t.Fatalf("PutExtension must succeed: %v", err)
 	}
 
 	extSubject := enablement.StateSubject{Kind: enablement.SubjectExtension, ID: extID}

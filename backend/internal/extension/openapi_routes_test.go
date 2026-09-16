@@ -11,6 +11,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/u-ai/backend/config"
+	"github.com/u-ai/backend/internal/auth"
+	"github.com/u-ai/backend/internal/runtimeidentity"
 	"github.com/u-ai/backend/pkg/app"
 )
 
@@ -78,7 +80,7 @@ func TestRetiredPackageInstallEndpointReturnsGone(t *testing.T) {
 func TestKernelAPIUserUsesExtensionAuthenticationIdentity(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
-	ctx.Set(authenticatedUserKey, 42)
+	ctx.Set("actorContext", &auth.ActorContext{SpaceID: runtimeidentity.SpaceID("42")})
 	if spaceID := kernelAPIUser(ctx); spaceID != "42" {
 		t.Fatalf("unexpected authenticated user: %s", spaceID)
 	}

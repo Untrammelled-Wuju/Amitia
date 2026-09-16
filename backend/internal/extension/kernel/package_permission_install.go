@@ -89,9 +89,7 @@ func restorePackagePermissionsFromDefinition(ctx context.Context, repo sqlite.Pe
 	if err != nil {
 		return err
 	}
-	if len(specs) == 0 {
-		specs = installedPermissionRequirementsFromDefinition(extensionID, definition)
-	}
+	specs = normalizeInstalledPermissionRequirements(extensionID, append(specs, installedPermissionRequirementsFromDefinition(extensionID, definition)...))
 	return restoreInstalledPackagePermissions(ctx, repo, extensionID, specs)
 }
 
@@ -205,7 +203,69 @@ func installedPermissionRequirementsFromDefinition(extensionID domain.ExtensionI
 			}
 		}
 	}
+	if requirement, ok := uiToolInvocationRequirement(extensionID, definition.Modules); ok {
+		requirements = append(requirements, requirement)
+	}
+	if requirement, ok := serviceRuntimeExecutionRequirement(extensionID, definition.Modules); ok {
+		requirements = append(requirements, requirement)
+	}
 	return normalizeInstalledPermissionRequirements(extensionID, requirements)
+}
+
+func uiToolInvocationRequirement(extensionID domain.ExtensionID, modules []domain.ModuleDefinition) (sqlite.PermissionRequirement, bool) {
+	for _, module := range modules {
+		for _, contribution := range module.Contributions {
+			switch contribution.Kind {
+			case domain.ContributionKindUIPage, domain.ContributionKindUIPanel, domain.ContributionKindUIChat, domain.ContributionKindUIContextAction, domain.ContributionKindUIDesktop:
+			default:
+				continue
+			}
+			actions, ok := contribution.Definition["actions"].([]any)
+			if !ok {
+				continue
+			}
+			for _, rawAction := range actions {
+				action, ok := rawAction.(map[string]any)
+				if !ok {
+					continue
+				}
+				target, ok := action["target"].(map[string]any)
+				if !ok {
+					continue
+				}
+				targetType, _ := target["type"].(string)
+				if strings.EqualFold(strings.TrimSpace(targetType), "tool") {
+					return sqlite.PermissionRequirement{
+						ExtensionID:    extensionID,
+						PermissionName: "tool.invoke",
+						Reason:         "Required to invoke tools declared by the extension UI actions.",
+						Required:       true,
+						Scope:          string(permission.ScopeExtension),
+					}, true
+				}
+			}
+		}
+	}
+	return sqlite.PermissionRequirement{}, false
+}
+
+func serviceRuntimeExecutionRequirement(extensionID domain.ExtensionID, modules []domain.ModuleDefinition) (sqlite.PermissionRequirement, bool) {
+	for _, module := range modules {
+		if module.Runtime == nil {
+			continue
+		}
+		switch module.Runtime.Type {
+		case domain.RuntimeTypeJavaScript, domain.RuntimeTypeService, domain.RuntimeTypeGo:
+			return sqlite.PermissionRequirement{
+				ExtensionID:    extensionID,
+				PermissionName: permission.PermissionServiceRuntimeExecute,
+				Reason:         "Required to launch the extension service runtime.",
+				Required:       true,
+				Scope:          string(permission.ScopeExtension),
+			}, true
+		}
+	}
+	return sqlite.PermissionRequirement{}, false
 }
 
 func packageManifestGrantRecords(extensionID domain.ExtensionID, requirements []sqlite.PermissionRequirement) []sqlite.PermissionGrant {

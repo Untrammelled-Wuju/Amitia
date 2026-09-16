@@ -416,8 +416,8 @@ func TestOpenAPIRouteRemainsActive(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/api/extensions/openapi.json", nil)
 	engine.ServeHTTP(recorder, req)
 
-	if recorder.Code != http.StatusUnauthorized {
-		t.Fatalf("expected 401 for /extensions/openapi.json, got %d", recorder.Code)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("expected 200 for /extensions/openapi.json, got %d", recorder.Code)
 	}
 }
 

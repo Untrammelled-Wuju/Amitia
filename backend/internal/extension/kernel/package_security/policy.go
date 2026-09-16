@@ -31,7 +31,7 @@ func DefaultArchivePolicy() ArchivePolicy {
 		AllowSymlink:              false,
 		AllowHardlink:             false,
 		AllowNestedArchive:        true,
-		AllowExecutable:           true,
+		AllowExecutable:           false,
 		AllowDeclaredExecutable:   true,
 	}
 }

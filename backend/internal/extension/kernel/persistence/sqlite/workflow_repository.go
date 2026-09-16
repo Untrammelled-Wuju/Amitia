@@ -1658,7 +1658,7 @@ func nullableRawJSON(raw json.RawMessage) any {
 
 func (r *WorkflowExecutionRepository) GetStats(ctx context.Context, workflowID string) (workflow.WorkflowExecutionStats, error) {
 	stats := workflow.WorkflowExecutionStats{NodeStatistics: []workflow.NodeExecutionStat{}}
-	var lastRunAt sql.NullTime
+	var lastRunAt sql.NullString
 	if err := r.db.QueryRowContext(ctx, `
 		SELECT COUNT(*),
 			COALESCE(SUM(CASE WHEN status = 'succeeded' THEN 1 ELSE 0 END), 0),
@@ -1670,8 +1670,7 @@ func (r *WorkflowExecutionRepository) GetStats(ctx context.Context, workflowID s
 	`, workflowID).Scan(&stats.RunCount, &stats.Succeeded, &stats.Failed, &stats.Cancelled, &stats.Compensated, &stats.AverageRunMS, &lastRunAt); err != nil {
 		return stats, fmt.Errorf("workflow stats: %w", err)
 	}
-	if lastRunAt.Valid {
-		t := lastRunAt.Time
+	if t, ok := parseWorkflowStoredTime(lastRunAt); ok {
 		stats.LastRunAt = &t
 	}
 	terminalRuns := stats.Succeeded + stats.Failed + stats.Cancelled + stats.Compensated
@@ -1703,6 +1702,30 @@ func (r *WorkflowExecutionRepository) GetStats(ctx context.Context, workflowID s
 		stats.NodeStatistics = append(stats.NodeStatistics, item)
 	}
 	return stats, rows.Err()
+}
+
+func parseWorkflowStoredTime(raw sql.NullString) (time.Time, bool) {
+	if !raw.Valid {
+		return time.Time{}, false
+	}
+	value := strings.TrimSpace(raw.String)
+	if value == "" {
+		return time.Time{}, false
+	}
+	for _, layout := range []string{
+		time.RFC3339Nano,
+		time.RFC3339,
+		"2006-01-02 15:04:05.999999999-07:00",
+		"2006-01-02 15:04:05.999999999Z07:00",
+		"2006-01-02 15:04:05.999999999",
+		"2006-01-02 15:04:05",
+	} {
+		parsed, err := time.Parse(layout, value)
+		if err == nil {
+			return parsed, true
+		}
+	}
+	return time.Time{}, false
 }
 
 func (r *WorkflowExecutionRepository) ListStepRuns(ctx context.Context, executionID string) ([]workflow.StepRun, error) {

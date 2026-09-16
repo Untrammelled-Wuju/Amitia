@@ -9,6 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 	kernelruntime "github.com/u-ai/backend/internal/extension/kernel"
 	"github.com/u-ai/backend/internal/extension/kernel/package_security"
+	middlewaresecurity "github.com/u-ai/backend/internal/middleware/security"
 )
 
 const packageAPIReplacement = "/api/extensions/packages/artifacts"
@@ -87,8 +88,11 @@ func createPackageArtifactPreview(c *gin.Context, runtime *Runtime) {
 		return
 	}
 	defer file.Close()
+	actor := middlewaresecurity.GetActor(c)
+	allowUnsignedLocal := actor != nil && actor.IsLocalTrusted && kernelruntime.PackageDevelopmentModeEnabled()
 	request := kernelruntime.PackagePreviewRequest{SpaceID: kernelAPIUser(c), ScopeType: c.Request.FormValue("scopeType"), ScopeID: c.Request.FormValue("scopeId"), FileName: header.Filename,
-		AllowUnsignedDev: strings.EqualFold(c.Request.FormValue("allowUnsignedDev"), "true"), DeveloperSessionID: c.Request.FormValue("developerSessionId")}
+		AllowUnsignedDev:   strings.EqualFold(c.Request.FormValue("allowUnsignedDev"), "true") || allowUnsignedLocal,
+		AllowUnsignedLocal: allowUnsignedLocal, DeveloperSessionID: c.Request.FormValue("developerSessionId")}
 	if request.ScopeType == "" {
 		request.ScopeType = "global"
 	}

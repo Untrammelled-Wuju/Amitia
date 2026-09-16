@@ -15,6 +15,10 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/migration"
 )
 
+func currentPackageTestPolicyJSON(raw string) string {
+	return strings.ReplaceAll(raw, "2026-07-30-v1", packagePolicyVersion)
+}
+
 // insertR46RollbackPointDirectSQL 绕过 PutRollbackPoint 内置的 snapshot 验证规则，
 // 直接向 extension_package_rollback_points 表写入数据并同步 artifact 引用。
 func insertR46RollbackPointDirectSQL(t *testing.T, ctx context.Context, container *Container, point PackageRollbackPoint) {
@@ -182,10 +186,10 @@ func r46FgConfirmationClaimsJSON(extensionID, artifactID, artifactPolicy string)
 	now := time.Now().UTC()
 	securityHash := computeSecurityPolicyHash()
 	emptyConfHash := computePackageRequiredConfirmationsHash([]string{})
-	return fmt.Sprintf(`{"schemaVersion":1,"operationType":"uninstall","extensionId":%q,"artifactId":%q,"artifactPolicy":%q,"previewHash":"sha256:r46-test-preview","securityPolicyHash":"%s","policyVersion":"2026-07-30-v1","spaceId":"user-1","scopeType":"global","scopeId":"","confirmedItems":[],"confirmations":{},"issuedAt":%d,"expiresAt":%d,"nonce":"r46-fg-test-nonce","requiredConfirmationsHash":"%s","dependenciesHash":"sha256:r46-test-deps"}`,
+	return currentPackageTestPolicyJSON(fmt.Sprintf(`{"schemaVersion":1,"operationType":"uninstall","extensionId":%q,"artifactId":%q,"artifactPolicy":%q,"previewHash":"sha256:r46-test-preview","securityPolicyHash":"%s","policyVersion":"2026-07-30-v1","spaceId":"user-1","scopeType":"global","scopeId":"","confirmedItems":[],"confirmations":{},"issuedAt":%d,"expiresAt":%d,"nonce":"r46-fg-test-nonce","requiredConfirmationsHash":"%s","dependenciesHash":"sha256:r46-test-deps"}`,
 		extensionID, artifactID, artifactPolicy, securityHash,
 		now.Add(-time.Minute).Unix(), now.Add(time.Hour).Unix(),
-		emptyConfHash)
+		emptyConfHash))
 }
 
 func putR46FgNonceBinding(t *testing.T, ctx context.Context, container *Container, operationID, extensionID, nonce string, issuedAt, expiresAt int64) {
@@ -285,8 +289,8 @@ func TestR46FinalGateRetainRollbackExactBindingPasses(t *testing.T) {
 	emptyDepsHash := computePackageDependenciesHash([]string{})
 
 	claimsJSON := fmt.Sprintf(`{"artifactId":%q,"artifactPolicy":"retainForRollback","versionId":"1.0.0","currentGenerationId":"r46-fg-generation","confirm":true,"expiresAt":9999999999}`, artifactID)
-	confirmationClaimsJSON := fmt.Sprintf(`{"schemaVersion":1,"operationType":"uninstall","extensionId":%q,"artifactId":%q,"artifactPolicy":"retainForRollback","previewHash":%q,"securityPolicyHash":"%s","policyVersion":"2026-07-30-v1","spaceId":"user-1","scopeType":"global","scopeId":"","confirmedItems":[],"confirmations":{},"issuedAt":%d,"expiresAt":%d,"nonce":%q,"requiredConfirmationsHash":"%s","dependenciesHash":"%s"}`,
-		extensionID, artifactID, previewHash, securityHash, issuedAt, expiresAt, nonce, emptyConfHash, emptyDepsHash)
+	confirmationClaimsJSON := currentPackageTestPolicyJSON(fmt.Sprintf(`{"schemaVersion":1,"operationType":"uninstall","extensionId":%q,"artifactId":%q,"artifactPolicy":"retainForRollback","previewHash":%q,"securityPolicyHash":"%s","policyVersion":"2026-07-30-v1","spaceId":"user-1","scopeType":"global","scopeId":"","confirmedItems":[],"confirmations":{},"issuedAt":%d,"expiresAt":%d,"nonce":%q,"requiredConfirmationsHash":"%s","dependenciesHash":"%s"}`,
+		extensionID, artifactID, previewHash, securityHash, issuedAt, expiresAt, nonce, emptyConfHash, emptyDepsHash))
 	setupR46FgOperation(t, ctx, container, extensionID, operationID, artifactID, claimsJSON, confirmationClaimsJSON)
 
 	putR46FgNonceBinding(t, ctx, container, operationID, extensionID, nonce, issuedAt, expiresAt)
@@ -1019,7 +1023,7 @@ func TestFinalGateUpdateMissingRollbackPointFailsWithoutSnapshotHash(t *testing.
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	confirmKey := "confirm.update"
 	securityHash := computeSecurityPolicyHash()
-	claimsJSON := fmt.Sprintf(`{"schemaVersion":1,"operationType":"update","extensionId":%q,"artifactId":"","previewHash":"sha256:0000000000000000000000000000000000000000000000000000000000000000","securityPolicyHash":"%s","policyVersion":"2026-07-30-v1","spaceId":"user-1","scopeType":"global","scopeId":"","confirmedItems":[%q],"confirmations":{%q:true},"issuedAt":%d,"expiresAt":%d,"nonce":"test-nonce"}`, extensionID, securityHash, confirmKey, confirmKey, time.Now().Unix(), time.Now().Add(time.Hour).Unix())
+	claimsJSON := currentPackageTestPolicyJSON(fmt.Sprintf(`{"schemaVersion":1,"operationType":"update","extensionId":%q,"artifactId":"","previewHash":"sha256:0000000000000000000000000000000000000000000000000000000000000000","securityPolicyHash":"%s","policyVersion":"2026-07-30-v1","spaceId":"user-1","scopeType":"global","scopeId":"","confirmedItems":[%q],"confirmations":{%q:true},"issuedAt":%d,"expiresAt":%d,"nonce":"test-nonce"}`, extensionID, securityHash, confirmKey, confirmKey, time.Now().Unix(), time.Now().Add(time.Hour).Unix()))
 
 	op := PackageOperationRecord{
 		OperationID: operationID, TraceID: "trace-fail-closed-update-norp",
@@ -1084,7 +1088,7 @@ func TestFinalGateUpdateMissingRollbackPointPassesWithValidSnapshotHash(t *testi
 	}
 	securityHash := computeSecurityPolicyHash()
 	confirmKey := "confirm.update"
-	claimsJSON := fmt.Sprintf(`{"schemaVersion":1,"operationType":"update","extensionId":%q,"artifactId":"test-artifact","previewHash":"sha256:0000000000000000000000000000000000000000000000000000000000000000","securityPolicyHash":"%s","policyVersion":"2026-07-30-v1","snapshotRequirementHash":"%s","spaceId":"user-1","scopeType":"global","scopeId":"","confirmedItems":[%q],"confirmations":{%q:true},"issuedAt":%d,"expiresAt":%d,"nonce":"test-nonce"}`, extensionID, securityHash, reqHashOrEmpty, confirmKey, confirmKey, time.Now().Unix(), time.Now().Add(time.Hour).Unix())
+	claimsJSON := currentPackageTestPolicyJSON(fmt.Sprintf(`{"schemaVersion":1,"operationType":"update","extensionId":%q,"artifactId":"test-artifact","previewHash":"sha256:0000000000000000000000000000000000000000000000000000000000000000","securityPolicyHash":"%s","policyVersion":"2026-07-30-v1","snapshotRequirementHash":"%s","spaceId":"user-1","scopeType":"global","scopeId":"","confirmedItems":[%q],"confirmations":{%q:true},"issuedAt":%d,"expiresAt":%d,"nonce":"test-nonce"}`, extensionID, securityHash, reqHashOrEmpty, confirmKey, confirmKey, time.Now().Unix(), time.Now().Add(time.Hour).Unix()))
 
 	op := PackageOperationRecord{
 		OperationID: operationID, TraceID: "trace-fail-closed-update-hash",
@@ -1513,7 +1517,7 @@ func TestFinalGateUpdateRequirementHashMismatchFails(t *testing.T) {
 		CurrentStep: "completed", StartedAt: now, UpdatedAt: now,
 		ArtifactID:              "art-reqhash",
 		SnapshotRequirementHash: "sha256:deadbeef",
-		ConfirmationClaimsJSON:  fmt.Sprintf(`{"schemaVersion":1,"operationType":"update","extensionId":%q,"artifactId":"art-reqhash","previewHash":"sha256:0000000000000000000000000000000000000000000000000000000000000000","securityPolicyHash":"%s","policyVersion":"2026-07-30-v1","snapshotRequirementHash":"sha256:deadbeef","spaceId":"user-1","scopeType":"global","scopeId":"","confirmedItems":["confirm.update"],"confirmations":{"confirm.update":true},"issuedAt":%d,"expiresAt":%d,"nonce":"test-nonce"}`, extensionID, secHash, time.Now().Unix(), time.Now().Add(time.Hour).Unix()),
+		ConfirmationClaimsJSON:  currentPackageTestPolicyJSON(fmt.Sprintf(`{"schemaVersion":1,"operationType":"update","extensionId":%q,"artifactId":"art-reqhash","previewHash":"sha256:0000000000000000000000000000000000000000000000000000000000000000","securityPolicyHash":"%s","policyVersion":"2026-07-30-v1","snapshotRequirementHash":"sha256:deadbeef","spaceId":"user-1","scopeType":"global","scopeId":"","confirmedItems":["confirm.update"],"confirmations":{"confirm.update":true},"issuedAt":%d,"expiresAt":%d,"nonce":"test-nonce"}`, extensionID, secHash, time.Now().Unix(), time.Now().Add(time.Hour).Unix())),
 		FencingToken:            1,
 	}
 	if err := container.PackageRepository.CreateOperation(ctx, op); err != nil {
@@ -1642,7 +1646,7 @@ func TestFinalGateSnapshotRealDiffNonEmptyFails(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	claimsJSON := `{"schemaVersion":1,"operationType":"update","extensionId":"com.example/fail-closed-real-diff","artifactId":"art-real-diff","artifactPolicy":"deleteArtifact","policyVersion":"2026-07-30-v1","spaceId":"user-1","scopeType":"global","scopeId":"","previewHash":"sha256:preview-real-diff","securityPolicyHash":"sha256:sec-real-diff","confirmedItems":["confirm.update"],"confirmations":{"confirm.update":true},"issuedAt":1700000000,"expiresAt":9999999999,"nonce":"test-nonce-real-diff"}`
+	claimsJSON := currentPackageTestPolicyJSON(`{"schemaVersion":1,"operationType":"update","extensionId":"com.example/fail-closed-real-diff","artifactId":"art-real-diff","artifactPolicy":"deleteArtifact","policyVersion":"2026-07-30-v1","spaceId":"user-1","scopeType":"global","scopeId":"","previewHash":"sha256:preview-real-diff","securityPolicyHash":"sha256:sec-real-diff","confirmedItems":["confirm.update"],"confirmations":{"confirm.update":true},"issuedAt":1700000000,"expiresAt":9999999999,"nonce":"test-nonce-real-diff"}`)
 
 	op := PackageOperationRecord{
 		OperationID: operationID, TraceID: "trace-real-diff",
@@ -1865,7 +1869,7 @@ func TestFinalGateSnapshotExemptMigrationEmptyConfigNonEmptyFails(t *testing.T) 
 		t.Fatal(err)
 	}
 
-	claimsJSON := `{"schemaVersion":1,"operationType":"update","extensionId":"com.example/snapshot-exempt-config-diff","artifactId":"art-config-diff","artifactPolicy":"deleteArtifact","previewHash":"sha256:preview-config","policyVersion":"2026-07-30-v1","spaceId":"user-1","scopeType":"global","scopeId":"","securityPolicyHash":"sha256:sec-config","confirmedItems":["confirm.update"],"confirmations":{"confirm.update":true},"issuedAt":1700000000,"expiresAt":9999999999,"nonce":"test-nonce-config-diff"}`
+	claimsJSON := currentPackageTestPolicyJSON(`{"schemaVersion":1,"operationType":"update","extensionId":"com.example/snapshot-exempt-config-diff","artifactId":"art-config-diff","artifactPolicy":"deleteArtifact","previewHash":"sha256:preview-config","policyVersion":"2026-07-30-v1","spaceId":"user-1","scopeType":"global","scopeId":"","securityPolicyHash":"sha256:sec-config","confirmedItems":["confirm.update"],"confirmations":{"confirm.update":true},"issuedAt":1700000000,"expiresAt":9999999999,"nonce":"test-nonce-config-diff"}`)
 
 	op := PackageOperationRecord{
 		OperationID: operationID, TraceID: "trace-config-diff",

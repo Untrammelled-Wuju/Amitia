@@ -22,7 +22,7 @@ func TestConversationScopedEventMirrorsAtomicallyWithCanonicalSequence(t *testin
 		payload, _ := json.Marshal(map[string]interface{}{"message": message})
 		if _, err := svc.Publish(context.Background(), "system.test", 1, payload, PublishOptions{
 			ProducerID:    "test-producer",
-			ProducerType:  EventProducerTypeHost,
+			ProducerType:  EventProducerTypeSystem,
 			AggregateType: "conversation",
 			AggregateID:   "conv-1",
 		}); err != nil {
@@ -81,7 +81,7 @@ func TestConversationUIEventBeforeSequenceReturnsAscendingStablePage(t *testing.
 	}
 
 	for index := 1; index <= 5; index++ {
-		payload, _ := json.Marshal(map[string]interface{}{"index": index})
+		payload, _ := json.Marshal(map[string]interface{}{"type": "system.test", "index": index})
 		if _, _, err := svc.PublishConversationUIEvent(context.Background(), "conv-before", payload, ""); err != nil {
 			t.Fatalf("publish %d: %v", index, err)
 		}

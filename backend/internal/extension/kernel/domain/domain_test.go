@@ -50,6 +50,7 @@ func TestVersionCompare(t *testing.T) {
 func TestValidateExtensionID(t *testing.T) {
 	valid := []string{
 		"com.example/weather",
+		"com.example.weather",
 		"top.untrammelled/amitia-tools",
 		"org.open-source/local-memory",
 		"local.user/my-ext",
@@ -57,7 +58,6 @@ func TestValidateExtensionID(t *testing.T) {
 	invalid := []string{
 		"",
 		"weather",
-		"com.example.weather",
 		"com.example/Weather",
 		"COM.EXAMPLE/weather",
 		"com.example/weather@1.0.0",

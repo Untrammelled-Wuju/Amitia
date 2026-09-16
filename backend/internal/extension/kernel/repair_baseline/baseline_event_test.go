@@ -49,6 +49,14 @@ func (r *baselineSchemaRegistry) IsRegistered(_ context.Context, _ event.EventTy
 	return false
 }
 
+func (r *baselineSchemaRegistry) ValidatePayload(_ context.Context, _ event.EventTypeID, _ int, payload []byte) error {
+	if len(payload) == 0 {
+		return errors.New("event: payload is required")
+	}
+	var value any
+	return json.Unmarshal(payload, &value)
+}
+
 func newBaselineRegistry(t *testing.T) (*event.EventSubscriptionRegistry, event.EventTypeID) {
 	t.Helper()
 	reg := &baselineSchemaRegistry{}

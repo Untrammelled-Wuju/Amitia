@@ -826,7 +826,7 @@ func (e *containerPlanExecutor) executeDirectInstallSaga(ctx context.Context, pl
 	}
 	result.Applied = append(result.Applied, "create_installation")
 
-	if err := persistInstalledPackagePermissions(ctx, e.permRepo, definition.ID, packageManifestRequirements(definition.ID, pkg.Manifest.Permissions)); err != nil {
+	if err := persistInstalledPackagePermissions(ctx, e.permRepo, definition.ID, packageManifestRequirements(definition.ID, pkg.Manifest.Permissions, definition.Modules...)); err != nil {
 		result.Status = "failed"
 		result.Error = fmt.Sprintf("grant package permissions: %v", err)
 		return 0, err

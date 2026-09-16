@@ -368,15 +368,15 @@ func verifyUIContribution(ctx context.Context) ([]string, error) {
 	if uiHost == nil {
 		return nil, fmt.Errorf("ui_contribution: NewUIHost returned nil")
 	}
-	if _, ok := uiHost.GetSlot("extension.settings.page"); !ok {
-		return nil, fmt.Errorf("ui_contribution: default slot extension.settings.page missing")
+	if _, ok := uiHost.GetSlot("provider.settings.section"); !ok {
+		return nil, fmt.Errorf("ui_contribution: default slot provider.settings.section missing")
 	}
 	testDef := &ui_contribution.UIContributionDefinition{
 		ContributionID:  "acceptance.ui.verify.settings",
 		ExtensionID:     "acceptance.ui.verify",
 		ModuleID:        "verify",
 		Kind:            ui_contribution.UIContributionSettingsSection,
-		Slot:            ui_contribution.UISlotReference{SlotID: "extension.settings.page", ContractVersion: 1},
+		Slot:            ui_contribution.UISlotReference{SlotID: "provider.settings.section", ContractVersion: 1},
 		ContractVersion: 1,
 		Display:         ui_contribution.UIDisplayMetadata{Title: ui_contribution.LocalizedText{Default: "Acceptance Verify"}},
 		Entry:           ui_contribution.UIEntryDefinition{Type: ui_contribution.SandboxSchemaRenderer, Path: "schema.json", ContentHash: "sha256:verify"},

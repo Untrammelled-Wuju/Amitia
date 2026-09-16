@@ -225,6 +225,7 @@ func (r *Runtime) reconcileUninstallPackageGeneration(ctx context.Context, opera
 	if err := json.Unmarshal([]byte(operation.CurrentPointerJSON), &stable); err != nil || stable.GenerationID == "" {
 		return "", errors.New("stable generation evidence unavailable")
 	}
+	stable.OperationID = operation.OperationID
 	_, dbErr := r.container.InstallationRepository.GetInstallation(ctx, domain.ExtensionID(operation.ExtensionID))
 	current, currentErr := r.container.PackageGenerationStore.ReadCurrent(operation.ExtensionID)
 	if dbErr == nil {
@@ -786,7 +787,7 @@ func (r *Runtime) proveRollbackPackageOperation(ctx context.Context, operation P
 				return fmt.Errorf("rollback resource quarantine verification failed: %w", err)
 			}
 		}
-		if r.container.UserDataSnapshotStore != nil && point.UserDataMigrationStateJSON != "" {
+		if r.container.UserDataSnapshotStore != nil && packageUserDataRestoreRequired(point.UserDataMigrationStateJSON) {
 			restoreOperationID := point.SourceOperationID
 			if restoreOperationID == "" {
 				restoreOperationID = "restore-" + point.RollbackPointID
@@ -1448,7 +1449,7 @@ func (r *Runtime) executeUninstallRecoveryChain(ctx context.Context, operation P
 		}
 		if !finalGateResult.Passed {
 			return "", NewPackageErrorWithRecovery(PackageErrCodeFinalGateFailed, 409, false, true, "Inspect compensation final gate result",
-				fmt.Errorf("compensation final gate not passed for operation %s", operation.OperationID))
+				fmt.Errorf("compensation final gate not passed for operation %s: %+v", operation.OperationID, finalGateResult.Findings))
 		}
 		resultBytes, marshalErr := json.Marshal(finalGateResult)
 		if marshalErr != nil {

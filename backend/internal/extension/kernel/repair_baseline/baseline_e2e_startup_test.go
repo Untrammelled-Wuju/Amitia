@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/internal/extension/kernel"
+	"github.com/u-ai/backend/internal/runtimeprofile"
 )
 
 func TestBaseline_E2E_Startup_ContainerBuilds(t *testing.T) {
@@ -21,6 +22,7 @@ func TestBaseline_E2E_Startup_ContainerBuilds(t *testing.T) {
 	extRoot := filepath.Join(tempDir, "extensions")
 
 	builder := kernel.NewContainerBuilder().
+		WithRuntimeProfile(runtimeprofile.ProfileLocal).
 		WithDBPath(dbPath).
 		WithExtensionRoot(extRoot)
 
@@ -59,6 +61,7 @@ func TestBaseline_E2E_Startup_ContainerRecovers(t *testing.T) {
 	extRoot := filepath.Join(tempDir, "extensions")
 
 	builder := kernel.NewContainerBuilder().
+		WithRuntimeProfile(runtimeprofile.ProfileLocal).
 		WithDBPath(dbPath).
 		WithExtensionRoot(extRoot)
 
@@ -85,6 +88,7 @@ func TestBaseline_E2E_Startup_LegacyCallCounterZero(t *testing.T) {
 	extRoot := filepath.Join(tempDir, "extensions")
 
 	builder := kernel.NewContainerBuilder().
+		WithRuntimeProfile(runtimeprofile.ProfileLocal).
 		WithDBPath(dbPath).
 		WithExtensionRoot(extRoot)
 
@@ -116,6 +120,7 @@ func TestBaseline_E2E_Startup_ContainerCloses(t *testing.T) {
 	extRoot := filepath.Join(tempDir, "extensions")
 
 	builder := kernel.NewContainerBuilder().
+		WithRuntimeProfile(runtimeprofile.ProfileLocal).
 		WithDBPath(dbPath).
 		WithExtensionRoot(extRoot)
 

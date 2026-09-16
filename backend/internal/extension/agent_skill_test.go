@@ -240,7 +240,15 @@ func agentSkillTestDB(t *testing.T) *gorm.DB {
 		t.Fatal(err)
 	}
 	runner := migration.Runner{DB: db, SkipBackup: true}
-	if err := runner.Apply([]migration.Migration{migration.ExtensionsMigration(), migration.PluginRuntimeMigration(), migration.ExtensionScopeBindingsMigration(), migration.ExtensionWorkshopMigration(), migration.ExtensionAgentSkillsMigration(), migration.ExtensionAgentSkillTraceMigration()}); err != nil {
+	if err := runner.Apply([]migration.Migration{
+		migration.ExtensionsMigration(),
+		migration.PluginRuntimeMigration(),
+		migration.ExtensionScopeBindingsMigration(),
+		migration.ExtensionWorkshopMigration(),
+		migration.ExtensionAgentSkillsMigration(),
+		migration.ExtensionAgentSkillTraceMigration(),
+		migration.SpaceIdentityCutoverMigration(),
+	}); err != nil {
 		t.Fatal(err)
 	}
 	return db

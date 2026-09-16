@@ -119,3 +119,101 @@ func TestInstallationPermissionPolicyOverridesPerUseAndPreservesRevokedGrant(t *
 		t.Fatalf("expected re-enabled grant to allow, got %s", result.Decision)
 	}
 }
+
+func TestRestorePackagePermissionsAddsServiceRuntimeExecute(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	root := t.TempDir()
+	container, err := NewContainerBuilder().
+		WithDBPath(filepath.Join(root, "kernel.db")).
+		WithExtensionRoot(filepath.Join(root, "extensions")).
+		Build(ctx)
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	defer container.Close()
+
+	extID := domain.ExtensionID("com.amitiax/runtime-permission")
+	if err := container.PermissionRepository.PutRequirement(ctx, sqlite.PermissionRequirement{
+		ExtensionID:    extID,
+		PermissionName: permission.PermissionServiceNetworkRequest,
+		Required:       true,
+		Scope:          string(permission.ScopeExtension),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	definition := domain.ExtensionDefinition{
+		ID: extID,
+		Modules: []domain.ModuleDefinition{{
+			ID:      "runtime",
+			Runtime: &domain.RuntimeDefinition{Type: domain.RuntimeTypeJavaScript},
+		}},
+	}
+	if err := restorePackagePermissionsFromDefinition(ctx, container.PermissionRepository, extID, definition); err != nil {
+		t.Fatal(err)
+	}
+	requirements, err := container.PermissionRepository.ListRequirements(ctx, extID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, requirement := range requirements {
+		if requirement.PermissionName == permission.PermissionServiceRuntimeExecute {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("runtime execute requirement not restored: %+v", requirements)
+	}
+	granted, err := container.PermissionRepository.IsGranted(ctx, extID, permission.PermissionServiceRuntimeExecute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !granted {
+		t.Fatal("runtime execute permission was not granted during restore")
+	}
+}
+
+func TestRestorePackagePermissionsAddsUIToolInvoke(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	root := t.TempDir()
+	container, err := NewContainerBuilder().
+		WithDBPath(filepath.Join(root, "kernel.db")).
+		WithExtensionRoot(filepath.Join(root, "extensions")).
+		Build(ctx)
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	defer container.Close()
+
+	extID := domain.ExtensionID("com.amitiax/ui-tool-permission")
+	definition := domain.ExtensionDefinition{
+		ID: extID,
+		Modules: []domain.ModuleDefinition{{
+			ID: "ui",
+			Contributions: []domain.ContributionDefinition{{
+				ID:   "dashboard",
+				Kind: domain.ContributionKindUIPage,
+				Definition: map[string]any{
+					"actions": []any{
+						map[string]any{
+							"target": map[string]any{"type": "tool"},
+						},
+					},
+				},
+			}},
+		}},
+	}
+	if err := restorePackagePermissionsFromDefinition(ctx, container.PermissionRepository, extID, definition); err != nil {
+		t.Fatal(err)
+	}
+	granted, err := container.PermissionRepository.IsGranted(ctx, extID, "tool.invoke")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !granted {
+		t.Fatal("tool invoke permission was not granted during restore")
+	}
+}

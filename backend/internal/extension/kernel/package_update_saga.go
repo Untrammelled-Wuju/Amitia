@@ -290,7 +290,7 @@ func (r *Runtime) ExecutePackageUpdate(ctx context.Context, request PackageInsta
 	if err := r.completePackageGenerationStep(ctx, op.OperationID, StepUpdateSwitchCurrentPointer, 5, stableGeneration, targetGeneration.Current, packageGenerationJSON(targetGeneration.Current), guard); err != nil {
 		return KernelInstallResult{}, r.failPackageUpdateOperation(op.OperationID, StepUpdateSwitchCurrentPointer, err, compensation, guard)
 	}
-	targetRequirements := packageManifestRequirements(current.ExtensionID, confirmed.preview.Manifest.Permissions)
+	targetRequirements := packageManifestRequirements(current.ExtensionID, confirmed.preview.Manifest.Permissions, targetDefinition.Modules...)
 	targetResources := packageManifestResources(current.ExtensionID, confirmed.preview.Manifest.Resources, targetGeneration.GenerationPath)
 	targetGrants := packageManifestGrantRecords(current.ExtensionID, targetRequirements)
 	currentGrantStates := make(map[string]string, len(currentGrants))
@@ -625,10 +625,16 @@ func (r *Runtime) executePackageUpdateMigrations(ctx context.Context, packageOpe
 	return execution, err
 }
 
-func packageManifestRequirements(extensionID domain.ExtensionID, permissions []manifest_v1.PermissionReq) []sqlite.PermissionRequirement {
+func packageManifestRequirements(extensionID domain.ExtensionID, permissions []manifest_v1.PermissionReq, modules ...domain.ModuleDefinition) []sqlite.PermissionRequirement {
 	result := make([]sqlite.PermissionRequirement, 0, len(permissions))
 	for _, permission := range permissions {
 		result = append(result, sqlite.PermissionRequirement{ExtensionID: extensionID, PermissionName: permission.Name, Reason: permission.Reason, Required: permission.Required, Scope: permission.Scope})
+	}
+	if requirement, ok := uiToolInvocationRequirement(extensionID, modules); ok {
+		result = append(result, requirement)
+	}
+	if requirement, ok := serviceRuntimeExecutionRequirement(extensionID, modules); ok {
+		result = append(result, requirement)
 	}
 	return result
 }
@@ -678,7 +684,7 @@ func computePackageUpdateDiff(oldDefinition domain.ExtensionDefinition, oldModul
 		oldPermissions[value.PermissionName] = packageCanonicalJSON(value)
 	}
 	newPermissions := map[string]string{}
-	for _, value := range packageManifestRequirements(targetDefinition.ID, target.Permissions) {
+	for _, value := range packageManifestRequirements(targetDefinition.ID, target.Permissions, targetDefinition.Modules...) {
 		newPermissions[value.PermissionName] = packageCanonicalJSON(value)
 	}
 	diff.PermissionsAdded, diff.PermissionsRemoved, _ = packageMapDiff(oldPermissions, newPermissions)

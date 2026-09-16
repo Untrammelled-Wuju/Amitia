@@ -542,8 +542,16 @@ func TestWorkflowRecoveryUsesCheckpoint(t *testing.T) {
 	if calls != 0 {
 		t.Fatalf("checkpointed step executed again: %d", calls)
 	}
-	run, _ := store.Get(context.Background(), "recover-run")
-	if run.Status != RunStatusSucceeded {
+	deadline := time.Now().Add(2 * time.Second)
+	var run *WorkflowRun
+	for time.Now().Before(deadline) {
+		run, _ = store.Get(context.Background(), "recover-run")
+		if run != nil && run.Status == RunStatusSucceeded {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if run == nil || run.Status != RunStatusSucceeded {
 		t.Fatalf("workflow recovery did not finish: %+v", run)
 	}
 }

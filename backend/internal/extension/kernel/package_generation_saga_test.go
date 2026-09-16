@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
-	"github.com/u-ai/backend/internal/extension/kernel/package_security"
 )
 
 func TestPackageGenerationInstallPersistsEvidenceAndReadModel(t *testing.T) {
@@ -160,6 +159,18 @@ func TestPackageGenerationRecoveryRestoresUninstallQuarantine(t *testing.T) {
 	if err := container.PackageRepository.CreateOperation(ctx, operation); err != nil {
 		t.Fatal(err)
 	}
+	installation, err := container.InstallationRepository.GetInstallation(ctx, domain.ExtensionID(installed.ExtensionID))
+	if err != nil {
+		t.Fatal(err)
+	}
+	preview, err := runtime.PreviewPackageUninstall(ctx, installed.ExtensionID, "user-1", "global", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshotJSON, snapshotHash, expectedGenerationID, err := captureInstallationSnapshot(installation, preview)
+	if err != nil {
+		t.Fatal(err)
+	}
 	quarantinedCurrent, err := container.PackageGenerationStore.QuarantineCurrent(installed.ExtensionID, stable.GenerationID, operationID)
 	if err != nil {
 		t.Fatal(err)
@@ -172,7 +183,10 @@ func TestPackageGenerationRecoveryRestoresUninstallQuarantine(t *testing.T) {
 	}
 	safeExt := safeDirectoryName(installed.ExtensionID)
 	originalCurrentPath := filepath.Join(container.ExtRoot, "installations", safeExt, "current.json")
-	verificationTreeHash := package_security.ComputeDirHash(quarantinePath, container.PackageSecurity.GetHasher())
+	verificationTreeHash, err := computeGenerationTreeHash(ctx, quarantinePath)
+	if err != nil {
+		t.Fatal(err)
+	}
 	qm := PackageQuarantineMetadata{
 		QuarantineID:             "quarantine-" + operationID,
 		OperationID:              operationID,
@@ -185,6 +199,10 @@ func TestPackageGenerationRecoveryRestoresUninstallQuarantine(t *testing.T) {
 		ArtifactID:               artifact.ArtifactID,
 		State:                    "active",
 		FencingToken:             1,
+		SnapshotJSON:             snapshotJSON,
+		SnapshotHash:             snapshotHash,
+		ExpectedGenerationID:     expectedGenerationID,
+		ExpectedVersionID:        preview.CurrentVersionID,
 	}
 	if err := container.PackageRepository.PutQuarantineMetadata(ctx, qm, PackageWriteGuard{}); err != nil {
 		t.Fatal(err)

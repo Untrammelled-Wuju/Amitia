@@ -319,7 +319,9 @@ window.amitiaUI = (function() {
 
   function postMessage(method, input, callback) {
     validateMethod(method);
-    const id = crypto.randomUUID();
+    const id = typeof crypto.randomUUID === "function"
+      ? crypto.randomUUID()
+      : "ui-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2);
     const msg = {
       method: "ui." + method,
       version: 1,

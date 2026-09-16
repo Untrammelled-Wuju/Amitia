@@ -110,6 +110,7 @@ type PackagePreviewRequest struct {
 	ScopeID            string
 	FileName           string
 	AllowUnsignedDev   bool
+	AllowUnsignedLocal bool
 	DeveloperSessionID string
 }
 

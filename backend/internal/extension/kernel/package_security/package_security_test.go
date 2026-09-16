@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 )
@@ -85,7 +86,9 @@ func TestFileTypeDetector(t *testing.T) {
 }
 
 func TestArchiveInspectorRejectsExecutableMagicAndNestedArchive(t *testing.T) {
-	inspector := NewArchiveInspector(DefaultArchivePolicy())
+	policy := DefaultArchivePolicy()
+	policy.AllowNestedArchive = false
+	inspector := NewArchiveInspector(policy)
 	for name, content := range map[string][]byte{
 		"modules/main/picture.png": {'M', 'Z', 0, 0},
 		"modules/main/payload.zip": {'P', 'K', 3, 4},
@@ -302,6 +305,9 @@ func TestRestrictedArchivePolicyRejectsDeclaredServiceEntrypointExecutable(t *te
 }
 
 func TestSecureExtractorRestoresExecuteBitOnlyForDeclaredServiceEntrypoint(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("windows does not expose POSIX execute bits")
+	}
 	manifest := []byte(`{"modules":[{"id":"runtime","runtime":{"type":"service","entryPoint":"bin/game"}}]}`)
 	elf := []byte{0x7f, 'E', 'L', 'F', 2, 1, 1, 0}
 	raw := createTestZIP(map[string][]byte{

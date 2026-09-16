@@ -370,8 +370,8 @@ func TestSSEUIHostNotifier_ClientRuntimeSessionRevisionIsAuthoritative(t *testin
 		t.Fatalf("run failed: %v", err)
 	}
 	runState := run["serverState"].(map[string]interface{})
-	if got := runState["revision"]; got != int64(3) {
-		t.Fatalf("run revision = %v, want 3 (approval + activation)", got)
+	if got := runState["revision"]; got != int64(4) {
+		t.Fatalf("run revision = %v, want 4 (approval + activation + delivery preparation)", got)
 	}
 
 	inspect, err := n.ExecuteClientRuntimeCommand(context.Background(), "inspect", map[string]interface{}{"_runtimeScope": scope})
@@ -379,8 +379,8 @@ func TestSSEUIHostNotifier_ClientRuntimeSessionRevisionIsAuthoritative(t *testin
 		t.Fatalf("inspect failed: %v", err)
 	}
 	inspectState := inspect["serverState"].(map[string]interface{})
-	if got := inspectState["revision"]; got != int64(3) {
-		t.Fatalf("inspect revision = %v, want 3", got)
+	if got := inspectState["revision"]; got != int64(4) {
+		t.Fatalf("inspect revision = %v, want 4", got)
 	}
 
 	stop, err := n.ExecuteClientRuntimeCommand(context.Background(), "stop", map[string]interface{}{"_runtimeScope": scope, "id": "demo"})
@@ -388,8 +388,8 @@ func TestSSEUIHostNotifier_ClientRuntimeSessionRevisionIsAuthoritative(t *testin
 		t.Fatalf("stop failed: %v", err)
 	}
 	stopState := stop["serverState"].(map[string]interface{})
-	if got := stopState["revision"]; got != int64(4) {
-		t.Fatalf("stop revision = %v, want 4", got)
+	if got := stopState["revision"]; got != int64(5) {
+		t.Fatalf("stop revision = %v, want 5", got)
 	}
 }
 

@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -758,6 +759,38 @@ func (r *PackageRepository) GetRollbackPoint(ctx context.Context, extensionID, v
 		return p, ClassifyRepositoryError("get rollback point", err)
 	}
 	return p, nil
+}
+
+func (r *PackageRepository) ConsumeRollbackPoint(ctx context.Context, point PackageRollbackPoint) error {
+	if r == nil || r.db == nil {
+		return fmt.Errorf("kernel: package repository unavailable")
+	}
+	if strings.TrimSpace(point.RollbackPointID) == "" || strings.TrimSpace(point.ArtifactID) == "" {
+		return fmt.Errorf("kernel: rollback point consume identity incomplete")
+	}
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	result, err := tx.ExecContext(ctx, `UPDATE extension_package_rollback_points
+		SET retention_state = 'consumed'
+		WHERE rollback_point_id = ? AND extension_id = ? AND retention_state IN ('active', 'forward_recovery')`,
+		point.RollbackPointID, point.ExtensionID)
+	if err != nil {
+		return err
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected != 1 {
+		return fmt.Errorf("kernel: rollback point %s is not consumable", point.RollbackPointID)
+	}
+	if err := releaseArtifactReferenceTx(ctx, tx, point.ArtifactID, ArtifactReferenceRollbackPoint, point.RollbackPointID); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (r *PackageRepository) PutExport(ctx context.Context, ticket PackageExportTicket) error {

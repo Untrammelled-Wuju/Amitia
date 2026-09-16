@@ -1,371 +1,48 @@
 {
-  "components": {
-    "schemas": {
-      "AgentSkill": {
-        "properties": {
-          "compatibilityStatus": {
-            "enum": [
-              "compatible",
-              "compatible_with_warnings",
-              "partially_compatible",
-              "blocked"
-            ]
-          },
-          "contentHash": {
-            "type": "string"
-          },
-          "description": {
-            "type": "string"
-          },
-          "enabled": {
-            "type": "boolean"
-          },
-          "extensionId": {
-            "type": "string"
-          },
-          "name": {
-            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
-            "type": "string"
-          },
-          "resources": {
-            "items": {
-              "$ref": "#/components/schemas/AgentSkillResource"
-            },
-            "type": "array"
-          },
-          "scope": {
-            "enum": [
-              "global",
-              "character"
-            ]
-          },
-          "source": {
-            "enum": [
-              "bundled",
-              "local-directory",
-              "local-zip",
-              "workshop"
-            ]
-          },
-          "toolMappings": {
-            "items": {
-              "type": "object"
-            },
-            "type": "array"
-          }
-        },
-        "required": [
-          "extensionId",
-          "name",
-          "description",
-          "source",
-          "scope",
-          "contentHash",
-          "resources",
-          "toolMappings",
-          "compatibilityStatus",
-          "enabled"
-        ],
-        "type": "object"
-      },
-      "AgentSkillInstallRequest": {
-        "properties": {
-          "characterId": {
-            "type": "string"
-          },
-          "enable": {
-            "default": false,
-            "type": "boolean"
-          },
-          "previewId": {
-            "type": "string"
-          },
-          "scope": {
-            "enum": [
-              "global",
-              "character"
-            ]
-          }
-        },
-        "required": [
-          "previewId",
-          "scope"
-        ],
-        "type": "object"
-      },
-      "AgentSkillResource": {
-        "properties": {
-          "executable": {
-            "const": false
-          },
-          "kind": {
-            "enum": [
-              "skill",
-              "reference",
-              "asset",
-              "script",
-              "agent_metadata",
-              "other"
-            ]
-          },
-          "mimeType": {
-            "type": "string"
-          },
-          "path": {
-            "type": "string"
-          },
-          "sha256": {
-            "type": "string"
-          },
-          "size": {
-            "type": "integer"
-          },
-          "supported": {
-            "type": "boolean"
-          },
-          "textReadable": {
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "path",
-          "kind",
-          "mimeType",
-          "size",
-          "sha256",
-          "textReadable",
-          "executable",
-          "supported"
-        ],
-        "type": "object"
-      },
-      "ExecuteRequest": {
-        "properties": {
-          "channel": {
-            "type": "string"
-          },
-          "characterId": {
-            "type": "string"
-          },
-          "conversationId": {
-            "type": "string"
-          },
-          "idempotencyKey": {
-            "type": "string"
-          },
-          "input": {},
-          "sessionId": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "characterId",
-          "input"
-        ],
-        "type": "object"
-      },
-      "PackageImportPreview": {
-        "properties": {
-          "availableActions": {
-            "items": {
+  "paths": {
+    "/extension-package-operations/{operationId}": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "operationId",
+            "required": true,
+            "schema": {
               "type": "string"
-            },
-            "type": "array"
-          },
-          "checksum": {
-            "type": "object"
-          },
-          "conflict": {
-            "type": "string"
-          },
-          "errors": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "expiresAt": {
-            "format": "date-time",
-            "type": "string"
-          },
-          "files": {
-            "items": {
-              "type": "object"
-            },
-            "type": "array"
-          },
-          "format": {
-            "enum": [
-              "amitiax",
-              "agentskills-zip",
-              "agentskills-directory"
-            ]
-          },
-          "id": {
-            "type": "string"
-          },
-          "name": {
-            "type": "string"
-          },
-          "managementTarget": {
-            "enum": [
-              "extension_center",
-              "game_center",
-              "pet_center"
-            ],
-            "type": "string"
-          },
-          "contributionKinds": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "packageHash": {
-            "type": "string"
-          },
-          "risks": {
-            "items": {
-              "type": "object"
-            },
-            "type": "array"
-          },
-          "sessionId": {
-            "type": "string"
-          },
-          "signature": {
-            "type": "object"
-          },
-          "skillType": {
-            "enum": [
-              "workflow",
-              "instructions"
-            ]
-          },
-          "version": {
-            "type": "string"
-          },
-          "warnings": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Package operation"
           }
         },
-        "required": [
-          "sessionId",
-          "format",
-          "skillType",
-          "id",
-          "name",
-          "version",
-          "packageHash",
-          "checksum",
-          "signature",
-          "files",
-          "risks",
-          "warnings",
-          "errors",
-          "conflict",
-          "availableActions",
-          "expiresAt"
-        ],
-        "type": "object"
-      },
-      "PackageInstallRequest": {
-        "properties": {
-          "confirmConfigMigration": {
-            "type": "boolean"
-          },
-          "confirmScripts": {
-            "type": "boolean"
-          },
-          "confirmSignerChange": {
-            "type": "boolean"
-          },
-          "confirmUnsigned": {
-            "type": "boolean"
-          },
-          "confirmVersionChange": {
-            "type": "boolean"
-          },
-          "confirmedCapabilities": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "uniqueItems": true
-          },
-          "scopeId": {
-            "type": "string"
-          },
-          "scopeType": {
-            "enum": [
-              "global",
-              "character"
-            ]
-          },
-          "sessionId": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "sessionId",
-          "scopeType"
-        ],
-        "type": "object"
-      },
-      "Problem": {
-        "properties": {
-          "code": {
-            "type": "string"
-          },
-          "detail": {
-            "type": "string"
-          },
-          "instance": {
-            "type": "string"
-          },
-          "status": {
-            "type": "integer"
-          },
-          "title": {
-            "type": "string"
-          },
-          "traceId": {
-            "type": "string"
-          },
-          "type": {
-            "format": "uri",
-            "type": "string"
-          }
-        },
-        "required": [
-          "type",
-          "title",
-          "status",
-          "detail",
-          "instance",
-          "code",
-          "traceId"
-        ],
-        "type": "object"
+        "summary": "Get a package operation compatibility view"
       }
     },
-    "securitySchemes": {
-      "bearerAuth": {
-        "bearerFormat": "JWT",
-        "scheme": "bearer",
-        "type": "http"
+    "/extension-package-operations/{operationId}/final-gate": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "operationId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Final gate verification result"
+          },
+          "404": {
+            "description": "Operation not found"
+          }
+        },
+        "summary": "Verify the final gate for a package operation (compatibility view)"
       }
-    }
-  },
-  "info": {
-    "title": "Amitia Extension Runtime API",
-    "version": "3.0.0"
-  },
-  "openapi": "3.1.0",
-  "paths": {
+    },
     "/extensions/agent-skills": {
       "get": {
         "parameters": [
@@ -1539,6 +1216,24 @@
         ]
       }
     },
+    "/extensions/events/conversation-ui/{conversationId}": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/extensions/events/conversation-ui/{conversationId}/stream": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/extensions/events/dead-letters": {
       "get": {
         "description": "List dead letters",
@@ -2076,6 +1771,15 @@
         ]
       }
     },
+    "/extensions/kernel/extensions/permissions": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/extensions/kernel/extensions/preview": {
       "post": {
         "deprecated": true,
@@ -2141,6 +1845,24 @@
         "tags": [
           "Kernel"
         ]
+      }
+    },
+    "/extensions/kernel/extensions/uninstall/confirm": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/extensions/kernel/extensions/uninstall/preview": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
       }
     },
     "/extensions/kernel/status": {
@@ -2357,22 +2079,59 @@
         "summary": "Upload an immutable package artifact and create its preview"
       }
     },
-    "/extensions/packages/previews/{sessionId}/confirm": {
+    "/extensions/packages/import/install": {
       "post": {
-        "parameters": [
-          {
-            "in": "path",
-            "name": "sessionId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
+        "deprecated": true,
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
+                "$ref": "#/components/schemas/PackageInstallRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "410": {
+            "description": "PACKAGE_INSTALL_ENDPOINT_RETIRED"
+          }
+        },
+        "summary": "Retired package install endpoint",
+        "x-replacement-endpoint": "/api/extensions/packages/artifacts"
+      }
+    },
+    "/extensions/packages/import/preview": {
+      "post": {
+        "deprecated": true,
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "properties": {
+                  "file": {
+                    "format": "binary",
+                    "type": "string"
+                  },
+                  "scopeId": {
+                    "type": "string"
+                  },
+                  "scopeType": {
+                    "enum": [
+                      "global",
+                      "character"
+                    ]
+                  }
+                },
+                "required": [
+                  "file",
+                  "scopeType"
+                ],
                 "type": "object"
               }
             }
@@ -2380,45 +2139,15 @@
           "required": true
         },
         "responses": {
-          "200": {
-            "description": "Bound, expiring confirmation token"
-          },
-          "422": {
-            "description": "Preview or confirmations rejected"
+          "410": {
+            "description": "PACKAGE_PREVIEW_ENDPOINT_RETIRED"
           }
         },
-        "summary": "Confirm a package preview"
-      }
-    },
-    "/extensions/packages/previews": {
-      "post": {
-        "responses": {
-          "201": {
-            "description": "Artifact stored and preview session created"
-          }
-        },
-        "summary": "Create a package preview from an uploaded artifact"
+        "summary": "Retired package preview endpoint",
+        "x-replacement-endpoint": "/api/extensions/packages/artifacts"
       }
     },
     "/extensions/packages/import/sessions/{sessionId}": {
-      "get": {
-        "parameters": [
-          {
-            "in": "path",
-            "name": "sessionId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Package preview session"
-          }
-        },
-        "summary": "Get a package preview session"
-      },
       "delete": {
         "parameters": [
           {
@@ -2436,14 +2165,12 @@
           }
         },
         "summary": "Cancel a package preview session"
-      }
-    },
-    "/extension-package-operations/{operationId}": {
+      },
       "get": {
         "parameters": [
           {
             "in": "path",
-            "name": "operationId",
+            "name": "sessionId",
             "required": true,
             "schema": {
               "type": "string"
@@ -2452,33 +2179,51 @@
         ],
         "responses": {
           "200": {
-            "description": "Package operation"
+            "description": "Package preview session"
           }
         },
-        "summary": "Get a package operation compatibility view"
+        "summary": "Get a package preview session"
       }
     },
-    "/extension-package-operations/{operationId}/final-gate": {
-      "get": {
-        "parameters": [
-          {
-            "in": "path",
-            "name": "operationId",
-            "required": true,
-            "schema": {
-              "type": "string"
+    "/extensions/packages/install": {
+      "post": {
+        "deprecated": true,
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "properties": {
+                  "package": {
+                    "format": "binary",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "package"
+                ],
+                "type": "object"
+              }
             }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Final gate verification result"
           },
-          "404": {
-            "description": "Operation not found"
+          "required": true
+        },
+        "responses": {
+          "410": {
+            "description": "PACKAGE_INSTALL_ENDPOINT_RETIRED"
           }
         },
-        "summary": "Verify the final gate for a package operation (compatibility view)"
+        "summary": "Retired package install endpoint",
+        "x-replacement-endpoint": "/api/extensions/packages/artifacts"
+      }
+    },
+    "/extensions/packages/metrics": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Package metrics"
+          }
+        },
+        "summary": "Get local package lifecycle counters"
       }
     },
     "/extensions/packages/operations/install": {
@@ -2550,113 +2295,47 @@
         "summary": "Get a package operation"
       }
     },
-    "/extensions/packages/import/install": {
+    "/extensions/packages/previews": {
       "post": {
-        "deprecated": true,
+        "responses": {
+          "201": {
+            "description": "Artifact stored and preview session created"
+          }
+        },
+        "summary": "Create a package preview from an uploaded artifact"
+      }
+    },
+    "/extensions/packages/previews/{sessionId}/confirm": {
+      "post": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sessionId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/PackageInstallRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "410": {
-            "description": "PACKAGE_INSTALL_ENDPOINT_RETIRED"
-          }
-        },
-        "summary": "Retired package install endpoint",
-        "x-replacement-endpoint": "/api/extensions/packages/artifacts"
-      }
-    },
-    "/extensions/packages/import/preview": {
-      "post": {
-        "deprecated": true,
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object"
-              }
-            },
-            "multipart/form-data": {
-              "schema": {
-                "properties": {
-                  "file": {
-                    "format": "binary",
-                    "type": "string"
-                  },
-                  "scopeId": {
-                    "type": "string"
-                  },
-                  "scopeType": {
-                    "enum": [
-                      "global",
-                      "character"
-                    ]
-                  }
-                },
-                "required": [
-                  "file",
-                  "scopeType"
-                ],
                 "type": "object"
               }
             }
           },
           "required": true
         },
-        "responses": {
-          "410": {
-            "description": "PACKAGE_PREVIEW_ENDPOINT_RETIRED"
-          }
-        },
-        "summary": "Retired package preview endpoint",
-        "x-replacement-endpoint": "/api/extensions/packages/artifacts"
-      }
-    },
-    "/extensions/packages/install": {
-      "post": {
-        "deprecated": true,
-        "requestBody": {
-          "content": {
-            "multipart/form-data": {
-              "schema": {
-                "properties": {
-                  "package": {
-                    "format": "binary",
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "package"
-                ],
-                "type": "object"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "410": {
-            "description": "PACKAGE_INSTALL_ENDPOINT_RETIRED"
-          }
-        },
-        "summary": "Retired package install endpoint",
-        "x-replacement-endpoint": "/api/extensions/packages/artifacts"
-      }
-    },
-    "/extensions/packages/metrics": {
-      "get": {
         "responses": {
           "200": {
-            "description": "Package metrics"
+            "description": "Bound, expiring confirmation token"
+          },
+          "422": {
+            "description": "Preview or confirmations rejected"
           }
         },
-        "summary": "Get local package lifecycle counters"
+        "summary": "Confirm a package preview"
       }
     },
     "/extensions/packages/status": {
@@ -3436,6 +3115,15 @@
         ]
       }
     },
+    "/extensions/tasks/{taskRunId}/pause": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/extensions/tasks/{taskRunId}/progress": {
       "get": {
         "description": "Get task progress",
@@ -3487,6 +3175,15 @@
         ]
       }
     },
+    "/extensions/tasks/{taskRunId}/resume": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/extensions/tasks/{taskRunId}/retry": {
       "post": {
         "description": "Retry task",
@@ -3536,6 +3233,731 @@
         "tags": [
           "Updates"
         ]
+      }
+    },
+    "/extensions/workflow-devices": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/extensions/workflow-devices/{deviceId}/runs/{runId}": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/extensions/workflow-devices/{deviceId}/runs/{runId}/attempts": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/extensions/workflow-devices/{deviceId}/runs/{runId}/cancel": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/extensions/workflow-devices/{deviceId}/runs/{runId}/checkpoints": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/extensions/workflow-devices/{deviceId}/runs/{runId}/confirm": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/extensions/workflow-devices/{deviceId}/runs/{runId}/logs": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/extensions/workflow-devices/{deviceId}/runs/{runId}/pause": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/extensions/workflow-devices/{deviceId}/runs/{runId}/recover": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/extensions/workflow-devices/{deviceId}/runs/{runId}/rerun": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/extensions/workflow-devices/{deviceId}/runs/{runId}/resume": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/extensions/workflow-devices/{deviceId}/runs/{runId}/steps": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/extensions/workflow-devices/{deviceId}/runtime-health": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/extensions/workflow-devices/{deviceId}/trigger-app-catalog": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/extensions/workflow-devices/{deviceId}/trigger-capabilities": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/extensions/workflow-devices/{deviceId}/trigger-secrets/tasker": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/extensions/workflow-devices/{deviceId}/trigger-wake-configs": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "post": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/extensions/workflow-devices/{deviceId}/workflows": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "post": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/extensions/workflow-devices/{deviceId}/workflows/catalog": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/extensions/workflow-devices/{deviceId}/workflows/{workflowId}": {
+      "delete": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "put": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/extensions/workflow-devices/{deviceId}/workflows/{workflowId}/disable": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/extensions/workflow-devices/{deviceId}/workflows/{workflowId}/enable": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/extensions/workflow-devices/{deviceId}/workflows/{workflowId}/run": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/extensions/workflow-devices/{deviceId}/workflows/{workflowId}/runs": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/extensions/workflow-runs/{runId}": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/extensions/workflow-runs/{runId}/cancel": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/extensions/workflow-runs/{runId}/confirm": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/extensions/workflow-runs/{runId}/logs": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/extensions/workflow-runs/{runId}/pause": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/extensions/workflow-runs/{runId}/recover": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/extensions/workflow-runs/{runId}/rerun": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/extensions/workflow-runs/{runId}/resume": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/extensions/workflows": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "post": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/extensions/workflows/ai/generate": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/extensions/workflows/android-runtime-health/status": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "post": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/extensions/workflows/catalog": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/extensions/workflows/events/{eventType}": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/extensions/workflows/import": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/extensions/workflows/reliability-metrics": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/extensions/workflows/sync-conflicts": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/extensions/workflows/sync-events": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/extensions/workflows/templates": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/extensions/workflows/templates/{templateId}": {
+      "delete": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/extensions/workflows/templates/{templateId}/instantiate": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/extensions/workflows/trigger-app-catalog": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/extensions/workflows/trigger-app-catalog/status": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/extensions/workflows/trigger-capabilities": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/extensions/workflows/trigger-capabilities/status": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/extensions/workflows/trigger-secrets/tasker": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/extensions/workflows/trigger-wake-configs": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "post": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/extensions/workflows/validate": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/extensions/workflows/wake-runtime/audio": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/extensions/workflows/wake-runtime/device-status": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/extensions/workflows/wake-runtime/status": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/extensions/workflows/{id}": {
+      "delete": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "patch": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "put": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/extensions/workflows/{id}/ai/edit": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/extensions/workflows/{id}/ai/explain": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/extensions/workflows/{id}/ai/repair": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/extensions/workflows/{id}/analysis": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/extensions/workflows/{id}/disable": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/extensions/workflows/{id}/duplicate": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/extensions/workflows/{id}/enable": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/extensions/workflows/{id}/export": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/extensions/workflows/{id}/preflight": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/extensions/workflows/{id}/revisions": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "post": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/extensions/workflows/{id}/revisions/{revisionId}/archive": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/extensions/workflows/{id}/revisions/{revisionId}/publish": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/extensions/workflows/{id}/revisions/{revisionId}/rollback": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/extensions/workflows/{id}/run": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/extensions/workflows/{id}/runs": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/extensions/workflows/{id}/stats": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/extensions/workflows/{id}/templates": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
       }
     },
     "/extensions/{id}": {
@@ -3609,6 +4031,16 @@
         "summary": "Download an authorized expiring export"
       }
     },
+    "/extensions/{id}/uninstall": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "Uninstall operation"
+          }
+        },
+        "summary": "Uninstall an extension package"
+      }
+    },
     "/extensions/{id}/uninstall/preview": {
       "get": {
         "responses": {
@@ -3628,16 +4060,6 @@
           }
         },
         "summary": "Create an uninstall preview"
-      }
-    },
-    "/extensions/{id}/uninstall": {
-      "post": {
-        "responses": {
-          "200": {
-            "description": "Uninstall operation"
-          }
-        },
-        "summary": "Uninstall an extension package"
       }
     },
     "/extensions/{id}/updates": {
@@ -3931,15 +4353,5 @@
         "summary": "Preview a version rollback without executing it"
       }
     }
-  },
-  "security": [
-    {
-      "bearerAuth": []
-    }
-  ],
-  "servers": [
-    {
-      "url": "/api"
-    }
-  ]
+  }
 }

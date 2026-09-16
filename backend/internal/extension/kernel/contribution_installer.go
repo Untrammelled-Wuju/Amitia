@@ -36,6 +36,21 @@ type TypedContributionInstaller struct {
 	candidateNS *CandidateNamespace
 }
 
+func normalizeJSONSchemaRaw(raw json.RawMessage) json.RawMessage {
+	if len(raw) == 0 {
+		return raw
+	}
+	var encoded string
+	if err := json.Unmarshal(raw, &encoded); err != nil {
+		return raw
+	}
+	trimmed := strings.TrimSpace(encoded)
+	if trimmed == "" {
+		return nil
+	}
+	return json.RawMessage(trimmed)
+}
+
 func NewTypedContributionInstaller(container *Container) *TypedContributionInstaller {
 	return &TypedContributionInstaller{container: container}
 }
@@ -446,6 +461,8 @@ func (i *TypedContributionInstaller) buildToolOp(ctx context.Context, contrib do
 	if err := json.Unmarshal(defData, &def); err != nil {
 		return installOp{}, fmt.Errorf("unmarshal tool definition: %w", err)
 	}
+	def.InputSchema = normalizeJSONSchemaRaw(def.InputSchema)
+	def.OutputSchema = normalizeJSONSchemaRaw(def.OutputSchema)
 
 	runtimeType := ""
 	runtimeID := ""
@@ -872,7 +889,7 @@ func (i *TypedContributionInstaller) buildUIContributionOp(ctx context.Context, 
 	uiDef.Integrity.Generation = generation
 
 	hostRuntimeID := strings.TrimSpace(uiDef.Entry.RuntimeID)
-	hostRuntime := hostRuntimeID != ""
+	hostRuntime := hostRuntimeID != "" && (uiDef.Entry.Type == ui_contribution.SandboxHostNative || uiDef.Sandbox.Type == ui_contribution.SandboxHostNative)
 	if hostRuntime {
 		if uiDef.Sandbox.Type != ui_contribution.SandboxHostNative {
 			return installOp{}, fmt.Errorf("host runtime ui contribution %s requires host_native sandbox", uiDef.ContributionID)
@@ -1326,6 +1343,8 @@ func (i *TypedContributionInstaller) activateTool(ctx context.Context, contrib d
 	if err := json.Unmarshal(defData, &def); err != nil {
 		return fmt.Errorf("unmarshal tool definition for activate: %w", err)
 	}
+	def.InputSchema = normalizeJSONSchemaRaw(def.InputSchema)
+	def.OutputSchema = normalizeJSONSchemaRaw(def.OutputSchema)
 	runtimeType := ""
 	runtimeID := ""
 	handlerName := def.HandlerName
