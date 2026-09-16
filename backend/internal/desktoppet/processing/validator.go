@@ -322,7 +322,11 @@ func (v *Validator) validatePersistedArtifactSource(action desktoppet.Generation
 
 	absPath, err := resolveValidatedRelativePath(v.dataDir, artifact.RelativePath)
 	if err != nil {
-		return 0, &ValidationError{Code: ErrCodeSourceFrameInvalid, Message: "V2 主制品路径非法", Err: err}
+		code := ErrCodeSourceFrameInvalid
+		if errors.Is(err, os.ErrNotExist) {
+			code = ErrCodeSourceFrameMissing
+		}
+		return 0, &ValidationError{Code: code, Message: "V2 主制品路径不可用", Err: err}
 	}
 	content, err := os.ReadFile(absPath)
 	if err != nil {
@@ -502,9 +506,13 @@ func (v *Validator) ValidateFrames(action desktoppet.GenerationTaskAction, attem
 		absPath, pathErr := resolveValidatedRelativePath(v.dataDir, frame.ResultImagePath)
 		if pathErr != nil {
 			results = append(results, info)
+			code := ErrCodeSourceFrameInvalid
+			if errors.Is(pathErr, os.ErrNotExist) {
+				code = ErrCodeSourceFrameMissing
+			}
 			return results, &ValidationError{
-				Code:    ErrCodeSourceFrameInvalid,
-				Message: fmt.Sprintf("帧 %s 的结果图片路径非法", frame.ID),
+				Code:    code,
+				Message: fmt.Sprintf("帧 %s 的结果图片路径不可用", frame.ID),
 				Err:     pathErr,
 			}
 		}

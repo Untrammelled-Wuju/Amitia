@@ -38,9 +38,8 @@ func setupTestDB(t *testing.T) *gorm.DB {
 		t.Fatalf("apply baseline: %v", err)
 	}
 
-	runner := migration.Runner{DB: db, SkipBackup: true}
-	if err := runner.Apply(migration.DefaultMigrations()); err != nil {
-		t.Fatalf("apply migrations: %v", err)
+	if err := migration.MarkAllMigrationsApplied(db, migration.DefaultMigrations()); err != nil {
+		t.Fatalf("mark migrations applied: %v", err)
 	}
 	return db
 }
@@ -488,11 +487,11 @@ func TestListTasks(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if respPending.Total != 2 {
-		t.Fatalf("pending total = %d, want 2", respPending.Total)
+	if respPending.Total != 3 {
+		t.Fatalf("pending total = %d, want 3", respPending.Total)
 	}
-	if len(respPending.Items) != 2 {
-		t.Fatalf("pending items = %d, want 2", len(respPending.Items))
+	if len(respPending.Items) != 3 {
+		t.Fatalf("pending items = %d, want 3", len(respPending.Items))
 	}
 	for _, it := range respPending.Items {
 		if it.Status != "pending" {

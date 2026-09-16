@@ -19,6 +19,11 @@ func newRunnerTestRepo(t *testing.T) *DBRepository {
 	if err := db.AutoMigrate(&operationRecord{}, &checkpointRecord{}, &conflictRecord{}, &readCutoverRecord{}, &writeCutoverRecord{}); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatalf("get sql db: %v", err)
+	}
+	t.Cleanup(func() { _ = sqlDB.Close() })
 	return NewDBRepository(db)
 }
 

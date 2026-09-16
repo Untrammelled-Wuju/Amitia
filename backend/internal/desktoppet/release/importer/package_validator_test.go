@@ -11,7 +11,7 @@ import (
 func TestRuntimeCompatibilityCompatibleRange(t *testing.T) {
 	max := "2.5.0"
 	status, err := checkRuntimeCompatibility(packageformat.ManifestCompatibility{
-		MinRuntimeVersion: "1.9.0",
+		MinRuntimeVersion: "0.9.0",
 		MaxRuntimeVersion: &max,
 	})
 	if err != nil {

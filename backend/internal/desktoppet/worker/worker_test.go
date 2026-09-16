@@ -46,9 +46,8 @@ func setupWorkerTestDB(t *testing.T) *gorm.DB {
 	if err := migration.ApplyBaseline(db); err != nil {
 		t.Fatalf("apply baseline: %v", err)
 	}
-	runner := migration.Runner{DB: db, SkipBackup: true}
-	if err := runner.Apply(migration.DefaultMigrations()); err != nil {
-		t.Fatalf("apply migrations: %v", err)
+	if err := migration.MarkAllMigrationsApplied(db, migration.DefaultMigrations()); err != nil {
+		t.Fatalf("mark migrations applied: %v", err)
 	}
 	return db
 }

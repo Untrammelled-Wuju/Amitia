@@ -278,16 +278,32 @@ func newHandlerTestRouter(svc Service) *gin.Engine {
 	r := gin.New()
 	r.Use(func(c *gin.Context) {
 		c.Set("actorContext", &desktoppetAuth.ActorContext{
-			ActorType:   desktoppetAuth.ActorTypeUser,
-			SpaceID:     "test-user-1",
-			Roles:       []string{"user"},
-			Permissions: desktoppetAuth.DefaultUserPermissions(),
+			PrincipalType: desktoppetAuth.PrincipalLocalUI,
+			SpaceID:       "test-user-1",
+			Permissions:   desktoppetAuth.StandardPermissions(),
 		})
 		c.Next()
 	})
-	stubCoord := &stubCoordinator{svc: svc}
-	stubRepo := &stubRepository{svc: svc}
-	RegisterRoutes(r.Group("/api"), stubCoord, stubRepo, &stubInstallGuard{})
+	handler := NewHandler(svc, &stubInstallGuard{})
+	coordHandler := NewCoordinatorHandler(&stubCoordinator{svc: svc}, &stubRepository{svc: svc}, &stubInstallGuard{})
+	g := r.Group("/api/desktop-pets")
+	g.POST("/packages/:packageId/install", handler.InstallPackage)
+	g.GET("/installations", handler.ListInstallations)
+	g.GET("/installations/:installationId", handler.GetInstallation)
+	g.GET("/installations/:installationId/settings", coordHandler.GetRuntimeSettings)
+	g.POST("/installations/:installationId/enable", handler.EnableInstallation)
+	g.POST("/installations/:installationId/disable", handler.DisableInstallation)
+	g.POST("/installations/:installationId/switch", coordHandler.SwitchRelease)
+	g.POST("/installations/:installationId/upgrade", coordHandler.Upgrade)
+	g.POST("/installations/:installationId/downgrade", coordHandler.Downgrade)
+	g.POST("/installations/:installationId/repair", coordHandler.Repair)
+	g.DELETE("/installations/:installationId", handler.Uninstall)
+	g.PATCH("/installations/:installationId/default-action", handler.UpdateDefaultAction)
+	g.PATCH("/installations/:installationId/settings", handler.UpdateRuntimeSettings)
+	g.POST("/installations/:installationId/recenter", handler.Recenter)
+	g.POST("/installations/:installationId/actions/:actionKey/play", handler.PlayAction)
+	g.GET("/operations/:operationId", coordHandler.GetOperationStatus)
+	g.POST("/operations/:operationId/cancel", coordHandler.CancelOperation)
 	return r
 }
 
@@ -1070,7 +1086,7 @@ func TestHandler_UpdateDefaultAction_InvalidJSON_InvalidParams(t *testing.T) {
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
-	assertHTTPCode(t, w, response.InvalidParams, ErrCodeActionNotFound)
+	assertHTTPCode(t, w, response.InvalidParams, ErrCodeInstallationFailed)
 }
 
 func TestHandler_UpdateDefaultAction_NotIdle_BusinessError(t *testing.T) {

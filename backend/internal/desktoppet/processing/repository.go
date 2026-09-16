@@ -481,7 +481,7 @@ func (r *repository) listProcessedFramesFromActiveRevision(processingActionID st
 		return []ProcessedFrame{}, nil
 	}
 	var rev ProcessingRevision
-	if err := r.db.Where("id = ? AND status = ?", action.ActiveRevisionID, "committed").First(&rev).Error; err != nil {
+	if err := r.db.Where("id = ? AND status IN ?", action.ActiveRevisionID, []string{"committed", "active"}).First(&rev).Error; err != nil {
 		return []ProcessedFrame{}, nil
 	}
 	var arts []ProcessingArtifactRecord
@@ -497,9 +497,31 @@ func (r *repository) listProcessedFramesFromActiveRevision(processingActionID st
 		if art.FrameIndex != nil {
 			idx = *art.FrameIndex
 		}
+		var sourceFrameID string
+		if action.GenerationTaskActionID != "" {
+			_ = r.db.Table("desktop_pet_generation_frames").
+				Select("id").
+				Where("task_action_id = ? AND frame_index = ? AND status = ?", action.GenerationTaskActionID, idx, "succeeded").
+				Order("attempt_number DESC").
+				Limit(1).
+				Scan(&sourceFrameID).Error
+		}
+		sourcePath := ""
+		if sourceFrameID != "" {
+			var sourceFrame struct {
+				ResultImagePath string `gorm:"column:result_image_path"`
+			}
+			if err := r.db.Table("desktop_pet_generation_frames").
+				Select("result_image_path").
+				Where("id = ?", sourceFrameID).
+				Scan(&sourceFrame).Error; err == nil {
+				sourcePath = filepath.ToSlash(sourceFrame.ResultImagePath)
+			}
+		}
 		frame := ProcessedFrame{
 			ID:                 art.ID,
 			ProcessingActionID: processingActionID,
+			SourceFrameID:      sourceFrameID,
 			FrameIndex:         idx,
 			Status:             "committed",
 			ProcessedPath:      filepath.ToSlash(filepath.Join(rev.RootRelativePath, art.RelativePath)),
@@ -508,6 +530,7 @@ func (r *repository) listProcessedFramesFromActiveRevision(processingActionID st
 			ContentHash:        art.ContentHash,
 			RevisionID:         action.ActiveRevisionID,
 			SourceArtifactID:   art.SourceArtifactID,
+			SourcePath:         sourcePath,
 		}
 		if art.SourceArtifactID != "" {
 			if sp, ok := sourcePathByArtifact[art.SourceArtifactID]; ok {
@@ -799,7 +822,7 @@ func (r *repository) GetActiveFrameArtifact(processingTaskID, actionKey string, 
 	var frame ProcessedFrame
 	if err := r.db.Where("processing_action_id = ? AND frame_index = ?", action.ID, frameIndex).First(&frame).Error; err != nil {
 		var rev ProcessingRevision
-		if rerr := r.db.Where("id = ? AND status = ?", action.ActiveRevisionID, "committed").First(&rev).Error; rerr == nil {
+		if rerr := r.db.Where("id = ? AND status IN ?", action.ActiveRevisionID, []string{"committed", "active"}).First(&rev).Error; rerr == nil {
 			var art ProcessingArtifactRecord
 			if aerr := r.db.Where("revision_id = ? AND artifact_kind = ? AND stage = ? AND frame_index = ?", action.ActiveRevisionID, "frame", "final", frameIndex).Order("created_at DESC").First(&art).Error; aerr == nil {
 				return &desktoppet_security.ArtifactReference{

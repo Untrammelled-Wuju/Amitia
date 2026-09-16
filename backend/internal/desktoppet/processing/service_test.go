@@ -378,7 +378,7 @@ func TestServiceCreatePackage_Normal(t *testing.T) {
 		SpaceID:          "user-1",
 	}
 
-	resp, err := svc.CreatePackage(req)
+	resp, err := svc.BuildReleasePackageSource(req)
 	if err != nil {
 		t.Fatalf("CreatePackage 失败: %v", err)
 	}
@@ -391,8 +391,8 @@ func TestServiceCreatePackage_Normal(t *testing.T) {
 	if resp.PackageHash == "" {
 		t.Fatal("PackageHash 为空")
 	}
-	if resp.Status != "ready" {
-		t.Fatalf("Status = %s, 期望 ready", resp.Status)
+	if resp.PackageDir == "" {
+		t.Fatal("PackageDir 为空")
 	}
 }
 

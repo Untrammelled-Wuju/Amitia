@@ -543,7 +543,7 @@ func TestInstall_Success_AtomMove(t *testing.T) {
 	}
 }
 
-func TestInstall_CharacterRepoError_Rejected(t *testing.T) {
+func TestInstall_IgnoresLegacyCharacterRepository(t *testing.T) {
 	db := setupTestDB(t)
 	dataDir := t.TempDir()
 	pkgRepo, charRepo := newDefaultStubRepos()
@@ -552,6 +552,7 @@ func TestInstall_CharacterRepoError_Rejected(t *testing.T) {
 	charRepo.err = gorm.ErrInvalidDB
 
 	svc := newTestService(t, db, dataDir, pkgRepo, charRepo)
-	_, err := svc.InstallPackage(testPackageID, testSpaceID)
-	assertInstallationError(t, err, ErrCodeCharacterNotFound)
+	if _, err := svc.InstallPackage(testPackageID, testSpaceID); err != nil {
+		t.Fatalf("InstallPackage: %v", err)
+	}
 }

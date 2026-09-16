@@ -30,6 +30,11 @@ func openRecoveryTestDB(t *testing.T) *gorm.DB {
 	); err != nil {
 		t.Fatalf("auto migrate release recovery tables: %v", err)
 	}
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatalf("get sql db: %v", err)
+	}
+	t.Cleanup(func() { _ = sqlDB.Close() })
 	return db
 }
 

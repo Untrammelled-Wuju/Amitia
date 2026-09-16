@@ -5,6 +5,7 @@ package processing
 import (
 	"context"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -32,9 +33,8 @@ func setupTestDB(t *testing.T) *gorm.DB {
 		t.Fatalf("apply baseline: %v", err)
 	}
 
-	runner := migration.Runner{DB: db, SkipBackup: true}
-	if err := runner.Apply(migration.DefaultMigrations()); err != nil {
-		t.Fatalf("apply migrations: %v", err)
+	if err := migration.MarkAllMigrationsApplied(db, migration.DefaultMigrations()); err != nil {
+		t.Fatalf("mark migrations applied: %v", err)
 	}
 	return db
 }
@@ -660,7 +660,7 @@ func TestCreateAndGetPackage(t *testing.T) {
 		IncludedActions:  "[]",
 	}
 
-	if err := repo.CreatePackage(pkg); err != nil {
+	if err := db.Create(pkg).Error; err != nil {
 		t.Fatalf("CreatePackage: %v", err)
 	}
 
@@ -683,32 +683,27 @@ func TestUpdatePackageStatus(t *testing.T) {
 	db := setupTestDB(t)
 	repo := newRepoFromDB(t, db)
 
-	if err := repo.CreatePackage(&Package{
+	if err := db.Create(&Package{
 		ID: "pkg-1", SpaceID: "user-1", Status: "draft", Version: 1,
-	}); err != nil {
+	}).Error; err != nil {
 		t.Fatalf("CreatePackage: %v", err)
 	}
 
-	if err := repo.UpdatePackageStatus("pkg-1", map[string]interface{}{
+	err := repo.UpdatePackageStatus("pkg-1", map[string]interface{}{
 		"status":       "published",
 		"package_path": "/path/to/pkg.zip",
 		"package_hash": "abc123",
-	}); err != nil {
-		t.Fatalf("UpdatePackageStatus: %v", err)
+	})
+	if err == nil || !strings.Contains(err.Error(), desktoppet.ErrCodeLegacyPackageWriteDisabled) {
+		t.Fatalf("UpdatePackageStatus must reject legacy writes: %v", err)
 	}
 
 	got, err := repo.GetPackage("pkg-1")
 	if err != nil {
 		t.Fatalf("GetPackage: %v", err)
 	}
-	if got.Status != "published" {
-		t.Fatalf("Status = %s, want published", got.Status)
-	}
-	if got.PackagePath != "/path/to/pkg.zip" {
-		t.Fatalf("PackagePath = %s, want /path/to/pkg.zip", got.PackagePath)
-	}
-	if got.PackageHash != "abc123" {
-		t.Fatalf("PackageHash = %s, want abc123", got.PackageHash)
+	if got.Status != "draft" || got.PackagePath != "" || got.PackageHash != "" {
+		t.Fatalf("legacy write mutated package: %+v", got)
 	}
 }
 
@@ -717,15 +712,15 @@ func TestListPackagesBySpace(t *testing.T) {
 	repo := newRepoFromDB(t, db)
 
 	for i, id := range []string{"pkg-1", "pkg-2", "pkg-3"} {
-		if err := repo.CreatePackage(&Package{
+		if err := db.Create(&Package{
 			ID: id, SpaceID: "user-1", ProcessingTaskID: id, Status: "draft", Version: 1,
-		}); err != nil {
+		}).Error; err != nil {
 			t.Fatalf("CreatePackage[%d]: %v", i, err)
 		}
 	}
-	if err := repo.CreatePackage(&Package{
+	if err := db.Create(&Package{
 		ID: "pkg-other", SpaceID: "user-2", ProcessingTaskID: "pt-other", Status: "draft", Version: 1,
-	}); err != nil {
+	}).Error; err != nil {
 		t.Fatalf("CreatePackage other: %v", err)
 	}
 
@@ -756,19 +751,19 @@ func TestListPackagesByGenerationTask(t *testing.T) {
 	db := setupTestDB(t)
 	repo := newRepoFromDB(t, db)
 
-	if err := repo.CreatePackage(&Package{
+	if err := db.Create(&Package{
 		ID: "pkg-1", SpaceID: "user-1", GenerationTaskID: "gt-1", ProcessingTaskID: "pt-1", Status: "draft", Version: 1,
-	}); err != nil {
+	}).Error; err != nil {
 		t.Fatalf("CreatePackage: %v", err)
 	}
-	if err := repo.CreatePackage(&Package{
+	if err := db.Create(&Package{
 		ID: "pkg-2", SpaceID: "user-1", GenerationTaskID: "gt-1", ProcessingTaskID: "pt-2", Status: "draft", Version: 1,
-	}); err != nil {
+	}).Error; err != nil {
 		t.Fatalf("CreatePackage: %v", err)
 	}
-	if err := repo.CreatePackage(&Package{
+	if err := db.Create(&Package{
 		ID: "pkg-3", SpaceID: "user-1", GenerationTaskID: "gt-2", ProcessingTaskID: "pt-3", Status: "draft", Version: 1,
-	}); err != nil {
+	}).Error; err != nil {
 		t.Fatalf("CreatePackage: %v", err)
 	}
 

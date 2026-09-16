@@ -135,10 +135,9 @@ func newTestRouter(svc ReleaseService) *gin.Engine {
 	r := gin.New()
 	r.Use(func(c *gin.Context) {
 		c.Set("actorContext", &desktoppetAuth.ActorContext{
-			ActorType:   desktoppetAuth.ActorTypeUser,
-			SpaceID:     "test-user-1",
-			Roles:       []string{"user"},
-			Permissions: desktoppetAuth.DefaultUserPermissions(),
+			PrincipalType: desktoppetAuth.PrincipalLocalUI,
+			SpaceID:       "test-user-1",
+			Permissions:   desktoppetAuth.StandardPermissions(),
 		})
 		c.Next()
 	})

@@ -26,6 +26,11 @@ func newFinalizeTestImporter(t *testing.T) (*PackageImporter, *gorm.DB, release.
 	); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatalf("get sql db: %v", err)
+	}
+	t.Cleanup(func() { _ = sqlDB.Close() })
 	repo := releaserepo.NewSQLiteRepository(db)
 	stagingRepo := security.NewImportStagingRepository(db)
 	return NewPackageImporterWithStaging(repo, nil, nil, nil, stagingRepo), db, repo

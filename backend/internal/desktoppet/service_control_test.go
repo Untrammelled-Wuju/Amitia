@@ -27,11 +27,8 @@ func TestStartTask_PendingTransitionsToQueued(t *testing.T) {
 	if err := db.Where("id = ?", summary.ID).First(&task).Error; err != nil {
 		t.Fatalf("query task: %v", err)
 	}
-	if task.ExecutionID == "" {
-		t.Fatal("execution_id should be set")
-	}
-	if task.StartedAt == "" {
-		t.Fatal("started_at should be set")
+	if task.ExecutionID != "" {
+		t.Fatalf("execution_id should be assigned by the worker, got %s", task.ExecutionID)
 	}
 	if task.Status != "queued" {
 		t.Fatalf("status = %s, want queued", task.Status)
@@ -181,7 +178,7 @@ func TestStartTask_SucceededReturnsStateConflict(t *testing.T) {
 	assertBusinessError(t, err, ErrCodeGenerationStateConflict)
 }
 
-func TestStartTask_CancelledReturnsStateConflict(t *testing.T) {
+func TestStartTask_CancelledTaskCanBeRetried(t *testing.T) {
 	svc, db, _ := setupTestService(t)
 	summary := createValidTask(t, svc, "start-cancelled", []string{"idle_normal"})
 
@@ -189,8 +186,13 @@ func TestStartTask_CancelledReturnsStateConflict(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err := svc.StartTask(summary.ID)
-	assertBusinessError(t, err, ErrCodeGenerationStateConflict)
+	result, err := svc.StartTask(summary.ID)
+	if err != nil {
+		t.Fatalf("StartTask retry: %v", err)
+	}
+	if result.Status != "queued" {
+		t.Fatalf("status = %s, want queued", result.Status)
+	}
 }
 
 func TestStartTask_NonExistentReturnsNotFound(t *testing.T) {
@@ -213,12 +215,22 @@ func TestStartTask_ModelDisabledReturnsModelUnavailable(t *testing.T) {
 }
 
 func TestStartTask_MissingReferenceImageReturnsInvalid(t *testing.T) {
-	svc, _, dataDir := setupTestService(t)
+	svc, db, dataDir := setupTestService(t)
 	summary := createValidTask(t, svc, "start-no-ref", []string{"idle_normal"})
 
-	taskDir := filepath.Join(dataDir, "desktop-pets", "generation-tasks", summary.ID)
-	if err := os.RemoveAll(taskDir); err != nil { // audit:ok: test-only cleanup of a temp task directory created by this test
-		t.Fatalf("remove task dir: %v", err)
+	var task GenerationTask
+	if err := db.Where("id = ?", summary.ID).First(&task).Error; err != nil {
+		t.Fatalf("load task: %v", err)
+	}
+	if err := db.Model(&GenerationTask{}).Where("id = ?", summary.ID).Updates(map[string]interface{}{
+		"reference_asset_id": "",
+		"source_image_path":  "missing-source-image.png",
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+	sourcePath := filepath.Join(dataDir, "missing-source-image.png")
+	if err := os.RemoveAll(sourcePath); err != nil { // audit:ok: test-only cleanup of a temp source image created by this test
+		t.Fatalf("remove source image: %v", err)
 	}
 
 	_, err := svc.StartTask(summary.ID)
@@ -260,8 +272,8 @@ func TestCancelTask_QueuedTaskSetsCancelRequested(t *testing.T) {
 	if task.CancelRequestedAt == "" {
 		t.Fatal("cancel_requested_at should be set")
 	}
-	if task.Status != "queued" {
-		t.Fatalf("status = %s, want queued (cancel sets flag only)", task.Status)
+	if task.Status != "cancelled" {
+		t.Fatalf("status = %s, want cancelled", task.Status)
 	}
 }
 
@@ -287,12 +299,20 @@ func TestCancelTask_ProcessingTaskSetsCancelRequested(t *testing.T) {
 	}
 }
 
-func TestCancelTask_PendingReturnsStateConflict(t *testing.T) {
-	svc, _, _ := setupTestService(t)
+func TestCancelTask_PendingTransitionsToCancelled(t *testing.T) {
+	svc, db, _ := setupTestService(t)
 	summary := createValidTask(t, svc, "cancel-pending", []string{"idle_normal"})
 
-	err := svc.CancelTask(summary.ID)
-	assertBusinessError(t, err, ErrCodeGenerationStateConflict)
+	if err := svc.CancelTask(summary.ID); err != nil {
+		t.Fatalf("CancelTask: %v", err)
+	}
+	var task GenerationTask
+	if err := db.Where("id = ?", summary.ID).First(&task).Error; err != nil {
+		t.Fatal(err)
+	}
+	if task.Status != "cancelled" {
+		t.Fatalf("status = %s, want cancelled", task.Status)
+	}
 }
 
 func TestCancelTask_SucceededReturnsStateConflict(t *testing.T) {
@@ -647,7 +667,7 @@ func TestStateConflict_CancelThenRetryPreservesCancelFlag(t *testing.T) {
 	}
 }
 
-func TestStartTask_GeneratesNewExecutionIdEachCall(t *testing.T) {
+func TestStartTask_DoesNotAssignExecutionIDBeforeWorkerClaim(t *testing.T) {
 	svc, db, _ := setupTestService(t)
 	summary := createValidTask(t, svc, "exec-id-regen", []string{"idle_normal"})
 
@@ -659,8 +679,8 @@ func TestStartTask_GeneratesNewExecutionIdEachCall(t *testing.T) {
 		t.Fatal(err)
 	}
 	firstExecID := task1.ExecutionID
-	if firstExecID == "" {
-		t.Fatal("first execution_id should not be empty")
+	if firstExecID != "" {
+		t.Fatalf("first execution_id should remain empty until worker claim, got %s", firstExecID)
 	}
 
 	if err := db.Exec("UPDATE desktop_pet_generation_tasks SET status = 'failed' WHERE id = ?", summary.ID).Error; err != nil {
@@ -677,10 +697,7 @@ func TestStartTask_GeneratesNewExecutionIdEachCall(t *testing.T) {
 	if err := db.Where("id = ?", summary.ID).First(&task2).Error; err != nil {
 		t.Fatal(err)
 	}
-	if task2.ExecutionID == "" {
-		t.Fatal("second execution_id should not be empty")
-	}
-	if task2.ExecutionID == firstExecID {
-		t.Fatalf("second start should generate new execution_id, got same: %s", task2.ExecutionID)
+	if task2.ExecutionID != "" {
+		t.Fatalf("second execution_id should remain empty until worker claim, got %s", task2.ExecutionID)
 	}
 }

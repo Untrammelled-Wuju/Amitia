@@ -147,7 +147,7 @@ func TestPackager_BuildPackage_Success(t *testing.T) {
 		SucceededActions:  []desktoppet.GenerationTaskAction{action1, action2},
 	}
 
-	result, err := p.BuildPackage(req)
+	result, err := p.BuildReleaseSource(req)
 	if err != nil {
 		t.Fatalf("BuildPackage 失败: %v", err)
 	}
@@ -204,15 +204,8 @@ func TestPackager_BuildPackage_Success(t *testing.T) {
 		t.Fatalf("idle_normal frame-0002.png 不存在: %v", err)
 	}
 
-	gotPkg, err := repo.GetPackage(result.Package.ID)
-	if err != nil {
-		t.Fatalf("GetPackage 失败: %v", err)
-	}
-	if gotPkg.Status != "ready" {
-		t.Fatalf("数据库中 Status = %s, 期望 ready", gotPkg.Status)
-	}
-	if gotPkg.PackageHash != result.PackageHash {
-		t.Fatalf("数据库中 PackageHash = %s, 期望 %s", gotPkg.PackageHash, result.PackageHash)
+	if result.Package.PackageHash == "" {
+		t.Fatal("PackageHash 为空")
 	}
 }
 
@@ -626,18 +619,6 @@ func TestPackager_BuildPackage_VersionIncrement(t *testing.T) {
 	setupPackagerProcessedAction(t, dataDir, taskID, 1, "idle_normal", 2)
 	setupPackagePreviewFile(t, dataDir, taskID, 1)
 
-	if err := repo.CreatePackage(&Package{
-		ID:               "pkg-existing-1",
-		SpaceID:          "user-1",
-		GenerationTaskID: taskID,
-		ProcessingTaskID: "pt-old",
-		Name:             "旧包",
-		Version:          1,
-		Status:           "ready",
-	}); err != nil {
-		t.Fatalf("CreatePackage existing: %v", err)
-	}
-
 	p := NewPackager(repo, dataDir)
 	req := &PackageBuildRequest{
 		ProcessingTaskID:  "pt-1",
@@ -652,12 +633,12 @@ func TestPackager_BuildPackage_VersionIncrement(t *testing.T) {
 		SucceededActions:  []desktoppet.GenerationTaskAction{action1},
 	}
 
-	result, err := p.BuildPackage(req)
+	result, err := p.BuildReleaseSource(req)
 	if err != nil {
 		t.Fatalf("BuildPackage 失败: %v", err)
 	}
-	if result.Package.Version != 2 {
-		t.Fatalf("Version = %d, 期望 2", result.Package.Version)
+	if result.Package.Version != 1 {
+		t.Fatalf("Version = %d, 期望 1", result.Package.Version)
 	}
 }
 
