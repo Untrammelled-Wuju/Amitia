@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 彭旭
+// SPDX-License-Identifier: AGPL-3.0-only
 var __create = Object.create;
 var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
@@ -39733,9 +39735,9 @@ qq.onMessage(async (msg) => {
             const sendTarget = last.groupId ? "group:" + last.groupId : "user:" + last.fromUserId;
             logLine("Delivery [" + (i + 1) + "/" + texts.length + "] to " + sendTarget + " text=" + line.substring(0, 50));
             try {
-              const deliveryResp = await fetch(`${qqSidecarConfig.coreUrl}/api/delivery/submit`, {
+              const deliveryResp = await fetch(`${qqSidecarConfig.coreUrl}/internal/delivery/submit`, {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers,
                 body: JSON.stringify({
                   channel: "qq",
                   peerId: last.groupId || last.fromUserId,
@@ -39756,9 +39758,9 @@ qq.onMessage(async (msg) => {
           const sendTarget = last.groupId ? "group:" + last.groupId : "user:" + last.fromUserId;
           logLine("Single reply to " + sendTarget + " via delivery");
           try {
-            const deliveryResp = await fetch(`${qqSidecarConfig.coreUrl}/api/delivery/submit`, {
+            const deliveryResp = await fetch(`${qqSidecarConfig.coreUrl}/internal/delivery/submit`, {
               method: "POST",
-              headers: { "Content-Type": "application/json" },
+              headers,
               body: JSON.stringify({
                 channel: "qq",
                 peerId: last.groupId || last.fromUserId,
