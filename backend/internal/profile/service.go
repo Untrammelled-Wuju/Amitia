@@ -172,7 +172,7 @@ func (s *service) GetBySpaceID(spaceID string, characterID ...string) ([]UserPro
 }
 
 func (s *service) UpsertFromTool(spaceID, category, attrName, attrValue string, confidence int, convID string, characterID ...string) (*UserProfile, error) {
-	spaceID = cleanScopeValue(spaceID)
+	spaceID = requestidentity.NormalizeSpaceID(cleanScopeValue(spaceID))
 	if spaceID == "" {
 		return nil, fmt.Errorf("space scope required")
 	}
@@ -217,7 +217,7 @@ func (s *service) ExtractFromConversation(spaceID, convID string, messages []map
 	if len(messages) == 0 {
 		return nil
 	}
-	spaceID = cleanScopeValue(spaceID)
+	spaceID = requestidentity.NormalizeSpaceID(cleanScopeValue(spaceID))
 	if spaceID == "" {
 		return fmt.Errorf("space scope required")
 	}
@@ -293,7 +293,7 @@ func (s *service) ExtractFromConversation(spaceID, convID string, messages []map
 func (s *service) ToSystemPrompt(spaceID string, characterID ...string) string {
 	requestedSpaceID := strings.TrimSpace(spaceID)
 	scope := firstScope(characterID...)
-	spaceID = cleanScopeValue(spaceID)
+	spaceID = requestidentity.NormalizeSpaceID(cleanScopeValue(spaceID))
 	if spaceID == "" {
 		spaceID = scope
 	}

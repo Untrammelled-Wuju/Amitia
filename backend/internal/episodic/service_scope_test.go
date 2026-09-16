@@ -1,11 +1,15 @@
 package episodic
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/glebarez/sqlite"
+	"github.com/u-ai/backend/config"
 	"github.com/u-ai/backend/internal/graph"
+	"github.com/u-ai/backend/internal/requestidentity"
+	"github.com/u-ai/backend/internal/spaceidentity"
 	"github.com/u-ai/backend/pkg/app"
 	"gorm.io/gorm"
 )
@@ -19,7 +23,13 @@ func newEpisodicTestService(t *testing.T) (*service, *gorm.DB) {
 	if err := db.AutoMigrate(&EpisodicMemory{}); err != nil {
 		t.Fatalf("migrate episodic memories: %v", err)
 	}
-	if err := db.Exec(`CREATE TABLE conversations (id text primary key, character_id text not null default '')`).Error; err != nil {
+	if _, err := spaceidentity.InitializeDefault(filepath.Join(t.TempDir(), "data")); err != nil {
+		t.Fatalf("initialize space: %v", err)
+	}
+	originalCfg := config.AppCfg
+	config.AppCfg = &config.Config{Security: config.SecurityRuntimeConfig{Mode: "local_single_user"}}
+	t.Cleanup(func() { config.AppCfg = originalCfg })
+	if err := db.Exec(`CREATE TABLE conversations (id text primary key, space_id text not null default '', character_id text not null default '', deleted_at datetime)`).Error; err != nil {
 		t.Fatalf("create conversations: %v", err)
 	}
 	if err := db.Exec(`CREATE TABLE messages (id text primary key, conversation_id text not null, role text, content text, created_at text)`).Error; err != nil {
@@ -77,8 +87,8 @@ func TestToolSaveUsesConversationCharacterScope(t *testing.T) {
 	if err != nil {
 		t.Fatalf("save from tool: %v", err)
 	}
-	if item.SpaceID != "char-a" {
-		t.Fatalf("tool episodic scope = %q, want char-a", item.SpaceID)
+	if item.SpaceID != requestidentity.CanonicalSpaceID() {
+		t.Fatalf("tool episodic scope = %q, want canonical space", item.SpaceID)
 	}
 
 	prompt := svc.ToSystemPrompt("default", "char-b")

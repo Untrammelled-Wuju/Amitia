@@ -40,6 +40,9 @@ func (s *service) requireProfileCharacterOwner(characterID, spaceID string) erro
 func (s *service) requireProfileConversationOwner(conversationID, spaceID, requestedCharacterID string) (string, error) {
 	conversationID = strings.TrimSpace(conversationID)
 	if conversationID == "" {
+		if strings.TrimSpace(requestedCharacterID) == "" {
+			return "", gorm.ErrRecordNotFound
+		}
 		if err := s.requireProfileCharacterOwner(requestedCharacterID, spaceID); err != nil {
 			return "", err
 		}

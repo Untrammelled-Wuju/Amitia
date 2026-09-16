@@ -41,6 +41,9 @@ func (s *service) requireEpisodicConversationOwner(conversationID, spaceID, requ
 	conversationID = strings.TrimSpace(conversationID)
 	requestedCharacterID = cleanScope(requestedCharacterID)
 	if conversationID == "" {
+		if requestedCharacterID == "" {
+			return "", gorm.ErrRecordNotFound
+		}
 		if err := s.requireEpisodicCharacterOwner(requestedCharacterID, spaceID); err != nil {
 			return "", err
 		}

@@ -5,12 +5,16 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/glebarez/sqlite"
+	"github.com/u-ai/backend/config"
 	"github.com/u-ai/backend/internal/graph"
 	"github.com/u-ai/backend/internal/pipelinecheckpoint"
+	"github.com/u-ai/backend/internal/requestidentity"
+	"github.com/u-ai/backend/internal/spaceidentity"
 	"github.com/u-ai/backend/pkg/app"
 	"gorm.io/gorm"
 )
@@ -24,7 +28,13 @@ func newProfileTestService(t *testing.T) (*service, *gorm.DB) {
 	if err := db.AutoMigrate(&UserProfile{}); err != nil {
 		t.Fatalf("migrate user profiles: %v", err)
 	}
-	if err := db.Exec(`CREATE TABLE conversations (id text primary key, character_id text not null default '')`).Error; err != nil {
+	if _, err := spaceidentity.InitializeDefault(filepath.Join(t.TempDir(), "data")); err != nil {
+		t.Fatalf("initialize space: %v", err)
+	}
+	originalCfg := config.AppCfg
+	config.AppCfg = &config.Config{Security: config.SecurityRuntimeConfig{Mode: "local_single_user"}}
+	t.Cleanup(func() { config.AppCfg = originalCfg })
+	if err := db.Exec(`CREATE TABLE conversations (id text primary key, space_id text not null default '', character_id text not null default '', deleted_at datetime)`).Error; err != nil {
 		t.Fatalf("create conversations: %v", err)
 	}
 	ctx := app.NewAppContext(db, nil)
@@ -241,8 +251,8 @@ func TestDefaultUserInputDerivesProfileUserScopeFromCharacter(t *testing.T) {
 	if err != nil {
 		t.Fatalf("upsert from tool: %v", err)
 	}
-	if item.SpaceID != "char-a" {
-		t.Fatalf("tool profile user scope = %q, want char-a", item.SpaceID)
+	if item.SpaceID != requestidentity.CanonicalSpaceID() {
+		t.Fatalf("tool profile user scope = %q, want canonical space", item.SpaceID)
 	}
 	if item.CharacterID != "char-a" {
 		t.Fatalf("tool profile character scope = %q, want char-a", item.CharacterID)

@@ -2,16 +2,21 @@ package temporal
 
 import (
 	"context"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/u-ai/backend/internal/spaceidentity"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
 
 func temporalTestService(t *testing.T, now time.Time) (*Service, *SQLiteRepository) {
 	t.Helper()
+	if _, err := spaceidentity.InitializeDefault(filepath.Join(t.TempDir(), "data")); err != nil {
+		t.Fatal(err)
+	}
 	db, err := gorm.Open(sqlite.Open("file:"+t.Name()+"?mode=memory&cache=shared"), &gorm.Config{})
 	if err != nil {
 		t.Fatal(err)
