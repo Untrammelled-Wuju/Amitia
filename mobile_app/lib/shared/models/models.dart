@@ -9,11 +9,25 @@ export 'dashboard_models.dart';
 export 'kernel_models.dart';
 
 enum MessageRole { user, assistant, system }
+
 enum MessageStatus { sending, sent, delivered, error }
-enum MessageType { text, file, image, video, audio, emote, code, agentTask, toolCall, systemNotice }
+
+enum MessageType {
+  text,
+  file,
+  image,
+  video,
+  audio,
+  emote,
+  code,
+  agentTask,
+  toolCall,
+  systemNotice,
+}
 
 class ChatMessage {
   final String id;
+  final String renderId;
   final MessageRole role;
   final MessageType type;
   final String content;
@@ -37,6 +51,7 @@ class ChatMessage {
 
   ChatMessage({
     required this.id,
+    String? renderId,
     required this.role,
     required this.type,
     required this.content,
@@ -57,7 +72,7 @@ class ChatMessage {
     this.toolResult,
     this.replyToMessageId,
     this.replyToExcerpt,
-  });
+  }) : renderId = renderId ?? id;
 }
 
 class Conversation {
@@ -117,6 +132,7 @@ class Character {
 }
 
 enum AgentTaskStatus { running, pending, completed, paused }
+
 enum AgentTaskPriority { low, medium, high }
 
 class AgentTask {
@@ -176,6 +192,7 @@ class Memory {
 }
 
 enum ExtensionType { mcp, skill, plugin, theme }
+
 enum ExtensionStatus { installed, notInstalled, enabled, disabled }
 
 class Extension {
@@ -244,7 +261,13 @@ class SettingItem {
   final String? subtitle;
   final String route;
 
-  SettingItem({required this.title, required this.icon, this.value, this.subtitle, required this.route});
+  SettingItem({
+    required this.title,
+    required this.icon,
+    this.value,
+    this.subtitle,
+    required this.route,
+  });
 }
 
 class SettingGroup {

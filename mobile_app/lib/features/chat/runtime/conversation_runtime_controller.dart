@@ -61,6 +61,7 @@ class ConversationRuntimeController extends ChangeNotifier {
   ChatMessage _copy(ChatMessage message, {String? id, MessageStatus? status}) {
     return ChatMessage(
       id: id ?? message.id,
+      renderId: message.renderId,
       role: message.role,
       type: message.type,
       content: message.content,
@@ -412,6 +413,7 @@ class ConversationRuntimeController extends ChangeNotifier {
     final existing = index >= 0 ? _messages[index] : null;
     final next = ChatMessage(
       id: id,
+      renderId: existing?.renderId ?? id,
       role: MessageRole.assistant,
       type: audioUrl.isNotEmpty ? MessageType.audio : type,
       content: content.isNotEmpty ? content : existing?.content ?? '',
@@ -494,9 +496,12 @@ class ConversationRuntimeController extends ChangeNotifier {
               : const <String, dynamic>{};
           return ChatMessage(
             id: dto.id,
+            renderId: existing?.renderId ?? dto.id,
             role: _roleFor(dto.role),
             type: type,
-            content: dto.content,
+            content: dto.content.trim().isNotEmpty || existing == null
+                ? dto.content
+                : existing.content,
             time:
                 DateTime.tryParse(dto.createdAt) ??
                 existing?.time ??
@@ -1038,6 +1043,7 @@ class ConversationRuntimeController extends ChangeNotifier {
   Map<String, dynamic> serializeMessage(ChatMessage message) =>
       <String, dynamic>{
         'id': message.id,
+        'renderId': message.renderId,
         'role': message.role.name,
         'type': message.type.name,
         'content': message.content,

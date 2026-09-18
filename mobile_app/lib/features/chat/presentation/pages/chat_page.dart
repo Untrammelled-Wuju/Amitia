@@ -14,7 +14,6 @@ import '../../../../app/app_routes.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_motion.dart';
 import '../../../../app/theme/app_typography.dart';
-import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_message.dart';
 import '../../../../core/widgets/amitia_misc.dart';
@@ -153,6 +152,11 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       bool same = true;
       for (int i = 0; i < currentMessages.length; i++) {
         if (_cachedMessagesForContext![i].id != currentMessages[i].id ||
+            _cachedMessagesForContext![i].renderId !=
+                currentMessages[i].renderId ||
+            _cachedMessagesForContext![i].type != currentMessages[i].type ||
+            _cachedMessagesForContext![i].content !=
+                currentMessages[i].content ||
             _cachedMessagesForContext![i].status != currentMessages[i].status) {
           same = false;
           break;
@@ -221,20 +225,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
           curve: AppMotion.standardCurve,
         );
       }
-    });
-  }
-
-  void _jumpToMessage(int index) {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!_scrollController.hasClients) return;
-      final target = (index * 76.0)
-          .clamp(0.0, _scrollController.position.maxScrollExtent)
-          .toDouble();
-      _scrollController.animateTo(
-        target,
-        duration: AppMotion.extended,
-        curve: AppMotion.standardCurve,
-      );
     });
   }
 
@@ -1250,26 +1240,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     );
   }
 
-  void _showMessageSearch(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: context.surfacePrimary,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (sheetCtx) {
-        return _MessageSearchSheet(
-          messages: _runtime.messages,
-          onJump: (index) {
-            Navigator.pop(sheetCtx);
-            _jumpToMessage(index);
-          },
-        );
-      },
-    );
-  }
-
   Future<void> _copyMessage(ChatMessage message) async {
     final text = message.content.trim();
     if (text.isEmpty) return;
@@ -1484,29 +1454,12 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   Future<void> _handleChatAction(int result) async {
     switch (result) {
       case 0:
-        final id = ref.read(currentCharacterIdProvider).trim();
-        if (id.isNotEmpty) context.push(AppRoutes.character(id));
-      case 1:
-        _showMessageSearch(context);
-      case 2:
-        final conversationId = _runtime.conversationId?.trim() ?? '';
-        if (conversationId.isEmpty) {
-          amitiaSnackBar(context, '当前还没有可重新生成的会话');
-          return;
-        }
-        await _runtime.regenerate();
-        if (!mounted) return;
-        final error = _runtime.lastError;
-        if (error != null) {
-          amitiaSnackBar(context, '重新生成失败：$error');
-        }
-      case 3:
         _showExportSheet(context);
-      case 4:
+      case 1:
         await _showProfileSummary(context);
-      case 5:
+      case 2:
         await _showMemoryContext(context);
-      case 6:
+      case 3:
         final confirmed = await showAmitiaConfirmDialog(
           context,
           title: '清空聊天记录',
@@ -1859,39 +1812,47 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                               final contentIndex =
                                   flowIndex - emptyStateSlotCount;
                               if (contentIndex >= flowItems.length) {
-                                return RepaintBoundary(
-                                  child: AmitiaMessageBubble(
-                                    message: ChatMessage(
-                                      id: '__live_agent_process__',
-                                      role: MessageRole.assistant,
-                                      type: MessageType.text,
-                                      content: '',
-                                      time: DateTime.now(),
+                                return KeyedSubtree(
+                                  key: const ValueKey(
+                                    'message:live-agent-process',
+                                  ),
+                                  child: RepaintBoundary(
+                                    child: AmitiaMessageBubble(
+                                      message: ChatMessage(
+                                        id: '__live_agent_process__',
+                                        role: MessageRole.assistant,
+                                        type: MessageType.text,
+                                        content: '',
+                                        time: DateTime.now(),
+                                      ),
+                                      showAvatar: true,
+                                      avatarInitial: avatarInitial,
+                                      avatarColor: avatarColor,
+                                      characterName: characterName,
+                                      userInitial: userInitial,
+                                      userAvatarColor: userAvatarColor,
+                                      userName: userName,
+                                      agentActivities: liveAgentActivities,
+                                      showThinking: true,
                                     ),
-                                    showAvatar: true,
-                                    avatarInitial: avatarInitial,
-                                    avatarColor: avatarColor,
-                                    characterName: characterName,
-                                    userInitial: userInitial,
-                                    userAvatarColor: userAvatarColor,
-                                    userName: userName,
-                                    agentActivities: liveAgentActivities,
-                                    showThinking: true,
                                   ),
                                 );
                               }
                               final item = flowItems[contentIndex];
                               if (!item.isMessage) {
                                 final node = item.node!;
-                                return MobileExtensionSlot(
-                                  slotId: 'chat.conversation.node',
-                                  contributionId: node.contributionId,
-                                  context: {
-                                    ...providerContext,
-                                    'conversationNode': node.toJson(),
-                                    'eventType': node.eventType,
-                                  },
-                                  actions: providerActions,
+                                return KeyedSubtree(
+                                  key: ValueKey(item.key),
+                                  child: MobileExtensionSlot(
+                                    slotId: 'chat.conversation.node',
+                                    contributionId: node.contributionId,
+                                    context: {
+                                      ...providerContext,
+                                      'conversationNode': node.toJson(),
+                                      'eventType': node.eventType,
+                                    },
+                                    actions: providerActions,
+                                  ),
                                 );
                               }
 
@@ -1981,53 +1942,57 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                                       .trim()
                                       .isNotEmpty ||
                                   (message.fileName ?? '').trim().isNotEmpty;
-                              return Column(
-                                mainAxisSize: MainAxisSize.min,
-                                crossAxisAlignment: CrossAxisAlignment.stretch,
-                                children: [
-                                  customRendered,
-                                  if (hasAttachment)
+                              return KeyedSubtree(
+                                key: ValueKey(item.key),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
+                                  children: [
+                                    customRendered,
+                                    if (hasAttachment)
+                                      Padding(
+                                        padding: const EdgeInsets.fromLTRB(
+                                          52,
+                                          2,
+                                          12,
+                                          2,
+                                        ),
+                                        child: MobileExtensionSlot(
+                                          slotId:
+                                              'chat.message.attachment_renderer',
+                                          context: messageContext,
+                                          actions: providerActions,
+                                        ),
+                                      ),
                                     Padding(
                                       padding: const EdgeInsets.fromLTRB(
                                         52,
-                                        2,
+                                        0,
                                         12,
                                         2,
                                       ),
                                       child: MobileExtensionSlot(
-                                        slotId:
-                                            'chat.message.attachment_renderer',
+                                        slotId: 'chat.message.badge',
                                         context: messageContext,
                                         actions: providerActions,
                                       ),
                                     ),
-                                  Padding(
-                                    padding: const EdgeInsets.fromLTRB(
-                                      52,
-                                      0,
-                                      12,
-                                      2,
+                                    Padding(
+                                      padding: const EdgeInsets.fromLTRB(
+                                        52,
+                                        0,
+                                        12,
+                                        6,
+                                      ),
+                                      child: MobileExtensionSlot(
+                                        slotId: 'chat.message.action',
+                                        context: messageContext,
+                                        actions: providerActions,
+                                      ),
                                     ),
-                                    child: MobileExtensionSlot(
-                                      slotId: 'chat.message.badge',
-                                      context: messageContext,
-                                      actions: providerActions,
-                                    ),
-                                  ),
-                                  Padding(
-                                    padding: const EdgeInsets.fromLTRB(
-                                      52,
-                                      0,
-                                      12,
-                                      6,
-                                    ),
-                                    child: MobileExtensionSlot(
-                                      slotId: 'chat.message.action',
-                                      context: messageContext,
-                                      actions: providerActions,
-                                    ),
-                                  ),
-                                ],
+                                  ],
+                                ),
                               );
                             },
                           ),
@@ -2732,36 +2697,12 @@ class _ChatTopBar extends StatelessWidget implements PreferredSizeWidget {
                   value: 0,
                   child: ListTile(
                     contentPadding: EdgeInsets.zero,
-                    leading: Icon(Icons.person_outline),
-                    title: Text('查看角色详情'),
-                  ),
-                ),
-                PopupMenuItem(
-                  value: 1,
-                  child: ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: Icon(Icons.search),
-                    title: Text('搜索当前会话'),
-                  ),
-                ),
-                PopupMenuItem(
-                  value: 2,
-                  child: ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: Icon(Icons.refresh_rounded),
-                    title: Text('重新生成'),
-                  ),
-                ),
-                PopupMenuItem(
-                  value: 3,
-                  child: ListTile(
-                    contentPadding: EdgeInsets.zero,
                     leading: Icon(Icons.file_download_outlined),
                     title: Text('导出聊天记录'),
                   ),
                 ),
                 PopupMenuItem(
-                  value: 4,
+                  value: 1,
                   child: ListTile(
                     contentPadding: EdgeInsets.zero,
                     leading: Icon(Icons.badge_outlined),
@@ -2769,7 +2710,7 @@ class _ChatTopBar extends StatelessWidget implements PreferredSizeWidget {
                   ),
                 ),
                 PopupMenuItem(
-                  value: 5,
+                  value: 2,
                   child: ListTile(
                     contentPadding: EdgeInsets.zero,
                     leading: Icon(Icons.psychology_alt_outlined),
@@ -2777,7 +2718,7 @@ class _ChatTopBar extends StatelessWidget implements PreferredSizeWidget {
                   ),
                 ),
                 PopupMenuItem(
-                  value: 6,
+                  value: 3,
                   child: ListTile(
                     contentPadding: EdgeInsets.zero,
                     leading: Icon(Icons.cleaning_services_outlined),
@@ -2823,135 +2764,6 @@ class _ChatTopBarButton extends StatelessWidget {
   }
 }
 
-class _MessageSearchSheet extends StatefulWidget {
-  final List<ChatMessage> messages;
-  final ValueChanged<int> onJump;
-
-  const _MessageSearchSheet({required this.messages, required this.onJump});
-
-  @override
-  State<_MessageSearchSheet> createState() => _MessageSearchSheetState();
-}
-
-class _MessageSearchSheetState extends State<_MessageSearchSheet> {
-  final _controller = TextEditingController();
-  String _query = '';
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  List<(int, ChatMessage)> get _results {
-    if (_query.trim().isEmpty) return const [];
-    final q = _query.trim().toLowerCase();
-    final list = <(int, ChatMessage)>[];
-    for (var i = 0; i < widget.messages.length; i++) {
-      final m = widget.messages[i];
-      if (m.type == MessageType.systemNotice) continue;
-      if (m.content.toLowerCase().contains(q)) {
-        list.add((i, m));
-      }
-    }
-    return list;
-  }
-
-  String _preview(ChatMessage m) {
-    if (m.type == MessageType.file) return '[文件] ${m.fileName ?? m.content}';
-    if (m.type == MessageType.image) return '[图片] ${m.fileName ?? ''}';
-    if (m.type == MessageType.video) return '[视频] ${m.fileName ?? ''}';
-    if (m.type == MessageType.audio) return '[语音] ${m.fileName ?? ''}';
-    if (m.type == MessageType.emote) return '[表情] ${m.content}';
-    if (m.type == MessageType.code) return '[代码] ${m.content}';
-    return m.content;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final results = _results;
-    return SafeArea(
-      child: SizedBox(
-        height: MediaQuery.sizeOf(context).height * 0.65,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-          child: Column(
-            children: [
-              const SizedBox(height: 8),
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: context.borderPrimary,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              Text('搜索聊天消息', style: AppTypography.pageTitle(context)),
-              const SizedBox(height: 12),
-              AmitiaSearchField(
-                hintText: '输入关键词搜索消息',
-                controller: _controller,
-                onChanged: (v) => setState(() => _query = v),
-              ),
-              const SizedBox(height: 8),
-              Expanded(
-                child: _query.trim().isEmpty
-                    ? Center(
-                        child: Text(
-                          '输入关键词后在当前会话中搜索消息',
-                          style: AppTypography.caption(context),
-                          textAlign: TextAlign.center,
-                        ),
-                      )
-                    : results.isEmpty
-                    ? Center(
-                        child: Text(
-                          '没有找到匹配「$_query」的消息',
-                          style: AppTypography.caption(context),
-                          textAlign: TextAlign.center,
-                        ),
-                      )
-                    : ListView.separated(
-                        itemCount: results.length,
-                        separatorBuilder: (_, _) =>
-                            Divider(height: 1, color: context.borderSecondary),
-                        itemBuilder: (ctx, i) {
-                          final item = results[i];
-                          final msg = item.$2;
-                          return ListTile(
-                            leading: Icon(
-                              msg.role == MessageRole.user
-                                  ? Icons.person_outline
-                                  : Icons.smart_toy_outlined,
-                              size: 20,
-                              color: context.textTertiary,
-                            ),
-                            title: Text(
-                              _preview(msg),
-                              style: AppTypography.bodySmall(context),
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            subtitle: Text(
-                              '${msg.time.hour.toString().padLeft(2, '0')}:${msg.time.minute.toString().padLeft(2, '0')}',
-                              style: AppTypography.label(context),
-                            ),
-                            onTap: () => widget.onJump(item.$1),
-                          );
-                        },
-                      ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _MobileChatFlowItem {
   const _MobileChatFlowItem._({
     required this.key,
@@ -2967,7 +2779,7 @@ class _MobileChatFlowItem {
     required int messageIndex,
     required DateTime timestamp,
   }) => _MobileChatFlowItem._(
-    key: 'message:${message.id}',
+    key: 'message:${message.renderId}',
     timestamp: timestamp,
     message: message,
     messageIndex: messageIndex,
