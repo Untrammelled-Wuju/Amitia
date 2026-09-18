@@ -304,7 +304,7 @@ class RuntimeService : Service() {
                 PersistentRuntimeRecoveryScheduler.cancel(applicationContext)
             }
         }.onFailure { error ->
-            Log.w(TAG, "failed to persist desired runtime state", error)
+            Log.w(RUNTIME_LOG_TAG, "failed to persist desired runtime state", error)
         }
     }
 

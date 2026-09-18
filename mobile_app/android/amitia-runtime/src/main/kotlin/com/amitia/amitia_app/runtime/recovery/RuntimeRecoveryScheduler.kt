@@ -1,6 +1,6 @@
 package com.amitia.amitia_app.runtime.recovery
 
-import android.app.PersistableBundle
+import android.os.PersistableBundle
 import android.app.job.JobInfo
 import android.app.job.JobScheduler
 import android.content.ComponentName
