@@ -1,0 +1,19 @@
+{
+  "desktop": {
+    "commit": "5c9ea7247^",
+    "paths": [
+      "front/src/views/proactive-rules/ProactiveRules.vue",
+      "front/src/views/proactive-rules/components/ActiveMessageSettings.vue",
+      "front/src/views/proactive-rules/components/RuleEditDialog.vue",
+      "front/src/views/proactive-rules/components/RuleListTable.vue",
+      "front/src/views/proactive-rules/components/TestResultDialog.vue",
+      "front/src/views/proactive-rules/composables/useProactiveRules.ts"
+    ]
+  },
+  "mobile": {
+    "commit": "33e21208f365f5a6ef5077603dcab37bbfd760d9",
+    "paths": [
+      "mobile_app/lib/features/characters/presentation/pages/character_proactive_page.dart"
+    ]
+  }
+}

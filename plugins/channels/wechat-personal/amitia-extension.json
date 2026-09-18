@@ -1,0 +1,495 @@
+{
+  "manifestVersion": 1,
+  "placement": "device",
+  "extension": {
+    "id": "com.amitia/channel-wechat-personal",
+    "name": {
+      "default": "个人微信渠道"
+    },
+    "description": {
+      "default": "以普通个人微信账号接入 Amitia；Windows/Linux 通过受校验的 Native Companion 托管官方微信，并由版本化 Hook Driver 完成插件内扫码与消息桥接。"
+    },
+    "version": "1.5.0",
+    "license": "AGPL-3.0-only",
+    "homepage": "https://amitia.untrammelled.top",
+    "categories": [
+      "channel",
+      "messaging"
+    ],
+    "keywords": [
+      "wechat",
+      "personal-wechat",
+      "wxhook",
+      "channel"
+    ]
+  },
+  "publisher": {
+    "id": "com.amitia",
+    "displayName": "Amitia",
+    "trustLevel": "official"
+  },
+  "compatibility": {
+    "minHostVersion": "0.1.0",
+    "platforms": [
+      "windows",
+      "linux"
+    ]
+  },
+  "modules": [
+    {
+      "id": "wechat-personal-channel-service",
+      "name": {
+        "default": "个人微信渠道服务"
+      },
+      "description": {
+        "default": "连接本机个人微信 Native Driver，并把消息桥接到 Amitia 统一入口。"
+      },
+      "type": "service",
+      "runtime": {
+        "type": "service",
+        "entryPoint": "launcher.mjs",
+        "timeout": "30s",
+        "memory": 134217728,
+        "maxSubprocesses": 2,
+        "nativeCompanions": [
+          {
+            "id": "wechat-agent-windows-x64",
+            "platform": "windows",
+            "architecture": "amd64",
+            "path": "native/windows-x64/amitia-wechat-agent.exe",
+            "sha256": "fdefdcf39c33d89c54062d2c11fbb5d351dfc5c0d022fefd60b569e515f62c5a",
+            "executable": true
+          },
+          {
+            "id": "wechat-agent-linux-x64",
+            "platform": "linux",
+            "architecture": "amd64",
+            "path": "native/linux-x64/amitia-wechat-agent",
+            "sha256": "0e42e8411e77daf5ab61f8d6a30a91b1dc4aa5a18c0dea4edeb4213a27f4078d",
+            "executable": true
+          },
+          {
+            "id": "wechat-driver-linux-x64",
+            "platform": "linux",
+            "architecture": "amd64",
+            "path": "native/linux-x64/libamitia_wechat_preload.so",
+            "sha256": "935feb8c1794afa35270ea8b5575f805b1eb6081e485eb47aafe0aa8adb5297e",
+            "executable": false
+          }
+        ],
+        "permissions": [
+          "service.process.spawn"
+        ]
+      },
+      "placement": "device",
+      "providedCapabilities": [
+        {
+          "id": "channel.provider",
+          "version": "1.0.0"
+        }
+      ],
+      "provider": {
+        "id": "com.amitia.channel-wechat-personal.provider",
+        "priority": 100,
+        "labels": {
+          "channelId": "wechat_personal"
+        },
+        "metadata": {
+          "capabilities": {
+            "file": false,
+            "group": true,
+            "image": false,
+            "reply": false,
+            "text": true,
+            "thread": false,
+            "video": false,
+            "voice": false
+          },
+          "id": "wechat_personal",
+          "sidecar": {
+            "defaultPort": 19878,
+            "healthPath": "/api/health",
+            "kind": "wechat_personal",
+            "subdir": "wechat-personal-sidecar"
+          }
+        }
+      },
+      "policies": {
+        "networkAccess": true
+      }
+    },
+    {
+      "id": "wechat-personal-channel-ui",
+      "name": {
+        "default": "个人微信渠道界面"
+      },
+      "description": {
+        "default": "显示个人微信登录二维码、账号状态和会话消息。"
+      },
+      "type": "data_only",
+      "contributions": [
+        {
+          "id": "wechat-personal-page",
+          "kind": "ui_page",
+          "name": {
+            "default": "个人微信"
+          },
+          "description": {
+            "default": ""
+          },
+          "spec": {
+            "actions": [
+              {
+                "action_id": "status",
+                "risk_level": "low",
+                "target": {
+                  "command": "channel.status",
+                  "type": "host_command"
+                },
+                "title": {
+                  "default": "查询个人微信状态"
+                }
+              },
+              {
+                "action_id": "connect",
+                "risk_level": "medium",
+                "target": {
+                  "command": "channel.connect",
+                  "type": "host_command"
+                },
+                "title": {
+                  "default": "连接个人微信"
+                }
+              },
+              {
+                "action_id": "disconnect",
+                "risk_level": "medium",
+                "target": {
+                  "command": "channel.disconnect",
+                  "type": "host_command"
+                },
+                "title": {
+                  "default": "断开个人微信"
+                }
+              }
+            ],
+            "contract_version": 1,
+            "contribution_id": "wechat-personal-page",
+            "display": {
+              "description": {
+                "default": "扫码登录普通个人微信账号。"
+              },
+              "icon": "channel",
+              "title": {
+                "default": "个人微信"
+              }
+            },
+            "entry": {
+              "content_hash": "bundled-wechat-personal-ui-v1",
+              "path": "modules/wechat-personal-channel-ui/desktop/index.html",
+              "type": "web_restricted"
+            },
+            "extension_id": "com.amitia/channel-wechat-personal",
+            "integrity": {
+              "definition_hash": "wechat-personal-page-v1"
+            },
+            "kind": "web_page",
+            "module_id": "wechat-personal-channel-ui",
+            "sandbox": {
+              "enable_scripts": true,
+              "type": "web_restricted"
+            },
+            "slot": {
+              "contract_version": 1,
+              "slot_id": "provider.page.provider"
+            }
+          },
+          "requiredPermissions": [
+            "service.network.request"
+          ]
+        },
+        {
+          "id": "wechat-personal-messages-page",
+          "kind": "ui_page",
+          "name": {
+            "default": "个人微信消息"
+          },
+          "description": {
+            "default": "查看宿主保存的个人微信渠道消息。"
+          },
+          "spec": {
+            "actions": [
+              {
+                "action_id": "messages",
+                "risk_level": "low",
+                "target": {
+                  "command": "channel.messages",
+                  "type": "host_command"
+                },
+                "title": {
+                  "default": "查看个人微信消息"
+                }
+              }
+            ],
+            "contract_version": 1,
+            "contribution_id": "wechat-personal-messages-page",
+            "display": {
+              "description": {
+                "default": "查看个人微信渠道消息记录。"
+              },
+              "icon": "channel",
+              "title": {
+                "default": "个人微信消息"
+              }
+            },
+            "entry": {
+              "content_hash": "bundled-wechat-personal-messages-ui-v1",
+              "path": "modules/wechat-personal-channel-ui/desktop/index.html",
+              "type": "web_restricted"
+            },
+            "extension_id": "com.amitia/channel-wechat-personal",
+            "integrity": {
+              "definition_hash": "wechat-personal-messages-page-v1"
+            },
+            "kind": "web_page",
+            "module_id": "wechat-personal-channel-ui",
+            "sandbox": {
+              "enable_scripts": true,
+              "type": "web_restricted"
+            },
+            "slot": {
+              "contract_version": 1,
+              "slot_id": "provider.page.provider"
+            }
+          },
+          "requiredPermissions": [
+            "conversation.read"
+          ]
+        },
+        {
+          "id": "wechat-personal-routes",
+          "kind": "ui_provider",
+          "name": {
+            "default": "个人微信路由"
+          },
+          "description": {
+            "default": ""
+          },
+          "spec": {
+            "capability": "route.registry",
+            "entries": {
+              "electron_windows": {
+                "type": "declarative"
+              },
+              "electron_linux": {
+                "type": "declarative"
+              }
+            },
+            "metadata": {
+              "navigationItems": [
+                {
+                  "group": "character",
+                  "groupLabel": "角色",
+                  "groupIcon": "character",
+                  "icon": "channel",
+                  "id": "channel.wechat_personal",
+                  "label": "个人微信",
+                  "order": 41,
+                  "platforms": [
+                    "windows",
+                    "linux"
+                  ],
+                  "route": "/channels/wechat-personal",
+                  "surface": "channels.center"
+                }
+              ],
+              "routes": [
+                {
+                  "capability": "page.provider",
+                  "id": "wechat-personal",
+                  "path": "/channels/wechat-personal",
+                  "priority": 210,
+                  "providerId": "wechat-personal-page-provider",
+                  "title": "个人微信"
+                },
+                {
+                  "capability": "page.provider",
+                  "id": "wechat-personal-messages",
+                  "path": "/channels/wechat-personal/messages",
+                  "priority": 211,
+                  "providerId": "wechat-personal-messages-page-provider",
+                  "title": "个人微信消息"
+                }
+              ]
+            },
+            "mode": "replace",
+            "priority": 210,
+            "providerId": "wechat-personal-routes",
+            "trustLevel": "official"
+          }
+        },
+        {
+          "id": "wechat-personal-page-provider",
+          "kind": "ui_provider",
+          "name": {
+            "default": "个人微信页面 Provider"
+          },
+          "description": {
+            "default": ""
+          },
+          "spec": {
+            "capability": "page.provider",
+            "entries": {
+              "electron_windows": {
+                "contributionId": "wechat-personal-page",
+                "type": "web_restricted"
+              },
+              "electron_linux": {
+                "contributionId": "wechat-personal-page",
+                "type": "web_restricted"
+              }
+            },
+            "metadata": {
+              "routes": [
+                "/channels/wechat-personal"
+              ]
+            },
+            "mode": "replace",
+            "priority": 210,
+            "providerId": "wechat-personal-page-provider",
+            "trustLevel": "official"
+          }
+        },
+        {
+          "id": "wechat-personal-messages-page-provider",
+          "kind": "ui_provider",
+          "name": {
+            "default": "个人微信消息页面 Provider"
+          },
+          "description": {
+            "default": ""
+          },
+          "spec": {
+            "capability": "page.provider",
+            "entries": {
+              "electron_windows": {
+                "contributionId": "wechat-personal-messages-page",
+                "type": "web_restricted"
+              },
+              "electron_linux": {
+                "contributionId": "wechat-personal-messages-page",
+                "type": "web_restricted"
+              }
+            },
+            "metadata": {
+              "routes": [
+                "/channels/wechat-personal/messages"
+              ]
+            },
+            "mode": "replace",
+            "priority": 211,
+            "providerId": "wechat-personal-messages-page-provider",
+            "trustLevel": "official"
+          }
+        },
+        {
+          "id": "wechat-personal-drawer",
+          "kind": "ui_provider",
+          "name": {
+            "default": "个人微信会话抽屉"
+          },
+          "description": {
+            "default": ""
+          },
+          "spec": {
+            "capability": "conversation.drawer",
+            "entries": {
+              "electron_windows": {
+                "type": "declarative"
+              },
+              "electron_linux": {
+                "type": "declarative"
+              }
+            },
+            "metadata": {
+              "navigationItems": [
+                {
+                  "id": "drawer.channel.wechat_personal.messages",
+                  "label": "个人微信消息",
+                  "icon": "channel",
+                  "order": 41,
+                  "route": "/channels/wechat-personal/messages",
+                  "channelId": "wechat_personal",
+                  "platforms": [
+                    "windows",
+                    "linux"
+                  ]
+                }
+              ]
+            },
+            "mode": "replace",
+            "priority": 210,
+            "providerId": "wechat-personal-drawer",
+            "trustLevel": "official"
+          }
+        }
+      ],
+      "placement": "device"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "conversation.read",
+      "reason": "在渠道消息页面读取宿主保存的个人微信会话和消息。",
+      "required": true,
+      "scope": "global"
+    },
+    {
+      "name": "conversation.write",
+      "reason": "将个人微信入站消息提交给统一会话管线。",
+      "required": true,
+      "scope": "global"
+    },
+    {
+      "name": "message.send",
+      "reason": "向个人微信联系人发送默认角色回复。",
+      "required": true,
+      "scope": "extension"
+    },
+    {
+      "name": "service.provider.register",
+      "reason": "注册个人微信渠道 Provider。",
+      "required": true,
+      "scope": "extension"
+    },
+    {
+      "name": "service.network.request",
+      "reason": "连接本机回环 Native Driver 和 Amitia Core。",
+      "required": true,
+      "scope": "extension"
+    },
+    {
+      "name": "service.network.listen_loopback",
+      "reason": "在本机回环地址提供渠道 Provider 和 Hook 回调接口。",
+      "required": true,
+      "scope": "extension"
+    },
+    {
+      "name": "service.background.run",
+      "reason": "保持个人微信消息接收、Native Companion 和登录状态检测在后台运行。",
+      "required": true,
+      "scope": "extension"
+    }
+  ],
+  "lifecycle": {
+    "autoUpdate": true,
+    "backgroundTasks": true,
+    "networkAccess": true,
+    "sandbox": true
+  },
+  "integrity": {
+    "algorithm": "sha256",
+    "contentTreeHash": ""
+  },
+  "development": {}
+}

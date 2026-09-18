@@ -1,0 +1,30 @@
+{
+  "desktopPage": {
+    "commit": "4d2fdd9e7",
+    "paths": [
+      "front/src/views/companion-life-rules/CompanionLifeRulesView.vue"
+    ]
+  },
+  "desktopComponents": {
+    "commit": "5c9ea7247^",
+    "paths": [
+      "front/src/views/ai-character-settings/components/LifeScenarioSection.vue",
+      "front/src/views/ai-character-settings/components/LifestyleTendencySection.vue",
+      "front/src/views/ai-character-settings/components/SleepSettingSection.vue",
+      "front/src/views/ai-character-settings/components/WorkProfileSection.vue",
+      "front/src/views/ai-character-settings/components/FixedEventsSection.vue",
+      "front/src/views/ai-character-settings/components/SpecialEventsSection.vue",
+      "front/src/composables/useLifestyleTendency.ts",
+      "front/src/composables/useSleepSetting.ts",
+      "front/src/composables/useWorkProfile.ts",
+      "front/src/composables/useFixedEvents.ts",
+      "front/src/composables/useSpecialEvents.ts"
+    ]
+  },
+  "mobile": {
+    "commit": "50911cb99d33e132cd7e64980fc3438064385a66",
+    "paths": [
+      "mobile_app/lib/features/characters/presentation/pages/character_life_rules_page.dart"
+    ]
+  }
+}
