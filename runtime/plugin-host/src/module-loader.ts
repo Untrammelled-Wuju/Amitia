@@ -87,6 +87,9 @@ export function loadExtension(entryPath: string): LoadedExtension {
     const content = fs.readFileSync(absoluteEntry, "utf-8");
     (mod as any)._compile(content, absoluteEntry);
 
+    if (!captured && mod.exports) {
+      captured = (mod.exports as any).default ?? mod.exports;
+    }
     if (!captured) {
       throw new Error("Extension entry did not call defineExtension()");
     }

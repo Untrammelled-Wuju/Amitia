@@ -116,10 +116,10 @@ func newRateLimitTool(id, extID string) capability.ToolDefinition {
 	}
 }
 
-func newRateLimitInvocation(userID, charID, convID string) capability.ToolInvocationContext {
+func newRateLimitInvocation(spaceID, charID, convID string) capability.ToolInvocationContext {
 	return capability.ToolInvocationContext{
 		InvocationID:   "inv-001",
-		UserID:         userID,
+		SpaceID:        spaceID,
 		CharacterID:    charID,
 		ConversationID: convID,
 	}

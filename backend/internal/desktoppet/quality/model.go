@@ -217,8 +217,7 @@ type ActionQualityResult struct {
 
 type QualityEvaluation struct {
 	ID                     string                    `json:"id"`
-	UserID                 string                    `json:"userId"`
-	CharacterID            string                    `json:"characterId"`
+	SpaceID                string                    `json:"spaceId"`
 	ProcessingTaskID       string                    `json:"processingTaskId"`
 	ProcessingActionID     string                    `json:"processingActionId"`
 	ActionRevisionID       string                    `json:"actionRevisionId"`
@@ -351,7 +350,7 @@ type QualityGateResultRecord struct {
 	SnapshotHash          string `json:"snapshotHash"`
 	ActiveRevisionSetHash string `json:"activeRevisionSetHash"`
 	EvaluationSetHash     string `json:"evaluationSetHash"`
-	RuleSetVersion        string `json:"ruleSetVersion"`
+	RuleSetVersion        string `json:"ruleSetVersion" gorm:"column:ruleset_version"`
 	ProfileID             string `json:"profileId"`
 	InvalidatedAt         string `json:"invalidatedAt"`
 	CreatedAt             string `json:"createdAt"`
@@ -413,6 +412,10 @@ type QualityMeasurementCacheRecord struct {
 	FullyTransparentRatio float64 `json:"fullyTransparentRatio"`
 	SemiTransparentRatio  float64 `json:"semiTransparentRatio"`
 	OpaqueRatio           float64 `json:"opaqueRatio"`
+	SubjectBoxX           float64 `json:"subjectBoxX"`
+	SubjectBoxY           float64 `json:"subjectBoxY"`
+	SubjectBoxWidth       float64 `json:"subjectBoxWidth"`
+	SubjectBoxHeight      float64 `json:"subjectBoxHeight"`
 	Decodable             bool    `json:"decodable"`
 	MimeType              string  `json:"mimeType"`
 	PixelHash             string  `json:"pixelHash"`
@@ -520,6 +523,7 @@ type EvaluateRequest struct {
 	ProcessingTaskID     string                 `json:"processingTaskId"`
 	ProcessingActionID   string                 `json:"processingActionId"`
 	ActionKey            string                 `json:"actionKey"`
+	SpaceID              string                 `json:"spaceId"`
 	Profile              QualityProfileSnapshot `json:"profile"`
 	ExpectedRevisionHash string                 `json:"expectedRevisionHash"`
 	ExecutionID          string                 `json:"executionId"`
@@ -528,8 +532,7 @@ type EvaluateRequest struct {
 }
 
 type CreateEvaluationRequest struct {
-	UserID               string `json:"userId"`
-	CharacterID          string `json:"characterId"`
+	SpaceID              string `json:"spaceId"`
 	ProcessingTaskID     string `json:"processingTaskId"`
 	ProcessingActionID   string `json:"processingActionId"`
 	ActionRevisionID     string `json:"actionRevisionId"`
@@ -614,8 +617,7 @@ type CommitEvaluationResult struct {
 }
 
 type EvaluateTaskGateRequest struct {
-	UserID                string
-	CharacterID           string
+	SpaceID               string
 	ProcessingTaskID      string
 	ActiveRevisionSetHash string
 	RequiredActionKeys    []string
@@ -633,7 +635,7 @@ type ReviewDecisionRequest struct {
 }
 
 type GetValidGateForReleaseRequest struct {
-	UserID                string
+	SpaceID               string
 	ProcessingTaskID      string
 	ActiveRevisionSetHash string
 }
@@ -641,8 +643,7 @@ type GetValidGateForReleaseRequest struct {
 type QualityOutboxEvent struct {
 	EventType        string `json:"eventType"`
 	ExecutionID      string `json:"executionId"`
-	UserID           string `json:"userId"`
-	CharacterID      string `json:"characterId"`
+	SpaceID          string `json:"spaceId"`
 	ProcessingTaskID string `json:"processingTaskId"`
 	ActionKey        string `json:"actionKey"`
 	ActionRevisionID string `json:"actionRevisionId"`

@@ -236,6 +236,25 @@ SPDX-License-Identifier: AGPL-3.0-only
                           </div>
                         </div>
                       </div>
+                      <div
+                        v-else-if="shouldShowActionImage(action)"
+                        class="frame-preview"
+                      >
+                        <div class="frame-preview-label">
+                          原始生成素材 / 尚未处理
+                        </div>
+                        <div class="action-image-wrap">
+                          <img
+                            v-if="actionImageUrls[`${row.id}:${action.actionKey}`]"
+                            :src="actionImageUrls[`${row.id}:${action.actionKey}`]"
+                            :alt="action.actionKey"
+                            class="action-image"
+                          />
+                          <div v-else class="frame-thumb-placeholder">
+                            加载中
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -254,11 +273,6 @@ SPDX-License-Identifier: AGPL-3.0-only
           </template>
         </el-table-column>
         <el-table-column prop="name" label="任务名称" min-width="160" />
-        <el-table-column label="角色" min-width="120">
-          <template #default="{ row }">{{
-            row.characterName || "—"
-          }}</template>
-        </el-table-column>
         <el-table-column label="模型" min-width="140">
           <template #default="{ row }">{{
             row.modelName || "—"
@@ -408,8 +422,6 @@ const { get, post } = useApi();
 interface TaskItem {
   id: string | number;
   name: string;
-  characterId?: string | number;
-  characterName?: string;
   modelConfigId?: string | number;
   modelName?: string;
   status: string;
@@ -481,6 +493,7 @@ const detailLoadingId = ref<string | number | null>(null);
 const detailMap = reactive<Record<string, TaskDetail>>({});
 const referenceUrls = reactive<Record<string, string>>({});
 const frameImageUrls = reactive<Record<string, string>>({});
+const actionImageUrls = reactive<Record<string, string>>({});
 const expandedRowKeys = ref<string[]>([]);
 const cancellingId = ref<string | number | null>(null);
 const startingId = ref<string | number | null>(null);
@@ -708,6 +721,14 @@ function actionKey(action: TaskAction): string {
   );
 }
 
+function shouldShowActionImage(action: TaskAction): boolean {
+  const succeeded =
+    action.status === "succeeded" ||
+    action.status === "success" ||
+    action.status === "completed";
+  return succeeded && !shouldShowFrames(action);
+}
+
 function frameKey(
   taskId: string | number,
   action: TaskAction,
@@ -928,15 +949,40 @@ async function loadActionFrames(taskId: string | number) {
   if (!detail?.actions) return;
   const tasks: Promise<void>[] = [];
   for (const action of detail.actions) {
-    if (!shouldShowFrames(action)) continue;
-    const total = Number(action.frameTotal ?? action.frameSucceeded ?? 0) || 0;
-    for (let i = 0; i < total; i++) {
-      const key = frameKey(taskId, action, i);
-      if (frameImageUrls[key]) continue;
-      tasks.push(loadFrame(taskId, action.actionKey, i, key));
+    if (shouldShowFrames(action)) {
+      const total = Number(action.frameTotal ?? action.frameSucceeded ?? 0) || 0;
+      for (let i = 0; i < total; i++) {
+        const key = frameKey(taskId, action, i);
+        if (frameImageUrls[key]) continue;
+        tasks.push(loadFrame(taskId, action.actionKey, i, key));
+      }
+    } else if (shouldShowActionImage(action)) {
+      const key = `${taskId}:${action.actionKey}`;
+      if (!actionImageUrls[key]) {
+        tasks.push(loadActionImage(taskId, action.actionKey, key));
+      }
     }
   }
   await Promise.all(tasks);
+}
+
+async function loadActionImage(
+  taskId: string | number,
+  actionKey: string,
+  key: string,
+) {
+  try {
+    const res = await apiClient.get(
+      `/api/desktop-pets/generation-tasks/${taskId}/actions/${actionKey}/image`,
+      { responseType: "blob" },
+    );
+    const blob = res.data as Blob;
+    if (blob && blob.size > 0) {
+      actionImageUrls[key] = URL.createObjectURL(blob);
+    }
+  } catch {
+    // ignore missing image
+  }
 }
 
 async function loadFrame(
@@ -1063,7 +1109,6 @@ async function expandTaskFromQuery() {
       row = {
         id: idStr,
         name: data?.name || "未命名任务",
-        characterName: (data as any)?.characterName,
         modelName: data?.modelName,
         status: data?.status || "pending",
         currentStage: data?.currentStage,
@@ -1285,6 +1330,20 @@ onUnmounted(() => {
   height: 100%;
   color: var(--el-text-color-secondary);
   font-size: 12px;
+}
+.action-image-wrap {
+  width: 100%;
+  max-width: 320px;
+  aspect-ratio: 4 / 3;
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--ac-color-bg-secondary, #f5f7fa);
+}
+.action-image {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
 }
 .detail-reference {
   width: 140px;

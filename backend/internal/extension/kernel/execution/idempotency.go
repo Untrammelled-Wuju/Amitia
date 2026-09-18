@@ -26,7 +26,7 @@ type RecordState string
 type IdempotencyIdentity struct {
 	ToolID         string
 	Generation     int64
-	UserID         string
+	SpaceID        string
 	CharacterID    string
 	ConversationID string
 	Source         capability.InvocationSource

@@ -25,6 +25,7 @@ class AsrPage extends ConsumerStatefulWidget {
 
 class _AsrPageState extends ConsumerState<AsrPage> {
   List<Map<String, dynamic>> _configs = const [];
+  List<Map<String, dynamic>> _providers = const [];
   bool _loading = true;
   bool _busy = false;
   String? _error;
@@ -53,10 +54,13 @@ class _AsrPageState extends ConsumerState<AsrPage> {
       _error = null;
     });
     try {
-      final configs = await ref.read(asrServiceProvider).configs();
+      final service = ref.read(asrServiceProvider);
+      final configs = await service.configs();
+      final providers = await service.providers();
       if (!mounted) return;
       setState(() {
         _configs = configs;
+        _providers = providers;
         _loading = false;
       });
     } catch (e) {
@@ -106,6 +110,165 @@ class _AsrPageState extends ConsumerState<AsrPage> {
       _show((result?['message'] ?? result?['msg'] ?? '连接测试完成').toString());
     } catch (e) {
       _show('测试失败：$e', error: true);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+
+  Future<void> _showConfigSheet([Map<String, dynamic>? existing]) async {
+    final nameCtrl = TextEditingController(text: (existing?['name'] ?? '').toString());
+    final typeCtrl = TextEditingController(text: (existing?['apiType'] ?? '').toString());
+    final keyCtrl = TextEditingController();
+    final baseCtrl = TextEditingController(text: (existing?['baseUrl'] ?? '').toString());
+    final resourceCtrl = TextEditingController(text: (existing?['resourceId'] ?? '').toString());
+    bool active = existing == null ? _configs.isEmpty : (existing['isActive'] == 1 || existing['isActive'] == true);
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: context.surfacePrimary,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (sheetContext, setSheetState) => SafeArea(
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(
+              AppSpacing.lg,
+              AppSpacing.lg,
+              AppSpacing.lg,
+              MediaQuery.of(sheetContext).viewInsets.bottom + AppSpacing.lg,
+            ),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(existing == null ? '新建 ASR 配置' : '编辑 ASR 配置', style: AppTypography.sectionTitle(context)),
+                  SizedBox(height: AppSpacing.lg),
+                  TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: '配置名称', border: OutlineInputBorder())),
+                  SizedBox(height: AppSpacing.md),
+                  if (_providers.isEmpty)
+                    TextField(controller: typeCtrl, decoration: const InputDecoration(labelText: 'Provider / API Type', border: OutlineInputBorder()))
+                  else
+                    DropdownButtonFormField<String>(
+                      value: _providers.any((p) => (p['id'] ?? '').toString() == typeCtrl.text) ? typeCtrl.text : null,
+                      isExpanded: true,
+                      decoration: const InputDecoration(labelText: 'Provider', border: OutlineInputBorder()),
+                      items: _providers
+                          .map((provider) => DropdownMenuItem<String>(
+                                value: (provider['id'] ?? '').toString(),
+                                child: Text((provider['name'] ?? provider['id'] ?? '').toString()),
+                              ))
+                          .toList(growable: false),
+                      onChanged: (value) {
+                        if (value == null) return;
+                        final provider = _providers.firstWhere((item) => (item['id'] ?? '').toString() == value);
+                        setSheetState(() {
+                          typeCtrl.text = value;
+                          if (baseCtrl.text.trim().isEmpty) baseCtrl.text = (provider['defaultBaseUrl'] ?? '').toString();
+                          if (resourceCtrl.text.trim().isEmpty) resourceCtrl.text = (provider['defaultModel'] ?? '').toString();
+                        });
+                      },
+                    ),
+                  SizedBox(height: AppSpacing.md),
+                  TextField(
+                    controller: keyCtrl,
+                    obscureText: true,
+                    decoration: InputDecoration(
+                      labelText: 'API Key',
+                      hintText: existing == null ? '输入 API Key' : '留空则保持原 Key',
+                      border: const OutlineInputBorder(),
+                    ),
+                  ),
+                  SizedBox(height: AppSpacing.md),
+                  TextField(controller: baseCtrl, decoration: const InputDecoration(labelText: 'Base URL', border: OutlineInputBorder())),
+                  SizedBox(height: AppSpacing.md),
+                  TextField(controller: resourceCtrl, decoration: const InputDecoration(labelText: 'Resource / Model ID', border: OutlineInputBorder())),
+                  SizedBox(height: AppSpacing.sm),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('激活此配置'),
+                    value: active,
+                    onChanged: (value) => setSheetState(() => active = value),
+                  ),
+                  SizedBox(height: AppSpacing.md),
+                  AmitiaButton(
+                    label: '保存',
+                    isFullWidth: true,
+                    onPressed: () async {
+                      if (nameCtrl.text.trim().isEmpty || typeCtrl.text.trim().isEmpty) {
+                        _show('名称和 Provider 不能为空', error: true);
+                        return;
+                      }
+                      final data = <String, dynamic>{
+                        'name': nameCtrl.text.trim(),
+                        'apiType': typeCtrl.text.trim(),
+                        'baseUrl': baseCtrl.text.trim(),
+                        'resourceId': resourceCtrl.text.trim(),
+                        'isActive': active ? 1 : 0,
+                        if (keyCtrl.text.trim().isNotEmpty) 'apiKey': keyCtrl.text.trim(),
+                      };
+                      Navigator.of(sheetContext).pop();
+                      await _saveConfig(existing, data);
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    nameCtrl.dispose();
+    typeCtrl.dispose();
+    keyCtrl.dispose();
+    baseCtrl.dispose();
+    resourceCtrl.dispose();
+  }
+
+  Future<void> _saveConfig(Map<String, dynamic>? existing, Map<String, dynamic> data) async {
+    setState(() => _busy = true);
+    try {
+      final service = ref.read(asrServiceProvider);
+      if (existing == null) {
+        await service.createConfig(data);
+      } else {
+        final id = (existing['id'] ?? '').toString();
+        if (id.isEmpty) throw StateError('ASR 配置 ID 无效');
+        await service.updateConfig(id, data);
+      }
+      await _loadConfigs();
+      _show(existing == null ? 'ASR 配置已创建' : 'ASR 配置已更新');
+    } catch (e) {
+      _show('保存失败：$e', error: true);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _deleteConfig(Map<String, dynamic> config) async {
+    final id = (config['id'] ?? '').toString();
+    if (id.isEmpty) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('删除 ASR 配置'),
+        content: Text('确定删除「${config['name'] ?? id}」吗？'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('取消')),
+          TextButton(onPressed: () => Navigator.pop(dialogContext, true), child: Text('删除', style: TextStyle(color: context.error))),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    setState(() => _busy = true);
+    try {
+      await ref.read(asrServiceProvider).deleteConfig(id);
+      await _loadConfigs();
+      _show('ASR 配置已删除');
+    } catch (e) {
+      _show('删除失败：$e', error: true);
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -222,6 +385,7 @@ class _AsrPageState extends ConsumerState<AsrPage> {
         title: '语音识别',
         navigation: AmitiaAppBarNavigation.back,
         actions: [
+          IconButton(onPressed: _busy ? null : () => _showConfigSheet(), icon: const Icon(Icons.add), tooltip: '新建 ASR 配置'),
           IconButton(onPressed: _busy ? null : _loadConfigs, icon: const Icon(Icons.refresh), tooltip: '刷新'),
         ],
       ),
@@ -237,7 +401,16 @@ class _AsrPageState extends ConsumerState<AsrPage> {
                     Text('ASR 配置', style: AppTypography.sectionTitle(context)),
                     SizedBox(height: AppSpacing.sm),
                     if (_configs.isEmpty)
-                      AmitiaCard(child: Text('暂无 ASR 配置，请先在模型配置中添加语音识别 Provider。', style: AppTypography.caption(context)))
+                      AmitiaCard(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Text('暂无 ASR 配置。', style: AppTypography.caption(context)),
+                            const SizedBox(height: 10),
+                            AmitiaButton(label: '新建 ASR 配置', icon: Icons.add, isSecondary: true, onPressed: _busy ? null : () => _showConfigSheet()),
+                          ],
+                        ),
+                      )
                     else
                       ..._configs.map((config) => Padding(
                             padding: const EdgeInsets.only(bottom: 8),
@@ -321,8 +494,31 @@ class _AsrPageState extends ConsumerState<AsrPage> {
               ],
             ),
           ),
-          TextButton(onPressed: _busy ? null : () => _test(config), child: const Text('测试')),
-          if (!active) TextButton(onPressed: _busy ? null : () => _activate(config), child: const Text('启用')),
+          PopupMenuButton<String>(
+            enabled: !_busy,
+            onSelected: (value) {
+              switch (value) {
+                case 'test':
+                  _test(config);
+                  break;
+                case 'activate':
+                  _activate(config);
+                  break;
+                case 'edit':
+                  _showConfigSheet(config);
+                  break;
+                case 'delete':
+                  _deleteConfig(config);
+                  break;
+              }
+            },
+            itemBuilder: (_) => [
+              const PopupMenuItem(value: 'test', child: Text('测试连接')),
+              if (!active) const PopupMenuItem(value: 'activate', child: Text('设为默认')),
+              const PopupMenuItem(value: 'edit', child: Text('编辑')),
+              const PopupMenuItem(value: 'delete', child: Text('删除')),
+            ],
+          ),
         ],
       ),
     );

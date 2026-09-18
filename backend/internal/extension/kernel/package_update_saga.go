@@ -14,7 +14,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/extension/kernel/amitiax"
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
-	"github.com/u-ai/backend/internal/extension/kernel/manifest_v2"
+	"github.com/u-ai/backend/internal/extension/kernel/manifest_v1"
 	"github.com/u-ai/backend/internal/extension/kernel/migration"
 	"github.com/u-ai/backend/internal/extension/kernel/package_security"
 	"github.com/u-ai/backend/internal/extension/kernel/persistence/sqlite"
@@ -63,7 +63,7 @@ func (r *Runtime) ExecutePackageUpdate(ctx context.Context, request PackageInsta
 		_ = r.container.PackageRepository.SetOperation(context.Background(), "package-operation-"+uuid.NewString(), "failed", "check_installed", "PACKAGE_NOT_INSTALLED", fmt.Sprintf("extension %s is not installed", confirmed.session.ExtensionID), true, PackageWriteGuard{})
 		return KernelInstallResult{}, fmt.Errorf("PACKAGE_NOT_INSTALLED: extension %s is not installed", confirmed.session.ExtensionID)
 	}
-	if err := validatePackageOwner(current, request.UserID, request.ScopeType, request.ScopeID); err != nil {
+	if err := validatePackageOwner(current, request.SpaceID, request.ScopeType, request.ScopeID); err != nil {
 		return KernelInstallResult{}, err
 	}
 	idempotencyKey := request.IdempotencyKey
@@ -85,7 +85,7 @@ func (r *Runtime) ExecutePackageUpdate(ctx context.Context, request PackageInsta
 		SnapshotRequirementHash:   confirmed.claims.SnapshotRequirementHash,
 		RequiredConfirmationsHash: confirmed.claims.RequiredConfirmationsHash,
 		DependenciesHash:          confirmed.claims.DependenciesHash,
-		UserID:                    request.UserID,
+		SpaceID:                   request.SpaceID,
 		ScopeType:                 request.ScopeType,
 		ScopeID:                   request.ScopeID,
 		ConfirmedItems:            confirmedItemsFromMap(confirmed.claims.Confirmations),
@@ -100,7 +100,7 @@ func (r *Runtime) ExecutePackageUpdate(ctx context.Context, request PackageInsta
 		TargetVersion:             confirmed.session.Version,
 		TargetVersionID:           confirmed.session.Version,
 	})
-	updateOp := PackageOperationRecord{OperationID: operationID, TraceID: traceID, UserID: request.UserID,
+	updateOp := PackageOperationRecord{OperationID: operationID, TraceID: traceID, SpaceID: request.SpaceID,
 		ScopeType: request.ScopeType, ScopeID: request.ScopeID, ExtensionID: confirmed.session.ExtensionID,
 		TargetVersion: confirmed.session.Version, FromVersion: current.InstalledVersion.String(),
 		OperationType: "update", Status: "created",
@@ -113,7 +113,7 @@ func (r *Runtime) ExecutePackageUpdate(ctx context.Context, request PackageInsta
 			ScopeType: request.ScopeType, ScopeID: request.ScopeID,
 		}), StartedAt: now, UpdatedAt: now}
 	existing, created, createErr := r.container.PackageRepository.CreateOrGetOperationWithConfirmationNonce(ctx, updateOp, PackageConfirmationNonceBinding{
-		Nonce: confirmed.claims.Nonce, OperationType: updateOp.OperationType, ExtensionID: updateOp.ExtensionID, UserID: updateOp.UserID,
+		Nonce: confirmed.claims.Nonce, OperationType: updateOp.OperationType, ExtensionID: updateOp.ExtensionID, SpaceID: updateOp.SpaceID,
 		IssuedAt: confirmationTimestamp(confirmed.claims.IssuedAt), ExpiresAt: confirmationTimestamp(confirmed.claims.ExpiresAt),
 	})
 	if createErr != nil {
@@ -152,13 +152,13 @@ func (r *Runtime) ExecutePackageUpdate(ctx context.Context, request PackageInsta
 	}()
 	ctx = sagaCtx
 	guard := packageWriteGuard(lease)
-	lockedSession, err := r.container.PackageRepository.GetPreview(ctx, request.SessionID, request.UserID, request.ScopeType, request.ScopeID)
+	lockedSession, err := r.container.PackageRepository.GetPreview(ctx, request.SessionID, request.SpaceID, request.ScopeType, request.ScopeID)
 	if err != nil {
 		_ = r.container.PackageRepository.SetOperation(context.Background(), operationID, "failed", "lock_preview_session", "PACKAGE_PREVIEW_SESSION_LOCK_FAILED", err.Error(), true, guard)
 		return KernelInstallResult{}, err
 	}
 	if lockedSession.Status == "consumed" {
-		return r.completedPackageInstallResult(ctx, request.UserID, request.SessionID)
+		return r.completedPackageInstallResult(ctx, request.SpaceID, request.SessionID)
 	}
 	if lockedSession.Status != "ready" && lockedSession.Status != "awaiting_confirmation" {
 		_ = r.container.PackageRepository.SetOperation(context.Background(), operationID, "failed", "lock_preview_session", "PACKAGE_PREVIEW_SESSION_STATUS", fmt.Sprintf("status %s", lockedSession.Status), true, guard)
@@ -290,9 +290,18 @@ func (r *Runtime) ExecutePackageUpdate(ctx context.Context, request PackageInsta
 	if err := r.completePackageGenerationStep(ctx, op.OperationID, StepUpdateSwitchCurrentPointer, 5, stableGeneration, targetGeneration.Current, packageGenerationJSON(targetGeneration.Current), guard); err != nil {
 		return KernelInstallResult{}, r.failPackageUpdateOperation(op.OperationID, StepUpdateSwitchCurrentPointer, err, compensation, guard)
 	}
-	targetRequirements := packageManifestRequirements(current.ExtensionID, confirmed.preview.Manifest.Permissions)
+	targetRequirements := packageManifestRequirements(current.ExtensionID, confirmed.preview.Manifest.Permissions, targetDefinition.Modules...)
 	targetResources := packageManifestResources(current.ExtensionID, confirmed.preview.Manifest.Resources, targetGeneration.GenerationPath)
-	retainedGrants := retainPackagePermissionGrants(currentGrants, targetRequirements)
+	targetGrants := packageManifestGrantRecords(current.ExtensionID, targetRequirements)
+	currentGrantStates := make(map[string]string, len(currentGrants))
+	for _, grant := range currentGrants {
+		currentGrantStates[grant.PermissionName] = grant.State
+	}
+	for i := range targetGrants {
+		if currentGrantStates[targetGrants[i].PermissionName] == "revoked" {
+			targetGrants[i].State = "revoked"
+		}
+	}
 	current.InstalledVersion = targetDefinition.Version
 	current.PackageID = confirmed.artifact.ArtifactID
 	current.Generation++
@@ -353,7 +362,7 @@ func (r *Runtime) ExecutePackageUpdate(ctx context.Context, request PackageInsta
 				return err
 			}
 		}
-		for _, grant := range retainedGrants {
+		for _, grant := range targetGrants {
 			if err := r.container.PermissionRepository.PutGrant(txCtx, grant); err != nil {
 				return err
 			}
@@ -410,7 +419,7 @@ func (r *Runtime) validateConfirmedPackageUpdate(ctx context.Context, request Pa
 	if r.container == nil || r.container.PackageRepository == nil || r.container.PackageArtifactStore == nil || r.container.PackageGenerationStore == nil {
 		return confirmedPackageUpdate{}, fmt.Errorf("kernel: package services unavailable")
 	}
-	session, err := r.container.PackageRepository.GetPreview(ctx, request.SessionID, request.UserID, request.ScopeType, request.ScopeID)
+	session, err := r.container.PackageRepository.GetPreview(ctx, request.SessionID, request.SpaceID, request.ScopeType, request.ScopeID)
 	if err != nil {
 		return confirmedPackageUpdate{}, fmt.Errorf("kernel: preview session unavailable: %w", err)
 	}
@@ -432,7 +441,7 @@ func (r *Runtime) validateConfirmedPackageUpdate(ctx context.Context, request Pa
 		return confirmedPackageUpdate{}, fmt.Errorf("kernel: package preview is unavailable or not installable")
 	}
 	if preview.DevOnly {
-		if err := r.validateUnsignedDeveloperSession(preview.DeveloperSessionID, request.UserID, preview.ExtensionID); err != nil {
+		if err := r.validateUnsignedDeveloperSession(preview.DeveloperSessionID, request.SpaceID, preview.ExtensionID); err != nil {
 			return confirmedPackageUpdate{}, fmt.Errorf("kernel: developer session no longer valid: %w", err)
 		}
 	}
@@ -440,7 +449,7 @@ func (r *Runtime) validateConfirmedPackageUpdate(ctx context.Context, request Pa
 	if err != nil {
 		return confirmedPackageUpdate{}, err
 	}
-	if claims.SessionID != session.SessionID || claims.ArtifactID != session.ArtifactID || claims.ArchiveHash != session.ArchiveHash || claims.ManifestHash != session.ManifestHash || claims.ContentTreeHash != session.ContentTreeHash || claims.UserID != request.UserID || claims.ScopeType != request.ScopeType || claims.ScopeID != request.ScopeID || claims.PolicyVersion != session.PolicyVersion || claims.SecurityPolicyHash != computeSecurityPolicyHash() || claims.DeveloperSessionID != preview.DeveloperSessionID || claims.MigrationPlanHash != preview.MigrationPlanHash {
+	if claims.SessionID != session.SessionID || claims.ArtifactID != session.ArtifactID || claims.ArchiveHash != session.ArchiveHash || claims.ManifestHash != session.ManifestHash || claims.ContentTreeHash != session.ContentTreeHash || claims.SpaceID != request.SpaceID || claims.ScopeType != request.ScopeType || claims.ScopeID != request.ScopeID || claims.PolicyVersion != session.PolicyVersion || claims.SecurityPolicyHash != computeSecurityPolicyHash() || claims.DeveloperSessionID != preview.DeveloperSessionID || claims.MigrationPlanHash != preview.MigrationPlanHash {
 		return confirmedPackageUpdate{}, fmt.Errorf("kernel: confirmation token binding mismatch")
 	}
 	var required []string
@@ -616,15 +625,21 @@ func (r *Runtime) executePackageUpdateMigrations(ctx context.Context, packageOpe
 	return execution, err
 }
 
-func packageManifestRequirements(extensionID domain.ExtensionID, permissions []manifest_v2.PermissionReq) []sqlite.PermissionRequirement {
+func packageManifestRequirements(extensionID domain.ExtensionID, permissions []manifest_v1.PermissionReq, modules ...domain.ModuleDefinition) []sqlite.PermissionRequirement {
 	result := make([]sqlite.PermissionRequirement, 0, len(permissions))
 	for _, permission := range permissions {
 		result = append(result, sqlite.PermissionRequirement{ExtensionID: extensionID, PermissionName: permission.Name, Reason: permission.Reason, Required: permission.Required, Scope: permission.Scope})
 	}
+	if requirement, ok := uiToolInvocationRequirement(extensionID, modules); ok {
+		result = append(result, requirement)
+	}
+	if requirement, ok := serviceRuntimeExecutionRequirement(extensionID, modules); ok {
+		result = append(result, requirement)
+	}
 	return result
 }
 
-func packageManifestResources(extensionID domain.ExtensionID, resources []manifest_v2.ResourceMeta, generationPath string) []domain.ResourceOwnership {
+func packageManifestResources(extensionID domain.ExtensionID, resources []manifest_v1.ResourceMeta, generationPath string) []domain.ResourceOwnership {
 	now := time.Now().UTC()
 	result := make([]domain.ResourceOwnership, 0, len(resources))
 	for _, resource := range resources {
@@ -655,7 +670,7 @@ func clonePackageMetadata(metadata map[string]any) map[string]any {
 	return result
 }
 
-func computePackageUpdateDiff(oldDefinition domain.ExtensionDefinition, oldModules []domain.ModuleDefinition, oldContributions []domain.ContributionDefinition, oldRequirements []sqlite.PermissionRequirement, oldResources []domain.ResourceOwnership, target manifest_v2.Manifest, artifact PackageArtifact) PackageUpdateDiff {
+func computePackageUpdateDiff(oldDefinition domain.ExtensionDefinition, oldModules []domain.ModuleDefinition, oldContributions []domain.ContributionDefinition, oldRequirements []sqlite.PermissionRequirement, oldResources []domain.ResourceOwnership, target manifest_v1.Manifest, artifact PackageArtifact) PackageUpdateDiff {
 	targetDefinition, _ := target.ToExtensionDefinition()
 	diff := PackageUpdateDiff{DefinitionChanged: packageCanonicalJSON(oldDefinition) != packageCanonicalJSON(targetDefinition)}
 	diff.ModulesAdded, diff.ModulesRemoved, diff.ModulesChanged = packageObjectDiff(oldModules, targetDefinition.Modules, func(value domain.ModuleDefinition) string { return string(value.ID) })
@@ -669,7 +684,7 @@ func computePackageUpdateDiff(oldDefinition domain.ExtensionDefinition, oldModul
 		oldPermissions[value.PermissionName] = packageCanonicalJSON(value)
 	}
 	newPermissions := map[string]string{}
-	for _, value := range packageManifestRequirements(targetDefinition.ID, target.Permissions) {
+	for _, value := range packageManifestRequirements(targetDefinition.ID, target.Permissions, targetDefinition.Modules...) {
 		newPermissions[value.PermissionName] = packageCanonicalJSON(value)
 	}
 	diff.PermissionsAdded, diff.PermissionsRemoved, _ = packageMapDiff(oldPermissions, newPermissions)

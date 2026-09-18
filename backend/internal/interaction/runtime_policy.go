@@ -32,7 +32,7 @@ func (p *RuntimePipeline) buildSafetyDecision(snapshot ContextSnapshot, scope In
 	if p.safetyGovernor == nil {
 		return runtimeSafety(snapshot)
 	}
-	result := p.safetyGovernor.CheckPreGen(safety.PreGenInput{CharacterID: scope.CharacterID, UserID: scope.UserID, Scope: scope.Channel, Context: map[string]string{"request_id": scope.RequestID}})
+	result := p.safetyGovernor.CheckPreGen(safety.PreGenInput{CharacterID: scope.CharacterID, SpaceID: scope.SpaceID, Scope: scope.Channel, Context: map[string]string{"request_id": scope.RequestID}})
 	level := "normal"
 	if !result.Allowed {
 		level = "blocked"

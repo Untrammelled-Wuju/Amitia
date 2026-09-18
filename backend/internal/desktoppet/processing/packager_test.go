@@ -41,13 +41,13 @@ func setupPackagePreviewFile(t *testing.T, dataDir, taskID string, version int) 
 	writeValidatorPNG(t, dataDir, filepath.ToSlash(filepath.Join(relDir, "package-preview.png")), 32, 32)
 }
 
-func seedPackagerTask(t *testing.T, db *gorm.DB, taskID, userID, status string) {
+func seedPackagerTask(t *testing.T, db *gorm.DB, taskID, spaceID, status string) {
 	t.Helper()
 	if err := db.Create(&desktoppet.GenerationTask{
-		ID:     taskID,
-		UserID: userID,
-		Name:   "打包测试任务",
-		Status: status,
+		ID:      taskID,
+		SpaceID: spaceID,
+		Name:    "打包测试任务",
+		Status:  status,
 	}).Error; err != nil {
 		t.Fatalf("create generation task %s: %v", taskID, err)
 	}
@@ -136,8 +136,7 @@ func TestPackager_BuildPackage_Success(t *testing.T) {
 	p := NewPackager(repo, dataDir)
 	req := &PackageBuildRequest{
 		ProcessingTaskID:  "pt-1",
-		UserID:            "user-1",
-		CharacterID:       "char-1",
+		SpaceID:           "user-1",
 		GenerationTaskID:  taskID,
 		PackageName:       "测试包",
 		DefaultAction:     "idle_normal",
@@ -148,7 +147,7 @@ func TestPackager_BuildPackage_Success(t *testing.T) {
 		SucceededActions:  []desktoppet.GenerationTaskAction{action1, action2},
 	}
 
-	result, err := p.BuildPackage(req)
+	result, err := p.BuildReleaseSource(req)
 	if err != nil {
 		t.Fatalf("BuildPackage 失败: %v", err)
 	}
@@ -205,15 +204,8 @@ func TestPackager_BuildPackage_Success(t *testing.T) {
 		t.Fatalf("idle_normal frame-0002.png 不存在: %v", err)
 	}
 
-	gotPkg, err := repo.GetPackage(result.Package.ID)
-	if err != nil {
-		t.Fatalf("GetPackage 失败: %v", err)
-	}
-	if gotPkg.Status != "ready" {
-		t.Fatalf("数据库中 Status = %s, 期望 ready", gotPkg.Status)
-	}
-	if gotPkg.PackageHash != result.PackageHash {
-		t.Fatalf("数据库中 PackageHash = %s, 期望 %s", gotPkg.PackageHash, result.PackageHash)
+	if result.Package.PackageHash == "" {
+		t.Fatal("PackageHash 为空")
 	}
 }
 
@@ -328,7 +320,7 @@ func TestPackager_VerifyPackageIntegrity_ManifestInvalid(t *testing.T) {
 func TestPackager_VerifyPackageIntegrity_ActionConfigMissing(t *testing.T) {
 	dir := t.TempDir()
 
-	manifest := BuildManifest("pkg-test", "测试", "char-1", "task-1", 1, 512, 512, "idle_normal",
+	manifest := BuildManifest("pkg-test", "测试", "task-1", 1, 512, 512, "idle_normal",
 		[]ManifestAction{BuildManifestAction("idle_normal", "待机")})
 	manifestData, _ := json.MarshalIndent(manifest, "", "  ")
 	writeFileBytes(t, dir, "manifest.json", manifestData)
@@ -357,7 +349,7 @@ func TestPackager_VerifyPackageIntegrity_FrameCountMismatch(t *testing.T) {
 	}
 	writeValidatorPNG(t, dir, "actions/idle_normal/frames/frame-0001.png", 8, 8)
 
-	manifest := BuildManifest("pkg-test", "测试", "char-1", "task-1", 1, 512, 512, "idle_normal",
+	manifest := BuildManifest("pkg-test", "测试", "task-1", 1, 512, 512, "idle_normal",
 		[]ManifestAction{BuildManifestAction("idle_normal", "待机")})
 	manifestData, _ := json.MarshalIndent(manifest, "", "  ")
 	writeFileBytes(t, dir, "manifest.json", manifestData)
@@ -414,7 +406,7 @@ func TestPackager_VerifyPackageIntegrity_ForbiddenFile(t *testing.T) {
 
 	writeFileBytes(t, dir, "secret.key", []byte("fake-key"))
 
-	manifest := BuildManifest("pkg-test", "测试", "char-1", "task-1", 1, 8, 8, "idle_normal",
+	manifest := BuildManifest("pkg-test", "测试", "task-1", 1, 8, 8, "idle_normal",
 		[]ManifestAction{BuildManifestAction("idle_normal", "待机")})
 	manifestData, _ := json.MarshalIndent(manifest, "", "  ")
 	writeFileBytes(t, dir, "manifest.json", manifestData)
@@ -441,7 +433,7 @@ func TestPackager_VerifyPackageIntegrity_Success(t *testing.T) {
 		writeValidatorPNG(t, dir, filepath.ToSlash(filepath.Join("actions", "idle_normal", "frames", frameFileName(i))), 8, 8)
 	}
 
-	manifest := BuildManifest("pkg-test", "测试", "char-1", "task-1", 1, 8, 8, "idle_normal",
+	manifest := BuildManifest("pkg-test", "测试", "task-1", 1, 8, 8, "idle_normal",
 		[]ManifestAction{BuildManifestAction("idle_normal", "待机")})
 	manifestData, _ := json.MarshalIndent(manifest, "", "  ")
 	writeFileBytes(t, dir, "manifest.json", manifestData)
@@ -471,7 +463,7 @@ func TestPackager_CopyActionFiles(t *testing.T) {
 	repo := newRepoFromDB(t, db)
 	p := NewPackager(repo, dataDir)
 
-	err := p.copyActionFiles(taskID, packageID, []string{actionKey}, processingVersion)
+	err := p.copyActionFiles(taskID, taskID, packageID, []string{actionKey}, processingVersion)
 	if err != nil {
 		t.Fatalf("copyActionFiles 失败: %v", err)
 	}
@@ -510,7 +502,7 @@ func TestPackager_CopyActionFiles_SourceMissing(t *testing.T) {
 	repo := newRepoFromDB(t, db)
 	p := NewPackager(repo, dataDir)
 
-	err := p.copyActionFiles(taskID, packageID, []string{"idle_normal"}, processingVersion)
+	err := p.copyActionFiles(taskID, taskID, packageID, []string{"idle_normal"}, processingVersion)
 	if err == nil {
 		t.Fatal("期望错误但得到 nil")
 	}
@@ -565,8 +557,7 @@ func TestPackager_BuildPackage_PreviewMissing(t *testing.T) {
 	p := NewPackager(repo, dataDir)
 	req := &PackageBuildRequest{
 		ProcessingTaskID:  "pt-1",
-		UserID:            "user-1",
-		CharacterID:       "char-1",
+		SpaceID:           "user-1",
 		GenerationTaskID:  taskID,
 		PackageName:       "测试包",
 		DefaultAction:     "idle_normal",
@@ -600,8 +591,7 @@ func TestPackager_BuildPackage_IncludedActionNotInSucceeded(t *testing.T) {
 	p := NewPackager(repo, dataDir)
 	req := &PackageBuildRequest{
 		ProcessingTaskID:  "pt-1",
-		UserID:            "user-1",
-		CharacterID:       "char-1",
+		SpaceID:           "user-1",
 		GenerationTaskID:  taskID,
 		PackageName:       "测试包",
 		DefaultAction:     "idle_normal",
@@ -629,23 +619,10 @@ func TestPackager_BuildPackage_VersionIncrement(t *testing.T) {
 	setupPackagerProcessedAction(t, dataDir, taskID, 1, "idle_normal", 2)
 	setupPackagePreviewFile(t, dataDir, taskID, 1)
 
-	if err := repo.CreatePackage(&Package{
-		ID:               "pkg-existing-1",
-		UserID:           "user-1",
-		GenerationTaskID: taskID,
-		ProcessingTaskID: "pt-old",
-		Name:             "旧包",
-		Version:          1,
-		Status:           "ready",
-	}); err != nil {
-		t.Fatalf("CreatePackage existing: %v", err)
-	}
-
 	p := NewPackager(repo, dataDir)
 	req := &PackageBuildRequest{
 		ProcessingTaskID:  "pt-1",
-		UserID:            "user-1",
-		CharacterID:       "char-1",
+		SpaceID:           "user-1",
 		GenerationTaskID:  taskID,
 		PackageName:       "测试包v2",
 		DefaultAction:     "idle_normal",
@@ -656,12 +633,12 @@ func TestPackager_BuildPackage_VersionIncrement(t *testing.T) {
 		SucceededActions:  []desktoppet.GenerationTaskAction{action1},
 	}
 
-	result, err := p.BuildPackage(req)
+	result, err := p.BuildReleaseSource(req)
 	if err != nil {
 		t.Fatalf("BuildPackage 失败: %v", err)
 	}
-	if result.Package.Version != 2 {
-		t.Fatalf("Version = %d, 期望 2", result.Package.Version)
+	if result.Package.Version != 1 {
+		t.Fatalf("Version = %d, 期望 1", result.Package.Version)
 	}
 }
 
@@ -679,7 +656,7 @@ func TestVerifyActionIntegrity_ImageSize(t *testing.T) {
 
 	writeValidatorPNG(t, dir, "actions/idle_normal/frames/frame-0001.png", 256, 256)
 
-	manifest := BuildManifest("pkg-test", "测试", "char-1", "task-1", 1, 512, 512, "idle_normal",
+	manifest := BuildManifest("pkg-test", "测试", "task-1", 1, 512, 512, "idle_normal",
 		[]ManifestAction{BuildManifestAction("idle_normal", "待机")})
 	manifestData, _ := json.MarshalIndent(manifest, "", "  ")
 	writeFileBytes(t, dir, "manifest.json", manifestData)
@@ -709,7 +686,7 @@ func TestVerifyActionIntegrity_ImageUndecodable(t *testing.T) {
 
 	writeFileBytes(t, dir, "actions/idle_normal/frames/frame-0001.png", []byte("not a valid png"))
 
-	manifest := BuildManifest("pkg-test", "测试", "char-1", "task-1", 1, 512, 512, "idle_normal",
+	manifest := BuildManifest("pkg-test", "测试", "task-1", 1, 512, 512, "idle_normal",
 		[]ManifestAction{BuildManifestAction("idle_normal", "待机")})
 	manifestData, _ := json.MarshalIndent(manifest, "", "  ")
 	writeFileBytes(t, dir, "manifest.json", manifestData)

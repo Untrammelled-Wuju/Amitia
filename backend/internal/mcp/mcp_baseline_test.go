@@ -178,25 +178,22 @@ func TestLegacy_MCP_ScopeBinding(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := repo.SetScopeEnabled(ctx, srv.ID, "global", "", true); err != nil {
+	if err := repo.SetScopeEnabled(ctx, srv.ID, true); err != nil {
 		t.Fatal(err)
 	}
 
-	enabled, scopeType, err := repo.ResolveScopeEnabled(ctx, srv.ID, "")
-	if err != nil || !enabled || scopeType != "global" {
-		t.Fatalf("expected global enabled: %v %s %v", enabled, scopeType, err)
+	enabled, err := repo.ResolveScopeEnabled(ctx, srv.ID)
+	if err != nil || !enabled {
+		t.Fatalf("expected global enabled: %v %v", enabled, err)
 	}
 
-	if err := repo.SetScopeEnabled(ctx, srv.ID, "character", "char-1", true); err != nil {
-		t.Fatal(err)
-	}
-	if err := repo.SetScopeEnabled(ctx, srv.ID, "character", "char-1", false); err != nil {
+	if err := repo.SetScopeEnabled(ctx, srv.ID, false); err != nil {
 		t.Fatal(err)
 	}
 
-	enabled, scopeType, err = repo.ResolveScopeEnabled(ctx, srv.ID, "char-1")
-	if err != nil || enabled || scopeType != "character" {
-		t.Fatalf("char-1 should be disabled after set false: %v %s %v", enabled, scopeType, err)
+	enabled, err = repo.ResolveScopeEnabled(ctx, srv.ID)
+	if err != nil || enabled {
+		t.Fatalf("expected disabled after set false: %v %v", enabled, err)
 	}
 }
 

@@ -67,7 +67,7 @@ func TestSecretRPCBindsIdentityToTrustedRequestAndUsesLeaseIDQueries(t *testing.
 	if err := json.Unmarshal(acquireWire["leaseId"], &leaseID); err != nil || leaseID == "" {
 		t.Fatalf("invalid lease id: %q err=%v", leaseID, err)
 	}
-	lease, ok := broker.GetLease(leaseID)
+	lease, ok := broker.GetLease(kernelsecret.LeaseID(leaseID))
 	if !ok {
 		t.Fatal("issued lease not found")
 	}

@@ -28,7 +28,7 @@ func (l WorkflowLocation) Valid() bool {
 type WorkflowInstallation struct {
 	InstallationID  string                      `json:"installationId"`
 	WorkflowID      string                      `json:"workflowId"`
-	OwnerUserID     string                      `json:"ownerUserId,omitempty"`
+	OwnerSpaceID    string                      `json:"ownerSpaceId,omitempty"`
 	Location        WorkflowLocation            `json:"location"`
 	HostDeviceID    string                      `json:"hostDeviceId,omitempty"`
 	Enabled         bool                        `json:"enabled"`
@@ -47,7 +47,7 @@ func (i WorkflowInstallation) Validate() error {
 	if strings.TrimSpace(i.WorkflowID) == "" {
 		return errors.New("workflow installation workflow id is required")
 	}
-	if strings.TrimSpace(i.OwnerUserID) == "" {
+	if strings.TrimSpace(i.OwnerSpaceID) == "" {
 		return errors.New("workflow installation owner is required")
 	}
 	if !i.Location.Valid() {

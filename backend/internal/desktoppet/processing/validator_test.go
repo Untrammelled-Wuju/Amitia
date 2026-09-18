@@ -71,13 +71,13 @@ func assertValidationErrorCode(t *testing.T, err error, wantCode string) {
 	}
 }
 
-func seedValidatorTask(t *testing.T, db *gorm.DB, taskID, userID, status string) {
+func seedValidatorTask(t *testing.T, db *gorm.DB, taskID, spaceID, status string) {
 	t.Helper()
 	if err := db.Create(&desktoppet.GenerationTask{
-		ID:     taskID,
-		UserID: userID,
-		Name:   "测试任务",
-		Status: status,
+		ID:      taskID,
+		SpaceID: spaceID,
+		Name:    "测试任务",
+		Status:  status,
 	}).Error; err != nil {
 		t.Fatalf("create generation task: %v", err)
 	}
@@ -134,7 +134,7 @@ func TestValidator_ValidateSources_TaskNotFound(t *testing.T) {
 	assertValidationErrorCode(t, err, ErrCodeGenerationTaskNotReady)
 }
 
-func TestValidator_ValidateSources_TaskNotOwnedByUser(t *testing.T) {
+func TestValidator_ValidateSources_TaskNotOwnedBySpace(t *testing.T) {
 	db := setupTestDB(t)
 	repo := newRepoFromDB(t, db)
 	seedValidatorTask(t, db, "gt-1", "user-1", "succeeded")

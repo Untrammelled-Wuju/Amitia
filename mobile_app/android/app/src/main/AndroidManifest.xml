@@ -1,9 +1,11 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
@@ -27,6 +29,7 @@
         android:label="amitia_app"
         android:name="${applicationName}"
         android:enableOnBackInvokedCallback="true"
+        android:networkSecurityConfig="@xml/network_security_config"
         android:icon="@mipmap/ic_launcher">
         <activity
             android:name=".MainActivity"
@@ -107,6 +110,9 @@
         <receiver
             android:name="com.amitia.amitia_app.workflow.WorkflowIntentReceiver"
             android:exported="true" />
+        <receiver
+            android:name="com.amitia.amitia_app.update.AppUpdateInstallReceiver"
+            android:exported="false" />
         <service
             android:name="com.amitia.amitia_app.workflow.WorkflowAutomationHealthJobService"
             android:permission="android.permission.BIND_JOB_SERVICE"
@@ -153,6 +159,10 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/share_file_paths" />
         </provider>
+        <service
+            android:name=".realtime.RealtimeProjectionService"
+            android:exported="false"
+            android:foregroundServiceType="mediaProjection" />
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and

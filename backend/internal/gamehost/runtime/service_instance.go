@@ -37,6 +37,9 @@ var validServiceTransitions = map[ServiceRuntimeState]map[ServiceRuntimeState]st
 		ServiceStateStopped: {},
 		ServiceStateFailed:  {},
 	},
+	ServiceStateStopped: {
+		ServiceStateStarting: {},
+	},
 }
 
 type ServiceInstance struct {
@@ -96,7 +99,7 @@ func CanTransitionServiceState(from ServiceRuntimeState, to ServiceRuntimeState)
 }
 
 func IsTerminalServiceState(state ServiceRuntimeState) bool {
-	return state == ServiceStateStopped || state == ServiceStateFailed
+	return state == ServiceStateFailed
 }
 
 func NewServiceInstance(

@@ -134,6 +134,9 @@ export class ShortcutHost {
 
   private matches(parsed: ParsedAccelerator, input: Electron.Input): boolean {
     const key = input.key.toLowerCase();
+    if ((input.control || input.meta) && !input.alt && ["a", "c", "v", "x", "z", "y"].includes(key)) {
+      return false;
+    }
     if (parsed.key !== key) return false;
     const wantCmdOrCtrl = parsed.ctrl && parsed.cmd;
     if (wantCmdOrCtrl) {

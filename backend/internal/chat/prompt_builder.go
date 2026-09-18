@@ -13,6 +13,7 @@ import (
 	"github.com/u-ai/backend/internal/interaction"
 	"github.com/u-ai/backend/internal/memory"
 	"github.com/u-ai/backend/pkg/app"
+	"gorm.io/gorm"
 
 	"strings"
 )
@@ -42,33 +43,31 @@ type sys1Result struct {
 	PersonalityPresetID string
 }
 
-func (s *service) sys1Builder(profile *character.RoleRuntimeProfile, userMessage string, runtime *interaction.RuntimeAssembly) sys1Result {
+func (s *service) sys1Builder(convID string, profile *character.RoleRuntimeProfile, userMessage string, runtime *interaction.RuntimeAssembly) sys1Result {
 	parts := buildRoleSystemParts(profile, runtime)
 	characterID := ""
 	if profile != nil {
 		characterID = strings.TrimSpace(profile.CharacterID)
 	}
+	// Only the compact core profile remains in sys1. Extended profile and episodic
+	// memories are recalled dynamically so relevance and retention decide what is
+	// remembered in this turn instead of being injected unconditionally.
 	var profileCtx, epiCtx, wbCtx string
-	if s.profilePort != nil {
-		profilePrompt := s.profilePort.ToSystemPrompt(characterID, characterID)
-		if profilePrompt != "" {
-			profileCtx = profilePrompt
-		}
-	}
-	if s.episodicPort != nil {
-		epiPrompt := s.episodicPort.ToSystemPrompt(characterID)
-		if epiPrompt != "" {
-			epiCtx = epiPrompt
-		}
+	spaceID := s.profileExtractionSpaceID(convID, characterID)
+	if s.profilePort != nil && characterID != "" {
+		profileCtx = s.profilePort.ToSystemPrompt(spaceID, characterID)
 	}
 	if s.worldBookPort != nil {
-		wbPrompt := s.worldBookPort.ToSystemPrompt(userMessage, "")
+		wbPrompt := s.worldBookPort.ToSystemPromptForSpace(spaceID, characterID, userMessage, "")
 		if wbPrompt != "" {
 			wbCtx = wbPrompt
 		}
 	}
 
-	presetID := profile.PersonalityPresetID()
+	presetID := ""
+	if profile != nil {
+		presetID = profile.PersonalityPresetID()
+	}
 
 	return sys1Result{
 		CharacterConfig:     strings.Join(parts, "\n\n"),
@@ -111,41 +110,27 @@ func (s *service) sys2Builder(convID, charID, requestID, channel, userMessage st
 			internalParts = append(internalParts, "【对话历史摘要】\n"+summary)
 		}
 	}
-	if s.memoryPort != nil && userMessage != "" {
+	if s.memoryPort != nil && shouldRetrieveMemory(userMessage) {
+		spaceID := s.profileExtractionSpaceID(convID, charID)
 		results, err := s.memoryPort.HybridSearch(&memory.VectorSearchRequest{
 			Query:          userMessage,
 			CharacterID:    charID,
+			SpaceID:        spaceID,
 			ConversationID: convID,
 			RequestID:      requestID,
 			Channel:        channel,
 			Limit:          8,
 		})
 		if err == nil && len(results) > 0 {
-			layerLines := map[string][]string{}
-			layerOrder := []string{"当前摘要", "用户画像", "情景回忆", "事实记忆"}
-			for _, r := range results {
-				layer := r.MemoryLayer
-				if layer == "" {
-					layer = "事实记忆"
-				}
-				typeLabel := r.Memory.MemoryType
-				if typeLabel == "" {
-					typeLabel = "fact"
-				}
-				line := fmt.Sprintf("- [%s %s %.0f%% 置信%d%%] %s", typeLabel, r.MatchType, r.Score*100, r.Memory.Confidence, r.Memory.Value)
-				layerLines[layer] = append(layerLines[layer], line)
-			}
-			for _, layer := range layerOrder {
-				if lines := layerLines[layer]; len(lines) > 0 {
-					internalParts = append(internalParts, "【"+layer+"】\n"+strings.Join(lines, "\n"))
-				}
-			}
 			memoryInjectRaw = s.buildMemoryInjectItems(results)
-			for _, r := range results {
-				go s.memoryPort.RecordUse(r.Memory.ID)
+			for _, result := range results {
+				if result.SourceType == "memory" && result.Memory.ID != "" {
+					go s.memoryPort.RecordUse(result.Memory.ID)
+				}
 			}
 		}
 	}
+
 	return sys2Result{
 		SystemInstruction: sysInstruction,
 		MemoryContext:     strings.Join(internalParts, "\n\n"),
@@ -370,6 +355,23 @@ func toneLabel(tone decision.ExpressionTone) string {
 	default:
 		return string(tone)
 	}
+}
+
+func (s *service) getRoleRuntimeProfileForSpace(characterID, spaceID string) (*character.RoleRuntimeProfile, error) {
+	type scopedRuntimeProfileRepository interface {
+		GetRuntimeProfileForSpace(id, spaceID string, includeLegacyDefault bool) (*character.RoleRuntimeProfile, error)
+	}
+	if scoped, ok := s.charRepo.(scopedRuntimeProfileRepository); ok {
+		return scoped.GetRuntimeProfileForSpace(characterID, normalizeConversationOwner(spaceID), chatLocalSingleUserMode())
+	}
+	if strings.TrimSpace(characterID) != "" {
+		var owner string
+		query := s.db.Table("characters").Select("space_id").Where("id = ? AND deleted_at IS NULL", strings.TrimSpace(characterID))
+		if err := query.Row().Scan(&owner); err != nil || !conversationOwnerMatches(owner, spaceID) {
+			return nil, gorm.ErrRecordNotFound
+		}
+	}
+	return s.getRoleRuntimeProfile(characterID)
 }
 
 func (s *service) getRoleRuntimeProfile(characterID string) (*character.RoleRuntimeProfile, error) {

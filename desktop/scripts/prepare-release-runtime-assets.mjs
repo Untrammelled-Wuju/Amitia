@@ -1,6 +1,5 @@
 import { createHash } from "node:crypto";
 import {
-  copyFileSync,
   existsSync,
   mkdirSync,
   readFileSync,
@@ -8,7 +7,7 @@ import {
   statSync,
   writeFileSync,
 } from "node:fs";
-import { dirname, relative, resolve, sep } from "node:path";
+import { relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { computeFreezeSourceGateHash } from "../../scripts/lib/freeze-scope.mjs";
 
@@ -18,25 +17,6 @@ const repositoryRoot = resolve(desktopRoot, "..");
 const resourcesRoot = resolve(desktopRoot, "resources");
 const coreRoot = resolve(resourcesRoot, "core");
 const manifestPath = resolve(coreRoot, ".release-runtime-assets.json");
-
-const sourceCopies = [
-  {
-    source: resolve(repositoryRoot, "backend/sidecar/bundle.mjs"),
-    destination: resolve(coreRoot, "sidecar/bundle.mjs"),
-  },
-  {
-    source: resolve(repositoryRoot, "backend/sidecar/launcher.mjs"),
-    destination: resolve(coreRoot, "sidecar/launcher.mjs"),
-  },
-  {
-    source: resolve(repositoryRoot, "backend/qq-sidecar/bundle.mjs"),
-    destination: resolve(coreRoot, "qq-sidecar/bundle.mjs"),
-  },
-  {
-    source: resolve(repositoryRoot, "backend/qq-sidecar/launcher.mjs"),
-    destination: resolve(coreRoot, "qq-sidecar/launcher.mjs"),
-  },
-];
 
 function sha256File(filePath) {
   return createHash("sha256").update(readFileSync(filePath)).digest("hex");
@@ -50,17 +30,6 @@ function assertRegularNonEmptyFile(filePath, label) {
   return stats;
 }
 
-function copyFrozenSidecars() {
-  for (const item of sourceCopies) {
-    assertRegularNonEmptyFile(item.source, "frozen sidecar source");
-    mkdirSync(dirname(item.destination), { recursive: true });
-    copyFileSync(item.source, item.destination);
-    if (sha256File(item.source) !== sha256File(item.destination)) {
-      throw new Error(`sidecar staging SHA mismatch: ${relative(repositoryRoot, item.source)}`);
-    }
-  }
-}
-
 function listFilesRecursive(root) {
   if (!existsSync(root)) return [];
   const output = [];
@@ -68,7 +37,7 @@ function listFilesRecursive(root) {
     for (const entry of readdirSync(current, { withFileTypes: true })) {
       const absolute = resolve(current, entry.name);
       if (entry.isDirectory()) visit(absolute);
-      else if (entry.isFile()) output.push(absolute);
+      else if (entry.isFile() && !entry.name.startsWith(".")) output.push(absolute);
     }
   };
   visit(root);
@@ -99,13 +68,9 @@ function collectRuntimeFiles() {
   assertRegularNonEmptyFile(qdrantConfig, "Qdrant config");
   assertRegularNonEmptyFile(surrealZip, "SurrealDB runtime archive");
 
-  const requiredSourceCopies = sourceCopies.map((item) => item.destination);
-  for (const filePath of requiredSourceCopies) assertRegularNonEmptyFile(filePath, "staged sidecar");
-
   const files = new Set([
     coreExe,
     ...nodeCandidates,
-    ...requiredSourceCopies,
     qdrantZip,
     qdrantConfig,
     surrealZip,
@@ -122,15 +87,12 @@ function collectRuntimeFiles() {
 }
 
 export async function prepareReleaseRuntimeAssets() {
-  copyFrozenSidecars();
   const sourceGateSha256 = await computeFreezeSourceGateHash(repositoryRoot);
   const files = collectRuntimeFiles();
-  const sourceCopyDestinations = new Set(sourceCopies.map((item) => item.destination));
   const entries = files.map((absolute) => {
     const stats = statSync(absolute);
     let provenance = "external-runtime";
     if (absolute === resolve(coreRoot, "AmitiaCore.exe")) provenance = "built-core";
-    if (sourceCopyDestinations.has(absolute)) provenance = "frozen-source-copy";
     if (
       absolute.startsWith(resolve(resourcesRoot, "bridge") + sep) ||
       absolute.startsWith(resolve(resourcesRoot, "migrations") + sep) ||

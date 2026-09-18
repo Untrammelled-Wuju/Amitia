@@ -19,23 +19,40 @@ SPDX-License-Identifier: AGPL-3.0-only
 
     <div class="header-actions">
       <slot name="extension-actions" />
-      <button
-        class="header-icon-btn"
-        :class="{ active: callActive }"
-        type="button"
-        :aria-label="callActive ? '结束语音通话' : '开始语音通话'"
-        :title="callActive ? '结束语音通话' : '开始语音通话'"
-        @click="$emit('toggleCall')"
-      >
-        <el-icon><Phone /></el-icon>
-      </button>
+      <el-dropdown trigger="click" @command="handleCallCommand">
+        <button
+          class="header-icon-btn"
+          :class="{ active: callActive }"
+          type="button"
+          :aria-label="callActive ? '通话中' : '发起通话'"
+          :title="callActive ? '通话中' : '发起通话'"
+        >
+          <el-icon><Phone /></el-icon>
+        </button>
+        <template #dropdown>
+          <el-dropdown-menu>
+            <el-dropdown-item command="voice">
+              <el-icon><Microphone /></el-icon> 语音通话
+            </el-dropdown-item>
+            <el-dropdown-item command="video">
+              <el-icon><VideoCamera /></el-icon> 视频通话
+            </el-dropdown-item>
+            <el-dropdown-item command="screen">
+              <el-icon><Monitor /></el-icon> 屏幕通话
+            </el-dropdown-item>
+            <el-dropdown-item v-if="callActive" command="end" divided>
+              <el-icon><CircleClose /></el-icon> 结束通话
+            </el-dropdown-item>
+          </el-dropdown-menu>
+        </template>
+      </el-dropdown>
       <button class="header-icon-btn" :class="{ active: showProfiles }" type="button" title="用户画像" aria-label="用户画像" @click="$emit('toggleProfiles')">
         <el-icon><User /></el-icon>
       </button>
       <button class="header-icon-btn" :class="{ active: showMemInject }" type="button" title="记忆注入" aria-label="记忆注入" @click="$emit('toggleMemInject')">
         <el-icon><Connection /></el-icon>
       </button>
-      <el-dropdown trigger="click">
+      <el-dropdown trigger="click" @command="handleMoreCommand">
         <button class="header-icon-btn" type="button" aria-label="更多" title="更多">
           <el-icon><MoreFilled /></el-icon>
         </button>
@@ -49,6 +66,9 @@ SPDX-License-Identifier: AGPL-3.0-only
             </el-dropdown-item>
             <el-dropdown-item v-if="convId" divided @click="$emit('viewMemories')">
               <el-icon><Collection /></el-icon> 查看相关记忆
+            </el-dropdown-item>
+            <el-dropdown-item command="summary" :disabled="!hasSummary">
+              <el-icon><Document /></el-icon> 会话摘要
             </el-dropdown-item>
             <el-dropdown-item @click="$emit('toggleCharPicker')">
               <el-icon><Switch /></el-icon> 切换角色
@@ -71,6 +91,11 @@ import {
   Connection,
   Phone,
   Refresh,
+  Microphone,
+  VideoCamera,
+  Monitor,
+  CircleClose,
+  Document,
 } from "@element-plus/icons-vue";
 
 defineProps<{
@@ -84,9 +109,10 @@ defineProps<{
   showProfiles: boolean;
   showMemInject: boolean;
   callActive: boolean;
+  hasSummary?: boolean;
 }>();
 
-defineEmits<{
+const emit = defineEmits<{
   toggleDrawer: [];
   regenerate: [];
   clear: [];
@@ -95,7 +121,25 @@ defineEmits<{
   toggleProfiles: [];
   toggleMemInject: [];
   toggleCall: [];
+  startCall: [mode: "voice" | "video" | "screen"];
+  viewSummary: [];
 }>();
+
+function handleCallCommand(command: string | number | object) {
+  if (command === "end") {
+    emit("toggleCall");
+    return;
+  }
+  if (command === "voice" || command === "video" || command === "screen") {
+    emit("startCall", command);
+  }
+}
+
+function handleMoreCommand(command: string | number | object) {
+  if (command === "summary") {
+    emit("viewSummary");
+  }
+}
 </script>
 
 <style scoped>

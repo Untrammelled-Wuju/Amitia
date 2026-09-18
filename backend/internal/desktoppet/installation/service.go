@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/u-ai/backend/internal/character"
 	"github.com/u-ai/backend/internal/desktoppet/processing"
 	"github.com/u-ai/backend/log"
 	"gorm.io/gorm"
@@ -31,26 +30,26 @@ const (
 )
 
 type RuntimeNotifier interface {
-	NotifyInstallationEnabled(userId, installationId string, settings *RuntimeSettings) error
-	NotifyInstallationDisabled(userId, installationId string) error
-	NotifyActionPlayed(userId, installationId, actionKey string) error
+	NotifyInstallationEnabled(spaceId, installationId string, settings *RuntimeSettings) error
+	NotifyInstallationDisabled(spaceId, installationId string) error
+	NotifyActionPlayed(spaceId, installationId, actionKey string) error
 	NotifyRecenter(installationId string) error
 	NotifyDefaultActionChanged(installationId, actionKey string) error
 	NotifyRuntimeSettingsUpdated(installationId string, settings *RuntimeSettings) error
 }
 
 type Service interface {
-	InstallPackage(packageId, userId, characterId string) (*Installation, error)
-	Uninstall(userId, installationId string) error
-	EnableInstallation(userId, installationId string) error
-	DisableInstallation(userId, installationId string) error
-	SwitchInstallation(userId, installationId string) error
+	InstallPackage(packageId, spaceId string) (*Installation, error)
+	Uninstall(spaceId, installationId string) error
+	EnableInstallation(spaceId, installationId string) error
+	DisableInstallation(spaceId, installationId string) error
+	SwitchInstallation(spaceId, installationId string) error
 	UpdateDefaultAction(installationId, actionKey string) error
-	UpdateRuntimeSettings(userId, installationId string, req *UpdateRuntimeSettingsRequest) (*RuntimeSettings, error)
-	Recenter(userId, installationId string) error
-	PlayAction(userId, installationId, actionKey string) error
-	ListInstallations(userId string) ([]*Installation, error)
-	CheckInstallationOwnership(installationID, userID string) error
+	UpdateRuntimeSettings(spaceId, installationId string, req *UpdateRuntimeSettingsRequest) (*RuntimeSettings, error)
+	Recenter(spaceId, installationId string) error
+	PlayAction(spaceId, installationId, actionKey string) error
+	ListInstallations(spaceId string) ([]*Installation, error)
+	CheckInstallationOwnership(installationID, spaceID string) error
 	GetInstallation(installationId string) (*Installation, error)
 	GetRuntimeSettings(installationId string) (*RuntimeSettings, error)
 	GetCoordinator() V2Coordinator
@@ -72,7 +71,6 @@ type service struct {
 	installer     Installer
 	uninstaller   Uninstaller
 	packageRepo   processing.Repository
-	charRepo      character.Repository
 	dataDir       string
 	notifier      RuntimeNotifier
 	v2Coordinator V2Coordinator
@@ -92,13 +90,12 @@ func WithV2Coordinator(coordinator V2Coordinator) ServiceOption {
 	}
 }
 
-func NewService(repo Repository, installer Installer, uninstaller Uninstaller, packageRepo processing.Repository, charRepo character.Repository, dataDir string, opts ...ServiceOption) Service {
+func NewService(repo Repository, installer Installer, uninstaller Uninstaller, packageRepo processing.Repository, dataDir string, opts ...ServiceOption) Service {
 	s := &service{
 		repo:        repo,
 		installer:   installer,
 		uninstaller: uninstaller,
 		packageRepo: packageRepo,
-		charRepo:    charRepo,
 		dataDir:     dataDir,
 	}
 	for _, opt := range opts {
@@ -121,15 +118,15 @@ func SetRuntimeNotifier(svc Service, notifier RuntimeNotifier) bool {
 	return true
 }
 
-func (s *service) InstallPackage(packageId, userId, characterId string) (*Installation, error) {
-	return s.installer.InstallPackage(packageId, userId, characterId)
+func (s *service) InstallPackage(packageId, spaceId string) (*Installation, error) {
+	return s.installer.InstallPackage(packageId, spaceId)
 }
 
-func (s *service) Uninstall(userId, installationId string) error {
-	return s.uninstaller.Uninstall(userId, installationId)
+func (s *service) Uninstall(spaceId, installationId string) error {
+	return s.uninstaller.Uninstall(spaceId, installationId)
 }
 
-func (s *service) CheckInstallationOwnership(installationID, userID string) error {
+func (s *service) CheckInstallationOwnership(installationID, spaceID string) error {
 	inst, err := s.repo.GetInstallation(installationID)
 	if err != nil {
 		if errors.Is(err, ErrInstallationNotFound) {
@@ -137,14 +134,14 @@ func (s *service) CheckInstallationOwnership(installationID, userID string) erro
 		}
 		return NewInstallationError(ErrCodeInstallationFailed, "查询安装记录失败", err)
 	}
-	if inst.UserID != userID {
+	if inst.SpaceID != spaceID {
 		return NewInstallationError(ErrCodeInstallationInvalid, "安装记录不属于当前用户", ErrInstallationInvalid)
 	}
 	return nil
 }
 
-func (s *service) EnableInstallation(userId, installationId string) error {
-	if userId == "" || installationId == "" {
+func (s *service) EnableInstallation(spaceId, installationId string) error {
+	if spaceId == "" || installationId == "" {
 		return NewInstallationError(ErrCodeInstallationInvalid, "用户 ID 或安装 ID 为空", ErrInstallationInvalid)
 	}
 	inst, err := s.repo.GetInstallation(installationId)
@@ -154,7 +151,7 @@ func (s *service) EnableInstallation(userId, installationId string) error {
 		}
 		return NewInstallationError(ErrCodeInstallationFailed, "查询安装记录失败", err)
 	}
-	if inst.UserID != userId {
+	if inst.SpaceID != spaceId {
 		return NewInstallationError(ErrCodeInstallationInvalid, "安装记录不属于当前用户", ErrInstallationInvalid)
 	}
 	if inst.Status == StatusEnabled {
@@ -162,7 +159,7 @@ func (s *service) EnableInstallation(userId, installationId string) error {
 		if err != nil {
 			return err
 		}
-		if err := s.notifyEnabled(userId, installationId, settings); err != nil {
+		if err := s.notifyEnabled(spaceId, installationId, settings); err != nil {
 			if isRuntimeOfflineError(err) {
 				log.Logger.Warnf("installation: NotifyInstallationEnabled 运行时离线 pending_sync installationId=%s", installationId)
 			} else {
@@ -178,7 +175,7 @@ func (s *service) EnableInstallation(userId, installationId string) error {
 	if err := s.validateEnablePrerequisites(inst); err != nil {
 		return err
 	}
-	if err := s.repo.SetActiveInstallation(userId, installationId); err != nil {
+	if err := s.repo.SetActiveInstallation(spaceId, installationId); err != nil {
 		return NewInstallationError(ErrCodeInstallationFailed, "设置活跃安装失败", err)
 	}
 	if err := s.repo.UpdateInstallationStatus(installationId, StatusEnabled); err != nil {
@@ -188,7 +185,7 @@ func (s *service) EnableInstallation(userId, installationId string) error {
 	if err != nil {
 		return err
 	}
-	if err := s.notifyEnabled(userId, installationId, settings); err != nil {
+	if err := s.notifyEnabled(spaceId, installationId, settings); err != nil {
 		if isRuntimeOfflineError(err) {
 			log.Logger.Warnf("installation: NotifyInstallationEnabled 运行时离线 pending_sync installationId=%s", installationId)
 		} else {
@@ -243,12 +240,6 @@ func (s *service) validateEnablePrerequisites(inst *Installation) error {
 			fmt.Sprintf("包哈希不匹配: 期望 %s, 实际 %s", inst.PackageHash, actualHash),
 			ErrPackageHashMismatch)
 	}
-	if _, err := s.charRepo.FindByID(inst.CharacterID); err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return NewInstallationError(ErrCodeCharacterNotFound, "角色不存在", ErrCharacterNotFound)
-		}
-		return NewInstallationError(ErrCodeCharacterNotFound, "校验角色失败", err)
-	}
 	return nil
 }
 
@@ -293,8 +284,8 @@ func (s *service) ensureRuntimeSettings(installationId string) (*RuntimeSettings
 	return settings, nil
 }
 
-func (s *service) DisableInstallation(userId, installationId string) error {
-	if userId == "" || installationId == "" {
+func (s *service) DisableInstallation(spaceId, installationId string) error {
+	if spaceId == "" || installationId == "" {
 		return NewInstallationError(ErrCodeInstallationInvalid, "用户 ID 或安装 ID 为空", ErrInstallationInvalid)
 	}
 	inst, err := s.repo.GetInstallation(installationId)
@@ -304,7 +295,7 @@ func (s *service) DisableInstallation(userId, installationId string) error {
 		}
 		return NewInstallationError(ErrCodeInstallationFailed, "查询安装记录失败", err)
 	}
-	if inst.UserID != userId {
+	if inst.SpaceID != spaceId {
 		return NewInstallationError(ErrCodeInstallationInvalid, "安装记录不属于当前用户", ErrInstallationInvalid)
 	}
 	if inst.Status == StatusUninstalled || inst.Status == StatusUninstalling {
@@ -312,11 +303,11 @@ func (s *service) DisableInstallation(userId, installationId string) error {
 	}
 	if inst.Status == StatusDisabled {
 		if inst.IsActivated() {
-			if err := s.repo.SetActiveInstallation(userId, ""); err != nil {
+			if err := s.repo.SetActiveInstallation(spaceId, ""); err != nil {
 				log.Logger.Errorf("installation: 取消活跃标记失败 installationId=%s err=%v", installationId, err)
 			}
 		}
-		if err := s.notifyDisabled(userId, installationId); err != nil {
+		if err := s.notifyDisabled(spaceId, installationId); err != nil {
 			if isRuntimeOfflineError(err) {
 				log.Logger.Warnf("installation: NotifyInstallationDisabled 运行时离线 pending_sync installationId=%s", installationId)
 			} else {
@@ -328,10 +319,10 @@ func (s *service) DisableInstallation(userId, installationId string) error {
 	if err := s.repo.UpdateInstallationStatus(installationId, StatusDisabled); err != nil {
 		return NewInstallationError(ErrCodeInstallationFailed, "更新安装状态失败", err)
 	}
-	if err := s.repo.SetActiveInstallation(userId, ""); err != nil {
+	if err := s.repo.SetActiveInstallation(spaceId, ""); err != nil {
 		log.Logger.Errorf("installation: 取消活跃标记失败 installationId=%s err=%v", installationId, err)
 	}
-	if err := s.notifyDisabled(userId, installationId); err != nil {
+	if err := s.notifyDisabled(spaceId, installationId); err != nil {
 		if isRuntimeOfflineError(err) {
 			log.Logger.Warnf("installation: NotifyInstallationDisabled 运行时离线 pending_sync installationId=%s", installationId)
 		} else {
@@ -341,8 +332,8 @@ func (s *service) DisableInstallation(userId, installationId string) error {
 	return nil
 }
 
-func (s *service) SwitchInstallation(userId, installationId string) error {
-	if userId == "" || installationId == "" {
+func (s *service) SwitchInstallation(spaceId, installationId string) error {
+	if spaceId == "" || installationId == "" {
 		return NewInstallationError(ErrCodeInstallationInvalid, "用户 ID 或安装 ID 为空", ErrInstallationInvalid)
 	}
 	target, err := s.repo.GetInstallation(installationId)
@@ -352,26 +343,26 @@ func (s *service) SwitchInstallation(userId, installationId string) error {
 		}
 		return NewInstallationError(ErrCodeInstallationFailed, "查询安装记录失败", err)
 	}
-	if target.UserID != userId {
+	if target.SpaceID != spaceId {
 		return NewInstallationError(ErrCodeInstallationInvalid, "安装记录不属于当前用户", ErrInstallationInvalid)
 	}
 	if target.Status == StatusUninstalled || target.Status == StatusUninstalling {
 		return NewInstallationError(ErrCodeInstallationInvalid, "目标安装已卸载", ErrInstallationInvalid)
 	}
-	current, err := s.repo.GetActiveInstallation(userId)
+	current, err := s.repo.GetActiveInstallation(spaceId)
 	if err == nil && current.ID == installationId {
 		if current.Status == StatusEnabled {
 			return nil
 		}
 	}
 	if err == nil && current.ID != installationId {
-		if derr := s.DisableInstallation(userId, current.ID); derr != nil {
+		if derr := s.DisableInstallation(spaceId, current.ID); derr != nil {
 			log.Logger.Errorf("installation: 切换时停用旧安装失败 oldId=%s err=%v", current.ID, derr)
 		}
 	} else if err != nil && !errors.Is(err, ErrInstallationNotFound) {
 		return NewInstallationError(ErrCodeInstallationFailed, "查询当前活跃安装失败", err)
 	}
-	return s.EnableInstallation(userId, installationId)
+	return s.EnableInstallation(spaceId, installationId)
 }
 
 func (s *service) UpdateDefaultAction(installationId, actionKey string) error {
@@ -423,8 +414,8 @@ func (s *service) UpdateDefaultAction(installationId, actionKey string) error {
 	return nil
 }
 
-func (s *service) UpdateRuntimeSettings(userId, installationId string, req *UpdateRuntimeSettingsRequest) (*RuntimeSettings, error) {
-	if userId == "" || installationId == "" {
+func (s *service) UpdateRuntimeSettings(spaceId, installationId string, req *UpdateRuntimeSettingsRequest) (*RuntimeSettings, error) {
+	if spaceId == "" || installationId == "" {
 		return nil, NewInstallationError(ErrCodeInstallationInvalid, "用户 ID 或安装 ID 为空", ErrInstallationInvalid)
 	}
 	if req == nil {
@@ -443,7 +434,7 @@ func (s *service) UpdateRuntimeSettings(userId, installationId string, req *Upda
 		}
 		return nil, NewInstallationError(ErrCodeInstallationFailed, "查询安装记录失败", err)
 	}
-	if inst.UserID != userId {
+	if inst.SpaceID != spaceId {
 		return nil, NewInstallationError(ErrCodeInstallationInvalid, "安装记录不属于当前用户", ErrInstallationInvalid)
 	}
 	existing, err := s.repo.GetRuntimeSettings(installationId)
@@ -493,8 +484,8 @@ func (s *service) UpdateRuntimeSettings(userId, installationId string, req *Upda
 	return updated, nil
 }
 
-func (s *service) Recenter(userId, installationId string) error {
-	if userId == "" || installationId == "" {
+func (s *service) Recenter(spaceId, installationId string) error {
+	if spaceId == "" || installationId == "" {
 		return NewInstallationError(ErrCodeInstallationInvalid, "用户 ID 或安装 ID 为空", ErrInstallationInvalid)
 	}
 	inst, err := s.repo.GetInstallation(installationId)
@@ -504,7 +495,7 @@ func (s *service) Recenter(userId, installationId string) error {
 		}
 		return NewInstallationError(ErrCodeInstallationFailed, "查询安装记录失败", err)
 	}
-	if inst.UserID != userId {
+	if inst.SpaceID != spaceId {
 		return NewInstallationError(ErrCodeInstallationInvalid, "安装记录不属于当前用户", ErrInstallationInvalid)
 	}
 	if inst.Status != StatusEnabled {
@@ -536,8 +527,8 @@ func (s *service) Recenter(userId, installationId string) error {
 	return nil
 }
 
-func (s *service) PlayAction(userId, installationId, actionKey string) error {
-	if userId == "" || installationId == "" || actionKey == "" {
+func (s *service) PlayAction(spaceId, installationId, actionKey string) error {
+	if spaceId == "" || installationId == "" || actionKey == "" {
 		return NewInstallationError(ErrCodeInstallationInvalid, "用户 ID、安装 ID 或动作 Key 为空", ErrInstallationInvalid)
 	}
 	inst, err := s.repo.GetInstallation(installationId)
@@ -547,7 +538,7 @@ func (s *service) PlayAction(userId, installationId, actionKey string) error {
 		}
 		return NewInstallationError(ErrCodeInstallationFailed, "查询安装记录失败", err)
 	}
-	if inst.UserID != userId {
+	if inst.SpaceID != spaceId {
 		return NewInstallationError(ErrCodeInstallationInvalid, "安装记录不属于当前用户", ErrInstallationInvalid)
 	}
 	if inst.Status != StatusEnabled {
@@ -561,7 +552,7 @@ func (s *service) PlayAction(userId, installationId, actionKey string) error {
 		return NewInstallationError(ErrCodeActionNotFound,
 			fmt.Sprintf("动作 %s 不在 manifest 中", actionKey), ErrActionNotFound)
 	}
-	if err := s.notifyActionPlayed(userId, installationId, actionKey); err != nil {
+	if err := s.notifyActionPlayed(spaceId, installationId, actionKey); err != nil {
 		if isRuntimeOfflineError(err) {
 			return NewInstallationError(ErrCodeRuntimeDeliveryFailed, "运行时离线，播放动作命令未送达", err)
 		}
@@ -570,8 +561,8 @@ func (s *service) PlayAction(userId, installationId, actionKey string) error {
 	return nil
 }
 
-func (s *service) ListInstallations(userId string) ([]*Installation, error) {
-	return s.repo.ListInstallationsByUser(userId)
+func (s *service) ListInstallations(spaceId string) ([]*Installation, error) {
+	return s.repo.ListInstallationsBySpace(spaceId)
 }
 
 func (s *service) GetInstallation(installationId string) (*Installation, error) {
@@ -672,25 +663,25 @@ func (s *service) computePackageHash(installDir string) (string, error) {
 	return hex.EncodeToString(hasher.Sum(nil)), nil
 }
 
-func (s *service) notifyEnabled(userId, installationId string, settings *RuntimeSettings) error {
+func (s *service) notifyEnabled(spaceId, installationId string, settings *RuntimeSettings) error {
 	if s.notifier == nil {
 		return nil
 	}
-	return s.notifier.NotifyInstallationEnabled(userId, installationId, settings)
+	return s.notifier.NotifyInstallationEnabled(spaceId, installationId, settings)
 }
 
-func (s *service) notifyDisabled(userId, installationId string) error {
+func (s *service) notifyDisabled(spaceId, installationId string) error {
 	if s.notifier == nil {
 		return nil
 	}
-	return s.notifier.NotifyInstallationDisabled(userId, installationId)
+	return s.notifier.NotifyInstallationDisabled(spaceId, installationId)
 }
 
-func (s *service) notifyActionPlayed(userId, installationId, actionKey string) error {
+func (s *service) notifyActionPlayed(spaceId, installationId, actionKey string) error {
 	if s.notifier == nil {
 		return nil
 	}
-	return s.notifier.NotifyActionPlayed(userId, installationId, actionKey)
+	return s.notifier.NotifyActionPlayed(spaceId, installationId, actionKey)
 }
 
 func (s *service) notifyRecenter(installationId string) error {

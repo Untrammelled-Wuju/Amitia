@@ -15,8 +15,8 @@ import (
 const RunSkillScriptToolName = "run_skill_script"
 
 type RunSkillScriptHandler interface {
-	HandleRunSkillScript(ctx context.Context, input RunSkillScriptInput, scope LegacyScope) (RunSkillScriptOutput, error)
-	HasScriptCapableSkills(ctx context.Context, scope LegacyScope) (bool, []string, error)
+	HandleRunSkillScript(ctx context.Context, input RunSkillScriptInput, scope InvocationScope) (RunSkillScriptOutput, error)
+	HasScriptCapableSkills(ctx context.Context, scope InvocationScope) (bool, []string, error)
 }
 
 type RunSkillScriptInput struct {
@@ -74,46 +74,46 @@ func buildRunSkillScriptTool(skillNames []string) tool.Tool {
 	}
 }
 
-func (f *ToolFacade) handleRunSkillScript(ctx context.Context, input json.RawMessage, scope LegacyScope) (LegacyToolResult, error) {
+func (f *ToolFacade) handleRunSkillScript(ctx context.Context, input json.RawMessage, scope InvocationScope) (ToolDispatchResult, error) {
 	var req RunSkillScriptInput
 	if err := json.Unmarshal(input, &req); err != nil {
-		return LegacyToolResult{
+		return ToolDispatchResult{
 			Status:      "FAILED",
 			VisibleText: fmt.Sprintf("invalid run_skill_script input: %v", err),
-			Error:       &LegacyToolError{Code: "SKILL_SCRIPT_INVALID_INPUT", Message: err.Error()},
+			Error:       &ToolDispatchError{Code: "SKILL_SCRIPT_INVALID_INPUT", Message: err.Error()},
 		}, err
 	}
 
 	if strings.TrimSpace(req.Skill) == "" {
-		return LegacyToolResult{
+		return ToolDispatchResult{
 			Status:      "FAILED",
 			VisibleText: "skill name is required",
-			Error:       &LegacyToolError{Code: "SKILL_SCRIPT_INVALID_INPUT", Message: "skill name is required"},
+			Error:       &ToolDispatchError{Code: "SKILL_SCRIPT_INVALID_INPUT", Message: "skill name is required"},
 		}, fmt.Errorf("skill name is required")
 	}
 
 	if strings.TrimSpace(req.Script) == "" {
-		return LegacyToolResult{
+		return ToolDispatchResult{
 			Status:      "FAILED",
 			VisibleText: "script path is required",
-			Error:       &LegacyToolError{Code: "SKILL_SCRIPT_INVALID_INPUT", Message: "script path is required"},
+			Error:       &ToolDispatchError{Code: "SKILL_SCRIPT_INVALID_INPUT", Message: "script path is required"},
 		}, fmt.Errorf("script path is required")
 	}
 
 	if f.runSkillScriptHandler == nil {
-		return LegacyToolResult{
+		return ToolDispatchResult{
 			Status:      "FAILED",
 			VisibleText: "skill script execution not available",
-			Error:       &LegacyToolError{Code: "SKILL_SCRIPT_UNAVAILABLE", Message: "handler not configured"},
+			Error:       &ToolDispatchError{Code: "SKILL_SCRIPT_UNAVAILABLE", Message: "handler not configured"},
 		}, fmt.Errorf("run_skill_script handler not configured")
 	}
 
 	output, err := f.runSkillScriptHandler.HandleRunSkillScript(ctx, req, scope)
 	if err != nil {
-		return LegacyToolResult{
+		return ToolDispatchResult{
 			Status:      "FAILED",
 			VisibleText: fmt.Sprintf("skill script execution failed: %v", err),
-			Error:       &LegacyToolError{Code: "SKILL_SCRIPT_EXECUTION_FAILED", Message: err.Error()},
+			Error:       &ToolDispatchError{Code: "SKILL_SCRIPT_EXECUTION_FAILED", Message: err.Error()},
 		}, err
 	}
 
@@ -124,7 +124,7 @@ func (f *ToolFacade) handleRunSkillScript(ctx context.Context, input json.RawMes
 		visibleText = fmt.Sprintf("Script failed: %s/%s - %s", req.Skill, req.Script, output.Error)
 	}
 
-	return LegacyToolResult{
+	return ToolDispatchResult{
 		RunID:       output.ExecutionID,
 		Status:      output.Status,
 		Output:      resultJSON,
@@ -132,7 +132,7 @@ func (f *ToolFacade) handleRunSkillScript(ctx context.Context, input json.RawMes
 	}, nil
 }
 
-func (f *ToolFacade) resolveScriptCapableSkillNames(ctx context.Context, scope LegacyScope) ([]string, error) {
+func (f *ToolFacade) resolveScriptCapableSkillNames(ctx context.Context, scope InvocationScope) ([]string, error) {
 	if f.runSkillScriptHandler == nil {
 		return nil, nil
 	}

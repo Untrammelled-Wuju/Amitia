@@ -12,7 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/extension/kernel/dev_mode"
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
-	"github.com/u-ai/backend/internal/extension/kernel/manifest_v2"
+	"github.com/u-ai/backend/internal/extension/kernel/manifest_v1"
 	"github.com/u-ai/backend/internal/extension/kernel/runtime_supervisor"
 	"github.com/u-ai/backend/internal/extension/kernel/update"
 )
@@ -66,7 +66,7 @@ func (r *ProductionCandidateRunner) StartCandidate(ctx context.Context, id dev_m
 		}
 	}
 
-	var manifest manifest_v2.Manifest
+	var manifest manifest_v1.Manifest
 	if err := json.Unmarshal(manifestData, &manifest); err != nil {
 		return "", fmt.Errorf("candidate_runner: parse manifest: %w", err)
 	}
@@ -407,7 +407,7 @@ func (r *ProductionCandidateRunner) rollbackCandidate(ctx context.Context, extID
 	_ = r.generationMgr.RemoveGeneration(ctx, string(extID), generationID)
 }
 
-func (r *ProductionCandidateRunner) buildInstanceSpec(extID domain.ExtensionID, modID domain.ModuleID, mod manifest_v2.ModuleMeta, genNum int) runtime_supervisor.InstanceSpec {
+func (r *ProductionCandidateRunner) buildInstanceSpec(extID domain.ExtensionID, modID domain.ModuleID, mod manifest_v1.ModuleMeta, genNum int) runtime_supervisor.InstanceSpec {
 	spec := runtime_supervisor.InstanceSpec{
 		DefinitionID:  runtime_supervisor.BuildRuntimeDefinitionID(string(extID), string(modID), domain.RuntimeType(mod.Runtime.Type)),
 		ExtensionID:   extID,

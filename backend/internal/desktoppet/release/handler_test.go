@@ -18,47 +18,44 @@ import (
 
 type stubOwnershipGuard struct{}
 
-func (s *stubOwnershipGuard) RequireCharacter(ctx context.Context, actor *desktoppetAuth.ActorContext, characterID string) (*security.CharacterScope, error) {
-	return &security.CharacterScope{UserID: string(actor.UserID), CharacterID: characterID}, nil
-}
 func (s *stubOwnershipGuard) RequireGenerationTask(ctx context.Context, actor *desktoppetAuth.ActorContext, taskID string) (*security.GenerationTaskScope, error) {
-	return &security.GenerationTaskScope{UserID: string(actor.UserID), TaskID: taskID}, nil
+	return &security.GenerationTaskScope{SpaceID: string(actor.SpaceID), TaskID: taskID}, nil
 }
 func (s *stubOwnershipGuard) RequireProcessingTask(ctx context.Context, actor *desktoppetAuth.ActorContext, taskID string) (*security.ProcessingTaskScope, error) {
-	return &security.ProcessingTaskScope{UserID: string(actor.UserID), TaskID: taskID}, nil
+	return &security.ProcessingTaskScope{SpaceID: string(actor.SpaceID), TaskID: taskID}, nil
 }
 func (s *stubOwnershipGuard) RequireActionRevision(ctx context.Context, actor *desktoppetAuth.ActorContext, revisionID string) (*security.ActionRevisionScope, error) {
-	return &security.ActionRevisionScope{UserID: string(actor.UserID), RevisionID: revisionID}, nil
+	return &security.ActionRevisionScope{SpaceID: string(actor.SpaceID), RevisionID: revisionID}, nil
 }
 func (s *stubOwnershipGuard) RequireActionStream(ctx context.Context, actor *desktoppetAuth.ActorContext, streamID string) (*security.ActionStreamScope, error) {
-	return &security.ActionStreamScope{UserID: string(actor.UserID)}, nil
+	return &security.ActionStreamScope{SpaceID: string(actor.SpaceID)}, nil
 }
 func (s *stubOwnershipGuard) RequireQualityEvaluation(ctx context.Context, actor *desktoppetAuth.ActorContext, evaluationID string) (*security.QualityScope, error) {
-	return &security.QualityScope{UserID: string(actor.UserID), EvaluationID: evaluationID}, nil
+	return &security.QualityScope{SpaceID: string(actor.SpaceID), EvaluationID: evaluationID}, nil
 }
 func (s *stubOwnershipGuard) RequireRelease(ctx context.Context, actor *desktoppetAuth.ActorContext, releaseID string) (*security.ReleaseScope, error) {
-	return &security.ReleaseScope{UserID: string(actor.UserID), ReleaseID: releaseID}, nil
+	return &security.ReleaseScope{SpaceID: string(actor.SpaceID), ReleaseID: releaseID}, nil
 }
 func (s *stubOwnershipGuard) RequireInstallation(ctx context.Context, actor *desktoppetAuth.ActorContext, deviceID, installationID string) (*security.InstallationScope, error) {
-	return &security.InstallationScope{UserID: string(actor.UserID), InstallationID: installationID}, nil
+	return &security.InstallationScope{SpaceID: string(actor.SpaceID), InstallationID: installationID}, nil
 }
 func (s *stubOwnershipGuard) RequireInstallationStrict(ctx context.Context, actor *desktoppetAuth.ActorContext, deviceID, installationID string) (*security.InstallationScope, error) {
-	return &security.InstallationScope{UserID: string(actor.UserID), InstallationID: installationID}, nil
+	return &security.InstallationScope{SpaceID: string(actor.SpaceID), InstallationID: installationID}, nil
 }
 func (s *stubOwnershipGuard) RequireEditSession(ctx context.Context, actor *desktoppetAuth.ActorContext, sessionID string) (*security.EditSessionScope, error) {
-	return &security.EditSessionScope{UserID: string(actor.UserID), SessionID: sessionID}, nil
+	return &security.EditSessionScope{SpaceID: string(actor.SpaceID), SessionID: sessionID}, nil
 }
 func (s *stubOwnershipGuard) RequireRegenerationJob(ctx context.Context, actor *desktoppetAuth.ActorContext, jobID string) (*security.RegenerationJobScope, error) {
-	return &security.RegenerationJobScope{UserID: string(actor.UserID), JobID: jobID}, nil
+	return &security.RegenerationJobScope{SpaceID: string(actor.SpaceID), JobID: jobID}, nil
 }
 func (s *stubOwnershipGuard) RequireCandidate(ctx context.Context, actor *desktoppetAuth.ActorContext, candidateID string) (*security.CandidateScope, error) {
-	return &security.CandidateScope{UserID: string(actor.UserID), CandidateID: candidateID}, nil
+	return &security.CandidateScope{SpaceID: string(actor.SpaceID), CandidateID: candidateID}, nil
 }
 func (s *stubOwnershipGuard) RequireRuntimeCommand(ctx context.Context, actor *desktoppetAuth.ActorContext, commandID string) (*security.RuntimeCommandScope, error) {
-	return &security.RuntimeCommandScope{UserID: string(actor.UserID), CommandID: commandID}, nil
+	return &security.RuntimeCommandScope{SpaceID: string(actor.SpaceID), CommandID: commandID}, nil
 }
 func (s *stubOwnershipGuard) RequireBehaviorBinding(ctx context.Context, actor *desktoppetAuth.ActorContext, bindingID string) (*security.BehaviorBindingScope, error) {
-	return &security.BehaviorBindingScope{UserID: string(actor.UserID), BindingID: bindingID}, nil
+	return &security.BehaviorBindingScope{SpaceID: string(actor.SpaceID), BindingID: bindingID}, nil
 }
 
 type stubReleaseService struct {
@@ -93,43 +90,43 @@ func (s *stubReleaseService) BuildRelease(ctx context.Context, req *BuildRelease
 	return s.buildReleaseResult, s.buildReleaseErr
 }
 
-func (s *stubReleaseService) GetBuildOperation(ctx context.Context, operationID, userID string) (*ReleaseBuildOperation, error) {
+func (s *stubReleaseService) GetBuildOperation(ctx context.Context, operationID, spaceID string) (*ReleaseBuildOperation, error) {
 	return s.getBuildOperationResult, s.getBuildOperationErr
 }
 
-func (s *stubReleaseService) CancelBuildOperation(ctx context.Context, operationID, userID string) error {
+func (s *stubReleaseService) CancelBuildOperation(ctx context.Context, operationID, spaceID string) error {
 	return s.cancelBuildOperationErr
 }
 
-func (s *stubReleaseService) GetRelease(ctx context.Context, releaseID, userID string) (*ReleaseData, error) {
+func (s *stubReleaseService) GetRelease(ctx context.Context, releaseID, spaceID string) (*ReleaseData, error) {
 	return s.getReleaseResult, s.getReleaseErr
 }
 
-func (s *stubReleaseService) ListReleases(ctx context.Context, userID string) ([]*ReleaseData, error) {
+func (s *stubReleaseService) ListReleases(ctx context.Context, spaceID string) ([]*ReleaseData, error) {
 	return s.listReleasesResult, s.listReleasesErr
 }
 
-func (s *stubReleaseService) ListReleasesForPet(ctx context.Context, userID, petID string) ([]*ReleaseData, error) {
+func (s *stubReleaseService) ListReleasesForPet(ctx context.Context, spaceID, petID string) ([]*ReleaseData, error) {
 	return s.listReleasesForPetResult, s.listReleasesForPetErr
 }
 
-func (s *stubReleaseService) GetReleaseFiles(ctx context.Context, releaseID, userID string) ([]ReleaseFileData, error) {
+func (s *stubReleaseService) GetReleaseFiles(ctx context.Context, releaseID, spaceID string) ([]ReleaseFileData, error) {
 	return s.getReleaseFilesResult, s.getReleaseFilesErr
 }
 
-func (s *stubReleaseService) ArchiveRelease(ctx context.Context, releaseID, userID string) error {
+func (s *stubReleaseService) ArchiveRelease(ctx context.Context, releaseID, spaceID string) error {
 	return s.archiveReleaseErr
 }
 
-func (s *stubReleaseService) RevokeRelease(ctx context.Context, releaseID, userID, reason string) error {
+func (s *stubReleaseService) RevokeRelease(ctx context.Context, releaseID, spaceID, reason string) error {
 	return s.revokeReleaseErr
 }
 
-func (s *stubReleaseService) GetPetIdentity(ctx context.Context, userID, petID string) (*PetIdentityData, error) {
+func (s *stubReleaseService) GetPetIdentity(ctx context.Context, spaceID, petID string) (*PetIdentityData, error) {
 	return s.getPetIdentityResult, s.getPetIdentityErr
 }
 
-func (s *stubReleaseService) GetReleaseArchivePath(ctx context.Context, releaseID, userID string) (string, *ReleaseData, error) {
+func (s *stubReleaseService) GetReleaseArchivePath(ctx context.Context, releaseID, spaceID string) (string, *ReleaseData, error) {
 	return "", s.getReleaseResult, s.getReleaseErr
 }
 
@@ -138,10 +135,9 @@ func newTestRouter(svc ReleaseService) *gin.Engine {
 	r := gin.New()
 	r.Use(func(c *gin.Context) {
 		c.Set("actorContext", &desktoppetAuth.ActorContext{
-			ActorType:   desktoppetAuth.ActorTypeUser,
-			UserID:      "test-user-1",
-			Roles:       []string{"user"},
-			Permissions: desktoppetAuth.DefaultUserPermissions(),
+			PrincipalType: desktoppetAuth.PrincipalLocalUI,
+			SpaceID:       "test-user-1",
+			Permissions:   desktoppetAuth.StandardPermissions(),
 		})
 		c.Next()
 	})

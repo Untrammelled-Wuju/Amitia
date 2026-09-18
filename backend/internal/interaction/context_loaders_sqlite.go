@@ -4,9 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/u-ai/backend/internal/character"
+	"github.com/u-ai/backend/internal/extensioncontext"
+	"github.com/u-ai/backend/internal/requestidentity"
 	"gorm.io/gorm"
 )
 
@@ -31,8 +34,6 @@ func (l *ChannelContextLoader) Load(ctx context.Context, scope InteractionScope,
 	case "web":
 		caps.SupportsImage = true
 		caps.SupportsVoice = true
-	case "wechat", "qq":
-		caps.SupportsImage = true
 	}
 	return FieldReady[any](caps, l.Name(), version), ctx.Err()
 }
@@ -116,7 +117,11 @@ func (l *ConversationContextLoader) Load(ctx context.Context, scope InteractionS
 		MessageCount int
 		UpdatedAt    string
 	}
-	err := l.db.WithContext(ctx).Table("conversations").Select("id, message_count, updated_at").Where("id = ?", scope.ConversationID).Take(&row).Error
+	query := l.db.WithContext(ctx).Table("conversations").Select("id, message_count, updated_at").Where("id = ?", scope.ConversationID)
+	if strings.TrimSpace(scope.SpaceID) != "" {
+		query = query.Where("space_id = ?", strings.TrimSpace(scope.SpaceID))
+	}
+	err := query.Take(&row).Error
 	if err != nil {
 		return FieldUnavailable[any](l.Name()), err
 	}
@@ -201,17 +206,14 @@ func (l *RelationshipContextLoader) Name() string           { return "relationsh
 func (l *RelationshipContextLoader) IsRequired() bool       { return false }
 func (l *RelationshipContextLoader) Timeout() time.Duration { return 800 * time.Millisecond }
 func (l *RelationshipContextLoader) CacheKey(scope InteractionScope, version string) string {
-	return version + ":relationship:" + scope.CharacterID + ":" + scope.UserID
+	return version + ":relationship:" + scope.CharacterID + ":" + scope.SpaceID
 }
 func (l *RelationshipContextLoader) Load(ctx context.Context, scope InteractionScope, version string) (SnapshotField[any], error) {
 	var row struct {
 		RelationData string
 	}
-	userID := scope.UserID
-	if userID == "" {
-		userID = "default"
-	}
-	err := l.db.WithContext(ctx).Table("relationship_states").Select("relation_data").Where("character_id = ? AND user_id = ?", scope.CharacterID, userID).Order("CASE WHEN channel = '*' AND relation_type = 'user_character' THEN 0 ELSE 1 END, updated_at DESC").Take(&row).Error
+	spaceID := requestidentity.NormalizeSpaceID(scope.SpaceID)
+	err := l.db.WithContext(ctx).Table("relationship_states").Select("relation_data").Where("character_id = ? AND space_id = ?", scope.CharacterID, spaceID).Order("CASE WHEN channel = '*' AND relation_type = 'user_character' THEN 0 ELSE 1 END, updated_at DESC").Take(&row).Error
 	if err != nil {
 		return FieldUnavailable[any](l.Name()), err
 	}
@@ -248,7 +250,7 @@ func (l *BeliefContextLoader) Load(ctx context.Context, scope InteractionScope, 
 		Value      string
 		Confidence float64
 	}
-	err := l.db.WithContext(ctx).Table("memories").Select("key, value, confidence").Where("character_id = ?", scope.CharacterID).Order("importance DESC, updated_at DESC").Limit(5).Scan(&rows).Error
+	err := l.db.WithContext(ctx).Table("memories").Select("key, value, confidence").Where("character_id = ? AND COALESCE(allow_context_use, 1) = 1", scope.CharacterID).Order("importance DESC, updated_at DESC").Limit(5).Scan(&rows).Error
 	if err != nil {
 		return FieldUnavailable[any](l.Name()), err
 	}
@@ -260,11 +262,11 @@ func (l *BeliefContextLoader) Load(ctx context.Context, scope InteractionScope, 
 }
 
 type LifeContextLoader struct {
-	db *gorm.DB
+	provider extensioncontext.Provider
 }
 
-func NewLifeContextLoader(db *gorm.DB) *LifeContextLoader {
-	return &LifeContextLoader{db: db}
+func NewLifeContextLoader(provider extensioncontext.Provider) *LifeContextLoader {
+	return &LifeContextLoader{provider: provider}
 }
 
 func (l *LifeContextLoader) Name() string           { return "life" }
@@ -274,50 +276,65 @@ func (l *LifeContextLoader) CacheKey(scope InteractionScope, version string) str
 	return version + ":life:" + scope.CharacterID
 }
 func (l *LifeContextLoader) Load(ctx context.Context, scope InteractionScope, version string) (SnapshotField[any], error) {
-	if l.db == nil {
-		return FieldUnavailable[any](l.Name()), errors.New("database unavailable")
+	if l.provider == nil {
+		return FieldUnavailable[any](l.Name()), nil
 	}
-	state := LifeState{
-		Mood:            "neutral",
-		Energy:          0.5,
-		Available:       true,
-		CurrentState:    "IDLE",
-		CurrentActivity: "空闲中",
-	}
-	if l.db.Migrator().HasTable("moods") {
-		var row struct {
-			Mood      string
-			MoodValue string
-		}
-		err := l.db.WithContext(ctx).Table("moods").Select("mood, mood_value").Where("character_id = ?", scope.CharacterID).Order("created_at DESC").Limit(1).Scan(&row).Error
-		if err != nil {
-			return FieldUnavailable[any](l.Name()), err
-		}
-		if row.Mood != "" {
-			state.Mood = row.Mood
-		}
-		if row.MoodValue != "" {
-			state.Mood = row.MoodValue
-		}
-	}
-	if l.db.Migrator().HasTable("psyche_states") {
-		var row struct {
-			Energy float64
-		}
-		err := l.db.WithContext(ctx).Table("psyche_states").Select("energy").Where("character_id = ?", scope.CharacterID).Order("updated_at DESC").Limit(1).Scan(&row).Error
-		if err != nil {
-			return FieldUnavailable[any](l.Name()), err
-		}
-		if row.Energy != 0 {
-			state.Energy = clamp01(row.Energy)
-		}
-	}
-	needs, err := loadNeedSummaries(ctx, l.db, scope.CharacterID)
+	raw, err := l.provider.Resolve(ctx, "chat.realtime.schedule", extensioncontext.Request{
+		SpaceID:        scope.SpaceID,
+		CharacterID:    scope.CharacterID,
+		ConversationID: scope.ConversationID,
+		At:             time.Now(),
+	})
 	if err != nil {
 		return FieldUnavailable[any](l.Name()), err
 	}
-	state.Needs = needs
-	return FieldReady[any](state, l.Name(), version), nil
+	snapshot, err := extensioncontext.Decode(raw)
+	if err != nil {
+		return FieldUnavailable[any](l.Name()), err
+	}
+	state := LifeState{}
+	found := false
+	for _, contribution := range snapshot.Contributions {
+		if contribution.Error != "" {
+			continue
+		}
+		var payload struct {
+			StateLife struct {
+				Mood            string  `json:"mood"`
+				Energy          float64 `json:"energy"`
+				Busy            bool    `json:"busy"`
+				Available       bool    `json:"available"`
+				CurrentState    string  `json:"currentState"`
+				CurrentActivity string  `json:"currentActivity"`
+				IdleDuration    float64 `json:"idleDuration"`
+			} `json:"stateLife"`
+		}
+		if err := json.Unmarshal(contribution.Data, &payload); err != nil {
+			continue
+		}
+		if payload.StateLife.CurrentState == "" && payload.StateLife.CurrentActivity == "" {
+			continue
+		}
+		energy := payload.StateLife.Energy
+		if energy > 1 {
+			energy /= 100
+		}
+		state = LifeState{
+			Mood:            payload.StateLife.Mood,
+			Energy:          clamp01(energy),
+			Busy:            payload.StateLife.Busy,
+			Available:       payload.StateLife.Available,
+			CurrentState:    payload.StateLife.CurrentState,
+			CurrentActivity: payload.StateLife.CurrentActivity,
+			IdleSeconds:     payload.StateLife.IdleDuration,
+		}
+		found = true
+		break
+	}
+	if !found {
+		return FieldUnavailable[any](l.Name()), nil
+	}
+	return FieldReady[any](state, "extension_context", version), nil
 }
 
 type NeedContextLoader struct {
@@ -357,7 +374,7 @@ func (l *UnresolvedThreadContextLoader) Name() string           { return "unreso
 func (l *UnresolvedThreadContextLoader) IsRequired() bool       { return false }
 func (l *UnresolvedThreadContextLoader) Timeout() time.Duration { return 800 * time.Millisecond }
 func (l *UnresolvedThreadContextLoader) CacheKey(scope InteractionScope, version string) string {
-	return version + ":unresolvedThreads:" + scope.CharacterID + ":" + scope.UserID
+	return version + ":unresolvedThreads:" + scope.CharacterID + ":" + scope.SpaceID
 }
 func (l *UnresolvedThreadContextLoader) Load(ctx context.Context, scope InteractionScope, version string) (SnapshotField[any], error) {
 	if l.db == nil {

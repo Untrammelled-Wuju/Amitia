@@ -11,7 +11,7 @@ import (
 	"gorm.io/gorm"
 )
 
-func TestBehaviorInboxDedupIsScopedByUserAndCharacter(t *testing.T) {
+func TestBehaviorInboxDedupIsScopedBySpaceAndCharacter(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	if err != nil {
 		t.Fatal(err)
@@ -34,7 +34,7 @@ func TestBehaviorInboxDedupIsScopedByUserAndCharacter(t *testing.T) {
 
 	repo := NewGormBehaviorStateRepository(db)
 	now := time.Date(2026, 8, 31, 12, 0, 0, 0, time.UTC)
-	makeEvent := func(eventID, userID, characterID string) behavior.BehaviorEventEnvelope {
+	makeEvent := func(eventID, spaceID, characterID string) behavior.BehaviorEventEnvelope {
 		return behavior.BehaviorEventEnvelope{
 			EventID:       eventID,
 			DedupKey:      "shared-business-id",
@@ -42,7 +42,7 @@ func TestBehaviorInboxDedupIsScopedByUserAndCharacter(t *testing.T) {
 			SchemaVersion: 1,
 			OccurredAt:    now,
 			ReceivedAt:    now,
-			UserID:        userID,
+			SpaceID:       spaceID,
 			CharacterID:   characterID,
 			Origin:        behavior.OriginChat,
 		}

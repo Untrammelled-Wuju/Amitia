@@ -6,8 +6,8 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/permission"
 	"github.com/u-ai/backend/internal/extension/kernel/task_runtime"
 	"github.com/u-ai/backend/internal/outbox"
-	"github.com/u-ai/backend/internal/runtimeprofile"
 	"github.com/u-ai/backend/internal/runtimeidentity"
+	"github.com/u-ai/backend/internal/runtimeprofile"
 )
 
 type DeviceMeshRuntime interface {

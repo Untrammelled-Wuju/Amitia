@@ -47,7 +47,7 @@ func (m *mockBridgeForExecutor) Execute(ctx context.Context, req androidnative.N
 	}
 	return androidnative.NativeBridgeResponse{
 		ProtocolVersion: req.ProtocolVersion,
-		RequestID:       req.RequestID,
+		RequestId:       req.RequestId,
 		Status:          "success",
 	}, nil
 }
@@ -198,7 +198,7 @@ func TestBridgeAccessibilityExecutor_PerformNodeAction_BridgeError(t *testing.T)
 		executeFunc: func(ctx context.Context, req androidnative.NativeBridgeRequest) (androidnative.NativeBridgeResponse, error) {
 			return androidnative.NativeBridgeResponse{
 				ProtocolVersion: req.ProtocolVersion,
-				RequestID:       req.RequestID,
+				RequestId:       req.RequestId,
 				Status:          "error",
 				Error: &androidnative.NativeBridgeError{
 					Code:    "ACTION_FAILED",
@@ -224,7 +224,7 @@ func TestBridgeAccessibilityExecutor_PerformNodeAction_UnsupportedMessage(t *tes
 		executeFunc: func(ctx context.Context, req androidnative.NativeBridgeRequest) (androidnative.NativeBridgeResponse, error) {
 			return androidnative.NativeBridgeResponse{
 				ProtocolVersion: req.ProtocolVersion,
-				RequestID:       req.RequestID,
+				RequestId:       req.RequestId,
 				Status:          "error",
 				Error: &androidnative.NativeBridgeError{
 					Code:    "UNSUPPORTED",
@@ -254,7 +254,7 @@ func TestBridgeAccessibilityExecutor_PerformNodeAction_StaleMessage(t *testing.T
 		executeFunc: func(ctx context.Context, req androidnative.NativeBridgeRequest) (androidnative.NativeBridgeResponse, error) {
 			return androidnative.NativeBridgeResponse{
 				ProtocolVersion: req.ProtocolVersion,
-				RequestID:       req.RequestID,
+				RequestId:       req.RequestId,
 				Status:          "error",
 				Error: &androidnative.NativeBridgeError{
 					Code:    "STALE",

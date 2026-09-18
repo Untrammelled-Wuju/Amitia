@@ -149,6 +149,48 @@ func (r *repository) GetRuntimeProfile(id string) (*RoleRuntimeProfile, error) {
 	}, nil
 }
 
+func (r *repository) GetRuntimeProfileForSpace(id, spaceID string, includeLegacyDefault bool) (*RoleRuntimeProfile, error) {
+	var c Character
+	base := r.db.Where("status = ? AND deleted_at IS NULL", "enabled")
+	if includeLegacyDefault {
+		base = base.Where("(space_id = ? OR space_id = '' OR space_id IS NULL OR space_id = 'default')", strings.TrimSpace(spaceID))
+	} else {
+		base = base.Where("space_id = ?", strings.TrimSpace(spaceID))
+	}
+	var err error
+	if strings.TrimSpace(id) != "" {
+		err = base.Where("id = ?", strings.TrimSpace(id)).First(&c).Error
+	} else {
+		err = base.Where("is_default = 1").Order("sort_order, created_at").Limit(1).First(&c).Error
+		if err != nil {
+			err = base.Order("sort_order, created_at").Limit(1).First(&c).Error
+		}
+	}
+	if err != nil {
+		return nil, err
+	}
+	return runtimeProfileFromCharacter(c), nil
+}
+
+func runtimeProfileFromCharacter(c Character) *RoleRuntimeProfile {
+	diagnostics := []string{}
+	personalityConfig := parseRuntimeJSON(c.ID, "personality_config", c.PersonalityConfig, &diagnostics)
+	chatStyleConfig := parseRuntimeJSON(c.ID, "chat_style_config", c.ChatStyleConfig, &diagnostics)
+	sceneRules := parseRuntimeJSON(c.ID, "scene_rules", c.SceneRules, &diagnostics)
+	for _, item := range diagnostics {
+		log.Printf("[RoleRuntimeProfile] %s", item)
+	}
+	return &RoleRuntimeProfile{
+		CharacterID: c.ID, Name: c.Name, Identity: c.Identity, Personality: c.Personality,
+		SpeakingStyle: c.SpeakingStyle, RelationshipStyle: c.RelationshipStyle, CharacterBase: c.CharacterBase,
+		BoundaryRules: c.BoundaryRules, PersonalitySliders: c.PersonalitySliders, BasePrompt: c.BasePrompt,
+		GeneratedPrompt: c.GeneratedPrompt, PersonalityConfig: personalityConfig, ChatStyleConfig: chatStyleConfig,
+		SceneRules: sceneRules, Gender: c.Gender, GenderLabel: c.GenderLabel, Pronoun: c.Pronoun,
+		SelfReference: c.SelfReference, UserAddressingStyle: c.UserAddressingStyle, GenderExpression: c.GenderExpression,
+		LifeIdentity: c.LifeIdentity, Diagnostics: diagnostics,
+	}
+}
+
 func parseRuntimeJSON(characterID, field, raw string, diagnostics *[]string) map[string]interface{} {
 	value := strings.TrimSpace(raw)
 	if value == "" {

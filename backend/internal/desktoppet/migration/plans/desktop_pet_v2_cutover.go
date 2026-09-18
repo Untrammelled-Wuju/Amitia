@@ -148,7 +148,7 @@ func NewDesktopPetV2CutoverPlan(deps Dependencies) migration.DomainMigrationOper
 				if err := deps.DB.Raw(`SELECT COUNT(*)
 FROM desktop_pet_installations i
 LEFT JOIN desktop_pet_runtime_desired_states d
-  ON d.user_id = i.user_id AND d.device_id = i.device_id AND d.installation_id = i.id
+  ON d.space_id = i.space_id AND d.device_id = i.device_id AND d.installation_id = i.id
 WHERE i.status IN ('active','installed') AND d.id IS NULL`).Scan(&broken).Error; err != nil {
 					return false, "检查 V2 写路径一致性失败: " + err.Error()
 				}
@@ -186,13 +186,13 @@ WHERE i.status IN ('active','installed') AND d.id IS NULL`).Scan(&broken).Error;
 				Check: func(ctx context.Context) (bool, string, error) {
 					type sessionRow struct {
 						ID        string
-						UserID    string
+						SpaceID   string
 						DeviceID  string
 						RuntimeID string
 						Status    string
 					}
 					var authority []sessionRow
-					if err := deps.DB.WithContext(ctx).Raw(`SELECT runtime_session_id AS id, user_id, device_id, runtime_id, status
+					if err := deps.DB.WithContext(ctx).Raw(`SELECT runtime_session_id AS id, space_id, device_id, runtime_id, status
 FROM kernel_device_runtime_sessions
 WHERE status IN ('registering','syncing','ready','degraded')`).Scan(&authority).Error; err != nil {
 						return false, "", err
@@ -200,7 +200,7 @@ WHERE status IN ('registering','syncing','ready','degraded')`).Scan(&authority).
 					for _, row := range authority {
 						var projected int64
 						if err := deps.DB.WithContext(ctx).Raw(`SELECT COUNT(*) FROM desktop_pet_runtime_sessions
-WHERE id = ? AND user_id = ? AND device_id = ? AND runtime_id = ? AND status = ?`, row.ID, row.UserID, row.DeviceID, row.RuntimeID, row.Status).Scan(&projected).Error; err != nil {
+WHERE id = ? AND space_id = ? AND device_id = ? AND runtime_id = ? AND status = ?`, row.ID, row.SpaceID, row.DeviceID, row.RuntimeID, row.Status).Scan(&projected).Error; err != nil {
 							return false, "", err
 						}
 						if projected != 1 {
@@ -216,20 +216,20 @@ WHERE id = ? AND user_id = ? AND device_id = ? AND runtime_id = ? AND status = ?
 				Check: func(ctx context.Context) (bool, string, error) {
 					type installationRow struct {
 						ID               string
-						UserID           string
+						SpaceID          string
 						DeviceID         string
 						PetID            string
 						CurrentReleaseID string
 						Status           string
 					}
 					var installations []installationRow
-					if err := deps.DB.WithContext(ctx).Raw("SELECT id, user_id, device_id, pet_id, current_release_id, status FROM desktop_pet_installations WHERE status IN (?, ?)", "active", "installed").Scan(&installations).Error; err != nil {
+					if err := deps.DB.WithContext(ctx).Raw("SELECT id, space_id, device_id, pet_id, current_release_id, status FROM desktop_pet_installations WHERE status IN (?, ?)", "active", "installed").Scan(&installations).Error; err != nil {
 						return false, "", err
 					}
 					for _, inst := range installations {
 						var desiredCount int64
 						if err := deps.DB.WithContext(ctx).Raw(`SELECT COUNT(*) FROM desktop_pet_runtime_desired_states
-WHERE user_id = ? AND device_id = ? AND installation_id = ? AND pet_id = ? AND release_id = ?`, inst.UserID, inst.DeviceID, inst.ID, inst.PetID, inst.CurrentReleaseID).Scan(&desiredCount).Error; err != nil {
+WHERE space_id = ? AND device_id = ? AND installation_id = ? AND pet_id = ? AND release_id = ?`, inst.SpaceID, inst.DeviceID, inst.ID, inst.PetID, inst.CurrentReleaseID).Scan(&desiredCount).Error; err != nil {
 							return false, "", err
 						}
 						if desiredCount != 1 {
@@ -237,7 +237,7 @@ WHERE user_id = ? AND device_id = ? AND installation_id = ? AND pet_id = ? AND r
 						}
 						var bindingCount int64
 						if err := deps.DB.WithContext(ctx).Raw(`SELECT COUNT(*) FROM desktop_pet_device_active_installation_bindings
-WHERE user_id = ? AND device_id = ? AND installation_id = ? AND pet_id = ? AND release_id = ?`, inst.UserID, inst.DeviceID, inst.ID, inst.PetID, inst.CurrentReleaseID).Scan(&bindingCount).Error; err != nil {
+WHERE space_id = ? AND device_id = ? AND installation_id = ? AND pet_id = ? AND release_id = ?`, inst.SpaceID, inst.DeviceID, inst.ID, inst.PetID, inst.CurrentReleaseID).Scan(&bindingCount).Error; err != nil {
 							return false, "", err
 						}
 						if bindingCount != 1 {

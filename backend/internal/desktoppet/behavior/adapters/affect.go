@@ -23,9 +23,9 @@ func (a *AffectAdapter) OnAffectChanged(ctx context.Context, characterID string,
 	if a == nil || a.publisher == nil {
 		return
 	}
-	userID := ""
+	spaceID := ""
 	if a.ownerResolver != nil {
-		userID = a.ownerResolver.ResolveUserID(ctx, characterID)
+		spaceID = a.ownerResolver.ResolveSpaceID(ctx, characterID)
 	}
 	now := a.clock.Now()
 	occurredAt := new.UpdatedAt
@@ -41,7 +41,7 @@ func (a *AffectAdapter) OnAffectChanged(ctx context.Context, characterID string,
 	)
 
 	builder := events.NewEnvelope("character.affect.changed", behavior.OriginAffect).
-		UserID(userID).
+		SpaceID(spaceID).
 		CharacterID(characterID).
 		OccurredAt(occurredAt).
 		DedupKey(events.BuildDedupKey(characterID, "affect.changed", new.Version))

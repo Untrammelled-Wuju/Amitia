@@ -124,6 +124,8 @@ class SchemaUINode {
   final List<SchemaUIBinding> bindings;
   final List<SchemaUIActionBinding> actions;
   final List<UICondition> visibility;
+  final List<UICondition> disabledWhen;
+  final SchemaUIBinding? dataSource;
   final List<SchemaUINode> children;
 
   const SchemaUINode({
@@ -133,6 +135,8 @@ class SchemaUINode {
     this.bindings = const [],
     this.actions = const [],
     this.visibility = const [],
+    this.disabledWhen = const [],
+    this.dataSource,
     this.children = const [],
   });
 
@@ -143,7 +147,11 @@ class SchemaUINode {
       props: _parseProps(json['props']),
       bindings: _parseList(json['bindings'], SchemaUIBinding.fromJson),
       actions: _parseList(json['actions'], SchemaUIActionBinding.fromJson),
-      visibility: _parseList(json['visibility'], UICondition.fromJson),
+      visibility: _parseList(json['visibleWhen'] ?? json['visibility'], UICondition.fromJson),
+      disabledWhen: _parseList(json['disabledWhen'], UICondition.fromJson),
+      dataSource: json['dataSource'] is Map
+          ? SchemaUIBinding.fromJson(Map<String, dynamic>.from(json['dataSource'] as Map))
+          : null,
       children: _parseList(json['children'], SchemaUINode.fromJson),
     );
   }
@@ -184,6 +192,80 @@ class ThemeConfig {
       overrides: (json['overrides'] as Map<String, dynamic>?)?.map(
         (k, v) => MapEntry(k, v.toString()),
       ),
+    );
+  }
+}
+
+
+class LocaleConfig {
+  final String current;
+  final List<String> available;
+
+  const LocaleConfig({this.current = 'zh-CN', this.available = const []});
+
+  factory LocaleConfig.fromJson(Map<String, dynamic> json) {
+    return LocaleConfig(
+      current: json['current'] as String? ?? 'zh-CN',
+      available: ((json['available'] as List?) ?? const []).map((value) => value.toString()).toList(growable: false),
+    );
+  }
+}
+
+class AccessibilityConfig {
+  final bool enabled;
+  final bool highContrast;
+  final bool reducedMotion;
+  final bool screenReader;
+  final bool keyboardNav;
+
+  const AccessibilityConfig({
+    this.enabled = false,
+    this.highContrast = false,
+    this.reducedMotion = false,
+    this.screenReader = false,
+    this.keyboardNav = false,
+  });
+
+  factory AccessibilityConfig.fromJson(Map<String, dynamic> json) {
+    return AccessibilityConfig(
+      enabled: json['enabled'] == true,
+      highContrast: json['highContrast'] == true,
+      reducedMotion: json['reducedMotion'] == true,
+      screenReader: json['screenReader'] == true,
+      keyboardNav: json['keyboardNav'] == true,
+    );
+  }
+}
+
+
+class PerformanceBudget {
+  final int maxRenderTimeMs;
+  final int maxLayoutCount;
+  final int maxNodeCount;
+  final int maxDataFetchCount;
+  final int maxActionCount;
+
+  const PerformanceBudget({
+    this.maxRenderTimeMs = 0,
+    this.maxLayoutCount = 0,
+    this.maxNodeCount = 0,
+    this.maxDataFetchCount = 0,
+    this.maxActionCount = 0,
+  });
+
+  factory PerformanceBudget.fromJson(Map<String, dynamic> json) {
+    int readInt(String key) {
+      final value = json[key];
+      if (value is num) return value.toInt();
+      return int.tryParse(value?.toString() ?? '') ?? 0;
+    }
+
+    return PerformanceBudget(
+      maxRenderTimeMs: readInt('maxRenderTimeMs'),
+      maxLayoutCount: readInt('maxLayoutCount'),
+      maxNodeCount: readInt('maxNodeCount'),
+      maxDataFetchCount: readInt('maxDataFetchCount'),
+      maxActionCount: readInt('maxActionCount'),
     );
   }
 }
@@ -246,6 +328,9 @@ class SchemaUIDocument {
   final List<SchemaUIDataSource> dataSources;
   final List<SchemaUIDeclaredAction> actions;
   final ThemeConfig? theme;
+  final LocaleConfig? locale;
+  final AccessibilityConfig? accessibility;
+  final PerformanceBudget? performanceBudget;
 
   const SchemaUIDocument({
     this.schemaVersion = 'schema-ui/1',
@@ -256,18 +341,30 @@ class SchemaUIDocument {
     this.dataSources = const [],
     this.actions = const [],
     this.theme,
+    this.locale,
+    this.accessibility,
+    this.performanceBudget,
   });
 
   factory SchemaUIDocument.fromJson(Map<String, dynamic> json) {
+    final root = json['root'];
+    final children = root is Map
+        ? <SchemaUINode>[SchemaUINode.fromJson(Map<String, dynamic>.from(root))]
+        : SchemaUINode._parseList(json['children'], SchemaUINode.fromJson);
     return SchemaUIDocument(
-      schemaVersion: json['schemaVersion'] as String? ?? 'schema-ui/1',
+      schemaVersion: (json['schemaVersion'] ?? json['version'])?.toString() ?? 'schema-ui/1',
       type: json['type'] as String? ?? 'document',
       title: json['title'] as String?,
-      layout: json['layout'] as Map<String, dynamic>?,
-      children: SchemaUINode._parseList(json['children'], SchemaUINode.fromJson),
+      layout: json['layout'] is Map ? Map<String, dynamic>.from(json['layout'] as Map) : null,
+      children: children,
       dataSources: SchemaUINode._parseList(json['dataSources'], SchemaUIDataSource.fromJson),
       actions: SchemaUINode._parseList(json['actions'], SchemaUIDeclaredAction.fromJson),
-      theme: json['theme'] != null ? ThemeConfig.fromJson(json['theme'] as Map<String, dynamic>) : null,
+      theme: json['theme'] is Map ? ThemeConfig.fromJson(Map<String, dynamic>.from(json['theme'] as Map)) : null,
+      locale: json['locale'] is Map ? LocaleConfig.fromJson(Map<String, dynamic>.from(json['locale'] as Map)) : null,
+      accessibility: json['accessibility'] is Map ? AccessibilityConfig.fromJson(Map<String, dynamic>.from(json['accessibility'] as Map)) : null,
+      performanceBudget: json['performanceBudget'] is Map
+          ? PerformanceBudget.fromJson(Map<String, dynamic>.from(json['performanceBudget'] as Map))
+          : null,
     );
   }
 

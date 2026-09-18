@@ -36,6 +36,15 @@ func (e *IPCError) Unwrap() error {
 	return e.Cause
 }
 
+type PluginResponseError struct {
+	Code    domain.ErrorCode
+	Message string
+}
+
+func (e *PluginResponseError) Error() string {
+	return fmt.Sprintf("[protocol_error/%s] %s", e.Code, e.Message)
+}
+
 func NewIPCError(errType IPCErrorType, code domain.ErrorCode, message string) *IPCError {
 	return &IPCError{
 		Type:    errType,

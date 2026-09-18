@@ -2,6 +2,7 @@ package browser
 
 import (
 	"context"
+	"encoding/json"
 	"sync"
 )
 
@@ -13,6 +14,7 @@ type productionProvider struct {
 	observer  BrowserObserver
 	interact  BrowserInteractor
 	resources BrowserResourceTransfer
+	devtools  BrowserDevTools
 	caps      BrowserCapabilities
 	mu        sync.RWMutex
 }
@@ -91,6 +93,7 @@ func NewProductionProvider(config BrowserConfig, engineFactory BrowserEngineFact
 		interactionPolicy,
 		tabManager.(*productionTabManager),
 	)
+	devtools := NewChromiumDevTools(engine, tabManager.(TabResolver))
 
 	return &productionProvider{
 		runtime:   runtime,
@@ -100,6 +103,7 @@ func NewProductionProvider(config BrowserConfig, engineFactory BrowserEngineFact
 		observer:  observer,
 		interact:  interact,
 		resources: resources,
+		devtools:  devtools,
 		caps: BrowserCapabilities{
 			SupportsNavigation:  true,
 			SupportsDOM:         true,
@@ -107,6 +111,7 @@ func NewProductionProvider(config BrowserConfig, engineFactory BrowserEngineFact
 			SupportsDownload:    true,
 			SupportsUpload:      true,
 			SupportsScreenshot:  true,
+			SupportsDevTools:    true,
 			RiskLevels:          []string{"browser_runtime", "browser_navigation", "browser_dom", "browser_interaction", "browser_resource"},
 		},
 	}, nil
@@ -121,6 +126,7 @@ func NewDisabledProvider() BrowserProvider {
 		observer:  &unsupportedObserver{},
 		interact:  &unsupportedInteractor{},
 		resources: &unsupportedResourceTransfer{},
+		devtools:  &unsupportedDevTools{},
 		caps: BrowserCapabilities{
 			SupportsNavigation:  false,
 			SupportsDOM:         false,
@@ -128,6 +134,7 @@ func NewDisabledProvider() BrowserProvider {
 			SupportsDownload:    false,
 			SupportsUpload:      false,
 			SupportsScreenshot:  false,
+			SupportsDevTools:    false,
 		},
 	}
 }
@@ -178,6 +185,12 @@ func (p *productionProvider) Resources() BrowserResourceTransfer {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	return p.resources
+}
+
+func (p *productionProvider) DevTools() BrowserDevTools {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.devtools
 }
 
 type runtimeController struct {
@@ -370,4 +383,10 @@ func (r *unsupportedResourceTransfer) Upload(_ context.Context, _ BrowserUploadR
 
 func (r *unsupportedResourceTransfer) Screenshot(_ context.Context, _ BrowserScreenshotRequest) (*BrowserScreenshotResult, *BrowserError) {
 	return nil, &BrowserError{Code: ErrCodeUnsupportedAction, Message: "browser screenshot is not supported in this build"}
+}
+
+type unsupportedDevTools struct{}
+
+func (d *unsupportedDevTools) Execute(_ context.Context, _ string, _ BrowserSessionID, _ BrowserTabID, _ json.RawMessage) (json.RawMessage, *BrowserError) {
+	return nil, &BrowserError{Code: ErrCodeUnsupportedAction, Message: "browser DevTools are not supported in this build"}
 }

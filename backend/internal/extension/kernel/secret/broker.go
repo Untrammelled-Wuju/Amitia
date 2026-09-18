@@ -124,7 +124,7 @@ func (b *Broker) Issue(ctx context.Context, req LeaseRequest) (Lease, error) {
 		Purpose:              req.Purpose,
 		InvocationID:         req.InvocationID,
 		RuntimeInstanceID:    req.RuntimeInstanceID,
-		UserID:               req.UserID,
+		SpaceID:              req.SpaceID,
 		CharacterID:          req.CharacterID,
 		ConversationID:       req.ConversationID,
 		ExtensionID:          req.ExtensionID,

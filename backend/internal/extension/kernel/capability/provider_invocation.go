@@ -22,7 +22,7 @@ type ProviderInvocationRequest struct {
 
 	PreferredProviderID ProviderID
 
-	UserID runtimeidentity.UserID `json:"-"`
+	SpaceID runtimeidentity.SpaceID `json:"-"`
 
 	AllowCore   bool
 	AllowDevice bool

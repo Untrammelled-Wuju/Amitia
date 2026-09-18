@@ -134,8 +134,11 @@ class BackendWebSocketClient implements BackendWebSocketTransport {
     switch (_config.authStrategy) {
       case BackendAuthStrategy.localToken:
         headers[BackendAuthHeader.localToken] = token;
-      case BackendAuthStrategy.bearer:
-        headers[BackendAuthHeader.authorization] = 'Bearer $token';
+      case BackendAuthStrategy.deviceCredential:
+        headers[BackendAuthHeader.authorization] = 'AmitiaDevice $token';
+        headers['X-Amitia-Space-ID'] = _config.spaceId;
+        headers['X-Amitia-Device-ID'] = _config.deviceId;
+        headers['X-Amitia-Runtime-ID'] = _config.runtimeId;
     }
 
     final webSocket = await WebSocket.connect(

@@ -1,9 +1,12 @@
 package tts
 
 import (
-	"github.com/gin-gonic/gin"
-	"gorm.io/gorm"
 	"strings"
+
+	"github.com/gin-gonic/gin"
+	"github.com/u-ai/backend/config"
+	"github.com/u-ai/backend/internal/requestidentity"
+	"gorm.io/gorm"
 )
 
 func HandlePlayMessage(c *gin.Context, db interface{}) {
@@ -18,7 +21,14 @@ func HandlePlayMessage(c *gin.Context, db interface{}) {
 	}
 	var msg Msg
 	gdb := db.(*gorm.DB)
-	if err := gdb.Table("messages").Select("content, msg_type").Where("id = ?", msgID).Row().Scan(&msg.Content, &msg.MsgType); err != nil {
+	owner := requestidentity.NormalizeSpaceID(requestidentity.ResolveGin(c))
+	query := gdb.Table("messages AS m").Select("m.content, m.msg_type").Joins("JOIN conversations AS conv ON conv.id = m.conversation_id").Where("m.id = ? AND conv.deleted_at IS NULL", msgID)
+	if config.AppCfg != nil && strings.EqualFold(strings.TrimSpace(config.AppCfg.Security.Mode), "local_single_user") {
+		query = query.Where("(conv.space_id = ? OR conv.space_id = '' OR conv.space_id IS NULL OR conv.space_id = ?)", owner, requestidentity.LegacySpaceID)
+	} else {
+		query = query.Where("conv.space_id = ?", owner)
+	}
+	if err := query.Row().Scan(&msg.Content, &msg.MsgType); err != nil {
 		c.JSON(404, gin.H{"error": "message not found"})
 		return
 	}

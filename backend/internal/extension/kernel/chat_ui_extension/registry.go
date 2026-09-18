@@ -18,17 +18,19 @@ import (
 type ChatSlotID = extension_slots.SlotID
 
 const (
-	SlotChatHeaderAction       ChatSlotID = "chat.header.action"
-	SlotChatSidebarPanel       ChatSlotID = "chat.sidebar.panel"
-	SlotChatMessageAction      ChatSlotID = "chat.message.action"
-	SlotChatMessageBadge       ChatSlotID = "chat.message.badge"
-	SlotChatMessageAttachment  ChatSlotID = "chat.message.attachment_renderer"
-	SlotChatMessageCustom      ChatSlotID = "chat.message.custom_renderer"
-	SlotChatComposerAction     ChatSlotID = "chat.composer.action"
-	SlotChatComposerAttachment ChatSlotID = "chat.composer.attachment"
-	SlotChatComposerHint       ChatSlotID = "chat.composer.hint"
-	SlotChatEmptyStateCard     ChatSlotID = "chat.empty_state.card"
-	SlotChatStatusItem         ChatSlotID = "chat.status.item"
+	SlotChatHeaderAction        ChatSlotID = "chat.header.action"
+	SlotChatSidebarPanel        ChatSlotID = "chat.sidebar.panel"
+	SlotChatProfileSummaryPanel ChatSlotID = "chat.profile_summary.panel"
+	SlotChatMemoryContextPanel  ChatSlotID = "chat.memory_context.panel"
+	SlotChatMessageAction       ChatSlotID = "chat.message.action"
+	SlotChatMessageBadge        ChatSlotID = "chat.message.badge"
+	SlotChatMessageAttachment   ChatSlotID = "chat.message.attachment_renderer"
+	SlotChatMessageCustom       ChatSlotID = "chat.message.custom_renderer"
+	SlotChatComposerAction      ChatSlotID = "chat.composer.action"
+	SlotChatComposerAttachment  ChatSlotID = "chat.composer.attachment"
+	SlotChatComposerHint        ChatSlotID = "chat.composer.hint"
+	SlotChatEmptyStateCard      ChatSlotID = "chat.empty_state.card"
+	SlotChatStatusItem          ChatSlotID = "chat.status.item"
 )
 
 type ChatUIContext struct {

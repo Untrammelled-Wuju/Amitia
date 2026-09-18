@@ -969,7 +969,7 @@ func (r *Runtime) verifyPackageFinalGateWithGuard(ctx context.Context, operation
 		rpUd, rpUdErr := r.container.PackageRepository.GetRollbackPoint(ctx, operation.ExtensionID, operation.FromVersion)
 		if rpUdErr != nil {
 			checkUserDataRestore.Passed = true
-		} else if rpUd.UserDataMigrationStateJSON == "" {
+		} else if !packageUserDataRestoreRequired(rpUd.UserDataMigrationStateJSON) {
 			checkUserDataRestore.Passed = true
 		} else {
 			restoreOperationID := rpUd.SourceOperationID

@@ -3,13 +3,12 @@ package chat
 import (
 	"encoding/json"
 	"path/filepath"
-	"reflect"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/glebarez/sqlite"
 	"github.com/u-ai/backend/internal/delivery"
+	"github.com/u-ai/backend/internal/extension/runtimegate"
 	"github.com/u-ai/backend/internal/interaction"
 	newoutbox "github.com/u-ai/backend/internal/outbox"
 	"github.com/u-ai/backend/internal/psyche"
@@ -18,6 +17,8 @@ import (
 
 func setupCommitCoordinatorTest(t *testing.T, withOutbox bool) (*gorm.DB, *service, string) {
 	t.Helper()
+	runtimegate.Set(runtimegate.EmotionExtensionID, true)
+	t.Cleanup(func() { runtimegate.Set(runtimegate.EmotionExtensionID, false) })
 	db, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "commit.db")), &gorm.Config{})
 	if err != nil {
 		t.Fatal(err)
@@ -45,7 +46,7 @@ func setupCommitCoordinatorTest(t *testing.T, withOutbox bool) (*gorm.DB, *servi
 		}
 	}
 	convID := "conv-commit"
-	if err := db.Create(&Conversation{ID: convID, CharacterID: "char-commit", Channel: "web", Source: "system"}).Error; err != nil {
+	if err := db.Create(&Conversation{ID: convID, SpaceID: normalizeConversationOwner(""), CharacterID: "char-commit", Channel: "web", Source: "system"}).Error; err != nil {
 		t.Fatal(err)
 	}
 	if err := db.Create(&Message{ID: "user-commit", ConversationID: convID, Role: "user", Content: "hello", MsgType: "text", Source: "system", Status: "processing", RequestID: "req-commit"}).Error; err != nil {
@@ -53,7 +54,7 @@ func setupCommitCoordinatorTest(t *testing.T, withOutbox bool) (*gorm.DB, *servi
 	}
 	if err := db.Create(&interaction.InteractionRecordModel{
 		ID:             "interaction-commit",
-		UserID:         "user:web",
+		SpaceID:        "user:web",
 		CharacterID:    "char-commit",
 		ConversationID: convID,
 		Channel:        "web",
@@ -89,6 +90,17 @@ func runtimeForCommitTest() *interaction.RuntimeAssembly {
 
 func TestCommitInteractionPersistsMessagesStateRelationshipAndOutboxAtomically(t *testing.T) {
 	db, svc, convID := setupCommitCoordinatorTest(t, true)
+	if err := svc.psycheStore.SaveState(&psyche.PsycheState{
+		CharacterID:  "char-commit",
+		Version:      psyche.StateVersionV1(),
+		StateVersion: 1,
+		Stress:       0.2,
+		Energy:       0.6,
+		CreatedAt:    time.Now(),
+		UpdatedAt:    time.Now(),
+	}); err != nil {
+		t.Fatal(err)
+	}
 	req := &ProcessMessageRequest{
 		CharacterID:           "char-commit",
 		ConversationID:        convID,
@@ -100,7 +112,7 @@ func TestCommitInteractionPersistsMessagesStateRelationshipAndOutboxAtomically(t
 		ExpectedStatusVersion: 2,
 		Runtime:               runtimeForCommitTest(),
 	}
-	result, err := svc.commitInteraction(messageCommitPlan{
+	result, err := svc.commitInteraction(t.Context(), messageCommitPlan{
 		Request:       req,
 		Conversation:  convID,
 		Character:     "char-commit",
@@ -168,6 +180,43 @@ func TestCommitInteractionPersistsMessagesStateRelationshipAndOutboxAtomically(t
 	}
 }
 
+func TestCommitInteractionSuppressesReplyPersistence(t *testing.T) {
+	db, svc, convID := setupCommitCoordinatorTest(t, false)
+	req := &ProcessMessageRequest{
+		CharacterID:              "char-commit",
+		ConversationID:           convID,
+		Channel:                  "web",
+		Source:                   "runtime",
+		RequestID:                "req-commit",
+		InteractionID:            "interaction-commit",
+		ExpectedStatusVersion:    2,
+		SuppressReplyPersistence: true,
+	}
+	result, err := svc.commitInteraction(t.Context(), messageCommitPlan{
+		Request:       req,
+		Conversation:  convID,
+		Character:     "char-commit",
+		CharacterName: "Amitia",
+		UserMessageID: "user-commit",
+		Reply:         "sent through plugin",
+		Lines:         []string{"sent through plugin"},
+		Source:        "runtime",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.MessageIDs) != 0 || len(result.MessagePlan.Items) != 0 {
+		t.Fatalf("suppressed reply created messages: %+v", result)
+	}
+	var assistantCount int64
+	if err := db.Model(&Message{}).Where("conversation_id = ? AND role = ?", convID, "assistant").Count(&assistantCount).Error; err != nil {
+		t.Fatal(err)
+	}
+	if assistantCount != 0 {
+		t.Fatalf("expected no assistant messages, got %d", assistantCount)
+	}
+}
+
 func TestCommitInteractionRollsBackWhenOutboxCommitFails(t *testing.T) {
 	db, svc, convID := setupCommitCoordinatorTest(t, false)
 	req := &ProcessMessageRequest{
@@ -181,7 +230,7 @@ func TestCommitInteractionRollsBackWhenOutboxCommitFails(t *testing.T) {
 		ExpectedStatusVersion: 2,
 		Runtime:               runtimeForCommitTest(),
 	}
-	_, err := svc.commitInteraction(messageCommitPlan{
+	_, err := svc.commitInteraction(t.Context(), messageCommitPlan{
 		Request:       req,
 		Conversation:  convID,
 		Character:     "char-commit",
@@ -269,7 +318,7 @@ func TestCommitInteractionRejectsStaleInteractionRecord(t *testing.T) {
 				ExpectedStatusVersion: 2,
 				Runtime:               runtimeForCommitTest(),
 			}
-			_, err := svc.commitInteraction(messageCommitPlan{
+			_, err := svc.commitInteraction(t.Context(), messageCommitPlan{
 				Request:       req,
 				Conversation:  convID,
 				Character:     "char-commit",
@@ -284,86 +333,6 @@ func TestCommitInteractionRejectsStaleInteractionRecord(t *testing.T) {
 				t.Fatal("expected stale interaction commit to fail")
 			}
 			assertNoCommitSideEffects(t, db, convID)
-		})
-	}
-}
-
-func TestCommitInteractionBuildsOneLegalOrderedEmotePlan(t *testing.T) {
-	originalHook := messagePlanningHook
-	t.Cleanup(func() { messagePlanningHook = originalHook })
-	cases := []struct {
-		name            string
-		insertAfter     int
-		sendMode        string
-		lines           []string
-		expectedTypes   []string
-		expectedMode    string
-		expectedMessage int
-		expectedEmotes  int
-	}{
-		{name: "between", insertAfter: 1, sendMode: "between_text_messages", lines: []string{"第一条", "第二条"}, expectedTypes: []string{"text", "emote", "text"}, expectedMode: "between_text_messages", expectedMessage: 3, expectedEmotes: 1},
-		{name: "before_is_normalized_to_after", insertAfter: 0, sendMode: "between_text_messages", lines: []string{"第一条", "第二条"}, expectedTypes: []string{"text", "text", "emote"}, expectedMode: "after_all_text", expectedMessage: 3, expectedEmotes: 1},
-		{name: "overflow_is_normalized_to_after", insertAfter: 9, sendMode: "between_text_messages", lines: []string{"第一条", "第二条"}, expectedTypes: []string{"text", "text", "emote"}, expectedMode: "after_all_text", expectedMessage: 3, expectedEmotes: 1},
-		{name: "emote_only_without_text", insertAfter: 0, sendMode: "emote_only", lines: nil, expectedTypes: []string{"emote"}, expectedMode: "emote_only", expectedMessage: 1, expectedEmotes: 1},
-		{name: "textless_non_emote_only_is_rejected", insertAfter: 0, sendMode: "between_text_messages", lines: nil, expectedTypes: []string{}, expectedMode: "between_text_messages", expectedMessage: 0, expectedEmotes: 0},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			db, svc, convID := setupCommitCoordinatorTest(t, false)
-			calls := 0
-			decision := &MessagePlanningDecision{Emote: &PlannedEmote{EmoteID: "emote-1", Content: "[表情：开心]"}, InsertAfter: tc.insertAfter, SendMode: tc.sendMode}
-			RegisterMessagePlanningHook(func(*MessagePlanningEvent) *MessagePlanningDecision {
-				calls++
-				return decision
-			})
-			result, err := svc.commitInteraction(messageCommitPlan{
-				Request:       &ProcessMessageRequest{CharacterID: "char-commit", ConversationID: convID, Channel: "web", Source: "manual", RequestID: "req-commit"},
-				Conversation:  convID,
-				Character:     "char-commit",
-				CharacterName: "Amitia",
-				UserMessageID: "user-commit",
-				Reply:         strings.Join(tc.lines, "\n"),
-				Lines:         tc.lines,
-				Source:        "manual",
-			})
-			if err != nil {
-				t.Fatal(err)
-			}
-			if calls != 1 {
-				t.Fatalf("一次回复应只调用一次表情规划，实际 %d", calls)
-			}
-			if result.MessagePlan == nil || result.MessagePlan.ResponseGroupID != "req-commit" || !result.MessagePlan.Managed {
-				t.Fatalf("统一消息计划缺失: %#v", result.MessagePlan)
-			}
-			types := make([]string, 0, len(result.MessagePlan.Items))
-			for index, item := range result.MessagePlan.Items {
-				types = append(types, item.Type)
-				if item.Sequence != index+1 {
-					t.Fatalf("消息计划 sequence 不连续: %#v", result.MessagePlan.Items)
-				}
-			}
-			if !reflect.DeepEqual(types, tc.expectedTypes) {
-				t.Fatalf("消息计划顺序错误: %#v", types)
-			}
-			if decision.SendMode != tc.expectedMode {
-				t.Fatalf("发送位置模式错误: %s", decision.SendMode)
-			}
-			var messages []Message
-			if err = db.Where("conversation_id = ? AND role = 'assistant'", convID).Order("delivery_sequence ASC").Find(&messages).Error; err != nil {
-				t.Fatal(err)
-			}
-			if len(messages) != tc.expectedMessage {
-				t.Fatalf("持久化消息数量错误: %d", len(messages))
-			}
-			emoteCount := 0
-			for _, message := range messages {
-				if message.MsgType == "emote" {
-					emoteCount++
-				}
-			}
-			if emoteCount != tc.expectedEmotes {
-				t.Fatalf("自动表情数量错误，期望 %d，实际 %d", tc.expectedEmotes, emoteCount)
-			}
 		})
 	}
 }

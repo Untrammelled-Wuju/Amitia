@@ -31,7 +31,6 @@ class _PetCreatePageState extends ConsumerState<PetCreatePage> {
   final Map<String, String> _actionDescs = {};
   double _modelScale = 1.0;
   String? _selectedModelConfigId;
-  String? _selectedCharacterId;
   bool _submitting = false;
 
   final _availableActions = [
@@ -312,29 +311,12 @@ class _PetCreatePageState extends ConsumerState<PetCreatePage> {
 
   Widget _buildModelConfigStep(BuildContext context) {
     final configs = ref.watch(modelConfigListProvider);
-    final characters = ref.watch(characterListProvider);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text('模型配置', style: AppTypography.sectionTitle(context)),
         SizedBox(height: AppSpacing.sm),
         Text('桌宠生成直接使用后端现有模型配置，不再使用本地伪模型选项。', style: AppTypography.caption(context)),
-        SizedBox(height: AppSpacing.lg),
-        Text('绑定角色', style: AppTypography.label(context)),
-        SizedBox(height: AppSpacing.sm),
-        characters.when(
-          data: (items) {
-            if (items.isEmpty) return const Text('暂无角色，可继续创建未绑定角色的桌宠');
-            _selectedCharacterId ??= (items.where((e) => e.isActive == 1).isNotEmpty ? items.firstWhere((e) => e.isActive == 1).id : items.first.id);
-            return DropdownButtonFormField<String>(
-              value: items.any((e) => e.id == _selectedCharacterId) ? _selectedCharacterId : null,
-              items: items.map((c) => DropdownMenuItem(value: c.id, child: Text(c.name))).toList(),
-              onChanged: (value) => setState(() => _selectedCharacterId = value),
-            );
-          },
-          loading: () => const LinearProgressIndicator(),
-          error: (e, _) => Text('角色加载失败：$e'),
-        ),
         SizedBox(height: AppSpacing.lg),
         Text('生成模型', style: AppTypography.label(context)),
         SizedBox(height: AppSpacing.sm),
@@ -515,7 +497,6 @@ class _PetCreatePageState extends ConsumerState<PetCreatePage> {
     try {
       final size = (512 * _modelScale).round().clamp(256, 2048);
       final form = FormData.fromMap({
-        'characterId': _selectedCharacterId ?? '',
         'modelConfigId': modelConfigId.toString(),
         'name': _nameController.text.trim(),
         'prompt': _descController.text.trim(),

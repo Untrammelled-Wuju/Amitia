@@ -42,7 +42,7 @@ func (s *SQLiteProfileStore) Init(ctx context.Context) error {
 		scope_key TEXT PRIMARY KEY,
 		profile_id TEXT NOT NULL,
 		name TEXT NOT NULL,
-		user_id TEXT NOT NULL DEFAULT '',
+		space_id TEXT NOT NULL DEFAULT '',
 		device_id TEXT NOT NULL DEFAULT '',
 		platform TEXT NOT NULL DEFAULT '',
 		runtime_profile TEXT NOT NULL DEFAULT '',
@@ -53,8 +53,18 @@ func (s *SQLiteProfileStore) Init(ctx context.Context) error {
 		return err
 	}
 	if _, err := s.db.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_extension_ui_profiles_v2_owner
-		ON extension_ui_profiles_v2(user_id, device_id, platform, runtime_profile, updated_at)`); err != nil {
+		ON extension_ui_profiles_v2(space_id, device_id, platform, runtime_profile, updated_at)`); err != nil {
 		return err
+	}
+	// Pre-Space builds encoded the owner component as `u=` even though the
+	// value already represented the personal data space. Migrate the persisted
+	// primary key once so the storage contract matches the Space identity model.
+	if _, err := s.db.ExecContext(ctx, `UPDATE OR IGNORE extension_ui_profiles_v2
+		SET scope_key = 's=' || substr(scope_key, 3) WHERE scope_key LIKE 'u=%'`); err != nil {
+		return fmt.Errorf("ui_provider: migrate legacy user scope keys: %w", err)
+	}
+	if _, err := s.db.ExecContext(ctx, `DELETE FROM extension_ui_profiles_v2 WHERE scope_key LIKE 'u=%'`); err != nil {
+		return fmt.Errorf("ui_provider: remove legacy user scope keys: %w", err)
 	}
 	return s.migrateLegacyProfile(ctx)
 }
@@ -75,7 +85,7 @@ func (s *SQLiteProfileStore) migrateLegacyProfile(ctx context.Context) error {
 		return err
 	}
 	_, err = s.db.ExecContext(ctx, `INSERT OR IGNORE INTO extension_ui_profiles_v2(
-		scope_key, profile_id, name, user_id, device_id, platform, runtime_profile, selections_json, revision, updated_at
+		scope_key, profile_id, name, space_id, device_id, platform, runtime_profile, selections_json, revision, updated_at
 	) VALUES(?, ?, ?, '', '', '', '', ?, 1, ?)`, globalProfileScope().Key(), profileID, name, raw, updatedAt)
 	return err
 }
@@ -104,7 +114,7 @@ func (s *SQLiteProfileStore) LoadLayers(ctx context.Context, scope ProfileScope)
 		placeholders[i] = "?"
 		args[i] = key
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT scope_key, profile_id, name, user_id, device_id, platform, runtime_profile,
+	rows, err := s.db.QueryContext(ctx, `SELECT scope_key, profile_id, name, space_id, device_id, platform, runtime_profile,
 		selections_json, revision, updated_at FROM extension_ui_profiles_v2 WHERE scope_key IN (`+strings.Join(placeholders, ",")+`)`, args...)
 	if err != nil {
 		return nil, err
@@ -134,7 +144,7 @@ func (s *SQLiteProfileStore) LoadExact(ctx context.Context, scope ProfileScope) 
 	if s == nil || s.db == nil {
 		return Profile{}, false, nil
 	}
-	row := s.db.QueryRowContext(ctx, `SELECT scope_key, profile_id, name, user_id, device_id, platform, runtime_profile,
+	row := s.db.QueryRowContext(ctx, `SELECT scope_key, profile_id, name, space_id, device_id, platform, runtime_profile,
 		selections_json, revision, updated_at FROM extension_ui_profiles_v2 WHERE scope_key = ?`, scope.Normalize().Key())
 	p, _, err := scanProfile(row)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -190,13 +200,13 @@ func (s *SQLiteProfileStore) SaveScoped(ctx context.Context, p Profile, expected
 		p.Revision = currentRevision + 1
 	}
 	_, err = tx.ExecContext(ctx, `INSERT INTO extension_ui_profiles_v2(
-		scope_key, profile_id, name, user_id, device_id, platform, runtime_profile, selections_json, revision, updated_at
+		scope_key, profile_id, name, space_id, device_id, platform, runtime_profile, selections_json, revision, updated_at
 	) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	ON CONFLICT(scope_key) DO UPDATE SET profile_id=excluded.profile_id, name=excluded.name,
-		user_id=excluded.user_id, device_id=excluded.device_id, platform=excluded.platform,
+		space_id=excluded.space_id, device_id=excluded.device_id, platform=excluded.platform,
 		runtime_profile=excluded.runtime_profile, selections_json=excluded.selections_json,
 		revision=excluded.revision, updated_at=excluded.updated_at`,
-		p.Scope.Key(), p.ProfileID, p.Name, p.Scope.UserID, p.Scope.DeviceID, p.Scope.Platform,
+		p.Scope.Key(), p.ProfileID, p.Name, p.Scope.SpaceID, p.Scope.DeviceID, p.Scope.Platform,
 		p.Scope.RuntimeProfile, string(raw), p.Revision, p.UpdatedAt)
 	if err != nil {
 		return Profile{}, err
@@ -244,7 +254,7 @@ type profileScanner interface{ Scan(dest ...any) error }
 func scanProfile(row profileScanner) (Profile, string, error) {
 	var p Profile
 	var key, raw string
-	if err := row.Scan(&key, &p.ProfileID, &p.Name, &p.Scope.UserID, &p.Scope.DeviceID, &p.Scope.Platform,
+	if err := row.Scan(&key, &p.ProfileID, &p.Name, &p.Scope.SpaceID, &p.Scope.DeviceID, &p.Scope.Platform,
 		&p.Scope.RuntimeProfile, &raw, &p.Revision, &p.UpdatedAt); err != nil {
 		return Profile{}, "", err
 	}

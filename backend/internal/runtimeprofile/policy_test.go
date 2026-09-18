@@ -20,7 +20,7 @@ func TestPolicyForDeviceAgentKeepsDesktopPetDeviceLocal(t *testing.T) {
 func TestPolicyForCloudCoreDoesNotHostDesktopPetBody(t *testing.T) {
 	policy := PolicyFor(ProfileCloudCore)
 	if policy.DesktopPet {
-		t.Fatal("cloud-core must not host desktop-pet packages, renderer state, or Runtime v2")
+		t.Fatal("cloud-core must not host desktop-pet packages, renderer state, or Runtime v1")
 	}
 	if !policy.FullHTTPAPI || !policy.CoreBusinessServices {
 		t.Fatal("cloud-core must retain business API authority")

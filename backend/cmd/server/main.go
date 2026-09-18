@@ -9,8 +9,6 @@ import (
 	"github.com/u-ai/backend/internal/chat"
 	"github.com/u-ai/backend/internal/graph"
 	"github.com/u-ai/backend/internal/mindruntime"
-	"github.com/u-ai/backend/internal/proactive"
-	"github.com/u-ai/backend/internal/qq"
 	"github.com/u-ai/backend/internal/temporal"
 	"gorm.io/gorm"
 	"net/http"
@@ -24,10 +22,10 @@ import (
 	"github.com/u-ai/backend/config"
 	"github.com/u-ai/backend/internal/runtimeprofile"
 	"github.com/u-ai/backend/internal/security"
+	"github.com/u-ai/backend/internal/spaceidentity"
 	"github.com/u-ai/backend/log"
 	"github.com/u-ai/backend/pkg/app"
 	"github.com/u-ai/backend/pkg/database/mysql"
-	surrealdbDB "github.com/u-ai/backend/pkg/database/surrealdb"
 	"github.com/u-ai/backend/pkg/platform"
 	"github.com/u-ai/backend/pkg/util"
 
@@ -74,6 +72,10 @@ func main() {
 	policy := runtimeprofile.PolicyFor(profile)
 
 	config.AppCfg.Storage.DataDir = util.RuntimeDataDir(runtimeRoot, config.AppCfg.Storage.DataDir)
+	if _, err := spaceidentity.InitializeDefault(config.AppCfg.Storage.DataDir); err != nil {
+		fmt.Fprintf(os.Stderr, "初始化 Space 身份失败: %v\n", err)
+		os.Exit(1)
+	}
 	config.AppCfg.Providers.GraphStore.SurrealDB.DataPath = util.ResolveRuntimePath(runtimeRoot, config.AppCfg.Providers.GraphStore.SurrealDB.DataPath)
 
 	resolvedToken, securityBootstrapErr := prepareSecurityMaterial(config.AppCfg.Storage.DataDir)
@@ -87,7 +89,6 @@ func main() {
 		Mode:              security.SecurityMode(config.AppCfg.Security.Mode),
 		AllowRemoteAccess: config.AppCfg.Security.AllowRemoteAccess,
 		ListenAddress:     config.AppCfg.Server.Addr(),
-		JWTSecret:         config.AppCfg.JWT.Secret,
 		LocalToken:        resolvedToken,
 		AllowedOrigins:    config.AppCfg.Security.AllowedOrigins,
 	}
@@ -95,14 +96,6 @@ func main() {
 		log.Error("安全配置验证失败:", err)
 		fmt.Fprintf(os.Stderr, "安全配置验证失败: %v\n", err)
 		os.Exit(1)
-	}
-
-	if secCfg.Mode == security.SecurityModeNetwork {
-		if secCfg.JWTSecret == "" || secCfg.JWTSecret == "u-ai-secret-key-change-me" || len(secCfg.JWTSecret) < 32 {
-			log.Error("网络模式要求有效的JWT Secret，长度至少32字节")
-			fmt.Fprintln(os.Stderr, "网络模式要求有效的JWT Secret，长度至少32字节")
-			os.Exit(1)
-		}
 	}
 
 	if err := validateProfileSecurity(profile, secCfg); err != nil {
@@ -260,18 +253,10 @@ func main() {
 			_ = services.DeviceMesh.Stop()
 		}
 	}()
-	if policy.GraphStore && config.AppCfg.Providers.GraphStore.Enabled {
-		surrealdbDB.SetSurrealRestartCallback(func() {
-			newGraphSvc := initGraph()
-			if newGraphSvc != nil {
-				services.Graph = newGraphSvc
-				bootstrap.SetGraphService(newGraphSvc)
-				log.Info("SurrealDB恢复后图谱服务已重新连接")
-			}
-		})
-	}
 	if policy.CoreBusinessServices {
 		agenttool.SetMemoryService(services.Memory)
+		agenttool.SetProfileService(services.Profile)
+		agenttool.SetEpisodicService(services.Episodic)
 		agenttool.SetTemporalService(services.Temporal)
 		temporalScheduler := temporal.NewScheduler(services.Temporal)
 		_ = temporalScheduler
@@ -292,9 +277,6 @@ func main() {
 	fmt.Printf("  ========================================\n\n")
 
 	if policy.FullHTTPAPI {
-		qqMgr := qq.NewManager("http://127.0.0.1:19877")
-		qq.SetManager(qqMgr)
-
 		agenttool.SetOnMemorySaved(func(id, key, value, memoryType, characterID string) {
 			services.Memory.SyncEmbedding(id, key, value, characterID, memoryType)
 			services.Memory.SyncGraphMemory(id)
@@ -306,12 +288,6 @@ func main() {
 			services.Episodic.SyncGraphEpisodic(id)
 		})
 		chat.InitBuffer(config.AppCfg.Chat.MergeWindowMs)
-		go func() {
-			time.Sleep(3 * time.Second)
-			services.Chat.EnsureChannelConversation("wechat")
-			services.Chat.EnsureChannelConversation("qq")
-			log.Info("频道对话已确保创建")
-		}()
 		count, err := services.Chat.RecalculateMessageCounts()
 		backfilled, backfillErr := services.Chat.BackfillMissingConversations()
 		if backfillErr != nil {
@@ -325,14 +301,6 @@ func main() {
 		} else {
 			log.Info("消息计数已修复，影响", count, "条对话")
 		}
-		if services.DB != nil && services.Companion != nil {
-			var charIDs []string
-			services.DB.Table("characters").Pluck("id", &charIDs)
-			for _, cid := range charIDs {
-				services.Companion.ScheduleBasedGenerator(time.Now().Format("2006-01-02"), cid)
-			}
-		}
-		log.Info("今日主动消息任务已生成")
 	}
 
 	killExistingServer(serverAddr)
@@ -402,10 +370,6 @@ func startCoreWorkers(appCtx context.Context, services *AppServices, r *http.Ser
 
 	selfHeal := startSelfHealMonitor(appCtx, services.DB)
 	defer selfHeal.Stop()
-	cron := NewProactiveCron(services.DB, services.Companion, services.RuntimeQueue)
-	cron.Start()
-	proactive.SchedulerRunning = true
-
 	go func() {
 		ticker := time.NewTicker(5 * time.Minute)
 		defer ticker.Stop()
@@ -506,6 +470,10 @@ func applyDatabaseStartupMigrations(db *gorm.DB, dataDir string) error {
 	if err != nil {
 		return fmt.Errorf("check existing database: %w", err)
 	}
+	hasCoreSchema, err := migration.HasCoreSchema(db)
+	if err != nil {
+		return fmt.Errorf("check core schema: %w", err)
+	}
 	migrations := migration.DefaultMigrations()
 	lockDir := filepath.Join(dataDir, "locks")
 	if err := os.MkdirAll(lockDir, 0o700); err != nil {
@@ -520,13 +488,20 @@ func applyDatabaseStartupMigrations(db *gorm.DB, dataDir string) error {
 		SkipBackup:                  !isNew,
 		AllowUnknownAppliedChecksum: true,
 	}
-	if isNew {
+	if isNew || !hasCoreSchema {
+		if !isNew {
+			if err := migRunner.CreatePreMigrationBackup(); err != nil {
+				return fmt.Errorf("预迁移备份失败: %w", err)
+			}
+		}
 		log.Info("检测到新数据库，执行基线快通道...")
 		if err := migration.ApplyBaseline(db); err != nil {
 			return fmt.Errorf("apply baseline: %w", err)
 		}
-		if err := migration.MarkDesktopPetCanonicalBaselineCutover(db); err != nil {
-			return fmt.Errorf("mark desktop pet canonical baseline cutover: %w", err)
+		if isNew {
+			if err := migration.MarkDesktopPetCanonicalBaselineCutover(db); err != nil {
+				return fmt.Errorf("mark desktop pet canonical baseline cutover: %w", err)
+			}
 		}
 		log.Info("基线建表完成，标记所有迁移为已应用")
 		if err := migration.MarkAllMigrationsApplied(db, migrations); err != nil {

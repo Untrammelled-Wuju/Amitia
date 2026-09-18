@@ -11,7 +11,7 @@ import (
 
 type ActivityChangeEvent struct {
 	CharacterID string
-	UserID      string
+	SpaceID     string
 	Old         behavior.ActivityBehaviorSnapshot
 	New         behavior.ActivityBehaviorSnapshot
 	OccurredAt  time.Time
@@ -35,9 +35,9 @@ func (a *ActivityAdapter) OnActivityChanged(ctx context.Context, event ActivityC
 	if a == nil || a.publisher == nil {
 		return
 	}
-	userID := event.UserID
-	if userID == "" && a.ownerResolver != nil {
-		userID = a.ownerResolver.ResolveUserID(ctx, event.CharacterID)
+	spaceID := event.SpaceID
+	if spaceID == "" && a.ownerResolver != nil {
+		spaceID = a.ownerResolver.ResolveSpaceID(ctx, event.CharacterID)
 	}
 	now := a.clock.Now()
 	occurredAt := event.OccurredAt
@@ -46,7 +46,7 @@ func (a *ActivityAdapter) OnActivityChanged(ctx context.Context, event ActivityC
 	}
 
 	builder := events.NewEnvelope("character.activity.changed", behavior.OriginActivity).
-		UserID(userID).
+		SpaceID(spaceID).
 		CharacterID(event.CharacterID).
 		OccurredAt(occurredAt).
 		DedupKey(events.BuildDedupKey(event.CharacterID, "activity.changed", event.New.Version))

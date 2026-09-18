@@ -56,7 +56,6 @@
                   >服务地址
                   <input
                     :value="vectorModelURL"
-                    :disabled="vectorModelMode === 'disabled'"
                     @input="
                       emit(
                         'update:vectorModelURL',
@@ -71,7 +70,6 @@
                   <div class="ob-input-password-wrap">
                     <input
                       :value="vectorModelKey"
-                      :disabled="vectorModelMode === 'disabled'"
                       @input="
                         emit(
                           'update:vectorModelKey',

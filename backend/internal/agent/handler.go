@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/u-ai/backend/internal/requestidentity"
 	"github.com/u-ai/backend/pkg/comment/response"
 	"github.com/u-ai/backend/pkg/util"
 )
@@ -28,7 +29,15 @@ func (h *Handler) Test(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, "无效请求体", nil)
 		return
 	}
-	result, err := h.service.Test(body.CharacterID, body.Message)
+	var result map[string]interface{}
+	var err error
+	if scoped, ok := h.service.(interface {
+		TestForSpace(spaceID, characterID, message string) (map[string]interface{}, error)
+	}); ok {
+		result, err = scoped.TestForSpace(requestidentity.ResolveGin(c), body.CharacterID, body.Message)
+	} else {
+		result, err = h.service.Test(body.CharacterID, body.Message)
+	}
 	if err != nil {
 		util.ErrorResponse(c, response.BusinessError, "AI 调用失败: "+err.Error(), nil)
 		return
@@ -44,7 +53,7 @@ func (h *Handler) Webhook(c *gin.Context) {
 		AccountID      string `json:"accountId"`
 		ConversationID string `json:"conversationId"`
 		SenderID       string `json:"senderId"`
-		UserID         string `json:"userId"`
+		SpaceID        string `json:"spaceId"`
 		MessageID      string `json:"messageId"`
 		RequestID      string `json:"requestId"`
 		SessionID      string `json:"sessionId"`
@@ -60,12 +69,13 @@ func (h *Handler) Webhook(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, "无效请求体", nil)
 		return
 	}
+	body.SpaceID = requestidentity.ResolveGin(c)
 	result, err := h.service.Webhook(c.Request.Context(), WebhookRequest{
 		Channel:        body.Channel,
 		AccountID:      body.AccountID,
 		ConversationID: body.ConversationID,
 		SenderID:       body.SenderID,
-		UserID:         body.UserID,
+		SpaceID:        body.SpaceID,
 		MessageID:      body.MessageID,
 		RequestID:      body.RequestID,
 		SessionID:      body.SessionID,
@@ -89,7 +99,15 @@ func (h *Handler) ContextPreview(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, "conversationId 不能为空", nil)
 		return
 	}
-	result, err := h.service.ContextPreview(convID)
+	var result map[string]interface{}
+	var err error
+	if scoped, ok := h.service.(interface {
+		ContextPreviewForSpace(spaceID, convID string) (map[string]interface{}, error)
+	}); ok {
+		result, err = scoped.ContextPreviewForSpace(requestidentity.ResolveGin(c), convID)
+	} else {
+		result, err = h.service.ContextPreview(convID)
+	}
 	if err != nil {
 		util.ErrorResponse(c, response.NotFound, err.Error(), nil)
 		return

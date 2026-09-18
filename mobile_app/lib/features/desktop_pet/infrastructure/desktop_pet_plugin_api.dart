@@ -2,7 +2,7 @@ import '../../../core/backend_transport/backend_service_api.dart';
 import 'desktop_pet_plugin_dto.dart';
 
 class DesktopPetPluginApi {
-  static const _basePath = '/api/extensions/desktop-pet/plugins';
+  static const _basePath = '/api/extensions/pet/plugins';
 
   final BackendServiceApi _api;
 

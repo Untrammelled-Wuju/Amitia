@@ -25,7 +25,7 @@ relation_type TEXT NOT NULL DEFAULT '',
 relation_data TEXT DEFAULT '{}',
 created_at TEXT DEFAULT '',
 updated_at TEXT DEFAULT '',
-user_id TEXT NOT NULL DEFAULT 'default',
+space_id TEXT NOT NULL DEFAULT 'default',
 channel TEXT NOT NULL DEFAULT ''
 )`).Error; err != nil {
 		t.Fatal(err)
@@ -84,7 +84,7 @@ relation_type TEXT NOT NULL DEFAULT '',
 relation_data TEXT DEFAULT '{}',
 created_at TEXT DEFAULT '',
 updated_at TEXT DEFAULT '',
-user_id TEXT NOT NULL DEFAULT 'default',
+space_id TEXT NOT NULL DEFAULT 'default',
 channel TEXT NOT NULL DEFAULT ''
 )`).Error; err != nil {
 		t.Fatal(err)
@@ -98,7 +98,7 @@ channel TEXT NOT NULL DEFAULT ''
 		{id: "latest-wechat", data: `{"version":"latest"}`, updatedAt: "2026-07-18T00:00:00Z"},
 	}
 	for _, row := range rows {
-		if err := db.Exec("INSERT INTO relationship_states (id, user_id, character_id, relation_type, relation_data, channel, created_at, updated_at) VALUES (?, 'user-a', 'character-a', 'friend', ?, ?, '2026-07-01T00:00:00Z', ?)", row.id, row.data, row.id, row.updatedAt).Error; err != nil {
+		if err := db.Exec("INSERT INTO relationship_states (id, space_id, character_id, relation_type, relation_data, channel, created_at, updated_at) VALUES (?, 'user-a', 'character-a', 'friend', ?, ?, '2026-07-01T00:00:00Z', ?)", row.id, row.data, row.id, row.updatedAt).Error; err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -111,13 +111,13 @@ channel TEXT NOT NULL DEFAULT ''
 		Channel      string `gorm:"column:channel"`
 		RelationType string `gorm:"column:relation_type"`
 	}
-	if err := db.Table("relationship_states").Where("user_id = 'user-a' AND character_id = 'character-a' AND channel = '*' AND relation_type = 'user_character'").First(&canonical).Error; err != nil {
+	if err := db.Table("relationship_states").Where("space_id = 'user-a' AND character_id = 'character-a' AND channel = '*' AND relation_type = 'user_character'").First(&canonical).Error; err != nil {
 		t.Fatal(err)
 	}
 	if canonical.RelationData != `{"version":"latest"}` || canonical.Channel != CanonicalRelationshipChannel || canonical.RelationType != CanonicalRelationshipType {
 		t.Fatalf("unexpected canonical relationship %#v", canonical)
 	}
-	if err := db.Exec("INSERT INTO relationship_states (id, user_id, character_id, relation_type, relation_data, channel) VALUES ('duplicate', 'user-a', 'character-a', 'user_character', '{}', '*')").Error; err == nil {
+	if err := db.Exec("INSERT INTO relationship_states (id, space_id, character_id, relation_type, relation_data, channel) VALUES ('duplicate', 'user-a', 'character-a', 'user_character', '{}', '*')").Error; err == nil {
 		t.Fatal("canonical unique index accepted duplicate scope")
 	}
 	var legacyCount int64
@@ -134,7 +134,7 @@ func TestSaveObservedPresenceDoesNotCommitInteraction(t *testing.T) {
 	now := time.Date(2026, 7, 18, 12, 0, 0, 123456789, time.UTC)
 	repository, _, _ := newRelationshipTimeTestRepository(t, now)
 	if err := repository.WithTransaction(ctx, func(tx *RelationshipTimeRepository) error {
-		return tx.SaveObservedPresence(ctx, ObservePresenceInput{UserID: "user-a", CharacterID: "character-a", Channel: "web", ObservedAt: now})
+		return tx.SaveObservedPresence(ctx, ObservePresenceInput{SpaceID: "user-a", CharacterID: "character-a", Channel: "web", ObservedAt: now})
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -161,7 +161,7 @@ func TestReceiptAndReunionEpisodeAreIdempotent(t *testing.T) {
 	ctx := context.Background()
 	now := time.Date(2026, 7, 18, 12, 0, 0, 0, time.UTC)
 	repository, _, _ := newRelationshipTimeTestRepository(t, now)
-	receipt := &InteractionReceipt{ID: "receipt-a", UserID: "user-a", RequestID: "request-a", InteractionID: "interaction-a", Status: InteractionReceiptObserved}
+	receipt := &InteractionReceipt{ID: "receipt-a", SpaceID: "user-a", RequestID: "request-a", InteractionID: "interaction-a", Status: InteractionReceiptObserved}
 	created, err := repository.CreateReceipt(ctx, receipt)
 	if err != nil || !created {
 		t.Fatalf("first receipt create failed: %v %v", created, err)
@@ -173,12 +173,12 @@ func TestReceiptAndReunionEpisodeAreIdempotent(t *testing.T) {
 	if err != nil || created {
 		t.Fatalf("duplicate receipt was created: %v %v", created, err)
 	}
-	episode := &ReunionEpisode{UserID: "user-a", CharacterID: "character-a", Status: ReunionStatePending, IdempotencyKey: "same-gap", PolicyJSON: "{}"}
+	episode := &ReunionEpisode{SpaceID: "user-a", CharacterID: "character-a", Status: ReunionStatePending, IdempotencyKey: "same-gap", PolicyJSON: "{}"}
 	first, created, err := repository.CreateOrGetReunionEpisode(ctx, episode)
 	if err != nil || !created {
 		t.Fatalf("first episode create failed: %v %v", created, err)
 	}
-	second, created, err := repository.CreateOrGetReunionEpisode(ctx, &ReunionEpisode{UserID: "user-a", CharacterID: "character-a", Status: ReunionStatePending, IdempotencyKey: "same-gap", PolicyJSON: "{}"})
+	second, created, err := repository.CreateOrGetReunionEpisode(ctx, &ReunionEpisode{SpaceID: "user-a", CharacterID: "character-a", Status: ReunionStatePending, IdempotencyKey: "same-gap", PolicyJSON: "{}"})
 	if err != nil || created || first.ID != second.ID {
 		t.Fatalf("episode idempotency failed: %#v %#v %v %v", first, second, created, err)
 	}
@@ -188,7 +188,7 @@ func TestReunionClaimExclusionReleaseAndTTL(t *testing.T) {
 	ctx := context.Background()
 	now := time.Date(2026, 7, 18, 12, 0, 0, 0, time.UTC)
 	repository, _, clock := newRelationshipTimeTestRepository(t, now)
-	episode, _, err := repository.CreateOrGetReunionEpisode(ctx, &ReunionEpisode{UserID: "user-a", CharacterID: "character-a", Status: ReunionStatePending, IdempotencyKey: "gap-a", PolicyJSON: "{}"})
+	episode, _, err := repository.CreateOrGetReunionEpisode(ctx, &ReunionEpisode{SpaceID: "user-a", CharacterID: "character-a", Status: ReunionStatePending, IdempotencyKey: "gap-a", PolicyJSON: "{}"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -218,10 +218,10 @@ func TestFinalizeInteractionIsAtomicAndIdempotent(t *testing.T) {
 	ctx := context.Background()
 	now := time.Date(2026, 7, 18, 12, 0, 0, 0, time.UTC)
 	repository, db, _ := newRelationshipTimeTestRepository(t, now)
-	if err := repository.SaveObservedPresence(ctx, ObservePresenceInput{UserID: "user-a", CharacterID: "character-a", Channel: "web", ObservedAt: now}); err != nil {
+	if err := repository.SaveObservedPresence(ctx, ObservePresenceInput{SpaceID: "user-a", CharacterID: "character-a", Channel: "web", ObservedAt: now}); err != nil {
 		t.Fatal(err)
 	}
-	episode, _, err := repository.CreateOrGetReunionEpisode(ctx, &ReunionEpisode{UserID: "user-a", CharacterID: "character-a", Status: ReunionStatePending, IdempotencyKey: "gap-a", PolicyJSON: "{}"})
+	episode, _, err := repository.CreateOrGetReunionEpisode(ctx, &ReunionEpisode{SpaceID: "user-a", CharacterID: "character-a", Status: ReunionStatePending, IdempotencyKey: "gap-a", PolicyJSON: "{}"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -236,19 +236,19 @@ func TestFinalizeInteractionIsAtomicAndIdempotent(t *testing.T) {
 	if err := repository.SaveRelationshipPresence(ctx, relationship); err != nil {
 		t.Fatal(err)
 	}
-	receipt := &InteractionReceipt{ID: "receipt-a", UserID: "user-a", CharacterID: "character-a", RequestID: "request-a", InteractionID: "interaction-a", ReunionEpisodeID: episode.ID, Status: InteractionReceiptObserved}
+	receipt := &InteractionReceipt{ID: "receipt-a", SpaceID: "user-a", CharacterID: "character-a", RequestID: "request-a", InteractionID: "interaction-a", ReunionEpisodeID: episode.ID, Status: InteractionReceiptObserved}
 	if _, err := repository.CreateReceipt(ctx, receipt); err != nil {
 		t.Fatal(err)
 	}
 	input := FinalizeInteractionInput{
-		UserID:             "user-a",
+		SpaceID:            "user-a",
 		CharacterID:        "character-a",
 		InteractionID:      "interaction-a",
 		CommittedAt:        now,
 		ReunionEpisodeID:   episode.ID,
 		ReacclimationTurns: 2,
 		CadenceSample: &CadenceSample{
-			ID: "sample-a", UserID: "user-a", CharacterID: "character-a", InteractionID: "interaction-a", SampleKind: "relationship", Included: true, CurrentInteractionAtUTC: now.Format(time.RFC3339Nano), CreatedAtUTC: now.Format(time.RFC3339Nano),
+			ID: "sample-a", SpaceID: "user-a", CharacterID: "character-a", InteractionID: "interaction-a", SampleKind: "relationship", Included: true, CurrentInteractionAtUTC: now.Format(time.RFC3339Nano), CreatedAtUTC: now.Format(time.RFC3339Nano),
 		},
 	}
 	if err := db.Transaction(func(tx *gorm.DB) error { return repository.FinalizeInteractionTx(ctx, tx, input) }); err != nil {
@@ -287,7 +287,7 @@ func TestCadenceSamplesKeepLatestSixty(t *testing.T) {
 	for index := 0; index < 65; index++ {
 		at := now.Add(time.Duration(index) * time.Hour)
 		sample := &CadenceSample{
-			ID: fmt.Sprintf("sample-%02d", index), UserID: "user-a", CharacterID: "character-a", InteractionID: fmt.Sprintf("interaction-%02d", index), SampleKind: "relationship", Included: true, CurrentInteractionAtUTC: FormatRelationshipTime(at), CreatedAtUTC: FormatRelationshipTime(at),
+			ID: fmt.Sprintf("sample-%02d", index), SpaceID: "user-a", CharacterID: "character-a", InteractionID: fmt.Sprintf("interaction-%02d", index), SampleKind: "relationship", Included: true, CurrentInteractionAtUTC: FormatRelationshipTime(at), CreatedAtUTC: FormatRelationshipTime(at),
 		}
 		if _, err := repository.AddCadenceSample(ctx, sample); err != nil {
 			t.Fatal(err)

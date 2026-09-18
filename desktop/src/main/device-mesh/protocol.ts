@@ -48,7 +48,7 @@ export interface DeviceMeshBootstrapResponse {
   expiresAt: string;
 }
 
-export interface CloudBootstrapTicketRequest {
+export interface CloudPairingDeviceIdentity {
   deviceId: string;
   runtimeId: string;
   platform: string;
@@ -58,11 +58,30 @@ export interface CloudBootstrapTicketRequest {
 export interface CloudBootstrapTicketResponse {
   ticketId: string;
   ticket: string;
-  userId: string;
+  spaceId: string;
   deviceId: string;
   runtimeId: string;
   expiresAt: string;
   ttlSeconds: number;
+}
+
+
+export interface CloudPairingStatusResponse {
+  spaceId: string;
+  trustedDeviceCount: number;
+  firstDeviceSetupRequired: boolean;
+}
+
+export interface CloudPairingClaimRequest extends CloudPairingDeviceIdentity {
+  offerToken?: string;
+  setupCode?: string;
+}
+
+export interface CloudPairingOfferResponse {
+  offerId: string;
+  offerToken: string;
+  qrPayload: string;
+  expiresAt: string;
 }
 
 export interface CloudDeviceRuntimeInfo {

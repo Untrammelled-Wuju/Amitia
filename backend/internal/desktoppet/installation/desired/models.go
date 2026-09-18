@@ -12,7 +12,7 @@ import (
 type RuntimeDesiredState struct {
 	ID string
 
-	UserID    string
+	SpaceID   string
 	DeviceID  string
 	RuntimeID string
 
@@ -43,7 +43,7 @@ func (RuntimeDesiredState) TableName() string {
 }
 
 type DeviceDesiredRevisionCounter struct {
-	UserID          string
+	SpaceID         string
 	DeviceID        string
 	CurrentRevision int64
 	UpdatedAt       string
@@ -56,7 +56,7 @@ func (DeviceDesiredRevisionCounter) TableName() string {
 type DesiredStateOutboxEvent struct {
 	EventID         string
 	EventType       string
-	UserID          string
+	SpaceID         string
 	DeviceID        string
 	RuntimeID       string
 	InstallationID  string
@@ -83,7 +83,7 @@ type DeviceDesiredSnapshot struct {
 	InstallationID  string
 	PetID           string
 	ReleaseID       string
-	UserID          string
+	SpaceID         string
 	DeviceID        string
 	RuntimeID       string
 }

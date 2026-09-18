@@ -11,9 +11,11 @@ class VoiceConfigDto {
   final double volume;
   final int isActive;
   final String customVoiceId;
+  final String cloneResourceId;
   final String realtimeAppId;
   final String realtimeAccessToken;
   final String realtimeSecretKey;
+  final bool hasApiKey;
 
   VoiceConfigDto({
     required this.id,
@@ -28,9 +30,11 @@ class VoiceConfigDto {
     this.volume = 1,
     this.isActive = 0,
     this.customVoiceId = '',
+    this.cloneResourceId = 'volc.megatts.timbre',
     this.realtimeAppId = '',
     this.realtimeAccessToken = '',
     this.realtimeSecretKey = '',
+    this.hasApiKey = false,
   });
 
   factory VoiceConfigDto.fromJson(Map<String, dynamic> json) {
@@ -47,9 +51,11 @@ class VoiceConfigDto {
       volume: (json['volume'] as num?)?.toDouble() ?? 1,
       isActive: (json['isActive'] as num?)?.toInt() ?? 0,
       customVoiceId: json['customVoiceId'] as String? ?? '',
+      cloneResourceId: (json['cloneResourceId'] ?? 'volc.megatts.timbre').toString(),
       realtimeAppId: json['realtimeAppId'] as String? ?? '',
       realtimeAccessToken: json['realtimeAccessToken'] as String? ?? '',
       realtimeSecretKey: json['realtimeSecretKey'] as String? ?? '',
+      hasApiKey: json['hasApiKey'] == true,
     );
   }
 
@@ -69,9 +75,11 @@ class VoiceConfigDto {
       'volume': volume,
       'isActive': isActive,
       'customVoiceId': customVoiceId,
+      'cloneResourceId': cloneResourceId,
       'realtimeAppId': realtimeAppId,
       'realtimeAccessToken': realtimeAccessToken,
       'realtimeSecretKey': realtimeSecretKey,
+      'hasApiKey': hasApiKey,
     };
   }
 }

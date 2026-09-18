@@ -30,22 +30,25 @@ const (
 )
 
 type managedProcess struct {
-	spec           ProcessSpec
-	mu             sync.Mutex
-	state          ProcessState
-	pid            int
-	procHandle     process.ProcessTreeHandle
-	executable     string
-	startedAt      time.Time
-	readyAt        time.Time
-	stoppedAt      time.Time
-	restartCount   int
-	lastExitCode   int
-	lastError      string
-	healthFailures int
-	stopRequested  bool
-	cancelMonitor  context.CancelFunc
-	cancelHealth   context.CancelFunc
+	spec               ProcessSpec
+	mu                 sync.Mutex
+	state              ProcessState
+	pid                int
+	procHandle         process.ProcessTreeHandle
+	executable         string
+	startedAt          time.Time
+	readyAt            time.Time
+	stoppedAt          time.Time
+	restartCount       int
+	lastExitCode       int
+	lastError          string
+	healthFailures     int
+	stopRequested      bool
+	forceRestart       bool
+	forceRestartReason string
+	generation         uint64
+	cancelMonitor      context.CancelFunc
+	cancelHealth       context.CancelFunc
 }
 
 type ProcessStopper interface {
@@ -115,7 +118,7 @@ func (s *defaultProcessSupervisor) Unregister(id ProcessID) error {
 	state := mp.state
 	mp.mu.Unlock()
 
-	if state == StateRunning || state == StateReady || state == StateStarting {
+	if state == StateRunning || state == StateReady || state == StateStarting || state == StateStopping || state == StateRestartBackoff {
 		return fmt.Errorf("%w: process %s is %s", ErrProcessNotRunning, id, state)
 	}
 
@@ -142,7 +145,7 @@ func (s *defaultProcessSupervisor) Start(ctx context.Context, id ProcessID) erro
 		return ErrHostStopped
 	}
 	mp.mu.Lock()
-	if mp.state == StateRunning || mp.state == StateReady {
+	if mp.state == StateRunning || mp.state == StateReady || mp.state == StateStarting {
 		mp.mu.Unlock()
 		s.mu.Unlock()
 		return fmt.Errorf("%w: %s", ErrProcessAlreadyRunning, id)
@@ -152,29 +155,40 @@ func (s *defaultProcessSupervisor) Start(ctx context.Context, id ProcessID) erro
 		s.mu.Unlock()
 		return fmt.Errorf("%w: process %s is stopping", ErrProcessNotRunning, id)
 	}
+	if mp.cancelMonitor != nil {
+		mp.cancelMonitor()
+		mp.cancelMonitor = nil
+	}
+	if mp.cancelHealth != nil {
+		mp.cancelHealth()
+		mp.cancelHealth = nil
+	}
+	mp.stopRequested = false
+	mp.healthFailures = 0
 	mp.state = StateStarting
+	mp.pid = 0
+	mp.procHandle = 0
+	mp.stoppedAt = time.Time{}
+	mp.readyAt = time.Time{}
+	mp.generation++
+	generation := mp.generation
+	restartCount := mp.restartCount
 	spec := mp.spec.Clone()
 	mp.mu.Unlock()
 	s.mu.Unlock()
 
-	s.emit(EventStarting, id, 0, mp.restartCount, "")
+	s.emit(EventStarting, id, 0, restartCount, "")
 
 	if err := s.claimPorts(spec.Ports); err != nil {
-		s.setState(id, StateFailed)
-		s.setLastError(id, err.Error())
+		s.failStart(id, generation, err)
 		return err
 	}
 
 	env, err := s.buildEnvironment(spec)
 	if err != nil {
-		s.setState(id, StateFailed)
-		s.setLastError(id, err.Error())
+		s.failStart(id, generation, err)
 		return err
 	}
-
-	mp.mu.Lock()
-	mp.state = StateStarting
-	mp.mu.Unlock()
 
 	envSlice := make([]string, 0, len(env))
 	for k, v := range env {
@@ -185,48 +199,55 @@ func (s *defaultProcessSupervisor) Start(ctx context.Context, id ProcessID) erro
 	if spec.ExecutableProcess != nil {
 		pid, handle, execErr := spec.ExecutableProcess.Start()
 		if execErr != nil {
-			s.setState(id, StateFailed)
-			s.setLastError(id, execErr.Error())
+			s.failStart(id, generation, execErr)
 			return execErr
 		}
 		managed = process.NewExternalManagedProcess(pid, handle)
-		mp.mu.Lock()
-		mp.pid = pid
-		mp.procHandle = handle
-		mp.mu.Unlock()
 	} else {
+		if s.host == nil || s.host.processManager == nil {
+			err := ErrHostProcessUnsupported
+			s.failStart(id, generation, err)
+			return err
+		}
 		var startErr error
 		managed, startErr = s.host.processManager.Start(ctx, process.ProcessConfig{
-			Executable: spec.Executable,
-			Args:       spec.Args,
-			WorkingDir: spec.WorkingDir,
-			Env:        envSlice,
+			Executable:     spec.Executable,
+			Args:           spec.Args,
+			WorkingDir:     spec.WorkingDir,
+			Env:            envSlice,
+			OnStdout:       spec.OnStdout,
+			OnStderr:       spec.OnStderr,
+			OnScannerError: spec.OnStreamError,
 		})
 		if startErr != nil {
-			s.setState(id, StateFailed)
-			s.setLastError(id, startErr.Error())
+			s.failStart(id, generation, startErr)
 			return startErr
 		}
-		mp.mu.Lock()
-		mp.pid = managed.PID
-		mp.mu.Unlock()
 	}
 
-	go func() {
-		code, _ := managed.Wait()
-		mp.mu.Lock()
-		mp.lastExitCode = code
-		mp.stopRequested = true
+	mp.mu.Lock()
+	if mp.generation != generation || mp.stopRequested {
 		mp.mu.Unlock()
-		s.emit(EventExited, id, managed.PID, mp.restartCount, "")
-	}()
-
-	s.emit(EventStarted, id, managed.PID, mp.restartCount, "")
+		_ = s.stopManagedProcess(spec, managed.PID, managed.Handle)
+		return fmt.Errorf("%w: process %s start superseded", ErrProcessNotRunning, id)
+	}
+	mp.pid = managed.PID
+	mp.procHandle = managed.Handle
+	mp.startedAt = time.Now().UTC()
+	mp.lastError = ""
 	if spec.HealthProbe == nil {
-		s.setState(id, StateReady)
-		s.markReady(id)
+		mp.state = StateReady
+		mp.readyAt = time.Now().UTC()
 	} else {
-		s.setState(id, StateRunning)
+		mp.state = StateRunning
+	}
+	mp.mu.Unlock()
+
+	go s.waitForExit(id, managed, generation)
+
+	s.emit(EventStarted, id, managed.PID, restartCount, "")
+	if spec.HealthProbe == nil {
+		s.emit(EventReady, id, managed.PID, restartCount, "")
 	}
 	return nil
 }
@@ -239,16 +260,22 @@ func (s *defaultProcessSupervisor) WaitReady(ctx context.Context, id ProcessID) 
 		return fmt.Errorf("%w: %s", ErrProcessNotFound, id)
 	}
 	mp.mu.Lock()
-	spec := mp.spec
+	spec := mp.spec.Clone()
 	state := mp.state
+	generation := mp.generation
+	pid := mp.pid
+	restartCount := mp.restartCount
 	mp.mu.Unlock()
 
 	if state == StateReady {
+		if spec.HealthProbe != nil {
+			s.startHealthMonitor(id, generation)
+		}
 		return nil
 	}
 	if spec.HealthProbe == nil {
-		s.setState(id, StateReady)
-		s.markReady(id)
+		s.setReadyIfGeneration(id, generation)
+		s.emit(EventReady, id, pid, restartCount, "")
 		return nil
 	}
 
@@ -256,7 +283,8 @@ func (s *defaultProcessSupervisor) WaitReady(ctx context.Context, id ProcessID) 
 	if timeout <= 0 {
 		timeout = DefaultStartupTimeout
 	}
-	deadline := time.Now().Add(timeout)
+	readyCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
 
 	for {
 		s.mu.RLock()
@@ -269,37 +297,41 @@ func (s *defaultProcessSupervisor) WaitReady(ctx context.Context, id ProcessID) 
 		mp.mu.Lock()
 		curState := mp.state
 		stopReq := mp.stopRequested
-		pid := mp.pid
+		curPID := mp.pid
+		curGeneration := mp.generation
 		mp.mu.Unlock()
 
+		if curGeneration != generation {
+			return fmt.Errorf("process %s launch generation changed while waiting for readiness", id)
+		}
 		if stopReq {
 			return fmt.Errorf("process %s stop requested", id)
 		}
-		if curState == StateStopped {
-			return fmt.Errorf("process %s has stopped", id)
+		if curState == StateStopped || curState == StateRestartBackoff {
+			return fmt.Errorf("process %s is %s", id, curState)
 		}
 		if curState == StateFailed {
 			return fmt.Errorf("process %s has failed", id)
 		}
-
-		if pid > 0 && !s.isAlive(pid) {
+		if curPID > 0 && !s.isAlive(curPID) {
 			return fmt.Errorf("process %s exited prematurely", id)
 		}
 
-		hErr := spec.HealthProbe.Check(ctx)
+		hErr := spec.HealthProbe.Check(readyCtx)
 		if hErr == nil {
-			s.setState(id, StateReady)
-			s.markReady(id)
-			s.resetHealthFailures(id)
+			if s.setReadyIfGeneration(id, generation) {
+				s.emit(EventReady, id, curPID, restartCount, "")
+			}
+			s.startHealthMonitor(id, generation)
 			return nil
 		}
 
-		if time.Now().After(deadline) {
-			return fmt.Errorf("%w: process %s not ready: %v", ErrStartTimeout, id, hErr)
-		}
 		select {
-		case <-ctx.Done():
-			return ctx.Err()
+		case <-readyCtx.Done():
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			return fmt.Errorf("%w: process %s not ready: %v", ErrStartTimeout, id, hErr)
 		case <-time.After(500 * time.Millisecond):
 		}
 	}
@@ -309,7 +341,15 @@ func (s *defaultProcessSupervisor) Restart(ctx context.Context, id ProcessID) er
 	if err := s.Stop(ctx, id); err != nil {
 		return err
 	}
-	return s.Start(ctx, id)
+	if err := s.Start(ctx, id); err != nil {
+		return err
+	}
+	if err := s.WaitReady(ctx, id); err != nil {
+		return err
+	}
+	snap, _ := s.Snapshot(id)
+	s.emit(EventRestarted, id, snap.PID, snap.RestartCount, "manual")
+	return nil
 }
 
 func (s *defaultProcessSupervisor) Stop(ctx context.Context, id ProcessID) error {
@@ -320,32 +360,40 @@ func (s *defaultProcessSupervisor) Stop(ctx context.Context, id ProcessID) error
 		return fmt.Errorf("%w: %s", ErrProcessNotFound, id)
 	}
 	mp.mu.Lock()
-	if mp.state == StateStopped || mp.state == StateStopping {
-		state := mp.state
+	if mp.state == StateStopped {
 		mp.mu.Unlock()
 		s.mu.Unlock()
-		if state == StateStopped {
-			return nil
-		}
+		return nil
+	}
+	if mp.state == StateStopping {
+		mp.mu.Unlock()
+		s.mu.Unlock()
+		return nil
 	}
 	mp.stopRequested = true
+	if mp.cancelMonitor != nil {
+		mp.cancelMonitor()
+		mp.cancelMonitor = nil
+	}
 	if mp.cancelHealth != nil {
 		mp.cancelHealth()
+		mp.cancelHealth = nil
 	}
-	spec := mp.spec
+	spec := mp.spec.Clone()
 	state := mp.state
 	pid := mp.pid
 	handle := mp.procHandle
+	restartCount := mp.restartCount
 	mp.state = StateStopping
 	mp.mu.Unlock()
 	s.mu.Unlock()
 
-	s.emit(EventStopping, id, pid, mp.restartCount, "")
+	s.emit(EventStopping, id, pid, restartCount, "")
 
-	if state == StateRegistered || pid <= 0 {
+	if state == StateRegistered || state == StateRestartBackoff || pid <= 0 {
 		s.setState(id, StateStopped)
-		s.updateStoppedAt(id, time.Now())
-		s.emit(EventStopped, id, 0, mp.restartCount, "")
+		s.updateStoppedAt(id, time.Now().UTC())
+		s.emit(EventStopped, id, 0, restartCount, "")
 		return nil
 	}
 
@@ -357,14 +405,381 @@ func (s *defaultProcessSupervisor) Stop(ctx context.Context, id ProcessID) error
 		if err := stopper.Stop(handle, pid, grace); err != nil {
 			s.setLastError(id, err.Error())
 		}
-	} else {
-		s.host.processManager.Stop(pid, handle, grace)
+	} else if s.host != nil && s.host.processManager != nil {
+		if err := s.host.processManager.StopContext(ctx, pid, handle, grace); err != nil {
+			s.setLastError(id, err.Error())
+		}
 	}
 
 	s.setState(id, StateStopped)
-	s.updateStoppedAt(id, time.Now())
-	s.emit(EventStopped, id, pid, mp.restartCount, "")
+	s.updateStoppedAt(id, time.Now().UTC())
+	s.emit(EventStopped, id, pid, restartCount, "")
 	return nil
+}
+
+func (s *defaultProcessSupervisor) failStart(id ProcessID, generation uint64, err error) {
+	s.mu.RLock()
+	mp, ok := s.processes[id]
+	s.mu.RUnlock()
+	if !ok {
+		return
+	}
+	mp.mu.Lock()
+	if mp.generation != generation {
+		mp.mu.Unlock()
+		return
+	}
+	mp.state = StateFailed
+	mp.lastError = err.Error()
+	restartCount := mp.restartCount
+	mp.mu.Unlock()
+	s.emit(EventFailed, id, 0, restartCount, err.Error())
+}
+
+func (s *defaultProcessSupervisor) setReadyIfGeneration(id ProcessID, generation uint64) bool {
+	s.mu.RLock()
+	mp, ok := s.processes[id]
+	s.mu.RUnlock()
+	if !ok {
+		return false
+	}
+	mp.mu.Lock()
+	defer mp.mu.Unlock()
+	if mp.generation != generation || mp.stopRequested || mp.state == StateStopped || mp.state == StateStopping || mp.state == StateFailed {
+		return false
+	}
+	if mp.state == StateReady {
+		return false
+	}
+	mp.state = StateReady
+	mp.readyAt = time.Now().UTC()
+	mp.healthFailures = 0
+	return true
+}
+
+func (s *defaultProcessSupervisor) waitForExit(id ProcessID, managed *process.ManagedProcess, generation uint64) {
+	code, waitErr := managed.Wait()
+	s.mu.RLock()
+	mp, ok := s.processes[id]
+	stopped := s.stopped
+	s.mu.RUnlock()
+	if !ok {
+		return
+	}
+
+	mp.mu.Lock()
+	if mp.generation != generation {
+		mp.mu.Unlock()
+		return
+	}
+	mp.lastExitCode = code
+	if waitErr != nil {
+		mp.lastError = waitErr.Error()
+	}
+	if mp.cancelHealth != nil {
+		mp.cancelHealth()
+		mp.cancelHealth = nil
+	}
+	mp.pid = 0
+	mp.procHandle = 0
+	forcedRestart := mp.forceRestart && !stopped
+	forcedReason := mp.forceRestartReason
+	manualStop := (mp.stopRequested || stopped) && !forcedRestart
+	restartCount := mp.restartCount
+	spec := mp.spec.Clone()
+	readyAt := mp.readyAt
+	if forcedRestart {
+		mp.stopRequested = false
+		mp.forceRestart = false
+		mp.forceRestartReason = ""
+		mp.state = StateFailed
+	} else if manualStop {
+		mp.state = StateStopped
+		mp.stoppedAt = time.Now().UTC()
+	} else if code == 0 {
+		mp.state = StateStopped
+		mp.stoppedAt = time.Now().UTC()
+	} else {
+		mp.state = StateFailed
+	}
+	mp.mu.Unlock()
+
+	errText := ""
+	if waitErr != nil {
+		errText = waitErr.Error()
+	}
+	s.emit(EventExited, id, managed.PID, restartCount, errText)
+	if manualStop {
+		return
+	}
+
+	if spec.RestartPolicy.ResetAfter > 0 && !readyAt.IsZero() && time.Since(readyAt) >= spec.RestartPolicy.ResetAfter {
+		mp.mu.Lock()
+		if mp.generation == generation {
+			mp.restartCount = 0
+			restartCount = 0
+		}
+		mp.mu.Unlock()
+	}
+
+	shouldRestart := forcedRestart || spec.RestartPolicy.Mode == RestartAlways || (spec.RestartPolicy.Mode == RestartOnFailure && code != 0)
+	restartReason := errText
+	if forcedRestart && forcedReason != "" {
+		restartReason = forcedReason
+	}
+	if shouldRestart {
+		// scheduleRestart owns the terminal EventFailed emission when the
+		// restart budget is exhausted. Returning here avoids duplicate failed
+		// events (and avoids reporting a RestartAlways clean exit as stopped
+		// when no restart budget remains).
+		s.scheduleRestart(id, generation, restartReason)
+		return
+	}
+	if code != 0 {
+		s.emit(EventFailed, id, managed.PID, restartCount, errText)
+	} else {
+		s.emit(EventStopped, id, managed.PID, restartCount, "")
+	}
+}
+
+func (s *defaultProcessSupervisor) scheduleRestart(id ProcessID, generation uint64, reason string) bool {
+	s.mu.RLock()
+	mp, ok := s.processes[id]
+	stopped := s.stopped
+	s.mu.RUnlock()
+	if !ok || stopped {
+		return false
+	}
+
+	mp.mu.Lock()
+	if mp.generation != generation || mp.stopRequested {
+		mp.mu.Unlock()
+		return false
+	}
+	policy := mp.spec.RestartPolicy
+	if policy.Mode == RestartNever || mp.restartCount >= policy.MaxRestarts {
+		mp.state = StateFailed
+		count := mp.restartCount
+		mp.mu.Unlock()
+		s.emit(EventFailed, id, 0, count, reason)
+		return false
+	}
+	mp.restartCount++
+	count := mp.restartCount
+	delay := restartDelay(policy, count)
+	if mp.cancelMonitor != nil {
+		mp.cancelMonitor()
+	}
+	monitorCtx, cancel := context.WithCancel(context.Background())
+	mp.cancelMonitor = cancel
+	mp.state = StateRestartBackoff
+	mp.mu.Unlock()
+
+	s.emit(EventRestartScheduled, id, 0, count, reason)
+	go func(expectedGeneration uint64, restartCount int) {
+		timer := time.NewTimer(delay)
+		defer timer.Stop()
+		select {
+		case <-monitorCtx.Done():
+			return
+		case <-timer.C:
+		}
+		if err := s.Start(context.Background(), id); err != nil {
+			// Start records/emits the launch failure and increments the generation.
+			// Continue the bounded restart policy from that new generation without
+			// emitting the same failure twice.
+			s.mu.RLock()
+			current := s.processes[id]
+			s.mu.RUnlock()
+			if current != nil {
+				current.mu.Lock()
+				newGeneration := current.generation
+				current.mu.Unlock()
+				s.scheduleRestart(id, newGeneration, err.Error())
+			}
+			return
+		}
+		if err := s.WaitReady(context.Background(), id); err != nil {
+			s.setLastError(id, err.Error())
+			_ = s.stopForHealthRestart(id, err.Error())
+			return
+		}
+		snap, _ := s.Snapshot(id)
+		s.emit(EventRestarted, id, snap.PID, restartCount, "")
+	}(generation, count)
+	return true
+}
+
+func restartDelay(policy RestartPolicy, restartCount int) time.Duration {
+	base := policy.BaseDelay
+	if base <= 0 {
+		base = time.Second
+	}
+	maxDelay := policy.MaxDelay
+	if maxDelay <= 0 {
+		maxDelay = 30 * time.Second
+	}
+	delay := base
+	for i := 1; i < restartCount && delay < maxDelay; i++ {
+		if delay > maxDelay/2 {
+			delay = maxDelay
+			break
+		}
+		delay *= 2
+	}
+	if delay > maxDelay {
+		delay = maxDelay
+	}
+	return delay
+}
+
+func (s *defaultProcessSupervisor) startHealthMonitor(id ProcessID, generation uint64) {
+	s.mu.RLock()
+	mp, ok := s.processes[id]
+	s.mu.RUnlock()
+	if !ok {
+		return
+	}
+	mp.mu.Lock()
+	if mp.generation != generation || mp.stopRequested || mp.spec.HealthProbe == nil || mp.state != StateReady {
+		mp.mu.Unlock()
+		return
+	}
+	if mp.cancelHealth != nil {
+		mp.cancelHealth()
+	}
+	healthCtx, cancel := context.WithCancel(context.Background())
+	mp.cancelHealth = cancel
+	interval := mp.spec.HealthInterval
+	probe := mp.spec.HealthProbe
+	resetAfter := mp.spec.RestartPolicy.ResetAfter
+	mp.mu.Unlock()
+	if interval <= 0 {
+		interval = DefaultHealthInterval
+	}
+
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-healthCtx.Done():
+				return
+			case <-ticker.C:
+			}
+			checkCtx, cancelCheck := context.WithTimeout(healthCtx, interval)
+			err := probe.Check(checkCtx)
+			cancelCheck()
+
+			mp.mu.Lock()
+			if mp.generation != generation || mp.stopRequested || mp.state != StateReady {
+				mp.mu.Unlock()
+				return
+			}
+			if err == nil {
+				mp.healthFailures = 0
+				if resetAfter > 0 && mp.restartCount > 0 && !mp.readyAt.IsZero() && time.Since(mp.readyAt) >= resetAfter {
+					mp.restartCount = 0
+				}
+				mp.mu.Unlock()
+				continue
+			}
+			mp.healthFailures++
+			failures := mp.healthFailures
+			pid := mp.pid
+			restartCount := mp.restartCount
+			mp.lastError = err.Error()
+			mp.mu.Unlock()
+			s.emit(EventUnhealthy, id, pid, restartCount, err.Error())
+			if failures >= healthFailureThreshold {
+				_ = s.stopForHealthRestart(id, err.Error())
+				return
+			}
+		}
+	}()
+}
+
+func (s *defaultProcessSupervisor) stopForHealthRestart(id ProcessID, reason string) error {
+	s.mu.RLock()
+	mp, ok := s.processes[id]
+	stopped := s.stopped
+	s.mu.RUnlock()
+	if !ok {
+		return fmt.Errorf("%w: %s", ErrProcessNotFound, id)
+	}
+	if stopped {
+		return ErrHostStopped
+	}
+
+	mp.mu.Lock()
+	policy := mp.spec.RestartPolicy
+	if policy.Mode == RestartNever {
+		count := mp.restartCount
+		mp.state = StateFailed
+		mp.lastError = reason
+		mp.mu.Unlock()
+		s.emit(EventFailed, id, 0, count, reason)
+		return nil
+	}
+	if mp.state == StateStopping || mp.state == StateStopped || mp.state == StateRestartBackoff {
+		mp.mu.Unlock()
+		return nil
+	}
+	if mp.cancelHealth != nil {
+		mp.cancelHealth()
+		mp.cancelHealth = nil
+	}
+	if mp.cancelMonitor != nil {
+		mp.cancelMonitor()
+		mp.cancelMonitor = nil
+	}
+	mp.stopRequested = false
+	mp.forceRestart = true
+	mp.forceRestartReason = reason
+	mp.lastError = reason
+	mp.state = StateStopping
+	spec := mp.spec.Clone()
+	pid := mp.pid
+	handle := mp.procHandle
+	restartCount := mp.restartCount
+	mp.mu.Unlock()
+
+	s.emit(EventStopping, id, pid, restartCount, reason)
+	if pid <= 0 {
+		// There is no live process whose wait goroutine can schedule the restart.
+		mp.mu.Lock()
+		mp.forceRestart = false
+		mp.forceRestartReason = ""
+		mp.state = StateFailed
+		generation := mp.generation
+		mp.mu.Unlock()
+		if !s.scheduleRestart(id, generation, reason) {
+			return fmt.Errorf("restart policy exhausted for %s", id)
+		}
+		return nil
+	}
+	if err := s.stopManagedProcess(spec, pid, handle); err != nil {
+		s.setLastError(id, err.Error())
+		return err
+	}
+	// waitForExit owns the transition into restart backoff. Keeping that
+	// transition in one place prevents a late Wait() from scheduling a second
+	// restart after an automated health stop.
+	return nil
+}
+
+func (s *defaultProcessSupervisor) stopManagedProcess(spec ProcessSpec, pid int, handle process.ProcessTreeHandle) error {
+	grace := spec.StopGracePeriod
+	if grace <= 0 {
+		grace = DefaultStopGracePeriod
+	}
+	if stopper, ok := spec.ExecutableProcess.(ProcessStopper); ok {
+		return stopper.Stop(handle, pid, grace)
+	}
+	if s.host == nil || s.host.processManager == nil {
+		return nil
+	}
+	return s.host.processManager.Stop(pid, handle, grace)
 }
 
 func (s *defaultProcessSupervisor) StopAll(ctx context.Context) error {
@@ -457,7 +872,7 @@ func (s *defaultProcessSupervisor) isAlive(pid int) bool {
 	s.mu.RLock()
 	host := s.host
 	s.mu.RUnlock()
-	if host == nil {
+	if host == nil || host.processManager == nil {
 		return false
 	}
 	return host.processManager.IsProcessAlive(pid)
@@ -574,6 +989,15 @@ func (s *defaultProcessSupervisor) applyDefaults(spec *ProcessSpec) error {
 	}
 	if spec.RestartPolicy.MaxRestarts <= 0 {
 		spec.RestartPolicy.MaxRestarts = DefaultMaxRestarts
+	}
+	if spec.RestartPolicy.BaseDelay <= 0 {
+		spec.RestartPolicy.BaseDelay = time.Second
+	}
+	if spec.RestartPolicy.MaxDelay <= 0 {
+		spec.RestartPolicy.MaxDelay = 30 * time.Second
+	}
+	if spec.RestartPolicy.MaxDelay < spec.RestartPolicy.BaseDelay {
+		spec.RestartPolicy.MaxDelay = spec.RestartPolicy.BaseDelay
 	}
 	return nil
 }

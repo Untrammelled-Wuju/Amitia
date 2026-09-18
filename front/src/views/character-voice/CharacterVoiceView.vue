@@ -48,6 +48,8 @@ SPDX-License-Identifier: AGPL-3.0-only
           />
 
           <VoiceSettingsPanel
+            v-model:voice-config-id="form.voiceConfigId"
+            :voice-configs="voiceConfigs"
             v-model:voice-speed="form.voiceSpeed"
             v-model:voice-pitch="form.voicePitch"
             v-model:voice-volume="form.voiceVolume"
@@ -82,6 +84,7 @@ import VoicePreviewBar from "./components/VoicePreviewBar.vue";
 
 const {
   voicePresets,
+  voiceConfigs,
   emotions,
   saving,
   previewLoading,

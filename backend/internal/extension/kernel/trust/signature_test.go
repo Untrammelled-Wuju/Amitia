@@ -43,7 +43,7 @@ func TestSignerAndVerifier(t *testing.T) {
 	payload := SignaturePayload{
 		ExtensionID:     "com.example/weather",
 		Version:         "1.0.0",
-		ManifestVersion: 2,
+		ManifestVersion: 1,
 		ManifestHash:    "sha256:abc",
 		ContentTreeHash: "sha256:def",
 		PackageHash:     "sha256:ghi",
@@ -86,7 +86,7 @@ func TestVerifierRejectsTamperedPayload(t *testing.T) {
 	payload := SignaturePayload{
 		ExtensionID:     "com.example/weather",
 		Version:         "1.0.0",
-		ManifestVersion: 2,
+		ManifestVersion: 1,
 		ManifestHash:    "sha256:abc",
 		ContentTreeHash: "sha256:def",
 		PackageHash:     "sha256:ghi",
@@ -233,7 +233,7 @@ func TestPayloadCanonicalizationStable(t *testing.T) {
 	payload := SignaturePayload{
 		ExtensionID:     "com.example/weather",
 		Version:         "1.0.0",
-		ManifestVersion: 2,
+		ManifestVersion: 1,
 		ManifestHash:    "sha256:abc",
 		ContentTreeHash: "sha256:def",
 		PackageHash:     "sha256:ghi",

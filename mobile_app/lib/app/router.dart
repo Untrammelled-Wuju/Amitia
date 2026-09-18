@@ -3,9 +3,9 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../core/services/providers.dart' show startupStageProvider;
 import 'theme/app_theme.dart';
 import '../core/ui_runtime/route_surface_provider_host.dart';
+import '../core/ui_runtime/mobile_extension_slot.dart';
 import '../core/ui_runtime/routing/builtin_route_catalog.dart';
 import '../core/ui_runtime/ui_provider.dart';
 import '../core/ui_runtime/ui_provider_host.dart';
@@ -13,7 +13,6 @@ import '../core/ui_runtime/ui_route_registry.dart';
 import '../core/ui_runtime/ui_runtime_controller.dart';
 import '../core/widgets/amitia_drawer.dart';
 import '../core/widgets/amitia_scaffold.dart';
-import '../features/auth/presentation/pages/login_page.dart';
 import '../features/error/presentation/pages/not_found_page.dart';
 import '../features/onboarding/presentation/pages/onboarding_page.dart';
 import '../features/privacy/presentation/pages/privacy_page.dart';
@@ -21,7 +20,7 @@ import '../features/settings/presentation/pages/ui_provider_settings_page.dart';
 import 'app_routes.dart';
 import 'route_transitions.dart';
 
-final _shellNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'shell');
+final appNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'app-shell');
 
 class AppShell extends ConsumerStatefulWidget {
   final Widget child;
@@ -112,23 +111,13 @@ final goRouterProvider = Provider<GoRouter>((ref) {
   final providerSnapshot = ref.read(uiRuntimeProvider).valueOrNull;
   return GoRouter(
     initialLocation: AppRoutes.chat,
-    navigatorKey: _shellNavigatorKey,
-    redirect: (context, state) {
-      final stage = ref.read(startupStageProvider).valueOrNull;
+    navigatorKey: appNavigatorKey,
+    redirect: (context, state) async {
       final location = state.matchedLocation;
 
       if (location == '/about') return '/settings/about';
       if (location == '/toolbox') return '/settings/toolbox';
 
-      switch (stage) {
-        case 'ready':
-          if (location == '/onboarding' ||
-              location == '/login' ||
-              location == '/privacy') {
-            return AppRoutes.chat;
-          }
-          break;
-      }
       return null;
     },
     errorBuilder: (context, state) =>
@@ -141,14 +130,6 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           context: context,
           state: state,
           child: const OnboardingPage(),
-        ),
-      ),
-      GoRoute(
-        path: '/login',
-        pageBuilder: (context, state) => slideFadePage(
-          context: context,
-          state: state,
-          child: const LoginPage(),
         ),
       ),
       GoRoute(
@@ -179,13 +160,21 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             route: state.matchedLocation,
             child: child,
           );
-          return UIProviderHost(
+          final shell = UIProviderHost(
             capability: UICapability.appShell,
             context: {'route': state.matchedLocation},
             fallback: AppShell(
               currentRoute: state.matchedLocation,
               child: surface,
             ),
+          );
+          return MobileExtensionSlot(
+            slotId: 'root',
+            context: {
+              'route': state.matchedLocation,
+              'surfaceRole': 'main',
+            },
+            fallback: shell,
           );
         },
         routes: <RouteBase>[

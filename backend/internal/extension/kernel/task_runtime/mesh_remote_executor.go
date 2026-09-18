@@ -25,7 +25,7 @@ type TaskCompletionHandler interface {
 }
 
 type meshSessionLookup interface {
-	GetActiveSession(ctx context.Context, userID runtimeidentity.UserID, deviceID runtimeidentity.DeviceID, runtimeID runtimeidentity.RuntimeID) (deviceruntime.RuntimeSession, error)
+	GetActiveSession(ctx context.Context, spaceID runtimeidentity.SpaceID, deviceID runtimeidentity.DeviceID, runtimeID runtimeidentity.RuntimeID) (deviceruntime.RuntimeSession, error)
 }
 
 type MeshRemoteTaskExecutor struct {
@@ -110,8 +110,8 @@ func (e *MeshRemoteTaskExecutor) executeOnDevice(ctx context.Context, request Ta
 		return TaskExecutionOutcome{
 			Status:       RunStatusFailed,
 			ErrorCode:    string(ErrTaskDeviceBindingInvalid),
-			ErrorMessage: "device execution requires userId and deviceId",
-		}, NewTaskError(ErrTaskDeviceBindingInvalid, "device execution requires userId and deviceId")
+			ErrorMessage: "device execution requires spaceId and deviceId",
+		}, NewTaskError(ErrTaskDeviceBindingInvalid, "device execution requires spaceId and deviceId")
 	}
 
 	sessionID, generation, err := e.resolveDeviceSession(ctx, target)
@@ -210,7 +210,7 @@ func (e *MeshRemoteTaskExecutor) executeOnCloud(ctx context.Context, request Tas
 
 func (e *MeshRemoteTaskExecutor) resolveDeviceSession(ctx context.Context, target TaskExecutionTarget) (runtimeidentity.RuntimeSessionID, int64, error) {
 	if e.sessionLookup != nil {
-		session, err := e.sessionLookup.GetActiveSession(ctx, target.UserID, target.DeviceID, target.RuntimeID)
+		session, err := e.sessionLookup.GetActiveSession(ctx, target.SpaceID, target.DeviceID, target.RuntimeID)
 		if err != nil {
 			return "", 0, fmt.Errorf("resolve session: %w", err)
 		}
@@ -224,7 +224,7 @@ func (e *MeshRemoteTaskExecutor) resolveDeviceSession(ctx context.Context, targe
 		return target.RuntimeSessionID, target.ConnectionGeneration, nil
 	}
 
-	conn, ok := e.hub.GetByRuntime(target.UserID, target.DeviceID, target.RuntimeID)
+	conn, ok := e.hub.GetByRuntime(target.SpaceID, target.DeviceID, target.RuntimeID)
 	if !ok {
 		return "", 0, fmt.Errorf("no active connection for target device")
 	}
@@ -255,8 +255,8 @@ func (e *MeshRemoteTaskExecutor) ValidateTarget(ctx context.Context, target Task
 		return NewTaskError(ErrTaskExecutionTargetInvalid, "empty execution target")
 	}
 
-	if normalized.HasDevice() && (normalized.UserID == "" || normalized.RuntimeID == "") {
-		return NewTaskError(ErrTaskDeviceBindingInvalid, "device target requires userId and runtimeId")
+	if normalized.HasDevice() && (normalized.SpaceID == "" || normalized.RuntimeID == "") {
+		return NewTaskError(ErrTaskDeviceBindingInvalid, "device target requires spaceId and runtimeId")
 	}
 
 	if normalized.HasRuntimeSession() && normalized.ConnectionGeneration < 1 {
@@ -279,7 +279,7 @@ func (e *MeshRemoteTaskExecutor) Cancel(ctx context.Context, run *TaskRun) error
 	generation := target.ConnectionGeneration
 
 	if (!target.HasRuntimeSession() || generation < 1) && e.sessionLookup != nil {
-		session, err := e.sessionLookup.GetActiveSession(ctx, target.UserID, target.DeviceID, target.RuntimeID)
+		session, err := e.sessionLookup.GetActiveSession(ctx, target.SpaceID, target.DeviceID, target.RuntimeID)
 		if err != nil {
 			return fmt.Errorf("resolve session for cancel: %w", err)
 		}

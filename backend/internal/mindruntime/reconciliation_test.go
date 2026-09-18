@@ -554,7 +554,7 @@ func TestRegisterDefaultRuntimeReconciliationCheckersRegistersAvailableTargets(t
 	}
 	statements := []string{
 		"CREATE TABLE outbox_records (id TEXT PRIMARY KEY, aggregate_id TEXT, event_type TEXT, payload TEXT, status TEXT, retry_count INTEGER, last_error TEXT, leased_until DATETIME)",
-		"CREATE TABLE interaction_records (id TEXT PRIMARY KEY, user_id TEXT, character_id TEXT, conversation_id TEXT, request_id TEXT, status TEXT, status_version INTEGER, result_ref TEXT, error_code TEXT, error_message TEXT)",
+		"CREATE TABLE interaction_records (id TEXT PRIMARY KEY, space_id TEXT, character_id TEXT, conversation_id TEXT, request_id TEXT, status TEXT, status_version INTEGER, result_ref TEXT, error_code TEXT, error_message TEXT)",
 		"CREATE TABLE messages (id TEXT PRIMARY KEY, conversation_id TEXT, character_id TEXT, request_id TEXT, status TEXT, content TEXT, updated_at DATETIME)",
 		"CREATE TABLE delivery_intents (id TEXT PRIMARY KEY, request_id TEXT, channel TEXT, status TEXT, retry_count INTEGER, last_error TEXT)",
 	}

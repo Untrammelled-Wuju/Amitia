@@ -21,8 +21,8 @@ func (h *Handler) SecurityAccessStatus(c *gin.Context) {
 	util.SuccessResponse(c, h.service.GetSecurityAccessStatus())
 }
 
-func (h *Handler) SecurityAccountCheck(c *gin.Context) {
-	util.SuccessResponse(c, h.service.SecurityAccountCheck())
+func (h *Handler) SecurityIdentityCheck(c *gin.Context) {
+	util.SuccessResponse(c, h.service.SecurityIdentityCheck())
 }
 
 func (h *Handler) SecurityExposureCheck(c *gin.Context) {

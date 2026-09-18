@@ -9,11 +9,11 @@ import (
 )
 
 type RuntimeTarget struct {
-	Placement        string                     `json:"placement"`
-	UserID           runtimeidentity.UserID     `json:"userId,omitempty"`
-	DeviceID         runtimeidentity.DeviceID   `json:"deviceId,omitempty"`
-	RuntimeID        runtimeidentity.RuntimeID  `json:"runtimeId,omitempty"`
-	RuntimeSessionID string                     `json:"runtimeSessionId,omitempty"`
+	Placement        string                    `json:"placement"`
+	SpaceID          runtimeidentity.SpaceID   `json:"spaceId,omitempty"`
+	DeviceID         runtimeidentity.DeviceID  `json:"deviceId,omitempty"`
+	RuntimeID        runtimeidentity.RuntimeID `json:"runtimeId,omitempty"`
+	RuntimeSessionID string                    `json:"runtimeSessionId,omitempty"`
 }
 
 type ExecutionContext struct {
@@ -22,7 +22,7 @@ type ExecutionContext struct {
 	RootExecutionID   string `json:"rootExecutionId,omitempty"`
 	ParentExecutionID string `json:"parentExecutionId,omitempty"`
 
-	UserID runtimeidentity.UserID `json:"userId"`
+	SpaceID runtimeidentity.SpaceID `json:"spaceId"`
 
 	ConversationID string `json:"conversationId,omitempty"`
 	TaskID         string `json:"taskId,omitempty"`
@@ -50,33 +50,41 @@ type ExecutionContext struct {
 	CreatedAt time.Time `json:"createdAt"`
 }
 
-func NewExecutionContext(rootID, userID string) ExecutionContext {
+func NewExecutionContext(rootID, spaceID string) ExecutionContext {
 	return ExecutionContext{
-		ExecutionID:      NewExecutionID(),
-		RootExecutionID:   rootID,
-		UserID:           runtimeidentity.UserID(userID),
-		ScopeSnapshotID:  "",
-		Budget:           DefaultExecutionBudget(),
-		CreatedAt:        time.Now().UTC(),
+		ExecutionID:     NewExecutionID(),
+		RootExecutionID: rootID,
+		SpaceID:         runtimeidentity.SpaceID(spaceID),
+		ScopeSnapshotID: "",
+		Budget:          DefaultExecutionBudget(),
+		CreatedAt:       time.Now().UTC(),
 	}
 }
 
 func NewChildExecution(parent ExecutionContext, source string) ExecutionContext {
+	metadata := make(map[string]any, len(parent.Metadata))
+	for key, value := range parent.Metadata {
+		metadata[key] = value
+	}
 	return ExecutionContext{
-		ExecutionID:        NewExecutionID(),
-		RootExecutionID:     parent.RootExecutionID,
-		ParentExecutionID:   parent.ExecutionID,
-		UserID:             parent.UserID,
-		ConversationID:     parent.ConversationID,
-		TaskID:             parent.TaskID,
-		TraceID:            parent.TraceID,
-		RuntimeTarget:      parent.RuntimeTarget,
-		ScopeSnapshotID:    parent.ScopeSnapshotID,
+		ExecutionID:          NewExecutionID(),
+		RootExecutionID:      parent.RootExecutionID,
+		ParentExecutionID:    parent.ExecutionID,
+		SpaceID:              parent.SpaceID,
+		ConversationID:       parent.ConversationID,
+		TaskID:               parent.TaskID,
+		InvocationID:         parent.InvocationID,
+		TraceID:              parent.TraceID,
+		RuntimeTarget:        parent.RuntimeTarget,
+		ScopeSnapshotID:      parent.ScopeSnapshotID,
 		PermissionSnapshotID: parent.PermissionSnapshotID,
-		Source:             source,
-		Budget:             parent.Budget,
-		Metadata:           make(map[string]any),
-		CreatedAt:          time.Now().UTC(),
+		ExtensionID:          parent.ExtensionID,
+		ModuleID:             parent.ModuleID,
+		WorkspaceID:          parent.WorkspaceID,
+		Source:               source,
+		Budget:               parent.Budget,
+		Metadata:             metadata,
+		CreatedAt:            time.Now().UTC(),
 	}
 }
 

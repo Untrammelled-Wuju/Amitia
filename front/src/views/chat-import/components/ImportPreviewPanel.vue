@@ -97,7 +97,6 @@ function formatLabel(value: string) {
   if (value === "standard") return "标准";
   if (value === "timestamp") return "时间戳";
   if (value === "multiline") return "多行";
-  if (value === "wechat") return "微信";
   return value || "自动";
 }
 </script>

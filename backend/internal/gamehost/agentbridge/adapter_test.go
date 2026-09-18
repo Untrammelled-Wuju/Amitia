@@ -18,6 +18,12 @@ import (
 
 type genericControlPlane struct{ methods []string }
 
+type runtimeStarterFunc func(context.Context, ghdomain.RuntimeInstanceID) error
+
+func (f runtimeStarterFunc) StartRuntime(ctx context.Context, runtimeID ghdomain.RuntimeInstanceID) error {
+	return f(ctx, runtimeID)
+}
+
 type stubReadiness struct{}
 
 func (stubReadiness) Resolve(_ context.Context, runtimeID ghdomain.RuntimeInstanceID) (readiness.Snapshot, error) {
@@ -98,9 +104,12 @@ func TestRuntimeAdapterForwardsOpaquePluginMethods(t *testing.T) {
 	}
 	binding := capability.RuntimeBinding{RuntimeType: capability.RuntimeTypeGameHost, HandlerName: "vendor.player.move", Metadata: map[string]any{"extensionId": "com.example/game", "serviceId": "main"}}
 	input, _ := json.Marshal(map[string]any{"opaque": true})
-	result := adapter.Execute(ctx, binding, capability.ToolInvocationContext{InvocationID: "invoke-1", UserID: "u", CharacterID: "c", ConversationID: "conv", Channel: "web", SessionID: "host-session"}, input)
+	result := adapter.Execute(ctx, binding, capability.ToolInvocationContext{InvocationID: "invoke-1", SpaceID: "u", CharacterID: "c", ConversationID: "conv", Channel: "web", SessionID: "host-session"}, input)
 	if result.Status != capability.ToolResultStatusSuccess {
 		t.Fatalf("Execute failed: %+v", result.Error)
+	}
+	if result.ToolID != "" {
+		t.Fatalf("runtime adapter must leave tool ID empty for the execution pipeline, got %q", result.ToolID)
 	}
 	if len(control.methods) != 1 || control.methods[0] != "vendor.player.move" {
 		t.Fatalf("unexpected methods %v", control.methods)
@@ -114,6 +123,51 @@ func TestRuntimeAdapterForwardsOpaquePluginMethods(t *testing.T) {
 	}
 	if result.Metadata["pluginId"] != "example" {
 		t.Fatalf("unexpected metadata %+v", result.Metadata)
+	}
+}
+
+func TestRuntimeAdapterStartsStoppedRuntimeBeforeExecutingTool(t *testing.T) {
+	ctx := context.Background()
+	plugins := registry.NewRegistry()
+	plugin := ghdomain.PluginDescriptor{ID: "example", ExtensionID: "com.example/game", Name: "Example", Version: "1.0.0", ProtocolVersion: protocol.ProtocolVersion, Services: []ghdomain.ServiceDescriptor{{ID: "main", Name: "main", Kind: ghdomain.ServiceKindProcess, Required: true}}}
+	if err := plugins.Register(ctx, plugin); err != nil {
+		t.Fatal(err)
+	}
+	runtimes := ghruntime.NewManager(ghruntime.ManagerOptions{})
+	rt, _, err := runtimes.EnsurePrimaryRuntime(ctx, plugin.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	topology := ghruntime.NewTopologyStore()
+	if err := topology.PutRuntimeGraph(rt, plugin, map[ghdomain.ServiceID]string{"main": "def-main"}); err != nil {
+		t.Fatal(err)
+	}
+	control := &genericControlPlane{}
+	adapter, err := NewRuntimeAdapter(plugins, runtimes, topology, control, stubReadiness{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	starts := 0
+	adapter.SetRuntimeStarter(runtimeStarterFunc(func(ctx context.Context, runtimeID ghdomain.RuntimeInstanceID) error {
+		starts++
+		if _, err := runtimes.AllocateGeneration(runtimeID); err != nil {
+			return err
+		}
+		if err := runtimes.UpdateRuntimeState(runtimeID, ghdomain.RuntimeStateStarting, "test", time.Now()); err != nil {
+			return err
+		}
+		return runtimes.UpdateRuntimeState(runtimeID, ghdomain.RuntimeStateRunning, "test", time.Now())
+	}))
+	binding := capability.RuntimeBinding{RuntimeType: capability.RuntimeTypeGameHost, HandlerName: "vendor.player.connect", Metadata: map[string]any{"pluginId": string(plugin.ID), "serviceId": "main"}}
+	result := adapter.Execute(ctx, binding, capability.ToolInvocationContext{InvocationID: "invoke-start"}, json.RawMessage(`{"host":"localhost"}`))
+	if result.Status != capability.ToolResultStatusSuccess {
+		t.Fatalf("Execute failed: %+v", result.Error)
+	}
+	if starts != 1 {
+		t.Fatalf("runtime starts = %d, want 1", starts)
+	}
+	if len(control.methods) != 1 || control.methods[0] != "vendor.player.connect" {
+		t.Fatalf("unexpected methods %v", control.methods)
 	}
 }
 
@@ -147,13 +201,39 @@ func TestRuntimeAdapterBindAgentContextWithoutToolInvocation(t *testing.T) {
 		t.Fatal(err)
 	}
 	binding := capability.RuntimeBinding{RuntimeType: capability.RuntimeTypeGameHost, Metadata: map[string]any{"extensionId": "com.example/game", "serviceId": "main"}}
-	invocation := capability.ToolInvocationContext{UserID: "user", CharacterID: "character", ConversationID: "conversation", Channel: "web", SessionID: "host-session"}
+	invocation := capability.ToolInvocationContext{SpaceID: "user", CharacterID: "character", ConversationID: "conversation", Channel: "web", SessionID: "host-session"}
 	if err := adapter.BindAgentContext(ctx, binding, invocation); err != nil {
 		t.Fatal(err)
 	}
 	scope, ok := adapter.SessionRegistry().Resolve(rt.ID, "main", "")
 	if !ok || scope.CharacterID != "character" || scope.HostSessionID != "host-session" {
 		t.Fatalf("unexpected bound scope: %+v ok=%v", scope, ok)
+	}
+}
+
+func TestRuntimeAdapterBindAgentContextWithoutActiveGenerationIsBestEffort(t *testing.T) {
+	ctx := context.Background()
+	plugins := registry.NewRegistry()
+	plugin := ghdomain.PluginDescriptor{ID: "example", ExtensionID: "com.example/game", Name: "Example", Version: "1.0.0", ProtocolVersion: protocol.ProtocolVersion, Services: []ghdomain.ServiceDescriptor{{ID: "main", Name: "main", Kind: ghdomain.ServiceKindProcess, Required: true}}}
+	if err := plugins.Register(ctx, plugin); err != nil {
+		t.Fatal(err)
+	}
+	runtimes := ghruntime.NewManager(ghruntime.ManagerOptions{})
+	rt, _, err := runtimes.EnsurePrimaryRuntime(ctx, plugin.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	topology := ghruntime.NewTopologyStore()
+	if err := topology.PutRuntimeGraph(rt, plugin, map[ghdomain.ServiceID]string{"main": "def-main"}); err != nil {
+		t.Fatal(err)
+	}
+	adapter, err := NewRuntimeAdapter(plugins, runtimes, topology, &genericControlPlane{}, stubReadiness{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	binding := capability.RuntimeBinding{RuntimeType: capability.RuntimeTypeGameHost, Metadata: map[string]any{"extensionId": "com.example/game", "serviceId": "main"}}
+	if err := adapter.BindAgentContext(ctx, binding, capability.ToolInvocationContext{CharacterID: "character"}); err != nil {
+		t.Fatalf("expected best-effort bind to ignore missing generation: %v", err)
 	}
 }
 
@@ -171,7 +251,7 @@ func TestSessionRegistryDefaultAgentContextEnrichesColdPluginSessions(t *testing
 		RuntimeID:      "runtime-1",
 		ServiceID:      "service-1",
 		Generation:     1,
-		UserID:         "user-1",
+		SpaceID:        "user-1",
 		CharacterID:    "character-1",
 		ConversationID: "conversation-1",
 		Channel:        "web",

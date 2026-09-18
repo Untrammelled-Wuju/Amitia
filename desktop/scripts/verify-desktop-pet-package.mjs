@@ -54,11 +54,11 @@ function main() {
     }
 
     const backendEnvelope = readFileSync(
-      resolve(repositoryRoot, "backend/internal/desktoppet/runtime/protocol/v2/envelope.go"),
+      resolve(repositoryRoot, "backend/internal/desktoppet/runtime/protocol/v1/envelope.go"),
       "utf8",
     );
     if (!/CurrentSchemaVersion\s*=\s*contracts\.RuntimeContractVersion/.test(backendEnvelope)) {
-      errors.push("MISMATCH: Runtime v2 CurrentSchemaVersion 未绑定后端唯一契约常量");
+      errors.push("MISMATCH: Runtime v1 CurrentSchemaVersion 未绑定后端唯一契约常量");
     }
   } catch (error) {
     errors.push(`FAILED: 无法验证桌宠 Runtime 版本源 (${error instanceof Error ? error.message : String(error)})`);

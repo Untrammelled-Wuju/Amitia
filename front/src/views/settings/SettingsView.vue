@@ -60,6 +60,18 @@ SPDX-License-Identifier: AGPL-3.0-only
         >维护诊断</router-link
       >
       <router-link
+        to="/settings/system-logs"
+        class="settings-tab"
+        active-class="settings-tab-active"
+        >运行日志</router-link
+      >
+      <router-link
+        to="/settings/prompt-trace"
+        class="settings-tab"
+        active-class="settings-tab-active"
+        >Prompt Trace</router-link
+      >
+      <router-link
         to="/settings/about"
         class="settings-tab"
         active-class="settings-tab-active"

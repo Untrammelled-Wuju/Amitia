@@ -78,6 +78,9 @@ func TestPrepareNetworkLaunchRejectsAuditWithoutAuditBackend(t *testing.T) {
 }
 
 func TestAppendSandboxParentDirsCreatesParentsInOrderWithoutDuplicates(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("uses POSIX sandbox paths")
+	}
 	created := map[string]struct{}{`/`: {}}
 	args := appendSandboxParentDirs(nil, `/opt/amitia/plugins/game/index.js`, created)
 	want := []string{`--dir`, `/opt`, `--dir`, `/opt/amitia`, `--dir`, `/opt/amitia/plugins`, `--dir`, `/opt/amitia/plugins/game`}
@@ -101,6 +104,9 @@ func TestPathWithinRejectsSiblingPrefix(t *testing.T) {
 }
 
 func TestBuildDarwinSandboxProfileUnrestrictedStillRestrictsFilesystem(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("darwin sandbox profile")
+	}
 	profile, err := buildDarwinSandboxProfile("unrestricted", "/opt/runtime", "/tmp/work", "/tmp/temp", "/opt/plugin")
 	if err != nil {
 		t.Fatalf("buildDarwinSandboxProfile() error = %v", err)
@@ -113,6 +119,9 @@ func TestBuildDarwinSandboxProfileUnrestrictedStillRestrictsFilesystem(t *testin
 }
 
 func TestBuildDarwinSandboxProfileUnrestrictedDoesNotAllowInbound(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("darwin sandbox profile")
+	}
 	profile, err := buildDarwinSandboxProfile("unrestricted", "/opt/runtime", "/tmp/work", "/tmp/temp", "/opt/plugin")
 	if err != nil {
 		t.Fatalf("buildDarwinSandboxProfile() error = %v", err)
@@ -213,7 +222,7 @@ func TestNetworkSandboxExecutableRequirementsWindowsModes(t *testing.T) {
 		{mode: "loopback", want: []string{"powershell", "icacls", "CheckNetIsolation"}},
 		{mode: "unrestricted", want: []string{"powershell", "icacls", "CheckNetIsolation"}},
 	} {
-		requirements, err := networkSandboxExecutableRequirements("windows", tc.mode, "/Windows")
+		requirements, err := networkSandboxExecutableRequirements("windows", tc.mode, os.Getenv("SystemRoot"))
 		if err != nil {
 			t.Fatalf("windows %s requirements error = %v", tc.mode, err)
 		}

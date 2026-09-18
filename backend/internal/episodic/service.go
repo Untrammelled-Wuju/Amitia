@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/u-ai/backend/internal/requestidentity"
 	"io"
 	"net/http"
 	"strings"
@@ -25,11 +26,13 @@ type Service interface {
 	List(q EpisodicListQuery) (*EpisodicListResponse, error)
 	Create(req *CreateEpisodicRequest) (*EpisodicMemory, error)
 	Delete(id string) error
-	GetByUserID(userID string, characterID ...string) ([]EpisodicMemory, error)
+	UpdateRetention(id string, level int) (*EpisodicMemory, error)
+	Restore(id string) (*EpisodicMemory, error)
+	GetBySpaceID(spaceID string, characterID ...string) ([]EpisodicMemory, error)
 	GetDetail(id string) (*EpisodicMemory, []map[string]interface{}, error)
-	ExtractFromConversation(userID, convID string, messages []map[string]string, characterID ...string) error
-	ToSystemPrompt(userID string, characterID ...string) string
-	SaveFromTool(userID, sceneType, title, content string, sentimentScore int, convID, msgStart, msgEnd string, characterID ...string) (*EpisodicMemory, error)
+	ExtractFromConversation(spaceID, convID string, messages []map[string]string, characterID ...string) error
+	ToSystemPrompt(spaceID string, characterID ...string) string
+	SaveFromTool(spaceID, sceneType, title, content string, sentimentScore int, convID, msgStart, msgEnd string, characterID ...string) (*EpisodicMemory, error)
 	SyncGraphEpisodic(id string) bool
 }
 
@@ -52,12 +55,13 @@ func (s *service) List(q EpisodicListQuery) (*EpisodicListResponse, error) {
 	if s.dataLifecycleCoordinator != nil && q.CharacterID != "" && s.dataLifecycleCoordinator.IsRetrievalBlocked(q.CharacterID) {
 		return &EpisodicListResponse{Items: []EpisodicMemory{}, Total: 0, Page: 1, PageSize: 20, TotalPages: 1}, nil
 	}
-	if strings.TrimSpace(q.CharacterID) != "" {
-		q.UserID = strings.TrimSpace(q.CharacterID)
-	}
 	items, total, err := s.repo.List(q)
 	if err != nil {
 		return nil, err
+	}
+	now := time.Now()
+	for i := range items {
+		s.maintainRetention(&items[i], now)
 	}
 	page := q.Page
 	pageSize := q.PageSize
@@ -78,12 +82,10 @@ func (s *service) Create(req *CreateEpisodicRequest) (*EpisodicMemory, error) {
 	if req.SceneType == "" {
 		return nil, fmt.Errorf("sceneType不能为空")
 	}
-	scope := s.episodicScope(req.SourceConvID, req.CharacterID, req.UserID)
-	if scope == "" {
-		return nil, fmt.Errorf("character scope required")
-	}
+	characterID := s.episodicScope(req.SourceConvID, req.CharacterID)
 	m := &EpisodicMemory{
-		UserID:           scope,
+		SpaceID:          cleanOwner(req.SpaceID),
+		CharacterID:      characterID,
 		SceneType:        req.SceneType,
 		Title:            req.Title,
 		Content:          req.Content,
@@ -111,31 +113,94 @@ func (s *service) Delete(id string) error {
 	}
 	if s.graphSvc != nil {
 		_ = s.graphSvc.DeleteNode("episodic:" + id)
-		if memory != nil && memory.UserID != "" {
-			_ = s.graphSvc.DeleteNodeIfOrphan("user:" + memory.UserID)
+		if memory != nil && memory.SpaceID != "" {
+			_ = s.graphSvc.DeleteNodeIfOrphan("space:" + memory.SpaceID)
 		}
 	}
 	return nil
 }
 
-func (s *service) GetByUserID(userID string, characterID ...string) ([]EpisodicMemory, error) {
-	if scope := firstScope(characterID...); scope != "" {
-		userID = scope
+func (s *service) UpdateRetention(id string, level int) (*EpisodicMemory, error) {
+	if level < 1 || level > 5 {
+		return nil, fmt.Errorf("retentionLevel必须在1到5之间")
 	}
-	return s.repo.GetByUserID(userID, 0)
+	m, err := s.repo.FindByID(id)
+	if err != nil || m == nil {
+		return nil, err
+	}
+	now := time.Now().Format("2006-01-02 15:04:05")
+	strength := m.MemoryStrength
+	minimum := episodicDefaultStrength(level)
+	if strength <= 0 || strength < minimum*0.65 {
+		strength = minimum
+	}
+	updates := map[string]interface{}{
+		"retention_level":     level,
+		"memory_strength":     clampEpisodicStrength(strength),
+		"strength_updated_at": now,
+		"last_reinforced_at":  now,
+		"decay_state":         episodicDecayActive,
+		"archived_at":         nil,
+		"updated_at":          now,
+	}
+	if err := s.db.Table("episodic_memories").Where("id = ?", id).Updates(updates).Error; err != nil {
+		return nil, err
+	}
+	updated, err := s.repo.FindByID(id)
+	if err == nil && updated != nil {
+		s.syncGraph(updated)
+	}
+	return updated, err
+}
+
+func (s *service) Restore(id string) (*EpisodicMemory, error) {
+	m, err := s.repo.FindByID(id)
+	if err != nil || m == nil {
+		return nil, err
+	}
+	level := normalizeEpisodicRetentionLevel(m.RetentionLevel)
+	now := time.Now().Format("2006-01-02 15:04:05")
+	strength := m.MemoryStrength
+	if strength < 0.18 {
+		strength = episodicDefaultStrength(level)
+	}
+	if err := s.db.Table("episodic_memories").Where("id = ?", id).Updates(map[string]interface{}{
+		"memory_strength":     clampEpisodicStrength(strength),
+		"strength_updated_at": now,
+		"last_reinforced_at":  now,
+		"decay_state":         episodicDecayActive,
+		"archived_at":         nil,
+		"updated_at":          now,
+	}).Error; err != nil {
+		return nil, err
+	}
+	updated, err := s.repo.FindByID(id)
+	if err == nil && updated != nil {
+		s.syncGraph(updated)
+	}
+	return updated, err
+}
+
+func (s *service) GetBySpaceID(spaceID string, characterID ...string) ([]EpisodicMemory, error) {
+	q := EpisodicListQuery{SpaceID: cleanOwner(spaceID), CharacterID: firstScope(characterID...), Page: 1, PageSize: 100}
+	items, _, err := s.repo.List(q)
+	return items, err
 }
 
 func (s *service) GetDetail(id string) (*EpisodicMemory, []map[string]interface{}, error) {
 	return s.repo.GetDetailWithMessages(id, s.db)
 }
 
-func (s *service) SaveFromTool(userID, sceneType, title, content string, sentimentScore int, convID, msgStart, msgEnd string, characterID ...string) (*EpisodicMemory, error) {
-	scope := s.episodicScope(convID, characterID...)
-	if scope == "" {
-		return nil, fmt.Errorf("character scope required")
+func (s *service) SaveFromTool(spaceID, sceneType, title, content string, sentimentScore int, convID, msgStart, msgEnd string, characterID ...string) (*EpisodicMemory, error) {
+	spaceID = cleanOwner(spaceID)
+	requestedScope := firstScope(characterID...)
+	characterScope, err := s.requireEpisodicConversationOwner(convID, spaceID, requestedScope)
+	if err != nil {
+		return nil, err
 	}
 	m := &EpisodicMemory{
-		UserID:           scope,
+		SpaceID:          spaceID,
+		CharacterID:      characterScope,
 		SceneType:        sceneType,
 		Title:            title,
 		Content:          content,
@@ -171,13 +236,15 @@ func (s *service) resolveMessageTime(convID, messageID string) string {
 	return createdAt
 }
 
-func (s *service) ExtractFromConversation(userID, convID string, messages []map[string]string, characterID ...string) error {
+func (s *service) ExtractFromConversation(spaceID, convID string, messages []map[string]string, characterID ...string) error {
 	if len(messages) == 0 {
 		return nil
 	}
-	scope := s.episodicScope(convID, characterID...)
-	if scope == "" {
-		return nil
+	ownerID := cleanOwner(spaceID)
+	requestedScope := firstScope(characterID...)
+	characterScope, err := s.requireEpisodicConversationOwner(convID, ownerID, requestedScope)
+	if err != nil {
+		return err
 	}
 	cfg := s.getActiveModel()
 	if cfg == nil {
@@ -214,19 +281,32 @@ func (s *service) ExtractFromConversation(userID, convID string, messages []map[
 	content = extractJSONArray(content)
 	var scenes []map[string]interface{}
 	if err := json.Unmarshal([]byte(content), &scenes); err != nil {
-		return nil
+		return fmt.Errorf("parse episodic extraction response: %w", err)
 	}
+	persisted := make([]*EpisodicMemory, 0, len(scenes))
 	for _, sc := range scenes {
 		st, _ := sc["scene_type"].(string)
 		title, _ := sc["title"].(string)
 		desc, _ := sc["content"].(string)
 		score, _ := sc["sentiment_score"].(float64)
 		keywords, _ := sc["trigger_keywords"].(string)
+		st = strings.TrimSpace(st)
+		title = strings.TrimSpace(title)
+		desc = strings.TrimSpace(desc)
 		if st == "" || title == "" || desc == "" {
 			continue
 		}
+		exists, err := s.extractedEpisodicExists(ownerID, characterScope, convID, st, title, desc)
+		if err != nil {
+			s.rollbackExtractedEpisodic(persisted)
+			return err
+		}
+		if exists {
+			continue
+		}
 		m := &EpisodicMemory{
-			UserID:          scope,
+			SpaceID:         ownerID,
+			CharacterID:     characterScope,
 			SceneType:       st,
 			Title:           title,
 			Content:         desc,
@@ -234,19 +314,43 @@ func (s *service) ExtractFromConversation(userID, convID string, messages []map[
 			TriggerKeywords: keywords,
 			SourceConvID:    convID,
 		}
-		if err := s.repo.Create(m); err == nil {
-			s.syncGraph(m)
+		if err := s.repo.Create(m); err != nil {
+			s.rollbackExtractedEpisodic(persisted)
+			return fmt.Errorf("persist extracted episodic memory %q: %w", title, err)
 		}
+		persisted = append(persisted, m)
+	}
+	for _, m := range persisted {
+		s.syncGraph(m)
 	}
 	return nil
 }
 
-func (s *service) ToSystemPrompt(userID string, characterID ...string) string {
-	scope := firstScope(characterID...)
-	if scope == "" {
-		scope = cleanScope(userID)
+func (s *service) extractedEpisodicExists(spaceID, characterID, convID, sceneType, title, content string) (bool, error) {
+	if s.db == nil {
+		return false, nil
 	}
-	memories, err := s.repo.GetRecentScoped(scope, 3)
+	var count int64
+	err := s.db.Model(&EpisodicMemory{}).
+		Where("space_id = ? AND character_id = ? AND source_conv_id = ? AND scene_type = ? AND title = ? AND content = ?", spaceID, characterID, convID, sceneType, title, content).
+		Count(&count).Error
+	if err != nil {
+		return false, fmt.Errorf("check extracted episodic idempotency: %w", err)
+	}
+	return count > 0, nil
+}
+
+func (s *service) rollbackExtractedEpisodic(items []*EpisodicMemory) {
+	for i := len(items) - 1; i >= 0; i-- {
+		if items[i] != nil && items[i].ID != "" {
+			_ = s.repo.Delete(items[i].ID)
+		}
+	}
+}
+
+func (s *service) ToSystemPrompt(spaceID string, characterID ...string) string {
+	q := EpisodicListQuery{SpaceID: cleanOwner(spaceID), CharacterID: firstScope(characterID...), Page: 1, PageSize: 3}
+	memories, _, err := s.repo.List(q)
 	if err != nil || len(memories) == 0 {
 		return ""
 	}
@@ -393,10 +497,19 @@ func (s *service) Process(ctx context.Context, convID string, messages []map[str
 	if err != nil || !acquired || len(pending) == 0 {
 		return err
 	}
-	if err := s.ExtractFromConversation("", convID, pending); err != nil {
+	if err := ctx.Err(); err != nil {
+		_ = manager.ReleaseLease(convID, "episodic", leaseOwner)
 		return err
 	}
-	return manager.AdvanceLeased(convID, "episodic", maxSequence, fmt.Sprintf("episodic:%s:%d", convID, maxSequence), leaseOwner)
+	if err := s.ExtractFromConversation(s.conversationOwnerForEpisodic(convID), convID, pending); err != nil {
+		_ = manager.ReleaseLease(convID, "episodic", leaseOwner)
+		return err
+	}
+	if err := manager.AdvanceLeased(convID, "episodic", maxSequence, fmt.Sprintf("episodic:%s:%d", convID, maxSequence), leaseOwner); err != nil {
+		_ = manager.ReleaseLease(convID, "episodic", leaseOwner)
+		return err
+	}
+	return nil
 }
 
 func (s *service) episodicScope(convID string, scopes ...string) string {
@@ -424,6 +537,10 @@ func firstScope(scopes ...string) string {
 	return ""
 }
 
+func cleanOwner(spaceID string) string {
+	return requestidentity.NormalizeSpaceID(spaceID)
+}
+
 func cleanScope(scope string) string {
 	scope = strings.TrimSpace(scope)
 	if scope == "" || scope == "default" {
@@ -436,16 +553,24 @@ func (s *service) syncGraph(m *EpisodicMemory) {
 	if s.graphSvc == nil || m == nil {
 		return
 	}
-	if m.UserID == "" {
+	if strings.EqualFold(strings.TrimSpace(m.DecayState), episodicDecayArchived) {
+		_ = s.graphSvc.DeleteNode("episodic:" + m.ID)
 		return
 	}
-	_ = s.graphSvc.SyncNode("user", m.UserID, m.UserID, map[string]interface{}{"user_id": m.UserID})
+	if m.SpaceID == "" {
+		return
+	}
+	_ = s.graphSvc.SyncNode("space", m.SpaceID, m.SpaceID, map[string]interface{}{"space_id": m.SpaceID})
 	_ = s.graphSvc.SyncNode("episodic", m.ID, m.Title, map[string]interface{}{
 		"sceneType":       m.SceneType,
 		"sentimentScore":  m.SentimentScore,
 		"sourceConvID":    m.SourceConvID,
 		"triggerKeywords": m.TriggerKeywords,
-		"user_id":         m.UserID,
+		"retention_level": m.RetentionLevel,
+		"memory_strength": m.MemoryStrength,
+		"decay_state":     m.DecayState,
+		"space_id":        m.SpaceID,
+		"character_id":    m.CharacterID,
 	})
-	_ = s.graphSvc.SyncEdge("user:"+m.UserID, "episodic:"+m.ID, "experienced", 1.0)
+	_ = s.graphSvc.SyncEdge("space:"+m.SpaceID, "episodic:"+m.ID, "experienced", 1.0)
 }

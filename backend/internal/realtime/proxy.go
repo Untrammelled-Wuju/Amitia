@@ -3,15 +3,9 @@
 package realtime
 
 import (
-	"context"
-	"encoding/base64"
-	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
-	"os"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -30,376 +24,94 @@ func SetDB(db *gorm.DB) { dbInstance = db }
 func HandleSession(c *gin.Context) {
 	appLog.Info("HandleSession ENTER")
 
-	apiKey := c.Query("apiKey")
-	if apiKey == "" {
-		apiKey = c.GetHeader("X-Tts-Api-Key")
+	voiceType := strings.TrimSpace(c.Query("voiceType"))
+
+	conversationID := strings.TrimSpace(c.Query("conversationId"))
+	dialogID := strings.TrimSpace(c.Query("dialogId"))
+	requestSpaceID := ""
+	if value, exists := c.Get("realtimeUserId"); exists && value != nil {
+		requestSpaceID = strings.TrimSpace(fmt.Sprint(value))
+	} else if value, exists := c.Get("spaceId"); exists && value != nil {
+		requestSpaceID = strings.TrimSpace(fmt.Sprint(value))
 	}
-	if apiKey == "" {
-		c.JSON(400, gin.H{"code": 400, "message": "API Key required"})
+	requestSpaceID = realtimeEffectiveSpaceID(requestSpaceID)
+	if requestSpaceID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"code": http.StatusUnauthorized, "message": "authenticated user is required"})
 		return
 	}
-	voiceType := c.Query("voiceType")
-	if voiceType == "" {
-		voiceType = "zh_female_vv_jupiter_bigtts"
-	}
-	resourceId := "volc.speech.dialog"
-	appId := c.Query("appId")
-	if appId == "" {
-		appId = c.GetHeader("X-Api-App-ID")
-	}
-	realtimeAppId := appId
-	realtimeAccessToken := apiKey
-	var ttsCfg struct {
-		RealtimeAppId       string `gorm:"column:realtime_app_id"`
-		RealtimeAccessToken string `gorm:"column:realtime_access_token"`
-		RealtimeSecretKey   string `gorm:"column:realtime_secret_key"`
-	}
-	if dbInstance != nil {
-		dbInstance.Table("tts_configs").Where("is_active = 1").Select("realtime_app_id, realtime_access_token, realtime_secret_key").First(&ttsCfg)
-		if ttsCfg.RealtimeAppId != "" {
-			realtimeAppId = ttsCfg.RealtimeAppId
-		}
-		if ttsCfg.RealtimeAccessToken != "" {
-			realtimeAccessToken = ttsCfg.RealtimeAccessToken
-		}
-	}
-
-	conversationId := c.Query("conversationId")
-	dialogId := c.Query("dialogId")
-	desktopPetCharacterID := ""
-	desktopPetUserID := ""
-
-	systemRole := ""
-	botName := "AI"
-	if dbInstance != nil && conversationId != "" {
-		var conv struct{ CID string }
-		dbInstance.Table("conversations").Where("id = ?", conversationId).Select("character_id as cid").First(&conv)
-		if conv.CID != "" {
-			desktopPetCharacterID = conv.CID
-			var activePet struct {
-				UserID string `gorm:"column:user_id"`
-			}
-			dbInstance.Table("desktop_pet_installations").
-				Where("character_id = ? AND is_active = 1", conv.CID).
-				Order("updated_at DESC").
-				Select("user_id").
-				First(&activePet)
-			desktopPetUserID = activePet.UserID
-
-			var ch struct{ N, SP, SS, VT, CVID, VM string }
-			dbInstance.Table("characters").Where("id = ?", conv.CID).Select("name as n, character_base as sp, speaking_style as ss, voice_type as vt, custom_voice_id as cvid, voice_mode as vm").First(&ch)
-			if ch.VM == "clone" && ch.CVID != "" {
-				voiceType = ch.CVID
-			} else if ch.VT != "" {
-				voiceType = ch.VT
-			}
-			if ch.N != "" {
-				botName = ch.N
-			}
-			if ch.SP != "" {
-				systemRole = ch.SP
-			}
-			if systemRole == "" && ch.SS != "" {
-				systemRole = ch.SS
-			}
-		}
-	}
-
-	browserConn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
-	if err != nil {
+	ownedCharacterID, ownerErr := requireRealtimeConversationOwner(conversationID, requestSpaceID)
+	if ownerErr != nil {
+		c.JSON(http.StatusNotFound, gin.H{"code": http.StatusNotFound, "message": "conversation not found"})
 		return
 	}
-	defer browserConn.Close()
-	appLog.Info("browser WS upgraded")
+	desktopPetCharacterID := ownedCharacterID
+	desktopPetSpaceID := requestSpaceID
 
-	volcanoHeaders := http.Header{}
-	volcanoAppKey := os.Getenv("AMITIA_VOLCANO_APP_KEY")
-	if ttsCfg.RealtimeSecretKey != "" {
-		volcanoAppKey = ttsCfg.RealtimeSecretKey
+	characterName := "AI"
+	characterBase := ""
+	speakingStyle := ""
+	if dbInstance != nil && desktopPetCharacterID != "" {
+		var ch struct{ N, SP, SS, VT, CVID, VM string }
+		dbInstance.Table("characters").Where("id = ? AND space_id = ?", desktopPetCharacterID, requestSpaceID).Select("name as n, character_base as sp, speaking_style as ss, voice_type as vt, custom_voice_id as cvid, voice_mode as vm").First(&ch)
+		if ch.VM == "clone" && ch.CVID != "" {
+			voiceType = ch.CVID
+		} else if ch.VT != "" {
+			voiceType = ch.VT
+		}
+		if ch.N != "" {
+			characterName = ch.N
+		}
+		characterBase = ch.SP
+		speakingStyle = ch.SS
 	}
-	volcanoHeaders.Set("X-Api-App-Key", volcanoAppKey)
-	volcanoHeaders.Set("X-Api-Access-Key", realtimeAccessToken)
-	volcanoHeaders.Set("X-Api-Resource-Id", resourceId)
-	volcanoHeaders.Set("X-Api-Connect-Id", uuid.New().String())
-	volcanoHeaders.Set("X-Api-App-ID", realtimeAppId)
 
-	appLog.Info("volc headers: AppID=" + realtimeAppId + " ResourceId=" + resourceId)
-	dialer := websocket.Dialer{HandshakeTimeout: 10 * time.Second}
-	volcanoConn, resp, err := dialer.Dial(volcanoRealtimeURI(), volcanoHeaders)
-	if err != nil {
-		sc := 0
-		if resp != nil {
-			sc = resp.StatusCode
-		}
-		bodyStr := ""
-		if resp != nil {
-			sc = resp.StatusCode
-			body, _ := io.ReadAll(resp.Body)
-			resp.Body.Close()
-			bodyStr = string(body)
-		}
-		browserConn.WriteJSON(gin.H{"event": "error", "data": fmt.Sprintf("volc dial failed HTTP %d body: %s err: %v", sc, bodyStr, err)})
+	sessionID := uuid.New().String()
+	callID := uuid.New().String()
+	visualTicket, tokenErr := newSecureRealtimeToken(32)
+	if tokenErr != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": "failed to create realtime visual authorization"})
 		return
 	}
-	appLog.Info("volc WS connected")
-	defer volcanoConn.Close()
-	appLog.Info("volc dial success, sending StartConnection...")
+	callSpaceID := requestSpaceID
+	if callSpaceID == "" {
+		callSpaceID = desktopPetSpaceID
+	}
+	call := NewRealtimeCallSession(callID, sessionID, conversationID, desktopPetCharacterID, callSpaceID, visualTicket)
 
-	sessID := uuid.New().String()
+	visualEndpoint := "/api/realtime/v2/visual"
+	if value, exists := c.Get("realtimeVisualEndpoint"); exists {
+		if candidate := strings.TrimSpace(fmt.Sprint(value)); strings.HasPrefix(candidate, "/api/realtime/") {
+			visualEndpoint = candidate
+		}
+	}
+
 	desktopPetVoiceSession := &ContinuousVoiceSession{
-		SessionID:      sessID,
-		ConversationID: conversationId,
+		SessionID:      sessionID,
+		ConversationID: conversationID,
 		CharacterID:    desktopPetCharacterID,
-		UserID:         desktopPetUserID,
-		CurrentTurnID:  "turn-" + sessID,
+		SpaceID:        desktopPetSpaceID,
+		CurrentTurnID:  "turn-" + sessionID,
 		State:          ContinuousVoiceSessionStatusListening,
 		LastActivityAt: time.Now(),
 	}
-	connFrame := buildEventFrame(MsgTypeFullClient, EvtStartConnection, "", []byte("{}"))
-	if err := volcanoConn.WriteMessage(websocket.BinaryMessage, connFrame); err != nil {
-		browserConn.WriteJSON(gin.H{"event": "error", "data": "StartConnection failed: " + err.Error()})
-		return
-	}
-	appLog.Info("StartConnection sent")
 
-	volcanoConn.SetReadDeadline(time.Now().Add(5 * time.Second))
-	_, scData, scErr := volcanoConn.ReadMessage()
-	if scErr != nil {
-		appLog.Info("volc read after StartConnection:", scErr)
-		browserConn.WriteJSON(gin.H{"event": "error", "data": fmt.Sprintf("no response after StartConnection: %v", scErr)})
-		return
-	}
-	volcanoConn.SetReadDeadline(time.Time{})
-	scFrame, _ := parseFrame(scData)
-	if scFrame != nil {
-		appLog.Info("volc StartConnection resp evt:", scFrame.EventCode, "payload:", string(scFrame.Payload))
-		if scFrame.EventCode == 51 {
-			browserConn.WriteJSON(gin.H{"event": "error", "data": "ConnectionFailed: " + string(scFrame.Payload)})
-			return
-		}
-	}
-
-	dialogData := map[string]interface{}{"bot_name": botName, "dialog_id": dialogId, "extra": nil}
-	dialogData["model"] = "1.2.1.1"
-	dialogData["extra"] = map[string]interface{}{"recv_timeout": 120, "input_mod": "audio"}
-	if systemRole != "" {
-		dialogData["system_role"] = systemRole
-	}
-
-	sessPayload := map[string]interface{}{
-		"dialog": dialogData,
-		"asr":    map[string]interface{}{"audio_info": map[string]interface{}{"format": "pcm", "sample_rate": 16000, "channel": 1}},
-		"tts":    map[string]interface{}{"speaker": voiceType, "audio_config": map[string]interface{}{"channel": 1, "format": "pcm_s16le", "sample_rate": 24000}},
-	}
-	sessJSON, _ := json.Marshal(sessPayload)
-	sessFrame := buildEventFrame(MsgTypeFullClient, EvtStartSession, sessID, sessJSON)
-	if err := volcanoConn.WriteMessage(websocket.BinaryMessage, sessFrame); err != nil {
-		browserConn.WriteJSON(gin.H{"event": "error", "data": "StartSession failed: " + err.Error()})
-		return
-	}
-	appLog.Info("StartSession sent")
-	appLog.Info("StartSession payload: " + string(sessJSON))
-
-	volcanoConn.SetReadDeadline(time.Now().Add(8 * time.Second))
-	_, respData, err := volcanoConn.ReadMessage()
-	if err != nil {
-		appLog.Info("volc read after StartSession:", err)
-		browserConn.WriteJSON(gin.H{"event": "error", "data": fmt.Sprintf("no response after StartSession: %v", err)})
-		return
-	}
-	volcanoConn.SetReadDeadline(time.Time{})
-	respFrame, _ := parseFrame(respData)
-	if respFrame != nil {
-		appLog.Info("volc init resp evt:", respFrame.EventCode, "payload:", string(respFrame.Payload))
-		if respFrame.EventCode == 51 {
-			browserConn.WriteJSON(gin.H{"event": "error", "data": "ConnectionFailed: " + string(respFrame.Payload)})
-			return
-		}
-		if respFrame.EventCode == 52 {
-			browserConn.WriteJSON(gin.H{"event": "error", "data": "ConnectionFinished before session"})
-			return
-		}
-	}
-
-	var respDialogId string
-	if respFrame != nil && respFrame.EventCode == 150 {
-		var ssResp struct {
-			DialogID string `json:"dialog_id"`
-		}
-		if json.Unmarshal(respFrame.Payload, &ssResp) == nil && ssResp.DialogID != "" {
-			respDialogId = ssResp.DialogID
-		}
-	}
-	browserConn.WriteJSON(gin.H{"event": "connected", "data": "ok", "dialogId": respDialogId})
-	if desktopPetVoiceSession.CharacterID != "" && desktopPetVoiceSession.UserID != "" {
-		emitDesktopPetVoice(c.Request.Context(), desktopPetVoiceSession, "session.started")
-		emitDesktopPetVoice(c.Request.Context(), desktopPetVoiceSession, "listening.started")
-	}
-
-	voiceSession := GetOrCreateVoiceSession(sessID, conversationId, "")
-	if voiceSession.CurrentTurn == nil {
-		voiceSession.BeginTurn("turn-"+sessID, "")
-	}
-	defer func() {
-		voiceSession.EndSession()
-		RemoveVoiceSession(sessID)
-	}()
-	desktopPetSpeaking := false
-	latestASRTranscript := ""
-	asrTurnSequence := uint64(0)
-	flushASRFinal := func() {
-		transcript := latestASRTranscript
-		if transcript == "" {
-			return
-		}
-		asrTurnSequence++
-		latestASRTranscript = ""
-		eventID := makeVoiceWorkflowEventID("realtime-asr", fmt.Sprintf("%s\n%d\n%s", sessID, asrTurnSequence, transcript))
-		_ = browserConn.WriteJSON(gin.H{
-			"event": "asr_final",
-			"data": gin.H{
-				"transcript":     transcript,
-				"eventId":        eventID,
-				"sessionId":      sessID,
-				"conversationId": conversationId,
-			},
-		})
-	}
-	defer func() {
-		if desktopPetVoiceSession.CharacterID == "" || desktopPetVoiceSession.UserID == "" {
-			return
-		}
-		if desktopPetSpeaking {
-			desktopPetVoiceSession.State = ContinuousVoiceSessionStatusListening
-			desktopPetVoiceSession.LastActivityAt = time.Now()
-			emitDesktopPetVoice(context.Background(), desktopPetVoiceSession, "speaking.ended")
-		}
-		emitDesktopPetVoice(context.Background(), desktopPetVoiceSession, "session.ended")
-	}()
-
-	var wg sync.WaitGroup
-	wg.Add(2)
-	doneCh := make(chan struct{})
-	closeOnce := sync.Once{}
-	closeConnections := func() {
-		closeOnce.Do(func() {
-			_ = browserConn.Close()
-			_ = volcanoConn.Close()
-		})
-	}
-
-	go func() {
-		defer wg.Done()
-		defer close(doneCh)
-		defer closeConnections()
-		for {
-			msgType, data, err := volcanoConn.ReadMessage()
-			if err != nil {
-				appLog.Info("volc read loop:", err)
-				return
-			}
-			if msgType != websocket.BinaryMessage {
-				continue
-			}
-			frame, _ := parseFrame(data)
-			if frame == nil {
-				appLog.Info("volc nil frame len:", len(data))
-				continue
-			}
-			appLog.Info("volc evt:", frame.EventCode)
-			switch frame.EventCode {
-			case 451:
-				if transcript := extractRealtimeASRTranscript(frame.Payload); transcript != "" {
-					latestASRTranscript = transcript
-				}
-			case 459:
-				flushASRFinal()
-			case 350, 550:
-				// ASREnded normally arrives before chat/TTS. Flush here as a
-				// compatibility fallback for providers that omit event 459.
-				flushASRFinal()
-			case 352:
-				if !desktopPetSpeaking && desktopPetVoiceSession.CharacterID != "" && desktopPetVoiceSession.UserID != "" {
-					desktopPetSpeaking = true
-					desktopPetVoiceSession.State = ContinuousVoiceSessionStatusSpeaking
-					desktopPetVoiceSession.PlaybackGeneration++
-					desktopPetVoiceSession.LastActivityAt = time.Now()
-					emitDesktopPetVoice(context.Background(), desktopPetVoiceSession, "speaking.started")
-				}
-				browserConn.WriteJSON(gin.H{"event": "audio", "data": base64.StdEncoding.EncodeToString(frame.Payload)})
-			case 359:
-				if desktopPetSpeaking && desktopPetVoiceSession.CharacterID != "" && desktopPetVoiceSession.UserID != "" {
-					desktopPetSpeaking = false
-					desktopPetVoiceSession.State = ContinuousVoiceSessionStatusListening
-					desktopPetVoiceSession.LastActivityAt = time.Now()
-					emitDesktopPetVoice(context.Background(), desktopPetVoiceSession, "speaking.ended")
-				}
-				browserConn.WriteJSON(gin.H{"event": "tts_ended"})
-			case 150, 151, 552:
-				browserConn.WriteJSON(gin.H{"event": "evt_" + itoa(frame.EventCode), "data": json.RawMessage(frame.Payload)})
-			case 51, 52:
-				browserConn.WriteJSON(gin.H{"event": "disconnected", "data": itoa(frame.EventCode)})
-				return
-			}
-		}
-	}()
-
-	go func() {
-		defer wg.Done()
-		defer closeConnections()
-		for {
-			select {
-			case <-doneCh:
-				return
-			default:
-			}
-			var msg map[string]interface{}
-			if err := browserConn.ReadJSON(&msg); err != nil {
-				return
-			}
-			evt, _ := msg["event"].(string)
-			switch evt {
-			case "stop":
-				fin, _ := json.Marshal(map[string]interface{}{})
-				volcanoConn.WriteMessage(websocket.BinaryMessage, buildEventFrame(MsgTypeFullClient, 102, sessID, fin))
-				volcanoConn.WriteMessage(websocket.BinaryMessage, buildEventFrame(MsgTypeFullClient, EvtFinishConnection, "", nil))
-				return
-			case "audio":
-				if d, ok := msg["data"].(string); ok {
-					if b, err := base64.StdEncoding.DecodeString(d); err == nil && len(b) > 0 {
-						volcanoConn.WriteMessage(websocket.BinaryMessage, buildAudioFrame(sessID, b))
-					}
-				}
-			}
-		}
-	}()
-
-	wg.Wait()
+	serveCascadeCall(c, cascadeCallParams{
+		CallID:          callID,
+		SessionID:       sessionID,
+		SpaceID:         requestSpaceID,
+		CharacterID:     desktopPetCharacterID,
+		ConversationID:  conversationID,
+		CharacterName:   characterName,
+		CharacterBase:   characterBase,
+		SpeakingStyle:   speakingStyle,
+		VoiceType:       voiceType,
+		Language:        "zh-CN",
+		VisualEndpoint:  visualEndpoint,
+		VisualTicket:    visualTicket,
+		Instruction:     speakingStyle,
+		DesktopPetPhase: true,
+		Call:            call,
+		DesktopPet:      desktopPetVoiceSession,
+		DialogID:        dialogID,
+	})
 }
-
-func extractRealtimeASRTranscript(payload []byte) string {
-	if len(payload) == 0 {
-		return ""
-	}
-	var envelope struct {
-		Results []struct {
-			Text string `json:"text"`
-		} `json:"results"`
-		Text       string `json:"text"`
-		Transcript string `json:"transcript"`
-	}
-	if err := json.Unmarshal(payload, &envelope); err != nil {
-		return ""
-	}
-	for i := len(envelope.Results) - 1; i >= 0; i-- {
-		if text := strings.TrimSpace(envelope.Results[i].Text); text != "" {
-			return text
-		}
-	}
-	if text := strings.TrimSpace(envelope.Text); text != "" {
-		return text
-	}
-	return strings.TrimSpace(envelope.Transcript)
-}
-
-func itoa(i int32) string { return fmt.Sprintf("%d", i) }

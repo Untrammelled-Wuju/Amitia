@@ -20,8 +20,8 @@ const (
 	ProtocolScheme         = "amitia-extension"
 	ResourceProtocolScheme = "amitia-resource"
 	ProtocolVersion        = "amitia-webui-bridge-v1"
-	DefaultCSP             = "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'none'; object-src 'none'; frame-src 'none'; worker-src 'none'; base-uri 'none'; form-action 'none'"
-	RestrictedCSP          = "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'none'; object-src 'none'; frame-src 'none'; worker-src 'none'; base-uri 'none'; form-action 'none'"
+	DefaultCSP             = "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; font-src 'self'; connect-src 'none'; object-src 'none'; frame-src 'none'; worker-src 'none'; base-uri 'none'; form-action 'none'"
+	RestrictedCSP          = "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; font-src 'self'; connect-src 'none'; object-src 'none'; frame-src 'none'; worker-src 'none'; base-uri 'none'; form-action 'none'"
 	MaxBundleBytes         = 50 * 1024 * 1024
 	MaxSessionDuration     = 24 * time.Hour
 	MaxMessageBytes        = 256 * 1024
@@ -142,6 +142,9 @@ type WebSession struct {
 	GrantedScopes        []string
 	ScopeSnapshotID      string
 	PermissionSnapshotID string
+	SpaceID              string
+	DeviceID             string
+	UIContext            map[string]any
 	mu                   sync.Mutex
 	subscriptions        map[string]*DataSubscription
 	resourceHandles      map[string]*ResourceHandle
@@ -153,6 +156,21 @@ type ThemeSnapshot struct {
 	Mode    string            `json:"mode"`
 	Density string            `json:"density"`
 	Tokens  map[string]string `json:"tokens"`
+}
+
+func (s *WebSession) BindIdentityIfNeeded(spaceID, deviceID string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	bound := false
+	if s.SpaceID == "" && spaceID != "" {
+		s.SpaceID = spaceID
+		bound = true
+	}
+	if s.DeviceID == "" && deviceID != "" {
+		s.DeviceID = deviceID
+		bound = true
+	}
+	return bound
 }
 
 type DataSubscription struct {
@@ -331,6 +349,7 @@ type CreateSessionRequest struct {
 	BasePath             string
 	EntryPath            string
 	ExpectedHash         string
+	EnableScripts        bool
 	Surface              string
 	SurfaceRole          string
 	Host                 string
@@ -342,6 +361,9 @@ type CreateSessionRequest struct {
 	GrantedScopes        []string
 	ScopeSnapshotID      string
 	PermissionSnapshotID string
+	SpaceID              string
+	DeviceID             string
+	UIContext            map[string]any
 }
 
 type CreateSessionResult struct {
@@ -373,13 +395,22 @@ func (h *Host) CreateSession(req CreateSessionRequest) (*CreateSessionResult, er
 	if err != nil {
 		return nil, err
 	}
-	if err := h.verifier.Verify(req.BasePath, cleanPath); err != nil {
+	if err := h.verifier.VerifyWithPolicy(req.BasePath, cleanPath, req.EnableScripts); err != nil {
 		return nil, err
 	}
 	if req.ExpectedHash != "" {
 		if err := h.verifier.VerifyIntegrity(req.BasePath, cleanPath, req.ExpectedHash); err != nil {
 			h.cspReporter("", "resource_integrity_failed")
 			return nil, err
+		}
+	}
+	if len(req.UIContext) > 0 {
+		uiContext, err := json.Marshal(req.UIContext)
+		if err != nil {
+			return nil, ErrInvalidRequest
+		}
+		if len(uiContext) > 64*1024 {
+			return nil, ErrInvalidRequest
 		}
 	}
 	csp := req.CSP
@@ -457,6 +488,9 @@ func (h *Host) CreateSession(req CreateSessionRequest) (*CreateSessionResult, er
 		ConversationID:       req.ConversationID,
 		GrantedPerms:         req.GrantedPerms,
 		GrantedScopes:        req.GrantedScopes,
+		SpaceID:              req.SpaceID,
+		DeviceID:             req.DeviceID,
+		UIContext:            req.UIContext,
 		ScopeSnapshotID:      scopeSnapshotID,
 		PermissionSnapshotID: permissionSnapshotID,
 		subscriptions:        make(map[string]*DataSubscription),
@@ -822,6 +856,10 @@ func NewBundleVerifier() *BundleVerifier {
 }
 
 func (v *BundleVerifier) Verify(basePath, entryPath string) error {
+	return v.VerifyWithPolicy(basePath, entryPath, false)
+}
+
+func (v *BundleVerifier) VerifyWithPolicy(basePath, entryPath string, enableScripts bool) error {
 	if entryPath == "" {
 		return ErrEntryMissing
 	}
@@ -841,7 +879,7 @@ func (v *BundleVerifier) Verify(basePath, entryPath string) error {
 		return ErrBundleNotFound
 	}
 	lower := strings.ToLower(string(content))
-	if strings.Contains(lower, "<script") {
+	if !enableScripts && strings.Contains(lower, "<script") {
 		return ErrBundleScriptForbidden
 	}
 	if strings.Contains(lower, "javascript:") {

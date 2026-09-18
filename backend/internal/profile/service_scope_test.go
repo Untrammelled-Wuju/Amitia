@@ -5,11 +5,16 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/glebarez/sqlite"
+	"github.com/u-ai/backend/config"
 	"github.com/u-ai/backend/internal/graph"
+	"github.com/u-ai/backend/internal/pipelinecheckpoint"
+	"github.com/u-ai/backend/internal/requestidentity"
+	"github.com/u-ai/backend/internal/spaceidentity"
 	"github.com/u-ai/backend/pkg/app"
 	"gorm.io/gorm"
 )
@@ -23,7 +28,13 @@ func newProfileTestService(t *testing.T) (*service, *gorm.DB) {
 	if err := db.AutoMigrate(&UserProfile{}); err != nil {
 		t.Fatalf("migrate user profiles: %v", err)
 	}
-	if err := db.Exec(`CREATE TABLE conversations (id text primary key, character_id text not null default '')`).Error; err != nil {
+	if _, err := spaceidentity.InitializeDefault(filepath.Join(t.TempDir(), "data")); err != nil {
+		t.Fatalf("initialize space: %v", err)
+	}
+	originalCfg := config.AppCfg
+	config.AppCfg = &config.Config{Security: config.SecurityRuntimeConfig{Mode: "local_single_user"}}
+	t.Cleanup(func() { config.AppCfg = originalCfg })
+	if err := db.Exec(`CREATE TABLE conversations (id text primary key, space_id text not null default '', character_id text not null default '', deleted_at datetime)`).Error; err != nil {
 		t.Fatalf("create conversations: %v", err)
 	}
 	ctx := app.NewAppContext(db, nil)
@@ -39,7 +50,7 @@ func TestCreatePreservesCharacterScope(t *testing.T) {
 	svc, _ := newProfileTestService(t)
 
 	item, err := svc.Create(&CreateProfileRequest{
-		UserID:         "user-1",
+		SpaceID:        "user-1",
 		CharacterID:    "char-a",
 		Category:       "preference",
 		AttributeName:  "颜色",
@@ -57,7 +68,7 @@ func TestCreateClampsConfidence(t *testing.T) {
 	svc, _ := newProfileTestService(t)
 
 	low, err := svc.Create(&CreateProfileRequest{
-		UserID:         "user-1",
+		SpaceID:        "user-1",
 		Category:       "preference",
 		AttributeName:  "低置信度",
 		AttributeValue: "测试",
@@ -71,7 +82,7 @@ func TestCreateClampsConfidence(t *testing.T) {
 	}
 
 	high, err := svc.Create(&CreateProfileRequest{
-		UserID:         "user-1",
+		SpaceID:        "user-1",
 		Category:       "preference",
 		AttributeName:  "高置信度",
 		AttributeValue: "测试",
@@ -89,7 +100,7 @@ func TestServiceUpdateClampsConfidence(t *testing.T) {
 	svc, _ := newProfileTestService(t)
 
 	item, err := svc.Create(&CreateProfileRequest{
-		UserID:         "user-1",
+		SpaceID:        "user-1",
 		Category:       "preference",
 		AttributeName:  "服务更新置信度",
 		AttributeValue: "测试",
@@ -148,10 +159,10 @@ func TestProcessUsesCheckpointIncrementally(t *testing.T) {
 	if err := db.Exec(`CREATE TABLE pipeline_checkpoints (conversation_id text not null, pipeline_type text not null, last_message_sequence integer not null default 0, checkpoint_version integer not null default 1, idempotency_key text default '', created_at text default '', updated_at text default '', primary key (conversation_id, pipeline_type))`).Error; err != nil {
 		t.Fatalf("create checkpoints: %v", err)
 	}
-	if err := db.Exec(`CREATE TABLE model_configs (id text primary key, base_url text not null, api_key text not null, model_name text not null, temperature real not null default 0, max_tokens real not null default 256, is_active integer not null default 0)`).Error; err != nil {
+	if err := db.Exec(`CREATE TABLE model_configs (id text primary key, base_url text not null, api_key text not null, model_name text not null, temperature real not null default 0, max_tokens real not null default 256, api_type text not null default 'openai', is_active integer not null default 0)`).Error; err != nil {
 		t.Fatalf("create model configs: %v", err)
 	}
-	if err := db.Exec(`INSERT INTO model_configs (id, base_url, api_key, model_name, temperature, max_tokens, is_active) VALUES (?, ?, ?, ?, ?, ?, 1)`, "model-1", modelServer.URL, "test-key", "test-model", 0, 256).Error; err != nil {
+	if err := db.Exec(`INSERT INTO model_configs (id, base_url, api_key, model_name, temperature, max_tokens, api_type, is_active) VALUES (?, ?, ?, ?, ?, ?, 'openai', 1)`, "model-1", modelServer.URL, "test-key", "test-model", 0, 256).Error; err != nil {
 		t.Fatalf("insert model config: %v", err)
 	}
 	if err := db.Exec(`INSERT INTO conversations (id, character_id) VALUES (?, ?)`, "conv-inc", "char-a").Error; err != nil {
@@ -219,7 +230,7 @@ func TestToolUpsertUsesConversationCharacterScope(t *testing.T) {
 		t.Fatalf("tool profile scope = %q, want char-a", item.CharacterID)
 	}
 
-	items, err := svc.repo.GetScopedByUserID("user-1", "char-b")
+	items, err := svc.repo.GetScopedBySpaceID("user-1", "char-b")
 	if err != nil {
 		t.Fatalf("query char-b profiles: %v", err)
 	}
@@ -240,8 +251,8 @@ func TestDefaultUserInputDerivesProfileUserScopeFromCharacter(t *testing.T) {
 	if err != nil {
 		t.Fatalf("upsert from tool: %v", err)
 	}
-	if item.UserID != "char-a" {
-		t.Fatalf("tool profile user scope = %q, want char-a", item.UserID)
+	if item.SpaceID != requestidentity.CanonicalSpaceID() {
+		t.Fatalf("tool profile user scope = %q, want canonical space", item.SpaceID)
 	}
 	if item.CharacterID != "char-a" {
 		t.Fatalf("tool profile character scope = %q, want char-a", item.CharacterID)
@@ -256,7 +267,7 @@ func TestDefaultUserInputDerivesProfileUserScopeFromCharacter(t *testing.T) {
 func TestSystemPromptUsesRequestedCharacterScope(t *testing.T) {
 	svc, _ := newProfileTestService(t)
 	_, err := svc.Create(&CreateProfileRequest{
-		UserID:         "user-1",
+		SpaceID:        "user-1",
 		CharacterID:    "char-a",
 		Category:       "preference",
 		AttributeName:  "称呼",
@@ -267,7 +278,7 @@ func TestSystemPromptUsesRequestedCharacterScope(t *testing.T) {
 		t.Fatalf("create char-a profile: %v", err)
 	}
 	_, err = svc.Create(&CreateProfileRequest{
-		UserID:         "user-1",
+		SpaceID:        "user-1",
 		CharacterID:    "char-b",
 		Category:       "preference",
 		AttributeName:  "称呼",
@@ -278,7 +289,7 @@ func TestSystemPromptUsesRequestedCharacterScope(t *testing.T) {
 		t.Fatalf("create char-b profile: %v", err)
 	}
 	_, err = svc.Create(&CreateProfileRequest{
-		UserID:         "user-1",
+		SpaceID:        "user-1",
 		Category:       "preference",
 		AttributeName:  "语言",
 		AttributeValue: "中文",
@@ -303,7 +314,7 @@ func TestSystemPromptUsesRequestedCharacterScope(t *testing.T) {
 func TestSystemPromptDoesNotFallbackToDefaultUser(t *testing.T) {
 	svc, _ := newProfileTestService(t)
 	_, err := svc.repo.UpsertConfidence(&UserProfile{
-		UserID:         "default",
+		SpaceID:        "default",
 		Category:       "preference",
 		AttributeName:  "内部默认偏好",
 		AttributeValue: "不应进入提示",
@@ -316,5 +327,66 @@ func TestSystemPromptDoesNotFallbackToDefaultUser(t *testing.T) {
 	prompt := svc.ToSystemPrompt("user-without-profile", "char-a")
 	if prompt != "" {
 		t.Fatalf("prompt leaked default profile: %s", prompt)
+	}
+}
+
+func TestProcessKeepsCheckpointPendingWhenProfileExtractionResponseIsInvalid(t *testing.T) {
+	svc, db := newProfileTestService(t)
+	var calls int
+	modelServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		content := "[]"
+		if calls == 1 {
+			content = "not-json"
+		}
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"choices": []map[string]interface{}{{"message": map[string]string{"content": content}}},
+			"usage":   map[string]int{"total_tokens": 1},
+		})
+	}))
+	t.Cleanup(modelServer.Close)
+
+	if err := db.Exec(`CREATE TABLE messages (id text primary key, conversation_id text not null, sequence integer not null default 0, role text not null, content text not null, created_at text default '')`).Error; err != nil {
+		t.Fatalf("create messages: %v", err)
+	}
+	if err := db.Exec(`CREATE TABLE pipeline_checkpoints (conversation_id text not null, pipeline_type text not null, last_message_sequence integer not null default 0, checkpoint_version integer not null default 1, idempotency_key text default '', created_at text default '', updated_at text default '', primary key (conversation_id, pipeline_type))`).Error; err != nil {
+		t.Fatalf("create checkpoints: %v", err)
+	}
+	if err := db.Exec(`CREATE TABLE model_configs (id text primary key, base_url text not null, api_key text not null, model_name text not null, temperature real not null default 0, max_tokens real not null default 256, api_type text not null default 'openai', is_active integer not null default 0)`).Error; err != nil {
+		t.Fatalf("create model configs: %v", err)
+	}
+	if err := db.Exec(`INSERT INTO model_configs (id, base_url, api_key, model_name, temperature, max_tokens, api_type, is_active) VALUES (?, ?, ?, ?, ?, ?, 'openai', 1)`, "model-invalid", modelServer.URL, "test-key", "test-model", 0, 256).Error; err != nil {
+		t.Fatalf("insert model config: %v", err)
+	}
+	if err := db.Exec(`INSERT INTO conversations (id, character_id) VALUES (?, ?)`, "conv-invalid", "char-a").Error; err != nil {
+		t.Fatalf("insert conversation: %v", err)
+	}
+	if err := db.Exec(`INSERT INTO messages (id, conversation_id, sequence, role, content) VALUES (?, ?, ?, ?, ?)`, "m-invalid", "conv-invalid", 1, "user", "我喜欢喝茶").Error; err != nil {
+		t.Fatalf("insert message: %v", err)
+	}
+
+	if err := svc.Process(context.Background(), "conv-invalid", nil, ""); err == nil {
+		t.Fatal("expected invalid extraction response to fail")
+	}
+	record, err := pipelinecheckpoint.New(db).Load("conv-invalid", "profile")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if record.LastMessageSequence != 0 || record.LeaseOwner != "" || record.ProcessingEndSeq != 0 {
+		t.Fatalf("failed extraction consumed or retained lease: %#v", record)
+	}
+
+	if err := svc.Process(context.Background(), "conv-invalid", nil, ""); err != nil {
+		t.Fatalf("retry process: %v", err)
+	}
+	record, err = pipelinecheckpoint.New(db).Load("conv-invalid", "profile")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if record.LastMessageSequence != 1 {
+		t.Fatalf("retry checkpoint sequence = %d, want 1", record.LastMessageSequence)
+	}
+	if calls != 2 {
+		t.Fatalf("llm calls = %d, want 2", calls)
 	}
 }

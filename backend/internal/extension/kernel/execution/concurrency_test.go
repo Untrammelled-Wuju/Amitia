@@ -26,10 +26,10 @@ func newConcurrencyTool() capability.ToolDefinition {
 	}
 }
 
-func newConcurrencyInvocation(userID string) capability.ToolInvocationContext {
+func newConcurrencyInvocation(spaceID string) capability.ToolInvocationContext {
 	return capability.ToolInvocationContext{
 		InvocationID:   "inv-001",
-		UserID:         userID,
+		SpaceID:        spaceID,
 		CharacterID:    "char-001",
 		ConversationID: "conv-001",
 	}

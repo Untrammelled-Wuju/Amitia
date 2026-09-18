@@ -6,34 +6,92 @@ SPDX-License-Identifier: AGPL-3.0-only
   <el-dialog
     :model-value="modelValue"
     @update:model-value="emit('update:modelValue', $event)"
-    title="导入角色包"
+    title="导入角色卡"
     width="560px"
     destroy-on-close
   >
     <template v-if="!preview">
-      <el-form label-position="top">
-        <el-form-item label="角色卡片文件">
+      <div class="card-import-content">
+        <div
+          class="character-card-drop-zone"
+          :class="{
+            'has-file': !!selectedFile,
+            'is-dragging': isDragActive,
+          }"
+          role="button"
+          tabindex="0"
+          aria-label="选择或拖入角色卡文件"
+          @click="openFilePicker"
+          @keydown.enter.prevent="openFilePicker"
+          @keydown.space.prevent="openFilePicker"
+          @dragenter.prevent="onDragEnter"
+          @dragover.prevent="isDragActive = true"
+          @dragleave.prevent="onDragLeave"
+          @drop.prevent="onFileDrop"
+        >
+          <el-icon class="upload-icon"><UploadFilled /></el-icon>
+          <template v-if="selectedFile">
+            <strong>{{ selectedFile.name }}</strong>
+            <span>{{ selectedFileSize }} · 已选择，点击预览继续</span>
+          </template>
+          <template v-else>
+            <strong>拖入角色卡文件，或点击选择文件</strong>
+            <span>支持酒馆角色卡 JSON/PNG 与 CHARX 角色包</span>
+          </template>
+          <el-button
+            :loading="previewing"
+            @click.stop="openFilePicker"
+          >
+            {{ selectedFile ? "重新选择" : "选择文件" }}
+          </el-button>
           <input
+            ref="fileInput"
+            class="sr-only"
             type="file"
             accept=".json,.png,.charx"
             @change="onFileChange"
-            style="width: 100%"
           />
-          <div class="form-hint" style="margin-top: 4px">
-            支持 V2/V3 JSON、PNG、CHARX 格式
-          </div>
-        </el-form-item>
-        <el-form-item>
+        </div>
+
+        <div class="import-primary-action">
           <el-button
             type="primary"
             :loading="previewing"
-            @click="emit('preview')"
             :disabled="!selectedFile"
+            @click="emit('preview')"
           >
-            预览
+            预览角色卡
           </el-button>
-        </el-form-item>
-      </el-form>
+        </div>
+      </div>
+
+      <section class="example-panel" aria-labelledby="import-json-example-title">
+        <div class="example-panel-header">
+          <div>
+            <h3 id="import-json-example-title">JSON 示例</h3>
+            <p>切换格式查看示例，替换内容后保存为 JSON 文件即可导入。</p>
+          </div>
+          <el-button text :icon="DocumentCopy" @click="copyExample">
+            复制
+          </el-button>
+        </div>
+        <el-radio-group
+          v-if="jsonExamples.length > 1"
+          v-model="activeExampleKey"
+          class="example-switcher"
+          size="small"
+        >
+          <el-radio-button
+            v-for="item in jsonExamples"
+            :key="item.key"
+            :value="item.key"
+          >
+            {{ item.label }}
+          </el-radio-button>
+        </el-radio-group>
+        <p class="example-description">{{ activeExample.description }}</p>
+        <pre class="example-code"><code>{{ activeExample.json }}</code></pre>
+      </section>
     </template>
 
     <template v-else>
@@ -71,7 +129,8 @@ SPDX-License-Identifier: AGPL-3.0-only
           <span class="ipi-label">作者</span><span>{{ preview.creator }}</span>
         </div>
         <div class="ipi-row">
-          <span class="ipi-label">格式</span><span>{{ preview.format }}</span>
+          <span class="ipi-label">格式</span
+          ><span>{{ previewFormatLabel }}</span>
         </div>
         <div class="ipi-row">
           <span class="ipi-label">描述长度</span
@@ -124,7 +183,9 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
+import { DocumentCopy, UploadFilled } from "@element-plus/icons-vue";
+import { ElMessage } from "element-plus";
 
 const props = defineProps<{
   modelValue: boolean;
@@ -147,14 +208,103 @@ const emit = defineEmits<{
 }>();
 
 const selectedFile = ref<File | null>(null);
+const fileInput = ref<HTMLInputElement | null>(null);
+const isDragActive = ref(false);
+let dragDepth = 0;
+
+type JsonExampleKey = "tavern";
+
+interface JsonExample {
+  key: JsonExampleKey;
+  label: string;
+  description: string;
+  json: string;
+}
+
+const jsonExamples: JsonExample[] = [
+  {
+    key: "tavern",
+    label: "酒馆角色卡",
+    description: "兼容酒馆常见 JSON 字段，可直接导入 JSON 或内嵌该 JSON 的 PNG。",
+    json: `{
+  "name": "阿澈",
+  "description": "住在临海旧书店里的年轻店主，熟悉每一本书的来历。",
+  "personality": "安静、可靠，观察细致，偶尔会开一点温和的玩笑。",
+  "scenario": "傍晚的旧书店刚送走最后一位客人，窗外正在下雨。",
+  "mes_example": "{{user}}: 你在看什么？\\n{{char}}: 一本很久没人借走的航海日志。",
+  "creatorcomment": "兼容酒馆角色卡的常见 JSON 字段。",
+  "alternate_greetings": [],
+  "tags": ["酒馆", "日常"],
+  "creator": "示例作者",
+  "character_version": "1.0",
+  "extensions": {}
+}`,
+  },
+];
+
+const activeExampleKey = ref<JsonExampleKey>("tavern");
+const activeExample = computed(
+  () =>
+    jsonExamples.find((item) => item.key === activeExampleKey.value) ??
+    jsonExamples[0],
+);
 
 function onFileChange(event: Event) {
-  const target = event.target as HTMLInputElement;
-  const file = target.files?.[0] || null;
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0] || null;
+  input.value = "";
+  if (file) setCardFile(file);
+}
+
+function openFilePicker() {
+  if (!props.previewing) fileInput.value?.click();
+}
+
+function onDragEnter() {
+  dragDepth += 1;
+  isDragActive.value = true;
+}
+
+function onDragLeave() {
+  dragDepth = Math.max(0, dragDepth - 1);
+  if (dragDepth === 0) isDragActive.value = false;
+}
+
+function onFileDrop(event: DragEvent) {
+  dragDepth = 0;
+  isDragActive.value = false;
+  const file = event.dataTransfer?.files?.[0];
+  if (file) setCardFile(file);
+}
+
+function setCardFile(file: File) {
+  if (!/\.(json|png|charx)$/i.test(file.name)) {
+    selectedFile.value = null;
+    emit("update:packName", "");
+    emit("fileSelected", null);
+    ElMessage.warning("请选择酒馆 JSON、PNG 或 CHARX 角色卡文件");
+    return;
+  }
   selectedFile.value = file;
-  if (file) {
-    emit("update:packName", file.name);
-    emit("fileSelected", file);
+  emit("update:packName", file.name);
+  emit("fileSelected", file);
+}
+
+function formatFileSize(value: number) {
+  if (value < 1024) return `${value} B`;
+  if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`;
+  return `${(value / 1024 / 1024).toFixed(1)} MB`;
+}
+
+async function copyExample() {
+  try {
+    if (!navigator.clipboard?.writeText) {
+      throw new Error("Clipboard API unavailable");
+    }
+    await navigator.clipboard.writeText(activeExample.value.json);
+    ElMessage.success("示例 JSON 已复制");
+  } catch {
+    ElMessage.warning("复制失败，请手动选择示例内容");
   }
 }
 
@@ -162,4 +312,175 @@ const confirmTextModel = computed({
   get: () => props.confirmText,
   set: (v) => emit("update:confirmText", v),
 });
+
+const formatLabels: Record<string, string> = {
+  v3_charx: "角色卡 V3 CHARX",
+  tavern_json: "酒馆角色卡 JSON",
+  tavern_png: "酒馆角色卡 PNG",
+};
+
+const previewFormatLabel = computed(
+  () => formatLabels[props.preview?.format] || props.preview?.format || "",
+);
+
+const selectedFileSize = computed(() =>
+  selectedFile.value ? formatFileSize(selectedFile.value.size) : "",
+);
+
+watch(
+  () => props.preview,
+  (preview) => {
+    if (preview) return;
+    selectedFile.value = null;
+    isDragActive.value = false;
+    dragDepth = 0;
+  },
+);
 </script>
+
+<style scoped>
+.card-import-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.character-card-drop-zone {
+  display: flex;
+  min-height: 176px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 22px;
+  border: 1px dashed var(--ac-color-border);
+  border-radius: var(--ac-radius-sm);
+  background: var(--ac-color-bg-secondary);
+  text-align: center;
+  cursor: pointer;
+  transition:
+    border-color var(--ac-transition-fast),
+    background var(--ac-transition-fast);
+}
+
+.character-card-drop-zone:hover,
+.character-card-drop-zone:focus-visible,
+.character-card-drop-zone.has-file {
+  border-color: var(--el-color-primary-light-7);
+  background: var(--el-color-primary-light-9);
+}
+
+.character-card-drop-zone.is-dragging {
+  border-color: var(--el-color-primary);
+  background: var(--el-color-primary-light-8);
+  box-shadow: 0 0 0 3px var(--el-color-primary-light-9);
+}
+
+.character-card-drop-zone .upload-icon {
+  margin-bottom: 4px;
+  color: var(--el-color-primary);
+  font-size: 34px;
+}
+
+.character-card-drop-zone strong {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--ac-color-text);
+  font-size: var(--ac-font-size-base);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.character-card-drop-zone span {
+  margin-bottom: 6px;
+  color: var(--ac-color-text-muted);
+  font-size: var(--ac-font-size-xs);
+  line-height: 1.5;
+}
+
+.import-primary-action {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+
+.example-panel {
+  padding: 12px;
+  border: 1px solid var(--ac-color-border-light);
+  border-radius: var(--ac-radius-sm);
+  background: var(--ac-color-bg-secondary);
+}
+
+.example-panel-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.example-panel-header h3 {
+  margin: 0;
+  font-size: var(--ac-font-size-sm);
+  font-weight: 600;
+  color: var(--ac-color-text);
+}
+
+.example-panel-header p,
+.example-description {
+  margin: 4px 0 0;
+  font-size: var(--ac-font-size-xs);
+  line-height: 1.5;
+  color: var(--ac-color-text-muted);
+}
+
+.example-switcher {
+  margin-top: 10px;
+}
+
+.example-description {
+  margin-bottom: 8px;
+}
+
+.example-code {
+  max-height: 260px;
+  margin: 0;
+  padding: 12px;
+  overflow: auto;
+  border: 1px solid var(--ac-color-border-light);
+  border-radius: var(--ac-radius-sm);
+  background: var(--ac-color-surface);
+  color: var(--ac-color-text);
+  font-family: var(--ac-font-family-mono);
+  font-size: var(--ac-font-size-xs);
+  line-height: 1.6;
+  white-space: pre;
+}
+
+@media (max-width: 640px) {
+  .example-panel-header {
+    align-items: center;
+  }
+
+  .example-switcher {
+    display: flex;
+    width: 100%;
+  }
+
+  .example-switcher :deep(.el-radio-button) {
+    flex: 1;
+  }
+
+  .example-switcher :deep(.el-radio-button__inner) {
+    width: 100%;
+    padding-inline: 6px;
+  }
+}
+</style>

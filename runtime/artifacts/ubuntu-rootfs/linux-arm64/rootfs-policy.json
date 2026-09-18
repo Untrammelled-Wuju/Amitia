@@ -1,0 +1,98 @@
+{
+  "schemaVersion": 1,
+  "component": "ubuntu-rootfs",
+  "distribution": "ubuntu",
+  "release": "24.04.4",
+  "architecture": "arm64",
+  "guestPlatform": "linux",
+  "runtimeKind": "proot",
+  "requiredPaths": [
+    "/bin/sh",
+    "/usr/bin/env",
+    "/etc/ssl/certs",
+    "/tmp",
+    "/usr/bin/locale"
+  ],
+  "requiredGuestDirs": [
+    "/opt/amitia",
+    "/etc/amitia",
+    "/var/lib/amitia",
+    "/var/cache/amitia",
+    "/var/log/amitia",
+    "/run/amitia",
+    "/home/amitia",
+    "/tmp"
+  ],
+  "forbiddenExecutables": [
+    "/usr/sbin/sshd",
+    "/usr/bin/sudo"
+  ],
+  "forbiddenPackages": [
+    "systemd",
+    "systemd-sysv",
+    "snapd",
+    "dbus",
+    "udev",
+    "cron",
+    "rsyslog",
+    "openssh-server",
+    "sudo",
+    "docker",
+    "podman",
+    "docker.io",
+    "containerd",
+    "runc",
+    "network-manager",
+    "cloud-init",
+    "lxc",
+    "gcc",
+    "g++",
+    "clang",
+    "make",
+    "cmake",
+    "rustc",
+    "cargo",
+    "openjdk",
+    "build-essential"
+  ],
+  "requiredLibraries": [
+    "ld-linux-aarch64.so.1",
+    "libstdc++.so",
+    "libgcc_s.so",
+    "libpthread.so",
+    "libdl.so",
+    "librt.so",
+    "libm.so"
+  ],
+  "requiredLocales": [
+    "C",
+    "C.UTF-8"
+  ],
+  "caCertificatesPath": "/etc/ssl/certs/ca-certificates.crt",
+  "shellHistoryCleanup": [
+    "/root/.bash_history",
+    "/home/amitia/.bash_history"
+  ],
+  "machineIdCleanup": [
+    "/etc/machine-id",
+    "/var/lib/dbus/machine-id"
+  ],
+  "sshHostKeysCleanup": [
+    "/etc/ssh/ssh_host_rsa_key",
+    "/etc/ssh/ssh_host_ecdsa_key",
+    "/etc/ssh/ssh_host_ed25519_key"
+  ],
+  "aptCacheCleanup": [
+    "/var/cache/apt/archives",
+    "/var/lib/apt/lists"
+  ],
+  "secretScanPatterns": [
+    "token",
+    "secret",
+    "password",
+    "private.key",
+    "AWS",
+    "npmrc.auth",
+    "netrc"
+  ]
+}

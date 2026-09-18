@@ -3,7 +3,7 @@ package protocol
 import "github.com/u-ai/backend/internal/runtimeidentity"
 
 type SessionIdentity struct {
-	UserID           runtimeidentity.UserID
+	SpaceID          runtimeidentity.SpaceID
 	DeviceID         runtimeidentity.DeviceID
 	RuntimeID        runtimeidentity.RuntimeID
 	RuntimeSessionID runtimeidentity.RuntimeSessionID

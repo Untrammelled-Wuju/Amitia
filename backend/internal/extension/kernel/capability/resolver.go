@@ -18,12 +18,17 @@ type RuntimeAvailabilityPort interface {
 	IsDeviceOffline(ctx context.Context, deviceID runtimeidentity.DeviceID) (bool, error)
 }
 
+type RuntimeHealthProber interface {
+	ProbeRuntimeHealth(ctx context.Context, binding RuntimeBinding) (HealthStatus, bool)
+}
+
 type Resolver struct {
 	catalog      ProviderCatalog
 	runtime      RuntimeCatalog
 	host         RoutingHostContext
 	policy       RoutingPolicy
 	availability RuntimeAvailabilityPort
+	prober       RuntimeHealthProber
 }
 
 func NewResolver(catalog ProviderCatalog) *Resolver {
@@ -44,6 +49,9 @@ func NewResolverWithPolicy(catalog ProviderCatalog, policy RoutingPolicy) *Resol
 
 func (r *Resolver) SetRuntimeCatalog(rt RuntimeCatalog) {
 	r.runtime = rt
+	if p, ok := rt.(RuntimeHealthProber); ok {
+		r.prober = p
+	}
 }
 
 func (r *Resolver) SetHostContext(host RoutingHostContext) {
@@ -151,6 +159,14 @@ func (r *Resolver) Resolve(request CapabilityResolutionRequest) (CapabilityResol
 	return result, nil
 }
 
+func (r *Resolver) probeBindingReady(def CapabilityProviderDefinition) bool {
+	if r.prober == nil {
+		return false
+	}
+	status, ok := r.prober.ProbeRuntimeHealth(context.Background(), def.Runtime)
+	return ok && status == HealthReady
+}
+
 func (r *Resolver) applyHardFilter(defs []CapabilityProviderDefinition, request CapabilityResolutionRequest) ([]CapabilityProviderDefinition, []CandidateRejection) {
 	var filtered []CapabilityProviderDefinition
 	var rejections []CandidateRejection
@@ -217,6 +233,9 @@ func (r *Resolver) applyHardFilter(defs []CapabilityProviderDefinition, request 
 				if err != nil || !offline {
 					allDeviceInstancesOffline = false
 				}
+			}
+			if !hasHealthy && r.probeBindingReady(def) {
+				hasHealthy = true
 			}
 			if !hasHealthy {
 				reason := RejectionProviderUnhealthy
@@ -286,18 +305,23 @@ func (r *Resolver) collectExecutableInstances(defs []CapabilityProviderDefinitio
 				continue
 			}
 			if !inst.IsExecutable() {
-				if r.availability != nil && inst.DeviceID != "" {
-					offline, err := r.availability.IsDeviceOffline(context.Background(), inst.DeviceID)
-					if err == nil && offline {
-						rejections = append(rejections, CandidateRejection{
-							ProviderID: def.ID,
-							Reason:     RejectionDeviceOffline,
-						})
-						seen[inst.ID] = true
-						continue
+				if r.probeBindingReady(def) {
+					inst.Health = HealthReady
+					inst.Availability = ProviderAvailabilityAvailable
+				} else {
+					if r.availability != nil && inst.DeviceID != "" {
+						offline, err := r.availability.IsDeviceOffline(context.Background(), inst.DeviceID)
+						if err == nil && offline {
+							rejections = append(rejections, CandidateRejection{
+								ProviderID: def.ID,
+								Reason:     RejectionDeviceOffline,
+							})
+							seen[inst.ID] = true
+							continue
+						}
 					}
+					continue
 				}
-				continue
 			}
 
 			if inst.DeviceID != "" && r.availability != nil {
@@ -349,7 +373,7 @@ func (r *Resolver) deviceInstanceSupportsAll(primary CapabilityProviderInstance,
 				continue
 			}
 			for _, candidate := range r.catalog.ListInstancesByProvider(def.ID) {
-				if candidate.UserID != primary.UserID || candidate.DeviceID != primary.DeviceID || !candidate.IsExecutable() {
+				if candidate.SpaceID != primary.SpaceID || candidate.DeviceID != primary.DeviceID || !candidate.IsExecutable() {
 					continue
 				}
 				if candidate.RuntimeID != "" && r.availability != nil {
@@ -425,7 +449,7 @@ func buildExecutionTarget(def *CapabilityProviderDefinition, inst *CapabilityPro
 	return InvocationExecutionTarget{
 		Placement: string(inst.Placement),
 
-		UserID:    inst.UserID,
+		SpaceID:   inst.SpaceID,
 		DeviceID:  inst.DeviceID,
 		RuntimeID: inst.RuntimeID,
 

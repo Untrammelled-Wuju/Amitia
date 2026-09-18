@@ -10,11 +10,13 @@ export interface KernelStatus {
 }
 
 export interface KernelExtension {
+  name?: string;
   extensionId: string;
   version: string;
   installationId: string;
   state: string;
   enablement: string;
+  systemManaged?: boolean;
   installedAt: string;
   updatedAt: string;
   generation: number;
@@ -144,6 +146,19 @@ export async function getExtension(id: string): Promise<KernelExtensionDetail> {
   return res.data;
 }
 
+export async function setExtensionPermission(
+  extensionId: string,
+  permission: string,
+  granted: boolean,
+): Promise<KernelPermission> {
+  const res = await apiClient.post(`${BASE}/extensions/permissions`, {
+    extensionId,
+    permission,
+    granted,
+  });
+  return res.data;
+}
+
 export async function previewInstall(file: File): Promise<InstallPreview> {
   const formData = new FormData();
   formData.append("package", file);
@@ -168,8 +183,74 @@ export async function disableExtension(id: string): Promise<{ extensionId: strin
   return res.data;
 }
 
-export async function uninstallExtension(id: string): Promise<{ extensionId: string; uninstalled: boolean }> {
-  const res = await apiClient.post(`${BASE}/extensions/uninstall`, { id });
+export async function uninstallExtension(id: string): Promise<Record<string, unknown>> {
+  const scopeType = "global";
+  const scopeId = "";
+  let previewResponse = await apiClient.post(`${BASE}/extensions/uninstall/preview`, {
+    extensionId: id,
+    scopeType,
+    scopeId,
+  });
+  let preview = previewResponse.data as {
+    uninstallable?: boolean;
+    enabled?: boolean;
+    dependents?: string[];
+    requiredConfirmations?: string[];
+  };
+  let disabledForUninstall = false;
+  if (!preview.uninstallable && preview.enabled && !(preview.dependents || []).length) {
+    await disableExtension(id);
+    disabledForUninstall = true;
+    previewResponse = await apiClient.post(`${BASE}/extensions/uninstall/preview`, {
+      extensionId: id,
+      scopeType,
+      scopeId,
+    });
+    preview = previewResponse.data;
+  }
+  if (preview.uninstallable === false) {
+    const dependents = (preview.dependents || []).filter(Boolean);
+    throw new Error(dependents.length > 0
+      ? `存在依赖此扩展的插件：${dependents.join("、")}`
+      : preview.enabled
+        ? "请先停用该扩展后再卸载"
+        : "当前扩展不可卸载");
+  }
+  const confirmations: Record<string, boolean> = {};
+  for (const key of preview.requiredConfirmations || []) {
+    if (key) confirmations[key] = true;
+  }
+  let confirmResponse: { data?: { confirmationToken?: string } };
+  try {
+    confirmResponse = await apiClient.post(`${BASE}/extensions/uninstall/confirm`, {
+      extensionId: id,
+      scopeType,
+      scopeId,
+      confirmations,
+    });
+  } catch (error) {
+    if (disabledForUninstall) await enableExtension(id).catch(() => {});
+    throw error;
+  }
+  const confirmationToken = String(confirmResponse.data?.confirmationToken || "");
+  if (!confirmationToken) throw new Error("卸载确认令牌缺失");
+  const idempotencyKey =
+    typeof globalThis.crypto?.randomUUID === "function"
+      ? `extension-uninstall:${id}:${globalThis.crypto.randomUUID()}`
+      : `extension-uninstall:${id}:${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const res = await apiClient.post(
+    `${BASE}/extensions/uninstall`,
+    {
+      extensionId: id,
+      scopeType,
+      scopeId,
+      confirmationToken,
+      idempotencyKey,
+    },
+    {
+      headers: { "Idempotency-Key": idempotencyKey },
+    },
+  );
   return res.data;
 }
 

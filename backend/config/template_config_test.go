@@ -12,7 +12,6 @@ import (
 func TestConfigTemplatesUseProviderLayout(t *testing.T) {
 	t.Setenv("AMITIA_JWT_SECRET", testJWTSecret)
 	dirs := []string{
-		".",
 		"../../config",
 		"../../desktop/resources/config-template",
 	}
@@ -50,12 +49,6 @@ func TestConfigTemplatesUseProviderLayout(t *testing.T) {
 			}
 			if cfg.Providers.GraphStore.Provider == "" {
 				t.Error("providers.graphStore.provider should be set")
-			}
-			if cfg.Components.Sidecars.Wechat.Port == 0 {
-				t.Error("components.sidecars.wechat.port should be set")
-			}
-			if cfg.Components.Sidecars.QQ.Port == 0 {
-				t.Error("components.sidecars.qq.port should be set")
 			}
 			if !cfg.DesktopPetRuntime.Enabled {
 				t.Error("desktopPetRuntime.enabled should be true in templates")
@@ -121,6 +114,7 @@ func TestConfigTemplatePreservesExistingProviderValues(t *testing.T) {
 		expectVDim int
 		expectNS   string
 		expectDB   string
+		expectPath string
 	}{
 		{
 			name:       "backend/config",
@@ -129,6 +123,7 @@ func TestConfigTemplatePreservesExistingProviderValues(t *testing.T) {
 			expectVDim: 1536,
 			expectNS:   "uai",
 			expectDB:   "memory_graph",
+			expectPath: "surrealdb/data",
 		},
 		{
 			name:       "config",
@@ -137,6 +132,7 @@ func TestConfigTemplatePreservesExistingProviderValues(t *testing.T) {
 			expectVDim: 1536,
 			expectNS:   "uai",
 			expectDB:   "memory_graph",
+			expectPath: "data/graph.db",
 		},
 		{
 			name:       "desktop-template",
@@ -145,6 +141,7 @@ func TestConfigTemplatePreservesExistingProviderValues(t *testing.T) {
 			expectVDim: 1536,
 			expectNS:   "uai",
 			expectDB:   "memory_graph",
+			expectPath: "data/graph.db",
 		},
 	}
 
@@ -167,8 +164,8 @@ func TestConfigTemplatePreservesExistingProviderValues(t *testing.T) {
 			if cfg.Providers.GraphStore.SurrealDB.Database != tt.expectDB {
 				t.Errorf("SurrealDB database = %q, want %q", cfg.Providers.GraphStore.SurrealDB.Database, tt.expectDB)
 			}
-			if cfg.Providers.GraphStore.SurrealDB.DataPath != "data/graph.db" {
-				t.Errorf("SurrealDB dataPath = %q, want data/graph.db", cfg.Providers.GraphStore.SurrealDB.DataPath)
+			if cfg.Providers.GraphStore.SurrealDB.DataPath != tt.expectPath {
+				t.Errorf("SurrealDB dataPath = %q, want %s", cfg.Providers.GraphStore.SurrealDB.DataPath, tt.expectPath)
 			}
 		})
 	}

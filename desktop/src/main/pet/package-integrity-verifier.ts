@@ -547,7 +547,7 @@ function sha256Hex(data: string | Buffer): string {
 function canonicalJSON(value: unknown): string {
   const canonical = canonicalizeValue(value);
   // Go's encoding/json escapes HTML-significant characters and U+2028/U+2029
-  // by default. Package v2 hashes are authored by the Go backend, so the
+  // by default. Package v1 hashes are authored by the Go backend, so the
   // Electron implementation must reproduce those bytes exactly rather than
   // relying on JavaScript's slightly different JSON.stringify escaping.
   return JSON.stringify(canonical)
@@ -661,7 +661,6 @@ function projectGoManifestForHash(raw: Record<string, unknown>): Record<string, 
     compatibility: projectedCompatibility,
     binding: {
       policy: asString(binding.policy),
-      sourceCharacterId: asString(binding.sourceCharacterId),
     },
     canvas: {
       width: asInteger(canvas.width),

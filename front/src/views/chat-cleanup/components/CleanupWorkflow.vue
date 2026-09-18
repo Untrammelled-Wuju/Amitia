@@ -49,7 +49,6 @@ SPDX-License-Identifier: AGPL-3.0-only
                 style="width: 100%"
               >
                 <el-option label="Web" value="web" />
-                <el-option label="微信" value="wechat" />
                 <el-option label="桌面端" value="desktop" />
               </el-select>
             </el-form-item>
@@ -64,7 +63,6 @@ SPDX-License-Identifier: AGPL-3.0-only
               >
                 <el-option label="手动" value="manual" />
                 <el-option label="导入" value="import" />
-                <el-option label="微信" value="wechat" />
               </el-select>
             </el-form-item>
           </el-col>

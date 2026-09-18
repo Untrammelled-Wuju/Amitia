@@ -24,7 +24,7 @@ func TestUpsertAndGetState(t *testing.T) {
 	cache := NewWorkingMemoryCache(5 * time.Minute)
 	p := NewConversationStateProvider(cache)
 
-	scope := interaction.InteractionScope{UserID: "u1", CharacterID: "c1", ConversationID: "conv1", Channel: "web"}
+	scope := interaction.InteractionScope{SpaceID: "u1", CharacterID: "c1", ConversationID: "conv1", Channel: "web"}
 	cs := &interaction.ConversationState{
 		ConversationID: "conv1",
 		MessageCount:   10,
@@ -98,7 +98,7 @@ func TestBuildFromWorkingMemory(t *testing.T) {
 	cache.UpdateSummary("wm1", "用户聊了天气和日程安排")
 
 	p := NewConversationStateProvider(cache)
-	scope := interaction.InteractionScope{UserID: "u1", ConversationID: "wm1", Channel: "web"}
+	scope := interaction.InteractionScope{SpaceID: "u1", ConversationID: "wm1", Channel: "web"}
 
 	cs := p.BuildFromWorkingMemory("wm1", scope)
 	if cs == nil {
@@ -119,7 +119,7 @@ func TestBuildFromWorkingMemoryEmpty(t *testing.T) {
 	cache := NewWorkingMemoryCache(5 * time.Minute)
 	p := NewConversationStateProvider(cache)
 
-	scope := interaction.InteractionScope{UserID: "u1", ConversationID: "empty", Channel: "web"}
+	scope := interaction.InteractionScope{SpaceID: "u1", ConversationID: "empty", Channel: "web"}
 	cs := p.BuildFromWorkingMemory("empty", scope)
 
 	if cs == nil {
@@ -296,7 +296,7 @@ func TestFullWorkflow(t *testing.T) {
 	cache.UpdateSummary("full", "用户讨论了工作计划和截止日期")
 
 	p := NewConversationStateProvider(cache)
-	scope := interaction.InteractionScope{UserID: "u1", CharacterID: "c1", ConversationID: "full", Channel: "web"}
+	scope := interaction.InteractionScope{SpaceID: "u1", CharacterID: "c1", ConversationID: "full", Channel: "web"}
 
 	cs := p.BuildFromWorkingMemory("full", scope)
 	p.UpsertState("full", cs)

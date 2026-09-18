@@ -29,7 +29,7 @@ func TestOrchestratorRaceCondition1000Runs(t *testing.T) {
 			req := &ProcessRequest{
 				CharacterID: "char-1",
 				Message:     fmt.Sprintf("msg-%d", idx),
-				UserID:      fmt.Sprintf("user-%d", idx),
+				SpaceID:     fmt.Sprintf("user-%d", idx),
 				RequestID:   fmt.Sprintf("req-%d", idx),
 			}
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -70,7 +70,7 @@ func TestOrchestratorConsistencyNoHalfCompleteRecords(t *testing.T) {
 	result, err := orch.Process(ctx, &ProcessRequest{
 		CharacterID: "char-1",
 		Message:     "hello",
-		UserID:      "user-1",
+		SpaceID:     "user-1",
 		RequestID:   "req-001",
 	})
 	if err != nil {
@@ -107,7 +107,7 @@ func TestOrchestratorIdempotentSameRequestID(t *testing.T) {
 	req := &ProcessRequest{
 		CharacterID: "char-1",
 		Message:     "test",
-		UserID:      "user-1",
+		SpaceID:     "user-1",
 		RequestID:   "req-idem-001",
 	}
 
@@ -150,7 +150,7 @@ func TestOrchestratorCancelBeforeCommitResultsInCancelled(t *testing.T) {
 		result, procErr = orch.Process(ctx, &ProcessRequest{
 			CharacterID: "char-1",
 			Message:     "slow",
-			UserID:      "user-1",
+			SpaceID:     "user-1",
 			RequestID:   "req-cancel",
 		})
 	}()
@@ -177,7 +177,7 @@ func TestOrchestratorStateMatrixTransitions(t *testing.T) {
 	result, err := orch.Process(ctx, &ProcessRequest{
 		CharacterID: "char-1",
 		Message:     "state",
-		UserID:      "user-1",
+		SpaceID:     "user-1",
 		RequestID:   "req-state-001",
 	})
 	if err != nil {

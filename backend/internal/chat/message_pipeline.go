@@ -30,7 +30,7 @@ func (s *service) ProcessMessage(ctx context.Context, req *ProcessMessageRequest
 			RequestID:      computeResult.RequestID,
 		}, nil
 	}
-	commitResult, err := s.commitInteraction(messageCommitPlan{
+	commitResult, err := s.commitInteraction(ctx, messageCommitPlan{
 		Request:       req,
 		Conversation:  computeResult.ConversationID,
 		Character:     computeResult.CharacterID,
@@ -89,7 +89,7 @@ func (s *service) ProcessMessageCtx(ctx context.Context, req *interaction.Proces
 		Channel:                  req.Channel,
 		Source:                   req.Source,
 		PeerID:                   req.PeerID,
-		UserID:                   req.UserID,
+		SpaceID:                  req.SpaceID,
 		SessionID:                req.SessionID,
 		AudioUrl:                 req.AudioUrl,
 		AudioDuration:            req.AudioDuration,
@@ -104,6 +104,7 @@ func (s *service) ProcessMessageCtx(ctx context.Context, req *interaction.Proces
 		Runtime:                  req.Runtime,
 		ExecContext:              req.ExecContext,
 		IsInternal:               req.IsInternal,
+		SuppressReplyPersistence: req.SuppressReplyPersistence,
 		ProactiveTimeContext:     req.ProactiveTimeContext,
 		ProactiveRecentContext:   req.ProactiveRecentContext,
 		ProactiveTaskInstruction: req.ProactiveTaskInstruction,
@@ -126,7 +127,7 @@ func (s *service) ProcessMessageCtx(ctx context.Context, req *interaction.Proces
 			RequestID:      computeResult.RequestID,
 		}, nil
 	}
-	commitResult, err := s.commitInteraction(messageCommitPlan{
+	commitResult, err := s.commitInteraction(ctx, messageCommitPlan{
 		Request:       chatReq,
 		Conversation:  computeResult.ConversationID,
 		Character:     computeResult.CharacterID,
@@ -173,12 +174,11 @@ func (s *service) dispatchPluginAfterReply(req *ProcessMessageRequest, result *C
 	if len(messageIDs) > 0 {
 		messageID = messageIDs[len(messageIDs)-1]
 	}
-	scope := extension.ExecutionScope{UserID: req.UserID, CharacterID: result.CharacterID, ConversationID: result.ConversationID, Channel: result.Channel, SessionID: req.SessionID, TraceID: result.RequestID, RequestID: result.RequestID, CorrelationID: result.Trace.CorrelationID, CausationID: result.Trace.CausationID}
-	replyView := extension.ReplyView{MessageID: messageID, CharacterID: result.CharacterID, ConversationID: result.ConversationID, Channel: result.Channel, Content: result.Reply, CreatedAt: time.Now().UTC()}
+	scope := extension.ExecutionScope{SpaceID: req.SpaceID, CharacterID: result.CharacterID, ConversationID: result.ConversationID, Channel: result.Channel, SessionID: req.SessionID, TraceID: result.RequestID, RequestID: result.RequestID, CorrelationID: result.Trace.CorrelationID, CausationID: result.Trace.CausationID}
+	replyView := ReplyView{MessageID: messageID, CharacterID: result.CharacterID, ConversationID: result.ConversationID, Channel: result.Channel, Content: result.Reply, CreatedAt: time.Now().UTC()}
 	if s.toolRuntime != nil {
 		toolScope := toolScopeFromExtension(scope)
-		toolReply := ReplyView{MessageID: replyView.MessageID, CharacterID: replyView.CharacterID, ConversationID: replyView.ConversationID, Channel: replyView.Channel, Content: replyView.Content, CreatedAt: replyView.CreatedAt}
-		s.toolRuntime.AfterReply(toolScope, toolReply)
+		s.toolRuntime.AfterReply(toolScope, replyView)
 		return
 	}
 }

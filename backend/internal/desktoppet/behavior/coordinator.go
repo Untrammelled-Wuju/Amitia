@@ -40,17 +40,17 @@ func NewCoordinator(capacity int, processFn ProcessFunc) *Coordinator {
 	}
 }
 
-func (c *Coordinator) mailboxKey(userID, characterID string) string {
-	return userID + ":" + characterID
+func (c *Coordinator) mailboxKey(spaceID, characterID string) string {
+	return spaceID + ":" + characterID
 }
 
-func (c *Coordinator) Enqueue(userID, characterID string, event BehaviorEventEnvelope) error {
+func (c *Coordinator) Enqueue(spaceID, characterID string, event BehaviorEventEnvelope) error {
 	c.mu.Lock()
 	if c.stopped {
 		c.mu.Unlock()
 		return NewBehaviorError(ErrCodeRulesetInvalid, "coordinator stopped")
 	}
-	key := c.mailboxKey(userID, characterID)
+	key := c.mailboxKey(spaceID, characterID)
 	mb, exists := c.mailboxes[key]
 	if !exists {
 		mb = c.createMailboxLocked(key)
@@ -70,13 +70,13 @@ func (c *Coordinator) Enqueue(userID, characterID string, event BehaviorEventEnv
 	}
 }
 
-func (c *Coordinator) TryEnqueue(userID, characterID string, event BehaviorEventEnvelope) bool {
+func (c *Coordinator) TryEnqueue(spaceID, characterID string, event BehaviorEventEnvelope) bool {
 	c.mu.Lock()
 	if c.stopped {
 		c.mu.Unlock()
 		return false
 	}
-	key := c.mailboxKey(userID, characterID)
+	key := c.mailboxKey(spaceID, characterID)
 	mb, exists := c.mailboxes[key]
 	if !exists {
 		mb = c.createMailboxLocked(key)
@@ -141,8 +141,8 @@ func (c *Coordinator) Stop() {
 	})
 }
 
-func (c *Coordinator) RemoveMailbox(userID, characterID string) {
-	key := c.mailboxKey(userID, characterID)
+func (c *Coordinator) RemoveMailbox(spaceID, characterID string) {
+	key := c.mailboxKey(spaceID, characterID)
 	c.mu.Lock()
 	mb, ok := c.mailboxes[key]
 	if ok {
@@ -154,8 +154,8 @@ func (c *Coordinator) RemoveMailbox(userID, characterID string) {
 	}
 }
 
-func (c *Coordinator) MailboxDepth(userID, characterID string) int {
-	key := c.mailboxKey(userID, characterID)
+func (c *Coordinator) MailboxDepth(spaceID, characterID string) int {
+	key := c.mailboxKey(spaceID, characterID)
 	c.mu.Lock()
 	mb, ok := c.mailboxes[key]
 	c.mu.Unlock()

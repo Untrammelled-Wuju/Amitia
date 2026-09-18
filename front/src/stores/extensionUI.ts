@@ -16,7 +16,6 @@ import { loadLastKnownGoodSnapshot, saveLastKnownGoodSnapshot } from "@/ui-runti
 import { isProviderCompatible } from "@/ui-runtime/providerRuntime";
 import { resolveHostEnvironment } from "@/composables/useHostEnvironment";
 import { getRuntimeConnection } from "@/runtime/runtime-adapter";
-import { useSessionStore } from "@/stores/session-store";
 
 export interface UIContributionSummary {
   contributionId: string;
@@ -43,6 +42,7 @@ export interface UIContributionSummary {
   runtimeReady: boolean;
   permissions?: string[];
   sandbox?: string;
+  runtimeId?: string;
   entryPath?: string;
   schemaPath?: string;
   dataContract?: Record<string, unknown>;
@@ -115,6 +115,8 @@ export interface SlotError {
 export interface SlotSession {
   contributionId: string;
   sessionId: string;
+  token?: string;
+  generation?: number;
   createdAt: number;
   lastActivity: number;
 }
@@ -132,7 +134,7 @@ export const useExtensionUIStore = defineStore("extensionUI", () => {
   const lastFetchAt = ref<number>(0);
   const loading = ref(false);
   const usingLastKnownGood = ref(false);
-  const profileScope = ref<UIProfileScopeKind>("user");
+  const profileScope = ref<UIProfileScopeKind>("space");
   const scopeProfile = ref<UIProfile | null>(null);
   const scopeExists = ref(false);
   const errors = ref<SlotError[]>([]);
@@ -328,7 +330,7 @@ export const useExtensionUIStore = defineStore("extensionUI", () => {
     const platform = resolveHostEnvironment().platform;
     const deviceId = await resolveUIHostDeviceId();
     const backendNamespace = await getRuntimeConnection().then((connection) => connection.apiBaseURL).catch(() => window.location.origin);
-    const cacheNamespace = `${backendNamespace}|user=${sessionStore.state.value.userId || "anonymous"}`;
+    const cacheNamespace = `${backendNamespace}|device=${deviceId || "browser"}`;
     try {
       const next = await fetchUISnapshot(platform, deviceId);
       snapshot.value = next;
@@ -441,6 +443,8 @@ export const useExtensionUIStore = defineStore("extensionUI", () => {
     registerSession({
       contributionId: key,
       sessionId: res.sessionId,
+      token: res.token,
+      generation: res.generation,
       createdAt: Date.now(),
       lastActivity: Date.now(),
     });

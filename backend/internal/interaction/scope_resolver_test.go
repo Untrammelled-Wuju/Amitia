@@ -11,7 +11,7 @@ type fakeScopeBindingLookup struct {
 	err      error
 }
 
-func (f fakeScopeBindingLookup) FindScopeBindings(ctx context.Context, channel, peerID string) ([]ScopeBinding, error) {
+func (f fakeScopeBindingLookup) FindScopeBindings(ctx context.Context, spaceID, channel, peerID string) ([]ScopeBinding, error) {
 	if f.err != nil {
 		return nil, f.err
 	}
@@ -22,7 +22,7 @@ func TestScopeResolverResolvesBoundPeer(t *testing.T) {
 	resolver := NewScopeResolver(fakeScopeBindingLookup{bindings: []ScopeBinding{
 		{
 			ID:             " bind-1 ",
-			UserID:         " user-1 ",
+			SpaceID:        " user-1 ",
 			CharacterID:    " char-1 ",
 			ConversationID: " conv-1 ",
 			Channel:        " QQ ",
@@ -40,7 +40,7 @@ func TestScopeResolverResolvesBoundPeer(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected scope to resolve, got %v", err)
 	}
-	if result.Scope.UserID != "user-1" || result.Scope.CharacterID != "char-1" || result.Scope.ConversationID != "conv-1" {
+	if result.Scope.SpaceID != "user-1" || result.Scope.CharacterID != "char-1" || result.Scope.ConversationID != "conv-1" {
 		t.Fatalf("unexpected resolved scope: %#v", result.Scope)
 	}
 	if result.Scope.Channel != "qq" || result.Scope.PeerID != "peer-1" || result.BindingID != "bind-1" {
@@ -55,7 +55,7 @@ func TestScopeResolverPreservesEntrySourceWhenBindingHasSource(t *testing.T) {
 	resolver := NewScopeResolver(fakeScopeBindingLookup{bindings: []ScopeBinding{
 		{
 			ID:             "bind-1",
-			UserID:         "user-1",
+			SpaceID:        "user-1",
 			CharacterID:    "char-1",
 			ConversationID: "conv-1",
 			Channel:        "wechat",
@@ -80,8 +80,8 @@ func TestScopeResolverPreservesEntrySourceWhenBindingHasSource(t *testing.T) {
 
 func TestScopeResolverRejectsAmbiguousBindings(t *testing.T) {
 	resolver := NewScopeResolver(fakeScopeBindingLookup{bindings: []ScopeBinding{
-		{ID: "bind-1", UserID: "user-1", CharacterID: "char-1", Channel: "qq", PeerID: "peer-1", State: ScopeBindingStateActive},
-		{ID: "bind-2", UserID: "user-1", CharacterID: "char-2", Channel: "qq", PeerID: "peer-1", State: ScopeBindingStateActive},
+		{ID: "bind-1", SpaceID: "user-1", CharacterID: "char-1", Channel: "qq", PeerID: "peer-1", State: ScopeBindingStateActive},
+		{ID: "bind-2", SpaceID: "user-1", CharacterID: "char-2", Channel: "qq", PeerID: "peer-1", State: ScopeBindingStateActive},
 	}})
 
 	_, err := resolver.Resolve(context.Background(), ScopeResolveInput{Channel: "qq", PeerID: "peer-1"})
@@ -121,7 +121,7 @@ func TestScopeResolverAllowsUnboundPeerWithExplicitTarget(t *testing.T) {
 
 func TestScopeResolverRejectsBindingConflict(t *testing.T) {
 	resolver := NewScopeResolver(fakeScopeBindingLookup{bindings: []ScopeBinding{
-		{ID: "bind-1", UserID: "user-1", CharacterID: "char-1", ConversationID: "conv-1", Channel: "qq", PeerID: "peer-1", State: ScopeBindingStateActive},
+		{ID: "bind-1", SpaceID: "user-1", CharacterID: "char-1", ConversationID: "conv-1", Channel: "qq", PeerID: "peer-1", State: ScopeBindingStateActive},
 	}})
 
 	_, err := resolver.Resolve(context.Background(), ScopeResolveInput{
@@ -136,7 +136,7 @@ func TestScopeResolverRejectsBindingConflict(t *testing.T) {
 
 func TestScopeResolverSkipsDeletedBindingsButRejectsIfNoActiveBinding(t *testing.T) {
 	resolver := NewScopeResolver(fakeScopeBindingLookup{bindings: []ScopeBinding{
-		{ID: "bind-1", UserID: "user-1", CharacterID: "char-1", Channel: "qq", PeerID: "peer-1", State: ScopeBindingStateDeleted},
+		{ID: "bind-1", SpaceID: "user-1", CharacterID: "char-1", Channel: "qq", PeerID: "peer-1", State: ScopeBindingStateDeleted},
 	}})
 
 	_, err := resolver.Resolve(context.Background(), ScopeResolveInput{Channel: "qq", PeerID: "peer-1"})
@@ -147,7 +147,7 @@ func TestScopeResolverSkipsDeletedBindingsButRejectsIfNoActiveBinding(t *testing
 
 func TestScopeResolverRejectsPeerWithoutChannelBeforeLookup(t *testing.T) {
 	resolver := NewScopeResolver(fakeScopeBindingLookup{bindings: []ScopeBinding{
-		{ID: "bind-1", UserID: "user-1", CharacterID: "char-1", Channel: "qq", PeerID: "peer-1", State: ScopeBindingStateActive},
+		{ID: "bind-1", SpaceID: "user-1", CharacterID: "char-1", Channel: "qq", PeerID: "peer-1", State: ScopeBindingStateActive},
 	}})
 
 	_, err := resolver.Resolve(context.Background(), ScopeResolveInput{PeerID: "peer-1"})

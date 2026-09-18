@@ -8,11 +8,11 @@ import (
 )
 
 type CharacterOwnerPort interface {
-	ResolveUserID(ctx context.Context, characterID string) string
+	ResolveSpaceID(ctx context.Context, characterID string) string
 }
 
 type PetInfoPort interface {
-	ResolvePetInfo(ctx context.Context, petInstanceID string) (userID, characterID string)
+	ResolvePetInfo(ctx context.Context, petInstanceID string) (spaceID, characterID string)
 }
 
 type enginePublisher struct {

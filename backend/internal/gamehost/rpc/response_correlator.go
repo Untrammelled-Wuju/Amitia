@@ -79,12 +79,10 @@ func (c *rpcResponseCorrelator) HandleResponse(peer ipc.Peer, envelope *protocol
 		if envelope.Error == nil {
 			return false
 		}
-		completed, _ = c.registry.Fail(key, NewRPCErrorWithCause(
-			"protocol_error",
-			domain.ErrorCode(envelope.Error.Code),
-			envelope.Error.Message,
-			nil,
-		))
+		completed, _ = c.registry.Fail(key, &ipc.PluginResponseError{
+			Code:    domain.ErrorCode(envelope.Error.Code),
+			Message: envelope.Error.Message,
+		})
 	} else {
 		completed, _ = c.registry.Complete(key, *envelope)
 	}

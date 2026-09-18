@@ -102,7 +102,7 @@ export async function initializeRuntimeCapabilities(force = false): Promise<Runt
           Accept: "application/json",
           "X-Amitia-Client-Type": "web",
         },
-        credentials: "same-origin",
+        credentials: "include",
       });
       if (!response.ok) {
         throw new Error(`runtime capability request failed with HTTP ${response.status}`);

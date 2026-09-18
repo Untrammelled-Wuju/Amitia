@@ -68,10 +68,10 @@ func TestValidateCapabilities_Duplicate(t *testing.T) {
 	}
 }
 
-func TestValidateCapabilities_UnknownStillPassesLocal(t *testing.T) {
+func TestValidateCapabilities_UnknownRejected(t *testing.T) {
 	err := handshake.ValidateCapabilities([]string{"vendor.something"})
-	if err != nil {
-		t.Errorf("namespaced capability should pass local validation: %v", err)
+	if err == nil {
+		t.Error("unknown capability should be rejected")
 	}
 }
 

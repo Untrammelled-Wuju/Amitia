@@ -197,8 +197,18 @@ func (b *SAFBackend) Write(ctx context.Context, mount WorkspaceMount, path strin
 			DisplayName:      name,
 			MIMEType:         mimeType,
 		}
-		result, err = b.bridge.CreateFile(ctx, grantID, createInput)
+		if _, err = b.bridge.CreateFile(ctx, grantID, createInput); err != nil {
+			return WorkspaceEntry{}, b.mapNativeError(err)
+		}
+		createdRef, resolveErr := b.bridge.ResolvePath(ctx, grantID, path)
+		if resolveErr != nil {
+			return WorkspaceEntry{}, b.mapNativeError(resolveErr)
+		}
+		result, err = b.bridge.Write(ctx, grantID, createdRef.DocumentID, name, source, true)
 		if err != nil {
+			// Best-effort rollback: a failed initial write must not masquerade as
+			// a successfully created empty file.
+			_ = b.bridge.Delete(ctx, grantID, createdRef.DocumentID)
 			return WorkspaceEntry{}, b.mapNativeError(err)
 		}
 	}
@@ -383,12 +393,16 @@ func (b *SAFBackend) findChildByName(ctx context.Context, grantID string, parent
 	}
 	for _, e := range entries {
 		if e.Name == name {
+			documentID := strings.TrimSpace(e.DocumentID)
+			if documentID == "" {
+				documentID = parentDocumentID + "/" + name
+			}
 			return SAFDocumentRef{
-				GrantID:    grantID,
-				DocumentID: parentDocumentID + "/" + name,
-				Name:       name,
-				MIMEType:   e.MIMEType,
-				Flags:      e.Flags,
+				GrantID:     grantID,
+				DocumentID:  documentID,
+				Name:        name,
+				MIMEType:    e.MIMEType,
+				Flags:       e.Flags,
 				IsDirectory: e.IsDirectory,
 			}, nil
 		}
@@ -459,6 +473,9 @@ func (b *SAFBackend) mapNativeError(err error) error {
 		return nil
 	}
 
+	if safErrPtr, ok := err.(*SAFNativeError); ok && safErrPtr != nil {
+		return b.mapNativeError(*safErrPtr)
+	}
 	if safErr, ok := err.(SAFNativeError); ok {
 		if safErr.PermissionRevoked {
 			return fmt.Errorf("%w: %v", ErrSAFPermissionRevoked, err)
@@ -467,14 +484,18 @@ func (b *SAFBackend) mapNativeError(err error) error {
 			return fmt.Errorf("%w: %v", ErrSAFProviderUnavailable, err)
 		}
 		switch safErr.Code {
-		case "NOT_FOUND":
+		case "NOT_FOUND", "FILE_NOT_FOUND":
 			return fmt.Errorf("%w: %v", ErrFileNotFound, err)
 		case "NOT_DIRECTORY":
 			return fmt.Errorf("%w: %v", ErrNotDirectory, err)
 		case "ALREADY_EXISTS":
 			return fmt.Errorf("%w: %v", ErrAlreadyExists, err)
-		case "UNSUPPORTED_OPERATION":
+		case "UNSUPPORTED_OPERATION", "OPERATION_NOT_SUPPORTED":
 			return fmt.Errorf("%w: %v", ErrOperationUnsupported, err)
+		case "INVALID_ARGUMENT":
+			return fmt.Errorf("%w: %v", ErrInvalidPath, err)
+		case "WRITE_FAILED":
+			return fmt.Errorf("%w: %v", ErrWriteFailed, err)
 		case "CANCELLED":
 			return fmt.Errorf("%w: %v", ErrOperationCancelled, err)
 		case "TIMEOUT":
@@ -482,10 +503,6 @@ func (b *SAFBackend) mapNativeError(err error) error {
 		default:
 			return fmt.Errorf("%w: %v", ErrSAFUnavailable, err)
 		}
-	}
-
-	if _, ok := err.(*SAFNativeError); ok {
-		return b.mapNativeError(err)
 	}
 
 	return err

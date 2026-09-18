@@ -21,8 +21,8 @@ func (v *InvocationValidator) Validate(ctx context.Context, request ToolExecutio
 	if request.ToolID == "" {
 		return fmt.Errorf("tool_id is required")
 	}
-	if inv.UserID == "" && inv.Source != capability.InvocationSourceScheduledTask {
-		return fmt.Errorf("user_id is required")
+	if inv.SpaceID == "" && inv.Source != capability.InvocationSourceScheduledTask {
+		return fmt.Errorf("space_id is required")
 	}
 	if !inv.Source.Valid() {
 		return fmt.Errorf("invalid invocation source")

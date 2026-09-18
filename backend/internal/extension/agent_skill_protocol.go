@@ -14,9 +14,7 @@ const (
 	AgentSkillSourceBundled         AgentSkillSource              = "bundled"
 	AgentSkillSourceDirectory       AgentSkillSource              = "local-directory"
 	AgentSkillSourceZIP             AgentSkillSource              = "local-zip"
-	AgentSkillSourceWorkshop        AgentSkillSource              = "workshop"
 	AgentSkillScopeGlobal           AgentSkillScope               = "global"
-	AgentSkillScopeCharacter        AgentSkillScope               = "character"
 	AgentSkillResourceSkill         AgentSkillResourceKind        = "skill"
 	AgentSkillResourceReference     AgentSkillResourceKind        = "reference"
 	AgentSkillResourceAsset         AgentSkillResourceKind        = "asset"
@@ -120,19 +118,19 @@ type AgentSkillMCPDependency struct {
 	RequiresManualConfirmation bool     `json:"requiresManualConfirmation"`
 }
 type AgentSkillCompatibilityReport struct {
-	Status             AgentSkillCompatibilityStatus `json:"status"`
-	DetectedProfiles   []AgentSkillEcosystemProfile  `json:"detectedProfiles,omitempty"`
-	FieldMappings      []AgentSkillFieldMapping      `json:"fieldMappings,omitempty"`
-	ToolMappings       []AgentSkillToolMapping       `json:"toolMappings"`
-	MappedFeatures     []AgentSkillFeatureResult     `json:"mappedFeatures,omitempty"`
-	DependencyMappings []AgentSkillDependencyMapping `json:"dependencyMappings,omitempty"`
-	RequiredScripts    []string                      `json:"requiredScripts"`
-	MissingFiles       []string                      `json:"missingFiles"`
-	Unsupported        []string                      `json:"unsupported"`
-	Warnings           []AgentSkillWarning           `json:"warnings"`
-	Errors             []AgentSkillError             `json:"errors"`
+	Status             AgentSkillCompatibilityStatus       `json:"status"`
+	DetectedProfiles   []AgentSkillEcosystemProfile        `json:"detectedProfiles,omitempty"`
+	FieldMappings      []AgentSkillFieldMapping            `json:"fieldMappings,omitempty"`
+	ToolMappings       []AgentSkillToolMapping             `json:"toolMappings"`
+	MappedFeatures     []AgentSkillFeatureResult           `json:"mappedFeatures,omitempty"`
+	DependencyMappings []AgentSkillDependencyMapping       `json:"dependencyMappings,omitempty"`
+	RequiredScripts    []string                            `json:"requiredScripts"`
+	MissingFiles       []string                            `json:"missingFiles"`
+	Unsupported        []string                            `json:"unsupported"`
+	Warnings           []AgentSkillWarning                 `json:"warnings"`
+	Errors             []AgentSkillError                   `json:"errors"`
 	Fingerprint        *AgentSkillCompatibilityFingerprint `json:"fingerprint,omitempty"`
-	EvaluatedAt        time.Time                     `json:"evaluatedAt"`
+	EvaluatedAt        time.Time                           `json:"evaluatedAt"`
 }
 
 type AgentSkillEcosystemProfile struct {
@@ -186,7 +184,7 @@ type AgentSkillDefinition struct {
 	Source              AgentSkillSource              `json:"source"`
 	Scope               AgentSkillScope               `json:"scope"`
 	ScopeID             string                        `json:"scopeId,omitempty"`
-	UserID              string                        `json:"userId"`
+	SpaceID             string                        `json:"spaceId"`
 	ArtifactID          string                        `json:"artifactId"`
 	ContentHash         string                        `json:"contentHash"`
 	Body                string                        `json:"body"`
@@ -214,7 +212,6 @@ type AgentSkillImportPreview struct {
 type AgentSkillFilter struct {
 	Query    string
 	Status   AgentSkillCompatibilityStatus
-	Scope    AgentSkillScope
 	Page     int
 	PageSize int
 }
@@ -248,7 +245,7 @@ type AgentSkillActivation struct {
 	Source              AgentSkillSource              `json:"source"`
 	Scope               AgentSkillScope               `json:"scope"`
 	CompatibilityStatus AgentSkillCompatibilityStatus `json:"compatibilityStatus"`
-	UserID              string                        `json:"userId"`
+	SpaceID             string                        `json:"spaceId"`
 	CharacterID         string                        `json:"characterId"`
 	ConversationID      string                        `json:"conversationId"`
 	Channel             string                        `json:"channel"`
@@ -290,9 +287,7 @@ type AgentSkillResourceContent struct {
 	Executable bool                   `json:"executable"`
 }
 type InstallAgentSkillRequest struct {
-	UserID      string
-	CharacterID string
-	PreviewID   string
-	Scope       AgentSkillScope
-	Enable      bool
+	SpaceID   string
+	PreviewID string
+	Enable    bool
 }

@@ -51,19 +51,11 @@ final mobileBackendLifecycleProvider =
     Provider<MobileBackendLifecycle>((ref) {
   final resolver = ref.watch(backendTopologyResolverProvider);
   final embedded = ref.watch(embeddedRuntimeControllerProvider);
-  final connectivityProbe = ref.watch(backendConnectivityProbeProvider);
-
-  final lifecycle = connectivityProbe != null
-      ? DefaultMobileBackendLifecycle.withProbe(
-          resolver: resolver,
-          embeddedRuntime: embedded,
-          connectivityProbe: connectivityProbe,
-        )
-      : DefaultMobileBackendLifecycle(
-          resolver: resolver,
-          embeddedRuntime: embedded,
-          remoteProbe: _NoopRemoteCoreProbe(),
-        );
+  final lifecycle = DefaultMobileBackendLifecycle(
+    resolver: resolver,
+    embeddedRuntime: embedded,
+    remoteProbe: const DirectRemoteCoreProbe(),
+  );
 
   ref.onDispose(() => lifecycle.shutdown());
   return lifecycle;

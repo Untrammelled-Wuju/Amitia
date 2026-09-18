@@ -235,10 +235,34 @@ func TestServiceTransition_StoppedCantTransition(t *testing.T) {
 
 	err := inst.Transition(ServiceStateRunning, now.Add(5*time.Second))
 	if err == nil {
-		t.Fatal("expected error when transitioning from stopped")
+		t.Fatal("expected error when transitioning from stopped directly to running")
 	}
 	if !IsTopologyError(err, ErrInvalidState) {
 		t.Errorf("expected invalid_state, got %v", err)
+	}
+}
+
+func TestServiceTransition_StoppedCanRestart(t *testing.T) {
+	now := time.Now()
+	inst, _ := NewServiceInstance("rt/svc", "rt", "plugin", "svc", true, domain.ServiceKindProcess, nil, now)
+
+	path := []ServiceRuntimeState{
+		ServiceStateStarting,
+		ServiceStateRunning,
+		ServiceStateStopping,
+		ServiceStateStopped,
+		ServiceStateStarting,
+		ServiceStateRunning,
+	}
+
+	for i, target := range path {
+		later := now.Add(time.Duration(i+1) * time.Second)
+		if err := inst.Transition(target, later); err != nil {
+			t.Fatalf("step %d (%s): unexpected error: %v", i, target, err)
+		}
+		if inst.State != target {
+			t.Errorf("step %d: expected state %s, got %s", i, target, inst.State)
+		}
 	}
 }
 
@@ -396,8 +420,8 @@ func TestServiceSetMetadataRejectsEmptyKey(t *testing.T) {
 }
 
 func TestIsTerminalServiceState(t *testing.T) {
-	if !IsTerminalServiceState(ServiceStateStopped) {
-		t.Error("expected stopped to be terminal")
+	if IsTerminalServiceState(ServiceStateStopped) {
+		t.Error("stopped should not be terminal, it can restart")
 	}
 	if !IsTerminalServiceState(ServiceStateFailed) {
 		t.Error("expected failed to be terminal")

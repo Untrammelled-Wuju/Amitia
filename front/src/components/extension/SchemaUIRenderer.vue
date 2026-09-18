@@ -15,6 +15,7 @@ import {
   type SchemaUINode as SchemaUINodeType,
   type SchemaUIActionBinding,
   type UITheme,
+  type SchemaUIDataSource,
 } from "./schema-ui-utils";
 
 const props = defineProps<{
@@ -38,11 +39,78 @@ const sessionId = ref<string>("");
 const sessionReady = ref(false);
 const sessionOrigin = ref("");
 const sessionContractVersion = ref(0);
+const sessionToken = ref("");
+const sessionGeneration = ref(0);
+let bridgeNonceSequence = 0;
 const actionLoading = reactive<Record<string, boolean>>({});
 const capturedError = ref<string | null>(null);
 
 const formState = reactive<Record<string, unknown>>({});
 const localContextOverride = reactive<Record<string, unknown>>({});
+const dataSourceState = reactive<Record<string, unknown>>({});
+
+const sessionScopeKey = computed(() =>
+  `${props.contribution.contributionId}:${props.contribution.generation}:${props.context?.characterId || ""}:${props.context?.conversationId || ""}`
+);
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function unwrapActionResult(value: unknown): Record<string, unknown> {
+  const result = asRecord(value);
+  const structured = asRecord(result.structured);
+  return Object.keys(structured).length > 0 ? { ...result, ...structured } : result;
+}
+
+function findActionFailure(value: unknown): string {
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const message = findActionFailure(item);
+      if (message) return message;
+    }
+    return "";
+  }
+  const data = asRecord(value);
+  const status = typeof data.status === "string" ? data.status.toLowerCase() : "";
+  if (["failed", "error", "rejected", "denied"].includes(status)) {
+    for (const key of ["message", "errorMessage", "reason"]) {
+      if (typeof data[key] === "string" && data[key]) return data[key] as string;
+    }
+    const error = asRecord(data.error);
+    if (typeof error.message === "string" && error.message) return error.message;
+  }
+  for (const child of Object.values(data)) {
+    const message = findActionFailure(child);
+    if (message) return message;
+  }
+  return "";
+}
+
+function formatActionMessage(value: string): string {
+  try {
+    const parsed = JSON.parse(value) as { message?: unknown; with?: unknown };
+    if (typeof parsed.message === "string" && parsed.message) return parsed.message;
+    if (Array.isArray(parsed.with)) {
+      const messages = parsed.with.filter((item): item is string => typeof item === "string" && item.length > 0);
+      if (messages.length > 0) return messages.join(" ");
+    }
+  } catch {
+  }
+  return value;
+}
+
+const groupedDataSources = computed(() => {
+  const groups: Record<string, Record<string, unknown>> = {};
+  for (const source of schema.value?.dataSources ?? []) {
+    const value = dataSourceState[source.id];
+    if (value === undefined) continue;
+    const group = groups[source.type] ?? (groups[source.type] = {});
+    if (value && typeof value === "object" && !Array.isArray(value)) Object.assign(group, value);
+    group[source.id] = value;
+  }
+  return groups;
+});
 
 const sessionScopeKey = computed(() =>
   `${props.contribution.contributionId}:${props.contribution.generation}:${props.context?.characterId || ""}:${props.context?.conversationId || ""}`
@@ -60,6 +128,16 @@ const mergedContext = computed<Record<string, unknown>>(() => ({
   enabled: props.contribution.enabled,
   effective: props.contribution.effective,
   sandbox: props.contribution.sandbox,
+  input: { ...asRecord(props.context?.input), ...(groupedDataSources.value.input ?? {}) },
+  query: { ...asRecord(props.context?.query), ...(groupedDataSources.value.query ?? {}) },
+  runtime: { ...asRecord(props.context?.runtime), ...(groupedDataSources.value.runtime ?? {}) },
+  runtimeStatus: { ...asRecord(props.context?.runtimeStatus ?? props.context?.runtime_status), ...(groupedDataSources.value.runtime_status ?? {}) },
+  runtime_status: { ...asRecord(props.context?.runtimeStatus ?? props.context?.runtime_status), ...(groupedDataSources.value.runtime_status ?? {}) },
+  resourceList: { ...asRecord(props.context?.resourceList ?? props.context?.resource_list), ...(groupedDataSources.value.resource_list ?? {}) },
+  resource_list: { ...asRecord(props.context?.resourceList ?? props.context?.resource_list), ...(groupedDataSources.value.resource_list ?? {}) },
+  dataSources: { ...dataSourceState },
+  localState: localContextOverride,
+  local_state: localContextOverride,
   form_state: formState,
   formState: formState,
 }));
@@ -172,11 +250,39 @@ async function loadSchema() {
     } else {
       schema.value = data;
     }
+    const roots: SchemaUINodeType[] = data.root ? [data.root] : data.children ?? [];
+    for (const r of roots) initializeFormDefaults(r);
   } catch (e) {
     error.value = e instanceof Error ? e.message : String(e);
   } finally {
     loading.value = false;
   }
+}
+
+function initializeFormDefaults(node: SchemaUINodeType) {
+  if (node.type === "select") {
+    const nodeProps = node.props ?? {};
+    const options = Array.isArray(nodeProps.options) ? (nodeProps.options as Record<string, unknown>[]) : [];
+    for (const binding of node.bindings ?? []) {
+      if (binding.source !== "form" || !binding.path) continue;
+      const current = formState[binding.path];
+      if (current !== undefined && current !== null && current !== "") continue;
+      if (binding.default !== undefined && binding.default !== null && binding.default !== "") {
+        formState[binding.path] = binding.default;
+        continue;
+      }
+      const propDefault = nodeProps.defaultValue ?? nodeProps.default_value;
+      if (propDefault !== undefined && propDefault !== null && propDefault !== "") {
+        formState[binding.path] = propDefault;
+        continue;
+      }
+      const first = options[0];
+      if (first && first.value !== undefined && first.value !== null && first.value !== "") {
+        formState[binding.path] = first.value;
+      }
+    }
+  }
+  for (const child of node.children ?? []) initializeFormDefaults(child);
 }
 
 let restartToken = 0;
@@ -194,6 +300,8 @@ async function createSession(expectedToken: number): Promise<string | null> {
     session_id?: string;
     origin?: string;
     contractVersion?: number;
+    generation?: number;
+    token?: string;
   }>("/api/extensions/ui/sessions", {
     contributionId: props.contribution.contributionId,
     surface: String(surfaceData.role ?? "main"),
@@ -216,11 +324,24 @@ async function createSession(expectedToken: number): Promise<string | null> {
   sessionId.value = sid;
   sessionOrigin.value = data.origin ?? "";
   sessionContractVersion.value = data.contractVersion ?? props.contribution.contractVersion;
+  sessionGeneration.value = data.generation ?? props.contribution.generation;
+  sessionToken.value = data.token ?? "";
+  if (!sessionToken.value) {
+    sessionId.value = "";
+    sessionOrigin.value = "";
+    sessionContractVersion.value = 0;
+    sessionGeneration.value = 0;
+    sessionReady.value = false;
+    apiClient.delete(`/api/extensions/ui/sessions/${sid}`).catch(() => {});
+    throw new Error("session 创建响应缺少 token");
+  }
   sessionReady.value = true;
   activeSessionRegistryKey.value = key;
   uiStore.registerSession({
     contributionId: key,
     sessionId: sid,
+    token: sessionToken.value,
+    generation: sessionGeneration.value,
     createdAt: Date.now(),
     lastActivity: Date.now(),
   });
@@ -233,6 +354,8 @@ async function disposeSession() {
   const registryKey = activeSessionRegistryKey.value;
   sessionId.value = "";
   sessionReady.value = false;
+  sessionToken.value = "";
+  sessionGeneration.value = 0;
   activeSessionRegistryKey.value = "";
   try {
     await apiClient.delete(`/api/extensions/ui/sessions/${oldSessionId}`);
@@ -252,6 +375,78 @@ async function restartSession() {
   } catch {
     if (token !== restartToken) return;
   }
+}
+
+function nextBridgeNonce(): string {
+  bridgeNonceSequence += 1;
+  const random = new Uint32Array(2);
+  if (typeof crypto !== "undefined" && typeof crypto.getRandomValues === "function") {
+    crypto.getRandomValues(random);
+  } else {
+    random[0] = Math.floor(Math.random() * 0xffffffff);
+    random[1] = Math.floor(Math.random() * 0xffffffff);
+  }
+  return `${Date.now().toString(36)}-${bridgeNonceSequence.toString(36)}-${random[0].toString(36)}${random[1].toString(36)}`;
+}
+
+class BridgeError extends Error {
+  code?: string;
+
+  constructor(message: string, code?: string) {
+    super(message);
+    this.code = code;
+  }
+}
+
+async function postBridge(method: string, payload: Record<string, unknown>): Promise<unknown> {
+  if (!sessionId.value || !sessionReady.value) {
+    const token = ++restartToken;
+    await createSession(token);
+    if (token !== restartToken) return undefined;
+  }
+  if (!sessionId.value || !sessionReady.value) return undefined;
+  const response = await apiClient.post<{ ok?: boolean; result?: unknown; error?: { code?: string; message?: string } | string }>(
+    `/api/extensions/ui/sessions/${sessionId.value}/bridge`,
+    {
+      method,
+      contributionId: props.contribution.contributionId,
+      origin: sessionOrigin.value,
+      contractVersion: sessionContractVersion.value,
+      token: sessionToken.value,
+      generation: sessionGeneration.value,
+      nonce: nextBridgeNonce(),
+      payload,
+    },
+  );
+  const envelope = response.data ?? {};
+  if (envelope.ok === false) {
+    const detail = typeof envelope.error === "string" ? envelope.error : envelope.error?.message;
+    const code = typeof envelope.error === "string" ? undefined : envelope.error?.code;
+    throw new BridgeError(detail || "Bridge 调用失败", code);
+  }
+  return envelope.result;
+}
+
+async function loadDataSources() {
+  for (const key of Object.keys(dataSourceState)) delete dataSourceState[key];
+  const sources = schema.value?.dataSources ?? [];
+  const limit = performanceBudget.value?.maxDataFetchCount && performanceBudget.value.maxDataFetchCount > 0
+    ? performanceBudget.value.maxDataFetchCount
+    : sources.length;
+  const selected = sources.slice(0, limit);
+  const perSource = asRecord(props.context?.dataSourceInput);
+  await Promise.all(selected.map(async (source: SchemaUIDataSource) => {
+    try {
+      const sourceInput = asRecord(perSource[source.id]);
+      const fallbackInput = asRecord(props.context?.input);
+      dataSourceState[source.id] = await postBridge("ui.data.request", {
+        key: source.id,
+        params: Object.keys(sourceInput).length > 0 ? sourceInput : fallbackInput,
+      });
+    } catch (e) {
+      if (import.meta.env.DEV) console.warn(`[SchemaUI] data source ${source.id} failed`, e);
+    }
+  }));
 }
 
 async function invokeAction(payload: { action: SchemaUIActionBinding; node: SchemaUINodeType }) {
@@ -283,44 +478,16 @@ async function invokeAction(payload: { action: SchemaUIActionBinding; node: Sche
       }
       return;
     }
-    if (!sessionId.value || !sessionReady.value) {
-      const token = ++restartToken;
-      await createSession(token);
-      if (token !== restartToken) return;
-    }
-    if (!sessionId.value || !sessionReady.value) return;
-    const res = await fetch(`/api/extensions/ui/sessions/${sessionId.value}/bridge`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        method: "ui.action.invoke",
-        contributionId: props.contribution.contributionId,
-        origin: sessionOrigin.value,
-        contractVersion: sessionContractVersion.value,
-        payload: {
-          action_id: action.action_id,
-          input: {
-            ...(action.input ?? {}),
-            node_id: node.id,
-            form_state: { ...formState },
-          },
-        },
-      }),
+    const actionInput = {
+      ...(action.input ?? {}),
+      node_id: node.id,
+      form_state: { ...formState },
+    } as Record<string, unknown>;
+    const bridgeResult = await postBridge("ui.action.invoke", {
+      action_id: action.action_id,
+      input: actionInput,
     });
-    if (!res.ok) {
-      const text = await res.text().catch(() => "");
-      throw new Error(`操作调用失败: ${res.status} ${text}`);
-    }
-    const envelope = (await res.json().catch(() => ({}))) as {
-      ok?: boolean;
-      result?: Record<string, unknown>;
-      error: { message?: string } | string;
-    };
-    if (envelope.ok === false) {
-      const detail = typeof envelope.error === "string" ? envelope.error : envelope.error?.message;
-      throw new Error(detail || "操作执行失败");
-    }
-    const data = envelope.result ?? {};
+    const data = unwrapActionResult(bridgeResult);
     if (data && typeof data === "object") {
       if (data.clientExecute === true && typeof data.text === "string") {
         try {
@@ -348,7 +515,10 @@ async function invokeAction(payload: { action: SchemaUIActionBinding; node: Sche
       if (data.reload_schema === true) {
         await loadSchema();
       }
-      if (typeof data.message === "string" && data.message) {
+      const failureMessage = findActionFailure(data);
+      if (failureMessage) {
+        ElMessage.error(formatActionMessage(failureMessage));
+      } else if (typeof data.message === "string" && data.message) {
         ElMessage.success(data.message);
       }
     }
@@ -388,9 +558,21 @@ watch(
   async () => {
     for (const k of Object.keys(formState)) delete formState[k];
     for (const k of Object.keys(localContextOverride)) delete localContextOverride[k];
+    for (const k of Object.keys(dataSourceState)) delete dataSourceState[k];
     capturedError.value = null;
     await loadSchema();
   }
+);
+
+watch(sessionScopeKey, async () => {
+  await restartSession();
+});
+
+watch(
+  [schema, sessionReady],
+  ([currentSchema, ready]) => {
+    if (currentSchema && ready) loadDataSources();
+  },
 );
 
 watch(sessionScopeKey, async () => {

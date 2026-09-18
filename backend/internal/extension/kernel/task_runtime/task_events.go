@@ -53,7 +53,7 @@ type TaskUnitOfWork interface {
 }
 
 func TaskEventPartitionKey(event TaskDomainEvent) string {
-	uid := event.Run.ExecutionTarget.UserID
+	uid := event.Run.ExecutionTarget.SpaceID
 	if uid != "" {
 		return uid.String()
 	}
@@ -68,6 +68,6 @@ func TaskEventAggregateVersion(event TaskDomainEvent) *int64 {
 	return &event.Run.Revision
 }
 
-func TaskRunUserID(event TaskDomainEvent) runtimeidentity.UserID {
-	return event.Run.ExecutionTarget.UserID
+func TaskRunSpaceID(event TaskDomainEvent) runtimeidentity.SpaceID {
+	return event.Run.ExecutionTarget.SpaceID
 }

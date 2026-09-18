@@ -3,8 +3,6 @@ abstract final class AppRoutes {
   static const conversations = '/conversations';
   static const dashboard = '/dashboard';
   static const channels = '/channels';
-  static const channelsWechat = '/channels/wechat';
-  static const channelsQq = '/channels/qq';
   static const characters = '/characters';
   static const charactersCreate = '/characters/create';
   static const agent = '/agent';
@@ -24,10 +22,10 @@ abstract final class AppRoutes {
   static const extensionsMcp = '/extensions/mcp';
   static const extensionsMcpNew = '/extensions/mcp/new';
   static const extensionsAgentSkills = '/extensions/agent-skills';
-  static const extensionsPlugins = '/extensions/plugins';
   static const extensionsSkills = '/extensions/skills';
   static const extensionsRuns = '/extensions/runs';
   static const workshop = '/workshop';
+  static const workshopCharacterCards = '/workshop/character-cards';
   static const workshopSkills = '/workshop/skills';
   static const workshopWorkflows = '/workshop/workflows';
   static const workshopPet = '/workshop/pet';
@@ -46,7 +44,6 @@ abstract final class AppRoutes {
   static const settingsPermissions = '/settings/permissions';
   static const settingsAndroidAutomation = '/settings/android-automation';
   static const settingsBackup = '/settings/backup';
-  static const settingsAi = '/settings/ai';
   static const settingsAsr = '/settings/asr';
   static const settingsSystem = '/settings/system';
   static const settingsTemporal = '/settings/temporal';
@@ -74,11 +71,11 @@ abstract final class AppRoutes {
   static const toolboxDatabaseStatus = '/settings/toolbox/database-status';
   static const toolboxDeviceStatus = '/settings/toolbox/device-status';
   static const onboarding = '/onboarding';
-  static const login = '/login';
   static const privacy = '/privacy';
   static const developer = '/developer';
   static const developerKernel = '/developer/kernel';
   static const gameCenter = '/game-center';
+  static const gamePlugin = '/game-center/plugin';
   static const desktopPet = '/desktop-pet';
 
   static String character(String id) => '/characters/$id';
@@ -93,7 +90,6 @@ abstract final class AppRoutes {
   static String mcpDetail(String id) => '/extensions/mcp/$id';
   static String mcpEdit(String id) => '/extensions/mcp/$id/edit';
   static String skillDetail(String id) => '/extensions/skills/$id';
-  static String pluginDetail(String id) => '/extensions/plugins/$id';
   static String extensionPage(String pageId, {String? extensionId}) => extensionId == null || extensionId.isEmpty
       ? '/extension/page/$pageId'
       : '/extension/page/$pageId?extensionId=${Uri.encodeQueryComponent(extensionId)}';

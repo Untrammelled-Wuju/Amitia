@@ -103,6 +103,11 @@ func TestPreloadBuilder(t *testing.T) {
 		Nonce:          "test-nonce-123",
 		Token:          "test-token-456",
 		Generation:     1,
+		Theme: ThemeSnapshot{
+			Mode:    "dark",
+			Density: "compact",
+			Tokens:  map[string]string{"--amitia-bg-surface": "#111111"},
+		},
 	}
 
 	pb := NewPreloadBuilder()
@@ -139,7 +144,23 @@ func TestPreloadBuilder(t *testing.T) {
 		t.Error("script should contain protocol version")
 	}
 
+	if strings.Contains(script, "const id = crypto.randomUUID();") {
+		t.Error("request ID generation must tolerate sandboxed opaque origins")
+	}
+
+	if !strings.Contains(script, `typeof crypto.randomUUID === "function"`) {
+		t.Error("script should include a request ID fallback")
+	}
+
 	if !strings.Contains(script, `protocolVersion:protocolVersion,session:sessionId,nonce:nonce,generation:generation,contributionId:contributionId`) {
 		t.Error("Ready message must include all required fields: protocolVersion, session, nonce, generation, contributionId")
+	}
+
+	if !strings.Contains(script, "applyThemeState") {
+		t.Error("script should apply host theme tokens")
+	}
+
+	if !strings.Contains(script, `"dark"`) || !strings.Contains(script, `--amitia-bg-surface`) {
+		t.Error("script should include initial theme snapshot")
 	}
 }

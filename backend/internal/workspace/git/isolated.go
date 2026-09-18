@@ -186,19 +186,25 @@ func (b *IsolatedBackend) Read(ctx context.Context, mount workspace.WorkspaceMou
 	if opts.MaxBytes > 0 && opts.MaxBytes < maxBytes {
 		maxBytes = opts.MaxBytes
 	}
-	if info.Size() > maxBytes {
+	explicitRange := opts.Offset > 0 || opts.MaxBytes > 0
+	if !explicitRange && info.Size() > maxBytes {
 		return workspace.ReadResult{}, fmt.Errorf("%w: file size %d exceeds max %d", workspace.ErrResourceTooLarge, info.Size(), maxBytes)
 	}
-	data, err := os.ReadFile(target)
+
+	file, err := os.Open(target)
 	if err != nil {
 		return workspace.ReadResult{}, fmt.Errorf("%w: %v", workspace.ErrReadFailed, err)
 	}
+	defer file.Close()
+
 	if opts.Offset > 0 {
-		if opts.Offset >= int64(len(data)) {
-			data = nil
-		} else {
-			data = data[opts.Offset:]
+		if _, err := file.Seek(opts.Offset, io.SeekStart); err != nil {
+			return workspace.ReadResult{}, fmt.Errorf("%w: %v", workspace.ErrReadFailed, err)
 		}
+	}
+	data, err := io.ReadAll(io.LimitReader(file, maxBytes))
+	if err != nil {
+		return workspace.ReadResult{}, fmt.Errorf("%w: %v", workspace.ErrReadFailed, err)
 	}
 	return workspace.ReadResult{Content: data, IsText: true}, nil
 }

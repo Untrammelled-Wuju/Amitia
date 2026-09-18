@@ -4,7 +4,7 @@ export type ArtifactStatus = "uploading" | "ready" | "deleted";
 
 export interface ArtifactMetadata {
   id: string;
-  owner_user_id: string;
+  owner_space_id: string;
   workspace_id: string;
   kind: ArtifactKind;
   blob_digest: string;

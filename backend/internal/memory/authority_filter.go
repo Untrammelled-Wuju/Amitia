@@ -9,13 +9,16 @@ import (
 
 type retrievalAuthorityPolicy struct {
 	CharacterID      string
-	UserID           string
+	SpaceID          string
 	ProactiveMention bool
 	Now              time.Time
 }
 
 func memoryAllowedBySQLiteAuthority(m Memory, policy retrievalAuthorityPolicy) bool {
-	if !memoryMatchesRetrievalScope(m, policy.CharacterID, policy.UserID) {
+	if !memoryContextUseAllowed(m) {
+		return false
+	}
+	if !memoryMatchesRetrievalScope(m, policy.CharacterID, policy.SpaceID) {
 		return false
 	}
 	if !memoryAllowedForDerivedContent(m, policy.Now) {
@@ -44,6 +47,10 @@ func tombstoneTargetsFromMemorySearch(coordinator *mindruntime.DataLifecycleCoor
 	return blocked
 }
 
+func memoryContextUseAllowed(m Memory) bool {
+	return m.AllowContextUse == nil || *m.AllowContextUse
+}
+
 func memoryAllowedForDerivedContent(m Memory, now time.Time) bool {
 	if memoryStatusBlocksRetrieval(m.VerifiedStatus) {
 		return false
@@ -54,24 +61,18 @@ func memoryAllowedForDerivedContent(m Memory, now time.Time) bool {
 	return true
 }
 
-func memoryMatchesRetrievalScope(m Memory, characterID, userID string) bool {
+func memoryMatchesRetrievalScope(m Memory, characterID, spaceID string) bool {
 	characterID = strings.TrimSpace(characterID)
-	userID = strings.TrimSpace(userID)
+	spaceID = strings.TrimSpace(spaceID)
+	if spaceID != "" && !memoryOwnerMatches(m.SpaceID, spaceID) {
+		return false
+	}
 	scope := strings.ToLower(strings.TrimSpace(m.Scope))
 	if scope == "user" || scope == "user_global" {
-		if userID != "" {
-			return m.CharacterID == userID
-		}
-		if characterID != "" {
-			return m.CharacterID == characterID
-		}
-		return true
+		return spaceID != "" || characterID == ""
 	}
 	if characterID != "" {
-		return m.CharacterID == characterID
-	}
-	if userID != "" {
-		return false
+		return strings.TrimSpace(m.CharacterID) == characterID
 	}
 	return true
 }

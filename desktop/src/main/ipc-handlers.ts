@@ -7,15 +7,15 @@ import type { DeploymentModeConfig } from "../shared/types";
 import { ConfigStore } from "./config-store";
 import type { DesktopRuntimeManager } from "../runtime/runtime-manager";
 import { refreshTrayMenu } from "./tray";
-import { setAuthToken } from "./auth-token-store";
 import { getDesktopAuthHeaders } from "./backend-session-client";
 import { getMeshCoordinator } from "./device-mesh/coordinator";
-import { getMeshIdentity, getMeshStatus, publishLocalVoiceASRFinal } from "./device-mesh/local-agent-client";
+import { getMeshCloudAuth, getMeshIdentity, getMeshStatus, publishLocalVoiceASRFinal } from "./device-mesh/local-agent-client";
 import {
   listDevices as cloudListDevices,
   revokeDevice as cloudRevokeDevice,
   probeRuntime as cloudProbeRuntime,
-  createBootstrapTicket,
+  getPairingStatus as cloudGetPairingStatus,
+  createPairingOffer as cloudCreatePairingOffer,
 } from "./device-mesh/remote-bootstrap-client";
 
 export function registerIpcHandlers(
@@ -144,11 +144,49 @@ export function registerIpcHandlers(
     return { path: selected, name: path.basename(selected) };
   });
 
+  ipcMain.handle(IPC_CHANNELS.selectWorkspaceDirectory, async (event) => {
+    const window = BrowserWindow.fromWebContents(event.sender);
+    const options = { properties: ["openDirectory"] as Array<"openDirectory"> };
+    const result = window
+      ? await dialog.showOpenDialog(window, options)
+      : await dialog.showOpenDialog(options);
+    if (result.canceled || !result.filePaths[0]) return null;
+
+    const selected = path.resolve(result.filePaths[0]);
+    const home = path.resolve(app.getPath("home"));
+    const blocked = [
+      app.getPath("userData"),
+      app.getPath("appData"),
+      path.join(home, ".ssh"),
+      path.join(home, ".gnupg"),
+      path.join(home, ".aws"),
+      path.join(home, ".azure"),
+      path.join(home, ".config", "gcloud"),
+      path.join(home, ".config", "google-chrome"),
+      path.join(home, ".config", "chromium"),
+    ].map((value) => path.resolve(value).toLowerCase());
+    const normalized = selected.toLowerCase();
+    if (
+      normalized === home.toLowerCase() ||
+      blocked.some(
+        (value) =>
+          normalized === value || normalized.startsWith(value + path.sep),
+      )
+    ) {
+      throw new Error("该目录包含敏感的应用或账户数据，不能作为聊天工作目录");
+    }
+    const stat = await fs.lstat(selected);
+    if (!stat.isDirectory() || stat.isSymbolicLink()) {
+      throw new Error("只能选择真实本地目录作为聊天工作目录");
+    }
+    return { path: selected, name: path.basename(selected) || selected };
+  });
+
   ipcMain.handle(IPC_CHANNELS.selectExtensionPackage, async (event) => {
     const window = BrowserWindow.fromWebContents(event.sender);
     const options = {
       properties: ["openFile"] as Array<"openFile">,
-      filters: [{ name: "Amitia 扩展包", extensions: ["amitiax", "zip"] }],
+      filters: [{ name: "Amitia 扩展包", extensions: ["amitiax", "gamex", "petx", "zip"] }],
     };
     const result = window
       ? await dialog.showOpenDialog(window, options)
@@ -182,7 +220,7 @@ export function registerIpcHandlers(
       const suggestedName = path
         .basename(request.suggestedName)
         .replace(/[^A-Za-z0-9._-]/g, "-");
-      if (!suggestedName || !/\.(amitiax|zip)$/i.test(suggestedName))
+      if (!suggestedName || !/\.(amitiax|gamex|petx|zip)$/i.test(suggestedName))
         throw new Error("导出文件名无效");
       const content = Buffer.from(request.base64, "base64");
       if (!content.length || content.length > 100 * 1024 * 1024)
@@ -190,7 +228,7 @@ export function registerIpcHandlers(
       const window = BrowserWindow.fromWebContents(event.sender);
       const options = {
         defaultPath: suggestedName,
-        filters: [{ name: "Amitia 扩展包", extensions: ["amitiax", "zip"] }],
+        filters: [{ name: "Amitia 扩展包", extensions: ["amitiax", "gamex", "petx", "zip"] }],
       };
       const result = window
         ? await dialog.showSaveDialog(window, options)
@@ -229,6 +267,34 @@ export function registerIpcHandlers(
 
   ipcMain.handle(IPC_CHANNELS.closeWindow, (event) => {
     BrowserWindow.fromWebContents(event.sender)?.close();
+  });
+
+  ipcMain.handle(IPC_CHANNELS.editCommand, (event, command: string) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (!win) return;
+    switch (command) {
+      case "undo":
+        win.webContents.undo();
+        break;
+      case "redo":
+        win.webContents.redo();
+        break;
+      case "cut":
+        win.webContents.cut();
+        break;
+      case "copy":
+        win.webContents.copy();
+        break;
+      case "paste":
+        win.webContents.paste();
+        break;
+      case "selectAll":
+        win.webContents.selectAll();
+        break;
+      case "delete":
+        win.webContents.delete();
+        break;
+    }
   });
 
   ipcMain.handle(IPC_CHANNELS.quitApp, () => {
@@ -304,11 +370,27 @@ export function registerIpcHandlers(
     clipboard.writeText(text);
   });
 
-  ipcMain.handle(IPC_CHANNELS.setAuthToken, async (_event, token: string) => {
-    setAuthToken(token || null);
+  ipcMain.handle(IPC_CHANNELS.clipboardReadText, () => {
+    return clipboard.readText();
   });
 
-  ipcMain.handle(IPC_CHANNELS.getBackendAuthHeaders, async () => {
+  ipcMain.handle(IPC_CHANNELS.getBackendAuthHeaders, async (_event, target: "local" | "business" = "business") => {
+    if (target === "local") {
+      return getDesktopAuthHeaders();
+    }
+    const deployment = await configStore.getDeploymentConfig();
+    if (deployment.mode === "cloud") {
+      const cloudAuth = await getMeshCloudAuth();
+      if (!cloudAuth?.authorization) {
+        return {};
+      }
+      return {
+        Authorization: cloudAuth.authorization,
+        "X-Amitia-Device-ID": cloudAuth.deviceId,
+        "X-Amitia-Runtime-ID": cloudAuth.runtimeId,
+        "X-Amitia-Space-ID": cloudAuth.spaceId,
+      };
+    }
     return getDesktopAuthHeaders();
   });
 
@@ -324,12 +406,12 @@ export function registerIpcHandlers(
     return getMeshIdentity();
   });
 
-  ipcMain.handle(IPC_CHANNELS.meshProvision, async (_event, cloudBaseUrl: string) => {
+  ipcMain.handle(IPC_CHANNELS.meshProvision, async (_event, cloudBaseUrl: string, pairing?: { offerToken?: string; setupCode?: string }) => {
     if (!cloudBaseUrl || typeof cloudBaseUrl !== "string") {
       throw new Error("cloudBaseUrl is required");
     }
     const coordinator = getMeshCoordinator(getMainWindow ?? (() => null));
-    await coordinator.provision(cloudBaseUrl);
+    await coordinator.provision(cloudBaseUrl, pairing);
     return { ok: true };
   });
 
@@ -337,6 +419,15 @@ export function registerIpcHandlers(
     const coordinator = getMeshCoordinator(getMainWindow ?? (() => null));
     await coordinator.deprovision();
     return { ok: true };
+  });
+
+
+  ipcMain.handle(IPC_CHANNELS.meshPairingStatus, async (_event, cloudBaseUrl: string) => {
+    return cloudGetPairingStatus(cloudBaseUrl);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.meshCreatePairingOffer, async (_event, cloudBaseUrl: string, ttlSeconds = 600) => {
+    return cloudCreatePairingOffer(cloudBaseUrl, ttlSeconds);
   });
 
   ipcMain.handle(IPC_CHANNELS.meshCloudListDevices, async (_event, cloudBaseUrl: string) => {
@@ -352,16 +443,4 @@ export function registerIpcHandlers(
     return cloudProbeRuntime(cloudBaseUrl, deviceId, runtimeId);
   });
 
-  ipcMain.handle("amitia:mesh:cloud:create-ticket", async (_event, cloudBaseUrl: string, label?: string) => {
-    const identity = await getMeshIdentity();
-    if (!identity) {
-      throw new Error("local device-mesh identity unavailable");
-    }
-    return createBootstrapTicket(cloudBaseUrl, {
-      deviceId: identity.deviceId,
-      runtimeId: identity.runtimeId,
-      platform: identity.platform,
-      label: label ?? `Desktop ${identity.deviceId}`,
-    });
-  });
 }

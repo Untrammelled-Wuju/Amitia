@@ -42,17 +42,17 @@ func (
 	return s.outbox.Append(ctx, event)
 }
 
-type v2StateEventOutbox struct {
+type actualStateEventOutbox struct {
 	appendFn func(eventType, aggregateID string, payload []byte, t time.Time, idemKey *string) (bool, error)
 }
 
-func NewV2ActualStateEventOutbox(
+func NewActualStateEventOutbox(
 	appendFn func(eventType, aggregateID string, payload []byte, t time.Time, idemKey *string) (bool, error),
 ) RuntimeDomainEventOutbox {
-	return &v2StateEventOutbox{appendFn: appendFn}
+	return &actualStateEventOutbox{appendFn: appendFn}
 }
 
-func (o *v2StateEventOutbox) Append(ctx context.Context, event RuntimeDomainEvent) error {
+func (o *actualStateEventOutbox) Append(ctx context.Context, event RuntimeDomainEvent) error {
 	// Always persist the complete domain envelope. Persisting only event.Payload
 	// loses user/device/session/installation identity and makes downstream
 	// Behavior consumers unable to correlate runtime feedback reliably.

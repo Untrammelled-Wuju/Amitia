@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/u-ai/backend/config"
 	"github.com/u-ai/backend/pkg/app"
 	"gorm.io/gorm"
 )
@@ -21,7 +22,7 @@ type Repository interface {
 	Update(id string, updates map[string]interface{}) error
 	Delete(id string) error
 	DeleteAll(characterID string) error
-	Search(keyword, characterID, userID string, limit int) ([]Memory, error)
+	Search(keyword, characterID, spaceID string, limit int) ([]Memory, error)
 	SearchByKey(key, characterID string) ([]Memory, error)
 	RecordUse(id string) error
 	VectorStatus() (totalMem, embedded int64)
@@ -63,9 +64,21 @@ func NewRepository(ctx *app.AppContext) Repository {
 
 func (r *repository) List(q MemoryListQuery) ([]Memory, int64, error) {
 	query := r.db.Model(&Memory{})
-	query = applyMemoryScopeQuery(query, q.CharacterID, q.UserID)
+	query = applyMemoryScopeQuery(query, q.CharacterID, q.SpaceID)
 	if q.Source != "" {
 		query = query.Where("source = ?", q.Source)
+	}
+	if q.ScopeType != "" {
+		switch q.ScopeType {
+		case "user_global":
+			query = query.Where("scope = ?", "user")
+		case "user_character":
+			query = query.Where("scope = ?", "character")
+		case "world":
+			query = query.Where("scope = ?", "world")
+		case "character_self":
+			query = query.Where("scope = ?", "character")
+		}
 	}
 	memoryTypeFilter := q.MemoryType
 	if memoryTypeFilter == "" {
@@ -82,6 +95,15 @@ func (r *repository) List(q MemoryListQuery) ([]Memory, int64, error) {
 	}
 	if q.MinConfidence > 0 {
 		query = query.Where("confidence >= ?", q.MinConfidence)
+	}
+	if q.RetentionLevel >= RetentionL1 && q.RetentionLevel <= RetentionL5 {
+		query = query.Where("retention_level = ?", q.RetentionLevel)
+	}
+	if q.DecayState != "" {
+		query = query.Where("decay_state = ?", q.DecayState)
+	}
+	if q.Pinned != nil {
+		query = query.Where("pinned = ?", *q.Pinned)
 	}
 	var total int64
 	query.Count(&total)
@@ -119,12 +141,17 @@ func parseSort(raw string) (col, dir string) {
 		raw = raw[:len(raw)-4]
 	}
 	validCols := map[string]string{
-		"updated_at": "updated_at",
-		"created_at": "created_at",
-		"importance": "importance",
-		"confidence": "confidence",
-		"use_count":  "use_count",
-		"time":       "created_at",
+		"updated_at":      "updated_at",
+		"created_at":      "created_at",
+		"importance":      "importance",
+		"confidence":      "confidence",
+		"use_count":       "use_count",
+		"retention_level": "retention_level",
+		"memory_strength": "memory_strength",
+		"reinforce_count": "reinforce_count",
+		"retrieved_count": "retrieved_count",
+		"injected_count":  "injected_count",
+		"time":            "created_at",
 	}
 	mapped, ok := validCols[strings.ToLower(raw)]
 	if ok {
@@ -161,11 +188,11 @@ func (r *repository) DeleteAll(characterID string) error {
 	return r.db.Where("1=1").Delete(&Memory{}).Error
 }
 
-func (r *repository) Search(keyword, characterID, userID string, limit int) ([]Memory, error) {
+func (r *repository) Search(keyword, characterID, spaceID string, limit int) ([]Memory, error) {
 	query := r.db.Where("(key LIKE ? OR value LIKE ?)", "%"+keyword+"%", "%"+keyword+"%")
-	query = applyMemoryScopeQuery(query, characterID, userID)
+	query = applyMemoryScopeQuery(query, characterID, spaceID)
 	var items []Memory
-	err := query.Order("importance DESC, confidence DESC, use_count DESC").Limit(limit).Find(&items).Error
+	err := query.Order("importance DESC, confidence DESC, updated_at DESC").Limit(limit).Find(&items).Error
 	if items == nil {
 		items = []Memory{}
 	}
@@ -188,8 +215,9 @@ func (r *repository) SearchByKey(key, characterID string) ([]Memory, error) {
 func (r *repository) RecordUse(id string) error {
 	nowStr := time.Now().Format("2006-01-02 15:04:05")
 	return r.db.Model(&Memory{}).Where("id = ?", id).Updates(map[string]interface{}{
-		"use_count":    gorm.Expr("use_count + 1"),
-		"last_used_at": nowStr,
+		"use_count":      gorm.Expr("use_count + 1"),
+		"injected_count": gorm.Expr("injected_count + 1"),
+		"last_used_at":   nowStr,
 	}).Error
 }
 
@@ -244,17 +272,18 @@ func (r *repository) GetRankedByImportance(characterID string, limit int) ([]Mem
 	return items, err
 }
 
-func applyMemoryScopeQuery(query *gorm.DB, characterID, userID string) *gorm.DB {
+func applyMemoryScopeQuery(query *gorm.DB, characterID, spaceID string) *gorm.DB {
 	characterID = strings.TrimSpace(characterID)
-	userID = strings.TrimSpace(userID)
-	if characterID != "" && userID != "" {
-		return query.Where("((scope IN (?, ?) AND character_id = ?) OR ((scope IS NULL OR scope = '' OR scope NOT IN (?, ?)) AND character_id = ?))", "user", "user_global", userID, "user", "user_global", characterID)
-	}
-	if userID != "" {
-		return query.Where("scope IN (?, ?) AND character_id = ?", "user", "user_global", userID)
+	spaceID = strings.TrimSpace(spaceID)
+	if spaceID != "" {
+		if config.AppCfg != nil && strings.EqualFold(strings.TrimSpace(config.AppCfg.Security.Mode), "local_single_user") {
+			query = query.Where("(space_id = ? OR space_id = '' OR space_id IS NULL OR space_id = 'default')", spaceID)
+		} else {
+			query = query.Where("space_id = ?", spaceID)
+		}
 	}
 	if characterID != "" {
-		return query.Where("character_id = ?", characterID)
+		return query.Where("(scope IN (?, ?) OR character_id = ?)", "user", "user_global", characterID)
 	}
 	return query
 }
@@ -514,7 +543,7 @@ func (r *repository) AppendRestoredEvents(events []MemoryEventV1) error {
 	return r.db.Transaction(func(tx *gorm.DB) error {
 		for _, e := range events {
 			var existing MemoryEventV1
-			err := tx.Where("id = ?", e.ID).Take(&existing).Error
+			err := tx.Table("memory_events").Where("id = ?", e.ID).Take(&existing).Error
 			if err == nil {
 				if !eventsEqual(existing, e) {
 					return fmt.Errorf("%w: event ID %s content mismatch", ErrRestoreEventConflict, e.ID)
@@ -524,7 +553,7 @@ func (r *repository) AppendRestoredEvents(events []MemoryEventV1) error {
 			if !errors.Is(err, gorm.ErrRecordNotFound) {
 				return err
 			}
-			if err := tx.Create(&e).Error; err != nil {
+			if err := tx.Table("memory_events").Create(&e).Error; err != nil {
 				return err
 			}
 		}

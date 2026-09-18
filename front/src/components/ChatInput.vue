@@ -18,6 +18,12 @@ SPDX-License-Identifier: AGPL-3.0-only
       class="hidden-input"
       @change="handleVideoInput"
     />
+    <input
+      ref="genericFileInputRef"
+      type="file"
+      class="hidden-input"
+      @change="handleGenericFileInput"
+    />
 
         <div class="composer-stack">
       <div ref="inputWrapperRef" class="input-wrapper">
@@ -87,6 +93,7 @@ SPDX-License-Identifier: AGPL-3.0-only
                 <small v-else-if="attachedVideoUrl" class="is-ready"
                   >视频已就绪</small
                 >
+                <small v-else-if="videoUploadError" class="is-error">{{ videoUploadError }}</small>
                 <small v-else>等待上传</small>
               </span>
               <button
@@ -119,9 +126,17 @@ SPDX-License-Identifier: AGPL-3.0-only
 
           <div class="input-row">
           <div class="input-left-actions">
-            <EmotePicker
-              :disabled="!!disabled"
-              @select="$emit('emote', $event)"
+            <ComposerActionExtensionHost
+              v-if="characterId"
+              :character-id="characterId"
+              :conversation-id="conversationId"
+              :channel="channel"
+              :platform="env.platform"
+              :host="env.host"
+              :os="env.os"
+              :conversation-state="generating ? 'generating' : 'idle'"
+              :capabilities="hostCapabilities"
+              :draft="text"
             />
             <el-popover
               v-model:visible="addMenuOpen"
@@ -173,6 +188,14 @@ SPDX-License-Identifier: AGPL-3.0-only
                     ><strong>上传视频</strong
                     ><small>添加一个视频到消息</small></span
                   >
+                </button>
+                <button
+                  type="button"
+                  class="add-menu-item"
+                  @click="openGenericFilePicker"
+                >
+                  <span class="add-menu-icon"><el-icon><Document /></el-icon></span>
+                  <span><strong>上传文件</strong><small>发送文档、压缩包或其他文件</small></span>
                 </button>
                 <div class="add-menu-divider"></div>
                 <button
@@ -256,6 +279,85 @@ SPDX-License-Identifier: AGPL-3.0-only
                 </div>
               </div>
             </el-popover>
+            <el-popover
+              v-if="supportsWorkspaceDirectory"
+              v-model:visible="workspaceMenuOpen"
+              placement="top-start"
+              :width="320"
+              trigger="click"
+              :hide-after="0"
+              :teleported="true"
+              append-to="#amitia-overlay-root"
+              popper-class="workspace-picker-popper"
+              @show="refreshRecentWorkspaces"
+            >
+              <template #reference>
+                <button
+                  type="button"
+                  class="workspace-trigger"
+                  :class="{ 'has-workspace': !!currentWorkspace }"
+                  :disabled="workspaceLoading || isInputDisabled"
+                  title="选择当前对话的工作目录"
+                >
+                  <el-icon><FolderOpened /></el-icon>
+                  <span>{{ workspaceLabel }}</span>
+                  <el-icon class="workspace-chevron"><ArrowDown /></el-icon>
+                </button>
+              </template>
+              <div class="workspace-picker">
+                <div class="workspace-picker-header">
+                  <div>
+                    <strong>工作目录</strong>
+                    <small>当前对话的文件与 Agent 工具默认在此目录执行</small>
+                  </div>
+                </div>
+                <div v-if="recentWorkspaces.length" class="workspace-recent-list">
+                  <button
+                    v-for="workspace in recentWorkspaces"
+                    :key="workspace.id"
+                    type="button"
+                    class="workspace-option"
+                    :class="{
+                      'is-selected': currentWorkspace?.workspaceId === workspace.id,
+                      'is-unavailable': !workspace.available,
+                    }"
+                    :disabled="workspaceLoading || !workspace.available"
+                    @click="handleWorkspaceSelect(workspace)"
+                  >
+                    <el-icon class="workspace-option-icon"><FolderOpened /></el-icon>
+                    <span class="workspace-option-copy">
+                      <strong>{{ workspace.name }}</strong>
+                      <small>{{ workspace.available ? '本机目录' : (workspace.statusReason || '目录不可用') }}</small>
+                    </span>
+                    <el-icon
+                      v-if="currentWorkspace?.workspaceId === workspace.id"
+                      class="workspace-selected-icon"
+                    ><Check /></el-icon>
+                  </button>
+                </div>
+                <div v-else class="workspace-empty">暂无最近使用的工作目录</div>
+                <div class="workspace-picker-divider"></div>
+                <button
+                  type="button"
+                  class="workspace-action"
+                  :disabled="workspaceLoading"
+                  @click="handleChooseWorkspaceDirectory"
+                >
+                  <el-icon><FolderOpened /></el-icon>
+                  <span>选择其他目录…</span>
+                </button>
+                <button
+                  v-if="currentWorkspace"
+                  type="button"
+                  class="workspace-action is-clear"
+                  :disabled="workspaceLoading"
+                  @click="handleClearWorkspace"
+                >
+                  <el-icon><CloseBold /></el-icon>
+                  <span>清除工作目录</span>
+                </button>
+              </div>
+            </el-popover>
           </div>
 
           <div class="input-body">
@@ -264,13 +366,7 @@ SPDX-License-Identifier: AGPL-3.0-only
               ref="inputRef"
               v-model="text"
               class="input-field"
-              :placeholder="
-                isWechatActive
-                  ? '微信消息请在微信端发送...'
-                  : isQQActive
-                    ? 'QQ消息请在QQ端发送...'
-                    : '输入消息...'
-              "
+              placeholder="输入消息..."
               :disabled="isInputDisabled"
               rows="1"
               :aria-expanded="slashMenuOpen"
@@ -385,6 +481,7 @@ SPDX-License-Identifier: AGPL-3.0-only
                 !generating &&
                 (isInputDisabled ||
                   uploadingVideo ||
+                  !!videoUploadError ||
                   processingImage ||
                   (!text.trim() &&
                     !attachedImagePreview &&
@@ -407,6 +504,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { ElMessage } from "element-plus";
 import {
+  ArrowDown,
   ArrowLeft,
   ArrowRight,
   Check,
@@ -418,20 +516,24 @@ import {
   Promotion,
   Search,
   VideoCamera,
+  Document,
+  FolderOpened,
 } from "@element-plus/icons-vue";
 import { useTextInput } from "../composables/useTextInput";
 import { useMediaUpload } from "../composables/useMediaUpload";
 import { useVoiceInput } from "../composables/useVoiceInput";
-import { fetchAgentSkills, resolveCharacterId } from "../views/extensions/api";
+import { fetchAgentSkills } from "../views/extensions/api";
 import type { AgentSkillDefinition } from "../views/extensions/types";
 import { resolveHostEnvironment } from "@/composables/useHostEnvironment";
-import EmotePicker from "./EmotePicker.vue";
 import ComposerExtensionHost from "./extension/chat/ComposerExtensionHost.vue";
+import ComposerActionExtensionHost from "./extension/chat/ComposerActionExtensionHost.vue";
+import {
+  useConversationWorkspace,
+  type WorkspaceMountSummary,
+} from "../composables/useConversationWorkspace";
 
 const env = resolveHostEnvironment();
 const props = withDefaults(defineProps<{
-  isWechatActive?: boolean;
-  isQQActive?: boolean;
   disabled?: boolean;
   sending?: boolean;
   generating?: boolean;
@@ -458,11 +560,10 @@ const emit = defineEmits<{
   video: [file: File, videoUrl: string];
   removeVideo: [];
   cancelReply: [];
-  emote: [emote: any];
+  file: [file: File];
 }>();
 
-const isDisabled = () =>
-  !!props.disabled || !!props.isWechatActive || !!props.isQQActive;
+const isDisabled = () => !!props.disabled;
 const isInputDisabled = computed(isDisabled);
 const textInput = useTextInput(emit as any, isDisabled);
 const mediaUpload = useMediaUpload(
@@ -491,6 +592,7 @@ const {
   attachedVideo,
   attachedVideoUrl,
   uploadingVideo,
+  videoUploadError,
   processingImage,
   handleImageSelect,
   clearImage,
@@ -500,6 +602,7 @@ const {
 } = mediaUpload;
 
 const addMenuOpen = ref(false);
+const genericFileInputRef = ref<HTMLInputElement | null>(null);
 const inputWrapperRef = ref<HTMLElement>();
 const skillsPanelOpen = ref(false);
 const skillSearch = ref("");
@@ -511,6 +614,23 @@ const slashRange = ref<{ start: number; end: number } | null>(null);
 const slashActiveIndex = ref(0);
 const skillsLoading = ref(false);
 const voiceMode = ref(false);
+const workspaceMenuOpen = ref(false);
+const supportsWorkspaceDirectory = computed(
+  () => typeof window !== "undefined" && !!window.amitiaDesktop?.selectWorkspaceDirectory,
+);
+const {
+  currentWorkspace,
+  recentWorkspaces,
+  workspaceLoading,
+  refreshRecentWorkspaces,
+  loadConversationWorkspace,
+  chooseWorkspaceDirectory,
+  selectWorkspaceMount,
+  clearWorkspace,
+} = useConversationWorkspace();
+const workspaceLabel = computed(
+  () => currentWorkspace.value?.workspaceName || "选择工作目录",
+);
 const agentSkillNames = computed(() =>
   agentSkills.value.map((s) => s.name).filter(Boolean),
 );
@@ -582,15 +702,40 @@ const filteredSlashSkills = computed(() => {
 async function loadAgentSkills() {
   skillsLoading.value = true;
   try {
-    const targetCharacterId = props.characterId || await resolveCharacterId();
-    if (!targetCharacterId) return;
-    const page = await fetchAgentSkills(targetCharacterId, { pageSize: 100 });
+    const page = await fetchAgentSkills({ pageSize: 100 });
     agentSkills.value = (page.items || []).filter(
       (skill) => skill.enabled && skill.compatibilityStatus !== "blocked",
     );
   } catch {
   } finally {
     skillsLoading.value = false;
+  }
+}
+
+async function handleWorkspaceSelect(workspace: WorkspaceMountSummary) {
+  try {
+    await selectWorkspaceMount(workspace);
+    workspaceMenuOpen.value = false;
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : "切换工作目录失败");
+  }
+}
+
+async function handleChooseWorkspaceDirectory() {
+  try {
+    await chooseWorkspaceDirectory();
+    workspaceMenuOpen.value = false;
+  } catch {
+    // chooseWorkspaceDirectory already reports a user-facing error.
+  }
+}
+
+async function handleClearWorkspace() {
+  try {
+    await clearWorkspace();
+    workspaceMenuOpen.value = false;
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : "清除工作目录失败");
   }
 }
 
@@ -607,6 +752,18 @@ function openImagePicker() {
 function openVideoPicker() {
   addMenuOpen.value = false;
   videoInputRef.value?.click();
+}
+
+function openGenericFilePicker() {
+  addMenuOpen.value = false;
+  genericFileInputRef.value?.click();
+}
+
+function handleGenericFileInput(event: Event) {
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0];
+  input.value = "";
+  if (file) emit("file", file);
 }
 
 async function handleImageInput(event: Event) {
@@ -713,6 +870,67 @@ function handleComposerKeydown(event: KeyboardEvent) {
   }
 }
 
+function isEditableTarget(target: Element | null): boolean {
+  if (!target) return false;
+  if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) return true;
+  return target instanceof HTMLElement && target.isContentEditable;
+}
+
+function isModalInteractionTarget(target: Element | null): boolean {
+  return Boolean(target?.closest('.el-overlay, [role="dialog"], [aria-modal="true"]'));
+}
+
+async function readClipboardText(): Promise<string> {
+  if (window.amitiaDesktop?.readClipboardText) {
+    return window.amitiaDesktop.readClipboardText();
+  }
+  if (navigator.clipboard?.readText) {
+    return navigator.clipboard.readText();
+  }
+  return "";
+}
+
+async function insertComposerText(content: string) {
+  const input = inputRef.value;
+  if (!input || !content) return;
+  input.focus();
+  const start = input.selectionStart ?? text.value.length;
+  const end = input.selectionEnd ?? start;
+  setText(`${text.value.slice(0, start)}${content}${text.value.slice(end)}`);
+  await nextTick();
+  input.focus();
+  const caret = start + content.length;
+  input.setSelectionRange(caret, caret);
+}
+
+async function handleGlobalChatPaste(event: KeyboardEvent) {
+  if (event.defaultPrevented || (!event.ctrlKey && !event.metaKey) || event.altKey || event.key.toLowerCase() !== "v") return;
+  const active = document.activeElement;
+  if (active === inputRef.value || isEditableTarget(active) || isModalInteractionTarget(active)) return;
+  if (isInputDisabled.value || voiceMode.value) return;
+  event.preventDefault();
+  const pasted = await readClipboardText();
+  await insertComposerText(pasted);
+}
+
+function handleGlobalComposerKey(event: KeyboardEvent) {
+  if (
+    event.defaultPrevented ||
+    event.isComposing ||
+    event.ctrlKey ||
+    event.metaKey ||
+    event.altKey ||
+    event.key.length !== 1
+  ) {
+    return;
+  }
+  const active = document.activeElement;
+  if (active === inputRef.value || isEditableTarget(active) || isModalInteractionTarget(active)) return;
+  if (isInputDisabled.value || voiceMode.value) return;
+  event.preventDefault();
+  void insertComposerText(event.key);
+}
+
 function selectSlashSkill(name: string) {
   const range = slashRange.value;
   if (!range) return;
@@ -754,7 +972,10 @@ async function submitComposer(event?: KeyboardEvent) {
   const outgoingText = buildOutgoingText(text.value);
 
   if (attachedVideo.value) {
-    if (!attachedVideoUrl.value) return;
+    if (!attachedVideoUrl.value) {
+      ElMessage.error(videoUploadError.value || "视频尚未上传完成");
+      return;
+    }
     sendWithVideo(outgoingText || "[视频]", attachedVideoUrl.value);
     clearVideo();
     finishSubmit();
@@ -795,6 +1016,14 @@ function toggleVoiceMode() {
 }
 
 watch(
+  () => props.conversationId,
+  (conversationId) => {
+    loadConversationWorkspace(conversationId || "");
+  },
+  { immediate: true },
+);
+
+watch(
   () => props.disabled,
   (value) => {
     if (!value) loadAgentSkills();
@@ -808,10 +1037,15 @@ watch(
 
 onMounted(() => {
   loadAgentSkills();
+  refreshRecentWorkspaces();
   document.addEventListener("pointerdown", handleComposerOutsidePointer);
+  window.addEventListener("keydown", handleGlobalChatPaste, true);
+  window.addEventListener("keydown", handleGlobalComposerKey, true);
 });
 onUnmounted(() => {
   document.removeEventListener("pointerdown", handleComposerOutsidePointer);
+  window.removeEventListener("keydown", handleGlobalChatPaste, true);
+  window.removeEventListener("keydown", handleGlobalComposerKey, true);
 });
 
 defineExpose({ focus, setText, clear: clearText });
@@ -857,6 +1091,168 @@ defineExpose({ focus, setText, clear: clearText });
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--composer-border-focus) 18%, transparent);
 }
 
+.workspace-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: min(180px, 42vw);
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ac-color-text-muted);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.workspace-trigger:hover,
+.workspace-trigger:focus-visible,
+.workspace-trigger.has-workspace {
+  border-color: var(--ac-color-border);
+  background: var(--ac-color-bg-secondary);
+  color: var(--ac-color-text);
+}
+
+.workspace-trigger:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.workspace-trigger > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-chevron {
+  flex: 0 0 auto;
+  font-size: 10px;
+}
+
+.workspace-picker {
+  color: var(--ac-color-text);
+}
+
+.workspace-picker-header {
+  padding: 4px 6px 9px;
+}
+
+.workspace-picker-header strong,
+.workspace-picker-header small {
+  display: block;
+}
+
+.workspace-picker-header strong {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.workspace-picker-header small {
+  margin-top: 3px;
+  color: var(--ac-color-text-muted);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.workspace-recent-list {
+  display: grid;
+  gap: 2px;
+  max-height: 250px;
+  overflow-y: auto;
+}
+
+.workspace-option,
+.workspace-action {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--ac-color-text);
+  cursor: pointer;
+}
+
+.workspace-option {
+  gap: 9px;
+  min-height: 46px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  text-align: left;
+}
+
+.workspace-option:hover,
+.workspace-option.is-selected,
+.workspace-action:hover {
+  background: var(--ac-color-bg-secondary);
+}
+
+.workspace-option:disabled,
+.workspace-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.workspace-option-icon {
+  flex: 0 0 auto;
+  color: var(--ac-color-text-secondary);
+}
+
+.workspace-option-copy {
+  min-width: 0;
+  flex: 1;
+}
+
+.workspace-option-copy strong,
+.workspace-option-copy small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-option-copy strong {
+  font-size: 12px;
+  font-weight: 550;
+}
+
+.workspace-option-copy small {
+  margin-top: 2px;
+  color: var(--ac-color-text-muted);
+  font-size: 10px;
+}
+
+.workspace-selected-icon {
+  flex: 0 0 auto;
+  color: var(--ac-color-primary);
+}
+
+.workspace-empty {
+  padding: 14px 8px;
+  color: var(--ac-color-text-muted);
+  font-size: 11px;
+  text-align: center;
+}
+
+.workspace-picker-divider {
+  height: 1px;
+  margin: 6px 2px;
+  background: var(--ac-color-border-light);
+}
+
+.workspace-action {
+  gap: 9px;
+  min-height: 36px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+.workspace-action.is-clear {
+  color: var(--ac-color-text-muted);
+}
+
 .input-row {
   display: flex;
   align-items: flex-end;
@@ -873,8 +1269,11 @@ defineExpose({ focus, setText, clear: clearText });
   min-height: 34px;
 }
 
-.input-actions {
-  gap: 4px;
+.input-left-actions { gap: 4px; }
+.input-actions { gap: 4px; }
+
+.input-left-actions :deep(.el-button + .el-button) {
+  margin-left: 0;
 }
 
 .add-btn {
@@ -1480,4 +1879,8 @@ defineExpose({ focus, setText, clear: clearText });
   .input-field { max-height: 132px; }
 }
 
+
+.attachment-card .is-error {
+  color: var(--el-color-danger);
+}
 </style>

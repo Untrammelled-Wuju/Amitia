@@ -130,6 +130,21 @@ func TestReadyGateWaitReadyFailsWhenConnectionRemoved(t *testing.T) {
 	}
 }
 
+func TestReadyGateWaitReadyReturnsHandshakeRejection(t *testing.T) {
+	gate := handshake.NewReadyGate(nil)
+	gate.Register("conn-rejected")
+	want := errors.New("handshake rejected")
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	done := make(chan error, 1)
+	go func() { done <- gate.WaitReady(ctx, "conn-rejected") }()
+	time.Sleep(10 * time.Millisecond)
+	gate.Reject("conn-rejected", want)
+	if err := <-done; !errors.Is(err, want) {
+		t.Fatalf("WaitReady() error = %v, want handshake rejection", err)
+	}
+}
+
 func TestReadyGateWaitReadyHonorsContext(t *testing.T) {
 	gate := handshake.NewReadyGate(nil)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)

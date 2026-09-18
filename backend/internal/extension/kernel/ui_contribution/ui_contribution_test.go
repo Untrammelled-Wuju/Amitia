@@ -534,6 +534,71 @@ func TestBridgeRevokeSession(t *testing.T) {
 	}
 }
 
+func TestBridgeRevokeSessionWaitsForInFlightRequestBeforeReleasingSnapshots(t *testing.T) {
+	h := NewUIHost()
+	started := make(chan struct{})
+	finish := make(chan struct{})
+	released := make(chan struct{}, 1)
+	h.Bridge().SetScopeSnapshotFactory(func(string, string, int64, string, string) (string, error) {
+		return "scope-snapshot", nil
+	})
+	h.Bridge().SetSnapshotReleaser(func(string, string) error {
+		released <- struct{}{}
+		return nil
+	})
+	h.Bridge().SetHandlers(func(context.Context, *BridgeSession, *UIActionDefinition, json.RawMessage) (json.RawMessage, error) {
+		close(started)
+		<-finish
+		return json.RawMessage(`{"saved":true}`), nil
+	}, nil)
+	def := makeValidDefinition()
+	def.Actions = []UIActionDefinition{{
+		ActionID:  "save",
+		Title:     LocalizedText{Default: "Save"},
+		Target:    UIActionTarget{Type: ActionTargetHostCommand, Command: "save"},
+		RiskLevel: RiskLevelLow,
+	}}
+	if err := h.RegisterContribution(def); err != nil {
+		t.Fatalf("register contribution: %v", err)
+	}
+	sess, err := h.Bridge().CreateSession(def, "amitia://ext-1", nil, nil, "web", "", "", time.Hour)
+	if err != nil {
+		t.Fatalf("create session: %v", err)
+	}
+	payload, _ := json.Marshal(map[string]any{"action_id": "save"})
+	responses := make(chan BridgeResponse, 1)
+	go func() {
+		responses <- h.Bridge().Handle(context.Background(), BridgeMessage{
+			Method:          BridgeUIActionInvoke,
+			SessionID:       sess.SessionID,
+			ContributionID:  "contrib-1",
+			Origin:          "amitia://ext-1",
+			ContractVersion: 1,
+			Token:           sess.Token,
+			Generation:      sess.Generation,
+			Nonce:           "nonce-in-flight-revoke",
+			Payload:         payload,
+		})
+	}()
+	<-started
+	h.Bridge().RevokeSession(sess.SessionID)
+	select {
+	case <-released:
+		t.Fatal("snapshots released before the in-flight request completed")
+	default:
+	}
+	close(finish)
+	resp := <-responses
+	if !resp.OK {
+		t.Fatalf("in-flight request failed: %v", resp.Error)
+	}
+	select {
+	case <-released:
+	case <-time.After(time.Second):
+		t.Fatal("snapshots were not released after the in-flight request completed")
+	}
+}
+
 func TestUILifecycleStateValid(t *testing.T) {
 	valid := []UILifecycleState{
 		UIStateRegistered, UIStateLoading, UIStateMounted,
@@ -590,6 +655,25 @@ func TestUIHostUnregister(t *testing.T) {
 	}
 	if _, err := h.GetContribution(def.ContributionID); err == nil {
 		t.Fatalf("expected not found after unregister")
+	}
+}
+
+func TestUIHostUnregisterByExtensionRevokesBridgeSessions(t *testing.T) {
+	h := NewUIHost()
+	def := makeValidDefinition()
+	_ = h.RegisterContribution(def)
+	sess, err := h.Bridge().CreateSession(def, "amitia://ext-1", nil, nil, "web", "char-1", "conv-1", time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if removed := h.UnregisterByExtension(def.ExtensionID); len(removed) != 1 {
+		t.Fatalf("expected one contribution to be removed, got %d", len(removed))
+	}
+	if h.Bridge().SessionCount() != 0 {
+		t.Fatal("expected bridge session to be revoked")
+	}
+	if _, err := h.Bridge().ValidateSession(sess.SessionID, string(def.ContributionID), "amitia://ext-1", 1, sess.Token, sess.Generation, "nonce-uninstalled"); err == nil {
+		t.Fatal("expected uninstalled extension session to be invalid")
 	}
 }
 

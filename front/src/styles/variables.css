@@ -278,3 +278,13 @@ body {
     --el-select-width: 100%;
   }
 }
+
+/* Accessibility preference driven by the shared appearance controller. */
+html[data-reduce-motion="true"] *,
+html[data-reduce-motion="true"] *::before,
+html[data-reduce-motion="true"] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
+}

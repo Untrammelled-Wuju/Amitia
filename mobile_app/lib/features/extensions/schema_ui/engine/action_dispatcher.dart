@@ -28,22 +28,14 @@ class ActionInvocation {
 }
 
 class ActionDispatcher {
-  static const Set<String> allowedActions = {
-    'navigate',
-    'invoke_tool',
-    'invoke_capability',
-    'open_resource',
-    'set_state',
-    'submit_form',
-  };
-
   final void Function(ActionInvocation) onDispatch;
 
   const ActionDispatcher({required this.onDispatch});
 
-  bool isAllowed(String target) {
-    return allowedActions.contains(target);
-  }
+  /// The canonical Schema UI contract validates declared actions on the host.
+  /// Clients must not maintain a second target whitelist because doing so can
+  /// reject actions that are valid on another platform or added by the host.
+  bool isAllowed(String target) => target.trim().isNotEmpty;
 
   void dispatch({
     required SchemaUIActionBinding action,

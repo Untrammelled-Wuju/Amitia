@@ -1,214 +1,120 @@
 // SPDX-FileCopyrightText: 2026 彭旭
 // SPDX-License-Identifier: AGPL-3.0-only
 /**
- * Deprecated: Legacy extension architecture.
- * Do not add new static routes or navigation entries for the legacy
- * extension center. Retained only for compatibility, maintenance,
- * testing, and migration to Extension Kernel.
+ * Application router.
+ *
+ * U-Ai has no product-account login. Cloud browser access has one lightweight
+ * instance-password gate; device/runtime authority still uses the existing
+ * Desktop Session or DeviceCredential boundary.
  */
-import { createRouter, createWebHashHistory, createWebHistory } from "vue-router"
-import { getAccessToken } from "../stores/refresh-coordinator"
-import { saveCurrentUser } from "../stores/refresh-coordinator"
-import { useSessionStore } from "../stores/session-store"
-import { apiClient } from "../ui-index"
-import { isRuntimeRouteAvailable, shouldUseHashRouting } from "../runtime/runtime-capabilities"
-import { builtinBusinessRoutes } from "./builtinRoutes"
+import { createRouter, createWebHashHistory, createWebHistory } from "vue-router";
+import { apiClient } from "../ui-index";
+import { getApiBaseURL, getDeploymentConfig, isCurrentDevicePaired } from "../runtime/runtime-adapter";
+import { getWebAccessStatus, type WebAccessStatus } from "../runtime/web-access";
+import { isRuntimeRouteAvailable, shouldUseHashRouting } from "../runtime/runtime-capabilities";
+import { builtinBusinessRoutes } from "./builtinRoutes";
 
-const TOKEN_CACHE_TTL = 5 * 60 * 1000
+const ONBOARDING_CACHE_TTL = 30_000;
+let onboardingCompleted: boolean | null = null;
+let onboardingCheckedAt = 0;
 
-interface AuthCache {
-  onboardingCompleted: boolean | null
-  onboardingCheckedAt: number
-  userAuthenticated: boolean | null
-  userCheckedAt: number
+async function readOnboardingCompleted(force = false): Promise<boolean | null> {
+  if (!force && onboardingCompleted !== null && Date.now() - onboardingCheckedAt < ONBOARDING_CACHE_TTL) {
+    return onboardingCompleted;
+  }
+  try {
+    const res = await apiClient.get("/api/public/onboarding/status");
+    const data = res.data?.data || res.data;
+    onboardingCompleted = Boolean(data?.completed);
+    onboardingCheckedAt = Date.now();
+    return onboardingCompleted;
+  } catch {
+    onboardingCompleted = null;
+    onboardingCheckedAt = 0;
+    return null;
+  }
 }
 
-const authCache: AuthCache = {
-  onboardingCompleted: null,
-  onboardingCheckedAt: 0,
-  userAuthenticated: null,
-  userCheckedAt: 0,
-}
+const PUBLIC_PATHS = new Set(["/web-access", "/onboarding", "/privacy", "/usage-boundary"]);
 
-let routerInstance: ReturnType<typeof createRouter> | null = null
+const router = createRouter({
+  history: shouldUseHashRouting() ? createWebHashHistory() : createWebHistory(),
+  routes: [
+    { path: "/web-access", name: "webAccess", component: () => import("../views/WebAccessLoginView.vue") },
+    { path: "/onboarding", name: "onboarding", component: () => import("../views/onboarding/OnboardingView.vue") },
+    { path: "/privacy", name: "privacy", component: () => import("../views/privacy/Privacy.vue") },
+    { path: "/usage-boundary", name: "usageBoundary", component: () => import("../views/usage-boundary/UsageBoundary.vue") },
+    { path: "/", redirect: "/chat" },
+    ...builtinBusinessRoutes,
+    { path: "/404", name: "notFound", component: () => import("@/views/NotFoundView.vue") },
+    { path: "/:pathMatch(.*)*", name: "catchAll", component: () => import("@/views/NotFoundView.vue") },
+  ],
+});
 
-function getToken(): string | null {
-  return getAccessToken()
-}
+router.beforeEach(async (to) => {
+  if (!isRuntimeRouteAvailable(to.path)) {
+    return { path: "/404", query: { reason: "runtime-capability-unavailable" } };
+  }
 
-function getUserId(): string | null {
-  return useSessionStore().state.value.userId
-}
-
-function isUserAuthenticatedCached(): boolean {
-  return (
-    authCache.userAuthenticated === true &&
-    Date.now() - authCache.userCheckedAt < TOKEN_CACHE_TTL
-  )
-}
-
-function refreshOnboardingStatus(): void {
-  apiClient
-    .get("/api/public/onboarding/status")
-    .then((res) => {
-      const data = res.data?.data || res.data
-      const completed = !!data?.completed
-      authCache.onboardingCompleted = completed
-      authCache.onboardingCheckedAt = Date.now()
-      if (!completed && routerInstance) {
-        const currentPath = window.location.hash.replace(/^#/, "")
-        if (currentPath && currentPath !== "/onboarding") {
-          routerInstance.push("/onboarding").catch(() => {})
+  let webAccess: WebAccessStatus | null = null;
+  let webDevicePaired: boolean | null = null;
+  if (typeof window !== "undefined" && !window.amitiaDesktop) {
+    const deployment = await getDeploymentConfig();
+    if (deployment.mode === "cloud") {
+      try {
+        const baseURL = await getApiBaseURL();
+        webAccess = await getWebAccessStatus(baseURL);
+        if (webAccess.authenticated || !webAccess.configured) {
+          webDevicePaired = await isCurrentDevicePaired(baseURL);
         }
-      }
-    })
-    .catch(() => {
-      authCache.onboardingCompleted = null
-      authCache.onboardingCheckedAt = 0
-    })
-}
-
-function refreshAuthStatus(): void {
-  apiClient
-    .get("/api/auth/me")
-    .then((res) => {
-      const userData = res.data?.data || res.data
-      const valid = !!(userData?.id || userData?.userId)
-      if (valid) {
-        saveCurrentUser({
-          userId: userData?.userId || userData?.id,
-          username: userData?.username,
-          role: userData?.role,
-        })
-        const { state, setSession } = useSessionStore()
-        setSession({
-          ...state.value,
-          userId: String(userData?.userId || userData?.id),
-          username: userData?.username || null,
-          role: userData?.role || null,
-        })
-      }
-      authCache.userAuthenticated = valid
-      authCache.userCheckedAt = Date.now()
-      if (!valid && routerInstance) {
-        const currentPath = window.location.hash.replace(/^#/, "")
-        const PUBLIC_PATHS = ["/login", "/onboarding", "/privacy", "/usage-boundary"]
-        if (currentPath && !PUBLIC_PATHS.includes(currentPath)) {
-          routerInstance.push("/login").catch(() => {})
+      } catch {
+        if (to.path !== "/web-access") {
+          return { path: "/web-access", query: { redirect: to.fullPath } };
         }
+        return true;
       }
-    })
-    .catch(() => {
-      authCache.userAuthenticated = null
-      authCache.userCheckedAt = 0
-    })
-}
 
-function createAppRouter() {
-  const r = createRouter({
-    history: shouldUseHashRouting() ? createWebHashHistory() : createWebHistory(),
-    routes: [
-      { path: "/onboarding", name: "onboarding", component: () => import("../views/onboarding/OnboardingView.vue") },
-      { path: "/login", name: "login", component: () => import("@/views/login/LoginView.vue") },
-      { path: "/privacy", name: "privacy", component: () => import("../views/privacy/Privacy.vue") },
-      { path: "/usage-boundary", name: "usageBoundary", component: () => import("../views/usage-boundary/UsageBoundary.vue") },
-      { path: "/", redirect: "/chat", meta: { requiresAuth: true } },
-      ...builtinBusinessRoutes,
-      { path: "/404", name: "notFound", component: () => import("@/views/NotFoundView.vue") },
-      { path: "/:pathMatch(.*)*", name: "catchAll", component: () => import("@/views/NotFoundView.vue") },
-    ],
-  })
-
-  routerInstance = r
-
-  r.beforeEach((to, _from, next) => {
-    const token = getToken()
-    const userId = getUserId()
-    const PUBLIC_PATHS = ["/login", "/onboarding", "/privacy", "/usage-boundary"]
-    const isPublic = PUBLIC_PATHS.includes(to.path)
-
-    if (!isRuntimeRouteAvailable(to.path)) {
-      return next({ path: "/404", query: { reason: "runtime-capability-unavailable" } })
-    }
-
-    if (isPublic) {
-      if (to.path === "/login") {
-        if (token && (userId || isUserAuthenticatedCached())) {
-          refreshOnboardingStatus()
-          refreshAuthStatus()
-          return next("/chat")
+      if (webAccess.configured && !webAccess.authenticated) {
+        if (to.path !== "/web-access") {
+          return { path: "/web-access", query: { redirect: to.fullPath } };
         }
-        apiClient
-          .get("/api/public/onboarding/status")
-          .then((res) => {
-            const data = res.data?.data || res.data
-            authCache.onboardingCompleted = !!data?.completed
-            authCache.onboardingCheckedAt = Date.now()
-            if (!data?.completed) {
-              next("/onboarding")
-            } else {
-              next()
-            }
-          })
-          .catch(() => next())
-        return
+        return true;
       }
-      if (to.path === "/onboarding") {
-        if (authCache.onboardingCompleted === true && token) {
-          return next("/chat")
-        }
-        apiClient
-          .get("/api/public/onboarding/status")
-          .then((res) => {
-            const data = res.data?.data || res.data
-            authCache.onboardingCompleted = !!data?.completed
-            authCache.onboardingCheckedAt = Date.now()
-            if (data?.completed) {
-              next(token ? "/chat" : "/login")
-            } else {
-              next()
-            }
-          })
-          .catch(() => next())
-        return
+
+      if (!webAccess.configured && to.path === "/web-access") {
+        return "/onboarding";
       }
-      next()
-      return
+
+      if (webAccess.configured && webAccess.authenticated && to.path === "/web-access") {
+        const redirect = typeof to.query.redirect === "string" && to.query.redirect.startsWith("/")
+          ? to.query.redirect
+          : "/chat";
+        return redirect === "/web-access" ? "/chat" : redirect;
+      }
+    } else if (to.path === "/web-access") {
+      return "/onboarding";
     }
 
-    if (!to.meta?.requiresAuth) {
-      next()
-      return
-    }
+  const isPublic = PUBLIC_PATHS.has(to.path);
+  const completed = await readOnboardingCompleted(false);
 
-    if (!token) {
-      next("/login")
-      return
-    }
+  if (to.path === "/onboarding") {
+    // A Cloud browser may need one-time password setup or Device Mesh pairing
+    // even when the shared Space onboarding was completed on another device.
+    if (webAccess?.configured === false || webDevicePaired === false) return true;
+    if (completed === true) return "/chat";
+    return true;
+  }
 
-    const authenticated = userId || isUserAuthenticatedCached()
-    const onboardingDone = authCache.onboardingCompleted !== false
+  if ((webAccess?.configured === false || webDevicePaired === false) && !isPublic) {
+    return "/onboarding";
+  }
 
-    if (!authenticated || !onboardingDone) {
-      refreshAuthStatus()
-      refreshOnboardingStatus()
-      next()
-      return
-    }
+  if (!isPublic && completed === false) {
+    return "/onboarding";
+  }
 
-    if (Date.now() - authCache.onboardingCheckedAt > TOKEN_CACHE_TTL) {
-      refreshOnboardingStatus()
-    }
-    if (Date.now() - authCache.userCheckedAt > TOKEN_CACHE_TTL) {
-      refreshAuthStatus()
-    }
+  return true;
+});
 
-    next()
-  })
-
-  return r
-}
-
-const router = createAppRouter()
-
-export default router
+export default router;

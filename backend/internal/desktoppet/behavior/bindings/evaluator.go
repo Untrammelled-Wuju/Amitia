@@ -8,7 +8,7 @@ import (
 
 type BehaviorBinding struct {
 	ID              string          `json:"id"`
-	UserID          string          `json:"userId"`
+	SpaceID         string          `json:"spaceId"`
 	CharacterID     string          `json:"characterId,omitempty"`
 	InstallationID  string          `json:"installationId,omitempty"`
 	EventType       string          `json:"eventType"`
@@ -30,7 +30,7 @@ func (b BehaviorBinding) GetSemantic() string        { return b.Semantic }
 func (b BehaviorBinding) GetPreferredAction() string { return b.PreferredAction }
 func (b BehaviorBinding) GetPriorityOffset() int     { return b.PriorityOffset }
 func (b BehaviorBinding) GetCooldownMS() int64       { return b.CooldownMS }
-func (b BehaviorBinding) GetUserID() string          { return b.UserID }
+func (b BehaviorBinding) GetSpaceID() string         { return b.SpaceID }
 func (b BehaviorBinding) GetCharacterID() string     { return b.CharacterID }
 func (b BehaviorBinding) GetInstallationID() string  { return b.InstallationID }
 
@@ -47,7 +47,7 @@ type CompiledBinding struct {
 }
 
 type EvaluatorScope struct {
-	UserID         string
+	SpaceID        string
 	CharacterID    string
 	InstallationID string
 }
@@ -64,7 +64,7 @@ func NewEvaluator() *Evaluator {
 }
 
 func scopeKey(scope EvaluatorScope) string {
-	return scope.UserID + "/" + scope.CharacterID + "/" + scope.InstallationID
+	return scope.SpaceID + "/" + scope.CharacterID + "/" + scope.InstallationID
 }
 
 func (e *Evaluator) AddBinding(scope EvaluatorScope, binding interface{}, condition ConditionNode) {
@@ -96,17 +96,17 @@ func (e *Evaluator) ReplaceScope(scope EvaluatorScope, bindings []CompiledBindin
 // ReplaceCharacterScopes atomically replaces every installation-specific scope
 // for one user/character pair. It also removes scopes whose last binding was
 // deleted, preventing stale evaluator entries after CRUD operations.
-func (e *Evaluator) ReplaceCharacterScopes(userID, characterID string, replacements map[EvaluatorScope][]CompiledBinding) {
+func (e *Evaluator) ReplaceCharacterScopes(spaceID, characterID string, replacements map[EvaluatorScope][]CompiledBinding) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	prefix := userID + "/" + characterID + "/"
+	prefix := spaceID + "/" + characterID + "/"
 	for key := range e.compiledBindings {
 		if len(key) >= len(prefix) && key[:len(prefix)] == prefix {
 			delete(e.compiledBindings, key)
 		}
 	}
 	for scope, entries := range replacements {
-		if scope.UserID != userID || scope.CharacterID != characterID || len(entries) == 0 {
+		if scope.SpaceID != spaceID || scope.CharacterID != characterID || len(entries) == 0 {
 			continue
 		}
 		copied := make([]CompiledBinding, len(entries))
@@ -131,12 +131,12 @@ func evaluatorLookupScopes(scope EvaluatorScope) []EvaluatorScope {
 	// finally user-global bindings. This preserves optional scope semantics.
 	add(scope)
 	if scope.InstallationID != "" {
-		add(EvaluatorScope{UserID: scope.UserID, CharacterID: scope.CharacterID})
+		add(EvaluatorScope{SpaceID: scope.SpaceID, CharacterID: scope.CharacterID})
 	}
 	if scope.CharacterID != "" {
-		add(EvaluatorScope{UserID: scope.UserID, InstallationID: scope.InstallationID})
+		add(EvaluatorScope{SpaceID: scope.SpaceID, InstallationID: scope.InstallationID})
 	}
-	add(EvaluatorScope{UserID: scope.UserID})
+	add(EvaluatorScope{SpaceID: scope.SpaceID})
 	return result
 }
 

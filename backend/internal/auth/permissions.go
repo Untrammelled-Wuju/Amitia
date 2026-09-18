@@ -3,41 +3,42 @@
 package auth
 
 const (
-	PermDesktopPetRead            = "desktop_pet.read"
-	PermDesktopPetWrite           = "desktop_pet.write"
-	PermDesktopPetGenerate        = "desktop_pet.generate"
-	PermDesktopPetImport          = "desktop_pet.import"
-	PermDesktopPetInstall         = "desktop_pet.install"
-	PermDesktopPetRuntimeControl  = "desktop_pet.runtime.control"
-	PermDesktopPetBehaviorManage  = "desktop_pet.behavior.manage"
-	PermDesktopPetBehaviorAdmin   = "desktop_pet.behavior.admin"
-	PermDesktopPetMigrate         = "desktop_pet.migrate"
-	PermDesktopPetRepair          = "desktop_pet.repair"
-	PermMaintenanceRead           = "desktop_pet.maintenance.read"
-	PermBackupCreate              = "desktop_pet.backup.create"
-	PermExportCreate              = "desktop_pet.export.create"
-	PermMigrationRun              = "desktop_pet.migration.run"
-	PermCutoverExecute            = "desktop_pet.cutover.execute"
-	PermSecurityAuditRead         = "security.audit.read"
-	PermDoctorRun                 = "doctor.run"
-	PermDoctorRepair              = "doctor.repair"
-	SystemShutdown                = "system.shutdown"
+	PermSystemAdmin              = "system.admin"
+	PermDesktopPetRead           = "desktop_pet.read"
+	PermDesktopPetWrite          = "desktop_pet.write"
+	PermDesktopPetGenerate       = "desktop_pet.generate"
+	PermDesktopPetImport         = "desktop_pet.import"
+	PermDesktopPetInstall        = "desktop_pet.install"
+	PermDesktopPetRuntimeControl = "desktop_pet.runtime.control"
+	PermDesktopPetBehaviorManage = "desktop_pet.behavior.manage"
+	PermDesktopPetBehaviorAdmin  = "desktop_pet.behavior.admin"
+	PermDesktopPetMigrate        = "desktop_pet.migrate"
+	PermDesktopPetRepair         = "desktop_pet.repair"
+	PermMaintenanceRead          = "desktop_pet.maintenance.read"
+	PermBackupCreate             = "desktop_pet.backup.create"
+	PermExportCreate             = "desktop_pet.export.create"
+	PermMigrationRun             = "desktop_pet.migration.run"
+	PermCutoverExecute           = "desktop_pet.cutover.execute"
+	PermSecurityAuditRead        = "security.audit.read"
+	PermDoctorRun                = "doctor.run"
+	PermDoctorRepair             = "doctor.repair"
+	SystemShutdown               = "system.shutdown"
 )
 
-func DefaultUserPermissions() []string {
+func StandardPermissions() []string {
 	return []string{
-		PermDesktopPetRead,
-		PermDesktopPetWrite,
-		PermDesktopPetGenerate,
-		PermDesktopPetImport,
-		PermDesktopPetInstall,
-		PermDesktopPetRuntimeControl,
+		PermDesktopPetRead, PermDesktopPetWrite, PermDesktopPetGenerate,
+		PermDesktopPetImport, PermDesktopPetInstall, PermDesktopPetRuntimeControl,
 		PermDesktopPetBehaviorManage,
 	}
 }
 
-func AdminPermissions() []string {
-	return append(DefaultUserPermissions(),
+// OwnerDevicePermissions are granted to a device credential paired to the
+// personal Space. Fine-grained tool/skill/MCP authorization is still enforced
+// by the Capability Gateway and permission broker at invocation time.
+func OwnerDevicePermissions() []string {
+	return append(StandardPermissions(),
+		PermSystemAdmin,
 		PermDesktopPetBehaviorAdmin,
 		PermDesktopPetMigrate,
 		PermDesktopPetRepair,
@@ -54,27 +55,11 @@ func AdminPermissions() []string {
 }
 
 func SystemWorkerPermissions() []string {
-	return []string{
-		PermDesktopPetRead,
-		PermDesktopPetWrite,
-		PermDesktopPetGenerate,
-		PermDesktopPetRuntimeControl,
-		PermDesktopPetBehaviorManage,
-	}
+	return []string{PermDesktopPetRead, PermDesktopPetWrite, PermDesktopPetGenerate, PermDesktopPetRuntimeControl, PermDesktopPetBehaviorManage}
 }
-
 func MigrationPermissions() []string {
-	return []string{
-		PermDesktopPetRead,
-		PermDesktopPetWrite,
-		PermDesktopPetMigrate,
-	}
+	return []string{PermDesktopPetRead, PermDesktopPetWrite, PermDesktopPetMigrate}
 }
-
 func RepairPermissions() []string {
-	return append(DefaultUserPermissions(),
-		PermDesktopPetRepair,
-		PermDoctorRun,
-		PermDoctorRepair,
-	)
+	return append(StandardPermissions(), PermDesktopPetRepair, PermDoctorRun, PermDoctorRepair)
 }

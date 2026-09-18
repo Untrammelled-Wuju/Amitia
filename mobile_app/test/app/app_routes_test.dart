@@ -8,9 +8,6 @@ void main() {
         AppRoutes.chat,
         AppRoutes.conversations,
         AppRoutes.dashboard,
-        AppRoutes.channels,
-        AppRoutes.channelsWechat,
-        AppRoutes.channelsQq,
         AppRoutes.characters,
         AppRoutes.charactersCreate,
         AppRoutes.agent,
@@ -30,10 +27,10 @@ void main() {
         AppRoutes.extensionsMcp,
         AppRoutes.extensionsMcpNew,
         AppRoutes.extensionsAgentSkills,
-        AppRoutes.extensionsPlugins,
         AppRoutes.extensionsSkills,
         AppRoutes.extensionsRuns,
         AppRoutes.workshop,
+        AppRoutes.workshopCharacterCards,
         AppRoutes.workshopSkills,
         AppRoutes.workshopPet,
         AppRoutes.workshopPetCreate,
@@ -45,7 +42,6 @@ void main() {
         AppRoutes.settingsRuntime,
         AppRoutes.settingsPermissions,
         AppRoutes.settingsBackup,
-        AppRoutes.settingsAi,
         AppRoutes.settingsSystem,
         AppRoutes.settingsTemporal,
         AppRoutes.settingsSafety,
@@ -58,7 +54,6 @@ void main() {
         AppRoutes.settingsAbout,
         AppRoutes.settingsToolbox,
         AppRoutes.onboarding,
-        AppRoutes.login,
         AppRoutes.privacy,
         AppRoutes.developer,
         AppRoutes.developerKernel,
@@ -85,7 +80,6 @@ void main() {
       expect(AppRoutes.mcpDetail('m1'), '/extensions/mcp/m1');
       expect(AppRoutes.mcpEdit('m1'), '/extensions/mcp/m1/edit');
       expect(AppRoutes.skillDetail('s1'), '/extensions/skills/s1');
-      expect(AppRoutes.pluginDetail('p1'), '/extensions/plugins/p1');
       expect(AppRoutes.extensionPage('page1'), '/extension/page/page1');
       expect(AppRoutes.petProcessing('task1'), '/workshop/pet/processing/task1');
       expect(AppRoutes.petActionEditor('task1', 'wave'), '/workshop/pet/processing/task1/actions/wave/editor');
@@ -99,9 +93,6 @@ void main() {
         AppRoutes.chat,
         AppRoutes.conversations,
         AppRoutes.dashboard,
-        AppRoutes.channels,
-        AppRoutes.channelsWechat,
-        AppRoutes.channelsQq,
         AppRoutes.characters,
         AppRoutes.charactersCreate,
         AppRoutes.agent,
@@ -121,10 +112,10 @@ void main() {
         AppRoutes.extensionsMcp,
         AppRoutes.extensionsMcpNew,
         AppRoutes.extensionsAgentSkills,
-        AppRoutes.extensionsPlugins,
         AppRoutes.extensionsSkills,
         AppRoutes.extensionsRuns,
         AppRoutes.workshop,
+        AppRoutes.workshopCharacterCards,
         AppRoutes.workshopSkills,
         AppRoutes.workshopPet,
         AppRoutes.workshopPetCreate,
@@ -136,7 +127,6 @@ void main() {
         AppRoutes.settingsRuntime,
         AppRoutes.settingsPermissions,
         AppRoutes.settingsBackup,
-        AppRoutes.settingsAi,
         AppRoutes.settingsSystem,
         AppRoutes.settingsTemporal,
         AppRoutes.settingsSafety,
@@ -149,7 +139,6 @@ void main() {
         AppRoutes.settingsAbout,
         AppRoutes.settingsToolbox,
         AppRoutes.onboarding,
-        AppRoutes.login,
         AppRoutes.privacy,
         AppRoutes.developer,
         AppRoutes.developerKernel,

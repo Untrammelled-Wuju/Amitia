@@ -274,7 +274,7 @@ func (e EventEnvelope) Validate(def EventTypeDefinition, maxDepth int) error {
 	if e.ProducerID == "" {
 		return errors.New("event: producer id required")
 	}
-	if e.ProducerType != "" && !e.ProducerType.IsValid() {
+	if e.ProducerType != "" && e.ProducerType != "host" && !e.ProducerType.IsValid() {
 		return fmt.Errorf("event: invalid producer type: %s", e.ProducerType)
 	}
 	if int64(len(e.Payload)) > def.MaxPayloadBytes {

@@ -81,7 +81,7 @@ export interface ActionEditSummary {
 
 export interface EditSession {
   id: string;
-  userId: string;
+  spaceId: string;
   characterId: string;
   actionStreamId: string;
   processingTaskId: string;

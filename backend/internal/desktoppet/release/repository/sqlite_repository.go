@@ -60,9 +60,9 @@ func (r *SQLiteRepository) GetBuildOperation(id string) (*release.ReleaseBuildOp
 	return &op, nil
 }
 
-func (r *SQLiteRepository) GetBuildOperationByIdempotencyKey(userID, idempotencyKey string) (*release.ReleaseBuildOperation, error) {
+func (r *SQLiteRepository) GetBuildOperationByIdempotencyKey(spaceID, idempotencyKey string) (*release.ReleaseBuildOperation, error) {
 	var op release.ReleaseBuildOperation
-	if err := r.db.First(&op, "user_id = ? AND idempotency_key = ?", userID, idempotencyKey).Error; err != nil {
+	if err := r.db.First(&op, "space_id = ? AND idempotency_key = ?", spaceID, idempotencyKey).Error; err != nil {
 		return nil, err
 	}
 	return &op, nil
@@ -171,22 +171,12 @@ func (r *SQLiteRepository) GetPetIdentity(petID string) (*release.PetIdentityDat
 	return record.toData(), nil
 }
 
-func (r *SQLiteRepository) GetPetIdentityByCharacter(userID, characterID string) (*release.PetIdentityData, error) {
-	var record petIdentityRecord
-	if err := r.db.First(&record, "owner_user_id = ? AND source_character_id = ?", userID, characterID).Error; err != nil {
-		return nil, err
-	}
-	return record.toData(), nil
-}
-
 func (r *SQLiteRepository) CreatePetIdentity(identity *release.PetIdentityData) error {
 	record := petIdentityRecord{
 		ID:                  identity.ID,
-		OwnerUserID:         identity.OwnerUserID,
-		SourceCharacterID:   identity.SourceCharacterID,
+		OwnerSpaceID:        identity.OwnerSpaceID,
 		Name:                identity.Name,
 		Slug:                identity.Slug,
-		BindingPolicy:       identity.BindingPolicy,
 		UpstreamPetID:       identity.UpstreamPetID,
 		DefaultActionKey:    identity.DefaultActionKey,
 		NextReleaseSequence: identity.NextReleaseSequence,
@@ -199,11 +189,9 @@ func (r *SQLiteRepository) CreatePetIdentity(identity *release.PetIdentityData) 
 func (r *SQLiteRepository) CreatePetIdentityTx(tx *gorm.DB, identity *release.PetIdentityData) error {
 	record := petIdentityRecord{
 		ID:                  identity.ID,
-		OwnerUserID:         identity.OwnerUserID,
-		SourceCharacterID:   identity.SourceCharacterID,
+		OwnerSpaceID:        identity.OwnerSpaceID,
 		Name:                identity.Name,
 		Slug:                identity.Slug,
-		BindingPolicy:       identity.BindingPolicy,
 		UpstreamPetID:       identity.UpstreamPetID,
 		DefaultActionKey:    identity.DefaultActionKey,
 		NextReleaseSequence: identity.NextReleaseSequence,
@@ -216,11 +204,9 @@ func (r *SQLiteRepository) CreatePetIdentityTx(tx *gorm.DB, identity *release.Pe
 func (r *SQLiteRepository) UpdatePetIdentity(identity *release.PetIdentityData) error {
 	record := petIdentityRecord{
 		ID:                  identity.ID,
-		OwnerUserID:         identity.OwnerUserID,
-		SourceCharacterID:   identity.SourceCharacterID,
+		OwnerSpaceID:        identity.OwnerSpaceID,
 		Name:                identity.Name,
 		Slug:                identity.Slug,
-		BindingPolicy:       identity.BindingPolicy,
 		UpstreamPetID:       identity.UpstreamPetID,
 		DefaultActionKey:    identity.DefaultActionKey,
 		NextReleaseSequence: identity.NextReleaseSequence,
@@ -233,11 +219,9 @@ func (r *SQLiteRepository) UpdatePetIdentity(identity *release.PetIdentityData) 
 func (r *SQLiteRepository) UpdatePetIdentityTx(tx *gorm.DB, identity *release.PetIdentityData) error {
 	record := petIdentityRecord{
 		ID:                  identity.ID,
-		OwnerUserID:         identity.OwnerUserID,
-		SourceCharacterID:   identity.SourceCharacterID,
+		OwnerSpaceID:        identity.OwnerSpaceID,
 		Name:                identity.Name,
 		Slug:                identity.Slug,
-		BindingPolicy:       identity.BindingPolicy,
 		UpstreamPetID:       identity.UpstreamPetID,
 		DefaultActionKey:    identity.DefaultActionKey,
 		NextReleaseSequence: identity.NextReleaseSequence,
@@ -279,9 +263,9 @@ func (r *SQLiteRepository) ListReleasesByPet(petID string) ([]*release.ReleaseDa
 	return releases, nil
 }
 
-func (r *SQLiteRepository) ListPublishedReleases(userID string) ([]*release.ReleaseData, error) {
+func (r *SQLiteRepository) ListPublishedReleases(spaceID string) ([]*release.ReleaseData, error) {
 	var releases []*release.ReleaseData
-	if err := r.db.Where("owner_user_id = ?", userID).Find(&releases).Error; err != nil {
+	if err := r.db.Where("owner_space_id = ?", spaceID).Find(&releases).Error; err != nil {
 		return nil, err
 	}
 	return releases, nil
@@ -488,11 +472,9 @@ func (r *SQLiteRepository) UpdateOperationOwned(tx *gorm.DB, op *release.Release
 
 type petIdentityRecord struct {
 	ID                  string `gorm:"column:id;primaryKey;type:text"`
-	OwnerUserID         string `gorm:"column:owner_user_id;type:text;index:idx_identity_owner_character,unique"`
-	SourceCharacterID   string `gorm:"column:source_character_id;type:text;index:idx_identity_owner_character,unique"`
+	OwnerSpaceID        string `gorm:"column:owner_space_id;type:text"`
 	Name                string `gorm:"column:name;type:text"`
 	Slug                string `gorm:"column:slug;type:text"`
-	BindingPolicy       string `gorm:"column:binding_policy;type:text;index:idx_identity_owner_character,unique"`
 	UpstreamPetID       string `gorm:"column:upstream_pet_id;type:text"`
 	DefaultActionKey    string `gorm:"column:default_action_key;type:text"`
 	NextReleaseSequence int    `gorm:"column:next_release_sequence;type:integer;default:0"`
@@ -507,11 +489,9 @@ func (petIdentityRecord) TableName() string {
 func (r *petIdentityRecord) toData() *release.PetIdentityData {
 	return &release.PetIdentityData{
 		ID:                  r.ID,
-		OwnerUserID:         r.OwnerUserID,
-		SourceCharacterID:   r.SourceCharacterID,
+		OwnerSpaceID:        r.OwnerSpaceID,
 		Name:                r.Name,
 		Slug:                r.Slug,
-		BindingPolicy:       r.BindingPolicy,
 		UpstreamPetID:       r.UpstreamPetID,
 		DefaultActionKey:    r.DefaultActionKey,
 		NextReleaseSequence: r.NextReleaseSequence,

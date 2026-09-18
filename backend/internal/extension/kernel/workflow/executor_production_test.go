@@ -167,7 +167,7 @@ func TestWorkflowExecutorBindsRevisionForEveryNewRun(t *testing.T) {
 	registry := NewWorkflowRegistry()
 	if err := registry.Register(WorkflowDefinition{
 		ID: "wf-revision-bound", Name: "revision-bound", Enabled: true,
-		Metadata: map[string]any{"ownerUserId": "user-a"},
+		Metadata: map[string]any{"ownerSpaceId": "user-a"},
 		Nodes:    []WorkflowNode{{ID: "step", Type: "tool"}},
 	}); err != nil {
 		t.Fatal(err)
@@ -177,10 +177,10 @@ func TestWorkflowExecutorBindsRevisionForEveryNewRun(t *testing.T) {
 	executor.RegisterHandler("tool", &countingHandler{})
 	executor.SetRunStore(store)
 	bindCalls := 0
-	executor.SetRevisionBinder(func(_ context.Context, userID string, def WorkflowDefinition) (string, error) {
+	executor.SetRevisionBinder(func(_ context.Context, spaceID string, def WorkflowDefinition) (string, error) {
 		bindCalls++
-		if userID != "user-a" || def.ID != "wf-revision-bound" {
-			t.Fatalf("unexpected revision bind request: user=%q workflow=%q", userID, def.ID)
+		if spaceID != "user-a" || def.ID != "wf-revision-bound" {
+			t.Fatalf("unexpected revision bind request: user=%q workflow=%q", spaceID, def.ID)
 		}
 		return "wfrev-12", nil
 	})
@@ -542,8 +542,16 @@ func TestWorkflowRecoveryUsesCheckpoint(t *testing.T) {
 	if calls != 0 {
 		t.Fatalf("checkpointed step executed again: %d", calls)
 	}
-	run, _ := store.Get(context.Background(), "recover-run")
-	if run.Status != RunStatusSucceeded {
+	deadline := time.Now().Add(2 * time.Second)
+	var run *WorkflowRun
+	for time.Now().Before(deadline) {
+		run, _ = store.Get(context.Background(), "recover-run")
+		if run != nil && run.Status == RunStatusSucceeded {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if run == nil || run.Status != RunStatusSucceeded {
 		t.Fatalf("workflow recovery did not finish: %+v", run)
 	}
 }
@@ -556,12 +564,12 @@ func TestNestedWorkflowRejectsCrossUserTarget(t *testing.T) {
 	registry := NewWorkflowRegistry()
 	_ = registry.Register(WorkflowDefinition{
 		ID: "parent-user-a", Name: "parent", Enabled: true, Source: "user",
-		Metadata: map[string]any{"ownerUserId": "user-a"},
+		Metadata: map[string]any{"ownerSpaceId": "user-a"},
 		Nodes:    []WorkflowNode{{ID: "nested", Type: "nested_workflow", TargetID: "child-user-b"}},
 	})
 	_ = registry.Register(WorkflowDefinition{
 		ID: "child-user-b", Name: "child", Enabled: true, Source: "user",
-		Metadata: map[string]any{"ownerUserId": "user-b"},
+		Metadata: map[string]any{"ownerSpaceId": "user-b"},
 		Nodes:    []WorkflowNode{{ID: "wait", Type: "wait", Runtime: structRuntimeMetadata(0)}},
 	})
 	executor := NewWorkflowExecutor(registry)
@@ -569,7 +577,7 @@ func TestNestedWorkflowRejectsCrossUserTarget(t *testing.T) {
 	executor.RegisterHandler("wait", WaitHandler{})
 	result, err := executor.Execute(context.Background(), ExecuteRequest{
 		WorkflowID: "parent-user-a",
-		Context:    ExecutionContext{InvocationID: "cross-user-nested", UserID: "user-a"},
+		Context:    ExecutionContext{InvocationID: "cross-user-nested", SpaceID: "user-a"},
 	})
 	if err != nil {
 		t.Fatal(err)

@@ -264,6 +264,18 @@ func TestBundleVerifier(t *testing.T) {
 	}
 }
 
+func TestBundleVerifierAllowsDeclaredScripts(t *testing.T) {
+	tmpDir := t.TempDir()
+	entry := filepath.Join(tmpDir, "index.html")
+	if err := os.WriteFile(entry, []byte(`<html><script src="./app.js" defer></script></html>`), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := NewBundleVerifier().VerifyWithPolicy(tmpDir, "index.html", true); err != nil {
+		t.Fatalf("declared scripts should pass: %v", err)
+	}
+}
+
 func TestComputeHash(t *testing.T) {
 	tmpDir := t.TempDir()
 	entryFile := filepath.Join(tmpDir, "index.html")

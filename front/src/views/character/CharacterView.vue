@@ -7,7 +7,11 @@ SPDX-License-Identifier: AGPL-3.0-only
     <div class="char-sidebar">
       <div class="sidebar-header">
         <h3>角色</h3>
-        <el-button size="small" type="primary" @click="openCreate">+</el-button>
+        <div class="sidebar-actions">
+          <el-button size="small" @click="openTemplates">模板</el-button>
+          <el-button size="small" @click="showImportDialog = true">导入</el-button>
+          <el-button size="small" type="primary" @click="openCreate">+</el-button>
+        </div>
       </div>
       <div class="char-list">
         <div
@@ -33,6 +37,13 @@ SPDX-License-Identifier: AGPL-3.0-only
           :image-size="40"
         />
       </div>
+      <ExtensionSlot
+        slot-id="character.sidebar.card"
+        :context="characterExtensionContext"
+        fallback="none"
+        layout="stack"
+        surface-role="sidebar"
+      />
     </div>
 
     <div class="char-main">
@@ -40,10 +51,19 @@ SPDX-License-Identifier: AGPL-3.0-only
         <div class="detail-top">
           <h2>{{ selectedChar?.name }}</h2>
           <el-button size="small" @click="editCurrent">编辑</el-button>
+          <el-button size="small" @click="copyCurrentCharacter">复制</el-button>
           <el-button size="small" @click="goToChatLogs">聊天记录</el-button>
+          <el-button size="small" :loading="exportingPack" @click="exportCurrentCharacter">导出角色卡</el-button>
           <el-button size="small" type="danger" @click="deleteCurrent"
             >删除</el-button
           >
+          <ExtensionSlot
+            slot-id="character.detail.action"
+            :context="characterExtensionContext"
+            fallback="none"
+            layout="inline"
+            surface-role="header"
+          />
         </div>
         <el-tabs
           :model-value="activeTab"
@@ -74,22 +94,16 @@ SPDX-License-Identifier: AGPL-3.0-only
               :key="`timeline-${selectedId}`"
             />
           </el-tab-pane>
-          <el-tab-pane label="主动消息" name="proactive">
-            <ProactiveRulesView
-              v-if="activeTab === 'proactive'"
-              :key="`pro-${selectedId}`"
-            />
-          </el-tab-pane>
-          <el-tab-pane label="调试" name="debug">
-            <CompanionDebugView
-              v-if="activeTab === 'debug'"
-              :key="`dbg-${selectedId}`"
-            />
-          </el-tab-pane>
-          <el-tab-pane label="心理状态" name="psyche">
-            <CharacterPsycheView
-              v-if="activeTab === 'psyche'"
-              :key="`psyche-${selectedId}`"
+          <el-tab-pane
+            v-for="tab in characterExtensionTabs"
+            :key="tab.contributionId"
+            :label="tab.title"
+            :name="tab.entryKey || tab.contributionId"
+          >
+            <ExtensionContributionRenderer
+              :contribution="tab"
+              :context="characterExtensionContext"
+              slot-id="character.detail.tab"
             />
           </el-tab-pane>
         </el-tabs>
@@ -147,13 +161,63 @@ SPDX-License-Identifier: AGPL-3.0-only
         <el-form-item label="性格"
           ><el-input v-model="form.personality" type="textarea" :rows="3"
         /></el-form-item>
-        <el-form-item label="提示词"
-          ><el-input v-model="form.characterBase" type="textarea" :rows="4"
-        /></el-form-item>
+        <el-form-item label="身份设定">
+          <el-input v-model="form.identity" type="textarea" :rows="2" />
+        </el-form-item>
+        <el-form-item label="说话风格">
+          <el-input v-model="form.speakingStyle" type="textarea" :rows="2" />
+        </el-form-item>
+        <el-form-item label="关系风格">
+          <el-input v-model="form.relationshipStyle" type="textarea" :rows="2" />
+        </el-form-item>
+        <el-form-item label="提示词">
+          <el-input v-model="form.characterBase" type="textarea" :rows="4" />
+        </el-form-item>
+        <el-form-item label="边界规则">
+          <el-input v-model="form.boundaryRules" type="textarea" :rows="3" />
+        </el-form-item>
+        <el-form-item label="基础 Prompt">
+          <el-input v-model="form.basePrompt" type="textarea" :rows="3" />
+        </el-form-item>
+
+        <el-divider content-position="left">高级配置</el-divider>
+        <el-form-item label="性格 JSON">
+          <el-input v-model="form.personalityConfig" type="textarea" :rows="4" placeholder='{"openness": 50}' />
+        </el-form-item>
+        <el-form-item label="聊天风格">
+          <el-input v-model="form.chatStyleConfig" type="textarea" :rows="4" placeholder="JSON 对象" />
+        </el-form-item>
+        <el-form-item label="场景规则">
+          <el-input v-model="form.sceneRules" type="textarea" :rows="4" placeholder="JSON 对象" />
+        </el-form-item>
 
         <el-divider content-position="left">语音配置</el-divider>
 
-        <el-form-item label="音色">
+        <el-form-item label="TTS 配置">
+          <el-select
+            v-model="form.voiceConfigId"
+            clearable
+            placeholder="跟随当前全局配置"
+            style="width: 100%"
+          >
+            <el-option label="跟随当前全局配置" value="" />
+            <el-option
+              v-for="cfg in voiceConfigs"
+              :key="cfg.id"
+              :label="cfg.isActive ? `${cfg.name}（当前默认）` : cfg.name"
+              :value="String(cfg.id)"
+            />
+          </el-select>
+        </el-form-item>
+
+        <el-form-item label="音色模式">
+          <el-radio-group v-model="form.voiceMode">
+            <el-radio value="preset">预设音色</el-radio>
+            <el-radio value="clone">复刻音色</el-radio>
+          </el-radio-group>
+        </el-form-item>
+
+        <el-form-item v-if="form.voiceMode === 'preset'" label="音色">
           <el-select
             v-model="form.voiceType"
             style="width: 100%"
@@ -169,6 +233,27 @@ SPDX-License-Identifier: AGPL-3.0-only
             />
           </el-select>
         </el-form-item>
+
+        <el-form-item v-else label="复刻音色">
+          <el-select
+            v-model="form.customVoiceId"
+            filterable
+            clearable
+            placeholder="选择已复刻音色"
+            style="width: 100%"
+          >
+            <el-option
+              v-for="v in clonedVoices"
+              :key="v.speakerId"
+              :label="`${v.name} · ${v.speakerId}`"
+              :value="v.speakerId"
+            />
+          </el-select>
+          <div v-if="!clonedVoices.length" class="voice-inline-hint">
+            暂无复刻音色。请先在角色语音页或语音模型配置页完成声音复刻。
+          </div>
+        </el-form-item>
+
         <el-form-item label="语速">
           <el-slider
             v-model="form.voiceSpeed"
@@ -183,18 +268,50 @@ SPDX-License-Identifier: AGPL-3.0-only
         <el-form-item label="音调">
           <el-slider
             v-model="form.voicePitch"
-            :min="-12"
-            :max="12"
-            :step="1"
+            :min="0.5"
+            :max="2.0"
+            :step="0.05"
             show-input
-            :format-tooltip="(v: number) => (v > 0 ? '+' : '') + v + '半音'"
+            :format-tooltip="(v: number) => v.toFixed(2) + 'x'"
+            style="width: 70%"
+          />
+        </el-form-item>
+        <el-form-item label="音量">
+          <el-slider
+            v-model="form.voiceVolume"
+            :min="0.5"
+            :max="2.0"
+            :step="0.1"
+            show-input
+            style="width: 70%"
+          />
+        </el-form-item>
+        <el-form-item label="情感">
+          <el-select
+            v-model="form.emotion"
+            clearable
+            placeholder="默认"
+            :disabled="form.voiceMode !== 'preset' || !currentVoiceSupportsEmotion"
+            style="width: 240px"
+          >
+            <el-option v-for="item in emotionOptions" :key="item.value" :label="item.label" :value="item.value" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="情感强度" v-if="form.emotion">
+          <el-slider v-model="form.emotionScale" :min="1" :max="5" :step="1" style="width: 70%" />
+        </el-form-item>
+        <el-form-item label="句尾静音">
+          <el-slider
+            v-model="form.silenceDuration"
+            :min="0"
+            :max="5000"
+            :step="100"
+            show-input
             style="width: 70%"
           />
         </el-form-item>
         <el-form-item label="试听">
-          <el-button size="small" @click="testVoice" :loading="testingVoice"
-            >试听</el-button
-          >
+          <el-button size="small" @click="testVoice" :loading="testingVoice">试听当前表单参数</el-button>
           <audio
             v-if="testAudioUrl"
             :src="testAudioUrl"
@@ -202,33 +319,6 @@ SPDX-License-Identifier: AGPL-3.0-only
             autoplay
             style="width: 260px; margin-left: 10px; height: 30px"
           />
-        </el-form-item>
-
-        <el-divider content-position="left">声音复刻</el-divider>
-
-        <el-form-item label="复刻音色ID">
-          <el-input
-            v-model="form.customVoiceId"
-            placeholder="输入音色ID，如 S_xxxxxxxx"
-            style="width: 240px"
-            clearable
-          />
-          <span
-            style="
-              font-size: 11px;
-              color: var(--ac-color-text-muted);
-              margin-left: 8px;
-            "
-            >在火山控制台训练后填入</span
-          >
-        </el-form-item>
-        <el-form-item label="试听" v-if="form.customVoiceId">
-          <el-button
-            size="small"
-            @click="previewClone"
-            :loading="previewCloneLoading"
-            >试听</el-button
-          >
         </el-form-item>
       </el-form>
       <template #footer>
@@ -238,27 +328,70 @@ SPDX-License-Identifier: AGPL-3.0-only
         >
       </template>
     </el-dialog>
+
+    <TemplatePickerDialog
+      v-model="showTemplateDialog"
+      :templates="templates"
+      :loading="templateLoading"
+      @select="createFromTemplate"
+    />
+
+    <ImportPackDialog
+      v-model="showImportDialog"
+      v-model:pack-name="importPackName"
+      v-model:confirm-text="importConfirmText"
+      :preview="importPreview"
+      :previewing="importPreviewing"
+      :importing="importing"
+      :history="packHistory"
+      @preview="previewImport"
+      @cancel-preview="cancelImportPreview"
+      @confirm="confirmImportAndReload"
+      @file-selected="setSelectedFile"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, watch, provide } from "vue";
-import { Plus } from "@element-plus/icons-vue";
 import { useRouter, useRoute } from "vue-router";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { apiClient } from "@/composables/useApi";
 import {
   AiCharacterSettingsView,
   CharacterVoiceView,
-  ProactiveRulesView,
-  CompanionDebugView,
 } from "../../ui-index";
-import CharacterPsycheView from "./CharacterPsycheView.vue";
 import MemoryManagerView from "@/views/memory-manager/MemoryManagerView.vue";
 import MemoryTimeline from "@/views/memory-timeline/MemoryTimeline.vue";
+import ImportPackDialog from "@/views/character-config/components/ImportPackDialog.vue";
+import TemplatePickerDialog from "@/views/character-config/components/TemplatePickerDialog.vue";
+import ExtensionSlot from "@/components/extension/ExtensionSlot.vue";
+import ExtensionContributionRenderer from "@/components/extension/ExtensionContributionRenderer.vue";
+import type { TemplateItem } from "@/views/character-config/composables/types";
+import { normalizeVoicePitchRatio } from "@/utils/voicePitch";
+import { useCharacterImportExport } from "@/views/character-config/composables/useCharacterImportExport";
+import { useCharacterExtensionTabs } from "./composables/useCharacterExtensionTabs";
 
 const router = useRouter();
 const route = useRoute();
+const selectedId = ref<string | null>(null);
+const selectedChar = ref<any>(null);
+const {
+  exportingPack,
+  showImportDialog,
+  importPackName,
+  importPreview,
+  importPreviewing,
+  importConfirmText,
+  importing,
+  packHistory,
+  exportPack,
+  previewImport,
+  confirmImport,
+  loadPackHistory,
+  cancelImportPreview,
+  setSelectedFile,
+} = useCharacterImportExport();
 
 const currentCharacterId = computed(() => selectedId.value);
 provide("currentCharacterId", currentCharacterId);
@@ -268,11 +401,42 @@ function goToChatLogs() {
   router.push({ path: "/logs", query: { characterId: selectedId.value } });
 }
 
+async function exportCurrentCharacter() {
+  if (!selectedId.value) return;
+  await exportPack(selectedId.value, selectedChar.value?.name || "character");
+}
+
+async function confirmImportAndReload() {
+  const result = await confirmImport();
+  if (!result) return;
+  await loadCharacters();
+  const importedId = String(
+    result?.characterId || result?.id || result?.character?.id || "",
+  );
+  const imported = importedId
+    ? characters.value.find((item: any) => String(item.id) === importedId)
+    : characters.value.at(-1);
+  if (imported) selectChar(imported);
+}
+
 const characters = ref<any[]>([]);
+const templates = ref<TemplateItem[]>([]);
+const showTemplateDialog = ref(false);
+const templateLoading = ref(false);
 const showDialog = ref(false);
 const editingId = ref<string | null>(null);
 const saving = ref(false);
 const voicePresets = ref<any[]>([]);
+const voiceConfigs = ref<any[]>([]);
+const clonedVoices = ref<any[]>([]);
+const emotionOptions = [
+  { value: "happy", label: "开心" },
+  { value: "sad", label: "悲伤" },
+  { value: "angry", label: "愤怒" },
+  { value: "fearful", label: "恐惧" },
+  { value: "surprised", label: "惊讶" },
+  { value: "neutral", label: "中性" },
+];
 const avatarInputRef = ref<HTMLInputElement>();
 
 function triggerAvatarUpload() {
@@ -301,17 +465,26 @@ const currentVoiceSupportsEmotion = computed(() => {
   const v = voicePresets.value.find((p: any) => p.name === form.voiceType);
   return v?.supportsEmotion ?? false;
 });
-const globalApiKey = ref("");
 
 const form = reactive({
   name: "",
   description: "",
   personality: "",
   avatar: "",
+  identity: "",
+  speakingStyle: "",
+  relationshipStyle: "",
   characterBase: "",
+  boundaryRules: "",
+  basePrompt: "",
+  personalityConfig: "{}",
+  chatStyleConfig: "{}",
+  sceneRules: "{}",
+  voiceMode: "preset",
+  voiceConfigId: "",
   voiceType: "zh_female_vv_uranus_bigtts",
   voiceSpeed: 1.0,
-  voicePitch: 0,
+  voicePitch: 1.0,
   voiceVolume: 1.0,
   customVoiceId: "",
   emotion: "",
@@ -321,29 +494,28 @@ const form = reactive({
 
 const testingVoice = ref(false);
 const testAudioUrl = ref("");
-const cloneFile = ref<File | null>(null);
-const cloneName = ref("");
-const cloneLoading = ref(false);
-const cloneResult = ref("");
-const previewCloneLoading = ref(false);
-
-const selectedId = ref<string | null>(null);
-const selectedChar = ref<any>(null);
 
 const activeTab = computed(() => {
   const p = route.path;
   if (p.endsWith("/voice")) return "voice";
   if (p.endsWith("/memory")) return "memory";
   if (p.endsWith("/timeline")) return "timeline";
-  if (p.endsWith("/proactive")) return "proactive";
-  if (p.endsWith("/debug")) return "debug";
+  if (p.endsWith("/lifestyle")) return "lifestyle";
   if (p.endsWith("/psyche")) return "psyche";
   return "life-rules";
 });
 
+const characterExtensionContext = computed(() => ({
+  characterId: selectedId.value,
+  characterName: selectedChar.value?.name ?? "",
+  activeTab: activeTab.value,
+  surface: "character-detail",
+}));
+const { tabs: characterExtensionTabs } = useCharacterExtensionTabs(characterExtensionContext);
+
 onMounted(async () => {
+  await Promise.allSettled([loadPackHistory(), loadTemplates()]);
   await loadVoices();
-  await loadGlobalApiKey();
   await loadCharacters();
   const id = route.params.id as string;
   if (id) {
@@ -364,24 +536,64 @@ watch(
   },
 );
 
-async function loadVoices() {
+
+async function loadTemplates() {
+  templateLoading.value = true;
   try {
-    voicePresets.value = await apiClient
-      .get("/api/tts/voices")
-      .then((r) => (Array.isArray(r.data) ? r.data : []));
+    const r = await apiClient.get("/api/character-templates");
+    const data = r.data?.data || r.data || [];
+    templates.value = Array.isArray(data) ? data : [];
   } catch {
-    voicePresets.value = [];
+    templates.value = [];
+  } finally {
+    templateLoading.value = false;
   }
 }
 
-async function loadGlobalApiKey() {
+async function openTemplates() {
+  if (!templates.value.length) await loadTemplates();
+  showTemplateDialog.value = true;
+}
+
+async function createFromTemplate(tpl: TemplateItem) {
   try {
-    const configs = await apiClient
-      .get("/api/tts/configs")
-      .then((r) => (Array.isArray(r.data) ? r.data : []));
-    const active = configs.find((c: any) => c.isActive);
-    if (active) globalApiKey.value = active.apiKey || "";
-  } catch {}
+    const r = await apiClient.post(`/api/character-templates/${tpl.id}/create-character`, { name: tpl.name });
+    const created = r.data?.data || r.data;
+    showTemplateDialog.value = false;
+    await loadCharacters();
+    const id = String(created?.id || created?.characterId || "");
+    const target = characters.value.find((c: any) => String(c.id) === id) || created;
+    if (target?.id) selectChar(target);
+    ElMessage.success("已从模板创建角色");
+  } catch (err: any) {
+    ElMessage.error(err?.message || "从模板创建失败");
+  }
+}
+
+async function loadVoices() {
+  const [presetsResult, configsResult, clonesResult] = await Promise.allSettled([
+    apiClient.get("/api/tts/voices"),
+    apiClient.get("/api/tts/config-summaries"),
+    apiClient.get("/api/tts/voice-clones"),
+  ]);
+  if (presetsResult.status === "fulfilled") {
+    const data = presetsResult.value.data?.data || presetsResult.value.data;
+    voicePresets.value = Array.isArray(data) ? data : [];
+  } else {
+    voicePresets.value = [];
+  }
+  if (configsResult.status === "fulfilled") {
+    const data = configsResult.value.data?.data || configsResult.value.data;
+    voiceConfigs.value = Array.isArray(data) ? data : [];
+  } else {
+    voiceConfigs.value = [];
+  }
+  if (clonesResult.status === "fulfilled") {
+    const data = clonesResult.value.data?.data || clonesResult.value.data;
+    clonedVoices.value = Array.isArray(data) ? data : [];
+  } else {
+    clonedVoices.value = [];
+  }
 }
 
 async function loadCharacters() {
@@ -407,17 +619,25 @@ function openCreate() {
   form.description = "";
   form.personality = "";
   form.avatar = "";
+  form.identity = "";
+  form.speakingStyle = "";
+  form.relationshipStyle = "";
+  form.characterBase = "";
+  form.boundaryRules = "";
+  form.basePrompt = "";
+  form.personalityConfig = "{}";
+  form.chatStyleConfig = "{}";
+  form.sceneRules = "{}";
+  form.voiceMode = "preset";
+  form.voiceConfigId = "";
   form.voiceType = "zh_female_vv_uranus_bigtts";
   form.voiceSpeed = 1.0;
-  form.voicePitch = 0;
+  form.voicePitch = 1.0;
   form.voiceVolume = 1.0;
   form.customVoiceId = "";
   form.emotion = "";
   form.emotionScale = 0;
   form.silenceDuration = 0;
-  cloneFile.value = null;
-  cloneName.value = "";
-  cloneResult.value = "";
   showDialog.value = true;
 }
 
@@ -428,19 +648,79 @@ function editCurrent() {
   form.description = selectedChar.value.description || "";
   form.avatar = selectedChar.value.avatar || "";
   form.personality = selectedChar.value.personality || "";
+  form.identity = selectedChar.value.identity || "";
+  form.speakingStyle = selectedChar.value.speakingStyle || "";
+  form.relationshipStyle = selectedChar.value.relationshipStyle || "";
   form.characterBase = selectedChar.value.characterBase || "";
+  form.boundaryRules = selectedChar.value.boundaryRules || "";
+  form.basePrompt = selectedChar.value.basePrompt || "";
+  form.personalityConfig = prettyJson(selectedChar.value.personalityConfig);
+  form.chatStyleConfig = prettyJson(selectedChar.value.chatStyleConfig);
+  form.sceneRules = prettyJson(selectedChar.value.sceneRules);
+  form.voiceMode = selectedChar.value.voiceMode || (selectedChar.value.customVoiceId ? "clone" : "preset");
+  form.voiceConfigId = selectedChar.value.voiceConfigId ? String(selectedChar.value.voiceConfigId) : "";
   form.voiceType = selectedChar.value.voiceType || "zh_female_vv_uranus_bigtts";
   form.voiceSpeed = selectedChar.value.voiceSpeed ?? 1.0;
-  form.voicePitch = selectedChar.value.voicePitch ?? 0;
+  form.voicePitch = normalizeVoicePitchRatio(selectedChar.value.voicePitch);
   form.voiceVolume = selectedChar.value.voiceVolume ?? 1.0;
   form.customVoiceId = selectedChar.value.customVoiceId || "";
   form.emotion = selectedChar.value.emotion || "";
   form.emotionScale = selectedChar.value.emotionScale ?? 0;
   form.silenceDuration = selectedChar.value.silenceDuration ?? 0;
-  cloneFile.value = null;
-  cloneName.value = "";
-  cloneResult.value = "";
   showDialog.value = true;
+}
+
+
+function prettyJson(value: unknown): string {
+  if (value == null || value === "") return "{}";
+  try {
+    const parsed = typeof value === "string" ? JSON.parse(value) : value;
+    return JSON.stringify(parsed ?? {}, null, 2);
+  } catch {
+    return String(value);
+  }
+}
+
+function parseJsonObject(value: string, label: string): Record<string, unknown> {
+  try {
+    const parsed = JSON.parse(value || "{}");
+    if (!parsed || Array.isArray(parsed) || typeof parsed !== "object") {
+      throw new Error(`${label} 必须是 JSON 对象`);
+    }
+    return parsed as Record<string, unknown>;
+  } catch (err: any) {
+    throw new Error(err?.message?.includes(label) ? err.message : `${label} JSON 格式错误`);
+  }
+}
+
+function copyCurrentCharacter() {
+  if (!selectedChar.value) return;
+  const source = selectedChar.value;
+  openCreate();
+  form.name = `${source.name || "角色"} (副本)`;
+  form.avatar = source.avatar || "";
+  form.description = source.description || "";
+  form.identity = source.identity || "";
+  form.personality = source.personality || "";
+  form.speakingStyle = source.speakingStyle || "";
+  form.relationshipStyle = source.relationshipStyle || "";
+  form.characterBase = source.characterBase || "";
+  form.boundaryRules = source.boundaryRules || "";
+  form.basePrompt = source.basePrompt || "";
+  form.personalityConfig = prettyJson(source.personalityConfig);
+  form.chatStyleConfig = prettyJson(source.chatStyleConfig);
+  form.sceneRules = prettyJson(source.sceneRules);
+  form.voiceMode = source.voiceMode || (source.customVoiceId ? "clone" : "preset");
+  form.voiceConfigId = source.voiceConfigId ? String(source.voiceConfigId) : "";
+  form.voiceType = source.voiceType || "zh_female_vv_uranus_bigtts";
+  form.voiceSpeed = source.voiceSpeed ?? 1.0;
+  form.voicePitch = normalizeVoicePitchRatio(source.voicePitch);
+  form.voiceVolume = source.voiceVolume ?? 1.0;
+  form.customVoiceId = source.customVoiceId || "";
+  form.emotion = source.emotion || "";
+  form.emotionScale = source.emotionScale ?? 0;
+  form.silenceDuration = source.silenceDuration ?? 0;
+  ElMessage.success("已复制角色配置，请保存为新角色");
 }
 
 function onVoiceTypeChange() {
@@ -458,129 +738,70 @@ async function testVoice() {
   testingVoice.value = true;
   testAudioUrl.value = "";
   try {
-    const res = await fetch("/api/tts/synthesize", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        voiceType: form.voiceType,
-        text: "你好，我是你的AI伙伴",
-        speedRatio: form.voiceSpeed,
-        pitchRatio: form.voicePitch,
-        volumeRatio: form.voiceVolume,
-        emotion: form.emotion || undefined,
-        emotionScale: form.emotionScale || undefined,
-        silenceDuration: form.silenceDuration || undefined,
-      }),
-    });
-    const json = await res.json();
-    testAudioUrl.value = json?.data?.audioUrl || json?.audioUrl || "";
-  } catch {
-  } finally {
-    testingVoice.value = false;
-  }
-}
-
-async function ensureTtsConfig() {
-  if (!globalApiKey.value) return;
-  const configs = await apiClient
-    .get("/api/tts/configs")
-    .then((r) => (Array.isArray(r.data) ? r.data : []));
-  const existing = configs.find((c: any) => c.isActive);
-  if (existing) {
-    if (!existing.hasApiKey)
-      await apiClient.put(`/api/tts/configs/${existing.id}`, {
-        apiKey: globalApiKey.value,
-      });
-  } else {
-    await apiClient.post("/api/tts/configs", {
-      name: "默认配置",
-      apiKey: globalApiKey.value,
-      voiceType: form.voiceType,
-      isActive: 1,
-    });
-  }
-}
-
-async function submitClone() {
-  if (!cloneFile.value || !cloneName.value.trim()) return;
-  if (!globalApiKey.value) {
-    ElMessage.warning("请先设置API Key");
-    return;
-  }
-  cloneLoading.value = true;
-  cloneResult.value = "";
-  try {
-    const fd = new FormData();
-    fd.append("audio", cloneFile.value);
-    fd.append("name", cloneName.value.trim());
-    fd.append("language", "cn");
-
-    const url =
-      "/api/tts/voice-clone?apiKey=" + encodeURIComponent(globalApiKey.value);
-    const resp = await fetch(url, {
-      method: "POST",
-      headers: {},
-      body: fd,
-    });
-    const json = await resp.json();
-    if (json.code !== 200) {
-      ElMessage.error(json.message || "复刻失败");
+    const payload = form.voiceMode === "clone"
+      ? { speakerId: form.customVoiceId, text: "你好，我是你的AI伙伴" }
+      : {
+          voiceConfigId: form.voiceConfigId || "",
+          voiceType: form.voiceType,
+          text: "你好，我是你的AI伙伴",
+          speed: form.voiceSpeed,
+          pitch: normalizeVoicePitchRatio(form.voicePitch),
+          volume: form.voiceVolume,
+          emotion: form.emotion || "",
+          emotionScale: form.emotionScale || 0,
+          silenceDuration: form.silenceDuration || 0,
+        };
+    if (form.voiceMode === "clone" && !form.customVoiceId) {
+      ElMessage.warning("请先选择复刻音色");
       return;
     }
-    const speakerId = json.data?.speakerId || "";
-    form.customVoiceId = speakerId;
-    cloneResult.value = "复刻成功: " + speakerId;
-    ElMessage.success("声音复刻成功");
-  } catch (err: any) {
-    ElMessage.error(err?.message || "复刻失败");
-  } finally {
-    cloneLoading.value = false;
-  }
-}
-
-async function previewClone() {
-  if (!form.customVoiceId) return;
-  previewCloneLoading.value = true;
-  testAudioUrl.value = "";
-  try {
-    const configs = await apiClient
-      .get("/api/tts/configs")
-      .then((r) => (Array.isArray(r.data) ? r.data : []));
-    const cfg = configs.find((c: any) => c.isActive) || configs[0];
-    if (!cfg) {
-      ElMessage.warning("未找到音色配置");
-      return;
-    }
-    await apiClient.put(`/api/tts/configs/${cfg.id}`, {
-      voiceType: form.customVoiceId,
-    });
-    const res = await apiClient.post("/api/tts/synthesize", {
-      speakerId: form.customVoiceId,
-      text: "复刻音色试听",
-    });
-    testAudioUrl.value =
-      (res as any)?.data?.audioUrl || (res as any)?.audioUrl || "";
+    const res = await apiClient.post(
+      form.voiceMode === "clone" ? "/api/tts/synthesize" : "/api/tts/preview",
+      payload,
+    );
+    const json: any = res.data;
+    testAudioUrl.value = json?.audioUrl || json?.data?.audioUrl || "";
+    if (!testAudioUrl.value) ElMessage.warning("未获取到试听音频");
   } catch (err: any) {
     ElMessage.error(err?.message || "试听失败");
   } finally {
-    previewCloneLoading.value = false;
+    testingVoice.value = false;
   }
 }
 
 async function saveCharacter() {
   saving.value = true;
   try {
+    if (!form.name.trim()) {
+      ElMessage.warning("请输入角色名称");
+      return;
+    }
+    if (form.voiceMode === "clone" && !form.customVoiceId.trim()) {
+      ElMessage.warning("请选择复刻音色");
+      return;
+    }
+    const personalityConfig = parseJsonObject(form.personalityConfig, "性格配置");
+    parseJsonObject(form.chatStyleConfig, "聊天风格配置");
+    parseJsonObject(form.sceneRules, "场景规则");
     const payload: any = {
       name: form.name,
       avatar: form.avatar,
       description: form.description,
       personality: form.personality,
+      identity: form.identity,
+      speakingStyle: form.speakingStyle,
+      relationshipStyle: form.relationshipStyle,
       characterBase: form.characterBase,
+      boundaryRules: form.boundaryRules,
+      basePrompt: form.basePrompt,
+      personalityConfig,
+      chatStyleConfig: form.chatStyleConfig || "{}",
+      sceneRules: form.sceneRules || "{}",
+      voiceMode: form.voiceMode,
+      voiceConfigId: form.voiceConfigId || "",
       voiceType: form.voiceType,
       voiceSpeed: form.voiceSpeed,
-      voicePitch: form.voicePitch,
+      voicePitch: normalizeVoicePitchRatio(form.voicePitch),
       voiceVolume: form.voiceVolume,
       customVoiceId: form.customVoiceId,
       emotion: form.emotion || "",
@@ -610,8 +831,8 @@ async function saveCharacter() {
         },
       }),
     );
-  } catch {
-    ElMessage.error("保存失败");
+  } catch (err: any) {
+    ElMessage.error(err?.message || "保存失败");
   } finally {
     saving.value = false;
   }
@@ -685,9 +906,22 @@ async function deleteCurrent() {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
   padding: 12px;
   border-bottom: 1px solid var(--el-border-color-lighter);
 }
+.sidebar-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  width: 100%;
+}
+.sidebar-actions :deep(.el-button + .el-button) {
+  margin-left: 0;
+}
+
 .sidebar-header h3 {
   font-size: 15px;
   font-weight: 600;
@@ -734,5 +968,11 @@ async function deleteCurrent() {
   font-weight: 600;
   margin: 0;
   flex: 1;
+}
+
+.voice-inline-hint {
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--ac-color-text-muted);
 }
 </style>

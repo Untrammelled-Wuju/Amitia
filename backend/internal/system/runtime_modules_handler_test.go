@@ -9,6 +9,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
+	"github.com/u-ai/backend/config"
 	"github.com/u-ai/backend/pkg/app"
 	"gorm.io/gorm"
 )
@@ -26,6 +27,9 @@ func newRuntimeModulesTestRouter(t *testing.T) *gin.Engine {
 	t.Cleanup(func() {
 		sqlDB.Close()
 	})
+	originalCfg := config.AppCfg
+	config.AppCfg = &config.Config{Security: config.SecurityRuntimeConfig{Mode: "local_single_user"}}
+	t.Cleanup(func() { config.AppCfg = originalCfg })
 
 	gin.SetMode(gin.TestMode)
 	router := gin.New()

@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
+	"strings"
 	"time"
 
 	"gorm.io/gorm"
@@ -39,7 +40,7 @@ type OutputLeaseModel struct {
 	ID            string `gorm:"primaryKey;column:id"`
 	InteractionID string `gorm:"column:interaction_id;index"`
 	CharacterID   string `gorm:"column:character_id;index"`
-	UserID        string `gorm:"column:user_id"`
+	SpaceID       string `gorm:"column:space_id"`
 	Channel       string `gorm:"column:channel"`
 	OwnerToken    string `gorm:"column:owner_token"`
 	Generation    int    `gorm:"column:generation"`
@@ -159,11 +160,11 @@ func (s *SQLiteDeliveryStore) CreateLease(lease OutputLease) error {
 	return s.db.Create(&model).Error
 }
 
-func (s *SQLiteDeliveryStore) GetActiveLease(characterID, userID, channel string) (*OutputLease, error) {
+func (s *SQLiteDeliveryStore) GetActiveLease(characterID, spaceID, channel string) (*OutputLease, error) {
 	var model OutputLeaseModel
 	now := time.Now().UTC().Format("2006-01-02 15:04:05")
-	err := s.db.Where("character_id = ? AND user_id = ? AND channel = ? AND status = ? AND expires_at > ?",
-		characterID, userID, channel, "active", now).Order("acquired_at DESC").Take(&model).Error
+	err := s.db.Where("character_id = ? AND space_id = ? AND channel = ? AND status = ? AND expires_at > ?",
+		characterID, spaceID, channel, "active", now).Order("acquired_at DESC").Take(&model).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil
 	}
@@ -276,8 +277,7 @@ func (s *SQLiteDeliveryStore) MarkSent(id, leaseToken string) error {
 	if res.RowsAffected == 0 {
 		return gorm.ErrRecordNotFound
 	}
-	_ = s.db.Table("emote_send_records").Where("delivery_key = ?", id).Updates(map[string]interface{}{"status": "sent", "sent_at": now, "failure_reason": ""}).Error
-	_ = s.db.Table("messages").Where("id = (SELECT message_id FROM emote_send_records WHERE delivery_key = ?)", id).Updates(map[string]interface{}{"status": "sent", "emote_decision_status": "sent", "updated_at": now}).Error
+	s.updateMessageStatusForIntent(s.db, id, "sent", "")
 	return nil
 }
 
@@ -329,12 +329,29 @@ func (s *SQLiteDeliveryStore) MarkFailed(id, leaseToken, errMsg string) error {
 		if newStatus == DeliveryStatusFailed {
 			recordStatus = "failed"
 		}
-		_ = tx.Table("emote_send_records").Where("delivery_key = ?", id).Updates(map[string]interface{}{"status": recordStatus, "failure_reason": errMsg}).Error
-		if newStatus == DeliveryStatusFailed {
-			_ = tx.Table("messages").Where("id = (SELECT message_id FROM emote_send_records WHERE delivery_key = ?)", id).Updates(map[string]interface{}{"status": "failed", "emote_decision_status": "failed", "updated_at": nowStr}).Error
-		}
+		s.updateMessageStatusForIntent(tx, id, recordStatus, errMsg)
 		return nil
 	})
+}
+
+func (s *SQLiteDeliveryStore) updateMessageStatusForIntent(tx *gorm.DB, id, status, _ string) {
+	if tx == nil || strings.TrimSpace(id) == "" {
+		return
+	}
+	var intent DeliveryIntentModel
+	if err := tx.Select("response_group_id", "delivery_sequence").Where("id = ?", id).Take(&intent).Error; err != nil {
+		return
+	}
+	if strings.TrimSpace(intent.ResponseGroupID) == "" || intent.DeliverySequence <= 0 {
+		return
+	}
+	updates := map[string]interface{}{
+		"status":     status,
+		"updated_at": time.Now().UTC().Format("2006-01-02 15:04:05"),
+	}
+	_ = tx.Table("messages").
+		Where("response_group_id = ? AND delivery_sequence = ?", intent.ResponseGroupID, intent.DeliverySequence).
+		Updates(updates).Error
 }
 
 func (s *SQLiteDeliveryStore) ReleaseExpiredClaims() (int64, error) {
@@ -425,7 +442,7 @@ func leaseToModel(l *OutputLease) *OutputLeaseModel {
 		ID:            l.ID,
 		InteractionID: l.InteractionID,
 		CharacterID:   l.CharacterID,
-		UserID:        l.UserID,
+		SpaceID:       l.SpaceID,
 		Channel:       l.Channel,
 		OwnerToken:    l.OwnerToken,
 		Generation:    l.Generation,
@@ -448,7 +465,7 @@ func modelToLease(m *OutputLeaseModel) *OutputLease {
 		ID:            m.ID,
 		InteractionID: m.InteractionID,
 		CharacterID:   m.CharacterID,
-		UserID:        m.UserID,
+		SpaceID:       m.SpaceID,
 		Channel:       m.Channel,
 		OwnerToken:    m.OwnerToken,
 		Generation:    m.Generation,

@@ -47,7 +47,7 @@ func setupProcessMessageTest(t *testing.T, llm llmWithToolsFunc) (*gorm.DB, *ser
 	}).Error; err != nil {
 		t.Fatal(err)
 	}
-	if err := db.Create(&Conversation{ID: convID, CharacterID: charID, Title: "hello", Channel: "web", Source: "manual"}).Error; err != nil {
+	if err := db.Create(&Conversation{ID: convID, SpaceID: normalizeConversationOwner(""), CharacterID: charID, Title: "hello", Channel: "web", Source: "manual"}).Error; err != nil {
 		t.Fatal(err)
 	}
 	if err := db.Create(&ModelConfig{
@@ -98,7 +98,7 @@ func TestProcessMessageDoesNotCommitAssistantWhenGenerationFails(t *testing.T) {
 
 func TestProcessMessageCommitsAssistantAfterGenerationSucceeds(t *testing.T) {
 	db, svc, convID := setupProcessMessageTest(t, func(context.Context, *ModelConfig, []map[string]interface{}, []tool.Tool) (string, string, []map[string]interface{}, int, error) {
-		return "第一句\n第二句", "", nil, 12, nil
+		return "第一句[AMITIA_BR]第二句", "", nil, 12, nil
 	})
 	resp, err := svc.ProcessMessage(context.Background(), &ProcessMessageRequest{
 		CharacterID:    "char-process",
@@ -111,7 +111,7 @@ func TestProcessMessageCommitsAssistantAfterGenerationSucceeds(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if resp.Reply != "第一句\n第二句" || len(resp.MessageIDs) != 2 {
+	if resp.Reply != "第一句[AMITIA_BR]第二句" || len(resp.MessageIDs) != 2 {
 		t.Fatalf("unexpected response: %#v", resp)
 	}
 	if resp.Sequence == 0 {

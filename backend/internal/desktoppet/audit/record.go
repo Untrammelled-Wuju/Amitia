@@ -42,9 +42,9 @@ const (
 
 type ActorSnapshot struct {
 	ActorType     string   `json:"actorType"`
-	UserID        string   `json:"userId"`
+	SpaceID       string   `json:"spaceId"`
 	DeviceID      string   `json:"deviceId,omitempty"`
-	Roles         []string `json:"roles,omitempty"`
+	Capabilities  []string `json:"capabilities,omitempty"`
 	Permissions   []string `json:"permissions,omitempty"`
 	AuthMethod    string   `json:"authMethod"`
 	CorrelationID string   `json:"correlationId"`
@@ -69,10 +69,10 @@ func NewSnapshot(actor *auth.ActorContext) ActorSnapshot {
 		return ActorSnapshot{}
 	}
 	return ActorSnapshot{
-		ActorType:     string(actor.ActorType),
-		UserID:        string(actor.UserID),
+		ActorType:     string(actor.PrincipalType),
+		SpaceID:       string(actor.SpaceID),
 		DeviceID:      string(actor.DeviceID),
-		Roles:         actor.Roles,
+		Capabilities:  append([]string(nil), actor.Capabilities...),
 		Permissions:   actor.Permissions,
 		AuthMethod:    actor.AuthMethod,
 		CorrelationID: actor.CorrelationID,

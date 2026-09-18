@@ -31,7 +31,7 @@ const (
 )
 
 type ScopeResolveInput struct {
-	UserID         string
+	SpaceID        string
 	CharacterID    string
 	ConversationID string
 	Channel        string
@@ -43,7 +43,7 @@ type ScopeResolveInput struct {
 
 type ScopeBinding struct {
 	ID             string
-	UserID         string
+	SpaceID        string
 	CharacterID    string
 	ConversationID string
 	Channel        string
@@ -60,7 +60,7 @@ type ScopeResolution struct {
 }
 
 type ScopeBindingLookup interface {
-	FindScopeBindings(ctx context.Context, channel, peerID string) ([]ScopeBinding, error)
+	FindScopeBindings(ctx context.Context, spaceID, channel, peerID string) ([]ScopeBinding, error)
 }
 
 type DefaultCharacterProvider interface {
@@ -82,7 +82,7 @@ func NewScopeResolverWithDefaultChar(lookup ScopeBindingLookup, defaultCharProvi
 
 func (r ScopeResolver) Resolve(ctx context.Context, input ScopeResolveInput) (ScopeResolution, error) {
 	scope := InteractionScope{
-		UserID:         input.UserID,
+		SpaceID:        input.SpaceID,
 		CharacterID:    input.CharacterID,
 		ConversationID: input.ConversationID,
 		Channel:        input.Channel,
@@ -113,7 +113,7 @@ func (r ScopeResolver) Resolve(ctx context.Context, input ScopeResolveInput) (Sc
 		return ScopeResolution{Scope: scope, Source: normalizeResolutionSource(scope.Source), Confidence: ScopeConfidenceUnboundExplicit}, nil
 	}
 
-	bindings, err := r.lookup.FindScopeBindings(ctx, scope.Channel, scope.PeerID)
+	bindings, err := r.lookup.FindScopeBindings(ctx, scope.SpaceID, scope.Channel, scope.PeerID)
 	if err != nil {
 		return ScopeResolution{}, err
 	}
@@ -166,7 +166,7 @@ func (r ScopeResolver) Resolve(ctx context.Context, input ScopeResolveInput) (Sc
 
 func normalizeBinding(binding ScopeBinding) ScopeBinding {
 	binding.ID = normalizeScopeValue(binding.ID)
-	binding.UserID = normalizeScopeValue(binding.UserID)
+	binding.SpaceID = normalizeScopeValue(binding.SpaceID)
 	binding.CharacterID = normalizeScopeValue(binding.CharacterID)
 	binding.ConversationID = normalizeScopeValue(binding.ConversationID)
 	binding.Channel = strings.ToLower(normalizeScopeValue(binding.Channel))
@@ -177,7 +177,7 @@ func normalizeBinding(binding ScopeBinding) ScopeBinding {
 }
 
 func mergeScopeBinding(scope InteractionScope, binding ScopeBinding) (InteractionScope, error) {
-	if scope.UserID != "" && scope.UserID != DefaultUserID && binding.UserID != "" && scope.UserID != binding.UserID {
+	if scope.SpaceID != "" && binding.SpaceID != "" && scope.SpaceID != binding.SpaceID {
 		return InteractionScope{}, ErrScopeBindingConflict
 	}
 	if scope.CharacterID != "" && binding.CharacterID != "" && scope.CharacterID != binding.CharacterID {
@@ -186,8 +186,8 @@ func mergeScopeBinding(scope InteractionScope, binding ScopeBinding) (Interactio
 	if scope.ConversationID != "" && binding.ConversationID != "" && scope.ConversationID != binding.ConversationID {
 		return InteractionScope{}, ErrScopeBindingConflict
 	}
-	if scope.UserID == DefaultUserID && binding.UserID != "" {
-		scope.UserID = binding.UserID
+	if scope.SpaceID == "" && binding.SpaceID != "" {
+		scope.SpaceID = binding.SpaceID
 	}
 	if scope.CharacterID == "" {
 		scope.CharacterID = binding.CharacterID

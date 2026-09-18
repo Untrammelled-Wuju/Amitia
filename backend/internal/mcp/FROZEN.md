@@ -64,7 +64,7 @@
 4. **禁止新增平行 Registry**：不得新增第二套 MCP Tool Registry、第二套 MCP Server Registry、第二套权限中心、第二套执行器、第二套 Discovery 缓存。
 5. **禁止新增永久兼容层**：不得为了新功能增加新旧字段双写、新旧状态同步、新旧接口桥接、新旧 Registry 双注册、新旧权限双判定、新旧数据双存储。后续允许存在一次性迁移适配器，但必须可删除并有明确退出条件。
 6. **禁止增加旧 Plugin 能力**：不得继续扩展当前 MCP 系统的 Host 能力、Hook、Surface、事件、定时任务、动态加载方式、第三方入口。当前 MCP Runtime 只允许修复稳定性、安全性和迁移阻塞问题。
-7. **禁止让 `.amitiax` v1 承担新职责**：不得让旧 `.amitiax` 包通过 MCP 承担第三方运行时代码、JavaScript、WASM、UI 页面、Electron 扩展、Provider、后台服务、消息渲染器、桌面组件等新职责。这些能力必须在后续 `.amitiax` Manifest v2 中统一设计。
+7. **禁止让 `.amitiax` v1 承担新职责**：不得让旧 `.amitiax` 包通过 MCP 承担第三方运行时代码、JavaScript、WASM、UI 页面、Electron 扩展、Provider、后台服务、消息渲染器、桌面组件等新职责。这些能力必须在后续 `.amitiax` Manifest v1 中统一设计。
 8. **禁止前端继续增加分散入口**：不得新增独立 MCP 子系统入口、新的重复 MCP 管理页面、新的重复运行记录页面。旧页面只允许修复无法使用、数据错误和安全问题。
 
 ---

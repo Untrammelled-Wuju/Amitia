@@ -4,15 +4,21 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/u-ai/backend/internal/auth"
+	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
 	"github.com/u-ai/backend/internal/extension/kernel/host_api"
+	"github.com/u-ai/backend/internal/extension/kernel/permission"
 	"github.com/u-ai/backend/internal/extension/kernel/persistence/sqlite"
 	"github.com/u-ai/backend/internal/extension/kernel/runtime_supervisor"
+	"github.com/u-ai/backend/internal/extension/kernel/scope"
 	"github.com/u-ai/backend/internal/extension/kernel/ui_contribution"
 	"github.com/u-ai/backend/internal/extension/kernel/workflow"
+	"github.com/u-ai/backend/internal/runtimeidentity"
 )
 
 type UIActionExecContext struct {
@@ -25,6 +31,8 @@ type UIActionExecContext struct {
 	PermissionSnapshotID string
 	CharacterID          string
 	ConversationID       string
+	SpaceID              string
+	DeviceID             string
 	TraceID              string
 }
 
@@ -34,16 +42,27 @@ type UIActionExecutor struct {
 	runStore            workflow.RunStore
 	hostCommandRegistry *HostCommandRegistry
 	operationRepo       sqlite.OperationRepository
+	toolRegistry        *capability.ToolRegistry
+	scopeManager        scope.ScopeManager
+	deriveSnapshots     UIActionSnapshotDeriver
 }
 
-func NewUIActionExecutor(gateway *host_api.DefaultGateway, wfExecutor *workflow.WorkflowExecutor, runStore workflow.RunStore, hostCmdRegistry *HostCommandRegistry, opRepo sqlite.OperationRepository) *UIActionExecutor {
-	return &UIActionExecutor{
+type UIActionSnapshotDeriver func(ctx context.Context, scopeSnapshotID, permissionSnapshotID, targetExtensionID, targetModuleID string) (string, string, func(), error)
+
+func NewUIActionExecutor(gateway *host_api.DefaultGateway, wfExecutor *workflow.WorkflowExecutor, runStore workflow.RunStore, hostCmdRegistry *HostCommandRegistry, opRepo sqlite.OperationRepository, toolRegistry *capability.ToolRegistry, scopeManager scope.ScopeManager, deriver ...UIActionSnapshotDeriver) *UIActionExecutor {
+	executor := &UIActionExecutor{
 		hostAPIGateway:      gateway,
 		workflowExecutor:    wfExecutor,
 		runStore:            runStore,
 		hostCommandRegistry: hostCmdRegistry,
 		operationRepo:       opRepo,
+		toolRegistry:        toolRegistry,
+		scopeManager:        scopeManager,
 	}
+	if len(deriver) > 0 {
+		executor.deriveSnapshots = deriver[0]
+	}
+	return executor
 }
 
 func (e *UIActionExecutor) Execute(ctx context.Context, execCtx UIActionExecContext, action *ui_contribution.UIActionDefinition, input json.RawMessage) (json.RawMessage, error) {
@@ -79,24 +98,128 @@ func (e *UIActionExecutor) executeTool(ctx context.Context, execCtx UIActionExec
 	if toolID == "" {
 		toolID = action.ActionID
 	}
+	toolID = e.resolveToolID(ctx, execCtx.ExtensionID, toolID)
+	if err := e.ensureToolScope(ctx, execCtx.ExtensionID, toolID); err != nil {
+		return nil, err
+	}
+	if targetModule := e.resolveToolModule(ctx, execCtx.ExtensionID, toolID, execCtx.ModuleID); targetModule != "" && targetModule != execCtx.ModuleID {
+		if e.deriveSnapshots == nil {
+			return nil, fmt.Errorf("action %s requires a snapshot deriver for module %s", action.ActionID, targetModule)
+		}
+		scopeSnapshotID, permissionSnapshotID, cleanup, err := e.deriveSnapshots(ctx, execCtx.ScopeSnapshotID, execCtx.PermissionSnapshotID, execCtx.ExtensionID, targetModule)
+		if err != nil {
+			return nil, fmt.Errorf("derive execution snapshots for module %s: %w", targetModule, err)
+		}
+		if cleanup != nil {
+			defer cleanup()
+		}
+		execCtx.ScopeSnapshotID = scopeSnapshotID
+		execCtx.PermissionSnapshotID = permissionSnapshotID
+		execCtx.ModuleID = targetModule
+		identity.ModuleID = domain.ModuleID(targetModule)
+	}
+	toolInputPayload, err := normalizeUIActionInput(input)
+	if err != nil {
+		return nil, err
+	}
+	callID := fmt.Sprintf("ui-action-tool-%s-%s", execCtx.SessionID, uuid.NewString())
+	executionContext := uiActionExecutionContext(ctx, execCtx)
 	toolInput, _ := json.Marshal(map[string]any{
 		"toolId": toolID,
-		"input":  json.RawMessage(input),
+		"input":  toolInputPayload,
 	})
 	callReq := host_api.CallRequest{
-		CallID:               fmt.Sprintf("ui-action-tool-%s-%s", execCtx.SessionID, uuid.NewString()),
+		CallID:               callID,
 		RuntimeIdentity:      identity,
 		Method:               host_api.MethodToolExecute,
 		Version:              1,
 		Input:                toolInput,
 		ScopeSnapshotID:      execCtx.ScopeSnapshotID,
 		PermissionSnapshotID: execCtx.PermissionSnapshotID,
+		InvocationID:         callID,
+		ExecutionContext:     executionContext,
 	}
 	result := e.hostAPIGateway.Call(ctx, callReq)
 	if result.Error != nil {
+		log.Printf("[ui-action] gateway call failed: action=%s call=%s code=%s msg=%s", action.ActionID, callID, result.Error.Code, result.Error.Message)
 		return nil, fmt.Errorf("action %s failed: %s", action.ActionID, result.Error.Message)
 	}
 	return result.Output, nil
+}
+
+func (e *UIActionExecutor) resolveToolID(ctx context.Context, extensionID, toolID string) string {
+	if e.toolRegistry == nil || toolID == "" {
+		return toolID
+	}
+	if _, ok := e.toolRegistry.Get(ctx, toolID); ok {
+		return toolID
+	}
+	candidate := canonicalGameHostToolID(extensionID, toolID)
+	definition, ok := e.toolRegistry.Get(ctx, candidate)
+	if !ok || definition.ExtensionID != extensionID {
+		return toolID
+	}
+	return candidate
+}
+
+func (e *UIActionExecutor) ensureToolScope(ctx context.Context, extensionID, toolID string) error {
+	if e.scopeManager == nil || e.toolRegistry == nil || extensionID == "" || toolID == "" {
+		return nil
+	}
+	definition, ok := e.toolRegistry.Get(ctx, toolID)
+	if !ok || definition.ExtensionID != extensionID {
+		return nil
+	}
+	if err := ensureScopeBinding(ctx, e.scopeManager, scope.SubjectTool, toolID, scope.NewExtensionScope(extensionID)); err != nil {
+		return fmt.Errorf("bind tool scope %s: %w", toolID, err)
+	}
+	return nil
+}
+
+func (e *UIActionExecutor) resolveToolModule(ctx context.Context, extensionID, toolID, fallback string) string {
+	if e.toolRegistry == nil || extensionID == "" || toolID == "" {
+		return fallback
+	}
+	definition, ok := e.toolRegistry.Get(ctx, toolID)
+	if !ok || definition.ExtensionID != extensionID || definition.ModuleID == "" {
+		return fallback
+	}
+	return definition.ModuleID
+}
+
+func normalizeUIActionInput(input json.RawMessage) (json.RawMessage, error) {
+	if len(input) == 0 {
+		return json.RawMessage(`{}`), nil
+	}
+	var payload map[string]json.RawMessage
+	if err := json.Unmarshal(input, &payload); err != nil {
+		return nil, fmt.Errorf("tool action input invalid: %w", err)
+	}
+	return input, nil
+}
+
+func uiActionExecutionContext(ctx context.Context, execCtx UIActionExecContext) permission.PermissionExecutionContext {
+	actor, ok := auth.FromContext(ctx)
+	spaceID := runtimeidentity.ParseSpaceID(execCtx.SpaceID)
+	deviceID := runtimeidentity.ParseDeviceID(execCtx.DeviceID)
+	if ok && actor != nil && actor.SpaceID != "" {
+		spaceID = actor.SpaceID
+	}
+	if ok && actor != nil && actor.DeviceID != "" {
+		deviceID = actor.DeviceID
+	}
+	if spaceID == "" || deviceID == "" {
+		return permission.PermissionExecutionContext{}
+	}
+	return permission.PermissionExecutionContext{
+		Placement:   permission.ExecutionPlacementDevice,
+		SpaceID:     spaceID,
+		DeviceID:    deviceID,
+		RuntimeID:   runtimeidentity.ParseRuntimeID(execCtx.SessionID),
+		ExtensionID: execCtx.ExtensionID,
+		ModuleID:    execCtx.ModuleID,
+		Source:      "ui_action",
+	}
 }
 
 func (e *UIActionExecutor) executeWorkflow(ctx context.Context, execCtx UIActionExecContext, action *ui_contribution.UIActionDefinition, input json.RawMessage, identity runtime_supervisor.RuntimeIdentity) (json.RawMessage, error) {

@@ -254,7 +254,7 @@ func newMigrationServiceTestFixture(
 				ExtensionID: fakeLegacyExtensionID,
 				Version:     "1.0.0",
 				PackageBlob: []byte("amitiax-package-blob"),
-				UserID:      "user-1",
+				SpaceID:     "user-1",
 				ScopeType:   "global",
 			},
 		},
@@ -312,7 +312,7 @@ func TestMigrationServiceFreshCandidateCompletes(t *testing.T) {
 			ExtensionID: fakeLegacyExtensionID,
 			Version:     "1.0.0",
 			PackageBlob: []byte("amitiax-package-blob"),
-			UserID:      "user-1",
+			SpaceID:     "user-1",
 			ScopeType:   "global",
 		},
 	)
@@ -352,7 +352,7 @@ func TestMigrationServiceResumesVerifyingCheckpoint(t *testing.T) {
 			ExtensionID: fakeLegacyExtensionID,
 			Version:     "1.0.0",
 			PackageBlob: []byte("amitiax-package-blob"),
-			UserID:      "user-1",
+			SpaceID:     "user-1",
 			ScopeType:   "global",
 		},
 	)
@@ -392,7 +392,7 @@ func TestMigrationServiceResumesMigratingWithOperation(t *testing.T) {
 			ExtensionID: fakeLegacyExtensionID,
 			Version:     "1.0.0",
 			PackageBlob: []byte("amitiax-package-blob"),
-			UserID:      "user-1",
+			SpaceID:     "user-1",
 			ScopeType:   "global",
 		},
 	)
@@ -435,7 +435,7 @@ func TestMigrationServiceRepreviewsPreviewedCheckpoint(t *testing.T) {
 			ExtensionID: fakeLegacyExtensionID,
 			Version:     "1.0.0",
 			PackageBlob: []byte("amitiax-package-blob"),
-			UserID:      "user-1",
+			SpaceID:     "user-1",
 			ScopeType:   "global",
 		},
 	)
@@ -478,7 +478,7 @@ func TestMigrationServiceRejectsPreviewHashDrift(t *testing.T) {
 			ExtensionID: fakeLegacyExtensionID,
 			Version:     "1.0.0",
 			PackageBlob: []byte("amitiax-package-blob"),
-			UserID:      "user-1",
+			SpaceID:     "user-1",
 			ScopeType:   "global",
 		},
 	)
@@ -510,7 +510,7 @@ func TestMigrationServiceExistingInstallWithoutOperationRequiresManual(t *testin
 			ExtensionID: fakeLegacyExtensionID,
 			Version:     "1.0.0",
 			PackageBlob: []byte("amitiax-package-blob"),
-			UserID:      "user-1",
+			SpaceID:     "user-1",
 			ScopeType:   "global",
 		},
 	)
@@ -542,7 +542,7 @@ func TestMigrationServiceConcurrentLeaseFencing(t *testing.T) {
 			ExtensionID: fakeLegacyExtensionID,
 			Version:     "1.0.0",
 			PackageBlob: []byte("amitiax-package-blob"),
-			UserID:      "user-1",
+			SpaceID:     "user-1",
 			ScopeType:   "global",
 		},
 	)
@@ -572,7 +572,7 @@ func TestMigrationServiceNeverCompletesWithoutFinalGate(t *testing.T) {
 			ExtensionID: fakeLegacyExtensionID,
 			Version:     "1.0.0",
 			PackageBlob: []byte("amitiax-package-blob"),
-			UserID:      "user-1",
+			SpaceID:     "user-1",
 			ScopeType:   "global",
 		},
 	)

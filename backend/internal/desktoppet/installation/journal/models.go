@@ -33,7 +33,7 @@ type InstallationCommitJournal struct {
 
 	OperationID string
 
-	UserID    string
+	SpaceID   string
 	DeviceID  string
 	RuntimeID string
 
@@ -137,7 +137,7 @@ type InstallationSwitchJournal struct {
 
 	OperationID string
 
-	UserID    string
+	SpaceID   string
 	DeviceID  string
 	RuntimeID string
 

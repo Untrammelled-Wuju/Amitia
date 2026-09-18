@@ -23,16 +23,14 @@ describe("引导页模型配置保存", () => {
     expect(onboardingSource).not.toContain('apiType: "vision"');
   });
 
-  it("完成引导后调用公开完成接口并进入聊天页", () => {
-    expect(onboardingSource).toContain('post("/api/public/onboarding/complete"');
+  it("完成引导后调用已认证完成接口并进入聊天页", () => {
+    expect(onboardingSource).toContain('post("/api/onboarding/complete"');
     expect(onboardingSource).toContain('router.push("/chat")');
   });
 
-  it("存在账号但引导未完成时优先进入引导页", () => {
-    const loginGuardStart = routerSource.indexOf('if (to.path === "/login")');
-    const loginGuardEnd = routerSource.indexOf('if (to.path === "/onboarding")');
-    const loginGuardSource = routerSource.slice(loginGuardStart, loginGuardEnd);
-    expect(loginGuardSource).toContain('apiClient.get("/api/public/onboarding/status")');
-    expect(loginGuardSource).toContain('return next("/onboarding")');
+  it("产品路由不再包含账号登录入口", () => {
+    expect(routerSource).not.toContain('path: "/login"');
+    expect(routerSource).not.toContain("/api/public/auth/login");
+    expect(routerSource).toContain('return next("/onboarding")');
   });
 });

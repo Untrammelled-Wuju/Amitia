@@ -123,7 +123,7 @@ try {
             & "$repoRoot/scripts/audit/desktop_pet_forbidden_patterns.ps1" -Paths @("backend/internal/desktoppet", "backend/cmd/server")
             Assert-LastExitCode "desktop pet static audit"
             & node "$repoRoot/scripts/audit/verify-desktop-pet-runtime-singletrack.mjs"
-            Assert-LastExitCode "Runtime V2 single-track gate"
+            Assert-LastExitCode "Runtime V1 single-track gate"
         }
     }
 
@@ -170,7 +170,7 @@ try {
                 & pnpm run verify:pet-player-singleton
                 Assert-LastExitCode "desktop player singleton gate"
                 & pnpm run verify:desktop-pet-runtime-singletrack
-                Assert-LastExitCode "desktop Runtime V2 single-track gate"
+                Assert-LastExitCode "desktop Runtime V1 single-track gate"
             }
             finally {
                 Pop-Location

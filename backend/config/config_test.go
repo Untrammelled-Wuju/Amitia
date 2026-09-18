@@ -9,11 +9,9 @@ import (
 	"testing"
 )
 
-const testJWTSecret = "Test-JWT-Secret-Key-1234567890-Xyz"
-
 func TestProviderConfigDefaults(t *testing.T) {
 	dir := t.TempDir()
-	yaml := "jwt:\n  secret: \"" + testJWTSecret + "\"\n"
+	yaml := ""
 	configFile := filepath.Join(dir, "config.yml")
 	if err := os.WriteFile(configFile, []byte(yaml), 0644); err != nil {
 		t.Fatal(err)
@@ -52,23 +50,14 @@ func TestProviderConfigDefaults(t *testing.T) {
 		t.Error("Node binaryPath should be empty by default")
 	}
 
-	if !cfg.Components.PluginHost.Enabled {
-		t.Error("PluginHost should be enabled by default")
-	}
 	if !cfg.Components.TaskHost.Enabled {
 		t.Error("TaskHost should be enabled by default")
-	}
-	if !cfg.Components.Sidecars.Wechat.Enabled {
-		t.Error("Wechat sidecar should be enabled by default")
-	}
-	if !cfg.Components.Sidecars.QQ.Enabled {
-		t.Error("QQ sidecar should be enabled by default")
 	}
 }
 
 func TestLoadCanonicalProviderConfig(t *testing.T) {
 	dir := t.TempDir()
-	yaml := "jwt:\n  secret: \"" + testJWTSecret + "\"\nproviders:\n  scriptRuntime:\n    enabled: true\n    required: true\n    provider: \"custom.node-runtime\"\n    node:\n      binaryPath: \"/usr/bin/node\"\n      npmPath: \"/usr/bin/npm\"\n      npxPath: \"/usr/bin/npx\"\n      workDir: \"/tmp/node\"\n  vectorStore:\n    enabled: true\n    required: false\n    qdrant:\n      host: \"10.0.0.1\"\n      port: 6333\n      collectionName: \"embeddings\"\n      vectorDim: 768\n      limit: 20\n      collections:\n        test_col:\n          name: \"test_col\"\n          vectorDim: 768\n  graphStore:\n    enabled: false\n    required: false\n    surrealdb:\n      host: \"10.0.0.2\"\n      port: 9000\n      namespace: \"test\"\n      database: \"test_db\"\n      username: \"admin\"\n      password: \"secret\"\n      dataPath: \"/var/data/graph.db\"\n"
+	yaml := "providers:\n  scriptRuntime:\n    enabled: true\n    required: true\n    provider: \"custom.node-runtime\"\n    node:\n      binaryPath: \"/usr/bin/node\"\n      npmPath: \"/usr/bin/npm\"\n      npxPath: \"/usr/bin/npx\"\n      workDir: \"/tmp/node\"\n  vectorStore:\n    enabled: true\n    required: false\n    qdrant:\n      host: \"10.0.0.1\"\n      port: 6333\n      collectionName: \"embeddings\"\n      vectorDim: 768\n      limit: 20\n      collections:\n        test_col:\n          name: \"test_col\"\n          vectorDim: 768\n  graphStore:\n    enabled: false\n    required: false\n    surrealdb:\n      host: \"10.0.0.2\"\n      port: 9000\n      namespace: \"test\"\n      database: \"test_db\"\n      username: \"admin\"\n      password: \"secret\"\n      dataPath: \"/var/data/graph.db\"\n"
 	configFile := filepath.Join(dir, "config.yml")
 	if err := os.WriteFile(configFile, []byte(yaml), 0644); err != nil {
 		t.Fatal(err)
@@ -112,7 +101,7 @@ func TestLoadCanonicalProviderConfig(t *testing.T) {
 
 func TestLoadLegacyQdrantConfig(t *testing.T) {
 	dir := t.TempDir()
-	yaml := "jwt:\n  secret: \"" + testJWTSecret + "\"\nqdrant:\n  host: \"127.0.0.1\"\n  port: 9999\n  collectionName: \"legacy\"\n  vectorDim: 512\n  limit: 5\n"
+	yaml := "qdrant:\n  host: \"127.0.0.1\"\n  port: 9999\n  collectionName: \"legacy\"\n  vectorDim: 512\n  limit: 5\n"
 	configFile := filepath.Join(dir, "config.yml")
 	if err := os.WriteFile(configFile, []byte(yaml), 0644); err != nil {
 		t.Fatal(err)
@@ -136,7 +125,7 @@ func TestLoadLegacyQdrantConfig(t *testing.T) {
 
 func TestLoadLegacySurrealConfig(t *testing.T) {
 	dir := t.TempDir()
-	yaml := "jwt:\n  secret: \"" + testJWTSecret + "\"\nsurrealdb:\n  host: \"127.0.0.1\"\n  port: 8888\n  namespace: \"legacy_ns\"\n  database: \"legacy_db\"\n  username: \"user\"\n  password: \"pass\"\n  dataPath: \"/tmp/legacy.db\"\n"
+	yaml := "surrealdb:\n  host: \"127.0.0.1\"\n  port: 8888\n  namespace: \"legacy_ns\"\n  database: \"legacy_db\"\n  username: \"user\"\n  password: \"pass\"\n  dataPath: \"/tmp/legacy.db\"\n"
 	configFile := filepath.Join(dir, "config.yml")
 	if err := os.WriteFile(configFile, []byte(yaml), 0644); err != nil {
 		t.Fatal(err)
@@ -163,7 +152,7 @@ func TestLoadLegacySurrealConfig(t *testing.T) {
 
 func TestCanonicalProviderConfigOverridesLegacyConfig(t *testing.T) {
 	dir := t.TempDir()
-	yaml := "jwt:\n  secret: \"" + testJWTSecret + "\"\nqdrant:\n  host: \"10.0.0.9\"\n  port: 1111\n  vectorDim: 999\n  limit: 1\nsurrealdb:\n  host: \"10.0.0.9\"\n  port: 1111\n  namespace: \"legacy_ns\"\nproviders:\n  vectorStore:\n    qdrant:\n      host: \"127.0.0.1\"\n      port: 6333\n      vectorDim: 768\n      limit: 10\n  graphStore:\n    surrealdb:\n      host: \"127.0.0.1\"\n      port: 8000\n      namespace: \"new_ns\"\n"
+	yaml := "qdrant:\n  host: \"10.0.0.9\"\n  port: 1111\n  vectorDim: 999\n  limit: 1\nsurrealdb:\n  host: \"10.0.0.9\"\n  port: 1111\n  namespace: \"legacy_ns\"\nproviders:\n  vectorStore:\n    qdrant:\n      host: \"127.0.0.1\"\n      port: 6333\n      vectorDim: 768\n      limit: 10\n  graphStore:\n    surrealdb:\n      host: \"127.0.0.1\"\n      port: 8000\n      namespace: \"new_ns\"\n"
 	configFile := filepath.Join(dir, "config.yml")
 	if err := os.WriteFile(configFile, []byte(yaml), 0644); err != nil {
 		t.Fatal(err)
@@ -204,7 +193,7 @@ func TestConfigDoesNotExposeLegacyProviderFields(t *testing.T) {
 
 func TestProviderIDNormalization(t *testing.T) {
 	dir := t.TempDir()
-	yaml := "jwt:\n  secret: \"" + testJWTSecret + "\"\nproviders:\n  scriptRuntime:\n    enabled: true\n    required: false\n    provider: \"builtin.node-process\"\n"
+	yaml := "providers:\n  scriptRuntime:\n    enabled: true\n    required: false\n    provider: \"builtin.node-process\"\n"
 	configFile := filepath.Join(dir, "config.yml")
 	if err := os.WriteFile(configFile, []byte(yaml), 0644); err != nil {
 		t.Fatal(err)
@@ -232,7 +221,7 @@ func TestRejectInvalidProviderID(t *testing.T) {
 
 	for _, id := range invalidIDs {
 		dir := t.TempDir()
-		yaml := "jwt:\n  secret: \"" + testJWTSecret + "\"\nproviders:\n  scriptRuntime:\n    enabled: true\n    required: false\n    provider: \"" + id + "\"\n"
+		yaml := "providers:\n  scriptRuntime:\n    enabled: true\n    required: false\n    provider: \"" + id + "\"\n"
 		configFile := filepath.Join(dir, "config.yml")
 		if err := os.WriteFile(configFile, []byte(yaml), 0644); err != nil {
 			t.Fatal(err)
@@ -246,7 +235,7 @@ func TestRejectInvalidProviderID(t *testing.T) {
 
 func TestRejectRequiredDisabledProvider(t *testing.T) {
 	dir := t.TempDir()
-	yaml := "jwt:\n  secret: \"" + testJWTSecret + "\"\nproviders:\n  scriptRuntime:\n    enabled: false\n    required: true\n"
+	yaml := "providers:\n  scriptRuntime:\n    enabled: false\n    required: true\n"
 	configFile := filepath.Join(dir, "config.yml")
 	if err := os.WriteFile(configFile, []byte(yaml), 0644); err != nil {
 		t.Fatal(err)
@@ -258,7 +247,7 @@ func TestRejectRequiredDisabledProvider(t *testing.T) {
 	}
 
 	dir2 := t.TempDir()
-	yaml2 := "jwt:\n  secret: \"" + testJWTSecret + "\"\nproviders:\n  vectorStore:\n    enabled: false\n    required: true\n"
+	yaml2 := "providers:\n  vectorStore:\n    enabled: false\n    required: true\n"
 	configFile2 := filepath.Join(dir2, "config.yml")
 	if err := os.WriteFile(configFile2, []byte(yaml2), 0644); err != nil {
 		t.Fatal(err)
@@ -272,7 +261,7 @@ func TestRejectRequiredDisabledProvider(t *testing.T) {
 
 func TestProviderEnvironmentOverrides(t *testing.T) {
 	dir := t.TempDir()
-	yaml := "jwt:\n  secret: \"" + testJWTSecret + "\"\n"
+	yaml := ""
 	configFile := filepath.Join(dir, "config.yml")
 	if err := os.WriteFile(configFile, []byte(yaml), 0644); err != nil {
 		t.Fatal(err)
@@ -282,14 +271,12 @@ func TestProviderEnvironmentOverrides(t *testing.T) {
 	t.Setenv("AMITIA_QDRANT_PORT", "5555")
 	t.Setenv("AMITIA_SURREAL_HOST", "10.0.0.6")
 	t.Setenv("AMITIA_SURREAL_PORT", "6666")
-	t.Setenv("AMITIA_PLUGIN_HOST_ENABLED", "false")
 	t.Setenv("AMITIA_NODE_BIN", "/env/path/node")
 	defer func() {
 		os.Unsetenv("AMITIA_QDRANT_HOST")
 		os.Unsetenv("AMITIA_QDRANT_PORT")
 		os.Unsetenv("AMITIA_SURREAL_HOST")
 		os.Unsetenv("AMITIA_SURREAL_PORT")
-		os.Unsetenv("AMITIA_PLUGIN_HOST_ENABLED")
 		os.Unsetenv("AMITIA_NODE_BIN")
 	}()
 
@@ -310,9 +297,6 @@ func TestProviderEnvironmentOverrides(t *testing.T) {
 	if cfg.Providers.GraphStore.SurrealDB.Port != 6666 {
 		t.Errorf("SurrealDB port via env = %d", cfg.Providers.GraphStore.SurrealDB.Port)
 	}
-	if cfg.Components.PluginHost.Enabled {
-		t.Error("PluginHost should be disabled via env")
-	}
 	if cfg.Providers.ScriptRuntime.Node.BinaryPath != "/env/path/node" {
 		t.Errorf("Node binary via env = %q", cfg.Providers.ScriptRuntime.Node.BinaryPath)
 	}
@@ -320,7 +304,7 @@ func TestProviderEnvironmentOverrides(t *testing.T) {
 
 func TestProviderEnvironmentFalseOverridesDefaults(t *testing.T) {
 	dir := t.TempDir()
-	yaml := "jwt:\n  secret: \"" + testJWTSecret + "\"\n"
+	yaml := ""
 	configFile := filepath.Join(dir, "config.yml")
 	if err := os.WriteFile(configFile, []byte(yaml), 0644); err != nil {
 		t.Fatal(err)
@@ -328,17 +312,11 @@ func TestProviderEnvironmentFalseOverridesDefaults(t *testing.T) {
 
 	t.Setenv("AMITIA_QDRANT_ENABLED", "false")
 	t.Setenv("AMITIA_SURREAL_ENABLED", "false")
-	t.Setenv("AMITIA_PLUGIN_HOST_ENABLED", "false")
 	t.Setenv("AMITIA_TASK_HOST_ENABLED", "false")
-	t.Setenv("AMITIA_WECHAT_SIDECAR_ENABLED", "false")
-	t.Setenv("AMITIA_QQ_SIDECAR_ENABLED", "false")
 	defer func() {
 		os.Unsetenv("AMITIA_QDRANT_ENABLED")
 		os.Unsetenv("AMITIA_SURREAL_ENABLED")
-		os.Unsetenv("AMITIA_PLUGIN_HOST_ENABLED")
 		os.Unsetenv("AMITIA_TASK_HOST_ENABLED")
-		os.Unsetenv("AMITIA_WECHAT_SIDECAR_ENABLED")
-		os.Unsetenv("AMITIA_QQ_SIDECAR_ENABLED")
 	}()
 
 	cfg, err := loadConfig(dir)
@@ -352,23 +330,14 @@ func TestProviderEnvironmentFalseOverridesDefaults(t *testing.T) {
 	if cfg.Providers.GraphStore.SurrealDB.Enabled {
 		t.Error("SurrealDB should be disabled via env false")
 	}
-	if cfg.Components.PluginHost.Enabled {
-		t.Error("PluginHost should be disabled via env false")
-	}
 	if cfg.Components.TaskHost.Enabled {
 		t.Error("TaskHost should be disabled via env false")
-	}
-	if cfg.Components.Sidecars.Wechat.Enabled {
-		t.Error("Wechat should be disabled via env false")
-	}
-	if cfg.Components.Sidecars.QQ.Enabled {
-		t.Error("QQ should be disabled via env false")
 	}
 }
 
 func TestCanonicalBinaryEnvironmentOverridesLegacy(t *testing.T) {
 	dir := t.TempDir()
-	yaml := "jwt:\n  secret: \"" + testJWTSecret + "\"\n"
+	yaml := ""
 	configFile := filepath.Join(dir, "config.yml")
 	if err := os.WriteFile(configFile, []byte(yaml), 0644); err != nil {
 		t.Fatal(err)
@@ -406,7 +375,7 @@ func TestCanonicalBinaryEnvironmentOverridesLegacy(t *testing.T) {
 
 func TestLegacyBinaryEnvironmentFallback(t *testing.T) {
 	dir := t.TempDir()
-	yaml := "jwt:\n  secret: \"" + testJWTSecret + "\"\n"
+	yaml := ""
 	configFile := filepath.Join(dir, "config.yml")
 	if err := os.WriteFile(configFile, []byte(yaml), 0644); err != nil {
 		t.Fatal(err)
@@ -436,7 +405,7 @@ func TestLegacyBinaryEnvironmentFallback(t *testing.T) {
 
 func TestComponentEntryPathValidation(t *testing.T) {
 	dir := t.TempDir()
-	yaml := "jwt:\n  secret: \"" + testJWTSecret + "\"\ncomponents:\n  pluginHost:\n    enabled: true\n    entryUri: \"amitia://runtime/polyglot/launcher.mjs\"\n    workUri: \"amitia://runtime/polyglot\"\n"
+	yaml := "components:\n  taskHost:\n    enabled: true\n    entryUri: \"amitia://runtime/polyglot/launcher.mjs\"\n    workUri: \"amitia://runtime/polyglot\"\n"
 	configFile := filepath.Join(dir, "config.yml")
 	if err := os.WriteFile(configFile, []byte(yaml), 0644); err != nil {
 		t.Fatal(err)
@@ -446,12 +415,12 @@ func TestComponentEntryPathValidation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("loadConfig should accept valid URI: %v", err)
 	}
-	if cfg.Components.PluginHost.EntryURI != "amitia://runtime/polyglot/launcher.mjs" {
-		t.Errorf("PluginHost entryUri = %q", cfg.Components.PluginHost.EntryURI)
+	if cfg.Components.TaskHost.EntryURI != "amitia://runtime/polyglot/launcher.mjs" {
+		t.Errorf("TaskHost entryUri = %q", cfg.Components.TaskHost.EntryURI)
 	}
 
 	dir2 := t.TempDir()
-	yaml2 := "jwt:\n  secret: \"" + testJWTSecret + "\"\ncomponents:\n  pluginHost:\n    entryUri: \"file:///etc/passwd\"\n"
+	yaml2 := "components:\n  taskHost:\n    entryUri: \"file:///etc/passwd\"\n"
 	configFile2 := filepath.Join(dir2, "config.yml")
 	if err := os.WriteFile(configFile2, []byte(yaml2), 0644); err != nil {
 		t.Fatal(err)
@@ -463,7 +432,7 @@ func TestComponentEntryPathValidation(t *testing.T) {
 	}
 
 	dir3 := t.TempDir()
-	yaml3 := "jwt:\n  secret: \"" + testJWTSecret + "\"\ncomponents:\n  pluginHost:\n    entryUri: \"\"\n"
+	yaml3 := "components:\n  taskHost:\n    entryUri: \"\"\n"
 	configFile3 := filepath.Join(dir3, "config.yml")
 	if err := os.WriteFile(configFile3, []byte(yaml3), 0644); err != nil {
 		t.Fatal(err)
@@ -475,77 +444,9 @@ func TestComponentEntryPathValidation(t *testing.T) {
 	}
 }
 
-func TestSidecarHealthURLValidation(t *testing.T) {
-	dir := t.TempDir()
-	yaml := "jwt:\n  secret: \"" + testJWTSecret + "\"\ncomponents:\n  sidecars:\n    wechat:\n      enabled: true\n      healthUrl: \"http://127.0.0.1:19876/api/health\"\n    qq:\n      enabled: true\n      healthUrl: \"https://example.com/health\"\n"
-	configFile := filepath.Join(dir, "config.yml")
-	if err := os.WriteFile(configFile, []byte(yaml), 0644); err != nil {
-		t.Fatal(err)
-	}
-
-	cfg, err := loadConfig(dir)
-	if err != nil {
-		t.Fatalf("loadConfig should accept valid URLs: %v", err)
-	}
-	if cfg.Components.Sidecars.Wechat.HealthURL != "http://127.0.0.1:19876/api/health" {
-		t.Errorf("Wechat healthUrl = %q", cfg.Components.Sidecars.Wechat.HealthURL)
-	}
-	if cfg.Components.Sidecars.QQ.HealthURL != "https://example.com/health" {
-		t.Errorf("QQ healthUrl = %q", cfg.Components.Sidecars.QQ.HealthURL)
-	}
-
-	dir2 := t.TempDir()
-	yaml2 := "jwt:\n  secret: \"" + testJWTSecret + "\"\ncomponents:\n  sidecars:\n    wechat:\n      healthUrl: \"\"\n"
-	configFile2 := filepath.Join(dir2, "config.yml")
-	if err := os.WriteFile(configFile2, []byte(yaml2), 0644); err != nil {
-		t.Fatal(err)
-	}
-
-	_, err = loadConfig(dir2)
-	if err != nil {
-		t.Errorf("Empty healthUrl should be allowed: %v", err)
-	}
-
-	dir3 := t.TempDir()
-	yaml3 := "jwt:\n  secret: \"" + testJWTSecret + "\"\ncomponents:\n  sidecars:\n    wechat:\n      healthUrl: \"ftp://example.com/health\"\n"
-	configFile3 := filepath.Join(dir3, "config.yml")
-	if err := os.WriteFile(configFile3, []byte(yaml3), 0644); err != nil {
-		t.Fatal(err)
-	}
-
-	_, err = loadConfig(dir3)
-	if err == nil {
-		t.Error("Should reject ftp:// scheme")
-	}
-
-	dir4 := t.TempDir()
-	yaml4 := "jwt:\n  secret: \"" + testJWTSecret + "\"\ncomponents:\n  sidecars:\n    wechat:\n      healthUrl: \"http:///health\"\n"
-	configFile4 := filepath.Join(dir4, "config.yml")
-	if err := os.WriteFile(configFile4, []byte(yaml4), 0644); err != nil {
-		t.Fatal(err)
-	}
-
-	_, err = loadConfig(dir4)
-	if err == nil {
-		t.Error("Should reject healthUrl without host")
-	}
-
-	dir5 := t.TempDir()
-	yaml5 := "jwt:\n  secret: \"" + testJWTSecret + "\"\ncomponents:\n  sidecars:\n    wechat:\n      healthUrl: \"http://user:pass@host/health\"\n"
-	configFile5 := filepath.Join(dir5, "config.yml")
-	if err := os.WriteFile(configFile5, []byte(yaml5), 0644); err != nil {
-		t.Fatal(err)
-	}
-
-	_, err = loadConfig(dir5)
-	if err == nil {
-		t.Error("Should reject healthUrl with userinfo")
-	}
-}
-
 func TestProviderConfigDoesNotRequireBinaries(t *testing.T) {
 	dir := t.TempDir()
-	yaml := "jwt:\n  secret: \"" + testJWTSecret + "\"\nproviders:\n  scriptRuntime:\n    node:\n      binaryPath: \"/nonexistent/node\"\n  vectorStore:\n    qdrant:\n      binaryPath: \"/nonexistent/qdrant\"\n  graphStore:\n    surrealdb:\n      binaryPath: \"/nonexistent/surreal\"\n"
+	yaml := "providers:\n  scriptRuntime:\n    node:\n      binaryPath: \"/nonexistent/node\"\n  vectorStore:\n    qdrant:\n      binaryPath: \"/nonexistent/qdrant\"\n  graphStore:\n    surrealdb:\n      binaryPath: \"/nonexistent/surreal\"\n"
 	configFile := filepath.Join(dir, "config.yml")
 	if err := os.WriteFile(configFile, []byte(yaml), 0644); err != nil {
 		t.Fatal(err)
@@ -562,7 +463,7 @@ func TestProviderConfigDoesNotRequireBinaries(t *testing.T) {
 
 func TestConfigDoesNotDependOnRuntimeDescriptor(t *testing.T) {
 	dir := t.TempDir()
-	yaml := "jwt:\n  secret: \"" + testJWTSecret + "\"\nproviders:\n  scriptRuntime:\n    enabled: true\n  vectorStore:\n    enabled: true\n  graphStore:\n    enabled: true\n"
+	yaml := "providers:\n  scriptRuntime:\n    enabled: true\n  vectorStore:\n    enabled: true\n  graphStore:\n    enabled: true\n"
 	configFile := filepath.Join(dir, "config.yml")
 	if err := os.WriteFile(configFile, []byte(yaml), 0644); err != nil {
 		t.Fatal(err)
@@ -587,7 +488,7 @@ func TestConfigDoesNotDependOnRuntimeDescriptor(t *testing.T) {
 
 func TestServerEnvironmentBinding(t *testing.T) {
 	dir := t.TempDir()
-	yaml := "jwt:\n  secret: \"" + testJWTSecret + "\"\n"
+	yaml := ""
 	configFile := filepath.Join(dir, "config.yml")
 	if err := os.WriteFile(configFile, []byte(yaml), 0644); err != nil {
 		t.Fatal(err)
@@ -608,7 +509,7 @@ func TestServerEnvironmentBinding(t *testing.T) {
 
 func TestServerHostEnvOverride(t *testing.T) {
 	dir := t.TempDir()
-	yaml := "jwt:\n  secret: \"" + testJWTSecret + "\"\n"
+	yaml := ""
 	configFile := filepath.Join(dir, "config.yml")
 	if err := os.WriteFile(configFile, []byte(yaml), 0644); err != nil {
 		t.Fatal(err)
@@ -629,7 +530,7 @@ func TestServerHostEnvOverride(t *testing.T) {
 
 func TestServerPortEnvOverride(t *testing.T) {
 	dir := t.TempDir()
-	yaml := "jwt:\n  secret: \"" + testJWTSecret + "\"\n"
+	yaml := ""
 	configFile := filepath.Join(dir, "config.yml")
 	if err := os.WriteFile(configFile, []byte(yaml), 0644); err != nil {
 		t.Fatal(err)
@@ -650,7 +551,7 @@ func TestServerPortEnvOverride(t *testing.T) {
 
 func TestServerEnvDoesNotAffectProviderPorts(t *testing.T) {
 	dir := t.TempDir()
-	yaml := "jwt:\n  secret: \"" + testJWTSecret + "\"\n"
+	yaml := ""
 	configFile := filepath.Join(dir, "config.yml")
 	if err := os.WriteFile(configFile, []byte(yaml), 0644); err != nil {
 		t.Fatal(err)
@@ -681,7 +582,7 @@ func TestNoAndroidSpecificServerEnv(t *testing.T) {
 
 func TestAndroidStyleRequiredProviderOverrides(t *testing.T) {
 	dir := t.TempDir()
-	yaml := "jwt:\n  secret: \"" + testJWTSecret + "\"\n"
+	yaml := ""
 	configFile := filepath.Join(dir, "config.yml")
 	if err := os.WriteFile(configFile, []byte(yaml), 0644); err != nil {
 		t.Fatal(err)
@@ -691,16 +592,12 @@ func TestAndroidStyleRequiredProviderOverrides(t *testing.T) {
 	t.Setenv("AMITIA_SCRIPT_RUNTIME_REQUIRED", "true")
 	t.Setenv("AMITIA_VECTOR_STORE_ENABLED", "true")
 	t.Setenv("AMITIA_GRAPH_STORE_ENABLED", "false")
-	t.Setenv("AMITIA_WECHAT_SIDECAR_ENABLED", "false")
-	t.Setenv("AMITIA_QQ_SIDECAR_ENABLED", "false")
 	t.Setenv("AMITIA_DESKTOP_PET_RUNTIME_ENABLED", "false")
 	defer func() {
 		os.Unsetenv("AMITIA_SCRIPT_RUNTIME_ENABLED")
 		os.Unsetenv("AMITIA_SCRIPT_RUNTIME_REQUIRED")
 		os.Unsetenv("AMITIA_VECTOR_STORE_ENABLED")
 		os.Unsetenv("AMITIA_GRAPH_STORE_ENABLED")
-		os.Unsetenv("AMITIA_WECHAT_SIDECAR_ENABLED")
-		os.Unsetenv("AMITIA_QQ_SIDECAR_ENABLED")
 		os.Unsetenv("AMITIA_DESKTOP_PET_RUNTIME_ENABLED")
 	}()
 
@@ -717,12 +614,6 @@ func TestAndroidStyleRequiredProviderOverrides(t *testing.T) {
 	}
 	if !cfg.Providers.VectorStore.Enabled {
 		t.Error("VectorStore should be enabled")
-	}
-	if cfg.Components.Sidecars.Wechat.Enabled {
-		t.Error("Wechat should be disabled")
-	}
-	if cfg.Components.Sidecars.QQ.Enabled {
-		t.Error("QQ should be disabled")
 	}
 	if cfg.DesktopPetRuntime.Enabled {
 		t.Error("DesktopPetRuntime should be disabled")

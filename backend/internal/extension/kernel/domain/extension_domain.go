@@ -4,8 +4,8 @@ type ExtensionDomain string
 
 const (
 	ExtensionDomainGeneral    ExtensionDomain = "general"
-	ExtensionDomainGame       ExtensionDomain = "game"
-	ExtensionDomainDesktopPet ExtensionDomain = "desktop_pet"
+	ExtensionDomainGame       ExtensionDomain = "gamex"
+	ExtensionDomainDesktopPet ExtensionDomain = "petx"
 	ExtensionDomainMemory     ExtensionDomain = "memory"
 	ExtensionDomainProfile    ExtensionDomain = "profile"
 	ExtensionDomainEpisodic   ExtensionDomain = "episodic"
@@ -29,10 +29,12 @@ func IsValidExtensionDomain(domain ExtensionDomain) bool {
 }
 
 func NormalizeExtensionDomain(domain ExtensionDomain) ExtensionDomain {
-	if domain == "" {
+	switch domain {
+	case "":
 		return ExtensionDomainGeneral
+	default:
+		return domain
 	}
-	return domain
 }
 
 func (d ExtensionDomain) IsGeneral() bool {
@@ -47,10 +49,10 @@ func DomainConflict(kinds []ContributionKind) bool {
 	hasGame := false
 	hasDesktopPet := false
 	for _, k := range kinds {
-		switch k {
+		switch NormalizeContributionKind(k) {
 		case ContributionKindGamePlugin:
 			hasGame = true
-		case ContributionKindDesktopPetPlugin:
+		case ContributionKindPetPlugin:
 			hasDesktopPet = true
 		}
 	}

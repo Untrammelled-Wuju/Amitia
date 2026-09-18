@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/internal/extension/kernel/amitiax"
-	"github.com/u-ai/backend/internal/extension/kernel/manifest_v2"
+	"github.com/u-ai/backend/internal/extension/kernel/manifest_v1"
 )
 
 type archiveEntry struct {
@@ -40,7 +40,7 @@ func runPack(args []string, output *Output) int {
 		output.fail(ExitConfig, fmt.Sprintf("读取 manifest.json 失败: %v", err))
 	}
 
-	var m manifest_v2.Manifest
+	var m manifest_v1.Manifest
 	if err := json.Unmarshal(manifestRaw, &m); err != nil {
 		output.fail(ExitConfig, fmt.Sprintf("解析 manifest.json 失败: %v", err))
 	}

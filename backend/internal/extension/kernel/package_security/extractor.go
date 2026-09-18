@@ -96,7 +96,7 @@ func (e *SecureExtractor) extractReader(ctx context.Context, reader *zip.Reader,
 			return nil, err
 		}
 
-		content, err := io.ReadAll(io.LimitReader(rc, e.policy.MaxSingleEntryBytes+1))
+		content, err := io.ReadAll(limitReader(rc, e.policy.MaxSingleEntryBytes))
 		rc.Close()
 		if err != nil {
 			return nil, err

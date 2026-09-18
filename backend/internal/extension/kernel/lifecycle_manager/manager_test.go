@@ -25,7 +25,7 @@ func setupExtension(t *testing.T, defRepo *domain.InMemoryDefinitionRepository, 
 	def := domain.ExtensionDefinition{
 		ID:              domain.ExtensionID(extID),
 		Version:         v,
-		ManifestVersion: 2,
+		ManifestVersion: 1,
 		Name:            domain.LocalizedText{Default: "Test"},
 		Modules: []domain.ModuleDefinition{
 			{ID: "main", ExtensionID: domain.ExtensionID(extID), Type: domain.ModuleTypeBuiltin},
@@ -178,7 +178,7 @@ func TestManagerUpdate(t *testing.T) {
 	def2 := domain.ExtensionDefinition{
 		ID:              "com.example/test",
 		Version:         v2,
-		ManifestVersion: 2,
+		ManifestVersion: 1,
 		Name:            domain.LocalizedText{Default: "Test v2"},
 		Modules: []domain.ModuleDefinition{
 			{ID: "main", ExtensionID: "com.example/test", Type: domain.ModuleTypeBuiltin},

@@ -6,18 +6,9 @@ server:
 storage:
   dataDir: "AmitiaData/data"
 
-jwt:
-  secret: "AmitiaLocalDevSecret20260831x9Zq7mKp3wRv5nTc8yB"
-  issuer: "amitia"
-  audience: "amitia-api"
-  expireDays: 7
-  accessTokenMinutes: 15
-  refreshTokenDays: 30
-  absoluteSessionDays: 90
-
 app:
   name: "U-Ai"
-  version: "1.0.0-beta"
+  version: "26.2.0-beta"
   deployMode: "desktop-local"
 
 desktopPetRuntime:
@@ -30,6 +21,8 @@ security:
   allowedOrigins:
     - "http://localhost:5178"
     - "http://127.0.0.1:5178"
+    - "http://localhost:15177"
+    - "http://127.0.0.1:15177"
 
 providers:
   scriptRuntime:
@@ -78,27 +71,10 @@ providers:
       dataPath: "surrealdb/data"
 
 components:
-  pluginHost:
-    enabled: true
-    entryUri: ""
-    workUri: ""
   taskHost:
     enabled: true
     entryUri: ""
     workUri: ""
-  sidecars:
-    wechat:
-      enabled: true
-      entryUri: ""
-      workUri: ""
-      port: 19876
-      healthUrl: "http://127.0.0.1:19876/api/health"
-    qq:
-      enabled: true
-      entryUri: ""
-      workUri: ""
-      port: 19877
-      healthUrl: "http://127.0.0.1:19877/api/health"
 
 runtime:
   mode: "desktop"
@@ -107,27 +83,10 @@ runtime:
     npmPath: ""
     npxPath: ""
     workDir: ""
-  pluginHost:
-    enabled: true
-    entryPath: ""
-    workDir: ""
   taskHost:
     enabled: true
     entryPath: ""
     workDir: ""
-  sidecars:
-    wechat:
-      enabled: true
-      entryPath: ""
-      workDir: ""
-      port: 19876
-      healthUrl: "http://127.0.0.1:19876/api/health"
-    qq:
-      enabled: true
-      entryPath: ""
-      workDir: ""
-      port: 19877
-      healthUrl: "http://127.0.0.1:19877/api/health"
 
 chat:
   mergeWindowMs: 6000

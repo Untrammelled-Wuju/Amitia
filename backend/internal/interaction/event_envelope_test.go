@@ -14,7 +14,7 @@ func TestEventEnvelopeNormalizeDefaultsVersionAndTrimsFields(t *testing.T) {
 		Status:         " PENDING ",
 		IdempotencyKey: " idem-1 ",
 		Scope: InteractionScope{
-			UserID:         " user-1 ",
+			SpaceID:        " user-1 ",
 			CharacterID:    " char-1 ",
 			ConversationID: " conv-1 ",
 			Channel:        " Web ",
@@ -42,7 +42,7 @@ func TestEventEnvelopeNormalizeDefaultsVersionAndTrimsFields(t *testing.T) {
 	if normalized.IdempotencyKey != "idem-1" {
 		t.Fatalf("expected trimmed idempotency key, got %q", normalized.IdempotencyKey)
 	}
-	if normalized.Scope.UserID != "user-1" || normalized.Scope.CharacterID != "char-1" || normalized.Scope.Channel != "web" {
+	if normalized.Scope.SpaceID != "user-1" || normalized.Scope.CharacterID != "char-1" || normalized.Scope.Channel != "web" {
 		t.Fatalf("expected normalized scope, got %#v", normalized.Scope)
 	}
 	if normalized.Causation.CorrelationID != "corr-1" || normalized.Causation.CausationID != "cause-1" || normalized.Causation.ParentEventID != "parent-1" {
@@ -148,7 +148,7 @@ func TestBuildEventIdempotencyKeyIsStableAndTrimsParts(t *testing.T) {
 func TestEventEnvelopeWithContextStoresNormalizedScope(t *testing.T) {
 	envelope := EventEnvelope{
 		Scope: InteractionScope{
-			UserID:         " user-1 ",
+			SpaceID:        " user-1 ",
 			CharacterID:    " char-1 ",
 			ConversationID: " conv-1 ",
 			Channel:        " QQ ",
@@ -162,7 +162,7 @@ func TestEventEnvelopeWithContextStoresNormalizedScope(t *testing.T) {
 	if !ok {
 		t.Fatal("expected scope to be stored in context")
 	}
-	if stored.UserID != "user-1" || stored.CharacterID != "char-1" || stored.ConversationID != "conv-1" {
+	if stored.SpaceID != "user-1" || stored.CharacterID != "char-1" || stored.ConversationID != "conv-1" {
 		t.Fatalf("unexpected stored scope ids: %#v", stored)
 	}
 	if stored.Channel != "qq" || stored.Source != "api" || stored.PeerID != "peer-1" || stored.RequestID != "req-1" {

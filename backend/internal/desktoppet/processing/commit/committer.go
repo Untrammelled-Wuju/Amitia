@@ -29,8 +29,7 @@ var _ Committer = (*ProcessingCommitter)(nil)
 
 type CommitRequest struct {
 	Ctx                        context.Context
-	UserID                     string
-	CharacterID                string
+	SpaceID                    string
 	ProcessingTaskID           string
 	ProcessingActionID         string
 	ProcessingAttemptID        string
@@ -259,6 +258,9 @@ func (c *ProcessingCommitter) Commit(req *CommitRequest) (*CommitResult, error) 
 			}).Error; err != nil {
 			return fmt.Errorf("update revision to committed: %w", err)
 		}
+		if err := c.repo.ActivateRevision(tx, req.ProcessingActionID, revisionID); err != nil {
+			return fmt.Errorf("activate committed revision: %w", err)
+		}
 
 		if err := tx.Model(&processing.ProcessingActionAttempt{}).
 			Where("id = ?", req.ProcessingAttemptID).
@@ -273,6 +275,7 @@ func (c *ProcessingCommitter) Commit(req *CommitRequest) (*CommitResult, error) 
 
 		if _, err := c.repo.UpdateProcessingActionWithRowVersion(tx, req.ProcessingActionID, req.ExpectedActionRowVersion, map[string]interface{}{
 			"status":             "succeeded",
+			"progress":           100,
 			"active_revision_id": revisionID,
 			"completed_at":       nowInner,
 			"updated_at":         nowInner,
@@ -285,8 +288,7 @@ func (c *ProcessingCommitter) Commit(req *CommitRequest) (*CommitResult, error) 
 		}
 
 		outboxEvent := events.ProcessingRevisionCommittedEvent{
-			UserID:                     req.UserID,
-			CharacterID:                req.CharacterID,
+			SpaceID:                    req.SpaceID,
 			ProcessingTaskID:           req.ProcessingTaskID,
 			ProcessingActionID:         req.ProcessingActionID,
 			ProcessingAttemptID:        req.ProcessingAttemptID,

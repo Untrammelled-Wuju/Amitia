@@ -1,5 +1,90 @@
+import 'dart:async';
+import 'dart:convert';
+
+import 'package:dio/dio.dart';
+
 import '../backend_transport/backend_service_api.dart';
 import '../models/conversation.dart';
+import '../native_bridge/device_timezone_cache.dart';
+
+class ChatSubmitResult {
+  final String conversationId;
+  final String userMessageId;
+  final String status;
+  final int mergeWindowMs;
+
+  const ChatSubmitResult({
+    required this.conversationId,
+    required this.userMessageId,
+    required this.status,
+    required this.mergeWindowMs,
+  });
+
+  factory ChatSubmitResult.fromJson(Map<String, dynamic> json) {
+    return ChatSubmitResult(
+      conversationId: (json['conversationId'] ?? '').toString(),
+      userMessageId: (json['userMessageId'] ?? '').toString(),
+      status: (json['status'] ?? '').toString(),
+      mergeWindowMs: (json['mergeWindowMs'] as num?)?.toInt() ?? 0,
+    );
+  }
+}
+
+class ChatStreamCancellation {
+  final CancelToken _token = CancelToken();
+
+  CancelToken get token => _token;
+  bool get isCancelled => _token.isCancelled;
+
+  void cancel([String reason = 'cancelled']) {
+    if (!_token.isCancelled) _token.cancel(reason);
+  }
+}
+
+class ChatStreamEvent {
+  final String type;
+  final Map<String, dynamic> data;
+
+  const ChatStreamEvent(this.type, this.data);
+}
+
+class ConversationWorkspaceDto {
+  final String conversationId;
+  final String workspaceId;
+  final String deviceId;
+  final String workspaceName;
+  final String workspaceKind;
+  final String rootUri;
+
+  const ConversationWorkspaceDto({
+    this.conversationId = '',
+    required this.workspaceId,
+    this.deviceId = '',
+    this.workspaceName = '',
+    this.workspaceKind = 'local',
+    required this.rootUri,
+  });
+
+  factory ConversationWorkspaceDto.fromJson(Map<String, dynamic> json) {
+    final workspaceId = (json['workspaceId'] ?? '').toString().trim();
+    return ConversationWorkspaceDto(
+      conversationId: (json['conversationId'] ?? '').toString().trim(),
+      workspaceId: workspaceId,
+      deviceId: (json['deviceId'] ?? '').toString().trim(),
+      workspaceName: (json['workspaceName'] ?? '').toString().trim(),
+      workspaceKind: (json['workspaceKind'] ?? 'local').toString().trim(),
+      rootUri: (json['rootUri'] ?? 'amitia://workspace/@$workspaceId/').toString().trim(),
+    );
+  }
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'workspaceId': workspaceId,
+        'deviceId': deviceId,
+        'workspaceName': workspaceName,
+        'workspaceKind': workspaceKind,
+        'rootUri': rootUri,
+      };
+}
 
 class ChatSubmitResult {
   final String conversationId;
@@ -56,6 +141,42 @@ class ChatService {
     return ConversationDto.fromJson(resp);
   }
 
+  Future<ConversationWorkspaceDto?> conversationWorkspace(String conversationId) async {
+    final id = conversationId.trim();
+    if (id.isEmpty) return null;
+    final resp = await _api.get<Map<String, dynamic>>(
+      '/api/web-chat/conversations/${Uri.encodeComponent(id)}/workspace',
+      fromJson: (e) => Map<String, dynamic>.from(e as Map),
+    );
+    if (resp == null || (resp['workspaceId'] ?? '').toString().trim().isEmpty) {
+      return null;
+    }
+    return ConversationWorkspaceDto.fromJson(resp);
+  }
+
+  Future<ConversationWorkspaceDto> setConversationWorkspace(
+    String conversationId,
+    ConversationWorkspaceDto workspace,
+  ) async {
+    final id = conversationId.trim();
+    if (id.isEmpty) throw ArgumentError('conversationId 不能为空');
+    final resp = await _api.put<Map<String, dynamic>>(
+      '/api/web-chat/conversations/${Uri.encodeComponent(id)}/workspace',
+      data: workspace.toJson(),
+      fromJson: (e) => Map<String, dynamic>.from(e as Map),
+    );
+    if (resp == null) throw StateError('保存工作目录失败：后端未返回结果');
+    return ConversationWorkspaceDto.fromJson(resp);
+  }
+
+  Future<void> clearConversationWorkspace(String conversationId) async {
+    final id = conversationId.trim();
+    if (id.isEmpty) return;
+    await _api.delete(
+      '/api/web-chat/conversations/${Uri.encodeComponent(id)}/workspace',
+    );
+  }
+
   Future<List<MessageDto>> getMessages(
     String conversationId, {
     int page = 1,
@@ -76,6 +197,15 @@ class ChatService {
   Future<bool> deleteConversation(String id) async {
     await _api.delete('/api/web-chat/conversations/$id');
     return true;
+  }
+
+  Future<void> renameConversation(String id, String title) async {
+    final trimmed = title.trim();
+    if (trimmed.isEmpty) throw ArgumentError('会话标题不能为空');
+    await _api.put<Map<String, dynamic>>(
+      '/api/web-chat/conversations/$id',
+      data: {'title': trimmed},
+    );
   }
 
   Future<void> deleteMessages(String conversationId) async {
@@ -172,6 +302,133 @@ class ChatService {
     return _api.get<Map<String, dynamic>>('/api/web-chat/message-status/$messageId');
   }
 
+  ChatStreamCancellation createStreamCancellation() => ChatStreamCancellation();
+
+  Stream<ChatStreamEvent> submitMessageStream({
+    required String message,
+    String? conversationId,
+    String? characterId,
+    String? imageUrl,
+    String? audioUrl,
+    double audioDuration = 0,
+    String? videoUrl,
+    String? replyToMessageId,
+    ConversationWorkspaceDto? workspace,
+    required ChatStreamCancellation cancellation,
+  }) async* {
+    final now = DateTime.now().microsecondsSinceEpoch;
+    final requestId = 'mobile-$now';
+    final stream = await _api.postStream(
+      '/api/web-chat/send-stream',
+      data: {
+        'message': message,
+        if (conversationId != null && conversationId.isNotEmpty)
+          'conversationId': conversationId,
+        if (characterId != null && characterId.isNotEmpty)
+          'characterId': characterId,
+        if (imageUrl != null && imageUrl.isNotEmpty) 'imageUrl': imageUrl,
+        if (audioUrl != null && audioUrl.isNotEmpty) ...{
+          'audioUrl': audioUrl,
+          'audioDuration': audioDuration,
+          'voiceMessage': true,
+        },
+        if (videoUrl != null && videoUrl.isNotEmpty) 'videoUrl': videoUrl,
+        if (replyToMessageId != null && replyToMessageId.isNotEmpty)
+          'replyToMessageId': replyToMessageId,
+        if (workspace != null) ...<String, dynamic>{
+          'workspaceId': workspace.workspaceId,
+          'workspaceDeviceId': workspace.deviceId,
+          'workspaceName': workspace.workspaceName,
+          'workspaceKind': workspace.workspaceKind,
+          'workspaceRootUri': workspace.rootUri,
+        },
+        'source': 'mobile',
+        'requestId': requestId,
+        'clientMessageId': requestId,
+        if (DeviceTimezoneCache.hasValue)
+          'deviceTimezone': DeviceTimezoneCache.ianaTimezone,
+      },
+      headers: const {'Accept': 'text/event-stream'},
+      cancelToken: cancellation.token,
+    );
+    yield* _decodeEventStream(stream);
+  }
+
+  Stream<ChatStreamEvent> messageEvents({
+    required ChatStreamCancellation cancellation,
+  }) async* {
+    final stream = await _api.getStream(
+      '/api/messages/events',
+      queryParameters: const {'channel': 'web'},
+      headers: const {'Accept': 'text/event-stream'},
+      cancelToken: cancellation.token,
+    );
+    yield* _decodeEventStream(stream);
+  }
+
+  Stream<ChatStreamEvent> _decodeEventStream(Stream<List<int>> source) async* {
+    final text = source.transform(utf8.decoder);
+    var buffer = '';
+    await for (final chunk in text) {
+      buffer += chunk;
+      while (true) {
+        final boundary = _eventBoundary(buffer);
+        if (boundary == null) break;
+        final block = buffer.substring(0, boundary.$1);
+        buffer = buffer.substring(boundary.$1 + boundary.$2);
+        final event = _parseEventBlock(block);
+        if (event != null) yield event;
+      }
+    }
+    final tail = buffer.trim();
+    if (tail.isEmpty) return;
+    final event = _parseEventBlock(tail);
+    if (event != null) {
+      yield event;
+      return;
+    }
+    final raw = jsonDecode(tail);
+    if (raw is! Map) throw StateError('聊天流返回格式无效');
+    final map = Map<String, dynamic>.from(raw);
+    final payload = map['data'];
+    if (payload is Map && (payload['status'] ?? '').toString() == 'queued') {
+      yield ChatStreamEvent('queued', Map<String, dynamic>.from(payload));
+      return;
+    }
+    final message = (map['message'] ?? map['msg'] ?? '聊天请求失败').toString();
+    throw StateError(message);
+  }
+
+  (int, int)? _eventBoundary(String value) {
+    int? bestIndex;
+    var bestLength = 0;
+    for (final separator in const <String>['\r\n\r\n', '\n\n', '\r\r']) {
+      final index = value.indexOf(separator);
+      if (index >= 0 && (bestIndex == null || index < bestIndex)) {
+        bestIndex = index;
+        bestLength = separator.length;
+      }
+    }
+    return bestIndex == null ? null : (bestIndex, bestLength);
+  }
+
+  ChatStreamEvent? _parseEventBlock(String block) {
+    String? type;
+    final dataLines = <String>[];
+    final normalized = block.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
+    for (final line in normalized.split('\n')) {
+      if (line.startsWith('event:')) {
+        type = line.substring(6).trim();
+      } else if (line.startsWith('data:')) {
+        dataLines.add(line.substring(5).trimLeft());
+      }
+    }
+    if (type == null || type.isEmpty || dataLines.isEmpty) return null;
+    final decoded = jsonDecode(dataLines.join('\n'));
+    if (decoded is! Map) return null;
+    return ChatStreamEvent(type, Map<String, dynamic>.from(decoded));
+  }
+
   Future<ChatSubmitResult> submitMessage({
     required String message,
     String? conversationId,
@@ -181,6 +438,7 @@ class ChatService {
     double audioDuration = 0,
     String? videoUrl,
     String? replyToMessageId,
+    ConversationWorkspaceDto? workspace,
   }) async {
     final now = DateTime.now().microsecondsSinceEpoch;
     final requestId = 'mobile-$now';
@@ -201,10 +459,18 @@ class ChatService {
         if (videoUrl != null && videoUrl.isNotEmpty) 'videoUrl': videoUrl,
         if (replyToMessageId != null && replyToMessageId.isNotEmpty)
           'replyToMessageId': replyToMessageId,
+        if (workspace != null) ...<String, dynamic>{
+          'workspaceId': workspace.workspaceId,
+          'workspaceDeviceId': workspace.deviceId,
+          'workspaceName': workspace.workspaceName,
+          'workspaceKind': workspace.workspaceKind,
+          'workspaceRootUri': workspace.rootUri,
+        },
         'source': 'mobile',
         'requestId': requestId,
         'clientMessageId': requestId,
-        'deviceTimezone': DateTime.now().timeZoneName,
+        if (DeviceTimezoneCache.hasValue)
+          'deviceTimezone': DeviceTimezoneCache.ianaTimezone,
       },
     );
     if (resp == null) {

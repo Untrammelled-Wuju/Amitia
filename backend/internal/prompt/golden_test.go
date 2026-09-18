@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/u-ai/backend/config"
@@ -38,7 +39,7 @@ func readGolden(t *testing.T, name string) ([]byte, bool) {
 	if err != nil {
 		return nil, false
 	}
-	return data, true
+	return []byte(strings.ReplaceAll(string(data), "\r\n", "\n")), true
 }
 
 func goldenAssertOrUpdate(t *testing.T, name string, data []byte) {
@@ -52,7 +53,7 @@ func goldenAssertOrUpdate(t *testing.T, name string, data []byte) {
 		writeGolden(t, name, data)
 		return
 	}
-	if string(expected) != string(data) {
+	if strings.ReplaceAll(string(expected), "\r\n", "\n") != strings.ReplaceAll(string(data), "\r\n", "\n") {
 		t.Errorf("golden mismatch for %s", name)
 	}
 }

@@ -4,6 +4,27 @@ SPDX-License-Identifier: AGPL-3.0-only
 -->
 <template>
   <div>
+    <div class="config-row">
+      <div class="form-item">
+        <label>TTS 配置</label>
+        <el-select
+          v-model="voiceConfigIdModel"
+          placeholder="跟随当前全局配置"
+          style="width: 100%"
+          clearable
+        >
+          <el-option label="跟随当前全局配置" value="" />
+          <el-option
+            v-for="cfg in voiceConfigs"
+            :key="cfg.id"
+            :label="cfg.isActive ? `${cfg.name}（当前默认）` : cfg.name"
+            :value="String(cfg.id)"
+          />
+        </el-select>
+        <span class="form-hint">角色可绑定独立 TTS Provider；留空时使用当前全局启用配置</span>
+      </div>
+    </div>
+
     <div class="param-grid">
       <div class="param-item">
         <label
@@ -18,9 +39,9 @@ SPDX-License-Identifier: AGPL-3.0-only
       </div>
       <div class="param-item">
         <label
-          >音高 <span class="param-value">{{ voicePitch }}</span></label
+          >音高倍率 <span class="param-value">{{ voicePitch.toFixed(2) }}x</span></label
         >
-        <el-slider v-model="voicePitchModel" :min="-12" :max="12" :step="1" />
+        <el-slider v-model="voicePitchModel" :min="0.5" :max="2" :step="0.05" />
       </div>
       <div class="param-item">
         <label
@@ -83,6 +104,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 import { computed } from "vue";
 
 const props = defineProps<{
+  voiceConfigId: string;
+  voiceConfigs: { id: number; name: string; isActive?: number }[];
   voiceSpeed: number;
   voicePitch: number;
   voiceVolume: number;
@@ -94,6 +117,7 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
+  (e: "update:voiceConfigId", v: string): void;
   (e: "update:voiceSpeed", v: number): void;
   (e: "update:voicePitch", v: number): void;
   (e: "update:voiceVolume", v: number): void;
@@ -101,6 +125,11 @@ const emit = defineEmits<{
   (e: "update:emotionScale", v: number): void;
   (e: "update:silenceDuration", v: number): void;
 }>();
+
+const voiceConfigIdModel = computed({
+  get: () => props.voiceConfigId,
+  set: (v) => emit("update:voiceConfigId", v || ""),
+});
 
 const voiceSpeedModel = computed({
   get: () => props.voiceSpeed,
@@ -129,12 +158,16 @@ const silenceDurationModel = computed({
 </script>
 
 <style scoped>
+.config-row {
+  padding: 12px 0;
+  border-top: 1px solid var(--ac-color-border-light);
+}
+
 .param-grid {
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;
   gap: 14px 20px;
   padding-top: 12px;
-  border-top: 1px solid var(--ac-color-border-light);
 }
 
 .extra-grid {

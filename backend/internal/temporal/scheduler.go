@@ -12,7 +12,7 @@ import (
 type ProactiveCandidate struct {
 	EventID         string    `json:"eventId"`
 	AnchorID        string    `json:"anchorId"`
-	UserID          string    `json:"userId"`
+	SpaceID         string    `json:"spaceId"`
 	CharacterID     string    `json:"characterId"`
 	Kind            string    `json:"kind"`
 	Title           string    `json:"title"`
@@ -64,7 +64,7 @@ func (s *Service) ProcessDueAnchors(ctx context.Context, recovery bool) (Process
 		} else {
 			localDate := occurrence.In(mustLocation(anchor.Timezone)).Format("2006-01-02")
 			key := fmt.Sprintf("temporal:%s:%s:%s:anchor_occurred", anchor.ID, localDate, anchor.CharacterID)
-			event := &Event{ID: uuid.NewString(), EventType: "anchor_occurred", UserID: anchor.UserID, CharacterID: anchor.CharacterID, AnchorID: anchor.ID, OccurredAtUTC: utc(*occurrence), EffectiveLocalDate: localDate, Timezone: anchor.Timezone, Salience: float64(anchor.Importance) / 100, Source: "temporal-scheduler", IdempotencyKey: key, PayloadJSON: anchor.PayloadJSON, CreatedAtUTC: now}
+			event := &Event{ID: uuid.NewString(), EventType: "anchor_occurred", SpaceID: anchor.SpaceID, CharacterID: anchor.CharacterID, AnchorID: anchor.ID, OccurredAtUTC: utc(*occurrence), EffectiveLocalDate: localDate, Timezone: anchor.Timezone, Salience: float64(anchor.Importance) / 100, Source: "temporal-scheduler", IdempotencyKey: key, PayloadJSON: anchor.PayloadJSON, CreatedAtUTC: now}
 			created, createErr := s.repo.CreateEvent(event)
 			if createErr != nil {
 				return result, createErr
@@ -76,7 +76,7 @@ func (s *Service) ProcessDueAnchors(ctx context.Context, recovery bool) (Process
 				result.Emitted++
 				s.metrics.anchorEvents.Add(1)
 				if anchor.AllowProactiveMention && s.candidatePublisher != nil {
-					if publishErr := s.candidatePublisher.PublishTemporalCandidate(ctx, ProactiveCandidate{EventID: event.ID, AnchorID: anchor.ID, UserID: anchor.UserID, CharacterID: anchor.CharacterID, Kind: anchor.AnchorType, Title: anchor.Title, OccurrenceAtUTC: utc(*occurrence), ExpiresAtUTC: utc(occurrence.Add(window)), IdempotencyKey: key}); publishErr != nil {
+					if publishErr := s.candidatePublisher.PublishTemporalCandidate(ctx, ProactiveCandidate{EventID: event.ID, AnchorID: anchor.ID, SpaceID: anchor.SpaceID, CharacterID: anchor.CharacterID, Kind: anchor.AnchorType, Title: anchor.Title, OccurrenceAtUTC: utc(*occurrence), ExpiresAtUTC: utc(occurrence.Add(window)), IdempotencyKey: key}); publishErr != nil {
 						s.metrics.proactiveCandidateErrors.Add(1)
 					} else {
 						s.metrics.proactiveCandidates.Add(1)
@@ -230,12 +230,12 @@ func (s *Scheduler) detectLocalDayChanges(ctx context.Context) {
 		if previous == "" || previous == date {
 			continue
 		}
-		userID, characterID := profile.OwnerID, ""
+		spaceID, characterID := profile.OwnerID, ""
 		if profile.OwnerType == OwnerCharacter {
-			userID = DefaultUserOwnerID
+			spaceID = defaultSpaceOwnerID()
 			characterID = profile.OwnerID
 		}
-		_, _ = s.service.repo.CreateEvent(&Event{ID: uuid.NewString(), EventType: "day_changed", UserID: userID, CharacterID: characterID, OccurredAtUTC: now, EffectiveLocalDate: date, Timezone: profile.Timezone, Source: "temporal-scheduler", IdempotencyKey: "temporal:day_changed:" + key + ":" + date, CreatedAtUTC: now})
+		_, _ = s.service.repo.CreateEvent(&Event{ID: uuid.NewString(), EventType: "day_changed", SpaceID: spaceID, CharacterID: characterID, OccurredAtUTC: now, EffectiveLocalDate: date, Timezone: profile.Timezone, Source: "temporal-scheduler", IdempotencyKey: "temporal:day_changed:" + key + ":" + date, CreatedAtUTC: now})
 		if ctx.Err() != nil {
 			return
 		}

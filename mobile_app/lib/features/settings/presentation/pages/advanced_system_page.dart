@@ -1,7 +1,6 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../app/app_routes.dart';
@@ -22,11 +21,8 @@ class _AdvancedSystemPageState extends ConsumerState<AdvancedSystemPage> {
   bool _loading = true;
   bool _busy = false;
   String? _error;
-  Map<String, dynamic> _currentSession = const {};
-  List<dynamic> _loginHistory = const [];
-  Map<String, dynamic> _recovery = const {};
-  List<String> _newRecoveryCodes = const [];
-  Map<String, dynamic> _sessionSettings = const {};
+  Map<String, dynamic> _space = const {};
+  List<dynamic> _devices = const [];
   List<dynamic> _auditLogs = const [];
   List<dynamic> _auditActions = const [];
   Map<String, dynamic> _auditSettings = const {};
@@ -41,12 +37,6 @@ class _AdvancedSystemPageState extends ConsumerState<AdvancedSystemPage> {
   Map<String, dynamic> _usageSources = const {};
   Map<String, dynamic> _accessConfig = const {};
   Map<String, dynamic> _accessStatus = const {};
-  Map<String, dynamic> _accountCheck = const {};
-  Map<String, dynamic> _wechatBridge = const {};
-  Map<String, dynamic> _wechatEvents = const {};
-  Map<String, dynamic> _wechatReplyTiming = const {};
-  Map<String, dynamic> _qqBridge = const {};
-  Map<String, dynamic> _qqEvents = const {};
   List<dynamic> _voiceSessions = const [];
   Map<String, dynamic> _shadowStatus = const {};
   Map<String, dynamic> _shadowThresholds = const {};
@@ -75,10 +65,8 @@ class _AdvancedSystemPageState extends ConsumerState<AdvancedSystemPage> {
     try {
       final api = ref.read(backendServiceProvider);
       final values = await Future.wait<dynamic>([
-        _safe(() async => await api.get<Map<String, dynamic>>('/api/auth/current-session') ?? <String, dynamic>{}, <String, dynamic>{}),
-        _safe(() async => await api.get<List<dynamic>>('/api/auth/login-history') ?? <dynamic>[], <dynamic>[]),
-        _safe(() async => await api.get<Map<String, dynamic>>('/api/auth/recovery-codes/status') ?? <String, dynamic>{}, <String, dynamic>{}),
-        _safe(() async => await api.get<Map<String, dynamic>>('/api/auth/session-settings') ?? <String, dynamic>{}, <String, dynamic>{}),
+        _safe(() async => await api.get<Map<String, dynamic>>('/api/space') ?? <String, dynamic>{}, <String, dynamic>{}),
+        _safe(() async { final value = await api.get<Map<String, dynamic>>('/api/device-mesh/v1/devices') ?? <String, dynamic>{}; final raw = value['devices']; return raw is List ? raw : <dynamic>[]; }, <dynamic>[]),
         _safe(() async => await api.get<List<dynamic>>('/api/audit/actions') ?? <dynamic>[], <dynamic>[]),
         _safe(() async => await api.get<List<dynamic>>('/api/audit/logs', queryParameters: {'limit': 200}) ?? <dynamic>[], <dynamic>[]),
         _safe(() async => await api.get<Map<String, dynamic>>('/api/audit/settings') ?? <String, dynamic>{}, <String, dynamic>{}),
@@ -93,48 +81,34 @@ class _AdvancedSystemPageState extends ConsumerState<AdvancedSystemPage> {
         _safe(() async => await api.get<Map<String, dynamic>>('/api/usage/sources') ?? <String, dynamic>{}, <String, dynamic>{}),
         _safe(() async => await api.get<Map<String, dynamic>>('/api/security/access-config') ?? <String, dynamic>{}, <String, dynamic>{}),
         _safe(() async => await api.get<Map<String, dynamic>>('/api/security/access-status') ?? <String, dynamic>{}, <String, dynamic>{}),
-        _safe(() async => await api.get<Map<String, dynamic>>('/api/security/account-check') ?? <String, dynamic>{}, <String, dynamic>{}),
-        _safe(() async => await api.get<Map<String, dynamic>>('/api/wechat/bridge/status-detail') ?? <String, dynamic>{}, <String, dynamic>{}),
-        _safe(() async => await api.get<Map<String, dynamic>>('/api/wechat/bridge/events') ?? <String, dynamic>{}, <String, dynamic>{}),
-        _safe(() async => await api.get<Map<String, dynamic>>('/api/wechat/reply-timing/status') ?? <String, dynamic>{}, <String, dynamic>{}),
-        _safe(() async => await api.get<Map<String, dynamic>>('/api/qq/bridge/status-detail') ?? <String, dynamic>{}, <String, dynamic>{}),
-        _safe(() async => await api.get<Map<String, dynamic>>('/api/qq/bridge/events') ?? <String, dynamic>{}, <String, dynamic>{}),
         _safe(() async => await api.get<Map<String, dynamic>>('/api/voice/sessions') ?? <String, dynamic>{}, <String, dynamic>{}),
         _safe(() async => await api.get<Map<String, dynamic>>('/api/shadow/status') ?? <String, dynamic>{}, <String, dynamic>{}),
         _safe(() async => await api.get<Map<String, dynamic>>('/api/shadow/thresholds') ?? <String, dynamic>{}, <String, dynamic>{}),
         _safe(() async => await api.get<Map<String, dynamic>>('/api/shadow/rollbacks') ?? <String, dynamic>{}, <String, dynamic>{}),
       ]);
       if (!mounted) return;
-      final voice = values[24] as Map<String, dynamic>;
+      final voice = values[16] as Map<String, dynamic>;
       setState(() {
-        _currentSession = values[0] as Map<String, dynamic>;
-        _loginHistory = values[1] as List<dynamic>;
-        _recovery = values[2] as Map<String, dynamic>;
-        _sessionSettings = values[3] as Map<String, dynamic>;
-        _auditActions = values[4] as List<dynamic>;
-        _auditLogs = values[5] as List<dynamic>;
-        _auditSettings = values[6] as Map<String, dynamic>;
-        _auditStats = values[7] as Map<String, dynamic>;
-        _mood = values[8] as Map<String, dynamic>;
-        _runtimeModules = values[9] as Map<String, dynamic>;
-        _runtimeHistory = values[10] as Map<String, dynamic>;
-        _modelErrors = values[11] as Map<String, dynamic>;
-        _logFiles = values[12] as Map<String, dynamic>;
-        _usageDaily = values[13] as Map<String, dynamic>;
-        _usageModels = values[14] as Map<String, dynamic>;
-        _usageSources = values[15] as Map<String, dynamic>;
-        _accessConfig = values[16] as Map<String, dynamic>;
-        _accessStatus = values[17] as Map<String, dynamic>;
-        _accountCheck = values[18] as Map<String, dynamic>;
-        _wechatBridge = values[19] as Map<String, dynamic>;
-        _wechatEvents = values[20] as Map<String, dynamic>;
-        _wechatReplyTiming = values[21] as Map<String, dynamic>;
-        _qqBridge = values[22] as Map<String, dynamic>;
-        _qqEvents = values[23] as Map<String, dynamic>;
+        _space = values[0] as Map<String, dynamic>;
+        _devices = values[1] as List<dynamic>;
+        _auditActions = values[2] as List<dynamic>;
+        _auditLogs = values[3] as List<dynamic>;
+        _auditSettings = values[4] as Map<String, dynamic>;
+        _auditStats = values[5] as Map<String, dynamic>;
+        _mood = values[6] as Map<String, dynamic>;
+        _runtimeModules = values[7] as Map<String, dynamic>;
+        _runtimeHistory = values[8] as Map<String, dynamic>;
+        _modelErrors = values[9] as Map<String, dynamic>;
+        _logFiles = values[10] as Map<String, dynamic>;
+        _usageDaily = values[11] as Map<String, dynamic>;
+        _usageModels = values[12] as Map<String, dynamic>;
+        _usageSources = values[13] as Map<String, dynamic>;
+        _accessConfig = values[14] as Map<String, dynamic>;
+        _accessStatus = values[15] as Map<String, dynamic>;
         _voiceSessions = voice['sessions'] is List ? voice['sessions'] as List : const [];
-        _shadowStatus = values[25] as Map<String, dynamic>;
-        _shadowThresholds = values[26] as Map<String, dynamic>;
-        _shadowRollbacks = values[27] as Map<String, dynamic>;
+        _shadowStatus = values[17] as Map<String, dynamic>;
+        _shadowThresholds = values[18] as Map<String, dynamic>;
+        _shadowRollbacks = values[19] as Map<String, dynamic>;
         _loading = false;
       });
     } catch (e) {
@@ -159,53 +133,6 @@ class _AdvancedSystemPageState extends ConsumerState<AdvancedSystemPage> {
     } finally {
       if (mounted) setState(() => _busy = false);
     }
-  }
-
-  Future<void> _generateRecoveryCodes() async {
-    final api = ref.read(backendServiceProvider);
-    final result = await api.post<Map<String, dynamic>>('/api/auth/recovery-codes/generate', data: const {});
-    final raw = result?['codes'];
-    if (!mounted) return;
-    setState(() => _newRecoveryCodes = raw is List ? raw.map((e) => '$e').toList() : const []);
-    if (_newRecoveryCodes.isNotEmpty) {
-      await showDialog<void>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('新的恢复代码'),
-          content: SizedBox(
-            width: 420,
-            child: SelectableText('这些代码只显示一次，请立即保存。\n\n${_newRecoveryCodes.join('\n')}'),
-          ),
-          actions: [
-            TextButton(onPressed: () async { await Clipboard.setData(ClipboardData(text: _newRecoveryCodes.join('\n'))); }, child: const Text('复制')),
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('完成')),
-          ],
-        ),
-      );
-    }
-    await _load();
-  }
-
-  Future<void> _editSessionSettings() async {
-    final timeout = TextEditingController(text: '${_sessionSettings['sessionTimeoutMinutes'] ?? 60}');
-    final maxSessions = TextEditingController(text: '${_sessionSettings['maxSessionsPerUser'] ?? 10}');
-    var tracking = _sessionSettings['enableDeviceTracking'] != false;
-    final result = await showDialog<Map<String, dynamic>>(
-      context: context,
-      builder: (context) => StatefulBuilder(builder: (context, setLocal) => AlertDialog(
-        title: const Text('会话策略'),
-        content: Column(mainAxisSize: MainAxisSize.min, children: [
-          TextField(controller: timeout, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: '访问令牌时长（分钟）')),
-          TextField(controller: maxSessions, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: '最大会话数')),
-          SwitchListTile(contentPadding: EdgeInsets.zero, title: const Text('设备追踪'), value: tracking, onChanged: (v) => setLocal(() => tracking = v)),
-          const Text('修改后需重启后端，新的会话才会使用更新后的策略。'),
-        ]),
-        actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('取消')), FilledButton(onPressed: () => Navigator.pop(context, {'sessionTimeoutMinutes': int.tryParse(timeout.text) ?? 60, 'maxSessionsPerUser': int.tryParse(maxSessions.text) ?? 10, 'enableDeviceTracking': tracking}), child: const Text('保存'))],
-      )),
-    );
-    timeout.dispose(); maxSessions.dispose();
-    if (result == null) return;
-    await _run(() async { await ref.read(backendServiceProvider).put<Map<String, dynamic>>('/api/auth/session-settings', data: result); }, '会话策略已保存，重启后端后应用');
   }
 
   Future<void> _editAudit() async {
@@ -281,13 +208,11 @@ class _AdvancedSystemPageState extends ConsumerState<AdvancedSystemPage> {
               : DefaultTabController(
                   length: 4,
                   child: Column(children: [
-                    const TabBar(isScrollable: true, tabs: [Tab(text: '账号'), Tab(text: '审计'), Tab(text: '观测'), Tab(text: 'Bridge')]),
+                    const TabBar(isScrollable: true, tabs: [Tab(text: 'Space / 设备'), Tab(text: '审计'), Tab(text: '观测'), Tab(text: 'Bridge')]),
                     Expanded(child: TabBarView(children: [
                       ListView(padding: EdgeInsets.all(AppSpacing.md), children: [
-                        _jsonCard('当前会话', _currentSession),
-                        _jsonCard('恢复代码状态', _recovery, actions: [TextButton(onPressed: _busy ? null : _generateRecoveryCodes, child: const Text('重新生成'))]),
-                        _jsonCard('会话策略', _sessionSettings, actions: [TextButton(onPressed: _busy ? null : _editSessionSettings, child: const Text('编辑'))]),
-                        _jsonCard('登录历史', _loginHistory),
+                        _jsonCard('个人空间', _space),
+                        _jsonCard('可信设备', _devices),
                       ]),
                       ListView(padding: EdgeInsets.all(AppSpacing.md), children: [
                         _jsonCard('审计统计', {'stats': _auditStats, 'actions': _auditActions, 'settings': _auditSettings}, actions: [TextButton(onPressed: _busy ? null : _editAudit, child: const Text('设置')), TextButton(onPressed: _busy ? null : () => _run(() async { await ref.read(backendServiceProvider).delete('/api/audit/logs'); }, '审计日志已清空'), child: const Text('清空'))]),
@@ -310,9 +235,7 @@ class _AdvancedSystemPageState extends ConsumerState<AdvancedSystemPage> {
                         _jsonCard('Usage · 按来源', _usageSources, actions: [TextButton(onPressed: _busy ? null : () => _run(() async { await ref.read(backendServiceProvider).delete('/api/usage/clear'); }, 'Usage 统计已清空'), child: const Text('清空统计'))]),
                       ]),
                       ListView(padding: EdgeInsets.all(AppSpacing.md), children: [
-                        _jsonCard('访问安全', {'config': _accessConfig, 'status': _accessStatus, 'account': _accountCheck}, actions: [TextButton(onPressed: _busy ? null : _editAccess, child: const Text('编辑'))]),
-                        _jsonCard('微信 Bridge', {'status': _wechatBridge, 'replyTiming': _wechatReplyTiming, 'events': _wechatEvents}, actions: [TextButton(onPressed: _busy ? null : () => _run(() async { final api=ref.read(backendServiceProvider); await api.post<Map<String,dynamic>>('/api/wechat/bridge/recover',data: const {}); await api.post<Map<String,dynamic>>('/api/wechat/reply-timing/recover',data: const {}); }, '微信 Bridge 恢复已执行'), child: const Text('恢复'))]),
-                        _jsonCard('QQ Bridge', {'status': _qqBridge, 'events': _qqEvents}, actions: [TextButton(onPressed: _busy ? null : () => _run(() async { await ref.read(backendServiceProvider).post<Map<String,dynamic>>('/api/qq/bridge/recover',data: const {}); }, 'QQ Bridge 恢复已执行'), child: const Text('恢复'))]),
+                        _jsonCard('访问安全', {'config': _accessConfig, 'status': _accessStatus}, actions: [TextButton(onPressed: _busy ? null : _editAccess, child: const Text('编辑'))]),
                         Card(margin: EdgeInsets.only(bottom: AppSpacing.md), child: Padding(padding: EdgeInsets.all(AppSpacing.md), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                           Text('Voice Sessions', style: Theme.of(context).textTheme.titleMedium), const SizedBox(height: 8),
                           if (_voiceSessions.isEmpty) const Text('暂无活动 Voice Session') else for (final raw in _voiceSessions) if (raw is Map) ...[

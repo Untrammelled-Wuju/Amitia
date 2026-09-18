@@ -32,12 +32,11 @@ type Repository interface {
 	CreateInstallation(installation *Installation) error
 	GetInstallation(id string) (*Installation, error)
 	GetInstallationByPackageVersion(packageID, packageVersion string) (*Installation, error)
-	ListInstallationsByUser(userID string) ([]*Installation, error)
-	ListInstallationsByCharacter(characterID string) ([]*Installation, error)
-	ListInstallations(userID string) ([]*Installation, error)
+	ListInstallationsBySpace(spaceID string) ([]*Installation, error)
+	ListInstallations(spaceID string) ([]*Installation, error)
 	UpdateInstallationStatus(id, status string) error
-	SetActiveInstallation(userID, installationID string) error
-	GetActiveInstallation(userID string) (*Installation, error)
+	SetActiveInstallation(spaceID, installationID string) error
+	GetActiveInstallation(spaceID string) (*Installation, error)
 	DeleteInstallation(id string) error
 
 	CreateRuntimeSettings(settings *RuntimeSettings) error
@@ -45,8 +44,8 @@ type Repository interface {
 	UpdateRuntimeSettings(installationID string, updates map[string]interface{}) error
 	UpdateRuntimeSettingsWithCAS(installationID string, expectedRevision int, updates map[string]interface{}) (*RuntimeSettings, error)
 
-	GetInstallationByUserDevicePet(userID, deviceID, petID string) (*Installation, error)
-	ListInstallationsByUserDevice(userID, deviceID string) ([]*Installation, error)
+	GetInstallationBySpaceDevicePet(spaceID, deviceID, petID string) (*Installation, error)
+	ListInstallationsBySpaceDevice(spaceID, deviceID string) ([]*Installation, error)
 }
 
 type repository struct {
@@ -89,12 +88,12 @@ func (a *txRepositoryAdapter) scoped() *repository {
 	return &repository{db: a.tx, ctx: a.repo.ctx}
 }
 
-func (a *txRepositoryAdapter) GetInstallationForUserDevice(userID, deviceID, installationID string) (*Installation, error) {
-	return a.scoped().GetInstallationForUserDevice(userID, deviceID, installationID)
+func (a *txRepositoryAdapter) GetInstallationForSpaceDevice(spaceID, deviceID, installationID string) (*Installation, error) {
+	return a.scoped().GetInstallationForSpaceDevice(spaceID, deviceID, installationID)
 }
 
-func (a *txRepositoryAdapter) ListInstallationsForUserDevice(userID, deviceID string) ([]*Installation, error) {
-	return a.scoped().ListInstallationsForUserDevice(userID, deviceID)
+func (a *txRepositoryAdapter) ListInstallationsForSpaceDevice(spaceID, deviceID string) ([]*Installation, error) {
+	return a.scoped().ListInstallationsForSpaceDevice(spaceID, deviceID)
 }
 
 func (a *txRepositoryAdapter) CreateInstallationTx(tx *gorm.DB, installation *Installation) error {
@@ -105,56 +104,56 @@ func (a *txRepositoryAdapter) UpdateInstallationTx(tx *gorm.DB, installation *In
 	return a.scoped().UpdateInstallationTx(tx, installation)
 }
 
-func (a *txRepositoryAdapter) GetInstallationByUserDevicePetTx(tx *gorm.DB, userID, deviceID, petID string) (*Installation, error) {
-	return a.scoped().GetInstallationByUserDevicePetTx(tx, userID, deviceID, petID)
+func (a *txRepositoryAdapter) GetInstallationBySpaceDevicePetTx(tx *gorm.DB, spaceID, deviceID, petID string) (*Installation, error) {
+	return a.scoped().GetInstallationBySpaceDevicePetTx(tx, spaceID, deviceID, petID)
 }
 
 func (a *txRepositoryAdapter) DeleteInstallationTx(tx *gorm.DB, id string) error {
 	return a.scoped().DeleteInstallationTx(tx, id)
 }
 
-func (a *txRepositoryAdapter) GetRuntimeSettingsForUserDevice(userID, deviceID, installationID string) (*RuntimeSettings, error) {
-	return a.scoped().GetRuntimeSettingsForUserDevice(userID, deviceID, installationID)
+func (a *txRepositoryAdapter) GetRuntimeSettingsForSpaceDevice(spaceID, deviceID, installationID string) (*RuntimeSettings, error) {
+	return a.scoped().GetRuntimeSettingsForSpaceDevice(spaceID, deviceID, installationID)
 }
 
 func (a *txRepositoryAdapter) CreateRuntimeSettingsTx(tx *gorm.DB, settings *RuntimeSettings) error {
 	return a.scoped().CreateRuntimeSettingsTx(tx, settings)
 }
 
-func (a *txRepositoryAdapter) UpdateRuntimeSettingsCAS(tx *gorm.DB, installationID, userID, deviceID string, expectedRevision int, updates map[string]interface{}) (*RuntimeSettings, error) {
-	return a.scoped().UpdateRuntimeSettingsCAS(tx, installationID, userID, deviceID, expectedRevision, updates)
+func (a *txRepositoryAdapter) UpdateRuntimeSettingsCAS(tx *gorm.DB, installationID, spaceID, deviceID string, expectedRevision int, updates map[string]interface{}) (*RuntimeSettings, error) {
+	return a.scoped().UpdateRuntimeSettingsCAS(tx, installationID, spaceID, deviceID, expectedRevision, updates)
 }
 
-func (a *txRepositoryAdapter) GetActiveBindingForUserDeviceTx(tx *gorm.DB, userID, deviceID string) (*binding.DeviceActiveInstallationBinding, error) {
-	return a.scoped().GetActiveBindingForUserDeviceTx(tx, userID, deviceID)
+func (a *txRepositoryAdapter) GetActiveBindingForSpaceDeviceTx(tx *gorm.DB, spaceID, deviceID string) (*binding.DeviceActiveInstallationBinding, error) {
+	return a.scoped().GetActiveBindingForSpaceDeviceTx(tx, spaceID, deviceID)
 }
 
 func (a *txRepositoryAdapter) UpsertActiveBindingTx(tx *gorm.DB, b *binding.DeviceActiveInstallationBinding) error {
 	return a.scoped().UpsertActiveBindingTx(tx, b)
 }
 
-func (a *txRepositoryAdapter) DeleteActiveBindingTx(tx *gorm.DB, userID, deviceID string) error {
-	return a.scoped().DeleteActiveBindingTx(tx, userID, deviceID)
+func (a *txRepositoryAdapter) DeleteActiveBindingTx(tx *gorm.DB, spaceID, deviceID string) error {
+	return a.scoped().DeleteActiveBindingTx(tx, spaceID, deviceID)
 }
 
 func (a *txRepositoryAdapter) InsertBindingHistoryTx(tx *gorm.DB, entry *binding.BindingHistoryEntry) error {
 	return a.scoped().InsertBindingHistoryTx(tx, entry)
 }
 
-func (a *txRepositoryAdapter) GetRuntimeDesiredStateTx(tx *gorm.DB, userID, deviceID string) (*desired.RuntimeDesiredState, error) {
-	return a.scoped().GetRuntimeDesiredStateTx(tx, userID, deviceID)
+func (a *txRepositoryAdapter) GetRuntimeDesiredStateTx(tx *gorm.DB, spaceID, deviceID string) (*desired.RuntimeDesiredState, error) {
+	return a.scoped().GetRuntimeDesiredStateTx(tx, spaceID, deviceID)
 }
 
-func (a *txRepositoryAdapter) UpsertRuntimeDesiredStateCAS(tx *gorm.DB, userID, deviceID string, state *desired.RuntimeDesiredState, expectedRevision int64) (*desired.RuntimeDesiredState, error) {
-	return a.scoped().UpsertRuntimeDesiredStateCAS(tx, userID, deviceID, state, expectedRevision)
+func (a *txRepositoryAdapter) UpsertRuntimeDesiredStateCAS(tx *gorm.DB, spaceID, deviceID string, state *desired.RuntimeDesiredState, expectedRevision int64) (*desired.RuntimeDesiredState, error) {
+	return a.scoped().UpsertRuntimeDesiredStateCAS(tx, spaceID, deviceID, state, expectedRevision)
 }
 
-func (a *txRepositoryAdapter) AllocateDeviceDesiredRevisionCAS(tx *gorm.DB, userID, deviceID string) (int64, error) {
-	return a.scoped().AllocateDeviceDesiredRevisionCAS(tx, userID, deviceID)
+func (a *txRepositoryAdapter) AllocateDeviceDesiredRevisionCAS(tx *gorm.DB, spaceID, deviceID string) (int64, error) {
+	return a.scoped().AllocateDeviceDesiredRevisionCAS(tx, spaceID, deviceID)
 }
 
-func (a *txRepositoryAdapter) GetDeviceDesiredRevisionCounterTx(tx *gorm.DB, userID, deviceID string) (*desired.DeviceDesiredRevisionCounter, error) {
-	return a.scoped().GetDeviceDesiredRevisionCounterTx(tx, userID, deviceID)
+func (a *txRepositoryAdapter) GetDeviceDesiredRevisionCounterTx(tx *gorm.DB, spaceID, deviceID string) (*desired.DeviceDesiredRevisionCounter, error) {
+	return a.scoped().GetDeviceDesiredRevisionCounterTx(tx, spaceID, deviceID)
 }
 
 func (a *txRepositoryAdapter) CreateOutboxEventTx(tx *gorm.DB, event *desired.DesiredStateOutboxEvent) error {
@@ -189,8 +188,8 @@ func (a *txRepositoryAdapter) GetOperationTx(tx *gorm.DB, operationID string) (*
 	return a.scoped().GetOperationTx(tx, operationID)
 }
 
-func (a *txRepositoryAdapter) GetOperationByIdempotencyKeyTx(tx *gorm.DB, userID, deviceID, idempotencyKey, opType string) (*operation.InstallationOperation, error) {
-	return a.scoped().GetOperationByIdempotencyKeyTx(tx, userID, deviceID, idempotencyKey, opType)
+func (a *txRepositoryAdapter) GetOperationByIdempotencyKeyTx(tx *gorm.DB, spaceID, deviceID, idempotencyKey, opType string) (*operation.InstallationOperation, error) {
+	return a.scoped().GetOperationByIdempotencyKeyTx(tx, spaceID, deviceID, idempotencyKey, opType)
 }
 
 func (a *txRepositoryAdapter) UpdateOperationStatusCAS(tx *gorm.DB, operationID, expectedStatus, newStatus, executionID string) (*operation.InstallationOperation, error) {
@@ -257,16 +256,16 @@ func (a *txRepositoryAdapter) MarkTrashEntryPurged(tx *gorm.DB, id string) error
 	return a.scoped().MarkTrashEntryPurged(tx, id)
 }
 
-func (a *txRepositoryAdapter) GetRuntimeProjectionTx(tx *gorm.DB, userID, deviceID string) (*projection.InstallationRuntimeProjection, error) {
-	return a.scoped().GetRuntimeProjectionTx(tx, userID, deviceID)
+func (a *txRepositoryAdapter) GetRuntimeProjectionTx(tx *gorm.DB, spaceID, deviceID string) (*projection.InstallationRuntimeProjection, error) {
+	return a.scoped().GetRuntimeProjectionTx(tx, spaceID, deviceID)
 }
 
 func (a *txRepositoryAdapter) UpsertRuntimeProjectionTx(tx *gorm.DB, p *projection.InstallationRuntimeProjection) error {
 	return a.scoped().UpsertRuntimeProjectionTx(tx, p)
 }
 
-func (a *txRepositoryAdapter) GetOrCreateDeviceContext(ctx context.Context, userID string, reqCtx device.RequestContext) (*device.DeviceContext, error) {
-	return a.scoped().GetOrCreateDeviceContext(ctx, userID, reqCtx)
+func (a *txRepositoryAdapter) GetOrCreateDeviceContext(ctx context.Context, spaceID string, reqCtx device.RequestContext) (*device.DeviceContext, error) {
+	return a.scoped().GetOrCreateDeviceContext(ctx, spaceID, reqCtx)
 }
 
 func (a *txRepositoryAdapter) Transaction(ctx context.Context, fn func(repo RepositoryV2) error) error {
@@ -278,11 +277,11 @@ func (a *txRepositoryAdapter) Transaction(ctx context.Context, fn func(repo Repo
 
 func (r *repository) DB() *gorm.DB { return r.db }
 
-func (r *repository) RequireOwnedDevice(ctx context.Context, userID, deviceID string) error {
+func (r *repository) RequireOwnedDevice(ctx context.Context, spaceID, deviceID string) error {
 	var count int64
 	err := r.db.WithContext(ctx).
 		Table("desktop_pet_installations").
-		Where("user_id = ? AND device_id = ?", userID, deviceID).
+		Where("space_id = ? AND device_id = ?", spaceID, deviceID).
 		Count(&count).Error
 	if err != nil {
 		return err
@@ -330,9 +329,9 @@ func (r *repository) GetInstallationByPackageVersion(packageID, packageVersion s
 	return &inst, nil
 }
 
-func (r *repository) ListInstallationsByUser(userID string) ([]*Installation, error) {
+func (r *repository) ListInstallationsBySpace(spaceID string) ([]*Installation, error) {
 	var installations []*Installation
-	err := r.db.Where("user_id = ?", userID).
+	err := r.db.Where("space_id = ?", spaceID).
 		Order("created_at DESC").
 		Find(&installations).Error
 	if installations == nil {
@@ -341,19 +340,8 @@ func (r *repository) ListInstallationsByUser(userID string) ([]*Installation, er
 	return installations, err
 }
 
-func (r *repository) ListInstallationsByCharacter(characterID string) ([]*Installation, error) {
-	var installations []*Installation
-	err := r.db.Where("character_id = ?", characterID).
-		Order("created_at DESC").
-		Find(&installations).Error
-	if installations == nil {
-		installations = []*Installation{}
-	}
-	return installations, err
-}
-
-func (r *repository) ListInstallations(userID string) ([]*Installation, error) {
-	return r.ListInstallationsByUser(userID)
+func (r *repository) ListInstallations(spaceID string) ([]*Installation, error) {
+	return r.ListInstallationsBySpace(spaceID)
 }
 
 func (r *repository) UpdateInstallationStatus(id, status string) error {
@@ -377,11 +365,11 @@ func (r *repository) UpdateInstallationStatus(id, status string) error {
 	return r.db.Model(&Installation{}).Where("id = ?", id).Updates(updates).Error
 }
 
-func (r *repository) SetActiveInstallation(userID, installationID string) error {
+func (r *repository) SetActiveInstallation(spaceID, installationID string) error {
 	return r.db.Transaction(func(tx *gorm.DB) error {
 		now := time.Now().Format(installationTimeFormat)
 		if err := tx.Model(&Installation{}).
-			Where("user_id = ? AND is_active = ?", userID, 1).
+			Where("space_id = ? AND is_active = ?", spaceID, 1).
 			Updates(map[string]interface{}{
 				"is_active":  0,
 				"updated_at": now,
@@ -399,7 +387,7 @@ func (r *repository) SetActiveInstallation(userID, installationID string) error 
 			}
 			return err
 		}
-		if inst.UserID != userID {
+		if inst.SpaceID != spaceID {
 			return ErrInstallationInvalid
 		}
 		return tx.Model(&Installation{}).
@@ -411,9 +399,9 @@ func (r *repository) SetActiveInstallation(userID, installationID string) error 
 	})
 }
 
-func (r *repository) GetActiveInstallation(userID string) (*Installation, error) {
+func (r *repository) GetActiveInstallation(spaceID string) (*Installation, error) {
 	var inst Installation
-	err := r.db.Where("user_id = ? AND is_active = ?", userID, 1).First(&inst).Error
+	err := r.db.Where("space_id = ? AND is_active = ?", spaceID, 1).First(&inst).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, ErrInstallationNotFound
@@ -484,9 +472,9 @@ func (r *repository) UpdateRuntimeSettingsWithCAS(installationID string, expecte
 	return result, nil
 }
 
-func (r *repository) GetInstallationByUserDevicePet(userID, deviceID, petID string) (*Installation, error) {
+func (r *repository) GetInstallationBySpaceDevicePet(spaceID, deviceID, petID string) (*Installation, error) {
 	var inst Installation
-	query := r.db.Where("user_id = ? AND pet_id = ?", userID, petID)
+	query := r.db.Where("space_id = ? AND pet_id = ?", spaceID, petID)
 	if deviceID != "" {
 		query = query.Where("device_id = ? OR device_id = ''", deviceID)
 	}
@@ -501,9 +489,9 @@ func (r *repository) GetInstallationByUserDevicePet(userID, deviceID, petID stri
 	return &inst, nil
 }
 
-func (r *repository) ListInstallationsByUserDevice(userID, deviceID string) ([]*Installation, error) {
+func (r *repository) ListInstallationsBySpaceDevice(spaceID, deviceID string) ([]*Installation, error) {
 	var installations []*Installation
-	query := r.db.Where("user_id = ?", userID)
+	query := r.db.Where("space_id = ?", spaceID)
 	if deviceID != "" {
 		query = query.Where("device_id = ? OR device_id = ''", deviceID)
 	}
@@ -514,10 +502,10 @@ func (r *repository) ListInstallationsByUserDevice(userID, deviceID string) ([]*
 	return installations, err
 }
 
-func (r *repository) GetInstallationForUserDevice(userID, deviceID, installationID string) (*Installation, error) {
+func (r *repository) GetInstallationForSpaceDevice(spaceID, deviceID, installationID string) (*Installation, error) {
 	var inst Installation
-	err := r.db.Where("id = ? AND user_id = ? AND (device_id = ? OR (device_id = '' AND ? = ''))",
-		installationID, userID, deviceID, deviceID).First(&inst).Error
+	err := r.db.Where("id = ? AND space_id = ? AND (device_id = ? OR (device_id = '' AND ? = ''))",
+		installationID, spaceID, deviceID, deviceID).First(&inst).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, ErrInstallationNotFound
@@ -527,9 +515,9 @@ func (r *repository) GetInstallationForUserDevice(userID, deviceID, installation
 	return &inst, nil
 }
 
-func (r *repository) ListInstallationsForUserDevice(userID, deviceID string) ([]*Installation, error) {
+func (r *repository) ListInstallationsForSpaceDevice(spaceID, deviceID string) ([]*Installation, error) {
 	var list []*Installation
-	tx := r.db.Where("user_id = ?", userID)
+	tx := r.db.Where("space_id = ?", spaceID)
 	if deviceID != "" {
 		tx = tx.Where("device_id = ? OR device_id = ''", deviceID)
 	}
@@ -547,9 +535,9 @@ func (r *repository) UpdateInstallationTx(tx *gorm.DB, inst *Installation) error
 	return tx.Save(inst).Error
 }
 
-func (r *repository) GetInstallationByUserDevicePetTx(tx *gorm.DB, userID, deviceID, petID string) (*Installation, error) {
+func (r *repository) GetInstallationBySpaceDevicePetTx(tx *gorm.DB, spaceID, deviceID, petID string) (*Installation, error) {
 	var inst Installation
-	err := tx.Where("user_id = ? AND pet_id = ?", userID, petID).
+	err := tx.Where("space_id = ? AND pet_id = ?", spaceID, petID).
 		Where("device_id = ? OR device_id = ''", deviceID).
 		First(&inst).Error
 	if err != nil {
@@ -565,13 +553,13 @@ func (r *repository) DeleteInstallationTx(tx *gorm.DB, id string) error {
 	return tx.Delete(&Installation{}, "id = ?", id).Error
 }
 
-func (r *repository) GetRuntimeSettingsForUserDevice(userID, deviceID, installationID string) (*RuntimeSettings, error) {
+func (r *repository) GetRuntimeSettingsForSpaceDevice(spaceID, deviceID, installationID string) (*RuntimeSettings, error) {
 	// Scope the settings lookup through the owning installation. Runtime settings
 	// do not carry user/device columns themselves, so installation_id alone is
 	// not an ownership boundary. Legacy device-less installations remain valid
-	// for their owner and are narrowed by user_id.
+	// for their owner and are narrowed by space_id.
 	var installation Installation
-	if err := r.db.Where("id = ? AND user_id = ?", installationID, userID).
+	if err := r.db.Where("id = ? AND space_id = ?", installationID, spaceID).
 		Where("device_id = ? OR device_id = ''", deviceID).
 		First(&installation).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -595,9 +583,9 @@ func (r *repository) CreateRuntimeSettingsTx(tx *gorm.DB, settings *RuntimeSetti
 	return tx.Create(settings).Error
 }
 
-func (r *repository) UpdateRuntimeSettingsCAS(tx *gorm.DB, installationID, userID, deviceID string, expectedRevision int, updates map[string]interface{}) (*RuntimeSettings, error) {
+func (r *repository) UpdateRuntimeSettingsCAS(tx *gorm.DB, installationID, spaceID, deviceID string, expectedRevision int, updates map[string]interface{}) (*RuntimeSettings, error) {
 	var installation Installation
-	if err := tx.Where("id = ? AND user_id = ?", installationID, userID).
+	if err := tx.Where("id = ? AND space_id = ?", installationID, spaceID).
 		Where("device_id = ? OR device_id = ''", deviceID).
 		Clauses(clause.Locking{Strength: "UPDATE"}).
 		First(&installation).Error; err != nil {
@@ -635,9 +623,9 @@ func (r *repository) UpdateRuntimeSettingsCAS(tx *gorm.DB, installationID, userI
 	return &updated, nil
 }
 
-func (r *repository) GetActiveBindingForUserDeviceTx(tx *gorm.DB, userID, deviceID string) (*binding.DeviceActiveInstallationBinding, error) {
+func (r *repository) GetActiveBindingForSpaceDeviceTx(tx *gorm.DB, spaceID, deviceID string) (*binding.DeviceActiveInstallationBinding, error) {
 	var b binding.DeviceActiveInstallationBinding
-	err := tx.Where("user_id = ? AND device_id = ?", userID, deviceID).First(&b).Error
+	err := tx.Where("space_id = ? AND device_id = ?", spaceID, deviceID).First(&b).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, ErrBindingNotFound
@@ -649,13 +637,13 @@ func (r *repository) GetActiveBindingForUserDeviceTx(tx *gorm.DB, userID, device
 
 func (r *repository) UpsertActiveBindingTx(tx *gorm.DB, b *binding.DeviceActiveInstallationBinding) error {
 	return tx.Clauses(clause.OnConflict{
-		Columns:   []clause.Column{{Name: "user_id"}, {Name: "device_id"}},
+		Columns:   []clause.Column{{Name: "space_id"}, {Name: "device_id"}},
 		DoUpdates: clause.AssignmentColumns([]string{"installation_id", "pet_id", "release_id", "binding_revision", "bound_reason", "bound_at", "bound_by", "updated_at"}),
 	}).Create(b).Error
 }
 
-func (r *repository) DeleteActiveBindingTx(tx *gorm.DB, userID, deviceID string) error {
-	return tx.Where("user_id = ? AND device_id = ?", userID, deviceID).
+func (r *repository) DeleteActiveBindingTx(tx *gorm.DB, spaceID, deviceID string) error {
+	return tx.Where("space_id = ? AND device_id = ?", spaceID, deviceID).
 		Delete(&binding.DeviceActiveInstallationBinding{}).Error
 }
 
@@ -663,9 +651,9 @@ func (r *repository) InsertBindingHistoryTx(tx *gorm.DB, entry *binding.BindingH
 	return tx.Create(entry).Error
 }
 
-func (r *repository) GetRuntimeDesiredStateTx(tx *gorm.DB, userID, deviceID string) (*desired.RuntimeDesiredState, error) {
+func (r *repository) GetRuntimeDesiredStateTx(tx *gorm.DB, spaceID, deviceID string) (*desired.RuntimeDesiredState, error) {
 	var state desired.RuntimeDesiredState
-	err := tx.Where("user_id = ? AND device_id = ?", userID, deviceID).First(&state).Error
+	err := tx.Where("space_id = ? AND device_id = ?", spaceID, deviceID).First(&state).Error
 	if err != nil {
 		if !errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, err
@@ -675,8 +663,8 @@ func (r *repository) GetRuntimeDesiredStateTx(tx *gorm.DB, userID, deviceID stri
 	return &state, nil
 }
 
-func (r *repository) UpsertRuntimeDesiredStateCAS(tx *gorm.DB, userID, deviceID string, state *desired.RuntimeDesiredState, expectedRevision int64) (*desired.RuntimeDesiredState, error) {
-	existing, err := r.GetRuntimeDesiredStateTx(tx, userID, deviceID)
+func (r *repository) UpsertRuntimeDesiredStateCAS(tx *gorm.DB, spaceID, deviceID string, state *desired.RuntimeDesiredState, expectedRevision int64) (*desired.RuntimeDesiredState, error) {
+	existing, err := r.GetRuntimeDesiredStateTx(tx, spaceID, deviceID)
 	if err != nil {
 		return nil, err
 	}
@@ -706,9 +694,9 @@ func (r *repository) UpsertRuntimeDesiredStateCAS(tx *gorm.DB, userID, deviceID 
 	return state, nil
 }
 
-func (r *repository) AllocateDeviceDesiredRevisionCAS(tx *gorm.DB, userID, deviceID string) (int64, error) {
+func (r *repository) AllocateDeviceDesiredRevisionCAS(tx *gorm.DB, spaceID, deviceID string) (int64, error) {
 	var counter desired.DeviceDesiredRevisionCounter
-	err := tx.Where("user_id = ? AND device_id = ?", userID, deviceID).
+	err := tx.Where("space_id = ? AND device_id = ?", spaceID, deviceID).
 		Clauses(clause.Locking{Strength: "UPDATE"}).
 		First(&counter).Error
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
@@ -717,7 +705,7 @@ func (r *repository) AllocateDeviceDesiredRevisionCAS(tx *gorm.DB, userID, devic
 	newRevision := counter.CurrentRevision + 1
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		counter = desired.DeviceDesiredRevisionCounter{
-			UserID:          userID,
+			SpaceID:         spaceID,
 			DeviceID:        deviceID,
 			CurrentRevision: newRevision,
 			UpdatedAt:       time.Now().Format(installationTimeFormat),
@@ -735,9 +723,9 @@ func (r *repository) AllocateDeviceDesiredRevisionCAS(tx *gorm.DB, userID, devic
 	return newRevision, nil
 }
 
-func (r *repository) GetDeviceDesiredRevisionCounterTx(tx *gorm.DB, userID, deviceID string) (*desired.DeviceDesiredRevisionCounter, error) {
+func (r *repository) GetDeviceDesiredRevisionCounterTx(tx *gorm.DB, spaceID, deviceID string) (*desired.DeviceDesiredRevisionCounter, error) {
 	var counter desired.DeviceDesiredRevisionCounter
-	err := tx.Where("user_id = ? AND device_id = ?", userID, deviceID).First(&counter).Error
+	err := tx.Where("space_id = ? AND device_id = ?", spaceID, deviceID).First(&counter).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, ErrDesiredStateRevisionNotFound
@@ -808,10 +796,10 @@ func (r *repository) GetOperationTx(tx *gorm.DB, operationID string) (*operation
 	return &op, nil
 }
 
-func (r *repository) GetOperationByIdempotencyKeyTx(tx *gorm.DB, userID, deviceID, idempotencyKey, opType string) (*operation.InstallationOperation, error) {
+func (r *repository) GetOperationByIdempotencyKeyTx(tx *gorm.DB, spaceID, deviceID, idempotencyKey, opType string) (*operation.InstallationOperation, error) {
 	var op operation.InstallationOperation
 	err := tx.Where("idempotency_key = ? AND operation_type = ?", idempotencyKey, opType).
-		Where("user_id = ? AND device_id = ?", userID, deviceID).
+		Where("space_id = ? AND device_id = ?", spaceID, deviceID).
 		First(&op).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -1039,9 +1027,9 @@ func (r *repository) MarkTrashEntryPurged(tx *gorm.DB, id string) error {
 		Updates(map[string]interface{}{"status": "purged", "purged_at": now}).Error
 }
 
-func (r *repository) GetRuntimeProjectionTx(tx *gorm.DB, userID, deviceID string) (*projection.InstallationRuntimeProjection, error) {
+func (r *repository) GetRuntimeProjectionTx(tx *gorm.DB, spaceID, deviceID string) (*projection.InstallationRuntimeProjection, error) {
 	var p projection.InstallationRuntimeProjection
-	err := tx.Where("user_id = ? AND device_id = ?", userID, deviceID).First(&p).Error
+	err := tx.Where("space_id = ? AND device_id = ?", spaceID, deviceID).First(&p).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, ErrProjectionNotFound
@@ -1053,7 +1041,7 @@ func (r *repository) GetRuntimeProjectionTx(tx *gorm.DB, userID, deviceID string
 
 func (r *repository) UpsertRuntimeProjectionTx(tx *gorm.DB, p *projection.InstallationRuntimeProjection) error {
 	return tx.Clauses(clause.OnConflict{
-		Columns: []clause.Column{{Name: "user_id"}, {Name: "device_id"}},
+		Columns: []clause.Column{{Name: "space_id"}, {Name: "device_id"}},
 		DoUpdates: clause.AssignmentColumns([]string{
 			"runtime_id", "installation_id", "pet_id", "applied_desired_revision",
 			"applied_settings_revision", "actual_release_id", "actual_visible",
@@ -1063,7 +1051,7 @@ func (r *repository) UpsertRuntimeProjectionTx(tx *gorm.DB, p *projection.Instal
 	}).Create(p).Error
 }
 
-func (r *repository) GetOrCreateDeviceContext(ctx context.Context, userID string, reqCtx device.RequestContext) (*device.DeviceContext, error) {
+func (r *repository) GetOrCreateDeviceContext(ctx context.Context, spaceID string, reqCtx device.RequestContext) (*device.DeviceContext, error) {
 	if reqCtx.RuntimeID != "" {
 		var client runtimeClient
 		if err := r.db.Where("runtime_id = ?", reqCtx.RuntimeID).First(&client).Error; err != nil {
@@ -1072,11 +1060,11 @@ func (r *repository) GetOrCreateDeviceContext(ctx context.Context, userID string
 			}
 			return nil, err
 		}
-		if client.UserID != userID && userID != "" {
+		if client.SpaceID != spaceID && spaceID != "" {
 			return nil, device.ErrDeviceNotOwned
 		}
 		return &device.DeviceContext{
-			UserID:    userID,
+			SpaceID:   spaceID,
 			DeviceID:  client.DeviceID,
 			RuntimeID: reqCtx.RuntimeID,
 			Source:    "runtime_registry",
@@ -1084,7 +1072,7 @@ func (r *repository) GetOrCreateDeviceContext(ctx context.Context, userID string
 	}
 	if reqCtx.DeviceIDHeader != "" {
 		return &device.DeviceContext{
-			UserID:   userID,
+			SpaceID:  spaceID,
 			DeviceID: reqCtx.DeviceIDHeader,
 			Source:   "request_header",
 		}, nil
@@ -1099,7 +1087,7 @@ func uuidPrefix(prefix string) string {
 type runtimeClient struct {
 	RuntimeID string `gorm:"primaryKey"`
 	DeviceID  string
-	UserID    string
+	SpaceID   string
 }
 
 func (runtimeClient) TableName() string {

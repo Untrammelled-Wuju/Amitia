@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/u-ai/backend/internal/androidmedia/camera"
+	"github.com/u-ai/backend/internal/androidmedia/screenshot"
 	"github.com/u-ai/backend/internal/androidnative/accessibility"
 	"github.com/u-ai/backend/internal/androidnative/adb"
 	"github.com/u-ai/backend/internal/androidnative/display"
@@ -58,11 +59,20 @@ func collectAndroidNativeToolDefinitions() []capability.ToolDefinition {
 	defs = append(defs, devicecontrol.BuildTools()...)
 	defs = append(defs, share.BuildShareTools()...)
 
-	cameraTools, err := camera.BuildCameraTools()
-	if err != nil {
-		return nil
+	if screenshotTool, err := screenshot.BuildToolDefinition(); err == nil {
+		defs = append(defs, screenshotTool)
+		captureAlias := screenshotTool
+		captureAlias.ID = "android.screen.capture_screenshot"
+		captureAlias.ModelName = "capture_screenshot"
+		captureAlias.Name = "Capture Screenshot"
+		captureAlias.Description = "Capture one static Android screenshot and return an amitia:// resource reference. This is the compatibility alias for capture_screenshot."
+		captureAlias.ToolVersion.Revision = "b34-screen-shot-alias-v1"
+		defs = append(defs, captureAlias)
 	}
-	defs = append(defs, cameraTools...)
+
+	if cameraTools, err := camera.BuildCameraTools(); err == nil {
+		defs = append(defs, cameraTools...)
+	}
 
 	return defs
 }

@@ -2,40 +2,70 @@ class ReminderDto {
   final String id;
   final String title;
   final String content;
-  final String cronExpr;
+  final String channel;
+  final String conversationId;
+  final String characterId;
+  final String remindAt;
+  final String repeatRule;
   final int enabled;
   final String lastTriggeredAt;
   final String createdAt;
+  final String updatedAt;
+  final String conversationTitle;
+  final String characterName;
 
-  ReminderDto({
+  const ReminderDto({
     required this.id,
     this.title = '',
     this.content = '',
-    this.cronExpr = '',
+    this.channel = 'web',
+    this.conversationId = '',
+    this.characterId = '',
+    this.remindAt = '',
+    this.repeatRule = 'none',
     this.enabled = 1,
     this.lastTriggeredAt = '',
     this.createdAt = '',
+    this.updatedAt = '',
+    this.conversationTitle = '',
+    this.characterName = '',
   });
 
-  factory ReminderDto.fromJson(Map<String, dynamic> json) {
-    return ReminderDto(
-      id: (json['id'] ?? '').toString(),
-      title: json['title'] as String? ?? '',
-      content: json['content'] as String? ?? '',
-      cronExpr: json['cronExpr'] as String? ?? '',
-      enabled: json['enabled'] as int? ?? 1,
-      lastTriggeredAt: json['lastTriggeredAt'] as String? ?? '',
-      createdAt: json['createdAt'] as String? ?? '',
-    );
-  }
+  bool get isEnabled => enabled == 1;
 
-  Map<String, dynamic> toJson() {
-    return {
-      'id': id,
-      'title': title,
-      'content': content,
-      'cronExpr': cronExpr,
-      'enabled': enabled,
-    };
-  }
+  factory ReminderDto.fromJson(Map<String, dynamic> json) => ReminderDto(
+        id: (json['id'] ?? '').toString(),
+        title: (json['title'] ?? '').toString(),
+        content: (json['content'] ?? '').toString(),
+        channel: (json['channel'] ?? 'web').toString(),
+        conversationId: (json['conversationId'] ?? '').toString(),
+        characterId: (json['characterId'] ?? '').toString(),
+        remindAt: (json['remindAt'] ?? '').toString(),
+        repeatRule: (json['repeatRule'] ?? 'none').toString(),
+        enabled: json['enabled'] is bool
+            ? (json['enabled'] == true ? 1 : 0)
+            : (json['enabled'] as num?)?.toInt() ?? 1,
+        lastTriggeredAt: (json['lastTriggeredAt'] ?? '').toString(),
+        createdAt: (json['createdAt'] ?? '').toString(),
+        updatedAt: (json['updatedAt'] ?? '').toString(),
+        conversationTitle: (json['conversationTitle'] ?? '').toString(),
+        characterName: (json['characterName'] ?? '').toString(),
+      );
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'title': title,
+        'content': content,
+        'channel': channel,
+        'conversationId': conversationId,
+        'characterId': characterId,
+        'remindAt': remindAt,
+        'repeatRule': repeatRule,
+        'enabled': enabled,
+        'lastTriggeredAt': lastTriggeredAt,
+        'createdAt': createdAt,
+        'updatedAt': updatedAt,
+        'conversationTitle': conversationTitle,
+        'characterName': characterName,
+      };
 }

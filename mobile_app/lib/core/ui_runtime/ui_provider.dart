@@ -1,9 +1,27 @@
 import 'package:flutter/foundation.dart';
 
 enum UIProviderMode { replace, compose, augment }
+
 enum UIProviderPlacement { any, cloud, device, hybrid }
-enum UIProfileScopeKind { global, user, platform, device, devicePlatform, runtime }
-enum UIProviderEntryType { builtinNative, declarative, webModule, schemaRenderer, webRestricted, webIsolated, unknown }
+
+enum UIProfileScopeKind {
+  global,
+  space,
+  platform,
+  device,
+  devicePlatform,
+  runtime,
+}
+
+enum UIProviderEntryType {
+  builtinNative,
+  declarative,
+  webModule,
+  schemaRenderer,
+  webRestricted,
+  webIsolated,
+  unknown,
+}
 
 abstract final class UICapability {
   static const appShell = 'app.shell';
@@ -32,22 +50,48 @@ abstract final class UICapability {
   static const components = 'ui.components';
 
   static const all = <String>[
-    appShell, appNavigation, appWorkspace, routeRegistry, pageProvider,
-    conversationShell, conversationHeader, conversationMessages, conversationMessageRenderer, conversationSidebar, conversationComposer, conversationOverlay,
-    characterShell, characterDetail, memoryShell, memoryDetail, settingsShell, settingsSection, extensionCenter, extensionPage,
-    theme, tokens, icons, components,
+    appShell,
+    appNavigation,
+    appWorkspace,
+    routeRegistry,
+    pageProvider,
+    conversationShell,
+    conversationHeader,
+    conversationMessages,
+    conversationMessageRenderer,
+    conversationSidebar,
+    conversationComposer,
+    conversationOverlay,
+    characterShell,
+    characterDetail,
+    memoryShell,
+    memoryDetail,
+    settingsShell,
+    settingsSection,
+    extensionCenter,
+    extensionPage,
+    theme,
+    tokens,
+    icons,
+    components,
   ];
 }
 
 String currentUIPlatform() {
   if (kIsWeb) return 'web';
   switch (defaultTargetPlatform) {
-    case TargetPlatform.android: return 'android';
-    case TargetPlatform.iOS: return 'ios';
-    case TargetPlatform.windows: return 'windows';
-    case TargetPlatform.macOS: return 'macos';
-    case TargetPlatform.linux: return 'linux';
-    case TargetPlatform.fuchsia: return 'mobile';
+    case TargetPlatform.android:
+      return 'android';
+    case TargetPlatform.iOS:
+      return 'ios';
+    case TargetPlatform.windows:
+      return 'windows';
+    case TargetPlatform.macOS:
+      return 'macos';
+    case TargetPlatform.linux:
+      return 'linux';
+    case TargetPlatform.fuchsia:
+      return 'mobile';
   }
 }
 
@@ -59,7 +103,14 @@ class UIProviderEntry {
   final String? exportName;
   final String? contentHash;
 
-  const UIProviderEntry({this.contributionId, required this.type, this.path, this.schemaPath, this.exportName, this.contentHash});
+  const UIProviderEntry({
+    this.contributionId,
+    required this.type,
+    this.path,
+    this.schemaPath,
+    this.exportName,
+    this.contentHash,
+  });
 
   factory UIProviderEntry.fromJson(Map<String, dynamic> json) {
     final rawType = (json['type'] ?? '').toString();
@@ -89,28 +140,48 @@ class UIDeviceRequirements {
   final String? minAppVersion;
   final String? minRuntimeVersion;
   final List<String> requiredFeatures;
-  const UIDeviceRequirements({this.platforms = const [], this.architectures = const [], this.minAppVersion, this.minRuntimeVersion, this.requiredFeatures = const []});
-  factory UIDeviceRequirements.fromJson(Map<String, dynamic> json) => UIDeviceRequirements(
-    platforms: ((json['platforms'] as List?) ?? const []).map((e) => e.toString()).toList(),
-    architectures: ((json['architectures'] as List?) ?? const []).map((e) => e.toString()).toList(),
-    minAppVersion: json['minAppVersion']?.toString(),
-    minRuntimeVersion: json['minRuntimeVersion']?.toString(),
-    requiredFeatures: ((json['requiredFeatures'] as List?) ?? const []).map((e) => e.toString()).toList(),
-  );
+  const UIDeviceRequirements({
+    this.platforms = const [],
+    this.architectures = const [],
+    this.minAppVersion,
+    this.minRuntimeVersion,
+    this.requiredFeatures = const [],
+  });
+  factory UIDeviceRequirements.fromJson(Map<String, dynamic> json) =>
+      UIDeviceRequirements(
+        platforms: ((json['platforms'] as List?) ?? const [])
+            .map((e) => e.toString())
+            .toList(),
+        architectures: ((json['architectures'] as List?) ?? const [])
+            .map((e) => e.toString())
+            .toList(),
+        minAppVersion: json['minAppVersion']?.toString(),
+        minRuntimeVersion: json['minRuntimeVersion']?.toString(),
+        requiredFeatures: ((json['requiredFeatures'] as List?) ?? const [])
+            .map((e) => e.toString())
+            .toList(),
+      );
 }
 
 class UIProfileScope {
-  final String? userId;
+  final String? spaceId;
   final String? deviceId;
   final String? platform;
   final String? runtimeProfile;
-  const UIProfileScope({this.userId, this.deviceId, this.platform, this.runtimeProfile});
+  const UIProfileScope({
+    this.spaceId,
+    this.deviceId,
+    this.platform,
+    this.runtimeProfile,
+  });
   factory UIProfileScope.fromJson(Map<String, dynamic> json) => UIProfileScope(
-    userId: json['userId']?.toString(), deviceId: json['deviceId']?.toString(),
-    platform: json['platform']?.toString(), runtimeProfile: json['runtimeProfile']?.toString(),
+    spaceId: json['spaceId']?.toString(),
+    deviceId: json['deviceId']?.toString(),
+    platform: json['platform']?.toString(),
+    runtimeProfile: json['runtimeProfile']?.toString(),
   );
   Map<String, dynamic> toJson() => {
-    if (userId?.isNotEmpty == true) 'userId': userId,
+    if (spaceId?.isNotEmpty == true) 'spaceId': spaceId,
     if (deviceId?.isNotEmpty == true) 'deviceId': deviceId,
     if (platform?.isNotEmpty == true) 'platform': platform,
     if (runtimeProfile?.isNotEmpty == true) 'runtimeProfile': runtimeProfile,
@@ -124,18 +195,42 @@ class UIProviderResolveContext extends UIProfileScope {
   final bool deviceOnline;
   final bool localRuntime;
   final List<String> deviceCapabilities;
-  const UIProviderResolveContext({super.userId, super.deviceId, super.platform, super.runtimeProfile, this.architecture, this.appVersion, this.runtimeVersion, this.deviceOnline = false, this.localRuntime = false, this.deviceCapabilities = const []});
-  factory UIProviderResolveContext.fromJson(Map<String, dynamic> json) => UIProviderResolveContext(
-    userId: json['userId']?.toString(), deviceId: json['deviceId']?.toString(), platform: json['platform']?.toString(), runtimeProfile: json['runtimeProfile']?.toString(),
-    architecture: json['architecture']?.toString(), appVersion: json['appVersion']?.toString(), runtimeVersion: json['runtimeVersion']?.toString(),
-    deviceOnline: json['deviceOnline'] == true, localRuntime: json['localRuntime'] == true,
-    deviceCapabilities: ((json['deviceCapabilities'] as List?) ?? const []).map((e) => e.toString()).toList(),
-  );
+  const UIProviderResolveContext({
+    super.spaceId,
+    super.deviceId,
+    super.platform,
+    super.runtimeProfile,
+    this.architecture,
+    this.appVersion,
+    this.runtimeVersion,
+    this.deviceOnline = false,
+    this.localRuntime = false,
+    this.deviceCapabilities = const [],
+  });
+  factory UIProviderResolveContext.fromJson(Map<String, dynamic> json) =>
+      UIProviderResolveContext(
+        spaceId: json['spaceId']?.toString(),
+        deviceId: json['deviceId']?.toString(),
+        platform: json['platform']?.toString(),
+        runtimeProfile: json['runtimeProfile']?.toString(),
+        architecture: json['architecture']?.toString(),
+        appVersion: json['appVersion']?.toString(),
+        runtimeVersion: json['runtimeVersion']?.toString(),
+        deviceOnline: json['deviceOnline'] == true,
+        localRuntime: json['localRuntime'] == true,
+        deviceCapabilities: ((json['deviceCapabilities'] as List?) ?? const [])
+            .map((e) => e.toString())
+            .toList(),
+      );
 }
 
 String uiProfileScopeKindValue(UIProfileScopeKind kind) => switch (kind) {
-  UIProfileScopeKind.global => 'global', UIProfileScopeKind.user => 'user', UIProfileScopeKind.platform => 'platform',
-  UIProfileScopeKind.device => 'device', UIProfileScopeKind.devicePlatform => 'device_platform', UIProfileScopeKind.runtime => 'runtime',
+  UIProfileScopeKind.global => 'global',
+  UIProfileScopeKind.space => 'space',
+  UIProfileScopeKind.platform => 'platform',
+  UIProfileScopeKind.device => 'device',
+  UIProfileScopeKind.devicePlatform => 'device_platform',
+  UIProfileScopeKind.runtime => 'runtime',
 };
 
 class UIProviderDefinition {
@@ -158,32 +253,69 @@ class UIProviderDefinition {
   final Map<String, dynamic> metadata;
 
   const UIProviderDefinition({
-    required this.providerId, required this.extensionId, this.moduleId, required this.capability,
-    required this.mode, required this.priority, required this.platforms, required this.entries,
-    this.fallbackProviderId, this.trustLevel, required this.permissions, required this.placement, this.deviceRequirements, required this.generation,
-    required this.enabled, required this.builtin, required this.metadata,
+    required this.providerId,
+    required this.extensionId,
+    this.moduleId,
+    required this.capability,
+    required this.mode,
+    required this.priority,
+    required this.platforms,
+    required this.entries,
+    this.fallbackProviderId,
+    this.trustLevel,
+    required this.permissions,
+    required this.placement,
+    this.deviceRequirements,
+    required this.generation,
+    required this.enabled,
+    required this.builtin,
+    required this.metadata,
   });
 
   factory UIProviderDefinition.fromJson(Map<String, dynamic> json) {
-    final rawEntries = (json['entries'] as Map?)?.cast<String, dynamic>() ?? const <String, dynamic>{};
+    final rawEntries =
+        (json['entries'] as Map?)?.cast<String, dynamic>() ??
+        const <String, dynamic>{};
     final entries = <String, UIProviderEntry>{};
     for (final item in rawEntries.entries) {
-      if (item.value is Map) entries[item.key] = UIProviderEntry.fromJson((item.value as Map).cast<String, dynamic>());
+      if (item.value is Map)
+        entries[item.key] = UIProviderEntry.fromJson(
+          (item.value as Map).cast<String, dynamic>(),
+        );
     }
     return UIProviderDefinition(
       providerId: (json['providerId'] ?? '').toString(),
       extensionId: (json['extensionId'] ?? '').toString(),
       moduleId: json['moduleId']?.toString(),
       capability: (json['capability'] ?? '').toString(),
-      mode: switch ((json['mode'] ?? 'replace').toString()) { 'compose' => UIProviderMode.compose, 'augment' => UIProviderMode.augment, _ => UIProviderMode.replace },
+      mode: switch ((json['mode'] ?? 'replace').toString()) {
+        'compose' => UIProviderMode.compose,
+        'augment' => UIProviderMode.augment,
+        _ => UIProviderMode.replace,
+      },
       priority: (json['priority'] as num?)?.toInt() ?? 0,
-      platforms: ((json['platforms'] as List?) ?? const []).map((e) => e.toString()).toList(),
+      platforms: ((json['platforms'] as List?) ?? const [])
+          .map((e) => e.toString())
+          .toList(),
       entries: entries,
       fallbackProviderId: json['fallbackProviderId']?.toString(),
       trustLevel: json['trustLevel']?.toString(),
-      permissions: ((json['permissions'] as List?) ?? const []).map((e) => e.toString()).toList(),
-      placement: switch ((json['placement'] ?? (json['builtin'] == true ? 'any' : 'cloud')).toString()) { 'device' => UIProviderPlacement.device, 'hybrid' => UIProviderPlacement.hybrid, 'any' => UIProviderPlacement.any, _ => UIProviderPlacement.cloud },
-      deviceRequirements: json['deviceRequirements'] is Map ? UIDeviceRequirements.fromJson((json['deviceRequirements'] as Map).cast<String, dynamic>()) : null,
+      permissions: ((json['permissions'] as List?) ?? const [])
+          .map((e) => e.toString())
+          .toList(),
+      placement: switch ((json['placement'] ??
+              (json['builtin'] == true ? 'any' : 'cloud'))
+          .toString()) {
+        'device' => UIProviderPlacement.device,
+        'hybrid' => UIProviderPlacement.hybrid,
+        'any' => UIProviderPlacement.any,
+        _ => UIProviderPlacement.cloud,
+      },
+      deviceRequirements: json['deviceRequirements'] is Map
+          ? UIDeviceRequirements.fromJson(
+              (json['deviceRequirements'] as Map).cast<String, dynamic>(),
+            )
+          : null,
       generation: (json['generation'] as num?)?.toInt() ?? 0,
       enabled: json['enabled'] != false,
       builtin: json['builtin'] == true,
@@ -194,20 +326,29 @@ class UIProviderDefinition {
   bool compatibleWith(UIProviderResolveContext context, String platform) {
     if (!enabled || entryFor(platform) == null) return false;
     if (placement == UIProviderPlacement.device && !context.localRuntime) {
-      if ((context.deviceId ?? '').isEmpty || !context.deviceOnline) return false;
+      if ((context.deviceId ?? '').isEmpty || !context.deviceOnline)
+        return false;
     }
     final req = deviceRequirements;
     if (req == null) return true;
-    bool contains(List<String> values, String value) => values.any((item) => item.toLowerCase() == value.toLowerCase());
-    if (req.platforms.isNotEmpty && !contains(req.platforms, platform)) return false;
+    bool contains(List<String> values, String value) =>
+        values.any((item) => item.toLowerCase() == value.toLowerCase());
+    if (req.platforms.isNotEmpty && !contains(req.platforms, platform))
+      return false;
     if (req.architectures.isNotEmpty) {
-      if ((context.architecture ?? '').isEmpty || !contains(req.architectures, context.architecture!)) return false;
+      if ((context.architecture ?? '').isEmpty ||
+          !contains(req.architectures, context.architecture!))
+        return false;
     }
     if ((req.minAppVersion ?? '').isNotEmpty) {
-      if ((context.appVersion ?? '').isEmpty || _compareVersion(context.appVersion!, req.minAppVersion!) < 0) return false;
+      if ((context.appVersion ?? '').isEmpty ||
+          _compareVersion(context.appVersion!, req.minAppVersion!) < 0)
+        return false;
     }
     if ((req.minRuntimeVersion ?? '').isNotEmpty) {
-      if ((context.runtimeVersion ?? '').isEmpty || _compareVersion(context.runtimeVersion!, req.minRuntimeVersion!) < 0) return false;
+      if ((context.runtimeVersion ?? '').isEmpty ||
+          _compareVersion(context.runtimeVersion!, req.minRuntimeVersion!) < 0)
+        return false;
     }
     for (final feature in req.requiredFeatures) {
       if (!contains(context.deviceCapabilities, feature)) return false;
@@ -216,14 +357,33 @@ class UIProviderDefinition {
   }
 
   UIProviderEntry? entryFor(String platform) {
-    if (entries[platform] case final direct?) return direct;
+    UIProviderEntry? supported(String key) {
+      final entry = entries[key];
+      if (entry == null || entry.type == UIProviderEntryType.webModule)
+        return null;
+      return entry;
+    }
+
     if (platform == 'android' || platform == 'ios') {
-      if (entries['mobile'] case final mobile?) return mobile;
+      if (supported('flutter_$platform') case final flutterPlatform?)
+        return flutterPlatform;
+      if (supported('flutter_mobile') case final flutterMobile?)
+        return flutterMobile;
     }
     if (platform == 'windows' || platform == 'macos' || platform == 'linux') {
-      if (entries['desktop'] case final desktop?) return desktop;
+      if (supported('flutter_$platform') case final flutterPlatform?)
+        return flutterPlatform;
+      if (supported('flutter_desktop') case final flutterDesktop?)
+        return flutterDesktop;
     }
-    return entries['*'];
+    if (supported(platform) case final direct?) return direct;
+    if (platform == 'android' || platform == 'ios') {
+      if (supported('mobile') case final mobile?) return mobile;
+    }
+    if (platform == 'windows' || platform == 'macos' || platform == 'linux') {
+      if (supported('desktop') case final desktop?) return desktop;
+    }
+    return supported('*');
   }
 }
 
@@ -235,7 +395,10 @@ int _compareVersion(String a, String b) {
     }
     normalized = normalized.split('-').first;
     final source = normalized.split('.');
-    return List<int>.generate(4, (index) => index < source.length ? int.tryParse(source[index]) ?? 0 : 0);
+    return List<int>.generate(
+      4,
+      (index) => index < source.length ? int.tryParse(source[index]) ?? 0 : 0,
+    );
   }
 
   final left = parse(a);
@@ -254,16 +417,36 @@ class UIProfile {
   final UIProfileScope? scope;
   final int revision;
   final int? updatedAt;
-  const UIProfile({required this.profileId, required this.name, required this.selections, this.scope, this.revision = 0, this.updatedAt});
+  const UIProfile({
+    required this.profileId,
+    required this.name,
+    required this.selections,
+    this.scope,
+    this.revision = 0,
+    this.updatedAt,
+  });
   factory UIProfile.fromJson(Map<String, dynamic> json) => UIProfile(
     profileId: (json['profileId'] ?? 'default').toString(),
     name: (json['name'] ?? 'Default').toString(),
-    selections: ((json['selections'] as Map?) ?? const {}).map((k, v) => MapEntry(k.toString(), v.toString())),
-    scope: json['scope'] is Map ? UIProfileScope.fromJson((json['scope'] as Map).cast<String, dynamic>()) : null,
+    selections: ((json['selections'] as Map?) ?? const {}).map(
+      (k, v) => MapEntry(k.toString(), v.toString()),
+    ),
+    scope: json['scope'] is Map
+        ? UIProfileScope.fromJson(
+            (json['scope'] as Map).cast<String, dynamic>(),
+          )
+        : null,
     revision: (json['revision'] as num?)?.toInt() ?? 0,
     updatedAt: (json['updatedAt'] as num?)?.toInt(),
   );
-  Map<String, dynamic> toJson() => {'profileId': profileId, 'name': name, 'selections': selections, if (scope != null) 'scope': scope!.toJson(), 'revision': revision, if (updatedAt != null) 'updatedAt': updatedAt};
+  Map<String, dynamic> toJson() => {
+    'profileId': profileId,
+    'name': name,
+    'selections': selections,
+    if (scope != null) 'scope': scope!.toJson(),
+    'revision': revision,
+    if (updatedAt != null) 'updatedAt': updatedAt,
+  };
 }
 
 class UIProfileEnvelope {
@@ -273,21 +456,43 @@ class UIProfileEnvelope {
   final UIProfileScopeKind scope;
   final UIProfile scopeProfile;
   final bool scopeExists;
-  const UIProfileEnvelope({required this.profile, required this.layers, required this.context, required this.scope, required this.scopeProfile, required this.scopeExists});
+  const UIProfileEnvelope({
+    required this.profile,
+    required this.layers,
+    required this.context,
+    required this.scope,
+    required this.scopeProfile,
+    required this.scopeExists,
+  });
   factory UIProfileEnvelope.fromJson(Map<String, dynamic> json) {
-    final rawScope = (json['scope'] ?? 'user').toString();
-    final scope = switch (rawScope) { 'global' => UIProfileScopeKind.global, 'platform' => UIProfileScopeKind.platform, 'device' => UIProfileScopeKind.device, 'device_platform' => UIProfileScopeKind.devicePlatform, 'runtime' => UIProfileScopeKind.runtime, _ => UIProfileScopeKind.user };
+    final rawScope = (json['scope'] ?? 'space').toString();
+    final scope = switch (rawScope) {
+      'global' => UIProfileScopeKind.global,
+      'platform' => UIProfileScopeKind.platform,
+      'device' => UIProfileScopeKind.device,
+      'device_platform' => UIProfileScopeKind.devicePlatform,
+      'runtime' => UIProfileScopeKind.runtime,
+      _ => UIProfileScopeKind.space,
+    };
     return UIProfileEnvelope(
-      profile: UIProfile.fromJson(((json['profile'] as Map?) ?? const {}).cast<String, dynamic>()),
-      layers: ((json['layers'] as List?) ?? const []).whereType<Map>().map((e) => UIProfile.fromJson(e.cast<String, dynamic>())).toList(),
-      context: UIProviderResolveContext.fromJson(((json['context'] as Map?) ?? const {}).cast<String, dynamic>()),
+      profile: UIProfile.fromJson(
+        ((json['profile'] as Map?) ?? const {}).cast<String, dynamic>(),
+      ),
+      layers: ((json['layers'] as List?) ?? const [])
+          .whereType<Map>()
+          .map((e) => UIProfile.fromJson(e.cast<String, dynamic>()))
+          .toList(),
+      context: UIProviderResolveContext.fromJson(
+        ((json['context'] as Map?) ?? const {}).cast<String, dynamic>(),
+      ),
       scope: scope,
-      scopeProfile: UIProfile.fromJson(((json['scopeProfile'] as Map?) ?? const {}).cast<String, dynamic>()),
+      scopeProfile: UIProfile.fromJson(
+        ((json['scopeProfile'] as Map?) ?? const {}).cast<String, dynamic>(),
+      ),
       scopeExists: json['scopeExists'] == true,
     );
   }
 }
-
 
 class UIContributionSnapshotEntry {
   final String contributionId;
@@ -300,6 +505,7 @@ class UIContributionSnapshotEntry {
   final String slotId;
   final int contractVersion;
   final String entryType;
+  final String runtimeId;
   final String entryPath;
   final String? schemaPath;
   final List<String> permissions;
@@ -307,6 +513,10 @@ class UIContributionSnapshotEntry {
   final Map<String, dynamic> visibility;
   final int ordering;
   final int priority;
+  final String entryKey;
+  final String cellId;
+  final dynamic matched;
+  final List<Map<String, dynamic>> matchRules;
 
   const UIContributionSnapshotEntry({
     required this.contributionId,
@@ -319,6 +529,7 @@ class UIContributionSnapshotEntry {
     required this.slotId,
     required this.contractVersion,
     required this.entryType,
+    this.runtimeId = '',
     required this.entryPath,
     this.schemaPath,
     required this.permissions,
@@ -326,35 +537,98 @@ class UIContributionSnapshotEntry {
     required this.visibility,
     required this.ordering,
     required this.priority,
+    this.entryKey = '',
+    this.cellId = '',
+    this.matched,
+    this.matchRules = const <Map<String, dynamic>>[],
   });
 
   factory UIContributionSnapshotEntry.fromJson(Map<String, dynamic> json) {
-    final slot = (json['slot'] as Map?)?.cast<String, dynamic>() ?? const <String, dynamic>{};
-    final entry = (json['entry'] as Map?)?.cast<String, dynamic>() ?? const <String, dynamic>{};
-    final ordering = (json['ordering'] as Map?)?.cast<String, dynamic>() ?? const <String, dynamic>{};
+    final slot =
+        (json['slot'] as Map?)?.cast<String, dynamic>() ??
+        const <String, dynamic>{};
+    final entry =
+        (json['entry'] as Map?)?.cast<String, dynamic>() ??
+        const <String, dynamic>{};
+    final ordering =
+        (json['ordering'] as Map?)?.cast<String, dynamic>() ??
+        const <String, dynamic>{};
+    final dispatch =
+        (json['dispatch'] as Map?)?.cast<String, dynamic>() ??
+        const <String, dynamic>{};
+    final contributionId =
+        (json['contribution_id'] ?? json['contributionId'] ?? '').toString();
+    final sortKey = (ordering['sort_key'] ?? ordering['sortKey'] ?? '')
+        .toString()
+        .trim();
     final permissions = ((json['permissions'] as List?) ?? const [])
         .whereType<Map>()
         .map((item) => (item['name'] ?? item['permission'] ?? '').toString())
         .where((item) => item.isNotEmpty)
         .toList(growable: false);
+    final rawMatch = json['match'] ?? dispatch['match'];
     return UIContributionSnapshotEntry(
-      contributionId: (json['contribution_id'] ?? json['contributionId'] ?? '').toString(),
-      sourceContributionId: (json['source_contribution_id'] ?? json['sourceContributionId'])?.toString(),
-      runtimePackageId: (json['runtime_package_id'] ?? json['runtimePackageId'])?.toString(),
-      runtimePackageVersion: (json['runtime_package_version'] ?? json['runtimePackageVersion'])?.toString(),
-      extensionId: (json['extension_id'] ?? json['extensionId'] ?? '').toString(),
+      contributionId: contributionId,
+      sourceContributionId:
+          (json['source_contribution_id'] ?? json['sourceContributionId'])
+              ?.toString(),
+      runtimePackageId: (json['runtime_package_id'] ?? json['runtimePackageId'])
+          ?.toString(),
+      runtimePackageVersion:
+          (json['runtime_package_version'] ?? json['runtimePackageVersion'])
+              ?.toString(),
+      extensionId: (json['extension_id'] ?? json['extensionId'] ?? '')
+          .toString(),
       moduleId: (json['module_id'] ?? json['moduleId'] ?? '').toString(),
       kind: (json['kind'] ?? '').toString(),
       slotId: (slot['slot_id'] ?? slot['slotId'] ?? '').toString(),
-      contractVersion: (json['contract_version'] as num?)?.toInt() ?? (json['contractVersion'] as num?)?.toInt() ?? 1,
+      contractVersion:
+          (json['contract_version'] as num?)?.toInt() ??
+          (json['contractVersion'] as num?)?.toInt() ??
+          1,
       entryType: (entry['type'] ?? '').toString(),
+      runtimeId: (entry['runtime_id'] ?? entry['runtimeId'] ?? '')
+          .toString()
+          .trim(),
       entryPath: (entry['path'] ?? '').toString(),
       schemaPath: (entry['schema_path'] ?? entry['schemaPath'])?.toString(),
       permissions: permissions,
-      dataContract: (json['data_contract'] as Map?)?.cast<String, dynamic>() ?? (json['dataContract'] as Map?)?.cast<String, dynamic>() ?? const {},
-      visibility: (json['visibility'] as Map?)?.cast<String, dynamic>() ?? const {},
-      ordering: (ordering['priority'] as num?)?.toInt() ?? 0,
+      dataContract:
+          (json['data_contract'] as Map?)?.cast<String, dynamic>() ??
+          (json['dataContract'] as Map?)?.cast<String, dynamic>() ??
+          const {},
+      visibility:
+          (json['visibility'] as Map?)?.cast<String, dynamic>() ?? const {},
+      ordering:
+          (ordering['ordering'] as num?)?.toInt() ??
+          (ordering['priority'] as num?)?.toInt() ??
+          0,
       priority: (ordering['priority'] as num?)?.toInt() ?? 0,
+      entryKey:
+          (dispatch['entry_key'] ?? dispatch['entryKey'] ?? sortKey)
+              .toString()
+              .trim()
+              .isNotEmpty
+          ? (dispatch['entry_key'] ?? dispatch['entryKey'] ?? sortKey)
+                .toString()
+                .trim()
+          : contributionId,
+      cellId:
+          (dispatch['cell_id'] ?? dispatch['cellId'] ?? sortKey)
+              .toString()
+              .trim()
+              .isNotEmpty
+          ? (dispatch['cell_id'] ?? dispatch['cellId'] ?? sortKey)
+                .toString()
+                .trim()
+          : contributionId,
+      matched: dispatch['matched'],
+      matchRules: rawMatch is List
+          ? rawMatch
+                .whereType<Map>()
+                .map((item) => item.cast<String, dynamic>())
+                .toList(growable: false)
+          : const <Map<String, dynamic>>[],
     );
   }
 }
@@ -362,6 +636,8 @@ class UIContributionSnapshotEntry {
 class UISlotSnapshotEntry {
   final String slotId;
   final int contractVersion;
+  final List<String> supportedKinds;
+  final String? kind;
   final String multiplicity;
   final String layout;
   final String fallbackPolicy;
@@ -375,6 +651,8 @@ class UISlotSnapshotEntry {
   const UISlotSnapshotEntry({
     required this.slotId,
     required this.contractVersion,
+    this.supportedKinds = const <String>[],
+    this.kind,
     required this.multiplicity,
     required this.layout,
     required this.fallbackPolicy,
@@ -386,22 +664,49 @@ class UISlotSnapshotEntry {
     required this.contributions,
   });
 
-  factory UISlotSnapshotEntry.fromJson(Map<String, dynamic> json) => UISlotSnapshotEntry(
-    slotId: (json['slotId'] ?? '').toString(),
-    contractVersion: (json['contractVersion'] as num?)?.toInt() ?? 1,
+  factory UISlotSnapshotEntry.fromJson(
+    Map<String, dynamic> json,
+  ) => UISlotSnapshotEntry(
+    slotId: (json['slotId'] ?? json['slot_id'] ?? '').toString(),
+    contractVersion:
+        (json['contractVersion'] as num?)?.toInt() ??
+        (json['contract_version'] as num?)?.toInt() ??
+        1,
+    supportedKinds:
+        ((json['supportedKinds'] ?? json['supported_kinds']) as List? ??
+                const <dynamic>[])
+            .map((item) => item.toString().trim())
+            .where((item) => item.isNotEmpty)
+            .toList(growable: false),
+    kind: _nullableText(json['kind']),
     multiplicity: (json['multiplicity'] ?? 'ordered_multiple').toString(),
     layout: (json['layout'] ?? 'stack').toString(),
-    fallbackPolicy: (json['fallbackPolicy'] ?? 'empty').toString(),
-    ownerExtension: json['ownerExtension']?.toString(),
-    parentSlotId: json['parentSlotId']?.toString(),
-    declarationEpoch: (json['declarationEpoch'] as num?)?.toInt() ?? 0,
+    fallbackPolicy:
+        (json['fallbackPolicy'] ?? json['fallback_policy'] ?? 'empty')
+            .toString(),
+    ownerExtension: (json['ownerExtension'] ?? json['owner_extension'])
+        ?.toString(),
+    parentSlotId: (json['parentSlotId'] ?? json['parent_slot_id'])?.toString(),
+    declarationEpoch:
+        (json['declarationEpoch'] as num?)?.toInt() ??
+        (json['declaration_epoch'] as num?)?.toInt() ??
+        0,
     scope: (json['scope'] ?? 'root').toString(),
-    dynamicSlot: json['dynamic'] == true,
+    dynamicSlot: json['dynamic'] == true || json['dynamicSlot'] == true,
     contributions: ((json['contributions'] as List?) ?? const [])
         .whereType<Map>()
-        .map((item) => UIContributionSnapshotEntry.fromJson(item.cast<String, dynamic>()))
+        .map(
+          (item) => UIContributionSnapshotEntry.fromJson(
+            item.cast<String, dynamic>(),
+          ),
+        )
         .toList(growable: false),
   );
+}
+
+String? _nullableText(dynamic value) {
+  final text = value?.toString().trim() ?? '';
+  return text.isEmpty ? null : text;
 }
 
 class UIProviderSnapshot {
@@ -412,7 +717,15 @@ class UIProviderSnapshot {
   final UIProviderResolveContext context;
   final Map<String, UIProviderDefinition> resolved;
   final int version;
-  const UIProviderSnapshot({required this.providers, required this.slots, required this.profile, required this.profileLayers, required this.context, required this.resolved, required this.version});
+  const UIProviderSnapshot({
+    required this.providers,
+    required this.slots,
+    required this.profile,
+    required this.profileLayers,
+    required this.context,
+    required this.resolved,
+    required this.version,
+  });
 
   factory UIProviderSnapshot.fromJson(Map<String, dynamic> json) {
     final providers = ((json['providers'] as List?) ?? const [])
@@ -422,19 +735,35 @@ class UIProviderSnapshot {
     final resolved = <String, UIProviderDefinition>{};
     final rawResolved = (json['resolved'] as Map?) ?? const {};
     for (final entry in rawResolved.entries) {
-      if (entry.value is Map) resolved[entry.key.toString()] = UIProviderDefinition.fromJson((entry.value as Map).cast<String, dynamic>());
+      if (entry.value is Map)
+        resolved[entry.key.toString()] = UIProviderDefinition.fromJson(
+          (entry.value as Map).cast<String, dynamic>(),
+        );
     }
     return UIProviderSnapshot(
       providers: providers,
       slots: ((json['slots'] as List?) ?? const [])
           .whereType<Map>()
-          .map((item) => UISlotSnapshotEntry.fromJson(item.cast<String, dynamic>()))
+          .map(
+            (item) =>
+                UISlotSnapshotEntry.fromJson(item.cast<String, dynamic>()),
+          )
           .toList(growable: false),
-      profile: UIProfile.fromJson(((json['profile'] as Map?) ?? const {}).cast<String, dynamic>()),
-      profileLayers: ((json['profileLayers'] as List?) ?? const []).whereType<Map>().map((e) => UIProfile.fromJson(e.cast<String, dynamic>())).toList(),
-      context: UIProviderResolveContext.fromJson(((json['providerContext'] as Map?) ?? const {}).cast<String, dynamic>()),
+      profile: UIProfile.fromJson(
+        ((json['profile'] as Map?) ?? const {}).cast<String, dynamic>(),
+      ),
+      profileLayers: ((json['profileLayers'] as List?) ?? const [])
+          .whereType<Map>()
+          .map((e) => UIProfile.fromJson(e.cast<String, dynamic>()))
+          .toList(),
+      context: UIProviderResolveContext.fromJson(
+        ((json['providerContext'] as Map?) ?? const {}).cast<String, dynamic>(),
+      ),
       resolved: resolved,
-      version: (json['providerVersion'] as num?)?.toInt() ?? (json['version'] as num?)?.toInt() ?? 1,
+      version:
+          (json['providerVersion'] as num?)?.toInt() ??
+          (json['version'] as num?)?.toInt() ??
+          1,
     );
   }
 
@@ -446,7 +775,8 @@ class UIProviderSnapshot {
   }
 
   List<UIContributionSnapshotEntry> contributionsForSlot(String slotId) {
-    final items = slot(slotId)?.contributions ?? const <UIContributionSnapshotEntry>[];
+    final items =
+        slot(slotId)?.contributions ?? const <UIContributionSnapshotEntry>[];
     final sorted = [...items]..sort((a, b) => a.ordering.compareTo(b.ordering));
     return sorted;
   }
@@ -487,7 +817,10 @@ class UIProviderSnapshot {
     }
 
     for (final provider in providers) {
-      if (provider.builtin && provider.capability == capability && provider.compatibleWith(context, platform)) return provider;
+      if (provider.builtin &&
+          provider.capability == capability &&
+          provider.compatibleWith(context, platform))
+        return provider;
     }
     return null;
   }
@@ -505,7 +838,8 @@ class UIProviderSnapshot {
     final seen = <String>{};
     UIProviderDefinition? current = resolve(capability, providerId: providerId);
     while (current != null && seen.add(current.providerId)) {
-      if (current.capability == capability && current.compatibleWith(context, activePlatform)) {
+      if (current.capability == capability &&
+          current.compatibleWith(context, activePlatform)) {
         chain.add(current);
       }
       final nextId = current.fallbackProviderId?.trim() ?? '';

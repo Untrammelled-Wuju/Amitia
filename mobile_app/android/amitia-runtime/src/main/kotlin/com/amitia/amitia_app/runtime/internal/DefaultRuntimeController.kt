@@ -488,8 +488,22 @@ internal class DefaultRuntimeController(
             )
             is RuntimeStartupError.Timeout -> RuntimeError(
                 code = RuntimeErrorCode.STARTUP_TIMEOUT,
-                message = "startup timed out after ${error.elapsedMs}ms (${error.probeCount} probes; limit ${error.timeoutMs}ms)",
-                recoverable = true
+                message = buildString {
+                    append("startup timed out after ${error.elapsedMs}ms ")
+                    append("(${error.probeCount} probes; limit ${error.timeoutMs}ms)")
+                    error.lastProbeFailure?.takeIf { it.isNotBlank() }?.let {
+                        append("; last readiness failure: $it")
+                    }
+                },
+                recoverable = true,
+                detailsSource = buildMap {
+                    put("timeoutMs", error.timeoutMs.toString())
+                    put("elapsedMs", error.elapsedMs.toString())
+                    put("probeCount", error.probeCount.toString())
+                    error.lastProbeFailure?.takeIf { it.isNotBlank() }?.let {
+                        put("lastProbeFailure", it)
+                    }
+                },
             )
             is RuntimeStartupError.InvalidEndpoint -> RuntimeError(
                 code = RuntimeErrorCode.STARTUP_INVALID_ENDPOINT,

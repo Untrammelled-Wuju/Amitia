@@ -16,10 +16,6 @@ extraResources:
       - "AmitiaCore.exe"
       - "node/node.exe.zip"
       - "node/node.zip"
-      - "sidecar/bundle.mjs"
-      - "sidecar/launcher.mjs"
-      - "qq-sidecar/bundle.mjs"
-      - "qq-sidecar/launcher.mjs"
   - from: resources/bridge
     to: bridge
   - from: resources/migrations
@@ -59,7 +55,7 @@ nsis:
   deleteAppDataOnUninstall: false
 
 releaseInfo:
-  releaseName: Amitia 26.1.8
+  releaseName: Amitia 26.2.0-beta
   releaseNotesFile: release-notes.md
 
 publish:

@@ -40,3 +40,7 @@ func (h *Handler) SafetyEvents(c *gin.Context) {
 func (h *Handler) DeleteSafetyEvents(c *gin.Context) {
 	util.SuccessResponse(c, h.service.DeleteSafetyEvents())
 }
+
+func (h *Handler) HandleSafetyEvent(c *gin.Context) {
+	util.SuccessResponse(c, h.service.HandleSafetyEvent(c.Param("id")))
+}

@@ -21,7 +21,7 @@ func (p *RuntimePipeline) buildGoalContext(scope InteractionScope, req *ProcessR
 
 	var activeGoals []decision.Goal
 	if registry != nil {
-		activeGoals = registry.ActiveForScope(scope.UserID, scope.CharacterID, scope.ConversationID)
+		activeGoals = registry.ActiveForScope(scope.SpaceID, scope.CharacterID, scope.ConversationID)
 	}
 
 	currentGoal := buildCurrentInteractionGoal(scope, req, appraisal, now)
@@ -75,7 +75,7 @@ func buildCurrentInteractionGoal(scope InteractionScope, req *ProcessRequest, ap
 	description := goalDescriptionForType(goalType)
 	return &decision.Goal{
 		ID:             goalID,
-		UserID:         scope.UserID,
+		SpaceID:        scope.SpaceID,
 		CharacterID:    scope.CharacterID,
 		ConversationID: scope.ConversationID,
 		Type:           goalType,

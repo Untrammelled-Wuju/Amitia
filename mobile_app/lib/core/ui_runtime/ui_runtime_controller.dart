@@ -1,9 +1,7 @@
 import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../services/extension_service.dart';
-import '../services/providers.dart' show extensionServiceProvider;
-import '../backend_connection/providers/backend_connection_providers.dart'
-    show accountSessionProvider;
+import '../services/providers.dart' show extensionServiceProvider, currentSpaceProfileProvider;
 import '../backend_connection/backend_connection_availability.dart';
 import '../backend_connection/providers/runtime_backend_connection_source.dart';
 import '../backend_transport/backend_service_api.dart';
@@ -15,6 +13,7 @@ import 'ui_client_info.dart';
 import 'ui_device_identity.dart';
 import 'ui_provider.dart';
 import 'ui_snapshot_cache.dart';
+import 'ui_runtime_invalidation.dart';
 
 final uiRuntimeUsingLastKnownGoodProvider = StateProvider<bool>((ref) => false);
 
@@ -29,8 +28,14 @@ class UIRuntimeController
        _meshDeviceId = meshDeviceId,
        _onLastKnownGood = onLastKnownGood,
        super(const AsyncValue.data(null)) {
-    // Mobile does not depend on the web SSE transport. Periodic reconciliation
-    // keeps cloud profile/provider changes convergent while app is alive.
+    _invalidationSubscription = UIRuntimeInvalidationBus.changes.listen((_) {
+      _invalidationDebounce?.cancel();
+      _invalidationDebounce = Timer(const Duration(milliseconds: 300), () {
+        if (!_loading) unawaited(ensureLoaded(force: true));
+      });
+    });
+    // Global UI Host SSE is the primary cross-device invalidation path. Keep a
+    // low-frequency reconciliation only as a recovery net after stream loss.
     _syncTimer = Timer.periodic(const Duration(minutes: 2), (_) {
       if (state.valueOrNull != null && !_loading) {
         unawaited(ensureLoaded(force: true));
@@ -45,6 +50,8 @@ class UIRuntimeController
   final UIDeviceIdentity _identity = UIDeviceIdentity();
   final UISnapshotCache _cache = UISnapshotCache();
   late final Timer _syncTimer;
+  late final StreamSubscription<void> _invalidationSubscription;
+  Timer? _invalidationDebounce;
   bool _loading = false;
 
   Future<String> get deviceId async {
@@ -113,7 +120,7 @@ class UIRuntimeController
 
   Future<UIProfile> updateProfile(
     UIProfile profile, {
-    UIProfileScopeKind scope = UIProfileScopeKind.user,
+    UIProfileScopeKind scope = UIProfileScopeKind.space,
   }) async {
     try {
       final json = await _service.updateUIProfile(
@@ -135,7 +142,7 @@ class UIRuntimeController
   Future<UIProfile> updateSelection(
     String capability,
     String? providerId, {
-    UIProfileScopeKind scope = UIProfileScopeKind.user,
+    UIProfileScopeKind scope = UIProfileScopeKind.space,
   }) async {
     final envelope = await loadProfileScope(scope);
     final current = envelope.scopeProfile;
@@ -176,6 +183,8 @@ class UIRuntimeController
 
   @override
   void dispose() {
+    _invalidationDebounce?.cancel();
+    _invalidationSubscription.cancel();
     _syncTimer.cancel();
     super.dispose();
   }
@@ -193,9 +202,10 @@ final uiRuntimeProvider =
                 value,
         cacheNamespace: () async {
           final deployment = ref.read(mobileDeploymentConfigProvider);
-          final userId = await ref.read(accountSessionProvider).getUserId();
+          final profile = await ref.read(currentSpaceProfileProvider.future);
+          final spaceId = profile?.spaceId.trim() ?? '';
           final endpoint = deployment.remoteCoreUri?.trim();
-          return '${deployment.mode.storageValue}:${endpoint == null || endpoint.isEmpty ? 'embedded' : endpoint}|user=${userId ?? 'anonymous'}';
+          return '${deployment.mode.storageValue}:${endpoint == null || endpoint.isEmpty ? 'embedded' : endpoint}|space=${spaceId.isEmpty ? 'unresolved' : spaceId}';
         },
         meshDeviceId: () async {
           final deployment = ref.read(mobileDeploymentConfigProvider);

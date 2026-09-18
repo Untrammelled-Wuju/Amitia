@@ -82,8 +82,8 @@ func TestToolRegistryUnregister(t *testing.T) {
 		t.Fatalf("expected empty registry, got %d", reg.Count())
 	}
 
-	if err := reg.Unregister(context.Background(), def.ID); err == nil {
-		t.Fatal("expected not exists error")
+	if err := reg.Unregister(context.Background(), def.ID); err != nil {
+		t.Fatalf("expected idempotent Unregister, got error: %v", err)
 	}
 }
 

@@ -14,6 +14,7 @@ import '../../runtime/runtime_bridge_state.dart';
 import '../../runtime/backend/mobile_backend_providers.dart';
 import '../../runtime/backend/mobile_deployment_mode.dart';
 import '../../debug/debug_log_service.dart';
+import '../auth/device_local_management_session.dart';
 import '../backend_service_api.dart';
 import '../backend_transport.dart';
 import '../dynamic_backend_service_api.dart';
@@ -23,6 +24,8 @@ import '../http/backend_http_method.dart';
 import '../http/backend_http_request.dart';
 import '../http/backend_http_response.dart';
 import '../http/backend_http_transport.dart';
+import '../http/backend_http_client.dart';
+import '../websocket/backend_websocket_client.dart';
 import '../state/backend_transport_state.dart';
 
 final _transportLogger = Logger();
@@ -231,7 +234,6 @@ class BackendTransportApi {
   }
 }
 
-
 final deviceLocalBackendConnectionProvider =
     FutureProvider<BackendConnectionAvailability>((ref) async {
       final runtimeAsync = ref.watch(runtimeSnapshotProvider);
@@ -251,10 +253,11 @@ final deviceLocalBackendConnectionProvider =
       );
     });
 
-final deviceLocalBackendTransportProvider = AsyncNotifierProvider<
-  DeviceLocalBackendTransportNotifier,
-  BackendTransportState
->(DeviceLocalBackendTransportNotifier.new);
+final deviceLocalBackendTransportProvider =
+    AsyncNotifierProvider<
+      DeviceLocalBackendTransportNotifier,
+      BackendTransportState
+    >(DeviceLocalBackendTransportNotifier.new);
 
 class DeviceLocalBackendTransportNotifier
     extends AsyncNotifier<BackendTransportState> {
@@ -280,9 +283,14 @@ class DeviceLocalBackendTransportNotifier
         if (_current == null || _currentGeneration != config.generation) {
           _closeCurrentIfNeeded();
           _currentGeneration = config.generation;
-          _current = DefaultBackendTransport.create(config);
+          final rootHttp = BackendHttpClient(config);
+          _current = DefaultBackendTransport(
+            generation: config.generation,
+            http: DeviceLocalSessionHttpTransport(rootHttp),
+            webSocket: BackendWebSocketClient(config),
+          );
           _transportLogger.d(
-            'DeviceLocalBackendTransport created: generation=${config.generation}',
+            'DeviceLocalBackendTransport created with management session support: generation=${config.generation}',
           );
         }
         return TransportAvailable(generation: config.generation);
@@ -312,7 +320,9 @@ class DeviceLocalBackendTransportNotifier
   }
 }
 
-final deviceLocalBackendCurrentTransportProvider = Provider<BackendTransport?>((ref) {
+final deviceLocalBackendCurrentTransportProvider = Provider<BackendTransport?>((
+  ref,
+) {
   final state = ref.watch(deviceLocalBackendTransportProvider).asData?.value;
   if (state is! TransportAvailable) return null;
   final notifier = ref.read(deviceLocalBackendTransportProvider.notifier);
@@ -323,7 +333,9 @@ final deviceLocalBackendCurrentTransportProvider = Provider<BackendTransport?>((
   return transport;
 });
 
-final rawDeviceLocalBackendServiceApiProvider = Provider<BackendServiceApi?>((ref) {
+final rawDeviceLocalBackendServiceApiProvider = Provider<BackendServiceApi?>((
+  ref,
+) {
   final transport = ref.watch(deviceLocalBackendCurrentTransportProvider);
   if (transport == null) return null;
   return BackendServiceApi(transport.http, transport.generation);
@@ -339,6 +351,8 @@ final backendServiceProvider = Provider<BackendServiceApi>((ref) {
   final logService = ref.read(debugLogServiceProvider);
   DateTime? lastUnavailableAt;
   String? lastUnavailableKey;
+  DateTime? lastDeviceUnavailableAt;
+  String? lastDeviceUnavailableKey;
 
   final businessApi = DynamicBackendServiceApiProxy(
     currentApi: () => ref.read(rawBackendServiceApiProvider),
@@ -354,17 +368,20 @@ final backendServiceProvider = Provider<BackendServiceApi>((ref) {
     },
     onUnavailable: (error) {
       final now = DateTime.now();
-      final key = '${error.phase.name}:${error.generation}:${error.primaryError?.code ?? 'BUSINESS_UNAVAILABLE'}';
+      final primary = error.primaryError;
+      final key =
+          '${error.phase.name}:${error.generation}:${primary?.code ?? 'BUSINESS_UNAVAILABLE'}:'
+          '${primary?.message ?? ''}:${primary?.details ?? const <String, String>{}}';
       if (lastUnavailableKey == key &&
           lastUnavailableAt != null &&
-          now.difference(lastUnavailableAt!) < const Duration(seconds: 5)) {
+          now.difference(lastUnavailableAt!) < const Duration(seconds: 30)) {
         return;
       }
       lastUnavailableKey = key;
       lastUnavailableAt = now;
       logService.addBackendLog(
-        'Business backend unavailable: $error',
-        DebugLogLevel.error,
+        error.toString(),
+        primary == null ? DebugLogLevel.debug : DebugLogLevel.error,
       );
     },
   );
@@ -374,9 +391,22 @@ final backendServiceProvider = Provider<BackendServiceApi>((ref) {
     currentStatus: () => ref.read(runtimeStatusCurrentProvider),
     canUseApi: (_, api) => api != null,
     onUnavailable: (error) {
+      final now = DateTime.now();
+      final primary = error.primaryError;
+      final key =
+          '${error.phase.name}:${error.generation}:${primary?.code ?? 'BUSINESS_UNAVAILABLE'}:'
+          '${primary?.message ?? ''}:${primary?.details ?? const <String, String>{}}';
+      if (lastDeviceUnavailableKey == key &&
+          lastDeviceUnavailableAt != null &&
+          now.difference(lastDeviceUnavailableAt!) <
+              const Duration(seconds: 30)) {
+        return;
+      }
+      lastDeviceUnavailableKey = key;
+      lastDeviceUnavailableAt = now;
       logService.addBackendLog(
-        'Device-local backend unavailable: $error',
-        DebugLogLevel.error,
+        'DeviceLocalBackendUnavailable\n$error',
+        primary == null ? DebugLogLevel.debug : DebugLogLevel.error,
       );
     },
   );

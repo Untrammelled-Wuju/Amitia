@@ -1,5 +1,6 @@
 import '../backend_transport/backend_service_api.dart';
 import '../ui_runtime/ui_client_info.dart';
+import '../ui_runtime/ui_runtime_invalidation.dart';
 
 class ExtensionCenterCard {
   final String extensionId;
@@ -140,6 +141,94 @@ class ExtensionService {
         .toList(growable: false);
   }
 
+  Future<Map<String, dynamic>> registerUIHostSession({
+    required String hostClientId,
+    required String deviceId,
+    required String platform,
+    String windowId = 'main',
+    List<String> features = const <String>[
+      'ui.notify',
+      'ui.dialog',
+      'ui.navigate',
+    ],
+  }) async {
+    return await _api.post<Map<String, dynamic>>(
+          '/api/extensions/ui/host-session',
+          data: <String, dynamic>{
+            'hostClientId': hostClientId.trim(),
+            'deviceId': deviceId.trim(),
+            'platform': platform.trim(),
+            'windowId': windowId.trim(),
+            'features': features,
+          },
+        ) ??
+        <String, dynamic>{};
+  }
+
+  Future<void> heartbeatUIHostSession({
+    required String hostClientId,
+    required String hostSessionId,
+  }) async {
+    await _api.post<Map<String, dynamic>>(
+      '/api/extensions/ui/host-session/heartbeat',
+      data: <String, dynamic>{
+        'hostClientId': hostClientId.trim(),
+        'hostSessionId': hostSessionId.trim(),
+      },
+    );
+  }
+
+  Future<void> disconnectUIHostSession({
+    required String hostClientId,
+    required String hostSessionId,
+  }) async {
+    await _api.post<Map<String, dynamic>>(
+      '/api/extensions/ui/host-session/disconnect',
+      data: <String, dynamic>{
+        'hostClientId': hostClientId.trim(),
+        'hostSessionId': hostSessionId.trim(),
+      },
+    );
+  }
+
+  Future<void> sendUIDialogResponse({
+    required String dialogId,
+    required String result,
+    String hostClientId = '',
+    String hostSessionId = '',
+  }) async {
+    await _api.post<Map<String, dynamic>>(
+      '/api/extensions/ui/dialog-response',
+      data: <String, dynamic>{
+        'dialogId': dialogId.trim(),
+        'result': result,
+        if (hostClientId.trim().isNotEmpty)
+          'hostClientId': hostClientId.trim(),
+        if (hostSessionId.trim().isNotEmpty)
+          'hostSessionId': hostSessionId.trim(),
+      },
+    );
+  }
+
+  Future<void> sendClientRuntimeResponse({
+    required String commandId,
+    required String hostClientId,
+    required String hostSessionId,
+    Map<String, dynamic> result = const <String, dynamic>{},
+    String error = '',
+  }) async {
+    await _api.post<Map<String, dynamic>>(
+      '/api/extensions/ui/client-runtime-response',
+      data: <String, dynamic>{
+        'commandId': commandId.trim(),
+        'hostClientId': hostClientId.trim(),
+        'hostSessionId': hostSessionId.trim(),
+        'result': result,
+        'error': error.trim(),
+      },
+    );
+  }
+
   Future<Map<String, dynamic>> getClientRuntimeSessionState(String conversationId) async {
     final id = conversationId.trim();
     if (id.isEmpty) {
@@ -175,7 +264,7 @@ class ExtensionService {
         .toList();
   }
 
-  Future<Map<String, dynamic>> getUIProfile({required String platform, String deviceId = '', String scope = 'user'}) async {
+  Future<Map<String, dynamic>> getUIProfile({required String platform, String deviceId = '', String scope = 'space'}) async {
     final client = currentUIClientInfo();
     return await _api.get<Map<String, dynamic>>(
       '/api/extensions/ui/profile',
@@ -188,7 +277,7 @@ class ExtensionService {
     ) ?? <String, dynamic>{};
   }
 
-  Future<Map<String, dynamic>> updateUIProfile(Map<String, dynamic> profile, {required String platform, String deviceId = '', String scope = 'user'}) async {
+  Future<Map<String, dynamic>> updateUIProfile(Map<String, dynamic> profile, {required String platform, String deviceId = '', String scope = 'space'}) async {
     final client = currentUIClientInfo();
     return await _api.put<Map<String, dynamic>>(
       '/api/extensions/ui/profile', data: profile,
@@ -220,6 +309,95 @@ class ExtensionService {
     if (document is Map<String, dynamic>) return document;
     if (document is Map) return document.cast<String, dynamic>();
     throw StateError('UI schema document missing');
+  }
+
+  Future<Map<String, dynamic>> createSchemaUISession({
+    required String contributionId,
+    String characterId = '',
+    String conversationId = '',
+    String surface = 'mobile',
+  }) async {
+    return await _api.post<Map<String, dynamic>>(
+          '/api/extensions/ui/sessions',
+          data: {
+            'contributionId': contributionId,
+            'surface': surface,
+            if (characterId.trim().isNotEmpty) 'characterId': characterId.trim(),
+            if (conversationId.trim().isNotEmpty) 'conversationId': conversationId.trim(),
+          },
+        ) ??
+        <String, dynamic>{};
+  }
+
+  Future<dynamic> invokeSchemaUIBridgeMessage(
+    String sessionId, {
+    required String contributionId,
+    required String origin,
+    required int contractVersion,
+    required String token,
+    required int generation,
+    required String nonce,
+    required String method,
+    Map<String, dynamic> payload = const <String, dynamic>{},
+  }) async {
+    final response = await _api.post<Map<String, dynamic>>(
+          '/api/extensions/ui/sessions/${Uri.encodeComponent(sessionId)}/bridge',
+          data: {
+            'method': method,
+            'contributionId': contributionId,
+            'origin': origin,
+            'contractVersion': contractVersion,
+            'token': token,
+            'generation': generation,
+            'nonce': nonce,
+            'payload': payload,
+          },
+        ) ??
+        <String, dynamic>{};
+    if (response['ok'] == false) {
+      final error = response['error'];
+      final message = error is Map
+          ? (error['message'] ?? error['code'] ?? 'UI bridge request failed').toString()
+          : (error ?? 'UI bridge request failed').toString();
+      throw StateError(message);
+    }
+    return response['result'];
+  }
+
+  Future<Map<String, dynamic>> invokeSchemaUIBridge(
+    String sessionId, {
+    required String contributionId,
+    required String origin,
+    required int contractVersion,
+    required String token,
+    required int generation,
+    required String nonce,
+    required String actionId,
+    Map<String, dynamic> input = const <String, dynamic>{},
+  }) async {
+    final result = await invokeSchemaUIBridgeMessage(
+      sessionId,
+      contributionId: contributionId,
+      origin: origin,
+      contractVersion: contractVersion,
+      token: token,
+      generation: generation,
+      nonce: nonce,
+      method: 'ui.action.invoke',
+      payload: {
+        'action_id': actionId,
+        'input': input,
+      },
+    );
+    if (result is Map<String, dynamic>) return result;
+    if (result is Map) return result.cast<String, dynamic>();
+    return <String, dynamic>{};
+  }
+
+  Future<void> revokeSchemaUISession(String sessionId) async {
+    final id = sessionId.trim();
+    if (id.isEmpty) return;
+    await _api.delete('/api/extensions/ui/sessions/${Uri.encodeComponent(id)}');
   }
 
   Future<Map<String, dynamic>> createWebUISession(Map<String, dynamic> request) async {
@@ -387,11 +565,13 @@ class ExtensionService {
   }
 
   Future<Map<String, dynamic>> installKernelExtensionUpdate(String extensionId, String operationId) async {
-    return await _api.post<Map<String, dynamic>>(
+    final result = await _api.post<Map<String, dynamic>>(
           '/api/extensions/${Uri.encodeComponent(extensionId)}/updates/install',
           data: {'operationId': operationId},
         ) ??
         <String, dynamic>{};
+    UIRuntimeInvalidationBus.notifyChanged();
+    return result;
   }
 
   Future<Map<String, dynamic>> cancelKernelExtensionUpdate(String extensionId, String operationId) async {
@@ -403,19 +583,23 @@ class ExtensionService {
   }
 
   Future<Map<String, dynamic>> retryKernelExtensionUpdate(String extensionId, String operationId) async {
-    return await _api.post<Map<String, dynamic>>(
+    final result = await _api.post<Map<String, dynamic>>(
           '/api/extensions/${Uri.encodeComponent(extensionId)}/updates/retry',
           data: {'operationId': operationId},
         ) ??
         <String, dynamic>{};
+    UIRuntimeInvalidationBus.notifyChanged();
+    return result;
   }
 
   Future<Map<String, dynamic>> rollbackKernelExtensionUpdate(String extensionId, String operationId) async {
-    return await _api.post<Map<String, dynamic>>(
+    final result = await _api.post<Map<String, dynamic>>(
           '/api/extensions/${Uri.encodeComponent(extensionId)}/updates/rollback',
           data: {'operationId': operationId},
         ) ??
         <String, dynamic>{};
+    UIRuntimeInvalidationBus.notifyChanged();
+    return result;
   }
 
   Future<Map<String, dynamic>> kernelUpdateOperation(String operationId) async {
@@ -448,6 +632,7 @@ class ExtensionService {
       enabled ? '/api/extensions/kernel/extensions/enable' : '/api/extensions/kernel/extensions/disable',
       data: {'id': id},
     );
+    UIRuntimeInvalidationBus.notifyChanged();
   }
 
   Future<Map<String, dynamic>> previewKernelUninstall(String id, {String scopeType = 'global', String scopeId = ''}) async {
@@ -482,7 +667,7 @@ class ExtensionService {
     String scopeType = 'global',
     String scopeId = '',
   }) async {
-    return await _api.post<Map<String, dynamic>>(
+    final result = await _api.post<Map<String, dynamic>>(
           '/api/extensions/kernel/extensions/uninstall',
           data: {
             'extensionId': id,
@@ -492,55 +677,16 @@ class ExtensionService {
           },
         ) ??
         <String, dynamic>{};
+    UIRuntimeInvalidationBus.notifyChanged();
+    return result;
   }
 
-  Future<List<Map<String, dynamic>>> plugins({int page = 1, int pageSize = 100}) async {
-    final resp = await _api.get<Map<String, dynamic>>(
-      '/api/extensions/plugins',
-      queryParameters: {'page': page, 'pageSize': pageSize},
-    );
-    final items = resp?['items'];
-    if (items is! List) return const [];
-    return items.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList(growable: false);
-  }
-
-  Future<bool> enablePlugin(String id) async {
-    await _api.post('/api/extensions/plugins/$id/enable');
-    return true;
-  }
-
-  Future<bool> disablePlugin(String id) async {
-    await _api.post('/api/extensions/plugins/$id/disable');
-    return true;
-  }
-
-  Future<bool> reloadPlugin(String id) async {
-    await _api.post('/api/extensions/plugins/$id/reload');
-    return true;
-  }
-
-  Future<Map<String, dynamic>?> getPluginConfig(String id) async {
-    final resp = await _api.get<Map<String, dynamic>>('/api/extensions/plugins/$id/config');
-    return resp;
-  }
-
-  Future<bool> updatePluginConfig(String id, Map<String, dynamic> data) async {
-    await _api.put('/api/extensions/plugins/$id/config', data: data);
-    return true;
-  }
-
-  Future<Map<String, dynamic>?> getPluginHealth(String id) async {
-    final resp = await _api.get<Map<String, dynamic>>('/api/extensions/plugins/$id/health');
-    return resp;
-  }
-
-  Future<List<Map<String, dynamic>>> agentSkills({int page = 1, int pageSize = 100, String characterId = ''}) async {
+  Future<List<Map<String, dynamic>>> agentSkills({int page = 1, int pageSize = 100}) async {
     final resp = await _api.get<Map<String, dynamic>>(
       '/api/extensions/agent-skills',
       queryParameters: {
         'page': page,
         'pageSize': pageSize,
-        if (characterId.isNotEmpty) 'characterId': characterId,
       },
     );
     final items = resp?['items'];
@@ -563,15 +709,149 @@ class ExtensionService {
     return true;
   }
 
-  Future<List<Map<String, dynamic>>> workshopSessions() async {
-    final resp = await _api.get<List<dynamic>>('/api/extensions/workshop/sessions');
-    if (resp == null) return [];
-    return resp.map((e) => e as Map<String, dynamic>).toList();
+  Future<List<Map<String, dynamic>>> workshopSessions({
+    int page = 1,
+    int pageSize = 100,
+    String status = '',
+    String characterId = '',
+  }) async {
+    final resp = await _api.get<Map<String, dynamic>>(
+      '/api/extensions/workshop/sessions',
+      queryParameters: {
+        'page': page,
+        'pageSize': pageSize,
+        if (status.trim().isNotEmpty) 'status': status.trim(),
+        if (characterId.trim().isNotEmpty) 'characterId': characterId.trim(),
+      },
+    );
+    final items = resp?['items'];
+    if (items is! List) return const <Map<String, dynamic>>[];
+    return items
+        .whereType<Map>()
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList(growable: false);
   }
 
-  Future<Map<String, dynamic>?> createWorkshopSession(Map<String, dynamic> data) async {
-    final resp = await _api.post<Map<String, dynamic>>('/api/extensions/workshop/sessions', data: data);
-    return resp;
+  Future<Map<String, dynamic>?> createWorkshopSession({
+    required String requirement,
+    String characterId = '',
+  }) {
+    return _api.post<Map<String, dynamic>>(
+      '/api/extensions/workshop/sessions',
+      data: {
+        'requirement': requirement.trim(),
+        if (characterId.trim().isNotEmpty) 'characterId': characterId.trim(),
+      },
+    );
+  }
+
+  Future<Map<String, dynamic>?> getWorkshopSession(String id) {
+    return _api.get<Map<String, dynamic>>(
+      '/api/extensions/workshop/sessions/${Uri.encodeComponent(id)}',
+    );
+  }
+
+  Future<void> archiveWorkshopSession(String id) {
+    return _api.delete(
+      '/api/extensions/workshop/sessions/${Uri.encodeComponent(id)}',
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> workshopRevisions(String id) async {
+    final resp = await _api.get<dynamic>(
+      '/api/extensions/workshop/sessions/${Uri.encodeComponent(id)}/revisions',
+    );
+    dynamic items = resp;
+    if (items is Map && items['items'] is List) items = items['items'];
+    if (items is! List) return const <Map<String, dynamic>>[];
+    return items
+        .whereType<Map>()
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList(growable: false);
+  }
+
+  Future<Map<String, dynamic>?> getWorkshopRevision(String id, int revision) {
+    return _api.get<Map<String, dynamic>>(
+      '/api/extensions/workshop/sessions/${Uri.encodeComponent(id)}/revisions/$revision',
+    );
+  }
+
+  Future<Map<String, dynamic>?> generateWorkshopDraft(
+    String id, {
+    String requirement = '',
+  }) {
+    return _api.post<Map<String, dynamic>>(
+      '/api/extensions/workshop/sessions/${Uri.encodeComponent(id)}/generate',
+      data: requirement.trim().isEmpty
+          ? const <String, dynamic>{}
+          : <String, dynamic>{'requirement': requirement.trim()},
+    );
+  }
+
+  Future<Map<String, dynamic>?> validateWorkshopRevision(
+    String id,
+    int revision,
+  ) {
+    return _api.post<Map<String, dynamic>>(
+      '/api/extensions/workshop/sessions/${Uri.encodeComponent(id)}/revisions/$revision/validate',
+    );
+  }
+
+  Future<void> confirmWorkshopPermissions({
+    required String id,
+    required int revision,
+    required String workflowChecksum,
+    required List<String> capabilities,
+    List<String> confirmedHighRisk = const <String>[],
+    bool production = false,
+  }) async {
+    await _api.post(
+      '/api/extensions/workshop/sessions/${Uri.encodeComponent(id)}/revisions/$revision/permissions/confirm',
+      data: {
+        'workflowChecksum': workflowChecksum,
+        'capabilities': capabilities,
+        'confirmedHighRisk': confirmedHighRisk,
+        'production': production,
+      },
+    );
+  }
+
+  Future<Map<String, dynamic>?> testWorkshopRevision({
+    required String id,
+    required int revision,
+    String mode = 'dry_run',
+    bool controlledLiveConfirmed = false,
+  }) {
+    return _api.post<Map<String, dynamic>>(
+      '/api/extensions/workshop/sessions/${Uri.encodeComponent(id)}/revisions/$revision/test',
+      data: {
+        'mode': mode,
+        'controlledLiveConfirmed': controlledLiveConfirmed,
+      },
+    );
+  }
+
+  Future<Map<String, dynamic>?> installWorkshopRevision(
+    String id,
+    int revision,
+  ) async {
+    final result = await _api.post<Map<String, dynamic>>(
+      '/api/extensions/workshop/sessions/${Uri.encodeComponent(id)}/revisions/$revision/install',
+    );
+    UIRuntimeInvalidationBus.notifyChanged();
+    return result;
+  }
+
+  Future<List<Map<String, dynamic>>> workshopTests(String id) async {
+    final resp = await _api.get<Map<String, dynamic>>(
+      '/api/extensions/workshop/sessions/${Uri.encodeComponent(id)}/tests',
+    );
+    final items = resp?['items'];
+    if (items is! List) return const <Map<String, dynamic>>[];
+    return items
+        .whereType<Map>()
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList(growable: false);
   }
 
   Future<List<Map<String, dynamic>>> extensionRuns({String characterId = '', int page = 1, int pageSize = 100}) async {
@@ -606,7 +886,11 @@ class ExtensionService {
 
   String _workflowRunBase(WorkflowApiTarget target) {
     if (target.isLocal) return '/api/local/workflow-runs';
-    if (target.isDevice) throw StateError('remote device run details are not exposed through the control plane');
+    if (target.isDevice) {
+      final deviceId = target.deviceId.trim();
+      if (deviceId.isEmpty) throw StateError('device workflow target requires deviceId');
+      return '/api/extensions/workflow-devices/${Uri.encodeComponent(deviceId)}/runs';
+    }
     return '/api/extensions/workflow-runs';
   }
 
@@ -912,18 +1196,32 @@ class ExtensionService {
     return await _api.post<Map<String, dynamic>>('${_workflowBase(value)}/validate', data: definition) ?? <String, dynamic>{};
   }
 
-  Future<Map<String, dynamic>> runWorkflow(String id, {Map<String, dynamic> input = const {}, bool wait = false, WorkflowApiTarget target = const WorkflowApiTarget.cloud()}) async {
+  Future<Map<String, dynamic>> runWorkflow(
+    String id, {
+    Map<String, dynamic> input = const {},
+    bool wait = false,
+    String mode = 'live',
+    List<Map<String, dynamic>> mocks = const <Map<String, dynamic>>[],
+    List<String> approvedSideEffects = const <String>[],
+    WorkflowApiTarget target = const WorkflowApiTarget.cloud(),
+  }) async {
+    final payload = <String, dynamic>{
+      'input': input,
+      if (!target.isDevice) 'wait': wait,
+      if (mode.isNotEmpty && mode != 'live') 'mode': mode,
+      if (mocks.isNotEmpty) 'mocks': mocks,
+      if (approvedSideEffects.isNotEmpty) 'approvedSideEffects': approvedSideEffects,
+    };
     return await _api.post<Map<String, dynamic>>(
           '${_workflowBase(target)}/${Uri.encodeComponent(id)}/run',
-          data: target.isDevice ? {'input': input} : {'input': input, 'wait': wait},
+          data: payload,
         ) ??
         <String, dynamic>{};
   }
 
   Future<Map<String, dynamic>> workflowRuns(String id, {int limit = 50, int offset = 0, String status = '', WorkflowApiTarget target = const WorkflowApiTarget.cloud()}) async {
-    final value = _kernelWorkflowTarget(target, 'workflow run history');
     return await _api.get<Map<String, dynamic>>(
-          '${_workflowBase(value)}/${Uri.encodeComponent(id)}/runs',
+          '${_workflowBase(target)}/${Uri.encodeComponent(id)}/runs',
           queryParameters: {'limit': limit.clamp(1, 200), 'offset': offset < 0 ? 0 : offset, if (status.isNotEmpty) 'status': status},
         ) ??
         <String, dynamic>{'items': <dynamic>[], 'total': 0};
@@ -943,6 +1241,18 @@ class ExtensionService {
 
   Future<void> resumeWorkflowRun(String runId, {WorkflowApiTarget target = const WorkflowApiTarget.cloud()}) async {
     await _api.post('${_workflowRunBase(target)}/${Uri.encodeComponent(runId)}/resume');
+  }
+
+  Future<Map<String, dynamic>> confirmWorkflowRun(
+    String runId,
+    List<String> nodeIds, {
+    WorkflowApiTarget target = const WorkflowApiTarget.cloud(),
+  }) async {
+    return await _api.post<Map<String, dynamic>>(
+          '${_workflowRunBase(target)}/${Uri.encodeComponent(runId)}/confirm',
+          data: <String, dynamic>{'nodeIds': nodeIds},
+        ) ??
+        <String, dynamic>{};
   }
 
   Future<Map<String, dynamic>> rerunWorkflowRun(String runId, {bool wait = false, WorkflowApiTarget target = const WorkflowApiTarget.cloud()}) async {

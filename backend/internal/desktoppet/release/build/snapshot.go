@@ -34,10 +34,9 @@ func NewSnapshotCreator(
 }
 
 type CreateSnapshotRequest struct {
-	UserID           string
+	SpaceID          string
 	PetID            string
 	ProcessingTaskID string
-	CharacterID      string
 	DefaultAction    string
 	IncludedActions  []string
 }
@@ -71,7 +70,7 @@ func (sc *SnapshotCreator) Create(ctx context.Context, req *CreateSnapshotReques
 		return nil, NewBuildError("REVISION_SET_HASH_FAILED", "获取活跃修订集合哈希失败", err)
 	}
 
-	gateResult, err := sc.gateReader.GetValidGateForRelease(ctx, req.UserID, req.ProcessingTaskID, activeRevisionSetHash)
+	gateResult, err := sc.gateReader.GetValidGateForRelease(ctx, req.SpaceID, req.ProcessingTaskID, activeRevisionSetHash)
 	if err != nil {
 		return nil, NewBuildError("QUALITY_GATE_READ_FAILED", "读取质量门禁失败", err)
 	}
@@ -104,7 +103,7 @@ func (sc *SnapshotCreator) Create(ctx context.Context, req *CreateSnapshotReques
 	}
 
 	buildConfigHash := sc.computeBuildConfigHash(req, includedActions, defaultActionKey)
-	inputHash := computeInputHash(req.UserID, identity.ID, activeRevisionSetHash, gateResult.GateID, buildConfigHash)
+	inputHash := computeInputHash(req.SpaceID, identity.ID, activeRevisionSetHash, gateResult.GateID, buildConfigHash)
 
 	actionsJSON, err := json.Marshal(includedActions)
 	if err != nil {
@@ -113,9 +112,8 @@ func (sc *SnapshotCreator) Create(ctx context.Context, req *CreateSnapshotReques
 
 	snapshot := &release.ReleaseBuildSnapshot{
 		ID:                     uuid.NewString(),
-		UserID:                 req.UserID,
+		SpaceID:                req.SpaceID,
 		PetID:                  identity.ID,
-		CharacterID:            taskInfo.CharacterID,
 		ProcessingTaskID:       req.ProcessingTaskID,
 		ActiveRevisionSetHash:  activeRevisionSetHash,
 		QualityGateID:          gateResult.GateID,
@@ -152,25 +150,18 @@ func (sc *SnapshotCreator) resolveAndValidateIdentity(req *CreateSnapshotRequest
 		return identity, nil
 	}
 
-	identity, err := sc.repo.GetPetIdentityByCharacter(req.UserID, taskInfo.CharacterID)
-	if err == nil {
-		return identity, nil
-	}
-
 	now := formatTimestamp(time.Now())
 	name := taskInfo.PackageName
 	if name == "" {
-		name = taskInfo.CharacterID
+		name = "桌宠"
 	}
-	identity = &release.PetIdentityData{
-		ID:                uuid.NewString(),
-		OwnerUserID:       req.UserID,
-		SourceCharacterID: taskInfo.CharacterID,
-		Name:              name,
-		Slug:              makeSlug(name),
-		BindingPolicy:     "character_locked",
-		CreatedAt:         now,
-		UpdatedAt:         now,
+	identity := &release.PetIdentityData{
+		ID:           uuid.NewString(),
+		OwnerSpaceID: req.SpaceID,
+		Name:         name,
+		Slug:         makeSlug(name),
+		CreatedAt:    now,
+		UpdatedAt:    now,
 	}
 	if err := sc.repo.CreatePetIdentity(identity); err != nil {
 		return nil, NewBuildError("PET_IDENTITY_CREATE_FAILED", "创建桌宠身份失败", err)
@@ -179,17 +170,11 @@ func (sc *SnapshotCreator) resolveAndValidateIdentity(req *CreateSnapshotRequest
 }
 
 func (sc *SnapshotCreator) validateOwnership(req *CreateSnapshotRequest, taskInfo *release.TaskInfo, identity *release.PetIdentityData) error {
-	if identity.OwnerUserID != req.UserID {
+	if identity.OwnerSpaceID != req.SpaceID {
 		return NewBuildError(ErrCodeReleaseOwnershipDenied, "桌宠身份不属于当前用户", nil)
 	}
-	if req.CharacterID != "" && identity.SourceCharacterID != req.CharacterID {
-		return NewBuildError(ErrCodeReleaseSourceMismatch, "角色 ID 不匹配", nil)
-	}
-	if taskInfo.UserID != "" && taskInfo.UserID != req.UserID {
+	if taskInfo.SpaceID != "" && taskInfo.SpaceID != req.SpaceID {
 		return NewBuildError(ErrCodeReleaseOwnershipDenied, "处理任务不属于当前用户", nil)
-	}
-	if taskInfo.CharacterID != "" && identity.SourceCharacterID != taskInfo.CharacterID {
-		return NewBuildError(ErrCodeReleaseSourceMismatch, "处理任务角色与桌宠角色不匹配", nil)
 	}
 	return nil
 }

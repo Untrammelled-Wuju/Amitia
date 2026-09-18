@@ -8,6 +8,7 @@ import (
 
 	"github.com/u-ai/backend/internal/extension/kernel/extension_slots"
 	"github.com/u-ai/backend/internal/extension/kernel/schema_ui"
+	"github.com/u-ai/backend/internal/extension/runtimegate"
 )
 
 type UIContributionKind string
@@ -474,6 +475,9 @@ func ValidateAgainstSlot(def *UIContributionDefinition, slot *UISlotContract) er
 				break
 			}
 		}
+		if !sandboxAllowed && def.Sandbox.Type == SandboxHostNative && IsAllowedHostRuntime(def.Entry.RuntimeID) {
+			sandboxAllowed = true
+		}
 		if !sandboxAllowed {
 			return fmt.Errorf("%w: %s not in slot %s", ErrSandboxNotAllowedBySlot, def.Sandbox.Type, slot.SlotID)
 		}
@@ -734,10 +738,16 @@ func allowedSandboxesForKind(kind UIContributionKind) []UISandboxType {
 	case UIContributionWebPage, UIContributionMessageRenderer:
 		return []UISandboxType{SandboxSchemaRenderer, SandboxWebRestricted, SandboxWebIsolated}
 	case UIContributionAction, UIContributionMenuItem, UIContributionToolbarItem,
-		UIContributionStatusItem, UIContributionMessageAction, UIContributionComposerAction,
+		UIContributionStatusItem, UIContributionMessageAction,
 		UIContributionDesktopCommand:
 		return []UISandboxType{SandboxHostNative}
+	case UIContributionComposerAction:
+		return []UISandboxType{SandboxHostNative, SandboxWebRestricted, SandboxWebIsolated}
 	default:
 		return []UISandboxType{kind.DefaultSandbox()}
 	}
+}
+
+func IsAllowedHostRuntime(runtimeID string) bool {
+	return runtimegate.HostRuntimeAllowed(runtimeID)
 }

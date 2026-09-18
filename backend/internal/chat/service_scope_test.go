@@ -40,7 +40,7 @@ func setupScopedChatService(t *testing.T) *service {
 
 func TestProcessMessageRejectsConversationCharacterMismatch(t *testing.T) {
 	svc := setupScopedChatService(t)
-	if err := svc.db.Create(&Conversation{ID: "conv-1", CharacterID: "char-2", Title: "旧会话", Channel: "web", Source: "manual"}).Error; err != nil {
+	if err := svc.db.Create(&Conversation{ID: "conv-1", SpaceID: normalizeConversationOwner(""), CharacterID: "char-2", Title: "旧会话", Channel: "web", Source: "manual"}).Error; err != nil {
 		t.Fatal(err)
 	}
 
@@ -65,7 +65,7 @@ func TestProcessMessageRejectsConversationCharacterMismatch(t *testing.T) {
 
 func TestProcessMessageRejectsConversationChannelMismatch(t *testing.T) {
 	svc := setupScopedChatService(t)
-	if err := svc.db.Create(&Conversation{ID: "conv-2", CharacterID: "char-1", Title: "旧会话", Channel: "qq", Source: "manual"}).Error; err != nil {
+	if err := svc.db.Create(&Conversation{ID: "conv-2", SpaceID: normalizeConversationOwner(""), CharacterID: "char-1", Title: "旧会话", Channel: "qq", Source: "manual"}).Error; err != nil {
 		t.Fatal(err)
 	}
 
@@ -90,7 +90,7 @@ func TestProcessMessageRejectsConversationChannelMismatch(t *testing.T) {
 
 func TestChatRejectsConversationChannelMismatch(t *testing.T) {
 	svc := setupScopedChatService(t)
-	if err := svc.db.Create(&Conversation{ID: "conv-3", CharacterID: "char-1", Title: "旧会话", Channel: "qq", Source: "manual"}).Error; err != nil {
+	if err := svc.db.Create(&Conversation{ID: "conv-3", SpaceID: normalizeConversationOwner(""), CharacterID: "char-1", Title: "旧会话", Channel: "qq", Source: "manual"}).Error; err != nil {
 		t.Fatal(err)
 	}
 

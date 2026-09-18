@@ -1,8 +1,6 @@
 package extension
 
 import (
-	"context"
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -35,25 +33,6 @@ func (f *TestFixture) WriteFiles(files map[string][]byte) error {
 		if err := f.WriteFile(path, content); err != nil {
 			return err
 		}
-	}
-	return nil
-}
-
-type MockPluginHost struct {
-	ValidateInputFunc  func(ctx context.Context, skillID string, input json.RawMessage) error
-	ValidateOutputFunc func(ctx context.Context, skillID string, output json.RawMessage) error
-}
-
-func (h *MockPluginHost) ValidateInput(ctx context.Context, skillID string, input json.RawMessage) error {
-	if h.ValidateInputFunc != nil {
-		return h.ValidateInputFunc(ctx, skillID, input)
-	}
-	return nil
-}
-
-func (h *MockPluginHost) ValidateOutput(ctx context.Context, skillID string, output json.RawMessage) error {
-	if h.ValidateOutputFunc != nil {
-		return h.ValidateOutputFunc(ctx, skillID, output)
 	}
 	return nil
 }

@@ -37,10 +37,21 @@ type DefaultPermissionBroker struct {
 	approvalRecords map[string]PermissionApprovalRecord
 	snapshotStore   PermissionSnapshotStore
 
-	SystemPolicy    func(ctx context.Context, subject PermissionSubject, permissionID string, scope PermissionScope) (PermissionDecision, bool)
-	ExecutionPolicy func(ctx context.Context, request PermissionEvaluationRequest, requirement PermissionRequirement, definition PermissionDefinition) (PermissionDecision, bool)
+	SystemPolicy       func(ctx context.Context, subject PermissionSubject, permissionID string, scope PermissionScope) (PermissionDecision, bool)
+	ExecutionPolicy    func(ctx context.Context, request PermissionEvaluationRequest, requirement PermissionRequirement, definition PermissionDefinition) (PermissionDecision, bool)
+	InstallationPolicy func(ctx context.Context, subject PermissionSubject, requirement PermissionRequirement, definition PermissionDefinition) (PermissionDecision, bool)
 
 	OnPermissionRevoked func(extensionID, runtimeID string)
+
+	PersistentOverride map[string]struct{}
+}
+
+func (b *DefaultPermissionBroker) allowPersistentOverride(permissionID string) bool {
+	if b.PersistentOverride == nil {
+		return false
+	}
+	_, ok := b.PersistentOverride[permissionID]
+	return ok
 }
 
 func NewDefaultPermissionBroker(registry *PermissionDefinitionRegistry, storage PermissionStorage) *DefaultPermissionBroker {
@@ -122,6 +133,7 @@ func (b *DefaultPermissionBroker) Evaluate(ctx context.Context, request Permissi
 	hasHardDeny := false
 	hasForcedApprovalMissing := false
 	hasNormalMissing := false
+	hasInstallationDeny := false
 
 	for _, req := range request.Requirements {
 		def, ok := b.registry.Get(req.PermissionID)
@@ -205,6 +217,26 @@ func (b *DefaultPermissionBroker) Evaluate(ctx context.Context, request Permissi
 			continue
 		}
 
+		if b.InstallationPolicy != nil {
+			if decision, handled := b.InstallationPolicy(ctx, request.Subject, req, def); handled {
+				if decision == DecisionDeny {
+					result.Missing = append(result.Missing, req)
+					result.Reasons = append(result.Reasons, PermissionReason{
+						Code:       "installation_permission_denied",
+						Permission: req.PermissionID,
+					})
+					hasHardDeny = true
+					hasInstallationDeny = true
+				} else {
+					result.Reasons = append(result.Reasons, PermissionReason{
+						Code:       "installation_permission_granted",
+						Permission: req.PermissionID,
+					})
+				}
+				continue
+			}
+		}
+
 		if remoteDecision == DecisionRequireApproval {
 			if !b.validateApprovalRecord(req.PermissionID, request) {
 				result.Missing = append(result.Missing, req)
@@ -215,6 +247,14 @@ func (b *DefaultPermissionBroker) Evaluate(ctx context.Context, request Permissi
 				hasForcedApprovalMissing = true
 				continue
 			}
+		}
+
+		if def.RequiresPerUse && b.validateApprovalRecord(req.PermissionID, request) {
+			result.Reasons = append(result.Reasons, PermissionReason{
+				Code:       "per_use_approval_matched",
+				Permission: req.PermissionID,
+			})
+			continue
 		}
 
 		grants := b.cache.GetOrLoad(ctx, request.Subject, req.PermissionID, func() []PermissionGrant {
@@ -255,7 +295,10 @@ func (b *DefaultPermissionBroker) Evaluate(ctx context.Context, request Permissi
 		}
 	}
 
-	if hasHardDeny {
+	if hasInstallationDeny {
+		result.Decision = DecisionDeny
+		result.ApprovalRequest = nil
+	} else if hasHardDeny {
 		b.determineDenyOrApproval(&result, request)
 	} else if hasForcedApprovalMissing {
 		b.determineForcedApproval(&result, request)
@@ -382,10 +425,10 @@ func (b *DefaultPermissionBroker) Grant(ctx context.Context, request PermissionG
 		return PermissionGrant{}, fmt.Errorf("scope %s not allowed for permission %s", request.Scope.Type, request.PermissionID)
 	}
 
-	if request.Decision == DecisionAllowPersistent && !def.PersistentGrantable {
+	if request.Decision == DecisionAllowPersistent && !def.PersistentGrantable && !b.allowPersistentOverride(request.PermissionID) {
 		return PermissionGrant{}, fmt.Errorf("persistent grant not allowed for permission %s", request.PermissionID)
 	}
-	if def.RequiresPerUse && request.Decision != DecisionAllowOnce {
+	if def.RequiresPerUse && request.Decision != DecisionAllowOnce && !b.allowPersistentOverride(request.PermissionID) {
 		return PermissionGrant{}, fmt.Errorf("permission %s requires an allow_once grant", request.PermissionID)
 	}
 

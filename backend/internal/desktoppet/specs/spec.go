@@ -4,6 +4,7 @@ package specs
 
 import (
 	"encoding/json"
+	"fmt"
 
 	"github.com/u-ai/backend/internal/desktoppet/contracts"
 )
@@ -12,6 +13,8 @@ const (
 	LoopTypeLoop = "loop"
 	LoopTypeOnce = "once"
 )
+
+const FixedFrameCount = 12
 
 const (
 	StrategySequentialFrames = "sequential_frames"
@@ -43,15 +46,12 @@ func fromContracts(spec contracts.ActionSpec) ActionGenerationSpec {
 		loopType = LoopTypeLoop
 	}
 
-	phases := make([]FramePhase, len(spec.Generation.FramePhases))
-	for i, p := range spec.Generation.FramePhases {
-		phases[i] = FramePhase{Index: p.Index, Description: p.Description}
-	}
+	phases := normalizePhases(spec.Generation.FramePhases, FixedFrameCount)
 
 	return ActionGenerationSpec{
 		ActionKey:              spec.Identity.Key,
 		LoopType:               loopType,
-		FrameCount:             spec.Generation.FrameCount,
+		FrameCount:             FixedFrameCount,
 		FramePhases:            phases,
 		MotionDescription:      spec.Generation.MotionDescription,
 		CameraConstraint:       spec.Generation.CameraConstraint,
@@ -62,6 +62,25 @@ func fromContracts(spec contracts.ActionSpec) ActionGenerationSpec {
 		GenerationStrategy:     spec.Generation.Strategy,
 		Version:                spec.Generation.Version,
 	}
+}
+
+func normalizePhases(phases []contracts.FramePhase, target int) []FramePhase {
+	out := make([]FramePhase, target)
+	if len(phases) <= 0 {
+		for i := range out {
+			out[i] = FramePhase{Index: i, Description: fmt.Sprintf("第%d帧，动作保持自然连贯过渡", i+1)}
+		}
+		return out
+	}
+	last := len(phases) - 1
+	for i := 0; i < target; i++ {
+		src := 0
+		if target > 1 {
+			src = i * last / (target - 1)
+		}
+		out[i] = FramePhase{Index: i, Description: phases[src].Description}
+	}
+	return out
 }
 
 func SpecFromJSON(jsonStr string) (ActionGenerationSpec, bool) {

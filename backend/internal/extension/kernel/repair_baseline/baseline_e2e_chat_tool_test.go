@@ -58,8 +58,8 @@ func TestBaseline_E2E_ChatTool_ModelToolsFromKernel(t *testing.T) {
 
 	toolFacade := kernel.NewToolFacade(container.ToolRegistry, container.ExecutionKernel, kernel.DefaultToolFacadeConfig())
 
-	scope := kernel.LegacyScope{
-		UserID:         "test-user",
+	scope := kernel.InvocationScope{
+		SpaceID:        "test-user",
 		CharacterID:    "test-character",
 		ConversationID: "test-conversation",
 		Channel:        "test",
@@ -91,8 +91,8 @@ func TestBaseline_E2E_ChatTool_LegacyCounterZero(t *testing.T) {
 
 	toolFacade := kernel.NewToolFacade(container.ToolRegistry, container.ExecutionKernel, kernel.DefaultToolFacadeConfig())
 
-	scope := kernel.LegacyScope{
-		UserID:         "test-user",
+	scope := kernel.InvocationScope{
+		SpaceID:        "test-user",
 		CharacterID:    "test-character",
 		ConversationID: "test-conversation",
 		Channel:        "test",
@@ -153,8 +153,8 @@ func TestBaseline_E2E_ChatTool_NoLegacyDispatcherMeansNoLegacyFallback(t *testin
 
 	toolFacade := kernel.NewToolFacade(container.ToolRegistry, container.ExecutionKernel, kernel.DefaultToolFacadeConfig())
 
-	scope := kernel.LegacyScope{
-		UserID:         "test-user",
+	scope := kernel.InvocationScope{
+		SpaceID:        "test-user",
 		CharacterID:    "test-character",
 		ConversationID: "test-conversation",
 		Channel:        "test",

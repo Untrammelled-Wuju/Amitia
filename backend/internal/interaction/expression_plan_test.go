@@ -11,7 +11,7 @@ func TestExpressionPlanJSONKeepsPolicyAndPromptBoundaries(t *testing.T) {
 		Version:        ExpressionPlanVersionV1,
 		ID:             "expr-1",
 		BehaviorPlanID: "plan-1",
-		UserID:         "user-1",
+		SpaceID:        "user-1",
 		CharacterID:    "char-1",
 		CreatedAt:      time.Date(2026, 7, 1, 9, 45, 0, 0, time.UTC),
 		Policy: ExpressionPolicy{

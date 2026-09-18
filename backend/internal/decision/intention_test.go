@@ -11,7 +11,7 @@ func TestDeriveIntentionFromGoal(t *testing.T) {
 		Type:        GoalTypeConnection,
 		Priority:    GoalPriorityHigh,
 		Description: "与用户建立深层次连接",
-		UserID:      "user-1",
+		SpaceID:     "user-1",
 		CharacterID: "char-1",
 	}
 	deadline := time.Now().UTC().Add(12 * time.Hour)

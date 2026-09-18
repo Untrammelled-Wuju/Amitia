@@ -29,11 +29,11 @@ func setupTwoInstallations(t *testing.T) (Service, *gorm.DB, string, *Installati
 	notifier := &mockNotifier{}
 	SetRuntimeNotifier(svc, notifier)
 
-	instA, err := svc.InstallPackage("pkg_a", testUserID, testCharacterID)
+	instA, err := svc.InstallPackage("pkg_a", testSpaceID)
 	if err != nil {
 		t.Fatalf("InstallPackage A: %v", err)
 	}
-	instB, err := svc.InstallPackage("pkg_b", testUserID, testCharacterID)
+	instB, err := svc.InstallPackage("pkg_b", testSpaceID)
 	if err != nil {
 		t.Fatalf("InstallPackage B: %v", err)
 	}
@@ -43,7 +43,7 @@ func setupTwoInstallations(t *testing.T) (Service, *gorm.DB, string, *Installati
 func TestEnable_Success(t *testing.T) {
 	svc, db, _, inst, notifier := setupInstalledService(t)
 
-	if err := svc.EnableInstallation(testUserID, inst.ID); err != nil {
+	if err := svc.EnableInstallation(testSpaceID, inst.ID); err != nil {
 		t.Fatalf("EnableInstallation: %v", err)
 	}
 
@@ -65,7 +65,7 @@ func TestEnable_Success(t *testing.T) {
 func TestEnable_CreatesRuntimeSettings(t *testing.T) {
 	svc, db, _, inst, _ := setupInstalledService(t)
 
-	if err := svc.EnableInstallation(testUserID, inst.ID); err != nil {
+	if err := svc.EnableInstallation(testSpaceID, inst.ID); err != nil {
 		t.Fatalf("EnableInstallation: %v", err)
 	}
 
@@ -87,10 +87,10 @@ func TestEnable_CreatesRuntimeSettings(t *testing.T) {
 func TestEnable_SingleInstance_OldActiveDeactivated(t *testing.T) {
 	svc, db, _, instA, instB, notifier := setupTwoInstallations(t)
 
-	if err := svc.EnableInstallation(testUserID, instA.ID); err != nil {
+	if err := svc.EnableInstallation(testSpaceID, instA.ID); err != nil {
 		t.Fatalf("EnableInstallation A: %v", err)
 	}
-	if err := svc.EnableInstallation(testUserID, instB.ID); err != nil {
+	if err := svc.EnableInstallation(testSpaceID, instB.ID); err != nil {
 		t.Fatalf("EnableInstallation B: %v", err)
 	}
 
@@ -115,10 +115,10 @@ func TestEnable_SingleInstance_OldActiveDeactivated(t *testing.T) {
 func TestEnable_Idempotent(t *testing.T) {
 	svc, _, _, inst, _ := setupInstalledService(t)
 
-	if err := svc.EnableInstallation(testUserID, inst.ID); err != nil {
+	if err := svc.EnableInstallation(testSpaceID, inst.ID); err != nil {
 		t.Fatalf("首次 EnableInstallation: %v", err)
 	}
-	if err := svc.EnableInstallation(testUserID, inst.ID); err != nil {
+	if err := svc.EnableInstallation(testSpaceID, inst.ID); err != nil {
 		t.Fatalf("重复 EnableInstallation 应幂等: %v", err)
 	}
 }
@@ -126,11 +126,11 @@ func TestEnable_Idempotent(t *testing.T) {
 func TestEnable_NotFound_Rejected(t *testing.T) {
 	svc, _, _, _, _ := setupInstalledService(t)
 
-	err := svc.EnableInstallation(testUserID, "nonexistent")
+	err := svc.EnableInstallation(testSpaceID, "nonexistent")
 	assertInstallationError(t, err, ErrCodeInstallationNotFound)
 }
 
-func TestEnable_NotOwnedByUser_Rejected(t *testing.T) {
+func TestEnable_NotOwnedBySpace_Rejected(t *testing.T) {
 	svc, _, _, inst, _ := setupInstalledService(t)
 
 	err := svc.EnableInstallation("other_user", inst.ID)
@@ -143,18 +143,18 @@ func TestEnable_EmptyParams_Rejected(t *testing.T) {
 	err := svc.EnableInstallation("", "inst_id")
 	assertInstallationError(t, err, ErrCodeInstallationInvalid)
 
-	err = svc.EnableInstallation(testUserID, "")
+	err = svc.EnableInstallation(testSpaceID, "")
 	assertInstallationError(t, err, ErrCodeInstallationInvalid)
 }
 
 func TestEnable_Uninstalled_Rejected(t *testing.T) {
 	svc, _, _, inst, _ := setupInstalledService(t)
 
-	if err := svc.Uninstall(testUserID, inst.ID); err != nil {
+	if err := svc.Uninstall(testSpaceID, inst.ID); err != nil {
 		t.Fatalf("Uninstall: %v", err)
 	}
 
-	err := svc.EnableInstallation(testUserID, inst.ID)
+	err := svc.EnableInstallation(testSpaceID, inst.ID)
 	assertInstallationError(t, err, ErrCodeInstallationInvalid)
 }
 
@@ -164,7 +164,7 @@ func TestEnable_PackageHashCorrupt_Rejected(t *testing.T) {
 	installDir := filepath.Join(dataDir, filepath.FromSlash(inst.InstallPath))
 	writeFile(t, filepath.Join(installDir, "extra_file.txt"), []byte("corrupt"))
 
-	err := svc.EnableInstallation(testUserID, inst.ID)
+	err := svc.EnableInstallation(testSpaceID, inst.ID)
 	assertInstallationError(t, err, ErrCodePackageHashMismatch)
 
 	dbInst := getInstallationFromDB(t, db, inst.ID)
@@ -176,11 +176,11 @@ func TestEnable_PackageHashCorrupt_Rejected(t *testing.T) {
 func TestDisable_Success(t *testing.T) {
 	svc, db, _, inst, notifier := setupInstalledService(t)
 
-	if err := svc.EnableInstallation(testUserID, inst.ID); err != nil {
+	if err := svc.EnableInstallation(testSpaceID, inst.ID); err != nil {
 		t.Fatalf("EnableInstallation: %v", err)
 	}
 
-	if err := svc.DisableInstallation(testUserID, inst.ID); err != nil {
+	if err := svc.DisableInstallation(testSpaceID, inst.ID); err != nil {
 		t.Fatalf("DisableInstallation: %v", err)
 	}
 
@@ -199,10 +199,10 @@ func TestDisable_Success(t *testing.T) {
 func TestDisable_Idempotent(t *testing.T) {
 	svc, _, _, inst, _ := setupInstalledService(t)
 
-	if err := svc.DisableInstallation(testUserID, inst.ID); err != nil {
+	if err := svc.DisableInstallation(testSpaceID, inst.ID); err != nil {
 		t.Fatalf("首次 DisableInstallation: %v", err)
 	}
-	if err := svc.DisableInstallation(testUserID, inst.ID); err != nil {
+	if err := svc.DisableInstallation(testSpaceID, inst.ID); err != nil {
 		t.Fatalf("重复 DisableInstallation 应幂等: %v", err)
 	}
 }
@@ -210,13 +210,13 @@ func TestDisable_Idempotent(t *testing.T) {
 func TestDisable_PreservesRuntimeSettings(t *testing.T) {
 	svc, db, _, inst, _ := setupInstalledService(t)
 
-	if err := svc.EnableInstallation(testUserID, inst.ID); err != nil {
+	if err := svc.EnableInstallation(testSpaceID, inst.ID); err != nil {
 		t.Fatalf("EnableInstallation: %v", err)
 	}
 
 	px, py := 100, 200
 	sc := 1.5
-	if _, err := svc.UpdateRuntimeSettings(testUserID, inst.ID, &UpdateRuntimeSettingsRequest{
+	if _, err := svc.UpdateRuntimeSettings(testSpaceID, inst.ID, &UpdateRuntimeSettingsRequest{
 		PositionX: &px,
 		PositionY: &py,
 		Scale:     &sc,
@@ -224,7 +224,7 @@ func TestDisable_PreservesRuntimeSettings(t *testing.T) {
 		t.Fatalf("UpdateRuntimeSettings: %v", err)
 	}
 
-	if err := svc.DisableInstallation(testUserID, inst.ID); err != nil {
+	if err := svc.DisableInstallation(testSpaceID, inst.ID); err != nil {
 		t.Fatalf("DisableInstallation: %v", err)
 	}
 
@@ -243,29 +243,29 @@ func TestDisable_PreservesRuntimeSettings(t *testing.T) {
 func TestDisable_NotFound_Rejected(t *testing.T) {
 	svc, _, _, _, _ := setupInstalledService(t)
 
-	err := svc.DisableInstallation(testUserID, "nonexistent")
+	err := svc.DisableInstallation(testSpaceID, "nonexistent")
 	assertInstallationError(t, err, ErrCodeInstallationNotFound)
 }
 
 func TestDisable_AlreadyUninstalled_Rejected(t *testing.T) {
 	svc, _, _, inst, _ := setupInstalledService(t)
 
-	if err := svc.Uninstall(testUserID, inst.ID); err != nil {
+	if err := svc.Uninstall(testSpaceID, inst.ID); err != nil {
 		t.Fatalf("Uninstall: %v", err)
 	}
 
-	err := svc.DisableInstallation(testUserID, inst.ID)
+	err := svc.DisableInstallation(testSpaceID, inst.ID)
 	assertInstallationError(t, err, ErrCodeInstallationInvalid)
 }
 
 func TestSwitch_DisablesOldAndEnablesNew(t *testing.T) {
 	svc, db, _, instA, instB, notifier := setupTwoInstallations(t)
 
-	if err := svc.EnableInstallation(testUserID, instA.ID); err != nil {
+	if err := svc.EnableInstallation(testSpaceID, instA.ID); err != nil {
 		t.Fatalf("EnableInstallation A: %v", err)
 	}
 
-	if err := svc.SwitchInstallation(testUserID, instB.ID); err != nil {
+	if err := svc.SwitchInstallation(testSpaceID, instB.ID); err != nil {
 		t.Fatalf("SwitchInstallation: %v", err)
 	}
 
@@ -296,11 +296,11 @@ func TestSwitch_DisablesOldAndEnablesNew(t *testing.T) {
 func TestSwitch_SameInstance_NoOp(t *testing.T) {
 	svc, _, _, instA, instB, _ := setupTwoInstallations(t)
 
-	if err := svc.EnableInstallation(testUserID, instA.ID); err != nil {
+	if err := svc.EnableInstallation(testSpaceID, instA.ID); err != nil {
 		t.Fatalf("EnableInstallation A: %v", err)
 	}
 
-	if err := svc.SwitchInstallation(testUserID, instA.ID); err != nil {
+	if err := svc.SwitchInstallation(testSpaceID, instA.ID); err != nil {
 		t.Fatalf("SwitchInstallation 同一实例应不报错: %v", err)
 	}
 
@@ -310,22 +310,22 @@ func TestSwitch_SameInstance_NoOp(t *testing.T) {
 func TestSwitch_TargetUninstalled_Rejected(t *testing.T) {
 	svc, _, _, instA, instB, _ := setupTwoInstallations(t)
 
-	if err := svc.EnableInstallation(testUserID, instA.ID); err != nil {
+	if err := svc.EnableInstallation(testSpaceID, instA.ID); err != nil {
 		t.Fatalf("EnableInstallation A: %v", err)
 	}
 
-	if err := svc.Uninstall(testUserID, instB.ID); err != nil {
+	if err := svc.Uninstall(testSpaceID, instB.ID); err != nil {
 		t.Fatalf("Uninstall B: %v", err)
 	}
 
-	err := svc.SwitchInstallation(testUserID, instB.ID)
+	err := svc.SwitchInstallation(testSpaceID, instB.ID)
 	assertInstallationError(t, err, ErrCodeInstallationInvalid)
 }
 
 func TestSwitch_NotFound_Rejected(t *testing.T) {
 	svc, _, _, _, _, _ := setupTwoInstallations(t)
 
-	err := svc.SwitchInstallation(testUserID, "nonexistent")
+	err := svc.SwitchInstallation(testSpaceID, "nonexistent")
 	assertInstallationError(t, err, ErrCodeInstallationNotFound)
 }
 
@@ -418,7 +418,7 @@ func TestUpdateDefaultAction_EmptyParams_Rejected(t *testing.T) {
 func TestUpdateDefaultAction_Uninstalled_Rejected(t *testing.T) {
 	svc, _, _, inst, _ := setupInstalledService(t)
 
-	if err := svc.Uninstall(testUserID, inst.ID); err != nil {
+	if err := svc.Uninstall(testSpaceID, inst.ID); err != nil {
 		t.Fatalf("Uninstall: %v", err)
 	}
 
@@ -429,11 +429,11 @@ func TestUpdateDefaultAction_Uninstalled_Rejected(t *testing.T) {
 func TestPlayAction_Success_NotifiesScheduler(t *testing.T) {
 	svc, _, _, inst, notifier := setupInstalledService(t)
 
-	if err := svc.EnableInstallation(testUserID, inst.ID); err != nil {
+	if err := svc.EnableInstallation(testSpaceID, inst.ID); err != nil {
 		t.Fatalf("EnableInstallation: %v", err)
 	}
 
-	if err := svc.PlayAction(testUserID, inst.ID, "idle_normal"); err != nil {
+	if err := svc.PlayAction(testSpaceID, inst.ID, "idle_normal"); err != nil {
 		t.Fatalf("PlayAction: %v", err)
 	}
 
@@ -451,11 +451,11 @@ func TestPlayAction_Success_NotifiesScheduler(t *testing.T) {
 func TestPlayAction_PlayWave_Success(t *testing.T) {
 	svc, _, _, inst, notifier := setupInstalledService(t)
 
-	if err := svc.EnableInstallation(testUserID, inst.ID); err != nil {
+	if err := svc.EnableInstallation(testSpaceID, inst.ID); err != nil {
 		t.Fatalf("EnableInstallation: %v", err)
 	}
 
-	if err := svc.PlayAction(testUserID, inst.ID, "wave"); err != nil {
+	if err := svc.PlayAction(testSpaceID, inst.ID, "wave"); err != nil {
 		t.Fatalf("PlayAction wave: %v", err)
 	}
 
@@ -470,7 +470,7 @@ func TestPlayAction_PlayWave_Success(t *testing.T) {
 func TestPlayAction_PetNotEnabled_Rejected(t *testing.T) {
 	svc, _, _, inst, notifier := setupInstalledService(t)
 
-	err := svc.PlayAction(testUserID, inst.ID, "idle_normal")
+	err := svc.PlayAction(testSpaceID, inst.ID, "idle_normal")
 	assertInstallationError(t, err, ErrCodePetNotEnabled)
 
 	if len(notifier.actionPlayCalls) != 0 {
@@ -481,18 +481,18 @@ func TestPlayAction_PetNotEnabled_Rejected(t *testing.T) {
 func TestPlayAction_ActionNotFound_Rejected(t *testing.T) {
 	svc, _, _, inst, _ := setupInstalledService(t)
 
-	if err := svc.EnableInstallation(testUserID, inst.ID); err != nil {
+	if err := svc.EnableInstallation(testSpaceID, inst.ID); err != nil {
 		t.Fatalf("EnableInstallation: %v", err)
 	}
 
-	err := svc.PlayAction(testUserID, inst.ID, "nonexistent_action")
+	err := svc.PlayAction(testSpaceID, inst.ID, "nonexistent_action")
 	assertInstallationError(t, err, ErrCodeActionNotFound)
 }
 
-func TestPlayAction_NotOwnedByUser_Rejected(t *testing.T) {
+func TestPlayAction_NotOwnedBySpace_Rejected(t *testing.T) {
 	svc, _, _, inst, _ := setupInstalledService(t)
 
-	if err := svc.EnableInstallation(testUserID, inst.ID); err != nil {
+	if err := svc.EnableInstallation(testSpaceID, inst.ID); err != nil {
 		t.Fatalf("EnableInstallation: %v", err)
 	}
 
@@ -503,7 +503,7 @@ func TestPlayAction_NotOwnedByUser_Rejected(t *testing.T) {
 func TestPlayAction_InstallationNotFound_Rejected(t *testing.T) {
 	svc, _, _, _, _ := setupInstalledService(t)
 
-	err := svc.PlayAction(testUserID, "nonexistent", "idle_normal")
+	err := svc.PlayAction(testSpaceID, "nonexistent", "idle_normal")
 	assertInstallationError(t, err, ErrCodeInstallationNotFound)
 }
 
@@ -513,22 +513,22 @@ func TestPlayAction_EmptyParams_Rejected(t *testing.T) {
 	err := svc.PlayAction("", inst.ID, "idle_normal")
 	assertInstallationError(t, err, ErrCodeInstallationInvalid)
 
-	err = svc.PlayAction(testUserID, "", "idle_normal")
+	err = svc.PlayAction(testSpaceID, "", "idle_normal")
 	assertInstallationError(t, err, ErrCodeInstallationInvalid)
 
-	err = svc.PlayAction(testUserID, inst.ID, "")
+	err = svc.PlayAction(testSpaceID, inst.ID, "")
 	assertInstallationError(t, err, ErrCodeInstallationInvalid)
 }
 
 func TestPlayAction_DoesNotTriggerGeneration(t *testing.T) {
 	svc, _, _, inst, notifier := setupInstalledService(t)
 
-	if err := svc.EnableInstallation(testUserID, inst.ID); err != nil {
+	if err := svc.EnableInstallation(testSpaceID, inst.ID); err != nil {
 		t.Fatalf("EnableInstallation: %v", err)
 	}
 
 	for i := 0; i < 5; i++ {
-		if err := svc.PlayAction(testUserID, inst.ID, "idle_normal"); err != nil {
+		if err := svc.PlayAction(testSpaceID, inst.ID, "idle_normal"); err != nil {
 			t.Fatalf("PlayAction %d: %v", i, err)
 		}
 	}
@@ -541,19 +541,19 @@ func TestPlayAction_DoesNotTriggerGeneration(t *testing.T) {
 func TestRecenter_Success(t *testing.T) {
 	svc, db, _, inst, notifier := setupInstalledService(t)
 
-	if err := svc.EnableInstallation(testUserID, inst.ID); err != nil {
+	if err := svc.EnableInstallation(testSpaceID, inst.ID); err != nil {
 		t.Fatalf("EnableInstallation: %v", err)
 	}
 
 	px, py := 500, 600
-	if _, err := svc.UpdateRuntimeSettings(testUserID, inst.ID, &UpdateRuntimeSettingsRequest{
+	if _, err := svc.UpdateRuntimeSettings(testSpaceID, inst.ID, &UpdateRuntimeSettingsRequest{
 		PositionX: &px,
 		PositionY: &py,
 	}); err != nil {
 		t.Fatalf("UpdateRuntimeSettings: %v", err)
 	}
 
-	if err := svc.Recenter(testUserID, inst.ID); err != nil {
+	if err := svc.Recenter(testSpaceID, inst.ID); err != nil {
 		t.Fatalf("Recenter: %v", err)
 	}
 
@@ -573,21 +573,21 @@ func TestRecenter_Success(t *testing.T) {
 func TestRecenter_PetNotEnabled_Rejected(t *testing.T) {
 	svc, _, _, inst, _ := setupInstalledService(t)
 
-	err := svc.Recenter(testUserID, inst.ID)
+	err := svc.Recenter(testSpaceID, inst.ID)
 	assertInstallationError(t, err, ErrCodePetNotEnabled)
 }
 
 func TestRecenter_NotFound_Rejected(t *testing.T) {
 	svc, _, _, _, _ := setupInstalledService(t)
 
-	err := svc.Recenter(testUserID, "nonexistent")
+	err := svc.Recenter(testSpaceID, "nonexistent")
 	assertInstallationError(t, err, ErrCodeInstallationNotFound)
 }
 
 func TestUpdateRuntimeSettings_Success(t *testing.T) {
 	svc, db, _, inst, notifier := setupInstalledService(t)
 
-	if err := svc.EnableInstallation(testUserID, inst.ID); err != nil {
+	if err := svc.EnableInstallation(testSpaceID, inst.ID); err != nil {
 		t.Fatalf("EnableInstallation: %v", err)
 	}
 
@@ -595,7 +595,7 @@ func TestUpdateRuntimeSettings_Success(t *testing.T) {
 	px, py := 300, 400
 	aot := 0
 	ctm := "full"
-	if _, err := svc.UpdateRuntimeSettings(testUserID, inst.ID, &UpdateRuntimeSettingsRequest{
+	if _, err := svc.UpdateRuntimeSettings(testSpaceID, inst.ID, &UpdateRuntimeSettingsRequest{
 		Scale:            &sc,
 		PositionX:        &px,
 		PositionY:        &py,
@@ -633,12 +633,12 @@ func TestUpdateRuntimeSettings_Success(t *testing.T) {
 func TestUpdateRuntimeSettings_InvalidClickThroughMode_Rejected(t *testing.T) {
 	svc, _, _, inst, _ := setupInstalledService(t)
 
-	if err := svc.EnableInstallation(testUserID, inst.ID); err != nil {
+	if err := svc.EnableInstallation(testSpaceID, inst.ID); err != nil {
 		t.Fatalf("EnableInstallation: %v", err)
 	}
 
 	ctm := "invalid_mode"
-	_, err := svc.UpdateRuntimeSettings(testUserID, inst.ID, &UpdateRuntimeSettingsRequest{
+	_, err := svc.UpdateRuntimeSettings(testSpaceID, inst.ID, &UpdateRuntimeSettingsRequest{
 		ClickThroughMode: &ctm,
 	})
 	assertInstallationError(t, err, ErrCodeInstallationInvalid)
@@ -647,12 +647,12 @@ func TestUpdateRuntimeSettings_InvalidClickThroughMode_Rejected(t *testing.T) {
 func TestUpdateRuntimeSettings_BoundingBoxClickThroughMode_Canonicalized(t *testing.T) {
 	svc, db, _, inst, _ := setupInstalledService(t)
 
-	if err := svc.EnableInstallation(testUserID, inst.ID); err != nil {
+	if err := svc.EnableInstallation(testSpaceID, inst.ID); err != nil {
 		t.Fatalf("EnableInstallation: %v", err)
 	}
 
 	ctm := "boundingBox"
-	if _, err := svc.UpdateRuntimeSettings(testUserID, inst.ID, &UpdateRuntimeSettingsRequest{
+	if _, err := svc.UpdateRuntimeSettings(testSpaceID, inst.ID, &UpdateRuntimeSettingsRequest{
 		ClickThroughMode: &ctm,
 	}); err != nil {
 		t.Fatalf("UpdateRuntimeSettings: %v", err)
@@ -667,11 +667,11 @@ func TestUpdateRuntimeSettings_BoundingBoxClickThroughMode_Canonicalized(t *test
 func TestUpdateRuntimeSettings_EmptySettings_NoOp(t *testing.T) {
 	svc, _, _, inst, _ := setupInstalledService(t)
 
-	if err := svc.EnableInstallation(testUserID, inst.ID); err != nil {
+	if err := svc.EnableInstallation(testSpaceID, inst.ID); err != nil {
 		t.Fatalf("EnableInstallation: %v", err)
 	}
 
-	if _, err := svc.UpdateRuntimeSettings(testUserID, inst.ID, &UpdateRuntimeSettingsRequest{}); err != nil {
+	if _, err := svc.UpdateRuntimeSettings(testSpaceID, inst.ID, &UpdateRuntimeSettingsRequest{}); err != nil {
 		t.Fatalf("空 settings 应不报错: %v", err)
 	}
 }
@@ -680,21 +680,21 @@ func TestUpdateRuntimeSettings_NotFound_Rejected(t *testing.T) {
 	svc, _, _, _, _ := setupInstalledService(t)
 
 	sc := 1.0
-	_, err := svc.UpdateRuntimeSettings(testUserID, "nonexistent", &UpdateRuntimeSettingsRequest{Scale: &sc})
+	_, err := svc.UpdateRuntimeSettings(testSpaceID, "nonexistent", &UpdateRuntimeSettingsRequest{Scale: &sc})
 	assertInstallationError(t, err, ErrCodeInstallationNotFound)
 }
 
 func TestUpdateRuntimeSettings_RevisionCAS_Success(t *testing.T) {
 	svc, db, _, inst, _ := setupInstalledService(t)
 
-	if err := svc.EnableInstallation(testUserID, inst.ID); err != nil {
+	if err := svc.EnableInstallation(testSpaceID, inst.ID); err != nil {
 		t.Fatalf("EnableInstallation: %v", err)
 	}
 
 	rs := getRuntimeSettingsFromDB(t, db, inst.ID)
 	expectedRev := rs.SettingsRevision
 	sc := 1.5
-	updated, err := svc.UpdateRuntimeSettings(testUserID, inst.ID, &UpdateRuntimeSettingsRequest{
+	updated, err := svc.UpdateRuntimeSettings(testSpaceID, inst.ID, &UpdateRuntimeSettingsRequest{
 		Scale:            &sc,
 		ExpectedRevision: &expectedRev,
 	})
@@ -709,13 +709,13 @@ func TestUpdateRuntimeSettings_RevisionCAS_Success(t *testing.T) {
 func TestUpdateRuntimeSettings_RevisionCAS_Conflict(t *testing.T) {
 	svc, _, _, inst, _ := setupInstalledService(t)
 
-	if err := svc.EnableInstallation(testUserID, inst.ID); err != nil {
+	if err := svc.EnableInstallation(testSpaceID, inst.ID); err != nil {
 		t.Fatalf("EnableInstallation: %v", err)
 	}
 
 	staleRev := 999
 	sc := 1.5
-	_, err := svc.UpdateRuntimeSettings(testUserID, inst.ID, &UpdateRuntimeSettingsRequest{
+	_, err := svc.UpdateRuntimeSettings(testSpaceID, inst.ID, &UpdateRuntimeSettingsRequest{
 		Scale:            &sc,
 		ExpectedRevision: &staleRev,
 	})
@@ -725,7 +725,7 @@ func TestUpdateRuntimeSettings_RevisionCAS_Conflict(t *testing.T) {
 func TestUpdateRuntimeSettings_UserOwnership_Rejected(t *testing.T) {
 	svc, _, _, inst, _ := setupInstalledService(t)
 
-	if err := svc.EnableInstallation(testUserID, inst.ID); err != nil {
+	if err := svc.EnableInstallation(testSpaceID, inst.ID); err != nil {
 		t.Fatalf("EnableInstallation: %v", err)
 	}
 
@@ -737,7 +737,7 @@ func TestUpdateRuntimeSettings_UserOwnership_Rejected(t *testing.T) {
 func TestListInstallations_Success(t *testing.T) {
 	svc, _, _, instA, instB, _ := setupTwoInstallations(t)
 
-	items, err := svc.ListInstallations(testUserID)
+	items, err := svc.ListInstallations(testSpaceID)
 	if err != nil {
 		t.Fatalf("ListInstallations: %v", err)
 	}

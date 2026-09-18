@@ -15,8 +15,8 @@ import (
 type (
 	// PackageInstallPort invokes the real package install saga.
 	PackageInstallPort interface {
-		InstallPackage(ctx context.Context, extID string, version string, packageID string, hash string, userID string) (string, error)
-		UninstallPackage(ctx context.Context, extID string, userID string) error
+		InstallPackage(ctx context.Context, extID string, version string, packageID string, hash string, spaceID string) (string, error)
+		UninstallPackage(ctx context.Context, extID string, spaceID string) error
 		ResolveArtifact(ctx context.Context, extID string, version string, packageURI string, hash string) (string, error)
 	}
 
@@ -120,7 +120,7 @@ func (i *ExtensionPackageInstaller) Install(
 		packageID = artifactID
 	}
 
-	installID, err := i.packagePort.InstallPackage(ctx, extID, version, packageID, hash, string(target.UserID))
+	installID, err := i.packagePort.InstallPackage(ctx, extID, version, packageID, hash, string(target.SpaceID))
 	if err != nil {
 		return InstalledCapability{}, fmt.Errorf("extension installer: install package %s: %w", extID, err)
 	}
@@ -160,7 +160,7 @@ func (i *ExtensionPackageInstaller) Rollback(
 		return nil
 	}
 
-	if err := i.packagePort.UninstallPackage(ctx, installed.ExtensionIDs[0], string(installed.Target.UserID)); err != nil {
+	if err := i.packagePort.UninstallPackage(ctx, installed.ExtensionIDs[0], string(installed.Target.SpaceID)); err != nil {
 		return fmt.Errorf("extension installer rollback: uninstall %s: %w", installed.ExtensionIDs[0], err)
 	}
 	return nil

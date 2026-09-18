@@ -6,6 +6,8 @@ import { useApi } from "./useApi";
 import { useCachedApi } from "./useCachedApi";
 import {
   compareChatMessages,
+  getClientMessageId,
+  getMessageUIKey,
   normalizeRealtimeMessage,
 } from "@/utils/message-order";
 
@@ -33,12 +35,6 @@ export function useWebChatConversation(
   const importBatches = ref<any[]>([]);
   const memories = ref<any[]>([]);
 
-  const isWechatActive = ref(false);
-  const wechatOnline = ref(false);
-  const wechatMsgCount = ref(0);
-  const isQQActive = ref(false);
-  const qqOnline = ref(false);
-  const qqMsgCount = ref(0);
   const webMsgCount = ref(0);
 
   const showDrawer = ref(false);
@@ -48,12 +44,24 @@ export function useWebChatConversation(
   const HISTORY_PAGE_SIZE = 50;
   let messagesVersion = 0;
 
-  let __fsLast = 0;
-  let __wcfLast = 0;
-
   function isLocalMessage(m: any) {
     const id = String(m.id || "");
     return id.startsWith("user-") || id.startsWith("failed-");
+  }
+
+  async function conversationExistsOnServer(conversationID: string): Promise<boolean> {
+    try {
+      const page = await get<any>("/api/web-chat/conversations", {
+        page: 1,
+        pageSize: 100,
+      });
+      const items = page?.conversations || page?.items || [];
+      const total = Number(page?.total ?? items.length);
+      if (total > items.length) return true;
+      return items.some((item: any) => String(item?.id || "") === conversationID);
+    } catch {
+      return true;
+    }
   }
 
   async function fetchLatestMessagesPage(conversationID: string) {
@@ -85,10 +93,29 @@ export function useWebChatConversation(
     if (pendingMsg && !serverMap.has(String(pendingMsg.id)) && !localOnly.some((m: any) => m.id === pendingMsg.id)) {
       localOnly.push(pendingMsg);
     }
+    const currentById = new Map<string, any>();
+    const currentByClientMessageId = new Map<string, any>();
+    for (const current of messages.value) {
+      const id = String(current?.id || "");
+      const clientMessageId = getClientMessageId(current);
+      if (id) currentById.set(id, current);
+      if (clientMessageId) currentByClientMessageId.set(clientMessageId, current);
+    }
     const merged = serverItems.map((raw: any) => {
       const m = normalizeRealtimeMessage(raw);
-      if (m.imageUrl && m.content === "[图片]") return { ...m, content: "" };
-      return m;
+      const existing =
+        currentById.get(String(m.id || "")) ||
+        currentByClientMessageId.get(getClientMessageId(m));
+      const next = {
+        ...existing,
+        ...m,
+        clientMessageId:
+          getClientMessageId(m) || getClientMessageId(existing) || undefined,
+        uiKey: existing?.uiKey || getMessageUIKey(m),
+        animateIn: existing?.animateIn ?? false,
+      };
+      if (next.imageUrl && next.content === "[图片]") return { ...next, content: "" };
+      return next;
     });
     for (const local of localOnly) {
       if (!serverMap.has(String(local.id))) {
@@ -121,8 +148,6 @@ export function useWebChatConversation(
     } catch {
       return;
     }
-    isWechatActive.value = false;
-    isQQActive.value = false;
     localStorage.setItem("webchat-last-conv", "char");
     localStorage.removeItem("webchat-conv-id");
     selectCharacter(c);
@@ -137,6 +162,10 @@ export function useWebChatConversation(
     if (!characterId.value) return;
     const c = characters.value.find((x: any) => x.id === characterId.value);
     let dedicatedConvId = localStorage.getItem("webchat-conv-id") || c?.conversationId;
+    if (dedicatedConvId && !(await conversationExistsOnServer(dedicatedConvId))) {
+      localStorage.removeItem("webchat-conv-id");
+      dedicatedConvId = "";
+    }
     if (!dedicatedConvId) {
       try {
         const created = await post<any>("/api/web-chat/conversations", {
@@ -190,26 +219,6 @@ export function useWebChatConversation(
       });
       const items = r?.conversations || r?.items || [];
       conversations.value = items;
-      const wc =
-        items.find(
-          (x: any) =>
-            x.channel === "wechat" && (x.messageCount > 0 || x.msgCount > 0),
-        ) ||
-        items.find(
-          (x: any) => x.id.startsWith("conv-") && x.channel === "wechat",
-        ) ||
-        items.find((x: any) => x.channel === "wechat");
-      wechatMsgCount.value = wc?.messageCount || wc?.msgCount || 0;
-      const qc =
-        items.find(
-          (x: any) =>
-            x.channel === "qq" && (x.messageCount > 0 || x.msgCount > 0),
-        ) ||
-        items.find(
-          (x: any) => x.id.startsWith("conv-") && x.channel === "qq",
-        ) ||
-        items.find((x: any) => x.channel === "qq");
-      qqMsgCount.value = qc?.messageCount || qc?.msgCount || 0;
       const webConv = items.find((x: any) => x.id === convId.value);
       if (webConv) webMsgCount.value = webConv?.messageCount || 0;
     } catch {
@@ -220,16 +229,9 @@ export function useWebChatConversation(
   async function handleSelectConv(conv: any) {
     showDrawer.value = false;
     const convIdStr = String(conv?.id || "");
-    isWechatActive.value = conv?.channel === "wechat";
-    isQQActive.value = conv?.channel === "qq";
     disconnectSSE();
     convId.value = conv.id;
-    convTitle.value =
-      conv?.channel === "qq"
-        ? "QQ聊天"
-        : conv?.channel === "wechat"
-          ? "微信聊天"
-          : conv.title || "";
+    convTitle.value = conv.title || "";
     msgPage.value = 1;
     hasMoreHistory.value = false;
     const version = ++messagesVersion;
@@ -252,143 +254,6 @@ export function useWebChatConversation(
       if (version !== messagesVersion) return;
       messages.value = [];
     }
-  }
-
-  async function handleSelectWechat(skipConfirm = false) {
-    console.log("[handleSelectWechat] called, skipConfirm =", skipConfirm);
-    if (!skipConfirm) {
-      try {
-        await ElMessageBox.confirm("将切换到微信对话。", "切换对话", {
-          confirmButtonText: "确认切换",
-          cancelButtonText: "取消",
-          type: "info",
-        });
-      } catch (e: any) {
-        if (e !== "cancel" && e !== "close")
-      console.error("[handleSelectWechat] confirm error:", e);
-        return;
-      }
-    }
-    showDrawer.value = false;
-    localStorage.removeItem("webchat-conv-id");
-    try {
-      const convs = await get<any>("/api/web-chat/conversations", {
-        pageSize: 50,
-      });
-      const items = convs?.conversations || convs?.items || [];
-      const wc =
-        items.find(
-          (x: any) =>
-            x.channel === "wechat" && (x.messageCount > 0 || x.msgCount > 0),
-        ) ||
-        items.find(
-          (x: any) => x.id.startsWith("conv-") && x.channel === "wechat",
-        ) ||
-        items.find((x: any) => x.channel === "wechat") ||
-        items.find((x: any) => x.id === "channel-wechat");
-      if (wc) {
-        localStorage.setItem("webchat-last-conv", "wechat");
-        const cid = wc.characterId || wc.character_id;
-        if (cid) {
-          const c = characters.value.find((x: any) => x.id === cid);
-          if (c) selectCharacter(c);
-        }
-        if (!characterId.value || !charName.value) {
-          const fallback =
-            characters.value.find((x: any) => x.isDefault) ||
-            characters.value.find((x: any) => x.isActive) ||
-            characters.value[0];
-          if (fallback) selectCharacter(fallback);
-        }
-        await handleSelectConv(wc);
-        return;
-      }
-      const defaultChar = characters.value.find(
-        (c: any) => c.isDefault || c.isActive,
-      );
-      const created = await post<any>("/api/web-chat/conversations", {
-        title: "微信对话",
-        channel: "wechat",
-        characterId: defaultChar?.id || characterId.value || "",
-      });
-      if (created?.id) {
-        await handleSelectConv(created);
-        return;
-      }
-    } catch (e: any) {
-      console.error("[handleSelectWechat]", e);
-    }
-    ElMessage.warning("未找到微信对话");
-  }
-
-  async function handleSelectQQ(skipConfirm = false) {
-    console.log("[handleSelectQQ] called, skipConfirm =", skipConfirm);
-    if (!skipConfirm) {
-      try {
-        await ElMessageBox.confirm("将切换到QQ对话。", "切换对话", {
-          confirmButtonText: "确认切换",
-          cancelButtonText: "取消",
-          type: "info",
-        });
-      } catch (e: any) {
-        if (e !== "cancel" && e !== "close")
-      console.error("[handleSelectQQ] confirm error:", e);
-        return;
-      }
-    }
-    showDrawer.value = false;
-    localStorage.removeItem("webchat-conv-id");
-    try {
-      if (!qqOnline.value) {
-        ElMessage.warning("QQ未连接，仅展示历史消息");
-      }
-      const convs = await get<any>("/api/web-chat/conversations", {
-        pageSize: 50,
-      });
-      const items = convs?.conversations || convs?.items || [];
-      const qc =
-        items.find(
-          (x: any) =>
-            x.channel === "qq" && (x.messageCount > 0 || x.msgCount > 0),
-        ) ||
-        items.find(
-          (x: any) => x.id.startsWith("conv-") && x.channel === "qq",
-        ) ||
-        items.find((x: any) => x.channel === "qq") ||
-        items.find((x: any) => x.id === "channel-qq");
-      if (qc) {
-        localStorage.setItem("webchat-last-conv", "qq");
-        const cid = qc.characterId || qc.character_id;
-        if (cid) {
-          const c = characters.value.find((x: any) => x.id === cid);
-          if (c) selectCharacter(c);
-        }
-        if (!characterId.value || !charName.value) {
-          const fallback =
-            characters.value.find((x: any) => x.isDefault) ||
-            characters.value.find((x: any) => x.isActive) ||
-            characters.value[0];
-          if (fallback) selectCharacter(fallback);
-        }
-        await handleSelectConv(qc);
-        return;
-      }
-      const defaultChar = characters.value.find(
-        (c: any) => c.isDefault || c.isActive,
-      );
-      const created = await post<any>("/api/web-chat/conversations", {
-        title: "QQ对话",
-        channel: "qq",
-        characterId: defaultChar?.id || characterId.value || "",
-      });
-      if (created?.id) {
-        await handleSelectConv(created);
-        return;
-      }
-    } catch (e: any) {
-      console.error("[handleSelectQQ]", e);
-    }
-    ElMessage.warning("未找到QQ对话");
   }
 
   async function handleContinueImport(batch: any) {
@@ -419,59 +284,6 @@ export function useWebChatConversation(
     } catch {}
   }
 
-  async function fetchWechatMsgCount() {
-    if (Date.now() - __wcfLast < 8000) return;
-    __wcfLast = Date.now();
-    try {
-      const r = await get<any>("/api/wechat/status");
-      const status = r?.data || r;
-      wechatOnline.value =
-        status?.status === "connected" || status?.accountId != null;
-    } catch {}
-    try {
-      const convs = await get<any>("/api/web-chat/conversations", {
-        pageSize: 50,
-      });
-      const items = convs?.conversations || convs?.items || [];
-      const wc =
-        items.find(
-          (x: any) =>
-            x.channel === "wechat" && (x.messageCount > 0 || x.msgCount > 0),
-        ) ||
-        items.find(
-          (x: any) => x.id.startsWith("conv-") && x.channel === "wechat",
-        ) ||
-        items.find((x: any) => x.channel === "wechat");
-      if (wc) wechatMsgCount.value = wc?.messageCount || wc?.msgCount || 0;
-    } catch {}
-  }
-
-  async function fetchQQStatus() {
-    if (Date.now() - __fsLast < 8000) return;
-    __fsLast = Date.now();
-    try {
-      const r = await get<any>("/api/qq/status");
-      const data = r?.data || r;
-      qqOnline.value = data?.qqOnline || data?.status === "online";
-    } catch {}
-    try {
-      const convs = await get<any>("/api/web-chat/conversations", {
-        pageSize: 50,
-      });
-      const items = convs?.conversations || convs?.items || [];
-      const qc =
-        items.find(
-          (x: any) =>
-            x.channel === "qq" && (x.messageCount > 0 || x.msgCount > 0),
-        ) ||
-        items.find(
-          (x: any) => x.id.startsWith("conv-") && x.channel === "qq",
-        ) ||
-        items.find((x: any) => x.channel === "qq");
-      if (qc) qqMsgCount.value = qc?.messageCount || qc?.msgCount || 0;
-    } catch {}
-  }
-
   async function fetchWebMsgCount() {
     if (!convId.value) return;
     try {
@@ -498,19 +310,29 @@ export function useWebChatConversation(
     } catch {}
   }
 
-  function fetchConvSummary() {}
+  async function fetchConvSummary(conversationID = convId.value): Promise<string> {
+    const id = String(conversationID || "").trim();
+    if (!id) return "";
+    try {
+      const response = await get<any>(
+        `/api/chats/conversations/${encodeURIComponent(id)}/summary`,
+      );
+      return String(
+        response?.summaryText ??
+          response?.summary_text ??
+          response?.summary ??
+          "",
+      ).trim();
+    } catch {
+      return "";
+    }
+  }
 
   return {
     characters,
     conversations,
     importBatches,
     memories,
-    isWechatActive,
-    wechatOnline,
-    wechatMsgCount,
-    isQQActive,
-    qqOnline,
-    qqMsgCount,
     webMsgCount,
     showDrawer,
     showCharPicker,
@@ -520,12 +342,8 @@ export function useWebChatConversation(
     loadCharacterConversation,
     fetchConversations,
     handleSelectConv,
-    handleSelectWechat,
-    handleSelectQQ,
     handleContinueImport,
     handleViewMemories,
-    fetchWechatMsgCount,
-    fetchQQStatus,
     fetchWebMsgCount,
     refreshCharacters,
     fetchConvSummary,

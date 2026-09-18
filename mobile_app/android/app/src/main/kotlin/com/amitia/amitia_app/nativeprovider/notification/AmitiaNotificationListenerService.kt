@@ -50,7 +50,7 @@ class AmitiaNotificationListenerService : NotificationListenerService() {
         }
     }
 
-    fun handleRequest(request: NativeNotificationRequest): NativeNotificationResponse {
+    suspend fun handleRequest(request: NativeNotificationRequest): NativeNotificationResponse {
         ensureHandler()
         return handler?.execute(request) ?: NativeNotificationResponse(
             requestId = request.requestId,

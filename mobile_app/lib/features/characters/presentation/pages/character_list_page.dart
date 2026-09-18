@@ -10,6 +10,7 @@ import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_radius.dart';
 import '../../../../core/artifact/artifact_providers.dart';
 import '../../../../core/backend_connection/backend_connection_availability.dart';
+import '../../../../core/backend_connection/backend_uri_builder.dart';
 import '../../../../core/backend_connection/providers/backend_connection_providers.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_misc.dart';
@@ -18,7 +19,9 @@ import '../../../../core/services/providers.dart';
 import '../../../../core/models/character.dart';
 
 class CharacterListPage extends ConsumerStatefulWidget {
-  const CharacterListPage({super.key});
+  final String title;
+
+  const CharacterListPage({super.key, this.title = '角色'});
 
   @override
   ConsumerState<CharacterListPage> createState() => _CharacterListPageState();
@@ -27,13 +30,26 @@ class CharacterListPage extends ConsumerStatefulWidget {
 enum _SortOrder { none, name, createdAt }
 
 class _CharacterListPageState extends ConsumerState<CharacterListPage> {
-  String? _defaultCharacterId;
-  final Set<String> _archivedIds = {};
   List<CharacterDto> _characters = [];
+  bool _searchVisible = false;
+  String _query = '';
   _SortOrder _sortOrder = _SortOrder.none;
+  final _searchController = TextEditingController();
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
   List<CharacterDto> get _activeCharacters {
-    var list = _characters.where((c) => !_archivedIds.contains(c.id)).toList();
+    var list = _characters.where((c) {
+      if (_query.trim().isEmpty) return true;
+      final q = _query.trim().toLowerCase();
+      return c.name.toLowerCase().contains(q) ||
+          c.identity.toLowerCase().contains(q) ||
+          c.description.toLowerCase().contains(q);
+    }).toList();
     switch (_sortOrder) {
       case _SortOrder.name:
         list.sort((a, b) => a.name.compareTo(b.name));
@@ -50,120 +66,178 @@ class _CharacterListPageState extends ConsumerState<CharacterListPage> {
   @override
   Widget build(BuildContext context) {
     final charactersAsync = ref.watch(characterListProvider);
+    final backendAvailability = ref.watch(backendConnectionProvider).valueOrNull;
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
-        title: '角色',
+        title: _searchVisible ? '搜索角色' : widget.title,
         navigation: AmitiaAppBarNavigation.back,
+        actions: [
+          AmitiaIconButton(
+            icon: _searchVisible ? Icons.close : Icons.search,
+            tooltip: _searchVisible ? '退出搜索' : '搜索',
+            onPressed: () {
+              FocusScope.of(context).unfocus();
+              _searchController.clear();
+              setState(() {
+                _searchVisible = !_searchVisible;
+                _query = '';
+              });
+            },
+          ),
+        ],
       ),
       body: SafeArea(
         top: false,
-        child: Column(
-          children: [
-            Padding(
-              padding: EdgeInsets.fromLTRB(
-                AppSpacing.pagePadding,
-                AppSpacing.sm,
-                AppSpacing.pagePadding,
-                AppSpacing.sm,
-              ),
-              child: const AmitiaSearchField(hintText: '搜索角色'),
-            ),
-            Expanded(
-              child: charactersAsync.when(
-                loading: () => const Center(child: CircularProgressIndicator()),
-                error: (err, _) => Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(32),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.error_outline, size: 48, color: context.textSecondary),
-                        const SizedBox(height: 16),
-                        Text(
-                          '加载失败: ${err.toString().replaceFirst('Exception: ', '')}',
-                          style: AppTypography.body(context).copyWith(color: context.error),
-                          textAlign: TextAlign.center,
-                        ),
-                        const SizedBox(height: 16),
-                        AmitiaButton(
-                          label: '重试',
-                          onPressed: () => ref.invalidate(characterListProvider),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                data: (characters) {
-                  _characters = characters;
-                  _defaultCharacterId ??= characters.isNotEmpty ? characters.first.id : null;
-                  final activeChars = _activeCharacters;
-                  if (activeChars.isEmpty) {
-                    return Center(
-                      child: Text(
-                        '暂无角色，请先创建',
-                        style: AppTypography.body(context).copyWith(color: context.textSecondary),
-                      ),
-                    );
-                  }
-                  return ListView.separated(
-                    padding: EdgeInsets.fromLTRB(
-                      AppSpacing.pagePadding,
-                      AppSpacing.xs,
-                      AppSpacing.pagePadding,
-                      AppSpacing.md,
-                    ),
-                    itemCount: activeChars.length,
-                    separatorBuilder: (_, _) => SizedBox(height: AppSpacing.sm),
-                    itemBuilder: (context, index) {
-                      final character = activeChars[index];
-                      final isDefault = character.id == _defaultCharacterId;
-                      return AmitiaCharacterCard(
-                        name: isDefault ? '${character.name} (默认)' : character.name,
-                        status: character.status,
-                        identity: character.identity,
-                        avatarInitial: character.name.isNotEmpty ? character.name[0] : '?',
-                        avatarColor: '#8A5728',
-                        mood: '',
-                        lastActive: _getLastActive(character.isActive == 1),
-                        onTap: () => context.push(AppRoutes.character(character.id)),
-                      );
-                    },
-                  );
-                },
-              ),
-            ),
-            Padding(
-              padding: EdgeInsets.fromLTRB(
-                AppSpacing.pagePadding,
-                AppSpacing.xs,
-                AppSpacing.pagePadding,
-                AppSpacing.lg,
-              ),
-              child: Row(
+        child: charactersAsync.when(
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (err, _) => Center(
+            child: Padding(
+              padding: const EdgeInsets.all(32),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Expanded(
-                    child: AmitiaButton(
-                      label: '创建新角色',
-                      icon: Icons.person_add_alt_1,
-                      isFullWidth: true,
-                      onPressed: () => context.push(AppRoutes.charactersCreate),
-                    ),
+                  Icon(Icons.error_outline, size: 48, color: context.textSecondary),
+                  const SizedBox(height: 16),
+                  Text(
+                    '加载失败: ${err.toString().replaceFirst('Exception: ', '')}',
+                    style: AppTypography.body(context).copyWith(color: context.error),
+                    textAlign: TextAlign.center,
                   ),
-                  SizedBox(width: AppSpacing.md),
-                  Expanded(
-                    child: AmitiaButton(
-                      label: '管理角色',
-                      isSecondary: true,
-                      isFullWidth: true,
-                      onPressed: () => _showManageSheet(context),
-                    ),
+                  const SizedBox(height: 16),
+                  AmitiaButton(
+                    label: '重试',
+                    onPressed: () => ref.invalidate(characterListProvider),
                   ),
                 ],
               ),
             ),
-          ],
+          ),
+          data: (characters) {
+            _characters = characters;
+            if (_searchVisible) {
+              return _buildSearchView(context, backendAvailability);
+            }
+            final activeChars = _activeCharacters;
+            return Column(
+              children: [
+                Expanded(
+                  child: activeChars.isEmpty
+                      ? Center(
+                          child: Text(
+                            '暂无角色，请先创建',
+                            style: AppTypography.body(context).copyWith(color: context.textSecondary),
+                          ),
+                        )
+                      : _buildCharacterList(context, activeChars, backendAvailability),
+                ),
+                Padding(
+                  padding: EdgeInsets.fromLTRB(
+                    AppSpacing.pagePadding,
+                    AppSpacing.xs,
+                    AppSpacing.pagePadding,
+                    AppSpacing.lg,
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: AmitiaButton(
+                          label: '创建新角色',
+                          icon: Icons.person_add_alt_1,
+                          isFullWidth: true,
+                          onPressed: () => context.push(AppRoutes.charactersCreate),
+                        ),
+                      ),
+                      SizedBox(width: AppSpacing.md),
+                      Expanded(
+                        child: AmitiaButton(
+                          label: '管理角色',
+                          isSecondary: true,
+                          isFullWidth: true,
+                          onPressed: () => _showManageSheet(context),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            );
+          },
         ),
       ),
+    );
+  }
+
+  Widget _buildSearchView(
+    BuildContext context,
+    BackendConnectionAvailability? backendAvailability,
+  ) {
+    final query = _query.trim();
+    final results = query.isEmpty ? const <CharacterDto>[] : _activeCharacters;
+    return Column(
+      children: [
+        Padding(
+          padding: EdgeInsets.fromLTRB(
+            AppSpacing.pagePadding,
+            AppSpacing.md,
+            AppSpacing.pagePadding,
+            AppSpacing.sm,
+          ),
+          child: AmitiaSearchField(
+            hintText: '搜索角色名称、身份或描述',
+            controller: _searchController,
+            autofocus: true,
+            onChanged: (value) => setState(() => _query = value),
+          ),
+        ),
+        Expanded(
+          child: query.isEmpty
+              ? const AmitiaEmptyState(
+                  icon: Icons.search,
+                  title: '输入关键词',
+                  subtitle: '在当前页面搜索角色',
+                )
+              : results.isEmpty
+              ? const AmitiaEmptyState(
+                  icon: Icons.search_off,
+                  title: '未找到相关角色',
+                  subtitle: '尝试更换关键词',
+                )
+              : _buildCharacterList(context, results, backendAvailability),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCharacterList(
+    BuildContext context,
+    List<CharacterDto> characters,
+    BackendConnectionAvailability? backendAvailability,
+  ) {
+    return ListView.separated(
+      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+      padding: EdgeInsets.fromLTRB(
+        AppSpacing.pagePadding,
+        AppSpacing.xs,
+        AppSpacing.pagePadding,
+        AppSpacing.md,
+      ),
+      itemCount: characters.length,
+      separatorBuilder: (_, _) => SizedBox(height: AppSpacing.sm),
+      itemBuilder: (context, index) {
+        final character = characters[index];
+        final isDefault = character.isDefault;
+        return AmitiaCharacterCard(
+          name: isDefault ? '${character.name} (默认)' : character.name,
+          status: character.status,
+          identity: character.identity,
+          avatarInitial: character.name.isNotEmpty ? character.name[0] : '?',
+          avatarColor: '#8A5728',
+          avatarUrl: _resolveAvatarUrl(character.avatar, backendAvailability),
+          mood: '',
+          lastActive: _getLastActive(character.isActive == 1),
+          onTap: () => context.push(AppRoutes.character(character.id)),
+        );
+      },
     );
   }
 
@@ -172,6 +246,20 @@ class _CharacterListPageState extends ConsumerState<CharacterListPage> {
       return '刚刚活跃';
     }
     return '离线';
+  }
+
+  String _resolveAvatarUrl(
+    String raw,
+    BackendConnectionAvailability? availability,
+  ) {
+    final avatar = raw.trim();
+    if (avatar.isEmpty) return '';
+    final parsed = Uri.tryParse(avatar);
+    if (parsed != null && parsed.hasScheme) return avatar;
+    if (!avatar.startsWith('/') || availability is! BackendConnectionAvailable) {
+      return avatar;
+    }
+    return BackendUriBuilder().http(availability.config, avatar).toString();
   }
 
   Future<Dio> _dio() async {
@@ -279,12 +367,13 @@ class _CharacterListPageState extends ConsumerState<CharacterListPage> {
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (sheetContext) {
         return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 34),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
+          child: SingleChildScrollView(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 34),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
                 const SizedBox(height: 8),
                 Center(
                   child: Container(
@@ -300,6 +389,22 @@ class _CharacterListPageState extends ConsumerState<CharacterListPage> {
                 Text('管理角色', style: AppTypography.pageTitle(context)),
                 const SizedBox(height: 16),
                 AmitiaListTile(
+                  leading: _buildSheetIcon(context, Icons.auto_awesome_outlined, context.accentPrimary),
+                  title: '从模板创建',
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    _showTemplatePicker(context);
+                  },
+                ),
+                AmitiaListTile(
+                  leading: _buildSheetIcon(context, Icons.history_outlined, context.accentPrimary),
+                  title: '角色包导入历史',
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    _showPackHistory(context);
+                  },
+                ),
+                AmitiaListTile(
                   leading: _buildSheetIcon(context, Icons.sort, context.accentPrimary),
                   title: '排序',
                   onTap: () {
@@ -312,11 +417,16 @@ class _CharacterListPageState extends ConsumerState<CharacterListPage> {
                   title: '设为默认',
                   onTap: () {
                     Navigator.pop(sheetContext);
-                    _showCharacterSelection(context, '设为默认角色', (character) {
-                      setState(() {
-                        _defaultCharacterId = character.id;
-                      });
-                      amitiaSnackBar(context, '已将 ${character.name} 设为默认角色');
+                    _showCharacterSelection(context, '设为默认角色', (character) async {
+                      try {
+                        await ref.read(characterServiceProvider).setDefault(character.id);
+                        await ref.read(characterServiceProvider).setActive(character.id);
+                        ref.read(currentCharacterIdProvider.notifier).state = character.id;
+                        ref.invalidate(characterListProvider);
+                        if (mounted) amitiaSnackBar(context, '已将 ${character.name} 设为默认角色');
+                      } catch (e) {
+                        if (mounted) amitiaSnackBar(context, '设置默认角色失败：$e');
+                      }
                     });
                   },
                 ),
@@ -325,8 +435,15 @@ class _CharacterListPageState extends ConsumerState<CharacterListPage> {
                   title: '复制角色',
                   onTap: () {
                     Navigator.pop(sheetContext);
-                    _showCharacterSelection(context, '复制角色', (character) {
-                      amitiaSnackBar(context, '角色复制功能开发中');
+                    _showCharacterSelection(context, '复制角色', (character) async {
+                      try {
+                        final created = await ref.read(characterServiceProvider).duplicate(character.id);
+                        if (created == null) throw StateError('后端未返回新角色');
+                        ref.invalidate(characterListProvider);
+                        if (mounted) amitiaSnackBar(context, '已复制为 ${created.name}');
+                      } catch (e) {
+                        if (mounted) amitiaSnackBar(context, '复制角色失败：$e');
+                      }
                     });
                   },
                 ),
@@ -343,8 +460,8 @@ class _CharacterListPageState extends ConsumerState<CharacterListPage> {
                   title: '导出角色卡',
                   onTap: () {
                     Navigator.pop(sheetContext);
-                    _showCharacterSelection(context, '导出角色卡', (character) {
-                      _exportCharacter(character);
+                    _showCharacterSelection(context, '导出角色卡', (character) async {
+                      await _exportCharacter(character);
                     });
                   },
                 ),
@@ -353,17 +470,27 @@ class _CharacterListPageState extends ConsumerState<CharacterListPage> {
                   title: '归档角色',
                   onTap: () {
                     Navigator.pop(sheetContext);
-                    _showCharacterSelection(context, '归档角色', (character) {
-                      setState(() {
-                        _archivedIds.add(character.id);
-                        if (_defaultCharacterId == character.id) {
-                          _defaultCharacterId = _activeCharacters.isNotEmpty
-                              ? _activeCharacters.first.id
-                              : '';
-                        }
-                      });
-                      amitiaSnackBar(context, '角色 ${character.name} 已归档');
+                    _showCharacterSelection(context, '归档角色', (character) async {
+                      if (character.isDefault) {
+                        amitiaSnackBar(context, '默认角色不能直接归档，请先设置其他默认角色');
+                        return;
+                      }
+                      try {
+                        await ref.read(characterServiceProvider).archive(character.id);
+                        ref.invalidate(characterListProvider);
+                        if (mounted) amitiaSnackBar(context, '角色 ${character.name} 已归档');
+                      } catch (e) {
+                        if (mounted) amitiaSnackBar(context, '归档失败：$e');
+                      }
                     });
+                  },
+                ),
+                AmitiaListTile(
+                  leading: _buildSheetIcon(context, Icons.unarchive_outlined, context.accentPrimary),
+                  title: '已归档角色',
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    _showArchivedCharacters(context);
                   },
                 ),
                 AmitiaListTile(
@@ -371,18 +498,179 @@ class _CharacterListPageState extends ConsumerState<CharacterListPage> {
                   title: '删除角色',
                   onTap: () {
                     Navigator.pop(sheetContext);
-                    _showCharacterSelection(context, '删除角色', (character) {
-                      _handleDelete(context, character);
+                    _showCharacterSelection(context, '删除角色', (character) async {
+                      await _handleDelete(context, character);
                     });
                   },
                 ),
-                const SizedBox(height: 8),
-              ],
+                  const SizedBox(height: 8),
+                ],
+              ),
             ),
           ),
         );
       },
     );
+  }
+
+  Future<void> _showTemplatePicker(BuildContext context) async {
+    try {
+      final service = ref.read(characterDetailServiceProvider);
+      final templates = await service.templates();
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          backgroundColor: dialogContext.surfacePrimary,
+          shape: RoundedRectangleBorder(borderRadius: AppRadius.brMedium),
+          title: Text('从模板创建角色', style: AppTypography.cardTitle(dialogContext)),
+          content: SizedBox(
+            width: 560,
+            height: 420,
+            child: templates.isEmpty
+                ? const Center(child: Text('暂无可用角色模板'))
+                : ListView.separated(
+                    itemCount: templates.length,
+                    separatorBuilder: (_, _) => const Divider(height: 1),
+                    itemBuilder: (_, index) {
+                      final template = templates[index];
+                      final id = (template['id'] ?? '').toString();
+                      final name = (template['name'] ?? '未命名模板').toString();
+                      final category = (template['category'] ?? '').toString();
+                      final description = (template['description'] ?? '').toString();
+                      return ListTile(
+                        leading: const Icon(Icons.person_add_alt_1_outlined),
+                        title: Text(name),
+                        subtitle: Text(
+                          [if (category.isNotEmpty) category, if (description.isNotEmpty) description].join(' · '),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        onTap: id.isEmpty
+                            ? null
+                            : () async {
+                                try {
+                                  final created = await service.createFromTemplate(id);
+                                  if (created == null || (created['id'] ?? '').toString().isEmpty) {
+                                    throw StateError('后端未返回创建后的角色');
+                                  }
+                                  ref.invalidate(characterListProvider);
+                                  if (dialogContext.mounted) Navigator.pop(dialogContext);
+                                  if (mounted) amitiaSnackBar(context, '已从模板创建 ${(created['name'] ?? name).toString()}');
+                                } catch (e) {
+                                  if (mounted) amitiaSnackBar(context, '模板创建失败：$e');
+                                }
+                              },
+                      );
+                    },
+                  ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('关闭')),
+          ],
+        ),
+      );
+    } catch (e) {
+      if (mounted) amitiaSnackBar(context, '模板加载失败：$e');
+    }
+  }
+
+  Future<void> _showPackHistory(BuildContext context) async {
+    try {
+      final history = await ref.read(characterDetailServiceProvider).packHistory();
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          backgroundColor: dialogContext.surfacePrimary,
+          shape: RoundedRectangleBorder(borderRadius: AppRadius.brMedium),
+          title: Text('角色包导入历史', style: AppTypography.cardTitle(dialogContext)),
+          content: SizedBox(
+            width: 560,
+            height: 420,
+            child: history.isEmpty
+                ? const Center(child: Text('暂无角色包导入记录'))
+                : ListView.separated(
+                    itemCount: history.length,
+                    separatorBuilder: (_, _) => const Divider(height: 1),
+                    itemBuilder: (_, index) {
+                      final item = history[index];
+                      final name = (item['name'] ?? item['characterName'] ?? '未命名角色').toString();
+                      final format = (item['sourceFormat'] ?? item['format'] ?? '').toString();
+                      final importedAt = (item['importedAt'] ?? item['createdAt'] ?? '').toString();
+                      return ListTile(
+                        leading: const Icon(Icons.history_outlined),
+                        title: Text(name),
+                        subtitle: Text(
+                          [if (format.isNotEmpty) format, if (importedAt.isNotEmpty) importedAt].join(' · '),
+                        ),
+                      );
+                    },
+                  ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('关闭')),
+          ],
+        ),
+      );
+    } catch (e) {
+      if (mounted) amitiaSnackBar(context, '导入历史加载失败：$e');
+    }
+  }
+
+  Future<void> _showArchivedCharacters(BuildContext context) async {
+    try {
+      final allCharacters = await ref.read(characterServiceProvider).list(includeDisabled: true);
+      final archived = allCharacters.where((character) => character.status.toLowerCase() == 'disabled').toList();
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => StatefulBuilder(
+          builder: (dialogContext, setDialogState) => AlertDialog(
+            backgroundColor: dialogContext.surfacePrimary,
+            shape: RoundedRectangleBorder(borderRadius: AppRadius.brMedium),
+            title: Text('已归档角色', style: AppTypography.cardTitle(dialogContext)),
+            content: SizedBox(
+              width: 560,
+              height: 420,
+              child: archived.isEmpty
+                  ? const Center(child: Text('暂无已归档角色'))
+                  : ListView.separated(
+                      itemCount: archived.length,
+                      separatorBuilder: (_, _) => const Divider(height: 1),
+                      itemBuilder: (_, index) {
+                        final character = archived[index];
+                        return ListTile(
+                          leading: const Icon(Icons.archive_outlined),
+                          title: Text(character.name),
+                          subtitle: Text(character.identity),
+                          trailing: TextButton(
+                            onPressed: () async {
+                              try {
+                                await ref.read(characterServiceProvider).restore(character.id);
+                                archived.removeAt(index);
+                                ref.invalidate(characterListProvider);
+                                if (dialogContext.mounted) setDialogState(() {});
+                                if (mounted) amitiaSnackBar(context, '已恢复 ${character.name}');
+                              } catch (e) {
+                                if (mounted) amitiaSnackBar(context, '恢复失败：$e');
+                              }
+                            },
+                            child: const Text('恢复'),
+                          ),
+                        );
+                      },
+                    ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('关闭')),
+            ],
+          ),
+        ),
+      );
+    } catch (e) {
+      if (mounted) amitiaSnackBar(context, '归档角色加载失败：$e');
+    }
   }
 
   void _showSortSheet(BuildContext context) {
@@ -457,7 +745,7 @@ class _CharacterListPageState extends ConsumerState<CharacterListPage> {
   void _showCharacterSelection(
     BuildContext context,
     String title,
-    ValueChanged<CharacterDto> onSelected,
+    Future<void> Function(CharacterDto) onSelected,
   ) {
     final characters = _activeCharacters;
     showModalBottomSheet(
@@ -494,12 +782,12 @@ class _CharacterListPageState extends ConsumerState<CharacterListPage> {
                     separatorBuilder: (_, _) => Divider(height: 1, color: context.borderSecondary),
                     itemBuilder: (_, index) {
                       final character = characters[index];
-                      final isDefault = character.id == _defaultCharacterId;
+                      final isDefault = character.isDefault;
                       return GestureDetector(
                         behavior: HitTestBehavior.opaque,
-                        onTap: () {
+                        onTap: () async {
                           Navigator.pop(sheetContext);
-                          onSelected(character);
+                          await onSelected(character);
                         },
                         child: Padding(
                           padding: const EdgeInsets.symmetric(vertical: 12),
@@ -549,25 +837,25 @@ class _CharacterListPageState extends ConsumerState<CharacterListPage> {
     );
   }
 
-  void _handleDelete(BuildContext context, CharacterDto character) {
-    if (character.id == _defaultCharacterId) {
+  Future<void> _handleDelete(BuildContext context, CharacterDto character) async {
+    if (character.isDefault) {
       amitiaSnackBar(context, '删除默认角色需要先选择替代角色');
-    } else {
-      showAmitiaConfirmDialog(
-        context,
-        title: '删除角色',
-        message: '确定要删除 ${character.name} 吗？此操作不可撤销。',
-        confirmLabel: '删除',
-        isDestructive: true,
-      ).then((confirmed) {
-        if (confirmed == true) {
-          setState(() {
-            _archivedIds.add(character.id);
-          });
-          ref.invalidate(characterListProvider);
-          amitiaSnackBar(context, '${character.name} 已删除');
-        }
-      });
+      return;
+    }
+    final confirmed = await showAmitiaConfirmDialog(
+      context,
+      title: '删除角色',
+      message: '确定要删除 ${character.name} 吗？此操作不可撤销。',
+      confirmLabel: '删除',
+      isDestructive: true,
+    );
+    if (confirmed != true) return;
+    try {
+      await ref.read(characterServiceProvider).delete(character.id);
+      ref.invalidate(characterListProvider);
+      if (mounted) amitiaSnackBar(context, '${character.name} 已删除');
+    } catch (e) {
+      if (mounted) amitiaSnackBar(context, '删除角色失败：$e');
     }
   }
 

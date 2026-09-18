@@ -11,19 +11,30 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/u-ai/backend/internal/character/card"
 	"github.com/u-ai/backend/internal/requestidentity"
 	"github.com/u-ai/backend/pkg/comment/response"
 	"github.com/u-ai/backend/pkg/util"
 )
 
+type readScopedCharacterService interface {
+	ListForSpace(includeDisabled bool, spaceID string) ([]Character, error)
+	GetByIDForSpace(id, spaceID string) (*Character, error)
+	ListPackHistoryForSpace(spaceID string) ([]map[string]interface{}, error)
+	GetRoleProfileForSpace(characterID, spaceID string) (*RoleProfileResponse, error)
+	ExportCardForSpace(characterID, format, spaceID string) (*CardExportResult, []byte, error)
+	GetCardDataForSpace(characterID, spaceID string) (*card.CharacterCardData, error)
+	UpdateCardDataForSpace(characterID string, cardData *card.CharacterCardData, spaceID string) error
+}
+
 type syncScopedCharacterService interface {
-	CreateForUser(req *CreateCharacterRequest, userID string) (*Character, error)
-	UpdateForUser(id string, req *UpdateCharacterRequest, userID string) (*Character, error)
-	DeleteForUser(id string, userID string) error
-	SetActiveForUser(id string, userID string) (*Character, error)
-	UpdateRoleProfileForUser(characterID string, updates map[string]interface{}, userID string) (*RoleProfileResponse, error)
-	UpdateAvatarForUser(id string, avatarURL string, userID string) error
-	ImportCardForUser(data []byte, filename string, confirm bool, userID string) (*CardImportResult, error)
+	CreateForSpace(req *CreateCharacterRequest, spaceID string) (*Character, error)
+	UpdateForSpace(id string, req *UpdateCharacterRequest, spaceID string) (*Character, error)
+	DeleteForSpace(id string, spaceID string) error
+	SetActiveForSpace(id string, spaceID string) (*Character, error)
+	UpdateRoleProfileForSpace(characterID string, updates map[string]interface{}, spaceID string) (*RoleProfileResponse, error)
+	UpdateAvatarForSpace(id string, avatarURL string, spaceID string) error
+	ImportCardForSpace(data []byte, filename string, confirm bool, spaceID string) (*CardImportResult, error)
 }
 
 type ChatTester interface {
@@ -41,7 +52,13 @@ func NewHandler(srv Service) *Handler {
 
 func (h *Handler) List(c *gin.Context) {
 	includeDisabled := c.Query("includeDisabled") == "true"
-	chars, err := h.service.List(includeDisabled)
+	var chars []Character
+	var err error
+	if scoped, ok := h.service.(readScopedCharacterService); ok {
+		chars, err = scoped.ListForSpace(includeDisabled, requestidentity.ResolveGin(c))
+	} else {
+		chars, err = h.service.List(includeDisabled)
+	}
 	if err != nil {
 		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
@@ -51,12 +68,54 @@ func (h *Handler) List(c *gin.Context) {
 
 func (h *Handler) Get(c *gin.Context) {
 	id := c.Param("id")
-	char, err := h.service.GetByID(id)
+	var char *Character
+	var err error
+	if scoped, ok := h.service.(readScopedCharacterService); ok {
+		char, err = scoped.GetByIDForSpace(id, requestidentity.ResolveGin(c))
+	} else {
+		char, err = h.service.GetByID(id)
+	}
 	if err != nil {
 		util.ErrorResponse(c, response.NotFound, "角色不存在", nil)
 		return
 	}
 	util.SuccessResponse(c, char)
+}
+
+func (h *Handler) GetCardData(c *gin.Context) {
+	id := c.Param("id")
+	var data *card.CharacterCardData
+	var err error
+	if scoped, ok := h.service.(readScopedCharacterService); ok {
+		data, err = scoped.GetCardDataForSpace(id, requestidentity.ResolveGin(c))
+	} else {
+		data, err = h.service.GetCardData(id)
+	}
+	if err != nil {
+		util.ErrorResponse(c, response.NotFound, "角色卡不存在", nil)
+		return
+	}
+	util.SuccessResponse(c, data)
+}
+
+func (h *Handler) UpdateCardData(c *gin.Context) {
+	id := c.Param("id")
+	var data card.CharacterCardData
+	if err := c.ShouldBindJSON(&data); err != nil {
+		util.ErrorResponse(c, response.InvalidParams, "无效角色卡数据", nil)
+		return
+	}
+	var err error
+	if scoped, ok := h.service.(readScopedCharacterService); ok {
+		err = scoped.UpdateCardDataForSpace(id, &data, requestidentity.ResolveGin(c))
+	} else {
+		err = h.service.UpdateCardData(id, &data)
+	}
+	if err != nil {
+		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
+		return
+	}
+	util.SuccessMsgResponse(c, "角色卡更新成功", data)
 }
 
 func (h *Handler) Create(c *gin.Context) {
@@ -68,7 +127,7 @@ func (h *Handler) Create(c *gin.Context) {
 	var char *Character
 	var err error
 	if scoped, ok := h.service.(syncScopedCharacterService); ok {
-		char, err = scoped.CreateForUser(&req, requestidentity.ResolveGin(c, ""))
+		char, err = scoped.CreateForSpace(&req, requestidentity.ResolveGin(c))
 	} else {
 		char, err = h.service.Create(&req)
 	}
@@ -89,7 +148,7 @@ func (h *Handler) Update(c *gin.Context) {
 	var char *Character
 	var err error
 	if scoped, ok := h.service.(syncScopedCharacterService); ok {
-		char, err = scoped.UpdateForUser(id, &req, requestidentity.ResolveGin(c, ""))
+		char, err = scoped.UpdateForSpace(id, &req, requestidentity.ResolveGin(c))
 	} else {
 		char, err = h.service.Update(id, &req)
 	}
@@ -104,7 +163,7 @@ func (h *Handler) Delete(c *gin.Context) {
 	id := c.Param("id")
 	var err error
 	if scoped, ok := h.service.(syncScopedCharacterService); ok {
-		err = scoped.DeleteForUser(id, requestidentity.ResolveGin(c, ""))
+		err = scoped.DeleteForSpace(id, requestidentity.ResolveGin(c))
 	} else {
 		err = h.service.Delete(id)
 	}
@@ -120,7 +179,7 @@ func (h *Handler) SetActive(c *gin.Context) {
 	var char *Character
 	var err error
 	if scoped, ok := h.service.(syncScopedCharacterService); ok {
-		char, err = scoped.SetActiveForUser(id, requestidentity.ResolveGin(c, ""))
+		char, err = scoped.SetActiveForSpace(id, requestidentity.ResolveGin(c))
 	} else {
 		char, err = h.service.SetActive(id)
 	}
@@ -152,7 +211,13 @@ func (h *Handler) GetTemplate(c *gin.Context) {
 
 func (h *Handler) GetRoleProfile(c *gin.Context) {
 	characterID := c.Query("characterId")
-	profile, err := h.service.GetRoleProfile(characterID)
+	var profile *RoleProfileResponse
+	var err error
+	if scoped, ok := h.service.(readScopedCharacterService); ok {
+		profile, err = scoped.GetRoleProfileForSpace(characterID, requestidentity.ResolveGin(c))
+	} else {
+		profile, err = h.service.GetRoleProfile(characterID)
+	}
 	if err != nil {
 		util.ErrorResponse(c, response.NotFound, err.Error(), nil)
 		return
@@ -162,6 +227,12 @@ func (h *Handler) GetRoleProfile(c *gin.Context) {
 
 func (h *Handler) Test(c *gin.Context) {
 	id := c.Param("id")
+	if scoped, ok := h.service.(readScopedCharacterService); ok {
+		if _, err := scoped.GetByIDForSpace(id, requestidentity.ResolveGin(c)); err != nil {
+			util.ErrorResponse(c, response.NotFound, "角色不存在", nil)
+			return
+		}
+	}
 	var req struct {
 		Message string `json:"message"`
 	}
@@ -184,20 +255,24 @@ func (h *Handler) ExportPack(c *gin.Context) {
 	characterID := c.Param("id")
 	format := c.DefaultQuery("format", "v3_charx")
 
-	result, _, err := h.service.ExportCard(characterID, format)
+	var result *CardExportResult
+	var data []byte
+	var err error
+	if scoped, ok := h.service.(readScopedCharacterService); ok {
+		result, data, err = scoped.ExportCardForSpace(characterID, format, requestidentity.ResolveGin(c))
+	} else {
+		result, data, err = h.service.ExportCard(characterID, format)
+	}
 	if err != nil {
 		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
 		return
 	}
 
 	if c.Query("download") == "true" {
-		_, data, err := h.service.ExportCard(characterID, format)
-		if err == nil {
-			c.Header("Content-Disposition", "attachment; filename="+result.Filename)
-			c.Header("Content-Type", "application/octet-stream")
-			c.Data(http.StatusOK, "application/octet-stream", data)
-			return
-		}
+		c.Header("Content-Disposition", "attachment; filename="+result.Filename)
+		c.Header("Content-Type", "application/octet-stream")
+		c.Data(http.StatusOK, "application/octet-stream", data)
+		return
 	}
 
 	util.SuccessResponse(c, result)
@@ -242,7 +317,7 @@ func (h *Handler) ImportPackConfirm(c *gin.Context) {
 
 	var result *CardImportResult
 	if scoped, ok := h.service.(syncScopedCharacterService); ok {
-		result, err = scoped.ImportCardForUser(data, header.Filename, true, requestidentity.ResolveGin(c, ""))
+		result, err = scoped.ImportCardForSpace(data, header.Filename, true, requestidentity.ResolveGin(c))
 	} else {
 		result, err = h.service.ImportCard(data, header.Filename, true)
 	}
@@ -255,31 +330,59 @@ func (h *Handler) ImportPackConfirm(c *gin.Context) {
 }
 
 func (h *Handler) PacksHistory(c *gin.Context) {
-	util.SuccessResponse(c, []map[string]interface{}{})
+	var history []map[string]interface{}
+	var err error
+	if scoped, ok := h.service.(readScopedCharacterService); ok {
+		history, err = scoped.ListPackHistoryForSpace(requestidentity.ResolveGin(c))
+	} else {
+		history, err = h.service.ListPackHistory()
+	}
+	if err != nil {
+		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
+		return
+	}
+	util.SuccessResponse(c, history)
 }
 
 func (h *Handler) CreateFromTemplate(c *gin.Context) {
-	util.SuccessMsgResponse(c, "创建成功", gin.H{"id": c.Param("id")})
+	var body struct {
+		Name string `json:"name"`
+	}
+	_ = c.ShouldBindJSON(&body)
+	created, err := h.service.CreateFromTemplate(
+		c.Param("id"),
+		body.Name,
+		requestidentity.ResolveGin(c),
+	)
+	if err != nil {
+		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
+		return
+	}
+	util.SuccessMsgResponse(c, "创建成功", created)
 }
 
 func (h *Handler) ExportCardV2(c *gin.Context) {
 	characterID := c.Param("id")
 	format := c.DefaultQuery("format", "v3_charx")
 
-	result, _, err := h.service.ExportCard(characterID, format)
+	var result *CardExportResult
+	var data []byte
+	var err error
+	if scoped, ok := h.service.(readScopedCharacterService); ok {
+		result, data, err = scoped.ExportCardForSpace(characterID, format, requestidentity.ResolveGin(c))
+	} else {
+		result, data, err = h.service.ExportCard(characterID, format)
+	}
 	if err != nil {
 		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
 		return
 	}
 
 	if c.Query("download") == "true" {
-		_, data, err := h.service.ExportCard(characterID, format)
-		if err == nil {
-			c.Header("Content-Disposition", "attachment; filename="+result.Filename)
-			c.Header("Content-Type", "application/octet-stream")
-			c.Data(http.StatusOK, "application/octet-stream", data)
-			return
-		}
+		c.Header("Content-Disposition", "attachment; filename="+result.Filename)
+		c.Header("Content-Type", "application/octet-stream")
+		c.Data(http.StatusOK, "application/octet-stream", data)
+		return
 	}
 
 	util.SuccessResponse(c, result)
@@ -295,7 +398,7 @@ func (h *Handler) UpdateRoleProfile(c *gin.Context) {
 	var profile *RoleProfileResponse
 	var err error
 	if scoped, ok := h.service.(syncScopedCharacterService); ok {
-		profile, err = scoped.UpdateRoleProfileForUser(characterID, updates, requestidentity.ResolveGin(c, ""))
+		profile, err = scoped.UpdateRoleProfileForSpace(characterID, updates, requestidentity.ResolveGin(c))
 	} else {
 		profile, err = h.service.UpdateRoleProfile(characterID, updates)
 	}
@@ -342,7 +445,7 @@ func (h *Handler) UploadAvatar(c *gin.Context) {
 
 	avatarUrl := "/avatars/" + filename
 	if scoped, ok := h.service.(syncScopedCharacterService); ok {
-		err = scoped.UpdateAvatarForUser(id, avatarUrl, requestidentity.ResolveGin(c, ""))
+		err = scoped.UpdateAvatarForSpace(id, avatarUrl, requestidentity.ResolveGin(c))
 	} else {
 		err = h.service.UpdateAvatar(id, avatarUrl)
 	}

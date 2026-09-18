@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 )
@@ -53,6 +54,14 @@ func TestFileTypeDetector(t *testing.T) {
 	if !result.IsArchive {
 		t.Error("expected archive detection for ZIP magic")
 	}
+	result = d.Detect([]byte("PK\u0003\u0004\u0000\u0000\u0000\u0000"), ".gamex")
+	if !result.IsArchive {
+		t.Error("expected archive detection for .gamex ZIP magic")
+	}
+	result = d.Detect([]byte("PK\u0003\u0004\u0000\u0000\u0000\u0000"), ".petx")
+	if !result.IsArchive {
+		t.Error("expected archive detection for .petx ZIP magic")
+	}
 
 	result = d.Detect([]byte("MZ\u0090\u0000"), ".exe")
 	if !result.IsExecutable {
@@ -77,7 +86,9 @@ func TestFileTypeDetector(t *testing.T) {
 }
 
 func TestArchiveInspectorRejectsExecutableMagicAndNestedArchive(t *testing.T) {
-	inspector := NewArchiveInspector(DefaultArchivePolicy())
+	policy := DefaultArchivePolicy()
+	policy.AllowNestedArchive = false
+	inspector := NewArchiveInspector(policy)
 	for name, content := range map[string][]byte{
 		"modules/main/picture.png": {'M', 'Z', 0, 0},
 		"modules/main/payload.zip": {'P', 'K', 3, 4},
@@ -294,6 +305,9 @@ func TestRestrictedArchivePolicyRejectsDeclaredServiceEntrypointExecutable(t *te
 }
 
 func TestSecureExtractorRestoresExecuteBitOnlyForDeclaredServiceEntrypoint(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("windows does not expose POSIX execute bits")
+	}
 	manifest := []byte(`{"modules":[{"id":"runtime","runtime":{"type":"service","entryPoint":"bin/game"}}]}`)
 	elf := []byte{0x7f, 'E', 'L', 'F', 2, 1, 1, 0}
 	raw := createTestZIP(map[string][]byte{

@@ -17,11 +17,11 @@ import (
 	"github.com/u-ai/backend/internal/runtimeprofile"
 )
 
-func (api *WorkflowAPI) lockWorkflowMutation(userID, workflowID string) func() {
+func (api *WorkflowAPI) lockWorkflowMutation(spaceID, workflowID string) func() {
 	if api == nil || api.runtime == nil {
 		return func() {}
 	}
-	key := strings.TrimSpace(userID) + "\x00" + strings.TrimSpace(workflowID)
+	key := strings.TrimSpace(spaceID) + "\x00" + strings.TrimSpace(workflowID)
 	value, _ := api.runtime.workflowMutationLocks.LoadOrStore(key, &sync.Mutex{})
 	mu, ok := value.(*sync.Mutex)
 	if !ok || mu == nil {
@@ -55,13 +55,13 @@ func (api *WorkflowAPI) effectiveLocation() workflow.WorkflowLocation {
 	return workflow.WorkflowLocationLocal
 }
 
-func (api *WorkflowAPI) installationFor(ctx context.Context, def workflow.WorkflowDefinition, userID string) (*workflow.WorkflowInstallation, error) {
+func (api *WorkflowAPI) installationFor(ctx context.Context, def workflow.WorkflowDefinition, spaceID string) (*workflow.WorkflowInstallation, error) {
 	if api == nil || api.runtime == nil || api.runtime.Kernel == nil || api.runtime.Kernel.Container() == nil || api.runtime.Kernel.Container().WorkflowInstallationRepo == nil {
 		return nil, errors.New("workflow installation repository unavailable")
 	}
 	repo := api.runtime.Kernel.Container().WorkflowInstallationRepo
 	location := api.effectiveLocation()
-	inst, err := repo.Get(ctx, userID, def.ID, location, "")
+	inst, err := repo.Get(ctx, spaceID, def.ID, location, "")
 	if err == nil {
 		return inst, nil
 	}
@@ -69,7 +69,7 @@ func (api *WorkflowAPI) installationFor(ctx context.Context, def workflow.Workfl
 		return nil, err
 	}
 	// Compatibility for databases created before WorkflowInstallation existed.
-	return repo.EnsureLegacy(ctx, def, userID, location)
+	return repo.EnsureLegacy(ctx, def, spaceID, location)
 }
 
 func applyInstallation(def workflow.WorkflowDefinition, inst workflow.WorkflowInstallation) workflow.WorkflowDefinition {
@@ -108,8 +108,8 @@ func (api *WorkflowAPI) emitWorkflowInstallationEvent(ctx context.Context, typeI
 		AggregateType:    "workflow_installation",
 		AggregateID:      inst.InstallationID,
 		AggregateVersion: &revision,
-		PartitionKey:     inst.OwnerUserID,
-		OrderingKey:      inst.OwnerUserID,
+		PartitionKey:     inst.OwnerSpaceID,
+		OrderingKey:      inst.OwnerSpaceID,
 	})
 }
 
@@ -138,7 +138,7 @@ func (api *WorkflowAPI) expectedRevision(c *gin.Context, current int64) (int64, 
 	return revision, nil
 }
 
-func (api *WorkflowAPI) updateInstallationCAS(ctx context.Context, def workflow.WorkflowDefinition, userID string, current *workflow.WorkflowInstallation, expectedRevision int64) (*workflow.WorkflowInstallation, error) {
+func (api *WorkflowAPI) updateInstallationCAS(ctx context.Context, def workflow.WorkflowDefinition, spaceID string, current *workflow.WorkflowInstallation, expectedRevision int64) (*workflow.WorkflowInstallation, error) {
 	if current == nil {
 		return nil, errors.New("workflow installation is required")
 	}

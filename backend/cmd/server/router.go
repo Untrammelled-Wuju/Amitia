@@ -13,13 +13,14 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/u-ai/backend/config"
 	"github.com/u-ai/backend/internal/accountsession"
 	"github.com/u-ai/backend/internal/agent"
 	"github.com/u-ai/backend/internal/asr"
+	channelinbound "github.com/u-ai/backend/internal/channel/inbound"
 	"github.com/u-ai/backend/internal/character"
 	"github.com/u-ai/backend/internal/chat"
-	"github.com/u-ai/backend/internal/companion"
 	"github.com/u-ai/backend/internal/delivery"
 	"github.com/u-ai/backend/internal/desktoppet"
 	"github.com/u-ai/backend/internal/desktoppet/behavior"
@@ -34,12 +35,12 @@ import (
 	"github.com/u-ai/backend/internal/desktoppet/release"
 	"github.com/u-ai/backend/internal/desktoppet/release/importer"
 	"github.com/u-ai/backend/internal/desktoppet/runtime"
-	runtimev2 "github.com/u-ai/backend/internal/desktoppet/runtime/protocol/v2"
+	runtimev1 "github.com/u-ai/backend/internal/desktoppet/runtime/protocol/v1"
 	desktoppetsecurity "github.com/u-ai/backend/internal/desktoppet/security"
+	devicemeshpairing "github.com/u-ai/backend/internal/devicemesh/pairing"
 	devicemeshserver "github.com/u-ai/backend/internal/devicemesh/server"
 	"github.com/u-ai/backend/internal/deviceruntime/protocol"
 	"github.com/u-ai/backend/internal/embedding_config"
-	"github.com/u-ai/backend/internal/emote"
 	"github.com/u-ai/backend/internal/episodic"
 	"github.com/u-ai/backend/internal/extension"
 	extensionkernel "github.com/u-ai/backend/internal/extension/kernel"
@@ -60,19 +61,18 @@ import (
 	"github.com/u-ai/backend/internal/middleware/security"
 	"github.com/u-ai/backend/internal/mood"
 	"github.com/u-ai/backend/internal/nativebridge"
-	"github.com/u-ai/backend/internal/proactive"
 	"github.com/u-ai/backend/internal/profile"
-	"github.com/u-ai/backend/internal/qq"
 	"github.com/u-ai/backend/internal/realtime"
+	"github.com/u-ai/backend/internal/reminder"
 	"github.com/u-ai/backend/internal/runtimeidentity"
 	"github.com/u-ai/backend/internal/runtimeorchestrator"
 	"github.com/u-ai/backend/internal/runtimeprofile"
 	"github.com/u-ai/backend/internal/safety"
+	"github.com/u-ai/backend/internal/spaceidentity"
 	"github.com/u-ai/backend/internal/sync"
 	"github.com/u-ai/backend/internal/system"
 	"github.com/u-ai/backend/internal/temporal"
 	"github.com/u-ai/backend/internal/tts"
-	"github.com/u-ai/backend/internal/user"
 	"github.com/u-ai/backend/internal/vision"
 	"github.com/u-ai/backend/internal/workspace"
 	"github.com/u-ai/backend/internal/worldbook"
@@ -181,24 +181,37 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 	systemSvc := system.NewService(ctx, services.RuntimeProfile)
 	systemHandler := system.NewHandler(systemSvc, ctx.DB, services.Chat, services.DataLifecycle, services.UnifiedEntry, services.Reconciliation, services.Memory)
 
-	public := r.Group("/api/public")
-
-	userRepo := user.NewRepository(ctx)
-	userSvc := user.NewService(userRepo, ctx)
-	userHandler := user.NewHandler(userSvc)
-
-	accountSessionRuntime, err := BuildAccountSessionRuntime(ctx.DB, userRepo)
-	if err != nil {
-		return nil, fmt.Errorf("failed to build accountsession runtime: %w", err)
+	spaceStore := spaceidentity.DefaultStore()
+	if spaceStore == nil {
+		spaceStore, err = spaceidentity.InitializeDefault(config.AppCfg.Storage.DataDir)
+		if err != nil {
+			return nil, fmt.Errorf("initialize canonical space identity: %w", err)
+		}
 	}
-	services.AccountSession = accountSessionRuntime
+	spaceID := spaceStore.SpaceID()
 
-	public.GET("/auth/status", userHandler.Status)
+	var webAccessSvc *security.WebAccessService
+	if services.RuntimeProfile == runtimeprofile.ProfileCloudCore {
+		webAccessSvc, err = security.NewWebAccessService(config.AppCfg.Storage.DataDir)
+		if err != nil {
+			return nil, fmt.Errorf("initialize cloud web access service: %w", err)
+		}
+	}
 
-	accountsession.RegisterPublicRoutes(public, accountSessionRuntime.Handler)
+	public := r.Group("/api/public")
+	if webAccessSvc != nil {
+		public.Use(security.RequireWebAccessForDeclaredBrowser(webAccessSvc))
+		security.RegisterWebAccessPublicRoutes(public, webAccessSvc)
+	}
+	public.GET("/core/info", func(c *gin.Context) {
+		identity := spaceStore.Identity()
+		c.JSON(http.StatusOK, gin.H{"code": 200, "msg": "ok", "data": gin.H{
+			"cloudId": identity.InstanceID, "instanceId": identity.InstanceID, "spaceId": identity.SpaceID,
+			"runtimeProfile": services.RuntimeProfile.String(), "pairingRequired": services.RuntimeProfile == runtimeprofile.ProfileCloudCore,
+		}})
+	})
 
 	public.GET("/onboarding/status", systemHandler.OnboardingStatus)
-	public.POST("/onboarding/complete", systemHandler.OnboardingComplete)
 	public.GET("/health", systemHandler.Health)
 	public.GET("/runtime/capabilities", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
@@ -208,9 +221,6 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 		})
 	})
 
-	chatHandler := chat.NewHandlerWithUnifiedEntry(services.Chat, services.UnifiedEntry)
-	public.POST("/model/detect-models", chatHandler.DetectModels)
-
 	sessionSvc, err := security.NewDesktopSessionService(ctx.DB, config.AppCfg.Storage.DataDir, localCredentialStore)
 	if err != nil {
 		return nil, fmt.Errorf("initialize desktop session service: %w", err)
@@ -218,6 +228,28 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 
 	if err := sessionSvc.RecoverRotationJournals(context.Background()); err != nil {
 		return nil, fmt.Errorf("recover local token rotation: %w", err)
+	}
+
+	newAuthConfig := func(mode string) security.AuthConfig {
+		cfg := security.AuthConfig{
+			Mode: mode, LocalCredentials: localCredentialStore, SpaceID: spaceID,
+			ListenAddress: config.AppCfg.Server.Host, AllowedOrigins: config.AppCfg.Security.AllowedOrigins,
+			SessionService: sessionSvc,
+		}
+		if services.DeviceMesh != nil {
+			cfg.DeviceCredentials = services.DeviceMesh.CredentialSvc
+			cfg.DeviceRegistry = services.DeviceMesh.DeviceReg
+		}
+		return cfg
+	}
+
+	if webAccessSvc != nil {
+		if services.DeviceMesh == nil || services.DeviceMesh.DeviceReg == nil {
+			return nil, fmt.Errorf("cloud web access requires device registry")
+		}
+		webAccessSetup := r.Group("/api")
+		webAccessSetup.Use(security.AuthenticationMiddleware(newAuthConfig(config.AppCfg.Security.Mode)))
+		security.RegisterWebAccessSetupRoutes(webAccessSetup, webAccessSvc, services.DeviceMesh.DeviceReg)
 	}
 
 	if services.DesktopInstanceStore == nil && config.AppCfg.Security.Mode == "local_single_user" {
@@ -230,16 +262,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 
 		localRoot.Use(
 			security.AuthenticationMiddleware(
-				security.AuthConfig{
-					Mode:             config.AppCfg.Security.Mode,
-					JWTSecret:        config.AppCfg.JWT.Secret,
-					JWTIssuer:        config.AppCfg.JWT.Issuer,
-					JWTAudience:      config.AppCfg.JWT.Audience,
-					LocalCredentials: localCredentialStore,
-					LocalUserID:      config.AppCfg.Security.LocalUserID,
-					ListenAddress:    config.AppCfg.Server.Host,
-					AllowedOrigins:   config.AppCfg.Security.AllowedOrigins,
-				},
+				newAuthConfig(config.AppCfg.Security.Mode),
 			),
 		)
 
@@ -262,17 +285,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 
 		localDesktop.Use(
 			security.AuthenticationMiddleware(
-				security.AuthConfig{
-					Mode:             config.AppCfg.Security.Mode,
-					JWTSecret:        config.AppCfg.JWT.Secret,
-					JWTIssuer:        config.AppCfg.JWT.Issuer,
-					JWTAudience:      config.AppCfg.JWT.Audience,
-					LocalCredentials: localCredentialStore,
-					LocalUserID:      config.AppCfg.Security.LocalUserID,
-					ListenAddress:    config.AppCfg.Server.Host,
-					AllowedOrigins:   config.AppCfg.Security.AllowedOrigins,
-					SessionService:   sessionSvc,
-				},
+				newAuthConfig(config.AppCfg.Security.Mode),
 			),
 		)
 
@@ -284,7 +297,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 		{
 			localDesktop.POST("/devices/register", func(c *gin.Context) {
 				actor := security.GetActor(c)
-				if actor == nil || actor.UserID == "" {
+				if actor == nil || actor.SpaceID == "" {
 					c.JSON(401, gin.H{"code": 401, "msg": "unauthorized"})
 					return
 				}
@@ -322,7 +335,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 					return
 				}
 				err := services.DeviceRepository.RegisterOrTouch(c.Request.Context(), device.Identity{
-					UserID:            actor.UserID,
+					SpaceID:           actor.SpaceID,
 					DeviceID:          runtimeidentity.DeviceID(request.DeviceID),
 					DesktopInstanceID: request.DesktopInstanceID,
 					Platform:          runtimeidentity.Platform(request.Platform),
@@ -337,7 +350,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 			})
 			localDesktop.POST("/devices/:deviceId/runtime-bootstrap-tickets", func(c *gin.Context) {
 				actor := security.GetActor(c)
-				if actor == nil || actor.UserID == "" {
+				if actor == nil || actor.SpaceID == "" {
 					c.JSON(401, gin.H{"code": 401, "msg": "unauthorized"})
 					return
 				}
@@ -354,11 +367,11 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 					return
 				}
 				runtimeID := strings.TrimSpace(request.RuntimeID)
-				if err := services.DeviceRepository.RequireOwned(c.Request.Context(), string(actor.UserID), deviceID); err != nil {
+				if err := services.DeviceRepository.RequireOwned(c.Request.Context(), string(actor.SpaceID), deviceID); err != nil {
 					c.JSON(http.StatusNotFound, gin.H{"code": 404, "msg": "device not found"})
 					return
 				}
-				rawTicket, ticket, err := bootstrapTicketRepo.Create(c.Request.Context(), string(actor.UserID), deviceID, runtimeID, 10*time.Minute)
+				rawTicket, ticket, err := bootstrapTicketRepo.Create(c.Request.Context(), string(actor.SpaceID), deviceID, runtimeID, 10*time.Minute)
 				if err != nil {
 					log.Error("failed to create bootstrap ticket", "error", err)
 					c.JSON(500, gin.H{"code": 500, "msg": "failed to create bootstrap ticket"})
@@ -370,7 +383,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 					"data": gin.H{
 						"ticketId":   ticket.ID,
 						"ticket":     rawTicket,
-						"userId":     ticket.UserID,
+						"spaceId":    ticket.SpaceID,
 						"deviceId":   ticket.DeviceID,
 						"runtimeId":  ticket.RuntimeID,
 						"expiresAt":  ticket.ExpiresAt,
@@ -380,7 +393,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 			})
 			localDesktop.DELETE("/devices/:deviceId/runtime-bootstrap-tickets", func(c *gin.Context) {
 				actor := security.GetActor(c)
-				if actor == nil || actor.UserID == "" {
+				if actor == nil || actor.SpaceID == "" {
 					c.JSON(401, gin.H{"code": 401, "msg": "unauthorized"})
 					return
 				}
@@ -389,7 +402,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 					c.JSON(400, gin.H{"code": 400, "msg": "deviceId is required"})
 					return
 				}
-				affected, err := bootstrapTicketRepo.RevokeDeviceTickets(c.Request.Context(), string(actor.UserID), deviceID)
+				affected, err := bootstrapTicketRepo.RevokeDeviceTickets(c.Request.Context(), string(actor.SpaceID), deviceID)
 				if err != nil {
 					log.Error("failed to revoke device bootstrap tickets", "error", err)
 					c.JSON(500, gin.H{"code": 500, "msg": "failed to revoke tickets"})
@@ -408,17 +421,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 		localWorkflows := r.Group("/api/local")
 		localWorkflows.Use(
 			security.AuthenticationMiddleware(
-				security.AuthConfig{
-					Mode:             config.AppCfg.Security.Mode,
-					JWTSecret:        config.AppCfg.JWT.Secret,
-					JWTIssuer:        config.AppCfg.JWT.Issuer,
-					JWTAudience:      config.AppCfg.JWT.Audience,
-					LocalCredentials: localCredentialStore,
-					LocalUserID:      config.AppCfg.Security.LocalUserID,
-					ListenAddress:    config.AppCfg.Server.Host,
-					AllowedOrigins:   config.AppCfg.Security.AllowedOrigins,
-					SessionService:   sessionSvc,
-				},
+				newAuthConfig(config.AppCfg.Security.Mode),
 			),
 		)
 		extension.RegisterDeviceExecutionWorkflowRoutes(localWorkflows, services.Extension)
@@ -426,14 +429,11 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 
 	if services.DesktopInstanceStore != nil {
 		localAdmin := r.Group("/api/local/admin")
-		localAdmin.Use(security.LocalAdminAuthenticationMiddleware(security.AuthConfig{
-			Mode:                     config.AppCfg.Security.Mode,
-			LocalCredentials:         localCredentialStore,
-			LocalUserID:              config.AppCfg.Security.LocalUserID,
-			ListenAddress:            config.AppCfg.Server.Host,
-			AllowedOrigins:           config.AppCfg.Security.AllowedOrigins,
-			DesktopInstanceValidator: services.DesktopInstanceStore.Validate,
-		}))
+		localAdmin.Use(security.LocalAdminAuthenticationMiddleware(func() security.AuthConfig {
+			cfg := newAuthConfig(config.AppCfg.Security.Mode)
+			cfg.DesktopInstanceValidator = services.DesktopInstanceStore.Validate
+			return cfg
+		}()))
 		localAdmin.Use(security.RequirePermission("system.shutdown"))
 		localAdmin.POST("/token/rotate", sessionSvc.RotateToken)
 		localAdmin.POST("/shutdown", func(c *gin.Context) {
@@ -442,7 +442,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 				c.JSON(403, gin.H{"code": 403, "msg": "local admin credential required"})
 				return
 			}
-			log.Info("system.shutdown.requested", "actor", actor.UserID, "method", actor.AuthMethod)
+			log.Info("system.shutdown.requested", "actor", actor.SpaceID, "method", actor.AuthMethod)
 			c.JSON(202, gin.H{"code": 202, "msg": "shutting down", "shutdownOperationId": generateShutdownOpID()})
 			go func() {
 				time.Sleep(300 * time.Millisecond)
@@ -458,26 +458,55 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 		mcpapi.RegisterOAuthCallback(r, services.MCPCompatibility.API)
 	}
 
+	// ASR providers such as Volcengine fetch audio by URL. Expose only the
+	// short-lived unguessable provider payload route outside authenticated /api.
+	asr.RegisterPublicAsrRouter(r)
+	var channelProviders channelinbound.ProviderDefinitionSource
+	if services.KernelContainer != nil {
+		channelProviders = services.KernelContainer.CapabilityProviders
+	}
+	channelinbound.RegisterInboundRouter(r, channelProviders, services.UnifiedEntry)
+
 	apiGroup := r.Group("/api")
-	apiGroup.Use(security.AuthenticationMiddleware(security.AuthConfig{
-		Mode:             config.AppCfg.Security.Mode,
-		JWTSecret:        config.AppCfg.JWT.Secret,
-		JWTIssuer:        config.AppCfg.JWT.Issuer,
-		JWTAudience:      config.AppCfg.JWT.Audience,
-		LocalCredentials: localCredentialStore,
-		LocalUserID:      config.AppCfg.Security.LocalUserID,
-		ListenAddress:    config.AppCfg.Server.Host,
-		AllowedOrigins:   config.AppCfg.Security.AllowedOrigins,
-		SessionService:   sessionSvc,
-		AccountSessions:  accountSessionRuntime.Validator,
-	}))
+	apiGroup.Use(security.AuthenticationMiddleware(newAuthConfig(config.AppCfg.Security.Mode)))
+	if webAccessSvc != nil && services.DeviceMesh != nil && services.DeviceMesh.DeviceReg != nil {
+		apiGroup.Use(security.RequireWebAccessForWebDevice(webAccessSvc, services.DeviceMesh.DeviceReg))
+	}
 	{
+		apiGroup.GET("/space", func(c *gin.Context) {
+			identity := spaceStore.Identity()
+			profileData, profileErr := spaceStore.ReadProfile()
+			if profileErr != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "msg": "failed to read local profile"})
+				return
+			}
+			c.JSON(http.StatusOK, gin.H{"code": 200, "msg": "ok", "data": gin.H{"identity": identity, "profile": profileData}})
+		})
+		apiGroup.GET("/space/profile", func(c *gin.Context) {
+			profileData, profileErr := spaceStore.ReadProfile()
+			if profileErr != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "msg": "failed to read local profile"})
+				return
+			}
+			c.JSON(http.StatusOK, gin.H{"code": 200, "msg": "ok", "data": profileData})
+		})
+		apiGroup.PUT("/space/profile", func(c *gin.Context) {
+			var profileData spaceidentity.Profile
+			if err := c.ShouldBindJSON(&profileData); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": "invalid profile"})
+				return
+			}
+			if err := spaceStore.WriteProfile(profileData); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": err.Error()})
+				return
+			}
+			updated, _ := spaceStore.ReadProfile()
+			c.JSON(http.StatusOK, gin.H{"code": 200, "msg": "ok", "data": updated})
+		})
 		registerAndroidAutomationStatusRoute(apiGroup, services)
-		accountsession.RegisterAuthenticatedRoutes(apiGroup, accountSessionRuntime.Handler)
 		if services.MCPCompatibility != nil {
 			mcpapi.RegisterRouter(apiGroup, ctx, services.MCPCompatibility.API)
 		}
-		user.RegisterUserRouter(apiGroup, ctx)
 		if services.Sync != nil && services.Sync.ChangeLog != nil {
 			character.RegisterCharacterRouterWithRecorder(apiGroup, ctx, services.Chat, services.Sync.ChangeLog)
 		} else {
@@ -490,20 +519,17 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 			c.JSON(200, gin.H{"code": 200, "data": services.Chat.GetPipelineStatus(), "msg": "\u64cd\u4f5c\u6210\u529f"})
 		})
 		profile.RegisterProfileRouter(apiGroup, services.Profile)
-		proHandler := proactive.RegisterProactiveRouterWithCompanion(apiGroup, ctx, services.Companion)
-		proactive.RegisterRemindersRouter(apiGroup, proHandler)
-		episodic.RegisterEpisodicRouter(apiGroup, services.Episodic)
-		worldbook.RegisterWorldBookRouter(apiGroup, services.WorldBook)
-		feedback.RegisterFeedbackRouter(apiGroup, ctx)
-		graph.RegisterGraphRouter(apiGroup, config.AppCfg.Providers.GraphStore.SurrealDB)
 		var agentToolFacade *extensionkernel.ToolFacade
 		if services.KernelContainer != nil {
 			agentToolFacade = services.KernelContainer.ToolFacade
 		}
+		episodic.RegisterEpisodicRouter(apiGroup, services.Episodic)
+		worldbook.RegisterWorldBookRouter(apiGroup, services.WorldBook)
+		feedback.RegisterFeedbackRouter(apiGroup, ctx)
+		reminder.RegisterRouter(apiGroup, ctx.DB, services.Chat)
+		graph.RegisterGraphRouter(apiGroup, config.AppCfg.Providers.GraphStore.SurrealDB)
 		agent.RegisterAgentRouter(apiGroup, ctx, services.UnifiedEntry, agentToolFacade)
 		system.RegisterSystemRouter(apiGroup, ctx, services.Chat, services.UnifiedEntry, services.DataLifecycle, services.Reconciliation, services.Memory, services.Profile, services.Episodic, services.Graph, services.Temporal, services.DataPortability, services.Artifact.Service)
-		companion.RegisterCompanionRouter(apiGroup, services.Companion)
-		qq.RegisterQQRouter(apiGroup, ctx)
 		tts.RegisterTtsRouter(apiGroup, ctx)
 		asr.RegisterAsrRouter(apiGroup, ctx)
 		if services.AdapterManager != nil {
@@ -513,16 +539,42 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 			if services.RuntimeProfile == runtimeprofile.ProfileCloudCore || services.KernelContainer == nil || services.KernelContainer.WorkflowTriggerManager == nil {
 				return nil
 			}
-			userID := strings.TrimSpace(event.UserID)
-			if userID == "" || strings.TrimSpace(event.EventID) == "" || strings.TrimSpace(event.EventType) == "" {
+			spaceID := strings.TrimSpace(event.SpaceID)
+			if spaceID == "" || strings.TrimSpace(event.EventID) == "" || strings.TrimSpace(event.EventType) == "" {
 				return nil
 			}
 			return services.KernelContainer.WorkflowTriggerManager.HandleStructuredEvent(callCtx, workflowkernel.WorkflowTriggerEvent{
-				EventID: event.EventID, EventType: "user:" + userID + ":" + event.EventType, Source: event.Source,
-				OwnerUserID: userID, OccurredAt: time.Now().UTC(), Payload: event.Payload,
-			}, workflowkernel.ExecutionContext{UserID: userID})
+				EventID: event.EventID, EventType: "space:" + spaceID + ":" + event.EventType, Source: event.Source,
+				OwnerSpaceID: spaceID, OccurredAt: time.Now().UTC(), Payload: event.Payload,
+			}, workflowkernel.ExecutionContext{SpaceID: spaceID})
 		})
-		realtime.RegisterRealtimeRouter(apiGroup, ctx)
+		realtime.SetCascadeVoiceProvider(func(callCtx context.Context, req realtime.CascadeVoiceGenerationRequest, onDelta func(string) error) error {
+			history := make([]chat.VoiceStreamTurn, 0, len(req.History))
+			for _, turn := range req.History {
+				history = append(history, chat.VoiceStreamTurn{UserText: turn.UserText, SpeechText: turn.SpeechText})
+			}
+			spaceID, spaceErr := uuid.Parse(req.SpaceID)
+			if spaceErr != nil {
+				return spaceErr
+			}
+			characterID, characterErr := uuid.Parse(req.CharacterID)
+			if characterErr != nil {
+				return characterErr
+			}
+			return services.Chat.GenerateVoiceStream(callCtx, spaceID, characterID, req.SystemPrompt, history, req.RollingSummary, req.UserText, onDelta)
+		}, services.Chat.RealtimeVoiceReady)
+		realtime.SetCascadeRollingSummarizer(func(callCtx context.Context, existingSummary, rawTurns string) (string, error) {
+			return services.Chat.SummarizeRealtimeVoiceRollingContext(callCtx, existingSummary, rawTurns)
+		})
+		realtime.SetCascadeEmotionProvider(cascadeEmotionAdapter{chat: services.Chat})
+		if err := realtime.CascadeVoiceReadiness(); err != nil {
+			log.Warn("realtime voice not ready:", err.Error())
+		} else {
+			log.Info("realtime voice ready")
+		}
+		realtime.RegisterRealtimeRouter(apiGroup, ctx, services.Vision)
+		r.GET("/api/realtime/v2/ws/session", realtime.HandleTicketedSession)
+		r.GET("/api/realtime/v2/ws/visual", realtime.HandleTicketedVisualSession)
 		vision.RegisterVisionRouter(apiGroup, ctx)
 		embedding_config.RegisterEmbeddingConfigRouter(apiGroup, ctx)
 		imagegen.RegisterImageGenRouter(apiGroup, ctx)
@@ -534,7 +586,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 		system.RegisterHealthRouter(apiGroup, services.CircuitBreakers, services.DataLifecycle, services.Reconciliation)
 		ttsRepo := tts.NewRepository(ctx.DB)
 		ttsSvc := tts.NewService(ttsRepo)
-		system.RegisterVoiceEntryRouter(apiGroup, services.VoiceEntry, ttsSvc, services.DeliveryStore)
+		system.RegisterVoiceEntryRouter(apiGroup, ctx.DB, services.VoiceEntry, ttsSvc, services.DeliveryStore)
 		safety.RegisterSafetyRouter(apiGroup, ctx.DB)
 		delivery.RegisterSubmitRouter(apiGroup, services.DeliveryStore)
 		extension.RegisterRouter(apiGroup, ctx, services.Extension)
@@ -543,6 +595,9 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 		}
 		if services.WorkspaceService != nil {
 			workspace.NewHandler(services.WorkspaceService).RegisterRoutes(apiGroup)
+		}
+		if services.WorkspaceGitHandler != nil {
+			services.WorkspaceGitHandler.RegisterRoutes(apiGroup)
 		}
 		if services.KernelContainer != nil {
 			cardProvider := extension_center.NewKernelCardProvider(services.KernelContainer.DefinitionRepository, services.KernelContainer.InstallationRepository)
@@ -570,9 +625,6 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 			kernelReader := management.NewKernelReaderWithContributions(services.KernelContainer.DefinitionRepository, services.KernelContainer.InstallationRepository, services.KernelContainer.ContributionRepository)
 			gameCenterSvc := management.NewProductionService(services.KernelContainer.GameHost, kernelReader)
 			management.RegisterGameCenterRouter(apiGroup, gameCenterSvc)
-			if services.KernelContainer.GameHost.PermissionApprovals != nil {
-				management.RegisterGameCenterApprovalRouter(apiGroup, management.NewApprovalHandler(services.KernelContainer.GameHost.PermissionApprovals))
-			}
 			if services.KernelContainer.GameHost.ArtifactManager != nil {
 				management.RegisterGameCenterArtifactRouter(apiGroup, management.NewArtifactHandler(services.KernelContainer.GameHost.ArtifactManager))
 			}
@@ -639,6 +691,9 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 						EmergencyStopFn: func(ctx context.Context, runtimeID string) (control.EmergencyStopResult, error) {
 							return services.KernelContainer.GameHost.EmergencyStopService.Execute(ctx, domain.RuntimeInstanceID(runtimeID))
 						},
+						RearmFn: func(ctx context.Context, runtimeID string) error {
+							return services.KernelContainer.GameHost.EmergencyStopService.ClearEmergencyLatch(ctx, domain.RuntimeInstanceID(runtimeID), "game_center_user")
+						},
 					})
 					management.RegisterGameCenterControlRouter(apiGroup, controlHandler)
 				}
@@ -657,8 +712,8 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 						if services.KernelContainer.ToolFacade == nil {
 							return nil, false
 						}
-						result, ok := services.KernelContainer.ToolFacade.ExecuteTool(ctx, capability.CapabilityID(toolID), input, extensionkernel.LegacyScope{
-							UserID: scope.UserID, CharacterID: scope.CharacterID, ConversationID: scope.ConversationID, Channel: scope.Channel, SessionID: scope.SessionID,
+						result, ok := services.KernelContainer.ToolFacade.ExecuteTool(ctx, capability.CapabilityID(toolID), input, extensionkernel.InvocationScope{
+							SpaceID: scope.SpaceID, CharacterID: scope.CharacterID, ConversationID: scope.ConversationID, Channel: scope.Channel, SessionID: scope.SessionID,
 							RequestID: scope.RequestID, ToolCallID: scope.ToolCallID,
 						}, scope.ToolCallID, scope.RequestID)
 						return result, ok
@@ -667,46 +722,29 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 				}
 			}
 		}
-		emote.RegisterRouter(apiGroup, services.Emote)
 		temporal.RegisterRouter(apiGroup, services.Temporal, services.RelTimeCoordinator)
 		mood.RegisterMoodRouter(apiGroup, ctx)
 		if services.Sync != nil {
 			syncHandler := sync.NewHandler(services.Sync, services.DeviceRepository)
-			syncHandler.RegisterRoutes(apiGroup, security.AuthenticationMiddleware(security.AuthConfig{
-				Mode:             config.AppCfg.Security.Mode,
-				JWTSecret:        config.AppCfg.JWT.Secret,
-				JWTIssuer:        config.AppCfg.JWT.Issuer,
-				JWTAudience:      config.AppCfg.JWT.Audience,
-				LocalCredentials: localCredentialStore,
-				LocalUserID:      config.AppCfg.Security.LocalUserID,
-				ListenAddress:    config.AppCfg.Server.Host,
-				AllowedOrigins:   config.AppCfg.Security.AllowedOrigins,
-				SessionService:   sessionSvc,
-				AccountSessions:  accountSessionRuntime.Validator,
-			}))
+			syncHandler.RegisterRoutes(apiGroup, security.AuthenticationMiddleware(newAuthConfig(config.AppCfg.Security.Mode)))
 		}
 
 		if services.DeviceMesh == nil || services.DeviceMesh.BootstrapSvc == nil || services.DeviceMesh.CredentialSvc == nil || services.DeviceMesh.Hub == nil || services.DeviceMesh.Handler == nil {
 			return nil, fmt.Errorf("device mesh: required cloud runtime dependencies are not initialized")
 		}
 		{
-			deviceMeshAuthMW := security.AuthenticationMiddleware(security.AuthConfig{
-				Mode:             config.AppCfg.Security.Mode,
-				JWTSecret:        config.AppCfg.JWT.Secret,
-				JWTIssuer:        config.AppCfg.JWT.Issuer,
-				JWTAudience:      config.AppCfg.JWT.Audience,
-				LocalCredentials: localCredentialStore,
-				LocalUserID:      config.AppCfg.Security.LocalUserID,
-				ListenAddress:    config.AppCfg.Server.Host,
-				AllowedOrigins:   config.AppCfg.Security.AllowedOrigins,
-				SessionService:   sessionSvc,
-				AccountSessions:  accountSessionRuntime.Validator,
-			})
+			deviceMeshAuthMW := security.AuthenticationMiddleware(newAuthConfig(config.AppCfg.Security.Mode))
+			deviceMeshWebAccessMW := security.RequireWebAccessForWebDevice(webAccessSvc, services.DeviceMesh.DeviceReg)
+			deviceMeshPublicWebAccessMW := security.RequireWebAccessForDeclaredBrowser(webAccessSvc)
 			meshSQLDB, meshDBErr := ctx.DB.DB()
 			if meshDBErr != nil {
 				return nil, fmt.Errorf("device mesh: resolve sql db: %w", meshDBErr)
 			}
-			if err := devicemeshserver.RegisterCloudRoutes(apiGroup, deviceMeshAuthMW, &devicemeshserver.RouterDeps{
+			pairingSvc, pairingErr := devicemeshpairing.NewService(meshSQLDB, config.AppCfg.Storage.DataDir, runtimeidentity.ParseSpaceID(spaceID), services.DeviceMesh.DeviceReg, services.DeviceMesh.BootstrapSvc)
+			if pairingErr != nil {
+				return nil, fmt.Errorf("device mesh: initialize pairing service: %w", pairingErr)
+			}
+			if err := devicemeshserver.RegisterCloudRoutes(r, deviceMeshAuthMW, deviceMeshWebAccessMW, deviceMeshPublicWebAccessMW, &devicemeshserver.RouterDeps{
 				DB:            meshSQLDB,
 				Sessions:      services.DeviceMesh.GetSessions(),
 				BootstrapSvc:  services.DeviceMesh.BootstrapSvc,
@@ -715,12 +753,20 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 				Handler:       services.DeviceMesh.Handler,
 				Probe:         services.DeviceMesh.Probe,
 				DeviceReg:     services.DeviceMesh.DeviceReg,
-				GetUserID: func(c *gin.Context) (runtimeidentity.UserID, bool) {
+				PairingSvc:    pairingSvc,
+				GetSpaceID: func(c *gin.Context) (runtimeidentity.SpaceID, bool) {
 					actor := security.GetActor(c)
-					if actor == nil || actor.UserID == "" {
+					if actor == nil || actor.SpaceID == "" {
 						return "", false
 					}
-					return runtimeidentity.UserID(actor.UserID), true
+					return runtimeidentity.SpaceID(actor.SpaceID), true
+				},
+				GetDeviceID: func(c *gin.Context) (runtimeidentity.DeviceID, bool) {
+					actor := security.GetActor(c)
+					if actor == nil || actor.DeviceID == "" {
+						return "", false
+					}
+					return actor.DeviceID, true
 				},
 				InvocationResultHandler: devicemeshserver.InvocationResultHandler(func(result protocol.RuntimeResultPayload) {
 					if services.DeviceMesh.PendingInvocations == nil {
@@ -837,14 +883,22 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 			}
 		}
 
-		if err := registerCloudDesktopPetGenerationBridge(r, ctx, services); err != nil {
+		if err := registerCloudDesktopPetGenerationBridge(r, ctx, services, webAccessSvc); err != nil {
 			return nil, err
 		}
 
 		if services.NativeBridgeRelay != nil && bootstrap != nil {
 			tryRegisterAndroidBridge(services.NativeBridgeRelay, bootstrap)
 			tryRegisterIOSBridge(services.NativeBridgeRelay, bootstrap)
-			setupNativeBridgeRelayRoutes(services.NativeBridgeRelay, apiGroup)
+			// Native relay is device-local authority. Cloud Core must not accept a
+			// platform-global relay session because multiple devices of the same
+			// platform would contend for one bridge/session. Mobile clients connect
+			// their relay to the local Device Agent instead.
+			if services.RuntimeProfile != runtimeprofile.ProfileCloudCore {
+				setupNativeBridgeRelayBackendActionHandler(services.NativeBridgeRelay, services)
+				setupNativeBridgeRelayRoutes(services.NativeBridgeRelay, apiGroup)
+				setupNativeBridgeBackendActionRoutes(services, apiGroup)
+			}
 
 			if services.KernelContainer != nil && services.KernelContainer.TaskRuntimeService != nil {
 				eventSinkRouter := iosnativebackground.NewTaskRuntimeEventSinkRouter(services.KernelContainer.TaskRuntimeService)
@@ -855,23 +909,12 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 		}
 	}
 
-	// Desktop-pet entity mutations and Runtime v2 are device-local authority.
+	// Desktop-pet entity mutations and Runtime v1 are device-local authority.
 	// CloudCore exposes catalog/control-plane reads and mesh gateways only; the
 	// desktop routes these writes to the loopback Device Agent.
 	if services.RuntimePolicy.DesktopPet {
 		desktopPetWriteGroup := r.Group("/api")
-		desktopPetWriteGroup.Use(security.AuthenticationMiddleware(security.AuthConfig{
-			Mode:             config.AppCfg.Security.Mode,
-			JWTSecret:        config.AppCfg.JWT.Secret,
-			JWTIssuer:        config.AppCfg.JWT.Issuer,
-			JWTAudience:      config.AppCfg.JWT.Audience,
-			LocalCredentials: localCredentialStore,
-			LocalUserID:      config.AppCfg.Security.LocalUserID,
-			ListenAddress:    config.AppCfg.Server.Host,
-			AllowedOrigins:   config.AppCfg.Security.AllowedOrigins,
-			SessionService:   sessionSvc,
-			AccountSessions:  accountSessionRuntime.Validator,
-		}))
+		desktopPetWriteGroup.Use(security.AuthenticationMiddleware(newAuthConfig(config.AppCfg.Security.Mode)))
 		desktopPetWriteGroup.Use(readiness.RejectWritesWhenSafeMode(services.SafeMode))
 		desktoppet.RegisterDesktopPetWriteRouter(desktopPetWriteGroup, ctx, services.PathRegistry)
 		processing.RegisterProcessingRouter(desktopPetWriteGroup, ctx, services.PathRegistry)
@@ -882,31 +925,23 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 		registerImportStagingRoutes(desktopPetWriteGroup, services.PathRegistry, services.ImportStagingRepo, services.OwnershipGuard, services.PackageImporter)
 		behavior.RegisterRoutes(desktopPetWriteGroup, services.BehaviorService)
 
-		runtimev2.RegisterInternalRoutes(
+		runtimev1.RegisterInternalRoutes(
 			r,
-			services.DesktopPetRuntimeV2,
+			services.DesktopPetRuntimeV1,
 			services.SafeMode,
-			func(ctx context.Context, rawTicket string, runtimeID runtimeidentity.RuntimeID, deviceID runtimeidentity.DeviceID) (runtimeidentity.UserID, error) {
+			func(ctx context.Context, rawTicket string, runtimeID runtimeidentity.RuntimeID, deviceID runtimeidentity.DeviceID) (runtimeidentity.SpaceID, error) {
 				ticket, err := bootstrapTicketRepo.ConsumeWithValidation(ctx, rawTicket, string(runtimeID), string(deviceID))
 				if err != nil {
 					return "", err
 				}
-				return runtimeidentity.UserID(ticket.UserID), nil
+				return runtimeidentity.SpaceID(ticket.SpaceID), nil
 			},
 		)
-		runtimev2.RegisterUserRoutes(apiGroup, services.DesktopPetRuntimeV2)
+		runtimev1.RegisterUserRoutes(apiGroup, services.DesktopPetRuntimeV1)
 	}
 
 	maintenanceAuthGroup := r.Group("/api")
-	maintenanceAuthGroup.Use(security.AuthenticationMiddleware(security.AuthConfig{
-		Mode:             "maintenance",
-		JWTSecret:        config.AppCfg.JWT.Secret,
-		LocalCredentials: localCredentialStore,
-		LocalUserID:      config.AppCfg.Security.LocalUserID,
-		ListenAddress:    config.AppCfg.Server.Host,
-		AllowedOrigins:   config.AppCfg.Security.AllowedOrigins,
-		AccountSessions:  accountSessionRuntime.Validator,
-	}))
+	maintenanceAuthGroup.Use(security.AuthenticationMiddleware(newAuthConfig("maintenance")))
 	maintenance.RegisterMaintenanceRouter(maintenanceAuthGroup, services.DesktopPetMaintenanceHandler)
 
 	return r, nil
@@ -922,7 +957,7 @@ func (a *packageImportAdapter) ImportPackage(ctx context.Context, req map[string
 		fmt.Sscanf(revStr, "%d", &expectedRevision)
 	}
 	result, err := a.imp.ImportPackage(ctx, &importer.ImportPackageRequest{
-		UserID:                  req["userId"],
+		SpaceID:                 req["spaceId"],
 		ImportStagingID:         req["importStagingId"],
 		SourceFilePath:          req["sourceFilePath"],
 		IdempotencyKey:          req["idempotencyKey"],

@@ -34,14 +34,26 @@ var CapabilityMatrix = []CapabilityEntry{
 		Reason:     "Existing Gateway 已注册；G12 #13-#15 直接复用",
 	},
 	{
+		Name:       "Conversation Message",
+		Route:      string(MethodConversationMessageSend),
+		Resolution: ResolutionReuseExisting,
+		Reason:     "统一会话消息发送能力，插件按当前会话或显式目标复用",
+	},
+	{
 		Name:       "Memory",
 		Route:      "host.memory.query",
 		Resolution: ResolutionReuseExisting,
 		Reason:     "Existing Gateway 已注册；G12 #16-#19 直接复用",
 	},
 	{
+		Name:       "Vector",
+		Route:      string(MethodVectorUpsert) + "/" + string(MethodVectorSearch) + "/" + string(MethodVectorDelete),
+		Resolution: ResolutionNewMinimal,
+		Reason:     "按扩展和模块命名空间隔离的通用向量读写能力",
+	},
+	{
 		Name:       "Resource",
-		Route:      string(MethodResourceOpen) + "/" + string(MethodResourceRead) + "/" + string(MethodResourceWrite) + "/" + string(MethodResourceClose) + "/" + string(MethodResourceStat),
+		Route:      string(MethodResourceOpen) + "/" + string(MethodResourceRead) + "/" + string(MethodResourceWrite) + "/" + string(MethodResourceClose) + "/" + string(MethodResourceStat) + "/" + string(MethodResourceLink) + "/" + string(MethodResourceDelete),
 		Resolution: ResolutionReuseExisting,
 		Reason:     "Existing Gateway 已注册；G12 #20-#21 直接复用",
 	},
@@ -116,7 +128,7 @@ func AllRegisteredMethods() []string {
 		// Secret
 		string(MethodSecretGet),
 		// Resource
-		string(MethodResourceOpen), string(MethodResourceRead), string(MethodResourceWrite), string(MethodResourceClose), string(MethodResourceStat),
+		string(MethodResourceOpen), string(MethodResourceRead), string(MethodResourceWrite), string(MethodResourceClose), string(MethodResourceStat), string(MethodResourceLink), string(MethodResourceDelete),
 		// Event
 		string(MethodEventEmit), string(MethodEventSubscribe), string(MethodEventUnsubscribe),
 		// Schedule
@@ -126,9 +138,12 @@ func AllRegisteredMethods() []string {
 		// Clipboard
 		string(MethodClipboardWrite), string(MethodClipboardRead),
 		// Data
-		string(MethodCharacterRead), string(MethodConversationRead), string(MethodMemoryQuery),
+		string(MethodCharacterRead), string(MethodCharacterList), string(MethodConversationRead), string(MethodMemoryQuery),
 		// Provider / Tool / Runtime / mediated network
 		string(MethodProviderInvoke), string(MethodToolExecute), string(MethodRuntimeHealth), string(MethodNetworkRequest),
+		string(MethodConversationMessageSend),
+		string(MethodConversationMessageAppend),
+		string(MethodVectorUpsert), string(MethodVectorSearch), string(MethodVectorDelete),
 		string(MethodNetworkTCPOpen), string(MethodNetworkTCPRead), string(MethodNetworkTCPWrite), string(MethodNetworkTCPClose),
 		string(MethodNetworkUDPOpen), string(MethodNetworkUDPReceive), string(MethodNetworkUDPSend), string(MethodNetworkUDPClose),
 		string(MethodNetworkWebSocketOpen), string(MethodNetworkWebSocketReceive), string(MethodNetworkWebSocketSend), string(MethodNetworkWebSocketClose),

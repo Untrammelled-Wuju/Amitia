@@ -44,6 +44,8 @@ type Worker struct {
 
 	recoveryWorker  quality.QualityRecoveryWorker
 	outboxPublisher quality.QualityOutboxPublisher
+
+	onEvaluationCommitted func(taskID, actionKey string)
 }
 
 func NewWorker(db *gorm.DB, svc quality.QualityService, dataDir string) *Worker {
@@ -59,6 +61,10 @@ func NewWorker(db *gorm.DB, svc quality.QualityService, dataDir string) *Worker 
 		w.outboxPublisher = provider.OutboxPublisher()
 	}
 	return w
+}
+
+func (w *Worker) SetOnEvaluationCommitted(fn func(taskID, actionKey string)) {
+	w.onEvaluationCommitted = fn
 }
 
 func (w *Worker) Start(ctx context.Context) {
@@ -215,6 +221,7 @@ func (w *Worker) processEvaluation(ctx context.Context, eval *quality.QualityEva
 		ProcessingTaskID:   eval.ProcessingTaskID,
 		ProcessingActionID: eval.ProcessingActionID,
 		ActionKey:          eval.ActionKey,
+		SpaceID:            eval.SpaceID,
 		Profile:            profile,
 		ExecutionID:        executionID,
 		WorkerID:           qualityWorkerID,
@@ -233,6 +240,25 @@ func (w *Worker) processEvaluation(ctx context.Context, eval *quality.QualityEva
 		log.Logger.Errorf("quality worker release lease for evaluation %s failed: %v", eval.ID, releaseErr)
 	} else if !released {
 		log.Logger.Infof("quality worker lease already changed before release for evaluation %s", eval.ID)
+	}
+
+	// Shutdown/lease cancellation must not strand a running row with an empty
+	// lease. Once release succeeds, a CAS recovery with the now-empty owner turns
+	// only that still-running row back to pending; a newly acquired owner wins the
+	// race and makes this update a no-op.
+	if evalCtx.Err() != nil && released {
+		if _, recoverErr := w.recoverExpiredEvaluation(cleanupCtx, eval.ID, "", time.Now().UTC()); recoverErr != nil {
+			log.Logger.Errorf("quality worker requeue cancelled evaluation %s failed: %v", eval.ID, recoverErr)
+		}
+	}
+
+	// Successful commits use the transactional outbox as the sole terminal
+	// event source. Flush after each evaluation for low-latency delivery; the
+	// periodic flush remains the retry path for transient publisher failures.
+	w.flushOutbox(cleanupCtx)
+
+	if w.onEvaluationCommitted != nil && eval.ProcessingTaskID != "" {
+		w.onEvaluationCommitted(eval.ProcessingTaskID, eval.ActionKey)
 	}
 
 	// Shutdown/lease cancellation must not strand a running row with an empty

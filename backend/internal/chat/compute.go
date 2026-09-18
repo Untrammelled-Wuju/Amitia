@@ -11,6 +11,7 @@ import (
 	"github.com/u-ai/backend/internal/decision"
 	"github.com/u-ai/backend/internal/expression"
 	"github.com/u-ai/backend/internal/extension"
+	"github.com/u-ai/backend/internal/extension/runtimegate"
 	"github.com/u-ai/backend/internal/interaction"
 	"github.com/u-ai/backend/internal/personality"
 	promptir "github.com/u-ai/backend/internal/prompt"
@@ -44,6 +45,7 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 		requestID = uuid.New().String()
 	}
 	req.RequestID = requestID
+	req.SpaceID = normalizeConversationOwner(req.SpaceID)
 	channel := strings.TrimSpace(req.Channel)
 	if channel == "" {
 		channel = "web"
@@ -66,7 +68,7 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 		"has_image":     strings.TrimSpace(req.ImageUrl) != "",
 		"has_video":     strings.TrimSpace(req.VideoUrl) != "",
 	}, "process message input received")
-	runtimeProfile, err := s.getRoleRuntimeProfile(req.CharacterID)
+	runtimeProfile, err := s.getRoleRuntimeProfileForSpace(req.CharacterID, req.SpaceID)
 	if err != nil {
 		applog.TraceError(trace.WithStage("runtime_profile_load_failed"), nil, err, "process message runtime profile load failed")
 		if req.CharacterID != "" {
@@ -79,18 +81,26 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 	convID := req.ConversationID
 	if convID == "" {
 		var existing struct{ ID string }
-		err := s.db.Table("conversations").Select("id").Where("character_id = ? AND channel = ?", charID, channel).Order("updated_at DESC").Limit(1).Row().Scan(&existing.ID)
+		query := s.db.Table("conversations").Select("id").Where("deleted_at IS NULL AND character_id = ? AND channel = ?", charID, channel)
+		query = applyConversationOwnerScope(query, req.SpaceID)
+		err := query.Order("updated_at DESC").Limit(1).Row().Scan(&existing.ID)
 		if err == nil && existing.ID != "" {
 			convID = existing.ID
 		} else {
 			convID = uuid.New().String()
-			s.repo.CreateConversation(&Conversation{ID: convID, CharacterID: charID, Title: req.Message, Channel: channel})
-			s.db.Table("characters").Where("id = ?", charID).Update("conversation_id", convID)
+			conversation := &Conversation{ID: convID, SpaceID: req.SpaceID, CharacterID: charID, Title: req.Message, Channel: channel, Source: source}
+			if err := s.persistConversationWithChange(conversation, req.SpaceID); err != nil {
+				return nil, err
+			}
+			applyConversationOwnerScope(s.db.Table("characters").Where("id = ?", charID), req.SpaceID).Update("conversation_id", convID)
 		}
-	} else if err := s.validateConversationScope(convID, charID, channel); err != nil {
+	} else if err := s.validateConversationScope(convID, charID, channel, req.SpaceID); err != nil {
 		if strings.Contains(err.Error(), "会话不存在") {
-			s.repo.CreateConversation(&Conversation{ID: convID, CharacterID: charID, Title: req.Message, Channel: channel})
-			s.db.Table("characters").Where("id = ?", charID).Update("conversation_id", convID)
+			conversation := &Conversation{ID: convID, SpaceID: req.SpaceID, CharacterID: charID, Title: req.Message, Channel: channel, Source: source}
+			if createErr := s.persistConversationWithChange(conversation, req.SpaceID); createErr != nil {
+				return nil, createErr
+			}
+			applyConversationOwnerScope(s.db.Table("characters").Where("id = ?", charID), req.SpaceID).Update("conversation_id", convID)
 		} else {
 			applog.TraceError(trace.WithStage("conversation_scope_invalid"), applog.Fields{
 				"conversation_id": convID,
@@ -170,24 +180,18 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 		return nil, fmt.Errorf("没有可用的模型配置")
 	}
 
-	sys1Result := s.sys1Builder(runtimeProfile, req.Message, req.Runtime)
+	sys1Result := s.sys1Builder(convID, runtimeProfile, req.Message, req.Runtime)
 	history := s.loadHistoryExcluding(convID, userMsgID)
 	sys2Result := s.sys2Builder(convID, charID, requestID, req.Channel, req.Message)
 
-	kind := expression.ChannelWeb
-	switch req.Channel {
-	case "wechat":
-		kind = expression.ChannelWechat
-	case "qq":
-		kind = expression.ChannelQQ
-	}
+	kind := resolveExpressionChannel(req.Channel, req.VoiceMessage)
 	channelPrompt := expression.CompileChannelPrompt(kind)
 
 	userContent := req.Message
 	if req.ImageContext != "" {
 		userContent = req.ImageContext + "\n\n用户问：" + req.Message
 	}
-	if source == "proactive" {
+	if (source == "proactive" || source == "runtime") && strings.TrimSpace(req.ProactiveTaskInstruction) != "" {
 		userContent = req.ProactiveTaskInstruction
 	}
 
@@ -241,12 +245,19 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 		proactiveTaskInstruction = req.ProactiveTaskInstruction
 	}
 
-	skillScope := extension.ExecutionScope{UserID: req.UserID, CharacterID: charID, ConversationID: convID, Channel: channel, SessionID: req.SessionID, Trigger: extension.TriggerLLM, TraceID: requestID, RequestID: requestID, CorrelationID: trace.CorrelationID, CausationID: trace.CausationID, ExecContext: req.ExecContext}
+	skillScope := extension.ExecutionScope{SpaceID: req.SpaceID, CharacterID: charID, ConversationID: convID, Channel: channel, SessionID: req.SessionID, Trigger: extension.TriggerLLM, TraceID: requestID, RequestID: requestID, CorrelationID: trace.CorrelationID, CausationID: trace.CausationID, ExecContext: req.ExecContext}
+	prepareToolScope := func() SkillScope {
+		scope := toolScopeFromExtension(skillScope)
+		scope.Message = req.Message
+		scope.Source = source
+		scope.IsInternal = req.IsInternal
+		return scope
+	}
 	agentSkillContext := ""
 	agentSkillCatalogIncluded := false
 	agentSkillTrace := []promptir.AgentSkillTrace{}
 	if s.toolRuntime != nil {
-		toolScope := toolScopeFromExtension(skillScope)
+		toolScope := prepareToolScope()
 		catalog, activated, activationErrors := s.toolRuntime.PrepareAgentSkillPrompt(ctx, toolScope, req.Message)
 		parts := []string{}
 		if catalog != "" {
@@ -265,10 +276,10 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 	} else {
 		applog.TraceError(trace.WithStage("tool_runtime_unavailable"), nil, fmt.Errorf("tool runtime is not configured"), "agent skill prompt preparation skipped")
 	}
-	pluginContributions := []extension.ContextContribution{}
+	pluginContributions := []ContextContribution{}
 	if s.toolRuntime != nil {
-		toolScope := toolScopeFromExtension(skillScope)
-		pluginContributions = contextContributionsToExtension(s.toolRuntime.BeforePrompt(ctx, toolScope))
+		toolScope := prepareToolScope()
+		pluginContributions = s.toolRuntime.BeforePrompt(ctx, toolScope)
 	} else {
 		applog.TraceError(trace.WithStage("tool_runtime_unavailable"), nil, fmt.Errorf("tool runtime is not configured"), "plugin context contributions skipped")
 	}
@@ -284,13 +295,23 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 		req.Runtime.Context.Temporal.Value.RelationshipTime.Policy = &policy
 		relationshipTimeContext = temporal.RenderRelationshipTime(*req.Runtime.Context.Temporal.Value.RelationshipTime, policy)
 	}
+	emotionFusionRaw := buildEmotionFusionRaw(req.Runtime, charName)
+	if emotionContext, emotionErr := s.LoadRealtimeEmotionContext(ctx, req.SpaceID, charID); emotionErr == nil && emotionContext != nil {
+		if prompt := strings.TrimSpace(emotionContext.Prompt); prompt != "" {
+			if strings.TrimSpace(emotionFusionRaw) == "" {
+				emotionFusionRaw = prompt
+			} else {
+				emotionFusionRaw = strings.TrimSpace(emotionFusionRaw) + "\n\n" + prompt
+			}
+		}
+	}
 	messages, promptTrace := buildProcessPromptMessages(processPromptInput{
 		BaseIdentity:              promptir.BaseIdentitySection(),
 		CharacterBase:             runtimeProfile.CharacterBase,
 		CharacterConfig:           sys1Result.CharacterConfig,
 		PersonalityConfig:         sys2Result.SystemInstruction,
 		PersonalityRaw:            personalityRaw,
-		EmotionFusionRaw:          buildEmotionFusionRaw(req.Runtime, charName),
+		EmotionFusionRaw:          emotionFusionRaw,
 		AdultIntimacyRaw:          adultIntimacyRaw,
 		MemoryInjectRaw:           sys2Result.MemoryInjectRaw,
 		AntiRepeatRaw:             antiRepeatRaw,
@@ -318,7 +339,7 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 	})
 	var toolDefs []tool.Tool
 	if s.toolRuntime != nil {
-		toolScope := toolScopeFromExtension(skillScope)
+		toolScope := prepareToolScope()
 		resolved, resolveErr := s.toolRuntime.ModelTools(ctx, toolScope)
 		if resolveErr != nil {
 			applog.TraceError(trace.WithStage("skill_tools_resolve_failed"), nil, resolveErr, "skill tool definitions unavailable")
@@ -399,7 +420,7 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 		}
 	}
 	s.emitDesktopPetChat(ctx, req, charID, convID, userMsgID, "response.started", 3)
-	reply, forceVoice, totalTokens, llmErr := s.invokeLLMWithTools(ctx, cfg, messages, trace, promptTrace, userMsgID, convID, charID, channel, requestID, req.UserID, req.SessionID, req.ExecContext, toolDefs, seenTools, toolExecCtx)
+	reply, forceVoice, totalTokens, llmErr := s.invokeLLMWithTools(ctx, cfg, messages, trace, promptTrace, userMsgID, convID, charID, channel, requestID, req.SpaceID, req.SessionID, req.ExecContext, toolDefs, seenTools, toolExecCtx)
 	if llmErr != nil {
 		s.emitDesktopPetChat(ctx, req, charID, convID, userMsgID, "response.failed", 4)
 		return nil, llmErr
@@ -410,13 +431,7 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 		reply = "操作已完成"
 	}
 
-	kind = expression.ChannelWeb
-	switch channel {
-	case "wechat":
-		kind = expression.ChannelWechat
-	case "qq":
-		kind = expression.ChannelQQ
-	}
+	kind = resolveExpressionChannel(channel, req.VoiceMessage)
 
 	priorAssistant := extractAssistantReplies(history)
 	var qualityFlags promptir.QualityFlags
@@ -445,15 +460,7 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 		reply = applyExpressionLengthLimit(reply, req.Runtime)
 	}
 
-	var maxLen int
-	switch kind {
-	case expression.ChannelWechat:
-		maxLen = util.MaxWechatMessageLen
-	case expression.ChannelQQ:
-		maxLen = util.MaxQQMessageLen
-	default:
-		maxLen = util.MaxWebMessageLen
-	}
+	maxLen := util.MaxWebMessageLen
 	realLines := util.SplitLongMessage(reply, maxLen)
 
 	realLines = DeduplicateAdjacentLines(realLines)
@@ -481,6 +488,13 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 		TotalTokens:          totalTokens,
 		PipelineMessages:     pipelineMessages,
 	}, nil
+}
+
+func resolveExpressionChannel(channel string, voiceMessage bool) expression.ChannelKind {
+	if voiceMessage {
+		return expression.ChannelVoice
+	}
+	return expression.ChannelWeb
 }
 
 func (s *service) PostCommitActions(ctx context.Context, result *ComputeResult) {
@@ -528,7 +542,7 @@ func mergeContext(a, b string) string {
 	return a + "\n\n" + b
 }
 
-func renderPluginContributions(contributions []extension.ContextContribution) (string, []string) {
+func renderPluginContributions(contributions []ContextContribution) (string, []string) {
 	parts := make([]string, 0, len(contributions))
 	sources := make([]string, 0, len(contributions))
 	for _, contribution := range contributions {
@@ -590,6 +604,9 @@ func extractAssistantReplies(history []map[string]string) []string {
 }
 
 func buildProactiveEmotionFromPsyche(runtime *interaction.RuntimeAssembly) string {
+	if !runtimegate.IsEnabled(runtimegate.EmotionExtensionID) {
+		return ""
+	}
 	if runtime == nil || runtime.Context.Psyche.Status != interaction.LoadStatusReady {
 		return ""
 	}

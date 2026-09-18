@@ -56,7 +56,7 @@ func (r *AmitiaxMigrationRegistry) Register(spec *AmitiaxMigrationSpec) error {
 		spec.TrustLevel = "user_installed"
 	}
 	if spec.ManifestVersion == "" {
-		spec.ManifestVersion = "v2"
+		spec.ManifestVersion = "1"
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()

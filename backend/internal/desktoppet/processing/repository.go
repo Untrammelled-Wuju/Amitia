@@ -47,6 +47,7 @@ type Repository interface {
 	UpdateProcessingActionOwned(tx *gorm.DB, actionID, executionID string, updates map[string]interface{}) (bool, error)
 	UpdateProcessingActionWithRowVersion(tx *gorm.DB, actionID string, expectedRowVersion int64, updates map[string]interface{}) (bool, error)
 	BeginProcessingActionAttempt(tx *gorm.DB, actionID string, expectedRowVersion int64, executionID string, sourceGenerationAttempt int) (*ProcessingActionAttempt, error)
+	CreateQueuedProcessingActionAttempt(tx *gorm.DB, actionID string, expectedRowVersion int64, sourceGenerationAttempt int) (*ProcessingActionAttempt, error)
 	ListProcessingActionAttempts(processingActionID string) ([]ProcessingActionAttempt, error)
 	GetLatestProcessingActionAttempt(processingActionID string) (*ProcessingActionAttempt, error)
 	CreateProcessingActionAttemptRecord(tx *gorm.DB, attempt *ProcessingActionAttempt) error
@@ -65,7 +66,7 @@ type Repository interface {
 	CreatePackage(pkg *Package) error
 	GetPackage(id string) (*Package, error)
 	UpdatePackageStatus(id string, updates map[string]interface{}) error
-	ListPackagesByUser(userID string, page, pageSize int) ([]Package, int64, error)
+	ListPackagesBySpace(spaceID string, page, pageSize int) ([]Package, int64, error)
 	ListPackagesByGenerationTask(generationTaskID string) ([]Package, error)
 	GetPackageByProcessingTaskID(processingTaskID string) (*Package, error)
 
@@ -380,6 +381,50 @@ func (r *repository) BeginProcessingActionAttempt(tx *gorm.DB, actionID string, 
 	return attempt, nil
 }
 
+func (r *repository) CreateQueuedProcessingActionAttempt(tx *gorm.DB, actionID string, expectedRowVersion int64, sourceGenerationAttempt int) (*ProcessingActionAttempt, error) {
+	var action ProcessingAction
+	if err := tx.Where("id = ? AND row_version = ?", actionID, expectedRowVersion).First(&action).Error; err != nil {
+		return nil, err
+	}
+
+	newAttemptNumber := action.ProcessingAttempt + 1
+	now := time.Now().Format(desktopPetTimeFormat)
+
+	result := tx.Model(&ProcessingAction{}).
+		Where("id = ? AND row_version = ?", actionID, expectedRowVersion).
+		Updates(map[string]interface{}{
+			"processing_attempt": newAttemptNumber,
+			"row_version":        expectedRowVersion + 1,
+			"error_code":         "",
+			"error_message":      "",
+			"updated_at":         now,
+		})
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	if result.RowsAffected == 0 {
+		return nil, fmt.Errorf("processing action %s row version mismatch", actionID)
+	}
+
+	attemptID := "pa_" + uuid.NewString()
+	attempt := &ProcessingActionAttempt{
+		ID:                      attemptID,
+		ProcessingActionID:      actionID,
+		ProcessingTaskID:        action.ProcessingTaskID,
+		ActionKey:               action.ActionKey,
+		AttemptNumber:           newAttemptNumber,
+		SourceGenerationAttempt: sourceGenerationAttempt,
+		Status:                  "queued",
+		Progress:                0,
+		CreatedAt:               now,
+		UpdatedAt:               now,
+	}
+	if err := tx.Create(attempt).Error; err != nil {
+		return nil, err
+	}
+	return attempt, nil
+}
+
 func (r *repository) ListProcessingActionAttempts(processingActionID string) ([]ProcessingActionAttempt, error) {
 	var attempts []ProcessingActionAttempt
 	err := r.db.Where("processing_action_id = ?", processingActionID).
@@ -418,10 +463,94 @@ func (r *repository) ListProcessedFramesByAction(processingActionID string) ([]P
 	err := r.db.Where("processing_action_id = ?", processingActionID).
 		Order("frame_index ASC").
 		Find(&frames).Error
+	if err == nil && len(frames) == 0 {
+		frames, err = r.listProcessedFramesFromActiveRevision(processingActionID)
+	}
 	if frames == nil {
 		frames = []ProcessedFrame{}
 	}
 	return frames, err
+}
+
+func (r *repository) listProcessedFramesFromActiveRevision(processingActionID string) ([]ProcessedFrame, error) {
+	var action ProcessingAction
+	if err := r.db.Where("id = ?", processingActionID).First(&action).Error; err != nil {
+		return nil, err
+	}
+	if action.ActiveRevisionID == "" {
+		return []ProcessedFrame{}, nil
+	}
+	var rev ProcessingRevision
+	if err := r.db.Where("id = ? AND status IN ?", action.ActiveRevisionID, []string{"committed", "active"}).First(&rev).Error; err != nil {
+		return []ProcessedFrame{}, nil
+	}
+	var arts []ProcessingArtifactRecord
+	if err := r.db.Where("revision_id = ? AND artifact_kind = ? AND stage = ?", action.ActiveRevisionID, "frame", "final").
+		Order("frame_index ASC").
+		Find(&arts).Error; err != nil {
+		return nil, err
+	}
+	sourcePathByArtifact := map[string]string{}
+	frames := make([]ProcessedFrame, 0, len(arts))
+	for _, art := range arts {
+		idx := 0
+		if art.FrameIndex != nil {
+			idx = *art.FrameIndex
+		}
+		var sourceFrameID string
+		if action.GenerationTaskActionID != "" {
+			_ = r.db.Table("desktop_pet_generation_frames").
+				Select("id").
+				Where("task_action_id = ? AND frame_index = ? AND status = ?", action.GenerationTaskActionID, idx, "succeeded").
+				Order("attempt_number DESC").
+				Limit(1).
+				Scan(&sourceFrameID).Error
+		}
+		sourcePath := ""
+		if sourceFrameID != "" {
+			var sourceFrame struct {
+				ResultImagePath string `gorm:"column:result_image_path"`
+			}
+			if err := r.db.Table("desktop_pet_generation_frames").
+				Select("result_image_path").
+				Where("id = ?", sourceFrameID).
+				Scan(&sourceFrame).Error; err == nil {
+				sourcePath = filepath.ToSlash(sourceFrame.ResultImagePath)
+			}
+		}
+		frame := ProcessedFrame{
+			ID:                 art.ID,
+			ProcessingActionID: processingActionID,
+			SourceFrameID:      sourceFrameID,
+			FrameIndex:         idx,
+			Status:             "committed",
+			ProcessedPath:      filepath.ToSlash(filepath.Join(rev.RootRelativePath, art.RelativePath)),
+			Width:              art.Width,
+			Height:             art.Height,
+			ContentHash:        art.ContentHash,
+			RevisionID:         action.ActiveRevisionID,
+			SourceArtifactID:   art.SourceArtifactID,
+			SourcePath:         sourcePath,
+		}
+		if art.SourceArtifactID != "" {
+			if sp, ok := sourcePathByArtifact[art.SourceArtifactID]; ok {
+				frame.SourcePath = sp
+			} else {
+				var row struct {
+					RelativePath string `gorm:"column:relative_path"`
+				}
+				if gerr := r.db.Table("desktop_pet_generation_artifacts").
+					Select("relative_path").
+					Where("id = ?", art.SourceArtifactID).
+					First(&row).Error; gerr == nil {
+					sourcePathByArtifact[art.SourceArtifactID] = filepath.ToSlash(row.RelativePath)
+					frame.SourcePath = filepath.ToSlash(row.RelativePath)
+				}
+			}
+		}
+		frames = append(frames, frame)
+	}
+	return frames, nil
 }
 
 func (r *repository) ListProcessedFramesByAttempt(processingAttemptID string) ([]ProcessedFrame, error) {
@@ -483,10 +612,10 @@ func (r *repository) UpdatePackageStatus(id string, updates map[string]interface
 	return r.db.Model(&Package{}).Where("id = ?", id).Updates(updates).Error
 }
 
-func (r *repository) ListPackagesByUser(userID string, page, pageSize int) ([]Package, int64, error) {
+func (r *repository) ListPackagesBySpace(spaceID string, page, pageSize int) ([]Package, int64, error) {
 	var packages []Package
 	var total int64
-	q := r.db.Model(&Package{}).Where("user_id = ?", userID)
+	q := r.db.Model(&Package{}).Where("space_id = ?", spaceID)
 	if err := q.Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
@@ -692,6 +821,21 @@ func (r *repository) GetActiveFrameArtifact(processingTaskID, actionKey string, 
 	}
 	var frame ProcessedFrame
 	if err := r.db.Where("processing_action_id = ? AND frame_index = ?", action.ID, frameIndex).First(&frame).Error; err != nil {
+		var rev ProcessingRevision
+		if rerr := r.db.Where("id = ? AND status IN ?", action.ActiveRevisionID, []string{"committed", "active"}).First(&rev).Error; rerr == nil {
+			var art ProcessingArtifactRecord
+			if aerr := r.db.Where("revision_id = ? AND artifact_kind = ? AND stage = ? AND frame_index = ?", action.ActiveRevisionID, "frame", "final", frameIndex).Order("created_at DESC").First(&art).Error; aerr == nil {
+				return &desktoppet_security.ArtifactReference{
+					ArtifactID:   processingTaskID + ":" + actionKey + ":" + strconv.Itoa(frameIndex),
+					OwnerSpaceID: task.SpaceID,
+					RootKind:     desktoppet_security.RootDesktopPets,
+					StorageKey:   filepath.ToSlash(filepath.Join(rev.RootRelativePath, art.RelativePath)),
+					ContentHash:  art.ContentHash,
+					ByteSize:     art.ByteSize,
+					MIME:         art.MimeType,
+				}, nil
+			}
+		}
 		return nil, fmt.Errorf("frame not found: %w", err)
 	}
 	if strings.TrimSpace(frame.ContentHash) == "" {
@@ -710,12 +854,12 @@ func (r *repository) GetActiveFrameArtifact(processingTaskID, actionKey string, 
 	}
 	artifactID := processingTaskID + ":" + actionKey + ":" + strconv.Itoa(frameIndex)
 	return &desktoppet_security.ArtifactReference{
-		ArtifactID:  artifactID,
-		OwnerUserID: task.UserID,
-		RootKind:    desktoppet_security.RootProcessingRevisions,
-		StorageKey:  frame.ProcessedPath,
-		ContentHash: frame.ContentHash,
-		ByteSize:    0,
-		MIME:        mimeType,
+		ArtifactID:   artifactID,
+		OwnerSpaceID: task.SpaceID,
+		RootKind:     desktoppet_security.RootDesktopPets,
+		StorageKey:   frame.ProcessedPath,
+		ContentHash:  frame.ContentHash,
+		ByteSize:     0,
+		MIME:         mimeType,
 	}, nil
 }

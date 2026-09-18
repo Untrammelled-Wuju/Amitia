@@ -123,7 +123,7 @@ func TestRelationshipStateAllFields(t *testing.T) {
 }
 
 func TestConversationStateExtendedFields(t *testing.T) {
-	scope := &InteractionScope{UserID: "u1", CharacterID: "c1", ConversationID: "conv1", Channel: "web"}
+	scope := &InteractionScope{SpaceID: "u1", CharacterID: "c1", ConversationID: "conv1", Channel: "web"}
 	cs := ConversationState{
 		ConversationID:         "conv1",
 		MessageCount:           12,
@@ -165,7 +165,7 @@ func TestConversationStateExtendedFields(t *testing.T) {
 	if cs.StateVersion != "5" {
 		t.Fatal("stateVersion")
 	}
-	if cs.Scope == nil || cs.Scope.UserID != "u1" {
+	if cs.Scope == nil || cs.Scope.SpaceID != "u1" {
 		t.Fatal("scope")
 	}
 	if cs.EmotionSnapshot == nil || cs.EmotionSnapshot.Primary != "joy" {
@@ -177,7 +177,7 @@ func TestConversationStateExtendedFields(t *testing.T) {
 }
 
 func TestConversationStateMarshalExtended(t *testing.T) {
-	scope := &InteractionScope{UserID: "u1", ConversationID: "c1", Channel: "web"}
+	scope := &InteractionScope{SpaceID: "u1", ConversationID: "c1", Channel: "web"}
 	cs := ConversationState{
 		ConversationID: "c1",
 		MessageCount:   3,
@@ -200,7 +200,7 @@ func TestConversationStateMarshalExtended(t *testing.T) {
 	if got.CurrentTopic != "greeting" {
 		t.Fatal("topic roundtrip")
 	}
-	if got.Scope == nil || got.Scope.UserID != "u1" {
+	if got.Scope == nil || got.Scope.SpaceID != "u1" {
 		t.Fatal("scope roundtrip")
 	}
 	if got.EmotionSnapshot == nil || got.EmotionSnapshot.Primary != "neutral" {

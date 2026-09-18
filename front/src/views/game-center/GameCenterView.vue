@@ -3,7 +3,7 @@
     <header class="page-head">
       <div class="page-copy">
 <h1>游戏模式</h1>
-        <p>通过游戏插件连接目标游戏。GameHost 只负责插件运行、权限与连接生命周期，具体感知和控制能力由插件提供。</p>
+        <p>游戏系统 v1 · 通过游戏插件连接目标游戏。GameHost 只负责插件运行、权限与连接生命周期，具体感知和控制能力由插件提供。</p>
       </div>
       <div class="head-actions">
         <el-button :icon="Refresh" :loading="loading" @click="refresh">刷新</el-button>
@@ -12,39 +12,6 @@
     </header>
 
     <el-alert v-if="error" :title="error" type="error" show-icon :closable="false" />
-
-    <section v-if="pendingApprovals.length" class="approval-section" aria-live="polite">
-      <div class="section-heading">
-        <div>
-          <h2>等待权限确认</h2>
-          <p>高风险游戏插件操作不会自动执行。每次确认只允许当前请求执行一次，超时后自动失效。</p>
-        </div>
-        <span class="section-count">{{ pendingApprovals.length }} 个</span>
-      </div>
-      <div class="approval-list">
-        <article v-for="approval in pendingApprovals" :key="approval.id" class="approval-card">
-          <div class="approval-copy">
-            <strong>{{ permissionLabel(approval.permissionId) }}</strong>
-            <span>{{ approval.pluginId }}<template v-if="approval.serviceId"> · {{ approval.serviceId }}</template></span>
-            <small v-if="approval.target?.path" class="approval-target" :title="approval.target.path">目标目录：{{ approval.target.path }}</small>
-            <small>仅本次请求 · {{ approvalExpiryLabel(approval.expiresAt) }}</small>
-          </div>
-          <div class="approval-actions">
-            <el-button
-              size="small"
-              :loading="approvalBusy === approval.id"
-              @click="resolveApproval(approval, false)"
-            >拒绝</el-button>
-            <el-button
-              type="primary"
-              size="small"
-              :loading="approvalBusy === approval.id"
-              @click="resolveApproval(approval, true)"
-            >允许一次</el-button>
-          </div>
-        </article>
-      </div>
-    </section>
 
     <section class="current-game-card" :class="{ 'is-connected': !!activeRuntime?.connected }">
       <div class="current-game-visual" aria-hidden="true">
@@ -66,10 +33,10 @@
           插件 Runtime 已连接{{ activeRuntime.ready ? "并完成准备" : "，正在准备中" }}。插件向 Agent 注册的能力可在对话中使用；GameHost 不解释这些能力的游戏语义。
         </p>
         <p v-else-if="activePlugin">
-          游戏扩展已安装。由插件检测并连接其支持的游戏，GameHost 只承载插件 Runtime 与通信通道。
+          游戏扩展已安装，由插件检测并连接其支持的游戏。
         </p>
         <p v-else>
-          添加一个 `.amitiax` 游戏扩展。安装完成后，Amitia 会自动把它归入游戏模式。
+          添加一个 `.gamex` 游戏扩展。安装完成后，Amitia 会自动把它归入游戏模式。
         </p>
 
         <div class="current-game-stats">
@@ -135,11 +102,11 @@
           :key="plugin.extensionId"
           class="game-card"
           :class="{ 'is-active': activePlugin?.extensionId === plugin.extensionId }"
-          @click="showPluginDetail(plugin)"
+          @click="openGamePlugin(plugin)"
         >
           <div class="game-card-top">
             <div class="game-icon">{{ gameInitial(plugin.name) }}</div>
-            <el-dropdown trigger="click" @command="(command) => pluginMenuAction(plugin, String(command))">
+            <el-dropdown trigger="click" @command="(command: string | number | object) => pluginMenuAction(plugin, String(command))">
               <button class="icon-button" type="button" aria-label="游戏扩展操作" @click.stop>
                 <el-icon><MoreFilled /></el-icon>
               </button>
@@ -147,7 +114,6 @@
                 <el-dropdown-menu>
                   <el-dropdown-item command="detail">扩展详情</el-dropdown-item>
                   <el-dropdown-item command="update">从本地更新</el-dropdown-item>
-                  <el-dropdown-item command="toggle">{{ plugin.enabled ? "禁用" : "启用" }}</el-dropdown-item>
                   <el-dropdown-item command="uninstall" divided>卸载</el-dropdown-item>
                 </el-dropdown-menu>
               </template>
@@ -166,69 +132,41 @@
 
           <div class="game-card-footer">
             <span>v{{ plugin.version }}</span>
-            <button class="text-action" type="button" @click.stop="showPluginDetail(plugin)">
-              查看详情
-              <el-icon><ArrowRight /></el-icon>
-            </button>
+            <div class="card-actions">
+              <el-button
+                v-if="pluginRuntime(plugin)?.state === 'running'"
+                size="small"
+                type="warning"
+                :loading="busy === plugin.extensionId"
+                @click.stop="stopPlugin(plugin)"
+              >停止</el-button>
+              <el-button
+                size="small"
+                type="primary"
+                :disabled="!isRuntimeStartable(pluginRuntime(plugin)?.state)"
+                :loading="busy === plugin.extensionId"
+                @click.stop="startPlugin(plugin)"
+              >启动</el-button>
+              <button class="text-action" type="button" @click.stop="openPluginRuntimeDetail(plugin)">
+                运行详情
+                <el-icon><ArrowRight /></el-icon>
+              </button>
+            </div>
           </div>
         </article>
 
         <button class="add-game-card" type="button" @click="openInstallDialog()">
           <span class="add-icon"><el-icon><Plus /></el-icon></span>
           <strong>添加游戏</strong>
-          <span>安装 .amitiax 游戏扩展</span>
+          <span>安装 .gamex 游戏扩展</span>
         </button>
       </div>
 
       <button v-else class="empty-game-state" type="button" @click="openInstallDialog()">
         <span class="empty-game-icon"><el-icon><Plus /></el-icon></span>
         <strong>添加第一个游戏</strong>
-        <span>选择或拖入 `.amitiax` 游戏扩展，安装前会进行安全检查和权限预览。</span>
+        <span>选择或拖入 `.gamex` 游戏扩展，安装前会进行安全检查和权限预览。</span>
       </button>
-    </section>
-
-    <section v-if="runtimes.length" class="content-section runtime-section">
-      <div class="section-heading">
-        <div>
-          <h2>运行连接</h2>
-          <p>这里只展示插件 Runtime 的连接和生命周期状态。协议、权限纪元和原始 Service RPC 仅在开发者访问已启用时开放。</p>
-        </div>
-        <span class="section-count">{{ readyRuntimeCount }}/{{ runtimes.length }} 已就绪</span>
-      </div>
-
-      <div class="runtime-list">
-        <article v-for="runtime in runtimes" :key="runtime.runtimeId" class="runtime-card">
-          <div class="runtime-main">
-            <span class="runtime-status-dot" :class="runtime.connected ? 'online' : 'offline'"></span>
-            <div class="runtime-copy">
-              <strong>{{ runtimeName(runtime) }}</strong>
-              <span>{{ runtime.connected ? "已连接" : "离线" }} · {{ stateLabel(runtime.state) }} · {{ healthLabel(runtime.health) }}</span>
-            </div>
-          </div>
-
-          <div class="runtime-actions">
-            <el-button
-              v-if="runtime.state !== 'running'"
-              size="small"
-              :loading="busy === runtime.runtimeId"
-              @click="runtimeAction(runtime.runtimeId, 'start')"
-            >启动</el-button>
-            <el-button
-              v-else
-              size="small"
-              :loading="busy === runtime.runtimeId"
-              @click="runtimeAction(runtime.runtimeId, 'restart')"
-            >重启</el-button>
-            <el-button
-              v-if="runtime.state === 'running'"
-              size="small"
-              :loading="busy === runtime.runtimeId"
-              @click="runtimeAction(runtime.runtimeId, 'stop')"
-            >停止</el-button>
-            <el-button size="small" text @click="showRuntimeDetail(runtime)">{{ developerAccess ? "开发者详情" : "运行详情" }}</el-button>
-          </div>
-        </article>
-      </div>
     </section>
 
     <el-dialog
@@ -251,11 +189,11 @@
           <span>{{ formatBytes(installFile.size) }} · {{ previewLoading ? `正在检查 ${uploadProgress}%` : "已选择" }}</span>
         </template>
         <template v-else>
-          <strong>选择或拖入 .amitiax 游戏扩展</strong>
+          <strong>选择或拖入 .gamex 游戏扩展</strong>
           <span>不会再要求填写后端宿主机文件路径</span>
         </template>
         <el-button :loading="previewLoading" @click="choosePackage">{{ installFile ? "重新选择" : "选择文件" }}</el-button>
-        <input ref="packageInput" class="sr-only" type="file" accept=".amitiax" @change="onPackageFile" />
+        <input ref="packageInput" class="sr-only" type="file" accept=".gamex" @change="onPackageFile" />
       </div>
 
       <el-progress
@@ -292,10 +230,27 @@
           show-icon
           :closable="false"
         />
+        <template v-else>
+          <el-alert
+            v-if="previewRequiresAdministrator"
+            title="该游戏插件需要 Windows 管理员权限来配置网络隔离。请关闭 Amitia，右键 Amitia 并选择“以管理员身份运行”，然后重新选择该插件包。"
+            type="warning"
+            show-icon
+            :closable="false"
+          />
+          <el-alert
+            v-if="nonAdministratorPreviewErrors.length"
+            :title="nonAdministratorPreviewErrors.join('；')"
+            type="error"
+            show-icon
+            :closable="false"
+          />
+        </template>
+
         <el-alert
-          v-else-if="installPreview.errors?.length"
-          :title="installPreview.errors.join('；')"
-          type="error"
+          v-if="previewIsGame && !installPreview.errors?.length && previewMatchesInstalledVersion"
+          :title="`版本 ${installPreview.version} 已安装，无需重复安装。`"
+          type="info"
           show-icon
           :closable="false"
         />
@@ -455,7 +410,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import { ElMessage, ElMessageBox } from "element-plus";
 import {
@@ -470,6 +425,7 @@ import { useApi } from "@/composables/useApi";
 import {
   installExtensionPackage,
   previewExtensionPackage,
+  setGameCenterExtensionEnabled,
 } from "@/views/extensions/api";
 import type { PackageImportPreview } from "@/views/extensions/types";
 
@@ -496,18 +452,6 @@ type Runtime = {
 
 type GameService = { serviceId: string; state?: string; health?: string };
 type PackageOperationView = { status?: string; errorCode?: string };
-type PendingApproval = {
-  id: string;
-  runtimeId: string;
-  pluginId: string;
-  serviceId?: string;
-  extensionId: string;
-  permissionId: string;
-  target?: { type?: string; id?: string; path?: string; url?: string };
-  status: string;
-  requestedAt: string;
-  expiresAt: string;
-};
 
 const api = useApi();
 const router = useRouter();
@@ -518,11 +462,6 @@ const error = ref("");
 const plugins = ref<Plugin[]>([]);
 const runtimes = ref<Runtime[]>([]);
 const developerAccess = ref(false);
-const pendingApprovals = ref<PendingApproval[]>([]);
-const approvalBusy = ref("");
-let approvalPollTimer: number | undefined;
-
-const readyRuntimeCount = computed(() => runtimes.value.filter((item) => item.ready).length);
 const activeRuntime = computed<Runtime | null>(() =>
   runtimes.value.find((item) => item.connected && item.ready)
   || runtimes.value.find((item) => item.connected)
@@ -579,8 +518,22 @@ const installAcknowledged = ref(false);
 const previewIsGame = computed(() => {
   const preview = installPreview.value;
   if (!preview) return false;
-  return preview.managementTarget === "game_center" || preview.contributionKinds?.includes("game_plugin") === true;
+  return preview.managementTarget === "game_center" || preview.contributionKinds?.includes("gamex") === true;
 });
+
+const previewRequiresAdministrator = computed(() =>
+  (installPreview.value?.errors || []).some((error) =>
+    error.includes("gamex_network_sandbox_unavailable")
+    && error.includes("Windows")
+    && (error.includes("requires elevation") || error.includes("exit status 5")),
+  ),
+);
+
+const nonAdministratorPreviewErrors = computed(() =>
+  (installPreview.value?.errors || []).filter(
+    (error) => !error.includes("gamex_network_sandbox_unavailable"),
+  ),
+);
 
 const needsInstallAcknowledgement = computed(() => {
   const preview = installPreview.value;
@@ -592,10 +545,18 @@ const needsInstallAcknowledgement = computed(() => {
     || (preview.warnings?.length || 0) > 0;
 });
 
+const previewMatchesInstalledVersion = computed(() => {
+  const preview = installPreview.value;
+  if (!preview?.currentVersion) return false;
+  return preview.conflict === "same-version-same-content"
+    || preview.currentVersion === preview.version;
+});
+
 const canInstallPreview = computed(() => {
   const preview = installPreview.value;
   if (!preview || previewLoading.value || installLoading.value) return false;
   if (!previewIsGame.value || !preview.compatible || (preview.errors?.length || 0) > 0) return false;
+  if (previewMatchesInstalledVersion.value) return false;
   if (installMode.value === "update" && updateTarget.value && preview.id !== updateTarget.value.extensionId) return false;
   return !needsInstallAcknowledgement.value || installAcknowledged.value;
 });
@@ -647,6 +608,8 @@ async function bindRuntimeAgentContexts(runtimeItems: Runtime[]) {
 async function bindRuntimeAgentContext(runtimeId: string) {
   runtimeId = String(runtimeId || "").trim();
   if (!runtimeId) return;
+  const runtime = runtimes.value.find((item) => item.runtimeId === runtimeId);
+  if (runtime && !runtime.connected && !runtime.ready) return;
   try {
     await api.post(
       `/api/game-center/runtimes/${encodeURIComponent(runtimeId)}/agent-context`,
@@ -661,51 +624,6 @@ async function bindRuntimeAgentContext(runtimeId: string) {
   }
 }
 
-async function refreshApprovals() {
-  try {
-    const result = await api.get<{ items?: PendingApproval[] }>("/api/game-center/approvals");
-    pendingApprovals.value = (result?.items ?? []).filter((item) => item?.status === "pending");
-  } catch {
-    // Approval polling must never make the whole Game Center unavailable.
-  }
-}
-
-async function resolveApproval(approval: PendingApproval, approve: boolean) {
-  if (!approval?.id || approvalBusy.value) return;
-  approvalBusy.value = approval.id;
-  try {
-    await api.post(
-      `/api/game-center/approvals/${encodeURIComponent(approval.id)}/${approve ? "approve" : "reject"}`,
-      { reason: approve ? "approved from Game Center" : "rejected from Game Center" },
-      { timeout: 10000 },
-    );
-    ElMessage.success(approve ? "已允许本次操作" : "已拒绝本次操作");
-    await refreshApprovals();
-  } catch (err: any) {
-    ElMessage.error(err?.message || "权限确认失败");
-    await refreshApprovals();
-  } finally {
-    approvalBusy.value = "";
-  }
-}
-
-function permissionLabel(permissionId: string) {
-  const labels: Record<string, string> = {
-    "gamehost.control": "允许游戏插件执行本次控制操作",
-    "gamehost.artifact.deploy": "允许游戏插件执行本次制品部署",
-    "service.runtime.execute": "允许启动本次插件 Runtime",
-    "service.process.spawn": "允许本次插件进程操作",
-  };
-  return labels[permissionId] || `允许一次：${permissionId}`;
-}
-
-function approvalExpiryLabel(expiresAt: string) {
-  const expires = Date.parse(expiresAt);
-  if (!Number.isFinite(expires)) return "即将过期";
-  const seconds = Math.max(0, Math.ceil((expires - Date.now()) / 1000));
-  return `${seconds} 秒后过期`;
-}
-
 function gameInitial(name: string) {
   const cleaned = String(name || "GAME").trim();
   return cleaned.slice(0, 4).toUpperCase();
@@ -717,9 +635,8 @@ function pluginRuntime(plugin: Plugin) {
     || null;
 }
 
-function runtimeName(runtime: Runtime) {
-  const plugin = plugins.value.find((item) => item.pluginId === runtime.pluginId);
-  return plugin?.name || runtime.pluginId || "Game Runtime";
+function isRuntimeStartable(state?: string) {
+  return state === "created" || state === "stopped";
 }
 
 function pluginSupportsCapability(plugin: Plugin | null | undefined, capability: string) {
@@ -859,8 +776,8 @@ async function onPackageDrop(event: DragEvent) {
 }
 
 async function setPackageFile(file: File) {
-  if (!file.name.toLowerCase().endsWith(".amitiax")) {
-    ElMessage.warning("请选择 .amitiax 游戏扩展包");
+  if (!/\.gamex$/i.test(file.name)) {
+    ElMessage.warning("请选择 .gamex 游戏扩展包");
     return;
   }
   installFile.value = file;
@@ -883,8 +800,14 @@ async function buildPackagePreview() {
       "game-center",
     );
     installPreview.value = preview;
-    if (preview.managementTarget !== "game_center" && !preview.contributionKinds?.includes("game_plugin")) {
-      ElMessage.error("该 .amitiax 包不是游戏扩展，已阻止从游戏模式安装");
+    if (preview.currentVersion) {
+      installMode.value = "update";
+    }
+    if (
+      preview.managementTarget !== "game_center"
+      && !preview.contributionKinds?.includes("gamex")
+    ) {
+      ElMessage.error("该扩展包不是游戏扩展，已阻止从游戏模式安装");
       return;
     }
     if (updateTarget.value && preview.id !== updateTarget.value.extensionId) {
@@ -902,6 +825,7 @@ async function buildPackagePreview() {
 async function commitPackageInstall() {
   const preview = installPreview.value;
   if (!preview || !canInstallPreview.value) return;
+  const isNewInstall = installMode.value === "install" && !preview.currentVersion;
   installLoading.value = true;
   try {
     const acknowledged = installAcknowledged.value || !needsInstallAcknowledgement.value;
@@ -915,10 +839,13 @@ async function commitPackageInstall() {
         signerChange: acknowledged,
         configMigration: acknowledged,
       },
-      installMode.value === "update" ? updateTarget.value?.extensionId || "" : "",
+      installMode.value === "update" ? updateTarget.value?.extensionId || preview.id : "",
       "game-center",
     );
     await waitForPackageOperation(result.operationId);
+    if (isNewInstall && !result.enabled) {
+      await setGameCenterExtensionEnabled(result.extensionId || preview.id, true);
+    }
     ElMessage.success(installMode.value === "update" ? "游戏扩展已更新" : "游戏扩展已安装");
     installDialogVisible.value = false;
     await refresh();
@@ -947,6 +874,13 @@ async function waitForPackageOperation(operationId?: string) {
   throw new Error("扩展包操作等待超时，请刷新游戏中心检查最终状态");
 }
 
+async function openGamePlugin(plugin: Plugin) {
+  await router.push({
+    name: "gamePlugin",
+    query: { extensionId: plugin.extensionId, pluginId: plugin.pluginId },
+  });
+}
+
 async function pluginMenuAction(plugin: Plugin, command: string) {
   if (command === "detail") {
     await showPluginDetail(plugin);
@@ -954,10 +888,6 @@ async function pluginMenuAction(plugin: Plugin, command: string) {
   }
   if (command === "update") {
     openInstallDialog(plugin);
-    return;
-  }
-  if (command === "toggle") {
-    await togglePlugin(plugin);
     return;
   }
   if (command === "uninstall") {
@@ -972,8 +902,8 @@ async function showPluginDetail(plugin: Plugin) {
   pluginHealth.value = null;
   try {
     const [detail, healthResult] = await Promise.all([
-      api.get<Record<string, any>>(`/api/game-center/plugins/${encodeURIComponent(plugin.pluginId)}`, { extensionId: plugin.extensionId }),
-      api.get<Record<string, any>>(`/api/game-center/plugins/${encodeURIComponent(plugin.pluginId)}/health`),
+      api.get<Record<string, any>>(`/api/game-center/plugins/detail?pluginId=${encodeURIComponent(plugin.pluginId)}&extensionId=${encodeURIComponent(plugin.extensionId)}`),
+      api.get<Record<string, any>>(`/api/game-center/plugins/detail/health?pluginId=${encodeURIComponent(plugin.pluginId)}`),
     ]);
     pluginDetail.value = detail;
     pluginHealth.value = healthResult;
@@ -1030,7 +960,7 @@ function openRpc(service: GameService) {
 
 async function invokeRpc() {
   if (!developerAccess.value) {
-    ElMessage.error("当前账号没有 GameHost 开发者访问权限");
+    ElMessage.error("当前 Space 没有 GameHost 开发者访问权限");
     rpcDialogVisible.value = false;
     return;
   }
@@ -1071,17 +1001,65 @@ async function invokeRpc() {
   }
 }
 
-async function togglePlugin(plugin: Plugin) {
+async function startPlugin(plugin: Plugin) {
   busy.value = plugin.extensionId;
   try {
-    await api.post(`/api/game-center/extensions/${encodeURIComponent(plugin.extensionId)}/${plugin.enabled ? "disable" : "enable"}`);
-    ElMessage.success(plugin.enabled ? "游戏扩展已禁用" : "游戏扩展已启用");
+    if (!plugin.enabled) {
+      await setGameCenterExtensionEnabled(plugin.extensionId, true);
+      await refresh();
+    }
+    const runtime = pluginRuntime(plugin);
+    if (!runtime) {
+      ElMessage.warning("插件暂无可用运行连接，无法启动");
+      return;
+    }
+    if (!isRuntimeStartable(runtime.state)) {
+      await refresh();
+      const currentRuntime = pluginRuntime(plugin);
+      if (currentRuntime?.state === "running") {
+        ElMessage.success("插件已在运行中");
+        return;
+      }
+      ElMessage.warning(`当前运行时状态为“${stateLabel(currentRuntime?.state)}”，暂不能启动`);
+      return;
+    }
+    await api.post(`/api/game-center/runtimes/${encodeURIComponent(runtime.runtimeId)}/start`, undefined, { timeout: 125000 });
+    ElMessage.success("启动请求已提交");
     await refresh();
   } catch (err: any) {
-    ElMessage.error(err?.message || "游戏扩展状态更新失败");
+    ElMessage.error(err?.message || "插件启动失败");
+    await refresh();
   } finally {
     busy.value = "";
   }
+}
+
+async function stopPlugin(plugin: Plugin) {
+  busy.value = plugin.extensionId;
+  try {
+    const runtime = pluginRuntime(plugin);
+    if (runtime && runtime.state === "running") {
+      await api.post(`/api/game-center/runtimes/${encodeURIComponent(runtime.runtimeId)}/stop`, undefined, { timeout: 125000 });
+      await refresh();
+    }
+    await setGameCenterExtensionEnabled(plugin.extensionId, false);
+    ElMessage.success("插件已停止并禁用");
+    await refresh();
+  } catch (err: any) {
+    ElMessage.error(err?.message || "插件停止失败");
+    await refresh();
+  } finally {
+    busy.value = "";
+  }
+}
+
+function openPluginRuntimeDetail(plugin: Plugin) {
+  const runtime = pluginRuntime(plugin);
+  if (!runtime) {
+    ElMessage.warning("插件暂无运行连接");
+    return;
+  }
+  void showRuntimeDetail(runtime);
 }
 
 async function uninstall(plugin: Plugin) {
@@ -1147,6 +1125,19 @@ async function uninstall(plugin: Plugin) {
 async function runtimeAction(runtimeId: string, action: "start" | "stop" | "restart") {
   busy.value = runtimeId;
   try {
+    if (action === "start") {
+      const runtime = runtimes.value.find((item) => item.runtimeId === runtimeId);
+      if (!isRuntimeStartable(runtime?.state)) {
+        await refresh();
+        const currentRuntime = runtimes.value.find((item) => item.runtimeId === runtimeId);
+        if (currentRuntime?.state === "running") {
+          ElMessage.success("运行时已在运行中");
+        } else {
+          ElMessage.warning(`当前运行时状态为“${stateLabel(currentRuntime?.state)}”，暂不能启动`);
+        }
+        return;
+      }
+    }
     await api.post(`/api/game-center/runtimes/${encodeURIComponent(runtimeId)}/${action}`, undefined, { timeout: 125000 });
     ElMessage.success(action === "start" ? "启动请求已提交" : action === "stop" ? "停止请求已提交" : "重启请求已提交");
     await refresh();
@@ -1191,17 +1182,6 @@ async function controlAction(runtimeId: string, action: string, successMessage =
 
 onMounted(() => {
   void refresh();
-  void refreshApprovals();
-  approvalPollTimer = window.setInterval(() => {
-    void refreshApprovals();
-  }, 1000);
-});
-
-onBeforeUnmount(() => {
-  if (approvalPollTimer !== undefined) {
-    window.clearInterval(approvalPollTimer);
-    approvalPollTimer = undefined;
-  }
 });
 </script>
 
@@ -1255,51 +1235,6 @@ onBeforeUnmount(() => {
 .page-head {
   gap: 20px;
   align-items: flex-start;
-}
-
-.approval-section {
-  border: 1px solid var(--game-border);
-  border-radius: 16px;
-  padding: 18px;
-  background: var(--game-panel);
-}
-
-.approval-list {
-  display: grid;
-  gap: 10px;
-  margin-top: 14px;
-}
-
-.approval-card {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 14px;
-  border: 1px solid var(--game-border-light);
-  border-radius: 12px;
-  background: var(--game-panel-soft);
-}
-
-.approval-copy {
-  min-width: 0;
-  display: grid;
-  gap: 3px;
-}
-
-.approval-copy span,
-.approval-copy small {
-  color: var(--game-text-muted);
-}
-
-.approval-target {
-  overflow-wrap: anywhere;
-}
-
-.approval-actions {
-  display: flex;
-  flex-shrink: 0;
-  gap: 8px;
 }
 
 .page-copy {
@@ -1662,6 +1597,12 @@ onBeforeUnmount(() => {
   background: transparent;
   cursor: pointer;
   color: var(--game-text-secondary);
+}
+
+.card-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .text-action:hover {
@@ -2103,5 +2044,6 @@ onBeforeUnmount(() => {
   .runtime-actions {
     flex-wrap: wrap;
   }
+
 }
 </style>

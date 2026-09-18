@@ -92,9 +92,10 @@ SPDX-License-Identifier: AGPL-3.0-only
             <el-form-item label="音调">
               <el-input-number
                 v-model="form.pitch"
-                :min="-12"
-                :max="12"
-                :step="1"
+                :min="0.5"
+                :max="2.0"
+                :step="0.1"
+                :precision="1"
                 controls-position="right"
                 style="width: 100%"
               />
@@ -217,10 +218,16 @@ const modelConfig = useModelConfig({
   showDetect: false,
   modelPlaceholder: "seed-tts-2.0 / tts-1 / eleven_multilingual_v2",
   defaultIsActive: 1,
+  payloadFields: [
+    "name", "apiType", "apiKey", "baseUrl", "resourceId", "voiceType",
+    "speed", "pitch", "volume", "cloneResourceId", "realtimeAppId",
+    "realtimeAccessToken", "realtimeSecretKey",
+  ],
+  preserveEmptyOnUpdateFields: ["apiKey", "realtimeAccessToken", "realtimeSecretKey"],
   extraFormFields: {
     voiceType: "zh_female_vv_uranus_bigtts",
     speed: 1.0,
-    pitch: 0,
+    pitch: 1.0,
     volume: 1.0,
     cloneResourceId: "volc.megatts.timbre",
     realtimeAppId: "",

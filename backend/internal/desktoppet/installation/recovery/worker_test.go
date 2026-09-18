@@ -341,7 +341,7 @@ func TestRecoveryWorker_SwitchBindingCommitted_RecoversMissingDesiredRevision(t 
 		OperationType: operation.TypeSwitch,
 		Status:        operation.OpStatusWaitingRuntimeACK,
 		Stage:         operation.OpStageWaitingRuntimeACK,
-		UserID:        "user-1",
+		SpaceID:       "user-1",
 		DeviceID:      "device-1",
 		RuntimeID:     "runtime-1",
 	}
@@ -689,7 +689,7 @@ func TestRecoveryWorker_WaitingRuntimeACK_RecoversMissingDesiredRevision(t *test
 		OperationType: operation.TypeEnable,
 		Status:        operation.OpStatusWaitingRuntimeACK,
 		Stage:         operation.OpStageWaitingRuntimeACK,
-		UserID:        "user-1",
+		SpaceID:       "user-1",
 		DeviceID:      "device-1",
 		RuntimeID:     "runtime-1",
 	}
@@ -724,7 +724,7 @@ func TestRecoveryWorker_RuntimeApplied_RecoversMissingRevisionBeforeFinalizer(t 
 		OperationType: operation.TypeUninstall,
 		Status:        operation.OpStatusWaitingRuntimeACK,
 		Stage:         operation.OpStageRuntimeApplied,
-		UserID:        "user-1",
+		SpaceID:       "user-1",
 		DeviceID:      "device-1",
 		RuntimeID:     "runtime-1",
 	}
@@ -774,7 +774,7 @@ func TestRecoveryWorker_SwitchDesiredCommitted_RecoversMissingDesiredRevision(t 
 		OperationType: operation.TypeSwitch,
 		Status:        operation.OpStatusWaitingRuntimeACK,
 		Stage:         operation.OpStageWaitingRuntimeACK,
-		UserID:        "user-1",
+		SpaceID:       "user-1",
 		DeviceID:      "device-1",
 		RuntimeID:     "runtime-1",
 	}
@@ -838,7 +838,7 @@ func TestRecoveryWorker_CancelInFlight_RecoversMissingDesiredRevisionBeforeCance
 		OperationType: operation.TypeEnable,
 		Status:        operation.OpStatusCancelRequested,
 		Stage:         operation.OpStageWaitingRuntimeACK,
-		UserID:        "user-1",
+		SpaceID:       "user-1",
 		DeviceID:      "device-1",
 		RuntimeID:     "runtime-1",
 	}

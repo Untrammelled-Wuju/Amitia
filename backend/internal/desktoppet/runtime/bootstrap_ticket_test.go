@@ -211,7 +211,7 @@ func TestBootstrapTicket_WrongUserTicket(t *testing.T) {
 	}
 }
 
-func TestBootstrapTicket_RevokeUserTickets(t *testing.T) {
+func TestBootstrapTicket_RevokeSpaceTickets(t *testing.T) {
 	db := newTestTicketDB(t)
 	repo := NewBootstrapTicketRepository(db)
 
@@ -222,7 +222,7 @@ func TestBootstrapTicket_RevokeUserTickets(t *testing.T) {
 		}
 	}
 
-	affected, err := repo.RevokeUserTickets(context.Background(), "user-1")
+	affected, err := repo.RevokeSpaceTickets(context.Background(), "user-1")
 	if err != nil {
 		t.Fatalf("revoke user tickets: %v", err)
 	}

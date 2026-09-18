@@ -15,7 +15,7 @@ import (
 func createTestArchive(t *testing.T, path string) {
 	t.Helper()
 	manifestJSON := `{
-		"manifestVersion": 2,
+		"manifestVersion": 1,
 		"extension": {
 			"id": "com.example/test",
 			"name": {"default": "Test"},

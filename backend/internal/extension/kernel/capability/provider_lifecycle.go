@@ -298,7 +298,7 @@ func toInstanceEventPayload(inst *CapabilityProviderInstance, at time.Time) Prov
 		ProviderID:         inst.ProviderID,
 		CapabilityID:       inst.CapabilityID,
 		Placement:          inst.Placement,
-		UserID:             inst.UserID,
+		SpaceID:            inst.SpaceID,
 		DeviceID:           inst.DeviceID,
 		RuntimeID:          inst.RuntimeID,
 		RuntimeInstanceID:  inst.RuntimeInstanceID,

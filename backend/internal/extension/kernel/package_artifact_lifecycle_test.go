@@ -172,7 +172,7 @@ func TestPackageArtifactPreviewCancelAndExpiryRelease(t *testing.T) {
 	artifact := putPackageArtifactForTest(t, repository, store, []byte("preview archive"), time.Now().Add(-time.Hour))
 	now := time.Now().UTC()
 	makePreview := func(id string, expires time.Time) PackagePreviewSession {
-		return PackagePreviewSession{SessionID: id, UserID: "1", ScopeType: "global", ArtifactID: artifact.ArtifactID,
+		return PackagePreviewSession{SessionID: id, SpaceID: "1", ScopeType: "global", ArtifactID: artifact.ArtifactID,
 			ExtensionID: artifact.ExtensionID, Version: artifact.Version, Status: "ready", ArchiveHash: artifact.ArchiveHash,
 			ManifestHash: artifact.ManifestHash, ContentTreeHash: artifact.ContentTreeHash, RiskFlagsJSON: "[]",
 			RequiredConfirmationsJSON: "[]", DependencyResultJSON: "[]", PreviewResultJSON: "{}",

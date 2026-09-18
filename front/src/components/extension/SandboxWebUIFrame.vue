@@ -4,11 +4,24 @@ import type { UIContributionSummary } from "@/stores/extensionUI";
 import { apiClient } from "@/composables/useApi";
 import { resolveHostEnvironment } from "@/composables/useHostEnvironment";
 import ExtensionRenderState from "./ExtensionRenderState.vue";
+import {
+  buildSandboxThemeSnapshot,
+  buildSandboxThemeTokens,
+  claimSandboxSession,
+  getOrCreateSandboxSession,
+  isSandboxSessionMissingError,
+  putCachedSandboxSession,
+  releaseSandboxSessionClaim,
+  sandboxSessionKey,
+  takeCachedSandboxSession,
+  type SandboxSessionRecord,
+} from "./sandboxSessionCache";
 
 const props = defineProps<{
   contribution: UIContributionSummary;
   context?: Record<string, unknown>;
   slotId: string;
+  surfaceState?: Record<string, unknown>;
   hostActions?: Record<string, (input?: unknown) => unknown | Promise<unknown>>;
 }>();
 
@@ -30,27 +43,75 @@ const error = ref<string | null>(null);
 const iframeLoaded = ref(false);
 const ready = ref(false);
 const preferredHeight = ref<number | null>(null);
+const preferredWidth = ref<number | null>(null);
+const dismissCounter = ref(0);
 let bridgePort: MessagePort | null = null;
+let composerResizeObserver: ResizeObserver | null = null;
 
 const PROTOCOL_VERSION = "amitia-webui-bridge-v1";
 
-const uiContext = computed(() => props.context ?? {});
+const hostContext = computed<Record<string, unknown>>(() => props.context ?? {});
+const uiContext = computed<Record<string, unknown>>(() => ({
+  ...hostContext.value,
+  surfaceState: props.surfaceState ?? {},
+}));
 const surfaceRole = computed(() => String((uiContext.value.surface as Record<string, unknown> | undefined)?.role ?? "main"));
+const overlayMode = computed(() => surfaceRole.value === "composer" || surfaceRole.value === "overlay");
+const composerExpanded = computed(() => overlayMode.value && ((preferredWidth.value ?? 32) > 32 || (preferredHeight.value ?? 32) > 32));
+const surfaceStateWithDismiss = computed<Record<string, unknown>>(() => ({
+  ...(props.surfaceState ?? {}),
+  dismissToken: dismissCounter.value,
+}));
+
+function onDocumentPointerDown(event: PointerEvent) {
+  if (!composerExpanded.value) return;
+  const iframe = iframeRef.value;
+  if (!iframe) return;
+  const target = event.target as Node | null;
+  if (!target) return;
+  if (target === iframe || iframe.contains(target)) return;
+  dismissCounter.value += 1;
+}
 const iframeStyle = computed(() => {
+  if (overlayMode.value) {
+    return {
+      width: `${preferredWidth.value || 32}px`,
+      height: `${preferredHeight.value || 32}px`,
+    };
+  }
   const height = preferredHeight.value;
   if (!height || ["sidebar", "main"].includes(surfaceRole.value)) return undefined;
   return { height: `${height}px` };
 });
 
-const sessionScopeKey = computed(() =>
-  `${props.contribution.contributionId}:${props.contribution.generation}:${uiContext.value.characterId || ""}:${uiContext.value.conversationId || ""}`
+const sessionCacheKey = computed(() =>
+  sandboxSessionKey({
+    contribution: props.contribution,
+    context: uiContext.value,
+    slotId: props.slotId,
+  })
 );
 
 let serverCapabilities: string[] = [];
 let serverGrantedPerms: string[] = [];
 let serverGrantedScopes: string[] = [];
+let activeSessionKey = "";
 
 let restartToken = 0;
+let restartPromise: Promise<void> | null = null;
+
+function applySession(data: SandboxSessionRecord, cacheKey: string) {
+  sessionId.value = data.sessionId;
+  sessionNonce.value = data.nonce;
+  sessionToken.value = data.token;
+  sessionOrigin.value = data.origin;
+  sessionCSP.value = data.csp;
+  resourceUrl.value = data.resourceUrl;
+  serverCapabilities = data.capabilities;
+  serverGrantedPerms = data.grantedPerms;
+  serverGrantedScopes = data.grantedScopes;
+  activeSessionKey = cacheKey;
+}
 
 async function createSession(expectedToken: number) {
   if (expectedToken !== restartToken) return;
@@ -62,64 +123,47 @@ async function createSession(expectedToken: number) {
   serverGrantedPerms = [];
   serverGrantedScopes = [];
   try {
-    const surfaceData = (uiContext.value.surface as Record<string, unknown> | undefined) ?? {};
-    const surfaceRole = String(surfaceData.role ?? "main");
-    const themeData = (uiContext.value.theme as Record<string, unknown> | undefined) ?? {};
-    const env = resolveHostEnvironment();
-    const res = await apiClient.post<{
-      sessionId: string;
-      nonce: string;
-      token: string;
-      origin: string;
-      csp: string;
-      resourceUrl?: string;
-      entryUrl?: string;
-      capabilities?: string[];
-      grantedPerms?: string[];
-      grantedScopes?: string[];
-    }>("/api/extension/webui/session", {
-      contributionId: props.contribution.contributionId,
-      extensionId: props.contribution.extensionId,
-      moduleId: props.contribution.moduleId,
+    const cacheKey = sessionCacheKey.value;
+    claimSandboxSession(cacheKey);
+    const cached = takeCachedSandboxSession(cacheKey);
+    if (cached) {
+      try {
+        await apiClient.get(`/api/extension/webui/session/${cached.sessionId}`);
+        if (expectedToken !== restartToken) {
+          releaseSandboxSessionClaim(cacheKey);
+          return;
+        }
+        applySession(cached, cacheKey);
+        loading.value = false;
+        return;
+      } catch (e) {
+        if (!isSandboxSessionMissingError(e)) {
+          applySession(cached, cacheKey);
+          loading.value = false;
+          return;
+        }
+      }
+    }
+    const data = await getOrCreateSandboxSession({
+      contribution: props.contribution,
+      context: uiContext.value,
       slotId: props.slotId,
-      generation: props.contribution.generation,
-      surface: surfaceRole,
-      surfaceRole,
-      host: env.host,
-      os: env.os,
-      platform: env.platform,
-      characterId: (uiContext.value.characterId as string) || "",
-      conversationId: (uiContext.value.conversationId as string) || "",
-      theme: {
-        mode: themeData.mode || (uiContext.value.hostTheme as string) || "light",
-        density: themeData.density || "default",
-        tokens: themeData.tokens as Record<string, string> || buildThemeTokens(),
-      },
-      locale: (uiContext.value.locale as string) || navigator.language || "en",
-      uiContext: uiContext.value,
-      sandbox: props.contribution.sandbox ?? "web_restricted",
-      entryPath: props.contribution.entryPath ?? "index.html",
-      allowedActions: (props.contribution.actions ?? []).map((a) => a.actionId),
     });
     if (expectedToken !== restartToken) {
-      const staleSid = res.data?.sessionId ?? "";
+      const staleSid = data?.sessionId ?? "";
       if (staleSid) {
         apiClient.delete(`/api/extension/webui/session/${staleSid}`).catch(() => {});
       }
+      releaseSandboxSessionClaim(cacheKey);
       return;
     }
-    const data = res.data;
-    sessionId.value = data.sessionId;
-    sessionNonce.value = data.nonce;
-    sessionToken.value = data.token;
-    sessionOrigin.value = data.origin;
-    sessionCSP.value = data.csp;
-    resourceUrl.value = data.resourceUrl || data.entryUrl || "";
-    serverCapabilities = data.capabilities || [];
-    serverGrantedPerms = data.grantedPerms || [];
-    serverGrantedScopes = data.grantedScopes || [];
+    applySession(data, cacheKey);
   } catch (e) {
-    if (expectedToken !== restartToken) return;
+    if (expectedToken !== restartToken) {
+      releaseSandboxSessionClaim(sessionCacheKey.value);
+      return;
+    }
+    releaseSandboxSessionClaim(sessionCacheKey.value);
     error.value = e instanceof Error ? e.message : String(e);
     emit("error", error.value);
   } finally {
@@ -132,43 +176,80 @@ async function createSession(expectedToken: number) {
 async function destroySession() {
   bridgePort?.close();
   bridgePort = null;
-  if (!sessionId.value) return;
+  const key = activeSessionKey || sessionCacheKey.value;
+  if (!sessionId.value) {
+    releaseSandboxSessionClaim(key);
+    return;
+  }
   try {
     await apiClient.delete(`/api/extension/webui/session/${sessionId.value}`);
   } catch {
   }
+  releaseSandboxSessionClaim(key);
   sessionId.value = "";
   sessionNonce.value = "";
   sessionToken.value = "";
   serverCapabilities = [];
   serverGrantedPerms = [];
   serverGrantedScopes = [];
+  activeSessionKey = "";
   ready.value = false;
 }
 
-async function disposeSession() {
+function stashSession() {
   bridgePort?.close();
   bridgePort = null;
   if (!sessionId.value) return;
-  const oldSessionId = sessionId.value;
+  const entry: SandboxSessionRecord = {
+    sessionId: sessionId.value,
+    nonce: sessionNonce.value,
+    token: sessionToken.value,
+    origin: sessionOrigin.value,
+    csp: sessionCSP.value,
+    resourceUrl: resourceUrl.value,
+    capabilities: [...serverCapabilities],
+    grantedPerms: [...serverGrantedPerms],
+    grantedScopes: [...serverGrantedScopes],
+  };
+  const key = activeSessionKey || sessionCacheKey.value;
+  putCachedSandboxSession(key, entry);
+  releaseSandboxSessionClaim(key);
   sessionId.value = "";
   sessionNonce.value = "";
   sessionToken.value = "";
+  sessionOrigin.value = "";
+  sessionCSP.value = "";
+  resourceUrl.value = "";
   serverCapabilities = [];
   serverGrantedPerms = [];
   serverGrantedScopes = [];
+  activeSessionKey = "";
   ready.value = false;
-  try {
-    await apiClient.delete(`/api/extension/webui/session/${oldSessionId}`);
-  } catch {
-  }
 }
 
 async function restartSession() {
+  if (restartPromise) return restartPromise;
   const token = ++restartToken;
-  await disposeSession();
-  if (token !== restartToken) return;
-  await createSession(token);
+  restartPromise = (async () => {
+    await destroySession();
+    if (token !== restartToken) return;
+    await createSession(token);
+  })().finally(() => {
+    restartPromise = null;
+  });
+  return restartPromise;
+}
+
+async function handleBridgeFailure(msg: Record<string, unknown>, error: unknown, requestSessionId: string) {
+  if (requestSessionId !== sessionId.value) return;
+  if (isSandboxSessionMissingError(error)) {
+    await restartSession();
+    return;
+  }
+  sendBridgeResponse(msg, {
+    ok: false,
+    error: error instanceof Error ? error.message : String(error),
+  });
 }
 
 function onMessage(event: MessageEvent) {
@@ -186,7 +267,7 @@ function onMessage(event: MessageEvent) {
   bridgePort.onmessage = (portEvent) => {
     const message = portEvent.data;
     if (!message || typeof message !== "object") return;
-    void handleBridgeMessage(message as Record<string, unknown>);
+    void handleBridgeMessage(message as Record<string, unknown>, sessionId.value);
   };
   bridgePort.start();
   const env = resolveHostEnvironment();
@@ -205,23 +286,65 @@ function onMessage(event: MessageEvent) {
         os: env.os,
         surface: (uiContext.value.surface as Record<string, unknown> | undefined)?.role ?? "main",
         slotId: props.slotId,
+        surfaceState: surfaceStateWithDismiss.value,
+        surfaceMetrics: buildSurfaceMetrics(),
       },
       capabilities: serverCapabilities,
       grantedPerms: serverGrantedPerms,
       grantedScopes: serverGrantedScopes,
       theme: buildThemeTokens(),
     },
-    sessionOrigin.value || "*",
+    "*",
     [channel.port2],
   );
 }
 
-async function handleBridgeMessage(msg: Record<string, unknown>) {
+async function handleBridgeMessage(msg: Record<string, unknown>, requestSessionId: string) {
   const method = msg.method as string;
-  if (method === "ui_ready") {
-    ready.value = true;
-    emit("ready", sessionId.value);
-    sendBridgeResponse(msg, { ok: true, sessionId: sessionId.value });
+  if (method === "ui_ready" || method === "ui.ready") {
+    try {
+      const res = await apiClient.post(`/api/extension/webui/bridge/${sessionId.value}`, msg);
+      ready.value = true;
+      emit("ready", sessionId.value);
+      sendBridgeResponse(msg, res.data as Record<string, unknown>);
+    } catch (e) {
+      await handleBridgeFailure(msg, e, requestSessionId);
+    }
+    return;
+  }
+  if (method === "ui.context.get") {
+    try {
+      const res = await apiClient.post(`/api/extension/webui/bridge/${sessionId.value}`, msg);
+      const data = res.data as Record<string, unknown>;
+      const output = data.output;
+      if (output && typeof output === "object") {
+        (output as Record<string, unknown>).surfaceState = surfaceStateWithDismiss.value;
+        (output as Record<string, unknown>).surfaceMetrics = buildSurfaceMetrics();
+      }
+      sendBridgeResponse(msg, data);
+    } catch (e) {
+      await handleBridgeFailure(msg, e, requestSessionId);
+    }
+    return;
+  }
+  if (method === "ui.content.resize" || method === "ui.resize.request") {
+    const input = msg.input as Record<string, unknown> | undefined;
+    const requested = Number(input?.preferredHeight ?? input?.height);
+    const requestedWidth = Number(input?.preferredWidth ?? input?.width);
+    if (Number.isFinite(requestedWidth) && requestedWidth > 0) {
+      const maximumWidth = surfaceRole.value === "composer" ? 520 : 1200;
+      preferredWidth.value = Math.max(32, Math.min(Math.round(requestedWidth), maximumWidth));
+    }
+    if (Number.isFinite(requested) && requested > 0) {
+      const maximum = surfaceRole.value === "composer" ? 480 : surfaceRole.value === "message" ? 480 : 720;
+      const minimum = surfaceRole.value === "composer" ? 32 : 44;
+      preferredHeight.value = Math.max(minimum, Math.min(Math.round(requested), maximum));
+    }
+    sendBridgeResponse(msg, { ok: true });
+    return;
+  }
+  if (msg.type === "host.event") {
+    sendBridgeResponse(msg, { ok: true });
     return;
   }
   if (method === "ui.content.resize" || method === "ui.resize.request") {
@@ -255,12 +378,10 @@ async function handleBridgeMessage(msg: Record<string, unknown>) {
   }
   try {
     const res = await apiClient.post(`/api/extension/webui/bridge/${sessionId.value}`, msg);
-    sendBridgeResponse(msg, res.data as Record<string, unknown>);
+    const data = res.data as Record<string, unknown>;
+    sendBridgeResponse(msg, data);
   } catch (e) {
-    sendBridgeResponse(msg, {
-      ok: false,
-      error: e instanceof Error ? e.message : String(e),
-    });
+    await handleBridgeFailure(msg, e, requestSessionId);
   }
 }
 
@@ -275,6 +396,70 @@ function sendBridgeResponse(originalMsg: Record<string, unknown>, response: Reco
 
 function onIframeLoad() {
   iframeLoaded.value = true;
+  observeComposerSurface();
+}
+
+function observeComposerSurface() {
+  if (surfaceRole.value !== "composer" || !iframeRef.value || typeof ResizeObserver === "undefined") return;
+  const wrapper = iframeRef.value.closest(".input-wrapper");
+  if (!(wrapper instanceof HTMLElement)) return;
+  composerResizeObserver?.disconnect();
+  composerResizeObserver = new ResizeObserver(() => {
+    if (ready.value) postUIContext();
+  });
+  composerResizeObserver.observe(wrapper);
+}
+
+function buildSurfaceMetrics(): Record<string, number> {
+  if (surfaceRole.value !== "composer" || !iframeRef.value) return {};
+  const wrapper = iframeRef.value.closest(".input-wrapper");
+  if (!(wrapper instanceof HTMLElement)) return {};
+  const frameRect = iframeRef.value.getBoundingClientRect();
+  const wrapperRect = wrapper.getBoundingClientRect();
+  return {
+    panelBottom: Math.max(40, Math.round(frameRect.bottom - wrapperRect.top + 8)),
+  };
+}
+
+function postUIContext() {
+  if (!bridgePort || !ready.value) return;
+  const surface = (uiContext.value.surface as Record<string, unknown> | undefined) ?? {};
+  const surfaceRole = String(surface.role ?? "main");
+  const themeSnapshot = buildThemeSnapshot();
+  const env = resolveHostEnvironment();
+  const contextPayload = {
+    theme: themeSnapshot,
+    locale: (uiContext.value.locale as string) || navigator.language || "en",
+    platform: env.platform,
+    host: env.host,
+    os: env.os,
+    surface: surfaceRole,
+    slotId: props.slotId,
+    messageId: (uiContext.value.messageId as string) || "",
+    characterId: (uiContext.value.characterId as string) || "",
+    conversationId: (uiContext.value.conversationId as string) || "",
+    capabilities: serverCapabilities,
+    grantedPerms: serverGrantedPerms,
+    grantedScopes: serverGrantedScopes,
+    scope: {
+      extensionId: props.contribution.extensionId,
+      moduleId: props.contribution.moduleId,
+    },
+    generation: props.contribution.generation,
+    surfaceState: surfaceStateWithDismiss.value,
+    surfaceMetrics: buildSurfaceMetrics(),
+  };
+  bridgePort.postMessage({ type: "host.event", method: "ui.host.context", payload: contextPayload });
+  bridgePort.postMessage({ type: "host.event", method: "ui.host.theme", payload: themeSnapshot });
+  bridgePort.postMessage({ type: "host.event", method: "ui.host.resize", payload: { width: surface.width ?? 0, height: surface.height ?? 0, breakpoint: surface.breakpoint ?? "xs", surfaceRole } });
+}
+
+function buildThemeSnapshot() {
+  return buildSandboxThemeSnapshot(uiContext.value);
+}
+
+function buildThemeTokens() {
+  return buildSandboxThemeTokens();
 }
 
 function postUIContext() {
@@ -351,16 +536,20 @@ function buildThemeTokens() {
 
 onMounted(async () => {
   window.addEventListener("message", onMessage);
+  document.addEventListener("pointerdown", onDocumentPointerDown, true);
   await restartSession();
 });
 
 onBeforeUnmount(() => {
   window.removeEventListener("message", onMessage);
+  document.removeEventListener("pointerdown", onDocumentPointerDown, true);
+  composerResizeObserver?.disconnect();
+  composerResizeObserver = null;
   ++restartToken;
-  void disposeSession();
+  stashSession();
 });
 
-watch(sessionScopeKey, async () => {
+watch(sessionCacheKey, async () => {
   await restartSession();
 });
 
@@ -379,16 +568,34 @@ watch(() => {
   bridgePort.postMessage({ type: "host.event", method: "ui.host.resize", payload: { width: surface.width ?? 0, height: surface.height ?? 0, breakpoint: surface.breakpoint ?? "xs", surfaceRole } });
 }, { deep: true });
 
-watch(ready, (value) => { if (value) postUIContext(); });
+watch(ready, (value) => {
+  if (!value) return;
+  observeComposerSurface();
+  postUIContext();
+});
 
 watch(() => uiContext.value.locale, () => {
+  if (!bridgePort || !ready.value) return;
+  postUIContext();
+});
+
+watch(() => props.surfaceState, () => {
+  if (!bridgePort || !ready.value) return;
+  postUIContext();
+}, { deep: true });
+
+watch(dismissCounter, () => {
   if (!bridgePort || !ready.value) return;
   postUIContext();
 });
 </script>
 
 <template>
-  <div class="sandbox-webui-frame" :data-contribution-id="contribution.contributionId">
+  <div
+    class="sandbox-webui-frame"
+    :class="{ 'sandbox-webui-frame--overlay': overlayMode }"
+    :data-contribution-id="contribution.contributionId"
+  >
     <template v-if="loading">
       <ExtensionRenderState state="loading" />
     </template>
@@ -426,6 +633,36 @@ watch(() => uiContext.value.locale, () => {
   flex: 1;
   min-height: 0;
 }
+.sandbox-webui-frame--overlay {
+  position: relative;
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  flex: 0 0 32px;
+  overflow: visible;
+}
+.sandbox-webui-frame--overlay .sandbox-webui-frame__container {
+  position: relative;
+  width: 32px;
+  height: 32px;
+  overflow: visible;
+}
+.sandbox-webui-frame--overlay .sandbox-webui-frame__iframe {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  z-index: 120;
+  min-height: 0;
+  max-height: none;
+  overflow: visible;
+}
+.sandbox-webui-frame--overlay .sandbox-webui-frame__connecting,
+.sandbox-webui-frame--overlay .sandbox-webui-frame__loading {
+  display: none;
+}
+.sandbox-webui-frame--overlay :deep(.extension-render-state) {
+  display: none;
+}
 .sandbox-webui-frame__container {
   position: relative;
   width: 100%;
@@ -441,7 +678,7 @@ watch(() => uiContext.value.locale, () => {
   border-radius: 6px;
   background: transparent;
 }
-.sandbox-webui-frame__iframe--composer { min-height: 44px; max-height: 160px; }
+.sandbox-webui-frame__iframe--composer { min-height: 44px; max-height: 480px; }
 .sandbox-webui-frame__iframe--message { min-height: 44px; max-height: 480px; }
 .sandbox-webui-frame__iframe--sidebar, .sandbox-webui-frame__iframe--main { display: block; min-height: 0; }
 .sandbox-webui-frame__loading {

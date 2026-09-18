@@ -252,27 +252,6 @@ func TestCanonicalStdioRegistry_List(t *testing.T) {
 	}
 }
 
-func TestCanonicalStdioRegistry_IsOwnedByLegacy(t *testing.T) {
-	resolver, _ := commandenv.NewResolver(commandenv.ResolveContext{})
-	factory := NewCanonicalStdioFactory(resolver)
-	registry := NewCanonicalStdioRegistry(factory)
-
-	if !registry.IsOwnedByLegacy("any-server") {
-		t.Error("expected IsOwnedByLegacy to return true when server not in registry")
-	}
-}
-
-func TestCanonicalStdioRegistry_RegisterLegacyOwnership(t *testing.T) {
-	resolver, _ := commandenv.NewResolver(commandenv.ResolveContext{})
-	factory := NewCanonicalStdioFactory(resolver)
-	registry := NewCanonicalStdioRegistry(factory)
-
-	err := registry.RegisterLegacyOwnership("some-server")
-	if err != nil {
-		t.Errorf("expected nil error, got: %v", err)
-	}
-}
-
 func TestMCPStdioSpec_Struct(t *testing.T) {
 	env := map[string]string{"KEY": "VALUE"}
 	spec := MCPStdioSpec{

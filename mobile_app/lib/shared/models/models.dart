@@ -5,7 +5,6 @@ export 'memory_models.dart';
 export 'extension_models.dart';
 export 'workshop_models.dart';
 export 'settings_models.dart';
-export 'channel_models.dart';
 export 'dashboard_models.dart';
 export 'kernel_models.dart';
 
@@ -20,6 +19,7 @@ class ChatMessage {
   final String content;
   final DateTime time;
   final MessageStatus status;
+  final String? agentTaskId;
   final String? agentTaskTitle;
   final List<String>? agentTaskSteps;
   final int? agentTaskProgress;
@@ -32,6 +32,8 @@ class ChatMessage {
   final int? durationMs;
   final String? toolName;
   final String? toolResult;
+  final String? replyToMessageId;
+  final String? replyToExcerpt;
 
   ChatMessage({
     required this.id,
@@ -40,6 +42,7 @@ class ChatMessage {
     required this.content,
     required this.time,
     this.status = MessageStatus.sent,
+    this.agentTaskId,
     this.agentTaskTitle,
     this.agentTaskSteps,
     this.agentTaskProgress,
@@ -52,6 +55,8 @@ class ChatMessage {
     this.durationMs,
     this.toolName,
     this.toolResult,
+    this.replyToMessageId,
+    this.replyToExcerpt,
   });
 }
 

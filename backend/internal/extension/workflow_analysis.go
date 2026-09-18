@@ -36,12 +36,12 @@ type WorkflowSafetyAnalysis struct {
 	HasSideEffects      bool                       `json:"hasSideEffects"`
 }
 
-func (api *WorkflowAPI) prepareValidatedUserWorkflow(def workflow.WorkflowDefinition, userID, existingID string) (workflow.WorkflowDefinition, error) {
-	prepared, err := prepareUserWorkflow(def, userID, existingID)
+func (api *WorkflowAPI) prepareValidatedUserWorkflow(def workflow.WorkflowDefinition, spaceID, existingID string) (workflow.WorkflowDefinition, error) {
+	prepared, err := prepareUserWorkflow(def, spaceID, existingID)
 	if err != nil {
 		return def, err
 	}
-	if err := api.validateNestedWorkflowTargets(prepared, userID); err != nil {
+	if err := api.validateNestedWorkflowTargets(prepared, spaceID); err != nil {
 		return def, err
 	}
 	if api.effectiveLocation() != workflow.WorkflowLocationLocal {
@@ -51,7 +51,7 @@ func (api *WorkflowAPI) prepareValidatedUserWorkflow(def workflow.WorkflowDefini
 			}
 		}
 	}
-	if err := api.verifyWorkflowTriggerSecretReferences(context.Background(), prepared, userID); err != nil {
+	if err := api.verifyWorkflowTriggerSecretReferences(context.Background(), prepared, spaceID); err != nil {
 		return def, err
 	}
 	if err := api.verifyWorkflowWakeConfigReferences(context.Background(), prepared); err != nil {
@@ -60,9 +60,8 @@ func (api *WorkflowAPI) prepareValidatedUserWorkflow(def workflow.WorkflowDefini
 	return prepared, nil
 }
 
-func (api *WorkflowAPI) verifyWorkflowTriggerSecretReferences(ctx context.Context, def workflow.WorkflowDefinition, userID string) error {
-	if api == nil || api.runtime == nil || api.runtime.Kernel == nil || api.runtime.Kernel.Container() == nil ||
-		api.runtime.Kernel.Container().ExecutionKernel == nil || api.runtime.Kernel.Container().ExecutionKernel.SecretBroker == nil {
+func (api *WorkflowAPI) verifyWorkflowTriggerSecretReferences(ctx context.Context, def workflow.WorkflowDefinition, spaceID string) error {
+	if api == nil || api.runtime == nil || api.runtime.Kernel == nil || api.runtime.Kernel.Container() == nil || api.runtime.Kernel.Container().ExecutionKernel == nil || api.runtime.Kernel.Container().ExecutionKernel.SecretBroker == nil {
 		for _, trigger := range def.Triggers {
 			if trigger.Type == "event" && strings.TrimSpace(trigger.EventType) == "device.android.tasker" {
 				return fmt.Errorf("tasker trigger secret broker unavailable")
@@ -81,7 +80,7 @@ func (api *WorkflowAPI) verifyWorkflowTriggerSecretReferences(ctx context.Contex
 		if err := json.Unmarshal(trigger.Config, &cfg); err != nil {
 			return fmt.Errorf("trigger %s: invalid tasker secret config: %w", trigger.ID, err)
 		}
-		if !workflow.TriggerSecretRefOwnedByUser(cfg.SecretRef, userID) {
+		if !workflow.TriggerSecretRefOwnedBySpace(cfg.SecretRef, spaceID) {
 			return fmt.Errorf("trigger %s: tasker trigger secretRef does not belong to the workflow owner", trigger.ID)
 		}
 		ref, err := secret.ParseRef(strings.TrimSpace(cfg.SecretRef))
@@ -149,34 +148,25 @@ func remoteDeviceNestedWorkflow(node workflow.WorkflowNode) bool {
 	return node.Type == "nested_workflow" && node.ExecutionTarget.Placement == workflow.WorkflowExecutionDevice
 }
 
-func ownedWorkflowUserID(def workflow.WorkflowDefinition) string {
+func ownedWorkflowSpaceID(def workflow.WorkflowDefinition) string {
 	if def.Metadata == nil {
 		return ""
 	}
-	value, ok := def.Metadata["ownerUserId"]
+	value, ok := def.Metadata["ownerSpaceId"]
 	if !ok || value == nil {
 		return ""
 	}
 	return strings.TrimSpace(fmt.Sprint(value))
 }
 
-func (api *WorkflowAPI) validateNestedWorkflowTargets(def workflow.WorkflowDefinition, userID string) error {
+func (api *WorkflowAPI) validateNestedWorkflowTargets(def workflow.WorkflowDefinition, spaceID string) error {
 	if api == nil || api.runtime == nil || api.runtime.Kernel == nil || api.runtime.Kernel.Container() == nil || api.runtime.Kernel.Container().WorkflowRegistry == nil {
 		return fmt.Errorf("workflow registry unavailable")
 	}
 	registry := api.runtime.Kernel.Container().WorkflowRegistry
 	for _, node := range def.Nodes {
 		targetID := nestedWorkflowTarget(node)
-		if targetID == "" {
-			continue
-		}
-		// A device-targeted nested workflow belongs to that Device Agent's local
-		// Workflow Registry, not this Core's registry. Existence/ownership is
-		// authoritatively checked by Cloud Core's device ownership gate and the
-		// target Device Agent's meshOwned() call at execution time. Treating it as
-		// a local dependency here would make Cloud -> Device Local Workflow
-		// impossible to save. Distributed recursion is enforced by CallStack.
-		if remoteDeviceNestedWorkflow(node) {
+		if targetID == "" || remoteDeviceNestedWorkflow(node) {
 			continue
 		}
 		if targetID == def.ID {
@@ -186,11 +176,10 @@ func (api *WorkflowAPI) validateNestedWorkflowTargets(def workflow.WorkflowDefin
 		if !ok {
 			return fmt.Errorf("nested workflow node %s target %s not found", node.ID, targetID)
 		}
-		if target.Source != userWorkflowSource || ownedWorkflowUserID(target) != userID {
+		if target.Source != userWorkflowSource || ownedWorkflowSpaceID(target) != spaceID {
 			return fmt.Errorf("nested workflow node %s target %s is not owned by the current user", node.ID, targetID)
 		}
 	}
-
 	visiting := map[string]bool{}
 	visited := map[string]bool{}
 	var walk func(workflow.WorkflowDefinition) error
@@ -213,7 +202,7 @@ func (api *WorkflowAPI) validateNestedWorkflowTargets(def workflow.WorkflowDefin
 				target = def
 			} else {
 				item, ok := registry.Get(targetID)
-				if !ok || item.Source != userWorkflowSource || ownedWorkflowUserID(item) != userID {
+				if !ok || item.Source != userWorkflowSource || ownedWorkflowSpaceID(item) != spaceID {
 					continue
 				}
 				target = item
@@ -228,15 +217,8 @@ func (api *WorkflowAPI) validateNestedWorkflowTargets(def workflow.WorkflowDefin
 	return walk(def)
 }
 
-func analyzeWorkflowRisk(def workflow.WorkflowDefinition, registry *workflow.WorkflowRegistry, userID string) WorkflowSafetyAnalysis {
-	analysis := WorkflowSafetyAnalysis{
-		DeclaredPermissions: []string{},
-		SecretReferences:    []string{},
-		Risks:               []WorkflowRiskItem{},
-		NestedDependencies:  []WorkflowNestedDependency{},
-		HasSideEffects:      def.HasSideEffects,
-		RiskLevel:           "low",
-	}
+func analyzeWorkflowRisk(def workflow.WorkflowDefinition, registry *workflow.WorkflowRegistry, spaceID string) WorkflowSafetyAnalysis {
+	analysis := WorkflowSafetyAnalysis{DeclaredPermissions: []string{}, SecretReferences: []string{}, Risks: []WorkflowRiskItem{}, NestedDependencies: []WorkflowNestedDependency{}, HasSideEffects: def.HasSideEffects, RiskLevel: "low"}
 	permissionSet := map[string]struct{}{}
 	for _, permission := range def.Permissions {
 		permission = strings.TrimSpace(permission)
@@ -261,15 +243,12 @@ func analyzeWorkflowRisk(def workflow.WorkflowDefinition, registry *workflow.Wor
 		if targetID := nestedWorkflowTarget(node); targetID != "" {
 			dep := WorkflowNestedDependency{NodeID: node.ID, WorkflowID: targetID, Status: "missing"}
 			if remoteDeviceNestedWorkflow(node) {
-				// The device catalog is intentionally not mirrored into the Core's
-				// Workflow Registry. Report a remote dependency rather than a false
-				// "missing" finding; runtime control-plane checks remain authoritative.
 				dep.Status = "remote_device"
 			} else if registry != nil {
 				if target, ok := registry.Get(targetID); ok {
 					dep.Name = target.Name
 					dep.DefinitionHash = target.DefinitionHash
-					if target.Source == userWorkflowSource && ownedWorkflowUserID(target) == userID {
+					if target.Source == userWorkflowSource && ownedWorkflowSpaceID(target) == spaceID {
 						dep.Status = "ok"
 					} else {
 						dep.Status = "forbidden"

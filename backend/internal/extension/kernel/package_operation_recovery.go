@@ -78,7 +78,7 @@ func (r *Runtime) recoverPackageOperation(ctx context.Context, operation Package
 	releaseInProcessLock := r.acquirePackageInProcessLock(operation.ExtensionID + ":" + operation.OperationID)
 	defer releaseInProcessLock()
 
-	authoritative, _, readErr := r.container.PackageRepository.GetOperation(ctx, operation.UserID, operation.OperationID)
+	authoritative, _, readErr := r.container.PackageRepository.GetOperation(ctx, operation.SpaceID, operation.OperationID)
 	if readErr != nil {
 		return fmt.Errorf("kernel: read authoritative operation before recovery: %w", readErr)
 	}
@@ -131,7 +131,7 @@ func (r *Runtime) recoverPackageOperation(ctx context.Context, operation Package
 		}
 	}()
 	ctx = sagaCtx
-	_, steps, err := r.container.PackageRepository.GetOperation(ctx, operation.UserID, operation.OperationID)
+	_, steps, err := r.container.PackageRepository.GetOperation(ctx, operation.SpaceID, operation.OperationID)
 	if err != nil {
 		return r.requirePackageRecovery(ctx, operation, "operation journal unavailable", err, guard)
 	}
@@ -225,6 +225,7 @@ func (r *Runtime) reconcileUninstallPackageGeneration(ctx context.Context, opera
 	if err := json.Unmarshal([]byte(operation.CurrentPointerJSON), &stable); err != nil || stable.GenerationID == "" {
 		return "", errors.New("stable generation evidence unavailable")
 	}
+	stable.OperationID = operation.OperationID
 	_, dbErr := r.container.InstallationRepository.GetInstallation(ctx, domain.ExtensionID(operation.ExtensionID))
 	current, currentErr := r.container.PackageGenerationStore.ReadCurrent(operation.ExtensionID)
 	if dbErr == nil {
@@ -786,7 +787,7 @@ func (r *Runtime) proveRollbackPackageOperation(ctx context.Context, operation P
 				return fmt.Errorf("rollback resource quarantine verification failed: %w", err)
 			}
 		}
-		if r.container.UserDataSnapshotStore != nil && point.UserDataMigrationStateJSON != "" {
+		if r.container.UserDataSnapshotStore != nil && packageUserDataRestoreRequired(point.UserDataMigrationStateJSON) {
 			restoreOperationID := point.SourceOperationID
 			if restoreOperationID == "" {
 				restoreOperationID = "restore-" + point.RollbackPointID
@@ -1107,7 +1108,7 @@ const (
 )
 
 func (r *Runtime) prepareUninstallRecoveryOperation(ctx context.Context, operation PackageOperationRecord, guard PackageWriteGuard) (PackageOperationRecord, RecoveryAction, error) {
-	authoritative, _, err := r.container.PackageRepository.GetOperation(ctx, operation.UserID, operation.OperationID)
+	authoritative, _, err := r.container.PackageRepository.GetOperation(ctx, operation.SpaceID, operation.OperationID)
 	if err != nil {
 		return operation, RecoveryActionNone, fmt.Errorf("kernel: read authoritative operation for recovery preparation: %w", err)
 	}
@@ -1175,7 +1176,7 @@ func (r *Runtime) transitionRequiresRecoveryToInProgress(ctx context.Context, au
 		return authoritative, RecoveryActionNone, fmt.Errorf("kernel: CAS transition requires_recovery→in_progress failed: %w", transitionErr)
 	}
 
-	updatedOp, _, reReadErr := r.container.PackageRepository.GetOperation(ctx, authoritative.UserID, authoritative.OperationID)
+	updatedOp, _, reReadErr := r.container.PackageRepository.GetOperation(ctx, authoritative.SpaceID, authoritative.OperationID)
 	if reReadErr != nil {
 		return authoritative, RecoveryActionNone, fmt.Errorf("kernel: re-read operation after transition: %w", reReadErr)
 	}
@@ -1448,7 +1449,7 @@ func (r *Runtime) executeUninstallRecoveryChain(ctx context.Context, operation P
 		}
 		if !finalGateResult.Passed {
 			return "", NewPackageErrorWithRecovery(PackageErrCodeFinalGateFailed, 409, false, true, "Inspect compensation final gate result",
-				fmt.Errorf("compensation final gate not passed for operation %s", operation.OperationID))
+				fmt.Errorf("compensation final gate not passed for operation %s: %+v", operation.OperationID, finalGateResult.Findings))
 		}
 		resultBytes, marshalErr := json.Marshal(finalGateResult)
 		if marshalErr != nil {
@@ -2056,7 +2057,7 @@ func (r *Runtime) validateReleasedQuarantineMetadata(qm PackageQuarantineMetadat
 }
 
 func (r *Runtime) finalizeUninstallRecovery(ctx context.Context, operation PackageOperationRecord, completed map[string]PackageOperationStep, guard PackageWriteGuard) error {
-	authoritativeOp, _, err := r.container.PackageRepository.GetOperation(ctx, operation.UserID, operation.OperationID)
+	authoritativeOp, _, err := r.container.PackageRepository.GetOperation(ctx, operation.SpaceID, operation.OperationID)
 	if err != nil {
 		return r.requirePackageRecovery(ctx, operation, "finalize failed: cannot read authoritative operation", err, guard)
 	}
@@ -2119,7 +2120,7 @@ func (r *Runtime) finalizeUninstallRecovery(ctx context.Context, operation Packa
 }
 
 func (r *Runtime) verifyUninstallFinalizedState(ctx context.Context, operation PackageOperationRecord) error {
-	op, _, err := r.container.PackageRepository.GetOperation(ctx, operation.UserID, operation.OperationID)
+	op, _, err := r.container.PackageRepository.GetOperation(ctx, operation.SpaceID, operation.OperationID)
 	if err != nil {
 		return fmt.Errorf("verify finalized operation: %w", err)
 	}

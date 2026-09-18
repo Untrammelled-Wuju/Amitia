@@ -7,7 +7,7 @@ import "time"
 type MCPBindingScope string
 
 const (
-	MCPScopeUser      MCPBindingScope = "user"
+	MCPScopeSpace     MCPBindingScope = "space"
 	MCPScopeExtension MCPBindingScope = "extension"
 	MCPScopeBuiltin   MCPBindingScope = "builtin"
 )

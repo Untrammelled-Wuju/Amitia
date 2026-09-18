@@ -11,7 +11,7 @@ func TestBehaviorPlanJSONKeepsPersonalityAndPsycheInputs(t *testing.T) {
 	plan := BehaviorPlan{
 		Version:     PlanVersionV1,
 		ID:          "plan-1",
-		UserID:      "user-1",
+		SpaceID:     "user-1",
 		CharacterID: "char-1",
 		CreatedAt:   now,
 		Selected: BehaviorCandidate{
@@ -54,7 +54,7 @@ func TestBehaviorPlanJSONKeepsPersonalityAndPsycheInputs(t *testing.T) {
 			Regulation: RegulationSignal{Strategy: "reappraise", ExpressionMode: "soften", AppraisalID: "appraisal-1", RevisionID: "revision-1"},
 		},
 		Relationship: RelationshipSnapshot{
-			UserID:      "user-1",
+			SpaceID:     "user-1",
 			CharacterID: "char-1",
 			Dimensions: map[RelationshipDimension]RelationshipDimensionValue{
 				RelationshipTrust: {Value: 0.6, Baseline: 0.5, EvidenceIDs: []string{"evidence-1"}, LastChangedAt: now},

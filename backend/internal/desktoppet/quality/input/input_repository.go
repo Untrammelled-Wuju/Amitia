@@ -17,8 +17,7 @@ import (
 
 type actionRevisionRow struct {
 	ID                         string `gorm:"column:id"`
-	UserID                     string `gorm:"column:user_id"`
-	CharacterID                string `gorm:"column:character_id"`
+	SpaceID                    string `gorm:"column:space_id"`
 	ActionStreamID             string `gorm:"column:action_stream_id"`
 	ProcessingTaskID           string `gorm:"column:processing_task_id"`
 	ProcessingActionID         string `gorm:"column:processing_action_id"`
@@ -86,7 +85,7 @@ func (r *InputRepository) safePath(framePath string) (string, error) {
 	return absPath, nil
 }
 
-func (r *InputRepository) LoadActionRevisionInput(ctx context.Context, userID string, actionRevisionID string) (*quality.QualityActionInput, error) {
+func (r *InputRepository) LoadActionRevisionInput(ctx context.Context, spaceID string, actionRevisionID string) (*quality.QualityActionInput, error) {
 	var rev actionRevisionRow
 	err := r.db.WithContext(ctx).
 		Where("id = ?", actionRevisionID).
@@ -98,8 +97,8 @@ func (r *InputRepository) LoadActionRevisionInput(ctx context.Context, userID st
 		return nil, err
 	}
 
-	if rev.UserID != userID {
-		return nil, fmt.Errorf("user mismatch: action revision belongs to %s, request from %s", rev.UserID, userID)
+	if rev.SpaceID != spaceID {
+		return nil, fmt.Errorf("user mismatch: action revision belongs to %s, request from %s", rev.SpaceID, spaceID)
 	}
 
 	var frameRows []actionRevisionFrameRow
@@ -201,8 +200,7 @@ func (r *InputRepository) LoadActionRevisionInput(ctx context.Context, userID st
 	now := time.Now().UTC().Format(time.RFC3339)
 	snapshot := &quality.EvaluationInputSnapshot{
 		ID:                   "is-" + uuid.NewString(),
-		UserID:               rev.UserID,
-		CharacterID:          rev.CharacterID,
+		SpaceID:              rev.SpaceID,
 		ActionStreamID:       rev.ActionStreamID,
 		ActionRevisionID:     rev.ID,
 		ActionContentHash:    rev.ContentHash,
@@ -215,8 +213,7 @@ func (r *InputRepository) LoadActionRevisionInput(ctx context.Context, userID st
 	}
 
 	return &quality.QualityActionInput{
-		UserID:               rev.UserID,
-		CharacterID:          rev.CharacterID,
+		SpaceID:              rev.SpaceID,
 		ProcessingTaskID:     rev.ProcessingTaskID,
 		ProcessingActionID:   rev.ProcessingActionID,
 		ActionKey:            rev.ActionKey,

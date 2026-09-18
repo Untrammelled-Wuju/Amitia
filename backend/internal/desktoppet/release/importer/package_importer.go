@@ -38,7 +38,7 @@ type JournalManagerPort interface {
 }
 
 type PackageValidator interface {
-	ValidatePackage(ctx context.Context, userID string, stagingID string) (*ImportValidationResult, error)
+	ValidatePackage(ctx context.Context, spaceID string, stagingID string) (*ImportValidationResult, error)
 }
 
 type ImportValidationResult struct {
@@ -58,7 +58,7 @@ type ImportValidationResult struct {
 }
 
 type ImportPackageRequest struct {
-	UserID                  string
+	SpaceID                 string
 	ImportStagingID         string
 	SourceFilePath          string
 	IdempotencyKey          string
@@ -119,7 +119,7 @@ func NewPackageImporterWithJournal(
 }
 
 func (pi *PackageImporter) ImportPackage(ctx context.Context, req *ImportPackageRequest) (*ImportPackageResult, error) {
-	if req.UserID == "" {
+	if req.SpaceID == "" {
 		return nil, release.NewReleaseError("INVALID_USER", "用户 ID 不能为空", nil)
 	}
 	if req.ImportStagingID == "" {
@@ -139,7 +139,7 @@ func (pi *PackageImporter) ImportPackage(ctx context.Context, req *ImportPackage
 		}, nil
 	}
 
-	validation, err := pi.validator.ValidatePackage(ctx, req.UserID, req.ImportStagingID)
+	validation, err := pi.validator.ValidatePackage(ctx, req.SpaceID, req.ImportStagingID)
 	if err != nil {
 		var releaseErr *release.ReleaseError
 		if errors.As(err, &releaseErr) {
@@ -176,7 +176,7 @@ func (pi *PackageImporter) executeImport(ctx context.Context, req *ImportPackage
 		return nil, release.NewReleaseError("DEPENDENCY_MISSING", "导入依赖未初始化", nil)
 	}
 
-	staging, err := pi.stagingRepo.GetForUser(ctx, req.ImportStagingID, req.UserID)
+	staging, err := pi.stagingRepo.GetForSpace(ctx, req.ImportStagingID, req.SpaceID)
 	if err != nil {
 		return nil, release.NewReleaseError("STAGING_READ_FAILED", "读取暂存记录失败", err)
 	}
@@ -195,16 +195,9 @@ func (pi *PackageImporter) executeImport(ctx context.Context, req *ImportPackage
 		return nil, release.NewReleaseError("STAGING_SOURCE_CHANGED", "暂存包在验证后发生变化", nil)
 	}
 
-	characterID := manifest.Binding.SourceCharacterID
-
 	petID := "pet_" + strings.ReplaceAll(uuid.NewString(), "-", "")
 
 	var identity *release.PetIdentityData
-	existingByIdentity, err := pi.repo.GetPetIdentityByCharacter(req.UserID, characterID)
-	if err == nil && existingByIdentity != nil {
-		identity = existingByIdentity
-		petID = identity.ID
-	}
 
 	now := formatImportTimestamp(time.Now())
 	operationID := uuid.NewString()
@@ -215,17 +208,11 @@ func (pi *PackageImporter) executeImport(ctx context.Context, req *ImportPackage
 		if name == "" {
 			name = petID
 		}
-		bindingPolicy := strings.TrimSpace(manifest.Binding.Policy)
-		if bindingPolicy == "" {
-			bindingPolicy = "character_locked"
-		}
 		identity = &release.PetIdentityData{
 			ID:                  petID,
-			OwnerUserID:         req.UserID,
-			SourceCharacterID:   characterID,
+			OwnerSpaceID:        req.SpaceID,
 			Name:                name,
 			Slug:                makeIdentitySlug(name),
-			BindingPolicy:       bindingPolicy,
 			UpstreamPetID:       strings.TrimSpace(manifest.PetID),
 			DefaultActionKey:    manifest.DefaultAction,
 			NextReleaseSequence: 1,
@@ -273,7 +260,7 @@ func (pi *PackageImporter) executeImport(ctx context.Context, req *ImportPackage
 	releaseRecord := &release.ReleaseData{
 		ID:                  releaseID,
 		PetID:               petID,
-		OwnerUserID:         req.UserID,
+		OwnerSpaceID:        req.SpaceID,
 		Version:             version,
 		ReleaseSequence:     sequence,
 		SchemaVersion:       manifest.SchemaVersion,
@@ -309,7 +296,7 @@ func (pi *PackageImporter) executeImport(ctx context.Context, req *ImportPackage
 		BindingDecision:       validation.BindingDecision,
 		LicenseDecision:       validation.LicenseDecision,
 		RuntimeCompatibility:  validation.RuntimeCompatibility,
-		UserID:                req.UserID,
+		SpaceID:               req.SpaceID,
 		PetID:                 petID,
 		ReleaseID:             releaseID,
 		OperationID:           operationID,
@@ -320,7 +307,7 @@ func (pi *PackageImporter) executeImport(ctx context.Context, req *ImportPackage
 
 	buildOp := &release.ReleaseBuildOperation{
 		ID:             operationID,
-		UserID:         req.UserID,
+		SpaceID:        req.SpaceID,
 		PetID:          petID,
 		IdempotencyKey: req.IdempotencyKey,
 		InputHash:      validation.SourcePackageHash,
@@ -378,7 +365,7 @@ func (pi *PackageImporter) runImportSaga(
 			if getErr != nil || existingIdentity == nil {
 				return err
 			}
-			if existingIdentity.OwnerUserID != req.UserID {
+			if existingIdentity.OwnerSpaceID != req.SpaceID {
 				return release.NewReleaseError("PET_IDENTITY_OWNER_MISMATCH", "manifest PetID 不属于当前用户", nil)
 			}
 			*identity = existingIdentity
@@ -617,7 +604,7 @@ func (pi *PackageImporter) finalizeImport(
 			return err
 		}
 
-		if err := pi.stagingRepo.CompleteConsumptionTx(tx, req.ImportStagingID, req.UserID, req.ExpectedStagingRevision, now); err != nil {
+		if err := pi.stagingRepo.CompleteConsumptionTx(tx, req.ImportStagingID, req.SpaceID, req.ExpectedStagingRevision, now); err != nil {
 			return err
 		}
 
@@ -799,7 +786,7 @@ func (pi *PackageImporter) hashWorkspaceFiles(workspaceDir, releaseID string, ma
 		}
 		clean, pathErr := packageformat.NormalizePackagePath(filepath.ToSlash(relPath))
 		if pathErr != nil {
-			return fmt.Errorf("workspace path is not Package V2 canonical: %s: %w", relPath, pathErr)
+			return fmt.Errorf("workspace path is not Package V1 canonical: %s: %w", relPath, pathErr)
 		}
 		verifiedPath, resolveErr := packageformat.SecureResolveExistingUnderRoot(workspaceDir, clean)
 		if resolveErr != nil {

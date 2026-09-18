@@ -37,7 +37,7 @@ func (RuntimeEventRecord) TableName() string { return "desktop_pet_runtime_event
 
 type runtimeSessionIdentity struct {
 	ID        string `gorm:"column:id"`
-	UserID    string `gorm:"column:user_id"`
+	SpaceID   string `gorm:"column:space_id"`
 	DeviceID  string `gorm:"column:device_id"`
 	RuntimeID string `gorm:"column:runtime_id"`
 }
@@ -155,7 +155,7 @@ func (b *ProjectionBridge) sessionIdentity(ctx context.Context, sessionID string
 	if err := b.db.WithContext(ctx).Where("id = ?", sessionID).First(&identity).Error; err != nil {
 		return nil, err
 	}
-	if identity.UserID == "" || identity.DeviceID == "" || identity.RuntimeID == "" {
+	if identity.SpaceID == "" || identity.DeviceID == "" || identity.RuntimeID == "" {
 		return nil, errors.New("projection bridge: incomplete runtime session identity")
 	}
 	return &identity, nil
@@ -181,7 +181,7 @@ func (b *ProjectionBridge) handleStateSnapshot(ctx context.Context, event Runtim
 		ActualHealth:            mapHealthStatus(snapshot.PlaybackStatus),
 		Timestamp:               snapshot.CapturedAt,
 	}
-	return b.service.HandleRuntimeHeartbeat(ctx, identity.UserID, identity.DeviceID, identity.RuntimeID, heartbeat)
+	return b.service.HandleRuntimeHeartbeat(ctx, identity.SpaceID, identity.DeviceID, identity.RuntimeID, heartbeat)
 }
 
 func (b *ProjectionBridge) handleCommandAcknowledged(ctx context.Context, event RuntimeEventRecord) error {
@@ -215,16 +215,16 @@ func (b *ProjectionBridge) handleCommandAcknowledged(ctx context.Context, event 
 		AppliedRevision: appliedRevision,
 		Timestamp:       time.Now().UTC().Format(time.RFC3339),
 	}
-	if err := b.service.HandleCommandResult(ctx, identity.UserID, identity.DeviceID, result); err != nil {
+	if err := b.service.HandleCommandResult(ctx, identity.SpaceID, identity.DeviceID, result); err != nil {
 		return err
 	}
 	if err := b.completeRecenterOperationFromACK(ctx, command.IdempotencyKey, ack.Status); err != nil {
 		return err
 	}
-	return b.completeDesiredStateOperationFromACK(ctx, identity.UserID, identity.DeviceID, command.DesiredRevision, ack.Status)
+	return b.completeDesiredStateOperationFromACK(ctx, identity.SpaceID, identity.DeviceID, command.DesiredRevision, ack.Status)
 }
 
-func (b *ProjectionBridge) completeDesiredStateOperationFromACK(ctx context.Context, userID, deviceID string, desiredRevision int64, ackStatus string) error {
+func (b *ProjectionBridge) completeDesiredStateOperationFromACK(ctx context.Context, spaceID, deviceID string, desiredRevision int64, ackStatus string) error {
 	if desiredRevision <= 0 {
 		return nil
 	}
@@ -233,7 +233,7 @@ func (b *ProjectionBridge) completeDesiredStateOperationFromACK(ctx context.Cont
 	}
 	err := b.db.WithContext(ctx).Table("desktop_pet_runtime_desired_states").
 		Select("operation_id").
-		Where("user_id = ? AND device_id = ? AND desired_revision = ?", userID, deviceID, desiredRevision).
+		Where("space_id = ? AND device_id = ? AND desired_revision = ?", spaceID, deviceID, desiredRevision).
 		Take(&state).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil
@@ -289,7 +289,7 @@ func (b *ProjectionBridge) completeDesiredStateOperationFromACK(ctx context.Cont
 			return nil
 		}
 		installRes := tx.Table("desktop_pet_installations").
-			Where("id = ? AND user_id = ? AND device_id = ?", op.InstallationID, op.UserID, op.DeviceID).
+			Where("id = ? AND space_id = ? AND device_id = ?", op.InstallationID, op.SpaceID, op.DeviceID).
 			Updates(map[string]interface{}{"runtime_sync_state": installationSyncState, "updated_at": now})
 		if installRes.Error != nil {
 			return installRes.Error
@@ -350,7 +350,7 @@ func (b *ProjectionBridge) completeRecenterOperationFromACK(ctx context.Context,
 }
 
 func (b *ProjectionBridge) markDelivered(ctx context.Context, eventID string) error {
-	result := b.db.WithContext(ctx).Model(&RuntimeEventRecord{}).Where("id = ? AND delivered = 0").Updates(map[string]interface{}{
+	result := b.db.WithContext(ctx).Model(&RuntimeEventRecord{}).Where("id = ? AND delivered = 0", eventID).Updates(map[string]interface{}{
 		"delivered":    1,
 		"delivered_at": time.Now().UTC().Format(time.RFC3339),
 	})

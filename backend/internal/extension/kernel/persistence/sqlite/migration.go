@@ -5,8 +5,11 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"strings"
+
+	"github.com/u-ai/backend/internal/extension/kernel/domain"
 )
 
 var schemaMigrations = []string{
@@ -580,11 +583,11 @@ var schemaMigrations = []string{
 	)`,
 
 	`CREATE TABLE IF NOT EXISTS extension_client_runtime_sessions (
-		user_id TEXT NOT NULL,
+		space_id TEXT NOT NULL,
 		conversation_id TEXT NOT NULL,
 		state_json TEXT NOT NULL,
 		updated_at DATETIME NOT NULL,
-		PRIMARY KEY (user_id, conversation_id)
+		PRIMARY KEY (space_id, conversation_id)
 	)`,
 
 	`CREATE TABLE IF NOT EXISTS extension_event_subscriptions (
@@ -1749,7 +1752,7 @@ var schemaMigrations = []string{
 	`CREATE TABLE IF NOT EXISTS kernel_host_registry (
 		host_client_id TEXT PRIMARY KEY,
 		host_session_id TEXT NOT NULL,
-		user_id TEXT NOT NULL DEFAULT '',
+		space_id TEXT NOT NULL DEFAULT '',
 		platform TEXT NOT NULL DEFAULT '',
 		device_id TEXT NOT NULL DEFAULT '',
 		runtime_id TEXT NOT NULL DEFAULT '',
@@ -1763,11 +1766,11 @@ var schemaMigrations = []string{
 		created_at TEXT NOT NULL,
 		expires_at TEXT
 	)`,
-	`CREATE INDEX IF NOT EXISTS idx_kernel_host_reg_user_id ON kernel_host_registry(user_id)`,
+	`CREATE INDEX IF NOT EXISTS idx_kernel_host_reg_space_id ON kernel_host_registry(space_id)`,
 	`CREATE INDEX IF NOT EXISTS idx_kernel_host_reg_session ON kernel_host_registry(host_session_id)`,
 	`CREATE INDEX IF NOT EXISTS idx_kernel_host_reg_state ON kernel_host_registry(connection_state)`,
-	`CREATE INDEX IF NOT EXISTS idx_kernel_host_reg_device ON kernel_host_registry(user_id, device_id)`,
-	`CREATE INDEX IF NOT EXISTS idx_kernel_host_reg_runtime ON kernel_host_registry(user_id, device_id, runtime_id)`,
+	`CREATE INDEX IF NOT EXISTS idx_kernel_host_reg_device ON kernel_host_registry(space_id, device_id)`,
+	`CREATE INDEX IF NOT EXISTS idx_kernel_host_reg_runtime ON kernel_host_registry(space_id, device_id, runtime_id)`,
 	`CREATE INDEX IF NOT EXISTS idx_kernel_host_reg_kind_state ON kernel_host_registry(entry_kind, connection_state)`,
 
 	`CREATE TABLE IF NOT EXISTS kernel_final_gate_metrics (
@@ -1813,7 +1816,7 @@ var schemaMigrations = []string{
 	`CREATE INDEX IF NOT EXISTS idx_ext_pkg_artifacts_extension ON extension_package_artifacts(extension_id, version)`,
 	`CREATE TABLE IF NOT EXISTS extension_package_preview_sessions (
 		session_id TEXT PRIMARY KEY,
-		user_id TEXT NOT NULL,
+		space_id TEXT NOT NULL,
 		scope_type TEXT NOT NULL,
 		scope_id TEXT NOT NULL DEFAULT '',
 		artifact_id TEXT NOT NULL,
@@ -1834,12 +1837,12 @@ var schemaMigrations = []string{
 		consumed_at TEXT NOT NULL DEFAULT '',
 		created_at TEXT NOT NULL
 	)`,
-	`CREATE INDEX IF NOT EXISTS idx_ext_pkg_preview_owner ON extension_package_preview_sessions(user_id, scope_type, scope_id, status)`,
+	`CREATE INDEX IF NOT EXISTS idx_ext_pkg_preview_owner ON extension_package_preview_sessions(space_id, scope_type, scope_id, status)`,
 	`CREATE INDEX IF NOT EXISTS idx_ext_pkg_preview_expiry ON extension_package_preview_sessions(expires_at, status)`,
 	`CREATE TABLE IF NOT EXISTS extension_package_operations (
 		operation_id TEXT PRIMARY KEY,
 		trace_id TEXT NOT NULL,
-		user_id TEXT NOT NULL,
+		space_id TEXT NOT NULL,
 		scope_type TEXT NOT NULL,
 		scope_id TEXT NOT NULL DEFAULT '',
 		extension_id TEXT NOT NULL,
@@ -1856,7 +1859,7 @@ var schemaMigrations = []string{
 		updated_at TEXT NOT NULL,
 		completed_at TEXT NOT NULL DEFAULT ''
 	)`,
-	`CREATE INDEX IF NOT EXISTS idx_ext_pkg_operations_owner ON extension_package_operations(user_id, started_at)`,
+	`CREATE INDEX IF NOT EXISTS idx_ext_pkg_operations_owner ON extension_package_operations(space_id, started_at)`,
 	`CREATE INDEX IF NOT EXISTS idx_ext_pkg_operations_status ON extension_package_operations(status, updated_at)`,
 	`CREATE TABLE IF NOT EXISTS extension_package_operation_steps (
 		step_id TEXT PRIMARY KEY,
@@ -1966,7 +1969,7 @@ var schemaMigrations = []string{
 		ON extension_package_legacy_migration_checkpoints(lease_expires_at, lease_owner)`,
 	`CREATE TABLE IF NOT EXISTS extension_package_exports (
 		export_id TEXT PRIMARY KEY,
-		user_id TEXT NOT NULL,
+		space_id TEXT NOT NULL,
 		extension_id TEXT NOT NULL,
 		artifact_id TEXT NOT NULL,
 		file_name TEXT NOT NULL,
@@ -1974,7 +1977,7 @@ var schemaMigrations = []string{
 		expires_at TEXT NOT NULL,
 		created_at TEXT NOT NULL
 	)`,
-	`CREATE INDEX IF NOT EXISTS idx_ext_pkg_exports_owner ON extension_package_exports(user_id, extension_id, expires_at)`,
+	`CREATE INDEX IF NOT EXISTS idx_ext_pkg_exports_owner ON extension_package_exports(space_id, extension_id, expires_at)`,
 	`ALTER TABLE extension_package_artifacts ADD COLUMN reference_count INTEGER NOT NULL DEFAULT 0 CHECK(reference_count >= 0)`,
 	`ALTER TABLE extension_package_artifacts ADD COLUMN retention_state TEXT NOT NULL DEFAULT 'active'`,
 	`ALTER TABLE extension_package_artifacts ADD COLUMN retention_until TEXT NOT NULL DEFAULT ''`,
@@ -2010,7 +2013,7 @@ var schemaMigrations = []string{
 	`ALTER TABLE extension_package_operations ADD COLUMN lease_owner TEXT NOT NULL DEFAULT ''`,
 	`ALTER TABLE extension_package_operations ADD COLUMN lease_expires_at TEXT NOT NULL DEFAULT ''`,
 	`ALTER TABLE extension_package_operations ADD COLUMN attempt_count INTEGER NOT NULL DEFAULT 1`,
-	`CREATE UNIQUE INDEX IF NOT EXISTS idx_ext_pkg_operations_idempotency ON extension_package_operations(user_id, idempotency_key) WHERE idempotency_key <> ''`,
+	`CREATE UNIQUE INDEX IF NOT EXISTS idx_ext_pkg_operations_idempotency ON extension_package_operations(space_id, idempotency_key) WHERE idempotency_key <> ''`,
 	`CREATE TABLE IF NOT EXISTS extension_package_operation_leases (
 		extension_id TEXT PRIMARY KEY,
 		operation_id TEXT NOT NULL,
@@ -2140,7 +2143,7 @@ var schemaMigrations = []string{
 		operation_id TEXT NOT NULL UNIQUE,
 		operation_type TEXT NOT NULL,
 		extension_id TEXT NOT NULL,
-		user_id TEXT NOT NULL,
+		space_id TEXT NOT NULL,
 		issued_at TEXT NOT NULL,
 		expires_at TEXT NOT NULL,
 		consumed_at TEXT NOT NULL
@@ -2174,7 +2177,7 @@ var schemaMigrations = []string{
 	`ALTER TABLE kernel_permission_snapshots ADD COLUMN execution_binding_key TEXT NOT NULL DEFAULT ''`,
 	`CREATE TABLE IF NOT EXISTS kernel_devices (
 		device_id TEXT PRIMARY KEY,
-		user_id TEXT NOT NULL,
+		space_id TEXT NOT NULL,
 		platform TEXT NOT NULL DEFAULT '',
 		label TEXT NOT NULL DEFAULT '',
 		trust_state TEXT NOT NULL DEFAULT 'pending',
@@ -2183,13 +2186,13 @@ var schemaMigrations = []string{
 		last_seen_at TEXT NOT NULL,
 		revision INTEGER NOT NULL DEFAULT 1
 	)`,
-	`CREATE UNIQUE INDEX IF NOT EXISTS idx_kernel_devices_user_device ON kernel_devices(user_id, device_id)`,
-	`CREATE INDEX IF NOT EXISTS idx_kernel_devices_user_id ON kernel_devices(user_id)`,
+	`CREATE UNIQUE INDEX IF NOT EXISTS idx_kernel_devices_user_device ON kernel_devices(space_id, device_id)`,
+	`CREATE INDEX IF NOT EXISTS idx_kernel_devices_space_id ON kernel_devices(space_id)`,
 	`CREATE INDEX IF NOT EXISTS idx_kernel_devices_trust_state ON kernel_devices(trust_state)`,
 	`CREATE TABLE IF NOT EXISTS kernel_device_mesh_bootstrap_tickets (
 		ticket_id TEXT PRIMARY KEY,
 		ticket_hash TEXT NOT NULL,
-		user_id TEXT NOT NULL,
+		space_id TEXT NOT NULL,
 		device_id TEXT NOT NULL,
 		runtime_id TEXT NOT NULL,
 		platform TEXT NOT NULL DEFAULT '',
@@ -2200,14 +2203,14 @@ var schemaMigrations = []string{
 		updated_at TEXT NOT NULL
 	)`,
 	`CREATE INDEX IF NOT EXISTS idx_kernel_device_mesh_bt_hash ON kernel_device_mesh_bootstrap_tickets(ticket_hash)`,
-	`CREATE INDEX IF NOT EXISTS idx_kernel_device_mesh_bt_user ON kernel_device_mesh_bootstrap_tickets(user_id)`,
+	`CREATE INDEX IF NOT EXISTS idx_kernel_device_mesh_bt_user ON kernel_device_mesh_bootstrap_tickets(space_id)`,
 	`CREATE INDEX IF NOT EXISTS idx_kernel_device_mesh_bt_device ON kernel_device_mesh_bootstrap_tickets(device_id)`,
 	`CREATE INDEX IF NOT EXISTS idx_kernel_device_mesh_bt_status ON kernel_device_mesh_bootstrap_tickets(status)`,
 	`CREATE INDEX IF NOT EXISTS idx_kernel_device_mesh_bt_expires ON kernel_device_mesh_bootstrap_tickets(expires_at)`,
 	`CREATE TABLE IF NOT EXISTS kernel_device_runtime_credentials (
 		credential_id TEXT PRIMARY KEY,
 		credential_hash TEXT NOT NULL,
-		user_id TEXT NOT NULL,
+		space_id TEXT NOT NULL,
 		device_id TEXT NOT NULL,
 		runtime_id TEXT NOT NULL,
 		status TEXT NOT NULL DEFAULT 'active',
@@ -2218,9 +2221,9 @@ var schemaMigrations = []string{
 		revision INTEGER NOT NULL DEFAULT 1
 	)`,
 	`CREATE INDEX IF NOT EXISTS idx_kernel_device_rc_hash ON kernel_device_runtime_credentials(credential_hash)`,
-	`CREATE INDEX IF NOT EXISTS idx_kernel_device_rc_user ON kernel_device_runtime_credentials(user_id)`,
+	`CREATE INDEX IF NOT EXISTS idx_kernel_device_rc_space ON kernel_device_runtime_credentials(space_id)`,
 	`CREATE INDEX IF NOT EXISTS idx_kernel_device_rc_device ON kernel_device_runtime_credentials(device_id)`,
-	`CREATE INDEX IF NOT EXISTS idx_kernel_device_rc_runtime ON kernel_device_runtime_credentials(user_id, device_id, runtime_id)`,
+	`CREATE INDEX IF NOT EXISTS idx_kernel_device_rc_runtime ON kernel_device_runtime_credentials(space_id, device_id, runtime_id)`,
 	`CREATE INDEX IF NOT EXISTS idx_kernel_device_rc_status ON kernel_device_runtime_credentials(status)`,
 	`DROP INDEX IF EXISTS idx_ext_event_outbox_idempotency`,
 	`CREATE UNIQUE INDEX IF NOT EXISTS idx_ext_event_outbox_idempotency ON extension_event_outbox(idempotency_key)`,
@@ -2228,7 +2231,7 @@ var schemaMigrations = []string{
 	`CREATE TABLE IF NOT EXISTS extension_workflow_revisions (
 		revision_id TEXT PRIMARY KEY,
 		workflow_id TEXT NOT NULL,
-		owner_user_id TEXT NOT NULL,
+		owner_space_id TEXT NOT NULL,
 		revision_no INTEGER NOT NULL,
 		name TEXT NOT NULL,
 		description TEXT NOT NULL DEFAULT '',
@@ -2241,10 +2244,10 @@ var schemaMigrations = []string{
 		created_at DATETIME NOT NULL,
 		UNIQUE(workflow_id, revision_no)
 	)`,
-	`CREATE INDEX IF NOT EXISTS idx_ext_wf_revisions_owner ON extension_workflow_revisions(owner_user_id, workflow_id, revision_no DESC)`,
+	`CREATE INDEX IF NOT EXISTS idx_ext_wf_revisions_owner ON extension_workflow_revisions(owner_space_id, workflow_id, revision_no DESC)`,
 	`CREATE TABLE IF NOT EXISTS extension_workflow_templates (
 		template_id TEXT PRIMARY KEY,
-		owner_user_id TEXT NOT NULL,
+		owner_space_id TEXT NOT NULL,
 		name TEXT NOT NULL,
 		description TEXT NOT NULL DEFAULT '',
 		definition_json TEXT NOT NULL,
@@ -2252,7 +2255,7 @@ var schemaMigrations = []string{
 		created_at DATETIME NOT NULL,
 		updated_at DATETIME NOT NULL
 	)`,
-	`CREATE INDEX IF NOT EXISTS idx_ext_wf_templates_owner ON extension_workflow_templates(owner_user_id, updated_at DESC)`,
+	`CREATE INDEX IF NOT EXISTS idx_ext_wf_templates_owner ON extension_workflow_templates(owner_space_id, updated_at DESC)`,
 	`CREATE TABLE IF NOT EXISTS extension_workflow_step_attempts (
 		execution_id TEXT NOT NULL,
 		workflow_id TEXT NOT NULL,
@@ -2337,17 +2340,17 @@ var schemaMigrations = []string{
 	`CREATE INDEX IF NOT EXISTS idx_ext_wf_compensations_execution ON extension_workflow_compensations(execution_id, updated_at, node_id)`,
 
 	`CREATE TABLE IF NOT EXISTS extension_workflow_sync_state (
-		owner_user_id TEXT NOT NULL,
+		owner_space_id TEXT NOT NULL,
 		workflow_id TEXT NOT NULL,
 		revision INTEGER NOT NULL DEFAULT 0,
 		definition_hash TEXT NOT NULL DEFAULT '',
 		deleted INTEGER NOT NULL DEFAULT 0,
 		updated_at DATETIME NOT NULL,
-		PRIMARY KEY(owner_user_id, workflow_id)
+		PRIMARY KEY(owner_space_id, workflow_id)
 	)`,
 	`CREATE TABLE IF NOT EXISTS extension_workflow_sync_outbox (
 		event_id TEXT PRIMARY KEY,
-		owner_user_id TEXT NOT NULL,
+		owner_space_id TEXT NOT NULL,
 		workflow_id TEXT NOT NULL,
 		revision INTEGER NOT NULL,
 		base_revision INTEGER NOT NULL,
@@ -2360,12 +2363,12 @@ var schemaMigrations = []string{
 		retry_count INTEGER NOT NULL DEFAULT 0,
 		next_retry_at DATETIME NOT NULL
 	)`,
-	`CREATE INDEX IF NOT EXISTS idx_ext_wf_sync_outbox_pending ON extension_workflow_sync_outbox(owner_user_id, acked_at, next_retry_at, created_at)`,
-	`CREATE INDEX IF NOT EXISTS idx_ext_wf_sync_outbox_workflow ON extension_workflow_sync_outbox(owner_user_id, workflow_id, revision)`,
+	`CREATE INDEX IF NOT EXISTS idx_ext_wf_sync_outbox_pending ON extension_workflow_sync_outbox(owner_space_id, acked_at, next_retry_at, created_at)`,
+	`CREATE INDEX IF NOT EXISTS idx_ext_wf_sync_outbox_workflow ON extension_workflow_sync_outbox(owner_space_id, workflow_id, revision)`,
 	`CREATE TABLE IF NOT EXISTS extension_workflow_sync_inbox (
 		event_id TEXT NOT NULL,
 		source_device_id TEXT NOT NULL,
-		owner_user_id TEXT NOT NULL,
+		owner_space_id TEXT NOT NULL,
 		workflow_id TEXT NOT NULL,
 		revision INTEGER NOT NULL,
 		base_revision INTEGER NOT NULL,
@@ -2378,9 +2381,9 @@ var schemaMigrations = []string{
 		received_at DATETIME NOT NULL,
 		PRIMARY KEY(event_id, source_device_id)
 	)`,
-	`CREATE INDEX IF NOT EXISTS idx_ext_wf_sync_inbox_workflow ON extension_workflow_sync_inbox(owner_user_id, workflow_id, received_at)`,
+	`CREATE INDEX IF NOT EXISTS idx_ext_wf_sync_inbox_workflow ON extension_workflow_sync_inbox(owner_space_id, workflow_id, received_at)`,
 	`CREATE TABLE IF NOT EXISTS extension_workflow_sync_canonical (
-		owner_user_id TEXT NOT NULL,
+		owner_space_id TEXT NOT NULL,
 		workflow_id TEXT NOT NULL,
 		revision INTEGER NOT NULL,
 		definition_hash TEXT NOT NULL DEFAULT '',
@@ -2388,13 +2391,13 @@ var schemaMigrations = []string{
 		source_device_id TEXT NOT NULL DEFAULT '',
 		payload_json TEXT NOT NULL DEFAULT '{}',
 		updated_at DATETIME NOT NULL,
-		PRIMARY KEY(owner_user_id, workflow_id)
+		PRIMARY KEY(owner_space_id, workflow_id)
 	)`,
 
 	`CREATE TABLE IF NOT EXISTS extension_workflow_installations (
 		installation_id TEXT PRIMARY KEY,
 		workflow_id TEXT NOT NULL,
-		owner_user_id TEXT NOT NULL,
+		owner_space_id TEXT NOT NULL,
 		location TEXT NOT NULL,
 		host_device_id TEXT NOT NULL DEFAULT '',
 		enabled INTEGER NOT NULL DEFAULT 0,
@@ -2404,14 +2407,14 @@ var schemaMigrations = []string{
 		revision INTEGER NOT NULL DEFAULT 1,
 		created_at DATETIME NOT NULL,
 		updated_at DATETIME NOT NULL,
-		UNIQUE(owner_user_id, workflow_id, location, host_device_id)
+		UNIQUE(owner_space_id, workflow_id, location, host_device_id)
 	)`,
-	`CREATE INDEX IF NOT EXISTS idx_ext_wf_install_owner_location ON extension_workflow_installations(owner_user_id, location, updated_at DESC)`,
+	`CREATE INDEX IF NOT EXISTS idx_ext_wf_install_owner_location ON extension_workflow_installations(owner_space_id, location, updated_at DESC)`,
 	`CREATE INDEX IF NOT EXISTS idx_ext_wf_install_workflow ON extension_workflow_installations(workflow_id)`,
-	`CREATE INDEX IF NOT EXISTS idx_ext_wf_install_device ON extension_workflow_installations(owner_user_id, host_device_id, updated_at DESC)`,
+	`CREATE INDEX IF NOT EXISTS idx_ext_wf_install_device ON extension_workflow_installations(owner_space_id, host_device_id, updated_at DESC)`,
 
 	`CREATE TABLE IF NOT EXISTS extension_workflow_device_catalog (
-		owner_user_id TEXT NOT NULL,
+		owner_space_id TEXT NOT NULL,
 		device_id TEXT NOT NULL,
 		workflow_id TEXT NOT NULL,
 		name TEXT NOT NULL,
@@ -2422,9 +2425,9 @@ var schemaMigrations = []string{
 		enabled INTEGER NOT NULL DEFAULT 0,
 		updated_at DATETIME NOT NULL,
 		last_seen DATETIME NOT NULL,
-		PRIMARY KEY(owner_user_id, device_id, workflow_id)
+		PRIMARY KEY(owner_space_id, device_id, workflow_id)
 	)`,
-	`CREATE INDEX IF NOT EXISTS idx_ext_wf_device_catalog_seen ON extension_workflow_device_catalog(owner_user_id, device_id, last_seen DESC)`,
+	`CREATE INDEX IF NOT EXISTS idx_ext_wf_device_catalog_seen ON extension_workflow_device_catalog(owner_space_id, device_id, last_seen DESC)`,
 	`ALTER TABLE extension_workflow_trigger_bindings ADD COLUMN config_json TEXT NOT NULL DEFAULT '{}'`,
 	`CREATE TABLE IF NOT EXISTS extension_workflow_trigger_receipts (
 		event_id TEXT NOT NULL,
@@ -2535,9 +2538,122 @@ func Migrate(ctx context.Context, db *sql.DB) error {
 	if _, err := tx.ExecContext(ctx, `CREATE UNIQUE INDEX IF NOT EXISTS idx_ext_wf_exec_idempotency ON extension_workflow_executions(workflow_id, idempotency_key) WHERE idempotency_key <> ''`); err != nil {
 		return fmt.Errorf("sqlite: ensure workflow idempotency index: %w", err)
 	}
+	if err := normalizeLegacyExtensionIdentities(ctx, tx); err != nil {
+		return fmt.Errorf("sqlite: normalize legacy extension identities: %w", err)
+	}
 
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("sqlite: commit migration transaction: %w", err)
+	}
+	return nil
+}
+
+func normalizeLegacyExtensionIdentities(ctx context.Context, tx *sql.Tx) error {
+	definitionRows, err := tx.QueryContext(ctx, `SELECT id, definition_json FROM extension_definitions`)
+	if err != nil {
+		return err
+	}
+	type definitionRow struct {
+		id   string
+		data string
+	}
+	var definitions []definitionRow
+	for definitionRows.Next() {
+		var row definitionRow
+		if err := definitionRows.Scan(&row.id, &row.data); err != nil {
+			definitionRows.Close()
+			return err
+		}
+		definitions = append(definitions, row)
+	}
+	if err := definitionRows.Close(); err != nil {
+		return err
+	}
+	if err := definitionRows.Err(); err != nil {
+		return err
+	}
+	for _, row := range definitions {
+		var raw map[string]any
+		if err := json.Unmarshal([]byte(row.data), &raw); err != nil {
+			return err
+		}
+		changed := false
+		if value, ok := raw["domain"].(string); ok {
+			normalized := string(domain.NormalizeExtensionDomain(domain.ExtensionDomain(value)))
+			if normalized != value {
+				raw["domain"] = normalized
+				changed = true
+			}
+		}
+		if pkg, ok := raw["package"].(map[string]any); ok {
+			if value, ok := pkg["packageId"].(string); ok {
+				switch value {
+				case "builtin-game-host":
+					pkg["packageId"] = "gamex"
+					changed = true
+				case "builtin-desktop-pet":
+					pkg["packageId"] = "petx"
+					changed = true
+				}
+			}
+		}
+		if !changed {
+			continue
+		}
+		data, err := json.Marshal(raw)
+		if err != nil {
+			return err
+		}
+		hash := sha256.Sum256(data)
+		if _, err := tx.ExecContext(ctx, `UPDATE extension_definitions SET definition_json = ?, definition_hash = ? WHERE id = ?`, string(data), hex.EncodeToString(hash[:]), row.id); err != nil {
+			return err
+		}
+	}
+
+	contributionRows, err := tx.QueryContext(ctx, `SELECT id, definition_json FROM extension_contributions`)
+	if err != nil {
+		return err
+	}
+	type contributionRow struct {
+		id   string
+		data string
+	}
+	var contributions []contributionRow
+	for contributionRows.Next() {
+		var row contributionRow
+		if err := contributionRows.Scan(&row.id, &row.data); err != nil {
+			contributionRows.Close()
+			return err
+		}
+		contributions = append(contributions, row)
+	}
+	if err := contributionRows.Close(); err != nil {
+		return err
+	}
+	if err := contributionRows.Err(); err != nil {
+		return err
+	}
+	for _, row := range contributions {
+		var raw map[string]any
+		if err := json.Unmarshal([]byte(row.data), &raw); err != nil {
+			return err
+		}
+		value, ok := raw["kind"].(string)
+		if !ok {
+			continue
+		}
+		normalized := string(domain.NormalizeContributionKind(domain.ContributionKind(value)))
+		if normalized == value {
+			continue
+		}
+		raw["kind"] = normalized
+		data, err := json.Marshal(raw)
+		if err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, `UPDATE extension_contributions SET contribution_type = ?, definition_json = ? WHERE id = ?`, normalized, string(data), row.id); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -2723,6 +2839,7 @@ var schemaColumnAdditions = []columnAddition{
 	{"extension_task_runs", "execution_resolved_at", "DATETIME"},
 	{"extension_task_runs", "execution_resolved_by", "TEXT NOT NULL DEFAULT ''"},
 	{"extension_task_runs", "revision", "INTEGER NOT NULL DEFAULT 1"},
+	{"kernel_permission_snapshots", "execution_space_id", "TEXT NOT NULL DEFAULT ''"},
 	{"kernel_host_registry", "runtime_session_id", "TEXT NOT NULL DEFAULT ''"},
 	{"kernel_host_registry", "connection_generation", "INTEGER NOT NULL DEFAULT 0"},
 	{"kernel_host_registry", "entry_id", "TEXT NOT NULL DEFAULT ''"},
@@ -2755,6 +2872,58 @@ func ensureSchemaColumns(ctx context.Context, db dbExecutor) error {
 			return fmt.Errorf("add column %s.%s: %w", a.table, a.column, err)
 		}
 	}
+	// Space identity cutover for permission snapshots. Older kernels persisted the
+	// owner principal in execution_user_id. The runtime no longer reads that
+	// column; copy it once and drop the legacy identity column when supported.
+	if exists, err := tableExists(ctx, db, "kernel_permission_snapshots"); err != nil {
+		return err
+	} else if exists {
+		legacy, err := columnExists(ctx, db, "kernel_permission_snapshots", "execution_user_id")
+		if err != nil {
+			return err
+		}
+		spaceCol, err := columnExists(ctx, db, "kernel_permission_snapshots", "execution_space_id")
+		if err != nil {
+			return err
+		}
+		if legacy && spaceCol {
+			if _, err := db.ExecContext(ctx, `UPDATE kernel_permission_snapshots SET execution_space_id = execution_user_id WHERE execution_space_id = '' AND execution_user_id <> ''`); err != nil {
+				return fmt.Errorf("backfill kernel permission snapshot space identity: %w", err)
+			}
+			if _, err := db.ExecContext(ctx, `ALTER TABLE kernel_permission_snapshots DROP COLUMN execution_user_id`); err != nil && !strings.Contains(strings.ToLower(err.Error()), "no such column") {
+				return fmt.Errorf("drop legacy kernel permission user identity column: %w", err)
+			}
+		}
+	}
+
+	// Space ownership cutover for Kernel persistence. Before the product account
+	// subsystem was removed, personal resources and permission subjects were
+	// serialized as "user". Runtime code now has exactly one personal ownership
+	// principal: "space". This migration is intentionally idempotent and only
+	// rewrites identity semantics; human action/audit values such as issued_by =
+	// "user" remain unchanged.
+	legacySpaceUpdates := []struct {
+		table  string
+		column string
+	}{
+		{"extension_resources", "owner_type"},
+		{"kernel_permission_grants", "subject_type"},
+		{"kernel_observability_invocations", "owner_type"},
+	}
+	for _, update := range legacySpaceUpdates {
+		exists, err := tableExists(ctx, db, update.table)
+		if err != nil {
+			return err
+		}
+		if !exists {
+			continue
+		}
+		stmt := fmt.Sprintf("UPDATE %s SET %s = 'space' WHERE %s = 'user'", update.table, update.column, update.column)
+		if _, err := db.ExecContext(ctx, stmt); err != nil {
+			return fmt.Errorf("migrate legacy user principal in %s.%s: %w", update.table, update.column, err)
+		}
+	}
+
 	if exists, err := tableExists(ctx, db, "extension_workflow_compensations"); err != nil {
 		return err
 	} else if exists {

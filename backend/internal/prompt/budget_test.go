@@ -20,23 +20,23 @@ func TestApplyBudgetTrimsLowPrioritySectionsFirst(t *testing.T) {
 		},
 	})
 
-	if len(budgeted.Sections) != 3 {
-		t.Fatalf("expected history to be dropped first: %#v", budgeted.Sections)
+	if len(budgeted.Sections) != 2 {
+		t.Fatalf("expected lower priority sections to be dropped: %#v", budgeted.Sections)
 	}
-	if budgeted.Sections[2].Type != SectionTypeMemory {
-		t.Fatalf("expected memory to remain after higher priority sections: %#v", budgeted.Sections)
+	if budgeted.Sections[1].Type != SectionTypeCurrentInput {
+		t.Fatalf("expected current input to remain after system: %#v", budgeted.Sections)
 	}
 	if got := sectionContentTokens(budgeted.Sections); got > 14 {
 		t.Fatalf("expected prompt to stay within budget, got %d", got)
 	}
-	if len(budgeted.Audit.TrimRecords) != 2 {
-		t.Fatalf("expected two trim records: %#v", budgeted.Audit.TrimRecords)
+	if len(budgeted.Audit.TrimRecords) != 4 {
+		t.Fatalf("expected four trim records: %#v", budgeted.Audit.TrimRecords)
 	}
-	if budgeted.Audit.TrimRecords[0].SectionType != SectionTypeMemory || budgeted.Audit.TrimRecords[1].SectionType != SectionTypeHistory {
+	if budgeted.Audit.TrimRecords[2].SectionType != SectionTypeMemory || budgeted.Audit.TrimRecords[3].SectionType != SectionTypeHistory {
 		t.Fatalf("unexpected trim record order: %#v", budgeted.Audit.TrimRecords)
 	}
-	if budgeted.Audit.TrimRecords[1].AfterTokens != 0 {
-		t.Fatalf("expected history to be fully dropped: %#v", budgeted.Audit.TrimRecords[1])
+	if budgeted.Audit.TrimRecords[3].AfterTokens != 0 {
+		t.Fatalf("expected history to be fully dropped: %#v", budgeted.Audit.TrimRecords[3])
 	}
 }
 

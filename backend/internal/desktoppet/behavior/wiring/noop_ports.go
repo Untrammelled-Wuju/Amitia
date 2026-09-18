@@ -9,7 +9,7 @@ import (
 
 type NoopActivePetPort struct{}
 
-func (n *NoopActivePetPort) ResolveActivePet(ctx context.Context, userID, characterID string) (*behavior.ActivePetSnapshot, error) {
+func (n *NoopActivePetPort) ResolveActivePet(ctx context.Context, spaceID, characterID string) (*behavior.ActivePetSnapshot, error) {
 	return nil, behavior.NewBehaviorError(behavior.ErrCodeNoActiveInstallation, "no active installation")
 }
 

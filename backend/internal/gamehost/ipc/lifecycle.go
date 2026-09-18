@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"log"
 	"sync"
 	"time"
 
@@ -318,34 +319,38 @@ func (cp *controlPlane) Send(ctx context.Context, peer Peer, envelope protocol.E
 }
 
 func (cp *controlPlane) SendRequest(ctx context.Context, peer Peer, envelope protocol.Envelope, timeout time.Duration) (*protocol.Envelope, error) {
+	fail := func(stage string, err error) (*protocol.Envelope, error) {
+		log.Printf("[gamehost-ipc] send request failed: stage=%s runtime=%s service=%s plugin=%s generation=%d method=%s err=%v", stage, peer.RuntimeID, peer.ServiceID, peer.PluginID, peer.Generation, envelope.Method, err)
+		return nil, err
+	}
 	if err := envelope.Validate(); err != nil {
-		return nil, NewIPCErrorWithCause(IPCErrorProtocol, domain.ErrInvalidArgument, "envelope validation failed", err)
+		return fail("envelope_validation", NewIPCErrorWithCause(IPCErrorProtocol, domain.ErrInvalidArgument, "envelope validation failed", err))
 	}
 
 	if err := ValidateEnvelopePeer(envelope, peer); err != nil {
-		return nil, err
+		return fail("envelope_peer", err)
 	}
 
 	conn, exists := cp.registry.GetByPeer(peer.Key())
 	if !exists {
-		return nil, NewIPCErrorWithCause(
+		return fail("no_connection", NewIPCErrorWithCause(
 			IPCErrorTransport,
 			domain.ErrRuntimeUnavailable,
 			"no active connection for peer",
 			nil,
-		)
+		))
 	}
 
 	if !conn.IsActive() {
-		return nil, NewIPCErrorWithCause(
+		return fail("connection_inactive", NewIPCErrorWithCause(
 			IPCErrorTransport,
 			domain.ErrRuntimeUnavailable,
 			"connection is not active",
 			nil,
-		)
+		))
 	}
 	if !cp.handshakeController.CanProcess(conn.ID, envelope.Method) {
-		return nil, NewIPCError(IPCErrorProtocol, domain.ErrInvalidState, "connection has not completed the game protocol handshake")
+		return fail("handshake_gate", NewIPCError(IPCErrorProtocol, domain.ErrInvalidState, "connection has not completed the game protocol handshake"))
 	}
 
 	if envelope.ID == "" {
@@ -366,14 +371,14 @@ func (cp *controlPlane) SendRequest(ctx context.Context, peer Peer, envelope pro
 
 	if cp.requestAdmission != nil {
 		if err := cp.requestAdmission.AdmitRequest(ctx, peer); err != nil {
-			return nil, NewIPCErrorWithCause(IPCErrorProtocol, domain.ErrResourceExhausted, "request denied by resource admission", err)
+			return fail("admission", NewIPCErrorWithCause(IPCErrorProtocol, domain.ErrResourceExhausted, "request denied by resource admission", err))
 		}
 	}
 
 	handle, registered := cp.responseCorrelator.RegisterPending(peer, envelope.ID, envelope.Generation, envelope.Method, envelope.Payload)
 	if !registered {
 		if handle == nil {
-			return nil, NewIPCError(IPCErrorProtocol, domain.ErrInvalidState, "duplicate or rejected request id")
+			return fail("duplicate_request_id", NewIPCError(IPCErrorProtocol, domain.ErrInvalidState, "duplicate or rejected request id"))
 		}
 		select {
 		case <-handle.DoneCh():
@@ -388,8 +393,9 @@ func (cp *controlPlane) SendRequest(ctx context.Context, peer Peer, envelope pro
 	}
 
 	if err := conn.Transport().Send(ctx, envelope); err != nil {
-		cp.responseCorrelator.Terminalize(requestKey, TerminalFailed, NewIPCErrorWithCause(IPCErrorTransport, domain.ErrRuntimeUnavailable, "send failed", err))
-		return nil, NewIPCErrorWithCause(IPCErrorTransport, domain.ErrRuntimeUnavailable, "send failed", err)
+		sendErr := NewIPCErrorWithCause(IPCErrorTransport, domain.ErrRuntimeUnavailable, "send failed", err)
+		cp.responseCorrelator.Terminalize(requestKey, TerminalFailed, sendErr)
+		return fail("transport_send", sendErr)
 	}
 
 	timer := time.NewTimer(timeout)
@@ -451,6 +457,7 @@ func (cp *controlPlane) receiveLoop(conn *Connection, ctx context.Context) {
 
 		envelope, err := conn.Transport().Receive(ctx)
 		if err != nil {
+			log.Printf("[gamehost-ipc] connection receive ended: runtime=%s service=%s plugin=%s generation=%d conn=%s terminal=%v err=%v", conn.Peer.RuntimeID, conn.Peer.ServiceID, conn.Peer.PluginID, conn.Peer.Generation, conn.ID, isTerminalError(err), err)
 			if isTerminalError(err) {
 				cp.connHandler.OnDetach(conn)
 				cp.cleanupConnection(conn)

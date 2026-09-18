@@ -8,8 +8,8 @@ import (
 )
 
 type BackgroundHandler struct {
-	bridge  nativebridge.Bridge
-	taskRT  TaskRuntimePort
+	bridge nativebridge.Bridge
+	taskRT TaskRuntimePort
 }
 
 func NewBackgroundHandler(bridge nativebridge.Bridge) *BackgroundHandler {
@@ -185,6 +185,7 @@ func (h *BackgroundHandler) handleTaskRegister(ctx context.Context, request nati
 func (h *BackgroundHandler) handleTaskSubmit(ctx context.Context, request nativebridge.Request) nativebridge.Response {
 	req := BackgroundSubmissionRequest{
 		SystemClass:           BackgroundSystemClass(getString(request.Payload, "systemClass")),
+		Identifier:            getString(request.Payload, "identifier"),
 		TaskRunID:             getString(request.Payload, "taskRunId"),
 		TaskDefinitionID:      getString(request.Payload, "taskDefinitionID"),
 		Reason:                getString(request.Payload, "reason"),
@@ -548,10 +549,10 @@ func (h *BackgroundHandler) handleFileAccessWrite(ctx context.Context, request n
 		return NewBackgroundError(request, code, msg)
 	}
 	return h.bridgeCall(ctx, request, OperationFileAccessWrite, map[string]any{
-		"mountId":        req.MountID,
-		"relativePath":   req.RelativePath,
-		"contentBase64":  req.ContentBase64,
-		"atomic":         req.Atomic,
+		"mountId":       req.MountID,
+		"relativePath":  req.RelativePath,
+		"contentBase64": req.ContentBase64,
+		"atomic":        req.Atomic,
 	})
 }
 

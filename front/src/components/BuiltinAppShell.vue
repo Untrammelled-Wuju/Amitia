@@ -8,8 +8,8 @@ SPDX-License-Identifier: AGPL-3.0-only
       <UIProviderHost v-if="!isMobile" capability="app.navigation" :fallback="SideNav" :context="{ viewport: 'desktop' }" :username="authUsername" :avatar="authAvatar" :theme="resolvedTheme" @toggle-theme="toggleTheme" />
 
       <div class="app-main workspace" :class="{ 'is-desktop-shell': isDesktopShell() }">
-        <main class="app-content workspace-surface" :class="{ 'is-login': isLoginPage, 'workspace-surface--chat': isChatPage }">
-          <header v-if="isMobile && !isLoginPage" class="mobile-header">
+        <main class="app-content workspace-surface" :class="{ 'workspace-surface--chat': isChatPage }">
+          <header v-if="isMobile" class="mobile-header">
             <span class="mobile-title">{{ pageTitle }}</span>
             <span class="mobile-status">
               <span class="dot" :class="modelClass"></span>
@@ -37,7 +37,7 @@ SPDX-License-Identifier: AGPL-3.0-only
       </div>
     </div>
 
-    <UIProviderHost v-if="isMobile && !isLoginPage" capability="app.navigation" :fallback="MobileNav" :context="{ viewport: 'mobile' }" />
+    <UIProviderHost v-if="isMobile" capability="app.navigation" :fallback="MobileNav" :context="{ viewport: 'mobile' }" />
   </div>
 </template>
 
@@ -54,7 +54,6 @@ import { isNavigationAllowed } from "../navigation/nav-whitelist";
 import {
   apiClient,
 } from "../composables/useApi";
-import { getAccessToken } from "../stores/refresh-coordinator";
 import { getPageTitle } from "@/navigation/app-nav";
 import { useAppStore } from "@/stores/app";
 import { useExtensionUIStore } from "@/stores/extensionUI";
@@ -73,21 +72,23 @@ const {
 
 const windowWidth = ref(window.innerWidth);
 const isMobile = computed(() => windowWidth.value < 768);
-const isLoginPage = computed(() => router.currentRoute.value.path === "/login");
 
 const isChatPage = computed(() => router.currentRoute.value.path === "/chat");
 const isContentPaddingDisabled = computed(() => {
   const path = router.currentRoute.value.path;
   return (
     path === "/chat" ||
-    path === "/login" ||
     path === "/emotes" ||
-    path.startsWith("/character")
+    path.startsWith("/character") ||
+    path === "/creative-workshop/character-cards"
   );
 });
 const isContentFullHeight = computed(() => {
   const path = router.currentRoute.value.path;
-  return path === "/emotes" || path.startsWith("/character");
+  return path === "/emotes" ||
+    path.startsWith("/character") ||
+    path === "/creative-workshop/character-cards" ||
+    path.startsWith("/extensions/workflows/");
 });
 const pageTitle = computed(() => getPageTitle(router.currentRoute.value.path));
 
@@ -96,8 +97,6 @@ const health = ref({
   deployMode: "desktop-local",
   database: "ok",
   model: "not_configured",
-  wechat: "disconnected",
-  qq: "disconnected",
   web: "enabled",
 });
 
@@ -120,7 +119,6 @@ function handleWindowResize() {
 provide("theme", theme);
 async function refreshAll() {
   await fetchHealth();
-  await fetchQQStatus();
   await fetchActiveCharacter();
 }
 provide("refreshHealth", refreshAll);
@@ -135,21 +133,6 @@ async function fetchHealth() {
       health.value = { ...health.value, ...res.data };
     }
   } catch {}
-}
-
-async function fetchQQStatus() {
-  try {
-    const res = await apiClient.get("/api/qq/status");
-    const data = res.data?.data || res.data;
-    if (data) {
-      health.value.qq =
-        data.qqOnline || data.status === "online"
-          ? "connected"
-          : "disconnected";
-    }
-  } catch {
-    health.value.qq = "disconnected";
-  }
 }
 
 async function fetchActiveCharacter() {
@@ -184,33 +167,29 @@ async function fetchActiveCharacter() {
   } catch {}
 }
 
-async function fetchUserInfo() {
-  if (!getAccessToken()) return;
+async function fetchSpaceProfile() {
   try {
-    const res = await apiClient.get("/api/auth/me");
-    const user = res.data?.data || res.data;
-    if (user?.username) {
-      authUsername.value = user.username;
-    }
-  } catch {}
+    const res = await apiClient.get("/api/space/profile");
+    const profile = res.data?.data || res.data;
+    authUsername.value = String(profile?.displayName || profile?.nickname || "本地用户");
+  } catch {
+    authUsername.value = "本地用户";
+  }
 }
 
 onMounted(() => {
   window.addEventListener("resize", handleWindowResize);
   fetchHealth();
-  fetchQQStatus();
-  if (getAccessToken()) {
-    fetchActiveCharacter();
-    fetchUserInfo();
-    connectUIHost();
-    extensionUIStore.refreshSnapshot(true).then(() => {
-      extensionRuntimeAvailable.value = true;
-    });
-    if (disposeExtensionListener) {
-      disposeExtensionListener();
-    }
-    disposeExtensionListener = extensionUIStore.setupExtensionChangeListener();
+  fetchActiveCharacter();
+  fetchSpaceProfile();
+  connectUIHost();
+  extensionUIStore.refreshSnapshot(true).then(() => {
+    extensionRuntimeAvailable.value = true;
+  });
+  if (disposeExtensionListener) {
+    disposeExtensionListener();
   }
+  disposeExtensionListener = extensionUIStore.setupExtensionChangeListener();
 
   if (window.amitiaDesktop?.onUINavigate) {
     electronNavCleanup = window.amitiaDesktop.onUINavigate((target: string) => {
@@ -222,7 +201,6 @@ onMounted(() => {
 
   healthInterval = window.setInterval(() => {
     void fetchHealth();
-    void fetchQQStatus();
   }, 30000);
 });
 

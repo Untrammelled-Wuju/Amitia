@@ -26,10 +26,9 @@ func (s *service) Health() map[string]interface{} {
 		s.healthLog = s.healthLog[1:]
 	}
 	return map[string]interface{}{
-		"health": true, "version": "1.0.0", "deployMode": "desktop-local",
+		"health": true, "version": "26.2.0-beta", "deployMode": "desktop-local",
 		"database": dbStatus, "model": modelStatus,
-		"wechat": s.getWechatHealthStatus(), "qq": s.getQQHealthStatus(), "web": "enabled",
-		"wechat_running": s.isWechatSidecarRunning(), "qq_running": s.isQQSidecarRunning(),
+		"web":    "enabled",
 		"uptime": int(time.Since(s.startTime).Seconds()),
 	}
 }
@@ -37,16 +36,15 @@ func (s *service) Health() map[string]interface{} {
 func (s *service) Diagnostics() map[string]interface{} {
 	var memStats runtime.MemStats
 	runtime.ReadMemStats(&memStats)
-	var userCount, convCount, msgCount, ruleCount int64
-	s.db.Table("auth_users").Count(&userCount)
+	var deviceCount, convCount, msgCount int64
+	s.db.Table("kernel_devices").Count(&deviceCount)
 	s.db.Table("conversations").Count(&convCount)
 	s.db.Table("messages").Count(&msgCount)
-	s.db.Table("proactive_rules").Where("enabled = 1").Count(&ruleCount)
 	return map[string]interface{}{
-		"version": "1.0.0-go", "goVersion": runtime.Version(),
+		"version": "26.2.0-beta", "goVersion": runtime.Version(),
 		"uptime": time.Since(s.startTime).String(), "goroutines": runtime.NumGoroutine(),
 		"memory": map[string]interface{}{"allocMB": memStats.Alloc / 1024 / 1024, "totalAllocMB": memStats.TotalAlloc / 1024 / 1024},
-		"stats":  map[string]interface{}{"users": userCount, "conversations": convCount, "messages": msgCount, "enabledRules": ruleCount},
+		"stats":  map[string]interface{}{"devices": deviceCount, "conversations": convCount, "messages": msgCount},
 	}
 }
 
@@ -69,9 +67,6 @@ func (s *service) RunDiagnostics() map[string]interface{} {
 		mStatus = "pass"
 	}
 	checks = append(checks, map[string]interface{}{"name": "Active Model", "status": mStatus, "detail": activeModel})
-	var ruleCount int64
-	s.db.Table("proactive_rules").Where("enabled = 1").Count(&ruleCount)
-	checks = append(checks, map[string]interface{}{"name": "Enabled Rules", "status": "info", "detail": ruleCount})
 	passCount := 0
 	for _, c := range checks {
 		if c["status"] == "pass" {

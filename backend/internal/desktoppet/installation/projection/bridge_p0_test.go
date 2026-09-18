@@ -30,12 +30,12 @@ func newProjectionBridgeP0TestDB(t *testing.T) *gorm.DB {
 func TestProjectionBridge_RecenterACKCompletesOriginalOperation(t *testing.T) {
 	db := newProjectionBridgeP0TestDB(t)
 	ctx := context.Background()
-	if err := db.Create(&runtimeSessionIdentity{ID: "sess-1", UserID: "u", DeviceID: "d", RuntimeID: "r"}).Error; err != nil {
+	if err := db.Create(&runtimeSessionIdentity{ID: "sess-1", SpaceID: "u", DeviceID: "d", RuntimeID: "r"}).Error; err != nil {
 		t.Fatalf("create session identity: %v", err)
 	}
 	op := &operation.InstallationOperation{
 		ID: "op-recenter-1", OperationType: operation.TypeRecenter,
-		UserID: "u", DeviceID: "d", RuntimeID: "r", InstallationID: "inst",
+		SpaceID: "u", DeviceID: "d", RuntimeID: "r", InstallationID: "inst",
 		Status: operation.OpStatusWaitingRuntimeACK, Stage: operation.OpStageWaitingRuntimeACK,
 	}
 	if err := db.Create(op).Error; err != nil {
@@ -64,12 +64,12 @@ func TestProjectionBridge_RecenterACKCompletesOriginalOperation(t *testing.T) {
 func TestProjectionBridge_RecenterACKBeforeCoordinatorStagePersistsIsRetryable(t *testing.T) {
 	db := newProjectionBridgeP0TestDB(t)
 	ctx := context.Background()
-	if err := db.Create(&runtimeSessionIdentity{ID: "sess-2", UserID: "u", DeviceID: "d", RuntimeID: "r"}).Error; err != nil {
+	if err := db.Create(&runtimeSessionIdentity{ID: "sess-2", SpaceID: "u", DeviceID: "d", RuntimeID: "r"}).Error; err != nil {
 		t.Fatalf("create session identity: %v", err)
 	}
 	op := &operation.InstallationOperation{
 		ID: "op-recenter-fast", OperationType: operation.TypeRecenter,
-		UserID: "u", DeviceID: "d", RuntimeID: "r", InstallationID: "inst",
+		SpaceID: "u", DeviceID: "d", RuntimeID: "r", InstallationID: "inst",
 		Status: operation.OpStatusCreated, Stage: operation.OpStageRequestValidated,
 	}
 	if err := db.Create(op).Error; err != nil {

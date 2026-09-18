@@ -1,5 +1,5 @@
 {
-	"manifestVersion": 2,
+	"manifestVersion": 1,
 	"extension": {
 		"id": "com.amitia.repair/schedule-workflow",
 		"name": {"default": "Schedule Workflow"},

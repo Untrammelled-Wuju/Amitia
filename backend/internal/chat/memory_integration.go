@@ -28,7 +28,7 @@ func (s *service) extractProfile(convID, charID string) {
 	if len(messages) == 0 {
 		return
 	}
-	s.profilePort.ExtractFromConversation(s.profileExtractionUserID(convID, charID), convID, messages, charID)
+	s.profilePort.ExtractFromConversation(s.profileExtractionSpaceID(convID, charID), convID, messages, charID)
 }
 
 func (s *service) autoExtractMemories(convID, charID string) {
@@ -51,9 +51,6 @@ func (s *service) autoExtractMemories(convID, charID string) {
 	}
 
 	for _, c := range candidates {
-		if c.Importance < 7 {
-			continue
-		}
 		if existingKeys[c.Key+"|"+c.Value] {
 			continue
 		}
@@ -62,7 +59,7 @@ func (s *service) autoExtractMemories(convID, charID string) {
 	}
 }
 
-func (s *service) profileExtractionUserID(convID, charID string) string {
+func (s *service) profileExtractionSpaceID(convID, charID string) string {
 	fallback := strings.TrimSpace(charID)
 	if s.db == nil || strings.TrimSpace(convID) == "" {
 		return fallback
@@ -91,7 +88,7 @@ func (s *service) buildMemoryInjectItems(results []memory.HybridSearchResult) st
 			continue
 		}
 		cat := string(memory.CanonicalMemoryType(r.Memory.MemoryType))
-		tier := mapLayerToTier(r.MemoryLayer)
+		tier := mapMemoryToTier(r)
 		injectItems = append(injectItems, promptir.MemoryInjectItem{
 			Content:  r.Memory.Value,
 			Category: cat,
@@ -101,22 +98,24 @@ func (s *service) buildMemoryInjectItems(results []memory.HybridSearchResult) st
 	return promptir.BuildMemoryInjectRawSection(injectItems)
 }
 
-func mapLayerToTier(layer string) promptir.MemoryInjectTier {
-	switch layer {
-	case "用户画像":
+func mapMemoryToTier(result memory.HybridSearchResult) promptir.MemoryInjectTier {
+	if result.SourceType == "episodic" {
+		return promptir.TierRecent
+	}
+	switch result.Memory.RetentionLevel {
+	case memory.RetentionL1, memory.RetentionL2:
 		return promptir.TierLongTerm
-	case "情景回忆":
+	case memory.RetentionL3:
 		return promptir.TierRoleRel
-	case "当前摘要":
-		return promptir.TierRecent
-	case "事实记忆":
-		return promptir.TierRecent
 	default:
 		return promptir.TierRecent
 	}
 }
 
 func isMemoryBlocked(m memory.Memory) bool {
+	if m.AllowContextUse != nil && !*m.AllowContextUse {
+		return true
+	}
 	status := strings.ToLower(strings.TrimSpace(m.VerifiedStatus))
 	switch status {
 	case "deleted", "invalidated", "expired", "rejected", "tombstone", "tombstoned", "inactive":

@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/u-ai/backend/internal/decision"
+	"github.com/u-ai/backend/internal/extension/runtimegate"
 	"github.com/u-ai/backend/internal/interaction"
 )
 
@@ -69,6 +70,8 @@ func TestBuildEmotionFusionRaw_NilExpressionPlan(t *testing.T) {
 }
 
 func TestBuildEmotionFusionRaw_ProducesFullSection(t *testing.T) {
+	runtimegate.Set(runtimegate.EmotionExtensionID, true)
+	t.Cleanup(func() { runtimegate.Set(runtimegate.EmotionExtensionID, false) })
 	runtime := &interaction.RuntimeAssembly{
 		ExpressionPlan: &decision.ExpressionPlan{
 			Tone:             decision.ExpressionToneWarm,
@@ -134,6 +137,8 @@ func TestBuildEmotionFusionInput_AllEmotionsHaveValidAffSecAroDom(t *testing.T) 
 }
 
 func TestBuildEmotionFusionRaw_DifferentPersonalitiesProduceDifferentOutput(t *testing.T) {
+	runtimegate.Set(runtimegate.EmotionExtensionID, true)
+	t.Cleanup(func() { runtimegate.Set(runtimegate.EmotionExtensionID, false) })
 	exprPlan := &decision.ExpressionPlan{
 		Tone:             decision.ExpressionTonePlayful,
 		EmotionIntensity: 0.6,

@@ -49,7 +49,7 @@ func TestPackageLifecycle100CanonicalCycles(t *testing.T) {
 			runtimeInstance, container, root := newPackageLifecycleAcceptanceRuntime(t, ctx)
 			developerSessionID := openPackageLifecycleDeveloperSession(t, ctx, container)
 			firstPreview, firstToken := previewAndConfirmPackageLifecycle(t, ctx, runtimeInstance, createPackagePipelineArchive(t, "1.0.0"), developerSessionID)
-			installRequest := PackageInstallRequest{SessionID: firstPreview.SessionID, UserID: "user-1", ScopeType: "global", ConfirmationToken: firstToken, IdempotencyKey: "lifecycle-install-key"}
+			installRequest := PackageInstallRequest{SessionID: firstPreview.SessionID, SpaceID: "user-1", ScopeType: "global", ConfirmationToken: firstToken, IdempotencyKey: "lifecycle-install-key"}
 			installed, err := runtimeInstance.ExecutePackageInstall(ctx, installRequest)
 			if err != nil {
 				t.Fatal(err)
@@ -59,7 +59,7 @@ func TestPackageLifecycle100CanonicalCycles(t *testing.T) {
 				t.Fatalf("install idempotency failed: first=%s repeated=%s err=%v", installed.OperationID, repeatedInstall.OperationID, err)
 			}
 			secondPreview, secondToken := previewAndConfirmPackageLifecycle(t, ctx, runtimeInstance, createPackagePipelineArchive(t, "1.1.0"), developerSessionID)
-			updateRequest := PackageInstallRequest{SessionID: secondPreview.SessionID, UserID: "user-1", ScopeType: "global", ConfirmationToken: secondToken, ExpectedExtensionID: firstPreview.ExtensionID, IdempotencyKey: "lifecycle-update-key"}
+			updateRequest := PackageInstallRequest{SessionID: secondPreview.SessionID, SpaceID: "user-1", ScopeType: "global", ConfirmationToken: secondToken, ExpectedExtensionID: firstPreview.ExtensionID, IdempotencyKey: "lifecycle-update-key"}
 			updated, err := runtimeInstance.ExecutePackageUpdate(ctx, updateRequest)
 			if err != nil {
 				t.Fatal(err)
@@ -71,7 +71,7 @@ func TestPackageLifecycle100CanonicalCycles(t *testing.T) {
 			rollbackConfirm, err := runtimeInstance.ConfirmPackageRollback(ctx, PackageRollbackConfirmationRequest{
 				ExtensionID:   firstPreview.ExtensionID,
 				TargetVersion: "1.0.0",
-				UserID:        "user-1",
+				SpaceID:       "user-1",
 				ScopeType:     "global",
 				ScopeID:       "",
 				Confirmations: map[string]bool{"confirm.rollback": true, PackageConfirmationSnapshotExempt: true},
@@ -107,7 +107,7 @@ func TestPackageLifecycle100CanonicalCycles(t *testing.T) {
 				SnapshotRequirementHash:   uninstallPreview.SnapshotRequirementHash,
 				RequiredConfirmationsHash: computePackageRequiredConfirmationsHash([]string{"confirm.uninstall.delete"}),
 				DependenciesHash:          computePackageDependenciesHash(uninstallPreview.Dependents),
-				UserID:                    "user-1",
+				SpaceID:                   "user-1",
 				ScopeType:                 "global",
 				ScopeID:                   "",
 				Confirmations:             map[string]bool{"confirm.uninstall.delete": true},
@@ -121,7 +121,7 @@ func TestPackageLifecycle100CanonicalCycles(t *testing.T) {
 			if err != nil {
 				t.Fatalf("sign uninstall confirmation failed: %v", err)
 			}
-			uninstall, err := runtimeInstance.ExecutePackageUninstall(ctx, ExecutePackageUninstallRequest{ExtensionID: firstPreview.ExtensionID, UserID: "user-1", ScopeType: "global", ScopeID: "", ConfirmationToken: uninstallToken})
+			uninstall, err := runtimeInstance.ExecutePackageUninstall(ctx, ExecutePackageUninstallRequest{ExtensionID: firstPreview.ExtensionID, SpaceID: "user-1", ScopeType: "global", ScopeID: "", ConfirmationToken: uninstallToken})
 			if err != nil {
 				t.Fatalf("uninstall failed: operation=%+v err=%v", uninstall, err)
 			}
@@ -172,7 +172,7 @@ func newPackageLifecycleAcceptanceRuntime(t *testing.T, ctx context.Context) (*R
 func openPackageLifecycleDeveloperSession(t *testing.T, ctx context.Context, container *Container) string {
 	t.Helper()
 	workspaceID := dev_mode.WorkspaceID("package-lifecycle")
-	_, err := container.DevModeRegistry.Register(ctx, dev_mode.RegisterWorkspaceInput{WorkspaceID: workspaceID, ExtensionID: dev_mode.ExtensionID("com.example/pipeline"), OwnerUserID: "user-1", PathReference: t.TempDir(), ManifestPath: "manifest.json"})
+	_, err := container.DevModeRegistry.Register(ctx, dev_mode.RegisterWorkspaceInput{WorkspaceID: workspaceID, ExtensionID: dev_mode.ExtensionID("com.example/pipeline"), OwnerSpaceID: "user-1", PathReference: t.TempDir(), ManifestPath: "manifest.json"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -196,7 +196,7 @@ func previewAndConfirmPackageLifecycle(t *testing.T, ctx context.Context, runtim
 	if err != nil {
 		t.Fatal(err)
 	}
-	preview, err := runtimeInstance.PreviewPackage(ctx, PackagePreviewRequest{UserID: "user-1", ScopeType: "global", FileName: "pipeline.amitiax", AllowUnsignedDev: true, DeveloperSessionID: developerSessionID}, archive)
+	preview, err := runtimeInstance.PreviewPackage(ctx, PackagePreviewRequest{SpaceID: "user-1", ScopeType: "global", FileName: "pipeline.amitiax", AllowUnsignedDev: true, DeveloperSessionID: developerSessionID}, archive)
 	archive.Close()
 	if err != nil || !preview.Installable || !preview.DevOnly {
 		t.Fatalf("canonical preview failed: preview=%+v err=%v", preview, err)
@@ -205,7 +205,7 @@ func previewAndConfirmPackageLifecycle(t *testing.T, ctx context.Context, runtim
 	for _, required := range preview.RequiredConfirmations {
 		confirmations[required] = true
 	}
-	confirmed, err := runtimeInstance.ConfirmPackagePreview(ctx, PackagePreviewConfirmationRequest{SessionID: preview.SessionID, UserID: "user-1", ScopeType: "global", Confirmations: confirmations})
+	confirmed, err := runtimeInstance.ConfirmPackagePreview(ctx, PackagePreviewConfirmationRequest{SessionID: preview.SessionID, SpaceID: "user-1", ScopeType: "global", Confirmations: confirmations})
 	if err != nil {
 		t.Fatal(err)
 	}

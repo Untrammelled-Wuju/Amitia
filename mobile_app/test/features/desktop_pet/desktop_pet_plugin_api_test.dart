@@ -25,7 +25,7 @@ class _RecordingServer {
     request.response.headers.contentType = ContentType.json;
     request.response.statusCode = 200;
 
-    if (request.uri.path == '/api/extensions/desktop-pet/plugins') {
+    if (request.uri.path == '/api/extensions/pet/plugins') {
       request.response.write(jsonEncode({
         'code': 200, 'message': 'ok',
         'data': {
@@ -35,7 +35,7 @@ class _RecordingServer {
           'total': 1, 'page': 1, 'pageSize': 20,
         },
       }));
-    } else if (request.uri.path == '/api/extensions/desktop-pet/plugins/plg-1' && request.method == 'GET') {
+    } else if (request.uri.path == '/api/extensions/pet/plugins/plg-1' && request.method == 'GET') {
       request.response.write(jsonEncode({
         'code': 200, 'message': 'ok',
         'data': {
@@ -44,7 +44,7 @@ class _RecordingServer {
           'requiredPermissions': ['window'],
         },
       }));
-    } else if (request.uri.path == '/api/extensions/desktop-pet/plugins/install') {
+    } else if (request.uri.path == '/api/extensions/pet/plugins/install') {
       request.response.write(jsonEncode({
         'code': 200, 'message': 'ok',
         'data': {'extensionId': 'ext-n', 'version': '1.0.0', 'installState': 'installed'},
@@ -123,7 +123,7 @@ void main() {
 
       final req = s.requests.first;
       expect(req.method, 'GET');
-      expect(req.path, '/api/extensions/desktop-pet/plugins');
+      expect(req.path, '/api/extensions/pet/plugins');
       expect(req.query['page'], '1');
       expect(req.query['pageSize'], '20');
     });
@@ -147,32 +147,32 @@ void main() {
       final d = await api.detail('plg-1');
       expect(d.pluginId, 'plg-1');
       expect(d.requiredPermissions, ['window']);
-      expect(s.requests.first.path, '/api/extensions/desktop-pet/plugins/plg-1');
+      expect(s.requests.first.path, '/api/extensions/pet/plugins/plg-1');
     });
 
     test('install POST path', () async {
       await api.install('/pkgs/foo.zip');
       final req = s.requests.first;
       expect(req.method, 'POST');
-      expect(req.path, '/api/extensions/desktop-pet/plugins/install');
+      expect(req.path, '/api/extensions/pet/plugins/install');
     });
 
     test('update POST with extensionId in path', () async {
       final r = await api.update('ext-1', '/pkgs/bar.zip');
       expect(r.version, '1.1.0');
-      expect(s.requests.first.path, '/api/extensions/desktop-pet/plugins/ext-1/update');
+      expect(s.requests.first.path, '/api/extensions/pet/plugins/ext-1/update');
     });
 
     test('enable POST with extensionId', () async {
       final r = await api.enable('ext-1');
       expect(r.success, true);
-      expect(s.requests.first.path, '/api/extensions/desktop-pet/plugins/ext-1/enable');
+      expect(s.requests.first.path, '/api/extensions/pet/plugins/ext-1/enable');
     });
 
     test('disable POST with extensionId', () async {
       final r = await api.disable('ext-1');
       expect(r.success, true);
-      expect(s.requests.first.path, '/api/extensions/desktop-pet/plugins/ext-1/disable');
+      expect(s.requests.first.path, '/api/extensions/pet/plugins/ext-1/disable');
     });
 
     test('uninstall DELETE with extensionId and parses response', () async {
@@ -181,7 +181,7 @@ void main() {
       expect(r.success, true);
       final req = s.requests.first;
       expect(req.method, 'DELETE');
-      expect(req.path, '/api/extensions/desktop-pet/plugins/ext-1');
+      expect(req.path, '/api/extensions/pet/plugins/ext-1');
     });
 
     test('list throws when data is null', () async {
@@ -208,7 +208,7 @@ void main() {
       await nullServer.start();
       final nullApi = DesktopPetPluginApi(BackendServiceApi(BackendHttpClient(_cfg(nullServer.port)), 1));
       await expectLater(() => nullApi.detail('plg/1+2'), throwsA(isA<StateError>()));
-      expect(nullServer.path, '/api/extensions/desktop-pet/plugins/plg%2F1%2B2');
+      expect(nullServer.path, '/api/extensions/pet/plugins/plg%2F1%2B2');
       await nullServer.stop();
     });
   });

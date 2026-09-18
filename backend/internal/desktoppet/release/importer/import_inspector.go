@@ -75,7 +75,7 @@ func (i *ImportInspector) InspectAndMarkReady(
 		}
 		clean, pathErr := packageformat.NormalizePackagePath(entryName)
 		if pathErr != nil {
-			return fmt.Errorf("archive path is not Package V2 canonical: %s: %w", entry.Name, pathErr)
+			return fmt.Errorf("archive path is not Package V1 canonical: %s: %w", entry.Name, pathErr)
 		}
 
 		if clean == "manifest.json" {
@@ -141,7 +141,7 @@ func (i *ImportInspector) InspectAndMarkReady(
 	updated, err := i.repo.UpdateInventory(
 		ctx,
 		staging.ID,
-		staging.OwnerUserID,
+		staging.OwnerSpaceID,
 		string(raw),
 		hex.EncodeToString(inventoryHash[:]),
 	)

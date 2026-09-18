@@ -11,6 +11,10 @@ type HookContextSnapshot struct {
 	OperationID          string    `json:"operationId"`
 	InvocationID         string    `json:"invocationId"`
 	ExtensionID          string    `json:"extensionId"`
+	SpaceID              string    `json:"spaceId"`
+	DeviceID             string    `json:"deviceId,omitempty"`
+	RuntimeID            string    `json:"runtimeId,omitempty"`
+	PrincipalType        string    `json:"principalType,omitempty"`
 	CharacterID          *string   `json:"characterId,omitempty"`
 	ConversationID       *string   `json:"conversationId,omitempty"`
 	MessageID            *string   `json:"messageId,omitempty"`

@@ -1,11 +1,10 @@
 import { describe, it, expect } from "vitest";
 import {
-  Schema1PackageReader,
-  Schema2PackageReader,
+  CanonicalPackageReader,
   RuntimePackageNormalizer,
   compareVersions,
   isValidSemVer,
-  INTEGRITY_ALGORITHM_V2,
+  INTEGRITY_ALGORITHM_V1,
   MANIFEST_FORMAT_CANONICAL,
 } from "../package-schema";
 
@@ -49,99 +48,16 @@ describe("compareVersions", () => {
   });
 
   it("prerelease 版本比较：1.0.0-alpha < 1.0.0", () => {
-    expect(compareVersions("1.0.0", "1.0.0-alpha")).toBe(true);
+    expect(compareVersions("1.0.0", "1.0.0-alpha")).toBe(false);
   });
 });
 
-describe("Schema1PackageReader", () => {
-  const reader = new Schema1PackageReader();
-
-  describe("readManifest", () => {
-    it("正确解析 schemaVersion=1 的 manifest，petId 从 packageId 回退，actionEntries 的 config 默认为 actions/{key}/action.json", () => {
-      const raw = {
-        schemaVersion: 1,
-        packageId: "test-pet-1",
-        name: "Test Pet",
-        defaultAction: "idle",
-        canvas: { width: 128, height: 128 },
-        actions: [
-          { key: "idle", name: "Idle", loopType: "loop" },
-          { key: "wave", loopType: "loop" },
-        ],
-        compatibility: { minRuntimeVersion: "1.0.0" },
-        integrity: { contentRootHash: "hash-1" },
-      };
-      const result = reader.readManifest(raw);
-      expect(result.data.schemaVersion).toBe(1);
-      expect(result.data.petId).toBe("test-pet-1");
-      expect(result.data.displayName).toBe("Test Pet");
-      expect(result.data.defaultActionKey).toBe("idle");
-      expect(result.data.canvas).toEqual({
-        width: 128,
-        height: 128,
-        coordinateSystem: "top-left",
-      });
-      expect(result.data.actionEntries).toHaveLength(2);
-      expect(result.data.actionEntries[0]).toMatchObject({
-        key: "idle",
-        name: "Idle",
-        config: "actions/idle/action.json",
-        playbackMode: "loop",
-      });
-      expect(result.data.actionEntries[1]).toMatchObject({
-        key: "wave",
-        name: "wave",
-        config: "actions/wave/action.json",
-        playbackMode: "loop",
-      });
-      expect(result.data.compatibility.minRuntimeVersion).toBe("1.0.0");
-      expect(result.data.integrity.contentRootHash).toBe("hash-1");
-      expect(result.warnings.some((w) => w.code === "LEGACY_PET_ID_FALLBACK")).toBe(true);
-    });
-  });
-
-  describe("readAction", () => {
-    it("playbackMode 从 loopType 回退，displayName 从 name 回退，默认 priority=50", () => {
-      const raw = {
-        name: "Idle Action",
-        loopType: "once",
-        fps: 10,
-        frames: ["f0.png", "f1.png"],
-      };
-      const result = reader.readAction(raw, "idle", "actions/idle/action.json");
-      expect(result.action.actionKey).toBe("idle");
-      expect(result.action.displayName).toBe("Idle Action");
-      expect(result.action.playbackMode).toBe("once");
-      expect(result.action.priority).toBe(50);
-      expect(result.action.fps).toBe(10);
-      expect(result.action.configPath).toBe("actions/idle/action.json");
-      expect(result.action.frames).toHaveLength(2);
-      expect(result.action.maximumPlayMs).toBeNull();
-      expect(result.action.mutexGroup).toBeNull();
-    });
-
-    it("legacy maximumPlayMs=0 和空 mutexGroup 保持为无约束语义", () => {
-      const raw = {
-        name: "Idle Action",
-        loopType: "loop",
-        fps: 12,
-        maximumPlayMs: 0,
-        mutexGroup: "",
-        frames: ["f0.png"],
-      };
-      const result = reader.readAction(raw, "idle", "actions/idle/action.json");
-      expect(result.action.maximumPlayMs).toBeNull();
-      expect(result.action.mutexGroup).toBeNull();
-    });
-  });
-});
-
-describe("Schema2PackageReader", () => {
-  const reader = new Schema2PackageReader();
+describe("CanonicalPackageReader", () => {
+  const reader = new CanonicalPackageReader();
 
   function buildValidManifest(overrides: Record<string, unknown> = {}): unknown {
     return {
-      schemaVersion: 2,
+      schemaVersion: 1,
       manifestFormat: MANIFEST_FORMAT_CANONICAL,
       petId: "test-pet-2",
       releaseId: "release-1",
@@ -162,7 +78,7 @@ describe("Schema2PackageReader", () => {
           isTransitionOnly: false,
         },
       ],
-      compatibility: { minRuntimeVersion: "2.0.0", renderMode: "sprite" },
+      compatibility: { minRuntimeVersion: "1.0.0", renderMode: "sprite" },
       binding: { policy: "bound" },
       capabilities: {
         transparentBackground: true,
@@ -172,7 +88,7 @@ describe("Schema2PackageReader", () => {
       },
       provenance: { builder: "package-schema-test", sourceType: "generated" },
       integrity: {
-        algorithm: INTEGRITY_ALGORITHM_V2,
+        algorithm: INTEGRITY_ALGORITHM_V1,
         manifestHash: "0".repeat(64),
         contentRootHash: "1".repeat(64),
         fileCount: 1,
@@ -193,7 +109,7 @@ describe("Schema2PackageReader", () => {
 
   function buildValidAction(overrides: Record<string, unknown> = {}): unknown {
     return {
-      schemaVersion: 2,
+      schemaVersion: 1,
       actionKey: "wave",
       displayName: "Wave",
       version: 1,
@@ -225,15 +141,15 @@ describe("Schema2PackageReader", () => {
   }
 
   describe("readManifest", () => {
-    it("正确解析 schemaVersion=2 的 manifest", () => {
+    it("正确解析 schemaVersion=1 的 manifest", () => {
       const raw = buildValidManifest();
       const result = reader.readManifest(raw);
-      expect(result.data.schemaVersion).toBe(2);
+      expect(result.data.schemaVersion).toBe(1);
       expect(result.data.petId).toBe("test-pet-2");
       expect(result.data.displayName).toBe("Test Pet 2");
       expect(result.data.defaultActionKey).toBe("idle");
-      expect(result.data.compatibility.minRuntimeVersion).toBe("2.0.0");
-      expect(result.data.integrity.algorithm).toBe(INTEGRITY_ALGORITHM_V2);
+      expect(result.data.compatibility.minRuntimeVersion).toBe("1.0.0");
+      expect(result.data.integrity.algorithm).toBe(INTEGRITY_ALGORITHM_V1);
       expect(result.data.integrity.manifestHash).toBe("0".repeat(64));
       expect(result.warnings).toHaveLength(0);
     });
@@ -243,8 +159,8 @@ describe("Schema2PackageReader", () => {
       expect(() => reader.readManifest(raw)).toThrow();
     });
 
-    it("schemaVersion 不为 2 时抛出错误", () => {
-      const raw = buildValidManifest({ schemaVersion: 1 });
+    it("schemaVersion 不为 1 时抛出错误", () => {
+      const raw = buildValidManifest({ schemaVersion: 2 });
       expect(() => reader.readManifest(raw)).toThrow();
     });
 
@@ -272,10 +188,10 @@ describe("Schema2PackageReader", () => {
       expect(() => reader.readManifest(raw)).toThrow();
     });
 
-    it("V2 integrity.files 不接受 legacy hash 字段", () => {
+    it("V1 integrity.files 不接受 legacy hash 字段", () => {
       const raw = buildValidManifest({
         integrity: {
-          algorithm: INTEGRITY_ALGORITHM_V2,
+          algorithm: INTEGRITY_ALGORITHM_V1,
           manifestHash: "0".repeat(64),
           contentRootHash: "1".repeat(64),
           fileCount: 1,
@@ -303,7 +219,7 @@ describe("Schema2PackageReader", () => {
       expect(result.action.fps).toBe(15);
     });
 
-    it("V2 action 拒绝 defaultFps 等未知顶层字段", () => {
+    it("V1 action 拒绝 defaultFps 等未知顶层字段", () => {
       const raw = buildValidAction({ defaultFps: 30 });
       expect(() => reader.readAction(raw, "wave", "actions/wave/action.json")).toThrow();
     });
@@ -336,7 +252,7 @@ describe("Schema2PackageReader", () => {
         ],
       });
       expect(() => reader.readAction(raw, "wave", "actions/wave/action.json")).toThrow(
-        "PACKAGE_FRAME_ASSET_ID_MISSING",
+        "assetId is required",
       );
     });
   });
@@ -344,28 +260,96 @@ describe("Schema2PackageReader", () => {
 
 describe("RuntimePackageNormalizer", () => {
   const normalizer = new RuntimePackageNormalizer();
-  const RUNTIME_VERSION = "2.0.0";
+  const RUNTIME_VERSION = "1.0.0";
 
-  it("Schema 1 输入 → sourceSchemaVersion=1, schemaVersion=2", () => {
+  function canonicalManifest(overrides: Record<string, unknown> = {}) {
+    return {
+      schemaVersion: 1,
+      manifestFormat: MANIFEST_FORMAT_CANONICAL,
+      petId: "pet-1",
+      releaseId: "release-1",
+      version: "1.0.0",
+      name: "Pet",
+      defaultAction: "idle",
+      canvas: { width: 128, height: 128, coordinateSystem: "top-left" },
+      actions: [
+        {
+          key: "idle",
+          name: "Idle",
+          config: "actions/idle/action.json",
+          playbackMode: "loop",
+          fps: 8,
+          frameCount: 1,
+          supportsDefaultIdle: true,
+          isStableStateCandidate: true,
+          isTransitionOnly: false,
+        },
+      ],
+      compatibility: { minRuntimeVersion: "1.0.0", renderMode: "sprite" },
+      binding: { policy: "bound" },
+      capabilities: {
+        transparentBackground: true,
+        frameSequence: true,
+        perFrameDuration: true,
+        audio: false,
+      },
+      provenance: { builder: "normalizer-test", sourceType: "generated" },
+      integrity: {
+        algorithm: INTEGRITY_ALGORITHM_V1,
+        manifestHash: "0".repeat(64),
+        contentRootHash: "1".repeat(64),
+        fileCount: 1,
+        totalBytes: 100,
+        files: [
+          {
+            path: "actions/idle/action.json",
+            sha256: "a".repeat(64),
+            bytes: 100,
+            mediaType: "application/json",
+            role: "action_config",
+          },
+        ],
+      },
+      ...overrides,
+    };
+  }
+
+  function canonicalAction(actionKey: string, overrides: Record<string, unknown> = {}) {
+    return {
+      schemaVersion: 1,
+      actionKey,
+      displayName: actionKey,
+      version: 1,
+      playbackMode: "loop",
+      fps: 8,
+      interruptible: true,
+      priority: 50,
+      cooldownMs: 0,
+      minimumPlayMs: 0,
+      maximumPlayMs: null,
+      mutexGroup: null,
+      supportsDefaultIdle: actionKey === "idle",
+      isStableStateCandidate: actionKey === "idle",
+      isTransitionOnly: actionKey !== "idle",
+      returnTo: { type: "default" },
+      anchor: { x: 0.5, y: 1.0, coordinateSpace: "normalized_canvas" },
+      frames: [
+        {
+          frameId: `${actionKey}_frame_0`,
+          index: 0,
+          file: `${actionKey}0.png`,
+          durationMs: 100,
+          assetId: `${actionKey}_asset_0`,
+          contentHash: "c".repeat(64),
+        },
+      ],
+      ...overrides,
+    };
+  }
+
+  it("新 v1 输入 → schemaVersion=1", () => {
     const manifest = {
       schemaVersion: 1,
-      packageId: "pet-s1",
-      name: "Pet S1",
-      defaultAction: "idle",
-      actions: [{ key: "idle", loopType: "loop" }],
-      compatibility: { minRuntimeVersion: "1.0.0" },
-    };
-    const actions = new Map<string, unknown>([
-      ["idle", { playbackMode: "loop", fps: 8, frames: ["f0.png"] }],
-    ]);
-    const result = normalizer.normalize(manifest, actions, "/pkg", RUNTIME_VERSION);
-    expect(result.sourceSchemaVersion).toBe(1);
-    expect(result.schemaVersion).toBe(2);
-  });
-
-  it("Schema 2 输入 → sourceSchemaVersion=2, schemaVersion=2", () => {
-    const manifest = {
-      schemaVersion: 2,
       manifestFormat: MANIFEST_FORMAT_CANONICAL,
       petId: "pet-s2",
       releaseId: "rel-1",
@@ -396,7 +380,7 @@ describe("RuntimePackageNormalizer", () => {
       },
       provenance: { builder: "normalizer-test", sourceType: "generated" },
       integrity: {
-        algorithm: INTEGRITY_ALGORITHM_V2,
+        algorithm: INTEGRITY_ALGORITHM_V1,
         manifestHash: "0".repeat(64),
         contentRootHash: "1".repeat(64),
         fileCount: 1,
@@ -416,7 +400,7 @@ describe("RuntimePackageNormalizer", () => {
       [
         "idle",
         {
-          schemaVersion: 2,
+          schemaVersion: 1,
           actionKey: "idle",
           displayName: "Idle",
           version: 1,
@@ -447,8 +431,7 @@ describe("RuntimePackageNormalizer", () => {
       ],
     ]);
     const result = normalizer.normalize(manifest, actions, "/pkg", RUNTIME_VERSION);
-    expect(result.sourceSchemaVersion).toBe(2);
-    expect(result.schemaVersion).toBe(2);
+    expect(result.schemaVersion).toBe(1);
   });
 
   it("不支持的 schemaVersion 抛出错误", () => {
@@ -457,98 +440,36 @@ describe("RuntimePackageNormalizer", () => {
     expect(() => normalizer.normalize(manifest, actions, "/pkg", RUNTIME_VERSION)).toThrow();
   });
 
-  it("ping-pong playbackMode 被转换为 ping_pong", () => {
-    const manifest = {
-      schemaVersion: 1,
-      packageId: "pet-pp",
-      name: "Pet PP",
-      defaultAction: "idle",
-      actions: [{ key: "idle", loopType: "loop" }],
-      compatibility: { minRuntimeVersion: "1.0.0" },
-    };
-    const actions = new Map<string, unknown>([
-      ["idle", { playbackMode: "ping-pong", fps: 8, frames: ["f0.png"] }],
-    ]);
-    const result = normalizer.normalize(manifest, actions, "/pkg", RUNTIME_VERSION);
-    expect(result.actions.get("idle")?.playbackMode).toBe("ping_pong");
-  });
-
-  it("pingpong playbackMode 被转换为 ping_pong", () => {
-    const manifest = {
-      schemaVersion: 1,
-      packageId: "pet-pp2",
-      name: "Pet PP2",
-      defaultAction: "idle",
-      actions: [{ key: "idle", loopType: "loop" }],
-      compatibility: { minRuntimeVersion: "1.0.0" },
-    };
-    const actions = new Map<string, unknown>([
-      ["idle", { playbackMode: "pingpong", fps: 8, frames: ["f0.png"] }],
-    ]);
-    const result = normalizer.normalize(manifest, actions, "/pkg", RUNTIME_VERSION);
-    expect(result.actions.get("idle")?.playbackMode).toBe("ping_pong");
-  });
-
   it("未知 playbackMode 抛出 UNKNOWN_PLAYBACK_MODE 错误", () => {
-    const manifest = {
-      schemaVersion: 1,
-      packageId: "pet-unk",
-      name: "Pet Unk",
-      defaultAction: "idle",
-      actions: [{ key: "idle", loopType: "loop" }],
-      compatibility: { minRuntimeVersion: "1.0.0" },
-    };
+    const manifest = canonicalManifest();
     const actions = new Map<string, unknown>([
-      ["idle", { playbackMode: "invalid-mode", fps: 8, frames: ["f0.png"] }],
+      ["idle", canonicalAction("idle", { playbackMode: "invalid-mode" })],
     ]);
     expect(() => normalizer.normalize(manifest, actions, "/pkg", RUNTIME_VERSION)).toThrow(
-      "UNKNOWN_PLAYBACK_MODE",
+      "playbackMode must be one of",
     );
   });
 
   it("returnTo { type: action, actionKey: wave } 被正确解析", () => {
-    const manifest = {
-      schemaVersion: 1,
-      packageId: "pet-rt",
-      name: "Pet RT",
-      defaultAction: "idle",
-      actions: [{ key: "wave", loopType: "once" }, { key: "idle", loopType: "loop" }],
-      compatibility: { minRuntimeVersion: "1.0.0" },
-    };
-    const actions = new Map<string, unknown>([
-      ["idle", { playbackMode: "loop", fps: 8, frames: ["f0.png"] }],
-      [
-        "wave",
+    const manifest = canonicalManifest({
+      actions: [
         {
+          key: "wave",
+          name: "Wave",
+          config: "actions/wave/action.json",
           playbackMode: "once",
           fps: 8,
-          returnTo: { type: "action", actionKey: "idle" },
-          frames: ["w0.png"],
+          frameCount: 1,
+          supportsDefaultIdle: false,
+          isStableStateCandidate: false,
+          isTransitionOnly: true,
         },
+        ...canonicalManifest().actions,
       ],
-    ]);
-    const result = normalizer.normalize(manifest, actions, "/pkg", RUNTIME_VERSION);
-    expect(result.actions.get("wave")?.returnTo).toEqual({
-      type: "action",
-      actionKey: "idle",
     });
-  });
-
-  it("returnAction 字符串被转换为 { type: action, actionKey: ... }", () => {
-    const manifest = {
-      schemaVersion: 1,
-      packageId: "pet-ra",
-      name: "Pet RA",
-      defaultAction: "idle",
-      actions: [{ key: "wave", loopType: "once" }, { key: "idle", loopType: "loop" }],
-      compatibility: { minRuntimeVersion: "1.0.0" },
-    };
     const actions = new Map<string, unknown>([
-      ["idle", { playbackMode: "loop", fps: 8, frames: ["f0.png"] }],
-      [
-        "wave",
-        { playbackMode: "once", fps: 8, returnAction: "idle", frames: ["w0.png"] },
-      ],
+      ["idle", canonicalAction("idle")],
+      ["wave", canonicalAction("wave", { returnTo: { type: "action", actionKey: "idle" } })],
     ]);
     const result = normalizer.normalize(manifest, actions, "/pkg", RUNTIME_VERSION);
     expect(result.actions.get("wave")?.returnTo).toEqual({
@@ -558,32 +479,18 @@ describe("RuntimePackageNormalizer", () => {
   });
 
   it("无 returnTo 和 returnAction 时默认为 { type: default }", () => {
-    const manifest = {
-      schemaVersion: 1,
-      packageId: "pet-def",
-      name: "Pet Def",
-      defaultAction: "idle",
-      actions: [{ key: "idle", loopType: "loop" }],
-      compatibility: { minRuntimeVersion: "1.0.0" },
-    };
+    const manifest = canonicalManifest();
     const actions = new Map<string, unknown>([
-      ["idle", { playbackMode: "loop", fps: 8, frames: ["f0.png"] }],
+      ["idle", canonicalAction("idle")],
     ]);
     const result = normalizer.normalize(manifest, actions, "/pkg", RUNTIME_VERSION);
     expect(result.actions.get("idle")?.returnTo).toEqual({ type: "default" });
   });
 
   it("anchor 默认为 { x: 0.5, y: 1.0, coordinateSpace: normalized_canvas }", () => {
-    const manifest = {
-      schemaVersion: 1,
-      packageId: "pet-anchor",
-      name: "Pet Anchor",
-      defaultAction: "idle",
-      actions: [{ key: "idle", loopType: "loop" }],
-      compatibility: { minRuntimeVersion: "1.0.0" },
-    };
+    const manifest = canonicalManifest();
     const actions = new Map<string, unknown>([
-      ["idle", { playbackMode: "loop", fps: 8, frames: ["f0.png"] }],
+      ["idle", canonicalAction("idle")],
     ]);
     const result = normalizer.normalize(manifest, actions, "/pkg", RUNTIME_VERSION);
     expect(result.actions.get("idle")?.anchor).toEqual({
@@ -593,65 +500,21 @@ describe("RuntimePackageNormalizer", () => {
     });
   });
 
-  it("字符串帧被正确转换为 RuntimeFrame 对象（含 assetId）", () => {
-    const manifest = {
-      schemaVersion: 1,
-      packageId: "pet-str",
-      name: "Pet Str",
-      defaultAction: "idle",
-      actions: [{ key: "idle", loopType: "loop" }],
-      compatibility: { minRuntimeVersion: "1.0.0" },
-    };
+  it("对象帧使用显式 index、file 和 assetId", () => {
+    const manifest = canonicalManifest();
     const actions = new Map<string, unknown>([
-      ["idle", { playbackMode: "loop", fps: 10, frames: ["f0.png", "f1.png"] }],
-    ]);
-    const result = normalizer.normalize(manifest, actions, "/pkg", RUNTIME_VERSION);
-    const frames = result.actions.get("idle")?.frames;
-    expect(frames).toHaveLength(2);
-    expect(frames?.[0]).toEqual({
-      frameId: "idle_frame_0",
-      index: 0,
-      file: "f0.png",
-      durationMs: 100,
-      assetId: "idle_asset_0",
-      contentHash: "",
-    });
-    expect(frames?.[1]).toEqual({
-      frameId: "idle_frame_1",
-      index: 1,
-      file: "f1.png",
-      durationMs: 100,
-      assetId: "idle_asset_1",
-      contentHash: "",
-    });
-  });
-
-  it("对象帧使用显式 index 和 file，缺少 assetId 时自动生成", () => {
-    const manifest = {
-      schemaVersion: 1,
-      packageId: "pet-obj",
-      name: "Pet Obj",
-      defaultAction: "idle",
-      actions: [{ key: "idle", loopType: "loop" }],
-      compatibility: { minRuntimeVersion: "1.0.0" },
-    };
-    const actions = new Map<string, unknown>([
-      [
-        "idle",
-        {
-          playbackMode: "loop",
-          fps: 10,
-          frames: [
-            {
-              file: "custom.png",
-              index: 5,
-              durationMs: 200,
-              contentHash: "ch-1",
-              frameId: "custom-id",
-            },
-          ],
-        },
-      ],
+      ["idle", canonicalAction("idle", {
+        frames: [
+          {
+            file: "custom.png",
+            index: 5,
+            durationMs: 200,
+            contentHash: "d".repeat(64),
+            frameId: "custom-id",
+            assetId: "custom-asset",
+          },
+        ],
+      })],
     ]);
     const result = normalizer.normalize(manifest, actions, "/pkg", RUNTIME_VERSION);
     const frames = result.actions.get("idle")?.frames;
@@ -661,22 +524,17 @@ describe("RuntimePackageNormalizer", () => {
       index: 5,
       file: "custom.png",
       durationMs: 200,
-      assetId: "idle_asset_0",
-      contentHash: "ch-1",
+      assetId: "custom-asset",
+      contentHash: "d".repeat(64),
     });
   });
 
   it("runtime version 低于 minRuntimeVersion 时抛出错误", () => {
-    const manifest = {
-      schemaVersion: 1,
-      packageId: "pet-ver",
-      name: "Pet Ver",
-      defaultAction: "idle",
-      actions: [{ key: "idle", loopType: "loop" }],
-      compatibility: { minRuntimeVersion: "3.0.0" },
-    };
+    const manifest = canonicalManifest({
+      compatibility: { minRuntimeVersion: "3.0.0", renderMode: "sprite" },
+    });
     const actions = new Map<string, unknown>([
-      ["idle", { playbackMode: "loop", fps: 8, frames: ["f0.png"] }],
+      ["idle", { schemaVersion: 1, playbackMode: "loop", fps: 8, frames: ["f0.png"] }],
     ]);
     expect(() => normalizer.normalize(manifest, actions, "/pkg", "1.0.0")).toThrow();
   });

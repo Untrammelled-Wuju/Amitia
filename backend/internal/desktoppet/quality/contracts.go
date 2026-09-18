@@ -9,8 +9,8 @@ import (
 )
 
 type MeasurementSource interface {
-	LoadActionMeasurements(ctx context.Context, actionRevisionID string) (*ActionMeasurementSet, error)
-	OpenFrame(ctx context.Context, actionRevisionID string, frameIndex int) (image.Image, error)
+	LoadActionMeasurements(ctx context.Context, spaceID, actionRevisionID string) (*ActionMeasurementSet, error)
+	OpenFrame(ctx context.Context, spaceID, actionRevisionID string, frameIndex int) (image.Image, error)
 }
 
 type Detector interface {
@@ -43,8 +43,8 @@ type QualityService interface {
 	GetTaskGate(ctx context.Context, processingTaskID string) (*QualityGateResult, error)
 	ListProblemFrames(ctx context.Context, evaluationID string, page, pageSize int) ([]ProblemFrameSummary, int64, error)
 	ListFindings(ctx context.Context, evaluationID string, severity string, dimension string, page, pageSize int) ([]QualityFinding, int64, error)
-	CheckEvaluationOwnership(ctx context.Context, evaluationID, userID string) error
-	CheckProcessingTaskOwnership(ctx context.Context, processingTaskID, userID string) error
+	CheckEvaluationOwnership(ctx context.Context, evaluationID, spaceID string) error
+	CheckProcessingTaskOwnership(ctx context.Context, processingTaskID, spaceID string) error
 }
 
 type QualityRepository interface {
@@ -87,6 +87,7 @@ type QualityRepository interface {
 
 	GetMeasurementCache(ctx context.Context, frameArtifactID, contentHash string) (*QualityMeasurementCacheRecord, error)
 	CreateMeasurementCache(ctx context.Context, cache *QualityMeasurementCacheRecord) error
+	DeleteMeasurementCache(ctx context.Context, frameArtifactID, contentHash string) error
 
 	CreateOutboxEvent(ctx context.Context, event *QualityOutboxEventRecord) error
 	ListPendingOutboxEvents(ctx context.Context, limit int) ([]QualityOutboxEventRecord, error)
@@ -94,12 +95,11 @@ type QualityRepository interface {
 }
 
 type QualityInputRepository interface {
-	LoadActionRevisionInput(ctx context.Context, userID string, actionRevisionID string) (*QualityActionInput, error)
+	LoadActionRevisionInput(ctx context.Context, spaceID string, actionRevisionID string) (*QualityActionInput, error)
 }
 
 type QualityActionInput struct {
-	UserID               string
-	CharacterID          string
+	SpaceID              string
 	ProcessingTaskID     string
 	ProcessingActionID   string
 	ActionKey            string
@@ -169,6 +169,10 @@ type FrameMeasurementResult struct {
 	FullyTransparentRatio float64
 	SemiTransparentRatio  float64
 	OpaqueRatio           float64
+	SubjectBoxX           float64
+	SubjectBoxY           float64
+	SubjectBoxWidth       float64
+	SubjectBoxHeight      float64
 	Decodable             bool
 	MimeType              string
 	PixelHash             string

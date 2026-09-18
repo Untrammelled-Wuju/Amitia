@@ -51,19 +51,19 @@ import { PetLogger } from "./logger";
 import { getRuntimeId, getDeviceId } from "./runtime-identity";
 import type { PetInstanceSummary } from "./runtime-bridge-client";
 import {
-  DesktopRuntimeHandlerV2,
+  DesktopRuntimeHandlerV1,
   type RuntimeHandlerConfig,
   type RuntimeHandlerHooks,
   type RuntimeResumeCursor,
   type RuntimeCommandReplayEntry,
   type RuntimePendingOutboundEntry,
-} from "../../desktop-pet/runtime/runtime-handler-v2";
+} from "../../desktop-pet/runtime/runtime-handler-v1";
 import type {
   RuntimeEnvelope,
   HelloAckPayload,
   StateSnapshotPayload,
-} from "../../desktop-pet/runtime/protocol-v2";
-import type { RuntimeCommandExecutionResult } from "./runtime-v2-command-adapter";
+} from "../../desktop-pet/runtime/protocol-v1";
+import type { RuntimeCommandExecutionResult } from "./runtime-v1-command-adapter";
 import { getBackendSessionClient } from "../backend-session-client";
 import type {
   ClickThroughMode,
@@ -80,7 +80,7 @@ const CORE_BASE_HOST = "127.0.0.1";
 const CORE_BASE_PORT = 18899;
 const API_BASE_PATH = "/api/desktop-pets";
 const HEALTH_CHECK_PATH = "/livez";
-const DEFAULT_USER_ID = "default";
+const DEFAULT_SPACE_ID = "default";
 const DEFAULT_ALPHA_THRESHOLD = 10;
 const DRAG_RUNTIME_MOVE_MIN_INTERVAL_MS = 150;
 
@@ -130,8 +130,7 @@ export type PetManagerState =
 
 export interface InstallationInfo {
   id: string;
-  userId: string;
-  characterId: string;
+  spaceId: string;
   packageId: string;
   packageVersion: string;
   name: string;
@@ -177,7 +176,7 @@ export interface RuntimeSettingsInfo {
 }
 
 export interface PetManagerDeps {
-  userId?: string;
+  spaceId?: string;
   resourceLoader?: ResourceLoader;
   resourceCache?: ResourceCache;
   alphaThreshold?: number;
@@ -221,7 +220,7 @@ export interface PetStatePayload {
 }
 
 export interface PetManagerOptions {
-  userId?: string;
+  spaceId?: string;
 }
 
 interface ApiEnvelope<T> {
@@ -232,8 +231,7 @@ interface ApiEnvelope<T> {
 
 interface InstallationApiPayload {
   id: string;
-  userId: string;
-  characterId: string;
+  spaceId: string;
   packageId: string;
   packageVersion: string;
   name: string;
@@ -349,8 +347,7 @@ function normalizePositionMode(value: string | undefined): "absolute" | "relativ
 function mapInstallationPayload(payload: InstallationApiPayload): InstallationInfo {
   return {
     id: payload.id,
-    userId: payload.userId,
-    characterId: payload.characterId,
+    spaceId: payload.spaceId,
     packageId: payload.packageId,
     packageVersion: payload.packageVersion,
     name: payload.name,
@@ -418,7 +415,7 @@ function mapRuntimeSettingsPayload(payload: RuntimeSettingsApiPayload): RuntimeS
 }
 
 export class DesktopPetManager {
-  private readonly userId: string;
+  private readonly spaceId: string;
   private readonly coreHost: string;
   private readonly corePort: number;
   private readonly resourceLoader: ResourceLoader;
@@ -451,7 +448,7 @@ export class DesktopPetManager {
   private dragController: DragController | null = null;
   private clickThroughController: ClickThroughController | null = null;
 
-  private runtimeHandler: DesktopRuntimeHandlerV2 | null = null;
+  private runtimeHandler: DesktopRuntimeHandlerV1 | null = null;
   private bridgeReconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private bridgeReconnectAttempts = 0;
   private bridgeStarted = false;
@@ -470,7 +467,7 @@ export class DesktopPetManager {
     string,
     { runtimeCommandId: string; decisionId: string }
   >();
-  // During a Runtime-v2 session handoff, old-session physical work is stopped
+  // During a Runtime-v1 session handoff, old-session physical work is stopped
   // locally but must never be reported through the newly authenticated session.
   private suppressRuntimeLifecycleReporting = false;
   private lastAppliedDesiredRevision = 0;
@@ -507,7 +504,7 @@ export class DesktopPetManager {
 
   constructor(deps?: PetManagerDeps) {
     const opts = deps ?? {};
-    this.userId = opts.userId ?? DEFAULT_USER_ID;
+    this.spaceId = opts.spaceId ?? DEFAULT_SPACE_ID;
     this.coreHost = opts.coreHost ?? CORE_BASE_HOST;
     this.corePort = opts.corePort ?? CORE_BASE_PORT;
     this.runtimeVersion = opts.runtimeVersion ?? DESKTOP_PET_RUNTIME_VERSION;
@@ -525,8 +522,8 @@ export class DesktopPetManager {
     this.authToken = token && token.length > 0 ? token : null;
   }
 
-  getUserId(): string {
-    return this.userId;
+  getSpaceId(): string {
+    return this.spaceId;
   }
 
   getState(): PetManagerState {
@@ -555,110 +552,6 @@ export class DesktopPetManager {
         this.errorMessage(err),
       );
     }
-  }
-
-  async handleCharacterSwitched(characterId: string | null): Promise<void> {
-    const normalized = characterId?.trim() ?? "";
-    await this.runLifecycleMutation(async () => {
-      if (!normalized) {
-        // "No active character" is authoritative desired absence. Never leave the
-        // previous character's pet visible while the watcher repeatedly observes
-        // a 204/404/null role profile.
-        await this.ensureInitializedWithinMutation(false);
-        if (this.activeInstallationId || this.state === "enabled") {
-          await this.disableInternal(true);
-        }
-        return;
-      }
-      await this.handleCharacterSwitchedInternal(normalized);
-    });
-  }
-
-  private async handleCharacterSwitchedInternal(characterId: string): Promise<void> {
-    // Character reconciliation is authoritative at application start. Do not
-    // restore a previously active installation before we know which character
-    // is active, otherwise the stale pet can become visible for one startup
-    // cycle before the watcher corrects it.
-    await this.ensureInitializedWithinMutation(false);
-    let installations: InstallationInfo[];
-    try {
-      installations = await this.listInstallations();
-    } catch (err) {
-      console.warn(
-        "[DesktopPetManager] 角色切换时查询安装列表失败:",
-        this.errorMessage(err),
-      );
-      throw err;
-    }
-    const candidate = this.selectInstallationForCharacter(
-      installations,
-      characterId,
-    );
-    if (!candidate) {
-      if (this.activeInstallationId || this.state === "enabled") {
-        await this.disableInternal(true);
-      }
-      return;
-    }
-    if (
-      this.activeInstallationId === candidate.id &&
-      this.state === "enabled"
-    ) {
-      return;
-    }
-    try {
-      await this.switchInstallationInternal(candidate.id);
-    } catch (err) {
-      console.warn(
-        "[DesktopPetManager] 角色切换后切换桌宠失败:",
-        this.errorMessage(err),
-      );
-      throw err;
-    }
-  }
-
-  private selectInstallationForCharacter(
-    installations: InstallationInfo[],
-    characterId: string,
-  ): InstallationInfo | undefined {
-    const usableStatuses = new Set([
-      INSTALLATION_STATUS_ENABLED,
-      INSTALLATION_STATUS_INSTALLED,
-      INSTALLATION_STATUS_DISABLED,
-    ]);
-    const candidates = installations.filter(
-      (installation) =>
-        installation.characterId === characterId &&
-        usableStatuses.has(installation.status),
-    );
-    if (candidates.length <= 1) return candidates[0];
-
-    // Only one pet can be globally enabled on a device. After switching away
-    // from a character, its preferred pet is therefore normally `disabled`.
-    // Preserve the user's per-character choice by preferring the currently
-    // enabled item, then the one most recently enabled for that character, and
-    // finally the newest installation.
-    return candidates.sort((left, right) => {
-      const leftEnabled = left.status === INSTALLATION_STATUS_ENABLED ? 1 : 0;
-      const rightEnabled = right.status === INSTALLATION_STATUS_ENABLED ? 1 : 0;
-      if (leftEnabled !== rightEnabled) return rightEnabled - leftEnabled;
-
-      const lastEnabledDelta =
-        this.parseTimestamp(right.lastEnabledAt) -
-        this.parseTimestamp(left.lastEnabledAt);
-      if (lastEnabledDelta !== 0) return lastEnabledDelta;
-
-      return (
-        this.parseTimestamp(right.createdAt) -
-        this.parseTimestamp(left.createdAt)
-      );
-    })[0];
-  }
-
-  private parseTimestamp(value: string | null | undefined): number {
-    if (!value) return 0;
-    const parsed = Date.parse(value);
-    return Number.isFinite(parsed) ? parsed : 0;
   }
 
   onStateChange(listener: (payload: PetStatePayload) => void): () => void {
@@ -820,7 +713,7 @@ export class DesktopPetManager {
       if (backendRollbackError) {
         // The backend enable is still the authoritative desired state. Do not
         // pretend the installation is locally absent: retaining the active
-        // identity lets Runtime v2 report a degraded instance and converge it
+        // identity lets Runtime v1 report a degraded instance and converge it
         // once connectivity/backend health returns, instead of creating the
         // split-brain state "backend enabled / desktop has no active pet".
         this.setState(
@@ -916,8 +809,8 @@ export class DesktopPetManager {
       throw new Error(`ACTION_NOT_FOUND: ${actionKey}`);
     }
 
-    // Manual playback has exactly one authority: backend -> Runtime v2 -> scheduler.
-    // Submitting locally here would race/duplicate the Runtime v2 play_action command.
+    // Manual playback has exactly one authority: backend -> Runtime v1 -> scheduler.
+    // Submitting locally here would race/duplicate the Runtime v1 play_action command.
     await this.callPlayActionApi(actionKey);
   }
 
@@ -942,8 +835,8 @@ export class DesktopPetManager {
       throw new Error("PET_NOT_ENABLED");
     }
 
-    // Recenter is authoritative through backend -> Runtime v2 recenter_once.
-    // The local position is applied only when that Runtime v2 command is consumed.
+    // Recenter is authoritative through backend -> Runtime v1 recenter_once.
+    // The local position is applied only when that Runtime v1 command is consumed.
     await this.callRecenterApi(this.activeInstallationId);
   }
 
@@ -1034,8 +927,8 @@ export class DesktopPetManager {
       return null;
     }
 
-    // Settings have one durable authority: backend desired state -> Runtime v2.
-    // Never apply the API echo locally before Runtime v2 ACKs the revision; doing
+    // Settings have one durable authority: backend desired state -> Runtime v1.
+    // Never apply the API echo locally before Runtime v1 ACKs the revision; doing
     // so would make activeSettings/appliedRevision claim convergence too early.
     return this.callUpdateSettingsApi(this.activeInstallationId, patch);
   }
@@ -1131,7 +1024,7 @@ export class DesktopPetManager {
 
     // Commit only after every requested runtime side effect completed. This
     // keeps activeSettings/appliedRevision truthful if an adapter operation
-    // throws and lets Runtime v2 report a rejection instead of a false apply.
+    // throws and lets Runtime v1 report a rejection instead of a false apply.
     this.activeSettings = merged;
     this.markSettingsRevisionApplied(merged.settingsRevision);
   }
@@ -1145,7 +1038,7 @@ export class DesktopPetManager {
     }
 
     // Default-action changes converge only through backend desired state ->
-    // Runtime v2. Applying here as well races the authoritative command.
+    // Runtime v1. Applying here as well races the authoritative command.
     return this.callUpdateDefaultActionApi(this.activeInstallationId, actionKey);
   }
 
@@ -1531,7 +1424,7 @@ export class DesktopPetManager {
       if (settings && !settings.restoreOnAppStart) {
         // `enabled` is the authoritative runtime desired state. If the user
         // explicitly disabled app-start restoration, converge that desired
-        // state to disabled before Runtime v2 connects; otherwise a queued or
+        // state to disabled before Runtime v1 connects; otherwise a queued or
         // freshly reconciled sync_desired_state could immediately resurrect
         // the pet after we intentionally skipped the local restore path.
         await this.callDisableApi(installation.id);
@@ -2035,18 +1928,15 @@ export class DesktopPetManager {
 
   private runtimeEventContext(decisionId = ""): {
     installationId: string;
-    characterId: string;
     petInstanceId: string;
     decisionId?: string;
   } {
     const context: {
       installationId: string;
-      characterId: string;
       petInstanceId: string;
       decisionId?: string;
     } = {
       installationId: this.activeInstallationId ?? this.activeInstallation?.id ?? "",
-      characterId: this.activeInstallation?.characterId ?? this.loadedInstallation?.manifest.characterId ?? "",
       petInstanceId: getRuntimeId(),
     };
     if (decisionId) {
@@ -2079,7 +1969,7 @@ export class DesktopPetManager {
     const currentRequestRuntimeCommandId = currentRequest?.metadata?.runtimeCommandId ?? "";
 
     // Renderer/Main also use local command IDs for idle, return and fallback
-    // playback. Those IDs are never Runtime-v2 command identities and must not
+    // playback. Those IDs are never Runtime-v1 command identities and must not
     // escape to Backend. A Runtime command is proven only by the scheduler's
     // runtimeCommandId metadata (before command_accepted) or by an already bound
     // playback -> Runtime command mapping (after command_accepted).
@@ -2636,6 +2526,7 @@ export class DesktopPetManager {
   }
 
   private resolveBehaviorEventSource(semantic: string): DesktopPetActionRequest["source"] {
+    if (semantic === "manual") return EventSources.MANUAL;
     if (semantic.includes("speaking")) return EventSources.CHAT_SPEAKING;
     if (semantic.includes("listening")) return EventSources.CHAT_LISTENING;
     if (semantic.includes("thinking") || semantic.includes("processing")) {
@@ -2657,6 +2548,7 @@ export class DesktopPetManager {
       return Math.max(0, Math.floor(backendPriority));
     }
     if (semantic.includes("drag")) return ActionPriorities.DRAG;
+    if (semantic === "manual") return ActionPriorities.MANUAL;
     if (semantic.includes("drop") || semantic.includes("fall")) return ActionPriorities.FALL;
     if (semantic.includes("speaking")) return ActionPriorities.SPEAKING;
     if (semantic.includes("listening") || semantic.includes("thinking") || semantic.startsWith("tool_")) {
@@ -2698,7 +2590,7 @@ export class DesktopPetManager {
     try {
       // The drag already changed the physical window position. Persist that fact
       // to backend, but do not advance activeSettings/settingsRevision here. The
-      // authoritative Runtime v2 desired-state command owns revision convergence.
+      // authoritative Runtime v1 desired-state command owns revision convergence.
       await this.callUpdateSettingsApi(
         this.activeInstallationId,
         this.buildSettingsPatch(patch),
@@ -3010,7 +2902,7 @@ export class DesktopPetManager {
         return {
           corrupted: true,
           errorCode: CORRUPTION_PACKAGE_HASH_MISMATCH,
-          detail: `Package v2 完整性校验失败: ${message}`,
+          detail: `Package v1 完整性校验失败: ${message}`,
         };
       }
       return {
@@ -3589,7 +3481,7 @@ export class DesktopPetManager {
 
     const runtimeId = getRuntimeId();
     const deviceId = getDeviceId();
-    let candidateHandler: DesktopRuntimeHandlerV2 | null = null;
+    let candidateHandler: DesktopRuntimeHandlerV1 | null = null;
 
     try {
       if (this.runtimeHandler) {
@@ -3616,7 +3508,7 @@ export class DesktopPetManager {
       const issued = await createRuntimeBootstrapTicket(deviceId, runtimeId);
       if (!this.isBridgeGenerationCurrent(generation)) return;
 
-      const wsUrl = this.buildRuntimeV2URL(runtimeId, deviceId);
+      const wsUrl = this.buildRuntimeV1URL(runtimeId, deviceId);
       const resumeCursor: RuntimeResumeCursor = {
         ...this.runtimeResumeCursor,
         lastAppliedDesiredRevision: Math.max(
@@ -3627,7 +3519,7 @@ export class DesktopPetManager {
       const handlerConfig: RuntimeHandlerConfig = {
         url: wsUrl,
         bootstrapTicket: issued.ticket,
-        userId: issued.userId,
+        spaceId: issued.spaceId,
         deviceId,
         runtimeId,
         runtimeVersion: this.runtimeVersion,
@@ -3639,12 +3531,12 @@ export class DesktopPetManager {
         pendingOutboundEntries: this.runtimePendingOutboundEntries,
       };
 
-      let handler: DesktopRuntimeHandlerV2 | null = null;
+      let handler: DesktopRuntimeHandlerV1 | null = null;
       const hooks = this.buildRuntimeHooks(
         generation,
         () => handler !== null && this.runtimeHandler === handler,
       );
-      handler = new DesktopRuntimeHandlerV2(handlerConfig, hooks);
+      handler = new DesktopRuntimeHandlerV1(handlerConfig, hooks);
       candidateHandler = handler;
       if (!this.isBridgeGenerationCurrent(generation)) return;
       this.runtimeHandler = handler;
@@ -3693,7 +3585,7 @@ export class DesktopPetManager {
     }
   }
 
-  private buildRuntimeV2URL(runtimeId: string, deviceId: string): string {
+  private buildRuntimeV1URL(runtimeId: string, deviceId: string): string {
     const wsBase = `ws://${this.coreHost}:${this.corePort}${RUNTIME_BRIDGE_WS_PATH}`;
     const url = new URL(wsBase);
     url.searchParams.set("deviceId", deviceId);
@@ -3780,7 +3672,7 @@ export class DesktopPetManager {
           this.runtimeCommandReplayEntries = [];
           this.activeSettings = null;
         }
-        // A new Runtime-v2 session never inherits an ephemeral playback attempt.
+        // A new Runtime-v1 session never inherits an ephemeral playback attempt.
         // Stop any locally in-flight Runtime command so Backend and Renderer share
         // the same reconnect boundary.
         const schedulerRuntimeCommandId =
@@ -3806,7 +3698,7 @@ export class DesktopPetManager {
         }
         if (serverDesiredRevision > this.lastAppliedDesiredRevision) {
           console.info(
-            `[DesktopPetManager] server desired revision ${serverDesiredRevision} is ahead of local ${this.lastAppliedDesiredRevision}; awaiting authoritative Runtime v2 reconciliation command`,
+            `[DesktopPetManager] server desired revision ${serverDesiredRevision} is ahead of local ${this.lastAppliedDesiredRevision}; awaiting authoritative Runtime v1 reconciliation command`,
           );
         } else if (serverDesiredRevision < this.lastAppliedDesiredRevision) {
           console.warn(
@@ -3880,7 +3772,6 @@ export class DesktopPetManager {
             decisionId?: string;
             semantic?: string;
             reasonCode?: string;
-            characterId?: string;
             petInstanceId?: string;
             runtimeId?: string;
             installationId?: string;
@@ -3998,14 +3889,6 @@ export class DesktopPetManager {
               if (!activeInstallationId || incomingInstallationId !== activeInstallationId) {
                 return { commandId, status: "rejected", errorCode: "INSTALLATION_MISMATCH", errorMessage: "play_action targets a stale installation", appliedRevision: desiredRevision };
               }
-              const incomingCharacterId = (cmd.payload?.characterId ?? "").trim();
-              const activeCharacterId = (this.activeInstallation?.characterId ?? this.loadedInstallation.manifest.characterId ?? "").trim();
-              if (!incomingCharacterId) {
-                return { commandId, status: "rejected", errorCode: "MISSING_CHARACTER_ID", errorMessage: "play_action must bind the active character", appliedRevision: desiredRevision };
-              }
-              if (!activeCharacterId || incomingCharacterId !== activeCharacterId) {
-                return { commandId, status: "rejected", errorCode: "CHARACTER_MISMATCH", errorMessage: "play_action targets a stale character", appliedRevision: desiredRevision };
-              }
               const incomingPetInstanceId = (cmd.payload?.petInstanceId ?? "").trim();
               if (!incomingPetInstanceId) {
                 return { commandId, status: "rejected", errorCode: "MISSING_PET_INSTANCE_ID", errorMessage: "play_action must bind the active runtime pet instance", appliedRevision: desiredRevision };
@@ -4039,7 +3922,7 @@ export class DesktopPetManager {
                   commandId,
                   status: "rejected",
                   errorCode: "INVALID_QUEUE_POLICY",
-                  errorMessage: `unsupported Runtime v2 queuePolicy: ${queuePolicy}`,
+                  errorMessage: `unsupported Runtime v1 queuePolicy: ${queuePolicy}`,
                   appliedRevision: desiredRevision,
                 };
               }
@@ -4054,7 +3937,6 @@ export class DesktopPetManager {
                 runtimeCommandId: commandId,
                 runtimeDecisionId: cmd.payload?.decisionId ?? "",
                 runtimeInstallationId: cmd.payload?.installationId ?? this.activeInstallationId ?? "",
-                runtimeCharacterId: cmd.payload?.characterId ?? this.activeInstallation?.characterId ?? "",
                 runtimePetInstanceId: cmd.payload?.petInstanceId ?? getRuntimeId(),
               };
               const minimumPlayMs = cmd.payload?.minimumPlayMs ?? action.minimumPlayMs;
@@ -4107,7 +3989,7 @@ export class DesktopPetManager {
             }
             case "runtime.command.recenter_once": {
               await this.applyRecenterLocal();
-              // Persist only after the authoritative Runtime v2 command has
+              // Persist only after the authoritative Runtime v1 command has
               // applied the position. This keeps one execution authority while
               // preserving the position across restart.
               await this.persistRuntimePosition();
@@ -4300,7 +4182,7 @@ export class DesktopPetManager {
     );
   }
 
-  private captureRuntimeCursor(handler: DesktopRuntimeHandlerV2 | null): void {
+  private captureRuntimeCursor(handler: DesktopRuntimeHandlerV1 | null): void {
     if (!handler) return;
     const cursor = handler.getResumeCursor();
     this.runtimeResumeCursor = {
@@ -4320,7 +4202,7 @@ export class DesktopPetManager {
   }
 
   private buildRuntimeStateSnapshot(
-    handler: DesktopRuntimeHandlerV2,
+    handler: DesktopRuntimeHandlerV1,
     summary: PetInstanceSummary | undefined,
   ): StateSnapshotPayload {
     const playerState = this.actionPlayer?.getState() ?? "idle";
@@ -4442,7 +4324,7 @@ export class DesktopPetManager {
       })
       .catch((err) => {
         console.warn(
-          "[DesktopPetManager] 同步 Runtime v2 权威状态失败:",
+          "[DesktopPetManager] 同步 Runtime v1 权威状态失败:",
           this.errorMessage(err),
         );
       });
@@ -4453,7 +4335,7 @@ export {
   PET_ACTION_SWITCH_CHANNEL,
   PET_LOAD_ERROR_CHANNEL,
   PET_STATE_CHANNEL,
-  DEFAULT_USER_ID,
+  DEFAULT_SPACE_ID,
 };
 
 export type {

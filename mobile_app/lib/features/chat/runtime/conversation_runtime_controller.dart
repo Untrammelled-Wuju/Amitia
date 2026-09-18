@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:collection';
+import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 
@@ -10,9 +11,9 @@ import '../../../shared/models/models.dart';
 
 /// UI-agnostic conversation runtime shared by the built-in UI and extension UI.
 ///
-/// Mobile uses the same asynchronous web-chat contract as the desktop client:
-/// submit -> generation status -> persisted messages. This keeps cancellation,
-/// retries and media messages backed by real server state instead of UI mocks.
+/// Mobile uses the same streaming web-chat contract as the desktop client:
+/// send-stream SSE is the primary reply path, while persisted-message sync and
+/// generation status are reconciliation fallbacks for queued/remote delivery.
 class ConversationRuntimeController extends ChangeNotifier {
   ConversationRuntimeController(this._chatService, this._emoteService);
 
@@ -21,13 +22,22 @@ class ConversationRuntimeController extends ChangeNotifier {
   final List<ChatMessage> _messages = <ChatMessage>[];
   String? _conversationId;
   String? _characterId;
+  ConversationWorkspaceDto? _workspace;
   bool _sending = false;
   Object? _lastError;
   int _generationEpoch = 0;
+  Timer? _liveSyncTimer;
+  bool _syncingMessages = false;
+  bool _disposed = false;
+  ChatStreamCancellation? _activeSendCancellation;
+  ChatStreamCancellation? _messageEventsCancellation;
+
+  static const Duration _liveSyncInterval = Duration(seconds: 15);
 
   UnmodifiableListView<ChatMessage> get messages =>
       UnmodifiableListView<ChatMessage>(_messages);
   String? get conversationId => _conversationId;
+  ConversationWorkspaceDto? get workspace => _workspace;
   bool get sending => _sending;
   Object? get lastError => _lastError;
   String get state => _sending ? 'sending' : 'idle';
@@ -36,11 +46,19 @@ class ConversationRuntimeController extends ChangeNotifier {
     _characterId = characterId?.trim().isEmpty == true ? null : characterId;
   }
 
-  ChatMessage _copy(
-    ChatMessage message, {
-    String? id,
-    MessageStatus? status,
-  }) {
+  void setWorkspace(ConversationWorkspaceDto? workspace) {
+    final previous = _workspace;
+    if (previous?.workspaceId == workspace?.workspaceId &&
+        previous?.deviceId == workspace?.deviceId &&
+        previous?.workspaceName == workspace?.workspaceName &&
+        previous?.rootUri == workspace?.rootUri) {
+      return;
+    }
+    _workspace = workspace;
+    notifyListeners();
+  }
+
+  ChatMessage _copy(ChatMessage message, {String? id, MessageStatus? status}) {
     return ChatMessage(
       id: id ?? message.id,
       role: message.role,
@@ -48,6 +66,7 @@ class ConversationRuntimeController extends ChangeNotifier {
       content: message.content,
       time: message.time,
       status: status ?? message.status,
+      agentTaskId: message.agentTaskId,
       agentTaskTitle: message.agentTaskTitle,
       agentTaskSteps: message.agentTaskSteps,
       agentTaskProgress: message.agentTaskProgress,
@@ -60,10 +79,16 @@ class ConversationRuntimeController extends ChangeNotifier {
       durationMs: message.durationMs,
       toolName: message.toolName,
       toolResult: message.toolResult,
+      replyToMessageId: message.replyToMessageId,
+      replyToExcerpt: message.replyToExcerpt,
     );
   }
 
-  Future<void> sendText(String text) async {
+  Future<void> sendText(
+    String text, {
+    String? replyToMessageId,
+    String? replyToExcerpt,
+  }) async {
     final value = text.trim();
     if (value.isEmpty || _sending) return;
     await _send(
@@ -74,8 +99,11 @@ class ConversationRuntimeController extends ChangeNotifier {
         content: value,
         time: DateTime.now(),
         status: MessageStatus.sending,
+        replyToMessageId: replyToMessageId,
+        replyToExcerpt: replyToExcerpt,
       ),
       message: value,
+      replyToMessageId: replyToMessageId,
     );
   }
 
@@ -101,7 +129,10 @@ class ConversationRuntimeController extends ChangeNotifier {
     if (emoteId.trim().isEmpty || _sending) return;
     final conv = _conversationId;
     final character = _characterId;
-    if (conv == null || conv.isEmpty || character == null || character.isEmpty) {
+    if (conv == null ||
+        conv.isEmpty ||
+        character == null ||
+        character.isEmpty) {
       _lastError = StateError('发送表情前需要有效会话和角色');
       notifyListeners();
       return;
@@ -125,14 +156,16 @@ class ConversationRuntimeController extends ChangeNotifier {
     required String displayUrl,
     required String fileName,
     String mimeType = 'image/*',
+    String text = '',
   }) async {
     if (_sending) return;
+    final content = text.trim().isEmpty ? '[图片]' : text.trim();
     await _send(
       ChatMessage(
         id: _localId('u'),
         role: MessageRole.user,
         type: MessageType.image,
-        content: '[图片]',
+        content: content,
         time: DateTime.now(),
         status: MessageStatus.sending,
         fileName: fileName,
@@ -140,7 +173,7 @@ class ConversationRuntimeController extends ChangeNotifier {
         mediaUrl: displayUrl,
         mimeType: mimeType,
       ),
-      message: '[图片]',
+      message: content,
       imageUrl: resourceUri,
     );
   }
@@ -151,14 +184,16 @@ class ConversationRuntimeController extends ChangeNotifier {
     required String fileName,
     String mimeType = 'video/*',
     int durationMs = 0,
+    String text = '',
   }) async {
     if (_sending) return;
+    final content = text.trim().isEmpty ? '[视频]' : text.trim();
     await _send(
       ChatMessage(
         id: _localId('u'),
         role: MessageRole.user,
         type: MessageType.video,
-        content: '[视频]',
+        content: content,
         time: DateTime.now(),
         status: MessageStatus.sending,
         fileName: fileName,
@@ -167,7 +202,7 @@ class ConversationRuntimeController extends ChangeNotifier {
         mimeType: mimeType,
         durationMs: durationMs,
       ),
-      message: '[视频]',
+      message: content,
       videoUrl: resourceUri,
     );
   }
@@ -178,14 +213,16 @@ class ConversationRuntimeController extends ChangeNotifier {
     required String fileName,
     String mimeType = 'audio/*',
     int durationMs = 0,
+    String text = '',
   }) async {
     if (_sending) return;
+    final content = text.trim().isEmpty ? '[语音]' : text.trim();
     await _send(
       ChatMessage(
         id: _localId('u'),
         role: MessageRole.user,
         type: MessageType.audio,
-        content: '[语音]',
+        content: content,
         time: DateTime.now(),
         status: MessageStatus.sending,
         fileName: fileName,
@@ -194,7 +231,7 @@ class ConversationRuntimeController extends ChangeNotifier {
         mimeType: mimeType,
         durationMs: durationMs,
       ),
-      message: '[语音]',
+      message: content,
       audioUrl: resourceUri,
       audioDuration: durationMs / 1000.0,
     );
@@ -237,15 +274,23 @@ class ConversationRuntimeController extends ChangeNotifier {
     String? audioUrl,
     double audioDuration = 0,
     String? videoUrl,
+    String? replyToMessageId,
   }) async {
     _messages.add(localMessage);
+    debugPrint(
+      'Chat local message added id=${localMessage.id} total=${_messages.length}',
+    );
     _lastError = null;
     _sending = true;
     final epoch = ++_generationEpoch;
+    final cancellation = _chatService.createStreamCancellation();
+    _activeSendCancellation?.cancel('superseded');
+    _activeSendCancellation = cancellation;
     notifyListeners();
 
+    var queued = false;
     try {
-      final result = await _chatService.submitMessage(
+      await for (final event in _chatService.submitMessageStream(
         message: message,
         conversationId: _conversationId,
         characterId: _characterId,
@@ -253,26 +298,56 @@ class ConversationRuntimeController extends ChangeNotifier {
         audioUrl: audioUrl,
         audioDuration: audioDuration,
         videoUrl: videoUrl,
-      );
+        replyToMessageId: replyToMessageId,
+        workspace: _workspace,
+        cancellation: cancellation,
+      )) {
+        if (epoch != _generationEpoch || cancellation.isCancelled) return;
+        switch (event.type) {
+          case 'message_start':
+            await _handleMessageStart(localMessage, event.data, epoch);
+            break;
+          case 'token':
+            _upsertStreamAssistant(event.data, MessageType.text);
+            break;
+          case 'voice_audio':
+            _upsertStreamAssistant(event.data, MessageType.audio);
+            break;
+          case 'queued':
+            queued = true;
+            final conversationId = (event.data['conversationId'] ?? '')
+                .toString()
+                .trim();
+            if (conversationId.isNotEmpty) {
+              _conversationId = conversationId;
+              _restartLiveSync();
+            }
+            break;
+          case 'message_end':
+          case 'done':
+          case 'connected':
+            break;
+        }
+      }
       if (epoch != _generationEpoch) return;
-      if (result.conversationId.isNotEmpty) {
-        _conversationId = result.conversationId;
+      if (queued) {
+        await _awaitQueuedGeneration(epoch);
+      } else {
+        await _syncMessages();
       }
-      final localIndex = _messages.indexWhere((m) => m.id == localMessage.id);
-      if (localIndex >= 0) {
-        _messages[localIndex] = _copy(
-          _messages[localIndex],
-          id: result.userMessageId.isEmpty ? null : result.userMessageId,
-          status: MessageStatus.sent,
-        );
-      }
-      notifyListeners();
-      await _awaitGeneration(epoch);
       _lastError = null;
-    } catch (error) {
-      if (epoch != _generationEpoch) return;
+    } catch (error, stackTrace) {
+      if (epoch != _generationEpoch || cancellation.isCancelled) return;
+      debugPrint('Chat send failed [${error.runtimeType}]: $error');
+      for (final line in stackTrace.toString().split('\n').take(24)) {
+        debugPrint(line);
+      }
       _lastError = error;
-      final localIndex = _messages.indexWhere((m) => m.id == localMessage.id);
+      final localIndex = _messages.indexWhere(
+        (m) =>
+            m.id == localMessage.id ||
+            (m.role == MessageRole.user && m.status == MessageStatus.sending),
+      );
       if (localIndex >= 0) {
         _messages[localIndex] = _copy(
           _messages[localIndex],
@@ -280,6 +355,9 @@ class ConversationRuntimeController extends ChangeNotifier {
         );
       }
     } finally {
+      if (identical(_activeSendCancellation, cancellation)) {
+        _activeSendCancellation = null;
+      }
       if (epoch == _generationEpoch) {
         _sending = false;
         notifyListeners();
@@ -287,7 +365,76 @@ class ConversationRuntimeController extends ChangeNotifier {
     }
   }
 
-  Future<void> _awaitGeneration(int epoch) async {
+  Future<void> _handleMessageStart(
+    ChatMessage localMessage,
+    Map<String, dynamic> data,
+    int epoch,
+  ) async {
+    final conversationId = (data['conversationId'] ?? '').toString().trim();
+    if (conversationId.isNotEmpty && conversationId != _conversationId) {
+      _conversationId = conversationId;
+      _restartLiveSync();
+    }
+    final userMessageId = (data['userMessageId'] ?? '').toString().trim();
+    final localIndex = _messages.indexWhere((m) => m.id == localMessage.id);
+    if (localIndex >= 0) {
+      _messages[localIndex] = _copy(
+        _messages[localIndex],
+        id: userMessageId.isEmpty ? null : userMessageId,
+        status: MessageStatus.sent,
+      );
+      notifyListeners();
+    }
+    final workspace = _workspace;
+    if (epoch != _generationEpoch ||
+        workspace == null ||
+        conversationId.isEmpty) {
+      return;
+    }
+    try {
+      _workspace = await _chatService.setConversationWorkspace(
+        conversationId,
+        workspace,
+      );
+    } catch (_) {}
+  }
+
+  void _upsertStreamAssistant(Map<String, dynamic> data, MessageType type) {
+    final id = (data['id'] ?? data['messageId'] ?? '').toString().trim();
+    if (id.isEmpty) return;
+    final content = (data['content'] ?? '').toString();
+    final createdAt =
+        DateTime.tryParse((data['createdAt'] ?? '').toString()) ??
+        DateTime.now();
+    final audioUrl = (data['audioUrl'] ?? '').toString().trim();
+    final duration = (data['duration'] as num?)?.toDouble() ?? 0;
+    final index = _messages.indexWhere((message) => message.id == id);
+    final existing = index >= 0 ? _messages[index] : null;
+    final next = ChatMessage(
+      id: id,
+      role: MessageRole.assistant,
+      type: audioUrl.isNotEmpty ? MessageType.audio : type,
+      content: content.isNotEmpty ? content : existing?.content ?? '',
+      time: existing?.time ?? createdAt,
+      status: MessageStatus.sending,
+      resourceUri: audioUrl.isNotEmpty ? audioUrl : existing?.resourceUri,
+      mediaUrl: audioUrl.isNotEmpty ? audioUrl : existing?.mediaUrl,
+      mimeType: audioUrl.isNotEmpty ? 'audio/*' : existing?.mimeType,
+      durationMs: duration > 0
+          ? (duration * 1000).round()
+          : existing?.durationMs,
+      replyToMessageId: existing?.replyToMessageId,
+      replyToExcerpt: existing?.replyToExcerpt,
+    );
+    if (index >= 0) {
+      _messages[index] = next;
+    } else {
+      _messages.add(next);
+    }
+    notifyListeners();
+  }
+
+  Future<void> _awaitQueuedGeneration(int epoch) async {
     final conv = _conversationId;
     if (conv == null || conv.isEmpty) return;
     final deadline = DateTime.now().add(const Duration(minutes: 2));
@@ -296,12 +443,10 @@ class ConversationRuntimeController extends ChangeNotifier {
       final status = await _chatService.generationStatus(conv);
       if (status == 'collecting' || status == 'processing') {
         sawActiveState = true;
-        await Future<void>.delayed(const Duration(milliseconds: 250));
+        await Future<void>.delayed(const Duration(milliseconds: 1000));
         continue;
       }
-      if (status == 'failed') {
-        throw StateError('AI 生成失败');
-      }
+      if (status == 'failed') throw StateError('AI 生成失败');
       if (status == 'cancelled') {
         await _syncMessages();
         return;
@@ -310,51 +455,362 @@ class ConversationRuntimeController extends ChangeNotifier {
         await _syncMessages();
         return;
       }
-      // The submit goroutine may not have entered collecting/processing yet.
-      await Future<void>.delayed(const Duration(milliseconds: 150));
+      await Future<void>.delayed(const Duration(milliseconds: 750));
     }
-    if (epoch != _generationEpoch) return;
-    await _syncMessages();
+    if (epoch == _generationEpoch) await _syncMessages();
   }
 
-  Future<void> _syncMessages() async {
+  Future<void> _syncMessages({bool background = false}) async {
     final conv = _conversationId;
     if (conv == null || conv.isEmpty) return;
     final persisted = await _chatService.getMessages(conv);
-    if (persisted.isEmpty) return;
+    debugPrint(
+      'Chat sync persisted conversation=$conv count=${persisted.length}',
+    );
+    if (_disposed || _conversationId != conv || (background && _sending))
+      return;
+    if (persisted.isEmpty) {
+      debugPrint('Chat sync skipped empty persisted conversation=$conv');
+      return;
+    }
 
     final localById = <String, ChatMessage>{
       for (final message in _messages) message.id: message,
     };
-    final mapped = persisted.map((dto) {
-      final existing = localById[dto.id];
-      final type = _typeForDto(dto, existing);
-      return ChatMessage(
-        id: dto.id,
-        role: _roleFor(dto.role),
-        type: type,
-        content: dto.content,
-        time: DateTime.tryParse(dto.createdAt) ?? existing?.time ?? DateTime.now(),
-        status: dto.status == 'failed'
-            ? MessageStatus.error
-            : MessageStatus.delivered,
-        fileName: existing?.fileName,
-        fileSizeKB: existing?.fileSizeKB,
-        resourceUri: _resourceForDto(dto, existing),
-        mediaUrl: existing?.mediaUrl,
-        mimeType: existing?.mimeType,
-        durationMs: dto.audioDuration > 0
-            ? (dto.audioDuration * 1000).round()
-            : existing?.durationMs,
-      );
-    }).toList(growable: false);
+    final transientErrors = _messages
+        .where(
+          (message) =>
+              message.role == MessageRole.assistant &&
+              message.status == MessageStatus.error &&
+              message.id.contains('-error-'),
+        )
+        .toList(growable: false);
+    final mapped = persisted
+        .map((dto) {
+          final existing = localById[dto.id];
+          final type = _typeForDto(dto, existing);
+          final agentTask = type == MessageType.agentTask
+              ? _agentTaskPayload(dto.content)
+              : const <String, dynamic>{};
+          return ChatMessage(
+            id: dto.id,
+            role: _roleFor(dto.role),
+            type: type,
+            content: dto.content,
+            time:
+                DateTime.tryParse(dto.createdAt) ??
+                existing?.time ??
+                DateTime.now(),
+            status: dto.status == 'failed'
+                ? MessageStatus.error
+                : MessageStatus.delivered,
+            agentTaskId:
+                _firstString(agentTask, const <String>[
+                  'taskRunId',
+                  'task_run_id',
+                  'runId',
+                ]) ??
+                existing?.agentTaskId,
+            agentTaskTitle:
+                _firstString(agentTask, const <String>[
+                  'title',
+                  'taskTitle',
+                  'taskDefinitionId',
+                ]) ??
+                existing?.agentTaskTitle,
+            agentTaskSteps:
+                _stringList(agentTask['steps']) ?? existing?.agentTaskSteps,
+            agentTaskProgress:
+                _progressInt(agentTask) ?? existing?.agentTaskProgress,
+            agentTaskElapsed:
+                _firstString(agentTask, const <String>[
+                  'elapsed',
+                  'elapsedTime',
+                ]) ??
+                existing?.agentTaskElapsed,
+            fileName: existing?.fileName,
+            fileSizeKB: existing?.fileSizeKB,
+            resourceUri: _resourceForDto(dto, existing),
+            mediaUrl: existing?.mediaUrl,
+            mimeType: existing?.mimeType,
+            durationMs: dto.audioDuration > 0
+                ? (dto.audioDuration * 1000).round()
+                : existing?.durationMs,
+            toolName: existing?.toolName,
+            toolResult: existing?.toolResult,
+            replyToMessageId:
+                dto.replyToMessageId ?? existing?.replyToMessageId,
+            replyToExcerpt: dto.replyToExcerpt ?? existing?.replyToExcerpt,
+          );
+        })
+        .toList(growable: true);
+    for (final transient in transientErrors) {
+      if (!mapped.any((message) => message.id == transient.id)) {
+        mapped.add(transient);
+      }
+    }
+    for (final local in _messages) {
+      if (local.status != MessageStatus.sending &&
+          local.status != MessageStatus.sent) {
+        continue;
+      }
+      if (mapped.any((message) => _samePersistedMessage(local, message))) {
+        continue;
+      }
+      mapped.add(local);
+    }
+    mapped.sort((a, b) => a.time.compareTo(b.time));
+    if (_sameMessageList(_messages, mapped)) return;
     _messages
       ..clear()
       ..addAll(mapped);
+    debugPrint(
+      'Chat sync replaced conversation=$conv total=${_messages.length} ids=${mapped.map((item) => item.id).join(',')}',
+    );
     notifyListeners();
   }
 
+  bool _samePersistedMessage(ChatMessage local, ChatMessage persisted) {
+    if (local.id == persisted.id) return true;
+    return local.role == persisted.role && local.content == persisted.content;
+  }
+
+  void _restartLiveSync() {
+    _liveSyncTimer?.cancel();
+    _messageEventsCancellation?.cancel('conversation changed');
+    _messageEventsCancellation = null;
+    final conv = _conversationId?.trim() ?? '';
+    if (_disposed || conv.isEmpty) return;
+    _liveSyncTimer = Timer.periodic(_liveSyncInterval, (_) {
+      if (_disposed || _syncingMessages) return;
+      unawaited(_pollPersistedMessages());
+    });
+    final cancellation = _chatService.createStreamCancellation();
+    _messageEventsCancellation = cancellation;
+    unawaited(_runMessageEvents(conv, cancellation));
+  }
+
+  Future<void> _pollPersistedMessages() async {
+    if (_syncingMessages) return;
+    _syncingMessages = true;
+    try {
+      await _syncMessages(background: true);
+    } catch (_) {
+      // Proactive/reminder reconciliation is a background fallback. A transient
+      // transport failure must not replace the current conversation with an
+      // error state; explicit user actions still surface their own failures.
+    } finally {
+      _syncingMessages = false;
+    }
+  }
+
+  Future<void> _runMessageEvents(
+    String conversationId,
+    ChatStreamCancellation cancellation,
+  ) async {
+    while (!_disposed &&
+        !cancellation.isCancelled &&
+        _conversationId == conversationId) {
+      try {
+        await for (final event in _chatService.messageEvents(
+          cancellation: cancellation,
+        )) {
+          if (_disposed ||
+              cancellation.isCancelled ||
+              _conversationId != conversationId) {
+            return;
+          }
+          if (event.type != 'message_created' &&
+              event.type != 'message_updated') {
+            continue;
+          }
+          final eventConversation = (event.data['conversationId'] ?? '')
+              .toString();
+          if (eventConversation != conversationId) continue;
+          if (_handleTransientModelError(event.data)) continue;
+          unawaited(_pollPersistedMessages());
+        }
+      } catch (_) {
+        if (_disposed ||
+            cancellation.isCancelled ||
+            _conversationId != conversationId) {
+          return;
+        }
+      }
+      await Future<void>.delayed(const Duration(seconds: 3));
+    }
+  }
+
+  bool _handleTransientModelError(Map<String, dynamic> event) {
+    final rawMetadata = event['data'];
+    if (rawMetadata is! Map) return false;
+    final metadata = Map<String, dynamic>.from(rawMetadata);
+    final messageType = (metadata['messageType'] ?? '').toString();
+    if (!const <String>{
+      'vision_error',
+      'text_error',
+      'voice_error',
+      'vector_error',
+    }.contains(messageType)) {
+      return false;
+    }
+    final id = (event['messageId'] ?? '').toString().trim();
+    if (id.isEmpty) return true;
+    final rawError = (metadata['rawError'] ?? '').toString().trim();
+    final content = (event['content'] ?? '').toString().trim();
+    final message = ChatMessage(
+      id: id,
+      role: MessageRole.assistant,
+      type: MessageType.systemNotice,
+      content: rawError.isNotEmpty
+          ? rawError
+          : content.isNotEmpty
+          ? content
+          : '模型响应失败',
+      time:
+          DateTime.tryParse((event['createdAt'] ?? '').toString()) ??
+          DateTime.now(),
+      status: MessageStatus.error,
+    );
+    final index = _messages.indexWhere((item) => item.id == id);
+    if (index >= 0) {
+      _messages[index] = message;
+    } else {
+      _messages.add(message);
+    }
+    if (messageType == 'text_error') {
+      _lastError = StateError(message.content);
+    }
+    notifyListeners();
+    return true;
+  }
+
+  bool _sameMessageList(List<ChatMessage> current, List<ChatMessage> next) {
+    if (current.length != next.length) return false;
+    for (var i = 0; i < current.length; i++) {
+      final a = current[i];
+      final b = next[i];
+      if (a.id != b.id ||
+          a.role != b.role ||
+          a.type != b.type ||
+          a.content != b.content ||
+          a.status != b.status ||
+          a.time != b.time ||
+          a.agentTaskId != b.agentTaskId ||
+          a.agentTaskTitle != b.agentTaskTitle ||
+          !_sameStringList(a.agentTaskSteps, b.agentTaskSteps) ||
+          a.agentTaskProgress != b.agentTaskProgress ||
+          a.agentTaskElapsed != b.agentTaskElapsed ||
+          a.fileName != b.fileName ||
+          a.fileSizeKB != b.fileSizeKB ||
+          a.resourceUri != b.resourceUri ||
+          a.mediaUrl != b.mediaUrl ||
+          a.mimeType != b.mimeType ||
+          a.durationMs != b.durationMs ||
+          a.toolName != b.toolName ||
+          a.toolResult != b.toolResult ||
+          a.replyToMessageId != b.replyToMessageId ||
+          a.replyToExcerpt != b.replyToExcerpt) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  bool _sameStringList(List<String>? a, List<String>? b) {
+    if (identical(a, b)) return true;
+    if (a == null || b == null || a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
+  }
+
+  Map<String, dynamic> _agentTaskPayload(String content) {
+    final value = content.trim();
+    if (value.isEmpty || (!value.startsWith('{') && !value.startsWith('['))) {
+      return const <String, dynamic>{};
+    }
+    try {
+      final decoded = jsonDecode(value);
+      if (decoded is Map) return Map<String, dynamic>.from(decoded);
+      if (decoded is List && decoded.isNotEmpty && decoded.first is Map) {
+        return Map<String, dynamic>.from(decoded.first as Map);
+      }
+    } catch (_) {}
+    return const <String, dynamic>{};
+  }
+
+  String? _firstString(Map<String, dynamic> source, List<String> keys) {
+    for (final key in keys) {
+      final value = (source[key] ?? '').toString().trim();
+      if (value.isNotEmpty) return value;
+    }
+    return null;
+  }
+
+  List<String>? _stringList(dynamic value) {
+    if (value is! List) return null;
+    final items = value
+        .map((item) {
+          if (item is Map) {
+            return (item['title'] ?? item['name'] ?? item['label'] ?? '')
+                .toString()
+                .trim();
+          }
+          return item.toString().trim();
+        })
+        .where((item) => item.isNotEmpty)
+        .toList(growable: false);
+    return items.isEmpty ? null : items;
+  }
+
+  int? _progressInt(Map<String, dynamic> source) {
+    final direct = source['percentage'] ?? source['progress'];
+    if (direct is num) return direct.round().clamp(0, 100);
+    if (direct is Map) {
+      final percentage = direct['percentage'];
+      if (percentage is num) return percentage.round().clamp(0, 100);
+      final current = direct['current'];
+      final total = direct['total'];
+      if (current is num && total is num && total > 0) {
+        return (current.toDouble() / total.toDouble() * 100).round().clamp(
+          0,
+          100,
+        );
+      }
+    }
+    return null;
+  }
+
   MessageType _typeForDto(MessageDto dto, ChatMessage? existing) {
+    final rawType = dto.msgType.trim().toLowerCase().replaceAll('-', '_');
+    switch (rawType) {
+      case 'image':
+        return MessageType.image;
+      case 'video':
+        return MessageType.video;
+      case 'audio':
+      case 'voice':
+        return MessageType.audio;
+      case 'emote':
+      case 'emoji':
+        return MessageType.emote;
+      case 'code':
+        return MessageType.code;
+      case 'file':
+        return MessageType.file;
+      case 'agent_task':
+      case 'agenttask':
+        return MessageType.agentTask;
+      case 'tool_call':
+      case 'toolcall':
+      case 'tool':
+        return MessageType.toolCall;
+      case 'system_notice':
+      case 'systemnotice':
+        return MessageType.systemNotice;
+    }
     if (existing != null && existing.type != MessageType.text) {
       return existing.type;
     }
@@ -386,10 +842,25 @@ class ConversationRuntimeController extends ChangeNotifier {
     }
   }
 
-  Future<void> retryMessage(int index) async {
-    if (_sending || index < 0 || index >= _messages.length) return;
+  bool canRetryMessage(int index) {
+    if (_sending || index < 0 || index >= _messages.length) return false;
     final message = _messages[index];
-    if (message.role != MessageRole.user) return;
+    if (message.status != MessageStatus.error) return false;
+    if (message.role == MessageRole.user) return true;
+    if (message.role != MessageRole.assistant) return false;
+    final latestUserIndex = _messages.lastIndexWhere(
+      (item) => item.role == MessageRole.user,
+    );
+    return latestUserIndex >= 0 && index > latestUserIndex;
+  }
+
+  Future<void> retryMessage(int index) async {
+    if (!canRetryMessage(index)) return;
+    final message = _messages[index];
+    if (message.role == MessageRole.assistant) {
+      await regenerate();
+      return;
+    }
     _messages.removeAt(index);
     notifyListeners();
     switch (message.type) {
@@ -402,6 +873,7 @@ class ConversationRuntimeController extends ChangeNotifier {
           displayUrl: message.mediaUrl!,
           fileName: message.fileName ?? 'image',
           mimeType: message.mimeType ?? 'image/*',
+          text: message.content == '[图片]' ? '' : message.content,
         );
       case MessageType.video:
         if (message.resourceUri == null || message.mediaUrl == null) {
@@ -413,6 +885,7 @@ class ConversationRuntimeController extends ChangeNotifier {
           fileName: message.fileName ?? 'video',
           mimeType: message.mimeType ?? 'video/*',
           durationMs: message.durationMs ?? 0,
+          text: message.content == '[视频]' ? '' : message.content,
         );
       case MessageType.audio:
         if (message.resourceUri == null || message.mediaUrl == null) {
@@ -424,6 +897,7 @@ class ConversationRuntimeController extends ChangeNotifier {
           fileName: message.fileName ?? 'audio',
           mimeType: message.mimeType ?? 'audio/*',
           durationMs: message.durationMs ?? 0,
+          text: message.content == '[语音]' ? '' : message.content,
         );
       case MessageType.file:
         if (message.resourceUri == null) return sendText(message.content);
@@ -442,7 +916,6 @@ class ConversationRuntimeController extends ChangeNotifier {
         return sendText(message.content);
     }
   }
-
 
   Future<void> regenerate({String? messageId}) async {
     final conv = _conversationId;
@@ -464,16 +937,22 @@ class ConversationRuntimeController extends ChangeNotifier {
     }
   }
 
-  void deleteMessage(String messageId) {
-    final index = _messages.indexWhere((message) => message.id == messageId);
-    if (index < 0) return;
-    _messages.removeAt(index);
-    notifyListeners();
+  Future<void> deleteMessage(String messageId) async {
+    final id = messageId.trim();
+    if (id.isEmpty) return;
+    await _chatService.deleteMessage(id);
+    final index = _messages.indexWhere((message) => message.id == id);
+    if (index >= 0) {
+      _messages.removeAt(index);
+      notifyListeners();
+    }
   }
 
   Future<void> stop() async {
     if (!_sending) return;
     final conv = _conversationId;
+    _activeSendCancellation?.cancel('user stopped');
+    _activeSendCancellation = null;
     ++_generationEpoch;
     _sending = false;
     notifyListeners();
@@ -488,15 +967,22 @@ class ConversationRuntimeController extends ChangeNotifier {
     }
   }
 
-  Future<void> openConversation(String conversationId, {String? characterId}) async {
+  Future<void> openConversation(
+    String conversationId, {
+    String? characterId,
+  }) async {
     final id = conversationId.trim();
     if (id.isEmpty) return;
+    debugPrint('Chat open conversation id=$id');
+    _activeSendCancellation?.cancel('conversation changed');
+    _activeSendCancellation = null;
     ++_generationEpoch;
     _conversationId = id;
     _characterId = characterId?.trim().isEmpty == true ? null : characterId;
     _messages.clear();
     _lastError = null;
     _sending = false;
+    _restartLiveSync();
     notifyListeners();
     try {
       await _syncMessages();
@@ -513,6 +999,7 @@ class ConversationRuntimeController extends ChangeNotifier {
     _characterId = characterId;
     _messages.clear();
     _lastError = null;
+    _restartLiveSync();
     notifyListeners();
     return true;
   }
@@ -533,6 +1020,18 @@ class ConversationRuntimeController extends ChangeNotifier {
     notifyListeners();
   }
 
+  @override
+  void dispose() {
+    _disposed = true;
+    _activeSendCancellation?.cancel('disposed');
+    _activeSendCancellation = null;
+    _messageEventsCancellation?.cancel('disposed');
+    _messageEventsCancellation = null;
+    _liveSyncTimer?.cancel();
+    _liveSyncTimer = null;
+    super.dispose();
+  }
+
   String _localId(String prefix) =>
       '$prefix${DateTime.now().microsecondsSinceEpoch}';
 
@@ -544,6 +1043,8 @@ class ConversationRuntimeController extends ChangeNotifier {
         'content': message.content,
         'time': message.time.toIso8601String(),
         'status': message.status.name,
+        if ((message.agentTaskId ?? '').isNotEmpty)
+          'agentTaskId': message.agentTaskId,
         if (message.fileName != null) 'fileName': message.fileName,
         if (message.fileSizeKB != null) 'fileSizeKB': message.fileSizeKB,
         if (message.resourceUri != null) 'resourceUri': message.resourceUri,
@@ -552,5 +1053,9 @@ class ConversationRuntimeController extends ChangeNotifier {
         if (message.durationMs != null) 'durationMs': message.durationMs,
         if (message.toolName != null) 'toolName': message.toolName,
         if (message.toolResult != null) 'toolResult': message.toolResult,
+        if ((message.replyToMessageId ?? '').isNotEmpty)
+          'replyToMessageId': message.replyToMessageId,
+        if ((message.replyToExcerpt ?? '').isNotEmpty)
+          'replyToExcerpt': message.replyToExcerpt,
       };
 }

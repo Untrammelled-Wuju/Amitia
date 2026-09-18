@@ -10,7 +10,7 @@ type SubjectType string
 
 const (
 	SubjectSystem    SubjectType = "system"
-	SubjectUser      SubjectType = "user"
+	SubjectSpace     SubjectType = "space"
 	SubjectExtension SubjectType = "extension"
 	SubjectModule    SubjectType = "module"
 	SubjectTool      SubjectType = "tool"
@@ -36,8 +36,8 @@ func SubjectForTool(extID, toolID string) PermissionSubject {
 	return PermissionSubject{Type: SubjectTool, ID: toolID, ExtensionID: extID, ToolID: toolID}
 }
 
-func SubjectForUser(userID string) PermissionSubject {
-	return PermissionSubject{Type: SubjectUser, ID: userID}
+func SubjectForSpace(spaceID string) PermissionSubject {
+	return PermissionSubject{Type: SubjectSpace, ID: spaceID}
 }
 
 func SubjectForMCPServer(serverID string) PermissionSubject {

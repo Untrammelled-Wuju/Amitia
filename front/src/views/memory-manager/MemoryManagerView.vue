@@ -88,6 +88,32 @@
         />
       </el-select>
       <el-select
+        v-model="retentionLevelFilter"
+        placeholder="记忆层级"
+        size="small"
+        style="width: 120px"
+        clearable
+        @change="fetchList"
+      >
+        <el-option label="L1 核心" :value="1" />
+        <el-option label="L2 稳定" :value="2" />
+        <el-option label="L3 普通" :value="3" />
+        <el-option label="L4 弱记忆" :value="4" />
+        <el-option label="L5 短暂" :value="5" />
+      </el-select>
+      <el-select
+        v-model="decayStateFilter"
+        placeholder="记忆状态"
+        size="small"
+        style="width: 120px"
+        clearable
+        @change="fetchList"
+      >
+        <el-option label="活跃" value="active" />
+        <el-option label="淡化" value="fading" />
+        <el-option label="已归档" value="archived" />
+      </el-select>
+      <el-select
         v-model="characterFilter"
         placeholder="角色"
         size="small"
@@ -113,10 +139,14 @@
         <el-option label="重要度升序" value="importance_asc" />
         <el-option label="时间降序" value="time_desc" />
         <el-option label="时间升序" value="time_asc" />
+        <el-option label="记忆强度降序" value="memory_strength_desc" />
+        <el-option label="记忆强度升序" value="memory_strength_asc" />
+        <el-option label="记忆层级" value="retention_level_asc" />
       </el-select>
-      <el-button size="small" @click="showGenerateDialog = true"
-        >生成候选</el-button
-      >
+      <el-button size="small" @click="searchMemory">记忆搜索</el-button>
+      <el-button size="small" :loading="extracting" @click="extractCandidates">提取待审核候选</el-button>
+      <el-button size="small" @click="showGenerateDialog = true">从会话生成候选</el-button>
+      <el-button size="small" @click="showRankedDialog = true">检索排序诊断</el-button>
       <div class="toolbar-spacer"></div>
       <el-button size="small" type="primary" :icon="Plus" @click="showCreate"
         >新建</el-button
@@ -285,6 +315,8 @@
           @selection-change="handleSelectionChange"
           @edit="showEdit"
           @delete="delMem"
+          @restore="restoreMemory"
+          @toggle-pin="togglePinned"
           @toggle-scope="toggleScope"
           @page-change="
             page = $event;
@@ -310,6 +342,7 @@
       v-model="dialogVisible"
       :editing="editing"
       :editing-id="editingId"
+      :memory="editingMemory"
       :character-id="injectedCharacterId || ''"
       @memory-saved="fetchList"
     />
@@ -328,6 +361,11 @@
       @update:candidates="candidates = $event"
       @show-candidates="showCandidates = true"
     />
+    <RankedMemoryDialog
+      v-model="showRankedDialog"
+      :character-id="characterFilter || injectedCharacterId || ''"
+      :initial-query="keyword"
+    />
   </div>
 </template>
 
@@ -335,6 +373,7 @@
 import { ref, onMounted, inject, type Ref } from "vue";
 import { Search, Plus } from "@element-plus/icons-vue";
 import CandidateGenerateDialog from "./components/CandidateGenerateDialog.vue";
+import RankedMemoryDialog from "./components/RankedMemoryDialog.vue";
 import MemorySearchDialog from "./components/MemorySearchDialog.vue";
 import CandidateEditorDialog from "./components/CandidateEditorDialog.vue";
 import MemoryEditorDialog from "./components/MemoryEditorDialog.vue";
@@ -385,6 +424,8 @@ const {
   typeFilter,
   sourceFilter,
   scopeTypeFilter,
+  retentionLevelFilter,
+  decayStateFilter,
   characterFilter,
   characters,
   sortBy,
@@ -396,6 +437,8 @@ const {
   fetchList,
   handleSelectionChange,
   delMem,
+  restoreMemory,
+  togglePinned,
   toggleScope,
   batchVerify,
   batchSetImportant,
@@ -408,12 +451,10 @@ const {
   dialogVisible,
   editing,
   editingId,
-  saving,
-  form,
+  editingMemory,
   showCreate,
   showEdit,
-  saveMem,
-} = useMemoryEditor(fetchList, () => injectedCharacterId?.value);
+} = useMemoryEditor();
 const {
   vectorStatus,
   pipelineStatus,
@@ -435,6 +476,7 @@ const {
   conversationList,
   showGenerateDialog,
   generating,
+  extracting,
   generateConvId,
   editCandidateVisible,
   editForm,
@@ -448,6 +490,7 @@ const {
   deleteCandidateItem,
   loadConversations,
   generateCandidates,
+  extractCandidates,
   editCandidate,
   saveEditCandidate,
   doResolveConflict,
@@ -457,9 +500,6 @@ const {
 );
 const {
   searchDialogVisible,
-  searchQuery,
-  searchResults,
-  searched,
   globalQuery,
   globalSearching,
   globalSearched,
@@ -467,11 +507,11 @@ const {
   globalResults,
   globalResultCount,
   searchMemory,
-  doSearch,
   clearGlobalSearch,
   doGlobalSearch,
 } = useMemorySearch();
 const activeTab = ref("list");
+const showRankedDialog = ref(false);
 
 function charName(cid: string) {
   const ch = characters.value.find((c: any) => String(c.id) === String(cid));

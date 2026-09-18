@@ -18,6 +18,8 @@ const props = withDefaults(
     startIndex?: number;
     surfaceRole?: ExtensionSurfaceRole;
     contributionId?: string;
+    /** Restrict this slot to contributions owned by one extension. */
+    extensionId?: string;
     /** Keyed-slot dispatch key. */
     dispatchKey?: string;
     /** List-slot cell filter (`renderSlot(..., { only })`). */
@@ -29,6 +31,7 @@ const props = withDefaults(
     /** Exact parent contribution that authorized rendering this child slot. */
     authorizedBy?: string;
     bare?: boolean;
+    renderContributions?: boolean;
   }>(),
   {
     fallback: undefined,
@@ -37,12 +40,14 @@ const props = withDefaults(
     startIndex: 0,
     surfaceRole: "main",
     contributionId: undefined,
+    extensionId: undefined,
     dispatchKey: undefined,
     dispatchOnly: undefined,
     chainOverlay: false,
     hookContext: undefined,
     authorizedBy: undefined,
     bare: false,
+    renderContributions: true,
   }
 );
 
@@ -102,13 +107,19 @@ onBeforeUnmount(() => {
 });
 
 const visibleContributions = computed<UIContributionSummary[]>(() => {
-  if (props.contributionId) {
-    return contributions.value.filter((c) => c.contributionId === props.contributionId);
+  if (!props.renderContributions) return [];
+  let items = contributions.value;
+  if (props.extensionId) {
+    items = items.filter((c) => c.extensionId === props.extensionId);
   }
-  return contributions.value;
+  if (props.contributionId) {
+    items = items.filter((c) => c.contributionId === props.contributionId);
+  }
+  return items;
 });
 
 const dispatchedClientContributions = computed(() => {
+  if (!props.renderContributions) return [];
   browserClientPluginRuntime.slots.revision.value;
   if (props.authorizedBy) {
     browserClientPluginRuntime.slots.assertRenderAuthority(props.authorizedBy, props.slotId);
@@ -119,9 +130,14 @@ const dispatchedClientContributions = computed(() => {
     props.dispatchKey,
     props.dispatchOnly,
   );
-  return props.contributionId
-    ? dispatched.filter((item) => item.contribution.contributionId === props.contributionId)
-    : dispatched;
+  let items = dispatched;
+  if (props.extensionId) {
+    items = items.filter((item) => item.contribution.pluginId === props.extensionId);
+  }
+  if (props.contributionId) {
+    items = items.filter((item) => item.contribution.contributionId === props.contributionId);
+  }
+  return items;
 });
 
 type RenderItem = UnifiedSlotItem & { matched?: unknown };

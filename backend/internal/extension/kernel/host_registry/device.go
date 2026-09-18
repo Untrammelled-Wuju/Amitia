@@ -17,7 +17,7 @@ const (
 )
 
 type DeviceRecord struct {
-	UserID     runtimeidentity.UserID
+	SpaceID    runtimeidentity.SpaceID
 	DeviceID   runtimeidentity.DeviceID
 	Platform   runtimeidentity.Platform
 	Label      string
@@ -35,7 +35,7 @@ func (r *Registry) EnsureDevice(ctx context.Context, record DeviceRecord) (*Devi
 	}
 
 	if existing != nil {
-		if existing.UserID != record.UserID {
+		if existing.SpaceID != record.SpaceID {
 			return nil, ErrDeviceOwnedByOther
 		}
 		changed := false
@@ -76,11 +76,11 @@ func (r *Registry) GetDevice(ctx context.Context, deviceID runtimeidentity.Devic
 	return r.repo.GetDevice(ctx, deviceID)
 }
 
-func (r *Registry) ListDevicesByUser(ctx context.Context, userID runtimeidentity.UserID) ([]*DeviceRecord, error) {
-	return r.repo.ListDevicesByUser(ctx, userID)
+func (r *Registry) ListDevicesBySpace(ctx context.Context, spaceID runtimeidentity.SpaceID) ([]*DeviceRecord, error) {
+	return r.repo.ListDevicesBySpace(ctx, spaceID)
 }
 
-func (r *Registry) RequireDeviceOwnedBy(ctx context.Context, userID runtimeidentity.UserID, deviceID runtimeidentity.DeviceID) error {
+func (r *Registry) RequireDeviceOwnedBy(ctx context.Context, spaceID runtimeidentity.SpaceID, deviceID runtimeidentity.DeviceID) error {
 	dev, err := r.GetDevice(ctx, deviceID)
 	if err != nil {
 		return err
@@ -88,8 +88,25 @@ func (r *Registry) RequireDeviceOwnedBy(ctx context.Context, userID runtimeident
 	if dev == nil {
 		return ErrDeviceNotFound
 	}
-	if dev.UserID != userID {
+	if dev.SpaceID != spaceID {
 		return ErrDeviceOwnedByOther
+	}
+	return nil
+}
+
+func (r *Registry) RequireTrustedDevice(ctx context.Context, spaceID runtimeidentity.SpaceID, deviceID runtimeidentity.DeviceID) error {
+	dev, err := r.GetDevice(ctx, deviceID)
+	if err != nil {
+		return err
+	}
+	if dev == nil {
+		return ErrDeviceNotFound
+	}
+	if dev.SpaceID != spaceID {
+		return ErrDeviceOwnedByOther
+	}
+	if dev.TrustState != DeviceTrustTrusted {
+		return ErrDeviceNotTrusted
 	}
 	return nil
 }

@@ -23,10 +23,10 @@ const (
 	IdempotentOpReflection IdempotentOperationKind = "reflection"
 )
 
-func BuildIdempotencyKey(kind IdempotentOperationKind, userID, characterID, operationID string) string {
+func BuildIdempotencyKey(kind IdempotentOperationKind, spaceID, characterID, operationID string) string {
 	parts := []string{
 		string(kind),
-		strings.TrimSpace(userID),
+		strings.TrimSpace(spaceID),
 		strings.TrimSpace(characterID),
 		strings.TrimSpace(operationID),
 	}
@@ -49,7 +49,7 @@ const (
 type IdempotentCommitRecord struct {
 	Key             string                  `json:"key"`
 	Kind            IdempotentOperationKind `json:"kind"`
-	UserID          string                  `json:"userId"`
+	SpaceID         string                  `json:"spaceId"`
 	CharacterID     string                  `json:"characterId"`
 	StateVersion    int                     `json:"stateVersion"`
 	GenerationToken string                  `json:"generationToken,omitempty"`
@@ -96,12 +96,12 @@ func NewCommitQueue() *CommitQueue {
 	}
 }
 
-func commitQueueKey(userID, characterID string) string {
-	return "commit:" + strings.TrimSpace(userID) + ":" + strings.TrimSpace(characterID)
+func commitQueueKey(spaceID, characterID string) string {
+	return "commit:" + strings.TrimSpace(spaceID) + ":" + strings.TrimSpace(characterID)
 }
 
-func (cq *CommitQueue) Serialize(userID, characterID string) func() {
-	key := commitQueueKey(userID, characterID)
+func (cq *CommitQueue) Serialize(spaceID, characterID string) func() {
+	key := commitQueueKey(spaceID, characterID)
 	cq.mu.Lock()
 	ch, exists := cq.queues[key]
 	if !exists {
@@ -185,7 +185,7 @@ func (cv CommitValidator) Validate(stateVersion int, status string, genToken str
 
 type SupersededAuditRecord struct {
 	TaskID        string                  `json:"taskId"`
-	UserID        string                  `json:"userId"`
+	SpaceID       string                  `json:"spaceId"`
 	CharacterID   string                  `json:"characterId"`
 	Reason        string                  `json:"reason"`
 	SupersededBy  string                  `json:"supersededBy,omitempty"`
@@ -210,13 +210,13 @@ func NewSupersededAuditLog(maxSize int) *SupersededAuditLog {
 	}
 }
 
-func (sal *SupersededAuditLog) Record(taskID, userID, characterID, reason, supersededBy string, stateVersion int, kind IdempotentOperationKind) {
+func (sal *SupersededAuditLog) Record(taskID, spaceID, characterID, reason, supersededBy string, stateVersion int, kind IdempotentOperationKind) {
 	sal.mu.Lock()
 	defer sal.mu.Unlock()
 
 	record := SupersededAuditRecord{
 		TaskID:        strings.TrimSpace(taskID),
-		UserID:        strings.TrimSpace(userID),
+		SpaceID:       strings.TrimSpace(spaceID),
 		CharacterID:   strings.TrimSpace(characterID),
 		Reason:        strings.TrimSpace(reason),
 		SupersededBy:  strings.TrimSpace(supersededBy),
@@ -262,7 +262,7 @@ func NewIdempotentExecutor() *IdempotentExecutor {
 
 type IdempotentCommitInput struct {
 	Kind            IdempotentOperationKind
-	UserID          string
+	SpaceID         string
 	CharacterID     string
 	OperationID     string
 	StateVersion    int
@@ -279,7 +279,7 @@ type IdempotentCommitResult struct {
 }
 
 func (ie *IdempotentExecutor) Commit(input IdempotentCommitInput) IdempotentCommitResult {
-	key := BuildIdempotencyKey(input.Kind, input.UserID, input.CharacterID, input.OperationID)
+	key := BuildIdempotencyKey(input.Kind, input.SpaceID, input.CharacterID, input.OperationID)
 
 	ie.mu.Lock()
 	if existing, ok := ie.committed[key]; ok {
@@ -292,7 +292,7 @@ func (ie *IdempotentExecutor) Commit(input IdempotentCommitInput) IdempotentComm
 		}
 	}
 
-	unlock := ie.queue.Serialize(input.UserID, input.CharacterID)
+	unlock := ie.queue.Serialize(input.SpaceID, input.CharacterID)
 	ie.mu.Unlock()
 	defer unlock()
 
@@ -309,11 +309,11 @@ func (ie *IdempotentExecutor) Commit(input IdempotentCommitInput) IdempotentComm
 	}
 
 	if strings.EqualFold(strings.TrimSpace(input.Status), "superseded") {
-		ie.auditLog.Record(key, input.UserID, input.CharacterID, "superseded", "", input.StateVersion, input.Kind)
+		ie.auditLog.Record(key, input.SpaceID, input.CharacterID, "superseded", "", input.StateVersion, input.Kind)
 		record := IdempotentCommitRecord{
 			Key:             key,
 			Kind:            input.Kind,
-			UserID:          strings.TrimSpace(input.UserID),
+			SpaceID:         strings.TrimSpace(input.SpaceID),
 			CharacterID:     strings.TrimSpace(input.CharacterID),
 			StateVersion:    input.StateVersion,
 			GenerationToken: strings.TrimSpace(input.GenerationToken),
@@ -325,11 +325,11 @@ func (ie *IdempotentExecutor) Commit(input IdempotentCommitInput) IdempotentComm
 	}
 
 	if strings.EqualFold(strings.TrimSpace(input.Status), "cancelled") {
-		ie.auditLog.Record(key, input.UserID, input.CharacterID, "cancelled", "", input.StateVersion, input.Kind)
+		ie.auditLog.Record(key, input.SpaceID, input.CharacterID, "cancelled", "", input.StateVersion, input.Kind)
 		record := IdempotentCommitRecord{
 			Key:             key,
 			Kind:            input.Kind,
-			UserID:          strings.TrimSpace(input.UserID),
+			SpaceID:         strings.TrimSpace(input.SpaceID),
 			CharacterID:     strings.TrimSpace(input.CharacterID),
 			StateVersion:    input.StateVersion,
 			GenerationToken: strings.TrimSpace(input.GenerationToken),
@@ -343,7 +343,7 @@ func (ie *IdempotentExecutor) Commit(input IdempotentCommitInput) IdempotentComm
 	record := IdempotentCommitRecord{
 		Key:             key,
 		Kind:            input.Kind,
-		UserID:          strings.TrimSpace(input.UserID),
+		SpaceID:         strings.TrimSpace(input.SpaceID),
 		CharacterID:     strings.TrimSpace(input.CharacterID),
 		StateVersion:    input.StateVersion,
 		GenerationToken: strings.TrimSpace(input.GenerationToken),
@@ -360,7 +360,7 @@ func (ie *IdempotentExecutor) CommitWithLock(input IdempotentCommitInput, lock O
 	validator := NewCommitValidator(lock.ExpectedVersion, input.Status, input.GenerationToken)
 	if !validator.Validate(input.StateVersion, input.Status, input.GenerationToken) {
 		return IdempotentCommitResult{
-			Key:    BuildIdempotencyKey(input.Kind, input.UserID, input.CharacterID, input.OperationID),
+			Key:    BuildIdempotencyKey(input.Kind, input.SpaceID, input.CharacterID, input.OperationID),
 			Status: CommitConflict,
 		}
 	}

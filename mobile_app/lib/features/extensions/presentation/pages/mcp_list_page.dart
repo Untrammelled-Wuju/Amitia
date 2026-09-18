@@ -7,7 +7,6 @@ import '../../../../app/theme/app_radius.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../app/app_routes.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
-import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/services/providers.dart';
 
@@ -20,6 +19,7 @@ class McpListPage extends ConsumerStatefulWidget {
 
 class _McpListPageState extends ConsumerState<McpListPage> {
   List<Map<String, dynamic>> _servers = [];
+  Map<String, Set<String>> _enabledCapabilities = const <String, Set<String>>{};
   bool _loading = true;
   String? _error;
 
@@ -34,7 +34,30 @@ class _McpListPageState extends ConsumerState<McpListPage> {
     try {
       final svc = ref.read(mcpServiceProvider);
       final data = await svc.servers();
-      if (mounted) setState(() { _servers = data; _loading = false; });
+      final capabilityEntries = await Future.wait(
+        data.map((server) async {
+          final id = (server['id'] ?? '').toString();
+          if (id.isEmpty) return MapEntry(id, <String>{});
+          try {
+            final items = await svc.capabilities(id);
+            final enabled = items
+                .where((item) => _asBool(item['enabled']))
+                .map((item) => (item['capability'] ?? '').toString())
+                .where((name) => name.isNotEmpty)
+                .toSet();
+            return MapEntry(id, enabled);
+          } catch (_) {
+            return MapEntry(id, <String>{});
+          }
+        }),
+      );
+      if (mounted) {
+        setState(() {
+          _servers = data;
+          _enabledCapabilities = Map<String, Set<String>>.fromEntries(capabilityEntries);
+          _loading = false;
+        });
+      }
     } catch (e) {
       if (mounted) setState(() { _error = e.toString(); _loading = false; });
     }
@@ -43,8 +66,7 @@ class _McpListPageState extends ConsumerState<McpListPage> {
   String _transportLabel(dynamic transport) {
     final t = transport.toString().toLowerCase();
     if (t.contains('stdio')) return 'STDIO';
-    if (t.contains('sse')) return 'SSE';
-    if (t.contains('websocket') || t.contains('ws')) return 'WebSocket';
+    if (t.contains('streamable_http')) return 'HTTP';
     return transport.toString();
   }
 
@@ -64,6 +86,12 @@ class _McpListPageState extends ConsumerState<McpListPage> {
     if (s.contains('error')) return BadgeType.error;
     if (s.contains('connecting')) return BadgeType.warning;
     return BadgeType.neutral;
+  }
+
+  static bool _asBool(dynamic value) {
+    if (value is bool) return value;
+    if (value is num) return value != 0;
+    return value.toString().toLowerCase() == 'true';
   }
 
   @override
@@ -106,15 +134,16 @@ class _McpListPageState extends ConsumerState<McpListPage> {
     final id = (server['id'] ?? '').toString();
     final name = (server['name'] ?? '').toString();
     final transport = server['transport'];
-    final address = (server['address'] ?? server['url'] ?? '').toString();
+    final address = (server['transport'] ?? '').toString() == 'stdio'
+        ? (server['command'] ?? '').toString()
+        : (server['endpoint'] ?? '').toString();
     final status = server['status'];
-    final toolCount = (server['toolCount'] ?? server['tools'] ?? 0) as int;
-    final promptCount = (server['promptCount'] ?? server['prompts'] ?? 0) as int;
-    final resourceCount = (server['resourceCount'] ?? server['resources'] ?? 0) as int;
-    final hasSampling = (server['hasSampling'] ?? false) as bool;
-    final hasTasks = (server['hasTasks'] ?? false) as bool;
-    final hasRoots = (server['hasRoots'] ?? false) as bool;
-    final hasOAuth = (server['hasOAuth'] ?? false) as bool;
+    final enabledCapabilities = _enabledCapabilities[id] ?? const <String>{};
+    final hasSampling = enabledCapabilities.contains('sampling');
+    final hasTasks = enabledCapabilities.contains('tasks');
+    final hasRoots = enabledCapabilities.contains('roots');
+    final hasElicitation = enabledCapabilities.contains('elicitation');
+    final hasOAuth = (server['authType'] ?? '').toString() == 'oauth';
 
     return AmitiaCard(
       onTap: () => context.push(AppRoutes.mcpDetail(id)),
@@ -164,15 +193,14 @@ class _McpListPageState extends ConsumerState<McpListPage> {
             spacing: 6,
             runSpacing: 6,
             children: [
-              _CapabilityTag(label: '工具 $toolCount', icon: Icons.build_outlined, color: context.accentPrimary),
-              _CapabilityTag(label: 'Prompt $promptCount', icon: Icons.chat_outlined, color: context.info),
-              _CapabilityTag(label: 'Resource $resourceCount', icon: Icons.folder_outlined, color: context.success),
               if (hasSampling)
                 _CapabilityTag(label: 'Sampling', icon: Icons.graphic_eq, color: context.warning),
               if (hasTasks)
                 _CapabilityTag(label: 'Tasks', icon: Icons.task_outlined, color: context.accentSecondary),
               if (hasRoots)
                 _CapabilityTag(label: 'Roots', icon: Icons.account_tree_outlined, color: context.info),
+              if (hasElicitation)
+                _CapabilityTag(label: 'Elicitation', icon: Icons.dynamic_form_outlined, color: context.warning),
               if (hasOAuth)
                 _CapabilityTag(label: 'OAuth', icon: Icons.lock_outline, color: context.error),
             ],
@@ -227,19 +255,9 @@ class _McpListPageState extends ConsumerState<McpListPage> {
   }
 
   void _showAddServerSheet() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: context.surfacePrimary,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
-      builder: (context) => _AddServerSheet(onConfirm: () {
-        Navigator.pop(context);
-        _loadServers();
-        ScaffoldMessenger.of(this.context).showSnackBar(
-          SnackBar(content: const Text('MCP 服务添加成功'), backgroundColor: context.success),
-        );
-      }),
-    );
+    context.push<bool>(AppRoutes.extensionsMcpNew).then((changed) {
+      if (changed == true && mounted) _loadServers();
+    });
   }
 
   Future<void> _showDeleteConfirm(Map<String, dynamic> server) async {
@@ -303,78 +321,6 @@ class _CapabilityTag extends StatelessWidget {
           Icon(icon, size: 13, color: color),
           const SizedBox(width: 4),
           Text(label, style: TextStyle(fontSize: 11, color: color, fontWeight: FontWeight.w500)),
-        ],
-      ),
-    );
-  }
-}
-
-class _AddServerSheet extends StatefulWidget {
-  final VoidCallback onConfirm;
-
-  const _AddServerSheet({required this.onConfirm});
-
-  @override
-  State<_AddServerSheet> createState() => _AddServerSheetState();
-}
-
-class _AddServerSheetState extends State<_AddServerSheet> {
-  int _transportIndex = 0;
-  final _nameController = TextEditingController();
-  final _addressController = TextEditingController();
-
-  @override
-  void dispose() {
-    _nameController.dispose();
-    _addressController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final transports = ['STDIO', 'SSE', 'WebSocket'];
-    return Padding(
-      padding: EdgeInsets.fromLTRB(20, 12, 20, 34 + MediaQuery.of(context).viewInsets.bottom),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Center(
-            child: Container(width: 40, height: 4, decoration: BoxDecoration(color: context.borderPrimary, borderRadius: BorderRadius.circular(2))),
-          ),
-          const SizedBox(height: 20),
-          Text('添加 MCP 服务', style: AppTypography.pageTitle(context)),
-          const SizedBox(height: 20),
-          Text('服务名称', style: AppTypography.caption(context)),
-          const SizedBox(height: 6),
-          AmitiaTextField(hintText: '输入服务名称', controller: _nameController),
-          const SizedBox(height: 16),
-          Text('Transport 类型', style: AppTypography.caption(context)),
-          const SizedBox(height: 6),
-          AmitiaSegmentedControl(
-            segments: transports,
-            selectedIndex: _transportIndex,
-            onChanged: (i) => setState(() => _transportIndex = i),
-          ),
-          const SizedBox(height: 16),
-          Text(_transportIndex == 0 ? '命令' : '地址', style: AppTypography.caption(context)),
-          const SizedBox(height: 6),
-          AmitiaTextField(
-            hintText: _transportIndex == 0 ? '输入启动命令' : '输入服务地址',
-            controller: _addressController,
-          ),
-          const SizedBox(height: 20),
-          Row(
-            children: [
-              Expanded(
-                child: AmitiaButton(label: '取消', isSecondary: true, onPressed: () => Navigator.pop(context)),
-              ),
-              SizedBox(width: AppSpacing.sm),
-              Expanded(
-                child: AmitiaButton(label: '添加', onPressed: widget.onConfirm),
-              ),
-            ],
-          ),
         ],
       ),
     );

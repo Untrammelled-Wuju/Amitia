@@ -5,11 +5,13 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
+	appconfig "github.com/u-ai/backend/config"
 	"github.com/u-ai/backend/internal/agent/tool"
 	"github.com/u-ai/backend/internal/browser"
 	"github.com/u-ai/backend/internal/delivery"
@@ -99,8 +101,10 @@ type ContainerBuilder struct {
 	dbPath                       string
 	extRoot                      string
 	db                           *sql.DB
+	scopeRelationDB              *sql.DB
 	characterReader              CharacterReader
 	conversationReader           ConversationReader
+	extensionDataSources         ExtensionDataSource
 	memoryQueryService           MemoryQueryService
 	nodeEnvironmentResolver      script_host.NodeEnvironmentResolver
 	hostArtifactResolver         script_host.ArtifactResolver
@@ -135,7 +139,11 @@ type ContainerBuilder struct {
 
 	workshopModelGenerator WorkshopModelGenerator
 
-	channelStore capability.ChannelStore
+	channelStore                capability.ChannelStore
+	agentAdminController        AgentAdminToolController
+	conversationMessageSender   ConversationMessageSender
+	conversationMessageAppender ConversationMessageAppender
+	vectorStore                 ExtensionVectorStore
 }
 
 type WorkshopModelGenerator interface {
@@ -144,7 +152,10 @@ type WorkshopModelGenerator interface {
 
 func NewContainerBuilder() *ContainerBuilder {
 	authority.MustValidate()
-	return &ContainerBuilder{}
+	return &ContainerBuilder{
+		runtimeProfile: runtimeprofile.ProfileLocal,
+		runtimePolicy:  runtimeprofile.PolicyFor(runtimeprofile.ProfileLocal),
+	}
 }
 
 func (b *ContainerBuilder) WithDBPath(path string) *ContainerBuilder {
@@ -162,6 +173,11 @@ func (b *ContainerBuilder) WithDB(db *sql.DB) *ContainerBuilder {
 	return b
 }
 
+func (b *ContainerBuilder) WithScopeRelationDB(db *sql.DB) *ContainerBuilder {
+	b.scopeRelationDB = db
+	return b
+}
+
 func (b *ContainerBuilder) WithDesktopPetPluginCapabilities(caps integration.DesktopPetPluginCapabilities) *ContainerBuilder {
 	b.desktopPetPluginCapabilities = &caps
 	return b
@@ -174,6 +190,11 @@ func (b *ContainerBuilder) WithCharacterReader(r CharacterReader) *ContainerBuil
 
 func (b *ContainerBuilder) WithConversationReader(r ConversationReader) *ContainerBuilder {
 	b.conversationReader = r
+	return b
+}
+
+func (b *ContainerBuilder) WithExtensionDataSources(sources ExtensionDataSource) *ContainerBuilder {
+	b.extensionDataSources = sources
 	return b
 }
 
@@ -306,6 +327,26 @@ func (b *ContainerBuilder) WithChannelStore(store capability.ChannelStore) *Cont
 	return b
 }
 
+func (b *ContainerBuilder) WithAgentAdminController(controller AgentAdminToolController) *ContainerBuilder {
+	b.agentAdminController = controller
+	return b
+}
+
+func (b *ContainerBuilder) WithConversationMessageSender(sender ConversationMessageSender) *ContainerBuilder {
+	b.conversationMessageSender = sender
+	return b
+}
+
+func (b *ContainerBuilder) WithConversationMessageAppender(appender ConversationMessageAppender) *ContainerBuilder {
+	b.conversationMessageAppender = appender
+	return b
+}
+
+func (b *ContainerBuilder) WithVectorStore(store ExtensionVectorStore) *ContainerBuilder {
+	b.vectorStore = store
+	return b
+}
+
 func (b *ContainerBuilder) WithMCPRepository(repo *mcp.Repository) *ContainerBuilder {
 	b.mcpRepository = repo
 	return b
@@ -326,6 +367,16 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	if nodeResolver == nil {
 		nodeResolver = script_host.UnavailableNodeResolver()
 	}
+	tool.SetSandboxNodePathResolver(func(resolveCtx context.Context) (string, error) {
+		environment, err := nodeResolver.Resolve(resolveCtx)
+		if err != nil {
+			return "", err
+		}
+		if environment.NodeBinary == "" {
+			return "", fmt.Errorf("managed Node.js runtime is unavailable")
+		}
+		return environment.NodeBinary, nil
+	})
 	artifactResolver := b.hostArtifactResolver
 	if artifactResolver == nil {
 		artifactResolver = script_host.UnavailableArtifactResolver()
@@ -360,9 +411,14 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	permBroker := permission.NewDefaultPermissionBroker(permDefRegistry, permStorage)
 	permBroker.SetSnapshotStore(permSnapshotStore)
 	permBroker.SetTrustLevelChecker(newRepositoryPermissionTrustChecker(instRepo, defRepo))
+	permBroker.InstallationPolicy = newInstallationPermissionPolicy(permRepo)
+	permBroker.PersistentOverride = map[string]struct{}{
+		permission.PermissionServiceRuntimeExecute: {},
+		permission.PermissionServiceNetworkRequest: {},
+	}
 
 	scopeStore := scope.NewSQLiteScopeStore(db)
-	relationChecker := newRepositoryScopeRelationChecker(db, resourceRepo, opRepo)
+	relationChecker := newRepositoryScopeRelationChecker(db, b.scopeRelationDB, resourceRepo, opRepo)
 	scopeEvaluator := scope.NewScopeEvaluator(scopeStore, relationChecker)
 	scopeManager := scope.NewScopeManager(scopeStore, scopeEvaluator)
 
@@ -383,6 +439,12 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		trustedSvcRoot,
 		trusted_service.NewBinaryVerifierWithManagedNode(newManagedNodeChecker(nodeResolver)),
 	)
+	trustedSupervisor.SetLogger(func(level, msg string, fields map[string]any) {
+		log.Printf("[trusted-service] level=%s service=%v instance=%v source=%v msg=%s", level, fields["service"], fields["instance"], fields["source"], msg)
+	})
+	if appconfig.AppCfg != nil && appconfig.AppCfg.Server.Port > 0 {
+		trustedSupervisor.SetCoreURL(fmt.Sprintf("http://127.0.0.1:%d", appconfig.AppCfg.Server.Port))
+	}
 	defProvider := newMemoryDefinitionProvider()
 	trustedFactory := trusted_service.NewTrustedServiceFactory(trustedSupervisor, defProvider, b.extRoot)
 	_ = supervisor.RegisterFactory(trustedFactory)
@@ -405,24 +467,24 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		if def.Source != "user" || def.Metadata == nil {
 			continue
 		}
-		ownerUserID := strings.TrimSpace(fmt.Sprint(def.Metadata["ownerUserId"]))
-		if ownerUserID == "" {
+		ownerSpaceID := strings.TrimSpace(fmt.Sprint(def.Metadata["ownerSpaceId"]))
+		if ownerSpaceID == "" {
 			continue
 		}
-		if _, ensureErr := workflowInstallationRepo.EnsureLegacy(ctx, def, ownerUserID, legacyWorkflowLocation); ensureErr != nil {
+		if _, ensureErr := workflowInstallationRepo.EnsureLegacy(ctx, def, ownerSpaceID, legacyWorkflowLocation); ensureErr != nil {
 			return nil, fmt.Errorf("migrate workflow installation %s: %w", def.ID, ensureErr)
 		}
 	}
 	workflowExecutor := workflow.NewWorkflowExecutor(workflowRegistry)
-	workflowExecutor.SetRevisionBinder(func(ctx context.Context, ownerUserID string, def workflow.WorkflowDefinition) (string, error) {
-		ownerUserID = strings.TrimSpace(ownerUserID)
-		if ownerUserID == "" {
+	workflowExecutor.SetRevisionBinder(func(ctx context.Context, ownerSpaceID string, def workflow.WorkflowDefinition) (string, error) {
+		ownerSpaceID = strings.TrimSpace(ownerSpaceID)
+		if ownerSpaceID == "" {
 			// System/internal workflows can legitimately have no user owner. Their
 			// immutable definition snapshot/hash is still persisted on the run, but
 			// there is no user-scoped revision row to bind.
 			return "", nil
 		}
-		revision, err := workflowDefRepo.EnsurePublishedRevision(ctx, ownerUserID, def, "执行时自动绑定")
+		revision, err := workflowDefRepo.EnsurePublishedRevision(ctx, ownerSpaceID, def, "执行时自动绑定")
 		if err != nil {
 			return "", err
 		}
@@ -501,7 +563,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		return nil, fmt.Errorf("kernel: build secret broker: %w", err)
 	}
 	workflowTriggerManager.SetSecretResolver(func(ctx context.Context, rawRef string, event workflow.WorkflowTriggerEvent, binding workflow.TriggerBinding) ([]byte, error) {
-		if !workflow.TriggerSecretRefOwnedByUser(rawRef, event.OwnerUserID) {
+		if !workflow.TriggerSecretRefOwnedBySpace(rawRef, event.OwnerSpaceID) {
 			return nil, fmt.Errorf("workflow trigger secret does not belong to event owner")
 		}
 		ref, err := secret.ParseRef(rawRef)
@@ -512,7 +574,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		const runtimeInstanceID = "workflow-trigger-manager"
 		lease, err := kernelSecretBroker.Issue(ctx, secret.LeaseRequest{
 			Ref: ref, Purpose: "workflow-trigger-match", InvocationID: invocationID, RuntimeInstanceID: runtimeInstanceID,
-			UserID: event.OwnerUserID, Generation: binding.Generation, TTL: 30 * time.Second, MaxUses: 1,
+			SpaceID: event.OwnerSpaceID, Generation: binding.Generation, TTL: 30 * time.Second, MaxUses: 1,
 		})
 		if err != nil {
 			return nil, err
@@ -717,8 +779,8 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 				Domain:        event.EventDomainSync,
 				AggregateType: "workflow_run",
 				AggregateID:   lifecycle.ExecutionID,
-				PartitionKey:  lifecycle.UserID,
-				OrderingKey:   lifecycle.UserID,
+				PartitionKey:  lifecycle.SpaceID,
+				OrderingKey:   lifecycle.SpaceID,
 			})
 		})
 		eventResolver := BuildEventEffectiveResolver(permBroker, scopeManager, dependencyResolver, supervisor, eventSvc.GetDispatcher(), enablementResolver, instRepo)
@@ -833,7 +895,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	stateLoader := newContainerStateLoader(instRepo, defRepo, moduleRepo, contribRepo, runtimeRepo, stateStore)
 	preflightChecker := newContainerPreflightChecker(dependencyResolver)
 	typedInstaller := NewTypedContributionInstaller(nil)
-	planExecutor := newContainerPlanExecutor(instRepo, defRepo, moduleRepo, contribRepo, stateStore, typedInstaller, packageRepo, packageArtifactStore, packageGenerationStore, packageSec, uiHostNotifier)
+	planExecutor := newContainerPlanExecutor(instRepo, defRepo, moduleRepo, contribRepo, permRepo, stateStore, typedInstaller, packageRepo, packageArtifactStore, packageGenerationStore, packageSec, uiHostNotifier)
 	lcAuditWriter := newContainerAuditWriter(opRepo)
 	lifecycleMgr := lifecycle_manager.NewManager(stateLoader, preflightChecker, planExecutor, lcAuditWriter)
 
@@ -843,7 +905,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	}
 	providerLifecycle := capability.NewProviderLifecycleService(capabilityProviderRegistry, providerEventSink)
 
-	deviceRuntimePresence := host_registry.NewDeviceRuntimePresenceAdapterWithCallback(deviceRegistry, func(userID runtimeidentity.UserID, deviceID runtimeidentity.DeviceID, runtimeID runtimeidentity.RuntimeID) {
+	deviceRuntimePresence := host_registry.NewDeviceRuntimePresenceAdapterWithCallback(deviceRegistry, func(spaceID runtimeidentity.SpaceID, deviceID runtimeidentity.DeviceID, runtimeID runtimeidentity.RuntimeID) {
 		allInstances := capabilityProviderRegistry.SnapshotInstances()
 		for _, inst := range allInstances {
 			if inst == nil {
@@ -852,7 +914,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 			if inst.Availability != capability.ProviderAvailabilityAvailable {
 				continue
 			}
-			if userID != "" && inst.UserID != userID {
+			if spaceID != "" && inst.SpaceID != spaceID {
 				continue
 			}
 			if deviceID != "" && inst.DeviceID != deviceID {
@@ -959,12 +1021,9 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	providerInvocationService := capability.NewProviderInvocationService(capabilityService, adapterRegistry)
 	kernelProviderInvoker := NewKernelProviderInvoker(providerInvocationService)
 
-	// CapabilityChannelResolver 是正式的 Channel 发现机制：
-	// channel.deliver.* → CapabilityService → ProviderInvocation
-	// 原 BuildChannelResolverFromConfig 只作为 Builtin Channel Provider 内部实现（fallback）
-	capabilityChannelInvoker := delivery.NewProviderInvocationCapabilityInvoker(providerInvocationService, "")
-	builtinChannelResolver := delivery.BuildChannelResolverFromConfig()
-	capabilityChannelResolver := delivery.NewCapabilityChannelResolver(capabilityChannelInvoker, builtinChannelResolver)
+	pluginChannelProviders := delivery.NewPluginChannelProviderRegistry(capabilityProviderRegistry)
+	builtinChannelResolver := delivery.BuildBuiltinChannelResolver()
+	capabilityChannelResolver := delivery.NewCapabilityChannelResolver(pluginChannelProviders, builtinChannelResolver)
 	if b.channelStore == nil {
 		b.channelStore = delivery.NewResolverChannelStore(capabilityChannelResolver)
 	}
@@ -1053,23 +1112,33 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	}
 
 	bridgeClipboardHost := NewBridgeClipboardHostWithRegistry(sse.Global, deviceRegistry)
+	resourceLinks, err := NewResourceLinkManager(b.extRoot)
+	if err != nil {
+		return nil, fmt.Errorf("kernel: initialize resource links: %w", err)
+	}
 	if err := setupDefaultHostAPIRoutes(hostAPIGateway, HostAPIRouteDeps{
-		StateStore:          extensionStateStore,
-		CharacterReader:     charReader,
-		ConversationReader:  convReader,
-		MemoryQueryService:  memQuerySvc,
-		UIHostNotifier:      uiHostNotifier,
-		ClipboardHost:       bridgeClipboardHost,
-		RuntimeSupervisor:   supervisor,
-		EventService:        eventSvc,
-		ScheduleService:     scheduleSvc,
-		ExecutionKernel:     executionKernel,
-		ToolRegistry:        toolRegistry,
-		OperationRepository: opRepo,
-		ExtensionRoot:       b.extRoot,
-		ScopeSnapshotStore:  host_api.NewSnapshotStoreAdapter(scopeStore),
-		SecretStore:         nil,
-		ProviderInvoker:     kernelProviderInvoker,
+		StateStore:                  extensionStateStore,
+		CharacterReader:             charReader,
+		CharacterLister:             characterListerFromReader(charReader),
+		ConversationReader:          convReader,
+		MemoryQueryService:          memQuerySvc,
+		UIHostNotifier:              uiHostNotifier,
+		ClipboardHost:               bridgeClipboardHost,
+		RuntimeSupervisor:           supervisor,
+		EventService:                eventSvc,
+		ScheduleService:             scheduleSvc,
+		ExecutionKernel:             executionKernel,
+		ToolRegistry:                toolRegistry,
+		OperationRepository:         opRepo,
+		ExtensionRoot:               b.extRoot,
+		ScopeSnapshotStore:          host_api.NewSnapshotStoreAdapter(scopeStore),
+		SecretStore:                 nil,
+		ProviderInvoker:             kernelProviderInvoker,
+		ConversationMessageSender:   b.conversationMessageSender,
+		ConversationMessageAppender: b.conversationMessageAppender,
+		ExtensionDataSources:        b.extensionDataSources,
+		ResourceLinks:               resourceLinks,
+		VectorStore:                 b.vectorStore,
 	}); err != nil {
 		return nil, fmt.Errorf("kernel: setup host api routes: %w", err)
 	}
@@ -1084,14 +1153,29 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	jsFactory.SetHostAPI(hostAPIGateway)
 
 	jsSupervisorFactory := javascript_main.NewSupervisorFactory(jsFactory, nodeResolver, artifactResolver)
+	jsSupervisorFactory.SetExtensionRoot(b.extRoot)
 	_ = supervisor.RegisterFactory(jsSupervisorFactory)
 
+	agentAdminTools := newAgentAdminToolService(b.agentAdminController, workflowRegistry, workflowExecutor, toolRegistry)
+	builtinUtilityTools := NewBuiltinUtilityService(BuiltinUtilityDeps{
+		Workspace:    b.workspaceService,
+		Browser:      b.browserProvider,
+		Android:      b.androidNativeProvider,
+		AndroidLinux: b.androidLinuxProvider,
+	})
+
 	builtinDispatcher := func(ctx context.Context, handlerName string, input json.RawMessage, invocation capability.ToolInvocationContext) (json.RawMessage, error) {
+		if agentAdminTools.CanHandle(handlerName) {
+			return agentAdminTools.Dispatch(ctx, handlerName, input, invocation)
+		}
+		if builtinUtilityTools.CanHandle(handlerName) {
+			return builtinUtilityTools.Dispatch(ctx, handlerName, input, invocation)
+		}
 		execCtx := tool.ToolExecutionContext{
 			Context:        ctx,
 			ConversationID: invocation.ConversationID,
 			CharacterID:    invocation.CharacterID,
-			User:           invocation.UserID,
+			SpaceID:        invocation.SpaceID,
 			Path:           "kernel.builtin",
 			ToolCallID:     invocation.InvocationID,
 			IdempotencyKey: invocation.IdempotencyKey,
@@ -1137,29 +1221,31 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	}
 
 	if err := RegisterProductionAdapters(adapterRegistry, AdapterRegistrationDeps{
-		JSGlobalFactory:        jsFactory,
-		WASMFactory:            wasmFactory,
-		WASMModuleMgr:          wasmModuleMgr,
-		Supervisor:             supervisor,
-		TaskService:            taskRuntimeService,
-		WorkflowCaller:         makeWorkflowCallFunc(workflowExecutor),
-		WorkflowCancel:         makeWorkflowCancelFunc(workflowExecutor),
-		BuiltinDispatcher:      builtinDispatcher,
-		BuiltinHandlerVerifier: tool.HasHandler,
-		AndroidLinuxProvider:   b.androidLinuxProvider,
-		AndroidNativeProvider:  b.androidNativeProvider,
-		SearchCaller:           makeSearchCallFunc(b.searchConfig, kernelSecretBroker),
-		SearchHealth:           makeSearchHealthFunc(b.searchConfig, kernelSecretBroker),
-		InternalDispatcher:     internalDispatcher,
-		MediaCaller:            mediaCaller,
-		MediaHealth:            mediaHealth,
-		WorkspaceCaller:        workspaceCaller,
-		WorkspaceHealth:        workspaceHealth,
-		BrowserCaller:          makeBrowserCallFunc(b.browserProvider),
-		BrowserHealth:          makeBrowserHealthFunc(b.browserProvider),
-		DeviceRuntimePort:      deviceRuntimePort,
-		BackgroundRemoval:      bgRegistry,
-		ChannelStore:           b.channelStore,
+		JSGlobalFactory:   jsFactory,
+		WASMFactory:       wasmFactory,
+		WASMModuleMgr:     wasmModuleMgr,
+		Supervisor:        supervisor,
+		TaskService:       taskRuntimeService,
+		WorkflowCaller:    makeWorkflowCallFunc(workflowExecutor),
+		WorkflowCancel:    makeWorkflowCancelFunc(workflowExecutor),
+		BuiltinDispatcher: builtinDispatcher,
+		BuiltinHandlerVerifier: func(name string) bool {
+			return tool.HasHandler(name) || agentAdminTools.CanHandle(name) || builtinUtilityTools.CanHandle(name)
+		},
+		AndroidLinuxProvider:  b.androidLinuxProvider,
+		AndroidNativeProvider: b.androidNativeProvider,
+		SearchCaller:          makeSearchCallFunc(b.searchConfig, kernelSecretBroker),
+		SearchHealth:          makeSearchHealthFunc(b.searchConfig, kernelSecretBroker),
+		InternalDispatcher:    internalDispatcher,
+		MediaCaller:           mediaCaller,
+		MediaHealth:           mediaHealth,
+		WorkspaceCaller:       workspaceCaller,
+		WorkspaceHealth:       workspaceHealth,
+		BrowserCaller:         makeBrowserCallFunc(b.browserProvider),
+		BrowserHealth:         makeBrowserHealthFunc(b.browserProvider),
+		DeviceRuntimePort:     deviceRuntimePort,
+		BackgroundRemoval:     bgRegistry,
+		ChannelStore:          b.channelStore,
 	}); err != nil {
 		return nil, fmt.Errorf("kernel: register production adapters: %w", err)
 	}
@@ -1179,6 +1265,15 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	}
 	if err := registerBrowserAgentTool(ctx, toolRegistry); err != nil {
 		return nil, fmt.Errorf("kernel: register browser agent tool: %w", err)
+	}
+	if err := registerAgentAdminTools(ctx, toolRegistry, agentAdminTools); err != nil {
+		return nil, fmt.Errorf("kernel: register agent admin tools: %w", err)
+	}
+	if err := registerBuiltinMemorySandboxTools(ctx, toolRegistry); err != nil {
+		return nil, fmt.Errorf("kernel: register builtin memory/sandbox tools: %w", err)
+	}
+	if err := RegisterBuiltinUtilityTools(ctx, toolRegistry, builtinUtilityTools); err != nil {
+		return nil, fmt.Errorf("kernel: register builtin utility tools: %w", err)
 	}
 	if err := registerDeepSearchSystemTask(ctx, taskRuntimeService, b.deepSearchTaskEntry); err != nil {
 		return nil, fmt.Errorf("kernel: register deep search system task: %w", err)
@@ -1285,6 +1380,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		scopes := []scope.ScopeRef{
 			scope.NewExtensionScope(extensionID),
 			scope.NewModuleScope(extensionID, moduleID),
+			scope.NewInvocationScope(invocationID),
 			scope.NewSessionScope(invocationID),
 		}
 		if characterID != "" {
@@ -1293,7 +1389,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		if conversationID != "" {
 			scopes = append(scopes, scope.NewConversationScope(conversationID))
 		}
-		snapshot := scope.CreateSnapshot(invocationID, scopes, characterID, conversationID, extensionID, moduleID, generation)
+		snapshot := scope.CreateSnapshotWithOwner(invocationID, scopes, resolveSnapshotOwner(db, conversationID, characterID), characterID, conversationID, extensionID, moduleID, generation)
 		if err := scopeStore.SaveSnapshot(context.Background(), snapshot); err != nil {
 			return "", err
 		}
@@ -1330,6 +1426,15 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	})
 	uiContribRepo := sqlite.NewSQLiteUIContributionRepository(store.DB())
 	savedContribs, _ := uiContribRepo.ListAll(ctx)
+	activeContribs := savedContribs[:0]
+	for _, def := range savedContribs {
+		if string(def.ExtensionID) == builtin.LegacyProactiveExtensionID {
+			_ = uiContribRepo.DeleteContribution(ctx, string(def.ContributionID))
+			continue
+		}
+		activeContribs = append(activeContribs, def)
+	}
+	savedContribs = activeContribs
 	slotRegistry := extension_slots.DefaultSlotRegistry()
 	pageRegistry := extension_page_host.NewPageRegistry()
 	pageSessionMgr := extension_page_host.NewSessionManager()
@@ -1354,6 +1459,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		scopes := []scope.ScopeRef{
 			scope.NewExtensionScope(extensionID),
 			scope.NewModuleScope(extensionID, moduleID),
+			scope.NewInvocationScope(invocationID),
 			scope.NewSessionScope(invocationID),
 		}
 		if characterID != "" {
@@ -1362,7 +1468,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		if conversationID != "" {
 			scopes = append(scopes, scope.NewConversationScope(conversationID))
 		}
-		snapshot := scope.CreateSnapshot(invocationID, scopes, characterID, conversationID, extensionID, moduleID, generation)
+		snapshot := scope.CreateSnapshotWithOwner(invocationID, scopes, resolveSnapshotOwner(db, conversationID, characterID), characterID, conversationID, extensionID, moduleID, generation)
 		if err := scopeStore.SaveSnapshot(context.Background(), snapshot); err != nil {
 			return "", err
 		}
@@ -1401,7 +1507,10 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	if err := SetupDefaultHostCommands(hostCmdRegistry, hostAPIGateway); err != nil {
 		return nil, fmt.Errorf("kernel: setup host commands: %w", err)
 	}
-	actionExecutor := NewUIActionExecutor(hostAPIGateway, workflowExecutor, workflowExecRepo, hostCmdRegistry, opRepo)
+	if err := SetupChannelHostCommands(hostCmdRegistry, pluginChannelProviders); err != nil {
+		return nil, fmt.Errorf("kernel: setup channel host commands: %w", err)
+	}
+	actionExecutor := NewUIActionExecutor(hostAPIGateway, workflowExecutor, workflowExecRepo, hostCmdRegistry, opRepo, toolRegistry, scopeManager, newUIActionSnapshotDeriver(scopeStore, permSnapshotStore, permIDValidator))
 	sandboxDispatcher := buildSandboxActionDispatcher(sandboxActionDispatcherDeps{
 		getSession: sandboxHost.GetSession,
 		getContribution: func(contributionID string) (*ui_contribution.UIContributionDefinition, error) {
@@ -1444,6 +1553,8 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 				PermissionSnapshotID: session.PermissionSnapshotID,
 				CharacterID:          session.CharacterID,
 				ConversationID:       session.ConversationID,
+				SpaceID:              session.SpaceID,
+				DeviceID:             session.DeviceID,
 			}, action, input)
 		},
 		func(ctx context.Context, session *ui_contribution.BridgeSession, sourceID string, params json.RawMessage) (json.RawMessage, error) {
@@ -1457,7 +1568,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	if b.extRoot == "" {
 		updateBaseDir = filepath.Join(os.TempDir(), "amitia-update-downloads")
 	}
-	updateManager := desktop_update.NewUpdateManager(updateBaseDir, "26.1.8")
+	updateManager := desktop_update.NewUpdateManager(updateBaseDir, "26.2.0-beta")
 	updateAdapter := NewUpdateManagerAdapter(updateManager, desktopHost)
 	desktopActionBridge := NewDesktopActionBridge(permBroker, scopeManager, executionKernel)
 	desktopHost.SetPermissionChecker(desktopActionBridge)
@@ -1580,6 +1691,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 			scopes := []scope.ScopeRef{
 				scope.NewExtensionScope(extensionID),
 				scope.NewModuleScope(extensionID, moduleID),
+				scope.NewInvocationScope(invocationID),
 				scope.NewSessionScope(invocationID),
 			}
 			if characterID != "" {
@@ -1588,7 +1700,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 			if conversationID != "" {
 				scopes = append(scopes, scope.NewConversationScope(conversationID))
 			}
-			snapshot := scope.CreateSnapshot(invocationID, scopes, characterID, conversationID, extensionID, moduleID, generation)
+			snapshot := scope.CreateSnapshotWithOwner(invocationID, scopes, resolveSnapshotOwner(db, conversationID, characterID), characterID, conversationID, extensionID, moduleID, generation)
 			if err := scopeStore.SaveSnapshot(context.Background(), snapshot); err != nil {
 				return "", err
 			}
@@ -1653,6 +1765,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		OrderingEngine:      orderingEngine,
 		UIProviderRegistry:  uiProviderRegistry,
 		ExtRoot:             b.extRoot,
+		ResourceLinks:       resourceLinks,
 
 		DesktopHost:              desktopHost,
 		UpdateManager:            updateManager,
@@ -1740,6 +1853,9 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	}
 
 	typedInstaller.SetContainer(container)
+	if err := activateBuiltinUIContributions(ctx, typedInstaller, instRepo, contribRepo); err != nil {
+		return nil, err
+	}
 
 	candidateNS := NewCandidateNamespace()
 	typedInstaller.SetCandidateNamespace(candidateNS)
@@ -1822,6 +1938,40 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	}
 
 	return container, nil
+}
+
+func activateBuiltinUIContributions(
+	ctx context.Context,
+	installer *TypedContributionInstaller,
+	instRepo domain.InstallationRepository,
+	contribRepo sqlite.ContributionRepository,
+) error {
+	if installer == nil || instRepo == nil || contribRepo == nil {
+		return nil
+	}
+	installations, err := instRepo.ListInstallations(ctx)
+	if err != nil {
+		return fmt.Errorf("kernel: list builtin installations: %w", err)
+	}
+	for _, inst := range installations {
+		if !strings.HasPrefix(string(inst.ExtensionID), builtin.PrefixBuiltin) || inst.EnablementState != domain.EnablementEnabled {
+			continue
+		}
+		contributions, err := contribRepo.ListContributions(ctx, inst.ExtensionID)
+		if err != nil {
+			return fmt.Errorf("kernel: list builtin contributions %s: %w", inst.ExtensionID, err)
+		}
+		for _, contrib := range contributions {
+			switch contrib.Kind {
+			case domain.ContributionKindUIPage, domain.ContributionKindUIPanel, domain.ContributionKindUIChat,
+				domain.ContributionKindUIContextAction, domain.ContributionKindUIDesktop:
+				if err := installer.activateUI(ctx, contrib, inst.Generation); err != nil {
+					return fmt.Errorf("kernel: activate builtin ui contribution %s: %w", contrib.ID, err)
+				}
+			}
+		}
+	}
+	return nil
 }
 
 type gameHostDefinitionReconcile struct {
@@ -2013,6 +2163,13 @@ func buildKernelSecretBroker(extRoot string) (*secret.Broker, error) {
 		return nil, fmt.Errorf("create secret broker: %w", err)
 	}
 	return broker, nil
+}
+
+func characterListerFromReader(reader CharacterReader) CharacterLister {
+	if lister, ok := reader.(CharacterLister); ok {
+		return lister
+	}
+	return nil
 }
 
 func validateExecutionWiring(kernel *execution.ExecutionPipeline, adapters *capability.RuntimeAdapterRegistry, tools *capability.ToolRegistry) error {

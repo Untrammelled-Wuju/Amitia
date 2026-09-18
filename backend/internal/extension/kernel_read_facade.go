@@ -8,7 +8,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
 )
 
-func kernelReadPackageOperation(ctx context.Context, runtime *Runtime, userID, operationID string) (PackageOperationView, error) {
+func kernelReadPackageOperation(ctx context.Context, runtime *Runtime, spaceID, operationID string) (PackageOperationView, error) {
 	if runtime == nil || runtime.Kernel == nil {
 		return PackageOperationView{}, NewExtensionError(ErrPackageRepositoryUnavailable, "Extension Kernel 不可用", "", true, nil)
 	}
@@ -16,14 +16,14 @@ func kernelReadPackageOperation(ctx context.Context, runtime *Runtime, userID, o
 	if container == nil || container.PackageRepository == nil {
 		return PackageOperationView{}, NewExtensionError(ErrPackageRepositoryUnavailable, "Extension Kernel 不可用", "", true, nil)
 	}
-	record, steps, err := container.PackageRepository.GetOperation(ctx, userID, operationID)
+	record, steps, err := container.PackageRepository.GetOperation(ctx, spaceID, operationID)
 	if err != nil {
 		return PackageOperationView{}, err
 	}
 	return kernelPackageOperationView(record, steps), nil
 }
 
-func kernelReadImportSession(ctx context.Context, runtime *Runtime, sessionID, userID, scopeType, scopeID string) (PackageImportPreview, error) {
+func kernelReadImportSession(ctx context.Context, runtime *Runtime, sessionID, spaceID, scopeType, scopeID string) (PackageImportPreview, error) {
 	if runtime == nil || runtime.Kernel == nil {
 		return PackageImportPreview{}, NewExtensionError(ErrPackageRepositoryUnavailable, "Extension Kernel 不可用", "", true, nil)
 	}
@@ -34,7 +34,7 @@ func kernelReadImportSession(ctx context.Context, runtime *Runtime, sessionID, u
 	if scopeType == "" {
 		scopeType = string(ScopeGlobal)
 	}
-	record, err := container.PackageRepository.GetPreview(ctx, sessionID, userID, scopeType, scopeID)
+	record, err := container.PackageRepository.GetPreview(ctx, sessionID, spaceID, scopeType, scopeID)
 	if err != nil {
 		return PackageImportPreview{}, NewExtensionError(ErrPackageImportSessionExpired, "预览会话不存在", sessionID, false, err)
 	}
@@ -102,7 +102,7 @@ func packagePreviewManagementTarget(preview kernelruntime.InstallPreview) (strin
 	seen := make(map[string]struct{})
 	for _, module := range preview.Manifest.Modules {
 		for _, contribution := range module.Contributions {
-			kind := string(contribution.Kind)
+			kind := string(domain.NormalizeContributionKind(domain.ContributionKind(contribution.Kind)))
 			if kind == "" {
 				continue
 			}

@@ -3,6 +3,7 @@
 package chat
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -13,7 +14,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/u-ai/backend/internal/interaction"
-	"github.com/u-ai/backend/internal/proactive"
+	"github.com/u-ai/backend/internal/outputlease"
 	"github.com/u-ai/backend/internal/requestidentity"
 	"github.com/u-ai/backend/pkg/comment/response"
 	"github.com/u-ai/backend/pkg/util"
@@ -26,16 +27,38 @@ type Handler struct {
 	unifiedEntry  *interaction.UnifiedEntry
 }
 
+type conversationReadScopedService interface {
+	ListConversationsForSpace(q ConversationQuery, spaceID string) (*ConversationListResponse, error)
+	GetConversationForSpace(id, spaceID string) (*Conversation, error)
+	GetMessagesForSpace(convID, spaceID string, page, pageSize int) ([]Message, int64, error)
+	SearchMessagesForSpace(q MessageSearchQuery, spaceID string) (*MessageSearchResponse, error)
+	GetStatsForSpace(spaceID string) (*ChatStatsResponse, error)
+	ExportConversationForSpace(convID, format, spaceID string) (string, error)
+}
+
+type summaryReadScopedService interface {
+	GetConversationSummaryForSpace(convID, spaceID string) (*ConversationSummary, error)
+	UpdateConversationSummaryForSpace(convID, summaryText, spaceID string) (*ConversationSummary, error)
+	DeleteConversationSummaryForSpace(convID, spaceID string) error
+	GenerateConversationSummaryForSpace(ctx context.Context, convID, spaceID string) (*ConversationSummary, error)
+}
+
 type conversationChangeScopedService interface {
-	CreateConversationForUser(req *CreateConversationRequest, userID string) (*Conversation, error)
-	DeleteConversationForUser(id string, userID string) (bool, error)
-	DeleteAllConversationsForUser(userID string) error
-	ChangeCharacterForUser(convID, charID, userID string) (*Conversation, error)
+	CreateConversationForSpace(req *CreateConversationRequest, spaceID string) (*Conversation, error)
+	DeleteConversationForSpace(id string, spaceID string) (bool, error)
+	DeleteAllConversationsForSpace(spaceID string) error
+	ChangeCharacterForSpace(convID, charID, spaceID string) (*Conversation, error)
 }
 
 type messageChangeScopedService interface {
-	DeleteMessagesForUser(convID string, userID string) error
-	DeleteSingleMessageForUser(id string, userID string) error
+	DeleteMessagesForSpace(convID string, spaceID string) error
+	DeleteSingleMessageForSpace(id string, spaceID string) error
+}
+
+type cleanupCapableService interface {
+	PreviewCleanup(req CleanupRequest, spaceID string) (*CleanupPreview, error)
+	ConfirmCleanup(previewID, confirmText, spaceID string) (*CleanupResult, error)
+	VacuumCleanup() error
 }
 
 func NewHandler(srv Service) *Handler {
@@ -53,7 +76,13 @@ func NewHandlerWithUnifiedEntryAndDelivery(srv Service, entry *interaction.Unifi
 func (h *Handler) ListConversations(c *gin.Context) {
 	var q ConversationQuery
 	c.ShouldBindQuery(&q)
-	resp, err := h.service.ListConversations(q)
+	var resp *ConversationListResponse
+	var err error
+	if scoped, ok := h.service.(conversationReadScopedService); ok {
+		resp, err = scoped.ListConversationsForSpace(q, requestidentity.ResolveGin(c))
+	} else {
+		resp, err = h.service.ListConversations(q)
+	}
 	if err != nil {
 		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
@@ -70,7 +99,7 @@ func (h *Handler) CreateConversation(c *gin.Context) {
 	var conv *Conversation
 	var err error
 	if scoped, ok := h.service.(conversationChangeScopedService); ok {
-		conv, err = scoped.CreateConversationForUser(&req, requestidentity.ResolveGin(c, ""))
+		conv, err = scoped.CreateConversationForSpace(&req, requestidentity.ResolveGin(c))
 	} else {
 		conv, err = h.service.CreateConversation(&req)
 	}
@@ -85,7 +114,14 @@ func (h *Handler) GetMessages(c *gin.Context) {
 	id := c.Param("id")
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "50"))
-	msgs, total, err := h.service.GetMessages(id, page, pageSize)
+	var msgs []Message
+	var total int64
+	var err error
+	if scoped, ok := h.service.(conversationReadScopedService); ok {
+		msgs, total, err = scoped.GetMessagesForSpace(id, requestidentity.ResolveGin(c), page, pageSize)
+	} else {
+		msgs, total, err = h.service.GetMessages(id, page, pageSize)
+	}
 	if err != nil {
 		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
@@ -99,7 +135,7 @@ func (h *Handler) DeleteConversation(c *gin.Context) {
 	var characterDeleted bool
 	var err error
 	if scoped, ok := h.service.(conversationChangeScopedService); ok {
-		characterDeleted, err = scoped.DeleteConversationForUser(id, requestidentity.ResolveGin(c, ""))
+		characterDeleted, err = scoped.DeleteConversationForSpace(id, requestidentity.ResolveGin(c))
 	} else {
 		characterDeleted, err = h.service.DeleteConversation(id)
 	}
@@ -113,7 +149,7 @@ func (h *Handler) DeleteConversation(c *gin.Context) {
 func (h *Handler) DeleteAllConversations(c *gin.Context) {
 	var err error
 	if scoped, ok := h.service.(conversationChangeScopedService); ok {
-		err = scoped.DeleteAllConversationsForUser(requestidentity.ResolveGin(c, ""))
+		err = scoped.DeleteAllConversationsForSpace(requestidentity.ResolveGin(c))
 	} else {
 		err = h.service.DeleteAllConversations()
 	}
@@ -128,7 +164,7 @@ func (h *Handler) DeleteMessages(c *gin.Context) {
 	id := c.Param("id")
 	var err error
 	if scoped, ok := h.service.(messageChangeScopedService); ok {
-		err = scoped.DeleteMessagesForUser(id, requestidentity.ResolveGin(c, ""))
+		err = scoped.DeleteMessagesForSpace(id, requestidentity.ResolveGin(c))
 	} else {
 		err = h.service.DeleteMessages(id)
 	}
@@ -143,7 +179,7 @@ func (h *Handler) DeleteSingleMessage(c *gin.Context) {
 	id := c.Param("id")
 	var err error
 	if scoped, ok := h.service.(messageChangeScopedService); ok {
-		err = scoped.DeleteSingleMessageForUser(id, requestidentity.ResolveGin(c, ""))
+		err = scoped.DeleteSingleMessageForSpace(id, requestidentity.ResolveGin(c))
 	} else {
 		err = h.service.DeleteSingleMessage(id)
 	}
@@ -161,7 +197,13 @@ func (h *Handler) SearchMessages(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, "关键词不能为空", nil)
 		return
 	}
-	resp, err := h.service.SearchMessages(q)
+	var resp *MessageSearchResponse
+	var err error
+	if scoped, ok := h.service.(conversationReadScopedService); ok {
+		resp, err = scoped.SearchMessagesForSpace(q, requestidentity.ResolveGin(c))
+	} else {
+		resp, err = h.service.SearchMessages(q)
+	}
 	if err != nil {
 		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
@@ -181,7 +223,7 @@ func (h *Handler) ChangeCharacter(c *gin.Context) {
 	var conv *Conversation
 	var err error
 	if scoped, ok := h.service.(conversationChangeScopedService); ok {
-		conv, err = scoped.ChangeCharacterForUser(id, body.CharacterID, requestidentity.ResolveGin(c, ""))
+		conv, err = scoped.ChangeCharacterForSpace(id, body.CharacterID, requestidentity.ResolveGin(c))
 	} else {
 		conv, err = h.service.ChangeCharacter(id, body.CharacterID)
 	}
@@ -193,7 +235,13 @@ func (h *Handler) ChangeCharacter(c *gin.Context) {
 }
 
 func (h *Handler) Stats(c *gin.Context) {
-	stats, err := h.service.GetStats()
+	var stats *ChatStatsResponse
+	var err error
+	if scoped, ok := h.service.(conversationReadScopedService); ok {
+		stats, err = scoped.GetStatsForSpace(requestidentity.ResolveGin(c))
+	} else {
+		stats, err = h.service.GetStats()
+	}
 	if err != nil {
 		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
@@ -207,6 +255,7 @@ func (h *Handler) Chat(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
 		return
 	}
+	req.SpaceID = requestidentity.ResolveGin(c)
 	if h.unifiedEntry != nil {
 		channel := strings.TrimSpace(req.Channel)
 		if channel == "" {
@@ -218,7 +267,7 @@ func (h *Handler) Chat(c *gin.Context) {
 		}
 
 		if req.CharacterID != "" {
-			proactive.CancelLowPriorityOnUserInput(req.CharacterID)
+			outputlease.CancelLowPriorityOnUserInput(req.CharacterID)
 			if h.deliveryStore != nil {
 				_ = h.deliveryStore.PreemptActiveOutputLeases(req.CharacterID)
 			}
@@ -235,7 +284,7 @@ func (h *Handler) Chat(c *gin.Context) {
 			Channel:        channel,
 			Source:         source,
 			PeerID:         req.PeerID,
-			UserID:         requestidentity.ResolveGin(c, req.UserID),
+			SpaceID:        req.SpaceID,
 			DeviceTimezone: deviceTimezone,
 			SessionID:      req.SessionID,
 			RequestID:      req.RequestID,
@@ -297,6 +346,14 @@ func (h *Handler) writeUnifiedEntryError(c *gin.Context, err error) {
 	}
 }
 
+func redactModelConfigForResponse(cfg *ModelConfig) {
+	if cfg == nil {
+		return
+	}
+	cfg.HasAPIKey = cfg.APIKey != ""
+	cfg.APIKey = ""
+}
+
 func (h *Handler) ListModels(c *gin.Context) {
 	models, err := h.service.ListModels()
 	if err != nil {
@@ -308,8 +365,7 @@ func (h *Handler) ListModels(c *gin.Context) {
 		if m.APIType == "doubao-vision" {
 			continue
 		}
-		m.HasAPIKey = m.APIKey != ""
-		m.APIKey = ""
+		redactModelConfigForResponse(&m)
 		filtered = append(filtered, m)
 	}
 	util.SuccessResponse(c, filtered)
@@ -395,8 +451,7 @@ func (h *Handler) CreateModel(c *gin.Context) {
 		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
 	}
-	result.HasAPIKey = result.APIKey != ""
-	result.APIKey = ""
+	redactModelConfigForResponse(result)
 	util.SuccessMsgResponse(c, "模型配置已创建", result)
 }
 
@@ -412,6 +467,7 @@ func (h *Handler) UpdateModel(c *gin.Context) {
 		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
 		return
 	}
+	redactModelConfigForResponse(result)
 	util.SuccessMsgResponse(c, "模型配置已更新", result)
 }
 
@@ -431,6 +487,7 @@ func (h *Handler) ActivateModel(c *gin.Context) {
 		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
 		return
 	}
+	redactModelConfigForResponse(result)
 	util.SuccessMsgResponse(c, "模型已激活", result)
 }
 
@@ -480,7 +537,13 @@ func (h *Handler) DetectModels(c *gin.Context) {
 }
 
 func (h *Handler) GetSummary(c *gin.Context) {
-	summary, err := h.service.GetConversationSummary(c.Param("id"))
+	var summary *ConversationSummary
+	var err error
+	if scoped, ok := h.service.(summaryReadScopedService); ok {
+		summary, err = scoped.GetConversationSummaryForSpace(c.Param("id"), requestidentity.ResolveGin(c))
+	} else {
+		summary, err = h.service.GetConversationSummary(c.Param("id"))
+	}
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			util.SuccessResponse(c, gin.H{"conversationId": c.Param("id"), "summaryText": ""})
@@ -500,7 +563,13 @@ func (h *Handler) UpdateSummary(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, "summaryText 不能为空", nil)
 		return
 	}
-	summary, err := h.service.UpdateConversationSummary(c.Param("id"), body.SummaryText)
+	var summary *ConversationSummary
+	var err error
+	if scoped, ok := h.service.(summaryReadScopedService); ok {
+		summary, err = scoped.UpdateConversationSummaryForSpace(c.Param("id"), body.SummaryText, requestidentity.ResolveGin(c))
+	} else {
+		summary, err = h.service.UpdateConversationSummary(c.Param("id"), body.SummaryText)
+	}
 	if err != nil {
 		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
 		return
@@ -509,7 +578,13 @@ func (h *Handler) UpdateSummary(c *gin.Context) {
 }
 
 func (h *Handler) DeleteSummary(c *gin.Context) {
-	if err := h.service.DeleteConversationSummary(c.Param("id")); err != nil {
+	var err error
+	if scoped, ok := h.service.(summaryReadScopedService); ok {
+		err = scoped.DeleteConversationSummaryForSpace(c.Param("id"), requestidentity.ResolveGin(c))
+	} else {
+		err = h.service.DeleteConversationSummary(c.Param("id"))
+	}
+	if err != nil {
 		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
 		return
 	}
@@ -517,16 +592,72 @@ func (h *Handler) DeleteSummary(c *gin.Context) {
 }
 
 func (h *Handler) GenerateSummary(c *gin.Context) {
-	summary, err := h.service.GenerateConversationSummary(c.Request.Context(), c.Param("id"))
+	var summary *ConversationSummary
+	var err error
+	if scoped, ok := h.service.(summaryReadScopedService); ok {
+		summary, err = scoped.GenerateConversationSummaryForSpace(c.Request.Context(), c.Param("id"), requestidentity.ResolveGin(c))
+	} else {
+		summary, err = h.service.GenerateConversationSummary(c.Request.Context(), c.Param("id"))
+	}
 	if err != nil {
 		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
 		return
 	}
 	util.SuccessResponse(c, summary)
 }
-func (h *Handler) CleanupPreview(c *gin.Context) { util.SuccessResponse(c, gin.H{"deletable": 0}) }
-func (h *Handler) CleanupConfirm(c *gin.Context) { util.SuccessResponse(c, gin.H{"cleaned": 0}) }
-func (h *Handler) CleanupVacuum(c *gin.Context)  { util.SuccessResponse(c, gin.H{"vacuumed": true}) }
+func (h *Handler) CleanupPreview(c *gin.Context) {
+	var req CleanupRequest
+	if err := c.ShouldBindJSON(&req); err != nil && !errors.Is(err, io.EOF) {
+		util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
+		return
+	}
+	cleanup, ok := h.service.(cleanupCapableService)
+	if !ok {
+		util.ErrorResponse(c, response.InternalError, "聊天清理服务不可用", nil)
+		return
+	}
+	result, err := cleanup.PreviewCleanup(req, requestidentity.ResolveGin(c))
+	if err != nil {
+		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
+		return
+	}
+	util.SuccessResponse(c, result)
+}
+
+func (h *Handler) CleanupConfirm(c *gin.Context) {
+	var req struct {
+		PreviewID   string `json:"previewId"`
+		ConfirmText string `json:"confirmText"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
+		return
+	}
+	cleanup, ok := h.service.(cleanupCapableService)
+	if !ok {
+		util.ErrorResponse(c, response.InternalError, "聊天清理服务不可用", nil)
+		return
+	}
+	result, err := cleanup.ConfirmCleanup(req.PreviewID, req.ConfirmText, requestidentity.ResolveGin(c))
+	if err != nil {
+		util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
+		return
+	}
+	util.SuccessResponse(c, result)
+}
+
+func (h *Handler) CleanupVacuum(c *gin.Context) {
+	cleanup, ok := h.service.(cleanupCapableService)
+	if !ok {
+		util.ErrorResponse(c, response.InternalError, "聊天清理服务不可用", nil)
+		return
+	}
+	if err := cleanup.VacuumCleanup(); err != nil {
+		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
+		return
+	}
+	util.SuccessResponse(c, gin.H{"vacuumed": true})
+}
 func (h *Handler) Export(c *gin.Context) {
 	var body struct {
 		Format          string   `json:"format"`
@@ -541,7 +672,13 @@ func (h *Handler) Export(c *gin.Context) {
 	}
 
 	convID := body.ConversationIDs[0]
-	url, err := h.service.ExportConversation(convID, body.Format)
+	var url string
+	var err error
+	if scoped, ok := h.service.(conversationReadScopedService); ok {
+		url, err = scoped.ExportConversationForSpace(convID, body.Format, requestidentity.ResolveGin(c))
+	} else {
+		url, err = h.service.ExportConversation(convID, body.Format)
+	}
 	if err != nil {
 		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
@@ -553,7 +690,7 @@ func (h *Handler) GetModel(c *gin.Context) {
 	models, _ := h.service.ListModels()
 	for _, m := range models {
 		if m.ID == id {
-			m.HasAPIKey = m.APIKey != ""
+			redactModelConfigForResponse(&m)
 			util.SuccessResponse(c, m)
 			return
 		}
@@ -648,6 +785,12 @@ func (h *Handler) TestModelStandalone(c *gin.Context) {
 
 func (h *Handler) CompressionStatus(c *gin.Context) {
 	id := c.Param("id")
+	if scoped, ok := h.service.(conversationReadScopedService); ok {
+		if _, err := scoped.GetConversationForSpace(id, requestidentity.ResolveGin(c)); err != nil {
+			util.ErrorResponse(c, response.NotFound, "会话不存在", nil)
+			return
+		}
+	}
 	status := h.service.GetCompressionStatus(id)
 	util.SuccessResponse(c, status)
 }

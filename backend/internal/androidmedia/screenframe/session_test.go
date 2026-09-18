@@ -137,7 +137,7 @@ func TestLatestRequest_ResolveFormat(t *testing.T) {
 func TestBlockedSessionStore_Create(t *testing.T) {
 	ctx := context.Background()
 	store := NewBlockedSessionStore(1)
-	owner := SessionOwner{UserID: "u1", CharacterID: "c1", ConversationID: "v1"}
+	owner := SessionOwner{SpaceID: "u1", CharacterID: "c1", ConversationID: "v1"}
 
 	session := ScreenFrameSession{
 		ID:    ScreenFrameSessionID("session-1"),
@@ -161,7 +161,7 @@ func TestBlockedSessionStore_SessionLimit(t *testing.T) {
 	ctx := context.Background()
 	store := NewBlockedSessionStore(2).(*blockedSessionStore)
 
-	owner := SessionOwner{UserID: "u1", CharacterID: "c1", ConversationID: "v1"}
+	owner := SessionOwner{SpaceID: "u1", CharacterID: "c1", ConversationID: "v1"}
 
 	preExisting := ScreenFrameSession{
 		ID:    ScreenFrameSessionID("s-pre"),
@@ -209,11 +209,11 @@ func TestBlockedSessionStore_Get_NotFound(t *testing.T) {
 	}
 }
 
-func TestBlockedSessionStore_ListByUser(t *testing.T) {
+func TestBlockedSessionStore_ListBySpace(t *testing.T) {
 	ctx := context.Background()
 	store := NewBlockedSessionStore(3).(*blockedSessionStore)
 
-	owner := SessionOwner{UserID: "u1", CharacterID: "c1", ConversationID: "v1"}
+	owner := SessionOwner{SpaceID: "u1", CharacterID: "c1", ConversationID: "v1"}
 
 	for i := 1; i <= 2; i++ {
 		session := ScreenFrameSession{
@@ -228,14 +228,14 @@ func TestBlockedSessionStore_ListByUser(t *testing.T) {
 
 	other := ScreenFrameSession{
 		ID:    ScreenFrameSessionID("other"),
-		Owner: SessionOwner{UserID: "u2", CharacterID: "c2", ConversationID: "v2"},
+		Owner: SessionOwner{SpaceID: "u2", CharacterID: "c2", ConversationID: "v2"},
 		State: SessionStateRunning,
 		Width: 1080, Height: 2400, TargetFPS: 2,
 		StartedAt: time.Now(),
 	}
 	store.sessions[other.ID] = &other
 
-	sessions, _ := store.ListByUser(ctx, "u1")
+	sessions, _ := store.ListBySpace(ctx, "u1")
 	if len(sessions) != 2 {
 		t.Errorf("expected 2 owned sessions, got %v", len(sessions))
 	}
@@ -247,7 +247,7 @@ func TestBlockedSessionStore_UpdateState(t *testing.T) {
 
 	session := ScreenFrameSession{
 		ID:    ScreenFrameSessionID("s-1"),
-		Owner: SessionOwner{UserID: "u1"},
+		Owner: SessionOwner{SpaceID: "u1"},
 		State: SessionStateRunning,
 		Width: 1080, Height: 2400, TargetFPS: 2,
 		StartedAt: time.Now(),
@@ -273,7 +273,7 @@ func TestBlockedSessionStore_Delete(t *testing.T) {
 
 	session := ScreenFrameSession{
 		ID:    ScreenFrameSessionID("s-1"),
-		Owner: SessionOwner{UserID: "u1"},
+		Owner: SessionOwner{SpaceID: "u1"},
 		State: SessionStateRunning,
 		Width: 1080, Height: 2400, TargetFPS: 2,
 		StartedAt: time.Now(),
@@ -307,7 +307,7 @@ func TestBlockedSessionStore_StopAll(t *testing.T) {
 	for i := 1; i <= 2; i++ {
 		session := ScreenFrameSession{
 			ID:    ScreenFrameSessionID("s-" + string(rune('0'+i))),
-			Owner: SessionOwner{UserID: "u1"},
+			Owner: SessionOwner{SpaceID: "u1"},
 			State: SessionStateRunning,
 			Width: 1080, Height: 2400, TargetFPS: 2,
 			StartedAt: time.Now(),

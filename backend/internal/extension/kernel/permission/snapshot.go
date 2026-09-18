@@ -24,7 +24,7 @@ type PermissionSnapshot struct {
 	ExpiresAt           *time.Time                `json:"expiresAt,omitempty"`
 	RevokedAt           *time.Time                `json:"revokedAt,omitempty"`
 	ExecutionPlacement  ExecutionPlacement        `json:"executionPlacement,omitempty"`
-	UserID              runtimeidentity.UserID    `json:"userId,omitempty"`
+	SpaceID             runtimeidentity.SpaceID   `json:"spaceId,omitempty"`
 	DeviceID            runtimeidentity.DeviceID  `json:"deviceId,omitempty"`
 	RuntimeID           runtimeidentity.RuntimeID `json:"runtimeId,omitempty"`
 	ProviderID          string                    `json:"providerId,omitempty"`
@@ -89,7 +89,7 @@ func NewPermissionSnapshot(req PermissionSnapshotRequest) PermissionSnapshot {
 	}
 	if req.ExecutionContext != (PermissionExecutionContext{}) {
 		snap.ExecutionPlacement = req.ExecutionContext.Placement
-		snap.UserID = req.ExecutionContext.UserID
+		snap.SpaceID = req.ExecutionContext.SpaceID
 		snap.DeviceID = req.ExecutionContext.DeviceID
 		snap.RuntimeID = req.ExecutionContext.RuntimeID
 		snap.ProviderID = req.ExecutionContext.ProviderID

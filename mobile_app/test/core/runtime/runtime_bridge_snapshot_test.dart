@@ -156,16 +156,21 @@ void main() {
         'code': 'START_FAILED',
         'message': 'Start failed',
         'retryable': true,
+        'details': <String, dynamic>{
+          'lastProbeFailure': 'readyz connection refused',
+        },
       };
       final error = RuntimeBridgeError.fromMap(map);
       expect(error.code, 'START_FAILED');
       expect(error.message, 'Start failed');
       expect(error.retryable, true);
+      expect(error.details['lastProbeFailure'], 'readyz connection refused');
+      expect(error.toString(), contains('readyz connection refused'));
     });
 
     test('fromMap handles null', () {
       final error = RuntimeBridgeError.fromMap(null);
-      expect(error.code, 'UNKNOWN');
+      expect(error.code, 'BRIDGE_ERROR_MISSING');
       expect(error.retryable, false);
     });
 

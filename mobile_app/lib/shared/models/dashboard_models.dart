@@ -3,7 +3,6 @@ class DashboardRunInfo {
   final String agentRuntimeStatus;
   final String modelStatus;
   final String databaseStatus;
-  final String channelStatus;
   final List<String> recentErrors;
   final String accessRisk;
   final List<String> recentTasks;
@@ -14,7 +13,6 @@ class DashboardRunInfo {
     this.agentRuntimeStatus = '空闲',
     this.modelStatus = 'GPT-4 已连接',
     this.databaseStatus = '正常',
-    this.channelStatus = '微信已连接',
     this.recentErrors = const [],
     this.accessRisk = '低风险',
     this.recentTasks = const [],

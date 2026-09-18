@@ -32,16 +32,12 @@ func (p *CardParser) Parse(data []byte, filename string) (*CharacterCard, map[st
 
 func (p *CardParser) ParseWithFormat(data []byte, format CharacterCardFormat) (*CharacterCard, map[string]json.RawMessage, error) {
 	switch format {
-	case FormatV2JSON:
-		return parseV2JSON(data)
-	case FormatV2PNG:
-		return parseV2PNG(data)
-	case FormatV3JSON:
-		return parseV3JSON(data)
-	case FormatV3PNG:
-		return parseV3PNG(data)
 	case FormatV3CHARX:
 		return parseCHARX(data)
+	case FormatTavernJSON:
+		return parseTavernJSON(data)
+	case FormatTavernPNG:
+		return parseTavernPNG(data)
 	}
 	return nil, nil, ErrUnsupportedFormat
 }
@@ -49,6 +45,16 @@ func (p *CardParser) ParseWithFormat(data []byte, format CharacterCardFormat) (*
 func ComputeSourceHash(data []byte) string {
 	sum := sha256.Sum256(data)
 	return fmt.Sprintf("%x", sum)
+}
+
+func extractPreservedFields(raw map[string]json.RawMessage, known map[string]bool) map[string]json.RawMessage {
+	preserved := make(map[string]json.RawMessage)
+	for key, value := range raw {
+		if !known[key] {
+			preserved[key] = value
+		}
+	}
+	return preserved
 }
 
 type CharacterMapping struct {
@@ -134,7 +140,7 @@ func (card *CharacterCard) SanitizeName() string {
 
 func (card *CharacterCard) IsEmpty() bool {
 	return card.Name == "" && card.Description == "" && card.Personality == "" &&
-		card.Scenario == "" && card.FirstMessage == "" && card.ExampleMessages == "" &&
+		card.Scenario == "" && card.ExampleMessages == "" &&
 		card.SystemPrompt == "" && card.PostHistoryInstructions == ""
 }
 

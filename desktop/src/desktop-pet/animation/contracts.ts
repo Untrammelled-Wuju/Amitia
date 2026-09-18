@@ -166,8 +166,8 @@ export interface PlayActionCommand {
   readonly interruptPolicy: InterruptPolicy;
   readonly playbackRate: number;
   readonly issuedAt: string;
-  // Runtime-v2 physical commands require one authoritative admission deadline.
-  // Local/default renderer commands are not Runtime-v2 side effects and may omit it.
+  // Runtime-v1 physical commands require one authoritative admission deadline.
+  // Local/default renderer commands are not Runtime-v1 side effects and may omit it.
   readonly requiresAuthoritativeExpiry?: boolean;
   readonly expiresAt?: string;
   readonly returnOverride?: ReturnTarget;

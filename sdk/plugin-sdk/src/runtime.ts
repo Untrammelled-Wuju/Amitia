@@ -15,7 +15,7 @@ export interface RuntimeScope {
   scope: "global" | "character" | "conversation";
   characterId?: string;
   conversationId?: string;
-  userId?: string;
+  spaceId?: string;
 }
 
 export interface RuntimeCallResult<T = unknown> {

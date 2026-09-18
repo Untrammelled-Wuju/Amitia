@@ -11,11 +11,17 @@ abstract final class ConversationUIAction {
   static const delete = 'conversation.delete';
   static const newConversation = 'conversation.new';
   static const openDrawer = 'conversation.openDrawer';
+  static const clear = 'conversation.clear';
+  static const reply = 'conversation.reply';
   static const sendFile = 'conversation.sendFile';
   static const sendImage = 'conversation.sendImage';
   static const sendCode = 'conversation.sendCode';
   static const sendVoice = 'conversation.sendVoice';
   static const sendEmote = 'conversation.sendEmote';
+  static const chooseWorkspace = 'conversation.workspace.choose';
+  static const selectWorkspace = 'conversation.workspace.select';
+  static const clearWorkspace = 'conversation.workspace.clear';
+  static const refreshWorkspaces = 'conversation.workspace.refresh';
 }
 
 typedef UIActionHandler = FutureOr<dynamic> Function(dynamic input);

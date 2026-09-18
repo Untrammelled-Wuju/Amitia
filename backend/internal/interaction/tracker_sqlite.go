@@ -23,7 +23,7 @@ func (t *SQLiteInteractionTracker) InitSchema() error {
 	if err := t.db.AutoMigrate(&InteractionRecordModel{}); err != nil {
 		return err
 	}
-	if err := t.db.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_interaction_request_unique ON interaction_records(user_id, request_id) WHERE request_id <> ''").Error; err != nil {
+	if err := t.db.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_interaction_request_unique ON interaction_records(space_id, request_id) WHERE request_id <> ''").Error; err != nil {
 		return err
 	}
 	return t.db.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_interaction_conv_request_unique ON interaction_records(conversation_id, request_id) WHERE request_id <> ''").Error
@@ -66,14 +66,14 @@ func (t *SQLiteInteractionTracker) Get(ctx context.Context, id string) (*Interac
 	return modelToInteractionRecord(model), true, nil
 }
 
-func (t *SQLiteInteractionTracker) GetByRequestID(ctx context.Context, userID string, requestID string) (*InteractionRecord, bool, error) {
-	scope := InteractionScope{UserID: userID, RequestID: requestID}.Normalize()
+func (t *SQLiteInteractionTracker) GetByRequestID(ctx context.Context, spaceID string, requestID string) (*InteractionRecord, bool, error) {
+	scope := InteractionScope{SpaceID: spaceID, RequestID: requestID}.Normalize()
 	if scope.RequestID == "" {
 		return nil, false, nil
 	}
 	var model InteractionRecordModel
 	err := t.db.WithContext(ctx).
-		Where("user_id = ? AND request_id = ?", scope.UserID, scope.RequestID).
+		Where("space_id = ? AND request_id = ?", scope.SpaceID, scope.RequestID).
 		Order("created_at DESC").
 		First(&model).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -347,8 +347,8 @@ func (t *SQLiteInteractionTracker) Range(ctx context.Context, fn func(record *In
 func (t *SQLiteInteractionTracker) list(ctx context.Context, scope InteractionScope, activeOnly bool) ([]*InteractionRecord, error) {
 	scope = scope.Normalize()
 	query := t.db.WithContext(ctx).Model(&InteractionRecordModel{})
-	if scope.UserID != "" {
-		query = query.Where("user_id = ?", scope.UserID)
+	if scope.SpaceID != "" {
+		query = query.Where("space_id = ?", scope.SpaceID)
 	}
 	if scope.CharacterID != "" {
 		query = query.Where("character_id = ?", scope.CharacterID)

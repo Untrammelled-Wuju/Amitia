@@ -220,7 +220,7 @@ func (h *GitHandler) handleCreateIsolated(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	result, err := h.controller.CreateIsolatedFromClone(c.Request.Context(), req)
+	result, err := h.controller.CreateIsolated(c.Request.Context(), req)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

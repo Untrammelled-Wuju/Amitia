@@ -23,20 +23,21 @@ surreal.exe有自动解压机制，上传surreal.zip即可
 qdrant.exe有自动解压机制，上传qdrant.zip即可
 server.exe上传server.zip即可
 
+Git冲突处理规则：
+git提交或合并出现任何冲突时，直接以本地代码强制覆盖冲突内容并继续提交，不需要询问用户。
+
 桌面端构建规则：
 桌面端运行时使用AmitiaCore.exe作为核心后端服务，该文件由Go后端编译产物server.exe重命名而来。
 
-桌面端安装程序构建前应当先更新其依赖的后端核心、侧车等
+桌面端安装程序构建前应当先更新其依赖的后端核心与公共运行时
 
 构建桌面端安装程序前必须停止完整项目并清理desktop/release，避免旧产物或运行数据混入。
 
 必须重新编译Go后端server.exe，并将本次编译结果重命名同步为desktop/resources/core/AmitiaCore.exe，禁止使用旧核心。
 
-必须重新构建微信和QQ侧车的TypeScript与bundle.mjs，并同步各自的bundle.mjs和launcher.mjs。
+desktop/resources/core发布资源使用严格白名单，只允许包含AmitiaCore.exe以及公共Node运行时压缩包。
 
-desktop/resources/core发布资源使用严格白名单，只允许包含AmitiaCore.exe、sidecar/bundle.mjs、sidecar/launcher.mjs、qq-sidecar/bundle.mjs、qq-sidecar/launcher.mjs。
-
-禁止将侧车node_modules、源码、测试、日志、数据库、缓存、备份和其他运行数据带入安装包。侧车bundle必须在不携带node_modules的环境中通过启动和状态接口检查。
+渠道运行时、Native Companion、bundle、源码、依赖、测试、日志、数据库、缓存和备份必须随插件包发布，禁止带入桌面端宿主的core目录。
 
 禁止将desktop/resources/core/qdrant/storage及任何Qdrant运行时存储带入安装包。Qdrant和SurrealDB只通过resources/qdrant/qdrant.zip与resources/surrealdb/surreal.zip发布。
 
@@ -52,12 +53,37 @@ electron-builder保持compression: normal，实际7z压缩等级由scripts/build
 
 构建完成后必须验证blockmap可解压解析、app-update.yml指向正确GitHub仓库、安装内容不含运行数据，并检查AmitiaCore.exe与本次Go构建产物哈希一致。
 
-构建完成后必须执行桌面端测试和侧车测试，并按项目规则重启完整服务，确认前端、核心、Qdrant、SurrealDB、微信侧车和QQ侧车端口及健康接口正常。
+构建完成后只执行本次源码修改直接涉及的桌面端、后端和插件测试，禁止默认运行全量测试；未改动模块不得执行测试。并按项目规则重启完整服务，确认前端、核心、Qdrant、SurrealDB及已安装渠道插件端口和健康接口正常。
 
 未收到用户上传Git的明确指令时，桌面构建和发布过程不得上传GitHub Release或推送Git。
 
 桌面端版本发布规则：
 桌面端版本更新托管在自有服务器（amitia.untrammelled.top），使用electron-updater的generic provider，通过FTP上传构建产物到服务器静态目录。
+
+发布基线与更新日志规则：
+
+当用户明确要求构建桌面端 NSIS 安装包或 Android Release APK 时，必须先创建本次发布的源码基线提交，且不得包含构建产物、依赖、缓存、日志或运行数据。
+
+构建版本号必须保持项目当前版本；只有用户明确指定新的版本号时才允许修改，禁止自行递增、降级或调整版本号格式。
+
+构建前必须读取本文件中的最近一次对应平台源码基线提交，与本次源码基线提交进行差异对比。对比范围仅限发布相关源码、配置、迁移和文档；忽略 AGENTS.md 发布记录、构建产物、依赖、缓存、日志与运行数据。
+
+构建前的测试范围必须基于本次源码差异确定，只运行修改文件所属模块的定向测试；禁止默认运行 `go test ./...`、前端全量测试或其他无关模块测试。
+
+必须根据差异生成面向用户的更新日志。桌面端更新 desktop/release-notes.md；Android Release 更新对应发布说明。生成内容作为本次发布版本的更新说明。
+
+构建、安装和验证全部通过后，必须更新本文件中的发布基线记录，包含平台、版本、源码基线提交编号、提交日志和记录时间。该记录变更需单独提交，且不得作为下一次发布差异对比的目标提交。
+
+首次执行对应平台构建且不存在已记录源码基线时，以本次源码基线提交的父提交作为差异对比起点。
+
+若工作区存在无关变更、提交冲突或无法判断变更归属，必须先询问用户，禁止混入发布基线提交。
+
+桌面端发布文件必须先上传至服务器临时目录，验证完整性后向用户提供明确的服务器替换命令。用户确认替换成功后，必须将可复用的上传、验证与替换流程补充至本文件。
+
+最近发布源码基线：
+
+- Desktop NSIS：暂无
+- Android Release：版本 26.2.0-beta，源码基线提交 c383af6c，提交日志 feat: add signed android app update flow，安装包 amitia-26.2.0-beta-release-arm64-v8a-20260918-182216.apk，SHA-256 f481ce450f82fab9b43d5298eb5cdcbaeeae4d4d7806b624f7f9f393f37d9a62，记录时间 2026-09-18 18:25:41 +08:00
 
 发布配置：
 
@@ -80,6 +106,8 @@ electron-builder保持compression: normal，实际7z压缩等级由scripts/build
 - 宝塔安全组必须放行FTP 21端口和被动模式端口范围（39000-40000）
 
 启动项目前必须先杀一遍项目占用（环境除外）
+
+Electron 桌面端启动时会自动通过 CoreManager 拉起后端服务（AmitiaCore.exe），无需手动单独启动后端。
 
 数据库迁移规则（三库统一版本注册）：
 

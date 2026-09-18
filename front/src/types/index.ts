@@ -43,11 +43,6 @@ export const ERR = {
   MODEL_CONFIG_INCOMPLETE: 40009,
   MODEL_UNSUPPORTED_TYPE: 40010,
   MODEL_TEST_FAILED: 40011,
-  WECHAT_ERROR: 50000,
-  WECHAT_NOT_CONNECTED: 50001,
-  WECHAT_ACCOUNT_NOT_FOUND: 50002,
-  WECHAT_SEND_FAILED: 50003,
-  WECHAT_WEBHOOK_INVALID: 50004,
   AGENT_ERROR: 60000,
   AGENT_MODEL_FAILED: 60001,
   AGENT_NO_CHARACTER: 60002,
@@ -83,7 +78,7 @@ export interface Message {
   videoUrl?: string;
   audioUrl?: string;
   msgType?: string;
-  emoteId?: string;
+  extensionType?: string;
   altText?: string;
   isAnimated?: boolean | number;
   width?: number;
@@ -93,7 +88,6 @@ export interface Message {
   responseGroupId?: string;
   deliverySequence?: number;
   sequence?: number;
-  emoteDecisionStatus?: string;
   tokens?: number;
   source: string;
   importedItemId?: string | null;
@@ -194,6 +188,7 @@ export interface Memory {
   id: string;
   characterId: string;
   memoryType: string;
+  memorySubtype?: string;
   key: string;
   value: string;
   importance: number;
@@ -204,6 +199,17 @@ export interface Memory {
   verifiedStatus: string;
   useCount: number;
   lastUsedAt?: string | null;
+  retentionLevel?: number;
+  memoryStrength?: number;
+  strengthUpdatedAt?: string | null;
+  lastReinforcedAt?: string | null;
+  reinforceCount?: number;
+  retrievedCount?: number;
+  injectedCount?: number;
+  decayState?: "active" | "fading" | "archived" | string;
+  pinned?: boolean;
+  archivedAt?: string | null;
+  supersededBy?: string;
   expiresAt?: string | null;
   createdAt: string;
   updatedAt: string;
@@ -516,7 +522,6 @@ export interface TriggerQueueSummary {
   backpressure: boolean;
 }
 
-export type ReminderGroup = "overdue" | "upcoming" | "completed" | "disabled";
 
 // ============================================================
 // Extension Kernel - 新领域类型 解除Skill概念过载
@@ -728,3 +733,4 @@ export interface MCPContribution extends BaseContribution {
   serverId: string;
   descriptor?: Record<string, unknown>;
 }
+export type ReminderGroup = "overdue" | "upcoming" | "completed" | "disabled";

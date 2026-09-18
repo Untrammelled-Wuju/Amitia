@@ -237,7 +237,6 @@ func runNetworkSandboxProbe(path string, args ...string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, path, args...)
-	process.ConfigureProcess(cmd)
 	output, err := cmd.CombinedOutput()
 	if ctx.Err() != nil {
 		return fmt.Errorf("probe timeout: %w", ctx.Err())

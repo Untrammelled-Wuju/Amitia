@@ -1,0 +1,523 @@
+{
+  "manifestVersion": 1,
+  "extension": {
+    "id": "com.amitia/emote",
+    "name": {
+      "default": "表情包"
+    },
+    "description": {
+      "default": "提供表情包管理、AI 表情选择、聊天发送和消息渲染。"
+    },
+    "version": "1.0.21",
+    "license": "AGPL-3.0-only",
+    "homepage": "https://amitia.untrammelled.top",
+    "categories": [
+      "character",
+      "media"
+    ],
+    "keywords": [
+      "emote",
+      "sticker",
+      "media"
+    ]
+  },
+  "publisher": {
+    "id": "com.amitia",
+    "displayName": "Amitia",
+    "trustLevel": "official"
+  },
+  "placement": "device",
+  "compatibility": {
+    "minHostVersion": "0.1.0",
+    "platforms": [
+      "windows",
+      "linux",
+      "macos",
+      "android",
+      "ios"
+    ]
+  },
+  "modules": [
+    {
+      "id": "emote-runtime",
+      "name": {
+        "default": "表情包运行时"
+      },
+      "description": {
+        "default": "管理插件自有表情数据、资源、向量和发送决策。"
+      },
+      "type": "javascript",
+      "placement": "device",
+      "runtime": {
+        "type": "javascript",
+        "entryPoint": "dist/index.js",
+        "timeout": "120s",
+        "memory": 268435456,
+        "maxSubprocesses": 0,
+        "capabilities": {
+          "network": false,
+          "filesystem": false
+        }
+      },
+      "contributions": [
+        {
+          "id": "emote-command",
+          "kind": "tool",
+          "name": {
+            "default": "表情包命令"
+          },
+          "description": {
+            "default": "表情包插件内部管理和发送入口。"
+          },
+          "requiredPermissions": [
+            "storage.state.read",
+            "storage.state.write",
+            "resource.read",
+            "resource.write",
+            "message.append",
+            "vector.read",
+            "vector.write",
+            "character.read"
+          ],
+          "spec": {
+            "toolId": "com.amitia/emote/command",
+            "handlerName": "command",
+            "inputSchema": {
+              "type": "object",
+              "required": [
+                "action"
+              ],
+              "properties": {
+                "action": {
+                  "type": "string"
+                },
+                "payload": {
+                  "type": "object"
+                }
+              },
+              "additionalProperties": false
+            },
+            "outputSchema": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "riskLevel": "high",
+            "sideEffect": "write",
+            "internal": true,
+            "runtime": {
+              "runtimeType": "javascript",
+              "handlerName": "command"
+            }
+          }
+        },
+        {
+          "id": "emote-output",
+          "kind": "tool",
+          "name": {
+            "default": "表情包回复输出"
+          },
+          "description": {
+            "default": "根据回复上下文规划通用媒体消息。"
+          },
+          "requiredPermissions": [
+            "storage.state.read",
+            "storage.state.write",
+            "resource.read",
+            "resource.write",
+            "vector.read"
+          ],
+          "spec": {
+            "toolId": "com.amitia/emote/output",
+            "handlerName": "output",
+            "inputSchema": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "outputSchema": {
+              "type": "object",
+              "properties": {
+                "outputs": {
+                  "type": "array"
+                }
+              },
+              "additionalProperties": false
+            },
+            "riskLevel": "medium",
+            "sideEffect": "write",
+            "internal": true,
+            "metadata": {
+              "amitia.message.outputs": true,
+              "amitia.message.priority": 100
+            },
+            "runtime": {
+              "runtimeType": "javascript",
+              "handlerName": "output"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "emote-ui",
+      "name": {
+        "default": "表情包界面"
+      },
+      "description": {
+        "default": "在角色导航组和聊天区域提供表情包界面。"
+      },
+      "type": "data_only",
+      "placement": "device",
+      "contributions": [
+        {
+          "id": "emote-page",
+          "kind": "ui_page",
+          "name": {
+            "default": "表情包管理"
+          },
+          "requiredPermissions": [
+            "tool.invoke"
+          ],
+          "spec": {
+            "contribution_id": "emote-page",
+            "extension_id": "com.amitia/emote",
+            "module_id": "emote-ui",
+            "kind": "web_page",
+            "slot": {
+              "slot_id": "provider.page.provider",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "表情包管理"
+              },
+              "description": {
+                "default": "管理表情、分组和 AI 使用设置。"
+              },
+              "icon": "star"
+            },
+            "entry": {
+              "type": "web_restricted",
+              "path": "modules/emote-ui/ui/index.html",
+              "content_hash": "emote-page-v1"
+            },
+            "sandbox": {
+              "type": "web_restricted",
+              "enable_scripts": true
+            },
+            "actions": [
+              {
+                "action_id": "command",
+                "title": {
+                  "default": "执行表情包命令"
+                },
+                "target": {
+                  "type": "tool",
+                  "tool_id": "com.amitia/emote/command"
+                },
+                "risk_level": "high"
+              }
+            ],
+            "integrity": {
+              "definition_hash": "emote-page-v1"
+            }
+          }
+        },
+        {
+          "id": "emote-composer",
+          "kind": "ui_page",
+          "name": {
+            "default": "表情包发送入口"
+          },
+          "requiredPermissions": [
+            "tool.invoke"
+          ],
+          "spec": {
+            "contribution_id": "emote-composer",
+            "extension_id": "com.amitia/emote",
+            "module_id": "emote-ui",
+            "kind": "composer_action",
+            "slot": {
+              "slot_id": "chat.composer.action",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "发送表情"
+              },
+              "icon": "emote"
+            },
+            "entry": {
+              "type": "web_restricted",
+              "path": "modules/emote-ui/ui/composer.html",
+              "content_hash": "emote-composer-v1"
+            },
+            "sandbox": {
+              "type": "web_restricted",
+              "enable_scripts": true
+            },
+            "actions": [
+              {
+                "action_id": "command",
+                "title": {
+                  "default": "发送表情"
+                },
+                "target": {
+                  "type": "tool",
+                  "tool_id": "com.amitia/emote/command"
+                },
+                "risk_level": "high"
+              }
+            ],
+            "integrity": {
+              "definition_hash": "emote-composer-v1"
+            }
+          }
+        },
+        {
+          "id": "emote-message",
+          "kind": "ui_page",
+          "name": {
+            "default": "表情消息渲染"
+          },
+          "spec": {
+            "contribution_id": "emote-message",
+            "extension_id": "com.amitia/emote",
+            "module_id": "emote-ui",
+            "kind": "message_renderer",
+            "slot": {
+              "slot_id": "provider.conversation.message_renderer",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "表情消息"
+              }
+            },
+            "entry": {
+              "type": "web_restricted",
+              "path": "modules/emote-ui/ui/message.html",
+              "content_hash": "emote-message-v1"
+            },
+            "sandbox": {
+              "type": "web_restricted",
+              "enable_scripts": true
+            },
+            "integrity": {
+              "definition_hash": "emote-message-v1"
+            }
+          }
+        },
+        {
+          "id": "emote-page-provider",
+          "kind": "ui_provider",
+          "name": {
+            "default": "表情包页面 Provider"
+          },
+          "spec": {
+            "providerId": "emote-page-provider",
+            "capability": "page.provider",
+            "mode": "replace",
+            "priority": 100,
+            "trustLevel": "official",
+            "entries": {
+              "web": {
+                "type": "web_restricted",
+                "contributionId": "emote-page"
+              },
+              "mobile": {
+                "type": "web_restricted",
+                "contributionId": "emote-page"
+              },
+              "electron_windows": {
+                "type": "web_restricted",
+                "contributionId": "emote-page"
+              },
+              "electron_macos": {
+                "type": "web_restricted",
+                "contributionId": "emote-page"
+              },
+              "electron_linux": {
+                "type": "web_restricted",
+                "contributionId": "emote-page"
+              }
+            },
+      "metadata": {
+        "routes": [
+          "/emotes"
+        ]
+      }
+          }
+        },
+        {
+          "id": "emote-routes",
+          "kind": "ui_provider",
+          "name": {
+            "default": "表情包路由"
+          },
+          "spec": {
+            "providerId": "emote-routes",
+            "capability": "route.registry",
+            "mode": "replace",
+            "priority": 100,
+            "trustLevel": "official",
+            "entries": {
+              "web": {
+                "type": "declarative"
+              },
+              "mobile": {
+                "type": "declarative"
+              },
+              "electron_windows": {
+                "type": "declarative"
+              },
+              "electron_macos": {
+                "type": "declarative"
+              },
+              "electron_linux": {
+                "type": "declarative"
+              }
+            },
+            "metadata": {
+              "routes": [
+                {
+                  "id": "emotes",
+                  "path": "/emotes",
+                  "providerId": "emote-page-provider",
+                  "capability": "page.provider",
+                  "title": "表情包管理",
+                  "priority": 100
+                }
+              ],
+              "navigationItems": [
+                {
+                  "id": "character.emotes",
+                  "label": "表情包管理",
+                  "route": "/emotes",
+                  "icon": "star",
+                  "group": "character",
+                  "groupLabel": "角色",
+                  "groupIcon": "character",
+                  "order": 50
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "emote-message-provider",
+          "kind": "ui_provider",
+          "name": {
+            "default": "表情消息 Provider"
+          },
+          "spec": {
+            "providerId": "emote-message-provider",
+            "capability": "conversation.message_renderer",
+            "mode": "replace",
+            "priority": 200,
+            "trustLevel": "official",
+            "fallbackProviderId": "builtin.amitia.message-renderer",
+            "entries": {
+              "web": {
+                "type": "web_restricted",
+                "contributionId": "emote-message"
+              },
+              "mobile": {
+                "type": "web_restricted",
+                "contributionId": "emote-message"
+              },
+              "electron_windows": {
+                "type": "web_restricted",
+                "contributionId": "emote-message"
+              },
+              "electron_macos": {
+                "type": "web_restricted",
+                "contributionId": "emote-message"
+              },
+              "electron_linux": {
+                "type": "web_restricted",
+                "contributionId": "emote-message"
+              }
+            },
+            "metadata": {
+              "extensionTypes": [
+                "emote"
+              ],
+              "messageTypes": [
+                "emote",
+                "image"
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "permissions": [
+    {
+      "name": "storage.state.read",
+      "reason": "读取插件自有表情、分组、设置和历史。",
+      "required": true,
+      "scope": "extension"
+    },
+    {
+      "name": "storage.state.write",
+      "reason": "保存插件自有表情、分组、设置和历史。",
+      "required": true,
+      "scope": "extension"
+    },
+    {
+      "name": "resource.read",
+      "reason": "读取插件自有图片和资源链接。",
+      "required": true,
+      "scope": "extension"
+    },
+    {
+      "name": "resource.write",
+      "reason": "写入和删除插件自有图片资源。",
+      "required": true,
+      "scope": "extension"
+    },
+    {
+      "name": "message.append",
+      "reason": "把用户选择的表情作为通用图片消息写入当前聊天。",
+      "required": true,
+      "scope": "conversation"
+    },
+    {
+      "name": "character.read",
+      "reason": "读取当前角色信息以匹配角色专属表情。",
+      "required": true,
+      "scope": "global"
+    },
+    {
+      "name": "vector.read",
+      "reason": "在插件自有向量集合中搜索合适的表情。",
+      "required": true,
+      "scope": "extension"
+    },
+    {
+      "name": "vector.write",
+      "reason": "维护插件自有表情向量。",
+      "required": true,
+      "scope": "extension"
+    },
+    {
+      "name": "tool.invoke",
+      "reason": "通过声明的表情包工具执行界面操作。",
+      "required": true,
+      "scope": "extension"
+    }
+  ],
+  "lifecycle": {
+    "backgroundTasks": false,
+    "networkAccess": false,
+    "sandbox": true
+  },
+  "integrity": {
+    "algorithm": "sha256",
+    "contentTreeHash": ""
+  }
+}

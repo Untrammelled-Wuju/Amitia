@@ -1,16 +1,16 @@
 import { describe, it, expect } from "vitest";
 import {
-  Schema2PackageReader,
+  CanonicalPackageReader,
   RuntimePackageNormalizer,
   compareVersions,
-  INTEGRITY_ALGORITHM_V2,
+  INTEGRITY_ALGORITHM_V1,
   MANIFEST_FORMAT_CANONICAL,
 } from "../package-schema";
 
-const RUNTIME_VERSION = "2.0.0";
+const RUNTIME_VERSION = "1.0.0";
 
 const goldenManifest = {
-  schemaVersion: 2,
+  schemaVersion: 1,
   manifestFormat: MANIFEST_FORMAT_CANONICAL,
   petId: "golden-pet",
   releaseId: "golden-release-1",
@@ -52,7 +52,7 @@ const goldenManifest = {
   },
   provenance: { builder: "golden-test", sourceType: "generated" },
   integrity: {
-    algorithm: INTEGRITY_ALGORITHM_V2,
+    algorithm: INTEGRITY_ALGORITHM_V1,
     manifestHash: "0".repeat(64),
     contentRootHash: "5".repeat(64),
     fileCount: 2,
@@ -79,7 +79,7 @@ const goldenManifest = {
 };
 
 const goldenIdleAction = {
-  schemaVersion: 2,
+  schemaVersion: 1,
   actionKey: "idle",
   displayName: "Idle",
   version: 1,
@@ -105,7 +105,7 @@ const goldenIdleAction = {
 };
 
 const goldenWaveAction = {
-  schemaVersion: 2,
+  schemaVersion: 1,
   actionKey: "wave",
   displayName: "Wave",
   version: 1,
@@ -130,12 +130,12 @@ const goldenWaveAction = {
 };
 
 describe("Golden Package", () => {
-  const reader = new Schema2PackageReader();
+  const reader = new CanonicalPackageReader();
   const normalizer = new RuntimePackageNormalizer();
 
   it("golden manifest 被正确解析", () => {
     const result = reader.readManifest(goldenManifest);
-    expect(result.data.schemaVersion).toBe(2);
+    expect(result.data.schemaVersion).toBe(1);
     expect(result.data.petId).toBe("golden-pet");
     expect(result.data.displayName).toBe("Golden Pet");
     expect(result.data.defaultActionKey).toBe("idle");
@@ -163,7 +163,7 @@ describe("Golden Package", () => {
     });
     expect(result.data.compatibility.minRuntimeVersion).toBe("1.0.0");
     expect(result.data.integrity.contentRootHash).toBe("5".repeat(64));
-    expect(result.data.integrity.algorithm).toBe(INTEGRITY_ALGORITHM_V2);
+    expect(result.data.integrity.algorithm).toBe(INTEGRITY_ALGORITHM_V1);
   });
 
   it("golden idle action 被正确规范化", () => {
@@ -217,7 +217,7 @@ describe("Golden Package", () => {
 
   it("playbackMode ping_pong 在 golden 数据中被正确处理", () => {
     const goldenPingPongAction = {
-      schemaVersion: 2,
+      schemaVersion: 1,
       actionKey: "bounce",
       displayName: "Bounce",
       version: 1,
@@ -296,15 +296,14 @@ describe("Golden Package", () => {
       ["wave", goldenWaveAction],
     ]);
     const pkg = normalizer.normalize(goldenManifest, actions, "/golden-pkg", RUNTIME_VERSION);
-    expect(pkg.schemaVersion).toBe(2);
-    expect(pkg.sourceSchemaVersion).toBe(2);
+    expect(pkg.schemaVersion).toBe(1);
     expect(pkg.petId).toBe("golden-pet");
     expect(pkg.displayName).toBe("Golden Pet");
     expect(pkg.defaultActionKey).toBe("idle");
     expect(pkg.compatibility.minRuntimeVersion).toBe("1.0.0");
     expect(pkg.compatibility.renderMode).toBe("sprite");
     expect(pkg.integrity.contentRootHash).toBe("5".repeat(64));
-    expect(pkg.integrity.algorithm).toBe(INTEGRITY_ALGORITHM_V2);
+    expect(pkg.integrity.algorithm).toBe(INTEGRITY_ALGORITHM_V1);
     expect(pkg.integrity.manifestHash).toBe("0".repeat(64));
     expect(pkg.packageRoot).toBe("/golden-pkg");
     expect(pkg.actions.size).toBe(2);

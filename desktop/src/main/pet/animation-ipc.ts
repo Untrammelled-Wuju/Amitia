@@ -77,7 +77,7 @@ export interface RendererDeliveryResult {
 interface PendingPlayCommand {
   command: PlayActionCommand;
   queuedAt: number;
-  // Runtime v2 commands always carry an authoritative admission deadline.
+  // Runtime v1 commands always carry an authoritative admission deadline.
   // Local/default actions do not; they are invalidated by renderer reset/package
   // replacement rather than by inventing a second TTL authority in Main.
   expiresAt: number | null;

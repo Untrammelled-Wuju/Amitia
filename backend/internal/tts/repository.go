@@ -3,6 +3,13 @@
 package tts
 
 import (
+	"errors"
+	"fmt"
+	"strconv"
+	"strings"
+
+	"github.com/u-ai/backend/config"
+	"github.com/u-ai/backend/internal/requestidentity"
 	"gorm.io/gorm"
 )
 
@@ -14,8 +21,14 @@ type Repository interface {
 	Delete(id int) error
 	Activate(id int) error
 	GetActive() (*TtsConfig, error)
-	GetByCharacterID(charID string) (*TtsConfig, error)
+	GetByCharacterID(spaceID, charID string) (*TtsConfig, error)
 	ListProviders() []ProviderInfo
+	ListClonedVoices(spaceID string) ([]ClonedVoice, error)
+	GetClonedVoice(spaceID, speakerID string) (*ClonedVoice, error)
+	GetClonedVoiceBySpeakerID(speakerID string) (*ClonedVoice, error)
+	ResolveClonedVoiceConfig(spaceID, speakerID string) (*TtsConfig, *ClonedVoice, error)
+	UpsertClonedVoice(voice *ClonedVoice) error
+	DeleteClonedVoice(spaceID, speakerID string) error
 }
 
 type repository struct {
@@ -64,19 +77,54 @@ func (r *repository) GetActive() (*TtsConfig, error) {
 	return &cfg, err
 }
 
+// resolveActiveConfig deliberately does not require an API key. Keyless TTS
+// providers (for example Edge TTS and local CosyVoice) are valid active
+// configurations and must not silently fall back to Volcengine.
 func (r *repository) resolveActiveConfig() *TtsConfig {
 	active, err := r.GetActive()
-	if err == nil && active != nil && active.ApiKey != "" {
+	if err == nil && active != nil {
 		return active
 	}
 	var anyCfg TtsConfig
-	if err2 := r.db.Where("api_key != ''").First(&anyCfg).Error; err2 == nil {
+	if err2 := r.db.Order("created_at DESC").First(&anyCfg).Error; err2 == nil {
 		return &anyCfg
 	}
-	return &TtsConfig{VoiceType: "zh_female_vv_uranus_bigtts", Speed: 1.0, Pitch: 1.0, Volume: 1.0}
+	return &TtsConfig{
+		ApiType:    "volcengine",
+		ResourceId: "seed-tts-2.0",
+		VoiceType:  "zh_female_vv_uranus_bigtts",
+		Speed:      1.0,
+		Pitch:      1.0,
+		Volume:     1.0,
+	}
 }
 
-func (r *repository) GetByCharacterID(charID string) (*TtsConfig, error) {
+func ttsLocalSingleUserMode() bool {
+	return config.AppCfg != nil && strings.EqualFold(strings.TrimSpace(config.AppCfg.Security.Mode), "local_single_user")
+}
+
+func ttsOwnerQuery(db *gorm.DB, column, spaceID string) *gorm.DB {
+	owner := requestidentity.NormalizeSpaceID(spaceID)
+	if ttsLocalSingleUserMode() {
+		return db.Where(
+			fmt.Sprintf("(%s = ? OR %s = '' OR %s IS NULL OR %s = ?)", column, column, column, column),
+			owner,
+			requestidentity.LegacySpaceID,
+		)
+	}
+	return db.Where(fmt.Sprintf("%s = ?", column), owner)
+}
+
+func ttsSameOwner(existingSpaceID, requestedSpaceID string) bool {
+	existingSpaceID = strings.TrimSpace(existingSpaceID)
+	requestedSpaceID = requestidentity.NormalizeSpaceID(requestedSpaceID)
+	if existingSpaceID == requestedSpaceID {
+		return true
+	}
+	return ttsLocalSingleUserMode() && (existingSpaceID == "" || existingSpaceID == requestidentity.LegacySpaceID)
+}
+
+func (r *repository) GetByCharacterID(spaceID, charID string) (*TtsConfig, error) {
 	var char struct {
 		VoiceType       string
 		VoiceSpeed      float64
@@ -84,41 +132,91 @@ func (r *repository) GetByCharacterID(charID string) (*TtsConfig, error) {
 		VoiceVolume     float64
 		CustomVoiceID   string
 		VoiceMode       string
+		VoiceConfigID   string
 		Emotion         string
 		EmotionScale    int
 		SilenceDuration int
 	}
-	err := r.db.Table("characters").Select("voice_type, voice_speed, voice_pitch, voice_volume, custom_voice_id, voice_mode, emotion, emotion_scale, silence_duration").Where("id = ?", charID).Row().Scan(&char.VoiceType, &char.VoiceSpeed, &char.VoicePitch, &char.VoiceVolume, &char.CustomVoiceID, &char.VoiceMode, &char.Emotion, &char.EmotionScale, &char.SilenceDuration)
-	if err != nil {
-		return r.GetActive()
+	row := ttsOwnerQuery(r.db.Table("characters"), "space_id", spaceID).Select(
+		"voice_type, voice_speed, voice_pitch, voice_volume, custom_voice_id, voice_mode, voice_config_id, emotion, emotion_scale, silence_duration",
+	).Where("id = ?", strings.TrimSpace(charID)).Row()
+	if err := row.Scan(
+		&char.VoiceType,
+		&char.VoiceSpeed,
+		&char.VoicePitch,
+		&char.VoiceVolume,
+		&char.CustomVoiceID,
+		&char.VoiceMode,
+		&char.VoiceConfigID,
+		&char.Emotion,
+		&char.EmotionScale,
+		&char.SilenceDuration,
+	); err != nil {
+		return nil, fmt.Errorf("角色不存在或不属于当前用户: %w", err)
 	}
-	active := r.resolveActiveConfig()
-	cfg := &TtsConfig{
-		ApiKey:          active.ApiKey,
-		ResourceId:      active.ResourceId,
-		VoiceType:       char.VoiceType,
-		Speed:           char.VoiceSpeed,
-		Pitch:           char.VoicePitch,
-		Volume:          char.VoiceVolume,
-		Emotion:         char.Emotion,
-		EmotionScale:    char.EmotionScale,
-		SilenceDuration: char.SilenceDuration,
+
+	base := r.resolveActiveConfig()
+	if rawID := strings.TrimSpace(char.VoiceConfigID); rawID != "" {
+		if id, err := strconv.Atoi(rawID); err == nil && id > 0 {
+			if selected, getErr := r.GetByID(id); getErr == nil && selected != nil {
+				base = selected
+			}
+		}
 	}
-	if cfg.VoiceType == "" {
-		cfg.VoiceType = active.VoiceType
+
+	cloneID := ""
+	if char.VoiceMode == "clone" && strings.TrimSpace(char.CustomVoiceID) != "" {
+		cloneID = strings.TrimSpace(char.CustomVoiceID)
+		cloneVoice, cloneErr := r.GetClonedVoice(spaceID, cloneID)
+		if cloneErr != nil {
+			// Local single-user deployments can have characters created before clone
+			// metadata existed. Preserve that legacy path locally, but cloud mode
+			// must never accept an unowned provider speaker id.
+			if !ttsLocalSingleUserMode() {
+				return nil, fmt.Errorf("角色复刻音色不存在或不属于当前用户")
+			}
+		} else if cloneVoice.TtsConfigID > 0 {
+			boundConfig, boundErr := r.GetByID(cloneVoice.TtsConfigID)
+			if boundErr != nil {
+				return nil, fmt.Errorf("复刻音色绑定的 TTS 配置不存在")
+			}
+			base = boundConfig
+		}
 	}
-	if cfg.Speed == 0 {
-		cfg.Speed = active.Speed
+
+	// Start from a full provider config. The previous implementation only copied
+	// ApiKey/ResourceId, which discarded api_type/base_url/realtime credentials
+	// and could silently route a character configured for another provider to
+	// Volcengine.
+	cfg := *base
+	if char.VoiceType != "" {
+		cfg.VoiceType = char.VoiceType
 	}
-	if cfg.Pitch == 0 {
-		cfg.Pitch = active.Pitch
+	if char.VoiceSpeed != 0 {
+		cfg.Speed = char.VoiceSpeed
 	}
-	if cfg.Volume == 0 {
-		cfg.Volume = active.Volume
+	if char.VoicePitch != 0 {
+		cfg.Pitch = char.VoicePitch
 	}
-	if char.VoiceMode == "clone" && char.CustomVoiceID != "" {
-		cfg.VoiceType = char.CustomVoiceID
+	if char.VoiceVolume != 0 {
+		cfg.Volume = char.VoiceVolume
+	}
+	cfg.Emotion = char.Emotion
+	cfg.EmotionScale = char.EmotionScale
+	cfg.SilenceDuration = char.SilenceDuration
+
+	if cloneID != "" {
+		apiType := strings.ToLower(strings.TrimSpace(cfg.ApiType))
+		if apiType != "" && apiType != "volcengine" {
+			return nil, fmt.Errorf("角色复刻音色需要使用火山引擎 TTS 配置")
+		}
+		cfg.ApiType = "volcengine"
+		cfg.VoiceType = cloneID
 		cfg.ResourceId = "seed-icl-2.0"
+	}
+
+	if cfg.ApiType == "" {
+		cfg.ApiType = "volcengine"
 	}
 	if cfg.VoiceType == "" {
 		cfg.VoiceType = "zh_female_vv_uranus_bigtts"
@@ -132,7 +230,75 @@ func (r *repository) GetByCharacterID(charID string) (*TtsConfig, error) {
 	if cfg.Volume == 0 {
 		cfg.Volume = 1.0
 	}
-	return cfg, nil
+	return &cfg, nil
+}
+
+func (r *repository) ListClonedVoices(spaceID string) ([]ClonedVoice, error) {
+	var voices []ClonedVoice
+	err := ttsOwnerQuery(r.db.Model(&ClonedVoice{}), "space_id", spaceID).Order("created_at DESC").Find(&voices).Error
+	if voices == nil {
+		voices = []ClonedVoice{}
+	}
+	return voices, err
+}
+
+func (r *repository) GetClonedVoice(spaceID, speakerID string) (*ClonedVoice, error) {
+	var voice ClonedVoice
+	err := ttsOwnerQuery(r.db.Model(&ClonedVoice{}), "space_id", spaceID).Where("speaker_id = ?", speakerID).First(&voice).Error
+	return &voice, err
+}
+
+func (r *repository) GetClonedVoiceBySpeakerID(speakerID string) (*ClonedVoice, error) {
+	var voice ClonedVoice
+	err := r.db.Where("speaker_id = ?", speakerID).First(&voice).Error
+	return &voice, err
+}
+
+func (r *repository) ResolveClonedVoiceConfig(spaceID, speakerID string) (*TtsConfig, *ClonedVoice, error) {
+	voice, err := r.GetClonedVoice(spaceID, speakerID)
+	if err != nil {
+		return nil, nil, err
+	}
+	if voice.TtsConfigID > 0 {
+		cfg, cfgErr := r.GetByID(voice.TtsConfigID)
+		if cfgErr != nil {
+			return nil, voice, fmt.Errorf("复刻音色绑定的 TTS 配置不存在: %w", cfgErr)
+		}
+		return cfg, voice, nil
+	}
+	// Legacy metadata did not record its provider config. Preserve old local
+	// installations by falling back to the current active config only for those
+	// records; newly created clone voices always persist TtsConfigID.
+	cfg, cfgErr := r.GetActive()
+	if cfgErr != nil {
+		return nil, voice, cfgErr
+	}
+	return cfg, voice, nil
+}
+
+func (r *repository) UpsertClonedVoice(voice *ClonedVoice) error {
+	if voice == nil || strings.TrimSpace(voice.SpaceID) == "" || strings.TrimSpace(voice.SpeakerID) == "" {
+		return gorm.ErrInvalidData
+	}
+	var existing ClonedVoice
+	err := r.db.Where("speaker_id = ?", voice.SpeakerID).First(&existing).Error
+	if err == nil {
+		if !ttsSameOwner(existing.SpaceID, voice.SpaceID) {
+			return fmt.Errorf("speakerId 已属于其他用户")
+		}
+		return r.db.Model(&ClonedVoice{}).Where("speaker_id = ?", voice.SpeakerID).Updates(map[string]interface{}{
+			"space_id": requestidentity.NormalizeSpaceID(voice.SpaceID),
+			"name":     voice.Name, "tts_config_id": voice.TtsConfigID, "language": voice.Language, "status": voice.Status, "updated_at": voice.UpdatedAt,
+		}).Error
+	}
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return err
+	}
+	return r.db.Create(voice).Error
+}
+
+func (r *repository) DeleteClonedVoice(spaceID, speakerID string) error {
+	return ttsOwnerQuery(r.db.Model(&ClonedVoice{}), "space_id", spaceID).Where("speaker_id = ?", speakerID).Delete(&ClonedVoice{}).Error
 }
 
 func (r *repository) ListProviders() []ProviderInfo {

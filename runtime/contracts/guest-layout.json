@@ -18,8 +18,6 @@
         "backend",
         "node",
         "qdrant",
-        "sidecar",
-        "qq-sidecar",
         "plugin-host",
         "task-host",
         "scripts",
@@ -48,14 +46,6 @@
     "taskHost": {
       "path": "/opt/amitia/task-host",
       "entry": "dist/index.js"
-    },
-    "sidecar": {
-      "path": "/opt/amitia/sidecar",
-      "files": ["launcher.mjs", "bundle.mjs"]
-    },
-    "qqSidecar": {
-      "path": "/opt/amitia/qq-sidecar",
-      "files": ["launcher.mjs", "bundle.mjs"]
     },
     "scripts": {
       "path": "/opt/amitia/scripts",

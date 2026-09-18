@@ -144,22 +144,9 @@ SPDX-License-Identifier: AGPL-3.0-only
         </el-table-column>
         <el-table-column label="渠道" width="70">
           <template #default="{ row }"
-            ><el-tag
-              :type="
-                row.channel === 'wechat'
-                  ? 'success'
-                  : row.channel === 'qq'
-                    ? 'primary'
-                    : 'info'
-              "
-              size="small"
-              >{{
-                row.channel === "wechat"
-                  ? "微信"
-                  : row.channel === "qq"
-                    ? "QQ"
-                    : "Web"
-              }}</el-tag
+            ><el-tag type="info" size="small">{{
+              row.channel || "web"
+            }}</el-tag
             ></template
           >
         </el-table-column>
@@ -257,9 +244,7 @@ SPDX-License-Identifier: AGPL-3.0-only
           <el-col :span="12">
             <el-form-item label="发送渠道">
               <el-select v-model="form.channel" style="width: 100%"
-                ><el-option label="Web 端" value="web" /><el-option
-                  label="微信"
-                  value="wechat" /><el-option label="QQ" value="qq"
+                ><el-option label="Web 端" value="web"
               /></el-select>
             </el-form-item>
           </el-col>
@@ -275,7 +260,6 @@ SPDX-License-Identifier: AGPL-3.0-only
         </el-row>
         <el-form-item label="关联对话">
           <el-select
-            v-if="form.channel !== 'wechat'"
             v-model="form.conversationId"
             placeholder="不关联"
             clearable
@@ -290,7 +274,6 @@ SPDX-License-Identifier: AGPL-3.0-only
               :value="c.id"
             />
           </el-select>
-          <el-input v-else :model-value="'微信对话（自动）'" disabled />
         </el-form-item>
         <el-form-item label="提醒时间" required>
           <el-date-picker
@@ -322,11 +305,7 @@ SPDX-License-Identifier: AGPL-3.0-only
             testResult.title
           }}</el-descriptions-item>
           <el-descriptions-item label="渠道">{{
-            testResult.channel === "wechat"
-              ? "微信"
-              : testResult.channel === "qq"
-                ? "QQ"
-                : "Web"
+            testResult.channel || "web"
           }}</el-descriptions-item>
           <el-descriptions-item label="消息内容"
             ><div class="msg-preview">
@@ -355,7 +334,6 @@ SPDX-License-Identifier: AGPL-3.0-only
 import { ref, computed, onMounted, onUnmounted } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { request } from "../../composables/request";
-import { resolveApiUrl } from "../../runtime/runtime-adapter";
 import type { ReminderGroup } from "../../types";
 import ProspectivePanel from "./components/ProspectivePanel.vue";
 import TriggerHistoryPanel from "./components/TriggerHistoryPanel.vue";
@@ -655,39 +633,29 @@ async function clearBackpressure() {
   }
 }
 
-let reminderSSE: EventSource | null = null;
+let reminderRefreshTimer: ReturnType<typeof setInterval> | null = null;
+let reminderRefreshBusy = false;
 
-async function connectReminderSSE() {
+async function refreshReminderRuntime() {
+  if (reminderRefreshBusy) return;
+  reminderRefreshBusy = true;
   try {
-    const url = await resolveApiUrl("/api/reminders/stream");
-    reminderSSE = new EventSource(url);
-    reminderSSE.onmessage = (e) => {
-      if (e.data) {
-        fetchReminders();
-        fetchStatus();
-      }
-    };
-    reminderSSE.addEventListener("changed", () => {
-      fetchReminders();
-      fetchStatus();
-    });
-    reminderSSE.onerror = () => {
-      reminderSSE?.close();
-      setTimeout(() => void connectReminderSSE(), 5000);
-    };
-  } catch {}
+    await Promise.all([fetchReminders(), fetchStatus()]);
+  } finally {
+    reminderRefreshBusy = false;
+  }
 }
 
 onMounted(async () => {
-  await fetchReminders();
-  await fetchStatus();
-  void connectReminderSSE();
+  await refreshReminderRuntime();
+  reminderRefreshTimer = setInterval(() => void refreshReminderRuntime(), 5000);
   await fetchCleanupConfig();
   await fetchCharacterOptions();
 });
 
 onUnmounted(() => {
-  if (reminderSSE) reminderSSE.close();
+  if (reminderRefreshTimer) clearInterval(reminderRefreshTimer);
+  reminderRefreshTimer = null;
 });
 </script>
 <style scoped>

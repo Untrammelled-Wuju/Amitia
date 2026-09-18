@@ -1,17 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
+import '../../../../app/app_routes.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_misc.dart';
+import '../../../../core/ui_runtime/mobile_extension_slot.dart';
+import '../../../../core/ui_runtime/ui_runtime_controller.dart';
 import '../../domain/game_center_dto.dart';
 import '../controllers/game_center_providers.dart';
 import '../controllers/game_center_controller.dart';
 import 'runtime_detail_page.dart';
 import '../widgets/game_package_confirmation.dart';
 
-class PluginDetailPage extends ConsumerWidget {
+class PluginDetailPage extends ConsumerStatefulWidget {
   final String pluginId;
   final String extensionId;
 
@@ -22,29 +25,74 @@ class PluginDetailPage extends ConsumerWidget {
   });
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<PluginDetailPage> createState() => _PluginDetailPageState();
+}
+
+class _PluginDetailPageState extends ConsumerState<PluginDetailPage> {
+  @override
+  void initState() {
+    super.initState();
+    Future.microtask(() => _loadPlugin());
+  }
+
+  @override
+  void didUpdateWidget(covariant PluginDetailPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.pluginId != widget.pluginId ||
+        oldWidget.extensionId != widget.extensionId) {
+      Future.microtask(() => _loadPlugin());
+    }
+  }
+
+  Future<void> _loadPlugin({bool refreshUi = false}) async {
+    if (widget.pluginId.trim().isEmpty || widget.extensionId.trim().isEmpty)
+      return;
+    await Future.wait([
+      ref
+          .read(gameCenterControllerProvider.notifier)
+          .selectPlugin(widget.pluginId, extensionId: widget.extensionId),
+      ref.read(uiRuntimeProvider.notifier).ensureLoaded(force: refreshUi),
+    ]);
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final controller = ref.watch(gameCenterControllerProvider.notifier);
     final state = ref.watch(gameCenterControllerProvider);
 
     final detail = state.pluginDetail;
+    final isCurrentDetail =
+        detail?.pluginId == widget.pluginId &&
+        detail?.extensionId == widget.extensionId;
+    final visibleDetail = isCurrentDetail ? detail : null;
     final isLoading = state.pluginDetailLoading;
     final error = state.pluginDetailError;
-    final hasOp = controller.hasPackageOp(extensionId);
+    final hasOp = controller.hasPackageOp(widget.extensionId);
 
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
-        title: detail?.name ?? '插件详情',
+        title: visibleDetail?.name ?? '游戏控制台',
         navigation: AmitiaAppBarNavigation.back,
+        fallbackRoute: AppRoutes.gameCenter,
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: hasOp ? null : () => controller.selectPlugin(pluginId, extensionId: extensionId),
+            onPressed: hasOp ? null : () => _loadPlugin(refreshUi: true),
           ),
         ],
       ),
       body: SafeArea(
         top: false,
-        child: _buildBody(context, ref, detail, isLoading, error, hasOp, controller, state),
+        child: _buildBody(
+          context,
+          ref,
+          visibleDetail,
+          isLoading,
+          error,
+          hasOp,
+          controller,
+          state,
+        ),
       ),
     );
   }
@@ -65,7 +113,7 @@ class PluginDetailPage extends ConsumerWidget {
     if (error != null) {
       return AmitiaErrorState(
         message: '加载失败: $error',
-        onRetry: () => controller.selectPlugin(pluginId, extensionId: extensionId),
+        onRetry: () => _loadPlugin(refreshUi: true),
       );
     }
     if (detail == null) {
@@ -78,12 +126,58 @@ class PluginDetailPage extends ConsumerWidget {
     return ListView(
       padding: EdgeInsets.all(AppSpacing.pagePadding),
       children: [
+        _buildGameSurface(context, detail),
+        SizedBox(height: AppSpacing.lg),
         _buildInfoSection(context, detail),
         SizedBox(height: AppSpacing.lg),
         _buildActionsSection(context, ref, detail, hasOp, controller),
         SizedBox(height: AppSpacing.lg),
         _buildRuntimesSection(context, detail, state),
       ],
+    );
+  }
+
+  Widget _buildGameSurface(BuildContext context, GamePluginDetail detail) {
+    final slotContext = <String, dynamic>{
+      'extensionId': detail.extensionId,
+      'pluginId': detail.pluginId,
+      'extension': <String, dynamic>{
+        'id': detail.extensionId,
+        'name': detail.name,
+        'version': detail.version,
+        'enabled': detail.enabled,
+      },
+      'gamePlugin': <String, dynamic>{
+        'extensionId': detail.extensionId,
+        'pluginId': detail.pluginId,
+        'name': detail.name,
+        'version': detail.version,
+        'enabled': detail.enabled,
+      },
+      'managementTarget': 'game-center',
+      'surface': 'game-detail',
+      'surfaceRole': 'main',
+      'slotFallback': 'default',
+      'slotLayout': 'stack',
+      'capabilities': detail.capabilities,
+    };
+
+    return MobileExtensionSlot(
+      slotId: 'extension.detail.tab',
+      extensionId: detail.extensionId,
+      context: slotContext,
+      fallback: Card(
+        child: Padding(
+          padding: EdgeInsets.all(AppSpacing.lg),
+          child: Column(
+            children: [
+              Icon(Icons.sports_esports_outlined, size: 36),
+              SizedBox(height: AppSpacing.sm),
+              Text('该游戏扩展暂未提供专属控制界面', style: AppTypography.body(context)),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -109,7 +203,11 @@ class PluginDetailPage extends ConsumerWidget {
             if (detail.provider != null)
               _buildInfoRow(context, 'Provider', detail.provider!),
             if (detail.packageRevision != null)
-              _buildInfoRow(context, 'PackageRevision', detail.packageRevision!),
+              _buildInfoRow(
+                context,
+                'PackageRevision',
+                detail.packageRevision!,
+              ),
             if (detail.permissions.isNotEmpty) ...[
               SizedBox(height: AppSpacing.sm),
               Text('权限', style: AppTypography.caption(context)),
@@ -118,7 +216,9 @@ class PluginDetailPage extends ConsumerWidget {
                 spacing: 4,
                 runSpacing: 4,
                 children: detail.permissions
-                    .map((p) => AmitiaStatusBadge(label: p, type: BadgeType.info))
+                    .map(
+                      (p) => AmitiaStatusBadge(label: p, type: BadgeType.info),
+                    )
                     .toList(),
               ),
             ],
@@ -172,13 +272,15 @@ class PluginDetailPage extends ConsumerWidget {
                     label: '更新',
                     isSecondary: true,
                     height: 36,
-                    onPressed: () => _pickUpdate(context, ref, controller, detail),
+                    onPressed: () =>
+                        _pickUpdate(context, ref, controller, detail),
                   ),
                   AmitiaButton(
                     label: '卸载',
                     isDestructive: true,
                     height: 36,
-                    onPressed: () => _confirmUninstall(context, ref, controller, detail),
+                    onPressed: () =>
+                        _confirmUninstall(context, ref, controller, detail),
                   ),
                 ],
               ),
@@ -188,56 +290,70 @@ class PluginDetailPage extends ConsumerWidget {
     );
   }
 
-  Widget _buildRuntimesSection(BuildContext context, GamePluginDetail detail, GameCenterState state) {
+  Widget _buildRuntimesSection(
+    BuildContext context,
+    GamePluginDetail detail,
+    GameCenterState state,
+  ) {
     return Card(
       child: Padding(
         padding: EdgeInsets.all(AppSpacing.md),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('运行实例 (${detail.runtimes.length})', style: AppTypography.sectionTitle(context)),
+            Text(
+              '运行实例 (${detail.runtimes.length})',
+              style: AppTypography.sectionTitle(context),
+            ),
             SizedBox(height: AppSpacing.sm),
             if (detail.runtimes.isEmpty)
               Text('尚无运行实例', style: AppTypography.caption(context))
             else
-              ...detail.runtimes.map((rt) => InkWell(
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => RuntimeDetailPage(
-                            runtimeId: rt.runtimeId,
-                            pluginId: rt.pluginId,
+              ...detail.runtimes.map(
+                (rt) => InkWell(
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => RuntimeDetailPage(
+                          runtimeId: rt.runtimeId,
+                          pluginId: rt.pluginId,
+                        ),
+                      ),
+                    );
+                  },
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(vertical: AppSpacing.sm),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                rt.runtimeId,
+                                style: AppTypography.bodySmall(context),
+                              ),
+                              Text(
+                                '状态: ${_stateLabel(rt.state)} | 控制: ${_modeLabel(rt.controlMode)}',
+                                style: AppTypography.caption(context),
+                              ),
+                            ],
                           ),
                         ),
-                      );
-                    },
-                    child: Padding(
-                      padding: EdgeInsets.symmetric(vertical: AppSpacing.sm),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(rt.runtimeId, style: AppTypography.bodySmall(context)),
-                                Text(
-                                  '状态: ${_stateLabel(rt.state)} | 控制: ${_modeLabel(rt.controlMode)}',
-                                  style: AppTypography.caption(context),
-                                ),
-                              ],
-                            ),
-                          ),
-                          AmitiaStatusBadge(
-                            label: rt.connected ? (rt.ready ? 'Ready' : 'Connected') : 'Disconnected',
-                            type: rt.connected
-                                ? (rt.ready ? BadgeType.success : BadgeType.info)
-                                : BadgeType.neutral,
-                          ),
-                        ],
-                      ),
+                        AmitiaStatusBadge(
+                          label: rt.connected
+                              ? (rt.ready ? 'Ready' : 'Connected')
+                              : 'Disconnected',
+                          type: rt.connected
+                              ? (rt.ready ? BadgeType.success : BadgeType.info)
+                              : BadgeType.neutral,
+                        ),
+                      ],
                     ),
-                  )),
+                  ),
+                ),
+              ),
           ],
         ),
       ),
@@ -305,7 +421,7 @@ class PluginDetailPage extends ConsumerWidget {
     final result = await FilePicker.platform.pickFiles(
       allowMultiple: false,
       type: FileType.custom,
-      allowedExtensions: const ['amitiax'],
+      allowedExtensions: const ['gamex'],
     );
     final path = result?.files.single.path;
     if (path == null || path.isEmpty) return;
@@ -330,14 +446,14 @@ class PluginDetailPage extends ConsumerWidget {
         ),
       );
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(ok ? '插件更新完成' : '插件更新失败')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(ok ? '插件更新完成' : '插件更新失败')));
     } catch (e) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('插件更新失败: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('插件更新失败: $e')));
     }
   }
 
@@ -363,15 +479,15 @@ class PluginDetailPage extends ConsumerWidget {
         clearSelectionAfterSuccess: true,
       );
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(ok ? '插件卸载完成' : '插件卸载失败')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(ok ? '插件卸载完成' : '插件卸载失败')));
       if (ok && context.mounted) Navigator.of(context).maybePop();
     } catch (e) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('插件卸载失败: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('插件卸载失败: $e')));
     }
   }
 }

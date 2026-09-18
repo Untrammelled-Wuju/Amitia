@@ -450,7 +450,7 @@ func TestNamespaceRegistry_StableList(t *testing.T) {
 		t.Fatalf("expected 4 namespaces, got %d", len(list))
 	}
 
-	expected := []string{"alpha", "vendorgame", "examplegame", "zebra"}
+	expected := []string{"alpha", "examplegame", "vendorgame", "zebra"}
 	for i, ns := range expected {
 		if string(list[i].Namespace) != ns {
 			t.Errorf("position %d: got %q, want %q", i, list[i].Namespace, ns)
@@ -612,8 +612,8 @@ func TestRPCDispatcher_CustomRouteForward(t *testing.T) {
 	if forwarded.Peer.ServiceID != "service-a" {
 		t.Errorf("forward target should be service-a, got %s", forwarded.Peer.ServiceID)
 	}
-	if forwarded.Envelope.ID != "custom-req-1" {
-		t.Errorf("request ID should be preserved")
+	if forwarded.Envelope.ID == "" || forwarded.Envelope.ID == "custom-req-1" {
+		t.Errorf("request ID should be rewritten for the downstream route")
 	}
 	if forwarded.Envelope.Method != "examplegame.bot.move" {
 		t.Errorf("method should be preserved")

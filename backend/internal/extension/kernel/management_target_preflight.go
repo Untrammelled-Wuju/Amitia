@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
-	"github.com/u-ai/backend/internal/extension/kernel/manifest_v2"
+	"github.com/u-ai/backend/internal/extension/kernel/manifest_v1"
 )
 
 type PackageTargetPreview struct {
@@ -37,7 +37,7 @@ func (g *TargetMutationGuard) ValidateArchiveTarget(ctx context.Context, archive
 	if !preview.Installable {
 		return nil, fmt.Errorf("target mutation guard: archive is not installable")
 	}
-	contributions := make([]manifest_v2.ContributionMeta, 0)
+	contributions := make([]manifest_v1.ContributionMeta, 0)
 	for _, module := range preview.Manifest.Modules {
 		contributions = append(contributions, module.Contributions...)
 	}
@@ -55,7 +55,7 @@ func (g *TargetMutationGuard) ValidateArchiveTarget(ctx context.Context, archive
 	}, nil
 }
 
-func resolveManagementTarget(contributions []manifest_v2.ContributionMeta) (domain.ManagementTarget, error) {
+func resolveManagementTarget(contributions []manifest_v1.ContributionMeta) (domain.ManagementTarget, error) {
 	kinds := make([]domain.ContributionKind, 0, len(contributions))
 	for _, c := range contributions {
 		kinds = append(kinds, domain.ContributionKind(c.Kind))

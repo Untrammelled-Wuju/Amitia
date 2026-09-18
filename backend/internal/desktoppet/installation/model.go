@@ -4,9 +4,8 @@ package installation
 
 type Installation struct {
 	ID                     string `gorm:"column:id;primaryKey;type:text" json:"id"`
-	UserID                 string `gorm:"column:user_id;type:text" json:"userId"`
+	SpaceID                string `gorm:"column:space_id;type:text" json:"spaceId"`
 	DeviceID               string `gorm:"column:device_id;type:text;default:''" json:"deviceId"`
-	CharacterID            string `gorm:"column:character_id;type:text" json:"characterId"`
 	PackageID              string `gorm:"column:package_id;type:text" json:"packageId"`
 	PackageVersion         string `gorm:"column:package_version;type:text" json:"packageVersion"`
 	Name                   string `gorm:"column:name;type:text" json:"name"`

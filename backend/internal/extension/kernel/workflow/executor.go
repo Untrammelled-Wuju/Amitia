@@ -86,7 +86,7 @@ type WorkflowRunLifecycleEvent struct {
 	WorkflowID     string
 	ExecutionID    string
 	InstallationID string
-	UserID         string
+	SpaceID        string
 	DeviceID       string
 	Status         RunStatus
 	Generation     int64
@@ -116,7 +116,7 @@ type ExecuteRequest struct {
 }
 
 type ExecutionContext struct {
-	UserID             string              `json:"userId,omitempty"`
+	SpaceID            string              `json:"spaceId,omitempty"`
 	WorkflowID         string              `json:"workflowId,omitempty"`
 	InstallationID     string              `json:"installationId,omitempty"`
 	DeviceID           string              `json:"deviceId,omitempty"`
@@ -206,14 +206,14 @@ func (e *WorkflowExecutor) SetRevisionBinder(binder WorkflowRevisionBinder) {
 	e.revisionMu.Unlock()
 }
 
-func (e *WorkflowExecutor) bindRevision(ctx context.Context, userID string, def WorkflowDefinition) (string, error) {
+func (e *WorkflowExecutor) bindRevision(ctx context.Context, spaceID string, def WorkflowDefinition) (string, error) {
 	e.revisionMu.RLock()
 	binder := e.revisionBind
 	e.revisionMu.RUnlock()
 	if binder == nil {
 		return "", nil
 	}
-	return binder(ctx, strings.TrimSpace(userID), def)
+	return binder(ctx, strings.TrimSpace(spaceID), def)
 }
 
 func (e *WorkflowExecutor) RunStore() RunStore {
@@ -253,7 +253,7 @@ func runLifecycleEvent(kind string, run WorkflowRun) WorkflowRunLifecycleEvent {
 		WorkflowID:     run.WorkflowID,
 		ExecutionID:    run.ExecutionID,
 		InstallationID: run.Context.InstallationID,
-		UserID:         run.Context.UserID,
+		SpaceID:        run.Context.SpaceID,
 		DeviceID:       run.Context.DeviceID,
 		Status:         run.Status,
 		Generation:     run.Generation,
@@ -501,12 +501,12 @@ func (e *WorkflowExecutor) markWaitingDevice(ctx context.Context, executionID, d
 // ResumeWaitingDevice re-enters waiting runs on the same execution ID. Completed
 // nodes are restored from checkpoints, while Generation is incremented so
 // attempts after reconnect remain distinguishable from pre-disconnect attempts.
-func (e *WorkflowExecutor) ResumeWaitingDevice(ctx context.Context, userID, deviceID string) (int, error) {
+func (e *WorkflowExecutor) ResumeWaitingDevice(ctx context.Context, spaceID, deviceID string) (int, error) {
 	store, ok := e.runStore.(WaitingDeviceRunStore)
 	if !ok || store == nil {
 		return 0, nil
 	}
-	runs, err := store.ListWaitingDevice(ctx, strings.TrimSpace(userID), strings.TrimSpace(deviceID), 100)
+	runs, err := store.ListWaitingDevice(ctx, strings.TrimSpace(spaceID), strings.TrimSpace(deviceID), 100)
 	if err != nil {
 		return 0, err
 	}
@@ -1172,9 +1172,9 @@ func (e *WorkflowExecutor) Execute(ctx context.Context, req ExecuteRequest) (res
 	if edgeConditionErr != nil {
 		return nil, edgeConditionErr
 	}
-	if req.Context.UserID == "" && wf.Metadata != nil {
-		if owner, ok := wf.Metadata["ownerUserId"].(string); ok {
-			req.Context.UserID = strings.TrimSpace(owner)
+	if req.Context.SpaceID == "" && wf.Metadata != nil {
+		if owner, ok := wf.Metadata["ownerSpaceId"].(string); ok {
+			req.Context.SpaceID = strings.TrimSpace(owner)
 		}
 	}
 	if req.Options.Mode == "" && req.Context.ExecutionOptions.Mode != "" {
@@ -1187,7 +1187,7 @@ func (e *WorkflowExecutor) Execute(ctx context.Context, req ExecuteRequest) (res
 	req.Options = normalizedOptions
 	req.Context.ExecutionOptions = normalizedOptions
 	if !req.Context.Recovery && strings.TrimSpace(req.Context.RevisionID) == "" {
-		revisionID, bindErr := e.bindRevision(ctx, req.Context.UserID, wf)
+		revisionID, bindErr := e.bindRevision(ctx, req.Context.SpaceID, wf)
 		if bindErr != nil {
 			return nil, fmt.Errorf("workflow: bind immutable revision: %w", bindErr)
 		}
@@ -2980,7 +2980,7 @@ func (e *WorkflowExecutor) ExecuteCompiled(ctx context.Context, req CompiledExec
 
 func workflowRuntimeValues(execution ExecutionContext) map[string]any {
 	return map[string]any{
-		"userId":           execution.UserID,
+		"spaceId":          execution.SpaceID,
 		"rootId":           execution.RootID,
 		"characterId":      execution.CharacterID,
 		"conversationId":   execution.ConversationID,

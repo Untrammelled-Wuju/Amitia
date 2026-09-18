@@ -22,16 +22,33 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/runtime_supervisor"
 	"github.com/u-ai/backend/internal/extension/kernel/schedule"
 	"github.com/u-ai/backend/internal/extension/kernel/schema_ui"
+	"github.com/u-ai/backend/internal/extension/kernel/scope"
 	"github.com/u-ai/backend/internal/extension/kernel/task_runtime"
 	"github.com/u-ai/backend/internal/extension/kernel/ui_contribution"
 	"github.com/u-ai/backend/internal/extension/kernel/ui_provider"
 	"github.com/u-ai/backend/internal/extension/kernel/workflow"
+	"github.com/u-ai/backend/internal/extension/runtimegate"
 	gameprotocol "github.com/u-ai/backend/pkg/gameplugin/protocol"
 )
 
 type TypedContributionInstaller struct {
 	container   *Container
 	candidateNS *CandidateNamespace
+}
+
+func normalizeJSONSchemaRaw(raw json.RawMessage) json.RawMessage {
+	if len(raw) == 0 {
+		return raw
+	}
+	var encoded string
+	if err := json.Unmarshal(raw, &encoded); err != nil {
+		return raw
+	}
+	trimmed := strings.TrimSpace(encoded)
+	if trimmed == "" {
+		return nil
+	}
+	return json.RawMessage(trimmed)
 }
 
 func NewTypedContributionInstaller(container *Container) *TypedContributionInstaller {
@@ -254,7 +271,7 @@ func (i *TypedContributionInstaller) buildInstallOp(ctx context.Context, contrib
 		return i.buildUISlotOp(ctx, contrib, defData)
 	case domain.ContributionKindGamePlugin:
 		return i.buildGamePluginOp(ctx, contrib, defData, generation)
-	case domain.ContributionKindDesktopPetPlugin:
+	case domain.ContributionKindPetPlugin:
 		return i.buildDesktopPetPluginOp(ctx, contrib, defData, generation)
 	default:
 		return installOp{}, fmt.Errorf("unsupported contribution kind: %s", contrib.Kind)
@@ -439,9 +456,27 @@ func (i *TypedContributionInstaller) buildToolOp(ctx context.Context, contrib do
 		Scope        json.RawMessage `json:"scope,omitempty"`
 		Internal     bool            `json:"internal,omitempty"`
 		Runtime      map[string]any  `json:"runtime,omitempty"`
+		Metadata     map[string]any  `json:"metadata,omitempty"`
 	}
 	if err := json.Unmarshal(defData, &def); err != nil {
 		return installOp{}, fmt.Errorf("unmarshal tool definition: %w", err)
+	}
+	def.InputSchema = normalizeJSONSchemaRaw(def.InputSchema)
+	def.OutputSchema = normalizeJSONSchemaRaw(def.OutputSchema)
+
+	runtimeType := ""
+	runtimeID := ""
+	handlerName := def.HandlerName
+	if len(def.Runtime) > 0 {
+		if v, ok := def.Runtime["runtimeType"].(string); ok {
+			runtimeType = v
+		}
+		if v, ok := def.Runtime["runtimeId"].(string); ok {
+			runtimeID = v
+		}
+		if v, ok := def.Runtime["handlerName"].(string); ok && v != "" {
+			handlerName = v
+		}
 	}
 
 	runtimeType := ""
@@ -476,9 +511,22 @@ func (i *TypedContributionInstaller) buildToolOp(ctx context.Context, contrib do
 	if len(def.Permissions) > 0 {
 		_ = json.Unmarshal(def.Permissions, &perms)
 	}
-	var scope capability.ScopeRule
+	var scopeRule capability.ScopeRule
 	if len(def.Scope) > 0 {
-		_ = json.Unmarshal(def.Scope, &scope)
+		_ = json.Unmarshal(def.Scope, &scopeRule)
+	}
+
+	toolSource := capability.ToolSourcePlugin
+	if isSystemBuiltin(contrib.Metadata) {
+		toolSource = capability.ToolSourceBuiltin
+	}
+
+	runtimeBinding := enrichGameHostToolRuntimeBinding(i.buildRuntimeBindingFromValues(contrib, handlerName, runtimeType, runtimeID, toolID), def.Runtime)
+	if runtimeBinding.RuntimeType == capability.RuntimeTypeGameHost && toolSource == capability.ToolSourcePlugin {
+		toolID = canonicalGameHostToolID(string(contrib.ExtensionID), toolID)
+		if def.CapabilityID == "" {
+			capID = capability.CapabilityID(toolID)
+		}
 	}
 
 	toolSource := capability.ToolSourcePlugin
@@ -511,8 +559,9 @@ func (i *TypedContributionInstaller) buildToolOp(ctx context.Context, contrib do
 		RiskLevel:    capability.RiskLevel(def.RiskLevel),
 		SideEffect:   capability.SideEffectLevel(def.SideEffect),
 		Permissions:  perms,
-		Scope:        scope,
+		Scope:        scopeRule,
 		Runtime:      runtimeBinding,
+		Metadata:     def.Metadata,
 	}
 
 	permIDs := make([]string, 0)
@@ -544,13 +593,13 @@ func (i *TypedContributionInstaller) buildGamePluginOp(ctx context.Context, cont
 	}
 	spec, err := gameprotocol.ParsePluginHostSpec(raw)
 	if err != nil {
-		return installOp{}, fmt.Errorf("game_plugin: %w", err)
+		return installOp{}, fmt.Errorf("gamex: %w", err)
 	}
 	if err := spec.Validate(); err != nil {
-		return installOp{}, fmt.Errorf("game_plugin: %w", err)
+		return installOp{}, fmt.Errorf("gamex: %w", err)
 	}
 	if contrib.ID == "" {
-		return installOp{}, fmt.Errorf("game_plugin: id required")
+		return installOp{}, fmt.Errorf("gamex: id required")
 	}
 	return installOp{
 		kind: domain.ContributionKindGamePlugin,
@@ -582,10 +631,10 @@ func (i *TypedContributionInstaller) buildGamePluginOp(ctx context.Context, cont
 
 func (i *TypedContributionInstaller) buildDesktopPetPluginOp(ctx context.Context, contrib domain.ContributionDefinition, defData []byte, generation int64) (installOp, error) {
 	if contrib.ID == "" {
-		return installOp{}, fmt.Errorf("desktop_pet_plugin: id required")
+		return installOp{}, fmt.Errorf("petx: id required")
 	}
 	return installOp{
-		kind: domain.ContributionKindDesktopPetPlugin,
+		kind: domain.ContributionKindPetPlugin,
 		doInstall: func(ctx context.Context) error {
 			i.logAudit(lifecycleAuditEntry{
 				ContributionID: string(contrib.ID),
@@ -867,8 +916,19 @@ func (i *TypedContributionInstaller) buildUIContributionOp(ctx context.Context, 
 	}
 	uiDef.Integrity.Generation = generation
 
-	hasPage := uiDef.Kind == ui_contribution.UIContributionWebPage || uiDef.Kind == ui_contribution.UIContributionSchemaPage
-	hasSchema := uiDef.Entry.SchemaPath != "" || uiDef.Sandbox.Type == ui_contribution.SandboxSchemaRenderer
+	hostRuntimeID := strings.TrimSpace(uiDef.Entry.RuntimeID)
+	hostRuntime := hostRuntimeID != "" && (uiDef.Entry.Type == ui_contribution.SandboxHostNative || uiDef.Sandbox.Type == ui_contribution.SandboxHostNative)
+	if hostRuntime {
+		if uiDef.Sandbox.Type != ui_contribution.SandboxHostNative {
+			return installOp{}, fmt.Errorf("host runtime ui contribution %s requires host_native sandbox", uiDef.ContributionID)
+		}
+		if !runtimegate.HostRuntimeAllowed(hostRuntimeID) {
+			return installOp{}, fmt.Errorf("host runtime %s is not registered", hostRuntimeID)
+		}
+	}
+
+	hasPage := !hostRuntime && (uiDef.Kind == ui_contribution.UIContributionWebPage || uiDef.Kind == ui_contribution.UIContributionSchemaPage)
+	hasSchema := !hostRuntime && (uiDef.Entry.SchemaPath != "" || uiDef.Sandbox.Type == ui_contribution.SandboxSchemaRenderer)
 	if hasSchema && uiDef.Entry.SchemaPath == "" {
 		return installOp{}, fmt.Errorf("schema ui contribution %s requires entry.schema_path", uiDef.ContributionID)
 	}
@@ -1060,6 +1120,19 @@ func canonicalGameHostToolID(extensionID, toolID string) string {
 	return prefix + toolID
 }
 
+func canonicalGameHostPluginID(extensionID, pluginID string) string {
+	extensionID = strings.Trim(strings.TrimSpace(extensionID), "/")
+	pluginID = strings.Trim(strings.TrimSpace(pluginID), "/")
+	if extensionID == "" || pluginID == "" {
+		return pluginID
+	}
+	prefix := extensionID + "/"
+	if strings.HasPrefix(pluginID, prefix) {
+		return pluginID
+	}
+	return prefix + pluginID
+}
+
 // enrichGameHostToolRuntimeBinding preserves GameHost route selectors from a
 // tool definition. The generic RuntimeBinding fields do not carry pluginId or
 // serviceId, but those selectors are required to route deterministically when
@@ -1074,6 +1147,10 @@ func enrichGameHostToolRuntimeBinding(binding capability.RuntimeBinding, runtime
 	for _, key := range []string{"pluginId", "serviceId"} {
 		value, _ := runtimeDef[key].(string)
 		value = strings.TrimSpace(value)
+		if key == "pluginId" {
+			extensionID, _ := binding.Metadata["extensionId"].(string)
+			value = canonicalGameHostPluginID(extensionID, value)
+		}
 		if value != "" {
 			binding.Metadata[key] = value
 		}
@@ -1154,7 +1231,7 @@ func (i *TypedContributionInstaller) ActivateContributions(ctx context.Context, 
 		seen[contrib.ID] = true
 
 		startedAt := time.Now().UTC()
-		if err := i.activateSingle(ctx, contrib); err != nil {
+		if err := i.activateSingle(ctx, contrib, generation); err != nil {
 			i.recordAudit(contrib, operationID, generation, startedAt, "failed", err)
 			for j := len(activated) - 1; j >= 0; j-- {
 				rollbackStart := time.Now().UTC()
@@ -1170,7 +1247,7 @@ func (i *TypedContributionInstaller) ActivateContributions(ctx context.Context, 
 	return nil
 }
 
-func (i *TypedContributionInstaller) activateSingle(ctx context.Context, contrib domain.ContributionDefinition) error {
+func (i *TypedContributionInstaller) activateSingle(ctx context.Context, contrib domain.ContributionDefinition, generation int64) error {
 	switch contrib.Kind {
 	case domain.ContributionKindTool:
 		return i.activateTool(ctx, contrib)
@@ -1185,7 +1262,7 @@ func (i *TypedContributionInstaller) activateSingle(ctx context.Context, contrib
 	case domain.ContributionKindWorkflow:
 		return i.activateWorkflow(ctx, contrib)
 	case domain.ContributionKindUIPage, domain.ContributionKindUIPanel, domain.ContributionKindUIChat, domain.ContributionKindUIContextAction, domain.ContributionKindUIDesktop:
-		return i.activateUI(ctx, contrib)
+		return i.activateUI(ctx, contrib, generation)
 	case domain.ContributionKindUIProvider:
 		return i.activateUIProvider(ctx, contrib)
 	case domain.ContributionKindUISlot:
@@ -1289,10 +1366,13 @@ func (i *TypedContributionInstaller) activateTool(ctx context.Context, contrib d
 		Scope        json.RawMessage `json:"scope,omitempty"`
 		Internal     bool            `json:"internal,omitempty"`
 		Runtime      map[string]any  `json:"runtime,omitempty"`
+		Metadata     map[string]any  `json:"metadata,omitempty"`
 	}
 	if err := json.Unmarshal(defData, &def); err != nil {
 		return fmt.Errorf("unmarshal tool definition for activate: %w", err)
 	}
+	def.InputSchema = normalizeJSONSchemaRaw(def.InputSchema)
+	def.OutputSchema = normalizeJSONSchemaRaw(def.OutputSchema)
 	runtimeType := ""
 	runtimeID := ""
 	handlerName := def.HandlerName
@@ -1323,9 +1403,9 @@ func (i *TypedContributionInstaller) activateTool(ctx context.Context, contrib d
 	if len(def.Permissions) > 0 {
 		_ = json.Unmarshal(def.Permissions, &perms)
 	}
-	var scope capability.ScopeRule
+	var scopeRule capability.ScopeRule
 	if len(def.Scope) > 0 {
-		_ = json.Unmarshal(def.Scope, &scope)
+		_ = json.Unmarshal(def.Scope, &scopeRule)
 	}
 	toolSource := capability.ToolSourcePlugin
 	if isSystemBuiltin(contrib.Metadata) {
@@ -1363,11 +1443,18 @@ func (i *TypedContributionInstaller) activateTool(ctx context.Context, contrib d
 		RiskLevel:    capability.RiskLevel(def.RiskLevel),
 		SideEffect:   capability.SideEffectLevel(def.SideEffect),
 		Permissions:  perms,
-		Scope:        scope,
+		Scope:        scopeRule,
 		Runtime:      runtimeBinding,
+		Metadata:     def.Metadata,
 	}
 	if err := i.container.ToolRegistry.Replace(ctx, toolDef); err != nil {
 		return fmt.Errorf("activate tool %s: %w", toolID, err)
+	}
+	if i.container.ScopeManager != nil {
+		if err := ensureScopeBinding(ctx, i.container.ScopeManager, scope.SubjectTool, toolID, scope.NewExtensionScope(string(contrib.ExtensionID))); err != nil {
+			_ = i.container.ToolRegistry.Unregister(ctx, toolID)
+			return fmt.Errorf("bind tool scope %s: %w", toolID, err)
+		}
 	}
 	return nil
 }
@@ -1478,7 +1565,7 @@ func (i *TypedContributionInstaller) activateWorkflow(ctx context.Context, contr
 	return nil
 }
 
-func (i *TypedContributionInstaller) activateUI(ctx context.Context, contrib domain.ContributionDefinition) error {
+func (i *TypedContributionInstaller) activateUI(ctx context.Context, contrib domain.ContributionDefinition, generation int64) error {
 	defData, _ := json.Marshal(contrib.Definition)
 	var uiDef ui_contribution.UIContributionDefinition
 	if err := json.Unmarshal(defData, &uiDef); err != nil {
@@ -1494,6 +1581,15 @@ func (i *TypedContributionInstaller) activateUI(ctx context.Context, contrib dom
 		uiDef.ModuleID = ui_contribution.ModuleID(contrib.ModuleID)
 	}
 	if i.container.UIHost != nil {
+		if _, err := i.container.UIHost.GetContribution(uiDef.ContributionID); err != nil {
+			op, buildErr := i.buildUIContributionOp(ctx, contrib, defData, generation)
+			if buildErr != nil {
+				return fmt.Errorf("restore ui contribution %s: %w", uiDef.ContributionID, buildErr)
+			}
+			if installErr := op.doInstall(ctx); installErr != nil {
+				return fmt.Errorf("restore ui contribution %s: %w", uiDef.ContributionID, installErr)
+			}
+		}
 		if err := i.container.UIHost.Mount(uiDef.ContributionID); err != nil {
 			return fmt.Errorf("mount ui contribution %s: %w", uiDef.ContributionID, err)
 		}
@@ -1627,6 +1723,11 @@ func (i *TypedContributionInstaller) deactivateTool(ctx context.Context, contrib
 	if contributionUsesGameHostRuntime(contrib, defData) && !isSystemBuiltin(contrib.Metadata) {
 		toolID = canonicalGameHostToolID(string(contrib.ExtensionID), toolID)
 	}
+	if i.container.ScopeManager != nil {
+		if err := deleteScopeBindings(ctx, i.container.ScopeManager, scope.SubjectTool, toolID); err != nil {
+			return fmt.Errorf("remove tool scope %s: %w", toolID, err)
+		}
+	}
 	if err := i.container.ToolRegistry.Unregister(ctx, toolID); err != nil {
 		return fmt.Errorf("deactivate tool %s: %w", toolID, err)
 	}
@@ -1724,6 +1825,18 @@ func resolveExtensionBundlePath(extRoot, extensionID string) string {
 		return ""
 	}
 	safeID := strings.NewReplacer("/", "__", "\\", "__", ":", "_", "..", "_").Replace(extensionID)
+	installationsRoot := filepath.Join(extRoot, "installations", safeID)
+	if currentData, err := os.ReadFile(filepath.Join(installationsRoot, "current.json")); err == nil {
+		var current struct {
+			GenerationID string `json:"generationID"`
+		}
+		if json.Unmarshal(currentData, &current) == nil && current.GenerationID != "" {
+			candidate := filepath.Join(installationsRoot, "generations", current.GenerationID)
+			if _, err := os.Stat(filepath.Join(candidate, "manifest.json")); err == nil {
+				return candidate
+			}
+		}
+	}
 	installedRoot := filepath.Join(extRoot, "installed", safeID)
 	entries, err := os.ReadDir(installedRoot)
 	if err != nil {
@@ -1935,7 +2048,7 @@ func (i *TypedContributionInstaller) recoverInMemoryRegistrations(ctx context.Co
 		}
 		for _, uiDef := range uiDefs {
 			_ = i.container.UIHost.RegisterContribution(uiDef)
-			if i.container.PageHost != nil && (uiDef.Kind == ui_contribution.UIContributionWebPage || uiDef.Kind == ui_contribution.UIContributionSchemaPage) {
+			if i.container.PageHost != nil && strings.TrimSpace(uiDef.Entry.RuntimeID) == "" && (uiDef.Kind == ui_contribution.UIContributionWebPage || uiDef.Kind == ui_contribution.UIContributionSchemaPage) {
 				entryKind := extension_page_host.PageKindWeb
 				if uiDef.Kind == ui_contribution.UIContributionSchemaPage {
 					entryKind = extension_page_host.PageKindSchema
@@ -2211,6 +2324,11 @@ func (i *TypedContributionInstaller) discardTool(ctx context.Context, contrib do
 	}
 	if contributionUsesGameHostRuntime(contrib, defData) && !isSystemBuiltin(contrib.Metadata) {
 		toolID = canonicalGameHostToolID(string(contrib.ExtensionID), toolID)
+	}
+	if i.container.ScopeManager != nil {
+		if err := deleteScopeBindings(ctx, i.container.ScopeManager, scope.SubjectTool, toolID); err != nil {
+			return err
+		}
 	}
 	_ = i.container.ToolRegistry.Unregister(ctx, toolID)
 	return nil

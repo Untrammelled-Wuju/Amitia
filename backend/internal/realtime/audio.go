@@ -322,7 +322,7 @@ type VoiceSessionRequest struct {
 	CharacterID    string
 	Mode           ContinuousVoiceSessionMode
 	Platform       Platform
-	UserID         string
+	SpaceID        string
 	ProfileID      string
 }
 

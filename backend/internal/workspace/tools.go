@@ -32,6 +32,7 @@ func BuildWorkspaceTools() []capability.ToolDefinition {
 		buildCopyTool(),
 		buildDeleteTool(),
 		buildSearchTool(),
+		buildContextSearchTool(),
 		buildPrecisePatchTool(),
 		buildPreciseDiffTool(),
 		buildPreciseReplaceTool(),
@@ -561,7 +562,7 @@ func buildSearchTool() capability.ToolDefinition {
 			"contextBefore": {"type": "integer", "minimum": 0, "maximum": 10},
 			"contextAfter": {"type": "integer", "minimum": 0, "maximum": 10}
 		},
-		"required": ["workspaceId", "query"],
+		"required": ["query"],
 		"additionalProperties": false
 	}`)
 	outputSchema := json.RawMessage(`{
@@ -577,7 +578,7 @@ func buildSearchTool() capability.ToolDefinition {
 		ModelName:    "workspace.search",
 		Source:       capability.ToolSourceBuiltin,
 		Name:         "Workspace Search",
-		Description:  "Search for literal or regex patterns across workspace files.",
+		Description:  "Search for literal or regex patterns across the current workspace. workspaceId is optional when a conversation workspace is bound.",
 		InputSchema:  inputSchema,
 		OutputSchema: outputSchema,
 		Permissions: []capability.PermissionRequirement{
@@ -612,6 +613,45 @@ func buildSearchTool() capability.ToolDefinition {
 	}
 }
 
+func buildContextSearchTool() capability.ToolDefinition {
+	inputSchema := json.RawMessage(`{
+		"type": "object",
+		"properties": {
+			"workspaceId": {"type": "string", "minLength": 1},
+			"query": {"type": "string", "minLength": 1, "maxLength": 2000},
+			"includeGlobs": {"type": "array", "maxItems": 64, "items": {"type": "string"}},
+			"excludeGlobs": {"type": "array", "maxItems": 64, "items": {"type": "string"}},
+			"maxResults": {"type": "integer", "minimum": 1, "maximum": 200},
+			"contextLines": {"type": "integer", "minimum": 1, "maximum": 10}
+		},
+		"required": ["query"],
+		"additionalProperties": false
+	}`)
+	outputSchema := json.RawMessage(`{
+		"type": "object",
+		"properties": {
+			"matches": {"type": "array", "items": {"type": "object"}},
+			"total": {"type": "integer"},
+			"truncated": {"type": "boolean"}
+		}
+	}`)
+	return capability.ToolDefinition{
+		ID: "workspace.grep_context", ModelName: "grep_context", Source: capability.ToolSourceBuiltin,
+		Name:        "Workspace Context Search",
+		Description: "Find code relevant to a natural-language intent in the current workspace using local identifier/path/context ranking; workspaceId is optional when a conversation workspace is bound.",
+		InputSchema: inputSchema, OutputSchema: outputSchema,
+		Permissions: []capability.PermissionRequirement{{Capability: "workspace.read", Risk: "low"}},
+		RiskLevel:   capability.RiskLow, SideEffect: capability.SideEffectReadOnly, HasSideEffects: false,
+		Idempotent: true, Retryable: true, TimeoutMS: 30000,
+		ToolVersion:     capability.ToolVersion{SchemaVersion: 1, Revision: "amitia-context-search-v1"},
+		ModelExposure:   capability.ModelExposureRule{ExposedByDefault: true, Categories: []string{"workspace", "code", "search"}, Priority: 55},
+		ExecutionPolicy: capability.ToolExecutionPolicy{Timeout: 30 * time.Second, MaxConcurrency: 3, Idempotent: true, AllowBackground: true},
+		ResultPolicy:    capability.ToolResultPolicy{SanitizeError: true, MaxOutputBytes: 196608, Streaming: capability.ToolStreamingPolicy{Enabled: false}},
+		Runtime:         capability.RuntimeBinding{RuntimeType: workspaceRuntime.RuntimeType, RuntimeID: workspaceRuntime.RuntimeID, HandlerName: "workspace.grep_context"},
+		Enabled:         true,
+	}
+}
+
 func buildPrecisePatchTool() capability.ToolDefinition {
 	inputSchema := json.RawMessage(`{
 		"type": "object",
@@ -621,7 +661,7 @@ func buildPrecisePatchTool() capability.ToolDefinition {
 			"baseSha256": {"type": "string"},
 			"patch": {"type": "string"}
 		},
-		"required": ["workspaceId", "filePath", "patch"],
+		"required": ["filePath", "patch"],
 		"additionalProperties": false
 	}`)
 	outputSchema := json.RawMessage(`{
@@ -637,7 +677,7 @@ func buildPrecisePatchTool() capability.ToolDefinition {
 		ModelName:    "workspace.patch",
 		Source:       capability.ToolSourceBuiltin,
 		Name:         "Workspace Patch",
-		Description:  "Apply a unified-diff patch to a workspace file with integrity verification.",
+		Description:  "Apply a unified-diff patch to a file in the current workspace with integrity verification. workspaceId is optional when a conversation workspace is bound.",
 		InputSchema:  inputSchema,
 		OutputSchema: outputSchema,
 		Permissions: []capability.PermissionRequirement{
@@ -680,7 +720,7 @@ func buildPreciseDiffTool() capability.ToolDefinition {
 			"beforeFiles": {"type": "object"},
 			"afterFiles": {"type": "object"}
 		},
-		"required": ["workspaceId"],
+		"required": [],
 		"additionalProperties": false
 	}`)
 	outputSchema := json.RawMessage(`{
@@ -697,7 +737,7 @@ func buildPreciseDiffTool() capability.ToolDefinition {
 		ModelName:    "workspace.diff",
 		Source:       capability.ToolSourceBuiltin,
 		Name:         "Workspace Diff",
-		Description:  "Compute unified diff between before and after file snapshots.",
+		Description:  "Compute unified diff between before and after file snapshots in the current workspace. workspaceId is optional when a conversation workspace is bound.",
 		InputSchema:  inputSchema,
 		OutputSchema: outputSchema,
 		Permissions: []capability.PermissionRequirement{
@@ -742,7 +782,7 @@ func buildPreciseReplaceTool() capability.ToolDefinition {
 			"newText": {"type": "string"},
 			"expectedOccurrences": {"type": "integer", "minimum": 0}
 		},
-		"required": ["workspaceId", "filePath", "oldText"],
+		"required": ["filePath", "oldText"],
 		"additionalProperties": false
 	}`)
 	outputSchema := json.RawMessage(`{
@@ -758,7 +798,7 @@ func buildPreciseReplaceTool() capability.ToolDefinition {
 		ModelName:    "workspace.replace",
 		Source:       capability.ToolSourceBuiltin,
 		Name:         "Workspace Replace",
-		Description:  "Perform exact text replacement in a workspace file with occurrence validation.",
+		Description:  "Perform exact text replacement in the current workspace with occurrence validation. workspaceId is optional when a conversation workspace is bound.",
 		InputSchema:  inputSchema,
 		OutputSchema: outputSchema,
 		Permissions: []capability.PermissionRequirement{
@@ -794,8 +834,8 @@ func buildPreciseReplaceTool() capability.ToolDefinition {
 }
 
 type ToolDispatcher struct {
-	service  *Service
-	precise  PreciseEditingService
+	service *Service
+	precise PreciseEditingService
 }
 
 func NewToolDispatcher(service *Service) *ToolDispatcher {
@@ -828,6 +868,8 @@ func (d *ToolDispatcher) Dispatch(ctx context.Context, handlerName string, input
 		return d.handleDelete(ctx, input)
 	case "workspace.search":
 		return d.handleSearch(ctx, input)
+	case "workspace.grep_context":
+		return d.handleContextSearch(ctx, input)
 	case "workspace.patch":
 		return d.handlePrecisePatch(ctx, input)
 	case "workspace.diff":
@@ -1047,6 +1089,18 @@ func (d *ToolDispatcher) handleSearch(ctx context.Context, input json.RawMessage
 		"total":     result.Total,
 		"truncated": result.Truncated,
 	})
+}
+
+func (d *ToolDispatcher) handleContextSearch(ctx context.Context, input json.RawMessage) (json.RawMessage, error) {
+	var req ContextSearchRequest
+	if err := json.Unmarshal(input, &req); err != nil {
+		return nil, err
+	}
+	result, err := ContextSearch(ctx, d.service, req)
+	if err != nil {
+		return nil, err
+	}
+	return json.Marshal(result)
 }
 
 func (d *ToolDispatcher) handlePrecisePatch(ctx context.Context, input json.RawMessage) (json.RawMessage, error) {

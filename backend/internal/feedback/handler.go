@@ -6,6 +6,7 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"github.com/u-ai/backend/internal/requestidentity"
 	"github.com/u-ai/backend/pkg/comment/response"
 	"github.com/u-ai/backend/pkg/util"
 )
@@ -25,7 +26,7 @@ func (h *Handler) Create(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
 		return
 	}
-	fb, err := h.service.Create(msgID, &req)
+	fb, err := h.service.CreateForSpace(msgID, requestidentity.ResolveGin(c), &req)
 	if err != nil {
 		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
 		return
@@ -35,16 +36,20 @@ func (h *Handler) Create(c *gin.Context) {
 
 func (h *Handler) GetByMessage(c *gin.Context) {
 	msgID := c.Param("id")
-	items, err := h.service.GetByMessage(msgID)
+	items, err := h.service.GetByMessageForSpace(msgID, requestidentity.ResolveGin(c))
 	if err != nil {
-		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
+		util.ErrorResponse(c, response.NotFound, "反馈不存在", nil)
 		return
 	}
 	util.SuccessResponse(c, items)
 }
 
 func (h *Handler) Stats(c *gin.Context) {
-	stats := h.service.GetStats()
+	stats, err := h.service.GetStats()
+	if err != nil {
+		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
+		return
+	}
 	util.SuccessResponse(c, stats)
 }
 
@@ -62,9 +67,13 @@ func (h *Handler) Recent(c *gin.Context) {
 }
 
 func (h *Handler) Delete(c *gin.Context) {
-	id, _ := strconv.Atoi(c.Param("id"))
-	if err := h.service.Delete(id); err != nil {
-		util.ErrorResponse(c, response.NotFound, err.Error(), nil)
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil || id <= 0 {
+		util.ErrorResponse(c, response.InvalidParams, "无效反馈 ID", nil)
+		return
+	}
+	if err := h.service.DeleteForSpace(id, requestidentity.ResolveGin(c)); err != nil {
+		util.ErrorResponse(c, response.NotFound, "反馈不存在", nil)
 		return
 	}
 	util.SuccessResponse(c, nil)

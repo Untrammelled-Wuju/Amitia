@@ -24,8 +24,7 @@ type ActionRevisionActivatedEvent struct {
 	BindingRevision    int64  `json:"bindingRevision"`
 	PreviousRevisionID string `json:"previousRevisionId"`
 	ActionKey          string `json:"actionKey"`
-	UserID             string `json:"userId"`
-	CharacterID        string `json:"characterId"`
+	SpaceID            string `json:"spaceId"`
 	OccurredAt         string `json:"occurredAt"`
 }
 
@@ -147,21 +146,16 @@ func (c *EvaluationInboxConsumer) handleActivated(ctx context.Context, record Ac
 		return fmt.Errorf("claim quality evaluation inbox: %w", err)
 	}
 
-	userID := revision.UserID
-	if userID == "" {
-		userID = evt.UserID
+	spaceID := revision.SpaceID
+	if spaceID == "" {
+		spaceID = evt.SpaceID
 	}
-	characterID := revision.CharacterID
-	if characterID == "" {
-		characterID = evt.CharacterID
-	}
-	if userID == "" || characterID == "" {
+	if spaceID == "" {
 		return c.failInbox(ctx, inbox.ID, fmt.Errorf("quality inbox missing ownership identity for revision %s", revision.ID))
 	}
 
 	_, createErr := c.qualitySvc.CreateEvaluation(ctx, quality.CreateEvaluationRequest{
-		UserID:               userID,
-		CharacterID:          characterID,
+		SpaceID:              spaceID,
 		ProcessingTaskID:     revision.ProcessingTaskID,
 		ProcessingActionID:   revision.ProcessingActionID,
 		ActionRevisionID:     revision.ID,

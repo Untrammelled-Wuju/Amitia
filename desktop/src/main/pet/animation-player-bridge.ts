@@ -165,7 +165,7 @@ export class AnimationPlayerBridge implements DesktopPetPlayerPort, PlayerLifecy
     // Deliver the interruption reason before clearing local mirrors. Renderer
     // playback identity remains authoritative for the terminal event when IPC
     // succeeds; on delivery failure, surface a bridge failure so Manager can
-    // terminalize the already-accepted Runtime v2 play command itself.
+    // terminalize the already-accepted Runtime v1 play command itself.
     const result = this.animationIpc?.sendStop(reason);
     if (result && result.status !== "delivered" && action) {
       this.callbacks.onActionFailed?.(

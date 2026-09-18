@@ -23,6 +23,7 @@ import (
 type StorageRootKind string
 
 const (
+	RootDesktopPets         StorageRootKind = "desktop_pets"
 	RootGenerationArtifacts StorageRootKind = "generation_artifacts"
 	RootProcessingRevisions StorageRootKind = "processing_revisions"
 	RootEditingAssets       StorageRootKind = "editing_assets"
@@ -37,6 +38,7 @@ const (
 )
 
 var requiredRootKinds = []StorageRootKind{
+	RootDesktopPets,
 	RootGenerationArtifacts,
 	RootProcessingRevisions,
 	RootEditingAssets,
@@ -57,6 +59,7 @@ func AllRequiredRootKinds() []StorageRootKind {
 }
 
 var defaultRelativePaths = map[StorageRootKind]string{
+	RootDesktopPets:         "desktop-pets",
 	RootGenerationArtifacts: "desktop-pets/generation-artifacts",
 	RootProcessingRevisions: "desktop-pets/processing-revisions",
 	RootEditingAssets:       "desktop-pets/editing-assets",
@@ -330,13 +333,13 @@ func checkWritable(dir string) error {
 }
 
 type ArtifactReference struct {
-	ArtifactID  string
-	OwnerUserID string
-	RootKind    StorageRootKind
-	StorageKey  string
-	ContentHash string
-	ByteSize    int64
-	MIME        string
+	ArtifactID   string
+	OwnerSpaceID string
+	RootKind     StorageRootKind
+	StorageKey   string
+	ContentHash  string
+	ByteSize     int64
+	MIME         string
 }
 
 type SafeArtifactResponder struct {
@@ -352,7 +355,7 @@ type SafeTreeDeleter interface {
 }
 
 func (s *SafeArtifactResponder) ServeArtifact(c *gin.Context, actor *auth.ActorContext, ref ArtifactReference) {
-	if actor == nil || ref.OwnerUserID == "" || string(actor.UserID) != ref.OwnerUserID {
+	if actor == nil || ref.OwnerSpaceID == "" || string(actor.SpaceID) != ref.OwnerSpaceID {
 		c.Status(http.StatusNotFound)
 		return
 	}

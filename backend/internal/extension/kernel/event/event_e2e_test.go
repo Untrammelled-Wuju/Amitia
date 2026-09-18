@@ -588,6 +588,9 @@ func TestEventE2E_AllConditionsMet_DeliverySucceeds(t *testing.T) {
 	eventID := publishTestEvent(t, svc, "system.test")
 
 	if !waitForDeliveryStatus(svc, eventID, DeliveryStatusSucceeded, 5*time.Second) {
+		if outbox, err := svc.GetOutboxByEventID(context.Background(), eventID); err == nil {
+			t.Logf("outbox=%+v", outbox)
+		}
 		deliveries, _ := svc.ListDeliveriesByEvent(context.Background(), eventID)
 		for _, d := range deliveries {
 			t.Logf("delivery %s status=%s code=%s msg=%s", d.DeliveryID, d.Status, d.ErrorCode, d.ErrorMessage)
@@ -949,7 +952,7 @@ func TestEventE2E_UpdateGenerationAtomic(t *testing.T) {
 }
 
 func TestProjection_SensitiveFields(t *testing.T) {
-	def := DefaultHostEventTypes()[0]
+	def := messageCreatedEventType(t)
 	projector := NewPayloadProjector(def)
 	payload, _ := json.Marshal(map[string]any{
 		"messageId":      "msg-1",
@@ -983,7 +986,7 @@ func TestProjection_SensitiveFields(t *testing.T) {
 }
 
 func TestProjection_SensitiveFields_NoPermission(t *testing.T) {
-	def := DefaultHostEventTypes()[0]
+	def := messageCreatedEventType(t)
 	projector := NewPayloadProjector(def)
 	payload, _ := json.Marshal(map[string]any{
 		"messageId": "msg-1",
@@ -1010,6 +1013,17 @@ func TestProjection_SensitiveFields_NoPermission(t *testing.T) {
 			t.Errorf("expected sensitive field text to be masked without permission, got %q", s)
 		}
 	}
+}
+
+func messageCreatedEventType(t *testing.T) EventTypeDefinition {
+	t.Helper()
+	for _, def := range DefaultHostEventTypes() {
+		if def.EventTypeID == "message.created" {
+			return def
+		}
+	}
+	t.Fatal("message.created event type not found")
+	return EventTypeDefinition{}
 }
 
 func TestPublish_SchemaValidation_Rejected(t *testing.T) {

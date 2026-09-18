@@ -11,20 +11,16 @@ export { default as ChatInput } from "./components/ChatInput.vue";
 export { default as ErrorPanel } from "./components/ErrorPanel.vue";
 
 // Shared Views
-export { default as LoginView } from "./views/login/LoginView.vue";
 export { default as WebChatView } from "./views/web-chat/WebChatView.vue";
-export { default as WechatConnectView } from "./views/wechat-connect/WechatConnectView.vue";
 export { default as ModelConfigView } from "./views/model-config/ModelConfigView.vue";
 export { default as CharacterConfigView } from "./views/character-config/CharacterConfigView.vue";
 export { default as CharacterVoiceView } from "./views/character-voice/CharacterVoiceView.vue";
 export { default as MemoryManagerView } from "./views/memory-manager/MemoryManagerView.vue";
 export { default as MemoryTimelineView } from "./views/memory-timeline/MemoryTimeline.vue";
 export { default as AiCharacterSettingsView } from "./views/ai-character-settings/AiCharacterSettingsView.vue";
-export { default as CompanionDebugView } from "./views/companion-debug/CompanionDebugView.vue";
-export { default as ProactiveRulesView } from "./views/proactive-rules/ProactiveRules.vue";
-export { default as RemindersView } from "./views/reminders/Reminders.vue";
 export { default as ChatLogsView } from "./views/chat-logs/ChatLogsView.vue";
 export { default as ChatImportView } from "./views/chat-import/ChatImportView.vue";
+export { default as RemindersView } from "./views/reminders/Reminders.vue";
 export { default as SafetySettingsView } from "./views/safety-settings/SafetySettingsView.vue";
 export { default as SettingsView } from "./views/settings/SettingsView.vue";
 export { default as ChatCleanupView } from "./views/chat-cleanup/ChatCleanupView.vue";

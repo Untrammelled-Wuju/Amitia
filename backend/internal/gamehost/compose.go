@@ -927,8 +927,45 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 	if err != nil {
 		return nil, fmt.Errorf("compose game agent bridge: %w", err)
 	}
+	gameAgentBridge.SetRuntimeStarter(runtimeExecutor)
 	agentEventSink := notification.NewAgentEventSink(gameAgentBridge.SessionRegistry())
 	notifComposite.Add(agentEventSink)
+
+	container := &GameHostContainer{
+		DirectoryManager:         dirMgr,
+		CheckpointStore:          checkpointStore,
+		ConfigStore:              configStore,
+		ConfigResolver:           configResolver,
+		ArtifactManager:          artifactManager,
+		PluginRegistry:           pluginReg,
+		ContributionSync:         contributionSync,
+		RuntimeManager:           runtimeManager,
+		RuntimeTopologyStore:     topologyStore,
+		RuntimeReadiness:         runtimeReadiness,
+		RuntimeHealth:            runtimeHealth,
+		RuntimeExecutor:          runtimeExecutor,
+		RuntimeProvisioner:       runtimeProvisioner,
+		NamespaceRegistry:        nsReg,
+		HandshakeManager:         handshakeMgr,
+		ReadyGate:                readyGate,
+		ConnectionRegistry:       connReg,
+		ControlPlane:             controlPlane,
+		AgentBridge:              gameAgentBridge,
+		RPCDispatcher:            rpcDispatcher,
+		RPCLifecycle:             rpcLifecycle,
+		HostHandlerRegistry:      hostHandlers,
+		ChannelRegistry:          channelReg,
+		OutboundChannels:         outboundChannels,
+		NotificationBridge:       notifBridge,
+		AgentEventSink:           agentEventSink,
+		StateStore:               stateStore,
+		BinaryObjectRegistry:     binaryReg,
+		BinaryResolver:           binaryResolver,
+		BinaryTransfer:           binaryTransfer,
+		StreamManager:            streamMgr,
+		procAdapter:              procAdapter,
+		HostAPIGateway:           opts.HostAPIGateway,
+		HostAPIInvocationTracker: emergencyHostAPITracker,
 
 	container := &GameHostContainer{
 		DirectoryManager:         dirMgr,

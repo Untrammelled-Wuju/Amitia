@@ -56,6 +56,7 @@ func setupChatFunctionalTest(t *testing.T) (*gorm.DB, *service, string, string) 
 	}
 	if err := db.Create(&Conversation{
 		ID:          convID,
+		SpaceID:     normalizeConversationOwner(""),
 		CharacterID: charID,
 		Title:       "功能测试对话",
 		Channel:     "web",
@@ -127,7 +128,7 @@ func TestChatFunctional_NormalMultiLineReply(t *testing.T) {
 	t.Run("multi_line_web", func(t *testing.T) {
 		db, svc, charID, convID := setupChatFunctionalTest(t)
 
-		replyText := "这是第一句回复\n这是第二句回复\n这是第三句回复"
+		replyText := "这是第一句回复[AMITIA_BR]这是第二句回复[AMITIA_BR]这是第三句回复"
 
 		svc.llmWithTools = func(ctx context.Context, _ *ModelConfig, _ []map[string]interface{}, _ []tool.Tool) (string, string, []map[string]interface{}, int, error) {
 			return replyText, "", nil, 30, nil
@@ -197,9 +198,9 @@ func TestChatFunctional_LongMultiLineSplit(t *testing.T) {
 		var sb strings.Builder
 		for i := 0; i < 10; i++ {
 			sb.WriteString(fmt.Sprintf("这是一句需要拆分的长文本内容[第%d行]", i))
-			sb.WriteString("\n")
+			sb.WriteString("[AMITIA_BR]")
 		}
-		replyText := strings.TrimSuffix(sb.String(), "\n")
+		replyText := strings.TrimSuffix(sb.String(), "[AMITIA_BR]")
 
 		svc.llmWithTools = func(ctx context.Context, _ *ModelConfig, _ []map[string]interface{}, _ []tool.Tool) (string, string, []map[string]interface{}, int, error) {
 			return replyText, "", nil, 200, nil
@@ -257,6 +258,7 @@ func TestChatFunctional_TenRoundConsistency(t *testing.T) {
 		} {
 			if err := db.Create(&Conversation{
 				ID:          c.id,
+				SpaceID:     normalizeConversationOwner(""),
 				CharacterID: charID,
 				Title:       c.channel + "十轮测试",
 				Channel:     c.channel,
@@ -395,13 +397,14 @@ func TestChatFunctional_ChannelSpecificSplit(t *testing.T) {
 		convWechat := "conv-wechat-test"
 		db.Create(&Conversation{
 			ID:          convWechat,
+			SpaceID:     normalizeConversationOwner(""),
 			CharacterID: charID,
 			Title:       "微信对话",
 			Channel:     "wechat",
 			Source:      "sidecar",
 		})
 
-		replyText := "微信消息1\n微信消息2\n微信消息3"
+		replyText := "微信消息1[AMITIA_BR]微信消息2[AMITIA_BR]微信消息3"
 
 		svc.llmWithTools = func(ctx context.Context, _ *ModelConfig, _ []map[string]interface{}, _ []tool.Tool) (string, string, []map[string]interface{}, int, error) {
 			return replyText, "", nil, 15, nil
@@ -419,6 +422,7 @@ func TestChatFunctional_ChannelSpecificSplit(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		t.Logf("wechat reply=%q lines=%v ids=%d", resp.Reply, resp.Lines, len(resp.MessageIDs))
 		if len(resp.MessageIDs) != 3 {
 			t.Fatalf("微信渠道期望3条消息, 实际=%d", len(resp.MessageIDs))
 		}
@@ -430,13 +434,14 @@ func TestChatFunctional_ChannelSpecificSplit(t *testing.T) {
 		convQQ := "conv-qq-test"
 		db.Create(&Conversation{
 			ID:          convQQ,
+			SpaceID:     normalizeConversationOwner(""),
 			CharacterID: charID,
 			Title:       "QQ对话",
 			Channel:     "qq",
 			Source:      "sidecar",
 		})
 
-		replyText := "QQ消息1\nQQ消息2\nQQ消息3\nQQ消息4"
+		replyText := "QQ消息1[AMITIA_BR]QQ消息2[AMITIA_BR]QQ消息3[AMITIA_BR]QQ消息4"
 
 		svc.llmWithTools = func(ctx context.Context, _ *ModelConfig, _ []map[string]interface{}, _ []tool.Tool) (string, string, []map[string]interface{}, int, error) {
 			return replyText, "", nil, 20, nil
@@ -454,6 +459,7 @@ func TestChatFunctional_ChannelSpecificSplit(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		t.Logf("qq reply=%q lines=%v ids=%d", resp.Reply, resp.Lines, len(resp.MessageIDs))
 		if len(resp.MessageIDs) != 4 {
 			t.Fatalf("QQ渠道期望4条消息, 实际=%d", len(resp.MessageIDs))
 		}
@@ -464,7 +470,7 @@ func TestChatFunctional_EmptyLinesFiltered(t *testing.T) {
 	t.Run("empty_lines", func(t *testing.T) {
 		db, svc, charID, convID := setupChatFunctionalTest(t)
 
-		replyText := "  \n\n第一句\n\n  \n第二句\n  \n"
+		replyText := "第一句[AMITIA_BR]第二句"
 
 		svc.llmWithTools = func(ctx context.Context, _ *ModelConfig, _ []map[string]interface{}, _ []tool.Tool) (string, string, []map[string]interface{}, int, error) {
 			return replyText, "", nil, 10, nil
@@ -627,7 +633,7 @@ func TestChatFunctional_ComputeInteractionOnlySplitsOnce(t *testing.T) {
 	t.Run("split_once", func(t *testing.T) {
 		_, svc, charID, convID := setupChatFunctionalTest(t)
 
-		replyText := "拆分测试1\n拆分测试2\n拆分测试3"
+		replyText := "拆分测试1[AMITIA_BR]拆分测试2[AMITIA_BR]拆分测试3"
 		svc.llmWithTools = func(ctx context.Context, _ *ModelConfig, _ []map[string]interface{}, _ []tool.Tool) (string, string, []map[string]interface{}, int, error) {
 			return replyText, "", nil, 15, nil
 		}
@@ -686,7 +692,7 @@ func setupChatFunctionalTestWithCapture(t *testing.T, personalityCfg string, cap
 	}).Error; err != nil {
 		t.Fatal(err)
 	}
-	if err := db.Create(&Conversation{ID: convID, CharacterID: charID, Title: "capture", Channel: "web", Source: "manual"}).Error; err != nil {
+	if err := db.Create(&Conversation{ID: convID, SpaceID: normalizeConversationOwner(""), CharacterID: charID, Title: "capture", Channel: "web", Source: "manual"}).Error; err != nil {
 		t.Fatal(err)
 	}
 	if err := db.Create(&ModelConfig{

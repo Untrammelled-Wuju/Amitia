@@ -87,6 +87,7 @@ func (h *LocalHandler) RegisterRoutes(r *gin.Engine, authMW gin.HandlerFunc) {
 	dm.GET("/identity", h.handleIdentity)
 	dm.POST("/bootstrap", h.handleBootstrap)
 	dm.GET("/status", h.handleStatus)
+	dm.GET("/cloud-auth", h.handleCloudAuth)
 	dm.DELETE("/credential", h.handleDeleteCredential)
 }
 
@@ -137,7 +138,7 @@ func (h *LocalHandler) handleBootstrap(c *gin.Context) {
 		CloudBaseUrl: req.CloudBaseURL,
 		CredentialID: resp.CredentialID,
 		Credential:   resp.Credential,
-		UserID:       runtimeidentity.UserID(resp.UserID),
+		SpaceID:      runtimeidentity.SpaceID(resp.SpaceID),
 		DeviceID:     runtimeidentity.DeviceID(resp.DeviceID),
 		RuntimeID:    runtimeidentity.RuntimeID(resp.RuntimeID),
 		ExpiresAt:    expiresAt,
@@ -172,7 +173,7 @@ func (h *LocalHandler) handleBootstrap(c *gin.Context) {
 	newMesh := NewMeshClient(MeshClientConfig{
 		CloudBaseURL:      req.CloudBaseURL,
 		Credential:        resp.Credential,
-		UserID:            cred.UserID,
+		SpaceID:           cred.SpaceID,
 		Identity:          id,
 		Cursor:            cursor,
 		RuntimeDispatcher: h.dispatcher,
@@ -241,6 +242,30 @@ func (h *LocalHandler) handleStatus(c *gin.Context) {
 	}
 
 	c.JSON(200, resp)
+}
+
+func (h *LocalHandler) handleCloudAuth(c *gin.Context) {
+	cred, err := h.credStore.LoadCredential()
+	if err != nil {
+		c.JSON(500, gin.H{"code": "credential_load_failed", "message": err.Error()})
+		return
+	}
+	if cred == nil || cred.Credential == "" {
+		c.JSON(404, gin.H{"code": "mesh.credential_missing", "message": "device is not paired with a cloud core"})
+		return
+	}
+	if !cred.ExpiresAt.IsZero() && !time.Now().UTC().Before(cred.ExpiresAt) {
+		c.JSON(401, gin.H{"code": "mesh.credential_expired", "message": "device credential has expired"})
+		return
+	}
+	c.JSON(200, gin.H{
+		"authorization": "AmitiaDevice " + cred.Credential,
+		"cloudBaseUrl":  cred.CloudBaseUrl,
+		"spaceId":       cred.SpaceID.String(),
+		"deviceId":      cred.DeviceID.String(),
+		"runtimeId":     cred.RuntimeID.String(),
+		"expiresAt":     cred.ExpiresAt.UTC().Format(time.RFC3339Nano),
+	})
 }
 
 func (h *LocalHandler) handleDeleteCredential(c *gin.Context) {

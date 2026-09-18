@@ -19,7 +19,7 @@ func TestSystemTime_FallbackWhenNoTemporalService(t *testing.T) {
 
 func TestSystemTime_ForcesCanonicalUser(t *testing.T) {
 	result := (&service{}).systemTimeResult(map[string]interface{}{
-		"userId": "random-user-abc",
+		"spaceId": "random-user-abc",
 	})
 	_, hasUserLocal := result["userLocal"]
 	if hasUserLocal {
@@ -28,9 +28,9 @@ func TestSystemTime_ForcesCanonicalUser(t *testing.T) {
 }
 
 func TestSystemTime_IgnoresBodyUserId(t *testing.T) {
-	_ = requestidentity.DefaultUserID
+	_ = requestidentity.LegacySpaceID
 	result := (&service{}).systemTimeResult(map[string]interface{}{
-		"userId":      "attacker-id",
+		"spaceId":     "attacker-id",
 		"characterId": "char-1",
 	})
 	if result["source"] != "system-fallback" {

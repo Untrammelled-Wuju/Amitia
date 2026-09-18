@@ -116,8 +116,8 @@ func TestBaseline_E2E_AllExtensionsHaveValidManifest(t *testing.T) {
 			if err := json.Unmarshal(data, &manifest); err != nil {
 				t.Fatalf("manifest.json must be valid JSON: %v", err)
 			}
-			if manifest["manifestVersion"] != float64(2) {
-				t.Fatalf("manifestVersion must be 2, got %v", manifest["manifestVersion"])
+			if manifest["manifestVersion"] != float64(1) {
+				t.Fatalf("manifestVersion must be 1, got %v", manifest["manifestVersion"])
 			}
 			ext, ok := manifest["extension"].(map[string]any)
 			if !ok {

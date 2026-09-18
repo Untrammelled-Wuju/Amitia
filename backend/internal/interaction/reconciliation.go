@@ -31,7 +31,7 @@ type AgentInvocationRef struct {
 }
 
 type AgentReconciliationSnapshot struct {
-	UserID         string                 `json:"userId"`
+	SpaceID        string                 `json:"spaceId"`
 	CharacterID    string                 `json:"characterId"`
 	ConversationID string                 `json:"conversationId"`
 	InteractionID  string                 `json:"interactionId"`
@@ -45,7 +45,7 @@ type AgentReconciliationSnapshot struct {
 
 type GoalReconciliationReader interface {
 	GetGoal(ctx context.Context, goalID string) (decision.Goal, bool)
-	ActiveForScope(ctx context.Context, userID, characterID, conversationID string) []decision.Goal
+	ActiveForScope(ctx context.Context, spaceID, characterID, conversationID string) []decision.Goal
 }
 
 type TaskReconciliationReader interface {
@@ -72,7 +72,7 @@ type AgentReconciliationProcessor interface {
 }
 
 type ReconciliationCaptureScope struct {
-	UserID         string
+	SpaceID        string
 	CharacterID    string
 	ConversationID string
 	InteractionID  string

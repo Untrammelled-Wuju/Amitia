@@ -16,15 +16,23 @@ export interface HookResult {
 }
 
 export interface HookContext {
-  invocationId: string;
+  traceId: string;
   operationId: string;
+  invocationId: string;
   extensionId: string;
-  userId: string;
-  characterId: string;
-  conversationId: string;
-  sessionId: string;
-  channel: string;
+  spaceId: string;
+  deviceId?: string;
+  runtimeId?: string;
+  principalType?: string;
+  characterId?: string;
+  conversationId?: string;
+  messageId?: string;
+  scopeSnapshotId: string;
+  permissionSnapshotId: string;
+  platform: string;
   timestamp: string;
+  depth: number;
+  parentHookId?: string;
 }
 
 export interface HookHandler {

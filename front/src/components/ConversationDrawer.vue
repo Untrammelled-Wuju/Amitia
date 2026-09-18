@@ -5,7 +5,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 <template>
   <el-drawer
     :model-value="visible"
-    @update:model-value="(val: boolean) => emit('update:visible', val)"
+    @update:model-value="(val: boolean) => $emit('update:visible', val)"
     :title="drawerTitle"
     :size="isMobile ? '100%' : '360px'"
     direction="ltr"
@@ -14,32 +14,6 @@ SPDX-License-Identifier: AGPL-3.0-only
     modal-class="workbench-drawer-modal"
   >
     <div :class="{ 'mobile-drawer-body': isMobile }">
-      <div v-if="wechatOnline || qqOnline" class="drawer-section">
-        <div class="section-label">频道对话</div>
-        <button
-          v-if="wechatOnline"
-          type="button"
-          class="drawer-row"
-          :class="{ active: isWechatActive }"
-          @click.stop="onSelectWechat"
-        >
-          <el-icon class="channel-icon"><ChatDotRound /></el-icon>
-          <span class="row-copy"><strong>微信对话</strong><small>{{ wechatMsgCount || 0 }} 条消息</small></span>
-          <span class="row-tag">微信</span>
-        </button>
-        <button
-          v-if="qqOnline"
-          type="button"
-          class="drawer-row"
-          :class="{ active: isQQActive }"
-          @click.stop="onSelectQQ"
-        >
-          <el-icon class="channel-icon"><ChatDotSquare /></el-icon>
-          <span class="row-copy"><strong>QQ 对话</strong><small>{{ qqMsgCount || 0 }} 条消息</small></span>
-          <span class="row-tag">QQ</span>
-        </button>
-      </div>
-
       <div v-if="webConversations.length" class="drawer-section">
         <div class="section-label">最近对话</div>
         <button
@@ -47,7 +21,7 @@ SPDX-License-Identifier: AGPL-3.0-only
           :key="conversation.id"
           type="button"
           class="drawer-row conversation-row"
-          :class="{ active: conversation.id === activeConvId && !isWechatActive && !isQQActive }"
+          :class="{ active: conversation.id === activeConvId }"
           @click="$emit('selectConv', conversation)"
         >
           <el-icon><ChatLineRound /></el-icon>
@@ -66,7 +40,7 @@ SPDX-License-Identifier: AGPL-3.0-only
             :key="c.id"
             type="button"
             class="char-item"
-            :class="{ active: c.id === activeCharId && !isWechatActive && !isQQActive }"
+            :class="{ active: c.id === activeCharId }"
             @click="$emit('selectChar', c)"
           >
             <el-avatar :size="30" :src="c.avatar || undefined">{{ c.name?.charAt(0) }}</el-avatar>
@@ -99,7 +73,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 <script setup lang="ts">
 import { computed } from "vue";
-import { Upload, ChatDotRound, ChatDotSquare, ChatLineRound } from "@element-plus/icons-vue";
+import { Upload, ChatLineRound } from "@element-plus/icons-vue";
 
 const props = defineProps<{
   visible: boolean;
@@ -108,20 +82,12 @@ const props = defineProps<{
   importBatches: any[];
   activeCharId: string;
   activeConvId?: string;
-  wechatMsgCount: number;
-  isWechatActive: boolean;
-  wechatOnline: boolean;
-  qqMsgCount: number;
-  isQQActive: boolean;
-  qqOnline: boolean;
 }>();
 
-const emit = defineEmits<{
+defineEmits<{
   "update:visible": [val: boolean];
   selectChar: [char: any];
   selectConv: [conversation: any];
-  selectWechat: [];
-  selectQQ: [];
   continueImport: [batch: any];
 }>();
 
@@ -133,8 +99,6 @@ const webConversations = computed(() =>
     .slice(0, 20),
 );
 
-function onSelectWechat() { emit("selectWechat"); }
-function onSelectQQ() { emit("selectQQ"); }
 </script>
 
 <style scoped>

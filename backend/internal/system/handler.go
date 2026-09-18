@@ -20,12 +20,12 @@ import (
 	"gorm.io/gorm"
 )
 
-// SystemFormatInstruction is injected into every LLM call to enforce WeChat-style line splitting.
+// SystemFormatInstruction enforces the host response line splitting contract.
 // It is NOT part of any character prompt and cannot be modified per character.
 const SystemFormatInstruction = `【回复格式 - 系统固定规则】
 
 每句话必须单独一行，用换行符分隔。
-每句话尽量短，像微信连续消息一样。
+每句话尽量短。
 能一句说完就一句，不要写长段落。
 不要把多句话连成一段。
 不要用句号连接多个意思。`

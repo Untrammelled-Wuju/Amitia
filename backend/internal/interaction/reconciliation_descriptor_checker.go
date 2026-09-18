@@ -117,7 +117,7 @@ func descriptorScopeMatch(filter *mindruntime.ReconciliationScope, scope Interac
 	}
 	norm := scope.Normalize()
 	switch {
-	case filter.UserID != "" && norm.UserID != filter.UserID:
+	case filter.SpaceID != "" && norm.SpaceID != filter.SpaceID:
 		return false
 	case filter.CharacterID != "" && norm.CharacterID != filter.CharacterID:
 		return false

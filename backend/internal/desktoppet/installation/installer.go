@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/u-ai/backend/internal/character"
 	"github.com/u-ai/backend/internal/desktoppet"
 	"github.com/u-ai/backend/internal/desktoppet/processing"
 	"gorm.io/gorm"
@@ -54,31 +53,29 @@ var installationExecutableExtensions = map[string]bool{
 }
 
 type Installer interface {
-	InstallPackage(packageId, userId, characterId string) (*Installation, error)
+	InstallPackage(packageId, spaceId string) (*Installation, error)
 }
 
 type installer struct {
 	repo        Repository
 	packageRepo processing.Repository
-	charRepo    character.Repository
 	dataDir     string
 }
 
 // DEPRECATED: legacy package installer retained for migration/tests; production writes are blocked and use InstallationCoordinator.
-func NewInstaller(repo Repository, packageRepo processing.Repository, charRepo character.Repository, dataDir string) Installer {
+func NewInstaller(repo Repository, packageRepo processing.Repository, dataDir string) Installer {
 	return &installer{
 		repo:        repo,
 		packageRepo: packageRepo,
-		charRepo:    charRepo,
 		dataDir:     dataDir,
 	}
 }
 
-func (s *installer) InstallPackage(packageId, userId, characterId string) (*Installation, error) {
+func (s *installer) InstallPackage(packageId, spaceId string) (*Installation, error) {
 	if desktoppet.IsLegacyInstallationWriteDisabled() {
 		return nil, NewInstallationError(ErrCodeInstallationFailed, "旧版 Installation 写入已禁用，请使用 InstallationCoordinator", nil)
 	}
-	if packageId == "" || userId == "" || characterId == "" {
+	if packageId == "" || spaceId == "" {
 		return nil, NewInstallationError(ErrCodeInstallationFailed, "安装参数为空", nil)
 	}
 
@@ -90,7 +87,7 @@ func (s *installer) InstallPackage(packageId, userId, characterId string) (*Inst
 		return nil, NewInstallationError(ErrCodeInstallationFailed, "获取资源包失败", err)
 	}
 
-	if err := s.validateBeforeInstall(pkg, userId, characterId); err != nil {
+	if err := s.validateBeforeInstall(pkg, spaceId); err != nil {
 		return nil, err
 	}
 
@@ -142,8 +139,7 @@ func (s *installer) InstallPackage(packageId, userId, characterId string) (*Inst
 	finalRelPath := s.installFinalRelPath(installId)
 	inst := &Installation{
 		ID:               installId,
-		UserID:           userId,
-		CharacterID:      characterId,
+		SpaceID:          spaceId,
 		PackageID:        pkg.ID,
 		PackageVersion:   packageVersionStr,
 		Name:             pkg.Name,
@@ -190,12 +186,12 @@ type installState struct {
 	finalMoved      bool
 }
 
-func (s *installer) validateBeforeInstall(pkg *processing.Package, userId, characterId string) error {
+func (s *installer) validateBeforeInstall(pkg *processing.Package, spaceId string) error {
 	if pkg == nil {
 		return NewInstallationError(ErrCodeInstallationFailed, "资源包为空", nil)
 	}
 
-	if pkg.UserID != userId {
+	if pkg.SpaceID != spaceId {
 		return NewInstallationError(ErrCodeInstallationInvalid, "资源包不属于当前用户", ErrInstallationInvalid)
 	}
 
@@ -286,13 +282,6 @@ func (s *installer) validateBeforeInstall(pkg *processing.Package, userId, chara
 		return NewInstallationError(ErrCodePackageHashMismatch,
 			fmt.Sprintf("资源包哈希不匹配: 期望 %s, 实际 %s", pkg.PackageHash, actualHash),
 			ErrPackageHashMismatch)
-	}
-
-	if _, err := s.charRepo.FindByID(characterId); err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return NewInstallationError(ErrCodeCharacterNotFound, "角色不存在", ErrCharacterNotFound)
-		}
-		return NewInstallationError(ErrCodeCharacterNotFound, "校验角色失败", err)
 	}
 
 	return nil
@@ -511,7 +500,6 @@ func (s *installer) writeMetadataFiles(finalDir, installId string, pkg *processi
 		"installId":        installId,
 		"packageId":        pkg.ID,
 		"packageVersion":   pkg.Version,
-		"characterId":      pkg.CharacterID,
 		"installedAt":      time.Now().UTC().Format(time.RFC3339),
 		"canvasWidth":      pkg.CanvasWidth,
 		"canvasHeight":     pkg.CanvasHeight,

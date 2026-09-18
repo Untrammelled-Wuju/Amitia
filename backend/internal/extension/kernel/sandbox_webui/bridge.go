@@ -214,6 +214,7 @@ func (b *Bridge) handleContextGet(ctx context.Context, session *WebSession) (jso
 		"slotId":         session.SlotID,
 		"characterId":    session.CharacterID,
 		"conversationId": session.ConversationID,
+		"uiContext":      session.UIContext,
 		"capabilities":   capabilities,
 		"scope": map[string]any{
 			"extensionId": session.ExtensionID,

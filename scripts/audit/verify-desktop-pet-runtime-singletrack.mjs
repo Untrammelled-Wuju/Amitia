@@ -79,7 +79,7 @@ if (existsSync(protocolRoot)) {
 
 requireText(
   "backend/cmd/server/router.go",
-  [/runtimev2\.RegisterInternalRoutes\s*\(/, /runtimev2\.RegisterUserRoutes\s*\(/],
+  [/runtimev1\.RegisterInternalRoutes\s*\(/, /runtimev1\.RegisterUserRoutes\s*\(/],
   [/runtime\.RegisterInternalRoutes\s*\(/, /runtime\.RegisterUserRoutes\s*\(/],
 );
 
@@ -87,17 +87,17 @@ requireText(
   "backend/cmd/server/services.go",
   [
     /runtimeConfig\.Enabled\s*=\s*config\.AppCfg\.DesktopPetRuntime\.Enabled\s*&&\s*policy\.DesktopPet/,
-    /runtimev2\.NewRuntimeFacadeWithDeviceRuntime\s*\([\s\S]*?kernelContainer\.DeviceRuntimeSessions\s*\)/,
+    /runtimev1\.NewRuntimeFacadeWithDeviceRuntime\s*\([\s\S]*?kernelContainer\.DeviceRuntimeSessions\s*\)/,
     /devicemesh\.NewCloudRuntimeWithHubAndSessions\s*\([\s\S]*?kernelContainer\.DeviceRuntimeSessions/,
-    /wiring\.NewV2RuntimeActionAdapter\s*\(/,
-    /wiring\.NewV2ActivePetAdapter\s*\(/,
+    /wiring\.NewV1RuntimeActionAdapter\s*\(/,
+    /wiring\.NewV1ActivePetAdapter\s*\(/,
     /desktoppet\.LegacyWriteCutoverReady\s*\(ctx\.DB\)/,
     /services\.InstallationCoordinator\s*==\s*nil/,
     /RegisterTimeout:\s*time\.Duration\(runtimeConfig\.RegisterTimeoutSec\)\s*\*\s*time\.Second/,
     /SendQueueSize:\s*runtimeConfig\.SendQueueSize/,
   ],
   [
-    /runtimev2\.NewRuntimeFacade\s*\(/,
+    /runtimev1\.NewRuntimeFacade\s*\(/,
     /runtime\.NewService\s*\(/,
     /wiring\.NewRuntimeActionAdapter\s*\(/,
     /wiring\.NewActivePetAdapter\s*\(/,
@@ -105,10 +105,10 @@ requireText(
 );
 
 requireText(
-  "backend/internal/desktoppet/runtime/protocol/v2/router.go",
+  "backend/internal/desktoppet/runtime/protocol/v1/router.go",
   [
-    /runtimeV2WebSocketSubprotocol\s*=\s*"amitia\.runtime\.v2"/,
-    /runtimeV2BootstrapProtocolPrefix\s*=\s*"amitia\.runtime\.bootstrap\."/,
+    /runtimeV1WebSocketSubprotocol\s*=\s*"amitia\.runtime\.v1"/,
+    /runtimeV1BootstrapProtocolPrefix\s*=\s*"amitia\.runtime\.bootstrap\."/,
     /websocket\.IsWebSocketUpgrade\s*\(r\)/,
     /parseRuntimeBootstrapSubprotocol\s*\(r\)/,
     /upgrader\.Subprotocols\s*=\s*\[\]string\{selectedProtocol\}/,
@@ -128,7 +128,7 @@ requireText(
   "desktop/src/main/pet/manager.ts",
   [
     /bootstrapTicket:\s*issued\.ticket/,
-    /buildRuntimeV2URL\(runtimeId,\s*deviceId\)/,
+    /buildRuntimeV1URL\(runtimeId,\s*deviceId\)/,
   ],
   [
     /searchParams\.set\("ticket"/,
@@ -136,10 +136,10 @@ requireText(
 );
 
 requireText(
-  "desktop/src/desktop-pet/runtime/runtime-handler-v2.ts",
+  "desktop/src/desktop-pet/runtime/runtime-handler-v1.ts",
   [
-    /RUNTIME_V2_WEBSOCKET_SUBPROTOCOL\s*=\s*"amitia\.runtime\.v2"/,
-    /RUNTIME_V2_BOOTSTRAP_SUBPROTOCOL_PREFIX\s*=\s*"amitia\.runtime\.bootstrap\."/,
+    /RUNTIME_V1_WEBSOCKET_SUBPROTOCOL\s*=\s*"amitia\.runtime\.v1"/,
+    /RUNTIME_V1_BOOTSTRAP_SUBPROTOCOL_PREFIX\s*=\s*"amitia\.runtime\.bootstrap\."/,
     /new WebSocket\([\s\S]*?buildRuntimeWebSocketProtocols\(this\.config\.bootstrapTicket\)/,
     /validateServerEnvelope\(envelope\)/,
     /envelope\.payloadHash\s*!==\s*computePayloadHash\(envelope\.payload\)/,
@@ -209,12 +209,12 @@ requireText(
 );
 
 requireText(
-  "backend/internal/desktoppet/runtime/protocol/v2/envelope.go",
+  "backend/internal/desktoppet/runtime/protocol/v1/envelope.go",
   [/CurrentSchemaVersion\s*=\s*contracts\.RuntimeContractVersion/],
 );
 
 requireText(
-  "backend/internal/desktoppet/runtime/protocol/v2/handler.go",
+  "backend/internal/desktoppet/runtime/protocol/v1/handler.go",
   [
     /deviceRuntimeSessions\.Acquire\s*\(context\.Background\(\)/,
     /deviceRuntimeSessions\.UpdateCursor\s*\(context\.Background\(\)/,
@@ -231,7 +231,7 @@ requireText(
 );
 
 requireText(
-  "backend/internal/desktoppet/runtime/protocol/v2/reconciler.go",
+  "backend/internal/desktoppet/runtime/protocol/v1/reconciler.go",
   [
     /ExpireCommands\(now time\.Time, timeoutSec int\)/,
     /ListExpiredCommands\(100, timeoutSec\)/,
@@ -242,7 +242,7 @@ requireText(
 );
 
 requireText(
-  "backend/internal/desktoppet/runtime/protocol/v2/command_dispatcher.go",
+  "backend/internal/desktoppet/runtime/protocol/v1/command_dispatcher.go",
   [
     /conn\.fenceMu\.RLock\(\)/,
     /sessionID, generation := conn\.SessionSnapshot\(\)/,
@@ -269,4 +269,4 @@ if (errors.length > 0) {
   process.exit(1);
 }
 
-console.log("[verify-desktop-pet-runtime-singletrack] PASSED: Runtime V2 is the only desktop-pet wire/runtime production path");
+console.log("[verify-desktop-pet-runtime-singletrack] PASSED: Runtime V1 is the only desktop-pet wire/runtime production path");

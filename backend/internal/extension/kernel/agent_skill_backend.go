@@ -34,8 +34,8 @@ type SkillActivePrompt struct {
 }
 
 type AgentSkillBackend interface {
-	ResolveCatalog(ctx context.Context, scope LegacyScope) ([]SkillCatalogEntry, error)
-	Activate(ctx context.Context, scope LegacyScope, name string, explicit bool) (SkillActivationResult, error)
-	ActivePrompts(ctx context.Context, scope LegacyScope) ([]SkillActivePrompt, error)
-	EndRound(scope LegacyScope)
+	ResolveCatalog(ctx context.Context, scope InvocationScope) ([]SkillCatalogEntry, error)
+	Activate(ctx context.Context, scope InvocationScope, name string, explicit bool) (SkillActivationResult, error)
+	ActivePrompts(ctx context.Context, scope InvocationScope) ([]SkillActivePrompt, error)
+	EndRound(scope InvocationScope)
 }

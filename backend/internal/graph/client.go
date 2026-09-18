@@ -30,16 +30,12 @@ func NewClient(cfg config.SurrealConfig) (*Client, error) {
 		"user": cfg.Username,
 		"pass": cfg.Password,
 	}); err != nil {
-		log.Warn("SurrealDB登录失败，尝试root/root:", err)
-		if _, err2 := db.SignIn(ctx, map[string]string{
-			"user": "root",
-			"pass": "root",
-		}); err2 != nil {
-			return nil, fmt.Errorf("surrealdb signin: %w", err2)
-		}
+		db.Close(context.Background())
+		return nil, fmt.Errorf("surrealdb signin: %w", err)
 	}
 
 	if err := db.Use(ctx, cfg.Namespace, cfg.Database); err != nil {
+		db.Close(context.Background())
 		return nil, fmt.Errorf("surrealdb use: %w", err)
 	}
 

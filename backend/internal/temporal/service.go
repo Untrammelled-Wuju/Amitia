@@ -12,6 +12,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/u-ai/backend/config"
+	"github.com/u-ai/backend/internal/requestidentity"
+	"gorm.io/gorm"
 )
 
 var (
@@ -60,6 +63,27 @@ func (s *Service) SetCalendarProviders(providers ...CalendarProvider) { s.calend
 
 func (s *Service) InitSchema() error { return s.repo.InitSchema() }
 
+func (s *Service) CharacterOwnedBy(characterID, spaceID string) (bool, error) {
+	characterID = strings.TrimSpace(characterID)
+	if characterID == "" {
+		return true, nil
+	}
+	owner, err := s.repo.CharacterOwner(characterID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return false, nil
+		}
+		return false, err
+	}
+	requested := requestidentity.NormalizeSpaceID(spaceID)
+	owner = strings.TrimSpace(owner)
+	if owner == requested && requested != "" {
+		return true, nil
+	}
+	local := config.AppCfg != nil && strings.EqualFold(strings.TrimSpace(config.AppCfg.Security.Mode), "local_single_user")
+	return local && requested != "" && (owner == "" || owner == requestidentity.LegacySpaceID), nil
+}
+
 func defaultProfile(ownerType, ownerID string, now time.Time) *Profile {
 	mode := TimezoneFollowDevice
 	if ownerType == OwnerCharacter {
@@ -76,12 +100,12 @@ func defaultProfile(ownerType, ownerID string, now time.Time) *Profile {
 	}
 }
 
-func normalizeUserID(userID string) string {
-	userID = strings.TrimSpace(userID)
-	if userID == "" {
-		return DefaultUserOwnerID
-	}
-	return userID
+func defaultSpaceOwnerID() string {
+	return requestidentity.CanonicalSpaceID()
+}
+
+func normalizeSpaceID(spaceID string) string {
+	return requestidentity.NormalizeSpaceID(spaceID)
 }
 
 func (s *Service) GetProfile(ctx context.Context, ownerType, ownerID string) (*Profile, error) {
@@ -90,10 +114,10 @@ func (s *Service) GetProfile(ctx context.Context, ownerType, ownerID string) (*P
 	}
 	ownerType = strings.TrimSpace(ownerType)
 	ownerID = strings.TrimSpace(ownerID)
-	if ownerType == OwnerUser {
-		ownerID = normalizeUserID(ownerID)
+	if ownerType == OwnerSpace {
+		ownerID = normalizeSpaceID(ownerID)
 	}
-	if ownerType != OwnerUser && ownerType != OwnerCharacter || ownerID == "" {
+	if ownerType != OwnerSpace && ownerType != OwnerCharacter || ownerID == "" {
 		return nil, ErrInvalidOwner
 	}
 	profile, err := s.repo.GetProfile(ownerType, ownerID)
@@ -107,8 +131,8 @@ func (s *Service) GetProfile(ctx context.Context, ownerType, ownerID string) (*P
 }
 
 func (s *Service) SaveProfile(ctx context.Context, ownerType, ownerID string, input Profile) (*Profile, error) {
-	if ownerType == OwnerUser {
-		ownerID = normalizeUserID(ownerID)
+	if ownerType == OwnerSpace {
+		ownerID = normalizeSpaceID(ownerID)
 	}
 	current, err := s.GetProfile(ctx, ownerType, ownerID)
 	if err != nil {
@@ -231,7 +255,7 @@ func (s *Service) ResolveSnapshot(ctx context.Context, input SnapshotInput) (sna
 
 func (s *Service) resolveSnapshot(ctx context.Context, input SnapshotInput) (Snapshot, error) {
 	now := utc(s.clock.Now())
-	input.UserID = normalizeUserID(input.UserID)
+	input.SpaceID = normalizeSpaceID(input.SpaceID)
 	if input.DeviceTimezone == "" {
 		input.DeviceTimezone = DeviceTimezoneFromContext(ctx)
 	}
@@ -243,7 +267,7 @@ func (s *Service) resolveSnapshot(ctx context.Context, input SnapshotInput) (Sna
 		}
 		return Snapshot{Version: SnapshotVersion, NowUTC: now, UserTime: fallback, CharacterTime: fallback, RelationshipTime: relationshipTime, Policy: TemporalBehaviorPolicy{MentionTime: "none", AllowProactive: true}, GeneratedAt: now}, nil
 	}
-	userProfile, err := s.GetProfile(ctx, OwnerUser, input.UserID)
+	spaceProfile, err := s.GetProfile(ctx, OwnerSpace, input.SpaceID)
 	if err != nil {
 		return Snapshot{}, err
 	}
@@ -254,10 +278,10 @@ func (s *Service) resolveSnapshot(ctx context.Context, input SnapshotInput) (Sna
 			return Snapshot{}, err
 		}
 	}
-	userTimezone := userProfile.Timezone
-	userTimezoneSource := userProfile.Source
-	userTimezoneConfidence := userProfile.Confidence
-	if userProfile.TimezoneMode == TimezoneFollowDevice && userProfile.AutoDetectTimezone && strings.TrimSpace(input.DeviceTimezone) != "" {
+	userTimezone := spaceProfile.Timezone
+	userTimezoneSource := spaceProfile.Source
+	userTimezoneConfidence := spaceProfile.Confidence
+	if spaceProfile.TimezoneMode == TimezoneFollowDevice && spaceProfile.AutoDetectTimezone && strings.TrimSpace(input.DeviceTimezone) != "" {
 		if deviceLocation, deviceErr := loadLocation(input.DeviceTimezone); deviceErr == nil {
 			userTimezone = deviceLocation.String()
 			userTimezoneSource = "device_session"
@@ -276,15 +300,15 @@ func (s *Service) resolveSnapshot(ctx context.Context, input SnapshotInput) (Sna
 	if err != nil {
 		return Snapshot{}, err
 	}
-	userCivil := civilSnapshot(now, userLocation, userProfile.DaypartConfigJSON, userProfile.Hemisphere)
+	userCivil := civilSnapshot(now, userLocation, spaceProfile.DaypartConfigJSON, spaceProfile.Hemisphere)
 	characterCivil := civilSnapshot(now, characterLocation, characterProfile.DaypartConfigJSON, characterProfile.Hemisphere)
-	if !userProfile.DaypartAwareness {
+	if !spaceProfile.DaypartAwareness {
 		userCivil.Daypart = ""
 	}
 	if !characterProfile.DaypartAwareness {
 		characterCivil.Daypart = ""
 	}
-	anchors, err := s.resolveSalientAnchors(input.UserID, input.CharacterID, now, userLocation)
+	anchors, err := s.resolveSalientAnchors(input.SpaceID, input.CharacterID, now, userLocation)
 	if err != nil {
 		return Snapshot{}, err
 	}
@@ -292,10 +316,10 @@ func (s *Service) resolveSnapshot(ctx context.Context, input SnapshotInput) (Sna
 	if s.schedule != nil && input.CharacterID != "" {
 		schedule, _ = s.schedule.CurrentState(input.CharacterID, now)
 	}
-	quiet := inQuietHours(userCivil.LocalTime, userProfile.QuietHoursJSON)
-	calendarEvents := s.resolveCalendarEvents(ctx, *userProfile, userCivil.LocalTime)
-	policy := TemporalBehaviorPolicy{MentionTime: "subtle", AllowProactive: userProfile.Enabled && !quiet, MaxTemporalMentions: 1}
-	if !userProfile.Enabled || !characterProfile.Enabled {
+	quiet := inQuietHours(userCivil.LocalTime, spaceProfile.QuietHoursJSON)
+	calendarEvents := s.resolveCalendarEvents(ctx, *spaceProfile, userCivil.LocalTime)
+	policy := TemporalBehaviorPolicy{MentionTime: "subtle", AllowProactive: spaceProfile.Enabled && !quiet, MaxTemporalMentions: 1}
+	if !spaceProfile.Enabled || !characterProfile.Enabled {
 		policy.MentionTime = "none"
 		anchors = nil
 	}
@@ -342,15 +366,15 @@ func (s *Service) ListAnchors(ctx context.Context, query AnchorQuery) ([]Anchor,
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	query.UserID = normalizeUserID(query.UserID)
+	query.SpaceID = normalizeSpaceID(query.SpaceID)
 	return s.repo.ListAnchors(query)
 }
 
-func (s *Service) SaveAnchor(ctx context.Context, userID, characterID string, anchor Anchor) (*Anchor, error) {
+func (s *Service) SaveAnchor(ctx context.Context, spaceID, characterID string, anchor Anchor) (*Anchor, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	userID = normalizeUserID(userID)
+	spaceID = normalizeSpaceID(spaceID)
 	if characterID != "" {
 		exists, err := s.repo.CharacterExists(characterID)
 		if err != nil || !exists {
@@ -372,12 +396,12 @@ func (s *Service) SaveAnchor(ctx context.Context, userID, characterID string, an
 		if current == nil {
 			return nil, ErrAnchorNotFound
 		}
-		if current.UserID != userID || current.CharacterID != characterID {
+		if current.SpaceID != spaceID || current.CharacterID != characterID {
 			return nil, ErrScopeMismatch
 		}
 		anchor.CreatedAtUTC = current.CreatedAtUTC
 	}
-	anchor.UserID = userID
+	anchor.SpaceID = spaceID
 	anchor.CharacterID = characterID
 	anchor.UpdatedAtUTC = now
 	if anchor.Source == "plugin" || anchor.Source == "model" {
@@ -387,7 +411,7 @@ func (s *Service) SaveAnchor(ctx context.Context, userID, characterID string, an
 	}
 	if anchor.ScopeType == "" {
 		if characterID == "" {
-			anchor.ScopeType = OwnerUser
+			anchor.ScopeType = OwnerSpace
 		} else {
 			anchor.ScopeType = "relationship"
 		}
@@ -414,7 +438,7 @@ func (s *Service) SaveAnchor(ctx context.Context, userID, characterID string, an
 	return &anchor, nil
 }
 
-func (s *Service) ConfirmAnchor(ctx context.Context, userID, characterID, id string) (*Anchor, error) {
+func (s *Service) ConfirmAnchor(ctx context.Context, spaceID, characterID, id string) (*Anchor, error) {
 	anchor, err := s.repo.GetAnchor(id)
 	if err != nil {
 		return nil, err
@@ -422,7 +446,7 @@ func (s *Service) ConfirmAnchor(ctx context.Context, userID, characterID, id str
 	if anchor == nil {
 		return nil, ErrAnchorNotFound
 	}
-	if anchor.UserID != normalizeUserID(userID) || anchor.CharacterID != characterID {
+	if anchor.SpaceID != normalizeSpaceID(spaceID) || anchor.CharacterID != characterID {
 		return nil, ErrScopeMismatch
 	}
 	anchor.Status = "active"
@@ -434,25 +458,25 @@ func (s *Service) ConfirmAnchor(ctx context.Context, userID, characterID, id str
 	return anchor, nil
 }
 
-func (s *Service) DeleteAnchor(ctx context.Context, userID, characterID, id string) error {
+func (s *Service) DeleteAnchor(ctx context.Context, spaceID, characterID, id string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	return s.repo.DeleteAnchor(id, normalizeUserID(userID), characterID)
+	return s.repo.DeleteAnchor(id, normalizeSpaceID(spaceID), characterID)
 }
 
-func (s *Service) ListEvents(ctx context.Context, userID, characterID string, limit int) ([]Event, error) {
+func (s *Service) ListEvents(ctx context.Context, spaceID, characterID string, limit int) ([]Event, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	return s.repo.ListEvents(normalizeUserID(userID), characterID, limit)
+	return s.repo.ListEvents(normalizeSpaceID(spaceID), characterID, limit)
 }
 
-func (s *Service) SuggestTimezone(ctx context.Context, userID, timezone string) (*Profile, error) {
+func (s *Service) SuggestTimezone(ctx context.Context, spaceID, timezone string) (*Profile, error) {
 	if _, err := loadLocation(timezone); err != nil {
 		return nil, err
 	}
-	profile, err := s.GetProfile(ctx, OwnerUser, userID)
+	profile, err := s.GetProfile(ctx, OwnerSpace, spaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -466,8 +490,8 @@ func (s *Service) SuggestTimezone(ctx context.Context, userID, timezone string) 
 	return profile, nil
 }
 
-func (s *Service) ResolveTimezoneSuggestion(ctx context.Context, userID string, accept bool) (*Profile, error) {
-	profile, err := s.GetProfile(ctx, OwnerUser, userID)
+func (s *Service) ResolveTimezoneSuggestion(ctx context.Context, spaceID string, accept bool) (*Profile, error) {
+	profile, err := s.GetProfile(ctx, OwnerSpace, spaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -597,8 +621,8 @@ func clockMinutes(value string) (int, bool) {
 	return hour*60 + minute, true
 }
 
-func (s *Service) resolveSalientAnchors(userID, characterID string, now time.Time, userLocation *time.Location) ([]AnchorOccurrence, error) {
-	anchors, err := s.repo.ListAnchors(AnchorQuery{UserID: userID, CharacterID: characterID, Status: "active", Limit: 200})
+func (s *Service) resolveSalientAnchors(spaceID, characterID string, now time.Time, userLocation *time.Location) ([]AnchorOccurrence, error) {
+	anchors, err := s.repo.ListAnchors(AnchorQuery{SpaceID: spaceID, CharacterID: characterID, Status: "active", Limit: 200})
 	if err != nil {
 		return nil, err
 	}

@@ -71,6 +71,7 @@ func setupE2EGoldenTest(t *testing.T, personalityConfig string) (*gorm.DB, *serv
 	}
 	if err := db.Create(&Conversation{
 		ID:          convID,
+		SpaceID:     normalizeConversationOwner(""),
 		CharacterID: charID,
 		Title:       "E2E测试对话",
 		Channel:     "web",
@@ -110,7 +111,7 @@ func createInteractionRecord(t *testing.T, db *gorm.DB, interactionID, charID, c
 	t.Helper()
 	if err := db.Create(&interaction.InteractionRecordModel{
 		ID:             interactionID,
-		UserID:         "user:web",
+		SpaceID:        "user:web",
 		CharacterID:    charID,
 		ConversationID: convID,
 		Channel:        "web",
@@ -499,7 +500,7 @@ func setupGoldenTestWithCapturedLLM(t *testing.T, personalityConfig string, capt
 	}).Error; err != nil {
 		t.Fatal(err)
 	}
-	if err := db.Create(&Conversation{ID: convID, CharacterID: charID, Title: "capture", Channel: "web", Source: "manual"}).Error; err != nil {
+	if err := db.Create(&Conversation{ID: convID, SpaceID: normalizeConversationOwner(""), CharacterID: charID, Title: "capture", Channel: "web", Source: "manual"}).Error; err != nil {
 		t.Fatal(err)
 	}
 	if err := db.Create(&ModelConfig{

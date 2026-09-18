@@ -1,163 +1,77 @@
 <template>
-  <div class="user-settings-page">
-    <header class="page-header">
+  <div class="space-settings">
+    <header class="settings-header">
       <div>
-        <h2>用户信息</h2>
-        <p>管理你的账户资料与登录安全</p>
+        <h2>个人空间</h2>
+        <p>资料保存在当前 U-Ai Space 中；设备认证与个人资料相互独立。</p>
       </div>
-      <el-button
-        type="danger"
-        plain
-        :icon="SwitchButton"
-        :loading="logoutLoading"
-        @click="handleLogout"
-      >
-        退出登录
-      </el-button>
+      <el-button :loading="saving" type="primary" @click="saveProfile">保存资料</el-button>
     </header>
 
-    <div v-loading="loading" class="settings-content">
-      <section class="profile-overview">
-        <div class="profile-main">
-          <span class="account-avatar">
-            <img v-if="appStore.avatar" :src="appStore.avatar" alt="用户头像" />
-            <el-icon v-else><UserFilled /></el-icon>
-          </span>
-          <div class="account-copy">
-            <div class="account-name-row">
-              <h3>{{ userInfo.username || "管理员" }}</h3>
-              <span class="role-badge">{{ roleLabel }}</span>
-            </div>
-            <p>当前登录账户</p>
-          </div>
-          <div class="avatar-actions">
-            <input
-              ref="avatarFileInput"
-              class="avatar-file-input"
-              type="file"
-              accept="image/jpeg,image/png,image/webp"
-              @change="handleAvatarChange"
-            />
-            <el-button
-              size="small"
-              :loading="avatarUpdating"
-              @click="avatarFileInput?.click()"
-              >更换头像</el-button
-            >
-            <el-button
-              v-if="appStore.avatar"
-              size="small"
-              text
-              @click="removeAvatar"
-              >恢复默认</el-button
-            >
+    <div class="settings-grid" v-loading="loading">
+      <section class="settings-card profile-card">
+        <div class="section-heading">
+          <el-icon><UserFilled /></el-icon>
+          <div>
+            <h3>本地资料</h3>
+            <p>这里只保存昵称、头像、简介和偏好，不承担认证职责。</p>
           </div>
         </div>
 
-        <div class="account-meta">
-          <div class="meta-item">
-            <span class="meta-icon"
-              ><el-icon><Key /></el-icon
-            ></span>
-            <div>
-              <span>账户 ID</span>
-              <strong>{{ userInfo.id || "—" }}</strong>
-            </div>
-          </div>
-          <div class="meta-item">
-            <span class="meta-icon"
-              ><el-icon><Calendar /></el-icon
-            ></span>
-            <div>
-              <span>创建时间</span>
-              <strong>{{ formatDate(userInfo.createdTime) }}</strong>
-            </div>
-          </div>
-          <div class="meta-item">
-            <span class="meta-icon"
-              ><el-icon><Clock /></el-icon
-            ></span>
-            <div>
-              <span>最近登录</span>
-              <strong>{{ formatDate(userInfo.lastLoginTime) }}</strong>
-            </div>
-          </div>
-        </div>
+        <el-form label-position="top">
+          <el-form-item label="显示名称">
+            <el-input v-model="profile.displayName" maxlength="100" placeholder="例如：无拘" />
+          </el-form-item>
+          <el-form-item label="用户标签">
+            <el-input v-model="profile.userLabel" maxlength="100" placeholder="可选" />
+          </el-form-item>
+          <el-form-item label="简介">
+            <el-input v-model="profile.bio" type="textarea" :rows="5" maxlength="1000" show-word-limit />
+          </el-form-item>
+          <el-form-item label="头像地址">
+            <el-input v-model="profile.avatar" placeholder="本地文件或可访问的图片地址" />
+          </el-form-item>
+        </el-form>
       </section>
 
-      <section class="security-card">
+      <section class="settings-card identity-card">
         <div class="section-heading">
-          <span class="section-icon"
-            ><el-icon><Lock /></el-icon
-          ></span>
+          <el-icon><Connection /></el-icon>
           <div>
-            <h3>登录与安全</h3>
-            <p>定期更新密码有助于保护你的账户</p>
+            <h3>Space 身份</h3>
+            <p>SpaceID 只负责数据归属，不作为密码，也不代表具体设备。</p>
           </div>
         </div>
+        <dl class="identity-list">
+          <div><dt>Space ID</dt><dd>{{ identity.spaceId || "未读取" }}</dd></div>
+          <div><dt>Instance ID</dt><dd>{{ identity.instanceId || "未读取" }}</dd></div>
+          <div><dt>运行模式</dt><dd>{{ deploymentLabel }}</dd></div>
+        </dl>
+      </section>
 
-        <div class="security-layout">
-          <el-form
-            ref="passwordFormRef"
-            :model="passwordForm"
-            :rules="passwordRules"
-            label-position="top"
-            class="password-form"
-            @submit.prevent="submitPassword"
+      <section class="settings-card device-card">
+        <div class="section-heading">
+          <el-icon><Monitor /></el-icon>
+          <div>
+            <h3>当前设备</h3>
+            <p>DeviceID 用于设备路由；Cloud 认证由 Device Credential 完成。</p>
+          </div>
+        </div>
+        <dl class="identity-list">
+          <div><dt>Device ID</dt><dd>{{ mesh.deviceId || "未获取" }}</dd></div>
+          <div><dt>Runtime ID</dt><dd>{{ mesh.runtimeId || "未获取" }}</dd></div>
+          <div><dt>连接状态</dt><dd>{{ mesh.state || (deployment.mode === "cloud" ? "未配对" : "本地模式") }}</dd></div>
+        </dl>
+        <div class="device-actions">
+          <el-button @click="router.push('/settings/devices')">管理设备</el-button>
+          <el-button
+            v-if="deployment.mode === 'cloud' && mesh.state && mesh.state !== 'unprovisioned'"
+            type="danger"
+            plain
+            @click="disconnectCloud"
           >
-            <el-form-item label="当前密码" prop="oldPassword">
-              <el-input
-                v-model="passwordForm.oldPassword"
-                type="password"
-                show-password
-                autocomplete="current-password"
-                placeholder="请输入当前密码"
-              />
-            </el-form-item>
-            <div class="new-password-row">
-              <el-form-item label="新密码" prop="newPassword">
-                <el-input
-                  v-model="passwordForm.newPassword"
-                  type="password"
-                  show-password
-                  autocomplete="new-password"
-                  placeholder="至少 6 位"
-                />
-              </el-form-item>
-              <el-form-item label="确认新密码" prop="confirmPassword">
-                <el-input
-                  v-model="passwordForm.confirmPassword"
-                  type="password"
-                  show-password
-                  autocomplete="new-password"
-                  placeholder="再次输入新密码"
-                />
-              </el-form-item>
-            </div>
-            <div class="form-actions">
-              <el-button type="primary" native-type="submit" :loading="saving"
-                >保存新密码</el-button
-              >
-            </div>
-          </el-form>
-
-          <aside class="security-guide">
-            <h4>修改密码前</h4>
-            <ul>
-              <li>
-                <el-icon><CircleCheck /></el-icon
-                ><span>新密码至少包含 6 个字符</span>
-              </li>
-              <li>
-                <el-icon><CircleCheck /></el-icon
-                ><span>避免使用容易猜到的连续字符</span>
-              </li>
-              <li>
-                <el-icon><CircleCheck /></el-icon
-                ><span>保存后请使用新密码登录</span>
-              </li>
-            </ul>
-          </aside>
+            解除当前设备配对
+          </el-button>
         </div>
       </section>
     </div>
@@ -167,522 +81,114 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from "vue";
 import { useRouter } from "vue-router";
-import {
-  ElMessage,
-  ElMessageBox,
-  type FormInstance,
-  type FormRules,
-} from "element-plus";
-import {
-  Calendar,
-  CircleCheck,
-  Clock,
-  Key,
-  Lock,
-  SwitchButton,
-  UserFilled,
-} from "@element-plus/icons-vue";
+import { Connection, Monitor, UserFilled } from "@element-plus/icons-vue";
+import { ElMessage, ElMessageBox } from "element-plus";
 import { apiClient } from "@/composables/useApi";
-import { forceCleanupSession } from "@/stores/refresh-coordinator";
-import { useAppStore } from "@/stores/app";
+import { getDeploymentConfig } from "@/runtime/runtime-adapter";
+import type { DeploymentModeConfig } from "@/runtime/runtime-types";
 
-type UserInfo = {
-  id?: number;
-  username: string;
-  role: string;
-  createdTime: string;
-  lastLoginTime: string;
-};
-
+const router = useRouter();
 const loading = ref(false);
 const saving = ref(false);
-const logoutLoading = ref(false);
-const avatarUpdating = ref(false);
-const avatarFileInput = ref<HTMLInputElement>();
-const passwordFormRef = ref<FormInstance>();
-const appStore = useAppStore();
-const router = useRouter();
-const userInfo = reactive<UserInfo>({
-  username: "",
-  role: "",
-  createdTime: "",
-  lastLoginTime: "",
+const profile = reactive({
+  schemaVersion: 1,
+  displayName: "",
+  avatar: "",
+  bio: "",
+  userLabel: "",
+  preferences: {} as Record<string, unknown>,
 });
-const passwordForm = reactive({
-  oldPassword: "",
-  newPassword: "",
-  confirmPassword: "",
-});
+const identity = reactive({ spaceId: "", instanceId: "" });
+const mesh = reactive({ state: "", deviceId: "", runtimeId: "" });
+const deployment = reactive<DeploymentModeConfig>({ mode: "local" });
 
-const roleLabel = computed(() =>
-  userInfo.role === "admin" ? "管理员" : userInfo.role || "普通用户",
+const deploymentLabel = computed(() =>
+  deployment.mode === "cloud" ? `云端 · ${deployment.serverURL || "未配置地址"}` : "本地",
 );
 
-const passwordRules: FormRules = {
-  oldPassword: [{ required: true, message: "请输入当前密码", trigger: "blur" }],
-  newPassword: [
-    { required: true, message: "请输入新密码", trigger: "blur" },
-    { min: 6, message: "新密码至少 6 位", trigger: "blur" },
-  ],
-  confirmPassword: [
-    { required: true, message: "请再次输入新密码", trigger: "blur" },
-    {
-      validator: (_rule, value, callback) => {
-        if (value !== passwordForm.newPassword) {
-          callback(new Error("两次输入的新密码不一致"));
-          return;
-        }
-        callback();
-      },
-      trigger: "blur",
-    },
-  ],
-};
-
-function formatDate(value: string) {
-  if (!value) return "—";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat("zh-CN", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(date);
-}
-
-async function createAvatar(file: File) {
-  const sourceUrl = URL.createObjectURL(file);
-  try {
-    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
-      const element = new Image();
-      element.onload = () => resolve(element);
-      element.onerror = () => reject(new Error("图片读取失败"));
-      element.src = sourceUrl;
-    });
-    const sourceSize = Math.min(image.naturalWidth, image.naturalHeight);
-    const sourceX = (image.naturalWidth - sourceSize) / 2;
-    const sourceY = (image.naturalHeight - sourceSize) / 2;
-    const canvas = document.createElement("canvas");
-    canvas.width = 256;
-    canvas.height = 256;
-    const context = canvas.getContext("2d");
-    if (!context) throw new Error("头像处理失败");
-    context.drawImage(
-      image,
-      sourceX,
-      sourceY,
-      sourceSize,
-      sourceSize,
-      0,
-      0,
-      256,
-      256,
-    );
-    return canvas.toDataURL("image/webp", 0.86);
-  } finally {
-    URL.revokeObjectURL(sourceUrl);
-  }
-}
-
-async function handleAvatarChange(event: Event) {
-  const input = event.target as HTMLInputElement;
-  const file = input.files?.[0];
-  input.value = "";
-  if (!file) return;
-  if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
-    ElMessage.warning("请选择 JPG、PNG 或 WebP 图片");
-    return;
-  }
-  if (file.size > 5 * 1024 * 1024) {
-    ElMessage.warning("头像图片不能超过 5 MB");
-    return;
-  }
-  avatarUpdating.value = true;
-  try {
-    appStore.setAvatar(await createAvatar(file));
-    ElMessage.success("头像已更新");
-  } catch (error: any) {
-    ElMessage.error(error?.message || "头像更新失败");
-  } finally {
-    avatarUpdating.value = false;
-  }
-}
-
-function removeAvatar() {
-  appStore.removeAvatar();
-  ElMessage.success("已恢复默认头像");
-}
-
-async function handleLogout() {
-  try {
-    await ElMessageBox.confirm("退出后需要重新登录，确定继续吗？", "退出登录", {
-      confirmButtonText: "退出登录",
-      cancelButtonText: "取消",
-      type: "warning",
-      confirmButtonClass: "el-button--danger",
-    });
-  } catch {
-    return;
-  }
-  logoutLoading.value = true;
-  try {
-    await apiClient.post("/api/auth/logout");
-  } catch {}
-  forceCleanupSession();
-  await router.replace("/login");
-}
-
-async function loadUserInfo() {
+async function loadAll() {
   loading.value = true;
   try {
-    const res = await apiClient.get("/api/auth/me");
-    const data = res.data?.data || res.data;
-    Object.assign(userInfo, data || {});
+    const [profileRes, infoRes, deploymentConfig] = await Promise.all([
+      apiClient.get("/api/space/profile"),
+      apiClient.get("/api/public/core/info"),
+      getDeploymentConfig(),
+    ]);
+    Object.assign(profile, profileRes.data?.data || profileRes.data || {});
+    const info = infoRes.data?.data || infoRes.data || {};
+    identity.spaceId = String(info.spaceId || "");
+    identity.instanceId = String(info.instanceId || info.cloudId || "");
+    Object.assign(deployment, deploymentConfig);
   } catch (error: any) {
-    ElMessage.error(error?.message || "用户信息加载失败");
-  } finally {
-    loading.value = false;
+    ElMessage.error(error?.message || "个人空间信息加载失败");
   }
+
+  if (window.amitiaDesktop?.getMeshStatus) {
+    try {
+      const status = await window.amitiaDesktop.getMeshStatus();
+      if (status) Object.assign(mesh, status);
+    } catch {}
+  }
+  loading.value = false;
 }
 
-async function submitPassword() {
-  if (!passwordFormRef.value) return;
-  const valid = await passwordFormRef.value.validate().catch(() => false);
-  if (!valid) return;
+async function saveProfile() {
   saving.value = true;
   try {
-    await apiClient.post("/api/auth/change-password", {
-      oldPassword: passwordForm.oldPassword,
-      newPassword: passwordForm.newPassword,
+    const res = await apiClient.put("/api/space/profile", {
+      schemaVersion: 1,
+      displayName: profile.displayName.trim(),
+      avatar: profile.avatar.trim(),
+      bio: profile.bio.trim(),
+      userLabel: profile.userLabel.trim(),
+      preferences: profile.preferences || {},
     });
-    passwordForm.oldPassword = "";
-    passwordForm.newPassword = "";
-    passwordForm.confirmPassword = "";
-    passwordFormRef.value.clearValidate();
-    ElMessage.success("密码修改成功");
+    Object.assign(profile, res.data?.data || res.data || profile);
+    ElMessage.success("个人资料已保存");
   } catch (error: any) {
-    ElMessage.error(error?.message || "密码修改失败");
+    ElMessage.error(error?.response?.data?.message || error?.message || "个人资料保存失败");
   } finally {
     saving.value = false;
   }
 }
 
-onMounted(loadUserInfo);
+async function disconnectCloud() {
+  if (!window.amitiaDesktop?.deprovisionMesh) return;
+  try {
+    await ElMessageBox.confirm(
+      "这会删除当前设备保存的 Cloud Device Credential。个人 Space 数据不会被删除。",
+      "解除设备配对",
+      { confirmButtonText: "解除配对", cancelButtonText: "取消", type: "warning" },
+    );
+  } catch {
+    return;
+  }
+  try {
+    await window.amitiaDesktop.deprovisionMesh();
+    mesh.state = "unprovisioned";
+    ElMessage.success("当前设备已解除云端配对");
+  } catch (error: any) {
+    ElMessage.error(error?.message || "解除配对失败");
+  }
+}
+
+onMounted(loadAll);
 </script>
 
 <style scoped>
-.user-settings-page {
-  width: 100%;
-  margin: 0 auto;
-}
-
-.page-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 20px;
-  margin-bottom: 22px;
-}
-
-.page-header h2 {
-  margin: 0;
-  color: var(--console-text);
-  font-size: 24px;
-  font-weight: 650;
-}
-
-.page-header p {
-  margin: 6px 0 0;
-  color: var(--console-text-muted);
-  font-size: 13px;
-}
-
-.settings-content {
-  min-height: 500px;
-}
-
-.profile-overview,
-.security-card {
-  border: 1px solid var(--console-border);
-  border-radius: 16px;
-  background: var(--ac-color-surface);
-}
-
-.profile-overview {
-  overflow: hidden;
-}
-
-.profile-main {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 24px;
-}
-
-.account-avatar {
-  display: grid;
-  place-items: center;
-  width: 52px;
-  height: 52px;
-  flex: 0 0 auto;
-  border-radius: 15px;
-  background: var(--tp-primary);
-  color: var(--tp-text-on-primary);
-  font-size: 20px;
-  overflow: hidden;
-}
-
-.account-avatar img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.account-copy {
-  min-width: 0;
-  flex: 1;
-}
-
-.account-name-row {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-}
-
-.account-name-row h3 {
-  margin: 0;
-  overflow: hidden;
-  color: var(--console-text);
-  font-size: 18px;
-  font-weight: 650;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.role-badge {
-  border: 1px solid var(--console-border);
-  border-radius: 999px;
-  background: var(--ac-color-surface);
-  color: var(--console-text-muted);
-  font-size: 11px;
-  line-height: 1;
-}
-
-.role-badge {
-  padding: 5px 8px;
-}
-
-.account-copy p {
-  margin: 5px 0 0;
-  color: var(--console-text-muted);
-  font-size: 12px;
-}
-
-.avatar-actions {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  margin-left: auto;
-}
-
-.avatar-file-input {
-  display: none;
-}
-
-.account-meta {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  border-top: 1px solid var(--console-border-soft);
-  background: var(--ac-color-surface);
-}
-
-.meta-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-  padding: 17px 20px;
-  border-right: 1px solid var(--console-border-soft);
-}
-
-.meta-item:last-child {
-  border-right: 0;
-}
-
-.meta-icon {
-  display: grid;
-  place-items: center;
-  width: 30px;
-  height: 30px;
-  flex: 0 0 auto;
-  border-radius: 9px;
-  background: var(--ac-color-surface);
-  color: var(--console-text-muted);
-  font-size: 14px;
-}
-
-.meta-item div {
-  min-width: 0;
-}
-
-.meta-item span,
-.meta-item strong {
-  display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.meta-item div > span {
-  color: var(--console-text-muted);
-  font-size: 11px;
-}
-
-.meta-item strong {
-  margin-top: 4px;
-  color: var(--console-text);
-  font-size: 12px;
-  font-weight: 550;
-}
-
-.security-card {
-  margin-top: 18px;
-  padding: 24px;
-}
-
-.section-heading {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 24px;
-}
-
-.section-icon {
-  display: grid;
-  place-items: center;
-  width: 36px;
-  height: 36px;
-  flex: 0 0 auto;
-  border-radius: 10px;
-  background: var(--tp-primary-soft);
-  color: var(--tp-primary);
-  font-size: 17px;
-}
-
-.section-heading h3 {
-  margin: 0;
-  color: var(--console-text);
-  font-size: 16px;
-  font-weight: 650;
-}
-
-.section-heading p {
-  margin: 3px 0 0;
-  color: var(--console-text-muted);
-  font-size: 12px;
-}
-
-.security-layout {
-  display: grid;
-  grid-template-columns: minmax(0, 1.7fr) minmax(220px, 0.8fr);
-  gap: 28px;
-}
-
-.password-form :deep(.el-form-item__label) {
-  color: var(--console-text);
-}
-
-.new-password-row {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
-}
-
-.security-guide {
-  align-self: start;
-  padding: 16px;
-  border: 1px solid var(--console-border-soft);
-  border-radius: 12px;
-  background: var(--ac-color-surface);
-}
-
-.security-guide h4 {
-  margin: 0 0 13px;
-  color: var(--console-text);
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.security-guide ul {
-  display: grid;
-  gap: 11px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.security-guide li {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  color: var(--console-text-muted);
-  font-size: 12px;
-  line-height: 1.5;
-}
-
-.security-guide li .el-icon {
-  flex: 0 0 auto;
-  margin-top: 2px;
-  color: var(--tp-success);
-}
-
-.form-actions {
-  display: flex;
-  justify-content: flex-start;
-  padding-top: 4px;
-}
-
-@media (max-width: 820px) {
-  .account-meta,
-  .security-layout {
-    grid-template-columns: 1fr;
-  }
-
-  .meta-item {
-    border-right: 0;
-    border-bottom: 1px solid var(--console-border-soft);
-  }
-
-  .meta-item:last-child {
-    border-bottom: 0;
-  }
-}
-
-@media (max-width: 560px) {
-  .page-header {
-    align-items: flex-start;
-  }
-
-  .profile-main {
-    align-items: center;
-    flex-wrap: wrap;
-    padding: 18px;
-  }
-
-  .avatar-actions {
-    width: 100%;
-    margin-left: 66px;
-  }
-
-  .new-password-row {
-    grid-template-columns: 1fr;
-    gap: 0;
-  }
-
-  .security-card {
-    padding: 18px;
-  }
-}
+.space-settings { padding: 24px; max-width: 1180px; margin: 0 auto; }
+.settings-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; margin-bottom: 20px; }
+.settings-header h2, .section-heading h3 { margin: 0; }
+.settings-header p, .section-heading p { margin: 6px 0 0; color: var(--el-text-color-secondary); }
+.settings-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+.settings-card { padding: 20px; border: 1px solid var(--el-border-color-lighter); border-radius: 14px; background: var(--el-bg-color); }
+.profile-card { grid-row: span 2; }
+.section-heading { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 18px; }
+.section-heading .el-icon { margin-top: 3px; font-size: 20px; }
+.identity-list { display: grid; gap: 12px; margin: 0; }
+.identity-list > div { display: grid; grid-template-columns: 100px 1fr; gap: 12px; }
+.identity-list dt { color: var(--el-text-color-secondary); }
+.identity-list dd { margin: 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; overflow-wrap: anywhere; }
+.device-actions { display: flex; gap: 10px; margin-top: 20px; }
+@media (max-width: 820px) { .settings-grid { grid-template-columns: 1fr; } .profile-card { grid-row: auto; } }
 </style>

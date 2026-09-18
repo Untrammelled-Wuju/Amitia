@@ -19,8 +19,7 @@ type ReferenceAsset struct {
 	SubjectBox               string `gorm:"column:subject_box;type:text" json:"subjectBox"`
 	Anchor                   string `gorm:"column:anchor;type:text" json:"anchor"`
 	CoordinateSpace          string `gorm:"column:coordinate_space;type:text" json:"coordinateSpace"`
-	CharacterID              string `gorm:"column:character_id;type:text" json:"characterId"`
-	UserID                   string `gorm:"column:user_id;type:text" json:"userId"`
+	SpaceID                  string `gorm:"column:space_id;type:text" json:"spaceId"`
 	SourceArtifactID         string `gorm:"column:source_artifact_id;type:text" json:"sourceArtifactId"`
 	StoragePath              string `gorm:"column:storage_path;type:text" json:"storagePath"`
 	Status                   string `gorm:"column:status;type:text;default:'staging'" json:"status"`

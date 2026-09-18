@@ -21,7 +21,7 @@ const ErrCodeProcessingSourceInvalid = "processing_source_invalid"
 var ErrSourceInvalid = errors.New("source: processing source invalid")
 
 type ManifestValidatorRepo interface {
-	GetTaskUserID(taskID string) (string, error)
+	GetTaskSpaceID(taskID string) (string, error)
 	GetGenerationActionInfo(generationActionID string) (*GenerationActionValidationInfo, error)
 	GetArtifactValidationInfo(artifactID string) (*ArtifactValidationInfo, error)
 }
@@ -44,7 +44,7 @@ type ArtifactValidationInfo struct {
 }
 
 type UnifiedSourceValidator interface {
-	Validate(ctx context.Context, manifest *ProcessingSourceManifestRecord, userID string) error
+	Validate(ctx context.Context, manifest *ProcessingSourceManifestRecord, spaceID string) error
 }
 
 type unifiedSourceValidator struct {
@@ -56,7 +56,7 @@ func NewUnifiedSourceValidator(repo ManifestValidatorRepo, dataDir string) Unifi
 	return &unifiedSourceValidator{repo: repo, dataDir: dataDir}
 }
 
-func (v *unifiedSourceValidator) Validate(ctx context.Context, manifest *ProcessingSourceManifestRecord, userID string) error {
+func (v *unifiedSourceValidator) Validate(ctx context.Context, manifest *ProcessingSourceManifestRecord, spaceID string) error {
 	if manifest == nil {
 		return fmt.Errorf("%w: manifest is nil", ErrSourceInvalid)
 	}
@@ -73,11 +73,7 @@ func (v *unifiedSourceValidator) Validate(ctx context.Context, manifest *Process
 		return fmt.Errorf("%w: source artifact id is empty", ErrSourceInvalid)
 	}
 
-	if manifest.CharacterID == "" {
-		return fmt.Errorf("%w: character id is empty", ErrSourceInvalid)
-	}
-
-	if err := v.validateOwnership(manifest, userID); err != nil {
+	if err := v.validateOwnership(manifest, spaceID); err != nil {
 		return err
 	}
 
@@ -104,16 +100,16 @@ func (v *unifiedSourceValidator) Validate(ctx context.Context, manifest *Process
 	return nil
 }
 
-func (v *unifiedSourceValidator) validateOwnership(manifest *ProcessingSourceManifestRecord, userID string) error {
-	if userID == "" {
+func (v *unifiedSourceValidator) validateOwnership(manifest *ProcessingSourceManifestRecord, spaceID string) error {
+	if spaceID == "" {
 		return fmt.Errorf("%w: user id is empty", ErrSourceInvalid)
 	}
-	ownerID, err := v.repo.GetTaskUserID(manifest.GenerationTaskID)
+	ownerID, err := v.repo.GetTaskSpaceID(manifest.GenerationTaskID)
 	if err != nil {
 		return fmt.Errorf("%w: get task owner: %v", ErrSourceInvalid, err)
 	}
-	if ownerID != userID {
-		return fmt.Errorf("%w: owner mismatch expected=%s actual=%s", ErrSourceInvalid, userID, ownerID)
+	if ownerID != spaceID {
+		return fmt.Errorf("%w: owner mismatch expected=%s actual=%s", ErrSourceInvalid, spaceID, ownerID)
 	}
 	return nil
 }

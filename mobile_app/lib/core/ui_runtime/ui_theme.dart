@@ -285,13 +285,42 @@ ThemeData applyUIThemeProvider(ThemeData base, UIProviderDefinition? provider) {
   final icons = _mergeIcons(iconDefault, source);
   final components = _mergeComponents(componentDefault, source);
   final componentVariants = _mergeComponentVariants(componentVariantsDefault, provider);
-  double componentNumber(String component, String key, double fallback) {
-    final value = componentVariants.variant(component)[key];
+  Object? componentValue(String component, String key, {String? fallbackComponent}) {
+    final primary = componentVariants.variant(component)[key];
+    if (primary != null) return primary;
+    if (fallbackComponent != null) {
+      return componentVariants.variant(fallbackComponent)[key];
+    }
+    return null;
+  }
+  double componentNumber(
+    String component,
+    String key,
+    double fallback, {
+    String? fallbackComponent,
+  }) {
+    final value = componentValue(component, key, fallbackComponent: fallbackComponent);
     return value is num ? value.toDouble() : fallback;
   }
-  int componentWeight(String component, String key, int fallback) {
-    final value = componentVariants.variant(component)[key];
+  int componentWeight(
+    String component,
+    String key,
+    int fallback, {
+    String? fallbackComponent,
+  }) {
+    final value = componentValue(component, key, fallbackComponent: fallbackComponent);
     return value is num ? value.toInt() : fallback;
+  }
+  Color componentColor(
+    String component,
+    String key,
+    Color fallback, {
+    String? fallbackComponent,
+  }) {
+    return parseDesignColor(
+          componentValue(component, key, fallbackComponent: fallbackComponent),
+        ) ??
+        fallback;
   }
   DesignTokenRuntime.activate(
     layout: layout,
@@ -387,6 +416,148 @@ ThemeData applyUIThemeProvider(ThemeData base, UIProviderDefinition? provider) {
             ),
           ),
         ),
+      ),
+    ),
+    outlinedButtonTheme: OutlinedButtonThemeData(
+      style: ButtonStyle(
+        minimumSize: WidgetStatePropertyAll(
+          Size(
+            0,
+            componentNumber(
+              'outlinedButton',
+              'minHeight',
+              components.controlHeight,
+              fallbackComponent: 'button',
+            ),
+          ),
+        ),
+        padding: WidgetStatePropertyAll(
+          EdgeInsets.symmetric(
+            horizontal: componentNumber(
+              'outlinedButton',
+              'paddingX',
+              layout.lg,
+              fallbackComponent: 'button',
+            ),
+            vertical: componentNumber(
+              'outlinedButton',
+              'paddingY',
+              layout.sm,
+              fallbackComponent: 'button',
+            ),
+          ),
+        ),
+        shape: WidgetStatePropertyAll(
+          RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(
+              componentNumber(
+                'outlinedButton',
+                'radius',
+                layout.radiusMedium,
+                fallbackComponent: 'button',
+              ),
+            ),
+          ),
+        ),
+        side: WidgetStatePropertyAll(
+          BorderSide(
+            color: componentColor(
+              'outlinedButton',
+              'borderColor',
+              colors.borderPrimary,
+              fallbackComponent: 'button',
+            ),
+            width: componentNumber(
+              'outlinedButton',
+              'borderWidth',
+              components.borderWidth,
+              fallbackComponent: 'button',
+            ),
+          ),
+        ),
+        textStyle: WidgetStatePropertyAll(
+          TextStyle(
+            fontSize: componentNumber(
+              'outlinedButton',
+              'fontSize',
+              typography.buttonSize,
+              fallbackComponent: 'button',
+            ),
+            fontWeight: designFontWeight(
+              componentWeight(
+                'outlinedButton',
+                'fontWeight',
+                typography.buttonWeight,
+                fallbackComponent: 'button',
+              ),
+            ),
+          ),
+        ),
+      ),
+    ),
+    iconButtonTheme: IconButtonThemeData(
+      style: ButtonStyle(
+        minimumSize: WidgetStatePropertyAll(
+          Size.square(
+            componentNumber(
+              'iconButton',
+              'minHeight',
+              components.compactControlHeight,
+              fallbackComponent: 'button',
+            ),
+          ),
+        ),
+        padding: WidgetStatePropertyAll(
+          EdgeInsets.all(
+            componentNumber('iconButton', 'padding', layout.sm),
+          ),
+        ),
+        shape: WidgetStatePropertyAll(
+          RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(
+              componentNumber(
+                'iconButton',
+                'radius',
+                layout.radiusSmall,
+                fallbackComponent: 'button',
+              ),
+            ),
+          ),
+        ),
+        foregroundColor: WidgetStatePropertyAll(
+          componentColor('iconButton', 'color', colors.textPrimary),
+        ),
+      ),
+    ),
+    switchTheme: SwitchThemeData(
+      thumbColor: WidgetStateProperty.resolveWith((states) {
+        if (states.contains(WidgetState.disabled)) return colors.textDisabled;
+        if (states.contains(WidgetState.selected)) {
+          return componentColor('switch', 'thumbColor', Colors.white);
+        }
+        return componentColor('switch', 'inactiveThumbColor', colors.textTertiary);
+      }),
+      trackColor: WidgetStateProperty.resolveWith((states) {
+        if (states.contains(WidgetState.disabled)) {
+          return colors.borderSecondary.withValues(alpha: .5);
+        }
+        if (states.contains(WidgetState.selected)) {
+          return componentColor('switch', 'activeColor', colors.accentPrimary);
+        }
+        return componentColor('switch', 'inactiveTrackColor', colors.borderSecondary);
+      }),
+      trackOutlineColor: WidgetStatePropertyAll(
+        componentColor('switch', 'borderColor', Colors.transparent),
+      ),
+    ),
+    sliderTheme: base.sliderTheme.copyWith(
+      activeTrackColor: componentColor('slider', 'activeColor', colors.accentPrimary),
+      inactiveTrackColor: componentColor('slider', 'inactiveColor', colors.borderSecondary),
+      thumbColor: componentColor('slider', 'thumbColor', colors.accentPrimary),
+      overlayColor: componentColor('slider', 'overlayColor', colors.accentSoft),
+      trackHeight: componentNumber('slider', 'trackHeight', base.sliderTheme.trackHeight ?? 4),
+      thumbShape: RoundSliderThumbShape(
+        enabledThumbRadius: componentNumber('slider', 'thumbRadius', 10),
       ),
     ),
     textButtonTheme: TextButtonThemeData(

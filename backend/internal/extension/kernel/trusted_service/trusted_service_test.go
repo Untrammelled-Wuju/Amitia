@@ -32,6 +32,31 @@ func makeTestExecutable(t *testing.T, dir string) (path, hash string) {
 	return path, hex.EncodeToString(h[:])
 }
 
+func TestBuildSafeEnvironmentIncludesCoreURL(t *testing.T) {
+	s := NewProcessSupervisor(t.TempDir())
+	s.SetCoreURL("http://127.0.0.1:18899/")
+	environment := s.buildSafeEnvironment(
+		&PlatformExecutable{EnvTemplate: map[string]string{"AMITIA_CORE_URL": "http://192.0.2.10:1"}},
+		&ServiceRuntimeDefinition{ExtensionID: "com.example/channel", ModuleID: "channel-service", Protocol: "stdio"},
+		"session",
+		"instance",
+		1,
+		t.TempDir(),
+		"info",
+		"",
+	)
+	found := false
+	for _, entry := range environment {
+		if entry == "AMITIA_CORE_URL=http://127.0.0.1:18899" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected AMITIA_CORE_URL in environment: %#v", environment)
+	}
+}
+
 func TestPlatformSelectorCurrent(t *testing.T) {
 	s := NewPlatformSelector()
 	def := &ServiceRuntimeDefinition{

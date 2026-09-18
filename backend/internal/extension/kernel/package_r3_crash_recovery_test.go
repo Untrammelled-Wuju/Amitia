@@ -77,7 +77,7 @@ func makeUninstallRecoveryOperation(t *testing.T, ctx context.Context, container
 	op := PackageOperationRecord{
 		OperationID:       opID,
 		TraceID:           "trace-" + opID,
-		UserID:            "user-1",
+		SpaceID:           "user-1",
 		ScopeType:         "global",
 		ExtensionID:       extensionID,
 		OperationType:     "uninstall",

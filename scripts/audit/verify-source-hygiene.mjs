@@ -31,7 +31,16 @@ const FORBIDDEN_EXTENSIONS = new Set([
   ".db-shm",
   ".db-wal",
   ".db-journal",
+  ".p12",
+  ".pfx",
+  ".keystore",
+  ".jks",
 ]);
+
+const FORBIDDEN_NAME_PATTERNS = [
+  /(^|[._-])signing[._-]local([._-]|$)/i,
+  /(^|[._-])release[._-]key(store)?([._-]|$)/i,
+];
 
 const RUNTIME_DATA_DIR_NAMES = new Set([
   "storage",
@@ -88,6 +97,10 @@ function isRuntimeDataDir(dirName, relativePath) {
   return true;
 }
 
+function hasForbiddenSensitiveName(fileName) {
+  return FORBIDDEN_NAME_PATTERNS.some((pattern) => pattern.test(fileName));
+}
+
 function scanDirectory(dirPath, violations) {
   let entries;
   try {
@@ -114,7 +127,7 @@ function scanDirectory(dirPath, violations) {
       scanDirectory(fullPath, violations);
     } else if (entry.isFile()) {
       if (isProtectedPath(relPath)) continue;
-      if (FORBIDDEN_FILE_NAMES.has(entry.name)) {
+      if (FORBIDDEN_FILE_NAMES.has(entry.name) || hasForbiddenSensitiveName(entry.name)) {
         violations.push(`forbidden file: ${relPath}`);
         continue;
       }
@@ -156,7 +169,7 @@ for (const entry of rootEntries) {
     scanDirectory(fullPath, violations);
   } else if (entry.isFile()) {
     if (isProtectedPath(entry.name)) continue;
-    if (FORBIDDEN_FILE_NAMES.has(entry.name)) {
+    if (FORBIDDEN_FILE_NAMES.has(entry.name) || hasForbiddenSensitiveName(entry.name)) {
       violations.push(`forbidden file: ${entry.name}`);
       continue;
     }

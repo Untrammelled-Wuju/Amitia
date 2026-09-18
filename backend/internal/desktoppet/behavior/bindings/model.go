@@ -9,7 +9,7 @@ import (
 
 type BindingUpdateRequest struct {
 	ID              string  `json:"id" binding:"required"`
-	UserID          string  `json:"userId"`
+	SpaceID         string  `json:"spaceId"`
 	ExpectedVersion int     `json:"expectedVersion"`
 	EventType       *string `json:"eventType,omitempty"`
 	ConditionsJSON  *string `json:"conditions,omitempty"`
@@ -33,7 +33,7 @@ func (r *BindingUpdateRequest) HasUpdates() bool {
 
 type BehaviorBindingModel struct {
 	ID              string `gorm:"column:id;primaryKey"`
-	UserID          string `gorm:"column:user_id"`
+	SpaceID         string `gorm:"column:space_id"`
 	CharacterID     string `gorm:"column:character_id"`
 	InstallationID  string `gorm:"column:installation_id"`
 	EventType       string `gorm:"column:event_type"`

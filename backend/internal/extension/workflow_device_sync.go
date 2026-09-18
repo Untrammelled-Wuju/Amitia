@@ -17,16 +17,16 @@ const workflowDeviceSyncInterval = 5 * time.Second
 // StartWorkflowDeviceSync starts one deduplicated durable outbox drain/reconcile
 // loop for an online device. The loop exits after the device stays unreachable;
 // the next Device Mesh ready event starts it again.
-func (r *Runtime) StartWorkflowDeviceSync(userID, deviceID string) {
+func (r *Runtime) StartWorkflowDeviceSync(spaceID, deviceID string) {
 	if r == nil || r.WorkflowDeviceControl == nil || r.Kernel == nil || r.Kernel.Container() == nil || r.Kernel.Container().WorkflowDefRepo == nil {
 		return
 	}
-	userID = strings.TrimSpace(userID)
+	spaceID = strings.TrimSpace(spaceID)
 	deviceID = strings.TrimSpace(deviceID)
-	if userID == "" || deviceID == "" {
+	if spaceID == "" || deviceID == "" {
 		return
 	}
-	key := userID + "\x00" + deviceID
+	key := spaceID + "\x00" + deviceID
 	if _, loaded := r.workflowDeviceSyncLoops.LoadOrStore(key, struct{}{}); loaded {
 		return
 	}
@@ -35,7 +35,7 @@ func (r *Runtime) StartWorkflowDeviceSync(userID, deviceID string) {
 		failures := 0
 		for {
 			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-			err := r.SyncWorkflowDeviceOnce(ctx, userID, deviceID)
+			err := r.SyncWorkflowDeviceOnce(ctx, spaceID, deviceID)
 			cancel()
 			if err != nil {
 				failures++
@@ -53,17 +53,17 @@ func (r *Runtime) StartWorkflowDeviceSync(userID, deviceID string) {
 // SyncWorkflowDeviceOnce drains durable local workflow mutations into Cloud's
 // idempotent inbox and then reconciles the latest canonical revisions back to
 // this device. Catalog reconciliation is not used as the normal sync path.
-func (r *Runtime) SyncWorkflowDeviceOnce(ctx context.Context, userID, deviceID string) error {
+func (r *Runtime) SyncWorkflowDeviceOnce(ctx context.Context, spaceID, deviceID string) error {
 	if r == nil || r.WorkflowDeviceControl == nil || r.Kernel == nil || r.Kernel.Container() == nil || r.Kernel.Container().WorkflowDefRepo == nil {
 		return errors.New("workflow device sync unavailable")
 	}
-	userID = strings.TrimSpace(userID)
+	spaceID = strings.TrimSpace(spaceID)
 	deviceID = strings.TrimSpace(deviceID)
-	if userID == "" || deviceID == "" {
+	if spaceID == "" || deviceID == "" {
 		return errors.New("workflow device sync requires user and device")
 	}
 	repo := r.Kernel.Container().WorkflowDefRepo
-	raw, err := r.WorkflowDeviceControl.Invoke(ctx, userID, deviceID, WorkflowMeshSyncOutbox, json.RawMessage(`{"limit":100}`))
+	raw, err := r.WorkflowDeviceControl.Invoke(ctx, spaceID, deviceID, WorkflowMeshSyncOutbox, json.RawMessage(`{"limit":100}`))
 	if err != nil {
 		return err
 	}
@@ -77,7 +77,7 @@ func (r *Runtime) SyncWorkflowDeviceOnce(ctx context.Context, userID, deviceID s
 	}
 	acked := make([]string, 0, len(envelope.Items))
 	for _, item := range envelope.Items {
-		if strings.TrimSpace(item.OwnerUserID) != userID {
+		if strings.TrimSpace(item.OwnerSpaceID) != spaceID {
 			continue
 		}
 		result, applyErr := repo.ApplyWorkflowSyncEvent(ctx, deviceID, item)
@@ -93,16 +93,16 @@ func (r *Runtime) SyncWorkflowDeviceOnce(ctx context.Context, userID, deviceID s
 	}
 	if len(acked) > 0 {
 		ackRaw, _ := json.Marshal(map[string]any{"eventIds": acked})
-		if _, err := r.WorkflowDeviceControl.Invoke(ctx, userID, deviceID, WorkflowMeshSyncAck, ackRaw); err != nil {
+		if _, err := r.WorkflowDeviceControl.Invoke(ctx, spaceID, deviceID, WorkflowMeshSyncAck, ackRaw); err != nil {
 			return err
 		}
 	}
-	return r.reconcileWorkflowCanonicalToDevice(ctx, userID, deviceID)
+	return r.reconcileWorkflowCanonicalToDevice(ctx, spaceID, deviceID)
 }
 
-func (r *Runtime) reconcileWorkflowCanonicalToDevice(ctx context.Context, userID, deviceID string) error {
+func (r *Runtime) reconcileWorkflowCanonicalToDevice(ctx context.Context, spaceID, deviceID string) error {
 	repo := r.Kernel.Container().WorkflowDefRepo
-	stateRaw, err := r.WorkflowDeviceControl.Invoke(ctx, userID, deviceID, WorkflowMeshSyncState, json.RawMessage(`{}`))
+	stateRaw, err := r.WorkflowDeviceControl.Invoke(ctx, spaceID, deviceID, WorkflowMeshSyncState, json.RawMessage(`{}`))
 	if err != nil {
 		return err
 	}
@@ -116,7 +116,7 @@ func (r *Runtime) reconcileWorkflowCanonicalToDevice(ctx context.Context, userID
 	for _, state := range stateEnvelope.Items {
 		states[state.WorkflowID] = state
 	}
-	canonical, err := repo.ListWorkflowSyncCanonical(ctx, userID)
+	canonical, err := repo.ListWorkflowSyncCanonical(ctx, spaceID)
 	if err != nil {
 		return err
 	}
@@ -136,7 +136,7 @@ func (r *Runtime) reconcileWorkflowCanonicalToDevice(ctx context.Context, userID
 		}
 		if item.EventType == sqlite.WorkflowSyncDelete {
 			payload, _ := json.Marshal(map[string]any{"workflowId": item.WorkflowID, "syncRevision": item.Revision})
-			if _, err := r.WorkflowDeviceControl.Invoke(ctx, userID, deviceID, WorkflowMeshDelete, payload); err != nil {
+			if _, err := r.WorkflowDeviceControl.Invoke(ctx, spaceID, deviceID, WorkflowMeshDelete, payload); err != nil {
 				return err
 			}
 			continue
@@ -150,7 +150,7 @@ func (r *Runtime) reconcileWorkflowCanonicalToDevice(ctx context.Context, userID
 		}
 		expected := int64(0)
 		getPayload, _ := json.Marshal(map[string]any{"workflowId": item.WorkflowID})
-		if currentRaw, getErr := r.WorkflowDeviceControl.Invoke(ctx, userID, deviceID, WorkflowMeshGet, getPayload); getErr == nil {
+		if currentRaw, getErr := r.WorkflowDeviceControl.Invoke(ctx, spaceID, deviceID, WorkflowMeshGet, getPayload); getErr == nil {
 			var current workflowAPIResponse
 			if json.Unmarshal(currentRaw, &current) == nil {
 				expected = current.Installation.Revision
@@ -161,7 +161,7 @@ func (r *Runtime) reconcileWorkflowCanonicalToDevice(ctx context.Context, userID
 			"expectedRevision": expected,
 			"syncRevision":     item.Revision,
 		})
-		if _, err := r.WorkflowDeviceControl.Invoke(ctx, userID, deviceID, WorkflowMeshUpsert, payload); err != nil {
+		if _, err := r.WorkflowDeviceControl.Invoke(ctx, spaceID, deviceID, WorkflowMeshUpsert, payload); err != nil {
 			if strings.Contains(err.Error(), "WORKFLOW_REVISION_CONFLICT") {
 				continue
 			}

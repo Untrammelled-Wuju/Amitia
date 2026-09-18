@@ -24,7 +24,7 @@ export interface MockHostOptions {
     scope: "global" | "character" | "conversation";
     characterId?: string;
     conversationId?: string;
-    userId?: string;
+    spaceId?: string;
   };
   readonly secretBackend?: SecretBackend;
   readonly storageBackend?: StorageBackend;

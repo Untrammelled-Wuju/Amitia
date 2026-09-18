@@ -18,19 +18,19 @@ import '../../../core/native_bridge/providers/native_bridge_relay_provider.dart'
 import '../../../core/ui_runtime/ui_client_info.dart';
 import '../../../core/ui_runtime/ui_runtime_controller.dart';
 
-const _runtimeVersion = '2.0.0';
-const _runtimeContractVersion = '2.0.0';
+const _runtimeVersion = '1.0.0';
+const _runtimeContractVersion = '1.0.0';
 const _runtimeProtocol = 'amitia.desktop-pet.runtime';
-const _runtimeWsSubprotocol = 'amitia.runtime.v2';
+const _runtimeWsSubprotocol = 'amitia.runtime.v1';
 const _runtimeBootstrapPrefix = 'amitia.runtime.bootstrap.';
 const _runtimeWsPath = '/internal/desktop-pet/runtime/ws';
 const _prefsAlpha = 'desktopPet.mobile.alpha.v1';
 const _defaultAlpha = 0.85;
 
 const _mandatoryCapabilities = <String>[
-  'runtime.sync_desired_v2',
-  'runtime.play_action_v2',
-  'runtime.renderer_ack_v2',
+  'runtime.sync_desired_v1',
+  'runtime.play_action_v1',
+  'runtime.renderer_ack_v1',
   'runtime.expiry_rfc3339_v1',
   'platform:android',
 ];
@@ -167,7 +167,6 @@ class _TrackedPlayback {
   final String playbackId;
   final String actionKey;
   final String installationId;
-  final String characterId;
   final String decisionId;
   final String completionPolicy;
   final int interruptAfterMs;
@@ -184,7 +183,6 @@ class _TrackedPlayback {
     required this.playbackId,
     required this.actionKey,
     required this.installationId,
-    required this.characterId,
     required this.decisionId,
     required this.completionPolicy,
     required this.interruptAfterMs,
@@ -206,7 +204,7 @@ final desktopPetMobileRuntimeProvider = StateNotifierProvider<
   return notifier;
 });
 
-/// Keeps the Android Runtime V2 renderer attached to the embedded Device Agent
+/// Keeps the Android Runtime V1 renderer attached to the embedded Device Agent
 /// even when the desktop-pet page is not open.
 final desktopPetMobileRuntimeBootstrapProvider = Provider<int?>((ref) {
   if (kIsWeb || !Platform.isAndroid) {
@@ -249,7 +247,7 @@ class DesktopPetMobileRuntimeNotifier
   int _attachEpoch = 0;
   Future<void> _inboundSerial = Future<void>.value();
 
-  String _userId = '';
+  String _spaceId = '';
   String _deviceId = '';
   String _runtimeId = '';
   String _sessionId = '';
@@ -454,8 +452,8 @@ class DesktopPetMobileRuntimeNotifier
       );
       if (ticket == null) throw StateError('runtime bootstrap ticket is empty');
       final rawTicket = ticket['ticket']?.toString().trim() ?? '';
-      _userId = ticket['userId']?.toString().trim() ?? '';
-      if (rawTicket.isEmpty || _userId.isEmpty) {
+      _spaceId = ticket['spaceId']?.toString().trim() ?? '';
+      if (rawTicket.isEmpty || _spaceId.isEmpty) {
         throw StateError('runtime bootstrap ticket is invalid');
       }
       if (!RegExp(r'^[A-Za-z0-9._~-]+$').hasMatch(rawTicket)) {
@@ -575,10 +573,10 @@ class DesktopPetMobileRuntimeNotifier
   }
 
   void _validateServerEnvelope(Map<String, dynamic> envelope) {
-    if (envelope['envelopeVersion'] != 2 || envelope['protocol'] != _runtimeProtocol) {
+    if (envelope['envelopeVersion'] != 1 || envelope['protocol'] != _runtimeProtocol) {
       throw const FormatException('invalid runtime protocol envelope');
     }
-    if (envelope['userId']?.toString() != _userId ||
+    if (envelope['spaceId']?.toString() != _spaceId ||
         envelope['deviceId']?.toString() != _deviceId ||
         envelope['runtimeId']?.toString() != _runtimeId) {
       throw const FormatException('runtime envelope identity mismatch');
@@ -665,7 +663,7 @@ class DesktopPetMobileRuntimeNotifier
     _startHeartbeat();
 
     // A local renderer/status API failure after a valid hello_ack is not a
-    // Runtime-v2 protocol violation. Keep the healthy socket and report the
+    // Runtime-v1 protocol violation. Keep the healthy socket and report the
     // local degradation so the periodic snapshot/recovery path can retry.
     try {
       await _flushPendingPosition();
@@ -722,7 +720,7 @@ class DesktopPetMobileRuntimeNotifier
         cached: cached,
       );
       if (cached['ok'] == true) {
-        // Mirror the canonical Electron Runtime V2 replay sequence. Successful
+        // Mirror the canonical Electron Runtime V1 replay sequence. Successful
         // durable replays may repeat received/accepted before desired_applied.
         await _sendCommandAck(commandId, commandSequence, 'runtime_received');
         await _sendCommandAck(commandId, commandSequence, 'runtime_accepted');
@@ -1138,14 +1136,11 @@ class DesktopPetMobileRuntimeNotifier
     }
 
     requireIdentity('petId', installation['petId']?.toString() ?? '');
-    requireIdentity('characterId', installation['characterId']?.toString() ?? '');
     requireIdentity('releaseId', installation['currentReleaseId']?.toString() ?? '');
 
     final authoritativePetId = installation['petId']?.toString().trim() ?? '';
     final authoritativeReleaseId =
         installation['currentReleaseId']?.toString().trim() ?? '';
-    final authoritativeCharacterId =
-        installation['characterId']?.toString().trim() ?? '';
     final manifestPetId = manifest['petId']?.toString().trim() ?? '';
     final manifestReleaseId = manifest['releaseId']?.toString().trim() ?? '';
     if (manifest.isEmpty ||
@@ -1181,7 +1176,7 @@ class DesktopPetMobileRuntimeNotifier
     if (expectedManifestHash.isEmpty || expectedContentRootHash.isEmpty) {
       throw const _RuntimeCommandFailure(
         'PACKAGE_INTEGRITY_AUTHORITY_MISSING',
-        'authoritative Package V2 integrity hashes are missing',
+        'authoritative Package V1 integrity hashes are missing',
       );
     }
 
@@ -1208,7 +1203,7 @@ class DesktopPetMobileRuntimeNotifier
     final prefs = await SharedPreferences.getInstance();
     final alpha = (prefs.getDouble(_prefsAlpha) ?? state.alpha).clamp(0.2, 1.0).toDouble();
 
-    // Runtime V2 desiredHash covers the complete canonical RuntimeSettings
+    // Runtime V1 desiredHash covers the complete canonical RuntimeSettings
     // object. Android must never silently project unsupported desktop-only
     // values and still acknowledge that canonical hash as applied.
     final alwaysOnTop = _int(settings['alwaysOnTop'], 1);
@@ -1283,7 +1278,6 @@ class DesktopPetMobileRuntimeNotifier
     await _native('desktop.pet.renderer.unload');
     final loaded = await _native('desktop.pet.renderer.load', <String, dynamic>{
       'installationId': installationId,
-      'characterId': authoritativeCharacterId,
       'petId': authoritativePetId,
       'releaseId': authoritativeReleaseId,
       'releaseVersion': expectedReleaseVersion,
@@ -1353,7 +1347,6 @@ class DesktopPetMobileRuntimeNotifier
     final requestedInstance = inner['petInstanceId']?.toString().trim() ?? '';
     final installationId =
         (inner['installationId'] ?? outer['installationId'])?.toString().trim() ?? '';
-    final characterId = inner['characterId']?.toString().trim() ?? '';
     if (requestedRuntimeId.isEmpty || requestedRuntimeId != _runtimeId) {
       throw const _RuntimeCommandFailure(
         'RUNTIME_ID_MISMATCH',
@@ -1372,15 +1365,6 @@ class DesktopPetMobileRuntimeNotifier
         'play action must target the active installation',
       );
     }
-    final nativeStatus = await _native('desktop.pet.renderer.status');
-    final activeCharacter = nativeStatus['characterId']?.toString().trim() ?? '';
-    if (characterId.isEmpty || activeCharacter.isEmpty || characterId != activeCharacter) {
-      throw const _RuntimeCommandFailure(
-        'CHARACTER_MISMATCH',
-        'play action must target the active installation character',
-      );
-    }
-
     final queuePolicy = inner['queuePolicy']?.toString().trim() ?? 'replace_current';
     if (queuePolicy != 'replace_current' && queuePolicy != 'enqueue') {
       throw const _RuntimeCommandFailure(
@@ -1389,7 +1373,7 @@ class DesktopPetMobileRuntimeNotifier
       );
     }
     if (_playback != null && queuePolicy == 'enqueue') {
-      // Runtime V2 currently exposes one physical Android lane. Until an action
+      // Runtime V1 currently exposes one physical Android lane. Until an action
       // has a renderer-owned playback identity, claiming queue admission would
       // create an unverifiable lifecycle. Reject truthfully so the scheduler can
       // retry/re-plan rather than leaving a command stuck in runtime_accepted.
@@ -1398,6 +1382,7 @@ class DesktopPetMobileRuntimeNotifier
         'Android desktop pet renderer is busy; enqueue admission is unavailable',
       );
     }
+    final nativeStatus = await _native('desktop.pet.renderer.status');
     final current = _playback;
     if (current != null) {
       final currentPlayedMs = _nonNegativeInt(nativeStatus['playedMs']);
@@ -1458,7 +1443,6 @@ class DesktopPetMobileRuntimeNotifier
       playbackId: playbackId,
       actionKey: actionKey,
       installationId: state.installationId,
-      characterId: characterId,
       decisionId: inner['decisionId']?.toString() ?? '',
       completionPolicy: inner['completionPolicy']?.toString() ?? '',
       interruptAfterMs: interruptAfterMs,
@@ -1491,7 +1475,7 @@ class DesktopPetMobileRuntimeNotifier
     } catch (error) {
       if (!_disposed) {
         // Do not manufacture a renderer failure when local execution already
-        // settled and only lifecycle/snapshot delivery failed. Runtime V2
+        // settled and only lifecycle/snapshot delivery failed. Runtime V1
         // fences ephemeral lifecycle across reconnects; the next authoritative
         // snapshot/cursor reconciliation is responsible for convergence.
         state = state.copyWith(
@@ -1692,7 +1676,6 @@ class DesktopPetMobileRuntimeNotifier
       'actionKey': tracked.actionKey,
       'triggerSource': 'runtime_command',
       'installationId': tracked.installationId,
-      if (tracked.characterId.isNotEmpty) 'characterId': tracked.characterId,
       'petInstanceId': _runtimeId,
       if (tracked.decisionId.isNotEmpty) 'decisionId': tracked.decisionId,
       if (name == 'runtime.playback.action_started') 'startedAt': now,
@@ -1882,12 +1865,12 @@ class DesktopPetMobileRuntimeNotifier
     }
     _outboundSequence = max(_outboundSequence, sequence);
     final envelope = <String, dynamic>{
-      'envelopeVersion': 2,
+      'envelopeVersion': 1,
       'protocol': _runtimeProtocol,
       'messageType': messageType,
       'messageName': messageName,
       'messageId': 'msg_${DateTime.now().microsecondsSinceEpoch}_${_randomToken(8)}',
-      'userId': _userId,
+      'spaceId': _spaceId,
       'deviceId': _deviceId,
       'runtimeId': _runtimeId,
       'runtimeSessionId': _sessionId,

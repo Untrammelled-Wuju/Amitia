@@ -41,7 +41,7 @@ export function isUIProviderCapability(value: string): value is UIProviderCapabi
 
 export type UIProviderMode = "replace" | "compose" | "augment";
 export type UIProviderPlacement = "any" | "cloud" | "device" | "hybrid";
-export type UIProfileScopeKind = "global" | "user" | "platform" | "device" | "device_platform" | "runtime";
+export type UIProfileScopeKind = "global" | "space" | "platform" | "device" | "device_platform" | "runtime";
 export type UIProviderEntryType =
   | "builtin_native"
   | "declarative"
@@ -68,7 +68,7 @@ export interface UIDeviceRequirements {
 }
 
 export interface UIProfileScope {
-  userId?: string;
+  spaceId?: string;
   deviceId?: string;
   platform?: string;
   runtimeProfile?: string;

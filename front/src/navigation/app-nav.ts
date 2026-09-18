@@ -1,7 +1,6 @@
 import type { Component } from "vue";
 import {
   ChatDotRound,
-  ChatDotSquare,
   Connection,
   Odometer,
   Opportunity,
@@ -52,13 +51,6 @@ export const desktopNavGroups: AppNavGroup[] = [
     ],
   },
   {
-    key: "links",
-    items: [
-      { key: "wechat", to: "/wechat", label: "微信连接", icon: Connection },
-      { key: "qq", to: "/qq", label: "QQ 连接", icon: ChatDotSquare },
-    ],
-  },
-  {
     key: "system",
     items: [
       { key: "devices", to: "/devices", label: "我的设备", icon: Connection },
@@ -93,9 +85,7 @@ export const mobileNavItems = desktopNavGroups.flatMap((group) =>
 const titleItems = desktopNavGroups.flatMap((group) => group.items);
 
 const extraTitles = [
-  { path: "/login", label: "登录" },
   { path: "/onboarding", label: "引导" },
-  { path: "/setup", label: "初始化" },
   { path: "/privacy", label: "隐私说明" },
   { path: "/usage-boundary", label: "使用边界" },
   { path: "/storage", label: "存储清理" },
@@ -103,15 +93,12 @@ const extraTitles = [
   { path: "/runtime-debug", label: "运行时调试" },
   { path: "/user-settings", label: "用户信息" },
   { path: "/creative-workshop", label: "创意工坊" },
+  { path: "/creative-workshop/character-cards", label: "角色卡工坊" },
   { path: "/creative-workshop/pet", label: "桌宠" },
-  { path: "/creative-workshop/skills", label: "技能制作" },
   { path: "/emotes", label: "表情包管理" },
   { path: "/extensions/mcp", label: "MCP 服务" },
   { path: "/extensions/packages", label: "扩展包" },
-  { path: "/extensions/skills", label: "技能管理" },
-  { path: "/extensions/plugins", label: "系统插件" },
-  { path: "/extensions/workshop", label: "技能制作" },
-  { path: "/extensions/runs", label: "技能执行记录" },
+  { path: "/extensions/workflows", label: "工作流" },
   { path: "/extensions", label: "扩展中心" },
   { path: "/kernel", label: "扩展包" },
   { path: "/kernel/trusted-services", label: "可信服务运行时" },
@@ -130,6 +117,8 @@ const extraTitles = [
   { path: "/workspaces", label: "工作区" },
   { path: "/realtime-voice", label: "实时语音" },
   { path: "/long-running", label: "长期运行维护" },
+  { path: "/settings/system-logs", label: "系统运行日志" },
+  { path: "/settings/prompt-trace", label: "Prompt Trace" },
 ];
 
 export function isNavItemActive(path: string, item: AppNavItem) {

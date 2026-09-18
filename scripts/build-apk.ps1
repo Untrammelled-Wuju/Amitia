@@ -149,14 +149,6 @@ function Build-Runtime {
         if (-not (Test-Path -LiteralPath $item -PathType Leaf)) { throw "缺少构建依赖: $item" }
     }
 
-    $wechat = Join-Path $backend 'sidecar\bundle.mjs'
-    $qq = Join-Path $backend 'qq-sidecar\bundle.mjs'
-    $wechatLauncher = Join-Path $backend 'sidecar\launcher.mjs'
-    $qqLauncher = Join-Path $backend 'qq-sidecar\launcher.mjs'
-    foreach ($item in @($wechat, $qq, $wechatLauncher, $qqLauncher)) {
-        if (-not (Test-Path -LiteralPath $item -PathType Leaf)) { throw "缺少已提交的侧车构建产物: $item" }
-    }
-
     New-Item -ItemType Directory -Path $stage | Out-Null
     try {
         $server = Join-Path $stage 'amitia-server'
@@ -177,10 +169,6 @@ function Build-Runtime {
             $builder,
             '--base-package', $base,
             '--backend', $server,
-            '--wechat-bundle', $wechat,
-            '--wechat-launcher', $wechatLauncher,
-            '--qq-bundle', $qq,
-            '--qq-launcher', $qqLauncher,
             '--surrealdb', $surreal,
             '--surrealdb-version', $surrealDbVersion,
             '--output', $runtimeOutput

@@ -95,13 +95,14 @@ internal object GeofenceAutomationManager {
         requireBackgroundPermission(context)
         val manager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
         val remaining = if (fence.expirationAt == 0L) -1L else (fence.expirationAt - System.currentTimeMillis()).coerceAtLeast(1L)
+        val intent = pendingIntent(context, fence.id, PendingIntent.FLAG_UPDATE_CURRENT) ?: return
         @Suppress("MissingPermission", "DEPRECATION")
         manager.addProximityAlert(
             fence.latitude,
             fence.longitude,
             fence.radiusMeters,
             remaining,
-            pendingIntent(context, fence.id, PendingIntent.FLAG_UPDATE_CURRENT),
+            intent,
         )
     }
 
@@ -197,8 +198,9 @@ internal class WorkflowGeofenceReceiver : BroadcastReceiver() {
                 }
                 WorkflowDeviceEventIngress(context.applicationContext).emit(
                     eventType = if (entering) "device.location.geofence.enter" else "device.location.geofence.exit",
-                    eventId = "geofence:$fenceId:${if (entering) "enter" else "exit"}:${System.currentTimeMillis()}",
-                    payload = buildMap {
+                    eventID = "geofence:$fenceId:${if (entering) "enter" else "exit"}:${System.currentTimeMillis()}",
+                    source = "android.background_location",
+                    payload = JSONObject().apply {
                         put("fenceId", fenceId)
                         put("entering", entering)
                         if (location != null) {

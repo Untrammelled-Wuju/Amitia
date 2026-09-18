@@ -1,12 +1,13 @@
-import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../app/app_routes.dart';
 import '../../../app/route_transitions.dart';
 import '../../../features/chat/presentation/pages/chat_page.dart';
 import '../../../features/conversations/presentation/pages/conversation_list_page.dart';
+import '../../../features/agent/presentation/pages/agent_page.dart';
 import '../../../features/agent/presentation/pages/agent_task_detail_page.dart';
 import '../../../features/characters/presentation/pages/character_list_page.dart';
+import '../../../features/characters/presentation/pages/character_card_workshop_page.dart';
 import '../../../features/characters/presentation/pages/character_detail_page.dart';
 import '../../../features/characters/presentation/pages/character_life_rules_page.dart';
 import '../../../features/characters/presentation/pages/character_voice_page.dart';
@@ -32,14 +33,13 @@ import '../../../features/extensions/presentation/pages/mcp_list_page.dart';
 import '../../../features/extensions/presentation/pages/mcp_detail_page.dart';
 import '../../../features/extensions/presentation/pages/mcp_edit_page.dart';
 import '../../../features/extensions/presentation/pages/agent_skills_page.dart';
-import '../../../features/extensions/presentation/pages/system_plugins_page.dart';
 import '../../../features/extensions/presentation/pages/compatible_skills_page.dart';
 import '../../../features/extensions/presentation/pages/execution_runs_page.dart';
 import '../../../features/extensions/presentation/pages/extension_run_detail_page.dart';
 import '../../../features/extensions/presentation/pages/extension_page_host_page.dart';
 import '../../../features/extensions/presentation/pages/skill_detail_page.dart';
-import '../../../features/extensions/presentation/pages/plugin_detail_page.dart';
 import '../../../features/game_center/presentation/pages/game_center_page.dart';
+import '../../../features/game_center/presentation/pages/plugin_detail_page.dart' as game_center;
 import '../../../features/desktop_pet/presentation/pages/desktop_pet_page.dart';
 import '../../../features/workshop/presentation/pages/workshop_home_page.dart';
 import '../../../features/workshop/presentation/pages/workflow_list_page.dart';
@@ -53,9 +53,6 @@ import '../../../features/workshop/presentation/pages/pet_processing_page.dart';
 import '../../../features/workshop/presentation/pages/pet_action_editor_page.dart';
 import '../../../features/workshop/presentation/pages/pet_installations_page.dart';
 import '../../../features/dashboard/presentation/pages/dashboard_page.dart';
-import '../../../features/channels/presentation/pages/wechat_page.dart';
-import '../../../features/channels/presentation/pages/qq_page.dart';
-import '../../../features/channels/presentation/pages/channel_center_page.dart';
 import '../../../features/characters/presentation/pages/character_create_page.dart';
 import '../../../features/settings/presentation/pages/settings_page.dart';
 import '../../../features/settings/presentation/pages/model_settings_page.dart';
@@ -68,7 +65,6 @@ import '../../../features/settings/presentation/pages/decision_viz_page.dart';
 import '../../../features/permissions/presentation/pages/permissions_page.dart';
 import '../../../features/permissions/presentation/pages/android_automation_page.dart';
 import '../../../features/settings/presentation/pages/backup_page.dart';
-import '../../../features/settings/presentation/pages/ai_config_page.dart';
 import '../../../features/settings/presentation/pages/asr_page.dart';
 import '../../../features/settings/presentation/pages/deployment_page.dart';
 import '../../../features/settings/presentation/pages/system_settings_page.dart';
@@ -137,31 +133,11 @@ GoRoute(
       drawerSlideFadePage(state: state, child: const DashboardPage()),
 ),
 GoRoute(
-  path: '/channels',
+  path: '/agent',
   pageBuilder: (context, state) => drawerSlideFadePage(
     state: state,
-    child: const ChannelCenterPage(),
+    child: const AgentPage(),
   ),
-),
-GoRoute(
-  path: '/channels/wechat',
-  pageBuilder: (context, state) => slideFadePage(
-    context: context,
-    state: state,
-    child: const WechatPage(),
-  ),
-),
-GoRoute(
-  path: '/channels/qq',
-  pageBuilder: (context, state) => slideFadePage(
-    context: context,
-    state: state,
-    child: const QqPage(),
-  ),
-),
-GoRoute(
-  path: '/agent',
-  redirect: (context, state) => AppRoutes.chat,
 ),
 GoRoute(
   path: '/agent/task/:id',
@@ -413,22 +389,6 @@ GoRoute(
   ),
 ),
 GoRoute(
-  path: '/extensions/plugins',
-  pageBuilder: (context, state) => slideFadePage(
-    context: context,
-    state: state,
-    child: const SystemPluginsPage(),
-  ),
-),
-GoRoute(
-  path: '/extensions/plugins/:id',
-  pageBuilder: (context, state) => slideFadePage(
-    context: context,
-    state: state,
-    child: PluginDetailPage(pluginId: state.pathParameters['id']!),
-  ),
-),
-GoRoute(
   path: '/extensions/runs',
   pageBuilder: (context, state) => slideFadePage(
     context: context,
@@ -463,6 +423,17 @@ GoRoute(
   ),
 ),
 GoRoute(
+  path: AppRoutes.gamePlugin,
+  pageBuilder: (context, state) => slideFadePage(
+    context: context,
+    state: state,
+    child: game_center.PluginDetailPage(
+      pluginId: state.uri.queryParameters['pluginId'] ?? '',
+      extensionId: state.uri.queryParameters['extensionId'] ?? '',
+    ),
+  ),
+),
+GoRoute(
   path: '/desktop-pet',
   pageBuilder: (context, state) => drawerSlideFadePage(
     state: state,
@@ -474,6 +445,14 @@ GoRoute(
   pageBuilder: (context, state) => drawerSlideFadePage(
     state: state,
     child: const WorkshopHomePage(),
+  ),
+),
+GoRoute(
+  path: '/workshop/character-cards',
+  pageBuilder: (context, state) => slideFadePage(
+    context: context,
+    state: state,
+    child: const CharacterCardWorkshopPage(),
   ),
 ),
 GoRoute(
@@ -624,14 +603,6 @@ GoRoute(
     context: context,
     state: state,
     child: const BackupPage(),
-  ),
-),
-GoRoute(
-  path: '/settings/ai',
-  pageBuilder: (context, state) => slideFadePage(
-    context: context,
-    state: state,
-    child: const AiConfigPage(),
   ),
 ),
 GoRoute(

@@ -44,6 +44,7 @@ function transformContribution(def: BackendUIContributionDefinition): UIContribu
     runtimeReady: true,
     permissions: perms,
     sandbox: def.sandbox?.type,
+    runtimeId: def.entry?.runtime_id,
     entryPath: def.entry?.path,
     schemaPath: def.entry?.schema_path,
     dataContract: def.data_contract && typeof def.data_contract === "object"
@@ -66,9 +67,9 @@ function transformSlotSnapshot(entry: BackendSlotSnapshotEntry): SlotSnapshot {
     contractVersion: entry.contractVersion ?? 1,
     supportedKinds: entry.supportedKinds ?? [],
     kind: entry.kind,
-    layout: entry.layout ?? "stack",
-    multiplicity: entry.multiplicity ?? "ordered_multiple",
-    fallbackPolicy: entry.fallbackPolicy ?? "empty",
+    layout: (entry.layout ?? "stack") as SlotSnapshot["layout"],
+    multiplicity: (entry.multiplicity ?? "ordered_multiple") as SlotSnapshot["multiplicity"],
+    fallbackPolicy: (entry.fallbackPolicy ?? "empty") as SlotSnapshot["fallbackPolicy"],
     description: entry.description,
     platforms: entry.platform,
     orderingPolicy: entry.orderingPolicy,
@@ -152,7 +153,7 @@ export async function fetchConversationUIEventsBeforeSequence(
 }
 
 export interface ClientRuntimeSessionState {
-  userId?: string;
+  spaceId?: string;
   conversationId: string;
   revision: number;
   packages: Array<{
@@ -225,6 +226,9 @@ export async function revokeBridgeSession(sessionId: string): Promise<void> {
 export async function invokeBridgeMethod(sessionId: string, params: {
   method: string;
   contributionId: string;
+  token: string;
+  generation: number;
+  nonce: string;
   origin?: string;
   contractVersion?: number;
   payload?: unknown;
@@ -236,6 +240,9 @@ export async function invokeBridgeMethod(sessionId: string, params: {
       contributionId: params.contributionId,
       origin: params.origin ?? "web",
       contractVersion: params.contractVersion ?? 1,
+      token: params.token,
+      generation: params.generation,
+      nonce: params.nonce,
       payload: params.payload ?? {},
     },
   );

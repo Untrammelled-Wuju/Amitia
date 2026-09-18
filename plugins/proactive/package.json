@@ -1,0 +1,11 @@
+{
+  "name": "@amitia/proactive-extension",
+  "version": "1.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build-package.mjs",
+    "verify": "node scripts/verify-package.mjs",
+    "test": "node scripts/test-runtime.mjs"
+  }
+}

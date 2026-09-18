@@ -1,5 +1,7 @@
 import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart';
+import '../backend_connection/backend_connection_config.dart';
+import 'native_bridge_platform_dispatcher.dart';
 import 'native_bridge_relay_client.dart';
 
 class NativeBridgePlatformAdapter {
@@ -15,15 +17,15 @@ class NativeBridgePlatformAdapter {
   }
 
   static NativeBridgeRelayClient createClient({
-    required String baseUrl,
+    required BackendConnectionConfig connectionConfig,
+    required NativeBridgePlatformDispatcher dispatcher,
     String? platform,
-    Duration heartbeatInterval = const Duration(seconds: 30),
     Duration reconnectDelay = const Duration(seconds: 3),
   }) {
     return NativeBridgeRelayClient(
-      baseUrl: baseUrl,
+      connectionConfig: connectionConfig,
+      dispatcher: dispatcher,
       platform: platform ?? NativeBridgePlatformAdapter.platform,
-      heartbeatInterval: heartbeatInterval,
       reconnectDelay: reconnectDelay,
     );
   }

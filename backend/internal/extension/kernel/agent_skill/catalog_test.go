@@ -42,7 +42,7 @@ func TestAgentSkillCatalogList(t *testing.T) {
 	cat := NewAgentSkillCatalog()
 
 	def1 := AgentSkillDefinition{ID: "s1", ExtensionID: "s1", Name: "one", Scope: AgentSkillScopeGlobal, Enabled: true}
-	def2 := AgentSkillDefinition{ID: "s2", ExtensionID: "s2", Name: "two", Scope: AgentSkillScopeCharacter, Enabled: false}
+	def2 := AgentSkillDefinition{ID: "s2", ExtensionID: "s2", Name: "two", Scope: AgentSkillScopeGlobal, Enabled: false}
 
 	_ = cat.Register(def1)
 	_ = cat.Register(def2)

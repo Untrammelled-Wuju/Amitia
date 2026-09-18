@@ -9,7 +9,7 @@ package migration
 func DesktopPetProcessingOwnershipBackfillMigration() Migration {
 	return Migration{
 		Version: "202608300001",
-		Name:    "backfill_desktop_pet_processing_ownership",
+		Name:    "desktop_pet_processing_ownership_backfill",
 		Up: func(s *Step) error {
 			s.Execute(`UPDATE desktop_pet_processing_tasks
 SET user_id = COALESCE((

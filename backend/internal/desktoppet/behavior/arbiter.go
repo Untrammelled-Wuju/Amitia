@@ -124,7 +124,7 @@ func (a *Arbiter) Arbitrate(ctx *BehaviorContextSnapshot, candidates []Candidate
 	decision := &BehaviorDecision{
 		DecisionID:         UUIDNew(),
 		EventID:            winner.SourceEventID,
-		UserID:             ctx.UserID,
+		SpaceID:            ctx.SpaceID,
 		CharacterID:        ctx.CharacterID,
 		InstallationID:     activePet.InstallationID,
 		ContextRevision:    ctx.Revision,
@@ -286,7 +286,7 @@ func (a *Arbiter) ResolveStableRecovery(ctx *BehaviorContextSnapshot, activePet 
 				if available[key] {
 					return &BehaviorDecision{
 						DecisionID:      UUIDNew(),
-						UserID:          ctx.UserID,
+						SpaceID:         ctx.SpaceID,
 						CharacterID:     ctx.CharacterID,
 						InstallationID:  activePet.InstallationID,
 						ContextRevision: ctx.Revision,
@@ -306,7 +306,7 @@ func (a *Arbiter) ResolveStableRecovery(ctx *BehaviorContextSnapshot, activePet 
 	if available["idle_normal"] {
 		return &BehaviorDecision{
 			DecisionID:      UUIDNew(),
-			UserID:          ctx.UserID,
+			SpaceID:         ctx.SpaceID,
 			CharacterID:     ctx.CharacterID,
 			InstallationID:  activePet.InstallationID,
 			ContextRevision: ctx.Revision,

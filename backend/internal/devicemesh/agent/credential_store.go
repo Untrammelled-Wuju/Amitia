@@ -11,14 +11,14 @@ import (
 )
 
 type StoredCredential struct {
-	CloudBaseUrl   string                  `json:"cloudBaseUrl"`
-	CredentialID   string                  `json:"credentialId"`
-	Credential     string                  `json:"credential"`
-	UserID         runtimeidentity.UserID  `json:"userId"`
-	DeviceID       runtimeidentity.DeviceID `json:"deviceId"`
-	RuntimeID      runtimeidentity.RuntimeID `json:"runtimeId"`
-	ExpiresAt      time.Time               `json:"expiresAt"`
-	Protocol       string                  `json:"protocol"`
+	CloudBaseUrl string                    `json:"cloudBaseUrl"`
+	CredentialID string                    `json:"credentialId"`
+	Credential   string                    `json:"credential"`
+	SpaceID      runtimeidentity.SpaceID   `json:"spaceId"`
+	DeviceID     runtimeidentity.DeviceID  `json:"deviceId"`
+	RuntimeID    runtimeidentity.RuntimeID `json:"runtimeId"`
+	ExpiresAt    time.Time                 `json:"expiresAt"`
+	Protocol     string                    `json:"protocol"`
 }
 
 type SessionCursor struct {

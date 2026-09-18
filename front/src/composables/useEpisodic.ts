@@ -5,7 +5,7 @@ import { apiClient } from "../ui-index";
 
 export interface EpisodicMemory {
   id: string;
-  userId: string;
+  spaceId: string;
   sceneType: string;
   title: string;
   content: string;
@@ -17,6 +17,14 @@ export interface EpisodicMemory {
   messageIdEnd: string;
   sourceConvId: string;
   createdAt: string;
+  updatedAt?: string;
+  retentionLevel: number;
+  memoryStrength: number;
+  strengthUpdatedAt?: string | null;
+  lastReinforcedAt?: string | null;
+  reinforceCount: number;
+  decayState: string;
+  archivedAt?: string | null;
 }
 
 export interface EpisodicListResponse {
@@ -49,8 +57,11 @@ export function useEpisodic() {
   const total = ref(0);
 
   async function fetchMemories(params?: {
-    userId?: string;
+    spaceId?: string;
     sceneType?: string;
+    retentionLevel?: number;
+    decayState?: string;
+    keyword?: string;
     page?: number;
     pageSize?: number;
   }) {
@@ -71,6 +82,14 @@ export function useEpisodic() {
   async function deleteMemory(id: string) {
     await apiClient.delete(`/api/episodic/${id}`);
     await fetchMemories();
+  }
+
+  async function updateRetention(id: string, retentionLevel: number) {
+    await apiClient.put(`/api/episodic/${id}/retention`, { retentionLevel });
+  }
+
+  async function restoreMemory(id: string) {
+    await apiClient.post(`/api/episodic/${id}/restore`);
   }
 
   async function getDetail(id: string) {
@@ -111,6 +130,8 @@ export function useEpisodic() {
     total,
     fetchMemories,
     deleteMemory,
+    updateRetention,
+    restoreMemory,
     getDetail,
     sceneLabel,
     sceneEmoji,

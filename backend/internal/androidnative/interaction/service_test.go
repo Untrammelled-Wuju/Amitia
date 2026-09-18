@@ -25,7 +25,7 @@ func TestService_Status_Available(t *testing.T) {
 
 func TestService_Status_NoExecutors(t *testing.T) {
 	policy := DefaultPolicy()
-	service := NewService(nil, nil, nil, nil, nil, nil, nil, nil, policy)
+	service := NewService(nil, nil, nil, nil, nil, nil, nil, nil, nil, policy)
 
 	state := service.Status(context.Background())
 
@@ -71,7 +71,7 @@ func TestService_Click_NodeTarget_CoordinateFallback(t *testing.T) {
 		accessibility,
 		&mockCoordinateExecutor{},
 		&mockVisualLocator{},
-		nil, nil, &mockVerifier{},
+		nil, nil, nil, &mockVerifier{},
 		DefaultPolicy(),
 	)
 
@@ -107,7 +107,7 @@ func TestService_Click_NodeStale(t *testing.T) {
 		&mockAccessibilityExecutor{},
 		&mockCoordinateExecutor{},
 		&mockVisualLocator{},
-		nil, nil, &mockVerifier{},
+		nil, nil, nil, &mockVerifier{},
 		DefaultPolicy(),
 	)
 
@@ -165,6 +165,7 @@ func TestService_CoordinateTarget_RootFallback(t *testing.T) {
 		nil,
 		&mockVisualLocator{},
 		&mockRootExecutor{},
+		nil,
 		nil,
 		&mockVerifier{},
 		policy,
@@ -254,7 +255,7 @@ func TestService_InputText_EditableNode(t *testing.T) {
 		&mockAccessibilityExecutor{},
 		&mockCoordinateExecutor{},
 		&mockVisualLocator{},
-		nil, nil, &mockVerifier{},
+		nil, nil, nil, &mockVerifier{},
 		DefaultPolicy(),
 	)
 
@@ -299,7 +300,7 @@ func TestService_InputText_PasswordDenied(t *testing.T) {
 		&mockAccessibilityExecutor{},
 		&mockCoordinateExecutor{},
 		&mockVisualLocator{},
-		nil, nil, &mockVerifier{},
+		nil, nil, nil, &mockVerifier{},
 		DefaultPolicy(),
 	)
 
@@ -344,7 +345,7 @@ func TestService_InputText_NotEditable(t *testing.T) {
 		&mockAccessibilityExecutor{},
 		&mockCoordinateExecutor{},
 		&mockVisualLocator{},
-		nil, nil, &mockVerifier{},
+		nil, nil, nil, &mockVerifier{},
 		DefaultPolicy(),
 	)
 
@@ -382,7 +383,7 @@ func TestService_ClearText_EditableNode(t *testing.T) {
 		&mockAccessibilityExecutor{},
 		&mockCoordinateExecutor{},
 		&mockVisualLocator{},
-		nil, nil, &mockVerifier{},
+		nil, nil, nil, &mockVerifier{},
 		DefaultPolicy(),
 	)
 
@@ -425,7 +426,7 @@ func TestService_Scroll_ForwardDirection(t *testing.T) {
 		&mockAccessibilityExecutor{},
 		&mockCoordinateExecutor{},
 		&mockVisualLocator{},
-		nil, nil, &mockVerifier{},
+		nil, nil, nil, &mockVerifier{},
 		DefaultPolicy(),
 	)
 
@@ -479,7 +480,7 @@ func TestService_Swipe_RootFallback(t *testing.T) {
 	service := NewService(
 		nil, nil, nil, nil, nil,
 		&mockRootExecutor{},
-		nil, nil,
+		nil, nil, nil,
 		policy,
 	)
 
@@ -520,7 +521,7 @@ func TestService_VisualLocate_Success(t *testing.T) {
 
 func TestService_VisualLocate_NoLocator(t *testing.T) {
 	service := NewService(
-		nil, nil, nil, nil, nil, nil, nil, nil,
+		nil, nil, nil, nil, nil, nil, nil, nil, nil,
 		DefaultPolicy(),
 	)
 
@@ -555,7 +556,7 @@ func TestService_VisualClick_Success(t *testing.T) {
 
 func TestService_VisualClick_NoLocator(t *testing.T) {
 	service := NewService(
-		nil, nil, nil, nil, nil, nil, nil, nil,
+		nil, nil, nil, nil, nil, nil, nil, nil, nil,
 		DefaultPolicy(),
 	)
 
@@ -575,7 +576,7 @@ func TestService_VisualClick_NotCoordinate(t *testing.T) {
 		nil,
 		nil,
 		&mockVisualLocator{},
-		nil, nil, nil,
+		nil, nil, nil, nil,
 		DefaultPolicy(),
 	)
 

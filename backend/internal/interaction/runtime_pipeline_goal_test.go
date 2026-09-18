@@ -14,7 +14,7 @@ func TestRuntimePipelineAssembleIncludesGoals(t *testing.T) {
 
 	if err := registry.Register(decision.Goal{
 		ID:             "long-term-goal",
-		UserID:         "user-1",
+		SpaceID:        "user-1",
 		CharacterID:    "char-1",
 		ConversationID: "conv-1",
 		Status:         decision.GoalStatusActive,
@@ -32,7 +32,7 @@ func TestRuntimePipelineAssembleIncludesGoals(t *testing.T) {
 	p.SetDecisionLayer(decision.DefaultCandidateRegistry(), decision.DefaultArbitrationLayer())
 
 	scope := InteractionScope{
-		UserID:         "user-1",
+		SpaceID:        "user-1",
 		CharacterID:    "char-1",
 		ConversationID: "conv-1",
 		RequestID:      "req-pipeline",
@@ -47,8 +47,8 @@ func TestRuntimePipelineAssembleIncludesGoals(t *testing.T) {
 	if assembly.Goals.Current == nil {
 		t.Fatal("RuntimeAssembly.Goals.Current不应为nil")
 	}
-	if assembly.Goals.Current.UserID != "user-1" {
-		t.Fatalf("Current.UserID应为user-1, 实际 %s", assembly.Goals.Current.UserID)
+	if assembly.Goals.Current.SpaceID != "user-1" {
+		t.Fatalf("Current.SpaceID应为user-1, 实际 %s", assembly.Goals.Current.SpaceID)
 	}
 	if assembly.Goals.Current.CharacterID != "char-1" {
 		t.Fatalf("Current.CharacterID应为char-1, 实际 %s", assembly.Goals.Current.CharacterID)
@@ -69,7 +69,7 @@ func TestRuntimePipelineAssembleWithoutGoalRegistry(t *testing.T) {
 	p := NewRuntimePipeline(ctxRegistry, NewPathClassifier(), NewTokenBudgetManager(1200))
 
 	scope := InteractionScope{
-		UserID:         "user-1",
+		SpaceID:        "user-1",
 		CharacterID:    "char-1",
 		ConversationID: "conv-1",
 	}
@@ -92,7 +92,7 @@ func TestRuntimePipelineAssembleWithEmptyInteractionID(t *testing.T) {
 	p := NewRuntimePipeline(ctxRegistry, NewPathClassifier(), NewTokenBudgetManager(1200))
 
 	scope := InteractionScope{
-		UserID:      "user-1",
+		SpaceID:     "user-1",
 		CharacterID: "char-1",
 	}
 	req := &ProcessRequest{
@@ -119,7 +119,7 @@ func TestRuntimePipelineGoalsInDecision(t *testing.T) {
 
 	if err := registry.Register(decision.Goal{
 		ID:          "decision-goal",
-		UserID:      "user-1",
+		SpaceID:     "user-1",
 		CharacterID: "char-1",
 		Status:      decision.GoalStatusActive,
 		Type:        decision.GoalTypeClarification,
@@ -136,7 +136,7 @@ func TestRuntimePipelineGoalsInDecision(t *testing.T) {
 	p.SetDecisionLayer(decision.DefaultCandidateRegistry(), decision.DefaultArbitrationLayer())
 
 	scope := InteractionScope{
-		UserID:         "user-1",
+		SpaceID:        "user-1",
 		CharacterID:    "char-1",
 		ConversationID: "conv-1",
 	}

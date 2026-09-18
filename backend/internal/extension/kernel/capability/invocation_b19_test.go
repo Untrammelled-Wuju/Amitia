@@ -8,7 +8,7 @@ import (
 
 func TestB19NewToolInvocationContextGeneratesInvocationID(t *testing.T) {
 	inv := NewToolInvocationContext(ToolInvocationOptions{
-		UserID: "user1",
+		SpaceID: "user1",
 	})
 
 	if inv.InvocationID == "" {
@@ -27,12 +27,12 @@ func TestB19NewToolInvocationContextGeneratesInvocationID(t *testing.T) {
 
 func TestB19NewToolInvocationContextInheritsFromParent(t *testing.T) {
 	parent := NewToolInvocationContext(ToolInvocationOptions{
-		UserID: "user1",
+		SpaceID: "user1",
 	})
 
 	child := NewToolInvocationContext(ToolInvocationOptions{
-		Parent: &parent,
-		UserID: "user1",
+		Parent:  &parent,
+		SpaceID: "user1",
 	})
 
 	if child.ParentID != parent.InvocationID {
@@ -51,12 +51,12 @@ func TestB19NewToolInvocationContextInheritsFromParent(t *testing.T) {
 
 func TestB19NewToolInvocationContextWithCustomTraceAndOperation(t *testing.T) {
 	parent := NewToolInvocationContext(ToolInvocationOptions{
-		UserID: "user1",
+		SpaceID: "user1",
 	})
 
 	child := NewToolInvocationContext(ToolInvocationOptions{
 		Parent:      &parent,
-		UserID:      "user1",
+		SpaceID:     "user1",
 		TraceID:     "custom-trace",
 		OperationID: "custom-operation",
 	})
@@ -75,7 +75,7 @@ func TestB19NewToolInvocationContextWithCustomTraceAndOperation(t *testing.T) {
 func TestB19NewToolInvocationContextMetadataDefensiveCopy(t *testing.T) {
 	metadata := map[string]any{"key": "value"}
 	inv := NewToolInvocationContext(ToolInvocationOptions{
-		UserID:   "user1",
+		SpaceID:  "user1",
 		Metadata: metadata,
 	})
 
@@ -318,19 +318,19 @@ func TestB19InvocationSourceValid(t *testing.T) {
 
 func TestB19DeepNestedInvocationChainPreservesRoot(t *testing.T) {
 	root := NewToolInvocationContext(ToolInvocationOptions{
-		UserID: "user1",
+		SpaceID: "user1",
 	})
 	level1 := NewToolInvocationContext(ToolInvocationOptions{
-		Parent: &root,
-		UserID: "user1",
+		Parent:  &root,
+		SpaceID: "user1",
 	})
 	level2 := NewToolInvocationContext(ToolInvocationOptions{
-		Parent: &level1,
-		UserID: "user1",
+		Parent:  &level1,
+		SpaceID: "user1",
 	})
 	level3 := NewToolInvocationContext(ToolInvocationOptions{
-		Parent: &level2,
-		UserID: "user1",
+		Parent:  &level2,
+		SpaceID: "user1",
 	})
 
 	if level3.RootID != root.RootID {

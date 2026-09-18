@@ -44,6 +44,13 @@ export function useCharacterConfig() {
     boundaryRules: DEFAULT_BOUNDARY,
     isActive: true,
     description: "",
+    scenario: "",
+    exampleMessages: "",
+    alternateGreetingsText: "",
+    postHistoryInstructions: "",
+    creator: "",
+    characterVersion: "",
+    tagsText: "",
     basePrompt: "",
     isDefault: false,
     status: "enabled",
@@ -51,6 +58,18 @@ export function useCharacterConfig() {
     chatStyleConfig: null as any,
     sceneRules: null as any,
   });
+  const cardDataExtra = ref<Record<string, any>>({});
+
+  function parseCardData(value: any): Record<string, any> {
+    if (!value) return {};
+    if (typeof value === "object") return { ...value };
+    try {
+      const parsed = JSON.parse(value);
+      return parsed && typeof parsed === "object" ? parsed : {};
+    } catch {
+      return {};
+    }
+  }
 
   function normalizePersonalityConfig(value: any): PersonalityConfig {
     const raw = typeof value === "string" ? JSON.parse(value) : value || {};
@@ -82,6 +101,8 @@ export function useCharacterConfig() {
   }
 
   function selectChar(c: any) {
+    const cardData = parseCardData(c.cardData);
+    cardDataExtra.value = cardData;
     selected.value = c;
     selectedId.value = c.id;
     activeTab.value = "edit";
@@ -91,9 +112,18 @@ export function useCharacterConfig() {
     form.personality = c.personality || "";
     form.speakingStyle = c.speakingStyle || "";
     form.relationshipStyle = c.relationshipStyle || "";
-    form.characterBase = c.characterBase || "";
+    form.characterBase = cardData.systemPrompt || c.characterBase || "";
     form.boundaryRules = c.boundaryRules ?? DEFAULT_BOUNDARY;
     form.description = c.description || "";
+    form.scenario = cardData.scenario || "";
+    form.exampleMessages = cardData.exampleMessages || "";
+    form.alternateGreetingsText = Array.isArray(cardData.alternateGreetings)
+      ? cardData.alternateGreetings.join("\n")
+      : "";
+    form.postHistoryInstructions = cardData.postHistoryInstructions || "";
+    form.creator = cardData.creator || "";
+    form.characterVersion = cardData.characterVersion || "";
+    form.tagsText = Array.isArray(cardData.tags) ? cardData.tags.join(", ") : "";
     form.basePrompt = c.basePrompt || "";
     form.isDefault = !!c.isDefault;
     form.status = c.status || "enabled";
@@ -104,6 +134,7 @@ export function useCharacterConfig() {
   }
 
   function createNew() {
+    cardDataExtra.value = {};
     selected.value = { id: "", name: "", isActive: false };
     selectedId.value = "";
     activeTab.value = "edit";
@@ -116,6 +147,14 @@ export function useCharacterConfig() {
     form.characterBase = "";
     form.boundaryRules = "";
     form.isActive = true;
+    form.description = "";
+    form.scenario = "";
+    form.exampleMessages = "";
+    form.alternateGreetingsText = "";
+    form.postHistoryInstructions = "";
+    form.creator = "";
+    form.characterVersion = "";
+    form.tagsText = "";
   }
 
   async function createFromTemplate(tpl: TemplateItem) {
@@ -135,16 +174,27 @@ export function useCharacterConfig() {
   }
 
   function copyChar(c: any) {
+    const cardData = parseCardData(c.cardData);
     createNew();
+    cardDataExtra.value = cardData;
     form.name = (c.name || "") + " (副本)";
     form.avatar = c.avatar || "";
     form.identity = c.identity || "";
     form.personality = c.personality || "";
     form.speakingStyle = c.speakingStyle || "";
     form.relationshipStyle = c.relationshipStyle || "";
-    form.characterBase = c.characterBase || "";
+    form.characterBase = cardData.systemPrompt || c.characterBase || "";
     form.boundaryRules = c.boundaryRules ?? DEFAULT_BOUNDARY;
     form.description = c.description || "";
+    form.scenario = cardData.scenario || "";
+    form.exampleMessages = cardData.exampleMessages || "";
+    form.alternateGreetingsText = Array.isArray(cardData.alternateGreetings)
+      ? cardData.alternateGreetings.join("\n")
+      : "";
+    form.postHistoryInstructions = cardData.postHistoryInstructions || "";
+    form.creator = cardData.creator || "";
+    form.characterVersion = cardData.characterVersion || "";
+    form.tagsText = Array.isArray(cardData.tags) ? cardData.tags.join(", ") : "";
     form.basePrompt = c.basePrompt || "";
     form.isDefault = false;
     form.status = "enabled";
@@ -163,6 +213,14 @@ export function useCharacterConfig() {
     saving.value = true;
     try {
       const payload = { ...form };
+      delete (payload as any).scenario;
+      delete (payload as any).exampleMessages;
+      delete (payload as any).alternateGreetingsText;
+      delete (payload as any).postHistoryInstructions;
+      delete (payload as any).creator;
+      delete (payload as any).characterVersion;
+      delete (payload as any).tagsText;
+      let targetId = selected.value?.id || "";
       if (selected.value?.id) {
         await put(`/api/characters/${selected.value.id}`, payload);
         ElMessage.success("保存成功");
@@ -170,9 +228,29 @@ export function useCharacterConfig() {
         const created = await post<any>("/api/characters", payload);
         ElMessage.success("创建成功");
         if (created?.id) {
+          targetId = created.id;
           selected.value = { ...payload, id: created.id };
           selectedId.value = created.id;
         }
+      }
+      if (targetId) {
+        await put(`/api/characters/${targetId}/card-data`, {
+          ...cardDataExtra.value,
+          scenario: form.scenario,
+          alternateGreetings: form.alternateGreetingsText
+            .split("\n")
+            .map((item) => item.trim())
+            .filter(Boolean),
+          exampleMessages: form.exampleMessages,
+          systemPrompt: form.characterBase,
+          postHistoryInstructions: form.postHistoryInstructions,
+          creator: form.creator,
+          characterVersion: form.characterVersion,
+          tags: form.tagsText
+            .split(",")
+            .map((item) => item.trim())
+            .filter(Boolean),
+        });
       }
       await fetchChars();
       if (selectedId.value) {

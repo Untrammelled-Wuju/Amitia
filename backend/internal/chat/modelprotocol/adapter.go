@@ -9,16 +9,16 @@ import (
 )
 
 type ModelCapabilities struct {
-	SupportsText        bool `json:"supportsText"`
-	SupportsImage       bool `json:"supportsImage"`
-	SupportsFile        bool `json:"supportsFile"`
-	SupportsAudio       bool `json:"supportsAudio"`
-	SupportsVideo       bool `json:"supportsVideo"`
-	SupportsToolUse     bool `json:"supportsToolUse"`
-	SupportsStreaming   bool `json:"supportsStreaming"`
-	SupportsReasoning   bool `json:"supportsReasoning"`
-	SupportsStructured  bool `json:"supportsStructured"`
-	MaxContextWindow    int  `json:"maxContextWindow"`
+	SupportsText       bool `json:"supportsText"`
+	SupportsImage      bool `json:"supportsImage"`
+	SupportsFile       bool `json:"supportsFile"`
+	SupportsAudio      bool `json:"supportsAudio"`
+	SupportsVideo      bool `json:"supportsVideo"`
+	SupportsToolUse    bool `json:"supportsToolUse"`
+	SupportsStreaming  bool `json:"supportsStreaming"`
+	SupportsReasoning  bool `json:"supportsReasoning"`
+	SupportsStructured bool `json:"supportsStructured"`
+	MaxContextWindow   int  `json:"maxContextWindow"`
 }
 
 type ModelProtocol string
@@ -90,48 +90,49 @@ type ModelContinuationState struct {
 }
 
 type ModelRequest struct {
-	Model          string                 `json:"model"`
-	Instructions   []string               `json:"instructions"`
-	Messages       []ModelMessage         `json:"messages"`
-	Tools          []ModelToolDefinition  `json:"tools"`
-	ToolResults    []ModelToolResult      `json:"toolResults"`
-	ResponseFormat ModelResponseFormat    `json:"responseFormat"`
-	Temperature    *float64               `json:"temperature,omitempty"`
-	TopP           *float64               `json:"topP,omitempty"`
-	MaxOutputTokens int                    `json:"maxOutputTokens"`
-	Stream         bool                   `json:"stream"`
-	Continuation   *ModelContinuationState `json:"continuation,omitempty"`
+	Model           string                  `json:"model"`
+	Instructions    []string                `json:"instructions"`
+	Messages        []ModelMessage          `json:"messages"`
+	Tools           []ModelToolDefinition   `json:"tools"`
+	ToolResults     []ModelToolResult       `json:"toolResults"`
+	ResponseFormat  ModelResponseFormat     `json:"responseFormat"`
+	DisableThinking bool                    `json:"disableThinking"`
+	Temperature     *float64                `json:"temperature,omitempty"`
+	TopP            *float64                `json:"topP,omitempty"`
+	MaxOutputTokens int                     `json:"maxOutputTokens"`
+	Stream          bool                    `json:"stream"`
+	Continuation    *ModelContinuationState `json:"continuation,omitempty"`
 }
 
 type ModelUsage struct {
-	InputTokens      int `json:"inputTokens"`
-	OutputTokens     int `json:"outputTokens"`
-	ReasoningTokens  int `json:"reasoningTokens"`
+	InputTokens       int `json:"inputTokens"`
+	OutputTokens      int `json:"outputTokens"`
+	ReasoningTokens   int `json:"reasoningTokens"`
 	CachedInputTokens int `json:"cachedInputTokens"`
-	TotalTokens      int `json:"totalTokens"`
+	TotalTokens       int `json:"totalTokens"`
 }
 
 type ModelError struct {
-	Code         string       `json:"code"`
-	Provider     string       `json:"provider"`
-	Protocol     ModelProtocol `json:"protocol"`
-	HTTPStatus   int          `json:"httpStatus"`
-	Message      string       `json:"message"`
-	Retryable    bool         `json:"retryable"`
-	AuthRelated  bool         `json:"authRelated"`
-	RateLimited  bool         `json:"rateLimited"`
-	Timeout      bool         `json:"timeout"`
-	RequestID    string       `json:"requestId"`
+	Code        string        `json:"code"`
+	Provider    string        `json:"provider"`
+	Protocol    ModelProtocol `json:"protocol"`
+	HTTPStatus  int           `json:"httpStatus"`
+	Message     string        `json:"message"`
+	Retryable   bool          `json:"retryable"`
+	AuthRelated bool          `json:"authRelated"`
+	RateLimited bool          `json:"rateLimited"`
+	Timeout     bool          `json:"timeout"`
+	RequestID   string        `json:"requestId"`
 }
 
 type ModelResult struct {
-	Text               string                 `json:"text"`
-	Refusal            string                 `json:"refusal"`
-	ToolCalls          []ModelToolCall        `json:"toolCalls"`
-	Usage              ModelUsage             `json:"usage"`
+	Text               string                  `json:"text"`
+	Refusal            string                  `json:"refusal"`
+	ToolCalls          []ModelToolCall         `json:"toolCalls"`
+	Usage              ModelUsage              `json:"usage"`
 	Continuation       *ModelContinuationState `json:"continuation"`
-	FinishReason       string                 `json:"finishReason"`
-	ProviderResponseID string                 `json:"providerResponseID"`
+	FinishReason       string                  `json:"finishReason"`
+	ProviderResponseID string                  `json:"providerResponseID"`
 }
 
 type ModelEventType string

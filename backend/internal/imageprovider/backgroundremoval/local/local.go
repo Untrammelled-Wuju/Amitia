@@ -244,7 +244,7 @@ func (p *LocalProvider) handleRemoveBackgroundV2(ctx context.Context, img *image
 		bgR, bgG, bgB, consistency, variance, _ := detectBackgroundColorRegions(img)
 		measurements.CornerConsistency = consistency
 		measurements.BackgroundVariance = variance
-		workImage = removeByColorNRGBA(img, bgR, bgG, bgB, p.colorThreshold)
+		workImage = removeByColorConnectedNRGBA(img, bgR, bgG, bgB, p.colorThreshold)
 	} else {
 		workImage = cleanAlphaEdgesNRGBA(img, p.alphaThreshold, p.edgeErodeRadius)
 	}
@@ -259,8 +259,13 @@ func (p *LocalProvider) finalizeResult(ctx context.Context, workImage *image.NRG
 	default:
 	}
 
+	clearDetachedWhiteHaze(workImage, bounds)
+
 	boolMask := alphaToBoolMask(workImage, p.alphaThreshold, bounds)
 	filteredMask := connectedComponentsWithSatellites(boolMask, width, height, p.minSubjectAreaRatio, p.satelliteAreaRatio)
+
+	removeBorderNearWhiteRegions(filteredMask, workImage, bounds)
+	trimMaskEdgeBands(filteredMask)
 
 	subjectBox := computeMaskBounds(filteredMask, bounds)
 	if subjectBox.Empty {

@@ -41,7 +41,7 @@ func TestB17ToolFacadeModelNameConflictResolved(t *testing.T) {
 		t.Fatalf("unexpected Register error for tool-b: %v", err)
 	}
 
-	scope := LegacyScope{}
+	scope := InvocationScope{}
 	tools, err := facade.ModelTools(context.Background(), scope)
 	if err != nil {
 		t.Fatalf("unexpected ModelTools error: %v", err)
@@ -103,7 +103,7 @@ func TestB17ToolFacadeExecuteModelToolResolved(t *testing.T) {
 	}
 
 	input := []byte(`{}`)
-	scope := LegacyScope{}
+	scope := InvocationScope{}
 
 	_, foundSearch := facade.ExecuteModelTool(context.Background(), "search", input, scope, "")
 	if !foundSearch {
@@ -176,7 +176,7 @@ func TestB17ExecuteToolUsesCanonicalID(t *testing.T) {
 	}
 
 	input := []byte(`{"q":"hello"}`)
-	scope := LegacyScope{ToolCallID: "scope_call_id"}
+	scope := InvocationScope{ToolCallID: "scope_call_id"}
 	result, ok := facade.ExecuteTool(
 		context.Background(),
 		capability.CapabilityID("builtin/browser/search"),
@@ -202,7 +202,7 @@ func TestB17ExecuteToolReturnsFalseWhenToolNotFound(t *testing.T) {
 		context.Background(),
 		capability.CapabilityID("nonexistent/tool"),
 		nil,
-		LegacyScope{},
+		InvocationScope{},
 		"call_x",
 		"key",
 	)
@@ -232,7 +232,7 @@ func TestB17ExecuteToolRejectsModelNameAsID(t *testing.T) {
 		t.Fatalf("unexpected register error: %v", err)
 	}
 
-	scope := LegacyScope{ToolCallID: "scope_id"}
+	scope := InvocationScope{ToolCallID: "scope_id"}
 	_, ok := facade.ExecuteTool(
 		context.Background(),
 		capability.CapabilityID("create_event"),
@@ -253,7 +253,7 @@ func TestB17ExecuteToolNilRegistry(t *testing.T) {
 		context.Background(),
 		capability.CapabilityID("any/tool"),
 		nil,
-		LegacyScope{},
+		InvocationScope{},
 		"call_z",
 		"key-z",
 	)

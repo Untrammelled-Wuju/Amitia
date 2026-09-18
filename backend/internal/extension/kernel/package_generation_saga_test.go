@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
-	"github.com/u-ai/backend/internal/extension/kernel/package_security"
 )
 
 func TestPackageGenerationInstallPersistsEvidenceAndReadModel(t *testing.T) {
@@ -77,7 +76,7 @@ func TestPackageGenerationRecoveryCompensatesCurrentDBSplit(t *testing.T) {
 		t.Fatal(err)
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	operation := PackageOperationRecord{OperationID: operationID, TraceID: "trace-generation-split", UserID: "user-1", ScopeType: "global", ExtensionID: installed.ExtensionID, TargetVersion: installed.Version, OperationType: "update", Status: "in_progress", CurrentStep: "switch_current_pointer", ArtifactID: artifact.ArtifactID, ConfirmationsJSON: "{}", StartedAt: now, UpdatedAt: now, StableGeneration: stable.GenerationID, TargetGeneration: target.Current.GenerationID, CurrentPointerJSON: packageGenerationJSON(target.Current)}
+	operation := PackageOperationRecord{OperationID: operationID, TraceID: "trace-generation-split", SpaceID: "user-1", ScopeType: "global", ExtensionID: installed.ExtensionID, TargetVersion: installed.Version, OperationType: "update", Status: "in_progress", CurrentStep: "switch_current_pointer", ArtifactID: artifact.ArtifactID, ConfirmationsJSON: "{}", StartedAt: now, UpdatedAt: now, StableGeneration: stable.GenerationID, TargetGeneration: target.Current.GenerationID, CurrentPointerJSON: packageGenerationJSON(target.Current)}
 	if err := container.PackageRepository.CreateOperation(ctx, operation); err != nil {
 		t.Fatal(err)
 	}
@@ -156,8 +155,20 @@ func TestPackageGenerationRecoveryRestoresUninstallQuarantine(t *testing.T) {
 	}
 	operationID := "package-operation-uninstall-recovery"
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	operation := PackageOperationRecord{OperationID: operationID, TraceID: "trace-uninstall-recovery", UserID: "user-1", ScopeType: "global", ExtensionID: installed.ExtensionID, TargetVersion: installed.Version, OperationType: "uninstall", Status: "in_progress", CurrentStep: "move_to_quarantine", ArtifactID: artifact.ArtifactID, ConfirmationsJSON: "{}", StartedAt: now, UpdatedAt: now, StableGeneration: stable.GenerationID, CurrentPointerJSON: packageGenerationJSON(stable)}
+	operation := PackageOperationRecord{OperationID: operationID, TraceID: "trace-uninstall-recovery", SpaceID: "user-1", ScopeType: "global", ExtensionID: installed.ExtensionID, TargetVersion: installed.Version, OperationType: "uninstall", Status: "in_progress", CurrentStep: "move_to_quarantine", ArtifactID: artifact.ArtifactID, ConfirmationsJSON: "{}", StartedAt: now, UpdatedAt: now, StableGeneration: stable.GenerationID, CurrentPointerJSON: packageGenerationJSON(stable)}
 	if err := container.PackageRepository.CreateOperation(ctx, operation); err != nil {
+		t.Fatal(err)
+	}
+	installation, err := container.InstallationRepository.GetInstallation(ctx, domain.ExtensionID(installed.ExtensionID))
+	if err != nil {
+		t.Fatal(err)
+	}
+	preview, err := runtime.PreviewPackageUninstall(ctx, installed.ExtensionID, "user-1", "global", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshotJSON, snapshotHash, expectedGenerationID, err := captureInstallationSnapshot(installation, preview)
+	if err != nil {
 		t.Fatal(err)
 	}
 	quarantinedCurrent, err := container.PackageGenerationStore.QuarantineCurrent(installed.ExtensionID, stable.GenerationID, operationID)
@@ -172,7 +183,10 @@ func TestPackageGenerationRecoveryRestoresUninstallQuarantine(t *testing.T) {
 	}
 	safeExt := safeDirectoryName(installed.ExtensionID)
 	originalCurrentPath := filepath.Join(container.ExtRoot, "installations", safeExt, "current.json")
-	verificationTreeHash := package_security.ComputeDirHash(quarantinePath, container.PackageSecurity.GetHasher())
+	verificationTreeHash, err := computeGenerationTreeHash(ctx, quarantinePath)
+	if err != nil {
+		t.Fatal(err)
+	}
 	qm := PackageQuarantineMetadata{
 		QuarantineID:             "quarantine-" + operationID,
 		OperationID:              operationID,
@@ -185,6 +199,10 @@ func TestPackageGenerationRecoveryRestoresUninstallQuarantine(t *testing.T) {
 		ArtifactID:               artifact.ArtifactID,
 		State:                    "active",
 		FencingToken:             1,
+		SnapshotJSON:             snapshotJSON,
+		SnapshotHash:             snapshotHash,
+		ExpectedGenerationID:     expectedGenerationID,
+		ExpectedVersionID:        preview.CurrentVersionID,
 	}
 	if err := container.PackageRepository.PutQuarantineMetadata(ctx, qm, PackageWriteGuard{}); err != nil {
 		t.Fatal(err)

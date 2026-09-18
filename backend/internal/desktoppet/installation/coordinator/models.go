@@ -12,7 +12,6 @@ import (
 type InstallRequest struct {
 	DeviceCtx       device.DeviceContext
 	PetID           string
-	CharacterID     string
 	TargetReleaseID string
 	SourceReleaseID string
 	IdempotencyKey  string

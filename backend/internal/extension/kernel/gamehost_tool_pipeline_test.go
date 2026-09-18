@@ -9,6 +9,7 @@ import (
 
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	"github.com/u-ai/backend/internal/extension/kernel/execution"
+	"github.com/u-ai/backend/internal/extension/kernel/scope"
 	"github.com/u-ai/backend/internal/gamehost/agentbridge"
 	ghdomain "github.com/u-ai/backend/internal/gamehost/domain"
 	"github.com/u-ai/backend/internal/gamehost/ipc"
@@ -39,6 +40,28 @@ func (pipelineReadiness) IsServiceReady(context.Context, ghdomain.RuntimeInstanc
 type pipelineGameControlPlane struct {
 	lastPeer   ipc.Peer
 	lastMethod string
+}
+
+type pipelineScopeRelationChecker struct{}
+
+func (pipelineScopeRelationChecker) ConversationBelongsToCharacter(context.Context, string, string) bool {
+	return true
+}
+func (pipelineScopeRelationChecker) IsCharacterDeleted(context.Context, string) bool { return false }
+func (pipelineScopeRelationChecker) IsConversationDeleted(context.Context, string) bool {
+	return false
+}
+func (pipelineScopeRelationChecker) ResourceOwnedBy(context.Context, string, string, string, string) bool {
+	return false
+}
+func (pipelineScopeRelationChecker) InvocationOwnedBy(context.Context, string, string, string) bool {
+	return false
+}
+func (pipelineScopeRelationChecker) InvocationIsChildOf(context.Context, string, string) bool {
+	return false
+}
+func (pipelineScopeRelationChecker) SessionValid(context.Context, string, string, string, int64) bool {
+	return false
 }
 
 func (p *pipelineGameControlPlane) Attach(context.Context, ipc.Peer, ipc.Transport) (*ipc.Connection, error) {
@@ -140,10 +163,21 @@ func TestGameHostToolRunsThroughAgentExecutionPipeline(t *testing.T) {
 	if err := toolRegistry.Register(ctx, toolDef); err != nil {
 		t.Fatal(err)
 	}
+	scopeStore := scope.NewMemoryScopeStore()
+	scopeManager := scope.NewScopeManager(scopeStore, scope.NewScopeEvaluator(scopeStore, pipelineScopeRelationChecker{}))
+	if _, err := scopeManager.Bind(ctx, scope.ScopeBindRequest{
+		SubjectType: scope.SubjectTool,
+		SubjectID:   toolDef.ID,
+		Scope:       scope.NewExtensionScope(plugin.ExtensionID),
+		Source:      scope.SourceSystem,
+	}); err != nil {
+		t.Fatal(err)
+	}
 
 	pipeline := &execution.ExecutionPipeline{
 		TimeoutCtrl: execution.NewTimeoutController(5 * time.Second),
 		Dispatcher:  execution.NewRuntimeDispatcher(adapterRegistry),
+		ScopeGate:   &execution.ScopeGate{ScopeManager: scopeManager},
 		ToolResolver: func(ctx context.Context, toolID string) (capability.ToolDefinition, error) {
 			def, ok := toolRegistry.Get(ctx, toolID)
 			if !ok {
@@ -153,13 +187,16 @@ func TestGameHostToolRunsThroughAgentExecutionPipeline(t *testing.T) {
 		},
 	}
 	facade := NewToolFacade(toolRegistry, pipeline)
+	capabilityService := capability.NewCapabilityService(capability.NewProviderRegistry())
+	capabilityService.SetToolRegistry(toolRegistry)
+	facade.SetCapabilityService(capabilityService)
 
 	result, ok := facade.ExecuteTool(
 		ctx,
 		capability.CapabilityID(toolDef.ID),
 		json.RawMessage(`{"direction":"north"}`),
-		LegacyScope{
-			UserID:         "user-1",
+		InvocationScope{
+			SpaceID:        "user-1",
 			CharacterID:    "character-1",
 			ConversationID: "conversation-1",
 			Channel:        "web",
@@ -200,7 +237,7 @@ func TestEnrichGameHostToolRuntimeBindingPreservesSelectors(t *testing.T) {
 		"pluginId":    "plugin-a",
 		"serviceId":   "service-b",
 	})
-	if got.Metadata["pluginId"] != "plugin-a" || got.Metadata["serviceId"] != "service-b" {
+	if got.Metadata["pluginId"] != "com.example.game/plugin-a" || got.Metadata["serviceId"] != "service-b" {
 		t.Fatalf("selectors were not preserved: %+v", got.Metadata)
 	}
 }

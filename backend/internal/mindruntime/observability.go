@@ -82,7 +82,7 @@ type RuntimeObservabilityReport struct {
 	SnapshotID        string               `json:"snapshotId"`
 	RequestID         string               `json:"requestId,omitempty"`
 	EventID           string               `json:"eventId,omitempty"`
-	UserID            string               `json:"userId,omitempty"`
+	SpaceID           string               `json:"spaceId,omitempty"`
 	CharacterID       string               `json:"characterId,omitempty"`
 	InteractionID     string               `json:"interactionId,omitempty"`
 	Scope             string               `json:"scope,omitempty"`
@@ -128,7 +128,7 @@ func BuildRuntimeObservabilityReport(input RuntimeObservabilityInput) RuntimeObs
 		SnapshotID:        snapshot.ID,
 		RequestID:         strings.TrimSpace(input.RequestID),
 		EventID:           strings.TrimSpace(input.EventID),
-		UserID:            snapshot.UserID,
+		SpaceID:           snapshot.SpaceID,
 		CharacterID:       snapshot.CharacterID,
 		InteractionID:     snapshot.InteractionID,
 		Scope:             strings.TrimSpace(input.Scope),

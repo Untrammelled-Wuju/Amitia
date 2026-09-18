@@ -56,9 +56,7 @@ func (defaultSurrealDep) HealthCheck(ctx context.Context, cfg config.SurrealConf
 	}
 	defer db.Close(ctx)
 	if _, err := db.SignIn(ctx, map[string]string{"user": cfg.Username, "pass": cfg.Password}); err != nil {
-		if _, err2 := db.SignIn(ctx, map[string]string{"user": "root", "pass": "root"}); err2 != nil {
-			return err2
-		}
+		return err
 	}
 	if err := db.Use(ctx, cfg.Namespace, cfg.Database); err != nil {
 		return err
@@ -110,7 +108,9 @@ type surrealProvider struct {
 	host        runtimehost.RuntimeHost
 	mu          sync.RWMutex
 	capability  graph.Service
+	switchable  *graph.SwitchableService
 	subscribers []func(any)
+	unsubscribe func()
 	started     bool
 	stopped     bool
 }
@@ -199,12 +199,21 @@ func (p *surrealProvider) Start(ctx context.Context) error {
 		return p.startFail("NewClient", context.DeadlineExceeded)
 	}
 	svc := p.dep.NewGraphService(client)
+	switchable := graph.NewSwitchableService(svc)
+	unsubscribe := supervisor.Subscribe(func(event runtimehost.ProcessEvent) {
+		if event.ProcessID == runtimehost.ProcessIDSurrealDB && event.Type == runtimehost.EventRestarted {
+			go p.handleRestart()
+		}
+	})
 	p.mu.Lock()
-	p.capability = svc
+	p.switchable = switchable
+	p.capability = switchable
+	p.unsubscribe = unsubscribe
+	p.started = true
+	p.stopped = false
 	p.mu.Unlock()
 
-	p.started = true
-	p.notifySubscribers(svc)
+	p.notifySubscribers(switchable)
 	return nil
 }
 
@@ -221,20 +230,32 @@ func (p *surrealProvider) Ready(ctx context.Context) error {
 }
 
 func (p *surrealProvider) Stop(ctx context.Context) error {
+	p.mu.Lock()
 	if p.stopped {
+		p.mu.Unlock()
 		return nil
+	}
+	p.stopped = true
+	unsubscribe := p.unsubscribe
+	p.unsubscribe = nil
+	switchable := p.switchable
+	p.switchable = nil
+	p.capability = nil
+	var subs []func(any)
+	subs = append(subs, p.subscribers...)
+	p.subscribers = nil
+	p.mu.Unlock()
+
+	if unsubscribe != nil {
+		unsubscribe()
+	}
+	if switchable != nil {
+		switchable.Close()
 	}
 	supervisor := p.host.Processes()
 	if supervisor != nil {
 		_ = supervisor.Stop(ctx, runtimehost.ProcessIDSurrealDB)
 	}
-	p.mu.Lock()
-	p.capability = nil
-	var subs []func(any)
-	subs = append(subs, p.subscribers...)
-	p.subscribers = nil
-	p.stopped = true
-	p.mu.Unlock()
 	for _, fn := range subs {
 		if fn != nil {
 			func() {
@@ -247,15 +268,14 @@ func (p *surrealProvider) Stop(ctx context.Context) error {
 }
 
 func (p *surrealProvider) handleRestart() {
-	p.mu.Lock()
+	p.mu.RLock()
 	if p.stopped {
-		p.mu.Unlock()
+		p.mu.RUnlock()
 		return
 	}
 	cfg := p.dep.GetConfig()
-	var subs []func(any)
-	subs = append(subs, p.subscribers...)
-	p.mu.Unlock()
+	switchable := p.switchable
+	p.mu.RUnlock()
 
 	defer func() { recover() }()
 
@@ -274,20 +294,14 @@ func (p *surrealProvider) handleRestart() {
 		return
 	}
 	svc := p.dep.NewGraphService(client)
-
-	p.mu.Lock()
-	p.capability = svc
-	p.mu.Unlock()
-
-	for _, fn := range subs {
-		if fn == nil {
-			continue
+	if switchable == nil {
+		if closer, ok := svc.(interface{ Close() }); ok {
+			closer.Close()
 		}
-		func() {
-			defer func() { recover() }()
-			fn(svc)
-		}()
+		return
 	}
+	switchable.Swap(svc)
+	p.notifySubscribers(switchable)
 }
 
 func (p *surrealProvider) notifySubscribers(svc graph.Service) {

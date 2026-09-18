@@ -246,9 +246,9 @@ func (e *BehaviorEngine) SubmitEvent(ctx context.Context, event BehaviorEventEnv
 		return NewBehaviorError(ErrCodeEventSchemaInvalid, "event missing characterId")
 	}
 
-	if event.UserID == "" {
+	if event.SpaceID == "" {
 		e.metrics.IncIgnored()
-		return NewBehaviorError(ErrCodeEventSchemaInvalid, "event missing userId")
+		return NewBehaviorError(ErrCodeEventSchemaInvalid, "event missing spaceId")
 	}
 
 	validatedPayload, err := ValidatePayload(event.EventType, event.Payload)
@@ -295,7 +295,7 @@ func (e *BehaviorEngine) SubmitEvent(ctx context.Context, event BehaviorEventEnv
 		return nil
 
 	case ReliabilityEphemeral:
-		if e.coordinator.TryEnqueue(event.UserID, event.CharacterID, event) {
+		if e.coordinator.TryEnqueue(event.SpaceID, event.CharacterID, event) {
 			return nil
 		}
 		e.metrics.IncOverflow()
@@ -338,7 +338,7 @@ func (e *BehaviorEngine) HandlePlaybackFeedback(ctx context.Context, feedback Pl
 		SchemaVersion:  1,
 		OccurredAt:     occurredAt,
 		ReceivedAt:     e.clock.Now(),
-		UserID:         decision.UserID,
+		SpaceID:        decision.SpaceID,
 		CharacterID:    decision.CharacterID,
 		InstallationID: decision.InstallationID,
 		PetInstanceID:  feedback.PetInstanceID,
@@ -350,20 +350,20 @@ func (e *BehaviorEngine) HandlePlaybackFeedback(ctx context.Context, feedback Pl
 	return e.SubmitEvent(ctx, event)
 }
 
-func (e *BehaviorEngine) Reconcile(ctx context.Context, userID, characterID string) error {
+func (e *BehaviorEngine) Reconcile(ctx context.Context, spaceID, characterID string) error {
 	if e.reconciler == nil {
 		return nil
 	}
-	currentCtx, err := e.repo.LoadContext(ctx, userID, characterID)
+	currentCtx, err := e.repo.LoadContext(ctx, spaceID, characterID)
 	if err != nil {
 		return err
 	}
-	_, err = e.reconciler.ReconcileCharacter(ctx, userID, characterID, currentCtx)
+	_, err = e.reconciler.ReconcileCharacter(ctx, spaceID, characterID, currentCtx)
 	return err
 }
 
 func (e *BehaviorEngine) Simulate(ctx context.Context, event BehaviorEventEnvelope) (*BehaviorDecision, error) {
-	currentCtx, err := e.repo.LoadContext(ctx, event.UserID, event.CharacterID)
+	currentCtx, err := e.repo.LoadContext(ctx, event.SpaceID, event.CharacterID)
 	if err != nil {
 		return nil, err
 	}
@@ -406,8 +406,8 @@ func (e *BehaviorEngine) Simulate(ctx context.Context, event BehaviorEventEnvelo
 	return decision, nil
 }
 
-func (e *BehaviorEngine) GetState(ctx context.Context, userID, characterID string) (*BehaviorContextSnapshot, error) {
-	return e.repo.LoadContext(ctx, userID, characterID)
+func (e *BehaviorEngine) GetState(ctx context.Context, spaceID, characterID string) (*BehaviorContextSnapshot, error) {
+	return e.repo.LoadContext(ctx, spaceID, characterID)
 }
 
 func (e *BehaviorEngine) GetMetrics() map[string]interface{} {
@@ -459,7 +459,7 @@ func (e *BehaviorEngine) preparePlaybackEvent(ctx context.Context, event Behavio
 	if decision == nil {
 		return event, NewBehaviorError(ErrCodeEventSchemaInvalid, "playback event references an unknown decision")
 	}
-	if event.UserID != "" && decision.UserID != "" && event.UserID != decision.UserID {
+	if event.SpaceID != "" && decision.SpaceID != "" && event.SpaceID != decision.SpaceID {
 		return event, NewBehaviorError(ErrCodeEventSchemaInvalid, "playback decision user mismatch")
 	}
 	if event.CharacterID != "" && decision.CharacterID != "" && event.CharacterID != decision.CharacterID {
@@ -540,7 +540,7 @@ func (e *BehaviorEngine) processEventOnce(ctx context.Context, event BehaviorEve
 		if err := ctx.Err(); err != nil {
 			return InboxRetry, err
 		}
-		currentCtx, err := e.repo.LoadContext(ctx, event.UserID, event.CharacterID)
+		currentCtx, err := e.repo.LoadContext(ctx, event.SpaceID, event.CharacterID)
 		if err != nil {
 			return InboxRetry, fmt.Errorf("load context: %w", err)
 		}
@@ -551,7 +551,7 @@ func (e *BehaviorEngine) processEventOnce(ctx context.Context, event BehaviorEve
 		}
 		if reduceResult.NeedsSnapshotSync && e.reconciler != nil {
 			syncedCtx, syncErr := e.reconciler.buildReconciledContext(
-				ctx, event.UserID, event.CharacterID, &nextCtx, e.clock.Now(),
+				ctx, event.SpaceID, event.CharacterID, &nextCtx, e.clock.Now(),
 			)
 			if syncErr != nil {
 				return InboxRetry, fmt.Errorf("rebuild behavior snapshot: %w", syncErr)
@@ -679,7 +679,7 @@ func (e *BehaviorEngine) resolveActivePet(ctx context.Context, event BehaviorEve
 	if targeted, ok := e.activePetPort.(EventTargetedActivePetPort); ok {
 		return targeted.ResolveActivePetForEvent(ctx, event)
 	}
-	return e.activePetPort.ResolveActivePet(ctx, event.UserID, event.CharacterID)
+	return e.activePetPort.ResolveActivePet(ctx, event.SpaceID, event.CharacterID)
 }
 
 func (e *BehaviorEngine) normalizeDecision(decision *BehaviorDecision, event BehaviorEventEnvelope, activePet *ActivePetSnapshot, contextRevision int64) {
@@ -689,8 +689,8 @@ func (e *BehaviorEngine) normalizeDecision(decision *BehaviorDecision, event Beh
 	if decision.EventID == "" {
 		decision.EventID = event.EventID
 	}
-	if decision.UserID == "" {
-		decision.UserID = event.UserID
+	if decision.SpaceID == "" {
+		decision.SpaceID = event.SpaceID
 	}
 	if decision.CharacterID == "" {
 		decision.CharacterID = event.CharacterID
@@ -744,7 +744,7 @@ func (e *BehaviorEngine) submitRuntimeCommand(ctx context.Context, decision *Beh
 		CommandID:            e.idGen.NewID(),
 		DecisionID:           decision.DecisionID,
 		IdempotencyKey:       decision.DecisionID,
-		UserID:               activePet.UserID,
+		SpaceID:              activePet.SpaceID,
 		DeviceID:             activePet.DeviceID,
 		CharacterID:          activePet.CharacterID,
 		RuntimeID:            activePet.RuntimeID,
@@ -773,7 +773,7 @@ func (e *BehaviorEngine) submitRuntimeCommand(ctx context.Context, decision *Beh
 			"decisionId": decision.DecisionID,
 		})
 		// Keep the committed decision in selected state. The inbox retry will
-		// resume this exact decision, and Runtime V2 idempotency prevents a
+		// resume this exact decision, and Runtime V1 idempotency prevents a
 		// duplicate command if transport acceptance happened before the error.
 		return runtimeErr
 	}
@@ -922,7 +922,7 @@ func (e *BehaviorEngine) processInboxBatch(ctx context.Context) {
 		}
 		if err := e.repo.MarkInboxStatus(ctx, record.EventID, leaseToken, status, "", ""); err != nil {
 			// A lost lease means another worker is authoritative. Any duplicated
-			// Runtime V2 submission is fenced by the decision idempotency key.
+			// Runtime V1 submission is fenced by the decision idempotency key.
 			log.Warn("behavior engine: failed to acknowledge inbox event", map[string]interface{}{"eventId": record.EventID, "status": status, "error": err.Error()})
 		}
 	}
@@ -975,7 +975,7 @@ func inboxRecordEnvelope(record InboxRecord) BehaviorEventEnvelope {
 		OccurredAt:      record.OccurredAt,
 		ReceivedAt:      record.ReceivedAt,
 		ExpiresAt:       record.ExpiresAt,
-		UserID:          record.UserID,
+		SpaceID:         record.SpaceID,
 		CharacterID:     record.CharacterID,
 		ConversationID:  record.ConversationID,
 		InteractionID:   record.InteractionID,

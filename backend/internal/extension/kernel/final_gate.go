@@ -30,6 +30,8 @@ type FinalGateProbe struct {
 	metricsRepo *FinalGateMetricsRepository
 }
 
+const nonBuiltinInstallationSQL = `COALESCE(json_extract(i.installation_json, '$.metadata.source'), '') <> 'builtin' AND COALESCE(json_extract(i.installation_json, '$.metadata.immutablePackage'), 0) NOT IN (1, 'true')`
+
 func NewFinalGateProbe(container *Container) *FinalGateProbe {
 	p := &FinalGateProbe{container: container}
 	if container != nil && container.Store != nil {
@@ -173,12 +175,12 @@ func (p *FinalGateProbe) probePackageReleaseGate(ctx context.Context, report *Fi
 		"legacy_package_write_calls":                    `SELECT COALESCE((SELECT count FROM kernel_legacy_call_counters WHERE metric_name = 'legacy_package_write_calls'), 0)`,
 		"requires_recovery_operations":                  `SELECT COUNT(*) FROM extension_package_operations WHERE status = 'requires_recovery'`,
 		"unresolved_package_operations":                 `SELECT COUNT(*) FROM extension_package_operations WHERE status NOT IN ('completed', 'failed', 'cancelled', 'rolled_back')`,
-		"missing_artifact_rows":                         `SELECT COUNT(*) FROM extension_installations i LEFT JOIN extension_package_artifacts a ON a.artifact_id = json_extract(i.installation_json, '$.packageId') WHERE COALESCE(json_extract(i.installation_json, '$.packageId'), '') <> '' AND a.artifact_id IS NULL`,
-		"active_contribution_for_disabled_installation": `SELECT COUNT(*) FROM extension_contributions c JOIN extension_installations i ON i.extension_id = c.extension_id WHERE c.registered = 1 AND i.enabled = 0`,
+		"missing_artifact_rows":                         `SELECT COUNT(*) FROM extension_installations i LEFT JOIN extension_package_artifacts a ON a.artifact_id = json_extract(i.installation_json, '$.packageId') WHERE COALESCE(json_extract(i.installation_json, '$.packageId'), '') <> '' AND a.artifact_id IS NULL AND ` + nonBuiltinInstallationSQL,
+		"active_contribution_for_disabled_installation": `SELECT COUNT(*) FROM extension_contributions c JOIN extension_installations i ON i.extension_id = c.extension_id WHERE c.registered = 1 AND i.enabled = 0 AND ` + nonBuiltinInstallationSQL,
 		"orphan_artifacts":                              `SELECT COUNT(*) FROM extension_package_artifacts a WHERE a.deleted_at = '' AND a.quarantined_at = '' AND a.reference_count = 0 AND a.retention_state NOT IN ('retained', 'deleted') AND NOT EXISTS (SELECT 1 FROM extension_package_artifact_references r WHERE r.artifact_id = a.artifact_id AND r.released_at = '')`,
-		"installation_read_model_mismatches":            `SELECT COUNT(*) FROM extension_installations i LEFT JOIN extension_definitions d ON d.extension_id = i.extension_id AND d.version = i.version LEFT JOIN extension_package_artifacts a ON a.artifact_id = json_extract(i.installation_json, '$.packageId') WHERE i.installed = 1 AND (d.id IS NULL OR a.artifact_id IS NULL OR a.extension_id <> i.extension_id OR a.version <> i.version OR COALESCE(json_extract(i.installation_json, '$.installedVersion'), '') <> i.version)`,
-		"unsigned_production_packages":                  `SELECT COUNT(*) FROM extension_installations i JOIN extension_package_artifacts a ON a.artifact_id = json_extract(i.installation_json, '$.packageId') WHERE i.installed = 1 AND a.signature_status <> 'valid' AND COALESCE(json_extract(i.installation_json, '$.metadata.devOnly'), 0) NOT IN (1, 'true')`,
-		"untrusted_installed_packages":                  `SELECT COUNT(*) FROM extension_installations i JOIN extension_package_artifacts a ON a.artifact_id = json_extract(i.installation_json, '$.packageId') WHERE i.installed = 1 AND a.trust_decision NOT IN ('official', 'trusted', 'user_trusted', 'development')`,
+		"installation_read_model_mismatches":            `SELECT COUNT(*) FROM extension_installations i LEFT JOIN extension_definitions d ON d.extension_id = i.extension_id AND d.version = i.version LEFT JOIN extension_package_artifacts a ON a.artifact_id = json_extract(i.installation_json, '$.packageId') WHERE i.installed = 1 AND ` + nonBuiltinInstallationSQL + ` AND (d.id IS NULL OR a.artifact_id IS NULL OR a.extension_id <> i.extension_id OR a.version <> i.version OR COALESCE(json_extract(i.installation_json, '$.installedVersion'), '') <> i.version)`,
+		"unsigned_production_packages":                  `SELECT COUNT(*) FROM extension_installations i JOIN extension_package_artifacts a ON a.artifact_id = json_extract(i.installation_json, '$.packageId') WHERE i.installed = 1 AND a.signature_status <> 'valid' AND COALESCE(json_extract(i.installation_json, '$.metadata.devOnly'), 0) NOT IN (1, 'true') AND ` + nonBuiltinInstallationSQL,
+		"untrusted_installed_packages":                  `SELECT COUNT(*) FROM extension_installations i JOIN extension_package_artifacts a ON a.artifact_id = json_extract(i.installation_json, '$.packageId') WHERE i.installed = 1 AND a.trust_decision NOT IN ('official', 'trusted', 'user_trusted', 'development') AND ` + nonBuiltinInstallationSQL,
 		"failed_uninstall_restores":                     `SELECT COUNT(*) FROM extension_package_operations WHERE operation_type = 'uninstall' AND status = 'requires_recovery' AND (current_step = 'restore_quarantine' OR error_detail LIKE '%restore quarantined installation%')`,
 		"ambiguous_recovery_operations":                 `SELECT COUNT(*) FROM extension_package_operations WHERE status = 'requires_recovery' AND (current_step = 'recovery_manual' OR error_detail LIKE '%ambiguous%' OR error_detail LIKE '%could not be proven%')`,
 	}
@@ -202,6 +204,11 @@ func (p *FinalGateProbe) probePackageReleaseGate(ctx context.Context, report *Fi
 	var installationWithoutFiles int64
 	var generationReadModelMismatches int64
 	for _, installation := range installations {
+		source, _ := installation.Metadata["source"].(string)
+		immutablePackage, _ := installation.Metadata["immutablePackage"].(bool)
+		if source == "builtin" || immutablePackage {
+			continue
+		}
 		path, _ := installation.Metadata["installedPath"].(string)
 		if path == "" {
 			installationWithoutFiles++

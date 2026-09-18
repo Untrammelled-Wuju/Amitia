@@ -3,17 +3,23 @@ package interaction
 import (
 	"strings"
 
+	"github.com/u-ai/backend/internal/extension/runtimegate"
 	"github.com/u-ai/backend/internal/psyche/appraisal"
 	"github.com/u-ai/backend/internal/psyche/budget"
 )
 
 type AppraisalResult struct {
-	PsycheDelta       float64            `json:"psycheDelta"`
-	RelationshipDelta float64            `json:"relationshipDelta"`
-	NeedDeltas        map[string]float64 `json:"needDeltas,omitempty"`
-	Severity          float64            `json:"severity"`
-	EventType         string             `json:"eventType"`
-	BudgetAllocated   float64            `json:"budgetAllocated"`
+	PsycheDelta                     float64            `json:"psycheDelta"`
+	RelationshipDelta               float64            `json:"relationshipDelta"`
+	NeedDeltas                      map[string]float64 `json:"needDeltas,omitempty"`
+	Severity                        float64            `json:"severity"`
+	EventType                       string             `json:"eventType"`
+	BudgetAllocated                 float64            `json:"budgetAllocated"`
+	RelationshipConcernDelta        float64            `json:"relationshipConcernDelta,omitempty"`
+	RelationshipWarmthDelta         float64            `json:"relationshipWarmthDelta,omitempty"`
+	RelationshipHurtDelta           float64            `json:"relationshipHurtDelta,omitempty"`
+	RelationshipAngerDelta          float64            `json:"relationshipAngerDelta,omitempty"`
+	RelationshipDisappointmentDelta float64            `json:"relationshipDisappointmentDelta,omitempty"`
 }
 
 type AppraisalEventCategory string
@@ -40,6 +46,9 @@ type appraisalSensitivities struct {
 func (p *RuntimePipeline) runAppraisal(snapshot ContextSnapshot, scope InteractionScope, req *ProcessRequest, path PathType) *AppraisalResult {
 	if p.appraisalEngine == nil || req.IsInternal {
 		return nil
+	}
+	if !runtimegate.IsEnabled(runtimegate.EmotionExtensionID) {
+		return &AppraisalResult{EventType: string(AppraisalCatChat)}
 	}
 	sens := extractAppraisalSensitivities(snapshot)
 	eventCat := classifyAppraisalEvent(req.Message, path)
@@ -197,4 +206,78 @@ func eventCategoryScales(category AppraisalEventCategory, sensitivities appraisa
 	default:
 		return 0.10, 0.10, map[string]float64{"reassurance": 0.10, "connection": 0.10, "autonomy": 0.05, "clarity": 0.08, "novelty": 0.08, "expression": 0.10}
 	}
+}
+
+func EvaluateMessageAppraisal(message string, familiarity float64) *AppraisalResult {
+	category := classifyAppraisalEvent(message, PathTypeStandard)
+	sensitivities := appraisalSensitivities{
+		boundaryStrength:  0.55,
+		warmth:            0.55,
+		rejectionSens:     0.5,
+		affection:         0.45,
+		conflictAvoidance: 0.5,
+	}
+	input := appraisal.AppraisalInput{
+		EventType:         string(category),
+		Source:            "realtime_voice",
+		IsUserInitiated:   true,
+		RelatesToGoal:     category != AppraisalCatChat,
+		GoalCongruent:     category == AppraisalCatPraise || category == AppraisalCatApology || category == AppraisalCatHelp,
+		IsExpected:        0.5,
+		InvolvesRelation:  familiarity > 0.1,
+		NormViolated:      category == AppraisalCatComplaint || category == AppraisalCatBoundaryCross,
+		BoundaryViolated:  category == AppraisalCatBoundaryCross,
+		Controllable:      false,
+		Responsibility:    0.5,
+		Uncertainty:       0.5,
+		SimilarPastEvents: 0,
+	}
+	a := appraisal.NewEngine(appraisal.DefaultAppraisalConfig()).Evaluate(input)
+	severity := budget.ComputeEventSeverity(a.OverallSeverity, a.GoalRelevance, a.NormViolation, a.BoundaryViolation)
+	psyScale, relScale, needScales := eventCategoryScales(category, sensitivities)
+	result := &AppraisalResult{
+		PsycheDelta:       (a.GoalCongruence - 0.5) * psyScale,
+		RelationshipDelta: (a.RelationshipRelevance - 0.5) * relScale,
+		Severity:          severity,
+		EventType:         string(category),
+		NeedDeltas: map[string]float64{
+			"reassurance": (a.GoalCongruence - 0.5) * needScales["reassurance"],
+			"connection":  (a.RelationshipRelevance - 0.5) * needScales["connection"],
+			"autonomy":    (a.Controllability - 0.5) * needScales["autonomy"],
+			"clarity":     ((1.0 - a.CausalUncertainty) - 0.5) * needScales["clarity"],
+			"novelty":     (a.Novelty - 0.5) * needScales["novelty"],
+			"expression":  (a.Responsibility - 0.5) * needScales["expression"],
+			"rest":        -severity * 0.05,
+		},
+	}
+	switch category {
+	case AppraisalCatPraise:
+		result.RelationshipWarmthDelta = 0.03
+		result.RelationshipConcernDelta = 0.01
+	case AppraisalCatApology:
+		result.RelationshipHurtDelta = -0.05
+		result.RelationshipAngerDelta = -0.06
+		result.RelationshipWarmthDelta = 0.02
+	case AppraisalCatComplaint:
+		result.RelationshipHurtDelta = 0.04
+		result.RelationshipAngerDelta = 0.04
+		result.RelationshipDisappointmentDelta = 0.04
+	case AppraisalCatBoundaryCross:
+		result.RelationshipHurtDelta = 0.05
+		result.RelationshipAngerDelta = 0.07
+		result.RelationshipConcernDelta = -0.02
+	case AppraisalCatCold:
+		result.RelationshipHurtDelta = 0.03
+		result.RelationshipAngerDelta = 0.02
+		result.RelationshipWarmthDelta = -0.03
+	case AppraisalCatHelp:
+		result.RelationshipConcernDelta = 0.03
+		result.RelationshipWarmthDelta = 0.01
+	case AppraisalCatEmotional:
+		result.RelationshipConcernDelta = 0.06
+		result.RelationshipWarmthDelta = 0.02
+	default:
+		result.RelationshipWarmthDelta = 0.005
+	}
+	return result
 }

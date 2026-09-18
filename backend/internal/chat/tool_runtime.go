@@ -11,11 +11,14 @@ import (
 )
 
 type SkillScope struct {
-	UserID         string
+	SpaceID        string
 	CharacterID    string
 	ConversationID string
 	Channel        string
 	SessionID      string
+	Message        string
+	Source         string
+	IsInternal     bool
 	Trigger        string
 	TraceID        string
 	RequestID      string
@@ -84,7 +87,7 @@ type ModelToolRuntime interface {
 
 func toolScopeFromExtension(es extension.ExecutionScope) SkillScope {
 	return SkillScope{
-		UserID:         es.UserID,
+		SpaceID:        es.SpaceID,
 		CharacterID:    es.CharacterID,
 		ConversationID: es.ConversationID,
 		Channel:        es.Channel,
@@ -97,21 +100,6 @@ func toolScopeFromExtension(es extension.ExecutionScope) SkillScope {
 		CausationID:    es.CausationID,
 		ExecContext:    es.ExecContext,
 	}
-}
-
-func contextContributionsToExtension(ccs []ContextContribution) []extension.ContextContribution {
-	result := make([]extension.ContextContribution, 0, len(ccs))
-	for _, c := range ccs {
-		result = append(result, extension.ContextContribution{
-			Source:     c.Source,
-			Priority:   c.Priority,
-			Content:    c.Content,
-			TokenLimit: c.TokenLimit,
-			ExpiresAt:  c.ExpiresAt,
-			Metadata:   c.Metadata,
-		})
-	}
-	return result
 }
 
 type toolExecOutcome struct {

@@ -1,11 +1,13 @@
 export const TYPES = [
+  { label: "个人信息", value: "personal_info" },
+  { label: "爱好", value: "hobby" },
   { label: "偏好", value: "preference" },
-  { label: "事件", value: "event" },
+  { label: "事实", value: "fact" },
+  { label: "计划", value: "plan" },
   { label: "习惯", value: "habit" },
-  { label: "昵称", value: "nickname" },
   { label: "关系", value: "relationship" },
-  { label: "其他", value: "custom" },
-];
+  { label: "自定义", value: "custom" },
+]
 export const SOURCES = [
   { label: "手动", value: "manual" },
   { label: "摘要", value: "summary" },
@@ -19,9 +21,10 @@ export const SCOPE_TYPES = [
   { label: "世界", value: "world" },
 ];
 export const SENSITIVITY_OPTIONS = [
-  { label: "普通", value: "normal" },
-  { label: "敏感", value: "sensitive" },
-  { label: "高敏感", value: "high" },
+  { label: "公开", value: "public" },
+  { label: "内部", value: "internal" },
+  { label: "私密", value: "private" },
+  { label: "高度敏感", value: "secret" },
 ];
 
 export function typeLabel(value: string) {
@@ -65,7 +68,7 @@ export function scopeTypeLabel(row: any) {
 }
 export function rowSensitivity(row: any) {
   return (
-    row.sensitivity || row.sensitivityLevel || row.sensitivity_level || "normal"
+    row.sensitivity || row.sensitivityLevel || row.sensitivity_level || "internal"
   );
 }
 export function sensitivityLabel(value: string) {
@@ -74,11 +77,13 @@ export function sensitivityLabel(value: string) {
   );
 }
 export function sensitivityTagType(value: string) {
-  return value === "high"
+  return value === "secret"
     ? "danger"
-    : value === "sensitive"
+    : value === "private"
       ? "warning"
-      : "info";
+      : value === "public"
+        ? "success"
+        : "info";
 }
 export function readBooleanFlag(
   row: any,

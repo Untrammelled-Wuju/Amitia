@@ -12,7 +12,7 @@ type DeveloperSession struct {
 	SessionID        string
 	WorkspaceID      WorkspaceID
 	ExtensionID      ExtensionID
-	UserID           string
+	SpaceID          string
 	DeviceID         string
 	UserAgent        string
 	Environment      string
@@ -49,8 +49,8 @@ var (
 	ErrSessionRevoked  = errors.New("dev_mode: session revoked")
 )
 
-func (m *SessionManager) Open(ctx context.Context, workspace WorkspaceID, extension ExtensionID, userID, deviceID, userAgent, policyVersion string, devTrust bool, devTrustVersion uint64) (*DeveloperSession, error) {
-	if workspace == "" || extension == "" || userID == "" || policyVersion == "" || !devTrust || devTrustVersion == 0 {
+func (m *SessionManager) Open(ctx context.Context, workspace WorkspaceID, extension ExtensionID, spaceID, deviceID, userAgent, policyVersion string, devTrust bool, devTrustVersion uint64) (*DeveloperSession, error) {
+	if workspace == "" || extension == "" || spaceID == "" || policyVersion == "" || !devTrust || devTrustVersion == 0 {
 		return nil, fmt.Errorf("dev_mode: invalid developer session binding")
 	}
 	m.mu.Lock()
@@ -60,7 +60,7 @@ func (m *SessionManager) Open(ctx context.Context, workspace WorkspaceID, extens
 		SessionID:        newSessionID(workspace, now),
 		WorkspaceID:      workspace,
 		ExtensionID:      extension,
-		UserID:           userID,
+		SpaceID:          spaceID,
 		DeviceID:         deviceID,
 		UserAgent:        userAgent,
 		Environment:      "development",

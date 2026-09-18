@@ -163,7 +163,7 @@ type RunStore interface {
 // workflow resume. It keeps the base RunStore interface compatible with memory
 // stores and older tests.
 type WaitingDeviceRunStore interface {
-	ListWaitingDevice(ctx context.Context, userID, deviceID string, limit int) ([]WorkflowRun, error)
+	ListWaitingDevice(ctx context.Context, spaceID, deviceID string, limit int) ([]WorkflowRun, error)
 }
 
 // WorkflowRunHeartbeatStore is an optional durable extension used by the

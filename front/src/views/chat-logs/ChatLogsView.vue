@@ -40,12 +40,7 @@ SPDX-License-Identifier: AGPL-3.0-only
         <div class="detail-header">
           <div class="dh-info">
             <span class="dh-title">{{
-              selectedConv.title ||
-              (selectedConv.channel === "qq"
-                ? "QQ聊天"
-                : selectedConv.channel === "wechat"
-                  ? "微信聊天"
-                  : "新对话")
+              selectedConv.title || "新对话"
             }}</span>
             <span class="dh-meta"
               >{{ channelLabel(selectedConv.channel) }} ·

@@ -139,7 +139,7 @@ func TestControlPlane_HandshakeGate_HelloSucceedsAndUnlocksTraffic(t *testing.T)
 	}
 
 	pluginTransport, hostTransport := NewMemoryTransportPair()
-	_, err = cp.Attach(ctx, peer, pluginTransport)
+	conn, err := cp.Attach(ctx, peer, pluginTransport)
 	if err != nil {
 		t.Fatalf("Attach failed: %v", err)
 	}
@@ -148,7 +148,7 @@ func TestControlPlane_HandshakeGate_HelloSucceedsAndUnlocksTraffic(t *testing.T)
 
 	helloPayload, _ := json.Marshal(map[string]interface{}{
 		"supportedProtocols": []string{"amitia-game-host/1"},
-		"capabilities":       []string{"custom_rpc"},
+		"capabilities":       []string{},
 	})
 
 	helloEnv := protocol.Envelope{
@@ -180,6 +180,9 @@ func TestControlPlane_HandshakeGate_HelloSucceedsAndUnlocksTraffic(t *testing.T)
 		}
 	case <-time.After(3 * time.Second):
 		t.Fatal("timed out waiting for hello response")
+	}
+	if !mgr.IsReady(string(conn.ID)) {
+		t.Fatal("handshake manager must be ready after the hello response is sent")
 	}
 
 	bizEnv := protocol.Envelope{

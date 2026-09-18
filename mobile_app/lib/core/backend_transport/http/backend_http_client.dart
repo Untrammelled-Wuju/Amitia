@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 
 import '../../backend_connection/backend_connection_config.dart';
 import '../../backend_connection/backend_uri_builder.dart';
+import '../../native_bridge/device_timezone_cache.dart';
 import '../auth/backend_auth_header.dart';
 import '../errors/backend_transport_error.dart';
 import '../errors/backend_transport_error_code.dart';
@@ -61,16 +62,21 @@ class BackendHttpClient implements BackendHttpTransport {
 
     final headers = <String, String>{
       BackendBaseHeaders.userAgent: BackendBaseHeaders.userAgentValue,
-      if (request.body != null)
+      if (request.body != null && request.body is! FormData)
         BackendBaseHeaders.contentType: BackendBaseHeaders.contentTypeJsonValue,
+      if (DeviceTimezoneCache.hasValue)
+        'X-Device-Timezone': DeviceTimezoneCache.ianaTimezone,
     };
 
     final token = _config.credential.revealForTransport();
     switch (_config.authStrategy) {
       case BackendAuthStrategy.localToken:
         headers[BackendAuthHeader.localToken] = token;
-      case BackendAuthStrategy.bearer:
-        headers[BackendAuthHeader.authorization] = 'Bearer $token';
+      case BackendAuthStrategy.deviceCredential:
+        headers[BackendAuthHeader.authorization] = 'AmitiaDevice $token';
+        headers['X-Amitia-Space-ID'] = _config.spaceId;
+        headers['X-Amitia-Device-ID'] = _config.deviceId;
+        headers['X-Amitia-Runtime-ID'] = _config.runtimeId;
     }
 
     if (request.headers != null) {
@@ -97,8 +103,12 @@ class BackendHttpClient implements BackendHttpTransport {
           method: request.method.value,
           headers: headers,
           validateStatus: (status) => status != null && status >= 200 && status < 300,
-          receiveTimeout: request.timeout,
+          receiveTimeout: request.streamResponse
+              ? (request.timeout ?? Duration.zero)
+              : request.timeout,
+          responseType: request.streamResponse ? ResponseType.stream : null,
         ),
+        cancelToken: request.cancelToken,
       );
 
       final statusCode = response.statusCode ?? 0;

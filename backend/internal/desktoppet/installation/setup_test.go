@@ -27,7 +27,7 @@ import (
 )
 
 const (
-	testUserID       = "user_test"
+	testSpaceID      = "user_test"
 	testCharacterID  = "char_test"
 	testTaskID       = "gt_test"
 	testPackageID    = "pkg_test"
@@ -57,20 +57,20 @@ func newTestContext(db *gorm.DB) *app.AppContext {
 	return &app.AppContext{DB: db, Context: context.Background()}
 }
 
-func newTestService(t *testing.T, db *gorm.DB, dataDir string, pkgRepo processing.Repository, charRepo character.Repository) Service {
+func newTestService(t *testing.T, db *gorm.DB, dataDir string, pkgRepo processing.Repository, _ character.Repository) Service {
 	t.Helper()
 	ctx := newTestContext(db)
 	repo := NewRepository(db, ctx)
-	inst := NewInstaller(repo, pkgRepo, charRepo, dataDir) // audit:ok: test exercises guarded deprecated installer
+	inst := NewInstaller(repo, pkgRepo, dataDir) // audit:ok: test exercises guarded deprecated installer
 	un := NewUninstaller(repo, dataDir)
-	return NewService(repo, inst, un, pkgRepo, charRepo, dataDir)
+	return NewService(repo, inst, un, pkgRepo, dataDir)
 }
 
-func newTestInstaller(t *testing.T, db *gorm.DB, dataDir string, pkgRepo processing.Repository, charRepo character.Repository) (Installer, Repository) {
+func newTestInstaller(t *testing.T, db *gorm.DB, dataDir string, pkgRepo processing.Repository, _ character.Repository) (Installer, Repository) {
 	t.Helper()
 	ctx := newTestContext(db)
 	repo := NewRepository(db, ctx)
-	return NewInstaller(repo, pkgRepo, charRepo, dataDir), repo // audit:ok: test helper for guarded deprecated installer
+	return NewInstaller(repo, pkgRepo, dataDir), repo // audit:ok: test helper for guarded deprecated installer
 }
 
 func newTestUninstaller(t *testing.T, db *gorm.DB, dataDir string) Uninstaller {
@@ -130,18 +130,18 @@ type mockNotifier struct {
 }
 
 type mockEnabledCall struct {
-	UserID         string
+	SpaceID        string
 	InstallationID string
 	Settings       *RuntimeSettings
 }
 
 type mockDisabledCall struct {
-	UserID         string
+	SpaceID        string
 	InstallationID string
 }
 
 type mockActionPlayCall struct {
-	UserID         string
+	SpaceID        string
 	InstallationID string
 	ActionKey      string
 }
@@ -156,21 +156,21 @@ type mockSettingsUpdatedCall struct {
 	Settings       *RuntimeSettings
 }
 
-func (m *mockNotifier) NotifyInstallationEnabled(userId, installationId string, settings *RuntimeSettings) error {
-	m.enabledCalls = append(m.enabledCalls, mockEnabledCall{UserID: userId, InstallationID: installationId, Settings: settings})
+func (m *mockNotifier) NotifyInstallationEnabled(spaceId, installationId string, settings *RuntimeSettings) error {
+	m.enabledCalls = append(m.enabledCalls, mockEnabledCall{SpaceID: spaceId, InstallationID: installationId, Settings: settings})
 	return nil
 }
 
-func (m *mockNotifier) NotifyInstallationDisabled(userId, installationId string) error {
-	m.disabledCalls = append(m.disabledCalls, mockDisabledCall{UserID: userId, InstallationID: installationId})
+func (m *mockNotifier) NotifyInstallationDisabled(spaceId, installationId string) error {
+	m.disabledCalls = append(m.disabledCalls, mockDisabledCall{SpaceID: spaceId, InstallationID: installationId})
 	return nil
 }
 
-func (m *mockNotifier) NotifyActionPlayed(userId, installationId, actionKey string) error {
+func (m *mockNotifier) NotifyActionPlayed(spaceId, installationId, actionKey string) error {
 	if m.failOnAction {
 		return fmt.Errorf("模拟调度器失败")
 	}
-	m.actionPlayCalls = append(m.actionPlayCalls, mockActionPlayCall{UserID: userId, InstallationID: installationId, ActionKey: actionKey})
+	m.actionPlayCalls = append(m.actionPlayCalls, mockActionPlayCall{SpaceID: spaceId, InstallationID: installationId, ActionKey: actionKey})
 	return nil
 }
 
@@ -286,7 +286,6 @@ func createPackageOnDisk(t *testing.T, dataDir, taskID, pkgID string, canvasW, c
 		SchemaVersion:     processing.ManifestSchemaVersion,
 		PackageID:         pkgID,
 		Name:              "测试包",
-		CharacterID:       testCharacterID,
 		GenerationTaskID:  taskID,
 		ProcessingVersion: 1,
 		Canvas:            processing.ManifestCanvas{Width: canvasW, Height: canvasH},
@@ -405,8 +404,7 @@ func createReadyPackage(t *testing.T, dataDir, pkgID string, actions []actionSpe
 	hash := computePackageHash(t, srcDir)
 	return &processing.Package{
 		ID:               pkgID,
-		UserID:           testUserID,
-		CharacterID:      testCharacterID,
+		SpaceID:          testSpaceID,
 		GenerationTaskID: testTaskID,
 		Name:             "测试包",
 		Version:          1,
@@ -478,7 +476,6 @@ func createInstalledPackageOnDisk(t *testing.T, dataDir, installID string, actio
 		SchemaVersion:     processing.ManifestSchemaVersion,
 		PackageID:         testPackageID,
 		Name:              "测试包",
-		CharacterID:       testCharacterID,
 		GenerationTaskID:  testTaskID,
 		ProcessingVersion: 1,
 		Canvas:            processing.ManifestCanvas{Width: testCanvasWidth, Height: testCanvasHeight},
@@ -515,8 +512,7 @@ func createInstalledPackageOnDisk(t *testing.T, dataDir, installID string, actio
 
 	inst := &Installation{
 		ID:               installID,
-		UserID:           testUserID,
-		CharacterID:      testCharacterID,
+		SpaceID:          testSpaceID,
 		PackageID:        testPackageID,
 		PackageVersion:   "1",
 		Name:             "测试包",
@@ -551,7 +547,7 @@ func setupInstalledService(t *testing.T) (Service, *gorm.DB, string, *Installati
 	notifier := &mockNotifier{}
 	SetRuntimeNotifier(svc, notifier)
 
-	inst, err := svc.InstallPackage(testPackageID, testUserID, testCharacterID)
+	inst, err := svc.InstallPackage(testPackageID, testSpaceID)
 	if err != nil {
 		t.Fatalf("InstallPackage: %v", err)
 	}

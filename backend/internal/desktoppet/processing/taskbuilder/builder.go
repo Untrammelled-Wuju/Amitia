@@ -32,8 +32,7 @@ type TaskBuilder struct {
 
 type CreateTaskRequest struct {
 	GenerationTaskID   string
-	UserID             string
-	CharacterID        string
+	SpaceID            string
 	OutputWidth        int
 	OutputHeight       int
 	TargetHeightRatio  float64
@@ -107,8 +106,7 @@ func (b *TaskBuilder) Build(ctx context.Context, req *CreateTaskRequest) (*proce
 	task := &processing.ProcessingTask{
 		ID:                         taskID,
 		GenerationTaskID:           req.GenerationTaskID,
-		UserID:                     req.UserID,
-		CharacterID:                req.CharacterID,
+		SpaceID:                    req.SpaceID,
 		Status:                     "queued",
 		CurrentStage:               "created",
 		Progress:                   0,
@@ -171,8 +169,7 @@ func (b *TaskBuilder) Build(ctx context.Context, req *CreateTaskRequest) (*proce
 
 			manifestRecord, mErr := b.manifestBuilder.Build(source.BuildManifestRequest{
 				ID:                            "pm_" + uuid.NewString(),
-				UserID:                        req.UserID,
-				CharacterID:                   req.CharacterID,
+				SpaceID:                       req.SpaceID,
 				ProcessingTaskID:              taskID,
 				ProcessingActionID:            actionID,
 				GenerationTaskID:              req.GenerationTaskID,

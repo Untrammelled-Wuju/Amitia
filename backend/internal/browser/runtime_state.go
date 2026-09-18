@@ -9,7 +9,7 @@ type runtimeState struct {
 	mu                sync.RWMutex
 	state             BrowserRuntimeState
 	generation        uint64
-	startupInProgress sync.Once
+	startupInProgress *sync.Once
 	startupResult     *startupResult
 }
 
@@ -109,9 +109,9 @@ func (s *runtimeState) tryStartupOnce() *sync.Once {
 	if s.startupResult != nil {
 		return nil
 	}
-	var once sync.Once
+	once := &sync.Once{}
 	s.startupInProgress = once
-	return &s.startupInProgress
+	return once
 }
 
 func (s *runtimeState) startupCompleted(info *BrowserRuntimeInfo, err *BrowserError) {
@@ -128,7 +128,7 @@ func (s *runtimeState) consumeStartupResult() (*BrowserRuntimeInfo, *BrowserErro
 	}
 	result := s.startupResult
 	s.startupResult = nil
-	s.startupInProgress = sync.Once{}
+	s.startupInProgress = nil
 	return result.info, result.err, true
 }
 

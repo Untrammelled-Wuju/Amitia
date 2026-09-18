@@ -29,10 +29,9 @@ internal class DefaultRuntimeEnvironmentBuilder(
             return RuntimeEnvironmentResult.Failure(endpointError.first, endpointError.second)
         }
 
-        val securityMaterial = try {
-            val material = ensureLocalSecurityMaterial(request.hostLayout)
-            ensureRuntimeConfig(request.hostLayout, material)
-            material
+        try {
+            ensureLocalSecurityMaterial(request.hostLayout)
+            ensureRuntimeConfig(request.hostLayout)
         } catch (e: Exception) {
             return RuntimeEnvironmentResult.Failure(
                 RuntimeEnvironmentErrorCode.BUILD_FAILED,
@@ -100,7 +99,6 @@ internal class DefaultRuntimeEnvironmentBuilder(
 
     private fun buildGuestRuntimeEnvironment(
         policy: BackendEndpointPolicy,
-        securityMaterial: LocalSecurityMaterial,
     ): Map<String, String> {
         val env = LinkedHashMap<String, String>()
 
@@ -125,8 +123,8 @@ internal class DefaultRuntimeEnvironmentBuilder(
         env["AMITIA_SECURITY_MODE"] = "local_single_user"
         env["AMITIA_ALLOW_REMOTE_ACCESS"] = "false"
         env["AMITIA_LOCAL_TOKEN_FILE"] = GuestLayout.LOCAL_TOKEN
+        env["SSL_CERT_FILE"] = GuestLayout.SECURITY_DIR + "/ca-certificates.crt"
 
-        env["AMITIA_JWT_SECRET"] = securityMaterial.jwtSecret
 
         env["AMITIA_GRAPH_STORE_ENABLED"] = "false"
         env["AMITIA_GRAPH_STORE_REQUIRED"] = "false"
@@ -150,22 +148,17 @@ internal class DefaultRuntimeEnvironmentBuilder(
         return env
     }
 
-    private fun ensureLocalSecurityMaterial(layout: RuntimeHostLayout): LocalSecurityMaterial {
+    private fun ensureLocalSecurityMaterial(layout: RuntimeHostLayout) {
         val securityDir = File(layout.dataRoot, "security")
         ensureDirectory(securityDir)
-
         val localTokenFile = File(securityDir, "local-token")
         ensureCredential(localTokenFile, minLength = 32, randomBytes = 32)
-
-        val jwtSecretFile = File(securityDir, "jwt-secret")
-        val jwtSecret = ensureCredential(jwtSecretFile, minLength = 32, randomBytes = 48)
-        return LocalSecurityMaterial(jwtSecret = jwtSecret)
     }
 
-    private fun ensureRuntimeConfig(layout: RuntimeHostLayout, securityMaterial: LocalSecurityMaterial) {
+    private fun ensureRuntimeConfig(layout: RuntimeHostLayout) {
         ensureDirectory(layout.configRoot)
         val configFile = File(layout.configRoot, "config.yml")
-        val value = "jwt:\n  secret: \"${securityMaterial.jwtSecret}\"\ndesktopPetRuntime:\n  enabled: false\n"
+        val value = "desktopPetRuntime:\n  enabled: false\n"
         configFile.writeText(value, Charsets.UTF_8)
         configFile.setReadable(false, false)
         configFile.setWritable(false, false)
@@ -225,9 +218,6 @@ internal class DefaultRuntimeEnvironmentBuilder(
         }
     }
 
-    private data class LocalSecurityMaterial(
-        val jwtSecret: String,
-    )
 
     private companion object {
         val secureRandom = SecureRandom()

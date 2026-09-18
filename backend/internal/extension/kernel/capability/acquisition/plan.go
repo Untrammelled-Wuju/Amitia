@@ -7,7 +7,7 @@ import (
 
 type DeploymentTarget struct {
 	Placement        capability.ProviderPlacement `json:"placement"`
-	UserID           runtimeidentity.UserID       `json:"userId,omitempty"`
+	SpaceID          runtimeidentity.SpaceID      `json:"spaceId,omitempty"`
 	DeviceID         runtimeidentity.DeviceID     `json:"deviceId,omitempty"`
 	RuntimeID        runtimeidentity.RuntimeID    `json:"runtimeId,omitempty"`
 	RuntimeSessionID string                       `json:"runtimeSessionID,omitempty"`

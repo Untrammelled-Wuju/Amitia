@@ -24,16 +24,17 @@ type SAFDocumentRef struct {
 }
 
 type SAFStatResult struct {
-	Name         string
-	MIMEType     string
-	SizeBytes    *int64
-	ModifiedAt   *time.Time
-	Flags        int64
-	IsDirectory  bool
-	IsVirtual    bool
+	Name        string
+	MIMEType    string
+	SizeBytes   *int64
+	ModifiedAt  *time.Time
+	Flags       int64
+	IsDirectory bool
+	IsVirtual   bool
 }
 
 type SAFEntryRef struct {
+	DocumentID  string
 	Name        string
 	MIMEType    string
 	SizeBytes   *int64
@@ -77,11 +78,11 @@ type SAFBridge interface {
 }
 
 type SAFNativeError struct {
-	Code               string
-	Message            string
-	PermissionRevoked  bool
+	Code                string
+	Message             string
+	PermissionRevoked   bool
 	ProviderUnavailable bool
-	Retryable          bool
+	Retryable           bool
 }
 
 func (e SAFNativeError) Error() string {

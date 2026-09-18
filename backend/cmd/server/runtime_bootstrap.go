@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/u-ai/backend/config"
 	"github.com/u-ai/backend/internal/graph"
@@ -15,7 +16,7 @@ import (
 	"github.com/u-ai/backend/internal/runtimeorchestrator"
 	"github.com/u-ai/backend/internal/runtimeprofile"
 	"github.com/u-ai/backend/internal/scriptruntime/nodeenv"
-	"github.com/u-ai/backend/internal/scriptruntime/sidecar"
+	"github.com/u-ai/backend/log"
 	qdrantDB "github.com/u-ai/backend/pkg/database/qdrant"
 	surrealdbDB "github.com/u-ai/backend/pkg/database/surrealdb"
 	"github.com/u-ai/backend/pkg/platform"
@@ -32,7 +33,6 @@ type runtimeBootstrap struct {
 	stopOnce         sync.Once
 	runError         error
 	nodeEnvironment  nodeenv.Resolver
-	artifactResolver sidecar.ArtifactResolver
 
 	profile runtimeprofile.Profile
 	policy  runtimeprofile.Policy
@@ -68,20 +68,12 @@ func newRuntimeBootstrap(paths *util.RuntimePaths, profile runtimeprofile.Profil
 		return nil, fmt.Errorf("create node environment resolver: %w", err)
 	}
 
-	artifactResolver, err := sidecar.NewArtifactResolver(sidecar.ResolveContext{
-		Host: host,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("create sidecar artifact resolver: %w", err)
-	}
-
 	bootstrap := &runtimeBootstrap{
 		host:             host,
 		orchestrator:     orch,
 		providerRegistry: providerRegistry,
 		resources:        paths,
 		nodeEnvironment:  nodeResolver,
-		artifactResolver: artifactResolver,
 		profile:          profile,
 		policy:           policy,
 	}
@@ -160,9 +152,6 @@ func (b *runtimeBootstrap) RegisterInfrastructure(sqlDB *sql.DB) error {
 	if err := b.orchestrator.Register(&sqliteComponent{db: sqlDB}); err != nil {
 		return fmt.Errorf("register sqlite: %w", err)
 	}
-	if err := b.orchestrator.Register(newSidecarComponent(b.host, b.nodeEnvironment, b.artifactResolver)); err != nil {
-		return fmt.Errorf("register sidecars: %w", err)
-	}
 	return nil
 }
 
@@ -218,13 +207,6 @@ func (b *runtimeBootstrap) NodeEnvironmentResolver() nodeenv.Resolver {
 		return nil
 	}
 	return b.nodeEnvironment
-}
-
-func (b *runtimeBootstrap) SidecarArtifactResolver() sidecar.ArtifactResolver {
-	if b == nil {
-		return nil
-	}
-	return b.artifactResolver
 }
 
 func (b *runtimeBootstrap) IOSSandboxProvider() runtimeorchestrator.ProviderInstance {
@@ -305,11 +287,15 @@ func (a *vectorStoreProviderAdapter) Stop(ctx context.Context) error {
 }
 
 type graphStoreProviderAdapter struct {
-	host     runtimehost.RuntimeHost
-	graphSvc graph.Service
-	enabled  bool
-	required bool
-	onReady  func(graph.Service)
+	host        runtimehost.RuntimeHost
+	graphSvc    graph.Service
+	switchable  *graph.SwitchableService
+	enabled     bool
+	required    bool
+	onReady     func(graph.Service)
+	unsubscribe func()
+	reconnectMu sync.Mutex
+	stopped     bool
 }
 
 func (a *graphStoreProviderAdapter) Descriptor() runtimeorchestrator.ComponentDescriptor {
@@ -325,6 +311,10 @@ func (a *graphStoreProviderAdapter) Descriptor() runtimeorchestrator.ComponentDe
 }
 
 func (a *graphStoreProviderAdapter) Start(ctx context.Context) error {
+	a.reconnectMu.Lock()
+	a.stopped = false
+	a.reconnectMu.Unlock()
+
 	spec, err := surrealdbDB.BuildSurrealProcessSpec(a.host.RuntimeInstanceID())
 	if err != nil {
 		return fmt.Errorf("build surrealdb spec: %w", err)
@@ -337,17 +327,75 @@ func (a *graphStoreProviderAdapter) Start(ctx context.Context) error {
 		return fmt.Errorf("start surrealdb: %w", err)
 	}
 	if err := supervisor.WaitReady(ctx, spec.ID); err != nil {
+		_ = supervisor.Stop(ctx, spec.ID)
 		return fmt.Errorf("wait for surrealdb ready: %w", err)
+	}
+
+	if a.unsubscribe != nil {
+		a.unsubscribe()
+	}
+	a.unsubscribe = supervisor.Subscribe(func(event runtimehost.ProcessEvent) {
+		if event.ProcessID != runtimehost.ProcessIDSurrealDB || event.Type != runtimehost.EventRestarted {
+			return
+		}
+		go a.reconnectGraphServiceAfterRestart()
+	})
+	if err := a.reconnectGraphService(); err != nil {
+		a.unsubscribe()
+		a.unsubscribe = nil
+		_ = supervisor.Stop(ctx, spec.ID)
+		return fmt.Errorf("initialize graph client after surrealdb readiness: %w", err)
+	}
+	return nil
+}
+
+func (a *graphStoreProviderAdapter) reconnectGraphServiceAfterRestart() {
+	const attempts = 6
+	var lastErr error
+	for attempt := 1; attempt <= attempts; attempt++ {
+		if err := a.reconnectGraphService(); err == nil {
+			if attempt > 1 {
+				log.Info("graph service reconnected after SurrealDB restart")
+			}
+			return
+		} else {
+			lastErr = err
+		}
+
+		a.reconnectMu.Lock()
+		stopped := a.stopped
+		a.reconnectMu.Unlock()
+		if stopped {
+			return
+		}
+		if attempt < attempts {
+			time.Sleep(time.Duration(attempt) * 500 * time.Millisecond)
+		}
+	}
+	log.Error("graph service reconnect after SurrealDB restart failed: ", lastErr)
+}
+
+func (a *graphStoreProviderAdapter) reconnectGraphService() error {
+	a.reconnectMu.Lock()
+	defer a.reconnectMu.Unlock()
+	if a.stopped {
+		return fmt.Errorf("graph store provider is stopped")
 	}
 
 	client, err := graph.NewClient(config.AppCfg.Providers.GraphStore.SurrealDB)
 	if err != nil {
-		return fmt.Errorf("initialize graph client after surrealdb readiness: %w", err)
+		return err
 	}
-	a.graphSvc = graph.NewService(client)
-	if a.onReady != nil {
-		a.onReady(a.graphSvc)
+	next := graph.NewService(client)
+	if a.switchable == nil {
+		a.switchable = graph.NewSwitchableService(next)
+		a.graphSvc = a.switchable
+		if a.onReady != nil {
+			a.onReady(a.graphSvc)
+		}
+		return nil
 	}
+	a.switchable.Swap(next)
 	return nil
 }
 
@@ -359,5 +407,19 @@ func (a *graphStoreProviderAdapter) Ready(ctx context.Context) error {
 }
 
 func (a *graphStoreProviderAdapter) Stop(ctx context.Context) error {
+	if a.unsubscribe != nil {
+		a.unsubscribe()
+		a.unsubscribe = nil
+	}
+
+	// Serialize shutdown against an already-dispatched reconnect callback so a
+	// late reconnect cannot resurrect a Graph client after the provider stops.
+	a.reconnectMu.Lock()
+	a.stopped = true
+	if a.switchable != nil {
+		a.switchable.Close()
+	}
+	a.reconnectMu.Unlock()
+
 	return a.host.Processes().Stop(ctx, runtimehost.ProcessIDSurrealDB)
 }

@@ -2,6 +2,9 @@ package javascript_main
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"sync"
@@ -31,6 +34,8 @@ func (f *RuntimeFactory) SetHostAPI(gateway host_api.Gateway) {
 	f.hostAPI = gateway
 }
 
+const DefaultHostAPIVersion = "1"
+
 type CreateHostRequest struct {
 	ExtensionID          string
 	ModuleID             string
@@ -49,6 +54,9 @@ type CreateHostRequest struct {
 }
 
 func (f *RuntimeFactory) Create(ctx context.Context, req CreateHostRequest) (*PluginHost, error) {
+	if req.HostAPIVersion == "" {
+		req.HostAPIVersion = DefaultHostAPIVersion
+	}
 	if req.ExtensionID == "" {
 		return nil, errors.New("javascript_main: extension id required")
 	}
@@ -66,6 +74,17 @@ func (f *RuntimeFactory) Create(ctx context.Context, req CreateHostRequest) (*Pl
 	}
 	if req.WorkingDirectory == "" {
 		return nil, errors.New("javascript_main: working directory required")
+	}
+	if req.SessionToken == "" {
+		token := make([]byte, 32)
+		if _, err := rand.Read(token); err != nil {
+			return nil, fmt.Errorf("javascript_main: generate session token: %w", err)
+		}
+		req.SessionToken = hex.EncodeToString(token)
+	}
+	if req.DefinitionHash == "" {
+		sum := sha256.Sum256([]byte(req.ExtensionID + "\x00" + req.ModuleID))
+		req.DefinitionHash = hex.EncodeToString(sum[:])
 	}
 
 	instanceID := fmt.Sprintf("inst-%s-%s-%d", req.ExtensionID, req.ModuleID, time.Now().UnixNano())
@@ -133,6 +152,27 @@ func (f *RuntimeFactory) Get(instanceID string) (*PluginHost, error) {
 		return nil, fmt.Errorf("javascript_main: host %s not found", instanceID)
 	}
 	return host, nil
+}
+
+func (f *RuntimeFactory) GetByExtensionModule(extensionID, moduleID string) (*PluginHost, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var fallback *PluginHost
+	for _, host := range f.hosts {
+		if host.ExtensionID() != extensionID || host.ModuleID() != moduleID {
+			continue
+		}
+		if host.State() == HostStateReady {
+			return host, nil
+		}
+		if fallback == nil {
+			fallback = host
+		}
+	}
+	if fallback != nil {
+		return fallback, nil
+	}
+	return nil, fmt.Errorf("javascript_main: host %s/%s not found", extensionID, moduleID)
 }
 
 func (f *RuntimeFactory) List() []*PluginHost {

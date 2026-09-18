@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/u-ai/backend/internal/extension/kernel/manifest_v2"
+	"github.com/u-ai/backend/internal/extension/kernel/manifest_v1"
 )
 
 func runInit(args []string, output *Output) int {
@@ -77,31 +77,31 @@ func runInit(args []string, output *Output) int {
 		output.fail(ExitEnv, fmt.Sprintf("创建目录失败: %v", err))
 	}
 
-	manifest := manifest_v2.Manifest{
-		ManifestVersion: manifest_v2.ManifestVersion,
-		Extension: manifest_v2.ExtensionMeta{
+	manifest := manifest_v1.Manifest{
+		ManifestVersion: manifest_v1.ManifestVersion,
+		Extension: manifest_v1.ExtensionMeta{
 			ID:      extID,
-			Name:    manifest_v2.LocalizedText{Default: *displayName},
+			Name:    manifest_v1.LocalizedText{Default: *displayName},
 			Version: *version,
 			License: "MIT",
 		},
-		Publisher: manifest_v2.PublisherMeta{
+		Publisher: manifest_v1.PublisherMeta{
 			ID:          *publisher,
 			DisplayName: *publisherName,
 		},
-		Compatibility: manifest_v2.Compatibility{},
-		Modules: []manifest_v2.ModuleMeta{
+		Compatibility: manifest_v1.Compatibility{},
+		Modules: []manifest_v1.ModuleMeta{
 			{
 				ID:   "main",
-				Name: manifest_v2.LocalizedText{Default: "Main Module"},
+				Name: manifest_v1.LocalizedText{Default: "Main Module"},
 				Type: "javascript",
-				Runtime: &manifest_v2.RuntimeMeta{
+				Runtime: &manifest_v1.RuntimeMeta{
 					Type:       "javascript",
 					EntryPoint: "index.js",
 				},
 			},
 		},
-		Integrity: manifest_v2.IntegrityMeta{
+		Integrity: manifest_v1.IntegrityMeta{
 			Algorithm: "sha256",
 		},
 	}

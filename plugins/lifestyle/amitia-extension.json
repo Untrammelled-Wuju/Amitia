@@ -1,0 +1,267 @@
+{
+  "manifestVersion": 1,
+  "extension": {
+    "id": "com.amitia/lifestyle",
+    "name": {
+      "default": "生活系统"
+    },
+    "description": {
+      "default": "管理角色生活场景、作息、工作、事件、日程和生活状态。"
+    },
+    "version": "1.0.5",
+    "license": "AGPL-3.0-only",
+    "homepage": "https://amitia.untrammelled.top",
+    "categories": [
+      "companion",
+      "lifestyle"
+    ],
+    "keywords": [
+      "lifestyle",
+      "schedule",
+      "sleep",
+      "work",
+      "events"
+    ]
+  },
+  "publisher": {
+    "id": "com.amitia",
+    "displayName": "Amitia",
+    "trustLevel": "official"
+  },
+  "compatibility": {
+    "minHostVersion": "0.1.0",
+    "platforms": [
+      "windows",
+      "linux",
+      "macos",
+      "android",
+      "ios"
+    ]
+  },
+  "placement": "device",
+  "modules": [
+    {
+      "id": "lifestyle-runtime",
+      "name": {
+        "default": "生活系统运行时"
+      },
+      "description": {
+        "default": "以插件自有状态管理生活规则、日程、状态和旧数据迁移。"
+      },
+      "type": "javascript",
+      "placement": "device",
+      "runtime": {
+        "type": "javascript",
+        "entryPoint": "dist/index.js",
+        "timeout": "120s",
+        "memory": 134217728,
+        "maxSubprocesses": 0,
+        "capabilities": {
+          "network": false,
+          "filesystem": false
+        }
+      },
+      "contributions": [
+        {
+          "id": "lifestyle-command",
+          "kind": "tool",
+          "name": {
+            "default": "生活系统命令"
+          },
+          "description": {
+            "default": "生活系统 UI 的统一控制入口。"
+          },
+          "requiredPermissions": [
+            "storage.state.read",
+            "storage.state.write"
+          ],
+          "spec": {
+            "toolId": "com.amitia/lifestyle/command",
+            "modelName": "lifestyle_command",
+            "handlerName": "command",
+            "inputSchema": {
+              "type": "object",
+              "required": [
+                "action"
+              ],
+              "properties": {
+                "action": {
+                  "type": "string"
+                },
+                "payload": {
+                  "type": "object"
+                }
+              },
+              "additionalProperties": false
+            },
+            "outputSchema": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "riskLevel": "medium",
+            "sideEffect": "write",
+            "internal": true,
+            "runtime": {
+              "runtimeType": "javascript",
+              "handlerName": "command"
+            }
+          }
+        },
+        {
+          "id": "lifestyle-context",
+          "kind": "tool",
+          "name": {
+            "default": "生活上下文"
+          },
+          "description": {
+            "default": "向宿主提供角色生活上下文。"
+          },
+          "requiredPermissions": [
+            "storage.state.read"
+          ],
+          "spec": {
+            "toolId": "com.amitia/lifestyle/context",
+            "modelName": "lifestyle_context",
+            "handlerName": "context",
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "spaceId": {
+                  "type": "string"
+                },
+                "characterId": {
+                  "type": "string"
+                },
+                "conversationId": {
+                  "type": "string"
+                },
+                "at": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            },
+            "outputSchema": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "riskLevel": "low",
+            "sideEffect": "read_only",
+            "internal": true,
+            "metadata": {
+              "amitia.context.provides": [
+                "chat.realtime.schedule"
+              ],
+              "amitia.context.priority": 230,
+              "amitia.context.key": "lifestyle"
+            },
+            "runtime": {
+              "runtimeType": "javascript",
+              "handlerName": "context"
+            }
+          }
+        },
+        {
+          "id": "lifestyle-character-tab",
+          "kind": "ui_page",
+          "name": {
+            "default": "生活"
+          },
+          "description": {
+            "default": "管理角色生活规则、日程、状态、作息、工作和事件。"
+          },
+          "requiredPermissions": [
+            "tool.invoke"
+          ],
+          "spec": {
+            "contribution_id": "lifestyle-character-tab",
+            "extension_id": "com.amitia/lifestyle",
+            "module_id": "lifestyle-runtime",
+            "kind": "web_page",
+            "slot": {
+              "slot_id": "character.detail.tab",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "生活"
+              },
+              "description": {
+                "default": "管理角色生活规则、日程、状态、作息、工作和事件。"
+              },
+              "icon": "life-system"
+            },
+            "entry": {
+              "type": "web_restricted",
+              "path": "modules/lifestyle-ui/index.html",
+              "content_hash": "pending"
+            },
+            "sandbox": {
+              "type": "web_restricted",
+              "enable_scripts": true
+            },
+            "ordering": {
+              "priority": 230
+            },
+            "dispatch": {
+              "entry_key": "lifestyle",
+              "cell_id": "lifestyle"
+            },
+            "actions": [
+              {
+                "action_id": "command",
+                "title": {
+                  "default": "执行生活系统操作"
+                },
+                "target": {
+                  "type": "tool",
+                  "tool_id": "com.amitia/lifestyle/command"
+                },
+                "risk_level": "medium"
+              }
+            ],
+            "integrity": {
+              "definition_hash": "lifestyle-character-tab-v1"
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "permissions": [
+    {
+      "name": "storage.state.read",
+      "reason": "读取插件自有生活状态。",
+      "required": true,
+      "scope": "extension"
+    },
+    {
+      "name": "storage.state.write",
+      "reason": "保存插件自有生活状态。",
+      "required": true,
+      "scope": "extension"
+    },
+    {
+      "name": "event.emit",
+      "reason": "通知宿主和其他插件生活状态已变化。",
+      "required": false,
+      "scope": "extension"
+    },
+    {
+      "name": "tool.invoke",
+      "reason": "通过声明的生活工具执行界面操作。",
+      "required": true,
+      "scope": "extension"
+    }
+  ],
+  "lifecycle": {
+    "backgroundTasks": true,
+    "networkAccess": false,
+    "sandbox": true
+  },
+  "integrity": {
+    "algorithm": "sha256",
+    "contentTreeHash": ""
+  }
+}

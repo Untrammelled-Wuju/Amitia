@@ -3,6 +3,7 @@ package gamehost
 import (
 	"context"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	stdruntime "runtime"
@@ -120,6 +121,7 @@ func (a resourceRequestAdmission) AdmitRequest(ctx context.Context, peer ipc.Pee
 		ServiceID: string(peer.ServiceID), Generation: peer.Generation,
 	})
 	if !decision.Allowed {
+		log.Printf("[gamehost-resource] rpc pending denied: plugin=%s runtime=%s service=%s generation=%d reason=%s", peer.PluginID, peer.RuntimeID, peer.ServiceID, peer.Generation, decision.Reason)
 		return fmt.Errorf("resource admission denied: %s", decision.Reason)
 	}
 	return nil

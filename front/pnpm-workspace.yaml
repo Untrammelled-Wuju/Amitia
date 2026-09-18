@@ -4,3 +4,5 @@ allowBuilds:
 onlyBuiltDependencies:
   - esbuild
   - vue-demi
+patchedDependencies:
+  vue-router@4.6.4: patches/vue-router@4.6.4.patch

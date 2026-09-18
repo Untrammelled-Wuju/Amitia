@@ -37,7 +37,7 @@ type BehaviorEventEnvelope struct {
 	OccurredAt      time.Time       `json:"occurredAt"`
 	ReceivedAt      time.Time       `json:"receivedAt"`
 	ExpiresAt       *time.Time      `json:"expiresAt,omitempty"`
-	UserID          string          `json:"userId"`
+	SpaceID         string          `json:"spaceId"`
 	CharacterID     string          `json:"characterId"`
 	ConversationID  string          `json:"conversationId,omitempty"`
 	InteractionID   string          `json:"interactionId,omitempty"`
@@ -129,7 +129,7 @@ type RecentSemanticRecord struct {
 }
 
 type BehaviorContextSnapshot struct {
-	UserID              string                        `json:"userId"`
+	SpaceID             string                        `json:"spaceId"`
 	CharacterID         string                        `json:"characterId"`
 	Revision            int64                         `json:"revision"`
 	Stable              StableBehaviorState           `json:"stable"`
@@ -217,7 +217,7 @@ const (
 type BehaviorDecision struct {
 	DecisionID         string              `json:"decisionId"`
 	EventID            string              `json:"eventId"`
-	UserID             string              `json:"userId"`
+	SpaceID            string              `json:"spaceId"`
 	CharacterID        string              `json:"characterId"`
 	InstallationID     string              `json:"installationId,omitempty"`
 	ContextRevision    int64               `json:"contextRevision"`
@@ -249,7 +249,7 @@ type BehaviorRuntimeCommand struct {
 	CommandID            string     `json:"commandId"`
 	DecisionID           string     `json:"decisionId"`
 	IdempotencyKey       string     `json:"idempotencyKey,omitempty"`
-	UserID               string     `json:"userId,omitempty"`
+	SpaceID              string     `json:"spaceId,omitempty"`
 	DeviceID             string     `json:"deviceId,omitempty"`
 	CharacterID          string     `json:"characterId,omitempty"`
 	RuntimeID            string     `json:"runtimeId,omitempty"`
@@ -327,7 +327,7 @@ type ActionCapability struct {
 }
 
 type ActivePetSnapshot struct {
-	UserID         string                      `json:"userId"`
+	SpaceID        string                      `json:"spaceId"`
 	DeviceID       string                      `json:"deviceId,omitempty"`
 	RuntimeID      string                      `json:"runtimeId,omitempty"`
 	InstallationID string                      `json:"installationId"`
@@ -361,7 +361,7 @@ type ActivityBehaviorSnapshot struct {
 }
 
 type CooldownRecord struct {
-	UserID           string    `json:"userId"`
+	SpaceID          string    `json:"spaceId"`
 	CharacterID      string    `json:"characterId"`
 	CooldownKey      string    `json:"cooldownKey"`
 	UntilAt          time.Time `json:"untilAt"`
@@ -385,7 +385,7 @@ type InboxRecord struct {
 	DedupKey          string          `json:"dedupKey"`
 	EventType         string          `json:"eventType"`
 	SchemaVersion     int             `json:"schemaVersion"`
-	UserID            string          `json:"userId"`
+	SpaceID           string          `json:"spaceId"`
 	CharacterID       string          `json:"characterId"`
 	ConversationID    string          `json:"conversationId,omitempty"`
 	InteractionID     string          `json:"interactionId,omitempty"`
@@ -418,7 +418,7 @@ type InboxRecord struct {
 type InteractionLifecycleEvent struct {
 	InteractionID  string    `json:"interactionId"`
 	CharacterID    string    `json:"characterId"`
-	UserID         string    `json:"userId"`
+	SpaceID        string    `json:"spaceId"`
 	ConversationID string    `json:"conversationId,omitempty"`
 	Phase          string    `json:"phase"`
 	StatusVersion  int64     `json:"statusVersion"`
@@ -431,7 +431,7 @@ type ChatLifecycleEvent struct {
 	InteractionID  string    `json:"interactionId,omitempty"`
 	MessageID      string    `json:"messageId,omitempty"`
 	CharacterID    string    `json:"characterId"`
-	UserID         string    `json:"userId"`
+	SpaceID        string    `json:"spaceId"`
 	ConversationID string    `json:"conversationId,omitempty"`
 	Phase          string    `json:"phase"`
 	StatusVersion  int64     `json:"statusVersion,omitempty"`
@@ -443,7 +443,7 @@ type ChatLifecycleEvent struct {
 type ToolLifecycleEvent struct {
 	InteractionID       string    `json:"interactionId"`
 	CharacterID         string    `json:"characterId"`
-	UserID              string    `json:"userId"`
+	SpaceID             string    `json:"spaceId"`
 	OperationID         string    `json:"operationId"`
 	ToolCallID          string    `json:"toolCallId,omitempty"`
 	ToolName            string    `json:"toolName,omitempty"`
@@ -460,7 +460,7 @@ type VoiceLifecycleEvent struct {
 	SessionID      string    `json:"sessionId"`
 	TurnID         string    `json:"turnId,omitempty"`
 	CharacterID    string    `json:"characterId"`
-	UserID         string    `json:"userId"`
+	SpaceID        string    `json:"spaceId"`
 	ConversationID string    `json:"conversationId,omitempty"`
 	Phase          string    `json:"phase"`
 	StateVersion   int64     `json:"stateVersion,omitempty"`
@@ -470,7 +470,7 @@ type VoiceLifecycleEvent struct {
 type DesktopGestureEvent struct {
 	PetInstanceID string    `json:"petInstanceId"`
 	CharacterID   string    `json:"characterId"`
-	UserID        string    `json:"userId"`
+	SpaceID       string    `json:"spaceId"`
 	GestureType   string    `json:"gestureType"`
 	GestureID     string    `json:"gestureId"`
 	Sequence      int64     `json:"sequence"`

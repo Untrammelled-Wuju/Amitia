@@ -152,13 +152,12 @@ type stubHandlerService struct {
 }
 
 type installCall struct {
-	PackageID   string
-	UserID      string
-	CharacterID string
+	PackageID string
+	SpaceID   string
 }
 
 type actionCall struct {
-	UserID         string
+	SpaceID        string
 	InstallationID string
 }
 
@@ -168,45 +167,45 @@ type updateDefaultCall struct {
 }
 
 type updateSettingsCall struct {
-	UserID         string
+	SpaceID        string
 	InstallationID string
 	Settings       *UpdateRuntimeSettingsRequest
 }
 
 type playCall struct {
-	UserID         string
+	SpaceID        string
 	InstallationID string
 	ActionKey      string
 }
 
-func (s *stubHandlerService) InstallPackage(packageId, userId, characterId string) (*Installation, error) {
-	s.installCalls = append(s.installCalls, installCall{PackageID: packageId, UserID: userId, CharacterID: characterId})
+func (s *stubHandlerService) InstallPackage(packageId, spaceId string) (*Installation, error) {
+	s.installCalls = append(s.installCalls, installCall{PackageID: packageId, SpaceID: spaceId})
 	if s.installErr != nil {
 		return nil, s.installErr
 	}
 	if s.installResult != nil {
 		return s.installResult, nil
 	}
-	return &Installation{ID: "inst_default", UserID: userId, CharacterID: characterId, PackageID: packageId, Status: StatusInstalled}, nil
+	return &Installation{ID: "inst_default", SpaceID: spaceId, PackageID: packageId, Status: StatusInstalled}, nil
 }
 
-func (s *stubHandlerService) Uninstall(userId, installationId string) error {
-	s.uninstallCalls = append(s.uninstallCalls, actionCall{UserID: userId, InstallationID: installationId})
+func (s *stubHandlerService) Uninstall(spaceId, installationId string) error {
+	s.uninstallCalls = append(s.uninstallCalls, actionCall{SpaceID: spaceId, InstallationID: installationId})
 	return s.uninstallErr
 }
 
-func (s *stubHandlerService) EnableInstallation(userId, installationId string) error {
-	s.enableCalls = append(s.enableCalls, actionCall{UserID: userId, InstallationID: installationId})
+func (s *stubHandlerService) EnableInstallation(spaceId, installationId string) error {
+	s.enableCalls = append(s.enableCalls, actionCall{SpaceID: spaceId, InstallationID: installationId})
 	return s.enableErr
 }
 
-func (s *stubHandlerService) DisableInstallation(userId, installationId string) error {
-	s.disableCalls = append(s.disableCalls, actionCall{UserID: userId, InstallationID: installationId})
+func (s *stubHandlerService) DisableInstallation(spaceId, installationId string) error {
+	s.disableCalls = append(s.disableCalls, actionCall{SpaceID: spaceId, InstallationID: installationId})
 	return s.disableErr
 }
 
-func (s *stubHandlerService) SwitchInstallation(userId, installationId string) error {
-	s.switchCalls = append(s.switchCalls, actionCall{UserID: userId, InstallationID: installationId})
+func (s *stubHandlerService) SwitchInstallation(spaceId, installationId string) error {
+	s.switchCalls = append(s.switchCalls, actionCall{SpaceID: spaceId, InstallationID: installationId})
 	return s.switchErr
 }
 
@@ -215,26 +214,26 @@ func (s *stubHandlerService) UpdateDefaultAction(installationId, actionKey strin
 	return s.updateDefaultErr
 }
 
-func (s *stubHandlerService) UpdateRuntimeSettings(userId, installationId string, req *UpdateRuntimeSettingsRequest) (*RuntimeSettings, error) {
-	s.updateSettingsCalls = append(s.updateSettingsCalls, updateSettingsCall{UserID: userId, InstallationID: installationId, Settings: req})
+func (s *stubHandlerService) UpdateRuntimeSettings(spaceId, installationId string, req *UpdateRuntimeSettingsRequest) (*RuntimeSettings, error) {
+	s.updateSettingsCalls = append(s.updateSettingsCalls, updateSettingsCall{SpaceID: spaceId, InstallationID: installationId, Settings: req})
 	if s.updateSettingsErr != nil {
 		return nil, s.updateSettingsErr
 	}
 	return s.getSettingsResult, nil
 }
 
-func (s *stubHandlerService) Recenter(userId, installationId string) error {
-	s.recenterCalls = append(s.recenterCalls, actionCall{UserID: userId, InstallationID: installationId})
+func (s *stubHandlerService) Recenter(spaceId, installationId string) error {
+	s.recenterCalls = append(s.recenterCalls, actionCall{SpaceID: spaceId, InstallationID: installationId})
 	return s.recenterErr
 }
 
-func (s *stubHandlerService) PlayAction(userId, installationId, actionKey string) error {
-	s.playCalls = append(s.playCalls, playCall{UserID: userId, InstallationID: installationId, ActionKey: actionKey})
+func (s *stubHandlerService) PlayAction(spaceId, installationId, actionKey string) error {
+	s.playCalls = append(s.playCalls, playCall{SpaceID: spaceId, InstallationID: installationId, ActionKey: actionKey})
 	return s.playErr
 }
 
-func (s *stubHandlerService) ListInstallations(userId string) ([]*Installation, error) {
-	s.listCalls = append(s.listCalls, userId)
+func (s *stubHandlerService) ListInstallations(spaceId string) ([]*Installation, error) {
+	s.listCalls = append(s.listCalls, spaceId)
 	if s.listErr != nil {
 		return nil, s.listErr
 	}
@@ -266,7 +265,7 @@ func (s *stubHandlerService) GetRuntimeSettings(installationId string) (*Runtime
 	return &RuntimeSettings{ID: "rts_default", InstallationID: installationId, Scale: 1.0}, nil
 }
 
-func (s *stubHandlerService) CheckInstallationOwnership(installationID, userID string) error {
+func (s *stubHandlerService) CheckInstallationOwnership(installationID, spaceID string) error {
 	return nil
 }
 
@@ -279,16 +278,32 @@ func newHandlerTestRouter(svc Service) *gin.Engine {
 	r := gin.New()
 	r.Use(func(c *gin.Context) {
 		c.Set("actorContext", &desktoppetAuth.ActorContext{
-			ActorType:   desktoppetAuth.ActorTypeUser,
-			UserID:      "test-user-1",
-			Roles:       []string{"user"},
-			Permissions: desktoppetAuth.DefaultUserPermissions(),
+			PrincipalType: desktoppetAuth.PrincipalLocalUI,
+			SpaceID:       "test-user-1",
+			Permissions:   desktoppetAuth.StandardPermissions(),
 		})
 		c.Next()
 	})
-	stubCoord := &stubCoordinator{svc: svc}
-	stubRepo := &stubRepository{svc: svc}
-	RegisterRoutes(r.Group("/api"), stubCoord, stubRepo, &stubInstallGuard{})
+	handler := NewHandler(svc, &stubInstallGuard{})
+	coordHandler := NewCoordinatorHandler(&stubCoordinator{svc: svc}, &stubRepository{svc: svc}, &stubInstallGuard{})
+	g := r.Group("/api/desktop-pets")
+	g.POST("/packages/:packageId/install", handler.InstallPackage)
+	g.GET("/installations", handler.ListInstallations)
+	g.GET("/installations/:installationId", handler.GetInstallation)
+	g.GET("/installations/:installationId/settings", coordHandler.GetRuntimeSettings)
+	g.POST("/installations/:installationId/enable", handler.EnableInstallation)
+	g.POST("/installations/:installationId/disable", handler.DisableInstallation)
+	g.POST("/installations/:installationId/switch", coordHandler.SwitchRelease)
+	g.POST("/installations/:installationId/upgrade", coordHandler.Upgrade)
+	g.POST("/installations/:installationId/downgrade", coordHandler.Downgrade)
+	g.POST("/installations/:installationId/repair", coordHandler.Repair)
+	g.DELETE("/installations/:installationId", handler.Uninstall)
+	g.PATCH("/installations/:installationId/default-action", handler.UpdateDefaultAction)
+	g.PATCH("/installations/:installationId/settings", handler.UpdateRuntimeSettings)
+	g.POST("/installations/:installationId/recenter", handler.Recenter)
+	g.POST("/installations/:installationId/actions/:actionKey/play", handler.PlayAction)
+	g.GET("/operations/:operationId", coordHandler.GetOperationStatus)
+	g.POST("/operations/:operationId/cancel", coordHandler.CancelOperation)
 	return r
 }
 
@@ -297,7 +312,7 @@ type stubCoordinator struct {
 }
 
 func (s *stubCoordinator) Install(ctx context.Context, req coordinator.InstallRequest) (*coordinator.InstallResult, error) {
-	inst, err := s.svc.InstallPackage(req.TargetReleaseID, req.DeviceCtx.UserID, req.CharacterID)
+	inst, err := s.svc.InstallPackage(req.TargetReleaseID, req.DeviceCtx.SpaceID)
 	if err != nil {
 		return nil, mapInstallErr(err)
 	}
@@ -305,7 +320,7 @@ func (s *stubCoordinator) Install(ctx context.Context, req coordinator.InstallRe
 }
 
 func (s *stubCoordinator) Enable(ctx context.Context, req coordinator.EnableDisableRequest) (*coordinator.EnableDisableResult, error) {
-	err := s.svc.EnableInstallation(req.DeviceCtx.UserID, req.InstallationID)
+	err := s.svc.EnableInstallation(req.DeviceCtx.SpaceID, req.InstallationID)
 	if err != nil {
 		return nil, mapInstallErr(err)
 	}
@@ -313,7 +328,7 @@ func (s *stubCoordinator) Enable(ctx context.Context, req coordinator.EnableDisa
 }
 
 func (s *stubCoordinator) Disable(ctx context.Context, req coordinator.EnableDisableRequest) (*coordinator.EnableDisableResult, error) {
-	err := s.svc.DisableInstallation(req.DeviceCtx.UserID, req.InstallationID)
+	err := s.svc.DisableInstallation(req.DeviceCtx.SpaceID, req.InstallationID)
 	if err != nil {
 		return nil, mapInstallErr(err)
 	}
@@ -321,7 +336,7 @@ func (s *stubCoordinator) Disable(ctx context.Context, req coordinator.EnableDis
 }
 
 func (s *stubCoordinator) Switch(ctx context.Context, req coordinator.SwitchRequest) (*coordinator.SwitchResult, error) {
-	err := s.svc.SwitchInstallation(req.DeviceCtx.UserID, req.SourceInstallationID)
+	err := s.svc.SwitchInstallation(req.DeviceCtx.SpaceID, req.SourceInstallationID)
 	if err != nil {
 		return nil, mapInstallErr(err)
 	}
@@ -345,7 +360,7 @@ func (s *stubCoordinator) Repair(ctx context.Context, req coordinator.RepairRequ
 }
 
 func (s *stubCoordinator) Uninstall(ctx context.Context, req coordinator.UninstallRequest) (*coordinator.UninstallResult, error) {
-	err := s.svc.Uninstall(req.DeviceCtx.UserID, req.InstallationID)
+	err := s.svc.Uninstall(req.DeviceCtx.SpaceID, req.InstallationID)
 	if err != nil {
 		return nil, mapInstallErr(err)
 	}
@@ -353,7 +368,7 @@ func (s *stubCoordinator) Uninstall(ctx context.Context, req coordinator.Uninsta
 }
 
 func (s *stubCoordinator) UpdateSettings(ctx context.Context, req coordinator.SettingsRequest) (*coordinator.SettingsResult, error) {
-	_, err := s.svc.UpdateRuntimeSettings(req.DeviceCtx.UserID, req.InstallationID, &UpdateRuntimeSettingsRequest{})
+	_, err := s.svc.UpdateRuntimeSettings(req.DeviceCtx.SpaceID, req.InstallationID, &UpdateRuntimeSettingsRequest{})
 	if err != nil {
 		return nil, mapInstallErr(err)
 	}
@@ -369,7 +384,7 @@ func (s *stubCoordinator) ChangeDefaultAction(ctx context.Context, req coordinat
 }
 
 func (s *stubCoordinator) Recenter(ctx context.Context, req coordinator.RecenterRequest) (*coordinator.EnableDisableResult, error) {
-	err := s.svc.Recenter(req.DeviceCtx.UserID, req.InstallationID)
+	err := s.svc.Recenter(req.DeviceCtx.SpaceID, req.InstallationID)
 	if err != nil {
 		return nil, mapInstallErr(err)
 	}
@@ -377,14 +392,14 @@ func (s *stubCoordinator) Recenter(ctx context.Context, req coordinator.Recenter
 }
 
 func (s *stubCoordinator) PlayAction(ctx context.Context, deviceCtx device.DeviceContext, installationID, actionKey string) error {
-	return mapInstallErr(s.svc.PlayAction(deviceCtx.UserID, installationID, actionKey))
+	return mapInstallErr(s.svc.PlayAction(deviceCtx.SpaceID, installationID, actionKey))
 }
 
-func (s *stubCoordinator) GetOperationStatus(ctx context.Context, userID, deviceID, operationID string) (*operation.InstallationOperation, error) {
+func (s *stubCoordinator) GetOperationStatus(ctx context.Context, spaceID, deviceID, operationID string) (*operation.InstallationOperation, error) {
 	return nil, nil
 }
 
-func (s *stubCoordinator) CancelOperation(ctx context.Context, userID, deviceID, operationID string) error {
+func (s *stubCoordinator) CancelOperation(ctx context.Context, spaceID, deviceID, operationID string) error {
 	return nil
 }
 
@@ -415,23 +430,23 @@ func (s *stubRepository) GetInstallationByPackageVersion(packageID, packageVersi
 	return nil, nil
 }
 
-func (s *stubRepository) ListInstallationsByUser(userID string) ([]*Installation, error) {
-	return s.svc.ListInstallations(userID)
+func (s *stubRepository) ListInstallationsBySpace(spaceID string) ([]*Installation, error) {
+	return s.svc.ListInstallations(spaceID)
 }
 
 func (s *stubRepository) ListInstallationsByCharacter(characterID string) ([]*Installation, error) {
 	return nil, nil
 }
 
-func (s *stubRepository) ListInstallations(userID string) ([]*Installation, error) {
-	return s.svc.ListInstallations(userID)
+func (s *stubRepository) ListInstallations(spaceID string) ([]*Installation, error) {
+	return s.svc.ListInstallations(spaceID)
 }
 
 func (s *stubRepository) UpdateInstallationStatus(id, status string) error { return nil }
 
-func (s *stubRepository) SetActiveInstallation(userID, installationID string) error { return nil }
+func (s *stubRepository) SetActiveInstallation(spaceID, installationID string) error { return nil }
 
-func (s *stubRepository) GetActiveInstallation(userID string) (*Installation, error) {
+func (s *stubRepository) GetActiveInstallation(spaceID string) (*Installation, error) {
 	return nil, nil
 }
 
@@ -451,11 +466,11 @@ func (s *stubRepository) UpdateRuntimeSettingsWithCAS(installationID string, exp
 	return nil, nil
 }
 
-func (s *stubRepository) GetInstallationByUserDevicePet(userID, deviceID, petID string) (*Installation, error) {
+func (s *stubRepository) GetInstallationBySpaceDevicePet(spaceID, deviceID, petID string) (*Installation, error) {
 	return nil, nil
 }
 
-func (s *stubRepository) ListInstallationsByUserDevice(userID, deviceID string) ([]*Installation, error) {
+func (s *stubRepository) ListInstallationsBySpaceDevice(spaceID, deviceID string) ([]*Installation, error) {
 	return nil, nil
 }
 
@@ -463,15 +478,15 @@ func (s *stubRepository) Transaction(ctx context.Context, fn func(repo Repositor
 	return fn(s)
 }
 
-func (s *stubRepository) AllocateDeviceDesiredRevisionCAS(tx *gorm.DB, userID, deviceID string) (int64, error) {
+func (s *stubRepository) AllocateDeviceDesiredRevisionCAS(tx *gorm.DB, spaceID, deviceID string) (int64, error) {
 	return 0, nil
 }
 
-func (s *stubRepository) GetInstallationForUserDevice(userID, deviceID, installationID string) (*Installation, error) {
+func (s *stubRepository) GetInstallationForSpaceDevice(spaceID, deviceID, installationID string) (*Installation, error) {
 	return nil, nil
 }
 
-func (s *stubRepository) ListInstallationsForUserDevice(userID, deviceID string) ([]*Installation, error) {
+func (s *stubRepository) ListInstallationsForSpaceDevice(spaceID, deviceID string) ([]*Installation, error) {
 	return nil, nil
 }
 
@@ -479,13 +494,13 @@ func (s *stubRepository) CreateInstallationTx(tx *gorm.DB, inst *Installation) e
 
 func (s *stubRepository) UpdateInstallationTx(tx *gorm.DB, inst *Installation) error { return nil }
 
-func (s *stubRepository) GetInstallationByUserDevicePetTx(tx *gorm.DB, userID, deviceID, petID string) (*Installation, error) {
+func (s *stubRepository) GetInstallationBySpaceDevicePetTx(tx *gorm.DB, spaceID, deviceID, petID string) (*Installation, error) {
 	return nil, nil
 }
 
 func (s *stubRepository) DeleteInstallationTx(tx *gorm.DB, id string) error { return nil }
 
-func (s *stubRepository) GetRuntimeSettingsForUserDevice(userID, deviceID, installationID string) (*RuntimeSettings, error) {
+func (s *stubRepository) GetRuntimeSettingsForSpaceDevice(spaceID, deviceID, installationID string) (*RuntimeSettings, error) {
 	return nil, nil
 }
 
@@ -493,11 +508,11 @@ func (s *stubRepository) CreateRuntimeSettingsTx(tx *gorm.DB, settings *RuntimeS
 	return nil
 }
 
-func (s *stubRepository) UpdateRuntimeSettingsCAS(tx *gorm.DB, installationID, userID, deviceID string, expectedRevision int, updates map[string]interface{}) (*RuntimeSettings, error) {
+func (s *stubRepository) UpdateRuntimeSettingsCAS(tx *gorm.DB, installationID, spaceID, deviceID string, expectedRevision int, updates map[string]interface{}) (*RuntimeSettings, error) {
 	return nil, nil
 }
 
-func (s *stubRepository) GetActiveBindingForUserDeviceTx(tx *gorm.DB, userID, deviceID string) (*binding.DeviceActiveInstallationBinding, error) {
+func (s *stubRepository) GetActiveBindingForSpaceDeviceTx(tx *gorm.DB, spaceID, deviceID string) (*binding.DeviceActiveInstallationBinding, error) {
 	return nil, nil
 }
 
@@ -505,7 +520,7 @@ func (s *stubRepository) UpsertActiveBindingTx(tx *gorm.DB, b *binding.DeviceAct
 	return nil
 }
 
-func (s *stubRepository) DeleteActiveBindingTx(tx *gorm.DB, userID, deviceID string) error {
+func (s *stubRepository) DeleteActiveBindingTx(tx *gorm.DB, spaceID, deviceID string) error {
 	return nil
 }
 
@@ -513,15 +528,15 @@ func (s *stubRepository) InsertBindingHistoryTx(tx *gorm.DB, entry *binding.Bind
 	return nil
 }
 
-func (s *stubRepository) GetRuntimeDesiredStateTx(tx *gorm.DB, userID, deviceID string) (*desired.RuntimeDesiredState, error) {
+func (s *stubRepository) GetRuntimeDesiredStateTx(tx *gorm.DB, spaceID, deviceID string) (*desired.RuntimeDesiredState, error) {
 	return nil, nil
 }
 
-func (s *stubRepository) UpsertRuntimeDesiredStateCAS(tx *gorm.DB, userID, deviceID string, state *desired.RuntimeDesiredState, expectedRevision int64) (*desired.RuntimeDesiredState, error) {
+func (s *stubRepository) UpsertRuntimeDesiredStateCAS(tx *gorm.DB, spaceID, deviceID string, state *desired.RuntimeDesiredState, expectedRevision int64) (*desired.RuntimeDesiredState, error) {
 	return nil, nil
 }
 
-func (s *stubRepository) GetDeviceDesiredRevisionCounterTx(tx *gorm.DB, userID, deviceID string) (*desired.DeviceDesiredRevisionCounter, error) {
+func (s *stubRepository) GetDeviceDesiredRevisionCounterTx(tx *gorm.DB, spaceID, deviceID string) (*desired.DeviceDesiredRevisionCounter, error) {
 	return nil, nil
 }
 
@@ -555,7 +570,7 @@ func (s *stubRepository) GetOperationTx(tx *gorm.DB, operationID string) (*opera
 	return nil, nil
 }
 
-func (s *stubRepository) GetOperationByIdempotencyKeyTx(tx *gorm.DB, userID, deviceID, idempotencyKey, opType string) (*operation.InstallationOperation, error) {
+func (s *stubRepository) GetOperationByIdempotencyKeyTx(tx *gorm.DB, spaceID, deviceID, idempotencyKey, opType string) (*operation.InstallationOperation, error) {
 	return nil, nil
 }
 
@@ -619,7 +634,7 @@ func (s *stubRepository) ListExpiredTrashEntries(retainBefore string, limit int)
 
 func (s *stubRepository) MarkTrashEntryPurged(tx *gorm.DB, id string) error { return nil }
 
-func (s *stubRepository) GetRuntimeProjectionTx(tx *gorm.DB, userID, deviceID string) (*projection.InstallationRuntimeProjection, error) {
+func (s *stubRepository) GetRuntimeProjectionTx(tx *gorm.DB, spaceID, deviceID string) (*projection.InstallationRuntimeProjection, error) {
 	return nil, nil
 }
 
@@ -627,54 +642,51 @@ func (s *stubRepository) UpsertRuntimeProjectionTx(tx *gorm.DB, p *projection.In
 	return nil
 }
 
-func (s *stubRepository) GetOrCreateDeviceContext(ctx context.Context, userID string, reqCtx device.RequestContext) (*device.DeviceContext, error) {
+func (s *stubRepository) GetOrCreateDeviceContext(ctx context.Context, spaceID string, reqCtx device.RequestContext) (*device.DeviceContext, error) {
 	return nil, nil
 }
 
 type stubInstallGuard struct{}
 
-func (s *stubInstallGuard) RequireCharacter(ctx context.Context, actor *desktoppetAuth.ActorContext, characterID string) (*security.CharacterScope, error) {
-	return &security.CharacterScope{UserID: string(actor.UserID)}, nil
-}
 func (s *stubInstallGuard) RequireGenerationTask(ctx context.Context, actor *desktoppetAuth.ActorContext, taskID string) (*security.GenerationTaskScope, error) {
-	return &security.GenerationTaskScope{UserID: string(actor.UserID)}, nil
+	return &security.GenerationTaskScope{SpaceID: string(actor.SpaceID)}, nil
 }
 func (s *stubInstallGuard) RequireProcessingTask(ctx context.Context, actor *desktoppetAuth.ActorContext, taskID string) (*security.ProcessingTaskScope, error) {
-	return &security.ProcessingTaskScope{UserID: string(actor.UserID)}, nil
+	return &security.ProcessingTaskScope{SpaceID: string(actor.SpaceID)}, nil
 }
 func (s *stubInstallGuard) RequireActionRevision(ctx context.Context, actor *desktoppetAuth.ActorContext, revisionID string) (*security.ActionRevisionScope, error) {
-	return &security.ActionRevisionScope{UserID: string(actor.UserID)}, nil
+	return &security.ActionRevisionScope{SpaceID: string(actor.SpaceID)}, nil
 }
 func (s *stubInstallGuard) RequireActionStream(ctx context.Context, actor *desktoppetAuth.ActorContext, streamID string) (*security.ActionStreamScope, error) {
-	return &security.ActionStreamScope{UserID: string(actor.UserID)}, nil
+	return &security.ActionStreamScope{SpaceID: string(actor.SpaceID)}, nil
 }
 func (s *stubInstallGuard) RequireQualityEvaluation(ctx context.Context, actor *desktoppetAuth.ActorContext, evaluationID string) (*security.QualityScope, error) {
-	return &security.QualityScope{UserID: string(actor.UserID)}, nil
+	return &security.QualityScope{SpaceID: string(actor.SpaceID)}, nil
 }
 func (s *stubInstallGuard) RequireRelease(ctx context.Context, actor *desktoppetAuth.ActorContext, releaseID string) (*security.ReleaseScope, error) {
-	return &security.ReleaseScope{UserID: string(actor.UserID)}, nil
+	return &security.ReleaseScope{SpaceID: string(actor.SpaceID)}, nil
 }
 func (s *stubInstallGuard) RequireInstallation(ctx context.Context, actor *desktoppetAuth.ActorContext, deviceID, installationID string) (*security.InstallationScope, error) {
-	return &security.InstallationScope{UserID: string(actor.UserID)}, nil
+	return &security.InstallationScope{SpaceID: string(actor.SpaceID)}, nil
 }
 
 func (s *stubInstallGuard) RequireInstallationStrict(ctx context.Context, actor *desktoppetAuth.ActorContext, deviceID, installationID string) (*security.InstallationScope, error) {
-	return &security.InstallationScope{UserID: string(actor.UserID)}, nil
+	return &security.InstallationScope{SpaceID: string(actor.SpaceID)}, nil
 }
 func (s *stubInstallGuard) RequireEditSession(ctx context.Context, actor *desktoppetAuth.ActorContext, sessionID string) (*security.EditSessionScope, error) {
-	return &security.EditSessionScope{UserID: string(actor.UserID)}, nil
+	return &security.EditSessionScope{SpaceID: string(actor.SpaceID)}, nil
 }
 func (s *stubInstallGuard) RequireRegenerationJob(ctx context.Context, actor *desktoppetAuth.ActorContext, jobID string) (*security.RegenerationJobScope, error) {
-	return &security.RegenerationJobScope{UserID: string(actor.UserID)}, nil
+	return &security.RegenerationJobScope{SpaceID: string(actor.SpaceID)}, nil
 }
 func (s *stubInstallGuard) RequireCandidate(ctx context.Context, actor *desktoppetAuth.ActorContext, candidateID string) (*security.CandidateScope, error) {
-	return &security.CandidateScope{UserID: string(actor.UserID)}, nil
+	return &security.CandidateScope{SpaceID: string(actor.SpaceID)}, nil
 }
 func (s *stubInstallGuard) RequireRuntimeCommand(ctx context.Context, actor *desktoppetAuth.ActorContext, commandID string) (*security.RuntimeCommandScope, error) {
-	return &security.RuntimeCommandScope{UserID: string(actor.UserID)}, nil
+	return &security.RuntimeCommandScope{SpaceID: string(actor.SpaceID)}, nil
 }
 func (s *stubInstallGuard) RequireBehaviorBinding(ctx context.Context, actor *desktoppetAuth.ActorContext, bindingID string) (*security.BehaviorBindingScope, error) {
-	return &security.BehaviorBindingScope{UserID: string(actor.UserID)}, nil
+	return &security.BehaviorBindingScope{SpaceID: string(actor.SpaceID)}, nil
 }
 
 func doRequest(t *testing.T, r *gin.Engine, method, path string, body interface{}) *httptest.ResponseRecorder {
@@ -742,24 +754,12 @@ func TestHandler_InstallPackage_EmptyPackageID_InvalidParams(t *testing.T) {
 	}
 }
 
-func TestHandler_InstallPackage_EmptyCharacterID_InvalidParams(t *testing.T) {
+func TestHandler_InstallPackage_WithoutCharacterID_OK(t *testing.T) {
 	svc := &stubHandlerService{}
 	r := newHandlerTestRouter(svc)
 
 	w := doRequest(t, r, http.MethodPost, "/api/desktop-pets/packages/"+testPackageID+"/install", gin.H{"character_id": ""})
-	assertHTTPCode(t, w, response.InvalidParams, ErrCodeInstallationFailed)
-}
-
-func TestHandler_InstallPackage_InvalidJSON_InvalidParams(t *testing.T) {
-	svc := &stubHandlerService{}
-	r := newHandlerTestRouter(svc)
-
-	req := httptest.NewRequest(http.MethodPost, "/api/desktop-pets/packages/"+testPackageID+"/install", bytes.NewReader([]byte("not json")))
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-
-	assertHTTPCode(t, w, response.InvalidParams, ErrCodeInstallationFailed)
+	assertHTTPCode(t, w, response.OK, "")
 }
 
 func TestHandler_InstallPackage_PackageNotReady_InvalidParams(t *testing.T) {
@@ -822,16 +822,6 @@ func TestHandler_InstallPackage_DefaultActionInvalid_InvalidParams(t *testing.T)
 	assertHTTPCode(t, w, response.InvalidParams, ErrCodePackageDefaultActionInvalid)
 }
 
-func TestHandler_InstallPackage_CharacterNotFound_NotFound(t *testing.T) {
-	svc := &stubHandlerService{
-		installErr: NewInstallationError(ErrCodeCharacterNotFound, "character not found", ErrCharacterNotFound),
-	}
-	r := newHandlerTestRouter(svc)
-
-	w := doRequest(t, r, http.MethodPost, "/api/desktop-pets/packages/"+testPackageID+"/install", gin.H{"character_id": testCharacterID})
-	assertHTTPCode(t, w, response.NotFound, ErrCodeCharacterNotFound)
-}
-
 func TestHandler_InstallPackage_Duplicate_BusinessError(t *testing.T) {
 	svc := &stubHandlerService{
 		installErr: NewInstallationError(ErrCodeInstallationDuplicate, "duplicate", ErrInstallationDuplicate),
@@ -855,8 +845,7 @@ func TestHandler_InstallPackage_InstallationFailed_InternalError(t *testing.T) {
 func TestHandler_InstallPackage_Success_OK(t *testing.T) {
 	expected := &Installation{
 		ID:               "inst_123",
-		UserID:           "default",
-		CharacterID:      testCharacterID,
+		SpaceID:          "default",
 		PackageID:        testPackageID,
 		PackageVersion:   "1",
 		Name:             "测试包",
@@ -892,9 +881,6 @@ func TestHandler_InstallPackage_Success_OK(t *testing.T) {
 	if svc.installCalls[0].PackageID != testPackageID {
 		t.Fatalf("PackageID = %s, 期望 %s", svc.installCalls[0].PackageID, testPackageID)
 	}
-	if svc.installCalls[0].CharacterID != testCharacterID {
-		t.Fatalf("CharacterID = %s, 期望 %s", svc.installCalls[0].CharacterID, testCharacterID)
-	}
 }
 
 func TestHandler_InstallPackage_GenericError_InternalError(t *testing.T) {
@@ -909,8 +895,8 @@ func TestHandler_InstallPackage_GenericError_InternalError(t *testing.T) {
 
 func TestHandler_ListInstallations_Success(t *testing.T) {
 	expected := []*Installation{
-		{ID: "inst_1", UserID: "default", Status: StatusInstalled},
-		{ID: "inst_2", UserID: "default", Status: StatusEnabled},
+		{ID: "inst_1", SpaceID: "default", Status: StatusInstalled},
+		{ID: "inst_2", SpaceID: "default", Status: StatusEnabled},
 	}
 	svc := &stubHandlerService{listResult: expected}
 	r := newHandlerTestRouter(svc)
@@ -1100,7 +1086,7 @@ func TestHandler_UpdateDefaultAction_InvalidJSON_InvalidParams(t *testing.T) {
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
-	assertHTTPCode(t, w, response.InvalidParams, ErrCodeActionNotFound)
+	assertHTTPCode(t, w, response.InvalidParams, ErrCodeInstallationFailed)
 }
 
 func TestHandler_UpdateDefaultAction_NotIdle_BusinessError(t *testing.T) {

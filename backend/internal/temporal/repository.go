@@ -14,14 +14,15 @@ type Repository interface {
 	SaveProfile(*Profile) error
 	ListProfiles() ([]Profile, error)
 	CharacterExists(characterID string) (bool, error)
+	CharacterOwner(characterID string) (string, error)
 	ListAnchors(AnchorQuery) ([]Anchor, error)
 	GetAnchor(id string) (*Anchor, error)
 	SaveAnchor(*Anchor) error
 	ListAllAnchors(status string, limit int) ([]Anchor, error)
 	ListDueAnchors(now time.Time, limit int) ([]Anchor, error)
-	DeleteAnchor(id, userID, characterID string) error
+	DeleteAnchor(id, spaceID, characterID string) error
 	CreateEvent(*Event) (bool, error)
-	ListEvents(userID, characterID string, limit int) ([]Event, error)
+	ListEvents(spaceID, characterID string, limit int) ([]Event, error)
 	SaveMemoryTemporalMetadata(*MemoryTemporalMetadata) error
 	GetMemoryTemporalMetadata(memoryIDs []string) (map[string]MemoryTemporalMetadata, error)
 }
@@ -62,12 +63,18 @@ func (r *SQLiteRepository) CharacterExists(characterID string) (bool, error) {
 	return count > 0, err
 }
 
+func (r *SQLiteRepository) CharacterOwner(characterID string) (string, error) {
+	var owner string
+	err := r.db.Table("characters").Select("space_id").Where("id = ?", characterID).Take(&owner).Error
+	return owner, err
+}
+
 func (r *SQLiteRepository) ListAnchors(query AnchorQuery) ([]Anchor, error) {
 	limit := query.Limit
 	if limit <= 0 || limit > 500 {
 		limit = 100
 	}
-	db := r.db.Where("user_id = ?", query.UserID)
+	db := r.db.Where("space_id = ?", query.SpaceID)
 	if query.CharacterID != "" {
 		db = db.Where("character_id = ? OR character_id = ''", query.CharacterID)
 	}
@@ -112,12 +119,12 @@ func (r *SQLiteRepository) ListDueAnchors(now time.Time, limit int) ([]Anchor, e
 	return anchors, err
 }
 
-func (r *SQLiteRepository) DeleteAnchor(id, userID, characterID string) error {
+func (r *SQLiteRepository) DeleteAnchor(id, spaceID, characterID string) error {
 	return r.db.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Where("anchor_id = ?", id).Delete(&Event{}).Error; err != nil {
 			return err
 		}
-		db := tx.Where("id = ? AND user_id = ?", id, userID)
+		db := tx.Where("id = ? AND space_id = ?", id, spaceID)
 		if characterID != "" {
 			db = db.Where("character_id = ?", characterID)
 		}
@@ -130,11 +137,11 @@ func (r *SQLiteRepository) CreateEvent(event *Event) (bool, error) {
 	return result.RowsAffected > 0, result.Error
 }
 
-func (r *SQLiteRepository) ListEvents(userID, characterID string, limit int) ([]Event, error) {
+func (r *SQLiteRepository) ListEvents(spaceID, characterID string, limit int) ([]Event, error) {
 	if limit <= 0 || limit > 500 {
 		limit = 100
 	}
-	db := r.db.Where("user_id = ?", userID)
+	db := r.db.Where("space_id = ?", spaceID)
 	if characterID != "" {
 		db = db.Where("character_id = ? OR character_id = ''", characterID)
 	}

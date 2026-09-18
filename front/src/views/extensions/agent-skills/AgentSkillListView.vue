@@ -37,12 +37,6 @@ compatibility, maintenance, testing, and migration to Extension Kernel.
             placeholder="名称或描述"
             @keyup.enter="load"
         /></el-form-item>
-        <el-form-item label="作用域"
-          ><el-select v-model="filters.scope" clearable placeholder="全部"
-            ><el-option label="用户全局" value="global" /><el-option
-              label="当前角色"
-              value="character" /></el-select
-        ></el-form-item>
         <el-form-item label="兼容性"
           ><el-select v-model="filters.status" clearable placeholder="全部"
             ><el-option
@@ -93,13 +87,6 @@ compatibility, maintenance, testing, and migration to Extension Kernel.
           min-width="320"
           show-overflow-tooltip
         />
-        <el-table-column label="作用域" width="110"
-          ><template #default="{ row }"
-            ><el-tag type="info">{{
-              row.scope === "character" ? "当前角色" : "用户全局"
-            }}</el-tag></template
-          ></el-table-column
-        >
         <el-table-column label="兼容性" width="170"
           ><template #default="{ row }"
             ><el-tag :type="statusType(row.compatibilityStatus)">{{
@@ -144,36 +131,10 @@ compatibility, maintenance, testing, and migration to Extension Kernel.
       destroy-on-close
     >
       <el-steps :active="preview ? 1 : 0" finish-status="success" simple
-        ><el-step title="选择来源" /><el-step title="检查并确认"
-      /></el-steps>
-      
-      <div class="scope-row">
-        <el-segmented
-          v-model="installScope"
-          :options="scopeOptions"
-          aria-label="安装作用域"
-        />
-        <div v-if="installScope === 'character'" class="character-field">
-          <label for="agent-character-select">导入角色</label>
-          <el-select
-            id="agent-character-select"
-            v-model="selectedCharacterId"
-            filterable
-            :loading="characterLoading"
-            placeholder="请选择角色"
-            no-data-text="暂无可用角色"
-            aria-label="导入角色"
-          >
-            <el-option
-              v-for="ch in characters"
-              :key="String(ch.id)"
-              :label="ch.name"
-              :value="String(ch.id)"
-            />
-          </el-select>
-          <span v-if="characterLoadError" class="field-error" role="alert">{{ characterLoadError }}</span>
-        </div>
-      </div><div v-if="!preview" class="source-grid">
+        ><el-step title="选择来源" /><el-step title="检查并确认" />
+      </el-steps>
+
+      <div v-if="!preview" class="source-grid">
         <button class="source-card" type="button" @click="zipInput?.click()">
           <el-icon><Files /></el-icon><strong>选择 ZIP</strong
           ><span>适用于 Web 和桌面端</span>
@@ -217,25 +178,6 @@ compatibility, maintenance, testing, and migration to Extension Kernel.
           show-icon
           :closable="false"
         />
-        <el-form label-position="top"
-          ><el-form-item label="安装作用域"
-            ><el-segmented
-              v-model="installScope"
-              :options="scopeOptions"
-              aria-label="安装作用域"
-            /></el-form-item
-          ><el-form-item v-if="installScope === 'character'" label="选择角色">
-            <el-select v-model="selectedCharacterId" placeholder="当前活跃角色" clearable style="width: 100%">
-              <el-option
-                v-for="ch in characters"
-                :key="String(ch.id)"
-                :label="ch.name"
-                :value="String(ch.id)"
-              />
-            </el-select>
-          ></el-form-item
-          ></el-form
-        >
         <section
           v-if="preview.definition.mcpDependencies?.length"
           class="dependency-plan"
@@ -399,9 +341,6 @@ compatibility, maintenance, testing, and migration to Extension Kernel.
           ><el-descriptions-item label="来源">{{
             detail.definition.source
           }}</el-descriptions-item
-          ><el-descriptions-item label="作用域">{{
-            detail.definition.scope
-          }}</el-descriptions-item
           ><el-descriptions-item label="License">{{
             detail.definition.license || "未声明"
           }}</el-descriptions-item
@@ -481,14 +420,13 @@ compatibility, maintenance, testing, and migration to Extension Kernel.
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from "vue";
+import { computed, onMounted, reactive, ref } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { Files, FolderOpened, Refresh, Upload } from "@element-plus/icons-vue";
 import ExtensionPageHeader from "../components/ExtensionPageHeader.vue";
 import {
   fetchAgentSkill,
   fetchAgentSkills,
-  fetchCharacterOptions,
   installAgentSkill,
   installAgentSkillMCPDependencies,
   previewAgentSkillDirectory,
@@ -496,7 +434,6 @@ import {
   previewAgentSkillZIP,
   removeAgentSkill,
   removeAgentSkillMCPDependencies,
-  resolveCharacterId,
   setAgentSkillEnabled,
 } from "../api";
 import type {
@@ -504,7 +441,6 @@ import type {
   AgentSkillDefinition,
   AgentSkillDetail,
   AgentSkillPreview,
-  AgentSkillScope,
 } from "../types";
 
 const loading = ref(false),
@@ -512,28 +448,18 @@ const loading = ref(false),
   importDialog = ref(false),
   detailOpen = ref(false);
 const errorText = ref(""),
-  changing = ref(""),
-  characterId = ref("");
-const characters = ref<Array<{ id: string | number; name: string }>>([]);
-const selectedCharacterId = ref("");
+  changing = ref("");
 const zipInput = ref<HTMLInputElement>(),
   directoryInput = ref<HTMLInputElement>();
 const items = ref<AgentSkillDefinition[]>([]),
   preview = ref<AgentSkillPreview | null>(null),
   detail = ref<AgentSkillDetail | null>(null);
-const installScope = ref<AgentSkillScope>("global");
-const scopeOptions = [
-  { label: "全局", value: "global" },
-  { label: "角色", value: "character" },
-];
-const characterLoading = ref(false);
-const characterLoadError = ref("");
 const dependencyPlan = ref<any>(null),
   dependencyLoading = ref(false),
   confirmHTTP = ref(false),
   confirmStdio = ref(false),
   installOptional = ref(false);
-const filters = reactive({ query: "", scope: "", status: "" });
+const filters = reactive({ query: "", status: "" });
 const hasHTTPDependency = computed(() =>
   dependencyPlan.value?.items?.some(
     (item: any) =>
@@ -568,8 +494,7 @@ async function load() {
   loading.value = true;
   errorText.value = "";
   try {
-    if (!characterId.value) characterId.value = await resolveCharacterId();
-    const page = await fetchAgentSkills(characterId.value, filters);
+    const page = await fetchAgentSkills(filters);
     items.value = page.items || [];
   } catch (error: any) {
     errorText.value =
@@ -648,7 +573,6 @@ async function loadDependencyPlan() {
   try {
     dependencyPlan.value = await previewAgentSkillMCPDependencies(
       preview.value.definition.extensionId,
-      installScope.value === "character" ? (selectedCharacterId.value || characterId.value) : "",
       preview.value.definition.mcpDependencies,
     );
   } catch (error: any) {
@@ -669,11 +593,7 @@ async function install() {
   installing.value = true;
   let installed: AgentSkillDefinition | null = null;
   try {
-    installed = await installAgentSkill(
-      preview.value.previewId,
-      installScope.value,
-      selectedCharacterId.value || characterId.value,
-    );
+    installed = await installAgentSkill(preview.value.previewId);
     if (dependencyPlan.value) {
       dependencyPlan.value.agentSkillExtensionId = installed.extensionId;
       const result = await installAgentSkillMCPDependencies(
@@ -696,7 +616,7 @@ async function install() {
       await removeAgentSkillMCPDependencies(installed.extensionId).catch(
         () => undefined,
       );
-      await removeAgentSkill(installed.extensionId, characterId.value).catch(
+      await removeAgentSkill(installed.extensionId).catch(
         () => undefined,
       );
     }
@@ -709,7 +629,7 @@ async function install() {
 }
 async function openDetail(id: string) {
   try {
-    detail.value = await fetchAgentSkill(id, characterId.value);
+    detail.value = await fetchAgentSkill(id);
     detailOpen.value = true;
   } catch (error: any) {
     ElMessage.error(error?.response?.data?.detail || "详情加载失败");
@@ -718,15 +638,11 @@ async function openDetail(id: string) {
 async function toggle(item: AgentSkillDefinition) {
   changing.value = item.extensionId;
   try {
-    await setAgentSkillEnabled(
-      item.extensionId,
-      !item.enabled,
-      characterId.value,
-    );
+    await setAgentSkillEnabled(item.extensionId, !item.enabled);
     ElMessage.success(item.enabled ? "已禁用" : "已启用");
     await load();
     if (detailOpen.value)
-      detail.value = await fetchAgentSkill(item.extensionId, characterId.value);
+      detail.value = await fetchAgentSkill(item.extensionId);
   } finally {
     changing.value = "";
   }
@@ -741,10 +657,7 @@ async function removeCurrent() {
   const dependencyResult = await removeAgentSkillMCPDependencies(
     detail.value.definition.extensionId,
   );
-  await removeAgentSkill(
-    detail.value.definition.extensionId,
-    characterId.value,
-  );
+  await removeAgentSkill(detail.value.definition.extensionId);
   detailOpen.value = false;
   detail.value = null;
   ElMessage.success("已移除，未删除可能共享的 MCP 服务");
@@ -774,26 +687,6 @@ function statusType(status: AgentSkillCompatibilityStatus) {
       : "warning";
 }
 onMounted(load);
-watch(importDialog, async (open) => {
-  if (open) {
-    characters.value = [];
-    selectedCharacterId.value = "";
-    characterLoading.value = true;
-    characterLoadError.value = "";
-    try {
-      characters.value = await fetchCharacterOptions();
-      if (!characters.value.length) characterLoadError.value = "暂无可用角色，请先创建角色";
-    } catch {
-      characterLoadError.value = "角色列表加载失败，请稍后重试";
-    } finally {
-      characterLoading.value = false;
-    }
-  }
-});
-watch(installScope, () => {
-  if (preview.value?.definition.mcpDependencies?.length)
-    void loadDependencyPlan();
-});
 </script>
 
 <style scoped>
@@ -984,30 +877,5 @@ code {
   .source-card {
     transition: none;
   }
-}
-.scope-row {
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 16px;
-  margin-bottom: 18px;
-}
-.character-field {
-  display: grid;
-  grid-template-columns: auto minmax(220px, 320px);
-  align-items: center;
-  gap: 8px 12px;
-}
-.character-field label {
-  color: var(--console-text-muted);
-  font-size: 13px;
-}
-.character-field .el-select {
-  width: 100%;
-}
-.field-error {
-  grid-column: 2;
-  color: var(--el-color-danger);
-  font-size: 12px;
 }
 </style>

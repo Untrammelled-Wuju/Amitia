@@ -1,15 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+
 import '../../../../app/app_routes.dart';
 import '../../../../app/theme/app_colors.dart';
-import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_radius.dart';
+import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
-import '../../../../core/widgets/amitia_scaffold.dart';
-import '../../../../core/widgets/amitia_misc.dart';
-import '../../../../core/services/providers.dart';
 import '../../../../core/services/error_utils.dart';
+import '../../../../core/services/providers.dart';
+import '../../../../core/widgets/amitia_misc.dart';
+import '../../../../core/widgets/amitia_scaffold.dart';
 
 class ExecutionRunsPage extends ConsumerStatefulWidget {
   const ExecutionRunsPage({super.key});
@@ -19,11 +20,19 @@ class ExecutionRunsPage extends ConsumerStatefulWidget {
 }
 
 class _ExecutionRunsPageState extends ConsumerState<ExecutionRunsPage> {
-  List<Map<String, dynamic>> _runs = [];
+  List<Map<String, dynamic>> _runs = const [];
   bool _loading = true;
   String? _error;
-  String _selectedFilter = '全部';
-  final _filters = ['全部', '运行中', '已完成', '失败'];
+  String _statusFilter = '';
+
+  static const _statuses = <String, String>{
+    '': '全部',
+    'pending': '等待中',
+    'running': '运行中',
+    'succeeded': '已完成',
+    'failed': '失败',
+    'cancelled': '已取消',
+  };
 
   @override
   void initState() {
@@ -32,83 +41,21 @@ class _ExecutionRunsPageState extends ConsumerState<ExecutionRunsPage> {
   }
 
   Future<void> _loadRuns() async {
-    setState(() { _loading = true; _error = null; });
+    if (mounted) setState(() { _loading = true; _error = null; });
     try {
-      final svc = ref.read(extensionServiceProvider);
-      final data = await svc.extensionRuns();
+      final data = await ref.read(extensionServiceProvider).extensionRuns();
       if (mounted) setState(() { _runs = data; _loading = false; });
-    } catch (e) {
-      if (mounted) setState(() { _error = safeErrorMessage(e); _loading = false; });
+    } catch (error) {
+      if (mounted) setState(() { _error = safeErrorMessage(error); _loading = false; });
     }
   }
 
-  List<Map<String, dynamic>> get _filteredRuns {
-    if (_selectedFilter == '全部') return _runs;
-    return _runs.where((r) => (r['status'] ?? '').toString() == _selectedFilter).toList();
-  }
-
-  BadgeType _statusBadgeType(String status) {
-    switch (status) {
-      case '运行中':
-        return BadgeType.accent;
-      case '已完成':
-        return BadgeType.success;
-      case '失败':
-        return BadgeType.error;
-      default:
-        return BadgeType.neutral;
-    }
-  }
-
-  IconData _statusIcon(String status) {
-    switch (status) {
-      case '运行中':
-        return Icons.play_circle_fill;
-      case '已完成':
-        return Icons.check_circle;
-      case '失败':
-        return Icons.cancel;
-      default:
-        return Icons.circle_outlined;
-    }
-  }
-
-  Color _statusColor(String status, BuildContext context) {
-    switch (status) {
-      case '运行中':
-        return context.accentPrimary;
-      case '已完成':
-        return context.success;
-      case '失败':
-        return context.error;
-      default:
-        return context.textTertiary;
-    }
-  }
-
-  String _formatTime(dynamic time) {
-    if (time is DateTime) {
-      return '${time.month.toString().padLeft(2, '0')}-${time.day.toString().padLeft(2, '0')} ${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
-    }
-    final str = time.toString();
-    if (str.length >= 16) return str.substring(5, 16);
-    return str;
-  }
+  List<Map<String, dynamic>> get _visible => _statusFilter.isEmpty
+      ? _runs
+      : _runs.where((run) => (run['status'] ?? '').toString() == _statusFilter).toList(growable: false);
 
   @override
   Widget build(BuildContext context) {
-    if (_loading) {
-      return AmitiaScaffold(
-        appBar: AmitiaAppBar(title: '执行记录', showBackButton: true, fallbackRoute: AppRoutes.extensions),
-        body: SafeArea(top: false, child: const AmitiaLoadingState(message: '加载中...')),
-      );
-    }
-    if (_error != null) {
-      return AmitiaScaffold(
-        appBar: AmitiaAppBar(title: '执行记录', showBackButton: true, fallbackRoute: AppRoutes.extensions),
-        body: SafeArea(top: false, child: AmitiaErrorState(message: '加载失败: $_error', onRetry: _loadRuns)),
-      );
-    }
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
         title: '执行记录',
@@ -119,21 +66,28 @@ class _ExecutionRunsPageState extends ConsumerState<ExecutionRunsPage> {
         top: false,
         child: Column(
           children: [
-            _buildFilterBar(context),
+            _buildFilters(),
             SizedBox(height: AppSpacing.sm),
             Expanded(
-              child: _filteredRuns.isEmpty
-                  ? AmitiaEmptyState(
-                      icon: Icons.history,
-                      title: '暂无执行记录',
-                      subtitle: '$_selectedFilter 状态下没有记录',
-                    )
-                  : ListView.separated(
-                      padding: EdgeInsets.fromLTRB(AppSpacing.pagePadding, 0, AppSpacing.pagePadding, AppSpacing.xxxl),
-                      itemCount: _filteredRuns.length,
-                      separatorBuilder: (_, _) => SizedBox(height: AppSpacing.sm),
-                      itemBuilder: (context, index) => _buildRunCard(context, _filteredRuns[index]),
-                    ),
+              child: _loading
+                  ? const AmitiaLoadingState(message: '加载中…')
+                  : _error != null
+                      ? AmitiaErrorState(message: '加载失败：$_error', onRetry: _loadRuns)
+                      : _visible.isEmpty
+                          ? AmitiaEmptyState(
+                              icon: Icons.history,
+                              title: '暂无执行记录',
+                              subtitle: _statusFilter.isEmpty ? '尚未产生扩展执行记录' : '当前状态没有记录',
+                            )
+                          : RefreshIndicator(
+                              onRefresh: _loadRuns,
+                              child: ListView.separated(
+                                padding: EdgeInsets.fromLTRB(AppSpacing.pagePadding, 0, AppSpacing.pagePadding, AppSpacing.xxxl),
+                                itemCount: _visible.length,
+                                separatorBuilder: (_, _) => SizedBox(height: AppSpacing.sm),
+                                itemBuilder: (context, index) => _buildRunCard(_visible[index]),
+                              ),
+                            ),
             ),
           ],
         ),
@@ -141,34 +95,28 @@ class _ExecutionRunsPageState extends ConsumerState<ExecutionRunsPage> {
     );
   }
 
-  Widget _buildFilterBar(BuildContext context) {
+  Widget _buildFilters() {
+    final entries = _statuses.entries.toList(growable: false);
     return SizedBox(
       height: 38,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
-        itemCount: _filters.length,
+        itemCount: entries.length,
         separatorBuilder: (_, _) => SizedBox(width: AppSpacing.sm),
         itemBuilder: (context, index) {
-          final isSelected = _selectedFilter == _filters[index];
+          final entry = entries[index];
+          final selected = entry.key == _statusFilter;
           return GestureDetector(
-            onTap: () => setState(() => _selectedFilter = _filters[index]),
+            onTap: () => setState(() => _statusFilter = entry.key),
             child: Container(
+              alignment: Alignment.center,
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
               decoration: BoxDecoration(
-                color: isSelected ? context.accentPrimary : context.surfaceSecondary,
+                color: selected ? context.accentPrimary : context.surfaceSecondary,
                 borderRadius: AppRadius.brTag,
               ),
-              child: Center(
-                child: Text(
-                  _filters[index],
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
-                    color: isSelected ? Colors.white : context.textSecondary,
-                  ),
-                ),
-              ),
+              child: Text(entry.value, style: TextStyle(fontSize: 13, color: selected ? Colors.white : context.textSecondary)),
             ),
           );
         },
@@ -176,66 +124,50 @@ class _ExecutionRunsPageState extends ConsumerState<ExecutionRunsPage> {
     );
   }
 
-  Widget _buildRunCard(BuildContext context, Map<String, dynamic> run) {
+  Widget _buildRunCard(Map<String, dynamic> run) {
+    final runId = (run['runId'] ?? '').toString();
+    final skillId = (run['skillId'] ?? '').toString();
+    final extensionId = (run['extensionId'] ?? '').toString();
     final status = (run['status'] ?? '').toString();
-    final name = (run['name'] ?? '').toString();
-    final duration = (run['duration'] ?? '').toString();
-    final startTime = run['startTime'] ?? run['created_at'] ?? '';
-    final id = (run['id'] ?? '').toString();
-    final toolCalls = (run['toolCalls'] as List?) ?? [];
-    final color = _statusColor(status, context);
-
+    final durationMs = (run['durationMs'] as num?)?.toInt() ?? 0;
+    final startedAt = (run['startedAt'] ?? '').toString();
+    final inputSummary = (run['inputSummary'] ?? '').toString();
+    final traceId = (run['traceId'] ?? '').toString();
+    final sideEffects = (run['sideEffects'] as List?) ?? const [];
     return AmitiaCard(
-      onTap: () => context.push('/extensions/runs/$id'),
+      onTap: runId.isEmpty ? null : () => context.push('/extensions/runs/$runId'),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(_statusIcon(status), size: 22, color: color),
+              Icon(_statusIcon(status), size: 22, color: _statusColor(status)),
               const SizedBox(width: 10),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(name, style: AppTypography.cardTitle(context)),
+                    Text(skillId.isNotEmpty ? skillId : (extensionId.isNotEmpty ? extensionId : runId), style: AppTypography.cardTitle(context)),
                     const SizedBox(height: 2),
-                    Row(
-                      children: [
-                        Text(_formatTime(startTime), style: AppTypography.label(context)),
-                        const SizedBox(width: 8),
-                        Icon(Icons.timer_outlined, size: 12, color: context.textTertiary),
-                        const SizedBox(width: 3),
-                        Text(duration, style: AppTypography.label(context)),
-                      ],
-                    ),
+                    Text('${_formatTime(startedAt)} · ${_formatDuration(durationMs)}', style: AppTypography.label(context)),
                   ],
                 ),
               ),
-              AmitiaStatusBadge(label: status, type: _statusBadgeType(status)),
+              AmitiaStatusBadge(label: _statusLabel(status), type: _statusBadge(status)),
             ],
           ),
-          SizedBox(height: AppSpacing.md),
-          Row(
+          if (inputSummary.isNotEmpty) ...[
+            SizedBox(height: AppSpacing.sm),
+            Text(inputSummary, style: AppTypography.bodySmall(context), maxLines: 2, overflow: TextOverflow.ellipsis),
+          ],
+          SizedBox(height: AppSpacing.sm),
+          Wrap(
+            spacing: AppSpacing.sm,
+            runSpacing: AppSpacing.xs,
             children: [
-              Icon(Icons.build_outlined, size: 14, color: context.textTertiary),
-              const SizedBox(width: 4),
-              Text('${toolCalls.length} 个工具调用', style: AppTypography.label(context)),
-              const Spacer(),
-              if (status == '运行中')
-                GestureDetector(
-                  onTap: () => _showCancelConfirm(run),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                    decoration: BoxDecoration(
-                      color: context.error.withValues(alpha: 0.1),
-                      borderRadius: AppRadius.brTag,
-                    ),
-                    child: Text('取消任务', style: TextStyle(fontSize: 12, color: context.error, fontWeight: FontWeight.w500)),
-                  ),
-                ),
-              const SizedBox(width: 8),
-              Icon(Icons.chevron_right, color: context.textTertiary, size: 20),
+              if (extensionId.isNotEmpty) AmitiaStatusBadge(label: extensionId, type: BadgeType.neutral),
+              if (sideEffects.isNotEmpty) AmitiaStatusBadge(label: '副作用 ${sideEffects.length}', type: BadgeType.warning),
+              if (traceId.isNotEmpty) AmitiaStatusBadge(label: 'Trace ${_short(traceId)}', type: BadgeType.info),
             ],
           ),
         ],
@@ -243,28 +175,50 @@ class _ExecutionRunsPageState extends ConsumerState<ExecutionRunsPage> {
     );
   }
 
-  void _showCancelConfirm(Map<String, dynamic> run) {
-    final name = (run['name'] ?? '').toString();
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: context.surfacePrimary,
-        shape: RoundedRectangleBorder(borderRadius: AppRadius.brLarge),
-        title: Text('取消任务', style: AppTypography.cardTitle(context)),
-        content: Text('确定要取消「$name」吗？正在执行的操作将被中断。', style: AppTypography.bodySmall(context)),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: Text('继续运行', style: TextStyle(color: context.textSecondary))),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              ScaffoldMessenger.of(this.context).showSnackBar(
-                SnackBar(content: Text('$name 已取消'), backgroundColor: context.error),
-              );
-            },
-            child: Text('取消任务', style: TextStyle(color: context.error)),
-          ),
-        ],
-      ),
-    );
+  String _statusLabel(String status) => _statuses[status] ?? (status.isEmpty ? '未知' : status);
+
+  BadgeType _statusBadge(String status) {
+    switch (status) {
+      case 'succeeded': return BadgeType.success;
+      case 'failed': return BadgeType.error;
+      case 'running': return BadgeType.accent;
+      case 'pending': return BadgeType.warning;
+      default: return BadgeType.neutral;
+    }
   }
+
+  IconData _statusIcon(String status) {
+    switch (status) {
+      case 'succeeded': return Icons.check_circle;
+      case 'failed': return Icons.cancel;
+      case 'running': return Icons.play_circle_fill;
+      case 'pending': return Icons.schedule;
+      case 'cancelled': return Icons.block;
+      default: return Icons.circle_outlined;
+    }
+  }
+
+  Color _statusColor(String status) {
+    switch (status) {
+      case 'succeeded': return context.success;
+      case 'failed': return context.error;
+      case 'running': return context.accentPrimary;
+      case 'pending': return context.warning;
+      default: return context.textTertiary;
+    }
+  }
+
+  static String _formatTime(String raw) {
+    if (raw.isEmpty) return '未知时间';
+    final date = DateTime.tryParse(raw.replaceFirst(' ', 'T'));
+    if (date == null) return raw;
+    return '${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')} ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+  }
+
+  static String _formatDuration(int ms) {
+    if (ms < 1000) return '${ms}ms';
+    return '${(ms / 1000).toStringAsFixed(ms < 10000 ? 1 : 0)}s';
+  }
+
+  static String _short(String value) => value.length <= 10 ? value : '${value.substring(0, 8)}…';
 }

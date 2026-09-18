@@ -6,6 +6,7 @@ import (
 	"context"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/u-ai/backend/internal/embedding"
 	"github.com/u-ai/backend/internal/graph"
@@ -24,13 +25,14 @@ type Service interface {
 	Create(req *CreateMemoryRequest) (*Memory, error)
 	Update(id string, req *UpdateMemoryRequest) (*Memory, error)
 	Delete(id string) error
+	Restore(id string) (*Memory, error)
 	DeleteAll(characterID string) error
 	Search(req *SearchMemoryRequest) ([]Memory, error)
 	VectorSearch(req *VectorSearchRequest) ([]VectorSearchResult, error)
 	HybridSearch(req *VectorSearchRequest) ([]HybridSearchResult, error)
 	RecordUse(id string) (*Memory, error)
 	GetVectorStatus() map[string]interface{}
-	GetTimeline(page, pageSize int, userID, source, memoryType, timelineType string) ([]map[string]interface{}, int64, error)
+	GetTimeline(page, pageSize int, spaceID, source, memoryType, timelineType string) ([]map[string]interface{}, int64, error)
 	GenerateCandidates(conversationID string) ([]MemoryCandidate, error)
 	SubmitCandidate(req *SubmitCandidateRequest) (*MemoryCandidate, error)
 	ListCandidates() []MemoryCandidate
@@ -42,7 +44,7 @@ type Service interface {
 	CheckConflict(req *CheckConflictRequest) (*CheckConflictResponse, error)
 	ResolveConflict(req *ResolveConflictRequest) (*ResolveConflictResponse, error)
 	AutoResolveConflict(key, value, characterID string, newConfidence int) (*ResolveConflictResponse, error)
-	GetRankedMemories(characterID, userID, query string, limit int) ([]RankedMemory, error)
+	GetRankedMemories(characterID, spaceID, query string, limit int) ([]RankedMemory, error)
 	ExtractCandidates() ([]MemoryCandidate, error)
 	RebuildIndex() (map[string]interface{}, error)
 	RebuildEmbeddings() (map[string]interface{}, error)
@@ -80,13 +82,23 @@ type RankedMemory struct {
 }
 
 type UpdateCandidateRequest struct {
-	Key        *string `json:"key"`
-	Value      *string `json:"value"`
-	MemoryType *string `json:"memoryType"`
-	Importance *int    `json:"importance"`
+	Key                   *string  `json:"key"`
+	Value                 *string  `json:"value"`
+	MemoryType            *string  `json:"memoryType"`
+	MemorySubtype         *string  `json:"memorySubtype"`
+	Importance            *int     `json:"importance"`
+	Confidence            *int     `json:"confidence"`
+	RetentionLevel        *int     `json:"retentionLevel"`
+	MemoryStrength        *float64 `json:"memoryStrength"`
+	Pinned                *bool    `json:"pinned"`
+	Scope                 *string  `json:"scope"`
+	SensitivityLevel      *string  `json:"sensitivityLevel"`
+	AllowProactiveMention *bool    `json:"allowProactiveMention"`
+	RequiresConfirmation  *bool    `json:"requiresConfirmation"`
 }
 
 type CheckConflictRequest struct {
+	SpaceID     string `json:"spaceId"`
 	Key         string `json:"key"`
 	Value       string `json:"value"`
 	MemoryType  string `json:"memoryType"`
@@ -105,6 +117,7 @@ type ConflictItem struct {
 }
 
 type ResolveConflictRequest struct {
+	SpaceID     string `json:"spaceId"`
 	Action      string `json:"action"`
 	NewKey      string `json:"newKey"`
 	NewValue    string `json:"newValue"`
@@ -119,27 +132,59 @@ type ResolveConflictResponse struct {
 	MemoryID string `json:"memoryId"`
 }
 type MemoryCandidate struct {
-	ID             string `json:"id"`
-	Key            string `json:"key"`
-	Value          string `json:"value"`
-	MemoryType     string `json:"memoryType"`
-	Importance     int    `json:"importance"`
-	SourceText     string `json:"sourceText"`
-	ConversationID string `json:"conversationId"`
-	CharacterID    string `json:"characterId"`
-	CreatedAt      string `json:"createdAt"`
+	ID                    string  `json:"id"`
+	SpaceID               string  `json:"spaceId"`
+	Key                   string  `json:"key"`
+	Value                 string  `json:"value"`
+	MemoryType            string  `json:"memoryType"`
+	MemorySubtype         string  `json:"memorySubtype"`
+	Importance            int     `json:"importance"`
+	Confidence            int     `json:"confidence"`
+	RetentionLevel        int     `json:"retentionLevel,omitempty"`
+	MemoryStrength        float64 `json:"memoryStrength,omitempty"`
+	StrengthUpdatedAt     *string `json:"strengthUpdatedAt,omitempty"`
+	LastReinforcedAt      *string `json:"lastReinforcedAt,omitempty"`
+	ReinforceCount        int     `json:"reinforceCount,omitempty"`
+	DecayState            string  `json:"decayState,omitempty"`
+	Pinned                bool    `json:"pinned,omitempty"`
+	ArchivedAt            *string `json:"archivedAt,omitempty"`
+	Scope                 string  `json:"scope"`
+	SensitivityLevel      string  `json:"sensitivityLevel"`
+	AllowProactiveMention bool    `json:"allowProactiveMention"`
+	RequiresConfirmation  bool    `json:"requiresConfirmation"`
+	SourceText            string  `json:"sourceText"`
+	ConversationID        string  `json:"conversationId"`
+	CharacterID           string  `json:"characterId"`
+	CreatedAt             string  `json:"createdAt"`
+	DerivationKey         string  `json:"derivationKey,omitempty"`
 }
+
 type SubmitCandidateRequest struct {
-	Key            string `json:"key"`
-	Value          string `json:"value"`
-	MemoryType     string `json:"memoryType"`
-	Importance     int    `json:"importance"`
-	SourceText     string `json:"sourceText"`
-	ConversationID string `json:"conversationId"`
-	CharacterID    string `json:"characterId"`
-	CandidateKind  string `json:"candidateKind"`
-	DerivationKey  string `json:"derivationKey"`
-	Reason         string `json:"reason"`
+	SpaceID               string  `json:"spaceId"`
+	Key                   string  `json:"key"`
+	Value                 string  `json:"value"`
+	MemoryType            string  `json:"memoryType"`
+	MemorySubtype         string  `json:"memorySubtype"`
+	Importance            int     `json:"importance"`
+	Confidence            int     `json:"confidence"`
+	RetentionLevel        int     `json:"retentionLevel,omitempty"`
+	MemoryStrength        float64 `json:"memoryStrength,omitempty"`
+	StrengthUpdatedAt     *string `json:"strengthUpdatedAt,omitempty"`
+	LastReinforcedAt      *string `json:"lastReinforcedAt,omitempty"`
+	ReinforceCount        int     `json:"reinforceCount,omitempty"`
+	DecayState            string  `json:"decayState,omitempty"`
+	Pinned                bool    `json:"pinned,omitempty"`
+	ArchivedAt            *string `json:"archivedAt,omitempty"`
+	Scope                 string  `json:"scope"`
+	SensitivityLevel      string  `json:"sensitivityLevel"`
+	AllowProactiveMention bool    `json:"allowProactiveMention"`
+	RequiresConfirmation  bool    `json:"requiresConfirmation"`
+	SourceText            string  `json:"sourceText"`
+	ConversationID        string  `json:"conversationId"`
+	CharacterID           string  `json:"characterId"`
+	CandidateKind         string  `json:"candidateKind"`
+	DerivationKey         string  `json:"derivationKey"`
+	Reason                string  `json:"reason"`
 }
 
 type VectorSearchResult struct {
@@ -147,6 +192,7 @@ type VectorSearchResult struct {
 	Score          float32 `json:"score"`
 	CollectionName string  `json:"collectionName"`
 	MemoryLayer    string  `json:"memoryLayer"`
+	SourceType     string  `json:"sourceType,omitempty"`
 	MatchType      string  `json:"matchType,omitempty"`
 }
 
@@ -158,6 +204,9 @@ type HybridSearchResult struct {
 	MatchType         string  `json:"matchType"`
 	CollectionName    string  `json:"collectionName"`
 	MemoryLayer       string  `json:"memoryLayer"`
+	SourceType        string  `json:"sourceType,omitempty"`
+	RRFScore          float64 `json:"rrfScore,omitempty"`
+	RetentionStrength float64 `json:"retentionStrength,omitempty"`
 	TemporalBoost     float64 `json:"temporalBoost"`
 	ValidityPenalty   float64 `json:"validityPenalty"`
 	TemporalReference string  `json:"temporalReference"`
@@ -177,6 +226,8 @@ type service struct {
 	legacyRawWriter          bool
 	legacyHistoryWriter      bool
 	rawImportWriter          bool
+	retentionRefreshMu       sync.Mutex
+	retentionRefreshed       map[string]time.Time
 }
 
 type TemporalMemoryReranker interface {
@@ -210,6 +261,7 @@ func NewService(repo Repository, ctx *app.AppContext, graphSvc ...graph.Service)
 		legacyRawWriter:     false,
 		legacyHistoryWriter: false,
 		rawImportWriter:     false,
+		retentionRefreshed:  map[string]time.Time{},
 	}
 }
 

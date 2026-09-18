@@ -42,7 +42,8 @@ export default defineConfig({
   root: resolve(__dirname, "../front"),
   publicDir: false,
   server: {
-    port: 5178,
+    port: 15178,
+    strictPort: true,
     fs: {
       allow: [
         resolve(__dirname, "../front"),
@@ -51,6 +52,14 @@ export default defineConfig({
       ],
     },
     proxy: {
+      "/readyz": {
+        target: "http://127.0.0.1:18899",
+        changeOrigin: true,
+      },
+      "/livez": {
+        target: "http://127.0.0.1:18899",
+        changeOrigin: true,
+      },
       "/api": {
         target: "http://127.0.0.1:18899",
         changeOrigin: true,

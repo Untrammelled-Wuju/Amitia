@@ -19,7 +19,7 @@ type ModelToolCall struct {
 }
 
 type ActionMaterializationScope struct {
-	UserID         string
+	SpaceID        string
 	CharacterID    string
 	ConversationID string
 	InteractionID  string
@@ -289,8 +289,8 @@ func (m ActionMaterializer) VerifyScope(action MaterializedAction, scope ActionM
 }
 
 func verifyActionScope(plan *decision.BehaviorPlan, scope ActionMaterializationScope) error {
-	if plan.UserID != "" && scope.UserID != "" && plan.UserID != scope.UserID {
-		return fmt.Errorf("%w: user mismatch: plan=%s scope=%s", decision.ErrActionScopeMismatch, plan.UserID, scope.UserID)
+	if plan.SpaceID != "" && scope.SpaceID != "" && plan.SpaceID != scope.SpaceID {
+		return fmt.Errorf("%w: user mismatch: plan=%s scope=%s", decision.ErrActionScopeMismatch, plan.SpaceID, scope.SpaceID)
 	}
 	if plan.CharacterID != "" && scope.CharacterID != "" && plan.CharacterID != scope.CharacterID {
 		return fmt.Errorf("%w: character mismatch: plan=%s scope=%s", decision.ErrActionScopeMismatch, plan.CharacterID, scope.CharacterID)

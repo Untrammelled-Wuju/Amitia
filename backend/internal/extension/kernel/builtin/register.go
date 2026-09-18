@@ -19,13 +19,10 @@ func AllBuiltinRegistrations() []func(c *Catalog) error {
 		func(c *Catalog) error { return c.Register(BuildEpisodicExtension("1.0.0")) },
 		func(c *Catalog) error { return c.Register(BuildWorldBookExtension("1.0.0")) },
 		func(c *Catalog) error { return c.Register(BuildCompanionExtension("1.0.0")) },
+		func(c *Catalog) error { return c.Register(BuildEmotionExtension("1.0.0")) },
 		func(c *Catalog) error { return c.Register(BuildGameHostExtension("1.0.0")) },
 		func(c *Catalog) error { return c.Register(BuildDesktopPetExtension("1.0.0")) },
 		func(c *Catalog) error { return c.Register(BuildWebChannelExtension("1.0.0")) },
-		func(c *Catalog) error { return c.Register(BuildQQChannelExtension("1.0.0")) },
-		func(c *Catalog) error {
-			return c.Register(BuildWechatChannelExtension("1.0.0"))
-		},
 		func(c *Catalog) error { return c.Register(BuildImageIntelligenceExtension("1.0.0")) },
 		RegisterDefaultAIModels,
 	}

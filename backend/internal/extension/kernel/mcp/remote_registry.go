@@ -1,11 +1,8 @@
-// migration-only: temporary compatibility adapter
-// remove at step 65 cutover
 package mcp
 
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"sync"
 )
 
@@ -92,22 +89,6 @@ func (r *CanonicalRemoteRegistry) List() map[string]*CanonicalRemoteConnection {
 		result[k] = v
 	}
 	return result
-}
-
-func (r *CanonicalRemoteRegistry) RegisterLegacyOwnership(serverID string) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if _, exists := r.connections[serverID]; exists {
-		return fmt.Errorf("MCP server already owned by Kernel: %s", serverID)
-	}
-	return nil
-}
-
-func (r *CanonicalRemoteRegistry) IsOwnedByLegacy(serverID string) bool {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	_, exists := r.connections[serverID]
-	return !exists
 }
 
 // ToStdioRegistry returns a compatible interface for CanonicalStdioCaller.

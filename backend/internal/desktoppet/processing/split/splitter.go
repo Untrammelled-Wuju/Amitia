@@ -62,6 +62,10 @@ func (s *Splitter) Split(sheet *image.NRGBA, layout *source.SpriteSheetLayoutSna
 	}
 
 	sourceSheetHash := computeSheetHash(sheet)
+	if err := validateFiguresWithinCells(sheet, cells, logicalFrameCount); err != nil {
+		return nil, err
+	}
+	refined := refineCellRects(sheet, layout)
 
 	result := &SplitResult{
 		Cells: make([]CellArtifact, 0, len(cells)),
@@ -98,13 +102,25 @@ func (s *Splitter) Split(sheet *image.NRGBA, layout *source.SpriteSheetLayoutSna
 		}
 
 		rect := image.Rect(cell.X, cell.Y, cell.X+cell.Width, cell.Y+cell.Height)
+		if refinedRect := refined[cell.CellIndex]; refinedRect[2] > 0 && refinedRect[3] > 0 {
+			r := image.Rect(refinedRect[0], refinedRect[1], refinedRect[0]+refinedRect[2], refinedRect[1]+refinedRect[3])
+			if r.In(sheet.Bounds()) {
+				rect = r
+			}
+		}
 		if !rect.In(sheet.Bounds()) {
 			return nil, fmt.Errorf("split: cell %d crop rect %v out of sheet bounds %v",
 				cell.CellIndex, rect, sheet.Bounds())
 		}
 
 		cropped := cropNRGBA(sheet, rect)
+		cleanCellContent(cropped)
+		trimTopBleedBand(cropped)
 		artifact.Image = cropped
+		artifact.X = rect.Min.X
+		artifact.Y = rect.Min.Y
+		artifact.Width = rect.Dx()
+		artifact.Height = rect.Dy()
 		artifact.PixelHash = computePixelHash(cropped)
 
 		if frameSet[frameIndex] {
@@ -115,6 +131,28 @@ func (s *Splitter) Split(sheet *image.NRGBA, layout *source.SpriteSheetLayoutSna
 		frameIndexes = append(frameIndexes, frameIndex)
 
 		result.Cells = append(result.Cells, artifact)
+	}
+
+	if len(result.Cells) >= 2 {
+		var first, last *CellArtifact
+		for i := range result.Cells {
+			c := &result.Cells[i]
+			if c.Empty || c.Image == nil {
+				continue
+			}
+			if first == nil || c.FrameIndex < first.FrameIndex {
+				first = c
+			}
+			if last == nil || c.FrameIndex > last.FrameIndex {
+				last = c
+			}
+		}
+		if first != nil && last != nil && first != last && first.Image != nil {
+			last.Image = cropNRGBA(first.Image, first.Image.Bounds())
+			last.Width = first.Width
+			last.Height = first.Height
+			last.PixelHash = first.PixelHash
+		}
 	}
 
 	if err := verifyContiguousFrames(frameIndexes, logicalFrameCount); err != nil {

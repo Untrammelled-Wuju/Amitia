@@ -9,6 +9,7 @@ import (
 
 type WorldBookEntry struct {
 	ID            string `gorm:"column:id;primaryKey" json:"id"`
+	SpaceID       string `gorm:"column:space_id;not null;index" json:"-"`
 	MatchType     string `gorm:"column:match_type;not null" json:"matchType"`
 	MatchPattern  string `gorm:"column:match_pattern;not null" json:"matchPattern"`
 	MatchScope    string `gorm:"column:match_scope;not null;default:full_context" json:"matchScope"`
@@ -51,6 +52,7 @@ type UpdateWorldBookRequest struct {
 type WorldBookListQuery struct {
 	MatchType   string `form:"matchType"`
 	CharacterID string `form:"characterId"`
+	Keyword     string `form:"keyword"`
 	Page        int    `form:"page"`
 	PageSize    int    `form:"pageSize"`
 }

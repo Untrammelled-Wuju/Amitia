@@ -140,4 +140,32 @@ describe("extension navigation registry", () => {
       pageProvider("bad", "page.bad"),
     ]))).toEqual([]);
   });
+
+  it("keeps extension pages in the existing character navigation group", () => {
+    const providers = [
+      routeRegistry("com.amitia/emote", "routes.emote", "/games/emote-manager", "page.emote", 50, false),
+      pageProvider("com.amitia/emote", "page.emote"),
+      provider({
+        providerId: "nav.emote",
+        extensionId: "com.amitia/emote",
+        capability: "app.navigation",
+        metadata: {
+          navigationItems: [{
+            id: "manager",
+            label: "表情包管理",
+            route: "/games/emote-manager",
+            icon: "star",
+            group: "character",
+            groupLabel: "角色",
+            groupIcon: "character",
+          }],
+        },
+      }),
+    ];
+
+    const item = collectExtensionNavigationItems(store(providers))[0];
+    expect(item?.group).toBe("character");
+    expect(item?.groupLabel).toBe("角色");
+    expect(item?.label).toBe("表情包管理");
+  });
 });

@@ -100,7 +100,7 @@ func (m *SessionManager) Read(ctx context.Context, params ReadParams) ([]OutputC
 		return nil, 0, false, "", err
 	}
 
-	if !sess.BelongsTo(params.Owner) && params.Owner.UserID != "" {
+	if !sess.BelongsTo(params.Owner) && params.Owner.SpaceID != "" {
 		return nil, 0, false, "", ErrScopeDenied()
 	}
 
@@ -132,7 +132,7 @@ func (m *SessionManager) Status(ctx context.Context, owner SessionOwner, id Sess
 		return SessionStatus{}, err
 	}
 
-	if !sess.BelongsTo(owner) && owner.UserID != "" {
+	if !sess.BelongsTo(owner) && owner.SpaceID != "" {
 		return SessionStatus{}, ErrScopeDenied()
 	}
 
@@ -192,7 +192,7 @@ func (m *SessionManager) ForceCancel(ctx context.Context, owner SessionOwner, id
 		return "", ErrSessionNotFound(id)
 	}
 
-	if !sess.BelongsTo(owner) && owner.UserID != "" {
+	if !sess.BelongsTo(owner) && owner.SpaceID != "" {
 		return "", ErrScopeDenied()
 	}
 
@@ -284,7 +284,7 @@ func (m *SessionManager) getSession(id SessionID, owner SessionOwner) (*Session,
 		return nil, ErrSessionNotFound(id)
 	}
 
-	if !sess.BelongsTo(owner) && owner.UserID != "" {
+	if !sess.BelongsTo(owner) && owner.SpaceID != "" {
 		return nil, ErrScopeDenied()
 	}
 
@@ -318,7 +318,7 @@ func (m *SessionManager) checkQuota(owner SessionOwner) error {
 	userCount := 0
 	convCount := 0
 	for _, sess := range m.sessions {
-		if sess.Owner.UserID == owner.UserID {
+		if sess.Owner.SpaceID == owner.SpaceID {
 			userCount++
 		}
 		if sess.Owner.ConversationID == owner.ConversationID && owner.ConversationID != "" {
@@ -404,9 +404,9 @@ func (m *SessionManager) startIdleMonitor() {
 }
 
 type SessionError struct {
-	Op      string
+	Op        string
 	SessionID SessionID
-	Err      error
+	Err       error
 }
 
 func (e *SessionError) Error() string {

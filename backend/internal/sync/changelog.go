@@ -15,21 +15,21 @@ import (
 type ChangeLogStore interface {
 	Append(record *ChangeRecord) error
 	AppendTx(tx *gorm.DB, record *ChangeRecord) error
-	ClaimMutationTx(tx *gorm.DB, mutationID MutationID, userID string, scope CursorScope) (bool, *MutationClaim, error)
-	CommitClaimTx(tx *gorm.DB, mutationID MutationID, userID string, scope CursorScope) error
-	RollbackClaimTx(tx *gorm.DB, mutationID MutationID, userID string, scope CursorScope) error
-	GetClaimTx(tx *gorm.DB, mutationID MutationID, userID string, scope CursorScope) (*MutationClaim, error)
-	ListAfter(userID string, scope CursorScope, cursor Sequence, limit int, entityType EntityType) ([]ChangeRecord, error)
-	Pull(userID string, scope CursorScope, cursor Sequence, limit int, entityType EntityType) ([]ChangeRecord, Sequence, bool, error)
+	ClaimMutationTx(tx *gorm.DB, mutationID MutationID, spaceID string, scope CursorScope) (bool, *MutationClaim, error)
+	CommitClaimTx(tx *gorm.DB, mutationID MutationID, spaceID string, scope CursorScope) error
+	RollbackClaimTx(tx *gorm.DB, mutationID MutationID, spaceID string, scope CursorScope) error
+	GetClaimTx(tx *gorm.DB, mutationID MutationID, spaceID string, scope CursorScope) (*MutationClaim, error)
+	ListAfter(spaceID string, scope CursorScope, cursor Sequence, limit int, entityType EntityType) ([]ChangeRecord, error)
+	Pull(spaceID string, scope CursorScope, cursor Sequence, limit int, entityType EntityType) ([]ChangeRecord, Sequence, bool, error)
 	GetLatestSequence() (Sequence, error)
 	GetByMutationID(mutationID MutationID) (*ChangeRecord, error)
-	GetByMutationIDUserScope(mutationID MutationID, userID string, scope CursorScope) (*ChangeRecord, error)
-	GetByMutationIDUserScopeTx(tx *gorm.DB, mutationID MutationID, userID string, scope CursorScope) (*ChangeRecord, error)
+	GetByMutationIDSpaceScope(mutationID MutationID, spaceID string, scope CursorScope) (*ChangeRecord, error)
+	GetByMutationIDSpaceScopeTx(tx *gorm.DB, mutationID MutationID, spaceID string, scope CursorScope) (*ChangeRecord, error)
 	Count() (int64, error)
 }
 
 type ChangeRecorder interface {
-	RecordChange(tx *gorm.DB, entityType EntityType, entityID EntityID, op OperationType, revision int64, mutationID MutationID, userID string, scope CursorScope, payload []byte) (*ChangeRecord, error)
+	RecordChange(tx *gorm.DB, entityType EntityType, entityID EntityID, op OperationType, revision int64, mutationID MutationID, spaceID string, scope CursorScope, payload []byte) (*ChangeRecord, error)
 }
 
 type sqliteChangeLogStore struct {
@@ -60,9 +60,9 @@ func (s *sqliteChangeLogStore) AppendTx(tx *gorm.DB, record *ChangeRecord) error
 	return tx.Create(record).Error
 }
 
-func (s *sqliteChangeLogStore) ClaimMutationTx(tx *gorm.DB, mutationID MutationID, userID string, scope CursorScope) (bool, *MutationClaim, error) {
+func (s *sqliteChangeLogStore) ClaimMutationTx(tx *gorm.DB, mutationID MutationID, spaceID string, scope CursorScope) (bool, *MutationClaim, error) {
 	var existing MutationClaim
-	err := tx.Where("user_id = ? AND scope = ? AND mutation_id = ?", userID, scope, mutationID).Take(&existing).Error
+	err := tx.Where("space_id = ? AND scope = ? AND mutation_id = ?", spaceID, scope, mutationID).Take(&existing).Error
 	if err == nil {
 		if existing.Status == MutationClaimStatusRolledBack {
 			if delErr := tx.Delete(&existing).Error; delErr != nil {
@@ -79,7 +79,7 @@ func (s *sqliteChangeLogStore) ClaimMutationTx(tx *gorm.DB, mutationID MutationI
 	}
 
 	claim := &MutationClaim{
-		UserID:     userID,
+		SpaceID:    spaceID,
 		Scope:      scope,
 		MutationID: mutationID,
 		Status:     MutationClaimStatusPending,
@@ -89,7 +89,7 @@ func (s *sqliteChangeLogStore) ClaimMutationTx(tx *gorm.DB, mutationID MutationI
 	if err := tx.Create(claim).Error; err != nil {
 		if strings.Contains(err.Error(), "UNIQUE") || strings.Contains(err.Error(), "duplicate") {
 			var conflict MutationClaim
-			if tx.Where("user_id = ? AND scope = ? AND mutation_id = ?", userID, scope, mutationID).Take(&conflict).Error == nil {
+			if tx.Where("space_id = ? AND scope = ? AND mutation_id = ?", spaceID, scope, mutationID).Take(&conflict).Error == nil {
 				return false, &conflict, nil
 			}
 		}
@@ -98,20 +98,20 @@ func (s *sqliteChangeLogStore) ClaimMutationTx(tx *gorm.DB, mutationID MutationI
 	return true, claim, nil
 }
 
-func (s *sqliteChangeLogStore) CommitClaimTx(tx *gorm.DB, mutationID MutationID, userID string, scope CursorScope) error {
+func (s *sqliteChangeLogStore) CommitClaimTx(tx *gorm.DB, mutationID MutationID, spaceID string, scope CursorScope) error {
 	return tx.Model(&MutationClaim{}).
-		Where("user_id = ? AND scope = ? AND mutation_id = ? AND status = ?", userID, scope, mutationID, MutationClaimStatusPending).
+		Where("space_id = ? AND scope = ? AND mutation_id = ? AND status = ?", spaceID, scope, mutationID, MutationClaimStatusPending).
 		Update("status", MutationClaimStatusCommitted).Error
 }
 
-func (s *sqliteChangeLogStore) RollbackClaimTx(tx *gorm.DB, mutationID MutationID, userID string, scope CursorScope) error {
-	return tx.Where("user_id = ? AND scope = ? AND mutation_id = ? AND status IN ?", userID, scope, mutationID, []MutationClaimStatus{MutationClaimStatusPending, MutationClaimStatusRolledBack}).
+func (s *sqliteChangeLogStore) RollbackClaimTx(tx *gorm.DB, mutationID MutationID, spaceID string, scope CursorScope) error {
+	return tx.Where("space_id = ? AND scope = ? AND mutation_id = ? AND status IN ?", spaceID, scope, mutationID, []MutationClaimStatus{MutationClaimStatusPending, MutationClaimStatusRolledBack}).
 		Delete(&MutationClaim{}).Error
 }
 
-func (s *sqliteChangeLogStore) GetClaimTx(tx *gorm.DB, mutationID MutationID, userID string, scope CursorScope) (*MutationClaim, error) {
+func (s *sqliteChangeLogStore) GetClaimTx(tx *gorm.DB, mutationID MutationID, spaceID string, scope CursorScope) (*MutationClaim, error) {
 	var claim MutationClaim
-	err := tx.Where("user_id = ? AND scope = ? AND mutation_id = ?", userID, scope, mutationID).Take(&claim).Error
+	err := tx.Where("space_id = ? AND scope = ? AND mutation_id = ?", spaceID, scope, mutationID).Take(&claim).Error
 	if err == gorm.ErrRecordNotFound {
 		return nil, nil
 	}
@@ -121,11 +121,11 @@ func (s *sqliteChangeLogStore) GetClaimTx(tx *gorm.DB, mutationID MutationID, us
 	return &claim, nil
 }
 
-func (s *sqliteChangeLogStore) ListAfter(userID string, scope CursorScope, cursor Sequence, limit int, entityType EntityType) ([]ChangeRecord, error) {
+func (s *sqliteChangeLogStore) ListAfter(spaceID string, scope CursorScope, cursor Sequence, limit int, entityType EntityType) ([]ChangeRecord, error) {
 	var records []ChangeRecord
 	query := s.db.Where("seq > ?", cursor).Order("seq ASC").Limit(limit)
-	if userID != "" {
-		query = query.Where("user_id = ?", userID)
+	if spaceID != "" {
+		query = query.Where("space_id = ?", spaceID)
 	}
 	if scope != "" {
 		query = query.Where("scope = ?", scope)
@@ -137,8 +137,8 @@ func (s *sqliteChangeLogStore) ListAfter(userID string, scope CursorScope, curso
 	return records, err
 }
 
-func (s *sqliteChangeLogStore) Pull(userID string, scope CursorScope, cursor Sequence, limit int, entityType EntityType) ([]ChangeRecord, Sequence, bool, error) {
-	records, err := s.ListAfter(userID, scope, cursor, limit+1, entityType)
+func (s *sqliteChangeLogStore) Pull(spaceID string, scope CursorScope, cursor Sequence, limit int, entityType EntityType) ([]ChangeRecord, Sequence, bool, error) {
+	records, err := s.ListAfter(spaceID, scope, cursor, limit+1, entityType)
 	if err != nil {
 		return nil, 0, false, err
 	}
@@ -173,18 +173,18 @@ func (s *sqliteChangeLogStore) GetByMutationID(mutationID MutationID) (*ChangeRe
 	return &record, err
 }
 
-func (s *sqliteChangeLogStore) GetByMutationIDUserScope(mutationID MutationID, userID string, scope CursorScope) (*ChangeRecord, error) {
+func (s *sqliteChangeLogStore) GetByMutationIDSpaceScope(mutationID MutationID, spaceID string, scope CursorScope) (*ChangeRecord, error) {
 	var record ChangeRecord
-	err := s.db.Where("mutation_id = ? AND user_id = ? AND scope = ?", mutationID, userID, scope).First(&record).Error
+	err := s.db.Where("mutation_id = ? AND space_id = ? AND scope = ?", mutationID, spaceID, scope).First(&record).Error
 	if err == gorm.ErrRecordNotFound {
 		return nil, nil
 	}
 	return &record, err
 }
 
-func (s *sqliteChangeLogStore) GetByMutationIDUserScopeTx(tx *gorm.DB, mutationID MutationID, userID string, scope CursorScope) (*ChangeRecord, error) {
+func (s *sqliteChangeLogStore) GetByMutationIDSpaceScopeTx(tx *gorm.DB, mutationID MutationID, spaceID string, scope CursorScope) (*ChangeRecord, error) {
 	var record ChangeRecord
-	err := tx.Where("mutation_id = ? AND user_id = ? AND scope = ?", mutationID, userID, scope).First(&record).Error
+	err := tx.Where("mutation_id = ? AND space_id = ? AND scope = ?", mutationID, spaceID, scope).First(&record).Error
 	if err == gorm.ErrRecordNotFound {
 		return nil, nil
 	}
@@ -287,36 +287,36 @@ func NewChangeLogService(store ChangeLogStore, sequences SequenceGenerator) *Cha
 	return &ChangeLogService{store: store, sequences: sequences}
 }
 
-func (s *ChangeLogService) RecordChange(tx *gorm.DB, entityType EntityType, entityID EntityID, op OperationType, revision int64, mutationID MutationID, userID string, scope CursorScope, payload []byte) (*ChangeRecord, error) {
-	return s.AppendTx(tx, entityType, entityID, op, revision, mutationID, "", userID, scope, payload)
+func (s *ChangeLogService) RecordChange(tx *gorm.DB, entityType EntityType, entityID EntityID, op OperationType, revision int64, mutationID MutationID, spaceID string, scope CursorScope, payload []byte) (*ChangeRecord, error) {
+	return s.AppendTx(tx, entityType, entityID, op, revision, mutationID, "", spaceID, scope, payload)
 }
 
-func (s *ChangeLogService) GetByMutationIDUserScopeTx(tx *gorm.DB, mutationID MutationID, userID string, scope CursorScope) (*ChangeRecord, error) {
-	return s.store.GetByMutationIDUserScopeTx(tx, mutationID, userID, scope)
+func (s *ChangeLogService) GetByMutationIDSpaceScopeTx(tx *gorm.DB, mutationID MutationID, spaceID string, scope CursorScope) (*ChangeRecord, error) {
+	return s.store.GetByMutationIDSpaceScopeTx(tx, mutationID, spaceID, scope)
 }
 
-func (s *ChangeLogService) ClaimMutationTx(tx *gorm.DB, mutationID MutationID, userID string, scope CursorScope) (bool, *MutationClaim, error) {
-	return s.store.ClaimMutationTx(tx, mutationID, userID, scope)
+func (s *ChangeLogService) ClaimMutationTx(tx *gorm.DB, mutationID MutationID, spaceID string, scope CursorScope) (bool, *MutationClaim, error) {
+	return s.store.ClaimMutationTx(tx, mutationID, spaceID, scope)
 }
 
-func (s *ChangeLogService) CommitClaimTx(tx *gorm.DB, mutationID MutationID, userID string, scope CursorScope) error {
-	return s.store.CommitClaimTx(tx, mutationID, userID, scope)
+func (s *ChangeLogService) CommitClaimTx(tx *gorm.DB, mutationID MutationID, spaceID string, scope CursorScope) error {
+	return s.store.CommitClaimTx(tx, mutationID, spaceID, scope)
 }
 
-func (s *ChangeLogService) RollbackClaimTx(tx *gorm.DB, mutationID MutationID, userID string, scope CursorScope) error {
-	return s.store.RollbackClaimTx(tx, mutationID, userID, scope)
+func (s *ChangeLogService) RollbackClaimTx(tx *gorm.DB, mutationID MutationID, spaceID string, scope CursorScope) error {
+	return s.store.RollbackClaimTx(tx, mutationID, spaceID, scope)
 }
 
-func (s *ChangeLogService) GetClaimTx(tx *gorm.DB, mutationID MutationID, userID string, scope CursorScope) (*MutationClaim, error) {
-	return s.store.GetClaimTx(tx, mutationID, userID, scope)
+func (s *ChangeLogService) GetClaimTx(tx *gorm.DB, mutationID MutationID, spaceID string, scope CursorScope) (*MutationClaim, error) {
+	return s.store.GetClaimTx(tx, mutationID, spaceID, scope)
 }
 
-func (s *ChangeLogService) Append(entityType EntityType, entityID EntityID, op OperationType, revision int64, mutationID MutationID, originDevice string, userID string, scope CursorScope, payload []byte) (*ChangeRecord, error) {
+func (s *ChangeLogService) Append(entityType EntityType, entityID EntityID, op OperationType, revision int64, mutationID MutationID, originDevice string, spaceID string, scope CursorScope, payload []byte) (*ChangeRecord, error) {
 	if scope == "" {
 		scope = ScopeDevice
 	}
 	if mutationID != "" {
-		existing, err := s.store.GetByMutationIDUserScope(mutationID, userID, scope)
+		existing, err := s.store.GetByMutationIDSpaceScope(mutationID, spaceID, scope)
 		if err != nil {
 			return nil, fmt.Errorf("changelog: check mutation: %w", err)
 		}
@@ -333,7 +333,7 @@ func (s *ChangeLogService) Append(entityType EntityType, entityID EntityID, op O
 	record := &ChangeRecord{
 		ChangeID:     ChangeID(fmt.Sprintf("ch_%d", seq)),
 		Sequence:     seq,
-		UserID:       userID,
+		SpaceID:      spaceID,
 		Scope:        scope,
 		EntityType:   entityType,
 		EntityID:     entityID,
@@ -352,12 +352,12 @@ func (s *ChangeLogService) Append(entityType EntityType, entityID EntityID, op O
 	return record, nil
 }
 
-func (s *ChangeLogService) AppendTx(tx *gorm.DB, entityType EntityType, entityID EntityID, op OperationType, revision int64, mutationID MutationID, originDevice string, userID string, scope CursorScope, payload []byte) (*ChangeRecord, error) {
+func (s *ChangeLogService) AppendTx(tx *gorm.DB, entityType EntityType, entityID EntityID, op OperationType, revision int64, mutationID MutationID, originDevice string, spaceID string, scope CursorScope, payload []byte) (*ChangeRecord, error) {
 	if scope == "" {
 		scope = ScopeDevice
 	}
 	if mutationID != "" {
-		existing, err := s.store.GetByMutationIDUserScopeTx(tx, mutationID, userID, scope)
+		existing, err := s.store.GetByMutationIDSpaceScopeTx(tx, mutationID, spaceID, scope)
 		if err != nil {
 			return nil, fmt.Errorf("changelog: check mutation: %w", err)
 		}
@@ -374,7 +374,7 @@ func (s *ChangeLogService) AppendTx(tx *gorm.DB, entityType EntityType, entityID
 	record := &ChangeRecord{
 		ChangeID:     ChangeID(fmt.Sprintf("ch_%d", seq)),
 		Sequence:     seq,
-		UserID:       userID,
+		SpaceID:      spaceID,
 		Scope:        scope,
 		EntityType:   entityType,
 		EntityID:     entityID,
@@ -393,8 +393,8 @@ func (s *ChangeLogService) AppendTx(tx *gorm.DB, entityType EntityType, entityID
 	return record, nil
 }
 
-func (s *ChangeLogService) Pull(userID string, scope CursorScope, cursor Sequence, limit int, entityType EntityType) ([]ChangeRecord, Sequence, bool, error) {
-	records, err := s.store.ListAfter(userID, scope, cursor, limit+1, entityType)
+func (s *ChangeLogService) Pull(spaceID string, scope CursorScope, cursor Sequence, limit int, entityType EntityType) ([]ChangeRecord, Sequence, bool, error) {
+	records, err := s.store.ListAfter(spaceID, scope, cursor, limit+1, entityType)
 	if err != nil {
 		return nil, 0, false, fmt.Errorf("changelog: list: %w", err)
 	}

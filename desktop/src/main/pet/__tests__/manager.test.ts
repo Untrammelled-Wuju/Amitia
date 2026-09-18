@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 vi.mock("electron", () => ({
   app: {
     getPath: vi.fn(() => "/tmp/amitia-test"),
-    getVersion: vi.fn(() => "26.1.8"),
+    getVersion: vi.fn(() => "26.2.0-beta"),
     setLoginItemSettings: vi.fn(),
   },
   BrowserWindow: class {},
@@ -196,7 +196,7 @@ describe("DesktopPetManager runtime settings", () => {
     expect(internal.lastAppliedSettingsRevision).toBe(7);
   });
 
-  it("does not apply public settings mutations before Runtime v2 convergence", async () => {
+  it("does not apply public settings mutations before Runtime v1 convergence", async () => {
     const manager = makeManager();
     const initial = settings({ settingsRevision: 3, scale: 1 });
     const callUpdateSettingsApi = vi.fn(async () => ({
@@ -265,7 +265,7 @@ describe("DesktopPetManager runtime settings", () => {
 });
 
 describe("DesktopPetManager app-start restore policy", () => {
-  it("disables authoritative desired state before Runtime v2 connects when restore is off", async () => {
+  it("disables authoritative desired state before Runtime v1 connects when restore is off", async () => {
     const manager = makeManager();
     const internal = manager as never as {
       listInstallations: ReturnType<typeof vi.fn>;
@@ -417,7 +417,7 @@ describe("DesktopPetManager desired-state convergence", () => {
     expect(internal.activeSettings.settingsRevision).toBe(7);
   });
 
-  it("does not apply a public default-action mutation before Runtime v2 convergence", async () => {
+  it("does not apply a public default-action mutation before Runtime v1 convergence", async () => {
     const manager = makeManager();
     const callUpdateDefaultActionApi = vi.fn(async () => ({
       operationId: "opin-default",
@@ -659,7 +659,7 @@ describe("DesktopPetManager disable transaction", () => {
 describe("DesktopPetManager lifecycle serialization", () => {
   it("queues shutdown behind an in-flight lifecycle mutation", async () => {
     const manager = makeManager();
-    let releaseMutation: (() => void) | null = null;
+    let releaseMutation: () => void = () => {};
     const internal = manager as never as {
       runLifecycleMutation: <T>(operation: () => Promise<T>) => Promise<T>;
       teardownRecoveryHandlers: ReturnType<typeof vi.fn>;
@@ -682,7 +682,7 @@ describe("DesktopPetManager lifecycle serialization", () => {
     await Promise.resolve();
     expect(internal.stopRuntime).not.toHaveBeenCalled();
 
-    releaseMutation?.();
+    releaseMutation();
     await mutation;
     await shutdown;
 
@@ -708,7 +708,7 @@ describe("DesktopPetManager lifecycle serialization", () => {
       calls.push("recovery");
     });
 
-    let releaseMutation: (() => void) | null = null;
+    let releaseMutation: () => void = () => {};
     const mutation = internal.runLifecycleMutation(
       () => new Promise<void>((resolve) => {
         calls.push("mutation-start");
@@ -723,7 +723,7 @@ describe("DesktopPetManager lifecycle serialization", () => {
     await Promise.resolve();
     expect(calls).toEqual(["mutation-start"]);
 
-    releaseMutation?.();
+    releaseMutation();
     await mutation;
     await recovery;
 
@@ -732,7 +732,7 @@ describe("DesktopPetManager lifecycle serialization", () => {
 });
 
 describe("DesktopPetManager manual play authority", () => {
-  it("publishes a manual action only through the Runtime v2 backend path", async () => {
+  it("publishes a manual action only through the Runtime v1 backend path", async () => {
     const manager = makeManager();
     const schedulerSubmit = vi.fn();
     const callPlayActionApi = vi.fn(async () => undefined);
@@ -826,134 +826,18 @@ describe("DesktopPetManager installation switching", () => {
   });
 });
 
-describe("DesktopPetManager character reconciliation", () => {
-  it("propagates installation lookup failures so CharacterWatcher can retry", async () => {
-    const manager = makeManager();
-    const lookupFailure = new Error("installation lookup failed");
-    const internal = manager as never as {
-      ensureInitialized: () => Promise<void>;
-      listInstallations: () => Promise<unknown[]>;
-    };
-    internal.ensureInitialized = vi.fn(async () => undefined);
-    internal.listInstallations = vi.fn(async () => {
-      throw lookupFailure;
-    });
-
-    await expect(manager.handleCharacterSwitched("character-a")).rejects.toBe(
-      lookupFailure,
-    );
-  });
-
-  it("selects the most recently enabled usable pet for a newly active character", async () => {
-    const manager = makeManager();
-    const internal = manager as never as {
-      state: string;
-      activeInstallationId: string | null;
-      ensureInitialized: () => Promise<void>;
-      listInstallations: () => Promise<Array<{
-        id: string;
-        characterId: string;
-        status: string;
-        lastEnabledAt: string;
-        createdAt: string;
-      }>>;
-      switchInstallation: (installationId: string) => Promise<void>;
-    };
-    internal.state = "enabled";
-    internal.activeInstallationId = "pet-character-a";
-    internal.ensureInitialized = vi.fn(async () => undefined);
-    internal.listInstallations = vi.fn(async () => [
-      {
-        id: "pet-b-newer-install",
-        characterId: "character-b",
-        status: "installed",
-        lastEnabledAt: "",
-        createdAt: "2026-08-28T12:00:00Z",
-      },
-      {
-        id: "pet-b-preferred",
-        characterId: "character-b",
-        status: "disabled",
-        lastEnabledAt: "2026-08-28T10:00:00Z",
-        createdAt: "2026-08-20T12:00:00Z",
-      },
-      {
-        id: "pet-b-invalid",
-        characterId: "character-b",
-        status: "invalid",
-        lastEnabledAt: "2026-08-29T10:00:00Z",
-        createdAt: "2026-08-29T10:00:00Z",
-      },
-    ]);
-    internal.switchInstallation = vi.fn(async () => undefined);
-
-    await manager.handleCharacterSwitched("character-b");
-
-    expect(internal.switchInstallation).toHaveBeenCalledTimes(1);
-    expect(internal.switchInstallation).toHaveBeenCalledWith("pet-b-preferred");
-  });
-
-  it("disables the previous character pet when the new character has no usable installation", async () => {
-    const manager = makeManager();
-    const internal = manager as never as {
-      state: string;
-      activeInstallationId: string | null;
-      ensureInitialized: () => Promise<void>;
-      listInstallations: () => Promise<unknown[]>;
-      disableInstallation: () => Promise<void>;
-    };
-    internal.state = "enabled";
-    internal.activeInstallationId = "pet-character-a";
-    internal.ensureInitialized = vi.fn(async () => undefined);
-    internal.listInstallations = vi.fn(async () => []);
-    internal.disableInstallation = vi.fn(async () => undefined);
-
-    await manager.handleCharacterSwitched("character-without-pet");
-
-    expect(internal.disableInstallation).toHaveBeenCalledTimes(1);
-  });
-
-  it("propagates switch failures so CharacterWatcher does not commit the new character", async () => {
-    const manager = makeManager();
-    const switchFailure = new Error("switch failed");
-    const internal = manager as never as {
-      state: string;
-      activeInstallationId: string | null;
-      ensureInitialized: () => Promise<void>;
-      listInstallations: () => Promise<Array<{
-        id: string;
-        characterId: string;
-        status: string;
-      }>>;
-      switchInstallation: (installationId: string) => Promise<void>;
-    };
-    internal.state = "enabled";
-    internal.activeInstallationId = "pet-old";
-    internal.ensureInitialized = vi.fn(async () => undefined);
-    internal.listInstallations = vi.fn(async () => [
-      { id: "pet-new", characterId: "character-b", status: "enabled" },
-    ]);
-    internal.switchInstallation = vi.fn(async () => {
-      throw switchFailure;
-    });
-
-    await expect(manager.handleCharacterSwitched("character-b")).rejects.toBe(
-      switchFailure,
-    );
-    expect(internal.switchInstallation).toHaveBeenCalledWith("pet-new");
-  });
-});
-
-describe("DesktopPetManager Runtime v2 play command validation", () => {
+describe("DesktopPetManager Runtime v1 play command validation", () => {
   it("rejects legacy queue policy before scheduling", async () => {
     const manager = makeManager();
     const submit = vi.fn(() => "played" as const);
     const internal = manager as never as {
       activeInstallationId: string;
-      activeInstallation: { characterId: string };
+      activeInstallation: Record<string, never>;
       loadedInstallation: { actions: Map<string, { key: string; available: boolean }> };
       scheduler: { submit: typeof submit };
-      buildRuntimeHooks: () => {
+      bridgeStarted: boolean;
+      bridgeGeneration: number;
+      buildRuntimeHooks: (generation: number, isCurrent: () => boolean) => {
         onCommand: (command: unknown, envelope: unknown) => Promise<{
           status: string;
           errorCode: string;
@@ -961,13 +845,15 @@ describe("DesktopPetManager Runtime v2 play command validation", () => {
       };
     };
     internal.activeInstallationId = "install-1";
-    internal.activeInstallation = { characterId: "character-1" };
+    internal.activeInstallation = {};
+    internal.bridgeStarted = true;
+    internal.bridgeGeneration = 1;
     internal.loadedInstallation = {
       actions: new Map([["wave", { key: "wave", available: true }]]),
     };
     internal.scheduler = { submit };
 
-    const result = await internal.buildRuntimeHooks().onCommand(
+    const result = await internal.buildRuntimeHooks(1, () => true).onCommand(
       {
         commandId: "cmd-1",
         commandType: "runtime.command.play_action",
@@ -977,7 +863,6 @@ describe("DesktopPetManager Runtime v2 play command validation", () => {
           installationId: "install-1",
           runtimeId: getRuntimeId(),
           petInstanceId: getRuntimeId(),
-          characterId: "character-1",
           actionKey: "wave",
           queuePolicy: "replace",
           semantic: "manual",
@@ -996,10 +881,12 @@ describe("DesktopPetManager Runtime v2 play command validation", () => {
     const submit = vi.fn(() => "played" as const);
     const internal = manager as never as {
       activeInstallationId: string;
-      activeInstallation: { characterId: string };
+      activeInstallation: Record<string, never>;
       loadedInstallation: { actions: Map<string, { key: string; available: boolean }> };
       scheduler: { submit: typeof submit };
-      buildRuntimeHooks: () => {
+      bridgeStarted: boolean;
+      bridgeGeneration: number;
+      buildRuntimeHooks: (generation: number, isCurrent: () => boolean) => {
         onCommand: (command: unknown, envelope: unknown) => Promise<{
           status: string;
           errorCode: string;
@@ -1007,13 +894,15 @@ describe("DesktopPetManager Runtime v2 play command validation", () => {
       };
     };
     internal.activeInstallationId = "install-1";
-    internal.activeInstallation = { characterId: "character-1" };
+    internal.activeInstallation = {};
+    internal.bridgeStarted = true;
+    internal.bridgeGeneration = 1;
     internal.loadedInstallation = {
       actions: new Map([["wave", { key: "wave", available: true }]]),
     };
     internal.scheduler = { submit };
 
-    const result = await internal.buildRuntimeHooks().onCommand(
+    const result = await internal.buildRuntimeHooks(1, () => true).onCommand(
       {
         commandId: "cmd-2",
         commandType: "runtime.command.play_action",
@@ -1023,7 +912,6 @@ describe("DesktopPetManager Runtime v2 play command validation", () => {
           installationId: "install-1",
           runtimeId: getRuntimeId(),
           petInstanceId: getRuntimeId(),
-          characterId: "character-1",
           actionKey: "wave",
           queuePolicy: "replace_current",
           semantic: "manual",
@@ -1076,7 +964,7 @@ describe("DesktopPetManager Runtime report rejection safety", () => {
     await Promise.resolve();
 
     expect(warning).toHaveBeenCalledWith(
-      "[DesktopPetManager] 上报单击事件失败:",
+      "[DesktopPetManager] 上报单击事件失败，降级为本地反馈:",
       "runtime socket not open",
     );
     warning.mockRestore();

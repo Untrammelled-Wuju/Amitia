@@ -17,7 +17,7 @@ type ContinuousVoiceSession struct {
 	CharacterID    string                       `json:"characterId"`
 	Mode           ContinuousVoiceSessionMode   `json:"mode"`
 	State          ContinuousVoiceSessionStatus `json:"state"`
-	UserID         string                       `json:"userId"`
+	SpaceID        string                       `json:"spaceId"`
 	Platform       Platform                     `json:"platform"`
 	ProfileID      string                       `json:"profileId"`
 	WakeConfigID   string                       `json:"wakeConfigId,omitempty"`
@@ -57,10 +57,12 @@ type Service interface {
 }
 
 type ServiceStatus struct {
-	ActiveSessions    int   `json:"activeSessions"`
-	WakeArmedSessions int   `json:"wakeArmedSessions"`
-	Healthy           bool  `json:"healthy"`
-	UptimeSeconds     int64 `json:"uptimeSeconds"`
+	ActiveSessions    int    `json:"activeSessions"`
+	WakeArmedSessions int    `json:"wakeArmedSessions"`
+	Healthy           bool   `json:"healthy"`
+	UptimeSeconds     int64  `json:"uptimeSeconds"`
+	CascadeReady      bool   `json:"cascadeReady"`
+	CascadeError      string `json:"cascadeError,omitempty"`
 }
 
 type service struct {
@@ -93,7 +95,7 @@ func (s *service) CreateSession(ctx context.Context, req VoiceSessionRequest) (*
 		ConversationID: req.ConversationID,
 		CharacterID:    req.CharacterID,
 		Mode:           req.Mode,
-		UserID:         req.UserID,
+		SpaceID:        req.SpaceID,
 		Platform:       req.Platform,
 		ProfileID:      req.ProfileID,
 		State:          ContinuousVoiceSessionStatusIdle,
@@ -352,7 +354,7 @@ func (s *service) HandleAudioFrame(ctx context.Context, sessionID string, frame 
 		}
 	}
 	wakeConfigID := sess.WakeConfigID
-	userID := sess.UserID
+	spaceID := sess.SpaceID
 	turnID := sess.CurrentTurnID
 	sess.mu.Unlock()
 
@@ -374,7 +376,7 @@ func (s *service) HandleAudioFrame(ctx context.Context, sessionID string, frame 
 		if err := publishVoiceWorkflowTrigger(ctx, VoiceWorkflowTriggerEvent{
 			EventID:   wakeEventID,
 			EventType: string(VoiceEventWakeDetected),
-			UserID:    userID,
+			SpaceID:   spaceID,
 			Source:    "voice.wake",
 			Payload:   raw,
 		}); err != nil {
@@ -398,7 +400,7 @@ func (s *service) PublishASRFinal(ctx context.Context, sessionID, transcript, ev
 		return err
 	}
 	sess.mu.RLock()
-	userID := sess.UserID
+	spaceID := sess.SpaceID
 	turnID := sess.CurrentTurnID
 	conversationID := sess.ConversationID
 	characterID := sess.CharacterID
@@ -412,7 +414,7 @@ func (s *service) PublishASRFinal(ctx context.Context, sessionID, transcript, ev
 		"final":          true,
 	}
 	s.events.PublishSessionEvent(sessionID, VoiceEventASRFinal, payload)
-	return PublishASRWorkflowFinal(ctx, userID, sessionID, turnID, conversationID, characterID, transcript, eventID)
+	return PublishASRWorkflowFinal(ctx, spaceID, sessionID, turnID, conversationID, characterID, transcript, eventID)
 }
 
 func (s *service) loadWakeDetector(ctx context.Context, sess *ContinuousVoiceSession) error {

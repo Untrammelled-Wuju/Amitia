@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -13,8 +14,6 @@ import (
 	"github.com/u-ai/backend/internal/runtimehost"
 	"github.com/u-ai/backend/internal/runtimeorchestrator"
 	"github.com/u-ai/backend/internal/runtimeprofile"
-	"github.com/u-ai/backend/internal/scriptruntime/nodeenv"
-	"github.com/u-ai/backend/internal/scriptruntime/sidecar"
 )
 
 var (
@@ -66,107 +65,6 @@ func (c *sqliteComponent) Ready(ctx context.Context) error {
 
 func (c *sqliteComponent) Stop(ctx context.Context) error {
 	return nil
-}
-
-type sidecarComponent struct {
-	host             runtimehost.RuntimeHost
-	nodeResolver     nodeenv.Resolver
-	artifactResolver sidecar.ArtifactResolver
-	mu               sync.Mutex
-}
-
-func newSidecarComponent(host runtimehost.RuntimeHost, nodeResolver nodeenv.Resolver, artifactResolver sidecar.ArtifactResolver) *sidecarComponent {
-	return &sidecarComponent{host: host, nodeResolver: nodeResolver, artifactResolver: artifactResolver}
-}
-
-func (s *sidecarComponent) Descriptor() runtimeorchestrator.ComponentDescriptor {
-	wechatEnabled := config.AppCfg.Components.Sidecars.Wechat.Enabled
-	qqEnabled := config.AppCfg.Components.Sidecars.QQ.Enabled
-	enabled := wechatEnabled || qqEnabled
-	return runtimeorchestrator.ComponentDescriptor{
-		ID:           runtimeorchestrator.ComponentSidecars,
-		Phase:        runtimeorchestrator.PhaseInfrastructure,
-		Enabled:      enabled,
-		Required:     false,
-		Capabilities: []string{"channel.sidecar"},
-		Profiles:     profilesCore,
-	}
-}
-
-func (s *sidecarComponent) Start(ctx context.Context) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	supervisor := s.host.Processes()
-
-	wechatEnabled := config.AppCfg.Components.Sidecars.Wechat.Enabled
-	qqEnabled := config.AppCfg.Components.Sidecars.QQ.Enabled
-
-	if wechatEnabled {
-		spec, err := buildWeChatSidecarSpec(s.host.RuntimeInstanceID(), s.nodeResolver, s.artifactResolver)
-		if err != nil {
-			return fmt.Errorf("wechat spec: %w", err)
-		}
-		if err := supervisor.Register(spec); err != nil {
-			return fmt.Errorf("register wechat: %w", err)
-		}
-		if err := supervisor.Start(ctx, spec.ID); err != nil {
-			return fmt.Errorf("start wechat: %w", err)
-		}
-	}
-	if qqEnabled {
-		spec, err := buildQQSidecarSpec(s.host.RuntimeInstanceID(), s.nodeResolver, s.artifactResolver)
-		if err != nil {
-			if wechatEnabled {
-				supervisor.Stop(ctx, runtimehost.ProcessIDSidecarWeChat)
-			}
-			return fmt.Errorf("qq spec: %w", err)
-		}
-		if err := supervisor.Register(spec); err != nil {
-			if wechatEnabled {
-				supervisor.Stop(ctx, runtimehost.ProcessIDSidecarWeChat)
-			}
-			return fmt.Errorf("register qq: %w", err)
-		}
-		if err := supervisor.Start(ctx, spec.ID); err != nil {
-			if wechatEnabled {
-				supervisor.Stop(ctx, runtimehost.ProcessIDSidecarWeChat)
-			}
-			return fmt.Errorf("start qq: %w", err)
-		}
-	}
-	return nil
-}
-
-func (s *sidecarComponent) Ready(ctx context.Context) error {
-	supervisor := s.host.Processes()
-	var firstErr error
-	if config.AppCfg.Components.Sidecars.Wechat.Enabled {
-		if err := supervisor.WaitReady(ctx, runtimehost.ProcessIDSidecarWeChat); err != nil {
-			firstErr = err
-		}
-	}
-	if config.AppCfg.Components.Sidecars.QQ.Enabled {
-		if err := supervisor.WaitReady(ctx, runtimehost.ProcessIDSidecarQQ); err != nil && firstErr == nil {
-			firstErr = err
-		}
-	}
-	return firstErr
-}
-
-func (s *sidecarComponent) Stop(ctx context.Context) error {
-	supervisor := s.host.Processes()
-	var lastErr error
-	if config.AppCfg.Components.Sidecars.QQ.Enabled {
-		if err := supervisor.Stop(ctx, runtimehost.ProcessIDSidecarQQ); err != nil {
-			lastErr = err
-		}
-	}
-	if config.AppCfg.Components.Sidecars.Wechat.Enabled {
-		if err := supervisor.Stop(ctx, runtimehost.ProcessIDSidecarWeChat); err != nil {
-			lastErr = err
-		}
-	}
-	return lastErr
 }
 
 type extensionKernelComponent struct {
@@ -582,14 +480,21 @@ func (c *desktopPetComponent) Start(ctx context.Context) error {
 		}
 		c.state.behaviorOk = true
 	}
-	if svc.DesktopPetRuntimeV2 != nil {
-		if err := svc.DesktopPetRuntimeV2.Start(ctx); err != nil {
+	if svc.DesktopPetRuntimeV1 != nil {
+		if err := svc.DesktopPetRuntimeV1.Start(ctx); err != nil {
 			c.stopAllLocked(ctx, svc)
 			if svc.SafeMode != nil {
-				svc.SafeMode.Enter("pet runtime v2 start failed")
+				svc.SafeMode.Enter("pet runtime v1 start failed")
 			}
-			return fmt.Errorf("runtime v2 start: %w", err)
+			return fmt.Errorf("runtime v1 start: %w", err)
 		}
+	}
+	if svc.RuntimeDomainEventConsumer != nil {
+		svc.RuntimeDomainEventConsumer.Start(ctx)
+	}
+	if err := ctx.Err(); err != nil {
+		c.stopAllLocked(ctx, svc)
+		return fmt.Errorf("desktop pet start context cancelled: %w", err)
 	}
 	if svc.RuntimeDomainEventConsumer != nil {
 		svc.RuntimeDomainEventConsumer.Start(ctx)
@@ -631,11 +536,55 @@ func (c *desktopPetComponent) Ready(ctx context.Context) error {
 }
 
 func (c *desktopPetComponent) readyLocked(svc *AppServices) error {
-	if svc == nil || svc.DesktopPetRuntimeV2 == nil || svc.Readiness == nil {
+	if svc == nil || svc.DesktopPetRuntimeV1 == nil || svc.Readiness == nil {
 		return fmt.Errorf("desktop pet not ready")
 	}
-	if svc.Readiness.Snapshot().OverallStatus == readiness.StatusBlocked {
-		return fmt.Errorf("readiness blocked")
+	snapshot := svc.Readiness.Snapshot()
+	if snapshot.OverallStatus == readiness.StatusBlocked {
+		var details []string
+		for name, check := range snapshot.Checks {
+			details = append(details, fmt.Sprintf("%s=%s(%s)", name, check.Status, check.Message))
+		}
+		return fmt.Errorf("readiness blocked: %s", strings.Join(details, "; "))
+	}
+	if svc.DesktopPetWorker == nil || !svc.DesktopPetWorker.IsRunning() {
+		return fmt.Errorf("desktop pet generation worker not running")
+	}
+	if svc.ProcessingWorker == nil || !svc.ProcessingWorker.IsRunning() {
+		return fmt.Errorf("desktop pet processing worker not running")
+	}
+	if svc.QualityWorker == nil || !svc.QualityWorker.IsRunning() {
+		return fmt.Errorf("desktop pet quality worker not running")
+	}
+	if svc.RegenerationWorker == nil || !svc.RegenerationWorker.IsRunning() {
+		return fmt.Errorf("desktop pet regeneration worker not running")
+	}
+	if svc.BridgeRecoveryWorker == nil || !svc.BridgeRecoveryWorker.IsRunning() {
+		return fmt.Errorf("desktop pet revision bridge recovery worker not running")
+	}
+	if svc.InstallationProjectionBridge == nil || !svc.InstallationProjectionBridge.IsRunning() {
+		return fmt.Errorf("desktop pet installation projection bridge not running")
+	}
+	if svc.InstallationDesiredOutbox == nil || !svc.InstallationDesiredOutbox.IsRunning() {
+		return fmt.Errorf("desktop pet installation desired outbox worker not running")
+	}
+	if svc.InstallationRecoveryWorker == nil || !svc.InstallationRecoveryWorker.IsRunning() {
+		return fmt.Errorf("desktop pet installation recovery worker not running")
+	}
+	if svc.ReleaseRecoveryWorker == nil || !svc.ReleaseRecoveryWorker.IsRunning() {
+		return fmt.Errorf("desktop pet release recovery worker not running")
+	}
+	if svc.ReleaseEventOutboxDispatcher == nil || !svc.ReleaseEventOutboxDispatcher.IsRunning() {
+		return fmt.Errorf("desktop pet release event outbox dispatcher not running")
+	}
+	if svc.BehaviorService == nil || !svc.BehaviorService.IsRunning() {
+		return fmt.Errorf("desktop pet behavior service not running")
+	}
+	if !svc.DesktopPetRuntimeV1.IsStarted() {
+		return fmt.Errorf("desktop pet runtime v1 not running")
+	}
+	if svc.RuntimeDomainEventConsumer == nil || !svc.RuntimeDomainEventConsumer.IsRunning() {
+		return fmt.Errorf("desktop pet runtime domain event consumer not running")
 	}
 	if svc.DesktopPetWorker == nil || !svc.DesktopPetWorker.IsRunning() {
 		return fmt.Errorf("desktop pet generation worker not running")
@@ -694,13 +643,19 @@ func (c *desktopPetComponent) Stop(ctx context.Context) error {
 
 func (c *desktopPetComponent) stopAllLocked(ctx context.Context, svc *AppServices) {
 	// Stop event ingress before the behavior engine so no new domain event can
-	// race into a service that is already draining. Runtime v2 is closed next,
+	// race into a service that is already draining. Runtime v1 is closed next,
 	// followed by behavior and the background workers in reverse dependency order.
 	if svc.RuntimeDomainEventConsumer != nil {
 		svc.RuntimeDomainEventConsumer.Stop()
 	}
-	if svc.DesktopPetRuntimeV2 != nil {
-		_ = svc.DesktopPetRuntimeV2.Close(ctx)
+	if svc.DesktopPetRuntimeV1 != nil {
+		_ = svc.DesktopPetRuntimeV1.Close(ctx)
+	}
+	if c.state.behaviorOk && svc.BehaviorService != nil {
+		_ = svc.BehaviorService.Stop()
+	}
+	if c.state.releaseEventOutboxOK && svc.ReleaseEventOutboxDispatcher != nil {
+		svc.ReleaseEventOutboxDispatcher.Stop()
 	}
 	if c.state.behaviorOk && svc.BehaviorService != nil {
 		_ = svc.BehaviorService.Stop()

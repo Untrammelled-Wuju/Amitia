@@ -37,7 +37,6 @@ audio_url TEXT DEFAULT '',
 audio_duration REAL DEFAULT 0,
 image_url TEXT DEFAULT '',
 video_url TEXT DEFAULT '',
-emote_id TEXT DEFAULT '',
 alt_text TEXT DEFAULT '',
 is_animated INTEGER DEFAULT 0,
 media_width INTEGER DEFAULT 0,
@@ -46,13 +45,15 @@ original_asset_reference TEXT DEFAULT '',
 fallback_asset_reference TEXT DEFAULT '',
 response_group_id TEXT DEFAULT '',
 delivery_sequence INTEGER DEFAULT 0,
-emote_decision_status TEXT DEFAULT '',
 request_id TEXT DEFAULT '',
 reply_to_message_id TEXT,
-reply_to_role TEXT,
-reply_to_excerpt TEXT,
-created_at TEXT DEFAULT '',
-updated_at TEXT DEFAULT ''
+	reply_to_role TEXT,
+	reply_to_excerpt TEXT,
+	created_at TEXT DEFAULT '',
+	updated_at TEXT DEFAULT '',
+	extension_type TEXT NOT NULL DEFAULT '',
+	revision INTEGER NOT NULL DEFAULT 1,
+	deleted_at DATETIME
 )`).Error; err != nil {
 		t.Fatal(err)
 	}

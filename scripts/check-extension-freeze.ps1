@@ -116,9 +116,6 @@ $BaselineExtensionTables = @(
 # 注：白名单键使用"相对路径:关键词"格式，不依赖行号，避免因行号漂移导致误报。
 # 报警时仍会输出实际行号作为定位参考。
 $BaselineRegistryPoints = @(
-    'backend/internal/extension/plugin_builtin_diagnostic.go:RegisterSkill',
-    'backend/internal/extension/plugin_host.go:RegisterSkill',
-    'backend/internal/extension/plugin_protocol.go:RegisterSkill',
     'backend/internal/extension/registry.go:NewRegistry',
     'backend/internal/extension/runtime.go:NewRegistry'
 )
@@ -131,8 +128,6 @@ $BaselineExtensionRoutes = @(
     '/extensions/skills|extensionSkills',
     '/extensions/skills/:id|extensionSkillDetail',
     '/extensions/agent-skills|extensionAgentSkills',
-    '/extensions/plugins|extensionPlugins',
-    '/extensions/plugins/:id|extensionPluginDetail',
     '/extensions/workshop|extensionWorkshop',
     '/extensions/workshop/:id|extensionWorkshopSession',
     '/extensions/runs|extensionRuns',

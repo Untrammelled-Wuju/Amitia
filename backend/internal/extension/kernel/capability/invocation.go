@@ -58,7 +58,7 @@ func (m ApprovalMode) Valid() bool {
 type InvocationExecutionTarget struct {
 	Placement string `json:"placement,omitempty"`
 
-	UserID           runtimeidentity.UserID           `json:"userId,omitempty"`
+	SpaceID          runtimeidentity.SpaceID          `json:"spaceId,omitempty"`
 	DeviceID         runtimeidentity.DeviceID         `json:"deviceId,omitempty"`
 	RuntimeID        runtimeidentity.RuntimeID        `json:"runtimeId,omitempty"`
 	RuntimeSessionID runtimeidentity.RuntimeSessionID `json:"runtimeSessionId,omitempty"`
@@ -72,7 +72,7 @@ type InvocationExecutionTarget struct {
 
 func (t InvocationExecutionTarget) IsZero() bool {
 	return t.Placement == "" &&
-		t.UserID == "" &&
+		t.SpaceID == "" &&
 		t.DeviceID == "" &&
 		t.RuntimeID == "" &&
 		t.RuntimeSessionID == "" &&
@@ -90,7 +90,7 @@ type ToolInvocationContext struct {
 	ParentID       string           `json:"parentId,omitempty"`
 	RootID         string           `json:"rootId,omitempty"`
 	ExternalCallID string           `json:"externalCallId,omitempty"`
-	UserID         string           `json:"userId"`
+	SpaceID        string           `json:"spaceId"`
 	CharacterID    string           `json:"characterId,omitempty"`
 	ConversationID string           `json:"conversationId,omitempty"`
 	Channel        string           `json:"channel,omitempty"`
@@ -131,7 +131,7 @@ type ToolInvocationOptions struct {
 
 	ExternalCallID string
 
-	UserID         string
+	SpaceID        string
 	CharacterID    string
 	ConversationID string
 
@@ -189,7 +189,7 @@ func NewToolInvocationContext(opts ToolInvocationOptions) ToolInvocationContext 
 		ExecContext:          opts.ExecContext,
 		InvocationID:         NewInvocationID(),
 		ExternalCallID:       opts.ExternalCallID,
-		UserID:               opts.UserID,
+		SpaceID:              opts.SpaceID,
 		CharacterID:          opts.CharacterID,
 		ConversationID:       opts.ConversationID,
 		Channel:              opts.Channel,

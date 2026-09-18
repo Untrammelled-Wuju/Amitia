@@ -292,7 +292,7 @@ func traceFromExecutionContext(ctx ToolExecutionContext) applog.TraceFields {
 		RequestID:     ctx.RequestID,
 		CorrelationID: ctx.CorrelationID,
 		CausationID:   ctx.CausationID,
-		User:          ctx.User,
+		User:          ctx.SpaceID,
 		Character:     ctx.CharacterID,
 		Conversation:  ctx.ConversationID,
 		Channel:       ctx.Channel,

@@ -290,7 +290,7 @@ func applyToolFailureActive(update *GoalProgressUpdate, goal Goal) {
 }
 
 func scopeMatches(goal Goal, observation Observation) bool {
-	if goal.UserID != "" && observation.UserID != "" && goal.UserID != observation.UserID {
+	if goal.SpaceID != "" && observation.SpaceID != "" && goal.SpaceID != observation.SpaceID {
 		return false
 	}
 	if goal.CharacterID != "" && observation.CharacterID != "" && goal.CharacterID != observation.CharacterID {

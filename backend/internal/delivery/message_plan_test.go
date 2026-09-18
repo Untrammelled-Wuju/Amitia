@@ -15,14 +15,16 @@ type orderedPlanAdapter struct {
 	delivered []string
 }
 
-func (a *orderedPlanAdapter) Name() string { return "qq" }
+func (a *orderedPlanAdapter) Name() string { return "test" }
+
+func (a *orderedPlanAdapter) ProviderInstanceID() string { return "test.channel" }
 
 func (a *orderedPlanAdapter) ProviderInstanceID() string { return ProviderInstanceIDQQChannel }
 
 func (a *orderedPlanAdapter) Deliver(intent DeliveryIntent) error {
 	a.delivered = append(a.delivered, intent.ContentType)
-	if intent.ContentType == "emote" {
-		return errors.New("emote failed")
+	if intent.ContentType == "image" {
+		return errors.New("image failed")
 	}
 	return nil
 }
@@ -37,14 +39,14 @@ func TestMessagePlanFailureDoesNotStopLaterText(t *testing.T) {
 		t.Fatal(err)
 	}
 	createdAt := time.Now().UTC()
-	for index, contentType := range []string{"text", "emote", "text"} {
-		intent := NewDeliveryIntent("interaction", "qq", "peer", contentType, []byte(`{}`))
+	for index, contentType := range []string{"text", "image", "text"} {
+		intent := NewDeliveryIntent("interaction", "test", "peer", contentType, []byte(`{}`))
 		intent.ID = contentType + string(rune('1'+index))
 		intent.ResponseGroupID = "response"
 		intent.DeliverySequence = index + 1
 		intent.CreatedAt = createdAt
 		intent.MaxRetries = 1
-		if contentType == "emote" {
+		if contentType == "image" {
 			intent.MaxRetries = 2
 		}
 		if err = store.CreateIntent(intent); err != nil {
@@ -55,7 +57,7 @@ func TestMessagePlanFailureDoesNotStopLaterText(t *testing.T) {
 	resolver := NewMapChannelResolverWith([]ChannelAdapter{adapter})
 	worker := NewWorker(store, resolver, WorkerConfig{BatchSize: 10, Interval: time.Second})
 	worker.processBatch(context.Background())
-	if !reflect.DeepEqual(adapter.delivered, []string{"text", "emote", "text"}) {
+	if !reflect.DeepEqual(adapter.delivered, []string{"text", "image", "text"}) {
 		t.Fatalf("投递未严格按计划继续执行: %#v", adapter.delivered)
 	}
 	var statuses []string
@@ -65,7 +67,7 @@ func TestMessagePlanFailureDoesNotStopLaterText(t *testing.T) {
 	if !reflect.DeepEqual(statuses, []string{"sent", "retry", "sent"}) {
 		t.Fatalf("中间表情失败不应影响后续文字: %#v", statuses)
 	}
-	if err = db.Model(&DeliveryIntentModel{}).Where("content_type = ?", "emote").Update("next_retry", time.Now().Add(-time.Second).UTC().Format("2006-01-02 15:04:05")).Error; err != nil {
+	if err = db.Model(&DeliveryIntentModel{}).Where("content_type = ?", "image").Update("next_retry", time.Now().Add(-time.Second).UTC().Format("2006-01-02 15:04:05")).Error; err != nil {
 		t.Fatal(err)
 	}
 	worker.processBatch(context.Background())
@@ -76,7 +78,7 @@ func TestMessagePlanFailureDoesNotStopLaterText(t *testing.T) {
 	if !reflect.DeepEqual(statuses, []string{"sent", "failed", "sent"}) {
 		t.Fatalf("表情达到有限重试上限后应单独失败: %#v", statuses)
 	}
-	if !reflect.DeepEqual(adapter.delivered, []string{"text", "emote", "text", "emote"}) {
+	if !reflect.DeepEqual(adapter.delivered, []string{"text", "image", "text", "image"}) {
 		t.Fatalf("重试不应重复投递已成功文字: %#v", adapter.delivered)
 	}
 }

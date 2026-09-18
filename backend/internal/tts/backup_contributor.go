@@ -63,10 +63,23 @@ type asrExportRecord struct {
 	UpdatedAt  string `json:"updatedAt"`
 }
 
+type clonedVoiceExportRecord struct {
+	SpaceID       string `json:"spaceId"`
+	SpeakerID     string `json:"speakerId"`
+	Name          string `json:"name"`
+	TtsConfigID   int    `json:"voiceConfigId,omitempty"`
+	TtsConfigName string `json:"voiceConfigName,omitempty"`
+	Language      int    `json:"language"`
+	Status        string `json:"status"`
+	CreatedAt     string `json:"createdAt"`
+	UpdatedAt     string `json:"updatedAt"`
+}
+
 func (c *VoiceBackupContributor) Plan(ctx context.Context, req dataportability.BackupRequest) ([]dataportability.BackupComponentPlan, error) {
-	var ttsCount, asrCount int64
+	var ttsCount, asrCount, clonedVoiceCount int64
 	c.DB.WithContext(ctx).Table("tts_configs").Count(&ttsCount)
 	c.DB.WithContext(ctx).Table("asr_configs").Count(&asrCount)
+	c.DB.WithContext(ctx).Table("tts_cloned_voices").Count(&clonedVoiceCount)
 
 	return []dataportability.BackupComponentPlan{
 		{
@@ -90,6 +103,17 @@ func (c *VoiceBackupContributor) Plan(ctx context.Context, req dataportability.B
 			Sensitive:     true,
 			ItemCount:     asrCount,
 			EstimatedSize: asrCount * 512,
+		},
+		{
+			ID:            "voice.clones.v1",
+			Kind:          dataportability.KindDataset,
+			LogicalName:   "voice.clones.v1",
+			Required:      false,
+			SourceOfTruth: false,
+			Rebuildable:   false,
+			Sensitive:     false,
+			ItemCount:     clonedVoiceCount,
+			EstimatedSize: clonedVoiceCount * 512,
 		},
 	}, nil
 }
@@ -155,6 +179,35 @@ func (c *VoiceBackupContributor) Export(ctx context.Context, req dataportability
 		asrW.Write([]byte("\n"))
 	}
 
+	cloneW, err := out.CreateComponent("voice.clones.v1", "voice.clones.v1", dataportability.KindDataset)
+	if err != nil {
+		return err
+	}
+	defer cloneW.Close()
+
+	cloneRows, err := c.DB.WithContext(ctx).Table("tts_cloned_voices AS cv").Select(
+		"cv.space_id, cv.speaker_id, cv.name, cv.tts_config_id, COALESCE(tc.name, '') AS tts_config_name, cv.language, cv.status, cv.created_at, cv.updated_at",
+	).Joins(
+		"LEFT JOIN tts_configs AS tc ON tc.id = cv.tts_config_id",
+	).Rows()
+	if err != nil {
+		return err
+	}
+	defer cloneRows.Close()
+
+	for cloneRows.Next() {
+		var rec clonedVoiceExportRecord
+		if err := c.DB.ScanRows(cloneRows, &rec); err != nil {
+			continue
+		}
+		data, err := json.Marshal(rec)
+		if err != nil {
+			continue
+		}
+		cloneW.Write(data)
+		cloneW.Write([]byte("\n"))
+	}
+
 	return nil
 }
 
@@ -181,6 +234,17 @@ func (c *VoiceBackupContributor) PreviewImport(ctx context.Context, req dataport
 		}
 		c.previewASR(ctx, asrRC, &asrPreview)
 		previews = append(previews, asrPreview)
+	}
+
+	cloneRC, err := in.ReadComponent("voice.clones.v1")
+	if err == nil {
+		clonePreview := dataportability.ImportComponentPreview{
+			ComponentID: "voice.clones.v1",
+			Kind:        dataportability.KindDataset,
+			LogicalName: "voice.clones.v1",
+		}
+		c.previewClonedVoices(ctx, cloneRC, &clonePreview)
+		previews = append(previews, clonePreview)
 	}
 
 	return previews, nil
@@ -246,6 +310,40 @@ func (c *VoiceBackupContributor) previewASR(ctx context.Context, rc io.ReadClose
 	}
 }
 
+func (c *VoiceBackupContributor) previewClonedVoices(ctx context.Context, rc io.ReadCloser, preview *dataportability.ImportComponentPreview) {
+	defer rc.Close()
+	scanner := bufio.NewScanner(rc)
+	for scanner.Scan() {
+		line := scanner.Bytes()
+		if len(line) == 0 {
+			continue
+		}
+		var rec clonedVoiceExportRecord
+		if err := json.Unmarshal(line, &rec); err != nil || rec.SpeakerID == "" {
+			continue
+		}
+		preview.ItemCount++
+
+		spaceID := rec.SpaceID
+		if spaceID == "" {
+			spaceID = "local_user"
+		}
+		var existing struct {
+			SpaceID   string
+			SpeakerID string
+		}
+		c.DB.WithContext(ctx).Table("tts_cloned_voices").Select("space_id, speaker_id").Where("speaker_id = ?", rec.SpeakerID).Scan(&existing)
+		if existing.SpeakerID != "" {
+			preview.Collisions = append(preview.Collisions, dataportability.ComponentCollision{
+				SourceID:   spaceID + ":" + rec.SpeakerID,
+				TargetID:   existing.SpaceID + ":" + existing.SpeakerID,
+				EntityType: "tts_cloned_voice",
+				Policy:     dataportability.CollisionDuplicate,
+			})
+		}
+	}
+}
+
 func (c *VoiceBackupContributor) Import(ctx context.Context, req dataportability.ImportRequest, in dataportability.BackupReader) error {
 	opts := dataportability.RestoreOptions{
 		OperationID:        req.OperationID,
@@ -268,6 +366,11 @@ func (c *VoiceBackupContributor) RestoreVoices(ctx context.Context, in dataporta
 	asrRC, err := in.ReadComponent("voice.asr.v1")
 	if err == nil {
 		c.restoreASR(ctx, asrRC, opts)
+	}
+
+	cloneRC, err := in.ReadComponent("voice.clones.v1")
+	if err == nil {
+		c.restoreClonedVoices(ctx, cloneRC, opts)
 	}
 
 	return nil
@@ -405,6 +508,89 @@ func (c *VoiceBackupContributor) restoreASR(ctx context.Context, rc io.ReadClose
 			"updated_at":  now,
 		})
 	}
+}
+
+func (c *VoiceBackupContributor) restoreClonedVoices(ctx context.Context, rc io.ReadCloser, opts dataportability.RestoreOptions) {
+	defer rc.Close()
+
+	scanner := bufio.NewScanner(rc)
+	for scanner.Scan() {
+		line := scanner.Bytes()
+		if len(line) == 0 {
+			continue
+		}
+		var rec clonedVoiceExportRecord
+		if err := json.Unmarshal(line, &rec); err != nil || rec.SpeakerID == "" {
+			continue
+		}
+
+		spaceID := rec.SpaceID
+		if spaceID == "" {
+			spaceID = "local_user"
+		}
+		ttsConfigID := c.resolveRestoredCloneTTSConfigID(ctx, rec)
+		var existing struct {
+			SpaceID   string
+			SpeakerID string
+		}
+		c.DB.WithContext(ctx).Table("tts_cloned_voices").Select("space_id, speaker_id").Where("speaker_id = ?", rec.SpeakerID).Scan(&existing)
+		if existing.SpeakerID != "" {
+			// Provider speaker IDs are globally unique within the provider account.
+			// Never transfer an existing provider identity to another user during restore.
+			if existing.SpaceID != spaceID {
+				continue
+			}
+			switch opts.CharacterPolicy {
+			case dataportability.CollisionSkip:
+				continue
+			case dataportability.CollisionReplace:
+				c.DB.WithContext(ctx).Table("tts_cloned_voices").Where("space_id = ? AND speaker_id = ?", spaceID, rec.SpeakerID).Updates(map[string]interface{}{
+					"name": rec.Name, "tts_config_id": ttsConfigID, "language": rec.Language, "status": rec.Status, "updated_at": rec.UpdatedAt,
+				})
+				continue
+			default:
+				// A cloned voice is keyed by the provider-issued speaker ID and cannot
+				// be duplicated locally under a fabricated identity. Keep the target
+				// record when the generic import policy asks for duplication.
+				continue
+			}
+		}
+
+		createdAt := rec.CreatedAt
+		if createdAt == "" {
+			createdAt = "2025-01-01 00:00:00"
+		}
+		updatedAt := rec.UpdatedAt
+		if updatedAt == "" {
+			updatedAt = createdAt
+		}
+		status := rec.Status
+		if status == "" {
+			status = "ready"
+		}
+		c.DB.WithContext(ctx).Table("tts_cloned_voices").Create(map[string]interface{}{
+			"space_id": spaceID, "speaker_id": rec.SpeakerID, "name": rec.Name, "tts_config_id": ttsConfigID, "language": rec.Language, "status": status,
+			"created_at": createdAt, "updated_at": updatedAt,
+		})
+	}
+}
+
+func (c *VoiceBackupContributor) resolveRestoredCloneTTSConfigID(ctx context.Context, rec clonedVoiceExportRecord) int {
+	if rec.TtsConfigName != "" {
+		var target struct{ ID int }
+		c.DB.WithContext(ctx).Table("tts_configs").Select("id").Where("name = ?", rec.TtsConfigName).Limit(1).Scan(&target)
+		if target.ID > 0 {
+			return target.ID
+		}
+	}
+	if rec.TtsConfigID > 0 {
+		var target struct{ ID int }
+		c.DB.WithContext(ctx).Table("tts_configs").Select("id").Where("id = ?", rec.TtsConfigID).Limit(1).Scan(&target)
+		if target.ID > 0 {
+			return target.ID
+		}
+	}
+	return 0
 }
 
 func (c *VoiceBackupContributor) importTTS(ctx context.Context, req dataportability.ImportRequest, rc io.ReadCloser) {

@@ -366,8 +366,9 @@ func (s *service) callOpenAIMode(ctx context.Context, cfg *ModelConfig, messages
 func (s *service) callOpenAIWithTools(ctx context.Context, cfg *ModelConfig, messages []map[string]interface{}, tools []tool.Tool) (string, string, []map[string]interface{}, int, error) {
 	base := strings.TrimRight(cfg.BaseURL, "/")
 	reqMap := map[string]interface{}{"model": cfg.ModelName, "messages": messages, "temperature": cfg.Temperature, "max_tokens": cfg.MaxTokens, "stream": false}
-	if len(tools) > 0 {
-		reqMap["tools"] = tools
+	compatibleTools := openAICompatibleTools(tools)
+	if len(compatibleTools) > 0 {
+		reqMap["tools"] = compatibleTools
 	}
 	if cfg.TopP > 0 && cfg.TopP < 1 {
 		reqMap["top_p"] = cfg.TopP
@@ -417,6 +418,27 @@ func (s *service) callOpenAIWithTools(ctx context.Context, cfg *ModelConfig, mes
 		})
 	}
 	return choice.Message.Content, choice.Message.ReasoningContent, toolCalls, r.Usage.TotalTokens, nil
+}
+
+func openAICompatibleTools(tools []tool.Tool) []tool.Tool {
+	result := make([]tool.Tool, 0, len(tools))
+	for _, candidate := range tools {
+		name := candidate.Function.Name
+		if name == "" || len(name) > 64 {
+			continue
+		}
+		valid := true
+		for _, char := range name {
+			if !(char >= 'a' && char <= 'z') && !(char >= 'A' && char <= 'Z') && !(char >= '0' && char <= '9') && char != '_' && char != '-' {
+				valid = false
+				break
+			}
+		}
+		if valid {
+			result = append(result, candidate)
+		}
+	}
+	return result
 }
 
 func (s *service) callOllamaMode(ctx context.Context, cfg *ModelConfig, messages []map[string]interface{}, jsonOnly bool) (string, int, error) {
@@ -665,11 +687,12 @@ type noopEventSink struct{}
 
 func (noopEventSink) Emit(ctx context.Context, event ModelEvent) error { return nil }
 
-func (s *service) callLLMStreamAdapter(ctx context.Context, cfg *ModelConfig, messages []map[string]interface{}, tools []tool.Tool, sink ModelEventSink) (*ModelResult, error) {
+func (s *service) callLLMStreamAdapter(ctx context.Context, cfg *ModelConfig, messages []map[string]interface{}, tools []tool.Tool, jsonOnly bool, disableThinking bool, sink ModelEventSink) (*ModelResult, error) {
 	protocol := resolveProtocol(cfg)
 	adapter := modelprotocol.AdapterForProtocol(protocol)
-	req := messagesToModelRequest(cfg, messages, tools, false)
+	req := messagesToModelRequest(cfg, messages, tools, jsonOnly)
 	req.Stream = true
+	req.DisableThinking = disableThinking
 	pcfg := cfgToProviderConfig(cfg)
 	if sink == nil {
 		sink = noopEventSink{}

@@ -34,15 +34,12 @@ type Service interface {
 	DeleteStorageBackup(name string) map[string]interface{}
 	Diagnostics() map[string]interface{}
 	ExportReleaseCheck() map[string]interface{}
-	GenerateRecoveryCodes(userID int64) map[string]interface{}
 	GetAuditActions() []string
 	GetAuditLogs(limit int) []auditLogRecord
 	ClearAuditLogs() int64
 	GetAuditSettings() map[string]interface{}
 	GetAuditStats() map[string]interface{}
 	GetAbout() map[string]interface{}
-	GetCurrentSession(userID int64, sessionID string) map[string]interface{}
-	GetLoginHistory(userID int64) []map[string]interface{}
 	GetLogsFileContent(name string) string
 	GetLogsFiles() map[string]interface{}
 	GetLogsModelErrors() map[string]interface{}
@@ -52,10 +49,9 @@ type Service interface {
 	GetLongRunningConfig() map[string]interface{}
 	GetLongRunningStatus() map[string]interface{}
 	GetMaintenanceStatus() map[string]interface{}
-	GetNotificationsSettings() map[string]interface{}
-	GetNotificationsStatus() map[string]interface{}
+	GetNotificationsSettings(spaceID, deviceID string) map[string]interface{}
+	GetNotificationsStatus(spaceID, deviceID string) map[string]interface{}
 	GetPrivacyScanResult(id string) map[string]interface{}
-	GetRecoveryCodesStatus(userID int64) map[string]interface{}
 	GetReleaseCheckHistory() map[string]interface{}
 	GetReleaseCheckLatest() map[string]interface{}
 	GetRuntimeHealth() map[string]interface{}
@@ -66,7 +62,6 @@ type Service interface {
 	GetSecurityAccessConfig() map[string]interface{}
 	GetSecurityAccessStatus() map[string]interface{}
 	GetSecurityStatus() map[string]interface{}
-	GetSessionSettings() map[string]interface{}
 	GetStorageBackups() map[string]interface{}
 	GetStorageInfo() map[string]interface{}
 	GetStorageMigrations() map[string]interface{}
@@ -78,33 +73,20 @@ type Service interface {
 	GetUsageOverview() map[string]interface{}
 	GetUsageSources() map[string]interface{}
 	GetVersion() map[string]interface{}
-	GetWechatBridgeConfig() map[string]interface{}
-	GetWechatBridgeEvents() map[string]interface{}
-	GetWechatBridgeQRCode() map[string]interface{}
-	GetWechatBridgeStatus() map[string]interface{}
-	GetWechatBridgeStatusDetail() map[string]interface{}
-	GetQQBridgeStatus() map[string]interface{}
-	GetQQBridgeStatusDetail() map[string]interface{}
-	GetQQBridgeConfig() map[string]interface{}
-	GetQQBridgeEvents() map[string]interface{}
-	GetWechatEvents() map[string]interface{}
-	GetWechatStatus() map[string]interface{}
 	Health() map[string]interface{}
 	MaintenanceDiagnose() map[string]interface{}
 	MaintenanceExportDiagnostic() map[string]interface{}
 	MaintenanceReloadConfig() map[string]interface{}
-	MaintenanceRestartBridge() map[string]interface{}
-	MaintenanceRestartQQBridge() map[string]interface{}
 	MoodDetectionConfig() map[string]interface{}
 	UpdateMoodDetectionConfig(body map[string]interface{}) map[string]interface{}
-	NotificationsSubscribe(body map[string]interface{}) map[string]interface{}
-	NotificationsTest() map[string]interface{}
-	NotificationsUnsubscribe() map[string]interface{}
+	NotificationsSubscribe(body map[string]interface{}, spaceID, deviceID string) map[string]interface{}
+	NotificationsTest(spaceID, deviceID string) map[string]interface{}
+	NotificationsUnsubscribe(spaceID, deviceID string) map[string]interface{}
 	OnboardingComplete() map[string]interface{}
 	OnboardingReset() map[string]interface{}
 	OnboardingStatus() map[string]interface{}
 	PrivacyMask() map[string]interface{}
-	PrivacyScan() map[string]interface{}
+	PrivacyScan(scope []string) map[string]interface{}
 	PrivacyScanResults() map[string]interface{}
 	RotateLogs() map[string]interface{}
 	RunDiagnostics() map[string]interface{}
@@ -114,7 +96,7 @@ type Service interface {
 	DeleteSafetyEvents() map[string]interface{}
 	HandleSafetyEvent(id string) map[string]interface{}
 	SafetyImportCheck(body map[string]interface{}) map[string]interface{}
-	SecurityAccountCheck() map[string]interface{}
+	SecurityIdentityCheck() map[string]interface{}
 	SecurityExposureCheck() map[string]interface{}
 	SetupChecks() map[string]interface{}
 	SetupFinish() map[string]interface{}
@@ -130,27 +112,12 @@ type Service interface {
 	UpdateAuditSettings(body map[string]interface{}) map[string]interface{}
 	UpdateLongRunningConfig(body map[string]interface{}) map[string]interface{}
 	ValidateIdentityCorePatch(characterID string, body map[string]interface{}) map[string]interface{}
-	UpdateNotificationsSettings(body map[string]interface{}) map[string]interface{}
+	UpdateNotificationsSettings(body map[string]interface{}, spaceID, deviceID string) map[string]interface{}
 	UpdateRuntimeMode(body map[string]interface{}) map[string]interface{}
 	UpdateSecurityAccessConfig(body map[string]interface{}) map[string]interface{}
-	UpdateSessionSettings(body map[string]interface{}) map[string]interface{}
 	UpdateTheme(body map[string]interface{}) map[string]interface{}
 	UpdateUpdateConfig(body map[string]interface{}) map[string]interface{}
-	UpdateWechatBridgeConfig(body map[string]interface{}) map[string]interface{}
 	ValidateMode() map[string]interface{}
-	VerifyRecoveryCode(userID int64, code string) map[string]interface{}
-	WechatBridgeRecover() map[string]interface{}
-	QQBridgeRecover() map[string]interface{}
-	WechatCloudCheck() map[string]interface{}
-	WechatCloudCheckReport() map[string]interface{}
-	WechatCloudCheckRiskSummary() map[string]interface{}
-	WechatCloudCheckRun() map[string]interface{}
-	WechatLoginReconnect() map[string]interface{}
-	WechatLoginRescan() map[string]interface{}
-	WechatLoginStart() map[string]interface{}
-	WechatLoginWait() map[string]interface{}
-	WechatReplyTimingRecover() map[string]interface{}
-	WechatReplyTimingStatus() map[string]interface{}
 	AttachTemporalService(temporalSvc *temporal.Service)
 	SetDataPortabilityCoordinator(coord *dataportability.Coordinator)
 	GetDataPortabilityCoordinator() (*dataportability.Coordinator, bool)
@@ -186,11 +153,6 @@ func (s *service) GetDataPortabilityCoordinator() (*dataportability.Coordinator,
 	}
 	return s.coordinator, true
 }
-func (s *service) MaintenanceRestartBridge() map[string]interface{} {
-	result := s.readSidecarResponse(s.sidecarPost("/api/login/reconnect", nil))
-	return map[string]interface{}{"restarted": true, "restartedAt": time.Now().Format(time.DateTime), "bridgeResult": result}
-}
-
 func toFloat(v interface{}) float64 {
 	switch val := v.(type) {
 	case float64:

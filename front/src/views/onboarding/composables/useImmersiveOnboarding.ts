@@ -2,9 +2,7 @@ import { ref, reactive, computed, watch, onMounted, onUnmounted } from "vue";
 import { useRouter } from "vue-router";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { useApi } from "../../../composables/useApi";
-import { useSessionStore } from "../../../stores/session-store";
-import { saveAuthenticatedSession } from "../../../stores/refresh-coordinator";
-import { getApiBaseURL } from "@/runtime/runtime-adapter";
+import { getApiBaseURL, saveDeploymentConfig } from "@/runtime/runtime-adapter";
 
 export function useImmersiveOnboarding() {
   const router = useRouter();
@@ -14,16 +12,10 @@ export function useImmersiveOnboarding() {
   const maxStage = ref(0);
   const stageError = ref("");
 
-  const deployMode = ref("local");
-  const serverURL = ref("");
+  const deployMode = ref(typeof window !== "undefined" && !window.amitiaDesktop ? "remote" : "local");
+  const serverURL = ref(typeof window !== "undefined" && !window.amitiaDesktop ? window.location.origin : "");
   const remoteChecked = ref(false);
 
-  const adminStep = ref("environment");
-  const isAdminLogin = ref(false);
-  const hasAdmin = ref(false);
-  const accountName = ref("");
-  const accountPassword = ref("");
-  const accountDone = ref(false);
 
   const detectingModels = ref(false);
   const modelReady = ref(false);
@@ -97,8 +89,6 @@ export function useImmersiveOnboarding() {
   const permissions = reactive({
     autostart: false,
     web: true,
-    wechat: false,
-    qq: false,
   });
 
   watch(
@@ -127,16 +117,9 @@ export function useImmersiveOnboarding() {
   const onboardingComplete = ref(false);
 
   const stageCaptions = [
-    "等待开始",
     "选择运行方式",
-    "完成运行准备",
+    "连接运行环境与设备",
     "连接语言模型",
-    "设置图片理解",
-    "配置语音输出",
-    "配置记忆检索",
-    "设定角色",
-    "记录初始信息",
-    "设置权限与渠道",
   ];
 
   const identityQuestions = [
@@ -209,254 +192,43 @@ export function useImmersiveOnboarding() {
     () => stageCaptions[currentStage.value] || "",
   );
 
-  const stageCount = 10;
-
-  const configStageTransition = ref(false);
-
-  let stageTransitionToken = 0;
-  const stageTransitioning = ref(false);
-  const coreRevealPending = ref(false);
-  const leavingStage = ref(-1);
-  const enterPrepStage = ref(-1);
-
-  let pendingNextStageTimer: ReturnType<typeof setTimeout> | null = null;
+  const stageCount = 3;
 
   function goToStage(stage: number) {
     if (stage < 0 || stage >= stageCount) return;
-    if (stageTransitioning.value && stage !== leavingStage.value) return;
 
     maxStage.value = Math.max(maxStage.value, stage);
 
-    if (stage === 2) {
-      if (accountDone.value) {
-        hasAdmin.value = true;
-        adminStep.value = "account";
-      } else {
-        adminStep.value = "environment";
-      }
-    }
-
-    const prev = currentStage.value;
-    if (stage === prev) return;
-
-    const isConfigStep = prev >= 3 && prev <= 6 && stage >= 3 && stage <= 6;
-    configStageTransition.value = isConfigStep;
-
-    stageTransitioning.value = true;
-    const token = ++stageTransitionToken;
-
-    leavingStage.value = prev;
-    coreRevealPending.value = false;
-    if (pendingNextStageTimer && prev === 7) {
-      clearTimeout(pendingNextStageTimer);
-      pendingNextStageTimer = null;
-    }
-
-    setTimeout(
-      () => {
-        if (token !== stageTransitionToken) return;
-
-        leavingStage.value = -1;
-        coreRevealPending.value = true;
-        currentStage.value = stage;
-        enterPrepStage.value = stage;
-
-        if (stage === 9 && window.amitiaDesktop) {
-          window.amitiaDesktop.getAutoLaunch().then((enabled: boolean) => {
-            permissions.autostart = enabled;
-          });
-        }
-
-        if (
-          stage === 7 &&
-          identityState.value !== "filling" &&
-          identityState.value !== "complete" &&
-          identityState.value !== "spotlight"
-        ) {
-          identityState.value = "filling";
-          identityStep.value = 0;
-        }
-
-        if (stage === 8) {
-          identityState.value = "filling";
-          identityStep.value = 0;
-        }
-
-        setTimeout(
-          () => {
-            if (token !== stageTransitionToken) return;
-            enterPrepStage.value = -1;
-            coreRevealPending.value = false;
-
-            setTimeout(
-              () => {
-                if (token !== stageTransitionToken) return;
-                stageTransitioning.value = false;
-                configStageTransition.value = false;
-              },
-              isConfigStep ? 360 : 380,
-            );
-          },
-          prev >= 3 && prev <= 6 && stage >= 3 && stage <= 6 ? 0 : 700,
-        );
-      },
-      isConfigStep ? 420 : 380,
-    );
+    if (stage === currentStage.value) return;
+    currentStage.value = stage;
   }
 
-  function nextStage() {
-    if (currentStage.value < stageCount - 1) {
-      if (currentStage.value === 7 && identityState.value === "complete") {
-        identityState.value = "spotlight";
-        if (pendingNextStageTimer) clearTimeout(pendingNextStageTimer);
-        pendingNextStageTimer = setTimeout(() => {
-          pendingNextStageTimer = null;
-          goToStage(currentStage.value + 1);
-        }, 1800);
+  async function nextStage() {
+    if (currentStage.value >= stageCount - 1) return;
+
+    if (currentStage.value === 0) {
+      try {
+        const config = deployMode.value === "remote"
+          ? {
+              mode: "cloud" as const,
+              serverURL: serverURL.value.trim().replace(/\/+$/, ""),
+            }
+          : { mode: "local" as const };
+        await saveDeploymentConfig(config);
+      } catch (error: any) {
+        const message = error?.message || "部署配置保存失败，请重试";
+        stageError.value = message;
+        ElMessage.error(message);
         return;
       }
-      if (currentStage.value === 3) {
-        modelFieldErrors.value = {};
-        if (!modelBaseUrl.value.trim()) modelFieldErrors.value.baseUrl = true;
-        if (modelType.value !== "local" && !modelApiKey.value.trim())
-          modelFieldErrors.value.apiKey = true;
-        if (!modelName.value.trim()) modelFieldErrors.value.modelName = true;
-        if (Object.keys(modelFieldErrors.value).length > 0) return;
-      }
-      goToStage(currentStage.value + 1);
     }
+
+    goToStage(currentStage.value + 1);
   }
 
   function prevStage() {
-    if (currentStage.value === 2 && adminStep.value !== "environment") {
-      adminStep.value = "environment";
-      return;
-    }
-
-    if (currentStage.value === 7) {
-      if (identityState.value !== "filling") {
-        if (pendingNextStageTimer) {
-          clearTimeout(pendingNextStageTimer);
-          pendingNextStageTimer = null;
-        }
-        startIdentityReverse();
-        return;
-      }
-      if (identityStep.value > 0) {
-        identityStep.value--;
-        return;
-      }
-    }
-
-    if (currentStage.value === 8) {
-      if (memoryComplete.value) {
-        memoryComplete.value = false;
-        memoryStep.value = 3;
-        return;
-      }
-      if (memoryStep.value > 0) {
-        memoryStep.value--;
-        return;
-      }
-      memoryStep.value = 0;
-      identityState.value = "spotlight";
-      goToStage(7);
-      setTimeout(() => {
-        identityState.value = "complete";
-      }, 2600);
-      return;
-    }
-
     if (currentStage.value > 0) {
       goToStage(currentStage.value - 1);
-    }
-  }
-
-  function isLoginFlow(): boolean {
-    return deployMode.value === "remote" || hasAdmin.value;
-  }
-
-  async function checkAdminExists() {
-    try {
-      const apiBase = await getApiBaseURL();
-      const res = await fetch(`${apiBase}/api/public/auth/status`, {
-      method: "GET",
-      headers: {
-        Accept: "application/json",
-      },
-    });
-      if (!res.ok) return;
-      const json = await res.json();
-      hasAdmin.value = !!(json?.data?.hasAdmin || json?.hasAdmin);
-    } catch {}
-  }
-
-  async function handleAdminSubmit(data: {
-    username: string;
-    password: string;
-    password2: string;
-    isLogin: boolean;
-    deployMode: string;
-  }) {
-    stageError.value = "";
-
-    try {
-      accountName.value = data.username;
-      accountPassword.value = data.password;
-
-      if (!data.isLogin) {
-        try {
-          await post("/api/public/auth/setup", {
-            username: data.username,
-            password: data.password,
-          });
-        } catch (setupErr: any) {
-          if (setupErr?.code === 600 || setupErr?.response?.status === 409) {
-            hasAdmin.value = true;
-          } else {
-            throw setupErr;
-          }
-        }
-      }
-
-      const loginRes = await post<any>("/api/public/auth/login", {
-        username: data.username,
-        password: data.password,
-      });
-      if (loginRes?.token || loginRes?.accessToken) {
-        const { setSession } = useSessionStore();
-        const accessToken = loginRes.accessToken || loginRes.token;
-        setSession({
-          accessToken,
-          accessTokenExpiresAt: loginRes.accessTokenExpiresAt || null,
-          sessionId: loginRes.sessionId || (loginRes.session?.sessionId) || null,
-          userId: loginRes.userId?.toString() || null,
-          username: loginRes.username || data.username || null,
-          role: loginRes.role || null,
-        });
-        saveAuthenticatedSession({
-          accessToken,
-          accessTokenExpiresAt: loginRes.accessTokenExpiresAt,
-          refreshToken: loginRes.refreshToken,
-          sessionId: loginRes.sessionId || loginRes.session?.sessionId,
-          userId: loginRes.user?.id || loginRes.userId,
-          username: loginRes.user?.username || loginRes.username || data.username,
-          role: loginRes.user?.role || loginRes.role,
-        });
-      }
-
-      accountDone.value = true;
-      accountName.value = data.username;
-      nextStage();
-    } catch (e: any) {
-      const msg =
-        e?.response?.data?.message ||
-        e?.message ||
-        (hasAdmin.value ? "登录失败，请检查密码" : "创建账号失败，请重试");
-      stageError.value = msg;
-      if (e?.severity === "fatal" || !e?.severity) {
-        ElMessage.error(msg);
-      }
     }
   }
 
@@ -467,7 +239,7 @@ export function useImmersiveOnboarding() {
     try {
       await new Promise((resolve) => setTimeout(resolve, 600));
 
-	const res = await post<any>("/api/public/model/detect-models", {
+	const res = await post<any>("/api/model/detect-models", {
 		baseUrl: modelBaseUrl.value,
 		apiKey: modelApiKey.value,
 		apiType: "openai-compatible",
@@ -501,7 +273,7 @@ export function useImmersiveOnboarding() {
     try {
       await new Promise((resolve) => setTimeout(resolve, 600));
 
-const res = await post<any>("/api/public/model/detect-models", {
+const res = await post<any>("/api/model/detect-models", {
 		baseUrl: visionModelURL.value,
 		apiKey: visionModelKey.value,
 		apiType: "openai-compatible",
@@ -558,7 +330,7 @@ const res = await post<any>("/api/public/model/detect-models", {
     try {
       await new Promise((resolve) => setTimeout(resolve, 600));
 
-const res = await post<any>("/api/public/model/detect-models", {
+const res = await post<any>("/api/model/detect-models", {
 		baseUrl: vectorModelURL.value,
 		apiKey: vectorModelKey.value,
 		apiType: "openai-compatible",
@@ -794,11 +566,6 @@ const res = await post<any>("/api/public/model/detect-models", {
       }
 
       if (memoryItems.value.some((item) => item)) {
-        let userId = "";
-        try {
-          const me = await get<any>("/api/auth/me");
-          userId = me?.id ? String(me.id) : "";
-        } catch {}
         const memoryAttrNames = ["称呼", "交流风格", "初始记忆"];
         for (let i = 0; i < memoryItems.value.length; i++) {
           const item = memoryItems.value[i];
@@ -807,7 +574,6 @@ const res = await post<any>("/api/public/model/detect-models", {
             category: "memory",
             attributeName: memoryAttrNames[i],
             attributeValue: item,
-            userId: userId,
           }).catch(() => {});
         }
       }
@@ -820,8 +586,6 @@ const res = await post<any>("/api/public/model/detect-models", {
             ? serverURL.value.trim().replace(/\/+$/, "")
             : undefined,
         webChatEnabled: true,
-        wechatEnabled: permissions.wechat,
-        qqEnabled: permissions.qq,
         modelConfig: modelApiKey.value
           ? {
               name: "default",
@@ -831,8 +595,6 @@ const res = await post<any>("/api/public/model/detect-models", {
               modelName: modelName.value,
             }
           : undefined,
-        username: accountName.value,
-        password: accountPassword.value || undefined,
       });
 
       localStorage.removeItem("webchat-last-conv");
@@ -864,11 +626,6 @@ const res = await post<any>("/api/public/model/detect-models", {
     deployMode,
     serverURL,
     remoteChecked,
-    adminStep,
-    isAdminLogin,
-    hasAdmin,
-    accountName,
-    accountDone,
     detectingModels,
     modelReady,
     modelDetected,
@@ -880,33 +637,18 @@ const res = await post<any>("/api/public/model/detect-models", {
     modelName,
     modelType,
     visionMode,
-    detectingVision,
-    visionReady,
-    visionDetected,
-    visionStatusText,
     visionModelKey,
     visionModelName,
     visionModelURL,
-    voiceStyle,
     voiceModelMode,
-    detectingVoice,
-    voiceReady,
-    voiceDetected,
-    voiceStatusText,
     voiceModelKey,
     voiceModelURL,
     voiceModelResource,
     voiceModelVoiceType,
-    detectingVector,
-    vectorReady,
-    vectorDetected,
-    vectorStatusText,
     vectorModelMode,
     vectorModelKey,
     vectorModelName,
     vectorModelURL,
-    identityStep,
-    identityState,
     identityName,
     identityRole,
     identityPersonality,
@@ -914,14 +656,10 @@ const res = await post<any>("/api/public/model/detect-models", {
     identityAvatarFile,
     identityAvatarPreviewUrl,
     identityAvatarUploaded,
-    identityQuestions,
-    memoryStep,
-    memoryComplete,
     memoryItems,
     memoryAvatarFile,
     memoryAvatarPreviewUrl,
     memoryAvatarUploaded,
-    memoryQuestions,
     permissions,
     entering,
     characterCreatedInSession,
@@ -930,33 +668,11 @@ const res = await post<any>("/api/public/model/detect-models", {
     onboardingComplete,
     currentCaption,
     stageCount,
-    currentIdentityQuestion,
-    currentMemoryQuestion,
     goToStage,
     nextStage,
     prevStage,
-    checkAdminExists,
-    isLoginFlow,
-    handleAdminSubmit,
     detectModel,
-    detectVision,
-    detectVoice,
-    detectVector,
-    handleIdentityAnswer,
-    handleAvatarFileSelected,
-    handleAvatarSkip,
-    handleAvatarContinue,
-    handleMemoryAnswer,
-    handleMemoryAvatarFileSelected,
-    handleMemoryAvatarSkip,
-    handleMemoryAvatarContinue,
     handleEnterAmitia,
     startEntryTransition,
-    playVoiceSample,
-    stageTransitioning,
-    configStageTransition,
-    coreRevealPending,
-    leavingStage,
-    enterPrepStage,
   };
 }

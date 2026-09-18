@@ -31,7 +31,7 @@ func TestRuntimeContextLoaderRegistryRegistersCompleteRuntimeInputs(t *testing.T
 	}
 
 	appCtx := app.NewAppContext(db, nil)
-	registry := newRuntimeContextLoaderRegistry(appCtx, character.NewRepository(appCtx))
+	registry := newRuntimeContextLoaderRegistry(appCtx, character.NewRepository(appCtx), nil)
 	registry.LoadAll(context.Background(), interaction.InteractionScope{CharacterID: "char-runtime", ConversationID: "conv-runtime", Channel: "web"}, "v-test")
 
 	registered := map[string]bool{}
@@ -80,7 +80,7 @@ func createServicesRuntimeCharacterSchema(t *testing.T, db *gorm.DB) {
 		`CREATE TABLE memories (character_id TEXT, key TEXT, value TEXT, confidence REAL, importance REAL, updated_at TEXT)`,
 		`CREATE TABLE moods (character_id TEXT, mood TEXT, mood_value TEXT, created_at TEXT)`,
 		`CREATE TABLE need_states (character_id TEXT, need_key TEXT, current_value REAL, baseline REAL, updated_at TEXT)`,
-		`CREATE TABLE unresolved_threads (id TEXT PRIMARY KEY, character_id TEXT, user_id TEXT, topic TEXT, reason TEXT, severity REAL, escalation_level INTEGER, created_at TEXT, resolved_at TEXT)`,
+		`CREATE TABLE unresolved_threads (id TEXT PRIMARY KEY, character_id TEXT, space_id TEXT, topic TEXT, reason TEXT, severity REAL, escalation_level INTEGER, created_at TEXT, resolved_at TEXT)`,
 	}
 	for _, statement := range statements {
 		if err := db.Exec(statement).Error; err != nil {

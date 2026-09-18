@@ -19,7 +19,7 @@ func (m *mockRootBridge) Execute(ctx context.Context, req androidnative.NativeBr
 	}
 	return androidnative.NativeBridgeResponse{
 		ProtocolVersion: req.ProtocolVersion,
-		RequestID:       req.RequestID,
+		RequestId:       req.RequestId,
 		Status:          "success",
 	}, nil
 }
@@ -71,7 +71,7 @@ func TestRootHandler_Status_Success(t *testing.T) {
 		executeFunc: func(ctx context.Context, req androidnative.NativeBridgeRequest) (androidnative.NativeBridgeResponse, error) {
 			return androidnative.NativeBridgeResponse{
 				ProtocolVersion: req.ProtocolVersion,
-				RequestID:       req.RequestID,
+				RequestId:       req.RequestId,
 				Status:          "success",
 				Result: map[string]any{
 					"platformSupported":   true,
@@ -127,7 +127,7 @@ func TestRootHandler_Request_UserActionRequired(t *testing.T) {
 		executeFunc: func(ctx context.Context, req androidnative.NativeBridgeRequest) (androidnative.NativeBridgeResponse, error) {
 			return androidnative.NativeBridgeResponse{
 				ProtocolVersion: req.ProtocolVersion,
-				RequestID:       req.RequestID,
+				RequestId:       req.RequestId,
 				Status:          "error",
 				Error: &androidnative.NativeBridgeError{
 					Code:       "USER_ACTION_REQUIRED",
@@ -235,7 +235,7 @@ func TestRootHandler_Execute_Success(t *testing.T) {
 		executeFunc: func(ctx context.Context, req androidnative.NativeBridgeRequest) (androidnative.NativeBridgeResponse, error) {
 			return androidnative.NativeBridgeResponse{
 				ProtocolVersion: req.ProtocolVersion,
-				RequestID:       req.RequestID,
+				RequestId:       req.RequestId,
 				Status:          "success",
 				Result: map[string]any{
 					"exitCode":          0,
@@ -275,7 +275,7 @@ func TestRootHandler_Execute_WithTimeout(t *testing.T) {
 		executeFunc: func(ctx context.Context, req androidnative.NativeBridgeRequest) (androidnative.NativeBridgeResponse, error) {
 			return androidnative.NativeBridgeResponse{
 				ProtocolVersion: req.ProtocolVersion,
-				RequestID:       req.RequestID,
+				RequestId:       req.RequestId,
 				Status:          "success",
 				Result: map[string]any{
 					"exitCode":          0,
@@ -317,7 +317,7 @@ func TestRootHandler_RequestIDMismatch(t *testing.T) {
 		executeFunc: func(ctx context.Context, req androidnative.NativeBridgeRequest) (androidnative.NativeBridgeResponse, error) {
 			return androidnative.NativeBridgeResponse{
 				ProtocolVersion: req.ProtocolVersion,
-				RequestID:       "wrong-id",
+				RequestId:       "wrong-id",
 				Status:          "success",
 			}, nil
 		},
@@ -365,7 +365,7 @@ func TestInternalRootExecutor(t *testing.T) {
 		executeFunc: func(ctx context.Context, req androidnative.NativeBridgeRequest) (androidnative.NativeBridgeResponse, error) {
 			return androidnative.NativeBridgeResponse{
 				ProtocolVersion: req.ProtocolVersion,
-				RequestID:       req.RequestID,
+				RequestId:       req.RequestId,
 				Status:          "success",
 				Result: map[string]any{
 					"exitCode":          0,

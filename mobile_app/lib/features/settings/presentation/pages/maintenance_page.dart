@@ -10,6 +10,7 @@ import '../../../../core/services/providers.dart';
 import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
+import '../../../../core/ui_runtime/mobile_extension_slot.dart';
 
 class MaintenancePage extends ConsumerStatefulWidget {
   const MaintenancePage({super.key});
@@ -161,15 +162,22 @@ class _MaintenancePageState extends ConsumerState<MaintenancePage> {
             );
           }),
         SizedBox(height: AppSpacing.sectionGap),
+        AmitiaSectionHeader(title: '扩展诊断'),
+        SizedBox(height: AppSpacing.sm),
+        MobileExtensionSlot(
+          slotId: 'system.diagnostics.tab',
+          context: {
+            'route': '/settings/maintenance',
+            'status': _status ?? const <String, dynamic>{},
+            'diagnosis': _diagnosis ?? const <String, dynamic>{},
+          },
+        ),
+        SizedBox(height: AppSpacing.sectionGap),
         AmitiaSectionHeader(title: '真实维护操作'),
         SizedBox(height: AppSpacing.sm),
         AmitiaButton(label: '重新运行诊断', icon: Icons.health_and_safety_outlined, isFullWidth: true, onPressed: _busy ? null : _load),
         SizedBox(height: AppSpacing.sm),
         AmitiaButton(label: '重新加载配置', icon: Icons.settings_backup_restore, isSecondary: true, isFullWidth: true, onPressed: _busy ? null : () => _action('重新加载配置', '/api/maintenance/reload-config', data: const {'confirmToken': 'reload-config-confirm'})),
-        SizedBox(height: AppSpacing.sm),
-        AmitiaButton(label: '重启微信 Bridge', icon: Icons.wechat, isSecondary: true, isFullWidth: true, onPressed: _busy ? null : () => _action('微信 Bridge 重启', '/api/maintenance/restart-bridge', data: const {'confirmToken': 'restart-bridge-confirm'})),
-        SizedBox(height: AppSpacing.sm),
-        AmitiaButton(label: '重启 QQ Bridge', icon: Icons.chat_bubble_outline, isSecondary: true, isFullWidth: true, onPressed: _busy ? null : () => _action('QQ Bridge 重启', '/api/maintenance/restart-qq-bridge', data: const {'confirmToken': 'restart-qq-bridge-confirm'})),
         SizedBox(height: AppSpacing.sm),
         AmitiaButton(label: '导出后端诊断报告', icon: Icons.file_download_outlined, isSecondary: true, isFullWidth: true, onPressed: _busy ? null : () => _action('诊断报告生成', '/api/maintenance/export-diagnostic')),
         SizedBox(height: AppSpacing.xl),

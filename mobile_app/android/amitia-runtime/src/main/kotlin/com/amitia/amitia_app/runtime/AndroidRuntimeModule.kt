@@ -1,6 +1,7 @@
 package com.amitia.amitia_app.runtime
 
 import android.content.Context
+import android.net.ConnectivityManager
 import com.amitia.amitia_app.runtime.abi.internal.BuildAndroidAbiProvider
 import com.amitia.amitia_app.runtime.abi.internal.DefaultRuntimeAbiGate
 import com.amitia.amitia_app.runtime.abi.RuntimeAbiGate
@@ -40,6 +41,8 @@ import com.amitia.amitia_app.runtime.recovery.RuntimeCrashRecoveryPolicy
 import com.amitia.amitia_app.runtime.recovery.RuntimeRecoveryScheduler
 import com.amitia.amitia_app.runtime.service.internal.AndroidRuntimeServiceHost
 import java.io.File
+import java.net.Inet4Address
+import java.net.InetAddress
 
 object AndroidRuntimeModule {
     @Volatile private var cachedModule: RuntimeModule? = null
@@ -95,6 +98,7 @@ object AndroidRuntimeModule {
         val prootEnvironmentAssembler = com.amitia.amitia_app.runtime.proot.internal.ProotEnvironmentAssembler(
             layout = layout,
             environmentBuilder = environmentBuilder,
+            dnsServersProvider = { resolveRuntimeDnsServers(appContext) },
         )
         cachedProotEnvironmentAssembler = prootEnvironmentAssembler
 
@@ -225,4 +229,38 @@ object AndroidRuntimeModule {
         cachedRuntimeInstaller = null
         cachedRuntimePackageSource = null
     }
+
+    private fun resolveRuntimeDnsServers(context: Context): List<String> {
+        val manager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+            ?: return fallbackRuntimeDnsServers()
+        val active = manager.activeNetwork
+        val networks = if (active != null) {
+            listOf(active) + manager.allNetworks.filterNot { it == active }
+        } else {
+            manager.allNetworks.toList()
+        }
+
+        val addresses = LinkedHashSet<InetAddress>()
+        for (network in networks) {
+            val properties = manager.getLinkProperties(network) ?: continue
+            addresses.addAll(properties.dnsServers)
+        }
+
+        val usable = addresses
+            .filterNot {
+                it.isAnyLocalAddress ||
+                    it.isLoopbackAddress ||
+                    it.isLinkLocalAddress ||
+                    it.isMulticastAddress
+            }
+            .sortedBy { if (it is Inet4Address) 0 else 1 }
+            .mapNotNull { it.hostAddress?.substringBefore('%')?.trim() }
+            .filter { it.isNotEmpty() }
+            .distinct()
+
+        return if (usable.isEmpty()) fallbackRuntimeDnsServers() else usable
+    }
+
+    private fun fallbackRuntimeDnsServers(): List<String> =
+        listOf("223.5.5.5", "119.29.29.29")
 }

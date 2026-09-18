@@ -29,8 +29,11 @@ Dio createAuthenticatedDio(BackendConnectionConfig config) {
   switch (config.authStrategy) {
     case BackendAuthStrategy.localToken:
       headers[BackendAuthHeader.localToken] = token;
-    case BackendAuthStrategy.bearer:
-      headers[BackendAuthHeader.authorization] = 'Bearer $token';
+    case BackendAuthStrategy.deviceCredential:
+      headers[BackendAuthHeader.authorization] = 'AmitiaDevice $token';
+      headers['X-Amitia-Space-ID'] = config.spaceId;
+      headers['X-Amitia-Device-ID'] = config.deviceId;
+      headers['X-Amitia-Runtime-ID'] = config.runtimeId;
   }
   return Dio(
     BaseOptions(

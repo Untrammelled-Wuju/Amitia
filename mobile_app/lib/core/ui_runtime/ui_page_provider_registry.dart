@@ -1,3 +1,4 @@
+import 'routing/ui_surface_catalog.dart';
 import 'ui_provider.dart';
 
 abstract final class UIPageProviderRegistry {
@@ -47,16 +48,41 @@ abstract final class UIPageProviderRegistry {
   static bool _hasSelectors(UIProviderDefinition provider) {
     final metadata = provider.metadata;
     return ((metadata['routes'] as List?)?.isNotEmpty ?? false) ||
-        ((metadata['routePatterns'] as List?)?.isNotEmpty ?? false);
+        ((metadata['routePatterns'] as List?)?.isNotEmpty ?? false) ||
+        ((metadata['surfaces'] as List?)?.isNotEmpty ?? false) ||
+        ((metadata['surfacePatterns'] as List?)?.isNotEmpty ?? false);
   }
 
   static bool _matchesRoute(UIProviderDefinition provider, String route) {
     final metadata = provider.metadata;
-    final selectors = <String>[
+    final routeSelectors = <String>[
       ...((metadata['routes'] as List?) ?? const <dynamic>[]).whereType<String>(),
       ...((metadata['routePatterns'] as List?) ?? const <dynamic>[]).whereType<String>(),
     ].map((e) => e.trim()).where((e) => e.isNotEmpty);
-    return selectors.any((pattern) => _matchesPattern(route, pattern));
+    final aliases = uiRouteAliases(route);
+    if (routeSelectors.any(
+      (pattern) => aliases.any((candidate) => _matchesPattern(candidate, pattern)),
+    )) {
+      return true;
+    }
+
+    final surfaceSelectors = <String>[
+      ...((metadata['surfaces'] as List?) ?? const <dynamic>[]).whereType<String>(),
+      ...((metadata['surfacePatterns'] as List?) ?? const <dynamic>[]).whereType<String>(),
+    ].map((e) => e.trim()).where((e) => e.isNotEmpty);
+    final surfaceId = canonicalUISurfaceId(route);
+    return surfaceSelectors.any((pattern) => _matchesSurfacePattern(surfaceId, pattern));
+  }
+
+  static bool _matchesSurfacePattern(String surfaceId, String pattern) {
+    final clean = pattern.trim();
+    if (clean.isEmpty) return false;
+    if (clean == '*' || clean == surfaceId) return true;
+    if (clean.endsWith('.*')) {
+      final prefix = clean.substring(0, clean.length - 2);
+      return surfaceId == prefix || surfaceId.startsWith('$prefix.');
+    }
+    return false;
   }
 
   static bool _matchesPattern(String route, String pattern) {

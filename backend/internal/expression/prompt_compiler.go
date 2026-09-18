@@ -2,6 +2,8 @@ package expression
 
 import (
 	"strings"
+
+	"github.com/u-ai/backend/internal/prompt/textlib"
 )
 
 type CompiledPrompt struct {
@@ -28,7 +30,7 @@ func compileWithPolicy(policy ChannelPolicy) CompiledPrompt {
 	case "short_per_line":
 		instructionParts = append(instructionParts,
 			"每句话必须单独一行，用换行符分隔。",
-			"每句话尽量短，像微信连续消息一样。",
+			"每句话尽量短，适合连续消息展示。",
 			"能一句说完就一句，不要写长段落。",
 			"不要把多句话连成一段。",
 			"不要用句号连接多个意思。",
@@ -38,7 +40,7 @@ func compileWithPolicy(policy ChannelPolicy) CompiledPrompt {
 			"回复要自然、有反应、有一点态度，可以适当使用「嗯？、喔、奥奥、ok、好、行、确实、懂了」等语气词。",
 			"用户随口聊，你就自然接话；用户认真问问题，你再认真回答。",
 			"不要客服腔，不要过度正式，不要每次都完整总结，也不要动不动分点讲大道理。",
-			"回复格式要像微信连续消息：",
+			"回复格式适合连续消息：",
 			"用户发一句话时，你可以回复 1 到 4 句短句。",
 			"不要写成一整段长文。",
 			"整体目标是：像一个熟悉用户、说话自然、有判断力的人。该短就短，该认真就认真，不端着，也不表演过头。",
@@ -51,7 +53,7 @@ func compileWithPolicy(policy ChannelPolicy) CompiledPrompt {
 		)
 		styleParts = append(styleParts,
 			"你和用户是自然的对话关系，回复要有温度。",
-			"可以比微信更完整地表达，但仍然保持亲切自然。",
+			"可以更完整地表达，但仍然保持亲切自然。",
 			"遇到复杂问题时可以适度展开说明，但不要啰嗦。",
 			"整体目标是：像一位体贴且有知识的朋友，既能深入交流也能轻松聊天。",
 		)
@@ -64,6 +66,7 @@ func compileWithPolicy(policy ChannelPolicy) CompiledPrompt {
 		styleParts = append(styleParts,
 			"用口语化方式回复，自然流畅像真人说话。",
 			"使用简短的句子，符合语音对话的习惯。",
+			textlib.VoiceReactionRules,
 		)
 	default:
 		instructionParts = append(instructionParts,
@@ -118,6 +121,10 @@ func ApplyPostValidation(raw string, kind ChannelKind) string {
 }
 
 func stripMarkdown(input string) string {
+	const (
+		messageBreak = "[AMITIA_BR]"
+		placeholder  = "\x00AMITIABRPLACEHOLDER\x00"
+	)
 	replacements := []struct{ old, new string }{
 		{"**", ""},
 		{"__", ""},
@@ -126,9 +133,9 @@ func stripMarkdown(input string) string {
 		{"`", ""},
 		{"#", ""},
 	}
-	result := input
+	result := strings.ReplaceAll(input, messageBreak, placeholder)
 	for _, r := range replacements {
 		result = strings.ReplaceAll(result, r.old, r.new)
 	}
-	return result
+	return strings.ReplaceAll(result, placeholder, messageBreak)
 }

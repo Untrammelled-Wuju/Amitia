@@ -15,12 +15,12 @@ function assert(condition, message) {
   }
 }
 
-const commandModel = await read("backend/internal/desktoppet/runtime/protocol/v2/command.go");
-const commandService = await read("backend/internal/desktoppet/runtime/protocol/v2/command_service.go");
-const dispatcher = await read("backend/internal/desktoppet/runtime/protocol/v2/command_dispatcher.go");
-const handler = await read("backend/internal/desktoppet/runtime/protocol/v2/handler.go");
-const envelope = await read("backend/internal/desktoppet/runtime/protocol/v2/envelope.go");
-const runtimeHandler = await read("desktop/src/desktop-pet/runtime/runtime-handler-v2.ts");
+const commandModel = await read("backend/internal/desktoppet/runtime/protocol/v1/command.go");
+const commandService = await read("backend/internal/desktoppet/runtime/protocol/v1/command_service.go");
+const dispatcher = await read("backend/internal/desktoppet/runtime/protocol/v1/command_dispatcher.go");
+const handler = await read("backend/internal/desktoppet/runtime/protocol/v1/handler.go");
+const envelope = await read("backend/internal/desktoppet/runtime/protocol/v1/envelope.go");
+const runtimeHandler = await read("desktop/src/desktop-pet/runtime/runtime-handler-v1.ts");
 const manager = await read("desktop/src/main/pet/manager.ts");
 const mainIndex = await read("desktop/src/main/index.ts");
 const scheduler = await read("desktop/src/main/pet/action-scheduler.ts");
@@ -30,7 +30,6 @@ const renderer = await read("desktop/src/renderer/pet-main.ts");
 const engine = await read("desktop/src/desktop-pet/animation/animation-engine.ts");
 const gateway = await read("desktop/src/desktop-pet/animation/command-gateway.ts");
 const queue = await read("desktop/src/desktop-pet/animation/action-queue.ts");
-const characterWatcher = await read("desktop/src/main/pet/character-watcher.ts");
 const eventBridge = await read("desktop/src/main/pet/event-bridge.ts");
 const dragController = await read("desktop/src/main/pet/drag-controller.ts");
 const worldController = await read("desktop/src/main/pet/world-controller.ts");
@@ -43,7 +42,7 @@ assert(
     commandModel.includes("func (c *RuntimeCommand) HasValidClassification() bool") &&
     commandService.includes("unsupported durable runtime command type") &&
     commandService.includes("unsupported ephemeral runtime command type"),
-  "unknown or mismatched command types must not be classified or persisted as Runtime-v2 work",
+  "unknown or mismatched command types must not be classified or persisted as Runtime-v1 work",
 );
 assert(
   commandService.includes("unbound ephemeral command creation is disabled") &&
@@ -80,9 +79,9 @@ assert(
 );
 assert(
   envelope.includes("CurrentRuntimeVersion = contracts.RuntimeVersion") &&
-    envelope.includes("CapabilitySyncDesiredV2") &&
-    envelope.includes("CapabilityPlayActionV2") &&
-    envelope.includes("CapabilityRendererAckV2") &&
+    envelope.includes("CapabilitySyncDesiredV1") &&
+    envelope.includes("CapabilityPlayActionV1") &&
+    envelope.includes("CapabilityRendererAckV1") &&
     envelope.includes("CapabilityExpiryRFC3339"),
   "runtime version and mandatory capability IDs must have one backend authority",
 );
@@ -117,14 +116,14 @@ assert(
     runtimeHandler.includes('errorCode: "COMMAND_EXPIRY_INVALID"') &&
     runtimeHandler.includes('errorCode: "COMMAND_EXPIRED"') &&
     runtimeCommandAckWindow.includes("validateAuthoritativeExpiry(command.expiresAt)"),
-  "all Runtime-v2 Ephemeral commands must validate authoritative expiresAt before local execution",
+  "all Runtime-v1 Ephemeral commands must validate authoritative expiresAt before local execution",
 );
 assert(
-  runtimeHandler.includes('"runtime.sync_desired_v2"') &&
-    runtimeHandler.includes('"runtime.play_action_v2"') &&
-    runtimeHandler.includes('"runtime.renderer_ack_v2"') &&
+  runtimeHandler.includes('"runtime.sync_desired_v1"') &&
+    runtimeHandler.includes('"runtime.play_action_v1"') &&
+    runtimeHandler.includes('"runtime.renderer_ack_v1"') &&
     runtimeHandler.includes('"runtime.expiry_rfc3339_v1"'),
-  "desktop hello must advertise all mandatory Runtime-v2 capabilities",
+  "desktop hello must advertise all mandatory Runtime-v1 capabilities",
 );
 assert(
   runtimeCommandAckWindow.includes('"runtime_received"') &&
@@ -201,8 +200,6 @@ assert(
     manager.includes("currentRequestRuntimeCommandId") &&
     manager.includes("MISSING_OR_INVALID_EXPIRY") &&
     manager.includes("INSTALLATION_MISMATCH") &&
-    manager.includes("MISSING_CHARACTER_ID") &&
-    manager.includes("CHARACTER_MISMATCH") &&
     manager.includes("MISSING_PET_INSTANCE_ID") &&
     manager.includes("PET_INSTANCE_MISMATCH") &&
     manager.includes("lastAppliedDesiredHash") &&
@@ -223,12 +220,6 @@ assert(
     manager.indexOf("this.playbackCommandIds.clear();", manager.indexOf("onHelloAck")) <
       manager.indexOf('this.scheduler?.forceInterrupt("runtime_stop")', manager.indexOf("onHelloAck")),
   "runtime reconnect must clear old playback identity before stopping old-session work and suppress synchronous old-session reports",
-);
-assert(
-  characterWatcher.includes("hasObservedCharacter") &&
-    characterWatcher.includes("string | null") &&
-    manager.includes("handleCharacterSwitched(characterId: string | null)"),
-  "active-character authority must represent and apply an explicit no-character state",
 );
 assert(
   dragController.includes('this.onEvent("drag-cancel"') &&

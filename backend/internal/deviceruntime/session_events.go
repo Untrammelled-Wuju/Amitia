@@ -54,8 +54,8 @@ func RuntimeSessionIDFromEvent(event SessionDomainEvent) runtimeidentity.Runtime
 }
 
 func SessionEventPartitionKey(event SessionDomainEvent) string {
-	if event.Session.UserID != "" {
-		return event.Session.UserID.String()
+	if event.Session.SpaceID != "" {
+		return event.Session.SpaceID.String()
 	}
 	return "system"
 }

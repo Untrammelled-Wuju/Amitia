@@ -1,3 +1,5 @@
+import 'package:dio/dio.dart';
+
 import '../backend_access/business_backend_unavailable.dart';
 import '../runtime/status/runtime_status_snapshot.dart';
 import 'backend_service_api.dart';
@@ -63,6 +65,58 @@ final class DynamicBackendServiceApiProxy implements BackendServiceApi {
       path,
       queryParameters: queryParameters,
       headers: headers,
+      fromJson: fromJson,
+    );
+  }
+
+  @override
+  Future<Stream<List<int>>> getStream(
+    String path, {
+    Map<String, dynamic>? queryParameters,
+    Map<String, String>? headers,
+    CancelToken? cancelToken,
+  }) {
+    final api = _requireCurrentApi();
+    return api.getStream(
+      path,
+      queryParameters: queryParameters,
+      headers: headers,
+      cancelToken: cancelToken,
+    );
+  }
+
+  @override
+  Future<Stream<List<int>>> postStream(
+    String path, {
+    Object? data,
+    Map<String, dynamic>? queryParameters,
+    Map<String, String>? headers,
+    CancelToken? cancelToken,
+  }) {
+    final api = _requireCurrentApi();
+    return api.postStream(
+      path,
+      data: data,
+      queryParameters: queryParameters,
+      headers: headers,
+      cancelToken: cancelToken,
+    );
+  }
+
+  @override
+  Future<T?> postMultipart<T>(
+    String path, {
+    Map<String, String> fields = const {},
+    Map<String, List<String>> files = const {},
+    Map<String, dynamic>? queryParameters,
+    T Function(dynamic)? fromJson,
+  }) {
+    final api = _requireCurrentApi();
+    return api.postMultipart<T>(
+      path,
+      fields: fields,
+      files: files,
+      queryParameters: queryParameters,
       fromJson: fromJson,
     );
   }

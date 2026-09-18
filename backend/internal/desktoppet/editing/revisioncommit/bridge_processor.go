@@ -31,8 +31,7 @@ type ProcessingRevisionReader interface {
 }
 
 type InboxEntryPayload struct {
-	UserID               string `json:"userId"`
-	CharacterID          string `json:"characterId"`
+	SpaceID              string `json:"spaceId"`
 	ProcessingTaskID     string `json:"processingTaskId"`
 	ProcessingActionID   string `json:"processingActionId"`
 	ProcessingAttemptID  string `json:"processingAttemptId"`
@@ -220,20 +219,15 @@ func (p *BridgeProcessor) buildInboxPayload(_ context.Context, evt processingeve
 	if err != nil {
 		return InboxEntryPayload{}, fmt.Errorf("序列化Anchor失败: %w", err)
 	}
-	userID := evt.UserID
-	if userID == "" {
-		userID = task.UserID
+	spaceID := evt.SpaceID
+	if spaceID == "" {
+		spaceID = task.SpaceID
 	}
-	characterID := evt.CharacterID
-	if characterID == "" {
-		characterID = task.CharacterID
-	}
-	if userID == "" || characterID == "" {
-		return InboxEntryPayload{}, fmt.Errorf("processing task identity incomplete: userId=%q characterId=%q", userID, characterID)
+	if spaceID == "" {
+		return InboxEntryPayload{}, fmt.Errorf("processing task identity incomplete: spaceId=%q", spaceID)
 	}
 	return InboxEntryPayload{
-		UserID:               userID,
-		CharacterID:          characterID,
+		SpaceID:              spaceID,
 		ProcessingTaskID:     evt.ProcessingTaskID,
 		ProcessingActionID:   evt.ProcessingActionID,
 		ProcessingAttemptID:  evt.ProcessingAttemptID,
@@ -248,7 +242,7 @@ func (p *BridgeProcessor) buildInboxPayload(_ context.Context, evt processingeve
 		FrameDurationMS:      actionJSON.FrameDurationMs,
 		LoopType:             actionJSON.LoopType,
 		AnchorJSON:           string(anchorBytes),
-		PromotionPolicy:      baseline.PromotionPolicyFirstRevisionOnly,
+		PromotionPolicy:      baseline.PromotionPolicyReplaceSystemBaselineIfUnchanged,
 		CreatedBy:            "system:processing-bridge",
 	}, nil
 }
@@ -332,8 +326,7 @@ func (p *BridgeProcessor) processPayload(ctx context.Context, entry *editing.Act
 			TargetActionKey:      payload.ActionKey,
 			Status:               baseline.BridgeStatusReceived,
 			EventID:              entry.EventID,
-			UserID:               payload.UserID,
-			CharacterID:          payload.CharacterID,
+			SpaceID:              payload.SpaceID,
 			ActionKey:            payload.ActionKey,
 			CreatedAt:            now,
 			UpdatedAt:            now,
@@ -346,8 +339,7 @@ func (p *BridgeProcessor) processPayload(ctx context.Context, entry *editing.Act
 	_ = p.journalRepo.UpdateStatus(journalID, baseline.BridgeStatusCommitting, "")
 
 	commitReq := baseline.CommitterRequest{
-		UserID:               payload.UserID,
-		CharacterID:          payload.CharacterID,
+		SpaceID:              payload.SpaceID,
 		ProcessingTaskID:     payload.ProcessingTaskID,
 		ProcessingActionID:   payload.ProcessingActionID,
 		ProcessingAttemptID:  payload.ProcessingAttemptID,

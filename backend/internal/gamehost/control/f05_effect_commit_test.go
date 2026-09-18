@@ -148,6 +148,7 @@ func TestF05_OutputIdRequired_RejectsEmpty(t *testing.T) {
 		t.Fatalf("register effect sink: %v", err)
 	}
 	handler := NewControlHandler(gate, registry)
+	handler.SetNegotiatedFeatureChecker(alwaysNegotiatedFeatureChecker{})
 
 	payload, _ := json.Marshal(ControlOutputInput{SinkID: "sink-1", Epoch: 10, Payload: json.RawMessage(`{}`)})
 	response, err := handler.handleControlOutput(context.Background(), rpc.RPCRequest{
@@ -175,6 +176,7 @@ func TestF05_OutputIdRequired_AcceptsValid(t *testing.T) {
 		t.Fatalf("register effect sink: %v", err)
 	}
 	handler := NewControlHandler(gate, registry)
+	handler.SetNegotiatedFeatureChecker(alwaysNegotiatedFeatureChecker{})
 
 	payload, _ := json.Marshal(ControlOutputInput{OutputID: "output-123", SinkID: "sink-1", Epoch: 10, Payload: json.RawMessage(`{}`)})
 	response, err := handler.handleControlOutput(context.Background(), rpc.RPCRequest{

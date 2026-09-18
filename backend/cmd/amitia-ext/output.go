@@ -16,7 +16,7 @@ const (
 	ExitInternal = 7
 )
 
-const CLIVersion = "0.1.0"
+const CLIVersion = "1.0.0"
 
 type Result struct {
 	OK       bool     `json:"ok"`

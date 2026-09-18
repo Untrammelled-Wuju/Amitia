@@ -74,7 +74,7 @@ func (b *mcpInstallPortBridge) InstallMCP(ctx context.Context, serverName string
 	launcherKind := resolveLauncherKind(transport, command)
 	binding := mcp.MCPBinding{
 		ID:        serverName,
-		Owner:     mcp.ExtensionOwnerRef{Type: "user"},
+		Owner:     mcp.ExtensionOwnerRef{Type: "space"},
 		Transport: mcp.MCPTransportSpec{Kind: transport},
 	}
 	if transport == "streamable_http" || transport == "sse" || transport == "remote" {
@@ -360,7 +360,7 @@ func (b *enableExistingPortBridge) EnableMCP(ctx context.Context, serverName str
 		if _, err := b.mcpLifecycle.GetInstallation(serverName); err != nil {
 			binding := mcp.MCPBinding{
 				ID:        serverName,
-				Owner:     mcp.ExtensionOwnerRef{Type: "user"},
+				Owner:     mcp.ExtensionOwnerRef{Type: "space"},
 				Transport: mcp.MCPTransportSpec{Kind: "stdio"},
 			}
 			if _, regErr := b.mcpLifecycle.RegisterBinding(binding); regErr != nil {

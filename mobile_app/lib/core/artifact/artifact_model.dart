@@ -28,7 +28,7 @@ enum ArtifactStatus {
 
 class ArtifactMetadata {
   final String id;
-  final String ownerUserId;
+  final String ownerSpaceId;
   final String workspaceId;
   final ArtifactKind kind;
   final String blobDigest;
@@ -47,7 +47,7 @@ class ArtifactMetadata {
 
   const ArtifactMetadata({
     required this.id,
-    required this.ownerUserId,
+    required this.ownerSpaceId,
     required this.workspaceId,
     required this.kind,
     required this.blobDigest,
@@ -67,18 +67,18 @@ class ArtifactMetadata {
 
   factory ArtifactMetadata.fromJson(Map<String, dynamic> json) {
     return ArtifactMetadata(
-      id: json['id'] as String? ?? '',
-      ownerUserId: json['owner_user_id'] as String? ?? '',
-      workspaceId: json['workspace_id'] as String? ?? '',
+      id: (json['artifactId'] ?? json['artifact_id'] ?? json['id'])?.toString() ?? '',
+      ownerSpaceId: (json['ownerSpaceId'] ?? json['owner_space_id'])?.toString() ?? '',
+      workspaceId: (json['workspaceId'] ?? json['workspace_id'])?.toString() ?? '',
       kind: ArtifactKind.values.firstWhere(
         (k) => k.value == json['kind'],
         orElse: () => ArtifactKind.file,
       ),
-      blobDigest: json['blob_digest'] as String? ?? '',
-      sizeBytes: (json['size_bytes'] as num?)?.toInt() ?? 0,
-      mimeType: json['mime_type'] as String? ?? '',
+      blobDigest: (json['blobDigest'] ?? json['blob_digest'])?.toString() ?? '',
+      sizeBytes: ((json['sizeBytes'] ?? json['size_bytes']) as num?)?.toInt() ?? 0,
+      mimeType: (json['mimeType'] ?? json['mime_type'])?.toString() ?? '',
       filename: json['filename'] as String? ?? '',
-      fileExtension: json['file_extension'] as String? ?? '',
+      fileExtension: (json['fileExtension'] ?? json['file_extension'])?.toString() ?? '',
       status: ArtifactStatus.values.firstWhere(
         (s) => s.value == json['status'],
         orElse: () => ArtifactStatus.uploading,
@@ -86,10 +86,10 @@ class ArtifactMetadata {
       source: json['source'] as String? ?? '',
       width: (json['width'] as num?)?.toInt() ?? 0,
       height: (json['height'] as num?)?.toInt() ?? 0,
-      durationMs: (json['duration_ms'] as num?)?.toInt() ?? 0,
+      durationMs: ((json['durationMs'] ?? json['duration_ms']) as num?)?.toInt() ?? 0,
       revision: (json['revision'] as num?)?.toInt() ?? 1,
-      createdAt: DateTime.tryParse(json['created_at'] as String? ?? '') ?? DateTime.now(),
-      updatedAt: DateTime.tryParse(json['updated_at'] as String? ?? '') ?? DateTime.now(),
+      createdAt: DateTime.tryParse((json['createdAt'] ?? json['created_at'])?.toString() ?? '') ?? DateTime.now(),
+      updatedAt: DateTime.tryParse((json['updatedAt'] ?? json['updated_at'])?.toString() ?? '') ?? DateTime.now(),
     );
   }
 
@@ -97,7 +97,7 @@ class ArtifactMetadata {
 
   Map<String, dynamic> toJson() => {
         'id': id,
-        'owner_user_id': ownerUserId,
+        'owner_space_id': ownerSpaceId,
         'workspace_id': workspaceId,
         'kind': kind.value,
         'blob_digest': blobDigest,

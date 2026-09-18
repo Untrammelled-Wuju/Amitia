@@ -6,7 +6,6 @@ import (
 )
 
 type CatalogFilter struct {
-	Scope   AgentSkillScope
 	Enabled *bool
 	Query   string
 }
@@ -51,9 +50,6 @@ func (c *AgentSkillCatalog) List(filter CatalogFilter) []AgentSkillDefinition {
 	defer c.mu.RUnlock()
 	result := make([]AgentSkillDefinition, 0, len(c.items))
 	for _, item := range c.items {
-		if filter.Scope != "" && item.Scope != filter.Scope {
-			continue
-		}
 		if filter.Enabled != nil && item.Enabled != *filter.Enabled {
 			continue
 		}

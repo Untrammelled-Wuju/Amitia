@@ -37,9 +37,9 @@ func (r *RelationshipTimeRepository) WithTransaction(ctx context.Context, fn fun
 	})
 }
 
-func (r *RelationshipTimeRepository) GetGlobalPresence(ctx context.Context, userID string) (*GlobalPresenceState, error) {
+func (r *RelationshipTimeRepository) GetGlobalPresence(ctx context.Context, spaceID string) (*GlobalPresenceState, error) {
 	var state GlobalPresenceState
-	err := r.db.WithContext(ctx).Where("user_id = ?", userID).First(&state).Error
+	err := r.db.WithContext(ctx).Where("space_id = ?", spaceID).First(&state).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil
 	}
@@ -50,9 +50,9 @@ func (r *RelationshipTimeRepository) SaveGlobalPresence(ctx context.Context, sta
 	return r.db.WithContext(ctx).Clauses(clause.OnConflict{UpdateAll: true}).Create(state).Error
 }
 
-func (r *RelationshipTimeRepository) GetRelationshipPresence(ctx context.Context, userID, characterID string) (*RelationshipPresenceState, error) {
+func (r *RelationshipTimeRepository) GetRelationshipPresence(ctx context.Context, spaceID, characterID string) (*RelationshipPresenceState, error) {
 	var state RelationshipPresenceState
-	err := r.db.WithContext(ctx).Where("user_id = ? AND character_id = ?", userID, characterID).First(&state).Error
+	err := r.db.WithContext(ctx).Where("space_id = ? AND character_id = ?", spaceID, characterID).First(&state).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil
 	}
@@ -74,13 +74,13 @@ func (r *RelationshipTimeRepository) SaveSettings(ctx context.Context, settings 
 
 func (r *RelationshipTimeRepository) SaveRelationshipPresence(ctx context.Context, state *RelationshipPresenceState) error {
 	return r.db.WithContext(ctx).Clauses(clause.OnConflict{
-		Columns:   []clause.Column{{Name: "user_id"}, {Name: "character_id"}},
+		Columns:   []clause.Column{{Name: "space_id"}, {Name: "character_id"}},
 		UpdateAll: true,
 	}).Create(state).Error
 }
 
 func (r *RelationshipTimeRepository) SaveObservedPresence(ctx context.Context, input ObservePresenceInput) error {
-	if strings.TrimSpace(input.UserID) == "" || strings.TrimSpace(input.CharacterID) == "" {
+	if strings.TrimSpace(input.SpaceID) == "" || strings.TrimSpace(input.CharacterID) == "" {
 		return errors.New("user id and character id are required")
 	}
 	now := input.ObservedAt
@@ -89,7 +89,7 @@ func (r *RelationshipTimeRepository) SaveObservedPresence(ctx context.Context, i
 	}
 	nowText := FormatRelationshipTime(now)
 	global := GlobalPresenceState{
-		UserID:                        input.UserID,
+		SpaceID:                       input.SpaceID,
 		FirstUserActivityAtUTC:        nowText,
 		LastObservedUserActivityAtUTC: nowText,
 		LastChannel:                   input.Channel,
@@ -99,7 +99,7 @@ func (r *RelationshipTimeRepository) SaveObservedPresence(ctx context.Context, i
 		UpdatedAtUTC:                  nowText,
 	}
 	if err := r.db.WithContext(ctx).Clauses(clause.OnConflict{
-		Columns: []clause.Column{{Name: "user_id"}},
+		Columns: []clause.Column{{Name: "space_id"}},
 		DoUpdates: clause.Assignments(map[string]interface{}{
 			"last_observed_user_activity_at_utc": gorm.Expr("CASE WHEN last_observed_user_activity_at_utc = '' OR julianday(last_observed_user_activity_at_utc) < julianday(?) THEN ? ELSE last_observed_user_activity_at_utc END", nowText, nowText),
 			"last_channel":                       input.Channel,
@@ -111,8 +111,8 @@ func (r *RelationshipTimeRepository) SaveObservedPresence(ctx context.Context, i
 		return err
 	}
 	relationship := RelationshipPresenceState{
-		ID:                            relationshipPresenceID(input.UserID, input.CharacterID),
-		UserID:                        input.UserID,
+		ID:                            relationshipPresenceID(input.SpaceID, input.CharacterID),
+		SpaceID:                       input.SpaceID,
 		CharacterID:                   input.CharacterID,
 		LastObservedUserActivityAtUTC: nowText,
 		ExpectedGapSeconds:            DefaultExpectedGap.Seconds(),
@@ -122,7 +122,7 @@ func (r *RelationshipTimeRepository) SaveObservedPresence(ctx context.Context, i
 		UpdatedAtUTC:                  nowText,
 	}
 	return r.db.WithContext(ctx).Clauses(clause.OnConflict{
-		Columns: []clause.Column{{Name: "user_id"}, {Name: "character_id"}},
+		Columns: []clause.Column{{Name: "space_id"}, {Name: "character_id"}},
 		DoUpdates: clause.Assignments(map[string]interface{}{
 			"last_observed_user_activity_at_utc": gorm.Expr("CASE WHEN last_observed_user_activity_at_utc = '' OR julianday(last_observed_user_activity_at_utc) < julianday(?) THEN ? ELSE last_observed_user_activity_at_utc END", nowText, nowText),
 			"state_version":                      gorm.Expr("state_version + 1"),
@@ -131,9 +131,9 @@ func (r *RelationshipTimeRepository) SaveObservedPresence(ctx context.Context, i
 	}).Create(&relationship).Error
 }
 
-func (r *RelationshipTimeRepository) GetReceipt(ctx context.Context, userID, requestID string) (*InteractionReceipt, error) {
+func (r *RelationshipTimeRepository) GetReceipt(ctx context.Context, spaceID, requestID string) (*InteractionReceipt, error) {
 	var receipt InteractionReceipt
-	err := r.db.WithContext(ctx).Where("user_id = ? AND request_id = ?", userID, requestID).First(&receipt).Error
+	err := r.db.WithContext(ctx).Where("space_id = ? AND request_id = ?", spaceID, requestID).First(&receipt).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil
 	}
@@ -234,28 +234,28 @@ func (r *RelationshipTimeRepository) AddCadenceSample(ctx context.Context, sampl
 	if result.Error != nil || result.RowsAffected == 0 {
 		return result.RowsAffected > 0, result.Error
 	}
-	if err := r.trimCadenceSamples(ctx, sample.UserID, sample.CharacterID, sample.SampleKind); err != nil {
+	if err := r.trimCadenceSamples(ctx, sample.SpaceID, sample.CharacterID, sample.SampleKind); err != nil {
 		return true, err
 	}
 	return true, nil
 }
 
-func (r *RelationshipTimeRepository) trimCadenceSamples(ctx context.Context, userID, characterID, sampleKind string) error {
+func (r *RelationshipTimeRepository) trimCadenceSamples(ctx context.Context, spaceID, characterID, sampleKind string) error {
 	query := `DELETE FROM temporal_cadence_samples
 WHERE id IN (
     SELECT id FROM temporal_cadence_samples
-    WHERE user_id = ? AND character_id = ? AND sample_kind = ? AND included = 1
+    WHERE space_id = ? AND character_id = ? AND sample_kind = ? AND included = 1
     ORDER BY julianday(current_interaction_at_utc) DESC, julianday(created_at_utc) DESC
     LIMIT -1 OFFSET ?
 )`
-	return r.db.WithContext(ctx).Exec(query, userID, characterID, sampleKind, MaximumCadenceSamples).Error
+	return r.db.WithContext(ctx).Exec(query, spaceID, characterID, sampleKind, MaximumCadenceSamples).Error
 }
 
-func (r *RelationshipTimeRepository) ListCadenceSamples(ctx context.Context, userID, characterID, sampleKind string, limit int) ([]CadenceSample, error) {
+func (r *RelationshipTimeRepository) ListCadenceSamples(ctx context.Context, spaceID, characterID, sampleKind string, limit int) ([]CadenceSample, error) {
 	if limit <= 0 || limit > MaximumCadenceSamples {
 		limit = MaximumCadenceSamples
 	}
-	query := r.db.WithContext(ctx).Where("user_id = ? AND character_id = ? AND included = 1", userID, characterID)
+	query := r.db.WithContext(ctx).Where("space_id = ? AND character_id = ? AND included = 1", spaceID, characterID)
 	if sampleKind != "" {
 		query = query.Where("sample_kind = ?", sampleKind)
 	}
@@ -294,7 +294,7 @@ func (r *RelationshipTimeRepository) FinalizeInteractionTx(ctx context.Context, 
 	committedText := FormatRelationshipTime(committedAt)
 
 	if input.AssistantInitiated {
-		if err := repository.updateAssistantContact(ctx, input.UserID, input.CharacterID, committedText); err != nil {
+		if err := repository.updateAssistantContact(ctx, input.SpaceID, input.CharacterID, committedText); err != nil {
 			return err
 		}
 		receipt.Status = InteractionReceiptCommitted
@@ -302,12 +302,12 @@ func (r *RelationshipTimeRepository) FinalizeInteractionTx(ctx context.Context, 
 		return repository.SaveReceipt(ctx, receipt)
 	}
 
-	global, err := repository.GetGlobalPresence(ctx, input.UserID)
+	global, err := repository.GetGlobalPresence(ctx, input.SpaceID)
 	if err != nil {
 		return err
 	}
 	if global == nil {
-		global = &GlobalPresenceState{UserID: input.UserID, CreatedAtUTC: committedText}
+		global = &GlobalPresenceState{SpaceID: input.SpaceID, CreatedAtUTC: committedText}
 	}
 	globalSessionBreak := isSessionBreak(global.LastCommittedUserInteractionAtUTC, committedAt)
 	if global.FirstUserActivityAtUTC == "" {
@@ -324,14 +324,14 @@ func (r *RelationshipTimeRepository) FinalizeInteractionTx(ctx context.Context, 
 	if err := repository.SaveGlobalPresence(ctx, global); err != nil {
 		return err
 	}
-	relationship, err := repository.GetRelationshipPresence(ctx, input.UserID, input.CharacterID)
+	relationship, err := repository.GetRelationshipPresence(ctx, input.SpaceID, input.CharacterID)
 	if err != nil {
 		return err
 	}
 	if relationship == nil {
 		relationship = &RelationshipPresenceState{
-			ID:                 relationshipPresenceID(input.UserID, input.CharacterID),
-			UserID:             input.UserID,
+			ID:                 relationshipPresenceID(input.SpaceID, input.CharacterID),
+			SpaceID:            input.SpaceID,
 			CharacterID:        input.CharacterID,
 			ExpectedGapSeconds: DefaultExpectedGap.Seconds(),
 			ContinuityScore:    1,
@@ -431,7 +431,7 @@ func (r *RelationshipTimeRepository) finalizeReunion(ctx context.Context, relati
 		ID:               uuid.NewString(),
 		EffectKey:        "relationship-time:" + episode.ID + ":finalized:v1",
 		EffectType:       effectType,
-		UserID:           input.UserID,
+		SpaceID:          input.SpaceID,
 		CharacterID:      input.CharacterID,
 		ReunionEpisodeID: episode.ID,
 		InteractionID:    input.InteractionID,
@@ -449,11 +449,11 @@ func (r *RelationshipTimeRepository) finalizeReunion(ctx context.Context, relati
 	return nil
 }
 
-func (r *RelationshipTimeRepository) ListReunionEpisodes(ctx context.Context, userID, characterID string, limit int) ([]ReunionEpisode, error) {
+func (r *RelationshipTimeRepository) ListReunionEpisodes(ctx context.Context, spaceID, characterID string, limit int) ([]ReunionEpisode, error) {
 	if limit <= 0 || limit > 200 {
 		limit = 50
 	}
-	query := r.db.WithContext(ctx).Where("user_id = ?", userID)
+	query := r.db.WithContext(ctx).Where("space_id = ?", spaceID)
 	if characterID != "" {
 		query = query.Where("character_id = ?", characterID)
 	}
@@ -462,11 +462,11 @@ func (r *RelationshipTimeRepository) ListReunionEpisodes(ctx context.Context, us
 	return episodes, err
 }
 
-func (r *RelationshipTimeRepository) ListEffectLedger(ctx context.Context, userID, characterID string, limit int) ([]TemporalEffectLedgerEntry, error) {
+func (r *RelationshipTimeRepository) ListEffectLedger(ctx context.Context, spaceID, characterID string, limit int) ([]TemporalEffectLedgerEntry, error) {
 	if limit <= 0 || limit > 500 {
 		limit = 100
 	}
-	query := r.db.WithContext(ctx).Where("user_id = ?", userID)
+	query := r.db.WithContext(ctx).Where("space_id = ?", spaceID)
 	if characterID != "" {
 		query = query.Where("character_id = ?", characterID)
 	}
@@ -475,8 +475,8 @@ func (r *RelationshipTimeRepository) ListEffectLedger(ctx context.Context, userI
 	return entries, err
 }
 
-func relationshipPresenceID(userID, characterID string) string {
-	return uuid.NewSHA1(uuid.NameSpaceOID, []byte(userID+"\x00"+characterID)).String()
+func relationshipPresenceID(spaceID, characterID string) string {
+	return uuid.NewSHA1(uuid.NameSpaceOID, []byte(spaceID+"\x00"+characterID)).String()
 }
 
 func isSessionBreak(previous string, current time.Time) bool {
@@ -484,15 +484,15 @@ func isSessionBreak(previous string, current time.Time) bool {
 	return previousTime.IsZero() || current.Sub(previousTime) >= SessionBreakThreshold
 }
 
-func (r *RelationshipTimeRepository) updateAssistantContact(ctx context.Context, userID, characterID, committedText string) error {
+func (r *RelationshipTimeRepository) updateAssistantContact(ctx context.Context, spaceID, characterID, committedText string) error {
 	return r.db.WithContext(ctx).Model(&RelationshipPresenceState{}).
-		Where("user_id = ? AND character_id = ?", userID, characterID).
+		Where("space_id = ? AND character_id = ?", spaceID, characterID).
 		Update("last_assistant_contact_at_utc", committedText).Error
 }
 
-func (r *RelationshipTimeRepository) RecordAssistantContact(ctx context.Context, userID, characterID string, at time.Time) error {
+func (r *RelationshipTimeRepository) RecordAssistantContact(ctx context.Context, spaceID, characterID string, at time.Time) error {
 	nowText := FormatRelationshipTime(at)
-	existing, err := r.GetRelationshipPresence(ctx, userID, characterID)
+	existing, err := r.GetRelationshipPresence(ctx, spaceID, characterID)
 	if err != nil {
 		return err
 	}
@@ -502,7 +502,7 @@ func (r *RelationshipTimeRepository) RecordAssistantContact(ctx context.Context,
 			return nil
 		}
 		return r.db.WithContext(ctx).Model(&RelationshipPresenceState{}).
-			Where("user_id = ? AND character_id = ?", userID, characterID).
+			Where("space_id = ? AND character_id = ?", spaceID, characterID).
 			Updates(map[string]interface{}{
 				"last_assistant_contact_at_utc": nowText,
 				"updated_at_utc":                nowText,
@@ -510,8 +510,8 @@ func (r *RelationshipTimeRepository) RecordAssistantContact(ctx context.Context,
 			}).Error
 	}
 	state := RelationshipPresenceState{
-		ID:                        relationshipPresenceID(userID, characterID),
-		UserID:                    userID,
+		ID:                        relationshipPresenceID(spaceID, characterID),
+		SpaceID:                   spaceID,
 		CharacterID:               characterID,
 		LastAssistantContactAtUTC: nowText,
 		ExpectedGapSeconds:        DefaultExpectedGap.Seconds(),

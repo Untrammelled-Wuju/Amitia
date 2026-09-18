@@ -34,6 +34,17 @@ class CompanionService {
     return resp;
   }
 
+  Future<Map<String, dynamic>?> psycheSnapshot({required String characterId}) async {
+    final id = characterId.trim();
+    if (id.isEmpty) {
+      throw ArgumentError.value(characterId, 'characterId', 'characterId 不能为空');
+    }
+    return _api.get<Map<String, dynamic>>(
+      '/api/psyche/snapshot',
+      queryParameters: {'characterId': id},
+    );
+  }
+
   Future<Map<String, dynamic>?> schedule({String? characterId}) async {
     final resp = await _api.get<Map<String, dynamic>>(
       '/api/companion/schedule',
@@ -42,13 +53,21 @@ class CompanionService {
     return resp;
   }
 
-  Future<List<Map<String, dynamic>>> todaySchedule({String? characterId}) async {
-    final resp = await _api.get<List<dynamic>>(
+  Future<Map<String, dynamic>?> todaySchedule({String? characterId}) async {
+    return _api.get<Map<String, dynamic>>(
       '/api/companion/schedule/today',
       queryParameters: {if (characterId != null && characterId.isNotEmpty) 'characterId': characterId},
     );
-    if (resp == null) return [];
-    return resp.map((e) => e as Map<String, dynamic>).toList();
+  }
+
+  Future<List<Map<String, dynamic>>> todayTimeline({String? characterId}) async {
+    final resp = await _api.get<Map<String, dynamic>>(
+      '/api/companion/timeline/today',
+      queryParameters: {if (characterId != null && characterId.isNotEmpty) 'characterId': characterId},
+    );
+    final events = resp?['events'];
+    if (events is! List) return const [];
+    return events.whereType<Map>().map((event) => Map<String, dynamic>.from(event)).toList(growable: false);
   }
 
   Future<bool> regenerateSchedule({String? characterId}) async {
@@ -81,6 +100,13 @@ class CompanionService {
   Future<bool> deleteFixedEvent(String id, {String? characterId}) async {
     await _api.delete('/api/companion/fixed-events/$id', queryParameters: {if (characterId != null && characterId.isNotEmpty) 'characterId': characterId});
     return true;
+  }
+
+  Future<Map<String, dynamic>?> toggleFixedEventEnabled(String id, {String? characterId}) {
+    return _api.patch<Map<String, dynamic>>(
+      '/api/companion/fixed-events/$id/enabled',
+      queryParameters: {if (characterId != null && characterId.isNotEmpty) 'characterId': characterId},
+    );
   }
 
   Future<List<Map<String, dynamic>>> specialEvents({String? characterId}) async {
@@ -119,6 +145,13 @@ class CompanionService {
     return true;
   }
 
+  Future<Map<String, dynamic>?> resetLifestyleTendency({String? characterId}) {
+    return _api.post<Map<String, dynamic>>(
+      '/api/companion/lifestyle-tendency/reset',
+      queryParameters: {if (characterId != null && characterId.isNotEmpty) 'characterId': characterId},
+    );
+  }
+
   Future<Map<String, dynamic>?> workProfile({String? characterId}) {
     return _api.get<Map<String, dynamic>>(
       '/api/companion/work-profile',
@@ -146,14 +179,14 @@ class CompanionService {
 
   Future<Map<String, dynamic>?> activeMessageSetting({String? characterId}) async {
     final resp = await _api.get<Map<String, dynamic>>(
-      '/api/companion/active-message/setting',
+      '/api/proactive/settings',
       queryParameters: {if (characterId != null && characterId.isNotEmpty) 'characterId': characterId},
     );
     return resp;
   }
 
   Future<bool> updateActiveMessageSetting(Map<String, dynamic> data, {String? characterId}) async {
-    await _api.put('/api/companion/active-message/setting', queryParameters: {if (characterId != null && characterId.isNotEmpty) 'characterId': characterId}, data: data);
+    await _api.put('/api/proactive/settings', queryParameters: {if (characterId != null && characterId.isNotEmpty) 'characterId': characterId}, data: data);
     return true;
   }
 
@@ -281,6 +314,20 @@ class CompanionService {
   Future<Map<String, dynamic>?> processDelayedReplies({String? characterId}) {
     return _api.post<Map<String, dynamic>>(
       '/api/companion/delayed-replies/process',
+      queryParameters: {if (characterId != null && characterId.isNotEmpty) 'characterId': characterId},
+    );
+  }
+
+  Future<Map<String, dynamic>?> processActiveMessagesDebug({String? characterId}) {
+    return _api.post<Map<String, dynamic>>(
+      '/api/companion/debug/process-active-messages',
+      queryParameters: {if (characterId != null && characterId.isNotEmpty) 'characterId': characterId},
+    );
+  }
+
+  Future<Map<String, dynamic>?> triggerDailyRegenerationDebug({String? characterId}) {
+    return _api.post<Map<String, dynamic>>(
+      '/api/companion/debug/trigger-daily-regeneration',
       queryParameters: {if (characterId != null && characterId.isNotEmpty) 'characterId': characterId},
     );
   }

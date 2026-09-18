@@ -1,5 +1,7 @@
 import 'dart:math';
 
+import 'package:dio/dio.dart';
+
 import 'backend_service_api.dart';
 
 const List<String> _deviceLocalApiPrefixes = <String>[
@@ -7,6 +9,11 @@ const List<String> _deviceLocalApiPrefixes = <String>[
   '/api/desktop-pet',
   '/api/local/workflows',
   '/api/local/workflow-runs',
+  '/api/local/workspaces',
+  '/api/workspaces',
+  '/api/storage',
+  '/api/native-bridge/backend-action',
+  '/internal/device-mesh',
 ];
 
 bool isDeviceLocalApiPath(String path) {
@@ -66,6 +73,58 @@ final class RoutedBackendServiceApiProxy implements BackendServiceApi {
       path,
       queryParameters: queryParameters,
       headers: routedHeaders,
+      fromJson: fromJson,
+    );
+  }
+
+  @override
+  Future<Stream<List<int>>> getStream(
+    String path, {
+    Map<String, dynamic>? queryParameters,
+    Map<String, String>? headers,
+    CancelToken? cancelToken,
+  }) {
+    final routedHeaders = isDeviceLocalApiPath(path)
+        ? <String, String>{...?headers, 'X-Amitia-Client-Type': 'mobile'}
+        : headers;
+    return _apiFor(path).getStream(
+      path,
+      queryParameters: queryParameters,
+      headers: routedHeaders,
+      cancelToken: cancelToken,
+    );
+  }
+
+  @override
+  Future<Stream<List<int>>> postStream(
+    String path, {
+    Object? data,
+    Map<String, dynamic>? queryParameters,
+    Map<String, String>? headers,
+    CancelToken? cancelToken,
+  }) {
+    return _apiFor(path).postStream(
+      path,
+      data: data,
+      queryParameters: queryParameters,
+      headers: _headersForMutation(path, headers),
+      cancelToken: cancelToken,
+    );
+  }
+
+  @override
+  Future<T?> postMultipart<T>(
+    String path, {
+    Map<String, String> fields = const {},
+    Map<String, List<String>> files = const {},
+    Map<String, dynamic>? queryParameters,
+    T Function(dynamic)? fromJson,
+  }) {
+    return _apiFor(path).postMultipart<T>(
+      path,
+      fields: fields,
+      files: files,
+      queryParameters: queryParameters,
       fromJson: fromJson,
     );
   }

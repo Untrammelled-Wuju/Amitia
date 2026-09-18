@@ -9,7 +9,7 @@ import (
 )
 
 // RuntimeDomainEvent is the transport-neutral event envelope shared by the
-// canonical Runtime V2 outbox and the desktop-pet behavior engine. It is not a
+// canonical Runtime V1 outbox and the desktop-pet behavior engine. It is not a
 // Runtime V1 wire-protocol type.
 type RuntimeDomainEvent struct {
 	EventType      string
@@ -17,14 +17,13 @@ type RuntimeDomainEvent struct {
 	SessionID      string
 	DeviceID       string
 	InstallationID string
-	UserID         string
-	CharacterID    string
+	SpaceID        string
 	Sequence       int64
 	Timestamp      time.Time
 	Payload        json.RawMessage
 }
 
-// RuntimeEventSink consumes canonical Runtime V2 domain events after they have
+// RuntimeEventSink consumes canonical Runtime V1 domain events after they have
 // crossed the durable outbox boundary.
 type RuntimeEventSink interface {
 	OnRuntimeEvent(ctx context.Context, event RuntimeDomainEvent) error

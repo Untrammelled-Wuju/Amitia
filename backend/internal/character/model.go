@@ -6,6 +6,7 @@ import "encoding/json"
 
 type Character struct {
 	ID                  string  `gorm:"column:id;primaryKey" json:"id"`
+	SpaceID             string  `gorm:"column:space_id;not null;index" json:"-"`
 	Name                string  `gorm:"column:name;not null" json:"name"`
 	Avatar              string  `gorm:"column:avatar" json:"avatar"`
 	Identity            string  `gorm:"column:identity" json:"identity"`
@@ -47,6 +48,7 @@ type Character struct {
 	SilenceDuration     int     `gorm:"column:silence_duration;default:0" json:"silenceDuration"`
 	CardDataJSON        string  `gorm:"column:card_data_json;default:{}" json:"cardData,omitempty"`
 	Revision            int64   `gorm:"column:revision;not null;default:0" json:"revision"`
+	DeletedAt           *string `gorm:"column:deleted_at" json:"-"`
 }
 
 func (Character) TableName() string { return "characters" }
@@ -64,11 +66,16 @@ type CharacterTemplate struct {
 func (CharacterTemplate) TableName() string { return "character_templates" }
 
 type CreateCharacterRequest struct {
+	VoiceConfigID     string          `json:"voiceConfigId"`
 	VoiceType         string          `json:"voiceType"`
 	VoiceSpeed        float64         `json:"voiceSpeed"`
 	VoicePitch        float64         `json:"voicePitch"`
 	VoiceVolume       float64         `json:"voiceVolume"`
 	CustomVoiceID     string          `json:"customVoiceId"`
+	VoiceMode         string          `json:"voiceMode"`
+	Emotion           string          `json:"emotion"`
+	EmotionScale      int             `json:"emotionScale"`
+	SilenceDuration   int             `json:"silenceDuration"`
 	IsDefault         bool            `json:"isDefault"`
 	Name              string          `json:"name"`
 	Identity          string          `json:"identity"`
@@ -79,6 +86,7 @@ type CreateCharacterRequest struct {
 	CharacterBase     string          `json:"characterBase"`
 	BoundaryRules     string          `json:"boundaryRules"`
 	Description       string          `json:"description"`
+	BasePrompt        string          `json:"basePrompt"`
 	Gender            string          `json:"gender"`
 	Pronoun           string          `json:"pronoun"`
 	SelfReference     string          `json:"selfReference"`

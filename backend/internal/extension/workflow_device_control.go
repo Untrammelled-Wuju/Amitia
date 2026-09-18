@@ -24,8 +24,8 @@ type WorkflowDeviceDescriptor struct {
 }
 
 type WorkflowDeviceControlPlane interface {
-	ListDevices(ctx context.Context, userID string) ([]WorkflowDeviceDescriptor, error)
-	Invoke(ctx context.Context, userID, deviceID, operation string, input json.RawMessage) (json.RawMessage, error)
+	ListDevices(ctx context.Context, spaceID string) ([]WorkflowDeviceDescriptor, error)
+	Invoke(ctx context.Context, spaceID, deviceID, operation string, input json.RawMessage) (json.RawMessage, error)
 }
 
 func (r *Runtime) AttachWorkflowDeviceControl(control WorkflowDeviceControlPlane) {
@@ -75,7 +75,7 @@ func (api *WorkflowAPI) workflowDeviceControl(c *gin.Context) (WorkflowDeviceCon
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "workflow device control plane unavailable"})
 		return nil, false
 	}
-	if strings.TrimSpace(workflowUserID(c)) == "" {
+	if strings.TrimSpace(workflowSpaceID(c)) == "" {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "workflow user is required"})
 		return nil, false
 	}
@@ -87,7 +87,7 @@ func (api *WorkflowAPI) listWorkflowDevices(c *gin.Context) {
 	if !ok {
 		return
 	}
-	items, err := control.ListDevices(c.Request.Context(), workflowUserID(c))
+	items, err := control.ListDevices(c.Request.Context(), workflowSpaceID(c))
 	if err != nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
 		return
@@ -105,7 +105,7 @@ func (api *WorkflowAPI) invokeDeviceWorkflow(c *gin.Context, operation string, p
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return nil, false
 	}
-	result, err := control.Invoke(c.Request.Context(), workflowUserID(c), strings.TrimSpace(c.Param("deviceId")), operation, raw)
+	result, err := control.Invoke(c.Request.Context(), workflowSpaceID(c), strings.TrimSpace(c.Param("deviceId")), operation, raw)
 	if err != nil {
 		status := http.StatusBadGateway
 		message := err.Error()
@@ -198,16 +198,16 @@ func (api *WorkflowAPI) listDeviceWorkflows(c *gin.Context) {
 	if !ok {
 		return
 	}
-	userID := workflowUserID(c)
+	spaceID := workflowSpaceID(c)
 	deviceID := strings.TrimSpace(c.Param("deviceId"))
-	result, err := control.Invoke(c.Request.Context(), userID, deviceID, WorkflowMeshCatalog, json.RawMessage(`{}`))
+	result, err := control.Invoke(c.Request.Context(), spaceID, deviceID, WorkflowMeshCatalog, json.RawMessage(`{}`))
 	if err != nil {
 		// A device catalog is a metadata mirror only. It may be shown while the
 		// device is offline, but mutating/running operations still fail rather
 		// than pretending the remote device accepted the request.
 		if api.runtime != nil && api.runtime.Kernel != nil && api.runtime.Kernel.Container() != nil {
 			if repo := api.runtime.Kernel.Container().WorkflowDeviceCatalogRepo; repo != nil {
-				cached, cacheErr := repo.ListDevice(c.Request.Context(), userID, deviceID)
+				cached, cacheErr := repo.ListDevice(c.Request.Context(), spaceID, deviceID)
 				if cacheErr == nil && len(cached) > 0 {
 					c.JSON(http.StatusOK, gin.H{"items": cached, "total": len(cached), "cached": true, "offline": true})
 					return
@@ -220,11 +220,11 @@ func (api *WorkflowAPI) listDeviceWorkflows(c *gin.Context) {
 	if len(result) == 0 {
 		result = json.RawMessage(`{"items":[],"total":0}`)
 	}
-	api.cacheDeviceWorkflowCatalog(c.Request.Context(), userID, deviceID, result)
+	api.cacheDeviceWorkflowCatalog(c.Request.Context(), spaceID, deviceID, result)
 	c.Data(http.StatusOK, "application/json", result)
 }
 
-func (api *WorkflowAPI) cacheDeviceWorkflowCatalog(ctx context.Context, userID, deviceID string, raw json.RawMessage) {
+func (api *WorkflowAPI) cacheDeviceWorkflowCatalog(ctx context.Context, spaceID, deviceID string, raw json.RawMessage) {
 	if api == nil || api.runtime == nil || api.runtime.Kernel == nil || api.runtime.Kernel.Container() == nil {
 		return
 	}
@@ -246,7 +246,7 @@ func (api *WorkflowAPI) cacheDeviceWorkflowCatalog(ctx context.Context, userID, 
 			updatedAt = now
 		}
 		items = append(items, sqlite.WorkflowDeviceCatalogItem{
-			OwnerUserID:  userID,
+			OwnerSpaceID: spaceID,
 			DeviceID:     deviceID,
 			WorkflowID:   item.ID,
 			Name:         item.Name,
@@ -259,7 +259,7 @@ func (api *WorkflowAPI) cacheDeviceWorkflowCatalog(ctx context.Context, userID, 
 			LastSeen:     now,
 		})
 	}
-	_ = repo.ReplaceDevice(ctx, userID, deviceID, items)
+	_ = repo.ReplaceDevice(ctx, spaceID, deviceID, items)
 }
 
 func (api *WorkflowAPI) getDeviceWorkflow(c *gin.Context) {
@@ -270,7 +270,7 @@ func (api *WorkflowAPI) getDeviceWorkflow(c *gin.Context) {
 	c.Data(http.StatusOK, "application/json", result)
 }
 
-func (api *WorkflowAPI) emitRemoteWorkflowInstallationEvent(ctx context.Context, typeID, userID, deviceID string, raw json.RawMessage) {
+func (api *WorkflowAPI) emitRemoteWorkflowInstallationEvent(ctx context.Context, typeID, spaceID, deviceID string, raw json.RawMessage) {
 	var envelope struct {
 		Installation *workflow.WorkflowInstallation `json:"installation"`
 	}
@@ -278,7 +278,7 @@ func (api *WorkflowAPI) emitRemoteWorkflowInstallationEvent(ctx context.Context,
 		return
 	}
 	inst := *envelope.Installation
-	inst.OwnerUserID = strings.TrimSpace(userID)
+	inst.OwnerSpaceID = strings.TrimSpace(spaceID)
 	inst.Location = workflow.WorkflowLocationLocal
 	inst.HostDeviceID = strings.TrimSpace(deviceID)
 	api.emitWorkflowInstallationEvent(ctx, typeID, &inst)
@@ -296,7 +296,7 @@ func (api *WorkflowAPI) createDeviceWorkflow(c *gin.Context) {
 	if !ok {
 		return
 	}
-	api.emitRemoteWorkflowInstallationEvent(c.Request.Context(), "workflow.installation.created", workflowUserID(c), c.Param("deviceId"), result)
+	api.emitRemoteWorkflowInstallationEvent(c.Request.Context(), "workflow.installation.created", workflowSpaceID(c), c.Param("deviceId"), result)
 	c.Data(http.StatusCreated, "application/json", result)
 }
 
@@ -324,7 +324,7 @@ func (api *WorkflowAPI) updateDeviceWorkflow(c *gin.Context) {
 	if !ok {
 		return
 	}
-	api.emitRemoteWorkflowInstallationEvent(c.Request.Context(), "workflow.installation.updated", workflowUserID(c), c.Param("deviceId"), result)
+	api.emitRemoteWorkflowInstallationEvent(c.Request.Context(), "workflow.installation.updated", workflowSpaceID(c), c.Param("deviceId"), result)
 	c.Data(http.StatusOK, "application/json", result)
 }
 
@@ -333,7 +333,7 @@ func (api *WorkflowAPI) deleteDeviceWorkflow(c *gin.Context) {
 	if !ok {
 		return
 	}
-	api.emitRemoteWorkflowInstallationEvent(c.Request.Context(), "workflow.installation.deleted", workflowUserID(c), c.Param("deviceId"), result)
+	api.emitRemoteWorkflowInstallationEvent(c.Request.Context(), "workflow.installation.deleted", workflowSpaceID(c), c.Param("deviceId"), result)
 	c.Data(http.StatusOK, "application/json", result)
 }
 
@@ -355,7 +355,7 @@ func (api *WorkflowAPI) setDeviceWorkflowEnabled(c *gin.Context, enabled bool) {
 	if enabled {
 		eventType = "workflow.installation.enabled"
 	}
-	api.emitRemoteWorkflowInstallationEvent(c.Request.Context(), eventType, workflowUserID(c), c.Param("deviceId"), result)
+	api.emitRemoteWorkflowInstallationEvent(c.Request.Context(), eventType, workflowSpaceID(c), c.Param("deviceId"), result)
 	c.Data(http.StatusOK, "application/json", result)
 }
 
@@ -394,16 +394,16 @@ func (api *WorkflowAPI) runDeviceWorkflow(c *gin.Context) {
 	c.Data(status, "application/json", result)
 }
 
-func (api *WorkflowAPI) resolveRemoteWorkflowRun(ctx context.Context, userID, runID, operation string, payload map[string]any) (json.RawMessage, string, error) {
+func (api *WorkflowAPI) resolveRemoteWorkflowRun(ctx context.Context, spaceID, runID, operation string, payload map[string]any) (json.RawMessage, string, error) {
 	if api == nil || api.runtime == nil || api.runtime.WorkflowDeviceControl == nil {
 		return nil, "", errors.New("workflow device control plane unavailable")
 	}
-	userID = strings.TrimSpace(userID)
+	spaceID = strings.TrimSpace(spaceID)
 	runID = strings.TrimSpace(runID)
-	if userID == "" || runID == "" {
-		return nil, "", errors.New("workflow run owner resolution requires userId and runId")
+	if spaceID == "" || runID == "" {
+		return nil, "", errors.New("workflow run owner resolution requires spaceId and runId")
 	}
-	devices, err := api.runtime.WorkflowDeviceControl.ListDevices(ctx, userID)
+	devices, err := api.runtime.WorkflowDeviceControl.ListDevices(ctx, spaceID)
 	if err != nil {
 		return nil, "", err
 	}
@@ -421,7 +421,7 @@ func (api *WorkflowAPI) resolveRemoteWorkflowRun(ctx context.Context, userID, ru
 		if deviceID == "" || !device.Online {
 			continue
 		}
-		result, invokeErr := api.runtime.WorkflowDeviceControl.Invoke(ctx, userID, deviceID, operation, raw)
+		result, invokeErr := api.runtime.WorkflowDeviceControl.Invoke(ctx, spaceID, deviceID, operation, raw)
 		if invokeErr == nil {
 			if len(result) == 0 {
 				result = json.RawMessage(`{}`)

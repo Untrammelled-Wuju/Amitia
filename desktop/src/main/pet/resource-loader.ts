@@ -92,7 +92,6 @@ export interface Manifest {
   packageId: string;
   schemaVersion: number;
   name: string;
-  characterId: string;
   petId?: string;
   releaseId?: string;
   canvas: { width: number; height: number };
@@ -316,7 +315,7 @@ export class ResourceLoader {
       throw new Error(msg);
     }
 
-    if (manifestData.schemaVersion === 2) {
+    if (manifestData.schemaVersion === 1) {
       const verification = await this.integrityVerifier.verify({
         manifestRawText,
         manifest: manifestData,
@@ -361,7 +360,6 @@ export class ResourceLoader {
       packageId: pkg.petId,
       schemaVersion: pkg.schemaVersion,
       name: pkg.displayName,
-      characterId: manifestData.binding.sourceCharacterId ?? "",
       petId: pkg.petId,
       releaseId: pkg.releaseId,
       canvas: { width: pkg.canvas.width, height: pkg.canvas.height },
@@ -450,7 +448,7 @@ export class ResourceLoader {
     try {
       reader = this.normalizer.getReader(loaded.manifest.schemaVersion);
     } catch {
-      reader = this.normalizer.getReader(2);
+      reader = this.normalizer.getReader(1);
     }
 
     let result: ActionReadResult;
@@ -516,9 +514,9 @@ export class ResourceLoader {
       try {
         return resolvePackagePathUnderRoot(installPath, packageRelativePath);
       } catch (error) {
-        // Schema 1 packages in the wild used both action-relative and
+        // Package V1 packages in the wild used both action-relative and
         // package-root-relative frame paths. Preserve that migration-only
-        // compatibility without weakening the frozen Schema 2 contract.
+        // compatibility without weakening the frozen Package V1 contract.
         if (schemaVersion === 1) {
           try {
             return resolvePackagePathUnderRoot(installPath, frameFile);

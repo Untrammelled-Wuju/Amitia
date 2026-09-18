@@ -15,7 +15,7 @@ String _between(String source, String start, String end) {
 }
 
 void main() {
-  group('DesktopPetMobileRuntime Runtime V2 regression guards', () {
+  group('DesktopPetMobileRuntime Runtime V1 regression guards', () {
     test('durable replay is bound to canonical command identity', () {
       final source = _runtimeSource();
       expect(source, contains('commandPayloadHash: commandPayloadHash'));

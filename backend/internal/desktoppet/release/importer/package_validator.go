@@ -36,14 +36,14 @@ func NewDefaultPackageValidator(
 
 func (v *DefaultPackageValidator) ValidatePackage(
 	ctx context.Context,
-	userID string,
+	spaceID string,
 	stagingID string,
 ) (*ImportValidationResult, error) {
 	if v == nil || v.registry == nil || v.repo == nil || v.reader == nil || v.validator == nil {
 		return nil, errors.New("package validator dependencies missing")
 	}
 
-	staging, err := v.repo.GetForUser(ctx, stagingID, userID)
+	staging, err := v.repo.GetForSpace(ctx, stagingID, spaceID)
 	if err != nil {
 		return nil, err
 	}

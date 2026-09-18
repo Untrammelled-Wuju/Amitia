@@ -50,10 +50,8 @@ func DefaultMigrations() []Migration {
 		TombstoneRebuildMigration(),
 		InteractionRecordsCreateMigration(),
 		InteractionRecordsV2Migration(),
-		ProactiveDeliveryTrackingMigration(),
 		RuntimeQueueMigration(),
 		LegacyDataMigration(),
-		TriggerHistoryMigration(),
 		RelationshipScopeMigration(),
 		NeedStatesMigration(),
 		ExtensionsMigration(),
@@ -71,7 +69,6 @@ func DefaultMigrations() []Migration {
 		ExtensionArtifactRecoveryMigration(),
 		ExtensionScheduleSourceMigration(),
 		ExtensionScheduleOwnershipRepairMigration(),
-		EmotesMigration(),
 		MessagePlanMigration(),
 		TemporalCoreMigration(),
 		TemporalRelationshipTimeMigration(),
@@ -162,16 +159,11 @@ func DefaultMigrations() []Migration {
 		ProductionCutoverMigration(),
 		TaskRunPauseColumnsMigration(),
 		ArtifactsMigration(),
-		AccountSessionSecurityMigration(),
 		SyncChangeLogMigration(),
 		SyncCursorMigration(),
 		SyncSequenceMigration(),
 		ExecutionResumeMigration(),
 		SyncMutationIdempotentMigration(),
-		SyncChangeLogUserIDMigration(),
-		SyncCursorCompositeKeyMigration(),
-		SyncMutationUserUniqueMigration(),
-		SyncChangeLogScopeMigration(),
 		AppSettingsRevisionMigration(),
 		AppSettingsTombstoneMigration(),
 		SecurityAuditEventsColumnsMigration(),
@@ -181,6 +173,8 @@ func DefaultMigrations() []Migration {
 		SyncMutationClaimsMigration(),
 		SessionTimestampCompatibilityMigration(),
 		DesktopPetActionRevisionSourceIndexFixMigration(),
+		MessageFeedbackColumnsMigration(),
+		ReminderCoreMigration(),
 		DesktopPetQualityInboxFinalizationMigration(),
 		DesktopPetEditingCanonicalFinalizationMigration(),
 		DesktopPetSchemaFinalizationMigration(),
@@ -192,6 +186,87 @@ func DefaultMigrations() []Migration {
 		DesktopPetBehaviorV2ColumnsRepairMigration(),
 		DesktopPetActionRevisionDataRepairMigration(),
 		DesktopPetInstallationOperationCreatedAtMigration(),
+		SyncSequenceSeedMigration(),
+		SandboxEnvironmentMigration(),
+		DesktopPetCutoverBaselineBackfillMigration(),
+		ConversationWorkspaceBindingsMigration(),
+		WorkspaceMountLastUsedMigration(),
+		MemoryDynamicRecallRetentionMigration(),
+		MemoryContextUseMigration(),
+		TtsClonedVoicesMigration(),
+		DesktopPetCatalogRepairMigration(),
+		DesktopPetGenerationModeSnapshotRepairMigration(),
+		DesktopPetQualityMeasurementSubjectBoxMigration(),
+		EmotionStateMigration(),
+		DesktopPetCharacterUnbindMigration(),
+		MessageExtensionTypeMigration(),
+		SpaceIdentityCutoverMigration(),
+		ConversationWorkspaceBindingsBaselineRepairMigration(),
+	}
+}
+
+func DesktopPetQualityMeasurementSubjectBoxMigration() Migration {
+	return Migration{
+		Version: "20260912001",
+		Name:    "add_quality_measurement_subject_box_columns",
+		Up: func(s *Step) error {
+			s.AddColumn("desktop_pet_quality_measurement_cache", "subject_box_x", "REAL NOT NULL DEFAULT 0")
+			s.AddColumn("desktop_pet_quality_measurement_cache", "subject_box_y", "REAL NOT NULL DEFAULT 0")
+			s.AddColumn("desktop_pet_quality_measurement_cache", "subject_box_width", "REAL NOT NULL DEFAULT 0")
+			s.AddColumn("desktop_pet_quality_measurement_cache", "subject_box_height", "REAL NOT NULL DEFAULT 0")
+			return nil
+		},
+	}
+}
+
+func SyncSequenceSeedMigration() Migration {
+	return Migration{
+		Version: "20260902001",
+		Name:    "seed_sync_sequence_initial_row",
+		Up: func(s *Step) error {
+			s.Execute("INSERT OR IGNORE INTO sync_sequence (id, seq) VALUES (1, 0)")
+			return nil
+		},
+	}
+}
+
+func DesktopPetGenerationModeSnapshotRepairMigration() Migration {
+	return Migration{
+		Version: "20260911001",
+		Name:    "repair_generation_action_mode_snapshot",
+		Up: func(s *Step) error {
+			s.Execute(`UPDATE desktop_pet_generation_task_actions SET
+				generation_mode = (
+					SELECT a.mode FROM desktop_pet_action_generation_attempts a
+					WHERE a.task_action_id = desktop_pet_generation_task_actions.id
+						AND a.status = 'succeeded' AND a.mode != '' AND a.mode != 'legacy_frame'
+					ORDER BY a.attempt_number DESC LIMIT 1
+				),
+				active_attempt_id = (
+					SELECT a.id FROM desktop_pet_action_generation_attempts a
+					WHERE a.task_action_id = desktop_pet_generation_task_actions.id
+						AND a.status = 'succeeded' AND a.mode != '' AND a.mode != 'legacy_frame'
+					ORDER BY a.attempt_number DESC LIMIT 1
+				),
+				active_attempt_number = (
+					SELECT a.attempt_number FROM desktop_pet_action_generation_attempts a
+					WHERE a.task_action_id = desktop_pet_generation_task_actions.id
+						AND a.status = 'succeeded' AND a.mode != '' AND a.mode != 'legacy_frame'
+					ORDER BY a.attempt_number DESC LIMIT 1
+				)
+				WHERE (generation_mode IS NULL OR generation_mode = '' OR generation_mode = 'legacy_frame')
+					AND EXISTS (
+						SELECT 1 FROM desktop_pet_action_generation_attempts a
+						WHERE a.task_action_id = desktop_pet_generation_task_actions.id
+							AND a.status = 'succeeded' AND a.mode != '' AND a.mode != 'legacy_frame'
+					)
+					AND EXISTS (
+						SELECT 1 FROM desktop_pet_generation_artifacts g
+						WHERE g.task_action_id = desktop_pet_generation_task_actions.id
+							AND g.is_primary = 1 AND g.status IN ('persisted', 'saved', 'verified')
+					)`)
+			return nil
+		},
 	}
 }
 

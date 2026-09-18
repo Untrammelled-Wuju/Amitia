@@ -40,16 +40,16 @@ func (m *mockDisplayCapability) AddExists(displayID int) bool {
 	return false
 }
 
-func (m *mockDisplayCapability) NotifyDisplayAdded(displayID int)    {}
-func (m *mockDisplayCapability) NotifyDisplayRemoved(displayID int)  {}
-func (m *mockDisplayCapability) NotifyDisplayChanged(displayID int)  {}
+func (m *mockDisplayCapability) NotifyDisplayAdded(displayID int)   {}
+func (m *mockDisplayCapability) NotifyDisplayRemoved(displayID int) {}
+func (m *mockDisplayCapability) NotifyDisplayChanged(displayID int) {}
 
 type mockNativeBridgeDisplay struct{}
 
 func (m *mockNativeBridgeDisplay) Execute(ctx context.Context, req androidnative.NativeBridgeRequest) (androidnative.NativeBridgeResponse, error) {
 	return androidnative.NativeBridgeResponse{
 		ProtocolVersion: req.ProtocolVersion,
-		RequestID:       req.RequestID,
+		RequestId:       req.RequestId,
 		Status:          "success",
 		Result:          map[string]any{},
 	}, nil

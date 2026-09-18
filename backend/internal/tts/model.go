@@ -31,6 +31,17 @@ type TtsConfig struct {
 
 func (TtsConfig) TableName() string { return "tts_configs" }
 
+type TtsConfigSummary struct {
+	ID         int    `json:"id"`
+	Name       string `json:"name"`
+	ApiType    string `json:"apiType"`
+	ResourceId string `json:"resourceId"`
+	VoiceType  string `json:"voiceType"`
+	IsActive   int    `json:"isActive"`
+	IsCustom   int    `json:"isCustom"`
+	HasApiKey  bool   `json:"hasApiKey"`
+}
+
 type CreateTtsConfigRequest struct {
 	Name                string  `json:"name"`
 	ApiType             string  `json:"apiType"`
@@ -42,6 +53,7 @@ type CreateTtsConfigRequest struct {
 	Speed               float64 `json:"speed"`
 	Pitch               float64 `json:"pitch"`
 	Volume              float64 `json:"volume"`
+	CloneResourceId     string  `json:"cloneResourceId"`
 	RealtimeAppId       string  `json:"realtimeAppId"`
 	RealtimeAccessToken string  `json:"realtimeAccessToken"`
 	RealtimeSecretKey   string  `json:"realtimeSecretKey"`
@@ -60,6 +72,18 @@ type SynthesizeRequest struct {
 type SynthesizeResponse struct {
 	AudioURL string  `json:"audioUrl"`
 	Duration float64 `json:"duration"`
+}
+
+type SynthesizePreviewRequest struct {
+	VoiceConfigID   string  `json:"voiceConfigId"`
+	VoiceType       string  `json:"voiceType"`
+	Text            string  `json:"text"`
+	Speed           float64 `json:"speed"`
+	Pitch           float64 `json:"pitch"`
+	Volume          float64 `json:"volume"`
+	Emotion         string  `json:"emotion"`
+	EmotionScale    int     `json:"emotionScale"`
+	SilenceDuration int     `json:"silenceDuration"`
 }
 
 type VoicePreset struct {
@@ -90,12 +114,17 @@ type VoiceCloneResponse struct {
 }
 
 type ClonedVoice struct {
-	SpeakerID string `json:"speakerId"`
-	Name      string `json:"name"`
-	Language  int    `json:"language"`
-	CreatedAt string `json:"createdAt"`
-	Status    string `json:"status"`
+	SpaceID     string `gorm:"column:space_id;not null;index" json:"-"`
+	SpeakerID   string `gorm:"column:speaker_id;primaryKey" json:"speakerId"`
+	Name        string `gorm:"column:name;not null" json:"name"`
+	TtsConfigID int    `gorm:"column:tts_config_id;not null;default:0" json:"voiceConfigId"`
+	Language    int    `gorm:"column:language;default:0" json:"language"`
+	Status      string `gorm:"column:status;default:ready" json:"status"`
+	CreatedAt   string `gorm:"column:created_at" json:"createdAt"`
+	UpdatedAt   string `gorm:"column:updated_at" json:"updatedAt"`
 }
+
+func (ClonedVoice) TableName() string { return "tts_cloned_voices" }
 
 type ProviderInfo struct {
 	ID             string `json:"id"`

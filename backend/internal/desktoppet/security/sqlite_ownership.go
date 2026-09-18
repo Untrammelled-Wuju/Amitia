@@ -21,35 +21,6 @@ func NewSQLiteOwnershipGuard(db *gorm.DB) *SQLiteOwnershipGuard {
 	return &SQLiteOwnershipGuard{db: db}
 }
 
-func (g *SQLiteOwnershipGuard) RequireCharacter(ctx context.Context, actor *desktoppetAuth.ActorContext, characterID string) (*CharacterScope, error) {
-	if actor == nil {
-		return nil, ErrUnauthorized
-	}
-	if characterID == "" {
-		return nil, ErrNotFound
-	}
-	var result struct {
-		Owner string `gorm:"column:owner_user_id"`
-	}
-	err := g.db.WithContext(ctx).Table("desktop_pet_identities").
-		Select("owner_user_id").
-		Where("source_character_id = ?", characterID).
-		Take(&result).Error
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, ErrNotFound
-		}
-		return nil, err
-	}
-	if result.Owner == "" {
-		return nil, ErrNotFound
-	}
-	if result.Owner != string(actor.UserID) && !actor.HasRole("admin") {
-		return nil, ErrForbidden
-	}
-	return &CharacterScope{UserID: result.Owner, CharacterID: characterID}, nil
-}
-
 func (g *SQLiteOwnershipGuard) RequireGenerationTask(ctx context.Context, actor *desktoppetAuth.ActorContext, taskID string) (*GenerationTaskScope, error) {
 	if actor == nil {
 		return nil, ErrUnauthorized
@@ -58,11 +29,11 @@ func (g *SQLiteOwnershipGuard) RequireGenerationTask(ctx context.Context, actor 
 		return nil, ErrNotFound
 	}
 	var result struct {
-		UserID      string `gorm:"column:user_id"`
+		SpaceID     string `gorm:"column:space_id"`
 		CharacterID string `gorm:"column:character_id"`
 	}
 	if err := g.db.WithContext(ctx).Table("desktop_pet_generation_tasks").
-		Select("user_id, character_id").
+		Select("space_id, character_id").
 		Where("id = ?", taskID).
 		Take(&result).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -70,14 +41,14 @@ func (g *SQLiteOwnershipGuard) RequireGenerationTask(ctx context.Context, actor 
 		}
 		return nil, err
 	}
-	if result.UserID == "" {
+	if result.SpaceID == "" {
 		return nil, ErrNotFound
 	}
-	if result.UserID != string(actor.UserID) && !actor.HasRole("admin") {
+	if result.SpaceID != string(actor.SpaceID) && !actor.HasPermission(desktoppetAuth.PermSystemAdmin) {
 		return nil, ErrForbidden
 	}
 	return &GenerationTaskScope{
-		UserID:      result.UserID,
+		SpaceID:     result.SpaceID,
 		TaskID:      taskID,
 		CharacterID: result.CharacterID,
 	}, nil
@@ -91,11 +62,11 @@ func (g *SQLiteOwnershipGuard) RequireProcessingTask(ctx context.Context, actor 
 		return nil, ErrNotFound
 	}
 	var result struct {
-		UserID      string `gorm:"column:user_id"`
+		SpaceID     string `gorm:"column:space_id"`
 		CharacterID string `gorm:"column:character_id"`
 	}
 	if err := g.db.WithContext(ctx).Table("desktop_pet_processing_tasks").
-		Select("user_id, character_id").
+		Select("space_id, character_id").
 		Where("id = ?", taskID).
 		Take(&result).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -103,14 +74,14 @@ func (g *SQLiteOwnershipGuard) RequireProcessingTask(ctx context.Context, actor 
 		}
 		return nil, err
 	}
-	if result.UserID == "" {
+	if result.SpaceID == "" {
 		return nil, ErrNotFound
 	}
-	if result.UserID != string(actor.UserID) && !actor.HasRole("admin") {
+	if result.SpaceID != string(actor.SpaceID) && !actor.HasPermission(desktoppetAuth.PermSystemAdmin) {
 		return nil, ErrForbidden
 	}
 	return &ProcessingTaskScope{
-		UserID:      result.UserID,
+		SpaceID:     result.SpaceID,
 		TaskID:      taskID,
 		CharacterID: result.CharacterID,
 	}, nil
@@ -124,13 +95,13 @@ func (g *SQLiteOwnershipGuard) RequireActionRevision(ctx context.Context, actor 
 		return nil, ErrNotFound
 	}
 	var result struct {
-		UserID         string `gorm:"column:user_id"`
+		SpaceID        string `gorm:"column:space_id"`
 		CharacterID    string `gorm:"column:character_id"`
 		ActionStreamID string `gorm:"column:action_stream_id"`
 		TaskID         string `gorm:"column:processing_task_id"`
 	}
 	err := g.db.WithContext(ctx).Table("desktop_pet_action_revisions").
-		Select("user_id, character_id, action_stream_id, processing_task_id").
+		Select("space_id, character_id, action_stream_id, processing_task_id").
 		Where("id = ?", revisionID).
 		Take(&result).Error
 	if err != nil {
@@ -139,21 +110,21 @@ func (g *SQLiteOwnershipGuard) RequireActionRevision(ctx context.Context, actor 
 		}
 		return nil, err
 	}
-	if result.UserID == "" {
+	if result.SpaceID == "" {
 		var taskResult struct {
-			UserID      string `gorm:"column:user_id"`
+			SpaceID     string `gorm:"column:space_id"`
 			CharacterID string `gorm:"column:character_id"`
 		}
 		if result.TaskID != "" {
 			if taskErr := g.db.WithContext(ctx).Table("desktop_pet_processing_tasks").
-				Select("user_id, character_id").
+				Select("space_id, character_id").
 				Where("id = ?", result.TaskID).
-				Take(&taskResult).Error; taskErr == nil && taskResult.UserID != "" {
-				if taskResult.UserID != string(actor.UserID) && !actor.HasRole("admin") {
+				Take(&taskResult).Error; taskErr == nil && taskResult.SpaceID != "" {
+				if taskResult.SpaceID != string(actor.SpaceID) && !actor.HasPermission(desktoppetAuth.PermSystemAdmin) {
 					return nil, ErrForbidden
 				}
 				return &ActionRevisionScope{
-					UserID:           taskResult.UserID,
+					SpaceID:          taskResult.SpaceID,
 					CharacterID:      taskResult.CharacterID,
 					RevisionID:       revisionID,
 					ProcessingTaskID: result.TaskID,
@@ -162,11 +133,11 @@ func (g *SQLiteOwnershipGuard) RequireActionRevision(ctx context.Context, actor 
 		}
 		return nil, ErrNotFound
 	}
-	if result.UserID != string(actor.UserID) && !actor.HasRole("admin") {
+	if result.SpaceID != string(actor.SpaceID) && !actor.HasPermission(desktoppetAuth.PermSystemAdmin) {
 		return nil, ErrForbidden
 	}
 	return &ActionRevisionScope{
-		UserID:           result.UserID,
+		SpaceID:          result.SpaceID,
 		CharacterID:      result.CharacterID,
 		RevisionID:       revisionID,
 		ProcessingTaskID: result.TaskID,
@@ -178,11 +149,11 @@ func (g *SQLiteOwnershipGuard) resolveProcessingTaskOwner(ctx context.Context, a
 		return nil, ErrNotFound
 	}
 	var result struct {
-		UserID      string `gorm:"column:user_id"`
+		SpaceID     string `gorm:"column:space_id"`
 		CharacterID string `gorm:"column:character_id"`
 	}
 	if err := g.db.WithContext(ctx).Table("desktop_pet_processing_tasks").
-		Select("user_id, character_id").
+		Select("space_id, character_id").
 		Where("id = ?", taskID).
 		Take(&result).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -190,14 +161,14 @@ func (g *SQLiteOwnershipGuard) resolveProcessingTaskOwner(ctx context.Context, a
 		}
 		return nil, err
 	}
-	if result.UserID == "" {
+	if result.SpaceID == "" {
 		return nil, ErrNotFound
 	}
-	if result.UserID != string(actor.UserID) && !actor.HasRole("admin") {
+	if result.SpaceID != string(actor.SpaceID) && !actor.HasPermission(desktoppetAuth.PermSystemAdmin) {
 		return nil, ErrForbidden
 	}
 	return &ActionRevisionScope{
-		UserID:           result.UserID,
+		SpaceID:          result.SpaceID,
 		CharacterID:      result.CharacterID,
 		RevisionID:       revisionID,
 		ProcessingTaskID: taskID,
@@ -212,11 +183,11 @@ func (g *SQLiteOwnershipGuard) RequireActionStream(ctx context.Context, actor *d
 		return nil, ErrNotFound
 	}
 	var result struct {
-		UserID      string `gorm:"column:user_id"`
+		SpaceID     string `gorm:"column:space_id"`
 		CharacterID string `gorm:"column:character_id"`
 	}
 	err := g.db.WithContext(ctx).Table("desktop_pet_action_streams").
-		Select("user_id, character_id").
+		Select("space_id, character_id").
 		Where("id = ?", streamID).
 		Take(&result).Error
 	if err != nil {
@@ -225,14 +196,14 @@ func (g *SQLiteOwnershipGuard) RequireActionStream(ctx context.Context, actor *d
 		}
 		return nil, err
 	}
-	if result.UserID == "" {
+	if result.SpaceID == "" {
 		return nil, ErrNotFound
 	}
-	if result.UserID != string(actor.UserID) && !actor.HasRole("admin") {
+	if result.SpaceID != string(actor.SpaceID) && !actor.HasPermission(desktoppetAuth.PermSystemAdmin) {
 		return nil, ErrForbidden
 	}
 	return &ActionStreamScope{
-		UserID:      result.UserID,
+		SpaceID:     result.SpaceID,
 		StreamID:    streamID,
 		CharacterID: result.CharacterID,
 	}, nil
@@ -281,12 +252,12 @@ func (g *SQLiteOwnershipGuard) RequireQualityEvaluation(ctx context.Context, act
 	if owner == "" {
 		return nil, ErrNotFound
 	}
-	if owner != string(actor.UserID) && !actor.HasRole("admin") {
+	if owner != string(actor.SpaceID) && !actor.HasPermission(desktoppetAuth.PermSystemAdmin) {
 		return nil, ErrForbidden
 	}
 
 	return &QualityScope{
-		UserID:           owner,
+		SpaceID:          owner,
 		EvaluationID:     evaluationID,
 		ActionRevisionID: evalResult.ActionRevisionID,
 		CharacterID:      characterID,
@@ -299,20 +270,20 @@ func (g *SQLiteOwnershipGuard) resolveActionRevisionOwner(ctx context.Context, r
 		return "", "", gorm.ErrRecordNotFound
 	}
 	var result struct {
-		UserID      string `gorm:"column:user_id"`
+		SpaceID     string `gorm:"column:space_id"`
 		CharacterID string `gorm:"column:character_id"`
 	}
 	err := g.db.WithContext(ctx).Table("desktop_pet_action_revisions").
-		Select("user_id, character_id").
+		Select("space_id, character_id").
 		Where("id = ?", revisionID).
 		Take(&result).Error
 	if err != nil {
 		return "", "", err
 	}
-	if result.UserID == "" {
+	if result.SpaceID == "" {
 		return "", "", gorm.ErrRecordNotFound
 	}
-	return result.UserID, result.CharacterID, nil
+	return result.SpaceID, result.CharacterID, nil
 }
 
 func (g *SQLiteOwnershipGuard) resolveProcessingTaskOwnerLegacy(ctx context.Context, actor *desktoppetAuth.ActorContext, taskID string) (string, string, error) {
@@ -320,22 +291,22 @@ func (g *SQLiteOwnershipGuard) resolveProcessingTaskOwnerLegacy(ctx context.Cont
 		return "", "", gorm.ErrRecordNotFound
 	}
 	var result struct {
-		UserID      string `gorm:"column:user_id"`
+		SpaceID     string `gorm:"column:space_id"`
 		CharacterID string `gorm:"column:character_id"`
 	}
 	if err := g.db.WithContext(ctx).Table("desktop_pet_processing_tasks").
-		Select("user_id, character_id").
+		Select("space_id, character_id").
 		Where("id = ?", taskID).
 		Take(&result).Error; err != nil {
 		return "", "", err
 	}
-	if result.UserID == "" {
+	if result.SpaceID == "" {
 		return "", "", gorm.ErrRecordNotFound
 	}
-	if result.UserID != string(actor.UserID) && !actor.HasRole("admin") {
+	if result.SpaceID != string(actor.SpaceID) && !actor.HasPermission(desktoppetAuth.PermSystemAdmin) {
 		return "", "", ErrForbidden
 	}
-	return result.UserID, result.CharacterID, nil
+	return result.SpaceID, result.CharacterID, nil
 }
 
 func (g *SQLiteOwnershipGuard) RequireRelease(ctx context.Context, actor *desktoppetAuth.ActorContext, releaseID string) (*ReleaseScope, error) {
@@ -346,11 +317,11 @@ func (g *SQLiteOwnershipGuard) RequireRelease(ctx context.Context, actor *deskto
 		return nil, ErrNotFound
 	}
 	var result struct {
-		Owner string `gorm:"column:owner_user_id"`
+		Owner string `gorm:"column:owner_space_id"`
 		PetID string `gorm:"column:pet_id"`
 	}
 	if err := g.db.WithContext(ctx).Table("desktop_pet_package_releases").
-		Select("owner_user_id, pet_id").
+		Select("owner_space_id, pet_id").
 		Where("id = ?", releaseID).
 		Take(&result).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -361,11 +332,11 @@ func (g *SQLiteOwnershipGuard) RequireRelease(ctx context.Context, actor *deskto
 	if result.Owner == "" {
 		return nil, ErrNotFound
 	}
-	if result.Owner != string(actor.UserID) && !actor.HasRole("admin") {
+	if result.Owner != string(actor.SpaceID) && !actor.HasPermission(desktoppetAuth.PermSystemAdmin) {
 		return nil, ErrForbidden
 	}
 	return &ReleaseScope{
-		UserID:    result.Owner,
+		SpaceID:   result.Owner,
 		ReleaseID: releaseID,
 		PetID:     result.PetID,
 	}, nil
@@ -379,11 +350,11 @@ func (g *SQLiteOwnershipGuard) RequireInstallation(ctx context.Context, actor *d
 		return nil, ErrNotFound
 	}
 	var result struct {
-		UserID   string `gorm:"column:user_id"`
+		SpaceID  string `gorm:"column:space_id"`
 		DeviceID string `gorm:"column:device_id"`
 	}
 	if err := g.db.WithContext(ctx).Table("desktop_pet_installations").
-		Select("user_id, device_id").
+		Select("space_id, device_id").
 		Where("id = ?", installationID).
 		Take(&result).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -391,14 +362,14 @@ func (g *SQLiteOwnershipGuard) RequireInstallation(ctx context.Context, actor *d
 		}
 		return nil, err
 	}
-	if result.UserID == "" {
+	if result.SpaceID == "" {
 		return nil, ErrNotFound
 	}
-	if result.UserID != string(actor.UserID) && !actor.HasRole("admin") {
+	if result.SpaceID != string(actor.SpaceID) && !actor.HasPermission(desktoppetAuth.PermSystemAdmin) {
 		return nil, ErrForbidden
 	}
 	return &InstallationScope{
-		UserID:         result.UserID,
+		SpaceID:        result.SpaceID,
 		DeviceID:       result.DeviceID,
 		InstallationID: installationID,
 	}, nil
@@ -412,11 +383,11 @@ func (g *SQLiteOwnershipGuard) RequireInstallationStrict(ctx context.Context, ac
 		return nil, ErrNotFound
 	}
 	var result struct {
-		UserID   string `gorm:"column:user_id"`
+		SpaceID  string `gorm:"column:space_id"`
 		DeviceID string `gorm:"column:device_id"`
 	}
 	if err := g.db.WithContext(ctx).Table("desktop_pet_installations").
-		Select("user_id, device_id").
+		Select("space_id, device_id").
 		Where("id = ?", installationID).
 		Take(&result).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -424,17 +395,17 @@ func (g *SQLiteOwnershipGuard) RequireInstallationStrict(ctx context.Context, ac
 		}
 		return nil, err
 	}
-	if result.UserID == "" {
+	if result.SpaceID == "" {
 		return nil, ErrNotFound
 	}
-	if result.UserID != string(actor.UserID) && !actor.HasRole("admin") {
+	if result.SpaceID != string(actor.SpaceID) && !actor.HasPermission(desktoppetAuth.PermSystemAdmin) {
 		return nil, ErrForbidden
 	}
 	if deviceID == "" || result.DeviceID == "" || result.DeviceID != deviceID {
 		return nil, ErrNotFound
 	}
 	return &InstallationScope{
-		UserID:         result.UserID,
+		SpaceID:        result.SpaceID,
 		DeviceID:       result.DeviceID,
 		InstallationID: installationID,
 	}, nil
@@ -448,10 +419,10 @@ func (g *SQLiteOwnershipGuard) RequireEditSession(ctx context.Context, actor *de
 		return nil, ErrNotFound
 	}
 	var result struct {
-		UserID string `gorm:"column:user_id"`
+		SpaceID string `gorm:"column:space_id"`
 	}
 	if err := g.db.WithContext(ctx).Table("desktop_pet_edit_sessions").
-		Select("user_id").
+		Select("space_id").
 		Where("id = ?", sessionID).
 		Take(&result).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -459,14 +430,14 @@ func (g *SQLiteOwnershipGuard) RequireEditSession(ctx context.Context, actor *de
 		}
 		return nil, err
 	}
-	if result.UserID == "" {
+	if result.SpaceID == "" {
 		return nil, ErrNotFound
 	}
-	if result.UserID != string(actor.UserID) && !actor.HasRole("admin") {
+	if result.SpaceID != string(actor.SpaceID) && !actor.HasPermission(desktoppetAuth.PermSystemAdmin) {
 		return nil, ErrForbidden
 	}
 	return &EditSessionScope{
-		UserID:    result.UserID,
+		SpaceID:   result.SpaceID,
 		SessionID: sessionID,
 	}, nil
 }
@@ -479,11 +450,11 @@ func (g *SQLiteOwnershipGuard) RequireRegenerationJob(ctx context.Context, actor
 		return nil, ErrNotFound
 	}
 	var result struct {
-		UserID    string `gorm:"column:user_id"`
+		SpaceID   string `gorm:"column:space_id"`
 		SessionID string `gorm:"column:session_id"`
 	}
 	if err := g.db.WithContext(ctx).Table("desktop_pet_regeneration_jobs").
-		Select("user_id, session_id").
+		Select("space_id, session_id").
 		Where("id = ?", jobID).
 		Take(&result).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -491,14 +462,14 @@ func (g *SQLiteOwnershipGuard) RequireRegenerationJob(ctx context.Context, actor
 		}
 		return nil, err
 	}
-	if result.UserID == "" {
+	if result.SpaceID == "" {
 		return nil, ErrNotFound
 	}
-	if result.UserID != string(actor.UserID) && !actor.HasRole("admin") {
+	if result.SpaceID != string(actor.SpaceID) && !actor.HasPermission(desktoppetAuth.PermSystemAdmin) {
 		return nil, ErrForbidden
 	}
 	return &RegenerationJobScope{
-		UserID:    result.UserID,
+		SpaceID:   result.SpaceID,
 		JobID:     jobID,
 		SessionID: result.SessionID,
 	}, nil
@@ -512,13 +483,13 @@ func (g *SQLiteOwnershipGuard) RequireCandidate(ctx context.Context, actor *desk
 		return nil, ErrNotFound
 	}
 	var result struct {
-		UserID    string `gorm:"column:owner_user_id"`
+		SpaceID   string `gorm:"column:owner_space_id"`
 		JobID     string `gorm:"column:job_id"`
 		SessionID string `gorm:"column:session_id"`
 	}
 	if err := g.db.WithContext(ctx).
 		Table("desktop_pet_edit_candidates AS c").
-		Select("c.owner_user_id, c.job_id, j.session_id").
+		Select("c.owner_space_id, c.job_id, j.session_id").
 		Joins("JOIN desktop_pet_regeneration_jobs AS j ON j.id = c.job_id").
 		Where("c.id = ?", candidateID).
 		Take(&result).Error; err != nil {
@@ -527,14 +498,14 @@ func (g *SQLiteOwnershipGuard) RequireCandidate(ctx context.Context, actor *desk
 		}
 		return nil, err
 	}
-	if result.UserID == "" {
+	if result.SpaceID == "" {
 		return nil, ErrNotFound
 	}
-	if result.UserID != string(actor.UserID) && !actor.HasRole("admin") {
+	if result.SpaceID != string(actor.SpaceID) && !actor.HasPermission(desktoppetAuth.PermSystemAdmin) {
 		return nil, ErrForbidden
 	}
 	return &CandidateScope{
-		UserID:      result.UserID,
+		SpaceID:     result.SpaceID,
 		CandidateID: candidateID,
 		JobID:       result.JobID,
 		SessionID:   result.SessionID,
@@ -549,12 +520,12 @@ func (g *SQLiteOwnershipGuard) RequireRuntimeCommand(ctx context.Context, actor 
 		return nil, ErrNotFound
 	}
 	var result struct {
-		UserID    string `gorm:"column:user_id"`
+		SpaceID   string `gorm:"column:space_id"`
 		DeviceID  string `gorm:"column:device_id"`
 		RuntimeID string `gorm:"column:runtime_id"`
 	}
 	if err := g.db.WithContext(ctx).Table("desktop_pet_runtime_commands_v2").
-		Select("user_id, device_id, runtime_id").
+		Select("space_id, device_id, runtime_id").
 		Where("id = ?", commandID).
 		Take(&result).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -562,7 +533,7 @@ func (g *SQLiteOwnershipGuard) RequireRuntimeCommand(ctx context.Context, actor 
 		}
 		return nil, err
 	}
-	if result.UserID == "" {
+	if result.SpaceID == "" {
 		return nil, ErrNotFound
 	}
 	if result.DeviceID == "" {
@@ -571,11 +542,11 @@ func (g *SQLiteOwnershipGuard) RequireRuntimeCommand(ctx context.Context, actor 
 	if result.RuntimeID == "" {
 		return nil, ErrNotFound
 	}
-	if result.UserID != string(actor.UserID) && !actor.HasRole("admin") {
+	if result.SpaceID != string(actor.SpaceID) && !actor.HasPermission(desktoppetAuth.PermSystemAdmin) {
 		return nil, ErrForbidden
 	}
 	return &RuntimeCommandScope{
-		UserID:    result.UserID,
+		SpaceID:   result.SpaceID,
 		DeviceID:  result.DeviceID,
 		RuntimeID: result.RuntimeID,
 		CommandID: commandID,
@@ -590,11 +561,11 @@ func (g *SQLiteOwnershipGuard) RequireBehaviorBinding(ctx context.Context, actor
 		return nil, ErrNotFound
 	}
 	var result struct {
-		UserID         string `gorm:"column:user_id"`
+		SpaceID        string `gorm:"column:space_id"`
 		InstallationID string `gorm:"column:installation_id"`
 	}
 	if err := g.db.WithContext(ctx).Table("desktop_pet_behavior_bindings").
-		Select("user_id, installation_id").
+		Select("space_id, installation_id").
 		Where("id = ?", bindingID).
 		Take(&result).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -602,14 +573,14 @@ func (g *SQLiteOwnershipGuard) RequireBehaviorBinding(ctx context.Context, actor
 		}
 		return nil, err
 	}
-	if result.UserID == "" {
+	if result.SpaceID == "" {
 		return nil, ErrNotFound
 	}
-	if result.UserID != string(actor.UserID) && !actor.HasRole("admin") {
+	if result.SpaceID != string(actor.SpaceID) && !actor.HasPermission(desktoppetAuth.PermSystemAdmin) {
 		return nil, ErrForbidden
 	}
 	return &BehaviorBindingScope{
-		UserID:         result.UserID,
+		SpaceID:        result.SpaceID,
 		BindingID:      bindingID,
 		InstallationID: result.InstallationID,
 	}, nil

@@ -322,11 +322,11 @@ func buildConcurrencyKeys(tool capability.ToolDefinition, inv capability.ToolInv
 }
 
 func characterConcurrencyID(inv capability.ToolInvocationContext) string {
-	return inv.UserID + "\x00" + inv.CharacterID
+	return inv.SpaceID + "\x00" + inv.CharacterID
 }
 
 func conversationConcurrencyID(inv capability.ToolInvocationContext) string {
-	return inv.UserID + "\x00" + inv.CharacterID + "\x00" + inv.ConversationID
+	return inv.SpaceID + "\x00" + inv.CharacterID + "\x00" + inv.ConversationID
 }
 
 func (c *ConcurrencyController) Snapshot() ConcurrencySnapshot {

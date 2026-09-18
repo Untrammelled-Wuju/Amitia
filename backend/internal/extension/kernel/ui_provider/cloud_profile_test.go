@@ -54,15 +54,15 @@ func TestScopedProfilesResolvePerUserAndDevice(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	user1 := ResolveContext{UserID: "user-1", Platform: "android"}
-	if _, err := r.SetProfileForContext(ctx, user1, ProfileScopeUser, Profile{
+	user1 := ResolveContext{SpaceID: "user-1", Platform: "android"}
+	if _, err := r.SetProfileForContext(ctx, user1, ProfileScopeSpace, Profile{
 		ProfileID: "user-1", Name: "User 1", Selections: map[Capability]string{CapabilityConversationShell: "test.cloud"},
 	}, 0); err != nil {
 		t.Fatal(err)
 	}
 
 	device1 := ResolveContext{
-		UserID: "user-1", DeviceID: "phone-1", Platform: "android", DeviceOnline: true,
+		SpaceID: "user-1", DeviceID: "phone-1", Platform: "android", DeviceOnline: true,
 		DeviceCapabilities: []string{"native-ui"},
 	}
 	if _, err := r.SetProfileForContext(ctx, device1, ProfileScopeDevice, Profile{
@@ -75,12 +75,12 @@ func TestScopedProfilesResolvePerUserAndDevice(t *testing.T) {
 		t.Fatalf("device override not resolved: %#v", got)
 	}
 
-	otherDevice := ResolveContext{UserID: "user-1", DeviceID: "phone-2", Platform: "android", DeviceOnline: true}
+	otherDevice := ResolveContext{SpaceID: "user-1", DeviceID: "phone-2", Platform: "android", DeviceOnline: true}
 	if got := r.ResolveWithContext(ctx, CapabilityConversationShell, otherDevice).Provider; got == nil || got.ProviderID != "test.cloud" {
 		t.Fatalf("user profile should apply to other device: %#v", got)
 	}
 
-	otherUser := ResolveContext{UserID: "user-2", DeviceID: "phone-1", Platform: "android", DeviceOnline: true, DeviceCapabilities: []string{"native-ui"}}
+	otherUser := ResolveContext{SpaceID: "user-2", DeviceID: "phone-1", Platform: "android", DeviceOnline: true, DeviceCapabilities: []string{"native-ui"}}
 	if got := r.ResolveWithContext(ctx, CapabilityConversationShell, otherUser).Provider; got == nil || !got.Builtin {
 		t.Fatalf("profiles must not leak between users: %#v", got)
 	}
@@ -95,8 +95,8 @@ func TestScopedProfilesResolvePerUserAndDevice(t *testing.T) {
 func TestScopedProfileRevisionConflict(t *testing.T) {
 	ctx := context.Background()
 	r := newCloudProfileTestRegistry(t)
-	rc := ResolveContext{UserID: "user-1", Platform: "android"}
-	first, err := r.SetProfileForContext(ctx, rc, ProfileScopeUser, Profile{
+	rc := ResolveContext{SpaceID: "user-1", Platform: "android"}
+	first, err := r.SetProfileForContext(ctx, rc, ProfileScopeSpace, Profile{
 		ProfileID: "user-1", Name: "User 1", Selections: map[Capability]string{},
 	}, 0)
 	if err != nil {
@@ -105,7 +105,7 @@ func TestScopedProfileRevisionConflict(t *testing.T) {
 	if first.Revision != 1 {
 		t.Fatalf("expected first revision 1, got %d", first.Revision)
 	}
-	_, err = r.SetProfileForContext(ctx, rc, ProfileScopeUser, Profile{
+	_, err = r.SetProfileForContext(ctx, rc, ProfileScopeSpace, Profile{
 		ProfileID: "user-1", Name: "Stale", Selections: map[Capability]string{},
 	}, 0)
 	if !errors.Is(err, ErrRevisionConflict) {
@@ -114,8 +114,8 @@ func TestScopedProfileRevisionConflict(t *testing.T) {
 }
 
 func TestProfileScopeKeyEscapesDelimiters(t *testing.T) {
-	a := ProfileScope{UserID: "user|d=device", Platform: "android"}.Key()
-	b := ProfileScope{UserID: "user", DeviceID: "device", Platform: "android"}.Key()
+	a := ProfileScope{SpaceID: "user|d=device", Platform: "android"}.Key()
+	b := ProfileScope{SpaceID: "user", DeviceID: "device", Platform: "android"}.Key()
 	if a == b {
 		t.Fatalf("escaped profile scope keys collided: %q", a)
 	}
@@ -135,7 +135,7 @@ func TestDeviceRequirementsFailClosedWhenMetadataMissing(t *testing.T) {
 	if err := r.Register(device); err != nil {
 		t.Fatal(err)
 	}
-	rc := ResolveContext{UserID: "user-1", DeviceID: "phone-1", Platform: "android", DeviceOnline: true}
+	rc := ResolveContext{SpaceID: "user-1", DeviceID: "phone-1", Platform: "android", DeviceOnline: true}
 	if _, err := r.SetProfileForContext(ctx, rc, ProfileScopeDevice, Profile{
 		ProfileID: "phone-1", Name: "Phone 1", Selections: map[Capability]string{CapabilityConversationShell: "test.device"},
 	}, 0); err != nil {
@@ -161,7 +161,7 @@ func TestRuntimeProfileIsIndependentFromDeviceAndPlatform(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rc := ResolveContext{UserID: "user-1", DeviceID: "phone-1", Platform: "android", RuntimeProfile: "cloud-core"}
+	rc := ResolveContext{SpaceID: "user-1", DeviceID: "phone-1", Platform: "android", RuntimeProfile: "cloud-core"}
 	saved, err := r.SetProfileForContext(ctx, rc, ProfileScopeRuntime, Profile{
 		ProfileID: "cloud-runtime", Name: "Cloud Runtime", Selections: map[Capability]string{CapabilityConversationShell: "test.cloud"},
 	}, 0)
@@ -172,7 +172,7 @@ func TestRuntimeProfileIsIndependentFromDeviceAndPlatform(t *testing.T) {
 		t.Fatalf("runtime scope must be user+runtime only: %#v", saved.Scope)
 	}
 
-	otherDevice := ResolveContext{UserID: "user-1", DeviceID: "desktop-2", Platform: "windows", RuntimeProfile: "cloud-core"}
+	otherDevice := ResolveContext{SpaceID: "user-1", DeviceID: "desktop-2", Platform: "windows", RuntimeProfile: "cloud-core"}
 	if got := r.ResolveWithContext(ctx, CapabilityConversationShell, otherDevice).Provider; got == nil || got.ProviderID != "test.cloud" {
 		t.Fatalf("runtime override should follow the user across devices/platforms: %#v", got)
 	}

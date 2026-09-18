@@ -11,6 +11,7 @@ import {
   normalizeRealtimeMessage,
 } from "@/utils/message-order";
 import { notifyDesktopPetChatState } from "@/runtime/desktop-pet-chat-state";
+import { useConversationWorkspace } from "./useConversationWorkspace";
 
 export function useWebChatSend(
   messages: Ref<any[]>,
@@ -27,12 +28,12 @@ export function useWebChatSend(
   scrollToBottom: (smooth?: boolean) => void,
   disconnectSSE: () => void,
   inputRef: Ref<any>,
-  fetchWechatMsgCount: () => void,
-  fetchQQStatus: () => void,
   fetchWebMsgCount?: () => void,
   replyTarget?: Ref<any>,
 ) {
   const { post, del, get } = useApi();
+  const { getWorkspaceRequestFields, bindCurrentWorkspaceToConversation } =
+    useConversationWorkspace();
   let lastPolledMsgId: string | null = null;
   const isSubmitting = ref(false);
   const generating = ref(false);
@@ -219,6 +220,8 @@ export function useWebChatSend(
     isSubmitting.value = true;
     const requestEnvelope = createRequestEnvelope();
     const userMsgLocalId = "user-" + Date.now();
+    const clientMessageId = requestEnvelope.requestId;
+    const uiKey = `client:${clientMessageId}`;
     const imgUrl = pendingImageBase64.value;
     const finalAudioUrl = audioUrl || pendingAudioUrl.value;
     const finalVideoUrl = videoUrl || pendingVideoUrl.value;
@@ -247,15 +250,18 @@ export function useWebChatSend(
     messages.value.push({
       id: userMsgLocalId,
       requestId: requestEnvelope.requestId,
+      clientMessageId,
+      uiKey,
+      animateIn: true,
       role: "user",
       content: sendContent,
       imageUrl: imgUrl || undefined,
       audioUrl: finalAudioUrl || undefined,
       audioDuration: 0,
       videoUrl: finalVideoUrl || undefined,
-      status: "sent",
+      status: "sending",
       conversationId: convId.value,
-      createdAt: new Date().toISOString(),
+      createdAt: new Date(Math.floor(Date.now() / 1000) * 1000).toISOString(),
       replyToMessageId: replyTarget?.value?.id || undefined,
       replyToRole: replyTarget?.value?.role || undefined,
       replyToExcerpt: replyTarget?.value?.content || undefined,
@@ -267,15 +273,18 @@ export function useWebChatSend(
           JSON.stringify({
             id: userMsgLocalId,
             requestId: requestEnvelope.requestId,
+            clientMessageId,
+            uiKey,
+            animateIn: false,
             role: "user",
             content: sendContent,
             imageUrl: imgUrl || undefined,
             audioUrl: finalAudioUrl || undefined,
             audioDuration: 0,
             videoUrl: finalVideoUrl || undefined,
-            status: "sent",
+            status: "sending",
             conversationId: convId.value,
-            createdAt: new Date().toISOString(),
+            createdAt: new Date(Math.floor(Date.now() / 1000) * 1000).toISOString(),
             replyToMessageId: replyTarget?.value?.id || undefined,
             replyToRole: replyTarget?.value?.role || undefined,
             replyToExcerpt: replyTarget?.value?.content || undefined,
@@ -291,6 +300,7 @@ export function useWebChatSend(
     try {
       const payload = {
         ...requestEnvelope,
+        clientMessageId,
         conversationId: convId.value || undefined,
         characterId: characterId.value || undefined,
         message: sendContent,
@@ -299,6 +309,7 @@ export function useWebChatSend(
         voiceMessage: !!finalAudioUrl,
         videoUrl: finalVideoUrl || "",
         replyToMessageId: replyTarget?.value?.id || undefined,
+        ...getWorkspaceRequestFields(),
       };
       const [url, init] = await Promise.all([
         resolveApiUrl("/api/web-chat/messages"),
@@ -310,7 +321,12 @@ export function useWebChatSend(
       ]);
       const res = await fetch(url, init);
       isSubmitting.value = false;
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (!res.ok) {
+        const errorBody = await res.json().catch(() => null);
+        throw new Error(
+          errorBody?.msg || errorBody?.message || `HTTP ${res.status}`,
+        );
+      }
       const data = await res.json();
       const result = data?.data || data;
       const uIdx = messages.value.findIndex(
@@ -318,6 +334,8 @@ export function useWebChatSend(
       );
       if (uIdx >= 0 && result.userMessageId) {
         messages.value[uIdx].id = result.userMessageId;
+        messages.value[uIdx].clientMessageId =
+          result.clientMessageId || clientMessageId;
         messages.value[uIdx].status = "queued";
         const duplicates = messages.value.filter(
           (m: any, i: number) => i !== uIdx && m.id === result.userMessageId,
@@ -332,8 +350,10 @@ export function useWebChatSend(
       if (convId.value) { try { sessionStorage.removeItem(`uai-pending-msg:${convId.value}`) } catch {} }
       if (result.conversationId && !convId.value)
         convId.value = result.conversationId;
-      if (result.conversationId)
+      if (result.conversationId) {
         localStorage.setItem("webchat-conv-id", result.conversationId);
+        bindCurrentWorkspaceToConversation(result.conversationId).catch(() => {});
+      }
       if (replyTarget) replyTarget.value = null;
       startGenerationPhaseTracking(result.mergeWindowMs);
       startSendingTimeout(result.userMessageId || userMsgLocalId);
@@ -365,8 +385,6 @@ export function useWebChatSend(
       const lastMsg = messages.value[messages.value.length - 1];
       if (lastMsg?.id && lastMsg.id !== "streaming")
         lastPolledMsgId = lastMsg.id;
-      fetchWechatMsgCount();
-      fetchQQStatus();
       if (fetchWebMsgCount) fetchWebMsgCount();
     }
   }

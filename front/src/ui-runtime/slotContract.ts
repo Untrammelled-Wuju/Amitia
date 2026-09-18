@@ -252,6 +252,8 @@ export interface ClientSlotMap {
   "extension.settings.section": ClientList<ClientExtensionOwner>;
   "chat.header.action": ClientList<ClientSessionOwner, "session-maybe">;
   "chat.sidebar.panel": ClientList<ClientSessionOwner, "session-maybe">;
+  "chat.profile_summary.panel": ClientChain<ClientSessionOwner, "session-maybe">;
+  "chat.memory_context.panel": ClientChain<ClientSessionOwner, "session-maybe">;
   "chat.message.action": ClientList<ClientMessageOwner, "session">;
   "chat.message.renderer": ClientChain<ClientMessageOwner, "session">;
   "chat.conversation.node": ClientList<ClientConversationNodeOwner, "session">;

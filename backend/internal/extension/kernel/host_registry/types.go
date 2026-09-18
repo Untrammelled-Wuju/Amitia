@@ -82,7 +82,7 @@ const (
 type RuntimeEntry struct {
 	EntryID         string
 	Kind            RegistryEntryKind
-	UserID          runtimeidentity.UserID
+	SpaceID         runtimeidentity.SpaceID
 	DeviceID        runtimeidentity.DeviceID
 	RuntimeID       runtimeidentity.RuntimeID
 	Platform        runtimeidentity.Platform
@@ -114,11 +114,11 @@ func (e *RuntimeEntry) NormalizeCompatibility() {
 }
 
 func (e RuntimeEntry) HasDeviceIdentity() bool {
-	return e.UserID != "" && e.DeviceID != ""
+	return e.SpaceID != "" && e.DeviceID != ""
 }
 
 func (e RuntimeEntry) HasRuntimeIdentity() bool {
-	return e.UserID != "" && e.DeviceID != "" && e.RuntimeID != ""
+	return e.SpaceID != "" && e.DeviceID != "" && e.RuntimeID != ""
 }
 
 func (e RuntimeEntry) IsExpired() bool {
@@ -165,7 +165,7 @@ func (e RuntimeEntry) HasCapability(cap HostCapability) bool {
 }
 
 type DevicePresence struct {
-	UserID        runtimeidentity.UserID
+	SpaceID       runtimeidentity.SpaceID
 	DeviceID      runtimeidentity.DeviceID
 	Platform      runtimeidentity.Platform
 	State         PresenceState
@@ -174,7 +174,7 @@ type DevicePresence struct {
 }
 
 type RuntimePresence struct {
-	UserID        runtimeidentity.UserID
+	SpaceID       runtimeidentity.SpaceID
 	DeviceID      runtimeidentity.DeviceID
 	RuntimeID     runtimeidentity.RuntimeID
 	Platform      runtimeidentity.Platform
@@ -200,8 +200,8 @@ func cloneRuntimeEntry(entry *RuntimeEntry) *RuntimeEntry {
 	return &clone
 }
 
-func RuntimeEntryID(userID runtimeidentity.UserID, deviceID runtimeidentity.DeviceID, runtimeID runtimeidentity.RuntimeID) string {
-	normalized := strings.TrimSpace(userID.String()) + "\x00" +
+func RuntimeEntryID(spaceID runtimeidentity.SpaceID, deviceID runtimeidentity.DeviceID, runtimeID runtimeidentity.RuntimeID) string {
+	normalized := strings.TrimSpace(spaceID.String()) + "\x00" +
 		strings.TrimSpace(deviceID.String()) + "\x00" +
 		strings.TrimSpace(runtimeID.String())
 	sum := sha256.Sum256([]byte(normalized))
@@ -270,7 +270,7 @@ func aggregateRuntimePresence(entries []*RuntimeEntry) RuntimePresence {
 	}
 
 	return RuntimePresence{
-		UserID:        ref.UserID,
+		SpaceID:       ref.SpaceID,
 		DeviceID:      ref.DeviceID,
 		RuntimeID:     ref.RuntimeID,
 		Platform:      platform,
@@ -345,7 +345,7 @@ func aggregateDevicePresence(entries []*RuntimeEntry) DevicePresence {
 	}
 
 	return DevicePresence{
-		UserID:        ref.UserID,
+		SpaceID:       ref.SpaceID,
 		DeviceID:      ref.DeviceID,
 		Platform:      platform,
 		State:         state,

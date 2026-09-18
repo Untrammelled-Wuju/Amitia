@@ -1,5 +1,6 @@
 import type { SlotSnapshot, UIContributionSummary } from "@/stores/extensionUI";
-import type { ClientSlotContribution, ClientSlotDefinition, ClientSlotKind } from "@/ui-runtime/clientPluginRuntime";
+import type { ClientSlotContribution, ClientSlotDefinition } from "@/ui-runtime/clientPluginRuntime";
+import type { ClientSlotKind } from "@/ui-runtime/slotContract";
 
 export type UnifiedSlotItem =
   | {

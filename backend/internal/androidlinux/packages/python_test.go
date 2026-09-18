@@ -1,3 +1,5 @@
+//go:build linux && !android
+
 package packages
 
 import (
@@ -11,9 +13,9 @@ import (
 func TestPythonDetector_Detect_Available(t *testing.T) {
 	executor := &fakeShellExecutor{
 		results: map[string]shell.ShellExecuteResult{
-			"python3 --version":       {ExitCode: 0, Stdout: "Python 3.10.12"},
+			"python3 --version":        {ExitCode: 0, Stdout: "Python 3.10.12"},
 			"python3 -m pip --version": {ExitCode: 0, Stdout: "pip 23.0.1"},
-			"python3 -m venv --help":  {ExitCode: 0},
+			"python3 -m venv --help":   {ExitCode: 0},
 		},
 	}
 	detector := NewPythonDetector(executor)

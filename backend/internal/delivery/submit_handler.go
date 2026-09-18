@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/u-ai/backend/internal/middleware/security"
 	"github.com/u-ai/backend/pkg/comment/response"
 	"github.com/u-ai/backend/pkg/util"
 )
@@ -37,7 +38,7 @@ func (h *SubmitHandler) Submit(c *gin.Context) {
 	}
 	interactionID := req.InteractionID
 	if interactionID == "" {
-		interactionID = "sidecar-" + req.MessageID
+		interactionID = "channel-" + req.MessageID
 	}
 	payload, _ := json.Marshal(map[string]interface{}{
 		"messageId": req.MessageID,
@@ -60,5 +61,5 @@ func (h *SubmitHandler) Submit(c *gin.Context) {
 
 func RegisterSubmitRouter(r *gin.RouterGroup, store *SQLiteDeliveryStore) {
 	handler := NewSubmitHandler(store)
-	r.POST("/delivery/submit", handler.Submit)
+	r.POST("/delivery/submit", security.SharedCoreAdminOnly(), handler.Submit)
 }

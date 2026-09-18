@@ -7,8 +7,7 @@ import "encoding/json"
 type AgentSkillScope string
 
 const (
-	AgentSkillScopeGlobal    AgentSkillScope = "global"
-	AgentSkillScopeCharacter AgentSkillScope = "character"
+	AgentSkillScopeGlobal AgentSkillScope = "global"
 )
 
 type ActivationMode string

@@ -14,7 +14,7 @@ import (
 
 type runtimeDebugInteractionRow struct {
 	ID             string    `gorm:"column:id"`
-	UserID         string    `gorm:"column:user_id"`
+	SpaceID        string    `gorm:"column:space_id"`
 	CharacterID    string    `gorm:"column:character_id"`
 	ConversationID string    `gorm:"column:conversation_id"`
 	Priority       int       `gorm:"column:priority"`
@@ -58,7 +58,7 @@ func (h *Handler) RuntimeDebugSnapshot(c *gin.Context) {
 	interactionRows := make([]runtimeDebugInteractionRow, 0)
 	if h.db != nil && h.db.Migrator().HasTable("interaction_records") {
 		_ = h.db.Table("interaction_records").
-			Select("id,user_id,character_id,conversation_id,priority,path_type,status,status_version,cancel_reason,deadline_at,created_at,updated_at").
+			Select("id,space_id,character_id,conversation_id,priority,path_type,status,status_version,cancel_reason,deadline_at,created_at,updated_at").
 			Order("updated_at DESC").Limit(100).Scan(&interactionRows).Error
 	}
 
@@ -84,7 +84,7 @@ func (h *Handler) RuntimeDebugSnapshot(c *gin.Context) {
 				queueOldest[queueName] = created
 			}
 		}
-		scope := runtimeDebugScope(row.UserID, row.CharacterID, row.ConversationID)
+		scope := runtimeDebugScope(row.SpaceID, row.CharacterID, row.ConversationID)
 		item := map[string]interface{}{
 			"scope":        scope,
 			"status":       row.Status,
@@ -229,10 +229,10 @@ func runtimeDebugActiveStatus(status string) bool {
 	}
 }
 
-func runtimeDebugScope(userID, characterID, conversationID string) string {
+func runtimeDebugScope(spaceID, characterID, conversationID string) string {
 	parts := make([]string, 0, 3)
-	if strings.TrimSpace(userID) != "" {
-		parts = append(parts, "user:"+userID)
+	if strings.TrimSpace(spaceID) != "" {
+		parts = append(parts, "space:"+spaceID)
 	}
 	if strings.TrimSpace(characterID) != "" {
 		parts = append(parts, "character:"+characterID)

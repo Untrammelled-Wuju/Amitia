@@ -13,13 +13,13 @@ import (
 )
 
 type WorkflowTriggerEvent struct {
-	EventID     string          `json:"eventId"`
-	EventType   string          `json:"eventType"`
-	Source      string          `json:"source"`
-	OwnerUserID string          `json:"ownerUserId"`
-	DeviceID    string          `json:"deviceId"`
-	OccurredAt  time.Time       `json:"occurredAt"`
-	Payload     json.RawMessage `json:"payload"`
+	EventID      string          `json:"eventId"`
+	EventType    string          `json:"eventType"`
+	Source       string          `json:"source"`
+	OwnerSpaceID string          `json:"ownerSpaceId"`
+	DeviceID     string          `json:"deviceId"`
+	OccurredAt   time.Time       `json:"occurredAt"`
+	Payload      json.RawMessage `json:"payload"`
 }
 
 type WorkflowEventMatchResult struct {
@@ -97,13 +97,13 @@ func (r *WorkflowEventMatcherRegistry) Match(ctx context.Context, event Workflow
 	return matcher.Match(ctx, event, binding, resolver)
 }
 
-func TriggerSecretNamespace(userID string) string {
-	sum := sha256.Sum256([]byte(strings.TrimSpace(userID)))
+func TriggerSecretNamespace(spaceID string) string {
+	sum := sha256.Sum256([]byte(strings.TrimSpace(spaceID)))
 	return fmt.Sprintf("workflow-trigger-%x", sum[:16])
 }
 
-func TriggerSecretRefOwnedByUser(ref, userID string) bool {
-	namespace := TriggerSecretNamespace(userID)
+func TriggerSecretRefOwnedBySpace(ref, spaceID string) bool {
+	namespace := TriggerSecretNamespace(spaceID)
 	prefix := "secret://" + namespace + "/"
 	trimmed := strings.TrimSpace(ref)
 	if !strings.HasPrefix(trimmed, prefix) {
@@ -115,8 +115,8 @@ func TriggerSecretRefOwnedByUser(ref, userID string) bool {
 
 func canonicalWorkflowEventType(event WorkflowTriggerEvent) string {
 	eventType := strings.TrimSpace(event.EventType)
-	if event.OwnerUserID != "" {
-		prefix := "user:" + event.OwnerUserID + ":"
+	if event.OwnerSpaceID != "" {
+		prefix := "space:" + event.OwnerSpaceID + ":"
 		if strings.HasPrefix(eventType, prefix) {
 			return strings.TrimPrefix(eventType, prefix)
 		}

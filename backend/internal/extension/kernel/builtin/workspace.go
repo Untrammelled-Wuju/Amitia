@@ -8,6 +8,7 @@ import (
 const (
 	WorkspaceExtensionID        = domain.ExtensionID("com.amitia.builtin.workspace")
 	WorkspaceModuleID           = domain.ModuleID("workspace-runtime")
+	WorkspaceDeviceModuleID     = domain.ModuleID("workspace-device-runtime")
 	WorkspaceReadCapabilityID   = capability.CapabilityID("workspace.read")
 	WorkspaceWriteCapabilityID  = capability.CapabilityID("workspace.write")
 	WorkspaceManageCapabilityID = capability.CapabilityID("workspace.manage")
@@ -76,9 +77,43 @@ func BuildWorkspaceExtension(version string) Definition {
 					FileSystemAccess: true,
 				},
 			},
+			{
+				ID:          WorkspaceDeviceModuleID,
+				ExtensionID: WorkspaceExtensionID,
+				Name:        domain.LocalizedText{Default: "Workspace Device Runtime"},
+				Description: domain.LocalizedText{Default: "Device-side provider for conversation-bound local workspaces."},
+				Type:        domain.ModuleTypeBuiltin,
+				Version:     version,
+				Runtime: &domain.RuntimeDefinition{
+					Type:        domain.RuntimeTypeBuiltin,
+					EntryPoint:  "workspace.manage",
+					WorkerCount: 2,
+				},
+				ProvidedCapabilities: []domain.ProvidedCapability{
+					{ID: string(WorkspaceReadCapabilityID), Version: version},
+					{ID: string(WorkspaceWriteCapabilityID), Version: version},
+					{ID: string(WorkspaceManageCapabilityID), Version: version},
+				},
+				Provider: &domain.ProviderMetadata{
+					ID:       "com.amitia.builtin.workspace.device.provider",
+					Priority: 110,
+					Labels: map[string]string{
+						"component": "workspace",
+						"authority": "device-local",
+					},
+				},
+				Placement: domain.ModulePlacementDevice,
+				Compatibility: domain.ModuleCompatibility{
+					Platforms: []string{"windows", "linux", "darwin", "android", "ios"},
+				},
+				Policies: domain.ModulePolicies{
+					NetworkAccess:    false,
+					FileSystemAccess: true,
+				},
+			},
 		},
 		Compatibility: domain.ExtensionCompatibility{
-			Platforms: []string{"windows", "linux", "darwin"},
+			Platforms: []string{"windows", "linux", "darwin", "android", "ios"},
 		},
 		Policies: domain.ExtensionPolicies{},
 	}
@@ -158,10 +193,10 @@ func buildWorkspaceContributions(extID domain.ExtensionID, modID domain.ModuleID
 		{
 			id:           "workspace_search",
 			name:         "Workspace Search",
-			description:  "Search for literal or regex patterns across workspace files",
+			description:  "Search the current conversation workspace for literal or regex patterns; workspaceId is optional when a chat workspace is bound",
 			modelName:    "workspace.search",
 			handlerName:  "workspace.search",
-			inputSchema:  `{"type":"object","properties":{"workspaceId":{"type":"string"},"query":{"type":"string"},"regex":{"type":"boolean"},"includeGlobs":{"type":"array","items":{"type":"string"}},"excludeGlobs":{"type":"array","items":{"type":"string"}},"maxResults":{"type":"integer","minimum":1,"maximum":1000},"contextBefore":{"type":"integer","minimum":0,"maximum":10},"contextAfter":{"type":"integer","minimum":0,"maximum":10}},"required":["workspaceId","query"],"additionalProperties":false}`,
+			inputSchema:  `{"type":"object","properties":{"workspaceId":{"type":"string"},"query":{"type":"string"},"regex":{"type":"boolean"},"includeGlobs":{"type":"array","items":{"type":"string"}},"excludeGlobs":{"type":"array","items":{"type":"string"}},"maxResults":{"type":"integer","minimum":1,"maximum":1000},"contextBefore":{"type":"integer","minimum":0,"maximum":10},"contextAfter":{"type":"integer","minimum":0,"maximum":10}},"required":["query"],"additionalProperties":false}`,
 			outputSchema: `{"type":"object","properties":{"matches":{"type":"array","items":{"type":"object"}},"total":{"type":"integer"},"truncated":{"type":"boolean"}}}`,
 			riskLevel:    "low",
 			sideEffect:   "read_only",
@@ -173,10 +208,10 @@ func buildWorkspaceContributions(extID domain.ExtensionID, modID domain.ModuleID
 		{
 			id:           "workspace_patch",
 			name:         "Workspace Patch",
-			description:  "Apply a unified-diff patch to a workspace file with integrity verification",
+			description:  "Apply a unified-diff patch inside the current conversation workspace; workspaceId is optional when bound",
 			modelName:    "workspace.patch",
 			handlerName:  "workspace.patch",
-			inputSchema:  `{"type":"object","properties":{"workspaceId":{"type":"string"},"filePath":{"type":"string"},"baseSha256":{"type":"string"},"patch":{"type":"string"}},"required":["workspaceId","filePath","patch"],"additionalProperties":false}`,
+			inputSchema:  `{"type":"object","properties":{"workspaceId":{"type":"string"},"filePath":{"type":"string"},"baseSha256":{"type":"string"},"patch":{"type":"string"}},"required":["filePath","patch"],"additionalProperties":false}`,
 			outputSchema: `{"type":"object","properties":{"applied":{"type":"boolean"},"filePath":{"type":"string"},"newSha256":{"type":"string"}}}`,
 			riskLevel:    "medium",
 			sideEffect:   "write",
@@ -191,7 +226,7 @@ func buildWorkspaceContributions(extID domain.ExtensionID, modID domain.ModuleID
 			description:  "Compute unified diff between before and after file snapshots",
 			modelName:    "workspace.diff",
 			handlerName:  "workspace.diff",
-			inputSchema:  `{"type":"object","properties":{"workspaceId":{"type":"string"},"beforeFiles":{"type":"object"},"afterFiles":{"type":"object"}},"required":["workspaceId"],"additionalProperties":false}`,
+			inputSchema:  `{"type":"object","properties":{"workspaceId":{"type":"string"},"beforeFiles":{"type":"object"},"afterFiles":{"type":"object"}},"required":[],"additionalProperties":false}`,
 			outputSchema: `{"type":"object","properties":{"changedFiles":{"type":"array","items":{"type":"string"}},"unifiedDiff":{"type":"string"},"additions":{"type":"integer"},"deletions":{"type":"integer"}}}`,
 			riskLevel:    "low",
 			sideEffect:   "read_only",
@@ -203,10 +238,10 @@ func buildWorkspaceContributions(extID domain.ExtensionID, modID domain.ModuleID
 		{
 			id:           "workspace_replace",
 			name:         "Workspace Replace",
-			description:  "Perform exact text replacement in a workspace file with occurrence validation",
+			description:  "Perform exact text replacement inside the current conversation workspace; workspaceId is optional when bound",
 			modelName:    "workspace.replace",
 			handlerName:  "workspace.replace",
-			inputSchema:  `{"type":"object","properties":{"workspaceId":{"type":"string"},"filePath":{"type":"string"},"oldText":{"type":"string"},"newText":{"type":"string"},"expectedOccurrences":{"type":"integer","minimum":0}},"required":["workspaceId","filePath","oldText"],"additionalProperties":false}`,
+			inputSchema:  `{"type":"object","properties":{"workspaceId":{"type":"string"},"filePath":{"type":"string"},"oldText":{"type":"string"},"newText":{"type":"string"},"expectedOccurrences":{"type":"integer","minimum":0}},"required":["filePath","oldText"],"additionalProperties":false}`,
 			outputSchema: `{"type":"object","properties":{"replaced":{"type":"boolean"},"actualOccurrences":{"type":"integer"},"filePath":{"type":"string"}}}`,
 			riskLevel:    "medium",
 			sideEffect:   "write",

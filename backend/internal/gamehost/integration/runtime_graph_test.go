@@ -4,6 +4,7 @@ import (
 	"context"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
 	"github.com/u-ai/backend/internal/extension/kernel/trusted_service"
@@ -69,6 +70,43 @@ func makeTestPlugin(extensionID, pluginID string, entryPoint string) KernelGameP
 			},
 		},
 	}
+}
+
+type recordingRuntimeExecutor struct {
+	stopped []ghdomain.RuntimeInstanceID
+	cleaned []ghdomain.RuntimeInstanceID
+}
+
+func (e *recordingRuntimeExecutor) StartRuntime(context.Context, ghdomain.RuntimeInstanceID) error {
+	return nil
+}
+
+func (e *recordingRuntimeExecutor) StopRuntime(_ context.Context, runtimeID ghdomain.RuntimeInstanceID) error {
+	e.stopped = append(e.stopped, runtimeID)
+	return nil
+}
+
+func (e *recordingRuntimeExecutor) RestartRuntime(context.Context, ghdomain.RuntimeInstanceID, string) error {
+	return nil
+}
+
+func (e *recordingRuntimeExecutor) StartServices(context.Context, ghdomain.RuntimeInstanceID, []ghdomain.ServiceID) error {
+	return nil
+}
+
+func (e *recordingRuntimeExecutor) StopServices(context.Context, ghdomain.RuntimeInstanceID, []ghdomain.ServiceID) error {
+	return nil
+}
+
+func (e *recordingRuntimeExecutor) CleanupRuntime(_ context.Context, runtimeID ghdomain.RuntimeInstanceID) error {
+	e.cleaned = append(e.cleaned, runtimeID)
+	return nil
+}
+
+func (e *recordingRuntimeExecutor) SetResolveDefinition(ghruntime.DefinitionResolverFunc) {
+}
+
+func (e *recordingRuntimeExecutor) SetRuntimeSubscriptionWatcher(ghruntime.RuntimeSubscriptionWatcher) {
 }
 
 func TestRuntimeGraphProvisioner_Reconcile_CreatesRuntime(t *testing.T) {
@@ -156,6 +194,55 @@ func TestRuntimeGraphProvisioner_Reconcile_Idempotent(t *testing.T) {
 	runtimes := rtManager.ListRuntimes()
 	if len(runtimes) != 1 {
 		t.Errorf("idempotent reconcile created %d runtimes, want 1", len(runtimes))
+	}
+}
+
+func TestRuntimeGraphProvisioner_Reconcile_RecreatesRunningRuntime(t *testing.T) {
+	source := testKernelSource{plugins: []KernelGamePlugin{
+		makeTestPlugin("ext-a", "game", "C:/test/game.exe"),
+	}}
+
+	provisioner, rtManager, _ := newTestProvisioner(t, source)
+	executor := &recordingRuntimeExecutor{}
+	provisioner.SetRuntimeExecutor(executor)
+
+	ctx := context.Background()
+	if err := provisioner.Reconcile(ctx); err != nil {
+		t.Fatalf("first Reconcile error: %v", err)
+	}
+
+	first := rtManager.ListRuntimes()
+	if len(first) != 1 {
+		t.Fatalf("first reconcile created %d runtimes, want 1", len(first))
+	}
+	oldID := first[0].ID
+	now := time.Now()
+	if err := rtManager.UpdateRuntimeState(oldID, ghdomain.RuntimeStateStarting, "test", now); err != nil {
+		t.Fatalf("transition runtime to starting: %v", err)
+	}
+	if err := rtManager.UpdateRuntimeState(oldID, ghdomain.RuntimeStateRunning, "test", now.Add(time.Second)); err != nil {
+		t.Fatalf("transition runtime to running: %v", err)
+	}
+
+	if err := provisioner.Reconcile(ctx); err != nil {
+		t.Fatalf("Reconcile running runtime error: %v", err)
+	}
+
+	runtimes := rtManager.ListRuntimes()
+	if len(runtimes) != 1 {
+		t.Fatalf("reconcile after running created %d runtimes, want 1", len(runtimes))
+	}
+	if runtimes[0].ID == oldID {
+		t.Error("running runtime was not recreated")
+	}
+	if runtimes[0].State != ghdomain.RuntimeStateCreated {
+		t.Errorf("recreated runtime state = %q, want created", runtimes[0].State)
+	}
+	if len(executor.stopped) != 1 || executor.stopped[0] != oldID {
+		t.Errorf("stopped runtimes = %v, want old runtime %s", executor.stopped, oldID)
+	}
+	if len(executor.cleaned) != 1 || executor.cleaned[0] != oldID {
+		t.Errorf("cleaned runtimes = %v, want old runtime %s", executor.cleaned, oldID)
 	}
 }
 

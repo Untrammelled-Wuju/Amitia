@@ -9,9 +9,14 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
 	"github.com/u-ai/backend/internal/extension/kernel/persistence/sqlite"
+	"github.com/u-ai/backend/internal/extension/runtimegate"
 )
 
 type EnableExtensionFunc func(ctx context.Context, extensionID domain.ExtensionID) error
+
+const LegacyProactiveExtensionID = "com.amitia.builtin.proactive"
+
+const LegacyLifestyleExtensionID = "com.amitia.builtin.lifestyle"
 
 type Bootstrapper struct {
 	catalog            *Catalog
@@ -61,6 +66,12 @@ func (b *Bootstrapper) Reconcile(ctx context.Context) error {
 	if b.installations == nil {
 		return fmt.Errorf("builtin bootstrapper: installation repository is nil")
 	}
+	if err := b.removeLegacyProactive(ctx); err != nil {
+		return err
+	}
+	if err := b.removeLegacyLifestyle(ctx); err != nil {
+		return err
+	}
 
 	defs := b.catalog.List()
 	for _, def := range defs {
@@ -69,6 +80,68 @@ func (b *Bootstrapper) Reconcile(ctx context.Context) error {
 			return fmt.Errorf("reconcile builtin %s: %w", def.Extension.ID, err)
 		}
 	}
+	return nil
+}
+
+func (b *Bootstrapper) removeLegacyProactive(ctx context.Context) error {
+	extID := domain.ExtensionID(LegacyProactiveExtensionID)
+	if b.contributions != nil {
+		if err := b.contributions.DeleteContributions(ctx, extID); err != nil {
+			return fmt.Errorf("remove legacy proactive contributions: %w", err)
+		}
+	}
+	if b.modules != nil {
+		if err := b.modules.DeleteModules(ctx, extID); err != nil {
+			return fmt.Errorf("remove legacy proactive modules: %w", err)
+		}
+	}
+	if err := b.installations.DeleteInstallation(ctx, extID); err != nil {
+		return fmt.Errorf("remove legacy proactive installation: %w", err)
+	}
+	defs, err := b.definitions.ListExtensions(ctx)
+	if err != nil {
+		return fmt.Errorf("list legacy proactive definitions: %w", err)
+	}
+	for _, def := range defs {
+		if def.ID != extID {
+			continue
+		}
+		if err := b.definitions.DeleteExtension(ctx, extID, def.Version); err != nil {
+			return fmt.Errorf("remove legacy proactive definition: %w", err)
+		}
+	}
+	runtimegate.Set(LegacyProactiveExtensionID, false)
+	return nil
+}
+
+func (b *Bootstrapper) removeLegacyLifestyle(ctx context.Context) error {
+	extID := domain.ExtensionID(LegacyLifestyleExtensionID)
+	if b.contributions != nil {
+		if err := b.contributions.DeleteContributions(ctx, extID); err != nil {
+			return fmt.Errorf("remove legacy lifestyle contributions: %w", err)
+		}
+	}
+	if b.modules != nil {
+		if err := b.modules.DeleteModules(ctx, extID); err != nil {
+			return fmt.Errorf("remove legacy lifestyle modules: %w", err)
+		}
+	}
+	if err := b.installations.DeleteInstallation(ctx, extID); err != nil {
+		return fmt.Errorf("remove legacy lifestyle installation: %w", err)
+	}
+	defs, err := b.definitions.ListExtensions(ctx)
+	if err != nil {
+		return fmt.Errorf("list legacy lifestyle definitions: %w", err)
+	}
+	for _, def := range defs {
+		if def.ID != extID {
+			continue
+		}
+		if err := b.definitions.DeleteExtension(ctx, extID, def.Version); err != nil {
+			return fmt.Errorf("remove legacy lifestyle definition: %w", err)
+		}
+	}
+	runtimegate.Set(LegacyLifestyleExtensionID, false)
 	return nil
 }
 
@@ -95,8 +168,11 @@ func (b *Bootstrapper) reconcileDefinition(ctx context.Context, def Definition) 
 		}
 	}
 
-	for _, contrib := range extDef.AllContributions() {
-		if b.contributions != nil {
+	if b.contributions != nil {
+		if err := b.contributions.DeleteContributions(ctx, extID); err != nil {
+			return fmt.Errorf("clear obsolete contributions: %w", err)
+		}
+		for _, contrib := range extDef.AllContributions() {
 			if err := b.contributions.PutContribution(ctx, contrib); err != nil {
 				return fmt.Errorf("persist contribution %s: %w", contrib.ID, err)
 			}
@@ -108,27 +184,50 @@ func (b *Bootstrapper) reconcileDefinition(ctx context.Context, def Definition) 
 
 	if instErr != nil {
 		inst = domain.ExtensionInstallation{
-			InstallationID:   string(extID),
-			ExtensionID:      extID,
-			InstalledVersion: extDef.Version,
-			EnablementState:  domain.EnablementDisabled,
-			InstalledAt:      time.Now().UTC(),
-			UpdatedAt:        time.Now().UTC(),
-			Metadata:         map[string]any{"source": "builtin", "immutablePackage": true},
+			InstallationID:    string(extID),
+			ExtensionID:       extID,
+			InstalledVersion:  extDef.Version,
+			InstallationState: domain.InstallationStateInstalled,
+			EnablementState:   domain.EnablementDisabled,
+			InstalledAt:       time.Now().UTC(),
+			UpdatedAt:         time.Now().UTC(),
+			Metadata:          map[string]any{"source": "builtin", "immutablePackage": true},
 		}
 		if err := b.installations.PutInstallation(ctx, inst); err != nil {
 			return fmt.Errorf("persist installation: %w", err)
 		}
-	} else if inst.InstalledVersion.String() != extDef.Version.String() {
-		inst.InstalledVersion = extDef.Version
-		inst.UpdatedAt = time.Now().UTC()
-		if err := b.installations.PutInstallation(ctx, inst); err != nil {
-			return fmt.Errorf("update installation version: %w", err)
+	} else {
+		changed := false
+		if inst.InstallationState == "" {
+			inst.InstallationState = domain.InstallationStateInstalled
+			changed = true
+		}
+		if inst.InstalledVersion.String() != extDef.Version.String() {
+			inst.InstalledVersion = extDef.Version
+			changed = true
+		}
+		if changed {
+			inst.UpdatedAt = time.Now().UTC()
+			if err := b.installations.PutInstallation(ctx, inst); err != nil {
+				return fmt.Errorf("update installation metadata: %w", err)
+			}
 		}
 	}
 
+	userEnabled := installationUserEnabled(inst)
+	if userEnabled {
+		desiredEnabled = true
+	}
 	if inst.IsUserDisabled() {
 		desiredEnabled = false
+	}
+	runtimegate.Set(string(extID), desiredEnabled && inst.AllowsEnable())
+	if !desiredEnabled && inst.EnablementState != domain.EnablementDisabled {
+		inst.EnablementState = domain.EnablementDisabled
+		inst.UpdatedAt = time.Now().UTC()
+		if err := b.installations.PutInstallation(ctx, inst); err != nil {
+			return fmt.Errorf("persist default disabled installation: %w", err)
+		}
 	}
 
 	if b.providerReconciler != nil {
@@ -146,4 +245,12 @@ func (b *Bootstrapper) reconcileDefinition(ctx context.Context, def Definition) 
 	}
 
 	return nil
+}
+
+func installationUserEnabled(inst domain.ExtensionInstallation) bool {
+	if inst.Metadata == nil {
+		return false
+	}
+	value, ok := inst.Metadata["user.enabled"].(bool)
+	return ok && value
 }

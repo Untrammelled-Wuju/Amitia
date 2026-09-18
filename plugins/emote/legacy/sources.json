@@ -1,0 +1,23 @@
+{
+  "desktop": {
+    "commit": "5c9ea7247^",
+    "paths": [
+      "front/src/views/emotes/EmoteManagerView.vue",
+      "front/src/components/EmotePicker.vue",
+      "front/src/components/chat-bubble/EmoteMessage.vue",
+      "front/src/views/ai-character-settings/components/EmoteSettingsSection.vue"
+    ]
+  },
+  "mobile": {
+    "commit": "d19d0534a5b84b2ec59cae3655cb9167788d2554",
+    "paths": [
+      "mobile_app/lib/features/emotes/presentation/pages/emotes_page.dart"
+    ]
+  },
+  "mobilePrototype": {
+    "commit": "7f7259a7c",
+    "paths": [
+      "amitia-mobile-ui/pages/emotes.html"
+    ]
+  }
+}

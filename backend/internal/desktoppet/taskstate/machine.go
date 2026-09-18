@@ -13,6 +13,7 @@ type transitionEdge struct {
 
 var universalEdges = map[transitionEdge]bool{
 	{contracts.StatusPending, contracts.StatusQueued}:                true,
+	{contracts.StatusPending, contracts.StatusCancelled}:             true,
 	{contracts.StatusQueued, contracts.StatusProcessing}:             true,
 	{contracts.StatusQueued, contracts.StatusCancelled}:              true,
 	{contracts.StatusProcessing, contracts.StatusCancelling}:         true,

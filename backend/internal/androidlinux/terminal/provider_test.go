@@ -109,17 +109,17 @@ func TestProviderHandleStatus(t *testing.T) {
 
 func TestExtractOwner(t *testing.T) {
 	owner := extractOwner(map[string]any{
-		"userId":         "user-123",
+		"spaceId":        "user-123",
 		"characterId":    "char-456",
 		"conversationId": "conv-789",
 	})
 
-	assert.Equal(t, "user-123", owner.UserID)
+	assert.Equal(t, "user-123", owner.SpaceID)
 	assert.Equal(t, "char-456", owner.CharacterID)
 	assert.Equal(t, "conv-789", owner.ConversationID)
 
 	owner = extractOwner(map[string]any{})
-	assert.Empty(t, owner.UserID)
+	assert.Empty(t, owner.SpaceID)
 	assert.Empty(t, owner.CharacterID)
 	assert.Empty(t, owner.ConversationID)
 }

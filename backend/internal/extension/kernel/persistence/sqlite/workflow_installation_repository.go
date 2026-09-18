@@ -26,7 +26,7 @@ func NewWorkflowInstallationRepository(db *sql.DB) *WorkflowInstallationReposito
 func normalizeInstallation(inst workflow.WorkflowInstallation) (workflow.WorkflowInstallation, error) {
 	inst.InstallationID = strings.TrimSpace(inst.InstallationID)
 	inst.WorkflowID = strings.TrimSpace(inst.WorkflowID)
-	inst.OwnerUserID = strings.TrimSpace(inst.OwnerUserID)
+	inst.OwnerSpaceID = strings.TrimSpace(inst.OwnerSpaceID)
 	inst.HostDeviceID = strings.TrimSpace(inst.HostDeviceID)
 	if inst.InstallationID == "" {
 		inst.InstallationID = "wfinst-" + uuid.NewString()
@@ -67,10 +67,10 @@ func (r *WorkflowInstallationRepository) Create(ctx context.Context, inst workfl
 	}
 	_, err = r.db.ExecContext(ctx, `
 		INSERT INTO extension_workflow_installations
-			(installation_id, workflow_id, owner_user_id, location, host_device_id, enabled,
+			(installation_id, workflow_id, owner_space_id, location, host_device_id, enabled,
 			 triggers_json, callable_by_agent, agent_tool_json, revision, created_at, updated_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, inst.InstallationID, inst.WorkflowID, inst.OwnerUserID, string(inst.Location), inst.HostDeviceID,
+	`, inst.InstallationID, inst.WorkflowID, inst.OwnerSpaceID, string(inst.Location), inst.HostDeviceID,
 		boolToInt(inst.Enabled), triggers, boolToInt(inst.CallableByAgent), agentTool, inst.Revision, inst.CreatedAt, inst.UpdatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("create workflow installation: %w", err)
@@ -78,19 +78,19 @@ func (r *WorkflowInstallationRepository) Create(ctx context.Context, inst workfl
 	return &inst, nil
 }
 
-func (r *WorkflowInstallationRepository) EnsureLegacy(ctx context.Context, def workflow.WorkflowDefinition, ownerUserID string, location workflow.WorkflowLocation) (*workflow.WorkflowInstallation, error) {
-	ownerUserID = strings.TrimSpace(ownerUserID)
-	if ownerUserID == "" || strings.TrimSpace(def.ID) == "" {
+func (r *WorkflowInstallationRepository) EnsureLegacy(ctx context.Context, def workflow.WorkflowDefinition, ownerSpaceID string, location workflow.WorkflowLocation) (*workflow.WorkflowInstallation, error) {
+	ownerSpaceID = strings.TrimSpace(ownerSpaceID)
+	if ownerSpaceID == "" || strings.TrimSpace(def.ID) == "" {
 		return nil, errors.New("legacy workflow installation requires owner and workflow id")
 	}
-	if current, err := r.Get(ctx, ownerUserID, def.ID, location, ""); err == nil {
+	if current, err := r.Get(ctx, ownerSpaceID, def.ID, location, ""); err == nil {
 		return current, nil
 	} else if !errors.Is(err, sql.ErrNoRows) {
 		return nil, err
 	}
 	return r.Create(ctx, workflow.WorkflowInstallation{
 		WorkflowID:      def.ID,
-		OwnerUserID:     ownerUserID,
+		OwnerSpaceID:    ownerSpaceID,
 		Location:        location,
 		Enabled:         def.Enabled,
 		Triggers:        def.Triggers,
@@ -99,32 +99,32 @@ func (r *WorkflowInstallationRepository) EnsureLegacy(ctx context.Context, def w
 	})
 }
 
-func (r *WorkflowInstallationRepository) Get(ctx context.Context, ownerUserID, workflowID string, location workflow.WorkflowLocation, hostDeviceID string) (*workflow.WorkflowInstallation, error) {
+func (r *WorkflowInstallationRepository) Get(ctx context.Context, ownerSpaceID, workflowID string, location workflow.WorkflowLocation, hostDeviceID string) (*workflow.WorkflowInstallation, error) {
 	row := r.db.QueryRowContext(ctx, `
-		SELECT installation_id, workflow_id, owner_user_id, location, host_device_id, enabled,
+		SELECT installation_id, workflow_id, owner_space_id, location, host_device_id, enabled,
 			triggers_json, callable_by_agent, agent_tool_json, revision, created_at, updated_at
 		FROM extension_workflow_installations
-		WHERE owner_user_id = ? AND workflow_id = ? AND location = ? AND host_device_id = ?
-	`, strings.TrimSpace(ownerUserID), strings.TrimSpace(workflowID), string(location), strings.TrimSpace(hostDeviceID))
+		WHERE owner_space_id = ? AND workflow_id = ? AND location = ? AND host_device_id = ?
+	`, strings.TrimSpace(ownerSpaceID), strings.TrimSpace(workflowID), string(location), strings.TrimSpace(hostDeviceID))
 	return scanWorkflowInstallation(row)
 }
 
-func (r *WorkflowInstallationRepository) GetByID(ctx context.Context, ownerUserID, installationID string) (*workflow.WorkflowInstallation, error) {
+func (r *WorkflowInstallationRepository) GetByID(ctx context.Context, ownerSpaceID, installationID string) (*workflow.WorkflowInstallation, error) {
 	row := r.db.QueryRowContext(ctx, `
-		SELECT installation_id, workflow_id, owner_user_id, location, host_device_id, enabled,
+		SELECT installation_id, workflow_id, owner_space_id, location, host_device_id, enabled,
 			triggers_json, callable_by_agent, agent_tool_json, revision, created_at, updated_at
 		FROM extension_workflow_installations
-		WHERE owner_user_id = ? AND installation_id = ?
-	`, strings.TrimSpace(ownerUserID), strings.TrimSpace(installationID))
+		WHERE owner_space_id = ? AND installation_id = ?
+	`, strings.TrimSpace(ownerSpaceID), strings.TrimSpace(installationID))
 	return scanWorkflowInstallation(row)
 }
 
-func (r *WorkflowInstallationRepository) List(ctx context.Context, ownerUserID string, location workflow.WorkflowLocation, hostDeviceID string) ([]workflow.WorkflowInstallation, error) {
+func (r *WorkflowInstallationRepository) List(ctx context.Context, ownerSpaceID string, location workflow.WorkflowLocation, hostDeviceID string) ([]workflow.WorkflowInstallation, error) {
 	query := `
-		SELECT installation_id, workflow_id, owner_user_id, location, host_device_id, enabled,
+		SELECT installation_id, workflow_id, owner_space_id, location, host_device_id, enabled,
 			triggers_json, callable_by_agent, agent_tool_json, revision, created_at, updated_at
-		FROM extension_workflow_installations WHERE owner_user_id = ?`
-	args := []any{strings.TrimSpace(ownerUserID)}
+		FROM extension_workflow_installations WHERE owner_space_id = ?`
+	args := []any{strings.TrimSpace(ownerSpaceID)}
 	if location != "" {
 		query += ` AND location = ?`
 		args = append(args, string(location))
@@ -171,9 +171,9 @@ func (r *WorkflowInstallationRepository) UpdateCAS(ctx context.Context, inst wor
 		UPDATE extension_workflow_installations
 		SET enabled = ?, triggers_json = ?, callable_by_agent = ?, agent_tool_json = ?,
 			revision = revision + 1, updated_at = ?
-		WHERE installation_id = ? AND owner_user_id = ? AND revision = ?
+		WHERE installation_id = ? AND owner_space_id = ? AND revision = ?
 	`, boolToInt(inst.Enabled), triggers, boolToInt(inst.CallableByAgent), agentTool, now,
-		inst.InstallationID, inst.OwnerUserID, expectedRevision)
+		inst.InstallationID, inst.OwnerSpaceID, expectedRevision)
 	if err != nil {
 		return nil, fmt.Errorf("update workflow installation: %w", err)
 	}
@@ -184,11 +184,11 @@ func (r *WorkflowInstallationRepository) UpdateCAS(ctx context.Context, inst wor
 	if n != 1 {
 		return nil, ErrWorkflowRevisionConflict
 	}
-	return r.GetByID(ctx, inst.OwnerUserID, inst.InstallationID)
+	return r.GetByID(ctx, inst.OwnerSpaceID, inst.InstallationID)
 }
 
-func (r *WorkflowInstallationRepository) Delete(ctx context.Context, ownerUserID, installationID string) error {
-	res, err := r.db.ExecContext(ctx, `DELETE FROM extension_workflow_installations WHERE owner_user_id = ? AND installation_id = ?`, strings.TrimSpace(ownerUserID), strings.TrimSpace(installationID))
+func (r *WorkflowInstallationRepository) Delete(ctx context.Context, ownerSpaceID, installationID string) error {
+	res, err := r.db.ExecContext(ctx, `DELETE FROM extension_workflow_installations WHERE owner_space_id = ? AND installation_id = ?`, strings.TrimSpace(ownerSpaceID), strings.TrimSpace(installationID))
 	if err != nil {
 		return fmt.Errorf("delete workflow installation: %w", err)
 	}
@@ -211,7 +211,7 @@ func scanWorkflowInstallation(row workflowInstallationScanner) (*workflow.Workfl
 	var location string
 	var enabled, callable int
 	var triggersRaw, agentToolRaw []byte
-	if err := row.Scan(&inst.InstallationID, &inst.WorkflowID, &inst.OwnerUserID, &location, &inst.HostDeviceID, &enabled,
+	if err := row.Scan(&inst.InstallationID, &inst.WorkflowID, &inst.OwnerSpaceID, &location, &inst.HostDeviceID, &enabled,
 		&triggersRaw, &callable, &agentToolRaw, &inst.Revision, &inst.CreatedAt, &inst.UpdatedAt); err != nil {
 		return nil, err
 	}
@@ -232,7 +232,7 @@ func scanWorkflowInstallation(row workflowInstallationScanner) (*workflow.Workfl
 }
 
 type WorkflowDeviceCatalogItem struct {
-	OwnerUserID  string          `json:"ownerUserId,omitempty"`
+	OwnerSpaceID string          `json:"ownerSpaceId,omitempty"`
 	DeviceID     string          `json:"deviceId"`
 	WorkflowID   string          `json:"workflowId"`
 	Name         string          `json:"name"`
@@ -251,32 +251,32 @@ func NewWorkflowDeviceCatalogRepository(db *sql.DB) *WorkflowDeviceCatalogReposi
 	return &WorkflowDeviceCatalogRepository{db: db}
 }
 
-func (r *WorkflowDeviceCatalogRepository) ReplaceDevice(ctx context.Context, ownerUserID, deviceID string, items []WorkflowDeviceCatalogItem) error {
+func (r *WorkflowDeviceCatalogRepository) ReplaceDevice(ctx context.Context, ownerSpaceID, deviceID string, items []WorkflowDeviceCatalogItem) error {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
-	if _, err := tx.ExecContext(ctx, `DELETE FROM extension_workflow_device_catalog WHERE owner_user_id = ? AND device_id = ?`, ownerUserID, deviceID); err != nil {
+	if _, err := tx.ExecContext(ctx, `DELETE FROM extension_workflow_device_catalog WHERE owner_space_id = ? AND device_id = ?`, ownerSpaceID, deviceID); err != nil {
 		return err
 	}
 	for _, item := range items {
 		if _, err := tx.ExecContext(ctx, `
 			INSERT INTO extension_workflow_device_catalog
-			(owner_user_id, device_id, workflow_id, name, description, input_schema_json, output_schema_json, version, enabled, updated_at, last_seen)
+			(owner_space_id, device_id, workflow_id, name, description, input_schema_json, output_schema_json, version, enabled, updated_at, last_seen)
 			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-		`, ownerUserID, deviceID, item.WorkflowID, item.Name, item.Description, item.InputSchema, item.OutputSchema, item.Version, boolToInt(item.Enabled), item.UpdatedAt, item.LastSeen); err != nil {
+		`, ownerSpaceID, deviceID, item.WorkflowID, item.Name, item.Description, item.InputSchema, item.OutputSchema, item.Version, boolToInt(item.Enabled), item.UpdatedAt, item.LastSeen); err != nil {
 			return err
 		}
 	}
 	return tx.Commit()
 }
 
-func (r *WorkflowDeviceCatalogRepository) ListDevice(ctx context.Context, ownerUserID, deviceID string) ([]WorkflowDeviceCatalogItem, error) {
+func (r *WorkflowDeviceCatalogRepository) ListDevice(ctx context.Context, ownerSpaceID, deviceID string) ([]WorkflowDeviceCatalogItem, error) {
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT owner_user_id, device_id, workflow_id, name, description, input_schema_json, output_schema_json, version, enabled, updated_at, last_seen
-		FROM extension_workflow_device_catalog WHERE owner_user_id = ? AND device_id = ? ORDER BY name, workflow_id
-	`, ownerUserID, deviceID)
+		SELECT owner_space_id, device_id, workflow_id, name, description, input_schema_json, output_schema_json, version, enabled, updated_at, last_seen
+		FROM extension_workflow_device_catalog WHERE owner_space_id = ? AND device_id = ? ORDER BY name, workflow_id
+	`, ownerSpaceID, deviceID)
 	if err != nil {
 		return nil, err
 	}
@@ -285,7 +285,7 @@ func (r *WorkflowDeviceCatalogRepository) ListDevice(ctx context.Context, ownerU
 	for rows.Next() {
 		var item WorkflowDeviceCatalogItem
 		var enabled int
-		if err := rows.Scan(&item.OwnerUserID, &item.DeviceID, &item.WorkflowID, &item.Name, &item.Description, &item.InputSchema, &item.OutputSchema, &item.Version, &enabled, &item.UpdatedAt, &item.LastSeen); err != nil {
+		if err := rows.Scan(&item.OwnerSpaceID, &item.DeviceID, &item.WorkflowID, &item.Name, &item.Description, &item.InputSchema, &item.OutputSchema, &item.Version, &enabled, &item.UpdatedAt, &item.LastSeen); err != nil {
 			return nil, err
 		}
 		item.Enabled = enabled != 0

@@ -37,4 +37,6 @@
 *.key binary
 *.db binary
 *.amitiax binary
+*.gamex binary
+*.petx binary
 *.extension-key binary

@@ -7,10 +7,10 @@ import (
 )
 
 type SnapshotCache struct {
-	mu         sync.RWMutex
-	snapshots  map[string]*snapshotRecord
-	policy     Policy
-	counter    int64
+	mu        sync.RWMutex
+	snapshots map[string]*snapshotRecord
+	policy    Policy
+	counter   int64
 }
 
 func NewSnapshotCache(policy Policy) *SnapshotCache {
@@ -26,10 +26,10 @@ func (c *SnapshotCache) Put(snapshot UITreeSnapshot) {
 
 	if len(c.snapshots) >= c.policy.MaxSnapshots {
 		var oldestKey string
-		var oldestTime int64
+		var oldestSequence int64
 		for k, v := range c.snapshots {
-			if oldestTime == 0 || v.createdAt < oldestTime {
-				oldestTime = v.createdAt
+			if oldestKey == "" || v.sequence < oldestSequence {
+				oldestSequence = v.sequence
 				oldestKey = k
 			}
 		}
@@ -43,11 +43,13 @@ func (c *SnapshotCache) Put(snapshot UITreeSnapshot) {
 		nodeIndex[node.NodeID] = i
 	}
 
+	c.counter++
 	counter := time.Now().UnixNano()
 	c.snapshots[snapshot.SnapshotID] = &snapshotRecord{
 		snapshot:   snapshot,
 		createdAt:  counter,
 		accessedAt: counter,
+		sequence:   c.counter,
 		nodeIndex:  nodeIndex,
 	}
 }
@@ -326,10 +328,10 @@ func (s *Service) SnapshotResolver() SnapshotResolver {
 
 func (s *Service) buildSnapshot(raw RawSnapshot, sourceType SourceType) UITreeSnapshot {
 	snapshot := UITreeSnapshot{
-		Source:    string(sourceType),
+		Source:     string(sourceType),
 		Generation: raw.Generation,
 		CapturedAt: raw.CapturedAt,
-		Truncated: raw.Truncated,
+		Truncated:  raw.Truncated,
 	}
 
 	snapshot.Capability = UITreeCapabilityState{
@@ -391,9 +393,9 @@ func (s *Service) buildSnapshot(raw RawSnapshot, sourceType SourceType) UITreeSn
 
 func (s *Service) mapRawNode(raw map[string]any, sourceType SourceType, snapshotID string) UINode {
 	node := UINode{
-		Bounds:             Rect{},
-		Actions:            nil,
-		ChildIDs:           nil,
+		Bounds:   Rect{},
+		Actions:  nil,
+		ChildIDs: nil,
 	}
 
 	if v, ok := raw["nodeId"].(string); ok {

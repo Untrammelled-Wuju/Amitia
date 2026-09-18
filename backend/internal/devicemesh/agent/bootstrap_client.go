@@ -25,10 +25,10 @@ func (c *BootstrapClient) Exchange(ctx context.Context, cloudBaseURL, rawTicket,
 	cloudBaseURL = strings.TrimRight(cloudBaseURL, "/")
 
 	reqBody := map[string]interface{}{
-		"deviceId":        deviceID,
-		"runtimeId":       runtimeID,
-		"platform":        platform,
-		"runtimeVersion":  runtimeVersion,
+		"deviceId":       deviceID,
+		"runtimeId":      runtimeID,
+		"platform":       platform,
+		"runtimeVersion": runtimeVersion,
 	}
 	bodyBytes, err := json.Marshal(reqBody)
 	if err != nil {
@@ -69,7 +69,7 @@ func (c *BootstrapClient) Exchange(ctx context.Context, cloudBaseURL, rawTicket,
 type ExchangeResponse struct {
 	CredentialID    string `json:"credentialId"`
 	Credential      string `json:"credential"`
-	UserID          string `json:"userId"`
+	SpaceID         string `json:"spaceId"`
 	DeviceID        string `json:"deviceId"`
 	RuntimeID       string `json:"runtimeId"`
 	ExpiresAt       string `json:"expiresAt"`

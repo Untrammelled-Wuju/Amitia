@@ -1,0 +1,28 @@
+{
+  "version": "5.3.0-amitia.2",
+  "componentId": "runtime.proot",
+  "provenance": {
+    "upstreamTag": "v5.3.0",
+    "upstreamCommit": "official-static-release",
+    "androidPatchSource": "proot-me",
+    "androidPatchCommit": "official-static-aarch64-fa10b1a7"
+  },
+  "targetAbi": "arm64-v8a",
+  "targetArchitecture": "aarch64",
+  "artifact": {
+    "fileName": "libamitia_proot.so",
+    "sha256": "fa10b1a7818c2f5b1dcb5834450570c368c9ecf66d31521509621b95c4538a45",
+    "size": 1479432,
+    "source": "src/main/jniLibs/arm64-v8a/libamitia_proot.so"
+  },
+  "elf": {
+    "class": "ELF64",
+    "machine": 183,
+    "machineName": "AArch64",
+    "endianness": "little-endian",
+    "type": "ET_EXEC",
+    "linking": "statically-linked"
+  },
+  "license": "GPL-2.0-or-later",
+  "frozenAt": "2026-08-29"
+}

@@ -29,7 +29,7 @@ export function useMemoryDiagnostics() {
   async function rebuildIndex() {
     rebuilding.value = true;
     try {
-      const result = await post<any>("/api/memories/rebuild-embeddings", {});
+      const result = await post<any>("/api/memories/rebuild-index", {});
       vectorStatus.value = result;
       ElMessage.success(
         "索引重建完成：" +

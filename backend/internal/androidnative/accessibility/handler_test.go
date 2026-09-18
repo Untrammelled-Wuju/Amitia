@@ -18,7 +18,7 @@ func (m *mockAccessibilityBridge) Execute(ctx context.Context, req androidnative
 	}
 	return androidnative.NativeBridgeResponse{
 		ProtocolVersion: req.ProtocolVersion,
-		RequestID:       req.RequestID,
+		RequestId:       req.RequestId,
 		Status:          "success",
 	}, nil
 }
@@ -32,7 +32,7 @@ func TestAccessibilityHandler_Status(t *testing.T) {
 		executeFunc: func(ctx context.Context, req androidnative.NativeBridgeRequest) (androidnative.NativeBridgeResponse, error) {
 			return androidnative.NativeBridgeResponse{
 				ProtocolVersion: 1,
-				RequestID:       req.RequestID,
+				RequestId:       req.RequestId,
 				Status:          "success",
 				Result: map[string]any{
 					"platformSupported": true,
@@ -69,10 +69,10 @@ func TestAccessibilityHandler_OpenSettings(t *testing.T) {
 		executeFunc: func(ctx context.Context, req androidnative.NativeBridgeRequest) (androidnative.NativeBridgeResponse, error) {
 			return androidnative.NativeBridgeResponse{
 				ProtocolVersion: 1,
-				RequestID:       req.RequestID,
+				RequestId:       req.RequestId,
 				Status:          "success",
 				Result: map[string]any{
-					"opened":            true,
+					"opened":             true,
 					"userActionRequired": true,
 				},
 			}, nil
@@ -153,7 +153,7 @@ func TestAccessibilityHandler_RequestIDMismatch(t *testing.T) {
 		executeFunc: func(ctx context.Context, req androidnative.NativeBridgeRequest) (androidnative.NativeBridgeResponse, error) {
 			return androidnative.NativeBridgeResponse{
 				ProtocolVersion: 1,
-				RequestID:       "different-id",
+				RequestId:       "different-id",
 				Status:          "success",
 			}, nil
 		},

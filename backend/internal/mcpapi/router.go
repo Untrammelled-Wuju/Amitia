@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/u-ai/backend/internal/extension"
 	"github.com/u-ai/backend/internal/mcp"
 	"github.com/u-ai/backend/internal/mcp/auth"
 	"github.com/u-ai/backend/internal/mcp/client"
@@ -19,6 +18,7 @@ import (
 	"github.com/u-ai/backend/internal/mcp/discovery"
 	"github.com/u-ai/backend/internal/mcp/features"
 	"github.com/u-ai/backend/internal/mcp/host"
+	"github.com/u-ai/backend/internal/middleware/security"
 	"github.com/u-ai/backend/pkg/app"
 	"gorm.io/gorm"
 )
@@ -41,9 +41,8 @@ type Services struct {
 	Connections  ConnectionManager
 	Auth         *auth.Manager
 	Discovery    *discovery.Service
-	Skills       ToolSyncer
+	Tools        ToolSyncer
 	Secrets      auth.SecretStore
-	Extensions   *extension.Runtime
 	Features     *features.Service
 	Dependencies *dependency.Service
 	Interactions *host.Broker
@@ -65,6 +64,7 @@ func RegisterOAuthCallback(routes gin.IRoutes, services Services) {
 func RegisterRouter(group *gin.RouterGroup, _ *app.AppContext, services Services) {
 	handler := &Handler{services: services}
 	routes := group.Group("/mcp")
+	routes.Use(security.SharedCoreAdminOnly())
 	routes.GET("/servers", handler.listServers)
 	routes.POST("/servers", handler.createServer)
 	routes.GET("/servers/:id", handler.getServer)
@@ -84,9 +84,7 @@ func RegisterRouter(group *gin.RouterGroup, _ *app.AppContext, services Services
 	routes.POST("/servers/:id/prompts/get", handler.getPrompt)
 	routes.POST("/servers/:id/completion", handler.complete)
 	routes.GET("/servers/:id/logs", handler.logs)
-	routes.PUT("/servers/:id/scope", handler.serverScope)
 	routes.PUT("/servers/:id/tools/:toolId/scope", handler.toolScope)
-	routes.PUT("/servers/:id/tools/:toolId/permissions", handler.toolPermissions)
 	routes.GET("/servers/:id/capabilities", handler.capabilities)
 	routes.PUT("/servers/:id/capabilities/:capability", handler.capability)
 	routes.GET("/servers/:id/tasks", handler.tasks)
@@ -131,7 +129,7 @@ func (h *Handler) createServer(c *gin.Context) {
 		err = h.storeCredential(c, record, request.Credential)
 	}
 	if err == nil {
-		err = h.services.Repository.SetScopeEnabled(c, record.ID, "global", "", request.Enabled)
+		err = h.services.Repository.SetScopeEnabled(c, record.ID, request.Enabled)
 	}
 	if err == nil {
 		_, err = h.services.Repository.SetServerCapability(c, record.ID, "private_network", request.PrivateNetworkConfirmed, json.RawMessage(`{}`))
@@ -161,7 +159,7 @@ func (h *Handler) updateServer(c *gin.Context) {
 		err = h.storeCredential(c, record, request.Credential)
 	}
 	if err == nil {
-		err = h.services.Repository.SetScopeEnabled(c, record.ID, "global", "", request.Enabled)
+		err = h.services.Repository.SetScopeEnabled(c, record.ID, request.Enabled)
 	}
 	if err == nil {
 		_, err = h.services.Repository.SetServerCapability(c, record.ID, "private_network", request.PrivateNetworkConfirmed, json.RawMessage(`{}`))
@@ -170,7 +168,7 @@ func (h *Handler) updateServer(c *gin.Context) {
 		if record.Enabled == 1 {
 			go h.reconnectAndSync(context.Background(), record.ID)
 		} else {
-			_ = h.services.Skills.UnregisterServer(c, record.ID)
+			_ = h.services.Tools.UnregisterServer(c, record.ID)
 			go h.services.Connections.Disconnect(context.Background(), record.ID)
 		}
 	}
@@ -180,7 +178,7 @@ func (h *Handler) updateServer(c *gin.Context) {
 
 func (h *Handler) deleteServer(c *gin.Context) {
 	id := c.Param("id")
-	_ = h.services.Skills.UnregisterServer(c, id)
+	_ = h.services.Tools.UnregisterServer(c, id)
 	references, err := h.services.Repository.CredentialReferences(c, id)
 	if err == nil {
 		h.cancelServerTasks(c, id)
@@ -238,13 +236,13 @@ func (h *Handler) reconnectServer(c *gin.Context) {
 func (h *Handler) refreshServer(c *gin.Context) {
 	err := h.services.Discovery.Discover(c, c.Param("id"))
 	if err == nil {
-		err = h.services.Skills.RegisterServer(c, c.Param("id"))
+		err = h.services.Tools.RegisterServer(c, c.Param("id"))
 	}
 	respond(c, gin.H{"refreshed": err == nil}, err)
 }
 
 func (h *Handler) connectAndSync(ctx context.Context, serverID string) error {
-	if h.services.Connections == nil || h.services.Discovery == nil || h.services.Skills == nil {
+	if h.services.Connections == nil || h.services.Discovery == nil || h.services.Tools == nil {
 		return fmt.Errorf("MCP runtime unavailable")
 	}
 	if err := h.services.Connections.Connect(ctx, serverID); err != nil {
@@ -254,7 +252,7 @@ func (h *Handler) connectAndSync(ctx context.Context, serverID string) error {
 		_ = h.services.Connections.Disconnect(context.Background(), serverID)
 		return err
 	}
-	if err := h.services.Skills.RegisterServer(ctx, serverID); err != nil {
+	if err := h.services.Tools.RegisterServer(ctx, serverID); err != nil {
 		_ = h.services.Connections.Disconnect(context.Background(), serverID)
 		return err
 	}
@@ -268,13 +266,13 @@ func (h *Handler) reconnectAndSync(ctx context.Context, serverID string) error {
 	if err := h.services.Connections.Reconnect(ctx, serverID); err != nil {
 		return err
 	}
-	if h.services.Discovery == nil || h.services.Skills == nil {
+	if h.services.Discovery == nil || h.services.Tools == nil {
 		return fmt.Errorf("MCP runtime unavailable")
 	}
 	if err := h.services.Discovery.Discover(ctx, serverID); err != nil {
 		return err
 	}
-	return h.services.Skills.RegisterServer(ctx, serverID)
+	return h.services.Tools.RegisterServer(ctx, serverID)
 }
 
 func (h *Handler) tools(c *gin.Context) {
@@ -291,56 +289,51 @@ func (h *Handler) prompts(c *gin.Context) {
 }
 func (h *Handler) readResource(c *gin.Context) {
 	var request struct {
-		CharacterID string `json:"characterId"`
-		URI         string `json:"uri"`
+		URI string `json:"uri"`
 	}
 	if c.ShouldBindJSON(&request) != nil {
 		problem(c, http.StatusBadRequest, "MCP_RESOURCE_NOT_FOUND", "资源参数无效")
 		return
 	}
-	result, err := h.services.Features.ReadResource(c, c.Param("id"), request.CharacterID, request.URI)
+	result, err := h.services.Features.ReadResource(c, c.Param("id"), request.URI)
 	respond(c, result, err)
 }
 func (h *Handler) subscribeResource(c *gin.Context) {
 	var request struct {
-		CharacterID string `json:"characterId"`
-		URI         string `json:"uri"`
+		URI string `json:"uri"`
 	}
 	if c.ShouldBindJSON(&request) != nil || strings.TrimSpace(request.URI) == "" {
 		problem(c, http.StatusBadRequest, "MCP_RESOURCE_NOT_FOUND", "资源参数无效")
 		return
 	}
-	err := h.services.Features.Subscribe(c, c.Param("id"), request.CharacterID, request.URI)
+	err := h.services.Features.Subscribe(c, c.Param("id"), request.URI)
 	respond(c, gin.H{"subscribed": err == nil}, err)
 }
 func (h *Handler) unsubscribeResource(c *gin.Context) {
 	var request struct {
-		CharacterID string `json:"characterId"`
-		URI         string `json:"uri"`
+		URI string `json:"uri"`
 	}
 	if c.ShouldBindJSON(&request) != nil || strings.TrimSpace(request.URI) == "" {
 		problem(c, http.StatusBadRequest, "MCP_RESOURCE_NOT_FOUND", "资源参数无效")
 		return
 	}
-	err := h.services.Features.Unsubscribe(c, c.Param("id"), request.CharacterID, request.URI)
+	err := h.services.Features.Unsubscribe(c, c.Param("id"), request.URI)
 	respond(c, gin.H{"subscribed": false}, err)
 }
 func (h *Handler) getPrompt(c *gin.Context) {
 	var request struct {
-		CharacterID string            `json:"characterId"`
-		Name        string            `json:"name"`
-		Arguments   map[string]string `json:"arguments"`
+		Name      string            `json:"name"`
+		Arguments map[string]string `json:"arguments"`
 	}
 	if c.ShouldBindJSON(&request) != nil {
 		problem(c, http.StatusBadRequest, "MCP_PROMPT_NOT_FOUND", "Prompt 参数无效")
 		return
 	}
-	result, err := h.services.Features.GetPrompt(c, c.Param("id"), request.CharacterID, request.Name, request.Arguments)
+	result, err := h.services.Features.GetPrompt(c, c.Param("id"), request.Name, request.Arguments)
 	respond(c, result, err)
 }
 func (h *Handler) complete(c *gin.Context) {
 	var request struct {
-		CharacterID      string            `json:"characterId"`
 		Reference        map[string]any    `json:"ref"`
 		Argument         map[string]string `json:"argument"`
 		ContextArguments map[string]string `json:"contextArguments"`
@@ -349,27 +342,13 @@ func (h *Handler) complete(c *gin.Context) {
 		problem(c, http.StatusBadRequest, "MCP_COMPLETION_INVALID", "补全参数无效")
 		return
 	}
-	result, err := h.services.Features.Complete(c, c.Param("id"), request.CharacterID, request.Reference, request.Argument, request.ContextArguments)
+	result, err := h.services.Features.Complete(c, c.Param("id"), request.Reference, request.Argument, request.ContextArguments)
 	respond(c, result, err)
 }
 func (h *Handler) logs(c *gin.Context) {
 	limit, _ := strconv.Atoi(c.Query("limit"))
 	records, err := h.services.Repository.ListAuditLogs(c, c.Param("id"), limit)
 	respond(c, records, err)
-}
-
-func (h *Handler) serverScope(c *gin.Context) {
-	var request struct {
-		ScopeType string `json:"scopeType"`
-		ScopeID   string `json:"scopeId"`
-		Enabled   bool   `json:"enabled"`
-	}
-	if c.ShouldBindJSON(&request) != nil {
-		problem(c, http.StatusBadRequest, "MCP_SERVER_CONFIGURATION_INVALID", "作用域无效")
-		return
-	}
-	err := h.services.Repository.SetScopeEnabled(c, c.Param("id"), request.ScopeType, request.ScopeID, request.Enabled)
-	respond(c, gin.H{"updated": err == nil}, err)
 }
 
 func (h *Handler) toolScope(c *gin.Context) {
@@ -383,36 +362,16 @@ func (h *Handler) toolScope(c *gin.Context) {
 		return
 	}
 	var request struct {
-		CharacterID string `json:"characterId"`
-		Enabled     bool   `json:"enabled"`
+		Enabled bool `json:"enabled"`
 	}
 	if c.ShouldBindJSON(&request) != nil {
 		problem(c, http.StatusBadRequest, "MCP_SERVER_CONFIGURATION_INVALID", "作用域无效")
 		return
 	}
-	if request.CharacterID == "" {
-		err = h.services.Repository.SetToolEnabled(c, tool.ID, request.Enabled)
-		if err == nil {
-			err = h.services.Skills.RegisterServer(c, tool.ServerID)
-		}
-	} else {
-		err = h.services.Extensions.Registry.SetScopeEnabled(c, tool.SkillID, extension.ExecutionScope{CharacterID: request.CharacterID}, request.Enabled)
+	err = h.services.Repository.SetToolEnabled(c, tool.ID, request.Enabled)
+	if err == nil {
+		err = h.services.Tools.RegisterServer(c, tool.ServerID)
 	}
-	respond(c, gin.H{"updated": err == nil}, err)
-}
-
-func (h *Handler) toolPermissions(c *gin.Context) {
-	tool, err := h.services.Repository.GetTool(c, c.Param("toolId"))
-	if err != nil || tool.ServerID != c.Param("id") {
-		respond(c, nil, err)
-		return
-	}
-	var grants []extension.PermissionGrantInput
-	if c.ShouldBindJSON(&grants) != nil {
-		problem(c, http.StatusBadRequest, "MCP_TOOL_PERMISSION_DENIED", "权限格式无效")
-		return
-	}
-	err = h.services.Extensions.Repository.ReplaceGrants(c, tool.SkillID, grants)
 	respond(c, gin.H{"updated": err == nil}, err)
 }
 

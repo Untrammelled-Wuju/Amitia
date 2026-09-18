@@ -53,7 +53,7 @@ func (RotationJournal) TableName() string {
 
 type DesktopSession struct {
 	ID                string     `gorm:"primaryKey;column:id"`
-	UserID            string     `gorm:"column:user_id;not null"`
+	SpaceID           string     `gorm:"column:space_id;not null"`
 	DesktopInstanceID string     `gorm:"column:desktop_instance_id;not null"`
 	TokenHash         string     `gorm:"column:token_hash;not null"`
 	Status            string     `gorm:"column:status;not null;default:active"`
@@ -106,7 +106,7 @@ func (s *DesktopSessionService) ReadinessCheck(ctx context.Context) error {
 	return nil
 }
 
-func (s *DesktopSessionService) resolveLocalToken(userID string) (string, error) {
+func (s *DesktopSessionService) resolveLocalToken(spaceID string) (string, error) {
 	tokenFile := filepath.Join(s.dataDir, "security", "local-token")
 	data, err := os.ReadFile(tokenFile)
 	if err != nil {
@@ -176,7 +176,7 @@ func (s *DesktopSessionService) CreateSession(c *gin.Context) {
 	now := time.Now()
 	session := &DesktopSession{
 		ID:                generateSessionID(),
-		UserID:            string(actor.UserID),
+		SpaceID:           string(actor.SpaceID),
 		DesktopInstanceID: req.DesktopInstanceID,
 		TokenHash:         tokenHashStr,
 		Status:            DesktopSessionStatusActive,
@@ -552,14 +552,11 @@ func DesktopSessionAuthMiddleware(sessionSvc *DesktopSessionService) gin.Handler
 }
 
 func buildSessionActor(session *DesktopSession) *auth.ActorContext {
-	perms := auth.DefaultUserPermissions()
-	perms = append(perms, auth.PermDesktopPetRepair)
-
 	return &auth.ActorContext{
-		ActorType:      auth.ActorTypeLocalUser,
-		UserID:         runtimeidentity.UserID(session.UserID),
-		Roles:          []string{"local_user", "user"},
-		Permissions:    perms,
+		PrincipalType:  auth.PrincipalLocalUI,
+		SpaceID:        runtimeidentity.SpaceID(session.SpaceID),
+		Capabilities:   []string{"*"},
+		Permissions:    auth.OwnerDevicePermissions(),
 		AuthMethod:     AuthMethodDesktopSession,
 		SessionID:      session.ID,
 		RequestID:      generateActorRequestID(),
@@ -570,11 +567,9 @@ func buildSessionActor(session *DesktopSession) *auth.ActorContext {
 
 func applySessionActorToContext(c *gin.Context, actor *auth.ActorContext) {
 	c.Set("actorContext", actor)
-	c.Set("userId", string(actor.UserID))
-	c.Set("username", string(actor.UserID))
-	c.Set("role", actor.Roles[0])
+	c.Set("spaceId", string(actor.SpaceID))
+	c.Set("principalType", string(actor.PrincipalType))
 	c.Set("desktopSession", actor.SessionID)
-	c.Set("actorUserID", string(actor.UserID))
 	ctx := auth.WithActor(c.Request.Context(), actor)
 	c.Request = c.Request.WithContext(ctx)
 	c.Next()

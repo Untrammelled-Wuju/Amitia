@@ -12,7 +12,7 @@ import (
 )
 
 type DebugToolScope struct {
-	UserID         string
+	SpaceID        string
 	CharacterID    string
 	ConversationID string
 	Channel        string
@@ -148,7 +148,7 @@ func (h *DebugHandler) runtimeResidue(runtimeID domain.RuntimeInstanceID) Residu
 type debugToolInvokeRequest struct {
 	ToolID         string          `json:"toolId"`
 	Input          json.RawMessage `json:"input"`
-	UserID         string          `json:"userId,omitempty"`
+	SpaceID        string          `json:"spaceId,omitempty"`
 	CharacterID    string          `json:"characterId,omitempty"`
 	ConversationID string          `json:"conversationId,omitempty"`
 	Channel        string          `json:"channel,omitempty"`
@@ -180,7 +180,7 @@ func (h *DebugHandler) InvokeTool(c *gin.Context) {
 		req.Input = json.RawMessage(`{}`)
 	}
 	result, ok := h.invokeTool(c.Request.Context(), req.ToolID, req.Input, DebugToolScope{
-		UserID: strings.TrimSpace(req.UserID), CharacterID: strings.TrimSpace(req.CharacterID),
+		SpaceID: strings.TrimSpace(req.SpaceID), CharacterID: strings.TrimSpace(req.CharacterID),
 		ConversationID: strings.TrimSpace(req.ConversationID), Channel: strings.TrimSpace(req.Channel),
 		SessionID: strings.TrimSpace(req.SessionID), RequestID: strings.TrimSpace(req.RequestID), ToolCallID: strings.TrimSpace(req.ToolCallID),
 	})

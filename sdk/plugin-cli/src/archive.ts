@@ -2,7 +2,7 @@ import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as zlib from "node:zlib";
-import type { AmitiaxManifestV2 } from "@amitia/plugin-sdk";
+import type { AmitiaxManifestV1 } from "@amitia/plugin-sdk";
 
 export interface ArchiveEntry {
   path: string;
@@ -10,7 +10,7 @@ export interface ArchiveEntry {
 }
 
 export interface PackageInspection {
-  manifest: AmitiaxManifestV2;
+  manifest: AmitiaxManifestV1;
   files: string[];
   treeHash: string;
 }
@@ -22,7 +22,7 @@ interface IntegrityEntry {
 }
 
 export function buildPackage(projectDir: string, manifestPath: string, outputPath: string): PackageInspection {
-  const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8")) as AmitiaxManifestV2;
+  const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8")) as AmitiaxManifestV1;
   const entries = collectProjectEntries(projectDir, manifestPath, manifest);
   const integrityEntries = entries.map((entry) => ({
     path: entry.path,
@@ -52,7 +52,7 @@ export function inspectPackage(packagePath: string): PackageInspection {
   if (!manifestData || !filesData || !treeData) {
     throw new Error("package is missing manifest or integrity metadata");
   }
-  const manifest = JSON.parse(manifestData.toString("utf8")) as AmitiaxManifestV2;
+  const manifest = JSON.parse(manifestData.toString("utf8")) as AmitiaxManifestV1;
   const filesDocument = JSON.parse(filesData.toString("utf8")) as { files: Record<string, IntegrityEntry> };
   const treeDocument = JSON.parse(treeData.toString("utf8")) as { treeHash: string };
   const verified: IntegrityEntry[] = [];
@@ -72,7 +72,7 @@ export function inspectPackage(packagePath: string): PackageInspection {
   return { manifest, files: Array.from(entries.keys()).sort(), treeHash };
 }
 
-function collectProjectEntries(projectDir: string, manifestPath: string, manifest: AmitiaxManifestV2): ArchiveEntry[] {
+function collectProjectEntries(projectDir: string, manifestPath: string, manifest: AmitiaxManifestV1): ArchiveEntry[] {
   const entries: ArchiveEntry[] = [{ path: "manifest.json", data: fs.readFileSync(manifestPath) }];
   for (const directory of ["modules", "resources", "assets", "migrations", "licenses", "docs", "signatures"]) {
     const absolute = path.join(projectDir, directory);

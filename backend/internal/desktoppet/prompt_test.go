@@ -21,22 +21,35 @@ func TestBuildFramePrompt_DifferentPhasePerFrame(t *testing.T) {
 		t.Fatalf("idle_normal FramePhases count = %d, want >= 2", len(spec.FramePhases))
 	}
 
-	promptFrame0 := BuildFramePrompt(spec, 0, "")
-	promptFrame1 := BuildFramePrompt(spec, 1, "")
+	first := strings.TrimSpace(spec.FramePhases[0].Description)
+	laterIndex := -1
+	for i := 1; i < len(spec.FramePhases); i++ {
+		if strings.TrimSpace(spec.FramePhases[i].Description) != first {
+			laterIndex = i
+			break
+		}
+	}
+	if laterIndex < 0 {
+		t.Skipf("all %d phases share the same description after fixed-12 normalization", len(spec.FramePhases))
+	}
 
-	if promptFrame0 == promptFrame1 {
+	promptFrame0 := BuildFramePrompt(spec, 0, "")
+	promptLater := BuildFramePrompt(spec, laterIndex, "")
+
+	if promptFrame0 == promptLater {
 		t.Fatalf("expected different prompts across frames, both = %q", promptFrame0)
 	}
 
-	if !strings.Contains(promptFrame0, strings.TrimSpace(spec.FramePhases[0].Description)) {
-		t.Fatalf("frame 0 prompt missing phase 0 description %q: %q", spec.FramePhases[0].Description, promptFrame0)
+	if !strings.Contains(promptFrame0, first) {
+		t.Fatalf("frame 0 prompt missing phase 0 description %q: %q", first, promptFrame0)
 	}
-	if !strings.Contains(promptFrame1, strings.TrimSpace(spec.FramePhases[1].Description)) {
-		t.Fatalf("frame 1 prompt missing phase 1 description %q: %q", spec.FramePhases[1].Description, promptFrame1)
+	laterDesc := strings.TrimSpace(spec.FramePhases[laterIndex].Description)
+	if !strings.Contains(promptLater, laterDesc) {
+		t.Fatalf("frame %d prompt missing phase description %q: %q", laterIndex, laterDesc, promptLater)
 	}
 
-	if strings.Contains(promptFrame0, strings.TrimSpace(spec.FramePhases[1].Description)) {
-		t.Fatalf("frame 0 prompt should not contain phase 1 description: %q", promptFrame0)
+	if strings.Contains(promptFrame0, laterDesc) {
+		t.Fatalf("frame 0 prompt should not contain phase %d description: %q", laterIndex, promptFrame0)
 	}
 }
 

@@ -4,6 +4,8 @@ package processing
 
 import (
 	"archive/zip"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -65,11 +67,11 @@ func (h *Handler) CreateProcessingTask(c *gin.Context) {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
-	userID := actorID
+	spaceID := actorID
 
 	req := &CreateProcessingTaskRequest{
 		GenerationTaskID:           taskID,
-		UserID:                     userID,
+		SpaceID:                    spaceID,
 		OutputWidth:                outputWidth,
 		OutputHeight:               outputHeight,
 		TargetCharacterHeightRatio: targetCharacterHeightRatio,
@@ -214,7 +216,7 @@ func (h *Handler) CreatePackage(c *gin.Context) {
 
 	req := &CreatePackageRequest{
 		ProcessingTaskID:  processingTaskID,
-		UserID:            string(actor.UserID),
+		SpaceID:           string(actor.SpaceID),
 		DefaultAction:     payload.DefaultAction,
 		IncludedActions:   payload.IncludedActions,
 		UserDefaultAction: payload.UserDefaultAction,
@@ -423,8 +425,10 @@ func (h *Handler) SourceFrameImage(c *gin.Context) {
 		writeProcessingError(c, err)
 		return
 	}
-	ref.StorageKey = resolveStorageKey(fullPath)
-	ref.MIME = mimeType
+	if err := finalizeArtifactReference(ref, fullPath, mimeType); err != nil {
+		writeProcessingError(c, err)
+		return
+	}
 	h.safeResponder.ServeArtifact(c, actor, *ref)
 }
 
@@ -452,8 +456,10 @@ func (h *Handler) ActionPreview(c *gin.Context) {
 		writeProcessingError(c, err)
 		return
 	}
-	ref.StorageKey = resolveStorageKey(fullPath)
-	ref.MIME = mimeType
+	if err := finalizeArtifactReference(ref, fullPath, mimeType); err != nil {
+		writeProcessingError(c, err)
+		return
+	}
 	h.safeResponder.ServeArtifact(c, actor, *ref)
 }
 
@@ -497,7 +503,8 @@ func mapProcessingErrorCode(code string) int {
 		ErrCodeActionFrameCountInvalid:
 		return response.InvalidParams
 	case ErrCodeProcessingTaskNotFound,
-		ErrCodeProcessingActionNotFound:
+		ErrCodeProcessingActionNotFound,
+		ErrCodeProcessingPreviewNotReady:
 		return response.NotFound
 	case ErrCodeProcessingTaskNotOwned,
 		ErrCodePackageNotOwned:
@@ -531,10 +538,10 @@ func (h *Handler) ListPackages(c *gin.Context) {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
-	userID := actorID
+	spaceID := actorID
 	generationTaskID := c.Query("generationTaskId")
 	if generationTaskID != "" {
-		packages, err := h.service.ListPackagesByGenerationTask(userID, generationTaskID)
+		packages, err := h.service.ListPackagesByGenerationTask(spaceID, generationTaskID)
 		if err != nil {
 			util.ErrorResponse(c, response.InternalError, "服务器内部错误", nil)
 			return
@@ -554,7 +561,7 @@ func (h *Handler) ListPackages(c *gin.Context) {
 		pageSize = 100
 	}
 
-	packages, total, err := h.service.ListPackages(userID, page, pageSize)
+	packages, total, err := h.service.ListPackages(spaceID, page, pageSize)
 	if err != nil {
 		util.ErrorResponse(c, response.InternalError, "服务器内部错误", nil)
 		return
@@ -574,8 +581,8 @@ func (h *Handler) DownloadPackage(c *gin.Context) {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
-	userID := actorID
-	if err := h.service.CheckPackageOwnership(packageID, userID); err != nil {
+	spaceID := actorID
+	if err := h.service.CheckPackageOwnership(packageID, spaceID); err != nil {
 		writeProcessingError(c, err)
 		return
 	}
@@ -618,9 +625,32 @@ func (h *Handler) DownloadPackage(c *gin.Context) {
 	}
 }
 
-func resolveStorageKey(fullPath string) string {
-	if idx := strings.Index(fullPath, "desktop-pets/"); idx != -1 {
-		return fullPath[idx+len("desktop-pets/"):]
+func finalizeArtifactReference(ref *security.ArtifactReference, fullPath, mimeType string) error {
+	info, err := os.Stat(fullPath)
+	if err != nil {
+		return err
 	}
-	return fullPath
+	f, err := os.Open(fullPath)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	hasher := sha256.New()
+	if _, err := io.Copy(hasher, f); err != nil {
+		return err
+	}
+	ref.RootKind = security.RootDesktopPets
+	ref.StorageKey = resolveStorageKey(fullPath)
+	ref.ContentHash = hex.EncodeToString(hasher.Sum(nil))
+	ref.ByteSize = info.Size()
+	ref.MIME = mimeType
+	return nil
+}
+
+func resolveStorageKey(fullPath string) string {
+	normalized := filepath.ToSlash(fullPath)
+	if idx := strings.Index(normalized, "desktop-pets/"); idx != -1 {
+		return normalized[idx+len("desktop-pets/"):]
+	}
+	return normalized
 }

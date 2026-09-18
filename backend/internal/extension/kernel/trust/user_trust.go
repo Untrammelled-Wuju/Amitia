@@ -21,7 +21,7 @@ const (
 
 type UserTrustDecision struct {
 	DecisionID    string     `json:"decision_id"`
-	UserID        string     `json:"user_id"`
+	SpaceID       string     `json:"space_id"`
 	PublisherID   string     `json:"publisher_id,omitempty"`
 	KeyID         string     `json:"key_id,omitempty"`
 	PackageHash   string     `json:"package_hash,omitempty"`

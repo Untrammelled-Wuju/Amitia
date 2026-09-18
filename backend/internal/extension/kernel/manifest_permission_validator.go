@@ -1,7 +1,7 @@
 package kernel
 
 import (
-	"github.com/u-ai/backend/internal/extension/kernel/manifest_v2"
+	"github.com/u-ai/backend/internal/extension/kernel/manifest_v1"
 	"github.com/u-ai/backend/internal/extension/kernel/permission"
 )
 
@@ -13,7 +13,7 @@ func NewManifestPermissionValidator(registry *permission.PermissionDefinitionReg
 	return &ManifestPermissionValidator{registry: registry}
 }
 
-func (v *ManifestPermissionValidator) Validate(manifest manifest_v2.Manifest) []PreviewIssue {
+func (v *ManifestPermissionValidator) Validate(manifest manifest_v1.Manifest) []PreviewIssue {
 	var issues []PreviewIssue
 
 	declared := make(map[string]bool)
@@ -45,23 +45,25 @@ func (v *ManifestPermissionValidator) Validate(manifest manifest_v2.Manifest) []
 	}
 
 	for _, mod := range manifest.Modules {
-		for _, permID := range mod.Runtime.Permissions {
-			if !v.registry.Known(permID) {
-				issues = append(issues, PreviewIssue{
-					Category: PreviewNotInstallable,
-					Code:     "unknown_permission",
-					Message:  "unknown permission: " + permID,
-					Path:     "modules[].runtime.permissions[]",
-				})
-				continue
-			}
-			if !declared[permID] {
-				issues = append(issues, PreviewIssue{
-					Category: PreviewNotInstallable,
-					Code:     "permission_not_declared",
-					Message:  "runtime permission " + permID + " not declared in package permissions",
-					Path:     "modules[].runtime.permissions[]",
-				})
+		if mod.Runtime != nil {
+			for _, permID := range mod.Runtime.Permissions {
+				if !v.registry.Known(permID) {
+					issues = append(issues, PreviewIssue{
+						Category: PreviewNotInstallable,
+						Code:     "unknown_permission",
+						Message:  "unknown permission: " + permID,
+						Path:     "modules[].runtime.permissions[]",
+					})
+					continue
+				}
+				if !declared[permID] {
+					issues = append(issues, PreviewIssue{
+						Category: PreviewNotInstallable,
+						Code:     "permission_not_declared",
+						Message:  "runtime permission " + permID + " not declared in package permissions",
+						Path:     "modules[].runtime.permissions[]",
+					})
+				}
 			}
 		}
 
@@ -100,7 +102,7 @@ func (v *ManifestPermissionValidator) scopeAllowed(allowed []permission.ScopeTyp
 	return false
 }
 
-func validateManifestPermissions(manifest manifest_v2.Manifest, registry *permission.PermissionDefinitionRegistry) []PreviewIssue {
+func validateManifestPermissions(manifest manifest_v1.Manifest, registry *permission.PermissionDefinitionRegistry) []PreviewIssue {
 	validator := NewManifestPermissionValidator(registry)
 	return validator.Validate(manifest)
 }

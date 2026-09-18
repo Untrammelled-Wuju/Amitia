@@ -36,8 +36,8 @@ func (r *SourceRepository) BackfillOwnership(
 			Exec(`
 				UPDATE extensions
 				SET
-					owner_user_id=(
-						SELECT user_id
+					owner_space_id=(
+						SELECT space_id
 						FROM extension_agent_skill_metadata
 						WHERE
 							extension_agent_skill_metadata.extension_id=
@@ -59,7 +59,7 @@ func (r *SourceRepository) BackfillOwnership(
 					), scope_id)
 				WHERE
 					source='instructions'
-					AND owner_user_id=''
+					AND owner_space_id=''
 			`).
 			Error; err != nil {
 		return err
@@ -70,8 +70,8 @@ func (r *SourceRepository) BackfillOwnership(
 			Exec(`
 				UPDATE extensions
 				SET
-					owner_user_id=COALESCE((
-						SELECT ws.user_id
+					owner_space_id=COALESCE((
+						SELECT ws.space_id
 						FROM extension_artifacts ea
 						JOIN extension_workshop_sessions ws
 							ON ws.id=ea.session_id
@@ -80,7 +80,7 @@ func (r *SourceRepository) BackfillOwnership(
 							AND ea.extension_version=
 								extensions.current_version
 						LIMIT 1
-					), owner_user_id),
+					), owner_space_id),
 					scope_type=CASE
 						WHEN COALESCE((
 							SELECT ws.character_id
@@ -109,7 +109,7 @@ func (r *SourceRepository) BackfillOwnership(
 					), scope_id)
 				WHERE
 					source='workflow'
-					AND owner_user_id=''
+					AND owner_space_id=''
 			`).
 			Error; err != nil {
 		return err
@@ -185,8 +185,8 @@ func (r *SourceRepository) ListCandidates(
 					e.current_version AS version,
 					COALESCE(v.package_blob, X'')
 						AS package_blob,
-					COALESCE(e.owner_user_id, '')
-						AS user_id,
+					COALESCE(e.owner_space_id, '')
+						AS space_id,
 					COALESCE(e.scope_type, 'global')
 						AS scope_type,
 					COALESCE(e.scope_id, '')

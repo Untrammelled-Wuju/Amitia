@@ -11,6 +11,7 @@ const (
 	OpPing      = "network.ping"
 	OpTCPProbe  = "network.tcp.probe"
 
-	OpHTTPRequest = "network.http.request"
-	OpDownload    = "network.download"
+	OpHTTPRequest      = "network.http.request"
+	OpMultipartRequest = "network.http.multipart"
+	OpDownload         = "network.download"
 )

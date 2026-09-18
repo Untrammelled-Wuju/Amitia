@@ -6,22 +6,22 @@ import (
 	"testing"
 
 	"github.com/u-ai/backend/internal/extension/kernel/amitiax"
-	"github.com/u-ai/backend/internal/extension/kernel/manifest_v2"
+	"github.com/u-ai/backend/internal/extension/kernel/manifest_v1"
 	"github.com/u-ai/backend/internal/extension/kernel/trusted_service"
 	gameprotocol "github.com/u-ai/backend/pkg/gameplugin/protocol"
 )
 
 func TestPackageCompatibilityUsesManifestRuntimeSourceOfTruth(t *testing.T) {
-	service := manifest_v2.ModuleMeta{
+	service := manifest_v1.ModuleMeta{
 		ID:   "native-runtime",
 		Type: "service",
-		Runtime: &manifest_v2.RuntimeMeta{
+		Runtime: &manifest_v1.RuntimeMeta{
 			Type:       "service",
 			EntryPoint: "bin/plugin",
 		},
 	}
 	if !packageModuleSupported(service, "linux", "1.0.0") {
-		t.Fatal("service module/runtime accepted by Manifest v2 must be installable by canonical package preview")
+		t.Fatal("service module/runtime accepted by Manifest v1 must be installable by canonical package preview")
 	}
 
 	native := service
@@ -31,7 +31,7 @@ func TestPackageCompatibilityUsesManifestRuntimeSourceOfTruth(t *testing.T) {
 	}
 
 	unknown := service
-	unknown.Runtime = &manifest_v2.RuntimeMeta{Type: "plugin_service"}
+	unknown.Runtime = &manifest_v1.RuntimeMeta{Type: "plugin_service"}
 	if packageModuleSupported(unknown, "linux", "1.0.0") {
 		t.Fatal("unknown runtime type must remain unsupported")
 	}
@@ -59,13 +59,13 @@ func TestPackagePlatformAliases(t *testing.T) {
 }
 
 func TestPackageModuleCompatibilityChecksMinimumHostVersion(t *testing.T) {
-	mod := manifest_v2.ModuleMeta{
+	mod := manifest_v1.ModuleMeta{
 		ID:   "runtime",
 		Type: "service",
-		Runtime: &manifest_v2.RuntimeMeta{
+		Runtime: &manifest_v1.RuntimeMeta{
 			Type: "service",
 		},
-		Compatibility: &manifest_v2.ModuleCompatibility{MinHostVersion: "2.0.0"},
+		Compatibility: &manifest_v1.ModuleCompatibility{MinHostVersion: "2.0.0"},
 	}
 	if packageModuleSupported(mod, "linux", "1.9.9") {
 		t.Fatal("module requiring newer host version was accepted")
@@ -81,7 +81,7 @@ func TestPackageGamePluginNetworkPreflightMatchesRuntimePermissionBoundary(t *te
 		AllowedDomains: []string{"example.com"},
 		AllowedPorts:   []int{443},
 	}, nil)
-	if err == nil || code != "game_plugin_network_permission_required" {
+	if err == nil || code != "gamex_network_permission_required" {
 		t.Fatalf("restricted network without permission = code %q err %v", code, err)
 	}
 
@@ -95,12 +95,12 @@ func TestPackageGamePluginNetworkPreflightMatchesRuntimePermissionBoundary(t *te
 }
 
 func TestPackageGamePluginNetworkPreflightRejectsMissingHostSandboxPrerequisite(t *testing.T) {
-	manifest := manifest_v2.Manifest{Modules: []manifest_v2.ModuleMeta{{
+	manifest := manifest_v1.Manifest{Modules: []manifest_v1.ModuleMeta{{
 		ID:   "runtime",
 		Type: "service",
-		Contributions: []manifest_v2.ContributionMeta{{
+		Contributions: []manifest_v1.ContributionMeta{{
 			ID:   "game-plugin",
-			Kind: "game_plugin",
+			Kind: "gamex",
 			Spec: map[string]any{
 				"protocolVersion": "amitia-game-host/1",
 				"runtimeModuleId": "runtime",
@@ -119,7 +119,7 @@ func TestPackageGamePluginNetworkPreflightRejectsMissingHostSandboxPrerequisite(
 		t.Fatalf("network prerequisite issues = %+v, want exactly one", preview.Issues)
 	}
 	issue := preview.Issues[0]
-	if issue.Category != PreviewNotInstallable || issue.Code != "game_plugin_network_sandbox_unavailable" {
+	if issue.Category != PreviewNotInstallable || issue.Code != "gamex_network_sandbox_unavailable" {
 		t.Fatalf("unexpected prerequisite issue: %+v", issue)
 	}
 	if !strings.Contains(issue.Message, trusted_service.ErrNetworkSandboxUnavailable.Error()) {
@@ -131,12 +131,12 @@ func TestPackageGamePluginNetworkPreflightRejectsMissingHostSandboxPrerequisite(
 }
 
 func TestPackageCompatibilityExecuteRecheckUsesHostSandboxPrerequisites(t *testing.T) {
-	pkg := &amitiax.Package{Manifest: manifest_v2.Manifest{Modules: []manifest_v2.ModuleMeta{{
+	pkg := &amitiax.Package{Manifest: manifest_v1.Manifest{Modules: []manifest_v1.ModuleMeta{{
 		ID:   "runtime",
 		Type: "service",
-		Contributions: []manifest_v2.ContributionMeta{{
+		Contributions: []manifest_v1.ContributionMeta{{
 			ID:   "game-plugin",
-			Kind: "game_plugin",
+			Kind: "gamex",
 			Spec: map[string]any{
 				"protocolVersion": "amitia-game-host/1",
 				"runtimeModuleId": "runtime",
@@ -151,7 +151,7 @@ func TestPackageCompatibilityExecuteRecheckUsesHostSandboxPrerequisites(t *testi
 	})
 	found := false
 	for _, issue := range preview.Issues {
-		if issue.Code == "game_plugin_network_sandbox_unavailable" {
+		if issue.Code == "gamex_network_sandbox_unavailable" {
 			found = true
 			break
 		}
@@ -163,12 +163,12 @@ func TestPackageCompatibilityExecuteRecheckUsesHostSandboxPrerequisites(t *testi
 
 func TestPackageGamePluginArtifactSourcesMustExistInArchive(t *testing.T) {
 	pkg := &amitiax.Package{
-		Manifest: manifest_v2.Manifest{Modules: []manifest_v2.ModuleMeta{{
+		Manifest: manifest_v1.Manifest{Modules: []manifest_v1.ModuleMeta{{
 			ID:   "runtime",
 			Type: "service",
-			Contributions: []manifest_v2.ContributionMeta{{
+			Contributions: []manifest_v1.ContributionMeta{{
 				ID:   "game-plugin",
-				Kind: "game_plugin",
+				Kind: "gamex",
 				Spec: map[string]any{
 					"protocolVersion": "amitia-game-host/1",
 					"runtimeModuleId": "runtime",
@@ -194,7 +194,7 @@ func TestPackageGamePluginArtifactSourcesMustExistInArchive(t *testing.T) {
 	if len(preview.Issues) != 1 {
 		t.Fatalf("artifact source issues = %+v, want exactly one missing source", preview.Issues)
 	}
-	if issue := preview.Issues[0]; issue.Code != "game_plugin_artifact_source_missing" || issue.Path != "modules[0].contributions[0].spec.artifacts[0].source" {
+	if issue := preview.Issues[0]; issue.Code != "gamex_artifact_source_missing" || issue.Path != "modules[0].contributions[0].spec.artifacts[0].source" {
 		t.Fatalf("unexpected artifact source issue: %+v", issue)
 	}
 }

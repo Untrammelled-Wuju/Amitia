@@ -11,7 +11,7 @@ class UIProviderSettingsPage extends ConsumerStatefulWidget {
 }
 
 class _UIProviderSettingsPageState extends ConsumerState<UIProviderSettingsPage> {
-  UIProfileScopeKind _scope = UIProfileScopeKind.user;
+  UIProfileScopeKind _scope = UIProfileScopeKind.space;
   UIProfileEnvelope? _envelope;
   bool _scopeLoading = false;
   String? _savingCapability;
@@ -89,7 +89,7 @@ class _UIProviderSettingsPageState extends ConsumerState<UIProviderSettingsPage>
 
   String _scopeLabel(UIProfileScopeKind value) => switch (value) {
     UIProfileScopeKind.global => '云端默认（管理员）',
-    UIProfileScopeKind.user => '当前用户',
+    UIProfileScopeKind.space => '当前空间',
     UIProfileScopeKind.platform => '当前平台',
     UIProfileScopeKind.device => '当前设备',
     UIProfileScopeKind.devicePlatform => '当前设备 + 平台',

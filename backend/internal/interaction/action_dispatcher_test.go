@@ -15,7 +15,7 @@ type fakeToolFacade struct {
 	lastToolID   string
 	lastCallID   string
 	lastInput    json.RawMessage
-	result       kernel.LegacyToolResult
+	result       kernel.ToolDispatchResult
 	returnOK     bool
 	toolDefs     map[string]capability.ToolDefinition
 }
@@ -30,7 +30,7 @@ func (f *fakeToolFacade) ResolveModelTool(modelName string) (kernel.ResolvedTool
 	return kernel.ResolvedToolReference{}, nil
 }
 
-func (f *fakeToolFacade) ExecuteTool(ctx context.Context, toolID capability.CapabilityID, input json.RawMessage, scope kernel.LegacyScope, externalCallID string, idempotencyKey string) (kernel.LegacyToolResult, bool) {
+func (f *fakeToolFacade) ExecuteTool(ctx context.Context, toolID capability.CapabilityID, input json.RawMessage, scope kernel.InvocationScope, externalCallID string, idempotencyKey string) (kernel.ToolDispatchResult, bool) {
 	f.executeCalls++
 	f.lastToolID = string(toolID)
 	f.lastCallID = externalCallID
@@ -62,7 +62,7 @@ func TestDispatchWaitReturnsSkipped(t *testing.T) {
 func TestDispatchToolCallsToolFacade(t *testing.T) {
 	facade := &fakeToolFacade{
 		returnOK: true,
-		result:   kernel.LegacyToolResult{Status: "success", VisibleText: "ok"},
+		result:   kernel.ToolDispatchResult{Status: "success", VisibleText: "ok"},
 	}
 	action := MaterializedAction{
 		Kind:          MaterializedActionTool,
@@ -74,7 +74,7 @@ func TestDispatchToolCallsToolFacade(t *testing.T) {
 			Input:          json.RawMessage(`{"q":"hi"}`),
 		},
 	}
-	scope := ActionMaterializationScope{InteractionID: "i-1", UserID: "u-1"}
+	scope := ActionMaterializationScope{InteractionID: "i-1", SpaceID: "u-1"}
 	d := NewActionDispatcher(facade)
 	result := d.Dispatch(context.Background(), action, scope, time.Now())
 	if result.State != ActionExecutionCompleted {

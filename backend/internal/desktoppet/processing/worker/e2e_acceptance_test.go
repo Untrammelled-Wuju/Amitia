@@ -11,7 +11,6 @@ import (
 	"image/png"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/u-ai/backend/internal/desktoppet"
@@ -77,8 +76,8 @@ func TestE2EFourActionsAcceptance(t *testing.T) {
 	w := newTestWorkerWithPipeline(t, db, repo, dataDir)
 
 	taskID := "gt-e2e-four-actions"
-	userID := "user-e2e"
-	seedWorkerGenerationTask(t, db, taskID, userID, "succeeded")
+	spaceID := "user-e2e"
+	seedWorkerGenerationTask(t, db, taskID, spaceID, "succeeded")
 
 	actionDefs := []struct {
 		key          string
@@ -166,24 +165,21 @@ func TestE2EFourActionsAcceptance(t *testing.T) {
 		subjectDetector := processing.NewSubjectDetector()
 		actionSubjectSizes := make(map[string][2]int)
 		for _, a := range actionDefs {
-			framesDir := filepath.Join(dataDir, "desktop-pets", "generation-tasks", taskID, "processed", "version-1", "actions", a.key, "frames")
-			entries, err := os.ReadDir(framesDir)
+			pa, err := repo.GetProcessingActionByActionKey(pt.ID, a.key)
 			if err != nil {
-				t.Fatalf("读取动作 %s 帧目录失败: %v", a.key, err)
+				t.Fatalf("获取动作 %s 失败: %v", a.key, err)
 			}
-			frameFiles := []os.DirEntry{}
-			for _, e := range entries {
-				if !e.IsDir() && !strings.HasPrefix(e.Name(), ".") {
-					frameFiles = append(frameFiles, e)
-				}
+			frames, err := repo.ListProcessedFramesByAction(pa.ID)
+			if err != nil {
+				t.Fatalf("查询动作 %s 处理帧失败: %v", a.key, err)
 			}
-			if len(frameFiles) == 0 {
+			if len(frames) == 0 {
 				t.Fatalf("动作 %s 无处理后帧文件", a.key)
 			}
 
 			var firstSize [2]int
-			for i, e := range frameFiles {
-				framePath := filepath.Join(framesDir, e.Name())
+			for i, frame := range frames {
+				framePath := filepath.Join(dataDir, filepath.FromSlash(frame.ProcessedPath))
 				f, err := os.Open(framePath)
 				if err != nil {
 					t.Fatalf("打开帧文件 %s 失败: %v", framePath, err)
@@ -197,12 +193,12 @@ func TestE2EFourActionsAcceptance(t *testing.T) {
 				_, isNRGBA := img.(*image.NRGBA)
 				_, isRGBA := img.(*image.RGBA)
 				if !isNRGBA && !isRGBA {
-					t.Fatalf("动作 %s 帧 %s 不含 alpha 通道", a.key, e.Name())
+					t.Fatalf("动作 %s 帧 %s 不含 alpha 通道", a.key, frame.ProcessedPath)
 				}
 
 				bounds := img.Bounds()
 				if bounds.Dx() != 512 || bounds.Dy() != 512 {
-					t.Fatalf("动作 %s 帧 %s 尺寸 = %dx%d, 期望 512x512", a.key, e.Name(), bounds.Dx(), bounds.Dy())
+					t.Fatalf("动作 %s 帧 %s 尺寸 = %dx%d, 期望 512x512", a.key, frame.ProcessedPath, bounds.Dx(), bounds.Dy())
 				}
 
 				hasTransparent := false
@@ -221,18 +217,18 @@ func TestE2EFourActionsAcceptance(t *testing.T) {
 					}
 				}
 				if !hasTransparent {
-					t.Fatalf("动作 %s 帧 %s 无透明像素，背景未移除", a.key, e.Name())
+					t.Fatalf("动作 %s 帧 %s 无透明像素，背景未移除", a.key, frame.ProcessedPath)
 				}
 				if !hasOpaque {
-					t.Fatalf("动作 %s 帧 %s 无不透明像素，主体缺失", a.key, e.Name())
+					t.Fatalf("动作 %s 帧 %s 无不透明像素，主体缺失", a.key, frame.ProcessedPath)
 				}
 
 				box, err := subjectDetector.DetectSubject(img)
 				if err != nil {
-					t.Fatalf("动作 %s 帧 %s 主体检测失败: %v", a.key, e.Name(), err)
+					t.Fatalf("动作 %s 帧 %s 主体检测失败: %v", a.key, frame.ProcessedPath, err)
 				}
 				if box.Empty {
-					t.Fatalf("动作 %s 帧 %s 未检测到主体", a.key, e.Name())
+					t.Fatalf("动作 %s 帧 %s 未检测到主体", a.key, frame.ProcessedPath)
 				}
 				size := [2]int{box.Width, box.Height}
 				if i == 0 {
@@ -303,28 +299,17 @@ func TestE2EFourActionsAcceptance(t *testing.T) {
 	})
 
 	t.Run("SubTask33.4_资源包与完整性", func(t *testing.T) {
-		packages, err := repo.ListPackagesByGenerationTask(taskID)
+		svc := processing.NewService(repo, db, &app.AppContext{DB: db, Context: context.Background()}, dataDir)
+		releaseSource, err := svc.BuildReleasePackageSource(&processing.CreatePackageRequest{ProcessingTaskID: pt.ID, SpaceID: spaceID, UserDefaultAction: "idle_normal"})
 		if err != nil {
-			t.Fatalf("查询资源包失败: %v", err)
+			t.Fatalf("创建资源包失败: %v", err)
 		}
-		if len(packages) != 1 {
-			t.Fatalf("资源包数量 = %d, 期望 1", len(packages))
-		}
-		pkg := packages[0]
-		if pkg.Status != "ready" {
-			t.Fatalf("资源包状态 = %s, 期望 ready", pkg.Status)
-		}
-		if pkg.DefaultActionKey != "idle_normal" {
-			t.Fatalf("默认动作 = %s, 期望 idle_normal", pkg.DefaultActionKey)
-		}
-		if pkg.ActionCount != 4 {
-			t.Fatalf("动作数量 = %d, 期望 4", pkg.ActionCount)
-		}
-		if pkg.PackageHash == "" {
+		defer os.RemoveAll(releaseSource.PackageDir)
+		if releaseSource.PackageID == "" || releaseSource.PackageHash == "" {
 			t.Fatal("资源包哈希为空")
 		}
 
-		packageDir := filepath.Join(dataDir, "desktop-pets", "generation-tasks", taskID, "packages", pkg.ID)
+		packageDir := releaseSource.PackageDir
 		manifestPath := filepath.Join(packageDir, "manifest.json")
 		manifestData, err := os.ReadFile(manifestPath)
 		if err != nil {
@@ -436,37 +421,28 @@ func TestE2EFourActionsAcceptance(t *testing.T) {
 				t.Fatalf("查询动作 %s 的处理后帧失败: %v", a.key, err)
 			}
 
-			framesDir := filepath.Join(dataDir, "desktop-pets", "generation-tasks", taskID, "processed", "version-1", "actions", a.key, "frames")
-			entries, err := os.ReadDir(framesDir)
-			if err != nil {
-				t.Fatalf("读取动作 %s 帧目录失败: %v", a.key, err)
-			}
-			actualFrameCount := 0
-			for _, e := range entries {
-				if !e.IsDir() && !strings.HasPrefix(e.Name(), ".") {
-					actualFrameCount++
-				}
-			}
-
 			if len(frames) == 0 {
 				t.Fatalf("动作 %s 的 ProcessedFrame 记录为空", a.key)
 			}
-			if len(frames) != actualFrameCount {
-				t.Fatalf("动作 %s 的 ProcessedFrame 记录数 = %d, 期望 = %d (实际帧文件数)", a.key, len(frames), actualFrameCount)
+			if len(frames) != frameCount {
+				t.Fatalf("动作 %s 的 ProcessedFrame 记录数 = %d, 期望 = %d", a.key, len(frames), frameCount)
 			}
 
 			for i, f := range frames {
 				if f.ProcessedPath == "" {
 					t.Fatalf("动作 %s 帧 %d 的 ProcessedPath 为空", a.key, i)
 				}
-				if f.Status != "succeeded" {
-					t.Fatalf("动作 %s 帧 %d 的 Status = %s, 期望 succeeded", a.key, i, f.Status)
+				if f.Status != "committed" {
+					t.Fatalf("动作 %s 帧 %d 的 Status = %s, 期望 committed", a.key, i, f.Status)
 				}
 				if f.SourceFrameID == "" {
 					t.Fatalf("动作 %s 帧 %d 的 SourceFrameID 为空", a.key, i)
 				}
 				if f.ContentHash == "" {
 					t.Fatalf("动作 %s 帧 %d 的 ContentHash 为空", a.key, i)
+				}
+				if _, err := os.Stat(filepath.Join(dataDir, filepath.FromSlash(f.ProcessedPath))); err != nil {
+					t.Fatalf("动作 %s 帧 %d 的处理文件不存在: %v", a.key, i, err)
 				}
 
 				processedFullPath, _, err := svc.GetProcessedFrameImage(pt.ID, a.key, i)

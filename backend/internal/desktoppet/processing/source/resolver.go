@@ -19,7 +19,7 @@ type ResolveRequest struct {
 	ProcessingActionID            string
 	ActionKey                     string
 	GenerationTaskID              string
-	UserID                        string
+	SpaceID                       string
 	SourceAttemptID               string
 	SourceGenerationAttemptNumber int
 	CandidateIndex                int
@@ -33,9 +33,9 @@ type LegacyFrameRepo interface {
 }
 
 type GenerationTaskInfo struct {
-	ID     string
-	UserID string
-	Status string
+	ID      string
+	SpaceID string
+	Status  string
 }
 
 type GenerationTaskActionInfo struct {
@@ -77,8 +77,8 @@ func (a *LegacyFrameAdapter) Resolve(ctx context.Context, req ResolveRequest) (*
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrTaskNotFound, err)
 	}
-	if task.UserID != req.UserID {
-		return nil, fmt.Errorf("%w: expected=%s actual=%s", ErrTaskUserMismatch, req.UserID, task.UserID)
+	if task.SpaceID != req.SpaceID {
+		return nil, fmt.Errorf("%w: expected=%s actual=%s", ErrTaskUserMismatch, req.SpaceID, task.SpaceID)
 	}
 
 	actions, err := a.repo.ListActionsByTaskID(req.GenerationTaskID)

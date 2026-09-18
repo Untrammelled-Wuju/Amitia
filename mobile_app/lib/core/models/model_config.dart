@@ -7,6 +7,9 @@ class ModelConfigDto {
   final int isActive;
   final int maxTokens;
   final double temperature;
+  final int timeoutSeconds;
+  final int retryCount;
+  final bool hasApiKey;
 
   ModelConfigDto({
     required this.id,
@@ -17,6 +20,9 @@ class ModelConfigDto {
     this.isActive = 0,
     this.maxTokens = 4096,
     this.temperature = 0.7,
+    this.timeoutSeconds = 60,
+    this.retryCount = 1,
+    this.hasApiKey = false,
   });
 
   factory ModelConfigDto.fromJson(Map<String, dynamic> json) {
@@ -29,6 +35,9 @@ class ModelConfigDto {
       isActive: json['isActive'] as int? ?? 0,
       maxTokens: json['maxTokens'] as int? ?? 4096,
       temperature: (json['temperature'] as num?)?.toDouble() ?? 0.7,
+      timeoutSeconds: (json['timeoutSeconds'] as num?)?.toInt() ?? 60,
+      retryCount: (json['retryCount'] as num?)?.toInt() ?? 1,
+      hasApiKey: json['hasApiKey'] == true,
     );
   }
 
@@ -42,6 +51,9 @@ class ModelConfigDto {
       'isActive': isActive,
       'maxTokens': maxTokens,
       'temperature': temperature,
+      'timeoutSeconds': timeoutSeconds,
+      'retryCount': retryCount,
+      'hasApiKey': hasApiKey,
     };
   }
 }

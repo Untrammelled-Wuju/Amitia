@@ -20,15 +20,15 @@ func NewService(db *gorm.DB) *Service {
 	return &Service{db: db}
 }
 
-func (s *Service) UpdateProjection(ctx context.Context, userID, deviceID string, updateFn func(*InstallationRuntimeProjection) error) error {
+func (s *Service) UpdateProjection(ctx context.Context, spaceID, deviceID string, updateFn func(*InstallationRuntimeProjection) error) error {
 	var proj InstallationRuntimeProjection
-	err := s.db.WithContext(ctx).Where("user_id = ? AND device_id = ?", userID, deviceID).Take(&proj).Error
+	err := s.db.WithContext(ctx).Where("space_id = ? AND device_id = ?", spaceID, deviceID).Take(&proj).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			now := time.Now().UTC().Format(time.RFC3339)
 			proj = InstallationRuntimeProjection{
 				ID:        uuid.NewString(),
-				UserID:    userID,
+				SpaceID:   spaceID,
 				DeviceID:  deviceID,
 				CreatedAt: now,
 			}
@@ -43,8 +43,8 @@ func (s *Service) UpdateProjection(ctx context.Context, userID, deviceID string,
 	return s.db.WithContext(ctx).Save(&proj).Error
 }
 
-func (s *Service) HandleRuntimeHeartbeat(ctx context.Context, userID, deviceID, runtimeID string, heartbeat *coordinator.RuntimeHeartbeat) error {
-	return s.UpdateProjection(ctx, userID, deviceID, func(p *InstallationRuntimeProjection) error {
+func (s *Service) HandleRuntimeHeartbeat(ctx context.Context, spaceID, deviceID, runtimeID string, heartbeat *coordinator.RuntimeHeartbeat) error {
+	return s.UpdateProjection(ctx, spaceID, deviceID, func(p *InstallationRuntimeProjection) error {
 		p.RuntimeID = runtimeID
 		p.InstallationID = heartbeat.InstallationID
 		p.PetID = heartbeat.PetID
@@ -69,8 +69,8 @@ func (s *Service) HandleRuntimeHeartbeat(ctx context.Context, userID, deviceID, 
 	})
 }
 
-func (s *Service) HandleCommandResult(ctx context.Context, userID, deviceID string, result *coordinator.CommandResult) error {
-	return s.UpdateProjection(ctx, userID, deviceID, func(p *InstallationRuntimeProjection) error {
+func (s *Service) HandleCommandResult(ctx context.Context, spaceID, deviceID string, result *coordinator.CommandResult) error {
+	return s.UpdateProjection(ctx, spaceID, deviceID, func(p *InstallationRuntimeProjection) error {
 		if result.Success {
 			if result.AppliedRevision >= p.AppliedDesiredRevision {
 				p.AppliedDesiredRevision = result.AppliedRevision

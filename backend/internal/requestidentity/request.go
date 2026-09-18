@@ -4,26 +4,42 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/u-ai/backend/config"
 	authctx "github.com/u-ai/backend/internal/auth"
+	"github.com/u-ai/backend/internal/spaceidentity"
 )
 
-const DefaultUserID = "default"
+// LegacySpaceID is only a migration/read-compatibility sentinel for records
+// created before the Space identity cutover. Runtime ownership must never be
+// persisted with this value.
+const LegacySpaceID = "default"
 
-// ResolveGin resolves the authenticated account identity from the request
-// context. Envelope/body user IDs are deliberately ignored for authenticated
-// HTTP requests so ownership cannot be selected by the client payload.
-func ResolveGin(c interface{}, _ string) string {
+// ResolveGin returns the Space bound to the authenticated request. Request
+// bodies, query parameters and headers are deliberately not accepted as an
+// ownership source: a client cannot select another Space by supplying an ID.
+// Local/system callers fall back to the process canonical Space, which is
+// initialized before the HTTP server is exposed.
+func ResolveGin(c interface{}) string {
 	if ginCtx, ok := c.(*gin.Context); ok && ginCtx != nil {
 		if raw, exists := ginCtx.Get("actorContext"); exists && raw != nil {
 			if actor, ok := raw.(*authctx.ActorContext); ok && actor != nil {
-				if userID := strings.TrimSpace(string(actor.UserID)); userID != "" {
-					return userID
+				if id := strings.TrimSpace(string(actor.SpaceID)); id != "" {
+					return id
 				}
 			}
 		}
 	}
-	return DefaultUserID
+	return CanonicalSpaceID()
+}
+
+func CanonicalSpaceID() string {
+	return strings.TrimSpace(spaceidentity.DefaultSpaceID())
+}
+
+func NormalizeSpaceID(spaceID string) string {
+	if v := strings.TrimSpace(spaceID); v != "" && v != LegacySpaceID {
+		return v
+	}
+	return CanonicalSpaceID()
 }
 
 // NormalizeUserID resolves local/default fallbacks through the configured local

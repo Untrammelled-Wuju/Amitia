@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	stdruntime "runtime"
 	"strings"
 
 	kerneldomain "github.com/u-ai/backend/internal/extension/kernel/domain"
@@ -288,6 +289,18 @@ func (p *RuntimeGraphProvisioner) reconcilePlugin(ctx context.Context, kp Kernel
 	runtime, _, err := p.runtimeManager.EnsurePrimaryRuntime(ctx, descriptor.ID)
 	if err != nil {
 		return fmt.Errorf("ensure primary runtime: %w", err)
+	}
+	if runtime.State != ghdomain.RuntimeStateCreated {
+		if p.runtimeExecutor == nil {
+			return fmt.Errorf("runtime %s must be recreated before topology rebuild but runtime executor is unavailable", runtime.ID)
+		}
+		if err := p.pruneRuntime(ctx, &ghruntime.RuntimeInstanceRef{ID: runtime.ID, PluginID: runtime.PluginID, State: runtime.State}); err != nil {
+			return fmt.Errorf("remove runtime %s before topology rebuild: %w", runtime.ID, err)
+		}
+		runtime, _, err = p.runtimeManager.EnsurePrimaryRuntime(ctx, descriptor.ID)
+		if err != nil {
+			return fmt.Errorf("recreate primary runtime: %w", err)
+		}
 	}
 
 	definitionIDs := make(map[ghdomain.ServiceID]string, len(bootServices))
@@ -644,6 +657,9 @@ func (p *RuntimeGraphProvisioner) buildBootServiceFor(ctx context.Context, kp Ke
 			Required: true,
 		}}
 		info.Arguments = []string{entryPath}
+		if stdruntime.GOOS == "windows" && info.Network.Enforce {
+			info.Arguments = []string{"--preserve-symlinks-main", "--preserve-symlinks", entryPath}
+		}
 	default:
 		info.ExecutablePath = entryPath
 		if _, err := os.Stat(entryPath); err == nil {

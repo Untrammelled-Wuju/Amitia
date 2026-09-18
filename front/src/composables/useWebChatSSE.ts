@@ -38,8 +38,6 @@ export function useWebChatSSE(
   convId: Ref<string>,
   messages: Ref<any[]>,
   scrollToBottom: (smooth?: boolean) => void,
-  fetchWechatMsgCount: () => void,
-  fetchQQStatus: () => void,
   sending: Ref<boolean>,
 ) {
   let eventAbortController: AbortController | null = null;
@@ -70,12 +68,11 @@ export function useWebChatSSE(
     const delay = calcTypingDelay(raw.content || "");
     typingTimer = setTimeout(() => {
       raw.typingDone = true;
+      raw.animateIn = true;
       messages.value.push(raw);
       sortMessages();
       lastPolledMsgId = raw.id || lastPolledMsgId;
       scrollToBottom();
-      fetchWechatMsgCount();
-      fetchQQStatus();
       notifyDesktopPetChatState("assistant_finished", roundId);
       typingTimer = null;
       setTimeout(() => processTypingQueue(), 300);
@@ -94,7 +91,8 @@ export function useWebChatSSE(
     if (!event.messageId && !event.id) return null;
     const metadata =
       event.data && typeof event.data === "object" ? event.data : {};
-    return {
+    const sequence = Number(event.sequence);
+    const message: any = {
       id: event.messageId || event.id,
       conversationId: event.conversationId,
       role: event.role,
@@ -109,6 +107,10 @@ export function useWebChatSSE(
       anchorMessageId: metadata.userMessageId,
       anchorSequence: metadata.userMessageSequence,
     };
+    if (Number.isFinite(sequence) && sequence > 0) {
+      message.sequence = sequence;
+    }
+    return message;
   }
 
   function handleMessageEvent(event: MessageEvent) {
@@ -143,6 +145,7 @@ export function useWebChatSSE(
           insertTransientModelError(messages.value, {
             ...msg,
             typingDone: true,
+            animateIn: true,
           });
           lastPolledMsgId = msg.id || lastPolledMsgId;
           sortMessages();
@@ -265,6 +268,7 @@ export function useWebChatSSE(
               messages.value.push({
                 ...msg,
                 createdAt: msg.createdAt || new Date().toISOString(),
+                animateIn: true,
               });
               sortMessages();
             }
@@ -272,8 +276,6 @@ export function useWebChatSSE(
             notifyDesktopPetChatState("assistant_finished", proactiveRoundId);
           }
         } catch {}
-        fetchWechatMsgCount();
-        fetchQQStatus();
       } catch {}
     };
     window.addEventListener("amitia:proactive-message", proactiveListener);

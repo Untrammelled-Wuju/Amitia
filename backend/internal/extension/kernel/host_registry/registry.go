@@ -133,8 +133,8 @@ func (r *Registry) GetHost(ctx context.Context, hostClientID string) (*HostEntry
 	return entry, nil
 }
 
-func (r *Registry) ListEntriesByUser(ctx context.Context, userID runtimeidentity.UserID) ([]*RuntimeEntry, error) {
-	entries, err := r.repo.ListEntriesByUser(ctx, userID)
+func (r *Registry) ListEntriesBySpace(ctx context.Context, spaceID runtimeidentity.SpaceID) ([]*RuntimeEntry, error) {
+	entries, err := r.repo.ListEntriesBySpace(ctx, spaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -146,8 +146,8 @@ func (r *Registry) ListEntriesByUser(ctx context.Context, userID runtimeidentity
 	return r.cloneEntries(entries), nil
 }
 
-func (r *Registry) ListEntriesByDevice(ctx context.Context, userID runtimeidentity.UserID, deviceID runtimeidentity.DeviceID) ([]*RuntimeEntry, error) {
-	entries, err := r.repo.ListEntriesByDevice(ctx, userID, deviceID)
+func (r *Registry) ListEntriesByDevice(ctx context.Context, spaceID runtimeidentity.SpaceID, deviceID runtimeidentity.DeviceID) ([]*RuntimeEntry, error) {
+	entries, err := r.repo.ListEntriesByDevice(ctx, spaceID, deviceID)
 	if err != nil {
 		return nil, err
 	}
@@ -159,8 +159,8 @@ func (r *Registry) ListEntriesByDevice(ctx context.Context, userID runtimeidenti
 	return r.cloneEntries(entries), nil
 }
 
-func (r *Registry) ListEntriesByRuntime(ctx context.Context, userID runtimeidentity.UserID, deviceID runtimeidentity.DeviceID, runtimeID runtimeidentity.RuntimeID) ([]*RuntimeEntry, error) {
-	entries, err := r.repo.ListEntriesByRuntime(ctx, userID, deviceID, runtimeID)
+func (r *Registry) ListEntriesByRuntime(ctx context.Context, spaceID runtimeidentity.SpaceID, deviceID runtimeidentity.DeviceID, runtimeID runtimeidentity.RuntimeID) ([]*RuntimeEntry, error) {
+	entries, err := r.repo.ListEntriesByRuntime(ctx, spaceID, deviceID, runtimeID)
 	if err != nil {
 		return nil, err
 	}
@@ -172,8 +172,8 @@ func (r *Registry) ListEntriesByRuntime(ctx context.Context, userID runtimeident
 	return r.cloneEntries(entries), nil
 }
 
-func (r *Registry) ListReadyEntries(ctx context.Context, userID runtimeidentity.UserID) ([]*RuntimeEntry, error) {
-	entries, err := r.repo.ListEntriesByUser(ctx, userID)
+func (r *Registry) ListReadyEntries(ctx context.Context, spaceID runtimeidentity.SpaceID) ([]*RuntimeEntry, error) {
+	entries, err := r.repo.ListEntriesBySpace(ctx, spaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -192,8 +192,8 @@ func (r *Registry) ListReadyEntries(ctx context.Context, userID runtimeidentity.
 	return sortRuntimeEntries(result), nil
 }
 
-func (r *Registry) ListHostsByUser(ctx context.Context, userID runtimeidentity.UserID) ([]*HostEntry, error) {
-	entries, err := r.ListEntriesByUser(ctx, userID)
+func (r *Registry) ListHostsBySpace(ctx context.Context, spaceID runtimeidentity.SpaceID) ([]*HostEntry, error) {
+	entries, err := r.ListEntriesBySpace(ctx, spaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -206,12 +206,12 @@ func (r *Registry) ListHostsByUser(ctx context.Context, userID runtimeidentity.U
 	return result, nil
 }
 
-func (r *Registry) ListHostsByUserString(ctx context.Context, userID string) ([]*HostEntry, error) {
-	return r.ListHostsByUser(ctx, runtimeidentity.ParseUserID(userID))
+func (r *Registry) ListHostsBySpaceString(ctx context.Context, spaceID string) ([]*HostEntry, error) {
+	return r.ListHostsBySpace(ctx, runtimeidentity.ParseSpaceID(spaceID))
 }
 
-func (r *Registry) ListReadyHosts(ctx context.Context, userID runtimeidentity.UserID, capability HostCapability) ([]*HostEntry, error) {
-	hosts, err := r.ListHostsByUser(ctx, userID)
+func (r *Registry) ListReadyHosts(ctx context.Context, spaceID runtimeidentity.SpaceID, capability HostCapability) ([]*HostEntry, error) {
+	hosts, err := r.ListHostsBySpace(ctx, spaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -228,8 +228,8 @@ func (r *Registry) ListReadyHosts(ctx context.Context, userID runtimeidentity.Us
 	return result, nil
 }
 
-func (r *Registry) ListReadyHostsString(ctx context.Context, userID string, capability HostCapability) ([]*HostEntry, error) {
-	return r.ListReadyHosts(ctx, runtimeidentity.ParseUserID(userID), capability)
+func (r *Registry) ListReadyHostsString(ctx context.Context, spaceID string, capability HostCapability) ([]*HostEntry, error) {
+	return r.ListReadyHosts(ctx, runtimeidentity.ParseSpaceID(spaceID), capability)
 }
 
 func (r *Registry) UpdateEntryHeartbeat(ctx context.Context, entryID string) error {
@@ -265,49 +265,96 @@ func (r *Registry) SetDisconnected(ctx context.Context, hostClientID string) err
 	return r.SetEntryDisconnected(ctx, hostClientID)
 }
 
-func (r *Registry) FindTargetHost(ctx context.Context, userID runtimeidentity.UserID, capability HostCapability, platform runtimeidentity.Platform, windowID string) (*HostEntry, error) {
-	hosts, err := r.ListHostsByUser(ctx, userID)
+func (r *Registry) FindTargetHost(ctx context.Context, spaceID runtimeidentity.SpaceID, capability HostCapability, platform runtimeidentity.Platform, windowID string) (*HostEntry, error) {
+	if spaceID == "" {
+		return r.findTargetHostForUniqueSpace(ctx, capability, platform, windowID)
+	}
+	hosts, err := r.ListHostsBySpace(ctx, spaceID)
 	if err != nil {
 		return nil, err
 	}
-	now := time.Now().UTC()
-	var bestMatch *HostEntry
-	for _, h := range hosts {
-		if h.PresenceState != PresenceStateReady {
-			continue
-		}
-		if !h.IsHeartbeatValidAt(now, r.heartbeatValidity) {
-			continue
-		}
-		if h.IsExpiredAt(now) {
-			continue
-		}
-		if !h.HasCapability(capability) {
-			continue
-		}
-		if platform != "" && h.Platform != platform {
-			continue
-		}
-		if windowID != "" && h.WindowID != windowID {
-			continue
-		}
-		if bestMatch == nil || bestMatch.LastHeartbeat.Before(h.LastHeartbeat) {
-			bestMatch = h
-		}
-	}
-	return bestMatch, nil
+	return r.pickTargetHost(hosts, capability, platform, windowID), nil
 }
 
-func (r *Registry) FindTargetHostString(ctx context.Context, userID string, capability HostCapability, platform string, windowID string) (*HostEntry, error) {
+// findTargetHostForUniqueSpace is a fail-closed fallback for internal Host API
+// invocations that do not carry an HTTP actor context. Routing is allowed only
+// when every eligible ready UI Host belongs to the same Space; if multiple
+// Spaces are present no target is chosen.
+func (r *Registry) findTargetHostForUniqueSpace(ctx context.Context, capability HostCapability, platform runtimeidentity.Platform, windowID string) (*HostEntry, error) {
+	entries, err := r.repo.ListAllEntries(ctx)
+	if err != nil {
+		return nil, err
+	}
+	hosts := make([]*HostEntry, 0, len(entries))
+	for _, entry := range entries {
+		if entry != nil && entry.Kind == RegistryEntryKindUIHost {
+			hosts = append(hosts, entry)
+		}
+	}
+	now := time.Now().UTC()
+	var selectedSpace runtimeidentity.SpaceID
+	hasSelectedSpace := false
+	var bestMatch *HostEntry
+	for _, host := range hosts {
+		if !hostEligibleForTarget(host, capability, platform, windowID, now, r.heartbeatValidity) {
+			continue
+		}
+		if !hasSelectedSpace {
+			selectedSpace = host.SpaceID
+			hasSelectedSpace = true
+		} else if host.SpaceID != selectedSpace {
+			return nil, nil
+		}
+		if bestMatch == nil || bestMatch.LastHeartbeat.Before(host.LastHeartbeat) {
+			bestMatch = host
+		}
+	}
+	return cloneRuntimeEntry(bestMatch), nil
+}
+
+func (r *Registry) pickTargetHost(hosts []*HostEntry, capability HostCapability, platform runtimeidentity.Platform, windowID string) *HostEntry {
+	now := time.Now().UTC()
+	var bestMatch *HostEntry
+	for _, host := range hosts {
+		if !hostEligibleForTarget(host, capability, platform, windowID, now, r.heartbeatValidity) {
+			continue
+		}
+		if bestMatch == nil || bestMatch.LastHeartbeat.Before(host.LastHeartbeat) {
+			bestMatch = host
+		}
+	}
+	return cloneRuntimeEntry(bestMatch)
+}
+
+func hostEligibleForTarget(host *HostEntry, capability HostCapability, platform runtimeidentity.Platform, windowID string, now time.Time, heartbeatValidity time.Duration) bool {
+	if host == nil || host.PresenceState != PresenceStateReady {
+		return false
+	}
+	if !host.IsHeartbeatValidAt(now, heartbeatValidity) || host.IsExpiredAt(now) {
+		return false
+	}
+	if !host.HasCapability(capability) {
+		return false
+	}
+	if platform != "" && host.Platform != platform {
+		return false
+	}
+	if windowID != "" && host.WindowID != windowID {
+		return false
+	}
+	return true
+}
+
+func (r *Registry) FindTargetHostString(ctx context.Context, spaceID string, capability HostCapability, platform string, windowID string) (*HostEntry, error) {
 	plat, err := runtimeidentity.ParsePlatform(platform)
 	if err != nil {
 		return nil, err
 	}
-	return r.FindTargetHost(ctx, runtimeidentity.ParseUserID(userID), capability, plat, windowID)
+	return r.FindTargetHost(ctx, runtimeidentity.ParseSpaceID(spaceID), capability, plat, windowID)
 }
 
-func (r *Registry) FindRuntimeEntry(ctx context.Context, userID runtimeidentity.UserID, deviceID runtimeidentity.DeviceID, runtimeID runtimeidentity.RuntimeID) (*RuntimeEntry, error) {
-	entries, err := r.repo.ListEntriesByRuntime(ctx, userID, deviceID, runtimeID)
+func (r *Registry) FindRuntimeEntry(ctx context.Context, spaceID runtimeidentity.SpaceID, deviceID runtimeidentity.DeviceID, runtimeID runtimeidentity.RuntimeID) (*RuntimeEntry, error) {
+	entries, err := r.repo.ListEntriesByRuntime(ctx, spaceID, deviceID, runtimeID)
 	if err != nil {
 		return nil, err
 	}
@@ -334,8 +381,8 @@ func (r *Registry) FindRuntimeEntry(ctx context.Context, userID runtimeidentity.
 	return nil, ErrRuntimePresenceNotFound
 }
 
-func (r *Registry) GetRuntimePresence(ctx context.Context, userID runtimeidentity.UserID, deviceID runtimeidentity.DeviceID, runtimeID runtimeidentity.RuntimeID) (RuntimePresence, error) {
-	entries, err := r.repo.ListEntriesByRuntime(ctx, userID, deviceID, runtimeID)
+func (r *Registry) GetRuntimePresence(ctx context.Context, spaceID runtimeidentity.SpaceID, deviceID runtimeidentity.DeviceID, runtimeID runtimeidentity.RuntimeID) (RuntimePresence, error) {
+	entries, err := r.repo.ListEntriesByRuntime(ctx, spaceID, deviceID, runtimeID)
 	if err != nil {
 		return RuntimePresence{}, err
 	}
@@ -345,8 +392,8 @@ func (r *Registry) GetRuntimePresence(ctx context.Context, userID runtimeidentit
 	return aggregateRuntimePresence(entries), nil
 }
 
-func (r *Registry) ListRuntimePresenceByDevice(ctx context.Context, userID runtimeidentity.UserID, deviceID runtimeidentity.DeviceID) ([]RuntimePresence, error) {
-	entries, err := r.repo.ListEntriesByDevice(ctx, userID, deviceID)
+func (r *Registry) ListRuntimePresenceByDevice(ctx context.Context, spaceID runtimeidentity.SpaceID, deviceID runtimeidentity.DeviceID) ([]RuntimePresence, error) {
+	entries, err := r.repo.ListEntriesByDevice(ctx, spaceID, deviceID)
 	if err != nil {
 		return nil, err
 	}
@@ -366,8 +413,8 @@ func (r *Registry) ListRuntimePresenceByDevice(ctx context.Context, userID runti
 	return result, nil
 }
 
-func (r *Registry) GetDevicePresence(ctx context.Context, userID runtimeidentity.UserID, deviceID runtimeidentity.DeviceID) (DevicePresence, error) {
-	entries, err := r.repo.ListEntriesByDevice(ctx, userID, deviceID)
+func (r *Registry) GetDevicePresence(ctx context.Context, spaceID runtimeidentity.SpaceID, deviceID runtimeidentity.DeviceID) (DevicePresence, error) {
+	entries, err := r.repo.ListEntriesByDevice(ctx, spaceID, deviceID)
 	if err != nil {
 		return DevicePresence{}, err
 	}
@@ -377,8 +424,8 @@ func (r *Registry) GetDevicePresence(ctx context.Context, userID runtimeidentity
 	return aggregateDevicePresence(entries), nil
 }
 
-func (r *Registry) ListDevicePresenceByUser(ctx context.Context, userID runtimeidentity.UserID) ([]DevicePresence, error) {
-	entries, err := r.repo.ListEntriesByUser(ctx, userID)
+func (r *Registry) ListDevicePresenceBySpace(ctx context.Context, spaceID runtimeidentity.SpaceID) ([]DevicePresence, error) {
+	entries, err := r.repo.ListEntriesBySpace(ctx, spaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -398,8 +445,8 @@ func (r *Registry) ListDevicePresenceByUser(ctx context.Context, userID runtimei
 	return result, nil
 }
 
-func (r *Registry) HasReadyRuntime(ctx context.Context, userID runtimeidentity.UserID, deviceID runtimeidentity.DeviceID, runtimeID runtimeidentity.RuntimeID) bool {
-	entries, err := r.repo.ListEntriesByRuntime(ctx, userID, deviceID, runtimeID)
+func (r *Registry) HasReadyRuntime(ctx context.Context, spaceID runtimeidentity.SpaceID, deviceID runtimeidentity.DeviceID, runtimeID runtimeidentity.RuntimeID) bool {
+	entries, err := r.repo.ListEntriesByRuntime(ctx, spaceID, deviceID, runtimeID)
 	if err != nil {
 		return false
 	}
@@ -412,16 +459,16 @@ func (r *Registry) HasReadyRuntime(ctx context.Context, userID runtimeidentity.U
 	return false
 }
 
-func (r *Registry) HasReadyHost(ctx context.Context, userID runtimeidentity.UserID, capability HostCapability) bool {
-	hosts, err := r.ListReadyHosts(ctx, userID, capability)
+func (r *Registry) HasReadyHost(ctx context.Context, spaceID runtimeidentity.SpaceID, capability HostCapability) bool {
+	hosts, err := r.ListReadyHosts(ctx, spaceID, capability)
 	if err != nil {
 		return false
 	}
 	return len(hosts) > 0
 }
 
-func (r *Registry) HasReadyHostString(ctx context.Context, userID string, capability HostCapability) bool {
-	return r.HasReadyHost(ctx, runtimeidentity.ParseUserID(userID), capability)
+func (r *Registry) HasReadyHostString(ctx context.Context, spaceID string, capability HostCapability) bool {
+	return r.HasReadyHost(ctx, runtimeidentity.ParseSpaceID(spaceID), capability)
 }
 
 func (r *Registry) EntryCount() int {
@@ -468,8 +515,8 @@ func (r *Registry) CleanupExpired(ctx context.Context) error {
 	return nil
 }
 
-func (r *Registry) SnapshotByUser(ctx context.Context, userID runtimeidentity.UserID) (PresenceSnapshot, error) {
-	entries, err := r.repo.ListEntriesByUser(ctx, userID)
+func (r *Registry) SnapshotBySpace(ctx context.Context, spaceID runtimeidentity.SpaceID) (PresenceSnapshot, error) {
+	entries, err := r.repo.ListEntriesBySpace(ctx, spaceID)
 	if err != nil {
 		return PresenceSnapshot{}, err
 	}
@@ -504,7 +551,7 @@ func (r *Registry) SnapshotByUser(ctx context.Context, userID runtimeidentity.Us
 }
 
 type RuntimeSessionBinding struct {
-	UserID           runtimeidentity.UserID
+	SpaceID          runtimeidentity.SpaceID
 	DeviceID         runtimeidentity.DeviceID
 	RuntimeID        runtimeidentity.RuntimeID
 	RuntimeSessionID runtimeidentity.RuntimeSessionID
@@ -515,7 +562,7 @@ type RuntimeSessionBinding struct {
 }
 
 func (r *Registry) BindRuntimeSession(ctx context.Context, binding RuntimeSessionBinding) (*RuntimeEntry, error) {
-	if binding.UserID == "" || binding.DeviceID == "" || binding.RuntimeID == "" {
+	if binding.SpaceID == "" || binding.DeviceID == "" || binding.RuntimeID == "" {
 		return nil, ErrInvalidRegistryEntry
 	}
 	if binding.RuntimeSessionID == "" {
@@ -533,7 +580,7 @@ func (r *Registry) BindRuntimeSession(ctx context.Context, binding RuntimeSessio
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	entryID := RuntimeEntryID(binding.UserID, binding.DeviceID, binding.RuntimeID)
+	entryID := RuntimeEntryID(binding.SpaceID, binding.DeviceID, binding.RuntimeID)
 
 	entry, err := r.repo.GetEntry(ctx, entryID)
 	if err != nil && !errors.Is(err, ErrRegistryEntryNotFound) {
@@ -545,7 +592,7 @@ func (r *Registry) BindRuntimeSession(ctx context.Context, binding RuntimeSessio
 		newEntry := &RuntimeEntry{
 			EntryID:              entryID,
 			Kind:                 RegistryEntryKindRuntime,
-			UserID:               binding.UserID,
+			SpaceID:              binding.SpaceID,
 			DeviceID:             binding.DeviceID,
 			RuntimeID:            binding.RuntimeID,
 			Platform:             binding.Platform,
@@ -570,7 +617,7 @@ func (r *Registry) BindRuntimeSession(ctx context.Context, binding RuntimeSessio
 	if entry.ConnectionGeneration > binding.ConnectionGeneration {
 		return nil, ErrStaleRuntimeSessionBinding
 	}
-	if entry.ConnectionGeneration == binding.ConnectionGeneration && entry.RuntimeSessionID != binding.RuntimeSessionID {
+	if entry.ConnectionGeneration == binding.ConnectionGeneration && entry.RuntimeSessionID != binding.RuntimeSessionID && entry.PresenceState != PresenceStateDisconnected {
 		return nil, ErrRuntimeSessionBindingConflict
 	}
 
@@ -601,7 +648,7 @@ func (r *Registry) HeartbeatRuntimeSession(ctx context.Context, binding RuntimeS
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	entryID := RuntimeEntryID(binding.UserID, binding.DeviceID, binding.RuntimeID)
+	entryID := RuntimeEntryID(binding.SpaceID, binding.DeviceID, binding.RuntimeID)
 
 	entry, ok := r.entries[entryID]
 	if !ok {
@@ -638,7 +685,7 @@ func (r *Registry) DisconnectRuntimeSession(ctx context.Context, binding Runtime
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	entryID := RuntimeEntryID(binding.UserID, binding.DeviceID, binding.RuntimeID)
+	entryID := RuntimeEntryID(binding.SpaceID, binding.DeviceID, binding.RuntimeID)
 
 	entry, ok := r.entries[entryID]
 	if !ok {

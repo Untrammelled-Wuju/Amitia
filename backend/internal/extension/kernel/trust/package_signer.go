@@ -224,6 +224,7 @@ func (v *SignatureVerifier) VerifyPackage(ctx context.Context, input PackageVeri
 		PublisherID:     input.Document.PublisherID,
 		KeyID:           input.Document.KeyID,
 		CreatedAt:       input.Document.CreatedAt,
+		Channel:         input.Document.Channel,
 	}
 	return v.Verify(ctx, VerifyInput{
 		Document:              input.Document,

@@ -49,7 +49,11 @@ func (e *ImageMeasurementEngineImpl) MeasureFrame(ctx context.Context, framePath
 
 	cached, err := e.cache.GetMeasurementCache(ctx, frameArtifactID, contentHash)
 	if err == nil && cached != nil {
-		return cacheRecordToResult(cached, framePath, fileSize), nil
+		if cached.Decodable && cached.SubjectBoxWidth == 0 && cached.SubjectBoxHeight == 0 {
+			_ = e.cache.DeleteMeasurementCache(ctx, frameArtifactID, contentHash)
+		} else {
+			return cacheRecordToResult(cached, framePath, fileSize), nil
+		}
 	}
 
 	file, err := os.Open(framePath)
@@ -61,6 +65,10 @@ func (e *ImageMeasurementEngineImpl) MeasureFrame(ctx context.Context, framePath
 	fileHash, err := computeFileHash(file, fileInfo.Size())
 	if err != nil {
 		fileHash = "error_hashing_file"
+	}
+
+	if _, err := file.Seek(0, io.SeekStart); err != nil {
+		return nil, err
 	}
 
 	_, _, err = image.DecodeConfig(file)
@@ -100,6 +108,7 @@ func (e *ImageMeasurementEngineImpl) MeasureFrame(ctx context.Context, framePath
 	hasAlphaChannel := colorModel == color.NRGBAModel || colorModel == color.RGBAModel
 
 	var fullyTransparent, semiTransparent, opaque int64
+	minX, minY, maxX, maxY := -1, -1, -1, -1
 	hasher := sha256.New()
 	for y := 0; y < realHeight; y++ {
 		for x := 0; x < realWidth; x++ {
@@ -111,10 +120,24 @@ func (e *ImageMeasurementEngineImpl) MeasureFrame(ctx context.Context, framePath
 			hasher.Write([]byte{r8, g8, b8, a8})
 			if a8 == 0 {
 				fullyTransparent++
-			} else if a8 == 255 {
-				opaque++
 			} else {
-				semiTransparent++
+				if a8 == 255 {
+					opaque++
+				} else {
+					semiTransparent++
+				}
+				if minX < 0 || x < minX {
+					minX = x
+				}
+				if x > maxX {
+					maxX = x
+				}
+				if minY < 0 || y < minY {
+					minY = y
+				}
+				if y > maxY {
+					maxY = y
+				}
 			}
 		}
 	}
@@ -130,6 +153,14 @@ func (e *ImageMeasurementEngineImpl) MeasureFrame(ctx context.Context, framePath
 
 	pixelHash := hex.EncodeToString(hasher.Sum(nil))
 
+	var subjectBoxX, subjectBoxY, subjectBoxW, subjectBoxH float64
+	if minX >= 0 && realWidth > 0 && realHeight > 0 {
+		subjectBoxX = float64(minX) / float64(realWidth)
+		subjectBoxY = float64(minY) / float64(realHeight)
+		subjectBoxW = float64(maxX-minX+1) / float64(realWidth)
+		subjectBoxH = float64(maxY-minY+1) / float64(realHeight)
+	}
+
 	result := &quality.FrameMeasurementResult{
 		Width:                 realWidth,
 		Height:                realHeight,
@@ -138,6 +169,10 @@ func (e *ImageMeasurementEngineImpl) MeasureFrame(ctx context.Context, framePath
 		FullyTransparentRatio: fullyTransparentRatio,
 		SemiTransparentRatio:  semiTransparentRatio,
 		OpaqueRatio:           opaqueRatio,
+		SubjectBoxX:           subjectBoxX,
+		SubjectBoxY:           subjectBoxY,
+		SubjectBoxWidth:       subjectBoxW,
+		SubjectBoxHeight:      subjectBoxH,
 		Decodable:             true,
 		MimeType:              mimeType,
 		PixelHash:             pixelHash,
@@ -239,6 +274,10 @@ func cacheRecordToResult(cached *quality.QualityMeasurementCacheRecord, framePat
 		FullyTransparentRatio: cached.FullyTransparentRatio,
 		SemiTransparentRatio:  cached.SemiTransparentRatio,
 		OpaqueRatio:           cached.OpaqueRatio,
+		SubjectBoxX:           cached.SubjectBoxX,
+		SubjectBoxY:           cached.SubjectBoxY,
+		SubjectBoxWidth:       cached.SubjectBoxWidth,
+		SubjectBoxHeight:      cached.SubjectBoxHeight,
 		Decodable:             cached.Decodable,
 		MimeType:              cached.MimeType,
 		PixelHash:             cached.PixelHash,
@@ -261,6 +300,10 @@ func (e *ImageMeasurementEngineImpl) createCache(ctx context.Context, frameArtif
 		FullyTransparentRatio: result.FullyTransparentRatio,
 		SemiTransparentRatio:  result.SemiTransparentRatio,
 		OpaqueRatio:           result.OpaqueRatio,
+		SubjectBoxX:           result.SubjectBoxX,
+		SubjectBoxY:           result.SubjectBoxY,
+		SubjectBoxWidth:       result.SubjectBoxWidth,
+		SubjectBoxHeight:      result.SubjectBoxHeight,
 		Decodable:             result.Decodable,
 		MimeType:              result.MimeType,
 		PixelHash:             result.PixelHash,

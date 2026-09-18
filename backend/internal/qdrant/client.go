@@ -9,7 +9,7 @@ import (
 )
 
 type QdrantFilter struct {
-	UserID      string
+	SpaceID     string
 	CharacterID string
 	ScopeType   string
 	MemoryKind  string
@@ -22,7 +22,7 @@ type FilterBuilder struct {
 	ScopeType   string
 	MemoryKind  string
 	Status      string
-	UserID      string
+	SpaceID     string
 }
 
 func (fb FilterBuilder) Validate() error {
@@ -34,7 +34,7 @@ func (fb FilterBuilder) Validate() error {
 
 func (fb FilterBuilder) Build() QdrantFilter {
 	return QdrantFilter{
-		UserID:      fb.UserID,
+		SpaceID:     fb.SpaceID,
 		CharacterID: fb.CharacterID,
 		ScopeType:   fb.ScopeType,
 		MemoryKind:  fb.MemoryKind,
@@ -70,8 +70,8 @@ func (c *QdrantClient) SearchWithFilter(
 	if filter.CharacterID != "" {
 		filterMap["character_id"] = filter.CharacterID
 	}
-	if filter.UserID != "" {
-		filterMap["user_id"] = filter.UserID
+	if filter.SpaceID != "" {
+		filterMap["space_id"] = filter.SpaceID
 	}
 	if filter.ScopeType != "" {
 		filterMap["scope_type"] = filter.ScopeType

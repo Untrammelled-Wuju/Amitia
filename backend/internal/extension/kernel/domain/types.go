@@ -479,9 +479,19 @@ const (
 	ContributionKindBackgroundService ContributionKind = "background_task"
 	// Deprecated: legacy manifest input only. Production definitions must use Module.Provider.
 	ContributionKindProvider         ContributionKind = "provider"
-	ContributionKindGamePlugin       ContributionKind = "game_plugin"
-	ContributionKindDesktopPetPlugin ContributionKind = "desktop_pet_plugin"
+	ContributionKindGamePlugin       ContributionKind = "gamex"
+	ContributionKindPetPlugin        ContributionKind = "petx"
+	ContributionKindDesktopPetPlugin                  = ContributionKindPetPlugin
 )
+
+func NormalizeContributionKind(kind ContributionKind) ContributionKind {
+	switch kind {
+	case "background_service":
+		return ContributionKindBackgroundTask
+	default:
+		return kind
+	}
+}
 
 type ContributionDefinition struct {
 	ID          ContributionID   `json:"id"`
@@ -546,6 +556,16 @@ type RuntimeDefinition struct {
 	Permissions     []string          `json:"permissions,omitempty"`
 	Capabilities    map[string]bool   `json:"capabilities,omitempty"`
 	Env             map[string]string `json:"env,omitempty"`
+}
+
+type NativeCompanionDefinition struct {
+	ID           string   `json:"id"`
+	Platform     string   `json:"platform"`
+	Architecture string   `json:"architecture,omitempty"`
+	Path         string   `json:"path"`
+	SHA256       string   `json:"sha256"`
+	Executable   bool     `json:"executable"`
+	Args         []string `json:"args,omitempty"`
 }
 
 type RuntimeBinding struct {

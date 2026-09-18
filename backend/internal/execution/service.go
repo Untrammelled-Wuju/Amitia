@@ -13,12 +13,12 @@ type ResumeHandler interface {
 }
 
 type ExecutionService struct {
-	journal         *InMemoryJournal
-	repo            ResumeRepository
-	resumeHandlers  []ResumeHandler
-	mu              sync.RWMutex
-	activeContexts  map[string]ExecutionContext
-	resumeContexts  map[string]ResumeContext
+	journal        *InMemoryJournal
+	repo           ResumeRepository
+	resumeHandlers []ResumeHandler
+	mu             sync.RWMutex
+	activeContexts map[string]ExecutionContext
+	resumeContexts map[string]ResumeContext
 }
 
 func NewExecutionService() *ExecutionService {
@@ -45,8 +45,8 @@ func (s *ExecutionService) RegisterResumeHandler(handler ResumeHandler) {
 	s.resumeHandlers = append(s.resumeHandlers, handler)
 }
 
-func (s *ExecutionService) StartExecution(ctx context.Context, rootID, userID string) ExecutionContext {
-	execCtx := NewExecutionContext(rootID, userID)
+func (s *ExecutionService) StartExecution(ctx context.Context, rootID, spaceID string) ExecutionContext {
+	execCtx := NewExecutionContext(rootID, spaceID)
 	s.mu.Lock()
 	s.activeContexts[execCtx.ExecutionID] = execCtx
 	s.mu.Unlock()
@@ -93,7 +93,7 @@ func (s *ExecutionService) CreateResume(execCtx ExecutionContext, resumeType Res
 
 	if s.repo != nil {
 		if err := s.repo.Save(context.Background(), resumeCopy); err != nil {
-		return nil, fmt.Errorf("execution service: persist resume: %w", err)
+			return nil, fmt.Errorf("execution service: persist resume: %w", err)
 		}
 	}
 
@@ -210,7 +210,7 @@ func (s *ExecutionService) reconstructExecutionContext(resume ResumeContext) Exe
 		return execCtx
 	}
 	return ExecutionContext{
-		ExecutionID:    resume.ParentExecutionID,
+		ExecutionID:     resume.ParentExecutionID,
 		RootExecutionID: resume.RootExecutionID,
 	}
 }

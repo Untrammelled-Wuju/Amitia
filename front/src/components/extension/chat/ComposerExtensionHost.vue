@@ -48,14 +48,7 @@ async function invokeComposerAction(actionId: string) {
           surface-role="composer"
         />
       </div>
-      <div class="composer-extension-host__actions">
-        <ExtensionSlot
-          slot-id="chat.composer.action"
-          :context="composerContext"
-          fallback="none"
-          layout="inline"
-          surface-role="composer"
-        />
+      <div class="composer-extension-host__hints">
         <ExtensionSlot
           slot-id="chat.composer.hint"
           :context="composerContext"
@@ -87,11 +80,10 @@ async function invokeComposerAction(actionId: string) {
   align-items: center;
   flex-wrap: wrap;
 }
-.composer-extension-host__actions {
+.composer-extension-host__hints {
   display: flex;
   gap: 4px;
   align-items: center;
-  justify-content: space-between;
   opacity: 0.85;
 }
 </style>

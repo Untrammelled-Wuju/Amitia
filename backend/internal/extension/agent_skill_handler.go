@@ -1,7 +1,3 @@
-// Deprecated: Legacy extension architecture.
-// Do not add new capabilities. This implementation is retained only for
-// compatibility, maintenance, testing, and migration to Extension Kernel.
-
 package extension
 
 import (
@@ -27,7 +23,7 @@ func NewAgentSkillHandler(service *AgentSkillService, problems *Handler) *AgentS
 }
 func (h *AgentSkillHandler) scope(c *gin.Context) ExecutionScope {
 	trace, _ := c.Get(middleware.CtxKeyRequestID)
-	return ExecutionScope{UserID: fmt.Sprint(c.GetInt(authenticatedUserKey)), CharacterID: c.Query("characterId"), ConversationID: c.Query("conversationId"), Channel: c.DefaultQuery("channel", "web"), TraceID: fmt.Sprint(trace), RequestID: fmt.Sprint(trace), Trigger: TriggerManual}
+	return ExecutionScope{SpaceID: authenticatedSpaceID(c), ConversationID: c.Query("conversationId"), Channel: c.DefaultQuery("channel", "web"), TraceID: fmt.Sprint(trace), RequestID: fmt.Sprint(trace), Trigger: TriggerManual}
 }
 
 func (h *AgentSkillHandler) Preview(c *gin.Context) {
@@ -36,7 +32,7 @@ func (h *AgentSkillHandler) Preview(c *gin.Context) {
 		h.problems.problem(c, NewExtensionError(ErrAgentSkillArchiveLimit, "import request exceeds limit", err.Error(), false, err))
 		return
 	}
-	userID := fmt.Sprint(c.GetInt(authenticatedUserKey))
+	spaceID := authenticatedSpaceID(c)
 	source := c.PostForm("source")
 	if source == "directory" {
 		headers := c.Request.MultipartForm.File["files"]
@@ -60,7 +56,7 @@ func (h *AgentSkillHandler) Preview(c *gin.Context) {
 			}
 			files[paths[index]] = content
 		}
-		preview, err := h.service.PreviewDirectory(c.Request.Context(), userID, c.PostForm("rootName"), files)
+		preview, err := h.service.PreviewDirectory(c.Request.Context(), spaceID, c.PostForm("rootName"), files)
 		if err != nil {
 			h.problems.problem(c, err)
 			return
@@ -84,7 +80,7 @@ func (h *AgentSkillHandler) Preview(c *gin.Context) {
 		h.problems.problem(c, readErr)
 		return
 	}
-	preview, err := h.service.PreviewZIP(c.Request.Context(), userID, raw)
+	preview, err := h.service.PreviewZIP(c.Request.Context(), spaceID, raw)
 	if err != nil {
 		h.problems.problem(c, err)
 		return
@@ -93,16 +89,14 @@ func (h *AgentSkillHandler) Preview(c *gin.Context) {
 }
 func (h *AgentSkillHandler) Install(c *gin.Context) {
 	var request struct {
-		PreviewID   string          `json:"previewId"`
-		Scope       AgentSkillScope `json:"scope"`
-		CharacterID string          `json:"characterId"`
-		Enable      bool            `json:"enable"`
+		PreviewID string `json:"previewId"`
+		Enable    bool   `json:"enable"`
 	}
 	if err := c.ShouldBindJSON(&request); err != nil {
 		h.problems.problem(c, NewExtensionError(ErrSkillInputInvalid, "invalid install request", err.Error(), false, err))
 		return
 	}
-	definition, err := h.service.Install(c.Request.Context(), InstallAgentSkillRequest{UserID: fmt.Sprint(c.GetInt(authenticatedUserKey)), CharacterID: request.CharacterID, PreviewID: request.PreviewID, Scope: request.Scope, Enable: request.Enable})
+	definition, err := h.service.Install(c.Request.Context(), InstallAgentSkillRequest{SpaceID: authenticatedSpaceID(c), PreviewID: request.PreviewID, Enable: request.Enable})
 	if err != nil {
 		h.problems.problem(c, err)
 		return
@@ -113,7 +107,7 @@ func (h *AgentSkillHandler) List(c *gin.Context) {
 	scope := h.scope(c)
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "20"))
-	result, err := h.service.List(c.Request.Context(), scope, AgentSkillFilter{Query: c.Query("query"), Status: AgentSkillCompatibilityStatus(c.Query("status")), Scope: AgentSkillScope(c.Query("scope")), Page: page, PageSize: pageSize})
+	result, err := h.service.List(c.Request.Context(), scope, AgentSkillFilter{Query: c.Query("query"), Status: AgentSkillCompatibilityStatus(c.Query("status")), Page: page, PageSize: pageSize})
 	if err != nil {
 		h.problems.problem(c, err)
 		return
@@ -127,7 +121,7 @@ func (h *AgentSkillHandler) Get(c *gin.Context) {
 		h.problems.problem(c, err)
 		return
 	}
-	activations, _ := h.service.repository.ListAgentSkillActivations(c.Request.Context(), definition.ExtensionID, scope.UserID, 20)
+	activations, _ := h.service.repository.ListAgentSkillActivations(c.Request.Context(), definition.ExtensionID, scope.SpaceID, 20)
 	success(c, map[string]interface{}{"definition": definition, "compatibilityReport": report, "activations": activations})
 }
 func (h *AgentSkillHandler) Enable(c *gin.Context) {
@@ -232,7 +226,7 @@ func (h *AgentSkillHandler) Activations(c *gin.Context) {
 		h.problems.problem(c, err)
 		return
 	}
-	items, err := h.service.repository.ListAgentSkillActivations(c.Request.Context(), definition.ExtensionID, h.scope(c).UserID, 50)
+	items, err := h.service.repository.ListAgentSkillActivations(c.Request.Context(), definition.ExtensionID, h.scope(c).SpaceID, 50)
 	if err != nil {
 		h.problems.problem(c, err)
 		return

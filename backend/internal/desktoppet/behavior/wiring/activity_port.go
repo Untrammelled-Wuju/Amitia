@@ -18,7 +18,7 @@ func NewActivityAdapter(clock behavior.Clock) *ActivityAdapter {
 	return &ActivityAdapter{clock: clock}
 }
 
-func (a *ActivityAdapter) GetActivitySnapshot(ctx context.Context, userID, characterID string) (*behavior.ActivityBehaviorSnapshot, error) {
+func (a *ActivityAdapter) GetActivitySnapshot(ctx context.Context, spaceID, characterID string) (*behavior.ActivityBehaviorSnapshot, error) {
 	now := a.clock.Now()
 	hour := now.Hour()
 

@@ -6,18 +6,11 @@ server:
 storage:
   dataDir: "data"
 
-jwt:
-  secret: ""
-  expireDays: 7
-  issuer: "amitia"
-  audience: "amitia-api"
-
 security:
   mode: "local_single_user"
   allowRemoteAccess: false
   localToken: ""
   localTokenFile: "security/local-token"
-  localUserId: "1"
   allowedOrigins:
     - "app://amitia"
     - "http://127.0.0.1:18899"
@@ -30,7 +23,7 @@ config:
 
 app:
   name: "U-Ai"
-  version: "26.1.8"
+  version: "26.2.0-beta"
   deployMode: "desktop-local"
 
 chat:
@@ -79,27 +72,10 @@ providers:
       dataPath: "data/graph.db"
 
 components:
-  pluginHost:
-    enabled: true
-    entryUri: ""
-    workUri: ""
   taskHost:
     enabled: true
     entryUri: ""
     workUri: ""
-  sidecars:
-    wechat:
-      enabled: true
-      entryUri: ""
-      workUri: ""
-      port: 19876
-      healthUrl: "http://127.0.0.1:19876/api/health"
-    qq:
-      enabled: true
-      entryUri: ""
-      workUri: ""
-      port: 19877
-      healthUrl: "http://127.0.0.1:19877/api/health"
 
 embedding:
   modelName: "text-embedding-3-small"
@@ -113,27 +89,10 @@ runtime:
     npmPath: ""
     npxPath: ""
     workDir: ""
-  pluginHost:
-    enabled: true
-    entryPath: ""
-    workDir: ""
   taskHost:
     enabled: true
     entryPath: ""
     workDir: ""
-  sidecars:
-    wechat:
-      enabled: true
-      entryPath: ""
-      workDir: ""
-      port: 19876
-      healthUrl: "http://127.0.0.1:19876/api/health"
-    qq:
-      enabled: true
-      entryPath: ""
-      workDir: ""
-      port: 19877
-      healthUrl: "http://127.0.0.1:19877/api/health"
 
 desktopPetRuntime:
   enabled: true

@@ -3,6 +3,7 @@
 package system
 
 import (
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -13,6 +14,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/artifact"
 	"github.com/u-ai/backend/internal/asr"
+	"github.com/u-ai/backend/internal/requestidentity"
 	"github.com/u-ai/backend/pkg/comment/response"
 	"github.com/u-ai/backend/pkg/util"
 )
@@ -26,21 +28,21 @@ func (h *Handler) VoiceUpload(c *gin.Context) {
 	defer file.Close()
 
 	if h.artifactSvc != nil {
-		owner := currentUserID(c)
+		owner := currentSpaceID(c)
 		art, err := h.artifactSvc.Create(c.Request.Context(), artifact.CreateRequest{
-			OwnerUserID: owner,
-			Kind:        artifact.KindAudio,
-			Filename:    header.Filename,
-			Source:      artifact.SourceUserUpload,
-			Reader:      file,
+			OwnerSpaceID: owner,
+			Kind:         artifact.KindAudio,
+			Filename:     header.Filename,
+			Source:       artifact.SourceUserUpload,
+			Reader:       file,
 		})
 		if err != nil {
 			util.ErrorResponse(c, response.InternalError, "上传失败: "+err.Error(), nil)
 			return
 		}
 		util.SuccessResponse(c, gin.H{
-			"audioUrl":  artifact.URI(art.ID),
-			"duration":  0,
+			"audioUrl":   artifact.URI(art.ID),
+			"duration":   0,
 			"artifactId": string(art.ID),
 		})
 		return
@@ -84,13 +86,13 @@ func (h *Handler) ImageUpload(c *gin.Context) {
 	defer file.Close()
 
 	if h.artifactSvc != nil {
-		owner := currentUserID(c)
+		owner := currentSpaceID(c)
 		art, err := h.artifactSvc.Create(c.Request.Context(), artifact.CreateRequest{
-			OwnerUserID: owner,
-			Kind:        artifact.KindImage,
-			Filename:    header.Filename,
-			Source:      artifact.SourceUserUpload,
-			Reader:      file,
+			OwnerSpaceID: owner,
+			Kind:         artifact.KindImage,
+			Filename:     header.Filename,
+			Source:       artifact.SourceUserUpload,
+			Reader:       file,
 		})
 		if err != nil {
 			util.ErrorResponse(c, response.InternalError, "上传失败: "+err.Error(), nil)
@@ -141,13 +143,13 @@ func (h *Handler) VideoUpload(c *gin.Context) {
 	defer file.Close()
 
 	if h.artifactSvc != nil {
-		owner := currentUserID(c)
+		owner := currentSpaceID(c)
 		art, err := h.artifactSvc.Create(c.Request.Context(), artifact.CreateRequest{
-			OwnerUserID: owner,
-			Kind:        artifact.KindVideo,
-			Filename:    header.Filename,
-			Source:      artifact.SourceUserUpload,
-			Reader:      file,
+			OwnerSpaceID: owner,
+			Kind:         artifact.KindVideo,
+			Filename:     header.Filename,
+			Source:       artifact.SourceUserUpload,
+			Reader:       file,
 		})
 		if err != nil {
 			util.ErrorResponse(c, response.InternalError, "上传失败: "+err.Error(), nil)
@@ -189,26 +191,57 @@ func (h *Handler) VideoUpload(c *gin.Context) {
 	util.SuccessResponse(c, gin.H{"videoUrl": videoUrl})
 }
 
-func resolveAudioURL(c *gin.Context, h *Handler, audioUrl string) string {
-	if strings.HasPrefix(audioUrl, "amitia://artifacts/") {
-		id, parseErr := artifact.ParseURI(audioUrl)
-		if parseErr == nil {
-			return "http://" + c.Request.Host + "/api/artifacts/v1/" + string(id) + "/content"
+func resolveAudioURL(c *gin.Context, h *Handler, audioURL string) (string, error) {
+	if strings.HasPrefix(audioURL, "amitia://artifacts/") {
+		if h.artifactSvc == nil {
+			return "", fmt.Errorf("artifact service unavailable")
 		}
+		id, err := artifact.ParseURI(audioURL)
+		if err != nil {
+			return "", err
+		}
+		art, err := h.artifactSvc.GetOwned(c.Request.Context(), currentSpaceID(c), id)
+		if err != nil {
+			return "", err
+		}
+		if art.Kind != artifact.KindAudio {
+			return "", fmt.Errorf("artifact is not audio")
+		}
+		rc, info, err := h.artifactSvc.OpenBlob(c.Request.Context(), art.BlobDigest)
+		if err != nil {
+			return "", err
+		}
+		defer rc.Close()
+		if info.SizeBytes <= 0 || info.SizeBytes > 32<<20 {
+			return "", fmt.Errorf("audio artifact exceeds ASR size limit")
+		}
+		data, err := io.ReadAll(io.LimitReader(rc, (32<<20)+1))
+		if err != nil {
+			return "", err
+		}
+		token, err := asr.RegisterPublicAudio(data, art.MIMEType)
+		if err != nil {
+			return "", err
+		}
+		return asr.BuildPublicAudioURL(c, token), nil
 	}
-	if strings.HasPrefix(audioUrl, "/voice/") {
-		return "http://" + c.Request.Host + audioUrl
+	if strings.HasPrefix(audioURL, "/voice/") {
+		filename := filepath.Base(audioURL)
+		data, err := os.ReadFile(filepath.Join("data", "voice_msg", filename))
+		if err != nil {
+			return "", err
+		}
+		token, err := asr.RegisterPublicAudio(data, "")
+		if err != nil {
+			return "", err
+		}
+		return asr.BuildPublicAudioURL(c, token), nil
 	}
-	return audioUrl
+	return audioURL, nil
 }
 
-func currentUserID(c *gin.Context) string {
-	if v, ok := c.Get("userID"); ok {
-		if s, ok := v.(string); ok {
-			return s
-		}
-	}
-	return ""
+func currentSpaceID(c *gin.Context) string {
+	return requestidentity.ResolveGin(c)
 }
 
 func (h *Handler) VoiceTranscribe(c *gin.Context) {
@@ -227,9 +260,13 @@ func (h *Handler) VoiceTranscribe(c *gin.Context) {
 		return
 	}
 
-	fullAudioUrl := resolveAudioURL(c, h, body.AudioUrl)
+	fullAudioURL, resolveErr := resolveAudioURL(c, h, body.AudioUrl)
+	if resolveErr != nil {
+		util.SuccessResponse(c, gin.H{"text": "", "status": "asr_failed"})
+		return
+	}
 
-	taskID, submitErr := asr.SubmitTask(activeCfg, fullAudioUrl, "zh-CN")
+	taskID, submitErr := asr.SubmitTask(activeCfg, fullAudioURL, "zh-CN")
 	if submitErr != nil {
 		util.SuccessResponse(c, gin.H{"text": "", "status": "asr_failed"})
 		return

@@ -11,7 +11,6 @@ export interface RuntimeConnection {
   mode: RuntimeMode;
   apiBaseURL: string;
   websocketBaseURL: string;
-  accessToken?: string;
 }
 
 export type RuntimeState =
@@ -85,6 +84,11 @@ export interface AgentSkillDirectorySelection {
   files: Array<{ path: string; name: string; base64: string }>;
 }
 
+export interface WorkspaceDirectorySelection {
+  path: string;
+  name: string;
+}
+
 export interface ExtensionPackageSelection {
   name: string;
   size: number;
@@ -102,5 +106,7 @@ export interface LocalVoiceASRFinalEvent {
   sessionId?: string;
   conversationId?: string;
   characterId?: string;
+  visualContext?: string;
+  visualSource?: "camera" | "screen";
   occurredAt?: string;
 }

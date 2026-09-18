@@ -78,7 +78,7 @@ type PackageConfirmationNonceBinding struct {
 	Nonce         string
 	OperationType string
 	ExtensionID   string
-	UserID        string
+	SpaceID       string
 	IssuedAt      string
 	ExpiresAt     string
 }
@@ -88,7 +88,7 @@ type PackageConfirmationNonceRecord struct {
 	OperationID   string
 	OperationType string
 	ExtensionID   string
-	UserID        string
+	SpaceID       string
 	IssuedAt      string
 	ExpiresAt     string
 	ConsumedAt    string
@@ -115,7 +115,7 @@ func validatePackageConfirmationNonceBindingForOperation(operation PackageOperat
 	if binding.ExtensionID != operation.ExtensionID {
 		return operationStateError(OperationErrTokenStale, "confirmation nonce extension mismatch", nil)
 	}
-	if binding.UserID != operation.UserID {
+	if binding.SpaceID != operation.SpaceID {
 		return operationStateError(OperationErrTokenStale, "confirmation nonce user mismatch", nil)
 	}
 	issuedAt, expiresAt, err := parsePackageConfirmationNonceTimes(binding)
@@ -159,7 +159,7 @@ func (r *PackageRepository) VerifyConfirmationNonceBinding(ctx context.Context, 
 		Nonce:         claims.Nonce,
 		OperationType: claims.OperationType,
 		ExtensionID:   claims.ExtensionID,
-		UserID:        claims.UserID,
+		SpaceID:       claims.SpaceID,
 		IssuedAt:      confirmationTimestamp(claims.IssuedAt),
 		ExpiresAt:     confirmationTimestamp(claims.ExpiresAt),
 	}
@@ -167,9 +167,9 @@ func (r *PackageRepository) VerifyConfirmationNonceBinding(ctx context.Context, 
 		return err
 	}
 	var record PackageConfirmationNonceRecord
-	err := r.db.QueryRowContext(ctx, `SELECT nonce, operation_id, operation_type, extension_id, user_id, issued_at, expires_at, consumed_at FROM extension_package_confirmation_nonces WHERE nonce=?`, claims.Nonce).Scan(
+	err := r.db.QueryRowContext(ctx, `SELECT nonce, operation_id, operation_type, extension_id, space_id, issued_at, expires_at, consumed_at FROM extension_package_confirmation_nonces WHERE nonce=?`, claims.Nonce).Scan(
 		&record.Nonce, &record.OperationID, &record.OperationType, &record.ExtensionID,
-		&record.UserID, &record.IssuedAt, &record.ExpiresAt, &record.ConsumedAt,
+		&record.SpaceID, &record.IssuedAt, &record.ExpiresAt, &record.ConsumedAt,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return operationStateError(OperationErrTokenStale, "confirmation nonce binding missing", nil)
@@ -184,17 +184,17 @@ func scanPackageConfirmationNonceRecord(row interface{ Scan(dest ...any) error }
 	var record PackageConfirmationNonceRecord
 	err := row.Scan(
 		&record.Nonce, &record.OperationID, &record.OperationType, &record.ExtensionID,
-		&record.UserID, &record.IssuedAt, &record.ExpiresAt, &record.ConsumedAt,
+		&record.SpaceID, &record.IssuedAt, &record.ExpiresAt, &record.ConsumedAt,
 	)
 	return record, err
 }
 
 func getPackageConfirmationNonceRecordByNonceTx(ctx context.Context, tx *sql.Tx, nonce string) (PackageConfirmationNonceRecord, error) {
-	return scanPackageConfirmationNonceRecord(tx.QueryRowContext(ctx, `SELECT nonce, operation_id, operation_type, extension_id, user_id, issued_at, expires_at, consumed_at FROM extension_package_confirmation_nonces WHERE nonce=?`, nonce))
+	return scanPackageConfirmationNonceRecord(tx.QueryRowContext(ctx, `SELECT nonce, operation_id, operation_type, extension_id, space_id, issued_at, expires_at, consumed_at FROM extension_package_confirmation_nonces WHERE nonce=?`, nonce))
 }
 
 func getPackageConfirmationNonceRecordByOperationTx(ctx context.Context, tx *sql.Tx, operationID string) (PackageConfirmationNonceRecord, error) {
-	return scanPackageConfirmationNonceRecord(tx.QueryRowContext(ctx, `SELECT nonce, operation_id, operation_type, extension_id, user_id, issued_at, expires_at, consumed_at FROM extension_package_confirmation_nonces WHERE operation_id=?`, operationID))
+	return scanPackageConfirmationNonceRecord(tx.QueryRowContext(ctx, `SELECT nonce, operation_id, operation_type, extension_id, space_id, issued_at, expires_at, consumed_at FROM extension_package_confirmation_nonces WHERE operation_id=?`, operationID))
 }
 
 func verifyPackageConfirmationNonceRecord(record PackageConfirmationNonceRecord, operationID string, binding PackageConfirmationNonceBinding, now time.Time) error {
@@ -210,7 +210,7 @@ func verifyPackageConfirmationNonceRecord(record PackageConfirmationNonceRecord,
 	if record.ExtensionID != binding.ExtensionID {
 		return operationStateError(OperationErrTokenStale, "confirmation nonce extension mismatch", nil)
 	}
-	if record.UserID != binding.UserID {
+	if record.SpaceID != binding.SpaceID {
 		return operationStateError(OperationErrTokenStale, "confirmation nonce user mismatch", nil)
 	}
 	if record.IssuedAt != binding.IssuedAt {
@@ -238,7 +238,7 @@ func verifyPackageConfirmationNonceRecord(record PackageConfirmationNonceRecord,
 }
 
 func (r *PackageRepository) createOrGetOperation(ctx context.Context, op PackageOperationRecord, nonceBinding *PackageConfirmationNonceBinding) (PackageOperationRecord, bool, error) {
-	if op.UserID == "" || op.IdempotencyKey == "" || op.RequestHash == "" || op.OperationID == "" || op.ExtensionID == "" {
+	if op.SpaceID == "" || op.IdempotencyKey == "" || op.RequestHash == "" || op.OperationID == "" || op.ExtensionID == "" {
 		return PackageOperationRecord{}, false, operationStateError(OperationErrStorageFailure, "operation authority fields required", nil)
 	}
 	if op.Status == "" {
@@ -260,14 +260,14 @@ func (r *PackageRepository) createOrGetOperation(ctx context.Context, op Package
 	}
 	defer tx.Rollback()
 	result, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO extension_package_operations (
-		operation_id, trace_id, user_id, scope_type, scope_id, extension_id, target_version,
+		operation_id, trace_id, space_id, scope_type, scope_id, extension_id, target_version,
 		operation_type, status, current_step, artifact_id, preview_session_id, confirmations_json,
 		error_code, error_detail, started_at, updated_at, completed_at, stable_generation,
 		target_generation, current_pointer_json, idempotency_key, request_hash, from_version,
 		recovery_required, cancel_requested_at, lease_owner, lease_expires_at, attempt_count,
 		fencing_token, owner_instance_id, confirmation_claims_json, snapshot_requirement_hash
 	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		op.OperationID, op.TraceID, op.UserID, op.ScopeType, op.ScopeID, op.ExtensionID, op.TargetVersion,
+		op.OperationID, op.TraceID, op.SpaceID, op.ScopeType, op.ScopeID, op.ExtensionID, op.TargetVersion,
 		op.OperationType, op.Status, op.CurrentStep, op.ArtifactID, op.PreviewSessionID,
 		op.ConfirmationsJSON, op.ErrorCode, op.ErrorDetail, op.StartedAt, op.UpdatedAt, op.CompletedAt,
 		op.StableGeneration, op.TargetGeneration, op.CurrentPointerJSON, op.IdempotencyKey,
@@ -280,7 +280,7 @@ func (r *PackageRepository) createOrGetOperation(ctx context.Context, op Package
 	if err != nil {
 		return PackageOperationRecord{}, false, storageOperationError("inspect operation insert", err)
 	}
-	existing, err := getAuthoritativeOperationTx(ctx, tx, op.UserID, op.IdempotencyKey)
+	existing, err := getAuthoritativeOperationTx(ctx, tx, op.SpaceID, op.IdempotencyKey)
 	if err != nil {
 		return PackageOperationRecord{}, false, err
 	}
@@ -680,15 +680,15 @@ func (r *PackageRepository) getOperationStep(ctx context.Context, operationID, s
 	return step, nil
 }
 
-func getAuthoritativeOperationTx(ctx context.Context, tx *sql.Tx, userID, idempotencyKey string) (PackageOperationRecord, error) {
-	return scanAuthoritativeOperation(tx.QueryRowContext(ctx, authoritativeOperationSelect+` WHERE user_id=? AND idempotency_key=?`, userID, idempotencyKey))
+func getAuthoritativeOperationTx(ctx context.Context, tx *sql.Tx, spaceID, idempotencyKey string) (PackageOperationRecord, error) {
+	return scanAuthoritativeOperation(tx.QueryRowContext(ctx, authoritativeOperationSelect+` WHERE space_id=? AND idempotency_key=?`, spaceID, idempotencyKey))
 }
 
 func (r *PackageRepository) getAuthoritativeOperationByID(ctx context.Context, operationID string) (PackageOperationRecord, error) {
 	return scanAuthoritativeOperation(r.db.QueryRowContext(ctx, authoritativeOperationSelect+` WHERE operation_id=?`, operationID))
 }
 
-const authoritativeOperationSelect = `SELECT operation_id, trace_id, user_id, scope_type, scope_id,
+const authoritativeOperationSelect = `SELECT operation_id, trace_id, space_id, scope_type, scope_id,
 	extension_id, target_version, operation_type, status, current_step, artifact_id, preview_session_id,
 	confirmations_json, error_code, error_detail, started_at, updated_at, completed_at,
 	stable_generation, target_generation, current_pointer_json, idempotency_key, request_hash,
@@ -702,7 +702,7 @@ type operationRow interface {
 
 func scanAuthoritativeOperation(row operationRow) (PackageOperationRecord, error) {
 	var op PackageOperationRecord
-	err := row.Scan(&op.OperationID, &op.TraceID, &op.UserID, &op.ScopeType, &op.ScopeID,
+	err := row.Scan(&op.OperationID, &op.TraceID, &op.SpaceID, &op.ScopeType, &op.ScopeID,
 		&op.ExtensionID, &op.TargetVersion, &op.OperationType, &op.Status, &op.CurrentStep,
 		&op.ArtifactID, &op.PreviewSessionID, &op.ConfirmationsJSON, &op.ErrorCode, &op.ErrorDetail,
 		&op.StartedAt, &op.UpdatedAt, &op.CompletedAt, &op.StableGeneration, &op.TargetGeneration,
@@ -809,8 +809,8 @@ func consumePackageConfirmationNonceTx(ctx context.Context, tx *sql.Tx, operatio
 		return operationStateError(OperationErrTokenStale, "confirmation nonce consumed outside valid window", nil)
 	}
 	consumedAt := now.Format(time.RFC3339Nano)
-	result, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO extension_package_confirmation_nonces (nonce, operation_id, operation_type, extension_id, user_id, issued_at, expires_at, consumed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-		binding.Nonce, operationID, binding.OperationType, binding.ExtensionID, binding.UserID, binding.IssuedAt, binding.ExpiresAt, consumedAt)
+	result, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO extension_package_confirmation_nonces (nonce, operation_id, operation_type, extension_id, space_id, issued_at, expires_at, consumed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		binding.Nonce, operationID, binding.OperationType, binding.ExtensionID, binding.SpaceID, binding.IssuedAt, binding.ExpiresAt, consumedAt)
 	if err != nil {
 		return storageOperationError("consume confirmation nonce", err)
 	}

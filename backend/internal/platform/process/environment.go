@@ -28,6 +28,7 @@ func (b *EnvironmentBuilder) addSystemMinimum() {
 	if runtime.GOOS == "windows" {
 		b.vars["SystemRoot"] = os.Getenv("SystemRoot")
 		b.vars["USERPROFILE"] = os.Getenv("USERPROFILE")
+		b.vars["LOCALAPPDATA"] = os.Getenv("LOCALAPPDATA")
 		b.vars["PATHEXT"] = os.Getenv("PATHEXT")
 	}
 }
@@ -109,30 +110,36 @@ func (b *EnvironmentBuilder) BuildFiltered() []string {
 
 func allowedEnvKeys() map[string]bool {
 	return map[string]bool{
-		"PATH":                        true,
-		"HOME":                        true,
-		"TMP":                         true,
-		"TEMP":                        true,
-		"SystemRoot":                  true,
-		"USERPROFILE":                 true,
-		"PATHEXT":                     true,
-		"AMITIA_RUNTIME_INSTANCE_ID":  true,
-		"AMITIA_EXTENSION_ID":         true,
-		"AMITIA_MODULE_ID":            true,
-		"AMITIA_RUNTIME_GENERATION":   true,
-		"AMITIA_RPC_ENDPOINT":         true,
-		"AMITIA_SESSION_NONCE":        true,
-		"AMITIA_LOG_LEVEL":            true,
-		"AMITIA_TEMP_DIR":             true,
-		"AMITIA_DATA_HANDLE":          true,
-		"AMITIA_CONFIG_HANDLE":        true,
-		"AMITIA_INSTANCE":             true,
-		"AMITIA_GENERATION":           true,
-		"AMITIA_SECRET_LEASE":         true,
-		"AMITIA_HOST_API":             true,
-		"AMITIA_PROTOCOL":             true,
-		"AMITIA_PLATFORM":             true,
-		"AMITIA_SESSION":              true,
+		"PATH":                             true,
+		"HOME":                             true,
+		"TMP":                              true,
+		"TEMP":                             true,
+		"SystemRoot":                       true,
+		"USERPROFILE":                      true,
+		"LOCALAPPDATA":                     true,
+		"PATHEXT":                          true,
+		"AMITIA_RUNTIME_INSTANCE_ID":       true,
+		"AMITIA_EXTENSION_ID":              true,
+		"AMITIA_MODULE_ID":                 true,
+		"AMITIA_RUNTIME_GENERATION":        true,
+		"AMITIA_RPC_ENDPOINT":              true,
+		"AMITIA_SESSION_NONCE":             true,
+		"AMITIA_LOG_LEVEL":                 true,
+		"AMITIA_TEMP_DIR":                  true,
+		"AMITIA_DATA_HANDLE":               true,
+		"AMITIA_CONFIG_HANDLE":             true,
+		"AMITIA_INSTANCE":                  true,
+		"AMITIA_GENERATION":                true,
+		"AMITIA_SECRET_LEASE":              true,
+		"AMITIA_HOST_API":                  true,
+		"AMITIA_PROTOCOL":                  true,
+		"AMITIA_PLATFORM":                  true,
+		"AMITIA_SESSION":                   true,
+		"AMITIA_CORE_URL":                  true,
+		"AMITIA_SERVICE_AUTH_VERSION":      true,
+		"AMITIA_SERVICE_AUTH_TOKEN":        true,
+		"AMITIA_NATIVE_COMPANIONS_VERSION": true,
+		"AMITIA_NATIVE_COMPANIONS":         true,
 	}
 }
 

@@ -24,7 +24,6 @@ func NewHandler(svc ReleaseService, guard security.OwnershipGuard) *Handler {
 type buildReleasePayload struct {
 	ProcessingTaskID string   `json:"processingTaskId"`
 	PetID            string   `json:"petId"`
-	CharacterID      string   `json:"characterId"`
 	DefaultAction    string   `json:"defaultAction"`
 	IncludedActions  []string `json:"includedActions"`
 	ProfileID        string   `json:"profileId"`
@@ -46,13 +45,12 @@ func (h *Handler) BuildRelease(c *gin.Context) {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
-	userID := actorID
+	spaceID := actorID
 
 	req := &BuildReleaseRequest{
-		UserID:             userID,
+		SpaceID:            spaceID,
 		ProcessingTaskID:   payload.ProcessingTaskID,
 		PetID:              payload.PetID,
-		CharacterID:        payload.CharacterID,
 		DefaultAction:      payload.DefaultAction,
 		IncludedActionKeys: payload.IncludedActions,
 		BuildProfileID:     payload.ProfileID,
@@ -81,9 +79,9 @@ func (h *Handler) GetBuildOperation(c *gin.Context) {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
-	userID := actorID
+	spaceID := actorID
 
-	op, err := h.svc.GetBuildOperation(c.Request.Context(), operationID, userID)
+	op, err := h.svc.GetBuildOperation(c.Request.Context(), operationID, spaceID)
 	if err != nil {
 		writeReleaseError(c, err)
 		return
@@ -102,9 +100,9 @@ func (h *Handler) CancelBuildOperation(c *gin.Context) {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
-	userID := actorID
+	spaceID := actorID
 
-	if err := h.svc.CancelBuildOperation(c.Request.Context(), operationID, userID); err != nil {
+	if err := h.svc.CancelBuildOperation(c.Request.Context(), operationID, spaceID); err != nil {
 		writeReleaseError(c, err)
 		return
 	}
@@ -117,9 +115,9 @@ func (h *Handler) ListReleases(c *gin.Context) {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
-	userID := actorID
+	spaceID := actorID
 
-	releases, err := h.svc.ListReleases(c.Request.Context(), userID)
+	releases, err := h.svc.ListReleases(c.Request.Context(), spaceID)
 	if err != nil {
 		writeReleaseError(c, err)
 		return
@@ -134,9 +132,9 @@ func (h *Handler) ListReleasesForPet(c *gin.Context) {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
-	userID := actorID
+	spaceID := actorID
 
-	releases, err := h.svc.ListReleasesForPet(c.Request.Context(), userID, petID)
+	releases, err := h.svc.ListReleasesForPet(c.Request.Context(), spaceID, petID)
 	if err != nil {
 		writeReleaseError(c, err)
 		return
@@ -155,7 +153,7 @@ func (h *Handler) GetRelease(c *gin.Context) {
 		writeReleaseOwnershipError(c, err)
 		return
 	}
-	release, err := h.svc.GetRelease(c.Request.Context(), releaseID, string(actor.UserID))
+	release, err := h.svc.GetRelease(c.Request.Context(), releaseID, string(actor.SpaceID))
 	if err != nil {
 		writeReleaseError(c, err)
 		return
@@ -174,7 +172,7 @@ func (h *Handler) GetReleaseFiles(c *gin.Context) {
 		writeReleaseOwnershipError(c, err)
 		return
 	}
-	files, err := h.svc.GetReleaseFiles(c.Request.Context(), releaseID, string(actor.UserID))
+	files, err := h.svc.GetReleaseFiles(c.Request.Context(), releaseID, string(actor.SpaceID))
 	if err != nil {
 		writeReleaseError(c, err)
 		return
@@ -193,7 +191,7 @@ func (h *Handler) ArchiveRelease(c *gin.Context) {
 		writeReleaseOwnershipError(c, err)
 		return
 	}
-	if err := h.svc.ArchiveRelease(c.Request.Context(), releaseID, string(actor.UserID)); err != nil {
+	if err := h.svc.ArchiveRelease(c.Request.Context(), releaseID, string(actor.SpaceID)); err != nil {
 		writeReleaseError(c, err)
 		return
 	}
@@ -212,7 +210,7 @@ func (h *Handler) RevokeRelease(c *gin.Context) {
 		return
 	}
 	reason := c.Query("reason")
-	if err := h.svc.RevokeRelease(c.Request.Context(), releaseID, string(actor.UserID), reason); err != nil {
+	if err := h.svc.RevokeRelease(c.Request.Context(), releaseID, string(actor.SpaceID), reason); err != nil {
 		writeReleaseError(c, err)
 		return
 	}
@@ -230,7 +228,7 @@ func (h *Handler) GetPetIdentity(c *gin.Context) {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
-	identity, err := h.svc.GetPetIdentity(c.Request.Context(), string(actor.UserID), petID)
+	identity, err := h.svc.GetPetIdentity(c.Request.Context(), string(actor.SpaceID), petID)
 	if err != nil {
 		writeReleaseError(c, err)
 		return
@@ -249,7 +247,7 @@ func (h *Handler) DownloadRelease(c *gin.Context) {
 		writeReleaseOwnershipError(c, err)
 		return
 	}
-	archivePath, releaseData, err := h.svc.GetReleaseArchivePath(c.Request.Context(), releaseID, string(actor.UserID))
+	archivePath, releaseData, err := h.svc.GetReleaseArchivePath(c.Request.Context(), releaseID, string(actor.SpaceID))
 	if err != nil {
 		writeReleaseError(c, err)
 		return

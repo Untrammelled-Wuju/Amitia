@@ -12,6 +12,7 @@ internal class NotificationNativeHandlerAdapter(
 
     override val operations: Set<String> = setOf(
         NotificationNativeHandler.OP_STATUS,
+        NotificationNativeHandler.OP_REQUEST_PERMISSION,
         NotificationNativeHandler.OP_LIST,
         NotificationNativeHandler.OP_GET,
         NotificationNativeHandler.OP_POST,

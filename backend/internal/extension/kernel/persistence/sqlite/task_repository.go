@@ -349,6 +349,12 @@ func (r *TaskRepository) ListTaskRuns(ctx context.Context, filter task_runtime.L
 			query += " OFFSET ?"
 			args = append(args, filter.Offset)
 		}
+	} else if filter.Offset > 0 {
+		// SQLite accepts OFFSET only together with LIMIT. LIMIT -1 means
+		// "all remaining rows", which preserves the public offset-only
+		// ListTasksFilter contract instead of silently ignoring the offset.
+		query += " LIMIT -1 OFFSET ?"
+		args = append(args, filter.Offset)
 	}
 
 	rows, err := ex.QueryContext(ctx, query, args...)
@@ -755,7 +761,7 @@ func serializeExecutionTarget(target task_runtime.TaskExecutionTarget) string {
 	type targetJSON struct {
 		ProviderID           string `json:"providerId,omitempty"`
 		ProviderInstanceID   string `json:"providerInstanceId,omitempty"`
-		UserID               string `json:"userId,omitempty"`
+		SpaceID              string `json:"spaceId,omitempty"`
 		DeviceID             string `json:"deviceId,omitempty"`
 		RuntimeID            string `json:"runtimeId,omitempty"`
 		RuntimeSessionID     string `json:"runtimeSessionId,omitempty"`
@@ -765,7 +771,7 @@ func serializeExecutionTarget(target task_runtime.TaskExecutionTarget) string {
 	return mustMarshalJSON(targetJSON{
 		ProviderID:           target.ProviderID.String(),
 		ProviderInstanceID:   target.ProviderInstanceID.String(),
-		UserID:               target.UserID.String(),
+		SpaceID:              target.SpaceID.String(),
 		DeviceID:             target.DeviceID.String(),
 		RuntimeID:            target.RuntimeID.String(),
 		RuntimeSessionID:     target.RuntimeSessionID.String(),
@@ -781,7 +787,7 @@ func deserializeExecutionTarget(s string) task_runtime.TaskExecutionTarget {
 	type targetJSON struct {
 		ProviderID           string `json:"providerId,omitempty"`
 		ProviderInstanceID   string `json:"providerInstanceId,omitempty"`
-		UserID               string `json:"userId,omitempty"`
+		SpaceID              string `json:"spaceId,omitempty"`
 		DeviceID             string `json:"deviceId,omitempty"`
 		RuntimeID            string `json:"runtimeId,omitempty"`
 		RuntimeSessionID     string `json:"runtimeSessionId,omitempty"`
@@ -795,7 +801,7 @@ func deserializeExecutionTarget(s string) task_runtime.TaskExecutionTarget {
 	return task_runtime.TaskExecutionTarget{
 		ProviderID:           capability.ParseProviderID(j.ProviderID),
 		ProviderInstanceID:   capability.ParseProviderInstanceID(j.ProviderInstanceID),
-		UserID:               runtimeidentity.ParseUserID(j.UserID),
+		SpaceID:              runtimeidentity.ParseSpaceID(j.SpaceID),
 		DeviceID:             runtimeidentity.ParseDeviceID(j.DeviceID),
 		RuntimeID:            runtimeidentity.ParseRuntimeID(j.RuntimeID),
 		RuntimeSessionID:     runtimeidentity.ParseRuntimeSessionID(j.RuntimeSessionID),

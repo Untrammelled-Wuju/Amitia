@@ -28,9 +28,9 @@ func newOperationStateTestRepository(t *testing.T) *PackageRepository {
 	return NewPackageRepository(db)
 }
 
-func operationFixture(id, userID, key, requestHash, extensionID string) PackageOperationRecord {
+func operationFixture(id, spaceID, key, requestHash, extensionID string) PackageOperationRecord {
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	return PackageOperationRecord{OperationID: id, TraceID: "trace-" + id, UserID: userID,
+	return PackageOperationRecord{OperationID: id, TraceID: "trace-" + id, SpaceID: spaceID,
 		ScopeType: "global", ExtensionID: extensionID, TargetVersion: "2.0.0", FromVersion: "1.0.0",
 		OperationType: "install", Status: string(PackageOperationPending), CurrentStep: "created",
 		ConfirmationsJSON: "{}", StartedAt: now, UpdatedAt: now, IdempotencyKey: key,
@@ -70,7 +70,7 @@ func TestCreateOrGetOperationConcurrentIdempotency(t *testing.T) {
 		t.Fatalf("expected one authoritative operation, got %v", operationIDs)
 	}
 	var count int
-	if err := repository.db.QueryRow(`SELECT COUNT(*) FROM extension_package_operations WHERE user_id='user-1' AND idempotency_key='request-1'`).Scan(&count); err != nil || count != 1 {
+	if err := repository.db.QueryRow(`SELECT COUNT(*) FROM extension_package_operations WHERE space_id='user-1' AND idempotency_key='request-1'`).Scan(&count); err != nil || count != 1 {
 		t.Fatalf("unexpected operation count=%d err=%v", count, err)
 	}
 }
@@ -185,7 +185,7 @@ func TestOperationAuthorityMigratesLegacyDatabase(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = db.Close() })
 	if _, err := db.Exec(`CREATE TABLE extension_package_operations (
-		operation_id TEXT PRIMARY KEY, trace_id TEXT NOT NULL, user_id TEXT NOT NULL,
+		operation_id TEXT PRIMARY KEY, trace_id TEXT NOT NULL, space_id TEXT NOT NULL,
 		scope_type TEXT NOT NULL, scope_id TEXT NOT NULL DEFAULT '', extension_id TEXT NOT NULL,
 		target_version TEXT NOT NULL DEFAULT '', operation_type TEXT NOT NULL, status TEXT NOT NULL,
 		current_step TEXT NOT NULL, artifact_id TEXT NOT NULL DEFAULT '', preview_session_id TEXT NOT NULL DEFAULT '',

@@ -579,7 +579,7 @@ func TestExecutionHookOnInvocationCreated(t *testing.T) {
 
 	inv := capability.ToolInvocationContext{
 		InvocationID: "hook-inv-1",
-		UserID:       "user-1",
+		SpaceID:      "user-1",
 		Source:       capability.InvocationSourceModel,
 	}
 
@@ -594,8 +594,8 @@ func TestExecutionHookOnInvocationCreated(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetInvocation failed: %v", err)
 	}
-	if got.UserID != "user-1" {
-		t.Errorf("expected UserID 'user-1', got %q", got.UserID)
+	if got.SpaceID != "user-1" {
+		t.Errorf("expected SpaceID 'user-1', got %q", got.SpaceID)
 	}
 	if got.CapabilityID != "tool-1" {
 		t.Errorf("expected CapabilityID 'tool-1', got %q", got.CapabilityID)
@@ -655,7 +655,7 @@ func TestMigrationMappingsCoverage(t *testing.T) {
 	}
 
 	expectedTables := []string{
-		"plugin_runs", "mcp_operations", "workflow_runs",
+		"mcp_operations", "workflow_runs",
 		"extension_runs", "package_operations", "agent_skill_activations",
 	}
 
@@ -811,7 +811,7 @@ func TestExecutionHookPermissionDecision(t *testing.T) {
 
 	hook.OnPermissionDecision(ctx, capability.ToolInvocationContext{
 		InvocationID: "inv-perm-1",
-		UserID:       "user-1",
+		SpaceID:      "user-1",
 	}, "tool-1", result)
 
 	_ = writer.Flush(ctx)
@@ -935,7 +935,6 @@ func TestExecutionHookCircuitEvents(t *testing.T) {
 func TestOperationTypeConstants(t *testing.T) {
 	types := []OperationType{
 		OpToolExecute, OpWorkflowExecute, OpWorkflowSchedule,
-		OpPluginHook, OpPluginEvent, OpPluginSchedule,
 		OpMCPConnect, OpMCPDisconnect, OpMCPDiscover, OpMCPToolExecute,
 		OpExtensionInstall, OpExtensionEnable, OpExtensionDisable,
 		OpExtensionUpdate, OpExtensionRollback, OpExtensionUninstall, OpExtensionRestore,

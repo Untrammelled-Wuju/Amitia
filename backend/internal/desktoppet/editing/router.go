@@ -23,6 +23,7 @@ func RegisterEditingRouterWithService(r *gin.RouterGroup, svc Service, guard sec
 		g.GET("/action-streams/:streamId/revisions", handler.ListRevisionsByStream)
 		g.GET("/action-streams/:streamId/active-revision", handler.GetActiveRevisionByStream)
 
+		g.GET("/revisions/:revisionId", handler.GetRevision)
 		g.GET("/revisions/:revisionId/frames/:frameId/image", handler.GetFrameImage)
 		g.GET("/revisions/:revisionId/frames/:frameId/thumbnail", handler.GetFrameThumbnail)
 		g.GET("/revisions/:revisionId/preview-manifest", handler.GetPreviewManifest)

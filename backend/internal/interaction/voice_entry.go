@@ -25,9 +25,10 @@ const (
 )
 
 var (
-	ErrVoiceSessionNotFound = errors.New("voice_entry: session not found")
-	ErrVoiceTurnCancelled   = errors.New("voice_entry: turn cancelled")
-	ErrVoiceBusy            = errors.New("voice_entry: orchestrator busy for voice input")
+	ErrVoiceSessionNotFound      = errors.New("voice_entry: session not found")
+	ErrVoiceTurnCancelled        = errors.New("voice_entry: turn cancelled")
+	ErrVoiceBusy                 = errors.New("voice_entry: orchestrator busy for voice input")
+	ErrVoiceSessionScopeMismatch = errors.New("voice_entry: session scope mismatch")
 )
 
 type VoiceTurnRequest struct {
@@ -39,7 +40,7 @@ type VoiceTurnRequest struct {
 	CharacterID    string          `json:"characterId"`
 	Channel        string          `json:"channel"`
 	PeerID         string          `json:"peerId,omitempty"`
-	UserID         string          `json:"userId,omitempty"`
+	SpaceID        string          `json:"spaceId,omitempty"`
 	AudioUrl       string          `json:"audioUrl,omitempty"`
 	AudioDuration  float64         `json:"audioDuration,omitempty"`
 	VoiceMessage   bool            `json:"voiceMessage"`
@@ -50,6 +51,7 @@ type VoiceSession struct {
 	SessionID       string               `json:"sessionId"`
 	ConversationID  string               `json:"conversationId"`
 	CharacterID     string               `json:"characterId"`
+	SpaceID         string               `json:"spaceId"`
 	State           VoiceTurnState       `json:"state"`
 	CurrentTurnID   string               `json:"currentTurnId"`
 	CurrentText     string               `json:"currentText"`
@@ -80,13 +82,14 @@ func (v *VoiceEntry) UnifiedEntry() *UnifiedEntry {
 	return v.unifiedEntry
 }
 
-func (v *VoiceEntry) CreateSession(sessionID, conversationID, characterID string) *VoiceSession {
+func (v *VoiceEntry) CreateSession(sessionID, conversationID, characterID, spaceID string) *VoiceSession {
 	v.mu.Lock()
 	defer v.mu.Unlock()
 	session := &VoiceSession{
 		SessionID:       sessionID,
 		ConversationID:  conversationID,
 		CharacterID:     characterID,
+		SpaceID:         spaceID,
 		State:           VoiceTurnStateIdle,
 		InterruptPolicy: VoiceInterruptPolicyImmediate,
 		CreatedAt:       time.Now(),
@@ -111,7 +114,9 @@ func (v *VoiceEntry) RemoveSession(sessionID string) {
 func (v *VoiceEntry) HandleTurn(ctx context.Context, req *VoiceTurnRequest) (*OrchestrationResult, error) {
 	session := v.GetSession(req.SessionID)
 	if session == nil {
-		session = v.CreateSession(req.SessionID, req.ConversationID, req.CharacterID)
+		session = v.CreateSession(req.SessionID, req.ConversationID, req.CharacterID, req.SpaceID)
+	} else if session.SpaceID != req.SpaceID || session.ConversationID != req.ConversationID || session.CharacterID != req.CharacterID {
+		return nil, ErrVoiceSessionScopeMismatch
 	}
 
 	session.mu.Lock()
@@ -148,7 +153,7 @@ func (v *VoiceEntry) HandleTurn(ctx context.Context, req *VoiceTurnRequest) (*Or
 		Message:        req.Text,
 		Channel:        req.Channel,
 		PeerID:         req.PeerID,
-		UserID:         req.UserID,
+		SpaceID:        req.SpaceID,
 		Source:         "voice",
 		RequestID:      req.TurnID,
 		SessionID:      session.SessionID,

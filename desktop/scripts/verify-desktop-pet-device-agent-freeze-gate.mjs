@@ -62,10 +62,10 @@ const [
   read("desktop/src/desktop-pet/animation/player-state-machine.ts"),
   read("backend/internal/desktoppet/doctor/doctor.go"),
   read("desktop/src/desktop-pet/runtime/playback-event-bridge.ts"),
-  read("backend/internal/desktoppet/behavior/wiring/runtime_v2_action_port.go"),
-  read("backend/internal/desktoppet/runtime/protocol/v2/handler.go"),
-  read("backend/internal/desktoppet/runtime/protocol/v2/event.go"),
-  read("backend/internal/desktoppet/runtime/protocol/v2/actual_state.go"),
+  read("backend/internal/desktoppet/behavior/wiring/runtime_v1_action_port.go"),
+  read("backend/internal/desktoppet/runtime/protocol/v1/handler.go"),
+  read("backend/internal/desktoppet/runtime/protocol/v1/event.go"),
+  read("backend/internal/desktoppet/runtime/protocol/v1/actual_state.go"),
   read("mobile_app/lib/features/desktop_pet/runtime/desktop_pet_mobile_runtime.dart"),
   read("mobile_app/android/app/src/main/kotlin/com/amitia/amitia_app/nativeprovider/desktoppet/DesktopPetRendererNativeHandler.kt"),
   read("backend/internal/migration/desktop_pet_runtime_behavior_finalization.go"),
@@ -85,7 +85,7 @@ for (const required of [
   "ReleaseRecoveryWorker.Start(ctx)",
   "ReleaseEventOutboxDispatcher.Start(ctx)",
   "BehaviorService.Start(ctx)",
-  "DesktopPetRuntimeV2.Start(ctx)",
+  "DesktopPetRuntimeV1.Start(ctx)",
   "RuntimeDomainEventConsumer.Start(ctx)",
 ]) {
   assert(runtimeComponents.includes(required), `DesktopPet component start topology missing ${required}`);
@@ -102,7 +102,7 @@ for (const readiness of [
   "release recovery worker not running",
   "release event outbox dispatcher not running",
   "behavior service not running",
-  "runtime v2 not running",
+  "runtime v1 not running",
   "runtime domain event consumer not running",
 ]) {
   assert(
@@ -130,10 +130,10 @@ assert(
 );
 assert(
   meshRuntime.includes("InvokeDeviceHandlerWithRuntimeType") &&
-    meshHub.includes("ListByUser") &&
+    meshHub.includes("ListBySpace") &&
     localHandler.includes("SetCredentialObserver") &&
-    !behaviorMesh.includes("GetPreferredByUser"),
-  "Desktop Pet behavior routing must enumerate authenticated user devices and must never select by freshest heartbeat",
+    !behaviorMesh.includes("GetPreferredBySpace"),
+  "Desktop Pet behavior routing must enumerate authenticated Space devices and must never select by freshest heartbeat",
 );
 assert(
   runtimeBehaviorMigration.includes('"target_installation_id"') ||
@@ -145,7 +145,7 @@ assert(
     migrationBaseline.includes("position_x INTEGER NOT NULL DEFAULT 0") &&
     migrationBaseline.includes("window_width INTEGER NOT NULL DEFAULT 0") &&
     migrationBaseline.includes("scale REAL NOT NULL DEFAULT 0"),
-  "baseline schema must include behavior target fencing and Runtime V2 physical-state columns",
+  "baseline schema must include behavior target fencing and Runtime V1 physical-state columns",
 );
 
 assert(
@@ -162,7 +162,7 @@ assert(
     behaviorMesh.includes("outbox claim lost before target fence persistence") &&
     behaviorMesh.includes("resolveOnDevice") &&
     behaviorMesh.includes("desktopPetBehaviorMeshResolveHandler") &&
-    behaviorMesh.includes("GetActiveBindingForUserDeviceTx") &&
+    behaviorMesh.includes("GetActiveBindingForSpaceDeviceTx") &&
     behaviorMesh.includes("target device %s is offline") &&
     behaviorMesh.includes("concrete outbox target is an execution fence") &&
     behaviorMesh.includes("pinned target device %s no longer owns the active installation"),
@@ -190,7 +190,7 @@ assert(
   "Cloud Core must not mount Device-local desktop-pet mutation routes",
 );
 
-// Runtime V2 desired state must fail closed on Android when the canonical
+// Runtime V1 desired state must fail closed on Android when the canonical
 // window cannot be represented. Silent platform clamping creates false
 // desiredHash convergence and is forbidden.
 assert(
@@ -204,14 +204,14 @@ assert(
     mobileRuntime.includes("positionMode != 'absolute'") &&
     !mobileRuntime.includes("_double(settings['scale'], 1.0).clamp(0.25, 4.0)") &&
     !mobileRuntime.includes("(canvasWidth * scale).round().clamp(64, 420)"),
-  "Android Runtime V2 must reject unsupported canonical desired settings instead of silently projecting/clamping and ACKing them",
+  "Android Runtime V1 must reject unsupported canonical desired settings instead of silently projecting/clamping and ACKing them",
 );
 assert(
   androidRenderer.includes("DESKTOP_PET_SIZE_UNSUPPORTED") &&
     androidRenderer.includes("requestedWidth !in MIN_PET_DP..MAX_PET_DP") &&
     androidRenderer.includes("requestedHeight !in MIN_PET_DP..MAX_PET_DP") &&
     !androidRenderer.includes('intOrNull("width")?.let { params.width = dp(it.coerceIn(MIN_PET_DP, MAX_PET_DP)) }'),
-  "Android native renderer must fail closed for unsupported Runtime V2 window dimensions",
+  "Android native renderer must fail closed for unsupported Runtime V1 window dimensions",
 );
 assert(
   runtimeProtocolEvent.includes('json:"positionX"') &&
@@ -220,7 +220,7 @@ assert(
     runtimeActualState.includes('gorm:"column:position_x') &&
     runtimeActualState.includes('gorm:"column:window_width') &&
     runtimeHandler.includes("snapshot.Visible != (windowStatus == WindowStatusVisible)"),
-  "Runtime V2 actual-state persistence must include physical window geometry and reject contradictory visibility facts",
+  "Runtime V1 actual-state persistence must include physical window geometry and reject contradictory visibility facts",
 );
 assert(
   manager.includes("incomingRuntimeId") &&
@@ -345,13 +345,13 @@ assert(
   playerBridge.includes("STOP_DELIVERY_FAILED") &&
     manager.includes("handlePlayerBridgeFailure") &&
     manager.includes("PLAYER_BRIDGE_DELIVERY_FAILED"),
-  "stop delivery failure must terminalize the active accepted Runtime v2 play command",
+  "stop delivery failure must terminalize the active accepted Runtime v1 play command",
 );
 assert(
   scheduler.includes('"action-cancelled"') &&
     manager.includes('event === "action-cancelled"') &&
     manager.includes('"PLAYBACK_COMMAND_CANCELLED"'),
-  "scheduler queue eviction/coalesce must terminalize accepted Runtime v2 commands before playback identity exists",
+  "scheduler queue eviction/coalesce must terminalize accepted Runtime v1 commands before playback identity exists",
 );
 assert(
   legacyPlaybackBridge.includes("test-only") &&
@@ -366,7 +366,7 @@ assert(
     runtimeHandler.includes("InterruptReason") &&
     runtimeHandler.includes("meta.Reason = meta.InterruptReason") &&
     runtimeHandler.includes("MarkCancelled(meta.CommandID"),
-  "Runtime v2 completionPolicy and interrupt reason parsing must execute in the command state machine",
+  "Runtime v1 completionPolicy and interrupt reason parsing must execute in the command state machine",
 );
 
 console.log(

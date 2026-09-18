@@ -69,7 +69,7 @@ func (r *Repository) UpdateTyped(ctx context.Context, req BindingUpdateRequest) 
 	}()
 
 	var model BehaviorBindingModel
-	if err := tx.Where("id = ? AND user_id = ?", req.ID, req.UserID).First(&model).Error; err != nil {
+	if err := tx.Where("id = ? AND space_id = ?", req.ID, req.SpaceID).First(&model).Error; err != nil {
 		tx.Rollback()
 		if err == gorm.ErrRecordNotFound {
 			return nil, errors.New("binding not found")
@@ -109,7 +109,7 @@ func (r *Repository) UpdateTyped(ctx context.Context, req BindingUpdateRequest) 
 	}
 
 	result := tx.Model(&model).
-		Where("id = ? AND user_id = ? AND version = ?", req.ID, req.UserID, req.ExpectedVersion).
+		Where("id = ? AND space_id = ? AND version = ?", req.ID, req.SpaceID, req.ExpectedVersion).
 		Updates(updates)
 	if result.Error != nil {
 		tx.Rollback()
@@ -155,9 +155,9 @@ func (r *Repository) GetByID(ctx context.Context, id string) (*BehaviorBinding, 
 	return &b, nil
 }
 
-func (r *Repository) ListByUserCharacter(ctx context.Context, userID, characterID string) ([]BehaviorBinding, error) {
+func (r *Repository) ListBySpaceCharacter(ctx context.Context, spaceID, characterID string) ([]BehaviorBinding, error) {
 	var models []BehaviorBindingModel
-	query := r.db.WithContext(ctx).Where("user_id = ?", userID)
+	query := r.db.WithContext(ctx).Where("space_id = ?", spaceID)
 	if characterID != "" {
 		query = query.Where("character_id = ?", characterID)
 	}
@@ -172,11 +172,11 @@ func (r *Repository) ListByUserCharacter(ctx context.Context, userID, characterI
 }
 
 // ListByScope returns bindings for exactly one persisted user/character scope.
-// Unlike ListByUserCharacter, an empty characterID means the global scope only.
-func (r *Repository) ListByScope(ctx context.Context, userID, characterID string) ([]BehaviorBinding, error) {
+// Unlike ListBySpaceCharacter, an empty characterID means the global scope only.
+func (r *Repository) ListByScope(ctx context.Context, spaceID, characterID string) ([]BehaviorBinding, error) {
 	var models []BehaviorBindingModel
 	if err := r.db.WithContext(ctx).
-		Where("user_id = ? AND character_id = ?", userID, characterID).
+		Where("space_id = ? AND character_id = ?", spaceID, characterID).
 		Order("created_at ASC").
 		Find(&models).Error; err != nil {
 		return nil, err
@@ -190,28 +190,28 @@ func (r *Repository) ListByScope(ctx context.Context, userID, characterID string
 
 func (r *Repository) ListScopes(ctx context.Context) ([]EvaluatorScope, error) {
 	type scopeRow struct {
-		UserID      string `gorm:"column:user_id"`
+		SpaceID     string `gorm:"column:space_id"`
 		CharacterID string `gorm:"column:character_id"`
 	}
 	var rows []scopeRow
 	if err := r.db.WithContext(ctx).
 		Model(&BehaviorBindingModel{}).
-		Select("user_id, character_id").
-		Group("user_id, character_id").
-		Order("user_id ASC, character_id ASC").
+		Select("space_id, character_id").
+		Group("space_id, character_id").
+		Order("space_id ASC, character_id ASC").
 		Scan(&rows).Error; err != nil {
 		return nil, err
 	}
 	result := make([]EvaluatorScope, 0, len(rows))
 	for _, row := range rows {
-		result = append(result, EvaluatorScope{UserID: row.UserID, CharacterID: row.CharacterID})
+		result = append(result, EvaluatorScope{SpaceID: row.SpaceID, CharacterID: row.CharacterID})
 	}
 	return result, nil
 }
 
-func (r *Repository) ListByEventType(ctx context.Context, userID, characterID, eventType string) ([]BehaviorBinding, error) {
+func (r *Repository) ListByEventType(ctx context.Context, spaceID, characterID, eventType string) ([]BehaviorBinding, error) {
 	var models []BehaviorBindingModel
-	query := r.db.WithContext(ctx).Where("user_id = ? AND event_type = ?", userID, eventType)
+	query := r.db.WithContext(ctx).Where("space_id = ? AND event_type = ?", spaceID, eventType)
 	if characterID != "" {
 		query = query.Where("character_id = ?", characterID)
 	}
@@ -232,7 +232,7 @@ func (r *Repository) GetByIDTyped(ctx context.Context, id string) (*BehaviorBind
 func bindingToModel(b BehaviorBinding) *BehaviorBindingModel {
 	return &BehaviorBindingModel{
 		ID:              b.ID,
-		UserID:          b.UserID,
+		SpaceID:         b.SpaceID,
 		CharacterID:     b.CharacterID,
 		InstallationID:  b.InstallationID,
 		EventType:       b.EventType,
@@ -255,7 +255,7 @@ func modelToBinding(m BehaviorBindingModel) BehaviorBinding {
 	}
 	b := BehaviorBinding{
 		ID:              m.ID,
-		UserID:          m.UserID,
+		SpaceID:         m.SpaceID,
 		CharacterID:     m.CharacterID,
 		InstallationID:  m.InstallationID,
 		EventType:       m.EventType,

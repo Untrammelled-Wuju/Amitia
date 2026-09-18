@@ -19,11 +19,14 @@
 import { onMounted, reactive, ref } from 'vue';
 import { ElMessage } from 'element-plus';
 import { apiClient } from '@/composables/useApi';
+import { resolveUIHostDeviceId } from '@/ui-runtime/deviceIdentity';
 const loading = ref(false); const saving = ref(false);
 const settings = reactive<any>({ enabled: false });
 const status = reactive<any>({ subscribed: false, subscriptionId: '' });
-async function load(){ loading.value=true; try { const [s,st]=await Promise.all([apiClient.get('/api/notifications/settings'),apiClient.get('/api/notifications/status')]); Object.assign(settings,s.data||{}); Object.assign(status,st.data||{});} finally {loading.value=false;} }
-async function saveSettings(){ saving.value=true; try{ await apiClient.put('/api/notifications/settings',{...settings}); ElMessage.success('通知设置已保存'); await load(); } finally{saving.value=false;} }
+let deviceId = '';
+async function ensureDeviceId(){ if (!deviceId) deviceId = await resolveUIHostDeviceId(); return deviceId; }
+async function load(){ loading.value=true; try { const id=await ensureDeviceId(); const [s,st]=await Promise.all([apiClient.get('/api/notifications/settings',{params:{deviceId:id}}),apiClient.get('/api/notifications/status',{params:{deviceId:id}})]); Object.assign(settings,s.data||{}); Object.assign(status,st.data||{});} finally {loading.value=false;} }
+async function saveSettings(){ saving.value=true; try{ const id=await ensureDeviceId(); await apiClient.put('/api/notifications/settings',{...settings,deviceId:id},{params:{deviceId:id}}); ElMessage.success('通知设置已保存'); await load(); } finally{saving.value=false;} }
 async function subscribe(){
   saving.value=true;
   try{
@@ -34,17 +37,19 @@ async function subscribe(){
         return;
       }
     }
-    const r=await apiClient.post('/api/notifications/subscribe',{});
+    const id=await ensureDeviceId();
+    const r=await apiClient.post('/api/notifications/subscribe',{deviceId:id});
     Object.assign(status,r.data||{});
     ElMessage.success('通知订阅已启用');
     await load();
   } finally{saving.value=false;}
 }
-async function unsubscribe(){ saving.value=true; try{ await apiClient.post('/api/notifications/unsubscribe',{}); ElMessage.success('通知订阅已取消'); await load(); } finally{saving.value=false;} }
+async function unsubscribe(){ saving.value=true; try{ const id=await ensureDeviceId(); await apiClient.post('/api/notifications/unsubscribe',{deviceId:id}); ElMessage.success('通知订阅已取消'); await load(); } finally{saving.value=false;} }
 async function test(){
   saving.value=true;
   try{
-    const r=await apiClient.post('/api/notifications/test',{});
+    const id=await ensureDeviceId();
+    const r=await apiClient.post('/api/notifications/test',{deviceId:id});
     const result=r.data||{};
     if (!result.accepted) {
       ElMessage.warning(result.reason||'请先启用并订阅通知');

@@ -27,7 +27,7 @@ func (s WorkflowRevisionState) Valid() bool {
 type WorkflowRevision struct {
 	RevisionID     string                `json:"revisionId"`
 	WorkflowID     string                `json:"workflowId"`
-	OwnerUserID    string                `json:"-"`
+	OwnerSpaceID   string                `json:"-"`
 	RevisionNo     int64                 `json:"revisionNo"`
 	Name           string                `json:"name"`
 	Description    string                `json:"description"`
@@ -63,7 +63,7 @@ type WorkflowRevisionSummary struct {
 // not registered with the runtime and therefore cannot execute on their own.
 type WorkflowTemplate struct {
 	TemplateID     string             `json:"templateId"`
-	OwnerUserID    string             `json:"-"`
+	OwnerSpaceID   string             `json:"-"`
 	Name           string             `json:"name"`
 	Description    string             `json:"description"`
 	Definition     WorkflowDefinition `json:"definition"`

@@ -29,7 +29,7 @@ func (r workflowDeviceRemoteRunner) RunRemoteWorkflow(ctx context.Context, reque
 	if err != nil {
 		return nil, err
 	}
-	resultRaw, err := r.control.Invoke(ctx, request.Context.UserID, deviceID, WorkflowMeshRun, payload)
+	resultRaw, err := r.control.Invoke(ctx, request.Context.SpaceID, deviceID, WorkflowMeshRun, payload)
 	if err != nil {
 		lower := strings.ToLower(err.Error())
 		if request.Target.OfflinePolicy == workflow.WorkflowOfflineWait &&

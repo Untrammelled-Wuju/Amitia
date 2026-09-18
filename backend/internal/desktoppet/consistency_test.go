@@ -51,7 +51,7 @@ func seedConsistencyGenTask(t *testing.T, db *gorm.DB, taskID, status, execution
 	t.Helper()
 	task := &GenerationTask{
 		ID:          taskID,
-		UserID:      "u1",
+		SpaceID:     "u1",
 		Name:        "一致性测试任务",
 		Status:      status,
 		ExecutionID: executionID,

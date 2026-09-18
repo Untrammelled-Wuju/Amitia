@@ -77,6 +77,7 @@ const modelConfig = useModelConfig({
   showDetect: false,
   modelPlaceholder: "doubao-seed-2-0-lite-260428 / gpt-4o / gemini-2.0-flash",
   defaultIsActive: 1,
+  payloadFields: ["name", "apiType", "apiKey", "baseUrl", "modelName", "isActive"],
 });
 
 const {

@@ -61,7 +61,7 @@ type GoalTrigger struct {
 
 type Goal struct {
 	ID                string         `json:"id"`
-	UserID            string         `json:"userId,omitempty"`
+	SpaceID           string         `json:"spaceId,omitempty"`
 	CharacterID       string         `json:"characterId,omitempty"`
 	ConversationID    string         `json:"conversationId,omitempty"`
 	Type              GoalType       `json:"type"`
@@ -80,7 +80,7 @@ type Goal struct {
 }
 
 type GoalCreateRequest struct {
-	UserID         string
+	SpaceID        string
 	CharacterID    string
 	ConversationID string
 	Type           GoalType
@@ -94,7 +94,7 @@ type GoalCreateRequest struct {
 func NewGoal(request GoalCreateRequest, now time.Time) Goal {
 	return Goal{
 		ID:             uuid.NewString(),
-		UserID:         request.UserID,
+		SpaceID:        request.SpaceID,
 		CharacterID:    request.CharacterID,
 		ConversationID: request.ConversationID,
 		Type:           request.Type,
@@ -188,12 +188,12 @@ func (r *GoalRegistry) Remove(id string) bool {
 	return ok
 }
 
-func (r *GoalRegistry) ByUser(userID string) []Goal {
+func (r *GoalRegistry) BySpace(spaceID string) []Goal {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	result := make([]Goal, 0)
 	for _, g := range r.goals {
-		if g.UserID == userID {
+		if g.SpaceID == spaceID {
 			result = append(result, g)
 		}
 	}
@@ -214,12 +214,12 @@ func (r *GoalRegistry) Active() []Goal {
 	return cloneGoalSlice(result)
 }
 
-func (r *GoalRegistry) ActiveForScope(userID string, characterID string, conversationID string) []Goal {
+func (r *GoalRegistry) ActiveForScope(spaceID string, characterID string, conversationID string) []Goal {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	result := make([]Goal, 0)
 	for _, g := range r.goals {
-		if g.UserID != userID {
+		if g.SpaceID != spaceID {
 			continue
 		}
 		if characterID != "" && g.CharacterID != "" && g.CharacterID != characterID {

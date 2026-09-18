@@ -149,12 +149,12 @@ func (s *RecoveryService) RecoverFromResolution(
 }
 
 // reconstructRequest rebuilds an AcquisitionRequest from a CapabilityResumeContext.
-// Fields that are not persisted in the resume context (e.g. UserID) are left at
+// Fields that are not persisted in the resume context (e.g. SpaceID) are left at
 // their zero value; the AcquisitionService handles that gracefully.
 func (s *RecoveryService) reconstructRequest(resumeCtx CapabilityResumeContext) AcquisitionRequest {
 	return AcquisitionRequest{
 		CapabilityID:       resumeCtx.CapabilityID,
-		UserID:             runtimeidentity.UserID(resumeCtx.UserID),
+		SpaceID:            runtimeidentity.SpaceID(resumeCtx.SpaceID),
 		ExecContext:        resumeCtx.ExecContext,
 		AutoInstallAllowed: true,
 	}
@@ -217,7 +217,7 @@ func (s *RecoveryService) budgetFor(resumeCtx CapabilityResumeContext) *Capabili
 		key = resumeCtx.ConversationID
 	}
 	if key == "" {
-		key = "unscoped:" + resumeCtx.UserID
+		key = "unscoped:" + resumeCtx.SpaceID
 	}
 	s.budgetMu.Lock()
 	defer s.budgetMu.Unlock()

@@ -10,6 +10,7 @@ object RuntimeBridgeErrorMapper {
         result["code"] = mapErrorCode(error.code)
         result["message"] = sanitizeMessage(error.message)
         result["retryable"] = error.recoverable
+        result["details"] = error.details
         return result
     }
 

@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>个人微信</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <main id="app">
+    <header class="page-head">
+      <div>
+        <h1>个人微信</h1>
+        <p>普通个人微信账号 · 当前空间默认角色</p>
+      </div>
+      <span id="badge" class="badge">检测中</span>
+    </header>
+
+    <section id="messages-view" class="card hidden">
+      <div class="card-title-row"><h2>个人微信消息</h2><button id="refresh-messages" class="button ghost">刷新</button></div>
+      <div id="bindings" class="bindings"></div>
+      <div id="messages" class="messages"></div>
+    </section>
+
+    <div id="connect-view">
+      <section class="card">
+        <div class="card-title-row">
+          <div><h2>账号状态</h2><p id="status-message" class="muted">正在检测...</p></div>
+          <button id="refresh" class="button ghost">刷新</button>
+        </div>
+        <div class="account-row">
+          <div id="avatar" class="avatar">微</div>
+          <div class="account-text">
+            <strong id="nickname">未登录</strong>
+            <span id="account-id">—</span>
+          </div>
+        </div>
+        <div class="stats">
+          <div><span>Driver</span><b id="driver">未连接</b></div>
+          <div><span>平台</span><b id="platform">—</b></div>
+          <div><span>Native</span><b id="native">—</b></div>
+          <div><span>收到</span><b id="received">0</b></div>
+          <div><span>发送</span><b id="sent">0</b></div>
+          <div><span>角色</span><b>空间默认角色</b></div>
+        </div>
+        <div class="capabilities" aria-label="当前 Driver 能力">
+          <span id="cap-qr" class="capability">二维码</span>
+          <span id="cap-login" class="capability">登录检测</span>
+          <span id="cap-recv" class="capability">接收文本</span>
+          <span id="cap-send" class="capability">发送文本</span>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>登录个人微信</h2>
+        <p class="muted">同一个插件同时支持 Windows x64 与 Linux x64：Amitia 会自动托管本机官方微信。登录能力可由官方客户端 UI Driver 提供；只有经过当前微信版本验证的 Hook/Preload Driver 才会启用消息收发。现有 OpenClaw 微信插件保持独立不变。</p>
+        <div id="qr-wrap" class="qr-wrap">
+          <img id="qr" class="qr hidden" alt="微信登录二维码" />
+          <div id="qr-placeholder" class="qr-placeholder">点击“连接个人微信”获取二维码</div>
+        </div>
+        <div id="error" class="error hidden"></div>
+        <div class="actions">
+          <button id="connect" class="button primary">连接个人微信</button>
+          <button id="disconnect" class="button danger">断开</button>
+        </div>
+        <details class="details">
+          <summary>Native Driver 状态说明</summary>
+          <p>Native Agent/Helper 必须在 manifest 的 nativeCompanions 中显式声明并通过 SHA256 校验。Windows 使用受管 Weixin.exe；Linux 优先使用官方 Linux 微信 + LD_PRELOAD Helper。未知微信版本不会调用未验证的内部偏移，直接 fail-closed。</p>
+        </details>
+      </section>
+    </div>
+  </main>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>

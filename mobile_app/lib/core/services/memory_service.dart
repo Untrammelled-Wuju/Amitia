@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import '../backend_transport/backend_service_api.dart';
 import '../models/memory.dart';
 
@@ -11,6 +13,9 @@ class MemoryService {
     String? keyword,
     String? memoryType,
     String? verifiedStatus,
+    int? retentionLevel,
+    String? decayState,
+    bool? pinned,
     int page = 1,
     int pageSize = 200,
   }) async {
@@ -23,6 +28,9 @@ class MemoryService {
         if (keyword != null && keyword.trim().isNotEmpty) 'keyword': keyword.trim(),
         if (memoryType != null && memoryType.isNotEmpty) 'memoryType': memoryType,
         if (verifiedStatus != null && verifiedStatus.isNotEmpty) 'verifiedStatus': verifiedStatus,
+        if (retentionLevel != null && retentionLevel >= 1 && retentionLevel <= 5) 'retentionLevel': retentionLevel,
+        if (decayState != null && decayState.isNotEmpty) 'decayState': decayState,
+        if (pinned != null) 'pinned': pinned,
       },
     );
     return _memoryList(resp);
@@ -38,6 +46,12 @@ class MemoryService {
   Future<MemoryDto?> update(String id, Map<String, dynamic> data) async {
     final normalized = _normalizeWritePayload(data, isCreate: false);
     final resp = await _api.put<Map<String, dynamic>>('/api/memories/$id', data: normalized);
+    if (resp == null) return null;
+    return MemoryDto.fromJson(resp);
+  }
+
+  Future<MemoryDto?> restore(String id) async {
+    final resp = await _api.post<Map<String, dynamic>>('/api/memories/$id/restore');
     if (resp == null) return null;
     return MemoryDto.fromJson(resp);
   }
@@ -105,6 +119,69 @@ class MemoryService {
       },
     );
     return _scoredMemoryList(resp);
+  }
+
+  Future<Map<String, List<Map<String, dynamic>>>> globalSearch(
+    String query, {
+    int limitPerType = 5,
+  }) async {
+    final keyword = query.trim();
+    if (keyword.isEmpty) {
+      return const {
+        'memories': <Map<String, dynamic>>[],
+        'profiles': <Map<String, dynamic>>[],
+        'episodics': <Map<String, dynamic>>[],
+        'worldBooks': <Map<String, dynamic>>[],
+      };
+    }
+
+    var memories = <Map<String, dynamic>>[];
+    var profiles = <Map<String, dynamic>>[];
+    var episodics = <Map<String, dynamic>>[];
+    var worldBooks = <Map<String, dynamic>>[];
+
+    try {
+      final memoryResp = await _api.post<dynamic>(
+        '/api/memories/hybrid-search',
+        data: {'keyword': keyword, 'query': keyword, 'limit': limitPerType},
+      );
+      memories = _mapList(memoryResp, keys: const ['items']).map((row) {
+        final nested = row['memory'];
+        final memory = nested is Map
+            ? Map<String, dynamic>.from(nested)
+            : Map<String, dynamic>.from(row);
+        memory['score'] = row['score'];
+        memory['matchType'] = row['matchType'];
+        memory['memoryLayer'] = row['memoryLayer'];
+        return memory;
+      }).take(limitPerType).toList(growable: false);
+    } catch (_) {}
+
+    Future<List<Map<String, dynamic>>> fetchAndFilter(String path) async {
+      try {
+        final resp = await _api.get<dynamic>(
+          path,
+          queryParameters: {'keyword': keyword, 'page': 1, 'pageSize': 100},
+        );
+        return _mapList(resp, keys: const ['items'])
+            .where((row) => _mapContainsQuery(row, keyword))
+            .take(limitPerType)
+            .toList(growable: false);
+      } catch (_) {
+        return <Map<String, dynamic>>[];
+      }
+    }
+
+    profiles = await fetchAndFilter('/api/profiles');
+    episodics = await fetchAndFilter('/api/episodic');
+    worldBooks = await fetchAndFilter('/api/world-book');
+
+    return {
+      'memories': memories,
+      'profiles': profiles,
+      'episodics': episodics,
+      'worldBooks': worldBooks,
+    };
   }
 
   Future<List<Map<String, dynamic>>> timeline({
@@ -262,7 +339,7 @@ class MemoryService {
 
   Future<List<Map<String, dynamic>>> ranked({
     String? characterId,
-    String? userId,
+    String? spaceId,
     String query = '',
     int limit = 20,
   }) async {
@@ -270,7 +347,7 @@ class MemoryService {
       '/api/memories/ranked',
       queryParameters: {
         if (characterId != null && characterId.isNotEmpty) 'characterId': characterId,
-        if (userId != null && userId.isNotEmpty) 'userId': userId,
+        if (spaceId != null && spaceId.isNotEmpty) 'spaceId': spaceId,
         if (query.trim().isNotEmpty) 'query': query.trim(),
         'limit': limit,
       },
@@ -319,6 +396,19 @@ class MemoryService {
     final normalized = value.replaceAll(RegExp(r'\s+'), ' ').trim();
     if (normalized.isEmpty) return 'manual-memory';
     return normalized.length <= 60 ? normalized : normalized.substring(0, 60);
+  }
+
+  bool _mapContainsQuery(Map<String, dynamic> row, String query) {
+    final lower = query.toLowerCase();
+    for (final value in row.values) {
+      if (value == null) continue;
+      if (value is Map || value is List) {
+        if (jsonEncode(value).toLowerCase().contains(lower)) return true;
+      } else if (value.toString().toLowerCase().contains(lower)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   List<MemoryDto> _memoryList(dynamic resp) {

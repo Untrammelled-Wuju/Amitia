@@ -16,7 +16,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/u-ai/backend/internal/extension/kernel/manifest_v2"
+	"github.com/u-ai/backend/internal/extension/kernel/manifest_v1"
 )
 
 const (
@@ -107,7 +107,7 @@ type SignatureDoc struct {
 }
 
 type Package struct {
-	Manifest    manifest_v2.Manifest
+	Manifest    manifest_v1.Manifest
 	Layout      PackageLayout
 	Files       []FileEntry
 	Integrity   IntegrityFilesDoc
@@ -201,10 +201,10 @@ func parsePackage(reader *zip.Reader) (*Package, error) {
 	// manifest.json is itself covered by integrity/files.json and the content
 	// tree. Embedding the final tree hash into manifest.json would therefore be
 	// circular. Bind the authoritative integrity/content-tree.json value into a
-	// validation-only copy before running the full Manifest v2 schema/semantic
+	// validation-only copy before running the full Manifest v1 schema/semantic
 	// validators. Parse the original first so duplicate JSON keys still fail
 	// closed and unknown fields remain present in the validation copy.
-	parsedManifest, err := manifest_v2.Parse(manifestData)
+	parsedManifest, err := manifest_v1.Parse(manifestData)
 	if err != nil {
 		return nil, err
 	}
@@ -227,12 +227,12 @@ func parsePackage(reader *zip.Reader) (*Package, error) {
 			return nil, fmt.Errorf("%w: bind content tree hash: %v", ErrInvalidStructure, err)
 		}
 	}
-	m, report, err := manifest_v2.ParseValidated(validationManifestData)
+	m, report, err := manifest_v1.ParseValidated(validationManifestData)
 	if err != nil {
 		return nil, err
 	}
 	if report.HasErrors() {
-		return nil, fmt.Errorf("%w: manifest validation failed", manifest_v2.ErrInvalidManifest)
+		return nil, fmt.Errorf("%w: manifest validation failed", manifest_v1.ErrInvalidManifest)
 	}
 	if pkg.Tree.TreeHash != "" && m.Integrity.ContentTreeHash != pkg.Tree.TreeHash {
 		return nil, fmt.Errorf("%w: manifest content tree hash mismatch", ErrIntegrityMismatch)

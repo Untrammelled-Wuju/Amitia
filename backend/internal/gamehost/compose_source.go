@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/u-ai/backend/internal/gamehost/integration"
 	kerneldomain "github.com/u-ai/backend/internal/extension/kernel/domain"
+	"github.com/u-ai/backend/internal/gamehost/integration"
 )
 
 // kernelContributionSource 将 kernel Container 适配到 integration.KernelContributionSource。
@@ -51,9 +51,6 @@ func (s *kernelContributionSource) ListEnabledGamePlugins(ctx context.Context) (
 		if inst.InstallationState != kerneldomain.InstallationStateInstalled {
 			continue
 		}
-		if inst.EnablementState != kerneldomain.EnablementEnabled {
-			continue
-		}
 
 		def, err := s.defRepo.GetExtension(ctx, inst.ExtensionID, inst.InstalledVersion)
 		if err != nil {
@@ -69,6 +66,7 @@ func (s *kernelContributionSource) ListEnabledGamePlugins(ctx context.Context) (
 			if c.Kind != kerneldomain.ContributionKindGamePlugin {
 				continue
 			}
+			def.Domain = kerneldomain.ExtensionDomainGame
 			result = append(result, integration.KernelGamePlugin{
 				Extension:    def,
 				Contribution: c,

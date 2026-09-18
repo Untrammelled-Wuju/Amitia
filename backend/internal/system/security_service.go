@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 package system
 
+import "github.com/u-ai/backend/internal/spaceidentity"
+
 func (s *service) GetSecurityAccessConfig() map[string]interface{} {
 	auth := s.getAppSetting("require_auth") != "false"
 	origins := s.getAppSetting("allowed_origins")
@@ -39,19 +41,22 @@ func (s *service) GetSecurityAccessStatus() map[string]interface{} {
 }
 
 func (s *service) GetSecurityStatus() map[string]interface{} {
-	acct := s.SecurityAccountCheck()
+	identity := s.SecurityIdentityCheck()
 	exp := s.SecurityExposureCheck()
 	status := "secure"
-	if !acct["secure"].(bool) || exp["exposed"].(bool) {
+	if !identity["secure"].(bool) || exp["exposed"].(bool) {
 		status = "warning"
 	}
-	return map[string]interface{}{"status": status, "account": acct, "exposure": exp}
+	return map[string]interface{}{"status": status, "identity": identity, "exposure": exp}
 }
 
-func (s *service) SecurityAccountCheck() map[string]interface{} {
-	var adminCount int64
-	s.db.Table("auth_users").Where("role = ?", "admin").Count(&adminCount)
-	return map[string]interface{}{"secure": adminCount > 0, "hasAdmin": adminCount > 0}
+func (s *service) SecurityIdentityCheck() map[string]interface{} {
+	spaceID := spaceidentity.DefaultSpaceID()
+	var trustedDevices int64
+	if spaceID != "" {
+		s.db.Table("kernel_devices").Where("space_id = ? AND trust_state = ?", spaceID, "trusted").Count(&trustedDevices)
+	}
+	return map[string]interface{}{"secure": spaceID != "", "spaceId": spaceID, "trustedDevices": trustedDevices}
 }
 
 func (s *service) SecurityExposureCheck() map[string]interface{} {

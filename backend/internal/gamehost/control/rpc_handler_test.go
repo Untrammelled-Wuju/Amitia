@@ -20,6 +20,7 @@ func TestControlHandler_OutputDispatchesRegisteredEffect(t *testing.T) {
 		t.Fatalf("register effect sink: %v", err)
 	}
 	handler := NewControlHandler(gate, registry)
+	handler.SetNegotiatedFeatureChecker(alwaysNegotiatedFeatureChecker{})
 	payload, _ := json.Marshal(ControlOutputInput{OutputID: "output-1", SinkID: "sink-1", Epoch: 10, Payload: json.RawMessage(`{"operation":"run"}`)})
 	response, err := handler.handleControlOutput(context.Background(), rpc.RPCRequest{
 		ID: "request-1", PluginID: "plugin-1", RuntimeID: "rt-1", ServiceID: "svc-1", Generation: 1, Payload: payload,
@@ -49,6 +50,7 @@ func TestControlHandler_OutputRejectsSinkIdentityMismatch(t *testing.T) {
 		t.Fatalf("register effect sink: %v", err)
 	}
 	handler := NewControlHandler(gate, registry)
+	handler.SetNegotiatedFeatureChecker(alwaysNegotiatedFeatureChecker{})
 	payload, _ := json.Marshal(ControlOutputInput{OutputID: "output-1", SinkID: "sink-1", Epoch: 10, Payload: json.RawMessage(`{}`)})
 	response, err := handler.handleControlOutput(context.Background(), rpc.RPCRequest{
 		ID: "request-1", PluginID: domain.PluginID("plugin-1"), RuntimeID: "rt-1", ServiceID: "svc-1", Generation: 2, Payload: payload,
@@ -76,6 +78,7 @@ func TestControlHandler_OutputBindsServiceToTrustedRequest(t *testing.T) {
 		t.Fatalf("register effect sink: %v", err)
 	}
 	handler := NewControlHandler(gate, registry)
+	handler.SetNegotiatedFeatureChecker(alwaysNegotiatedFeatureChecker{})
 
 	// A stale or malicious client may still send historical identity/kind fields.
 	// The host must ignore them and bind authority to the trusted connection.
@@ -102,6 +105,7 @@ func TestControlHandler_SinkNotFoundPreservesTrustedGeneration(t *testing.T) {
 	gate, topology, _ := newCompleteTestGate(t)
 	topology.RegisterService("rt-1", "svc-1")
 	handler := NewControlHandler(gate, NewControlSinkRegistry())
+	handler.SetNegotiatedFeatureChecker(alwaysNegotiatedFeatureChecker{})
 	payload, _ := json.Marshal(ControlOutputInput{OutputID: "output-missing", SinkID: "missing", Epoch: 10, Payload: json.RawMessage(`{}`)})
 	response, err := handler.handleControlOutput(context.Background(), rpc.RPCRequest{
 		ID: "request-1", PluginID: "plugin-1", RuntimeID: "rt-1", ServiceID: "svc-1", Generation: 7, Payload: payload,

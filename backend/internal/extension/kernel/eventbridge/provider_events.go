@@ -94,14 +94,14 @@ func instanceOptions(payload capability.ProviderInstanceEventPayload) event.Publ
 		AggregateType:    "capability_provider_instance",
 		AggregateID:      payload.ProviderInstanceID.String(),
 		AggregateVersion: rev,
-		PartitionKey:     partitionKeyForProvider(payload.UserID),
+		PartitionKey:     partitionKeyForProvider(payload.SpaceID),
 		OrderingKey:      payload.ProviderInstanceID.String(),
 	}
 }
 
-func partitionKeyForProvider(userID interface{ String() string }) string {
-	if userID != nil && userID.String() != "" {
-		return userID.String()
+func partitionKeyForProvider(spaceID interface{ String() string }) string {
+	if spaceID != nil && spaceID.String() != "" {
+		return spaceID.String()
 	}
 	return "system"
 }

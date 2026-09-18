@@ -8,6 +8,7 @@ import (
 
 type ScopeResolveRequest struct {
 	Expression     ScopeExpression `json:"expression"`
+	SpaceID        string          `json:"spaceId,omitempty"`
 	CharacterID    string          `json:"characterId,omitempty"`
 	ConversationID string          `json:"conversationId,omitempty"`
 	ExtensionID    string          `json:"extensionId,omitempty"`
@@ -147,6 +148,12 @@ func CreateSnapshot(invocationID string, scopes []ScopeRef, characterID, convers
 		Generation:     currentGeneration,
 		CreatedAt:      time.Now(),
 	}
+}
+
+func CreateSnapshotWithOwner(invocationID string, scopes []ScopeRef, spaceID, characterID, conversationID, extensionID, moduleID string, generation ...int64) ScopeSnapshot {
+	snapshot := CreateSnapshot(invocationID, scopes, characterID, conversationID, extensionID, moduleID, generation...)
+	snapshot.SpaceID = spaceID
+	return snapshot
 }
 
 func (s ScopeSnapshot) Contains(other ScopeRef) bool {

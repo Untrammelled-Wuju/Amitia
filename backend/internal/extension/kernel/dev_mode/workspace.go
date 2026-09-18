@@ -25,7 +25,7 @@ const (
 type DevelopmentWorkspace struct {
 	WorkspaceID     WorkspaceID
 	ExtensionID     ExtensionID
-	OwnerUserID     string
+	OwnerSpaceID    string
 	PathReference   string
 	ManifestPath    string
 	CurrentRevision RevisionID
@@ -66,7 +66,7 @@ var (
 type RegisterWorkspaceInput struct {
 	WorkspaceID   WorkspaceID
 	ExtensionID   ExtensionID
-	OwnerUserID   string
+	OwnerSpaceID  string
 	PathReference string
 	ManifestPath  string
 	WatchEnabled  bool
@@ -89,7 +89,7 @@ func (r *WorkspaceRegistry) Register(ctx context.Context, in RegisterWorkspaceIn
 	ws := &DevelopmentWorkspace{
 		WorkspaceID:   in.WorkspaceID,
 		ExtensionID:   in.ExtensionID,
-		OwnerUserID:   in.OwnerUserID,
+		OwnerSpaceID:  in.OwnerSpaceID,
 		PathReference: in.PathReference,
 		ManifestPath:  in.ManifestPath,
 		Status:        WorkspaceStatusRegistered,

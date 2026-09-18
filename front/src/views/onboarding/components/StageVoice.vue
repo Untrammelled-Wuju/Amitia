@@ -41,7 +41,6 @@
                   >服务地址
                   <input
                     :value="voiceModelURL"
-                    :disabled="voiceModelMode === 'disabled'"
                     @input="
                       emit(
                         'update:voiceModelURL',
@@ -56,7 +55,6 @@
                   <div class="ob-input-password-wrap">
                     <input
                       :value="voiceModelKey"
-                      :disabled="voiceModelMode === 'disabled'"
                       @input="
                         emit(
                           'update:voiceModelKey',
@@ -142,7 +140,6 @@
                   >接口地址
                   <input
                     :value="voiceModelURL"
-                    :disabled="voiceModelMode === 'disabled'"
                     @input="
                       emit(
                         'update:voiceModelURL',
@@ -225,7 +222,6 @@
                   <input
                     v-if="voiceModelMode === 'compatible'"
                     :value="voiceModelVoiceType"
-                    :disabled="voiceModelMode === 'disabled'"
                     @input="
                       emit(
                         'update:voiceModelVoiceType',

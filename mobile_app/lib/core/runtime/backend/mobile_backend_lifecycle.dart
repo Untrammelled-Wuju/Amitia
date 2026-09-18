@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:dio/dio.dart';
+
 import 'mobile_deployment_mode.dart';
 import 'backend_topology.dart';
 import 'backend_topology_resolver.dart';
@@ -93,6 +95,53 @@ abstract interface class RemoteCoreProbe {
   Future<BackendConnectivityResult> probe(Uri baseUri, {Duration timeout});
 }
 
+/// Probes the endpoint supplied by the topology resolver directly.
+///
+/// Health checks must not be coupled to an already-created business transport:
+/// during cold start and endpoint switching that transport can be absent or can
+/// still point at the previous Cloud Core. `/readyz` and `/livez` are public
+/// health endpoints, so a short unauthenticated probe is the authoritative
+/// deployment-state check.
+final class DirectRemoteCoreProbe implements RemoteCoreProbe {
+  const DirectRemoteCoreProbe();
+
+  @override
+  Future<BackendConnectivityResult> probe(
+    Uri baseUri, {
+    Duration timeout = const Duration(seconds: 5),
+  }) async {
+    final normalizedBase = baseUri.replace(
+      path: '',
+      query: null,
+      fragment: null,
+    );
+    final dio = Dio(
+      BaseOptions(
+        baseUrl: normalizedBase.toString(),
+        connectTimeout: timeout,
+        receiveTimeout: timeout,
+        sendTimeout: timeout,
+        validateStatus: (status) => status != null,
+      ),
+    );
+    try {
+      final ready = await dio.get<dynamic>('/readyz');
+      if (ready.statusCode == 200) return BackendConnectivityResult.ready;
+      if (ready.statusCode != 404 && ready.statusCode != 405) {
+        return BackendConnectivityResult.unreachable;
+      }
+      final live = await dio.get<dynamic>('/livez');
+      return live.statusCode == 200
+          ? BackendConnectivityResult.live
+          : BackendConnectivityResult.unreachable;
+    } on DioException {
+      return BackendConnectivityResult.unreachable;
+    } finally {
+      dio.close(force: true);
+    }
+  }
+}
+
 abstract interface class MobileBackendLifecycle {
   Stream<MobileBackendStatus> get statusStream;
   MobileBackendStatus get currentStatus;
@@ -121,17 +170,6 @@ class DefaultMobileBackendLifecycle implements MobileBackendLifecycle {
        _embeddedRuntime = embeddedRuntime,
        _remoteProbe = remoteProbe;
 
-  factory DefaultMobileBackendLifecycle.withProbe({
-    required BackendTopologyResolver resolver,
-    required EmbeddedRuntimeController embeddedRuntime,
-    required BackendConnectivityProbe connectivityProbe,
-  }) {
-    return DefaultMobileBackendLifecycle(
-      resolver: resolver,
-      embeddedRuntime: embeddedRuntime,
-      remoteProbe: _ConnectivityProbeAdapter(connectivityProbe),
-    );
-  }
 
   @override
   Stream<MobileBackendStatus> get statusStream => _statusController.stream;

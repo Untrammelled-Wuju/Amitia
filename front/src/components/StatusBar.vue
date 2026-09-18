@@ -19,14 +19,6 @@ SPDX-License-Identifier: AGPL-3.0-only
           <span class="dot"></span>
           <span class="dot-label">核心服务正常</span>
         </span>
-        <span class="status-dot" :class="wechatClass" :title="wechatLabel">
-          <span class="dot"></span>
-          <span class="dot-label">{{ wechatLabel }}</span>
-        </span>
-        <span class="status-dot" :class="qqClass" :title="qqLabel">
-          <span class="dot"></span>
-          <span class="dot-label">{{ qqLabel }}</span>
-        </span>
       </div>
     </div>
     <div class="status-right">
@@ -93,8 +85,6 @@ import { useAppStore } from "@/stores/app";
 
 const props = defineProps<{
   deployMode?: string;
-  wechatStatus?: string;
-  qqStatus?: string;
   modelStatus?: string;
   characterName?: string;
   theme?: string;
@@ -112,23 +102,6 @@ const deployLabel = computed(() =>
   props.deployMode === "cloud-web" ? "私有云" : "本地",
 );
 
-const wechatClass = computed(() =>
-  props.wechatStatus === "connected" ? "status-on" : "status-off",
-);
-const wechatLabel = computed(() =>
-  props.wechatStatus === "connected" ? "微信已连接" : "微信未连接",
-);
-
-const qqClass = computed(() =>
-  props.qqStatus === "connected" || props.qqStatus === "online"
-    ? "status-on"
-    : "status-off",
-);
-const qqLabel = computed(() =>
-  props.qqStatus === "connected" || props.qqStatus === "online"
-    ? "QQ已连接"
-    : "QQ未连接",
-);
 </script>
 
 <style scoped>

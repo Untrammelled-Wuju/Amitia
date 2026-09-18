@@ -51,10 +51,10 @@ func (m *mockContributionLister) ListContributions(ctx context.Context, extensio
 
 func makeExtensionInstallation(id kerneldomain.ExtensionID) kerneldomain.ExtensionInstallation {
 	return kerneldomain.ExtensionInstallation{
-		ExtensionID:      id,
-		InstalledVersion: kerneldomain.SemanticVersion{Major: 1},
+		ExtensionID:       id,
+		InstalledVersion:  kerneldomain.SemanticVersion{Major: 1},
 		InstallationState: kerneldomain.InstallationStateInstalled,
-		EnablementState:  kerneldomain.EnablementEnabled,
+		EnablementState:   kerneldomain.EnablementEnabled,
 	}
 }
 
@@ -164,6 +164,25 @@ func TestListEnabledGamePluginsAllSuccessReturnsCompleteSnapshot(t *testing.T) {
 	}
 	if len(plugins) != 2 {
 		t.Errorf("expected 2 plugins, got %d", len(plugins))
+	}
+}
+
+func TestListEnabledGamePluginsNormalizesLegacyGeneralDomain(t *testing.T) {
+	instRepo := &mockInstallationLister{installations: []kerneldomain.ExtensionInstallation{makeExtensionInstallation("com.example.game")}}
+	def := makeExtensionDefinition("com.example.game")
+	def.Domain = kerneldomain.ExtensionDomainGeneral
+	defRepo := &mockDefinitionLister{defs: map[kerneldomain.ExtensionID]kerneldomain.ExtensionDefinition{"com.example.game": def}}
+	contribRepo := &mockContributionLister{contribs: map[kerneldomain.ExtensionID][]kerneldomain.ContributionDefinition{"com.example.game": {makeGamePluginContribution()}}}
+
+	plugins, err := newKernelContributionSource(instRepo, defRepo, contribRepo).ListEnabledGamePlugins(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(plugins) != 1 {
+		t.Fatalf("expected 1 plugin, got %d", len(plugins))
+	}
+	if plugins[0].Extension.Domain != kerneldomain.ExtensionDomainGame {
+		t.Fatalf("expected game domain, got %s", plugins[0].Extension.Domain)
 	}
 }
 

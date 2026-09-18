@@ -50,14 +50,14 @@ func (a *CoordinatorRepoAdapter) CreateOperation(ctx context.Context, op *operat
 	})
 }
 
-func (a *CoordinatorRepoAdapter) GetOperation(ctx context.Context, userID, deviceID, operationID string) (*operation.InstallationOperation, error) {
+func (a *CoordinatorRepoAdapter) GetOperation(ctx context.Context, spaceID, deviceID, operationID string) (*operation.InstallationOperation, error) {
 	var result *operation.InstallationOperation
 	err := a.repo.Transaction(ctx, func(tx RepositoryV2) error {
 		op, err := tx.GetOperationTx(tx.DB(), operationID)
 		if err != nil {
 			return err
 		}
-		if op.UserID != userID || op.DeviceID != deviceID {
+		if op.SpaceID != spaceID || op.DeviceID != deviceID {
 			return ErrOperationNotFound
 		}
 		result = op
@@ -91,10 +91,10 @@ func (a *CoordinatorRepoAdapter) UpdateOperation(ctx context.Context, op *operat
 	})
 }
 
-func (a *CoordinatorRepoAdapter) FindOperationByIdempotencyKey(ctx context.Context, userID, deviceID, key, operationType string) (*operation.InstallationOperation, error) {
+func (a *CoordinatorRepoAdapter) FindOperationByIdempotencyKey(ctx context.Context, spaceID, deviceID, key, operationType string) (*operation.InstallationOperation, error) {
 	var result *operation.InstallationOperation
 	err := a.repo.Transaction(ctx, func(tx RepositoryV2) error {
-		op, err := tx.GetOperationByIdempotencyKeyTx(tx.DB(), userID, deviceID, key, operationType)
+		op, err := tx.GetOperationByIdempotencyKeyTx(tx.DB(), spaceID, deviceID, key, operationType)
 		if err != nil {
 			if errors.Is(err, ErrOperationNotFound) {
 				result = nil
@@ -108,16 +108,16 @@ func (a *CoordinatorRepoAdapter) FindOperationByIdempotencyKey(ctx context.Conte
 	return result, err
 }
 
-func (a *CoordinatorRepoAdapter) GetInstallation(ctx context.Context, userID, deviceID, installationID string) (*coordinator.InstallationRecord, error) {
-	inst, err := a.repo.GetInstallationForUserDevice(userID, deviceID, installationID)
+func (a *CoordinatorRepoAdapter) GetInstallation(ctx context.Context, spaceID, deviceID, installationID string) (*coordinator.InstallationRecord, error) {
+	inst, err := a.repo.GetInstallationForSpaceDevice(spaceID, deviceID, installationID)
 	if err != nil {
 		return nil, err
 	}
 	return installationRecord(inst), nil
 }
 
-func (a *CoordinatorRepoAdapter) GetDesiredStateSnapshot(ctx context.Context, userID, deviceID string) (*coordinator.DesiredStateSnapshot, error) {
-	state, err := a.repo.GetRuntimeDesiredStateTx(a.repo.DB().WithContext(ctx), userID, deviceID)
+func (a *CoordinatorRepoAdapter) GetDesiredStateSnapshot(ctx context.Context, spaceID, deviceID string) (*coordinator.DesiredStateSnapshot, error) {
+	state, err := a.repo.GetRuntimeDesiredStateTx(a.repo.DB().WithContext(ctx), spaceID, deviceID)
 	if err != nil {
 		return nil, err
 	}
@@ -130,7 +130,7 @@ func (a *CoordinatorRepoAdapter) GetDesiredStateSnapshot(ctx context.Context, us
 		InstallationID:       state.InstallationID,
 		PetID:                state.PetID,
 		ReleaseID:            state.ReleaseID,
-		UserID:               state.UserID,
+		SpaceID:              state.SpaceID,
 		DeviceID:             state.DeviceID,
 		RuntimeID:            state.RuntimeID,
 		DefaultActionKey:     state.DesiredActionKey,
@@ -144,7 +144,7 @@ func (a *CoordinatorRepoAdapter) CreateInstallationAndDesiredState(ctx context.C
 	err := a.repo.Transaction(ctx, func(tx RepositoryV2) error {
 		now := nowInstallation()
 		var existing Installation
-		existingErr := tx.DB().Where("id = ? AND user_id = ? AND device_id = ?", install.ID, install.UserID, install.DeviceID).First(&existing).Error
+		existingErr := tx.DB().Where("id = ? AND space_id = ? AND device_id = ?", install.ID, install.SpaceID, install.DeviceID).First(&existing).Error
 		if existingErr != nil && !errors.Is(existingErr, gorm.ErrRecordNotFound) {
 			return existingErr
 		}
@@ -160,15 +160,10 @@ func (a *CoordinatorRepoAdapter) CreateInstallationAndDesiredState(ctx context.C
 		if presentation.Manifest.Preview != "" {
 			previewPath = filepath.ToSlash(filepath.Join(installPath, filepath.FromSlash(presentation.Manifest.Preview)))
 		}
-		characterID := install.CharacterID
-		if characterID == "" {
-			characterID = presentation.Manifest.Binding.SourceCharacterID
-		}
 		model := &Installation{
 			ID:                     install.ID,
-			UserID:                 install.UserID,
+			SpaceID:                install.SpaceID,
 			DeviceID:               install.DeviceID,
-			CharacterID:            characterID,
 			PackageID:              install.ReleaseID,
 			PackageVersion:         presentation.Version,
 			Name:                   presentation.Manifest.Name,
@@ -193,7 +188,7 @@ func (a *CoordinatorRepoAdapter) CreateInstallationAndDesiredState(ctx context.C
 			RuntimeSyncState:       SyncPending,
 			UpdatedAt:              now,
 		}
-		if err := tx.DB().Model(&Installation{}).Where("user_id = ? AND device_id = ? AND id <> ? AND is_active = 1", install.UserID, install.DeviceID, install.ID).Updates(map[string]interface{}{
+		if err := tx.DB().Model(&Installation{}).Where("space_id = ? AND device_id = ? AND id <> ? AND is_active = 1", install.SpaceID, install.DeviceID, install.ID).Updates(map[string]interface{}{
 			"is_active": 0, "status": StatusDisabled, "desired_state": DesiredDisabled, "last_disabled_at": now, "updated_at": now,
 		}).Error; err != nil {
 			return err
@@ -224,7 +219,7 @@ func (a *CoordinatorRepoAdapter) CreateInstallationAndDesiredState(ctx context.C
 			return err
 		}
 		state := &desired.RuntimeDesiredState{
-			UserID:               snapshot.UserID,
+			SpaceID:              snapshot.SpaceID,
 			DeviceID:             snapshot.DeviceID,
 			RuntimeID:            snapshot.RuntimeID,
 			InstallationID:       snapshot.InstallationID,
@@ -243,7 +238,7 @@ func (a *CoordinatorRepoAdapter) CreateInstallationAndDesiredState(ctx context.C
 		}
 		desiredRevision = revision
 
-		if err := a.upsertBindingTx(tx, install.UserID, install.DeviceID, install.ID, install.PetID, install.ReleaseID, revision, op.ID, binding.BoundReasonInstall); err != nil {
+		if err := a.upsertBindingTx(tx, install.SpaceID, install.DeviceID, install.ID, install.PetID, install.ReleaseID, revision, op.ID, binding.BoundReasonInstall); err != nil {
 			return err
 		}
 		if err := a.ensureCommitJournalTx(tx, op, install.ID, install.PetID, op.SourceReleaseID, install.ReleaseID, stagingPathKey, operation.OpStageDesiredStateCommitted); err != nil {
@@ -257,7 +252,7 @@ func (a *CoordinatorRepoAdapter) CreateInstallationAndDesiredState(ctx context.C
 func (a *CoordinatorRepoAdapter) UpdateDesiredEnabled(ctx context.Context, op *operation.InstallationOperation, installationID string, enabled bool) (int64, error) {
 	var desiredRevision int64
 	err := a.repo.Transaction(ctx, func(tx RepositoryV2) error {
-		inst, err := loadInstallationTx(tx.DB(), op.UserID, op.DeviceID, installationID)
+		inst, err := loadInstallationTx(tx.DB(), op.SpaceID, op.DeviceID, installationID)
 		if err != nil {
 			return err
 		}
@@ -277,7 +272,7 @@ func (a *CoordinatorRepoAdapter) UpdateDesiredEnabled(ctx context.Context, op *o
 		inst.IsActive = 0
 		if enabled {
 			now := nowInstallation()
-			if err := tx.DB().Model(&Installation{}).Where("user_id = ? AND device_id = ? AND id <> ? AND is_active = 1", inst.UserID, inst.DeviceID, inst.ID).Updates(map[string]interface{}{
+			if err := tx.DB().Model(&Installation{}).Where("space_id = ? AND device_id = ? AND id <> ? AND is_active = 1", inst.SpaceID, inst.DeviceID, inst.ID).Updates(map[string]interface{}{
 				"is_active": 0, "status": StatusDisabled, "desired_state": DesiredDisabled, "last_disabled_at": now, "updated_at": now,
 			}).Error; err != nil {
 				return err
@@ -286,14 +281,14 @@ func (a *CoordinatorRepoAdapter) UpdateDesiredEnabled(ctx context.Context, op *o
 			inst.Status = StatusEnabled
 			inst.IsActive = 1
 			inst.LastEnabledAt = now
-			if err := a.upsertBindingTx(tx, inst.UserID, inst.DeviceID, inst.ID, inst.PetID, inst.CurrentReleaseID, revision, op.ID, binding.BoundReasonEnable); err != nil {
+			if err := a.upsertBindingTx(tx, inst.SpaceID, inst.DeviceID, inst.ID, inst.PetID, inst.CurrentReleaseID, revision, op.ID, binding.BoundReasonEnable); err != nil {
 				return err
 			}
 		} else {
 			inst.LastDisabledAt = nowInstallation()
-			active, bindErr := tx.GetActiveBindingForUserDeviceTx(tx.DB(), inst.UserID, inst.DeviceID)
+			active, bindErr := tx.GetActiveBindingForSpaceDeviceTx(tx.DB(), inst.SpaceID, inst.DeviceID)
 			if bindErr == nil && active != nil && active.InstallationID == inst.ID {
-				if err := tx.DeleteActiveBindingTx(tx.DB(), inst.UserID, inst.DeviceID); err != nil {
+				if err := tx.DeleteActiveBindingTx(tx.DB(), inst.SpaceID, inst.DeviceID); err != nil {
 					return err
 				}
 			}
@@ -306,7 +301,7 @@ func (a *CoordinatorRepoAdapter) UpdateDesiredEnabled(ctx context.Context, op *o
 func (a *CoordinatorRepoAdapter) SwitchRelease(ctx context.Context, op *operation.InstallationOperation, installationID, targetReleaseID, stagingPathKey, defaultActionKey string) (int64, error) {
 	var desiredRevision int64
 	err := a.repo.Transaction(ctx, func(tx RepositoryV2) error {
-		inst, err := loadInstallationTx(tx.DB(), op.UserID, op.DeviceID, installationID)
+		inst, err := loadInstallationTx(tx.DB(), op.SpaceID, op.DeviceID, installationID)
 		if err != nil {
 			return err
 		}
@@ -353,7 +348,7 @@ func (a *CoordinatorRepoAdapter) SwitchRelease(ctx context.Context, op *operatio
 		if err := tx.UpdateInstallationTx(tx.DB(), inst); err != nil {
 			return err
 		}
-		if err := a.upsertBindingTx(tx, inst.UserID, inst.DeviceID, inst.ID, inst.PetID, targetReleaseID, revision, op.ID, binding.BoundReasonSwitch); err != nil {
+		if err := a.upsertBindingTx(tx, inst.SpaceID, inst.DeviceID, inst.ID, inst.PetID, targetReleaseID, revision, op.ID, binding.BoundReasonSwitch); err != nil {
 			return err
 		}
 		return a.ensureSwitchJournalTx(tx, op, installationID, oldRelease, targetReleaseID, revision)
@@ -365,11 +360,11 @@ func (a *CoordinatorRepoAdapter) UpdateSettings(ctx context.Context, op *operati
 	var settingsRevision int
 	var desiredRevision int64
 	err := a.repo.Transaction(ctx, func(tx RepositoryV2) error {
-		inst, err := loadInstallationTx(tx.DB(), op.UserID, op.DeviceID, installationID)
+		inst, err := loadInstallationTx(tx.DB(), op.SpaceID, op.DeviceID, installationID)
 		if err != nil {
 			return err
 		}
-		settings, err := tx.UpdateRuntimeSettingsCAS(tx.DB(), installationID, op.UserID, op.DeviceID, expectedRevision, updates)
+		settings, err := tx.UpdateRuntimeSettingsCAS(tx.DB(), installationID, op.SpaceID, op.DeviceID, expectedRevision, updates)
 		if err != nil {
 			return err
 		}
@@ -397,7 +392,7 @@ func (a *CoordinatorRepoAdapter) UpdateSettings(ctx context.Context, op *operati
 func (a *CoordinatorRepoAdapter) ChangeDefaultAction(ctx context.Context, op *operation.InstallationOperation, installationID, actionKey string) (int64, error) {
 	var desiredRevision int64
 	err := a.repo.Transaction(ctx, func(tx RepositoryV2) error {
-		inst, err := loadInstallationTx(tx.DB(), op.UserID, op.DeviceID, installationID)
+		inst, err := loadInstallationTx(tx.DB(), op.SpaceID, op.DeviceID, installationID)
 		if err != nil {
 			return err
 		}
@@ -420,7 +415,7 @@ func (a *CoordinatorRepoAdapter) ChangeDefaultAction(ctx context.Context, op *op
 func (a *CoordinatorRepoAdapter) MarkUninstallDesired(ctx context.Context, op *operation.InstallationOperation, installationID string) (int64, error) {
 	var desiredRevision int64
 	err := a.repo.Transaction(ctx, func(tx RepositoryV2) error {
-		inst, err := loadInstallationTx(tx.DB(), op.UserID, op.DeviceID, installationID)
+		inst, err := loadInstallationTx(tx.DB(), op.SpaceID, op.DeviceID, installationID)
 		if err != nil {
 			return err
 		}
@@ -445,13 +440,13 @@ func (a *CoordinatorRepoAdapter) MarkUninstallDesired(ctx context.Context, op *o
 	return desiredRevision, err
 }
 
-func (a *CoordinatorRepoAdapter) MarkOperationCancelRequested(ctx context.Context, userID, deviceID, operationID string) error {
+func (a *CoordinatorRepoAdapter) MarkOperationCancelRequested(ctx context.Context, spaceID, deviceID, operationID string) error {
 	return a.repo.Transaction(ctx, func(tx RepositoryV2) error {
 		op, err := tx.GetOperationTx(tx.DB(), operationID)
 		if err != nil {
 			return err
 		}
-		if op.UserID != userID || op.DeviceID != deviceID {
+		if op.SpaceID != spaceID || op.DeviceID != deviceID {
 			return ErrOperationNotFound
 		}
 		if op.IsTerminal() {
@@ -466,7 +461,7 @@ func (a *CoordinatorRepoAdapter) MarkOperationCancelRequested(ctx context.Contex
 }
 
 func (a *CoordinatorRepoAdapter) writeDesiredStateTx(tx RepositoryV2, state *desired.RuntimeDesiredState, ensureAbsent bool) (int64, error) {
-	existing, err := tx.GetRuntimeDesiredStateTx(tx.DB(), state.UserID, state.DeviceID)
+	existing, err := tx.GetRuntimeDesiredStateTx(tx.DB(), state.SpaceID, state.DeviceID)
 	if err != nil {
 		return 0, err
 	}
@@ -509,7 +504,7 @@ func (a *CoordinatorRepoAdapter) writeDesiredStateTx(tx RepositoryV2, state *des
 			"snapshot": state.SettingsSnapshotJSON,
 		},
 	})
-	revision, err := tx.AllocateDeviceDesiredRevisionCAS(tx.DB(), state.UserID, state.DeviceID)
+	revision, err := tx.AllocateDeviceDesiredRevisionCAS(tx.DB(), state.SpaceID, state.DeviceID)
 	if err != nil {
 		return 0, err
 	}
@@ -518,7 +513,7 @@ func (a *CoordinatorRepoAdapter) writeDesiredStateTx(tx RepositoryV2, state *des
 	if state.CreatedAt == "" {
 		state.CreatedAt = state.UpdatedAt
 	}
-	if _, err := tx.UpsertRuntimeDesiredStateCAS(tx.DB(), state.UserID, state.DeviceID, state, expected); err != nil {
+	if _, err := tx.UpsertRuntimeDesiredStateCAS(tx.DB(), state.SpaceID, state.DeviceID, state, expected); err != nil {
 		return 0, err
 	}
 	snapshot := coordinator.DesiredStateSnapshot{
@@ -527,7 +522,7 @@ func (a *CoordinatorRepoAdapter) writeDesiredStateTx(tx RepositoryV2, state *des
 		InstallationID:       state.InstallationID,
 		PetID:                state.PetID,
 		ReleaseID:            state.ReleaseID,
-		UserID:               state.UserID,
+		SpaceID:              state.SpaceID,
 		DeviceID:             state.DeviceID,
 		RuntimeID:            state.RuntimeID,
 		EnsureAbsent:         ensureAbsent,
@@ -543,7 +538,7 @@ func (a *CoordinatorRepoAdapter) writeDesiredStateTx(tx RepositoryV2, state *des
 	if err := tx.CreateOutboxEventTx(tx.DB(), &desired.DesiredStateOutboxEvent{
 		EventID:         uuid.NewString(),
 		EventType:       "desired_state_changed",
-		UserID:          state.UserID,
+		SpaceID:         state.SpaceID,
 		DeviceID:        state.DeviceID,
 		RuntimeID:       state.RuntimeID,
 		InstallationID:  state.InstallationID,
@@ -562,12 +557,12 @@ func (a *CoordinatorRepoAdapter) writeDesiredStateTx(tx RepositoryV2, state *des
 }
 
 func (a *CoordinatorRepoAdapter) desiredFromCurrentTx(tx RepositoryV2, inst *Installation, op *operation.InstallationOperation) (*desired.RuntimeDesiredState, error) {
-	current, err := tx.GetRuntimeDesiredStateTx(tx.DB(), inst.UserID, inst.DeviceID)
+	current, err := tx.GetRuntimeDesiredStateTx(tx.DB(), inst.SpaceID, inst.DeviceID)
 	if err != nil {
 		return nil, err
 	}
 	state := &desired.RuntimeDesiredState{
-		UserID:         inst.UserID,
+		SpaceID:        inst.SpaceID,
 		DeviceID:       inst.DeviceID,
 		RuntimeID:      op.RuntimeID,
 		InstallationID: inst.ID,
@@ -594,14 +589,14 @@ func (a *CoordinatorRepoAdapter) desiredFromCurrentTx(tx RepositoryV2, inst *Ins
 	return state, nil
 }
 
-func (a *CoordinatorRepoAdapter) upsertBindingTx(tx RepositoryV2, userID, deviceID, installationID, petID, releaseID string, revision int64, operationID, reason string) error {
-	previous, err := tx.GetActiveBindingForUserDeviceTx(tx.DB(), userID, deviceID)
+func (a *CoordinatorRepoAdapter) upsertBindingTx(tx RepositoryV2, spaceID, deviceID, installationID, petID, releaseID string, revision int64, operationID, reason string) error {
+	previous, err := tx.GetActiveBindingForSpaceDeviceTx(tx.DB(), spaceID, deviceID)
 	if err != nil && !errors.Is(err, ErrBindingNotFound) {
 		return err
 	}
 	now := nowInstallation()
 	entry := &binding.DeviceActiveInstallationBinding{
-		UserID:          userID,
+		SpaceID:         spaceID,
 		DeviceID:        deviceID,
 		InstallationID:  installationID,
 		PetID:           petID,
@@ -622,7 +617,7 @@ func (a *CoordinatorRepoAdapter) upsertBindingTx(tx RepositoryV2, userID, device
 	}
 	return tx.InsertBindingHistoryTx(tx.DB(), &binding.BindingHistoryEntry{
 		ID:                     uuid.NewString(),
-		UserID:                 userID,
+		SpaceID:                spaceID,
 		DeviceID:               deviceID,
 		PreviousInstallationID: previousID,
 		NewInstallationID:      installationID,
@@ -650,7 +645,7 @@ func (a *CoordinatorRepoAdapter) ensureCommitJournalTx(tx RepositoryV2, op *oper
 	return tx.CreateCommitJournalTx(tx.DB(), &journal.InstallationCommitJournal{
 		ID:              uuid.NewString(),
 		OperationID:     op.ID,
-		UserID:          op.UserID,
+		SpaceID:         op.SpaceID,
 		DeviceID:        op.DeviceID,
 		RuntimeID:       op.RuntimeID,
 		InstallationID:  installationID,
@@ -685,7 +680,7 @@ func (a *CoordinatorRepoAdapter) ensureSwitchJournalTx(tx RepositoryV2, op *oper
 	return tx.CreateSwitchJournalTx(tx.DB(), &journal.InstallationSwitchJournal{
 		ID:                 uuid.NewString(),
 		OperationID:        op.ID,
-		UserID:             op.UserID,
+		SpaceID:            op.SpaceID,
 		DeviceID:           op.DeviceID,
 		RuntimeID:          op.RuntimeID,
 		OldInstallationID:  installationID,
@@ -732,9 +727,9 @@ func ensureRuntimeSettingsTx(tx RepositoryV2, installationID, now string) (*Runt
 	return &settings, nil
 }
 
-func loadInstallationTx(db *gorm.DB, userID, deviceID, installationID string) (*Installation, error) {
+func loadInstallationTx(db *gorm.DB, spaceID, deviceID, installationID string) (*Installation, error) {
 	var inst Installation
-	if err := db.Where("id = ? AND user_id = ? AND device_id = ?", installationID, userID, deviceID).First(&inst).Error; err != nil {
+	if err := db.Where("id = ? AND space_id = ? AND device_id = ?", installationID, spaceID, deviceID).First(&inst).Error; err != nil {
 		return nil, err
 	}
 	return &inst, nil
@@ -765,9 +760,8 @@ func loadReleasePresentationTx(db *gorm.DB, releaseID string) (*releasePresentat
 func installationRecord(inst *Installation) *coordinator.InstallationRecord {
 	return &coordinator.InstallationRecord{
 		ID:                inst.ID,
-		UserID:            inst.UserID,
+		SpaceID:           inst.SpaceID,
 		DeviceID:          inst.DeviceID,
-		CharacterID:       inst.CharacterID,
 		PetID:             inst.PetID,
 		ReleaseID:         inst.CurrentReleaseID,
 		Status:            inst.Status,

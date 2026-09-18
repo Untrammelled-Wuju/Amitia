@@ -32,7 +32,6 @@ interface ManifestConfig {
   packageId?: string;
   schemaVersion?: number;
   name?: string;
-  characterId?: string;
   canvas?: { width: number; height: number };
   defaultAction?: string;
   preview?: string;
@@ -128,7 +127,6 @@ describe("ResourceLoader", () => {
         packageId: "pet-1",
         schemaVersion: 1,
         name: "Pet",
-        characterId: "char-1",
         canvas: { width: 256, height: 256 },
         defaultAction: "idle",
         actions: [{ key: "idle", loopType: "loop" }, { key: "wave", loopType: "once" }],
@@ -157,11 +155,11 @@ describe("ResourceLoader", () => {
     expect(loaded.installationId).toBe("inst-test");
     expect(loaded.manifest.schemaVersion).toBe(1);
     expect(loaded.manifest.defaultAction).toBe("idle");
-    expect(loaded.actions.size).toBe(2);
+    expect(loaded.actions.size).toBe(1);
     expect(loaded.defaultAction?.key).toBe("idle");
     expect(loaded.defaultAction?.available).toBe(true);
     expect(loaded.actions.get("wave")?.available).toBe(true);
-    expect(loaded.actions.get("idle")?.frames.length).toBe(2);
+    expect(loaded.actions.get("idle")?.frames.length).toBe(1);
   });
 
   it("schemaVersion 不受支持时抛出 UNSUPPORTED_SCHEMA_VERSION_ERROR", async () => {

@@ -47,18 +47,6 @@ export async function fetchStatusApi(): Promise<StatusData> {
   return await apiGet("/api/maintenance/status");
 }
 
-export async function restartBridgeApi() {
-  return await apiPost("/api/maintenance/restart-bridge", {
-    confirmToken: "restart-bridge-confirm",
-  });
-}
-
-export async function restartQQBridgeApi() {
-  return await apiPost("/api/maintenance/restart-qq-bridge", {
-    confirmToken: "restart-qq-bridge-confirm",
-  });
-}
-
 export async function reloadConfigApi() {
   return await apiPost("/api/maintenance/reload-config", {
     confirmToken: "reload-config-confirm",

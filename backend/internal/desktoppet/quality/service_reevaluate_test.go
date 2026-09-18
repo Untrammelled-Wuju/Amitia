@@ -20,8 +20,7 @@ func TestReevaluatePreservesImmutableInputFence(t *testing.T) {
 
 	original := &QualityEvaluation{
 		ID:                   "eval-original",
-		UserID:               "user-1",
-		CharacterID:          "character-1",
+		SpaceID:              "user-1",
 		ProcessingTaskID:     "task-1",
 		ProcessingActionID:   "processing-action-1",
 		ActionRevisionID:     "action-revision-1",
@@ -48,8 +47,7 @@ func TestReevaluatePreservesImmutableInputFence(t *testing.T) {
 	require.NoError(t, err)
 
 	require.NotEqual(t, original.ID, recreated.ID)
-	require.Equal(t, original.UserID, recreated.UserID)
-	require.Equal(t, original.CharacterID, recreated.CharacterID)
+	require.Equal(t, original.SpaceID, recreated.SpaceID)
 	require.Equal(t, original.ProcessingTaskID, recreated.ProcessingTaskID)
 	require.Equal(t, original.ProcessingActionID, recreated.ProcessingActionID)
 	require.Equal(t, original.ActionRevisionID, recreated.ActionRevisionID)

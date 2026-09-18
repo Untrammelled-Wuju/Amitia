@@ -21,7 +21,7 @@ type ProviderExecutionLookup interface {
 type DeviceSessionResolver interface {
 	ResolveActiveSession(
 		ctx context.Context,
-		userID runtimeidentity.UserID,
+		spaceID runtimeidentity.SpaceID,
 		deviceID runtimeidentity.DeviceID,
 		runtimeID runtimeidentity.RuntimeID,
 	) (runtimeidentity.RuntimeSessionID, bool)
@@ -169,10 +169,10 @@ func (r *ProviderRuntimeExecutionResolver) ResolveRuntimeExecution(
 		route.ProviderRuntimeInstanceID = instance.RuntimeInstanceID
 	}
 
-	if instance.UserID != "" {
-		route.UserID = instance.UserID
+	if instance.SpaceID != "" {
+		route.SpaceID = instance.SpaceID
 	} else {
-		route.UserID = target.UserID
+		route.SpaceID = target.SpaceID
 	}
 	if instance.DeviceID != "" {
 		route.DeviceID = instance.DeviceID
@@ -186,7 +186,7 @@ func (r *ProviderRuntimeExecutionResolver) ResolveRuntimeExecution(
 	}
 
 	if definition.Placement == ProviderPlacementDevice {
-		sessionID, ok := r.resolveDeviceSession(ctx, route.UserID, route.DeviceID, route.RuntimeID)
+		sessionID, ok := r.resolveDeviceSession(ctx, route.SpaceID, route.DeviceID, route.RuntimeID)
 		if !ok || sessionID == "" {
 			return RuntimeExecutionRoute{}, ErrProviderExecutionTargetInvalid
 		}
@@ -200,12 +200,12 @@ func (r *ProviderRuntimeExecutionResolver) ResolveRuntimeExecution(
 
 func (r *ProviderRuntimeExecutionResolver) resolveDeviceSession(
 	ctx context.Context,
-	userID runtimeidentity.UserID,
+	spaceID runtimeidentity.SpaceID,
 	deviceID runtimeidentity.DeviceID,
 	runtimeID runtimeidentity.RuntimeID,
 ) (runtimeidentity.RuntimeSessionID, bool) {
 	if r.sessionResolver == nil {
 		return "", false
 	}
-	return r.sessionResolver.ResolveActiveSession(ctx, userID, deviceID, runtimeID)
+	return r.sessionResolver.ResolveActiveSession(ctx, spaceID, deviceID, runtimeID)
 }

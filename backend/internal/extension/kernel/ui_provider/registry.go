@@ -42,7 +42,7 @@ const (
 
 const (
 	ProfileScopeGlobal         ProfileScopeKind = "global"
-	ProfileScopeUser           ProfileScopeKind = "user"
+	ProfileScopeSpace          ProfileScopeKind = "space"
 	ProfileScopePlatform       ProfileScopeKind = "platform"
 	ProfileScopeDevice         ProfileScopeKind = "device"
 	ProfileScopeDevicePlatform ProfileScopeKind = "device_platform"
@@ -230,8 +230,8 @@ func (d ProviderDefinition) Validate() error {
 			}
 		case EntryWebModule:
 			platformKey := strings.ToLower(strings.TrimSpace(platform))
-			if platformKey == "android" || platformKey == "ios" || platformKey == "mobile" {
-				return fmt.Errorf("ui_provider: web_module cannot target Flutter AOT platform %s; use schema_renderer or sandbox web", platform)
+			if platformKey == "android" || platformKey == "ios" || platformKey == "mobile" || strings.HasPrefix(platformKey, "flutter_") || platformKey == "*" {
+				return fmt.Errorf("ui_provider: web_module cannot target Flutter/mobile/wildcard entry %s; use schema_renderer or sandbox web and reserve web_module for web/Electron hosts", platform)
 			}
 			if strings.TrimSpace(entry.Path) == "" {
 				return fmt.Errorf("ui_provider: web_module path required for %s", platform)
@@ -478,7 +478,7 @@ func validateProviderMetadata(d ProviderDefinition) error {
 }
 
 type ProfileScope struct {
-	UserID         string `json:"userId,omitempty"`
+	SpaceID        string `json:"spaceId,omitempty"`
 	DeviceID       string `json:"deviceId,omitempty"`
 	Platform       string `json:"platform,omitempty"`
 	RuntimeProfile string `json:"runtimeProfile,omitempty"`
@@ -486,7 +486,7 @@ type ProfileScope struct {
 
 func (s ProfileScope) Normalize() ProfileScope {
 	return ProfileScope{
-		UserID: strings.TrimSpace(s.UserID), DeviceID: strings.TrimSpace(s.DeviceID),
+		SpaceID: strings.TrimSpace(s.SpaceID), DeviceID: strings.TrimSpace(s.DeviceID),
 		Platform: strings.ToLower(strings.TrimSpace(s.Platform)), RuntimeProfile: strings.ToLower(strings.TrimSpace(s.RuntimeProfile)),
 	}
 }
@@ -495,8 +495,8 @@ func (s ProfileScope) Key() string {
 	s = s.Normalize()
 	// Scope keys are persisted as a single primary key. Escape each component so
 	// an externally supplied identifier cannot smuggle the field delimiters into
-	// the key and collide with another user's/device's profile scope.
-	return "u=" + url.QueryEscape(s.UserID) + "|d=" + url.QueryEscape(s.DeviceID) + "|p=" + url.QueryEscape(s.Platform) + "|r=" + url.QueryEscape(s.RuntimeProfile)
+	// the key and collide with another space/device's profile scope.
+	return "s=" + url.QueryEscape(s.SpaceID) + "|d=" + url.QueryEscape(s.DeviceID) + "|p=" + url.QueryEscape(s.Platform) + "|r=" + url.QueryEscape(s.RuntimeProfile)
 }
 func (s ProfileScope) LayerKeys() []string {
 	s = s.Normalize()
@@ -510,25 +510,25 @@ func (s ProfileScope) LayerKeys() []string {
 		}
 		keys = append(keys, key)
 	}
-	if s.UserID == "" {
+	if s.SpaceID == "" {
 		return keys
 	}
-	add(ProfileScope{UserID: s.UserID})
+	add(ProfileScope{SpaceID: s.SpaceID})
 	if s.Platform != "" {
-		add(ProfileScope{UserID: s.UserID, Platform: s.Platform})
+		add(ProfileScope{SpaceID: s.SpaceID, Platform: s.Platform})
 	}
 	if s.DeviceID != "" {
-		add(ProfileScope{UserID: s.UserID, DeviceID: s.DeviceID})
+		add(ProfileScope{SpaceID: s.SpaceID, DeviceID: s.DeviceID})
 	}
 	if s.DeviceID != "" && s.Platform != "" {
-		add(ProfileScope{UserID: s.UserID, DeviceID: s.DeviceID, Platform: s.Platform})
+		add(ProfileScope{SpaceID: s.SpaceID, DeviceID: s.DeviceID, Platform: s.Platform})
 	}
 	if s.RuntimeProfile != "" {
-		// Runtime is an explicit user-level override layer. Keep it independent
+		// Runtime is an explicit space-level override layer. Keep it independent
 		// from device/platform so the same runtime profile behaves consistently
 		// across every device using it. Device/platform layers still apply before
 		// this final runtime override.
-		add(ProfileScope{UserID: s.UserID, RuntimeProfile: s.RuntimeProfile})
+		add(ProfileScope{SpaceID: s.SpaceID, RuntimeProfile: s.RuntimeProfile})
 	}
 	return keys
 }
@@ -536,33 +536,33 @@ func (s ProfileScope) LayerKeys() []string {
 func (s ProfileScope) ForKind(kind ProfileScopeKind) (ProfileScope, error) {
 	s = s.Normalize()
 	switch kind {
-	case "", ProfileScopeUser:
-		if s.UserID == "" {
-			return ProfileScope{}, errors.New("ui_provider: user scope requires authenticated user")
+	case "", ProfileScopeSpace:
+		if s.SpaceID == "" {
+			return ProfileScope{}, errors.New("ui_provider: space scope requires authenticated space")
 		}
-		return ProfileScope{UserID: s.UserID}, nil
+		return ProfileScope{SpaceID: s.SpaceID}, nil
 	case ProfileScopeGlobal:
 		return globalProfileScope(), nil
 	case ProfileScopePlatform:
-		if s.UserID == "" || s.Platform == "" {
-			return ProfileScope{}, errors.New("ui_provider: platform scope requires user and platform")
+		if s.SpaceID == "" || s.Platform == "" {
+			return ProfileScope{}, errors.New("ui_provider: platform scope requires space and platform")
 		}
-		return ProfileScope{UserID: s.UserID, Platform: s.Platform}, nil
+		return ProfileScope{SpaceID: s.SpaceID, Platform: s.Platform}, nil
 	case ProfileScopeDevice:
-		if s.UserID == "" || s.DeviceID == "" {
-			return ProfileScope{}, errors.New("ui_provider: device scope requires user and device")
+		if s.SpaceID == "" || s.DeviceID == "" {
+			return ProfileScope{}, errors.New("ui_provider: device scope requires space and device")
 		}
-		return ProfileScope{UserID: s.UserID, DeviceID: s.DeviceID}, nil
+		return ProfileScope{SpaceID: s.SpaceID, DeviceID: s.DeviceID}, nil
 	case ProfileScopeDevicePlatform:
-		if s.UserID == "" || s.DeviceID == "" || s.Platform == "" {
-			return ProfileScope{}, errors.New("ui_provider: device_platform scope requires user, device and platform")
+		if s.SpaceID == "" || s.DeviceID == "" || s.Platform == "" {
+			return ProfileScope{}, errors.New("ui_provider: device_platform scope requires space, device and platform")
 		}
-		return ProfileScope{UserID: s.UserID, DeviceID: s.DeviceID, Platform: s.Platform}, nil
+		return ProfileScope{SpaceID: s.SpaceID, DeviceID: s.DeviceID, Platform: s.Platform}, nil
 	case ProfileScopeRuntime:
-		if s.UserID == "" || s.RuntimeProfile == "" {
-			return ProfileScope{}, errors.New("ui_provider: runtime scope requires user and runtime profile")
+		if s.SpaceID == "" || s.RuntimeProfile == "" {
+			return ProfileScope{}, errors.New("ui_provider: runtime scope requires space and runtime profile")
 		}
-		return ProfileScope{UserID: s.UserID, RuntimeProfile: s.RuntimeProfile}, nil
+		return ProfileScope{SpaceID: s.SpaceID, RuntimeProfile: s.RuntimeProfile}, nil
 	default:
 		return ProfileScope{}, fmt.Errorf("ui_provider: invalid profile scope %q", kind)
 	}
@@ -578,7 +578,7 @@ type Profile struct {
 }
 
 type ResolveContext struct {
-	UserID             string   `json:"userId,omitempty"`
+	SpaceID            string   `json:"spaceId,omitempty"`
 	DeviceID           string   `json:"deviceId,omitempty"`
 	Platform           string   `json:"platform"`
 	Architecture       string   `json:"architecture,omitempty"`
@@ -591,7 +591,7 @@ type ResolveContext struct {
 }
 
 func (c ResolveContext) Normalize() ResolveContext {
-	c.UserID = strings.TrimSpace(c.UserID)
+	c.SpaceID = strings.TrimSpace(c.SpaceID)
 	c.DeviceID = strings.TrimSpace(c.DeviceID)
 	c.Platform = strings.ToLower(strings.TrimSpace(c.Platform))
 	if c.Platform == "" {
@@ -618,7 +618,7 @@ func (c ResolveContext) Normalize() ResolveContext {
 }
 func (c ResolveContext) ProfileScope() ProfileScope {
 	c = c.Normalize()
-	return ProfileScope{UserID: c.UserID, DeviceID: c.DeviceID, Platform: c.Platform, RuntimeProfile: c.RuntimeProfile}
+	return ProfileScope{SpaceID: c.SpaceID, DeviceID: c.DeviceID, Platform: c.Platform, RuntimeProfile: c.RuntimeProfile}
 }
 
 type Resolution struct {
@@ -796,11 +796,33 @@ func supportsPlatform(p *ProviderDefinition, platform string) bool {
 	if _, ok := p.Entries[platform]; ok {
 		return true
 	}
-	if _, ok := p.Entries["mobile"]; ok && (platform == "android" || platform == "ios") {
-		return true
+	if platform == "android" || platform == "ios" {
+		if _, ok := p.Entries["flutter_"+platform]; ok {
+			return true
+		}
+		if _, ok := p.Entries["flutter_mobile"]; ok {
+			return true
+		}
+		if _, ok := p.Entries["mobile"]; ok {
+			return true
+		}
 	}
-	if _, ok := p.Entries["desktop"]; ok && (platform == "windows" || platform == "macos" || platform == "linux") {
-		return true
+	if platform == "windows" || platform == "macos" || platform == "linux" {
+		if _, ok := p.Entries["electron_"+platform]; ok {
+			return true
+		}
+		if _, ok := p.Entries["electron_desktop"]; ok {
+			return true
+		}
+		if _, ok := p.Entries["flutter_"+platform]; ok {
+			return true
+		}
+		if _, ok := p.Entries["flutter_desktop"]; ok {
+			return true
+		}
+		if _, ok := p.Entries["desktop"]; ok {
+			return true
+		}
 	}
 	_, ok := p.Entries["*"]
 	return ok
@@ -957,7 +979,7 @@ func (r *Registry) effectiveProfile(ctx context.Context, rc ResolveContext) (Pro
 		if layer.UpdatedAt > effective.UpdatedAt {
 			effective.UpdatedAt = layer.UpdatedAt
 		}
-		if layer.Scope.UserID == rc.UserID && layer.Scope.DeviceID == "" && layer.Scope.Platform == "" && layer.Scope.RuntimeProfile == "" {
+		if layer.Scope.SpaceID == rc.SpaceID && layer.Scope.DeviceID == "" && layer.Scope.Platform == "" && layer.Scope.RuntimeProfile == "" {
 			userRevision = layer.Revision
 		}
 	}
@@ -1133,7 +1155,7 @@ func (r *Registry) DeleteProfileScope(ctx context.Context, rc ResolveContext, ki
 }
 
 func (r *Registry) SetProfile(profile Profile) error {
-	_, err := r.SetProfileForContext(context.Background(), ResolveContext{UserID: "default", Platform: "web"}, ProfileScopeGlobal, profile, -1)
+	_, err := r.SetProfileForContext(context.Background(), ResolveContext{Platform: "web"}, ProfileScopeGlobal, profile, -1)
 	return err
 }
 func cloneSelections(in map[Capability]string) map[Capability]string {
@@ -1162,7 +1184,7 @@ func (r *Registry) ProfileForScope(ctx context.Context, rc ResolveContext, kind 
 	legacy := r.profile
 	r.mu.RUnlock()
 	if store == nil {
-		if kind == ProfileScopeGlobal || kind == "" || kind == ProfileScopeUser {
+		if kind == ProfileScopeGlobal || kind == "" || kind == ProfileScopeSpace {
 			legacy.Scope = scope
 			legacy.Selections = cloneSelections(legacy.Selections)
 			return legacy, true, nil

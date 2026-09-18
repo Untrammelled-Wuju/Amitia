@@ -67,7 +67,7 @@ func setupR46ExportRuntime(t *testing.T) (*Runtime, *Container, context.Context,
 			"artifactId":        artifactID,
 			"installedTreeHash": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
 			"lastOperationId":   "op-r46-export",
-			"ownerUserId":       "user-1",
+			"ownerSpaceId":      "user-1",
 			"scopeType":         "global",
 			"scopeId":           "",
 		},
@@ -86,7 +86,7 @@ func TestR46UninstallPreviewRejectsActiveExportLease(t *testing.T) {
 
 	exportTicket := PackageExportTicket{
 		ExportID:    "export-r46",
-		UserID:      "user-1",
+		SpaceID:     "user-1",
 		ExtensionID: extensionID,
 		ArtifactID:  artifactID,
 		FileName:    "export.zip",
@@ -117,7 +117,7 @@ func TestR46UninstallPreviewDoesNotDowngradeExportError(t *testing.T) {
 
 	exportTicket := PackageExportTicket{
 		ExportID:    "export-r46-downgrade",
-		UserID:      "user-1",
+		SpaceID:     "user-1",
 		ExtensionID: extensionID,
 		ArtifactID:  artifactID,
 		FileName:    "export.zip",
@@ -147,7 +147,7 @@ func TestR46UninstallConfirmCannotBeCreatedForExportRetention(t *testing.T) {
 
 	exportTicket := PackageExportTicket{
 		ExportID:    "export-r46-confirm",
-		UserID:      "user-1",
+		SpaceID:     "user-1",
 		ExtensionID: extensionID,
 		ArtifactID:  "artifact-r46-export",
 		FileName:    "export.zip",

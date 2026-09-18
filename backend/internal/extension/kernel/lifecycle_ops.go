@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
@@ -15,7 +16,9 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/extension_page_host"
 	"github.com/u-ai/backend/internal/extension/kernel/persistence/sqlite"
 	"github.com/u-ai/backend/internal/extension/kernel/runtime_supervisor"
+	"github.com/u-ai/backend/internal/extension/kernel/scope"
 	"github.com/u-ai/backend/internal/extension/kernel/ui_contribution"
+	"github.com/u-ai/backend/internal/extension/runtimegate"
 )
 
 type moduleEnablementSnapshot struct {
@@ -58,6 +61,11 @@ func (r *Runtime) Enable(ctx context.Context, extensionID string) error {
 	if err != nil {
 		return fmt.Errorf("kernel: get installation: %w", err)
 	}
+	if inst.Metadata == nil {
+		inst.Metadata = map[string]any{}
+	}
+	inst.Metadata["user.enabled"] = true
+	inst.Metadata["user.disabled"] = false
 	prevInst := inst
 	prevExtEnablement := enablement.EnablementDisabled
 	prevExtDesired := enablement.DesiredRuntimeStopped
@@ -134,16 +142,9 @@ func (r *Runtime) Enable(ctx context.Context, extensionID string) error {
 				continue
 			}
 			if mod.Runtime != nil && mod.Runtime.Type != "" && mod.Runtime.Type != domain.RuntimeTypeBuiltin {
-				defID := runtime_supervisor.BuildRuntimeDefinitionID(extensionID, string(mod.ID), mod.Runtime.Type)
-				spec := runtime_supervisor.InstanceSpec{
-					DefinitionID: defID,
-					ExtensionID:  extID,
-					ModuleID:     mod.ID,
-					RuntimeType:  mod.Runtime.Type,
-					Generation:   candidateGeneration,
-				}
+				spec := buildModuleInstanceSpec(extID, mod.ID, mod.Runtime, candidateGeneration)
 				result := r.container.RuntimeSupervisor.Reconcile(ctx, runtime_supervisor.ReconcileRequest{
-					DefinitionID: defID,
+					DefinitionID: spec.DefinitionID,
 					Desired:      runtime_supervisor.DesiredRunning,
 					Spec:         spec,
 				})
@@ -252,6 +253,18 @@ func (r *Runtime) Enable(ctx context.Context, extensionID string) error {
 	r.logEnableStep(operationID, extensionID, "promote_generation", "succeeded", nil)
 	r.persistLifecycleStep(ctx, operationID, "promote_generation", LifecycleStepSucceeded, nil)
 
+	if r.container.ScopeManager != nil {
+		if err := r.seedExtensionScopeBindings(ctx, extensionID, modules); err != nil {
+			tx.rollback(ctx)
+			r.logEnableStep(operationID, extensionID, "seed_scope_bindings", "failed", err)
+			r.persistLifecycleStep(ctx, operationID, "seed_scope_bindings", LifecycleStepFailed, err)
+			r.updateLifecycleOperationStatus(ctx, operationID, LifecycleOperationCompensating, "seed_scope_bindings", err)
+			return fmt.Errorf("kernel: seed scope bindings: %w", err)
+		}
+		r.logEnableStep(operationID, extensionID, "seed_scope_bindings", "succeeded", nil)
+		r.persistLifecycleStep(ctx, operationID, "seed_scope_bindings", LifecycleStepSucceeded, nil)
+	}
+
 	if r.container.ContributionInstaller != nil {
 		if err := r.container.ContributionInstaller.ActivateContributions(ctx, extID); err != nil {
 			tx.rollback(ctx)
@@ -295,7 +308,7 @@ func (r *Runtime) Enable(ctx context.Context, extensionID string) error {
 
 	if r.container.DesktopPetPluginBoundary != nil {
 		if err := r.container.DesktopPetPluginBoundary.HandleExtensionEnabled(ctx, extID, inst.InstalledVersion.String(), operationID); err != nil {
-			log.Printf("[enable-tx] desktop_pet_plugin boundary error: %v", err)
+			log.Printf("[enable-tx] petx boundary error: %v", err)
 		}
 	}
 
@@ -307,13 +320,15 @@ func (r *Runtime) Enable(ctx context.Context, extensionID string) error {
 			return fmt.Errorf("kernel: list ui contributions: %w", uiErr)
 		}
 		for _, uiDef := range uiDefs {
-			if err := r.container.UIHost.RegisterContribution(uiDef); err != nil {
-				tx.rollback(ctx)
-				r.logEnableStep(operationID, extensionID, "register_ui", "failed", err)
-				return fmt.Errorf("kernel: register ui contribution %s: %w", uiDef.ContributionID, err)
+			if _, err := r.container.UIHost.GetContribution(uiDef.ContributionID); err != nil {
+				if err := r.container.UIHost.RegisterContribution(uiDef); err != nil {
+					tx.rollback(ctx)
+					r.logEnableStep(operationID, extensionID, "register_ui", "failed", err)
+					return fmt.Errorf("kernel: register ui contribution %s: %w", uiDef.ContributionID, err)
+				}
+				tx.uiRegistered = true
 			}
-			tx.uiRegistered = true
-			if uiDef.Kind == ui_contribution.UIContributionWebPage || uiDef.Kind == ui_contribution.UIContributionSchemaPage {
+			if strings.TrimSpace(uiDef.Entry.RuntimeID) == "" && (uiDef.Kind == ui_contribution.UIContributionWebPage || uiDef.Kind == ui_contribution.UIContributionSchemaPage) {
 				entryKind := extension_page_host.PageKindWeb
 				if uiDef.Kind == ui_contribution.UIContributionSchemaPage {
 					entryKind = extension_page_host.PageKindSchema
@@ -343,7 +358,7 @@ func (r *Runtime) Enable(ctx context.Context, extensionID string) error {
 					Icon:        uiDef.Display.Icon,
 					Permissions: perms,
 				})
-				if err := r.container.PageHost.RegisterPage(ctx, pageDef); err != nil {
+				if err := r.container.PageHost.RegisterPage(ctx, pageDef); err != nil && !errors.Is(err, extension_page_host.ErrPageExists) {
 					tx.rollback(ctx)
 					r.logEnableStep(operationID, extensionID, "register_page", "failed", err)
 					return fmt.Errorf("kernel: register page %s: %w", uiDef.ContributionID, err)
@@ -353,6 +368,8 @@ func (r *Runtime) Enable(ctx context.Context, extensionID string) error {
 	}
 	r.logEnableStep(operationID, extensionID, "register_ui", "succeeded", nil)
 	r.persistLifecycleStep(ctx, operationID, "register_ui", LifecycleStepSucceeded, nil)
+
+	r.container.ensureGameHostServicePermissionGrants(ctx, extID, gameHostOwnedModules, modules)
 
 	if err := r.reconcileGameHostExtension(ctx, extensionID); err != nil {
 		tx.rollback(ctx)
@@ -371,6 +388,7 @@ func (r *Runtime) Enable(ctx context.Context, extensionID string) error {
 		r.container.UIHostNotifier.BroadcastExtensionChange("extension_generation_changed", extensionID, map[string]interface{}{"generation": candidateGeneration})
 		r.container.UIHostNotifier.BroadcastExtensionChange("extension_contributions_changed", extensionID, nil)
 	}
+	runtimegate.Set(extensionID, true)
 
 	return nil
 }
@@ -645,6 +663,11 @@ func (r *Runtime) Disable(ctx context.Context, extensionID string) error {
 	if err != nil {
 		return fmt.Errorf("kernel: get installation: %w", err)
 	}
+	if inst.Metadata == nil {
+		inst.Metadata = map[string]any{}
+	}
+	inst.Metadata["user.enabled"] = false
+	inst.Metadata["user.disabled"] = true
 
 	modules, err := r.container.ModuleRepository.ListModules(ctx, extID)
 	if err != nil {
@@ -718,7 +741,7 @@ func (r *Runtime) Disable(ctx context.Context, extensionID string) error {
 	if r.container.DesktopPetPluginBoundary != nil {
 		disableOpID := fmt.Sprintf("disable-%s-%d", extensionID, time.Now().UnixNano())
 		if err := r.container.DesktopPetPluginBoundary.HandleExtensionDisabled(ctx, extID, inst.InstalledVersion.String(), disableOpID, ""); err != nil {
-			log.Printf("[disable-tx] desktop_pet_plugin boundary error: %v", err)
+			log.Printf("[disable-tx] petx boundary error: %v", err)
 		}
 	}
 
@@ -758,6 +781,7 @@ func (r *Runtime) Disable(ctx context.Context, extensionID string) error {
 		r.container.UIHostNotifier.BroadcastExtensionChange("extension_generation_changed", extensionID, map[string]interface{}{"generation": newGeneration})
 		r.container.UIHostNotifier.BroadcastExtensionChange("extension_contributions_changed", extensionID, nil)
 	}
+	runtimegate.Set(extensionID, false)
 
 	return nil
 }
@@ -847,7 +871,7 @@ func (r *Runtime) Uninstall(ctx context.Context, extensionID string) error {
 
 	if r.container.DesktopPetPluginBoundary != nil {
 		if err := r.container.DesktopPetPluginBoundary.HandleExtensionUninstalled(ctx, extID, version, "", ""); err != nil {
-			log.Printf("[uninstall-tx] desktop_pet_plugin boundary error: %v", err)
+			log.Printf("[uninstall-tx] petx boundary error: %v", err)
 		}
 	}
 
@@ -869,6 +893,11 @@ func (r *Runtime) Uninstall(ctx context.Context, extensionID string) error {
 	if r.container.ScheduleService != nil {
 		if err := r.container.ScheduleService.DeleteAllByExtension(ctx, extensionID); err != nil {
 			cleanupErrs = append(cleanupErrs, fmt.Errorf("delete schedules: %w", err))
+		}
+	}
+	if r.container.ScopeManager != nil {
+		if err := r.removeExtensionScopeBindings(ctx, extensionID); err != nil {
+			cleanupErrs = append(cleanupErrs, fmt.Errorf("remove scope bindings: %w", err))
 		}
 	}
 	if r.container.TaskRuntimeService != nil {
@@ -956,6 +985,7 @@ func (r *Runtime) Uninstall(ctx context.Context, extensionID string) error {
 		r.container.UIHostNotifier.BroadcastExtensionChange("extension_uninstalled", extensionID, nil)
 		r.container.UIHostNotifier.BroadcastExtensionChange("extension_contributions_changed", extensionID, nil)
 	}
+	runtimegate.Set(extensionID, false)
 
 	return nil
 }
@@ -988,6 +1018,61 @@ func (r *Runtime) stopInstances(ctx context.Context, instanceIDs []string) error
 	}
 	if len(errs) > 0 {
 		return fmt.Errorf("stop instances failed with %d errors: %v", len(errs), errs)
+	}
+	return nil
+}
+
+func (r *Runtime) seedExtensionScopeBindings(ctx context.Context, extensionID string, modules []domain.ModuleDefinition) error {
+	if err := ensureScopeBinding(ctx, r.container.ScopeManager, scope.SubjectExtension, extensionID, scope.NewExtensionScope(extensionID)); err != nil {
+		return err
+	}
+	for _, mod := range modules {
+		if err := ensureScopeBinding(ctx, r.container.ScopeManager, scope.SubjectModule, string(mod.ID), scope.NewModuleScope(extensionID, string(mod.ID))); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (r *Runtime) removeExtensionScopeBindings(ctx context.Context, extensionID string) error {
+	if err := deleteScopeBindings(ctx, r.container.ScopeManager, scope.SubjectExtension, extensionID); err != nil {
+		return err
+	}
+	modules, err := r.container.ModuleRepository.ListModules(ctx, domain.ExtensionID(extensionID))
+	if err != nil {
+		return err
+	}
+	for _, mod := range modules {
+		if err := deleteScopeBindings(ctx, r.container.ScopeManager, scope.SubjectModule, string(mod.ID)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func ensureScopeBinding(ctx context.Context, manager scope.ScopeManager, subjectType scope.ScopeSubjectType, subjectID string, scopeRef scope.ScopeRef) error {
+	existing, err := manager.ListBindings(ctx, scope.ScopeBindingFilter{SubjectType: subjectType, SubjectID: subjectID})
+	if err != nil {
+		return err
+	}
+	for _, b := range existing {
+		if b.IsActive() && b.Scope.Type == scopeRef.Type && b.Scope.ExtensionID == scopeRef.ExtensionID && b.Scope.ModuleID == scopeRef.ModuleID {
+			return nil
+		}
+	}
+	_, err = manager.Bind(ctx, scope.ScopeBindRequest{SubjectType: subjectType, SubjectID: subjectID, Scope: scopeRef, Source: scope.SourceSystem})
+	return err
+}
+
+func deleteScopeBindings(ctx context.Context, manager scope.ScopeManager, subjectType scope.ScopeSubjectType, subjectID string) error {
+	existing, err := manager.ListBindings(ctx, scope.ScopeBindingFilter{SubjectType: subjectType, SubjectID: subjectID})
+	if err != nil {
+		return err
+	}
+	for _, b := range existing {
+		if err := manager.Unbind(ctx, b.BindingID); err != nil {
+			return err
+		}
 	}
 	return nil
 }

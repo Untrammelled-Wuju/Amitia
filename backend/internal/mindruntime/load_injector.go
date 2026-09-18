@@ -186,7 +186,7 @@ func countActiveFaults(faults []InjectedFault, now time.Time) int {
 
 func BuildBurstFaults(baseTime time.Time) []InjectedFault {
 	return []InjectedFault{
-		{FaultType: FaultChannelOffline, Target: "wechat", StartAt: baseTime.Add(10 * time.Second), EndAt: baseTime.Add(20 * time.Second), Active: true},
+		{FaultType: FaultChannelOffline, Target: "web", StartAt: baseTime.Add(10 * time.Second), EndAt: baseTime.Add(20 * time.Second), Active: true},
 		{FaultType: FaultDependencyFail, Target: "qdrant", StartAt: baseTime.Add(30 * time.Second), EndAt: baseTime.Add(45 * time.Second), Active: true},
 		{FaultType: FaultTimeout, Target: "llm", StartAt: baseTime.Add(50 * time.Second), EndAt: baseTime.Add(60 * time.Second), Active: true},
 		{FaultType: FaultPartition, Target: "redis", StartAt: baseTime.Add(70 * time.Second), EndAt: baseTime.Add(90 * time.Second), Active: true},

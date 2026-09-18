@@ -97,6 +97,8 @@ func (a *UISessionAuthorizer) AuthorizeSession(
 	modID := string(def.ModuleID)
 
 	permReqs := make([]PermissionRequirement, 0, len(def.Permissions))
+	grantedPerms := make([]string, 0, len(def.Permissions)+1)
+	seenPerms := make(map[string]struct{}, len(def.Permissions)+1)
 	for _, p := range def.Permissions {
 		if !p.Required {
 			continue
@@ -105,6 +107,17 @@ func (a *UISessionAuthorizer) AuthorizeSession(
 			PermissionID: p.Name,
 			Scope:        resolvePermScope(p.Scope, characterID, conversationID, extID),
 		})
+		grantedPerms = append(grantedPerms, p.Name)
+		seenPerms[p.Name] = struct{}{}
+	}
+	for _, action := range def.Actions {
+		if action.Target.Type != ui_contribution.ActionTargetTool {
+			continue
+		}
+		if _, ok := seenPerms["tool.invoke"]; !ok {
+			grantedPerms = append(grantedPerms, "tool.invoke")
+			seenPerms["tool.invoke"] = struct{}{}
+		}
 	}
 
 	if len(permReqs) > 0 {
@@ -123,13 +136,6 @@ func (a *UISessionAuthorizer) AuthorizeSession(
 				missingNames = append(missingNames, m.PermissionID)
 			}
 			return nil, fmt.Errorf("ui_authorizer: permission denied (decision=%s missing=%v)", result.Decision, missingNames)
-		}
-	}
-
-	grantedPerms := make([]string, 0, len(def.Permissions))
-	for _, p := range def.Permissions {
-		if p.Required {
-			grantedPerms = append(grantedPerms, p.Name)
 		}
 	}
 

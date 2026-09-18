@@ -18,6 +18,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/u-ai/backend/internal/middleware/security"
 	"github.com/u-ai/backend/pkg/app"
 	"github.com/u-ai/backend/pkg/comment/response"
 	"github.com/u-ai/backend/pkg/util"
@@ -55,6 +56,84 @@ type AsrQueryResp struct {
 
 var asrService Service
 var syncResults sync.Map
+var publicAudioEntries sync.Map
+
+type publicAudioEntry struct {
+	Data        []byte
+	ContentType string
+	ExpiresAt   time.Time
+}
+
+const publicAudioTTL = 10 * time.Minute
+const maxPublicAudioBytes = 32 << 20
+
+// RegisterPublicAudio exposes a short-lived, unguessable read-only URL payload
+// for ASR providers that require a fetchable audio URL. The token contains no
+// user or filesystem information and expires quickly.
+func RegisterPublicAudio(data []byte, contentType string) (string, error) {
+	if len(data) == 0 {
+		return "", fmt.Errorf("音频内容为空")
+	}
+	if len(data) > maxPublicAudioBytes {
+		return "", fmt.Errorf("音频文件超过大小限制")
+	}
+	if strings.TrimSpace(contentType) == "" {
+		contentType = http.DetectContentType(data[:min(len(data), 512)])
+	}
+	token := uuid.NewString() + uuid.NewString()
+	publicAudioEntries.Store(token, publicAudioEntry{
+		Data:        append([]byte(nil), data...),
+		ContentType: contentType,
+		ExpiresAt:   time.Now().Add(publicAudioTTL),
+	})
+	return token, nil
+}
+
+func BuildPublicAudioURL(c *gin.Context, token string) string {
+	scheme := strings.TrimSpace(c.GetHeader("X-Forwarded-Proto"))
+	if comma := strings.IndexByte(scheme, ','); comma >= 0 {
+		scheme = strings.TrimSpace(scheme[:comma])
+	}
+	if scheme != "http" && scheme != "https" {
+		if c.Request.TLS != nil {
+			scheme = "https"
+		} else {
+			scheme = "http"
+		}
+	}
+	host := strings.TrimSpace(c.GetHeader("X-Forwarded-Host"))
+	if comma := strings.IndexByte(host, ','); comma >= 0 {
+		host = strings.TrimSpace(host[:comma])
+	}
+	if host == "" {
+		host = c.Request.Host
+	}
+	return scheme + "://" + host + "/api/asr/public-audio/" + url.PathEscape(token)
+}
+
+func handlePublicAudio(c *gin.Context) {
+	token := strings.TrimSpace(c.Param("token"))
+	value, ok := publicAudioEntries.Load(token)
+	if !ok {
+		c.Status(http.StatusNotFound)
+		return
+	}
+	entry, ok := value.(publicAudioEntry)
+	if !ok || time.Now().After(entry.ExpiresAt) {
+		publicAudioEntries.Delete(token)
+		c.Status(http.StatusNotFound)
+		return
+	}
+	c.Header("Cache-Control", "no-store")
+	c.Header("X-Content-Type-Options", "nosniff")
+	c.Data(http.StatusOK, entry.ContentType, entry.Data)
+}
+
+// RegisterPublicAsrRouter registers only the short-lived provider fetch route.
+// All ASR management and submission endpoints remain under authenticated /api.
+func RegisterPublicAsrRouter(r gin.IRouter) {
+	r.GET("/api/asr/public-audio/:token", handlePublicAudio)
+}
 
 func protocolForApiType(apiType string) string {
 	switch apiType {
@@ -533,18 +612,23 @@ func RegisterAsrRouter(r *gin.RouterGroup, ctx *app.AppContext) {
 	asrGroup := r.Group("/asr")
 	{
 		asrGroup.GET("/providers", handler.ListProviders)
-		asrGroup.POST("/upload", handleUpload)
-		asrGroup.GET("/uploads/:file", handleServeUpload)
-		asrGroup.POST("/submit", handleSubmit)
-		asrGroup.GET("/query", handleQuery)
+		// The raw upload/submit/query endpoints are provider-configuration test
+		// surfaces. They use the server-global active ASR credential and persist
+		// temporary files on the Core, so a shared Cloud Core must not expose
+		// them to ordinary tenant users. Realtime/business ASR uses the scoped
+		// runtime pipeline instead of these endpoints.
+		asrGroup.POST("/upload", security.SharedCoreAdminOnly(), handleUpload)
+		asrGroup.GET("/uploads/:file", security.SharedCoreAdminOnly(), handleServeUpload)
+		asrGroup.POST("/submit", security.SharedCoreAdminOnly(), handleSubmit)
+		asrGroup.GET("/query", security.SharedCoreAdminOnly(), handleQuery)
 
-		asrGroup.GET("/configs", handler.List)
-		asrGroup.GET("/configs/:id", handler.Get)
-		asrGroup.POST("/configs", handler.Create)
-		asrGroup.PUT("/configs/:id", handler.Update)
-		asrGroup.DELETE("/configs/:id", handler.Delete)
-		asrGroup.POST("/configs/:id/activate", handler.Activate)
-		asrGroup.POST("/configs/:id/test", handler.Test)
+		asrGroup.GET("/configs", security.SharedCoreAdminOnly(), handler.List)
+		asrGroup.GET("/configs/:id", security.SharedCoreAdminOnly(), handler.Get)
+		asrGroup.POST("/configs", security.SharedCoreAdminOnly(), handler.Create)
+		asrGroup.PUT("/configs/:id", security.SharedCoreAdminOnly(), handler.Update)
+		asrGroup.DELETE("/configs/:id", security.SharedCoreAdminOnly(), handler.Delete)
+		asrGroup.POST("/configs/:id/activate", security.SharedCoreAdminOnly(), handler.Activate)
+		asrGroup.POST("/configs/:id/test", security.SharedCoreAdminOnly(), handler.Test)
 	}
 }
 
@@ -562,6 +646,20 @@ func handleSubmit(c *gin.Context) {
 	if audioURL == "" {
 		util.ErrorResponse(c, response.InvalidParams, "缺少音频URL", nil)
 		return
+	}
+	if strings.HasPrefix(audioURL, "/api/asr/uploads/") {
+		filename := filepath.Base(audioURL)
+		data, readErr := os.ReadFile(filepath.Join("data", "asr_uploads", filename))
+		if readErr != nil {
+			util.ErrorResponse(c, response.NotFound, "音频文件不存在", nil)
+			return
+		}
+		token, tokenErr := RegisterPublicAudio(data, "")
+		if tokenErr != nil {
+			util.ErrorResponse(c, response.InvalidParams, tokenErr.Error(), nil)
+			return
+		}
+		audioURL = BuildPublicAudioURL(c, token)
 	}
 	language := c.PostForm("language")
 	taskID, err := SubmitTask(cfg, audioURL, language)

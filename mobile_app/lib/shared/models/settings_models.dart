@@ -80,22 +80,6 @@ class ThemeSettings {
   });
 }
 
-class UserSettings {
-  final String avatar;
-  final String username;
-  final String nickname;
-  final String userLabel;
-  final String bio;
-
-  UserSettings({
-    this.avatar = 'U',
-    this.username = 'user',
-    this.nickname = '用户',
-    this.userLabel = '主人',
-    this.bio = '',
-  });
-}
-
 class PrivacyScanResult {
   final String category;
   final int riskCount;
@@ -117,10 +101,15 @@ class TimeAnchor {
   final String description;
   final String timeKind;
   final String instantAtUtc;
+  final String endAtUtc;
   final String localDate;
   final String localTime;
   final String timezone;
   final String rrule;
+  final int durationSeconds;
+  final int preWindowSeconds;
+  final int postWindowSeconds;
+  final String sensitivityLevel;
   final int importance;
   final int confidence;
   final bool allowPromptMention;
@@ -132,17 +121,22 @@ class TimeAnchor {
 
   const TimeAnchor({
     required this.id,
-    this.scopeType = 'user',
+    this.scopeType = 'space',
     this.characterId = '',
     this.anchorType = 'custom',
     required this.title,
     this.description = '',
     required this.timeKind,
     this.instantAtUtc = '',
+    this.endAtUtc = '',
     this.localDate = '',
     this.localTime = '',
     this.timezone = 'Asia/Shanghai',
     this.rrule = '',
+    this.durationSeconds = 0,
+    this.preWindowSeconds = 259200,
+    this.postWindowSeconds = 86400,
+    this.sensitivityLevel = 'internal',
     this.importance = 70,
     this.confidence = 100,
     this.allowPromptMention = true,
@@ -156,17 +150,22 @@ class TimeAnchor {
   factory TimeAnchor.fromJson(Map<String, dynamic> json) {
     return TimeAnchor(
       id: (json['id'] ?? '').toString(),
-      scopeType: (json['scopeType'] ?? 'user').toString(),
+      scopeType: (json['scopeType'] ?? 'space').toString(),
       characterId: (json['characterId'] ?? '').toString(),
       anchorType: (json['anchorType'] ?? 'custom').toString(),
       title: (json['title'] ?? '').toString(),
       description: (json['description'] ?? '').toString(),
       timeKind: (json['timeKind'] ?? 'local_date').toString(),
       instantAtUtc: (json['instantAtUtc'] ?? '').toString(),
+      endAtUtc: (json['endAtUtc'] ?? '').toString(),
       localDate: (json['localDate'] ?? '').toString(),
       localTime: (json['localTime'] ?? '').toString(),
       timezone: (json['timezone'] ?? 'Asia/Shanghai').toString(),
       rrule: (json['rrule'] ?? '').toString(),
+      durationSeconds: (json['durationSeconds'] as num?)?.toInt() ?? 0,
+      preWindowSeconds: (json['preWindowSeconds'] as num?)?.toInt() ?? 259200,
+      postWindowSeconds: (json['postWindowSeconds'] as num?)?.toInt() ?? 86400,
+      sensitivityLevel: (json['sensitivityLevel'] ?? 'internal').toString(),
       importance: (json['importance'] as num?)?.toInt() ?? 70,
       confidence: (json['confidence'] as num?)?.toInt() ?? 100,
       allowPromptMention: json['allowPromptMention'] as bool? ?? true,
@@ -205,6 +204,11 @@ class TimeAnchor {
 
   String get displayValue {
     if (timeKind == 'instant') return instantAtUtc.isEmpty ? '—' : instantAtUtc;
+    if (timeKind == 'range') {
+      final start = instantAtUtc.isEmpty ? '—' : instantAtUtc;
+      final end = endAtUtc.isEmpty ? '—' : endAtUtc;
+      return '$start → $end';
+    }
     final parts = <String>[
       if (localDate.isNotEmpty) localDate,
       if (localTime.isNotEmpty) localTime,

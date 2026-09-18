@@ -29,7 +29,7 @@ func parseCHARX(data []byte) (*CharacterCard, map[string]json.RawMessage, error)
 		return nil, nil, err
 	}
 
-	return parseV3JSON(extract.CardJSON)
+	return parseV3CardJSON(extract.CardJSON, FormatV3CHARX)
 }
 
 func extractCHARX(reader *zip.Reader) (*CHARXExtract, error) {
@@ -152,7 +152,7 @@ func buildCHARX(cardJSON []byte, assets map[string][]byte) ([]byte, error) {
 
 func buildV3JSON(card *CharacterCard, preserved map[string]json.RawMessage) ([]byte, error) {
 	output := map[string]any{
-		"spec":       "chara_card_v3",
+		"spec":         "chara_card_v3",
 		"spec_version": "3.0",
 	}
 
@@ -167,9 +167,6 @@ func buildV3JSON(card *CharacterCard, preserved map[string]json.RawMessage) ([]b
 	}
 	if card.Scenario != "" {
 		output["scenario"] = card.Scenario
-	}
-	if card.FirstMessage != "" {
-		output["first_mes"] = card.FirstMessage
 	}
 	if card.ExampleMessages != "" {
 		output["mes_example"] = card.ExampleMessages
@@ -251,92 +248,9 @@ func buildV3JSON(card *CharacterCard, preserved map[string]json.RawMessage) ([]b
 	}
 
 	for k, v := range preserved {
-		output[k] = v
-	}
-
-	return json.MarshalIndent(output, "", "  ")
-}
-
-func buildV2JSON(card *CharacterCard, preserved map[string]json.RawMessage) ([]byte, error) {
-	output := map[string]any{
-		"spec":         "chara_card_v2",
-		"spec_version": "2.0",
-	}
-
-	if card.Name != "" {
-		output["name"] = card.Name
-	}
-	if card.Description != "" {
-		output["description"] = card.Description
-	}
-	if card.Personality != "" {
-		output["personality"] = card.Personality
-	}
-	if card.Scenario != "" {
-		output["scenario"] = card.Scenario
-	}
-	if card.FirstMessage != "" {
-		output["first_mes"] = card.FirstMessage
-	}
-	if card.ExampleMessages != "" {
-		output["mes_example"] = card.ExampleMessages
-	}
-	if card.Creator != "" {
-		output["creator"] = card.Creator
-	}
-	if card.CreatorNotes != "" {
-		output["creator_notes"] = card.CreatorNotes
-	}
-	if card.CharacterVersion != "" {
-		output["character_version"] = card.CharacterVersion
-	}
-	if len(card.Tags) > 0 {
-		output["tags"] = card.Tags
-	}
-	if card.SystemPrompt != "" {
-		output["system_prompt"] = card.SystemPrompt
-	}
-	if card.PostHistoryInstructions != "" {
-		output["post_history_instructions"] = card.PostHistoryInstructions
-	}
-	if len(card.AlternateGreetings) > 0 {
-		output["alternate_greetings"] = card.AlternateGreetings
-	}
-
-	if len(card.Extensions) > 0 {
-		output["extensions"] = card.Extensions
-	}
-
-	if card.CharacterBook != nil && len(card.CharacterBook.Entries) > 0 {
-		entries := make([]map[string]any, 0, len(card.CharacterBook.Entries))
-		for _, e := range card.CharacterBook.Entries {
-			entry := map[string]any{
-				"keys":            e.Keys,
-				"content":         e.Content,
-				"enabled":         e.Enabled,
-				"insertion_order": e.InsertionOrder,
-			}
-			if len(e.SecondaryKeys) > 0 {
-				entry["secondary_keys"] = e.SecondaryKeys
-			}
-			if e.CaseSensitive != nil {
-				entry["case_sensitive"] = *e.CaseSensitive
-			}
-			if e.Selective != nil {
-				entry["selective"] = *e.Selective
-			}
-			if e.Constant != nil {
-				entry["constant"] = *e.Constant
-			}
-			if e.Position != nil {
-				entry["position"] = *e.Position
-			}
-			entries = append(entries, entry)
+		if isRemovedCardField(k) {
+			continue
 		}
-		output["character_book"] = map[string]any{"entries": entries}
-	}
-
-	for k, v := range preserved {
 		output[k] = v
 	}
 

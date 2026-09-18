@@ -4,6 +4,8 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io"
@@ -21,7 +23,7 @@ import (
 type agentSkillMetadataRecord struct {
 	ID                      string `gorm:"column:id;primaryKey"`
 	ExtensionID             string `gorm:"column:extension_id"`
-	UserID                  string `gorm:"column:user_id"`
+	SpaceID                 string `gorm:"column:space_id"`
 	Name                    string `gorm:"column:name"`
 	Description             string `gorm:"column:description"`
 	License                 string `gorm:"column:license"`
@@ -72,7 +74,7 @@ type agentSkillActivationRecord struct {
 	Source              string `gorm:"column:source"`
 	ScopeType           string `gorm:"column:scope_type"`
 	CompatibilityStatus string `gorm:"column:compatibility_status"`
-	UserID              string `gorm:"column:user_id"`
+	SpaceID             string `gorm:"column:space_id"`
 	CharacterID         string `gorm:"column:character_id"`
 	ConversationID      string `gorm:"column:conversation_id"`
 	Channel             string `gorm:"column:channel"`
@@ -93,7 +95,13 @@ type agentSkillActivationRecord struct {
 
 func (agentSkillActivationRecord) TableName() string { return "extension_agent_skill_activations" }
 
-func (r *Repository) InstallAgentSkill(ctx context.Context, definition AgentSkillDefinition, report AgentSkillCompatibilityReport, manifest SkillDefinition, files map[string][]byte) error {
+type agentSkillManifest struct {
+	Version string
+	Raw     json.RawMessage
+	Enabled bool
+}
+
+func (r *Repository) InstallAgentSkill(ctx context.Context, definition AgentSkillDefinition, report AgentSkillCompatibilityReport, manifest agentSkillManifest, files map[string][]byte) error {
 	archive, err := encodeAgentSkillArtifact(files)
 	if err != nil {
 		return err
@@ -110,20 +118,59 @@ func (r *Repository) InstallAgentSkill(ctx context.Context, definition AgentSkil
 			break
 		}
 	}
-	record := agentSkillMetadataRecord{ID: uuid.NewString(), ExtensionID: definition.ExtensionID, UserID: definition.UserID, Name: definition.Name, Description: definition.Description, License: definition.License, Compatibility: definition.Compatibility, MetadataJSON: string(metadata), AllowedTools: definition.AllowedTools, DisplayName: definition.DisplayName, ShortDescription: definition.ShortDescription, DefaultPrompt: definition.DefaultPrompt, OpenAIMetadataJSON: string(normalizeJSON(definition.OpenAIMetadata)), ScopeType: string(definition.Scope), ScopeID: definition.ScopeID, Source: string(definition.Source), CompatibilityStatus: string(definition.CompatibilityStatus), CompatibilityReportJSON: string(reportRaw), ContentHash: definition.ContentHash, ArtifactID: definition.ArtifactID, RawFrontmatterJSON: string(normalizeJSON(definition.RawFrontmatter)), ExtraFrontmatterJSON: string(normalizeJSON(definition.ExtraFrontmatter)), ResourceIndexJSON: string(resources), ToolMappingsJSON: string(mappings), ScriptsPresent: scriptsPresent, ScriptsRequired: boolNumber(len(report.RequiredScripts) > 0), Enabled: 0, CreatedAt: now, UpdatedAt: now}
+	record := agentSkillMetadataRecord{ID: uuid.NewString(), ExtensionID: definition.ExtensionID, SpaceID: definition.SpaceID, Name: definition.Name, Description: definition.Description, License: definition.License, Compatibility: definition.Compatibility, MetadataJSON: string(metadata), AllowedTools: definition.AllowedTools, DisplayName: definition.DisplayName, ShortDescription: definition.ShortDescription, DefaultPrompt: definition.DefaultPrompt, OpenAIMetadataJSON: string(normalizeJSON(definition.OpenAIMetadata)), ScopeType: string(definition.Scope), ScopeID: definition.ScopeID, Source: string(definition.Source), CompatibilityStatus: string(definition.CompatibilityStatus), CompatibilityReportJSON: string(reportRaw), ContentHash: definition.ContentHash, ArtifactID: definition.ArtifactID, RawFrontmatterJSON: string(normalizeJSON(definition.RawFrontmatter)), ExtraFrontmatterJSON: string(normalizeJSON(definition.ExtraFrontmatter)), ResourceIndexJSON: string(resources), ToolMappingsJSON: string(mappings), ScriptsPresent: scriptsPresent, ScriptsRequired: boolNumber(len(report.RequiredScripts) > 0), Enabled: 0, CreatedAt: now, UpdatedAt: now}
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var count int64
-		if err := tx.Model(&agentSkillMetadataRecord{}).Where("user_id = ? AND name = ? AND scope_type = ? AND scope_id = ? AND removed_at = ''", definition.UserID, definition.Name, definition.Scope, definition.ScopeID).Count(&count).Error; err != nil {
+		if err := tx.Model(&agentSkillMetadataRecord{}).Where("space_id = ? AND name = ? AND scope_type = ? AND scope_id = ? AND removed_at = ''", definition.SpaceID, definition.Name, definition.Scope, definition.ScopeID).Count(&count).Error; err != nil {
 			return err
 		}
 		if count > 0 {
 			return NewExtensionError(ErrAgentSkillNameConflict, "Agent Skill name already exists in this scope", definition.Name, false, nil)
 		}
-		artifact := map[string]interface{}{"id": uuid.NewString(), "artifact_id": definition.ArtifactID, "extension_id": definition.ExtensionID, "extension_version": manifest.Version, "source": string(definition.Source), "session_id": "", "revision": 0, "manifest_json": string(manifest.Manifest), "workflow_json": "{}", "schemas_json": "{}", "compiled_workflow_json": "{}", "tests_json": "[]", "readme_text": "", "checksum": definition.ContentHash, "size_bytes": len(archive), "created_at": now, "archived_at": "", "artifact_kind": "agent-skill", "content_blob": archive, "resource_index_json": string(resources)}
+		artifact := map[string]interface{}{"id": uuid.NewString(), "artifact_id": definition.ArtifactID, "extension_id": definition.ExtensionID, "extension_version": manifest.Version, "source": string(definition.Source), "session_id": "", "revision": 0, "manifest_json": string(manifest.Raw), "workflow_json": "{}", "schemas_json": "{}", "compiled_workflow_json": "{}", "tests_json": "[]", "readme_text": "", "checksum": definition.ContentHash, "size_bytes": len(archive), "created_at": now, "archived_at": "", "artifact_kind": "agent-skill", "content_blob": archive, "resource_index_json": string(resources)}
 		if err := tx.Table("extension_artifacts").Create(artifact).Error; err != nil {
 			return err
 		}
 		return tx.Create(&record).Error
+	})
+}
+
+func (r *Repository) UpsertAgentSkillExtension(ctx context.Context, definition AgentSkillDefinition, manifest agentSkillManifest) error {
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	normalized := string(manifest.Raw)
+	var value interface{}
+	if json.Unmarshal(manifest.Raw, &value) == nil {
+		if raw, err := json.Marshal(value); err == nil {
+			normalized = string(raw)
+		}
+	}
+	record := extensionRecord{
+		ID: uuid.NewString(), ExtensionID: definition.ExtensionID, Kind: "AgentSkill", Name: definition.Name,
+		CurrentVersion: manifest.Version, Source: string(definition.Source), Enabled: boolNumber(definition.Enabled),
+		ManifestJSON: string(manifest.Raw), NormalizedManifestJSON: normalized, CreatedAt: now, UpdatedAt: now,
+	}
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var existing extensionRecord
+		err := tx.Where("extension_id = ?", definition.ExtensionID).First(&existing).Error
+		if err == nil {
+			record.ID = existing.ID
+			record.CreatedAt = existing.CreatedAt
+		} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return err
+		}
+		if err := tx.Clauses(clause.OnConflict{
+			Columns:   []clause.Column{{Name: "extension_id"}},
+			DoUpdates: clause.AssignmentColumns([]string{"kind", "name", "current_version", "source", "enabled", "manifest_json", "normalized_manifest_json", "updated_at"}),
+		}).Create(&record).Error; err != nil {
+			return err
+		}
+		binding := scopeBindingRecord{ID: uuid.NewString(), ExtensionID: definition.ExtensionID, ScopeType: string(ScopeGlobal), ScopeID: "", Enabled: boolNumber(definition.Enabled), CreatedAt: now, UpdatedAt: now}
+		if err := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&binding).Error; err != nil {
+			return err
+		}
+		hash := sha256.Sum256(manifest.Raw)
+		version := extensionVersionRecord{ID: uuid.NewString(), ExtensionID: definition.ExtensionID, Version: manifest.Version, ManifestJSON: string(manifest.Raw), Checksum: hex.EncodeToString(hash[:]), CreatedAt: now}
+		return tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&version).Error
 	})
 }
 
@@ -199,15 +246,15 @@ func (r *Repository) RemoveAgentSkill(ctx context.Context, id string) error {
 func (r *Repository) SaveAgentSkillActivation(ctx context.Context, a AgentSkillActivation) error {
 	paths, _ := json.Marshal(a.ResourcePaths)
 	mappings, _ := json.Marshal(a.ToolMappings)
-	row := agentSkillActivationRecord{ID: a.ID, ActivationID: a.ActivationID, ExtensionID: a.ExtensionID, AgentSkillName: a.AgentSkillName, Source: string(a.Source), ScopeType: string(a.Scope), CompatibilityStatus: string(a.CompatibilityStatus), UserID: a.UserID, CharacterID: a.CharacterID, ConversationID: a.ConversationID, Channel: a.Channel, TriggerType: a.TriggerType, Explicit: boolNumber(a.Explicit), Status: a.Status, LoadedTokens: a.LoadedTokens, ResourceReads: a.ResourceReads, ResourcePathsJSON: string(paths), ScriptsUsed: boolNumber(a.ScriptsUsed), ToolMappingsJSON: string(mappings), InstructionPosition: a.InstructionPosition, TokenLimitHit: boolNumber(a.TokenLimitHit), TraceID: a.TraceID, ErrorCode: a.ErrorCode, CreatedAt: a.CreatedAt.UTC().Format(time.RFC3339Nano)}
+	row := agentSkillActivationRecord{ID: a.ID, ActivationID: a.ActivationID, ExtensionID: a.ExtensionID, AgentSkillName: a.AgentSkillName, Source: string(a.Source), ScopeType: string(a.Scope), CompatibilityStatus: string(a.CompatibilityStatus), SpaceID: a.SpaceID, CharacterID: a.CharacterID, ConversationID: a.ConversationID, Channel: a.Channel, TriggerType: a.TriggerType, Explicit: boolNumber(a.Explicit), Status: a.Status, LoadedTokens: a.LoadedTokens, ResourceReads: a.ResourceReads, ResourcePathsJSON: string(paths), ScriptsUsed: boolNumber(a.ScriptsUsed), ToolMappingsJSON: string(mappings), InstructionPosition: a.InstructionPosition, TokenLimitHit: boolNumber(a.TokenLimitHit), TraceID: a.TraceID, ErrorCode: a.ErrorCode, CreatedAt: a.CreatedAt.UTC().Format(time.RFC3339Nano)}
 	return r.db.WithContext(ctx).Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "activation_id"}}, DoUpdates: clause.AssignmentColumns([]string{"status", "loaded_tokens", "resource_reads", "resource_paths_json", "scripts_used", "tool_mappings_json", "instruction_position", "token_limit_hit", "error_code"})}).Create(&row).Error
 }
-func (r *Repository) ListAgentSkillActivations(ctx context.Context, extensionID, userID string, limit int) ([]AgentSkillActivation, error) {
+func (r *Repository) ListAgentSkillActivations(ctx context.Context, extensionID, spaceID string, limit int) ([]AgentSkillActivation, error) {
 	if limit < 1 || limit > 100 {
 		limit = 20
 	}
 	var rows []agentSkillActivationRecord
-	query := r.db.WithContext(ctx).Where("extension_id = ? AND user_id = ?", extensionID, userID).Order("created_at DESC").Limit(limit)
+	query := r.db.WithContext(ctx).Where("extension_id = ? AND space_id = ?", extensionID, spaceID).Order("created_at DESC").Limit(limit)
 	if err := query.Find(&rows).Error; err != nil {
 		return nil, err
 	}
@@ -218,7 +265,7 @@ func (r *Repository) ListAgentSkillActivations(ctx context.Context, extensionID,
 		_ = json.Unmarshal([]byte(row.ResourcePathsJSON), &paths)
 		_ = json.Unmarshal([]byte(row.ToolMappingsJSON), &mappings)
 		created, _ := time.Parse(time.RFC3339Nano, row.CreatedAt)
-		result = append(result, AgentSkillActivation{ID: row.ID, ActivationID: row.ActivationID, ExtensionID: row.ExtensionID, AgentSkillName: row.AgentSkillName, Source: AgentSkillSource(row.Source), Scope: AgentSkillScope(row.ScopeType), CompatibilityStatus: AgentSkillCompatibilityStatus(row.CompatibilityStatus), UserID: row.UserID, CharacterID: row.CharacterID, ConversationID: row.ConversationID, Channel: row.Channel, TriggerType: row.TriggerType, Explicit: row.Explicit == 1, Status: row.Status, LoadedTokens: row.LoadedTokens, ResourceReads: row.ResourceReads, ResourcePaths: paths, ScriptsUsed: row.ScriptsUsed == 1, ToolMappings: mappings, InstructionPosition: row.InstructionPosition, TokenLimitHit: row.TokenLimitHit == 1, TraceID: row.TraceID, ErrorCode: row.ErrorCode, CreatedAt: created})
+		result = append(result, AgentSkillActivation{ID: row.ID, ActivationID: row.ActivationID, ExtensionID: row.ExtensionID, AgentSkillName: row.AgentSkillName, Source: AgentSkillSource(row.Source), Scope: AgentSkillScope(row.ScopeType), CompatibilityStatus: AgentSkillCompatibilityStatus(row.CompatibilityStatus), SpaceID: row.SpaceID, CharacterID: row.CharacterID, ConversationID: row.ConversationID, Channel: row.Channel, TriggerType: row.TriggerType, Explicit: row.Explicit == 1, Status: row.Status, LoadedTokens: row.LoadedTokens, ResourceReads: row.ResourceReads, ResourcePaths: paths, ScriptsUsed: row.ScriptsUsed == 1, ToolMappings: mappings, InstructionPosition: row.InstructionPosition, TokenLimitHit: row.TokenLimitHit == 1, TraceID: row.TraceID, ErrorCode: row.ErrorCode, CreatedAt: created})
 	}
 	return result, nil
 }
@@ -232,7 +279,7 @@ func agentSkillDefinitionFromRecord(row agentSkillMetadataRecord) AgentSkillDefi
 	_ = json.Unmarshal([]byte(row.ToolMappingsJSON), &mappings)
 	created, _ := time.Parse(time.RFC3339Nano, row.CreatedAt)
 	updated, _ := time.Parse(time.RFC3339Nano, row.UpdatedAt)
-	return AgentSkillDefinition{ExtensionID: row.ExtensionID, Name: row.Name, Description: row.Description, License: row.License, Compatibility: row.Compatibility, Metadata: metadata, AllowedTools: row.AllowedTools, DisplayName: row.DisplayName, ShortDescription: row.ShortDescription, DefaultPrompt: row.DefaultPrompt, Source: AgentSkillSource(row.Source), Scope: AgentSkillScope(row.ScopeType), ScopeID: row.ScopeID, UserID: row.UserID, ArtifactID: row.ArtifactID, ContentHash: row.ContentHash, RawFrontmatter: json.RawMessage(row.RawFrontmatterJSON), ExtraFrontmatter: json.RawMessage(row.ExtraFrontmatterJSON), OpenAIMetadata: json.RawMessage(row.OpenAIMetadataJSON), Resources: resources, ToolMappings: mappings, CompatibilityStatus: AgentSkillCompatibilityStatus(row.CompatibilityStatus), Enabled: row.Enabled == 1, CreatedAt: created, UpdatedAt: updated}
+	return AgentSkillDefinition{ExtensionID: row.ExtensionID, Name: row.Name, Description: row.Description, License: row.License, Compatibility: row.Compatibility, Metadata: metadata, AllowedTools: row.AllowedTools, DisplayName: row.DisplayName, ShortDescription: row.ShortDescription, DefaultPrompt: row.DefaultPrompt, Source: AgentSkillSource(row.Source), Scope: AgentSkillScope(row.ScopeType), ScopeID: row.ScopeID, SpaceID: row.SpaceID, ArtifactID: row.ArtifactID, ContentHash: row.ContentHash, RawFrontmatter: json.RawMessage(row.RawFrontmatterJSON), ExtraFrontmatter: json.RawMessage(row.ExtraFrontmatterJSON), OpenAIMetadata: json.RawMessage(row.OpenAIMetadataJSON), Resources: resources, ToolMappings: mappings, CompatibilityStatus: AgentSkillCompatibilityStatus(row.CompatibilityStatus), Enabled: row.Enabled == 1, CreatedAt: created, UpdatedAt: updated}
 }
 
 func encodeAgentSkillArtifact(files map[string][]byte) ([]byte, error) {

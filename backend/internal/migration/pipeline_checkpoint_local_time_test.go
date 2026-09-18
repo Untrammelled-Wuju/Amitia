@@ -60,7 +60,7 @@ func TestPipelineCheckpointLocalTimeMigrationAcceptsPreLeaseChecksum(t *testing.
 	if err := db.Where("version = ?", migration.Version).First(&record).Error; err != nil {
 		t.Fatalf("read migration record: %v", err)
 	}
-	if record.Checksum != "cbaaa05f039a706de25db7f3fdf48ba43ec2d6b84c240404b771975bcb749f40" {
+	if record.Checksum != "092890813b6201298b00b6f784978ee6d341b07f3dfa31a7706ae3c7b6e7ea7f" {
 		t.Fatalf("checksum = %s", record.Checksum)
 	}
 }

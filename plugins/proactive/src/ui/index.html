@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>主动消息</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="proactive-shell">
+      <header class="page-head">
+        <div>
+          <h1>主动消息</h1>
+          <p id="subtitle">正在读取主动消息状态...</p>
+        </div>
+        <div class="head-actions">
+          <button type="button" id="reset-presets">恢复预设</button>
+          <button type="button" id="refresh">刷新</button>
+        </div>
+      </header>
+
+      <div id="message" class="message" role="status" aria-live="polite"></div>
+      <section id="metrics" class="metrics" aria-label="主动消息概况"></section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <h2>主动消息总开关</h2>
+            <p>关闭后当前角色停止执行所有主动消息规则。</p>
+          </div>
+          <label class="switch">
+            <input id="master-enabled" type="checkbox" />
+            <span class="switch-track"></span>
+          </label>
+        </div>
+        <form id="settings-form">
+          <div class="form-grid">
+            <label>主动程度 <output id="active-level-value">40%</output>
+              <input id="active-level" name="activeLevel" type="range" min="1" max="100" value="40" />
+            </label>
+            <label>最小间隔 <output id="min-interval-value">60 分钟</output>
+              <input id="min-interval" name="minInterval" type="range" min="5" max="480" value="60" />
+            </label>
+            <label>每天最多主动消息 <output id="max-per-day-value">6 次</output>
+              <input id="max-per-day" name="maxPerDay" type="range" min="1" max="24" value="6" />
+            </label>
+            <label>每天最多模型调用 <output id="max-daily-calls-value">10 次</output>
+              <input id="max-daily-calls" name="maxDailyCalls" type="range" min="1" max="50" value="10" />
+            </label>
+            <label>静默开始
+              <input id="quiet-start" name="quietStart" type="time" value="23:00" />
+            </label>
+            <label>静默结束
+              <input id="quiet-end" name="quietEnd" type="time" value="07:00" />
+            </label>
+            <label>发送通道
+              <select id="channel" name="channel">
+                <option value="all">全部/自动</option>
+                <option value="web">Web</option>
+                <option value="wechat">微信</option>
+                <option value="qq">QQ</option>
+              </select>
+            </label>
+            <label class="switch-line">
+              <span>未回复时自动降频</span>
+              <input id="unreplied-enabled" name="unrepliedSlowdownEnabled" type="checkbox" checked />
+            </label>
+          </div>
+          <div class="form-actions">
+            <button type="submit" class="primary">保存全局参数</button>
+          </div>
+        </form>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <h2>角色规则</h2>
+            <p id="rule-summary">暂无规则</p>
+          </div>
+          <button type="button" id="add-rule" class="primary">新建规则</button>
+        </div>
+        <div id="rules" class="list"></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <h2>最近运行</h2>
+            <p>最近发生的发送与失败记录。</p>
+          </div>
+        </div>
+        <div id="history" class="list"></div>
+      </section>
+    </main>
+
+    <dialog id="rule-dialog" class="rule-dialog">
+      <form id="rule-form">
+        <header class="dialog-head">
+          <div>
+            <h2 id="rule-dialog-title">新建主动消息规则</h2>
+            <p>时间使用本机时区。</p>
+          </div>
+          <button type="button" id="close-rule-dialog" class="icon-button" aria-label="关闭">关闭</button>
+        </header>
+        <div class="dialog-body">
+          <input id="rule-id" type="hidden" />
+          <div class="form-grid">
+            <label>规则名称
+              <input id="rule-name" name="name" required placeholder="例如：晚安提醒" />
+            </label>
+            <label>规则类型
+              <select id="rule-type" name="ruleType">
+                <option value="daily_greeting">每日问候</option>
+                <option value="sleep_reminder">休息提醒</option>
+                <option value="study_checkin">学习提醒</option>
+                <option value="work_break">工作间歇</option>
+                <option value="custom">自定义</option>
+                <option value="cron">Cron</option>
+              </select>
+            </label>
+            <label>Cron 时间
+              <input id="rule-cron" name="scheduleCron" required value="0 9 * * *" placeholder="0 9 * * *" />
+            </label>
+            <label>发送通道
+              <select id="rule-channel" name="channel">
+                <option value="all">全部/自动</option>
+                <option value="web">Web</option>
+                <option value="wechat">微信</option>
+                <option value="qq">QQ</option>
+              </select>
+            </label>
+            <label>静默开始
+              <input id="rule-quiet-start" name="quietStart" type="time" value="23:00" />
+            </label>
+            <label>静默结束
+              <input id="rule-quiet-end" name="quietEnd" type="time" value="07:00" />
+            </label>
+            <label>每天最多
+              <input id="rule-max-per-day" name="maxPerDay" type="number" min="1" max="20" value="1" />
+            </label>
+            <label>随机偏移分钟
+              <input id="rule-random-minutes" name="randomMinutes" type="number" min="0" max="180" value="0" />
+            </label>
+            <label class="wide">消息 Prompt
+              <textarea id="rule-prompt" name="promptTemplate" rows="4" placeholder="描述希望角色如何发起这次主动消息"></textarea>
+            </label>
+          </div>
+        </div>
+        <footer class="dialog-actions">
+          <button type="button" id="cancel-rule">取消</button>
+          <button type="submit" class="primary">保存规则</button>
+        </footer>
+      </form>
+    </dialog>
+
+    <div id="toast" class="toast" aria-live="polite"></div>
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>

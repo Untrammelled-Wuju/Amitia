@@ -18,20 +18,20 @@ func TestInstall_PackageNotInRepo_Rejected(t *testing.T) {
 	pkgRepo, charRepo := newDefaultStubRepos()
 	svc := newTestService(t, db, dataDir, pkgRepo, charRepo)
 
-	_, err := svc.InstallPackage("nonexistent_pkg", testUserID, testCharacterID)
+	_, err := svc.InstallPackage("nonexistent_pkg", testSpaceID)
 	assertInstallationError(t, err, ErrCodeInstallationFailed)
 }
 
-func TestInstall_PackageNotOwnedByUser_Rejected(t *testing.T) {
+func TestInstall_PackageNotOwnedBySpace_Rejected(t *testing.T) {
 	db := setupTestDB(t)
 	dataDir := t.TempDir()
 	pkgRepo, charRepo := newDefaultStubRepos()
 	pkg := createReadyPackage(t, dataDir, testPackageID, defaultTestActions())
-	pkg.UserID = "other_user"
+	pkg.SpaceID = "other_user"
 	pkgRepo.pkgs[testPackageID] = pkg
 
 	svc := newTestService(t, db, dataDir, pkgRepo, charRepo)
-	_, err := svc.InstallPackage(testPackageID, testUserID, testCharacterID)
+	_, err := svc.InstallPackage(testPackageID, testSpaceID)
 	assertInstallationError(t, err, ErrCodeInstallationInvalid)
 }
 
@@ -44,7 +44,7 @@ func TestInstall_PackageNotReady_Rejected(t *testing.T) {
 	pkgRepo.pkgs[testPackageID] = pkg
 
 	svc := newTestService(t, db, dataDir, pkgRepo, charRepo)
-	_, err := svc.InstallPackage(testPackageID, testUserID, testCharacterID)
+	_, err := svc.InstallPackage(testPackageID, testSpaceID)
 	assertInstallationError(t, err, ErrCodePackageNotReady)
 }
 
@@ -61,7 +61,7 @@ func TestInstall_ManifestMissing_Rejected(t *testing.T) {
 	}
 
 	svc := newTestService(t, db, dataDir, pkgRepo, charRepo)
-	_, err := svc.InstallPackage(testPackageID, testUserID, testCharacterID)
+	_, err := svc.InstallPackage(testPackageID, testSpaceID)
 	assertInstallationError(t, err, ErrCodeInstallationFailed)
 }
 
@@ -76,7 +76,7 @@ func TestInstall_ManifestCorrupt_Rejected(t *testing.T) {
 	writeFile(t, filepath.Join(srcDir, "manifest.json"), []byte("{not valid json"))
 
 	svc := newTestService(t, db, dataDir, pkgRepo, charRepo)
-	_, err := svc.InstallPackage(testPackageID, testUserID, testCharacterID)
+	_, err := svc.InstallPackage(testPackageID, testSpaceID)
 	assertInstallationError(t, err, ErrCodeInstallationFailed)
 }
 
@@ -98,7 +98,7 @@ func TestInstall_SchemaVersionUnsupported_Rejected(t *testing.T) {
 	writeFile(t, filepath.Join(srcDir, "manifest.json"), badData)
 
 	svc := newTestService(t, db, dataDir, pkgRepo, charRepo)
-	_, err := svc.InstallPackage(testPackageID, testUserID, testCharacterID)
+	_, err := svc.InstallPackage(testPackageID, testSpaceID)
 	assertInstallationError(t, err, ErrCodeInstallationFailed)
 }
 
@@ -120,7 +120,7 @@ func TestInstall_DefaultActionNotInActions_Rejected(t *testing.T) {
 	writeFile(t, filepath.Join(srcDir, "manifest.json"), badData)
 
 	svc := newTestService(t, db, dataDir, pkgRepo, charRepo)
-	_, err := svc.InstallPackage(testPackageID, testUserID, testCharacterID)
+	_, err := svc.InstallPackage(testPackageID, testSpaceID)
 	assertInstallationError(t, err, ErrCodePackageDefaultActionInvalid)
 }
 
@@ -137,7 +137,7 @@ func TestInstall_DefaultActionJSONMissing_Rejected(t *testing.T) {
 	}
 
 	svc := newTestService(t, db, dataDir, pkgRepo, charRepo)
-	_, err := svc.InstallPackage(testPackageID, testUserID, testCharacterID)
+	_, err := svc.InstallPackage(testPackageID, testSpaceID)
 	assertInstallationError(t, err, ErrCodePackageDefaultActionInvalid)
 }
 
@@ -152,7 +152,7 @@ func TestInstall_DefaultActionJSONCorrupt_Rejected(t *testing.T) {
 	writeFile(t, filepath.Join(srcDir, "actions", "idle_normal", "action.json"), []byte("not json"))
 
 	svc := newTestService(t, db, dataDir, pkgRepo, charRepo)
-	_, err := svc.InstallPackage(testPackageID, testUserID, testCharacterID)
+	_, err := svc.InstallPackage(testPackageID, testSpaceID)
 	assertInstallationError(t, err, ErrCodePackageDefaultActionInvalid)
 }
 
@@ -169,7 +169,7 @@ func TestInstall_ActionJSONMissing_Rejected(t *testing.T) {
 	}
 
 	svc := newTestService(t, db, dataDir, pkgRepo, charRepo)
-	_, err := svc.InstallPackage(testPackageID, testUserID, testCharacterID)
+	_, err := svc.InstallPackage(testPackageID, testSpaceID)
 	assertInstallationError(t, err, ErrCodeInstallationFailed)
 }
 
@@ -184,7 +184,7 @@ func TestInstall_FramesDirMissing_Rejected(t *testing.T) {
 	removeAllDir(t, filepath.Join(srcDir, "actions", "wave", "frames"))
 
 	svc := newTestService(t, db, dataDir, pkgRepo, charRepo)
-	_, err := svc.InstallPackage(testPackageID, testUserID, testCharacterID)
+	_, err := svc.InstallPackage(testPackageID, testSpaceID)
 	assertInstallationError(t, err, ErrCodeInstallationFailed)
 }
 
@@ -201,7 +201,7 @@ func TestInstall_FrameFileMissing_Rejected(t *testing.T) {
 	}
 
 	svc := newTestService(t, db, dataDir, pkgRepo, charRepo)
-	_, err := svc.InstallPackage(testPackageID, testUserID, testCharacterID)
+	_, err := svc.InstallPackage(testPackageID, testSpaceID)
 	assertInstallationError(t, err, ErrCodeInstallationFailed)
 }
 
@@ -216,7 +216,7 @@ func TestInstall_PathTraversal_Rejected(t *testing.T) {
 	writeFile(t, filepath.Join(srcDir, "traversal..file.txt"), []byte("evil"))
 
 	svc := newTestService(t, db, dataDir, pkgRepo, charRepo)
-	_, err := svc.InstallPackage(testPackageID, testUserID, testCharacterID)
+	_, err := svc.InstallPackage(testPackageID, testSpaceID)
 	assertInstallationError(t, err, ErrCodePackagePathTraversal)
 }
 
@@ -231,7 +231,7 @@ func TestInstall_ExecutableFile_Rejected(t *testing.T) {
 	writeFile(t, filepath.Join(srcDir, "evil.exe"), []byte("MZ"))
 
 	svc := newTestService(t, db, dataDir, pkgRepo, charRepo)
-	_, err := svc.InstallPackage(testPackageID, testUserID, testCharacterID)
+	_, err := svc.InstallPackage(testPackageID, testSpaceID)
 	assertInstallationError(t, err, ErrCodePackageExecutableFound)
 }
 
@@ -251,7 +251,7 @@ func TestInstall_SymlinkEscape_Rejected(t *testing.T) {
 	}
 
 	svc := newTestService(t, db, dataDir, pkgRepo, charRepo)
-	_, err := svc.InstallPackage(testPackageID, testUserID, testCharacterID)
+	_, err := svc.InstallPackage(testPackageID, testSpaceID)
 	assertInstallationError(t, err, ErrCodePackageSymlinkEscape)
 }
 
@@ -264,21 +264,8 @@ func TestInstall_HashMismatch_Rejected(t *testing.T) {
 	pkgRepo.pkgs[testPackageID] = pkg
 
 	svc := newTestService(t, db, dataDir, pkgRepo, charRepo)
-	_, err := svc.InstallPackage(testPackageID, testUserID, testCharacterID)
+	_, err := svc.InstallPackage(testPackageID, testSpaceID)
 	assertInstallationError(t, err, ErrCodePackageHashMismatch)
-}
-
-func TestInstall_CharacterNotFound_Rejected(t *testing.T) {
-	db := setupTestDB(t)
-	dataDir := t.TempDir()
-	pkgRepo, charRepo := newDefaultStubRepos()
-	pkg := createReadyPackage(t, dataDir, testPackageID, defaultTestActions())
-	pkgRepo.pkgs[testPackageID] = pkg
-	delete(charRepo.chars, testCharacterID)
-
-	svc := newTestService(t, db, dataDir, pkgRepo, charRepo)
-	_, err := svc.InstallPackage(testPackageID, testUserID, "nonexistent_char")
-	assertInstallationError(t, err, ErrCodeCharacterNotFound)
 }
 
 func TestInstall_EmptyParams_Rejected(t *testing.T) {
@@ -287,13 +274,10 @@ func TestInstall_EmptyParams_Rejected(t *testing.T) {
 	pkgRepo, charRepo := newDefaultStubRepos()
 	svc := newTestService(t, db, dataDir, pkgRepo, charRepo)
 
-	_, err := svc.InstallPackage("", testUserID, testCharacterID)
+	_, err := svc.InstallPackage("", testSpaceID)
 	assertInstallationError(t, err, ErrCodeInstallationFailed)
 
-	_, err = svc.InstallPackage(testPackageID, "", testCharacterID)
-	assertInstallationError(t, err, ErrCodeInstallationFailed)
-
-	_, err = svc.InstallPackage(testPackageID, testUserID, "")
+	_, err = svc.InstallPackage(testPackageID, "")
 	assertInstallationError(t, err, ErrCodeInstallationFailed)
 }
 
@@ -308,7 +292,7 @@ func TestInstall_PackageSourceDirMissing_Rejected(t *testing.T) {
 	removeAllDir(t, srcDir)
 
 	svc := newTestService(t, db, dataDir, pkgRepo, charRepo)
-	_, err := svc.InstallPackage(testPackageID, testUserID, testCharacterID)
+	_, err := svc.InstallPackage(testPackageID, testSpaceID)
 	assertInstallationError(t, err, ErrCodePackageNotReady)
 }
 
@@ -320,18 +304,15 @@ func TestInstall_AllValidationsPass_Success(t *testing.T) {
 	pkgRepo.pkgs[testPackageID] = pkg
 
 	svc := newTestService(t, db, dataDir, pkgRepo, charRepo)
-	inst, err := svc.InstallPackage(testPackageID, testUserID, testCharacterID)
+	inst, err := svc.InstallPackage(testPackageID, testSpaceID)
 	if err != nil {
 		t.Fatalf("InstallPackage 失败: %v", err)
 	}
 	if inst.Status != StatusInstalled {
 		t.Fatalf("状态 = %s, 期望 %s", inst.Status, StatusInstalled)
 	}
-	if inst.UserID != testUserID {
-		t.Fatalf("UserID = %s, 期望 %s", inst.UserID, testUserID)
-	}
-	if inst.CharacterID != testCharacterID {
-		t.Fatalf("CharacterID = %s, 期望 %s", inst.CharacterID, testCharacterID)
+	if inst.SpaceID != testSpaceID {
+		t.Fatalf("SpaceID = %s, 期望 %s", inst.SpaceID, testSpaceID)
 	}
 	if inst.PackageID != testPackageID {
 		t.Fatalf("PackageID = %s, 期望 %s", inst.PackageID, testPackageID)
@@ -375,7 +356,7 @@ func TestInstall_Success_TempDirCleaned(t *testing.T) {
 	pkgRepo.pkgs[testPackageID] = pkg
 
 	svc := newTestService(t, db, dataDir, pkgRepo, charRepo)
-	inst, err := svc.InstallPackage(testPackageID, testUserID, testCharacterID)
+	inst, err := svc.InstallPackage(testPackageID, testSpaceID)
 	if err != nil {
 		t.Fatalf("InstallPackage: %v", err)
 	}
@@ -397,7 +378,7 @@ func TestInstall_Success_SourcePackageIntact(t *testing.T) {
 	srcHashBefore := computePackageHash(t, srcDir)
 
 	svc := newTestService(t, db, dataDir, pkgRepo, charRepo)
-	if _, err := svc.InstallPackage(testPackageID, testUserID, testCharacterID); err != nil {
+	if _, err := svc.InstallPackage(testPackageID, testSpaceID); err != nil {
 		t.Fatalf("InstallPackage: %v", err)
 	}
 
@@ -426,8 +407,7 @@ func TestInstall_FailureRollback_TempDirCleaned(t *testing.T) {
 
 	pkg := &processing.Package{
 		ID:               testPackageID,
-		UserID:           testUserID,
-		CharacterID:      testCharacterID,
+		SpaceID:          testSpaceID,
 		GenerationTaskID: testTaskID,
 		Name:             "测试包",
 		Version:          1,
@@ -441,7 +421,7 @@ func TestInstall_FailureRollback_TempDirCleaned(t *testing.T) {
 	pkgRepo.pkgs[testPackageID] = pkg
 
 	svc := newTestService(t, db, dataDir, pkgRepo, charRepo)
-	_, err := svc.InstallPackage(testPackageID, testUserID, testCharacterID)
+	_, err := svc.InstallPackage(testPackageID, testSpaceID)
 	if err == nil {
 		t.Fatal("期望安装失败（哈希不匹配），但成功了")
 	}
@@ -478,8 +458,7 @@ func TestInstall_FailureRollback_SourcePackageIntact(t *testing.T) {
 
 	pkg := &processing.Package{
 		ID:               testPackageID,
-		UserID:           testUserID,
-		CharacterID:      testCharacterID,
+		SpaceID:          testSpaceID,
 		GenerationTaskID: testTaskID,
 		Name:             "测试包",
 		Version:          1,
@@ -493,7 +472,7 @@ func TestInstall_FailureRollback_SourcePackageIntact(t *testing.T) {
 	pkgRepo.pkgs[testPackageID] = pkg
 
 	svc := newTestService(t, db, dataDir, pkgRepo, charRepo)
-	_, _ = svc.InstallPackage(testPackageID, testUserID, testCharacterID)
+	_, _ = svc.InstallPackage(testPackageID, testSpaceID)
 
 	srcHashAfter := computePackageHash(t, srcDir)
 	if srcHashBefore != srcHashAfter {
@@ -515,11 +494,11 @@ func TestInstall_Duplicate_Rejected(t *testing.T) {
 	pkgRepo.pkgs[testPackageID] = pkg
 
 	svc := newTestService(t, db, dataDir, pkgRepo, charRepo)
-	if _, err := svc.InstallPackage(testPackageID, testUserID, testCharacterID); err != nil {
+	if _, err := svc.InstallPackage(testPackageID, testSpaceID); err != nil {
 		t.Fatalf("首次安装失败: %v", err)
 	}
 
-	_, err := svc.InstallPackage(testPackageID, testUserID, testCharacterID)
+	_, err := svc.InstallPackage(testPackageID, testSpaceID)
 	assertInstallationError(t, err, ErrCodeInstallationDuplicate)
 
 	var count int64
@@ -539,7 +518,7 @@ func TestInstall_Success_AtomMove(t *testing.T) {
 	pkgRepo.pkgs[testPackageID] = pkg
 
 	svc := newTestService(t, db, dataDir, pkgRepo, charRepo)
-	inst, err := svc.InstallPackage(testPackageID, testUserID, testCharacterID)
+	inst, err := svc.InstallPackage(testPackageID, testSpaceID)
 	if err != nil {
 		t.Fatalf("InstallPackage: %v", err)
 	}
@@ -564,7 +543,7 @@ func TestInstall_Success_AtomMove(t *testing.T) {
 	}
 }
 
-func TestInstall_CharacterRepoError_Rejected(t *testing.T) {
+func TestInstall_IgnoresLegacyCharacterRepository(t *testing.T) {
 	db := setupTestDB(t)
 	dataDir := t.TempDir()
 	pkgRepo, charRepo := newDefaultStubRepos()
@@ -573,6 +552,7 @@ func TestInstall_CharacterRepoError_Rejected(t *testing.T) {
 	charRepo.err = gorm.ErrInvalidDB
 
 	svc := newTestService(t, db, dataDir, pkgRepo, charRepo)
-	_, err := svc.InstallPackage(testPackageID, testUserID, testCharacterID)
-	assertInstallationError(t, err, ErrCodeCharacterNotFound)
+	if _, err := svc.InstallPackage(testPackageID, testSpaceID); err != nil {
+		t.Fatalf("InstallPackage: %v", err)
+	}
 }

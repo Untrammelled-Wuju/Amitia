@@ -2,12 +2,14 @@ package extension
 
 import (
 	"fmt"
+	"math"
 	"net/http"
 	"strings"
 
 	"github.com/gin-gonic/gin"
 	kernelruntime "github.com/u-ai/backend/internal/extension/kernel"
 	"github.com/u-ai/backend/internal/extension/kernel/package_security"
+	middlewaresecurity "github.com/u-ai/backend/internal/middleware/security"
 )
 
 const packageAPIReplacement = "/api/extensions/packages/artifacts"
@@ -63,7 +65,11 @@ func createPackageArtifactPreview(c *gin.Context, runtime *Runtime) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "extension package service unavailable"})
 		return
 	}
-	maxBody := package_security.DefaultArchivePolicy().MaxArchiveBytes + (1 << 20)
+	policy := package_security.DefaultArchivePolicy()
+	maxBody := policy.MaxArchiveBytes
+	if maxBody < math.MaxInt64-(1<<20) {
+		maxBody += 1 << 20
+	}
 	if c.Request.ContentLength > maxBody {
 		c.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": "package upload exceeds limit"})
 		return
@@ -82,8 +88,11 @@ func createPackageArtifactPreview(c *gin.Context, runtime *Runtime) {
 		return
 	}
 	defer file.Close()
-	request := kernelruntime.PackagePreviewRequest{UserID: kernelAPIUser(c), ScopeType: c.Request.FormValue("scopeType"), ScopeID: c.Request.FormValue("scopeId"), FileName: header.Filename,
-		AllowUnsignedDev: strings.EqualFold(c.Request.FormValue("allowUnsignedDev"), "true"), DeveloperSessionID: c.Request.FormValue("developerSessionId")}
+	actor := middlewaresecurity.GetActor(c)
+	allowUnsignedLocal := actor != nil && actor.IsLocalTrusted
+	request := kernelruntime.PackagePreviewRequest{SpaceID: kernelAPIUser(c), ScopeType: c.Request.FormValue("scopeType"), ScopeID: c.Request.FormValue("scopeId"), FileName: header.Filename,
+		AllowUnsignedDev:   strings.EqualFold(c.Request.FormValue("allowUnsignedDev"), "true") || allowUnsignedLocal,
+		AllowUnsignedLocal: allowUnsignedLocal, DeveloperSessionID: c.Request.FormValue("developerSessionId")}
 	if request.ScopeType == "" {
 		request.ScopeType = "global"
 	}
@@ -93,7 +102,7 @@ func createPackageArtifactPreview(c *gin.Context, runtime *Runtime) {
 		c.JSON(status, gin.H{"error": msg, "code": code})
 		return
 	}
-	presentation, err := kernelReadImportSession(c.Request.Context(), runtime, preview.SessionID, request.UserID, request.ScopeType, request.ScopeID)
+	presentation, err := kernelReadImportSession(c.Request.Context(), runtime, preview.SessionID, request.SpaceID, request.ScopeType, request.ScopeID)
 	if err != nil {
 		status, code, msg := kernelruntime.PackageErrorResponse(err)
 		c.JSON(status, gin.H{"error": msg, "code": code})
@@ -119,7 +128,7 @@ func confirmPackagePreview(c *gin.Context, runtime *Runtime) {
 	if body.ScopeType == "" {
 		body.ScopeType = "global"
 	}
-	confirmation, err := runtime.Kernel.ConfirmPackagePreview(c.Request.Context(), kernelruntime.PackagePreviewConfirmationRequest{SessionID: c.Param("sessionId"), UserID: kernelAPIUser(c), ScopeType: body.ScopeType, ScopeID: body.ScopeID, Confirmations: body.Confirmations})
+	confirmation, err := runtime.Kernel.ConfirmPackagePreview(c.Request.Context(), kernelruntime.PackagePreviewConfirmationRequest{SessionID: c.Param("sessionId"), SpaceID: kernelAPIUser(c), ScopeType: body.ScopeType, ScopeID: body.ScopeID, Confirmations: body.Confirmations})
 	if err != nil {
 		status, code, msg := kernelruntime.PackageErrorResponse(err)
 		c.JSON(status, gin.H{"error": msg, "code": code})
@@ -138,7 +147,7 @@ func executePackageInstallOperation(c *gin.Context, runtime *Runtime) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "install operation request invalid"})
 		return
 	}
-	request.UserID = kernelAPIUser(c)
+	request.SpaceID = kernelAPIUser(c)
 	if request.ScopeType == "" {
 		request.ScopeType = "global"
 	}
@@ -165,7 +174,7 @@ func executePackageUpdateOperation(c *gin.Context, runtime *Runtime) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "update operation request invalid"})
 		return
 	}
-	request.UserID = kernelAPIUser(c)
+	request.SpaceID = kernelAPIUser(c)
 	if request.ScopeType == "" {
 		request.ScopeType = "global"
 	}

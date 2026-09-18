@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/u-ai/backend/internal/extension/runtimegate"
 	"github.com/u-ai/backend/internal/personality"
 	"github.com/u-ai/backend/internal/psyche/appraisal"
 	"github.com/u-ai/backend/internal/psyche/budget"
@@ -59,6 +60,8 @@ func (l testRuntimeProfileLoader) Load(ctx context.Context, scope InteractionSco
 }
 
 func TestAppraisalDifferentEventTypesProduceDistinctResults(t *testing.T) {
+	runtimegate.Set(runtimegate.EmotionExtensionID, true)
+	t.Cleanup(func() { runtimegate.Set(runtimegate.EmotionExtensionID, false) })
 	eng := appraisal.NewEngine(appraisal.DefaultAppraisalConfig())
 	pc := personality.NewCompiler(personality.DefaultCompilerConfig())
 
@@ -156,7 +159,7 @@ func TestAppraisalDifferentEventTypesProduceDistinctResults(t *testing.T) {
 		p.SetPersonalityCompiler(pc)
 
 		scope := InteractionScope{
-			UserID:         fmt.Sprintf("user-%d", i),
+			SpaceID:        fmt.Sprintf("user-%d", i),
 			CharacterID:    fmt.Sprintf("char-%d", i),
 			ConversationID: fmt.Sprintf("conv-%d", i),
 			Channel:        "web",
@@ -168,7 +171,7 @@ func TestAppraisalDifferentEventTypesProduceDistinctResults(t *testing.T) {
 			Message:     tc.message,
 			Channel:     "web",
 			Source:      "web",
-			UserID:      scope.UserID,
+			SpaceID:     scope.SpaceID,
 			CharacterID: scope.CharacterID,
 			RequestID:   scope.RequestID,
 		})
@@ -241,6 +244,8 @@ func TestAppraisalDifferentEventTypesProduceDistinctResults(t *testing.T) {
 }
 
 func TestAppraisalPersonalitySensitivityModulatesResult(t *testing.T) {
+	runtimegate.Set(runtimegate.EmotionExtensionID, true)
+	t.Cleanup(func() { runtimegate.Set(runtimegate.EmotionExtensionID, false) })
 	eng := appraisal.NewEngine(appraisal.DefaultAppraisalConfig())
 
 	highBoundaryConfig := map[string]interface{}{
@@ -276,14 +281,14 @@ func TestAppraisalPersonalitySensitivityModulatesResult(t *testing.T) {
 		p.SetPersonalityCompiler(personality.NewCompiler(personality.DefaultCompilerConfig()))
 
 		scope := InteractionScope{
-			UserID: "user-boundary", CharacterID: "char-boundary",
+			SpaceID: "user-boundary", CharacterID: "char-boundary",
 			ConversationID: "conv-boundary", Channel: "web", Source: "web",
 			RequestID: "req-boundary",
 		}.Normalize()
 
 		assembly := p.Assemble(context.Background(), scope, &ProcessRequest{
 			Message: message, Channel: "web", Source: "web",
-			UserID: scope.UserID, CharacterID: scope.CharacterID,
+			SpaceID: scope.SpaceID, CharacterID: scope.CharacterID,
 			RequestID: scope.RequestID,
 		})
 		return assembly.Appraisal
@@ -312,6 +317,8 @@ func TestAppraisalPersonalitySensitivityModulatesResult(t *testing.T) {
 }
 
 func TestAppraisalRejectionSensitivityAffectsColdResponse(t *testing.T) {
+	runtimegate.Set(runtimegate.EmotionExtensionID, true)
+	t.Cleanup(func() { runtimegate.Set(runtimegate.EmotionExtensionID, false) })
 	eng := appraisal.NewEngine(appraisal.DefaultAppraisalConfig())
 
 	highRejectConfig := map[string]interface{}{
@@ -347,14 +354,14 @@ func TestAppraisalRejectionSensitivityAffectsColdResponse(t *testing.T) {
 		p.SetPersonalityCompiler(personality.NewCompiler(personality.DefaultCompilerConfig()))
 
 		scope := InteractionScope{
-			UserID: "user-reject", CharacterID: "char-reject",
+			SpaceID: "user-reject", CharacterID: "char-reject",
 			ConversationID: "conv-reject", Channel: "web", Source: "web",
 			RequestID: "req-reject",
 		}.Normalize()
 
 		assembly := p.Assemble(context.Background(), scope, &ProcessRequest{
 			Message: message, Channel: "web", Source: "web",
-			UserID: scope.UserID, CharacterID: scope.CharacterID,
+			SpaceID: scope.SpaceID, CharacterID: scope.CharacterID,
 			RequestID: scope.RequestID,
 		})
 		return assembly.Appraisal
@@ -378,6 +385,8 @@ func TestAppraisalRejectionSensitivityAffectsColdResponse(t *testing.T) {
 }
 
 func TestAppraisalNeedDeltasVaryByEventType(t *testing.T) {
+	runtimegate.Set(runtimegate.EmotionExtensionID, true)
+	t.Cleanup(func() { runtimegate.Set(runtimegate.EmotionExtensionID, false) })
 	eng := appraisal.NewEngine(appraisal.DefaultAppraisalConfig())
 	config := map[string]interface{}{
 		"boundary": 0.7, "warmth": 0.55, "affection": 0.45,
@@ -409,14 +418,14 @@ func TestAppraisalNeedDeltasVaryByEventType(t *testing.T) {
 			p.SetPersonalityCompiler(personality.NewCompiler(personality.DefaultCompilerConfig()))
 
 			scope := InteractionScope{
-				UserID: "user-need", CharacterID: "char-need",
+				SpaceID: "user-need", CharacterID: "char-need",
 				ConversationID: "conv-need", Channel: "web", Source: "web",
 				RequestID: "req-need-" + tc.label,
 			}.Normalize()
 
 			assembly := p.Assemble(context.Background(), scope, &ProcessRequest{
 				Message: tc.message, Channel: "web", Source: "web",
-				UserID: scope.UserID, CharacterID: scope.CharacterID,
+				SpaceID: scope.SpaceID, CharacterID: scope.CharacterID,
 				RequestID: scope.RequestID,
 			})
 

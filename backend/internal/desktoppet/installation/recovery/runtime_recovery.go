@@ -22,10 +22,10 @@ type RuntimeAppliedFinalizer interface {
 }
 
 type RuntimeRepo interface {
-	SendDesiredCommand(ctx context.Context, opID, userID, deviceID, runtimeID, installationID string, desiredRevision int64) error
-	CancelDesiredCommand(ctx context.Context, opID, userID, deviceID, runtimeID string) error
-	ResolveDesiredRevision(ctx context.Context, opID, userID, deviceID string) (int64, error)
-	QueryRuntimeAppliedState(ctx context.Context, userID, deviceID, runtimeID string) (appliedRevision int64, actualReleaseID string, err error)
+	SendDesiredCommand(ctx context.Context, opID, spaceID, deviceID, runtimeID, installationID string, desiredRevision int64) error
+	CancelDesiredCommand(ctx context.Context, opID, spaceID, deviceID, runtimeID string) error
+	ResolveDesiredRevision(ctx context.Context, opID, spaceID, deviceID string) (int64, error)
+	QueryRuntimeAppliedState(ctx context.Context, spaceID, deviceID, runtimeID string) (appliedRevision int64, actualReleaseID string, err error)
 	QueryCommandTerminalStatusByIdempotencyKey(ctx context.Context, idempotencyKey string) (status string, found bool, err error)
 }
 
@@ -80,7 +80,7 @@ func (r *RuntimeRecovery) ensureAuthoritativeDesiredRevision(ctx context.Context
 	if op.DesiredRevision > 0 {
 		return nil
 	}
-	resolved, err := r.runtimeRepo.ResolveDesiredRevision(ctx, op.ID, op.UserID, op.DeviceID)
+	resolved, err := r.runtimeRepo.ResolveDesiredRevision(ctx, op.ID, op.SpaceID, op.DeviceID)
 	if err != nil {
 		return fmt.Errorf("runtimeRecovery: resolve desired revision failed op=%s: %w", op.ID, err)
 	}
@@ -110,12 +110,12 @@ func (r *RuntimeRecovery) CancelOperation(ctx context.Context, op *operation.Ins
 			return fmt.Errorf("runtimeRecovery: recover desired revision before cancel failed op=%s: %w", op.ID, err)
 		}
 	}
-	return r.runtimeRepo.CancelDesiredCommand(ctx, op.ID, op.UserID, op.DeviceID, op.RuntimeID)
+	return r.runtimeRepo.CancelDesiredCommand(ctx, op.ID, op.SpaceID, op.DeviceID, op.RuntimeID)
 }
 
 func (r *RuntimeRecovery) recoverFromDesiredStateCommitted(ctx context.Context, op *operation.InstallationOperation, j *RecoveryCommitJournal) error {
 	desiredRevision := op.DesiredRevision
-	if err := r.runtimeRepo.SendDesiredCommand(ctx, op.ID, op.UserID, op.DeviceID, op.RuntimeID, op.InstallationID, desiredRevision); err != nil {
+	if err := r.runtimeRepo.SendDesiredCommand(ctx, op.ID, op.SpaceID, op.DeviceID, op.RuntimeID, op.InstallationID, desiredRevision); err != nil {
 		return fmt.Errorf("runtimeRecovery: send command failed op=%s: %w", op.ID, err)
 	}
 	if _, err := r.repo.CASUpdateOperationStage(op.ID, op.Stage, operation.OpStageWaitingRuntimeACK, r.worker.executionID); err != nil {
@@ -140,9 +140,9 @@ func (r *RuntimeRecovery) recoverFromWaitingRuntimeAck(ctx context.Context, op *
 		return r.recoverRecenterFromWaitingRuntimeAck(ctx, op, j)
 	}
 
-	appliedRevision, _, err := r.runtimeRepo.QueryRuntimeAppliedState(ctx, op.UserID, op.DeviceID, op.RuntimeID)
+	appliedRevision, _, err := r.runtimeRepo.QueryRuntimeAppliedState(ctx, op.SpaceID, op.DeviceID, op.RuntimeID)
 	if err != nil {
-		if err := r.runtimeRepo.SendDesiredCommand(ctx, op.ID, op.UserID, op.DeviceID, op.RuntimeID, op.InstallationID, op.DesiredRevision); err != nil {
+		if err := r.runtimeRepo.SendDesiredCommand(ctx, op.ID, op.SpaceID, op.DeviceID, op.RuntimeID, op.InstallationID, op.DesiredRevision); err != nil {
 			return fmt.Errorf("runtimeRecovery: re-send command failed op=%s: %w", op.ID, err)
 		}
 		return nil
@@ -157,7 +157,7 @@ func (r *RuntimeRecovery) recoverFromWaitingRuntimeAck(ctx context.Context, op *
 		}
 		return r.recoverFromRuntimeApplied(ctx, op, j)
 	}
-	if err := r.runtimeRepo.SendDesiredCommand(ctx, op.ID, op.UserID, op.DeviceID, op.RuntimeID, op.InstallationID, op.DesiredRevision); err != nil {
+	if err := r.runtimeRepo.SendDesiredCommand(ctx, op.ID, op.SpaceID, op.DeviceID, op.RuntimeID, op.InstallationID, op.DesiredRevision); err != nil {
 		return fmt.Errorf("runtimeRecovery: re-send command failed op=%s: %w", op.ID, err)
 	}
 	return nil
@@ -187,7 +187,7 @@ func (r *RuntimeRecovery) recoverRecenterFromWaitingRuntimeAck(ctx context.Conte
 			return nil
 		}
 	}
-	if err := r.runtimeRepo.SendDesiredCommand(ctx, op.ID, op.UserID, op.DeviceID, op.RuntimeID, op.InstallationID, 0); err != nil {
+	if err := r.runtimeRepo.SendDesiredCommand(ctx, op.ID, op.SpaceID, op.DeviceID, op.RuntimeID, op.InstallationID, 0); err != nil {
 		return fmt.Errorf("runtimeRecovery: idempotent re-send recenter command failed op=%s: %w", op.ID, err)
 	}
 	return nil

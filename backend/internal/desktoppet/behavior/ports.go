@@ -5,7 +5,14 @@ import (
 )
 
 type ActivePetPort interface {
-	ResolveActivePet(ctx context.Context, userID, characterID string) (*ActivePetSnapshot, error)
+	ResolveActivePet(ctx context.Context, spaceID, characterID string) (*ActivePetSnapshot, error)
+}
+
+// EventTargetedActivePetPort is implemented by adapters that can preserve
+// device/installation affinity carried by a behavior event. Engines fall back
+// to ActivePetPort when the adapter does not support targeted resolution.
+type EventTargetedActivePetPort interface {
+	ResolveActivePetForEvent(ctx context.Context, event BehaviorEventEnvelope) (*ActivePetSnapshot, error)
 }
 
 // EventTargetedActivePetPort is implemented by adapters that can preserve
@@ -21,7 +28,7 @@ type RuntimeActionPort interface {
 }
 
 type BehaviorStateRepository interface {
-	LoadContext(ctx context.Context, userID, characterID string) (*BehaviorContextSnapshot, error)
+	LoadContext(ctx context.Context, spaceID, characterID string) (*BehaviorContextSnapshot, error)
 	SaveContextCAS(ctx context.Context, currentRevision int64, next BehaviorContextSnapshot) (bool, error)
 	CommitLeasedContextAndInboxCAS(ctx context.Context, currentRevision int64, next BehaviorContextSnapshot, eventID, leaseToken string, status InboxStatus) (bool, error)
 	InsertInboxIfAbsent(ctx context.Context, event BehaviorEventEnvelope) (bool, error)
@@ -37,19 +44,19 @@ type BehaviorStateRepository interface {
 	FindDecisionByID(ctx context.Context, decisionID string) (*BehaviorDecisionAudit, error)
 	UpdateDecisionStatus(ctx context.Context, decisionID string, status DecisionStatus, at interface{}) error
 	UpdateDecisionOutcome(ctx context.Context, decision BehaviorDecision) error
-	LoadCooldowns(ctx context.Context, userID, characterID string) ([]CooldownRecord, error)
+	LoadCooldowns(ctx context.Context, spaceID, characterID string) ([]CooldownRecord, error)
 	SaveCooldown(ctx context.Context, record CooldownRecord) error
 	CleanupExpiredCooldowns(ctx context.Context, before interface{}) error
 	CleanupOldRecords(ctx context.Context, before interface{}) error
-	DeleteCharacterData(ctx context.Context, userID, characterID string) error
+	DeleteCharacterData(ctx context.Context, spaceID, characterID string) error
 }
 
 type CharacterAffectPort interface {
-	GetAffectSnapshot(ctx context.Context, userID, characterID string) (*AffectBehaviorSnapshot, error)
+	GetAffectSnapshot(ctx context.Context, spaceID, characterID string) (*AffectBehaviorSnapshot, error)
 }
 
 type CharacterActivityPort interface {
-	GetActivitySnapshot(ctx context.Context, userID, characterID string) (*ActivityBehaviorSnapshot, error)
+	GetActivitySnapshot(ctx context.Context, spaceID, characterID string) (*ActivityBehaviorSnapshot, error)
 }
 
 type InteractionLifecycleObserver interface {

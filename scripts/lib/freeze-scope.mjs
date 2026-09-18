@@ -79,7 +79,6 @@ const EXCLUDED_RELATIVE_PREFIXES = [
   "backend/qdrant/storage",
   "backend/surrealdb/data",
   "backend/node",
-  "backend/qq-sidecar/data",
   "backend/build",
 ];
 

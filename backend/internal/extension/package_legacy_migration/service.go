@@ -111,9 +111,9 @@ func normalizeCandidate(
 			candidate.Version,
 		)
 
-	candidate.UserID =
+	candidate.SpaceID =
 		strings.TrimSpace(
-			candidate.UserID,
+			candidate.SpaceID,
 		)
 
 	candidate.ScopeType =
@@ -555,11 +555,11 @@ func (s *MigrationService) MigrateOne(
 	}
 
 	if len(candidate.PackageBlob) == 0 ||
-		candidate.UserID == "" {
+		candidate.SpaceID == "" {
 		reason :=
 			"legacy package blob is unavailable"
 
-		if candidate.UserID == "" {
+		if candidate.SpaceID == "" {
 			reason =
 				"legacy package owner is unavailable"
 		}
@@ -579,7 +579,7 @@ func (s *MigrationService) MigrateOne(
 		s.target.Preview(
 			ctx,
 			kernel.PackagePreviewRequest{
-				UserID:    candidate.UserID,
+				SpaceID:   candidate.SpaceID,
 				ScopeType: candidate.ScopeType,
 				ScopeID:   candidate.ScopeID,
 				FileName: candidate.ExtensionID +
@@ -689,7 +689,7 @@ func (s *MigrationService) MigrateOne(
 			ctx,
 			kernel.PackageInstallRequest{
 				SessionID:           preview.SessionID,
-				UserID:              candidate.UserID,
+				SpaceID:             candidate.SpaceID,
 				ScopeType:           candidate.ScopeType,
 				ScopeID:             candidate.ScopeID,
 				ExpectedExtensionID: candidate.ExtensionID,

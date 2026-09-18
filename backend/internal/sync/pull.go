@@ -29,7 +29,7 @@ func (s *PullService) Pull(req PullRequest) (*PullResult, error) {
 	}
 
 	identity := CursorIdentity{
-		UserID:   req.UserID,
+		SpaceID:  req.SpaceID,
 		Scope:    scope,
 		DeviceID: req.DeviceID,
 	}
@@ -44,7 +44,7 @@ func (s *PullService) Pull(req PullRequest) (*PullResult, error) {
 		startCursor = cursor.LastApplied
 	}
 
-	changes, nextCursor, hasMore, err := s.changelog.Pull(req.UserID, scope, startCursor, req.Limit, EntityType(req.EntityType))
+	changes, nextCursor, hasMore, err := s.changelog.Pull(req.SpaceID, scope, startCursor, req.Limit, EntityType(req.EntityType))
 	if err != nil {
 		return nil, fmt.Errorf("pull: changelog: %w", err)
 	}
@@ -62,22 +62,22 @@ func (s *PullService) Pull(req PullRequest) (*PullResult, error) {
 	}, nil
 }
 
-func (s *PullService) MarkApplied(userID string, deviceID string, scope CursorScope, seq Sequence) error {
+func (s *PullService) MarkApplied(spaceID string, deviceID string, scope CursorScope, seq Sequence) error {
 	identity := CursorIdentity{
-		UserID:   userID,
+		SpaceID:  spaceID,
 		Scope:    scope,
 		DeviceID: deviceID,
 	}
 	return s.cursors.MarkApplied(identity, seq)
 }
 
-func (s *PullService) GetStatus(userID string, deviceID string, scope CursorScope) (*CursorStatus, error) {
+func (s *PullService) GetStatus(spaceID string, deviceID string, scope CursorScope) (*CursorStatus, error) {
 	serverSeq, err := s.changelog.GetServerSequence()
 	if err != nil {
 		return nil, fmt.Errorf("pull: server seq: %w", err)
 	}
 	identity := CursorIdentity{
-		UserID:   userID,
+		SpaceID:  spaceID,
 		Scope:    scope,
 		DeviceID: deviceID,
 	}

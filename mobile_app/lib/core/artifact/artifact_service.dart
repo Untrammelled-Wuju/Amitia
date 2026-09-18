@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:file_picker/file_picker.dart';
@@ -46,7 +47,16 @@ abstract class ArtifactService {
     required ArtifactKind kind,
     String? fileName,
     String? mimeType,
-    String source,
+    String source = 'user_upload',
+    UploadProgressCallback? onProgress,
+  });
+
+  Future<ArtifactMetadata> uploadBytes({
+    required Uint8List bytes,
+    required ArtifactKind kind,
+    required String fileName,
+    required String mimeType,
+    String source = 'ui_provider',
     UploadProgressCallback? onProgress,
   });
 
@@ -134,6 +144,60 @@ class HttpArtifactService implements ArtifactService {
       throw ArtifactServiceException('upload_failed: ${response.statusCode}');
     }
 
+    final data = response.data;
+    if (data is Map<String, dynamic> && data['artifact'] != null) {
+      return ArtifactMetadata.fromJson(data['artifact']);
+    }
+    throw ArtifactServiceException('invalid_artifact_response');
+  }
+
+  @override
+  Future<ArtifactMetadata> uploadBytes({
+    required Uint8List bytes,
+    required ArtifactKind kind,
+    required String fileName,
+    required String mimeType,
+    String source = 'ui_provider',
+    UploadProgressCallback? onProgress,
+  }) async {
+    if (bytes.isEmpty) {
+      throw ArtifactServiceException('empty_upload');
+    }
+    final formData = FormData.fromMap({
+      'kind': kind.value,
+      'source': source,
+      'mime_type': mimeType,
+      'file': MultipartFile.fromBytes(
+        bytes,
+        filename: fileName,
+        contentType: DioMediaType.parse(mimeType),
+      ),
+    });
+
+    final response = await _dio.post(
+      '$_baseUrl/api/artifacts/v1',
+      data: formData,
+      onSendProgress: (sent, total) {
+        if (onProgress != null) {
+          onProgress(UploadTask(
+            id: '',
+            fileName: fileName,
+            kind: kind,
+            totalBytes: total,
+            loadedBytes: sent,
+            state: UploadState.uploading,
+          ));
+        }
+      },
+      options: Options(
+        headers: {'Content-Type': 'multipart/form-data'},
+        validateStatus: (status) => status != null && status < 500,
+      ),
+    );
+
+    if (response.statusCode != 200) {
+      throw ArtifactServiceException('upload_failed: ${response.statusCode}');
+    }
     final data = response.data;
     if (data is Map<String, dynamic> && data['artifact'] != null) {
       return ArtifactMetadata.fromJson(data['artifact']);

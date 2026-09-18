@@ -26,8 +26,8 @@ type PresenceEventSink interface {
 }
 
 func PresenceEventPartitionKey(event PresenceDomainEvent) string {
-	if event.Entry.UserID != "" {
-		return event.Entry.UserID.String()
+	if event.Entry.SpaceID != "" {
+		return event.Entry.SpaceID.String()
 	}
 	return "system"
 }

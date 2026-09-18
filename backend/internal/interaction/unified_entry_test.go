@@ -63,7 +63,7 @@ func TestUnifiedEntryPreservesClientRequestIDAndEnvelope(t *testing.T) {
 		Channel:        "web",
 		Source:         "web",
 		PeerID:         "peer-1",
-		UserID:         "user-1",
+		SpaceID:        "user-1",
 		CharacterID:    "char-1",
 		ConversationID: "conv-1",
 		SessionID:      "session-1",
@@ -79,7 +79,7 @@ func TestUnifiedEntryPreservesClientRequestIDAndEnvelope(t *testing.T) {
 	if processor.req == nil {
 		t.Fatal("processor was not called")
 	}
-	if processor.req.RequestID != "request-1" || processor.req.SessionID != "session-1" || processor.req.PeerID != "peer-1" || processor.req.UserID != "user-1" {
+	if processor.req.RequestID != "request-1" || processor.req.SessionID != "session-1" || processor.req.PeerID != "peer-1" || processor.req.SpaceID != "user-1" {
 		t.Fatalf("entry envelope was not preserved: %#v", processor.req)
 	}
 	record, ok, err := orch.GetTracker().Get(context.Background(), result.InteractionID)
@@ -89,7 +89,7 @@ func TestUnifiedEntryPreservesClientRequestIDAndEnvelope(t *testing.T) {
 	if !ok {
 		t.Fatal("interaction record was not persisted")
 	}
-	if record.Scope.RequestID != "request-1" || record.Scope.SessionID != "session-1" || record.Scope.PeerID != "peer-1" || record.Scope.UserID != "user-1" {
+	if record.Scope.RequestID != "request-1" || record.Scope.SessionID != "session-1" || record.Scope.PeerID != "peer-1" || record.Scope.SpaceID != "user-1" {
 		t.Fatalf("persisted scope was not preserved: %#v", record.Scope)
 	}
 }
@@ -104,7 +104,7 @@ func TestUnifiedEntryGeneratesRequestIDWhenMissing(t *testing.T) {
 	result, err := entry.Handle(context.Background(), &UnifiedEntryRequest{
 		Channel:        "web",
 		Source:         "web",
-		UserID:         "user-1",
+		SpaceID:        "user-1",
 		CharacterID:    "char-1",
 		ConversationID: "conv-1",
 		Message:        "hello",
@@ -138,7 +138,7 @@ func TestUnifiedEntryUsesResolvedScopeForProcessRequest(t *testing.T) {
 	entry := NewUnifiedEntry(orch, NewScopeResolver(fakeScopeBindingLookup{bindings: []ScopeBinding{
 		{
 			ID:             "bind-1",
-			UserID:         "bound-user",
+			SpaceID:        "bound-user",
 			CharacterID:    "bound-char",
 			ConversationID: "bound-conv",
 			Channel:        "wechat",
@@ -162,7 +162,7 @@ func TestUnifiedEntryUsesResolvedScopeForProcessRequest(t *testing.T) {
 	if processor.req == nil {
 		t.Fatal("processor was not called")
 	}
-	if processor.req.UserID != "bound-user" || processor.req.CharacterID != "bound-char" || processor.req.ConversationID != "bound-conv" {
+	if processor.req.SpaceID != "bound-user" || processor.req.CharacterID != "bound-char" || processor.req.ConversationID != "bound-conv" {
 		t.Fatalf("processor did not receive resolved target scope: %#v", processor.req)
 	}
 	if processor.req.Channel != "wechat" || processor.req.PeerID != "peer-1" || processor.req.Source != "wechat" {
@@ -178,7 +178,7 @@ func TestUnifiedEntryUsesResolvedScopeForProcessRequest(t *testing.T) {
 	if !ok {
 		t.Fatal("interaction record was not persisted")
 	}
-	if record.Scope.UserID != "bound-user" || record.Scope.CharacterID != "bound-char" || record.Scope.ConversationID != "bound-conv" {
+	if record.Scope.SpaceID != "bound-user" || record.Scope.CharacterID != "bound-char" || record.Scope.ConversationID != "bound-conv" {
 		t.Fatalf("persisted scope did not use resolved target scope: %#v", record.Scope)
 	}
 	if record.Scope.Channel != "wechat" || record.Scope.PeerID != "peer-1" || record.Scope.Source != "wechat" {
@@ -205,7 +205,7 @@ func TestUnifiedEntryBackpressureConfigNormalizesExtremeValues(t *testing.T) {
 	result, err := entry.Handle(context.Background(), &UnifiedEntryRequest{
 		Channel:        "web",
 		Source:         "web",
-		UserID:         "user-1",
+		SpaceID:        "user-1",
 		CharacterID:    "char-1",
 		ConversationID: "conv-1",
 		Message:        "hello",
@@ -269,7 +269,7 @@ func TestUnifiedEntryBackpressureConcurrentConfigAndHandle(t *testing.T) {
 			_, _ = entry.Handle(context.Background(), &UnifiedEntryRequest{
 				Channel:        "web",
 				Source:         "web",
-				UserID:         "user-1",
+				SpaceID:        "user-1",
 				CharacterID:    "char-1",
 				ConversationID: "conv-concurrent",
 				Message:        "hello",

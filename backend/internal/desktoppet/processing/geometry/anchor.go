@@ -15,6 +15,9 @@ const (
 	AnchorHeadCenter        AnchorMode = "head_center"
 	AnchorHandContact       AnchorMode = "hand_contact"
 	AnchorWindowEdgeContact AnchorMode = "window_edge_contact"
+	AnchorBottomCenter      AnchorMode = "bottom_center"
+	AnchorCenter            AnchorMode = "center"
+	AnchorTopCenter         AnchorMode = "top_center"
 )
 
 type SourceAnchorResult struct {
@@ -47,6 +50,12 @@ func EstimateSourceAnchor(analysis *SubjectAnalysis, mask *image.Gray, mode Anch
 		return estimateHandContact(mask, box, space), nil
 	case AnchorWindowEdgeContact:
 		return estimateWindowEdge(mask, box, space), nil
+	case AnchorBottomCenter:
+		return estimateFeetCenter(mask, box, space), nil
+	case AnchorCenter:
+		return estimateBodyCenter(main, space), nil
+	case AnchorTopCenter:
+		return estimateHeadCenter(box, space), nil
 	default:
 		return nil, errors.New("unknown anchor mode: " + string(mode))
 	}

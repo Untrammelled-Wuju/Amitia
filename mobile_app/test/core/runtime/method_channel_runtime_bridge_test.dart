@@ -23,8 +23,14 @@ void main() {
     });
 
     test('contract has correct channel names', () {
-      expect(RuntimeBridgeContract.methodChannelName, 'com.amitia.runtime/bridge');
-      expect(RuntimeBridgeContract.eventChannelName, 'com.amitia.runtime/events');
+      expect(
+        RuntimeBridgeContract.methodChannelName,
+        'com.amitia.runtime/bridge',
+      );
+      expect(
+        RuntimeBridgeContract.eventChannelName,
+        'com.amitia.runtime/events',
+      );
     });
 
     test('contract has correct method names', () {
@@ -34,15 +40,18 @@ void main() {
       expect(RuntimeBridgeContract.methodInstall, 'runtime.install');
       expect(RuntimeBridgeContract.methodVerify, 'runtime.verify');
       expect(RuntimeBridgeContract.methodRepair, 'runtime.repair');
-      expect(RuntimeBridgeContract.methodManifestSummary, 'runtime.manifestSummary');
+      expect(
+        RuntimeBridgeContract.methodManifestSummary,
+        'runtime.manifestSummary',
+      );
     });
 
     testWidgets('snapshot handles MissingPluginException', (tester) async {
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(
-        const MethodChannel(RuntimeBridgeContract.methodChannelName),
-        (call) async => null,
-      );
+            const MethodChannel(RuntimeBridgeContract.methodChannelName),
+            (call) async => null,
+          );
 
       final result = await bridge.snapshot();
       expect(result.state, RuntimeBridgeState.unavailable);
@@ -51,9 +60,9 @@ void main() {
     testWidgets('start returns bridge unavailable on null', (tester) async {
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(
-        const MethodChannel(RuntimeBridgeContract.methodChannelName),
-        (call) async => null,
-      );
+            const MethodChannel(RuntimeBridgeContract.methodChannelName),
+            (call) async => null,
+          );
 
       final result = await bridge.start();
       expect(result.accepted, false);
@@ -64,9 +73,9 @@ void main() {
     testWidgets('stop returns bridge unavailable on null', (tester) async {
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(
-        const MethodChannel(RuntimeBridgeContract.methodChannelName),
-        (call) async => null,
-      );
+            const MethodChannel(RuntimeBridgeContract.methodChannelName),
+            (call) async => null,
+          );
 
       final result = await bridge.stop();
       expect(result.accepted, false);
@@ -77,9 +86,9 @@ void main() {
     testWidgets('install returns bridge unavailable on null', (tester) async {
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(
-        const MethodChannel(RuntimeBridgeContract.methodChannelName),
-        (call) async => null,
-      );
+            const MethodChannel(RuntimeBridgeContract.methodChannelName),
+            (call) async => null,
+          );
 
       final result = await bridge.install();
       expect(result.accepted, false);
@@ -90,9 +99,9 @@ void main() {
     testWidgets('verify returns bridge unavailable on null', (tester) async {
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(
-        const MethodChannel(RuntimeBridgeContract.methodChannelName),
-        (call) async => null,
-      );
+            const MethodChannel(RuntimeBridgeContract.methodChannelName),
+            (call) async => null,
+          );
 
       final result = await bridge.verify();
       expect(result.accepted, false);
@@ -103,9 +112,9 @@ void main() {
     testWidgets('repair returns bridge unavailable on null', (tester) async {
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(
-        const MethodChannel(RuntimeBridgeContract.methodChannelName),
-        (call) async => null,
-      );
+            const MethodChannel(RuntimeBridgeContract.methodChannelName),
+            (call) async => null,
+          );
 
       final result = await bridge.repair();
       expect(result.accepted, false);
@@ -116,15 +125,15 @@ void main() {
     testWidgets('snapshot returns data on success', (tester) async {
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(
-        const MethodChannel(RuntimeBridgeContract.methodChannelName),
-        (call) async => {
-          'schemaVersion': 1,
-          'state': 'READY',
-          'generation': 5,
-          'runtimeInstalled': true,
-          'runtimeAvailable': true,
-        },
-      );
+            const MethodChannel(RuntimeBridgeContract.methodChannelName),
+            (call) async => {
+              'schemaVersion': 1,
+              'state': 'READY',
+              'generation': 5,
+              'runtimeInstalled': true,
+              'runtimeAvailable': true,
+            },
+          );
 
       final result = await bridge.snapshot();
       expect(result.state, RuntimeBridgeState.ready);
@@ -132,6 +141,31 @@ void main() {
       expect(result.runtimeInstalled, true);
       expect(result.runtimeAvailable, true);
     });
+
+    testWidgets(
+      'snapshots replay the latest native snapshot to late listeners',
+      (tester) async {
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(
+              const MethodChannel(RuntimeBridgeContract.methodChannelName),
+              (call) async => {
+                'schemaVersion': 1,
+                'state': 'READY',
+                'generation': 5,
+                'runtimeInstalled': true,
+                'runtimeAvailable': true,
+              },
+            );
+
+        await bridge.snapshot();
+        final replayed = await bridge.snapshots.first.timeout(
+          const Duration(seconds: 1),
+        );
+
+        expect(replayed.state, RuntimeBridgeState.ready);
+        expect(replayed.generation, 5);
+      },
+    );
 
     test('dispose cleans up resources', () async {
       await bridge.dispose();

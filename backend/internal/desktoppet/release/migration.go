@@ -31,12 +31,11 @@ func NewLegacyPackageMigrationService(
 
 type MigrateLegacyPackageRequest struct {
 	LegacyPackageID   string
-	UserID            string
+	SpaceID           string
 	SourceContentHash string
 	ManifestJSON      string
 	LegacyVersion     int
 	PetID             string
-	CharacterID       string
 	PackageName       string
 }
 
@@ -70,7 +69,7 @@ func (s *LegacyPackageMigrationService) Migrate(ctx context.Context, req *Migrat
 	op := &LegacyPackageMigrationOperation{
 		ID:              opID,
 		LegacyPackageID: req.LegacyPackageID,
-		UserID:          req.UserID,
+		SpaceID:         req.SpaceID,
 		State:           LegacyMigrationOpStatePending,
 		StartedAt:       now,
 		UpdatedAt:       now,
@@ -100,7 +99,7 @@ func (s *LegacyPackageMigrationService) resumeMigration(ctx context.Context, map
 	op := &LegacyPackageMigrationOperation{
 		ID:              uuid.NewString(),
 		LegacyPackageID: req.LegacyPackageID,
-		UserID:          req.UserID,
+		SpaceID:         req.SpaceID,
 		State:           LegacyMigrationOpStateValidating,
 		StartedAt:       formatMigrationTimestamp(time.Now()),
 		UpdatedAt:       formatMigrationTimestamp(time.Now()),
@@ -122,7 +121,7 @@ func (s *LegacyPackageMigrationService) executeMigration(ctx context.Context, op
 		return nil, err
 	}
 
-	if manifest.SchemaVersion < 2 {
+	if manifest.SchemaVersion < 1 {
 		op.State = LegacyMigrationOpStateRebuilding
 		s.updateMigrationOp(op)
 		manifest = s.upgradeManifestToV2(manifest, req)
@@ -133,27 +132,20 @@ func (s *LegacyPackageMigrationService) executeMigration(ctx context.Context, op
 
 	petID := req.PetID
 	if petID == "" {
-		identity, err := s.repo.GetPetIdentityByCharacter(req.UserID, req.CharacterID)
-		if err != nil {
-			now := formatMigrationTimestamp(time.Now())
-			identity = &PetIdentityData{
-				ID:                uuid.NewString(),
-				OwnerUserID:       req.UserID,
-				SourceCharacterID: req.CharacterID,
-				Name:              req.PackageName,
-				Slug:              req.CharacterID,
-				BindingPolicy:     "character_locked",
-				CreatedAt:         now,
-				UpdatedAt:         now,
-			}
-			if err := s.repo.CreatePetIdentity(identity); err != nil {
-				s.failMigrationOp(op, "PET_IDENTITY_FAILED", err)
-				return nil, err
-			}
-			petID = identity.ID
-		} else {
-			petID = identity.ID
+		now := formatMigrationTimestamp(time.Now())
+		identity := &PetIdentityData{
+			ID:           uuid.NewString(),
+			OwnerSpaceID: req.SpaceID,
+			Name:         req.PackageName,
+			Slug:         makeIdentitySlug(req.PackageName),
+			CreatedAt:    now,
+			UpdatedAt:    now,
 		}
+		if err := s.repo.CreatePetIdentity(identity); err != nil {
+			s.failMigrationOp(op, "PET_IDENTITY_FAILED", err)
+			return nil, err
+		}
+		petID = identity.ID
 	}
 
 	releaseID := uuid.NewString()
@@ -166,10 +158,10 @@ func (s *LegacyPackageMigrationService) executeMigration(ctx context.Context, op
 	releaseData := &ReleaseData{
 		ID:                  releaseID,
 		PetID:               petID,
-		OwnerUserID:         req.UserID,
+		OwnerSpaceID:        req.SpaceID,
 		Version:             fmt.Sprintf("1.0.%d", req.LegacyVersion),
 		ReleaseSequence:     req.LegacyVersion,
-		SchemaVersion:       2,
+		SchemaVersion:       1,
 		Lifecycle:           string(ReleaseLifecycleReady),
 		ContentRootHash:     contentRootHash,
 		ManifestHash:        hashMigrationManifest(req.ManifestJSON),
@@ -203,7 +195,7 @@ func (s *LegacyPackageMigrationService) executeMigration(ctx context.Context, op
 	if s.eventPublisher != nil {
 		s.eventPublisher.PublishReleaseEvent(ReleaseEvent{
 			EventType:  EventLegacyPackageMigrated,
-			UserID:     req.UserID,
+			SpaceID:    req.SpaceID,
 			PetID:      petID,
 			ReleaseID:  releaseID,
 			OccurredAt: now,
@@ -244,7 +236,7 @@ func (s *LegacyPackageMigrationService) parseLegacyManifest(manifestJSON string)
 }
 
 func (s *LegacyPackageMigrationService) upgradeManifestToV2(m *legacyManifest, req *MigrateLegacyPackageRequest) *legacyManifest {
-	m.SchemaVersion = 2
+	m.SchemaVersion = 1
 	if m.PetID == "" {
 		m.PetID = req.PetID
 	}

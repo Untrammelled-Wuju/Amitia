@@ -56,7 +56,7 @@ func (s *SQLitePermissionSnapshotStore) SaveSnapshot(ctx context.Context, snap P
 		(snapshot_id, session_id, extension_id, module_id, generation,
 		 character_id, conversation_id, resource_ids, granted_perms, granted_scopes,
 		 created_at, expires_at, revoked_at,
-		 execution_placement, execution_user_id, execution_device_id, execution_runtime_id,
+		 execution_placement, execution_space_id, execution_device_id, execution_runtime_id,
 		 provider_id, provider_instance_id, execution_binding_key)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(snapshot_id) DO UPDATE SET
@@ -73,7 +73,7 @@ func (s *SQLitePermissionSnapshotStore) SaveSnapshot(ctx context.Context, snap P
 		 expires_at = excluded.expires_at,
 		 revoked_at = excluded.revoked_at,
 		 execution_placement = excluded.execution_placement,
-		 execution_user_id = excluded.execution_user_id,
+		 execution_space_id = excluded.execution_space_id,
 		 execution_device_id = excluded.execution_device_id,
 		 execution_runtime_id = excluded.execution_runtime_id,
 		 provider_id = excluded.provider_id,
@@ -83,7 +83,7 @@ func (s *SQLitePermissionSnapshotStore) SaveSnapshot(ctx context.Context, snap P
 		snap.SnapshotID, snap.SessionID, snap.ExtensionID, snap.ModuleID, snap.Generation,
 		snap.CharacterID, snap.ConversationID, resourceIDs, grantedPerms, grantedScopes,
 		snap.CreatedAt, expiresAt, revokedAt,
-		snap.ExecutionPlacement.String(), snap.UserID.String(), snap.DeviceID.String(), snap.RuntimeID.String(),
+		snap.ExecutionPlacement.String(), snap.SpaceID.String(), snap.DeviceID.String(), snap.RuntimeID.String(),
 		snap.ProviderID, snap.ProviderInstanceID, snap.ExecutionBindingKey,
 	)
 	if err != nil {
@@ -98,7 +98,7 @@ func (s *SQLitePermissionSnapshotStore) GetSnapshot(ctx context.Context, snapsho
 		 COALESCE(character_id, ''), COALESCE(conversation_id, ''),
 		 COALESCE(resource_ids, ''), COALESCE(granted_perms, ''), COALESCE(granted_scopes, ''),
 		 created_at, expires_at, revoked_at,
-		 COALESCE(execution_placement, ''), COALESCE(execution_user_id, ''),
+		 COALESCE(execution_placement, ''), COALESCE(execution_space_id, ''),
 		 COALESCE(execution_device_id, ''), COALESCE(execution_runtime_id, ''),
 		 COALESCE(provider_id, ''), COALESCE(provider_instance_id, ''),
 		 COALESCE(execution_binding_key, '')
@@ -108,7 +108,7 @@ func (s *SQLitePermissionSnapshotStore) GetSnapshot(ctx context.Context, snapsho
 
 	var snap PermissionSnapshot
 	var resourceIDs, grantedPerms, grantedScopes string
-	var executionPlacement, executionUserID, executionDeviceID, executionRuntimeID string
+	var executionPlacement, executionSpaceID, executionDeviceID, executionRuntimeID string
 	var providerID, providerInstanceID, executionBindingKey string
 	var expiresAt, revokedAt sql.NullTime
 
@@ -117,7 +117,7 @@ func (s *SQLitePermissionSnapshotStore) GetSnapshot(ctx context.Context, snapsho
 		&snap.CharacterID, &snap.ConversationID,
 		&resourceIDs, &grantedPerms, &grantedScopes,
 		&snap.CreatedAt, &expiresAt, &revokedAt,
-		&executionPlacement, &executionUserID, &executionDeviceID, &executionRuntimeID,
+		&executionPlacement, &executionSpaceID, &executionDeviceID, &executionRuntimeID,
 		&providerID, &providerInstanceID, &executionBindingKey,
 	)
 	if err != nil {
@@ -127,7 +127,7 @@ func (s *SQLitePermissionSnapshotStore) GetSnapshot(ctx context.Context, snapsho
 	snap.GrantedPerms = unmarshalStringList(grantedPerms)
 	snap.GrantedScopes = unmarshalStringList(grantedScopes)
 	snap.ExecutionPlacement = ParseExecutionPlacement(executionPlacement)
-	snap.UserID = runtimeidentity.ParseUserID(executionUserID)
+	snap.SpaceID = runtimeidentity.ParseSpaceID(executionSpaceID)
 	snap.DeviceID = runtimeidentity.ParseDeviceID(executionDeviceID)
 	snap.RuntimeID = runtimeidentity.ParseRuntimeID(executionRuntimeID)
 	snap.ProviderID = providerID
@@ -208,29 +208,52 @@ func (s *SQLitePermissionSnapshotStore) RevokeInvalidSnapshots(ctx context.Conte
 	if err != nil {
 		return 0, fmt.Errorf("sqlite: list active snapshots for validation: %w", err)
 	}
-	defer rows.Close()
-
-	revoked := 0
+	type snapshot struct {
+		id           string
+		extensionID  string
+		moduleID     string
+		generation   int64
+		grantedPerms string
+	}
+	snapshots := make([]snapshot, 0)
 	for rows.Next() {
 		var snapshotID, extensionID, moduleID, grantedPermsJSON string
 		var generation int64
 		if err := rows.Scan(&snapshotID, &extensionID, &moduleID, &generation, &grantedPermsJSON); err != nil {
-			return revoked, fmt.Errorf("sqlite: scan snapshot row: %w", err)
+			rows.Close()
+			return 0, fmt.Errorf("sqlite: scan snapshot row: %w", err)
 		}
+		snapshots = append(snapshots, snapshot{
+			id:           snapshotID,
+			extensionID:  extensionID,
+			moduleID:     moduleID,
+			generation:   generation,
+			grantedPerms: grantedPermsJSON,
+		})
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return 0, fmt.Errorf("sqlite: iterate active snapshots for validation: %w", err)
+	}
+	if err := rows.Close(); err != nil {
+		return 0, fmt.Errorf("sqlite: close active snapshots for validation: %w", err)
+	}
 
+	revoked := 0
+	for _, item := range snapshots {
 		invalidPerms := false
 		if validator != nil {
-			perms := unmarshalStringList(grantedPermsJSON)
+			perms := unmarshalStringList(item.grantedPerms)
 			invalidPerms = len(validator.ValidateAll(perms)) > 0
 		}
 
 		invalidSubject := false
 		if subjectValidator != nil {
-			invalidSubject = !subjectValidator(extensionID, moduleID, generation)
+			invalidSubject = !subjectValidator(item.extensionID, item.moduleID, item.generation)
 		}
 
 		if invalidPerms || invalidSubject {
-			if err := s.RevokeSnapshot(ctx, snapshotID); err != nil {
+			if err := s.RevokeSnapshot(ctx, item.id); err != nil {
 				continue
 			}
 			revoked++

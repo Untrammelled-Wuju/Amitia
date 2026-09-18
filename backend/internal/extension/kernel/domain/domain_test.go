@@ -50,6 +50,7 @@ func TestVersionCompare(t *testing.T) {
 func TestValidateExtensionID(t *testing.T) {
 	valid := []string{
 		"com.example/weather",
+		"com.example.weather",
 		"top.untrammelled/amitia-tools",
 		"org.open-source/local-memory",
 		"local.user/my-ext",
@@ -57,7 +58,6 @@ func TestValidateExtensionID(t *testing.T) {
 	invalid := []string{
 		"",
 		"weather",
-		"com.example.weather",
 		"com.example/Weather",
 		"COM.EXAMPLE/weather",
 		"com.example/weather@1.0.0",
@@ -79,7 +79,7 @@ func TestExtensionDefinitionValidate(t *testing.T) {
 	def := ExtensionDefinition{
 		ID:              "com.example/test",
 		Version:         v,
-		ManifestVersion: 2,
+		ManifestVersion: 1,
 		Name:            LocalizedText{Default: "Test"},
 		Modules: []ModuleDefinition{
 			{
@@ -105,7 +105,7 @@ func TestExtensionDefinitionValidateMissingModule(t *testing.T) {
 	def := ExtensionDefinition{
 		ID:              "com.example/test",
 		Version:         v,
-		ManifestVersion: 2,
+		ManifestVersion: 1,
 		Name:            LocalizedText{Default: "Test"},
 		Modules:         []ModuleDefinition{},
 	}
@@ -119,7 +119,7 @@ func TestExtensionDefinitionValidateDuplicateModule(t *testing.T) {
 	def := ExtensionDefinition{
 		ID:              "com.example/test",
 		Version:         v,
-		ManifestVersion: 2,
+		ManifestVersion: 1,
 		Name:            LocalizedText{Default: "Test"},
 		Modules: []ModuleDefinition{
 			{ID: "main", ExtensionID: "com.example/test", Type: ModuleTypeBuiltin},
@@ -173,7 +173,7 @@ func TestDependencyGraphWithCycle(t *testing.T) {
 func TestInMemoryRepositories(t *testing.T) {
 	v, _ := ParseVersion("1.0.0")
 	def := ExtensionDefinition{
-		ID: "com.example/test", Version: v, ManifestVersion: 2,
+		ID: "com.example/test", Version: v, ManifestVersion: 1,
 		Name: LocalizedText{Default: "Test"},
 		Modules: []ModuleDefinition{
 			{ID: "main", ExtensionID: "com.example/test", Type: ModuleTypeBuiltin},

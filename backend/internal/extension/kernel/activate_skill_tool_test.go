@@ -10,28 +10,28 @@ import (
 
 type mockAgentSkillBackend struct {
 	catalog      []SkillCatalogEntry
-	activateFunc func(scope LegacyScope, name string) (SkillActivationResult, error)
+	activateFunc func(scope InvocationScope, name string) (SkillActivationResult, error)
 	activePrompt []SkillActivePrompt
 	activeLabels []string
 	endRoundHit  int
 }
 
-func (m *mockAgentSkillBackend) ResolveCatalog(ctx context.Context, scope LegacyScope) ([]SkillCatalogEntry, error) {
+func (m *mockAgentSkillBackend) ResolveCatalog(ctx context.Context, scope InvocationScope) ([]SkillCatalogEntry, error) {
 	return m.catalog, nil
 }
 
-func (m *mockAgentSkillBackend) Activate(ctx context.Context, scope LegacyScope, name string, explicit bool) (SkillActivationResult, error) {
+func (m *mockAgentSkillBackend) Activate(ctx context.Context, scope InvocationScope, name string, explicit bool) (SkillActivationResult, error) {
 	if m.activateFunc != nil {
 		return m.activateFunc(scope, name)
 	}
 	return SkillActivationResult{ActivationID: "act-" + name, ExtensionID: "ext-" + name, Name: name, Tokens: 100, Explicit: explicit}, nil
 }
 
-func (m *mockAgentSkillBackend) ActivePrompts(ctx context.Context, scope LegacyScope) ([]SkillActivePrompt, error) {
+func (m *mockAgentSkillBackend) ActivePrompts(ctx context.Context, scope InvocationScope) ([]SkillActivePrompt, error) {
 	return m.activePrompt, nil
 }
 
-func (m *mockAgentSkillBackend) EndRound(scope LegacyScope) {
+func (m *mockAgentSkillBackend) EndRound(scope InvocationScope) {
 	m.endRoundHit++
 }
 
@@ -78,7 +78,7 @@ func TestModelTools_InjectsActivateSkillWhenCatalogNonEmpty(t *testing.T) {
 		counters: NewToolFacadeCounters(),
 	}
 
-	tools, err := facade.ModelTools(context.Background(), LegacyScope{})
+	tools, err := facade.ModelTools(context.Background(), InvocationScope{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -108,7 +108,7 @@ func TestModelTools_NoActivateSkillWhenCatalogEmpty(t *testing.T) {
 		counters: NewToolFacadeCounters(),
 	}
 
-	tools, err := facade.ModelTools(context.Background(), LegacyScope{})
+	tools, err := facade.ModelTools(context.Background(), InvocationScope{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -125,7 +125,7 @@ func TestModelTools_NoActivateSkillWithoutBackend(t *testing.T) {
 		counters: NewToolFacadeCounters(),
 	}
 
-	tools, err := facade.ModelTools(context.Background(), LegacyScope{})
+	tools, err := facade.ModelTools(context.Background(), InvocationScope{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -139,7 +139,7 @@ func TestExecuteModelTool_ActivateSkillSuccess(t *testing.T) {
 	facade := &ToolFacade{
 		agentSkillBackend: &mockAgentSkillBackend{
 			catalog: []SkillCatalogEntry{{Name: "pdf", Description: "PDF"}},
-			activateFunc: func(scope LegacyScope, name string) (SkillActivationResult, error) {
+			activateFunc: func(scope InvocationScope, name string) (SkillActivationResult, error) {
 				return SkillActivationResult{
 					ActivationID:        "act-123",
 					ExtensionID:         "ext-456",
@@ -156,7 +156,7 @@ func TestExecuteModelTool_ActivateSkillSuccess(t *testing.T) {
 	}
 
 	input := json.RawMessage(`{"name":"pdf"}`)
-	result, found := facade.ExecuteModelTool(context.Background(), ActivateSkillToolName, input, LegacyScope{}, "idem-1")
+	result, found := facade.ExecuteModelTool(context.Background(), ActivateSkillToolName, input, InvocationScope{}, "idem-1")
 
 	if !found {
 		t.Fatal("expected found=true for activate_skill")
@@ -186,7 +186,7 @@ func TestExecuteModelTool_ActivateSkillFailure(t *testing.T) {
 	facade := &ToolFacade{
 		agentSkillBackend: &mockAgentSkillBackend{
 			catalog: []SkillCatalogEntry{{Name: "pdf", Description: "PDF"}},
-			activateFunc: func(scope LegacyScope, name string) (SkillActivationResult, error) {
+			activateFunc: func(scope InvocationScope, name string) (SkillActivationResult, error) {
 				return SkillActivationResult{}, &mockError{text: "skill not found"}
 			},
 		},
@@ -194,7 +194,7 @@ func TestExecuteModelTool_ActivateSkillFailure(t *testing.T) {
 	}
 
 	input := json.RawMessage(`{"name":"unknown"}`)
-	result, found := facade.ExecuteModelTool(context.Background(), ActivateSkillToolName, input, LegacyScope{}, "idem-1")
+	result, found := facade.ExecuteModelTool(context.Background(), ActivateSkillToolName, input, InvocationScope{}, "idem-1")
 
 	if !found {
 		t.Fatal("expected found=true even on activation failure")
@@ -218,7 +218,7 @@ func TestExecuteModelTool_ActivateSkillInvalidInput(t *testing.T) {
 	}
 
 	input := json.RawMessage(`{"bad_field":"value"}`)
-	result, found := facade.ExecuteModelTool(context.Background(), ActivateSkillToolName, input, LegacyScope{}, "idem-1")
+	result, found := facade.ExecuteModelTool(context.Background(), ActivateSkillToolName, input, InvocationScope{}, "idem-1")
 
 	if !found {
 		t.Fatal("expected found=true even on invalid input")
@@ -239,7 +239,7 @@ func TestExecuteModelTool_ActivateSkillNoBackend(t *testing.T) {
 	}
 
 	input := json.RawMessage(`{"name":"pdf"}`)
-	_, found := facade.ExecuteModelTool(context.Background(), ActivateSkillToolName, input, LegacyScope{}, "idem-1")
+	_, found := facade.ExecuteModelTool(context.Background(), ActivateSkillToolName, input, InvocationScope{}, "idem-1")
 
 	if found {
 		t.Fatal("expected found=false when no backend configured")
@@ -269,7 +269,7 @@ func TestPrepareAgentSkillPrompt_FromBackendExplicitActivation(t *testing.T) {
 		counters:          NewToolFacadeCounters(),
 	}
 
-	scope := LegacyScope{UserID: "user1", ConversationID: "conv1"}
+	scope := InvocationScope{SpaceID: "user1", ConversationID: "conv1"}
 	catalog, activated, errs := facade.PrepareAgentSkillPrompt(context.Background(), scope, "Please use $pdf for this task")
 
 	if len(errs) > 0 {
@@ -305,7 +305,7 @@ func TestPrepareAgentSkillPrompt_FromBackendNoExplicit(t *testing.T) {
 		counters:          NewToolFacadeCounters(),
 	}
 
-	scope := LegacyScope{UserID: "user1"}
+	scope := InvocationScope{SpaceID: "user1"}
 	catalog, activated, errs := facade.PrepareAgentSkillPrompt(context.Background(), scope, "Just a normal message")
 
 	if len(errs) > 0 {
@@ -328,7 +328,7 @@ func TestEndAgentSkillRound_CallsBackend(t *testing.T) {
 		counters:          NewToolFacadeCounters(),
 	}
 
-	scope := LegacyScope{UserID: "user1"}
+	scope := InvocationScope{SpaceID: "user1"}
 	facade.EndAgentSkillRound(scope)
 
 	if mock.endRoundHit != 1 {
@@ -348,7 +348,7 @@ func TestResolveVisibleSkillNames(t *testing.T) {
 		counters: NewToolFacadeCounters(),
 	}
 
-	names, err := facade.resolveVisibleSkillNames(context.Background(), LegacyScope{})
+	names, err := facade.resolveVisibleSkillNames(context.Background(), InvocationScope{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

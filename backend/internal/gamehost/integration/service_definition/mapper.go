@@ -4,7 +4,10 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"os"
 	"sort"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/u-ai/backend/internal/extension/kernel/trusted_service"
@@ -33,6 +36,24 @@ func (m *DefinitionMapper) MapToDefinition(view ServiceRuntimeView) (*trusted_se
 	}
 	if err := validateResourceLimits(view.Limits); err != nil {
 		return nil, err
+	}
+
+	definitionID := view.ToDefinitionID()
+	envCopy := cloneStringMap(view.Env)
+	executablePath := view.ExecutablePath
+	if executablePath == "" {
+		executablePath = view.EntryPoint
+	}
+	integrityValue := view.IntegrityValue
+	if integrityValue == "" && view.ExecutableSHA256 != "" {
+		integrityValue = "sha256:" + view.ExecutableSHA256
+	}
+
+	trustLevel := authoritativeServiceTrustLevel(view.PublisherTrust)
+	signatureTrusted := trustLevel.AllowedForService()
+	networkPolicy := resolveNetworkPolicy(view.Network)
+	if (view.PublisherTrust == "development" || serviceRuntimeDevelopmentModeEnabled()) && strings.EqualFold(strings.TrimSpace(networkPolicy.Mode), "unrestricted") {
+		networkPolicy.Enforce = false
 	}
 
 	definitionID := view.ToDefinitionID()
@@ -101,7 +122,7 @@ func (m *DefinitionMapper) MapToDefinition(view ServiceRuntimeView) (*trusted_se
 		// enforced (or fail-closed) by the platform supervisor. Never silently drop
 		// a plugin's declared process budget.
 		Limits:              view.Limits,
-		Network:             resolveNetworkPolicy(view.Network),
+		Network:             networkPolicy,
 		SandboxReadOnlyRoot: view.SandboxReadOnlyRoot,
 		ManifestHash:        computeManifestHash(view),
 		DefinitionVersion:   2,
@@ -248,6 +269,8 @@ func authoritativeServiceTrustLevel(raw string) trusted_service.TrustLevel {
 		return trusted_service.TrustLevelOfficial
 	case "trusted", "user_trusted":
 		return trusted_service.TrustLevelTrusted
+	case "development":
+		return trusted_service.TrustLevelTrusted
 	case "community":
 		return trusted_service.TrustLevelCommunity
 	default:
@@ -266,6 +289,11 @@ func resolveNetworkPolicy(policy trusted_service.ServiceNetworkPolicy) trusted_s
 	// Missing network policy is deny-by-default. A plugin must explicitly request
 	// loopback or unrestricted access; unsupported policies never degrade open.
 	return trusted_service.ServiceNetworkPolicy{Mode: "none", Enforce: true}
+}
+
+func serviceRuntimeDevelopmentModeEnabled() bool {
+	enabled, err := strconv.ParseBool(strings.TrimSpace(os.Getenv("AMITIA_EXTENSION_DEV_MODE")))
+	return err == nil && enabled
 }
 
 func CanonicalizeEnv(env map[string]string) []string {

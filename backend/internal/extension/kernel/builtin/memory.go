@@ -21,7 +21,7 @@ func buildBaseDomainDefinition(id, name, desc, ver string) (domain.ExtensionDefi
 		Name:            domain.LocalizedText{Default: name},
 		Description:     domain.LocalizedText{Default: desc},
 		Version:         parseBuiltinVersion(ver),
-		ManifestVersion: 2,
+		ManifestVersion: 1,
 		Domain:          domain.ExtensionDomain(id),
 	}
 	return def, nil
@@ -50,7 +50,7 @@ func BuildMemoryExtension(version string) Definition {
 		Name:            domain.LocalizedText{Default: "Memory"},
 		Description:     domain.LocalizedText{Default: "Memory storage and retrieval"},
 		Version:         parseBuiltinVersion(version),
-		ManifestVersion: 2,
+		ManifestVersion: 1,
 		Domain:          domain.ExtensionDomain("memory"),
 	}
 	def.Modules = []domain.ModuleDefinition{
@@ -74,7 +74,7 @@ func BuildProfileExtension(version string) Definition {
 		Name:            domain.LocalizedText{Default: "User Profile"},
 		Description:     domain.LocalizedText{Default: "User profile storage and retrieval"},
 		Version:         parseBuiltinVersion(version),
-		ManifestVersion: 2,
+		ManifestVersion: 1,
 		Domain:          domain.ExtensionDomain("profile"),
 	}
 	def.Modules = []domain.ModuleDefinition{
@@ -98,7 +98,7 @@ func BuildEpisodicExtension(version string) Definition {
 		Name:            domain.LocalizedText{Default: "Episodic Memory"},
 		Description:     domain.LocalizedText{Default: "Episodic conversation memory"},
 		Version:         parseBuiltinVersion(version),
-		ManifestVersion: 2,
+		ManifestVersion: 1,
 		Domain:          domain.ExtensionDomain("episodic"),
 	}
 	def.Modules = []domain.ModuleDefinition{
@@ -122,7 +122,7 @@ func BuildWorldBookExtension(version string) Definition {
 		Name:            domain.LocalizedText{Default: "World Book"},
 		Description:     domain.LocalizedText{Default: "Static world-building knowledge store"},
 		Version:         parseBuiltinVersion(version),
-		ManifestVersion: 2,
+		ManifestVersion: 1,
 		Domain:          domain.ExtensionDomain("worldbook"),
 	}
 	def.Modules = []domain.ModuleDefinition{
@@ -146,7 +146,7 @@ func BuildCompanionExtension(version string) Definition {
 		Name:            domain.LocalizedText{Default: "Companion"},
 		Description:     domain.LocalizedText{Default: "Companion configuration and lifecycle"},
 		Version:         parseBuiltinVersion(version),
-		ManifestVersion: 2,
+		ManifestVersion: 1,
 		Domain:          domain.ExtensionDomain("companion"),
 	}
 	def.Modules = []domain.ModuleDefinition{
@@ -171,8 +171,8 @@ type MemoryProvider interface {
 }
 
 type ProfileProvider interface {
-	Get(ctx context.Context, userID string) ([]byte, error)
-	Update(ctx context.Context, userID string, data []byte) error
+	Get(ctx context.Context, spaceID string) ([]byte, error)
+	Update(ctx context.Context, spaceID string, data []byte) error
 }
 
 type EpisodicProvider interface {

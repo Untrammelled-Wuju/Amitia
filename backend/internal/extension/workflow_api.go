@@ -341,7 +341,7 @@ func (api *WorkflowAPI) createTaskerTriggerSecret(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "local workflow trigger secret endpoint unavailable"})
 		return
 	}
-	value, err := api.newTaskerTriggerSecret(c.Request.Context(), workflowUserID(c))
+	value, err := api.newTaskerTriggerSecret(c.Request.Context(), workflowSpaceID(c))
 	if err != nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
 		return
@@ -350,9 +350,9 @@ func (api *WorkflowAPI) createTaskerTriggerSecret(c *gin.Context) {
 	c.JSON(http.StatusCreated, value)
 }
 
-func (api *WorkflowAPI) newTaskerTriggerSecret(ctx context.Context, userID string) (map[string]string, error) {
-	userID = strings.TrimSpace(userID)
-	if userID == "" {
+func (api *WorkflowAPI) newTaskerTriggerSecret(ctx context.Context, spaceID string) (map[string]string, error) {
+	spaceID = strings.TrimSpace(spaceID)
+	if spaceID == "" {
 		return nil, errors.New("workflow user is required")
 	}
 	if api == nil || api.runtime == nil || api.runtime.Kernel == nil || api.runtime.Kernel.Container() == nil || api.runtime.Kernel.Container().ExecutionKernel == nil || api.runtime.Kernel.Container().ExecutionKernel.SecretBroker == nil {
@@ -367,7 +367,7 @@ func (api *WorkflowAPI) newTaskerTriggerSecret(ctx context.Context, userID strin
 	for i := range raw {
 		raw[i] = 0
 	}
-	ref, err := api.runtime.Kernel.Container().ExecutionKernel.SecretBroker.Store(ctx, workflow.TriggerSecretNamespace(userID), encoded)
+	ref, err := api.runtime.Kernel.Container().ExecutionKernel.SecretBroker.Store(ctx, workflow.TriggerSecretNamespace(spaceID), encoded)
 	if err != nil {
 		for i := range encoded {
 			encoded[i] = 0
@@ -435,8 +435,8 @@ func (api *WorkflowAPI) workflowSyncConflicts(c *gin.Context) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "workflow sync repository unavailable"})
 		return
 	}
-	userID := strings.TrimSpace(workflowUserID(c))
-	if userID == "" {
+	spaceID := strings.TrimSpace(workflowSpaceID(c))
+	if spaceID == "" {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "workflow user is required"})
 		return
 	}
@@ -452,13 +452,13 @@ func (api *WorkflowAPI) workflowSyncConflicts(c *gin.Context) {
 		}
 		limit = parsed
 	}
-	items, err := api.runtime.Kernel.Container().WorkflowDefRepo.ListWorkflowSyncConflicts(c.Request.Context(), userID, limit)
+	items, err := api.runtime.Kernel.Container().WorkflowDefRepo.ListWorkflowSyncConflicts(c.Request.Context(), spaceID, limit)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 	if items == nil {
-		items = []workflowdb.WorkflowSyncConflict{}
+		items = []workflowdb.WorkflowSyncConflictRecord{}
 	}
 	c.Header("Cache-Control", "no-store")
 	c.JSON(http.StatusOK, gin.H{"items": items})
@@ -474,15 +474,15 @@ func (api *WorkflowAPI) workflowSyncEvents(c *gin.Context) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "workflow durable event service unavailable"})
 		return
 	}
-	userID := strings.TrimSpace(workflowUserID(c))
-	if userID == "" {
+	spaceID := strings.TrimSpace(workflowSpaceID(c))
+	if spaceID == "" {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "workflow user is required"})
 		return
 	}
 
 	afterRaw := strings.TrimSpace(c.Query("afterCursor"))
 	if afterRaw == "" {
-		cursor, err := service.LatestWorkflowSyncCursor(c.Request.Context(), userID)
+		cursor, err := service.LatestWorkflowSyncCursor(c.Request.Context(), spaceID)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
@@ -507,7 +507,7 @@ func (api *WorkflowAPI) workflowSyncEvents(c *gin.Context) {
 		}
 		limit = parsed
 	}
-	records, err := service.ListWorkflowSyncEventsAfterCursor(c.Request.Context(), userID, afterCursor, limit)
+	records, err := service.ListWorkflowSyncEventsAfterCursor(c.Request.Context(), spaceID, afterCursor, limit)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -551,22 +551,19 @@ func (api *WorkflowAPI) kernelContainer() (*workflow.WorkflowRegistry, *workflow
 	return c.WorkflowRegistry, c.WorkflowExecutor, nil
 }
 
-func workflowUserID(c *gin.Context) string {
-	if value, ok := c.Get(authenticatedUserKey); ok {
-		return fmt.Sprint(value)
-	}
-	return ""
+func workflowSpaceID(c *gin.Context) string {
+	return authenticatedSpaceID(c)
 }
 
-func workflowOwnedBy(def workflow.WorkflowDefinition, userID string) bool {
-	if userID == "" || def.Source != userWorkflowSource || def.Metadata == nil {
+func workflowOwnedBy(def workflow.WorkflowDefinition, spaceID string) bool {
+	if spaceID == "" || def.Source != userWorkflowSource || def.Metadata == nil {
 		return false
 	}
-	owner, ok := def.Metadata["ownerUserId"]
-	return ok && owner != nil && strings.TrimSpace(fmt.Sprint(owner)) == userID
+	owner, ok := def.Metadata["ownerSpaceId"]
+	return ok && owner != nil && strings.TrimSpace(fmt.Sprint(owner)) == spaceID
 }
 
-func prepareUserWorkflow(def workflow.WorkflowDefinition, userID string, existingID string) (workflow.WorkflowDefinition, error) {
+func prepareUserWorkflow(def workflow.WorkflowDefinition, spaceID string, existingID string) (workflow.WorkflowDefinition, error) {
 	if existingID != "" {
 		def.ID = existingID
 	}
@@ -579,7 +576,7 @@ func prepareUserWorkflow(def workflow.WorkflowDefinition, userID string, existin
 	if def.Metadata == nil {
 		def.Metadata = map[string]any{}
 	}
-	def.Metadata["ownerUserId"] = userID
+	def.Metadata["ownerSpaceId"] = spaceID
 	def.Metadata["editor"] = "creative-workshop"
 	if def.SchemaVersion != workflow.UserWorkflowSchemaVersion && len(def.Edges) == 0 {
 		def.Edges = workflow.DeriveEdges(def.Nodes)
@@ -617,7 +614,7 @@ func prepareUserWorkflow(def workflow.WorkflowDefinition, userID string, existin
 	if err != nil {
 		return def, err
 	}
-	if err := validateUserWorkflowTriggers(normalized, userID); err != nil {
+	if err := validateUserWorkflowTriggers(normalized, spaceID); err != nil {
 		return def, err
 	}
 	if _, err := workflow.NewCompiler().Compile(normalized, workflow.DefaultCompileOptions()); err != nil {
@@ -626,7 +623,7 @@ func prepareUserWorkflow(def workflow.WorkflowDefinition, userID string, existin
 	return normalized, nil
 }
 
-func validateUserWorkflowTriggers(def workflow.WorkflowDefinition, userID string) error {
+func validateUserWorkflowTriggers(def workflow.WorkflowDefinition, spaceID string) error {
 	seen := make(map[string]struct{}, len(def.Triggers))
 	for _, trigger := range def.Triggers {
 		id := strings.TrimSpace(trigger.ID)
@@ -649,11 +646,11 @@ func validateUserWorkflowTriggers(def workflow.WorkflowDefinition, userID string
 			if strings.TrimSpace(trigger.EventType) == "" {
 				return fmt.Errorf("trigger %s eventType is required", id)
 			}
-			if err := validateWorkflowEventTriggerConfig(trigger, userID); err != nil {
+			if err := validateWorkflowEventTriggerConfig(trigger, spaceID); err != nil {
 				return fmt.Errorf("trigger %s: %w", id, err)
 			}
 		case "schedule", "cron", "interval", "one_shot":
-			if _, err := buildWorkflowSchedule(def, trigger, userID); err != nil {
+			if _, err := buildWorkflowSchedule(def, trigger, spaceID); err != nil {
 				return err
 			}
 		default:
@@ -673,13 +670,13 @@ func (api *WorkflowAPI) list(c *gin.Context) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
 		return
 	}
-	userID := workflowUserID(c)
+	spaceID := workflowSpaceID(c)
 	items := make([]workflowAPIResponse, 0)
 	for _, def := range registry.List(workflow.WorkflowFilter{}) {
-		if !workflowOwnedBy(def, userID) {
+		if !workflowOwnedBy(def, spaceID) {
 			continue
 		}
-		inst, installErr := api.installationFor(c.Request.Context(), def, userID)
+		inst, installErr := api.installationFor(c.Request.Context(), def, spaceID)
 		if installErr != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": installErr.Error()})
 			return
@@ -696,7 +693,7 @@ func (api *WorkflowAPI) list(c *gin.Context) {
 		return items[i].Name < items[j].Name
 	})
 	total := len(items)
-	limit, offset := parsePagination(c)
+	limit, offset := parseWorkflowPagination(c)
 	if offset >= total {
 		items = []workflowAPIResponse{}
 	} else {
@@ -709,7 +706,7 @@ func (api *WorkflowAPI) list(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"items": items, "total": total, "limit": limit, "offset": offset, "location": api.effectiveLocation()})
 }
 
-func (api *WorkflowAPI) workflowToolCatalogSnapshot(ctx context.Context, userID string) ([]map[string]any, error) {
+func (api *WorkflowAPI) workflowToolCatalogSnapshot(ctx context.Context, spaceID string) ([]map[string]any, error) {
 	if _, _, err := api.kernelContainer(); err != nil {
 		return nil, err
 	}
@@ -721,8 +718,8 @@ func (api *WorkflowAPI) workflowToolCatalogSnapshot(ctx context.Context, userID 
 	for _, def := range kc.ToolRegistry.List(ctx, capability.ToolFilter{Enabled: boolPtrWorkflow(true)}) {
 		if def.Source == capability.ToolSourceWorkflow && def.Metadata != nil {
 			if flag, ok := def.Metadata["userWorkflow"].(bool); ok && flag {
-				owner := strings.TrimSpace(fmt.Sprint(def.Metadata["ownerUserId"]))
-				if owner == "" || owner != strings.TrimSpace(userID) {
+				owner := strings.TrimSpace(fmt.Sprint(def.Metadata["ownerSpaceId"]))
+				if owner == "" || owner != strings.TrimSpace(spaceID) {
 					continue
 				}
 			}
@@ -778,7 +775,7 @@ func workflowCatalogSafeMetadata(metadata map[string]any) map[string]any {
 }
 
 func (api *WorkflowAPI) catalog(c *gin.Context) {
-	items, err := api.workflowToolCatalogSnapshot(c.Request.Context(), workflowUserID(c))
+	items, err := api.workflowToolCatalogSnapshot(c.Request.Context(), workflowSpaceID(c))
 	if err != nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
 		return
@@ -799,7 +796,7 @@ func (api *WorkflowAPI) create(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid workflow: " + err.Error()})
 		return
 	}
-	def, err = api.prepareValidatedUserWorkflow(def, workflowUserID(c), "")
+	def, err = api.prepareValidatedUserWorkflow(def, workflowSpaceID(c), "")
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -812,12 +809,12 @@ func (api *WorkflowAPI) create(c *gin.Context) {
 		c.JSON(http.StatusConflict, gin.H{"error": "workflow id already exists"})
 		return
 	}
-	userID := workflowUserID(c)
-	if err := api.registerNewUserWorkflow(c.Request.Context(), registry, def, userID, "初始版本"); err != nil {
+	spaceID := workflowSpaceID(c)
+	if err := api.registerNewUserWorkflow(c.Request.Context(), registry, def, spaceID, "初始版本"); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	inst, err := api.installationFor(c.Request.Context(), def, userID)
+	inst, err := api.installationFor(c.Request.Context(), def, spaceID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -831,7 +828,7 @@ func (api *WorkflowAPI) validate(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"valid": false, "error": err.Error()})
 		return
 	}
-	prepared, err := api.prepareValidatedUserWorkflow(def, workflowUserID(c), def.ID)
+	prepared, err := api.prepareValidatedUserWorkflow(def, workflowSpaceID(c), def.ID)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"valid": false, "error": err.Error()})
 		return
@@ -845,7 +842,7 @@ func (api *WorkflowAPI) validate(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"valid": false, "error": err.Error()})
 		return
 	}
-	report := api.preflightDefinition(c.Request.Context(), prepared, workflowUserID(c))
+	report := api.preflightDefinition(c.Request.Context(), prepared, workflowSpaceID(c))
 	c.JSON(http.StatusOK, gin.H{"valid": report.Runnable, "topologicalOrder": compiled.TopologicalOrder, "entryNodes": compiled.EntryNodes, "exitNodes": compiled.ExitNodes, "definitionHash": prepared.DefinitionHash, "preflight": report})
 }
 
@@ -854,7 +851,7 @@ func (api *WorkflowAPI) preflight(c *gin.Context) {
 	if !ok {
 		return
 	}
-	report := api.preflightDefinition(c.Request.Context(), def, workflowUserID(c))
+	report := api.preflightDefinition(c.Request.Context(), def, workflowSpaceID(c))
 	status := http.StatusOK
 	if !report.Runnable {
 		status = http.StatusConflict
@@ -869,13 +866,13 @@ func (api *WorkflowAPI) owned(c *gin.Context) (workflow.WorkflowDefinition, bool
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
 		return workflow.WorkflowDefinition{}, false
 	}
-	userID := workflowUserID(c)
+	spaceID := workflowSpaceID(c)
 	def, ok := registry.Get(c.Param("id"))
-	if !ok || !workflowOwnedBy(def, userID) {
+	if !ok || !workflowOwnedBy(def, spaceID) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "workflow not found"})
 		return workflow.WorkflowDefinition{}, false
 	}
-	inst, err := api.installationFor(c.Request.Context(), def, userID)
+	inst, err := api.installationFor(c.Request.Context(), def, spaceID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "workflow installation not found"})
@@ -896,7 +893,7 @@ func (api *WorkflowAPI) get(c *gin.Context) {
 	if !ok {
 		return
 	}
-	inst, err := api.installationFor(c.Request.Context(), def, workflowUserID(c))
+	inst, err := api.installationFor(c.Request.Context(), def, workflowSpaceID(c))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -910,14 +907,14 @@ func (api *WorkflowAPI) update(c *gin.Context) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
 		return
 	}
-	userID := workflowUserID(c)
-	unlock := api.lockWorkflowMutation(userID, c.Param("id"))
+	spaceID := workflowSpaceID(c)
+	unlock := api.lockWorkflowMutation(spaceID, c.Param("id"))
 	defer unlock()
 	old, ok := api.owned(c)
 	if !ok {
 		return
 	}
-	currentInst, err := api.installationFor(c.Request.Context(), old, userID)
+	currentInst, err := api.installationFor(c.Request.Context(), old, spaceID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -936,7 +933,7 @@ func (api *WorkflowAPI) update(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid workflow: " + err.Error()})
 		return
 	}
-	def, err = api.prepareValidatedUserWorkflow(def, userID, old.ID)
+	def, err = api.prepareValidatedUserWorkflow(def, spaceID, old.ID)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -946,7 +943,7 @@ func (api *WorkflowAPI) update(c *gin.Context) {
 		return
 	}
 	if old.DefinitionHash != def.DefinitionHash {
-		if _, err := api.runtime.Kernel.Container().WorkflowDefRepo.SaveRevision(c.Request.Context(), userID, old, "保存前自动快照"); err != nil {
+		if _, err := api.runtime.Kernel.Container().WorkflowDefRepo.SaveRevision(c.Request.Context(), spaceID, old, "保存前自动快照"); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
@@ -956,15 +953,15 @@ func (api *WorkflowAPI) update(c *gin.Context) {
 		return
 	}
 	rollback := func() {
-		_ = api.syncTriggers(c.Request.Context(), def, old, userID)
+		_ = api.syncTriggers(c.Request.Context(), def, old, spaceID)
 		_ = registry.UpsertContext(api.workflowDefinitionMutationContext(c.Request.Context()), old)
 	}
-	if err := api.syncTriggers(c.Request.Context(), old, def, userID); err != nil {
+	if err := api.syncTriggers(c.Request.Context(), old, def, spaceID); err != nil {
 		rollback()
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	updatedInst, err := api.updateInstallationCAS(c.Request.Context(), def, userID, currentInst, expectedRevision)
+	updatedInst, err := api.updateInstallationCAS(c.Request.Context(), def, spaceID, currentInst, expectedRevision)
 	if err != nil {
 		rollback()
 		if isWorkflowRevisionConflict(err) {
@@ -983,14 +980,14 @@ func (api *WorkflowAPI) patch(c *gin.Context) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
 		return
 	}
-	userID := workflowUserID(c)
-	unlock := api.lockWorkflowMutation(userID, c.Param("id"))
+	spaceID := workflowSpaceID(c)
+	unlock := api.lockWorkflowMutation(spaceID, c.Param("id"))
 	defer unlock()
 	old, ok := api.owned(c)
 	if !ok {
 		return
 	}
-	currentInst, err := api.installationFor(c.Request.Context(), old, userID)
+	currentInst, err := api.installationFor(c.Request.Context(), old, spaceID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -1036,7 +1033,7 @@ func (api *WorkflowAPI) patch(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid workflow patch: " + err.Error()})
 		return
 	}
-	def, err = api.prepareValidatedUserWorkflow(def, userID, old.ID)
+	def, err = api.prepareValidatedUserWorkflow(def, spaceID, old.ID)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -1046,7 +1043,7 @@ func (api *WorkflowAPI) patch(c *gin.Context) {
 		return
 	}
 	if old.DefinitionHash != def.DefinitionHash {
-		if _, err := api.runtime.Kernel.Container().WorkflowDefRepo.SaveRevision(c.Request.Context(), userID, old, "保存前自动快照"); err != nil {
+		if _, err := api.runtime.Kernel.Container().WorkflowDefRepo.SaveRevision(c.Request.Context(), spaceID, old, "保存前自动快照"); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
@@ -1056,15 +1053,15 @@ func (api *WorkflowAPI) patch(c *gin.Context) {
 		return
 	}
 	rollback := func() {
-		_ = api.syncTriggers(c.Request.Context(), def, old, userID)
+		_ = api.syncTriggers(c.Request.Context(), def, old, spaceID)
 		_ = registry.UpsertContext(api.workflowDefinitionMutationContext(c.Request.Context()), old)
 	}
-	if err := api.syncTriggers(c.Request.Context(), old, def, userID); err != nil {
+	if err := api.syncTriggers(c.Request.Context(), old, def, spaceID); err != nil {
 		rollback()
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	updatedInst, err := api.updateInstallationCAS(c.Request.Context(), def, userID, currentInst, expectedRevision)
+	updatedInst, err := api.updateInstallationCAS(c.Request.Context(), def, spaceID, currentInst, expectedRevision)
 	if err != nil {
 		rollback()
 		if isWorkflowRevisionConflict(err) {
@@ -1137,16 +1134,16 @@ func (api *WorkflowAPI) duplicate(c *gin.Context) {
 			clone.Metadata[key] = value
 		}
 	}
-	clone, err = api.prepareValidatedUserWorkflow(clone, workflowUserID(c), "")
+	clone, err = api.prepareValidatedUserWorkflow(clone, workflowSpaceID(c), "")
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	if err := api.registerNewUserWorkflow(c.Request.Context(), registry, clone, workflowUserID(c), "复制创建"); err != nil {
+	if err := api.registerNewUserWorkflow(c.Request.Context(), registry, clone, workflowSpaceID(c), "复制创建"); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	inst, err := api.installationFor(c.Request.Context(), clone, workflowUserID(c))
+	inst, err := api.installationFor(c.Request.Context(), clone, workflowSpaceID(c))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -1154,7 +1151,7 @@ func (api *WorkflowAPI) duplicate(c *gin.Context) {
 	c.JSON(http.StatusCreated, workflowResponse(clone, inst))
 }
 
-func (api *WorkflowAPI) registerNewUserWorkflow(ctx context.Context, registry *workflow.WorkflowRegistry, def workflow.WorkflowDefinition, userID, revisionNote string) error {
+func (api *WorkflowAPI) registerNewUserWorkflow(ctx context.Context, registry *workflow.WorkflowRegistry, def workflow.WorkflowDefinition, spaceID, revisionNote string) error {
 	if err := api.validateExecutionTargets(def); err != nil {
 		return err
 	}
@@ -1162,20 +1159,20 @@ func (api *WorkflowAPI) registerNewUserWorkflow(ctx context.Context, registry *w
 		return err
 	}
 	rollback := func() {
-		_ = api.syncTriggers(ctx, def, workflow.WorkflowDefinition{}, userID)
+		_ = api.syncTriggers(ctx, def, workflow.WorkflowDefinition{}, spaceID)
 		_ = registry.UnregisterContext(api.workflowDefinitionMutationContext(ctx), def.ID)
 	}
-	if err := api.syncTriggers(ctx, workflow.WorkflowDefinition{}, def, userID); err != nil {
+	if err := api.syncTriggers(ctx, workflow.WorkflowDefinition{}, def, spaceID); err != nil {
 		rollback()
 		return err
 	}
-	if _, err := api.runtime.Kernel.Container().WorkflowDefRepo.SaveRevision(ctx, userID, def, revisionNote); err != nil {
+	if _, err := api.runtime.Kernel.Container().WorkflowDefRepo.SaveRevision(ctx, spaceID, def, revisionNote); err != nil {
 		rollback()
 		return err
 	}
 	created, err := api.runtime.Kernel.Container().WorkflowInstallationRepo.Create(ctx, workflow.WorkflowInstallation{
 		WorkflowID:      def.ID,
-		OwnerUserID:     userID,
+		OwnerSpaceID:    spaceID,
 		Location:        api.effectiveLocation(),
 		Enabled:         def.Enabled,
 		Triggers:        def.Triggers,
@@ -1201,7 +1198,7 @@ func portableWorkflowDefinition(def workflow.WorkflowDefinition) (workflow.Workf
 	clone.Source = ""
 	clone.DefinitionHash = ""
 	if clone.Metadata != nil {
-		delete(clone.Metadata, "ownerUserId")
+		delete(clone.Metadata, "ownerSpaceId")
 		delete(clone.Metadata, "editor")
 	}
 	return clone, nil
@@ -1266,22 +1263,22 @@ func (api *WorkflowAPI) importWorkflow(c *gin.Context) {
 	def.Enabled = false
 	def.CallableByAgent = false
 	if def.Metadata != nil {
-		delete(def.Metadata, "ownerUserId")
+		delete(def.Metadata, "ownerSpaceId")
 		delete(def.Metadata, "editor")
 	}
 	for i := range def.Triggers {
 		def.Triggers[i].Enabled = false
 	}
-	def, err = api.prepareValidatedUserWorkflow(def, workflowUserID(c), "")
+	def, err = api.prepareValidatedUserWorkflow(def, workflowSpaceID(c), "")
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	if err := api.registerNewUserWorkflow(c.Request.Context(), registry, def, workflowUserID(c), "导入创建"); err != nil {
+	if err := api.registerNewUserWorkflow(c.Request.Context(), registry, def, workflowSpaceID(c), "导入创建"); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	inst, err := api.installationFor(c.Request.Context(), def, workflowUserID(c))
+	inst, err := api.installationFor(c.Request.Context(), def, workflowSpaceID(c))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -1312,7 +1309,7 @@ func (api *WorkflowAPI) saveTemplate(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	item, err := api.runtime.Kernel.Container().WorkflowDefRepo.SaveTemplate(c.Request.Context(), workflowUserID(c), name, description, portable)
+	item, err := api.runtime.Kernel.Container().WorkflowDefRepo.SaveTemplate(c.Request.Context(), workflowSpaceID(c), name, description, portable)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -1325,7 +1322,7 @@ func (api *WorkflowAPI) listTemplates(c *gin.Context) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
 		return
 	}
-	items, err := api.runtime.Kernel.Container().WorkflowDefRepo.ListTemplates(c.Request.Context(), workflowUserID(c))
+	items, err := api.runtime.Kernel.Container().WorkflowDefRepo.ListTemplates(c.Request.Context(), workflowSpaceID(c))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -1339,7 +1336,7 @@ func (api *WorkflowAPI) instantiateTemplate(c *gin.Context) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
 		return
 	}
-	item, err := api.runtime.Kernel.Container().WorkflowDefRepo.GetTemplate(c.Request.Context(), workflowUserID(c), c.Param("templateId"))
+	item, err := api.runtime.Kernel.Container().WorkflowDefRepo.GetTemplate(c.Request.Context(), workflowSpaceID(c), c.Param("templateId"))
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "workflow template not found"})
 		return
@@ -1365,16 +1362,16 @@ func (api *WorkflowAPI) instantiateTemplate(c *gin.Context) {
 	for i := range def.Triggers {
 		def.Triggers[i].Enabled = false
 	}
-	def, err = api.prepareValidatedUserWorkflow(def, workflowUserID(c), "")
+	def, err = api.prepareValidatedUserWorkflow(def, workflowSpaceID(c), "")
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	if err := api.registerNewUserWorkflow(c.Request.Context(), registry, def, workflowUserID(c), "从本地模板创建"); err != nil {
+	if err := api.registerNewUserWorkflow(c.Request.Context(), registry, def, workflowSpaceID(c), "从本地模板创建"); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	inst, err := api.installationFor(c.Request.Context(), def, workflowUserID(c))
+	inst, err := api.installationFor(c.Request.Context(), def, workflowSpaceID(c))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -1387,7 +1384,7 @@ func (api *WorkflowAPI) deleteTemplate(c *gin.Context) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
 		return
 	}
-	if err := api.runtime.Kernel.Container().WorkflowDefRepo.DeleteTemplate(c.Request.Context(), workflowUserID(c), c.Param("templateId")); err != nil {
+	if err := api.runtime.Kernel.Container().WorkflowDefRepo.DeleteTemplate(c.Request.Context(), workflowSpaceID(c), c.Param("templateId")); err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "workflow template not found"})
 		return
 	}
@@ -1400,14 +1397,14 @@ func (api *WorkflowAPI) listRevisions(c *gin.Context) {
 		return
 	}
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "50"))
-	userID := workflowUserID(c)
+	spaceID := workflowSpaceID(c)
 	kc := api.runtime.Kernel.Container()
-	items, err := kc.WorkflowDefRepo.ListRevisions(c.Request.Context(), userID, c.Param("id"), limit)
+	items, err := kc.WorkflowDefRepo.ListRevisions(c.Request.Context(), spaceID, c.Param("id"), limit)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	inst, _ := api.installationFor(c.Request.Context(), def, userID)
+	inst, _ := api.installationFor(c.Request.Context(), def, spaceID)
 	runs, _, _ := kc.WorkflowExecRepo.ListRuns(c.Request.Context(), def.ID, "", 200, 0)
 	for i := range items {
 		item := &items[i]
@@ -1444,7 +1441,7 @@ func (api *WorkflowAPI) createRevision(c *gin.Context) {
 		Note string `json:"note"`
 	}
 	_ = c.ShouldBindJSON(&body)
-	item, err := api.runtime.Kernel.Container().WorkflowDefRepo.SaveDraftRevision(c.Request.Context(), workflowUserID(c), def, body.Note)
+	item, err := api.runtime.Kernel.Container().WorkflowDefRepo.SaveDraftRevision(c.Request.Context(), workflowSpaceID(c), def, body.Note)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -1458,16 +1455,16 @@ func (api *WorkflowAPI) publishRevision(c *gin.Context) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
 		return
 	}
-	userID := workflowUserID(c)
+	spaceID := workflowSpaceID(c)
 	workflowID := c.Param("id")
-	unlock := api.lockWorkflowMutation(userID, workflowID)
+	unlock := api.lockWorkflowMutation(spaceID, workflowID)
 	defer unlock()
 
 	current, ok := api.owned(c)
 	if !ok {
 		return
 	}
-	inst, err := api.installationFor(c.Request.Context(), current, userID)
+	inst, err := api.installationFor(c.Request.Context(), current, spaceID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -1482,7 +1479,7 @@ func (api *WorkflowAPI) publishRevision(c *gin.Context) {
 		return
 	}
 
-	revision, err := api.runtime.Kernel.Container().WorkflowDefRepo.GetRevision(c.Request.Context(), userID, workflowID, c.Param("revisionId"))
+	revision, err := api.runtime.Kernel.Container().WorkflowDefRepo.GetRevision(c.Request.Context(), spaceID, workflowID, c.Param("revisionId"))
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "workflow revision not found"})
 		return
@@ -1490,7 +1487,7 @@ func (api *WorkflowAPI) publishRevision(c *gin.Context) {
 	previousState := revision.State
 	previousPublishedAt := revision.PublishedAt
 	previousArchivedAt := revision.ArchivedAt
-	published, err := api.runtime.Kernel.Container().WorkflowDefRepo.PublishRevision(c.Request.Context(), userID, workflowID, revision.RevisionID)
+	published, err := api.runtime.Kernel.Container().WorkflowDefRepo.PublishRevision(c.Request.Context(), spaceID, workflowID, revision.RevisionID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -1500,7 +1497,7 @@ func (api *WorkflowAPI) publishRevision(c *gin.Context) {
 			return
 		}
 		_, _ = api.runtime.Kernel.Container().WorkflowDefRepo.RestoreRevisionLifecycle(
-			context.Background(), userID, workflowID, revision.RevisionID,
+			context.Background(), spaceID, workflowID, revision.RevisionID,
 			previousState, previousPublishedAt, previousArchivedAt,
 		)
 	}
@@ -1510,7 +1507,7 @@ func (api *WorkflowAPI) publishRevision(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	target, err = api.prepareValidatedUserWorkflow(target, userID, current.ID)
+	target, err = api.prepareValidatedUserWorkflow(target, spaceID, current.ID)
 	if err != nil {
 		restoreLifecycle()
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -1524,7 +1521,7 @@ func (api *WorkflowAPI) publishRevision(c *gin.Context) {
 
 	updatedInst := inst
 	if current.DefinitionHash != target.DefinitionHash {
-		if _, err := api.runtime.Kernel.Container().WorkflowDefRepo.SaveRevision(c.Request.Context(), userID, current, "发布新 Revision 前自动快照"); err != nil {
+		if _, err := api.runtime.Kernel.Container().WorkflowDefRepo.SaveRevision(c.Request.Context(), spaceID, current, "发布新 Revision 前自动快照"); err != nil {
 			restoreLifecycle()
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
@@ -1535,16 +1532,16 @@ func (api *WorkflowAPI) publishRevision(c *gin.Context) {
 			return
 		}
 		rollback := func() {
-			_ = api.syncTriggers(c.Request.Context(), target, current, userID)
+			_ = api.syncTriggers(c.Request.Context(), target, current, spaceID)
 			_ = registry.UpsertContext(api.workflowDefinitionMutationContext(c.Request.Context()), current)
 			restoreLifecycle()
 		}
-		if err := api.syncTriggers(c.Request.Context(), current, target, userID); err != nil {
+		if err := api.syncTriggers(c.Request.Context(), current, target, spaceID); err != nil {
 			rollback()
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
-		updatedInst, err = api.updateInstallationCAS(c.Request.Context(), target, userID, inst, expectedRevision)
+		updatedInst, err = api.updateInstallationCAS(c.Request.Context(), target, spaceID, inst, expectedRevision)
 		if err != nil {
 			rollback()
 			if isWorkflowRevisionConflict(err) {
@@ -1562,16 +1559,16 @@ func (api *WorkflowAPI) publishRevision(c *gin.Context) {
 }
 
 func (api *WorkflowAPI) archiveRevision(c *gin.Context) {
-	userID := workflowUserID(c)
+	spaceID := workflowSpaceID(c)
 	workflowID := c.Param("id")
-	unlock := api.lockWorkflowMutation(userID, workflowID)
+	unlock := api.lockWorkflowMutation(spaceID, workflowID)
 	defer unlock()
 	current, ok := api.owned(c)
 	if !ok {
 		return
 	}
 	repo := api.runtime.Kernel.Container().WorkflowDefRepo
-	revision, err := repo.GetRevision(c.Request.Context(), userID, workflowID, c.Param("revisionId"))
+	revision, err := repo.GetRevision(c.Request.Context(), spaceID, workflowID, c.Param("revisionId"))
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "workflow revision not found"})
 		return
@@ -1580,7 +1577,7 @@ func (api *WorkflowAPI) archiveRevision(c *gin.Context) {
 		c.JSON(http.StatusConflict, gin.H{"error": "active workflow revision cannot be archived; publish or roll back another revision first"})
 		return
 	}
-	archived, err := repo.ArchiveRevision(c.Request.Context(), userID, workflowID, revision.RevisionID)
+	archived, err := repo.ArchiveRevision(c.Request.Context(), spaceID, workflowID, revision.RevisionID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -1594,14 +1591,14 @@ func (api *WorkflowAPI) rollbackRevision(c *gin.Context) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
 		return
 	}
-	userID := workflowUserID(c)
-	unlock := api.lockWorkflowMutation(userID, c.Param("id"))
+	spaceID := workflowSpaceID(c)
+	unlock := api.lockWorkflowMutation(spaceID, c.Param("id"))
 	defer unlock()
 	current, ok := api.owned(c)
 	if !ok {
 		return
 	}
-	inst, err := api.installationFor(c.Request.Context(), current, userID)
+	inst, err := api.installationFor(c.Request.Context(), current, spaceID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -1615,7 +1612,7 @@ func (api *WorkflowAPI) rollbackRevision(c *gin.Context) {
 		writeWorkflowRevisionConflict(c)
 		return
 	}
-	revision, err := api.runtime.Kernel.Container().WorkflowDefRepo.GetRevision(c.Request.Context(), userID, current.ID, c.Param("revisionId"))
+	revision, err := api.runtime.Kernel.Container().WorkflowDefRepo.GetRevision(c.Request.Context(), spaceID, current.ID, c.Param("revisionId"))
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "workflow revision not found"})
 		return
@@ -1625,7 +1622,7 @@ func (api *WorkflowAPI) rollbackRevision(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	target, err = api.prepareValidatedUserWorkflow(target, userID, current.ID)
+	target, err = api.prepareValidatedUserWorkflow(target, spaceID, current.ID)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -1638,7 +1635,7 @@ func (api *WorkflowAPI) rollbackRevision(c *gin.Context) {
 		c.JSON(http.StatusOK, workflowResponse(target, inst))
 		return
 	}
-	if _, err := api.runtime.Kernel.Container().WorkflowDefRepo.SaveRevision(c.Request.Context(), userID, current, "回滚前自动快照"); err != nil {
+	if _, err := api.runtime.Kernel.Container().WorkflowDefRepo.SaveRevision(c.Request.Context(), spaceID, current, "回滚前自动快照"); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -1647,15 +1644,15 @@ func (api *WorkflowAPI) rollbackRevision(c *gin.Context) {
 		return
 	}
 	rollback := func() {
-		_ = api.syncTriggers(c.Request.Context(), target, current, userID)
+		_ = api.syncTriggers(c.Request.Context(), target, current, spaceID)
 		_ = registry.UpsertContext(api.workflowDefinitionMutationContext(c.Request.Context()), current)
 	}
-	if err := api.syncTriggers(c.Request.Context(), current, target, userID); err != nil {
+	if err := api.syncTriggers(c.Request.Context(), current, target, spaceID); err != nil {
 		rollback()
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	updatedInst, err := api.updateInstallationCAS(c.Request.Context(), target, userID, inst, expectedRevision)
+	updatedInst, err := api.updateInstallationCAS(c.Request.Context(), target, spaceID, inst, expectedRevision)
 	if err != nil {
 		rollback()
 		if isWorkflowRevisionConflict(err) {
@@ -1674,24 +1671,24 @@ func (api *WorkflowAPI) delete(c *gin.Context) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
 		return
 	}
-	userID := workflowUserID(c)
-	unlock := api.lockWorkflowMutation(userID, c.Param("id"))
+	spaceID := workflowSpaceID(c)
+	unlock := api.lockWorkflowMutation(spaceID, c.Param("id"))
 	defer unlock()
 	old, ok := api.owned(c)
 	if !ok {
 		return
 	}
-	inst, err := api.installationFor(c.Request.Context(), old, userID)
+	inst, err := api.installationFor(c.Request.Context(), old, spaceID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	if err := api.syncTriggers(c.Request.Context(), old, workflow.WorkflowDefinition{}, userID); err != nil {
+	if err := api.syncTriggers(c.Request.Context(), old, workflow.WorkflowDefinition{}, spaceID); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 	if err := registry.UnregisterContext(api.workflowDefinitionMutationContext(c.Request.Context()), old.ID); err != nil {
-		_ = api.syncTriggers(c.Request.Context(), workflow.WorkflowDefinition{}, old, userID)
+		_ = api.syncTriggers(c.Request.Context(), workflow.WorkflowDefinition{}, old, spaceID)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -1705,14 +1702,14 @@ func (api *WorkflowAPI) setEnabled(c *gin.Context, enabled bool) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
 		return
 	}
-	userID := workflowUserID(c)
-	unlock := api.lockWorkflowMutation(userID, c.Param("id"))
+	spaceID := workflowSpaceID(c)
+	unlock := api.lockWorkflowMutation(spaceID, c.Param("id"))
 	defer unlock()
 	old, ok := api.owned(c)
 	if !ok {
 		return
 	}
-	currentInst, err := api.installationFor(c.Request.Context(), old, userID)
+	currentInst, err := api.installationFor(c.Request.Context(), old, spaceID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -1732,15 +1729,15 @@ func (api *WorkflowAPI) setEnabled(c *gin.Context, enabled bool) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	if err := api.syncTriggers(c.Request.Context(), old, def, userID); err != nil {
-		_ = api.syncTriggers(c.Request.Context(), def, old, userID)
+	if err := api.syncTriggers(c.Request.Context(), old, def, spaceID); err != nil {
+		_ = api.syncTriggers(c.Request.Context(), def, old, spaceID)
 		_ = registry.UpsertContext(api.workflowDefinitionMutationContext(c.Request.Context()), old)
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	updatedInst, err := api.updateInstallationCAS(c.Request.Context(), def, userID, currentInst, expectedRevision)
+	updatedInst, err := api.updateInstallationCAS(c.Request.Context(), def, spaceID, currentInst, expectedRevision)
 	if err != nil {
-		_ = api.syncTriggers(c.Request.Context(), def, old, userID)
+		_ = api.syncTriggers(c.Request.Context(), def, old, spaceID)
 		_ = registry.UpsertContext(api.workflowDefinitionMutationContext(c.Request.Context()), old)
 		if isWorkflowRevisionConflict(err) {
 			writeWorkflowRevisionConflict(c)
@@ -1794,23 +1791,23 @@ func (api *WorkflowAPI) run(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	report := api.preflightDefinition(c.Request.Context(), def, workflowUserID(c))
+	report := api.preflightDefinition(c.Request.Context(), def, workflowSpaceID(c))
 	if err := workflowPreflightBlockedError(report); err != nil {
 		c.JSON(http.StatusConflict, gin.H{"error": "WORKFLOW_PREFLIGHT_BLOCKED", "code": "WORKFLOW_PREFLIGHT_BLOCKED", "detail": err.Error(), "preflight": report})
 		return
 	}
-	inst, err := api.installationFor(c.Request.Context(), def, workflowUserID(c))
+	inst, err := api.installationFor(c.Request.Context(), def, workflowSpaceID(c))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	publishedRevision, err := api.runtime.Kernel.Container().WorkflowDefRepo.EnsurePublishedRevision(c.Request.Context(), workflowUserID(c), def, "运行时发布绑定")
+	publishedRevision, err := api.runtime.Kernel.Container().WorkflowDefRepo.EnsurePublishedRevision(c.Request.Context(), workflowSpaceID(c), def, "运行时发布绑定")
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 	executionID := "wf-run-" + uuid.NewString()
-	req := workflow.ExecuteRequest{WorkflowID: def.ID, Input: body.Input, Context: workflow.ExecutionContext{UserID: workflowUserID(c), WorkflowID: def.ID, InstallationID: inst.InstallationID, RevisionID: publishedRevision.RevisionID, RootID: executionID, InvocationID: executionID, OperationID: "wf-op-" + uuid.NewString(), TraceID: "trace-" + uuid.NewString()}, Options: opts}
+	req := workflow.ExecuteRequest{WorkflowID: def.ID, Input: body.Input, Context: workflow.ExecutionContext{SpaceID: workflowSpaceID(c), WorkflowID: def.ID, InstallationID: inst.InstallationID, RevisionID: publishedRevision.RevisionID, RootID: executionID, InvocationID: executionID, OperationID: "wf-op-" + uuid.NewString(), TraceID: "trace-" + uuid.NewString()}, Options: opts}
 	mustReturnInitialResult := body.Wait || opts.IsDryRun() || (opts.Mode == workflow.ExecutionModeControlled && len(opts.MissingControlledApprovals(def.Nodes)) > 0)
 	if mustReturnInitialResult {
 		result, err := executor.Execute(c.Request.Context(), req)
@@ -1829,7 +1826,7 @@ func (api *WorkflowAPI) run(c *gin.Context) {
 	c.JSON(http.StatusAccepted, gin.H{"accepted": true, "executionId": executionID, "workflowId": def.ID, "status": workflow.RunStatusRunning, "executionMode": opts.Mode})
 }
 
-func parsePagination(c *gin.Context) (int, int) {
+func parseWorkflowPagination(c *gin.Context) (int, int) {
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "50"))
 	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
 	if limit <= 0 || limit > 200 {
@@ -1851,7 +1848,7 @@ func (api *WorkflowAPI) analysis(c *gin.Context) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, analyzeWorkflowRisk(def, registry, workflowUserID(c)))
+	c.JSON(http.StatusOK, analyzeWorkflowRisk(def, registry, workflowSpaceID(c)))
 }
 
 func (api *WorkflowAPI) stats(c *gin.Context) {
@@ -1871,7 +1868,7 @@ func (api *WorkflowAPI) listRuns(c *gin.Context) {
 		return
 	}
 	kc := api.runtime.Kernel.Container()
-	limit, offset := parsePagination(c)
+	limit, offset := parseWorkflowPagination(c)
 	items, total, err := kc.WorkflowExecRepo.ListRuns(c.Request.Context(), c.Param("id"), workflow.RunStatus(c.Query("status")), limit, offset)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -1886,10 +1883,10 @@ func (api *WorkflowAPI) getRun(c *gin.Context) {
 		return
 	}
 	ctx := c.Request.Context()
-	userID := workflowUserID(c)
+	spaceID := workflowSpaceID(c)
 	runID := strings.TrimSpace(c.Param("runId"))
 	kc := api.runtime.Kernel.Container()
-	if run, _, localErr := api.localRunOwned(ctx, userID, runID); localErr == nil && run != nil {
+	if run, _, localErr := api.localRunOwned(ctx, spaceID, runID); localErr == nil && run != nil {
 		steps, listErr := kc.WorkflowExecRepo.ListStepRuns(ctx, run.ExecutionID)
 		if listErr != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": listErr.Error()})
@@ -1934,7 +1931,7 @@ func (api *WorkflowAPI) getRun(c *gin.Context) {
 		return
 	}
 
-	result, _, remoteErr := api.resolveRemoteWorkflowRun(ctx, userID, runID, WorkflowMeshRunGet, nil)
+	result, _, remoteErr := api.resolveRemoteWorkflowRun(ctx, spaceID, runID, WorkflowMeshRunGet, nil)
 	if remoteErr != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "workflow run not found"})
 		return
@@ -1949,10 +1946,10 @@ func (api *WorkflowAPI) getRunLogs(c *gin.Context) {
 		return
 	}
 	ctx := c.Request.Context()
-	userID := workflowUserID(c)
+	spaceID := workflowSpaceID(c)
 	runID := strings.TrimSpace(c.Param("runId"))
 	kc := api.runtime.Kernel.Container()
-	if run, _, localErr := api.localRunOwned(ctx, userID, runID); localErr == nil && run != nil {
+	if run, _, localErr := api.localRunOwned(ctx, spaceID, runID); localErr == nil && run != nil {
 		steps, err := kc.WorkflowExecRepo.ListStepRuns(ctx, run.ExecutionID)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -1971,7 +1968,7 @@ func (api *WorkflowAPI) getRunLogs(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"items": workflow.BuildWorkflowRunLogs(run, steps, attempts, compensations)})
 		return
 	}
-	result, _, remoteErr := api.resolveRemoteWorkflowRun(ctx, userID, runID, WorkflowMeshRunLogs, nil)
+	result, _, remoteErr := api.resolveRemoteWorkflowRun(ctx, spaceID, runID, WorkflowMeshRunLogs, nil)
 	if remoteErr != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "workflow run not found"})
 		return
@@ -1980,7 +1977,7 @@ func (api *WorkflowAPI) getRunLogs(c *gin.Context) {
 	c.Data(http.StatusOK, "application/json", result)
 }
 
-func (api *WorkflowAPI) localRunOwned(ctx context.Context, userID, runID string) (*workflow.WorkflowRun, *workflow.WorkflowExecutor, error) {
+func (api *WorkflowAPI) localRunOwned(ctx context.Context, spaceID, runID string) (*workflow.WorkflowRun, *workflow.WorkflowExecutor, error) {
 	_, executor, err := api.kernelContainer()
 	if err != nil {
 		return nil, nil, err
@@ -1990,25 +1987,25 @@ func (api *WorkflowAPI) localRunOwned(ctx context.Context, userID, runID string)
 	if err != nil || run == nil {
 		return nil, nil, errors.New("workflow run not found")
 	}
-	ownerID := strings.TrimSpace(run.Context.UserID)
-	requestedUserID := strings.TrimSpace(userID)
+	ownerID := strings.TrimSpace(run.Context.SpaceID)
+	requestedSpaceID := strings.TrimSpace(spaceID)
 	if ownerID != "" {
-		if requestedUserID == "" || ownerID != requestedUserID {
+		if requestedSpaceID == "" || ownerID != requestedSpaceID {
 			return nil, nil, errors.New("workflow run not found")
 		}
 		return run, executor, nil
 	}
-	// Legacy runs created before the execution context persisted UserID must
+	// Legacy runs created before the execution context persisted SpaceID must
 	// still resolve through the current definition ownership metadata.
 	def, ok := kc.WorkflowRegistry.Get(run.WorkflowID)
-	if !ok || !workflowOwnedBy(def, requestedUserID) {
+	if !ok || !workflowOwnedBy(def, requestedSpaceID) {
 		return nil, nil, errors.New("workflow run not found")
 	}
 	return run, executor, nil
 }
 
 func (api *WorkflowAPI) runOwned(c *gin.Context) (*workflow.WorkflowRun, *workflow.WorkflowExecutor, bool) {
-	run, executor, err := api.localRunOwned(c.Request.Context(), workflowUserID(c), c.Param("runId"))
+	run, executor, err := api.localRunOwned(c.Request.Context(), workflowSpaceID(c), c.Param("runId"))
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "workflow run not found"})
 		return nil, nil, false
@@ -2018,9 +2015,9 @@ func (api *WorkflowAPI) runOwned(c *gin.Context) (*workflow.WorkflowRun, *workfl
 
 func (api *WorkflowAPI) cancelRun(c *gin.Context) {
 	ctx := c.Request.Context()
-	userID := workflowUserID(c)
+	spaceID := workflowSpaceID(c)
 	runID := c.Param("runId")
-	if _, executor, err := api.localRunOwned(ctx, userID, runID); err == nil {
+	if _, executor, err := api.localRunOwned(ctx, spaceID, runID); err == nil {
 		cancelled, cancelErr := executor.CancelRun(ctx, runID)
 		if cancelErr != nil {
 			c.JSON(http.StatusConflict, gin.H{"error": cancelErr.Error()})
@@ -2029,7 +2026,7 @@ func (api *WorkflowAPI) cancelRun(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"cancelled": cancelled})
 		return
 	}
-	result, _, err := api.resolveRemoteWorkflowRun(ctx, userID, runID, WorkflowMeshRunCancel, nil)
+	result, _, err := api.resolveRemoteWorkflowRun(ctx, spaceID, runID, WorkflowMeshRunCancel, nil)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "workflow run not found"})
 		return
@@ -2043,9 +2040,9 @@ func (api *WorkflowAPI) pauseRun(c *gin.Context) {
 	}
 	_ = c.ShouldBindJSON(&body)
 	ctx := c.Request.Context()
-	userID := workflowUserID(c)
+	spaceID := workflowSpaceID(c)
 	runID := c.Param("runId")
-	if _, executor, err := api.localRunOwned(ctx, userID, runID); err == nil {
+	if _, executor, err := api.localRunOwned(ctx, spaceID, runID); err == nil {
 		run, pauseErr := executor.Pause(ctx, runID, body.Reason)
 		if pauseErr != nil {
 			c.JSON(http.StatusConflict, gin.H{"error": pauseErr.Error()})
@@ -2054,7 +2051,7 @@ func (api *WorkflowAPI) pauseRun(c *gin.Context) {
 		c.JSON(http.StatusOK, run)
 		return
 	}
-	result, _, err := api.resolveRemoteWorkflowRun(ctx, userID, runID, WorkflowMeshRunPause, map[string]any{"reason": body.Reason})
+	result, _, err := api.resolveRemoteWorkflowRun(ctx, spaceID, runID, WorkflowMeshRunPause, map[string]any{"reason": body.Reason})
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "workflow run not found"})
 		return
@@ -2064,9 +2061,9 @@ func (api *WorkflowAPI) pauseRun(c *gin.Context) {
 
 func (api *WorkflowAPI) resumeRun(c *gin.Context) {
 	ctx := c.Request.Context()
-	userID := workflowUserID(c)
+	spaceID := workflowSpaceID(c)
 	runID := c.Param("runId")
-	if _, executor, err := api.localRunOwned(ctx, userID, runID); err == nil {
+	if _, executor, err := api.localRunOwned(ctx, spaceID, runID); err == nil {
 		run, resumeErr := executor.Resume(ctx, runID)
 		if resumeErr != nil {
 			c.JSON(http.StatusConflict, gin.H{"error": resumeErr.Error()})
@@ -2075,7 +2072,7 @@ func (api *WorkflowAPI) resumeRun(c *gin.Context) {
 		c.JSON(http.StatusOK, run)
 		return
 	}
-	result, _, err := api.resolveRemoteWorkflowRun(ctx, userID, runID, WorkflowMeshRunResume, nil)
+	result, _, err := api.resolveRemoteWorkflowRun(ctx, spaceID, runID, WorkflowMeshRunResume, nil)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "workflow run not found"})
 		return
@@ -2094,9 +2091,9 @@ func (api *WorkflowAPI) confirmRun(c *gin.Context) {
 		}
 	}
 	ctx := c.Request.Context()
-	userID := workflowUserID(c)
+	spaceID := workflowSpaceID(c)
 	runID := c.Param("runId")
-	if _, executor, err := api.localRunOwned(ctx, userID, runID); err == nil {
+	if _, executor, err := api.localRunOwned(ctx, spaceID, runID); err == nil {
 		run, missing, confirmErr := executor.ConfirmControlledRun(ctx, runID, body.NodeIDs)
 		if confirmErr != nil {
 			c.JSON(http.StatusConflict, gin.H{"error": confirmErr.Error()})
@@ -2109,7 +2106,7 @@ func (api *WorkflowAPI) confirmRun(c *gin.Context) {
 		c.JSON(status, gin.H{"accepted": len(missing) == 0, "run": run, "missingConfirmations": missing})
 		return
 	}
-	result, _, err := api.resolveRemoteWorkflowRun(ctx, userID, runID, WorkflowMeshRunConfirm, map[string]any{"nodeIds": body.NodeIDs})
+	result, _, err := api.resolveRemoteWorkflowRun(ctx, spaceID, runID, WorkflowMeshRunConfirm, map[string]any{"nodeIds": body.NodeIDs})
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "workflow run not found"})
 		return
@@ -2119,11 +2116,11 @@ func (api *WorkflowAPI) confirmRun(c *gin.Context) {
 
 func (api *WorkflowAPI) recoverRun(c *gin.Context) {
 	ctx := c.Request.Context()
-	userID := workflowUserID(c)
+	spaceID := workflowSpaceID(c)
 	runID := c.Param("runId")
-	run, executor, localErr := api.localRunOwned(ctx, userID, runID)
+	run, executor, localErr := api.localRunOwned(ctx, spaceID, runID)
 	if localErr != nil {
-		result, _, remoteErr := api.resolveRemoteWorkflowRun(ctx, userID, runID, WorkflowMeshRunRecover, nil)
+		result, _, remoteErr := api.resolveRemoteWorkflowRun(ctx, spaceID, runID, WorkflowMeshRunRecover, nil)
 		if remoteErr != nil {
 			c.JSON(http.StatusNotFound, gin.H{"error": "workflow run not found"})
 			return
@@ -2153,7 +2150,7 @@ func (api *WorkflowAPI) recoverRun(c *gin.Context) {
 		// Legacy runs without immutable snapshots can only recover when the
 		// currently installed definition still matches exactly.
 		def, exists := api.runtime.Kernel.Container().WorkflowRegistry.Get(run.WorkflowID)
-		if !exists || !workflowOwnedBy(def, userID) {
+		if !exists || !workflowOwnedBy(def, spaceID) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "workflow not found"})
 			return
 		}
@@ -2181,7 +2178,7 @@ func (api *WorkflowAPI) recoverRun(c *gin.Context) {
 		return
 	}
 	execution := run.Context
-	execution.UserID = userID
+	execution.SpaceID = spaceID
 	execution.InvocationID = run.ExecutionID
 	execution.Recovery = true
 	execution.Generation = run.Generation + 1
@@ -2203,7 +2200,7 @@ func (api *WorkflowAPI) rerunRun(c *gin.Context) {
 	}
 	kc := api.runtime.Kernel.Container()
 	def, exists := kc.WorkflowRegistry.Get(previous.WorkflowID)
-	if !exists || !workflowOwnedBy(def, workflowUserID(c)) {
+	if !exists || !workflowOwnedBy(def, workflowSpaceID(c)) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "workflow not found"})
 		return
 	}
@@ -2224,7 +2221,7 @@ func (api *WorkflowAPI) rerunRun(c *gin.Context) {
 	if len(input) == 0 {
 		input = json.RawMessage(`{}`)
 	}
-	inst, err := api.installationFor(c.Request.Context(), def, workflowUserID(c))
+	inst, err := api.installationFor(c.Request.Context(), def, workflowSpaceID(c))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -2235,7 +2232,7 @@ func (api *WorkflowAPI) rerunRun(c *gin.Context) {
 		WorkflowID: def.ID,
 		Input:      input,
 		Context: workflow.ExecutionContext{
-			UserID:         workflowUserID(c),
+			SpaceID:        workflowSpaceID(c),
 			WorkflowID:     def.ID,
 			InstallationID: inst.InstallationID,
 			RootID:         executionID,
@@ -2309,10 +2306,10 @@ func (api *WorkflowAPI) dispatchEvent(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "event payload must be valid JSON"})
 		return
 	}
-	userID := workflowUserID(c)
+	spaceID := workflowSpaceID(c)
 	eventType := strings.TrimSpace(c.Param("eventType"))
 	if isDeviceWorkflowEventType(eventType) && api.effectiveLocation() == workflow.WorkflowLocationLocal {
-		allowed, retryAfter := api.runtime.AllowWorkflowTriggerIngress(userID, eventType)
+		allowed, retryAfter := api.runtime.AllowWorkflowTriggerIngress(spaceID, eventType)
 		if !allowed {
 			retrySeconds := int((retryAfter + time.Second - 1) / time.Second)
 			if retrySeconds < 1 {
@@ -2323,7 +2320,7 @@ func (api *WorkflowAPI) dispatchEvent(c *gin.Context) {
 			return
 		}
 	}
-	qualifiedEventType := "user:" + userID + ":" + eventType
+	qualifiedEventType := "space:" + spaceID + ":" + eventType
 	var envelope struct {
 		EventID    string          `json:"eventId"`
 		Source     string          `json:"source"`
@@ -2357,8 +2354,8 @@ func (api *WorkflowAPI) dispatchEvent(c *gin.Context) {
 			}
 		}
 		structuredEventType := qualifiedEventType
-		structuredOwnerUserID := userID
-		execution := workflow.ExecutionContext{UserID: userID, DeviceID: deviceID}
+		structuredOwnerSpaceID := spaceID
+		execution := workflow.ExecutionContext{SpaceID: spaceID, DeviceID: deviceID}
 		if isDeviceWorkflowEventType(eventType) && api.effectiveLocation() == workflow.WorkflowLocationLocal {
 			actor := security.GetActor(c)
 			if actor != nil && actor.AuthMethod == security.AuthMethodLocalToken {
@@ -2367,18 +2364,18 @@ func (api *WorkflowAPI) dispatchEvent(c *gin.Context) {
 				// the TriggerManager resolves that owner per binding so Android never has to know
 				// or assert a cloud account ID. Desktop Sessions stay account-scoped.
 				structuredEventType = eventType
-				structuredOwnerUserID = ""
-				execution.UserID = ""
+				structuredOwnerSpaceID = ""
+				execution.SpaceID = ""
 			}
 		}
 		event := workflow.WorkflowTriggerEvent{
-			EventID:     eventID,
-			EventType:   structuredEventType,
-			Source:      source,
-			OwnerUserID: structuredOwnerUserID,
-			DeviceID:    deviceID,
-			OccurredAt:  occurredAt,
-			Payload:     envelope.Payload,
+			EventID:      eventID,
+			EventType:    structuredEventType,
+			Source:       source,
+			OwnerSpaceID: structuredOwnerSpaceID,
+			DeviceID:     deviceID,
+			OccurredAt:   occurredAt,
+			Payload:      envelope.Payload,
 		}
 		if err := kc.WorkflowTriggerManager.HandleStructuredEvent(c.Request.Context(), event, execution); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -2398,7 +2395,7 @@ func (api *WorkflowAPI) dispatchEvent(c *gin.Context) {
 	c.JSON(http.StatusAccepted, gin.H{"accepted": true, "eventType": eventType})
 }
 
-func validateWorkflowEventTriggerConfig(trigger workflow.WorkflowTriggerDefinition, userID string) error {
+func validateWorkflowEventTriggerConfig(trigger workflow.WorkflowTriggerDefinition, spaceID string) error {
 	eventType := strings.TrimSpace(trigger.EventType)
 	if len(trigger.Config) == 0 {
 		switch eventType {
@@ -2463,7 +2460,7 @@ func validateWorkflowEventTriggerConfig(trigger workflow.WorkflowTriggerDefiniti
 		if !strings.HasPrefix(strings.TrimSpace(cfg.SecretRef), "secret://") {
 			return errors.New("tasker trigger secretRef must use secret://")
 		}
-		if !workflow.TriggerSecretRefOwnedByUser(cfg.SecretRef, userID) {
+		if !workflow.TriggerSecretRefOwnedBySpace(cfg.SecretRef, spaceID) {
 			return errors.New("tasker trigger secretRef does not belong to the workflow owner")
 		}
 		if err := validateTriggerStringList("tasker allowedVariables", cfg.AllowedVariables, 32, 128); err != nil {
@@ -2672,7 +2669,7 @@ func isDeviceWorkflowEventType(eventType string) bool {
 	}
 }
 
-func (api *WorkflowAPI) syncTriggers(ctx context.Context, oldDef, newDef workflow.WorkflowDefinition, userID string) error {
+func (api *WorkflowAPI) syncTriggers(ctx context.Context, oldDef, newDef workflow.WorkflowDefinition, spaceID string) error {
 	kc := api.runtime.Kernel.Container()
 	if kc == nil || kc.WorkflowDefRepo == nil {
 		return errors.New("workflow trigger store unavailable")
@@ -2688,7 +2685,7 @@ func (api *WorkflowAPI) syncTriggers(ctx context.Context, oldDef, newDef workflo
 			continue
 		}
 		eventType := strings.TrimSpace(trigger.EventType)
-		if err := kc.WorkflowDefRepo.SaveTrigger(ctx, workflow.TriggerBinding{BindingID: "userwf:" + newDef.ID + ":" + trigger.ID, Type: workflow.TriggerTypeEvent, EventType: "user:" + userID + ":" + eventType, WorkflowID: newDef.ID, Config: trigger.Config, Input: trigger.Input, Enabled: true}); err != nil {
+		if err := kc.WorkflowDefRepo.SaveTrigger(ctx, workflow.TriggerBinding{BindingID: "userwf:" + newDef.ID + ":" + trigger.ID, Type: workflow.TriggerTypeEvent, EventType: "space:" + spaceID + ":" + eventType, WorkflowID: newDef.ID, Config: trigger.Config, Input: trigger.Input, Enabled: true}); err != nil {
 			return err
 		}
 	}
@@ -2712,7 +2709,7 @@ func (api *WorkflowAPI) syncTriggers(ctx context.Context, oldDef, newDef workflo
 			if !trigger.Enabled || !isScheduleTrigger(trigger.Type) {
 				continue
 			}
-			def, err := buildWorkflowSchedule(newDef, trigger, userID)
+			def, err := buildWorkflowSchedule(newDef, trigger, spaceID)
 			if err != nil {
 				return err
 			}
@@ -2743,7 +2740,7 @@ func scheduleIDFor(workflowID, triggerID string) string {
 	return userWorkflowSchedulePrefix + workflowID + "-" + triggerID
 }
 
-func buildWorkflowSchedule(def workflow.WorkflowDefinition, trigger workflow.WorkflowTriggerDefinition, userID string) (*schedule.ScheduleContributionDefinition, error) {
+func buildWorkflowSchedule(def workflow.WorkflowDefinition, trigger workflow.WorkflowTriggerDefinition, spaceID string) (*schedule.ScheduleContributionDefinition, error) {
 	var cfg struct {
 		Type            string `json:"type"`
 		CronExpression  string `json:"cronExpression"`

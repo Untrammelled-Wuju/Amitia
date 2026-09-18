@@ -1,6 +1,7 @@
 package final_acceptance
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"os"
@@ -83,7 +84,7 @@ func writeJSON(report *FinalReport, path string) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, data, 0o644)
+	return writeFileIfChanged(path, data)
 }
 
 func writeMarkdown(report *FinalReport, path string) error {
@@ -141,12 +142,23 @@ func writeMarkdown(report *FinalReport, path string) error {
 	b.WriteString("1. 旧版本数据准备\n2. 升级应用\n3. 迁移\n4. 切换\n5. 启动\n6. 核心扩展运行\n7. 安装新包\n8. 更新\n9. 回滚 Extension\n10. 禁用/启用\n11. 卸载\n12. 应用更新回滚\n13. 数据库恢复\n14. 诊断包\n15. 关闭\n\n")
 
 	b.WriteString("## 协议版本基线\n\n")
-	b.WriteString("- Extension Kernel v1\n- Manifest v2\n- Host API v1\n- Runtime RPC v1\n- Schema UI v1\n- UI Contract v1\n- SDK v1\n\n")
+	b.WriteString("- Extension Kernel v1\n- Manifest v1\n- Host API v1\n- Runtime RPC v1\n- Schema UI v1\n- UI Contract v1\n- SDK v1\n\n")
 
 	b.WriteString("## 已知限制\n\n")
 	b.WriteString("详见 `docs/extension-kernel/known-limitations.md`。\n")
 
-	return os.WriteFile(path, []byte(b.String()), 0o644)
+	return writeFileIfChanged(path, []byte(b.String()))
+}
+
+func writeFileIfChanged(path string, data []byte) error {
+	existing, err := os.ReadFile(path)
+	if err == nil && bytes.Equal(existing, data) {
+		return nil
+	}
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return os.WriteFile(path, data, 0o644)
 }
 
 func itoa(i int) string {

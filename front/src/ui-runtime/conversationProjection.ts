@@ -1,4 +1,5 @@
 import type { UIContributionSummary } from "@/stores/extensionUI";
+import { parseMessageTime } from "@/utils/message-order";
 
 export interface RuntimeConversationEvent {
   id: string;
@@ -714,8 +715,8 @@ function eventSourceRank(source: string | undefined): number {
 
 export function compareTimeline(aSeq: number | undefined, aTime: string, bSeq: number | undefined, bTime: string): number {
   if (aSeq != null && bSeq != null && aSeq !== bSeq) return aSeq - bSeq;
-  const timeDelta = Date.parse(aTime || "") - Date.parse(bTime || "");
-  if (Number.isFinite(timeDelta) && timeDelta !== 0) return timeDelta;
+  const timeDelta = parseMessageTime(aTime) - parseMessageTime(bTime);
+  if (timeDelta !== 0) return timeDelta;
   if (aSeq != null && bSeq == null) return -1;
   if (aSeq == null && bSeq != null) return 1;
   return 0;

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -143,7 +144,7 @@ func (r *WorkflowDefinitionRepository) Delete(ctx context.Context, workflowID st
 	if source == "user" {
 		var metadata map[string]any
 		_ = json.Unmarshal([]byte(metadataRaw), &metadata)
-		owner := strings.TrimSpace(fmt.Sprint(metadata["ownerUserId"]))
+		owner := strings.TrimSpace(fmt.Sprint(metadata["ownerSpaceId"]))
 		if err := r.enqueueWorkflowSyncDeleteTx(ctx, tx, owner, workflowID, definitionHash, time.Now().UTC()); err != nil {
 			return err
 		}
@@ -213,25 +214,25 @@ func (r *WorkflowDefinitionRepository) List(ctx context.Context) ([]workflow.Wor
 	return defs, rows.Err()
 }
 
-func (r *WorkflowDefinitionRepository) SaveRevision(ctx context.Context, ownerUserID string, def workflow.WorkflowDefinition, note string) (*workflow.WorkflowRevision, error) {
-	return r.saveRevisionWithState(ctx, ownerUserID, def, note, workflow.WorkflowRevisionPublished)
+func (r *WorkflowDefinitionRepository) SaveRevision(ctx context.Context, ownerSpaceID string, def workflow.WorkflowDefinition, note string) (*workflow.WorkflowRevision, error) {
+	return r.saveRevisionWithState(ctx, ownerSpaceID, def, note, workflow.WorkflowRevisionPublished)
 }
 
-func (r *WorkflowDefinitionRepository) SaveDraftRevision(ctx context.Context, ownerUserID string, def workflow.WorkflowDefinition, note string) (*workflow.WorkflowRevision, error) {
-	return r.saveRevisionWithState(ctx, ownerUserID, def, note, workflow.WorkflowRevisionDraft)
+func (r *WorkflowDefinitionRepository) SaveDraftRevision(ctx context.Context, ownerSpaceID string, def workflow.WorkflowDefinition, note string) (*workflow.WorkflowRevision, error) {
+	return r.saveRevisionWithState(ctx, ownerSpaceID, def, note, workflow.WorkflowRevisionDraft)
 }
 
 // EnsurePublishedRevision returns the immutable published revision representing
 // the supplied definition. It is safe to call before every run: identical
 // published revisions are reused, while an identical draft is atomically
 // promoted instead of creating another row.
-func (r *WorkflowDefinitionRepository) EnsurePublishedRevision(ctx context.Context, ownerUserID string, def workflow.WorkflowDefinition, note string) (*workflow.WorkflowRevision, error) {
-	return r.saveRevisionWithState(ctx, ownerUserID, def, note, workflow.WorkflowRevisionPublished)
+func (r *WorkflowDefinitionRepository) EnsurePublishedRevision(ctx context.Context, ownerSpaceID string, def workflow.WorkflowDefinition, note string) (*workflow.WorkflowRevision, error) {
+	return r.saveRevisionWithState(ctx, ownerSpaceID, def, note, workflow.WorkflowRevisionPublished)
 }
 
-func (r *WorkflowDefinitionRepository) saveRevisionWithState(ctx context.Context, ownerUserID string, def workflow.WorkflowDefinition, note string, state workflow.WorkflowRevisionState) (*workflow.WorkflowRevision, error) {
-	ownerUserID = strings.TrimSpace(ownerUserID)
-	if ownerUserID == "" || strings.TrimSpace(def.ID) == "" {
+func (r *WorkflowDefinitionRepository) saveRevisionWithState(ctx context.Context, ownerSpaceID string, def workflow.WorkflowDefinition, note string, state workflow.WorkflowRevisionState) (*workflow.WorkflowRevision, error) {
+	ownerSpaceID = strings.TrimSpace(ownerSpaceID)
+	if ownerSpaceID == "" || strings.TrimSpace(def.ID) == "" {
 		return nil, fmt.Errorf("workflow revision requires owner and workflow id")
 	}
 	if !state.Valid() || state == workflow.WorkflowRevisionArchived {
@@ -253,9 +254,9 @@ func (r *WorkflowDefinitionRepository) saveRevisionWithState(ctx context.Context
 	latestErr := tx.QueryRowContext(ctx, `
 		SELECT revision_id, revision_no, name, description, definition_hash, note, state, published_at, archived_at, created_at
 		FROM extension_workflow_revisions
-		WHERE owner_user_id = ? AND workflow_id = ?
+		WHERE owner_space_id = ? AND workflow_id = ?
 		ORDER BY revision_no DESC LIMIT 1
-	`, ownerUserID, def.ID).Scan(
+	`, ownerSpaceID, def.ID).Scan(
 		&latest.RevisionID, &latest.RevisionNo, &latest.Name, &latest.Description,
 		&latestHash, &latest.Note, &latest.State, &latest.PublishedAt, &latest.ArchivedAt, &latest.CreatedAt,
 	)
@@ -268,8 +269,8 @@ func (r *WorkflowDefinitionRepository) saveRevisionWithState(ctx context.Context
 			if _, err := tx.ExecContext(ctx, `
 				UPDATE extension_workflow_revisions
 				SET state = ?, published_at = COALESCE(published_at, ?), archived_at = NULL
-				WHERE revision_id = ? AND owner_user_id = ? AND workflow_id = ?
-			`, workflow.WorkflowRevisionPublished, now, latest.RevisionID, ownerUserID, def.ID); err != nil {
+				WHERE revision_id = ? AND owner_space_id = ? AND workflow_id = ?
+			`, workflow.WorkflowRevisionPublished, now, latest.RevisionID, ownerSpaceID, def.ID); err != nil {
 				return nil, fmt.Errorf("publish matching workflow revision: %w", err)
 			}
 			latest.State = workflow.WorkflowRevisionPublished
@@ -277,7 +278,7 @@ func (r *WorkflowDefinitionRepository) saveRevisionWithState(ctx context.Context
 			latest.ArchivedAt = nil
 		}
 		latest.WorkflowID = def.ID
-		latest.OwnerUserID = ownerUserID
+		latest.OwnerSpaceID = ownerSpaceID
 		latest.Definition = def
 		latest.DefinitionHash = latestHash
 		if err := tx.Commit(); err != nil {
@@ -298,7 +299,7 @@ func (r *WorkflowDefinitionRepository) saveRevisionWithState(ctx context.Context
 	revision := &workflow.WorkflowRevision{
 		RevisionID:     "wfrev-" + uuid.NewString(),
 		WorkflowID:     def.ID,
-		OwnerUserID:    ownerUserID,
+		OwnerSpaceID:   ownerSpaceID,
 		RevisionNo:     revisionNo,
 		Name:           def.Name,
 		Description:    def.Description,
@@ -311,21 +312,21 @@ func (r *WorkflowDefinitionRepository) saveRevisionWithState(ctx context.Context
 	}
 	if _, err := tx.ExecContext(ctx, `
 		INSERT INTO extension_workflow_revisions
-			(revision_id, workflow_id, owner_user_id, revision_no, name, description, definition_json, definition_hash, note, state, published_at, archived_at, created_at)
+			(revision_id, workflow_id, owner_space_id, revision_no, name, description, definition_json, definition_hash, note, state, published_at, archived_at, created_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)
-	`, revision.RevisionID, revision.WorkflowID, revision.OwnerUserID, revision.RevisionNo, revision.Name, revision.Description, definitionJSON, revision.DefinitionHash, revision.Note, revision.State, revision.PublishedAt, revision.CreatedAt); err != nil {
+	`, revision.RevisionID, revision.WorkflowID, revision.OwnerSpaceID, revision.RevisionNo, revision.Name, revision.Description, definitionJSON, revision.DefinitionHash, revision.Note, revision.State, revision.PublishedAt, revision.CreatedAt); err != nil {
 		return nil, fmt.Errorf("save workflow revision: %w", err)
 	}
 	// Only explicitly archived history is eligible for automatic pruning. A
 	// published revision can still be referenced by an audit trail or old run.
 	if _, err := tx.ExecContext(ctx, `
 		DELETE FROM extension_workflow_revisions
-		WHERE owner_user_id = ? AND workflow_id = ? AND state = ? AND revision_id NOT IN (
+		WHERE owner_space_id = ? AND workflow_id = ? AND state = ? AND revision_id NOT IN (
 			SELECT revision_id FROM extension_workflow_revisions
-			WHERE owner_user_id = ? AND workflow_id = ? AND state = ?
+			WHERE owner_space_id = ? AND workflow_id = ? AND state = ?
 			ORDER BY revision_no DESC LIMIT 50
 		)
-	`, ownerUserID, def.ID, workflow.WorkflowRevisionArchived, ownerUserID, def.ID, workflow.WorkflowRevisionArchived); err != nil {
+	`, ownerSpaceID, def.ID, workflow.WorkflowRevisionArchived, ownerSpaceID, def.ID, workflow.WorkflowRevisionArchived); err != nil {
 		return nil, fmt.Errorf("prune archived workflow revisions: %w", err)
 	}
 	if err := tx.Commit(); err != nil {
@@ -334,16 +335,16 @@ func (r *WorkflowDefinitionRepository) saveRevisionWithState(ctx context.Context
 	return revision, nil
 }
 
-func (r *WorkflowDefinitionRepository) ListRevisions(ctx context.Context, ownerUserID, workflowID string, limit int) ([]workflow.WorkflowRevisionSummary, error) {
+func (r *WorkflowDefinitionRepository) ListRevisions(ctx context.Context, ownerSpaceID, workflowID string, limit int) ([]workflow.WorkflowRevisionSummary, error) {
 	if limit <= 0 || limit > 100 {
 		limit = 50
 	}
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT revision_id, workflow_id, revision_no, name, description, definition_hash, note, state, published_at, archived_at, created_at
 		FROM extension_workflow_revisions
-		WHERE owner_user_id = ? AND workflow_id = ?
+		WHERE owner_space_id = ? AND workflow_id = ?
 		ORDER BY revision_no DESC LIMIT ?
-	`, ownerUserID, workflowID, limit)
+	`, ownerSpaceID, workflowID, limit)
 	if err != nil {
 		return nil, fmt.Errorf("list workflow revisions: %w", err)
 	}
@@ -359,14 +360,14 @@ func (r *WorkflowDefinitionRepository) ListRevisions(ctx context.Context, ownerU
 	return items, rows.Err()
 }
 
-func (r *WorkflowDefinitionRepository) GetRevision(ctx context.Context, ownerUserID, workflowID, revisionID string) (*workflow.WorkflowRevision, error) {
+func (r *WorkflowDefinitionRepository) GetRevision(ctx context.Context, ownerSpaceID, workflowID, revisionID string) (*workflow.WorkflowRevision, error) {
 	var item workflow.WorkflowRevision
 	var definitionJSON string
 	err := r.db.QueryRowContext(ctx, `
-		SELECT revision_id, workflow_id, owner_user_id, revision_no, name, description, definition_json, definition_hash, note, state, published_at, archived_at, created_at
+		SELECT revision_id, workflow_id, owner_space_id, revision_no, name, description, definition_json, definition_hash, note, state, published_at, archived_at, created_at
 		FROM extension_workflow_revisions
-		WHERE owner_user_id = ? AND workflow_id = ? AND revision_id = ?
-	`, ownerUserID, workflowID, revisionID).Scan(&item.RevisionID, &item.WorkflowID, &item.OwnerUserID, &item.RevisionNo, &item.Name, &item.Description, &definitionJSON, &item.DefinitionHash, &item.Note, &item.State, &item.PublishedAt, &item.ArchivedAt, &item.CreatedAt)
+		WHERE owner_space_id = ? AND workflow_id = ? AND revision_id = ?
+	`, ownerSpaceID, workflowID, revisionID).Scan(&item.RevisionID, &item.WorkflowID, &item.OwnerSpaceID, &item.RevisionNo, &item.Name, &item.Description, &definitionJSON, &item.DefinitionHash, &item.Note, &item.State, &item.PublishedAt, &item.ArchivedAt, &item.CreatedAt)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, workflow.ErrWorkflowNotFound
@@ -379,54 +380,54 @@ func (r *WorkflowDefinitionRepository) GetRevision(ctx context.Context, ownerUse
 	return &item, nil
 }
 
-func (r *WorkflowDefinitionRepository) FindRevisionByHash(ctx context.Context, ownerUserID, workflowID, definitionHash string) (*workflow.WorkflowRevision, error) {
+func (r *WorkflowDefinitionRepository) FindRevisionByHash(ctx context.Context, ownerSpaceID, workflowID, definitionHash string) (*workflow.WorkflowRevision, error) {
 	var revisionID string
 	err := r.db.QueryRowContext(ctx, `
 		SELECT revision_id
 		FROM extension_workflow_revisions
-		WHERE owner_user_id = ? AND workflow_id = ? AND definition_hash = ? AND state != ?
+		WHERE owner_space_id = ? AND workflow_id = ? AND definition_hash = ? AND state != ?
 		ORDER BY CASE state WHEN 'published' THEN 0 WHEN 'draft' THEN 1 ELSE 2 END, revision_no DESC
 		LIMIT 1
-	`, strings.TrimSpace(ownerUserID), strings.TrimSpace(workflowID), strings.TrimSpace(definitionHash), workflow.WorkflowRevisionArchived).Scan(&revisionID)
+	`, strings.TrimSpace(ownerSpaceID), strings.TrimSpace(workflowID), strings.TrimSpace(definitionHash), workflow.WorkflowRevisionArchived).Scan(&revisionID)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, workflow.ErrWorkflowNotFound
 		}
 		return nil, fmt.Errorf("find workflow revision by hash: %w", err)
 	}
-	return r.GetRevision(ctx, ownerUserID, workflowID, revisionID)
+	return r.GetRevision(ctx, ownerSpaceID, workflowID, revisionID)
 }
 
-func (r *WorkflowDefinitionRepository) PublishRevision(ctx context.Context, ownerUserID, workflowID, revisionID string) (*workflow.WorkflowRevision, error) {
+func (r *WorkflowDefinitionRepository) PublishRevision(ctx context.Context, ownerSpaceID, workflowID, revisionID string) (*workflow.WorkflowRevision, error) {
 	now := time.Now().UTC()
 	result, err := r.db.ExecContext(ctx, `
 		UPDATE extension_workflow_revisions
 		SET state = ?, published_at = COALESCE(published_at, ?), archived_at = NULL
-		WHERE owner_user_id = ? AND workflow_id = ? AND revision_id = ?
-	`, workflow.WorkflowRevisionPublished, now, strings.TrimSpace(ownerUserID), strings.TrimSpace(workflowID), strings.TrimSpace(revisionID))
+		WHERE owner_space_id = ? AND workflow_id = ? AND revision_id = ?
+	`, workflow.WorkflowRevisionPublished, now, strings.TrimSpace(ownerSpaceID), strings.TrimSpace(workflowID), strings.TrimSpace(revisionID))
 	if err != nil {
 		return nil, fmt.Errorf("publish workflow revision: %w", err)
 	}
 	if n, _ := result.RowsAffected(); n == 0 {
 		return nil, workflow.ErrWorkflowNotFound
 	}
-	return r.GetRevision(ctx, ownerUserID, workflowID, revisionID)
+	return r.GetRevision(ctx, ownerSpaceID, workflowID, revisionID)
 }
 
-func (r *WorkflowDefinitionRepository) ArchiveRevision(ctx context.Context, ownerUserID, workflowID, revisionID string) (*workflow.WorkflowRevision, error) {
+func (r *WorkflowDefinitionRepository) ArchiveRevision(ctx context.Context, ownerSpaceID, workflowID, revisionID string) (*workflow.WorkflowRevision, error) {
 	now := time.Now().UTC()
 	result, err := r.db.ExecContext(ctx, `
 		UPDATE extension_workflow_revisions
 		SET state = ?, archived_at = ?
-		WHERE owner_user_id = ? AND workflow_id = ? AND revision_id = ?
-	`, workflow.WorkflowRevisionArchived, now, strings.TrimSpace(ownerUserID), strings.TrimSpace(workflowID), strings.TrimSpace(revisionID))
+		WHERE owner_space_id = ? AND workflow_id = ? AND revision_id = ?
+	`, workflow.WorkflowRevisionArchived, now, strings.TrimSpace(ownerSpaceID), strings.TrimSpace(workflowID), strings.TrimSpace(revisionID))
 	if err != nil {
 		return nil, fmt.Errorf("archive workflow revision: %w", err)
 	}
 	if n, _ := result.RowsAffected(); n == 0 {
 		return nil, workflow.ErrWorkflowNotFound
 	}
-	return r.GetRevision(ctx, ownerUserID, workflowID, revisionID)
+	return r.GetRevision(ctx, ownerSpaceID, workflowID, revisionID)
 }
 
 // RestoreRevisionLifecycle restores only the lifecycle metadata of a revision.
@@ -435,7 +436,7 @@ func (r *WorkflowDefinitionRepository) ArchiveRevision(ctx context.Context, owne
 // promoted. The immutable definition payload/hash are never modified here.
 func (r *WorkflowDefinitionRepository) RestoreRevisionLifecycle(
 	ctx context.Context,
-	ownerUserID, workflowID, revisionID string,
+	ownerSpaceID, workflowID, revisionID string,
 	state workflow.WorkflowRevisionState,
 	publishedAt, archivedAt *time.Time,
 ) (*workflow.WorkflowRevision, error) {
@@ -445,15 +446,15 @@ func (r *WorkflowDefinitionRepository) RestoreRevisionLifecycle(
 	result, err := r.db.ExecContext(ctx, `
 		UPDATE extension_workflow_revisions
 		SET state = ?, published_at = ?, archived_at = ?
-		WHERE owner_user_id = ? AND workflow_id = ? AND revision_id = ?
-	`, state, publishedAt, archivedAt, strings.TrimSpace(ownerUserID), strings.TrimSpace(workflowID), strings.TrimSpace(revisionID))
+		WHERE owner_space_id = ? AND workflow_id = ? AND revision_id = ?
+	`, state, publishedAt, archivedAt, strings.TrimSpace(ownerSpaceID), strings.TrimSpace(workflowID), strings.TrimSpace(revisionID))
 	if err != nil {
 		return nil, fmt.Errorf("restore workflow revision lifecycle: %w", err)
 	}
 	if n, _ := result.RowsAffected(); n == 0 {
 		return nil, workflow.ErrWorkflowNotFound
 	}
-	return r.GetRevision(ctx, ownerUserID, workflowID, revisionID)
+	return r.GetRevision(ctx, ownerSpaceID, workflowID, revisionID)
 }
 
 func (r *WorkflowDefinitionRepository) DeleteRevisionsByWorkflow(ctx context.Context, workflowID string) error {
@@ -463,10 +464,10 @@ func (r *WorkflowDefinitionRepository) DeleteRevisionsByWorkflow(ctx context.Con
 	return nil
 }
 
-func (r *WorkflowDefinitionRepository) SaveTemplate(ctx context.Context, ownerUserID, name, description string, def workflow.WorkflowDefinition) (*workflow.WorkflowTemplate, error) {
-	ownerUserID = strings.TrimSpace(ownerUserID)
+func (r *WorkflowDefinitionRepository) SaveTemplate(ctx context.Context, ownerSpaceID, name, description string, def workflow.WorkflowDefinition) (*workflow.WorkflowTemplate, error) {
+	ownerSpaceID = strings.TrimSpace(ownerSpaceID)
 	name = strings.TrimSpace(name)
-	if ownerUserID == "" || name == "" {
+	if ownerSpaceID == "" || name == "" {
 		return nil, fmt.Errorf("workflow template requires owner and name")
 	}
 	definitionJSON, err := json.Marshal(def)
@@ -476,7 +477,7 @@ func (r *WorkflowDefinitionRepository) SaveTemplate(ctx context.Context, ownerUs
 	now := time.Now().UTC()
 	item := &workflow.WorkflowTemplate{
 		TemplateID:     "wftpl-" + uuid.NewString(),
-		OwnerUserID:    ownerUserID,
+		OwnerSpaceID:   ownerSpaceID,
 		Name:           name,
 		Description:    strings.TrimSpace(description),
 		Definition:     def,
@@ -486,19 +487,19 @@ func (r *WorkflowDefinitionRepository) SaveTemplate(ctx context.Context, ownerUs
 	}
 	if _, err := r.db.ExecContext(ctx, `
 		INSERT INTO extension_workflow_templates
-			(template_id, owner_user_id, name, description, definition_json, definition_hash, created_at, updated_at)
+			(template_id, owner_space_id, name, description, definition_json, definition_hash, created_at, updated_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-	`, item.TemplateID, item.OwnerUserID, item.Name, item.Description, definitionJSON, item.DefinitionHash, item.CreatedAt, item.UpdatedAt); err != nil {
+	`, item.TemplateID, item.OwnerSpaceID, item.Name, item.Description, definitionJSON, item.DefinitionHash, item.CreatedAt, item.UpdatedAt); err != nil {
 		return nil, fmt.Errorf("save workflow template: %w", err)
 	}
 	return item, nil
 }
 
-func (r *WorkflowDefinitionRepository) ListTemplates(ctx context.Context, ownerUserID string) ([]workflow.WorkflowTemplateSummary, error) {
+func (r *WorkflowDefinitionRepository) ListTemplates(ctx context.Context, ownerSpaceID string) ([]workflow.WorkflowTemplateSummary, error) {
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT template_id, name, description, definition_json, definition_hash, created_at, updated_at
-		FROM extension_workflow_templates WHERE owner_user_id = ? ORDER BY updated_at DESC, name
-	`, ownerUserID)
+		FROM extension_workflow_templates WHERE owner_space_id = ? ORDER BY updated_at DESC, name
+	`, ownerSpaceID)
 	if err != nil {
 		return nil, fmt.Errorf("list workflow templates: %w", err)
 	}
@@ -521,13 +522,13 @@ func (r *WorkflowDefinitionRepository) ListTemplates(ctx context.Context, ownerU
 	return items, rows.Err()
 }
 
-func (r *WorkflowDefinitionRepository) GetTemplate(ctx context.Context, ownerUserID, templateID string) (*workflow.WorkflowTemplate, error) {
+func (r *WorkflowDefinitionRepository) GetTemplate(ctx context.Context, ownerSpaceID, templateID string) (*workflow.WorkflowTemplate, error) {
 	var item workflow.WorkflowTemplate
 	var definitionJSON string
 	err := r.db.QueryRowContext(ctx, `
-		SELECT template_id, owner_user_id, name, description, definition_json, definition_hash, created_at, updated_at
-		FROM extension_workflow_templates WHERE owner_user_id = ? AND template_id = ?
-	`, ownerUserID, templateID).Scan(&item.TemplateID, &item.OwnerUserID, &item.Name, &item.Description, &definitionJSON, &item.DefinitionHash, &item.CreatedAt, &item.UpdatedAt)
+		SELECT template_id, owner_space_id, name, description, definition_json, definition_hash, created_at, updated_at
+		FROM extension_workflow_templates WHERE owner_space_id = ? AND template_id = ?
+	`, ownerSpaceID, templateID).Scan(&item.TemplateID, &item.OwnerSpaceID, &item.Name, &item.Description, &definitionJSON, &item.DefinitionHash, &item.CreatedAt, &item.UpdatedAt)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, workflow.ErrWorkflowNotFound
@@ -540,8 +541,8 @@ func (r *WorkflowDefinitionRepository) GetTemplate(ctx context.Context, ownerUse
 	return &item, nil
 }
 
-func (r *WorkflowDefinitionRepository) DeleteTemplate(ctx context.Context, ownerUserID, templateID string) error {
-	res, err := r.db.ExecContext(ctx, `DELETE FROM extension_workflow_templates WHERE owner_user_id = ? AND template_id = ?`, ownerUserID, templateID)
+func (r *WorkflowDefinitionRepository) DeleteTemplate(ctx context.Context, ownerSpaceID, templateID string) error {
+	res, err := r.db.ExecContext(ctx, `DELETE FROM extension_workflow_templates WHERE owner_space_id = ? AND template_id = ?`, ownerSpaceID, templateID)
 	if err != nil {
 		return fmt.Errorf("delete workflow template: %w", err)
 	}
@@ -807,7 +808,7 @@ func scanWorkflowDefinition(row scannerInterface) (*workflow.WorkflowDefinition,
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, fmt.Errorf("workflow definition not found")
+			return nil, fmt.Errorf("workflow definition not found: %w", sql.ErrNoRows)
 		}
 		return nil, fmt.Errorf("scan workflow definition: %w", err)
 	}
@@ -1195,7 +1196,7 @@ func (r *WorkflowExecutionRepository) getByIdempotency(ctx context.Context, work
 	`, workflowID, idempotencyKey))
 }
 
-func (r *WorkflowExecutionRepository) ListWaitingDevice(ctx context.Context, userID, deviceID string, limit int) ([]workflow.WorkflowRun, error) {
+func (r *WorkflowExecutionRepository) ListWaitingDevice(ctx context.Context, spaceID, deviceID string, limit int) ([]workflow.WorkflowRun, error) {
 	if limit <= 0 || limit > 500 {
 		limit = 100
 	}
@@ -1213,7 +1214,7 @@ func (r *WorkflowExecutionRepository) ListWaitingDevice(ctx context.Context, use
 	}
 	defer rows.Close()
 
-	wantedUser := strings.TrimSpace(userID)
+	wantedUser := strings.TrimSpace(spaceID)
 	wantedDevice := strings.TrimSpace(deviceID)
 	result := make([]workflow.WorkflowRun, 0)
 	for rows.Next() {
@@ -1221,7 +1222,7 @@ func (r *WorkflowExecutionRepository) ListWaitingDevice(ctx context.Context, use
 		if scanErr != nil {
 			return nil, scanErr
 		}
-		if wantedUser != "" && strings.TrimSpace(run.Context.UserID) != wantedUser {
+		if wantedUser != "" && strings.TrimSpace(run.Context.SpaceID) != wantedUser {
 			continue
 		}
 		reason := strings.TrimSpace(strings.TrimPrefix(run.PauseReason, "waiting_device:"))
@@ -1657,7 +1658,7 @@ func nullableRawJSON(raw json.RawMessage) any {
 
 func (r *WorkflowExecutionRepository) GetStats(ctx context.Context, workflowID string) (workflow.WorkflowExecutionStats, error) {
 	stats := workflow.WorkflowExecutionStats{NodeStatistics: []workflow.NodeExecutionStat{}}
-	var lastRunAt sql.NullTime
+	var lastRunAt sql.NullString
 	if err := r.db.QueryRowContext(ctx, `
 		SELECT COUNT(*),
 			COALESCE(SUM(CASE WHEN status = 'succeeded' THEN 1 ELSE 0 END), 0),
@@ -1669,8 +1670,7 @@ func (r *WorkflowExecutionRepository) GetStats(ctx context.Context, workflowID s
 	`, workflowID).Scan(&stats.RunCount, &stats.Succeeded, &stats.Failed, &stats.Cancelled, &stats.Compensated, &stats.AverageRunMS, &lastRunAt); err != nil {
 		return stats, fmt.Errorf("workflow stats: %w", err)
 	}
-	if lastRunAt.Valid {
-		t := lastRunAt.Time
+	if t, ok := parseWorkflowStoredTime(lastRunAt); ok {
 		stats.LastRunAt = &t
 	}
 	terminalRuns := stats.Succeeded + stats.Failed + stats.Cancelled + stats.Compensated
@@ -1702,6 +1702,30 @@ func (r *WorkflowExecutionRepository) GetStats(ctx context.Context, workflowID s
 		stats.NodeStatistics = append(stats.NodeStatistics, item)
 	}
 	return stats, rows.Err()
+}
+
+func parseWorkflowStoredTime(raw sql.NullString) (time.Time, bool) {
+	if !raw.Valid {
+		return time.Time{}, false
+	}
+	value := strings.TrimSpace(raw.String)
+	if value == "" {
+		return time.Time{}, false
+	}
+	for _, layout := range []string{
+		time.RFC3339Nano,
+		time.RFC3339,
+		"2006-01-02 15:04:05.999999999-07:00",
+		"2006-01-02 15:04:05.999999999Z07:00",
+		"2006-01-02 15:04:05.999999999",
+		"2006-01-02 15:04:05",
+	} {
+		parsed, err := time.Parse(layout, value)
+		if err == nil {
+			return parsed, true
+		}
+	}
+	return time.Time{}, false
 }
 
 func (r *WorkflowExecutionRepository) ListStepRuns(ctx context.Context, executionID string) ([]workflow.StepRun, error) {

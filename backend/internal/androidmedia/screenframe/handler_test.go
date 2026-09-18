@@ -67,7 +67,7 @@ func TestStartHandler_BuildPayload_Custom(t *testing.T) {
 func TestStartHandler_Handle_Blocked(t *testing.T) {
 	ctx := context.Background()
 	h := NewStartHandler(NewBlockedSessionStore(1), DefaultScreenFramePolicy())
-	owner := SessionOwner{UserID: "u1", CharacterID: "c1", ConversationID: "v1"}
+	owner := SessionOwner{SpaceID: "u1", CharacterID: "c1", ConversationID: "v1"}
 
 	req := StartRequest{}
 	result, err := h.Handle(ctx, owner, marshalRequest(req))
@@ -98,7 +98,7 @@ func TestLatestHandler_CapabilityID(t *testing.T) {
 func TestLatestHandler_Handle_SessionNotFound(t *testing.T) {
 	ctx := context.Background()
 	h := NewLatestHandler(NewBlockedSessionStore(1), DefaultScreenFramePolicy())
-	owner := SessionOwner{UserID: "u1", CharacterID: "c1", ConversationID: "v1"}
+	owner := SessionOwner{SpaceID: "u1", CharacterID: "c1", ConversationID: "v1"}
 
 	req := LatestRequest{SessionID: "nonexistent"}
 	_, err := h.Handle(ctx, owner, marshalRequest(req))
@@ -118,11 +118,11 @@ func TestLatestHandler_Handle_WrongOwner(t *testing.T) {
 	ctx := context.Background()
 	store := NewBlockedSessionStore(2).(*blockedSessionStore)
 	h := NewLatestHandler(store, DefaultScreenFramePolicy())
-	owner := SessionOwner{UserID: "u1", CharacterID: "c1", ConversationID: "v1"}
+	owner := SessionOwner{SpaceID: "u1", CharacterID: "c1", ConversationID: "v1"}
 
 	session := ScreenFrameSession{
 		ID:    ScreenFrameSessionID("s-1"),
-		Owner: SessionOwner{UserID: "other-user"},
+		Owner: SessionOwner{SpaceID: "other-user"},
 		State: SessionStateRunning,
 		Width: 1080, Height: 2400, TargetFPS: 2,
 		StartedAt: time.Now(),
@@ -154,7 +154,7 @@ func TestStopHandler_CapabilityID(t *testing.T) {
 func TestStopHandler_Handle_NotFound(t *testing.T) {
 	ctx := context.Background()
 	h := NewStopHandler(NewBlockedSessionStore(1))
-	owner := SessionOwner{UserID: "u1"}
+	owner := SessionOwner{SpaceID: "u1"}
 
 	_, err := h.Handle(ctx, owner, "nonexistent")
 	if err == nil {
@@ -166,11 +166,11 @@ func TestStopHandler_Handle_WrongConversation(t *testing.T) {
 	ctx := context.Background()
 	store := NewBlockedSessionStore(2).(*blockedSessionStore)
 	h := NewStopHandler(store)
-	owner := SessionOwner{UserID: "u1", CharacterID: "c1", ConversationID: "v1"}
+	owner := SessionOwner{SpaceID: "u1", CharacterID: "c1", ConversationID: "v1"}
 
 	session := ScreenFrameSession{
 		ID:    ScreenFrameSessionID("s-1"),
-		Owner: SessionOwner{UserID: "u1", CharacterID: "c1", ConversationID: "v2"},
+		Owner: SessionOwner{SpaceID: "u1", CharacterID: "c1", ConversationID: "v2"},
 		State: SessionStateRunning,
 		Width: 1080, Height: 2400, TargetFPS: 2,
 		StartedAt: time.Now(),
@@ -187,7 +187,7 @@ func TestStopHandler_Handle_AlreadyStopped(t *testing.T) {
 	ctx := context.Background()
 	store := NewBlockedSessionStore(2).(*blockedSessionStore)
 	h := NewStopHandler(store)
-	owner := SessionOwner{UserID: "u1", CharacterID: "c1", ConversationID: "v1"}
+	owner := SessionOwner{SpaceID: "u1", CharacterID: "c1", ConversationID: "v1"}
 
 	session := ScreenFrameSession{
 		ID:    ScreenFrameSessionID("s-1"),
@@ -221,7 +221,7 @@ func TestStatusHandler_CapabilityID(t *testing.T) {
 func TestStatusHandler_Handle_Blocked(t *testing.T) {
 	ctx := context.Background()
 	h := NewStatusHandler(NewBlockedSessionStore(1))
-	owner := SessionOwner{UserID: "u1"}
+	owner := SessionOwner{SpaceID: "u1"}
 
 	result, err := h.Handle(ctx, owner)
 	if err != nil {
@@ -242,17 +242,17 @@ func TestStatusHandler_Handle_ActiveSession(t *testing.T) {
 	ctx := context.Background()
 	store := NewBlockedSessionStore(2).(*blockedSessionStore)
 	h := NewStatusHandler(store)
-	owner := SessionOwner{UserID: "u1", CharacterID: "c1", ConversationID: "v1"}
+	owner := SessionOwner{SpaceID: "u1", CharacterID: "c1", ConversationID: "v1"}
 
 	session := ScreenFrameSession{
-		ID:              ScreenFrameSessionID("s-1"),
-		Owner:           owner,
-		State:           SessionStateRunning,
-		DisplayID:       0,
-		Width:           1080,
-		Height:          2400,
-		TargetFPS:       2,
-		StartedAt:       time.Now(),
+		ID:        ScreenFrameSessionID("s-1"),
+		Owner:     owner,
+		State:     SessionStateRunning,
+		DisplayID: 0,
+		Width:     1080,
+		Height:    2400,
+		TargetFPS: 2,
+		StartedAt: time.Now(),
 	}
 	store.sessions[session.ID] = &session
 

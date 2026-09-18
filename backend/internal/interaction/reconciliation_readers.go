@@ -24,11 +24,11 @@ func (a *goalReaderAdapter) GetGoal(ctx context.Context, goalID string) (decisio
 	return a.registry.Get(goalID)
 }
 
-func (a *goalReaderAdapter) ActiveForScope(ctx context.Context, userID, characterID, conversationID string) []decision.Goal {
+func (a *goalReaderAdapter) ActiveForScope(ctx context.Context, spaceID, characterID, conversationID string) []decision.Goal {
 	if a.registry == nil {
 		return nil
 	}
-	return a.registry.ActiveForScope(userID, characterID, conversationID)
+	return a.registry.ActiveForScope(spaceID, characterID, conversationID)
 }
 
 type taskReaderAdapter struct {

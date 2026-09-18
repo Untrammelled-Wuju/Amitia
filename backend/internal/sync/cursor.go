@@ -10,7 +10,7 @@ import (
 )
 
 type CursorIdentity struct {
-	UserID   string
+	SpaceID  string
 	Scope    CursorScope
 	DeviceID string
 }
@@ -21,7 +21,7 @@ type CursorStore interface {
 	UpdateApplied(identity CursorIdentity, seq Sequence) error
 	UpdatePushed(identity CursorIdentity, seq Sequence) error
 	UpdatePushedTx(tx *gorm.DB, identity CursorIdentity, seq Sequence) error
-	ListByUser(userID string) ([]SyncCursor, error)
+	ListBySpace(spaceID string) ([]SyncCursor, error)
 }
 
 type sqliteCursorStore struct {
@@ -34,7 +34,7 @@ func NewCursorStore(db *gorm.DB) CursorStore {
 
 func (s *sqliteCursorStore) Get(identity CursorIdentity) (*SyncCursor, error) {
 	var cursor SyncCursor
-	err := s.db.Where("user_id = ? AND scope = ? AND device_id = ?", identity.UserID, identity.Scope, identity.DeviceID).First(&cursor).Error
+	err := s.db.Where("space_id = ? AND scope = ? AND device_id = ?", identity.SpaceID, identity.Scope, identity.DeviceID).First(&cursor).Error
 	if err == gorm.ErrRecordNotFound {
 		return nil, nil
 	}
@@ -43,14 +43,14 @@ func (s *sqliteCursorStore) Get(identity CursorIdentity) (*SyncCursor, error) {
 
 func (s *sqliteCursorStore) Save(cursor *SyncCursor) error {
 	cursor.UpdatedAt = time.Now().UTC()
-	existing, err := s.Get(CursorIdentity{UserID: cursor.UserID, Scope: cursor.Scope, DeviceID: cursor.DeviceID})
+	existing, err := s.Get(CursorIdentity{SpaceID: cursor.SpaceID, Scope: cursor.Scope, DeviceID: cursor.DeviceID})
 	if err != nil {
 		return err
 	}
 	if existing == nil {
 		return s.db.Create(cursor).Error
 	}
-	return s.db.Model(&SyncCursor{}).Where("user_id = ? AND scope = ? AND device_id = ?", cursor.UserID, cursor.Scope, cursor.DeviceID).Updates(map[string]interface{}{
+	return s.db.Model(&SyncCursor{}).Where("space_id = ? AND scope = ? AND device_id = ?", cursor.SpaceID, cursor.Scope, cursor.DeviceID).Updates(map[string]interface{}{
 		"last_applied": cursor.LastApplied,
 		"last_pushed":  cursor.LastPushed,
 		"updated_at":   cursor.UpdatedAt,
@@ -58,32 +58,32 @@ func (s *sqliteCursorStore) Save(cursor *SyncCursor) error {
 }
 
 func (s *sqliteCursorStore) UpdateApplied(identity CursorIdentity, seq Sequence) error {
-	return s.db.Exec(`INSERT INTO sync_cursors (device_id, user_id, scope, last_applied, last_pushed, updated_at)
+	return s.db.Exec(`INSERT INTO sync_cursors (device_id, space_id, scope, last_applied, last_pushed, updated_at)
 		VALUES (?, ?, ?, ?, 0, ?)
-		ON CONFLICT(user_id, scope, device_id) DO UPDATE SET
+		ON CONFLICT(space_id, scope, device_id) DO UPDATE SET
 		last_applied = CASE WHEN sync_cursors.last_applied < excluded.last_applied THEN excluded.last_applied ELSE sync_cursors.last_applied END,
-		updated_at = excluded.updated_at`, identity.DeviceID, identity.UserID, identity.Scope, seq, time.Now().UTC()).Error
+		updated_at = excluded.updated_at`, identity.DeviceID, identity.SpaceID, identity.Scope, seq, time.Now().UTC()).Error
 }
 
 func (s *sqliteCursorStore) UpdatePushed(identity CursorIdentity, seq Sequence) error {
-	return s.db.Exec(`INSERT INTO sync_cursors (device_id, user_id, scope, last_applied, last_pushed, updated_at)
+	return s.db.Exec(`INSERT INTO sync_cursors (device_id, space_id, scope, last_applied, last_pushed, updated_at)
 		VALUES (?, ?, ?, 0, ?, ?)
-		ON CONFLICT(user_id, scope, device_id) DO UPDATE SET
+		ON CONFLICT(space_id, scope, device_id) DO UPDATE SET
 		last_pushed = CASE WHEN sync_cursors.last_pushed < excluded.last_pushed THEN excluded.last_pushed ELSE sync_cursors.last_pushed END,
-		updated_at = excluded.updated_at`, identity.DeviceID, identity.UserID, identity.Scope, seq, time.Now().UTC()).Error
+		updated_at = excluded.updated_at`, identity.DeviceID, identity.SpaceID, identity.Scope, seq, time.Now().UTC()).Error
 }
 
 func (s *sqliteCursorStore) UpdatePushedTx(tx *gorm.DB, identity CursorIdentity, seq Sequence) error {
-	return tx.Exec(`INSERT INTO sync_cursors (device_id, user_id, scope, last_applied, last_pushed, updated_at)
+	return tx.Exec(`INSERT INTO sync_cursors (device_id, space_id, scope, last_applied, last_pushed, updated_at)
 		VALUES (?, ?, ?, 0, ?, ?)
-		ON CONFLICT(user_id, scope, device_id) DO UPDATE SET
+		ON CONFLICT(space_id, scope, device_id) DO UPDATE SET
 		last_pushed = CASE WHEN sync_cursors.last_pushed < excluded.last_pushed THEN excluded.last_pushed ELSE sync_cursors.last_pushed END,
-		updated_at = excluded.updated_at`, identity.DeviceID, identity.UserID, identity.Scope, seq, time.Now().UTC()).Error
+		updated_at = excluded.updated_at`, identity.DeviceID, identity.SpaceID, identity.Scope, seq, time.Now().UTC()).Error
 }
 
-func (s *sqliteCursorStore) ListByUser(userID string) ([]SyncCursor, error) {
+func (s *sqliteCursorStore) ListBySpace(spaceID string) ([]SyncCursor, error) {
 	var cursors []SyncCursor
-	err := s.db.Where("user_id = ?", userID).Find(&cursors).Error
+	err := s.db.Where("space_id = ?", spaceID).Find(&cursors).Error
 	return cursors, err
 }
 
@@ -106,7 +106,7 @@ func (s *CursorService) GetOrCreate(identity CursorIdentity) (*SyncCursor, error
 
 	cursor = &SyncCursor{
 		DeviceID:    identity.DeviceID,
-		UserID:      identity.UserID,
+		SpaceID:     identity.SpaceID,
 		Scope:       identity.Scope,
 		LastApplied: 0,
 		LastPushed:  0,
@@ -138,7 +138,7 @@ func (s *CursorService) GetStatus(identity CursorIdentity, serverSeq Sequence) (
 	if cursor == nil {
 		return &CursorStatus{
 			DeviceID:       identity.DeviceID,
-			UserID:         identity.UserID,
+			SpaceID:        identity.SpaceID,
 			LastApplied:    0,
 			LastPushed:     0,
 			ServerSequence: serverSeq,
@@ -148,7 +148,7 @@ func (s *CursorService) GetStatus(identity CursorIdentity, serverSeq Sequence) (
 
 	return &CursorStatus{
 		DeviceID:       cursor.DeviceID,
-		UserID:         cursor.UserID,
+		SpaceID:        cursor.SpaceID,
 		LastApplied:    cursor.LastApplied,
 		LastPushed:     cursor.LastPushed,
 		ServerSequence: serverSeq,

@@ -36,7 +36,6 @@ func (h *Handler) GetActionDefinitions(c *gin.Context) {
 }
 
 func (h *Handler) CreateTask(c *gin.Context) {
-	characterID := c.PostForm("characterId")
 	modelConfigID, err := strconv.Atoi(c.PostForm("modelConfigId"))
 	if err != nil || modelConfigID <= 0 {
 		util.ErrorResponse(c, response.InvalidParams, "modelConfigId 无效", gin.H{"errorCode": "INVALID_MODEL_CONFIG"})
@@ -76,9 +75,9 @@ func (h *Handler) CreateTask(c *gin.Context) {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
-	userID := string(actor.UserID)
+	spaceID := string(actor.SpaceID)
 
-	taskSummary, err := h.service.CreateTask(c.Request.Context(), userID, characterID, modelConfigID, name, prompt, negativePrompt, outputWidth, outputHeight, selectedActionKeys, fileHeader)
+	taskSummary, err := h.service.CreateTask(c.Request.Context(), spaceID, modelConfigID, name, prompt, negativePrompt, outputWidth, outputHeight, selectedActionKeys, fileHeader)
 	if err != nil {
 		writeServiceError(c, err)
 		return
@@ -111,8 +110,7 @@ func (h *Handler) ListTasks(c *gin.Context) {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
-	userID := string(actor.UserID)
-	characterID := c.Query("characterId")
+	spaceID := string(actor.SpaceID)
 	status := c.Query("status")
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "20"))
@@ -125,7 +123,7 @@ func (h *Handler) ListTasks(c *gin.Context) {
 	if pageSize > 100 {
 		pageSize = 100
 	}
-	data, err := h.service.ListTasks(userID, characterID, status, page, pageSize)
+	data, err := h.service.ListTasks(spaceID, status, page, pageSize)
 	if err != nil {
 		writeServiceError(c, err)
 		return
@@ -162,7 +160,7 @@ func (h *Handler) ReferenceImage(c *gin.Context) {
 		writeOwnershipError(c, err)
 		return
 	}
-	ref, err := h.service.GetTaskSourceImageRef(taskID, string(actor.UserID))
+	ref, err := h.service.GetTaskSourceImageRef(taskID, string(actor.SpaceID))
 	if err != nil {
 		writeServiceError(c, err)
 		return
@@ -258,7 +256,27 @@ func (h *Handler) ActionFrameImage(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, "帧索引无效", nil)
 		return
 	}
-	ref, err := h.service.GetFrameImageRef(taskID, actionKey, frameIndex, string(actor.UserID))
+	ref, err := h.service.GetFrameImageRef(taskID, actionKey, frameIndex, string(actor.SpaceID))
+	if err != nil {
+		writeServiceError(c, err)
+		return
+	}
+	h.safeResponder.ServeArtifact(c, actor, ref)
+}
+
+func (h *Handler) ActionImage(c *gin.Context) {
+	taskID := c.Param("taskId")
+	actionKey := c.Param("actionKey")
+	actor, err := middleware.GetActorFromContext(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	if _, err := h.ownershipGuard.RequireGenerationTask(c.Request.Context(), actor, taskID); err != nil {
+		writeOwnershipError(c, err)
+		return
+	}
+	ref, err := h.service.GetActionImageRef(taskID, actionKey, string(actor.SpaceID))
 	if err != nil {
 		writeServiceError(c, err)
 		return

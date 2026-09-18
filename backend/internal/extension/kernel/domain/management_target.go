@@ -7,16 +7,21 @@ type ManagementTarget string
 const (
 	ManagementTargetExtensionCenter  ManagementTarget = "extension_center"
 	ManagementTargetGameCenter       ManagementTarget = "game_center"
-	ManagementTargetDesktopPetCenter ManagementTarget = "desktop_pet_center"
+	ManagementTargetPetCenter        ManagementTarget = "pet_center"
+	ManagementTargetDesktopPetCenter                  = ManagementTargetPetCenter
 )
 
 func IsValidManagementTarget(target ManagementTarget) bool {
-	switch target {
-	case ManagementTargetExtensionCenter, ManagementTargetGameCenter, ManagementTargetDesktopPetCenter:
+	switch NormalizeManagementTarget(target) {
+	case ManagementTargetExtensionCenter, ManagementTargetGameCenter, ManagementTargetPetCenter:
 		return true
 	default:
 		return false
 	}
+}
+
+func NormalizeManagementTarget(target ManagementTarget) ManagementTarget {
+	return target
 }
 
 func ManagementTargetForDomain(domain ExtensionDomain) (ManagementTarget, error) {
@@ -26,7 +31,7 @@ func ManagementTargetForDomain(domain ExtensionDomain) (ManagementTarget, error)
 	case ExtensionDomainGame:
 		return ManagementTargetGameCenter, nil
 	case ExtensionDomainDesktopPet:
-		return ManagementTargetDesktopPetCenter, nil
+		return ManagementTargetPetCenter, nil
 	default:
 		return "", fmt.Errorf("domain: unknown extension domain: %s", domain)
 	}
@@ -41,5 +46,5 @@ func (m ManagementTarget) IsGameCenter() bool {
 }
 
 func (m ManagementTarget) IsDesktopPetCenter() bool {
-	return m == ManagementTargetDesktopPetCenter
+	return NormalizeManagementTarget(m) == ManagementTargetPetCenter
 }

@@ -17,8 +17,6 @@ import { BusinessCoreClient } from "./business-core-client";
 import { DesktopHostManager, DesktopSnapshotSync } from "./desktop-host";
 import { UIHostSSE } from "./ui-host-sse";
 import { DesktopPetManager } from "./pet/manager";
-import { CharacterWatcher } from "./pet/character-watcher";
-import { getBackendSessionClient } from "./backend-session-client";
 import { getMeshCoordinator } from "./device-mesh/coordinator";
 
 export interface DesktopDeploymentLifecycleDeps {
@@ -41,7 +39,6 @@ export class DesktopDeploymentLifecycle {
   private desktopHostManager: DesktopHostManager | null = null;
   private desktopSnapshotSync: DesktopSnapshotSync | null = null;
   private uiHostSSE: UIHostSSE | null = null;
-  private characterWatcher: CharacterWatcher | null = null;
 
   private reconcileChain: Promise<void> = Promise.resolve();
   private currentConfig: DeploymentModeConfig;
@@ -139,9 +136,8 @@ export class DesktopDeploymentLifecycle {
     coordinator.start();
 
     // Cloud mode still owns a local desktop-pet body. Packages, renderer and
-    // Runtime v2 remain on the device; only business/character authority moves
-    // to the cloud core. Never construct the pet manager on top of a failed
-    // device-agent profile.
+    // Runtime v1 remain on the device. Never construct the pet manager on top
+    // of a failed device-agent profile.
     if (localRuntimeAvailable) {
       await this.startLocalPetIntegrations();
     }
@@ -266,49 +262,14 @@ export class DesktopDeploymentLifecycle {
     const mainWindow = this.getMainWindow();
     if (!mainWindow) return;
 
-    this.characterWatcher = new CharacterWatcher({
-      coreBaseURL: this.topology.businessCore.baseURL,
-      authHeadersProvider: async () => {
-        if (this.topology.businessCore.remote) {
-          return this.businessCoreClient.authHeaders();
-        }
-        return getBackendSessionClient().getMainProcessAuthHeaders();
-      },
-      onActiveCharacterChanged: async (characterId) => {
-        if (!this.desktopPetManager) return;
-        try {
-          await this.desktopPetManager.handleCharacterSwitched(characterId);
-        } catch (err) {
-          console.warn("[DeploymentLifecycle] 角色切换处理失败，将由Watcher重试:", err);
-          throw err;
-        }
-      },
-    });
-
     try {
-      await this.desktopPetManager.initialize({ restoreActiveInstallation: false });
+      await this.desktopPetManager.initialize({ restoreActiveInstallation: true });
     } catch (err) {
       console.warn("[DeploymentLifecycle] DesktopPetManager 初始化失败:", err);
     }
-
-    const watcher = this.characterWatcher;
-    const starts: Promise<unknown>[] = [];
-    if (watcher) {
-      starts.push(
-        watcher.start().catch((err) => {
-          console.warn("[DeploymentLifecycle] 角色监听启动失败:", err);
-        }),
-      );
-    }
-    await Promise.all(starts);
   }
 
   private async stopLocalPetIntegrations(): Promise<void> {
-    const watcher = this.characterWatcher;
-    this.characterWatcher = null;
-
-    watcher?.stop();
-
     try {
       await this.desktopPetManager.shutdown();
     } catch (err) {

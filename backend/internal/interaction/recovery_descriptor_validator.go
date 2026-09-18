@@ -149,7 +149,7 @@ func (v *RecoveryDescriptorValidator) validateGoals(ctx context.Context, d *Reco
 			result.StaleRefs = append(result.StaleRefs, RecoveryReference{Type: "goal", ID: ref.GoID()})
 			continue
 		}
-		if g.UserID != d.Scope.UserID {
+		if g.SpaceID != d.Scope.SpaceID {
 			v.addIssue(result, IssueGoalScopeMismatch, "goal", ref.GoalID, "critical")
 			continue
 		}

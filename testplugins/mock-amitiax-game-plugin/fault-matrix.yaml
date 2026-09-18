@@ -1,0 +1,318 @@
+version: "1.0"
+description: G46-F15 Fault Matrix for Mock AmitiaX Game Plugin
+id: g46-f15-mock-amitiax-game-plugin-fault-matrix
+source: testplugins/mock-amitiax-game-plugin/fault-matrix.yaml
+owner: gamehost
+plugin: mock-amitiax-game-plugin
+
+matrix:
+  - id: F01
+    name: Plugin process crash
+    category: crash
+    precondition: Runtime running, Ready=true
+    injection: mockgame.fault.crash with exitCode=42
+    expectedHostBehavior: ProcessSupervisor detects exit, F10 Recovery, fresh generation
+    expectedPluginBehavior: Old connection/lease/sink/pending cleared
+    expectedCanonicalState: Old generation resources = 0
+    residueChecks: [process, connection, lease, sink, pending]
+
+  - id: F02
+    name: Process crash while control output pending
+    category: crash
+    precondition: Runtime running, control output in-flight
+    injection: mockgame.fault.crash during output commit
+    expectedHostBehavior: Pending cancelled, effect not double-committed
+    expectedPluginBehavior: Old response ignored
+    expectedCanonicalState: Effect commit count unchanged
+    residueChecks: [pending, sink]
+
+  - id: F03
+    name: Handshake wrong protocol
+    category: protocol
+    precondition: Plugin startup
+    injection: fixtures/wrong-protocol.js sends amitia-game-host/99
+    expectedHostBehavior: Handshake reject, Ready=false
+    expectedPluginBehavior: Runtime not treated as ready
+    expectedCanonicalState: Ready=false
+    residueChecks: [runtime, connection]
+
+  - id: F04
+    name: Capability mismatch
+    category: protocol
+    precondition: Plugin handshake
+    injection: Plugin declares unsupported capability
+    expectedHostBehavior: Intersection negotiation, mandatory=fail
+    expectedPluginBehavior: Optional capability marked missing
+    expectedCanonicalState: Negotiated capabilities = intersection
+    residueChecks: [negotiation]
+
+  - id: F05
+    name: Malformed frame
+    category: protocol
+    precondition: Connection established
+    injection: fixtures/malformed-frame.js sends invalid JSON
+    expectedHostBehavior: Connection fail closed, no panic
+    expectedPluginBehavior: Runtime/process handled per fault policy
+    expectedCanonicalState: Connection closed
+    residueChecks: [connection, process]
+
+  - id: F06
+    name: Oversized frame
+    category: protocol
+    precondition: Connection established
+    injection: fixtures/oversized-frame.js sends frame > 16MB
+    expectedHostBehavior: Reject, bounded memory, no OOM
+    expectedPluginBehavior: Host enforces frame limit
+    expectedCanonicalState: Connection survive or clean close
+    residueChecks: [connection]
+
+  - id: F07
+    name: Unknown reserved method
+    category: protocol
+    precondition: Connection established
+    injection: Plugin calls control.fake / host.fake / emergency.fake
+    expectedHostBehavior: Reserved namespace denied
+    expectedPluginBehavior: Method not found / denied
+    expectedCanonicalState: Custom RPC not triggered
+    residueChecks: [routing]
+
+  - id: F08
+    name: Duplicate request ID
+    category: rpc
+    precondition: RPC pending
+    injection: Duplicate requestId on custom RPC
+    expectedHostBehavior: Idempotency enforcement, no double-execution
+    expectedPluginBehavior: Single response
+    expectedCanonicalState: Effect count unchanged
+    residueChecks: [pending]
+
+  - id: F09
+    name: Timeout
+    category: rpc
+    precondition: RPC in-flight
+    injection: mockgame.long_task with infinite delay
+    expectedHostBehavior: Timeout, pending cleanup, late response ignored
+    expectedPluginBehavior: Host invariant held
+    expectedCanonicalState: Pending cleaned
+    residueChecks: [pending]
+
+  - id: F10
+    name: Cancel
+    category: rpc
+    precondition: RPC in-flight
+    injection: Cancel via SDK context
+    expectedHostBehavior: Plugin receives cancellation, pending=0 residue
+    expectedPluginBehavior: Handler aborts
+    expectedCanonicalState: Pending cleaned
+    residueChecks: [pending]
+
+  - id: F11
+    name: Disconnect while pending
+    category: rpc
+    precondition: RPC pending
+    injection: Connection close
+    expectedHostBehavior: All pending by connection cancelled
+    expectedPluginBehavior: Pending responses orphaned
+    expectedCanonicalState: Pending=0 for connection
+    residueChecks: [pending, connection]
+
+  - id: F12
+    name: Restart during pending
+    category: lifecycle
+    precondition: RPC pending
+    injection: Host restart
+    expectedHostBehavior: Old pending cancelled, old response fenced
+    expectedPluginBehavior: New generation fresh
+    expectedCanonicalState: Old generation pending=0
+    residueChecks: [pending, generation]
+
+  - id: F13
+    name: Permission revoke during preflight/commit
+    category: security
+    precondition: Control output in preflight
+    injection: Revoke gamehost.control mid-flight
+    expectedHostBehavior: Old permission effect not committed after revoke
+    expectedPluginBehavior: Commit barrier enforced
+    expectedCanonicalState: Effect not committed
+    residueChecks: [sink]
+
+  - id: F14
+    name: Takeover during output
+    category: security
+    precondition: Plugin output working
+    injection: User Takeover mid-output
+    expectedHostBehavior: TOCTOU guarantee - either effect commits first OR takeover succeeds first
+    expectedPluginBehavior: No old epoch effect after takeover
+    expectedCanonicalState: Deterministic outcome
+    residueChecks: [sink, authority]
+
+  - id: F15
+    name: EStop during output
+    category: security
+    precondition: Plugin output working
+    injection: Emergency Stop
+    expectedHostBehavior: Gate closed, authority suspended, no old effect commit
+    expectedPluginBehavior: Runtime stopped, connection closed, lease revoked
+    expectedCanonicalState: Emergency latch active
+    residueChecks: [sink, connection, lease, runtime]
+
+  - id: F16
+    name: SecretLease revoked while operation running
+    category: security
+    precondition: Lease active, operation running
+    injection: Host revokes lease
+    expectedHostBehavior: Old lease subsequent use DENY
+    expectedPluginBehavior: Runtime fallback behavior
+    expectedCanonicalState: Lease invalid
+    residueChecks: [lease]
+
+  - id: F17
+    name: Binary object missing
+    category: resource
+    precondition: Runtime active
+    injection: Plugin references non-existent BinaryRef
+    expectedHostBehavior: Fail closed, host does not read arbitrary path
+    expectedPluginBehavior: Error handled
+    expectedCanonicalState: No arbitrary file access
+    residueChecks: [binary]
+
+  - id: F18
+    name: Binary generation stale
+    category: resource
+    precondition: Restart occurred
+    injection: Plugin uses old BinaryRef after restart
+    expectedHostBehavior: Stale binary ref DENY
+    expectedPluginBehavior: Fresh binary reference required
+    expectedCanonicalState: Old generation binary invalid
+    residueChecks: [binary]
+
+  - id: F19
+    name: Stream disconnect
+    category: resource
+    precondition: Stream open
+    injection: Connection close during stream
+    expectedHostBehavior: Stream cleanup, replay boundary
+    expectedPluginBehavior: No leak
+    expectedCanonicalState: Stream closed
+    residueChecks: [stream]
+
+  - id: F20
+    name: Channel owner mismatch
+    category: resource
+    precondition: Multiple runtimes
+    injection: Plugin A attempts to use Plugin B channel
+    expectedHostBehavior: DENY
+    expectedPluginBehavior: Channel access denied
+    expectedCanonicalState: Channel ownership enforced
+    residueChecks: [channel]
+
+  - id: F21
+    name: Host API scope violation
+    category: security
+    precondition: Host API permission granted
+    injection: Plugin accesses resource beyond scope
+    expectedHostBehavior: DENY
+    expectedPluginBehavior: Scope violation detected
+    expectedCanonicalState: Scope enforcement active
+    residueChecks: [hostapi]
+
+  - id: F22
+    name: Host API permission revoke while active
+    category: security
+    precondition: Host API call in-flight
+    injection: Revoke gamehost.host_api.invoke
+    expectedHostBehavior: Next call immediately DENY
+    expectedPluginBehavior: Permission revoked
+    expectedCanonicalState: Permission state updated
+    residueChecks: [hostapi]
+
+  - id: F23
+    name: Host API connection detach
+    category: security
+    precondition: Host API invocation in-flight
+    injection: Connection detach
+    expectedHostBehavior: Inflight invocation cancelled
+    expectedPluginBehavior: Invocation terminated
+    expectedCanonicalState: Host API inflight=0
+    residueChecks: [hostapi]
+
+  - id: F24
+    name: Crash during Upgrade
+    category: lifecycle
+    precondition: Upgrade operation in progress
+    injection: Plugin crash during upgrade
+    expectedHostBehavior: No dual recovery/update owner, no old package runtime resume
+    expectedPluginBehavior: Upgrade atomic
+    expectedCanonicalState: Single runtime owner
+    residueChecks: [runtime, upgrade]
+
+  - id: F25
+    name: Crash during Emergency Stop
+    category: lifecycle
+    precondition: Emergency Stop active
+    injection: Plugin crash during EStop
+    expectedHostBehavior: Emergency latch priority, recovery does not resurrect
+    expectedPluginBehavior: Runtime stays stopped
+    expectedCanonicalState: Emergency latch persists
+    residueChecks: [runtime, emergency]
+
+  - id: F26
+    name: Backend restart with orphan plugin process
+    category: recovery
+    precondition: Plugin process running
+    injection: Backend restart
+    expectedHostBehavior: Strong ownership recognition, orphan cleanup, formal structures reconstructed, Ready gate last to open
+    expectedPluginBehavior: Orphan process handled
+    expectedCanonicalState: Clean runtime state
+    residueChecks: [process, runtime, connection]
+
+  - id: F27
+    name: Old connection after backend restart
+    category: recovery
+    precondition: Backend restart occurred
+    injection: Plugin uses old connection
+    expectedHostBehavior: Old connection invalid, new handshake required
+    expectedPluginBehavior: Reconnect flow
+    expectedCanonicalState: Old connection invalid
+    residueChecks: [connection]
+
+  - id: F28
+    name: Old SecretLease after backend restart
+    category: recovery
+    precondition: Backend restart occurred
+    injection: Plugin uses old lease
+    expectedHostBehavior: Old lease invalid/revoked
+    expectedPluginBehavior: Re-acquire lease
+    expectedCanonicalState: Old lease invalid
+    residueChecks: [lease]
+
+  - id: F29
+    name: Plugin update removes a service
+    category: lifecycle
+    precondition: v1 runtime is running and ready
+    injection: Update the same extension to the independently packaged v2 archive
+    expectedHostBehavior: Old service does not resume, new topology生效
+    expectedPluginBehavior: New package topology active
+    expectedCanonicalState: Old service gone
+    residueChecks: [service, runtime]
+
+  - id: F30
+    name: Uninstall while stopped
+    category: lifecycle
+    precondition: Plugin stopped
+    injection: Uninstall operation
+    expectedHostBehavior: All residue = 0
+    expectedPluginBehavior: Cleanup complete
+    expectedCanonicalState: Zero residue
+    residueChecks: [process, connection, lease, sink, channel, stream, binary, pending]
+
+residueHardGates:
+  - process
+  - connection
+  - ready
+  - pending
+  - lease
+  - sink
+  - channel
+  - stream
+  - binary

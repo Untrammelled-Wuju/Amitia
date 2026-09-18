@@ -1,9 +1,11 @@
 package management
 
 import (
-	"errors"
-	"net/http"
-	"strings"
+"context"
+"errors"
+"net/http"
+"strings"
+"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -11,6 +13,20 @@ import (
 type MutationHandler struct {
 	packageSvc *PackageMutationService
 	runtimeSvc *RuntimeMutationService
+}
+
+func extensionIDFromMutationRequest(c *gin.Context) string {
+	extensionID := strings.TrimSpace(c.Param("extensionId"))
+	if extensionID != "" {
+		return extensionID
+	}
+	var request struct {
+		ExtensionID string `json:"extensionId"`
+	}
+	if err := c.ShouldBindJSON(&request); err != nil {
+		return ""
+	}
+	return strings.TrimSpace(request.ExtensionID)
 }
 
 func NewMutationHandler(packageSvc *PackageMutationService, runtimeSvc *RuntimeMutationService) *MutationHandler {
@@ -50,7 +66,7 @@ func (h *MutationHandler) Enable(c *gin.Context) {
 		return
 	}
 
-	extensionID := strings.TrimSpace(c.Param("extensionId"))
+	extensionID := extensionIDFromMutationRequest(c)
 	if extensionID == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": "extensionId required"})
 		return
@@ -79,7 +95,7 @@ func (h *MutationHandler) Disable(c *gin.Context) {
 		return
 	}
 
-	extensionID := strings.TrimSpace(c.Param("extensionId"))
+	extensionID := extensionIDFromMutationRequest(c)
 	if extensionID == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": "extensionId required"})
 		return
@@ -118,7 +134,9 @@ func (h *MutationHandler) StartRuntime(c *gin.Context) {
 		return
 	}
 
-	result, err := h.runtimeSvc.Start(c.Request.Context(), runtimeID)
+	startCtx, cancel := context.WithTimeout(context.WithoutCancel(c.Request.Context()), 10*time.Minute)
+	defer cancel()
+	result, err := h.runtimeSvc.Start(startCtx, runtimeID)
 	if err != nil {
 		if errors.Is(err, ErrInvalidInput) {
 			c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": err.Error()})
@@ -188,7 +206,9 @@ func (h *MutationHandler) RestartRuntime(c *gin.Context) {
 		return
 	}
 
-	result, err := h.runtimeSvc.Restart(c.Request.Context(), runtimeID)
+	restartCtx, cancel := context.WithTimeout(context.WithoutCancel(c.Request.Context()), 10*time.Minute)
+	defer cancel()
+	result, err := h.runtimeSvc.Restart(restartCtx, runtimeID)
 	if err != nil {
 		if errors.Is(err, ErrInvalidInput) {
 			c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": err.Error()})

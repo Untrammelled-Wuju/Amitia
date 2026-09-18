@@ -154,7 +154,7 @@ SPDX-License-Identifier: AGPL-3.0-only
         </el-col>
       </el-row>
 
-      <el-row :gutter="12">
+      <el-row v-if="showAdvanced" :gutter="12">
         <el-col :span="12">
           <el-form-item label="超时(秒)">
             <el-input-number

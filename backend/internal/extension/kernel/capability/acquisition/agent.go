@@ -27,14 +27,14 @@ func NewAgentCapabilityBridge(service *AcquisitionService) *AgentCapabilityBridg
 // FindCapabilities translates a FindCapabilitiesInput into an AcquisitionRequest,
 // invokes the AcquisitionService.FindCapabilities, and returns a
 // FindCapabilitiesOutput.
-func (b *AgentCapabilityBridge) FindCapabilities(ctx context.Context, input FindCapabilitiesInput, userID string) (*FindCapabilitiesOutput, error) {
+func (b *AgentCapabilityBridge) FindCapabilities(ctx context.Context, input FindCapabilitiesInput, spaceID string) (*FindCapabilitiesOutput, error) {
 	if input.CapabilityID == "" {
 		return nil, NewAcquisitionError("invalid_input", "capabilityId is required", nil)
 	}
 
 	request := AcquisitionRequest{
 		CapabilityID: capability.CapabilityID(input.CapabilityID),
-		UserID:       runtimeidentity.UserID(userID),
+		SpaceID:      runtimeidentity.SpaceID(spaceID),
 		Description:  input.Description,
 	}
 
@@ -62,7 +62,7 @@ func (b *AgentCapabilityBridge) FindCapabilities(ctx context.Context, input Find
 
 // AcquireCapability translates an AcquireInput into an AcquisitionRequest,
 // invokes the AcquisitionService.Acquire, and returns an AcquireOutput.
-func (b *AgentCapabilityBridge) AcquireCapability(ctx context.Context, input AcquireInput, userID string, execCtx *execution.ExecutionContext) (*AcquireOutput, error) {
+func (b *AgentCapabilityBridge) AcquireCapability(ctx context.Context, input AcquireInput, spaceID string, execCtx *execution.ExecutionContext) (*AcquireOutput, error) {
 	if input.ResumeToken != "" {
 		if !input.UserConfirmed && !input.Approval {
 			return nil, NewAcquisitionError("approval_required", "userConfirmed=true is required to resume an approval-gated acquisition", nil)
@@ -91,7 +91,7 @@ func (b *AgentCapabilityBridge) AcquireCapability(ctx context.Context, input Acq
 	request := AcquisitionRequest{
 		CapabilityID:         capability.CapabilityID(input.CapabilityID),
 		RequestedCandidateID: input.CandidateID,
-		UserID:               runtimeidentity.UserID(userID),
+		SpaceID:              runtimeidentity.SpaceID(spaceID),
 		ExecContext:          execCtx,
 	}
 

@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "component": "ubuntu-rootfs",
+  "distribution": "ubuntu",
+  "flavor": "ubuntu-base",
+  "release": "24.04.4",
+  "codename": "noble",
+  "architecture": "arm64",
+  "guestPlatform": "linux",
+  "runtimeKind": "proot",
+  "archiveFileName": "ubuntu-base-24.04.4-base-arm64.tar.gz",
+  "sourceUrl": "https://cdimage.ubuntu.com/ubuntu-base/releases/24.04.4/release/ubuntu-base-24.04.4-base-arm64.tar.gz",
+  "checksumUrl": "https://cdimage.ubuntu.com/ubuntu-base/releases/24.04.4/release/SHA256SUMS",
+  "sha256": "04207713ece899c3740823d33690441ad3a7f0ded1101aca744e2b0f37ac7ff2",
+  "guestLibc": "glibc",
+  "guestLoader": "/lib/ld-linux-aarch64.so.1"
+}

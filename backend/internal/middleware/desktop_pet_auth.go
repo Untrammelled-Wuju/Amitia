@@ -102,7 +102,15 @@ func ResolveActorID(c *gin.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return string(actor.UserID), nil
+	return string(actor.SpaceID), nil
+}
+
+func GetSpaceID(c *gin.Context) string {
+	actor, err := GetActorFromContext(c)
+	if err != nil || actor == nil {
+		return ""
+	}
+	return actor.SpaceID.String()
 }
 
 func isValidCorrelationID(id string) bool {

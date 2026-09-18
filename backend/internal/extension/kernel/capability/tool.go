@@ -1,10 +1,5 @@
 package capability
 
-import (
-	"context"
-	"encoding/json"
-)
-
 type ToolSource string
 
 const (
@@ -47,8 +42,6 @@ type ScopeRule struct {
 	Type string `json:"type"`
 	ID   string `json:"id,omitempty"`
 }
-
-type LegacyToolExecutor func(ctx context.Context, input json.RawMessage, scope map[string]string) (json.RawMessage, error)
 
 func BuildToolID(source ToolSource, namespace, name string) string {
 	return BuildCapabilityID(CapabilitySource(source), namespace, name)

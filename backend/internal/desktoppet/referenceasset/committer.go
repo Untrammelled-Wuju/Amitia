@@ -96,8 +96,7 @@ func (r *journalRepository) GetByReferenceAssetID(referenceAssetID string) (*Ref
 type CommitInput struct {
 	Tx                      *gorm.DB
 	DataDir                 string
-	UserID                  string
-	CharacterID             string
+	SpaceID                 string
 	TaskID                  string
 	UploadPath              string
 	UploadName              string
@@ -161,8 +160,7 @@ func (c *Committer) Commit(input CommitInput) (*CommitResult, error) {
 		SourcePath:               sourceAbsPath,
 		OutputPath:               normalizedAbsPath,
 		Config:                   input.NormalizeConfig,
-		UserID:                   input.UserID,
-		CharacterID:              input.CharacterID,
+		SpaceID:                  input.SpaceID,
 		TaskID:                   input.TaskID,
 		NormalizerProfileID:      input.NormalizeProfileID,
 		NormalizerProfileVersion: input.NormalizeProfileVersion,

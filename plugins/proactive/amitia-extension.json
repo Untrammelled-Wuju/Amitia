@@ -1,0 +1,225 @@
+{
+  "manifestVersion": 1,
+  "extension": {
+    "id": "com.amitia/proactive",
+    "name": {
+      "default": "主动消息"
+    },
+    "description": {
+      "default": "为角色提供主动消息规则、调度、发送、历史记录和独立启停能力。"
+    },
+    "version": "1.0.1",
+    "license": "AGPL-3.0-only",
+    "homepage": "https://amitia.untrammelled.top",
+    "categories": [
+      "companion",
+      "messaging"
+    ],
+    "keywords": [
+      "proactive",
+      "companion",
+      "schedule",
+      "reminder"
+    ]
+  },
+  "publisher": {
+    "id": "com.amitia",
+    "displayName": "Amitia",
+    "trustLevel": "official"
+  },
+  "compatibility": {
+    "minHostVersion": "0.1.0",
+    "platforms": [
+      "windows",
+      "linux",
+      "macos",
+      "android",
+      "ios"
+    ]
+  },
+  "placement": "device",
+  "modules": [
+    {
+      "id": "proactive-runtime",
+      "name": {
+        "default": "主动消息运行时"
+      },
+      "description": {
+        "default": "在插件自有状态命名空间中管理规则、设置、调度与历史。"
+      },
+      "type": "javascript",
+      "placement": "device",
+      "runtime": {
+        "type": "javascript",
+        "entryPoint": "dist/index.js",
+        "timeout": "120s",
+        "memory": 134217728,
+        "maxSubprocesses": 0,
+        "capabilities": {
+          "network": false,
+          "filesystem": false
+        }
+      },
+      "contributions": [
+        {
+          "id": "proactive-command",
+          "kind": "tool",
+          "name": {
+            "default": "主动消息命令"
+          },
+          "description": {
+            "default": "主动消息插件的内部控制入口。"
+          },
+          "requiredPermissions": [
+            "storage.state.read",
+            "storage.state.write"
+          ],
+          "spec": {
+            "toolId": "com.amitia/proactive/command",
+            "modelName": "proactive_command",
+            "handlerName": "command",
+            "inputSchema": {
+              "type": "object",
+              "required": [
+                "action"
+              ],
+              "properties": {
+                "action": {
+                  "type": "string"
+                },
+                "payload": {
+                  "type": "object"
+                }
+              },
+              "additionalProperties": false
+            },
+            "outputSchema": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "riskLevel": "medium",
+            "sideEffect": "write",
+            "internal": true,
+            "runtime": {
+              "runtimeType": "javascript",
+              "handlerName": "command"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "proactive-ui",
+      "name": {
+        "default": "主动消息页面"
+      },
+      "description": {
+        "default": "在角色详情中管理主动消息开关、参数、规则和运行历史。"
+      },
+      "type": "data_only",
+      "placement": "device",
+      "contributions": [
+        {
+          "id": "proactive-character-tab",
+          "kind": "ui_page",
+          "name": {
+            "default": "主动消息"
+          },
+          "description": {
+            "default": "配置角色主动消息规则和发送策略。"
+          },
+          "spec": {
+            "contribution_id": "proactive-character-tab",
+            "extension_id": "com.amitia/proactive",
+            "module_id": "proactive-ui",
+            "kind": "web_page",
+            "slot": {
+              "slot_id": "character.detail.tab",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "主动消息"
+              },
+              "description": {
+                "default": "管理主动消息开关、全局参数、规则和运行历史。"
+              },
+              "icon": "message"
+            },
+            "entry": {
+              "type": "web_restricted",
+              "path": "modules/proactive-ui/index.html",
+              "content_hash": "pending"
+            },
+            "sandbox": {
+              "type": "web_restricted",
+              "enable_scripts": true
+            },
+            "ordering": {
+              "priority": 220
+            },
+            "dispatch": {
+              "entry_key": "proactive",
+              "cell_id": "proactive"
+            },
+            "actions": [
+              {
+                "action_id": "command",
+                "title": {
+                  "default": "执行主动消息操作"
+                },
+                "target": {
+                  "type": "tool",
+                  "tool_id": "com.amitia/proactive/command"
+                },
+                "risk_level": "medium"
+              }
+            ],
+            "integrity": {
+              "definition_hash": "proactive-character-tab-v1"
+            }
+          },
+          "requiredPermissions": [
+            "tool.invoke"
+          ]
+        }
+      ]
+    }
+  ],
+  "permissions": [
+    {
+      "name": "storage.state.read",
+      "reason": "读取插件自有规则、设置和历史。",
+      "required": true,
+      "scope": "extension"
+    },
+    {
+      "name": "storage.state.write",
+      "reason": "保存插件自有规则、设置和历史。",
+      "required": true,
+      "scope": "extension"
+    },
+    {
+      "name": "message.send",
+      "reason": "通过宿主统一会话管线发送角色消息。",
+      "required": true,
+      "scope": "extension"
+    },
+    {
+      "name": "tool.invoke",
+      "reason": "通过声明的主动消息工具执行页面操作。",
+      "required": true,
+      "scope": "extension"
+    }
+  ],
+  "lifecycle": {
+    "backgroundTasks": true,
+    "networkAccess": false,
+    "sandbox": true
+  },
+  "integrity": {
+    "algorithm": "sha256",
+    "contentTreeHash": ""
+  }
+}

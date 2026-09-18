@@ -11,37 +11,41 @@ import (
 
 type repositoryScopeRelationChecker struct {
 	db         *sql.DB
+	relationDB *sql.DB
 	resources  sqlite.ResourceRepository
 	operations sqlite.OperationRepository
 	sessions   *extension_page_host.SessionManager
 }
 
-func newRepositoryScopeRelationChecker(db *sql.DB, resources sqlite.ResourceRepository, operations sqlite.OperationRepository) *repositoryScopeRelationChecker {
-	return &repositoryScopeRelationChecker{db: db, resources: resources, operations: operations}
+func newRepositoryScopeRelationChecker(db *sql.DB, relationDB *sql.DB, resources sqlite.ResourceRepository, operations sqlite.OperationRepository) *repositoryScopeRelationChecker {
+	if relationDB == nil {
+		relationDB = db
+	}
+	return &repositoryScopeRelationChecker{db: db, relationDB: relationDB, resources: resources, operations: operations}
 }
 
 func (c *repositoryScopeRelationChecker) ConversationBelongsToCharacter(ctx context.Context, conversationID, characterID string) bool {
-	if c == nil || c.db == nil || conversationID == "" || characterID == "" {
+	if c == nil || c.relationDB == nil || conversationID == "" || characterID == "" {
 		return false
 	}
 	var count int
-	return c.db.QueryRowContext(ctx, `SELECT COUNT(1) FROM conversations WHERE id = ? AND character_id = ?`, conversationID, characterID).Scan(&count) == nil && count == 1
+	return c.relationDB.QueryRowContext(ctx, `SELECT COUNT(1) FROM conversations WHERE id = ? AND character_id = ?`, conversationID, characterID).Scan(&count) == nil && count == 1
 }
 
 func (c *repositoryScopeRelationChecker) IsCharacterDeleted(ctx context.Context, characterID string) bool {
-	if c == nil || c.db == nil || characterID == "" {
+	if c == nil || c.relationDB == nil || characterID == "" {
 		return true
 	}
 	var count int
-	return c.db.QueryRowContext(ctx, `SELECT COUNT(1) FROM characters WHERE id = ?`, characterID).Scan(&count) != nil || count != 1
+	return c.relationDB.QueryRowContext(ctx, `SELECT COUNT(1) FROM characters WHERE id = ?`, characterID).Scan(&count) != nil || count != 1
 }
 
 func (c *repositoryScopeRelationChecker) IsConversationDeleted(ctx context.Context, conversationID string) bool {
-	if c == nil || c.db == nil || conversationID == "" {
+	if c == nil || c.relationDB == nil || conversationID == "" {
 		return true
 	}
 	var count int
-	return c.db.QueryRowContext(ctx, `SELECT COUNT(1) FROM conversations WHERE id = ?`, conversationID).Scan(&count) != nil || count != 1
+	return c.relationDB.QueryRowContext(ctx, `SELECT COUNT(1) FROM conversations WHERE id = ?`, conversationID).Scan(&count) != nil || count != 1
 }
 
 func (c *repositoryScopeRelationChecker) ResourceOwnedBy(ctx context.Context, resourceID, resourceType, extensionID, moduleID string) bool {

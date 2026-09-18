@@ -21,10 +21,10 @@ func hasGameHostDeveloperAccess(c *gin.Context) bool {
 	if actor == nil {
 		return false
 	}
-	if actor.ActorType == auth.ActorTypeLocalAdmin && actor.IsLocalTrusted {
+	if actor.PrincipalType == auth.PrincipalLocalUI && actor.IsLocalTrusted && actor.HasPermission(auth.PermSystemAdmin) {
 		return true
 	}
-	isAdmin := actor.ActorType == auth.ActorTypeAdmin || actor.HasRole("admin")
+	isAdmin := actor.HasPermission(auth.PermSystemAdmin)
 	return isAdmin && gameHostDeveloperModeEnabled()
 }
 

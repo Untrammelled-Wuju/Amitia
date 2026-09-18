@@ -7,6 +7,18 @@ function numericValue(value: unknown): number | null {
   return null;
 }
 
+export function parseMessageTime(value: unknown): number {
+  const raw = numericValue(value);
+  if (raw !== null) return raw;
+  const text = String(value ?? "").trim();
+  if (!text) return 0;
+  const normalized = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}(:\d{2})?(\.\d+)?$/.test(text)
+    ? text.replace(" ", "T")
+    : text;
+  const parsed = Date.parse(normalized);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
 function field(message: any, camel: string, snake: string) {
   return message?.[camel] ?? message?.[snake];
 }
@@ -64,13 +76,14 @@ export function compareChatMessages(a: any, b: any): number {
     return aSequence - bSequence;
 
   const aTime =
-    numericValue(a?.sortTimestamp) ??
-    (a?.createdAt ? new Date(a.createdAt).getTime() : 0);
+    numericValue(a?.sortTimestamp) ?? parseMessageTime(a?.createdAt);
   const bTime =
-    numericValue(b?.sortTimestamp) ??
-    (b?.createdAt ? new Date(b.createdAt).getTime() : 0);
-  if (Number.isFinite(aTime) && Number.isFinite(bTime) && aTime !== bTime)
-    return aTime - bTime;
+    numericValue(b?.sortTimestamp) ?? parseMessageTime(b?.createdAt);
+  if (aTime !== 0 || bTime !== 0) {
+    if (aTime !== bTime) return aTime - bTime;
+  }
+  if (aSequence !== null && bSequence === null) return -1;
+  if (aSequence === null && bSequence !== null) return 1;
   return 0;
 }
 
@@ -112,7 +125,7 @@ export function insertTransientModelError(messages: any[], incoming: any): void 
     ) + 1;
   const anchorTime =
     anchorIndex >= 0 && messages[anchorIndex]?.createdAt
-      ? new Date(messages[anchorIndex].createdAt).getTime()
+      ? parseMessageTime(messages[anchorIndex].createdAt)
       : 0;
   const previousTime = relatedErrors.reduce(
     (maximum, message) =>
@@ -148,8 +161,8 @@ export function normalizeRealtimeMessage(payload: any): any {
     ["id", "messageId"],
     ["conversationId", "conversation_id"],
     ["msgType", "msg_type"],
+    ["extensionType", "extension_type"],
     ["contentType", "content_type"],
-    ["emoteId", "emote_id"],
     ["altText", "alt_text"],
     ["isAnimated", "is_animated"],
     ["width", "media_width"],
@@ -159,23 +172,55 @@ export function normalizeRealtimeMessage(payload: any): any {
     ["fallbackAssetReference", "fallback_asset_reference"],
     ["responseGroupId", "response_group_id"],
     ["deliverySequence", "delivery_sequence"],
-    ["emoteDecisionStatus", "emote_decision_status"],
     ["createdAt", "created_at"],
+    ["requestId", "request_id"],
+    ["clientMessageId", "client_message_id"],
   ] as const;
   for (const [target, fallback] of mappings) {
     const value = payload?.[target] ?? payload?.[fallback];
     if (value !== undefined && value !== null) message[target] = value;
   }
+  if (!message.clientMessageId && message.role === "user" && message.requestId) {
+    message.clientMessageId = message.requestId;
+  }
   return message;
+}
+
+export function getClientMessageId(message: any): string {
+  const explicit = String(message?.clientMessageId || "").trim();
+  if (explicit) return explicit;
+  if (message?.role !== "user") return "";
+  return String(message?.requestId || "").trim();
+}
+
+export function getMessageUIKey(message: any, index = 0): string {
+  const uiKey = String(message?.uiKey || "").trim();
+  if (uiKey) return uiKey;
+  const clientMessageId = getClientMessageId(message);
+  if (clientMessageId) return `client:${clientMessageId}`;
+  const id = String(message?.id || "").trim();
+  if (id) return `server:${id}`;
+  return `fallback:${String(message?.role || "unknown")}:${String(message?.createdAt || message?.timestamp || "")}:${index}`;
 }
 
 export function mergeChatMessage(messages: any[], incoming: any): boolean {
   const id = String(incoming?.id || "");
-  if (!id) return false;
+  const clientMessageId = getClientMessageId(incoming);
+  if (!id && !clientMessageId) return false;
   const index = messages.findIndex(
-    (message) => String(message?.id || "") === id,
+    (message) =>
+      (!!id && String(message?.id || "") === id) ||
+      (!!clientMessageId && getClientMessageId(message) === clientMessageId),
   );
   if (index < 0) return false;
-  messages[index] = { ...messages[index], ...incoming };
+  const current = messages[index];
+  messages[index] = {
+    ...current,
+    ...incoming,
+    clientMessageId:
+      getClientMessageId(incoming) || getClientMessageId(current) || undefined,
+    uiKey: current?.uiKey || incoming?.uiKey,
+    animateIn: current?.animateIn ?? incoming?.animateIn,
+  };
   return true;
 }

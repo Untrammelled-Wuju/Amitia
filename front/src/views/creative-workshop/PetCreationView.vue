@@ -4,10 +4,15 @@ SPDX-License-Identifier: AGPL-3.0-only
 -->
 <template>
   <main class="pet-creation">
-    <ExtensionPageHeader title="桌宠制作" description="创建和定制你的桌面陪伴角色" grandparent-title="创意工坊" grandparent-path="/creative-workshop" parent-title="桌宠" parent-path="/creative-workshop/pet" />
+    <ExtensionPageHeader title="桌宠制作" description="创建和定制你的桌面陪伴宠物" grandparent-title="创意工坊" grandparent-path="/creative-workshop" parent-title="桌宠" parent-path="/creative-workshop/pet" />
 
 
-    <div v-if="noModelsAvailable" class="no-models-banner">
+    <div v-if="modelLoadError" class="load-error-banner">
+      <el-alert :title="modelLoadError" type="error" show-icon :closable="false" />
+      <el-button type="primary" @click="loadModelConfigs">重新加载</el-button>
+    </div>
+
+    <div v-else-if="noModelsAvailable" class="no-models-banner">
       <el-result icon="warning" title="未配置生图模型" sub-title="需要先配置至少一个已启用的生图模型才能制作桌宠">
         <template #extra>
           <el-button type="primary" @click="goToImageGenConfig">前往配置生图模型</el-button>
@@ -89,31 +94,11 @@ SPDX-License-Identifier: AGPL-3.0-only
                     :value="m.id"
                   />
                 </el-select>
-                <span v-if="!modelConfigs.length && !modelLoading" class="hint">未找到已启用的生图模型,请先在设置中配置</span>
+                <span v-if="!modelConfigs.length && !modelLoading && !modelLoadError" class="hint">未找到已启用的生图模型,请先在设置中配置</span>
               </div>
               <div class="form-item-half">
-                <label class="form-label">绑定角色 <span class="required">*</span></label>
-                <el-select
-                  v-model="form.characterId"
-                  placeholder="选择绑定的角色"
-                  :loading="characterLoading"
-                >
-                  <el-option
-                    v-for="c in characters"
-                    :key="c.id"
-                    :label="c.name"
-                    :value="c.id"
-                  />
-                </el-select>
-                <span v-if="!characters.length && !characterLoading" class="hint">未找到可用角色,请先在角色管理中启用</span>
-              </div>
-              <div class="form-item-half">
-                <label class="form-label">输出尺寸 <span class="required">*</span></label>
-                <el-select v-model="sizePreset" @change="onSizeChange">
-                  <el-option label="512 × 512" value="512x512" />
-                  <el-option label="768 × 768" value="768x768" />
-                  <el-option label="1024 × 1024" value="1024x1024" />
-                </el-select>
+                <label class="form-label">输出尺寸</label>
+                <el-input value="4096 × 3072（固定，12 帧 4×3 网格）" disabled />
               </div>
             </div>
           </div>
@@ -149,14 +134,16 @@ SPDX-License-Identifier: AGPL-3.0-only
       </div>
 
       <div v-show="step === 1" class="step-panel">
-        <el-alert
-          v-if="actionError"
-          :title="actionError"
-          type="warning"
-          show-icon
-          :closable="false"
-          class="action-alert"
-        />
+        <div v-if="displayedActionError" class="action-error-row">
+          <el-alert
+            :title="displayedActionError"
+            :type="actionDefinitionsError ? 'error' : 'warning'"
+            show-icon
+            :closable="false"
+            class="action-alert"
+          />
+          <el-button v-if="actionDefinitionsError" type="primary" :loading="loading" @click="reloadActions">重新加载动作</el-button>
+        </div>
 
         <div class="action-toolbar">
           <div class="preset-group">
@@ -206,7 +193,7 @@ SPDX-License-Identifier: AGPL-3.0-only
           </div>
         </div>
 
-        <el-empty v-if="!categories.length && !loading" description="暂无可用动作" />
+        <el-empty v-if="!categories.length && !loading && !actionDefinitionsError" description="暂无可用动作" />
 
         <div class="category-list">
           <div v-for="cat in categories" :key="cat.key" class="category-section">
@@ -265,10 +252,6 @@ SPDX-License-Identifier: AGPL-3.0-only
               <div class="summary-item">
                 <span class="summary-label">桌宠名称</span>
                 <span class="summary-value">{{ form.name }}</span>
-              </div>
-              <div class="summary-item">
-                <span class="summary-label">绑定角色</span>
-                <span class="summary-value">{{ selectedCharacterName || "—" }}</span>
               </div>
               <div class="summary-item">
                 <span class="summary-label">生图模型</span>
@@ -379,6 +362,7 @@ const {
   categories,
   presets,
   loading,
+  error: actionDefinitionsError,
   selectedKeys,
   load: loadActions,
   isSelected,
@@ -421,46 +405,35 @@ interface ModelConfig {
   enabled?: number | boolean;
   isActive?: number | boolean;
 }
-interface Character {
-  id: number | string;
-  name: string;
-  status?: string;
-  isActive?: number | boolean;
-}
-
 const modelConfigs = ref<ModelConfig[]>([]);
-const characters = ref<Character[]>([]);
 const modelLoading = ref(false);
-const characterLoading = ref(false);
+const modelLoadError = ref("");
 
-const noModelsAvailable = computed(() => !modelLoading.value && modelConfigs.value.length === 0);
+const noModelsAvailable = computed(
+  () => !modelLoading.value && !modelLoadError.value && modelConfigs.value.length === 0,
+);
+const displayedActionError = computed(
+  () => actionDefinitionsError.value || actionError.value,
+);
 
 const referenceFile = ref<File | null>(null);
 const referencePreview = ref("");
 
-const sizePreset = ref("512x512");
 const form = reactive({
   modelConfigId: "" as number | string,
-  characterId: "" as number | string,
   name: "",
   prompt: "",
   negativePrompt: "",
-  outputWidth: 512,
-  outputHeight: 512,
+  outputWidth: 4096,
+  outputHeight: 3072,
 });
 
 const step1Valid = computed(
   () =>
     !!referenceFile.value &&
     !!form.modelConfigId &&
-    !!form.name.trim() &&
-    !!form.characterId,
+    !!form.name.trim(),
 );
-
-const selectedCharacterName = computed(() => {
-  const c = characters.value.find((item) => item.id === form.characterId);
-  return c?.name || "";
-});
 
 const selectedModelName = computed(() => {
   const m = modelConfigs.value.find((item) => item.id === form.modelConfigId);
@@ -496,14 +469,6 @@ function isPresetActive(preset: ActionPreset): boolean {
   const set = new Set(selectedKeys.value);
   if (set.size !== preset.actionKeys.length) return false;
   return preset.actionKeys.every((k) => set.has(k));
-}
-
-function onSizeChange(value: string) {
-  const parts = value.split("x");
-  if (parts.length === 2) {
-    form.outputWidth = Number(parts[0]) || 512;
-    form.outputHeight = Number(parts[1]) || 512;
-  }
 }
 
 function onReferenceChange(file: UploadFile) {
@@ -587,11 +552,13 @@ function onDragEnd() {
 
 async function loadModelConfigs() {
   modelLoading.value = true;
+  modelLoadError.value = "";
   try {
     const list = (await get<ModelConfig[]>("/api/imagegen/configs")) || [];
     modelConfigs.value = list.filter((m) => Number(m.enabled) === 1);
-  } catch {
+  } catch (err: any) {
     modelConfigs.value = [];
+    modelLoadError.value = err?.message || "生图模型加载失败";
   } finally {
     modelLoading.value = false;
   }
@@ -601,17 +568,12 @@ function goToImageGenConfig() {
   router.push("/settings/model/imagegen");
 }
 
-async function loadCharacters() {
-  characterLoading.value = true;
+async function reloadActions() {
+  actionError.value = "";
   try {
-    const list = (await get<Character[]>("/api/characters")) || [];
-    characters.value = list.filter(
-      (c) => c.status === "enabled" || c.isActive === true || c.isActive === 1,
-    );
+    await loadActions(true);
   } catch {
-    characters.value = [];
-  } finally {
-    characterLoading.value = false;
+    return;
   }
 }
 
@@ -620,7 +582,7 @@ async function submit() {
     ElMessage.error("请先上传参考图");
     return;
   }
-  if (!form.modelConfigId || !form.name.trim() || !form.characterId) {
+  if (!form.modelConfigId || !form.name.trim()) {
     ElMessage.error("请补全基础配置");
     return;
   }
@@ -631,7 +593,6 @@ async function submit() {
   submitting.value = true;
   try {
     const fd = new FormData();
-    fd.append("characterId", String(form.characterId));
     fd.append("modelConfigId", String(form.modelConfigId));
     fd.append("name", form.name.trim());
     fd.append("referenceImage", referenceFile.value, referenceFile.value.name);
@@ -697,19 +658,15 @@ function resetWizard() {
   createdTaskId.value = null;
   clearReference();
   form.modelConfigId = "";
-  form.characterId = "";
   form.name = "";
   form.prompt = "";
   form.negativePrompt = "";
-  sizePreset.value = "512x512";
-  form.outputWidth = 512;
-  form.outputHeight = 512;
   clearAll();
   actionError.value = "";
 }
 
 onMounted(async () => {
-  await Promise.all([loadModelConfigs(), loadCharacters(), loadActions()]);
+  await Promise.allSettled([loadModelConfigs(), loadActions()]);
 });
 
 onUnmounted(() => {
@@ -820,6 +777,30 @@ onUnmounted(() => {
 
 .no-models-banner {
   margin: 24px 0;
+}
+
+.load-error-banner,
+.action-error-row,
+.field-error-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.load-error-banner,
+.action-error-row {
+  margin: 16px 0;
+}
+
+.load-error-banner .el-alert,
+.action-error-row .el-alert {
+  flex: 1;
+}
+
+.field-error-row {
+  margin-top: 6px;
+  color: var(--el-color-danger);
+  font-size: 12px;
 }
 
 /* ===== 步骤主体 ===== */

@@ -72,7 +72,7 @@ async function main() {
   // Recheck after the Core build. Any source mutation during build invalidates release.
   await verifyPreBuildGates();
 
-  console.log("[build-release] staging frozen sidecars and verifying external runtime assets...");
+  console.log("[build-release] verifying external runtime assets...");
   run(process.execPath, [prepareRuntimeAssetsPath]);
   await verifyPreBuildGates();
 

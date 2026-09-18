@@ -19,6 +19,7 @@ const (
 	OperationAppUninstall                = "device.app_uninstall"
 	OperationBluetoothStatus             = "device.bluetooth_status"
 	OperationBluetoothRequestEnable      = "device.bluetooth_request_enable"
+	OperationBluetoothRequestPermission  = "device.bluetooth_request_permission"
 	OperationBluetoothPair               = "device.bluetooth_pair"
 	OperationBluetoothPaired             = "device.bluetooth_paired"
 	OperationBluetoothScan               = "device.bluetooth_scan"
@@ -38,7 +39,19 @@ const (
 	OperationBLEWrite                    = "device.ble_write"
 	OperationBLESubscribe                = "device.ble_subscribe"
 	OperationBLEUnsubscribe              = "device.ble_unsubscribe"
+	OperationBLEReadNotifications        = "device.ble_read_notifications"
 	OperationTaskerRunTask               = "device.tasker_run_task"
+	OperationTaskerTriggerEvent          = "device.tasker_trigger_event"
+	OperationMusicPlay                   = "device.music_play"
+	OperationMusicPlayQueue              = "device.music_play_queue"
+	OperationMusicPause                  = "device.music_pause"
+	OperationMusicResume                 = "device.music_resume"
+	OperationMusicStop                   = "device.music_stop"
+	OperationMusicSeek                   = "device.music_seek"
+	OperationMusicSetVolume              = "device.music_set_volume"
+	OperationMusicStatus                 = "device.music_status"
+	OperationSendBroadcast               = "device.send_broadcast"
+	OperationToast                       = "device.toast"
 )
 
 const RuntimeID = "android_native_device_control"
@@ -62,6 +75,7 @@ var Operations = []string{
 	OperationAppUninstall,
 	OperationBluetoothStatus,
 	OperationBluetoothRequestEnable,
+	OperationBluetoothRequestPermission,
 	OperationBluetoothPair,
 	OperationBluetoothPaired,
 	OperationBluetoothScan,
@@ -81,5 +95,17 @@ var Operations = []string{
 	OperationBLEWrite,
 	OperationBLESubscribe,
 	OperationBLEUnsubscribe,
+	OperationBLEReadNotifications,
 	OperationTaskerRunTask,
+	OperationTaskerTriggerEvent,
+	OperationMusicPlay,
+	OperationMusicPlayQueue,
+	OperationMusicPause,
+	OperationMusicResume,
+	OperationMusicStop,
+	OperationMusicSeek,
+	OperationMusicSetVolume,
+	OperationMusicStatus,
+	OperationSendBroadcast,
+	OperationToast,
 }

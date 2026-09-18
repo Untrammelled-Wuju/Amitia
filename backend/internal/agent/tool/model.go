@@ -8,6 +8,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+
+	"github.com/u-ai/backend/config"
+	"github.com/u-ai/backend/internal/requestidentity"
 )
 
 type Tool struct {
@@ -43,7 +46,7 @@ type ToolExecutionContext struct {
 	RequestID      string
 	CorrelationID  string
 	CausationID    string
-	User           string
+	SpaceID        string
 	StateVersion   string
 	Path           string
 	ToolCallID     string
@@ -96,6 +99,23 @@ func UnknownResult(code, content string) ToolCallResult {
 }
 
 type ToolCallFunc func(ctx context.Context, execCtx ToolExecutionContext, args map[string]interface{}) ToolCallResult
+
+func effectiveToolSpaceID(execCtx ToolExecutionContext) (string, *ToolCallResult) {
+	spaceID := strings.TrimSpace(execCtx.SpaceID)
+	if spaceID != "" {
+		return spaceID, nil
+	}
+	if config.AppCfg == nil || strings.EqualFold(strings.TrimSpace(config.AppCfg.Security.Mode), "local_single_user") {
+		return requestidentity.CanonicalSpaceID(), nil
+	}
+	result := ErrorResult("missing_space_scope", "ERROR: authenticated space scope is required")
+	result.Audit = map[string]interface{}{
+		"conversation_id": strings.TrimSpace(execCtx.ConversationID),
+		"character_id":    strings.TrimSpace(execCtx.CharacterID),
+		"channel":         strings.TrimSpace(execCtx.Channel),
+	}
+	return "", &result
+}
 
 func requireScopedWrite(execCtx ToolExecutionContext) (ToolExecutionContext, *ToolCallResult) {
 	execCtx.CharacterID = strings.TrimSpace(execCtx.CharacterID)

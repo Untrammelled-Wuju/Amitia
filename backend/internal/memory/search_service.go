@@ -3,9 +3,7 @@
 package memory
 
 import (
-	"context"
 	"fmt"
-	"math"
 	"sort"
 	"strings"
 	"time"
@@ -38,22 +36,33 @@ func (s *service) Search(req *SearchMemoryRequest) ([]Memory, error) {
 		}
 	}
 
-	var timeScopedIDs map[string]bool
-	if req.Time != nil && s.temporalRepo != nil {
-		scopedIDs, err := s.queryTimeScopedMemoryIDs(req)
-		if err == nil && len(scopedIDs) > 0 {
-			timeScopedIDs = scopedIDs
+	var layerFiltered map[MemoryLayer]bool
+	if len(req.Layers) > 0 {
+		layerFiltered = make(map[MemoryLayer]bool, len(req.Layers))
+		for _, layer := range req.Layers {
+			if IsValidLayer(string(layer)) {
+				layerFiltered[MemoryLayer(strings.ToLower(strings.TrimSpace(string(layer))))] = true
+			}
 		}
 	}
 
-	items, err := s.repo.Search(req.Keyword, req.CharacterID, req.UserID, fetchLimit)
+	var timeScopedIDs map[string]bool
+	if req.Time != nil && s.temporalRepo != nil {
+		scopedIDs, err := s.queryTimeScopedMemoryIDs(req)
+		if err != nil {
+			return nil, err
+		}
+		timeScopedIDs = scopedIDs
+	}
+
+	items, err := s.repo.Search(req.Keyword, req.CharacterID, req.SpaceID, fetchLimit)
 	if err != nil {
 		return nil, err
 	}
 	tombstoneBlocked := tombstoneTargetsFromMemorySearch(s.dataLifecycleCoordinator, req.CharacterID)
 	policy := retrievalAuthorityPolicy{
 		CharacterID: req.CharacterID,
-		UserID:      req.UserID,
+		SpaceID:     req.SpaceID,
 		Now:         time.Now(),
 	}
 	filtered := make([]Memory, 0, min(limit, len(items)))
@@ -66,6 +75,12 @@ func (s *service) Search(req *SearchMemoryRequest) ([]Memory, error) {
 		}
 		if typeFiltered != nil && !typeFiltered[m.MemoryType] {
 			continue
+		}
+		if layerFiltered != nil {
+			layer := CanonicalLayer(collectionKeyFromCollectionName(collectionNameForMemoryType(m.MemoryType)))
+			if !layerFiltered[layer] {
+				continue
+			}
 		}
 		if timeScopedIDs != nil && !timeScopedIDs[m.ID] {
 			continue
@@ -159,10 +174,10 @@ func (s *service) VectorSearch(req *VectorSearchRequest) ([]VectorSearchResult, 
 	if limit <= 0 {
 		limit = 5
 	}
-	filters := rankedMemoryVectorFilters(req.CharacterID, req.UserID)
+	filters := rankedMemoryVectorFilters(req.CharacterID, req.SpaceID)
 	log.Info("VectorSearch with filter",
 		"characterID", req.CharacterID,
-		"userID", req.UserID,
+		"spaceID", req.SpaceID,
 		"query", queryText,
 		"limit", limit,
 	)
@@ -186,7 +201,7 @@ func (s *service) VectorSearch(req *VectorSearchRequest) ([]VectorSearchResult, 
 	seen := map[string]bool{}
 	policy := retrievalAuthorityPolicy{
 		CharacterID:      req.CharacterID,
-		UserID:           req.UserID,
+		SpaceID:          req.SpaceID,
 		ProactiveMention: req.ProactiveMention,
 		Now:              time.Now(),
 	}
@@ -222,7 +237,7 @@ func (s *service) VectorSearch(req *VectorSearchRequest) ([]VectorSearchResult, 
 	}
 	log.Info("VectorSearch completed",
 		"characterID", req.CharacterID,
-		"userID", req.UserID,
+		"spaceID", req.SpaceID,
 		"results", len(vsResults),
 		"total", len(results),
 	)
@@ -230,151 +245,5 @@ func (s *service) VectorSearch(req *VectorSearchRequest) ([]VectorSearchResult, 
 }
 
 func (s *service) HybridSearch(req *VectorSearchRequest) ([]HybridSearchResult, error) {
-	limit := req.Limit
-	if limit <= 0 {
-		limit = 10
-	}
-	queryText := req.Query
-	if queryText == "" {
-		queryText = req.Keyword
-	}
-	if queryText == "" {
-		return nil, fmt.Errorf("缺少查询文本")
-	}
-	var blockedMemoryIDs map[string]bool
-	if s.dataLifecycleCoordinator != nil {
-		memoryBlockedIDs := s.dataLifecycleCoordinator.BlockedEntityIDsByType("memory")
-		if len(memoryBlockedIDs) > 0 {
-			blockedMemoryIDs = make(map[string]bool, len(memoryBlockedIDs))
-			for _, id := range memoryBlockedIDs {
-				blockedMemoryIDs[id] = true
-			}
-		}
-	}
-
-	vectorFetchLimit := limit * 2
-	if vectorFetchLimit < 20 {
-		vectorFetchLimit = 20
-	}
-	vectorResults, _ := s.VectorSearch(&VectorSearchRequest{
-		Query:            queryText,
-		CharacterID:      req.CharacterID,
-		UserID:           req.UserID,
-		Limit:            vectorFetchLimit,
-		ConversationID:   req.ConversationID,
-		RequestID:        req.RequestID,
-		Channel:          req.Channel,
-		ProactiveMention: req.ProactiveMention,
-	})
-
-	scorer := &RetrievalScorer{}
-	pipelineResults := scorer.Pipeline(vectorResults)
-
-	merged := map[string]*struct {
-		m              Memory
-		vectorScore    float64
-		keywordScore   float64
-		collectionName string
-		matchType      string
-	}{}
-	for _, pr := range pipelineResults {
-		merged[pr.Memory.ID] = &struct {
-			m              Memory
-			vectorScore    float64
-			keywordScore   float64
-			collectionName string
-			matchType      string
-		}{m: pr.Memory, vectorScore: pr.VectorScore, collectionName: pr.CollectionName, matchType: pr.MatchType}
-	}
-
-	keywordResults, err := s.repo.Search(queryText, req.CharacterID, req.UserID, limit*2)
-	if err != nil {
-		keywordResults = nil
-	}
-	queryLower := strings.ToLower(queryText)
-	policy := retrievalAuthorityPolicy{
-		CharacterID:      req.CharacterID,
-		UserID:           req.UserID,
-		ProactiveMention: req.ProactiveMention,
-		Now:              time.Now(),
-	}
-	for _, m := range keywordResults {
-		if !memoryAllowedBySQLiteAuthority(m, policy) {
-			continue
-		}
-		if blockedMemoryIDs != nil && blockedMemoryIDs[m.ID] {
-			continue
-		}
-		item, exists := merged[m.ID]
-		if !exists {
-			item = &struct {
-				m              Memory
-				vectorScore    float64
-				keywordScore   float64
-				collectionName string
-				matchType      string
-			}{m: m, collectionName: collectionNameForMemoryType(m.MemoryType), matchType: "keyword"}
-			merged[m.ID] = item
-		}
-		score := keywordMatchScore(queryLower, m.Key, m.Value)
-		if score <= 0 {
-			score = 0.5
-		}
-		if score > item.keywordScore {
-			item.keywordScore = score
-		}
-		if item.matchType == "vector" {
-			item.matchType = "hybrid"
-		}
-	}
-
-	results := make([]HybridSearchResult, 0, len(merged))
-	for _, item := range merged {
-		score := item.vectorScore*0.6 + item.keywordScore*0.4
-		if item.matchType == "hybrid" {
-			score += 0.1
-		}
-		collectionKey := collectionKeyFromCollectionName(item.collectionName)
-		results = append(results, HybridSearchResult{
-			Memory:         item.m,
-			Score:          math.Round(score*10000) / 10000,
-			VectorScore:    math.Round(item.vectorScore*10000) / 10000,
-			KeywordScore:   math.Round(item.keywordScore*10000) / 10000,
-			MatchType:      item.matchType,
-			CollectionName: item.collectionName,
-			MemoryLayer:    memoryLayerLabel(collectionKey),
-		})
-	}
-	if s.temporalReranker != nil && len(results) > 0 {
-		candidates := make([]temporal.MemoryScoreCandidate, 0, len(results))
-		for _, result := range results {
-			candidates = append(candidates, temporal.MemoryScoreCandidate{MemoryID: result.Memory.ID, BaseScore: result.Score, CreatedAt: result.Memory.CreatedAt, MemoryType: result.Memory.MemoryType})
-		}
-		if reranked, rerankErr := s.temporalReranker.RerankMemoryScores(context.Background(), queryText, candidates); rerankErr == nil {
-			for index := range results {
-				if score, exists := reranked[results[index].Memory.ID]; exists {
-					results[index].Score = score.FinalScore
-					results[index].TemporalBoost = score.TemporalBoost
-					results[index].ValidityPenalty = score.ValidityPenalty
-					results[index].TemporalReference = score.ReferenceSource
-				}
-			}
-		}
-	}
-
-	sort.Slice(results, func(i, j int) bool {
-		return results[i].Score > results[j].Score
-	})
-	if len(results) > limit {
-		results = results[:limit]
-	}
-
-	memoryIDs := make([]string, len(results))
-	for i, r := range results {
-		memoryIDs[i] = r.Memory.ID
-	}
-
-	s.logRetrieval(req.ConversationID, req.CharacterID, req.RequestID, req.Channel, queryText, memoryIDs, results)
-
-	return results, nil
+	return s.dynamicRecall(req)
 }

@@ -20,6 +20,8 @@ func RegisterCharacterRouterWithRecorder(r *gin.RouterGroup, ctx *app.AppContext
 
 	r.GET("/characters", handler.List)
 	r.GET("/characters/:id", handler.Get)
+	r.GET("/characters/:id/card-data", handler.GetCardData)
+	r.PUT("/characters/:id/card-data", handler.UpdateCardData)
 	r.POST("/characters", handler.Create)
 	r.PUT("/characters/:id", handler.Update)
 	r.DELETE("/characters/:id", handler.Delete)

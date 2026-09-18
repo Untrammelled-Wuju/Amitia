@@ -10,11 +10,11 @@ func TestExtensionDomainValues(t *testing.T) {
 	if string(ExtensionDomainGeneral) != "general" {
 		t.Errorf("expected general, got %s", ExtensionDomainGeneral)
 	}
-	if string(ExtensionDomainGame) != "game" {
-		t.Errorf("expected game, got %s", ExtensionDomainGame)
+	if string(ExtensionDomainGame) != "gamex" {
+		t.Errorf("expected gamex, got %s", ExtensionDomainGame)
 	}
-	if string(ExtensionDomainDesktopPet) != "desktop_pet" {
-		t.Errorf("expected desktop_pet, got %s", ExtensionDomainDesktopPet)
+	if string(ExtensionDomainDesktopPet) != "petx" {
+		t.Errorf("expected petx, got %s", ExtensionDomainDesktopPet)
 	}
 }
 
@@ -55,6 +55,12 @@ func TestNormalizeExtensionDomain(t *testing.T) {
 	if d := NormalizeExtensionDomain("foobar"); d != "foobar" {
 		t.Errorf("expected foobar to stay foobar, got %s", d)
 	}
+	if d := NormalizeExtensionDomain("game"); d != "game" {
+		t.Errorf("expected legacy game to remain invalid, got %s", d)
+	}
+	if d := NormalizeExtensionDomain("desktop_pet"); d != "desktop_pet" {
+		t.Errorf("expected legacy desktop_pet to remain invalid, got %s", d)
+	}
 }
 
 func TestExtensionDomainHelpers(t *testing.T) {
@@ -86,7 +92,7 @@ func TestExtensionDefinitionDefaultDomainGeneral(t *testing.T) {
 	def := ExtensionDefinition{
 		ID:              "com.example/test",
 		Version:         v,
-		ManifestVersion: 2,
+		ManifestVersion: 1,
 		Name:            LocalizedText{Default: "Test"},
 		Modules:         []ModuleDefinition{{ID: "main", ExtensionID: "com.example/test", Type: ModuleTypeBuiltin}},
 	}
@@ -103,7 +109,7 @@ func TestExtensionDefinitionValidGameDomain(t *testing.T) {
 	def := ExtensionDefinition{
 		ID:              "com.example/game-test",
 		Version:         v,
-		ManifestVersion: 2,
+		ManifestVersion: 1,
 		Name:            LocalizedText{Default: "Game Test"},
 		Domain:          ExtensionDomainGame,
 		Modules:         []ModuleDefinition{{ID: "main", ExtensionID: "com.example/game-test", Type: ModuleTypeBuiltin}},
@@ -121,7 +127,7 @@ func TestExtensionDefinitionValidDesktopPetDomain(t *testing.T) {
 	def := ExtensionDefinition{
 		ID:              "com.example/pet-test",
 		Version:         v,
-		ManifestVersion: 2,
+		ManifestVersion: 1,
 		Name:            LocalizedText{Default: "Pet Test"},
 		Domain:          ExtensionDomainDesktopPet,
 		Modules:         []ModuleDefinition{{ID: "main", ExtensionID: "com.example/pet-test", Type: ModuleTypeBuiltin}},
@@ -139,7 +145,7 @@ func TestExtensionDefinitionInvalidDomain(t *testing.T) {
 	def := ExtensionDefinition{
 		ID:              "com.example/invalid",
 		Version:         v,
-		ManifestVersion: 2,
+		ManifestVersion: 1,
 		Name:            LocalizedText{Default: "Invalid"},
 		Domain:          "minecraft",
 		Modules:         []ModuleDefinition{{ID: "main", ExtensionID: "com.example/invalid", Type: ModuleTypeBuiltin}},
@@ -154,7 +160,7 @@ func TestExtensionDefinitionPreservesGameDomainOnCopy(t *testing.T) {
 	def := ExtensionDefinition{
 		ID:              "com.example/game-test",
 		Version:         v,
-		ManifestVersion: 2,
+		ManifestVersion: 1,
 		Name:            LocalizedText{Default: "Game"},
 		Domain:          ExtensionDomainGame,
 		Modules:         []ModuleDefinition{{ID: "main", ExtensionID: "com.example/game-test", Type: ModuleTypeBuiltin}},
@@ -173,7 +179,7 @@ func TestExtensionDefinitionPreservesDesktopPetDomainOnCopy(t *testing.T) {
 	def := ExtensionDefinition{
 		ID:              "com.example/pet-test",
 		Version:         v,
-		ManifestVersion: 2,
+		ManifestVersion: 1,
 		Name:            LocalizedText{Default: "Pet"},
 		Domain:          ExtensionDomainDesktopPet,
 		Modules:         []ModuleDefinition{{ID: "main", ExtensionID: "com.example/pet-test", Type: ModuleTypeBuiltin}},
@@ -192,7 +198,7 @@ func TestExtensionDomainJSONSerialization(t *testing.T) {
 	def := ExtensionDefinition{
 		ID:              "com.example/test",
 		Version:         v,
-		ManifestVersion: 2,
+		ManifestVersion: 1,
 		Name:            LocalizedText{Default: "Test"},
 		Domain:          ExtensionDomainGame,
 		Modules:         []ModuleDefinition{{ID: "main", ExtensionID: "com.example/test", Type: ModuleTypeBuiltin}},
@@ -201,8 +207,8 @@ func TestExtensionDomainJSONSerialization(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
 	}
-	if !bytes.Contains(data, []byte(`"domain":"game"`)) {
-		t.Errorf("expected domain:game in JSON, got: %s", string(data))
+	if !bytes.Contains(data, []byte(`"domain":"gamex"`)) {
+		t.Errorf("expected domain:gamex in JSON, got: %s", string(data))
 	}
 }
 
@@ -211,7 +217,7 @@ func TestExtensionDomainJSONDeserialization(t *testing.T) {
 		"id": "com.example/test",
 		"name": {"default": "Test"},
 		"version": {"major": 1, "minor": 0, "patch": 0},
-		"manifestVersion": 2,
+		"manifestVersion": 1,
 		"domain": "desktop_pet",
 		"modules": [{"id": "main", "type": "builtin"}]
 	}`)
@@ -219,8 +225,8 @@ func TestExtensionDomainJSONDeserialization(t *testing.T) {
 	if err := json.Unmarshal(data, &def); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if def.Domain != ExtensionDomainDesktopPet {
-		t.Errorf("expected desktop_pet, got %s", def.Domain)
+	if def.Domain == ExtensionDomainDesktopPet {
+		t.Errorf("legacy desktop_pet must not normalize to petx")
 	}
 }
 
@@ -256,7 +262,10 @@ func TestDomainFromContributionKinds(t *testing.T) {
 		t.Errorf("expected desktop_pet for desktop_pet_plugin contribution, got %s", d)
 	}
 	if d := DomainFromContributionKinds([]ContributionKind{ContributionKindTool, ContributionKindDesktopPetPlugin}); d != ExtensionDomainDesktopPet {
-		t.Errorf("expected desktop_pet when desktop_pet_plugin present, got %s", d)
+		t.Errorf("expected petx when pet_plugin present, got %s", d)
+	}
+	if d := DomainFromContributionKinds([]ContributionKind{"desktop_pet_plugin"}); d != ExtensionDomainGeneral {
+		t.Errorf("expected legacy desktop_pet_plugin to be unsupported, got %s", d)
 	}
 }
 

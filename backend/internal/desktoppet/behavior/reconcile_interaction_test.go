@@ -96,7 +96,7 @@ func (p *reconcileRuntimePort) QueryPlayback(_ context.Context, petInstanceID st
 
 func reconcileTestActivePet() *ActivePetSnapshot {
 	return &ActivePetSnapshot{
-		UserID:         "user-1",
+		SpaceID:        "user-1",
 		DeviceID:       "device-1",
 		RuntimeID:      "runtime-1",
 		InstallationID: "install-1",

@@ -11,7 +11,7 @@ class PrivacyPolicyPage extends StatelessWidget {
 
   static const _sections = <(String, IconData, List<String>)>[
     ('数据收集与存储', Icons.storage_outlined, [
-      'Amitia 会保存维持账号、对话、角色、记忆和运行配置所需的数据。',
+      'Amitia 会保存维持个人空间、对话、角色、记忆和运行配置所需的数据。',
       '本地模式的数据由本机 Runtime 处理；云端模式的数据由你配置的 Cloud Core 处理。',
       '聊天、记忆和相关业务数据可通过应用提供的删除、清理或备份功能进行管理。',
     ]),

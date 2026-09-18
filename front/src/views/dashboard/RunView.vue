@@ -10,10 +10,6 @@ SPDX-License-Identifier: AGPL-3.0-only
       :model-class="modelClass"
       :model-label="modelLabel"
       :model-name="modelName"
-      :wechat-class="wechatClass"
-      :wechat-label="wechatLabel"
-      :qq-class="qqClass"
-      :qq-label="qqLabel"
       :runtime-health="runtimeHealth"
     />
 
@@ -67,10 +63,6 @@ const {
   modelClass,
   modelLabel,
   modelName,
-  wechatClass,
-  wechatLabel,
-  qqClass,
-  qqLabel,
   runtimeHealth,
   runtimeHealthLoading,
   recentErrors,

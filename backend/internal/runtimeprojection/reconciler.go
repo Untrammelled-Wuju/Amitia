@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	"github.com/u-ai/backend/internal/execution"
+	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	"github.com/u-ai/backend/internal/runtimeidentity"
 )
 
@@ -43,13 +43,13 @@ func (r *RuntimeProjectionReconciler) HandleHello(ctx context.Context, event Pre
 	}
 
 	proj := RuntimeProjection{
-		RuntimeID:   event.RuntimeID,
-		SessionID:   event.SessionID,
-		Identity:    event.Identity,
-		Placement:   event.Placement,
-		Online:      true,
-		Health:      event.Health,
-		UpdatedAt:   event.Timestamp,
+		RuntimeID: event.RuntimeID,
+		SessionID: event.SessionID,
+		Identity:  event.Identity,
+		Placement: event.Placement,
+		Online:    true,
+		Health:    event.Health,
+		UpdatedAt: event.Timestamp,
 	}
 
 	if r.providers != nil {

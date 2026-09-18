@@ -20,7 +20,7 @@ type SingleFrameGenerationRequest struct {
 	TotalFrames      int
 	AdjacentFrames   []AdjacentFrameContext
 	FixIntent        string
-	UserID           string
+	SpaceID          string
 	// AttemptID is a caller-stable submission identity. Regeneration workers
 	// must reuse it across retries so a crash cannot create a second provider
 	// attempt for the same durable job.
@@ -45,7 +45,7 @@ type FullActionGenerationRequest struct {
 	JobID            string
 	GenerationTaskID string
 	ActionKey        string
-	UserID           string
+	SpaceID          string
 	// AttemptID has the same idempotency semantics as the single-frame path.
 	AttemptID string
 }

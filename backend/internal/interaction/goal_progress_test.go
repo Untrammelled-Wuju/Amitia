@@ -71,7 +71,7 @@ func TestGoalProgressServiceNoGoalRefsNoApply(t *testing.T) {
 
 func TestGoalProgressServiceObserveOnlyDoesNotAdvanceProgress(t *testing.T) {
 	reg := decision.NewGoalRegistry()
-	reg.Register(decision.Goal{ID: "g1", Status: decision.GoalStatusActive, Progress: 0.2, Revision: 1, UserID: "u1", CharacterID: "c1", ConversationID: "conv1"})
+	reg.Register(decision.Goal{ID: "g1", Status: decision.GoalStatusActive, Progress: 0.2, Revision: 1, SpaceID: "u1", CharacterID: "c1", ConversationID: "conv1"})
 	svc := NewGoalProgressService(reg)
 
 	plan := &decision.BehaviorPlan{
@@ -87,7 +87,7 @@ func TestGoalProgressServiceObserveOnlyDoesNotAdvanceProgress(t *testing.T) {
 		PlanID:         "p1",
 		ActionID:       "a1",
 		InteractionID:  "i1",
-		UserID:         "u1",
+		SpaceID:        "u1",
 		CharacterID:    "c1",
 		ConversationID: "conv1",
 		GoalRefs:       []decision.GoalRef{{ID: "g1", Revision: 1}},
@@ -121,7 +121,7 @@ func TestGoalProgressServiceObserveOnlyDoesNotAdvanceProgress(t *testing.T) {
 
 func TestGoalProgressServiceAdvanceTo05(t *testing.T) {
 	reg := decision.NewGoalRegistry()
-	reg.Register(decision.Goal{ID: "g1", Status: decision.GoalStatusActive, Progress: 0.2, Revision: 1, UserID: "u1"})
+	reg.Register(decision.Goal{ID: "g1", Status: decision.GoalStatusActive, Progress: 0.2, Revision: 1, SpaceID: "u1"})
 	svc := NewGoalProgressService(reg)
 
 	plan := &decision.BehaviorPlan{
@@ -137,7 +137,7 @@ func TestGoalProgressServiceAdvanceTo05(t *testing.T) {
 		Kind:       decision.ObservationKindToolResult,
 		Outcome:    decision.ObservationOutcomeSucceeded,
 		ObservedAt: time.Now(),
-		UserID:     "u1",
+		SpaceID:    "u1",
 	}
 
 	result, err := svc.ApplyObservation(context.Background(), plan, obs, time.Now())
@@ -159,7 +159,7 @@ func TestGoalProgressServiceAdvanceTo05(t *testing.T) {
 
 func TestGoalProgressServiceAchieveProgress1(t *testing.T) {
 	reg := decision.NewGoalRegistry()
-	reg.Register(decision.Goal{ID: "g1", Status: decision.GoalStatusActive, Progress: 0.5, Revision: 1, UserID: "u1"})
+	reg.Register(decision.Goal{ID: "g1", Status: decision.GoalStatusActive, Progress: 0.5, Revision: 1, SpaceID: "u1"})
 	svc := NewGoalProgressService(reg)
 
 	plan := &decision.BehaviorPlan{
@@ -175,7 +175,7 @@ func TestGoalProgressServiceAchieveProgress1(t *testing.T) {
 		Kind:       decision.ObservationKindToolResult,
 		Outcome:    decision.ObservationOutcomeSucceeded,
 		ObservedAt: time.Now(),
-		UserID:     "u1",
+		SpaceID:    "u1",
 	}
 
 	result, err := svc.ApplyObservation(context.Background(), plan, obs, time.Now())
@@ -197,7 +197,7 @@ func TestGoalProgressServiceAchieveProgress1(t *testing.T) {
 
 func TestGoalProgressServicePendingToolSuccessActivatesAndRevision(t *testing.T) {
 	reg := decision.NewGoalRegistry()
-	reg.Register(decision.Goal{ID: "g1", Status: decision.GoalStatusPending, Progress: 0, Revision: 1, UserID: "u1"})
+	reg.Register(decision.Goal{ID: "g1", Status: decision.GoalStatusPending, Progress: 0, Revision: 1, SpaceID: "u1"})
 	svc := NewGoalProgressService(reg)
 
 	plan := &decision.BehaviorPlan{
@@ -213,7 +213,7 @@ func TestGoalProgressServicePendingToolSuccessActivatesAndRevision(t *testing.T)
 		Kind:       decision.ObservationKindToolResult,
 		Outcome:    decision.ObservationOutcomeSucceeded,
 		ObservedAt: time.Now(),
-		UserID:     "u1",
+		SpaceID:    "u1",
 	}
 
 	_, err := svc.ApplyObservation(context.Background(), plan, obs, time.Now())
@@ -232,7 +232,7 @@ func TestGoalProgressServicePendingToolSuccessActivatesAndRevision(t *testing.T)
 
 func TestGoalProgressServiceMissingGoalInBatch(t *testing.T) {
 	reg := decision.NewGoalRegistry()
-	reg.Register(decision.Goal{ID: "g1", Status: decision.GoalStatusActive, Progress: 0.2, Revision: 1, UserID: "u1"})
+	reg.Register(decision.Goal{ID: "g1", Status: decision.GoalStatusActive, Progress: 0.2, Revision: 1, SpaceID: "u1"})
 	svc := NewGoalProgressService(reg)
 
 	plan := &decision.BehaviorPlan{
@@ -248,7 +248,7 @@ func TestGoalProgressServiceMissingGoalInBatch(t *testing.T) {
 		Kind:       decision.ObservationKindToolResult,
 		Outcome:    decision.ObservationOutcomeSucceeded,
 		ObservedAt: time.Now(),
-		UserID:     "u1",
+		SpaceID:    "u1",
 	}
 
 	_, err := svc.ApplyObservation(context.Background(), plan, obs, time.Now())
@@ -267,7 +267,7 @@ func TestGoalProgressServiceMissingGoalInBatch(t *testing.T) {
 
 func TestGoalProgressServiceStaleRevisionNoMutation(t *testing.T) {
 	reg := decision.NewGoalRegistry()
-	reg.Register(decision.Goal{ID: "g1", Status: decision.GoalStatusAchieved, Progress: 1, Revision: 5, UserID: "u1"})
+	reg.Register(decision.Goal{ID: "g1", Status: decision.GoalStatusAchieved, Progress: 1, Revision: 5, SpaceID: "u1"})
 	svc := NewGoalProgressService(reg)
 
 	plan := &decision.BehaviorPlan{
@@ -283,7 +283,7 @@ func TestGoalProgressServiceStaleRevisionNoMutation(t *testing.T) {
 		Kind:       decision.ObservationKindToolResult,
 		Outcome:    decision.ObservationOutcomeSucceeded,
 		ObservedAt: time.Now(),
-		UserID:     "u1",
+		SpaceID:    "u1",
 	}
 
 	_, err := svc.ApplyObservation(context.Background(), plan, obs, time.Now())
@@ -299,7 +299,7 @@ func TestGoalProgressServiceStaleRevisionNoMutation(t *testing.T) {
 
 func TestGoalProgressServiceSuspendedIgnored(t *testing.T) {
 	reg := decision.NewGoalRegistry()
-	reg.Register(decision.Goal{ID: "g1", Status: decision.GoalStatusSuspended, Progress: 0.5, Revision: 3, UserID: "u1"})
+	reg.Register(decision.Goal{ID: "g1", Status: decision.GoalStatusSuspended, Progress: 0.5, Revision: 3, SpaceID: "u1"})
 	svc := NewGoalProgressService(reg)
 
 	plan := &decision.BehaviorPlan{
@@ -315,7 +315,7 @@ func TestGoalProgressServiceSuspendedIgnored(t *testing.T) {
 		Kind:       decision.ObservationKindToolResult,
 		Outcome:    decision.ObservationOutcomeSucceeded,
 		ObservedAt: time.Now(),
-		UserID:     "u1",
+		SpaceID:    "u1",
 	}
 
 	result, err := svc.ApplyObservation(context.Background(), plan, obs, time.Now())

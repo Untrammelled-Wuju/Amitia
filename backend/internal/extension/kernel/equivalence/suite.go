@@ -25,7 +25,6 @@ func NewSuite() *Suite {
 	s.registerSkillChecks()
 	s.registerMCPChecks()
 	s.registerWorkflowChecks()
-	s.registerPluginChecks()
 	s.registerLegacyAmitiaxChecks()
 	s.registerInstallationChecks()
 	s.registerEnablementChecks()
@@ -83,12 +82,6 @@ func (s *Suite) registerMCPChecks() {
 func (s *Suite) registerWorkflowChecks() {
 	s.register(CategoryWorkflows, "workflow.steps", "Workflow 步骤定义在新模型中等价", func(ctx context.Context) (EquivalenceResult, []Evidence, error) {
 		return ResultEquivalent, []Evidence{{Kind: "registry", Content: "workflow_migration/registry.go 已建立"}}, nil
-	})
-}
-
-func (s *Suite) registerPluginChecks() {
-	s.register(CategoryPlugins, "plugin.trust_level", "官方插件信任级别在新体系中保留", func(ctx context.Context) (EquivalenceResult, []Evidence, error) {
-		return ResultEquivalent, []Evidence{{Kind: "trust", Content: "plugin_migration 保留 TrustLevel"}}, nil
 	})
 }
 

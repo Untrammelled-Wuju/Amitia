@@ -6,11 +6,12 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/u-ai/backend/internal/extension/kernel/host_registry"
 	"github.com/u-ai/backend/internal/runtimeidentity"
 )
 
 type TicketSnapshot struct {
-	UserID    runtimeidentity.UserID
+	SpaceID   runtimeidentity.SpaceID
 	DeviceID  runtimeidentity.DeviceID
 	RuntimeID runtimeidentity.RuntimeID
 	ExpiresAt time.Time
@@ -22,7 +23,7 @@ type BootstrapTicketValidator interface {
 
 type DeviceRuntimePrincipal struct {
 	CredentialID string
-	UserID       runtimeidentity.UserID
+	SpaceID      runtimeidentity.SpaceID
 	DeviceID     runtimeidentity.DeviceID
 	RuntimeID    runtimeidentity.RuntimeID
 	ExpiresAt    time.Time
@@ -31,11 +32,11 @@ type DeviceRuntimePrincipal struct {
 type contextKey string
 
 const (
-	principalKey  contextKey = "device_runtime_principal"
+	principalKey       contextKey = "device_runtime_principal"
 	bootstrapTicketKey contextKey = "bootstrap_ticket_snapshot"
 )
 
-func DeviceAuthMiddleware(svc *Service) gin.HandlerFunc {
+func DeviceAuthMiddleware(svc *Service, devices *host_registry.Registry) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		header := c.GetHeader("Authorization")
 		var rawCred string
@@ -60,9 +61,18 @@ func DeviceAuthMiddleware(svc *Service) gin.HandlerFunc {
 			return
 		}
 
+		if devices == nil {
+			c.AbortWithStatusJSON(500, gin.H{"code": "mesh.trust_registry_unavailable", "message": "device trust registry unavailable"})
+			return
+		}
+		if err := devices.RequireTrustedDevice(c.Request.Context(), cred.SpaceID, cred.DeviceID); err != nil {
+			c.AbortWithStatusJSON(401, gin.H{"code": "mesh.device_not_trusted", "message": err.Error()})
+			return
+		}
+
 		principal := DeviceRuntimePrincipal{
 			CredentialID: cred.ID,
-			UserID:       cred.UserID,
+			SpaceID:      cred.SpaceID,
 			DeviceID:     cred.DeviceID,
 			RuntimeID:    cred.RuntimeID,
 			ExpiresAt:    cred.ExpiresAt,
@@ -113,7 +123,7 @@ func BootstrapTicketAuthMiddleware(svc *Service, validator BootstrapTicketValida
 		}
 
 		principal := DeviceRuntimePrincipal{
-			UserID:    snapshot.UserID,
+			SpaceID:   snapshot.SpaceID,
 			DeviceID:  snapshot.DeviceID,
 			RuntimeID: snapshot.RuntimeID,
 			ExpiresAt: snapshot.ExpiresAt,
@@ -148,7 +158,7 @@ func GinPrincipal(c *gin.Context) (DeviceRuntimePrincipal, bool) {
 	return p, ok
 }
 
-func DeviceAuthCredentialWS(svc *Service, handler WSHandler) gin.HandlerFunc {
+func DeviceAuthCredentialWS(svc *Service, devices *host_registry.Registry, handler WSHandler) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		header := c.GetHeader("Authorization")
 		var rawCred string
@@ -166,9 +176,18 @@ func DeviceAuthCredentialWS(svc *Service, handler WSHandler) gin.HandlerFunc {
 			return
 		}
 
+		if devices == nil {
+			c.AbortWithStatusJSON(500, gin.H{"code": "mesh.trust_registry_unavailable", "message": "device trust registry unavailable"})
+			return
+		}
+		if err := devices.RequireTrustedDevice(c.Request.Context(), cred.SpaceID, cred.DeviceID); err != nil {
+			c.AbortWithStatusJSON(401, gin.H{"code": "mesh.device_not_trusted", "message": err.Error()})
+			return
+		}
+
 		principal := DeviceRuntimePrincipal{
 			CredentialID: cred.ID,
-			UserID:       cred.UserID,
+			SpaceID:      cred.SpaceID,
 			DeviceID:     cred.DeviceID,
 			RuntimeID:    cred.RuntimeID,
 		}

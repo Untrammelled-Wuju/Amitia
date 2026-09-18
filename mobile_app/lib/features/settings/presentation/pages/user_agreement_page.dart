@@ -21,7 +21,7 @@ class UserAgreementPage extends ConsumerWidget {
     final license = (about?['license'] ?? 'AGPL-3.0-only').toString();
     final sections = <(String, IconData, String)>[
       ('服务使用', Icons.check_circle_outline, '你可以在本地模式或自己配置的 Cloud Core 中使用 Amitia。具体可用能力取决于当前部署、模型、扩展和设备运行状态。'),
-      ('账号与设备', Icons.person_outline, '账号会用于鉴权以及云端设备归属。设备绑定、登录会话和凭据管理应通过应用提供的真实接口完成。'),
+      ('个人空间与设备', Icons.person_outline, 'Amitia 不创建产品账号。Space ID 用于数据归属，Device ID / Runtime ID 用于执行路由，云端设备通过一次性配对签发的 Device Credential 鉴权。'),
       ('扩展与工具', Icons.extension_outlined, '扩展包、MCP、Agent Skills 及其它工具可能访问你授权的数据或设备能力。启用前应确认来源和权限范围。'),
       ('开源许可', Icons.code_outlined, '当前后端返回的开源许可为 $license。第三方依赖分别遵循各自许可证。'),
     ];

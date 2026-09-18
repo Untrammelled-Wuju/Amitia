@@ -67,24 +67,27 @@ func NewCloudRuntimeWithHubAndSessions(
 	credRepo := credential.NewRepository(db)
 	credSvc := credential.NewService(credRepo, DeviceCredentialTTL)
 
-	exchangeFn := func(ctx context.Context, tx *sql.Tx, userID runtimeidentity.UserID, deviceID runtimeidentity.DeviceID, runtimeID runtimeidentity.RuntimeID, now time.Time, credHash string, expires time.Time) (string, string, error) {
+	exchangeFn := func(ctx context.Context, tx *sql.Tx, spaceID runtimeidentity.SpaceID, deviceID runtimeidentity.DeviceID, runtimeID runtimeidentity.RuntimeID, now time.Time, expires time.Time) (string, string, error) {
+		rawCred, err := credential.GenerateRawCredential()
+		if err != nil {
+			return "", "", err
+		}
 		credID := uuid.New().String()
 		newCred := &credential.DeviceRuntimeCredential{
 			ID:             credID,
-			UserID:         userID,
+			SpaceID:        spaceID,
 			DeviceID:       deviceID,
 			RuntimeID:      runtimeID,
-			CredentialHash: credHash,
+			CredentialHash: credential.HashRawCredential(rawCred),
 			Status:         credential.CredentialActive,
 			CreatedAt:      now,
 			ExpiresAt:      expires,
 			LastUsedAt:     now,
 			Revision:       1,
 		}
-		if err := credRepo.ExchangeAtomicTx(ctx, tx, userID, deviceID, runtimeID, now, newCred); err != nil {
+		if err := credRepo.ExchangeAtomicTx(ctx, tx, spaceID, deviceID, runtimeID, now, newCred); err != nil {
 			return "", "", err
 		}
-		rawCred := credential.HashRawCredential(credHash)
 		return credID, rawCred, nil
 	}
 
@@ -222,7 +225,7 @@ func (rt *Runtime) autoRecoverCredential(handler *agent.LocalHandler) {
 	meshClient := agent.NewMeshClient(agent.MeshClientConfig{
 		CloudBaseURL:      cred.CloudBaseUrl,
 		Credential:        cred.Credential,
-		UserID:            cred.UserID,
+		SpaceID:           cred.SpaceID,
 		Identity:          identity,
 		Cursor:            cursor,
 		RuntimeDispatcher: dispatcher,
@@ -243,13 +246,13 @@ func (rt *Runtime) autoRecoverCredential(handler *agent.LocalHandler) {
 // on the device.
 func (rt *Runtime) InvokeDeviceHandler(
 	ctx context.Context,
-	userID runtimeidentity.UserID,
+	spaceID runtimeidentity.SpaceID,
 	targetDeviceID runtimeidentity.DeviceID,
 	handlerName string,
 	input []byte,
 	deadline time.Duration,
 ) (capability.UnifiedToolResult, error) {
-	return rt.InvokeDeviceHandlerWithRuntimeType(ctx, userID, targetDeviceID, capability.RuntimeTypeGameHost, handlerName, input, deadline)
+	return rt.InvokeDeviceHandlerWithRuntimeType(ctx, spaceID, targetDeviceID, capability.RuntimeTypeGameHost, handlerName, input, deadline)
 }
 
 // InvokeDeviceHandlerWithRuntimeType is the generic cloud-to-device control
@@ -257,7 +260,7 @@ func (rt *Runtime) InvokeDeviceHandler(
 // subsystems such as Desktop Pet Behavior to use their own runtime identity.
 func (rt *Runtime) InvokeDeviceHandlerWithRuntimeType(
 	ctx context.Context,
-	userID runtimeidentity.UserID,
+	spaceID runtimeidentity.SpaceID,
 	targetDeviceID runtimeidentity.DeviceID,
 	runtimeType capability.RuntimeType,
 	handlerName string,
@@ -267,7 +270,7 @@ func (rt *Runtime) InvokeDeviceHandlerWithRuntimeType(
 	if rt == nil || rt.Hub == nil || rt.PendingInvocations == nil {
 		return capability.UnifiedToolResult{}, fmt.Errorf("devicemesh: invocation runtime unavailable")
 	}
-	conn, ok := rt.Hub.GetByDevice(userID, targetDeviceID)
+	conn, ok := rt.Hub.GetByDevice(spaceID, targetDeviceID)
 	if !ok || conn == nil {
 		return capability.UnifiedToolResult{}, fmt.Errorf("devicemesh: target device is offline")
 	}
@@ -285,7 +288,7 @@ func (rt *Runtime) InvokeDeviceHandlerWithRuntimeType(
 			HandlerName: handlerName,
 		},
 		Placement:    capability.ProviderPlacementDevice,
-		UserID:       userID,
+		SpaceID:      spaceID,
 		DeviceID:     targetDeviceID,
 		RuntimeID:    conn.RuntimeID,
 		RemoteDevice: true,
@@ -295,7 +298,7 @@ func (rt *Runtime) InvokeDeviceHandlerWithRuntimeType(
 		Binding: route.Binding,
 		Invocation: capability.ToolInvocationContext{
 			InvocationID:     invocationID,
-			UserID:           string(userID),
+			SpaceID:          string(spaceID),
 			DeadlineDuration: deadline,
 		},
 		Input: input,

@@ -38,7 +38,7 @@ func (d *defaultMissingDetector) DetectFromError(ctx context.Context, err error,
 	if errors.As(err, &missingErr) {
 		return &CapabilityResumeContext{
 			ConversationID: invocation.ConversationID,
-			UserID:         invocation.UserID,
+			SpaceID:        invocation.SpaceID,
 			ExecContext:    invocation.ExecContext,
 			CapabilityID:   missingErr.CapabilityID,
 			State:          ResumePending,
@@ -77,7 +77,7 @@ func (d *defaultMissingDetector) DetectFromResolution(ctx context.Context, failu
 
 	return &CapabilityResumeContext{
 		ConversationID: invocation.ConversationID,
-		UserID:         invocation.UserID,
+		SpaceID:        invocation.SpaceID,
 		ExecContext:    invocation.ExecContext,
 		CapabilityID:   capID,
 		State:          ResumePending,
@@ -122,9 +122,9 @@ func ValidateResumeToken(token string) bool {
 
 // GenerateIdempotencyKey produces a deterministic idempotency key for a given
 // acquisition request and candidate. The format is:
-// base64url(sha256(capabilityId|userID|candidateID))
+// base64url(sha256(capabilityId|spaceID|candidateID))
 func GenerateIdempotencyKey(request AcquisitionRequest, candidateID string) string {
-	data := string(request.CapabilityID) + "|" + string(request.UserID) + "|" + candidateID
+	data := string(request.CapabilityID) + "|" + string(request.SpaceID) + "|" + candidateID
 	h := sha256.Sum256([]byte(data))
 	return base64.RawURLEncoding.EncodeToString(h[:])
 }

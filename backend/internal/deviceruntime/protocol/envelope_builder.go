@@ -37,7 +37,7 @@ func BuildEnvelope(input EnvelopeInput) (*Envelope, error) {
 		MessageID:            input.MessageID,
 		CorrelationID:        input.CorrelationID,
 		CausationID:          input.CausationID,
-		UserID:               input.Identity.UserID,
+		SpaceID:              input.Identity.SpaceID,
 		DeviceID:             input.Identity.DeviceID,
 		RuntimeID:            input.Identity.RuntimeID,
 		RuntimeSessionID:     input.Identity.RuntimeSessionID,

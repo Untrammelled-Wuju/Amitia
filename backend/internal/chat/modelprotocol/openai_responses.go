@@ -31,12 +31,12 @@ func (a *OpenAIResponsesAdapter) Generate(ctx context.Context, cfg ProviderConfi
 	baseURL := strings.TrimRight(cfg.BaseURL, "/")
 
 	requestBody := map[string]interface{}{
-		"model":            cfg.ModelName,
-		"input":            a.buildInput(req),
-		"tools":            a.buildTools(req.Tools),
+		"model":             cfg.ModelName,
+		"input":             a.buildInput(req),
+		"tools":             a.buildTools(req.Tools),
 		"max_output_tokens": cfg.MaxOutputTokens,
-		"store":            false,
-		"stream":           false,
+		"store":             false,
+		"stream":            false,
 	}
 
 	if len(req.Instructions) > 0 {
@@ -88,12 +88,12 @@ func (a *OpenAIResponsesAdapter) Stream(ctx context.Context, cfg ProviderConfig,
 	baseURL := strings.TrimRight(cfg.BaseURL, "/")
 
 	requestBody := map[string]interface{}{
-		"model":            cfg.ModelName,
-		"input":            a.buildInput(req),
-		"tools":            a.buildTools(req.Tools),
+		"model":             cfg.ModelName,
+		"input":             a.buildInput(req),
+		"tools":             a.buildTools(req.Tools),
 		"max_output_tokens": cfg.MaxOutputTokens,
-		"store":            false,
-		"stream":           true,
+		"store":             false,
+		"stream":            true,
 	}
 
 	if len(req.Instructions) > 0 {
@@ -151,14 +151,14 @@ func (a *OpenAIResponsesAdapter) buildInput(req ModelRequest) []map[string]inter
 				})
 			case ContentTypeImage:
 				content = append(content, map[string]interface{}{
-					"type": "input_image",
+					"type":      "input_image",
 					"image_url": part.ResourceURI,
-					"detail":   part.Detail,
+					"detail":    part.Detail,
 				})
 			case ContentTypeFile:
 				content = append(content, map[string]interface{}{
-					"type":     "input_file",
-					"filename": part.Filename,
+					"type":      "input_file",
+					"filename":  part.Filename,
 					"file_data": part.ResourceURI,
 				})
 			}
@@ -170,9 +170,9 @@ func (a *OpenAIResponsesAdapter) buildInput(req ModelRequest) []map[string]inter
 
 	for _, tr := range req.ToolResults {
 		items = append(items, map[string]interface{}{
-			"type":          "function_call_output",
-			"call_id":       tr.CallID,
-			"output":        tr.Output,
+			"type":    "function_call_output",
+			"call_id": tr.CallID,
+			"output":  tr.Output,
 		})
 	}
 
@@ -197,17 +197,17 @@ func (a *OpenAIResponsesAdapter) parseResponse(respBytes []byte) (*ModelResult, 
 	var result struct {
 		ID     string `json:"id"`
 		Output []struct {
-			Type            string `json:"type"`
-			Status          string `json:"status"`
-			Role            string `json:"role"`
-			Content         []struct {
+			Type    string `json:"type"`
+			Status  string `json:"status"`
+			Role    string `json:"role"`
+			Content []struct {
 				Type string `json:"type"`
 				Text string `json:"text"`
 			} `json:"content"`
-			CallID  string `json:"call_id"`
-			Name    string `json:"name"`
+			CallID    string `json:"call_id"`
+			Name      string `json:"name"`
 			Arguments string `json:"arguments"`
-			Summary string `json:"summary"`
+			Summary   string `json:"summary"`
 		} `json:"output"`
 		Usage struct {
 			InputTokens  int `json:"input_tokens"`
@@ -296,17 +296,17 @@ func (a *OpenAIResponsesAdapter) parseStream(body io.Reader, sink ModelEventSink
 				}
 
 				var event struct {
-					Type          string `json:"type"`
-					SequenceNumber int   `json:"sequence_number"`
-					Delta         string `json:"delta"`
-					OutputIndex   int    `json:"output_index"`
-					ContentIndex  int    `json:"content_index"`
-					ItemID        string `json:"item_id"`
-					Name          string `json:"name"`
-					Arguments     string `json:"arguments"`
-					Status        string `json:"status"`
-					Text          string `json:"text"`
-					Summary       string `json:"summary"`
+					Type           string `json:"type"`
+					SequenceNumber int    `json:"sequence_number"`
+					Delta          string `json:"delta"`
+					OutputIndex    int    `json:"output_index"`
+					ContentIndex   int    `json:"content_index"`
+					ItemID         string `json:"item_id"`
+					Name           string `json:"name"`
+					Arguments      string `json:"arguments"`
+					Status         string `json:"status"`
+					Text           string `json:"text"`
+					Summary        string `json:"summary"`
 				}
 
 				if err := json.Unmarshal([]byte(content), &event); err != nil {

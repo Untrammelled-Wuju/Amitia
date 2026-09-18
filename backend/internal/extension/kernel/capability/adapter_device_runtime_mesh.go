@@ -19,7 +19,7 @@ type MeshRuntimePorts struct {
 }
 
 type meshSessionLookup interface {
-	GetActiveSession(ctx context.Context, userID runtimeidentity.UserID, deviceID runtimeidentity.DeviceID, runtimeID runtimeidentity.RuntimeID) (deviceruntime.RuntimeSession, error)
+	GetActiveSession(ctx context.Context, spaceID runtimeidentity.SpaceID, deviceID runtimeidentity.DeviceID, runtimeID runtimeidentity.RuntimeID) (deviceruntime.RuntimeSession, error)
 }
 
 type MeshDeviceRuntimeInvocationPort struct {
@@ -44,7 +44,7 @@ func (p *MeshDeviceRuntimeInvocationPort) Execute(ctx context.Context, request D
 	}
 
 	route := request.Route
-	sessionID, generation, ok := p.resolveSession(ctx, route.UserID, route.DeviceID, route.RuntimeID)
+	sessionID, generation, ok := p.resolveSession(ctx, route.SpaceID, route.DeviceID, route.RuntimeID)
 	if !ok {
 		return UnifiedToolResult{
 			InvocationID: request.Invocation.InvocationID,
@@ -84,7 +84,7 @@ func (p *MeshDeviceRuntimeInvocationPort) Execute(ctx context.Context, request D
 		Handler:              route.Binding.HandlerName,
 		Input:                input,
 		ProviderID:           route.Binding.ProviderID,
-		UserID:               route.UserID,
+		SpaceID:              route.SpaceID,
 		DeviceID:             route.DeviceID,
 		RuntimeID:            route.RuntimeID,
 		RuntimeSessionID:     sessionID,
@@ -162,7 +162,7 @@ func (p *MeshDeviceRuntimeInvocationPort) Health(ctx context.Context, route Runt
 	if p.ports == nil || p.ports.Hub == nil {
 		return HealthUnknown
 	}
-	sessionID, generation, ok := p.resolveSession(ctx, route.UserID, route.DeviceID, route.RuntimeID)
+	sessionID, generation, ok := p.resolveSession(ctx, route.SpaceID, route.DeviceID, route.RuntimeID)
 	if !ok {
 		return HealthUnhealthy
 	}
@@ -180,7 +180,7 @@ func (p *MeshDeviceRuntimeInvocationPort) Cancel(ctx context.Context, request De
 		return ErrRuntimeCancellationUnsupported{}
 	}
 	route := request.Route
-	sessionID, generation, ok := p.resolveSession(ctx, route.UserID, route.DeviceID, route.RuntimeID)
+	sessionID, generation, ok := p.resolveSession(ctx, route.SpaceID, route.DeviceID, route.RuntimeID)
 	if !ok {
 		if p.ports.PendingInvocations != nil {
 			p.ports.PendingInvocations.Cancel(request.Invocation.InvocationID, string(reason.Code))
@@ -208,9 +208,9 @@ func (p *MeshDeviceRuntimeInvocationPort) Cancel(ctx context.Context, request De
 	return nil
 }
 
-func (p *MeshDeviceRuntimeInvocationPort) resolveSession(ctx context.Context, userID runtimeidentity.UserID, deviceID runtimeidentity.DeviceID, runtimeID runtimeidentity.RuntimeID) (runtimeidentity.RuntimeSessionID, int64, bool) {
+func (p *MeshDeviceRuntimeInvocationPort) resolveSession(ctx context.Context, spaceID runtimeidentity.SpaceID, deviceID runtimeidentity.DeviceID, runtimeID runtimeidentity.RuntimeID) (runtimeidentity.RuntimeSessionID, int64, bool) {
 	if p.ports.SessionLookup != nil {
-		session, err := p.ports.SessionLookup.GetActiveSession(ctx, userID, deviceID, runtimeID)
+		session, err := p.ports.SessionLookup.GetActiveSession(ctx, spaceID, deviceID, runtimeID)
 		if err != nil || session.ID == "" {
 			return "", 0, false
 		}
@@ -219,7 +219,7 @@ func (p *MeshDeviceRuntimeInvocationPort) resolveSession(ctx context.Context, us
 		}
 		return session.ID, session.ConnectionGeneration, true
 	}
-	conn, ok := p.ports.Hub.GetByRuntime(userID, deviceID, runtimeID)
+	conn, ok := p.ports.Hub.GetByRuntime(spaceID, deviceID, runtimeID)
 	if !ok {
 		return "", 0, false
 	}

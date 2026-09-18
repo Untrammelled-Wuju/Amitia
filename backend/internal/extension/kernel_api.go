@@ -1,13 +1,15 @@
 package extension
 
 import (
-	"fmt"
+	"context"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	kernelruntime "github.com/u-ai/backend/internal/extension/kernel"
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
+	"github.com/u-ai/backend/internal/extension/kernel/persistence/sqlite"
 )
 
 type KernelAPI struct {
@@ -32,7 +34,22 @@ func (api *KernelAPI) RegisterRoutes(group *gin.RouterGroup) {
 	kernel.POST("/extensions/resume-uninstall", api.resumeUninstall)
 	kernel.POST("/extensions/pause", api.pause)
 	kernel.POST("/extensions/rollback", api.rollback)
+	kernel.POST("/extensions/permissions", api.updateExtensionPermission)
 	kernel.GET("/status", api.status)
+}
+
+type extensionPermissionView struct {
+	Name     string `json:"name"`
+	Scope    string `json:"scope,omitempty"`
+	Reason   string `json:"reason,omitempty"`
+	Required bool   `json:"required"`
+	Granted  bool   `json:"granted"`
+}
+
+type updateExtensionPermissionRequest struct {
+	ExtensionID string `json:"extensionId" binding:"required"`
+	Permission  string `json:"permission" binding:"required"`
+	Granted     bool   `json:"granted"`
 }
 
 type publicUninstallPreviewRequest struct {
@@ -71,6 +88,7 @@ type publicUninstallRequest struct {
 	ScopeType         string `json:"scopeType"`
 	ScopeID           string `json:"scopeId"`
 	ConfirmationToken string `json:"confirmationToken" binding:"required"`
+	IdempotencyKey    string `json:"idempotencyKey"`
 }
 
 type publicResumeUninstallRequest struct {
@@ -112,23 +130,54 @@ func (api *KernelAPI) listExtensions(c *gin.Context) {
 		return
 	}
 	type extensionItem struct {
+		Name           string    `json:"name"`
 		ExtensionID    string    `json:"extensionId"`
 		Version        string    `json:"version"`
 		InstallationID string    `json:"installationId"`
 		State          string    `json:"state"`
 		Enablement     string    `json:"enablement"`
+		SystemManaged  bool      `json:"systemManaged"`
 		InstalledAt    time.Time `json:"installedAt"`
 		UpdatedAt      time.Time `json:"updatedAt"`
 		Generation     int64     `json:"generation"`
 	}
+	defsByExt := map[domain.ExtensionID][]domain.ExtensionDefinition{}
+	if defs, err := container.DefinitionRepository.ListExtensions(ctx); err == nil {
+		for _, def := range defs {
+			defsByExt[def.ID] = append(defsByExt[def.ID], def)
+		}
+	}
+	resolveName := func(inst domain.ExtensionInstallation) string {
+		defs := defsByExt[inst.ExtensionID]
+		fallback := ""
+		for _, def := range defs {
+			if fallback == "" {
+				fallback = def.Name.Default
+			}
+			if def.Version == inst.InstalledVersion {
+				return def.Name.Default
+			}
+		}
+		return fallback
+	}
+	resolveSystemManaged := func(inst domain.ExtensionInstallation) bool {
+		for _, def := range defsByExt[inst.ExtensionID] {
+			if value, ok := def.Metadata["system.managed"].(bool); ok && value {
+				return true
+			}
+		}
+		return strings.HasPrefix(string(inst.ExtensionID), "com.amitia.builtin.")
+	}
 	items := make([]extensionItem, 0, len(insts))
 	for _, inst := range insts {
 		items = append(items, extensionItem{
+			Name:           resolveName(inst),
 			ExtensionID:    string(inst.ExtensionID),
 			Version:        inst.InstalledVersion.String(),
 			InstallationID: inst.InstallationID,
-			State:          string(inst.InstallationState),
+			State:          installationStateForView(inst),
 			Enablement:     string(inst.EnablementState),
+			SystemManaged:  resolveSystemManaged(inst),
 			InstalledAt:    inst.InstalledAt,
 			UpdatedAt:      inst.UpdatedAt,
 			Generation:     inst.Generation,
@@ -158,6 +207,10 @@ func (api *KernelAPI) getExtension(c *gin.Context) {
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "extension not found"})
 		return
+	}
+	name := ""
+	if def, err := container.DefinitionRepository.GetExtension(ctx, inst.ExtensionID, inst.InstalledVersion); err == nil {
+		name = def.Name.Default
 	}
 
 	modules, _ := container.ModuleRepository.ListModules(ctx, domain.ExtensionID(extID))
@@ -210,18 +263,129 @@ func (api *KernelAPI) getExtension(c *gin.Context) {
 		})
 	}
 
+	permissionList := make([]extensionPermissionView, 0)
+	if container.PermissionRepository != nil {
+		requirements, requirementsErr := container.PermissionRepository.ListRequirements(ctx, inst.ExtensionID)
+		grants, grantsErr := container.PermissionRepository.ListGrants(ctx, inst.ExtensionID)
+		if requirementsErr == nil && grantsErr == nil {
+			grantStates := make(map[string]string, len(grants))
+			for _, grant := range grants {
+				grantStates[grant.PermissionName] = grant.State
+			}
+			for _, requirement := range requirements {
+				permissionList = append(permissionList, extensionPermissionView{
+					Name:     requirement.PermissionName,
+					Scope:    requirement.Scope,
+					Reason:   requirement.Reason,
+					Required: requirement.Required,
+					Granted:  grantStates[requirement.PermissionName] == "granted",
+				})
+			}
+		}
+	}
+
 	c.JSON(http.StatusOK, gin.H{
+		"name":           name,
 		"extensionId":    string(inst.ExtensionID),
 		"version":        inst.InstalledVersion.String(),
 		"installationId": inst.InstallationID,
-		"state":          string(inst.InstallationState),
+		"state":          installationStateForView(inst),
 		"enablement":     string(inst.EnablementState),
+		"systemManaged":  isSystemManagedExtension(ctx, container, string(inst.ExtensionID)),
 		"installedAt":    inst.InstalledAt,
 		"updatedAt":      inst.UpdatedAt,
 		"generation":     inst.Generation,
 		"modules":        moduleList,
 		"contributions":  contribList,
+		"permissions":    permissionList,
 	})
+}
+
+func (api *KernelAPI) updateExtensionPermission(c *gin.Context) {
+	if api.runtime == nil || api.runtime.Kernel == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "kernel unavailable"})
+		return
+	}
+	container := api.runtime.Kernel.Container()
+	if container == nil || container.PermissionRepository == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "permission repository unavailable"})
+		return
+	}
+	var req updateExtensionPermissionRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	extensionID := strings.TrimSpace(req.ExtensionID)
+	permissionID := strings.TrimSpace(req.Permission)
+	if extensionID == "" || permissionID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "extensionId and permission are required"})
+		return
+	}
+	ctx := c.Request.Context()
+	requirements, err := container.PermissionRepository.ListRequirements(ctx, domain.ExtensionID(extensionID))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	var target *extensionPermissionView
+	for _, requirement := range requirements {
+		if requirement.PermissionName != permissionID {
+			continue
+		}
+		target = &extensionPermissionView{
+			Name:     requirement.PermissionName,
+			Scope:    requirement.Scope,
+			Reason:   requirement.Reason,
+			Required: requirement.Required,
+			Granted:  req.Granted,
+		}
+		break
+	}
+	if target == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "declared permission not found"})
+		return
+	}
+	state := "revoked"
+	if req.Granted {
+		state = "granted"
+	}
+	if err := container.PermissionRepository.PutGrant(ctx, sqlite.PermissionGrant{
+		ExtensionID:    domain.ExtensionID(extensionID),
+		PermissionName: permissionID,
+		State:          state,
+		GrantedAt:      time.Now().UTC(),
+	}); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, target)
+}
+
+func installationStateForView(inst domain.ExtensionInstallation) string {
+	if inst.InstallationState == "" {
+		return string(domain.InstallationStateInstalled)
+	}
+	return string(inst.InstallationState)
+}
+
+func isSystemManagedExtension(ctx context.Context, container *kernelruntime.Container, extensionID string) bool {
+	if strings.HasPrefix(extensionID, "com.amitia.builtin.") {
+		return true
+	}
+	if container == nil || container.DefinitionRepository == nil || container.InstallationRepository == nil {
+		return false
+	}
+	inst, err := container.InstallationRepository.GetInstallation(ctx, domain.ExtensionID(extensionID))
+	if err != nil {
+		return false
+	}
+	def, err := container.DefinitionRepository.GetExtension(ctx, domain.ExtensionID(extensionID), inst.InstalledVersion)
+	if err != nil {
+		return false
+	}
+	value, _ := def.Metadata["system.managed"].(bool)
+	return value
 }
 
 func (api *KernelAPI) previewInstall(c *gin.Context) {
@@ -233,10 +397,7 @@ func (api *KernelAPI) install(c *gin.Context) {
 }
 
 func kernelAPIUser(c *gin.Context) string {
-	if value, exists := c.Get(authenticatedUserKey); exists {
-		return fmt.Sprint(value)
-	}
-	return ""
+	return authenticatedSpaceID(c)
 }
 
 func kernelAPIScopeType(c *gin.Context) string {
@@ -311,25 +472,16 @@ func (api *KernelAPI) previewUninstall(c *gin.Context) {
 		scopeType = "global"
 	}
 	ctx := c.Request.Context()
+	if isSystemManagedExtension(ctx, api.runtime.Kernel.Container(), req.ExtensionID) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "系统插件不可卸载", "code": "SYSTEM_EXTENSION_UNINSTALL_FORBIDDEN"})
+		return
+	}
 	kr := api.runtime.Kernel
 	preview, err := kr.PreviewPackageUninstall(ctx, req.ExtensionID, kernelAPIUser(c), scopeType, req.ScopeID)
 	if err != nil {
 		status, code, msg := kernelruntime.PackageErrorResponse(err)
 		c.JSON(status, gin.H{"error": msg, "code": code})
 		return
-	}
-	requiredConfirmations := []string{}
-	switch preview.ArtifactPolicy {
-	case kernelruntime.ArtifactPolicyDeleteArtifact:
-		requiredConfirmations = []string{"confirm.uninstall.delete"}
-	case kernelruntime.ArtifactPolicyRetainArtifact:
-		requiredConfirmations = []string{"confirm.uninstall.retain"}
-	case kernelruntime.ArtifactPolicyRetainForRollback:
-		requiredConfirmations = []string{"confirm.uninstall.retain_for_rollback"}
-	case kernelruntime.ArtifactPolicyRetainForExport:
-		requiredConfirmations = []string{"confirm.uninstall.retain_for_export"}
-	default:
-		requiredConfirmations = []string{"confirm.uninstall.delete"}
 	}
 	resp := publicUninstallPreviewResponse{
 		ExtensionID:             preview.ExtensionID,
@@ -341,7 +493,7 @@ func (api *KernelAPI) previewUninstall(c *gin.Context) {
 		PreviewHash:             preview.PreviewHash,
 		SecurityPolicyHash:      preview.SecurityPolicyHash,
 		SnapshotRequirementHash: preview.SnapshotRequirementHash,
-		RequiredConfirmations:   requiredConfirmations,
+		RequiredConfirmations:   kernelruntime.RequiredUninstallConfirmations(preview),
 	}
 	c.JSON(http.StatusOK, resp)
 }
@@ -361,10 +513,14 @@ func (api *KernelAPI) confirmUninstall(c *gin.Context) {
 		scopeType = "global"
 	}
 	ctx := c.Request.Context()
+	if isSystemManagedExtension(ctx, api.runtime.Kernel.Container(), req.ExtensionID) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "系统插件不可卸载", "code": "SYSTEM_EXTENSION_UNINSTALL_FORBIDDEN"})
+		return
+	}
 	kr := api.runtime.Kernel
 	result, err := kr.ConfirmPackageUninstall(ctx, kernelruntime.ConfirmPackageUninstallRequest{
 		ExtensionID:   req.ExtensionID,
-		UserID:        kernelAPIUser(c),
+		SpaceID:       kernelAPIUser(c),
 		ScopeType:     scopeType,
 		ScopeID:       req.ScopeID,
 		Confirmations: req.Confirmations,
@@ -391,7 +547,18 @@ func (api *KernelAPI) uninstall(c *gin.Context) {
 	if scopeType == "" {
 		scopeType = "global"
 	}
-	op, err := api.runtime.Kernel.ExecutePackageUninstall(c.Request.Context(), kernelruntime.ExecutePackageUninstallRequest{ExtensionID: req.ExtensionID, UserID: kernelAPIUser(c), ScopeType: scopeType, ScopeID: req.ScopeID, ConfirmationToken: req.ConfirmationToken})
+	if isSystemManagedExtension(c.Request.Context(), api.runtime.Kernel.Container(), req.ExtensionID) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "系统插件不可卸载", "code": "SYSTEM_EXTENSION_UNINSTALL_FORBIDDEN"})
+		return
+	}
+	idempotencyKey := strings.TrimSpace(req.IdempotencyKey)
+	if idempotencyKey == "" {
+		idempotencyKey = strings.TrimSpace(c.GetHeader("X-Idempotency-Key"))
+	}
+	if idempotencyKey == "" {
+		idempotencyKey = strings.TrimSpace(c.GetHeader("Idempotency-Key"))
+	}
+	op, err := api.runtime.Kernel.ExecutePackageUninstall(c.Request.Context(), kernelruntime.ExecutePackageUninstallRequest{ExtensionID: req.ExtensionID, SpaceID: kernelAPIUser(c), ScopeType: scopeType, ScopeID: req.ScopeID, ConfirmationToken: req.ConfirmationToken, IdempotencyKey: idempotencyKey})
 	if err != nil {
 		status, code, msg := kernelruntime.PackageErrorResponse(err)
 		c.JSON(status, gin.H{"error": msg, "code": code})
@@ -416,7 +583,7 @@ func (api *KernelAPI) resumeUninstall(c *gin.Context) {
 		c.JSON(status, gin.H{"error": msg, "code": code})
 		return
 	}
-	op, err := api.runtime.Kernel.ExecutePackageUninstall(c.Request.Context(), kernelruntime.ExecutePackageUninstallRequest{ExtensionID: claims.ExtensionID, UserID: claims.UserID, ScopeType: claims.ScopeType, ScopeID: claims.ScopeID, ConfirmationToken: req.ConfirmationToken})
+	op, err := api.runtime.Kernel.ExecutePackageUninstall(c.Request.Context(), kernelruntime.ExecutePackageUninstallRequest{ExtensionID: claims.ExtensionID, SpaceID: claims.SpaceID, ScopeType: claims.ScopeType, ScopeID: claims.ScopeID, ConfirmationToken: req.ConfirmationToken})
 	if err != nil {
 		status, code, msg := kernelruntime.PackageErrorResponse(err)
 		c.JSON(status, gin.H{"error": msg, "code": code})
@@ -456,11 +623,11 @@ func (api *KernelAPI) rollback(c *gin.Context) {
 		return
 	}
 	var body struct {
-		ID                 string `json:"id"`
-		Version            string `json:"version"`
-		ScopeType          string `json:"scopeType"`
-		ScopeID            string `json:"scopeId"`
-		ConfirmationToken  string `json:"confirmationToken"`
+		ID                string `json:"id"`
+		Version           string `json:"version"`
+		ScopeType         string `json:"scopeType"`
+		ScopeID           string `json:"scopeId"`
+		ConfirmationToken string `json:"confirmationToken"`
 	}
 	_ = c.ShouldBindJSON(&body)
 	extID := c.Query("id")

@@ -49,6 +49,13 @@ func TestPackageFinalGateReportsExactReleaseMetrics(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = container.Close() })
+	var initialInstallationMismatches int64
+	if err := container.Store.DB().QueryRowContext(ctx, `SELECT COUNT(*) FROM extension_installations i
+		LEFT JOIN extension_definitions d ON d.extension_id = i.extension_id AND d.version = i.version
+		LEFT JOIN extension_package_artifacts a ON a.artifact_id = json_extract(i.installation_json, '$.packageId')
+		WHERE i.installed = 1 AND `+nonBuiltinInstallationSQL+` AND (d.id IS NULL OR a.artifact_id IS NULL OR a.extension_id <> i.extension_id OR a.version <> i.version OR COALESCE(json_extract(i.installation_json, '$.installedVersion'), '') <> i.version)`).Scan(&initialInstallationMismatches); err != nil {
+		t.Fatal(err)
+	}
 	artifact := PackageArtifact{
 		ArtifactID: "artifact-final-gate", ExtensionID: "dev.local.test/final-gate", Version: "1.0.0",
 		ArchiveHash: "sha256:missing", ManifestHash: "manifest", ContentTreeHash: "tree", ArtifactHash: "artifact",
@@ -85,19 +92,19 @@ func TestPackageFinalGateReportsExactReleaseMetrics(t *testing.T) {
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	for _, operation := range []PackageOperationRecord{
-		{OperationID: "uninstall-restore-failed", TraceID: "trace-1", UserID: "user", ScopeType: "global", ExtensionID: artifact.ExtensionID, OperationType: "uninstall", Status: "requires_recovery", CurrentStep: "restore_quarantine", ArtifactID: artifact.ArtifactID, ConfirmationsJSON: "{}", ErrorDetail: "restore quarantined installation failed", StartedAt: now, UpdatedAt: now},
-		{OperationID: "ambiguous-recovery", TraceID: "trace-2", UserID: "user", ScopeType: "global", ExtensionID: artifact.ExtensionID, OperationType: "install", Status: "requires_recovery", CurrentStep: "recovery_manual", ArtifactID: artifact.ArtifactID, ConfirmationsJSON: "{}", ErrorDetail: "consistency could not be proven", StartedAt: now, UpdatedAt: now},
-		{OperationID: "pending-operation", TraceID: "trace-3", UserID: "user", ScopeType: "global", ExtensionID: artifact.ExtensionID, OperationType: "install", Status: "pending", CurrentStep: "pending", ArtifactID: artifact.ArtifactID, ConfirmationsJSON: "{}", StartedAt: now, UpdatedAt: now},
-		{OperationID: "created-operation", TraceID: "trace-4", UserID: "user", ScopeType: "global", ExtensionID: artifact.ExtensionID, OperationType: "install", Status: "created", CurrentStep: "created", ArtifactID: artifact.ArtifactID, ConfirmationsJSON: "{}", StartedAt: now, UpdatedAt: now},
-		{OperationID: "in-progress-operation", TraceID: "trace-5", UserID: "user", ScopeType: "global", ExtensionID: artifact.ExtensionID, OperationType: "install", Status: "in_progress", CurrentStep: "commit", ArtifactID: artifact.ArtifactID, ConfirmationsJSON: "{}", StartedAt: now, UpdatedAt: now},
-		{OperationID: "compensating-operation", TraceID: "trace-6", UserID: "user", ScopeType: "global", ExtensionID: artifact.ExtensionID, OperationType: "install", Status: "compensating", CurrentStep: "compensate", ArtifactID: artifact.ArtifactID, ConfirmationsJSON: "{}", StartedAt: now, UpdatedAt: now},
-		{OperationID: "retrying-operation", TraceID: "trace-7", UserID: "user", ScopeType: "global", ExtensionID: artifact.ExtensionID, OperationType: "install", Status: "retrying", CurrentStep: "retry", ArtifactID: artifact.ArtifactID, ConfirmationsJSON: "{}", StartedAt: now, UpdatedAt: now},
-		{OperationID: "cancel-requested-operation", TraceID: "trace-8", UserID: "user", ScopeType: "global", ExtensionID: artifact.ExtensionID, OperationType: "install", Status: "cancel_requested", CurrentStep: "cancel", ArtifactID: artifact.ArtifactID, ConfirmationsJSON: "{}", StartedAt: now, UpdatedAt: now},
-		{OperationID: "manual-recovery-operation", TraceID: "trace-9", UserID: "user", ScopeType: "global", ExtensionID: artifact.ExtensionID, OperationType: "install", Status: "manual_recovery", CurrentStep: "recover", ArtifactID: artifact.ArtifactID, ConfirmationsJSON: "{}", StartedAt: now, UpdatedAt: now},
-		{OperationID: "completed-operation", TraceID: "trace-10", UserID: "user", ScopeType: "global", ExtensionID: artifact.ExtensionID, OperationType: "install", Status: "completed", CurrentStep: "complete", ArtifactID: artifact.ArtifactID, ConfirmationsJSON: "{}", StartedAt: now, UpdatedAt: now},
-		{OperationID: "failed-operation", TraceID: "trace-11", UserID: "user", ScopeType: "global", ExtensionID: artifact.ExtensionID, OperationType: "install", Status: "failed", CurrentStep: "fail", ArtifactID: artifact.ArtifactID, ConfirmationsJSON: "{}", StartedAt: now, UpdatedAt: now},
-		{OperationID: "cancelled-operation", TraceID: "trace-12", UserID: "user", ScopeType: "global", ExtensionID: artifact.ExtensionID, OperationType: "install", Status: "cancelled", CurrentStep: "cancel", ArtifactID: artifact.ArtifactID, ConfirmationsJSON: "{}", StartedAt: now, UpdatedAt: now},
-		{OperationID: "rolled-back-operation", TraceID: "trace-13", UserID: "user", ScopeType: "global", ExtensionID: artifact.ExtensionID, OperationType: "install", Status: "rolled_back", CurrentStep: "rollback", ArtifactID: artifact.ArtifactID, ConfirmationsJSON: "{}", StartedAt: now, UpdatedAt: now},
+		{OperationID: "uninstall-restore-failed", TraceID: "trace-1", SpaceID: "user", ScopeType: "global", ExtensionID: artifact.ExtensionID, OperationType: "uninstall", Status: "requires_recovery", CurrentStep: "restore_quarantine", ArtifactID: artifact.ArtifactID, ConfirmationsJSON: "{}", ErrorDetail: "restore quarantined installation failed", StartedAt: now, UpdatedAt: now},
+		{OperationID: "ambiguous-recovery", TraceID: "trace-2", SpaceID: "user", ScopeType: "global", ExtensionID: artifact.ExtensionID, OperationType: "install", Status: "requires_recovery", CurrentStep: "recovery_manual", ArtifactID: artifact.ArtifactID, ConfirmationsJSON: "{}", ErrorDetail: "consistency could not be proven", StartedAt: now, UpdatedAt: now},
+		{OperationID: "pending-operation", TraceID: "trace-3", SpaceID: "user", ScopeType: "global", ExtensionID: artifact.ExtensionID, OperationType: "install", Status: "pending", CurrentStep: "pending", ArtifactID: artifact.ArtifactID, ConfirmationsJSON: "{}", StartedAt: now, UpdatedAt: now},
+		{OperationID: "created-operation", TraceID: "trace-4", SpaceID: "user", ScopeType: "global", ExtensionID: artifact.ExtensionID, OperationType: "install", Status: "created", CurrentStep: "created", ArtifactID: artifact.ArtifactID, ConfirmationsJSON: "{}", StartedAt: now, UpdatedAt: now},
+		{OperationID: "in-progress-operation", TraceID: "trace-5", SpaceID: "user", ScopeType: "global", ExtensionID: artifact.ExtensionID, OperationType: "install", Status: "in_progress", CurrentStep: "commit", ArtifactID: artifact.ArtifactID, ConfirmationsJSON: "{}", StartedAt: now, UpdatedAt: now},
+		{OperationID: "compensating-operation", TraceID: "trace-6", SpaceID: "user", ScopeType: "global", ExtensionID: artifact.ExtensionID, OperationType: "install", Status: "compensating", CurrentStep: "compensate", ArtifactID: artifact.ArtifactID, ConfirmationsJSON: "{}", StartedAt: now, UpdatedAt: now},
+		{OperationID: "retrying-operation", TraceID: "trace-7", SpaceID: "user", ScopeType: "global", ExtensionID: artifact.ExtensionID, OperationType: "install", Status: "retrying", CurrentStep: "retry", ArtifactID: artifact.ArtifactID, ConfirmationsJSON: "{}", StartedAt: now, UpdatedAt: now},
+		{OperationID: "cancel-requested-operation", TraceID: "trace-8", SpaceID: "user", ScopeType: "global", ExtensionID: artifact.ExtensionID, OperationType: "install", Status: "cancel_requested", CurrentStep: "cancel", ArtifactID: artifact.ArtifactID, ConfirmationsJSON: "{}", StartedAt: now, UpdatedAt: now},
+		{OperationID: "manual-recovery-operation", TraceID: "trace-9", SpaceID: "user", ScopeType: "global", ExtensionID: artifact.ExtensionID, OperationType: "install", Status: "manual_recovery", CurrentStep: "recover", ArtifactID: artifact.ArtifactID, ConfirmationsJSON: "{}", StartedAt: now, UpdatedAt: now},
+		{OperationID: "completed-operation", TraceID: "trace-10", SpaceID: "user", ScopeType: "global", ExtensionID: artifact.ExtensionID, OperationType: "install", Status: "completed", CurrentStep: "complete", ArtifactID: artifact.ArtifactID, ConfirmationsJSON: "{}", StartedAt: now, UpdatedAt: now},
+		{OperationID: "failed-operation", TraceID: "trace-11", SpaceID: "user", ScopeType: "global", ExtensionID: artifact.ExtensionID, OperationType: "install", Status: "failed", CurrentStep: "fail", ArtifactID: artifact.ArtifactID, ConfirmationsJSON: "{}", StartedAt: now, UpdatedAt: now},
+		{OperationID: "cancelled-operation", TraceID: "trace-12", SpaceID: "user", ScopeType: "global", ExtensionID: artifact.ExtensionID, OperationType: "install", Status: "cancelled", CurrentStep: "cancel", ArtifactID: artifact.ArtifactID, ConfirmationsJSON: "{}", StartedAt: now, UpdatedAt: now},
+		{OperationID: "rolled-back-operation", TraceID: "trace-13", SpaceID: "user", ScopeType: "global", ExtensionID: artifact.ExtensionID, OperationType: "install", Status: "rolled_back", CurrentStep: "rollback", ArtifactID: artifact.ArtifactID, ConfirmationsJSON: "{}", StartedAt: now, UpdatedAt: now},
 	} {
 		if err := container.PackageRepository.CreateOperation(ctx, operation); err != nil {
 			t.Fatal(err)
@@ -114,7 +121,7 @@ func TestPackageFinalGateReportsExactReleaseMetrics(t *testing.T) {
 	}
 	expected := map[string]int64{
 		"legacy_package_write_calls": 3, "incomplete_package_operations": 9, "unresolved_package_operations": 9, "orphan_artifacts": 1,
-		"orphan_installation_generations": 0, "installation_read_model_mismatches": 1,
+		"orphan_installation_generations": 0, "installation_read_model_mismatches": initialInstallationMismatches + 1,
 		"unsigned_production_packages": 1, "untrusted_installed_packages": 1, "corrupted_artifacts": 1,
 		"failed_uninstall_restores": 1, "ambiguous_recovery_operations": 1,
 	}

@@ -399,6 +399,11 @@ const windowsAppContainerPowerShell = `$ErrorActionPreference = 'Stop'
 $cfg = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('__AMITIA_CONFIG__')) | ConvertFrom-Json
 $self = $MyInvocation.MyCommand.Path
 if ($self) { Remove-Item -LiteralPath $self -Force -ErrorAction SilentlyContinue }
+function ConvertTo-AmitiaExtendedPath([string]$path) {
+    if ([string]::IsNullOrWhiteSpace($path) -or $path.StartsWith('\\?\')) { return $path }
+    if ($path.StartsWith('\\')) { return '\\?\UNC\' + $path.TrimStart('\') }
+    return '\\?\' + $path
+}
 $native = @'
 using System;
 using System.Collections.Generic;
@@ -641,16 +646,18 @@ try {
     foreach ($path in @($cfg.readOnly)) {
         if ([string]::IsNullOrWhiteSpace([string]$path)) { continue }
         $item = Get-Item -LiteralPath ([string]$path) -Force
+        $aclPath = ConvertTo-AmitiaExtendedPath ([string]$path)
         if ($item.PSIsContainer) {
-            & $cfg.icacls ([string]$path) /grant "*$($sid):(OI)(CI)RX" /T /C /Q | Out-Null
+            & $cfg.icacls $aclPath /grant "*$($sid):(OI)(CI)RX" /T /C /Q | Out-Null
         } else {
-            & $cfg.icacls ([string]$path) /grant "*$($sid):RX" /C /Q | Out-Null
+            & $cfg.icacls $aclPath /grant "*$($sid):RX" /C /Q | Out-Null
         }
         if ($LASTEXITCODE -ne 0) { throw "icacls read grant failed for $path (exit $LASTEXITCODE)" }
     }
     foreach ($path in @($cfg.writable)) {
         if ([string]::IsNullOrWhiteSpace([string]$path)) { continue }
-        & $cfg.icacls ([string]$path) /grant "*$($sid):(OI)(CI)M" /T /C /Q | Out-Null
+        $aclPath = ConvertTo-AmitiaExtendedPath ([string]$path)
+        & $cfg.icacls $aclPath /grant "*$($sid):(OI)(CI)M" /T /C /Q | Out-Null
         if ($LASTEXITCODE -ne 0) { throw "icacls write grant failed for $path (exit $LASTEXITCODE)" }
     }
     if ([bool]$cfg.loopback) {
@@ -677,10 +684,11 @@ try {
             if ([string]::IsNullOrWhiteSpace([string]$path)) { continue }
             $item = Get-Item -LiteralPath ([string]$path) -Force -ErrorAction SilentlyContinue
             if (-not $item) { continue }
+            $aclPath = ConvertTo-AmitiaExtendedPath ([string]$path)
             if ($item.PSIsContainer) {
-                & $cfg.icacls ([string]$path) /remove:g "*$sid" /T /C /Q | Out-Null
+                & $cfg.icacls $aclPath /remove:g "*$sid" /T /C /Q | Out-Null
             } else {
-                & $cfg.icacls ([string]$path) /remove:g "*$sid" /C /Q | Out-Null
+                & $cfg.icacls $aclPath /remove:g "*$sid" /C /Q | Out-Null
             }
             if ($LASTEXITCODE -ne 0) { $cleanupOk = $false }
         }
@@ -701,6 +709,11 @@ const windowsAppContainerRecoveryPowerShell = `$ErrorActionPreference = 'Stop'
 $cfg = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('__AMITIA_CONFIG__')) | ConvertFrom-Json
 $self = $MyInvocation.MyCommand.Path
 if ($self) { Remove-Item -LiteralPath $self -Force -ErrorAction SilentlyContinue }
+function ConvertTo-AmitiaExtendedPath([string]$path) {
+    if ([string]::IsNullOrWhiteSpace($path) -or $path.StartsWith('\\?\')) { return $path }
+    if ($path.StartsWith('\\')) { return '\\?\UNC\' + $path.TrimStart('\') }
+    return '\\?\' + $path
+}
 $native = @'
 using System;
 using System.Runtime.InteropServices;
@@ -740,13 +753,14 @@ if ([bool]$cfg.loopback -and (Test-Path -LiteralPath ([string]$cfg.checkNet))) {
 if ($sid) {
     foreach ($path in @($cfg.writable) + @($cfg.readOnly)) {
         if ([string]::IsNullOrWhiteSpace([string]$path)) { continue }
-        $item = Get-Item -LiteralPath ([string]$path) -Force -ErrorAction SilentlyContinue
-        if (-not $item) { continue }
-        if ($item.PSIsContainer) {
-            & $cfg.icacls ([string]$path) /remove:g "*$sid" /T /C /Q | Out-Null
-        } else {
-            & $cfg.icacls ([string]$path) /remove:g "*$sid" /C /Q | Out-Null
-        }
+            $item = Get-Item -LiteralPath ([string]$path) -Force -ErrorAction SilentlyContinue
+            if (-not $item) { continue }
+            $aclPath = ConvertTo-AmitiaExtendedPath ([string]$path)
+            if ($item.PSIsContainer) {
+                & $cfg.icacls $aclPath /remove:g "*$sid" /T /C /Q | Out-Null
+            } else {
+                & $cfg.icacls $aclPath /remove:g "*$sid" /C /Q | Out-Null
+            }
         if ($LASTEXITCODE -ne 0) { $cleanupOk = $false }
     }
     $deleteResult = [AmitiaAppContainerRecovery]::DeleteAppContainerProfile([string]$cfg.profileName)

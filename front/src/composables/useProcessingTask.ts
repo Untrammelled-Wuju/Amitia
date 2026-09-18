@@ -82,6 +82,8 @@ export interface ProcessingActionInfo {
   qualityLevel: ActionQualityLevel | string;
   qualityFlags: string[];
   sourceAttempt: number;
+  sourceFrameCount?: number;
+  processedFrameCount?: number;
   excluded: boolean;
 }
 

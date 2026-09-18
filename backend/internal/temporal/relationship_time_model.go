@@ -52,7 +52,7 @@ const (
 type RelationshipTimeContext struct {
 	Version string `json:"version"`
 
-	UserID      string `json:"userId"`
+	SpaceID     string `json:"spaceId"`
 	CharacterID string `json:"characterId"`
 
 	NowUTC time.Time `json:"nowUtc"`
@@ -105,7 +105,7 @@ type ReunionContext struct {
 }
 
 type PrepareInboundInput struct {
-	UserID         string
+	SpaceID        string
 	CharacterID    string
 	ConversationID string
 	Channel        string
@@ -118,14 +118,14 @@ type PrepareInboundInput struct {
 }
 
 type ObservePresenceInput struct {
-	UserID      string
+	SpaceID     string
 	CharacterID string
 	Channel     string
 	ObservedAt  time.Time
 }
 
 type FinalizeInteractionInput struct {
-	UserID              string
+	SpaceID             string
 	CharacterID         string
 	InteractionID       string
 	CommittedAt         time.Time
@@ -162,7 +162,7 @@ func DefaultRelationshipTimeSettings(characterID string) RelationshipTimeSetting
 }
 
 type GlobalPresenceState struct {
-	UserID                            string `gorm:"column:user_id;primaryKey" json:"userId"`
+	SpaceID                           string `gorm:"column:space_id;primaryKey" json:"spaceId"`
 	FirstUserActivityAtUTC            string `gorm:"column:first_user_activity_at_utc" json:"firstUserActivityAtUtc"`
 	LastObservedUserActivityAtUTC     string `gorm:"column:last_observed_user_activity_at_utc" json:"lastObservedUserActivityAtUtc"`
 	LastCommittedUserInteractionAtUTC string `gorm:"column:last_committed_user_interaction_at_utc" json:"lastCommittedUserInteractionAtUtc"`
@@ -179,7 +179,7 @@ func (GlobalPresenceState) TableName() string { return "temporal_global_presence
 
 type RelationshipPresenceState struct {
 	ID                                string  `gorm:"column:id;primaryKey" json:"id"`
-	UserID                            string  `gorm:"column:user_id" json:"userId"`
+	SpaceID                           string  `gorm:"column:space_id" json:"spaceId"`
 	CharacterID                       string  `gorm:"column:character_id" json:"characterId"`
 	FirstInteractionAtUTC             string  `gorm:"column:first_interaction_at_utc" json:"firstInteractionAtUtc"`
 	LastObservedUserActivityAtUTC     string  `gorm:"column:last_observed_user_activity_at_utc" json:"lastObservedUserActivityAtUtc"`
@@ -205,7 +205,7 @@ func (RelationshipPresenceState) TableName() string {
 
 type CadenceSample struct {
 	ID                       string  `gorm:"column:id;primaryKey" json:"id"`
-	UserID                   string  `gorm:"column:user_id" json:"userId"`
+	SpaceID                  string  `gorm:"column:space_id" json:"spaceId"`
 	CharacterID              string  `gorm:"column:character_id" json:"characterId"`
 	InteractionID            string  `gorm:"column:interaction_id" json:"interactionId"`
 	PreviousInteractionAtUTC string  `gorm:"column:previous_interaction_at_utc" json:"previousInteractionAtUtc"`
@@ -220,7 +220,7 @@ func (CadenceSample) TableName() string { return "temporal_cadence_samples" }
 
 type ReunionEpisode struct {
 	ID                                   string       `gorm:"column:id;primaryKey" json:"id"`
-	UserID                               string       `gorm:"column:user_id" json:"userId"`
+	SpaceID                              string       `gorm:"column:space_id" json:"spaceId"`
 	CharacterID                          string       `gorm:"column:character_id" json:"characterId"`
 	ReunionKind                          ReunionKind  `gorm:"column:reunion_kind" json:"reunionKind"`
 	ReunionLevel                         ReunionLevel `gorm:"column:reunion_level" json:"reunionLevel"`
@@ -251,7 +251,7 @@ type InteractionReceipt struct {
 	ID                                 string                   `gorm:"column:id;primaryKey" json:"id"`
 	RequestID                          string                   `gorm:"column:request_id" json:"requestId"`
 	InteractionID                      string                   `gorm:"column:interaction_id" json:"interactionId"`
-	UserID                             string                   `gorm:"column:user_id" json:"userId"`
+	SpaceID                            string                   `gorm:"column:space_id" json:"spaceId"`
 	CharacterID                        string                   `gorm:"column:character_id" json:"characterId"`
 	Channel                            string                   `gorm:"column:channel" json:"channel"`
 	PeerID                             string                   `gorm:"column:peer_id" json:"peerId"`
@@ -270,7 +270,7 @@ type TemporalEffectLedgerEntry struct {
 	ID               string `gorm:"column:id;primaryKey" json:"id"`
 	EffectKey        string `gorm:"column:effect_key" json:"effectKey"`
 	EffectType       string `gorm:"column:effect_type" json:"effectType"`
-	UserID           string `gorm:"column:user_id" json:"userId"`
+	SpaceID          string `gorm:"column:space_id" json:"spaceId"`
 	CharacterID      string `gorm:"column:character_id" json:"characterId"`
 	ReunionEpisodeID string `gorm:"column:reunion_episode_id" json:"reunionEpisodeId"`
 	InteractionID    string `gorm:"column:interaction_id" json:"interactionId"`

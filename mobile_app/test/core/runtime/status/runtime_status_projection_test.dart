@@ -50,9 +50,8 @@ void main() {
           readinessPath: '/readyz',
         ),
         authStrategy: BackendAuthStrategy.localToken,
-        credential: BackendConnectionCredential.tryCreate(
-              'a' * 32,
-            ) ??
+        credential:
+            BackendConnectionCredential.tryCreate('a' * 32) ??
             (throw StateError('Failed to create credential')),
       );
     }
@@ -92,11 +91,13 @@ void main() {
 
       await projection.initialize();
       await _pump();
-      transportSource.emit(const TransportStateSnapshot(
-        generation: 5,
-        httpState: BackendHttpState.available,
-        webSocketState: BackendWebSocketState.connected,
-      ));
+      transportSource.emit(
+        const TransportStateSnapshot(
+          generation: 5,
+          httpState: BackendHttpState.available,
+          webSocketState: BackendWebSocketState.connected,
+        ),
+      );
       await _pump();
 
       expect(projection.current.phase, RuntimeStatusPhase.ready);
@@ -122,11 +123,13 @@ void main() {
 
       await projection.initialize();
       await _pump();
-      transportSource.emit(const TransportStateSnapshot(
-        generation: 4,
-        httpState: BackendHttpState.available,
-        webSocketState: BackendWebSocketState.connected,
-      ));
+      transportSource.emit(
+        const TransportStateSnapshot(
+          generation: 4,
+          httpState: BackendHttpState.available,
+          webSocketState: BackendWebSocketState.connected,
+        ),
+      );
       await _pump();
 
       expect(projection.current.phase, RuntimeStatusPhase.starting);
@@ -134,36 +137,7 @@ void main() {
       expect(projection.current.businessAvailable, false);
     });
 
-    test('CASE 3: Runtime failed with connected transport projects failed',
-        () async {
-      const bridgeSnapshot = RuntimeBridgeSnapshot(
-        schemaVersion: 1,
-        state: RuntimeBridgeState.failed,
-        generation: 5,
-        runtimeInstalled: true,
-        runtimeAvailable: true,
-      );
-      bridge.setSnapshot(bridgeSnapshot);
-      connectionSource.setAvailability(
-        BackendConnectionAvailable(_makeConfig(5)),
-      );
-
-      await projection.initialize();
-      await _pump();
-      transportSource.emit(const TransportStateSnapshot(
-        generation: 5,
-        httpState: BackendHttpState.available,
-        webSocketState: BackendWebSocketState.connected,
-      ));
-      await _pump();
-
-      expect(projection.current.phase, RuntimeStatusPhase.failed);
-      expect(projection.current.runtimeReady, false);
-      expect(projection.current.businessAvailable, false);
-    });
-
-    test('CASE 4: Runtime ready with HTTP unavailable projects degraded',
-        () async {
+    test('idle WebSocket does not degrade an HTTP-ready runtime', () async {
       const bridgeSnapshot = RuntimeBridgeSnapshot(
         schemaVersion: 1,
         state: RuntimeBridgeState.ready,
@@ -178,18 +152,148 @@ void main() {
 
       await projection.initialize();
       await _pump();
-      transportSource.emit(const TransportStateSnapshot(
-        generation: 5,
-        httpState: BackendHttpState.unavailable,
-        webSocketState: BackendWebSocketState.disconnected,
-      ));
+      transportSource.emit(
+        const TransportStateSnapshot(
+          generation: 5,
+          httpState: BackendHttpState.available,
+          webSocketState: BackendWebSocketState.idle,
+        ),
+      );
       await _pump();
 
-      expect(projection.current.phase, RuntimeStatusPhase.degraded);
-      expect(projection.current.runtimeReady, true);
-      expect(projection.current.httpAvailable, false);
-      expect(projection.current.businessAvailable, false);
+      expect(projection.current.phase, RuntimeStatusPhase.ready);
+      expect(projection.current.httpAvailable, true);
+      expect(projection.current.webSocketConnected, false);
+      expect(projection.current.businessAvailable, true);
+      expect(projection.current.primaryError, isNull);
     });
+
+    test(
+      'unbound transport remains pending without a degraded error',
+      () async {
+        const bridgeSnapshot = RuntimeBridgeSnapshot(
+          schemaVersion: 1,
+          state: RuntimeBridgeState.ready,
+          generation: 5,
+          runtimeInstalled: true,
+          runtimeAvailable: true,
+        );
+        bridge.setSnapshot(bridgeSnapshot);
+        connectionSource.setAvailability(
+          BackendConnectionAvailable(_makeConfig(5)),
+        );
+
+        await projection.initialize();
+        await _pump();
+        transportSource.emit(
+          const TransportStateSnapshot(
+            generation: 0,
+            httpState: BackendHttpState.unavailable,
+            webSocketState: BackendWebSocketState.idle,
+          ),
+        );
+        await _pump();
+
+        expect(projection.current.phase, RuntimeStatusPhase.starting);
+        expect(projection.current.runtimeReady, true);
+        expect(projection.current.businessAvailable, false);
+        expect(projection.current.primaryError, isNull);
+      },
+    );
+
+    test('polls native snapshot when event delivery is missed', () async {
+      bridge.setSnapshot(
+        const RuntimeBridgeSnapshot(
+          schemaVersion: 1,
+          state: RuntimeBridgeState.notInstalled,
+          generation: 0,
+          runtimeInstalled: false,
+          runtimeAvailable: false,
+        ),
+      );
+      await projection.initialize();
+      bridge.setSnapshotWithoutEvent(
+        const RuntimeBridgeSnapshot(
+          schemaVersion: 1,
+          state: RuntimeBridgeState.ready,
+          generation: 1,
+          runtimeInstalled: true,
+          runtimeAvailable: true,
+        ),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 1200));
+      expect(projection.current.runtimeState, RuntimeBridgeState.ready);
+      expect(projection.current.runtimeReady, true);
+    });
+
+    test(
+      'CASE 3: Runtime failed with connected transport projects failed',
+      () async {
+        const bridgeSnapshot = RuntimeBridgeSnapshot(
+          schemaVersion: 1,
+          state: RuntimeBridgeState.failed,
+          generation: 5,
+          runtimeInstalled: true,
+          runtimeAvailable: true,
+        );
+        bridge.setSnapshot(bridgeSnapshot);
+        connectionSource.setAvailability(
+          BackendConnectionAvailable(_makeConfig(5)),
+        );
+
+        await projection.initialize();
+        await _pump();
+        transportSource.emit(
+          const TransportStateSnapshot(
+            generation: 5,
+            httpState: BackendHttpState.available,
+            webSocketState: BackendWebSocketState.connected,
+          ),
+        );
+        await _pump();
+
+        expect(projection.current.phase, RuntimeStatusPhase.failed);
+        expect(projection.current.runtimeReady, false);
+        expect(projection.current.businessAvailable, false);
+      },
+    );
+
+    test(
+      'CASE 4: Runtime ready with HTTP unavailable projects degraded',
+      () async {
+        const bridgeSnapshot = RuntimeBridgeSnapshot(
+          schemaVersion: 1,
+          state: RuntimeBridgeState.ready,
+          generation: 5,
+          runtimeInstalled: true,
+          runtimeAvailable: true,
+        );
+        bridge.setSnapshot(bridgeSnapshot);
+        connectionSource.setAvailability(
+          BackendConnectionAvailable(_makeConfig(5)),
+        );
+
+        await projection.initialize();
+        await _pump();
+        transportSource.emit(
+          const TransportStateSnapshot(
+            generation: 5,
+            httpState: BackendHttpState.unavailable,
+            webSocketState: BackendWebSocketState.disconnected,
+          ),
+        );
+        await _pump();
+
+        expect(projection.current.phase, RuntimeStatusPhase.degraded);
+        expect(projection.current.runtimeReady, true);
+        expect(projection.current.httpAvailable, false);
+        expect(projection.current.businessAvailable, false);
+        expect(
+          projection.current.primaryError?.details['httpState'],
+          'unavailable',
+        );
+      },
+    );
 
     test('CASE 9: Generation mismatch does not project ready', () async {
       const bridgeSnapshot = RuntimeBridgeSnapshot(
@@ -206,11 +310,13 @@ void main() {
 
       await projection.initialize();
       await _pump();
-      transportSource.emit(const TransportStateSnapshot(
-        generation: 7,
-        httpState: BackendHttpState.available,
-        webSocketState: BackendWebSocketState.connected,
-      ));
+      transportSource.emit(
+        const TransportStateSnapshot(
+          generation: 7,
+          httpState: BackendHttpState.available,
+          webSocketState: BackendWebSocketState.connected,
+        ),
+      );
       await _pump();
 
       expect(projection.current.phase, RuntimeStatusPhase.degraded);
@@ -246,24 +352,29 @@ void main() {
       await projection.initialize();
       await _pump();
 
-      transportSource.emit(const TransportStateSnapshot(
-        generation: 5,
-        httpState: BackendHttpState.available,
-        webSocketState: BackendWebSocketState.connected,
-      ));
+      transportSource.emit(
+        const TransportStateSnapshot(
+          generation: 5,
+          httpState: BackendHttpState.available,
+          webSocketState: BackendWebSocketState.connected,
+        ),
+      );
       await _pump();
 
-      transportSource.emit(const TransportStateSnapshot(
-        generation: 5,
-        httpState: BackendHttpState.available,
-        webSocketState: BackendWebSocketState.connected,
-      ));
+      transportSource.emit(
+        const TransportStateSnapshot(
+          generation: 5,
+          httpState: BackendHttpState.available,
+          webSocketState: BackendWebSocketState.connected,
+        ),
+      );
       await _pump();
 
       await Future.delayed(const Duration(milliseconds: 10));
 
-      final readyEmissions =
-          emissions.where((e) => e.phase == RuntimeStatusPhase.ready).length;
+      final readyEmissions = emissions
+          .where((e) => e.phase == RuntimeStatusPhase.ready)
+          .length;
       expect(readyEmissions, 1);
     });
   });

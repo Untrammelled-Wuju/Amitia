@@ -1,4 +1,4 @@
-﻿package decision
+package decision
 
 import (
 	"testing"
@@ -139,8 +139,8 @@ func TestEvaluateContinuation_ToolSuccessGoalAchieved(t *testing.T) {
 		ConversationID: "conv-1",
 		Kind:           ObservationKindToolResult,
 		Outcome:        ObservationOutcomeSucceeded,
-		GoalRefs:      []GoalRef{{ID: goalID, Revision: 1}},
-		ObservedAt:    time.Now(),
+		GoalRefs:       []GoalRef{{ID: goalID, Revision: 1}},
+		ObservedAt:     time.Now(),
 	}
 	goals := []Goal{{ID: goalID, Status: GoalStatusAchieved, Progress: 1, Revision: 1}}
 	input := ContinuationInput{
@@ -182,8 +182,8 @@ func TestEvaluateContinuation_ToolSuccessGoalActive(t *testing.T) {
 		ConversationID: "conv-1",
 		Kind:           ObservationKindToolResult,
 		Outcome:        ObservationOutcomeSucceeded,
-		GoalRefs:      []GoalRef{{ID: goalID, Revision: 1}},
-		ObservedAt:    time.Now(),
+		GoalRefs:       []GoalRef{{ID: goalID, Revision: 1}},
+		ObservedAt:     time.Now(),
 	}
 	goals := []Goal{{ID: goalID, Status: GoalStatusActive, Progress: 0.5, Revision: 1}}
 	input := ContinuationInput{
@@ -225,8 +225,8 @@ func TestEvaluateContinuation_ToolFailedGoalActive(t *testing.T) {
 		ConversationID: "conv-1",
 		Kind:           ObservationKindToolResult,
 		Outcome:        ObservationOutcomeFailed,
-		GoalRefs:      []GoalRef{{ID: goalID, Revision: 1}},
-		ObservedAt:    time.Now(),
+		GoalRefs:       []GoalRef{{ID: goalID, Revision: 1}},
+		ObservedAt:     time.Now(),
 	}
 	goals := []Goal{{ID: goalID, Status: GoalStatusActive, Progress: 0.3, Revision: 1}}
 	input := ContinuationInput{
@@ -267,7 +267,7 @@ func TestEvaluateContinuation_ToolCancelled(t *testing.T) {
 		ConversationID: "conv-1",
 		Kind:           ObservationKindToolResult,
 		Outcome:        ObservationOutcomeCancelled,
-		GoalRefs:      []GoalRef{{ID: "goal-1", Revision: 1}},
+		GoalRefs:       []GoalRef{{ID: "goal-1", Revision: 1}},
 		ObservedAt:     time.Now(),
 	}
 	goals := []Goal{{ID: "goal-1", Status: GoalStatusActive}}
@@ -308,7 +308,7 @@ func TestEvaluateContinuation_BudgetExhaustion(t *testing.T) {
 		ConversationID: "conv-1",
 		Kind:           ObservationKindToolResult,
 		Outcome:        ObservationOutcomeFailed,
-		GoalRefs:      []GoalRef{{ID: goalID, Revision: 1}},
+		GoalRefs:       []GoalRef{{ID: goalID, Revision: 1}},
 		ObservedAt:     time.Now(),
 	}
 	goals := []Goal{{ID: goalID, Status: GoalStatusActive}}
@@ -352,7 +352,7 @@ func TestEvaluateContinuation_StaleRevision(t *testing.T) {
 		ConversationID: "conv-1",
 		Kind:           ObservationKindToolResult,
 		Outcome:        ObservationOutcomeSucceeded,
-		GoalRefs:      []GoalRef{{ID: goalID, Revision: 1}},
+		GoalRefs:       []GoalRef{{ID: goalID, Revision: 1}},
 		ObservedAt:     time.Now(),
 	}
 	input := ContinuationInput{
@@ -394,7 +394,7 @@ func TestEvaluateContinuation_SuspendedGoal(t *testing.T) {
 		ConversationID: "conv-1",
 		Kind:           ObservationKindNoAction,
 		Outcome:        ObservationOutcomeSkipped,
-		GoalRefs:      []GoalRef{{ID: goalID, Revision: 1}},
+		GoalRefs:       []GoalRef{{ID: goalID, Revision: 1}},
 		ObservedAt:     time.Now(),
 	}
 	goals := []Goal{{ID: goalID, Status: GoalStatusSuspended}}
@@ -435,7 +435,7 @@ func TestEvaluateContinuation_MaterializationFailure(t *testing.T) {
 		ConversationID: "conv-1",
 		Kind:           ObservationKindMaterializationFailure,
 		Outcome:        ObservationOutcomeNotMaterialized,
-		GoalRefs:      []GoalRef{{ID: goalID, Revision: 1}},
+		GoalRefs:       []GoalRef{{ID: goalID, Revision: 1}},
 		ObservedAt:     time.Now(),
 	}
 	goals := []Goal{{ID: goalID, Status: GoalStatusActive}}
@@ -476,7 +476,7 @@ func TestEvaluateContinuation_DispatchFailure(t *testing.T) {
 		ConversationID: "conv-1",
 		Kind:           ObservationKindDispatchFailure,
 		Outcome:        ObservationOutcomeNotDispatched,
-		GoalRefs:      []GoalRef{{ID: goalID, Revision: 1}},
+		GoalRefs:       []GoalRef{{ID: goalID, Revision: 1}},
 		ObservedAt:     time.Now(),
 	}
 	goals := []Goal{{ID: goalID, Status: GoalStatusActive}}

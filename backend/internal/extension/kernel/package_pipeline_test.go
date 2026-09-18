@@ -48,7 +48,7 @@ func createPackagePipelineArchiveWithMigrations(t *testing.T, version string, de
 		extension["metadata"] = map[string]any{"migrations": map[string]any{"definitions": definitions}}
 	}
 	manifest := map[string]any{
-		"manifestVersion": 2,
+		"manifestVersion": 1,
 		"extension":       extension,
 		"publisher":       map[string]any{"id": "com.example", "displayName": "Example"},
 		"compatibility":   map[string]any{},
@@ -119,7 +119,7 @@ func TestPackagePipelinePreviewInstallIsolationAndIdempotency(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	productionPreview, err := runtime.PreviewPackage(ctx, PackagePreviewRequest{UserID: "user-1", ScopeType: "global", FileName: "pipeline.amitiax"}, productionArchive)
+	productionPreview, err := runtime.PreviewPackage(ctx, PackagePreviewRequest{SpaceID: "user-1", ScopeType: "global", FileName: "pipeline.amitiax"}, productionArchive)
 	productionArchive.Close()
 	if err != nil {
 		t.Fatal(err)
@@ -128,7 +128,7 @@ func TestPackagePipelinePreviewInstallIsolationAndIdempotency(t *testing.T) {
 		t.Fatalf("unsigned production package must be rejected: %+v", productionPreview)
 	}
 	workspaceID := dev_mode.WorkspaceID("pipeline-test")
-	_, err = container.DevModeRegistry.Register(ctx, dev_mode.RegisterWorkspaceInput{WorkspaceID: workspaceID, ExtensionID: dev_mode.ExtensionID("com.example/pipeline"), OwnerUserID: "user-1", PathReference: t.TempDir(), ManifestPath: "manifest.json"})
+	_, err = container.DevModeRegistry.Register(ctx, dev_mode.RegisterWorkspaceInput{WorkspaceID: workspaceID, ExtensionID: dev_mode.ExtensionID("com.example/pipeline"), OwnerSpaceID: "user-1", PathReference: t.TempDir(), ManifestPath: "manifest.json"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -147,7 +147,7 @@ func TestPackagePipelinePreviewInstallIsolationAndIdempotency(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	preview, err := runtime.PreviewPackage(ctx, PackagePreviewRequest{UserID: "user-1", ScopeType: "global", FileName: "pipeline.amitiax", AllowUnsignedDev: true, DeveloperSessionID: developerSession.SessionID}, archive)
+	preview, err := runtime.PreviewPackage(ctx, PackagePreviewRequest{SpaceID: "user-1", ScopeType: "global", FileName: "pipeline.amitiax", AllowUnsignedDev: true, DeveloperSessionID: developerSession.SessionID}, archive)
 	archive.Close()
 	if err != nil {
 		t.Fatal(err)
@@ -155,12 +155,12 @@ func TestPackagePipelinePreviewInstallIsolationAndIdempotency(t *testing.T) {
 	if !preview.Installable || !preview.DevOnly || len(preview.RequiredConfirmations) != 1 || preview.RequiredConfirmations[0] != "confirm.unsigned_dev" {
 		t.Fatalf("unexpected preview: %+v", preview)
 	}
-	confirmation, err := runtime.ConfirmPackagePreview(ctx, PackagePreviewConfirmationRequest{SessionID: preview.SessionID, UserID: "user-1", ScopeType: "global", Confirmations: map[string]bool{"confirm.unsigned_dev": true}})
+	confirmation, err := runtime.ConfirmPackagePreview(ctx, PackagePreviewConfirmationRequest{SessionID: preview.SessionID, SpaceID: "user-1", ScopeType: "global", Confirmations: map[string]bool{"confirm.unsigned_dev": true}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	request := PackageInstallRequest{SessionID: preview.SessionID, UserID: "user-1", ScopeType: "global", ConfirmationToken: confirmation.ConfirmationToken, IdempotencyKey: "pipeline-install-key"}
-	if _, err := runtime.ExecutePackageInstall(ctx, PackageInstallRequest{SessionID: preview.SessionID, UserID: "user-2", ScopeType: "global", ConfirmationToken: confirmation.ConfirmationToken, IdempotencyKey: "pipeline-cross-user-key"}); err == nil {
+	request := PackageInstallRequest{SessionID: preview.SessionID, SpaceID: "user-1", ScopeType: "global", ConfirmationToken: confirmation.ConfirmationToken, IdempotencyKey: "pipeline-install-key"}
+	if _, err := runtime.ExecutePackageInstall(ctx, PackageInstallRequest{SessionID: preview.SessionID, SpaceID: "user-2", ScopeType: "global", ConfirmationToken: confirmation.ConfirmationToken, IdempotencyKey: "pipeline-cross-user-key"}); err == nil {
 		t.Fatal("cross-user preview session must be rejected")
 	}
 	result, err := runtime.ExecutePackageInstall(ctx, request)
@@ -190,7 +190,7 @@ func TestPackagePipelinePreviewInstallIsolationAndIdempotency(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	sameVersionPreview, err := runtime.PreviewPackage(ctx, PackagePreviewRequest{UserID: "user-1", ScopeType: "global", FileName: "pipeline.amitiax", AllowUnsignedDev: true, DeveloperSessionID: developerSession.SessionID}, sameVersionArchive)
+	sameVersionPreview, err := runtime.PreviewPackage(ctx, PackagePreviewRequest{SpaceID: "user-1", ScopeType: "global", FileName: "pipeline.amitiax", AllowUnsignedDev: true, DeveloperSessionID: developerSession.SessionID}, sameVersionArchive)
 	sameVersionArchive.Close()
 	if err != nil {
 		t.Fatal(err)
@@ -199,11 +199,11 @@ func TestPackagePipelinePreviewInstallIsolationAndIdempotency(t *testing.T) {
 	for _, required := range sameVersionPreview.RequiredConfirmations {
 		sameVersionConfirmations[required] = true
 	}
-	sameVersionConfirmation, err := runtime.ConfirmPackagePreview(ctx, PackagePreviewConfirmationRequest{SessionID: sameVersionPreview.SessionID, UserID: "user-1", ScopeType: "global", Confirmations: sameVersionConfirmations})
+	sameVersionConfirmation, err := runtime.ConfirmPackagePreview(ctx, PackagePreviewConfirmationRequest{SessionID: sameVersionPreview.SessionID, SpaceID: "user-1", ScopeType: "global", Confirmations: sameVersionConfirmations})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := runtime.ExecutePackageUpdate(ctx, PackageInstallRequest{SessionID: sameVersionPreview.SessionID, UserID: "user-1", ScopeType: "global", ConfirmationToken: sameVersionConfirmation.ConfirmationToken, ExpectedExtensionID: preview.ExtensionID, IdempotencyKey: "same-version-update-key"}); err == nil || !strings.Contains(err.Error(), "PACKAGE_UPDATE_TARGET_UNCHANGED") {
+	if _, err := runtime.ExecutePackageUpdate(ctx, PackageInstallRequest{SessionID: sameVersionPreview.SessionID, SpaceID: "user-1", ScopeType: "global", ConfirmationToken: sameVersionConfirmation.ConfirmationToken, ExpectedExtensionID: preview.ExtensionID, IdempotencyKey: "same-version-update-key"}); err == nil || !strings.Contains(err.Error(), "PACKAGE_UPDATE_TARGET_UNCHANGED") {
 		t.Fatalf("same-version update must be rejected: %v", err)
 	}
 	operation, steps, err := container.PackageRepository.GetOperation(ctx, "user-1", result.OperationID)
@@ -218,7 +218,7 @@ func TestPackagePipelinePreviewInstallIsolationAndIdempotency(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	secondPreview, err := runtime.PreviewPackage(ctx, PackagePreviewRequest{UserID: "user-1", ScopeType: "global", FileName: "pipeline.amitiax", AllowUnsignedDev: true, DeveloperSessionID: developerSession.SessionID}, secondArchive)
+	secondPreview, err := runtime.PreviewPackage(ctx, PackagePreviewRequest{SpaceID: "user-1", ScopeType: "global", FileName: "pipeline.amitiax", AllowUnsignedDev: true, DeveloperSessionID: developerSession.SessionID}, secondArchive)
 	secondArchive.Close()
 	if err != nil {
 		t.Fatal(err)
@@ -227,23 +227,23 @@ func TestPackagePipelinePreviewInstallIsolationAndIdempotency(t *testing.T) {
 	for _, confirmation := range secondPreview.RequiredConfirmations {
 		secondConfirmations[confirmation] = true
 	}
-	secondConfirmation, err := runtime.ConfirmPackagePreview(ctx, PackagePreviewConfirmationRequest{SessionID: secondPreview.SessionID, UserID: "user-1", ScopeType: "global", Confirmations: secondConfirmations})
+	secondConfirmation, err := runtime.ConfirmPackagePreview(ctx, PackagePreviewConfirmationRequest{SessionID: secondPreview.SessionID, SpaceID: "user-1", ScopeType: "global", Confirmations: secondConfirmations})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := runtime.ExecutePackageInstall(ctx, PackageInstallRequest{SessionID: secondPreview.SessionID, UserID: "user-1", ScopeType: "global", ConfirmationToken: secondConfirmation.ConfirmationToken, ExpectedExtensionID: preview.ExtensionID, IdempotencyKey: "second-install-key"}); err == nil || !strings.Contains(err.Error(), "PACKAGE_ALREADY_INSTALLED") {
+	if _, err := runtime.ExecutePackageInstall(ctx, PackageInstallRequest{SessionID: secondPreview.SessionID, SpaceID: "user-1", ScopeType: "global", ConfirmationToken: secondConfirmation.ConfirmationToken, ExpectedExtensionID: preview.ExtensionID, IdempotencyKey: "second-install-key"}); err == nil || !strings.Contains(err.Error(), "PACKAGE_ALREADY_INSTALLED") {
 		t.Fatalf("install must reject an already installed extension: %v", err)
 	}
 	if err := container.DevModeRegistry.RevokeDevTrust(workspaceID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := runtime.ExecutePackageUpdate(ctx, PackageInstallRequest{SessionID: secondPreview.SessionID, UserID: "user-1", ScopeType: "global", ConfirmationToken: secondConfirmation.ConfirmationToken, ExpectedExtensionID: preview.ExtensionID, IdempotencyKey: "trust-revoke-update-key"}); err == nil {
+	if _, err := runtime.ExecutePackageUpdate(ctx, PackageInstallRequest{SessionID: secondPreview.SessionID, SpaceID: "user-1", ScopeType: "global", ConfirmationToken: secondConfirmation.ConfirmationToken, ExpectedExtensionID: preview.ExtensionID, IdempotencyKey: "trust-revoke-update-key"}); err == nil {
 		t.Fatal("developer trust revocation must invalidate a confirmed install")
 	}
 	if err := container.DevModeRegistry.GrantDevTrust(workspaceID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := runtime.ExecutePackageUpdate(ctx, PackageInstallRequest{SessionID: secondPreview.SessionID, UserID: "user-1", ScopeType: "global", ConfirmationToken: secondConfirmation.ConfirmationToken, ExpectedExtensionID: preview.ExtensionID, IdempotencyKey: "session-revoke-update-key"}); err == nil {
+	if _, err := runtime.ExecutePackageUpdate(ctx, PackageInstallRequest{SessionID: secondPreview.SessionID, SpaceID: "user-1", ScopeType: "global", ConfirmationToken: secondConfirmation.ConfirmationToken, ExpectedExtensionID: preview.ExtensionID, IdempotencyKey: "session-revoke-update-key"}); err == nil {
 		t.Fatal("revoked developer session must not revive after trust is granted again")
 	}
 	workspace, err = container.DevModeRegistry.Get(workspaceID)
@@ -258,7 +258,7 @@ func TestPackagePipelinePreviewInstallIsolationAndIdempotency(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	secondPreview, err = runtime.PreviewPackage(ctx, PackagePreviewRequest{UserID: "user-1", ScopeType: "global", FileName: "pipeline.amitiax", AllowUnsignedDev: true, DeveloperSessionID: developerSession.SessionID}, secondArchive)
+	secondPreview, err = runtime.PreviewPackage(ctx, PackagePreviewRequest{SpaceID: "user-1", ScopeType: "global", FileName: "pipeline.amitiax", AllowUnsignedDev: true, DeveloperSessionID: developerSession.SessionID}, secondArchive)
 	secondArchive.Close()
 	if err != nil {
 		t.Fatal(err)
@@ -267,11 +267,11 @@ func TestPackagePipelinePreviewInstallIsolationAndIdempotency(t *testing.T) {
 	for _, confirmation := range secondPreview.RequiredConfirmations {
 		secondConfirmations[confirmation] = true
 	}
-	secondConfirmation, err = runtime.ConfirmPackagePreview(ctx, PackagePreviewConfirmationRequest{SessionID: secondPreview.SessionID, UserID: "user-1", ScopeType: "global", Confirmations: secondConfirmations})
+	secondConfirmation, err = runtime.ConfirmPackagePreview(ctx, PackagePreviewConfirmationRequest{SessionID: secondPreview.SessionID, SpaceID: "user-1", ScopeType: "global", Confirmations: secondConfirmations})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := runtime.ExecutePackageUpdate(ctx, PackageInstallRequest{SessionID: secondPreview.SessionID, UserID: "user-1", ScopeType: "global", ConfirmationToken: secondConfirmation.ConfirmationToken, ExpectedExtensionID: preview.ExtensionID, IdempotencyKey: "final-update-key"}); err != nil {
+	if _, err := runtime.ExecutePackageUpdate(ctx, PackageInstallRequest{SessionID: secondPreview.SessionID, SpaceID: "user-1", ScopeType: "global", ConfirmationToken: secondConfirmation.ConfirmationToken, ExpectedExtensionID: preview.ExtensionID, IdempotencyKey: "final-update-key"}); err != nil {
 		t.Fatal(err)
 	}
 	updatedInstallation, err := container.InstallationRepository.GetInstallation(ctx, domain.ExtensionID(preview.ExtensionID))
@@ -284,7 +284,7 @@ func TestPackagePipelinePreviewInstallIsolationAndIdempotency(t *testing.T) {
 	rollbackConfirm, err := runtime.ConfirmPackageRollback(ctx, PackageRollbackConfirmationRequest{
 		ExtensionID:   preview.ExtensionID,
 		TargetVersion: "1.0.0",
-		UserID:        "user-1",
+		SpaceID:       "user-1",
 		ScopeType:     "global",
 		ScopeID:       "",
 		Confirmations: map[string]bool{"confirm.rollback": true, PackageConfirmationSnapshotExempt: true},
@@ -364,7 +364,7 @@ func TestPackagePipelinePreviewInstallIsolationAndIdempotency(t *testing.T) {
 		DependenciesHash:          depsHash,
 		InstalledPath:             uninstallPreview.InstalledPath,
 		InstalledTreeHash:         uninstallPreview.InstalledHash,
-		UserID:                    "user-1",
+		SpaceID:                   "user-1",
 		ScopeType:                 "global",
 		ScopeID:                   "",
 		PolicyVersion:             packagePolicyVersion,
@@ -378,7 +378,7 @@ func TestPackagePipelinePreviewInstallIsolationAndIdempotency(t *testing.T) {
 	if err != nil {
 		t.Fatalf("sign uninstall confirmation failed: %v", err)
 	}
-	uninstallOperation, err := runtime.ExecutePackageUninstall(ctx, ExecutePackageUninstallRequest{ExtensionID: preview.ExtensionID, UserID: "user-1", ScopeType: "global", ScopeID: "", ConfirmationToken: uninstallToken})
+	uninstallOperation, err := runtime.ExecutePackageUninstall(ctx, ExecutePackageUninstallRequest{ExtensionID: preview.ExtensionID, SpaceID: "user-1", ScopeType: "global", ScopeID: "", ConfirmationToken: uninstallToken})
 	if err != nil {
 		t.Fatal(err)
 	}

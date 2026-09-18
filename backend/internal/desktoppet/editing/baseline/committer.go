@@ -13,8 +13,7 @@ import (
 )
 
 type CommitterRequest struct {
-	UserID               string
-	CharacterID          string
+	SpaceID              string
 	ProcessingTaskID     string
 	ProcessingActionID   string
 	ProcessingAttemptID  string
@@ -81,7 +80,7 @@ func (c *BaselineActionRevisionCommitter) Commit(req CommitterRequest, procRev *
 			return fmt.Errorf("查询既有ActionRevision失败: %w", existingErr)
 		}
 
-		stream, err := c.getOrCreateStream(tx, req.UserID, req.CharacterID, req.ActionKey, req.ProcessingTaskID)
+		stream, err := c.getOrCreateStream(tx, req.SpaceID, req.ActionKey, req.ProcessingTaskID)
 		if err != nil {
 			return fmt.Errorf("获取或创建ActionStream失败: %w", err)
 		}
@@ -93,7 +92,7 @@ func (c *BaselineActionRevisionCommitter) Commit(req CommitterRequest, procRev *
 		}
 		result.RevisionNumber = revisionNumber
 
-		mappings, err := c.mapper.MapArtifactsToAssets(tx, req.UserID, req.CharacterID, req.ProcessingRevisionID, artifacts)
+		mappings, err := c.mapper.MapArtifactsToAssets(tx, req.SpaceID, req.ProcessingRevisionID, procRev.RootRelativePath, artifacts)
 		if err != nil {
 			return fmt.Errorf("映射FrameAssets失败: %w", err)
 		}
@@ -131,8 +130,7 @@ func (c *BaselineActionRevisionCommitter) Commit(req CommitterRequest, procRev *
 
 		rev := &editing.ActionRevision{
 			ID:                         revisionID,
-			UserID:                     req.UserID,
-			CharacterID:                req.CharacterID,
+			SpaceID:                    req.SpaceID,
 			ProcessingTaskID:           req.ProcessingTaskID,
 			ProcessingActionID:         req.ProcessingActionID,
 			ActionKey:                  req.ActionKey,
@@ -143,7 +141,7 @@ func (c *BaselineActionRevisionCommitter) Commit(req CommitterRequest, procRev *
 			FrameCount:                 frameCount,
 			DefaultFPS:                 req.FPS,
 			LoopType:                   req.LoopType,
-			CreatedByUserID:            req.CreatedBy,
+			CreatedBySpaceID:           req.CreatedBy,
 			CreatedAt:                  now,
 			UpdatedAt:                  now,
 			SourceType:                 SourceTypeProcessingBaseline,
@@ -214,8 +212,8 @@ func (c *BaselineActionRevisionCommitter) Commit(req CommitterRequest, procRev *
 	return result, nil
 }
 
-func (c *BaselineActionRevisionCommitter) getOrCreateStream(tx *gorm.DB, userID, characterID, actionKey, processingTaskID string) (*editing.ActionStream, error) {
-	streamKey := fmt.Sprintf("%s:%s:%s", userID, characterID, actionKey)
+func (c *BaselineActionRevisionCommitter) getOrCreateStream(tx *gorm.DB, spaceID, actionKey, processingTaskID string) (*editing.ActionStream, error) {
+	streamKey := fmt.Sprintf("%s:%s", spaceID, actionKey)
 
 	var stream editing.ActionStream
 	err := tx.Where("stream_key = ?", streamKey).First(&stream).Error
@@ -229,8 +227,7 @@ func (c *BaselineActionRevisionCommitter) getOrCreateStream(tx *gorm.DB, userID,
 	now := time.Now().UTC().Format(time.RFC3339)
 	stream = editing.ActionStream{
 		ID:                   "as-" + uuid.NewString(),
-		UserID:               userID,
-		CharacterID:          characterID,
+		SpaceID:              spaceID,
 		ActionKey:            actionKey,
 		RootProcessingTaskID: processingTaskID,
 		StreamKey:            streamKey,
@@ -324,8 +321,7 @@ func (c *BaselineActionRevisionCommitter) activateBinding(tx *gorm.DB, stream *e
 	binding := &editing.ActiveActionRevisionBinding{
 		ID:                     "ab-" + uuid.NewString(),
 		ActionStreamID:         stream.ID,
-		UserID:                 stream.UserID,
-		CharacterID:            stream.CharacterID,
+		SpaceID:                stream.SpaceID,
 		ActionKey:              stream.ActionKey,
 		ActiveActionRevisionID: revisionID,
 		BindingRevision:        1,
@@ -364,8 +360,7 @@ func (c *BaselineActionRevisionCommitter) createOutboxEvents(tx *gorm.DB, stream
 		"revisionNumber":       revisionNumber,
 		"processingRevisionId": processingRevisionID,
 		"actionKey":            req.ActionKey,
-		"userId":               req.UserID,
-		"characterId":          req.CharacterID,
+		"spaceId":              req.SpaceID,
 		"contentHash":          contentHash,
 		"bindingRevision":      bindingRevision,
 		"occurredAt":           now,
@@ -399,8 +394,7 @@ func (c *BaselineActionRevisionCommitter) createOutboxEvents(tx *gorm.DB, stream
 			"bindingRevision":    bindingRevision,
 			"previousRevisionId": previousRevisionID,
 			"actionKey":          req.ActionKey,
-			"userId":             req.UserID,
-			"characterId":        req.CharacterID,
+			"spaceId":            req.SpaceID,
 			"occurredAt":         now,
 		})
 

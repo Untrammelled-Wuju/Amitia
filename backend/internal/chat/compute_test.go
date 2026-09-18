@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/u-ai/backend/internal/extension/runtimegate"
 	"github.com/u-ai/backend/internal/interaction"
 )
 
@@ -29,6 +30,8 @@ func TestBuildProactiveEmotionFromPsyche_NotReady(t *testing.T) {
 }
 
 func TestBuildProactiveEmotionFromPsyche_NormalState(t *testing.T) {
+	runtimegate.Set(runtimegate.EmotionExtensionID, true)
+	t.Cleanup(func() { runtimegate.Set(runtimegate.EmotionExtensionID, false) })
 	runtime := &interaction.RuntimeAssembly{
 		Context: interaction.ContextSnapshot{
 			Psyche: interaction.FieldReady(interaction.PsycheState{
@@ -65,6 +68,8 @@ func TestBuildProactiveEmotionFromPsyche_NormalState(t *testing.T) {
 }
 
 func TestBuildProactiveEmotionFromPsyche_HighStress(t *testing.T) {
+	runtimegate.Set(runtimegate.EmotionExtensionID, true)
+	t.Cleanup(func() { runtimegate.Set(runtimegate.EmotionExtensionID, false) })
 	runtime := &interaction.RuntimeAssembly{
 		Context: interaction.ContextSnapshot{
 			Psyche: interaction.FieldReady(interaction.PsycheState{

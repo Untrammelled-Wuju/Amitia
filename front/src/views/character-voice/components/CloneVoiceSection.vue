@@ -38,11 +38,11 @@ SPDX-License-Identifier: AGPL-3.0-only
 
     <div class="clone-new-section">
       <div class="form-item-label">训练新音色</div>
-      <p class="sub-desc">填入已购买的复刻槽位ID并上传语音样本</p>
+      <p class="sub-desc">上传语音样本；使用 MegaTTS V1 时需填写已购买的复刻槽位 ID，V3 可留空</p>
       <div class="clone-form-row">
         <el-input
           v-model="trainSpeakerIdModel"
-          placeholder="槽位ID，如 S_xxxxxxxx"
+          placeholder="槽位ID（V1 必填，V3 可留空）"
           size="default"
           style="width: 220px"
         />
@@ -71,7 +71,7 @@ SPDX-License-Identifier: AGPL-3.0-only
         type="success"
         @click="emit('train')"
         :loading="trainLoading"
-        :disabled="!trainSpeakerId.trim() || !cloneFile"
+        :disabled="!cloneFile"
         size="small"
       >
         开始训练

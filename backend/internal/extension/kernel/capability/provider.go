@@ -14,13 +14,13 @@ func (p FilterPlacement) String() string {
 }
 
 type Owner struct {
-	UserID    runtimeidentity.UserID    `json:"userId"`
+	SpaceID   runtimeidentity.SpaceID   `json:"spaceId"`
 	DeviceID  runtimeidentity.DeviceID  `json:"deviceId"`
 	RuntimeID runtimeidentity.RuntimeID `json:"runtimeId"`
 }
 
 func (o Owner) IsValid() bool {
-	return o.UserID != "" || o.DeviceID != "" || o.RuntimeID != ""
+	return o.SpaceID != "" || o.DeviceID != "" || o.RuntimeID != ""
 }
 
 type ProviderID string
@@ -102,7 +102,7 @@ func ParseProviderPlacement(raw string) ProviderPlacement {
 type RoutingMode string
 
 const (
-	RoutingModeLegacy          RoutingMode = "legacy"
+	RoutingModeLegacy            RoutingMode = "legacy"
 	RoutingModeProviderPreferred RoutingMode = "provider_preferred"
 	RoutingModeProviderRequired  RoutingMode = "provider_required"
 )
@@ -173,7 +173,7 @@ type CapabilityProviderInstance struct {
 	ExtensionID string `json:"extensionId,omitempty"`
 	ModuleID    string `json:"moduleId,omitempty"`
 
-	UserID    runtimeidentity.UserID    `json:"userId,omitempty"`
+	SpaceID   runtimeidentity.SpaceID   `json:"spaceId,omitempty"`
 	DeviceID  runtimeidentity.DeviceID  `json:"deviceId,omitempty"`
 	RuntimeID runtimeidentity.RuntimeID `json:"runtimeId,omitempty"`
 
@@ -194,7 +194,7 @@ func (p CapabilityProviderInstance) Normalize() CapabilityProviderInstance {
 	p.ID = ParseProviderInstanceID(string(p.ID))
 	p.ProviderID = ParseProviderID(string(p.ProviderID))
 	p.CapabilityID = ParseCapabilityID(string(p.CapabilityID))
-	p.UserID = runtimeidentity.ParseUserID(string(p.UserID))
+	p.SpaceID = runtimeidentity.ParseSpaceID(string(p.SpaceID))
 	p.DeviceID = runtimeidentity.ParseDeviceID(string(p.DeviceID))
 	p.RuntimeID = runtimeidentity.ParseRuntimeID(string(p.RuntimeID))
 	p.RuntimeInstanceID = strings.TrimSpace(p.RuntimeInstanceID)
@@ -231,7 +231,7 @@ func (p CapabilityProviderInstance) Validate() error {
 
 func (p CapabilityProviderInstance) ValidateIdentity() error {
 	if p.Placement == ProviderPlacementDevice {
-		if p.UserID == "" || p.DeviceID == "" || p.RuntimeID == "" {
+		if p.SpaceID == "" || p.DeviceID == "" || p.RuntimeID == "" {
 			return ErrProviderInstanceIdentityInvalid
 		}
 	}

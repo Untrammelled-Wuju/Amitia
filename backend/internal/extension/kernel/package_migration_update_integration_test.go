@@ -13,7 +13,7 @@ import (
 
 	"github.com/u-ai/backend/internal/extension/kernel/amitiax"
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
-	"github.com/u-ai/backend/internal/extension/kernel/manifest_v2"
+	"github.com/u-ai/backend/internal/extension/kernel/manifest_v1"
 	"github.com/u-ai/backend/internal/extension/kernel/migration"
 )
 
@@ -51,11 +51,11 @@ func packageMigrationSQLStagingDir(t *testing.T, extensionID string, definitions
 	return dir
 }
 
-func packageMigrationManifest(extensionID, version string, definitions []migration.MigrationDefinition) manifest_v2.Manifest {
-	return manifest_v2.Manifest{Extension: manifest_v2.ExtensionMeta{ID: extensionID, Version: version, Metadata: map[string]any{"migrations": map[string]any{"definitions": definitions}}}}
+func packageMigrationManifest(extensionID, version string, definitions []migration.MigrationDefinition) manifest_v1.Manifest {
+	return manifest_v1.Manifest{Extension: manifest_v1.ExtensionMeta{ID: extensionID, Version: version, Metadata: map[string]any{"migrations": map[string]any{"definitions": definitions}}}}
 }
 
-func packageMigrationPackage(manifest manifest_v2.Manifest, definitions []migration.MigrationDefinition) *amitiax.Package {
+func packageMigrationPackage(manifest manifest_v1.Manifest, definitions []migration.MigrationDefinition) *amitiax.Package {
 	files := make([]amitiax.FileEntry, 0, len(definitions))
 	for _, definition := range definitions {
 		files = append(files, amitiax.FileEntry{Path: definition.Entry, Size: 10, Hash: "entry-" + definition.MigrationID})
@@ -109,7 +109,7 @@ func TestPackageMigrationPreviewPersistsPlanEvidence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	preview, err := runtime.PreviewPackage(context.Background(), PackagePreviewRequest{UserID: "user-1", ScopeType: "global", FileName: "migration.amitiax"}, archive)
+	preview, err := runtime.PreviewPackage(context.Background(), PackagePreviewRequest{SpaceID: "user-1", ScopeType: "global", FileName: "migration.amitiax"}, archive)
 	archive.Close()
 	if err != nil {
 		t.Fatal(err)
@@ -210,7 +210,7 @@ func TestPackageMigrationUpdateReverseFailureRequiresManualRecovery(t *testing.T
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	packageOperationID := "package-operation-reverse-fail"
-	if err := container.PackageRepository.CreateOperation(context.Background(), PackageOperationRecord{OperationID: packageOperationID, TraceID: "trace-reverse-fail", UserID: "user-1", ScopeType: "global", ExtensionID: manifest.Extension.ID, OperationType: "update", Status: "created", CurrentStep: "create_operation", StartedAt: now, UpdatedAt: now}); err != nil {
+	if err := container.PackageRepository.CreateOperation(context.Background(), PackageOperationRecord{OperationID: packageOperationID, TraceID: "trace-reverse-fail", SpaceID: "user-1", ScopeType: "global", ExtensionID: manifest.Extension.ID, OperationType: "update", Status: "created", CurrentStep: "create_operation", StartedAt: now, UpdatedAt: now}); err != nil {
 		t.Fatal(err)
 	}
 	if err := container.PackageRepository.SetOperation(context.Background(), packageOperationID, "in_progress", "execute_migrations", "", "", false, PackageWriteGuard{}); err != nil {

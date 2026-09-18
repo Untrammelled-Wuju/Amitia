@@ -60,8 +60,8 @@ func TestBaseline_FinalGate_AllMetricsZero(t *testing.T) {
 	}
 
 	if container.ToolFacade != nil {
-		_, _ = container.ToolFacade.ModelTools(ctx, kernel.LegacyScope{
-			UserID:    "final-gate",
+		_, _ = container.ToolFacade.ModelTools(ctx, kernel.InvocationScope{
+			SpaceID:   "final-gate",
 			Channel:   "test",
 			SessionID: "final-gate-verify",
 		})
@@ -123,8 +123,8 @@ func TestBaseline_FinalGate_LegacyZeroCallAfterLifecycle(t *testing.T) {
 			t.Fatalf("iteration %d Build must succeed: %v", i, err)
 		}
 		facade := kernel.NewToolFacade(container.ToolRegistry, container.ExecutionKernel, kernel.DefaultToolFacadeConfig())
-		scope := kernel.LegacyScope{
-			UserID:    fmt.Sprintf("gate-%d", i),
+		scope := kernel.InvocationScope{
+			SpaceID:   fmt.Sprintf("gate-%d", i),
 			Channel:   "test",
 			SessionID: fmt.Sprintf("gate-session-%d", i),
 		}

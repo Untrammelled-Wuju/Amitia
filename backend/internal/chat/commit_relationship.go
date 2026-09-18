@@ -11,11 +11,11 @@ import (
 
 func (s *service) updateRelationshipStateTx(tx *gorm.DB, plan messageCommitPlan) error {
 	relationType := relationshipTypeForRequest(plan.Request)
-	userID := userIDForRequest(plan.Request)
+	spaceID := spaceIDForRequest(plan.Request)
 	channel := channelForRequest(plan.Request)
 	now := time.Now().Format("2006-01-02 15:04:05")
 	var existing RelationshipStateRecord
-	err := tx.Where("character_id = ? AND user_id = ? AND channel = ? AND relation_type = ?", plan.Character, userID, channel, relationType).Order("updated_at DESC").Take(&existing).Error
+	err := tx.Where("character_id = ? AND space_id = ? AND channel = ? AND relation_type = ?", plan.Character, spaceID, channel, relationType).Order("updated_at DESC").Take(&existing).Error
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		return err
 	}
@@ -44,7 +44,7 @@ func (s *service) updateRelationshipStateTx(tx *gorm.DB, plan messageCommitPlan)
 		existing = RelationshipStateRecord{
 			ID:           uuid.New().String(),
 			CharacterID:  plan.Character,
-			UserID:       userID,
+			SpaceID:      spaceID,
 			Channel:      channel,
 			RelationType: relationType,
 			CreatedAt:    now,
@@ -133,11 +133,11 @@ func (s *service) applyAppraisalResultTx(tx *gorm.DB, plan messageCommitPlan) er
 	appraisal := plan.Runtime.Appraisal
 	if appraisal.RelationshipDelta != 0 {
 		relationType := relationshipTypeForRequest(plan.Request)
-		userID := userIDForRequest(plan.Request)
+		spaceID := spaceIDForRequest(plan.Request)
 		channel := channelForRequest(plan.Request)
 		now := time.Now().Format("2006-01-02 15:04:05")
 		var existing RelationshipStateRecord
-		err := tx.Where("character_id = ? AND user_id = ? AND channel = ? AND relation_type = ?", plan.Character, userID, channel, relationType).Order("updated_at DESC").Take(&existing).Error
+		err := tx.Where("character_id = ? AND space_id = ? AND channel = ? AND relation_type = ?", plan.Character, spaceID, channel, relationType).Order("updated_at DESC").Take(&existing).Error
 		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 			return err
 		}
@@ -153,7 +153,7 @@ func (s *service) applyAppraisalResultTx(tx *gorm.DB, plan messageCommitPlan) er
 		if existing.ID == "" {
 			existing = RelationshipStateRecord{
 				ID: uuid.New().String(), CharacterID: plan.Character,
-				UserID: userID, Channel: channel,
+				SpaceID: spaceID, Channel: channel,
 				RelationType: relationType, CreatedAt: now,
 			}
 		}
@@ -170,7 +170,7 @@ func (s *service) applyAppraisalResultTx(tx *gorm.DB, plan messageCommitPlan) er
 type RelationshipStateRecord struct {
 	ID           string `gorm:"primaryKey;column:id"`
 	CharacterID  string `gorm:"column:character_id"`
-	UserID       string `gorm:"column:user_id"`
+	SpaceID      string `gorm:"column:space_id"`
 	Channel      string `gorm:"column:channel"`
 	RelationType string `gorm:"column:relation_type"`
 	RelationData string `gorm:"column:relation_data"`

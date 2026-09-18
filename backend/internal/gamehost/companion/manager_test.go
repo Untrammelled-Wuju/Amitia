@@ -127,6 +127,10 @@ func TestDeployRequiredToAuthorizedRootsRequiresGrantAndExplicitUpgradeRefresh(t
 	}
 
 	targetRoot := t.TempDir()
+	canonicalRoot, err := canonicalTargetRoot(targetRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
 	grant, err := manager.AuthorizeTargetRootForCompatibility(ctx, extensionID, targetRoot, "1.21.4")
 	if err != nil {
 		t.Fatalf("AuthorizeTargetRootForCompatibility() error = %v", err)
@@ -158,7 +162,7 @@ func TestDeployRequiredToAuthorizedRootsRequiresGrantAndExplicitUpgradeRefresh(t
 	if err != nil {
 		t.Fatalf("ListAuthorizedTargetRoots() after refresh error = %v", err)
 	}
-	if len(grants) != 1 || grants[0].TargetRoot != filepath.Clean(targetRoot) || grants[0].Generation != "generation-2" {
+	if len(grants) != 1 || grants[0].TargetRoot != canonicalRoot || grants[0].Generation != "generation-2" {
 		t.Fatalf("host refresh did not preserve the exact root on the new generation: %+v", grants)
 	}
 	if grants[0].CompatibilityVersion != "1.21.4" {
@@ -181,7 +185,7 @@ func TestDeployRequiredToAuthorizedRootsRequiresGrantAndExplicitUpgradeRefresh(t
 	if err != nil {
 		t.Fatalf("ListAuthorizedTargetRoots() after rollback refresh error = %v", err)
 	}
-	if len(grants) != 1 || grants[0].TargetRoot != filepath.Clean(targetRoot) || grants[0].Generation != "generation-rollback" {
+	if len(grants) != 1 || grants[0].TargetRoot != canonicalRoot || grants[0].Generation != "generation-rollback" {
 		t.Fatalf("host rollback refresh did not preserve the exact root: %+v", grants)
 	}
 	if grants[0].CompatibilityVersion != "1.21.4" {

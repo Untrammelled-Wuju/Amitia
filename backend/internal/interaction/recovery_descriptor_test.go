@@ -28,7 +28,7 @@ func (f *fakeRecoveryGoalReader) GetGoal(ctx context.Context, id string) (decisi
 }
 
 type fakeRecoveryTaskReader struct {
-	runs       map[string]*taskRunRecoveryView
+	runs        map[string]*taskRunRecoveryView
 	checkpoints map[string]*taskCheckpointRecoveryView
 }
 
@@ -105,9 +105,9 @@ func (t *fakeServiceTracker) Get(ctx context.Context, id string) (*InteractionRe
 	return r, ok, nil
 }
 
-func (t *fakeServiceTracker) GetByRequestID(ctx context.Context, userID, requestID string) (*InteractionRecord, bool, error) {
+func (t *fakeServiceTracker) GetByRequestID(ctx context.Context, spaceID, requestID string) (*InteractionRecord, bool, error) {
 	for _, r := range t.records {
-		if r.Scope.UserID == userID && r.Scope.RequestID == requestID {
+		if r.Scope.SpaceID == spaceID && r.Scope.RequestID == requestID {
 			return r, true, nil
 		}
 	}
@@ -129,7 +129,7 @@ func (t *fakeServiceTracker) ListByScope(ctx context.Context, scope InteractionS
 	normalized := scope.Normalize()
 	for _, r := range t.records {
 		rNorm := r.Scope.Normalize()
-		if (normalized.UserID == "" || rNorm.UserID == normalized.UserID) &&
+		if (normalized.SpaceID == "" || rNorm.SpaceID == normalized.SpaceID) &&
 			(normalized.CharacterID == "" || rNorm.CharacterID == normalized.CharacterID) &&
 			(normalized.ConversationID == "" || rNorm.ConversationID == normalized.ConversationID) {
 			out = append(out, r)
@@ -221,7 +221,7 @@ func TestRecoveryDescriptorBuilder_BuildMinimalDescriptor(t *testing.T) {
 	goals := &fakeRecoveryGoalReader{goals: map[string]decision.Goal{
 		"goal-1": {
 			ID:             "goal-1",
-			UserID:         "user-1",
+			SpaceID:        "user-1",
 			CharacterID:    "char-1",
 			ConversationID: "conv-1",
 			Status:         decision.GoalStatusActive,
@@ -236,7 +236,7 @@ func TestRecoveryDescriptorBuilder_BuildMinimalDescriptor(t *testing.T) {
 			Status:        InteractionStatusProcessing,
 			StatusVersion: 2,
 			Scope: InteractionScope{
-				UserID:         "user-1",
+				SpaceID:        "user-1",
 				CharacterID:    "char-1",
 				ConversationID: "conv-1",
 				RequestID:      "request-1",
@@ -260,7 +260,7 @@ func TestRecoveryDescriptorBuilder_BuildMinimalDescriptor(t *testing.T) {
 	if len(desc.Goals) != 1 || desc.Goals[0].GoalID != "goal-1" {
 		t.Fatalf("expected single goal ref, got %+v", desc.Goals)
 	}
-	if desc.Scope.UserID != "user-1" || desc.Scope.ConversationID != "conv-1" {
+	if desc.Scope.SpaceID != "user-1" || desc.Scope.ConversationID != "conv-1" {
 		t.Fatalf("scope mismatch: %+v", desc.Scope)
 	}
 	if desc.Fingerprint == "" {
@@ -275,7 +275,7 @@ func TestRecoveryDescriptorBuilder_GoalScopeMismatch(t *testing.T) {
 	goals := &fakeRecoveryGoalReader{goals: map[string]decision.Goal{
 		"goal-1": {
 			ID:             "goal-1",
-			UserID:         "other-user",
+			SpaceID:        "other-user",
 			CharacterID:    "char-1",
 			ConversationID: "conv-1",
 			Status:         decision.GoalStatusActive,
@@ -288,7 +288,7 @@ func TestRecoveryDescriptorBuilder_GoalScopeMismatch(t *testing.T) {
 			ID:            "intr-1",
 			Status:        InteractionStatusProcessing,
 			StatusVersion: 1,
-			Scope:         InteractionScope{UserID: "user-1", CharacterID: "char-1", ConversationID: "conv-1"},
+			Scope:         InteractionScope{SpaceID: "user-1", CharacterID: "char-1", ConversationID: "conv-1"},
 		},
 		GoalRefs: []decision.GoalRef{{ID: "goal-1"}},
 	}
@@ -302,7 +302,7 @@ func TestRecoveryDescriptorBuilder_CrossCharacterGoalScopeMismatch(t *testing.T)
 	goals := &fakeRecoveryGoalReader{goals: map[string]decision.Goal{
 		"goal-1": {
 			ID:             "goal-1",
-			UserID:         "user-1",
+			SpaceID:        "user-1",
 			CharacterID:    "other-char",
 			ConversationID: "conv-1",
 			Status:         decision.GoalStatusActive,
@@ -315,7 +315,7 @@ func TestRecoveryDescriptorBuilder_CrossCharacterGoalScopeMismatch(t *testing.T)
 			ID:            "intr-1",
 			Status:        InteractionStatusProcessing,
 			StatusVersion: 1,
-			Scope:         InteractionScope{UserID: "user-1", CharacterID: "char-1", ConversationID: "conv-1"},
+			Scope:         InteractionScope{SpaceID: "user-1", CharacterID: "char-1", ConversationID: "conv-1"},
 		},
 		GoalRefs: []decision.GoalRef{{ID: "goal-1"}},
 	}
@@ -356,7 +356,7 @@ func TestRecoveryDescriptorBuilder_TaskWithCanonicalExperience(t *testing.T) {
 			ID:            "intr-1",
 			Status:        InteractionStatusProcessing,
 			StatusVersion: 1,
-			Scope:         InteractionScope{UserID: "user-1"},
+			Scope:         InteractionScope{SpaceID: "user-1"},
 		},
 		TaskRunID: taskID,
 	}
@@ -383,7 +383,7 @@ func TestRecoveryDescriptorBuilder_TaskMissingReturnsError(t *testing.T) {
 			ID:            "intr-1",
 			Status:        InteractionStatusProcessing,
 			StatusVersion: 1,
-			Scope:         InteractionScope{UserID: "user-1"},
+			Scope:         InteractionScope{SpaceID: "user-1"},
 		},
 		TaskRunID: "missing-task",
 	}
@@ -419,7 +419,7 @@ func TestRecoveryDescriptorBuilder_WorkflowCheckpointAndList(t *testing.T) {
 			ID:            "intr-1",
 			Status:        InteractionStatusProcessing,
 			StatusVersion: 1,
-			Scope:         InteractionScope{UserID: "user-1"},
+			Scope:         InteractionScope{SpaceID: "user-1"},
 		},
 		WorkflowExecutionID: wfID,
 	}
@@ -443,7 +443,7 @@ func TestRecoveryDescriptor_Fingerprint_Deterministic(t *testing.T) {
 			Revision:      1,
 			State:         RecoveryDescriptorActive,
 			Interaction:   RecoveryInteractionRef{InteractionID: "i1", Status: InteractionStatusProcessing, StatusVersion: 3},
-			Scope:         RecoveryScopeRef{UserID: "u1", CharacterID: "c1", ConversationID: "cv1"},
+			Scope:         RecoveryScopeRef{SpaceID: "u1", CharacterID: "c1", ConversationID: "cv1"},
 			Goals: []RecoveryGoalRef{
 				{GoalID: "g2", Revision: 1, Status: decision.GoalStatusActive},
 				{GoalID: "g1", Revision: 2, Status: decision.GoalStatusPending},
@@ -537,7 +537,7 @@ func TestRecoveryDescriptor_NilReturnsNil(t *testing.T) {
 func TestRecoveryDescriptorService_AssociateIdempotentFingerprint(t *testing.T) {
 	tracker := newFakeServiceTracker()
 	record := NewInteractionRecord(InteractionScope{
-		UserID:         "user-1",
+		SpaceID:        "user-1",
 		CharacterID:    "char-1",
 		ConversationID: "conv-1",
 		RequestID:      "request-1",
@@ -571,7 +571,7 @@ func TestRecoveryDescriptorService_AssociateIdempotentFingerprint(t *testing.T) 
 
 func TestRecoveryDescriptorService_AssociateRejectsCommitted(t *testing.T) {
 	tracker := newFakeServiceTracker()
-	record := NewInteractionRecord(InteractionScope{UserID: "user-1"})
+	record := NewInteractionRecord(InteractionScope{SpaceID: "user-1"})
 	if err := tracker.Create(context.Background(), record); err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -604,7 +604,7 @@ func TestRecoveryDescriptorService_AssociateThrowsOnNilInteraction(t *testing.T)
 
 func TestRecoveryDescriptorService_LoadReturnsStoredDescriptor(t *testing.T) {
 	tracker := newFakeServiceTracker()
-	record := NewInteractionRecord(InteractionScope{UserID: "user-1"})
+	record := NewInteractionRecord(InteractionScope{SpaceID: "user-1"})
 	if err := tracker.Create(context.Background(), record); err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -631,7 +631,7 @@ func TestRecoveryDescriptorService_LoadReturnsStoredDescriptor(t *testing.T) {
 
 func TestRecoveryDescriptorService_ValidateClassifiesDescriptor(t *testing.T) {
 	goals := &fakeRecoveryGoalReader{goals: map[string]decision.Goal{
-		"goal-1": {ID: "goal-1", UserID: "user-1", Revision: 1, Status: decision.GoalStatusActive},
+		"goal-1": {ID: "goal-1", SpaceID: "user-1", Revision: 1, Status: decision.GoalStatusActive},
 	}}
 	tasks := &fakeRecoveryTaskReader{}
 	workflows := &fakeRecoveryWorkflowReader{}
@@ -648,7 +648,7 @@ func TestRecoveryDescriptorService_ValidateClassifiesDescriptor(t *testing.T) {
 		Revision:      1,
 		State:         RecoveryDescriptorActive,
 		Interaction:   RecoveryInteractionRef{InteractionID: "i1", Status: InteractionStatusProcessing, StatusVersion: 1},
-		Scope:         RecoveryScopeRef{UserID: "user-1"},
+		Scope:         RecoveryScopeRef{SpaceID: "user-1"},
 		Goals: []RecoveryGoalRef{
 			{GoalID: "goal-1", Revision: 1, Status: decision.GoalStatusActive},
 		},
@@ -670,7 +670,7 @@ func TestRecoveryDescriptorService_ValidateClassifiesDescriptor(t *testing.T) {
 
 func TestRecoveryDescriptorValidator_AcceptedGoalRevisionMismatch(t *testing.T) {
 	goals := &fakeRecoveryGoalReader{goals: map[string]decision.Goal{
-		"goal-1": {ID: "goal-1", UserID: "user-1", Revision: 5, Status: decision.GoalStatusActive},
+		"goal-1": {ID: "goal-1", SpaceID: "user-1", Revision: 5, Status: decision.GoalStatusActive},
 	}}
 	tasks := &fakeRecoveryTaskReader{}
 	invocations := &fakeRecoveryInvocationReader{}
@@ -678,7 +678,7 @@ func TestRecoveryDescriptorValidator_AcceptedGoalRevisionMismatch(t *testing.T) 
 	desc := &RecoveryDescriptor{
 		SchemaVersion: RecoveryDescriptorSchemaVersion,
 		Interaction:   RecoveryInteractionRef{InteractionID: "i1", Status: InteractionStatusProcessing},
-		Scope:         RecoveryScopeRef{UserID: "user-1"},
+		Scope:         RecoveryScopeRef{SpaceID: "user-1"},
 		Goals: []RecoveryGoalRef{
 			{GoalID: "goal-1", Revision: 2, Status: decision.GoalStatusActive},
 		},
@@ -749,7 +749,7 @@ func TestRecoveryClassifier_ManualWhenTaskCheckpointMissing(t *testing.T) {
 			CheckpointID:   "cp-1",
 		},
 		Interaction: RecoveryInteractionRef{InteractionID: "i1", Status: InteractionStatusProcessing},
-		Scope:       RecoveryScopeRef{UserID: "u1"},
+		Scope:       RecoveryScopeRef{SpaceID: "u1"},
 		State:       RecoveryDescriptorActive,
 	}
 	result, err := validator.Validate(context.Background(), desc)
@@ -774,7 +774,7 @@ func TestRecoveryInvocation_ClassifiesTerminalDescriptor(t *testing.T) {
 			Status:       "succeeded",
 		},
 		Interaction: RecoveryInteractionRef{InteractionID: "i1"},
-		Scope:       RecoveryScopeRef{UserID: "u1"},
+		Scope:       RecoveryScopeRef{SpaceID: "u1"},
 		State:       RecoveryDescriptorActive,
 	}
 	result, err := validator.Validate(context.Background(), desc)
@@ -804,7 +804,7 @@ func TestRecoveryInvocation_NonTerminalAddsCriticalIssue(t *testing.T) {
 			Status:       "running",
 		},
 		Interaction: RecoveryInteractionRef{InteractionID: "i1"},
-		Scope:       RecoveryScopeRef{UserID: "u1"},
+		Scope:       RecoveryScopeRef{SpaceID: "u1"},
 		State:       RecoveryDescriptorActive,
 	}
 	result, err := validator.Validate(context.Background(), desc)
@@ -838,7 +838,7 @@ func TestRecoveryWorkflow_GenerationMismatchEmitsStale(t *testing.T) {
 			Status:      workflow.RunStatusRunning,
 		},
 		Interaction: RecoveryInteractionRef{InteractionID: "i1"},
-		Scope:       RecoveryScopeRef{UserID: "u1"},
+		Scope:       RecoveryScopeRef{SpaceID: "u1"},
 		State:       RecoveryDescriptorActive,
 	}
 	result, err := validator.Validate(context.Background(), desc)
@@ -882,7 +882,7 @@ func TestDescriptorRefStaleChecker_EmitsDiffsForStaleRefs(t *testing.T) {
 		ID:            "i1",
 		Status:        InteractionStatusProcessing,
 		StatusVersion: 1,
-		Scope:         InteractionScope{UserID: "user-1"},
+		Scope:         InteractionScope{SpaceID: "user-1"},
 	}
 	staleRec.RecoveryDescriptor = &RecoveryDescriptor{
 		SchemaVersion: RecoveryDescriptorSchemaVersion,
@@ -890,7 +890,7 @@ func TestDescriptorRefStaleChecker_EmitsDiffsForStaleRefs(t *testing.T) {
 		State:         RecoveryDescriptorActive,
 		UpdatedAt:     time.Now().Add(-10 * time.Second),
 		Interaction:   RecoveryInteractionRef{InteractionID: "i1", Status: InteractionStatusProcessing},
-		Scope:         RecoveryScopeRef{UserID: "user-1"},
+		Scope:         RecoveryScopeRef{SpaceID: "user-1"},
 		Goals: []RecoveryGoalRef{
 			{GoalID: "goal-1", Revision: 1, Status: decision.GoalStatusActive},
 		},
@@ -899,7 +899,7 @@ func TestDescriptorRefStaleChecker_EmitsDiffsForStaleRefs(t *testing.T) {
 	tracker.insert(staleRec)
 
 	goals := &fakeRecoveryGoalReader{goals: map[string]decision.Goal{
-		"goal-1": {ID: "goal-1", UserID: "user-1", Revision: 3, Status: decision.GoalStatusActive},
+		"goal-1": {ID: "goal-1", SpaceID: "user-1", Revision: 3, Status: decision.GoalStatusActive},
 	}}
 	builder := NewRecoveryDescriptorBuilder(goals, &fakeRecoveryTaskReader{}, &fakeRecoveryWorkflowReader{}, &fakeRecoveryInvocationReader{}, &fakeRecoveryPipelineReader{})
 	validator := NewRecoveryDescriptorValidator(goals, &fakeRecoveryTaskReader{}, &fakeRecoveryWorkflowReader{}, &fakeRecoveryInvocationReader{}, &fakeRecoveryPipelineReader{})
@@ -930,7 +930,7 @@ func TestDescriptorRefStaleChecker_EmitsDiffsForStaleRefs(t *testing.T) {
 
 func TestDescriptorRefStaleChecker_NoDiffsWhenNoDescriptors(t *testing.T) {
 	tracker := newFakeServiceTracker()
-	rec := NewInteractionRecord(InteractionScope{UserID: "user-1"})
+	rec := NewInteractionRecord(InteractionScope{SpaceID: "user-1"})
 	if err := tracker.Create(context.Background(), rec); err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -956,12 +956,12 @@ func strPtr(s string) *string {
 func TestRecoveryDescriptorService_AssociateInjectsBumpsRevision(t *testing.T) {
 	ctx := context.Background()
 	tracker := newFakeServiceTracker()
-	record := NewInteractionRecord(InteractionScope{UserID: "user-1"})
+	record := NewInteractionRecord(InteractionScope{SpaceID: "user-1"})
 	if err := tracker.Create(ctx, record); err != nil {
 		t.Fatalf("create: %v", err)
 	}
 	goals := &fakeRecoveryGoalReader{goals: map[string]decision.Goal{
-		"goal-1": {ID: "goal-1", UserID: "user-1", Revision: 1, Status: decision.GoalStatusActive},
+		"goal-1": {ID: "goal-1", SpaceID: "user-1", Revision: 1, Status: decision.GoalStatusActive},
 	}}
 	builder := NewRecoveryDescriptorBuilder(goals, &fakeRecoveryTaskReader{}, &fakeRecoveryWorkflowReader{}, &fakeRecoveryInvocationReader{}, &fakeRecoveryPipelineReader{})
 	validator := NewRecoveryDescriptorValidator(goals, &fakeRecoveryTaskReader{}, &fakeRecoveryWorkflowReader{}, &fakeRecoveryInvocationReader{}, &fakeRecoveryPipelineReader{})
@@ -1000,7 +1000,7 @@ func TestRecoveryDescriptorService_AssociateReturnsNotFoundOnUnknownInteraction(
 
 func TestRecoveryDescriptorService_AssociateDefaultRequirement(t *testing.T) {
 	tracker := newFakeServiceTracker()
-	record := NewInteractionRecord(InteractionScope{UserID: "user-1"})
+	record := NewInteractionRecord(InteractionScope{SpaceID: "user-1"})
 	if err := tracker.Create(context.Background(), record); err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -1021,7 +1021,7 @@ func TestRecoveryDescriptorService_AssociateDefaultRequirement(t *testing.T) {
 
 func TestRecoveryDescriptor_OnlyStoresRefs(t *testing.T) {
 	goals := &fakeRecoveryGoalReader{goals: map[string]decision.Goal{
-		"goal-1": {ID: "goal-1", UserID: "user-1", Description: "sensitive-content-here", Revision: 1, Status: decision.GoalStatusActive},
+		"goal-1": {ID: "goal-1", SpaceID: "user-1", Description: "sensitive-content-here", Revision: 1, Status: decision.GoalStatusActive},
 	}}
 	builder := NewRecoveryDescriptorBuilder(goals, &fakeRecoveryTaskReader{}, &fakeRecoveryWorkflowReader{}, &fakeRecoveryInvocationReader{}, &fakeRecoveryPipelineReader{})
 	input := RecoveryDescriptorInput{
@@ -1029,7 +1029,7 @@ func TestRecoveryDescriptor_OnlyStoresRefs(t *testing.T) {
 			ID:            "i1",
 			Status:        InteractionStatusProcessing,
 			StatusVersion: 1,
-			Scope:         InteractionScope{UserID: "user-1"},
+			Scope:         InteractionScope{SpaceID: "user-1"},
 		},
 		GoalRefs: []decision.GoalRef{{ID: "goal-1"}},
 	}
@@ -1053,7 +1053,7 @@ func TestRecoveryDescriptor_RawPayloadNotSerialized(t *testing.T) {
 		Interaction: &InteractionRecord{
 			ID:     "i1",
 			Status: InteractionStatusProcessing,
-			Scope:  InteractionScope{UserID: "user-1"},
+			Scope:  InteractionScope{SpaceID: "user-1"},
 		},
 	}
 	desc, err := builder.Build(context.Background(), input)
@@ -1093,7 +1093,7 @@ func TestRecoveryDescriptorPipeline_StaleWhenNewer(t *testing.T) {
 			LastMessageSequence: 30,
 		},
 		Interaction: RecoveryInteractionRef{InteractionID: "i1"},
-		Scope:       RecoveryScopeRef{UserID: "user-1"},
+		Scope:       RecoveryScopeRef{SpaceID: "user-1"},
 		State:       RecoveryDescriptorActive,
 	}
 	result, err := validator.Validate(context.Background(), desc)
@@ -1119,7 +1119,7 @@ func TestRecoveryDescriptorFromJSON_RoundTripsFingerprint(t *testing.T) {
 		Revision:      2,
 		State:         RecoveryDescriptorActive,
 		Interaction:   RecoveryInteractionRef{InteractionID: "i1", Status: InteractionStatusProcessing, StatusVersion: 3},
-		Scope:         RecoveryScopeRef{UserID: "u1"},
+		Scope:         RecoveryScopeRef{SpaceID: "u1"},
 		Goals: []RecoveryGoalRef{
 			{GoalID: "g1", Revision: 1, Status: decision.GoalStatusActive},
 		},
@@ -1186,22 +1186,22 @@ func TestRecoveryDescriptor_ConstantsMatchSpec(t *testing.T) {
 func TestDescriptorRefStaleChecker_BatchTruncatesAndRespectsSettle(t *testing.T) {
 	tracker := newFakeServiceTracker()
 	goalsData := map[string]decision.Goal{
-		"goal-stale-0": {ID: "goal-stale-0", UserID: "user-1", Revision: 5, Status: decision.GoalStatusActive},
-		"goal-stale-1": {ID: "goal-stale-1", UserID: "user-1", Revision: 5, Status: decision.GoalStatusActive},
+		"goal-stale-0": {ID: "goal-stale-0", SpaceID: "user-1", Revision: 5, Status: decision.GoalStatusActive},
+		"goal-stale-1": {ID: "goal-stale-1", SpaceID: "user-1", Revision: 5, Status: decision.GoalStatusActive},
 	}
 	for i := 0; i < 5; i++ {
 		rec := &InteractionRecord{
 			ID:            "i" + string(rune('a'+i)),
 			Status:        InteractionStatusProcessing,
 			StatusVersion: 1,
-			Scope:         InteractionScope{UserID: "user-1"},
+			Scope:         InteractionScope{SpaceID: "user-1"},
 		}
 		rec.RecoveryDescriptor = &RecoveryDescriptor{
 			SchemaVersion: RecoveryDescriptorSchemaVersion,
 			State:         RecoveryDescriptorActive,
 			UpdatedAt:     time.Now().Add(-10 * time.Second),
 			Interaction:   RecoveryInteractionRef{InteractionID: rec.ID, Status: InteractionStatusProcessing},
-			Scope:         RecoveryScopeRef{UserID: "user-1"},
+			Scope:         RecoveryScopeRef{SpaceID: "user-1"},
 			Goals: []RecoveryGoalRef{
 				{GoalID: "goal-stale-" + string(rune('0'+i%2)), Revision: 1, Status: decision.GoalStatusActive},
 			},
@@ -1230,7 +1230,7 @@ func TestDescriptorRefStaleChecker_BatchTruncatesAndRespectsSettle(t *testing.T)
 
 func TestRecoveryDescriptor_AbsentDescriptor_PassesThroughDescriptorRefStale(t *testing.T) {
 	tracker := newFakeServiceTracker()
-	rec := NewInteractionRecord(InteractionScope{UserID: "user-1"})
+	rec := NewInteractionRecord(InteractionScope{SpaceID: "user-1"})
 	if err := tracker.Create(context.Background(), rec); err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -1260,13 +1260,13 @@ func TestRecoveryDescriptorService_DescriptorPersistenceCompatibility(t *testing
 		}
 	})
 	ctx := context.Background()
-	scope := InteractionScope{UserID: "u1", CharacterID: "c1", ConversationID: "cv1"}
+	scope := InteractionScope{SpaceID: "u1", CharacterID: "c1", ConversationID: "cv1"}
 	rec := NewInteractionRecord(scope)
 	if err := tr.Create(ctx, rec); err != nil {
 		t.Fatalf("create: %v", err)
 	}
 	goals := &fakeRecoveryGoalReader{goals: map[string]decision.Goal{
-		"goal-1": {ID: "goal-1", UserID: "u1", CharacterID: "c1", ConversationID: "cv1", Revision: 1, Status: decision.GoalStatusActive},
+		"goal-1": {ID: "goal-1", SpaceID: "u1", CharacterID: "c1", ConversationID: "cv1", Revision: 1, Status: decision.GoalStatusActive},
 	}}
 	tasks := &fakeRecoveryTaskReader{}
 	workflows := &fakeRecoveryWorkflowReader{}
@@ -1310,7 +1310,7 @@ func TestRecoveryDescriptorService_PipelineAndInvocationReaderBackedByObservabil
 		}
 	})
 	ctx := context.Background()
-	rec := NewInteractionRecord(InteractionScope{UserID: "u1"})
+	rec := NewInteractionRecord(InteractionScope{SpaceID: "u1"})
 	if err := tr.Create(ctx, rec); err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -1367,7 +1367,7 @@ func TestB12SpecItems_RecoveryDescriptorInteractionIsAuthority(t *testing.T) {
 	}
 	goals := &fakeRecoveryGoalReader{}
 	builder := NewRecoveryDescriptorBuilder(goals, &fakeRecoveryTaskReader{}, &fakeRecoveryWorkflowReader{}, &fakeRecoveryInvocationReader{}, &fakeRecoveryPipelineReader{})
-	input := RecoveryDescriptorInput{Interaction: &InteractionRecord{ID: "x", Status: InteractionStatusProcessing, Scope: InteractionScope{UserID: "u1"}}}
+	input := RecoveryDescriptorInput{Interaction: &InteractionRecord{ID: "x", Status: InteractionStatusProcessing, Scope: InteractionScope{SpaceID: "u1"}}}
 	desc, err := builder.Build(context.Background(), input)
 	if err != nil {
 		t.Fatalf("build: %v", err)
@@ -1381,7 +1381,7 @@ func TestB12SpecItems_RecoveryDescriptorInteractionIsAuthority(t *testing.T) {
 func TestB12SpecItems_BuilderDefaultStateActive(t *testing.T) {
 	goals := &fakeRecoveryGoalReader{}
 	builder := NewRecoveryDescriptorBuilder(goals, &fakeRecoveryTaskReader{}, &fakeRecoveryWorkflowReader{}, &fakeRecoveryInvocationReader{}, &fakeRecoveryPipelineReader{})
-	input := RecoveryDescriptorInput{Interaction: &InteractionRecord{ID: "x", Status: InteractionStatusProcessing, Scope: InteractionScope{UserID: "u1"}}}
+	input := RecoveryDescriptorInput{Interaction: &InteractionRecord{ID: "x", Status: InteractionStatusProcessing, Scope: InteractionScope{SpaceID: "u1"}}}
 	desc, err := builder.Build(context.Background(), input)
 	if err != nil {
 		t.Fatalf("build: %v", err)

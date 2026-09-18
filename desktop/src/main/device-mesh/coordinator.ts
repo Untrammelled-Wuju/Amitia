@@ -7,11 +7,11 @@ import {
   postMeshBootstrap,
   deleteMeshCredential,
 } from "./local-agent-client";
-import { createBootstrapTicket } from "./remote-bootstrap-client";
+import { claimPairing } from "./remote-bootstrap-client";
 import {
   type DeviceMeshAgentState,
   type DeviceMeshStatusResponse,
-  type CloudBootstrapTicketRequest,
+  type CloudPairingDeviceIdentity,
 } from "./protocol";
 
 export type MeshCoordinatorEvent =
@@ -67,7 +67,7 @@ export class DeviceMeshCoordinator {
     return this.lastStatus;
   }
 
-  async provision(cloudBaseUrl: string): Promise<void> {
+  async provision(cloudBaseUrl: string, pairing?: { offerToken?: string; setupCode?: string }): Promise<void> {
     const identity = await getMeshIdentity();
     if (!identity) {
       throw new Error("本地 device-mesh 身份不可用，请确保核心以 device-agent Profile 运行");
@@ -76,14 +76,18 @@ export class DeviceMeshCoordinator {
     this.lastDeviceId = identity.deviceId;
     this.lastRuntimeId = identity.runtimeId;
 
-    const ticketReq: CloudBootstrapTicketRequest = {
+    const pairingIdentity: CloudPairingDeviceIdentity = {
       deviceId: identity.deviceId,
       runtimeId: identity.runtimeId,
       platform: this.platform,
       label: `Desktop ${getDesktopInstanceID()}`,
     };
 
-    const ticket = await createBootstrapTicket(cloudBaseUrl, ticketReq);
+    const ticket = await claimPairing(cloudBaseUrl, {
+      ...pairingIdentity,
+      offerToken: pairing?.offerToken?.trim() || undefined,
+      setupCode: pairing?.setupCode?.trim() || undefined,
+    });
 
     await postMeshBootstrap({
       cloudBaseUrl,
@@ -95,7 +99,6 @@ export class DeviceMeshCoordinator {
 
   async deprovision(): Promise<void> {
     await deleteMeshCredential();
-    this.lastState = "unprovisioned";
     this.lastStatus = null;
     this.emitState("unprovisioned");
   }

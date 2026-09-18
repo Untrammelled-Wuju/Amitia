@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 package specs
 
-const cameraConstraint = "固定正面镜头，角色半身居中，保持固定缩放比例"
+const cameraConstraint = "固定正面镜头，角色居中，保持固定缩放比例"
 const continuityConstraint = "保持与参考图同一角色，脸部/发型/服装/配饰/身体比例一致"
 
 var defaultSpecs = map[string]ActionGenerationSpec{

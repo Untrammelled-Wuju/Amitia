@@ -14,7 +14,22 @@ class BusinessBackendUnavailable implements Exception {
 
   @override
   String toString() {
-    final code = primaryError?.code ?? 'BUSINESS_UNAVAILABLE';
-    return 'BusinessBackendUnavailable(${phase.name}, gen=$generation, code=$code)';
+    final error = primaryError;
+    final buffer = StringBuffer()
+      ..writeln('BusinessBackendUnavailable(')
+      ..writeln('  phase: ${phase.name}')
+      ..writeln('  generation: $generation')
+      ..writeln('  source: ${error?.source.name ?? 'unavailable'}')
+      ..writeln('  code: ${error?.code ?? 'BUSINESS_UNAVAILABLE'}')
+      ..writeln(
+        '  message: ${error?.message ?? 'No primary RuntimeStatusError is attached. Inspect the preceding Runtime bootstrap error for the root cause.'}',
+      );
+    if (error != null && error.details.isNotEmpty) {
+      for (final entry in error.details.entries) {
+        buffer.writeln('  ${entry.key}: ${entry.value}');
+      }
+    }
+    buffer.write(')');
+    return buffer.toString();
   }
 }

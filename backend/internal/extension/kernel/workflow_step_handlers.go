@@ -120,7 +120,7 @@ func workflowInvocation(execCtx workflow.ExecutionContext, invocationID string) 
 		InvocationID:         invocationID,
 		ParentID:             execCtx.InvocationID,
 		RootID:               rootID,
-		UserID:               execCtx.UserID,
+		SpaceID:              execCtx.SpaceID,
 		CharacterID:          execCtx.CharacterID,
 		ConversationID:       execCtx.ConversationID,
 		ExtensionID:          execCtx.ExtensionID,

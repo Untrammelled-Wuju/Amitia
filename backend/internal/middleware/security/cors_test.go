@@ -11,22 +11,20 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func TestCorsMiddleware_AllowsDesktopDeviceHeadersForLoopbackPetRequests(t *testing.T) {
+func TestCorsMiddleware_AllowsDesktopDevelopmentUploadPreflight(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
-	router.Use(CorsMiddleware(CorsConfig{
-		AllowedOrigins: []string{"http://cloud.example.test"},
-	}))
-	router.GET("/api/desktop-pets/installations", func(c *gin.Context) {
+	router.Use(CorsMiddleware(CorsConfig{}))
+	router.POST("/api/extensions/packages/artifacts", func(c *gin.Context) {
 		c.Status(http.StatusOK)
 	})
 
-	request := httptest.NewRequest(http.MethodOptions, "/api/desktop-pets/installations", nil)
-	request.Header.Set("Origin", "http://cloud.example.test")
-	request.Header.Set("Access-Control-Request-Method", http.MethodGet)
+	request := httptest.NewRequest(http.MethodOptions, "/api/extensions/packages/artifacts", nil)
+	request.Header.Set("Origin", "http://localhost:15178")
+	request.Header.Set("Access-Control-Request-Method", http.MethodPost)
 	request.Header.Set(
 		"Access-Control-Request-Headers",
-		"x-amitia-desktop-session,x-amitia-desktop-instance,x-amitia-device-id,x-amitia-client-type,idempotency-key",
+		"content-type,cache-control,x-amitia-desktop-session,x-amitia-desktop-instance,x-amitia-device-id,x-amitia-client-type,x-amitia-management-target,idempotency-key",
 	)
 
 	response := httptest.NewRecorder()
@@ -37,10 +35,13 @@ func TestCorsMiddleware_AllowsDesktopDeviceHeadersForLoopbackPetRequests(t *test
 	}
 	allowed := strings.ToLower(response.Header().Get("Access-Control-Allow-Headers"))
 	for _, header := range []string{
+		"content-type",
+		"cache-control",
 		"x-amitia-desktop-session",
 		"x-amitia-desktop-instance",
 		"x-amitia-device-id",
 		"x-amitia-client-type",
+		"x-amitia-management-target",
 		"idempotency-key",
 	} {
 		if !strings.Contains(allowed, header) {

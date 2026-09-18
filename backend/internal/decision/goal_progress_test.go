@@ -7,8 +7,8 @@ import (
 )
 
 func TestEvaluateObserveOnlyToolSuccessDoesNotAdvanceProgress(t *testing.T) {
-	goal := Goal{ID: "g1", Status: GoalStatusActive, Progress: 0.2, Revision: 1, UserID: "u1", CharacterID: "c1", ConversationID: "conv1"}
-	obs := Observation{ID: "o1", PlanID: "p1", ActionID: "a1", InteractionID: "i1", ObservedAt: time.Now(), Kind: ObservationKindToolResult, Outcome: ObservationOutcomeSucceeded, UserID: "u1", CharacterID: "c1", ConversationID: "conv1"}
+	goal := Goal{ID: "g1", Status: GoalStatusActive, Progress: 0.2, Revision: 1, SpaceID: "u1", CharacterID: "c1", ConversationID: "conv1"}
+	obs := Observation{ID: "o1", PlanID: "p1", ActionID: "a1", InteractionID: "i1", ObservedAt: time.Now(), Kind: ObservationKindToolResult, Outcome: ObservationOutcomeSucceeded, SpaceID: "u1", CharacterID: "c1", ConversationID: "conv1"}
 	exp := GoalProgressExpectation{Goal: GoalRef{ID: "g1", Revision: 1}, Mode: GoalProgressObserveOnly}
 	update, err := EvaluateGoalProgress(goal, exp, obs)
 	if err != nil {
@@ -26,8 +26,8 @@ func TestEvaluateObserveOnlyToolSuccessDoesNotAdvanceProgress(t *testing.T) {
 }
 
 func TestEvaluatePendingFirstToolSuccessActivates(t *testing.T) {
-	goal := Goal{ID: "g1", Status: GoalStatusPending, Progress: 0, Revision: 1, UserID: "u1"}
-	obs := Observation{ID: "o1", PlanID: "p1", ActionID: "a1", InteractionID: "i1", ObservedAt: time.Now(), Kind: ObservationKindToolResult, Outcome: ObservationOutcomeSucceeded, UserID: "u1"}
+	goal := Goal{ID: "g1", Status: GoalStatusPending, Progress: 0, Revision: 1, SpaceID: "u1"}
+	obs := Observation{ID: "o1", PlanID: "p1", ActionID: "a1", InteractionID: "i1", ObservedAt: time.Now(), Kind: ObservationKindToolResult, Outcome: ObservationOutcomeSucceeded, SpaceID: "u1"}
 	exp := GoalProgressExpectation{Goal: GoalRef{ID: "g1", Revision: 1}, Mode: GoalProgressObserveOnly}
 	update, _ := EvaluateGoalProgress(goal, exp, obs)
 	if update.NextStatus != GoalStatusActive {
@@ -39,8 +39,8 @@ func TestEvaluatePendingFirstToolSuccessActivates(t *testing.T) {
 }
 
 func TestEvaluatePendingToolFailed(t *testing.T) {
-	goal := Goal{ID: "g1", Status: GoalStatusPending, Progress: 0, Revision: 1, UserID: "u1"}
-	obs := Observation{ID: "o1", ObservedAt: time.Now(), Kind: ObservationKindToolResult, Outcome: ObservationOutcomeFailed, UserID: "u1"}
+	goal := Goal{ID: "g1", Status: GoalStatusPending, Progress: 0, Revision: 1, SpaceID: "u1"}
+	obs := Observation{ID: "o1", ObservedAt: time.Now(), Kind: ObservationKindToolResult, Outcome: ObservationOutcomeFailed, SpaceID: "u1"}
 	exp := GoalProgressExpectation{Goal: GoalRef{ID: "g1", Revision: 1}, Mode: GoalProgressObserveOnly}
 	update, _ := EvaluateGoalProgress(goal, exp, obs)
 	if update.NextStatus != GoalStatusActive {
@@ -52,8 +52,8 @@ func TestEvaluatePendingToolFailed(t *testing.T) {
 }
 
 func TestEvaluateAdvanceTo(t *testing.T) {
-	goal := Goal{ID: "g1", Status: GoalStatusActive, Progress: 0.2, Revision: 1, UserID: "u1"}
-	obs := Observation{ID: "o1", ObservedAt: time.Now(), Kind: ObservationKindToolResult, Outcome: ObservationOutcomeSucceeded, UserID: "u1"}
+	goal := Goal{ID: "g1", Status: GoalStatusActive, Progress: 0.2, Revision: 1, SpaceID: "u1"}
+	obs := Observation{ID: "o1", ObservedAt: time.Now(), Kind: ObservationKindToolResult, Outcome: ObservationOutcomeSucceeded, SpaceID: "u1"}
 	exp := GoalProgressExpectation{Goal: GoalRef{ID: "g1", Revision: 1}, Mode: GoalProgressAdvanceTo, TargetProgress: 0.6}
 	update, _ := EvaluateGoalProgress(goal, exp, obs)
 	if update.NextProgress != 0.6 {
@@ -68,8 +68,8 @@ func TestEvaluateAdvanceTo(t *testing.T) {
 }
 
 func TestEvaluateAdvanceNoRegression(t *testing.T) {
-	goal := Goal{ID: "g1", Status: GoalStatusActive, Progress: 0.8, Revision: 1, UserID: "u1"}
-	obs := Observation{ID: "o1", ObservedAt: time.Now(), Kind: ObservationKindToolResult, Outcome: ObservationOutcomeSucceeded, UserID: "u1"}
+	goal := Goal{ID: "g1", Status: GoalStatusActive, Progress: 0.8, Revision: 1, SpaceID: "u1"}
+	obs := Observation{ID: "o1", ObservedAt: time.Now(), Kind: ObservationKindToolResult, Outcome: ObservationOutcomeSucceeded, SpaceID: "u1"}
 	exp := GoalProgressExpectation{Goal: GoalRef{ID: "g1", Revision: 1}, Mode: GoalProgressAdvanceTo, TargetProgress: 0.6}
 	update, _ := EvaluateGoalProgress(goal, exp, obs)
 	if update.NextProgress != 0.8 {
@@ -78,8 +78,8 @@ func TestEvaluateAdvanceNoRegression(t *testing.T) {
 }
 
 func TestEvaluateAchieve(t *testing.T) {
-	goal := Goal{ID: "g1", Status: GoalStatusActive, Progress: 0.5, Revision: 1, UserID: "u1"}
-	obs := Observation{ID: "o1", ObservedAt: time.Now(), Kind: ObservationKindToolResult, Outcome: ObservationOutcomeSucceeded, UserID: "u1"}
+	goal := Goal{ID: "g1", Status: GoalStatusActive, Progress: 0.5, Revision: 1, SpaceID: "u1"}
+	obs := Observation{ID: "o1", ObservedAt: time.Now(), Kind: ObservationKindToolResult, Outcome: ObservationOutcomeSucceeded, SpaceID: "u1"}
 	exp := GoalProgressExpectation{Goal: GoalRef{ID: "g1", Revision: 1}, Mode: GoalProgressAchieve}
 	update, _ := EvaluateGoalProgress(goal, exp, obs)
 	if update.NextStatus != GoalStatusAchieved {
@@ -94,8 +94,8 @@ func TestEvaluateAchieve(t *testing.T) {
 }
 
 func TestEvaluateAchieveFailedNotComplete(t *testing.T) {
-	goal := Goal{ID: "g1", Status: GoalStatusActive, Progress: 0.5, Revision: 1, UserID: "u1"}
-	obs := Observation{ID: "o1", ObservedAt: time.Now(), Kind: ObservationKindToolResult, Outcome: ObservationOutcomeFailed, UserID: "u1"}
+	goal := Goal{ID: "g1", Status: GoalStatusActive, Progress: 0.5, Revision: 1, SpaceID: "u1"}
+	obs := Observation{ID: "o1", ObservedAt: time.Now(), Kind: ObservationKindToolResult, Outcome: ObservationOutcomeFailed, SpaceID: "u1"}
 	exp := GoalProgressExpectation{Goal: GoalRef{ID: "g1", Revision: 1}, Mode: GoalProgressAchieve}
 	update, _ := EvaluateGoalProgress(goal, exp, obs)
 	if update.NextStatus == GoalStatusAchieved {
@@ -104,8 +104,8 @@ func TestEvaluateAchieveFailedNotComplete(t *testing.T) {
 }
 
 func TestEvaluateAchieveCancelledNotComplete(t *testing.T) {
-	goal := Goal{ID: "g1", Status: GoalStatusActive, Progress: 0.5, Revision: 1, UserID: "u1"}
-	obs := Observation{ID: "o1", ObservedAt: time.Now(), Kind: ObservationKindToolResult, Outcome: ObservationOutcomeCancelled, UserID: "u1"}
+	goal := Goal{ID: "g1", Status: GoalStatusActive, Progress: 0.5, Revision: 1, SpaceID: "u1"}
+	obs := Observation{ID: "o1", ObservedAt: time.Now(), Kind: ObservationKindToolResult, Outcome: ObservationOutcomeCancelled, SpaceID: "u1"}
 	exp := GoalProgressExpectation{Goal: GoalRef{ID: "g1", Revision: 1}, Mode: GoalProgressAchieve}
 	update, _ := EvaluateGoalProgress(goal, exp, obs)
 	if update.NextStatus == GoalStatusAchieved {
@@ -114,8 +114,8 @@ func TestEvaluateAchieveCancelledNotComplete(t *testing.T) {
 }
 
 func TestEvaluateAchieveTimedOutNotComplete(t *testing.T) {
-	goal := Goal{ID: "g1", Status: GoalStatusActive, Progress: 0.5, Revision: 1, UserID: "u1"}
-	obs := Observation{ID: "o1", ObservedAt: time.Now(), Kind: ObservationKindToolResult, Outcome: ObservationOutcomeTimedOut, UserID: "u1"}
+	goal := Goal{ID: "g1", Status: GoalStatusActive, Progress: 0.5, Revision: 1, SpaceID: "u1"}
+	obs := Observation{ID: "o1", ObservedAt: time.Now(), Kind: ObservationKindToolResult, Outcome: ObservationOutcomeTimedOut, SpaceID: "u1"}
 	exp := GoalProgressExpectation{Goal: GoalRef{ID: "g1", Revision: 1}, Mode: GoalProgressAchieve}
 	update, _ := EvaluateGoalProgress(goal, exp, obs)
 	if update.NextStatus == GoalStatusAchieved {
@@ -124,8 +124,8 @@ func TestEvaluateAchieveTimedOutNotComplete(t *testing.T) {
 }
 
 func TestEvaluateSuspendedIgnored(t *testing.T) {
-	goal := Goal{ID: "g1", Status: GoalStatusSuspended, Progress: 0.5, Revision: 2, UserID: "u1"}
-	obs := Observation{ID: "o1", ObservedAt: time.Now(), Kind: ObservationKindToolResult, Outcome: ObservationOutcomeSucceeded, UserID: "u1"}
+	goal := Goal{ID: "g1", Status: GoalStatusSuspended, Progress: 0.5, Revision: 2, SpaceID: "u1"}
+	obs := Observation{ID: "o1", ObservedAt: time.Now(), Kind: ObservationKindToolResult, Outcome: ObservationOutcomeSucceeded, SpaceID: "u1"}
 	exp := GoalProgressExpectation{Goal: GoalRef{ID: "g1", Revision: 2}, Mode: GoalProgressAchieve}
 	update, _ := EvaluateGoalProgress(goal, exp, obs)
 	if update.Disposition != GoalProgressSuspendedIgnore {
@@ -134,8 +134,8 @@ func TestEvaluateSuspendedIgnored(t *testing.T) {
 }
 
 func TestEvaluateAchievedTerminalIgnored(t *testing.T) {
-	goal := Goal{ID: "g1", Status: GoalStatusAchieved, Progress: 1, Revision: 5, UserID: "u1"}
-	obs := Observation{ID: "o1", ObservedAt: time.Now(), Kind: ObservationKindToolResult, Outcome: ObservationOutcomeSucceeded, UserID: "u1"}
+	goal := Goal{ID: "g1", Status: GoalStatusAchieved, Progress: 1, Revision: 5, SpaceID: "u1"}
+	obs := Observation{ID: "o1", ObservedAt: time.Now(), Kind: ObservationKindToolResult, Outcome: ObservationOutcomeSucceeded, SpaceID: "u1"}
 	exp := GoalProgressExpectation{Goal: GoalRef{ID: "g1", Revision: 5}, Mode: GoalProgressAchieve}
 	update, err := EvaluateGoalProgress(goal, exp, obs)
 	if err != nil {
@@ -150,8 +150,8 @@ func TestEvaluateAchievedTerminalIgnored(t *testing.T) {
 }
 
 func TestEvaluateAbandonedTerminalIgnored(t *testing.T) {
-	goal := Goal{ID: "g1", Status: GoalStatusAbandoned, Progress: 0.3, Revision: 3, UserID: "u1"}
-	obs := Observation{ID: "o1", ObservedAt: time.Now(), Kind: ObservationKindToolResult, Outcome: ObservationOutcomeSucceeded, UserID: "u1"}
+	goal := Goal{ID: "g1", Status: GoalStatusAbandoned, Progress: 0.3, Revision: 3, SpaceID: "u1"}
+	obs := Observation{ID: "o1", ObservedAt: time.Now(), Kind: ObservationKindToolResult, Outcome: ObservationOutcomeSucceeded, SpaceID: "u1"}
 	exp := GoalProgressExpectation{Goal: GoalRef{ID: "g1", Revision: 3}, Mode: GoalProgressAchieve}
 	update, err := EvaluateGoalProgress(goal, exp, obs)
 	if err != nil {
@@ -163,8 +163,8 @@ func TestEvaluateAbandonedTerminalIgnored(t *testing.T) {
 }
 
 func TestEvaluateWishIgnored(t *testing.T) {
-	goal := Goal{ID: "g1", Status: GoalStatusWish, Progress: 0.3, Revision: 3, UserID: "u1"}
-	obs := Observation{ID: "o1", ObservedAt: time.Now(), Kind: ObservationKindToolResult, Outcome: ObservationOutcomeSucceeded, UserID: "u1"}
+	goal := Goal{ID: "g1", Status: GoalStatusWish, Progress: 0.3, Revision: 3, SpaceID: "u1"}
+	obs := Observation{ID: "o1", ObservedAt: time.Now(), Kind: ObservationKindToolResult, Outcome: ObservationOutcomeSucceeded, SpaceID: "u1"}
 	exp := GoalProgressExpectation{Goal: GoalRef{ID: "g1", Revision: 3}, Mode: GoalProgressObserveOnly}
 	update, _ := EvaluateGoalProgress(goal, exp, obs)
 	if update.Disposition != GoalProgressWishIgnore {
@@ -173,8 +173,8 @@ func TestEvaluateWishIgnored(t *testing.T) {
 }
 
 func TestEvaluateExpiredIgnored(t *testing.T) {
-	goal := Goal{ID: "g1", Status: GoalStatusActive, Progress: 0.3, Revision: 3, UserID: "u1", ExpiresAt: time.Now().Add(-time.Hour)}
-	obs := Observation{ID: "o1", ObservedAt: time.Now(), Kind: ObservationKindToolResult, Outcome: ObservationOutcomeSucceeded, UserID: "u1"}
+	goal := Goal{ID: "g1", Status: GoalStatusActive, Progress: 0.3, Revision: 3, SpaceID: "u1", ExpiresAt: time.Now().Add(-time.Hour)}
+	obs := Observation{ID: "o1", ObservedAt: time.Now(), Kind: ObservationKindToolResult, Outcome: ObservationOutcomeSucceeded, SpaceID: "u1"}
 	exp := GoalProgressExpectation{Goal: GoalRef{ID: "g1", Revision: 3}, Mode: GoalProgressAchieve}
 	update, _ := EvaluateGoalProgress(goal, exp, obs)
 	if update.Disposition != GoalProgressExpiredIgnore {
@@ -183,8 +183,8 @@ func TestEvaluateExpiredIgnored(t *testing.T) {
 }
 
 func TestEvaluateStaleRevision(t *testing.T) {
-	goal := Goal{ID: "g1", Status: GoalStatusActive, Progress: 0.3, Revision: 6, UserID: "u1"}
-	obs := Observation{ID: "o1", ObservedAt: time.Now(), Kind: ObservationKindToolResult, Outcome: ObservationOutcomeSucceeded, UserID: "u1"}
+	goal := Goal{ID: "g1", Status: GoalStatusActive, Progress: 0.3, Revision: 6, SpaceID: "u1"}
+	obs := Observation{ID: "o1", ObservedAt: time.Now(), Kind: ObservationKindToolResult, Outcome: ObservationOutcomeSucceeded, SpaceID: "u1"}
 	exp := GoalProgressExpectation{Goal: GoalRef{ID: "g1", Revision: 5}, Mode: GoalProgressAchieve}
 	update, _ := EvaluateGoalProgress(goal, exp, obs)
 	if update.Disposition != GoalProgressStaleRevision {
@@ -193,8 +193,8 @@ func TestEvaluateStaleRevision(t *testing.T) {
 }
 
 func TestEvaluateScopeMismatch(t *testing.T) {
-	goal := Goal{ID: "g1", Status: GoalStatusActive, Progress: 0.3, Revision: 1, UserID: "u1", CharacterID: "c1"}
-	obs := Observation{ID: "o1", ObservedAt: time.Now(), Kind: ObservationKindToolResult, Outcome: ObservationOutcomeSucceeded, UserID: "u1", CharacterID: "c2"}
+	goal := Goal{ID: "g1", Status: GoalStatusActive, Progress: 0.3, Revision: 1, SpaceID: "u1", CharacterID: "c1"}
+	obs := Observation{ID: "o1", ObservedAt: time.Now(), Kind: ObservationKindToolResult, Outcome: ObservationOutcomeSucceeded, SpaceID: "u1", CharacterID: "c2"}
 	exp := GoalProgressExpectation{Goal: GoalRef{ID: "g1", Revision: 1}, Mode: GoalProgressAchieve}
 	update, err := EvaluateGoalProgress(goal, exp, obs)
 	if err == nil {
@@ -206,8 +206,8 @@ func TestEvaluateScopeMismatch(t *testing.T) {
 }
 
 func TestEvaluateNoActionNoProgress(t *testing.T) {
-	goal := Goal{ID: "g1", Status: GoalStatusPending, Progress: 0.3, Revision: 1, UserID: "u1"}
-	obs := Observation{ID: "o1", ObservedAt: time.Now(), Kind: ObservationKindNoAction, Outcome: ObservationOutcomeSkipped, UserID: "u1"}
+	goal := Goal{ID: "g1", Status: GoalStatusPending, Progress: 0.3, Revision: 1, SpaceID: "u1"}
+	obs := Observation{ID: "o1", ObservedAt: time.Now(), Kind: ObservationKindNoAction, Outcome: ObservationOutcomeSkipped, SpaceID: "u1"}
 	exp := GoalProgressExpectation{Goal: GoalRef{ID: "g1", Revision: 1}, Mode: GoalProgressObserveOnly}
 	update, _ := EvaluateGoalProgress(goal, exp, obs)
 	if update.Apply {
@@ -219,8 +219,8 @@ func TestEvaluateNoActionNoProgress(t *testing.T) {
 }
 
 func TestEvaluateMaterializationFailureNoProgress(t *testing.T) {
-	goal := Goal{ID: "g1", Status: GoalStatusActive, Progress: 0.3, Revision: 1, UserID: "u1"}
-	obs := Observation{ID: "o1", ObservedAt: time.Now(), Kind: ObservationKindMaterializationFailure, Outcome: ObservationOutcomeNotMaterialized, UserID: "u1"}
+	goal := Goal{ID: "g1", Status: GoalStatusActive, Progress: 0.3, Revision: 1, SpaceID: "u1"}
+	obs := Observation{ID: "o1", ObservedAt: time.Now(), Kind: ObservationKindMaterializationFailure, Outcome: ObservationOutcomeNotMaterialized, SpaceID: "u1"}
 	exp := GoalProgressExpectation{Goal: GoalRef{ID: "g1", Revision: 1}, Mode: GoalProgressAchieve}
 	update, _ := EvaluateGoalProgress(goal, exp, obs)
 	if update.NextProgress != 0.3 {
@@ -259,8 +259,8 @@ func TestValidateExpectationAchieveTargetNonZero(t *testing.T) {
 }
 
 func TestEvaluateGoalInvalidProgressValue(t *testing.T) {
-	goal := Goal{ID: "g1", Status: GoalStatusActive, Progress: math.NaN(), Revision: 1, UserID: "u1"}
-	obs := Observation{ID: "o1", ObservedAt: time.Now(), Kind: ObservationKindToolResult, Outcome: ObservationOutcomeSucceeded, UserID: "u1"}
+	goal := Goal{ID: "g1", Status: GoalStatusActive, Progress: math.NaN(), Revision: 1, SpaceID: "u1"}
+	obs := Observation{ID: "o1", ObservedAt: time.Now(), Kind: ObservationKindToolResult, Outcome: ObservationOutcomeSucceeded, SpaceID: "u1"}
 	exp := GoalProgressExpectation{Goal: GoalRef{ID: "g1", Revision: 1}, Mode: GoalProgressObserveOnly}
 	_, err := EvaluateGoalProgress(goal, exp, obs)
 	if err == nil {
@@ -269,8 +269,8 @@ func TestEvaluateGoalInvalidProgressValue(t *testing.T) {
 }
 
 func TestEvaluateGoalProgress1ActiveRejected(t *testing.T) {
-	goal := Goal{ID: "g1", Status: GoalStatusActive, Progress: 1, Revision: 1, UserID: "u1"}
-	obs := Observation{ID: "o1", ObservedAt: time.Now(), Kind: ObservationKindToolResult, Outcome: ObservationOutcomeSucceeded, UserID: "u1"}
+	goal := Goal{ID: "g1", Status: GoalStatusActive, Progress: 1, Revision: 1, SpaceID: "u1"}
+	obs := Observation{ID: "o1", ObservedAt: time.Now(), Kind: ObservationKindToolResult, Outcome: ObservationOutcomeSucceeded, SpaceID: "u1"}
 	exp := GoalProgressExpectation{Goal: GoalRef{ID: "g1", Revision: 1}, Mode: GoalProgressObserveOnly}
 	_, err := EvaluateGoalProgress(goal, exp, obs)
 	if err == nil {

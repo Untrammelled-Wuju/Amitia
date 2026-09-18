@@ -8,7 +8,7 @@ import (
 )
 
 type PresenceSnapshot struct {
-	UserID               runtimeidentity.UserID
+	SpaceID              runtimeidentity.SpaceID
 	DeviceID             runtimeidentity.DeviceID
 	RuntimeID            runtimeidentity.RuntimeID
 	RuntimeSessionID     runtimeidentity.RuntimeSessionID

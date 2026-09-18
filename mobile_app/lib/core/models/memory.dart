@@ -2,6 +2,7 @@ class MemoryDto {
   final String id;
   final String characterId;
   final String memoryType;
+  final String memorySubtype;
   final String source;
   final String scope;
   final String key;
@@ -10,7 +11,18 @@ class MemoryDto {
   final int confidence;
   final String verifiedStatus;
   final int useCount;
+  final int retentionLevel;
+  final double memoryStrength;
+  final String? strengthUpdatedAt;
+  final String? lastReinforcedAt;
+  final int reinforceCount;
+  final int retrievedCount;
+  final int injectedCount;
+  final String decayState;
+  final bool pinned;
+  final String? archivedAt;
   final String sensitivityLevel;
+  final bool allowContextUse;
   final bool allowProactiveMention;
   final bool requiresConfirmation;
   final String createdAt;
@@ -20,6 +32,7 @@ class MemoryDto {
     required this.id,
     this.characterId = '',
     this.memoryType = 'custom',
+    this.memorySubtype = '',
     this.source = 'manual',
     this.scope = 'character',
     this.key = '',
@@ -28,7 +41,18 @@ class MemoryDto {
     this.confidence = 50,
     this.verifiedStatus = 'unverified',
     this.useCount = 0,
+    this.retentionLevel = 3,
+    this.memoryStrength = 0.68,
+    this.strengthUpdatedAt,
+    this.lastReinforcedAt,
+    this.reinforceCount = 0,
+    this.retrievedCount = 0,
+    this.injectedCount = 0,
+    this.decayState = 'active',
+    this.pinned = false,
+    this.archivedAt,
     this.sensitivityLevel = 'internal',
+    this.allowContextUse = true,
     this.allowProactiveMention = true,
     this.requiresConfirmation = false,
     this.createdAt = '',
@@ -45,6 +69,7 @@ class MemoryDto {
       id: (json['id'] ?? '').toString(),
       characterId: (json['characterId'] ?? '').toString(),
       memoryType: (json['memoryType'] ?? json['type'] ?? 'custom').toString(),
+      memorySubtype: (json['memorySubtype'] ?? json['memory_subtype'] ?? '').toString(),
       source: (json['source'] ?? 'manual').toString(),
       scope: (json['scope'] ?? 'character').toString(),
       key: (json['key'] ?? '').toString(),
@@ -53,8 +78,19 @@ class MemoryDto {
       confidence: _asInt(json['confidence'], fallback: 50),
       verifiedStatus: (json['verifiedStatus'] ?? json['status'] ?? 'unverified').toString(),
       useCount: _asInt(json['useCount']),
-      sensitivityLevel: (json['sensitivityLevel'] ?? 'internal').toString(),
-      allowProactiveMention: _asBool(json['allowProactiveMention'], fallback: true),
+      retentionLevel: _asInt(json['retentionLevel'] ?? json['retention_level'], fallback: 3),
+      memoryStrength: _asDouble(json['memoryStrength'] ?? json['memory_strength'], fallback: 0.68),
+      strengthUpdatedAt: _nullableString(json['strengthUpdatedAt'] ?? json['strength_updated_at']),
+      lastReinforcedAt: _nullableString(json['lastReinforcedAt'] ?? json['last_reinforced_at']),
+      reinforceCount: _asInt(json['reinforceCount'] ?? json['reinforce_count']),
+      retrievedCount: _asInt(json['retrievedCount'] ?? json['retrieved_count']),
+      injectedCount: _asInt(json['injectedCount'] ?? json['injected_count']),
+      decayState: (json['decayState'] ?? json['decay_state'] ?? 'active').toString(),
+      pinned: _asBool(json['pinned']),
+      archivedAt: _nullableString(json['archivedAt'] ?? json['archived_at']),
+      sensitivityLevel: (json['sensitivityLevel'] ?? json['sensitivity_level'] ?? 'internal').toString(),
+      allowContextUse: _asBool(json['allowContextUse'] ?? json['allow_context_use'], fallback: true),
+      allowProactiveMention: _asBool(json['allowProactiveMention'] ?? json['allow_proactive_mention'], fallback: true),
       requiresConfirmation: _asBool(json['requiresConfirmation']),
       createdAt: (json['createdAt'] ?? '').toString(),
       updatedAt: (json['updatedAt'] ?? '').toString(),
@@ -66,6 +102,7 @@ class MemoryDto {
       'id': id,
       'characterId': characterId,
       'memoryType': memoryType,
+      'memorySubtype': memorySubtype,
       'source': source,
       'scope': scope,
       'key': key,
@@ -73,9 +110,23 @@ class MemoryDto {
       'importance': importance,
       'confidence': confidence,
       'verifiedStatus': verifiedStatus,
+      'useCount': useCount,
+      'retentionLevel': retentionLevel,
+      'memoryStrength': memoryStrength,
+      'strengthUpdatedAt': strengthUpdatedAt,
+      'lastReinforcedAt': lastReinforcedAt,
+      'reinforceCount': reinforceCount,
+      'retrievedCount': retrievedCount,
+      'injectedCount': injectedCount,
+      'decayState': decayState,
+      'pinned': pinned,
+      'archivedAt': archivedAt,
       'sensitivityLevel': sensitivityLevel,
+      'allowContextUse': allowContextUse,
       'allowProactiveMention': allowProactiveMention,
       'requiresConfirmation': requiresConfirmation,
+      'createdAt': createdAt,
+      'updatedAt': updatedAt,
     };
   }
 
@@ -83,6 +134,16 @@ class MemoryDto {
     if (value is int) return value;
     if (value is num) return value.round();
     return int.tryParse(value?.toString() ?? '') ?? fallback;
+  }
+
+  static double _asDouble(dynamic value, {double fallback = 0}) {
+    if (value is num) return value.toDouble();
+    return double.tryParse(value?.toString() ?? '') ?? fallback;
+  }
+
+  static String? _nullableString(dynamic value) {
+    final text = value?.toString().trim() ?? '';
+    return text.isEmpty ? null : text;
   }
 
   static bool _asBool(dynamic value, {bool fallback = false}) {
@@ -101,6 +162,7 @@ class MemoryCandidateDto {
   final String key;
   final String value;
   final String memoryType;
+  final String memorySubtype;
   final int importance;
   final double confidence;
   final String sourceText;
@@ -115,6 +177,7 @@ class MemoryCandidateDto {
     this.key = '',
     this.value = '',
     this.memoryType = 'custom',
+    this.memorySubtype = '',
     this.importance = 5,
     this.confidence = 0,
     this.sourceText = '',
@@ -136,8 +199,9 @@ class MemoryCandidateDto {
       key: (json['key'] ?? '').toString(),
       value: (json['value'] ?? json['content'] ?? '').toString(),
       memoryType: (json['memoryType'] ?? json['type'] ?? 'custom').toString(),
+      memorySubtype: (json['memorySubtype'] ?? json['memory_subtype'] ?? '').toString(),
       importance: MemoryDto._asInt(json['importance'], fallback: 5),
-      confidence: _asDouble(json['confidenceReal'] ?? json['confidence']),
+      confidence: _normalizedConfidence(json['confidenceReal'] ?? json['confidence']),
       sourceText: (json['sourceText'] ?? json['source'] ?? '').toString(),
       candidateKind: (json['candidateKind'] ?? '').toString(),
       proposedAction: (json['proposedAction'] ?? json['status'] ?? '').toString(),
@@ -146,8 +210,8 @@ class MemoryCandidateDto {
     );
   }
 
-  static double _asDouble(dynamic value) {
-    if (value is num) return value.toDouble();
-    return double.tryParse(value?.toString() ?? '') ?? 0;
+  static double _normalizedConfidence(dynamic value) {
+    final parsed = value is num ? value.toDouble() : double.tryParse(value?.toString() ?? '') ?? 0;
+    return parsed > 1 ? parsed / 100.0 : parsed;
   }
 }

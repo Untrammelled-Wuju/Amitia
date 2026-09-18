@@ -104,15 +104,15 @@ func TestPersistentLock_FileLockFailureReleasesDBLease(t *testing.T) {
 
 	inst2 := NewPersistentLock(db, lockDir)
 	err := inst2.Acquire(ctx, "test-lock", ttl)
-	if err == nil {
-		inst2.Release("test-lock")
-		t.Fatal("expected acquire to fail with stale lock file (not after takeover)")
+	if err != nil {
+		t.Fatalf("expected acquire to replace stale lock file: %v", err)
 	}
+	t.Cleanup(func() { _ = inst2.Release("test-lock") })
 
 	var count int64
 	db.Model(&migrationLockRecord{}).Where("lock_name = ?", "test-lock").Count(&count)
-	if count != 0 {
-		t.Fatalf("DB lease should be released after file lock failure, got %d records", count)
+	if count != 1 {
+		t.Fatalf("DB lease count = %d, want 1 after stale lock takeover", count)
 	}
 }
 

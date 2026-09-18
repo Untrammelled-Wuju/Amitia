@@ -16,8 +16,19 @@ func runKeys(args []string, output *Output) int {
 	if len(args) < 1 {
 		output.fail(ExitConfig, "用法: amitiax keys <create|export-public> [选项]")
 	}
-	subcmd := args[0]
-	rest := args[1:]
+	subcmd := ""
+	subcmdIndex := -1
+	for index, arg := range args {
+		if arg == "create" || arg == "export-public" {
+			subcmd = arg
+			subcmdIndex = index
+			break
+		}
+	}
+	if subcmdIndex < 0 {
+		output.fail(ExitConfig, "用法: amitiax keys <create|export-public> [选项]")
+	}
+	rest := append(append([]string{}, args[:subcmdIndex]...), args[subcmdIndex+1:]...)
 
 	switch subcmd {
 	case "create":

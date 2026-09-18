@@ -13,17 +13,14 @@ SPDX-License-Identifier: AGPL-3.0-only
   />
   <div v-else class="webchat-page">
     <section class="chat-surface">
-    <ChatBanners
+<ChatBanners
       :model-missing="modelMissing"
       :is-offline="isOffline"
       :model-error="modelError"
       :import-context="importContext"
       :show-import-detail="showImportDetail"
-      :conv-summary="convSummary"
-      :show-summary="showSummary"
       @close-error="modelError = ''"
       @close-import="importContext = null"
-      @toggle-summary="showSummary = !showSummary"
     />
 
     <div class="chat-header-region">
@@ -42,6 +39,7 @@ SPDX-License-Identifier: AGPL-3.0-only
       :show-profiles="showProfiles"
       :show-mem-inject="showMemInject"
       :call-active="callActive"
+      :has-summary="!!convSummary"
       @toggle-drawer="showDrawer = true"
       @regenerate="handleRegenerate"
       @clear="handleClear"
@@ -49,20 +47,41 @@ SPDX-License-Identifier: AGPL-3.0-only
       @toggle-char-picker="showCharPicker = true"
       @toggle-profiles="toggleProfiles"
       @toggle-mem-inject="toggleMemInject"
-      @toggle-call="handleToggleCall"
+      @toggle-call="handleEndCall"
+      @start-call="handleStartCall"
+      @view-summary="handleViewSummary"
     ><template #extension-actions><button v-if="hasConversationSidebar && isSmallViewport" type="button" class="sidebar-toggle-btn" aria-label="展开插件侧栏" @click="sidebarDrawerOpen = true"><el-icon><MenuIcon /></el-icon></button><ChatHeaderExtensionHost :context="chatExtensionContext" /></template></UIProviderHost>
     </div>
       <div class="chat-body-wrapper">
-      <ProfileSummaryPanel
-        :visible="showProfiles"
-        @close="showProfiles = false"
-      />
-      <MemoryInjectPanel
-        :visible="showMemInject"
-        :conv-id="convId"
-        :character-id="characterId"
-        @close="showMemInject = false"
-      />
+      <ExtensionSlot
+        slot-id="chat.profile_summary.panel"
+        :context="chatExtensionContext"
+        fallback="default"
+        layout="stack"
+        surface-role="overlay"
+        bare
+      >
+        <ProfileSummaryPanel
+          :visible="showProfiles"
+          :character-id="characterId"
+          @close="showProfiles = false"
+        />
+      </ExtensionSlot>
+      <ExtensionSlot
+        slot-id="chat.memory_context.panel"
+        :context="chatExtensionContext"
+        fallback="default"
+        layout="stack"
+        surface-role="overlay"
+        bare
+      >
+        <MemoryInjectPanel
+          :visible="showMemInject"
+          :conv-id="convId"
+          :character-id="characterId"
+          @close="showMemInject = false"
+        />
+      </ExtensionSlot>
       <UIProviderHost
         capability="conversation.messages"
         :fallback="MessagesArea"
@@ -118,11 +137,6 @@ SPDX-License-Identifier: AGPL-3.0-only
         :ui-context-value="chatExtensionContext"
         :call-active="callActive"
         :has-status-extensions="hasStatusExtensions"
-        :api-key="ttsApiKey"
-        :voice-type="ttsVoiceType"
-        :resource-id="ttsResourceId"
-        :conversation-id="convId"
-        @state-change="handleCallStateChange"
       />
     </div>
     <div class="composer-region"><UIProviderHost
@@ -147,8 +161,8 @@ SPDX-License-Identifier: AGPL-3.0-only
       @voiceText="handleVoiceText"
       @video="onVideoAttached"
       @removeVideo="onVideoRemoved"
+      @file="handleFileSend"
       @cancel-reply="replyTarget = null"
-      @emote="handleEmoteSend"
     /></div>
 
     <ConversationDrawer
@@ -156,15 +170,7 @@ SPDX-License-Identifier: AGPL-3.0-only
       :characters="characters"
       :import-batches="importBatches"
       :active-char-id="characterId"
-      :wechat-msg-count="wechatMsgCount"
-      :is-wechat-active="isWechatActive"
-      :wechat-online="wechatOnline"
-      :qq-msg-count="qqMsgCount"
-      :isQQActive="isQQActive"
-      :qqOnline="qqOnline"
       @select-char="handleSwitchChar"
-      @select-wechat="handleSelectWechat"
-      @select-q-q="handleSelectQQ"
       @continue-import="handleContinueImport"
     />
 
@@ -176,6 +182,23 @@ SPDX-License-Identifier: AGPL-3.0-only
     />
 
     <MemoryPanel v-model:visible="showMemories" :memories="memories" />
+
+    <el-drawer v-model="showSummaryDrawer" title="会话摘要" direction="rtl" size="420px">
+      <div v-if="convSummary" class="summary-drawer-text">{{ convSummary }}</div>
+      <el-empty v-else description="暂无会话摘要" :image-size="88" />
+    </el-drawer>
+
+    <RealtimeCallDialog
+      v-if="callActive"
+      :mode="callMode"
+      :voice-type="ttsVoiceType"
+      :resource-id="ttsResourceId"
+      :conversation-id="convId"
+      :char-name="charName"
+      :char-avatar="charAvatar"
+      @state-change="handleCallStateChange"
+      @close="callActive = false"
+    />
     </section>
   </div>
 </template>
@@ -185,12 +208,12 @@ import { useRouter } from "vue-router";
 import { ElMessage } from "element-plus";
 import { Menu as MenuIcon } from "@element-plus/icons-vue";
 import { useApi } from "../../composables/useApi";
-import { useSessionStore } from "../../stores/session-store";
 import { useCachedApi } from "../../composables/useCachedApi";
 import { useWebChatSSE } from "../../composables/useWebChatSSE";
 import { useWebChatScroll } from "../../composables/useWebChatScroll";
 import { useWebChatSend } from "../../composables/useWebChatSend";
 import { useWebChatConversation } from "../../composables/useWebChatConversation";
+import { useConversationWorkspace } from "../../composables/useConversationWorkspace";
 import ChatBanners from "../../components/ChatBanners.vue";
 import ChatHeaderBar from "../../components/ChatHeaderBar.vue";
 import MessagesArea from "../../components/MessagesArea.vue";
@@ -198,11 +221,12 @@ import ChatInput from "../../components/ChatInput.vue";
 import ConversationDrawer from "../../components/ConversationDrawer.vue";
 import CharacterPickerDialog from "../../components/CharacterPickerDialog.vue";
 import MemoryPanel from "../../components/MemoryPanel.vue";
-import RealtimeCallWidget from "../../components/RealtimeCallWidget.vue";
+import RealtimeCallDialog from "../../components/RealtimeCallDialog.vue";
 import ProfileSummaryPanel from "./components/ProfileSummaryPanel.vue";
 import MemoryInjectPanel from "./components/MemoryInjectPanel.vue";
 import { normalizeRealtimeMessage } from "@/utils/message-order";
 import ChatHeaderExtensionHost from "@/components/extension/chat/ChatHeaderExtensionHost.vue";
+import ExtensionSlot from "@/components/extension/ExtensionSlot.vue";
 import { useExtensionUIStore } from "@/stores/extensionUI";
 import { resolveHostEnvironment } from "@/composables/useHostEnvironment";
 import UIProviderHost from "@/components/ui-runtime/UIProviderHost.vue";
@@ -215,44 +239,35 @@ import { hasUnifiedSlotItem } from "@/ui-runtime/slotLedger";
 
 const router = useRouter();
 const callActive = ref(false);
-const ttsApiKey = ref("");
+const callMode = ref<"voice" | "video" | "screen">("voice");
 const ttsVoiceType = ref("");
 const ttsResourceId = ref("");
 
-async function fetchTtsConfig() {
-  try {
-    const res = await fetch("/api/tts/configs", {
-      headers: {},
-    });
-    const data = await res.json();
-    const list = Array.isArray(data?.data)
-      ? data.data
-      : data?.data?.items || data?.data?.configs || [];
-    const active = list.find((c: any) => c.isActive || c.is_active);
-    if (active) {
-      ttsApiKey.value = active.apiKey || "";
-      ttsVoiceType.value = active.voiceType || "";
-      ttsResourceId.value = active.resourceId || "";
-    }
-  } catch {}
+function handleStartCall(mode: "voice" | "video" | "screen") {
+  callMode.value = mode;
+  callActive.value = true;
 }
 
-async function handleToggleCall() {
-  await fetchTtsConfig();
-  if (!ttsApiKey.value) {
-    router.push("/model/voice");
-    return;
-  }
-  callActive.value = !callActive.value;
+function handleEndCall() {
+  callActive.value = false;
 }
 
 function handleCallStateChange(state: string) {
-  if (state === "idle" || state === "error") {
+  if (state === "idle") {
     callActive.value = false;
   }
 }
 
-const { get, post } = useApi();
+const { get, post, del } = useApi();
+const {
+  currentWorkspace,
+  recentWorkspaces,
+  refreshRecentWorkspaces,
+  loadConversationWorkspace,
+  chooseWorkspaceDirectory,
+  selectWorkspaceMount,
+  clearWorkspace,
+} = useConversationWorkspace();
 const { cachedGet, invalidateCache } = useCachedApi();
 const currentCharName = inject<any>("currentCharName", null);
 const extensionUIStore = useExtensionUIStore();
@@ -288,19 +303,21 @@ const showMemInject = ref(false);
 const importContext = ref<any>(null);
 const showImportDetail = ref(false);
 const convSummary = ref("");
-const showSummary = ref(false);
+const showSummaryDrawer = ref(false);
 const replyTarget = ref<any>(null);
 const chatExtensionContext = computed(() => {
   const env = resolveHostEnvironment();
   return {
     characterId: characterId.value,
     conversationId: convId.value,
-    channel: isWechatActive.value ? "wechat" : isQQActive.value ? "qq" : "web",
+    channel: "web",
     platform: env.platform,
     host: env.host,
     os: env.os,
     conversationState: sending.value ? "generating" : isOffline.value ? "offline" : "idle",
     capabilities: env.host === "desktop" ? ["browser", "desktop", "clipboard-host"] : ["browser"],
+    workspace: currentWorkspace.value,
+    recentWorkspaces: recentWorkspaces.value,
   };
 });
 const externalConversationProvider = computed(() => {
@@ -382,27 +399,35 @@ async function handleNewChat(event?: CustomEvent) {
   }
 }
 
-async function handleEmoteSend(emote: any) {
+async function handleFileSend(file: File) {
+  if (!file) return;
   if (!convId.value || !characterId.value) {
     ElMessage.warning("请先选择角色和会话");
     return;
   }
   try {
-    const message = normalizeRealtimeMessage(
-      await post<any>("/api/chat/send-emote", {
-        conversationId: convId.value,
-        characterId: characterId.value,
-        emoteId: emote.id,
-        replyToMessageId: replyTarget.value?.id || undefined,
-      }),
-    );
-    if (!messages.value.some((item) => item.id === message.id))
-      messages.value.push(message);
-    replyTarget.value = null;
-    nextTick(() => scrollToBottom());
+    const form = new FormData();
+    form.append("kind", "file");
+    form.append("source", "chat_upload");
+    form.append("file", file, file.name);
+    const response = await post<any>("/api/artifacts/v1", form);
+    const artifact = response?.artifact ?? response;
+    const artifactId = String(artifact?.artifactId ?? artifact?.id ?? "").trim();
+    if (!artifactId) throw new Error("上传结果缺少 artifactId");
+    const filename = String(artifact?.filename || file.name || "文件");
+    const resourceUri = `amitia://artifacts/${artifactId}`;
+    await handleSend(`[文件] ${filename}\n${resourceUri}`);
   } catch (error: any) {
-    ElMessage.error(error?.response?.data?.msg || "表情发送失败");
+    ElMessage.error(error?.response?.data?.message || error?.message || "文件上传失败");
   }
+}
+
+async function deleteConversationMessage(messageId: string) {
+  const id = String(messageId || "").trim();
+  if (!id) return;
+  await del(`/api/chats/messages/${encodeURIComponent(id)}`);
+  const index = messages.value.findIndex((item) => String(item.id) === id);
+  if (index >= 0) messages.value.splice(index, 1);
 }
 
 function toggleProfiles() {
@@ -454,8 +479,6 @@ const {
   convId,
   messages,
   scrollToBottom,
-  () => fetchWechatMsgCount(),
-  () => fetchQQStatus(),
   sending,
 );
 
@@ -491,8 +514,6 @@ const {
   scrollToBottom,
   disconnectSSE,
   inputRef,
-  () => fetchWechatMsgCount(),
-  () => fetchQQStatus(),
   undefined,
   replyTarget,
 );
@@ -502,12 +523,6 @@ const {
   conversations,
   importBatches,
   memories,
-  isWechatActive,
-  wechatOnline,
-  wechatMsgCount,
-  isQQActive,
-  qqOnline,
-  qqMsgCount,
   showDrawer,
   showCharPicker,
   showMemories,
@@ -516,12 +531,8 @@ const {
   loadCharacterConversation,
   fetchConversations,
   handleSelectConv,
-  handleSelectWechat,
-  handleSelectQQ,
   handleContinueImport,
   handleViewMemories,
-  fetchWechatMsgCount,
-  fetchQQStatus,
   refreshCharacters,
   fetchConvSummary,
 } = useWebChatConversation(
@@ -548,11 +559,73 @@ const conversationHostActions: Record<string, (input?: any) => unknown | Promise
   "conversation.stop": async () => handleStop(),
   "conversation.retry": async (input) => { const id = String(input?.messageId ?? input ?? ""); const msg = messages.value.find((item) => item.id === id); if (msg) await handleRetry(msg); },
   "conversation.regenerate": async () => handleRegenerate(),
+  "conversation.delete": async (input) => deleteConversationMessage(String(input?.messageId ?? input ?? "")),
   "conversation.new": async () => handleNewChat(),
   "conversation.clear": async () => handleClear(),
   "conversation.openDrawer": async () => { showDrawer.value = true; },
   "conversation.reply": async (input) => { const msg = messages.value.find((item) => item.id === String(input?.messageId ?? input ?? "")); if (msg) handleSetReply(msg); },
+  "conversation.sendFile": async (input) => {
+    if (input?.file instanceof File) return handleFileSend(input.file);
+    const resourceUri = String(input?.resourceUri ?? "").trim();
+    const fileName = String(input?.fileName ?? input?.filename ?? "文件").trim() || "文件";
+    if (resourceUri) return handleSend(`[文件] ${fileName}\n${resourceUri}`);
+  },
+  "conversation.sendImage": async (input) => {
+    const imageBase64 = String(input?.imageBase64 ?? "").trim();
+    if (imageBase64) return handleSend(String(input?.text ?? ""), imageBase64);
+  },
+  "conversation.sendCode": async (input) => {
+    const language = String(input?.language ?? "text").trim() || "text";
+    const code = String(input?.code ?? "");
+    if (code) return handleSend(`\`\`\`${language}\n${code}\n\`\`\``);
+  },
+  "conversation.sendVoice": async (input) => {
+    if (input?.blob instanceof Blob) return handleVoiceAudio(input.blob, input?.transcript, input?.duration);
+    if (input?.text) return handleVoiceText(String(input.text));
+  },
+  "conversation.workspace.choose": async () => chooseWorkspaceDirectory(),
+  "conversation.workspace.select": async (input) => {
+    const workspaceId = String(input?.workspaceId ?? input ?? "").trim();
+    if (!workspaceId) return chooseWorkspaceDirectory();
+    let mount = recentWorkspaces.value.find((item) => item.id === workspaceId);
+    if (!mount) {
+      await refreshRecentWorkspaces();
+      mount = recentWorkspaces.value.find((item) => item.id === workspaceId);
+    }
+    if (mount) return selectWorkspaceMount(mount);
+  },
+  "conversation.workspace.clear": async () => clearWorkspace(),
+  "conversation.workspace.refresh": async () => refreshRecentWorkspaces(),
 };
+
+watch(
+  convId,
+  (conversationId) => {
+    const id = conversationId || "";
+    loadConversationWorkspace(id);
+    const requestedId = id;
+    void fetchConvSummary(requestedId).then((summary) => {
+      if ((convId.value || "") === requestedId) {
+        convSummary.value = summary;
+      }
+    });
+  },
+  { immediate: true },
+);
+
+watch(showSummaryDrawer, (visible) => {
+  if (!visible) return;
+  const requestedId = convId.value || "";
+  void fetchConvSummary(requestedId).then((summary) => {
+    if ((convId.value || "") === requestedId) {
+      convSummary.value = summary;
+    }
+  });
+});
+
+function handleViewSummary() {
+  showSummaryDrawer.value = true;
+}
 
 provideConversationUIContext({
   conversationId: convId,
@@ -588,11 +661,6 @@ watch(showDrawer, (open) => {
 });
 
 onMounted(async () => {
-  fetchWechatMsgCount();
-  fetchQQStatus();
-  setInterval(fetchWechatMsgCount, 30000);
-  setInterval(() => fetchQQStatus(), 15000);
-
   connectProactiveSSE();
   history.scrollRestoration = "manual";
 
@@ -610,13 +678,6 @@ onMounted(async () => {
   updateViewport();
 
   const h = await get<any>("/api/health").catch(() => null);
-  if (h?.deployMode === "cloud-web") {
-    const { isAuthenticated } = useSessionStore();
-    if (!isAuthenticated.value) {
-      router.push("/login");
-      return;
-    }
-  }
   if (h?.model === "not_configured") {
     modelMissing.value = true;
   }
@@ -632,15 +693,6 @@ onMounted(async () => {
     await cachedGet<any[]>("/api/characters");
   if (cachedChars.value?.length) {
     characters.value = cachedChars.value;
-    const lastConv = localStorage.getItem("webchat-last-conv");
-    if (lastConv === "wechat") {
-      await handleSelectWechat(true);
-      return;
-    }
-    if (lastConv === "qq") {
-      await handleSelectQQ(true);
-      return;
-    }
     const savedId = localStorage.getItem("webchat-char-id");
     const preferred = savedId
       ? characters.value.find((c: any) => c.id === savedId)
@@ -723,6 +775,12 @@ onUnmounted(() => {
   flex-direction: column;
   height: 100%;
   width: 100%;
+}
+.summary-drawer-text {
+  white-space: pre-wrap;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.7;
 }
 .chat-surface { display: flex; flex-direction: column; width: min(100%, 1440px); height: 100%; min-height: 0; margin: 0 auto; overflow: hidden; border-radius: var(--radius-lg); background: var(--chat-surface-bg); }
 .chat-header-region { order: 1; flex: 0 0 auto; }

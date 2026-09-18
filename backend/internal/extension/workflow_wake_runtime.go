@@ -201,7 +201,7 @@ func normalizeWorkflowWakeBackend(value string) string {
 	switch strings.ToLower(strings.TrimSpace(value)) {
 	case "", "auto", "local", "local_kws", workflowLocalKWSWakeBackend:
 		return workflowLocalKWSWakeBackend
-	case "cloud", "asr", "asr_phrase", workflowASRWakeBackend:
+	case "cloud", "asr", workflowASRWakeBackend:
 		return workflowASRWakeBackend
 	default:
 		return strings.TrimSpace(value)
@@ -578,7 +578,7 @@ func canonicalBindingEventType(value string) string {
 		return value
 	}
 	suffix := ":" + workflowWakeEventType
-	if strings.HasPrefix(value, "user:") && strings.HasSuffix(value, suffix) {
+	if strings.HasPrefix(value, "space:") && strings.HasSuffix(value, suffix) {
 		return workflowWakeEventType
 	}
 	return value

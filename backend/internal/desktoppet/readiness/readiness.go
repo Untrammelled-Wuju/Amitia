@@ -419,16 +419,14 @@ func makeSurrealPingChecker() func() (SystemStatus, string) {
 		defer cancel()
 
 		if _, err := db.SignIn(ctx, map[string]string{"user": cfg.Username, "pass": cfg.Password}); err != nil {
-			if _, err2 := db.SignIn(ctx, map[string]string{"user": "root", "pass": "root"}); err2 != nil {
-				return StatusBlocked, fmt.Sprintf("surrealdb: authentication failed: %v", err)
-			}
+			return StatusBlocked, fmt.Sprintf("surrealdb: authentication failed: %v", err)
 		}
 
 		if err := db.Use(ctx, cfg.Namespace, cfg.Database); err != nil {
 			return StatusBlocked, fmt.Sprintf("surrealdb: use namespace/database failed: %v", err)
 		}
 
-		_, err = surrealdb.Query[any](ctx, db, "SELECT 1", nil)
+		_, err = surrealdb.Query[any](ctx, db, "RETURN 1;", nil)
 		if err != nil {
 			return StatusDegraded, fmt.Sprintf("surrealdb: query test failed: %v", err)
 		}

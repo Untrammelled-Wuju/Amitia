@@ -4,8 +4,7 @@ package quality
 
 type EvaluationInputSnapshot struct {
 	ID                   string `json:"id"`
-	UserID               string `json:"userId"`
-	CharacterID          string `json:"characterId"`
+	SpaceID              string `json:"spaceId"`
 	ActionStreamID       string `json:"actionStreamId"`
 	ActionRevisionID     string `json:"actionRevisionId"`
 	ActionContentHash    string `json:"actionContentHash"`
@@ -120,8 +119,7 @@ func (ActiveQualityGateBinding) TableName() string {
 
 type QualityGateSnapshot struct {
 	ID                    string `json:"id"`
-	UserID                string `json:"userId"`
-	CharacterID           string `json:"characterId"`
+	SpaceID               string `json:"spaceId"`
 	ProcessingTaskID      string `json:"processingTaskId"`
 	ActiveRevisionSetHash string `json:"activeRevisionSetHash"`
 	EvaluationSetHash     string `json:"evaluationSetHash"`

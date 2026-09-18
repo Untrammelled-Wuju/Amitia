@@ -113,7 +113,11 @@ async function loadData() {
           sort: "recently_used",
         })
       : Promise.resolve({ items: [] }),
-    get<any>("/api/profiles", { page: 1, pageSize: 5 }),
+    get<any>("/api/profiles", {
+      page: 1,
+      pageSize: 5,
+      characterId: props.characterId || undefined,
+    }),
     props.convId
       ? get<any>(`/api/chats/conversations/${encodeURIComponent(props.convId)}/compression-status`)
       : Promise.resolve({}),

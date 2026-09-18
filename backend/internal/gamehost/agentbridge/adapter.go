@@ -3,7 +3,9 @@ package agentbridge
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
@@ -18,6 +20,11 @@ import (
 )
 
 const defaultToolTimeout = 30 * time.Second
+const runtimeStartupTimeout = 15 * time.Second
+
+type RuntimeStarter interface {
+	StartRuntime(ctx context.Context, runtimeID ghdomain.RuntimeInstanceID) error
+}
 
 type RuntimeAdapter struct {
 	plugins   *registry.Registry
@@ -26,6 +33,7 @@ type RuntimeAdapter struct {
 	control   ipc.ControlPlane
 	readiness readiness.Reader
 	sessions  *SessionRegistry
+	starter   RuntimeStarter
 }
 
 func NewRuntimeAdapter(plugins *registry.Registry, runtimes *ghruntime.Manager, topology *ghruntime.TopologyStore, control ipc.ControlPlane, runtimeReadiness readiness.Reader) (*RuntimeAdapter, error) {
@@ -39,8 +47,15 @@ func (a *RuntimeAdapter) Supports(binding capability.RuntimeBinding) bool {
 	return binding.RuntimeType == capability.RuntimeTypeGameHost
 }
 
+func (a *RuntimeAdapter) SetRuntimeStarter(starter RuntimeStarter) {
+	if a == nil {
+		return
+	}
+	a.starter = starter
+}
+
 func (a *RuntimeAdapter) Execute(ctx context.Context, binding capability.RuntimeBinding, invocation capability.ToolInvocationContext, input json.RawMessage) capability.UnifiedToolResult {
-	toolID := binding.HandlerName
+	toolID := ""
 	if !a.Supports(binding) {
 		return failure(invocation.InvocationID, toolID, capability.ErrorCodeRuntimeUnavailable, "game_host runtime adapter does not support this binding", nil)
 	}
@@ -49,6 +64,15 @@ func (a *RuntimeAdapter) Execute(ctx context.Context, binding capability.Runtime
 		return failure(invocation.InvocationID, toolID, capability.ErrorCodeInvalidInput, "invalid plugin RPC method", err)
 	}
 	peer, err := a.resolvePeer(ctx, binding)
+	if err != nil {
+		started, startErr := a.startStoppedRuntime(ctx, binding, err)
+		if startErr != nil {
+			return failure(invocation.InvocationID, toolID, capability.ErrorCodeRuntimeUnavailable, "start plugin runtime", startErr)
+		}
+		if started {
+			peer, err = a.waitForReadyPeer(ctx, binding)
+		}
+	}
 	if err != nil {
 		return failure(invocation.InvocationID, toolID, capability.ErrorCodeRuntimeUnavailable, "plugin runtime is unavailable", err)
 	}
@@ -83,6 +107,11 @@ func (a *RuntimeAdapter) Execute(ctx context.Context, binding capability.Runtime
 	started := time.Now()
 	response, err := a.control.SendRequest(ctx, peer, envelope, timeout)
 	if err != nil {
+		var pluginErr *ipc.PluginResponseError
+		if errors.As(err, &pluginErr) {
+			return failure(invocation.InvocationID, toolID, capability.ErrorCodeExecutionFailed, pluginErr.Message, fmt.Errorf("%s", pluginErr.Code))
+		}
+		log.Printf("[gamehost-agentbridge] send request failed: runtime=%s plugin=%s service=%s method=%s generation=%d elapsed=%s err=%v", peer.RuntimeID, peer.PluginID, peer.ServiceID, method, peer.Generation, time.Since(started), err)
 		if ctx.Err() != nil {
 			result := capability.ResultFromContextError(invocation.InvocationID, ctx.Err())
 			result.ToolID = toolID
@@ -110,6 +139,56 @@ func (a *RuntimeAdapter) Execute(ctx context.Context, binding capability.Runtime
 	return result
 }
 
+func (a *RuntimeAdapter) startStoppedRuntime(ctx context.Context, binding capability.RuntimeBinding, resolveErr error) (bool, error) {
+	if a == nil || a.starter == nil || resolveErr == nil || !strings.Contains(resolveErr.Error(), "has no active generation") {
+		return false, nil
+	}
+	plugin, err := a.resolvePlugin(ctx, binding)
+	if err != nil {
+		return false, err
+	}
+	runtimeID, err := a.resolveRuntime(ctx, binding, plugin.ID)
+	if err != nil {
+		return false, err
+	}
+	runtimeInstance, err := a.runtimes.Get(ctx, runtimeID)
+	if err != nil {
+		return false, err
+	}
+	if runtimeInstance.State != ghdomain.RuntimeStateCreated && runtimeInstance.State != ghdomain.RuntimeStateStopped {
+		return false, nil
+	}
+	if err := a.starter.StartRuntime(ctx, runtimeID); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func (a *RuntimeAdapter) waitForReadyPeer(ctx context.Context, binding capability.RuntimeBinding) (ipc.Peer, error) {
+	timeout := time.NewTimer(runtimeStartupTimeout)
+	defer timeout.Stop()
+	ticker := time.NewTicker(200 * time.Millisecond)
+	defer ticker.Stop()
+	var lastErr error
+	for {
+		peer, err := a.resolvePeer(ctx, binding)
+		if err == nil {
+			err = a.ensurePeerReady(ctx, peer)
+			if err == nil {
+				return peer, nil
+			}
+		}
+		lastErr = err
+		select {
+		case <-ctx.Done():
+			return ipc.Peer{}, ctx.Err()
+		case <-timeout.C:
+			return ipc.Peer{}, fmt.Errorf("plugin runtime did not become ready: %w", lastErr)
+		case <-ticker.C:
+		}
+	}
+}
+
 func (a *RuntimeAdapter) SessionRegistry() *SessionRegistry {
 	if a == nil {
 		return nil
@@ -130,6 +209,9 @@ func (a *RuntimeAdapter) BindAgentContext(ctx context.Context, binding capabilit
 	}
 	peer, err := a.resolvePeer(ctx, binding)
 	if err != nil {
+		if strings.Contains(err.Error(), "has no active generation") {
+			return nil
+		}
 		return err
 	}
 	a.bindInvocationContext(peer, invocation)
@@ -142,7 +224,7 @@ func (a *RuntimeAdapter) bindInvocationContext(peer ipc.Peer, invocation capabil
 	}
 	a.sessions.Bind(SessionScope{
 		PluginID: peer.PluginID, RuntimeID: peer.RuntimeID, ServiceID: peer.ServiceID, Generation: peer.Generation,
-		UserID: invocation.UserID, CharacterID: invocation.CharacterID,
+		SpaceID: invocation.SpaceID, CharacterID: invocation.CharacterID,
 		ConversationID: invocation.ConversationID, Channel: invocation.Channel,
 		HostSessionID: invocation.SessionID,
 	})

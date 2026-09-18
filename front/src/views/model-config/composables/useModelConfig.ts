@@ -27,6 +27,8 @@ interface ModelConfigOptions {
   extraFormFields?: Record<string, any>;
   transformPayload?: (payload: any) => any;
   transformConfig?: (config: any) => any;
+  payloadFields?: string[];
+  preserveEmptyOnUpdateFields?: string[];
   testResultMapper?: (result: any) => TestResultData;
   defaultIsActive?: number;
 }
@@ -61,6 +63,8 @@ export function useModelConfig(options?: ModelConfigOptions) {
   const extraFormFields = options?.extraFormFields;
   const transformPayload = options?.transformPayload;
   const transformConfig = options?.transformConfig;
+  const payloadFields = options?.payloadFields;
+  const preserveEmptyOnUpdateFields = options?.preserveEmptyOnUpdateFields ?? ["apiKey"];
   const testResultMapper = options?.testResultMapper ?? defaultTestMapper;
   const defaultIsActive = options?.defaultIsActive ?? 0;
 
@@ -176,13 +180,13 @@ export function useModelConfig(options?: ModelConfigOptions) {
     onProviderChange(form.apiType);
   }
 
-  function onProviderChange(apiType = form.apiType) {
+  function onProviderChange(apiType = form.apiType, applyDefaults = true) {
     currentProviderSchema.value =
       providers.value.find((p: any) => p.id === apiType) || null;
     detectedModels.value = [];
     detectError.value = "";
     const provider = currentProviderSchema.value as any;
-    if (provider) {
+    if (provider && applyDefaults) {
       if (provider.defaultBaseUrl) {
         form.baseUrl = provider.defaultBaseUrl;
       }
@@ -244,6 +248,7 @@ export function useModelConfig(options?: ModelConfigOptions) {
       form.apiType = defaultApiType;
       form.baseUrl = defaultBaseUrl;
       form.apiKey = "";
+      originalApiKey.value = "";
       form.modelName = defaultModel;
       form.temperature = 0.7;
       form.maxTokens = 4096;
@@ -255,7 +260,7 @@ export function useModelConfig(options?: ModelConfigOptions) {
         (form as any)[key] = fullConfig?.[key] ?? row?.[key] ?? defaultVal;
       }
     }
-    onProviderChange(form.apiType);
+    onProviderChange(form.apiType, !row);
     dialogVisible.value = true;
     setTimeout(() => dialogFormRef.value?.clearValidate(), 0);
   }
@@ -270,8 +275,19 @@ export function useModelConfig(options?: ModelConfigOptions) {
       if (transformPayload) {
         payload = transformPayload(payload);
       }
+      if (payloadFields?.length) {
+        payload = Object.fromEntries(
+          Object.entries(payload).filter(([key]) => payloadFields.includes(key)),
+        );
+      }
       if (!payload.apiKey || payload.apiKey === originalApiKey.value) {
         delete payload.apiKey;
+      }
+      if (editingId.value) {
+        for (const field of preserveEmptyOnUpdateFields) {
+          const value = payload[field];
+          if (value === "" || value == null) delete payload[field];
+        }
       }
       if (editingId.value) {
         await put(`${apiBase}/configs/${editingId.value}`, payload);

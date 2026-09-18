@@ -62,7 +62,7 @@ func TestConcurrent_100Takeovers(t *testing.T) {
 	if finalSnap.Epoch != 3 {
 		t.Errorf("expected epoch 3, got %d", finalSnap.Epoch)
 	}
-	_ = noopCount
+	_ = noopCount.Load()
 }
 
 func TestConcurrent_100Releases(t *testing.T) {
@@ -118,7 +118,7 @@ func TestConcurrent_100Releases(t *testing.T) {
 	if successCount.Load() != 1 {
 		t.Errorf("expected exactly 1 successful release, got %d", successCount.Load())
 	}
-	_ = staleCount
+	_ = staleCount.Load()
 
 	if finalSnap.Mode != domain.ControlModeObserveOnly {
 		t.Errorf("expected mode %q after release, got %q", domain.ControlModeObserveOnly, finalSnap.Mode)

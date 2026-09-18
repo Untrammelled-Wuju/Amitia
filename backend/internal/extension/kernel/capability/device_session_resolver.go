@@ -17,14 +17,14 @@ func NewHostRegistryDeviceSessionResolver(registry *host_registry.Registry) Devi
 
 func (r *hostRegistryDeviceSessionResolver) ResolveActiveSession(
 	ctx context.Context,
-	userID runtimeidentity.UserID,
+	spaceID runtimeidentity.SpaceID,
 	deviceID runtimeidentity.DeviceID,
 	runtimeID runtimeidentity.RuntimeID,
 ) (runtimeidentity.RuntimeSessionID, bool) {
 	if r.registry == nil {
 		return "", false
 	}
-	entry, err := r.registry.FindRuntimeEntry(ctx, userID, deviceID, runtimeID)
+	entry, err := r.registry.FindRuntimeEntry(ctx, spaceID, deviceID, runtimeID)
 	if err != nil || entry == nil {
 		return "", false
 	}

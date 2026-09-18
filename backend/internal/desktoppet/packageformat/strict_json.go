@@ -105,7 +105,7 @@ func scanValue(dec *json.Decoder, tok json.Token, depth int) error {
 // DecodeStrictTopLevelJSON validates duplicate keys/depth and rejects unknown
 // top-level fields while preserving JSON Schema's default behavior for nested
 // objects (additionalProperties is allowed unless a nested schema says
-// otherwise). This is used by package-v2 schemas whose additionalProperties:
+// otherwise). This is used by package-v1 schemas whose additionalProperties:
 // false is declared only on the document root.
 func DecodeStrictTopLevelJSON(data []byte, target interface{}, allowedFields []string) error {
 	if len(data) > maxStrictJSONBytes {

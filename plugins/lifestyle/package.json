@@ -1,0 +1,11 @@
+{
+  "name": "@amitia/lifestyle-extension",
+  "version": "1.0.5",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build-package.mjs",
+    "verify": "node scripts/verify-package.mjs",
+    "test": "node scripts/test-runtime.mjs"
+  }
+}

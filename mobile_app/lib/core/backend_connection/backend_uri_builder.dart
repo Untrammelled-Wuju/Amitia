@@ -20,7 +20,7 @@ class BackendUriBuilder {
       host: config.endpoint.host,
       port: config.endpoint.port,
       path: path,
-      queryParameters: (queryParameters?.isEmpty ?? true) ? null : queryParameters,
+      queryParameters: _normalizeQueryParameters(queryParameters),
     );
   }
 
@@ -43,8 +43,31 @@ class BackendUriBuilder {
       host: config.endpoint.host,
       port: config.endpoint.port,
       path: path,
-      queryParameters: (queryParameters?.isEmpty ?? true) ? null : queryParameters,
+      queryParameters: _normalizeQueryParameters(queryParameters),
     );
+  }
+
+  Map<String, dynamic>? _normalizeQueryParameters(
+    Map<String, dynamic>? queryParameters,
+  ) {
+    if (queryParameters == null || queryParameters.isEmpty) return null;
+    final normalized = <String, dynamic>{};
+    for (final entry in queryParameters.entries) {
+      final value = entry.value;
+      if (value == null) continue;
+      if (value is String) {
+        normalized[entry.key] = value;
+      } else if (value is Iterable) {
+        final values = value
+            .where((item) => item != null)
+            .map((item) => item.toString())
+            .toList(growable: false);
+        if (values.isNotEmpty) normalized[entry.key] = values;
+      } else {
+        normalized[entry.key] = value.toString();
+      }
+    }
+    return normalized.isEmpty ? null : normalized;
   }
 
   void _validatePath(String path) {

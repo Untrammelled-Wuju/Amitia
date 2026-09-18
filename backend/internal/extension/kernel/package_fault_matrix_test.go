@@ -73,7 +73,7 @@ func TestPackageFaultMatrixRealJournalCracksRecoverDeterministically(t *testing.
 			ctx := context.Background()
 			runtimeInstance, container := newPackagePipelineRuntime(t)
 			now := time.Now().UTC().Format(time.RFC3339Nano)
-			record := PackageOperationRecord{OperationID: "fault-" + operation, TraceID: "trace-fault-" + operation, UserID: "user-1", ScopeType: "global", ExtensionID: "com.example/fault-" + operation, TargetVersion: "2.0.0", OperationType: operation, Status: string(PackageOperationPending), CurrentStep: "created", ConfirmationsJSON: "{}", StartedAt: now, UpdatedAt: now}
+			record := PackageOperationRecord{OperationID: "fault-" + operation, TraceID: "trace-fault-" + operation, SpaceID: "user-1", ScopeType: "global", ExtensionID: "com.example/fault-" + operation, TargetVersion: "2.0.0", OperationType: operation, Status: string(PackageOperationPending), CurrentStep: "created", ConfirmationsJSON: "{}", StartedAt: now, UpdatedAt: now}
 			if err := container.PackageRepository.CreateOperation(ctx, record); err != nil {
 				t.Fatal(err)
 			}

@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>发送表情</title>
+  <link rel="stylesheet" href="./composer.css">
+</head>
+<body>
+  <div class="wrap">
+    <button class="emote-button" id="toggle" title="发送表情" aria-label="发送表情">☺</button>
+    <div class="panel hidden" id="panel">
+      <div class="head">
+        <select id="group"><option value="">全部表情</option><option value="recent">最近使用</option></select>
+        <input id="search" placeholder="搜索">
+      </div>
+      <div class="grid" id="grid"></div>
+    </div>
+  </div>
+  <script src="./composer.js" defer></script>
+</body>
+</html>

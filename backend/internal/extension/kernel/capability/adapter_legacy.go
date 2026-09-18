@@ -31,7 +31,7 @@ func (a *LegacyRuntimeAdapter) Execute(
 			Status:       ToolResultStatusFailed,
 			Error: &ToolError{
 				Code:        ErrorCodeInternalError,
-				Message:     "legacy dispatcher not configured",
+				Message:     "capability dispatcher not configured",
 				UserVisible: false,
 			},
 		}

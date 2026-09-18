@@ -41,7 +41,11 @@ func (api *UIAPI) RegisterRoutes(extensions *gin.RouterGroup, parent *gin.Router
 		container.SandboxHost,
 	)
 	handler.SetExtensionRoot(container.ExtRoot)
+	if container.ResourceLinks != nil {
+		handler.SetResourceLinkResolver(container.ResourceLinks)
+	}
 	handler.SetProviderRegistry(container.UIProviderRegistry)
+	handler.SetHostRegistry(container.DeviceRegistry)
 	handler.SetProviderContextResolver(func(r *http.Request, platform string) ui_provider.ResolveContext {
 		resolveContext := ui_provider.ResolveContext{
 			Platform:       platform,
@@ -60,7 +64,7 @@ func (api *UIAPI) RegisterRoutes(extensions *gin.RouterGroup, parent *gin.Router
 			resolveContext.AppVersion = strings.TrimSpace(r.URL.Query().Get("appVersion"))
 		}
 		if actor, ok := auth.FromContext(r.Context()); ok && actor != nil {
-			resolveContext.UserID = actor.UserID.String()
+			resolveContext.SpaceID = actor.SpaceID.String()
 			resolveContext.DeviceID = actor.DeviceID.String()
 		}
 		if resolveContext.DeviceID == "" {
@@ -70,11 +74,11 @@ func (api *UIAPI) RegisterRoutes(extensions *gin.RouterGroup, parent *gin.Router
 			resolveContext.DeviceID = strings.TrimSpace(r.Header.Get("X-Amitia-Device-ID"))
 		}
 
-		userID := runtimeidentity.ParseUserID(resolveContext.UserID)
+		spaceID := runtimeidentity.ParseSpaceID(resolveContext.SpaceID)
 		deviceID := runtimeidentity.ParseDeviceID(resolveContext.DeviceID)
-		if userID != "" && deviceID != "" && container.DeviceRegistry != nil {
+		if spaceID != "" && deviceID != "" && container.DeviceRegistry != nil {
 			if device, err := container.DeviceRegistry.GetDevice(r.Context(), deviceID); err == nil && device != nil {
-				if device.UserID != userID {
+				if device.SpaceID != spaceID {
 					resolveContext.DeviceID = ""
 					deviceID = ""
 				} else if resolveContext.Platform == "" && device.Platform != "" {
@@ -84,10 +88,10 @@ func (api *UIAPI) RegisterRoutes(extensions *gin.RouterGroup, parent *gin.Router
 		}
 
 		capabilitySet := map[string]struct{}{}
-		if userID != "" && deviceID != "" && container.DeviceRuntimeSessions != nil {
+		if spaceID != "" && deviceID != "" && container.DeviceRuntimeSessions != nil {
 			if sessions, err := container.DeviceRuntimeSessions.ListActiveSessions(r.Context()); err == nil {
 				for _, session := range sessions {
-					if session.UserID != userID || session.DeviceID != deviceID || !session.IsActive() {
+					if session.SpaceID != spaceID || session.DeviceID != deviceID || !session.IsActive() {
 						continue
 					}
 					resolveContext.DeviceOnline = true
@@ -100,8 +104,8 @@ func (api *UIAPI) RegisterRoutes(extensions *gin.RouterGroup, parent *gin.Router
 				}
 			}
 		}
-		if !resolveContext.DeviceOnline && userID != "" && deviceID != "" && container.DeviceRegistry != nil {
-			if presence, err := container.DeviceRegistry.GetDevicePresence(r.Context(), userID, deviceID); err == nil {
+		if !resolveContext.DeviceOnline && spaceID != "" && deviceID != "" && container.DeviceRegistry != nil {
+			if presence, err := container.DeviceRegistry.GetDevicePresence(r.Context(), spaceID, deviceID); err == nil {
 				resolveContext.DeviceOnline = presence.State == host_registry.PresenceStateReady
 			}
 		}

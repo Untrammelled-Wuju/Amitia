@@ -34,13 +34,11 @@ object GuestLayout {
     const val TASK_HOST_DIR = "$PROGRAM/task-host"
     const val TASK_HOST_ENTRY = "$TASK_HOST_DIR/dist/index.js"
 
-    const val SIDECAR_DIR = "$PROGRAM/sidecar"
-    const val SIDECAR_LAUNCHER = "$SIDECAR_DIR/launcher.mjs"
-    const val SIDECAR_BUNDLE = "$SIDECAR_DIR/bundle.mjs"
+    const val SCRIPTS_DIR = "$PROGRAM/scripts"
+    const val SCRIPTS_NODE_DIR = "$SCRIPTS_DIR/node"
 
-    const val QQ_SIDECAR_DIR = "$PROGRAM/qq-sidecar"
-    const val QQ_SIDECAR_LAUNCHER = "$QQ_SIDECAR_DIR/launcher.mjs"
-    const val QQ_SIDECAR_BUNDLE = "$QQ_SIDECAR_DIR/bundle.mjs"
+    const val MANIFEST_DIR = "$PROGRAM/manifest"
+    const val LICENSES_DIR = "$PROGRAM/licenses"
 
     const val SCRIPTS_DIR = "$PROGRAM/scripts"
     const val SCRIPTS_NODE_DIR = "$SCRIPTS_DIR/node"
@@ -62,7 +60,7 @@ object GuestLayout {
     val PATH = "$NODE_BIN:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
     val PROGRAM_SUBDIRS = listOf(
-        "backend", "node", "qdrant", "sidecar", "qq-sidecar",
+        "backend", "node", "qdrant",
         "plugin-host", "task-host", "scripts", "manifest", "licenses",
     )
 

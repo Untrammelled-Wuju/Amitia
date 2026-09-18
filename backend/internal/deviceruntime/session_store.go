@@ -15,7 +15,7 @@ type SessionStore interface {
 
 	GetActiveByRuntime(
 		ctx context.Context,
-		userID runtimeidentity.UserID,
+		spaceID runtimeidentity.SpaceID,
 		deviceID runtimeidentity.DeviceID,
 		runtimeID runtimeidentity.RuntimeID,
 	) (RuntimeSession, error)

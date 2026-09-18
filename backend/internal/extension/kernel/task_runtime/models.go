@@ -132,7 +132,8 @@ var validTransitions = map[TaskRunStatus][]TaskRunStatus{
 	RunStatusStarting:         {RunStatusRunning, RunStatusFailed, RunStatusCancelled, RunStatusRecoveryRequired},
 	RunStatusRunning:          {RunStatusCheckpointing, RunStatusPaused, RunStatusCancelling, RunStatusSucceeded, RunStatusFailed, RunStatusTimedOut, RunStatusRecoveryRequired},
 	RunStatusCheckpointing:    {RunStatusRunning, RunStatusPaused, RunStatusFailed, RunStatusRecoveryRequired},
-	RunStatusPaused:           {RunStatusRunning, RunStatusCancelling, RunStatusRecoveryRequired},
+	RunStatusPaused:           {RunStatusResuming, RunStatusRunning, RunStatusCancelling, RunStatusRecoveryRequired},
+	RunStatusResuming:         {RunStatusRunning, RunStatusFailed, RunStatusCancelling, RunStatusRecoveryRequired},
 	RunStatusCancelling:       {RunStatusCancelled, RunStatusFailed},
 	RunStatusRecoveryRequired: {RunStatusStarting, RunStatusManualIntervention, RunStatusCancelled},
 }
@@ -459,6 +460,7 @@ type EnqueueTaskRequest struct {
 	Input                  json.RawMessage                `json:"input"`
 	Priority               int                            `json:"priority"`
 	ExecutionPlacement     TaskExecutionPlacement         `json:"executionPlacement,omitempty"`
+	DeviceID               string                         `json:"deviceId,omitempty"`
 	TrustedExecutionTarget *TrustedExecutionTargetRequest `json:"-"`
 	OperationID            string                         `json:"operationId"`
 	InvocationID           string                         `json:"invocationId,omitempty"`

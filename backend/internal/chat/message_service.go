@@ -20,6 +20,13 @@ func (s *service) GetMessages(convID string, page, pageSize int) ([]Message, int
 	return s.repo.GetMessages(convID, page, pageSize)
 }
 
+func (s *service) GetMessagesForSpace(convID, spaceID string, page, pageSize int) ([]Message, int64, error) {
+	if _, err := s.requireConversationOwner(convID, spaceID); err != nil {
+		return nil, 0, err
+	}
+	return s.repo.GetMessages(convID, page, pageSize)
+}
+
 func (s *service) GetMessagesScoped(convID string, characterID string, page, pageSize int) ([]Message, int64, error) {
 	if err := s.requireConversationCharacter(convID, characterID); err != nil {
 		return nil, 0, err
@@ -43,10 +50,13 @@ func (s *service) removeAttachmentReferences(tx *gorm.DB, attachments []MessageA
 }
 
 func (s *service) DeleteMessages(convID string) error {
-	return s.DeleteMessagesForUser(convID, requestidentity.DefaultUserID)
+	return s.DeleteMessagesForSpace(convID, requestidentity.CanonicalSpaceID())
 }
 
-func (s *service) DeleteMessagesForUser(convID string, userID string) error {
+func (s *service) DeleteMessagesForSpace(convID string, spaceID string) error {
+	if _, err := s.requireConversationOwner(convID, spaceID); err != nil {
+		return err
+	}
 	var attachments []MessageAttachment
 	if s.artifactResolver != nil {
 		attachments, _ = s.repo.GetAttachmentsByConv(convID)
@@ -83,11 +93,11 @@ func (s *service) DeleteMessagesForUser(convID string, userID string) error {
 			if result.RowsAffected == 0 {
 				return fmt.Errorf("消息版本冲突")
 			}
-			if err := s.recordMessageChangeTx(tx, message, syncapi.OpDelete, row.Revision+1, userID); err != nil {
+			if err := s.recordMessageChangeTx(tx, message, syncapi.OpDelete, row.Revision+1, spaceID); err != nil {
 				return err
 			}
 		}
-		if err := tx.Where("conversation_id = ?", convID).Delete(&MessageAttachment{}).Error; err != nil {
+		if err := tx.Where("message_id IN (SELECT id FROM messages WHERE conversation_id = ?)", convID).Delete(&MessageAttachment{}).Error; err != nil {
 			return err
 		}
 		return nil
@@ -106,22 +116,23 @@ func (s *service) DeleteMessagesScoped(convID string, characterID string) error 
 }
 
 func (s *service) DeleteSingleMessage(id string) error {
-	return s.DeleteSingleMessageForUser(id, requestidentity.DefaultUserID)
+	return s.DeleteSingleMessageForSpace(id, requestidentity.CanonicalSpaceID())
 }
 
-func (s *service) DeleteSingleMessageForUser(id string, userID string) error {
-	var msg Message
-	if err := s.db.Where("id = ?", id).First(&msg).Error; err != nil {
+func (s *service) DeleteSingleMessageForSpace(id string, spaceID string) error {
+	owned, err := s.requireMessageOwner(id, spaceID)
+	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return fmt.Errorf("消息不存在")
 		}
 		return err
 	}
+	msg := *owned
 	var attachments []MessageAttachment
 	if s.artifactResolver != nil {
 		attachments, _ = s.repo.GetMessageAttachments(id)
 	}
-	err := s.db.Transaction(func(tx *gorm.DB) error {
+	err = s.db.Transaction(func(tx *gorm.DB) error {
 		var revision int64
 		if err := tx.Table("messages").Where("id = ?", id).Select("COALESCE(revision, 1)").Scan(&revision).Error; err != nil {
 			return err
@@ -141,7 +152,7 @@ func (s *service) DeleteSingleMessageForUser(id string, userID string) error {
 		if result.RowsAffected == 0 {
 			return fmt.Errorf("消息版本冲突")
 		}
-		if err := s.recordMessageChangeTx(tx, &msg, syncapi.OpDelete, revision+1, userID); err != nil {
+		if err := s.recordMessageChangeTx(tx, &msg, syncapi.OpDelete, revision+1, spaceID); err != nil {
 			return err
 		}
 		if err := tx.Where("message_id = ?", id).Delete(&MessageAttachment{}).Error; err != nil {
@@ -185,6 +196,17 @@ func (s *service) SearchMessages(q MessageSearchQuery) (*MessageSearchResponse, 
 		items = []Message{}
 	}
 	return &MessageSearchResponse{Items: items, Total: total, Page: q.Page, PageSize: q.PageSize, TotalPages: totalPages}, nil
+}
+
+func (s *service) SearchMessagesForSpace(q MessageSearchQuery, spaceID string) (*MessageSearchResponse, error) {
+	q.SpaceID = normalizeConversationOwner(spaceID)
+	q.IncludeLegacyDefault = chatLocalSingleUserMode()
+	if q.ConversationID != "" {
+		if _, err := s.requireConversationOwner(q.ConversationID, spaceID); err != nil {
+			return nil, err
+		}
+	}
+	return s.SearchMessages(q)
 }
 
 func (s *service) SearchMessagesScoped(q MessageSearchQuery, characterID string) (*MessageSearchResponse, error) {
@@ -233,7 +255,7 @@ func (s *service) Chat(req *ChatRequest) (*ChatResponse, error) {
 		Channel:        channel,
 		Source:         source,
 		PeerID:         req.PeerID,
-		UserID:         req.UserID,
+		SpaceID:        req.SpaceID,
 		RequestID:      req.RequestID,
 	})
 	if err != nil {
@@ -260,7 +282,7 @@ func (s *service) Chat(req *ChatRequest) (*ChatResponse, error) {
 	}, nil
 }
 
-func (s *service) validateConversationScope(convID, characterID, channel string) error {
+func (s *service) validateConversationScope(convID, characterID, channel, spaceID string) error {
 	convID = strings.TrimSpace(convID)
 	if convID == "" {
 		return nil
@@ -271,6 +293,9 @@ func (s *service) validateConversationScope(convID, characterID, channel string)
 			return fmt.Errorf("会话不存在")
 		}
 		return err
+	}
+	if !conversationOwnerMatches(conv.SpaceID, spaceID) {
+		return fmt.Errorf("%w: space_id", ErrConversationScopeMismatch)
 	}
 	actualCharacterID := strings.TrimSpace(conv.CharacterID)
 	expectedCharacterID := strings.TrimSpace(characterID)

@@ -9,13 +9,33 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	episodicsvc "github.com/u-ai/backend/internal/episodic"
 	memorysvc "github.com/u-ai/backend/internal/memory"
+	profilesvc "github.com/u-ai/backend/internal/profile"
 )
 
 var toolMemoryService memorysvc.Service
+var toolProfileService profilesvc.Service
+var toolEpisodicService episodicsvc.Service
 
 func SetMemoryService(svc memorysvc.Service) {
 	toolMemoryService = svc
+}
+
+func SetProfileService(svc profilesvc.Service) {
+	toolProfileService = svc
+}
+
+func SetEpisodicService(svc episodicsvc.Service) {
+	toolEpisodicService = svc
+}
+
+type userScopedMemoryToolService interface {
+	SearchForSpace(req *memorysvc.SearchMemoryRequest, spaceID string) ([]memorysvc.Memory, error)
+	VectorSearchForSpace(req *memorysvc.VectorSearchRequest, spaceID string) ([]memorysvc.VectorSearchResult, error)
+	HybridSearchForSpace(req *memorysvc.VectorSearchRequest, spaceID string) ([]memorysvc.HybridSearchResult, error)
+	UpdateForSpace(id, spaceID string, req *memorysvc.UpdateMemoryRequest) (*memorysvc.Memory, error)
+	CreateForSpace(req *memorysvc.CreateMemoryRequest, spaceID string) (*memorysvc.Memory, error)
 }
 
 func init() {
@@ -31,15 +51,15 @@ func init() {
 						Type:        "string",
 						Description: "记忆关键词，简短标签如'姓名'、'爱好'、'职业'、'宠物'、'计划'等",
 					},
-				"value": {
-					Type:        "string",
-					Description: "记忆具体内容，如'张三'、'喜欢爬山和摄影'",
-				},
-				"memoryType": {
-					Type:        "string",
-					Description: "记忆类型",
-					Enum:        []string{"personal_info", "hobby", "preference", "fact", "plan", "habit", "relationship", "custom"},
-				},
+					"value": {
+						Type:        "string",
+						Description: "记忆具体内容，如'张三'、'喜欢爬山和摄影'",
+					},
+					"memoryType": {
+						Type:        "string",
+						Description: "记忆类型",
+						Enum:        []string{"personal_info", "hobby", "preference", "fact", "plan", "habit", "relationship", "custom"},
+					},
 					"importance": {
 						Type:        "integer",
 						Description: "重要程度 1-10，10为最重要。个人信息如姓名通常为9-10，爱好为7-8，一般事实为5-6",
@@ -76,6 +96,14 @@ func saveMemory(callCtx context.Context, execCtx ToolExecutionContext, args map[
 		result := ErrorResult("memory_service_not_initialized", "ERROR: memory service not initialized")
 		result.Audit = map[string]interface{}{"service": "memory"}
 		return result
+	}
+	spaceID, userErr := effectiveToolSpaceID(execCtx)
+	if userErr != nil {
+		return *userErr
+	}
+	scopedMemoryService, ok := toolMemoryService.(userScopedMemoryToolService)
+	if !ok {
+		return ErrorResult("memory_service_scope_unavailable", "ERROR: memory service does not support authenticated ownership")
 	}
 
 	key, _ := args["key"].(string)
@@ -131,11 +159,11 @@ func saveMemory(callCtx context.Context, execCtx ToolExecutionContext, args map[
 		result.Audit = map[string]interface{}{"field": "entityId", "value": entityID}
 		return result
 	}
-	searchResults, err := toolMemoryService.Search(&memorysvc.SearchMemoryRequest{
+	searchResults, err := scopedMemoryService.SearchForSpace(&memorysvc.SearchMemoryRequest{
 		Keyword:     key,
 		CharacterID: characterID,
 		Limit:       50,
-	})
+	}, spaceID)
 	if err != nil {
 		result := ErrorResult("memory_service_error", fmt.Sprintf("ERROR: %s", err.Error()))
 		result.Audit = map[string]interface{}{"operation": "search", "key": key, "character_id": characterID}
@@ -169,7 +197,7 @@ func saveMemory(callCtx context.Context, execCtx ToolExecutionContext, args map[
 		if entityID != "" {
 			updateReq.EntityID = stringPtr(entityID)
 		}
-		updated, err := toolMemoryService.Update(existing.ID, updateReq)
+		updated, err := scopedMemoryService.UpdateForSpace(existing.ID, spaceID, updateReq)
 		if err != nil {
 			result := ErrorResult("memory_service_error", fmt.Sprintf("ERROR: %s", err.Error()))
 			result.Audit = map[string]interface{}{"operation": "update", "memory_id": existing.ID, "key": key}
@@ -188,7 +216,7 @@ func saveMemory(callCtx context.Context, execCtx ToolExecutionContext, args map[
 		return result
 	}
 
-	created, err := toolMemoryService.Create(&memorysvc.CreateMemoryRequest{
+	created, err := scopedMemoryService.CreateForSpace(&memorysvc.CreateMemoryRequest{
 		CharacterID:    characterID,
 		MemoryType:     memoryType,
 		Key:            key,
@@ -202,7 +230,7 @@ func saveMemory(callCtx context.Context, execCtx ToolExecutionContext, args map[
 		Scope:          "character",
 		SourceConvID:   execCtx.ConversationID,
 		SourceMsgID:    execCtx.RequestID,
-	})
+	}, spaceID)
 	if err != nil {
 		result := ErrorResult("memory_service_error", fmt.Sprintf("ERROR: %s", err.Error()))
 		result.Audit = map[string]interface{}{"operation": "create", "key": key, "character_id": characterID}
@@ -305,69 +333,48 @@ func saveProfile(callCtx context.Context, execCtx ToolExecutionContext, args map
 		return *scopeErr
 	}
 	execCtx = scopedCtx
-	if toolDB == nil {
-		return ErrorResult("database_not_initialized", "ERROR: database not initialized")
+	if toolProfileService == nil {
+		return ErrorResult("profile_service_not_initialized", "ERROR: profile service not initialized")
+	}
+	spaceID, userErr := effectiveToolSpaceID(execCtx)
+	if userErr != nil {
+		return *userErr
 	}
 
 	category, _ := args["category"].(string)
 	attrName, _ := args["attribute_name"].(string)
 	attrValue, _ := args["attribute_value"].(string)
 	confidence, _ := args["confidence"].(float64)
-
+	category = strings.TrimSpace(category)
+	attrName = strings.TrimSpace(attrName)
+	attrValue = strings.TrimSpace(attrValue)
 	if category == "" || attrName == "" || attrValue == "" {
 		return ErrorResult("invalid_args", "ERROR: category, attribute_name and attribute_value are required")
 	}
-
 	if confidence < 1 {
 		confidence = 50
 	}
 	if confidence > 100 {
 		confidence = 100
 	}
-
-	userID := execCtx.CharacterID
-	convID := execCtx.ConversationID
-
-	var existingID string
-	var currentConf int
-	row := toolDB.QueryRow(
-		"SELECT id, confidence FROM user_profiles WHERE user_id = ? AND category = ? AND attribute_name = ?",
-		userID, category, attrName)
-	row.Scan(&existingID, &currentConf)
-
-	newConf := int(confidence)
-	if existingID != "" {
-		newConf = currentConf + 10
-		if newConf > 100 {
-			newConf = 100
-		}
-		nowStr := time.Now().Format("2006-01-02 15:04:05")
-		toolDB.Exec(
-			"UPDATE user_profiles SET attribute_value = ?, confidence = ?, source_conv_id = ?, updated_at = ? WHERE id = ?",
-			attrValue, newConf, convID, nowStr, existingID)
-		if OnProfileSaved != nil {
-			OnProfileSaved(existingID)
-		}
-		result := TextResult(fmt.Sprintf("OK (updated) %s/%s: %s (confidence %d)", category, attrName, attrValue, newConf))
-		result.ExternalOperationID = existingID
-		result.SideEffects = []ToolSideEffect{{Type: "profile_update", TargetID: existingID, Confirmed: true}}
-		result.Audit = map[string]interface{}{"category": category, "attribute_name": attrName, "conversation_id": convID, "character_id": userID}
+	profileItem, err := toolProfileService.UpsertFromTool(
+		spaceID, category, attrName, attrValue, int(confidence), execCtx.ConversationID, execCtx.CharacterID,
+	)
+	if err != nil {
+		result := ErrorResult("profile_service_error", fmt.Sprintf("ERROR: %s", err.Error()))
+		result.Audit = map[string]interface{}{"category": category, "attribute_name": attrName, "space_id": spaceID, "character_id": execCtx.CharacterID, "conversation_id": execCtx.ConversationID}
 		return result
 	}
-
-	id := uuid.New().String()
-	toolDB.Exec(
-		"INSERT INTO user_profiles (id, user_id, category, attribute_name, attribute_value, confidence, source_conv_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
-		id, userID, category, attrName, attrValue, newConf, convID)
 	if OnProfileSaved != nil {
-		OnProfileSaved(id)
+		OnProfileSaved(profileItem.ID)
 	}
-	result := TextResult(fmt.Sprintf("OK (created) %s/%s: %s (confidence %d)", category, attrName, attrValue, newConf))
-	result.ExternalOperationID = id
-	result.SideEffects = []ToolSideEffect{{Type: "profile_create", TargetID: id, Confirmed: true}}
-	result.Audit = map[string]interface{}{"category": category, "attribute_name": attrName, "conversation_id": convID, "character_id": userID}
+	result := TextResult(fmt.Sprintf("OK %s/%s: %s (confidence %d)", category, attrName, attrValue, profileItem.Confidence))
+	result.ExternalOperationID = profileItem.ID
+	result.SideEffects = []ToolSideEffect{{Type: "profile_upsert", TargetID: profileItem.ID, Confirmed: true}}
+	result.Audit = map[string]interface{}{"category": category, "attribute_name": attrName, "conversation_id": execCtx.ConversationID, "character_id": execCtx.CharacterID, "space_id": spaceID}
 	return result
 }
+
 func init() {
 	Register(Tool{
 		Type: "function",
@@ -409,33 +416,44 @@ func saveEpisodicMemory(callCtx context.Context, execCtx ToolExecutionContext, a
 		return *scopeErr
 	}
 	execCtx = scopedCtx
-	if toolDB == nil {
-		return ErrorResult("database_not_initialized", "ERROR: database not initialized")
+	if toolEpisodicService == nil {
+		return ErrorResult("episodic_service_not_initialized", "ERROR: episodic service not initialized")
+	}
+	spaceID, userErr := effectiveToolSpaceID(execCtx)
+	if userErr != nil {
+		return *userErr
 	}
 
 	sceneType, _ := args["scene_type"].(string)
 	title, _ := args["title"].(string)
 	content, _ := args["content"].(string)
 	score, _ := args["sentiment_score"].(float64)
-
+	sceneType = strings.TrimSpace(sceneType)
+	title = strings.TrimSpace(title)
+	content = strings.TrimSpace(content)
 	if sceneType == "" || title == "" || content == "" {
 		return ErrorResult("invalid_args", "ERROR: scene_type, title and content are required")
 	}
-
-	userID := execCtx.CharacterID
-	convID := execCtx.ConversationID
-
-	id := uuid.New().String()
-	nowStr := time.Now().Format("2006-01-02 15:04:05")
-	toolDB.Exec(
-		"INSERT INTO episodic_memories (id, user_id, scene_type, title, content, sentiment_score, source_conv_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-		id, userID, sceneType, title, content, int(score), convID, nowStr, nowStr)
+	if score < -10 {
+		score = -10
+	}
+	if score > 10 {
+		score = 10
+	}
+	item, err := toolEpisodicService.SaveFromTool(
+		spaceID, sceneType, title, content, int(score), execCtx.ConversationID, execCtx.RequestID, execCtx.RequestID, execCtx.CharacterID,
+	)
+	if err != nil {
+		result := ErrorResult("episodic_service_error", fmt.Sprintf("ERROR: %s", err.Error()))
+		result.Audit = map[string]interface{}{"scene_type": sceneType, "space_id": spaceID, "character_id": execCtx.CharacterID, "conversation_id": execCtx.ConversationID}
+		return result
+	}
 	if OnEpisodicSaved != nil {
-		OnEpisodicSaved(id)
+		OnEpisodicSaved(item.ID)
 	}
 	result := TextResult(fmt.Sprintf("OK (created) %s: %s (score %d)", sceneType, title, int(score)))
-	result.ExternalOperationID = id
-	result.SideEffects = []ToolSideEffect{{Type: "episodic_memory_create", TargetID: id, Confirmed: true}}
-	result.Audit = map[string]interface{}{"scene_type": sceneType, "conversation_id": convID, "character_id": userID}
+	result.ExternalOperationID = item.ID
+	result.SideEffects = []ToolSideEffect{{Type: "episodic_memory_create", TargetID: item.ID, Confirmed: true}}
+	result.Audit = map[string]interface{}{"scene_type": sceneType, "conversation_id": execCtx.ConversationID, "character_id": execCtx.CharacterID, "space_id": spaceID}
 	return result
 }

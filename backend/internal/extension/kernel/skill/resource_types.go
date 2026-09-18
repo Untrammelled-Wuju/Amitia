@@ -154,7 +154,7 @@ type SkillActivationRef struct {
 	SkillContentHash    string
 	ScopeCharacterID    string
 	ScopeConversationID string
-	ScopeUserID         string
+	ScopeSpaceID        string
 }
 
 type ResourceReadMetrics struct {

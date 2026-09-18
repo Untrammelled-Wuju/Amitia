@@ -13,7 +13,7 @@ func validTestConfirmationNonceBinding(
 		Nonce:         nonce,
 		OperationType: operation.OperationType,
 		ExtensionID:   operation.ExtensionID,
-		UserID:        operation.UserID,
+		SpaceID:       operation.SpaceID,
 		IssuedAt:      confirmationTimestamp(now.Unix()),
 		ExpiresAt:     confirmationTimestamp(now.Add(5 * time.Minute).Unix()),
 	}

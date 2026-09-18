@@ -143,7 +143,7 @@ type CutoverReadSwitchPort interface {
 }
 
 type CutoverReadVerification struct {
-	UserID            string `json:"userId"`
+	SpaceID           string `json:"spaceId"`
 	DeviceID          string `json:"deviceId"`
 	InstallationID    string `json:"installationId"`
 	ReleaseID         string `json:"releaseId"`
@@ -180,7 +180,6 @@ type CutoverSmokePort interface {
 
 type CutoverLegacyVerifier interface {
 	LegacyMCPManagerPresent() bool
-	LegacyPluginWorkersPresent() bool
 	MemoryRawWriterPresent() bool
 	LegacyRuntimeActive() int
 	LegacyWriteEnabled() int
@@ -193,7 +192,6 @@ type CutoverStateStore interface {
 }
 
 type LegacyWorkerStatus struct {
-	PluginManagerStarted        bool
 	LegacyHookWorkerStarted     bool
 	LegacyEventWorkerStarted    bool
 	LegacyScheduleWorkerStarted bool
@@ -471,9 +469,6 @@ func (p *CutoverPlan) runPreflight(ctx context.Context, state *CutoverState) err
 		if v.LegacyMCPManagerPresent() {
 			return fmt.Errorf("%w: legacy MCP manager present", ErrCutoverPreflightFailure)
 		}
-		if v.LegacyPluginWorkersPresent() {
-			return fmt.Errorf("%w: legacy plugin workers present", ErrCutoverPreflightFailure)
-		}
 		if v.MemoryRawWriterPresent() {
 			return fmt.Errorf("%w: memory raw writer present", ErrCutoverPreflightFailure)
 		}
@@ -611,7 +606,7 @@ func (p *CutoverPlan) runWorkerCutoff(ctx context.Context, state *CutoverState) 
 		return err
 	}
 	status := p.getWorkerCutoff().GetLegacyWorkerStatus()
-	if status.PluginManagerStarted || status.LegacyHookWorkerStarted || status.LegacyEventWorkerStarted ||
+	if status.LegacyHookWorkerStarted || status.LegacyEventWorkerStarted ||
 		status.LegacyScheduleWorkerStarted || status.LegacyRuntimeStarted || status.LegacyMCPWorkerActive {
 		return fmt.Errorf("legacy workers still active: %+v", status)
 	}

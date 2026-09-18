@@ -3,7 +3,7 @@ package kernel
 import (
 	"testing"
 
-	"github.com/u-ai/backend/internal/extension/kernel/manifest_v2"
+	"github.com/u-ai/backend/internal/extension/kernel/manifest_v1"
 	"github.com/u-ai/backend/internal/extension/kernel/permission"
 )
 
@@ -11,8 +11,8 @@ func TestManifestPermissionValidator_CanonicalPass(t *testing.T) {
 	registry := permission.NewPermissionDefinitionRegistry()
 	v := NewManifestPermissionValidator(registry)
 
-	manifest := manifest_v2.Manifest{
-		Permissions: []manifest_v2.PermissionReq{
+	manifest := manifest_v1.Manifest{
+		Permissions: []manifest_v1.PermissionReq{
 			{Name: "gamehost.control", Required: true},
 			{Name: "gamehost.channel.use", Required: true},
 			{Name: "gamehost.host_api.invoke", Required: true},
@@ -29,8 +29,8 @@ func TestManifestPermissionValidator_OldControlOutputFail(t *testing.T) {
 	registry := permission.NewPermissionDefinitionRegistry()
 	v := NewManifestPermissionValidator(registry)
 
-	manifest := manifest_v2.Manifest{
-		Permissions: []manifest_v2.PermissionReq{
+	manifest := manifest_v1.Manifest{
+		Permissions: []manifest_v1.PermissionReq{
 			{Name: "gamehost.control.output", Required: true},
 		},
 	}
@@ -48,8 +48,8 @@ func TestManifestPermissionValidator_OldControlRequestFail(t *testing.T) {
 	registry := permission.NewPermissionDefinitionRegistry()
 	v := NewManifestPermissionValidator(registry)
 
-	manifest := manifest_v2.Manifest{
-		Permissions: []manifest_v2.PermissionReq{
+	manifest := manifest_v1.Manifest{
+		Permissions: []manifest_v1.PermissionReq{
 			{Name: "gamehost.control.request", Required: true},
 		},
 	}
@@ -67,8 +67,8 @@ func TestManifestPermissionValidator_OldChannelRegisterFail(t *testing.T) {
 	registry := permission.NewPermissionDefinitionRegistry()
 	v := NewManifestPermissionValidator(registry)
 
-	manifest := manifest_v2.Manifest{
-		Permissions: []manifest_v2.PermissionReq{
+	manifest := manifest_v1.Manifest{
+		Permissions: []manifest_v1.PermissionReq{
 			{Name: "gamehost.channel.register", Required: true},
 		},
 	}
@@ -86,15 +86,15 @@ func TestManifestPermissionValidator_RuntimeUndeclaredPermissionFail(t *testing.
 	registry := permission.NewPermissionDefinitionRegistry()
 	v := NewManifestPermissionValidator(registry)
 
-	manifest := manifest_v2.Manifest{
-		Permissions: []manifest_v2.PermissionReq{
+	manifest := manifest_v1.Manifest{
+		Permissions: []manifest_v1.PermissionReq{
 			{Name: "gamehost.channel.use", Required: true},
 		},
-		Modules: []manifest_v2.ModuleMeta{
+		Modules: []manifest_v1.ModuleMeta{
 			{
 				ID:   "mod-1",
 				Type: "javascript",
-				Runtime: &manifest_v2.RuntimeMeta{
+				Runtime: &manifest_v1.RuntimeMeta{
 					Type:        "javascript",
 					Permissions: []string{"gamehost.control"},
 				},
@@ -115,15 +115,15 @@ func TestManifestPermissionValidator_ContributionUndeclaredFail(t *testing.T) {
 	registry := permission.NewPermissionDefinitionRegistry()
 	v := NewManifestPermissionValidator(registry)
 
-	manifest := manifest_v2.Manifest{
-		Permissions: []manifest_v2.PermissionReq{
+	manifest := manifest_v1.Manifest{
+		Permissions: []manifest_v1.PermissionReq{
 			{Name: "gamehost.host_api.invoke", Required: true},
 		},
-		Modules: []manifest_v2.ModuleMeta{
+		Modules: []manifest_v1.ModuleMeta{
 			{
 				ID:   "mod-1",
 				Type: "javascript",
-				Contributions: []manifest_v2.ContributionMeta{
+				Contributions: []manifest_v1.ContributionMeta{
 					{
 						ID:                  "contrib-1",
 						Kind:                "tool",
@@ -147,8 +147,8 @@ func TestManifestPermissionValidator_ScopeValidation(t *testing.T) {
 	registry := permission.NewPermissionDefinitionRegistry()
 	v := NewManifestPermissionValidator(registry)
 
-	manifest := manifest_v2.Manifest{
-		Permissions: []manifest_v2.PermissionReq{
+	manifest := manifest_v1.Manifest{
+		Permissions: []manifest_v1.PermissionReq{
 			{Name: "gamehost.control", Required: true, Scope: "resource"},
 		},
 	}
@@ -163,8 +163,8 @@ func TestManifestPermissionValidator_InvalidScopeFail(t *testing.T) {
 	registry := permission.NewPermissionDefinitionRegistry()
 	v := NewManifestPermissionValidator(registry)
 
-	manifest := manifest_v2.Manifest{
-		Permissions: []manifest_v2.PermissionReq{
+	manifest := manifest_v1.Manifest{
+		Permissions: []manifest_v1.PermissionReq{
 			{Name: "gamehost.channel.use", Required: true, Scope: "conversation"},
 		},
 	}
@@ -182,8 +182,8 @@ func TestManifestPermissionValidator_UnknownPermissionFail(t *testing.T) {
 	registry := permission.NewPermissionDefinitionRegistry()
 	v := NewManifestPermissionValidator(registry)
 
-	manifest := manifest_v2.Manifest{
-		Permissions: []manifest_v2.PermissionReq{
+	manifest := manifest_v1.Manifest{
+		Permissions: []manifest_v1.PermissionReq{
 			{Name: "whatever.foo", Required: true},
 		},
 	}
@@ -201,8 +201,8 @@ func TestManifestPermissionValidator_ExistingNonGameHostPass(t *testing.T) {
 	registry := permission.NewPermissionDefinitionRegistry()
 	v := NewManifestPermissionValidator(registry)
 
-	manifest := manifest_v2.Manifest{
-		Permissions: []manifest_v2.PermissionReq{
+	manifest := manifest_v1.Manifest{
+		Permissions: []manifest_v1.PermissionReq{
 			{Name: "character.read", Required: true},
 			{Name: "provider.use", Required: true},
 		},

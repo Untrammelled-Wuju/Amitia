@@ -156,7 +156,7 @@ func (w *ArchiveWriter) BuildManifestForArchive(root string, baseManifest *Manif
 	baseManifest.Integrity.Files = fileManifest.Entries
 	baseManifest.Integrity.FileCount = len(fileManifest.Entries)
 	baseManifest.Integrity.TotalBytes = totalBytes
-	baseManifest.Integrity.Algorithm = IntegrityAlgorithmV2
+	baseManifest.Integrity.Algorithm = IntegrityAlgorithmV1
 	baseManifest.Integrity.ManifestHash = ""
 	baseManifest.Integrity.ContentRootHash = ""
 

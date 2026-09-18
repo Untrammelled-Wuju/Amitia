@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	kernelpermission "github.com/u-ai/backend/internal/extension/kernel/permission"
 	"github.com/u-ai/backend/internal/extension/kernel/trusted_service"
 	"github.com/u-ai/backend/internal/gamehost/domain"
 	"github.com/u-ai/backend/internal/gamehost/integration"
@@ -36,6 +37,52 @@ func (fakeArchiveUpdater) GetPreviousArchivePath(ctx context.Context, extensionI
 	return "", nil
 }
 
+type fakeKernelLifecycle struct{}
+
+func (fakeKernelLifecycle) ExecuteUpdate(context.Context, string, string, upgrade.UpgradeOperationID) (*upgrade.KernelUpdateResult, error) {
+	return &upgrade.KernelUpdateResult{Success: true}, nil
+}
+
+type allowPermissionBroker struct{}
+
+func (allowPermissionBroker) Evaluate(context.Context, kernelpermission.PermissionEvaluationRequest) kernelpermission.PermissionEvaluationResult {
+	return kernelpermission.PermissionEvaluationResult{Decision: kernelpermission.DecisionAllow}
+}
+
+func (allowPermissionBroker) Grant(context.Context, kernelpermission.PermissionGrantRequest) (kernelpermission.PermissionGrant, error) {
+	return kernelpermission.PermissionGrant{}, nil
+}
+
+func (allowPermissionBroker) Revoke(context.Context, string) error { return nil }
+
+func (allowPermissionBroker) RevokeBySubject(context.Context, kernelpermission.PermissionSubject) (int, error) {
+	return 0, nil
+}
+
+func (allowPermissionBroker) RevokeByExtension(context.Context, string) (int, error) {
+	return 0, nil
+}
+
+func (allowPermissionBroker) ListGrants(context.Context, kernelpermission.PermissionGrantFilter) ([]kernelpermission.PermissionGrant, error) {
+	return nil, nil
+}
+
+func (allowPermissionBroker) Explain(context.Context, kernelpermission.PermissionEvaluationRequest) kernelpermission.PermissionExplanation {
+	return kernelpermission.PermissionExplanation{}
+}
+
+func (allowPermissionBroker) DetectUpgrade(context.Context, []kernelpermission.PermissionRequirement, []kernelpermission.PermissionRequirement) []kernelpermission.PermissionUpgrade {
+	return nil
+}
+
+func (allowPermissionBroker) RecordApproval(context.Context, kernelpermission.PermissionApprovalRecordRequest) (kernelpermission.PermissionApprovalRecord, error) {
+	return kernelpermission.PermissionApprovalRecord{}, nil
+}
+
+func (allowPermissionBroker) ValidateSnapshot(context.Context, string, kernelpermission.PermissionEvaluationRequest) error {
+	return nil
+}
+
 func composeTestContainer(t *testing.T) *GameHostContainer {
 	t.Helper()
 	root := filepath.Join(t.TempDir(), "data")
@@ -47,6 +94,8 @@ func composeTestContainer(t *testing.T) *GameHostContainer {
 		TrustedSupervisor:   supervisor,
 		DefinitionReconcile: fakeDefinitionReconcile{},
 		ArchiveUpdater:      fakeArchiveUpdater{},
+		KernelLifecycle:     fakeKernelLifecycle{},
+		PermissionBroker:    allowPermissionBroker{},
 	})
 	if err != nil {
 		t.Fatalf("ComposeGameHost error: %v", err)
@@ -65,6 +114,8 @@ func composeTestContainerWithSupervisor(t *testing.T) *GameHostContainer {
 		TrustedSupervisor:   supervisor,
 		DefinitionReconcile: fakeDefinitionReconcile{},
 		ArchiveUpdater:      fakeArchiveUpdater{},
+		KernelLifecycle:     fakeKernelLifecycle{},
+		PermissionBroker:    allowPermissionBroker{},
 	})
 	if err != nil {
 		t.Fatalf("ComposeGameHost with supervisor error: %v", err)

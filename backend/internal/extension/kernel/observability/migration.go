@@ -15,7 +15,7 @@ type LegacyRunEntry struct {
 	Status         string
 	ErrorCode      string
 	CreatedAt      string
-	UserID         string
+	SpaceID        string
 	CharacterID    string
 	ConversationID string
 	Metadata       map[string]any
@@ -41,20 +41,6 @@ type MigrationMapping struct {
 
 func DefaultMigrationMappings() []MigrationMapping {
 	return []MigrationMapping{
-		{
-			OldTable:      "plugin_runs",
-			OperationType: OpPluginHook,
-			SubjectType:   SubjectTool,
-			StatusMap: map[string]ExecutionStatus{
-				"pending":   StatusQueued,
-				"running":   StatusRunning,
-				"success":   StatusSucceeded,
-				"failed":    StatusFailed,
-				"cancelled": StatusCancelled,
-				"timeout":   StatusTimedOut,
-				"denied":    StatusDenied,
-			},
-		},
 		{
 			OldTable:      "mcp_operations",
 			OperationType: OpMCPToolExecute,
@@ -199,7 +185,7 @@ func (m *Migrator) MigrateLegacyRecord(ctx context.Context, mappings []Migration
 		ExtensionID:    entry.ExtensionID,
 		ModuleID:       entry.ModuleID,
 		CapabilityID:   entry.ToolID,
-		UserID:         entry.UserID,
+		SpaceID:        entry.SpaceID,
 		CharacterID:    entry.CharacterID,
 		ConversationID: entry.ConversationID,
 		Status:         status,

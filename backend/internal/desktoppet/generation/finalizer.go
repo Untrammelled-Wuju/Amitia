@@ -3,6 +3,7 @@ package generation
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/u-ai/backend/internal/desktoppet/generation/activebinding"
 	"gorm.io/gorm"
@@ -16,6 +17,8 @@ type FinalizeAttemptRequest struct {
 	PrimaryArtifactID string
 	ArtifactHash      string
 	ExecutionID       string
+	Mode              string
+	AttemptNumber     int
 	ActualCost        float64
 	ActualInputUnits  int
 	ActualOutputUnits int
@@ -44,7 +47,7 @@ func (f *GenerationFinalizer) FinalizeAttempt(req FinalizeAttemptRequest) error 
 	if err := f.markAttemptSucceeded(req.Tx, req.AttemptID, now); err != nil {
 		return NewGenerationError(ErrCodeFinalizeFailed, fmt.Sprintf("mark attempt succeeded: %v", err), err)
 	}
-	actionTransitioned, err := f.markActionSucceeded(req.Tx, req.TaskActionID, now)
+	actionTransitioned, err := f.markActionSucceeded(req.Tx, req, now)
 	if err != nil {
 		return NewGenerationError(ErrCodeFinalizeFailed, fmt.Sprintf("mark action succeeded: %v", err), err)
 	}
@@ -84,7 +87,8 @@ func (f *GenerationFinalizer) markAttemptSucceeded(tx *gorm.DB, attemptID, now s
 	return nil
 }
 
-func (f *GenerationFinalizer) markActionSucceeded(tx *gorm.DB, taskActionID, now string) (bool, error) {
+func (f *GenerationFinalizer) markActionSucceeded(tx *gorm.DB, req FinalizeAttemptRequest, now string) (bool, error) {
+	taskActionID := req.TaskActionID
 	var current struct {
 		Status string `gorm:"column:status"`
 	}
@@ -100,16 +104,26 @@ func (f *GenerationFinalizer) markActionSucceeded(tx *gorm.DB, taskActionID, now
 	if current.Status == "succeeded" {
 		return false, nil
 	}
+	actionUpdates := map[string]interface{}{
+		"status":        "succeeded",
+		"progress":      100,
+		"error_code":    "",
+		"error_message": "",
+		"completed_at":  now,
+		"updated_at":    now,
+	}
+	if mode := strings.TrimSpace(req.Mode); mode != "" {
+		attemptNumber := req.AttemptNumber
+		if attemptNumber <= 0 {
+			attemptNumber = 1
+		}
+		actionUpdates["generation_mode"] = mode
+		actionUpdates["active_attempt_id"] = req.AttemptID
+		actionUpdates["active_attempt_number"] = attemptNumber
+	}
 	result := tx.Table("desktop_pet_generation_task_actions").
 		Where("id = ?", taskActionID).
-		Updates(map[string]interface{}{
-			"status":        "succeeded",
-			"progress":      100,
-			"error_code":    "",
-			"error_message": "",
-			"completed_at":  now,
-			"updated_at":    now,
-		})
+		Updates(actionUpdates)
 	if result.Error != nil {
 		return false, result.Error
 	}

@@ -1104,7 +1104,7 @@ func ownerFilter(owner Owner) func(*CapabilityProviderInstance) bool {
 		if inst == nil {
 			return false
 		}
-		return inst.UserID == owner.UserID && inst.DeviceID == owner.DeviceID && inst.RuntimeID == owner.RuntimeID
+		return inst.SpaceID == owner.SpaceID && inst.DeviceID == owner.DeviceID && inst.RuntimeID == owner.RuntimeID
 	}
 }
 
@@ -1116,7 +1116,7 @@ func ownerFilterFn(owner Owner) func(*CapabilityProviderInstance) bool {
 		if inst == nil {
 			return false
 		}
-		if owner.UserID != "" && inst.UserID != owner.UserID {
+		if owner.SpaceID != "" && inst.SpaceID != owner.SpaceID {
 			return false
 		}
 		if owner.DeviceID != "" && inst.DeviceID != owner.DeviceID {
@@ -1140,7 +1140,7 @@ func instanceIdentityFilter(identity runtimeidentity.Identity) func(*CapabilityP
 		if inst == nil {
 			return false
 		}
-		if identity.UserID != "" && inst.UserID != identity.UserID {
+		if identity.SpaceID != "" && inst.SpaceID != identity.SpaceID {
 			return false
 		}
 		if identity.DeviceID != "" && inst.DeviceID != identity.DeviceID {

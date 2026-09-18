@@ -24,7 +24,7 @@ func (s *SQLiteSessionStore) EnsureSchema(ctx context.Context) error {
 	stmts := []string{
 		`CREATE TABLE IF NOT EXISTS kernel_device_runtime_sessions (
     runtime_session_id TEXT PRIMARY KEY,
-    user_id TEXT NOT NULL,
+    space_id TEXT NOT NULL,
     device_id TEXT NOT NULL,
     runtime_id TEXT NOT NULL,
     platform TEXT NOT NULL DEFAULT '',
@@ -47,7 +47,7 @@ func (s *SQLiteSessionStore) EnsureSchema(ctx context.Context) error {
     close_reason TEXT NOT NULL DEFAULT ''
 )`,
 		`CREATE INDEX IF NOT EXISTS idx_kernel_device_runtime_sessions_identity
-    ON kernel_device_runtime_sessions(user_id, device_id, runtime_id)`,
+    ON kernel_device_runtime_sessions(space_id, device_id, runtime_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_kernel_device_runtime_sessions_status
     ON kernel_device_runtime_sessions(status)`,
 		`CREATE INDEX IF NOT EXISTS idx_kernel_device_runtime_sessions_heartbeat
@@ -68,14 +68,14 @@ func (s *SQLiteSessionStore) Create(ctx context.Context, session RuntimeSession)
 	}
 	_, err = s.db.ExecContext(ctx,
 		`INSERT INTO kernel_device_runtime_sessions (
-        runtime_session_id, user_id, device_id, runtime_id, platform,
+        runtime_session_id, space_id, device_id, runtime_id, platform,
         status, connection_generation, revision, runtime_version, runtime_contract_version,
         capabilities_json, capabilities_hash,
         last_applied_state_revision, last_processed_command_sequence, last_event_sequence, actual_state_hash,
         created_at, updated_at, last_heartbeat_at, expires_at, closed_at, close_reason
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		session.ID.String(),
-		session.UserID.String(),
+		session.SpaceID.String(),
 		session.DeviceID.String(),
 		session.RuntimeID.String(),
 		session.Platform.String(),
@@ -102,7 +102,7 @@ func (s *SQLiteSessionStore) Create(ctx context.Context, session RuntimeSession)
 
 func (s *SQLiteSessionStore) Get(ctx context.Context, sessionID runtimeidentity.RuntimeSessionID) (RuntimeSession, error) {
 	row := s.db.QueryRowContext(ctx,
-		`SELECT runtime_session_id, user_id, device_id, runtime_id, platform,
+		`SELECT runtime_session_id, space_id, device_id, runtime_id, platform,
         status, connection_generation, revision, runtime_version, runtime_contract_version,
         capabilities_json, capabilities_hash,
         last_applied_state_revision, last_processed_command_sequence, last_event_sequence, actual_state_hash,
@@ -115,20 +115,20 @@ func (s *SQLiteSessionStore) Get(ctx context.Context, sessionID runtimeidentity.
 
 func (s *SQLiteSessionStore) GetActiveByRuntime(
 	ctx context.Context,
-	userID runtimeidentity.UserID,
+	spaceID runtimeidentity.SpaceID,
 	deviceID runtimeidentity.DeviceID,
 	runtimeID runtimeidentity.RuntimeID,
 ) (RuntimeSession, error) {
 	row := s.db.QueryRowContext(ctx,
-		`SELECT runtime_session_id, user_id, device_id, runtime_id, platform,
+		`SELECT runtime_session_id, space_id, device_id, runtime_id, platform,
         status, connection_generation, revision, runtime_version, runtime_contract_version,
         capabilities_json, capabilities_hash,
         last_applied_state_revision, last_processed_command_sequence, last_event_sequence, actual_state_hash,
         created_at, updated_at, last_heartbeat_at, expires_at, closed_at, close_reason
     FROM kernel_device_runtime_sessions
-    WHERE user_id = ? AND device_id = ? AND runtime_id = ? AND status IN (?, ?, ?, ?)
+    WHERE space_id = ? AND device_id = ? AND runtime_id = ? AND status IN (?, ?, ?, ?)
     ORDER BY connection_generation DESC LIMIT 1`,
-		userID.String(), deviceID.String(), runtimeID.String(),
+		spaceID.String(), deviceID.String(), runtimeID.String(),
 		string(protocol.SessionStatusRegistering),
 		string(protocol.SessionStatusSyncing),
 		string(protocol.SessionStatusReady),
@@ -181,7 +181,7 @@ func (s *SQLiteSessionStore) Update(ctx context.Context, session RuntimeSession)
 
 func (s *SQLiteSessionStore) ListActive(ctx context.Context) ([]RuntimeSession, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT runtime_session_id, user_id, device_id, runtime_id, platform,
+		`SELECT runtime_session_id, space_id, device_id, runtime_id, platform,
         status, connection_generation, revision, runtime_version, runtime_contract_version,
         capabilities_json, capabilities_hash,
         last_applied_state_revision, last_processed_command_sequence, last_event_sequence, actual_state_hash,
@@ -416,11 +416,11 @@ func scanRuntimeSession(row rowScanner) (RuntimeSession, error) {
 	var session RuntimeSession
 	var capsJSON string
 	var createdAtMs, updatedAtMs, heartbeatMs, expiresAtMs, closedAtMs int64
-	var statusStr, platformStr, userIDStr, deviceIDStr, runtimeIDStr string
+	var statusStr, platformStr, spaceIDStr, deviceIDStr, runtimeIDStr string
 
 	err := row.Scan(
 		&session.ID,
-		&userIDStr,
+		&spaceIDStr,
 		&deviceIDStr,
 		&runtimeIDStr,
 		&platformStr,
@@ -449,7 +449,7 @@ func scanRuntimeSession(row rowScanner) (RuntimeSession, error) {
 		return RuntimeSession{}, err
 	}
 
-	session.UserID = runtimeidentity.ParseUserID(userIDStr)
+	session.SpaceID = runtimeidentity.ParseSpaceID(spaceIDStr)
 	session.DeviceID = runtimeidentity.ParseDeviceID(deviceIDStr)
 	session.RuntimeID = runtimeidentity.ParseRuntimeID(runtimeIDStr)
 	platform, err := runtimeidentity.ParsePlatform(platformStr)
@@ -518,13 +518,13 @@ func (t *SQLiteSessionStoreTx) Create(ctx context.Context, session RuntimeSessio
 	}
 	_, err = t.tx.ExecContext(ctx,
 		`INSERT INTO kernel_device_runtime_sessions (
-        runtime_session_id, user_id, device_id, runtime_id, platform,
+        runtime_session_id, space_id, device_id, runtime_id, platform,
         status, connection_generation, revision, runtime_version, runtime_contract_version,
         capabilities_json, capabilities_hash,
         last_applied_state_revision, last_processed_command_sequence, last_event_sequence, actual_state_hash,
         created_at, updated_at, last_heartbeat_at, expires_at, closed_at, close_reason
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		session.ID.String(), session.UserID.String(), session.DeviceID.String(), session.RuntimeID.String(),
+		session.ID.String(), session.SpaceID.String(), session.DeviceID.String(), session.RuntimeID.String(),
 		session.Platform.String(), string(session.Status), session.ConnectionGeneration, session.Revision,
 		session.RuntimeVersion, session.RuntimeContractVersion, string(capsJSON), session.CapabilitiesHash,
 		session.LastAppliedStateRevision, session.LastProcessedCommandSequence, session.LastEventSequence, session.ActualStateHash,
@@ -536,7 +536,7 @@ func (t *SQLiteSessionStoreTx) Create(ctx context.Context, session RuntimeSessio
 
 func (t *SQLiteSessionStoreTx) Get(ctx context.Context, sessionID runtimeidentity.RuntimeSessionID) (RuntimeSession, error) {
 	row := t.tx.QueryRowContext(ctx,
-		`SELECT runtime_session_id, user_id, device_id, runtime_id, platform,
+		`SELECT runtime_session_id, space_id, device_id, runtime_id, platform,
         status, connection_generation, revision, runtime_version, runtime_contract_version,
         capabilities_json, capabilities_hash,
         last_applied_state_revision, last_processed_command_sequence, last_event_sequence, actual_state_hash,
@@ -549,20 +549,20 @@ func (t *SQLiteSessionStoreTx) Get(ctx context.Context, sessionID runtimeidentit
 
 func (t *SQLiteSessionStoreTx) GetActiveByRuntime(
 	ctx context.Context,
-	userID runtimeidentity.UserID,
+	spaceID runtimeidentity.SpaceID,
 	deviceID runtimeidentity.DeviceID,
 	runtimeID runtimeidentity.RuntimeID,
 ) (RuntimeSession, error) {
 	row := t.tx.QueryRowContext(ctx,
-		`SELECT runtime_session_id, user_id, device_id, runtime_id, platform,
+		`SELECT runtime_session_id, space_id, device_id, runtime_id, platform,
         status, connection_generation, revision, runtime_version, runtime_contract_version,
         capabilities_json, capabilities_hash,
         last_applied_state_revision, last_processed_command_sequence, last_event_sequence, actual_state_hash,
         created_at, updated_at, last_heartbeat_at, expires_at, closed_at, close_reason
     FROM kernel_device_runtime_sessions
-    WHERE user_id = ? AND device_id = ? AND runtime_id = ? AND status IN (?, ?, ?, ?)
+    WHERE space_id = ? AND device_id = ? AND runtime_id = ? AND status IN (?, ?, ?, ?)
     ORDER BY connection_generation DESC LIMIT 1`,
-		userID.String(), deviceID.String(), runtimeID.String(),
+		spaceID.String(), deviceID.String(), runtimeID.String(),
 		string(protocol.SessionStatusRegistering), string(protocol.SessionStatusSyncing),
 		string(protocol.SessionStatusReady), string(protocol.SessionStatusDegraded),
 	)
@@ -600,7 +600,7 @@ func (t *SQLiteSessionStoreTx) Update(ctx context.Context, session RuntimeSessio
 
 func (t *SQLiteSessionStoreTx) ListActive(ctx context.Context) ([]RuntimeSession, error) {
 	rows, err := t.tx.QueryContext(ctx,
-		`SELECT runtime_session_id, user_id, device_id, runtime_id, platform,
+		`SELECT runtime_session_id, space_id, device_id, runtime_id, platform,
         status, connection_generation, revision, runtime_version, runtime_contract_version,
         capabilities_json, capabilities_hash,
         last_applied_state_revision, last_processed_command_sequence, last_event_sequence, actual_state_hash,

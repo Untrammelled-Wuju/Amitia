@@ -66,7 +66,7 @@ const groups: Array<{ name: string; capabilities: UIProviderCapability[] }> = [
 ];
 const scopeOptions: Array<{ value: UIProfileScopeKind; label: string }> = [
   { value: "global", label: "云端默认（管理员）" },
-  { value: "user", label: "当前用户" },
+  { value: "space", label: "当前空间" },
   { value: "platform", label: "当前平台" },
   { value: "device", label: "当前设备" },
   { value: "device_platform", label: "当前设备 + 平台" },

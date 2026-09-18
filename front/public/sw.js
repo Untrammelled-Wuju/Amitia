@@ -64,15 +64,6 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // NEVER cache auth-related paths
-  if (
-    url.pathname.includes("/auth/") ||
-    url.pathname.includes("/login") ||
-    url.pathname.includes("/setup")
-  ) {
-    return;
-  }
-
   // Only cache GET requests for static resources
   if (event.request.method !== "GET") {
     return;

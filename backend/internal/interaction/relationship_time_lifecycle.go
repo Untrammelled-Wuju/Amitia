@@ -28,7 +28,7 @@ func (o *Orchestrator) prepareRelationshipTime(ctx context.Context, record *Inte
 		return nil, nil
 	}
 	result, err := coordinator.PrepareInbound(ctx, temporal.PrepareInboundInput{
-		UserID:         record.Scope.UserID,
+		SpaceID:        record.Scope.SpaceID,
 		CharacterID:    record.Scope.CharacterID,
 		ConversationID: record.Scope.ConversationID,
 		Channel:        record.Scope.Channel,

@@ -6,7 +6,7 @@ import (
 )
 
 const (
-	OwnerUser            = "user"
+	OwnerSpace           = "space"
 	OwnerCharacter       = "character"
 	TimezoneFollowDevice = "follow_device"
 	TimezoneFixed        = "fixed"
@@ -14,7 +14,7 @@ const (
 	TimezoneNarrative    = "narrative"
 	DefaultTimezone      = "Asia/Shanghai"
 	SnapshotVersion      = "temporal-snapshot-v1"
-	DefaultUserOwnerID   = "default"
+	LegacySpaceOwnerID   = "default"
 )
 
 type Profile struct {
@@ -75,7 +75,7 @@ type ProfilePatch struct {
 type Anchor struct {
 	ID                    string     `gorm:"column:id;primaryKey" json:"id"`
 	ScopeType             string     `gorm:"column:scope_type;index" json:"scopeType"`
-	UserID                string     `gorm:"column:user_id;index" json:"userId"`
+	SpaceID               string     `gorm:"column:space_id;index" json:"spaceId"`
 	CharacterID           string     `gorm:"column:character_id;index" json:"characterId"`
 	AnchorType            string     `gorm:"column:anchor_type;index" json:"anchorType"`
 	Title                 string     `gorm:"column:title" json:"title"`
@@ -111,7 +111,7 @@ func (Anchor) TableName() string { return "temporal_anchors" }
 type Event struct {
 	ID                 string    `gorm:"column:id;primaryKey" json:"id"`
 	EventType          string    `gorm:"column:event_type;index" json:"eventType"`
-	UserID             string    `gorm:"column:user_id;index" json:"userId"`
+	SpaceID            string    `gorm:"column:space_id;index" json:"spaceId"`
 	CharacterID        string    `gorm:"column:character_id;index" json:"characterId"`
 	AnchorID           string    `gorm:"column:anchor_id;index" json:"anchorId,omitempty"`
 	OccurredAtUTC      time.Time `gorm:"column:occurred_at_utc;index" json:"occurredAtUtc"`
@@ -199,14 +199,14 @@ type Snapshot struct {
 }
 
 type SnapshotInput struct {
-	UserID         string
+	SpaceID        string
 	CharacterID    string
 	Channel        string
 	DeviceTimezone string
 }
 
 type NarrativeClockInput struct {
-	UserID      string `json:"userId"`
+	SpaceID     string `json:"spaceId"`
 	CharacterID string `json:"characterId"`
 }
 
@@ -220,7 +220,7 @@ type NarrativeClockProvider interface {
 }
 
 type AnchorQuery struct {
-	UserID      string
+	SpaceID     string
 	CharacterID string
 	Status      string
 	Limit       int

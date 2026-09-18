@@ -3,119 +3,46 @@
 package memory
 
 import (
-	"context"
-	"math"
-	"sort"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/u-ai/backend/internal/temporal"
-
-	qdrantDB "github.com/u-ai/backend/pkg/database/qdrant"
 )
 
-func (s *service) GetRankedMemories(characterID, userID, query string, limit int) ([]RankedMemory, error) {
+func (s *service) GetRankedMemories(characterID, spaceID, query string, limit int) ([]RankedMemory, error) {
 	if limit <= 0 {
 		limit = 10
 	}
-	if s.dataLifecycleCoordinator != nil && s.dataLifecycleCoordinator.IsRetrievalBlocked(characterID) {
-		return nil, nil
-	}
-
-	allMemories, _, err := s.repo.List(MemoryListQuery{
-		CharacterID: characterID,
-		UserID:      userID,
-		PageSize:    200,
-		Page:        1,
+	results, err := s.dynamicRecall(&VectorSearchRequest{
+		Query: query, CharacterID: characterID, SpaceID: spaceID, Limit: limit,
 	})
 	if err != nil {
 		return nil, err
 	}
-	policy := retrievalAuthorityPolicy{
-		CharacterID: characterID,
-		UserID:      userID,
-		Now:         time.Now(),
-	}
-
-	vectorScores := make(map[string]float64)
-	if qdrantDB.Client != nil && query != "" {
-		vector, err := s.embeddingSvc.Embed(query)
-		if err == nil {
-			for _, filter := range rankedMemoryVectorFilters(characterID, userID) {
-				results, err := qdrantDB.MultiSearch(vector, 50, filter)
-				if err != nil {
-					continue
-				}
-				for _, r := range results {
-					if val, ok := r.Point.Payload["memory_id"]; ok {
-						rawMemID := val.GetStringValue()
-						if float64(r.Point.Score) > vectorScores[rawMemID] {
-							vectorScores[rawMemID] = float64(r.Point.Score)
-						}
-					}
-				}
-			}
-		}
-	}
-
-	queryLower := strings.ToLower(query)
-	var ranked []RankedMemory
-	for _, m := range allMemories {
-		if !memoryAllowedBySQLiteAuthority(m, policy) {
-			continue
-		}
-		vs := vectorScores[m.ID]
-		ks := keywordMatchScore(queryLower, m.Key, m.Value)
-		is := float64(m.Importance) / 10.0
-
-		finalScore := vs*0.4 + ks*0.3 + is*0.3
-		if finalScore > 0 {
-			ranked = append(ranked, RankedMemory{
-				Memory:         m,
-				FinalScore:     math.Round(finalScore*10000) / 10000,
-				VectorScore:    math.Round(vs*10000) / 10000,
-				KeywordScore:   math.Round(ks*10000) / 10000,
-				ImportanceNorm: math.Round(is*10000) / 10000,
-			})
-		}
-	}
-	if s.temporalReranker != nil && len(ranked) > 0 {
-		candidates := make([]temporal.MemoryScoreCandidate, 0, len(ranked))
-		for _, result := range ranked {
-			candidates = append(candidates, temporal.MemoryScoreCandidate{MemoryID: result.Memory.ID, BaseScore: result.FinalScore, CreatedAt: result.Memory.CreatedAt, MemoryType: result.Memory.MemoryType})
-		}
-		if reranked, rerankErr := s.temporalReranker.RerankMemoryScores(context.Background(), query, candidates); rerankErr == nil {
-			for index := range ranked {
-				if score, exists := reranked[ranked[index].Memory.ID]; exists {
-					ranked[index].FinalScore = score.FinalScore
-					ranked[index].TemporalBoost = score.TemporalBoost
-					ranked[index].ValidityPenalty = score.ValidityPenalty
-					ranked[index].TemporalReference = score.ReferenceSource
-				}
-			}
-		}
-	}
-
-	sort.Slice(ranked, func(i, j int) bool {
-		return ranked[i].FinalScore > ranked[j].FinalScore
-	})
-
-	if len(ranked) > limit {
-		ranked = ranked[:limit]
+	ranked := make([]RankedMemory, 0, len(results))
+	for _, result := range results {
+		ranked = append(ranked, RankedMemory{
+			Memory: result.Memory, FinalScore: result.Score, VectorScore: result.VectorScore,
+			KeywordScore: result.KeywordScore, ImportanceNorm: round4(float64(result.Memory.Importance) / 10),
+			TemporalBoost: result.TemporalBoost, ValidityPenalty: result.ValidityPenalty, TemporalReference: result.TemporalReference,
+		})
 	}
 	return ranked, nil
 }
 
-func rankedMemoryVectorFilters(characterID, userID string) []map[string]interface{} {
+func rankedMemoryVectorFilters(characterID, spaceID string) []map[string]interface{} {
 	characterID = strings.TrimSpace(characterID)
-	userID = strings.TrimSpace(userID)
+	spaceID = strings.TrimSpace(spaceID)
 	filters := make([]map[string]interface{}, 0, 2)
-	if characterID != "" {
-		filters = append(filters, map[string]interface{}{"character_id": characterID})
+	if spaceID != "" && characterID != "" {
+		filters = append(filters, map[string]interface{}{"space_id": spaceID, "character_id": characterID})
 	}
-	if userID != "" && userID != characterID {
-		filters = append(filters, map[string]interface{}{"user_id": userID, "scope_type": "user"})
+	if spaceID != "" {
+		filters = append(filters, map[string]interface{}{"space_id": spaceID, "scope_type": "user"})
+	} else if characterID != "" {
+		// Internal/local legacy callers that have no authenticated user remain
+		// character-scoped. Public handlers always provide spaceID.
+		filters = append(filters, map[string]interface{}{"character_id": characterID})
 	}
 	if len(filters) == 0 {
 		filters = append(filters, map[string]interface{}{})

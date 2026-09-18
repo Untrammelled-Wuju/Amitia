@@ -8,52 +8,51 @@ import (
 )
 
 type v3Card struct {
-	Spec                   string         `json:"spec"`
-	SpecVersion            string         `json:"spec_version"`
-	Name                   string         `json:"name"`
-	Description            string         `json:"description"`
-	Personality            string         `json:"personality"`
-	Scenario               string         `json:"scenario"`
-	FirstMes               string         `json:"first_mes"`
-	MesExample             string         `json:"mes_example"`
-	SystemPrompt           string         `json:"system_prompt"`
-	PostHistoryInstructions string        `json:"post_history_instructions"`
-	AlternateGreetings     []string       `json:"alternate_greetings"`
-	CharacterBook          *v3CharacterBook `json:"character_book"`
-	Tags                   []string       `json:"tags"`
-	Creator                string         `json:"creator"`
-	CreatorNotes           string         `json:"creator_notes"`
-	CharacterVersion       string         `json:"character_version"`
-	Extensions             map[string]any `json:"extensions"`
-	Assets                 []v3Asset      `json:"assets"`
-	Nickname               string         `json:"nickname"`
-	GroupOnlyGreetings     []string       `json:"group_only_greetings"`
-	Source                 string         `json:"source"`
+	Spec                    string           `json:"spec"`
+	SpecVersion             string           `json:"spec_version"`
+	Name                    string           `json:"name"`
+	Description             string           `json:"description"`
+	Personality             string           `json:"personality"`
+	Scenario                string           `json:"scenario"`
+	MesExample              string           `json:"mes_example"`
+	SystemPrompt            string           `json:"system_prompt"`
+	PostHistoryInstructions string           `json:"post_history_instructions"`
+	AlternateGreetings      []string         `json:"alternate_greetings"`
+	CharacterBook           *v3CharacterBook `json:"character_book"`
+	Tags                    []string         `json:"tags"`
+	Creator                 string           `json:"creator"`
+	CreatorNotes            string           `json:"creator_notes"`
+	CharacterVersion        string           `json:"character_version"`
+	Extensions              map[string]any   `json:"extensions"`
+	Assets                  []v3Asset        `json:"assets"`
+	Nickname                string           `json:"nickname"`
+	GroupOnlyGreetings      []string         `json:"group_only_greetings"`
+	Source                  string           `json:"source"`
 
 	CreationDate     *int64 `json:"creation_date"`
 	ModificationDate *int64 `json:"modification_date"`
 }
 
 type v3CharacterBook struct {
-	Entries []v3BookEntry `json:"entries"`
+	Entries    []v3BookEntry  `json:"entries"`
 	Extensions map[string]any `json:"extensions"`
-	Name     string `json:"name"`
+	Name       string         `json:"name"`
 }
 
 type v3BookEntry struct {
-	Keys           []string               `json:"keys"`
-	SecondaryKeys  []string               `json:"secondary_keys"`
-	Content        string                 `json:"content"`
-	Enabled        bool                   `json:"enabled"`
-	InsertionOrder int                    `json:"insertion_order"`
-	CaseSensitive  *bool                  `json:"case_sensitive"`
-	Selective      *bool                  `json:"selective"`
-	Constant       *bool                  `json:"constant"`
-	Position       *string                `json:"position"`
-	Extensions     map[string]any         `json:"extensions"`
-	Priority       int                    `json:"priority"`
-	Name           string                 `json:"name"`
-	ID             any                    `json:"id"`
+	Keys           []string       `json:"keys"`
+	SecondaryKeys  []string       `json:"secondary_keys"`
+	Content        string         `json:"content"`
+	Enabled        bool           `json:"enabled"`
+	InsertionOrder int            `json:"insertion_order"`
+	CaseSensitive  *bool          `json:"case_sensitive"`
+	Selective      *bool          `json:"selective"`
+	Constant       *bool          `json:"constant"`
+	Position       *string        `json:"position"`
+	Extensions     map[string]any `json:"extensions"`
+	Priority       int            `json:"priority"`
+	Name           string         `json:"name"`
+	ID             any            `json:"id"`
 }
 
 type v3Asset struct {
@@ -64,7 +63,7 @@ type v3Asset struct {
 	Legend   any    `json:"legend"`
 }
 
-func parseV3JSON(data []byte) (*CharacterCard, map[string]json.RawMessage, error) {
+func parseV3CardJSON(data []byte, sourceFormat CharacterCardFormat) (*CharacterCard, map[string]json.RawMessage, error) {
 	if len(data) > MaxJSONBytes {
 		return nil, nil, ErrJSONInvalid
 	}
@@ -74,22 +73,29 @@ func parseV3JSON(data []byte) (*CharacterCard, map[string]json.RawMessage, error
 		return nil, nil, ErrJSONInvalid
 	}
 
-	preserved := extractPreservedFields(raw, knownV3Fields())
+	cardData := data
+	if payload, ok := raw["data"]; ok && len(payload) > 0 && string(payload) != "null" {
+		cardData = payload
+		if err := json.Unmarshal(payload, &raw); err != nil {
+			return nil, nil, ErrJSONInvalid
+		}
+	}
+
+	preserved := stripRemovedCardFields(extractPreservedFields(raw, knownV3Fields()))
 
 	var card v3Card
-	if err := json.Unmarshal(data, &card); err != nil {
+	if err := json.Unmarshal(cardData, &card); err != nil {
 		return nil, nil, ErrJSONInvalid
 	}
 
 	result := &CharacterCard{
-		SourceFormat:            FormatV3JSON,
+		SourceFormat:            sourceFormat,
 		Name:                    card.Name,
 		Description:             card.Description,
 		Personality:             card.Personality,
 		Scenario:                card.Scenario,
-		FirstMessage:            card.FirstMes,
-		ExampleMessages:          card.MesExample,
-		AlternateGreetings:       card.AlternateGreetings,
+		ExampleMessages:         card.MesExample,
+		AlternateGreetings:      card.AlternateGreetings,
 		SystemPrompt:            card.SystemPrompt,
 		PostHistoryInstructions: card.PostHistoryInstructions,
 		CreatorNotes:            card.CreatorNotes,
@@ -149,7 +155,7 @@ func parseV3JSON(data []byte) (*CharacterCard, map[string]json.RawMessage, error
 func knownV3Fields() map[string]bool {
 	return map[string]bool{
 		"spec": true, "spec_version": true, "name": true, "description": true,
-		"personality": true, "scenario": true, "first_mes": true, "mes_example": true,
+		"personality": true, "scenario": true, "mes_example": true,
 		"creator_notes": true, "system_prompt": true, "post_history_instructions": true,
 		"alternate_greetings": true, "character_book": true, "tags": true,
 		"creator": true, "character_version": true, "extensions": true,

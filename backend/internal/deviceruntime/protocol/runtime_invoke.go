@@ -13,7 +13,7 @@ type RuntimeInvokePayload struct {
 	Handler              string                           `json:"handler"`
 	Input                json.RawMessage                  `json:"input,omitempty"`
 	ProviderID           string                           `json:"providerId,omitempty"`
-	UserID               runtimeidentity.UserID           `json:"userId"`
+	SpaceID              runtimeidentity.SpaceID          `json:"spaceId"`
 	DeviceID             runtimeidentity.DeviceID         `json:"deviceId"`
 	RuntimeID            runtimeidentity.RuntimeID        `json:"runtimeId"`
 	RuntimeSessionID     runtimeidentity.RuntimeSessionID `json:"runtimeSessionId"`

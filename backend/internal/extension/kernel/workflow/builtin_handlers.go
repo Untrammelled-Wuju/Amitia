@@ -1195,11 +1195,11 @@ func (h NestedWorkflowHandler) Execute(ctx context.Context, node WorkflowNode, i
 	if definition.Source == "user" {
 		owner := ""
 		if definition.Metadata != nil {
-			if value, exists := definition.Metadata["ownerUserId"]; exists && value != nil {
+			if value, exists := definition.Metadata["ownerSpaceId"]; exists && value != nil {
 				owner = strings.TrimSpace(fmt.Sprint(value))
 			}
 		}
-		if execution.UserID == "" || owner == "" || owner != execution.UserID {
+		if execution.SpaceID == "" || owner == "" || owner != execution.SpaceID {
 			return nil, fmt.Errorf("%w: nested user workflow owner mismatch", ErrScopeDenied)
 		}
 	}

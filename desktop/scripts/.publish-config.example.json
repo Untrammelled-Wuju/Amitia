@@ -5,5 +5,7 @@
   "password": "宝塔FTP密码",
   "secure": false,
   "remotePath": "/amitia",
+  "stagingRemotePath": "/amitia/.staging",
+  "serverReleaseRoot": "/www/wwwroot/amitia",
   "url": "https://amitia.untrammelled.top/amitia"
 }

@@ -9,6 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/u-ai/backend/internal/psyche"
 	"github.com/u-ai/backend/internal/relationship"
+	"github.com/u-ai/backend/internal/requestidentity"
 	"gorm.io/gorm"
 )
 
@@ -71,11 +72,17 @@ func (h *psycheSnapshotHandler) handleMessageSnapshot(c *gin.Context) {
 		CharacterID string `gorm:"column:character_id"`
 		CreatedAt   string `gorm:"column:created_at"`
 	}
-	err := h.db.Table("messages AS m").
+	query := h.db.Table("messages AS m").
 		Select("c.character_id, m.created_at").
 		Joins("JOIN conversations AS c ON c.id = m.conversation_id").
-		Where("m.id = ?", messageID).
-		Take(&row).Error
+		Where("m.id = ?", messageID)
+	owner := requestidentity.NormalizeSpaceID(requestidentity.ResolveGin(c))
+	if webChatLocalSingleUserMode() {
+		query = query.Where("(c.space_id = ? OR c.space_id = '' OR c.space_id IS NULL OR c.space_id = ?)", owner, requestidentity.LegacySpaceID)
+	} else {
+		query = query.Where("c.space_id = ?", owner)
+	}
+	err := query.Take(&row).Error
 	if err != nil || row.CharacterID == "" {
 		c.JSON(http.StatusNotFound, gin.H{"code": 404, "msg": "message not found"})
 		return
@@ -86,7 +93,7 @@ func (h *psycheSnapshotHandler) handleMessageSnapshot(c *gin.Context) {
 		SnapshotData string    `gorm:"column:snapshot_data"`
 		CreatedAt    time.Time `gorm:"column:created_at"`
 	}
-	query := h.db.Table("psyche_snapshots").
+	query = h.db.Table("psyche_snapshots").
 		Select("snapshot_data, created_at").
 		Where("character_id = ?", row.CharacterID)
 	if !messageTime.IsZero() {
@@ -171,6 +178,10 @@ func (h *psycheSnapshotHandler) handle(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": "characterId is required"})
 		return
 	}
+	if !h.characterOwned(c, characterID) {
+		c.JSON(http.StatusNotFound, gin.H{"code": 404, "msg": "character not found"})
+		return
+	}
 
 	store := psyche.NewSQLitePsycheStore(h.db)
 	state, err := store.LoadState(characterID)
@@ -185,6 +196,15 @@ func (h *psycheSnapshotHandler) handle(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"code": 200, "data": buildSnapshot(*state, characterID, now, h), "msg": "操作成功"})
+}
+
+func (h *psycheSnapshotHandler) characterOwned(c *gin.Context, characterID string) bool {
+	var count int64
+	query := webChatOwnerQuery(h.db.Table("characters").Where("deleted_at IS NULL"), requestidentity.ResolveGin(c))
+	if err := query.Where("id = ?", characterID).Count(&count).Error; err != nil {
+		return false
+	}
+	return count > 0
 }
 
 func buildSnapshot(state psyche.PsycheState, characterID string, now time.Time, h *psycheSnapshotHandler) PsycheSnapshotOutput {
@@ -298,7 +318,7 @@ func (h *psycheSnapshotHandler) loadBeliefSnapshots(characterID string) []belief
 		Value      string
 		Confidence float64
 	}
-	err := h.db.Table("memories").Select("key, value, confidence").Where("character_id = ? AND confidence > 0", characterID).Order("importance DESC, updated_at DESC").Limit(10).Scan(&rows).Error
+	err := h.db.Table("memories").Select("key, value, confidence").Where("character_id = ? AND confidence > 0 AND COALESCE(allow_context_use, 1) = 1", characterID).Order("importance DESC, updated_at DESC").Limit(10).Scan(&rows).Error
 	if err != nil || len(rows) == 0 {
 		return []beliefSnapshotEntry{}
 	}

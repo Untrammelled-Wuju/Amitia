@@ -18,19 +18,19 @@ type MemoryPort interface {
 }
 
 type ProfilePort interface {
-	ExtractFromConversation(userID, convID string, messages []map[string]string, characterID ...string) error
-	ToSystemPrompt(userID string, characterID ...string) string
+	ExtractFromConversation(spaceID, convID string, messages []map[string]string, characterID ...string) error
+	ToSystemPrompt(spaceID string, characterID ...string) string
 	memory.PipelineLayer
 }
 
 type EpisodicPort interface {
-	ExtractFromConversation(userID, convID string, messages []map[string]string, characterID ...string) error
-	ToSystemPrompt(userID string, characterID ...string) string
+	ExtractFromConversation(spaceID, convID string, messages []map[string]string, characterID ...string) error
+	ToSystemPrompt(spaceID string, characterID ...string) string
 	memory.PipelineLayer
 }
 
 type WorldBookPort interface {
-	ToSystemPrompt(userMessage, assistantReply string) string
+	ToSystemPromptForSpace(spaceID, characterID, userMessage, assistantReply string) string
 }
 
 type VisionPort interface {
@@ -38,12 +38,12 @@ type VisionPort interface {
 }
 
 type memoryPipelineLayerAdapter struct {
-	GenerateCandidatesFunc  func(conversationID string) ([]memory.MemoryCandidate, error)
-	AcceptCandidateFunc     func(id string) (*memory.Memory, error)
-	HybridSearchFunc        func(req *memory.VectorSearchRequest) ([]memory.HybridSearchResult, error)
-	RecordUseFunc           func(id string) (*memory.Memory, error)
-	NameFunc                func() string
-	ProcessFunc             func(ctx context.Context, convID string, messages []map[string]string, newReply string) error
+	GenerateCandidatesFunc func(conversationID string) ([]memory.MemoryCandidate, error)
+	AcceptCandidateFunc    func(id string) (*memory.Memory, error)
+	HybridSearchFunc       func(req *memory.VectorSearchRequest) ([]memory.HybridSearchResult, error)
+	RecordUseFunc          func(id string) (*memory.Memory, error)
+	NameFunc               func() string
+	ProcessFunc            func(ctx context.Context, convID string, messages []map[string]string, newReply string) error
 }
 
 func (a memoryPipelineLayerAdapter) GenerateCandidates(conversationID string) ([]memory.MemoryCandidate, error) {
@@ -71,18 +71,18 @@ func (a memoryPipelineLayerAdapter) Process(ctx context.Context, convID string, 
 }
 
 type profilePipelineLayerAdapter struct {
-	ExtractFromConversationFunc func(userID, convID string, messages []map[string]string, characterID ...string) error
-	ToSystemPromptFunc          func(userID string, characterID ...string) string
+	ExtractFromConversationFunc func(spaceID, convID string, messages []map[string]string, characterID ...string) error
+	ToSystemPromptFunc          func(spaceID string, characterID ...string) string
 	NameFunc                    func() string
 	ProcessFunc                 func(ctx context.Context, convID string, messages []map[string]string, newReply string) error
 }
 
-func (a profilePipelineLayerAdapter) ExtractFromConversation(userID, convID string, messages []map[string]string, characterID ...string) error {
-	return a.ExtractFromConversationFunc(userID, convID, messages, characterID...)
+func (a profilePipelineLayerAdapter) ExtractFromConversation(spaceID, convID string, messages []map[string]string, characterID ...string) error {
+	return a.ExtractFromConversationFunc(spaceID, convID, messages, characterID...)
 }
 
-func (a profilePipelineLayerAdapter) ToSystemPrompt(userID string, characterID ...string) string {
-	return a.ToSystemPromptFunc(userID, characterID...)
+func (a profilePipelineLayerAdapter) ToSystemPrompt(spaceID string, characterID ...string) string {
+	return a.ToSystemPromptFunc(spaceID, characterID...)
 }
 
 func (a profilePipelineLayerAdapter) Name() string {
@@ -94,18 +94,18 @@ func (a profilePipelineLayerAdapter) Process(ctx context.Context, convID string,
 }
 
 type episodicPipelineLayerAdapter struct {
-	ExtractFromConversationFunc func(userID, convID string, messages []map[string]string, characterID ...string) error
-	ToSystemPromptFunc          func(userID string, characterID ...string) string
+	ExtractFromConversationFunc func(spaceID, convID string, messages []map[string]string, characterID ...string) error
+	ToSystemPromptFunc          func(spaceID string, characterID ...string) string
 	NameFunc                    func() string
 	ProcessFunc                 func(ctx context.Context, convID string, messages []map[string]string, newReply string) error
 }
 
-func (a episodicPipelineLayerAdapter) ExtractFromConversation(userID, convID string, messages []map[string]string, characterID ...string) error {
-	return a.ExtractFromConversationFunc(userID, convID, messages, characterID...)
+func (a episodicPipelineLayerAdapter) ExtractFromConversation(spaceID, convID string, messages []map[string]string, characterID ...string) error {
+	return a.ExtractFromConversationFunc(spaceID, convID, messages, characterID...)
 }
 
-func (a episodicPipelineLayerAdapter) ToSystemPrompt(userID string, characterID ...string) string {
-	return a.ToSystemPromptFunc(userID, characterID...)
+func (a episodicPipelineLayerAdapter) ToSystemPrompt(spaceID string, characterID ...string) string {
+	return a.ToSystemPromptFunc(spaceID, characterID...)
 }
 
 func (a episodicPipelineLayerAdapter) Name() string {
@@ -117,11 +117,11 @@ func (a episodicPipelineLayerAdapter) Process(ctx context.Context, convID string
 }
 
 type worldBookPortAdapter struct {
-	ToSystemPromptFunc func(userMessage, assistantReply string) string
+	ToSystemPromptForSpaceFunc func(spaceID, characterID, userMessage, assistantReply string) string
 }
 
-func (a worldBookPortAdapter) ToSystemPrompt(userMessage, assistantReply string) string {
-	return a.ToSystemPromptFunc(userMessage, assistantReply)
+func (a worldBookPortAdapter) ToSystemPromptForSpace(spaceID, characterID, userMessage, assistantReply string) string {
+	return a.ToSystemPromptForSpaceFunc(spaceID, characterID, userMessage, assistantReply)
 }
 
 type visionPortAdapter struct {

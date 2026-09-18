@@ -6,19 +6,26 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
+	"mime"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/u-ai/backend/internal/auth"
 	"github.com/u-ai/backend/internal/extension/kernel/extension_page_host"
 	"github.com/u-ai/backend/internal/extension/kernel/extension_slots"
+	"github.com/u-ai/backend/internal/extension/kernel/host_registry"
 	"github.com/u-ai/backend/internal/extension/kernel/permission"
 	"github.com/u-ai/backend/internal/extension/kernel/sandbox_webui"
 	"github.com/u-ai/backend/internal/extension/kernel/ui_contribution"
 	"github.com/u-ai/backend/internal/extension/kernel/ui_provider"
+	"github.com/u-ai/backend/internal/runtimeidentity"
 )
 
 type DialogResolver interface {
@@ -32,8 +39,8 @@ type ClientRuntimeCommandResolver interface {
 
 type ScopedClientRuntimeCommandResolver interface {
 	ResolveClientRuntimeCommandWithHost(commandID, hostClientID, hostSessionID string, result map[string]interface{}, commandErr string) bool
-	ClientRuntimeSessionState(userID, conversationID string) map[string]interface{}
-	AcknowledgeClientRuntimeSession(userID, conversationID string, revision int64) (map[string]interface{}, error)
+	ClientRuntimeSessionState(spaceID, conversationID string) map[string]interface{}
+	AcknowledgeClientRuntimeSession(spaceID, conversationID string, revision int64) (map[string]interface{}, error)
 }
 
 type ClipboardResolver interface {
@@ -41,6 +48,10 @@ type ClipboardResolver interface {
 	FailClipboardRequest(requestID string, err error) bool
 	ResolveClipboardRequestWithHost(requestID string, hostClientID string, hostSessionID string, text string) bool
 	FailClipboardRequestWithHost(requestID string, hostClientID string, hostSessionID string, err error) bool
+}
+
+type ResourceLinkResolver interface {
+	ResolveResourceLink(token string) (extensionID string, scope string, fullPath string, err error)
 }
 
 type HTTPHandler struct {
@@ -57,7 +68,9 @@ type HTTPHandler struct {
 	dialogResolver        DialogResolver
 	clientRuntimeResolver ClientRuntimeCommandResolver
 	clipboardResolver     ClipboardResolver
+	hostRegistry          *host_registry.HostRegistry
 	extRoot               string
+	resourceLinks         ResourceLinkResolver
 }
 
 func NewHTTPHandler(
@@ -121,6 +134,14 @@ func (h *HTTPHandler) SetClipboardResolver(r ClipboardResolver) {
 	h.clipboardResolver = r
 }
 
+func (h *HTTPHandler) SetHostRegistry(registry *host_registry.HostRegistry) {
+	h.hostRegistry = registry
+}
+
+func (h *HTTPHandler) SetResourceLinkResolver(resolver ResourceLinkResolver) {
+	h.resourceLinks = resolver
+}
+
 func (h *HTTPHandler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/extensions/ui/slots", h.handleSlots)
 	mux.HandleFunc("/api/extensions/ui/contributions", h.handleContributions)
@@ -143,6 +164,7 @@ func (h *HTTPHandler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/extension/webui/preload/", h.handleWebUIPreload)
 	mux.HandleFunc("/api/extension/webui/resource/", h.handleWebUIResource)
 	mux.HandleFunc("/api/extension/webui/stats", h.handleWebUIStats)
+	mux.HandleFunc("/api/extension/resources/", h.handleResourceLink)
 	mux.HandleFunc("/api/extension/action/", h.handleAction)
 	mux.HandleFunc("/api/extension/composer/action/", h.handleComposerAction)
 	mux.HandleFunc("/api/extensions/ui/dialog-response", h.handleDialogResponse)
@@ -150,6 +172,62 @@ func (h *HTTPHandler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/extensions/ui/client-runtime-state", h.handleClientRuntimeState)
 	mux.HandleFunc("/api/extensions/ui/client-runtime-session-ack", h.handleClientRuntimeSessionAck)
 	mux.HandleFunc("/api/extensions/ui/clipboard-response", h.handleClipboardResponse)
+	mux.HandleFunc("/api/extensions/ui/host-session", h.handleHostSession)
+	mux.HandleFunc("/api/extensions/ui/host-session/heartbeat", h.handleHostSessionHeartbeat)
+	mux.HandleFunc("/api/extensions/ui/host-session/disconnect", h.handleHostSessionDisconnect)
+}
+
+func (h *HTTPHandler) handleResourceLink(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+		return
+	}
+	if h.resourceLinks == nil {
+		writeError(w, http.StatusServiceUnavailable, "resource_links_unavailable", "resource link resolver not configured")
+		return
+	}
+	const prefix = "/api/extension/resources/"
+	token := strings.TrimPrefix(r.URL.Path, prefix)
+	if token == "" || token == r.URL.Path {
+		writeError(w, http.StatusNotFound, "resource_not_found", "resource token required")
+		return
+	}
+	_, _, fullPath, err := h.resourceLinks.ResolveResourceLink(token)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "resource_not_found", err.Error())
+		return
+	}
+	file, err := os.Open(fullPath)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "resource_not_found", err.Error())
+		return
+	}
+	defer file.Close()
+	info, err := file.Stat()
+	if err != nil || info.IsDir() {
+		writeError(w, http.StatusNotFound, "resource_not_found", "resource not found")
+		return
+	}
+	contentType := mime.TypeByExtension(strings.ToLower(filepath.Ext(fullPath)))
+	if contentType == "" {
+		var header [512]byte
+		n, _ := file.Read(header[:])
+		contentType = http.DetectContentType(header[:n])
+		_, _ = file.Seek(0, 0)
+	}
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+	w.Header().Set("Content-Type", contentType)
+	w.Header().Set("Cache-Control", "private, max-age=300")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Header().Set("Referrer-Policy", "no-referrer")
+	if strings.HasPrefix(contentType, "image/") || strings.HasPrefix(contentType, "audio/") || strings.HasPrefix(contentType, "video/") || contentType == "application/pdf" {
+		w.Header().Set("Content-Disposition", "inline")
+	} else {
+		w.Header().Set("Content-Disposition", "attachment")
+	}
+	http.ServeContent(w, r, info.Name(), info.ModTime(), file)
 }
 
 func (h *HTTPHandler) handleSlots(w http.ResponseWriter, r *http.Request) {
@@ -198,7 +276,7 @@ func (h *HTTPHandler) handleSnapshot(w http.ResponseWriter, r *http.Request) {
 	}
 	out := make([]slotSnapshotEntry, 0, len(slots))
 	for _, s := range slots {
-		contribs := h.uiHost.ListBySlot(string(s.SlotID))
+		contribs := h.uiHost.ListActiveBySlot(string(s.SlotID))
 		out = append(out, slotSnapshotEntry{
 			SlotID:            string(s.SlotID),
 			ContractVersion:   s.ContractVersion,
@@ -222,7 +300,7 @@ func (h *HTTPHandler) handleSnapshot(w http.ResponseWriter, r *http.Request) {
 	}
 	payload := map[string]any{
 		"slots":                out,
-		"contributions":        h.uiHost.ListAll(),
+		"contributions":        h.uiHost.ListActiveAll(),
 		"pendingContributions": h.uiHost.ListPending(),
 		"timestamp":            time.Now().UTC(),
 	}
@@ -375,11 +453,11 @@ func (h *HTTPHandler) handleProfile(w http.ResponseWriter, r *http.Request) {
 	resolveContext := h.resolveProviderContext(r, platform)
 	scopeKind := ui_provider.ProfileScopeKind(strings.TrimSpace(r.URL.Query().Get("scope")))
 	if scopeKind == "" {
-		scopeKind = ui_provider.ProfileScopeUser
+		scopeKind = ui_provider.ProfileScopeSpace
 	}
 	if scopeKind == ui_provider.ProfileScopeGlobal && r.Method != http.MethodGet {
 		actor, ok := auth.FromContext(r.Context())
-		if !ok || actor == nil || (!actor.HasRole("admin") && !actor.IsSystemActor()) {
+		if !ok || actor == nil || (!actor.HasPermission(auth.PermSystemAdmin) && !actor.IsSystemActor()) {
 			writeError(w, http.StatusForbidden, "global_profile_forbidden", "global UI profile requires administrator privileges")
 			return
 		}
@@ -480,17 +558,20 @@ func (h *HTTPHandler) handleSessionsCollection(w http.ResponseWriter, r *http.Re
 		writeError(w, http.StatusInternalServerError, "authorizer_not_configured", "session authorizer not configured (fail-closed)")
 		return
 	}
-	auth, err := h.authorizer.AuthorizeSession(r.Context(), def, req.CharacterID, req.ConversationID)
+	sessionAuth, err := h.authorizer.AuthorizeSession(r.Context(), def, req.CharacterID, req.ConversationID)
 	if err != nil {
 		writeError(w, http.StatusForbidden, "permission_denied", err.Error())
 		return
 	}
 	origin := fmt.Sprintf("amitia-extension://%s/%s", def.ExtensionID, def.ModuleID)
 	lifetime := time.Hour
-	sess, err := h.uiHost.Bridge().CreateSession(def, origin, auth.GrantedScopes, auth.GrantedPerms, req.Surface, req.CharacterID, req.ConversationID, lifetime)
+	sess, err := h.uiHost.Bridge().CreateSession(def, origin, sessionAuth.GrantedScopes, sessionAuth.GrantedPerms, req.Surface, req.CharacterID, req.ConversationID, lifetime)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "session_create_failed", err.Error())
 		return
+	}
+	if actor, ok := auth.FromContext(r.Context()); ok && actor != nil {
+		_ = h.uiHost.Bridge().SetSessionExecutionIdentity(sess.SessionID, actor.SpaceID.String(), strings.TrimSpace(r.Header.Get("X-Amitia-Device-ID")))
 	}
 	writeJSON(w, http.StatusOK, bridgeSessionResponse{
 		SessionID:       sess.SessionID,
@@ -504,6 +585,7 @@ func (h *HTTPHandler) handleSessionsCollection(w http.ResponseWriter, r *http.Re
 		GrantedPerms:    sess.GrantedPerms,
 		CreatedAt:       sess.CreatedAt,
 		ExpiresAt:       sess.ExpiresAt,
+		Token:           sess.Token,
 	})
 }
 
@@ -533,6 +615,9 @@ func (h *HTTPHandler) handleSessionItem(w http.ResponseWriter, r *http.Request) 
 			ContributionID  string          `json:"contributionId"`
 			Origin          string          `json:"origin"`
 			ContractVersion int             `json:"contractVersion"`
+			Token           string          `json:"token"`
+			Generation      int64           `json:"generation"`
+			Nonce           string          `json:"nonce"`
 			Payload         json.RawMessage `json:"payload"`
 		}
 		if err := decodeJSON(r, &req); err != nil {
@@ -545,6 +630,9 @@ func (h *HTTPHandler) handleSessionItem(w http.ResponseWriter, r *http.Request) 
 			ContributionID:  req.ContributionID,
 			Origin:          req.Origin,
 			ContractVersion: req.ContractVersion,
+			Token:           req.Token,
+			Generation:      req.Generation,
+			Nonce:           req.Nonce,
 			Payload:         req.Payload,
 		}
 		resp := h.uiHost.Bridge().Handle(r.Context(), msg)
@@ -599,7 +687,7 @@ func (h *HTTPHandler) handlePageSession(w http.ResponseWriter, r *http.Request) 
 }
 
 func (h *HTTPHandler) handleExtensionScoped(w http.ResponseWriter, r *http.Request) {
-	segs := splitPath(r.URL.Path)
+	segs := splitEscapedPath(r.URL.EscapedPath())
 	if len(segs) < 3 {
 		writeError(w, http.StatusNotFound, "not_found", "extension id required")
 		return
@@ -735,7 +823,7 @@ func (h *HTTPHandler) handleSchema(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
 		return
 	}
-	segs := splitPath(r.URL.Path)
+	segs := splitEscapedPath(r.URL.EscapedPath())
 	if len(segs) < 5 {
 		writeError(w, http.StatusNotFound, "not_found", "extensionId and contributionId required")
 		return
@@ -770,6 +858,11 @@ func (h *HTTPHandler) handleWebUISessionCollection(w http.ResponseWriter, r *htt
 		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
 		return
 	}
+	actorSpaceID := ""
+	actorDeviceID := strings.TrimSpace(r.Header.Get("X-Amitia-Device-ID"))
+	if actor, ok := auth.FromContext(r.Context()); ok && actor != nil {
+		actorSpaceID = actor.SpaceID.String()
+	}
 	var req struct {
 		ContributionID string                      `json:"contributionId"`
 		Surface        string                      `json:"surface"`
@@ -779,6 +872,7 @@ func (h *HTTPHandler) handleWebUISessionCollection(w http.ResponseWriter, r *htt
 		Platform       string                      `json:"platform"`
 		CharacterID    string                      `json:"characterId"`
 		ConversationID string                      `json:"conversationId"`
+		UIContext      map[string]any              `json:"uiContext"`
 		Theme          sandbox_webui.ThemeSnapshot `json:"theme"`
 		Locale         string                      `json:"locale"`
 	}
@@ -840,6 +934,7 @@ func (h *HTTPHandler) handleWebUISessionCollection(w http.ResponseWriter, r *htt
 		Locale:             req.Locale,
 		BasePath:           basePath,
 		EntryPath:          def.Entry.Path,
+		EnableScripts:      def.Sandbox.EnableScripts,
 		Surface:            req.Surface,
 		SurfaceRole:        req.SurfaceRole,
 		Host:               req.Host,
@@ -847,10 +942,13 @@ func (h *HTTPHandler) handleWebUISessionCollection(w http.ResponseWriter, r *htt
 		Platform:           req.Platform,
 		CharacterID:        req.CharacterID,
 		ConversationID:     req.ConversationID,
+		UIContext:          req.UIContext,
 		GrantedPerms:       auth.GrantedPerms,
 		GrantedScopes:      auth.GrantedScopes,
 		ScopeSnapshotID:    scopeSnapshotID,
 	}
+	sreq.SpaceID = actorSpaceID
+	sreq.DeviceID = actorDeviceID
 	result, err := h.sandboxHost.CreateSession(sreq)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "webui_session_create_failed", err.Error())
@@ -1051,6 +1149,18 @@ func (h *HTTPHandler) resolveExtensionBasePath(extensionID string) string {
 		return ""
 	}
 	safeID := strings.NewReplacer("/", "__", "\\", "__", ":", "_", "..", "_").Replace(extensionID)
+	installationsRoot := filepath.Join(h.extRoot, "installations", safeID)
+	if currentData, err := os.ReadFile(filepath.Join(installationsRoot, "current.json")); err == nil {
+		var current struct {
+			GenerationID string `json:"generationID"`
+		}
+		if json.Unmarshal(currentData, &current) == nil && current.GenerationID != "" {
+			candidate := filepath.Join(installationsRoot, "generations", current.GenerationID)
+			if _, err := os.Stat(filepath.Join(candidate, "manifest.json")); err == nil {
+				return candidate
+			}
+		}
+	}
 	installedRoot := filepath.Join(h.extRoot, "installed", safeID)
 	entries, err := os.ReadDir(installedRoot)
 	if err != nil {
@@ -1110,6 +1220,22 @@ func (h *HTTPHandler) handleWebUIBridge(w http.ResponseWriter, r *http.Request) 
 	if err != nil {
 		writeError(w, http.StatusNotFound, "webui_session_not_found", err.Error())
 		return
+	}
+	if sess.SpaceID == "" || sess.DeviceID == "" {
+		bindSpaceID := ""
+		bindDeviceID := ""
+		if actor, ok := auth.FromContext(r.Context()); ok && actor != nil {
+			bindSpaceID = actor.SpaceID.String()
+			bindDeviceID = actor.DeviceID.String()
+		}
+		if bindDeviceID == "" {
+			bindDeviceID = strings.TrimSpace(r.Header.Get("X-Amitia-Device-ID"))
+		}
+		if bindSpaceID != "" || bindDeviceID != "" {
+			if sess.BindIdentityIfNeeded(bindSpaceID, bindDeviceID) {
+				log.Printf("[ui-action] bridge identity backfill: session=%s user=%q device=%q", sessionID, sess.SpaceID, sess.DeviceID)
+			}
+		}
 	}
 	var msg sandbox_webui.BridgeMessage
 	if err := decodeJSON(r, &msg); err != nil {
@@ -1206,6 +1332,192 @@ func (h *HTTPHandler) handleComposerAction(w http.ResponseWriter, r *http.Reques
 	writeJSON(w, http.StatusOK, resp)
 }
 
+func (h *HTTPHandler) handleHostSession(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+		return
+	}
+	if h.hostRegistry == nil {
+		writeError(w, http.StatusServiceUnavailable, "host_registry_unavailable", "UI host registry not configured")
+		return
+	}
+	actor, ok := auth.FromContext(r.Context())
+	if !ok || actor == nil || strings.TrimSpace(actor.SpaceID.String()) == "" {
+		writeError(w, http.StatusUnauthorized, "unauthorized", "authenticated user is required")
+		return
+	}
+	var req struct {
+		HostClientID string   `json:"hostClientId"`
+		DeviceID     string   `json:"deviceId"`
+		Platform     string   `json:"platform"`
+		WindowID     string   `json:"windowId"`
+		Features     []string `json:"features"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "payload_invalid", err.Error())
+		return
+	}
+	hostClientID := strings.TrimSpace(req.HostClientID)
+	if !validHostClientID(hostClientID) {
+		writeError(w, http.StatusBadRequest, "host_client_id_invalid", "hostClientId is invalid")
+		return
+	}
+	platform, err := runtimeidentity.ParsePlatform(req.Platform)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "platform_invalid", err.Error())
+		return
+	}
+	deviceID := actor.DeviceID
+	if deviceID == "" {
+		deviceID = runtimeidentity.ParseDeviceID(req.DeviceID)
+	}
+	features := normalizeUIHostFeatures(req.Features)
+	if len(features) == 0 {
+		features = []host_registry.EndpointFeature{
+			host_registry.EndpointFeatureUINotify,
+			host_registry.EndpointFeatureUIDialog,
+			host_registry.EndpointFeatureUINavigate,
+		}
+	}
+	now := time.Now().UTC()
+	hostSessionID := "uihs_" + uuid.NewString()
+	entry := &host_registry.HostEntry{
+		EntryID:         hostClientID,
+		Kind:            host_registry.RegistryEntryKindUIHost,
+		SpaceID:         actor.SpaceID,
+		DeviceID:        deviceID,
+		Platform:        platform,
+		Features:        features,
+		AuthenticatedAt: now,
+		LastHeartbeat:   now,
+		PresenceState:   host_registry.PresenceStateReady,
+		HostClientID:    hostClientID,
+		HostSessionID:   hostSessionID,
+		WindowID:        strings.TrimSpace(req.WindowID),
+	}
+	if err := h.hostRegistry.RegisterHost(r.Context(), entry); err != nil {
+		writeError(w, http.StatusInternalServerError, "host_register_failed", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"hostClientId":             hostClientID,
+		"hostSessionId":            hostSessionID,
+		"heartbeatIntervalSeconds": 60,
+		"features":                 features,
+	})
+}
+
+func (h *HTTPHandler) handleHostSessionHeartbeat(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+		return
+	}
+	if h.hostRegistry == nil {
+		writeError(w, http.StatusServiceUnavailable, "host_registry_unavailable", "UI host registry not configured")
+		return
+	}
+	hostClientID, _, ok := h.authorizedHostSessionRequest(w, r)
+	if !ok {
+		return
+	}
+	if err := h.hostRegistry.UpdateHeartbeat(r.Context(), hostClientID); err != nil {
+		writeError(w, http.StatusNotFound, "host_session_not_found", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "hostClientId": hostClientID})
+}
+
+func (h *HTTPHandler) handleHostSessionDisconnect(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+		return
+	}
+	if h.hostRegistry == nil {
+		writeError(w, http.StatusServiceUnavailable, "host_registry_unavailable", "UI host registry not configured")
+		return
+	}
+	hostClientID, _, ok := h.authorizedHostSessionRequest(w, r)
+	if !ok {
+		return
+	}
+	if err := h.hostRegistry.SetDisconnected(r.Context(), hostClientID); err != nil {
+		writeError(w, http.StatusNotFound, "host_session_not_found", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "hostClientId": hostClientID})
+}
+
+func (h *HTTPHandler) authorizedHostSessionRequest(w http.ResponseWriter, r *http.Request) (string, string, bool) {
+	actor, ok := auth.FromContext(r.Context())
+	if !ok || actor == nil || strings.TrimSpace(actor.SpaceID.String()) == "" {
+		writeError(w, http.StatusUnauthorized, "unauthorized", "authenticated user is required")
+		return "", "", false
+	}
+	var req struct {
+		HostClientID  string `json:"hostClientId"`
+		HostSessionID string `json:"hostSessionId"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "payload_invalid", err.Error())
+		return "", "", false
+	}
+	req.HostClientID = strings.TrimSpace(req.HostClientID)
+	req.HostSessionID = strings.TrimSpace(req.HostSessionID)
+	if req.HostClientID == "" || req.HostSessionID == "" {
+		writeError(w, http.StatusBadRequest, "missing_param", "hostClientId and hostSessionId are required")
+		return "", "", false
+	}
+	entry, err := h.hostRegistry.GetHost(r.Context(), req.HostClientID)
+	if err != nil || entry == nil {
+		writeError(w, http.StatusNotFound, "host_session_not_found", "UI host session not found")
+		return "", "", false
+	}
+	if entry.SpaceID != actor.SpaceID || entry.HostSessionID != req.HostSessionID {
+		writeError(w, http.StatusForbidden, "host_session_mismatch", "UI host session does not belong to this actor")
+		return "", "", false
+	}
+	return req.HostClientID, req.HostSessionID, true
+}
+
+func validHostClientID(value string) bool {
+	if len(value) < 3 || len(value) > 160 {
+		return false
+	}
+	for _, ch := range value {
+		if (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == '-' || ch == '_' || ch == ':' || ch == '.' {
+			continue
+		}
+		return false
+	}
+	return true
+}
+
+func normalizeUIHostFeatures(raw []string) []host_registry.EndpointFeature {
+	allowed := map[host_registry.EndpointFeature]struct{}{
+		host_registry.EndpointFeatureUINotify:       {},
+		host_registry.EndpointFeatureUIDialog:       {},
+		host_registry.EndpointFeatureUINavigate:     {},
+		host_registry.EndpointFeatureClipboardRead:  {},
+		host_registry.EndpointFeatureClipboardWrite: {},
+		host_registry.EndpointFeatureDesktopMenu:    {},
+		host_registry.EndpointFeatureDesktopTray:    {},
+	}
+	seen := map[host_registry.EndpointFeature]struct{}{}
+	result := make([]host_registry.EndpointFeature, 0, len(raw))
+	for _, item := range raw {
+		feature := host_registry.EndpointFeature(strings.TrimSpace(item))
+		if _, ok := allowed[feature]; !ok {
+			continue
+		}
+		if _, duplicate := seen[feature]; duplicate {
+			continue
+		}
+		seen[feature] = struct{}{}
+		result = append(result, feature)
+	}
+	return result
+}
+
 func (h *HTTPHandler) handleDialogResponse(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
@@ -1291,11 +1603,11 @@ func (h *HTTPHandler) handleClientRuntimeState(w http.ResponseWriter, r *http.Re
 		writeError(w, http.StatusBadRequest, "missing_param", "conversationId is required")
 		return
 	}
-	userID := ""
+	spaceID := ""
 	if actor, ok := auth.FromContext(r.Context()); ok && actor != nil {
-		userID = actor.UserID.String()
+		spaceID = actor.SpaceID.String()
 	}
-	writeJSON(w, http.StatusOK, scoped.ClientRuntimeSessionState(userID, conversationID))
+	writeJSON(w, http.StatusOK, scoped.ClientRuntimeSessionState(spaceID, conversationID))
 }
 
 func (h *HTTPHandler) handleClientRuntimeSessionAck(w http.ResponseWriter, r *http.Request) {
@@ -1321,11 +1633,11 @@ func (h *HTTPHandler) handleClientRuntimeSessionAck(w http.ResponseWriter, r *ht
 		writeError(w, http.StatusBadRequest, "missing_param", "conversationId is required")
 		return
 	}
-	userID := ""
+	spaceID := ""
 	if actor, ok := auth.FromContext(r.Context()); ok && actor != nil {
-		userID = actor.UserID.String()
+		spaceID = actor.SpaceID.String()
 	}
-	state, err := scoped.AcknowledgeClientRuntimeSession(userID, req.ConversationID, req.Revision)
+	state, err := scoped.AcknowledgeClientRuntimeSession(spaceID, req.ConversationID, req.Revision)
 	if err != nil {
 		writeJSON(w, http.StatusConflict, map[string]any{"error": "client_runtime_revision_conflict", "message": err.Error(), "state": state})
 		return
@@ -1381,6 +1693,17 @@ func (h *HTTPHandler) invokeAction(r *http.Request, contributionID, actionID str
 	case int:
 		contractVersion = v
 	}
+	token, _ := ctxMap["token"].(string)
+	nonce, _ := ctxMap["nonce"].(string)
+	var generation int64
+	switch v := ctxMap["generation"].(type) {
+	case float64:
+		generation = int64(v)
+	case int:
+		generation = int64(v)
+	case int64:
+		generation = v
+	}
 	payload, _ := json.Marshal(map[string]any{
 		"action_id": actionID,
 		"input":     input,
@@ -1391,6 +1714,9 @@ func (h *HTTPHandler) invokeAction(r *http.Request, contributionID, actionID str
 		ContributionID:  contributionID,
 		Origin:          origin,
 		ContractVersion: contractVersion,
+		Token:           token,
+		Generation:      generation,
+		Nonce:           nonce,
 		Payload:         payload,
 	}
 	return h.uiHost.Bridge().Handle(r.Context(), msg)
@@ -1408,6 +1734,7 @@ type bridgeSessionResponse struct {
 	GrantedPerms    []string  `json:"grantedPerms"`
 	CreatedAt       time.Time `json:"createdAt"`
 	ExpiresAt       time.Time `json:"expiresAt"`
+	Token           string    `json:"token"`
 }
 
 func contributionActionIDs(def *ui_contribution.UIContributionDefinition) []string {
@@ -1455,4 +1782,17 @@ func splitPath(path string) []string {
 		return []string{}
 	}
 	return strings.Split(trimmed, "/")
+}
+
+func splitEscapedPath(path string) []string {
+	segs := splitPath(path)
+	out := make([]string, len(segs))
+	for i, seg := range segs {
+		if decoded, err := url.PathUnescape(seg); err == nil {
+			out[i] = decoded
+		} else {
+			out[i] = seg
+		}
+	}
+	return out
 }

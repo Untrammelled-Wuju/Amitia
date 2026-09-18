@@ -58,7 +58,7 @@ func (r *CapabilityTaskPlacementResolver) ResolveTaskPlacement(
 	target := TaskExecutionTarget{
 		ProviderID:         capability.ProviderID(result.ExecutionTarget.ProviderID),
 		ProviderInstanceID: capability.ProviderInstanceID(result.ExecutionTarget.ProviderInstanceID),
-		UserID:             result.ExecutionTarget.UserID,
+		SpaceID:            result.ExecutionTarget.SpaceID,
 		DeviceID:           result.ExecutionTarget.DeviceID,
 		RuntimeID:          result.ExecutionTarget.RuntimeID,
 		RuntimeSessionID:   result.ExecutionTarget.RuntimeSessionID,

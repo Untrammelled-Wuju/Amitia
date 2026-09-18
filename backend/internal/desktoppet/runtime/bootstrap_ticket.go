@@ -17,7 +17,7 @@ import (
 type BootstrapTicket struct {
 	ID                string `gorm:"column:id;primaryKey" json:"id"`
 	TicketHash        string `gorm:"column:ticket_hash;uniqueIndex" json:"-"`
-	UserID            string `gorm:"column:user_id;index:idx_bt_user" json:"userId"`
+	SpaceID           string `gorm:"column:space_id;index:idx_bt_user" json:"spaceId"`
 	DeviceID          string `gorm:"column:device_id;index:idx_bt_device" json:"deviceId"`
 	RuntimeID         string `gorm:"column:runtime_id;index:idx_bt_runtime" json:"runtimeId"`
 	Status            string `gorm:"column:status;index:idx_bt_status" json:"status"`
@@ -78,7 +78,7 @@ func hashTicket(ticket string) string {
 	return hex.EncodeToString(h[:])
 }
 
-func (r *BootstrapTicketRepository) Create(ctx context.Context, userID, deviceID, runtimeID string, ttl time.Duration) (rawTicket string, ticket *BootstrapTicket, err error) {
+func (r *BootstrapTicketRepository) Create(ctx context.Context, spaceID, deviceID, runtimeID string, ttl time.Duration) (rawTicket string, ticket *BootstrapTicket, err error) {
 	rawTicket, err = generateRawTicket()
 	if err != nil {
 		return "", nil, err
@@ -91,7 +91,7 @@ func (r *BootstrapTicketRepository) Create(ctx context.Context, userID, deviceID
 	ticket = &BootstrapTicket{
 		ID:         ticketID,
 		TicketHash: hashTicket(rawTicket),
-		UserID:     userID,
+		SpaceID:    spaceID,
 		DeviceID:   deviceID,
 		RuntimeID:  runtimeID,
 		Status:     BootstrapTicketStatusActive,
@@ -359,11 +359,11 @@ func (r *BootstrapTicketRepository) GetByID(ctx context.Context, ticketID string
 	return &ticket, nil
 }
 
-func (r *BootstrapTicketRepository) RevokeUserTickets(ctx context.Context, userID string) (int64, error) {
+func (r *BootstrapTicketRepository) RevokeSpaceTickets(ctx context.Context, spaceID string) (int64, error) {
 	now := time.Now().UTC().Format(time.RFC3339)
 	result := r.db.WithContext(ctx).
 		Model(&BootstrapTicket{}).
-		Where("user_id = ? AND status = ?", userID, BootstrapTicketStatusActive).
+		Where("space_id = ? AND status = ?", spaceID, BootstrapTicketStatusActive).
 		Updates(map[string]interface{}{
 			"status":     BootstrapTicketStatusRevoked,
 			"reason":     "user-revoked",
@@ -372,14 +372,14 @@ func (r *BootstrapTicketRepository) RevokeUserTickets(ctx context.Context, userI
 	return result.RowsAffected, result.Error
 }
 
-func (r *BootstrapTicketRepository) RevokeDeviceTickets(ctx context.Context, userID, deviceID string) (int64, error) {
-	if userID == "" || deviceID == "" {
+func (r *BootstrapTicketRepository) RevokeDeviceTickets(ctx context.Context, spaceID, deviceID string) (int64, error) {
+	if spaceID == "" || deviceID == "" {
 		return 0, nil
 	}
 	now := time.Now().UTC().Format(time.RFC3339)
 	result := r.db.WithContext(ctx).
 		Model(&BootstrapTicket{}).
-		Where("user_id = ? AND device_id = ? AND status = ?", userID, deviceID, BootstrapTicketStatusActive).
+		Where("space_id = ? AND device_id = ? AND status = ?", spaceID, deviceID, BootstrapTicketStatusActive).
 		Updates(map[string]interface{}{
 			"status":     BootstrapTicketStatusRevoked,
 			"reason":     "device-revoked",
@@ -396,10 +396,10 @@ func (r *BootstrapTicketRepository) CleanupExpired(ctx context.Context, olderTha
 	return result.RowsAffected, result.Error
 }
 
-func (r *BootstrapTicketRepository) GetActiveByDevice(ctx context.Context, userID, deviceID string) (*BootstrapTicket, error) {
+func (r *BootstrapTicketRepository) GetActiveByDevice(ctx context.Context, spaceID, deviceID string) (*BootstrapTicket, error) {
 	var ticket BootstrapTicket
 	if err := r.db.WithContext(ctx).
-		Where("user_id = ? AND device_id = ? AND status = ?", userID, deviceID, BootstrapTicketStatusActive).
+		Where("space_id = ? AND device_id = ? AND status = ?", spaceID, deviceID, BootstrapTicketStatusActive).
 		Order("created_at DESC").
 		Take(&ticket).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {

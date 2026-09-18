@@ -138,7 +138,7 @@ type WorkerRunRequest struct {
 	CharacterID          string `json:"characterId"`
 	ConversationID       string `json:"conversationId"`
 	Source               string `json:"source"`
-	UserID               string `json:"userId"`
+	SpaceID              string `json:"spaceId"`
 	Objective            string `json:"objective"`
 	ExpectedOutcome      string `json:"expectedOutcome"`
 	CoordinationDepth    int    `json:"coordinationDepth"`
@@ -158,31 +158,31 @@ type realClock struct{}
 func (realClock) Now() time.Time { return time.Now().UTC() }
 
 type MultiAgentCoordinator struct {
-	tracker     InteractionTracker
-	goals       *decision.GoalRegistry
-	recovery    *RecoveryDescriptorService
-	starter     AgentWorkerRunner
-	pauseSvc    *PauseResumeService
-	policy      MultiAgentPolicy
-	clock       CoordinatorClock
+	tracker  InteractionTracker
+	goals    *decision.GoalRegistry
+	recovery *RecoveryDescriptorService
+	starter  AgentWorkerRunner
+	pauseSvc *PauseResumeService
+	policy   MultiAgentPolicy
+	clock    CoordinatorClock
 
 	mu            sync.Mutex
 	coordinations map[string]*activeCoordination
 }
 
 type activeCoordination struct {
-	id              CoordinationID
-	parentGoalID    string
-	parentGoalRev   int64
+	id                  CoordinationID
+	parentGoalID        string
+	parentGoalRev       int64
 	parentInteractionID string
-	status          CoordinationStatus
-	strategy        CoordinationStrategy
-	completionPlan  CoordinationCompletionPolicy
-	depth           int
-	assignments     []*AgentAssignment
-	deadlineAt      *time.Time
-	createdAt       time.Time
-	updatedAt       time.Time
+	status              CoordinationStatus
+	strategy            CoordinationStrategy
+	completionPlan      CoordinationCompletionPolicy
+	depth               int
+	assignments         []*AgentAssignment
+	deadlineAt          *time.Time
+	createdAt           time.Time
+	updatedAt           time.Time
 }
 
 func NewMultiAgentCoordinator(
@@ -221,11 +221,11 @@ type StartCoordinationRequest struct {
 }
 
 type AssignmentObjective struct {
-	WorkerIndex    int
-	Objective      string
+	WorkerIndex     int
+	Objective       string
 	ExpectedOutcome string
-	Dependencies   []string
-	Constraints    []string
+	Dependencies    []string
+	Constraints     []string
 }
 
 type StartCoordinationResult struct {
@@ -280,8 +280,8 @@ func (c *MultiAgentCoordinator) Start(ctx context.Context, req StartCoordination
 
 	multiRef := &MultiAgentRecoveryRef{
 		CoordinationID:     string(coordID),
-		ParentGoalID:        req.ParentGoalID,
-		ParentGoalRevision:  req.ParentGoalRevision,
+		ParentGoalID:       req.ParentGoalID,
+		ParentGoalRevision: req.ParentGoalRevision,
 		Status:             string(CoordinationPlanning),
 		AssignmentRefs:     make([]AssignmentRecoveryRef, 0, len(req.Objectives)),
 	}
@@ -618,18 +618,18 @@ func (c *MultiAgentCoordinator) aggregate(ctx context.Context, ac *activeCoordin
 	aggObsID := BuildAggregateObservationID(string(ac.id), ac.parentGoalRev)
 
 	aggObs := &decision.Observation{
-		Version:        decision.ObservationVersionV1,
-		ID:             aggObsID,
-		InteractionID:  ac.parentInteractionID,
-		GoalIDs:        []string{ac.parentGoalID},
+		Version:       decision.ObservationVersionV1,
+		ID:            aggObsID,
+		InteractionID: ac.parentInteractionID,
+		GoalIDs:       []string{ac.parentGoalID},
 		GoalRefs: []decision.GoalRef{
 			{ID: ac.parentGoalID, Revision: ac.parentGoalRev},
 		},
-		Kind:           decision.ObservationKindCoordinationResult,
-		TargetKind:     decision.ObservationTargetCoordination,
-		Outcome:        c.deriveCoordinationOutcome(ac),
-		TaskRunID:      string(ac.id),
-		ObservedAt:     now,
+		Kind:       decision.ObservationKindCoordinationResult,
+		TargetKind: decision.ObservationTargetCoordination,
+		Outcome:    c.deriveCoordinationOutcome(ac),
+		TaskRunID:  string(ac.id),
+		ObservedAt: now,
 	}
 
 	_ = aggObs
@@ -646,12 +646,12 @@ func (c *MultiAgentCoordinator) aggregate(ctx context.Context, ac *activeCoordin
 
 	if ac.parentInteractionID != "" {
 		meta := map[string]any{
-			"multi_agent_coordination_id":    string(ac.id),
-			"multi_agent_status":             string(ac.status),
-			"multi_agent_succeeded_workers":  succeeded,
-			"multi_agent_failed_workers":     failed,
-			"multi_agent_cancelled_workers":  cancelled,
-			"multi_agent_aggregate_obs_id":   aggObsID,
+			"multi_agent_coordination_id":   string(ac.id),
+			"multi_agent_status":            string(ac.status),
+			"multi_agent_succeeded_workers": succeeded,
+			"multi_agent_failed_workers":    failed,
+			"multi_agent_cancelled_workers": cancelled,
+			"multi_agent_aggregate_obs_id":  aggObsID,
 		}
 		_ = meta
 	}
@@ -891,9 +891,9 @@ func (c *MultiAgentCoordinator) DetectConflicts(ac *activeCoordination) []Coordi
 					if !seen[key] {
 						seen[key] = true
 						conflicts = append(conflicts, CoordinationConflict{
-							Kind:          ConflictStaleResult,
-							AssignmentID:  a.ID,
-							Detail:        fmt.Sprintf("goal revision changed from %d to %d", a.ParentGoalRevision, current.Revision),
+							Kind:         ConflictStaleResult,
+							AssignmentID: a.ID,
+							Detail:       fmt.Sprintf("goal revision changed from %d to %d", a.ParentGoalRevision, current.Revision),
 						})
 					}
 				}
@@ -955,10 +955,10 @@ type CoordinationConflict struct {
 type CoordinationConflictKind string
 
 const (
-	ConflictStaleResult        CoordinationConflictKind = "stale_result"
-	ConflictGoalRevision       CoordinationConflictKind = "goal_revision"
+	ConflictStaleResult         CoordinationConflictKind = "stale_result"
+	ConflictGoalRevision        CoordinationConflictKind = "goal_revision"
 	ConflictDuplicateAssignment CoordinationConflictKind = "duplicate_assignment"
-	ConflictResource           CoordinationConflictKind = "resource"
+	ConflictResource            CoordinationConflictKind = "resource"
 	ConflictResultContradiction CoordinationConflictKind = "result_contradiction"
 )
 
@@ -1020,7 +1020,7 @@ func (r *unifiedEntryWorkerRunner) StartWorker(ctx context.Context, req WorkerRu
 	res, err := r.entry.Handle(ctx, &UnifiedEntryRequest{
 		Channel:        "web",
 		Message:        req.Objective,
-		UserID:         req.UserID,
+		SpaceID:        req.SpaceID,
 		CharacterID:    req.CharacterID,
 		ConversationID: req.ConversationID,
 		Source:         req.Source,

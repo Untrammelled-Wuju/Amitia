@@ -1,10 +1,8 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from "vue";
-import { useAppStore } from "@/stores/app";
 import { useRouter } from "vue-router";
+import { useAppStore } from "@/stores/app";
 import { ElMessageBox } from "element-plus";
-import { apiClient } from "@/composables/useApi";
-import { forceCleanupSession } from "@/stores/refresh-coordinator";
 
 const props = defineProps<{ transparent?: boolean }>();
 const appStore = useAppStore();
@@ -37,85 +35,54 @@ function toggleEditMenu() {
   editMenuOpen.value = !editMenuOpen.value;
 }
 
+type EditCommand = "undo" | "redo" | "cut" | "copy" | "paste" | "selectAll" | "delete";
+
+async function runEditCommand(command: EditCommand) {
+  if (window.electronWindowApi?.editCommand) {
+    await window.electronWindowApi.editCommand(command);
+    return;
+  }
+  document.execCommand(command);
+}
+
 function handleUndo() {
-  document.dispatchEvent(new CustomEvent('global-undo'));
+  void runEditCommand("undo");
   editMenuOpen.value = false;
 }
 
 function handleRedo() {
-  document.dispatchEvent(new CustomEvent('global-redo'));
+  void runEditCommand("redo");
   editMenuOpen.value = false;
 }
 
 function handleCut() {
-  document.execCommand('cut');
+  void runEditCommand("cut");
   editMenuOpen.value = false;
 }
 
 function handleCopy() {
-  document.execCommand('copy');
+  void runEditCommand("copy");
   editMenuOpen.value = false;
 }
 
 function handlePaste() {
-  document.execCommand('paste');
+  void runEditCommand("paste");
   editMenuOpen.value = false;
 }
 
 function handleDelete() {
-  const activeEl = document.activeElement as HTMLInputElement | HTMLTextAreaElement | null;
-  if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA')) {
-    const start = activeEl.selectionStart ?? 0;
-    const end = activeEl.selectionEnd ?? 0;
-    if (start !== end) {
-      activeEl.setRangeText('', start, end, 'select');
-    } else if (start > 0) {
-      activeEl.setRangeText('', start - 1, start, 'select');
-    }
-  } else {
-    document.execCommand('delete');
-  }
+  void runEditCommand("delete");
   editMenuOpen.value = false;
 }
 
 function handleSelectAll() {
-  const activeEl = document.activeElement as HTMLInputElement | HTMLTextAreaElement | null;
-  if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA')) {
-    activeEl.select();
-  } else {
-    document.execCommand('selectAll');
-  }
+  void runEditCommand("selectAll");
   editMenuOpen.value = false;
 }
 
 function handleSettings() {
   router.push('/settings');
   editMenuOpen.value = false;
-}
-
-function handleGlobalShortcut(event: KeyboardEvent) {
-  const ctrl = event.ctrlKey || event.metaKey;
-  if (!ctrl) return;
-  const key = event.key.toLowerCase();
-  if (key === 'z' && !event.shiftKey) {
-    event.preventDefault();
-    handleUndo();
-  } else if ((key === 'z' && event.shiftKey) || key === 'y') {
-    event.preventDefault();
-    handleRedo();
-  } else if (key === 'x') {
-    event.preventDefault();
-    handleCut();
-  } else if (key === 'c') {
-    event.preventDefault();
-    handleCopy();
-  } else if (key === 'v') {
-    event.preventDefault();
-    handlePaste();
-  } else if (key === 'a') {
-    event.preventDefault();
-    handleSelectAll();
-  }
 }
 
 function toggleFileMenu() {
@@ -200,25 +167,6 @@ async function handleFileClose() {
   await window.electronWindowApi!.close("main");
 }
 
-async function handleLogout() {
-  fileMenuOpen.value = false;
-  try {
-    await ElMessageBox.confirm("退出后需要重新登录，确定继续吗？", "注销", {
-      confirmButtonText: "注销",
-      cancelButtonText: "取消",
-      type: "warning",
-      confirmButtonClass: "el-button--danger",
-    });
-  } catch {
-    return;
-  }
-  try {
-    await apiClient.post("/api/auth/logout");
-  } catch {}
-  forceCleanupSession();
-  await router.replace("/login");
-}
-
 async function handleExit() {
   fileMenuOpen.value = false;
   try {
@@ -268,7 +216,6 @@ onMounted(async () => {
   documentObserver.observe(document.body, { childList: true, subtree: true });
   isMaximized.value = await window.electronWindowApi!.isMaximized();
   document.addEventListener('click', handleClickOutside);
-  document.addEventListener('keydown', handleGlobalShortcut);
   document.addEventListener('fullscreenchange', handleFullscreenChange);
   try {
     appVersion.value = await window.amitiaDesktop?.getVersion() ?? '';
@@ -291,7 +238,6 @@ onUnmounted(() => {
   documentObserver?.disconnect();
   documentObserver = null;
   document.removeEventListener('click', handleClickOutside);
-  document.removeEventListener('keydown', handleGlobalShortcut);
   document.removeEventListener('fullscreenchange', handleFullscreenChange);
 });
 
@@ -386,14 +332,6 @@ async function handleClose() {
           文件
         </button>
         <div v-if="fileMenuOpen" class="file-menu-card">
-          <button type="button" class="edit-menu-item" @click="handleLogout">
-            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M15 4H18C19.1046 4 20 4.89543 20 6V18C20 19.1046 19.1046 20 18 20H15" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round"/>
-              <path d="M11 16L15 12L11 8" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round"/>
-              <path d="M15 12H4" stroke="currentColor" stroke-width="1.35" stroke-linecap="round"/>
-            </svg>
-            <span class="menu-item-label">注销</span>
-          </button>
           <button type="button" class="edit-menu-item" @click="handleFileClose">
             <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path d="M7 7L17 17" stroke="currentColor" stroke-width="1.35" stroke-linecap="round"/>

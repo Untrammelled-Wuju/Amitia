@@ -5,8 +5,13 @@ class PrivacyService {
 
   PrivacyService(this._api);
 
-  Future<Map<String, dynamic>> scan() async {
-    final result = await _api.post<Map<String, dynamic>>('/api/privacy/scan');
+  Future<Map<String, dynamic>> scan({
+    List<String> scope = const ['messages', 'memories', 'import_items'],
+  }) async {
+    final result = await _api.post<Map<String, dynamic>>(
+      '/api/privacy/scan',
+      data: {'scope': scope},
+    );
     return result ?? const {};
   }
 
@@ -15,10 +20,25 @@ class PrivacyService {
     return result ?? const {};
   }
 
-  Future<Map<String, dynamic>> mask(List<int> ids) async {
+  Future<Map<String, dynamic>> scanResult(String id) async {
+    final result = await _api.get<Map<String, dynamic>>(
+      '/api/privacy/scan-results/${Uri.encodeComponent(id)}',
+    );
+    final nested = result?['result'];
+    return nested is Map ? Map<String, dynamic>.from(nested) : const {};
+  }
+
+  Future<Map<String, dynamic>> mask(List<Map<String, dynamic>> findings) async {
+    final items = findings
+        .map((finding) => {
+              'id': (finding['id'] ?? finding['recordId'] ?? finding['messageId'] ?? '').toString(),
+              'sourceTable': (finding['source_table'] ?? finding['sourceTable'] ?? 'messages').toString(),
+            })
+        .where((item) => (item['id'] ?? '').toString().isNotEmpty)
+        .toList(growable: false);
     final result = await _api.post<Map<String, dynamic>>(
       '/api/privacy/mask',
-      data: {'ids': ids, 'confirmToken': '确认脱敏'},
+      data: {'items': items, 'confirmToken': '确认脱敏'},
     );
     return result ?? const {};
   }

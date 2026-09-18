@@ -45,7 +45,7 @@ type OutputLease struct {
 	ID            string     `json:"id"`
 	InteractionID string     `json:"interactionId"`
 	CharacterID   string     `json:"characterId"`
-	UserID        string     `json:"userId"`
+	SpaceID       string     `json:"spaceId"`
 	Channel       string     `json:"channel"`
 	OwnerToken    string     `json:"ownerToken"`
 	Generation    int        `json:"generation"`
@@ -97,12 +97,12 @@ func NewDeliveryIntent(interactionID, channel, peerID, contentType string, paylo
 	}
 }
 
-func NewOutputLease(interactionID, characterID, userID, channel string) OutputLease {
+func NewOutputLease(interactionID, characterID, spaceID, channel string) OutputLease {
 	return OutputLease{
 		ID:            uuid.New().String(),
 		InteractionID: interactionID,
 		CharacterID:   characterID,
-		UserID:        userID,
+		SpaceID:       spaceID,
 		Channel:       channel,
 		OwnerToken:    uuid.New().String(),
 		Generation:    1,

@@ -46,9 +46,8 @@ func setupWorkerTestDB(t *testing.T) *gorm.DB {
 	if err := migration.ApplyBaseline(db); err != nil {
 		t.Fatalf("apply baseline: %v", err)
 	}
-	runner := migration.Runner{DB: db, SkipBackup: true}
-	if err := runner.Apply(migration.DefaultMigrations()); err != nil {
-		t.Fatalf("apply migrations: %v", err)
+	if err := migration.MarkAllMigrationsApplied(db, migration.DefaultMigrations()); err != nil {
+		t.Fatalf("mark migrations applied: %v", err)
 	}
 	return db
 }
@@ -118,7 +117,6 @@ func newQueuedTask(db *gorm.DB, taskID, modelKey string, outputW, outputH int) *
 	now := time.Now().Format("2006-01-02 15:04:05")
 	task := &desktoppet.GenerationTask{
 		ID:            taskID,
-		CharacterID:   "char-w",
 		ModelConfigID: 1,
 		Name:          "worker-task",
 		Status:        "queued",
@@ -137,7 +135,6 @@ func insertTask(t *testing.T, db *gorm.DB, taskID string, modelConfigID int, sou
 	now := time.Now().Format("2006-01-02 15:04:05")
 	task := &desktoppet.GenerationTask{
 		ID:              taskID,
-		CharacterID:     "char-w",
 		ModelConfigID:   modelConfigID,
 		Name:            "task-" + taskID,
 		SourceImagePath: sourceRel,
@@ -979,7 +976,6 @@ func TestIsTransientError_Codes(t *testing.T) {
 	transient := []string{
 		desktoppet.ErrCodeImageGenerationTimeout,
 		desktoppet.ErrCodeImageGenerationRateLimited,
-		desktoppet.ErrCodeImageGenerationProviderRejected,
 		desktoppet.ErrCodeImageResultDownloadFailed,
 	}
 	for _, code := range transient {
@@ -990,6 +986,7 @@ func TestIsTransientError_Codes(t *testing.T) {
 	nonTransient := []string{
 		desktoppet.ErrCodeImageGenerationAuthFailed,
 		desktoppet.ErrCodeImageGenerationRequestInvalid,
+		desktoppet.ErrCodeImageGenerationProviderRejected,
 		desktoppet.ErrCodeImageModelCapabilityUnsupported,
 		desktoppet.ErrCodeImageModelCredentialMissing,
 		"",
@@ -1006,6 +1003,7 @@ func TestIsNonRetriableError_Codes(t *testing.T) {
 	nonRetriable := []string{
 		desktoppet.ErrCodeImageGenerationAuthFailed,
 		desktoppet.ErrCodeImageGenerationRequestInvalid,
+		desktoppet.ErrCodeImageGenerationProviderRejected,
 		desktoppet.ErrCodeImageModelCapabilityUnsupported,
 		desktoppet.ErrCodeImageModelCredentialMissing,
 	}
@@ -1017,7 +1015,6 @@ func TestIsNonRetriableError_Codes(t *testing.T) {
 	retriable := []string{
 		desktoppet.ErrCodeImageGenerationTimeout,
 		desktoppet.ErrCodeImageGenerationRateLimited,
-		desktoppet.ErrCodeImageGenerationProviderRejected,
 		"",
 	}
 	for _, code := range retriable {
@@ -1201,7 +1198,10 @@ func TestRunActions_ActionIsolationOneFailureDoesNotBlockOthers(t *testing.T) {
 	action2 := insertAction(t, db, taskID, "idle_normal", "act-2", 2)
 
 	w := NewWorker(db, repo, registry)
-	results := w.runActions(context.Background(), task)
+	results, runErr := w.runActions(context.Background(), task)
+	if runErr != nil {
+		t.Fatalf("runActions returned error: %v", runErr)
+	}
 	if len(results) != 2 {
 		t.Fatalf("results count = %d, want 2", len(results))
 	}
@@ -1253,7 +1253,10 @@ func TestRunActions_SkipsAlreadyCompletedActions(t *testing.T) {
 	pendingSpec, _ := specs.GetSpec("idle_normal")
 
 	w := NewWorker(db, repo, registry)
-	results := w.runActions(context.Background(), task)
+	results, runErr := w.runActions(context.Background(), task)
+	if runErr != nil {
+		t.Fatalf("runActions returned error: %v", runErr)
+	}
 	if len(results) != 2 {
 		t.Fatalf("results count = %d, want 2", len(results))
 	}
@@ -1287,7 +1290,10 @@ func TestRunActions_CancelledTaskSkipsPendingActions(t *testing.T) {
 	insertAction(t, db, taskID, "idle_blink", "act-1", 1)
 
 	w := NewWorker(db, repo, registry)
-	results := w.runActions(context.Background(), task)
+	results, runErr := w.runActions(context.Background(), task)
+	if runErr != nil {
+		t.Fatalf("runActions returned error: %v", runErr)
+	}
 	if len(results) != 1 {
 		t.Fatalf("results count = %d, want 1", len(results))
 	}

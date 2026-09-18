@@ -164,8 +164,11 @@ func TestKernelEventAdapter_MergedMetadata(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if string(capturedOpts["extra"]) != `"added"` {
-		t.Error("expected extra merged from metadata")
+	if _, exists := capturedOpts["extra"]; exists {
+		t.Error("plugin metadata must not override trusted event options")
+	}
+	if string(capturedOpts["pluginMetadata"]) != `{"extra":"added"}` {
+		t.Error("expected plugin metadata to be namespaced")
 	}
 	if string(capturedOpts["producerId"]) != `"p"` {
 		t.Error("expected producerId present")

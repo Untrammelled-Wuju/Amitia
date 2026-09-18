@@ -14,8 +14,10 @@ class AppRadius {
 
   static BorderRadius get brSmall => BorderRadius.all(Radius.circular(small));
   static BorderRadius get brMedium => BorderRadius.all(Radius.circular(medium));
+  static BorderRadius get brCard => brMedium;
   static BorderRadius get brLarge => BorderRadius.all(Radius.circular(large));
   static BorderRadius get brTag => BorderRadius.all(Radius.circular(tag));
   static BorderRadius get brPill => BorderRadius.all(Radius.circular(pill));
-  static BorderRadius get brExtraSmall => BorderRadius.all(Radius.circular(extraSmall));
+  static BorderRadius get brExtraSmall =>
+      BorderRadius.all(Radius.circular(extraSmall));
 }

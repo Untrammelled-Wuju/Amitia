@@ -20,6 +20,9 @@
         <el-button size="small" @click="rebuildIndex" :loading="rebuilding">
           {{ rebuilding ? "重建中..." : "重建索引" }}
         </el-button>
+        <el-button size="small" @click="rebuildEmbeddings" :loading="rebuilding">
+          重建向量嵌入
+        </el-button>
         <el-button
           size="small"
           @click="searchDialogVisible = true"
@@ -93,7 +96,7 @@ async function loadVectorStatus() {
 async function rebuildIndex() {
   rebuilding.value = true;
   try {
-    const result = await post<any>("/api/memories/rebuild-embeddings", {});
+    const result = await post<any>("/api/memories/rebuild-index", {});
     ElMessage.success(
       "索引重建完成：" +
         (result.embedded ?? result.totalEmbedded ?? 0) +
@@ -102,6 +105,23 @@ async function rebuildIndex() {
     await loadVectorStatus();
   } catch (err: any) {
     ElMessage.error(err?.message || "Rebuild failed");
+  } finally {
+    rebuilding.value = false;
+  }
+}
+
+async function rebuildEmbeddings() {
+  rebuilding.value = true;
+  try {
+    const result = await post<any>("/api/memories/rebuild-embeddings", {});
+    ElMessage.success(
+      "向量嵌入重建完成：" +
+        (result.embedded ?? result.totalEmbedded ?? result.total ?? 0) +
+        " 条记忆已处理",
+    );
+    await loadVectorStatus();
+  } catch (err: any) {
+    ElMessage.error(err?.message || "Rebuild embeddings failed");
   } finally {
     rebuilding.value = false;
   }

@@ -39,8 +39,7 @@ type NormalizeInput struct {
 	SourcePath               string
 	OutputPath               string
 	Config                   NormalizeConfig
-	UserID                   string
-	CharacterID              string
+	SpaceID                  string
 	TaskID                   string
 	NormalizerProfileID      string
 	NormalizerProfileVersion string
@@ -117,8 +116,7 @@ func Normalize(input NormalizeInput) (*ReferenceAsset, error) {
 	asset := &ReferenceAsset{
 		ID:                       uuid.New().String(),
 		TaskID:                   input.TaskID,
-		UserID:                   input.UserID,
-		CharacterID:              input.CharacterID,
+		SpaceID:                  input.SpaceID,
 		SourcePath:               input.SourcePath,
 		SourceHash:               sourceHashStr,
 		SourceMIME:               sourceMIME,

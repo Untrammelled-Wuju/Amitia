@@ -34,13 +34,13 @@ func insertRecoveryTestOperation(t *testing.T, db *sql.DB, op PackageOperationRe
 	t.Helper()
 	_, err := db.ExecContext(context.Background(), `
 		INSERT INTO extension_package_operations (
-			operation_id, trace_id, user_id, scope_type, scope_id, extension_id, target_version,
+			operation_id, trace_id, space_id, scope_type, scope_id, extension_id, target_version,
 			operation_type, status, current_step, artifact_id, preview_session_id,
 			confirmations_json, confirmation_claims_json, error_code, error_detail,
 			started_at, updated_at, completed_at, stable_generation, target_generation,
 			current_pointer_json, snapshot_requirement_hash, recovery_required
 		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		op.OperationID, op.TraceID, op.UserID, op.ScopeType, op.ScopeID, op.ExtensionID, op.TargetVersion,
+		op.OperationID, op.TraceID, op.SpaceID, op.ScopeType, op.ScopeID, op.ExtensionID, op.TargetVersion,
 		op.OperationType, op.Status, op.CurrentStep, op.ArtifactID, op.PreviewSessionID,
 		op.ConfirmationsJSON, op.ConfirmationClaimsJSON, op.ErrorCode, op.ErrorDetail,
 		op.StartedAt, op.UpdatedAt, op.CompletedAt, op.StableGeneration, op.TargetGeneration,
@@ -62,7 +62,7 @@ func TestRecoverPackageOperationsScansIncompleteWithClaimsAndHash(t *testing.T) 
 	op := PackageOperationRecord{
 		OperationID:             "op-recover-scan-1",
 		TraceID:                 "trace-scan-1",
-		UserID:                  "user-recover-scanner",
+		SpaceID:                 "user-recover-scanner",
 		ScopeType:               "global",
 		ScopeID:                 "",
 		ExtensionID:             "ext-recovery-scan",
@@ -127,7 +127,7 @@ func TestRecoveryScannerDiscardsCompleted(t *testing.T) {
 	incompleteOp := PackageOperationRecord{
 		OperationID:             "op-scanner-live",
 		TraceID:                 "trace-live",
-		UserID:                  "user-scanner-filter",
+		SpaceID:                 "user-scanner-filter",
 		ScopeType:               "global",
 		ScopeID:                 "",
 		ExtensionID:             "ext-scanner-live",
@@ -148,7 +148,7 @@ func TestRecoveryScannerDiscardsCompleted(t *testing.T) {
 	completedOp := PackageOperationRecord{
 		OperationID:             "op-scanner-completed",
 		TraceID:                 "trace-completed",
-		UserID:                  "user-scanner-filter",
+		SpaceID:                 "user-scanner-filter",
 		ScopeType:               "global",
 		ScopeID:                 "",
 		ExtensionID:             "ext-scanner-completed",
@@ -208,7 +208,7 @@ func TestRecoveryScannerReadsAllOperationTypes(t *testing.T) {
 		op := PackageOperationRecord{
 			OperationID:             "op-type-" + tc.opType,
 			TraceID:                 "trace-type-" + tc.opType,
-			UserID:                  "user-type-test",
+			SpaceID:                 "user-type-test",
 			ScopeType:               "global",
 			ScopeID:                 "",
 			ExtensionID:             tc.extID,

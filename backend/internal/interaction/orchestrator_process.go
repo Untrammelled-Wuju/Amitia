@@ -31,7 +31,7 @@ func (o *Orchestrator) Process(ctx context.Context, req *ProcessRequest) (*Orche
 	if err := scope.Validate(); err != nil {
 		return nil, err
 	}
-	if existing, ok, err := o.tracker.GetByRequestID(ctx, scope.UserID, scope.RequestID); err != nil {
+	if existing, ok, err := o.tracker.GetByRequestID(ctx, scope.SpaceID, scope.RequestID); err != nil {
 		return nil, err
 	} else if ok {
 		return o.handleIdempotentHit(existing)
@@ -39,7 +39,7 @@ func (o *Orchestrator) Process(ctx context.Context, req *ProcessRequest) (*Orche
 	record := NewInteractionRecord(scope)
 	if err := o.tracker.Create(ctx, record); err != nil {
 		if errors.Is(err, ErrDuplicateRequest) {
-			if existing, ok, getErr := o.tracker.GetByRequestID(ctx, scope.UserID, scope.RequestID); getErr != nil {
+			if existing, ok, getErr := o.tracker.GetByRequestID(ctx, scope.SpaceID, scope.RequestID); getErr != nil {
 				return nil, getErr
 			} else if ok {
 				return o.handleIdempotentHit(existing)

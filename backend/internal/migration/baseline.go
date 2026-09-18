@@ -12,7 +12,10 @@ import (
 var baselineSQL string
 
 func ApplyBaseline(db *gorm.DB) error {
-	return ApplyInitialSQL(db, baselineSQL)
+	if err := ApplyInitialSQL(db, baselineSQL); err != nil {
+		return err
+	}
+	return applyDesktopPetCatalogBaseline(db)
 }
 
 func MarkAllMigrationsApplied(db *gorm.DB, migrations []Migration) error {
@@ -47,4 +50,17 @@ func IsNewDatabase(db *gorm.DB) (bool, error) {
 		return false, err
 	}
 	return count == 0, nil
+}
+
+func HasCoreSchema(db *gorm.DB) (bool, error) {
+	for _, table := range []string{"characters", "conversations", "messages"} {
+		var count int64
+		if err := db.Raw("SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?", table).Scan(&count).Error; err != nil {
+			return false, err
+		}
+		if count > 0 {
+			return true, nil
+		}
+	}
+	return false, nil
 }

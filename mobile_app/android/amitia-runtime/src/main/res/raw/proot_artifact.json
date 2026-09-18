@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "componentId": "runtime.proot",
+  "name": "proot",
+  "version": "5.3.0-amitia.2",
+  "abi": "arm64-v8a",
+  "architecture": "aarch64",
+  "fileName": "libamitia_proot.so",
+  "sha256": "fa10b1a7818c2f5b1dcb5834450570c368c9ecf66d31521509621b95c4538a45",
+  "license": "GPL-2.0-or-later",
+  "source": {
+    "upstreamTag": "v5.3.0",
+    "upstreamCommit": "official-static-release",
+    "androidPatchSource": "proot-me",
+    "androidPatchCommit": "official-static-aarch64-fa10b1a7"
+  }
+}

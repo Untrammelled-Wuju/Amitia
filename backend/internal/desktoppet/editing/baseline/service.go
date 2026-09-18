@@ -20,9 +20,9 @@ type ProcessingRevisionReader interface {
 
 type BaselineRevisionService interface {
 	CreateFromProcessingRevision(ctx context.Context, req CreateBaselineRevisionRequest) (*editing.ActionRevision, error)
-	GetRevision(ctx context.Context, userID, revisionID string) (*editing.ActionRevision, error)
+	GetRevision(ctx context.Context, spaceID, revisionID string) (*editing.ActionRevision, error)
 	UpdateQualitySnapshot(ctx context.Context, revisionID, evaluationID, verdict string, score *float64) error
-	ArchiveRevision(ctx context.Context, userID, revisionID, reason string) error
+	ArchiveRevision(ctx context.Context, spaceID, revisionID, reason string) error
 }
 
 type service struct {
@@ -95,8 +95,7 @@ func (s *service) CreateFromProcessingRevision(ctx context.Context, req CreateBa
 
 	rev := &editing.ActionRevision{
 		ID:                         revisionID,
-		UserID:                     req.UserID,
-		CharacterID:                req.CharacterID,
+		SpaceID:                    req.SpaceID,
 		ProcessingTaskID:           req.ProcessingTaskID,
 		ProcessingActionID:         req.ProcessingActionID,
 		ActionKey:                  req.ActionKey,
@@ -107,7 +106,7 @@ func (s *service) CreateFromProcessingRevision(ctx context.Context, req CreateBa
 		FrameCount:                 frameCount,
 		DefaultFPS:                 req.FPS,
 		LoopType:                   req.LoopType,
-		CreatedByUserID:            req.CreatedBy,
+		CreatedBySpaceID:           req.CreatedBy,
 		CreatedAt:                  now,
 		UpdatedAt:                  now,
 		SourceType:                 SourceTypeProcessingBaseline,
@@ -140,16 +139,16 @@ func (s *service) CreateFromProcessingRevision(ctx context.Context, req CreateBa
 	return rev, nil
 }
 
-func (s *service) GetRevision(ctx context.Context, userID, revisionID string) (*editing.ActionRevision, error) {
-	return s.repo.GetActionRevisionForUser(userID, revisionID)
+func (s *service) GetRevision(ctx context.Context, spaceID, revisionID string) (*editing.ActionRevision, error) {
+	return s.repo.GetActionRevisionForSpace(spaceID, revisionID)
 }
 
 func (s *service) UpdateQualitySnapshot(ctx context.Context, revisionID, evaluationID, verdict string, score *float64) error {
 	return s.repo.UpdateActionRevisionQuality(revisionID, evaluationID, verdict)
 }
 
-func (s *service) ArchiveRevision(ctx context.Context, userID, revisionID, reason string) error {
-	_, err := s.repo.GetActionRevisionForUser(userID, revisionID)
+func (s *service) ArchiveRevision(ctx context.Context, spaceID, revisionID, reason string) error {
+	_, err := s.repo.GetActionRevisionForSpace(spaceID, revisionID)
 	if err != nil {
 		return err
 	}

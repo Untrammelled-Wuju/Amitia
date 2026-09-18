@@ -4,9 +4,9 @@ package migration
 
 // DesktopPetDesiredStateSchemaForwardFixMigration aligns the persisted
 // desktop_pet_runtime_desired_states table with the canonical RuntimeDesiredState
-// model used by the installation coordinator and Runtime V2 reconciliation.
+// model used by the installation coordinator and Runtime V1 reconciliation.
 //
-// The original coordinator schema was installation-scoped. Runtime V2 is
+// The original coordinator schema was installation-scoped. Runtime V1 is
 // device-scoped, so existing rows are collapsed to one authoritative row per
 // (user_id, device_id), preferring the active binding and then the newest
 // revision. Legacy columns are intentionally retained for downgrade/read
@@ -95,7 +95,7 @@ WHERE EXISTS (
       AND d.device_id = desktop_pet_device_desired_revision_counters.device_id
 )`)
 
-			// Runtime V2 has one desired authority per device. Prefer the row pointed
+			// Runtime V1 has one desired authority per device. Prefer the row pointed
 			// to by the active binding; otherwise keep the highest/newest revision.
 			s.Execute(`DELETE FROM desktop_pet_runtime_desired_states
 WHERE rowid IN (

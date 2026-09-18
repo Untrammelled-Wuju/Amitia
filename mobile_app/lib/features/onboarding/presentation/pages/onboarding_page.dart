@@ -9,6 +9,12 @@ import '../../../../app/app_routes.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
+import '../../../../core/widgets/amitia_drawer.dart';
+import '../../../../core/services/providers.dart';
+import '../../../../core/runtime/backend/mobile_backend_providers.dart';
+import '../../../../core/runtime/backend/mobile_deployment_mode.dart';
+import '../../../../core/backend_connection/providers/backend_connection_providers.dart';
+import '../../../../core/backend_transport/providers/backend_transport_providers.dart';
 
 class OnboardingPage extends ConsumerStatefulWidget {
   const OnboardingPage({super.key});
@@ -24,7 +30,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
     '欢迎',
     '运行环境检查',
     '部署模式选择',
-    '管理员初始化',
+    '个人空间与设备',
     '使用边界确认',
     '文本模型配置',
     '视觉模型配置',
@@ -39,38 +45,48 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
     '进入Amitia',
   ];
 
-  final _adminUserController = TextEditingController();
-  final _adminPassController = TextEditingController();
+  final _profileNameController = TextEditingController(text: '我');
+  final _pairingCodeController = TextEditingController();
   final _textProviderCtrl = TextEditingController(text: 'OpenAI');
   final _textModelCtrl = TextEditingController(text: 'GPT-4o');
   final _textKeyCtrl = TextEditingController();
   final _visionProviderCtrl = TextEditingController(text: 'OpenAI');
   final _visionModelCtrl = TextEditingController(text: 'GPT-4o-mini');
   final _visionKeyCtrl = TextEditingController();
-  final _voiceProviderCtrl = TextEditingController(text: 'DeepSeek');
-  final _voiceModelCtrl = TextEditingController(text: 'DeepSeek-Voice');
+  final _voiceProviderCtrl = TextEditingController(text: 'Volcengine');
+  final _voiceModelCtrl = TextEditingController(text: 'seed-tts-2.0');
   final _voiceKeyCtrl = TextEditingController();
   final _vectorProviderCtrl = TextEditingController(text: '火山方舟');
   final _vectorModelCtrl = TextEditingController(text: 'Doubao Embedding');
   final _vectorKeyCtrl = TextEditingController();
+  final _remoteCoreCtrl = TextEditingController();
   final _charNameCtrl = TextEditingController();
   final _charIdentityCtrl = TextEditingController();
   final _initMemoryCtrl = TextEditingController();
 
   int _deployMode = 0;
   bool _envChecked = false;
+  bool _envChecking = false;
   List<bool> _envResults = [];
   final List<bool> _boundaryAgreed = [false, false, false];
   int _selectedAvatarColor = 0;
   final List<bool> _selectedTraits = List.filled(8, false);
+  bool _submitting = false;
+  bool _devicePaired = false;
+  bool _firstDeviceSetupRequired = false;
+  String? _textConfigId;
+  String? _visionConfigId;
+  String? _ttsConfigId;
+  String? _embeddingConfigId;
+  String? _createdCharacterId;
 
   static const _avatarColors = ['#8A5728', '#52B788', '#6C8FEA', '#E9A23B', '#E66767', '#9C91F5'];
   static const _personalityTraits = ['温柔', '理性', '活泼', '冷静', '幽默', '严谨', '热情', '内敛'];
 
   @override
   void dispose() {
-    _adminUserController.dispose();
-    _adminPassController.dispose();
+    _profileNameController.dispose();
+    _pairingCodeController.dispose();
     _textProviderCtrl.dispose();
     _textModelCtrl.dispose();
     _textKeyCtrl.dispose();
@@ -83,39 +99,398 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
     _vectorProviderCtrl.dispose();
     _vectorModelCtrl.dispose();
     _vectorKeyCtrl.dispose();
+    _remoteCoreCtrl.dispose();
     _charNameCtrl.dispose();
     _charIdentityCtrl.dispose();
     _initMemoryCtrl.dispose();
     super.dispose();
   }
 
-  void _next() {
-    if (_currentStep < _steps.length - 1) {
-      setState(() => _currentStep++);
-    } else {
-      context.go(AppRoutes.chat);
+  Future<void> _next() async {
+    if (_submitting) return;
+    setState(() => _submitting = true);
+    try {
+      await _persistCurrentStep();
+      if (!mounted) return;
+      if (_currentStep < _steps.length - 1) {
+        setState(() => _currentStep++);
+      } else {
+        await _completeOnboarding();
+      }
+    } catch (error) {
+      if (!mounted) return;
+      amitiaSnackBar(context, '该步骤未完成：$error');
+    } finally {
+      if (mounted) setState(() => _submitting = false);
     }
   }
 
   void _prev() {
-    if (_currentStep > 0) {
+    if (_currentStep > 0 && !_submitting) {
       setState(() => _currentStep--);
     }
   }
 
-  void _runEnvCheck() {
+  Future<void> _runEnvCheck() async {
+    if (_envChecking) return;
     setState(() {
+      _envChecking = true;
       _envChecked = false;
-      _envResults = List.filled(5, false);
+      _envResults = const [];
     });
-    Future.delayed(const Duration(milliseconds: 600), () {
+    try {
+      final onboarding = ref.read(onboardingServiceProvider);
+      const localRuntimeUri = 'http://127.0.0.1:18899';
+      final results = await Future.wait<dynamic>(<Future<dynamic>>[
+        onboarding.livenessAt(localRuntimeUri),
+        onboarding.readinessAt(localRuntimeUri),
+        onboarding.runtimeCapabilitiesAt(localRuntimeUri),
+      ]);
+      final live = results[0] == true;
+      final ready = results[1] == true;
+      final capabilities = results[2] is Map
+          ? Map<String, dynamic>.from(results[2] as Map)
+          : const <String, dynamic>{};
+      if (!mounted) return;
+      final profile = (capabilities['runtimeProfile'] ?? '').toString();
+      final capabilityMap = capabilities['capabilities'] is Map
+          ? Map<String, dynamic>.from(capabilities['capabilities'] as Map)
+          : const <String, dynamic>{};
+      final profileReady = switch (profile) {
+        'local' => capabilityMap['localUIEndpoints'] == true,
+        'device-agent' =>
+          capabilityMap['localUIEndpoints'] == true &&
+              capabilityMap['deviceExecutionPlane'] == true,
+        _ => false,
+      };
+      final checked = [live, ready, profileReady];
+      setState(() {
+        _envResults = checked;
+        _envChecked = checked.every((value) => value);
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _envResults = [false, false, false];
+        _envChecked = false;
+      });
+    } finally {
+      if (mounted) {
+        setState(() => _envChecking = false);
+      }
+    }
+  }
+
+  Future<void> _applyDeploymentSelection() async {
+    final config = _deployMode == 0
+        ? MobileDeploymentConfig.local
+        : MobileDeploymentConfig(
+            mode: MobileDeploymentMode.cloud,
+            remoteCoreUri: _remoteCoreCtrl.text.trim(),
+          );
+    final validationError = validateDeploymentConfigForSave(config);
+    if (validationError != null) throw validationError;
+
+    final deploymentNotifier = ref.read(mobileDeploymentConfigProvider.notifier);
+    final previousConfig = ref.read(mobileDeploymentConfigProvider);
+    try {
+      await deploymentNotifier.update(config);
+      ref.invalidate(backendConnectionProvider);
+      ref.invalidate(backendTransportProvider);
+      await ref.read(mobileBackendLifecycleProvider).reconcile(config);
+      if (_deployMode == 0) {
+        await ref.read(backendConnectionProvider.future);
+        await ref.read(backendTransportProvider.future);
+      }
+
+      final onboarding = ref.read(onboardingServiceProvider);
+      final health = _deployMode == 0
+          ? await onboarding.health()
+          : await onboarding.healthAt(_remoteCoreCtrl.text.trim());
+      if (health.isEmpty) {
+        throw StateError(_deployMode == 0 ? '本地 Business Core 不可用' : 'Cloud Core 不可用');
+      }
+      var firstDeviceSetupRequired = false;
+      if (_deployMode == 1) {
+        final pairing = await onboarding.pairingStatusAt(_remoteCoreCtrl.text.trim());
+        firstDeviceSetupRequired = pairing['firstDeviceSetupRequired'] == true;
+      }
       if (mounted) {
         setState(() {
-          _envResults = [true, true, true, false, true];
-          _envChecked = true;
+          _firstDeviceSetupRequired = firstDeviceSetupRequired;
+          _devicePaired = _deployMode == 0;
+          _pairingCodeController.clear();
         });
       }
-    });
+    } catch (_) {
+      await deploymentNotifier.update(previousConfig);
+      ref.invalidate(backendConnectionProvider);
+      ref.invalidate(backendTransportProvider);
+      try {
+        await ref.read(mobileBackendLifecycleProvider).reconcile(previousConfig);
+      } catch (_) {}
+      rethrow;
+    }
+  }
+
+  Future<void> _persistCurrentStep() async {
+    switch (_currentStep) {
+      case 2:
+        if (_deployMode == 1 && _remoteCoreCtrl.text.trim().isEmpty) {
+          throw StateError('云端模式必须填写 Cloud Core 地址');
+        }
+        await _applyDeploymentSelection();
+        return;
+      case 3:
+        final displayName = _profileNameController.text.trim();
+        if (displayName.isEmpty) {
+          throw StateError('请填写个人空间显示名称');
+        }
+        if (_deployMode == 1 && !_devicePaired) {
+          final remoteCore = _remoteCoreCtrl.text.trim();
+          final localMesh = ref.read(deviceMeshLocalServiceProvider);
+          if (localMesh == null) {
+            throw StateError('本机 Device Agent 不可用，无法完成云端设备配对');
+          }
+          final identity = await localMesh.identity();
+          final deviceId = (identity['deviceId'] ?? '').toString().trim();
+          final runtimeId = (identity['runtimeId'] ?? '').toString().trim();
+          final platform = (identity['platform'] ?? '').toString().trim();
+          if (deviceId.isEmpty || runtimeId.isEmpty || platform.isEmpty) {
+            throw StateError('本机 Device Mesh 身份不完整');
+          }
+          final rawPairing = _pairingCodeController.text.trim();
+          if (rawPairing.isEmpty) {
+            throw StateError(_firstDeviceSetupRequired ? '请输入 Cloud 首设备设置码' : '请粘贴设备配对二维码内容或 Offer Token');
+          }
+          var offerToken = '';
+          var setupCode = '';
+          if (_firstDeviceSetupRequired) {
+            setupCode = rawPairing;
+          } else {
+            offerToken = _extractPairingOffer(rawPairing, remoteCore);
+          }
+          final claimed = await ref.read(onboardingServiceProvider).claimPairingAt(
+                remoteCore,
+                deviceId: deviceId,
+                runtimeId: runtimeId,
+                platform: platform,
+                label: 'Mobile',
+                offerToken: offerToken,
+                setupCode: setupCode,
+              );
+          final ticket = (claimed['ticket'] ?? '').toString().trim();
+          if (ticket.isEmpty) throw StateError('Cloud Core 未返回 Bootstrap Ticket');
+          await localMesh.bootstrap(cloudBaseUrl: remoteCore, bootstrapTicket: ticket);
+          ref.invalidate(backendConnectionProvider);
+          ref.invalidate(backendTransportProvider);
+          await ref.read(backendConnectionProvider.future);
+          await ref.read(backendTransportProvider.future);
+          _devicePaired = true;
+        }
+        final current = await ref.read(spaceProfileServiceProvider).fetch();
+        await ref.read(spaceProfileServiceProvider).update(
+              displayName: displayName,
+              userLabel: current.userLabel,
+              bio: current.bio,
+              avatar: current.avatar,
+              preferences: current.preferences,
+            );
+        ref.invalidate(currentSpaceProfileProvider);
+        return;
+      case 5:
+        await _persistTextModel();
+        return;
+      case 6:
+        await _persistVisionModel();
+        return;
+      case 7:
+        await _persistVoiceModel();
+        return;
+      case 8:
+        await _persistEmbeddingModel();
+        return;
+      default:
+        return;
+    }
+  }
+
+  Future<void> _persistTextModel() async {
+    final provider = _textProviderCtrl.text.trim();
+    final model = _textModelCtrl.text.trim();
+    final key = _textKeyCtrl.text.trim();
+    final baseUrl = _baseUrlFor(provider, 'text');
+    final detected = await ref.read(onboardingServiceProvider).detectModels(
+          baseUrl: baseUrl,
+          apiKey: key,
+          apiType: _apiTypeFor(provider),
+        );
+    if (detected.isEmpty) {
+      throw StateError('文本模型连接检测失败');
+    }
+    final payload = <String, dynamic>{
+      'name': '默认文本模型',
+      'apiType': _apiTypeFor(provider),
+      'baseUrl': baseUrl,
+      'apiKey': key,
+      'modelName': model,
+      'isActive': 1,
+    };
+    final svc = ref.read(modelConfigServiceProvider);
+    if (_textConfigId == null) {
+      final created = await svc.create(payload);
+      _textConfigId = created?.id;
+    } else {
+      await svc.update(_textConfigId!, payload);
+    }
+  }
+
+  Future<void> _persistVisionModel() async {
+    final provider = _visionProviderCtrl.text.trim();
+    final model = _visionModelCtrl.text.trim();
+    final key = _visionKeyCtrl.text.trim();
+    final baseUrl = _baseUrlFor(provider, 'vision');
+    final detected = await ref.read(onboardingServiceProvider).detectModels(
+          baseUrl: baseUrl,
+          apiKey: key,
+          apiType: _apiTypeFor(provider),
+        );
+    if (detected.isEmpty) throw StateError('视觉模型连接检测失败');
+    final payload = <String, dynamic>{
+      'name': '默认视觉模型',
+      'apiType': _apiTypeFor(provider),
+      'baseUrl': baseUrl,
+      'apiKey': key,
+      'modelName': model,
+      'isActive': 1,
+    };
+    final svc = ref.read(visionServiceProvider);
+    if (_visionConfigId == null) {
+      final created = await svc.createConfig(payload);
+      _visionConfigId = created?['id']?.toString();
+    } else {
+      await svc.updateConfig(_visionConfigId!, payload);
+    }
+  }
+
+  Future<void> _persistVoiceModel() async {
+    final provider = _voiceProviderCtrl.text.trim();
+    final resource = _voiceModelCtrl.text.trim();
+    final key = _voiceKeyCtrl.text.trim();
+    final payload = <String, dynamic>{
+      'name': '默认语音模型',
+      'apiType': _apiTypeFor(provider, tts: true),
+      'baseUrl': _baseUrlFor(provider, 'tts'),
+      'apiKey': key,
+      'resourceId': resource,
+      'voiceType': 'zh_female_vv_uranus_bigtts',
+      'speed': 1.0,
+      'pitch': 1.0,
+      'volume': 1.0,
+      'isActive': 1,
+    };
+    final svc = ref.read(ttsServiceProvider);
+    await svc.testConnection(payload);
+    if (_ttsConfigId == null) {
+      final created = await svc.createConfig(payload);
+      _ttsConfigId = created?.id.toString();
+    } else {
+      await svc.updateConfig(_ttsConfigId!, payload);
+    }
+  }
+
+  Future<void> _persistEmbeddingModel() async {
+    final provider = _vectorProviderCtrl.text.trim();
+    final model = _vectorModelCtrl.text.trim();
+    final key = _vectorKeyCtrl.text.trim();
+    final baseUrl = _baseUrlFor(provider, 'embedding');
+    final detected = await ref.read(onboardingServiceProvider).detectModels(
+          baseUrl: baseUrl,
+          apiKey: key,
+          apiType: _apiTypeFor(provider),
+        );
+    if (detected.isEmpty) throw StateError('向量模型连接检测失败');
+    final payload = <String, dynamic>{
+      'name': '默认向量模型',
+      'apiType': _apiTypeFor(provider),
+      'baseUrl': baseUrl,
+      'apiKey': key,
+      'modelName': model,
+      'isActive': 1,
+    };
+    final svc = ref.read(embeddingServiceProvider);
+    if (_embeddingConfigId == null) {
+      final created = await svc.createConfig(payload);
+      _embeddingConfigId = created?['id']?.toString();
+    } else {
+      await svc.updateConfig(_embeddingConfigId!, payload);
+    }
+  }
+
+  Future<void> _completeOnboarding() async {
+    final traits = _personalityTraits
+        .asMap()
+        .entries
+        .where((entry) => _selectedTraits[entry.key])
+        .map((entry) => entry.value)
+        .join('、');
+    var characterId = _createdCharacterId;
+    if (characterId == null || characterId.isEmpty) {
+      final character = await ref.read(characterServiceProvider).create({
+        'name': _charNameCtrl.text.trim(),
+        'identity': _charIdentityCtrl.text.trim(),
+        'personality': traits,
+        'description': _charIdentityCtrl.text.trim(),
+        'isDefault': true,
+      });
+      if (character == null || character.id.isEmpty) {
+        throw StateError('角色创建失败');
+      }
+      characterId = character.id;
+      _createdCharacterId = characterId;
+    }
+    await ref.read(characterServiceProvider).setActive(characterId);
+    final memory = _initMemoryCtrl.text.trim();
+    if (memory.isNotEmpty) {
+      await ref.read(profileServiceProvider).create({
+        'category': 'memory',
+        'attributeName': '初始记忆',
+        'attributeValue': memory,
+        'characterId': characterId,
+        'confidence': 1.0,
+        'source': 'onboarding',
+      });
+    }
+    await ref.read(onboardingServiceProvider).complete(
+          deployMode: _deployMode == 0 ? 'mobile-local' : 'cloud-web',
+        );
+    ref.invalidate(characterListProvider);
+    ref.read(currentCharacterIdProvider.notifier).state = characterId;
+    if (!mounted) return;
+    context.go(AppRoutes.chat);
+  }
+
+  String _apiTypeFor(String provider, {bool tts = false}) {
+    final p = provider.toLowerCase();
+    if (tts && (p.contains('volc') || p.contains('火山'))) return 'volcengine';
+    if (p.contains('anthropic')) return 'anthropic';
+    return 'openai-compatible';
+  }
+
+  String _baseUrlFor(String provider, String kind) {
+    final p = provider.toLowerCase();
+    if (kind == 'tts') {
+      if (p.contains('volc') || p.contains('火山')) {
+        return 'https://openspeech.bytedance.com/api/v1';
+      }
+      return 'https://openspeech.bytedance.com/api/v1';
+    }
+    if (p.contains('deepseek')) return 'https://api.deepseek.com/v1';
+    if (p.contains('volc') || p.contains('火山')) {
+      return 'https://ark.cn-beijing.volces.com/api/v3';
+    }
+    if (p.contains('anthropic')) return 'https://api.anthropic.com';
+    return 'https://api.openai.com/v1';
   }
 
   void _toggleTrait(int index) {
@@ -128,8 +503,14 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
     switch (_currentStep) {
       case 1:
         return _envChecked;
+      case 2:
+        return _deployMode == 0 || _remoteCoreCtrl.text.trim().isNotEmpty;
       case 3:
-        return _adminUserController.text.isNotEmpty && _adminPassController.text.isNotEmpty;
+        if (_profileNameController.text.trim().isEmpty) return false;
+        if (_deployMode == 1 && !_devicePaired) {
+          return _pairingCodeController.text.trim().isNotEmpty;
+        }
+        return true;
       case 4:
         return _boundaryAgreed.every((v) => v);
       case 5:
@@ -231,7 +612,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
                 child: AmitiaButton(
                   label: '上一步',
                   isSecondary: true,
-                  onPressed: _prev,
+                  onPressed: _submitting ? null : _prev,
                 ),
               )
             else
@@ -239,9 +620,9 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
             SizedBox(width: AppSpacing.md),
             Expanded(
               child: AmitiaButton(
-                label: isLast ? '进入 Amitia' : '下一步',
+                label: _submitting ? '正在保存…' : (isLast ? '进入 Amitia' : '下一步'),
                 icon: isLast ? Icons.rocket_launch : Icons.arrow_forward,
-                onPressed: _canProceed ? _next : null,
+                onPressed: _canProceed && !_submitting ? _next : null,
               ),
             ),
           ],
@@ -259,7 +640,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
       case 2:
         return _buildDeployMode();
       case 3:
-        return _buildAdminInit();
+        return _buildSpaceAndDevice();
       case 4:
         return _buildBoundary();
       case 5:
@@ -353,7 +734,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
               SizedBox(height: AppSpacing.md),
               ...[
                 '运行环境与部署模式',
-                '管理员账号初始化',
+                '个人空间与设备配对',
                 '文本 / 视觉 / 语音 / 向量模型',
                 'AI 角色头像、名字与性格',
                 '初始记忆设定',
@@ -391,8 +772,8 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
   }
 
   Widget _buildEnvCheck() {
-    final checks = ['后端服务', '数据库 (SurrealDB)', '向量数据库 (Qdrant)', 'MCP Runtime', '系统权限'];
-    final results = ['运行中', '运行中', '运行中', '未启动', '部分授权'];
+    final checks = ['本地 Runtime 进程', 'Runtime 就绪状态', 'Runtime Profile / 本地能力'];
+    final results = ['进程已响应', '编排已就绪', '能力声明有效'];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -400,7 +781,19 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
         SizedBox(height: AppSpacing.sm),
         Text('请确认以下组件状态正常，以确保 Amitia 正常运行。', style: AppTypography.caption(context)),
         SizedBox(height: AppSpacing.lg),
-        if (!_envChecked && _envResults.isEmpty)
+        if (_envChecking)
+          AmitiaCard(
+            child: Center(
+              child: Column(
+                children: [
+                  CircularProgressIndicator(strokeWidth: 2.5, color: context.accentPrimary),
+                  SizedBox(height: AppSpacing.md),
+                  Text('正在检查环境...', style: AppTypography.caption(context)),
+                ],
+              ),
+            ),
+          )
+        else if (_envResults.isEmpty)
           AmitiaCard(
             child: Column(
               children: [
@@ -415,18 +808,6 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
                   onPressed: _runEnvCheck,
                 ),
               ],
-            ),
-          )
-        else if (!_envChecked)
-          AmitiaCard(
-            child: Center(
-              child: Column(
-                children: [
-                  CircularProgressIndicator(strokeWidth: 2.5, color: context.accentPrimary),
-                  SizedBox(height: AppSpacing.md),
-                  Text('正在检查环境...', style: AppTypography.caption(context)),
-                ],
-              ),
             ),
           )
         else ...[
@@ -456,7 +837,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(checks[i], style: AppTypography.body(context)),
-                          Text(results[i], style: AppTypography.label(context)),
+                          Text(ok ? results[i] : '检查失败', style: AppTypography.label(context)),
                         ],
                       ),
                     ),
@@ -478,13 +859,23 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
                   SizedBox(width: AppSpacing.sm),
                   Expanded(
                     child: Text(
-                      '部分组件未就绪，你可以继续配置并在后续启动后再处理。',
+                      '本地 Runtime/Device Agent 尚未就绪。请修复后重新检查，全部通过后再继续。',
                       style: AppTypography.caption(context).copyWith(color: context.warning),
                     ),
                   ),
                 ],
               ),
             ),
+          if (_envResults.any((v) => !v)) ...[
+            SizedBox(height: AppSpacing.sm),
+            AmitiaButton(
+              label: '重新检查',
+              icon: Icons.refresh,
+              isSecondary: true,
+              isFullWidth: true,
+              onPressed: _runEnvCheck,
+            ),
+          ],
         ],
       ],
     );
@@ -560,38 +951,82 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
             ),
           );
         }),
+        if (_deployMode == 1) ...[
+          SizedBox(height: AppSpacing.lg),
+          AmitiaCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Cloud Core 地址', style: AppTypography.label(context)),
+                SizedBox(height: AppSpacing.xs),
+                AmitiaTextField(
+                  controller: _remoteCoreCtrl,
+                  hintText: 'https://core.example.com',
+                  prefixIcon: Icon(Icons.link, size: 20, color: context.textTertiary),
+                  onChanged: (_) => setState(() {}),
+                ),
+                SizedBox(height: AppSpacing.sm),
+                Text(
+                  '点击下一步后会立即切换 Business Core 到该 Cloud Core；设备本地 Runtime / Device Agent 仍会保留。',
+                  style: AppTypography.caption(context),
+                ),
+              ],
+            ),
+          ),
+        ],
       ],
     );
   }
 
-  Widget _buildAdminInit() {
+  Widget _buildSpaceAndDevice() {
+    final isCloud = _deployMode == 1;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('管理员账号初始化', style: AppTypography.sectionTitle(context)),
+        Text('个人空间与设备', style: AppTypography.sectionTitle(context)),
         SizedBox(height: AppSpacing.sm),
-        Text('创建管理员账号用于管理 Amitia 平台。', style: AppTypography.caption(context)),
+        Text(
+          isCloud
+              ? '不创建产品账号。当前设备通过 Device Mesh 配对加入 Cloud Core，个人资料归属于该 Space。'
+              : '本地模式不需要账号。个人资料保存在本地 Space，设备身份由 Device Mesh 独立管理。',
+          style: AppTypography.caption(context),
+        ),
         SizedBox(height: AppSpacing.lg),
         AmitiaCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('用户名', style: AppTypography.label(context)),
+              Text('显示名称', style: AppTypography.label(context)),
               SizedBox(height: AppSpacing.xs),
               AmitiaTextField(
-                hintText: '请输入管理员用户名',
-                controller: _adminUserController,
+                hintText: '例如：无拘',
+                controller: _profileNameController,
                 prefixIcon: Icon(Icons.person_outline, size: 20, color: context.textTertiary),
+                onChanged: (_) => setState(() {}),
               ),
-              SizedBox(height: AppSpacing.lg),
-              Text('密码', style: AppTypography.label(context)),
-              SizedBox(height: AppSpacing.xs),
-              AmitiaTextField(
-                hintText: '请输入密码',
-                controller: _adminPassController,
-                obscureText: true,
-                prefixIcon: Icon(Icons.lock_outline, size: 20, color: context.textTertiary),
-              ),
+              if (isCloud) ...[
+                SizedBox(height: AppSpacing.lg),
+                Text(
+                  _firstDeviceSetupRequired ? 'Cloud 首设备设置码' : '设备配对信息',
+                  style: AppTypography.label(context),
+                ),
+                SizedBox(height: AppSpacing.xs),
+                AmitiaTextField(
+                  hintText: _firstDeviceSetupRequired
+                      ? '输入 Cloud Core 本机显示的一次性设置码'
+                      : '粘贴 amitia://pair?... 二维码内容或 Offer Token',
+                  controller: _pairingCodeController,
+                  prefixIcon: Icon(Icons.qr_code_2, size: 20, color: context.textTertiary),
+                  onChanged: (_) => setState(() {}),
+                ),
+                SizedBox(height: AppSpacing.sm),
+                Text(
+                  _firstDeviceSetupRequired
+                      ? '这是该 Cloud Core 的第一台可信设备。设置码只能从 Cloud Core 本机安全界面获取。'
+                      : '可在任意已信任设备上生成一次性配对二维码；二维码只用于签发当前设备的 Device Credential。',
+                  style: AppTypography.caption(context),
+                ),
+              ],
               SizedBox(height: AppSpacing.lg),
               Container(
                 padding: EdgeInsets.all(AppSpacing.md),
@@ -605,7 +1040,9 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
                     SizedBox(width: AppSpacing.sm),
                     Expanded(
                       child: Text(
-                        '密码将使用加密存储，仅你本人可登录管理后台。',
+                        isCloud
+                            ? 'Device ID 只用于设备寻址，真正的云端认证由一次性配对后签发的 Device Credential 完成。'
+                            : 'Space ID 负责数据归属；Device ID / Runtime ID 负责执行位置，两者不再混用。',
                         style: AppTypography.label(context).copyWith(color: context.accentPrimary),
                       ),
                     ),
@@ -619,11 +1056,27 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
     );
   }
 
+  String _extractPairingOffer(String raw, String cloudUri) {
+    final value = raw.trim();
+    if (!value.startsWith('amitia://')) return value;
+    final uri = Uri.tryParse(value);
+    if (uri == null) return '';
+    final endpoint = uri.queryParameters['endpoint']?.trim() ?? '';
+    if (endpoint.isNotEmpty) {
+      final expected = Uri.tryParse(cloudUri);
+      final offered = Uri.tryParse(endpoint);
+      if (expected == null || offered == null || expected.scheme != offered.scheme || expected.host != offered.host || expected.port != offered.port) {
+        throw StateError('配对 Offer 属于另一个 Cloud Core');
+      }
+    }
+    return uri.queryParameters['offer']?.trim() ?? '';
+  }
+
   Widget _buildBoundary() {
     final boundaries = [
       '我已了解 Amitia 将在本地处理我的数据，并拥有相应的访问权限。',
       '我同意 Amitia 在使用过程中调用 AI 模型进行推理，相关数据将发送至模型服务商。',
-      '我理解 Agent 模式下 Amitia 可能执行文件操作、系统命令等高风险操作，需我逐一确认。',
+      '我理解在对话中让 Amitia 执行任务时，可能涉及文件操作、系统命令等高风险操作，并按权限策略要求确认。',
     ];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1074,7 +1527,8 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
         .join('、');
     final items = <(String, String)>[
       ('部署模式', _deployMode == 0 ? '本地部署' : '云端部署'),
-      ('管理员账号', _adminUserController.text.isNotEmpty ? _adminUserController.text : '未设置'),
+      ('个人空间', _profileNameController.text.trim().isNotEmpty ? _profileNameController.text.trim() : '未设置'),
+      if (_deployMode == 1) ('设备配对', _devicePaired ? '已完成' : '待完成'),
       ('文本模型', '${_textProviderCtrl.text} / ${_textModelCtrl.text}'),
       ('视觉模型', '${_visionProviderCtrl.text} / ${_visionModelCtrl.text}'),
       ('语音模型', '${_voiceProviderCtrl.text} / ${_voiceModelCtrl.text}'),
@@ -1177,7 +1631,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
               SizedBox(height: AppSpacing.md),
               ...[
                 '在对话页面与角色聊天',
-                '通过 Agent 模式执行任务',
+                '直接在对话中让 AI 调用工具并执行任务',
                 '在设置中管理模型和权限',
                 '在角色页面自定义角色属性',
               ].map((item) => Padding(

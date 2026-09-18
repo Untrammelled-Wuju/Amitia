@@ -13,7 +13,7 @@ var (
 )
 
 type DeviceActiveInstallationBinding struct {
-	UserID   string
+	SpaceID  string
 	DeviceID string
 
 	InstallationID string
@@ -35,13 +35,13 @@ func (DeviceActiveInstallationBinding) TableName() string {
 }
 
 func (b DeviceActiveInstallationBinding) IsValid() bool {
-	return b.UserID != "" && b.DeviceID != "" && b.InstallationID != ""
+	return b.SpaceID != "" && b.DeviceID != "" && b.InstallationID != ""
 }
 
 type BindingHistoryEntry struct {
 	ID string
 
-	UserID   string
+	SpaceID  string
 	DeviceID string
 
 	PreviousInstallationID string

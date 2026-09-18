@@ -25,16 +25,16 @@ var ErrPetIdentityNotFound = errors.New("pet identity not found")
 
 type ReleaseService interface {
 	BuildRelease(ctx context.Context, req *BuildReleaseRequest) (*BuildReleaseResult, error)
-	GetBuildOperation(ctx context.Context, operationID, userID string) (*ReleaseBuildOperation, error)
-	CancelBuildOperation(ctx context.Context, operationID, userID string) error
-	GetRelease(ctx context.Context, releaseID, userID string) (*ReleaseData, error)
-	ListReleases(ctx context.Context, userID string) ([]*ReleaseData, error)
-	ListReleasesForPet(ctx context.Context, userID, petID string) ([]*ReleaseData, error)
-	GetReleaseFiles(ctx context.Context, releaseID, userID string) ([]ReleaseFileData, error)
-	ArchiveRelease(ctx context.Context, releaseID, userID string) error
-	RevokeRelease(ctx context.Context, releaseID, userID, reason string) error
-	GetPetIdentity(ctx context.Context, userID, petID string) (*PetIdentityData, error)
-	GetReleaseArchivePath(ctx context.Context, releaseID, userID string) (string, *ReleaseData, error)
+	GetBuildOperation(ctx context.Context, operationID, spaceID string) (*ReleaseBuildOperation, error)
+	CancelBuildOperation(ctx context.Context, operationID, spaceID string) error
+	GetRelease(ctx context.Context, releaseID, spaceID string) (*ReleaseData, error)
+	ListReleases(ctx context.Context, spaceID string) ([]*ReleaseData, error)
+	ListReleasesForPet(ctx context.Context, spaceID, petID string) ([]*ReleaseData, error)
+	GetReleaseFiles(ctx context.Context, releaseID, spaceID string) ([]ReleaseFileData, error)
+	ArchiveRelease(ctx context.Context, releaseID, spaceID string) error
+	RevokeRelease(ctx context.Context, releaseID, spaceID, reason string) error
+	GetPetIdentity(ctx context.Context, spaceID, petID string) (*PetIdentityData, error)
+	GetReleaseArchivePath(ctx context.Context, releaseID, spaceID string) (string, *ReleaseData, error)
 }
 
 type GeneratedPackageSourceResult struct {
@@ -46,15 +46,14 @@ type GeneratedPackageSourceResult struct {
 }
 
 type GeneratedPackageSource interface {
-	CheckProcessingTaskOwnership(ctx context.Context, userID, processingTaskID string) error
-	BuildGeneratedPackage(ctx context.Context, userID, processingTaskID, defaultAction string, includedActions []string) (*GeneratedPackageSourceResult, error)
+	CheckProcessingTaskOwnership(ctx context.Context, spaceID, processingTaskID string) error
+	BuildGeneratedPackage(ctx context.Context, spaceID, processingTaskID, defaultAction string, includedActions []string) (*GeneratedPackageSourceResult, error)
 }
 
 type BuildReleaseRequest struct {
-	UserID             string
+	SpaceID            string
 	ProcessingTaskID   string
 	PetID              string
-	CharacterID        string
 	IncludedActionKeys []string
 	DefaultAction      string
 	BuildProfileID     string
@@ -105,33 +104,23 @@ type PetIdentityResolver struct {
 
 func (r *PetIdentityResolver) ResolveOrCreate(
 	ctx context.Context,
-	userID, characterID, preferredName string,
+	spaceID, preferredName string,
 ) (*PetIdentityData, error) {
-	if userID == "" {
+	if spaceID == "" {
 		return nil, NewReleaseError("INVALID_USER", "用户 ID 不能为空", nil)
-	}
-	if characterID == "" {
-		return nil, NewReleaseError("INVALID_CHARACTER", "角色 ID 不能为空", nil)
-	}
-
-	existing, err := r.repo.GetPetIdentityByCharacter(userID, characterID)
-	if err == nil {
-		return existing, nil
 	}
 
 	currentTime := formatReleaseTimestamp(time.Now())
 	name := preferredName
 	if name == "" {
-		name = characterID
+		name = "桌宠"
 	}
 
 	identity := &PetIdentityData{
 		ID:                  uuid.NewString(),
-		OwnerUserID:         userID,
-		SourceCharacterID:   characterID,
+		OwnerSpaceID:        spaceID,
 		Name:                name,
 		Slug:                makeIdentitySlug(name),
-		BindingPolicy:       "character_locked",
 		NextReleaseSequence: 1,
 		CreatedAt:           currentTime,
 		UpdatedAt:           currentTime,
@@ -164,7 +153,7 @@ func (s *service) BuildRelease(ctx context.Context, req *BuildReleaseRequest) (*
 	if req == nil {
 		return nil, NewReleaseError("INVALID_REQUEST", "构建请求不能为空", nil)
 	}
-	if req.UserID == "" {
+	if req.SpaceID == "" {
 		return nil, NewReleaseError("INVALID_REQUEST", "用户 ID 不能为空", nil)
 	}
 	if req.ProcessingTaskID == "" {
@@ -177,7 +166,7 @@ func (s *service) BuildRelease(ctx context.Context, req *BuildReleaseRequest) (*
 	// before idempotency lookup, build-operation creation, quality-gate reads or
 	// any other observable side effect so a foreign processingTaskID cannot be
 	// used as an existence/status oracle.
-	if err := s.packageSource.CheckProcessingTaskOwnership(ctx, req.UserID, req.ProcessingTaskID); err != nil {
+	if err := s.packageSource.CheckProcessingTaskOwnership(ctx, req.SpaceID, req.ProcessingTaskID); err != nil {
 		return nil, NewReleaseError("OWNERSHIP_DENIED", "处理任务不属于当前用户", err)
 	}
 
@@ -186,7 +175,7 @@ func (s *service) BuildRelease(ctx context.Context, req *BuildReleaseRequest) (*
 		stableKey = generateInputBasedKey(req)
 	}
 
-	existing, err := s.repo.GetBuildOperationByIdempotencyKey(req.UserID, stableKey)
+	existing, err := s.repo.GetBuildOperationByIdempotencyKey(req.SpaceID, stableKey)
 	if err == nil && existing != nil {
 		if existing.State == BuildOpStateCompleted && existing.ReleaseID != "" {
 			releaseData, releaseErr := s.repo.GetRelease(existing.ReleaseID)
@@ -221,7 +210,7 @@ func (s *service) createNewBuild(ctx context.Context, req *BuildReleaseRequest, 
 
 	op := &ReleaseBuildOperation{
 		ID:             operationID,
-		UserID:         req.UserID,
+		SpaceID:        req.SpaceID,
 		IdempotencyKey: stableKey,
 		InputHash:      inputHash,
 		State:          BuildOpStateCreated,
@@ -237,7 +226,7 @@ func (s *service) createNewBuild(ctx context.Context, req *BuildReleaseRequest, 
 		return nil, NewReleaseError("OPERATION_UPDATE_FAILED", "更新操作状态失败", err)
 	}
 
-	gate, err := s.loadReleaseQualityGate(ctx, req.UserID, req.ProcessingTaskID)
+	gate, err := s.loadReleaseQualityGate(ctx, req.SpaceID, req.ProcessingTaskID)
 	if err != nil {
 		err = s.failOperation(op, "QUALITY_GATE_READ_FAILED", err)
 		return nil, err
@@ -251,7 +240,7 @@ func (s *service) createNewBuild(ctx context.Context, req *BuildReleaseRequest, 
 	buildReq.IncludedActionKeys = selectedActions
 	req = &buildReq
 
-	generated, err := s.packageSource.BuildGeneratedPackage(ctx, req.UserID, req.ProcessingTaskID, req.DefaultAction, req.IncludedActionKeys)
+	generated, err := s.packageSource.BuildGeneratedPackage(ctx, req.SpaceID, req.ProcessingTaskID, req.DefaultAction, req.IncludedActionKeys)
 	if err != nil {
 		err = s.failOperation(op, "PACKAGE_BUILD_FAILED", err)
 		return nil, NewReleaseError("PACKAGE_BUILD_FAILED", "生成 Release 源包失败", err)
@@ -260,26 +249,11 @@ func (s *service) createNewBuild(ctx context.Context, req *BuildReleaseRequest, 
 		defer os.RemoveAll(generated.PackageDir) // audit:ok: Ephemeral PackageDir is created and owned by the internal processing packager
 	}
 
-	legacyManifest, err := (&packageformat.V1Reader{}).ReadManifest(generated.ManifestData)
+	generatedManifest, err := (&packageformat.CanonicalReader{}).ReadManifest(generated.ManifestData)
 	if err != nil {
 		err = s.failOperation(op, "SOURCE_MANIFEST_INVALID", err)
-		return nil, NewReleaseError("SOURCE_MANIFEST_INVALID", "源包 manifest 无法转换为 V2", err)
+		return nil, NewReleaseError("SOURCE_MANIFEST_INVALID", "源包 manifest 无法读取", err)
 	}
-	characterID := strings.TrimSpace(legacyManifest.Binding.SourceCharacterID)
-	if characterID == "" {
-		characterID = strings.TrimSpace(req.CharacterID)
-	}
-	if characterID == "" {
-		err := errors.New("source character id is empty")
-		err = s.failOperation(op, "CHARACTER_ID_MISSING", err)
-		return nil, NewReleaseError("CHARACTER_ID_MISSING", "无法确定桌宠绑定角色", err)
-	}
-	if req.CharacterID != "" && req.CharacterID != characterID {
-		err := fmt.Errorf("request character %s does not match source character %s", req.CharacterID, characterID)
-		err = s.failOperation(op, "CHARACTER_ID_MISMATCH", err)
-		return nil, NewReleaseError("CHARACTER_ID_MISMATCH", "桌宠角色绑定与处理任务不一致", err)
-	}
-
 	var identity *PetIdentityData
 	if req.PetID != "" {
 		identity, err = s.repo.GetPetIdentity(req.PetID)
@@ -287,20 +261,20 @@ func (s *service) createNewBuild(ctx context.Context, req *BuildReleaseRequest, 
 			err = s.failOperation(op, "PET_IDENTITY_NOT_FOUND", err)
 			return nil, NewReleaseError("PET_IDENTITY_NOT_FOUND", "指定桌宠身份不存在", err)
 		}
-		if identity.OwnerUserID != req.UserID || (identity.SourceCharacterID != "" && identity.SourceCharacterID != characterID) {
-			err := errors.New("pet identity ownership or binding mismatch")
+		if identity.OwnerSpaceID != req.SpaceID {
+			err := errors.New("pet identity ownership mismatch")
 			err = s.failOperation(op, "OWNERSHIP_DENIED", err)
-			return nil, NewReleaseError("OWNERSHIP_DENIED", "桌宠身份与当前用户或角色不匹配", err)
+			return nil, NewReleaseError("OWNERSHIP_DENIED", "桌宠身份与当前用户不匹配", err)
 		}
 	} else {
-		identity, err = s.identitySvc.ResolveOrCreate(ctx, req.UserID, characterID, legacyManifest.Name)
+		identity, err = s.identitySvc.ResolveOrCreate(ctx, req.SpaceID, generatedManifest.Name)
 		if err != nil {
 			err = s.failOperation(op, "IDENTITY_CREATE_FAILED", err)
 			return nil, err
 		}
 	}
 
-	snapshot, err := s.createSnapshot(ctx, req, op, identity, legacyManifest, gate)
+	snapshot, err := s.createSnapshot(ctx, req, op, identity, generatedManifest, gate)
 	if err != nil {
 		err = s.failOperation(op, "SNAPSHOT_FAILED", err)
 		return nil, err
@@ -323,19 +297,19 @@ func (s *service) createNewBuild(ctx context.Context, req *BuildReleaseRequest, 
 	record := &ReleaseData{
 		ID:                    releaseID,
 		PetID:                 identity.ID,
-		OwnerUserID:           req.UserID,
+		OwnerSpaceID:          req.SpaceID,
 		Version:               version,
 		ReleaseSequence:       releaseSequence,
 		SchemaVersion:         packageformat.ManifestSchemaVersion,
 		Lifecycle:             string(ReleaseLifecycleBuilding),
 		SourceType:            "generated",
 		SourceProcessingTask:  req.ProcessingTaskID,
-		SourceGenerationTask:  legacyManifest.Provenance.GenerationTaskID,
+		SourceGenerationTask:  generatedManifest.Provenance.GenerationTaskID,
 		ActiveRevisionSetHash: gate.ActiveRevisionSetHash,
 		QualityGateID:         gate.GateID,
 		QualityGateHash:       gate.GateHash,
 		EvaluationSetHash:     gate.EvaluationSetHash,
-		DefaultActionKey:      legacyManifest.DefaultAction,
+		DefaultActionKey:      generatedManifest.DefaultAction,
 		BuildSnapshotID:       snapshot.ID,
 		IntegrityStatus:       string(ReleaseIntegrityUnknown),
 		CompatibilityStatus:   string(ReleaseCompatUnknown),
@@ -352,7 +326,7 @@ func (s *service) createNewBuild(ctx context.Context, req *BuildReleaseRequest, 
 		return nil, NewReleaseError("OPERATION_UPDATE_FAILED", "更新操作状态失败", err)
 	}
 
-	finalRelease, err := s.finalizeRelease(ctx, op, snapshot, record, version, identity, legacyManifest, generated)
+	finalRelease, err := s.finalizeRelease(ctx, op, snapshot, record, version, identity, generatedManifest, generated)
 	if err != nil {
 		record.Lifecycle = string(ReleaseLifecycleFailed)
 		record.UpdatedAt = formatReleaseTimestamp(time.Now())
@@ -381,7 +355,7 @@ func (s *service) createNewBuild(ctx context.Context, req *BuildReleaseRequest, 
 	}, nil
 }
 
-func (s *service) loadReleaseQualityGate(ctx context.Context, userID, processingTaskID string) (*QualityGateResult, error) {
+func (s *service) loadReleaseQualityGate(ctx context.Context, spaceID, processingTaskID string) (*QualityGateResult, error) {
 	if s.gateReader == nil {
 		return nil, NewReleaseError("QUALITY_GATE_UNAVAILABLE", "Release 质量门禁未配置", nil)
 	}
@@ -407,7 +381,7 @@ func (s *service) loadReleaseQualityGate(ctx context.Context, userID, processing
 	if strings.TrimSpace(activeRevisionSetHash) == "" {
 		return nil, NewReleaseError("QUALITY_GATE_STALE", "质量门禁缺少 active revision set", nil)
 	}
-	gate, err := s.gateReader.GetValidGateForRelease(ctx, userID, processingTaskID, activeRevisionSetHash)
+	gate, err := s.gateReader.GetValidGateForRelease(ctx, spaceID, processingTaskID, activeRevisionSetHash)
 	if err != nil {
 		return nil, NewReleaseError("QUALITY_GATE_READ_FAILED", "读取 Release 质量门禁失败", err)
 	}
@@ -466,9 +440,8 @@ func (s *service) createSnapshot(ctx context.Context, req *BuildReleaseRequest, 
 	gateJSON, _ := json.Marshal(gate)
 	snapshot := &ReleaseBuildSnapshot{
 		ID:                     uuid.NewString(),
-		UserID:                 req.UserID,
+		SpaceID:                req.SpaceID,
 		PetID:                  identity.ID,
-		CharacterID:            identity.SourceCharacterID,
 		ProcessingTaskID:       req.ProcessingTaskID,
 		ActiveRevisionSetHash:  gate.ActiveRevisionSetHash,
 		QualityGateID:          gate.GateID,
@@ -505,8 +478,18 @@ func (s *service) allocateSequence(ctx context.Context, petID string) (int, erro
 		if sequence < 1 {
 			sequence = 1
 		}
+		var maxUsed int
+		maxRow := tx.WithContext(ctx).Table("desktop_pet_package_releases").
+			Where("pet_id = ?", petID).
+			Select("COALESCE(MAX(release_sequence), 0)").Row()
+		if err := maxRow.Scan(&maxUsed); err != nil {
+			return err
+		}
+		if maxUsed >= sequence {
+			sequence = maxUsed + 1
+		}
 		result := tx.WithContext(ctx).Table("desktop_pet_identities").
-			Where("id = ? AND next_release_sequence = ?", petID, current).
+			Where("id = ? AND next_release_sequence <= ?", petID, sequence).
 			Update("next_release_sequence", sequence+1)
 		if result.Error != nil {
 			return result.Error
@@ -548,16 +531,16 @@ func (s *service) finalizeRelease(ctx context.Context, op *ReleaseBuildOperation
 	if manifest.Name == "" {
 		manifest.Name = source.Name
 	}
-	manifest.Author = packageformat.ManifestAuthor{Name: "Amitia User", ID: record.OwnerUserID}
+	manifest.Author = packageformat.ManifestAuthor{Name: "Amitia User", ID: record.OwnerSpaceID}
 	manifest.License = packageformat.ManifestLicense{SPDX: "AGPL-3.0-only"}
 	manifest.Compatibility = packageformat.ManifestCompatibility{MinRuntimeVersion: contracts.RuntimeVersion, RenderMode: packageformat.RenderModeSprite}
-	manifest.Binding = packageformat.ManifestBinding{Policy: packageformat.BindingPolicyBound, SourceCharacterID: identity.SourceCharacterID}
+	manifest.Binding = packageformat.ManifestBinding{Policy: packageformat.BindingPolicyUnbound}
 	manifest.Canvas.CoordinateSystem = packageformat.CoordinateSystemTopLeft
 	manifest.Capabilities = packageformat.ManifestCapabilities{TransparentBackground: true, FrameSequence: true, PerFrameDuration: true, Audio: false}
 	manifest.Provenance.SourceType = "generated"
 	manifest.Provenance.ProcessingTaskID = snapshot.ProcessingTaskID
 	manifest.Provenance.BuiltAt = time.Now().UTC().Format(time.RFC3339)
-	manifest.Provenance.Builder = "amitia-release-v2"
+	manifest.Provenance.Builder = "amitia-release-v1"
 
 	for i := range manifest.Actions {
 		a := &manifest.Actions[i]
@@ -587,17 +570,17 @@ func (s *service) finalizeRelease(ctx context.Context, op *ReleaseBuildOperation
 	if err != nil {
 		return nil, NewReleaseError("FILE_MANIFEST_FAILED", "计算 Release 文件清单失败", s.cleanupStagingFailure(record.ID, err))
 	}
-	manifest.Integrity = packageformat.ManifestIntegrity{Algorithm: packageformat.IntegrityAlgorithmV2, Files: fileManifest.Entries}
+	manifest.Integrity = packageformat.ManifestIntegrity{Algorithm: packageformat.IntegrityAlgorithmV1, Files: fileManifest.Entries}
 	for _, f := range fileManifest.Entries {
 		manifest.Integrity.TotalBytes += f.Bytes
 	}
 	manifest.Integrity.FileCount = len(fileManifest.Entries)
-	finalManifest, manifestData, err := (&packageformat.V2Writer{}).FinalizeManifest(&manifest)
+	finalManifest, manifestData, err := (&packageformat.CanonicalWriter{}).FinalizeManifest(&manifest)
 	if err != nil {
-		return nil, NewReleaseError("MANIFEST_FINALIZE_FAILED", "生成 V2 manifest 失败", s.cleanupStagingFailure(record.ID, err))
+		return nil, NewReleaseError("MANIFEST_FINALIZE_FAILED", "生成 V1 manifest 失败", s.cleanupStagingFailure(record.ID, err))
 	}
 	if err := os.WriteFile(filepath.Join(stagingDir, "manifest.json"), manifestData, 0o644); err != nil {
-		return nil, NewReleaseError("MANIFEST_WRITE_FAILED", "写入 V2 manifest 失败", s.cleanupStagingFailure(record.ID, err))
+		return nil, NewReleaseError("MANIFEST_WRITE_FAILED", "写入 V1 manifest 失败", s.cleanupStagingFailure(record.ID, err))
 	}
 	validation := packageformat.NewValidator().ValidateDirectory(stagingDir, finalManifest)
 	if validation.Verdict != "valid" || validation.ErrorCount > 0 {
@@ -938,7 +921,7 @@ func (s *service) computeInputHash(req *BuildReleaseRequest, stableKey string) s
 	sort.Strings(sortedActions)
 
 	data := fmt.Sprintf("%s|%s|%s|%s|%s|%s",
-		req.UserID,
+		req.SpaceID,
 		req.ProcessingTaskID,
 		req.PetID,
 		strings.Join(sortedActions, ","),
@@ -963,23 +946,23 @@ func (s *service) failOperation(op *ReleaseBuildOperation, code string, cause er
 	return cause
 }
 
-func (s *service) GetBuildOperation(ctx context.Context, operationID, userID string) (*ReleaseBuildOperation, error) {
+func (s *service) GetBuildOperation(ctx context.Context, operationID, spaceID string) (*ReleaseBuildOperation, error) {
 	op, err := s.repo.GetBuildOperation(operationID)
 	if err != nil {
 		return nil, NewReleaseError("OPERATION_NOT_FOUND", "构建操作不存在", err)
 	}
-	if op.UserID != userID {
+	if op.SpaceID != spaceID {
 		return nil, NewReleaseError("OWNERSHIP_DENIED", "不属于当前用户", nil)
 	}
 	return op, nil
 }
 
-func (s *service) CancelBuildOperation(ctx context.Context, operationID, userID string) error {
+func (s *service) CancelBuildOperation(ctx context.Context, operationID, spaceID string) error {
 	op, err := s.repo.GetBuildOperation(operationID)
 	if err != nil {
 		return NewReleaseError("OPERATION_NOT_FOUND", "构建操作不存在", err)
 	}
-	if op.UserID != userID {
+	if op.SpaceID != spaceID {
 		return NewReleaseError("OWNERSHIP_DENIED", "不属于当前用户", nil)
 	}
 	if op.State == BuildOpStateCompleted || op.State == BuildOpStateCancelled {
@@ -991,41 +974,41 @@ func (s *service) CancelBuildOperation(ctx context.Context, operationID, userID 
 	return s.repo.UpdateBuildOperation(op)
 }
 
-func (s *service) GetRelease(ctx context.Context, releaseID, userID string) (*ReleaseData, error) {
+func (s *service) GetRelease(ctx context.Context, releaseID, spaceID string) (*ReleaseData, error) {
 	release, err := s.repo.GetRelease(releaseID)
 	if err != nil {
 		return nil, NewReleaseError("RELEASE_NOT_FOUND", "Release 不存在", err)
 	}
-	if release.OwnerUserID != userID {
+	if release.OwnerSpaceID != spaceID {
 		return nil, NewReleaseError("OWNERSHIP_DENIED", "不属于当前用户", nil)
 	}
 	return release, nil
 }
 
-func (s *service) ListReleases(ctx context.Context, userID string) ([]*ReleaseData, error) {
-	return s.repo.ListPublishedReleases(userID)
+func (s *service) ListReleases(ctx context.Context, spaceID string) ([]*ReleaseData, error) {
+	return s.repo.ListPublishedReleases(spaceID)
 }
 
-func (s *service) ListReleasesForPet(ctx context.Context, userID, petID string) ([]*ReleaseData, error) {
+func (s *service) ListReleasesForPet(ctx context.Context, spaceID, petID string) ([]*ReleaseData, error) {
 	releases, err := s.repo.ListReleasesByPet(petID)
 	if err != nil {
 		return nil, err
 	}
 	var result []*ReleaseData
 	for _, r := range releases {
-		if r.OwnerUserID == userID {
+		if r.OwnerSpaceID == spaceID {
 			result = append(result, r)
 		}
 	}
 	return result, nil
 }
 
-func (s *service) GetReleaseFiles(ctx context.Context, releaseID, userID string) ([]ReleaseFileData, error) {
+func (s *service) GetReleaseFiles(ctx context.Context, releaseID, spaceID string) ([]ReleaseFileData, error) {
 	release, err := s.repo.GetRelease(releaseID)
 	if err != nil {
 		return nil, NewReleaseError("RELEASE_NOT_FOUND", "Release 不存在", err)
 	}
-	if release.OwnerUserID != userID {
+	if release.OwnerSpaceID != spaceID {
 		return nil, NewReleaseError("OWNERSHIP_DENIED", "不属于当前用户", nil)
 	}
 	files, err := s.repo.GetReleaseFiles(releaseID)
@@ -1035,12 +1018,12 @@ func (s *service) GetReleaseFiles(ctx context.Context, releaseID, userID string)
 	return files, nil
 }
 
-func (s *service) ArchiveRelease(ctx context.Context, releaseID, userID string) error {
+func (s *service) ArchiveRelease(ctx context.Context, releaseID, spaceID string) error {
 	release, err := s.repo.GetRelease(releaseID)
 	if err != nil {
 		return NewReleaseError("RELEASE_NOT_FOUND", "Release 不存在", err)
 	}
-	if release.OwnerUserID != userID {
+	if release.OwnerSpaceID != spaceID {
 		return NewReleaseError("OWNERSHIP_DENIED", "不属于当前用户", nil)
 	}
 	if release.Lifecycle != string(ReleaseLifecycleReady) {
@@ -1052,12 +1035,12 @@ func (s *service) ArchiveRelease(ctx context.Context, releaseID, userID string) 
 	return s.repo.UpdateRelease(release)
 }
 
-func (s *service) RevokeRelease(ctx context.Context, releaseID, userID, reason string) error {
+func (s *service) RevokeRelease(ctx context.Context, releaseID, spaceID, reason string) error {
 	release, err := s.repo.GetRelease(releaseID)
 	if err != nil {
 		return NewReleaseError("RELEASE_NOT_FOUND", "Release 不存在", err)
 	}
-	if release.OwnerUserID != userID {
+	if release.OwnerSpaceID != spaceID {
 		return NewReleaseError("OWNERSHIP_DENIED", "不属于当前用户", nil)
 	}
 
@@ -1069,19 +1052,19 @@ func (s *service) RevokeRelease(ctx context.Context, releaseID, userID, reason s
 	return s.repo.UpdateRelease(release)
 }
 
-func (s *service) GetPetIdentity(ctx context.Context, userID, petID string) (*PetIdentityData, error) {
+func (s *service) GetPetIdentity(ctx context.Context, spaceID, petID string) (*PetIdentityData, error) {
 	identity, err := s.repo.GetPetIdentity(petID)
 	if err != nil {
 		return nil, NewReleaseError("IDENTITY_NOT_FOUND", "宠物身份不存在", err)
 	}
-	if identity.OwnerUserID != userID {
+	if identity.OwnerSpaceID != spaceID {
 		return nil, NewReleaseError("OWNERSHIP_DENIED", "不属于当前用户", nil)
 	}
 	return identity, nil
 }
 
-func (s *service) GetReleaseArchivePath(ctx context.Context, releaseID, userID string) (string, *ReleaseData, error) {
-	releaseData, err := s.GetRelease(ctx, releaseID, userID)
+func (s *service) GetReleaseArchivePath(ctx context.Context, releaseID, spaceID string) (string, *ReleaseData, error) {
+	releaseData, err := s.GetRelease(ctx, releaseID, spaceID)
 	if err != nil {
 		return "", nil, err
 	}
@@ -1104,7 +1087,7 @@ func (s *SnapshotResult) MarshalJSON() ([]byte, error) {
 }
 
 func generateInputBasedKey(req *BuildReleaseRequest) string {
-	data := fmt.Sprintf("%s|%s|%s", req.UserID, req.ProcessingTaskID, req.PetID)
+	data := fmt.Sprintf("%s|%s|%s", req.SpaceID, req.ProcessingTaskID, req.PetID)
 	h := sha256.Sum256([]byte(data))
 	return "release-build:" + hex.EncodeToString(h[:])
 }
@@ -1115,9 +1098,8 @@ func formatReleaseTimestamp(t time.Time) string {
 
 func (s *ReleaseBuildSnapshot) computeSnapshotHash() string {
 	type hashSource struct {
-		UserID                string `json:"userId"`
+		SpaceID               string `json:"spaceId"`
 		PetID                 string `json:"petId"`
-		CharacterID           string `json:"characterId"`
 		ProcessingTaskID      string `json:"processingTaskId"`
 		ActiveRevisionSetHash string `json:"activeRevisionSetHash"`
 		QualityGateID         string `json:"qualityGateId"`
@@ -1133,9 +1115,8 @@ func (s *ReleaseBuildSnapshot) computeSnapshotHash() string {
 	}
 
 	src := hashSource{
-		UserID:                s.UserID,
+		SpaceID:               s.SpaceID,
 		PetID:                 s.PetID,
-		CharacterID:           s.CharacterID,
 		ProcessingTaskID:      s.ProcessingTaskID,
 		ActiveRevisionSetHash: s.ActiveRevisionSetHash,
 		QualityGateID:         s.QualityGateID,

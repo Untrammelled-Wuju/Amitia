@@ -8,7 +8,7 @@ import (
 func TestApplyCandidateContextSignalsScoring(t *testing.T) {
 	registry := DefaultCandidateRegistry()
 	ctx := CandidateGenerationContext{
-		UserID:      "user-1",
+		SpaceID:     "user-1",
 		CharacterID: "char-1",
 		Goals: []Goal{
 			{ID: "g1", Type: GoalTypeConnection, Status: GoalStatusActive, Priority: GoalPriorityHigh},

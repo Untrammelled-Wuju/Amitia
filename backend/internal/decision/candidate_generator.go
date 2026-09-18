@@ -3,7 +3,7 @@ package decision
 import "time"
 
 type CandidateGenerationContext struct {
-	UserID             string
+	SpaceID            string
 	CharacterID        string
 	Goals              []Goal
 	Intentions         []Intention

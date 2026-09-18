@@ -65,7 +65,7 @@ type RecoveryInteractionRef struct {
 }
 
 type RecoveryScopeRef struct {
-	UserID         string `json:"userId"`
+	SpaceID        string `json:"spaceId"`
 	CharacterID    string `json:"characterId"`
 	ConversationID string `json:"conversationId"`
 	Channel        string `json:"channel,omitempty"`
@@ -141,12 +141,12 @@ type RecoveryMindRef struct {
 }
 
 type MultiAgentRecoveryRef struct {
-	CoordinationID        string                   `json:"coordinationId"`
-	ParentGoalID          string                   `json:"parentGoalId"`
-	ParentGoalRevision    int64                    `json:"parentGoalRevision"`
-	Status                string                   `json:"status"`
-	AssignmentRefs        []AssignmentRecoveryRef  `json:"assignmentRefs,omitempty"`
-	DeriveAssignmentRefs  func() []AssignmentRecoveryRef `json:"-"`
+	CoordinationID       string                         `json:"coordinationId"`
+	ParentGoalID         string                         `json:"parentGoalId"`
+	ParentGoalRevision   int64                          `json:"parentGoalRevision"`
+	Status               string                         `json:"status"`
+	AssignmentRefs       []AssignmentRecoveryRef        `json:"assignmentRefs,omitempty"`
+	DeriveAssignmentRefs func() []AssignmentRecoveryRef `json:"-"`
 }
 
 type AssignmentRecoveryRef struct {
@@ -172,7 +172,7 @@ type RecoveryDescriptor struct {
 	Kernel        *RecoveryInvocationRef         `json:"kernel,omitempty"`
 	Pipeline      *RecoveryPipelineCheckpointRef `json:"pipeline,omitempty"`
 	Mind          *RecoveryMindRef               `json:"mind,omitempty"`
-	MultiAgent    *MultiAgentRecoveryRef        `json:"multiAgent,omitempty"`
+	MultiAgent    *MultiAgentRecoveryRef         `json:"multiAgent,omitempty"`
 	State         RecoveryDescriptorState        `json:"state"`
 	Fingerprint   string                         `json:"fingerprint"`
 	CreatedAt     time.Time                      `json:"createdAt"`
@@ -213,7 +213,7 @@ func (d *RecoveryDescriptor) ComputeFingerprint() {
 	writeKV("interaction.status", string(d.Interaction.Status))
 	writeKVI("interaction.statusVersion", d.Interaction.StatusVersion)
 	writeKV("interaction.commitId", d.Interaction.CommitID)
-	writeKV("scope.userId", d.Scope.UserID)
+	writeKV("scope.spaceId", d.Scope.SpaceID)
 	writeKV("scope.characterId", d.Scope.CharacterID)
 	writeKV("scope.conversationId", d.Scope.ConversationID)
 	for _, g := range d.Goals {

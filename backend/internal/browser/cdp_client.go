@@ -145,9 +145,9 @@ func (c *cdpClient) SubscribeEvent(method string, handler func(json.RawMessage))
 }
 
 func (c *cdpClient) SubscribeEventWithSession(method string, handler func(sessionID string, params json.RawMessage)) func() {
-	return c.events.subscribeAll(func(m string, p json.RawMessage) {
+	return c.events.subscribeAllWithSession(func(m string, sessionID string, p json.RawMessage) {
 		if m == method {
-			handler("", p)
+			handler(sessionID, p)
 		}
 	})
 }
@@ -187,7 +187,7 @@ func (c *cdpClient) readLoop() {
 
 		var evt cdpEvent
 		if err := json.Unmarshal(data, &evt); err == nil && evt.Method != "" {
-			c.events.dispatch(evt.Method, evt.Params)
+			c.events.dispatch(evt.Method, evt.SessionID, evt.Params)
 			continue
 		}
 	}

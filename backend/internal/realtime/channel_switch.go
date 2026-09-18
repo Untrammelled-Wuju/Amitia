@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/u-ai/backend/internal/proactive"
+	"github.com/u-ai/backend/internal/outputlease"
 )
 
 type ChannelGroup string
@@ -42,10 +42,8 @@ func resolveChannelGroup(channel string) ChannelGroup {
 	switch channel {
 	case "voice", "tts":
 		return ChannelGroupVoice
-	case "wechat", "qq", "web":
-		return ChannelGroupText
 	default:
-		return ChannelGroupAll
+		return ChannelGroupText
 	}
 }
 
@@ -120,22 +118,22 @@ func randomSuffix(n int) string {
 	return string(b)
 }
 
-func AcquireChannelLease(characterID, conversationID, channel string, correlationID string, priority proactive.OutputPriority, ttl time.Duration) *proactive.OutputLease {
+func AcquireChannelLease(characterID, conversationID, channel string, correlationID string, priority outputlease.OutputPriority, ttl time.Duration) *outputlease.OutputLease {
 	group := resolveChannelGroup(channel)
-	lease := proactive.AcquireLeaseForGroup(priority, characterID, conversationID, string(group), correlationID, ttl)
+	lease := outputlease.AcquireLeaseForGroup(priority, characterID, conversationID, string(group), correlationID, ttl)
 	return lease
 }
 
 func CancelLowPriorityLeasesOnUserInput(characterID string) int {
-	return proactive.CancelLowPriorityOnUserInput(characterID)
+	return outputlease.CancelLowPriorityOnUserInput(characterID)
 }
 
 func CancelLeasesForChannelGroup(characterID string, group ChannelGroup) int {
-	return proactive.CancelLeasesForGroup(characterID, string(group))
+	return outputlease.CancelLeasesForGroup(characterID, string(group))
 }
 
 func HasActiveLeaseForChannel(characterID, channel string) bool {
 	group := resolveChannelGroup(channel)
-	leases := proactive.GetActiveLeasesForGroup(characterID, string(group))
+	leases := outputlease.GetActiveLeasesForGroup(characterID, string(group))
 	return len(leases) > 0
 }

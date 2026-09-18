@@ -24,7 +24,7 @@ SPDX-License-Identifier: AGPL-3.0-only
       <div class="empty-icon"><el-icon :size="48"><ChatDotRound /></el-icon></div>
       <p class="empty-text">你好，我是 {{ charName || "AI 陪伴角色" }}</p>
       <p class="empty-hint">随时可以和我聊聊天，我在这里陪你。</p>
-      <ChatEmptyStateExtensionHost :context="extensionContext" />
+      <ChatEmptyStateExtensionHost :context="extensionContext || {}" />
     </div>
 
     <template v-for="item in flowItems" :key="item.key">
@@ -32,6 +32,8 @@ SPDX-License-Identifier: AGPL-3.0-only
         v-if="item.kind === 'message'"
         :data-message-id="item.message.id"
         class="conversation-flow-item conversation-flow-item--message"
+        :class="{ 'conversation-flow-item--entering': item.message.animateIn === true }"
+        @animationend="finishMessageEntrance(item.message, $event)"
       >
         <ExtensionSlot
           v-if="hasMessageSlotRenderer(item.message)"
@@ -125,6 +127,7 @@ import { hasUnifiedSlotItem } from "@/ui-runtime/slotLedger";
 import { acknowledgeClientRuntimeSessionState, fetchClientRuntimeSessionState, fetchConversationUIEventsBeforeSequence } from "@/api/extension";
 import { createConversationUIEventStream } from "@/composables/useConversationUIEventStream";
 import { resolveMessageRenderer } from "@/ui-runtime/messageRendererRegistry";
+import { getMessageUIKey } from "@/utils/message-order";
 import {
   ConversationNodeAssembler,
   compareTimeline,
@@ -193,7 +196,7 @@ type FlowItem =
 const flowItems = computed<FlowItem[]>(() => {
   const items: FlowItem[] = props.messages.map((message, index) => ({
     kind: "message",
-    key: `message:${String(message?.id ?? index)}`,
+    key: `message:${getMessageUIKey(message, index)}`,
     message,
     sequence: finiteNumber(message?.seq ?? message?.sequence),
     timestamp: String(message?.createdAt ?? message?.timestamp ?? ""),
@@ -208,12 +211,25 @@ const flowItems = computed<FlowItem[]>(() => {
     });
   }
   return items.sort((a, b) => {
+    const anchorOrder = compareAnchorOrder(a, b);
+    if (anchorOrder !== 0) return anchorOrder;
     const order = compareTimeline(a.sequence, a.timestamp, b.sequence, b.timestamp);
     if (order !== 0) return order;
     if (a.kind !== b.kind) return a.kind === "message" ? -1 : 1;
     return a.key.localeCompare(b.key);
   });
 });
+
+function compareAnchorOrder(a: FlowItem, b: FlowItem): number {
+  if (a.kind !== "message" || b.kind !== "message") return 0;
+  const aId = String(a.message?.id || "");
+  const bId = String(b.message?.id || "");
+  const aAnchor = String(a.message?.anchorMessageId || "");
+  const bAnchor = String(b.message?.anchorMessageId || "");
+  if (aAnchor && aAnchor === bId) return 1;
+  if (bAnchor && bAnchor === aId) return -1;
+  return 0;
+}
 
 function rebuildConversationEventLog() {
   const id = conversationId.value;
@@ -333,22 +349,35 @@ watch(conversationId, (id) => {
 }, { immediate: true });
 
 function messageContext(msg: any) {
+  const messageType = msg.msgType || msg.msg_type || msg.type || "text";
   return {
     messageId: msg.id,
-    type: msg.type || "text",
+    type: messageType,
+    messageType,
+    extensionType: msg.extensionType || msg.extension_type || "",
     role: msg.role,
     status: msg.status,
     content: msg.content || msg.text || "",
+    altText: msg.altText || msg.alt_text || "",
+    imageUrl: msg.imageUrl || msg.image_url || "",
+    videoUrl: msg.videoUrl || msg.video_url || "",
+    audioUrl: msg.audioUrl || msg.audio_url || "",
+    originalAssetReference: msg.originalAssetReference || msg.original_asset_reference || "",
+    fallbackAssetReference: msg.fallbackAssetReference || msg.fallback_asset_reference || "",
+    isAnimated: !!(msg.isAnimated || msg.is_animated),
+    width: msg.width || msg.media_width || 0,
+    height: msg.height || msg.media_height || 0,
     attachments: msg.attachments || [],
     metadata: msg.metadata || {},
   };
 }
 
 function messageSlotContext(msg: any) {
+  const messageType = msg.msgType || msg.msg_type || msg.type || "text";
   return {
     ...(props.extensionContext ?? {}),
     messageId: msg.id,
-    messageType: msg.type || "text",
+    messageType,
     direction: msg.role === "user" ? "outgoing" : msg.role === "assistant" ? "incoming" : "system",
     senderType: msg.role === "user" ? "user" : msg.role === "assistant" ? "character" : "system",
     characterId: props.characterId,
@@ -387,9 +416,11 @@ function messageActions(msg: any) {
 }
 
 function messageExtensionSummary(msg: any) {
+  const messageType = msg.msgType || msg.msg_type || msg.type || "text";
   return {
     messageId: msg.id,
-    type: msg.type || "text",
+    type: messageType,
+    messageType,
     direction: msg.role === "user" ? "outgoing" : msg.role === "assistant" ? "incoming" : "system",
     senderType: msg.role === "user" ? "user" : msg.role === "assistant" ? "character" : "system",
     createdAt: msg.createdAt || "",
@@ -405,6 +436,11 @@ function messageExtensionSummary(msg: any) {
 function finiteNumber(value: unknown): number | undefined {
   const number = Number(value);
   return Number.isFinite(number) ? number : undefined;
+}
+
+function finishMessageEntrance(message: any, event: AnimationEvent) {
+  if (event.target !== event.currentTarget) return;
+  message.animateIn = false;
 }
 
 function scrollToMessage(messageId: string) {
@@ -480,6 +516,13 @@ defineExpose({ rootEl });
 .empty-chat :deep(.extension-slot) { width: min(100%, 680px); margin-top: 20px; }
 
 .messages-area > [data-message-id] { width: min(100%, 820px); margin: 0 auto; }
+.conversation-flow-item--entering { animation: conversationMessageIn 0.25s ease-out; }
+
+@keyframes conversationMessageIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
 @media (max-width: 768px) { .messages-area { padding: 12px 8px; } }
 
 .scroll-btn {

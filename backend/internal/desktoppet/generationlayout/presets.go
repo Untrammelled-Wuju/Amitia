@@ -1,8 +1,8 @@
 package generationlayout
 
 const (
-	DefaultCellWidth  = 512
-	DefaultCellHeight = 512
+	DefaultCellWidth  = 1024
+	DefaultCellHeight = 1024
 	DefaultMargin     = 0
 	DefaultGap        = 0
 )
@@ -15,10 +15,6 @@ type GridPreset struct {
 }
 
 var gridPresets = []GridPreset{
-	{FrameCount: 4, Rows: 2, Columns: 2, Name: "2x2"},
-	{FrameCount: 6, Rows: 2, Columns: 3, Name: "3x2"},
-	{FrameCount: 8, Rows: 2, Columns: 4, Name: "4x2"},
-	{FrameCount: 10, Rows: 2, Columns: 5, Name: "5x2"},
 	{FrameCount: 12, Rows: 3, Columns: 4, Name: "4x3"},
 }
 
@@ -27,17 +23,12 @@ func Presets() []GridPreset {
 }
 
 func RecommendGrid(frameCount int) (rows, columns int) {
-	if frameCount <= 0 {
-		return 1, 1
-	}
 	for _, p := range gridPresets {
 		if p.FrameCount == frameCount {
 			return p.Rows, p.Columns
 		}
 	}
-	columns = 4
-	rows = (frameCount + columns - 1) / columns
-	return rows, columns
+	return 3, 4
 }
 
 func RecommendColumns(frameCount int) int {

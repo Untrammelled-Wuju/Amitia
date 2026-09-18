@@ -16,6 +16,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/runtime_supervisor"
 	"github.com/u-ai/backend/internal/extension/kernel/schedule"
 	"github.com/u-ai/backend/internal/extension/kernel/scope"
+	"github.com/u-ai/backend/internal/runtimeprofile"
 )
 
 func TestBaseline_E2E_FullChain_Lifecycle(t *testing.T) {
@@ -62,6 +63,7 @@ func TestBaseline_E2E_FullChain_Lifecycle(t *testing.T) {
 	container, err := kernel.NewContainerBuilder().
 		WithDBPath(dbPath).
 		WithExtensionRoot(extRoot).
+		WithRuntimeProfile(runtimeprofile.ProfileLocal).
 		Build(ctx)
 	if err != nil {
 		t.Fatalf("ContainerBuilder.Build must succeed: %v", err)
@@ -173,8 +175,8 @@ func TestBaseline_E2E_FullChain_Lifecycle(t *testing.T) {
 		if container.ToolFacade == nil {
 			t.Fatalf("ToolFacade must not be nil")
 		}
-		tools, err := container.ToolFacade.ModelTools(ctx, kernel.LegacyScope{
-			UserID:    "fullchain",
+		tools, err := container.ToolFacade.ModelTools(ctx, kernel.InvocationScope{
+			SpaceID:   "fullchain",
 			Channel:   "test",
 			SessionID: "fullchain-exec",
 		})
@@ -257,6 +259,7 @@ func TestBaseline_E2E_FullChain_Lifecycle(t *testing.T) {
 		container2, err := kernel.NewContainerBuilder().
 			WithDBPath(dbPath).
 			WithExtensionRoot(extRoot).
+			WithRuntimeProfile(runtimeprofile.ProfileLocal).
 			Build(ctx)
 		if err != nil {
 			t.Fatalf("ContainerBuilder.Build after restart must succeed: %v", err)
@@ -281,6 +284,7 @@ func TestBaseline_E2E_FullChain_Lifecycle(t *testing.T) {
 		container3, err := kernel.NewContainerBuilder().
 			WithDBPath(dbPath).
 			WithExtensionRoot(extRoot).
+			WithRuntimeProfile(runtimeprofile.ProfileLocal).
 			Build(ctx)
 		if err != nil {
 			t.Fatalf("ContainerBuilder.Build for disable must succeed: %v", err)
@@ -301,6 +305,7 @@ func TestBaseline_E2E_FullChain_Lifecycle(t *testing.T) {
 		container4, err := kernel.NewContainerBuilder().
 			WithDBPath(dbPath).
 			WithExtensionRoot(extRoot).
+			WithRuntimeProfile(runtimeprofile.ProfileLocal).
 			Build(ctx)
 		if err != nil {
 			t.Fatalf("ContainerBuilder.Build for uninstall must succeed: %v", err)
@@ -367,6 +372,7 @@ func TestBaseline_E2E_FullChain_RestartRecovery(t *testing.T) {
 	container1, err := kernel.NewContainerBuilder().
 		WithDBPath(dbPath).
 		WithExtensionRoot(extRoot).
+		WithRuntimeProfile(runtimeprofile.ProfileLocal).
 		Build(ctx)
 	if err != nil {
 		t.Fatalf("first build must succeed: %v", err)
@@ -410,6 +416,7 @@ func TestBaseline_E2E_FullChain_RestartRecovery(t *testing.T) {
 	container2, err := kernel.NewContainerBuilder().
 		WithDBPath(dbPath).
 		WithExtensionRoot(extRoot).
+		WithRuntimeProfile(runtimeprofile.ProfileLocal).
 		Build(ctx)
 	if err != nil {
 		t.Fatalf("second build after restart must succeed: %v", err)
@@ -454,6 +461,7 @@ func TestBaseline_E2E_FullChain_LegacyZeroCallThroughout(t *testing.T) {
 	container, err := kernel.NewContainerBuilder().
 		WithDBPath(filepath.Join(tempDir, "kernel.db")).
 		WithExtensionRoot(extRoot).
+		WithRuntimeProfile(runtimeprofile.ProfileLocal).
 		Build(ctx)
 	if err != nil {
 		t.Fatalf("ContainerBuilder.Build must succeed: %v", err)
@@ -467,8 +475,8 @@ func TestBaseline_E2E_FullChain_LegacyZeroCallThroughout(t *testing.T) {
 	}
 
 	facade := kernel.NewToolFacade(container.ToolRegistry, container.ExecutionKernel, kernel.DefaultToolFacadeConfig())
-	scope := kernel.LegacyScope{
-		UserID:    "zerocall",
+	scope := kernel.InvocationScope{
+		SpaceID:   "zerocall",
 		Channel:   "test",
 		SessionID: "zerocall-verify",
 	}

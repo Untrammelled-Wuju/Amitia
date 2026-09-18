@@ -4,6 +4,9 @@ package gate
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"sort"
 
 	"github.com/u-ai/backend/internal/desktoppet/quality"
 	"gorm.io/gorm"
@@ -53,7 +56,31 @@ func (s *TaskGateService) Evaluate(ctx context.Context, req quality.EvaluateTask
 	}
 
 	profile := quality.QualityProfileSnapshot{}
-	return s.gateEvaluator.EvaluateTaskGate(ctx, req.ProcessingTaskID, actionVerdicts, profile)
+	revisionSetHash := req.ActiveRevisionSetHash
+	if revisionSetHash == "" {
+		revisionSetHash = computeRevisionSetHash(actionVerdicts)
+	}
+	return s.gateEvaluator.EvaluateTaskGate(ctx, req.ProcessingTaskID, actionVerdicts, profile, quality.GateMeta{
+		ActiveRevisionSetHash: revisionSetHash,
+		ProfileID:             req.ProfileID,
+		RuleSetVersion:        req.RuleSetVersion,
+	})
+}
+
+func computeRevisionSetHash(verdicts []quality.ActionVerdictSummary) string {
+	sorted := make([]quality.ActionVerdictSummary, len(verdicts))
+	copy(sorted, verdicts)
+	sort.Slice(sorted, func(i, j int) bool { return sorted[i].ActionKey < sorted[j].ActionKey })
+	h := sha256.New()
+	for _, v := range sorted {
+		h.Write([]byte(v.ActionKey))
+		h.Write([]byte{0})
+		h.Write([]byte(v.ActionRevisionID))
+		h.Write([]byte{0})
+		h.Write([]byte(v.Verdict))
+		h.Write([]byte{0x1f})
+	}
+	return hex.EncodeToString(h.Sum(nil))
 }
 
 func (s *TaskGateService) buildVerdictSummary(ctx context.Context, eval *quality.QualityEvaluation, actionKey string, required bool) quality.ActionVerdictSummary {
@@ -80,7 +107,7 @@ func (s *TaskGateService) buildVerdictSummary(ctx context.Context, eval *quality
 }
 
 func (s *TaskGateService) GetValidGateForRelease(ctx context.Context, req quality.GetValidGateForReleaseRequest) (*quality.QualityGateResult, error) {
-	if req.UserID == "" {
+	if req.SpaceID == "" {
 		return nil, quality.NewQualityError(quality.ErrCodeQualityNotOwned, "用户 ID 不能为空", nil)
 	}
 
@@ -92,7 +119,7 @@ func (s *TaskGateService) GetValidGateForRelease(ctx context.Context, req qualit
 		return nil, nil
 	}
 	for _, eval := range evals {
-		if eval.UserID != req.UserID {
+		if eval.SpaceID != req.SpaceID {
 			return nil, quality.NewQualityError(quality.ErrCodeQualityNotOwned, "处理任务不属于当前用户", nil)
 		}
 	}

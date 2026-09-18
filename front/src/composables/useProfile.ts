@@ -5,7 +5,7 @@ import { apiClient } from "../ui-index";
 
 export interface UserProfile {
   id: string;
-  userId: string;
+  spaceId: string;
   category: string;
   attributeName: string;
   attributeValue: string;
@@ -40,8 +40,10 @@ export function useProfile() {
   const total = ref(0);
 
   async function fetchProfiles(params?: {
-    userId?: string;
+    spaceId?: string;
+    characterId?: string;
     category?: string;
+    keyword?: string;
     page?: number;
     pageSize?: number;
   }) {
@@ -60,7 +62,7 @@ export function useProfile() {
   }
 
   async function createProfile(data: {
-    userId?: string;
+    spaceId?: string;
     category: string;
     attributeName: string;
     attributeValue: string;

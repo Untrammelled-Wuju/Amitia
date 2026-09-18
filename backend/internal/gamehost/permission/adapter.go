@@ -123,19 +123,15 @@ func (a *EffectivePermissionAdapter) kernelEvaluate(
 	permID string,
 	target permission.PermissionTarget,
 ) DecisionResult {
-	return a.kernelEvaluateMode(ctx, effectiveSubject, kernelSubject, permID, target, true)
+	return a.kernelEvaluateMode(ctx, effectiveSubject, kernelSubject, permID, target)
 }
 
-// kernelEvaluateMode keeps permission inspection side-effect free. Interactive
-// evaluation is reserved for an operation that is actually about to execute;
-// diagnostic/effective-view reads must never create a pending approval request.
 func (a *EffectivePermissionAdapter) kernelEvaluateMode(
 	ctx context.Context,
 	effectiveSubject EffectiveSubject,
 	kernelSubject permission.PermissionSubject,
 	permID string,
 	target permission.PermissionTarget,
-	interactive bool,
 ) DecisionResult {
 	scope := permission.ScopeForExtension(effectiveSubject.ExtensionID)
 	moduleID := effectiveSubject.EffectiveModuleID()
@@ -157,12 +153,7 @@ func (a *EffectivePermissionAdapter) kernelEvaluateMode(
 			Source:      "gamehost",
 		},
 	}
-	var kernelResult permission.PermissionEvaluationResult
-	if interactive && a.approvals != nil {
-		kernelResult = a.approvals.Evaluate(ctx, effectiveSubject, permID, request)
-	} else {
-		kernelResult = a.broker.Evaluate(ctx, request)
-	}
+	kernelResult := a.broker.Evaluate(ctx, request)
 
 	switch kernelResult.Decision {
 	case permission.DecisionAllow, permission.DecisionAllowOnce, permission.DecisionAllowSession, permission.DecisionAllowPersistent:
@@ -225,7 +216,7 @@ func (a *EffectivePermissionAdapter) inspect(ctx context.Context, subject Effect
 			return DecisionResult{Decision: DecisionDenied, Reason: ReasonPolicyDenied, Detail: "host policy denied"}
 		}
 	}
-	return a.kernelEvaluateMode(ctx, subject, subject.KernelSubject(), permID, permission.PermissionTarget{}, false)
+	return a.kernelEvaluateMode(ctx, subject, subject.KernelSubject(), permID, permission.PermissionTarget{})
 }
 
 func (a *EffectivePermissionAdapter) CheckRuntimePermission(

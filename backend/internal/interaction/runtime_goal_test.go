@@ -7,7 +7,7 @@ import (
 	"github.com/u-ai/backend/internal/decision"
 )
 
-func TestGoalTriggerForUserMessage(t *testing.T) {
+func TestGoalTriggerForSpaceMessage(t *testing.T) {
 	scope := InteractionScope{Source: "web", RequestID: "req-1", SessionID: "sess-1"}
 	req := &ProcessRequest{}
 	trigger := goalTriggerForRequest(scope, req)
@@ -60,7 +60,7 @@ func TestGoalTriggerForInternal(t *testing.T) {
 
 func TestCurrentInteractionGoalID(t *testing.T) {
 	now := time.Now().UTC()
-	scope := InteractionScope{UserID: "user-1", CharacterID: "char-1", ConversationID: "conv-1"}
+	scope := InteractionScope{SpaceID: "user-1", CharacterID: "char-1", ConversationID: "conv-1"}
 	req := &ProcessRequest{InteractionID: "int-123"}
 	appraisal := &AppraisalResult{EventType: "chat"}
 
@@ -71,8 +71,8 @@ func TestCurrentInteractionGoalID(t *testing.T) {
 	if goal.ID != "goal:interaction:int-123" {
 		t.Fatalf("Goal ID应为goal:interaction:int-123, 实际 %s", goal.ID)
 	}
-	if goal.UserID != "user-1" {
-		t.Fatalf("UserID应为user-1, 实际 %s", goal.UserID)
+	if goal.SpaceID != "user-1" {
+		t.Fatalf("SpaceID应为user-1, 实际 %s", goal.SpaceID)
 	}
 	if goal.CharacterID != "char-1" {
 		t.Fatalf("CharacterID应为char-1, 实际 %s", goal.CharacterID)
@@ -86,7 +86,7 @@ func TestCurrentInteractionGoalID(t *testing.T) {
 }
 
 func TestCurrentInteractionGoalNilWhenNoInteractionID(t *testing.T) {
-	scope := InteractionScope{UserID: "user-1", CharacterID: "char-1"}
+	scope := InteractionScope{SpaceID: "user-1", CharacterID: "char-1"}
 	req := &ProcessRequest{}
 
 	goal := buildCurrentInteractionGoal(scope, req, nil, time.Now().UTC())
@@ -126,7 +126,7 @@ func TestGoalTypeMapping(t *testing.T) {
 
 func TestGoalDescriptionDoesNotContainRawMessage(t *testing.T) {
 	now := time.Now().UTC()
-	scope := InteractionScope{UserID: "user-1", CharacterID: "char-1"}
+	scope := InteractionScope{SpaceID: "user-1", CharacterID: "char-1"}
 	req := &ProcessRequest{InteractionID: "int-456", Message: "这条消息不应该出现在Goal中"}
 
 	tests := []string{"help", "boundary_cross", "complaint", "apology", "cold", "emotional", "praise", "chat"}
@@ -153,7 +153,7 @@ func TestBuildGoalContextIncludesCurrentAndActive(t *testing.T) {
 
 	if err := registry.Register(decision.Goal{
 		ID:          "long-term-1",
-		UserID:      "user-1",
+		SpaceID:     "user-1",
 		CharacterID: "char-1",
 		Status:      decision.GoalStatusActive,
 		Type:        decision.GoalTypeSupport,
@@ -165,7 +165,7 @@ func TestBuildGoalContextIncludesCurrentAndActive(t *testing.T) {
 	}
 
 	p := &RuntimePipeline{goalRegistry: registry}
-	scope := InteractionScope{UserID: "user-1", CharacterID: "char-1", ConversationID: "conv-1"}
+	scope := InteractionScope{SpaceID: "user-1", CharacterID: "char-1", ConversationID: "conv-1"}
 	req := &ProcessRequest{InteractionID: "int-789"}
 	appraisal := &AppraisalResult{EventType: "help"}
 
@@ -190,7 +190,7 @@ func TestBuildGoalContextDeduplicatesCurrentGoal(t *testing.T) {
 
 	if err := registry.Register(decision.Goal{
 		ID:             "goal:interaction:int-dup",
-		UserID:         "user-1",
+		SpaceID:        "user-1",
 		CharacterID:    "char-1",
 		ConversationID: "conv-1",
 		Status:         decision.GoalStatusActive,
@@ -201,7 +201,7 @@ func TestBuildGoalContextDeduplicatesCurrentGoal(t *testing.T) {
 	}
 
 	p := &RuntimePipeline{goalRegistry: registry}
-	scope := InteractionScope{UserID: "user-1", CharacterID: "char-1", ConversationID: "conv-1"}
+	scope := InteractionScope{SpaceID: "user-1", CharacterID: "char-1", ConversationID: "conv-1"}
 	req := &ProcessRequest{InteractionID: "int-dup"}
 
 	ctx := p.buildGoalContext(scope, req, nil, now)

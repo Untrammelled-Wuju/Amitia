@@ -14,12 +14,11 @@ func NewAuditOutbox(repo Repository) *AuditOutbox {
 	return &AuditOutbox{repo: repo}
 }
 
-func (a *AuditOutbox) Log(ctx context.Context, eventType, userID, characterID, actionKey, editSessionID, jobID, baseRevisionID, candidateRevisionID, previousActiveRevisionID, newActiveRevisionID, reason string) error {
+func (a *AuditOutbox) Log(ctx context.Context, eventType, spaceID, actionKey, editSessionID, jobID, baseRevisionID, candidateRevisionID, previousActiveRevisionID, newActiveRevisionID, reason string) error {
 	entry := &EditAuditLog{
 		ID:                       generateID("audit"),
 		EventType:                eventType,
-		UserID:                   userID,
-		CharacterID:              characterID,
+		SpaceID:                  spaceID,
 		ActionKey:                actionKey,
 		EditSessionID:            editSessionID,
 		JobID:                    jobID,
@@ -31,8 +30,8 @@ func (a *AuditOutbox) Log(ctx context.Context, eventType, userID, characterID, a
 		OccurredAt:               nowUTC(),
 	}
 	if err := a.repo.CreateAuditLog(entry); err != nil {
-		log.Logger.Errorf("editing audit log write failed: type=%s user=%s character=%s action=%s err=%v",
-			eventType, userID, characterID, actionKey, err)
+		log.Logger.Errorf("editing audit log write failed: type=%s user=%s action=%s err=%v",
+			eventType, spaceID, actionKey, err)
 	}
 	return nil
 }

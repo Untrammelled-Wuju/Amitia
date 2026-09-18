@@ -16,7 +16,7 @@ import (
 	applog "github.com/u-ai/backend/log"
 )
 
-func (s *service) invokeLLMWithTools(ctx context.Context, cfg *ModelConfig, messages []map[string]interface{}, trace applog.TraceFields, promptTrace *promptir.PromptTrace, userMsgID, convID, charID, channel, requestID, userID, sessionID string, execCtx *coreexec.ExecutionContext, toolDefs []tool.Tool, seenTools map[string]bool, toolExecCtx context.Context) (string, bool, int, error) {
+func (s *service) invokeLLMWithTools(ctx context.Context, cfg *ModelConfig, messages []map[string]interface{}, trace applog.TraceFields, promptTrace *promptir.PromptTrace, userMsgID, convID, charID, channel, requestID, spaceID, sessionID string, execCtx *coreexec.ExecutionContext, toolDefs []tool.Tool, seenTools map[string]bool, toolExecCtx context.Context) (string, bool, int, error) {
 	var reply string
 	var totalTokens int
 	forceVoice := false
@@ -70,7 +70,7 @@ func (s *service) invokeLLMWithTools(ctx context.Context, cfg *ModelConfig, mess
 				args = string(newArgs)
 			}
 			applog.TraceInfo(trace.WithStage("tool_call_started"), applog.Fields{"round": round, "tool_name": name, "tool_call_id": toolCallID, "args_size": len(args)}, "process message tool call started")
-			toolScope := SkillScope{UserID: userID, CharacterID: charID, ConversationID: convID, Channel: channel, SessionID: sessionID, Trigger: string(extension.TriggerLLM), TraceID: requestID, RequestID: requestID, ToolCallID: toolCallID, CorrelationID: trace.CorrelationID, CausationID: trace.CausationID, ExecContext: execCtx}
+			toolScope := SkillScope{SpaceID: spaceID, CharacterID: charID, ConversationID: convID, Channel: channel, SessionID: sessionID, Trigger: string(extension.TriggerLLM), TraceID: requestID, RequestID: requestID, ToolCallID: toolCallID, CorrelationID: trace.CorrelationID, CausationID: trace.CausationID, ExecContext: execCtx}
 			s.emitDesktopPetTool(ctx, toolScope, toolCallID, name, "started", "", round)
 			result := ""
 			ok := false

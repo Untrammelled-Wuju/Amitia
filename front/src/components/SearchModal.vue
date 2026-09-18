@@ -59,8 +59,8 @@ import {
   ChatDotRound,
   Connection,
   ChatDotSquare,
-  Setting,
   Clock,
+  Setting,
   Upload,
   DataAnalysis,
   Histogram,
@@ -69,6 +69,8 @@ import {
   Timer,
   Notebook,
   Files,
+  Document,
+  Operation,
 } from "@element-plus/icons-vue";
 import { apiClient } from "../composables/useApi";
 
@@ -90,15 +92,13 @@ const pageItems = [
     to: "/dashboard/data",
     icon: DataAnalysis,
   },
-  { label: "微信连接", desc: "微信消息接入", to: "/wechat", icon: Connection },
-  { label: "QQ 连接", desc: "QQ 消息接入", to: "/qq", icon: ChatDotSquare },
+  { label: "日程提醒", desc: "主动陪伴提醒", to: "/reminders", icon: Clock },
   {
     label: "角色管理",
     desc: "AI 角色编辑",
     to: "/character",
     icon: UserFilled,
   },
-  { label: "日程提醒", desc: "主动陪伴提醒", to: "/reminders", icon: Clock },
   {
     label: "记忆总览",
     desc: "记忆数据管理",
@@ -111,6 +111,8 @@ const pageItems = [
   { label: "用户画像", desc: "用户特征画像", to: "/profiles", icon: Notebook },
   { label: "世界书", desc: "世界观设定", to: "/world-book", icon: Files },
   { label: "聊天记录", desc: "历史对话", to: "/logs", icon: ChatDotRound },
+  { label: "系统运行日志", desc: "Core 运行日志文件", to: "/settings/system-logs", icon: Document },
+  { label: "Prompt Trace", desc: "提示词调用追踪", to: "/settings/prompt-trace", icon: Operation },
   { label: "导入记录", desc: "导入批次", to: "/import", icon: Upload },
   { label: "设置", desc: "系统配置", to: "/settings", icon: Setting },
 ];

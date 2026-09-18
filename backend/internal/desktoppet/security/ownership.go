@@ -11,32 +11,27 @@ import (
 	"github.com/u-ai/backend/pkg/comment/response"
 )
 
-type CharacterScope struct {
-	UserID      string
-	CharacterID string
-}
-
 type GenerationTaskScope struct {
-	UserID      string
+	SpaceID     string
 	TaskID      string
 	CharacterID string
 }
 
 type ProcessingTaskScope struct {
-	UserID      string
+	SpaceID     string
 	TaskID      string
 	CharacterID string
 }
 
 type ActionRevisionScope struct {
-	UserID           string
+	SpaceID          string
 	CharacterID      string
 	RevisionID       string
 	ProcessingTaskID string
 }
 
 type QualityScope struct {
-	UserID           string
+	SpaceID          string
 	EvaluationID     string
 	ActionRevisionID string
 	CharacterID      string
@@ -44,51 +39,51 @@ type QualityScope struct {
 }
 
 type ReleaseScope struct {
-	UserID    string
+	SpaceID   string
 	ReleaseID string
 	PetID     string
 }
 
 type InstallationScope struct {
-	UserID         string
+	SpaceID        string
 	DeviceID       string
 	InstallationID string
 }
 
 type EditSessionScope struct {
-	UserID    string
+	SpaceID   string
 	SessionID string
 }
 
 type RegenerationJobScope struct {
-	UserID         string
+	SpaceID        string
 	JobID          string
 	SessionID      string
 	BaseRevisionID string
 }
 
 type CandidateScope struct {
-	UserID      string
+	SpaceID     string
 	CandidateID string
 	JobID       string
 	SessionID   string
 }
 
 type RuntimeCommandScope struct {
-	UserID    string
+	SpaceID   string
 	DeviceID  string
 	RuntimeID string
 	CommandID string
 }
 
 type BehaviorBindingScope struct {
-	UserID         string
+	SpaceID        string
 	BindingID      string
 	InstallationID string
 }
 
 type ActionStreamScope struct {
-	UserID      string
+	SpaceID     string
 	StreamID    string
 	CharacterID string
 }
@@ -100,7 +95,6 @@ var (
 )
 
 type OwnershipGuard interface {
-	RequireCharacter(ctx context.Context, actor *desktoppetAuth.ActorContext, characterID string) (*CharacterScope, error)
 	RequireGenerationTask(ctx context.Context, actor *desktoppetAuth.ActorContext, taskID string) (*GenerationTaskScope, error)
 	RequireProcessingTask(ctx context.Context, actor *desktoppetAuth.ActorContext, taskID string) (*ProcessingTaskScope, error)
 	RequireActionRevision(ctx context.Context, actor *desktoppetAuth.ActorContext, revisionID string) (*ActionRevisionScope, error)

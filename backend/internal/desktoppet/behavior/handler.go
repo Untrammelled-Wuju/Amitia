@@ -21,7 +21,7 @@ func NewHandler(svc *BehaviorService) *Handler {
 }
 
 type reconcileRequest struct {
-	UserID      string `json:"userId"`
+	SpaceID     string `json:"spaceId"`
 	CharacterID string `json:"characterId"`
 }
 
@@ -30,7 +30,7 @@ type setModeRequest struct {
 }
 
 func (h *Handler) GetBehaviorState(c *gin.Context) {
-	userID, err := middleware.ResolveActorID(c)
+	spaceID, err := middleware.ResolveActorID(c)
 	if err != nil {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
@@ -40,7 +40,7 @@ func (h *Handler) GetBehaviorState(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, "characterId 不能为空", nil)
 		return
 	}
-	snapshot, err := h.service.GetBehaviorState(c.Request.Context(), userID, characterID)
+	snapshot, err := h.service.GetBehaviorState(c.Request.Context(), spaceID, characterID)
 	if err != nil {
 		writeBehaviorError(c, err)
 		return
@@ -58,7 +58,7 @@ func requireAdmin(c *gin.Context) (string, bool) {
 		util.ErrorResponse(c, response.Forbidden, "需要管理员权限", gin.H{"errorCode": "FORBIDDEN"})
 		return "", false
 	}
-	return string(actor.UserID), true
+	return string(actor.SpaceID), true
 }
 
 func (h *Handler) GetMetrics(c *gin.Context) {
@@ -100,10 +100,10 @@ func (h *Handler) TriggerReconcile(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, "characterId 不能为空", nil)
 		return
 	}
-	if req.UserID == "" {
-		req.UserID = actorID
+	if req.SpaceID == "" {
+		req.SpaceID = actorID
 	}
-	if err := h.service.TriggerReconcile(c.Request.Context(), req.UserID, req.CharacterID); err != nil {
+	if err := h.service.TriggerReconcile(c.Request.Context(), req.SpaceID, req.CharacterID); err != nil {
 		writeBehaviorError(c, err)
 		return
 	}
@@ -137,13 +137,13 @@ func (h *Handler) SetRuntimeCommand(c *gin.Context) {
 }
 
 func (h *Handler) ListBindings(c *gin.Context) {
-	userID, err := middleware.ResolveActorID(c)
+	spaceID, err := middleware.ResolveActorID(c)
 	if err != nil {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
 	characterID := c.Query("characterId")
-	items, err := h.service.ListBindings(c.Request.Context(), userID, characterID)
+	items, err := h.service.ListBindings(c.Request.Context(), spaceID, characterID)
 	if err != nil {
 		writeBehaviorError(c, err)
 		return
@@ -165,7 +165,7 @@ func (h *Handler) CreateBinding(c *gin.Context) {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
-	binding.UserID = actorID
+	binding.SpaceID = actorID
 	if binding.EventType == "" {
 		util.ErrorResponse(c, response.InvalidParams, "eventType 不能为空", nil)
 		return
@@ -198,7 +198,7 @@ func (h *Handler) GetBinding(c *gin.Context) {
 		writeBehaviorError(c, err)
 		return
 	}
-	if existing.UserID != actorID {
+	if existing.SpaceID != actorID {
 		util.ErrorResponse(c, response.Forbidden, "无权访问该绑定", gin.H{"errorCode": "BINDING_NOT_OWNED"})
 		return
 	}
@@ -223,7 +223,7 @@ func (h *Handler) UpdateBinding(c *gin.Context) {
 		return
 	}
 	req.ID = id
-	req.UserID = actorID
+	req.SpaceID = actorID
 
 	updated, err := h.service.UpdateBindingTyped(c.Request.Context(), req)
 	if err != nil {
@@ -253,7 +253,7 @@ func (h *Handler) DeleteBinding(c *gin.Context) {
 		writeBehaviorError(c, err)
 		return
 	}
-	if existing.UserID != actorID {
+	if existing.SpaceID != actorID {
 		util.ErrorResponse(c, response.Forbidden, "无权操作该绑定", gin.H{"errorCode": "BINDING_NOT_OWNED"})
 		return
 	}

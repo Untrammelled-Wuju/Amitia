@@ -9,34 +9,34 @@ import (
 )
 
 type mockSkillResourceHandler struct {
-	hasFunc         func(ctx context.Context, scope LegacyScope) (bool, []string, error)
-	listFunc        func(ctx context.Context, input ListSkillResourcesInput, scope LegacyScope) (ListSkillResourcesOutput, error)
-	readFunc        func(ctx context.Context, input ReadSkillResourceInput, scope LegacyScope) (ReadSkillResourceOutput, error)
-	materializeFunc func(ctx context.Context, input MaterializeSkillResourceInput, scope LegacyScope) (MaterializeSkillResourceOutput, error)
+	hasFunc         func(ctx context.Context, scope InvocationScope) (bool, []string, error)
+	listFunc        func(ctx context.Context, input ListSkillResourcesInput, scope InvocationScope) (ListSkillResourcesOutput, error)
+	readFunc        func(ctx context.Context, input ReadSkillResourceInput, scope InvocationScope) (ReadSkillResourceOutput, error)
+	materializeFunc func(ctx context.Context, input MaterializeSkillResourceInput, scope InvocationScope) (MaterializeSkillResourceOutput, error)
 }
 
-func (m *mockSkillResourceHandler) HasResourceCapableSkills(ctx context.Context, scope LegacyScope) (bool, []string, error) {
+func (m *mockSkillResourceHandler) HasResourceCapableSkills(ctx context.Context, scope InvocationScope) (bool, []string, error) {
 	if m.hasFunc != nil {
 		return m.hasFunc(ctx, scope)
 	}
 	return false, nil, nil
 }
 
-func (m *mockSkillResourceHandler) HandleListSkillResources(ctx context.Context, input ListSkillResourcesInput, scope LegacyScope) (ListSkillResourcesOutput, error) {
+func (m *mockSkillResourceHandler) HandleListSkillResources(ctx context.Context, input ListSkillResourcesInput, scope InvocationScope) (ListSkillResourcesOutput, error) {
 	if m.listFunc != nil {
 		return m.listFunc(ctx, input, scope)
 	}
 	return ListSkillResourcesOutput{}, nil
 }
 
-func (m *mockSkillResourceHandler) HandleReadSkillResource(ctx context.Context, input ReadSkillResourceInput, scope LegacyScope) (ReadSkillResourceOutput, error) {
+func (m *mockSkillResourceHandler) HandleReadSkillResource(ctx context.Context, input ReadSkillResourceInput, scope InvocationScope) (ReadSkillResourceOutput, error) {
 	if m.readFunc != nil {
 		return m.readFunc(ctx, input, scope)
 	}
 	return ReadSkillResourceOutput{}, nil
 }
 
-func (m *mockSkillResourceHandler) HandleMaterializeSkillResource(ctx context.Context, input MaterializeSkillResourceInput, scope LegacyScope) (MaterializeSkillResourceOutput, error) {
+func (m *mockSkillResourceHandler) HandleMaterializeSkillResource(ctx context.Context, input MaterializeSkillResourceInput, scope InvocationScope) (MaterializeSkillResourceOutput, error) {
 	if m.materializeFunc != nil {
 		return m.materializeFunc(ctx, input, scope)
 	}
@@ -92,13 +92,13 @@ func TestBuildMaterializeSkillResourceTool_HasCorrectSchema(t *testing.T) {
 
 func TestHandleListSkillResources_Success(t *testing.T) {
 	handler := &mockSkillResourceHandler{
-		listFunc: func(ctx context.Context, input ListSkillResourcesInput, scope LegacyScope) (ListSkillResourcesOutput, error) {
+		listFunc: func(ctx context.Context, input ListSkillResourcesInput, scope InvocationScope) (ListSkillResourcesOutput, error) {
 			return ListSkillResourcesOutput{TotalCount: 1}, nil
 		},
 	}
 	facade := &ToolFacade{skillResourceHandler: handler}
 	input := json.RawMessage(`{"skill":"pdf","kind":"reference"}`)
-	result, _ := facade.handleListSkillResources(context.Background(), input, LegacyScope{})
+	result, _ := facade.handleListSkillResources(context.Background(), input, InvocationScope{})
 	if result.Status != "SUCCEEDED" {
 		t.Fatalf("expected SUCCEEDED status, got %s", result.Status)
 	}
@@ -110,7 +110,7 @@ func TestHandleListSkillResources_Success(t *testing.T) {
 func TestHandleListSkillResources_NoHandler(t *testing.T) {
 	facade := &ToolFacade{skillResourceHandler: nil}
 	input := json.RawMessage(`{"skill":"pdf"}`)
-	result, _ := facade.handleListSkillResources(context.Background(), input, LegacyScope{})
+	result, _ := facade.handleListSkillResources(context.Background(), input, InvocationScope{})
 	if result.Status != "FAILED" {
 		t.Fatalf("expected FAILED status when no handler, got %s", result.Status)
 	}
@@ -123,7 +123,7 @@ func TestHandleListSkillResources_MissingSkill(t *testing.T) {
 	handler := &mockSkillResourceHandler{}
 	facade := &ToolFacade{skillResourceHandler: handler}
 	input := json.RawMessage(`{"kind":"reference"}`)
-	result, _ := facade.handleListSkillResources(context.Background(), input, LegacyScope{})
+	result, _ := facade.handleListSkillResources(context.Background(), input, InvocationScope{})
 	if result.Status != "FAILED" {
 		t.Fatalf("expected FAILED status when skill missing, got %s", result.Status)
 	}
@@ -131,13 +131,13 @@ func TestHandleListSkillResources_MissingSkill(t *testing.T) {
 
 func TestHandleReadSkillResource_Success(t *testing.T) {
 	handler := &mockSkillResourceHandler{
-		readFunc: func(ctx context.Context, input ReadSkillResourceInput, scope LegacyScope) (ReadSkillResourceOutput, error) {
+		readFunc: func(ctx context.Context, input ReadSkillResourceInput, scope InvocationScope) (ReadSkillResourceOutput, error) {
 			return ReadSkillResourceOutput{Skill: input.Skill, Path: input.Path, Content: "test content", MIMEType: "text/plain"}, nil
 		},
 	}
 	facade := &ToolFacade{skillResourceHandler: handler}
 	input := json.RawMessage(`{"skill":"pdf","path":"guide.md"}`)
-	result, _ := facade.handleReadSkillResource(context.Background(), input, LegacyScope{})
+	result, _ := facade.handleReadSkillResource(context.Background(), input, InvocationScope{})
 	if result.Status != "SUCCEEDED" {
 		t.Fatalf("expected SUCCEEDED status, got %s", result.Status)
 	}
@@ -147,7 +147,7 @@ func TestHandleReadSkillResource_MissingPath(t *testing.T) {
 	handler := &mockSkillResourceHandler{}
 	facade := &ToolFacade{skillResourceHandler: handler}
 	input := json.RawMessage(`{"skill":"pdf"}`)
-	result, _ := facade.handleReadSkillResource(context.Background(), input, LegacyScope{})
+	result, _ := facade.handleReadSkillResource(context.Background(), input, InvocationScope{})
 	if result.Status != "FAILED" {
 		t.Fatalf("expected FAILED status when path missing, got %s", result.Status)
 	}
@@ -155,7 +155,7 @@ func TestHandleReadSkillResource_MissingPath(t *testing.T) {
 
 func TestHandleMaterializeSkillResource_Success(t *testing.T) {
 	handler := &mockSkillResourceHandler{
-		materializeFunc: func(ctx context.Context, input MaterializeSkillResourceInput, scope LegacyScope) (MaterializeSkillResourceOutput, error) {
+		materializeFunc: func(ctx context.Context, input MaterializeSkillResourceInput, scope InvocationScope) (MaterializeSkillResourceOutput, error) {
 			return MaterializeSkillResourceOutput{
 				Skill:       input.Skill,
 				Path:        input.Path,
@@ -166,7 +166,7 @@ func TestHandleMaterializeSkillResource_Success(t *testing.T) {
 	}
 	facade := &ToolFacade{skillResourceHandler: handler}
 	input := json.RawMessage(`{"skill":"pdf","path":"assets/icon.png"}`)
-	result, _ := facade.handleMaterializeSkillResource(context.Background(), input, LegacyScope{})
+	result, _ := facade.handleMaterializeSkillResource(context.Background(), input, InvocationScope{})
 	if result.Status != "SUCCEEDED" {
 		t.Fatalf("expected SUCCEEDED status, got %s", result.Status)
 	}
@@ -176,7 +176,7 @@ func TestHandleMaterializeSkillResource_MissingPath(t *testing.T) {
 	handler := &mockSkillResourceHandler{}
 	facade := &ToolFacade{skillResourceHandler: handler}
 	input := json.RawMessage(`{"skill":"pdf"}`)
-	result, _ := facade.handleMaterializeSkillResource(context.Background(), input, LegacyScope{})
+	result, _ := facade.handleMaterializeSkillResource(context.Background(), input, InvocationScope{})
 	if result.Status != "FAILED" {
 		t.Fatalf("expected FAILED status when path missing, got %s", result.Status)
 	}

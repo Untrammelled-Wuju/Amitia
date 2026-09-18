@@ -23,7 +23,7 @@ func installPackagePipelineVersion(t *testing.T, runtime *Runtime, version strin
 	ctx := context.Background()
 	workspaceID := dev_mode.WorkspaceID("package-saga-recovery")
 	if _, err := runtime.container.DevModeRegistry.Get(workspaceID); err != nil {
-		if _, err := runtime.container.DevModeRegistry.Register(ctx, dev_mode.RegisterWorkspaceInput{WorkspaceID: workspaceID, ExtensionID: dev_mode.ExtensionID("com.example/pipeline"), OwnerUserID: "user-1", PathReference: t.TempDir(), ManifestPath: "manifest.json"}); err != nil {
+		if _, err := runtime.container.DevModeRegistry.Register(ctx, dev_mode.RegisterWorkspaceInput{WorkspaceID: workspaceID, ExtensionID: dev_mode.ExtensionID("com.example/pipeline"), OwnerSpaceID: "user-1", PathReference: t.TempDir(), ManifestPath: "manifest.json"}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -44,7 +44,7 @@ func installPackagePipelineVersion(t *testing.T, runtime *Runtime, version strin
 		t.Fatal(err)
 	}
 	preview, err := runtime.PreviewPackage(context.Background(), PackagePreviewRequest{
-		UserID: "user-1", ScopeType: "global", FileName: "pipeline.amitiax",
+		SpaceID: "user-1", ScopeType: "global", FileName: "pipeline.amitiax",
 		AllowUnsignedDev: true, DeveloperSessionID: session.SessionID,
 	}, archive)
 	archive.Close()
@@ -56,12 +56,12 @@ func installPackagePipelineVersion(t *testing.T, runtime *Runtime, version strin
 		confirmations[confirmation] = true
 	}
 	confirmed, err := runtime.ConfirmPackagePreview(context.Background(), PackagePreviewConfirmationRequest{
-		SessionID: preview.SessionID, UserID: "user-1", ScopeType: "global", Confirmations: confirmations,
+		SessionID: preview.SessionID, SpaceID: "user-1", ScopeType: "global", Confirmations: confirmations,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	request := PackageInstallRequest{SessionID: preview.SessionID, UserID: "user-1", ScopeType: "global", Confirmations: confirmations, ConfirmationToken: confirmed.ConfirmationToken, IdempotencyKey: "test-key-" + version}
+	request := PackageInstallRequest{SessionID: preview.SessionID, SpaceID: "user-1", ScopeType: "global", Confirmations: confirmations, ConfirmationToken: confirmed.ConfirmationToken, IdempotencyKey: "test-key-" + version}
 	var result KernelInstallResult
 	if _, installedErr := runtime.container.InstallationRepository.GetInstallation(ctx, domain.ExtensionID(preview.ExtensionID)); installedErr == nil {
 		request.ExpectedExtensionID = preview.ExtensionID
@@ -86,7 +86,7 @@ func TestRecoverPackageOperationDoesNotCompleteFromVersionAlone(t *testing.T) {
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	op := PackageOperationRecord{
 		OperationID: "package-operation-recovery-evidence", TraceID: "trace-recovery-evidence",
-		UserID: "user-1", ScopeType: "global", ExtensionID: installed.ExtensionID,
+		SpaceID: "user-1", ScopeType: "global", ExtensionID: installed.ExtensionID,
 		TargetVersion: installed.Version, OperationType: "install", Status: "in_progress",
 		CurrentStep: "commit_installed_tree", ArtifactID: artifact.ArtifactID,
 		StartedAt: now, UpdatedAt: now, ConfirmationsJSON: "{}",
@@ -185,7 +185,7 @@ func TestPackageUninstallRechecksPreflightInsideLock(t *testing.T) {
 		SnapshotRequirementHash:   uninstallPreview.SnapshotRequirementHash,
 		RequiredConfirmationsHash: confirmationsHash,
 		DependenciesHash:          depsHash,
-		UserID:                    "user-1",
+		SpaceID:                   "user-1",
 		ScopeType:                 "global",
 		ScopeID:                   "",
 		PolicyVersion:             packagePolicyVersion,
@@ -204,7 +204,7 @@ func TestPackageUninstallRechecksPreflightInsideLock(t *testing.T) {
 	lock.Lock()
 	result := make(chan error, 1)
 	go func() {
-		_, err := runtime.ExecutePackageUninstall(ctx, ExecutePackageUninstallRequest{ExtensionID: installed.ExtensionID, UserID: "user-1", ScopeType: "global", ScopeID: "", ConfirmationToken: uninstallToken})
+		_, err := runtime.ExecutePackageUninstall(ctx, ExecutePackageUninstallRequest{ExtensionID: installed.ExtensionID, SpaceID: "user-1", ScopeType: "global", ScopeID: "", ConfirmationToken: uninstallToken})
 		result <- err
 	}()
 	time.Sleep(200 * time.Millisecond)
@@ -285,7 +285,7 @@ func TestUninstallRecoveryRejectsRetainForRollbackWithMissingArtifact(t *testing
 		PreviewHash:         preview.PreviewHash,
 		CurrentVersionID:    preview.CurrentVersionID,
 		CurrentGenerationID: preview.CurrentGenerationID,
-		UserID:              "user-1",
+		SpaceID:             "user-1",
 		ScopeType:           "global",
 		PolicyVersion:       packagePolicyVersion,
 		Confirmations:       map[string]bool{"confirm.delete": true},
@@ -332,7 +332,7 @@ func TestUninstallRecoveryRejectsRetainForExportWithMissingArtifact(t *testing.T
 		PreviewHash:         preview.PreviewHash,
 		CurrentVersionID:    preview.CurrentVersionID,
 		CurrentGenerationID: preview.CurrentGenerationID,
-		UserID:              "user-1",
+		SpaceID:             "user-1",
 		ScopeType:           "global",
 		PolicyVersion:       packagePolicyVersion,
 		Confirmations:       map[string]bool{"confirm.delete": true},
@@ -550,7 +550,7 @@ func TestProveUninstalledPackageOperationChecksRecoverySteps(t *testing.T) {
 	op := PackageOperationRecord{
 		OperationID:       "op-proof-recovery-steps",
 		TraceID:           "trace-proof-recovery",
-		UserID:            "user-1",
+		SpaceID:           "user-1",
 		ScopeType:         "global",
 		ExtensionID:       installed.ExtensionID,
 		TargetVersion:     installed.Version,

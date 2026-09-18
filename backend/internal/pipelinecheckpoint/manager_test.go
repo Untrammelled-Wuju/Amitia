@@ -181,3 +181,72 @@ func TestAcquirePendingRangeRecoversExpiredLeaseAndAdvanceRequiresOwner(t *testi
 		t.Fatalf("expected completed checkpoint lease to clear, got %#v", record)
 	}
 }
+
+func TestReleaseLeaseAllowsImmediateRetryWithoutAdvancing(t *testing.T) {
+	db := openManagerTestDB(t)
+	for _, row := range []struct {
+		id       string
+		sequence int
+		content  string
+	}{
+		{"m1", 1, "一"},
+		{"m2", 2, "二"},
+	} {
+		if err := db.Exec("INSERT INTO messages (id, conversation_id, sequence, role, content) VALUES (?, 'conv-release', ?, 'user', ?)", row.id, row.sequence, row.content).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	manager := New(db)
+	_, maxSequence, acquired, err := manager.AcquirePendingRange("conv-release", "profile", 0, "worker-1", time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !acquired || maxSequence != 2 {
+		t.Fatalf("unexpected first acquire: acquired=%v max=%d", acquired, maxSequence)
+	}
+	if err := manager.ReleaseLease("conv-release", "profile", "worker-1"); err != nil {
+		t.Fatal(err)
+	}
+
+	record, err := manager.Load("conv-release", "profile")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if record.LastMessageSequence != 0 || record.LeaseOwner != "" || record.ProcessingEndSeq != 0 {
+		t.Fatalf("release must keep checkpoint pending and clear lease: %#v", record)
+	}
+
+	messages, maxSequence, acquired, err := manager.AcquirePendingRange("conv-release", "profile", 0, "worker-2", time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !acquired || maxSequence != 2 || len(messages) != 2 {
+		t.Fatalf("expected immediate retry after release, got acquired=%v max=%d messages=%d", acquired, maxSequence, len(messages))
+	}
+}
+
+func TestAdvanceLeasedRejectsReleasedLeaseOwner(t *testing.T) {
+	db := openManagerTestDB(t)
+	if err := db.Exec("INSERT INTO messages (id, conversation_id, sequence, role, content) VALUES ('m1', 'conv-stale', 1, 'user', 'one')").Error; err != nil {
+		t.Fatal(err)
+	}
+	manager := New(db)
+	_, _, acquired, err := manager.AcquirePendingRange("conv-stale", "profile", 0, "worker-1", time.Minute)
+	if err != nil || !acquired {
+		t.Fatalf("acquire: acquired=%v err=%v", acquired, err)
+	}
+	if err := manager.ReleaseLease("conv-stale", "profile", "worker-1"); err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.AdvanceLeased("conv-stale", "profile", 1, "stale", "worker-1"); err == nil {
+		t.Fatal("expected released lease owner to be rejected")
+	}
+	record, err := manager.Load("conv-stale", "profile")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if record.LastMessageSequence != 0 {
+		t.Fatalf("stale worker advanced checkpoint to %d", record.LastMessageSequence)
+	}
+}

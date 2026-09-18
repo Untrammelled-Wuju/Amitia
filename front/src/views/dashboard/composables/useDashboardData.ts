@@ -10,7 +10,6 @@ export function useDashboardData() {
   const runtimeHealth = ref<any>(null);
   const runtimeHealthLoading = ref(false);
   const accessRisk = ref<any>(null);
-  const cloudRisk = ref<any>(null);
   const modelName = ref("");
   const diagResult = ref<any>(null);
   const diagLoading = ref(false);
@@ -44,19 +43,6 @@ export function useDashboardData() {
   const modelClass = computed(() =>
     health.value?.model === "configured" ? "status-ok" : "status-warn",
   );
-  const wechatLabel = computed(() =>
-    health.value?.wechat === "connected" ? "已连接" : "未连接",
-  );
-  const wechatClass = computed(() =>
-    health.value?.wechat === "connected" ? "status-ok" : "status-off",
-  );
-  const qqLabel = computed(() =>
-    health.value?.qq === "connected" ? "已连接" : "未连接",
-  );
-  const qqClass = computed(() =>
-    health.value?.qq === "connected" ? "status-ok" : "status-off",
-  );
-
   const suggestionItems = computed(() => {
     return (
       diagResult.value?.items?.filter(
@@ -158,31 +144,9 @@ export function useDashboardData() {
     } catch {}
   }
 
-  async function fetchQQStatus() {
-    try {
-      const r = await get<any>("/api/qq/status");
-      const data = r?.data || r;
-      if (data) {
-        health.value.qq =
-          data.qqOnline || data.status === "online"
-            ? "connected"
-            : "disconnected";
-      }
-    } catch {
-      health.value.qq = "disconnected";
-    }
-  }
-
   async function fetchAccessRisk() {
     try {
       accessRisk.value = await get<any>("/api/security/exposure-check");
-    } catch {}
-  }
-
-  async function fetchCloudRisk() {
-    try {
-      const r = await get<any>("/api/wechat/cloud-check/risk-summary");
-      cloudRisk.value = r?.data || r;
     } catch {}
   }
 
@@ -405,11 +369,9 @@ export function useDashboardData() {
       fetchActiveChar(),
       fetchTodayStats(),
       fetchRecentImports(),
-      fetchCloudRisk(),
       fetchFeedbackStats(),
       fetchAccessRisk(),
       fetchUsageOverview(),
-      fetchQQStatus(),
       fetchUsageDaily(),
     ]);
     await fetchPsycheState();
@@ -432,7 +394,6 @@ export function useDashboardData() {
     runtimeHealth,
     runtimeHealthLoading,
     accessRisk,
-    cloudRisk,
     modelName,
     diagResult,
     diagLoading,
@@ -451,10 +412,6 @@ export function useDashboardData() {
     deployClass,
     modelLabel,
     modelClass,
-    wechatLabel,
-    wechatClass,
-    qqLabel,
-    qqClass,
     suggestionItems,
     hasSuggestions,
     maxTodayStat,
@@ -465,9 +422,7 @@ export function useDashboardData() {
     fmtDateShort,
     fetchHealth,
     fetchModelInfo,
-    fetchQQStatus,
     fetchAccessRisk,
-    fetchCloudRisk,
     fetchRuntimeHealth,
     runHealthCheck,
     fetchDiagnostics,

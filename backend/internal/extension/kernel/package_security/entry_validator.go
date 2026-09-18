@@ -30,7 +30,7 @@ func NewEntryValidatorWithDeclaredExecutables(policy ArchivePolicy, declared map
 		policy:           policy,
 		fileTypeDetector: NewFileTypeDetector(),
 		forbiddenExt: map[string]bool{
-			".exe": true, ".com": true, ".bat": true, ".cmd": true,
+			".exe": true, ".com": true, ".bat": true,
 			".msi": true, ".dll": true, ".sys": true, ".scr": true,
 			".pif": true, ".cpl": true, ".so": true, ".dylib": true,
 			".app": true, ".class": true, ".jar": true,

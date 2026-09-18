@@ -167,7 +167,7 @@ func TestUserTrustGrantAndLookup(t *testing.T) {
 	now := time.Now().UTC()
 	decision := UserTrustDecision{
 		DecisionID:   "d1",
-		UserID:       "user-1",
+		SpaceID:      "user-1",
 		PublisherID:  "com.example",
 		Scope:        TrustScopePublisher,
 		GrantedLevel: TrustLevelUserTrusted,
@@ -190,7 +190,7 @@ func TestUserTrustRevoke(t *testing.T) {
 	now := time.Now().UTC()
 	decision := UserTrustDecision{
 		DecisionID:   "d1",
-		UserID:       "user-1",
+		SpaceID:      "user-1",
 		PublisherID:  "com.example",
 		Scope:        TrustScopePublisher,
 		GrantedLevel: TrustLevelUserTrusted,
@@ -211,7 +211,7 @@ func TestUserTrustBlockedScope(t *testing.T) {
 	now := time.Now().UTC()
 	store.Grant(UserTrustDecision{
 		DecisionID:   "d1",
-		UserID:       "user-1",
+		SpaceID:      "user-1",
 		PublisherID:  "com.example",
 		Scope:        TrustScopePublisher,
 		GrantedLevel: TrustLevelBlocked,

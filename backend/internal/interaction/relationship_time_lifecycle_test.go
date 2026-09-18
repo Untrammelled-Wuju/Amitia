@@ -34,7 +34,7 @@ func (s *relationshipTimeCoordinatorStub) PrepareInbound(_ context.Context, inpu
 	}
 	result := temporal.RelationshipTimeContext{
 		Version:     temporal.RelationshipTimeVersion,
-		UserID:      input.UserID,
+		SpaceID:     input.SpaceID,
 		CharacterID: input.CharacterID,
 		NowUTC:      input.ObservedAt,
 	}
@@ -83,7 +83,7 @@ func TestRelationshipTimePrepareRunsOnceForIdempotentRequest(t *testing.T) {
 	orch.SetRelationshipTimeCoordinator(coordinator)
 	orch.SetReady(true)
 	req := &ProcessRequest{
-		UserID:         "user-1",
+		SpaceID:        "user-1",
 		CharacterID:    "char-1",
 		ConversationID: "conv-1",
 		Channel:        "web",
@@ -108,7 +108,7 @@ func TestRelationshipTimePrepareRunsOnceForIdempotentRequest(t *testing.T) {
 		t.Fatalf("unexpected lifecycle calls prepare=%d release=%d", prepareCount, releaseCount)
 	}
 	input := coordinator.prepareCalls[0]
-	if input.UserID != "user-1" || input.CharacterID != "char-1" || input.InteractionID != first.InteractionID || input.RequestID != "request-1" {
+	if input.SpaceID != "user-1" || input.CharacterID != "char-1" || input.InteractionID != first.InteractionID || input.RequestID != "request-1" {
 		t.Fatalf("unexpected prepare input: %#v", input)
 	}
 }
@@ -118,7 +118,7 @@ func TestRelationshipTimeClaimReleasedOnProcessorFailure(t *testing.T) {
 	orch := NewOrchestrator(DefaultOrchestratorConfig(), &relationshipTimeErrorProcessor{err: errors.New("generation failed")}, nil)
 	orch.SetRelationshipTimeCoordinator(coordinator)
 	orch.SetReady(true)
-	result, err := orch.Process(context.Background(), &ProcessRequest{UserID: "user-1", CharacterID: "char-1", RequestID: "request-fail", Message: "hello"})
+	result, err := orch.Process(context.Background(), &ProcessRequest{SpaceID: "user-1", CharacterID: "char-1", RequestID: "request-fail", Message: "hello"})
 	if err == nil || result == nil {
 		t.Fatalf("expected failed result: result=%#v err=%v", result, err)
 	}
@@ -138,7 +138,7 @@ func TestRelationshipTimeClaimReleasedOnDeadline(t *testing.T) {
 	orch := NewOrchestrator(cfg, &stubMessageProcessor{prefix: "late-", delay: time.Second}, nil)
 	orch.SetRelationshipTimeCoordinator(coordinator)
 	orch.SetReady(true)
-	result, err := orch.Process(context.Background(), &ProcessRequest{UserID: "user-1", CharacterID: "char-1", RequestID: "request-timeout", Message: "hello"})
+	result, err := orch.Process(context.Background(), &ProcessRequest{SpaceID: "user-1", CharacterID: "char-1", RequestID: "request-timeout", Message: "hello"})
 	if !errors.Is(err, context.DeadlineExceeded) || result == nil || result.Outcome != OutcomeCancelled {
 		t.Fatalf("expected deadline cancellation: result=%#v err=%v", result, err)
 	}
@@ -157,7 +157,7 @@ func TestRelationshipTimeClaimReleaseSurvivesCallerCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 	go func() {
-		_, err := orch.Process(ctx, &ProcessRequest{UserID: "user-1", CharacterID: "char-1", RequestID: "request-cancelled", Message: "hello"})
+		_, err := orch.Process(ctx, &ProcessRequest{SpaceID: "user-1", CharacterID: "char-1", RequestID: "request-cancelled", Message: "hello"})
 		done <- err
 	}()
 	select {
@@ -185,7 +185,7 @@ func TestRelationshipTimePrepareFailureDoesNotBlockChat(t *testing.T) {
 	orch := NewOrchestrator(DefaultOrchestratorConfig(), &stubMessageProcessor{prefix: "ok-"}, nil)
 	orch.SetRelationshipTimeCoordinator(coordinator)
 	orch.SetReady(true)
-	result, err := orch.Process(context.Background(), &ProcessRequest{UserID: "user-1", CharacterID: "char-1", RequestID: "request-prepare-fail", Message: "hello"})
+	result, err := orch.Process(context.Background(), &ProcessRequest{SpaceID: "user-1", CharacterID: "char-1", RequestID: "request-prepare-fail", Message: "hello"})
 	if err != nil || result == nil || result.Outcome != OutcomeCompleted {
 		t.Fatalf("prepare failure blocked chat: result=%#v err=%v", result, err)
 	}
@@ -200,7 +200,7 @@ func TestRelationshipTimeUnclaimedContextIsNeverReleased(t *testing.T) {
 	orch := NewOrchestrator(DefaultOrchestratorConfig(), &relationshipTimeErrorProcessor{err: errors.New("generation failed")}, nil)
 	orch.SetRelationshipTimeCoordinator(coordinator)
 	orch.SetReady(true)
-	_, _ = orch.Process(context.Background(), &ProcessRequest{UserID: "user-1", CharacterID: "char-1", RequestID: "request-unclaimed", Message: "hello"})
+	_, _ = orch.Process(context.Background(), &ProcessRequest{SpaceID: "user-1", CharacterID: "char-1", RequestID: "request-unclaimed", Message: "hello"})
 	prepareCount, releaseCount := coordinator.counts()
 	if prepareCount != 1 || releaseCount != 0 {
 		t.Fatalf("unexpected lifecycle calls prepare=%d release=%d", prepareCount, releaseCount)

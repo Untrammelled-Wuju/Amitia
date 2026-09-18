@@ -140,7 +140,6 @@ class _PetInstallationsPageState extends ConsumerState<PetInstallationsPage> {
   Widget _packageCard(BuildContext context, Map<String, dynamic> item) {
     final id = (item['id'] ?? '').toString();
     final name = (item['name'] ?? id).toString();
-    final characterId = (item['characterId'] ?? '').toString();
     final status = (item['status'] ?? '').toString();
     return Padding(
       padding: EdgeInsets.only(bottom: AppSpacing.sm),
@@ -152,7 +151,7 @@ class _PetInstallationsPageState extends ConsumerState<PetInstallationsPage> {
             Text(name, style: AppTypography.body(context)),
             Text('v${item['version'] ?? '-'} · ${item['actionCount'] ?? 0} 动作 · $status', style: AppTypography.caption(context)),
           ])),
-          FilledButton(onPressed: id.isEmpty || characterId.isEmpty ? null : () => _install(id, characterId, name), child: const Text('安装')),
+          FilledButton(onPressed: id.isEmpty ? null : () => _install(id, name), child: const Text('安装')),
         ]),
       ),
     );
@@ -226,12 +225,11 @@ class _PetInstallationsPageState extends ConsumerState<PetInstallationsPage> {
     } catch (e) { _toast('卸载失败：$e'); }
   }
 
-  Future<void> _install(String packageId, String characterId, String name) async {
+  Future<void> _install(String packageId, String name) async {
     try {
       await ref.read(backendServiceProvider).post<dynamic>(
         '/api/desktop-pets/packages/$packageId/install',
         headers: _deviceHeaders,
-        data: {'character_id': characterId},
       );
       _toast('「$name」安装任务已提交');
       await _load();

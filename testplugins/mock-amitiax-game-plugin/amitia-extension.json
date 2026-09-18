@@ -1,0 +1,265 @@
+{
+  "manifestVersion": 1,
+  "extension": {
+    "id": "com.amitia/world-game-plugin",
+    "name": {
+      "default": "Amitia World Game"
+    },
+    "description": {
+      "default": "Amitia World Game Plugin - a formal game plugin for the Amitia platform with realtime control, state streaming, and RPC capabilities."
+    },
+    "version": "1.0.0",
+    "license": "MIT",
+    "categories": [
+      "game",
+      "world"
+    ],
+    "keywords": [
+      "world-game",
+      "game-plugin",
+      "sdk-consumer",
+      "amitia",
+      "formal-plugin"
+    ]
+  },
+  "publisher": {
+    "id": "amitia",
+    "displayName": "Amitia",
+    "trustLevel": "trusted"
+  },
+  "compatibility": {
+    "minHostVersion": "0.1.0",
+    "platforms": [
+      "windows",
+      "linux",
+      "macos"
+    ]
+  },
+  "modules": [
+    {
+      "id": "world-game-runtime",
+      "name": {
+        "default": "Amitia World Game Runtime"
+      },
+      "type": "javascript",
+      "runtime": {
+        "type": "javascript",
+        "entryPoint": "dist/index.js"
+      },
+      "contributions": [
+        {
+          "id": "world-game-plugin-contribution",
+          "kind": "gamex",
+          "name": {
+            "default": "World Game Plugin"
+          },
+          "description": {
+            "default": "Formal Amitia World Game plugin with realtime control, state streaming, and RPC capabilities."
+          },
+          "spec": {
+            "protocolVersion": "amitia-game-host/1",
+            "runtimeModuleId": "world-game-runtime",
+            "hostFeatures": [
+              "realtime_control",
+              "state_streaming",
+              "event_streaming",
+              "custom_rpc",
+              "host_api",
+              "shared_control",
+              "multi_service",
+              "binary_streaming"
+            ],
+            "services": [
+              {
+                "id": "world-game-runtime",
+                "moduleId": "world-game-runtime",
+                "name": "World Game Runtime",
+                "kind": "process",
+                "required": true,
+                "dependsOn": [
+                  "world-game-support"
+                ]
+              },
+              {
+                "id": "world-game-support",
+                "moduleId": "world-game-support",
+                "name": "World Game Support Runtime",
+                "kind": "process",
+                "required": true
+              }
+            ],
+            "channels": [
+              {
+                "id": "worldgame-events",
+                "kind": "event",
+                "serviceId": "world-game-runtime",
+                "direction": "bidirectional",
+                "frequencyHint": "high"
+              },
+              {
+                "id": "worldgame-state",
+                "kind": "state",
+                "serviceId": "world-game-runtime",
+                "direction": "bidirectional",
+                "frequencyHint": "realtime"
+              },
+              {
+                "id": "worldgame-binary",
+                "kind": "binary",
+                "serviceId": "world-game-runtime",
+                "direction": "plugin_to_host",
+                "frequencyHint": "normal"
+              }
+            ],
+            "controlEffectSinks": [
+              {
+                "id": "worldgame.effect",
+                "serviceId": "world-game-runtime",
+                "description": "Opaque control-effect sink declared by the plugin package."
+              }
+            ],
+            "network": {
+              "mode": "restricted",
+              "allowedIPs": [
+                "127.0.0.1"
+              ],
+              "allowedPorts": [
+                18899,
+                18901,
+                18902,
+                18903
+              ],
+              "allowedTransports": [
+                "http",
+                "tcp",
+                "udp",
+                "websocket"
+              ],
+              "allowHostLoopback": true,
+              "maxConnections": 8
+            },
+            "metadata": {
+              "mode": "formal-plugin",
+              "security": "full"
+            },
+            "artifacts": [
+              {
+                "id": "worldgame-companion-file",
+                "type": "file",
+                "platforms": [
+                  "windows",
+                  "linux",
+                  "macos"
+                ],
+                "source": "artifacts/worldgame-companion.txt",
+                "target": "worldgame-companion.txt",
+                "required": false,
+                "sha256": "6577bff0ff196b83226d454d08b7721d2aa90f6708dafb517b81eefa1dd461d0"
+              }
+            ]
+          },
+          "requiredPermissions": [
+            "gamehost.control",
+            "gamehost.channel.use",
+            "gamehost.host_api.invoke",
+            "service.secret.use",
+            "service.network.request"
+          ]
+        },
+        {
+          "id": "world-game-move-tool",
+          "kind": "tool",
+          "name": {
+            "default": "World Game Move"
+          },
+          "description": {
+            "default": "Agent-facing opaque tool routed through GameHost to the world game plugin runtime."
+          },
+          "spec": {
+            "toolId": "worldgame/move",
+            "modelName": "world_game_move",
+            "handlerName": "move",
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "direction": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": true
+            },
+            "outputSchema": {
+              "type": "object"
+            },
+            "riskLevel": "medium",
+            "sideEffect": "write",
+            "runtime": {
+              "runtimeType": "game_host",
+              "handlerName": "move",
+              "pluginId": "com.amitia/world-game-plugin/world-game-plugin-contribution",
+              "serviceId": "world-game-runtime"
+            }
+          }
+        }
+      ],
+      "placement": "device"
+    },
+    {
+      "id": "world-game-support",
+      "name": {
+        "default": "World Game Support Runtime"
+      },
+      "type": "javascript",
+      "runtime": {
+        "type": "javascript",
+        "entryPoint": "dist/support.js"
+      },
+      "contributions": [],
+      "placement": "device"
+    }
+  ],
+  "dependencies": [],
+  "permissions": [
+    {
+      "name": "gamehost.control",
+      "reason": "Required to request control authority transitions and submit control-effect intents through the mockgame.effect sink.",
+      "required": false
+    },
+    {
+      "name": "gamehost.channel.use",
+      "reason": "Required to publish to mockgame-events and mockgame-state channels.",
+      "required": false
+    },
+    {
+      "name": "gamehost.host_api.invoke",
+      "reason": "Required to invoke host API routes via the gateway.",
+      "required": false
+    },
+    {
+      "name": "service.secret.use",
+      "reason": "Required to acquire scoped SecretLease for mock_provider_token.",
+      "required": false,
+      "scope": "extension"
+    },
+    {
+      "name": "service.network.request",
+      "reason": "Required for host-mediated restricted HTTP/TCP/UDP/WebSocket access; the plugin process itself remains network-isolated.",
+      "required": false,
+      "scope": "extension"
+    }
+  ],
+  "secretRefs": [
+    {
+      "ref": "secret://worldgame_provider_token",
+      "serviceId": "world-game-runtime",
+      "purpose": "startup",
+      "required": false,
+      "description": "World Game provider token for testing SecretLease lifecycle."
+    }
+  ],
+  "integrity": {
+    "algorithm": "sha256",
+    "contentTreeHash": ""
+  },
+  "placement": "device"
+}

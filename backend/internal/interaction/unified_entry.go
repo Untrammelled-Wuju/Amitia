@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 	coreexec "github.com/u-ai/backend/internal/execution"
+	"github.com/u-ai/backend/internal/runtimeidentity"
 	"github.com/u-ai/backend/internal/temporal"
 )
 
@@ -18,8 +19,6 @@ type EntrySource string
 
 const (
 	EntrySourceWeb       EntrySource = "web"
-	EntrySourceWeChat    EntrySource = "wechat"
-	EntrySourceQQ        EntrySource = "qq"
 	EntrySourceVoice     EntrySource = "voice"
 	EntrySourceProactive EntrySource = "proactive"
 	EntrySourceRuntime   EntrySource = "runtime"
@@ -28,12 +27,10 @@ const (
 
 func ParseEntrySource(source string) EntrySource {
 	s := EntrySource(strings.ToLower(strings.TrimSpace(source)))
-	switch s {
-	case EntrySourceWeb, EntrySourceWeChat, EntrySourceQQ, EntrySourceVoice, EntrySourceProactive, EntrySourceRuntime:
-		return s
-	default:
+	if s == "" {
 		return EntrySourceUnknown
 	}
+	return s
 }
 
 type BackpressureStatus string
@@ -106,7 +103,7 @@ type UnifiedEntryRequest struct {
 	Channel                  string          `json:"channel"`
 	Message                  string          `json:"message"`
 	PeerID                   string          `json:"peerId,omitempty"`
-	UserID                   string          `json:"userId,omitempty"`
+	SpaceID                  string          `json:"spaceId,omitempty"`
 	DeviceTimezone           string          `json:"deviceTimezone,omitempty"`
 	Source                   string          `json:"source,omitempty"`
 	ProactiveTaskInstruction string          `json:"-"`
@@ -117,6 +114,11 @@ type UnifiedEntryRequest struct {
 	ProactiveMemory          string          `json:"-"`
 	CharacterID              string          `json:"characterId,omitempty"`
 	ConversationID           string          `json:"conversationId,omitempty"`
+	WorkspaceID              string          `json:"workspaceId,omitempty"`
+	WorkspaceDeviceID        string          `json:"workspaceDeviceId,omitempty"`
+	WorkspaceName            string          `json:"workspaceName,omitempty"`
+	WorkspaceKind            string          `json:"workspaceKind,omitempty"`
+	WorkspaceRootURI         string          `json:"workspaceRootUri,omitempty"`
 	AudioUrl                 string          `json:"audioUrl,omitempty"`
 	AudioDuration            float64         `json:"audioDuration,omitempty"`
 	VoiceMessage             bool            `json:"voiceMessage"`
@@ -128,6 +130,7 @@ type UnifiedEntryRequest struct {
 	RequestID                string          `json:"requestId,omitempty"`
 	SessionID                string          `json:"sessionId,omitempty"`
 	IsInternal               bool            `json:"-"`
+	SuppressReplyPersistence bool            `json:"-"`
 }
 
 type UnifiedEntry struct {
@@ -186,7 +189,7 @@ func (e *UnifiedEntry) Handle(ctx context.Context, req *UnifiedEntryRequest) (*O
 	requestID := stableRequestID(req.RequestID)
 	source := parseOptionalEntrySource(req.Source)
 	scopeInput := ScopeResolveInput{
-		UserID:         req.UserID,
+		SpaceID:        req.SpaceID,
 		CharacterID:    req.CharacterID,
 		ConversationID: req.ConversationID,
 		Channel:        req.Channel,
@@ -204,11 +207,29 @@ func (e *UnifiedEntry) Handle(ctx context.Context, req *UnifiedEntryRequest) (*O
 	var execCtx *coreexec.ExecutionContext
 	if execService != nil {
 		rootID := ""
-		userID := req.UserID
-		if userID == "" {
-			userID = resolution.Scope.UserID
+		spaceID := req.SpaceID
+		if spaceID == "" {
+			spaceID = resolution.Scope.SpaceID
 		}
-		created := execService.StartExecution(ctx, rootID, userID)
+		created := execService.StartExecution(ctx, rootID, spaceID)
+		created.ConversationID = resolution.Scope.ConversationID
+		created.WorkspaceID = strings.TrimSpace(req.WorkspaceID)
+		if created.Metadata == nil {
+			created.Metadata = make(map[string]any)
+		}
+		if created.WorkspaceID != "" {
+			created.Metadata["workspaceName"] = strings.TrimSpace(req.WorkspaceName)
+			created.Metadata["workspaceKind"] = strings.TrimSpace(req.WorkspaceKind)
+			created.Metadata["workspaceRootUri"] = strings.TrimSpace(req.WorkspaceRootURI)
+			created.Metadata["workspaceDeviceId"] = strings.TrimSpace(req.WorkspaceDeviceID)
+		}
+		if deviceID := strings.TrimSpace(req.WorkspaceDeviceID); deviceID != "" {
+			created.RuntimeTarget = &coreexec.RuntimeTarget{
+				Placement: "device",
+				SpaceID:   runtimeidentity.SpaceID(spaceID),
+				DeviceID:  runtimeidentity.DeviceID(deviceID),
+			}
+		}
 		execCtx = &created
 	}
 
@@ -219,7 +240,7 @@ func (e *UnifiedEntry) Handle(ctx context.Context, req *UnifiedEntryRequest) (*O
 		Channel:                  resolution.Scope.Channel,
 		Source:                   resolution.Source,
 		PeerID:                   resolution.Scope.PeerID,
-		UserID:                   resolution.Scope.UserID,
+		SpaceID:                  resolution.Scope.SpaceID,
 		DeviceTimezone:           req.DeviceTimezone,
 		SessionID:                resolution.Scope.SessionID,
 		RequestID:                requestID,
@@ -232,6 +253,7 @@ func (e *UnifiedEntry) Handle(ctx context.Context, req *UnifiedEntryRequest) (*O
 		ImageContext:             req.ImageContext,
 		ReplyToMessageID:         req.ReplyToMessageID,
 		IsInternal:               req.IsInternal,
+		SuppressReplyPersistence: req.SuppressReplyPersistence,
 		ProactiveTaskInstruction: req.ProactiveTaskInstruction,
 		ProactiveTimeContext:     req.ProactiveTimeContext,
 		ProactiveRecentContext:   req.ProactiveRecentContext,
@@ -247,7 +269,7 @@ func (e *UnifiedEntry) Handle(ctx context.Context, req *UnifiedEntryRequest) (*O
 func (e *UnifiedEntry) ResolveScope(ctx context.Context, req *UnifiedEntryRequest) (ScopeResolution, error) {
 	source := parseOptionalEntrySource(req.Source)
 	scopeInput := ScopeResolveInput{
-		UserID:         req.UserID,
+		SpaceID:        req.SpaceID,
 		CharacterID:    req.CharacterID,
 		ConversationID: req.ConversationID,
 		Channel:        req.Channel,

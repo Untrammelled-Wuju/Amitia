@@ -33,13 +33,13 @@ func insertRawOperation(t *testing.T, db *sql.DB, op PackageOperationRecord) {
 	t.Helper()
 	_, err := db.ExecContext(context.Background(), `
 		INSERT INTO extension_package_operations (
-			operation_id, trace_id, user_id, scope_type, scope_id, extension_id, target_version,
+			operation_id, trace_id, space_id, scope_type, scope_id, extension_id, target_version,
 			operation_type, status, current_step, artifact_id, preview_session_id,
 			confirmations_json, confirmation_claims_json, error_code, error_detail,
 			started_at, updated_at, completed_at, stable_generation, target_generation,
 			current_pointer_json, snapshot_requirement_hash
 		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		op.OperationID, op.TraceID, op.UserID, op.ScopeType, op.ScopeID, op.ExtensionID, op.TargetVersion,
+		op.OperationID, op.TraceID, op.SpaceID, op.ScopeType, op.ScopeID, op.ExtensionID, op.TargetVersion,
 		op.OperationType, op.Status, op.CurrentStep, op.ArtifactID, op.PreviewSessionID,
 		op.ConfirmationsJSON, op.ConfirmationClaimsJSON, op.ErrorCode, op.ErrorDetail,
 		op.StartedAt, op.UpdatedAt, op.CompletedAt, op.StableGeneration, op.TargetGeneration,
@@ -60,7 +60,7 @@ func TestListIncompleteOperationsReadsClaimsAndHash(t *testing.T) {
 	op := PackageOperationRecord{
 		OperationID:             "op-incomplete-1",
 		TraceID:                 "trace-1",
-		UserID:                  "user-incomplete",
+		SpaceID:                 "user-incomplete",
 		ScopeType:               "global",
 		ExtensionID:             "ext-1",
 		TargetVersion:           "1.0.0",
@@ -80,7 +80,7 @@ func TestListIncompleteOperationsReadsClaimsAndHash(t *testing.T) {
 	completed := PackageOperationRecord{
 		OperationID:             "op-completed-1",
 		TraceID:                 "trace-2",
-		UserID:                  "user-incomplete",
+		SpaceID:                 "user-incomplete",
 		ScopeType:               "global",
 		ExtensionID:             "ext-2",
 		TargetVersion:           "1.0.0",
@@ -139,7 +139,7 @@ func TestListIncompleteOperationsMultiRecord(t *testing.T) {
 
 	ops := []PackageOperationRecord{
 		{
-			OperationID: "op-running", TraceID: "t-1", UserID: "user-multi",
+			OperationID: "op-running", TraceID: "t-1", SpaceID: "user-multi",
 			ScopeType: "global", ExtensionID: "ext-a", TargetVersion: "1.0.0",
 			OperationType: "install", Status: "in_progress", CurrentStep: "commit",
 			ArtifactID: "art-a", PreviewSessionID: "ps-a", ConfirmationsJSON: "{}",
@@ -148,7 +148,7 @@ func TestListIncompleteOperationsMultiRecord(t *testing.T) {
 			SnapshotRequirementHash: installHash,
 		},
 		{
-			OperationID: "op-recovery", TraceID: "t-2", UserID: "user-multi",
+			OperationID: "op-recovery", TraceID: "t-2", SpaceID: "user-multi",
 			ScopeType: "global", ExtensionID: "ext-b", TargetVersion: "2.0.0",
 			OperationType: "update", Status: "requires_recovery", CurrentStep: "failed-step",
 			ArtifactID: "art-b", PreviewSessionID: "ps-b", ConfirmationsJSON: "{}",
@@ -158,7 +158,7 @@ func TestListIncompleteOperationsMultiRecord(t *testing.T) {
 			SnapshotRequirementHash: updateHash,
 		},
 		{
-			OperationID: "op-finalizing", TraceID: "t-3", UserID: "user-multi",
+			OperationID: "op-finalizing", TraceID: "t-3", SpaceID: "user-multi",
 			ScopeType: "global", ExtensionID: "ext-c", TargetVersion: "1.5.0",
 			OperationType: "rollback", Status: "finalizing", CurrentStep: "final_gate",
 			ArtifactID: "art-c", PreviewSessionID: "", ConfirmationsJSON: "{}",
@@ -167,7 +167,7 @@ func TestListIncompleteOperationsMultiRecord(t *testing.T) {
 			SnapshotRequirementHash: rollbackHash,
 		},
 		{
-			OperationID: "op-install-uninstall", TraceID: "t-4", UserID: "user-multi",
+			OperationID: "op-install-uninstall", TraceID: "t-4", SpaceID: "user-multi",
 			ScopeType: "global", ExtensionID: "ext-d", TargetVersion: "1.0.0",
 			OperationType: "uninstall", Status: "in_progress", CurrentStep: "quarantine_move",
 			ArtifactID: "art-d", PreviewSessionID: "", ConfirmationsJSON: "{}",
@@ -176,7 +176,7 @@ func TestListIncompleteOperationsMultiRecord(t *testing.T) {
 			SnapshotRequirementHash: uninstallHash,
 		},
 		{
-			OperationID: "op-completed", TraceID: "t-5", UserID: "user-multi",
+			OperationID: "op-completed", TraceID: "t-5", SpaceID: "user-multi",
 			ScopeType: "global", ExtensionID: "ext-e", TargetVersion: "1.0.0",
 			OperationType: "install", Status: "completed", CurrentStep: "completed",
 			ArtifactID: "art-e", PreviewSessionID: "", ConfirmationsJSON: "{}",
@@ -186,7 +186,7 @@ func TestListIncompleteOperationsMultiRecord(t *testing.T) {
 			SnapshotRequirementHash: "should-not-appear-completed",
 		},
 		{
-			OperationID: "op-failed", TraceID: "t-6", UserID: "user-multi",
+			OperationID: "op-failed", TraceID: "t-6", SpaceID: "user-multi",
 			ScopeType: "global", ExtensionID: "ext-f", TargetVersion: "1.0.0",
 			OperationType: "install", Status: "failed", CurrentStep: "failed",
 			ArtifactID: "art-f", PreviewSessionID: "", ConfirmationsJSON: "{}",
@@ -267,7 +267,7 @@ func TestGetOperationReadsClaimsAndHash(t *testing.T) {
 	op := PackageOperationRecord{
 		OperationID:             "op-getop-1",
 		TraceID:                 "trace-getop",
-		UserID:                  "user-getop",
+		SpaceID:                 "user-getop",
 		ScopeType:               "global",
 		ExtensionID:             "ext-getop",
 		TargetVersion:           "2.0.0",
@@ -297,8 +297,8 @@ func TestGetOperationReadsClaimsAndHash(t *testing.T) {
 	if got.OperationID != "op-getop-1" {
 		t.Fatalf("expected operation_id op-getop-1, got %s", got.OperationID)
 	}
-	if got.UserID != "user-getop" {
-		t.Fatalf("expected user-getop got %s", got.UserID)
+	if got.SpaceID != "user-getop" {
+		t.Fatalf("expected user-getop got %s", got.SpaceID)
 	}
 	if got.OperationType != "update" {
 		t.Fatalf("expected update got %s", got.OperationType)
@@ -332,7 +332,7 @@ func TestGetCompletedOperationByPreviewReadsClaimsAndHash(t *testing.T) {
 
 	inserted := []PackageOperationRecord{
 		{
-			OperationID: "op-preview-incomplete", TraceID: "t-1", UserID: "user-preview",
+			OperationID: "op-preview-incomplete", TraceID: "t-1", SpaceID: "user-preview",
 			ScopeType: "global", ExtensionID: "ext-preview", TargetVersion: "1.0.0",
 			OperationType: "install", Status: "in_progress", CurrentStep: "commit",
 			ArtifactID: "art-1", PreviewSessionID: "preview-session-xyz",
@@ -341,7 +341,7 @@ func TestGetCompletedOperationByPreviewReadsClaimsAndHash(t *testing.T) {
 			SnapshotRequirementHash: "incomplete-hash",
 		},
 		{
-			OperationID: "op-preview-completed-old", TraceID: "t-2", UserID: "user-preview",
+			OperationID: "op-preview-completed-old", TraceID: "t-2", SpaceID: "user-preview",
 			ScopeType: "global", ExtensionID: "ext-preview", TargetVersion: "1.0.0",
 			OperationType: "install", Status: "completed", CurrentStep: "completed",
 			ArtifactID: "art-1", PreviewSessionID: "preview-session-xyz",
@@ -351,7 +351,7 @@ func TestGetCompletedOperationByPreviewReadsClaimsAndHash(t *testing.T) {
 			SnapshotRequirementHash: "old-hash",
 		},
 		{
-			OperationID: "op-preview-completed-new", TraceID: "t-3", UserID: "user-preview",
+			OperationID: "op-preview-completed-new", TraceID: "t-3", SpaceID: "user-preview",
 			ScopeType: "global", ExtensionID: "ext-preview", TargetVersion: "1.0.0",
 			OperationType: "install", Status: "completed", CurrentStep: "completed",
 			ArtifactID: "art-1", PreviewSessionID: "preview-session-xyz",
@@ -390,7 +390,7 @@ func TestListOperationsPagination(t *testing.T) {
 		op := PackageOperationRecord{
 			OperationID:             "op-page-" + string(rune('a'+i)),
 			TraceID:                 "trace-page-" + string(rune('a'+i)),
-			UserID:                  "user-page",
+			SpaceID:                 "user-page",
 			ScopeType:               "global",
 			ExtensionID:             "ext-page",
 			TargetVersion:           "1.0.0",
@@ -417,8 +417,8 @@ func TestListOperationsPagination(t *testing.T) {
 	}
 
 	for _, op := range operations {
-		if op.UserID != "user-page" {
-			t.Fatalf("unexpected user_id %s", op.UserID)
+		if op.SpaceID != "user-page" {
+			t.Fatalf("unexpected space_id %s", op.SpaceID)
 		}
 	}
 }

@@ -43,9 +43,7 @@ func (a *OpenAIChatAdapter) Generate(ctx context.Context, cfg ProviderConfig, re
 		requestBody["top_p"] = cfg.TopP
 	}
 
-	if req.ResponseFormat.Type == "json_schema" || req.ResponseFormat.Type == "json" {
-		requestBody["response_format"] = map[string]string{"type": "json_object"}
-	}
+	applyOpenAIChatControls(requestBody, cfg, req)
 
 	if len(req.Tools) > 0 {
 		requestBody["tools"] = a.buildTools(req.Tools)
@@ -92,6 +90,8 @@ func (a *OpenAIChatAdapter) Stream(ctx context.Context, cfg ProviderConfig, req 
 		requestBody["top_p"] = cfg.TopP
 	}
 
+	applyOpenAIChatControls(requestBody, cfg, req)
+
 	if len(req.Tools) > 0 {
 		requestBody["tools"] = a.buildTools(req.Tools)
 	}
@@ -118,7 +118,17 @@ func (a *OpenAIChatAdapter) Stream(ctx context.Context, cfg ProviderConfig, req 
 		return nil, fmt.Errorf("API 返回 %d: %s", resp.StatusCode, string(respBytes))
 	}
 
-	return a.parseStream(resp.Body, sink)
+	return a.parseStream(ctx, resp.Body, sink)
+}
+
+func applyOpenAIChatControls(requestBody map[string]interface{}, cfg ProviderConfig, req ModelRequest) {
+	switch req.ResponseFormat.Type {
+	case "json_schema", "json", "json_object":
+		requestBody["response_format"] = map[string]string{"type": "json_object"}
+	}
+	if req.DisableThinking && strings.Contains(strings.ToLower(cfg.BaseURL), "deepseek.com") {
+		requestBody["thinking"] = map[string]string{"type": "disabled"}
+	}
 }
 
 func (a *OpenAIChatAdapter) buildMessages(req ModelRequest) []map[string]interface{} {
@@ -252,9 +262,12 @@ func (a *OpenAIChatAdapter) parseResponse(respBytes []byte) (*ModelResult, error
 	return res, nil
 }
 
-func (a *OpenAIChatAdapter) parseStream(body io.Reader, sink ModelEventSink) (*ModelResult, error) {
+func (a *OpenAIChatAdapter) parseStream(ctx context.Context, body io.Reader, sink ModelEventSink) (*ModelResult, error) {
 	result := &ModelResult{
 		ToolCalls: []ModelToolCall{},
+	}
+	if err := ctx.Err(); err != nil {
+		return result, err
 	}
 
 	var toolCallBuffers map[string]*ModelToolCall
@@ -286,9 +299,14 @@ func (a *OpenAIChatAdapter) parseStream(body io.Reader, sink ModelEventSink) (*M
 
 				content := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
 				if content == "[DONE]" {
-					sink.Emit(context.Background(), ModelEvent{
+					if err := sink.Emit(ctx, ModelEvent{
 						Type: ModelEventCompleted,
-					})
+					}); err != nil {
+						return result, err
+					}
+					if err := ctx.Err(); err != nil {
+						return result, err
+					}
 					return result, nil
 				}
 
@@ -321,10 +339,12 @@ func (a *OpenAIChatAdapter) parseStream(body io.Reader, sink ModelEventSink) (*M
 
 				if choice.Delta.Content != "" {
 					result.Text += choice.Delta.Content
-					sink.Emit(context.Background(), ModelEvent{
+					if err := sink.Emit(ctx, ModelEvent{
 						Type:      ModelEventTextDelta,
 						TextDelta: choice.Delta.Content,
-					})
+					}); err != nil {
+						return result, err
+					}
 				}
 
 				for _, tc := range choice.Delta.ToolCalls {
@@ -347,6 +367,9 @@ func (a *OpenAIChatAdapter) parseStream(body io.Reader, sink ModelEventSink) (*M
 			}
 		}
 		if err == io.EOF {
+			if ctxErr := ctx.Err(); ctxErr != nil {
+				return result, ctxErr
+			}
 			break
 		}
 		if err != nil {
@@ -359,5 +382,8 @@ func (a *OpenAIChatAdapter) parseStream(body io.Reader, sink ModelEventSink) (*M
 		result.ToolCalls = append(result.ToolCalls, *tc)
 	}
 
+	if err := ctx.Err(); err != nil {
+		return result, err
+	}
 	return result, nil
 }

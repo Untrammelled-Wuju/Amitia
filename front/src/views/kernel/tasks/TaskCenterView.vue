@@ -2,11 +2,14 @@
 import { ref, computed, onMounted, onUnmounted, watch } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { Refresh, Search, VideoPause, VideoPlay, RefreshRight, SetUp } from "@element-plus/icons-vue";
+import { listWorkflowDevices, type WorkflowDeviceDescriptor } from "@/api/workflow";
 import {
   listTasks,
   getTask,
   enqueueTask,
   cancelTask,
+  pauseTask,
+  resumeTask,
   retryTask,
   recoverTask,
   getTaskProgress,
@@ -41,11 +44,16 @@ const detailResult = ref<TaskRunResult | null>(null);
 const detailCheckpoint = ref<TaskCheckpoint | null>(null);
 const detailLoading = ref(false);
 const enqueueDialogVisible = ref(false);
-const enqueueForm = ref<{ taskDefinitionId: string; input: string; priority: number }>({
+const enqueueForm = ref<{ taskDefinitionId: string; input: string; priority: number; deviceId: string }>({
   taskDefinitionId: "",
   input: "{}",
   priority: 0,
+  deviceId: "",
 });
+const workflowDevices = ref<WorkflowDeviceDescriptor[]>([]);
+const selectedEnqueueDefinition = computed(() => definitions.value.find((d) => d.taskId === enqueueForm.value.taskDefinitionId));
+const enqueueNeedsDevice = computed(() => selectedEnqueueDefinition.value?.executionPlacement === "device");
+const onlineWorkflowDevices = computed(() => workflowDevices.value.filter((device) => device.online));
 const enqueueLoading = ref(false);
 let refreshTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -61,10 +69,52 @@ const activeTaskCount = computed(() => tasks.value.filter((t) => isActive(t.stat
 const succeededCount = computed(() => tasks.value.filter((t) => t.status === "succeeded").length);
 const failedCount = computed(() => tasks.value.filter((t) => t.status === "failed" || t.status === "timed_out").length);
 
+function definitionForTask(task: TaskRun): TaskDefinition | undefined {
+  return definitions.value.find((definition) => definition.taskId === task.taskDefinitionId);
+}
+
+function effectivePlacement(task: TaskRun): "local" | "cloud" | "device" {
+  return task.executionPlacement || "local";
+}
+
+function canPauseTask(task: TaskRun): boolean {
+  const definition = definitionForTask(task);
+  return effectivePlacement(task) === "local"
+    && definition?.checkpoint === true
+    && ["running", "checkpointing"].includes(task.status);
+}
+
+function canResumeTask(task: TaskRun): boolean {
+  return effectivePlacement(task) === "local" && task.status === "paused";
+}
+
+function canCancelTask(task: TaskRun): boolean {
+  const placement = effectivePlacement(task);
+  if (placement === "cloud" || placement === "device") {
+    return ["queued", "running", "cancelling"].includes(task.status);
+  }
+  return ["queued", "running", "pausing", "paused"].includes(task.status);
+}
+
+function canRecoverTask(task: TaskRun): boolean {
+  return task.status === "recovery_required" || task.status === "manual_intervention";
+}
+
+function canRetryTask(task: TaskRun): boolean {
+  if (!isTerminal(task.status) || task.maxAttempts <= 0 || task.attempt >= task.maxAttempts) return false;
+  const definition = definitionForTask(task);
+  if (!definition) return false;
+  const idempotency = definition.idempotency || (definition.idempotent ? "idempotent" : "non_idempotent");
+  return idempotency !== "non_idempotent";
+}
+
 const statusOptions = [
   { label: "全部", value: "" },
   { label: "排队中", value: "queued" },
   { label: "运行中", value: "running" },
+  { label: "暂停中", value: "pausing" },
+  { label: "已暂停", value: "paused" },
+  { label: "恢复中", value: "resuming" },
   { label: "已成功", value: "succeeded" },
   { label: "已失败", value: "failed" },
   { label: "已取消", value: "cancelled" },
@@ -136,6 +186,28 @@ async function showDetail(taskRunId: string) {
   }
 }
 
+async function handlePause(task: TaskRun) {
+  try {
+    await pauseTask(task.taskRunId, task.generation ?? 0);
+    ElMessage.success("已发送暂停请求");
+    await fetchTasks();
+    if (detailTask.value?.taskRunId === task.taskRunId) await showDetail(task.taskRunId);
+  } catch (e: unknown) {
+    ElMessage.error("暂停失败: " + (e instanceof Error ? e.message : String(e)));
+  }
+}
+
+async function handleResume(task: TaskRun) {
+  try {
+    await resumeTask(task.taskRunId, task.generation ?? 0);
+    ElMessage.success("已发送继续请求");
+    await fetchTasks();
+    if (detailTask.value?.taskRunId === task.taskRunId) await showDetail(task.taskRunId);
+  } catch (e: unknown) {
+    ElMessage.error("继续失败: " + (e instanceof Error ? e.message : String(e)));
+  }
+}
+
 async function handleCancel(taskRunId: string) {
   try {
     await ElMessageBox.confirm("确认取消此任务？", "取消任务", { type: "warning" });
@@ -172,13 +244,35 @@ async function handleRecover(taskRunId: string) {
   }
 }
 
-function openEnqueue(def: TaskDefinition) {
+async function refreshEnqueueDeviceOptions() {
+  const def = definitions.value.find((item) => item.taskId === enqueueForm.value.taskDefinitionId);
+  if (def?.executionPlacement !== "device") {
+    workflowDevices.value = [];
+    enqueueForm.value.deviceId = "";
+    return;
+  }
+  try {
+    workflowDevices.value = await listWorkflowDevices();
+    const online = workflowDevices.value.filter((device) => device.online && !!device.deviceId);
+    if (!online.some((device) => device.deviceId === enqueueForm.value.deviceId)) {
+      enqueueForm.value.deviceId = online.length === 1 ? online[0].deviceId : "";
+    }
+  } catch (e: unknown) {
+    workflowDevices.value = [];
+    enqueueForm.value.deviceId = "";
+    ElMessage.warning("设备列表加载失败: " + (e instanceof Error ? e.message : String(e)));
+  }
+}
+
+async function openEnqueue(def: TaskDefinition) {
   enqueueForm.value = {
     taskDefinitionId: def.taskId,
     input: "{}",
     priority: 0,
+    deviceId: "",
   };
   enqueueDialogVisible.value = true;
+  await refreshEnqueueDeviceOptions();
 }
 
 async function handleEnqueue() {
@@ -193,6 +287,10 @@ async function handleEnqueue() {
     ElMessage.error("输入 JSON 格式无效");
     return;
   }
+  if (enqueueNeedsDevice.value && !enqueueForm.value.deviceId) {
+    ElMessage.warning("设备任务需要选择在线设备");
+    return;
+  }
   enqueueLoading.value = true;
   try {
     const def = definitions.value.find((d) => d.taskId === enqueueForm.value.taskDefinitionId);
@@ -202,6 +300,7 @@ async function handleEnqueue() {
       moduleId: def?.moduleId,
       input,
       priority: enqueueForm.value.priority,
+      deviceId: enqueueNeedsDevice.value ? enqueueForm.value.deviceId : undefined,
     };
     const result = await enqueueTask(req);
     ElMessage.success(`任务已入队: ${result.taskRunId}`);
@@ -252,6 +351,13 @@ watch(activeTab, (val) => {
     fetchDefinitions();
   }
 });
+
+watch(
+  () => enqueueForm.value.taskDefinitionId,
+  () => {
+    if (enqueueDialogVisible.value) void refreshEnqueueDeviceOptions();
+  },
+);
 
 onMounted(() => {
   handleRefresh();
@@ -320,11 +426,13 @@ onUnmounted(() => {
               {{ formatTime(row.createdAt) }}
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="200" fixed="right">
+          <el-table-column label="操作" width="280" fixed="right">
             <template #default="{ row }">
-              <el-button v-if="isActive(row.status)" size="small" type="danger" :icon="VideoPause" @click.stop="handleCancel(row.taskRunId)">取消</el-button>
-              <el-button v-if="row.status === 'recovery_required'" size="small" type="warning" :icon="RefreshRight" @click.stop="handleRecover(row.taskRunId)">恢复</el-button>
-              <el-button v-if="isTerminal(row.status) && row.status !== 'cancelled'" size="small" :icon="VideoPlay" @click.stop="handleRetry(row.taskRunId)">重试</el-button>
+              <el-button v-if="canPauseTask(row)" size="small" :icon="VideoPause" @click.stop="handlePause(row)">暂停</el-button>
+              <el-button v-if="canResumeTask(row)" size="small" type="primary" :icon="VideoPlay" @click.stop="handleResume(row)">继续</el-button>
+              <el-button v-if="canCancelTask(row)" size="small" type="danger" @click.stop="handleCancel(row.taskRunId)">取消</el-button>
+              <el-button v-if="canRecoverTask(row)" size="small" type="warning" :icon="RefreshRight" @click.stop="handleRecover(row.taskRunId)">恢复</el-button>
+              <el-button v-if="canRetryTask(row)" size="small" :icon="VideoPlay" @click.stop="handleRetry(row.taskRunId)">重试</el-button>
             </template>
           </el-table-column>
         </el-table>
@@ -412,9 +520,11 @@ onUnmounted(() => {
           </div>
 
           <div class="detail-actions">
-            <el-button v-if="isActive(detailTask.status)" type="danger" :icon="VideoPause" @click="handleCancel(detailTask.taskRunId)">取消任务</el-button>
-            <el-button v-if="detailTask.status === 'recovery_required'" type="warning" :icon="RefreshRight" @click="handleRecover(detailTask.taskRunId)">恢复任务</el-button>
-            <el-button v-if="isTerminal(detailTask.status)" :icon="VideoPlay" @click="handleRetry(detailTask.taskRunId)">重试任务</el-button>
+            <el-button v-if="canPauseTask(detailTask)" :icon="VideoPause" @click="handlePause(detailTask)">暂停任务</el-button>
+            <el-button v-if="canResumeTask(detailTask)" type="primary" :icon="VideoPlay" @click="handleResume(detailTask)">继续任务</el-button>
+            <el-button v-if="canCancelTask(detailTask)" type="danger" @click="handleCancel(detailTask.taskRunId)">取消任务</el-button>
+            <el-button v-if="canRecoverTask(detailTask)" type="warning" :icon="RefreshRight" @click="handleRecover(detailTask.taskRunId)">恢复任务</el-button>
+            <el-button v-if="canRetryTask(detailTask)" :icon="VideoPlay" @click="handleRetry(detailTask.taskRunId)">重试任务</el-button>
           </div>
         </template>
       </div>
@@ -427,6 +537,17 @@ onUnmounted(() => {
             <el-option v-for="def in definitions" :key="def.taskId" :label="`${def.taskId} (${def.extensionId})`" :value="def.taskId" />
           </el-select>
         </el-form-item>
+        <el-form-item v-if="enqueueNeedsDevice" label="执行设备">
+          <el-select v-model="enqueueForm.deviceId" placeholder="选择在线设备" style="width: 100%">
+            <el-option
+              v-for="device in onlineWorkflowDevices"
+              :key="device.deviceId"
+              :label="device.label || `${device.platform || 'device'} · ${device.deviceId}`"
+              :value="device.deviceId"
+            />
+          </el-select>
+          <div v-if="onlineWorkflowDevices.length === 0" class="form-tip">当前没有在线设备，设备任务无法入队。</div>
+        </el-form-item>
         <el-form-item label="优先级">
           <el-input-number v-model="enqueueForm.priority" :min="0" :max="10" />
         </el-form-item>
@@ -436,7 +557,12 @@ onUnmounted(() => {
       </el-form>
       <template #footer>
         <el-button @click="enqueueDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="enqueueLoading" @click="handleEnqueue">入队</el-button>
+        <el-button
+          type="primary"
+          :loading="enqueueLoading"
+          :disabled="enqueueNeedsDevice && !enqueueForm.deviceId"
+          @click="handleEnqueue"
+        >入队</el-button>
       </template>
     </el-dialog>
   </div>
@@ -524,6 +650,14 @@ onUnmounted(() => {
   display: flex;
   gap: 12px;
   justify-content: flex-end;
+}
+
+.form-tip {
+  width: 100%;
+  margin-top: 6px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--el-text-color-secondary);
 }
 
 :deep(.el-table__row) {

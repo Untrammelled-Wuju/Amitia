@@ -27,7 +27,7 @@ func TestB18ResultValidatorPassesValidStructuredOutput(t *testing.T) {
 	}
 
 	inv := capability.NewToolInvocationContext(capability.ToolInvocationOptions{
-		UserID: "user1",
+		SpaceID: "user1",
 	})
 
 	result := capability.UnifiedToolResult{
@@ -62,7 +62,7 @@ func TestB18ResultValidatorRejectsInvalidStructuredOutput(t *testing.T) {
 	}
 
 	inv := capability.NewToolInvocationContext(capability.ToolInvocationOptions{
-		UserID: "user1",
+		SpaceID: "user1",
 	})
 
 	result := capability.UnifiedToolResult{
@@ -99,7 +99,7 @@ func TestB18ResultValidatorRejectsInvalidStructuredJSON(t *testing.T) {
 	}
 
 	inv := capability.NewToolInvocationContext(capability.ToolInvocationOptions{
-		UserID: "user1",
+		SpaceID: "user1",
 	})
 
 	result := capability.UnifiedToolResult{
@@ -134,7 +134,7 @@ func TestB18ResultValidatorDoesNotRequireStructuredForTextOnly(t *testing.T) {
 	}
 
 	inv := capability.NewToolInvocationContext(capability.ToolInvocationOptions{
-		UserID: "user1",
+		SpaceID: "user1",
 	})
 
 	result := capability.UnifiedToolResult{
@@ -174,7 +174,7 @@ func TestB18ResultValidatorValidatesStructuredContent(t *testing.T) {
 	}
 
 	inv := capability.NewToolInvocationContext(capability.ToolInvocationOptions{
-		UserID: "user1",
+		SpaceID: "user1",
 	})
 
 	result := capability.UnifiedToolResult{
@@ -214,7 +214,7 @@ func TestB18ResultValidatorRejectsInvalidStructuredContent(t *testing.T) {
 	}
 
 	inv := capability.NewToolInvocationContext(capability.ToolInvocationOptions{
-		UserID: "user1",
+		SpaceID: "user1",
 	})
 
 	result := capability.UnifiedToolResult{
@@ -254,7 +254,7 @@ func TestB18ResultErrorMessageDoesNotLeakSchemaErrors(t *testing.T) {
 	}
 
 	inv := capability.NewToolInvocationContext(capability.ToolInvocationOptions{
-		UserID: "user1",
+		SpaceID: "user1",
 	})
 
 	result := capability.UnifiedToolResult{
@@ -283,7 +283,7 @@ func TestB18ResultValidatorDoesNotAutoFailEmptyOutput(t *testing.T) {
 	}
 
 	inv := capability.NewToolInvocationContext(capability.ToolInvocationOptions{
-		UserID: "user1",
+		SpaceID: "user1",
 	})
 
 	result := capability.UnifiedToolResult{
@@ -313,7 +313,7 @@ func TestB19ResultValidatorRejectsInvocationIDMismatch(t *testing.T) {
 	}
 
 	inv := capability.NewToolInvocationContext(capability.ToolInvocationOptions{
-		UserID: "user1",
+		SpaceID: "user1",
 	})
 
 	result := capability.UnifiedToolResult{
@@ -346,7 +346,7 @@ func TestB19ResultValidatorFillsMissingInvocationID(t *testing.T) {
 	}
 
 	inv := capability.NewToolInvocationContext(capability.ToolInvocationOptions{
-		UserID: "user1",
+		SpaceID: "user1",
 	})
 
 	result := capability.UnifiedToolResult{
@@ -371,7 +371,7 @@ func TestB19ResultValidatorSuccessWithErrorBecomesFailed(t *testing.T) {
 	}
 
 	inv := capability.NewToolInvocationContext(capability.ToolInvocationOptions{
-		UserID: "user1",
+		SpaceID: "user1",
 	})
 
 	result := capability.UnifiedToolResult{
@@ -399,7 +399,7 @@ func TestB19ResultValidatorFailedWithoutErrorGetsDefault(t *testing.T) {
 	}
 
 	inv := capability.NewToolInvocationContext(capability.ToolInvocationOptions{
-		UserID: "user1",
+		SpaceID: "user1",
 	})
 
 	result := capability.UnifiedToolResult{
@@ -427,7 +427,7 @@ func TestB19ResultValidatorCancelledGetsCorrectCode(t *testing.T) {
 	v := NewResultValidator()
 
 	inv := capability.NewToolInvocationContext(capability.ToolInvocationOptions{
-		UserID: "user1",
+		SpaceID: "user1",
 	})
 
 	result := capability.UnifiedToolResult{
@@ -459,7 +459,7 @@ func TestB19ResultValidatorCloneDoesNotMutateOriginal(t *testing.T) {
 	}
 
 	inv := capability.NewToolInvocationContext(capability.ToolInvocationOptions{
-		UserID: "user1",
+		SpaceID: "user1",
 	})
 
 	originalContent := []capability.ToolContent{
@@ -488,7 +488,7 @@ func TestB19ResultValidatorUnknownStatusBecomesInvalidResult(t *testing.T) {
 	}
 
 	inv := capability.NewToolInvocationContext(capability.ToolInvocationOptions{
-		UserID: "user1",
+		SpaceID: "user1",
 	})
 
 	result := capability.UnifiedToolResult{

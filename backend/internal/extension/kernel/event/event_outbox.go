@@ -208,7 +208,7 @@ func (r *OutboxRepository) ClaimNext(ctx context.Context, owner string, leaseTTL
 	expires := now.Add(leaseTTL)
 	rows, err := tx.QueryContext(ctx, `
 		SELECT outbox_id, event_id, event_type_id, event_version, producer_id, producer_type, producer_generation,
-		 aggregate_type, aggregate_id, aggregate_version, partition_key, ordering_key, idempotency_key,
+		 event_domain, causation_id, aggregate_type, aggregate_id, aggregate_version, partition_key, ordering_key, idempotency_key,
 		 scope_snapshot_id, permission_snapshot_id, trace_id, operation_id, parent_event_id, depth,
 		 occurred_at, published_at, payload_json, metadata_json, payload_hash, definition_hash,
 		 status, available_at, created_at, updated_at, error_code, error_message, lease_owner, lease_expires_at, dispatched_at

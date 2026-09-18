@@ -9,8 +9,8 @@ func TestManagementTargetValues(t *testing.T) {
 	if string(ManagementTargetGameCenter) != "game_center" {
 		t.Errorf("expected game_center, got %s", ManagementTargetGameCenter)
 	}
-	if string(ManagementTargetDesktopPetCenter) != "desktop_pet_center" {
-		t.Errorf("expected desktop_pet_center, got %s", ManagementTargetDesktopPetCenter)
+	if string(ManagementTargetPetCenter) != "pet_center" {
+		t.Errorf("expected pet_center, got %s", ManagementTargetPetCenter)
 	}
 }
 
@@ -25,7 +25,7 @@ func TestIsValidManagementTarget(t *testing.T) {
 			t.Errorf("expected %s to be valid", target)
 		}
 	}
-	invalid := []ManagementTarget{"", "plugin_center", "normal_center", "pet_center", "game", "extension", "provider_center", "channel_center"}
+	invalid := []ManagementTarget{"", "plugin_center", "normal_center", "game", "extension", "provider_center", "channel_center"}
 	for _, target := range invalid {
 		if IsValidManagementTarget(target) {
 			t.Errorf("expected %s to be invalid", target)
@@ -68,7 +68,7 @@ func TestManagementTargetForDesktopPet(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if target != ManagementTargetDesktopPetCenter {
-		t.Errorf("expected desktop_pet_center, got %s", target)
+		t.Errorf("expected pet_center, got %s", target)
 	}
 }
 
@@ -100,9 +100,9 @@ func TestManagementTargetHelpers(t *testing.T) {
 		t.Error("expected game_center.IsExtensionCenter() to be false")
 	}
 	if !ManagementTargetDesktopPetCenter.IsDesktopPetCenter() {
-		t.Error("expected desktop_pet_center.IsDesktopPetCenter() to be true")
+		t.Error("expected pet_center.IsDesktopPetCenter() to be true")
 	}
 	if ManagementTargetDesktopPetCenter.IsGameCenter() {
-		t.Error("expected desktop_pet_center.IsGameCenter() to be false")
+		t.Error("expected pet_center.IsGameCenter() to be false")
 	}
 }

@@ -6,8 +6,11 @@ class CharacterService {
 
   CharacterService(this._api);
 
-  Future<List<CharacterDto>> list() async {
-    final resp = await _api.get<List<dynamic>>('/api/characters');
+  Future<List<CharacterDto>> list({bool includeDisabled = false}) async {
+    final resp = await _api.get<List<dynamic>>(
+      '/api/characters',
+      queryParameters: {if (includeDisabled) 'includeDisabled': true},
+    );
     if (resp == null) return [];
     return resp
         .map((e) => CharacterDto.fromJson(e as Map<String, dynamic>))
@@ -48,6 +51,38 @@ class CharacterService {
     if (resp == null) return null;
     return CharacterDto.fromJson(resp);
   }
+
+
+  Future<CharacterDto?> duplicate(String id, {String? name}) async {
+    final source = await _api.get<Map<String, dynamic>>(
+      '/api/characters/$id',
+      fromJson: (e) => e as Map<String, dynamic>,
+    );
+    if (source == null) return null;
+    const fields = <String>[
+      'voiceType', 'voiceSpeed', 'voicePitch', 'voiceVolume', 'customVoiceId',
+      'identity', 'personality', 'avatar', 'speakingStyle', 'relationshipStyle',
+      'characterBase', 'boundaryRules', 'description', 'basePrompt', 'gender', 'pronoun',
+      'selfReference', 'genderExpression', 'lifeIdentity', 'personalityConfig',
+      'chatStyleConfig', 'sceneRules',
+    ];
+    final payload = <String, dynamic>{
+      'name': name?.trim().isNotEmpty == true
+          ? name!.trim()
+          : '${(source['name'] ?? '角色').toString()} 副本',
+      'isDefault': false,
+    };
+    for (final field in fields) {
+      if (source.containsKey(field)) payload[field] = source[field];
+    }
+    return create(payload);
+  }
+
+  Future<CharacterDto?> setDefault(String id) => update(id, const {'isDefault': true});
+
+  Future<CharacterDto?> archive(String id) => update(id, const {'status': 'disabled'});
+
+  Future<CharacterDto?> restore(String id) => update(id, const {'status': 'enabled'});
 
   Future<bool> delete(String id) async {
     await _api.delete('/api/characters/$id');

@@ -6,7 +6,13 @@ import ExtensionSurface from "./ExtensionSurface.vue";
 const props = defineProps<{ contribution: UIContributionSummary; context: Record<string, unknown>; slotId: string; hostActions?: Record<string, (input?: unknown) => unknown | Promise<unknown>> }>();
 const emit = defineEmits<{ (e: "error", error: string): void }>();
 
+const isHostRuntime = computed(() => props.contribution.runtimeId?.trim().startsWith("host.") ?? false);
+
 const renderer = computed(() => {
+  if (isHostRuntime.value) return defineAsyncComponent(() => import("./HostRuntimeContribution.vue"));
+  if (props.contribution.kind === "composer_action" && ["web_restricted", "web_isolated"].includes(props.contribution.sandbox ?? "")) {
+    return defineAsyncComponent(() => import("./WebComposerActionProxy.vue"));
+  }
   if (props.contribution.sandbox === "schema_renderer") return defineAsyncComponent(() => import("./SchemaUIRenderer.vue"));
   if (["web_restricted", "web_isolated"].includes(props.contribution.sandbox ?? "")) return defineAsyncComponent(() => import("./SandboxWebUIFrame.vue"));
   if (props.contribution.sandbox === "host_native") return defineAsyncComponent(() => import("./HostNativeAction.vue"));
@@ -16,12 +22,12 @@ const renderer = computed(() => {
   return null;
 });
 const surfaceRole = computed(() => String((props.context.surface as Record<string, unknown> | undefined)?.role ?? "main"));
-const needsSurface = computed(() => props.contribution.sandbox !== "host_native" || ["schema_page", "settings_section", "panel", "card", "web_page", "message_renderer"].includes(props.contribution.kind));
+const needsSurface = computed(() => !isHostRuntime.value && (props.contribution.sandbox !== "host_native" || ["schema_page", "settings_section", "panel", "card", "web_page", "message_renderer"].includes(props.contribution.kind)));
 </script>
 
 <template>
   <ExtensionSurface v-if="renderer && needsSurface" :role="surfaceRole as any" :bordered="surfaceRole !== 'message' && surfaceRole !== 'composer'">
-    <component :is="renderer" :contribution="contribution" :context="context" :slot-id="slotId" :host-actions="hostActions" @error="(error) => emit('error', error)" />
+    <component :is="renderer" :contribution="contribution" :context="context" :slot-id="slotId" :host-actions="hostActions" @error="(error: string) => emit('error', error)" />
   </ExtensionSurface>
-  <component :is="renderer" v-else-if="renderer" :contribution="contribution" :context="context" :slot-id="slotId" :host-actions="hostActions" @error="(error) => emit('error', error)" />
+  <component :is="renderer" v-else-if="renderer" :contribution="contribution" :context="context" :slot-id="slotId" :host-actions="hostActions" @error="(error: string) => emit('error', error)" />
 </template>

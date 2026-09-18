@@ -51,7 +51,7 @@ func newFakeDescriptorProvider() *fakeDescriptorProvider {
 	return &fakeDescriptorProvider{
 		caps: map[string][]string{
 			"plugin-1": {"custom_rpc", "event_streaming"},
-			"plugin-2": {"realtime_control"},
+			"plugin-2": {"custom_rpc", "realtime_control"},
 		},
 		chs: map[string][]string{
 			"plugin-1": {"events", "state"},
@@ -148,7 +148,9 @@ func TestHandshakeManager_BasicHello(t *testing.T) {
 	}
 
 	if !mgr.IsReady(connID) {
-		t.Error("connection should be ready after hello")
+		if !mgr.ConfirmReady(connID) {
+			t.Fatal("connection should become ready after confirmation")
+		}
 	}
 }
 
@@ -213,7 +215,7 @@ func TestHandshakeManager_ReservedNamespaceRejected(t *testing.T) {
 
 	hello := &handshake.HelloRequest{
 		SupportedProtocols: []string{"amitia-game-host/1"},
-		Capabilities:       []string{"custom_rpc"},
+		Capabilities:       []string{"realtime_control"},
 		RPCNamespaces:      []string{"host"},
 	}
 
@@ -266,18 +268,23 @@ func TestHandshakeManager_CrossRuntimeSameNamespace(t *testing.T) {
 	mgr.RegisterConnection(connID1)
 	mgr.RegisterConnection(connID2)
 
-	hello := &handshake.HelloRequest{
+	hello1 := &handshake.HelloRequest{
+		SupportedProtocols: []string{"amitia-game-host/1"},
+		Capabilities:       []string{"custom_rpc"},
+		RPCNamespaces:      []string{"examplegame"},
+	}
+	hello2 := &handshake.HelloRequest{
 		SupportedProtocols: []string{"amitia-game-host/1"},
 		Capabilities:       []string{"custom_rpc"},
 		RPCNamespaces:      []string{"examplegame"},
 	}
 
-	_, err := mgr.HandleHello(context.Background(), connID1, peer1, hello)
+	_, err := mgr.HandleHello(context.Background(), connID1, peer1, hello1)
 	if err != nil {
 		t.Fatalf("first hello failed: %v", err)
 	}
 
-	_, err = mgr.HandleHello(context.Background(), connID2, peer2, hello)
+	_, err = mgr.HandleHello(context.Background(), connID2, peer2, hello2)
 	if err != nil {
 		t.Errorf("cross-runtime same namespace should succeed: %v", err)
 	}

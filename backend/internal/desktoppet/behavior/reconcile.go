@@ -8,9 +8,9 @@ import (
 )
 
 type StateSourceQuery interface {
-	QueryActiveInteractions(ctx context.Context, userID, characterID string) ([]InteractionSnapshot, error)
-	QueryVoiceSession(ctx context.Context, userID, characterID string) (*VoiceBehaviorState, error)
-	QueryActiveTools(ctx context.Context, userID, characterID string) (map[string]ToolOperationState, error)
+	QueryActiveInteractions(ctx context.Context, spaceID, characterID string) ([]InteractionSnapshot, error)
+	QueryVoiceSession(ctx context.Context, spaceID, characterID string) (*VoiceBehaviorState, error)
+	QueryActiveTools(ctx context.Context, spaceID, characterID string) (map[string]ToolOperationState, error)
 }
 
 type InteractionSnapshot struct {
@@ -89,16 +89,16 @@ func NewReconciler(
 	}
 }
 
-func (r *Reconciler) ReconcileCharacter(ctx context.Context, userID, characterID string, currentContext *BehaviorContextSnapshot) (*BehaviorDecision, error) {
-	if userID == "" || characterID == "" {
-		return nil, NewBehaviorError(ErrCodeEventSchemaInvalid, "reconcile requires userId and characterId")
+func (r *Reconciler) ReconcileCharacter(ctx context.Context, spaceID, characterID string, currentContext *BehaviorContextSnapshot) (*BehaviorDecision, error) {
+	if spaceID == "" || characterID == "" {
+		return nil, NewBehaviorError(ErrCodeEventSchemaInvalid, "reconcile requires spaceId and characterId")
 	}
 	now := r.clock.Now()
 
 	var activePet *ActivePetSnapshot
 	var activePetErr error
 	if r.activePetPort != nil {
-		activePet, activePetErr = r.activePetPort.ResolveActivePet(ctx, userID, characterID)
+		activePet, activePetErr = r.activePetPort.ResolveActivePet(ctx, spaceID, characterID)
 	} else {
 		activePetErr = NewBehaviorError(ErrCodeNoActiveInstallation, "active pet port unavailable")
 	}
@@ -106,14 +106,14 @@ func (r *Reconciler) ReconcileCharacter(ctx context.Context, userID, characterID
 		return nil, activePetErr
 	}
 
-	reconciledCtx, err := r.rebuildAndPersistContext(ctx, userID, characterID, currentContext, activePet, now)
+	reconciledCtx, err := r.rebuildAndPersistContext(ctx, spaceID, characterID, currentContext, activePet, now)
 	if err != nil {
 		return nil, err
 	}
 
 	if activePet == nil || activePetErr != nil {
 		return &BehaviorDecision{
-			UserID:          userID,
+			SpaceID:         spaceID,
 			CharacterID:     characterID,
 			ContextRevision: reconciledCtx.Revision,
 			RulesetVersion:  int(CurrentRulesetVersion),
@@ -125,7 +125,7 @@ func (r *Reconciler) ReconcileCharacter(ctx context.Context, userID, characterID
 
 	if !activePet.RuntimeOnline {
 		return &BehaviorDecision{
-			UserID:          userID,
+			SpaceID:         spaceID,
 			CharacterID:     characterID,
 			InstallationID:  activePet.InstallationID,
 			ContextRevision: reconciledCtx.Revision,
@@ -142,7 +142,7 @@ func (r *Reconciler) ReconcileCharacter(ctx context.Context, userID, characterID
 		SchemaVersion: 1,
 		OccurredAt:    now,
 		ReceivedAt:    now,
-		UserID:        userID,
+		SpaceID:       spaceID,
 		CharacterID:   characterID,
 		Origin:        OriginSystem,
 	}
@@ -161,7 +161,7 @@ func (r *Reconciler) ReconcileCharacter(ctx context.Context, userID, characterID
 	if decision.DecisionID == "" {
 		decision.DecisionID = UUIDNew()
 	}
-	decision.UserID = userID
+	decision.SpaceID = spaceID
 	decision.CharacterID = characterID
 	decision.InstallationID = activePet.InstallationID
 	decision.ContextRevision = reconciledCtx.Revision
@@ -203,7 +203,7 @@ func (r *Reconciler) ReconcileCharacter(ctx context.Context, userID, characterID
 	return decision, nil
 }
 
-func (r *Reconciler) rebuildAndPersistContext(ctx context.Context, userID, characterID string, currentContext *BehaviorContextSnapshot, activePet *ActivePetSnapshot, now time.Time) (BehaviorContextSnapshot, error) {
+func (r *Reconciler) rebuildAndPersistContext(ctx context.Context, spaceID, characterID string, currentContext *BehaviorContextSnapshot, activePet *ActivePetSnapshot, now time.Time) (BehaviorContextSnapshot, error) {
 	base := currentContext
 	maxRetries := MaxCASRetries
 	if maxRetries <= 0 {
@@ -216,18 +216,18 @@ func (r *Reconciler) rebuildAndPersistContext(ctx context.Context, userID, chara
 		}
 		if base == nil || attempt > 0 {
 			if r.repo != nil {
-				loaded, err := r.repo.LoadContext(ctx, userID, characterID)
+				loaded, err := r.repo.LoadContext(ctx, spaceID, characterID)
 				if err != nil {
 					return BehaviorContextSnapshot{}, err
 				}
 				base = loaded
 			} else {
-				empty := NewDefaultContext(userID, characterID)
+				empty := NewDefaultContext(spaceID, characterID)
 				base = &empty
 			}
 		}
 
-		reconciled, err := r.buildReconciledContext(ctx, userID, characterID, base, now)
+		reconciled, err := r.buildReconciledContext(ctx, spaceID, characterID, base, now)
 		if err != nil {
 			return BehaviorContextSnapshot{}, err
 		}
@@ -325,15 +325,15 @@ func applyStableDesiredState(ctx *BehaviorContextSnapshot) {
 	}
 }
 
-func (r *Reconciler) buildReconciledContext(ctx context.Context, userID, characterID string, currentContext *BehaviorContextSnapshot, now time.Time) (BehaviorContextSnapshot, error) {
+func (r *Reconciler) buildReconciledContext(ctx context.Context, spaceID, characterID string, currentContext *BehaviorContextSnapshot, now time.Time) (BehaviorContextSnapshot, error) {
 	if currentContext == nil {
-		emptyCtx := NewDefaultContext(userID, characterID)
+		emptyCtx := NewDefaultContext(spaceID, characterID)
 		currentContext = &emptyCtx
 	}
 
 	reconciled := currentContext.Copy()
 
-	interactions, err := r.stateSource.QueryActiveInteractions(ctx, userID, characterID)
+	interactions, err := r.stateSource.QueryActiveInteractions(ctx, spaceID, characterID)
 	if err != nil {
 		return BehaviorContextSnapshot{}, err
 	}
@@ -365,7 +365,7 @@ func (r *Reconciler) buildReconciledContext(ctx context.Context, userID, charact
 		}
 	}
 
-	voiceState, err := r.stateSource.QueryVoiceSession(ctx, userID, characterID)
+	voiceState, err := r.stateSource.QueryVoiceSession(ctx, spaceID, characterID)
 	if err != nil {
 		return BehaviorContextSnapshot{}, err
 	}
@@ -375,7 +375,7 @@ func (r *Reconciler) buildReconciledContext(ctx context.Context, userID, charact
 		reconciled.Voice = VoiceBehaviorState{}
 	}
 
-	tools, err := r.stateSource.QueryActiveTools(ctx, userID, characterID)
+	tools, err := r.stateSource.QueryActiveTools(ctx, spaceID, characterID)
 	if err != nil {
 		return BehaviorContextSnapshot{}, err
 	}
@@ -394,7 +394,7 @@ func (r *Reconciler) buildReconciledContext(ctx context.Context, userID, charact
 	}
 
 	if r.affectPort != nil {
-		affect, err := r.affectPort.GetAffectSnapshot(ctx, userID, characterID)
+		affect, err := r.affectPort.GetAffectSnapshot(ctx, spaceID, characterID)
 		if err != nil {
 			return BehaviorContextSnapshot{}, fmt.Errorf("query affect snapshot: %w", err)
 		}
@@ -405,7 +405,7 @@ func (r *Reconciler) buildReconciledContext(ctx context.Context, userID, charact
 	}
 
 	if r.activityPort != nil {
-		activity, err := r.activityPort.GetActivitySnapshot(ctx, userID, characterID)
+		activity, err := r.activityPort.GetActivitySnapshot(ctx, spaceID, characterID)
 		if err != nil {
 			return BehaviorContextSnapshot{}, fmt.Errorf("query activity snapshot: %w", err)
 		}
@@ -433,7 +433,7 @@ func (r *Reconciler) buildAndSubmitCommand(ctx context.Context, decision *Behavi
 		CommandID:            UUIDNew(),
 		DecisionID:           decision.DecisionID,
 		IdempotencyKey:       decision.DecisionID,
-		UserID:               activePet.UserID,
+		SpaceID:              activePet.SpaceID,
 		DeviceID:             activePet.DeviceID,
 		CharacterID:          activePet.CharacterID,
 		RuntimeID:            activePet.RuntimeID,
@@ -478,14 +478,14 @@ func (r *Reconciler) buildAndSubmitCommand(ctx context.Context, decision *Behavi
 	return nil
 }
 
-func (r *Reconciler) HandleRuntimeReconnect(ctx context.Context, userID, characterID string, currentContext *BehaviorContextSnapshot) (*BehaviorDecision, error) {
-	return r.ReconcileCharacter(ctx, userID, characterID, currentContext)
+func (r *Reconciler) HandleRuntimeReconnect(ctx context.Context, spaceID, characterID string, currentContext *BehaviorContextSnapshot) (*BehaviorDecision, error) {
+	return r.ReconcileCharacter(ctx, spaceID, characterID, currentContext)
 }
 
-func (r *Reconciler) HandleInstallationChanged(ctx context.Context, userID, characterID string, currentContext *BehaviorContextSnapshot) (*BehaviorDecision, error) {
+func (r *Reconciler) HandleInstallationChanged(ctx context.Context, spaceID, characterID string, currentContext *BehaviorContextSnapshot) (*BehaviorDecision, error) {
 	r.arbiter.ClearUnavailable()
 	if currentContext != nil {
 		currentContext.Foreground = ForegroundActionState{}
 	}
-	return r.ReconcileCharacter(ctx, userID, characterID, currentContext)
+	return r.ReconcileCharacter(ctx, spaceID, characterID, currentContext)
 }

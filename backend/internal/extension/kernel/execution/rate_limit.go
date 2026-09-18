@@ -38,7 +38,7 @@ type RateLimitKey struct {
 	Dimension      RateLimitDimension
 	ToolID         string
 	ExtensionID    string
-	UserID         string
+	SpaceID        string
 	CharacterID    string
 	ConversationID string
 }
@@ -116,7 +116,7 @@ type rateKeyType struct {
 	dim          RateLimitDimension
 	toolID       string
 	extensionID  string
-	userID       string
+	spaceID      string
 	characterID  string
 	conversation string
 }
@@ -404,11 +404,11 @@ func (r *RateLimiter) prepareRelevantKeys(tool capability.ToolDefinition, inv ca
 	}
 	if r.policy.PerCharacter.Tokens > 0 && inv.CharacterID != "" {
 		dims = append(dims, RateLimitCharacter)
-		keys = append(keys, rateKeyType{dim: RateLimitCharacter, userID: inv.UserID, characterID: inv.CharacterID})
+		keys = append(keys, rateKeyType{dim: RateLimitCharacter, spaceID: inv.SpaceID, characterID: inv.CharacterID})
 	}
 	if r.policy.PerConversation.Tokens > 0 && inv.ConversationID != "" {
 		dims = append(dims, RateLimitConversation)
-		keys = append(keys, rateKeyType{dim: RateLimitConversation, userID: inv.UserID, characterID: inv.CharacterID, conversation: inv.ConversationID})
+		keys = append(keys, rateKeyType{dim: RateLimitConversation, spaceID: inv.SpaceID, characterID: inv.CharacterID, conversation: inv.ConversationID})
 	}
 	return dims, keys, nil
 }

@@ -12,12 +12,12 @@ func TestExternalTextEntrypointsUseUnifiedEntry(t *testing.T) {
 	if strings.Contains(streamHandler, "chatSvc.ProcessMessage") {
 		t.Fatal("WebChatSendStream must not call chatSvc.ProcessMessage directly")
 	}
-	if !strings.Contains(streamHandler, "h.unifiedEntry.Handle") {
+	if !strings.Contains(streamHandler, "h.handleUnifiedEntryWithWorkspace") {
 		t.Fatal("WebChatSendStream must call UnifiedEntry.Handle")
 	}
 
 	webHandler := readGuardFile(t, "webchat_handler.go")
-	if !strings.Contains(webHandler, "h.unifiedEntry.Handle") {
+	if !strings.Contains(webHandler, "h.handleUnifiedEntryWithWorkspace") {
 		t.Fatal("WebChatSend must call UnifiedEntry.Handle")
 	}
 

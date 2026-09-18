@@ -9,10 +9,8 @@ import (
 type ChannelKind string
 
 const (
-	ChannelWechat ChannelKind = "wechat"
-	ChannelQQ     ChannelKind = "qq"
-	ChannelWeb    ChannelKind = "web"
-	ChannelVoice  ChannelKind = "voice"
+	ChannelWeb   ChannelKind = "web"
+	ChannelVoice ChannelKind = "voice"
 )
 
 type ChannelCapability struct {
@@ -43,42 +41,6 @@ const (
 
 func defaultChannelPolicy(kind ChannelKind) ChannelPolicy {
 	switch kind {
-	case ChannelWechat:
-		return ChannelPolicy{
-			Kind:          ChannelWechat,
-			Version:       string(ExpressionChannelPolicyV1),
-			MaxCharacters: 200,
-			MinCharacters: 10,
-			MaxSegments:   3,
-			MinSegments:   1,
-			Capabilities: ChannelCapability{
-				SupportsMarkdown:  false,
-				SupportsMedia:     true,
-				SupportsVoice:     false,
-				SupportsSegmented: true,
-			},
-			SegmentHint:       "short_per_line",
-			ShortRules:        textlib.RawChannelWechatShortRules,
-			AntiRepeatEnabled: true,
-		}
-	case ChannelQQ:
-		return ChannelPolicy{
-			Kind:          ChannelQQ,
-			Version:       string(ExpressionChannelPolicyV1),
-			MaxCharacters: 200,
-			MinCharacters: 10,
-			MaxSegments:   3,
-			MinSegments:   1,
-			Capabilities: ChannelCapability{
-				SupportsMarkdown:  false,
-				SupportsMedia:     true,
-				SupportsVoice:     false,
-				SupportsSegmented: true,
-			},
-			SegmentHint:       "short_per_line",
-			ShortRules:        textlib.RawChannelQQShortRules,
-			AntiRepeatEnabled: true,
-		}
 	case ChannelWeb:
 		return ChannelPolicy{
 			Kind:          ChannelWeb,
@@ -135,7 +97,7 @@ var builtinPolicies map[ChannelKind]ChannelPolicy
 
 func init() {
 	builtinPolicies = make(map[ChannelKind]ChannelPolicy, 4)
-	for _, k := range []ChannelKind{ChannelWechat, ChannelQQ, ChannelWeb, ChannelVoice} {
+	for _, k := range []ChannelKind{ChannelWeb, ChannelVoice} {
 		builtinPolicies[k] = defaultChannelPolicy(k)
 	}
 }
@@ -164,17 +126,15 @@ func RegisterChannelPolicy(kind ChannelKind, policy ChannelPolicy) {
 }
 
 func KnownChannels() []ChannelKind {
-	return []ChannelKind{ChannelWechat, ChannelQQ, ChannelWeb, ChannelVoice}
+	return []ChannelKind{ChannelWeb, ChannelVoice}
 }
 
 const ChannelStateVersionKey = "channel-state-version"
 
 func ChannelStateVersionMapping() map[ChannelKind]string {
 	return map[ChannelKind]string{
-		ChannelWechat: "wechat-state-v1",
-		ChannelQQ:     "qq-state-v1",
-		ChannelWeb:    "web-state-v1",
-		ChannelVoice:  "voice-state-v1",
+		ChannelWeb:   "web-state-v1",
+		ChannelVoice: "voice-state-v1",
 	}
 }
 

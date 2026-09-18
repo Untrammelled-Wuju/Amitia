@@ -409,21 +409,6 @@ SPDX-License-Identifier: AGPL-3.0-only
           <el-form-item label="资源包 ID">
             <span class="install-package-id">{{ installForm.releaseId }}</span>
           </el-form-item>
-          <el-form-item label="绑定角色">
-            <el-select
-              v-model="installForm.characterId"
-              placeholder="请选择绑定的 Amitia 角色"
-              style="width: 100%"
-              filterable
-            >
-              <el-option
-                v-for="c in installCharacters"
-                :key="c.id"
-                :label="c.name"
-                :value="c.id"
-              />
-            </el-select>
-          </el-form-item>
         </el-form>
         <el-alert
           type="info"
@@ -513,8 +498,6 @@ const { install: installPet } = useDesktopPetInstallations();
 interface GenerationTaskDetail {
   id: string | number;
   name?: string;
-  characterId?: string | number;
-  characterName?: string;
   status?: string;
   actions?: Array<{
     actionKey: string;
@@ -560,22 +543,12 @@ const packageForm = reactive({
 const packageError = ref("");
 const packageResult = ref<CreatePackageResponse | null>(null);
 
-interface InstallCharacterOption {
-  id: string | number;
-  name: string;
-  status?: string;
-  isActive?: number | boolean;
-  isDefault?: number | boolean;
-}
-
 const installDialogVisible = ref(false);
 const installSubmitting = ref(false);
 const installError = ref("");
-const installCharacters = ref<InstallCharacterOption[]>([]);
 const installForm = reactive({
   petId: "",
   releaseId: "",
-  characterId: "" as string | number,
 });
 
 const canInstallPackage = computed(
@@ -686,7 +659,6 @@ function actionProgressStatus(
 const petName = computed(() => {
   return (
     generationTaskDetail.value?.name ||
-    generationTaskDetail.value?.characterName ||
     ""
   );
 });
@@ -1027,10 +999,11 @@ async function openFrameDialog(action: ProcessingActionInfo) {
     );
     const total =
       Number(
-        (genAction as any)?.frameTotal ??
-          (genAction as any)?.attemptNumber ??
+        action.processedFrameCount ||
+          action.sourceFrameCount ||
+          (genAction as any)?.frameTotal ||
           0,
-      ) || 8;
+      ) || 12;
     const rows: FrameRow[] = [];
     const fetchTasks: Promise<void>[] = [];
     for (let i = 0; i < total; i++) {
@@ -1105,28 +1078,6 @@ async function submitPackage() {
   }
 }
 
-async function loadInstallCharacters() {
-  try {
-    const list =
-      (await get<InstallCharacterOption[]>("/api/characters")) || [];
-    installCharacters.value = list.filter(
-      (c) =>
-        c.status === "enabled" ||
-        c.isActive === true ||
-        c.isActive === 1,
-    );
-    if (!installForm.characterId && installCharacters.value.length) {
-      const defaultChar =
-        installCharacters.value.find((c) => c.isDefault) ||
-        installCharacters.value.find((c) => c.isActive) ||
-        installCharacters.value[0];
-      installForm.characterId = defaultChar?.id || "";
-    }
-  } catch {
-    installCharacters.value = [];
-  }
-}
-
 function openInstallDialog() {
   if (!packageResult.value?.releaseId) {
     ElMessage.warning("请先生成资源包");
@@ -1134,13 +1085,8 @@ function openInstallDialog() {
   }
   installForm.petId = packageResult.value.petId;
   installForm.releaseId = packageResult.value.releaseId;
-  installForm.characterId =
-    generationTaskDetail.value?.characterId ||
-    installCharacters.value[0]?.id ||
-    "";
   installError.value = "";
   installDialogVisible.value = true;
-  void loadInstallCharacters();
 }
 
 async function submitInstall() {
@@ -1148,18 +1094,10 @@ async function submitInstall() {
     installError.value = "缺少资源包信息";
     return;
   }
-  if (!installForm.characterId) {
-    installError.value = "请选择绑定的 Amitia 角色";
-    return;
-  }
   installError.value = "";
   installSubmitting.value = true;
   try {
-    await installPet(
-      installForm.petId,
-      installForm.releaseId,
-      String(installForm.characterId),
-    );
+    await installPet(installForm.petId, installForm.releaseId);
     installDialogVisible.value = false;
     ElMessage.success("桌宠已安装，正在跳转到安装管理");
     router.push("/creative-workshop/pet/installations");

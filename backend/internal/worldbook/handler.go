@@ -4,6 +4,7 @@ package worldbook
 
 import (
 	"github.com/gin-gonic/gin"
+	"github.com/u-ai/backend/internal/requestidentity"
 	"github.com/u-ai/backend/pkg/comment/response"
 	"github.com/u-ai/backend/pkg/util"
 )
@@ -19,7 +20,7 @@ func NewHandler(srv Service) *Handler {
 func (h *Handler) List(c *gin.Context) {
 	var q WorldBookListQuery
 	c.ShouldBindQuery(&q)
-	resp, err := h.service.List(q)
+	resp, err := h.service.ListForSpace(requestidentity.ResolveGin(c), q)
 	if err != nil {
 		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
@@ -33,7 +34,7 @@ func (h *Handler) Create(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
 		return
 	}
-	e, err := h.service.Create(&req)
+	e, err := h.service.CreateForSpace(requestidentity.ResolveGin(c), &req)
 	if err != nil {
 		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
@@ -48,7 +49,7 @@ func (h *Handler) Update(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
 		return
 	}
-	e, err := h.service.Update(id, &req)
+	e, err := h.service.UpdateForSpace(requestidentity.ResolveGin(c), id, &req)
 	if err != nil {
 		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
 		return
@@ -58,7 +59,7 @@ func (h *Handler) Update(c *gin.Context) {
 
 func (h *Handler) Delete(c *gin.Context) {
 	id := c.Param("id")
-	if err := h.service.Delete(id); err != nil {
+	if err := h.service.DeleteForSpace(requestidentity.ResolveGin(c), id); err != nil {
 		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
 		return
 	}
@@ -71,7 +72,7 @@ func (h *Handler) TestMatch(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, "缺少必要参数", nil)
 		return
 	}
-	resp, err := h.service.TestMatch(req.Text)
+	resp, err := h.service.TestMatchForSpace(requestidentity.ResolveGin(c), req.Text)
 	if err != nil {
 		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
@@ -80,7 +81,7 @@ func (h *Handler) TestMatch(c *gin.Context) {
 }
 
 func (h *Handler) DeleteAll(c *gin.Context) {
-	if err := h.service.DeleteAll(); err != nil {
+	if err := h.service.DeleteAllForSpace(requestidentity.ResolveGin(c)); err != nil {
 		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
 		return
 	}
@@ -89,6 +90,6 @@ func (h *Handler) DeleteAll(c *gin.Context) {
 
 func (h *Handler) SystemPrompt(c *gin.Context) {
 	userMessage := c.Query("userMessage")
-	prompt := h.service.ToSystemPrompt(userMessage, "")
+	prompt := h.service.ToSystemPromptForSpace(requestidentity.ResolveGin(c), c.Query("characterId"), userMessage, "")
 	util.SuccessResponse(c, map[string]string{"prompt": prompt})
 }

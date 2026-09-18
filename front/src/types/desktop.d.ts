@@ -4,6 +4,7 @@ interface ElectronWindowApi {
   minimize(windowType?: "main" | "child"): Promise<void>;
   toggleMaximize(): Promise<boolean>;
   close(windowType?: "main" | "child"): Promise<void>;
+  editCommand(command: "undo" | "redo" | "cut" | "copy" | "paste" | "selectAll" | "delete"): Promise<void>;
   isMaximized(): Promise<boolean>;
   getWindowType(): Promise<"main" | "child">;
 }

@@ -29,6 +29,10 @@ class FakeRuntimeBridge implements RuntimeBridge {
     _controller.add(snapshot);
   }
 
+  void setSnapshotWithoutEvent(RuntimeBridgeSnapshot snapshot) {
+    _current = snapshot;
+  }
+
   void setManifest(RuntimeManifestSummary? manifest) {
     _manifest = manifest;
   }

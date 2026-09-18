@@ -25,15 +25,15 @@ const (
 )
 
 const (
-	OpOpen        = "terminal.open"
-	OpWrite       = "terminal.write"
-	OpRead        = "terminal.read"
-	OpResize      = "terminal.resize"
-	OpStatus      = "terminal.status"
-	OpClose       = "terminal.close"
-	OpCancel      = "terminal.cancel"
-	OpShellExec   = "shell.exec"
-	OpPackages    = "packages.*"
+	OpOpen      = "terminal.open"
+	OpWrite     = "terminal.write"
+	OpRead      = "terminal.read"
+	OpResize    = "terminal.resize"
+	OpStatus    = "terminal.status"
+	OpClose     = "terminal.close"
+	OpCancel    = "terminal.cancel"
+	OpShellExec = "shell.exec"
+	OpPackages  = "packages.*"
 )
 
 const (
@@ -73,8 +73,8 @@ const (
 )
 
 const (
-	OpSSHStatus     = "ssh.status"
-	OpSSHExec       = "ssh.exec"
+	OpSSHStatus      = "ssh.status"
+	OpSSHExec        = "ssh.exec"
 	OpSSHHostKeyScan = "ssh.hostkey.scan"
 )
 
@@ -94,9 +94,9 @@ type AndroidLinuxRequest struct {
 }
 
 type AndroidLinuxResponse struct {
-	RequestID string         `json:"requestId"`
-	Status    string         `json:"status"`
-	Result    map[string]any `json:"result,omitempty"`
+	RequestID string             `json:"requestId"`
+	Status    string             `json:"status"`
+	Result    map[string]any     `json:"result,omitempty"`
 	Error     *AndroidLinuxError `json:"error,omitempty"`
 }
 
@@ -441,12 +441,12 @@ func (p *Provider) handleOpen(ctx context.Context, req AndroidLinuxRequest) (map
 	owner := extractOwner(payload)
 
 	sessID, state, finalRows, finalCols, err := p.manager.Open(ctx, OpenParams{
-		Owner:       owner,
-		Shell:       shell,
-		WorkingDir:  cwd,
-		Rows:        rows,
-		Cols:        cols,
-		Workspace:   p.workspace,
+		Owner:        owner,
+		Shell:        shell,
+		WorkingDir:   cwd,
+		Rows:         rows,
+		Cols:         cols,
+		Workspace:    p.workspace,
 		InvocationID: req.RequestID,
 	})
 
@@ -518,7 +518,7 @@ func (p *Provider) handleWrite(ctx context.Context, req AndroidLinuxRequest) (ma
 	}
 
 	return map[string]any{
-		"accepted":    true,
+		"accepted":     true,
 		"bytesWritten": bytesWritten,
 	}, nil
 }
@@ -561,7 +561,7 @@ func (p *Provider) handleRead(ctx context.Context, req AndroidLinuxRequest) (map
 				AfterSequence: afterSeq,
 				MaxBytes:      maxBytes,
 			})
-			resultCh <-readResult{c, ns, t, s, e}
+			resultCh <- readResult{c, ns, t, s, e}
 		}()
 
 		select {
@@ -606,11 +606,11 @@ func (p *Provider) handleRead(ctx context.Context, req AndroidLinuxRequest) (map
 	}
 
 	return map[string]any{
-		"sessionId":     string(sessID),
-		"chunks":        chunksToAny(chunks),
-		"nextSequence":  nextSeq,
-		"truncated":     truncated,
-		"state":         string(state),
+		"sessionId":    string(sessID),
+		"chunks":       chunksToAny(chunks),
+		"nextSequence": nextSeq,
+		"truncated":    truncated,
+		"state":        string(state),
 	}, nil
 }
 
@@ -717,8 +717,8 @@ func (p *Provider) handleCancel(ctx context.Context, req AndroidLinuxRequest) (m
 func extractOwner(payload map[string]any) SessionOwner {
 	owner := SessionOwner{}
 
-	if v, ok := payload["userId"].(string); ok {
-		owner.UserID = v
+	if v, ok := payload["spaceId"].(string); ok {
+		owner.SpaceID = v
 	}
 	if v, ok := payload["characterId"].(string); ok {
 		owner.CharacterID = v

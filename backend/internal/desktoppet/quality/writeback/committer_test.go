@@ -55,8 +55,7 @@ func TestCommitEvaluationStaleRevisionNeverBecomesActive(t *testing.T) {
 	}
 	ev := &quality.QualityEvaluation{
 		ID:                "evaluation-stale",
-		UserID:            "user-1",
-		CharacterID:       "character-1",
+		SpaceID:           "user-1",
 		ProcessingTaskID:  "task-1",
 		ActionRevisionID:  "revision-1",
 		ActionContentHash: "old-content",

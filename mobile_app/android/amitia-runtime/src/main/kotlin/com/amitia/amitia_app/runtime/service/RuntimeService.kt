@@ -1208,6 +1208,7 @@ class RuntimeService : Service() {
     }
 
     internal companion object {
+        private const val TAG = "AmitiaRuntimeService"
 
         private val instanceRef = AtomicReference<RuntimeService?>(null)
 

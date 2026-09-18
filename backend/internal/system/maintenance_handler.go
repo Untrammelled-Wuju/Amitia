@@ -22,7 +22,3 @@ func (h *Handler) MaintenanceExportDiagnostic(c *gin.Context) {
 func (h *Handler) MaintenanceReloadConfig(c *gin.Context) {
 	util.SuccessResponse(c, h.service.MaintenanceReloadConfig())
 }
-
-func (h *Handler) MaintenanceRestartBridge(c *gin.Context) {
-	util.SuccessResponse(c, h.service.MaintenanceRestartBridge())
-}

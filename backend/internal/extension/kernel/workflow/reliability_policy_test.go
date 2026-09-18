@@ -287,7 +287,7 @@ func TestExecuteV2EvaluatesEdgeConditions(t *testing.T) {
 }
 
 func TestExecuteV2EvaluatesRuntimeCondition(t *testing.T) {
-	when := json.RawMessage(`{"op":"eq","left":{"ref":{"source":"runtime","path":["userId"]}},"right":{"value":"user-allowed"}}`)
+	when := json.RawMessage(`{"op":"eq","left":{"ref":{"source":"runtime","path":["spaceId"]}},"right":{"value":"user-allowed"}}`)
 	def, err := NormalizeDefinition(WorkflowDefinition{
 		SchemaVersion: UserWorkflowSchemaVersion,
 		ID:            "wf-v2-runtime-condition",
@@ -319,7 +319,7 @@ func TestExecuteV2EvaluatesRuntimeCondition(t *testing.T) {
 	result, err := executor.Execute(context.Background(), ExecuteRequest{
 		WorkflowID: def.ID,
 		Input:      json.RawMessage(`{}`),
-		Context:    ExecutionContext{UserID: "user-denied"},
+		Context:    ExecutionContext{SpaceID: "user-denied"},
 	})
 	if err != nil {
 		t.Fatalf("execute: %v", err)

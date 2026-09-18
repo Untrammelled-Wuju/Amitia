@@ -38,12 +38,10 @@ type Service struct {
 
 type PreviewRequest struct {
 	AgentSkillExtensionID string                              `json:"agentSkillExtensionId"`
-	CharacterID           string                              `json:"characterId"`
 	Dependencies          []extension.AgentSkillMCPDependency `json:"dependencies"`
 }
 type Plan struct {
 	AgentSkillExtensionID string     `json:"agentSkillExtensionId"`
-	CharacterID           string     `json:"characterId"`
 	Items                 []PlanItem `json:"items"`
 	RequiredMissing       bool       `json:"requiredMissing"`
 	RiskLevel             string     `json:"riskLevel"`
@@ -87,7 +85,7 @@ func New(repository *mcp.Repository, connections ConnectionManager, discoverySer
 }
 
 func (s *Service) Preview(ctx context.Context, request PreviewRequest) (Plan, error) {
-	plan := Plan{AgentSkillExtensionID: request.AgentSkillExtensionID, CharacterID: request.CharacterID, Items: []PlanItem{}, RiskLevel: "low"}
+	plan := Plan{AgentSkillExtensionID: request.AgentSkillExtensionID, Items: []PlanItem{}, RiskLevel: "low"}
 	for _, dependency := range request.Dependencies {
 		input := serverInput(dependency)
 		identity := ""
@@ -134,12 +132,12 @@ func (s *Service) Install(ctx context.Context, request InstallRequest) (InstallR
 	for _, item := range request.Plan.Items {
 		dependencies = append(dependencies, item.Dependency)
 	}
-	verified, err := s.Preview(ctx, PreviewRequest{AgentSkillExtensionID: request.Plan.AgentSkillExtensionID, CharacterID: request.Plan.CharacterID, Dependencies: dependencies})
+	verified, err := s.Preview(ctx, PreviewRequest{AgentSkillExtensionID: request.Plan.AgentSkillExtensionID, Dependencies: dependencies})
 	if err != nil {
 		return InstallResult{}, err
 	}
 	request.Plan = verified
-	operation, err := s.repository.CreateOperation(ctx, "agent_skill_mcp_install", request.Plan.AgentSkillExtensionID, scopeType(request.Plan.CharacterID), request.Plan.CharacterID, request.Plan)
+	operation, err := s.repository.CreateOperation(ctx, "agent_skill_mcp_install", request.Plan.AgentSkillExtensionID, "global", "", request.Plan)
 	if err != nil {
 		return InstallResult{}, err
 	}
@@ -198,15 +196,7 @@ func (s *Service) Install(ctx context.Context, request InstallRequest) (InstallR
 			serverID = server.ID
 			created = append(created, serverID)
 		}
-		bindingScope := dependency.DefaultScope
-		bindingID := ""
-		if bindingScope == "character" {
-			bindingID = request.Plan.CharacterID
-			if bindingID == "" {
-				return fail("MCP_DEPENDENCY_SCOPE_INVALID", fmt.Errorf("character scope is required for %s", dependency.ID))
-			}
-		}
-		if err := s.repository.SetScopeEnabled(ctx, serverID, bindingScope, bindingID, request.EnableServers); err != nil {
+		if err := s.repository.SetScopeEnabled(ctx, serverID, request.EnableServers); err != nil {
 			return fail("MCP_DEPENDENCY_INSTALL_FAILED", err)
 		}
 		link := mcp.DependencyLink{AgentSkillExtensionID: request.Plan.AgentSkillExtensionID, ServerID: serverID, DependencyName: dependency.ID, Required: boolInt(dependency.Required), InstallStatus: "installed", BindingStatus: "bound"}
@@ -340,12 +330,6 @@ func dependencyRisk(dependency extension.AgentSkillMCPDependency) string {
 		return "medium"
 	}
 	return "low"
-}
-func scopeType(characterID string) string {
-	if characterID != "" {
-		return "character"
-	}
-	return "global"
 }
 func boolInt(value bool) int {
 	if value {

@@ -24,6 +24,10 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
   final Set<String> _selected = {};
   String _typeFilter = '';
   String _importanceFilter = '全部';
+  String _scopeFilter = '';
+  int _retentionFilter = 0;
+  String _decayFilter = '';
+  Map<String, dynamic>? _pipelineStatus;
   bool _searchVisible = false;
   final _searchController = TextEditingController();
   String _searchQuery = '';
@@ -44,6 +48,22 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
   };
   final _types = const ['', 'personal_info', 'hobby', 'preference', 'fact', 'plan', 'habit', 'relationship', 'custom'];
   final _importances = ['全部', '高', '较高', '中', '低'];
+  static const _scopes = <String, String>{'': '全部', 'character': '角色', 'user': '用户全局', 'world': '世界'};
+  static const _retentions = <int, String>{0: '全部', 1: 'L1 核心', 2: 'L2 稳定', 3: 'L3 普通', 4: 'L4 弱记忆', 5: 'L5 短暂'};
+  static const _decayStates = <String, String>{'': '全部', 'active': '活跃', 'fading': '淡化', 'archived': '已归档'};
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPipelineStatus();
+  }
+
+  Future<void> _loadPipelineStatus() async {
+    try {
+      final status = await ref.read(systemServiceProvider).pipelineStatus();
+      if (mounted) setState(() => _pipelineStatus = status);
+    } catch (_) {}
+  }
 
   @override
   void dispose() {
@@ -156,6 +176,27 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
                       ],
                     ),
                   ),
+                if (_pipelineStatus != null)
+                  Padding(
+                    padding: EdgeInsets.fromLTRB(AppSpacing.pagePadding, AppSpacing.xs, AppSpacing.pagePadding, 0),
+                    child: AmitiaCard(
+                      child: Row(
+                        children: [
+                          Icon(Icons.hub_outlined, size: 18, color: context.accentPrimary),
+                          SizedBox(width: AppSpacing.sm),
+                          Expanded(
+                            child: Text(
+                              _pipelineSummary(_pipelineStatus!),
+                              style: AppTypography.caption(context),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          IconButton(icon: const Icon(Icons.refresh, size: 18), tooltip: '刷新记忆管线状态', onPressed: _loadPipelineStatus),
+                        ],
+                      ),
+                    ),
+                  ),
                 _buildFilters(context),
                 if (_batchMode) _buildBatchBar(context),
                 Expanded(
@@ -191,6 +232,9 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
     final source = _remoteResults ?? memories;
     return source.where((m) {
       if (_typeFilter.isNotEmpty && m.type != _typeFilter) return false;
+      if (_scopeFilter.isNotEmpty && m.scope != _scopeFilter) return false;
+      if (_retentionFilter != 0 && m.retentionLevel != _retentionFilter) return false;
+      if (_decayFilter.isNotEmpty && m.decayState != _decayFilter) return false;
       if (_importanceFilter != '全部') {
         final impStr = _importanceIntToString(m.importance);
         if (impStr != _importanceFilter) return false;
@@ -199,6 +243,19 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
       return true;
     }).toList();
   }
+
+  String _pipelineSummary(Map<String, dynamic> status) {
+    final layers = status['layers'];
+    if (layers is List && layers.isNotEmpty) {
+      final completed = layers.whereType<Map>().where((row) => (row['status'] ?? '').toString() == 'completed').length;
+      final failed = layers.whereType<Map>().where((row) => (row['status'] ?? '').toString() == 'failed').length;
+      return '记忆管线：$completed/${layers.length} 层完成${failed > 0 ? ' · $failed 层失败' : ''}';
+    }
+    final state = (status['status'] ?? status['state'] ?? '可用').toString();
+    return '记忆管线：$state';
+  }
+
+  String _scopeLabel(String scope) => _scopes[scope] ?? (scope.isEmpty ? '角色' : scope);
 
   String _importanceIntToString(int importance) {
     if (importance >= 9) return '高';
@@ -232,6 +289,30 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
             ),
             SizedBox(width: AppSpacing.sm),
             _buildFilterChip(context, '重要度: $_importanceFilter', _importances, (v) => setState(() => _importanceFilter = v)),
+            SizedBox(width: AppSpacing.sm),
+            _buildFilterChip(
+              context,
+              '范围: ${_scopes[_scopeFilter] ?? _scopeFilter}',
+              _scopes.keys.toList(growable: false),
+              (v) => setState(() => _scopeFilter = v),
+              optionLabel: (value) => _scopes[value] ?? value,
+            ),
+            SizedBox(width: AppSpacing.sm),
+            _buildFilterChip(
+              context,
+              '层级: ${_retentions[_retentionFilter] ?? '全部'}',
+              _retentions.keys.map((e) => e.toString()).toList(growable: false),
+              (v) => setState(() => _retentionFilter = int.tryParse(v) ?? 0),
+              optionLabel: (value) => _retentions[int.tryParse(value) ?? 0] ?? value,
+            ),
+            SizedBox(width: AppSpacing.sm),
+            _buildFilterChip(
+              context,
+              '状态: ${_decayStates[_decayFilter] ?? '全部'}',
+              _decayStates.keys.toList(growable: false),
+              (v) => setState(() => _decayFilter = v),
+              optionLabel: (value) => _decayStates[value] ?? value,
+            ),
             SizedBox(width: AppSpacing.sm),
           ],
         ),
@@ -303,15 +384,152 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
             children: [
               Text('高级记忆工具', style: AppTypography.sectionTitle(context)),
               SizedBox(height: AppSpacing.md),
+              ListTile(leading: const Icon(Icons.manage_search_outlined), title: const Text('全局搜索所有记忆类型'), onTap: () { Navigator.pop(ctx); _showGlobalSearch(); }),
               ListTile(leading: const Icon(Icons.analytics_outlined), title: const Text('向量与检索诊断'), onTap: () { Navigator.pop(ctx); _showDiagnostics(); }),
               ListTile(leading: const Icon(Icons.pending_actions_outlined), title: const Text('候选记忆管理'), onTap: () { Navigator.pop(ctx); _showCandidates(); }),
               ListTile(leading: const Icon(Icons.auto_awesome_outlined), title: const Text('提取待审核候选'), onTap: () async { Navigator.pop(ctx); await _extractCandidates(); }),
+              ListTile(leading: const Icon(Icons.forum_outlined), title: const Text('从会话生成候选'), onTap: () async { Navigator.pop(ctx); await _generateCandidatesFromConversation(); }),
               ListTile(leading: const Icon(Icons.sort), title: const Text('查看检索排序结果'), onTap: () { Navigator.pop(ctx); _showRanked(); }),
               ListTile(leading: const Icon(Icons.replay), title: const Text('重建向量嵌入'), onTap: () async { Navigator.pop(ctx); await _runMaintenance('正在重建向量嵌入', () => ref.read(memoryServiceProvider).rebuildEmbeddings()); }),
               ListTile(leading: const Icon(Icons.reorder), title: const Text('重建记忆索引'), onTap: () async { Navigator.pop(ctx); await _runMaintenance('正在重建记忆索引', () => ref.read(memoryServiceProvider).rebuildIndex()); }),
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Future<void> _showGlobalSearch() async {
+    final controller = TextEditingController(text: _searchController.text.trim());
+    var searching = false;
+    var searched = false;
+    Map<String, List<Map<String, dynamic>>> results = const {
+      'memories': <Map<String, dynamic>>[],
+      'profiles': <Map<String, dynamic>>[],
+      'episodics': <Map<String, dynamic>>[],
+      'worldBooks': <Map<String, dynamic>>[],
+    };
+    try {
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => StatefulBuilder(
+          builder: (dialogContext, setDialogState) {
+            Future<void> runSearch() async {
+              final query = controller.text.trim();
+              if (query.isEmpty || searching) return;
+              setDialogState(() => searching = true);
+              try {
+                final next = await ref.read(memoryServiceProvider).globalSearch(query);
+                if (dialogContext.mounted) {
+                  setDialogState(() {
+                    results = next;
+                    searched = true;
+                    searching = false;
+                  });
+                }
+              } catch (e) {
+                if (dialogContext.mounted) {
+                  setDialogState(() {
+                    searching = false;
+                    searched = true;
+                    results = const {
+                      'memories': <Map<String, dynamic>>[],
+                      'profiles': <Map<String, dynamic>>[],
+                      'episodics': <Map<String, dynamic>>[],
+                      'worldBooks': <Map<String, dynamic>>[],
+                    };
+                  });
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('全局搜索失败: $e')));
+                }
+              }
+            }
+
+            final count = results.values.fold<int>(0, (sum, rows) => sum + rows.length);
+            return AlertDialog(
+              title: const Text('全局记忆搜索'),
+              content: SizedBox(
+                width: 720,
+                height: 520,
+                child: Column(
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: controller,
+                            autofocus: true,
+                            onSubmitted: (_) => runSearch(),
+                            decoration: const InputDecoration(
+                              labelText: '同时搜索结构化记忆、用户画像、情景记忆与世界书',
+                              prefixIcon: Icon(Icons.search),
+                              border: OutlineInputBorder(),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        FilledButton.icon(
+                          onPressed: searching ? null : runSearch,
+                          icon: searching
+                              ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                              : const Icon(Icons.search),
+                          label: const Text('搜索'),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Expanded(
+                      child: !searched
+                          ? const Center(child: Text('输入关键词开始全局搜索'))
+                          : count == 0
+                              ? const Center(child: Text('未找到相关结果'))
+                              : ListView(
+                                  children: [
+                                    _globalSearchSection('结构化记忆', results['memories'] ?? const [], (row) => '${row['key'] ?? ''}: ${row['value'] ?? ''}'),
+                                    _globalSearchSection('用户画像', results['profiles'] ?? const [], (row) => '${row['attributeName'] ?? row['key'] ?? ''}: ${row['attributeValue'] ?? row['value'] ?? ''}'),
+                                    _globalSearchSection('情景记忆', results['episodics'] ?? const [], (row) => (row['title'] ?? row['summary'] ?? row['content'] ?? '').toString()),
+                                    _globalSearchSection('世界书', results['worldBooks'] ?? const [], (row) => '${row['matchPattern'] ?? row['title'] ?? ''}: ${row['injectContent'] ?? row['content'] ?? ''}'),
+                                  ],
+                                ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('关闭'))],
+            );
+          },
+        ),
+      );
+    } finally {
+      controller.dispose();
+    }
+  }
+
+  Widget _globalSearchSection(
+    String title,
+    List<Map<String, dynamic>> rows,
+    String Function(Map<String, dynamic>) textOf,
+  ) {
+    if (rows.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('$title (${rows.length})', style: AppTypography.cardTitle(context)),
+          const SizedBox(height: 6),
+          for (final row in rows)
+            Container(
+              width: double.infinity,
+              margin: const EdgeInsets.only(bottom: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              decoration: BoxDecoration(
+                color: context.surfaceSecondary,
+                borderRadius: AppRadius.brSmall,
+                border: Border.all(color: context.borderPrimary, width: 0.5),
+              ),
+              child: Text(textOf(row), maxLines: 3, overflow: TextOverflow.ellipsis, style: AppTypography.bodySmall(context)),
+            ),
+        ],
       ),
     );
   }
@@ -379,6 +597,82 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
       }
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('候选提取失败: $e')));
+    }
+  }
+
+  Future<void> _generateCandidatesFromConversation() async {
+    try {
+      final conversations = await ref.read(chatServiceProvider).listConversations();
+      if (!mounted) return;
+      final available = conversations.where((item) => item.id.trim().isNotEmpty).toList(growable: false);
+      if (available.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('暂无可用于生成候选的会话')));
+        return;
+      }
+      String selectedId = available.first.id;
+      var generating = false;
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => StatefulBuilder(
+          builder: (dialogContext, setDialogState) => AlertDialog(
+            title: const Text('从会话生成候选'),
+            content: SizedBox(
+              width: 520,
+              child: DropdownButtonFormField<String>(
+                value: selectedId,
+                isExpanded: true,
+                decoration: const InputDecoration(labelText: '选择会话', border: OutlineInputBorder()),
+                items: available
+                    .map(
+                      (conversation) => DropdownMenuItem<String>(
+                        value: conversation.id,
+                        child: Text(
+                          conversation.title.trim().isEmpty ? '未命名会话 · ${conversation.id}' : conversation.title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    )
+                    .toList(growable: false),
+                onChanged: generating ? null : (value) { if (value != null) selectedId = value; },
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: generating ? null : () => Navigator.pop(dialogContext),
+                child: const Text('取消'),
+              ),
+              FilledButton(
+                onPressed: generating
+                    ? null
+                    : () async {
+                        setDialogState(() => generating = true);
+                        try {
+                          final candidates = await ref.read(memoryServiceProvider).generateCandidates(selectedId);
+                          if (!dialogContext.mounted) return;
+                          Navigator.pop(dialogContext);
+                          if (!mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text(candidates.isEmpty ? '该会话没有生成新的候选记忆' : '已生成 ${candidates.length} 条候选记忆')),
+                          );
+                          if (candidates.isNotEmpty) await _showCandidates();
+                        } catch (e) {
+                          if (dialogContext.mounted) {
+                            setDialogState(() => generating = false);
+                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('生成候选失败: $e')));
+                          }
+                        }
+                      },
+                child: generating
+                    ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Text('生成'),
+              ),
+            ],
+          ),
+        ),
+      );
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('加载会话失败: $e')));
     }
   }
 
@@ -503,7 +797,15 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
     }
   }
 
-  Future<bool> _createWithConflictCheck(MemoryService svc, {required String content, required String type, required int importance}) async {
+  Future<bool> _createWithConflictCheck(
+    MemoryService svc, {
+    required String content,
+    required String type,
+    required int importance,
+    required String scope,
+    required int retentionLevel,
+    required bool pinned,
+  }) async {
     final key = content.replaceAll(RegExp(r'\s+'), ' ').trim();
     final normalizedKey = key.length <= 60 ? key : key.substring(0, 60);
     final check = await svc.checkConflict(key: normalizedKey, value: content, memoryType: type, importance: importance);
@@ -511,7 +813,16 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
     final conflictsRaw = check['conflicts'];
     final conflicts = conflictsRaw is List ? conflictsRaw.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList() : <Map<String, dynamic>>[];
     if (!hasConflict || conflicts.isEmpty) {
-      await svc.create({'key': normalizedKey, 'value': content, 'memoryType': type, 'importance': importance, 'verifiedStatus': 'user_verified'});
+      await svc.create({
+        'key': normalizedKey,
+        'value': content,
+        'memoryType': type,
+        'importance': importance,
+        'verifiedStatus': 'user_verified',
+        'scope': scope,
+        if (retentionLevel > 0) 'retentionLevel': retentionLevel,
+        'pinned': pinned,
+      });
       return true;
     }
     if (!mounted) return false;
@@ -532,7 +843,7 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
       ),
     );
     if (action == null) return false;
-    await svc.resolveConflict(
+    final resolved = await svc.resolveConflict(
       action: action,
       newKey: normalizedKey,
       newValue: content,
@@ -541,6 +852,14 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
       conflictId: (memory['id'] ?? '').toString(),
       characterId: (memory['characterId'] ?? '').toString(),
     );
+    final resolvedId = (resolved['memoryId'] ?? resolved['memoryID'] ?? '').toString().trim();
+    if (resolvedId.isNotEmpty) {
+      await svc.update(resolvedId, {
+        if (scope != 'character') 'scope': scope,
+        if (retentionLevel > 0) 'retentionLevel': retentionLevel,
+        'pinned': pinned,
+      });
+    }
     return true;
   }
 
@@ -660,26 +979,46 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
                   ],
                 ),
                 SizedBox(height: AppSpacing.sm),
-                Row(
+                Wrap(
+                  spacing: AppSpacing.sm,
+                  runSpacing: AppSpacing.xs,
+                  crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
                     AmitiaStatusBadge(label: _importanceIntToString(memory.importance), type: _importanceToBadgeType(memory.importance)),
-                    SizedBox(width: AppSpacing.sm),
                     AmitiaStatusBadge(label: _memoryTypeLabel(memory.type), type: BadgeType.neutral),
-                    SizedBox(width: AppSpacing.sm),
+                    AmitiaStatusBadge(
+                      label: 'L${memory.retentionLevel} · ${(memory.memoryStrength * 100).round()}%${memory.pinned ? ' · 固定' : memory.decayState == 'archived' ? ' · 归档' : memory.decayState == 'fading' ? ' · 淡化' : ''}',
+                      type: memory.decayState == 'archived' ? BadgeType.neutral : memory.retentionLevel <= 2 ? BadgeType.success : BadgeType.neutral,
+                    ),
+                    AmitiaStatusBadge(label: _scopeLabel(memory.scope), type: memory.scope == 'world' || memory.scope == 'user' ? BadgeType.success : BadgeType.neutral),
                     Text(memory.status, style: AppTypography.label(context)),
-                    const Spacer(),
                     Text(_formatTimeString(memory.createdAt), style: AppTypography.label(context)),
                   ],
                 ),
+                SizedBox(height: AppSpacing.xs),
+                Text(
+                  '强化 ${memory.reinforceCount} 次 · 召回 ${memory.retrievedCount} · 注入 ${memory.injectedCount}${memory.lastReinforcedAt != null && memory.lastReinforcedAt!.isNotEmpty ? ' · 上次强化 ${_formatTimeString(memory.lastReinforcedAt!)}' : ''}',
+                  style: AppTypography.caption(context).copyWith(color: context.textTertiary),
+                ),
                 if (!_batchMode) ...[
                   SizedBox(height: AppSpacing.sm),
-                  Row(
+                  Wrap(
+                    spacing: AppSpacing.sm,
+                    runSpacing: AppSpacing.xs,
                     children: [
                       GestureDetector(
                         onTap: () => _showMemoryEditor(context, memory),
                         child: _buildMiniButton(context, '编辑', context.accentPrimary),
                       ),
-                      SizedBox(width: AppSpacing.sm),
+                      GestureDetector(
+                        onTap: () => _togglePinned(memory),
+                        child: _buildMiniButton(context, memory.pinned ? '取消固定' : '固定', context.accentPrimary),
+                      ),
+                      if (memory.decayState == 'archived')
+                        GestureDetector(
+                          onTap: () => _restoreMemory(memory),
+                          child: _buildMiniButton(context, '恢复', context.success),
+                        ),
                       GestureDetector(
                         onTap: () => _showDeleteConfirm(context, memory),
                         child: _buildMiniButton(context, '删除', context.error),
@@ -711,6 +1050,9 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
     final contentCtrl = TextEditingController(text: existing?.content ?? '');
     String importance = existing != null ? _importanceIntToString(existing.importance) : '中';
     String type = _memoryTypeLabels.containsKey(existing?.type) ? (existing?.type ?? 'fact') : 'fact';
+    String scope = _scopes.containsKey(existing?.scope) ? (existing?.scope ?? 'character') : 'character';
+    int retentionLevel = existing?.retentionLevel ?? 3;
+    bool pinned = existing?.pinned ?? false;
 
     showModalBottomSheet(
       context: context,
@@ -718,10 +1060,11 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setSheetState) => Padding(
           padding: EdgeInsets.fromLTRB(AppSpacing.xl, AppSpacing.lg, AppSpacing.xl, MediaQuery.of(ctx).viewInsets.bottom + AppSpacing.xl),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
               Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: context.borderPrimary, borderRadius: BorderRadius.circular(2)))),
               SizedBox(height: AppSpacing.lg),
               Text(isEdit ? '编辑记忆' : '新建记忆', style: AppTypography.sectionTitle(context)),
@@ -770,6 +1113,80 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
                   );
                 }).toList(),
               ),
+              SizedBox(height: AppSpacing.md),
+              Text('自然遗忘层级', style: AppTypography.label(context)),
+              SizedBox(height: AppSpacing.xs),
+              Wrap(
+                spacing: AppSpacing.sm,
+                runSpacing: AppSpacing.xs,
+                children: _retentions.entries.where((entry) => entry.key != 0).map((entry) {
+                  final selected = retentionLevel == entry.key;
+                  return ChoiceChip(
+                    label: Text(entry.value),
+                    selected: selected,
+                    onSelected: (_) => setSheetState(() => retentionLevel = entry.key),
+                  );
+                }).toList(growable: false),
+              ),
+              SizedBox(height: AppSpacing.sm),
+              SwitchListTile.adaptive(
+                contentPadding: EdgeInsets.zero,
+                dense: true,
+                title: const Text('固定记忆'),
+                subtitle: Text(
+                  pinned ? '固定后不会参与自然遗忘归档' : '未固定时按 L1-L5 规则自然衰减',
+                  style: AppTypography.caption(context).copyWith(color: context.textTertiary),
+                ),
+                value: pinned,
+                onChanged: (value) => setSheetState(() => pinned = value),
+              ),
+              if (existing != null) ...[
+                SizedBox(height: AppSpacing.sm),
+                Container(
+                  width: double.infinity,
+                  padding: EdgeInsets.all(AppSpacing.md),
+                  decoration: BoxDecoration(
+                    color: context.surfaceSecondary,
+                    borderRadius: AppRadius.brCard,
+                    border: Border.all(color: context.borderPrimary, width: 0.5),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '当前强度 ${(existing.memoryStrength * 100).round()}% · ${_decayStates[existing.decayState] ?? existing.decayState}',
+                        style: AppTypography.bodySmall(context),
+                      ),
+                      SizedBox(height: AppSpacing.xs),
+                      Text(
+                        '强化 ${existing.reinforceCount} 次 · 召回 ${existing.retrievedCount} · 注入 ${existing.injectedCount}',
+                        style: AppTypography.caption(context).copyWith(color: context.textTertiary),
+                      ),
+                      if (existing.lastReinforcedAt != null && existing.lastReinforcedAt!.isNotEmpty) ...[
+                        SizedBox(height: AppSpacing.xs),
+                        Text(
+                          '上次强化：${_formatTimeString(existing.lastReinforcedAt!)}',
+                          style: AppTypography.caption(context).copyWith(color: context.textTertiary),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+              SizedBox(height: AppSpacing.md),
+              Text('记忆范围', style: AppTypography.label(context)),
+              SizedBox(height: AppSpacing.xs),
+              Wrap(
+                spacing: AppSpacing.sm,
+                children: _scopes.entries.where((entry) => entry.key.isNotEmpty).map((entry) {
+                  final selected = scope == entry.key;
+                  return ChoiceChip(
+                    label: Text(entry.value),
+                    selected: selected,
+                    onSelected: (_) => setSheetState(() => scope = entry.key),
+                  );
+                }).toList(growable: false),
+              ),
               SizedBox(height: AppSpacing.xl),
               AmitiaButton(
                 label: isEdit ? '保存' : '创建',
@@ -786,6 +1203,9 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
                     'memoryType': type,
                     'importance': _importanceStringToInt(importance),
                     'verifiedStatus': 'user_verified',
+                    'scope': scope,
+                    'retentionLevel': retentionLevel,
+                    'pinned': pinned,
                   };
                   try {
                     if (isEdit) {
@@ -796,6 +1216,9 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
                         content: contentCtrl.text.trim(),
                         type: type,
                         importance: _importanceStringToInt(importance),
+                        scope: scope,
+                        retentionLevel: retentionLevel,
+                        pinned: pinned,
                       );
                       if (!handled) return;
                     }
@@ -810,11 +1233,48 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
                   }
                 },
               ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
     );
+  }
+
+  Future<void> _togglePinned(MemoryDto memory) async {
+    try {
+      await ref.read(memoryServiceProvider).update(memory.id, {'pinned': !memory.pinned});
+      ref.invalidate(memoryListProvider);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(memory.pinned ? '已取消固定' : '记忆已固定'), duration: const Duration(seconds: 1)),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('操作失败: ${e.toString().replaceFirst('Exception: ', '')}')),
+        );
+      }
+    }
+  }
+
+  Future<void> _restoreMemory(MemoryDto memory) async {
+    try {
+      await ref.read(memoryServiceProvider).restore(memory.id);
+      ref.invalidate(memoryListProvider);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('记忆已恢复'), duration: Duration(seconds: 1)),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('恢复失败: ${e.toString().replaceFirst('Exception: ', '')}')),
+        );
+      }
+    }
   }
 
   void _showDeleteConfirm(BuildContext context, MemoryDto memory) {

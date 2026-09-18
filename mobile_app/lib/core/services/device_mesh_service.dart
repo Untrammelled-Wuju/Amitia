@@ -12,26 +12,17 @@ class DeviceMeshService {
     return items.whereType<Map>().map((item) => Map<String, dynamic>.from(item)).toList();
   }
 
-  Future<Map<String, dynamic>> createBootstrapTicket({
-    required String deviceId,
-    required String runtimeId,
-    required String platform,
-    String label = '',
-  }) async {
+  Future<Map<String, dynamic>> createPairingOffer({int ttlSeconds = 600}) async {
     final response = await _api.post<Map<String, dynamic>>(
-      '/api/device-mesh/v1/bootstrap-tickets',
-      data: <String, dynamic>{
-        'deviceId': deviceId,
-        'runtimeId': runtimeId,
-        'platform': platform,
-        if (label.trim().isNotEmpty) 'label': label.trim(),
-      },
+      '/api/device-mesh/v1/pairing/offers',
+      data: <String, dynamic>{'ttlSeconds': ttlSeconds},
     );
     if (response == null) {
-      throw StateError('云端未返回设备绑定凭据');
+      throw StateError('云端未返回设备配对 Offer');
     }
     return response;
   }
+
 
   Future<void> revokeDevice(String deviceId) async {
     await _api.delete('/api/device-mesh/v1/devices/${Uri.encodeComponent(deviceId)}');
@@ -40,6 +31,13 @@ class DeviceMeshService {
   Future<Map<String, dynamic>?> probeRuntime(String deviceId, String runtimeId) async {
     return _api.post<Map<String, dynamic>>(
       '/api/device-mesh/v1/devices/${Uri.encodeComponent(deviceId)}/runtimes/${Uri.encodeComponent(runtimeId)}/probe',
+    );
+  }
+
+  Future<Map<String, dynamic>?> syncStatus(String deviceId) async {
+    return _api.get<Map<String, dynamic>>(
+      '/api/v1/sync/status',
+      queryParameters: <String, dynamic>{'deviceId': deviceId},
     );
   }
 }

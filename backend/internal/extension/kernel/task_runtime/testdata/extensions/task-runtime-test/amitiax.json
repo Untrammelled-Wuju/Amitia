@@ -1,5 +1,5 @@
 {
-  "manifestVersion": 2,
+  "manifestVersion": 1,
   "extensionId": "task-runtime-test",
   "version": "1.0.0",
   "name": "Task Runtime Test Extension",

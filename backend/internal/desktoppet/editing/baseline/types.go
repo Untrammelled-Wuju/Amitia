@@ -86,8 +86,7 @@ const (
 )
 
 type CreateBaselineRevisionRequest struct {
-	UserID               string
-	CharacterID          string
+	SpaceID              string
 	ProcessingTaskID     string
 	ProcessingActionID   string
 	ProcessingRevisionID string
@@ -107,8 +106,7 @@ type CreateBaselineRevisionRequest struct {
 
 type ActionRevision struct {
 	ID                         string
-	UserID                     string
-	CharacterID                string
+	SpaceID                    string
 	ProcessingTaskID           string
 	ProcessingActionID         string
 	ActionKey                  string
@@ -135,8 +133,7 @@ type ActionRevision struct {
 
 type ActionRevisionEvent struct {
 	EventID              string
-	UserID               string
-	CharacterID          string
+	SpaceID              string
 	ActionKey            string
 	ActionRevisionID     string
 	PreviousRevisionID   string
@@ -158,8 +155,7 @@ type ActiveRevisionRef struct {
 
 type ActiveRevisionSet struct {
 	ProcessingTaskID   string
-	UserID             string
-	CharacterID        string
+	SpaceID            string
 	Revisions          []ActiveRevisionRef
 	RequiredActionKeys []string
 	OptionalActionKeys []string
@@ -211,8 +207,7 @@ type CommitResult struct {
 
 type ProcessingRevisionValidation struct {
 	Valid              bool
-	UserID             string
-	CharacterID        string
+	SpaceID            string
 	ProcessingTaskID   string
 	ProcessingActionID string
 	ActionKey          string

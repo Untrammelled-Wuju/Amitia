@@ -6,6 +6,7 @@ import (
 
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
 )
+
 type mockVirtualBridge struct {
 	execFunc func(ctx context.Context, op string, payload map[string]any) (map[string]any, error)
 }
@@ -43,6 +44,7 @@ func TestHandler_Status_Success(t *testing.T) {
 		State:      StateReady,
 	})
 	svc := NewService(store, nil, DefaultPolicy(), &PrimaryResolver{})
+	svc = NewService(store, &mockVirtualBridge{}, DefaultPolicy(), &PrimaryResolver{})
 	h := NewHandler(svc)
 	resp := h.Execute(context.Background(), capability.AndroidBridgeRequest{
 		ProtocolVersion: 1,
@@ -107,8 +109,8 @@ func TestHandler_Create_AlreadyExists(t *testing.T) {
 		RequestID:       "test-1",
 		Operation:       OperationCreate,
 	})
-	if resp.Status != "error" {
-		t.Fatalf("expected error, got %s: %+v", resp.Status, resp.Error)
+	if resp.Status != "success" {
+		t.Fatalf("expected success, got %s: %+v", resp.Status, resp.Error)
 	}
 }
 

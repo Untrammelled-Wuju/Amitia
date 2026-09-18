@@ -17,7 +17,7 @@ type RuntimeSettings struct {
 	ID string
 
 	InstallationID string
-	UserID         string
+	SpaceID        string
 	DeviceID       string
 
 	AlwaysOnTop            int
@@ -53,11 +53,11 @@ type SettingsCASRequest struct {
 	InstallationID    string
 	ExpectedRevision  int
 	InitiatorDeviceID string
-	InitiatorUserID   string
+	InitiatorSpaceID  string
 }
 
 func (r SettingsCASRequest) IsValid() bool {
-	return r.InstallationID != "" && r.InitiatorUserID != "" && r.InitiatorDeviceID != ""
+	return r.InstallationID != "" && r.InitiatorSpaceID != "" && r.InitiatorDeviceID != ""
 }
 
 type SettingsSnapshot struct {

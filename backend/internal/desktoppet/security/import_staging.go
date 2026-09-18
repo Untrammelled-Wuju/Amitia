@@ -27,7 +27,7 @@ const (
 
 type ImportStaging struct {
 	ID                   string        `gorm:"column:id;primaryKey" json:"id"`
-	OwnerUserID          string        `gorm:"column:owner_user_id" json:"ownerUserId"`
+	OwnerSpaceID         string        `gorm:"column:owner_space_id" json:"ownerSpaceId"`
 	SourceFilename       string        `gorm:"column:source_filename" json:"sourceFilename"`
 	SourceType           string        `gorm:"column:source_type" json:"sourceType"`
 	SourceContentHash    string        `gorm:"column:source_content_hash" json:"sourceContentHash"`
@@ -50,7 +50,7 @@ type ImportStaging struct {
 	CorrelationID        string        `gorm:"column:correlation_id" json:"correlationId,omitempty"`
 }
 
-func NewImportStaging(ownerUserID, sourceFilename, sourceType string) (*ImportStaging, error) {
+func NewImportStaging(ownerSpaceID, sourceFilename, sourceType string) (*ImportStaging, error) {
 	id, err := generateStagingID()
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate staging ID: %w", err)
@@ -59,7 +59,7 @@ func NewImportStaging(ownerUserID, sourceFilename, sourceType string) (*ImportSt
 	expires := now.Add(2 * time.Hour)
 	return &ImportStaging{
 		ID:             id,
-		OwnerUserID:    ownerUserID,
+		OwnerSpaceID:   ownerSpaceID,
 		SourceFilename: sourceFilename,
 		SourceType:     sourceType,
 		Status:         StagingStatusUploading,
@@ -140,9 +140,9 @@ func (s *ImportStaging) IsExpired() bool {
 	return time.Now().UTC().After(expires)
 }
 
-func (s *ImportStaging) CanAccess(userID string) error {
-	if s.OwnerUserID != userID {
-		return ErrStagingCrossUser
+func (s *ImportStaging) CanAccess(spaceID string) error {
+	if s.OwnerSpaceID != spaceID {
+		return ErrStagingCrossSpace
 	}
 	if s.Status == StagingStatusConsumed {
 		return ErrStagingConsumed

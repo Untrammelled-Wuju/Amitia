@@ -127,11 +127,11 @@ func TestCacheUserStateTTL(t *testing.T) {
 	}
 	c := NewCache(cfg)
 
-	c.Set("user:state", "v1", "d1", "state1", 1, false)
+	c.Set("space:state", "v1", "d1", "state1", 1, false)
 
 	time.Sleep(100 * time.Millisecond)
 
-	val, ok := c.Get("user:state", "v1", "d1")
+	val, ok := c.Get("space:state", "v1", "d1")
 	if ok {
 		t.Fatalf("expected cache miss for user state, got %v", val)
 	}

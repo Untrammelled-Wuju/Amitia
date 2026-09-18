@@ -14,7 +14,7 @@ func NewBehaviorPlanID() string {
 
 type BehaviorPlanBuildInput struct {
 	PlanID         string
-	UserID         string
+	SpaceID        string
 	CharacterID    string
 	ConversationID string
 	InteractionID  string
@@ -85,7 +85,7 @@ func (b BehaviorPlanBuilder) Build(input BehaviorPlanBuildInput) (*BehaviorPlan,
 	plan := &BehaviorPlan{
 		Version:              PlanVersionV2,
 		ID:                   planID,
-		UserID:               input.UserID,
+		SpaceID:              input.SpaceID,
 		CharacterID:          input.CharacterID,
 		ConversationID:       input.ConversationID,
 		InteractionID:        input.InteractionID,

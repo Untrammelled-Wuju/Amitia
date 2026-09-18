@@ -8,7 +8,7 @@ SPDX-License-Identifier: AGPL-3.0-only
       <template #header><span>部署模式</span></template>
 
       <el-radio-group v-model="formMode" class="mode-radio-group">
-        <el-radio value="local" border class="mode-radio-card">
+        <el-radio value="local" border class="mode-radio-card" :disabled="!desktopShell">
           <div class="mode-label">本地模式</div>
           <div class="mode-desc">Core 在本机运行，数据存储在本地</div>
         </el-radio>
@@ -104,6 +104,7 @@ import { initializeRuntimeCapabilities, isDesktopShell } from "../../runtime/run
 const formMode = ref<"local" | "cloud">("local");
 const formData = reactive({ serverURL: "" });
 const formRef = ref<FormInstance>();
+const desktopShell = isDesktopShell();
 const saving = ref(false);
 const saveSuccess = ref(false);
 const saveError = ref("");
@@ -216,16 +217,15 @@ async function handleSave() {
           }
         : { mode: "local" };
 
-    if (!isDesktopShell()) {
-      ElMessage.warning("当前运行在浏览器环境，部署模式仅对桌面端有效");
-      saving.value = false;
+    if (!desktopShell && config.mode === "local") {
+      ElMessage.warning("浏览器作为 Cloud Web 设备运行，不支持切换为本地 Core 模式");
       return;
     }
 
     await saveDeploymentConfig(config);
     await initializeRuntimeCapabilities(true);
     saveSuccess.value = true;
-    ElMessage.success("部署配置已保存，部分更改需要重启应用后生效");
+    ElMessage.success(desktopShell ? "部署配置已保存，部分更改需要重启应用后生效" : "Cloud Core 地址已保存；如服务已变更，请在设备页完成配对");
 
     currentMode.value = config.mode;
     currentApiURL.value = await getApiBaseURL();

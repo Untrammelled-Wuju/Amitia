@@ -5,11 +5,9 @@ import "encoding/json"
 type CharacterCardFormat string
 
 const (
-	FormatV2JSON  CharacterCardFormat = "v2_json"
-	FormatV2PNG   CharacterCardFormat = "v2_png"
-	FormatV3JSON  CharacterCardFormat = "v3_json"
-	FormatV3PNG   CharacterCardFormat = "v3_png"
-	FormatV3CHARX CharacterCardFormat = "v3_charx"
+	FormatV3CHARX    CharacterCardFormat = "v3_charx"
+	FormatTavernJSON CharacterCardFormat = "tavern_json"
+	FormatTavernPNG  CharacterCardFormat = "tavern_png"
 )
 
 type CharacterCard struct {
@@ -19,7 +17,6 @@ type CharacterCard struct {
 	Personality  string
 	Scenario     string
 
-	FirstMessage       string
 	ExampleMessages    string
 	AlternateGreetings []string
 
@@ -52,17 +49,17 @@ type CharacterBook struct {
 }
 
 type CharacterBookEntry struct {
-	Keys           []string               `json:"keys"`
-	SecondaryKeys  []string               `json:"secondary_keys"`
-	Content        string                 `json:"content"`
-	Enabled        bool                   `json:"enabled"`
-	InsertionOrder int                    `json:"insertion_order"`
-	CaseSensitive  *bool                  `json:"case_sensitive"`
-	Selective      *bool                  `json:"selective"`
-	Constant       *bool                  `json:"constant"`
-	Position       *string                `json:"position"`
-	Priority       int                    `json:"priority"`
-	Extensions     map[string]any         `json:"extensions"`
+	Keys           []string                   `json:"keys"`
+	SecondaryKeys  []string                   `json:"secondary_keys"`
+	Content        string                     `json:"content"`
+	Enabled        bool                       `json:"enabled"`
+	InsertionOrder int                        `json:"insertion_order"`
+	CaseSensitive  *bool                      `json:"case_sensitive"`
+	Selective      *bool                      `json:"selective"`
+	Constant       *bool                      `json:"constant"`
+	Position       *string                    `json:"position"`
+	Priority       int                        `json:"priority"`
+	Extensions     map[string]any             `json:"extensions"`
 	Preserved      map[string]json.RawMessage `json:"-"`
 }
 
@@ -104,4 +101,21 @@ type CharacterCardExportResult struct {
 	Filename    string `json:"filename"`
 	SizeBytes   int64  `json:"sizeBytes"`
 	ContentHash string `json:"contentHash"`
+}
+
+func isRemovedCardField(key string) bool {
+	switch key {
+	case "first_mes", "firstMessage", "char_greeting":
+		return true
+	}
+	return false
+}
+
+func stripRemovedCardFields(preserved map[string]json.RawMessage) map[string]json.RawMessage {
+	for key := range preserved {
+		if isRemovedCardField(key) {
+			delete(preserved, key)
+		}
+	}
+	return preserved
 }

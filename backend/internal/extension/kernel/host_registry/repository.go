@@ -96,15 +96,15 @@ func (r *registryRepository) SaveEntry(ctx context.Context, entry *RuntimeEntry)
 	}
 	entryID := entry.EntryID
 	if entryID == "" {
-		entryID = RuntimeEntryID(entry.UserID, entry.DeviceID, entry.RuntimeID)
+		entryID = RuntimeEntryID(entry.SpaceID, entry.DeviceID, entry.RuntimeID)
 	}
 	_, err = r.db.ExecContext(ctx,
 		`INSERT OR REPLACE INTO kernel_host_registry
-		(host_client_id, host_session_id, user_id, platform, device_id, runtime_id, window_id, capabilities, entry_kind, authenticated_at, last_heartbeat, connection_state, session_token, created_at, expires_at, runtime_session_id, connection_generation, entry_id)
+		(host_client_id, host_session_id, space_id, platform, device_id, runtime_id, window_id, capabilities, entry_kind, authenticated_at, last_heartbeat, connection_state, session_token, created_at, expires_at, runtime_session_id, connection_generation, entry_id)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		entry.HostClientID,
 		entry.HostSessionID,
-		entry.UserID.String(),
+		entry.SpaceID.String(),
 		entry.Platform.String(),
 		entry.DeviceID.String(),
 		entry.RuntimeID.String(),
@@ -129,7 +129,7 @@ func (r *registryRepository) GetEntry(ctx context.Context, entryID string) (*Run
 		return nil, ErrRegistryEntryNotFound
 	}
 	row := r.db.QueryRowContext(ctx,
-		`SELECT host_client_id, host_session_id, user_id, platform, device_id, runtime_id, window_id, capabilities, entry_kind, authenticated_at, last_heartbeat, connection_state, session_token, created_at, expires_at, runtime_session_id, connection_generation
+		`SELECT host_client_id, host_session_id, space_id, platform, device_id, runtime_id, window_id, capabilities, entry_kind, authenticated_at, last_heartbeat, connection_state, session_token, created_at, expires_at, runtime_session_id, connection_generation
 		FROM kernel_host_registry WHERE entry_id = ? OR host_client_id = ?`,
 		entryID,
 		entryID,
@@ -137,14 +137,14 @@ func (r *registryRepository) GetEntry(ctx context.Context, entryID string) (*Run
 	return scanEntry(row)
 }
 
-func (r *registryRepository) ListEntriesByUser(ctx context.Context, userID runtimeidentity.UserID) ([]*RuntimeEntry, error) {
+func (r *registryRepository) ListEntriesBySpace(ctx context.Context, spaceID runtimeidentity.SpaceID) ([]*RuntimeEntry, error) {
 	if r.db == nil {
 		return nil, nil
 	}
 	rows, err := r.db.QueryContext(ctx,
-		`SELECT host_client_id, host_session_id, user_id, platform, device_id, runtime_id, window_id, capabilities, entry_kind, authenticated_at, last_heartbeat, connection_state, session_token, created_at, expires_at, runtime_session_id, connection_generation
-		FROM kernel_host_registry WHERE user_id = ?`,
-		userID.String(),
+		`SELECT host_client_id, host_session_id, space_id, platform, device_id, runtime_id, window_id, capabilities, entry_kind, authenticated_at, last_heartbeat, connection_state, session_token, created_at, expires_at, runtime_session_id, connection_generation
+		FROM kernel_host_registry WHERE space_id = ?`,
+		spaceID.String(),
 	)
 	if err != nil {
 		return nil, err
@@ -153,14 +153,14 @@ func (r *registryRepository) ListEntriesByUser(ctx context.Context, userID runti
 	return scanEntries(rows)
 }
 
-func (r *registryRepository) ListEntriesByDevice(ctx context.Context, userID runtimeidentity.UserID, deviceID runtimeidentity.DeviceID) ([]*RuntimeEntry, error) {
+func (r *registryRepository) ListEntriesByDevice(ctx context.Context, spaceID runtimeidentity.SpaceID, deviceID runtimeidentity.DeviceID) ([]*RuntimeEntry, error) {
 	if r.db == nil {
 		return nil, nil
 	}
 	rows, err := r.db.QueryContext(ctx,
-		`SELECT host_client_id, host_session_id, user_id, platform, device_id, runtime_id, window_id, capabilities, entry_kind, authenticated_at, last_heartbeat, connection_state, session_token, created_at, expires_at, runtime_session_id, connection_generation
-		FROM kernel_host_registry WHERE user_id = ? AND device_id = ?`,
-		userID.String(),
+		`SELECT host_client_id, host_session_id, space_id, platform, device_id, runtime_id, window_id, capabilities, entry_kind, authenticated_at, last_heartbeat, connection_state, session_token, created_at, expires_at, runtime_session_id, connection_generation
+		FROM kernel_host_registry WHERE space_id = ? AND device_id = ?`,
+		spaceID.String(),
 		deviceID.String(),
 	)
 	if err != nil {
@@ -170,14 +170,14 @@ func (r *registryRepository) ListEntriesByDevice(ctx context.Context, userID run
 	return scanEntries(rows)
 }
 
-func (r *registryRepository) ListEntriesByRuntime(ctx context.Context, userID runtimeidentity.UserID, deviceID runtimeidentity.DeviceID, runtimeID runtimeidentity.RuntimeID) ([]*RuntimeEntry, error) {
+func (r *registryRepository) ListEntriesByRuntime(ctx context.Context, spaceID runtimeidentity.SpaceID, deviceID runtimeidentity.DeviceID, runtimeID runtimeidentity.RuntimeID) ([]*RuntimeEntry, error) {
 	if r.db == nil {
 		return nil, nil
 	}
 	rows, err := r.db.QueryContext(ctx,
-		`SELECT host_client_id, host_session_id, user_id, platform, device_id, runtime_id, window_id, capabilities, entry_kind, authenticated_at, last_heartbeat, connection_state, session_token, created_at, expires_at, runtime_session_id, connection_generation
-		FROM kernel_host_registry WHERE user_id = ? AND device_id = ? AND runtime_id = ?`,
-		userID.String(),
+		`SELECT host_client_id, host_session_id, space_id, platform, device_id, runtime_id, window_id, capabilities, entry_kind, authenticated_at, last_heartbeat, connection_state, session_token, created_at, expires_at, runtime_session_id, connection_generation
+		FROM kernel_host_registry WHERE space_id = ? AND device_id = ? AND runtime_id = ?`,
+		spaceID.String(),
 		deviceID.String(),
 		runtimeID.String(),
 	)
@@ -193,7 +193,7 @@ func (r *registryRepository) ListAllEntries(ctx context.Context) ([]*RuntimeEntr
 		return nil, nil
 	}
 	rows, err := r.db.QueryContext(ctx,
-		`SELECT host_client_id, host_session_id, user_id, platform, device_id, runtime_id, window_id, capabilities, entry_kind, authenticated_at, last_heartbeat, connection_state, session_token, created_at, expires_at, runtime_session_id, connection_generation
+		`SELECT host_client_id, host_session_id, space_id, platform, device_id, runtime_id, window_id, capabilities, entry_kind, authenticated_at, last_heartbeat, connection_state, session_token, created_at, expires_at, runtime_session_id, connection_generation
 		FROM kernel_host_registry`,
 	)
 	if err != nil {
@@ -308,7 +308,7 @@ func (r *registryRepository) ListExpiredEntries(ctx context.Context) ([]*Runtime
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	rows, err := r.db.QueryContext(ctx,
-		`SELECT host_client_id, host_session_id, user_id, platform, device_id, runtime_id, window_id, capabilities, entry_kind, authenticated_at, last_heartbeat, connection_state, session_token, created_at, expires_at, runtime_session_id, connection_generation
+		`SELECT host_client_id, host_session_id, space_id, platform, device_id, runtime_id, window_id, capabilities, entry_kind, authenticated_at, last_heartbeat, connection_state, session_token, created_at, expires_at, runtime_session_id, connection_generation
 		FROM kernel_host_registry WHERE expires_at != '' AND expires_at < ?`,
 		now,
 	)
@@ -329,10 +329,10 @@ func (r *registryRepository) SaveDevice(ctx context.Context, record *DeviceRecor
 	}
 	_, err := r.db.ExecContext(ctx,
 		`INSERT OR REPLACE INTO kernel_devices (
-			device_id, user_id, platform, label, trust_state, created_at, trusted_at, last_seen_at, revision
+			device_id, space_id, platform, label, trust_state, created_at, trusted_at, last_seen_at, revision
 		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		record.DeviceID.String(),
-		record.UserID.String(),
+		record.SpaceID.String(),
 		record.Platform.String(),
 		record.Label,
 		string(record.TrustState),
@@ -349,21 +349,21 @@ func (r *registryRepository) GetDevice(ctx context.Context, deviceID runtimeiden
 		return nil, nil
 	}
 	row := r.db.QueryRowContext(ctx,
-		`SELECT device_id, user_id, platform, label, trust_state, created_at, trusted_at, last_seen_at, revision
+		`SELECT device_id, space_id, platform, label, trust_state, created_at, trusted_at, last_seen_at, revision
 		FROM kernel_devices WHERE device_id = ?`,
 		deviceID.String(),
 	)
 	return scanDevice(row)
 }
 
-func (r *registryRepository) ListDevicesByUser(ctx context.Context, userID runtimeidentity.UserID) ([]*DeviceRecord, error) {
+func (r *registryRepository) ListDevicesBySpace(ctx context.Context, spaceID runtimeidentity.SpaceID) ([]*DeviceRecord, error) {
 	if r.db == nil {
 		return nil, nil
 	}
 	rows, err := r.db.QueryContext(ctx,
-		`SELECT device_id, user_id, platform, label, trust_state, created_at, trusted_at, last_seen_at, revision
-		FROM kernel_devices WHERE user_id = ?`,
-		userID.String(),
+		`SELECT device_id, space_id, platform, label, trust_state, created_at, trusted_at, last_seen_at, revision
+		FROM kernel_devices WHERE space_id = ?`,
+		spaceID.String(),
 	)
 	if err != nil {
 		return nil, err
@@ -427,13 +427,13 @@ func (r *registryRepository) UpdateDeviceLastSeen(ctx context.Context, deviceID 
 
 func scanDevice(s rowScanner) (*DeviceRecord, error) {
 	var d DeviceRecord
-	var userID, platform, trustState string
+	var spaceID, platform, trustState string
 	var createdStr, lastSeenStr string
 	var trustedAt sql.NullString
 
 	err := s.Scan(
 		&d.DeviceID,
-		&userID,
+		&spaceID,
 		&platform,
 		&d.Label,
 		&trustState,
@@ -449,7 +449,7 @@ func scanDevice(s rowScanner) (*DeviceRecord, error) {
 		return nil, err
 	}
 
-	d.UserID = runtimeidentity.ParseUserID(userID)
+	d.SpaceID = runtimeidentity.ParseSpaceID(spaceID)
 	d.Platform = runtimeidentity.Platform(platform)
 	d.TrustState = DeviceTrustState(trustState)
 
@@ -482,7 +482,7 @@ func scanEntry(row rowScanner) (*RuntimeEntry, error) {
 	var authenticatedAt, lastHeartbeat, createdAt string
 	var expiresAt string
 	var presenceState string
-	var userID, platform, deviceID, runtimeID string
+	var spaceID, platform, deviceID, runtimeID string
 	var kind string
 	var runtimeSessionID string
 	var connectionGeneration int64
@@ -490,7 +490,7 @@ func scanEntry(row rowScanner) (*RuntimeEntry, error) {
 	err := row.Scan(
 		&entry.HostClientID,
 		&entry.HostSessionID,
-		&userID,
+		&spaceID,
 		&platform,
 		&deviceID,
 		&runtimeID,
@@ -513,7 +513,7 @@ func scanEntry(row rowScanner) (*RuntimeEntry, error) {
 		return nil, err
 	}
 
-	entry.UserID = runtimeidentity.ParseUserID(userID)
+	entry.SpaceID = runtimeidentity.ParseSpaceID(spaceID)
 	plat, err := runtimeidentity.ParsePlatform(platform)
 	if err != nil {
 		return nil, fmt.Errorf("host_registry: parse platform: %w", err)

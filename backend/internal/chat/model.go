@@ -67,16 +67,19 @@ type ModelEventSink = modelprotocol.ModelEventSink
 type ModelCapabilities = modelprotocol.ModelCapabilities
 
 type Conversation struct {
-	ID           string `gorm:"column:id;primaryKey" json:"id"`
-	CharacterID  string `gorm:"column:character_id" json:"characterId"`
-	Title        string `gorm:"column:title" json:"title"`
-	Channel      string `gorm:"column:channel;default:web" json:"channel"`
-	Source       string `gorm:"column:source;default:manual" json:"source"`
-	PeerID       string `gorm:"column:peer_id" json:"peerId"`
-	MessageCount int    `gorm:"column:message_count;default:0" json:"messageCount"`
-	StateVersion string `gorm:"column:state_version" json:"stateVersion"`
-	CreatedAt    string `gorm:"column:created_at" json:"createdAt"`
-	UpdatedAt    string `gorm:"column:updated_at" json:"updatedAt"`
+	ID           string  `gorm:"column:id;primaryKey" json:"id"`
+	SpaceID      string  `gorm:"column:space_id;not null;index" json:"-"`
+	CharacterID  string  `gorm:"column:character_id" json:"characterId"`
+	Title        string  `gorm:"column:title" json:"title"`
+	Channel      string  `gorm:"column:channel;default:web" json:"channel"`
+	Source       string  `gorm:"column:source;default:manual" json:"source"`
+	PeerID       string  `gorm:"column:peer_id" json:"peerId"`
+	MessageCount int     `gorm:"column:message_count;default:0" json:"messageCount"`
+	StateVersion string  `gorm:"column:state_version" json:"stateVersion"`
+	CreatedAt    string  `gorm:"column:created_at" json:"createdAt"`
+	UpdatedAt    string  `gorm:"column:updated_at" json:"updatedAt"`
+	Revision     int64   `gorm:"column:revision;not null;default:1" json:"revision"`
+	DeletedAt    *string `gorm:"column:deleted_at" json:"-"`
 }
 
 func (Conversation) TableName() string { return "conversations" }
@@ -96,37 +99,38 @@ func (c *Conversation) BeforeCreate(tx *gorm.DB) error {
 }
 
 type Message struct {
-	ID                  string  `gorm:"column:id;primaryKey" json:"id"`
-	ConversationID      string  `gorm:"column:conversation_id;not null;index" json:"conversationId"`
-	Sequence            int64   `gorm:"column:sequence;not null;default:0;index" json:"sequence"`
-	Role                string  `gorm:"column:role;not null" json:"role"`
-	Content             string  `gorm:"column:content;not null" json:"content"`
-	MsgType             string  `gorm:"column:msg_type;default:text" json:"msgType"`
-	Tokens              int     `gorm:"column:tokens;default:0" json:"tokens"`
-	Source              string  `gorm:"column:source;default:manual" json:"source"`
-	SafetyLevel         string  `gorm:"column:safety_level;default:normal" json:"safetyLevel"`
-	Status              string  `gorm:"column:status;default:sent" json:"status"`
-	IncludeInCtx        int     `gorm:"column:include_in_context;default:1" json:"includeInContext"`
-	AudioUrl            string  `gorm:"column:audio_url;default:" json:"audioUrl"`
-	AudioDuration       float64 `gorm:"column:audio_duration;default:0" json:"audioDuration"`
-	ImageUrl            string  `gorm:"column:image_url;default:" json:"imageUrl"`
-	VideoUrl            string  `gorm:"column:video_url;default:" json:"videoUrl"`
-	EmoteID             string  `gorm:"column:emote_id;default:" json:"emoteId"`
-	AltText             string  `gorm:"column:alt_text;default:" json:"altText"`
-	IsAnimated          int     `gorm:"column:is_animated;default:0" json:"isAnimated"`
-	MediaWidth          int     `gorm:"column:media_width;default:0" json:"width"`
-	MediaHeight         int     `gorm:"column:media_height;default:0" json:"height"`
-	OriginalAsset       string  `gorm:"column:original_asset_reference;default:" json:"originalAssetReference"`
-	FallbackAsset       string  `gorm:"column:fallback_asset_reference;default:" json:"fallbackAssetReference"`
-	ResponseGroupID     string  `gorm:"column:response_group_id;default:" json:"responseGroupId"`
-	DeliverySequence    int     `gorm:"column:delivery_sequence;default:0" json:"deliverySequence"`
-	EmoteDecisionStatus string  `gorm:"column:emote_decision_status;default:none" json:"emoteDecisionStatus"`
-	RequestID           string  `gorm:"column:request_id;default:" json:"requestId"`
-	ReplyToMessageID    *string `gorm:"column:reply_to_message_id" json:"replyToMessageId,omitempty"`
-	ReplyToRole         *string `gorm:"column:reply_to_role" json:"replyToRole,omitempty"`
-	ReplyToExcerpt      *string `gorm:"column:reply_to_excerpt" json:"replyToExcerpt,omitempty"`
-	CreatedAt           string  `gorm:"column:created_at" json:"createdAt"`
-	UpdatedAt           string  `gorm:"column:updated_at" json:"updatedAt"`
+	ID               string  `gorm:"column:id;primaryKey" json:"id"`
+	ConversationID   string  `gorm:"column:conversation_id;not null;index" json:"conversationId"`
+	Sequence         int64   `gorm:"column:sequence;not null;default:0;index" json:"sequence"`
+	Role             string  `gorm:"column:role;not null" json:"role"`
+	Content          string  `gorm:"column:content;not null" json:"content"`
+	MsgType          string  `gorm:"column:msg_type;default:text" json:"msgType"`
+	ExtensionType    string  `gorm:"column:extension_type;default:" json:"extensionType"`
+	Tokens           int     `gorm:"column:tokens;default:0" json:"tokens"`
+	Source           string  `gorm:"column:source;default:manual" json:"source"`
+	SafetyLevel      string  `gorm:"column:safety_level;default:normal" json:"safetyLevel"`
+	Status           string  `gorm:"column:status;default:sent" json:"status"`
+	IncludeInCtx     int     `gorm:"column:include_in_context;default:1" json:"includeInContext"`
+	AudioUrl         string  `gorm:"column:audio_url;default:" json:"audioUrl"`
+	AudioDuration    float64 `gorm:"column:audio_duration;default:0" json:"audioDuration"`
+	ImageUrl         string  `gorm:"column:image_url;default:" json:"imageUrl"`
+	VideoUrl         string  `gorm:"column:video_url;default:" json:"videoUrl"`
+	AltText          string  `gorm:"column:alt_text;default:" json:"altText"`
+	IsAnimated       int     `gorm:"column:is_animated;default:0" json:"isAnimated"`
+	MediaWidth       int     `gorm:"column:media_width;default:0" json:"width"`
+	MediaHeight      int     `gorm:"column:media_height;default:0" json:"height"`
+	OriginalAsset    string  `gorm:"column:original_asset_reference;default:" json:"originalAssetReference"`
+	FallbackAsset    string  `gorm:"column:fallback_asset_reference;default:" json:"fallbackAssetReference"`
+	ResponseGroupID  string  `gorm:"column:response_group_id;default:" json:"responseGroupId"`
+	DeliverySequence int     `gorm:"column:delivery_sequence;default:0" json:"deliverySequence"`
+	RequestID        string  `gorm:"column:request_id;default:" json:"requestId"`
+	ReplyToMessageID *string `gorm:"column:reply_to_message_id" json:"replyToMessageId,omitempty"`
+	ReplyToRole      *string `gorm:"column:reply_to_role" json:"replyToRole,omitempty"`
+	ReplyToExcerpt   *string `gorm:"column:reply_to_excerpt" json:"replyToExcerpt,omitempty"`
+	CreatedAt        string  `gorm:"column:created_at" json:"createdAt"`
+	UpdatedAt        string  `gorm:"column:updated_at" json:"updatedAt"`
+	Revision         int64   `gorm:"column:revision;not null;default:1" json:"revision"`
+	DeletedAt        *string `gorm:"column:deleted_at" json:"-"`
 }
 
 func (Message) TableName() string { return "messages" }
@@ -222,7 +226,7 @@ type ChatRequest struct {
 	Channel        string `json:"channel"`
 	Source         string `json:"source"`
 	PeerID         string `json:"peerId"`
-	UserID         string `json:"userId"`
+	SpaceID        string `json:"spaceId"`
 	DeviceTimezone string `json:"deviceTimezone"`
 	SessionID      string `json:"sessionId"`
 	RequestID      string `json:"requestId"`
@@ -233,7 +237,7 @@ type WebChatRequest struct {
 	Message          string  `json:"message" binding:"required"`
 	ConversationID   string  `json:"conversationId"`
 	Sequence         int64   `gorm:"column:sequence;not null;default:0;index" json:"sequence"`
-	UserID           string  `json:"userId"`
+	SpaceID          string  `json:"spaceId"`
 	DeviceTimezone   string  `json:"deviceTimezone"`
 	SessionID        string  `json:"sessionId"`
 	RequestID        string  `json:"requestId"`
@@ -249,20 +253,24 @@ type CreateConversationRequest struct {
 }
 
 type ConversationQuery struct {
-	Page        int    `form:"page"`
-	PageSize    int    `form:"pageSize"`
-	Channel     string `form:"channel"`
-	Source      string `form:"source"`
-	CharacterID string `form:"characterId"`
-	Keyword     string `form:"keyword"`
+	SpaceID              string `form:"-" json:"-"`
+	IncludeLegacyDefault bool   `form:"-" json:"-"`
+	Page                 int    `form:"page"`
+	PageSize             int    `form:"pageSize"`
+	Channel              string `form:"channel"`
+	Source               string `form:"source"`
+	CharacterID          string `form:"characterId"`
+	Keyword              string `form:"keyword"`
 }
 
 type MessageSearchQuery struct {
-	Keyword        string `form:"keyword" binding:"required"`
-	ConversationID string `form:"conversationId"`
-	Sequence       int64  `gorm:"column:sequence;not null;default:0;index" json:"sequence"`
-	Page           int    `form:"page"`
-	PageSize       int    `form:"pageSize"`
+	SpaceID              string `form:"-" json:"-"`
+	IncludeLegacyDefault bool   `form:"-" json:"-"`
+	Keyword              string `form:"keyword" binding:"required"`
+	ConversationID       string `form:"conversationId"`
+	Sequence             int64  `gorm:"column:sequence;not null;default:0;index" json:"sequence"`
+	Page                 int    `form:"page"`
+	PageSize             int    `form:"pageSize"`
 }
 
 type ChatResponse struct {
@@ -337,7 +345,7 @@ type ProcessMessageRequest struct {
 	RequestID                string                       `json:"requestId"`
 	ReplyToMessageID         *string                      `json:"replyToMessageId,omitempty"`
 	ImageContext             string                       `json:"-"`
-	UserID                   string                       `json:"-"`
+	SpaceID                  string                       `json:"-"`
 	DeviceTimezone           string                       `json:"-"`
 	SessionID                string                       `json:"-"`
 	InteractionID            string                       `json:"-"`
@@ -345,6 +353,7 @@ type ProcessMessageRequest struct {
 	Runtime                  *interaction.RuntimeAssembly `json:"-"`
 	ExecContext              *coreexec.ExecutionContext   `json:"-"`
 	IsInternal               bool                         `json:"-"`
+	SuppressReplyPersistence bool                         `json:"-"`
 }
 
 type ProcessMessageResponse struct {

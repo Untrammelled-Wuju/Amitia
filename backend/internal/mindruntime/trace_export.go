@@ -62,7 +62,7 @@ type RedactionRule struct {
 
 var DefaultRedactionRule = RedactionRule{
 	Enabled: true,
-	Fields:  []string{"characterId", "userId", "requestId", "interactionId"},
+	Fields:  []string{"characterId", "spaceId", "requestId", "interactionId"},
 }
 
 func redactField(fieldName string, rules RedactionRule) bool {
@@ -184,7 +184,7 @@ func redactExportedEvent(ee CausalChainExportedEvent, rules RedactionRule) Causa
 	if redactField("characterId", rules) {
 		ee.CharacterID = redactContent(ee.CharacterID)
 	}
-	if redactField("userId", rules) {
+	if redactField("spaceId", rules) {
 		ee.RequestID = redactContent(ee.RequestID)
 	}
 	if redactField("requestId", rules) {

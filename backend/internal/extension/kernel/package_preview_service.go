@@ -18,16 +18,21 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/amitiax"
 	"github.com/u-ai/backend/internal/extension/kernel/dependency"
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
-	"github.com/u-ai/backend/internal/extension/kernel/manifest_v2"
+	"github.com/u-ai/backend/internal/extension/kernel/manifest_v1"
 	"github.com/u-ai/backend/internal/extension/kernel/package_security"
 	"github.com/u-ai/backend/internal/extension/kernel/trust"
 	"github.com/u-ai/backend/internal/extension/kernel/trusted_service"
 )
 
-const packagePolicyVersion = "2026-08-27-v4"
+const packagePolicyVersion = "2026-09-04-v5"
+const localUnsignedDeveloperSessionID = "local-trusted-unsigned-dev"
 
 func CurrentPackagePolicyVersion() string {
 	return packagePolicyVersion
+}
+
+func PackageDevelopmentModeEnabled() bool {
+	return packageDevelopmentModeEnabled()
 }
 
 func computeSecurityPolicyHash() string {
@@ -43,11 +48,39 @@ func packageDevelopmentModeEnabled() bool {
 	return err == nil && enabled
 }
 
+func securityRejectionDetail(report *package_security.PackageSecurityReport) string {
+	if report == nil {
+		return "no security report"
+	}
+	detail := ""
+	if report.EntryCount > 0 {
+		detail += fmt.Sprintf("entries=%d ", report.EntryCount)
+	}
+	if report.TotalUncompressed > 0 {
+		detail += fmt.Sprintf("totalUncompressed=%.1fMB ", float64(report.TotalUncompressed)/(1024*1024))
+	}
+	issues := make([]string, 0, len(report.BlockingIssues))
+	for _, issue := range report.BlockingIssues {
+		msg := issue.Description
+		if issue.Path != "" {
+			msg = issue.Path + ": " + issue.Description
+		}
+		issues = append(issues, msg)
+	}
+	if len(issues) > 5 {
+		issues = append(issues[:5], fmt.Sprintf("...(%d more)", len(report.BlockingIssues)-5))
+	}
+	if len(issues) > 0 {
+		detail += strings.Join(issues, "; ")
+	}
+	return strings.TrimSpace(detail)
+}
+
 func (r *Runtime) PreviewPackage(ctx context.Context, request PackagePreviewRequest, reader io.Reader) (InstallPreview, error) {
 	if r.container == nil || r.container.PackageRepository == nil || r.container.PackageArtifactStore == nil {
 		return InstallPreview{}, fmt.Errorf("kernel: package services unavailable")
 	}
-	if request.UserID == "" || request.ScopeType == "" {
+	if request.SpaceID == "" || request.ScopeType == "" {
 		return InstallPreview{}, fmt.Errorf("kernel: preview owner and scope required")
 	}
 	artifact, err := r.container.PackageArtifactStore.PutArchive(ctx, reader, package_security.DefaultArchivePolicy().MaxArchiveBytes)
@@ -60,7 +93,7 @@ func (r *Runtime) PreviewPackage(ctx context.Context, request PackagePreviewRequ
 		return InstallPreview{}, fmt.Errorf("kernel: security inspect: %w", err)
 	}
 	if !securityReport.Passed {
-		return InstallPreview{}, fmt.Errorf("kernel: archive security rejected package")
+		return InstallPreview{}, fmt.Errorf("kernel: archive security rejected package (%s)", securityRejectionDetail(securityReport))
 	}
 	pkg, err := amitiax.OpenArchive(artifact.ArchivePath)
 	if err != nil {
@@ -123,11 +156,14 @@ func (r *Runtime) PreviewPackage(ctx context.Context, request PackagePreviewRequ
 		preview.SignatureStatus = "legacy_signature"
 		preview.SignerKeyID = pkg.Signatures.KeyID
 		preview.TrustDecision = "rejected"
-		preview.Issues = append(preview.Issues, PreviewIssue{Category: PreviewNotInstallable, Code: "package_signature_required", Message: "Manifest v2 signature is required"})
+		preview.Issues = append(preview.Issues, PreviewIssue{Category: PreviewNotInstallable, Code: "package_signature_required", Message: "Manifest v1 signature is required"})
 	} else {
 		if r.packageUnsignedDevAllowed(request, preview.ExtensionID) {
 			preview.DevOnly = true
 			preview.DeveloperSessionID = request.DeveloperSessionID
+			if request.AllowUnsignedLocal {
+				preview.DeveloperSessionID = localUnsignedDeveloperSessionID
+			}
 			preview.TrustDecision = string(trust.TrustLevelDevelopment)
 			preview.RequiredConfirmations = append(preview.RequiredConfirmations, "confirm.unsigned_dev")
 			preview.RiskFlags = append(preview.RiskFlags, "unsigned_dev", "dev_only")
@@ -204,7 +240,7 @@ func (r *Runtime) PreviewPackage(ctx context.Context, request PackagePreviewRequ
 	if len(preview.RequiredConfirmations) > 0 {
 		status = "awaiting_confirmation"
 	}
-	session := PackagePreviewSession{SessionID: preview.SessionID, UserID: request.UserID,
+	session := PackagePreviewSession{SessionID: preview.SessionID, SpaceID: request.SpaceID,
 		ScopeType: request.ScopeType, ScopeID: request.ScopeID, ArtifactID: artifact.ArtifactID,
 		ExtensionID: preview.ExtensionID, Version: preview.Version, Status: status,
 		ArchiveHash: preview.ArchiveHash, ManifestHash: preview.ManifestHash,
@@ -220,7 +256,7 @@ func (r *Runtime) PreviewPackage(ctx context.Context, request PackagePreviewRequ
 	return preview, nil
 }
 
-func (r *Runtime) evaluatePackageMigrationPreflight(ctx context.Context, manifest manifest_v2.Manifest, preview *InstallPreview) {
+func (r *Runtime) evaluatePackageMigrationPreflight(ctx context.Context, manifest manifest_v1.Manifest, preview *InstallPreview) {
 	if preview == nil || !packageManifestHasMigrations(manifest) {
 		return
 	}
@@ -257,7 +293,7 @@ func (r *Runtime) evaluatePackageMigrationPreflight(ctx context.Context, manifes
 	}
 }
 
-func packageManifestHasMigrations(manifest manifest_v2.Manifest) bool {
+func packageManifestHasMigrations(manifest manifest_v1.Manifest) bool {
 	if len(manifest.Extension.Metadata) == 0 {
 		return false
 	}
@@ -267,17 +303,26 @@ func packageManifestHasMigrations(manifest manifest_v2.Manifest) bool {
 }
 
 func (r *Runtime) packageUnsignedDevAllowed(request PackagePreviewRequest, extensionID string) bool {
+	if request.AllowUnsignedLocal {
+		return true
+	}
 	if !request.AllowUnsignedDev {
 		return false
 	}
-	return r.validateUnsignedDeveloperSession(request.DeveloperSessionID, request.UserID, extensionID) == nil
+	return r.validateUnsignedDeveloperSession(request.DeveloperSessionID, request.SpaceID, extensionID) == nil
 }
 
-func (r *Runtime) validateUnsignedDeveloperSession(sessionID, userID, extensionID string) error {
+func (r *Runtime) validateUnsignedDeveloperSession(sessionID, spaceID, extensionID string) error {
+	if sessionID == localUnsignedDeveloperSessionID {
+		return nil
+	}
+	if !packageDevelopmentModeEnabled() {
+		return fmt.Errorf("kernel: developer mode is disabled")
+	}
 	if r.container == nil {
 		return fmt.Errorf("kernel: developer session binding unavailable")
 	}
-	return validateDeveloperSessionBinding(r.container.DevModeSessions, r.container.DevModeRegistry, sessionID, userID, extensionID)
+	return validateDeveloperSessionBinding(r.container.DevModeSessions, r.container.DevModeRegistry, sessionID, spaceID, extensionID)
 }
 
 func (r *Runtime) evaluatePackageUpdateRisks(ctx context.Context, preview *InstallPreview) {
@@ -332,7 +377,7 @@ func (r *Runtime) evaluatePackageCompatibilityAndDependenciesWithHostValidator(c
 			preview.Issues = append(preview.Issues, PreviewIssue{Category: PreviewPartialUnsupported, Code: "unsupported_module", Message: mod.ID})
 		}
 	}
-	deps := append([]manifest_v2.Dependency(nil), pkg.Manifest.Dependencies...)
+	deps := append([]manifest_v1.Dependency(nil), pkg.Manifest.Dependencies...)
 	for _, mod := range pkg.Manifest.Modules {
 		deps = append(deps, mod.Dependencies...)
 		for _, contribution := range mod.Contributions {

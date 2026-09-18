@@ -13,7 +13,7 @@ func RegisterProfileRouter(r *gin.RouterGroup, svc Service) {
 	r.POST("/profiles", handler.Create)
 	r.PUT("/profiles/:id", handler.Update)
 	r.DELETE("/profiles/:id", handler.Delete)
-	r.GET("/profiles/by-user", handler.GetByUserID)
+	r.GET("/profiles/by-space", handler.GetBySpaceID)
 	r.POST("/profiles/extract", handler.Extract)
 	r.GET("/profiles/system-prompt", handler.SystemPrompt)
 }

@@ -89,8 +89,8 @@ func NewValidator(repo Repository, dataDir string) *Validator {
 // hash and image-decode validation. This prevents a generic validation error
 // from degrading into the old unsafe "list succeeded actions and continue"
 // behavior.
-func (v *Validator) ValidateProcessingSources(generationTaskID, userID string) (*SourceValidationResult, error) {
-	task, succeededActions, err := v.validateTaskAndSucceededActions(generationTaskID, userID)
+func (v *Validator) ValidateProcessingSources(generationTaskID, spaceID string) (*SourceValidationResult, error) {
+	task, succeededActions, err := v.validateTaskAndSucceededActions(generationTaskID, spaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -167,8 +167,8 @@ func (v *Validator) ValidateProcessingSources(generationTaskID, userID string) (
 	return result, nil
 }
 
-func (v *Validator) ValidateSources(generationTaskID, userID string) (*SourceValidationResult, error) {
-	task, succeededActions, err := v.validateTaskAndSucceededActions(generationTaskID, userID)
+func (v *Validator) ValidateSources(generationTaskID, spaceID string) (*SourceValidationResult, error) {
+	task, succeededActions, err := v.validateTaskAndSucceededActions(generationTaskID, spaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -216,7 +216,7 @@ func (v *Validator) ValidateSources(generationTaskID, userID string) (*SourceVal
 	return result, nil
 }
 
-func (v *Validator) validateTaskAndSucceededActions(generationTaskID, userID string) (*desktoppet.GenerationTask, []desktoppet.GenerationTaskAction, error) {
+func (v *Validator) validateTaskAndSucceededActions(generationTaskID, spaceID string) (*desktoppet.GenerationTask, []desktoppet.GenerationTaskAction, error) {
 	task, err := v.repo.GetGenerationTask(generationTaskID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -229,7 +229,7 @@ func (v *Validator) validateTaskAndSucceededActions(generationTaskID, userID str
 		return nil, nil, err
 	}
 
-	if task.UserID != userID {
+	if task.SpaceID != spaceID {
 		return nil, nil, &ValidationError{
 			Code:    ErrCodeGenerationTaskNotReady,
 			Message: "生成任务不属于当前用户",
@@ -322,7 +322,11 @@ func (v *Validator) validatePersistedArtifactSource(action desktoppet.Generation
 
 	absPath, err := resolveValidatedRelativePath(v.dataDir, artifact.RelativePath)
 	if err != nil {
-		return 0, &ValidationError{Code: ErrCodeSourceFrameInvalid, Message: "V2 主制品路径非法", Err: err}
+		code := ErrCodeSourceFrameInvalid
+		if errors.Is(err, os.ErrNotExist) {
+			code = ErrCodeSourceFrameMissing
+		}
+		return 0, &ValidationError{Code: code, Message: "V2 主制品路径不可用", Err: err}
 	}
 	content, err := os.ReadFile(absPath)
 	if err != nil {
@@ -502,9 +506,13 @@ func (v *Validator) ValidateFrames(action desktoppet.GenerationTaskAction, attem
 		absPath, pathErr := resolveValidatedRelativePath(v.dataDir, frame.ResultImagePath)
 		if pathErr != nil {
 			results = append(results, info)
+			code := ErrCodeSourceFrameInvalid
+			if errors.Is(pathErr, os.ErrNotExist) {
+				code = ErrCodeSourceFrameMissing
+			}
 			return results, &ValidationError{
-				Code:    ErrCodeSourceFrameInvalid,
-				Message: fmt.Sprintf("帧 %s 的结果图片路径非法", frame.ID),
+				Code:    code,
+				Message: fmt.Sprintf("帧 %s 的结果图片路径不可用", frame.ID),
 				Err:     pathErr,
 			}
 		}

@@ -8,7 +8,7 @@ func InteractionRecordsCreateMigration() Migration {
 		Up: func(step *Step) error {
 			step.CreateTable(`CREATE TABLE IF NOT EXISTS interaction_records (
 				id TEXT PRIMARY KEY,
-				user_id TEXT,
+				space_id TEXT,
 				character_id TEXT,
 				conversation_id TEXT,
 				channel TEXT,
@@ -37,10 +37,10 @@ func InteractionRecordsCreateMigration() Migration {
 				updated_at DATETIME
 			)`)
 
-			if err := step.CreateIndex("idx_interaction_scope_active", "interaction_records", []string{"user_id", "character_id", "conversation_id", "status"}, false); err != nil {
+			if err := step.CreateIndex("idx_interaction_scope_active", "interaction_records", []string{"space_id", "character_id", "conversation_id", "status"}, false); err != nil {
 				return err
 			}
-			if err := step.CreateIndex("idx_interaction_request", "interaction_records", []string{"user_id", "request_id"}, false); err != nil {
+			if err := step.CreateIndex("idx_interaction_request", "interaction_records", []string{"space_id", "request_id"}, false); err != nil {
 				return err
 			}
 			if err := step.CreateIndex("idx_interaction_records_channel", "interaction_records", []string{"channel"}, false); err != nil {
@@ -70,7 +70,7 @@ func InteractionRecordsCreateMigration() Migration {
 			if err := step.CreateIndex("idx_interaction_records_updated_at", "interaction_records", []string{"updated_at"}, false); err != nil {
 				return err
 			}
-			if err := step.CreateIndex("idx_interaction_request_unique", "interaction_records", []string{"user_id", "request_id"}, true); err != nil {
+			if err := step.CreateIndex("idx_interaction_request_unique", "interaction_records", []string{"space_id", "request_id"}, true); err != nil {
 				return err
 			}
 

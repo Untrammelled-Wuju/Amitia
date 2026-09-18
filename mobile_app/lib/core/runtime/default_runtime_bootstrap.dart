@@ -23,6 +23,8 @@ class DefaultRuntimeBootstrap implements RuntimeBootstrap {
       StreamController<RuntimeBootstrapSnapshot>.broadcast();
 
   StreamSubscription<RuntimeBridgeSnapshot>? _bridgeSubscription;
+  Timer? _refreshTimer;
+  bool _refreshInFlight = false;
   Future<void>? _initialization;
   bool _disposed = false;
   int _lastGeneration = 0;
@@ -36,10 +38,16 @@ class DefaultRuntimeBootstrap implements RuntimeBootstrap {
        _policy = policy;
 
   @override
-  Stream<RuntimeBootstrapSnapshot> get snapshots async* {
-    yield _current;
-    yield* _snapshotController.stream;
-  }
+  Stream<RuntimeBootstrapSnapshot> get snapshots =>
+      Stream<RuntimeBootstrapSnapshot>.multi((controller) {
+        controller.add(_current);
+        final subscription = _snapshotController.stream.listen(
+          controller.add,
+          onError: controller.addError,
+          onDone: controller.close,
+        );
+        controller.onCancel = subscription.cancel;
+      }, isBroadcast: true);
 
   @override
   Future<void> initialize() async {
@@ -77,6 +85,7 @@ class DefaultRuntimeBootstrap implements RuntimeBootstrap {
 
     final phase = _mapToBootstrapPhase(snapshot);
     _updatePhase(phase, snapshot);
+    _syncRefreshTimer();
   }
 
   RuntimeBootstrapPhase _mapToBootstrapPhase(RuntimeBridgeSnapshot snapshot) {
@@ -159,6 +168,38 @@ class DefaultRuntimeBootstrap implements RuntimeBootstrap {
     _snapshotController.add(_current);
   }
 
+  void _syncRefreshTimer() {
+    if (_disposed) return;
+    final shouldRefresh = switch (_current.phase) {
+      RuntimeBootstrapPhase.initializing ||
+      RuntimeBootstrapPhase.installRequired ||
+      RuntimeBootstrapPhase.stopped ||
+      RuntimeBootstrapPhase.starting ||
+      RuntimeBootstrapPhase.stopping ||
+      RuntimeBootstrapPhase.unavailable => true,
+      RuntimeBootstrapPhase.ready || RuntimeBootstrapPhase.failed => false,
+    };
+    if (!shouldRefresh) {
+      _refreshTimer?.cancel();
+      _refreshTimer = null;
+      return;
+    }
+    _refreshTimer ??= Timer.periodic(
+      const Duration(seconds: 1),
+      (_) => unawaited(_refreshFromNative()),
+    );
+  }
+
+  Future<void> _refreshFromNative() async {
+    if (_disposed || _refreshInFlight) return;
+    _refreshInFlight = true;
+    try {
+      _handleRuntimeSnapshot(await _bridge.snapshot());
+    } finally {
+      _refreshInFlight = false;
+    }
+  }
+
   void _handleBridgeError() {
     if (_disposed) return;
     _current = RuntimeBootstrapSnapshot(
@@ -173,6 +214,8 @@ class DefaultRuntimeBootstrap implements RuntimeBootstrap {
   Future<void> dispose() async {
     if (_disposed) return;
     _disposed = true;
+    _refreshTimer?.cancel();
+    _refreshTimer = null;
     await _bridgeSubscription?.cancel();
     _bridgeSubscription = null;
     await _snapshotController.close();

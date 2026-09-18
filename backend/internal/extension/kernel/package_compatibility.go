@@ -10,7 +10,7 @@ import (
 
 	"github.com/u-ai/backend/internal/extension/kernel/amitiax"
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
-	"github.com/u-ai/backend/internal/extension/kernel/manifest_v2"
+	"github.com/u-ai/backend/internal/extension/kernel/manifest_v1"
 	"github.com/u-ai/backend/internal/extension/kernel/trusted_service"
 	gamehostnetworkpolicy "github.com/u-ai/backend/internal/gamehost/networkpolicy"
 	gameprotocol "github.com/u-ai/backend/pkg/gameplugin/protocol"
@@ -20,21 +20,24 @@ func currentPackageHostVersion() string {
 	if value := strings.TrimSpace(os.Getenv("AMITIA_VERSION")); value != "" {
 		return value
 	}
-	// The production extension runtime is currently constructed with 1.0.0.
+	// The production extension runtime is currently constructed with 26.2.0-beta.
 	// Release builds can override the compatibility identity via AMITIA_VERSION.
-	return "1.0.0"
+	return "26.2.0-beta"
 }
 
 func normalizePackagePlatform(value string) string {
-	switch strings.ToLower(strings.TrimSpace(value)) {
-	case "windows", "win32", "win64":
+	normalized := strings.ToLower(strings.TrimSpace(value))
+	switch {
+	case normalized == "windows" || normalized == "win32" || normalized == "win64" ||
+		strings.HasPrefix(normalized, "windows-"):
 		return "windows"
-	case "darwin", "macos", "osx", "mac":
+	case normalized == "darwin" || normalized == "macos" || normalized == "osx" || normalized == "mac" ||
+		strings.HasPrefix(normalized, "macos-") || strings.HasPrefix(normalized, "darwin-"):
 		return "darwin"
-	case "linux":
+	case normalized == "linux" || strings.HasPrefix(normalized, "linux-"):
 		return "linux"
 	default:
-		return strings.ToLower(strings.TrimSpace(value))
+		return normalized
 	}
 }
 
@@ -72,7 +75,7 @@ func packageVersionAtMost(actual, maximum string) bool {
 	return actualErr == nil && maximumErr == nil && actualVersion.Compare(maximumVersion) <= 0
 }
 
-func appendPackageHostCompatibilityIssues(manifest manifest_v2.Manifest, preview *InstallPreview) {
+func appendPackageHostCompatibilityIssues(manifest manifest_v1.Manifest, preview *InstallPreview) {
 	if preview == nil {
 		return
 	}
@@ -104,11 +107,11 @@ func appendPackageHostCompatibilityIssues(manifest manifest_v2.Manifest, preview
 	}
 }
 
-func packageModuleSupported(mod manifest_v2.ModuleMeta, platform, hostVersion string) bool {
-	if !manifest_v2.IsSupportedModuleType(mod.Type) {
+func packageModuleSupported(mod manifest_v1.ModuleMeta, platform, hostVersion string) bool {
+	if !manifest_v1.IsSupportedModuleType(mod.Type) {
 		return false
 	}
-	if mod.Runtime != nil && strings.TrimSpace(mod.Runtime.Type) != "" && !manifest_v2.IsSupportedRuntimeType(mod.Runtime.Type) {
+	if mod.Runtime != nil && strings.TrimSpace(mod.Runtime.Type) != "" && !manifest_v1.IsSupportedRuntimeType(mod.Runtime.Type) {
 		return false
 	}
 	if mod.Compatibility == nil {
@@ -127,25 +130,26 @@ func packageGamePluginNetworkPolicy(spec *gameprotocol.PluginNetworkPolicy, requ
 	}
 	switch {
 	case errors.Is(err, gamehostnetworkpolicy.ErrPermissionRequired):
-		return trusted_service.ServiceNetworkPolicy{}, "game_plugin_network_permission_required", err
+		return trusted_service.ServiceNetworkPolicy{}, "gamex_network_permission_required", err
 	case errors.Is(err, gamehostnetworkpolicy.ErrPlatformUnsupported):
-		return trusted_service.ServiceNetworkPolicy{}, "game_plugin_network_platform_unsupported", err
+		return trusted_service.ServiceNetworkPolicy{}, "gamex_network_platform_unsupported", err
 	default:
-		return trusted_service.ServiceNetworkPolicy{}, "game_plugin_network_policy_invalid", err
+		return trusted_service.ServiceNetworkPolicy{}, "gamex_network_policy_invalid", err
 	}
 }
 
-func appendGamePluginNetworkCompatibilityIssues(manifest manifest_v2.Manifest, preview *InstallPreview) {
+func appendGamePluginNetworkCompatibilityIssues(manifest manifest_v1.Manifest, preview *InstallPreview) {
 	appendGamePluginNetworkCompatibilityIssuesWithHostValidator(manifest, preview, trusted_service.ValidateNetworkSandboxPrerequisites)
 }
 
-func appendGamePluginNetworkCompatibilityIssuesWithHostValidator(manifest manifest_v2.Manifest, preview *InstallPreview, validateHost func(trusted_service.ServiceNetworkPolicy) error) {
+func appendGamePluginNetworkCompatibilityIssuesWithHostValidator(manifest manifest_v1.Manifest, preview *InstallPreview, validateHost func(trusted_service.ServiceNetworkPolicy) error) {
 	if preview == nil {
 		return
 	}
+	devMode := packageDevelopmentModeEnabled()
 	for moduleIndex, mod := range manifest.Modules {
 		for contributionIndex, contribution := range mod.Contributions {
-			if strings.TrimSpace(string(contribution.Kind)) != "game_plugin" {
+			if domain.NormalizeContributionKind(domain.ContributionKind(strings.TrimSpace(string(contribution.Kind)))) != domain.ContributionKindGamePlugin {
 				continue
 			}
 			spec, err := gameprotocol.ParsePluginHostSpec(contribution.Spec)
@@ -153,9 +157,9 @@ func appendGamePluginNetworkCompatibilityIssuesWithHostValidator(manifest manife
 				continue // Manifest validation owns malformed contribution specs.
 			}
 			policy, code, policyErr := packageGamePluginNetworkPolicy(spec.Network, contribution.RequiredPermissions)
-			if policyErr == nil && validateHost != nil {
+			if policyErr == nil && validateHost != nil && !devMode {
 				if hostErr := validateHost(policy); hostErr != nil {
-					code = "game_plugin_network_sandbox_unavailable"
+					code = "gamex_network_sandbox_unavailable"
 					policyErr = fmt.Errorf("game plugin network sandbox prerequisites are unavailable on this host: %w", hostErr)
 				}
 			}
@@ -193,7 +197,7 @@ func appendGamePluginArtifactPackageIssues(pkg *amitiax.Package, preview *Instal
 
 	for moduleIndex, mod := range pkg.Manifest.Modules {
 		for contributionIndex, contribution := range mod.Contributions {
-			if strings.TrimSpace(string(contribution.Kind)) != "game_plugin" {
+			if domain.NormalizeContributionKind(domain.ContributionKind(strings.TrimSpace(string(contribution.Kind)))) != domain.ContributionKindGamePlugin {
 				continue
 			}
 			spec, err := gameprotocol.ParsePluginHostSpec(contribution.Spec)
@@ -207,7 +211,7 @@ func appendGamePluginArtifactPackageIssues(pkg *amitiax.Package, preview *Instal
 				}
 				preview.Issues = append(preview.Issues, PreviewIssue{
 					Category: PreviewNotInstallable,
-					Code:     "game_plugin_artifact_source_missing",
+					Code:     "gamex_artifact_source_missing",
 					Message:  fmt.Sprintf("game plugin artifact %q source %q is missing from the package", artifact.ID, artifact.Source),
 					Path:     fmt.Sprintf("modules[%d].contributions[%d].spec.artifacts[%d].source", moduleIndex, contributionIndex, artifactIndex),
 				})

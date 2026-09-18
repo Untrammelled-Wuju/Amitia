@@ -30,8 +30,7 @@ func newTestDB(t *testing.T) *gorm.DB {
 	if err := db.AutoMigrate(&Character{}, &CharacterTemplate{}); err != nil {
 		t.Fatal(err)
 	}
-	db.Exec(`CREATE TABLE IF NOT EXISTS conversations (id text, character_id text, title text, channel text, source text, created_at text, updated_at text)`)
-	db.Exec(`CREATE TABLE IF NOT EXISTS proactive_rules (id integer primary key, name text, enabled integer, channel text, character_id text, rule_type text, schedule_cron text, max_per_day integer, prompt_template text, random_minutes integer, created_at text, updated_at text)`)
+	db.Exec(`CREATE TABLE IF NOT EXISTS conversations (id text, space_id text not null default '', character_id text, title text, channel text, source text, created_at text, updated_at text, revision integer not null default 1, deleted_at text default '')`)
 	return db
 }
 
@@ -97,8 +96,7 @@ func TestE2ECharacterStorageReopen(t *testing.T) {
 	if err := db.AutoMigrate(&Character{}, &CharacterTemplate{}); err != nil {
 		t.Fatal(err)
 	}
-	db.Exec(`CREATE TABLE IF NOT EXISTS conversations (id text, character_id text, title text, channel text, source text, created_at text, updated_at text)`)
-	db.Exec(`CREATE TABLE IF NOT EXISTS proactive_rules (id integer primary key, name text, enabled integer, channel text, character_id text, rule_type text, schedule_cron text, max_per_day integer, prompt_template text, random_minutes integer, created_at text, updated_at text)`)
+	db.Exec(`CREATE TABLE IF NOT EXISTS conversations (id text, space_id text not null default '', character_id text, title text, channel text, source text, created_at text, updated_at text, revision integer not null default 1, deleted_at text default '')`)
 	ctx := app.NewAppContext(db, nil)
 	repo := NewRepository(ctx)
 	svc := NewService(repo, ctx)
