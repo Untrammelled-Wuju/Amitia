@@ -106,6 +106,6 @@ async function start() {
   const isMessages = route.includes("/messages");
   show("messages-view", isMessages); show("connect-view", !isMessages);
   $("refresh").onclick = refresh; $("connect").onclick = connect; $("disconnect").onclick = disconnect; $("refresh-messages").onclick = loadMessages;
-  if (isMessages) await loadMessages(); else { await refresh(); setInterval(refresh, 2200); }
+  if (isMessages) await loadMessages(); else await refresh();
 }
 void start();

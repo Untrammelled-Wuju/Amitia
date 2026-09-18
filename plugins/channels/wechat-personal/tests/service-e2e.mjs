@@ -55,17 +55,23 @@ const driver = await server(8888, async (req, res) => {
   }
   return reply(res, { error: "not_found" }, 404);
 });
-const core = await server(18899, async (req, res) => {
+const core = await server(0, async (req, res) => {
   if (req.url === "/api/channels/inbound" && req.method === "POST") {
+    if (
+      req.headers.authorization !== `Bearer ${SERVICE_TOKEN}`
+      || req.headers["x-amitia-extension-id"] !== "com.amitia/channel-wechat-personal"
+      || req.headers["x-amitia-module-id"] !== "wechat-personal-channel-service"
+    ) return reply(res, { error: "unauthorized" }, 401);
     lastCoreInbound = await readBody(req);
     return reply(res, { success: true, conversationId: "conv-test" });
   }
   return reply(res, { error: "not_found" }, 404);
 });
+const coreUrl = `http://127.0.0.1:${core.address().port}`;
 
 const child = spawn(process.execPath, [join(root, "runtime", "service.mjs")], {
   cwd: root,
-  env: { ...process.env, AMITIA_SERVICE_AUTH_TOKEN: SERVICE_TOKEN, AMITIA_SERVICE_AUTH_VERSION: "1", AMITIA_WECHAT_EXTERNAL_DRIVER_COMPAT: "1" },
+  env: { ...process.env, AMITIA_SERVICE_AUTH_TOKEN: SERVICE_TOKEN, AMITIA_SERVICE_AUTH_VERSION: "1", AMITIA_CORE_URL: coreUrl, AMITIA_WECHAT_EXTERNAL_DRIVER_COMPAT: "1" },
   stdio: ["ignore", "pipe", "pipe"],
 });
 let logs = "";
@@ -93,13 +99,10 @@ try {
     body: JSON.stringify({ roomId: "room@chatroom", fromWxid: "room@chatroom", senderWxid: "wxid_member", content: "群里你好", msgId: "m-1", msgType: 1 }),
   }).then((r) => r.json());
   assert.equal(inbound.success, true);
-  assert.equal(lastCoreInbound.channel, "wechat_personal");
-  assert.equal(lastCoreInbound.extensionId, "com.amitia/channel-wechat-personal");
-  assert.equal(lastCoreInbound.providerId, "com.amitia.channel-wechat-personal.provider");
+  assert.equal(lastCoreInbound.channelId, "wechat_personal");
   assert.equal(lastCoreInbound.accountId, "wxid_ai");
-  assert.equal(lastCoreInbound.externalConversationId, "room@chatroom");
-  assert.equal(lastCoreInbound.senderId, "wxid_member");
-  assert.equal(lastCoreInbound.externalUserId, "wxid_member");
+  assert.equal(lastCoreInbound.peerId, "wxid_member");
+  assert.equal(lastCoreInbound.contentType, "text");
 
   const send = await fetch("http://127.0.0.1:19878/api/send", {
     method: "POST", headers: { ...AUTH_HEADERS, "content-type": "application/json", "idempotency-key": "delivery-1" },

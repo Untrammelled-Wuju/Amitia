@@ -16,14 +16,24 @@ Each entry is already filtered for the current platform/architecture and contain
 
 ## Trusted Service loopback authentication
 
-The plugin sidecar consumes the generic Trusted Service Loopback Authentication v1 contract:
+The plugin provider service consumes the generic Trusted Service Loopback Authentication v1 contract:
 
 ```text
 AMITIA_SERVICE_AUTH_VERSION=1
 AMITIA_SERVICE_AUTH_TOKEN=<host-derived module token>
+AMITIA_CORE_URL=http://127.0.0.1:<host-port>
 ```
 
-Every HTTP route exposed by the sidecar requires `Authorization: Bearer <token>`. The host's generic Channel HTTP Provider attaches this header automatically. The token is process-scoped, is not persisted, and must never be exposed to UI code. Wildcard CORS is not permitted on the authenticated loopback service.
+Every HTTP route exposed by the provider service requires `Authorization: Bearer <token>`. The host's generic Channel HTTP Provider attaches this header automatically. The token is process-scoped, is not persisted, and must never be exposed to UI code. Wildcard CORS is not permitted on the authenticated loopback service.
+
+Inbound messages posted to `/api/channels/inbound` also carry:
+
+```http
+X-Amitia-Extension-ID: com.amitia/channel-wechat-personal
+X-Amitia-Module-ID: wechat-personal-channel-service
+```
+
+The host validates the token against that exact extension/module pair and verifies the declared `channelId`.
 
 ## Agent RPC
 

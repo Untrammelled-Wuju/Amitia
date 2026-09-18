@@ -37,7 +37,7 @@ AMITIA_NATIVE_COMPANIONS=[...]
 Trusted Service
 ```
 
-Channel 插件身份也通过通用的 `extensionId/providerId` 入站字段传递，不给 `wechat_personal` 增加宿主 switch 特例。
+Channel 插件身份通过通用的 Trusted Service 身份头和 `channelId` 入站字段传递，不给 `wechat_personal` 增加宿主 switch 特例。
 
 ## Windows x64
 

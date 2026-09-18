@@ -9,7 +9,7 @@ import (
 )
 
 func TestHTTPProviderDefaultHeaders(t *testing.T) {
-	const token = "test-sidecar-token"
+	const token = "test-provider-token"
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if got := r.Header.Get("Authorization"); got != "Bearer "+token {
 			t.Fatalf("unexpected authorization header: %q", got)

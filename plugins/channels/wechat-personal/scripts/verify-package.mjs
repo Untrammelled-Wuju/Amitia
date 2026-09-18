@@ -7,6 +7,10 @@ const file = process.argv[2];
 if (!file) throw new Error("usage: node scripts/verify-package.mjs <package.amitiax>");
 const list = execFileSync("unzip", ["-Z1", file], { encoding: "utf8" }).trim().split(/\r?\n/).filter(Boolean);
 const manifest = JSON.parse(execFileSync("unzip", ["-p", file, "manifest.json"], { encoding: "utf8" }));
+const channelUi = execFileSync("unzip", ["-p", file, "modules/wechat-personal-channel-ui/desktop/app.js"], { encoding: "utf8" });
+if (channelUi.includes("setInterval(")) {
+  throw new Error("channel UI must not poll channel status");
+}
 if (!manifest.compatibility?.platforms?.includes("windows") || !manifest.compatibility?.platforms?.includes("linux")) {
   throw new Error("package must declare both windows and linux");
 }

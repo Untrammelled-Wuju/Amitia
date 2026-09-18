@@ -32,6 +32,7 @@ const child = spawn(process.execPath, [join(root, "runtime", "service.mjs")], {
     ...process.env,
     AMITIA_SERVICE_AUTH_TOKEN: SERVICE_TOKEN,
     AMITIA_SERVICE_AUTH_VERSION: "1",
+    AMITIA_CORE_URL: "http://127.0.0.1:18899",
   },
   stdio: ["ignore", "pipe", "pipe"],
 });

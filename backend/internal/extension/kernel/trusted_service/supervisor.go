@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -86,6 +87,7 @@ type ProcessSupervisor struct {
 	exitObservers      []ProcessExitObserver
 	ownerStore         *ProcessOwnerStore
 	hostIdentity       HostIdentityProvider
+	coreURL            string
 	ownerStoreErr      error
 	sandboxRecoveryErr error
 }
@@ -144,6 +146,15 @@ func NewProcessSupervisorWithVerifier(rootDir string, verifier *BinaryVerifier) 
 
 func (s *ProcessSupervisor) SetLogger(l func(level, msg string, fields map[string]any)) {
 	s.logger = l
+}
+
+func (s *ProcessSupervisor) SetCoreURL(coreURL string) {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	s.coreURL = strings.TrimRight(strings.TrimSpace(coreURL), "/")
+	s.mu.Unlock()
 }
 
 func (s *ProcessSupervisor) SetGameHostNotifier(n GameHostNotifier) {
@@ -868,15 +879,22 @@ func (s *ProcessSupervisor) buildSafeEnvironment(exe *PlatformExecutable, def *S
 	envB.Set("AMITIA_HOST_API", "internal-rpc")
 	envB.Set("AMITIA_PROTOCOL", def.Protocol)
 	envB.Set("AMITIA_PLATFORM", string(CurrentPlatform()))
-	if token, err := serviceauth.Token(def.ExtensionID, def.ModuleID); err == nil {
-		envB.Set("AMITIA_SERVICE_AUTH_VERSION", serviceauth.ContractVersion)
-		envB.Set("AMITIA_SERVICE_AUTH_TOKEN", token)
-	}
 
 	for k, v := range exe.EnvTemplate {
 		if s.envBuilder.IsAllowed(k) {
 			envB.Set(k, v)
 		}
+	}
+
+	s.mu.Lock()
+	coreURL := s.coreURL
+	s.mu.Unlock()
+	if coreURL != "" {
+		envB.Set("AMITIA_CORE_URL", coreURL)
+	}
+	if token, err := serviceauth.Token(def.ExtensionID, def.ModuleID); err == nil {
+		envB.Set("AMITIA_SERVICE_AUTH_VERSION", serviceauth.ContractVersion)
+		envB.Set("AMITIA_SERVICE_AUTH_TOKEN", token)
 	}
 
 	return envB.BuildFiltered()

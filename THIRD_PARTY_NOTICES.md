@@ -29,20 +29,6 @@
 | vue | ^3.4.0 | https://github.com/vuejs/core | MIT | front/package.json | No known extra NOTICE | Direct dependency |
 | vue-router | ^4.3.0 | https://github.com/vuejs/router | MIT | front/package.json | No known extra NOTICE | Direct dependency |
 
-## Sidecar npm Packages
-
-| Name | Version | Project | License | Used in | NOTICE | Risk |
-|---|---:|---|---|---|---|---|
-| @fastify/cors | ^9.0.0 | https://github.com/fastify/fastify-cors | MIT | backend/sidecar, backend/qq-sidecar | No known extra NOTICE | Direct dependency |
-| @tencent-weixin/openclaw-weixin | ^2.4.3 | https://www.npmjs.com/package/@tencent-weixin/openclaw-weixin | License status: TO BE VERIFIED | backend/sidecar/package.json | TO BE VERIFIED | WeChat SDK license/terms require manual review |
-| axios | ^1.16.1 | https://github.com/axios/axios | MIT | backend/sidecar/package.json | No known extra NOTICE | Direct dependency |
-| fast-xml-parser | ^4.5.0 | https://github.com/NaturalIntelligence/fast-xml-parser | MIT | backend/sidecar/package.json | No known extra NOTICE | Direct dependency |
-| fastify | ^4.29.0 | https://github.com/fastify/fastify | MIT | backend/sidecar, backend/qq-sidecar | No known extra NOTICE | Direct dependency |
-| openclaw | ^2026.5.19 | https://www.npmjs.com/package/openclaw | License status: TO BE VERIFIED | backend/sidecar/package.json | TO BE VERIFIED | Bridge SDK license/terms require manual review |
-| qrcode | ^1.5.4 | https://github.com/soldair/node-qrcode | MIT | backend/sidecar/package.json | No known extra NOTICE | Direct dependency |
-| form-data | ^4.0.5 | https://github.com/form-data/form-data | MIT | backend/qq-sidecar/package.json | No known extra NOTICE | Direct dependency |
-| ws | ^8.17.0 | https://github.com/websockets/ws | MIT | backend/qq-sidecar/package.json | No known extra NOTICE | Direct dependency |
-
 ## Python Packages
 
 | Name | Version | Project | License | Used in | NOTICE | Risk |
@@ -57,8 +43,6 @@
 | OpenAI-compatible API providers | User configured | Service terms vary | Model config / chat | Terms and data processing obligations require user review |
 | DeepSeek / Ollama compatible models | User configured | Model-specific licenses vary | README / runtime configuration | Model license status depends on user-selected model |
 | Doubao Embedding Vision | User configured | Service terms TO BE VERIFIED | README / embedding | Provider terms require manual review |
-| WeChat bridge / OpenClaw integration | package versions above | License status: TO BE VERIFIED | backend/sidecar | WeChat/OpenClaw terms and account rules require manual review |
-| QQ bridge | package versions above | License status: TO BE VERIFIED | backend/qq-sidecar | QQ bridge implementation and SDK terms require manual review |
 | Qdrant runtime binaries | bundled under the runtime directory qdrant folder and backend/qdrant | License status: TO BE VERIFIED | runtime vector database | Bundled binary notices should be reviewed before redistribution |
 | SurrealDB runtime binary | bundled under the runtime directory surrealdb folder if present | License status: TO BE VERIFIED | runtime graph database | Bundled binary notices should be reviewed before redistribution |
 | unidbg-fetch-qsign-all.jar | bundled JAR | License status: TO BE VERIFIED | backend/libs | Bundled third-party binary requires manual license review |
@@ -78,16 +62,12 @@
 The following locations were treated as third-party, generated, runtime, or build artifacts and were not relicensed as project-owned AGPL source code:
 
 - front/node_modules
-- backend/sidecar/node_modules
-- backend/qq-sidecar/node_modules
 - front/dist
 - release
 - backend/data
 - backend/qdrant
 - qdrant
 - backend/libs/*.jar
-- backend/sidecar/bundle.mjs
-- backend/qq-sidecar/bundle.mjs
 - generated helper files under backend/internal/system/_gen*.py
 
 ## Strong-Copyleft or Source-Available Licenses

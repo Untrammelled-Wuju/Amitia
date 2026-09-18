@@ -6,10 +6,12 @@ import { spawn } from "node:child_process";
 import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 
 const CHANNEL_ID = "wechat_personal";
+const EXTENSION_ID = "com.amitia/channel-wechat-personal";
+const MODULE_ID = "wechat-personal-channel-service";
 const HOST = "127.0.0.1";
 const PORT = 19878;
 const RECEIVER_PORT = 9999;
-const CORE_URL = "http://127.0.0.1:18899";
+const CORE_URL = String(process.env.AMITIA_CORE_URL || "").trim().replace(/\/+$/, "");
 const SERVICE_AUTH_TOKEN = String(process.env.AMITIA_SERVICE_AUTH_TOKEN || "").trim();
 const SERVICE_AUTH_VERSION = String(process.env.AMITIA_SERVICE_AUTH_VERSION || "").trim();
 const DEV_ALLOW_UNAUTHENTICATED = process.env.AMITIA_WECHAT_DEV_ALLOW_UNAUTHENTICATED === "1";
@@ -17,6 +19,9 @@ const EXTERNAL_COMPAT = process.env.AMITIA_WECHAT_EXTERNAL_DRIVER_COMPAT === "1"
 const EXTERNAL_UNAUTH_CALLBACK = process.env.AMITIA_WECHAT_EXTERNAL_CALLBACK_UNAUTHENTICATED === "1";
 if (!SERVICE_AUTH_TOKEN && !DEV_ALLOW_UNAUTHENTICATED) {
   throw new Error("AMITIA_SERVICE_AUTH_TOKEN is required for the personal WeChat trusted service");
+}
+if (!CORE_URL) {
+  throw new Error("AMITIA_CORE_URL is required for the personal WeChat trusted service");
 }
 if (SERVICE_AUTH_VERSION && SERVICE_AUTH_VERSION !== "1") {
   throw new Error(`Unsupported AMITIA_SERVICE_AUTH_VERSION: ${SERVICE_AUTH_VERSION}`);
@@ -623,24 +628,23 @@ async function forwardInbound(raw) {
   const accountId = state.accountId || "wechat-personal";
   const convKey = `wechat-personal-${accountId}-${item.peerId}`.replace(/[^a-zA-Z0-9_@.-]/g, "_");
   const payload = {
-    channel: CHANNEL_ID,
-    extensionId: "com.amitia/channel-wechat-personal",
-    providerId: "com.amitia.channel-wechat-personal.provider",
+    channelId: CHANNEL_ID,
     accountId,
     conversationId: convKey,
-    externalConversationId: item.peerId,
-    externalUserId: item.senderId || item.peerId,
-    externalMessageId: item.messageId,
-    senderId: item.senderId || item.peerId,
+    peerId: item.senderId || item.peerId,
     messageId: item.messageId,
-    type: item.type === 34 ? "voice" : "text",
+    contentType: "text",
     text: item.text,
-    createdAt: item.createdAt,
-    skipTiming: true,
   };
+  const headers = {
+    "Content-Type": "application/json",
+    "X-Amitia-Extension-ID": EXTENSION_ID,
+    "X-Amitia-Module-ID": MODULE_ID,
+  };
+  if (SERVICE_AUTH_TOKEN) headers.Authorization = `Bearer ${SERVICE_AUTH_TOKEN}`;
   const response = await fetchJson(`${CORE_URL}/api/channels/inbound`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers,
     body: JSON.stringify(payload),
   }, 180000);
   state.messageCount += 1;
@@ -739,7 +743,7 @@ async function handleMain(req, res) {
       return json(res, 200, {
         mode: "personal-wechat-managed-hook",
         channelId: CHANNEL_ID,
-        sidecarPort: PORT,
+        transportPort: PORT,
         receiverPort: RECEIVER_PORT,
         defaultRolePolicy: "space_default_character",
         platforms: ["windows-x64", "linux-x64"],
@@ -802,7 +806,7 @@ async function handleMain(req, res) {
 
 const mainServer = http.createServer((req, res) => void handleMain(req, res));
 mainServer.listen(PORT, HOST, () => {
-  console.log(`[wechat-personal] sidecar listening on http://${HOST}:${PORT}`);
+  console.log(`[wechat-personal] provider service listening on http://${HOST}:${PORT}`);
 });
 
 // The legacy hero-compatible callback receiver is deliberately disabled in

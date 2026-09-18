@@ -39,15 +39,20 @@ async function waitFor(fn, timeout=8000) {
   while(Date.now()-start<timeout){ try{const v=await fn(); if(v)return v;}catch{} await new Promise(r=>setTimeout(r,100)); }
   throw new Error("timeout");
 }
-const core = await server(18899, async (req,res)=>{
-  if(req.url==="/api/channels/inbound" && req.method==="POST") { lastCoreInbound=await readBody(req); return reply(res,{success:true,conversationId:"conv-native"}); }
+const core = await server(0, async (req,res)=>{
+  if(req.url==="/api/channels/inbound" && req.method==="POST") {
+    if(req.headers.authorization!==`Bearer ${SERVICE_TOKEN}` || req.headers["x-amitia-extension-id"]!=="com.amitia/channel-wechat-personal" || req.headers["x-amitia-module-id"]!=="wechat-personal-channel-service") return reply(res,{error:"unauthorized"},401);
+    lastCoreInbound=await readBody(req);
+    return reply(res,{success:true,conversationId:"conv-native"});
+  }
   return reply(res,{error:"not_found"},404);
 });
+const coreUrl=`http://127.0.0.1:${core.address().port}`;
 
 const descriptors=[{id:"wechat-agent-linux-x64",platform:"linux",architecture:"amd64",path:fakeAgent,sha256:sha,executable:true}];
 const child=spawn(process.execPath,[join(root,"runtime","service.mjs")],{
   cwd:root,
-  env:{...process.env,AMITIA_SERVICE_AUTH_TOKEN:SERVICE_TOKEN,AMITIA_SERVICE_AUTH_VERSION:"1",AMITIA_NATIVE_COMPANIONS_VERSION:"1",AMITIA_NATIVE_COMPANIONS:JSON.stringify(descriptors),AMITIA_TEST_SEND_LOG:sendLog},
+  env:{...process.env,AMITIA_SERVICE_AUTH_TOKEN:SERVICE_TOKEN,AMITIA_SERVICE_AUTH_VERSION:"1",AMITIA_CORE_URL:coreUrl,AMITIA_NATIVE_COMPANIONS_VERSION:"1",AMITIA_NATIVE_COMPANIONS:JSON.stringify(descriptors),AMITIA_TEST_SEND_LOG:sendLog},
   stdio:["ignore","pipe","pipe"],
 });
 let logs=""; child.stdout.on("data",c=>logs+=c); child.stderr.on("data",c=>logs+=c);
@@ -65,9 +70,9 @@ try {
   assert.equal(status.data.accountId,"wxid_native_ai");
 
   await waitFor(()=>lastCoreInbound);
-  assert.equal(lastCoreInbound.channel,"wechat_personal");
+  assert.equal(lastCoreInbound.channelId,"wechat_personal");
   assert.equal(lastCoreInbound.accountId,"wxid_native_ai");
-  assert.equal(lastCoreInbound.senderId,"wxid_friend");
+  assert.equal(lastCoreInbound.peerId,"wxid_friend");
   assert.equal(lastCoreInbound.text,"native hello");
 
   const send=await fetch("http://127.0.0.1:19878/api/send",{method:"POST",headers:{...AUTH_HEADERS,"content-type":"application/json","idempotency-key":"native-delivery-1"},body:JSON.stringify({toUserId:"wxid_friend",text:"native reply",deliveryKey:"native-delivery-1"})}).then(r=>r.json());

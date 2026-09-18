@@ -29,11 +29,12 @@ describe("角色包导入弹窗", () => {
     vi.clearAllMocks();
   });
 
-  it("提供 V2、V3 和酒馆角色卡 JSON 示例", () => {
-    expect(importDialogSource).toContain('"spec": "chara_card_v2"');
-    expect(importDialogSource).toContain('"spec": "chara_card_v3"');
+  it("只提供酒馆角色卡 JSON 示例并保留拖放导入", () => {
     expect(importDialogSource).toContain('key: "tavern"');
     expect(importDialogSource).toContain('"creatorcomment"');
+    expect(importDialogSource).not.toContain('"spec": "chara_card_v2"');
+    expect(importDialogSource).not.toContain('"spec": "chara_card_v3"');
+    expect(importDialogSource).not.toContain('"first_mes"');
     expect(importDialogSource).toContain("拖入角色卡文件");
     expect(importDialogSource).toContain('@drop.prevent="onFileDrop"');
     expect(importDialogSource).toContain('ref="fileInput"');

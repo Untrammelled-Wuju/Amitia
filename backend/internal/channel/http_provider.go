@@ -163,7 +163,7 @@ func (p *HTTPProvider) Status(ctx context.Context, accountID string) (AccountSta
 	if status.AccountID == "" {
 		status.AccountID = accountID
 	}
-	status.Connected = status.Status == "connected" || boolValue(data["connected"]) || boolValue(data["qqOnline"])
+	status.Connected = status.Status == "connected" || boolValue(data["connected"])
 	if status.Status == "online" {
 		status.Connected = true
 	} else if status.Status == "" {

@@ -19,13 +19,6 @@ type Capabilities struct {
 	Reply  bool
 }
 
-type SidecarSpec struct {
-	Kind        string
-	Subdir      string
-	DefaultPort int
-	HealthPath  string
-}
-
 type Definition struct {
 	ID            ID
 	Name          string
@@ -33,7 +26,6 @@ type Definition struct {
 	Version       string
 	PublisherID   string
 	Capabilities  Capabilities
-	Sidecar       *SidecarSpec
 	ConfigSchema  json.RawMessage
 	PermissionSet []string
 	Metadata      map[string]any

@@ -36,6 +36,9 @@ func TestDetectAndParseTavernJSON(t *testing.T) {
 	if _, ok := preserved["future_field"]; !ok {
 		t.Fatal("Parse() did not preserve an unknown field")
 	}
+	if _, ok := preserved["first_mes"]; ok {
+		t.Fatal("Parse() must not preserve first_mes")
+	}
 }
 
 func TestParseTavernLegacyAliases(t *testing.T) {
@@ -51,7 +54,7 @@ func TestParseTavernLegacyAliases(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Parse() error = %v", err)
 	}
-	if parsed.Name != "旧版角色" || parsed.Description != "角色设定" || parsed.Scenario != "世界场景" || parsed.FirstMessage != "角色问候" || parsed.ExampleMessages != "对话示例" {
+	if parsed.Name != "旧版角色" || parsed.Description != "角色设定" || parsed.Scenario != "世界场景" || parsed.ExampleMessages != "对话示例" {
 		t.Fatalf("Parse() alias mapping unexpected card: %+v", parsed)
 	}
 }
@@ -91,24 +94,14 @@ func TestRejectUnrelatedJSONAsTavernCard(t *testing.T) {
 	}
 }
 
-func TestParseCanonicalV2Envelope(t *testing.T) {
+func TestRejectCanonicalJSONEnvelopes(t *testing.T) {
 	data := []byte(`{"spec":"chara_card_v2","spec_version":"2.0","data":{"name":"V2角色","description":"V2角色背景","first_mes":"V2问候","creator_notes":"V2说明"}}`)
-	parsed, _, err := NewCardParser().Parse(data, "v2.json")
-	if err != nil {
-		t.Fatalf("Parse() error = %v", err)
+	if _, err := DetectFormat(data, "v2.json"); err != ErrUnsupportedFormat {
+		t.Fatalf("DetectFormat() error = %v, want %v", err, ErrUnsupportedFormat)
 	}
-	if parsed.Name != "V2角色" || parsed.Description != "V2角色背景" || parsed.FirstMessage != "V2问候" || parsed.CreatorNotes != "V2说明" {
-		t.Fatalf("Parse() returned unexpected V2 card: %+v", parsed)
-	}
-}
 
-func TestParseCanonicalV3Envelope(t *testing.T) {
-	data := []byte(`{"spec":"chara_card_v3","spec_version":"3.0","data":{"name":"V3角色","description":"V3角色背景","nickname":"V3昵称","group_only_greetings":["群聊问候"]}}`)
-	parsed, _, err := NewCardParser().Parse(data, "v3.json")
-	if err != nil {
-		t.Fatalf("Parse() error = %v", err)
-	}
-	if parsed.Name != "V3角色" || parsed.Description != "V3角色背景" || parsed.Nickname != "V3昵称" || len(parsed.GroupOnlyGreetings) != 1 {
-		t.Fatalf("Parse() returned unexpected V3 card: %+v", parsed)
+	data = []byte(`{"spec":"chara_card_v3","spec_version":"3.0","data":{"name":"V3角色","description":"V3角色背景","nickname":"V3昵称","group_only_greetings":["群聊问候"]}}`)
+	if _, err := DetectFormat(data, "v3.json"); err != ErrUnsupportedFormat {
+		t.Fatalf("DetectFormat() error = %v, want %v", err, ErrUnsupportedFormat)
 	}
 }

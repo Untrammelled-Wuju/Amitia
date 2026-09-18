@@ -14,7 +14,6 @@ type v3Card struct {
 	Description             string           `json:"description"`
 	Personality             string           `json:"personality"`
 	Scenario                string           `json:"scenario"`
-	FirstMes                string           `json:"first_mes"`
 	MesExample              string           `json:"mes_example"`
 	SystemPrompt            string           `json:"system_prompt"`
 	PostHistoryInstructions string           `json:"post_history_instructions"`
@@ -64,7 +63,7 @@ type v3Asset struct {
 	Legend   any    `json:"legend"`
 }
 
-func parseV3JSON(data []byte) (*CharacterCard, map[string]json.RawMessage, error) {
+func parseV3CardJSON(data []byte, sourceFormat CharacterCardFormat) (*CharacterCard, map[string]json.RawMessage, error) {
 	if len(data) > MaxJSONBytes {
 		return nil, nil, ErrJSONInvalid
 	}
@@ -82,7 +81,7 @@ func parseV3JSON(data []byte) (*CharacterCard, map[string]json.RawMessage, error
 		}
 	}
 
-	preserved := extractPreservedFields(raw, knownV3Fields())
+	preserved := stripRemovedCardFields(extractPreservedFields(raw, knownV3Fields()))
 
 	var card v3Card
 	if err := json.Unmarshal(cardData, &card); err != nil {
@@ -90,12 +89,11 @@ func parseV3JSON(data []byte) (*CharacterCard, map[string]json.RawMessage, error
 	}
 
 	result := &CharacterCard{
-		SourceFormat:            FormatV3JSON,
+		SourceFormat:            sourceFormat,
 		Name:                    card.Name,
 		Description:             card.Description,
 		Personality:             card.Personality,
 		Scenario:                card.Scenario,
-		FirstMessage:            card.FirstMes,
 		ExampleMessages:         card.MesExample,
 		AlternateGreetings:      card.AlternateGreetings,
 		SystemPrompt:            card.SystemPrompt,
@@ -157,7 +155,7 @@ func parseV3JSON(data []byte) (*CharacterCard, map[string]json.RawMessage, error
 func knownV3Fields() map[string]bool {
 	return map[string]bool{
 		"spec": true, "spec_version": true, "name": true, "description": true,
-		"personality": true, "scenario": true, "first_mes": true, "mes_example": true,
+		"personality": true, "scenario": true, "mes_example": true,
 		"creator_notes": true, "system_prompt": true, "post_history_instructions": true,
 		"alternate_greetings": true, "character_book": true, "tags": true,
 		"creator": true, "character_version": true, "extensions": true,

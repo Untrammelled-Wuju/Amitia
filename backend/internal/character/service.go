@@ -820,15 +820,21 @@ func (s *service) ExportCardForSpace(characterID, format, spaceID string) (*Card
 	}
 
 	exporter := card.NewExporter("data")
+	systemPrompt := strings.TrimSpace(cardData.SystemPrompt)
+	if systemPrompt == "" {
+		systemPrompt = strings.TrimSpace(char.CharacterBase)
+	}
+	if systemPrompt == "" {
+		systemPrompt = strings.TrimSpace(char.BasePrompt)
+	}
 	input := card.ExportInput{
 		Name:               char.Name,
 		Description:        char.Description,
 		Personality:        char.Personality,
 		Scenario:           cardData.Scenario,
-		FirstMessage:       cardData.FirstMessage,
 		AlternateGreetings: cardData.AlternateGreetings,
 		ExampleMessages:    cardData.ExampleMessages,
-		SystemPrompt:       cardData.SystemPrompt,
+		SystemPrompt:       systemPrompt,
 		PostHistory:        cardData.PostHistoryInstructions,
 		Creator:            cardData.Creator,
 		CreatorNotes:       cardData.CreatorNotes,
@@ -839,7 +845,7 @@ func (s *service) ExportCardForSpace(characterID, format, spaceID string) (*Card
 		Source:             "Amitia",
 		Extensions:         cardData.ExternalExtensions,
 		AvatarURL:          char.Avatar,
-		SourceFormat:       cardData.SourceFormat,
+		SourceFormat:       string(card.FormatV3CHARX),
 	}
 
 	result, data, err := exporter.Export(input, format)

@@ -74,6 +74,13 @@ function runReleasePreflight() {
   for (const test of tests) run(process.execPath, [join(root, "tests", test)]);
 }
 
+function verifyChannelStatusOwnership() {
+  const source = readFileSync(join(root, "ui", "desktop", "app.js"), "utf8");
+  if (source.includes("setInterval(")) {
+    throw new Error("channel UI must not poll channel status");
+  }
+}
+
 function updateNativeHashes(manifest) {
   for (const mod of manifest.modules || []) {
     for (const companion of mod.runtime?.nativeCompanions || []) {
@@ -87,6 +94,7 @@ function updateNativeHashes(manifest) {
 }
 
 runReleasePreflight();
+verifyChannelStatusOwnership();
 buildNative();
 const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
 updateNativeHashes(manifest);

@@ -32,7 +32,10 @@ class _PetCenterPageState extends ConsumerState<PetCenterPage> {
   }
 
   Future<void> _load() async {
-    setState(() { _loading = true; _error = null; });
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
     try {
       final svc = ref.read(extensionServiceProvider);
       final desktopPetApi = ref.read(desktopPetPluginApiProvider);
@@ -48,7 +51,12 @@ class _PetCenterPageState extends ConsumerState<PetCenterPage> {
         });
       }
     } catch (e) {
-      if (mounted) setState(() { _error = e.toString(); _loading = false; });
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+          _loading = false;
+        });
+      }
     }
   }
 
@@ -110,7 +118,10 @@ class _PetCenterPageState extends ConsumerState<PetCenterPage> {
     );
   }
 
-  Widget _buildRunningPetCard(BuildContext context, DesktopPetPluginSummary pet) {
+  Widget _buildRunningPetCard(
+    BuildContext context,
+    DesktopPetPluginSummary pet,
+  ) {
     final name = pet.name;
 
     return Padding(
@@ -159,28 +170,53 @@ class _PetCenterPageState extends ConsumerState<PetCenterPage> {
 
   Widget _buildQuickActions(BuildContext context) {
     final actions = [
-      (Icons.add_circle_outline, '创建桌宠', () => context.push(AppRoutes.workshopPetCreate)),
+      (
+        Icons.add_circle_outline,
+        '创建桌宠',
+        () => context.push(AppRoutes.workshopPetCreate),
+      ),
       (Icons.list_alt, '任务列表', () => context.push(AppRoutes.workshopPetTasks)),
-      (Icons.install_desktop, '安装管理', () => context.push(AppRoutes.workshopPetInstallations)),
+      (
+        Icons.install_desktop,
+        '安装管理',
+        () => context.push(AppRoutes.workshopPetInstallations),
+      ),
     ];
     return Padding(
       padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
-      child: Row(
+      child: Column(
         children: actions.map((action) {
-          return Expanded(
-            child: Padding(
-              padding: EdgeInsets.only(right: AppSpacing.sm),
-              child: GestureDetector(
-                onTap: action.$3,
-                child: AmitiaCard(
-                  padding: EdgeInsets.symmetric(vertical: AppSpacing.md),
-                  child: Column(
-                    children: [
-                      Icon(action.$1, size: 26, color: context.accentPrimary),
-                      SizedBox(height: AppSpacing.xs),
-                      Text(action.$2, style: AppTypography.bodySmall(context)),
-                    ],
+          return Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: action.$3,
+              child: Container(
+                constraints: const BoxConstraints(minHeight: 56),
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                decoration: BoxDecoration(
+                  border: Border(
+                    bottom: BorderSide(
+                      color: context.borderSecondary,
+                      width: 0.5,
+                    ),
                   ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(action.$1, size: 22, color: context.accentPrimary),
+                    SizedBox(width: AppSpacing.md),
+                    Expanded(
+                      child: Text(
+                        action.$2,
+                        style: AppTypography.body(context),
+                      ),
+                    ),
+                    Icon(
+                      Icons.chevron_right,
+                      size: 20,
+                      color: context.textTertiary,
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -190,7 +226,10 @@ class _PetCenterPageState extends ConsumerState<PetCenterPage> {
     );
   }
 
-  Widget _buildTaskListCard(BuildContext context, List<Map<String, dynamic>> tasks) {
+  Widget _buildTaskListCard(
+    BuildContext context,
+    List<Map<String, dynamic>> tasks,
+  ) {
     if (tasks.isEmpty) {
       return Padding(
         padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
@@ -211,7 +250,8 @@ class _PetCenterPageState extends ConsumerState<PetCenterPage> {
           children: [
             for (int i = 0; i < tasks.length; i++) ...[
               _buildTaskItem(context, tasks[i]),
-              if (i < tasks.length - 1) Divider(height: 1, color: context.borderSecondary),
+              if (i < tasks.length - 1)
+                Divider(height: 1, color: context.borderSecondary),
             ],
           ],
         ),
@@ -221,9 +261,15 @@ class _PetCenterPageState extends ConsumerState<PetCenterPage> {
 
   Widget _buildTaskItem(BuildContext context, Map<String, dynamic> task) {
     final name = task['name']?.toString() ?? '';
-    final completedActions = (task['completedActions'] is num) ? (task['completedActions'] as num).toInt() : 0;
-    final totalActions = (task['totalActions'] is num) ? (task['totalActions'] as num).toInt() : 0;
-    final progress = (task['progress'] is num) ? (task['progress'] as num).toInt() : 0;
+    final completedActions = (task['completedActions'] is num)
+        ? (task['completedActions'] as num).toInt()
+        : 0;
+    final totalActions = (task['totalActions'] is num)
+        ? (task['totalActions'] as num).toInt()
+        : 0;
+    final progress = (task['progress'] is num)
+        ? (task['progress'] as num).toInt()
+        : 0;
     final status = task['status']?.toString() ?? '';
     final sessionId = task['id']?.toString() ?? '';
 
@@ -231,16 +277,20 @@ class _PetCenterPageState extends ConsumerState<PetCenterPage> {
       onTap: () => context.push(AppRoutes.petProcessing(sessionId)),
       behavior: HitTestBehavior.opaque,
       child: Padding(
-        padding: EdgeInsets.symmetric(horizontal: AppSpacing.cardPadding, vertical: 12),
+        padding: EdgeInsets.symmetric(
+          horizontal: AppSpacing.cardPadding,
+          vertical: 12,
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
-                Expanded(
-                  child: Text(name, style: AppTypography.body(context)),
+                Expanded(child: Text(name, style: AppTypography.body(context))),
+                AmitiaStatusBadge(
+                  label: _statusLabel(status),
+                  type: _statusBadgeType(status),
                 ),
-                AmitiaStatusBadge(label: _statusLabel(status), type: _statusBadgeType(status)),
               ],
             ),
             SizedBox(height: AppSpacing.xs),
@@ -251,9 +301,7 @@ class _PetCenterPageState extends ConsumerState<PetCenterPage> {
                   style: AppTypography.caption(context),
                 ),
                 SizedBox(width: AppSpacing.md),
-                Expanded(
-                  child: AmitiaProgressBar(progress: progress / 100.0),
-                ),
+                Expanded(child: AmitiaProgressBar(progress: progress / 100.0)),
                 SizedBox(width: AppSpacing.sm),
                 Text('$progress%', style: AppTypography.caption(context)),
               ],
@@ -264,7 +312,10 @@ class _PetCenterPageState extends ConsumerState<PetCenterPage> {
     );
   }
 
-  Widget _buildRecentRecords(BuildContext context, List<Map<String, dynamic>> records) {
+  Widget _buildRecentRecords(
+    BuildContext context,
+    List<Map<String, dynamic>> records,
+  ) {
     return Padding(
       padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
       child: AmitiaCard(
@@ -273,7 +324,8 @@ class _PetCenterPageState extends ConsumerState<PetCenterPage> {
           children: [
             for (int i = 0; i < records.length; i++) ...[
               _buildRecordItem(context, records[i]),
-              if (i < records.length - 1) Divider(height: 1, color: context.borderSecondary),
+              if (i < records.length - 1)
+                Divider(height: 1, color: context.borderSecondary),
             ],
           ],
         ),
@@ -283,12 +335,18 @@ class _PetCenterPageState extends ConsumerState<PetCenterPage> {
 
   Widget _buildRecordItem(BuildContext context, Map<String, dynamic> task) {
     final name = task['name']?.toString() ?? '';
-    final characterName = task['characterName']?.toString() ?? task['character']?.toString() ?? '';
+    final characterName =
+        task['characterName']?.toString() ??
+        task['character']?.toString() ??
+        '';
     final createdAt = task['createdAt']?.toString() ?? '';
     final status = task['status']?.toString() ?? '';
 
     return Padding(
-      padding: EdgeInsets.symmetric(horizontal: AppSpacing.cardPadding, vertical: 10),
+      padding: EdgeInsets.symmetric(
+        horizontal: AppSpacing.cardPadding,
+        vertical: 10,
+      ),
       child: Row(
         children: [
           Container(
@@ -298,7 +356,11 @@ class _PetCenterPageState extends ConsumerState<PetCenterPage> {
               color: context.accentSoft,
               borderRadius: AppRadius.brExtraSmall,
             ),
-            child: Icon(Icons.pets_outlined, size: 18, color: context.accentPrimary),
+            child: Icon(
+              Icons.pets_outlined,
+              size: 18,
+              color: context.accentPrimary,
+            ),
           ),
           SizedBox(width: AppSpacing.md),
           Expanded(
@@ -314,7 +376,10 @@ class _PetCenterPageState extends ConsumerState<PetCenterPage> {
               ],
             ),
           ),
-          AmitiaStatusBadge(label: _statusLabel(status), type: _statusBadgeType(status)),
+          AmitiaStatusBadge(
+            label: _statusLabel(status),
+            type: _statusBadgeType(status),
+          ),
         ],
       ),
     );

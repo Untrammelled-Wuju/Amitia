@@ -14,8 +14,6 @@ import (
 	"github.com/u-ai/backend/internal/runtimehost"
 	"github.com/u-ai/backend/internal/runtimeorchestrator"
 	"github.com/u-ai/backend/internal/runtimeprofile"
-	"github.com/u-ai/backend/internal/scriptruntime/nodeenv"
-	"github.com/u-ai/backend/internal/scriptruntime/sidecar"
 )
 
 var (
@@ -67,107 +65,6 @@ func (c *sqliteComponent) Ready(ctx context.Context) error {
 
 func (c *sqliteComponent) Stop(ctx context.Context) error {
 	return nil
-}
-
-type sidecarComponent struct {
-	host             runtimehost.RuntimeHost
-	nodeResolver     nodeenv.Resolver
-	artifactResolver sidecar.ArtifactResolver
-	mu               sync.Mutex
-}
-
-func newSidecarComponent(host runtimehost.RuntimeHost, nodeResolver nodeenv.Resolver, artifactResolver sidecar.ArtifactResolver) *sidecarComponent {
-	return &sidecarComponent{host: host, nodeResolver: nodeResolver, artifactResolver: artifactResolver}
-}
-
-func (s *sidecarComponent) Descriptor() runtimeorchestrator.ComponentDescriptor {
-	wechatEnabled := config.AppCfg.Components.Sidecars.Wechat.Enabled
-	qqEnabled := config.AppCfg.Components.Sidecars.QQ.Enabled
-	enabled := wechatEnabled || qqEnabled
-	return runtimeorchestrator.ComponentDescriptor{
-		ID:           runtimeorchestrator.ComponentSidecars,
-		Phase:        runtimeorchestrator.PhaseInfrastructure,
-		Enabled:      enabled,
-		Required:     false,
-		Capabilities: []string{"channel.sidecar"},
-		Profiles:     profilesCore,
-	}
-}
-
-func (s *sidecarComponent) Start(ctx context.Context) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	supervisor := s.host.Processes()
-
-	wechatEnabled := config.AppCfg.Components.Sidecars.Wechat.Enabled
-	qqEnabled := config.AppCfg.Components.Sidecars.QQ.Enabled
-
-	if wechatEnabled {
-		spec, err := buildWeChatSidecarSpec(s.host.RuntimeInstanceID(), s.nodeResolver, s.artifactResolver)
-		if err != nil {
-			return fmt.Errorf("wechat spec: %w", err)
-		}
-		if err := supervisor.Register(spec); err != nil {
-			return fmt.Errorf("register wechat: %w", err)
-		}
-		if err := supervisor.Start(ctx, spec.ID); err != nil {
-			return fmt.Errorf("start wechat: %w", err)
-		}
-	}
-	if qqEnabled {
-		spec, err := buildQQSidecarSpec(s.host.RuntimeInstanceID(), s.nodeResolver, s.artifactResolver)
-		if err != nil {
-			if wechatEnabled {
-				supervisor.Stop(ctx, runtimehost.ProcessIDSidecarWeChat)
-			}
-			return fmt.Errorf("qq spec: %w", err)
-		}
-		if err := supervisor.Register(spec); err != nil {
-			if wechatEnabled {
-				supervisor.Stop(ctx, runtimehost.ProcessIDSidecarWeChat)
-			}
-			return fmt.Errorf("register qq: %w", err)
-		}
-		if err := supervisor.Start(ctx, spec.ID); err != nil {
-			if wechatEnabled {
-				supervisor.Stop(ctx, runtimehost.ProcessIDSidecarWeChat)
-			}
-			return fmt.Errorf("start qq: %w", err)
-		}
-	}
-	return nil
-}
-
-func (s *sidecarComponent) Ready(ctx context.Context) error {
-	supervisor := s.host.Processes()
-	var firstErr error
-	if config.AppCfg.Components.Sidecars.Wechat.Enabled {
-		if err := supervisor.WaitReady(ctx, runtimehost.ProcessIDSidecarWeChat); err != nil {
-			firstErr = err
-		}
-	}
-	if config.AppCfg.Components.Sidecars.QQ.Enabled {
-		if err := supervisor.WaitReady(ctx, runtimehost.ProcessIDSidecarQQ); err != nil && firstErr == nil {
-			firstErr = err
-		}
-	}
-	return firstErr
-}
-
-func (s *sidecarComponent) Stop(ctx context.Context) error {
-	supervisor := s.host.Processes()
-	var lastErr error
-	if config.AppCfg.Components.Sidecars.QQ.Enabled {
-		if err := supervisor.Stop(ctx, runtimehost.ProcessIDSidecarQQ); err != nil {
-			lastErr = err
-		}
-	}
-	if config.AppCfg.Components.Sidecars.Wechat.Enabled {
-		if err := supervisor.Stop(ctx, runtimehost.ProcessIDSidecarWeChat); err != nil {
-			lastErr = err
-		}
-	}
-	return lastErr
 }
 
 type extensionKernelComponent struct {

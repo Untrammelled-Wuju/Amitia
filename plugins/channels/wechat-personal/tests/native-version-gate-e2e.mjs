@@ -17,8 +17,9 @@ fs.writeFileSync(fake,`#!/usr/bin/env node\nimport readline from "node:readline"
 fs.chmodSync(fake,0o755);
 const sha=createHash("sha256").update(fs.readFileSync(fake)).digest("hex");
 const core=http.createServer((req,res)=>{res.writeHead(200,{"content-type":"application/json"});res.end('{"success":true}')});
-await new Promise((ok,fail)=>{core.once("error",fail);core.listen(18899,"127.0.0.1",ok)});
-const child=spawn(process.execPath,[join(root,"runtime","service.mjs")],{cwd:root,env:{...process.env,AMITIA_SERVICE_AUTH_TOKEN:SERVICE_TOKEN,AMITIA_SERVICE_AUTH_VERSION:"1",AMITIA_NATIVE_COMPANIONS_VERSION:"1",AMITIA_NATIVE_COMPANIONS:JSON.stringify([{id:"wechat-agent-linux-x64",platform:"linux",architecture:"amd64",path:fake,sha256:sha,executable:true}])},stdio:["ignore","ignore","pipe"]});
+await new Promise((ok,fail)=>{core.once("error",fail);core.listen(0,"127.0.0.1",ok)});
+const coreUrl=`http://127.0.0.1:${core.address().port}`;
+const child=spawn(process.execPath,[join(root,"runtime","service.mjs")],{cwd:root,env:{...process.env,AMITIA_SERVICE_AUTH_TOKEN:SERVICE_TOKEN,AMITIA_SERVICE_AUTH_VERSION:"1",AMITIA_CORE_URL:coreUrl,AMITIA_NATIVE_COMPANIONS_VERSION:"1",AMITIA_NATIVE_COMPANIONS:JSON.stringify([{id:"wechat-agent-linux-x64",platform:"linux",architecture:"amd64",path:fake,sha256:sha,executable:true}])},stdio:["ignore","ignore","pipe"]});
 async function wait(fn,timeout=6000){const st=Date.now();while(Date.now()-st<timeout){try{const v=await fn();if(v)return v}catch{}await new Promise(r=>setTimeout(r,100))}throw new Error("timeout")}
 try{
  await wait(async()=> (await fetch("http://127.0.0.1:19878/api/health", { headers: AUTH_HEADERS })).ok);

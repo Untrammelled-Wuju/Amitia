@@ -25,6 +25,7 @@ abstract final class AppRoutes {
   static const extensionsSkills = '/extensions/skills';
   static const extensionsRuns = '/extensions/runs';
   static const workshop = '/workshop';
+  static const workshopCharacterCards = '/workshop/character-cards';
   static const workshopSkills = '/workshop/skills';
   static const workshopWorkflows = '/workshop/workflows';
   static const workshopPet = '/workshop/pet';

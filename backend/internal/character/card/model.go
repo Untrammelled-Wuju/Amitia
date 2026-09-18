@@ -5,10 +5,6 @@ import "encoding/json"
 type CharacterCardFormat string
 
 const (
-	FormatV2JSON     CharacterCardFormat = "v2_json"
-	FormatV2PNG      CharacterCardFormat = "v2_png"
-	FormatV3JSON     CharacterCardFormat = "v3_json"
-	FormatV3PNG      CharacterCardFormat = "v3_png"
 	FormatV3CHARX    CharacterCardFormat = "v3_charx"
 	FormatTavernJSON CharacterCardFormat = "tavern_json"
 	FormatTavernPNG  CharacterCardFormat = "tavern_png"
@@ -21,7 +17,6 @@ type CharacterCard struct {
 	Personality  string
 	Scenario     string
 
-	FirstMessage       string
 	ExampleMessages    string
 	AlternateGreetings []string
 
@@ -106,4 +101,21 @@ type CharacterCardExportResult struct {
 	Filename    string `json:"filename"`
 	SizeBytes   int64  `json:"sizeBytes"`
 	ContentHash string `json:"contentHash"`
+}
+
+func isRemovedCardField(key string) bool {
+	switch key {
+	case "first_mes", "firstMessage", "char_greeting":
+		return true
+	}
+	return false
+}
+
+func stripRemovedCardFields(preserved map[string]json.RawMessage) map[string]json.RawMessage {
+	for key := range preserved {
+		if isRemovedCardField(key) {
+			delete(preserved, key)
+		}
+	}
+	return preserved
 }

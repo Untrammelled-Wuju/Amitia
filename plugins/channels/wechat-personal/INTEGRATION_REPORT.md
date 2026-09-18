@@ -4,7 +4,7 @@
 
 - Added `wechat_personal` as a separate channel/provider declared by its own extension manifest. Existing `plugins/channels/wechat` remains independent.
 - Preserved the host's existing space-default-character routing.
-- Added generic optional `extensionId` / `providerId` fields to the channel inbound envelope so installed channel extensions do not require a host channel-name switch.
+- Added the generic `/api/channels/inbound` contract with trusted-service identity headers, `channelId`, and provider declaration validation.
 - Added public Manifest v1 `runtime.nativeCompanions` for trusted service extensions. This is a generic Extension Kernel capability and contains no WeChat-specific fields.
 - Added generic Native Companion v1 runtime descriptors, current-platform/current-architecture filtering, canonical-path resolution and SHA-256 re-verification before Trusted Service registration.
 - Package security only permits native files at exact manifest-declared paths. Undeclared `.exe/.dll/.so` remain rejected.
@@ -20,9 +20,9 @@
 
 ## 1.5.0 security hardening
 
-- Added public Trusted Service Loopback Authentication v1. The host derives a process-lifetime token scoped to `extensionId + moduleId`; the same token is injected into the Trusted Service and automatically attached by the generic Channel HTTP Provider.
+- Added public Trusted Service Loopback Authentication v1. The host derives a process-lifetime token scoped to `extensionId + moduleId`; the same token is injected into the Trusted Service and attached by the generic Channel HTTP Provider.
 - `wechat-personal` now requires `Authorization: Bearer <token>` for every `19878` API route. Missing/wrong credentials return 401 before routing.
-- Removed wildcard CORS from the sidecar response path.
+- Removed wildcard CORS from the provider response path.
 - The legacy unauthenticated hero `9999/message` receiver is no longer started by default. It is created only when both `AMITIA_WECHAT_EXTERNAL_DRIVER_COMPAT=1` and `AMITIA_WECHAT_EXTERNAL_CALLBACK_UNAUTHENTICATED=1` are set for explicit development migration.
 - Added a dedicated security E2E covering unauthorized access, wrong credentials, no wildcard CORS, closed legacy callback port, and rejection of forged unauthenticated native callbacks.
 - Release preflight runs security, Native Companion, version-gate, and compatibility E2E tests before packaging.
@@ -47,6 +47,6 @@ The uploaded backend declares Go 1.26.1. The available environment has Go 1.23.2
 
 ## Public host capability boundary
 
-No WeChat-specific Extension Kernel permission or runtime primitive was added. `runtime.nativeCompanions`, package allow-listing, SHA-256 verification, runtime descriptor injection, and generic channel `extensionId/providerId` identity are reusable by any extension.
+No WeChat-specific Extension Kernel permission or runtime primitive was added. `runtime.nativeCompanions`, package allow-listing, SHA-256 verification, runtime descriptor injection, and generic channel identity validation are reusable by any extension.
 
 - Added strict `clientVersion`/`versionVerified` handshake. Version-sensitive send/receive capabilities remain disabled unless the native Driver target version exactly matches the official client version independently detected by the Agent.

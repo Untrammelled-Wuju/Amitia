@@ -29,17 +29,15 @@ git提交或合并出现任何冲突时，直接以本地代码强制覆盖冲�
 桌面端构建规则：
 桌面端运行时使用AmitiaCore.exe作为核心后端服务，该文件由Go后端编译产物server.exe重命名而来。
 
-桌面端安装程序构建前应当先更新其依赖的后端核心、侧车等
+桌面端安装程序构建前应当先更新其依赖的后端核心与公共运行时
 
 构建桌面端安装程序前必须停止完整项目并清理desktop/release，避免旧产物或运行数据混入。
 
 必须重新编译Go后端server.exe，并将本次编译结果重命名同步为desktop/resources/core/AmitiaCore.exe，禁止使用旧核心。
 
-必须重新构建微信和QQ侧车的TypeScript与bundle.mjs，并同步各自的bundle.mjs和launcher.mjs。
+desktop/resources/core发布资源使用严格白名单，只允许包含AmitiaCore.exe以及公共Node运行时压缩包。
 
-desktop/resources/core发布资源使用严格白名单，只允许包含AmitiaCore.exe、sidecar/bundle.mjs、sidecar/launcher.mjs、qq-sidecar/bundle.mjs、qq-sidecar/launcher.mjs。
-
-禁止将侧车node_modules、源码、测试、日志、数据库、缓存、备份和其他运行数据带入安装包。侧车bundle必须在不携带node_modules的环境中通过启动和状态接口检查。
+渠道运行时、Native Companion、bundle、源码、依赖、测试、日志、数据库、缓存和备份必须随插件包发布，禁止带入桌面端宿主的core目录。
 
 禁止将desktop/resources/core/qdrant/storage及任何Qdrant运行时存储带入安装包。Qdrant和SurrealDB只通过resources/qdrant/qdrant.zip与resources/surrealdb/surreal.zip发布。
 
@@ -55,7 +53,7 @@ electron-builder保持compression: normal，实际7z压缩等级由scripts/build
 
 构建完成后必须验证blockmap可解压解析、app-update.yml指向正确GitHub仓库、安装内容不含运行数据，并检查AmitiaCore.exe与本次Go构建产物哈希一致。
 
-构建完成后只执行本次源码修改直接涉及的桌面端、后端和侧车测试，禁止默认运行全量测试；未改动模块不得执行测试。并按项目规则重启完整服务，确认前端、核心、Qdrant、SurrealDB、微信侧车和QQ侧车端口及健康接口正常。
+构建完成后只执行本次源码修改直接涉及的桌面端、后端和插件测试，禁止默认运行全量测试；未改动模块不得执行测试。并按项目规则重启完整服务，确认前端、核心、Qdrant、SurrealDB及已安装渠道插件端口和健康接口正常。
 
 未收到用户上传Git的明确指令时，桌面构建和发布过程不得上传GitHub Release或推送Git。
 

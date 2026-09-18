@@ -3,26 +3,24 @@ package card
 import "encoding/json"
 
 type CharacterCardData struct {
-	FirstMessage       string         `json:"firstMessage,omitempty"`
-	AlternateGreetings []string       `json:"alternateGreetings,omitempty"`
-	ExampleMessages    string         `json:"exampleMessages,omitempty"`
-	Scenario           string         `json:"scenario,omitempty"`
-	Creator            string         `json:"creator,omitempty"`
-	CreatorNotes       string         `json:"creatorNotes,omitempty"`
-	CharacterVersion   string         `json:"characterVersion,omitempty"`
-	Tags               []string       `json:"tags,omitempty"`
-	SystemPrompt       string         `json:"systemPrompt,omitempty"`
-	PostHistoryInstructions string   `json:"postHistoryInstructions,omitempty"`
-	Nickname           string         `json:"nickname,omitempty"`
-	GroupOnlyGreetings []string       `json:"groupOnlyGreetings,omitempty"`
-	ExternalExtensions map[string]any `json:"externalExtensions,omitempty"`
-	SourceFormat       string         `json:"sourceFormat,omitempty"`
-	Preserved          map[string]json.RawMessage `json:"preserved,omitempty"`
+	AlternateGreetings      []string                   `json:"alternateGreetings,omitempty"`
+	ExampleMessages         string                     `json:"exampleMessages,omitempty"`
+	Scenario                string                     `json:"scenario,omitempty"`
+	Creator                 string                     `json:"creator,omitempty"`
+	CreatorNotes            string                     `json:"creatorNotes,omitempty"`
+	CharacterVersion        string                     `json:"characterVersion,omitempty"`
+	Tags                    []string                   `json:"tags,omitempty"`
+	SystemPrompt            string                     `json:"systemPrompt,omitempty"`
+	PostHistoryInstructions string                     `json:"postHistoryInstructions,omitempty"`
+	Nickname                string                     `json:"nickname,omitempty"`
+	GroupOnlyGreetings      []string                   `json:"groupOnlyGreetings,omitempty"`
+	ExternalExtensions      map[string]any             `json:"externalExtensions,omitempty"`
+	SourceFormat            string                     `json:"sourceFormat,omitempty"`
+	Preserved               map[string]json.RawMessage `json:"preserved,omitempty"`
 }
 
 func (card *CharacterCard) ToCardData() *CharacterCardData {
 	cd := &CharacterCardData{
-		FirstMessage:            card.FirstMessage,
 		AlternateGreetings:      card.AlternateGreetings,
 		ExampleMessages:         card.ExampleMessages,
 		Scenario:                card.Scenario,
@@ -49,9 +47,7 @@ func (card *CharacterCard) ToCardData() *CharacterCardData {
 
 func (card *CharacterCard) HasFutureSpec() bool {
 	switch card.SourceFormat {
-	case FormatV2JSON, FormatV2PNG:
-		return false
-	case FormatV3JSON, FormatV3PNG, FormatV3CHARX:
+	case FormatV3CHARX:
 		return false
 	}
 	return true

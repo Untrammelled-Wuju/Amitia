@@ -6,7 +6,7 @@ SPDX-License-Identifier: AGPL-3.0-only
   <el-dialog
     :model-value="modelValue"
     @update:model-value="emit('update:modelValue', $event)"
-    title="导入角色包"
+    title="导入角色卡"
     width="560px"
     destroy-on-close
   >
@@ -36,7 +36,7 @@ SPDX-License-Identifier: AGPL-3.0-only
           </template>
           <template v-else>
             <strong>拖入角色卡文件，或点击选择文件</strong>
-            <span>支持 V2/V3 JSON、酒馆角色卡 JSON/PNG、PNG、CHARX</span>
+            <span>支持酒馆角色卡 JSON/PNG 与 CHARX 角色包</span>
           </template>
           <el-button
             :loading="previewing"
@@ -76,6 +76,7 @@ SPDX-License-Identifier: AGPL-3.0-only
           </el-button>
         </div>
         <el-radio-group
+          v-if="jsonExamples.length > 1"
           v-model="activeExampleKey"
           class="example-switcher"
           size="small"
@@ -211,7 +212,7 @@ const fileInput = ref<HTMLInputElement | null>(null);
 const isDragActive = ref(false);
 let dragDepth = 0;
 
-type JsonExampleKey = "v2" | "v3" | "tavern";
+type JsonExampleKey = "tavern";
 
 interface JsonExample {
   key: JsonExampleKey;
@@ -222,66 +223,6 @@ interface JsonExample {
 
 const jsonExamples: JsonExample[] = [
   {
-    key: "v2",
-    label: "V2 JSON",
-    description: "标准角色卡 V2 信封格式，角色字段放在 data 中。",
-    json: `{
-  "spec": "chara_card_v2",
-  "spec_version": "2.0",
-  "data": {
-    "name": "林夏",
-    "description": "温柔、好奇的旅行摄影师。",
-    "personality": "友善、细腻，遇到感兴趣的话题会主动追问。",
-    "scenario": "你们在一座海边小城暂时同住。",
-    "first_mes": "我刚整理完今天的照片，你要一起看看吗？",
-    "mes_example": "{{user}}: 今天拍到了什么？\\n{{char}}: 一张落日，还有一只一直跟着我的猫。",
-    "creator_notes": "示例角色，可自由修改。",
-    "system_prompt": "",
-    "post_history_instructions": "",
-    "alternate_greetings": [],
-    "tags": ["日常", "治愈"],
-    "creator": "示例作者",
-    "character_version": "1.0",
-    "extensions": {}
-  }
-}`,
-  },
-  {
-    key: "v3",
-    label: "V3 JSON",
-    description: "标准角色卡 V3 信封格式，支持昵称、分组问候与资产声明。",
-    json: `{
-  "spec": "chara_card_v3",
-  "spec_version": "3.0",
-  "data": {
-    "name": "林夏",
-    "nickname": "小夏",
-    "description": "温柔、好奇的旅行摄影师。",
-    "personality": "友善、细腻，遇到感兴趣的话题会主动追问。",
-    "scenario": "你们在一座海边小城暂时同住。",
-    "first_mes": "我刚整理完今天的照片，你要一起看看吗？",
-    "mes_example": "{{user}}: 今天拍到了什么？\\n{{char}}: 一张落日，还有一只一直跟着我的猫。",
-    "creator_notes": "示例角色，可自由修改。",
-    "system_prompt": "",
-    "post_history_instructions": "",
-    "alternate_greetings": [],
-    "group_only_greetings": [],
-    "character_book": {
-      "name": "海边小城",
-      "entries": []
-    },
-    "tags": ["日常", "治愈"],
-    "creator": "示例作者",
-    "character_version": "1.0",
-    "extensions": {},
-    "assets": [],
-    "source": "Amitia",
-    "creation_date": 0,
-    "modification_date": 0
-  }
-}`,
-  },
-  {
     key: "tavern",
     label: "酒馆角色卡",
     description: "兼容酒馆常见 JSON 字段，可直接导入 JSON 或内嵌该 JSON 的 PNG。",
@@ -290,7 +231,6 @@ const jsonExamples: JsonExample[] = [
   "description": "住在临海旧书店里的年轻店主，熟悉每一本书的来历。",
   "personality": "安静、可靠，观察细致，偶尔会开一点温和的玩笑。",
   "scenario": "傍晚的旧书店刚送走最后一位客人，窗外正在下雨。",
-  "first_mes": "雨一时停不了，你要先喝杯热茶吗？",
   "mes_example": "{{user}}: 你在看什么？\\n{{char}}: 一本很久没人借走的航海日志。",
   "creatorcomment": "兼容酒馆角色卡的常见 JSON 字段。",
   "alternate_greetings": [],
@@ -302,7 +242,7 @@ const jsonExamples: JsonExample[] = [
   },
 ];
 
-const activeExampleKey = ref<JsonExampleKey>("v2");
+const activeExampleKey = ref<JsonExampleKey>("tavern");
 const activeExample = computed(
   () =>
     jsonExamples.find((item) => item.key === activeExampleKey.value) ??
@@ -342,7 +282,7 @@ function setCardFile(file: File) {
     selectedFile.value = null;
     emit("update:packName", "");
     emit("fileSelected", null);
-    ElMessage.warning("请选择 JSON、PNG 或 CHARX 角色卡文件");
+    ElMessage.warning("请选择酒馆 JSON、PNG 或 CHARX 角色卡文件");
     return;
   }
   selectedFile.value = file;
@@ -374,10 +314,6 @@ const confirmTextModel = computed({
 });
 
 const formatLabels: Record<string, string> = {
-  v2_json: "角色卡 V2 JSON",
-  v2_png: "角色卡 V2 PNG",
-  v3_json: "角色卡 V3 JSON",
-  v3_png: "角色卡 V3 PNG",
   v3_charx: "角色卡 V3 CHARX",
   tavern_json: "酒馆角色卡 JSON",
   tavern_png: "酒馆角色卡 PNG",

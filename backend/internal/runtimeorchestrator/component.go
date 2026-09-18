@@ -12,7 +12,6 @@ const (
 	ComponentSQLite          ComponentID = "core.sqlite"
 	ComponentVectorStore     ComponentID = "provider.vector-store"
 	ComponentGraphStore      ComponentID = "provider.graph-store"
-	ComponentSidecars        ComponentID = "component.channel-sidecars"
 	ComponentExtensionKernel ComponentID = "component.extension-kernel"
 	ComponentTaskRuntime     ComponentID = "component.task-runtime"
 	ComponentDesktopPet      ComponentID = "component.desktop-pet"

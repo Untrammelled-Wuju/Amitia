@@ -3,7 +3,11 @@ package delivery
 import (
 	"context"
 	"fmt"
+	"net"
+	"net/url"
+	"os"
 	"sort"
+	"strconv"
 	"strings"
 
 	basechannel "github.com/u-ai/backend/internal/channel"
@@ -30,10 +34,10 @@ func (r *PluginChannelProviderRegistry) Provider(channelID string) (*basechannel
 	if err != nil {
 		return nil, err
 	}
-	sidecar := metadataMap(def.Metadata, "sidecar")
-	port := intValue(sidecar["defaultPort"])
-	if port <= 0 {
-		return nil, fmt.Errorf("channel provider %s has no sidecar defaultPort", channelID)
+	transport := metadataMap(def.Metadata, "transport")
+	baseURL, err := resolveTransportBaseURL(transport)
+	if err != nil {
+		return nil, fmt.Errorf("channel provider %s: %w", channelID, err)
 	}
 	token, err := serviceauth.Token(def.ExtensionID, def.ModuleID)
 	if err != nil {
@@ -45,7 +49,7 @@ func (r *PluginChannelProviderRegistry) Provider(channelID string) (*basechannel
 		"X-Amitia-Module-ID":    def.ModuleID,
 	}
 	return basechannel.NewHTTPProvider(basechannel.HTTPProviderOptions{
-		BaseURL: fmt.Sprintf("http://127.0.0.1:%d", port),
+		BaseURL: baseURL,
 		Definition: basechannel.Definition{
 			ID:          basechannel.ID(channelID),
 			Name:        channelID,
@@ -53,19 +57,84 @@ func (r *PluginChannelProviderRegistry) Provider(channelID string) (*basechannel
 			Version:     "1.0.0",
 			PublisherID: def.ExtensionID,
 		},
-		HealthPath:        stringValue(sidecar["healthPath"]),
-		SendPath:          stringValue(sidecar["sendPath"]),
-		ImagePath:         stringValue(sidecar["imagePath"]),
-		VoicePath:         stringValue(sidecar["voicePath"]),
-		StatusPath:        stringValue(sidecar["statusPath"]),
-		ConnectPath:       stringValue(sidecar["connectPath"]),
-		DisconnectPath:    stringValue(sidecar["disconnectPath"]),
-		ConfigPath:        stringValue(sidecar["configPath"]),
-		MessagesPath:      stringValue(sidecar["messagesPath"]),
+		HealthPath:        stringValue(transport["healthPath"]),
+		SendPath:          stringValue(transport["sendPath"]),
+		ImagePath:         stringValue(transport["imagePath"]),
+		VoicePath:         stringValue(transport["voicePath"]),
+		StatusPath:        stringValue(transport["statusPath"]),
+		ConnectPath:       stringValue(transport["connectPath"]),
+		DisconnectPath:    stringValue(transport["disconnectPath"]),
+		ConfigPath:        stringValue(transport["configPath"]),
+		MessagesPath:      stringValue(transport["messagesPath"]),
 		DefaultHeaders:    headers,
-		UseFallbackImage:  boolValue(sidecar["preferFallbackImage"]),
+		UseFallbackImage:  boolValue(transport["preferFallbackImage"]),
 		IdempotencyHeader: true,
 	}), nil
+}
+
+func resolveTransportBaseURL(transport map[string]any) (string, error) {
+	transportType := strings.ToLower(stringValue(transport["type"]))
+	if transportType == "" {
+		transportType = "http"
+	}
+	if transportType != "http" {
+		return "", fmt.Errorf("unsupported transport type %s", transportType)
+	}
+	if baseURL := strings.TrimRight(stringValue(transport["baseUrl"]), "/"); baseURL != "" {
+		if err := validateLoopbackBaseURL(baseURL); err != nil {
+			return "", err
+		}
+		return baseURL, nil
+	}
+	port := intValue(transport["defaultPort"])
+	if envName := stringValue(transport["portEnv"]); envName != "" {
+		raw := strings.TrimSpace(os.Getenv(envName))
+		if raw == "" {
+			return "", fmt.Errorf("transport port environment variable %s is not set", envName)
+		}
+		parsed, err := strconv.Atoi(raw)
+		if err != nil || parsed <= 0 || parsed > 65535 {
+			return "", fmt.Errorf("transport port environment variable %s is invalid", envName)
+		}
+		port = parsed
+	}
+	if port <= 0 || port > 65535 {
+		return "", fmt.Errorf("transport defaultPort is required")
+	}
+	host := stringValue(transport["host"])
+	if host == "" {
+		host = "127.0.0.1"
+	}
+	if !isLoopbackHost(host) {
+		return "", fmt.Errorf("transport host must be loopback")
+	}
+	if strings.Contains(host, ":") {
+		host = "[" + strings.Trim(host, "[]") + "]"
+	}
+	return fmt.Sprintf("http://%s:%d", host, port), nil
+}
+
+func validateLoopbackBaseURL(raw string) error {
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return fmt.Errorf("invalid transport baseUrl")
+	}
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return fmt.Errorf("transport baseUrl must use http or https")
+	}
+	if !isLoopbackHost(parsed.Hostname()) {
+		return fmt.Errorf("transport baseUrl must use a loopback host")
+	}
+	return nil
+}
+
+func isLoopbackHost(host string) bool {
+	host = strings.TrimSpace(host)
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(strings.Trim(host, "[]"))
+	return ip != nil && ip.IsLoopback()
 }
 
 func (r *PluginChannelProviderRegistry) Has(channelID string) bool {

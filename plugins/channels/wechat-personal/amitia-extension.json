@@ -78,7 +78,9 @@
           }
         ],
         "permissions": [
-          "service.process.spawn"
+          "service.process.spawn",
+          "service.network.request",
+          "service.network.listen_loopback"
         ]
       },
       "placement": "device",
@@ -105,12 +107,21 @@
             "video": false,
             "voice": false
           },
+          "channelId": "wechat_personal",
           "id": "wechat_personal",
-          "sidecar": {
+          "transport": {
+            "type": "http",
+            "host": "127.0.0.1",
             "defaultPort": 19878,
             "healthPath": "/api/health",
-            "kind": "wechat_personal",
-            "subdir": "wechat-personal-sidecar"
+            "statusPath": "/api/status",
+            "configPath": "/api/config",
+            "connectPath": "/api/connect",
+            "disconnectPath": "/api/disconnect",
+            "messagesPath": "/api/messages",
+            "sendPath": "/api/send",
+            "imagePath": "/api/send-image",
+            "voicePath": "/api/send-voice"
           }
         }
       },

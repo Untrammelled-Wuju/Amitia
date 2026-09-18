@@ -30,6 +30,7 @@ export const builtinBusinessRoutes: RouteRecordRaw[] = [
 { path: "/extensions/packages", name: "extensionPackages", component: () => import("@/views/extensions/packages/PackageManagerView.vue"), meta: { requiresAuth: true } },
 { path: "/extensions/agent-skills", name: "extensionAgentSkills", component: () => import("@/views/extensions/agent-skills/AgentSkillListView.vue"), meta: { requiresAuth: true } },
 { path: "/creative-workshop", name: "creativeWorkshop", component: () => import("@/views/creative-workshop/CreativeWorkshopView.vue"), meta: { requiresAuth: true } },
+{ path: "/creative-workshop/character-cards", name: "characterCardWorkshop", component: () => import("@/views/character-config/CharacterConfigView.vue"), meta: { requiresAuth: true } },
 { path: "/extensions/workflows", name: "extensionWorkflows", component: () => import("@/views/extensions/workflows/WorkflowListView.vue"), meta: { requiresAuth: true } },
 { path: "/extensions/workflows/:id", name: "extensionWorkflowBuilder", component: () => import("@/views/extensions/workflows/WorkflowBuilderView.vue"), meta: { requiresAuth: true } },
 { path: "/creative-workshop/workflows", redirect: (to) => ({ path: "/extensions/workflows", query: to.query }) },

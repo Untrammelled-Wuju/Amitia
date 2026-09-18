@@ -78,4 +78,4 @@ A service should reject an unsupported non-empty contract version, treat a missi
 
 ## Public channel identity
 
-Channel plugins are not required to be hard-coded into the host's channel-name switch. `/api/channels/inbound` accepts optional `extensionId` and `providerId` fields. A third-party or newly installed channel extension should send its own declared identity explicitly. Legacy built-in QQ/WeChat mappings remain only as backwards-compatible defaults.
+Channel plugins use the generic [`channel.provider` contract](./channel-provider-contract.md). The host resolves providers by manifest metadata and validates inbound requests by trusted-service token, extension ID, module ID, and declared `channelId`. The host does not contain built-in QQ, WeChat, Telegram, or Feishu channel mappings.

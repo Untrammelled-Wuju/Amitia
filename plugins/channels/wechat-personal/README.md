@@ -75,6 +75,9 @@ AMITIA_WECHAT_EXTERNAL_CALLBACK_UNAUTHENTICATED=1
 ```text
 AMITIA_SERVICE_AUTH_VERSION=1
 AMITIA_SERVICE_AUTH_TOKEN=<process-scoped-token>
+AMITIA_CORE_URL=http://127.0.0.1:<host-port>
 ```
 
-`19878` 上所有插件 API 均要求 `Authorization: Bearer ...`。Service 不返回 wildcard CORS，Token 不暴露给插件 UI。该鉴权机制属于公共 Extension Kernel 能力，不是微信专属实现。
+`19878` 上所有插件 API 均要求 `Authorization: Bearer ...`。插件使用宿主注入的 `AMITIA_CORE_URL` 提交入站消息，同时携带 `X-Amitia-Extension-ID` 和 `X-Amitia-Module-ID`，宿主校验其声明的 `channel.provider` 与 `channelId`。Service 不返回 wildcard CORS，Token 不暴露给插件 UI。该鉴权机制属于公共 Extension Kernel 能力，不是微信专属实现。
+
+渠道状态由插件 Service 维护。插件页面只在打开时和用户显式操作后读取状态，不启动定时轮询。

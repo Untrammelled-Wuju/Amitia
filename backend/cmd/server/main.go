@@ -9,7 +9,6 @@ import (
 	"github.com/u-ai/backend/internal/chat"
 	"github.com/u-ai/backend/internal/graph"
 	"github.com/u-ai/backend/internal/mindruntime"
-	"github.com/u-ai/backend/internal/qq"
 	"github.com/u-ai/backend/internal/temporal"
 	"gorm.io/gorm"
 	"net/http"
@@ -278,9 +277,6 @@ func main() {
 	fmt.Printf("  ========================================\n\n")
 
 	if policy.FullHTTPAPI {
-		qqMgr := qq.NewManager("http://127.0.0.1:19877")
-		qq.SetManager(qqMgr)
-
 		agenttool.SetOnMemorySaved(func(id, key, value, memoryType, characterID string) {
 			services.Memory.SyncEmbedding(id, key, value, characterID, memoryType)
 			services.Memory.SyncGraphMemory(id)
@@ -292,12 +288,6 @@ func main() {
 			services.Episodic.SyncGraphEpisodic(id)
 		})
 		chat.InitBuffer(config.AppCfg.Chat.MergeWindowMs)
-		go func() {
-			time.Sleep(3 * time.Second)
-			services.Chat.EnsureChannelConversation("wechat")
-			services.Chat.EnsureChannelConversation("qq")
-			log.Info("频道对话已确保创建")
-		}()
 		count, err := services.Chat.RecalculateMessageCounts()
 		backfilled, backfillErr := services.Chat.BackfillMissingConversations()
 		if backfillErr != nil {

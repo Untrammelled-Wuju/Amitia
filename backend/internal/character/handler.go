@@ -82,6 +82,42 @@ func (h *Handler) Get(c *gin.Context) {
 	util.SuccessResponse(c, char)
 }
 
+func (h *Handler) GetCardData(c *gin.Context) {
+	id := c.Param("id")
+	var data *card.CharacterCardData
+	var err error
+	if scoped, ok := h.service.(readScopedCharacterService); ok {
+		data, err = scoped.GetCardDataForSpace(id, requestidentity.ResolveGin(c))
+	} else {
+		data, err = h.service.GetCardData(id)
+	}
+	if err != nil {
+		util.ErrorResponse(c, response.NotFound, "角色卡不存在", nil)
+		return
+	}
+	util.SuccessResponse(c, data)
+}
+
+func (h *Handler) UpdateCardData(c *gin.Context) {
+	id := c.Param("id")
+	var data card.CharacterCardData
+	if err := c.ShouldBindJSON(&data); err != nil {
+		util.ErrorResponse(c, response.InvalidParams, "无效角色卡数据", nil)
+		return
+	}
+	var err error
+	if scoped, ok := h.service.(readScopedCharacterService); ok {
+		err = scoped.UpdateCardDataForSpace(id, &data, requestidentity.ResolveGin(c))
+	} else {
+		err = h.service.UpdateCardData(id, &data)
+	}
+	if err != nil {
+		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
+		return
+	}
+	util.SuccessMsgResponse(c, "角色卡更新成功", data)
+}
+
 func (h *Handler) Create(c *gin.Context) {
 	var req CreateCharacterRequest
 	if err := c.ShouldBindJSON(&req); err != nil {

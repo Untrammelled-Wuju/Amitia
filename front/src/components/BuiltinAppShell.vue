@@ -79,12 +79,16 @@ const isContentPaddingDisabled = computed(() => {
   return (
     path === "/chat" ||
     path === "/emotes" ||
-    path.startsWith("/character")
+    path.startsWith("/character") ||
+    path === "/creative-workshop/character-cards"
   );
 });
 const isContentFullHeight = computed(() => {
   const path = router.currentRoute.value.path;
-  return path === "/emotes" || path.startsWith("/character") || path.startsWith("/extensions/workflows/");
+  return path === "/emotes" ||
+    path.startsWith("/character") ||
+    path === "/creative-workshop/character-cards" ||
+    path.startsWith("/extensions/workflows/");
 });
 const pageTitle = computed(() => getPageTitle(router.currentRoute.value.path));
 

@@ -17,6 +17,7 @@ import (
 	"github.com/u-ai/backend/config"
 	"github.com/u-ai/backend/internal/agent"
 	"github.com/u-ai/backend/internal/asr"
+	channelinbound "github.com/u-ai/backend/internal/channel/inbound"
 	"github.com/u-ai/backend/internal/character"
 	"github.com/u-ai/backend/internal/chat"
 	"github.com/u-ai/backend/internal/delivery"
@@ -60,7 +61,6 @@ import (
 	"github.com/u-ai/backend/internal/mood"
 	"github.com/u-ai/backend/internal/nativebridge"
 	"github.com/u-ai/backend/internal/profile"
-	"github.com/u-ai/backend/internal/qq"
 	"github.com/u-ai/backend/internal/realtime"
 	"github.com/u-ai/backend/internal/reminder"
 	"github.com/u-ai/backend/internal/runtimeidentity"
@@ -456,9 +456,11 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 	// ASR providers such as Volcengine fetch audio by URL. Expose only the
 	// short-lived unguessable provider payload route outside authenticated /api.
 	asr.RegisterPublicAsrRouter(r)
-	if services.DeliveryStore != nil {
-		delivery.RegisterBridgeSubmitRouter(r, services.DeliveryStore)
+	var channelProviders channelinbound.ProviderDefinitionSource
+	if services.KernelContainer != nil {
+		channelProviders = services.KernelContainer.CapabilityProviders
 	}
+	channelinbound.RegisterInboundRouter(r, channelProviders, services.UnifiedEntry)
 
 	apiGroup := r.Group("/api")
 	apiGroup.Use(security.AuthenticationMiddleware(newAuthConfig(config.AppCfg.Security.Mode)))
@@ -523,7 +525,6 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 		graph.RegisterGraphRouter(apiGroup, config.AppCfg.Providers.GraphStore.SurrealDB)
 		agent.RegisterAgentRouter(apiGroup, ctx, services.UnifiedEntry, agentToolFacade)
 		system.RegisterSystemRouter(apiGroup, ctx, services.Chat, services.UnifiedEntry, services.DataLifecycle, services.Reconciliation, services.Memory, services.Profile, services.Episodic, services.Graph, services.Temporal, services.DataPortability, services.Artifact.Service)
-		qq.RegisterQQRouter(apiGroup, ctx)
 		tts.RegisterTtsRouter(apiGroup, ctx)
 		asr.RegisterAsrRouter(apiGroup, ctx)
 		if services.AdapterManager != nil {

@@ -17,7 +17,7 @@ func (card *CharacterCard) BuildPreview() *CharacterCardPreview {
 		PersonalityLength:  len(card.Personality),
 		HasSystemPrompt:    card.SystemPrompt != "",
 		HasPostHistory:     card.PostHistoryInstructions != "",
-		GreetingCount:      len(card.AlternateGreetings) + boolToInt(card.FirstMessage != ""),
+		GreetingCount:      len(card.AlternateGreetings),
 		LorebookEntryCount: card.lorebookCount(),
 		AssetCount:         len(card.Assets),
 		UnknownFieldCount:  len(card.Preserved),
@@ -96,16 +96,6 @@ func (card *CharacterCard) DetectRisks() []CardImportRisk {
 		}
 	}
 
-	if card.SourceFormat == FormatV2JSON || card.SourceFormat == FormatV2PNG {
-		if card.unknownFieldCount() > 0 {
-			risks = append(risks, CardImportRisk{
-				Category: "unknown_fields",
-				Level:    "low",
-				Message:  "存在未来版本兼容字段将被保留",
-			})
-		}
-	}
-
 	return risks
 }
 
@@ -155,17 +145,10 @@ func (card *CharacterCard) unknownFieldCount() int {
 
 func (card *CharacterCard) specVersionString() string {
 	switch card.SourceFormat {
-	case FormatV2JSON, FormatV2PNG:
-		return "2.0"
-	case FormatV3JSON, FormatV3PNG, FormatV3CHARX:
+	case FormatV3CHARX:
 		return "3.0"
+	case FormatTavernJSON, FormatTavernPNG:
+		return "tavern"
 	}
 	return ""
-}
-
-func boolToInt(b bool) int {
-	if b {
-		return 1
-	}
-	return 0
 }

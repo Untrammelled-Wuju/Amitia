@@ -26,6 +26,11 @@ describe("Extension Center Baseline", () => {
       expect(router.resolve("/extensions/workflows/test-workflow-id").name).toBe("extensionWorkflowBuilder")
     })
 
+    it("resolves character card workshop route", async () => {
+      const router = (await import("@/router")).default
+      expect(router.resolve("/creative-workshop/character-cards").name).toBe("characterCardWorkshop")
+    })
+
     it("redirects legacy workflow routes to extension center", async () => {
       const router = (await import("@/router")).default
       const legacyList = router.resolve("/creative-workshop/workflows").matched.at(-1)
@@ -112,6 +117,7 @@ describe("Extension Center Baseline", () => {
       { name: "PackageManagerView", path: "@/views/extensions/packages/PackageManagerView.vue" },
       { name: "WorkflowListView", path: "@/views/extensions/workflows/WorkflowListView.vue" },
       { name: "WorkflowBuilderView", path: "@/views/extensions/workflows/WorkflowBuilderView.vue" },
+      { name: "CharacterConfigView", path: "@/views/character-config/CharacterConfigView.vue" },
     ]
 
     for (const { name, path } of extensionViews) {
@@ -140,6 +146,7 @@ describe("Extension Center Baseline", () => {
     it("getPageTitle resolves creative workshop card paths", async () => {
       const { getPageTitle } = await import("@/navigation/app-nav")
       expect(getPageTitle("/creative-workshop/pet")).toBe("桌宠")
+      expect(getPageTitle("/creative-workshop/character-cards")).toBe("角色卡工坊")
       expect(getPageTitle("/extensions/workflows")).toBe("工作流")
     })
   })

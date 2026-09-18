@@ -26,8 +26,14 @@ SPDX-License-Identifier: AGPL-3.0-only
   </main>
 </template>
 <script setup lang="ts">
-import { ArrowRight, Star } from "@element-plus/icons-vue";
+import { ArrowRight, Postcard, Star } from "@element-plus/icons-vue";
 const entries = [
+  {
+    to: "/creative-workshop/character-cards",
+    title: "角色卡工坊",
+    description: "创建、编辑角色卡，导入酒馆角色卡并导出 CHARX 角色包",
+    icon: Postcard,
+  },
   {
     to: "/creative-workshop/pet",
     title: "桌宠",

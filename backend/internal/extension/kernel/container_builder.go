@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	appconfig "github.com/u-ai/backend/config"
 	"github.com/u-ai/backend/internal/agent/tool"
 	"github.com/u-ai/backend/internal/browser"
 	"github.com/u-ai/backend/internal/delivery"
@@ -441,6 +442,9 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	trustedSupervisor.SetLogger(func(level, msg string, fields map[string]any) {
 		log.Printf("[trusted-service] level=%s service=%v instance=%v source=%v msg=%s", level, fields["service"], fields["instance"], fields["source"], msg)
 	})
+	if appconfig.AppCfg != nil && appconfig.AppCfg.Server.Port > 0 {
+		trustedSupervisor.SetCoreURL(fmt.Sprintf("http://127.0.0.1:%d", appconfig.AppCfg.Server.Port))
+	}
 	defProvider := newMemoryDefinitionProvider()
 	trustedFactory := trusted_service.NewTrustedServiceFactory(trustedSupervisor, defProvider, b.extRoot)
 	_ = supervisor.RegisterFactory(trustedFactory)

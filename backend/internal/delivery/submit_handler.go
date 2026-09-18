@@ -1,12 +1,7 @@
 package delivery
 
 import (
-	"crypto/subtle"
 	"encoding/json"
-	"net"
-	"net/http"
-	"os"
-	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -43,7 +38,7 @@ func (h *SubmitHandler) Submit(c *gin.Context) {
 	}
 	interactionID := req.InteractionID
 	if interactionID == "" {
-		interactionID = "sidecar-" + req.MessageID
+		interactionID = "channel-" + req.MessageID
 	}
 	payload, _ := json.Marshal(map[string]interface{}{
 		"messageId": req.MessageID,
@@ -67,44 +62,4 @@ func (h *SubmitHandler) Submit(c *gin.Context) {
 func RegisterSubmitRouter(r *gin.RouterGroup, store *SQLiteDeliveryStore) {
 	handler := NewSubmitHandler(store)
 	r.POST("/delivery/submit", security.SharedCoreAdminOnly(), handler.Submit)
-}
-
-// RegisterBridgeSubmitRouter exposes the sidecar-only delivery ingress outside
-// the user-authenticated /api group. It is intentionally restricted to
-// loopback callers presenting BRIDGE_API_TOKEN so managed channel sidecars do
-// not need to impersonate a user JWT.
-func RegisterBridgeSubmitRouter(r *gin.Engine, store *SQLiteDeliveryStore) {
-	if r == nil || store == nil {
-		return
-	}
-	handler := NewSubmitHandler(store)
-	r.POST("/internal/delivery/submit", bridgeServiceOnly(), handler.Submit)
-}
-
-func bridgeServiceOnly() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		host, _, err := net.SplitHostPort(strings.TrimSpace(c.Request.RemoteAddr))
-		if err != nil {
-			host = strings.Trim(strings.TrimSpace(c.Request.RemoteAddr), "[]")
-		}
-		ip := net.ParseIP(host)
-		if ip == nil || !ip.IsLoopback() {
-			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"code": http.StatusForbidden, "msg": "delivery bridge requires loopback access"})
-			return
-		}
-
-		expected := strings.TrimSpace(os.Getenv("BRIDGE_API_TOKEN"))
-		if expected == "" || expected == "change-me-bridge-token" {
-			c.AbortWithStatusJSON(http.StatusServiceUnavailable, gin.H{"code": http.StatusServiceUnavailable, "msg": "delivery bridge token is not configured"})
-			return
-		}
-
-		authz := strings.TrimSpace(c.GetHeader("Authorization"))
-		parts := strings.Fields(authz)
-		if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") || subtle.ConstantTimeCompare([]byte(parts[1]), []byte(expected)) != 1 {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"code": http.StatusUnauthorized, "msg": "invalid delivery bridge credential"})
-			return
-		}
-		c.Next()
-	}
 }

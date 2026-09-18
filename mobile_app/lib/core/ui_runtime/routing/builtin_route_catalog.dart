@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../app/app_routes.dart';
@@ -8,6 +7,7 @@ import '../../../features/conversations/presentation/pages/conversation_list_pag
 import '../../../features/agent/presentation/pages/agent_page.dart';
 import '../../../features/agent/presentation/pages/agent_task_detail_page.dart';
 import '../../../features/characters/presentation/pages/character_list_page.dart';
+import '../../../features/characters/presentation/pages/character_card_workshop_page.dart';
 import '../../../features/characters/presentation/pages/character_detail_page.dart';
 import '../../../features/characters/presentation/pages/character_life_rules_page.dart';
 import '../../../features/characters/presentation/pages/character_voice_page.dart';
@@ -445,6 +445,14 @@ GoRoute(
   pageBuilder: (context, state) => drawerSlideFadePage(
     state: state,
     child: const WorkshopHomePage(),
+  ),
+),
+GoRoute(
+  path: '/workshop/character-cards',
+  pageBuilder: (context, state) => slideFadePage(
+    context: context,
+    state: state,
+    child: const CharacterCardWorkshopPage(),
   ),
 ),
 GoRoute(

@@ -2,14 +2,8 @@ package card
 
 import (
 	"bytes"
-	"encoding/json"
 	"strings"
 )
-
-type rawCardHeader struct {
-	Spec        string `json:"spec"`
-	SpecVersion string `json:"spec_version"`
-}
 
 func DetectFormat(data []byte, filename string) (CharacterCardFormat, error) {
 	if len(data) == 0 {
@@ -53,16 +47,12 @@ func isJSON(data []byte) bool {
 }
 
 func detectPNGFormat(data []byte) (CharacterCardFormat, error) {
-	ccv3Data := extractPNGTextChunk(data, "ccv3")
-	if len(ccv3Data) > 0 {
-		return FormatV3PNG, nil
-	}
 	charaData := extractPNGTextChunk(data, "chara")
 	if len(charaData) > 0 {
 		if isTavernCard(charaData) {
 			return FormatTavernPNG, nil
 		}
-		return FormatV2PNG, nil
+		return "", ErrUnsupportedFormat
 	}
 	return "", ErrPNGMetadataMissing
 }
@@ -70,19 +60,6 @@ func detectPNGFormat(data []byte) (CharacterCardFormat, error) {
 func detectJSONFormat(data []byte) (CharacterCardFormat, error) {
 	if len(data) > MaxJSONBytes {
 		return "", ErrJSONInvalid
-	}
-
-	var header rawCardHeader
-	if err := json.Unmarshal(data, &header); err != nil {
-		return "", ErrJSONInvalid
-	}
-
-	spec := strings.TrimSpace(header.Spec)
-	switch spec {
-	case "chara_card_v2":
-		return FormatV2JSON, nil
-	case "chara_card_v3":
-		return FormatV3JSON, nil
 	}
 	if isTavernCard(data) {
 		return FormatTavernJSON, nil

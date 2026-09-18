@@ -19,7 +19,9 @@ import '../../../../core/services/providers.dart';
 import '../../../../core/models/character.dart';
 
 class CharacterListPage extends ConsumerStatefulWidget {
-  const CharacterListPage({super.key});
+  final String title;
+
+  const CharacterListPage({super.key, this.title = '角色'});
 
   @override
   ConsumerState<CharacterListPage> createState() => _CharacterListPageState();
@@ -67,7 +69,7 @@ class _CharacterListPageState extends ConsumerState<CharacterListPage> {
     final backendAvailability = ref.watch(backendConnectionProvider).valueOrNull;
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
-        title: _searchVisible ? '搜索角色' : '角色',
+        title: _searchVisible ? '搜索角色' : widget.title,
         navigation: AmitiaAppBarNavigation.back,
         actions: [
           AmitiaIconButton(

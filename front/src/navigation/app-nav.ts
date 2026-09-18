@@ -93,6 +93,7 @@ const extraTitles = [
   { path: "/runtime-debug", label: "运行时调试" },
   { path: "/user-settings", label: "用户信息" },
   { path: "/creative-workshop", label: "创意工坊" },
+  { path: "/creative-workshop/character-cards", label: "角色卡工坊" },
   { path: "/creative-workshop/pet", label: "桌宠" },
   { path: "/emotes", label: "表情包管理" },
   { path: "/extensions/mcp", label: "MCP 服务" },
