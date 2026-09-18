@@ -89,7 +89,7 @@ func createPackageArtifactPreview(c *gin.Context, runtime *Runtime) {
 	}
 	defer file.Close()
 	actor := middlewaresecurity.GetActor(c)
-	allowUnsignedLocal := actor != nil && actor.IsLocalTrusted && kernelruntime.PackageDevelopmentModeEnabled()
+	allowUnsignedLocal := actor != nil && actor.IsLocalTrusted
 	request := kernelruntime.PackagePreviewRequest{SpaceID: kernelAPIUser(c), ScopeType: c.Request.FormValue("scopeType"), ScopeID: c.Request.FormValue("scopeId"), FileName: header.Filename,
 		AllowUnsignedDev:   strings.EqualFold(c.Request.FormValue("allowUnsignedDev"), "true") || allowUnsignedLocal,
 		AllowUnsignedLocal: allowUnsignedLocal, DeveloperSessionID: c.Request.FormValue("developerSessionId")}

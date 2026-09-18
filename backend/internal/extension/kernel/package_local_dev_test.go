@@ -56,7 +56,7 @@ func TestLocalTrustedDevelopmentUnsignedPackageLifecycle(t *testing.T) {
 	}
 }
 
-func TestLocalTrustedDevelopmentUnsignedPackageRequiresDevelopmentMode(t *testing.T) {
+func TestLocalTrustedUnsignedPackageLifecycleWithoutDevelopmentMode(t *testing.T) {
 	t.Setenv("AMITIA_EXTENSION_DEV_MODE", "false")
 	ctx := context.Background()
 	runtime, _ := newPackagePipelineRuntime(t)
@@ -76,7 +76,29 @@ func TestLocalTrustedDevelopmentUnsignedPackageRequiresDevelopmentMode(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	if preview.Installable || preview.TrustDecision != "rejected" {
-		t.Fatalf("local unsigned package must be rejected outside development mode: %+v", preview)
+	if !preview.Installable || !preview.DevOnly || preview.DeveloperSessionID != localUnsignedDeveloperSessionID {
+		t.Fatalf("unexpected local unsigned preview: %+v", preview)
+	}
+	confirmation, err := runtime.ConfirmPackagePreview(ctx, PackagePreviewConfirmationRequest{
+		SessionID:     preview.SessionID,
+		SpaceID:       "user-1",
+		ScopeType:     "global",
+		Confirmations: map[string]bool{"confirm.unsigned_dev": true},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := runtime.ExecutePackageInstall(ctx, PackageInstallRequest{
+		SessionID:         preview.SessionID,
+		SpaceID:           "user-1",
+		ScopeType:         "global",
+		ConfirmationToken: confirmation.ConfirmationToken,
+		IdempotencyKey:    "local-trusted-install-without-development-mode",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.ExtensionID != preview.ExtensionID {
+		t.Fatalf("installed extension = %q, want %q", result.ExtensionID, preview.ExtensionID)
 	}
 }

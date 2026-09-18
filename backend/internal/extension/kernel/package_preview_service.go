@@ -161,7 +161,7 @@ func (r *Runtime) PreviewPackage(ctx context.Context, request PackagePreviewRequ
 		if r.packageUnsignedDevAllowed(request, preview.ExtensionID) {
 			preview.DevOnly = true
 			preview.DeveloperSessionID = request.DeveloperSessionID
-			if request.AllowUnsignedLocal && packageDevelopmentModeEnabled() {
+			if request.AllowUnsignedLocal {
 				preview.DeveloperSessionID = localUnsignedDeveloperSessionID
 			}
 			preview.TrustDecision = string(trust.TrustLevelDevelopment)
@@ -303,7 +303,7 @@ func packageManifestHasMigrations(manifest manifest_v1.Manifest) bool {
 }
 
 func (r *Runtime) packageUnsignedDevAllowed(request PackagePreviewRequest, extensionID string) bool {
-	if request.AllowUnsignedLocal && packageDevelopmentModeEnabled() {
+	if request.AllowUnsignedLocal {
 		return true
 	}
 	if !request.AllowUnsignedDev {
@@ -313,11 +313,11 @@ func (r *Runtime) packageUnsignedDevAllowed(request PackagePreviewRequest, exten
 }
 
 func (r *Runtime) validateUnsignedDeveloperSession(sessionID, spaceID, extensionID string) error {
-	if !packageDevelopmentModeEnabled() {
-		return fmt.Errorf("kernel: developer mode is disabled")
-	}
 	if sessionID == localUnsignedDeveloperSessionID {
 		return nil
+	}
+	if !packageDevelopmentModeEnabled() {
+		return fmt.Errorf("kernel: developer mode is disabled")
 	}
 	if r.container == nil {
 		return fmt.Errorf("kernel: developer session binding unavailable")
