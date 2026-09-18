@@ -54,7 +54,10 @@ class SafetyPage extends ConsumerWidget {
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 16),
-                AmitiaButton(label: '重试', onPressed: () => ref.invalidate(_safetyConfigProvider)),
+                AmitiaButton(
+                  label: '重试',
+                  onPressed: () => ref.invalidate(_safetyConfigProvider),
+                ),
               ],
             ),
           ),

@@ -1096,26 +1096,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     });
   }
 
-  Future<void> _withArtifactUpload(
-    Future<void> Function(ArtifactService service) action,
-  ) async {
-    try {
-      final service = await ref.read(artifactServiceProvider.future);
-      await action(service);
-    } on ArtifactServiceException catch (error) {
-      if (error.message != 'user_cancelled' && mounted) {
-        amitiaSnackBar(context, '附件处理失败：${error.message}');
-      }
-    } catch (error) {
-      if (mounted) {
-        amitiaSnackBar(
-          context,
-          '附件处理失败：${error.toString().replaceFirst('Exception: ', '')}',
-        );
-      }
-    }
-  }
-
   void _onSendCode(String lang, String code) {
     _runtime.sendCode(lang, code);
   }
@@ -2134,8 +2114,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                             ],
                           ),
                         ),
-                        ],
-                      ),
+                      ],
                     ),
                   ),
                   MobileExtensionSlot(
@@ -2344,15 +2323,6 @@ class _ChatProfileSummarySheet extends StatelessWidget {
           ),
         ],
       ),
-    );
-
-
-
-    return UIProviderHost(
-      capability: UICapability.conversationShell,
-      fallback: builtinConversation,
-      context: providerContext,
-      actions: providerActions,
     );
   }
 }

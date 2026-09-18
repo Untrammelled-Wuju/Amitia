@@ -324,8 +324,6 @@ class _DeviceTileState extends State<_DeviceTile> {
     } finally {
       if (mounted) setState(() => _probeBusy = '');
     }
-    if (platform.contains('ipad') || platform.contains('tablet')) return Icons.tablet_mac_outlined;
-    return Icons.computer_outlined;
   }
 
   @override

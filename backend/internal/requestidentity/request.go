@@ -41,18 +41,3 @@ func NormalizeSpaceID(spaceID string) string {
 	}
 	return CanonicalSpaceID()
 }
-
-// NormalizeUserID resolves local/default fallbacks through the configured local
-// account identity while preserving authenticated cloud account IDs verbatim.
-func NormalizeUserID(userID string) string {
-	userID = strings.TrimSpace(userID)
-	if userID != "" && userID != DefaultUserID {
-		return userID
-	}
-	if config.AppCfg != nil {
-		if configured := strings.TrimSpace(config.AppCfg.Security.LocalUserID); configured != "" {
-			return configured
-		}
-	}
-	return "local_user"
-}

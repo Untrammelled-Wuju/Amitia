@@ -27,7 +27,6 @@ class _AgentSkillsPageState extends ConsumerState<AgentSkillsPage> {
   List<Map<String, dynamic>> _skills = [];
   bool _loading = true;
   String? _error;
-  String _characterId = '';
 
   @override
   void initState() {
@@ -35,23 +34,12 @@ class _AgentSkillsPageState extends ConsumerState<AgentSkillsPage> {
     _loadSkills();
   }
 
-  Future<String> _resolveCharacterId() async {
-    final selected = ref.read(currentCharacterIdProvider);
-    final characters = await ref.read(characterServiceProvider).list();
-    if (characters.isEmpty) return '';
-    final match = characters.where((item) => item.id == selected).firstOrNull;
-    final resolved = match?.id ?? characters.where((item) => item.isActive == 1).firstOrNull?.id ?? characters.first.id;
-    ref.read(currentCharacterIdProvider.notifier).state = resolved;
-    return resolved;
-  }
-
   Future<void> _loadSkills() async {
     setState(() { _loading = true; _error = null; });
     try {
       final svc = ref.read(extensionServiceProvider);
-      final characterId = await _resolveCharacterId();
-      final data = await svc.agentSkills(characterId: characterId);
-      if (mounted) setState(() { _characterId = characterId; _skills = data; _loading = false; });
+      final data = await svc.agentSkills();
+      if (mounted) setState(() { _skills = data; _loading = false; });
     } catch (e) {
       if (mounted) setState(() { _error = safeErrorMessage(e); _loading = false; });
     }
@@ -519,94 +507,6 @@ class _AgentSkillsPageState extends ConsumerState<AgentSkillsPage> {
         ),
       ),
     );
-    if (picked == null || picked.files.isEmpty) return;
-    final file = picked.files.first;
-    if (file.path == null || file.path!.isEmpty) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('无法读取所选文件')));
-      return;
-    }
-    Dio? dio;
-    try {
-      dio = await _dio();
-      final previewResponse = await dio.post(
-        '/api/extensions/agent-skills/import/preview',
-        data: FormData.fromMap({
-          'file': await MultipartFile.fromFile(file.path!, filename: file.name),
-        }),
-      );
-      dynamic preview = previewResponse.data;
-      if (preview is Map && preview['data'] is Map) preview = preview['data'];
-      if (preview is! Map) throw StateError('后端未返回导入预览');
-      final previewMap = Map<String, dynamic>.from(preview);
-      final previewId = (previewMap['previewId'] ?? '').toString();
-      if (previewId.isEmpty) throw StateError('导入预览缺少 previewId');
-      final definition = previewMap['definition'] is Map ? Map<String, dynamic>.from(previewMap['definition'] as Map) : <String, dynamic>{};
-      final report = previewMap['compatibilityReport'] is Map ? Map<String, dynamic>.from(previewMap['compatibilityReport'] as Map) : <String, dynamic>{};
-      if (!mounted) return;
-      String scope = 'global';
-      final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (dialogContext) => StatefulBuilder(
-          builder: (dialogContext, setDialogState) => AlertDialog(
-            backgroundColor: dialogContext.surfacePrimary,
-            shape: RoundedRectangleBorder(borderRadius: AppRadius.brLarge),
-            title: Text('Agent Skill 导入预览', style: AppTypography.cardTitle(dialogContext)),
-            content: SizedBox(
-              width: double.maxFinite,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text((definition['displayName'] ?? definition['name'] ?? file.name).toString(), style: AppTypography.bodySmall(dialogContext).copyWith(fontWeight: FontWeight.w600)),
-                  const SizedBox(height: 6),
-                  Text((definition['description'] ?? '').toString(), style: AppTypography.caption(dialogContext)),
-                  const SizedBox(height: 10),
-                  Text('兼容性：${report['status'] ?? definition['compatibilityStatus'] ?? 'unknown'}', style: AppTypography.label(dialogContext)),
-                  Text('文件数：${(previewMap['files'] as List?)?.length ?? 0}', style: AppTypography.label(dialogContext)),
-                  const SizedBox(height: 12),
-                  DropdownButtonFormField<String>(
-                    initialValue: scope,
-                    decoration: const InputDecoration(labelText: '安装范围'),
-                    items: [
-                      const DropdownMenuItem(value: 'global', child: Text('全局')),
-                      if (_characterId.isNotEmpty) const DropdownMenuItem(value: 'character', child: Text('当前角色')),
-                    ],
-                    onChanged: (value) => setDialogState(() => scope = value ?? 'global'),
-                  ),
-                  if (((report['errors'] as List?) ?? const []).isNotEmpty) ...[
-                    const SizedBox(height: 10),
-                    Text('存在兼容性错误，后端可能拒绝安装。', style: AppTypography.label(dialogContext).copyWith(color: dialogContext.error)),
-                  ],
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('取消')),
-              FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('安装')),
-            ],
-          ),
-        ),
-      );
-      if (confirmed != true) return;
-      final installResponse = await dio.post(
-        '/api/extensions/agent-skills/import/install',
-        data: {
-          'previewId': previewId,
-          'scope': scope,
-          'characterId': scope == 'character' ? _characterId : '',
-          'enable': true,
-        },
-      );
-      dynamic installed = installResponse.data;
-      if (installed is Map && installed['data'] != null) installed = installed['data'];
-      if (installed == null) throw StateError('安装未完成');
-      await _loadSkills();
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: const Text('Agent Skill 已安装'), backgroundColor: context.success));
-    } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('导入失败: ${safeErrorMessage(e)}'), backgroundColor: context.error));
-    } finally {
-      dio?.close(force: true);
-    }
   }
 
   void _showDetailSheet(Map<String, dynamic> skill) {

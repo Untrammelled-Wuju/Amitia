@@ -578,7 +578,7 @@ const res = await post<any>("/api/model/detect-models", {
         }
       }
 
-      await post("/api/public/onboarding/complete", {
+      await post("/api/onboarding/complete", {
         deployMode:
           deployMode.value === "remote" ? "cloud-web" : "desktop-local",
         serverURL:

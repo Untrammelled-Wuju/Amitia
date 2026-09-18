@@ -548,161 +548,6 @@ class _ExtensionPackagesPageState extends ConsumerState<ExtensionPackagesPage> {
         },
       ),
     );
-    if (picked == null || picked.files.isEmpty) return;
-    final file = picked.files.first;
-    if (file.path == null || file.path!.isEmpty) {
-      _toast('无法读取所选文件', error: true);
-      return;
-    }
-
-    Dio? dio;
-    if (mounted) setState(() => _busy = true);
-    try {
-      dio = await _dio();
-      final previewResponse = await dio.post(
-        '/api/extensions/packages/artifacts',
-        data: FormData.fromMap({
-          'scopeType': 'global',
-          'scopeId': '',
-          'file': await MultipartFile.fromFile(file.path!, filename: file.name),
-        }),
-      );
-      dynamic raw = previewResponse.data;
-      if (raw is! Map || raw['preview'] is! Map) throw StateError('后端未返回扩展包预览');
-      final preview = Map<String, dynamic>.from(raw['preview'] as Map);
-      if (!mounted) return;
-
-      final accepted = await showModalBottomSheet<bool>(
-        context: context,
-        isScrollControlled: true,
-        backgroundColor: context.surfacePrimary,
-        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
-        builder: (sheetContext) => _PackagePreviewSheet(fileName: file.name, preview: preview),
-      );
-      if (accepted != true) return;
-
-      final sessionId = (preview['sessionId'] ?? '').toString();
-      if (sessionId.isEmpty) throw StateError('预览会话无效');
-      final confirmations = _buildInstallConfirmations(preview);
-      final confirmResponse = await dio.post(
-        '/api/extensions/packages/previews/${Uri.encodeComponent(sessionId)}/confirm',
-        data: {
-          'scopeType': (preview['scopeType'] ?? 'global').toString(),
-          'scopeId': (preview['scopeId'] ?? '').toString(),
-          'confirmations': confirmations,
-        },
-      );
-      dynamic confirmed = confirmResponse.data;
-      if (confirmed is Map && confirmed['data'] is Map) confirmed = confirmed['data'];
-      if (confirmed is! Map) throw StateError('安装确认失败');
-      final token = (confirmed['confirmationToken'] ?? '').toString();
-      if (token.isEmpty) throw StateError('安装确认令牌缺失');
-
-      final isUpdate = (preview['currentVersion'] ?? '').toString().isNotEmpty;
-      final extensionId = (preview['id'] ?? '').toString();
-      final operationResponse = await dio.post(
-        isUpdate ? '/api/extensions/packages/operations/update' : '/api/extensions/packages/operations/install',
-        data: {
-          'sessionId': sessionId,
-          'scopeType': (preview['scopeType'] ?? 'global').toString(),
-          'scopeId': (preview['scopeId'] ?? '').toString(),
-          'confirmationToken': token,
-          if (isUpdate && extensionId.isNotEmpty) 'expectedExtensionId': extensionId,
-          'idempotencyKey': 'mobile-package-${DateTime.now().microsecondsSinceEpoch}',
-        },
-      );
-      dynamic operation = operationResponse.data;
-      if (operation is Map && operation['data'] is Map) operation = operation['data'];
-      final operationId = operation is Map ? (operation['operationId'] ?? '').toString() : '';
-      await _loadPackages();
-      _toast(operationId.isEmpty ? '扩展包操作已提交' : '扩展包操作已提交 · $operationId');
-    } catch (e) {
-      _toast('安装失败: ${safeErrorMessage(e)}', error: true);
-    } finally {
-      dio?.close(force: true);
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  Map<String, bool> _buildInstallConfirmations(Map<String, dynamic> preview) {
-    final result = <String, bool>{};
-    for (final value in (preview['capabilityConfirmations'] as List?) ?? const []) {
-      final key = value.toString();
-      if (key.isNotEmpty) result[key] = true;
-    }
-    final signature = preview['signature'];
-    final signatureStatus = signature is Map ? (signature['status'] ?? '').toString() : '';
-    if (signatureStatus == 'unsigned') result['confirm.unsigned_dev'] = true;
-    final scriptCount = (preview['scripts'] as num?)?.toInt() ?? 0;
-    if (scriptCount > 0) result['confirm.scripts'] = true;
-    if ((preview['currentVersion'] ?? '').toString().isNotEmpty) result['confirm.version_change'] = true;
-    if (((preview['highRiskCapabilities'] as List?) ?? const []).isNotEmpty) result['confirm.permission_escalation'] = true;
-    if (preview['upgradeDiff'] is Map) {
-      final diff = preview['upgradeDiff'] as Map;
-      if (diff['signerChanged'] == true) result['confirm.signer_change'] = true;
-      if (diff['configMigrationRequired'] == true) result['confirm.config_migration'] = true;
-    }
-    return result;
-  }
-
-  Future<void> _showUninstallConfirm(Map<String, dynamic> pkg) async {
-    if (_busy) return;
-    final id = (pkg['extensionId'] ?? '').toString();
-    if (id.isEmpty) return;
-    setState(() => _busy = true);
-    try {
-      final svc = ref.read(extensionServiceProvider);
-      final preview = await svc.previewKernelUninstall(id);
-      if (!mounted) return;
-      final dependents = ((preview['dependents'] as List?) ?? const []).map((e) => e.toString()).toList(growable: false);
-      final required = ((preview['requiredConfirmations'] as List?) ?? const []).map((e) => e.toString()).toList(growable: false);
-      final allowed = preview['uninstallable'] != false;
-      final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (dialogContext) => AlertDialog(
-          backgroundColor: dialogContext.surfacePrimary,
-          shape: RoundedRectangleBorder(borderRadius: AppRadius.brLarge),
-          title: Text('卸载扩展', style: AppTypography.cardTitle(dialogContext)),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('扩展：$id', style: AppTypography.bodySmall(dialogContext)),
-              const SizedBox(height: 6),
-              Text('当前版本：${preview['currentVersion'] ?? pkg['version'] ?? ''}', style: AppTypography.label(dialogContext)),
-              Text('制品策略：${preview['artifactPolicy'] ?? 'unknown'}', style: AppTypography.label(dialogContext)),
-              if (dependents.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                Text('依赖此扩展：${dependents.join('、')}', style: AppTypography.label(dialogContext).copyWith(color: dialogContext.warning)),
-              ],
-              if (!allowed) ...[
-                const SizedBox(height: 8),
-                Text('后端判定当前不可卸载。', style: AppTypography.label(dialogContext).copyWith(color: dialogContext.error)),
-              ],
-            ],
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('取消')),
-            FilledButton(
-              onPressed: allowed ? () => Navigator.pop(dialogContext, true) : null,
-              child: const Text('确认卸载'),
-            ),
-          ],
-        ),
-      );
-      if (confirmed != true) return;
-      final confirmation = await svc.confirmKernelUninstall(id, {for (final key in required) key: true});
-      final token = (confirmation['confirmationToken'] ?? '').toString();
-      if (token.isEmpty) throw StateError('卸载确认令牌缺失');
-      final result = await svc.uninstallKernelExtension(id, token);
-      await _loadPackages();
-      final operationId = (result['operationId'] ?? '').toString();
-      _toast(operationId.isEmpty ? '$id 卸载操作已提交' : '$id 卸载操作已提交 · $operationId');
-    } catch (e) {
-      _toast('卸载失败: ${safeErrorMessage(e)}', error: true);
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
   }
 
   Future<void> _toggleExtension(Map<String, dynamic> pkg, bool enabled) async {
@@ -970,7 +815,10 @@ class _MiniButton extends StatelessWidget {
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-        decoration: BoxDecoration(color: color.withValues(alpha: 0.1), borderRadius: AppRadius.brTag),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.1),
+          borderRadius: AppRadius.brTag,
+        ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [

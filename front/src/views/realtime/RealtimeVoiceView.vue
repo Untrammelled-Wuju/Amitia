@@ -174,25 +174,6 @@ async function startCall() {
   }
 }
 
-async function forwardASRFinalToLocalWorkflow(data: unknown) {
-  if (!data || typeof data !== "object") return;
-  const payload = data as Record<string, unknown>;
-  const transcript = typeof payload.transcript === "string" ? payload.transcript.trim() : "";
-  const eventId = typeof payload.eventId === "string" ? payload.eventId.trim() : "";
-  if (!transcript || !eventId) return;
-  try {
-    await publishLocalVoiceASRFinal({
-      eventId,
-      transcript,
-      sessionId: typeof payload.sessionId === "string" ? payload.sessionId : undefined,
-      conversationId: typeof payload.conversationId === "string" ? payload.conversationId : undefined,
-      occurredAt: new Date().toISOString(),
-    });
-  } catch (error) {
-    console.warn("[RealtimeVoiceView] 本地语音工作流事件投递失败", error);
-  }
-}
-
 async function stopCall() {
   const active = controller;
   controller = null;

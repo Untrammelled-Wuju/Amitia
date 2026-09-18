@@ -40,7 +40,7 @@ internal class DefaultRuntimeEnvironmentBuilder(
         }
 
         val hostProcess = buildHostProcessEnvironment(request.hostLayout)
-        val guestRuntime = buildGuestRuntimeEnvironment(request.endpoint, securityMaterial)
+        val guestRuntime = buildGuestRuntimeEnvironment(request.endpoint)
 
         return try {
             RuntimeEnvironmentResult.Success(RuntimeEnvironment(hostProcess, guestRuntime))

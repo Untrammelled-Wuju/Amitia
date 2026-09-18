@@ -40,12 +40,6 @@ object GuestLayout {
     const val MANIFEST_DIR = "$PROGRAM/manifest"
     const val LICENSES_DIR = "$PROGRAM/licenses"
 
-    const val SCRIPTS_DIR = "$PROGRAM/scripts"
-    const val SCRIPTS_NODE_DIR = "$SCRIPTS_DIR/node"
-
-    const val MANIFEST_DIR = "$PROGRAM/manifest"
-    const val LICENSES_DIR = "$PROGRAM/licenses"
-
     const val SECURITY_DIR = "$DATA/security"
     const val LOCAL_TOKEN = "$SECURITY_DIR/local-token"
 

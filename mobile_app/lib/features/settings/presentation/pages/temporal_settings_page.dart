@@ -477,8 +477,6 @@ class _TemporalContentState extends ConsumerState<_TemporalContent> {
             onChanged: (value) => setState(() => _locale = value),
           ),
           _divider(),
-          _buildTimezoneTile(),
-          _divider(),
           _buildDropdownTile(
             icon: Icons.calendar_view_week_outlined,
             title: '每周起始日',

@@ -442,7 +442,6 @@ var runtimeEnvEntries = []runtimeEnvEntry{
 	{key: "server.port", environments: []string{"AMITIA_SERVER_PORT"}},
 	{key: "server.mode", environments: []string{"AMITIA_SERVER_MODE"}},
 	{key: "storage.dataDir", environments: []string{"AMITIA_DATA_DIR"}},
-	{key: "jwt.secret", environments: []string{"AMITIA_JWT_SECRET"}},
 	{key: "app.deployMode", environments: []string{"AMITIA_DEPLOY_MODE"}},
 	{key: "security.mode", environments: []string{"AMITIA_SECURITY_MODE"}},
 	{key: "security.allowRemoteAccess", environments: []string{"AMITIA_ALLOW_REMOTE_ACCESS"}},

@@ -201,7 +201,6 @@ func (v *Validator) validateCore(report *ValidationReport, fs PackageFileSystem,
 }
 
 func (v *Validator) validateSchemaLayer(report *ValidationReport, m *Manifest) {
-	isLegacyV1 := m.Provenance.SourceType == "legacy_v1"
 	if m.SchemaVersion == 0 {
 		report.addFinding(Finding{
 			Code:     ErrCodePackageSchemaMissing,
@@ -353,11 +352,6 @@ func (v *Validator) validatePathLayer(report *ValidationReport, m *Manifest) {
 }
 
 func (v *Validator) validateFileLayerFS(report *ValidationReport, fs PackageFileSystem, m *Manifest) {
-	if m.Provenance.SourceType == "legacy_v1" {
-		v.validateLegacyFileLayerFS(report, fs, m)
-		return
-	}
-
 	declared := make(map[string]*FileManifestEntry, len(m.Integrity.Files))
 	for i := range m.Integrity.Files {
 		e := &m.Integrity.Files[i]
@@ -554,60 +548,7 @@ func (v *Validator) validateFileLayerFS(report *ValidationReport, fs PackageFile
 	}
 }
 
-func (v *Validator) validateLegacyFileLayerFS(report *ValidationReport, fs PackageFileSystem, m *Manifest) {
-	actualPaths, err := fs.List()
-	if err != nil {
-		report.addFinding(Finding{
-			Code:     ErrCodePackagePathInvalid,
-			Severity: SeverityError,
-			Message:  fmt.Sprintf("failed to list legacy package files: %v", err),
-		})
-		return
-	}
-
-	actualSet := make(map[string]bool, len(actualPaths))
-	for _, p := range actualPaths {
-		actualSet[p] = true
-	}
-
-	required := make([]struct {
-		path      string
-		actionKey string
-	}, 0, len(m.Actions)+1)
-	if m.Preview != "" {
-		required = append(required, struct {
-			path      string
-			actionKey string
-		}{path: m.Preview})
-	}
-	for _, action := range m.Actions {
-		if action.Config != "" {
-			required = append(required, struct {
-				path      string
-				actionKey string
-			}{path: action.Config, actionKey: action.Key})
-		}
-	}
-
-	for _, ref := range required {
-		normalized, pathErr := NormalizePackagePath(ref.path)
-		if pathErr != nil {
-			continue // validatePathLayer already reports the precise path failure.
-		}
-		if !actualSet[normalized] {
-			report.addFinding(Finding{
-				Code:      ErrCodePackageFileMissing,
-				Severity:  SeverityError,
-				Path:      normalized,
-				ActionKey: ref.actionKey,
-				Message:   fmt.Sprintf("legacy package referenced file is missing: %s", normalized),
-			})
-		}
-	}
-}
-
 func (v *Validator) validateActionLayer(report *ValidationReport, m *Manifest) {
-	isLegacyV1 := m.Provenance.SourceType == "legacy_v1"
 	if len(m.Actions) == 0 {
 		report.addFinding(Finding{
 			Code:     ErrCodePackageManifestInvalid,
@@ -744,11 +685,6 @@ type validatedAnchor struct {
 }
 
 func (v *Validator) validateActionConfigLayer(report *ValidationReport, fs PackageFileSystem, m *Manifest) {
-	if m.Provenance.SourceType == "legacy_v1" {
-		v.validateLegacyActionConfigLayer(report, fs, m)
-		return
-	}
-
 	actionKeys := make(map[string]bool, len(m.Actions))
 	for _, a := range m.Actions {
 		actionKeys[a.Key] = true

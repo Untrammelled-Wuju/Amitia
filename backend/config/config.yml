@@ -11,9 +11,6 @@ app:
   version: "26.2.0-beta"
   deployMode: "desktop-local"
 
-desktopPetRuntime:
-  enabled: false
-
 security:
   mode: "local_single_user"
   localToken: ""

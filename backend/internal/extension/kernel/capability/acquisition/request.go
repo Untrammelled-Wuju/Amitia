@@ -19,8 +19,6 @@ type AcquisitionRequest struct {
 
 	ExecContext *execution.ExecutionContext `json:"-"`
 
-	ExecContext *execution.ExecutionContext `json:"-"`
-
 	Description string `json:"description,omitempty"`
 	Intent      string `json:"intent,omitempty"`
 

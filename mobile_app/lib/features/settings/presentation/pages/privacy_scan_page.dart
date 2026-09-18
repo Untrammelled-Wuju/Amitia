@@ -636,32 +636,6 @@ class _PrivacyScanPageState extends ConsumerState<PrivacyScanPage> {
               ),
             ),
           ),
-        ),
-        SizedBox(height: AppSpacing.sm),
-        AmitiaCard(
-          child: Row(
-            children: [
-              Expanded(child: _Metric(label: '删除记录', value: '$total', color: context.textPrimary)),
-              Expanded(child: _Metric(label: '待清理', value: '$pending', color: context.warning)),
-              Expanded(child: _Metric(label: '当前状态', value: status.isEmpty ? '—' : status, color: status == 'completed' ? context.success : context.textPrimary)),
-            ],
-          ),
-        ),
-        if (_securityResults.isNotEmpty) ...[
-          SizedBox(height: AppSpacing.sm),
-          ..._securityResults.map((item) => Padding(
-                padding: EdgeInsets.only(bottom: AppSpacing.xs),
-                child: AmitiaCard(
-                  child: Row(
-                    children: [
-                      Icon(item['passed'] == true ? Icons.check_circle_outline : Icons.error_outline, color: item['passed'] == true ? context.success : context.error),
-                      SizedBox(width: AppSpacing.sm),
-                      Expanded(child: Text((item['kind'] ?? 'security_test').toString(), style: AppTypography.bodySmall(context))),
-                      AmitiaStatusBadge(label: item['passed'] == true ? '通过' : '未通过', type: item['passed'] == true ? BadgeType.success : BadgeType.error),
-                    ],
-                  ),
-                ),
-              )),
         ],
       ],
     );

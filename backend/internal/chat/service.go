@@ -129,26 +129,6 @@ type ArtifactResolution struct {
 	Revision     int64
 }
 
-type ArtifactResolver interface {
-	Resolve(ctx context.Context, actor string, resourceURI string) (ArtifactResolution, error)
-	Open(ctx context.Context, actor string, resourceURI string) (io.ReadCloser, ArtifactResolution, error)
-	RegisterReference(artifactID string, refType string, refID string) error
-	RegisterReferenceGormTx(tx *gorm.DB, artifactID string, refType string, refID string) error
-	UnregisterReferenceGormTx(tx *gorm.DB, artifactID string, refType string, refID string) error
-}
-
-type ArtifactResolution struct {
-	ID          string
-	OwnerUserID string
-	Kind        string
-	BlobDigest  string
-	SizeBytes   int64
-	MIMEType    string
-	Filename    string
-	Status      string
-	Revision    int64
-}
-
 type service struct {
 	repo                Repository
 	charRepo            character.Repository

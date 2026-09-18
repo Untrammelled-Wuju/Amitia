@@ -111,36 +111,6 @@ func isDesktopDevelopmentOrigin(origin string) bool {
 	return ip != nil && ip.IsLoopback()
 }
 
-func validateLocalOrigin(c *gin.Context, allowedOrigins []string) error {
-	if err := validateOrigin(c, allowedOrigins); err == nil {
-		return nil
-	}
-	if isTrustedDesktopOrigin(c.GetHeader("Origin")) {
-		return nil
-	}
-	return errors.New("origin not allowed")
-}
-
-func isTrustedDesktopOrigin(origin string) bool {
-	if strings.EqualFold(strings.TrimSpace(origin), "app://amitia") {
-		return true
-	}
-	return isDesktopDevelopmentOrigin(origin)
-}
-
-func isDesktopDevelopmentOrigin(origin string) bool {
-	parsed, err := url.Parse(strings.TrimSpace(origin))
-	if err != nil || parsed.Scheme != "http" || parsed.Port() != "5178" {
-		return false
-	}
-	host := strings.ToLower(parsed.Hostname())
-	if host == "localhost" {
-		return true
-	}
-	ip := net.ParseIP(host)
-	return ip != nil && ip.IsLoopback()
-}
-
 func AuthenticationMiddleware(cfg AuthConfig) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		switch strings.ToLower(strings.TrimSpace(cfg.Mode)) {

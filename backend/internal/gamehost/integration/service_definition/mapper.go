@@ -56,20 +56,6 @@ func (m *DefinitionMapper) MapToDefinition(view ServiceRuntimeView) (*trusted_se
 		networkPolicy.Enforce = false
 	}
 
-	definitionID := view.ToDefinitionID()
-	envCopy := cloneStringMap(view.Env)
-	executablePath := view.ExecutablePath
-	if executablePath == "" {
-		executablePath = view.EntryPoint
-	}
-	integrityValue := view.IntegrityValue
-	if integrityValue == "" && view.ExecutableSHA256 != "" {
-		integrityValue = "sha256:" + view.ExecutableSHA256
-	}
-
-	trustLevel := authoritativeServiceTrustLevel(view.PublisherTrust)
-	signatureTrusted := trustLevel.AllowedForService()
-
 	return &trusted_service.ServiceRuntimeDefinition{
 		ServiceID:   definitionID,
 		ExtensionID: view.ExtensionID,

@@ -47,7 +47,6 @@ type InstallationRecord struct {
 	ID                string
 	SpaceID           string
 	DeviceID          string
-	CharacterID       string
 	PetID             string
 	ReleaseID         string
 	Status            string
@@ -432,47 +431,6 @@ func (c *Coordinator) resolveIdempotentOperation(ctx context.Context, op *operat
 		return nil, nil
 	}
 	existing, err := c.repo.FindOperationByIdempotencyKey(ctx, op.SpaceID, op.DeviceID, op.IdempotencyKey, op.OperationType)
-	if err != nil {
-		return nil, err
-	}
-	if existing == nil {
-		return nil, nil
-	}
-	if existing.RequestHash != "" && op.RequestHash != "" && existing.RequestHash != op.RequestHash {
-		return nil, operation.ErrIdempotencyConflict
-	}
-	return existing, nil
-}
-
-func stableJSON(value interface{}) string {
-	data, err := json.Marshal(value)
-	if err != nil {
-		return fmt.Sprintf("%v", value)
-	}
-	return string(data)
-}
-
-func operationRequestHash(op *operation.InstallationOperation, extra map[string]string) string {
-	fields := map[string]string{
-		"operationType":   op.OperationType,
-		"userID":          op.UserID,
-		"deviceID":        op.DeviceID,
-		"installationID":  op.InstallationID,
-		"petID":           op.PetID,
-		"sourceReleaseID": op.SourceReleaseID,
-		"targetReleaseID": op.TargetReleaseID,
-	}
-	for key, value := range extra {
-		fields[key] = value
-	}
-	return operation.ComputeRequestHash(fields)
-}
-
-func (c *Coordinator) resolveIdempotentOperation(ctx context.Context, op *operation.InstallationOperation) (*operation.InstallationOperation, error) {
-	if op == nil || op.IdempotencyKey == "" {
-		return nil, nil
-	}
-	existing, err := c.repo.FindOperationByIdempotencyKey(ctx, op.UserID, op.DeviceID, op.IdempotencyKey, op.OperationType)
 	if err != nil {
 		return nil, err
 	}

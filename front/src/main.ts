@@ -22,11 +22,6 @@ import { browserClientPluginRuntime, syncBrowserClientSlots } from "./ui-runtime
 
 async function bootstrap() {
   await getRuntimeConnection();
-  const initialCapabilities = await initializeRuntimeCapabilities();
-  const isAuthenticated = await restoreSessionOnStartup();
-  if (initialCapabilities.runtimeProfile === "unknown") {
-    await initializeRuntimeCapabilities(true);
-  }
   const app = createApp(App);
   const pinia = createPinia();
   app.use(pinia);

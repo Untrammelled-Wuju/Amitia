@@ -490,17 +490,3 @@ BackendConnection? buildLocalConnection(MobileBackendTopology topology) {
     authStrategy: BackendAuthStrategy.localTrusted,
   );
 }
-
-class _ConnectivityProbeAdapter implements RemoteCoreProbe {
-  final BackendConnectivityProbe _probe;
-
-  _ConnectivityProbeAdapter(this._probe);
-
-  @override
-  Future<BackendConnectivityResult> probe(
-    Uri baseUri, {
-    Duration timeout = const Duration(seconds: 5),
-  }) async {
-    return _probe.probe();
-  }
-}

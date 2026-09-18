@@ -267,11 +267,6 @@ func BuildMediaExtension(version string) Definition {
 						Priority: 100,
 						Metadata: map[string]any{},
 					},
-					Provider: &domain.ProviderMetadata{
-						ID:       "builtin.media",
-						Priority: 100,
-						Metadata: map[string]any{},
-					},
 				},
 			},
 			Compatibility: domain.ExtensionCompatibility{},

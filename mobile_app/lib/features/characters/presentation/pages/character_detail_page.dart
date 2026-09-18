@@ -1759,14 +1759,6 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
     return createAuthenticatedDio(availability.config);
   }
 
-  Future<Dio> _dio() async {
-    final availability = await ref.read(backendConnectionProvider.future);
-    if (availability is! BackendConnectionAvailable) {
-      throw StateError('后端当前不可用');
-    }
-    return createAuthenticatedDio(availability.config);
-  }
-
   Future<void> _exportCharacter(CharacterDto character) async {
     final output = await FilePicker.platform.saveFile(
       dialogTitle: '保存角色卡',

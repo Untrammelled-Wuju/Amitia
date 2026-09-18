@@ -12,9 +12,6 @@ type CapabilityResolutionRequest struct {
 	PreferredProviderID ProviderID
 	RequiredProviderID  ProviderID
 
-	PreferredProviderID ProviderID
-	RequiredProviderID  ProviderID
-
 	PreferredPlacement ProviderPlacement
 	RequiredPlacement  ProviderPlacement
 

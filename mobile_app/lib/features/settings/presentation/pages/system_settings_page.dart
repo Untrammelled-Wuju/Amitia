@@ -272,8 +272,6 @@ class _SystemSettingsPageState extends ConsumerState<SystemSettingsPage> {
               title: '发送测试通知',
               onTap: _testNotification,
             ),
-            _divider(),
-            _buildNavTile(icon: Icons.notifications_active_outlined, title: '发送测试通知', onTap: _testNotification),
           ]),
           SizedBox(height: AppSpacing.sectionGap),
           _SectionLabel(text: '功能入口'),

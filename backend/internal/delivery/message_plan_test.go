@@ -19,8 +19,6 @@ func (a *orderedPlanAdapter) Name() string { return "test" }
 
 func (a *orderedPlanAdapter) ProviderInstanceID() string { return "test.channel" }
 
-func (a *orderedPlanAdapter) ProviderInstanceID() string { return ProviderInstanceIDQQChannel }
-
 func (a *orderedPlanAdapter) Deliver(intent DeliveryIntent) error {
 	a.delivered = append(a.delivered, intent.ContentType)
 	if intent.ContentType == "image" {

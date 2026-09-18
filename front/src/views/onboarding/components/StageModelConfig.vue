@@ -310,7 +310,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted, computed } from "vue";
+import { ref, watch, onMounted } from "vue";
 import { useApi } from "../../../composables/useApi";
 
 const showApiKey = ref(false);
@@ -338,13 +338,6 @@ function onProviderSelect(providerId: string) {
     }
   }
 }
-
-const isFormValid = computed(() => {
-  if (!props.baseUrl.trim()) return false;
-  if (props.modelType !== "local" && !props.apiKey.trim()) return false;
-  if (!props.modelName.trim()) return false;
-  return true;
-});
 
 const props = defineProps<{
   detecting: boolean;

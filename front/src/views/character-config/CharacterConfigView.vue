@@ -308,16 +308,6 @@ onMounted(async () => {
   justify-content: flex-start;
 }
 
-.char-sidebar-stack {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  min-height: 0;
-}
-.char-sidebar-stack :deep(.extension-slot) { max-height: 40%; }
-.character-action-slot { margin-bottom: 8px; }
-.character-detail-slot { margin-top: 12px; }
-
 .char-main {
   width: 100%;
   min-width: 0;

@@ -86,29 +86,6 @@ class ConversationWorkspaceDto {
       };
 }
 
-class ChatSubmitResult {
-  final String conversationId;
-  final String userMessageId;
-  final String status;
-  final int mergeWindowMs;
-
-  const ChatSubmitResult({
-    required this.conversationId,
-    required this.userMessageId,
-    required this.status,
-    required this.mergeWindowMs,
-  });
-
-  factory ChatSubmitResult.fromJson(Map<String, dynamic> json) {
-    return ChatSubmitResult(
-      conversationId: (json['conversationId'] ?? '').toString(),
-      userMessageId: (json['userMessageId'] ?? '').toString(),
-      status: (json['status'] ?? '').toString(),
-      mergeWindowMs: (json['mergeWindowMs'] as num?)?.toInt() ?? 0,
-    );
-  }
-}
-
 class ChatService {
   final BackendServiceApi _api;
 

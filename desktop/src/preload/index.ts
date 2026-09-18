@@ -125,15 +125,6 @@ const api = {
   deprovisionMesh(): Promise<{ ok: boolean }> {
     return ipcRenderer.invoke(IPC_CHANNELS.meshDeprovision);
   },
-  publishLocalVoiceASRFinal(event: LocalVoiceASRFinalEvent): Promise<{ accepted: boolean; eventId: string; eventType: string }> {
-    return ipcRenderer.invoke(IPC_CHANNELS.publishLocalVoiceASRFinal, event);
-  },
-  getMeshIdentity(): Promise<{ deviceId: string; runtimeId: string; platform: string } | null> {
-    return ipcRenderer.invoke(IPC_CHANNELS.meshGetIdentity);
-  },
-  getMeshStatus(): Promise<{ state: string; deviceId: string; runtimeId: string; runtimeSessionId: string } | null> {
-    return ipcRenderer.invoke(IPC_CHANNELS.meshGetStatus);
-  },
   onUINavigate(callback: (target: string) => void): () => void {
     const listener = (
       _event: Electron.IpcRendererEvent,

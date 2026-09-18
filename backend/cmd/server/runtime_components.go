@@ -496,13 +496,6 @@ func (c *desktopPetComponent) Start(ctx context.Context) error {
 		c.stopAllLocked(ctx, svc)
 		return fmt.Errorf("desktop pet start context cancelled: %w", err)
 	}
-	if svc.RuntimeDomainEventConsumer != nil {
-		svc.RuntimeDomainEventConsumer.Start(ctx)
-	}
-	if err := ctx.Err(); err != nil {
-		c.stopAllLocked(ctx, svc)
-		return fmt.Errorf("desktop pet start context cancelled: %w", err)
-	}
 	c.started = true
 	if err := c.readyLocked(svc); err != nil {
 		c.started = false
@@ -586,45 +579,6 @@ func (c *desktopPetComponent) readyLocked(svc *AppServices) error {
 	if svc.RuntimeDomainEventConsumer == nil || !svc.RuntimeDomainEventConsumer.IsRunning() {
 		return fmt.Errorf("desktop pet runtime domain event consumer not running")
 	}
-	if svc.DesktopPetWorker == nil || !svc.DesktopPetWorker.IsRunning() {
-		return fmt.Errorf("desktop pet generation worker not running")
-	}
-	if svc.ProcessingWorker == nil || !svc.ProcessingWorker.IsRunning() {
-		return fmt.Errorf("desktop pet processing worker not running")
-	}
-	if svc.QualityWorker == nil || !svc.QualityWorker.IsRunning() {
-		return fmt.Errorf("desktop pet quality worker not running")
-	}
-	if svc.RegenerationWorker == nil || !svc.RegenerationWorker.IsRunning() {
-		return fmt.Errorf("desktop pet regeneration worker not running")
-	}
-	if svc.BridgeRecoveryWorker == nil || !svc.BridgeRecoveryWorker.IsRunning() {
-		return fmt.Errorf("desktop pet revision bridge recovery worker not running")
-	}
-	if svc.InstallationProjectionBridge == nil || !svc.InstallationProjectionBridge.IsRunning() {
-		return fmt.Errorf("desktop pet installation projection bridge not running")
-	}
-	if svc.InstallationDesiredOutbox == nil || !svc.InstallationDesiredOutbox.IsRunning() {
-		return fmt.Errorf("desktop pet installation desired outbox worker not running")
-	}
-	if svc.InstallationRecoveryWorker == nil || !svc.InstallationRecoveryWorker.IsRunning() {
-		return fmt.Errorf("desktop pet installation recovery worker not running")
-	}
-	if svc.ReleaseRecoveryWorker == nil || !svc.ReleaseRecoveryWorker.IsRunning() {
-		return fmt.Errorf("desktop pet release recovery worker not running")
-	}
-	if svc.ReleaseEventOutboxDispatcher == nil || !svc.ReleaseEventOutboxDispatcher.IsRunning() {
-		return fmt.Errorf("desktop pet release event outbox dispatcher not running")
-	}
-	if svc.BehaviorService == nil || !svc.BehaviorService.IsRunning() {
-		return fmt.Errorf("desktop pet behavior service not running")
-	}
-	if !svc.DesktopPetRuntimeV2.IsStarted() {
-		return fmt.Errorf("desktop pet runtime v2 not running")
-	}
-	if svc.RuntimeDomainEventConsumer == nil || !svc.RuntimeDomainEventConsumer.IsRunning() {
-		return fmt.Errorf("desktop pet runtime domain event consumer not running")
-	}
 	return nil
 }
 
@@ -650,12 +604,6 @@ func (c *desktopPetComponent) stopAllLocked(ctx context.Context, svc *AppService
 	}
 	if svc.DesktopPetRuntimeV1 != nil {
 		_ = svc.DesktopPetRuntimeV1.Close(ctx)
-	}
-	if c.state.behaviorOk && svc.BehaviorService != nil {
-		_ = svc.BehaviorService.Stop()
-	}
-	if c.state.releaseEventOutboxOK && svc.ReleaseEventOutboxDispatcher != nil {
-		svc.ReleaseEventOutboxDispatcher.Stop()
 	}
 	if c.state.behaviorOk && svc.BehaviorService != nil {
 		_ = svc.BehaviorService.Stop()

@@ -15,7 +15,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/config"
-	"github.com/u-ai/backend/internal/accountsession"
 	"github.com/u-ai/backend/internal/agent"
 	"github.com/u-ai/backend/internal/asr"
 	channelinbound "github.com/u-ai/backend/internal/channel/inbound"
@@ -149,10 +148,6 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 	r.GET("/readyz", func(c *gin.Context) {
 		if services.RuntimeOrchestrator == nil {
 			c.JSON(503, gin.H{"code": 503, "msg": "blocked", "data": gin.H{"status": "blocked", "reason": "orchestrator not initialized"}})
-			return
-		}
-		if services.AccountSession == nil || services.AccountSession.Validator == nil {
-			c.JSON(503, gin.H{"code": 503, "msg": "blocked", "data": gin.H{"status": "blocked", "reason": "accountsession validator not initialized"}})
 			return
 		}
 		snap := services.RuntimeOrchestrator.Snapshot()

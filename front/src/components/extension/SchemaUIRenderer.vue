@@ -112,10 +112,6 @@ const groupedDataSources = computed(() => {
   return groups;
 });
 
-const sessionScopeKey = computed(() =>
-  `${props.contribution.contributionId}:${props.contribution.generation}:${props.context?.characterId || ""}:${props.context?.conversationId || ""}`
-);
-
 const mergedContext = computed<Record<string, unknown>>(() => ({
   ...(props.context ?? {}),
   ...localContextOverride,
@@ -563,10 +559,6 @@ watch(
     await loadSchema();
   }
 );
-
-watch(sessionScopeKey, async () => {
-  await restartSession();
-});
 
 watch(
   [schema, sessionReady],

@@ -216,7 +216,6 @@ export async function installExtensionPackage(
         "Idempotency-Key": idempotencyKey,
       },
     },
-    managementTarget ? { headers: { "X-Amitia-Management-Target": managementTarget } } : undefined,
   );
   return response.data as PackageOperationResult;
 }

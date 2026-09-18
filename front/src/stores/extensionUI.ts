@@ -129,7 +129,6 @@ export interface LayoutPreference {
 }
 
 export const useExtensionUIStore = defineStore("extensionUI", () => {
-  const sessionStore = useSessionStore();
   const snapshot = ref<UIContributionSnapshot | null>(null);
   const lastFetchAt = ref<number>(0);
   const loading = ref(false);

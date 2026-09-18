@@ -15,13 +15,6 @@ type EventTargetedActivePetPort interface {
 	ResolveActivePetForEvent(ctx context.Context, event BehaviorEventEnvelope) (*ActivePetSnapshot, error)
 }
 
-// EventTargetedActivePetPort is implemented by adapters that can preserve
-// device/installation affinity carried by a behavior event. Engines fall back
-// to ActivePetPort when the adapter does not support targeted resolution.
-type EventTargetedActivePetPort interface {
-	ResolveActivePetForEvent(ctx context.Context, event BehaviorEventEnvelope) (*ActivePetSnapshot, error)
-}
-
 type RuntimeActionPort interface {
 	SubmitBehaviorCommand(ctx context.Context, command BehaviorRuntimeCommand) (*CommandReceipt, error)
 	QueryPlayback(ctx context.Context, petInstanceID string) (*PlaybackSnapshot, error)

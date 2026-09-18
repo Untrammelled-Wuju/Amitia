@@ -94,6 +94,7 @@ router.beforeEach(async (to) => {
     } else if (to.path === "/web-access") {
       return "/onboarding";
     }
+  }
 
   const isPublic = PUBLIC_PATHS.has(to.path);
   const completed = await readOnboardingCompleted(false);

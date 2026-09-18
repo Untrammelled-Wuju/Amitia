@@ -144,7 +144,6 @@ func (w *Worker) deliver(ctx context.Context, intent DeliveryIntent) error {
 	}
 
 	if err := adapter.Deliver(intent); err != nil {
-		w.availability.MarkProviderUnavailable(providerID, "delivery failed: "+err.Error())
 		return err
 	}
 

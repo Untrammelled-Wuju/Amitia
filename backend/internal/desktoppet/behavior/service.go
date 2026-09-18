@@ -34,8 +34,6 @@ type ReloadEvaluatorFunc func(ctx context.Context, engine *BehaviorEngine, repo 
 
 type ResetEvaluatorFunc func()
 
-type ResetEvaluatorFunc func()
-
 type BehaviorService struct {
 	engine          *BehaviorEngine
 	repo            BindingRepository

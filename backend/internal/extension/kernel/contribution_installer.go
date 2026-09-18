@@ -479,21 +479,6 @@ func (i *TypedContributionInstaller) buildToolOp(ctx context.Context, contrib do
 		}
 	}
 
-	runtimeType := ""
-	runtimeID := ""
-	handlerName := def.HandlerName
-	if len(def.Runtime) > 0 {
-		if v, ok := def.Runtime["runtimeType"].(string); ok {
-			runtimeType = v
-		}
-		if v, ok := def.Runtime["runtimeId"].(string); ok {
-			runtimeID = v
-		}
-		if v, ok := def.Runtime["handlerName"].(string); ok && v != "" {
-			handlerName = v
-		}
-	}
-
 	toolID := def.ToolID
 	if toolID == "" {
 		toolID = string(contrib.ID)
@@ -514,19 +499,6 @@ func (i *TypedContributionInstaller) buildToolOp(ctx context.Context, contrib do
 	var scopeRule capability.ScopeRule
 	if len(def.Scope) > 0 {
 		_ = json.Unmarshal(def.Scope, &scopeRule)
-	}
-
-	toolSource := capability.ToolSourcePlugin
-	if isSystemBuiltin(contrib.Metadata) {
-		toolSource = capability.ToolSourceBuiltin
-	}
-
-	runtimeBinding := enrichGameHostToolRuntimeBinding(i.buildRuntimeBindingFromValues(contrib, handlerName, runtimeType, runtimeID, toolID), def.Runtime)
-	if runtimeBinding.RuntimeType == capability.RuntimeTypeGameHost && toolSource == capability.ToolSourcePlugin {
-		toolID = canonicalGameHostToolID(string(contrib.ExtensionID), toolID)
-		if def.CapabilityID == "" {
-			capID = capability.CapabilityID(toolID)
-		}
 	}
 
 	toolSource := capability.ToolSourcePlugin

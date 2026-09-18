@@ -22,7 +22,6 @@ type EffectivePermissionAdapter struct {
 	broker        Broker
 	policy        PermissionDecisionHostPolicy
 	subjectMapper *GameHostSubjectMapper
-	approvals     *ApprovalCoordinator
 	clock         func() time.Time
 }
 
@@ -51,13 +50,6 @@ func NewEffectivePermissionAdapterWithClock(
 		subjectMapper: mapper,
 		clock:         clock,
 	}
-}
-
-func (a *EffectivePermissionAdapter) SetApprovalCoordinator(coordinator *ApprovalCoordinator) {
-	if a == nil {
-		return
-	}
-	a.approvals = coordinator
 }
 
 func (a *EffectivePermissionAdapter) Check(

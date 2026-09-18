@@ -333,15 +333,8 @@ class BackendServiceApi {
       final code = data['code'] as int? ?? 0;
       final message = data['message'] as String? ?? data['msg'] as String? ?? '';
       final detail = data['detail'] as String?;
-      if (rawCode is num) {
-        final code = rawCode.toInt();
-        if (code != 200) {
-          throw ServiceApiException(code: code, message: message, detail: detail);
-        }
-        final responseData = data['data'];
-        if (responseData == null) return null;
-        if (fromJson != null) return fromJson(responseData);
-        return responseData as T?;
+      if (code != 200) {
+        throw ServiceApiException(code: code, message: message, detail: detail);
       }
       final payload = data['payload'];
       if (payload == null) return null;
@@ -352,11 +345,7 @@ class BackendServiceApi {
     return data as T?;
   }
 
-  T? _parsePayloadResponse<T>(
-    BackendHttpResponse response,
-    T Function(dynamic)? fromJson,
-    String path,
-  ) {
+  void _parseSimpleResponse(BackendHttpResponse response, String path) {
     final data = response.data;
     if (data is Map<String, dynamic> && data.containsKey('code')) {
       final rawCode = data['code'];

@@ -241,9 +241,6 @@ request.interceptors.response.use(
     return response.data;
   },
   (error: AxiosError) => {
-    if (error?.response?.status === 401) {
-      forceCleanupSession();
-    }
     const body = (error.response?.data as ApiResponse) || null;
     const webAccessExpired = notifyWebAccessExpired(error);
     const err = classifyError(body, error);

@@ -267,7 +267,9 @@ class AmitiaMessageBubble extends StatelessWidget {
         bottom: 14,
       ),
       child: Row(
-        mainAxisAlignment: isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
+        mainAxisAlignment: isUser
+            ? MainAxisAlignment.end
+            : MainAxisAlignment.start,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (!isUser) ...[
@@ -2319,7 +2321,10 @@ class _EmotePickerState extends State<_EmotePicker> {
               child: Container(
                 width: 40,
                 height: 4,
-                decoration: BoxDecoration(color: context.borderPrimary, borderRadius: BorderRadius.circular(2)),
+                decoration: BoxDecoration(
+                  color: context.borderPrimary,
+                  borderRadius: BorderRadius.circular(2),
+                ),
               ),
             ),
             const SizedBox(height: 14),

@@ -85,22 +85,6 @@ func (s *service) PrivacyScan(scope []string) map[string]interface{} {
 					findings = append(findings, finding)
 				}
 			}
-			findings = append(findings, map[string]interface{}{
-				"id":             msg["id"],
-				"messageId":      msg["id"],
-				"conversationId": msg["conversation_id"],
-				"role":           msg["role"],
-				"createdAt":      msg["created_at"],
-				"pattern":        pattern,
-				"severity":       severity,
-				"risk_level":     severity,
-				"risk_type":      pattern,
-				"source_table":   "messages",
-				"snippet":        privacyPreview(content),
-				"preview":        privacyPreview(content),
-				"masked":         msg["safety_level"] == "masked",
-			})
-			break
 		}
 	}
 

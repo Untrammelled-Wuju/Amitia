@@ -654,12 +654,6 @@ func (b *DefaultPermissionBroker) matchGrants(grants []PermissionGrant, scope Pe
 		if !g.IsValid() {
 			continue
 		}
-		// RequiresPerUse permissions must never be satisfied by a legacy/session/
-		// persistent grant. Only an explicit allow_once grant may authorize one
-		// operation.
-		if def.RequiresPerUse && !g.IsOneTime() {
-			continue
-		}
 		if scope.Type != ScopeGlobal && !g.Scope.Contains(scope) {
 			continue
 		}

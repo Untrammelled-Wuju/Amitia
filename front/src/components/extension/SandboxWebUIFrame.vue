@@ -347,20 +347,6 @@ async function handleBridgeMessage(msg: Record<string, unknown>, requestSessionI
     sendBridgeResponse(msg, { ok: true });
     return;
   }
-  if (method === "ui.content.resize" || method === "ui.resize.request") {
-    const input = msg.input as Record<string, unknown> | undefined;
-    const requested = Number(input?.preferredHeight ?? input?.height);
-    if (Number.isFinite(requested) && requested > 0) {
-      const maximum = surfaceRole.value === "composer" ? 160 : surfaceRole.value === "message" ? 480 : 720;
-      preferredHeight.value = Math.max(44, Math.min(Math.round(requested), maximum));
-    }
-    sendBridgeResponse(msg, { ok: true });
-    return;
-  }
-  if (msg.type === "host.event") {
-    sendBridgeResponse(msg, { ok: true });
-    return;
-  }
   if (method === "ui.action.invoke") {
     const input = msg.input as Record<string, unknown> | null;
     const actionId = String(input?.actionId ?? input?.action_id ?? "");
@@ -460,78 +446,6 @@ function buildThemeSnapshot() {
 
 function buildThemeTokens() {
   return buildSandboxThemeTokens();
-}
-
-function postUIContext() {
-  if (!bridgePort || !ready.value) return;
-  const surface = (uiContext.value.surface as Record<string, unknown> | undefined) ?? {};
-  const surfaceRole = String(surface.role ?? "main");
-  const themeSnapshot = buildThemeSnapshot();
-  const env = resolveHostEnvironment();
-  const contextPayload = {
-    theme: themeSnapshot,
-    locale: (uiContext.value.locale as string) || navigator.language || "en",
-    platform: env.platform,
-    host: env.host,
-    os: env.os,
-    surface: surfaceRole,
-    slotId: props.slotId,
-    characterId: (uiContext.value.characterId as string) || "",
-    conversationId: (uiContext.value.conversationId as string) || "",
-    capabilities: serverCapabilities,
-    grantedPerms: serverGrantedPerms,
-    grantedScopes: serverGrantedScopes,
-    scope: {
-      extensionId: props.contribution.extensionId,
-      moduleId: props.contribution.moduleId,
-    },
-    generation: props.contribution.generation,
-  };
-  bridgePort.postMessage({ type: "host.event", method: "ui.host.context", payload: contextPayload });
-  bridgePort.postMessage({ type: "host.event", method: "ui.host.theme", payload: themeSnapshot });
-  bridgePort.postMessage({ type: "host.event", method: "ui.host.resize", payload: { width: surface.width ?? 0, height: surface.height ?? 0, breakpoint: surface.breakpoint ?? "xs", surfaceRole } });
-}
-
-function buildThemeSnapshot() {
-  const tokens = buildThemeTokens();
-  const themeData = (uiContext.value.theme as Record<string, unknown> | undefined) ?? {};
-  const mode = themeData.mode || (uiContext.value.hostTheme as string) || "light";
-  const density = themeData.density || "default";
-  return { mode, density, tokens };
-}
-
-function buildThemeTokens() {
-  const cs = getComputedStyle(document.documentElement);
-  const surface = cs.getPropertyValue("--amitia-bg-surface").trim() || "transparent";
-  const textPrimary = cs.getPropertyValue("--amitia-text-primary").trim() || "inherit";
-  const textSecondary = cs.getPropertyValue("--amitia-text-secondary").trim() || "inherit";
-  const border = cs.getPropertyValue("--amitia-border").trim() || "transparent";
-  const control = cs.getPropertyValue("--amitia-control-hover").trim() || "transparent";
-  const controlActive = cs.getPropertyValue("--amitia-control-active").trim() || "transparent";
-  const radius = cs.getPropertyValue("--amitia-radius-sm").trim() || "8px";
-  const radiusLg = cs.getPropertyValue("--amitia-radius-lg").trim() || "12px";
-  const font = cs.getPropertyValue("--amitia-font-ui").trim() || "system-ui";
-  const fontSize = cs.getPropertyValue("--amitia-font-size-sm").trim() || "13px";
-  const accent = cs.getPropertyValue("--amitia-color-accent").trim() || "#c99557";
-  const success = cs.getPropertyValue("--amitia-color-success").trim() || "#75a184";
-  const warning = cs.getPropertyValue("--amitia-color-warning").trim() || "#c99a56";
-  const danger = cs.getPropertyValue("--amitia-color-danger").trim() || "#c96e6a";
-  return {
-    "--amitia-bg-surface": surface,
-    "--amitia-text-primary": textPrimary,
-    "--amitia-text-secondary": textSecondary,
-    "--amitia-border": border,
-    "--amitia-control-hover": control,
-    "--amitia-control-active": controlActive,
-    "--amitia-radius-sm": radius,
-    "--amitia-radius-lg": radiusLg,
-    "--amitia-font-ui": font,
-    "--amitia-font-size-sm": fontSize,
-    "--amitia-color-accent": accent,
-    "--amitia-color-success": success,
-    "--amitia-color-warning": warning,
-    "--amitia-color-danger": danger,
-  };
 }
 
 onMounted(async () => {

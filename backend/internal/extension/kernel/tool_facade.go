@@ -502,9 +502,6 @@ func (f *ToolFacade) ExecuteTool(ctx context.Context, toolID capability.Capabili
 	if !workflowToolAllowedForSpace(def, scope.SpaceID) {
 		return ToolDispatchResult{Status: "FAILED", VisibleText: "workflow tool is not available for this Space", Error: &ToolDispatchError{Code: "TOOL_NOT_FOUND", Message: string(toolID)}}, false
 	}
-	if !workflowToolAllowedForUser(def, scope.UserID) {
-		return LegacyToolResult{Status: "FAILED", VisibleText: "workflow tool is not available for this user", Error: &LegacyToolError{Code: "TOOL_NOT_FOUND", Message: string(toolID)}}, false
-	}
 	f.counters.IncPipelineExecution()
 	return f.executeResolvedTool(ctx, def, input, scope, externalCallID, idempotencyKey), true
 }
@@ -552,9 +549,6 @@ func (f *ToolFacade) ExecuteModelTool(ctx context.Context, modelName string, inp
 	}
 	if !workflowToolAllowedForSpace(def, scope.SpaceID) {
 		return ToolDispatchResult{Status: "FAILED", VisibleText: fmt.Sprintf("tool %s not found in kernel registry", modelName), Error: &ToolDispatchError{Code: "TOOL_NOT_FOUND", Message: modelName}}, false
-	}
-	if !workflowToolAllowedForUser(def, scope.UserID) {
-		return LegacyToolResult{Status: "FAILED", VisibleText: fmt.Sprintf("tool %s not found in kernel registry", modelName), Error: &LegacyToolError{Code: "TOOL_NOT_FOUND", Message: modelName}}, false
 	}
 	f.counters.IncPipelineExecution()
 	return f.executeResolvedTool(ctx, def, input, scope, scope.ToolCallID, idempotencyKey), true
