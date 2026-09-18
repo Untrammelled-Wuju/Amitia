@@ -163,8 +163,10 @@ func (r *Runtime) PreviewPackage(ctx context.Context, request PackagePreviewRequ
 			preview.DeveloperSessionID = request.DeveloperSessionID
 			if request.AllowUnsignedLocal {
 				preview.DeveloperSessionID = localUnsignedDeveloperSessionID
+				preview.TrustDecision = string(trust.TrustLevelUserTrusted)
+			} else {
+				preview.TrustDecision = string(trust.TrustLevelDevelopment)
 			}
-			preview.TrustDecision = string(trust.TrustLevelDevelopment)
 			preview.RequiredConfirmations = append(preview.RequiredConfirmations, "confirm.unsigned_dev")
 			preview.RiskFlags = append(preview.RiskFlags, "unsigned_dev", "dev_only")
 		} else {

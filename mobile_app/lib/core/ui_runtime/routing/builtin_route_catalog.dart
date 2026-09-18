@@ -33,19 +33,13 @@ import '../../../features/extensions/presentation/pages/mcp_list_page.dart';
 import '../../../features/extensions/presentation/pages/mcp_detail_page.dart';
 import '../../../features/extensions/presentation/pages/mcp_edit_page.dart';
 import '../../../features/extensions/presentation/pages/agent_skills_page.dart';
-import '../../../features/extensions/presentation/pages/compatible_skills_page.dart';
-import '../../../features/extensions/presentation/pages/execution_runs_page.dart';
-import '../../../features/extensions/presentation/pages/extension_run_detail_page.dart';
 import '../../../features/extensions/presentation/pages/extension_page_host_page.dart';
-import '../../../features/extensions/presentation/pages/skill_detail_page.dart';
 import '../../../features/game_center/presentation/pages/game_center_page.dart';
 import '../../../features/game_center/presentation/pages/plugin_detail_page.dart' as game_center;
 import '../../../features/desktop_pet/presentation/pages/desktop_pet_page.dart';
 import '../../../features/workshop/presentation/pages/workshop_home_page.dart';
 import '../../../features/workshop/presentation/pages/workflow_list_page.dart';
 import '../../../features/workshop/presentation/pages/workflow_editor_page.dart';
-import '../../../features/workshop/presentation/pages/skill_workshop_page.dart';
-import '../../../features/workshop/presentation/pages/skill_draft_editor_page.dart';
 import '../../../features/workshop/presentation/pages/pet_center_page.dart';
 import '../../../features/workshop/presentation/pages/pet_create_page.dart';
 import '../../../features/workshop/presentation/pages/pet_tasks_page.dart';
@@ -373,38 +367,6 @@ GoRoute(
   ),
 ),
 GoRoute(
-  path: '/extensions/skills',
-  pageBuilder: (context, state) => slideFadePage(
-    context: context,
-    state: state,
-    child: const CompatibleSkillsPage(),
-  ),
-),
-GoRoute(
-  path: '/extensions/skills/:id',
-  pageBuilder: (context, state) => slideFadePage(
-    context: context,
-    state: state,
-    child: SkillDetailPage(skillId: state.pathParameters['id']!),
-  ),
-),
-GoRoute(
-  path: '/extensions/runs',
-  pageBuilder: (context, state) => slideFadePage(
-    context: context,
-    state: state,
-    child: const ExecutionRunsPage(),
-  ),
-),
-GoRoute(
-  path: '/extensions/runs/:id',
-  pageBuilder: (context, state) => slideFadePage(
-    context: context,
-    state: state,
-    child: ExtensionRunDetailPage(runId: state.pathParameters['id']!),
-  ),
-),
-GoRoute(
   path: '/extension/page/:pageId',
   pageBuilder: (context, state) => slideFadePage(
     context: context,
@@ -473,22 +435,6 @@ GoRoute(
       location: state.uri.queryParameters['location'] ?? 'cloud',
       deviceId: state.uri.queryParameters['deviceId'] ?? '',
     ),
-  ),
-),
-GoRoute(
-  path: '/workshop/skills',
-  pageBuilder: (context, state) => slideFadePage(
-    context: context,
-    state: state,
-    child: const SkillWorkshopPage(),
-  ),
-),
-GoRoute(
-  path: '/workshop/skills/:id/editor',
-  pageBuilder: (context, state) => slideFadePage(
-    context: context,
-    state: state,
-    child: SkillDraftEditorPage(draftId: state.pathParameters['id']!),
   ),
 ),
 GoRoute(

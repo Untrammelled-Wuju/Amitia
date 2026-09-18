@@ -334,6 +334,29 @@ function ensureCoreBinaries(dataDir: string): void {
       console.error("[CoreManager] 二进制资源不存在:", src);
     }
   }
+  syncRuntimeHostAssets(dataDir, getBundledRuntimeRoot());
+}
+
+function getBundledRuntimeRoot(): string {
+  if (isDevMode()) {
+    return path.resolve(getInstallDir(), "..", "runtime");
+  }
+  return path.join(getCoreResourcesPath(), "runtime");
+}
+
+export function syncRuntimeHostAssets(dataDir: string, runtimeRoot: string): void {
+  for (const host of ["plugin-host", "task-host"]) {
+    const source = path.join(runtimeRoot, host, "dist");
+    const destination = path.join(dataDir, "runtime", host, "dist");
+    if (!fs.existsSync(path.join(source, "index.js"))) {
+      console.error("[CoreManager] 运行时宿主资源不存在:", source);
+      continue;
+    }
+    fs.rmSync(destination, { recursive: true, force: true });
+    fs.mkdirSync(path.dirname(destination), { recursive: true });
+    fs.cpSync(source, destination, { recursive: true, force: true });
+    console.log("[CoreManager] 运行时宿主已同步:", destination);
+  }
 }
 
 export function startCore(profile: BundledCoreProfile): void {

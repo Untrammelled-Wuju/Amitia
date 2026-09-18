@@ -9,8 +9,9 @@ import '../../../../app/theme/app_radius.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/backend_transport/providers/backend_transport_providers.dart';
+import '../../../../core/backend_transport/errors/backend_transport_error.dart';
+import '../../../../core/backend_transport/errors/backend_transport_error_code.dart';
 import '../../../../core/services/providers.dart';
-import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 
@@ -52,6 +53,33 @@ class _UpdatesPageState extends ConsumerState<UpdatesPage> {
         );
   }
 
+  Future<Map<String, dynamic>?> _getOptional(String path) async {
+    try {
+      return await _get(path);
+    } on BackendTransportError catch (error) {
+      if (error.code == BackendTransportErrorCode.notFound ||
+          error.statusCode == 404) {
+        return null;
+      }
+      rethrow;
+    }
+  }
+
+  Future<Map<String, dynamic>?> _checkCoreUpdateOptional() async {
+    try {
+      return await ref.read(backendServiceProvider).post<Map<String, dynamic>>(
+            '/api/update/check',
+            fromJson: (value) => Map<String, dynamic>.from(value as Map),
+          );
+    } on BackendTransportError catch (error) {
+      if (error.code == BackendTransportErrorCode.notFound ||
+          error.statusCode == 404) {
+        return null;
+      }
+      rethrow;
+    }
+  }
+
   Future<void> _load() async {
     setState(() {
       _loading = true;
@@ -59,11 +87,11 @@ class _UpdatesPageState extends ConsumerState<UpdatesPage> {
     });
     try {
       final values = await Future.wait([
-        _get('/api/version'),
-        _get('/api/update/check'),
-        _get('/api/update/config'),
-        _get('/api/release-check/latest'),
-        _get('/api/release-check/history'),
+        _getOptional('/api/version'),
+        _checkCoreUpdateOptional(),
+        _getOptional('/api/update/config'),
+        _getOptional('/api/release-check/latest'),
+        _getOptional('/api/release-check/history'),
       ]);
       if (!mounted) return;
       final historyRaw = values[4]?['history'] as List<dynamic>? ?? const [];

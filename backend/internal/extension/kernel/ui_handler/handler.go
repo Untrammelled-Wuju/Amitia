@@ -664,6 +664,7 @@ func (h *HTTPHandler) handlePageSession(w http.ResponseWriter, r *http.Request) 
 		}
 		writeJSON(w, http.StatusOK, map[string]any{
 			"sessionId":          sess.SessionID,
+			"generation":         sess.Generation,
 			"state":              sess.State,
 			"definition":         nil,
 			"missingPermissions": []string{},
@@ -977,6 +978,7 @@ func (h *HTTPHandler) handleWebUISessionCollection(w http.ResponseWriter, r *htt
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"sessionId":     result.SessionID,
+		"generation":    def.Integrity.Generation,
 		"entryUrl":      result.EntryURL,
 		"resourceUrl":   resourceURL,
 		"origin":        result.Origin,

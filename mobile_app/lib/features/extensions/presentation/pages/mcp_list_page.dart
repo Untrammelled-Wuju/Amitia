@@ -21,12 +21,37 @@ class _McpListPageState extends ConsumerState<McpListPage> {
   List<Map<String, dynamic>> _servers = [];
   Map<String, Set<String>> _enabledCapabilities = const <String, Set<String>>{};
   bool _loading = true;
+  bool _searchVisible = false;
   String? _error;
+  String _query = '';
+  final _searchController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
     _loadServers();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  List<Map<String, dynamic>> get _searchResults {
+    final query = _query.trim().toLowerCase();
+    if (query.isEmpty) return const [];
+    return _servers.where((server) {
+      final searchable = [
+        server['id'],
+        server['name'],
+        server['transport'],
+        server['command'],
+        server['endpoint'],
+        server['status'],
+      ].map((value) => (value ?? '').toString().toLowerCase());
+      return searchable.any((value) => value.contains(query));
+    }).toList(growable: false);
   }
 
   Future<void> _loadServers() async {
@@ -110,23 +135,106 @@ class _McpListPageState extends ConsumerState<McpListPage> {
     }
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
-        title: 'MCP 服务',
+        title: _searchVisible ? '搜索 MCP 服务' : 'MCP 服务',
         showBackButton: true,
+        actions: _searchVisible
+            ? [
+                AmitiaIconButton(
+                  icon: Icons.close,
+                  tooltip: '退出搜索',
+                  onPressed: () => _toggleSearch(context),
+                ),
+              ]
+            : [
+                AmitiaIconButton(
+                  icon: Icons.search,
+                  tooltip: '搜索',
+                  onPressed: () => _toggleSearch(context),
+                ),
+                AmitiaIconButton(
+                  icon: Icons.add,
+                  tooltip: '添加 MCP 服务',
+                  onPressed: _showAddServerSheet,
+                ),
+              ],
       ),
       body: SafeArea(
         top: false,
-        child: ListView.separated(
-          padding: EdgeInsets.fromLTRB(AppSpacing.pagePadding, AppSpacing.sm, AppSpacing.pagePadding, AppSpacing.xxxl),
-          itemCount: _servers.length,
-          separatorBuilder: (_, _) => SizedBox(height: AppSpacing.sm),
-          itemBuilder: (context, index) => _buildServerCard(context, _servers[index]),
+        child: _searchVisible
+            ? _buildSearchView()
+            : _servers.isEmpty
+            ? AmitiaEmptyState(
+                icon: Icons.dns_outlined,
+                title: '暂无 MCP 服务',
+                subtitle: '点击右上角添加 MCP 服务',
+                actionText: '添加',
+                onAction: _showAddServerSheet,
+              )
+            : _buildServerList(_servers),
+      ),
+    );
+  }
+
+  void _toggleSearch(BuildContext context) {
+    FocusScope.of(context).unfocus();
+    _searchController.clear();
+    setState(() {
+      _searchVisible = !_searchVisible;
+      _query = '';
+    });
+  }
+
+  Widget _buildSearchView() {
+    final query = _query.trim();
+    final results = _searchResults;
+    return Column(
+      children: [
+        Padding(
+          padding: EdgeInsets.fromLTRB(
+            AppSpacing.pagePadding,
+            AppSpacing.md,
+            AppSpacing.pagePadding,
+            AppSpacing.sm,
+          ),
+          child: AmitiaSearchField(
+            hintText: '搜索 MCP 名称、地址或状态',
+            controller: _searchController,
+            autofocus: true,
+            onChanged: (value) => setState(() => _query = value),
+          ),
         ),
+        Expanded(
+          child: query.isEmpty
+              ? const AmitiaEmptyState(
+                  icon: Icons.search,
+                  title: '输入关键词',
+                  subtitle: '在当前页面搜索 MCP 服务',
+                )
+              : results.isEmpty
+              ? const AmitiaEmptyState(
+                  icon: Icons.search_off,
+                  title: '未找到相关 MCP 服务',
+                  subtitle: '尝试更换关键词',
+                )
+              : _buildServerList(results),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildServerList(List<Map<String, dynamic>> servers) {
+    return ListView.separated(
+      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+      padding: EdgeInsets.fromLTRB(
+        AppSpacing.pagePadding,
+        AppSpacing.sm,
+        AppSpacing.pagePadding,
+        AppSpacing.xxxl,
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _showAddServerSheet,
-        backgroundColor: context.accentPrimary,
-        child: const Icon(Icons.add, color: Colors.white),
-      ),
+      itemCount: servers.length,
+      separatorBuilder: (_, _) => SizedBox(height: AppSpacing.sm),
+      itemBuilder: (context, index) =>
+          _buildServerCard(context, servers[index]),
     );
   }
 

@@ -1,8 +1,9 @@
 import http from "node:http";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { spawn } from "node:child_process";
+import { createRequire } from "node:module";
 import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 
 const CHANNEL_ID = "wechat_personal";
@@ -10,13 +11,19 @@ const EXTENSION_ID = "com.amitia/channel-wechat-personal";
 const MODULE_ID = "wechat-personal-channel-service";
 const HOST = "127.0.0.1";
 const PORT = 19878;
-const RECEIVER_PORT = 9999;
 const CORE_URL = String(process.env.AMITIA_CORE_URL || "").trim().replace(/\/+$/, "");
 const SERVICE_AUTH_TOKEN = String(process.env.AMITIA_SERVICE_AUTH_TOKEN || "").trim();
 const SERVICE_AUTH_VERSION = String(process.env.AMITIA_SERVICE_AUTH_VERSION || "").trim();
 const DEV_ALLOW_UNAUTHENTICATED = process.env.AMITIA_WECHAT_DEV_ALLOW_UNAUTHENTICATED === "1";
-const EXTERNAL_COMPAT = process.env.AMITIA_WECHAT_EXTERNAL_DRIVER_COMPAT === "1";
-const EXTERNAL_UNAUTH_CALLBACK = process.env.AMITIA_WECHAT_EXTERNAL_CALLBACK_UNAUTHENTICATED === "1";
+const ILINK_BASE_URL = String(process.env.AMITIA_WECHAT_ILINK_BASE_URL || "https://ilinkai.weixin.qq.com").trim().replace(/\/+$/, "");
+const ILINK_APP_ID = "bot";
+const ILINK_BOT_TYPE = "3";
+const ILINK_CHANNEL_VERSION = "2.4.6";
+const ILINK_CLIENT_VERSION = ((2 & 0xff) << 16) | ((4 & 0xff) << 8) | (6 & 0xff);
+const LOGIN_TTL_MS = 5 * 60_000;
+const LOGIN_LONG_POLL_MS = 35_000;
+const MAX_QR_REFRESH = 3;
+
 if (!SERVICE_AUTH_TOKEN && !DEV_ALLOW_UNAUTHENTICATED) {
   throw new Error("AMITIA_SERVICE_AUTH_TOKEN is required for the personal WeChat trusted service");
 }
@@ -26,55 +33,97 @@ if (!CORE_URL) {
 if (SERVICE_AUTH_VERSION && SERVICE_AUTH_VERSION !== "1") {
   throw new Error(`Unsupported AMITIA_SERVICE_AUTH_VERSION: ${SERVICE_AUTH_VERSION}`);
 }
-const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
-const TEMP_DIR = process.env.AMITIA_TEMP_DIR || path.join(process.cwd(), ".wechat-personal-temp");
-fs.mkdirSync(TEMP_DIR, { recursive: true });
 
+const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
+const require = createRequire(import.meta.url);
+const qrCandidates = [
+  path.join(MODULE_DIR, "vendor", "qrcode"),
+  path.join(MODULE_DIR, "..", "vendor", "qrcode"),
+];
+const QRCode = require(qrCandidates.find((candidate) => fs.existsSync(candidate)) || qrCandidates[0]);
+
+function resolveStateDir() {
+  const override = String(process.env.AMITIA_WECHAT_STATE_DIR || "").trim();
+  if (override) return path.resolve(override);
+  if (process.platform === "win32") {
+    const base = String(process.env.APPDATA || process.env.LOCALAPPDATA || "").trim();
+    if (base) return path.join(base, "Amitia", "extensions", "wechat-personal");
+  }
+  const configHome = String(process.env.XDG_CONFIG_HOME || "").trim();
+  return path.join(configHome || path.join(os.homedir(), ".config"), "amitia", "extensions", "wechat-personal");
+}
+
+const STATE_DIR = resolveStateDir();
+const ACCOUNT_FILE = path.join(STATE_DIR, "account.json");
+fs.mkdirSync(STATE_DIR, { recursive: true });
+
+function loadCredentials() {
+  try {
+    if (!fs.existsSync(ACCOUNT_FILE)) return null;
+    const value = JSON.parse(fs.readFileSync(ACCOUNT_FILE, "utf8"));
+    if (!value || typeof value !== "object" || !String(value.token || "").trim()) return null;
+    return {
+      accountId: String(value.accountId || value.id || "").trim(),
+      id: String(value.id || value.accountId || "").trim(),
+      token: String(value.token || "").trim(),
+      baseUrl: String(value.baseUrl || ILINK_BASE_URL).trim().replace(/\/+$/, ""),
+      userId: String(value.userId || "").trim(),
+      syncBuf: String(value.syncBuf || ""),
+      contextTokens: value.contextTokens && typeof value.contextTokens === "object" ? value.contextTokens : {},
+    };
+  } catch {
+    return null;
+  }
+}
+
+let credentials = loadCredentials();
+const contextTokens = new Map(Object.entries(credentials?.contextTokens || {}));
 const state = {
-  status: "disconnected",
-  connected: false,
-  running: true,
-  accountId: "",
-  nickname: "",
-  alias: "",
+  status: credentials ? "connected" : "disconnected",
+  connected: Boolean(credentials),
+  accountId: credentials?.accountId || "",
+  nickname: credentials ? "个人微信" : "",
+  alias: credentials?.accountId || "",
   avatar: "",
   qrCodeUrl: "",
-  driverKind: "none",
-  driverBaseUrl: "",
-  driverVersion: "",
+  qrImageUrl: "",
+  sessionKey: "",
+  protocol: "ilink",
+  transport: "腾讯 iLink",
+  localWechatRequired: false,
+  managedWechat: false,
+  driverKind: credentials ? "ilink" : "none",
+  driverVersion: ILINK_CHANNEL_VERSION,
+  messageTransportReady: Boolean(credentials),
   messageCount: 0,
   replyCount: 0,
-  startedAt: new Date().toISOString(),
+  startedAt: credentials ? new Date().toISOString() : "",
+  lastInboundAt: "",
+  lastOutboundAt: "",
   lastError: "",
-  message: "等待连接个人微信",
-  managedWechatPid: 0,
+  message: credentials ? "个人微信已连接" : "等待连接个人微信",
   platform: process.platform,
   architecture: process.arch,
-  nativeAgent: "stopped",
-  nativeAgentPath: "",
-  nativeClientFound: false,
-  nativeClientRunning: false,
-  nativeClientVersion: "",
-  nativeClientStrategy: "",
-  nativeClientPath: "",
-  nativeClientMessage: "",
-  nativeDriverKind: "",
-  nativeDriverVersion: "",
-  nativeDriverClientVersion: "",
-  nativeDriverVersionVerified: false,
-  nativeDriverMessage: "",
-  linuxPreloadAttached: false,
-  nativeDriverAvailable: false,
-  nativeDriverEndpoint: "",
-  nativeDriverCapabilities: {},
-  messageTransportReady: false,
 };
 
+let activeLogin = null;
 let loginTimer = null;
-let nativeEventTimer = null;
+let loginGeneration = 0;
+let monitorAbort = null;
+let monitorTask = null;
 const seenInbound = new Map();
 const delivered = new Map();
 const messageHistory = new Map();
+
+function pruneMap(map, max = 1000) {
+  if (map.size <= max) return;
+  const remove = map.size - max;
+  let index = 0;
+  for (const key of map.keys()) {
+    map.delete(key);
+    if (++index >= remove) break;
+  }
+}
 
 function recordMessage(conversationId, peerId, role, content, createdAt = new Date().toISOString()) {
   const key = String(conversationId || peerId || "default");
@@ -105,16 +154,6 @@ function readMessages(conversationId, limit, offset) {
     bindings,
     messages: selected.slice(Math.max(0, offset), Math.max(0, offset) + Math.max(1, limit)),
   };
-}
-
-function pruneMap(map, max = 1000) {
-  if (map.size <= max) return;
-  const remove = map.size - max;
-  let i = 0;
-  for (const key of map.keys()) {
-    map.delete(key);
-    if (++i >= remove) break;
-  }
 }
 
 function json(res, statusCode, value) {
@@ -161,480 +200,380 @@ async function readJson(req) {
   return text ? JSON.parse(text) : {};
 }
 
-async function fetchJson(url, options = {}, timeoutMs = 5000) {
-  const signal = AbortSignal.timeout(timeoutMs);
-  const response = await fetch(url, { ...options, signal });
-  const text = await response.text();
-  let data = {};
-  if (text) {
-    try { data = JSON.parse(text); } catch { data = { raw: text }; }
+function safeAccountId(value) {
+  return String(value || "").replace(/[^a-zA-Z0-9._@-]/g, "_").slice(0, 160);
+}
+
+function conversationKey(accountId, peerId) {
+  return `wechat-personal-${accountId || "default"}-${peerId}`.replace(/[^a-zA-Z0-9_@.-]/g, "_");
+}
+
+function persistCredentials() {
+  if (!credentials) {
+    fs.rmSync(ACCOUNT_FILE, { force: true });
+    return;
   }
-  if (!response.ok) throw new Error(`HTTP ${response.status}: ${text.slice(0, 240)}`);
-  return data;
-}
-
-function normalizeStatusPayload(data) {
-  if (!data || typeof data !== "object") return false;
-  if (data.data && typeof data.data === "object") data = data.data;
-  if (typeof data.logged === "boolean") return data.logged;
-  if (typeof data.connected === "boolean") return data.connected;
-  if (data.IsLogin !== undefined) return Number(data.IsLogin) === 1;
-  if (data.isLogin !== undefined) return Number(data.isLogin) === 1 || data.isLogin === true;
-  if (typeof data.status === "string") return ["connected", "online", "logged_in", "logged"].includes(data.status.toLowerCase());
-  return false;
-}
-
-async function probeAmitiaDriver(base = "http://127.0.0.1:19879") {
+  const payload = {
+    ...credentials,
+    contextTokens: Object.fromEntries(contextTokens),
+  };
+  const tempFile = `${ACCOUNT_FILE}.${process.pid}.tmp`;
+  fs.writeFileSync(tempFile, `${JSON.stringify(payload, null, 2)}\n`, { mode: 0o600 });
+  fs.rmSync(ACCOUNT_FILE, { force: true });
+  fs.renameSync(tempFile, ACCOUNT_FILE);
   try {
-    const info = await fetchJson(`${base}/v1/health`);
-    return { kind: "amitia", base, info };
-  } catch { return null; }
+    fs.chmodSync(ACCOUNT_FILE, 0o600);
+  } catch {}
 }
 
-async function probeHeroDriver(base = "http://127.0.0.1:8888") {
-  try {
-    const info = await fetchJson(`${base}/status`);
-    if (info?.matched === false) throw new Error("微信版本与 Hook Driver 不匹配");
-    return { kind: "hero", base, info };
-  } catch { return null; }
+function clearCredentials() {
+  credentials = null;
+  contextTokens.clear();
+  fs.rmSync(ACCOUNT_FILE, { force: true });
 }
 
-async function probeAixedDriver(base = "http://127.0.0.1:30001") {
-  try {
-    const info = await fetchJson(`${base}/QueryDB/status`);
-    return { kind: "aixed", base, info };
-  } catch { return null; }
+function ensureTrailingSlash(value) {
+  return value.endsWith("/") ? value : `${value}/`;
 }
 
-async function probeExternalCompatibilityDriver(preferred = "") {
-  if (!EXTERNAL_COMPAT) return null;
-  const candidates = [];
-  if (preferred) {
-    candidates.push({ kind: "hero", fn: () => probeHeroDriver(preferred) });
-    candidates.push({ kind: "aixed", fn: () => probeAixedDriver(preferred) });
-  }
-  candidates.push(
-    { kind: "hero", fn: () => probeHeroDriver() },
-    { kind: "aixed", fn: () => probeAixedDriver() },
-  );
-  for (const candidate of candidates) {
-    const result = await candidate.fn();
-    if (result) return result;
-  }
-  return null;
+function randomWechatUin() {
+  const value = Math.floor(Math.random() * 0xffffffff) >>> 0;
+  return Buffer.from(String(value), "utf8").toString("base64");
 }
 
-class NativeCompanionManager {
-  constructor() {
-    this.child = null;
-    this.pending = new Map();
-    this.buffer = "";
-    this.seq = 0;
-  }
-
-  declaredCompanions() {
-    const version = String(process.env.AMITIA_NATIVE_COMPANIONS_VERSION || "").trim();
-    const raw = String(process.env.AMITIA_NATIVE_COMPANIONS || "").trim();
-    if (!raw) return [];
-    if (version && version !== "1") {
-      throw new Error(`Unsupported Native Companion contract version: ${version}`);
-    }
-    try {
-      const value = JSON.parse(raw);
-      return Array.isArray(value) ? value : [];
-    } catch (error) {
-      throw new Error(`Invalid AMITIA_NATIVE_COMPANIONS payload: ${error.message}`);
-    }
-  }
-
-  verifyDeclaredFile(item) {
-    if (!item?.path || !item?.sha256 || !fs.existsSync(item.path)) return false;
-    const actual = createHash("sha256").update(fs.readFileSync(item.path)).digest("hex");
-    return actual === String(item.sha256).toLowerCase();
-  }
-
-  resolveCompanions() {
-    const declared = this.declaredCompanions().filter((item) => this.verifyDeclaredFile(item));
-    const byId = (id) => declared.find((item) => item.id === id);
-    if (process.platform === "win32" && process.arch === "x64") {
-      return {
-        agent: byId("wechat-agent-windows-x64"),
-        driverLibrary: byId("wechat-driver-windows-x64"),
-      };
-    }
-    if (process.platform === "linux" && process.arch === "x64") {
-      return {
-        agent: byId("wechat-agent-linux-x64"),
-        driverLibrary: byId("wechat-driver-linux-x64") || byId("wechat-preload-linux-x64"),
-      };
-    }
-    return { agent: undefined, driverLibrary: undefined };
-  }
-
-  async ensureStarted() {
-    if (this.child && !this.child.killed) return true;
-    const companions = this.resolveCompanions();
-    const agent = companions.agent;
-    state.nativeAgentPath = String(agent?.path || "");
-    if (!agent?.path || agent.executable !== true) {
-      state.nativeAgent = "missing";
-      throw new Error(`宿主未声明当前平台可执行 Native Companion: ${process.platform}/${process.arch}`);
-    }
-    this.child = spawn(agent.path, Array.isArray(agent.args) ? agent.args.map(String) : [], {
-      cwd: MODULE_DIR,
-      stdio: ["pipe", "pipe", "pipe"],
-      windowsHide: true,
-      env: { ...process.env },
-    });
-    state.nativeAgent = "running";
-    this.child.stdout.setEncoding("utf8");
-    this.child.stdout.on("data", (chunk) => this.onStdout(chunk));
-    this.child.stderr.setEncoding("utf8");
-    this.child.stderr.on("data", (chunk) => {
-      const line = String(chunk || "").trim();
-      if (line) console.warn(`[wechat-personal/native] ${line}`);
-    });
-    this.child.once("exit", (code, signal) => {
-      state.nativeAgent = "stopped";
-      state.nativeClientRunning = false;
-      for (const [, item] of this.pending) item.reject(new Error(`Native Agent exited: code=${code} signal=${signal || ""}`));
-      this.pending.clear();
-      this.child = null;
-    });
-    await new Promise((resolve) => setTimeout(resolve, 40));
-    if (!this.child || this.child.exitCode !== null) throw new Error("Native Agent 启动失败");
-    return true;
-  }
-
-  onStdout(chunk) {
-    this.buffer += chunk;
-    for (;;) {
-      const idx = this.buffer.indexOf("\n");
-      if (idx < 0) break;
-      const line = this.buffer.slice(0, idx).trim();
-      this.buffer = this.buffer.slice(idx + 1);
-      if (!line) continue;
-      let payload;
-      try { payload = JSON.parse(line); } catch { continue; }
-      const item = this.pending.get(String(payload.id || ""));
-      if (!item) continue;
-      this.pending.delete(String(payload.id));
-      if (payload.ok === false) item.reject(new Error(payload.error || "Native Agent request failed"));
-      else item.resolve(payload);
-    }
-  }
-
-  async call(op, extra = {}, timeoutMs = 5000) {
-    await this.ensureStarted();
-    const id = `rpc-${Date.now()}-${++this.seq}`;
-    const companions = this.resolveCompanions();
-    const request = { id, op, ...extra };
-    if (op === "start" && companions.driverLibrary?.path) request.driverLibraryPath = companions.driverLibrary.path;
-    return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
-        this.pending.delete(id);
-        reject(new Error(`Native Agent timeout: ${op}`));
-      }, timeoutMs);
-      this.pending.set(id, {
-        resolve: (value) => { clearTimeout(timer); resolve(value); },
-        reject: (error) => { clearTimeout(timer); reject(error); },
-      });
-      this.child.stdin.write(`${JSON.stringify(request)}\n`);
-    });
-  }
-
-  applyClient(payload) {
-    const client = payload?.client || {};
-    state.managedWechatPid = Number(client.pid || 0);
-    state.nativeClientFound = Boolean(client.found);
-    state.nativeClientRunning = Boolean(client.running);
-    state.nativeClientVersion = String(client.version || "");
-    state.nativeClientStrategy = String(client.strategy || "");
-    state.nativeClientPath = String(client.path || "");
-    state.nativeClientMessage = String(client.message || "");
-    if (process.platform === "linux" && state.managedWechatPid > 0) {
-      state.linuxPreloadAttached = fs.existsSync(`/tmp/amitia-wechat-hook-${state.managedWechatPid}.sock`);
-    } else {
-      state.linuxPreloadAttached = false;
-    }
-    return client;
-  }
-
-  async probe() {
-    const payload = await this.call("probe");
-    this.applyDriver(payload?.driver);
-    return this.applyClient(payload);
-  }
-
-  async startClient() {
-    const payload = await this.call("start", {}, 10000);
-    this.applyDriver(payload?.driver);
-    return this.applyClient(payload);
-  }
-
-  async hideClient() {
-    try { return this.applyClient(await this.call("hide")); }
-    catch (error) {
-      if (process.platform !== "linux") throw error;
-      return { warning: error.message };
-    }
-  }
-
-  applyDriver(driver = {}) {
-    state.nativeDriverAvailable = Boolean(driver?.available);
-    state.nativeDriverKind = String(driver?.kind || "");
-    state.nativeDriverVersion = String(driver?.version || "");
-    state.nativeDriverClientVersion = String(driver?.clientVersion || "");
-    state.nativeDriverVersionVerified = Boolean(driver?.versionVerified);
-    state.nativeDriverMessage = String(driver?.message || "");
-    state.nativeDriverEndpoint = String(driver?.endpoint || "");
-    state.nativeDriverCapabilities = driver?.capabilities && typeof driver.capabilities === "object" ? { ...driver.capabilities } : {};
-    if (process.platform === "linux") state.linuxPreloadAttached = Boolean(state.nativeDriverCapabilities?.attached);
-    return driver;
-  }
-
-  async probeDriver() {
-    const payload = await this.call("driver.probe");
-    this.applyClient(payload);
-    return this.applyDriver(payload?.driver);
-  }
-
-  async driverCall(driverOp, payload = {}, timeoutMs = 10000) {
-    const response = await this.call("driver.call", { driverOp, payload }, timeoutMs);
-    this.applyClient(response);
-    const raw = response?.data;
-    if (raw == null) return {};
-    if (typeof raw === "object") return raw;
-    try { return JSON.parse(String(raw)); } catch { return { raw }; }
-  }
-
-  stop() {
-    if (!this.child) return;
-    try { this.child.stdin.end(); } catch {}
-    try { this.child.kill(); } catch {}
-    this.child = null;
-    state.nativeAgent = "stopped";
-  }
-}
-
-const nativeCompanion = new NativeCompanionManager();
-
-async function ensureManagedWechat() {
-  try {
-    let client = await nativeCompanion.probe();
-    // start is idempotent. On Windows it also gives the Agent a chance to attach
-    // a host-verified Driver Library to an already-running official client.
-    if (!client.running || process.platform === "win32") client = await nativeCompanion.startClient();
-    // Do not hide the official client before QR acquisition. UI-derived login
-    // drivers need a live render target. The window is hidden immediately
-    // after the QR is captured (or when an authenticated session is detected).
-    return client;
-  } catch (error) {
-    state.lastError = `Native Companion: ${error.message}`;
-    return null;
-  }
-}
-
-async function driverLoginStatus() {
-  try {
-    let data;
-    if (state.driverKind === "amitia-native") data = await nativeCompanion.driverCall("login.status");
-    else if (state.driverKind === "hero") data = await fetchJson(`${state.driverBaseUrl}/login/state`);
-    else if (state.driverKind === "aixed") data = await fetchJson(`${state.driverBaseUrl}/QueryDB/status`);
-    else return false;
-    return normalizeStatusPayload(data);
-  } catch {
-    return false;
-  }
-}
-
-async function driverSelf() {
-  try {
-    let data;
-    if (state.driverKind === "amitia-native") data = await nativeCompanion.driverCall("account.self");
-    else if (state.driverKind === "hero") data = await fetchJson(`${state.driverBaseUrl}/self/info`);
-    else if (state.driverKind === "aixed") data = await fetchJson(`${state.driverBaseUrl}/GetSelfProfile`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
-    else return {};
-    if (data?.data && typeof data.data === "object") data = data.data;
-    if (data?.result && typeof data.result === "object" && !Array.isArray(data.result)) data = data.result;
-    return data || {};
-  } catch { return {}; }
-}
-
-function selfFromPayload(data) {
+function baseInfo() {
   return {
-    accountId: String(data.wxid || data.accountId || data.userName || data.username || ""),
-    nickname: String(data.nickname || data.nickName || data.name || ""),
-    alias: String(data.alias || data.wxcount || data.wechatId || ""),
-    avatar: String(data.avatar || data.avatarUrl || data.big_head_url || ""),
+    channel_version: ILINK_CHANNEL_VERSION,
+    bot_agent: "Amitia/1.0.0",
   };
 }
 
-async function refreshAccountState() {
-  const logged = await driverLoginStatus();
-  if (!logged) {
-    state.connected = false;
-    if (state.status !== "qr_ready") state.status = "waiting_login";
-    return false;
+async function ilinkRequest(baseUrl, endpoint, options = {}) {
+  const method = options.method || "POST";
+  const token = String(options.token || "").trim();
+  const timeoutMs = Number(options.timeoutMs || 15_000);
+  const url = new URL(endpoint, ensureTrailingSlash(baseUrl || ILINK_BASE_URL));
+  const headers = {
+    "iLink-App-Id": ILINK_APP_ID,
+    "iLink-App-ClientVersion": String(ILINK_CLIENT_VERSION),
+  };
+  if (method === "POST") {
+    headers["Content-Type"] = "application/json";
+    headers.AuthorizationType = "ilink_bot_token";
+    headers["X-WECHAT-UIN"] = randomWechatUin();
+    if (token) headers.Authorization = `Bearer ${token}`;
   }
-  const profile = selfFromPayload(await driverSelf());
-  state.accountId = profile.accountId || state.accountId;
-  state.nickname = profile.nickname || state.nickname;
-  state.alias = profile.alias || state.alias;
-  state.avatar = profile.avatar || state.avatar;
-  state.connected = true;
-  state.messageTransportReady = state.driverKind !== "amitia-native" || Boolean(
-    state.nativeDriverVersionVerified &&
-    state.nativeDriverCapabilities?.receiveText &&
-    state.nativeDriverCapabilities?.sendText
-  );
-  state.status = state.messageTransportReady ? "connected" : "connected_limited";
-  state.qrCodeUrl = "";
-  state.message = state.messageTransportReady
-    ? "个人微信已连接"
-    : "个人微信已登录，但当前平台/版本仅完成登录适配，消息收发仍处于 fail-closed";
+  let response;
+  try {
+    response = await fetch(url, {
+      method,
+      headers,
+      body: method === "POST" ? JSON.stringify(options.body || {}) : undefined,
+      signal: timeoutMs > 0 ? AbortSignal.timeout(timeoutMs) : undefined,
+    });
+  } catch (error) {
+    if (error?.name === "TimeoutError") throw new Error("iLink 请求超时");
+    throw error;
+  }
+  const text = await response.text();
+  let payload = {};
+  if (text) {
+    try {
+      payload = JSON.parse(text);
+    } catch {
+      payload = { raw: text };
+    }
+  }
+  if (!response.ok) {
+    throw new Error(`iLink HTTP ${response.status}: ${text.slice(0, 240)}`);
+  }
+  if (payload?.ret !== undefined && Number(payload.ret) !== 0) {
+    throw new Error(`iLink ret=${payload.ret} errcode=${payload.errcode ?? ""} errmsg=${payload.errmsg ?? ""}`);
+  }
+  if (payload?.errcode !== undefined && Number(payload.errcode) !== 0) {
+    throw new Error(`iLink errcode=${payload.errcode} errmsg=${payload.errmsg ?? ""}`);
+  }
+  return payload;
+}
+
+async function fetchLoginQr() {
+  const localTokenList = credentials?.token ? [credentials.token] : [];
+  const payload = await ilinkRequest(ILINK_BASE_URL, `ilink/bot/get_bot_qrcode?bot_type=${encodeURIComponent(ILINK_BOT_TYPE)}`, {
+    method: "POST",
+    body: { local_token_list: localTokenList },
+    timeoutMs: 15_000,
+  });
+  const qrcode = String(payload.qrcode || "").trim();
+  const qrPayload = String(payload.qrcode_img_content || "").trim();
+  if (!qrcode || !qrPayload) throw new Error("iLink 未返回有效二维码");
+  const qrImageUrl = await QRCode.toDataURL(qrPayload, { width: 320, margin: 2, errorCorrectionLevel: "M" });
+  return { qrcode, qrPayload, qrImageUrl };
+}
+
+async function pollLoginStatus(login) {
+  let endpoint = `ilink/bot/get_qrcode_status?qrcode=${encodeURIComponent(login.qrcode)}`;
+  if (login.verifyCode) endpoint += `&verify_code=${encodeURIComponent(login.verifyCode)}`;
+  return ilinkRequest(login.currentBaseUrl, endpoint, {
+    method: "GET",
+    timeoutMs: LOGIN_LONG_POLL_MS,
+  });
+}
+
+function clearLoginTimer() {
+  if (loginTimer) {
+    clearTimeout(loginTimer);
+    loginTimer = null;
+  }
+}
+
+function scheduleLoginPoll(delayMs = 1000) {
+  clearLoginTimer();
+  loginTimer = setTimeout(() => {
+    loginTimer = null;
+    void pollLoginTick();
+  }, Math.max(0, delayMs));
+}
+
+async function refreshLoginQr(login) {
+  const next = await fetchLoginQr();
+  login.qrcode = next.qrcode;
+  login.qrPayload = next.qrPayload;
+  login.qrImageUrl = next.qrImageUrl;
+  login.startedAt = Date.now();
+  login.verifyCode = "";
+  state.qrCodeUrl = next.qrImageUrl;
+  state.qrImageUrl = next.qrImageUrl;
+  state.status = "qr_ready";
+  state.message = "二维码已更新，请重新扫码";
   state.lastError = "";
-  return true;
 }
 
-function startLoginPolling() {
-  if (loginTimer) clearInterval(loginTimer);
-  loginTimer = setInterval(async () => {
-    try {
-      const connected = await refreshAccountState();
-      if (connected && loginTimer) {
-        clearInterval(loginTimer);
-        loginTimer = null;
+async function completeLogin(login, payload) {
+  const accountId = String(payload.ilink_bot_id || "").trim();
+  const token = String(payload.bot_token || "").trim();
+  if (!accountId || !token) throw new Error("iLink 登录成功但未返回账号凭据");
+  credentials = {
+    accountId,
+    id: safeAccountId(accountId),
+    token,
+    baseUrl: String(payload.baseurl || login.currentBaseUrl || ILINK_BASE_URL).trim().replace(/\/+$/, ""),
+    userId: String(payload.ilink_user_id || "").trim(),
+    syncBuf: "",
+    contextTokens: {},
+  };
+  contextTokens.clear();
+  persistCredentials();
+  activeLogin = null;
+  clearLoginTimer();
+  state.connected = true;
+  state.status = "connected";
+  state.accountId = accountId;
+  state.nickname = "个人微信";
+  state.alias = accountId;
+  state.qrCodeUrl = "";
+  state.qrImageUrl = "";
+  state.sessionKey = "";
+  state.driverKind = "ilink";
+  state.messageTransportReady = true;
+  state.startedAt = new Date().toISOString();
+  state.lastError = "";
+  state.message = "个人微信已连接";
+  await startMonitor();
+}
+
+async function pollLoginTick() {
+  const login = activeLogin;
+  if (!login || Date.now() - login.startedAt >= LOGIN_TTL_MS) {
+    if (login) {
+      activeLogin = null;
+      state.status = "login_expired";
+      state.message = "二维码已过期，请重新连接";
+      state.qrCodeUrl = "";
+      state.qrImageUrl = "";
+    }
+    return;
+  }
+  const generation = login.generation;
+  try {
+    const payload = await pollLoginStatus(login);
+    if (activeLogin !== login || generation !== loginGeneration) return;
+    switch (payload.status) {
+      case "wait":
+        state.status = "qr_ready";
+        state.message = "请使用手机微信扫描二维码";
+        state.lastError = "";
+        scheduleLoginPoll(1000);
+        return;
+      case "scaned":
+        login.verifyCode = "";
+        state.status = "scanned";
+        state.message = "已扫码，请在手机上确认登录";
+        state.lastError = "";
+        scheduleLoginPoll(1000);
+        return;
+      case "need_verifycode":
+        login.verifyCode = "";
+        state.status = "verify_required";
+        state.message = "请输入手机微信显示的数字";
+        state.lastError = "";
+        return;
+      case "scaned_but_redirect": {
+        const host = String(payload.redirect_host || "").trim();
+        if (host) login.currentBaseUrl = `https://${host}`;
+        scheduleLoginPoll(1000);
+        return;
       }
-    } catch {}
-  }, 1800);
-  loginTimer.unref?.();
-}
-
-function stopNativeEventPolling() {
-  if (nativeEventTimer) {
-    clearInterval(nativeEventTimer);
-    nativeEventTimer = null;
-  }
-}
-
-function startNativeEventPolling() {
-  stopNativeEventPolling();
-  if (
-    state.driverKind !== "amitia-native" ||
-    !state.nativeDriverVersionVerified ||
-    !state.nativeDriverCapabilities?.receiveText
-  ) return;
-  let busy = false;
-  nativeEventTimer = setInterval(async () => {
-    if (busy) return;
-    busy = true;
-    try {
-      const payload = await nativeCompanion.driverCall("events.poll", { limit: 20 }, 1200);
-      const events = Array.isArray(payload) ? payload : Array.isArray(payload?.events) ? payload.events : [];
-      for (const event of events) {
-        try { await forwardInbound(event); } catch (error) { console.warn(`[wechat-personal/native-event] ${error.message}`); }
-      }
-    } catch {} finally {
-      busy = false;
+      case "expired":
+        if (login.refreshCount >= MAX_QR_REFRESH) {
+          activeLogin = null;
+          state.status = "login_expired";
+          state.connected = false;
+          state.message = "二维码多次失效，请重新连接";
+          state.qrCodeUrl = "";
+          state.qrImageUrl = "";
+          return;
+        }
+        login.refreshCount += 1;
+        await refreshLoginQr(login);
+        if (activeLogin === login) scheduleLoginPoll(1000);
+        return;
+      case "verify_code_blocked":
+        activeLogin = null;
+        state.status = "login_error";
+        state.connected = false;
+        state.message = "验证码多次错误，请稍后重新连接";
+        state.lastError = state.message;
+        state.qrCodeUrl = "";
+        state.qrImageUrl = "";
+        return;
+      case "binded_redirect":
+        activeLogin = null;
+        state.status = "login_error";
+        state.connected = false;
+        state.message = "该微信账号已绑定其他实例，请先解除原绑定后重试";
+        state.lastError = state.message;
+        state.qrCodeUrl = "";
+        state.qrImageUrl = "";
+        return;
+      case "confirmed":
+        await completeLogin(login, payload);
+        return;
+      default:
+        state.message = `等待登录状态：${payload.status || "unknown"}`;
+        scheduleLoginPoll(1000);
     }
-  }, 350);
-  nativeEventTimer.unref?.();
+  } catch (error) {
+    if (activeLogin !== login || generation !== loginGeneration) return;
+    state.lastError = error instanceof Error ? error.message : String(error);
+    state.message = "二维码状态查询失败，正在重试";
+    scheduleLoginPoll(2000);
+  }
 }
 
-async function getDriverQr() {
-  if (state.driverKind === "amitia-native") {
-    const payload = await nativeCompanion.driverCall("login.qr", {}, 15000);
-    const data = payload?.data || payload;
-    const image = data.imageDataUrl || data.qrImageUrl || data.image || "";
-    const qrUrl = data.qrUrl || data.url || "";
-    if (image) return String(image);
-    if (qrUrl) return String(qrUrl);
-    throw new Error("Amitia Native Driver 未返回二维码");
+async function startLogin(force = false) {
+  if (activeLogin && !force && Date.now() - activeLogin.startedAt < LOGIN_TTL_MS) {
+    return {
+      status: state.status,
+      qrCodeUrl: activeLogin.qrImageUrl,
+      qrImageUrl: activeLogin.qrImageUrl,
+      sessionKey: activeLogin.sessionKey,
+    };
   }
-  if (!state.driverBaseUrl) throw new Error("Native Driver 未连接");
-  if (state.driverKind === "hero") {
-    const qrFile = path.join(TEMP_DIR, "wechat-personal-login-qr.png");
-    try { fs.rmSync(qrFile, { force: true }); } catch {}
-    const payload = await fetchJson(`${state.driverBaseUrl}/qr/url?path=${encodeURIComponent(qrFile)}`, {}, 10000);
-    const data = payload?.data || payload;
-    if (fs.existsSync(qrFile)) {
-      const buffer = fs.readFileSync(qrFile);
-      if (buffer.length > 32) return `data:image/png;base64,${buffer.toString("base64")}`;
+  loginGeneration += 1;
+  clearLoginTimer();
+  const next = await fetchLoginQr();
+  activeLogin = {
+    sessionKey: randomUUID(),
+    qrcode: next.qrcode,
+    qrPayload: next.qrPayload,
+    qrImageUrl: next.qrImageUrl,
+    currentBaseUrl: ILINK_BASE_URL,
+    startedAt: Date.now(),
+    refreshCount: 0,
+    verifyCode: "",
+    generation: loginGeneration,
+  };
+  state.status = "qr_ready";
+  state.connected = false;
+  state.qrCodeUrl = next.qrImageUrl;
+  state.qrImageUrl = next.qrImageUrl;
+  state.sessionKey = activeLogin.sessionKey;
+  state.message = "请使用手机微信扫描二维码";
+  state.lastError = "";
+  scheduleLoginPoll(1000);
+  return {
+    status: state.status,
+    qrCodeUrl: state.qrCodeUrl,
+    qrImageUrl: state.qrImageUrl,
+    sessionKey: state.sessionKey,
+  };
+}
+
+function verifyLoginCode(code) {
+  if (!activeLogin || state.status !== "verify_required") throw new Error("当前没有等待验证码的登录");
+  activeLogin.verifyCode = String(code || "").trim();
+  if (!activeLogin.verifyCode) throw new Error("请输入验证码");
+  state.status = "scanned";
+  state.message = "正在验证手机显示的数字";
+  scheduleLoginPoll(0);
+}
+
+function setContextToken(peerId, token) {
+  if (!peerId || !token) return;
+  contextTokens.set(`${credentials?.id || "default"}:${peerId}`, token);
+  pruneMap(contextTokens, 2000);
+  persistCredentials();
+}
+
+function getContextToken(peerId) {
+  return contextTokens.get(`${credentials?.id || "default"}:${peerId}`) || "";
+}
+
+function messageText(itemList) {
+  const parts = [];
+  for (const item of Array.isArray(itemList) ? itemList : []) {
+    if (Number(item?.type) === 1 && item?.text_item?.text != null) {
+      parts.push(String(item.text_item.text));
+    } else if (Number(item?.type) === 3 && item?.voice_item?.text) {
+      parts.push(String(item.voice_item.text));
     }
-    const direct = data.imageDataUrl || data.qrImageUrl || data.image || "";
-    if (direct) return String(direct);
-    throw new Error("Hook 已返回登录 URL，但未生成二维码 PNG；请使用支持 /qr/url?path= 的 Driver");
   }
-  throw new Error("当前 Hook Driver 不提供插件内二维码；建议使用 Amitia Native Driver 或 hero-compatible Driver");
+  return parts.join("").trim();
 }
 
-async function sendText(peerId, text, deliveryKey = "") {
-  if (!state.driverBaseUrl) throw new Error("Native Driver 未连接");
-  if (!peerId || !text) throw new Error("toUserId and text are required");
-  if (deliveryKey && delivered.has(deliveryKey)) return { duplicate: true };
-  let result;
-  if (state.driverKind === "amitia-native") {
-    if (!state.nativeDriverVersionVerified || !state.nativeDriverCapabilities?.sendText) {
-      throw new Error("当前 Native Driver 未通过客户端版本验证或未声明文本发送能力");
-    }
-    result = await nativeCompanion.driverCall("messages.send_text", { peerId, text, deliveryKey }, 15000);
-  } else if (state.driverKind === "hero") {
-    result = await fetchJson(`${state.driverBaseUrl}/send`, {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ wxid: peerId, content: text }),
-    }, 15000);
-    if (result?.code !== undefined && Number(result.code) !== 0) throw new Error(result.msg || "发送失败");
-  } else if (state.driverKind === "aixed") {
-    result = await fetchJson(`${state.driverBaseUrl}/SendTextMsg`, {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ wxidorgid: peerId, msg: text }),
-    }, 15000);
-    if (result?.ret !== undefined && Number(result.ret) !== 0) throw new Error(result.retmsg || "发送失败");
-  } else {
-    throw new Error("未知 Driver");
-  }
-  if (deliveryKey) {
-    delivered.set(deliveryKey, Date.now());
-    pruneMap(delivered);
-  }
-  state.replyCount += 1;
-  recordMessage(`wechat-personal-${state.accountId || "default"}-${peerId}`.replace(/[^a-zA-Z0-9_@.-]/g, "_"), peerId, "assistant", text);
-  return { duplicate: false, result };
+function resolveMessageId(message) {
+  if (message?.message_id) return String(message.message_id);
+  const value = JSON.stringify({
+    from: message?.from_user_id || "",
+    to: message?.to_user_id || "",
+    created: message?.create_time_ms || 0,
+    type: message?.message_type || 0,
+    items: message?.item_list || [],
+  });
+  return `fallback-${createHash("sha256").update(value).digest("hex")}`;
 }
 
-function extractInbound(raw) {
-  const body = raw?.data && typeof raw.data === "object" ? raw.data : raw;
-  const msg = body?.message && typeof body.message === "object" ? body.message : body;
-  const type = Number(msg.msgtype ?? msg.msgType ?? msg.type ?? msg.messageType ?? 1);
-  const roomId = String(msg.roomid || msg.roomId || msg.chatroom || msg.chatRoomId || "");
-  const from = String(msg.wxid || msg.fromWxid || msg.fromUser || msg.sender || msg.senderId || msg.from || "");
-  const senderInRoom = String(msg.senderWxid || msg.memberWxid || msg.actualSender || msg.sender || "");
-  const peerId = roomId || from;
-  const senderId = roomId ? (senderInRoom || from) : from;
-  const text = String(msg.content ?? msg.text ?? msg.msg ?? msg.message ?? "");
-  const messageId = String(msg.msgid ?? msg.msgId ?? msg.messageId ?? msg.newMsgId ?? raw?.id ?? randomUUID());
-  const createdAt = msg.timestamp || msg.createTime || msg.createdAt || Date.now();
-  return { type, peerId, senderId, text, messageId, createdAt, raw: body };
-}
-
-async function forwardInbound(raw) {
-  const item = extractInbound(raw);
-  if (!item.peerId || !item.text) return { ignored: true, reason: "missing peer/text" };
-  const dedupeKey = `${item.peerId}:${item.messageId}`;
+async function forwardInbound(message) {
+  if (Number(message?.message_type) === 2) return { ignored: true, reason: "outbound" };
+  const peerId = String(message?.from_user_id || "").trim();
+  const text = messageText(message?.item_list);
+  if (!peerId || !text) return { ignored: true, reason: "unsupported message" };
+  const messageId = resolveMessageId(message);
+  const dedupeKey = `${peerId}:${messageId}`;
   if (seenInbound.has(dedupeKey)) return { ignored: true, reason: "duplicate" };
   seenInbound.set(dedupeKey, Date.now());
   pruneMap(seenInbound);
-  const accountId = state.accountId || "wechat-personal";
-  const convKey = `wechat-personal-${accountId}-${item.peerId}`.replace(/[^a-zA-Z0-9_@.-]/g, "_");
+  setContextToken(peerId, String(message?.context_token || "").trim());
+  const accountId = credentials?.accountId || "wechat-personal";
+  const convKey = conversationKey(accountId, peerId);
   const payload = {
     channelId: CHANNEL_ID,
     accountId,
     conversationId: convKey,
-    peerId: item.senderId || item.peerId,
-    messageId: item.messageId,
+    peerId,
+    messageId,
     contentType: "text",
-    text: item.text,
+    text,
   };
   const headers = {
     "Content-Type": "application/json",
@@ -642,90 +581,237 @@ async function forwardInbound(raw) {
     "X-Amitia-Module-ID": MODULE_ID,
   };
   if (SERVICE_AUTH_TOKEN) headers.Authorization = `Bearer ${SERVICE_AUTH_TOKEN}`;
-  const response = await fetchJson(`${CORE_URL}/api/channels/inbound`, {
+  const response = await fetch(`${CORE_URL}/api/channels/inbound`, {
     method: "POST",
     headers,
     body: JSON.stringify(payload),
-  }, 180000);
-  state.messageCount += 1;
-  const createdAt = Number.isFinite(Number(item.createdAt))
-    ? new Date(Number(item.createdAt)).toISOString()
+    signal: AbortSignal.timeout(180_000),
+  });
+  const responseText = await response.text();
+  if (!response.ok) throw new Error(`Amitia Core inbound HTTP ${response.status}: ${responseText.slice(0, 240)}`);
+  let responsePayload = {};
+  if (responseText) {
+    try {
+      responsePayload = JSON.parse(responseText);
+    } catch {
+      responsePayload = { raw: responseText };
+    }
+  }
+  const createdAt = Number(message?.create_time_ms || 0) > 0
+    ? new Date(Number(message.create_time_ms)).toISOString()
     : new Date().toISOString();
-  recordMessage(convKey, item.peerId, "user", item.text, createdAt);
-  return { ignored: false, response };
+  state.messageCount += 1;
+  state.lastInboundAt = createdAt;
+  recordMessage(convKey, peerId, "user", text, createdAt);
+  return { ignored: false, response: responsePayload };
 }
 
-async function handleConnect(config = {}) {
-  state.lastError = "";
-  state.message = "正在启动并检测个人微信 Native Companion";
-  state.driverKind = "none";
-  state.driverBaseUrl = "";
-  state.nativeDriverAvailable = false;
-  state.nativeDriverCapabilities = {};
-  stopNativeEventPolling();
-
-  if (config.launchWechat !== false) await ensureManagedWechat();
-
-  let nativeDriver = null;
-  try { nativeDriver = await nativeCompanion.probeDriver(); } catch (error) { state.lastError = `Native Driver: ${error.message}`; }
-  const caps = nativeDriver?.capabilities || {};
-  const nativeLoginReady = Boolean(nativeDriver?.available && caps.loginStatus && caps.qr);
-
-  if (nativeLoginReady) {
-    state.driverKind = "amitia-native";
-    state.driverBaseUrl = "native://companion";
-    state.driverVersion = String(nativeDriver?.version || "native-v1");
-    state.message = "Amitia Native Driver 已连接";
-    startNativeEventPolling();
-  } else {
-    const preferred = typeof config.driverBaseUrl === "string" ? config.driverBaseUrl.trim() : "";
-    const external = await probeExternalCompatibilityDriver(preferred);
-    if (external) {
-      state.driverKind = external.kind;
-      state.driverBaseUrl = external.base;
-      state.driverVersion = String(external.info?.version || external.info?.wxVersion || external.info?.expected || "");
-      state.message = "已连接兼容 Driver（开发兼容模式）";
-    } else {
-      state.status = "driver_required";
-      state.connected = false;
-      state.messageTransportReady = false;
-      state.message = "Native Companion 已启动，但当前微信版本没有已验证的消息 Driver";
-      const capabilityText = JSON.stringify(caps);
-      if (process.platform === "linux" && state.nativeClientRunning) {
-        state.lastError = caps.attached
-          ? `Linux preload 已附着，但版本适配器仍为 fail-closed。capabilities=${capabilityText}`
-          : "Linux 微信正在运行，但 preload companion 未附着；如果微信早于插件启动，请完全退出微信后重新连接。";
-      } else if (process.platform === "win32" && state.nativeClientRunning) {
-        state.lastError = `Windows 微信已由 Amitia 托管，但尚未检测到与该进程匹配的 Amitia Hook companion。capabilities=${capabilityText}`;
-      } else {
-        state.lastError = state.lastError || "未检测到可运行的官方微信客户端。";
-      }
-      return { status: state.status, message: state.message, lastError: state.lastError, capabilities: caps };
-    }
-  }
-
-  if (await refreshAccountState()) {
-    if (process.platform === "win32" || process.platform === "linux") {
-      try { await nativeCompanion.hideClient(); } catch {}
-    }
-    return { status: state.messageTransportReady ? "connected" : "connected_limited", accountId: state.accountId, nickname: state.nickname, driverKind: state.driverKind, capabilities: caps };
-  }
+async function getUpdates(abortSignal) {
   try {
-    state.qrCodeUrl = await getDriverQr();
-    if (process.platform === "win32" || process.platform === "linux") {
-      try { await nativeCompanion.hideClient(); } catch {}
-    }
-    state.status = "qr_ready";
-    state.message = "请使用准备交给 AI 的微信账号扫码";
-    startLoginPolling();
-    return { status: state.status, qrCodeUrl: state.qrCodeUrl, driverKind: state.driverKind, capabilities: caps };
+    return await ilinkRequest(credentials.baseUrl, "ilink/bot/getupdates", {
+      method: "POST",
+      token: credentials.token,
+      body: {
+        get_updates_buf: credentials.syncBuf || "",
+        base_info: baseInfo(),
+      },
+      timeoutMs: 35_000,
+    });
   } catch (error) {
-    state.status = "waiting_login";
-    state.message = "Driver 已连接，但当前适配器无法提供插件内二维码";
-    state.lastError = error.message;
-    startLoginPolling();
-    return { status: state.status, driverKind: state.driverKind, lastError: state.lastError, capabilities: caps };
+    if (abortSignal?.aborted || error?.name === "AbortError" || error?.name === "TimeoutError" || String(error?.message || "").includes("超时")) {
+      return { ret: 0, msgs: [], get_updates_buf: credentials.syncBuf || "" };
+    }
+    throw error;
   }
+}
+
+async function notifyStart() {
+  if (!credentials) return;
+  try {
+    await ilinkRequest(credentials.baseUrl, "ilink/bot/msg/notifystart", {
+      method: "POST",
+      token: credentials.token,
+      body: { base_info: baseInfo() },
+      timeoutMs: 10_000,
+    });
+  } catch {}
+}
+
+async function notifyStop() {
+  if (!credentials) return;
+  try {
+    await ilinkRequest(credentials.baseUrl, "ilink/bot/msg/notifystop", {
+      method: "POST",
+      token: credentials.token,
+      body: { base_info: baseInfo() },
+      timeoutMs: 10_000,
+    });
+  } catch {}
+}
+
+function sleep(ms, signal) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(resolve, ms);
+    if (!signal) return;
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(new Error("aborted"));
+    };
+    if (signal.aborted) onAbort();
+    else signal.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
+async function monitorLoop(signal) {
+  await notifyStart();
+  let failures = 0;
+  while (!signal.aborted && credentials) {
+    try {
+      const payload = await getUpdates(signal);
+      if (signal.aborted) break;
+      if (payload?.ret !== undefined && Number(payload.ret) !== 0) {
+        throw new Error(`getUpdates ret=${payload.ret} errcode=${payload.errcode ?? ""} errmsg=${payload.errmsg ?? ""}`);
+      }
+      if (payload?.errcode !== undefined && Number(payload.errcode) !== 0) {
+        throw new Error(`getUpdates errcode=${payload.errcode} errmsg=${payload.errmsg ?? ""}`);
+      }
+      failures = 0;
+      if (payload.get_updates_buf) {
+        credentials.syncBuf = String(payload.get_updates_buf);
+        persistCredentials();
+      }
+      for (const message of Array.isArray(payload.msgs) ? payload.msgs : []) {
+        try {
+          await forwardInbound(message);
+        } catch (error) {
+          state.lastError = error instanceof Error ? error.message : String(error);
+        }
+      }
+    } catch (error) {
+      if (signal.aborted) break;
+      failures += 1;
+      state.lastError = error instanceof Error ? error.message : String(error);
+      state.message = "个人微信消息轮询失败，正在重试";
+      try {
+        await sleep(failures >= 3 ? 30_000 : 2_000, signal);
+      } catch {
+        break;
+      }
+      if (failures >= 3) failures = 0;
+    }
+  }
+  await notifyStop();
+}
+
+async function startMonitor() {
+  if (!credentials || monitorTask) return;
+  monitorAbort = new AbortController();
+  state.connected = true;
+  state.status = "connected";
+  state.messageTransportReady = true;
+  state.lastError = "";
+  state.message = "个人微信已连接";
+  const signal = monitorAbort.signal;
+  monitorTask = monitorLoop(signal)
+    .catch((error) => {
+      if (!signal.aborted) {
+        state.connected = false;
+        state.status = "error";
+        state.lastError = error instanceof Error ? error.message : String(error);
+        state.message = "个人微信连接已中断";
+      }
+    })
+    .finally(() => {
+      monitorTask = null;
+      monitorAbort = null;
+    });
+}
+
+async function stopMonitor() {
+  const task = monitorTask;
+  const abort = monitorAbort;
+  monitorTask = null;
+  monitorAbort = null;
+  abort?.abort();
+  if (task) {
+    await Promise.race([
+      task.catch(() => {}),
+      new Promise((resolve) => setTimeout(resolve, 2500)),
+    ]);
+  }
+}
+
+async function sendText(peerId, text, deliveryKey = "") {
+  if (!credentials?.token) throw new Error("个人微信尚未连接");
+  const target = String(peerId || "").trim();
+  const content = String(text || "");
+  if (!target || !content) throw new Error("toUserId and text are required");
+  if (deliveryKey && delivered.has(deliveryKey)) return { duplicate: true };
+  const contextToken = getContextToken(target);
+  if (!contextToken) throw new Error("当前联系人缺少 iLink context_token，需等待联系人先发送消息后再回复");
+  const clientId = `amitia-wechat:${Date.now()}-${randomUUID().slice(0, 8)}`;
+  await ilinkRequest(credentials.baseUrl, "ilink/bot/sendmessage", {
+    method: "POST",
+    token: credentials.token,
+    timeoutMs: 15_000,
+    body: {
+      msg: {
+        from_user_id: "",
+        to_user_id: target,
+        client_id: clientId,
+        message_type: 2,
+        message_state: 2,
+        context_token: contextToken,
+        run_id: randomUUID(),
+        item_list: [{ type: 1, text_item: { text: content } }],
+      },
+      base_info: baseInfo(),
+    },
+  });
+  if (deliveryKey) {
+    delivered.set(deliveryKey, Date.now());
+    pruneMap(delivered);
+  }
+  state.replyCount += 1;
+  state.lastOutboundAt = new Date().toISOString();
+  recordMessage(conversationKey(credentials.accountId, target), target, "assistant", content);
+  return { duplicate: false, clientId };
+}
+
+async function handleConnect(body = {}) {
+  if (body.verifyCode) {
+    verifyLoginCode(body.verifyCode);
+    return { status: state.status, message: state.message };
+  }
+  if (credentials?.token && !body.force) {
+    await startMonitor();
+    return {
+      status: "connected",
+      accountId: credentials.accountId,
+      message: "个人微信已连接",
+    };
+  }
+  return startLogin(Boolean(body.force));
+}
+
+async function disconnect() {
+  await stopMonitor();
+  clearLoginTimer();
+  loginGeneration += 1;
+  activeLogin = null;
+  clearCredentials();
+  state.connected = false;
+  state.status = "disconnected";
+  state.accountId = "";
+  state.nickname = "";
+  state.alias = "";
+  state.qrCodeUrl = "";
+  state.qrImageUrl = "";
+  state.sessionKey = "";
+  state.driverKind = "none";
+  state.messageTransportReady = false;
+  state.message = "已断开个人微信渠道";
+  state.lastError = "";
 }
 
 async function handleMain(req, res) {
@@ -733,23 +819,21 @@ async function handleMain(req, res) {
   const url = new URL(req.url, `http://${HOST}:${PORT}`);
   try {
     if (req.method === "GET" && url.pathname === "/api/health") {
-      return json(res, 200, { success: true, status: state.status, accountId: state.accountId, driverKind: state.driverKind });
+      return json(res, 200, { success: true, status: state.status, accountId: state.accountId, protocol: state.protocol });
     }
     if (req.method === "GET" && url.pathname === "/api/status") {
-      if (state.driverKind !== "none") await refreshAccountState();
       return json(res, 200, { success: true, data: { ...state } });
     }
     if (req.method === "GET" && url.pathname === "/api/config") {
       return json(res, 200, {
-        mode: "personal-wechat-managed-hook",
+        mode: "ilink-personal",
         channelId: CHANNEL_ID,
         transportPort: PORT,
-        receiverPort: RECEIVER_PORT,
         defaultRolePolicy: "space_default_character",
-        platforms: ["windows-x64", "linux-x64"],
-        managedClient: true,
-        nativeCompanion: state.nativeAgent,
-        supportedDrivers: ["amitia-native-v1", "hero-compatible", "aixed-compatible"],
+        platforms: ["windows", "linux", "darwin"],
+        localWechatRequired: false,
+        managedClient: false,
+        protocol: "ilink",
       });
     }
     if (req.method === "POST" && url.pathname === "/api/messages") {
@@ -766,20 +850,15 @@ async function handleMain(req, res) {
     if (req.method === "POST" && url.pathname === "/api/connect") {
       const body = await readJson(req);
       const result = await handleConnect(body || {});
-      return json(res, 200, { success: state.status !== "driver_required", data: result, message: state.message });
+      return json(res, 200, { success: true, data: result, message: state.message });
+    }
+    if (req.method === "POST" && url.pathname === "/api/login/verify") {
+      const body = await readJson(req);
+      verifyLoginCode(body.code || "");
+      return json(res, 200, { success: true, data: { status: state.status, message: state.message } });
     }
     if (req.method === "POST" && url.pathname === "/api/disconnect") {
-      if (loginTimer) { clearInterval(loginTimer); loginTimer = null; }
-      stopNativeEventPolling();
-      state.connected = false;
-      state.messageTransportReady = false;
-      state.status = "disconnected";
-      state.qrCodeUrl = "";
-      state.message = "已断开个人微信渠道";
-      nativeCompanion.stop();
-      state.managedWechatPid = 0;
-      state.nativeClientRunning = false;
-      state.linuxPreloadAttached = false;
+      await disconnect();
       return json(res, 200, { success: true, disconnected: true });
     }
     if (req.method === "POST" && url.pathname === "/api/send") {
@@ -790,63 +869,30 @@ async function handleMain(req, res) {
       return json(res, 200, { success: true, accepted: true, duplicate: result.duplicate });
     }
     if (req.method === "POST" && (url.pathname === "/api/send-image" || url.pathname === "/api/send-voice")) {
-      return json(res, 501, { success: false, message: "个人微信插件 1.5.0 暂未声明图片/语音发送能力" });
-    }
-    if (req.method === "POST" && ["/api/native/callback", "/message"].includes(url.pathname)) {
-      const body = await readJson(req);
-      const result = await forwardInbound(body);
-      return json(res, 200, { success: true, ...result });
+      return json(res, 501, { success: false, message: "个人微信插件暂未声明图片/语音发送能力" });
     }
     return json(res, 404, { success: false, message: "not found" });
   } catch (error) {
-    state.lastError = error instanceof Error ? error.message : String(error);
-    return json(res, 500, { success: false, message: state.lastError });
+    const message = error instanceof Error ? error.message : String(error);
+    state.lastError = message;
+    return json(res, 500, { success: false, message });
   }
 }
 
 const mainServer = http.createServer((req, res) => void handleMain(req, res));
 mainServer.listen(PORT, HOST, () => {
-  console.log(`[wechat-personal] provider service listening on http://${HOST}:${PORT}`);
+  console.log(`[wechat-personal] iLink provider listening on http://${HOST}:${PORT}`);
+  if (credentials) {
+    void startMonitor();
+  }
 });
 
-// The legacy hero-compatible callback receiver is deliberately disabled in
-// production. It lacks an authentication contract, so enabling it requires two
-// explicit development flags. This prevents arbitrary local processes from
-// injecting fake inbound messages into the default character pipeline.
-let receiverServer = null;
-if (EXTERNAL_COMPAT && EXTERNAL_UNAUTH_CALLBACK) {
-  receiverServer = http.createServer(async (req, res) => {
-    if (req.method === "POST" && req.url?.split("?")[0] === "/message") {
-      try {
-        const body = await readJson(req);
-        const result = await forwardInbound(body);
-        return json(res, 200, { success: true, ...result });
-      } catch (error) {
-        return json(res, 500, { success: false, message: error.message });
-      }
-    }
-    if (req.method === "POST" && req.url?.split("?")[0] === "/log") {
-      try { await readJson(req); } catch {}
-      return json(res, 200, { success: true });
-    }
-    return json(res, 404, { success: false });
-  });
-  receiverServer.on("error", (error) => {
-    console.warn(`[wechat-personal] development receiver ${RECEIVER_PORT} unavailable: ${error.message}`);
-  });
-  receiverServer.listen(RECEIVER_PORT, HOST, () => {
-    console.warn(`[wechat-personal] UNSAFE development callback receiver enabled on http://${HOST}:${RECEIVER_PORT}`);
-  });
-}
-
 async function shutdown() {
-  if (loginTimer) clearInterval(loginTimer);
-  stopNativeEventPolling();
-  nativeCompanion.stop();
-  const closers = [new Promise((resolve) => mainServer.close(resolve))];
-  if (receiverServer) closers.push(new Promise((resolve) => receiverServer.close(resolve)));
-  await Promise.allSettled(closers);
+  await stopMonitor();
+  clearLoginTimer();
+  await new Promise((resolve) => mainServer.close(resolve));
   process.exit(0);
 }
+
 process.on("SIGTERM", () => void shutdown());
 process.on("SIGINT", () => void shutdown());

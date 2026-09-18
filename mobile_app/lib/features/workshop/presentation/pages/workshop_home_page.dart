@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../app/theme/app_colors.dart';
+import '../../../../app/theme/app_radius.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
@@ -25,8 +26,6 @@ class WorkshopHomePage extends ConsumerWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('制作工具', style: AppTypography.sectionTitle(context)),
-              SizedBox(height: AppSpacing.sm),
               _buildEntryCard(
                 context,
                 icon: Icons.badge_outlined,
@@ -34,23 +33,6 @@ class WorkshopHomePage extends ConsumerWidget {
                 description: '创建和编辑角色卡，导入酒馆角色卡并导出 CHARX 角色包',
                 onTap: () => context.push(AppRoutes.workshopCharacterCards),
               ),
-              SizedBox(height: AppSpacing.md),
-              _buildEntryCard(
-                context,
-                icon: Icons.account_tree_outlined,
-                title: '工作流',
-                description: '可视化拖拽创建 DAG 工作流，配置触发器并查看节点运行轨迹',
-                onTap: () => context.push(AppRoutes.workshopWorkflows),
-              ),
-              SizedBox(height: AppSpacing.md),
-              _buildEntryCard(
-                context,
-                icon: Icons.psychology_outlined,
-                title: '技能制作',
-                description: '创建和管理 AI 技能，定义输入输出 Schema、测试并安装到系统',
-                onTap: () => context.push(AppRoutes.workshopSkills),
-              ),
-              SizedBox(height: AppSpacing.md),
               _buildEntryCard(
                 context,
                 icon: Icons.pets_outlined,
@@ -76,22 +58,28 @@ class WorkshopHomePage extends ConsumerWidget {
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
+        borderRadius: AppRadius.brMedium,
         child: Container(
-          constraints: const BoxConstraints(minHeight: 72),
-          padding: const EdgeInsets.symmetric(vertical: 12),
+          constraints: const BoxConstraints(minHeight: 76),
+          margin: const EdgeInsets.only(bottom: 10),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           decoration: BoxDecoration(
-            border: Border(
-              bottom: BorderSide(color: context.borderSecondary, width: 0.5),
-            ),
+            color: context.surfaceSecondary,
+            borderRadius: AppRadius.brMedium,
+            border: Border.all(color: context.borderPrimary, width: 0.6),
           ),
           child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Padding(
-                padding: const EdgeInsets.only(top: 1),
-                child: Icon(icon, size: 22, color: context.accentPrimary),
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: context.accentSoft,
+                  borderRadius: AppRadius.brSmall,
+                ),
+                child: Icon(icon, size: 21, color: context.accentPrimary),
               ),
-              SizedBox(width: AppSpacing.md),
+              const SizedBox(width: 14),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -103,7 +91,19 @@ class WorkshopHomePage extends ConsumerWidget {
                 ),
               ),
               const SizedBox(width: 8),
-              Icon(Icons.chevron_right, size: 20, color: context.textTertiary),
+              Container(
+                width: 30,
+                height: 30,
+                decoration: BoxDecoration(
+                  color: context.surfacePrimary,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.arrow_forward_rounded,
+                  size: 17,
+                  color: context.accentPrimary,
+                ),
+              ),
             ],
           ),
         ),

@@ -367,10 +367,27 @@ func readZipFile(f *zip.File) ([]byte, error) {
 }
 
 func ComputeTreeHash(files []FileEntry) string {
+	return computeTreeHash(files, func(left, right string) bool {
+		return left < right
+	})
+}
+
+func computeLegacyTreeHash(files []FileEntry) string {
+	return computeTreeHash(files, func(left, right string) bool {
+		leftFolded := strings.ToLower(left)
+		rightFolded := strings.ToLower(right)
+		if leftFolded != rightFolded {
+			return leftFolded < rightFolded
+		}
+		return left < right
+	})
+}
+
+func computeTreeHash(files []FileEntry, less func(left, right string) bool) string {
 	sorted := make([]FileEntry, len(files))
 	copy(sorted, files)
 	sort.SliceStable(sorted, func(i, j int) bool {
-		return sorted[i].Path < sorted[j].Path
+		return less(sorted[i].Path, sorted[j].Path)
 	})
 	h := sha256.New()
 	for _, f := range sorted {
@@ -408,7 +425,10 @@ func VerifyIntegrity(pkg *Package) error {
 	}
 	computedTree := ComputeTreeHash(verifiedFiles)
 	if pkg.Tree.TreeHash != "" && computedTree != pkg.Tree.TreeHash {
-		return fmt.Errorf("%w: tree hash mismatch", ErrIntegrityMismatch)
+		legacyTree := computeLegacyTreeHash(verifiedFiles)
+		if legacyTree != pkg.Tree.TreeHash {
+			return fmt.Errorf("%w: tree hash mismatch", ErrIntegrityMismatch)
+		}
 	}
 	return nil
 }

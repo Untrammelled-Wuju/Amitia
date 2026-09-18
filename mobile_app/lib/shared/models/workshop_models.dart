@@ -1,33 +1,5 @@
-import 'package:flutter/material.dart';
-
 enum PetTaskStatus { pending, processing, completed, cancelled }
 enum ProcessingStatus { pending, reviewing, approved, rejected }
-
-class SkillDraft {
-  final String id;
-  final String name;
-  final String description;
-  final String metadata;
-  final String inputSchema;
-  final String outputSchema;
-  final String riskAssessment;
-  final String testResult;
-  final String status;
-  final DateTime updated;
-
-  SkillDraft({
-    required this.id,
-    required this.name,
-    required this.description,
-    this.metadata = '',
-    this.inputSchema = '',
-    this.outputSchema = '',
-    this.riskAssessment = '低风险',
-    this.testResult = '未测试',
-    this.status = '草稿',
-    required this.updated,
-  });
-}
 
 class PetTask {
   final String id;

@@ -164,7 +164,7 @@ function buildIntegrityDocuments() {
       hash: sha256Raw(data),
       modified: generatedAt,
     };
-  }).sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+  }).sort((a, b) => Buffer.compare(Buffer.from(a.path, 'utf8'), Buffer.from(b.path, 'utf8')));
 
   const files = {};
   for (const entry of entries) files[entry.path] = entry;

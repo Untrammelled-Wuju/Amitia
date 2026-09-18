@@ -1,52 +1,35 @@
-# Integration Report — 1.5.0
+# 个人微信渠道改造报告
 
-## Completed in source
+## 结论
 
-- Added `wechat_personal` as a separate channel/provider declared by its own extension manifest. Existing `plugins/channels/wechat` remains independent.
-- Preserved the host's existing space-default-character routing.
-- Added the generic `/api/channels/inbound` contract with trusted-service identity headers, `channelId`, and provider declaration validation.
-- Added public Manifest v1 `runtime.nativeCompanions` for trusted service extensions. This is a generic Extension Kernel capability and contains no WeChat-specific fields.
-- Added generic Native Companion v1 runtime descriptors, current-platform/current-architecture filtering, canonical-path resolution and SHA-256 re-verification before Trusted Service registration.
-- Package security only permits native files at exact manifest-declared paths. Undeclared `.exe/.dll/.so` remain rejected.
-- Trusted Service injects `AMITIA_NATIVE_COMPANIONS_VERSION=1` and `AMITIA_NATIVE_COMPANIONS`; the plugin rejects unsupported non-empty versions.
-- Added Windows x64 and Linux x64 Native Agent builds using one JSON-lines RPC contract.
-- Windows Native Agent manages official Weixin, detects version, captures the official login UI through Win32, and provides a QR/login-only UI fallback when no verified Hook is attached.
-- Linux Native Agent manages official Linux WeChat, supports versioned `LD_PRELOAD` transport, and provides an X11/XWayland login UI fallback when the desktop permits cross-window access.
-- Windows uses a named-pipe Hook contract; Linux uses a Unix-domain-socket preload contract. Both expose the same `driver.capabilities`, `login.qr`, `login.status`, `account.self`, `events.poll`, and `messages.send_text` operations to the service.
-- Service treats QR/login capability separately from message capability. Login-only drivers become `connected_limited`; text delivery is not reported ready unless `receiveText && sendText` are verified.
-- hero/aixed HTTP adapters remain development migration adapters and are disabled unless `AMITIA_WECHAT_EXTERNAL_DRIVER_COMPAT=1` is explicitly set.
-- UI now surfaces individual QR/login/receive/send capability state.
+个人微信渠道已从本机微信/Native Companion 方案切换为腾讯 iLink 协议方案。连接、账号状态和消息收发均由插件自身完成，不再依赖安装设备上的微信客户端。
 
+## 已移除依赖
 
-## 1.5.0 security hardening
+- 删除 `runtime.nativeCompanions` 声明
+- 删除本机微信安装路径探测
+- 删除本机微信进程启动、隐藏和窗口控制
+- 删除 `child_process` 调用
+- 删除 Native Agent、Hook Driver 和 Preload 运行链路
+- 删除无鉴权本地回调入口
 
-- Added public Trusted Service Loopback Authentication v1. The host derives a process-lifetime token scoped to `extensionId + moduleId`; the same token is injected into the Trusted Service and attached by the generic Channel HTTP Provider.
-- `wechat-personal` now requires `Authorization: Bearer <token>` for every `19878` API route. Missing/wrong credentials return 401 before routing.
-- Removed wildcard CORS from the provider response path.
-- The legacy unauthenticated hero `9999/message` receiver is no longer started by default. It is created only when both `AMITIA_WECHAT_EXTERNAL_DRIVER_COMPAT=1` and `AMITIA_WECHAT_EXTERNAL_CALLBACK_UNAUTHENTICATED=1` are set for explicit development migration.
-- Added a dedicated security E2E covering unauthorized access, wrong credentials, no wildcard CORS, closed legacy callback port, and rejection of forged unauthenticated native callbacks.
-- Release preflight runs security, Native Companion, version-gate, and compatibility E2E tests before packaging.
+## 当前链路
 
-## Runtime validation performed
+1. `/api/connect` 调用 iLink `get_bot_qrcode`
+2. 插件将二维码转换为 PNG Data URL 返回页面
+3. 后台轮询 `get_qrcode_status`
+4. `confirmed` 后保存 `bot_token`、`ilink_bot_id` 和 `baseurl`
+5. 启动 `getupdates` 长轮询
+6. 文本消息转发到 `/api/channels/inbound`
+7. `/api/send` 使用入站消息携带的 `context_token` 调用 `sendmessage`
 
-- Native Agent source compiles/tests for Linux amd64.
-- Native Agent source cross-compiles/tests for Windows amd64 with CGO disabled.
-- Node service syntax validation passes.
-- The service mock end-to-end test for inbound normalization and outbound delivery passes.
-- Linux preload companion builds and exposes the common JSON-line driver transport while intentionally advertising message capabilities false until a verified version adapter exists.
+## 账号隔离
 
-## Fail-closed boundary
+插件账号文件与其他微信插件、本机微信、OpenClaw 目录完全分离。断开只清除个人微信插件自己的账号令牌，不影响电脑微信或其他渠道插件。
 
-The current self-contained package can manage official clients and provide login UI on supported desktop environments. It does **not** claim a fully verified text Hook for every current Weixin/WeChat build.
+## 验证
 
-A platform Driver may advertise `receiveText` or `sendText` only after that exact implementation is verified for the running client version. Unknown versions remain login-only or unsupported. No version bypass, anti-detection logic, hidden runtime download, or undeclared binary extraction is used.
+- `service-e2e.mjs`：二维码、扫码确认、令牌保存、入站消息、文本回复、幂等和断开
+- `service-security-e2e.mjs`：Bearer 鉴权、无 wildcard CORS、旧回调入口不可用
 
-## Build environment limitation
-
-The uploaded backend declares Go 1.26.1. The available environment has Go 1.23.2 and cannot download the newer toolchain, so the full backend Go test suite cannot be executed here. The modified generic host code is formatted/static-reviewed; the separately versioned Native Agent module builds/tests with the available toolchain.
-
-## Public host capability boundary
-
-No WeChat-specific Extension Kernel permission or runtime primitive was added. `runtime.nativeCompanions`, package allow-listing, SHA-256 verification, runtime descriptor injection, and generic channel identity validation are reusable by any extension.
-
-- Added strict `clientVersion`/`versionVerified` handshake. Version-sensitive send/receive capabilities remain disabled unless the native Driver target version exactly matches the official client version independently detected by the Agent.
+两个测试均使用模拟 iLink 服务，不要求真机扫码，也不启动本机微信。

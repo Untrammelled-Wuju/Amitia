@@ -32,4 +32,27 @@ void main() {
     expect(voiceButtonTop - composerTop, greaterThanOrEqualTo(6));
     expect(voiceButtonHeight, closeTo(44, 0.1));
   });
+
+  testWidgets('composer border does not change when input is focused', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(body: AmitiaChatInput(onSend: (_) {})),
+      ),
+    );
+
+    BoxDecoration decoration() => tester
+        .widget<Container>(
+          find.byKey(const ValueKey('chat-composer-surface')),
+        )
+        .decoration! as BoxDecoration;
+
+    final before = decoration().border;
+    await tester.tap(find.byType(TextField));
+    await tester.pump();
+    final after = decoration().border;
+
+    expect(after, before);
+  });
 }

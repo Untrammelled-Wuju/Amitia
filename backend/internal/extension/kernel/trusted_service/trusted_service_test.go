@@ -57,6 +57,37 @@ func TestBuildSafeEnvironmentIncludesCoreURL(t *testing.T) {
 	}
 }
 
+func TestBuildSafeEnvironmentIncludesNativeCompanions(t *testing.T) {
+	s := NewProcessSupervisor(t.TempDir())
+	const companions = `[{"id":"wechat-agent-windows-x64","executable":true}]`
+	environment := s.buildSafeEnvironment(
+		&PlatformExecutable{EnvTemplate: map[string]string{
+			"AMITIA_NATIVE_COMPANIONS_VERSION": "1",
+			"AMITIA_NATIVE_COMPANIONS":         companions,
+		}},
+		&ServiceRuntimeDefinition{ExtensionID: "com.example/channel", ModuleID: "channel-service", Protocol: "plain"},
+		"session",
+		"instance",
+		1,
+		t.TempDir(),
+		"info",
+		"",
+	)
+	foundVersion := false
+	foundCompanions := false
+	for _, entry := range environment {
+		if entry == "AMITIA_NATIVE_COMPANIONS_VERSION=1" {
+			foundVersion = true
+		}
+		if entry == "AMITIA_NATIVE_COMPANIONS="+companions {
+			foundCompanions = true
+		}
+	}
+	if !foundVersion || !foundCompanions {
+		t.Fatalf("expected native companion environment: %#v", environment)
+	}
+}
+
 func TestPlatformSelectorCurrent(t *testing.T) {
 	s := NewPlatformSelector()
 	def := &ServiceRuntimeDefinition{

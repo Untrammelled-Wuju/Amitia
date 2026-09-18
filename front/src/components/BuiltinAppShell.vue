@@ -74,13 +74,15 @@ const windowWidth = ref(window.innerWidth);
 const isMobile = computed(() => windowWidth.value < 768);
 
 const isChatPage = computed(() => router.currentRoute.value.path === "/chat");
+const isExtensionPage = computed(() => router.currentRoute.value.path.startsWith("/extension/page/"));
+const isFullHeightRoute = computed(() => router.currentRoute.value.meta.fullHeight === true || isExtensionPage.value);
 const isContentPaddingDisabled = computed(() => {
   const path = router.currentRoute.value.path;
   return (
     path === "/chat" ||
     path === "/emotes" ||
     path.startsWith("/character") ||
-    path === "/creative-workshop/character-cards"
+    isFullHeightRoute.value
   );
 });
 const isContentFullHeight = computed(() => {
@@ -88,7 +90,8 @@ const isContentFullHeight = computed(() => {
   return path === "/emotes" ||
     path.startsWith("/character") ||
     path === "/creative-workshop/character-cards" ||
-    path.startsWith("/extensions/workflows/");
+    path.startsWith("/extensions/workflows/") ||
+    isFullHeightRoute.value;
 });
 const pageTitle = computed(() => getPageTitle(router.currentRoute.value.path));
 

@@ -342,7 +342,10 @@ final rawDeviceLocalBackendServiceApiProvider = Provider<BackendServiceApi?>((
 });
 
 final rawBackendServiceApiProvider = Provider<BackendServiceApi?>((ref) {
-  final transport = ref.watch(backendCurrentTransportProvider);
+  final mode = ref.watch(mobileDeploymentConfigProvider).mode;
+  final transport = mode == MobileDeploymentMode.local
+      ? ref.watch(deviceLocalBackendCurrentTransportProvider)
+      : ref.watch(backendCurrentTransportProvider);
   if (transport == null) return null;
   return BackendServiceApi(transport.http, transport.generation);
 });

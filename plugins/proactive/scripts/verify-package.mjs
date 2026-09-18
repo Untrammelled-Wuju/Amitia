@@ -134,7 +134,7 @@ function main() {
 
   const canonical = payload
     .map(([path, data]) => ({ path, hash: sha256(data) }))
-    .sort((left, right) => left.path.localeCompare(right.path));
+    .sort((left, right) => Buffer.compare(Buffer.from(left.path, "utf8"), Buffer.from(right.path, "utf8")));
   const digest = createHash("sha256");
   for (const entry of canonical) {
     digest.update(entry.path);

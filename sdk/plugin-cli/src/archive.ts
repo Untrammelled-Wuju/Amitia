@@ -88,7 +88,7 @@ function collectProjectEntries(projectDir: string, manifestPath: string, manifes
     if (!source) throw new Error(`module ${module.id} has no packaged files or build output`);
     entries.push({ path: `${prefix}${normalizeEntryPath(entryPoint)}`, data: fs.readFileSync(source) });
   }
-  return entries.sort((a, b) => a.path.localeCompare(b.path));
+  return entries.sort((a, b) => compareArchivePaths(a.path, b.path));
 }
 
 function collectDirectory(root: string, archiveRoot: string, entries: ArchiveEntry[]): void {
@@ -112,13 +112,17 @@ function sha256(data: Buffer): string {
 
 function computeTreeHash(entries: IntegrityEntry[]): string {
   const hash = crypto.createHash("sha256");
-  for (const entry of [...entries].sort((a, b) => a.path.localeCompare(b.path))) {
+  for (const entry of [...entries].sort((a, b) => compareArchivePaths(a.path, b.path))) {
     hash.update(entry.path);
     hash.update(Buffer.from([0]));
     hash.update(entry.hash);
     hash.update(Buffer.from([0]));
   }
   return hash.digest("hex");
+}
+
+function compareArchivePaths(left: string, right: string): number {
+  return Buffer.compare(Buffer.from(left, "utf8"), Buffer.from(right, "utf8"));
 }
 
 export function createZip(entries: ArchiveEntry[]): Buffer {

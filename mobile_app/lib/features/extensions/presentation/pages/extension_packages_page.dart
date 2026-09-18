@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../../app/app_routes.dart';
 import '../../../../app/theme/app_colors.dart';
@@ -29,12 +30,36 @@ class _ExtensionPackagesPageState extends ConsumerState<ExtensionPackagesPage> {
   List<Map<String, dynamic>> _packages = const [];
   bool _loading = true;
   bool _busy = false;
+  bool _searchVisible = false;
   String? _error;
+  String _query = '';
+  final _searchController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
     _loadPackages();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  List<Map<String, dynamic>> get _searchResults {
+    final query = _query.trim().toLowerCase();
+    if (query.isEmpty) return const [];
+    return _packages.where((pkg) {
+      final searchable = [
+        pkg['name'],
+        pkg['extensionId'],
+        pkg['version'],
+        pkg['state'],
+        pkg['enablement'],
+      ].map((value) => (value ?? '').toString().toLowerCase());
+      return searchable.any((value) => value.contains(query));
+    }).toList(growable: false);
   }
 
   Future<void> _loadPackages() async {
@@ -80,39 +105,131 @@ class _ExtensionPackagesPageState extends ConsumerState<ExtensionPackagesPage> {
   Widget build(BuildContext context) {
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
-        title: '扩展包',
+        title: _searchVisible ? '搜索扩展包' : '扩展包',
         showBackButton: true,
         fallbackRoute: AppRoutes.extensions,
-        actions: [
-          AmitiaIconButton(
-            icon: Icons.refresh,
-            onPressed: _busy ? null : _loadPackages,
-            tooltip: '刷新',
-          ),
-          AmitiaIconButton(
-            icon: Icons.download_outlined,
-            onPressed: _busy ? null : _showInstallLocalSheet,
-            tooltip: '安装本地包',
-          ),
-        ],
+        actions: _searchVisible
+            ? [
+                AmitiaIconButton(
+                  icon: Icons.close,
+                  tooltip: '退出搜索',
+                  onPressed: () => _toggleSearch(context),
+                ),
+              ]
+            : [
+                AmitiaIconButton(
+                  icon: Icons.refresh,
+                  onPressed: _busy ? null : _loadPackages,
+                  tooltip: '刷新',
+                ),
+                AmitiaIconButton(
+                  icon: Icons.search,
+                  onPressed: () => _toggleSearch(context),
+                  tooltip: '搜索',
+                ),
+                AmitiaIconButton(
+                  icon: Icons.download_outlined,
+                  onPressed: _busy ? null : _showInstallLocalSheet,
+                  tooltip: '安装本地包',
+                ),
+                _buildKernelMoreMenu(context),
+              ],
       ),
       body: SafeArea(top: false, child: _body()),
-      floatingActionButton: _loading
-          ? null
-          : FloatingActionButton(
-              onPressed: _busy ? null : _showInstallLocalSheet,
-              backgroundColor: context.accentPrimary,
-              child: _busy
-                  ? const SizedBox(
-                      width: 22,
-                      height: 22,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
-                      ),
-                    )
-                  : const Icon(Icons.add, color: Colors.white),
-            ),
+    );
+  }
+
+  void _toggleSearch(BuildContext context) {
+    FocusScope.of(context).unfocus();
+    _searchController.clear();
+    setState(() {
+      _searchVisible = !_searchVisible;
+      _query = '';
+    });
+  }
+
+  Widget _buildKernelMoreMenu(BuildContext context) {
+    return PopupMenuButton<String>(
+      tooltip: '更多',
+      enabled: !_busy,
+      icon: Icon(
+        Icons.more_horiz_rounded,
+        size: 22,
+        color: context.textSecondary,
+      ),
+      onSelected: (route) => context.push(AppRoutes.kernelPage(route)),
+      itemBuilder: (context) => const [
+        PopupMenuItem(
+          value: 'trusted-services',
+          child: _PackageMenuLabel(
+            icon: Icons.verified_user_outlined,
+            label: '可信服务运行时',
+          ),
+        ),
+        PopupMenuItem(
+          value: 'wasm',
+          child: _PackageMenuLabel(
+            icon: Icons.memory_outlined,
+            label: 'WASM 运行时',
+          ),
+        ),
+        PopupMenuItem(
+          value: 'hooks',
+          child: _PackageMenuLabel(
+            icon: Icons.account_tree_outlined,
+            label: 'Hook 中心',
+          ),
+        ),
+        PopupMenuItem(
+          value: 'tasks',
+          child: _PackageMenuLabel(
+            icon: Icons.play_circle_outline,
+            label: '任务运行时',
+          ),
+        ),
+        PopupMenuItem(
+          value: 'events',
+          child: _PackageMenuLabel(
+            icon: Icons.notifications_active_outlined,
+            label: '事件中心',
+          ),
+        ),
+        PopupMenuItem(
+          value: 'schedules',
+          child: _PackageMenuLabel(
+            icon: Icons.schedule_outlined,
+            label: '调度中心',
+          ),
+        ),
+        PopupMenuItem(
+          value: 'desktop',
+          child: _PackageMenuLabel(
+            icon: Icons.desktop_windows_outlined,
+            label: '桌面贡献中心',
+          ),
+        ),
+        PopupMenuItem(
+          value: 'dev-console',
+          child: _PackageMenuLabel(
+            icon: Icons.terminal,
+            label: '开发者诊断控制台',
+          ),
+        ),
+        PopupMenuItem(
+          value: 'migrations',
+          child: _PackageMenuLabel(
+            icon: Icons.merge_type_outlined,
+            label: '迁移与灰度中心',
+          ),
+        ),
+        PopupMenuItem(
+          value: 'dev-mode',
+          child: _PackageMenuLabel(
+            icon: Icons.developer_mode_outlined,
+            label: '开发模式中心',
+          ),
+        ),
+      ],
     );
   }
 
@@ -120,6 +237,7 @@ class _ExtensionPackagesPageState extends ConsumerState<ExtensionPackagesPage> {
     if (_loading) return const AmitiaLoadingState(message: '加载已安装扩展...');
     if (_error != null)
       return AmitiaErrorState(message: '加载失败: $_error', onRetry: _loadPackages);
+    if (_searchVisible) return _buildSearchView();
     if (_packages.isEmpty) {
       return AmitiaEmptyState(
         icon: Icons.inventory_2_outlined,
@@ -129,6 +247,48 @@ class _ExtensionPackagesPageState extends ConsumerState<ExtensionPackagesPage> {
         onAction: _showInstallLocalSheet,
       );
     }
+    return _buildPackageList(_packages);
+  }
+
+  Widget _buildSearchView() {
+    final query = _query.trim();
+    final results = _searchResults;
+    return Column(
+      children: [
+        Padding(
+          padding: EdgeInsets.fromLTRB(
+            AppSpacing.pagePadding,
+            AppSpacing.md,
+            AppSpacing.pagePadding,
+            AppSpacing.sm,
+          ),
+          child: AmitiaSearchField(
+            hintText: '搜索扩展名称、扩展 ID、版本或状态',
+            controller: _searchController,
+            autofocus: true,
+            onChanged: (value) => setState(() => _query = value),
+          ),
+        ),
+        Expanded(
+          child: query.isEmpty
+              ? const AmitiaEmptyState(
+                  icon: Icons.search,
+                  title: '输入关键词',
+                  subtitle: '在当前页面搜索扩展包',
+                )
+              : results.isEmpty
+              ? const AmitiaEmptyState(
+                  icon: Icons.search_off,
+                  title: '未找到相关扩展包',
+                  subtitle: '尝试更换关键词',
+                )
+              : _buildPackageList(results),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPackageList(List<Map<String, dynamic>> packages) {
     return RefreshIndicator(
       onRefresh: _loadPackages,
       child: ListView.separated(
@@ -138,9 +298,10 @@ class _ExtensionPackagesPageState extends ConsumerState<ExtensionPackagesPage> {
           AppSpacing.pagePadding,
           AppSpacing.xxxl,
         ),
-        itemCount: _packages.length,
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+        itemCount: packages.length,
         separatorBuilder: (_, _) => SizedBox(height: AppSpacing.sm),
-        itemBuilder: (context, index) => _buildPackageCard(_packages[index]),
+        itemBuilder: (context, index) => _buildPackageCard(packages[index]),
       ),
     );
   }
@@ -153,14 +314,15 @@ class _ExtensionPackagesPageState extends ConsumerState<ExtensionPackagesPage> {
     final state = (pkg['state'] ?? '').toString();
     final enablement = (pkg['enablement'] ?? '').toString();
     final enabled = enablement == 'enabled';
-    final statusText = enabled ? '已启用' : (state.isEmpty ? '已停用' : state);
+    final systemManaged = pkg['systemManaged'] == true;
+    final statusText = enabled ? '已启用' : (state == 'paused' ? '已暂停' : '已停用');
 
     return AmitiaCard(
-      onTap: () => _showExtensionDetail(pkg),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Container(
                 width: 44,
@@ -194,22 +356,58 @@ class _ExtensionPackagesPageState extends ConsumerState<ExtensionPackagesPage> {
                   ],
                 ),
               ),
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  AmitiaStatusBadge(
-                    label: statusText,
-                    type: enabled ? BadgeType.success : BadgeType.neutral,
+              PopupMenuButton<String>(
+                tooltip: '更多操作',
+                enabled: !_busy,
+                padding: EdgeInsets.zero,
+                icon: Icon(
+                  Icons.more_horiz_rounded,
+                  size: 22,
+                  color: context.textSecondary,
+                ),
+                onSelected: (action) => _handlePackageAction(pkg, action),
+                itemBuilder: (context) => [
+                  PopupMenuItem(
+                    value: 'permissions',
+                    child: _PackageMenuLabel(
+                      icon: Icons.admin_panel_settings_outlined,
+                      label: '权限管理',
+                    ),
                   ),
-                  SizedBox(width: AppSpacing.sm),
-                  Semantics(
-                    label: enabled ? '停用扩展' : '启用扩展',
-                    child: Switch.adaptive(
-                      value: enabled,
-                      onChanged: _busy
-                          ? null
-                          : (value) => _toggleExtension(pkg, value),
-                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  PopupMenuItem(
+                    value: 'pause',
+                    enabled: enabled,
+                    child: _PackageMenuLabel(
+                      icon: Icons.pause_circle_outline,
+                      label: '暂停',
+                    ),
+                  ),
+                  const PopupMenuItem(
+                    value: 'update',
+                    child: _PackageMenuLabel(
+                      icon: Icons.system_update_alt,
+                      label: '更新',
+                    ),
+                  ),
+                  const PopupMenuItem(
+                    value: 'rollback',
+                    child: _PackageMenuLabel(icon: Icons.history, label: '回滚'),
+                  ),
+                  const PopupMenuItem(
+                    value: 'diagnose',
+                    child: _PackageMenuLabel(
+                      icon: Icons.monitor_heart_outlined,
+                      label: '诊断',
+                    ),
+                  ),
+                  PopupMenuDivider(),
+                  PopupMenuItem(
+                    value: 'uninstall',
+                    enabled: !systemManaged,
+                    child: _PackageMenuLabel(
+                      icon: Icons.delete_outline,
+                      label: '卸载',
+                      color: systemManaged ? null : context.error,
                     ),
                   ),
                 ],
@@ -217,33 +415,271 @@ class _ExtensionPackagesPageState extends ConsumerState<ExtensionPackagesPage> {
             ],
           ),
           SizedBox(height: AppSpacing.md),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
+          Row(
             children: [
-              _MiniButton(
-                label: '检查更新',
-                icon: Icons.system_update_alt,
-                color: context.accentPrimary,
-                onTap: () => _checkUpdate(pkg),
+              Expanded(
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: AmitiaStatusBadge(
+                    label: statusText,
+                    type: enabled
+                        ? BadgeType.success
+                        : (state == 'paused'
+                              ? BadgeType.warning
+                              : BadgeType.neutral),
+                  ),
+                ),
               ),
+              SizedBox(width: AppSpacing.sm),
               _MiniButton(
                 label: '详情',
                 icon: Icons.info_outline,
                 color: context.accentPrimary,
                 onTap: () => _showExtensionDetail(pkg),
               ),
-              _MiniButton(
-                label: '卸载',
-                icon: Icons.delete_outline,
-                color: context.error,
-                onTap: () => _showUninstallConfirm(pkg),
+              SizedBox(width: 8),
+              Semantics(
+                label: enabled ? '停用扩展' : '启用扩展',
+                child: Switch.adaptive(
+                  value: enabled,
+                  onChanged: _busy
+                      ? null
+                      : (value) => _toggleExtension(pkg, value),
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
               ),
             ],
           ),
         ],
       ),
     );
+  }
+
+  Future<void> _handlePackageAction(
+    Map<String, dynamic> pkg,
+    String action,
+  ) async {
+    switch (action) {
+      case 'permissions':
+        await _showPermissionManager(pkg);
+        break;
+      case 'pause':
+        await _pauseExtension(pkg);
+        break;
+      case 'update':
+        await _checkUpdate(pkg);
+        break;
+      case 'rollback':
+        await _rollbackExtension(pkg);
+        break;
+      case 'diagnose':
+        context.push(AppRoutes.kernelPage('dev-console'));
+        break;
+      case 'uninstall':
+        await _showUninstallConfirm(pkg);
+        break;
+    }
+  }
+
+  Future<void> _showPermissionManager(Map<String, dynamic> pkg) async {
+    if (_busy) return;
+    final id = (pkg['extensionId'] ?? '').toString();
+    if (id.isEmpty) return;
+    setState(() => _busy = true);
+    try {
+      final detail = await ref
+          .read(extensionServiceProvider)
+          .kernelExtension(id);
+      final permissions = ((detail['permissions'] as List?) ?? const [])
+          .whereType<Map>()
+          .map((item) => Map<String, dynamic>.from(item))
+          .toList(growable: false);
+      if (!mounted) return;
+      if (permissions.isEmpty) {
+        _toast('该扩展没有声明权限');
+        return;
+      }
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) {
+          var updating = false;
+          return StatefulBuilder(
+            builder: (dialogContext, setDialogState) => AlertDialog(
+              backgroundColor: dialogContext.surfacePrimary,
+              shape: RoundedRectangleBorder(borderRadius: AppRadius.brLarge),
+              title: Text(
+                '权限管理',
+                style: AppTypography.cardTitle(dialogContext),
+              ),
+              content: SizedBox(
+                width: double.maxFinite,
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: permissions.length,
+                  separatorBuilder: (_, _) =>
+                      Divider(height: 1, color: dialogContext.borderSecondary),
+                  itemBuilder: (context, index) {
+                    final permission = permissions[index];
+                    final permissionName = (permission['name'] ?? '')
+                        .toString();
+                    final granted = permission['granted'] == true;
+                    final reason = (permission['reason'] ?? '').toString();
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  permissionName,
+                                  style: AppTypography.bodySmall(dialogContext),
+                                ),
+                                if (reason.isNotEmpty) ...[
+                                  const SizedBox(height: 3),
+                                  Text(
+                                    reason,
+                                    style: AppTypography.caption(dialogContext),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Switch.adaptive(
+                            value: granted,
+                            onChanged: updating
+                                ? null
+                                : (value) async {
+                                    setDialogState(() => updating = true);
+                                    try {
+                                      await ref
+                                          .read(extensionServiceProvider)
+                                          .setKernelExtensionPermission(
+                                            id,
+                                            permissionName,
+                                            value,
+                                          );
+                                      if (dialogContext.mounted) {
+                                        setDialogState(() {
+                                          permission['granted'] = value;
+                                          updating = false;
+                                        });
+                                      }
+                                    } catch (e) {
+                                      if (dialogContext.mounted) {
+                                        setDialogState(() => updating = false);
+                                      }
+                                      _toast(
+                                        '权限更新失败: ${safeErrorMessage(e)}',
+                                        error: true,
+                                      );
+                                    }
+                                  },
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogContext),
+                  child: const Text('关闭'),
+                ),
+              ],
+            ),
+          );
+        },
+      );
+    } catch (e) {
+      _toast('读取权限失败: ${safeErrorMessage(e)}', error: true);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _pauseExtension(Map<String, dynamic> pkg) async {
+    if (_busy) return;
+    final id = (pkg['extensionId'] ?? '').toString();
+    if (id.isEmpty) return;
+    setState(() => _busy = true);
+    try {
+      await ref.read(extensionServiceProvider).pauseKernelExtension(id);
+      await _loadPackages();
+      _toast('$id 已暂停');
+    } catch (e) {
+      _toast('暂停失败: ${safeErrorMessage(e)}', error: true);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _rollbackExtension(Map<String, dynamic> pkg) async {
+    if (_busy) return;
+    final id = (pkg['extensionId'] ?? '').toString();
+    if (id.isEmpty) return;
+    final currentVersion = (pkg['version'] ?? '').toString();
+    final controller = TextEditingController();
+    final targetVersion = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: dialogContext.surfacePrimary,
+        shape: RoundedRectangleBorder(borderRadius: AppRadius.brLarge),
+        title: Text('回滚扩展', style: AppTypography.cardTitle(dialogContext)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              currentVersion.isEmpty ? id : '$id · v$currentVersion',
+              style: AppTypography.bodySmall(dialogContext),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: controller,
+              autofocus: true,
+              decoration: const InputDecoration(
+                labelText: '目标版本',
+                hintText: '例如 1.0.0',
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () =>
+                Navigator.pop(dialogContext, controller.text.trim()),
+            child: const Text('开始回滚'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (targetVersion == null || targetVersion.isEmpty) return;
+    setState(() => _busy = true);
+    try {
+      final result = await ref
+          .read(extensionServiceProvider)
+          .rollbackKernelExtension(id, targetVersion);
+      await _loadPackages();
+      final operationId = (result['operationId'] ?? '').toString();
+      _toast(
+        operationId.isEmpty
+            ? '$id 已回滚到 v$targetVersion'
+            : '$id 回滚操作已提交 · $operationId',
+      );
+    } catch (e) {
+      _toast('回滚失败: ${safeErrorMessage(e)}', error: true);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   Future<void> _checkUpdate(Map<String, dynamic> pkg) async {
@@ -793,6 +1229,34 @@ class _ExtensionPackagesPageState extends ConsumerState<ExtensionPackagesPage> {
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+}
+
+class _PackageMenuLabel extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color? color;
+
+  const _PackageMenuLabel({
+    required this.icon,
+    required this.label,
+    this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(icon, size: 19, color: color ?? context.textSecondary),
+        const SizedBox(width: 10),
+        Text(
+          label,
+          style: AppTypography.bodySmall(
+            context,
+          ).copyWith(color: color ?? context.textPrimary),
+        ),
+      ],
+    );
   }
 }
 

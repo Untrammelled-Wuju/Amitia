@@ -288,6 +288,38 @@ func TestArchiveInspectorAllowsOnlyDeclaredServiceEntrypointExecutable(t *testin
 	}
 }
 
+func TestArchiveInspectorAllowsOnlyDeclaredNativeCompanions(t *testing.T) {
+	manifest := []byte(`{"modules":[{"id":"runtime","runtime":{"type":"javascript","entryPoint":"index.js","nativeCompanions":[{"path":"native/tool.exe"},{"path":"native/driver.so"}]}}]}`)
+	pe := []byte{'M', 'Z', 0, 0}
+	elf := []byte{0x7f, 'E', 'L', 'F', 2, 1, 1, 0}
+
+	inspector := NewArchiveInspector(DefaultArchivePolicy())
+	result, err := inspector.Inspect(context.Background(), createTestZIP(map[string][]byte{
+		"manifest.json":                    manifest,
+		"modules/runtime/index.js":         []byte("module.exports = {}"),
+		"modules/runtime/native/tool.exe":  pe,
+		"modules/runtime/native/driver.so": elf,
+	}))
+	if err != nil {
+		t.Fatalf("Inspect returned error: %v", err)
+	}
+	if !result.Passed {
+		t.Fatalf("declared native companions must be accepted, errors=%v", result.Errors)
+	}
+
+	result, err = inspector.Inspect(context.Background(), createTestZIP(map[string][]byte{
+		"manifest.json":                    manifest,
+		"modules/runtime/index.js":         []byte("module.exports = {}"),
+		"modules/runtime/native/other.exe": pe,
+	}))
+	if err != nil {
+		t.Fatalf("Inspect returned error: %v", err)
+	}
+	if result.Passed {
+		t.Fatal("undeclared native companion must remain rejected")
+	}
+}
+
 func TestRestrictedArchivePolicyRejectsDeclaredServiceEntrypointExecutable(t *testing.T) {
 	manifest := []byte(`{"modules":[{"id":"runtime","runtime":{"type":"service","entryPoint":"bin/game"}}]}`)
 	elf := []byte{0x7f, 'E', 'L', 'F', 2, 1, 1, 0}

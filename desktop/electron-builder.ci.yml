@@ -12,6 +12,10 @@ extraResources:
     to: core
     filter:
       - "AmitiaCore.exe"
+  - from: ../runtime/plugin-host/dist
+    to: runtime/plugin-host/dist
+  - from: ../runtime/task-host/dist
+    to: runtime/task-host/dist
 asar: true
 compression: normal
 win:

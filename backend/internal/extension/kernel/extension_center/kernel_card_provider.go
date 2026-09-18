@@ -22,6 +22,10 @@ func NewKernelCardProvider(
 }
 
 func (p *KernelCardProvider) ListCards(ctx context.Context) ([]ExtensionCard, error) {
+	if p.definitions == nil || p.installations == nil {
+		return []ExtensionCard{}, nil
+	}
+
 	defs, err := p.definitions.ListExtensions(ctx)
 	if err != nil {
 		return nil, err

@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
+import { createMemoryHistory, createRouter } from "vue-router";
 import type { UIProviderDefinition } from "@/ui-runtime/types";
 import { collectExtensionNavigationItems } from "@/ui-runtime/navigationRegistry";
-import { collectEffectiveProviderRoutes, shadowsProtectedRoute } from "@/ui-runtime/providerRoutes";
+import { collectEffectiveProviderRoutes, shadowsProtectedRoute, syncProviderRoutes } from "@/ui-runtime/providerRoutes";
 
 function provider(input: Partial<UIProviderDefinition> & Pick<UIProviderDefinition, "providerId" | "extensionId" | "capability">): UIProviderDefinition {
   return {
@@ -167,5 +168,17 @@ describe("extension navigation registry", () => {
     expect(item?.group).toBe("character");
     expect(item?.groupLabel).toBe("角色");
     expect(item?.label).toBe("表情包管理");
+  });
+
+  it("marks extension provider routes as full height", () => {
+    const router = createRouter({ history: createMemoryHistory(), routes: [] });
+    syncProviderRoutes(router, store([
+      routeRegistry("minecraft", "routes.minecraft", "/games/minecraft", "page.minecraft", 10, false),
+      pageProvider("minecraft", "page.minecraft"),
+    ]));
+
+    const registered = router.getRoutes().find((route) => route.path === "/games/minecraft");
+    expect(registered?.meta.fullHeight).toBe(true);
+    expect(registered?.meta.extensionRoute).toBe(true);
   });
 });

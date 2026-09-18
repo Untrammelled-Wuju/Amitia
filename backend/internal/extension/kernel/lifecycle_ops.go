@@ -99,6 +99,9 @@ func (r *Runtime) Enable(ctx context.Context, extensionID string) error {
 	}
 
 	candidateGeneration := inst.Generation + 1
+	if err := r.registerServiceModuleDefinitions(ctx, extID, inst.InstalledVersion, modules); err != nil {
+		return fmt.Errorf("kernel: register service runtimes for %s: %w", extensionID, err)
+	}
 	operationID := fmt.Sprintf("enable-%s-%d", extensionID, time.Now().UnixNano())
 	r.logEnableStep(operationID, extensionID, "acquire_lock", "succeeded", nil)
 

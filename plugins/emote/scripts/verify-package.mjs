@@ -112,7 +112,7 @@ function main() {
       throw new Error(`integrity mismatch: ${name}`);
     }
   }
-  const canonical = payload.map(([path, data]) => ({ path, hash: sha256(data) })).sort((left, right) => left.path.localeCompare(right.path));
+  const canonical = payload.map(([path, data]) => ({ path, hash: sha256(data) })).sort((left, right) => Buffer.compare(Buffer.from(left.path, "utf8"), Buffer.from(right.path, "utf8")));
   const digest = createHash("sha256");
   for (const entry of canonical) {
     digest.update(entry.path);

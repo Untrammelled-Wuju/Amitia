@@ -1,5 +1,6 @@
 import http from "node:http";
 import fs from "node:fs";
+import os from "node:os";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { dirname, join, resolve } from "node:path";
@@ -8,54 +9,100 @@ import assert from "node:assert/strict";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const SERVICE_TOKEN = "amitia-test-service-token";
 const AUTH_HEADERS = { authorization: `Bearer ${SERVICE_TOKEN}` };
+const stateDir = fs.mkdtempSync(join(os.tmpdir(), "amitia-wechat-personal-"));
 let loginChecks = 0;
 let lastCoreInbound = null;
 let lastSend = null;
+let sendCount = 0;
 
-function server(port, handler) {
-  const s = http.createServer(handler);
+function server(handler) {
+  const current = http.createServer(handler);
   return new Promise((resolvePromise, reject) => {
-    s.once("error", reject);
-    s.listen(port, "127.0.0.1", () => resolvePromise(s));
+    current.once("error", reject);
+    current.listen(0, "127.0.0.1", () => resolvePromise(current));
   });
 }
+
 async function readBody(req) {
   const chunks = [];
-  for await (const c of req) chunks.push(c);
+  for await (const chunk of req) chunks.push(chunk);
   const text = Buffer.concat(chunks).toString("utf8");
   return text ? JSON.parse(text) : {};
 }
+
 function reply(res, value, status = 200) {
   const data = JSON.stringify(value);
   res.writeHead(status, { "content-type": "application/json", "content-length": Buffer.byteLength(data) });
   res.end(data);
 }
-async function waitFor(fn, timeout = 6000) {
-  const start = Date.now();
-  while (Date.now() - start < timeout) {
-    try { const value = await fn(); if (value) return value; } catch {}
-    await new Promise((r) => setTimeout(r, 120));
+
+async function waitFor(fn, timeout = 8000) {
+  const started = Date.now();
+  while (Date.now() - started < timeout) {
+    try {
+      const value = await fn();
+      if (value) return value;
+    } catch {}
+    await new Promise((resolvePromise) => setTimeout(resolvePromise, 100));
   }
   throw new Error("timeout");
 }
 
-const driver = await server(8888, async (req, res) => {
-  const u = new URL(req.url, "http://127.0.0.1:8888");
-  if (u.pathname === "/status") return reply(res, { matched: true, version: "mock-4.x" });
-  if (u.pathname === "/login/state") return reply(res, { logged: ++loginChecks >= 3 });
-  if (u.pathname === "/self/info") return reply(res, { wxid: "wxid_ai", nickname: "Amitia测试号", alias: "amitia_test" });
-  if (u.pathname === "/qr/url") {
-    const target = u.searchParams.get("path");
-    if (target) fs.writeFileSync(target, Buffer.concat([Buffer.from("PNGMOCK"), Buffer.alloc(128, 1)]));
-    return reply(res, { code: 0, data: { url: "https://example.invalid/mock-qr" } });
+const ilink = await server(async (req, res) => {
+  const url = new URL(req.url, "http://127.0.0.1");
+  if (url.pathname === "/ilink/bot/get_bot_qrcode" && req.method === "POST") {
+    await readBody(req);
+    return reply(res, {
+      qrcode: `mock-qr-${Date.now()}`,
+      qrcode_img_content: "https://liteapp.weixin.qq.com/q/mock",
+      ret: 0,
+    });
   }
-  if (u.pathname === "/send" && req.method === "POST") {
+  if (url.pathname === "/ilink/bot/get_qrcode_status" && req.method === "GET") {
+    loginChecks += 1;
+    if (loginChecks < 2) return reply(res, { status: "wait" });
+    return reply(res, {
+      status: "confirmed",
+      bot_token: "mock-bot-token",
+      ilink_bot_id: "bot-123@im.bot",
+      ilink_user_id: "wxid_user",
+      baseurl: `http://127.0.0.1:${ilink.address().port}`,
+    });
+  }
+  if (url.pathname === "/ilink/bot/msg/notifystart" || url.pathname === "/ilink/bot/msg/notifystop") {
+    await readBody(req);
+    return reply(res, { ret: 0 });
+  }
+  if (url.pathname === "/ilink/bot/getupdates" && req.method === "POST") {
+    const body = await readBody(req);
+    if (body.get_updates_buf !== "sync-1") {
+      await new Promise((resolvePromise) => setTimeout(resolvePromise, 120));
+      return reply(res, {
+        ret: 0,
+        get_updates_buf: "sync-1",
+        msgs: [{
+          message_id: "message-1",
+          from_user_id: "wxid_friend",
+          to_user_id: "bot-123@im.bot",
+          create_time_ms: 1700000000000,
+          message_type: 1,
+          context_token: "context-1",
+          item_list: [{ type: 1, text_item: { text: "你好" } }],
+        }],
+      });
+    }
+    await new Promise((resolvePromise) => setTimeout(resolvePromise, 150));
+    return reply(res, { ret: 0, get_updates_buf: "sync-1", msgs: [] });
+  }
+  if (url.pathname === "/ilink/bot/sendmessage" && req.method === "POST") {
     lastSend = await readBody(req);
-    return reply(res, { code: 0, msg: "ok" });
+    sendCount += 1;
+    return reply(res, { ret: 0 });
   }
   return reply(res, { error: "not_found" }, 404);
 });
-const core = await server(0, async (req, res) => {
+
+const core = await server(async (req, res) => {
   if (req.url === "/api/channels/inbound" && req.method === "POST") {
     if (
       req.headers.authorization !== `Bearer ${SERVICE_TOKEN}`
@@ -67,60 +114,81 @@ const core = await server(0, async (req, res) => {
   }
   return reply(res, { error: "not_found" }, 404);
 });
-const coreUrl = `http://127.0.0.1:${core.address().port}`;
 
+const coreUrl = `http://127.0.0.1:${core.address().port}`;
+const ilinkUrl = `http://127.0.0.1:${ilink.address().port}`;
 const child = spawn(process.execPath, [join(root, "runtime", "service.mjs")], {
   cwd: root,
-  env: { ...process.env, AMITIA_SERVICE_AUTH_TOKEN: SERVICE_TOKEN, AMITIA_SERVICE_AUTH_VERSION: "1", AMITIA_CORE_URL: coreUrl, AMITIA_WECHAT_EXTERNAL_DRIVER_COMPAT: "1" },
+  env: {
+    ...process.env,
+    AMITIA_SERVICE_AUTH_TOKEN: SERVICE_TOKEN,
+    AMITIA_SERVICE_AUTH_VERSION: "1",
+    AMITIA_CORE_URL: coreUrl,
+    AMITIA_WECHAT_ILINK_BASE_URL: ilinkUrl,
+    AMITIA_WECHAT_STATE_DIR: stateDir,
+  },
   stdio: ["ignore", "pipe", "pipe"],
 });
 let logs = "";
-child.stdout.on("data", (c) => { logs += c; });
-child.stderr.on("data", (c) => { logs += c; });
+child.stdout.on("data", (chunk) => { logs += chunk; });
+child.stderr.on("data", (chunk) => { logs += chunk; });
 
 try {
   await waitFor(async () => (await fetch("http://127.0.0.1:19878/api/health", { headers: AUTH_HEADERS })).ok);
   const connect = await fetch("http://127.0.0.1:19878/api/connect", {
-    method: "POST", headers: { ...AUTH_HEADERS, "content-type": "application/json" }, body: JSON.stringify({ launchWechat: false }),
-  }).then((r) => r.json());
+    method: "POST",
+    headers: { ...AUTH_HEADERS, "content-type": "application/json" },
+    body: JSON.stringify({ force: true }),
+  }).then((response) => response.json());
   assert.equal(connect.success, true);
   assert.equal(connect.data.status, "qr_ready");
-  assert.match(connect.data.qrCodeUrl, /^data:image\/png;base64,/);
+  assert.match(connect.data.qrImageUrl, /^data:image\/png;base64,/);
 
   const connected = await waitFor(async () => {
-    const payload = await fetch("http://127.0.0.1:19878/api/status", { headers: AUTH_HEADERS }).then((r) => r.json());
+    const payload = await fetch("http://127.0.0.1:19878/api/status", { headers: AUTH_HEADERS }).then((response) => response.json());
     return payload?.data?.connected ? payload.data : null;
-  }, 8000);
-  assert.equal(connected.accountId, "wxid_ai");
-  assert.equal(connected.driverKind, "hero");
+  });
+  assert.equal(connected.accountId, "bot-123@im.bot");
+  assert.equal(connected.protocol, "ilink");
+  assert.equal(connected.localWechatRequired, false);
 
-  const inbound = await fetch("http://127.0.0.1:19878/api/native/callback", {
-    method: "POST", headers: { ...AUTH_HEADERS, "content-type": "application/json" },
-    body: JSON.stringify({ roomId: "room@chatroom", fromWxid: "room@chatroom", senderWxid: "wxid_member", content: "群里你好", msgId: "m-1", msgType: 1 }),
-  }).then((r) => r.json());
-  assert.equal(inbound.success, true);
+  await waitFor(() => Boolean(lastCoreInbound));
   assert.equal(lastCoreInbound.channelId, "wechat_personal");
-  assert.equal(lastCoreInbound.accountId, "wxid_ai");
-  assert.equal(lastCoreInbound.peerId, "wxid_member");
-  assert.equal(lastCoreInbound.contentType, "text");
+  assert.equal(lastCoreInbound.accountId, "bot-123@im.bot");
+  assert.equal(lastCoreInbound.peerId, "wxid_friend");
+  assert.equal(lastCoreInbound.text, "你好");
 
   const send = await fetch("http://127.0.0.1:19878/api/send", {
-    method: "POST", headers: { ...AUTH_HEADERS, "content-type": "application/json", "idempotency-key": "delivery-1" },
+    method: "POST",
+    headers: { ...AUTH_HEADERS, "content-type": "application/json", "idempotency-key": "delivery-1" },
     body: JSON.stringify({ toUserId: "wxid_friend", text: "你好", deliveryKey: "delivery-1" }),
-  }).then((r) => r.json());
+  }).then((response) => response.json());
   assert.equal(send.success, true);
-  assert.deepEqual(lastSend, { wxid: "wxid_friend", content: "你好" });
+  assert.equal(lastSend.msg.to_user_id, "wxid_friend");
+  assert.equal(lastSend.msg.context_token, "context-1");
+  assert.equal(lastSend.msg.item_list[0].text_item.text, "你好");
 
   const duplicate = await fetch("http://127.0.0.1:19878/api/send", {
-    method: "POST", headers: { ...AUTH_HEADERS, "content-type": "application/json", "idempotency-key": "delivery-1" },
+    method: "POST",
+    headers: { ...AUTH_HEADERS, "content-type": "application/json", "idempotency-key": "delivery-1" },
     body: JSON.stringify({ toUserId: "wxid_friend", text: "你好", deliveryKey: "delivery-1" }),
-  }).then((r) => r.json());
+  }).then((response) => response.json());
   assert.equal(duplicate.duplicate, true);
+  assert.equal(sendCount, 1);
 
-  console.log("wechat-personal service e2e: PASS");
+  const disconnected = await fetch("http://127.0.0.1:19878/api/disconnect", {
+    method: "POST",
+    headers: AUTH_HEADERS,
+  }).then((response) => response.json());
+  assert.equal(disconnected.disconnected, true);
+  assert.equal(fs.existsSync(join(stateDir, "account.json")), false);
+
+  console.log("wechat-personal iLink service e2e: PASS");
 } finally {
   child.kill("SIGTERM");
-  await new Promise((r) => setTimeout(r, 150));
-  driver.close(); core.close();
+  await new Promise((resolvePromise) => setTimeout(resolvePromise, 250));
+  ilink.close();
+  core.close();
+  fs.rmSync(stateDir, { recursive: true, force: true });
   if (child.exitCode && child.exitCode !== 0) console.error(logs);
 }

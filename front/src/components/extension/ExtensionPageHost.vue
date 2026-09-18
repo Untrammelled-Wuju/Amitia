@@ -49,6 +49,7 @@ const router = useRouter();
 const uiStore = useExtensionUIStore();
 
 const sessionId = ref<string>("");
+const pageSessionGeneration = ref<number>(0);
 const pageState = ref<PageState>("resolving");
 const pageSpec = ref<PageSpec | null>(null);
 const missingPermissions = ref<string[]>([]);
@@ -92,7 +93,7 @@ const pageContribution = computed<UIContributionSummary | null>(() => {
     kind: pageSpec.value.entryKind,
     slotId: "extension.page.main",
     contractVersion: 1,
-    generation: 1,
+    generation: pageSessionGeneration.value,
     title: pageSpec.value.title.default,
     ordering: 0,
     visible: true,
@@ -132,6 +133,7 @@ async function openPage() {
       scopeSnapshot: buildScopeSnapshot(),
     });
     sessionId.value = result.sessionId;
+    pageSessionGeneration.value = result.generation ?? 0;
     pageState.value = result.state as PageState;
     pageSpec.value = (result.definition as PageSpec) ?? null;
     missingPermissions.value = result.missingPermissions ?? [];
@@ -159,6 +161,7 @@ async function pollPageStatus() {
   if (!sessionId.value) return;
   try {
     const result = await pollPageSessionStatus(sessionId.value);
+    pageSessionGeneration.value = result.generation ?? pageSessionGeneration.value;
     pageState.value = result.state as PageState;
     pageSpec.value = (result.definition as PageSpec) ?? pageSpec.value;
     missingPermissions.value = result.missingPermissions ?? [];
@@ -184,6 +187,7 @@ async function closePage() {
   }
   uiStore.unregisterSession(`${extensionId.value}/${pageId.value}`);
   sessionId.value = "";
+  pageSessionGeneration.value = 0;
 }
 
 function buildScopeSnapshot(): string {
@@ -345,8 +349,21 @@ watch([extensionId, pageId], async () => {
 }
 .extension-page-host__content {
   flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
   overflow: auto;
   padding: 16px;
+}
+.extension-page-host__page-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.extension-page-host__page-content :deep(.sandbox-webui-frame) {
+  flex: 1;
+  min-height: 0;
 }
 .extension-page-host__loading {
   display: flex;

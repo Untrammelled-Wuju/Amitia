@@ -7,9 +7,9 @@
       "default": "个人微信渠道"
     },
     "description": {
-      "default": "以普通个人微信账号接入 Amitia；Windows/Linux 通过受校验的 Native Companion 托管官方微信，并由版本化 Hook Driver 完成插件内扫码与消息桥接。"
+      "default": "以普通个人微信账号接入 Amitia；插件直接通过腾讯 iLink 协议生成二维码、保存独立账号令牌并完成消息收发，不依赖安装设备上的微信客户端。"
     },
-    "version": "1.5.0",
+    "version": "1.6.0",
     "license": "AGPL-3.0-only",
     "homepage": "https://amitia.untrammelled.top",
     "categories": [
@@ -19,7 +19,7 @@
     "keywords": [
       "wechat",
       "personal-wechat",
-      "wxhook",
+      "ilink",
       "channel"
     ]
   },
@@ -42,7 +42,7 @@
         "default": "个人微信渠道服务"
       },
       "description": {
-        "default": "连接本机个人微信 Native Driver，并把消息桥接到 Amitia 统一入口。"
+        "default": "通过腾讯 iLink 协议连接独立个人微信账号，并把消息桥接到 Amitia 统一入口。"
       },
       "type": "service",
       "runtime": {
@@ -50,35 +50,8 @@
         "entryPoint": "launcher.mjs",
         "timeout": "30s",
         "memory": 134217728,
-        "maxSubprocesses": 2,
-        "nativeCompanions": [
-          {
-            "id": "wechat-agent-windows-x64",
-            "platform": "windows",
-            "architecture": "amd64",
-            "path": "native/windows-x64/amitia-wechat-agent.exe",
-            "sha256": "fdefdcf39c33d89c54062d2c11fbb5d351dfc5c0d022fefd60b569e515f62c5a",
-            "executable": true
-          },
-          {
-            "id": "wechat-agent-linux-x64",
-            "platform": "linux",
-            "architecture": "amd64",
-            "path": "native/linux-x64/amitia-wechat-agent",
-            "sha256": "0e42e8411e77daf5ab61f8d6a30a91b1dc4aa5a18c0dea4edeb4213a27f4078d",
-            "executable": true
-          },
-          {
-            "id": "wechat-driver-linux-x64",
-            "platform": "linux",
-            "architecture": "amd64",
-            "path": "native/linux-x64/libamitia_wechat_preload.so",
-            "sha256": "935feb8c1794afa35270ea8b5575f805b1eb6081e485eb47aafe0aa8adb5297e",
-            "executable": false
-          }
-        ],
+        "maxSubprocesses": 1,
         "permissions": [
-          "service.process.spawn",
           "service.network.request",
           "service.network.listen_loopback"
         ]
@@ -99,9 +72,9 @@
         "metadata": {
           "capabilities": {
             "file": false,
-            "group": true,
+            "group": false,
             "image": false,
-            "reply": false,
+            "reply": true,
             "text": true,
             "thread": false,
             "video": false,
@@ -168,8 +141,8 @@
                   "command": "channel.connect",
                   "type": "host_command"
                 },
-                "title": {
-                  "default": "连接个人微信"
+                  "title": {
+                    "default": "获取个人微信二维码"
                 }
               },
               {
@@ -188,7 +161,7 @@
             "contribution_id": "wechat-personal-page",
             "display": {
               "description": {
-                "default": "扫码登录普通个人微信账号。"
+                "default": "通过腾讯 iLink 扫码登录独立个人微信账号。"
               },
               "icon": "channel",
               "title": {
@@ -492,20 +465,21 @@
       "scope": "extension"
     },
     {
+      "name": "service.process.spawn",
       "name": "service.network.request",
-      "reason": "连接本机回环 Native Driver 和 Amitia Core。",
+      "reason": "连接腾讯 iLink 协议服务、Amitia Core 和本地渠道接口。",
       "required": true,
       "scope": "extension"
     },
     {
       "name": "service.network.listen_loopback",
-      "reason": "在本机回环地址提供渠道 Provider 和 Hook 回调接口。",
+      "reason": "在本机回环地址提供渠道 Provider 接口。",
       "required": true,
       "scope": "extension"
     },
     {
       "name": "service.background.run",
-      "reason": "保持个人微信消息接收、Native Companion 和登录状态检测在后台运行。",
+      "reason": "保持个人微信二维码登录、消息轮询和账号状态检测在后台运行。",
       "required": true,
       "scope": "extension"
     }

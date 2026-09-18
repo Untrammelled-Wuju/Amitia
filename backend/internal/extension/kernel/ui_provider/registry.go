@@ -62,6 +62,7 @@ const (
 	CapabilityConversationSidebar         Capability = "conversation.sidebar"
 	CapabilityConversationComposer        Capability = "conversation.composer"
 	CapabilityConversationOverlay         Capability = "conversation.overlay"
+	CapabilityConversationDrawer          Capability = "conversation.drawer"
 	CapabilityCharacterShell              Capability = "character.shell"
 	CapabilityCharacterDetail             Capability = "character.detail"
 	CapabilityMemoryShell                 Capability = "memory.shell"
@@ -81,7 +82,8 @@ var knownCapabilities = map[Capability]struct{}{
 	CapabilityRouteRegistry: {}, CapabilityPageProvider: {},
 	CapabilityConversationShell: {}, CapabilityConversationHeader: {}, CapabilityConversationMessages: {},
 	CapabilityConversationMessageRenderer: {}, CapabilityConversationSidebar: {}, CapabilityConversationComposer: {}, CapabilityConversationOverlay: {},
-	CapabilityCharacterShell: {}, CapabilityCharacterDetail: {}, CapabilityMemoryShell: {}, CapabilityMemoryDetail: {},
+	CapabilityConversationDrawer: {},
+	CapabilityCharacterShell:     {}, CapabilityCharacterDetail: {}, CapabilityMemoryShell: {}, CapabilityMemoryDetail: {},
 	CapabilitySettingsShell: {}, CapabilitySettingsSection: {}, CapabilityExtensionCenter: {}, CapabilityExtensionPage: {},
 	CapabilityTheme: {}, CapabilityTokens: {}, CapabilityIcons: {}, CapabilityComponents: {},
 }
@@ -166,13 +168,15 @@ func requiresTrustedRootProvider(capability Capability) bool {
 	switch capability {
 	case CapabilityAppShell, CapabilityAppNavigation, CapabilityAppWorkspace, CapabilityRouteRegistry, CapabilityPageProvider:
 		return true
+	case CapabilityConversationDrawer:
+		return true
 	default:
 		return false
 	}
 }
 func supportsDeclarativeEntry(capability Capability) bool {
 	switch capability {
-	case CapabilityAppNavigation, CapabilityRouteRegistry, CapabilityTheme, CapabilityTokens, CapabilityIcons, CapabilityComponents:
+	case CapabilityAppNavigation, CapabilityRouteRegistry, CapabilityTheme, CapabilityTokens, CapabilityIcons, CapabilityComponents, CapabilityConversationDrawer:
 		return true
 	default:
 		return false

@@ -250,7 +250,7 @@
   ],
   "secretRefs": [
     {
-      "ref": "secret://worldgame_provider_token",
+      "ref": "secret://provider/worldgame_provider_token",
       "serviceId": "world-game-runtime",
       "purpose": "startup",
       "required": false,

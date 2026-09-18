@@ -33,6 +33,7 @@ const emit = defineEmits<{
 
 const iframeRef = ref<HTMLIFrameElement | null>(null);
 const sessionId = ref<string>("");
+const sessionGeneration = ref<number>(0);
 const sessionNonce = ref<string>("");
 const sessionToken = ref<string>("");
 const sessionOrigin = ref<string>("");
@@ -102,6 +103,7 @@ let restartPromise: Promise<void> | null = null;
 
 function applySession(data: SandboxSessionRecord, cacheKey: string) {
   sessionId.value = data.sessionId;
+  sessionGeneration.value = data.generation;
   sessionNonce.value = data.nonce;
   sessionToken.value = data.token;
   sessionOrigin.value = data.origin;
@@ -128,12 +130,15 @@ async function createSession(expectedToken: number) {
     const cached = takeCachedSandboxSession(cacheKey);
     if (cached) {
       try {
-        await apiClient.get(`/api/extension/webui/session/${cached.sessionId}`);
+        const info = await apiClient.get<{ generation?: number }>(`/api/extension/webui/session/${cached.sessionId}`);
         if (expectedToken !== restartToken) {
           releaseSandboxSessionClaim(cacheKey);
           return;
         }
-        applySession(cached, cacheKey);
+        applySession({
+          ...cached,
+          generation: typeof info.data?.generation === "number" ? info.data.generation : cached.generation,
+        }, cacheKey);
         loading.value = false;
         return;
       } catch (e) {
@@ -187,6 +192,7 @@ async function destroySession() {
   }
   releaseSandboxSessionClaim(key);
   sessionId.value = "";
+  sessionGeneration.value = 0;
   sessionNonce.value = "";
   sessionToken.value = "";
   serverCapabilities = [];
@@ -202,6 +208,7 @@ function stashSession() {
   if (!sessionId.value) return;
   const entry: SandboxSessionRecord = {
     sessionId: sessionId.value,
+    generation: sessionGeneration.value,
     nonce: sessionNonce.value,
     token: sessionToken.value,
     origin: sessionOrigin.value,
@@ -215,6 +222,7 @@ function stashSession() {
   putCachedSandboxSession(key, entry);
   releaseSandboxSessionClaim(key);
   sessionId.value = "";
+  sessionGeneration.value = 0;
   sessionNonce.value = "";
   sessionToken.value = "";
   sessionOrigin.value = "";
@@ -260,7 +268,7 @@ function onMessage(event: MessageEvent) {
   if (data.protocolVersion !== PROTOCOL_VERSION) return;
   if (data.session !== sessionId.value) return;
   if (data.nonce !== sessionNonce.value) return;
-  if (data.generation !== props.contribution.generation) return;
+  if (data.generation !== sessionGeneration.value) return;
   if (bridgePort) return;
   const channel = new MessageChannel();
   bridgePort = channel.port1;
@@ -277,7 +285,7 @@ function onMessage(event: MessageEvent) {
       session: sessionId.value,
       nonce: sessionNonce.value,
       token: sessionToken.value,
-      generation: props.contribution.generation,
+      generation: sessionGeneration.value,
       uiContext: {
         theme: buildThemeTokens(),
         locale: (uiContext.value.locale as string) || navigator.language || "en",
@@ -431,7 +439,7 @@ function postUIContext() {
       extensionId: props.contribution.extensionId,
       moduleId: props.contribution.moduleId,
     },
-    generation: props.contribution.generation,
+    generation: sessionGeneration.value,
     surfaceState: surfaceStateWithDismiss.value,
     surfaceMetrics: buildSurfaceMetrics(),
   };

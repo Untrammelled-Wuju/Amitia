@@ -59,7 +59,7 @@ function buildIntegrity() {
       const data = readFileSync(file);
       return { path: packagePath(file), size: data.length, hash: sha256(data), modified: generatedAt };
     })
-    .sort((left, right) => left.path.localeCompare(right.path));
+    .sort((left, right) => Buffer.compare(Buffer.from(left.path, "utf8"), Buffer.from(right.path, "utf8")));
   const files = {};
   for (const entry of entries) files[entry.path] = entry;
   writeFileSync(join(integrityRoot, "files.json"), `${JSON.stringify({ algorithm: "sha256", files, generatedAt }, null, 2)}\n`);

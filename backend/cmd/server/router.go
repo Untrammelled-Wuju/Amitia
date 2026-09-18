@@ -729,7 +729,10 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 		}
 		{
 			deviceMeshAuthMW := security.AuthenticationMiddleware(newAuthConfig(config.AppCfg.Security.Mode))
-			deviceMeshWebAccessMW := security.RequireWebAccessForWebDevice(webAccessSvc, services.DeviceMesh.DeviceReg)
+			var deviceMeshWebAccessMW gin.HandlerFunc
+			if webAccessSvc != nil && services.DeviceMesh.DeviceReg != nil {
+				deviceMeshWebAccessMW = security.RequireWebAccessForWebDevice(webAccessSvc, services.DeviceMesh.DeviceReg)
+			}
 			deviceMeshPublicWebAccessMW := security.RequireWebAccessForDeclaredBrowser(webAccessSvc)
 			meshSQLDB, meshDBErr := ctx.DB.DB()
 			if meshDBErr != nil {

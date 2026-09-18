@@ -72,20 +72,43 @@ void main() {
     expect((installCall.arguments as Map<Object?, Object?>)['downloadId'], 42);
     service.dispose();
   });
+
+  test('treats a missing manifest as no available update', () async {
+    final service = _service(notFound: true);
+    final result = await service.check();
+
+    expect(result.available, isNull);
+    expect(result.reason, 'manifest_unavailable');
+    service.dispose();
+  });
 }
 
-AppUpdateService _service() {
-  final dio = Dio(BaseOptions())..httpClientAdapter = _UpdateServerAdapter();
+AppUpdateService _service({bool notFound = false}) {
+  final dio = Dio(BaseOptions())
+    ..httpClientAdapter = _UpdateServerAdapter(notFound: notFound);
   return AppUpdateService(dio: dio, baseUrl: 'https://updates.test/android');
 }
 
 class _UpdateServerAdapter implements HttpClientAdapter {
+  final bool notFound;
+
+  _UpdateServerAdapter({this.notFound = false});
+
   @override
   Future<ResponseBody> fetch(
     RequestOptions options,
     Stream<Uint8List>? requestStream,
     Future<void>? cancelFuture,
   ) async {
+    if (notFound) {
+      return ResponseBody.fromString(
+        'not found',
+        404,
+        headers: <String, List<String>>{
+          Headers.contentTypeHeader: <String>['text/plain'],
+        },
+      );
+    }
     if (options.path.endsWith('.sig')) {
       return ResponseBody.fromString(
         'test-signature',

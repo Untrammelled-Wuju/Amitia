@@ -571,6 +571,7 @@ type OpenPageRequest struct {
 
 type OpenPageResult struct {
 	SessionID    PageSessionID      `json:"sessionId"`
+	Generation   int64              `json:"generation"`
 	State        PageState          `json:"state"`
 	Definition   *ExtensionPageSpec `json:"definition"`
 	MissingPerms []string           `json:"missingPermissions,omitempty"`
@@ -640,6 +641,7 @@ func (h *PageHost) OpenPage(ctx context.Context, req OpenPageRequest) (*OpenPage
 	}
 	return &OpenPageResult{
 		SessionID:    session.SessionID,
+		Generation:   session.Generation,
 		State:        session.State,
 		Definition:   def.PageSpec,
 		MissingPerms: missing,

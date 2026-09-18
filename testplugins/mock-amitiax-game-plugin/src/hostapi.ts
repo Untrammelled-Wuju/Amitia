@@ -6,7 +6,7 @@ import { networkTCPOpen, networkTCPRead, networkTCPWrite, networkTCPClose, netwo
 
 export class HostAPIHandler {
   private leaseId: string = '';
-  private secretRef: string = 'secret://worldgame_provider_token';
+  private secretRef: string = 'secret://provider/worldgame_provider_token';
 
   hasActiveLease(): boolean {
     return this.leaseId !== '';

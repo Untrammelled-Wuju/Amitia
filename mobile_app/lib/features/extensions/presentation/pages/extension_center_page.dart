@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../app/app_routes.dart';
 import '../../../../app/theme/app_colors.dart';
+import '../../../../app/theme/app_radius.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/services/extension_service.dart';
@@ -26,7 +27,7 @@ class ExtensionCenterPage extends ConsumerWidget {
 
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
-        title: '扩展中心 v1',
+        title: '扩展中心',
         navigation: AmitiaAppBarNavigation.back,
         actions: [
           ConstrainedBox(
@@ -36,16 +37,11 @@ class ExtensionCenterPage extends ConsumerWidget {
               context: {'surface': 'extension-center'},
             ),
           ),
-          AmitiaIconButton(
-            icon: Icons.refresh_rounded,
-            tooltip: '刷新',
-            onPressed: () => ref.invalidate(installedExtensionViewProvider),
-          ),
         ],
       ),
       body: viewAsync.when(
         data: (view) => _buildContent(context, ref, view),
-        loading: () => const AmitiaLoadingState(message: '正在加载扩展能力…'),
+        loading: () => const AmitiaLoadingState(message: '正在加载扩展…'),
         error: (err, _) => AmitiaErrorState(
           message: '扩展中心加载失败：$err',
           onRetry: () => ref.invalidate(installedExtensionViewProvider),
@@ -62,11 +58,6 @@ class ExtensionCenterPage extends ConsumerWidget {
     return ListView(
       padding: EdgeInsets.all(AppSpacing.pagePadding),
       children: [
-        Text(
-          '扩展能力',
-          style: AppTypography.pageTitle(context).copyWith(fontSize: 16),
-        ),
-        SizedBox(height: AppSpacing.sm),
         Column(
           children: [
             _CenterEntry(
@@ -80,30 +71,17 @@ class ExtensionCenterPage extends ConsumerWidget {
               onTap: () => context.push(AppRoutes.extensionsMcp),
             ),
             _CenterEntry(
+              label: '工作流',
+              icon: Icons.account_tree_outlined,
+              onTap: () => context.push(AppRoutes.workshopWorkflows),
+            ),
+            _CenterEntry(
               label: 'Agent Skill',
               icon: Icons.auto_awesome_outlined,
               onTap: () => context.push(AppRoutes.extensionsAgentSkills),
             ),
-            _CenterEntry(
-              label: '兼容 Skill',
-              icon: Icons.psychology_outlined,
-              onTap: () => context.push(AppRoutes.extensionsSkills),
-            ),
-            _CenterEntry(
-              label: '执行记录',
-              icon: Icons.receipt_long_outlined,
-              onTap: () => context.push(AppRoutes.extensionsRuns),
-            ),
           ],
         ),
-        if (view.all.isEmpty) ...[
-          SizedBox(height: AppSpacing.sectionGap),
-          const AmitiaEmptyState(
-            icon: Icons.extension_off_outlined,
-            title: '暂无已发现扩展',
-            subtitle: '上方入口仍可用于安装扩展包、连接 MCP 或管理 Skill',
-          ),
-        ],
         if (view.updates.isNotEmpty) ...[
           SizedBox(height: AppSpacing.lg),
           Text(
@@ -224,20 +202,47 @@ class _CenterEntry extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
+        borderRadius: AppRadius.brMedium,
         child: Container(
-          constraints: const BoxConstraints(minHeight: 56),
-          padding: const EdgeInsets.symmetric(vertical: 10),
+          constraints: const BoxConstraints(minHeight: 68),
+          margin: const EdgeInsets.only(bottom: 10),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           decoration: BoxDecoration(
-            border: Border(
-              bottom: BorderSide(color: context.borderSecondary, width: 0.5),
-            ),
+            color: context.surfaceSecondary,
+            borderRadius: AppRadius.brMedium,
+            border: Border.all(color: context.borderPrimary, width: 0.6),
           ),
           child: Row(
             children: [
-              Icon(icon, size: 22, color: context.accentPrimary),
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: context.accentSoft,
+                  borderRadius: AppRadius.brSmall,
+                ),
+                child: Icon(icon, size: 21, color: context.accentPrimary),
+              ),
               const SizedBox(width: 14),
-              Expanded(child: Text(label, style: AppTypography.body(context))),
-              Icon(Icons.chevron_right, size: 20, color: context.textTertiary),
+              Expanded(
+                child: Text(
+                  label,
+                  style: AppTypography.cardTitle(context),
+                ),
+              ),
+              Container(
+                width: 30,
+                height: 30,
+                decoration: BoxDecoration(
+                  color: context.surfacePrimary,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.arrow_forward_rounded,
+                  size: 17,
+                  color: context.accentPrimary,
+                ),
+              ),
             ],
           ),
         ),

@@ -11,7 +11,7 @@
     <header class="page-head">
       <div>
         <h1>个人微信</h1>
-        <p>普通个人微信账号 · 当前空间默认角色</p>
+        <p>腾讯 iLink 独立账号 · 当前空间默认角色</p>
       </div>
       <span id="badge" class="badge">检测中</span>
     </header>
@@ -25,7 +25,7 @@
     <div id="connect-view">
       <section class="card">
         <div class="card-title-row">
-          <div><h2>账号状态</h2><p id="status-message" class="muted">正在检测...</p></div>
+          <div><h2>账号状态</h2><p id="status-message" class="muted" aria-live="polite">正在检测...</p></div>
           <button id="refresh" class="button ghost">刷新</button>
         </div>
         <div class="account-row">
@@ -36,14 +36,14 @@
           </div>
         </div>
         <div class="stats">
-          <div><span>Driver</span><b id="driver">未连接</b></div>
+          <div><span>协议</span><b id="driver">未连接</b></div>
           <div><span>平台</span><b id="platform">—</b></div>
-          <div><span>Native</span><b id="native">—</b></div>
+          <div><span>登录方式</span><b id="native">—</b></div>
           <div><span>收到</span><b id="received">0</b></div>
           <div><span>发送</span><b id="sent">0</b></div>
           <div><span>角色</span><b>空间默认角色</b></div>
         </div>
-        <div class="capabilities" aria-label="当前 Driver 能力">
+        <div class="capabilities" aria-label="当前连接能力">
           <span id="cap-qr" class="capability">二维码</span>
           <span id="cap-login" class="capability">登录检测</span>
           <span id="cap-recv" class="capability">接收文本</span>
@@ -53,23 +53,54 @@
 
       <section class="card">
         <h2>登录个人微信</h2>
-        <p class="muted">同一个插件同时支持 Windows x64 与 Linux x64：Amitia 会自动托管本机官方微信。登录能力可由官方客户端 UI Driver 提供；只有经过当前微信版本验证的 Hook/Preload Driver 才会启用消息收发。现有 OpenClaw 微信插件保持独立不变。</p>
-        <div id="qr-wrap" class="qr-wrap">
-          <img id="qr" class="qr hidden" alt="微信登录二维码" />
-          <div id="qr-placeholder" class="qr-placeholder">点击“连接个人微信”获取二维码</div>
+        <p class="muted">插件直接向腾讯 iLink 申请二维码并保存自己的账号令牌，不读取本机微信登录状态，也不需要安装或启动电脑微信。</p>
+        <div class="login-layout">
+          <div class="qr-column">
+            <div id="qr-wrap" class="qr-wrap">
+              <img id="qr" class="qr hidden" alt="微信登录二维码" />
+              <div id="qr-placeholder" class="qr-placeholder">点击“连接个人微信”获取二维码</div>
+            </div>
+            <div class="actions">
+              <button id="connect" class="button primary">获取登录二维码</button>
+              <button id="disconnect" class="button danger">断开</button>
+            </div>
+            <div id="verify-row" class="verify-row hidden">
+              <input id="verify-code" class="input" inputmode="numeric" autocomplete="one-time-code" placeholder="手机显示的数字" />
+              <button id="verify" class="button primary">提交验证码</button>
+            </div>
+          </div>
+          <div class="login-guide">
+            <div class="guide-step">
+              <span class="guide-step-number">1</span>
+              <div>
+                <strong>获取插件二维码</strong>
+                <p>点击后由插件自己的 iLink 登录会话生成二维码。</p>
+              </div>
+            </div>
+            <div class="guide-step">
+              <span class="guide-step-number">2</span>
+              <div>
+                <strong>使用手机微信扫码</strong>
+                <p>扫码和确认都在手机上完成，不读取电脑微信。</p>
+              </div>
+            </div>
+            <div class="guide-step">
+              <span class="guide-step-number">3</span>
+              <div>
+                <strong>等待插件确认</strong>
+                <p>只有腾讯 iLink 返回登录成功后才显示已连接。</p>
+              </div>
+            </div>
+          </div>
         </div>
-        <div id="error" class="error hidden"></div>
-        <div class="actions">
-          <button id="connect" class="button primary">连接个人微信</button>
-          <button id="disconnect" class="button danger">断开</button>
-        </div>
+        <div id="error" class="error hidden" role="alert"></div>
         <details class="details">
-          <summary>Native Driver 状态说明</summary>
-          <p>Native Agent/Helper 必须在 manifest 的 nativeCompanions 中显式声明并通过 SHA256 校验。Windows 使用受管 Weixin.exe；Linux 优先使用官方 Linux 微信 + LD_PRELOAD Helper。未知微信版本不会调用未验证的内部偏移，直接 fail-closed。</p>
+          <summary>账号独立说明</summary>
+          <p>登录凭据仅保存在个人微信插件的数据目录。断开只会清除插件自己的账号会话，不会退出或影响电脑上安装的微信。</p>
         </details>
       </section>
     </div>
   </main>
-  <script type="module" src="./app.js"></script>
+  <script src="./app.js" defer></script>
 </body>
 </html>

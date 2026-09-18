@@ -35,8 +35,12 @@ class ExtensionCenterCard {
       version: (json['version'] ?? '').toString(),
       status: (json['status'] ?? '').toString(),
       enabled: (json['enabled'] as bool?) ?? false,
-      contributionTags: ((json['contributionTags'] as List?) ?? []).map((e) => e.toString()).toList(),
-      platforms: ((json['platforms'] as List?) ?? []).map((e) => e.toString()).toList(),
+      contributionTags: ((json['contributionTags'] as List?) ?? [])
+          .map((e) => e.toString())
+          .toList(),
+      platforms: ((json['platforms'] as List?) ?? [])
+          .map((e) => e.toString())
+          .toList(),
       installedAt: json['installedAt'] as String?,
       updatedAt: json['updatedAt'] as String?,
     );
@@ -58,16 +62,28 @@ class ExtensionCenterView {
 
   factory ExtensionCenterView.fromJson(Map<String, dynamic> json) {
     return ExtensionCenterView(
-      installed: ((json['installed'] as List?) ?? []).map((e) => ExtensionCenterCard.fromJson(e as Map<String, dynamic>)).toList(),
-      discover: ((json['discover'] as List?) ?? []).map((e) => ExtensionCenterCard.fromJson(e as Map<String, dynamic>)).toList(),
-      updates: ((json['updates'] as List?) ?? []).map((e) => ExtensionCenterCard.fromJson(e as Map<String, dynamic>)).toList(),
-      needsAction: ((json['needsAction'] as List?) ?? []).map((e) => ExtensionCenterCard.fromJson(e as Map<String, dynamic>)).toList(),
+      installed: ((json['installed'] as List?) ?? [])
+          .map((e) => ExtensionCenterCard.fromJson(e as Map<String, dynamic>))
+          .toList(),
+      discover: ((json['discover'] as List?) ?? [])
+          .map((e) => ExtensionCenterCard.fromJson(e as Map<String, dynamic>))
+          .toList(),
+      updates: ((json['updates'] as List?) ?? [])
+          .map((e) => ExtensionCenterCard.fromJson(e as Map<String, dynamic>))
+          .toList(),
+      needsAction: ((json['needsAction'] as List?) ?? [])
+          .map((e) => ExtensionCenterCard.fromJson(e as Map<String, dynamic>))
+          .toList(),
     );
   }
 
-  List<ExtensionCenterCard> get all => [...installed, ...discover, ...updates, ...needsAction];
+  List<ExtensionCenterCard> get all => [
+    ...installed,
+    ...discover,
+    ...updates,
+    ...needsAction,
+  ];
 }
-
 
 class WorkflowApiTarget {
   final String location;
@@ -88,7 +104,10 @@ class ExtensionService {
 
   ExtensionService(this._api);
 
-  Future<Map<String, dynamic>> getUISnapshot(String platform, {String deviceId = ''}) async {
+  Future<Map<String, dynamic>> getUISnapshot(
+    String platform, {
+    String deviceId = '',
+  }) async {
     final client = currentUIClientInfo();
     final resp = await _api.get<Map<String, dynamic>>(
       '/api/extensions/ui/snapshot',
@@ -202,8 +221,7 @@ class ExtensionService {
       data: <String, dynamic>{
         'dialogId': dialogId.trim(),
         'result': result,
-        if (hostClientId.trim().isNotEmpty)
-          'hostClientId': hostClientId.trim(),
+        if (hostClientId.trim().isNotEmpty) 'hostClientId': hostClientId.trim(),
         if (hostSessionId.trim().isNotEmpty)
           'hostSessionId': hostSessionId.trim(),
       },
@@ -229,16 +247,26 @@ class ExtensionService {
     );
   }
 
-  Future<Map<String, dynamic>> getClientRuntimeSessionState(String conversationId) async {
+  Future<Map<String, dynamic>> getClientRuntimeSessionState(
+    String conversationId,
+  ) async {
     final id = conversationId.trim();
     if (id.isEmpty) {
-      return const <String, dynamic>{'conversationId': '', 'revision': 0, 'packages': <dynamic>[]};
+      return const <String, dynamic>{
+        'conversationId': '',
+        'revision': 0,
+        'packages': <dynamic>[],
+      };
     }
     return await _api.get<Map<String, dynamic>>(
           '/api/extensions/ui/client-runtime-state',
           queryParameters: {'conversationId': id},
         ) ??
-        <String, dynamic>{'conversationId': id, 'revision': 0, 'packages': <dynamic>[]};
+        <String, dynamic>{
+          'conversationId': id,
+          'revision': 0,
+          'packages': <dynamic>[],
+        };
   }
 
   Future<Map<String, dynamic>> acknowledgeClientRuntimeSessionState(
@@ -247,61 +275,94 @@ class ExtensionService {
   ) async {
     final id = conversationId.trim();
     if (id.isEmpty) {
-      return const <String, dynamic>{'conversationId': '', 'revision': 0, 'packages': <dynamic>[]};
+      return const <String, dynamic>{
+        'conversationId': '',
+        'revision': 0,
+        'packages': <dynamic>[],
+      };
     }
     return await _api.post<Map<String, dynamic>>(
           '/api/extensions/ui/client-runtime-session-ack',
           data: {'conversationId': id, 'revision': revision},
         ) ??
-        <String, dynamic>{'conversationId': id, 'revision': revision, 'packages': <dynamic>[]};
+        <String, dynamic>{
+          'conversationId': id,
+          'revision': revision,
+          'packages': <dynamic>[],
+        };
   }
 
   Future<List<Map<String, dynamic>>> getUIProviders() async {
-    final resp = await _api.get<Map<String, dynamic>>('/api/extensions/ui/providers');
+    final resp = await _api.get<Map<String, dynamic>>(
+      '/api/extensions/ui/providers',
+    );
     return ((resp?['providers'] as List?) ?? const [])
         .whereType<Map>()
         .map((e) => e.cast<String, dynamic>())
         .toList();
   }
 
-  Future<Map<String, dynamic>> getUIProfile({required String platform, String deviceId = '', String scope = 'space'}) async {
+  Future<Map<String, dynamic>> getUIProfile({
+    required String platform,
+    String deviceId = '',
+    String scope = 'space',
+  }) async {
     final client = currentUIClientInfo();
     return await _api.get<Map<String, dynamic>>(
+          '/api/extensions/ui/profile',
+          queryParameters: {
+            'platform': platform,
+            'scope': scope,
+            if (deviceId.isNotEmpty) 'deviceId': deviceId,
+            ...client.toQueryParameters(),
+          },
+        ) ??
+        <String, dynamic>{};
+  }
+
+  Future<Map<String, dynamic>> updateUIProfile(
+    Map<String, dynamic> profile, {
+    required String platform,
+    String deviceId = '',
+    String scope = 'space',
+  }) async {
+    final client = currentUIClientInfo();
+    return await _api.put<Map<String, dynamic>>(
+          '/api/extensions/ui/profile',
+          data: profile,
+          queryParameters: {
+            'platform': platform,
+            'scope': scope,
+            if (deviceId.isNotEmpty) 'deviceId': deviceId,
+            ...client.toQueryParameters(),
+          },
+        ) ??
+        <String, dynamic>{};
+  }
+
+  Future<void> deleteUIProfileOverride({
+    required String platform,
+    String deviceId = '',
+    required String scope,
+    int? revision,
+  }) async {
+    final client = currentUIClientInfo();
+    await _api.delete(
       '/api/extensions/ui/profile',
       queryParameters: {
         'platform': platform,
         'scope': scope,
         if (deviceId.isNotEmpty) 'deviceId': deviceId,
+        'revision': ?revision,
         ...client.toQueryParameters(),
       },
-    ) ?? <String, dynamic>{};
+    );
   }
 
-  Future<Map<String, dynamic>> updateUIProfile(Map<String, dynamic> profile, {required String platform, String deviceId = '', String scope = 'space'}) async {
-    final client = currentUIClientInfo();
-    return await _api.put<Map<String, dynamic>>(
-      '/api/extensions/ui/profile', data: profile,
-      queryParameters: {
-        'platform': platform,
-        'scope': scope,
-        if (deviceId.isNotEmpty) 'deviceId': deviceId,
-        ...client.toQueryParameters(),
-      },
-    ) ?? <String, dynamic>{};
-  }
-
-  Future<void> deleteUIProfileOverride({required String platform, String deviceId = '', required String scope, int? revision}) async {
-    final client = currentUIClientInfo();
-    await _api.delete('/api/extensions/ui/profile', queryParameters: {
-      'platform': platform,
-      'scope': scope,
-      if (deviceId.isNotEmpty) 'deviceId': deviceId,
-      'revision': ?revision,
-      ...client.toQueryParameters(),
-    });
-  }
-
-  Future<Map<String, dynamic>> getUISchema(String extensionId, String contributionId) async {
+  Future<Map<String, dynamic>> getUISchema(
+    String extensionId,
+    String contributionId,
+  ) async {
     final resp = await _api.get<Map<String, dynamic>>(
       '/api/extensions/ui/schema/${Uri.encodeComponent(extensionId)}/${Uri.encodeComponent(contributionId)}',
     );
@@ -322,8 +383,10 @@ class ExtensionService {
           data: {
             'contributionId': contributionId,
             'surface': surface,
-            if (characterId.trim().isNotEmpty) 'characterId': characterId.trim(),
-            if (conversationId.trim().isNotEmpty) 'conversationId': conversationId.trim(),
+            if (characterId.trim().isNotEmpty)
+              'characterId': characterId.trim(),
+            if (conversationId.trim().isNotEmpty)
+              'conversationId': conversationId.trim(),
           },
         ) ??
         <String, dynamic>{};
@@ -340,7 +403,8 @@ class ExtensionService {
     required String method,
     Map<String, dynamic> payload = const <String, dynamic>{},
   }) async {
-    final response = await _api.post<Map<String, dynamic>>(
+    final response =
+        await _api.post<Map<String, dynamic>>(
           '/api/extensions/ui/sessions/${Uri.encodeComponent(sessionId)}/bridge',
           data: {
             'method': method,
@@ -357,7 +421,8 @@ class ExtensionService {
     if (response['ok'] == false) {
       final error = response['error'];
       final message = error is Map
-          ? (error['message'] ?? error['code'] ?? 'UI bridge request failed').toString()
+          ? (error['message'] ?? error['code'] ?? 'UI bridge request failed')
+                .toString()
           : (error ?? 'UI bridge request failed').toString();
       throw StateError(message);
     }
@@ -384,10 +449,7 @@ class ExtensionService {
       generation: generation,
       nonce: nonce,
       method: 'ui.action.invoke',
-      payload: {
-        'action_id': actionId,
-        'input': input,
-      },
+      payload: {'action_id': actionId, 'input': input},
     );
     if (result is Map<String, dynamic>) return result;
     if (result is Map) return result.cast<String, dynamic>();
@@ -400,16 +462,31 @@ class ExtensionService {
     await _api.delete('/api/extensions/ui/sessions/${Uri.encodeComponent(id)}');
   }
 
-  Future<Map<String, dynamic>> createWebUISession(Map<String, dynamic> request) async {
-    return await _api.post<Map<String, dynamic>>('/api/extension/webui/session', data: request) ?? <String, dynamic>{};
+  Future<Map<String, dynamic>> createWebUISession(
+    Map<String, dynamic> request,
+  ) async {
+    return await _api.post<Map<String, dynamic>>(
+          '/api/extension/webui/session',
+          data: request,
+        ) ??
+        <String, dynamic>{};
   }
 
-  Future<Map<String, dynamic>> invokeWebUIBridge(String sessionId, Map<String, dynamic> request) async {
-    return await _api.post<Map<String, dynamic>>('/api/extension/webui/bridge/${Uri.encodeComponent(sessionId)}', data: request) ?? <String, dynamic>{};
+  Future<Map<String, dynamic>> invokeWebUIBridge(
+    String sessionId,
+    Map<String, dynamic> request,
+  ) async {
+    return await _api.post<Map<String, dynamic>>(
+          '/api/extension/webui/bridge/${Uri.encodeComponent(sessionId)}',
+          data: request,
+        ) ??
+        <String, dynamic>{};
   }
 
   Future<void> revokeWebUISession(String sessionId) async {
-    await _api.delete('/api/extension/webui/session/${Uri.encodeComponent(sessionId)}');
+    await _api.delete(
+      '/api/extension/webui/session/${Uri.encodeComponent(sessionId)}',
+    );
   }
 
   Future<Map<String, dynamic>> openExtensionPage(
@@ -430,7 +507,9 @@ class ExtensionService {
         <String, dynamic>{};
   }
 
-  Future<Map<String, dynamic>> getExtensionPageSessionStatus(String sessionId) async {
+  Future<Map<String, dynamic>> getExtensionPageSessionStatus(
+    String sessionId,
+  ) async {
     return await _api.get<Map<String, dynamic>>(
           '/api/extensions/ui/page-sessions/${Uri.encodeComponent(sessionId)}/status',
         ) ??
@@ -438,125 +517,50 @@ class ExtensionService {
   }
 
   Future<void> closeExtensionPageSession(String sessionId) async {
-    await _api.delete('/api/extensions/ui/page-sessions/${Uri.encodeComponent(sessionId)}');
+    await _api.delete(
+      '/api/extensions/ui/page-sessions/${Uri.encodeComponent(sessionId)}',
+    );
   }
 
   Future<ExtensionCenterView> getExtensionCenterView() async {
-    final resp = await _api.get<Map<String, dynamic>>('/api/extension-center/view');
-    if (resp == null) return ExtensionCenterView(installed: [], discover: [], updates: [], needsAction: []);
+    final resp = await _api.get<Map<String, dynamic>>(
+      '/api/extension-center/view',
+    );
+    if (resp == null)
+      return ExtensionCenterView(
+        installed: [],
+        discover: [],
+        updates: [],
+        needsAction: [],
+      );
     return ExtensionCenterView.fromJson(resp);
   }
 
-  Future<List<Map<String, dynamic>>> skills({String characterId = ''}) async {
-    final resp = await _api.get<List<dynamic>>(
-      '/api/extensions/skills',
-      queryParameters: {if (characterId.isNotEmpty) 'characterId': characterId},
-    );
-    if (resp == null) return [];
-    return resp.map((e) => e as Map<String, dynamic>).toList();
-  }
-
-  Future<bool> enableSkill(String id, {String characterId = ''}) async {
-    await _api.post(
-      '/api/extensions/skills/${Uri.encodeComponent(id)}/enable${characterId.isNotEmpty ? '?characterId=${Uri.encodeQueryComponent(characterId)}' : ''}',
-    );
-    return true;
-  }
-
-  Future<bool> disableSkill(String id, {String characterId = ''}) async {
-    await _api.post(
-      '/api/extensions/skills/${Uri.encodeComponent(id)}/disable${characterId.isNotEmpty ? '?characterId=${Uri.encodeQueryComponent(characterId)}' : ''}',
-    );
-    return true;
-  }
-
-  Future<Map<String, dynamic>?> getSkill(String id, {String characterId = ''}) async {
-    final resp = await _api.get<Map<String, dynamic>>(
-      '/api/extensions/skills/${Uri.encodeComponent(id)}',
-      queryParameters: {if (characterId.isNotEmpty) 'characterId': characterId},
-    );
-    return resp;
-  }
-
-  Future<List<Map<String, dynamic>>> getPermissions(String id, {String characterId = ''}) async {
-    final resp = await _api.get<List<dynamic>>(
-      '/api/extensions/skills/${Uri.encodeComponent(id)}/permissions',
-      queryParameters: {if (characterId.isNotEmpty) 'characterId': characterId},
-    );
-    return (resp ?? const []).whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList(growable: false);
-  }
-
-  Future<bool> updatePermissions(String id, Map<String, dynamic> data) async {
-    await _api.put('/api/extensions/skills/${Uri.encodeComponent(id)}/permissions', data: data);
-    return true;
-  }
-
-  Future<Map<String, dynamic>?> getSkillConfig(String id, {String characterId = ''}) async {
-    final resp = await _api.get<Map<String, dynamic>>(
-      '/api/extensions/skills/${Uri.encodeComponent(id)}/config',
-      queryParameters: {if (characterId.isNotEmpty) 'characterId': characterId},
-    );
-    return resp;
-  }
-
-  Future<bool> updateSkillConfig(String id, Map<String, dynamic> data, {String characterId = ''}) async {
-    await _api.put(
-      '/api/extensions/skills/${Uri.encodeComponent(id)}/config',
-      data: data,
-      queryParameters: {if (characterId.isNotEmpty) 'characterId': characterId},
-    );
-    return true;
-  }
-
-  Future<bool> resetSkillConfig(String id, {String characterId = ''}) async {
-    await _api.post(
-      '/api/extensions/skills/${Uri.encodeComponent(id)}/config/reset${characterId.isNotEmpty ? '?characterId=${Uri.encodeQueryComponent(characterId)}' : ''}',
-    );
-    return true;
-  }
-
-  Future<Map<String, dynamic>?> executeSkill(String id, Map<String, dynamic> params) async {
-    return _api.post<Map<String, dynamic>>(
-      '/api/extensions/skills/${Uri.encodeComponent(id)}/execute',
-      data: params,
-    );
-  }
-
-  Future<Map<String, dynamic>?> rollbackSkill(String id, String version, {String characterId = ''}) async {
-    return _api.post<Map<String, dynamic>>(
-      '/api/extensions/skills/${Uri.encodeComponent(id)}/versions/${Uri.encodeComponent(version)}/rollback${characterId.isNotEmpty ? '?characterId=${Uri.encodeQueryComponent(characterId)}' : ''}',
-    );
-  }
-
-  Future<Map<String, dynamic>> skillRuns(String id, String characterId, {int page = 1, int pageSize = 50}) async {
-    return await _api.get<Map<String, dynamic>>(
-          '/api/extensions/runs',
-          queryParameters: {
-            'characterId': characterId,
-            'skillId': id,
-            'page': page,
-            'pageSize': pageSize,
-          },
-        ) ??
-        <String, dynamic>{'items': <dynamic>[], 'total': 0, 'page': page, 'pageSize': pageSize};
-  }
-
-
   Future<List<Map<String, dynamic>>> kernelExtensions() async {
-    final resp = await _api.get<Map<String, dynamic>>('/api/extensions/kernel/extensions');
+    final resp = await _api.get<Map<String, dynamic>>(
+      '/api/extensions/kernel/extensions',
+    );
     final items = resp?['extensions'];
     if (items is! List) return const [];
-    return items.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList(growable: false);
+    return items
+        .whereType<Map>()
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList(growable: false);
   }
 
-  Future<Map<String, dynamic>> checkKernelExtensionUpdate(String extensionId) async {
+  Future<Map<String, dynamic>> checkKernelExtensionUpdate(
+    String extensionId,
+  ) async {
     return await _api.post<Map<String, dynamic>>(
           '/api/extensions/${Uri.encodeComponent(extensionId)}/updates/check',
         ) ??
         <String, dynamic>{};
   }
 
-  Future<Map<String, dynamic>> downloadKernelExtensionUpdate(String extensionId, String version) async {
+  Future<Map<String, dynamic>> downloadKernelExtensionUpdate(
+    String extensionId,
+    String version,
+  ) async {
     return await _api.post<Map<String, dynamic>>(
           '/api/extensions/${Uri.encodeComponent(extensionId)}/updates/download',
           data: {'version': version},
@@ -564,8 +568,12 @@ class ExtensionService {
         <String, dynamic>{};
   }
 
-  Future<Map<String, dynamic>> installKernelExtensionUpdate(String extensionId, String operationId) async {
-    final result = await _api.post<Map<String, dynamic>>(
+  Future<Map<String, dynamic>> installKernelExtensionUpdate(
+    String extensionId,
+    String operationId,
+  ) async {
+    final result =
+        await _api.post<Map<String, dynamic>>(
           '/api/extensions/${Uri.encodeComponent(extensionId)}/updates/install',
           data: {'operationId': operationId},
         ) ??
@@ -574,7 +582,10 @@ class ExtensionService {
     return result;
   }
 
-  Future<Map<String, dynamic>> cancelKernelExtensionUpdate(String extensionId, String operationId) async {
+  Future<Map<String, dynamic>> cancelKernelExtensionUpdate(
+    String extensionId,
+    String operationId,
+  ) async {
     return await _api.post<Map<String, dynamic>>(
           '/api/extensions/${Uri.encodeComponent(extensionId)}/updates/cancel',
           data: {'operationId': operationId},
@@ -582,8 +593,12 @@ class ExtensionService {
         <String, dynamic>{};
   }
 
-  Future<Map<String, dynamic>> retryKernelExtensionUpdate(String extensionId, String operationId) async {
-    final result = await _api.post<Map<String, dynamic>>(
+  Future<Map<String, dynamic>> retryKernelExtensionUpdate(
+    String extensionId,
+    String operationId,
+  ) async {
+    final result =
+        await _api.post<Map<String, dynamic>>(
           '/api/extensions/${Uri.encodeComponent(extensionId)}/updates/retry',
           data: {'operationId': operationId},
         ) ??
@@ -592,8 +607,12 @@ class ExtensionService {
     return result;
   }
 
-  Future<Map<String, dynamic>> rollbackKernelExtensionUpdate(String extensionId, String operationId) async {
-    final result = await _api.post<Map<String, dynamic>>(
+  Future<Map<String, dynamic>> rollbackKernelExtensionUpdate(
+    String extensionId,
+    String operationId,
+  ) async {
+    final result =
+        await _api.post<Map<String, dynamic>>(
           '/api/extensions/${Uri.encodeComponent(extensionId)}/updates/rollback',
           data: {'operationId': operationId},
         ) ??
@@ -609,14 +628,19 @@ class ExtensionService {
         <String, dynamic>{};
   }
 
-  Future<List<Map<String, dynamic>>> kernelUpdateOperationSteps(String operationId) async {
+  Future<List<Map<String, dynamic>>> kernelUpdateOperationSteps(
+    String operationId,
+  ) async {
     final resp = await _api.get<dynamic>(
       '/api/extensions/updates/operations/${Uri.encodeComponent(operationId)}/steps',
     );
     dynamic raw = resp;
     if (raw is Map && raw['items'] is List) raw = raw['items'];
     if (raw is! List) return const [];
-    return raw.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList(growable: false);
+    return raw
+        .whereType<Map>()
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList(growable: false);
   }
 
   Future<Map<String, dynamic>> kernelExtension(String id) async {
@@ -627,15 +651,59 @@ class ExtensionService {
         <String, dynamic>{};
   }
 
-  Future<void> setKernelExtensionEnabled(String id, bool enabled) async {
+  Future<Map<String, dynamic>> setKernelExtensionPermission(
+    String id,
+    String permission,
+    bool granted,
+  ) async {
+    return await _api.post<Map<String, dynamic>>(
+          '/api/extensions/kernel/extensions/permissions',
+          data: {
+            'extensionId': id,
+            'permission': permission,
+            'granted': granted,
+          },
+        ) ??
+        <String, dynamic>{};
+  }
+
+  Future<void> pauseKernelExtension(String id) async {
     await _api.post(
-      enabled ? '/api/extensions/kernel/extensions/enable' : '/api/extensions/kernel/extensions/disable',
+      '/api/extensions/kernel/extensions/pause',
       data: {'id': id},
     );
     UIRuntimeInvalidationBus.notifyChanged();
   }
 
-  Future<Map<String, dynamic>> previewKernelUninstall(String id, {String scopeType = 'global', String scopeId = ''}) async {
+  Future<Map<String, dynamic>> rollbackKernelExtension(
+    String id,
+    String version,
+  ) async {
+    final result =
+        await _api.post<Map<String, dynamic>>(
+          '/api/extensions/kernel/extensions/rollback',
+          data: {'id': id, 'version': version},
+        ) ??
+        <String, dynamic>{};
+    UIRuntimeInvalidationBus.notifyChanged();
+    return result;
+  }
+
+  Future<void> setKernelExtensionEnabled(String id, bool enabled) async {
+    await _api.post(
+      enabled
+          ? '/api/extensions/kernel/extensions/enable'
+          : '/api/extensions/kernel/extensions/disable',
+      data: {'id': id},
+    );
+    UIRuntimeInvalidationBus.notifyChanged();
+  }
+
+  Future<Map<String, dynamic>> previewKernelUninstall(
+    String id, {
+    String scopeType = 'global',
+    String scopeId = '',
+  }) async {
     return await _api.post<Map<String, dynamic>>(
           '/api/extensions/kernel/extensions/uninstall/preview',
           data: {'extensionId': id, 'scopeType': scopeType, 'scopeId': scopeId},
@@ -667,7 +735,8 @@ class ExtensionService {
     String scopeType = 'global',
     String scopeId = '',
   }) async {
-    final result = await _api.post<Map<String, dynamic>>(
+    final result =
+        await _api.post<Map<String, dynamic>>(
           '/api/extensions/kernel/extensions/uninstall',
           data: {
             'extensionId': id,
@@ -681,17 +750,20 @@ class ExtensionService {
     return result;
   }
 
-  Future<List<Map<String, dynamic>>> agentSkills({int page = 1, int pageSize = 100}) async {
+  Future<List<Map<String, dynamic>>> agentSkills({
+    int page = 1,
+    int pageSize = 100,
+  }) async {
     final resp = await _api.get<Map<String, dynamic>>(
       '/api/extensions/agent-skills',
-      queryParameters: {
-        'page': page,
-        'pageSize': pageSize,
-      },
+      queryParameters: {'page': page, 'pageSize': pageSize},
     );
     final items = resp?['items'];
     if (items is! List) return const [];
-    return items.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList(growable: false);
+    return items
+        .whereType<Map>()
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList(growable: false);
   }
 
   Future<bool> enableAgentSkill(String id) async {
@@ -824,10 +896,7 @@ class ExtensionService {
   }) {
     return _api.post<Map<String, dynamic>>(
       '/api/extensions/workshop/sessions/${Uri.encodeComponent(id)}/revisions/$revision/test',
-      data: {
-        'mode': mode,
-        'controlledLiveConfirmed': controlledLiveConfirmed,
-      },
+      data: {'mode': mode, 'controlledLiveConfirmed': controlledLiveConfirmed},
     );
   }
 
@@ -854,31 +923,13 @@ class ExtensionService {
         .toList(growable: false);
   }
 
-  Future<List<Map<String, dynamic>>> extensionRuns({String characterId = '', int page = 1, int pageSize = 100}) async {
-    final resp = await _api.get<Map<String, dynamic>>(
-      '/api/extensions/runs',
-      queryParameters: {
-        'page': page,
-        'pageSize': pageSize,
-        if (characterId.isNotEmpty) 'characterId': characterId,
-      },
-    );
-    final items = resp?['items'];
-    if (items is! List) return const [];
-    return items.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList(growable: false);
-  }
-
-  Future<Map<String, dynamic>?> getExtensionRun(String runId) async {
-    final resp = await _api.get<Map<String, dynamic>>('/api/extensions/runs/$runId');
-    return resp;
-  }
-
   // ---- Extension Kernel Workflow V2 ----
   String _workflowBase(WorkflowApiTarget target) {
     if (target.isLocal) return '/api/local/workflows';
     if (target.isDevice) {
       final deviceId = target.deviceId.trim();
-      if (deviceId.isEmpty) throw StateError('device workflow target requires deviceId');
+      if (deviceId.isEmpty)
+        throw StateError('device workflow target requires deviceId');
       return '/api/extensions/workflow-devices/${Uri.encodeComponent(deviceId)}/workflows';
     }
     return '/api/extensions/workflows';
@@ -888,7 +939,8 @@ class ExtensionService {
     if (target.isLocal) return '/api/local/workflow-runs';
     if (target.isDevice) {
       final deviceId = target.deviceId.trim();
-      if (deviceId.isEmpty) throw StateError('device workflow target requires deviceId');
+      if (deviceId.isEmpty)
+        throw StateError('device workflow target requires deviceId');
       return '/api/extensions/workflow-devices/${Uri.encodeComponent(deviceId)}/runs';
     }
     return '/api/extensions/workflow-runs';
@@ -897,11 +949,19 @@ class ExtensionService {
   String _workflowSyncBase(WorkflowApiTarget target) {
     // Remote device mutations are mirrored as account-level workflow events in
     // Cloud Core; the local target reads the device-local durable outbox.
-    return target.isLocal ? '/api/local/workflows/sync-events' : '/api/extensions/workflows/sync-events';
+    return target.isLocal
+        ? '/api/local/workflows/sync-events'
+        : '/api/extensions/workflows/sync-events';
   }
 
-  WorkflowApiTarget _kernelWorkflowTarget(WorkflowApiTarget target, String feature) {
-    if (target.isDevice) throw StateError('$feature is not exposed through the remote device control plane');
+  WorkflowApiTarget _kernelWorkflowTarget(
+    WorkflowApiTarget target,
+    String feature,
+  ) {
+    if (target.isDevice)
+      throw StateError(
+        '$feature is not exposed through the remote device control plane',
+      );
     return target;
   }
 
@@ -914,13 +974,20 @@ class ExtensionService {
   }
 
   Future<List<Map<String, dynamic>>> workflowDevices() async {
-    final resp = await _api.get<Map<String, dynamic>>('/api/extensions/workflow-devices');
+    final resp = await _api.get<Map<String, dynamic>>(
+      '/api/extensions/workflow-devices',
+    );
     final items = resp?['items'];
     if (items is! List) return const <Map<String, dynamic>>[];
-    return items.whereType<Map>().map((e) => e.map((k, v) => MapEntry(k.toString(), v))).toList(growable: false);
+    return items
+        .whereType<Map>()
+        .map((e) => e.map((k, v) => MapEntry(k.toString(), v)))
+        .toList(growable: false);
   }
 
-  Future<List<Map<String, dynamic>>> workflowTriggerCapabilities({required WorkflowApiTarget target}) async {
+  Future<List<Map<String, dynamic>>> workflowTriggerCapabilities({
+    required WorkflowApiTarget target,
+  }) async {
     if (target.isCloud) return const <Map<String, dynamic>>[];
     final path = target.isLocal
         ? '/api/local/workflows/trigger-capabilities'
@@ -928,10 +995,15 @@ class ExtensionService {
     final resp = await _api.get<Map<String, dynamic>>(path);
     final items = resp?['items'];
     if (items is! List) return const <Map<String, dynamic>>[];
-    return items.whereType<Map>().map((e) => e.map((k, v) => MapEntry(k.toString(), v))).toList(growable: false);
+    return items
+        .whereType<Map>()
+        .map((e) => e.map((k, v) => MapEntry(k.toString(), v)))
+        .toList(growable: false);
   }
 
-  Future<List<Map<String, dynamic>>> workflowTriggerAppCatalog({required WorkflowApiTarget target}) async {
+  Future<List<Map<String, dynamic>>> workflowTriggerAppCatalog({
+    required WorkflowApiTarget target,
+  }) async {
     if (target.isCloud) return const <Map<String, dynamic>>[];
     final path = target.isLocal
         ? '/api/local/workflows/trigger-app-catalog'
@@ -939,10 +1011,15 @@ class ExtensionService {
     final resp = await _api.get<Map<String, dynamic>>(path);
     final items = resp?['items'];
     if (items is! List) return const <Map<String, dynamic>>[];
-    return items.whereType<Map>().map((e) => e.map((k, v) => MapEntry(k.toString(), v))).toList(growable: false);
+    return items
+        .whereType<Map>()
+        .map((e) => e.map((k, v) => MapEntry(k.toString(), v)))
+        .toList(growable: false);
   }
 
-  Future<List<Map<String, dynamic>>> workflowTriggerWakeConfigs({required WorkflowApiTarget target}) async {
+  Future<List<Map<String, dynamic>>> workflowTriggerWakeConfigs({
+    required WorkflowApiTarget target,
+  }) async {
     if (target.isCloud) return const <Map<String, dynamic>>[];
     final path = target.isLocal
         ? '/api/local/workflows/trigger-wake-configs'
@@ -950,7 +1027,10 @@ class ExtensionService {
     final resp = await _api.get<Map<String, dynamic>>(path);
     final items = resp?['items'];
     if (items is! List) return const <Map<String, dynamic>>[];
-    return items.whereType<Map>().map((e) => e.map((k, v) => MapEntry(k.toString(), v))).toList(growable: false);
+    return items
+        .whereType<Map>()
+        .map((e) => e.map((k, v) => MapEntry(k.toString(), v)))
+        .toList(growable: false);
   }
 
   Future<Map<String, dynamic>> createWorkflowWakeConfig({
@@ -963,7 +1043,10 @@ class ExtensionService {
     String backend = 'local',
     String modelResourceUri = '',
   }) async {
-    if (target.isCloud) throw StateError('Wake config requires a local or device workflow target');
+    if (target.isCloud)
+      throw StateError(
+        'Wake config requires a local or device workflow target',
+      );
     final path = target.isLocal
         ? '/api/local/workflows/trigger-wake-configs'
         : '/api/extensions/workflow-devices/${Uri.encodeComponent(target.deviceId.trim())}/trigger-wake-configs';
@@ -971,23 +1054,36 @@ class ExtensionService {
           path,
           data: <String, dynamic>{
             'name': name.trim(),
-            'phrases': phrases.map((value) => value.trim()).where((value) => value.isNotEmpty).toList(growable: false),
+            'phrases': phrases
+                .map((value) => value.trim())
+                .where((value) => value.isNotEmpty)
+                .toList(growable: false),
             'locale': locale.trim(),
             'threshold': threshold,
             'cooldownMs': cooldownMs,
             'backend': backend.trim(),
-            if (modelResourceUri.trim().isNotEmpty) 'modelResourceUri': modelResourceUri.trim(),
+            if (modelResourceUri.trim().isNotEmpty)
+              'modelResourceUri': modelResourceUri.trim(),
           },
         ) ??
         <String, dynamic>{};
   }
 
-  Future<Map<String, dynamic>> createWorkflowTaskerSecret({required WorkflowApiTarget target}) async {
-    if (target.isCloud) throw StateError('Tasker trigger secret requires a local or device workflow target');
+  Future<Map<String, dynamic>> createWorkflowTaskerSecret({
+    required WorkflowApiTarget target,
+  }) async {
+    if (target.isCloud)
+      throw StateError(
+        'Tasker trigger secret requires a local or device workflow target',
+      );
     final path = target.isLocal
         ? '/api/local/workflows/trigger-secrets/tasker'
         : '/api/extensions/workflow-devices/${Uri.encodeComponent(target.deviceId.trim())}/trigger-secrets/tasker';
-    return await _api.post<Map<String, dynamic>>(path, data: const <String, dynamic>{}) ?? <String, dynamic>{};
+    return await _api.post<Map<String, dynamic>>(
+          path,
+          data: const <String, dynamic>{},
+        ) ??
+        <String, dynamic>{};
   }
 
   Future<Map<String, dynamic>> workflowSyncEvents({
@@ -999,15 +1095,20 @@ class ExtensionService {
       _workflowSyncBase(target),
       queryParameters: <String, dynamic>{
         if (afterCursor != null && afterCursor >= 0) 'afterCursor': afterCursor,
-        if (afterCursor != null && afterCursor >= 0) 'limit': limit.clamp(1, 1000),
+        if (afterCursor != null && afterCursor >= 0)
+          'limit': limit.clamp(1, 1000),
       },
     );
     final items = ((resp?['items'] as List?) ?? const <dynamic>[])
         .whereType<Map>()
-        .map((item) => item.map((key, value) => MapEntry(key.toString(), value)))
+        .map(
+          (item) => item.map((key, value) => MapEntry(key.toString(), value)),
+        )
         .toList(growable: false);
     final rawCursor = resp?['cursor'];
-    final cursor = rawCursor is int ? rawCursor : int.tryParse(rawCursor?.toString() ?? '') ?? (afterCursor ?? 0);
+    final cursor = rawCursor is int
+        ? rawCursor
+        : int.tryParse(rawCursor?.toString() ?? '') ?? (afterCursor ?? 0);
     return <String, dynamic>{'cursor': cursor, 'items': items};
   }
 
@@ -1018,70 +1119,138 @@ class ExtensionService {
   }) async {
     final resp = await _api.get<Map<String, dynamic>>(
       _workflowBase(target),
-      queryParameters: target.isDevice ? null : {'limit': limit.clamp(1, 200), 'offset': offset < 0 ? 0 : offset},
+      queryParameters: target.isDevice
+          ? null
+          : {'limit': limit.clamp(1, 200), 'offset': offset < 0 ? 0 : offset},
     );
     final items = resp?['items'];
     if (items is! List) return const <Map<String, dynamic>>[];
     final cached = resp?['cached'] == true;
     final offline = resp?['offline'] == true;
-    return items.whereType<Map>().map((raw) {
-      final item = raw.map((k, v) => MapEntry(k.toString(), v));
-      item['id'] ??= item['workflowId'];
-      item['schemaVersion'] ??= 'workflow-v2';
-      item['nodes'] ??= <dynamic>[];
-      item['edges'] ??= <dynamic>[];
-      item['triggers'] ??= <dynamic>[];
-      item['callableByAgent'] ??= false;
-      item['agentTool'] ??= <String, dynamic>{};
-      item['cached'] = cached || item['cached'] == true;
-      item['offline'] = offline || item['offline'] == true;
-      return item;
-    }).toList(growable: false);
+    return items
+        .whereType<Map>()
+        .map((raw) {
+          final item = raw.map((k, v) => MapEntry(k.toString(), v));
+          item['id'] ??= item['workflowId'];
+          item['schemaVersion'] ??= 'workflow-v2';
+          item['nodes'] ??= <dynamic>[];
+          item['edges'] ??= <dynamic>[];
+          item['triggers'] ??= <dynamic>[];
+          item['callableByAgent'] ??= false;
+          item['agentTool'] ??= <String, dynamic>{};
+          item['cached'] = cached || item['cached'] == true;
+          item['offline'] = offline || item['offline'] == true;
+          return item;
+        })
+        .toList(growable: false);
   }
 
-  Future<List<Map<String, dynamic>>> workflowCatalog({WorkflowApiTarget target = const WorkflowApiTarget.cloud()}) async {
-    final resp = await _api.get<Map<String, dynamic>>('${_workflowBase(target)}/catalog');
+  Future<List<Map<String, dynamic>>> workflowCatalog({
+    WorkflowApiTarget target = const WorkflowApiTarget.cloud(),
+  }) async {
+    final resp = await _api.get<Map<String, dynamic>>(
+      '${_workflowBase(target)}/catalog',
+    );
     final items = resp?['items'];
     if (items is! List) return const <Map<String, dynamic>>[];
-    return items.whereType<Map>().map((e) => e.cast<String, dynamic>()).toList(growable: false);
+    return items
+        .whereType<Map>()
+        .map((e) => e.cast<String, dynamic>())
+        .toList(growable: false);
   }
 
-  Future<Map<String, dynamic>> generateWorkflowWithAI(String instruction, {WorkflowApiTarget target = const WorkflowApiTarget.cloud()}) async {
+  Future<Map<String, dynamic>> generateWorkflowWithAI(
+    String instruction, {
+    WorkflowApiTarget target = const WorkflowApiTarget.cloud(),
+  }) async {
     final value = _kernelWorkflowTarget(target, 'AI workflow generation');
-    return await _api.post<Map<String, dynamic>>('${_workflowBase(value)}/ai/generate', data: {'instruction': instruction}) ?? <String, dynamic>{};
+    return await _api.post<Map<String, dynamic>>(
+          '${_workflowBase(value)}/ai/generate',
+          data: {'instruction': instruction},
+        ) ??
+        <String, dynamic>{};
   }
 
-  Future<Map<String, dynamic>> editWorkflowWithAI(String id, String instruction, {WorkflowApiTarget target = const WorkflowApiTarget.cloud()}) async {
+  Future<Map<String, dynamic>> editWorkflowWithAI(
+    String id,
+    String instruction, {
+    WorkflowApiTarget target = const WorkflowApiTarget.cloud(),
+  }) async {
     final value = _kernelWorkflowTarget(target, 'AI workflow editing');
-    return await _api.post<Map<String, dynamic>>('${_workflowBase(value)}/${Uri.encodeComponent(id)}/ai/edit', data: {'instruction': instruction}) ?? <String, dynamic>{};
+    return await _api.post<Map<String, dynamic>>(
+          '${_workflowBase(value)}/${Uri.encodeComponent(id)}/ai/edit',
+          data: {'instruction': instruction},
+        ) ??
+        <String, dynamic>{};
   }
 
-  Future<Map<String, dynamic>> repairWorkflowWithAI(String id, {String instruction = '', WorkflowApiTarget target = const WorkflowApiTarget.cloud()}) async {
+  Future<Map<String, dynamic>> repairWorkflowWithAI(
+    String id, {
+    String instruction = '',
+    WorkflowApiTarget target = const WorkflowApiTarget.cloud(),
+  }) async {
     final value = _kernelWorkflowTarget(target, 'AI workflow repair');
-    return await _api.post<Map<String, dynamic>>('${_workflowBase(value)}/${Uri.encodeComponent(id)}/ai/repair', data: {'instruction': instruction}) ?? <String, dynamic>{};
+    return await _api.post<Map<String, dynamic>>(
+          '${_workflowBase(value)}/${Uri.encodeComponent(id)}/ai/repair',
+          data: {'instruction': instruction},
+        ) ??
+        <String, dynamic>{};
   }
 
-  Future<Map<String, dynamic>> explainWorkflowWithAI(String id, {String instruction = '', WorkflowApiTarget target = const WorkflowApiTarget.cloud()}) async {
+  Future<Map<String, dynamic>> explainWorkflowWithAI(
+    String id, {
+    String instruction = '',
+    WorkflowApiTarget target = const WorkflowApiTarget.cloud(),
+  }) async {
     final value = _kernelWorkflowTarget(target, 'AI workflow explanation');
-    return await _api.post<Map<String, dynamic>>('${_workflowBase(value)}/${Uri.encodeComponent(id)}/ai/explain', data: {'instruction': instruction}) ?? <String, dynamic>{};
+    return await _api.post<Map<String, dynamic>>(
+          '${_workflowBase(value)}/${Uri.encodeComponent(id)}/ai/explain',
+          data: {'instruction': instruction},
+        ) ??
+        <String, dynamic>{};
   }
 
-  Future<Map<String, dynamic>> createWorkflow(Map<String, dynamic> definition, {WorkflowApiTarget target = const WorkflowApiTarget.cloud()}) async {
-    return await _api.post<Map<String, dynamic>>(_workflowBase(target), data: definition) ?? <String, dynamic>{};
+  Future<Map<String, dynamic>> createWorkflow(
+    Map<String, dynamic> definition, {
+    WorkflowApiTarget target = const WorkflowApiTarget.cloud(),
+  }) async {
+    return await _api.post<Map<String, dynamic>>(
+          _workflowBase(target),
+          data: definition,
+        ) ??
+        <String, dynamic>{};
   }
 
-  Future<Map<String, dynamic>> getWorkflow(String id, {WorkflowApiTarget target = const WorkflowApiTarget.cloud()}) async {
-    return await _api.get<Map<String, dynamic>>('${_workflowBase(target)}/${Uri.encodeComponent(id)}') ?? <String, dynamic>{};
+  Future<Map<String, dynamic>> getWorkflow(
+    String id, {
+    WorkflowApiTarget target = const WorkflowApiTarget.cloud(),
+  }) async {
+    return await _api.get<Map<String, dynamic>>(
+          '${_workflowBase(target)}/${Uri.encodeComponent(id)}',
+        ) ??
+        <String, dynamic>{};
   }
 
-  Future<Map<String, dynamic>> workflowAnalysis(String id, {WorkflowApiTarget target = const WorkflowApiTarget.cloud()}) async {
+  Future<Map<String, dynamic>> workflowAnalysis(
+    String id, {
+    WorkflowApiTarget target = const WorkflowApiTarget.cloud(),
+  }) async {
     final value = _kernelWorkflowTarget(target, 'workflow analysis');
-    return await _api.get<Map<String, dynamic>>('${_workflowBase(value)}/${Uri.encodeComponent(id)}/analysis') ?? <String, dynamic>{};
+    return await _api.get<Map<String, dynamic>>(
+          '${_workflowBase(value)}/${Uri.encodeComponent(id)}/analysis',
+        ) ??
+        <String, dynamic>{};
   }
 
-  Future<Map<String, dynamic>> workflowStats(String id, {WorkflowApiTarget target = const WorkflowApiTarget.cloud()}) async {
+  Future<Map<String, dynamic>> workflowStats(
+    String id, {
+    WorkflowApiTarget target = const WorkflowApiTarget.cloud(),
+  }) async {
     final value = _kernelWorkflowTarget(target, 'workflow statistics');
-    return await _api.get<Map<String, dynamic>>('${_workflowBase(value)}/${Uri.encodeComponent(id)}/stats') ?? <String, dynamic>{};
+    return await _api.get<Map<String, dynamic>>(
+          '${_workflowBase(value)}/${Uri.encodeComponent(id)}/stats',
+        ) ??
+        <String, dynamic>{};
   }
 
   Future<Map<String, dynamic>> updateWorkflow(
@@ -1094,7 +1263,9 @@ class ExtensionService {
     return await _api.put<Map<String, dynamic>>(
           '${_workflowBase(target)}/${Uri.encodeComponent(id)}',
           data: definition,
-          queryParameters: revision != null && revision > 0 ? {'expectedRevision': revision} : null,
+          queryParameters: revision != null && revision > 0
+              ? {'expectedRevision': revision}
+              : null,
         ) ??
         <String, dynamic>{};
   }
@@ -1109,72 +1280,149 @@ class ExtensionService {
     return await _api.patch<Map<String, dynamic>>(
           '${_workflowBase(value)}/${Uri.encodeComponent(id)}',
           data: patch,
-          queryParameters: expectedRevision != null && expectedRevision > 0 ? {'expectedRevision': expectedRevision} : null,
+          queryParameters: expectedRevision != null && expectedRevision > 0
+              ? {'expectedRevision': expectedRevision}
+              : null,
         ) ??
         <String, dynamic>{};
   }
 
-  Future<Map<String, dynamic>> exportWorkflow(String id, {WorkflowApiTarget target = const WorkflowApiTarget.cloud()}) async {
+  Future<Map<String, dynamic>> exportWorkflow(
+    String id, {
+    WorkflowApiTarget target = const WorkflowApiTarget.cloud(),
+  }) async {
     final value = _kernelWorkflowTarget(target, 'workflow export');
-    return await _api.get<Map<String, dynamic>>('${_workflowBase(value)}/${Uri.encodeComponent(id)}/export') ?? <String, dynamic>{};
+    return await _api.get<Map<String, dynamic>>(
+          '${_workflowBase(value)}/${Uri.encodeComponent(id)}/export',
+        ) ??
+        <String, dynamic>{};
   }
 
-  Future<Map<String, dynamic>> importWorkflow(Map<String, dynamic> payload, {WorkflowApiTarget target = const WorkflowApiTarget.cloud()}) async {
+  Future<Map<String, dynamic>> importWorkflow(
+    Map<String, dynamic> payload, {
+    WorkflowApiTarget target = const WorkflowApiTarget.cloud(),
+  }) async {
     final value = _kernelWorkflowTarget(target, 'workflow import');
-    return await _api.post<Map<String, dynamic>>('${_workflowBase(value)}/import', data: payload) ?? <String, dynamic>{};
+    return await _api.post<Map<String, dynamic>>(
+          '${_workflowBase(value)}/import',
+          data: payload,
+        ) ??
+        <String, dynamic>{};
   }
 
-  Future<List<Map<String, dynamic>>> workflowTemplates({WorkflowApiTarget target = const WorkflowApiTarget.cloud()}) async {
+  Future<List<Map<String, dynamic>>> workflowTemplates({
+    WorkflowApiTarget target = const WorkflowApiTarget.cloud(),
+  }) async {
     final value = _kernelWorkflowTarget(target, 'workflow templates');
-    final resp = await _api.get<Map<String, dynamic>>('${_workflowBase(value)}/templates');
+    final resp = await _api.get<Map<String, dynamic>>(
+      '${_workflowBase(value)}/templates',
+    );
     final items = resp?['items'];
     if (items is! List) return const <Map<String, dynamic>>[];
-    return items.whereType<Map>().map((e) => e.cast<String, dynamic>()).toList(growable: false);
+    return items
+        .whereType<Map>()
+        .map((e) => e.cast<String, dynamic>())
+        .toList(growable: false);
   }
 
-  Future<void> saveWorkflowTemplate(String id, {String name = '', String description = '', WorkflowApiTarget target = const WorkflowApiTarget.cloud()}) async {
+  Future<void> saveWorkflowTemplate(
+    String id, {
+    String name = '',
+    String description = '',
+    WorkflowApiTarget target = const WorkflowApiTarget.cloud(),
+  }) async {
     final value = _kernelWorkflowTarget(target, 'workflow templates');
-    await _api.post('${_workflowBase(value)}/${Uri.encodeComponent(id)}/templates', data: {'name': name, 'description': description});
+    await _api.post(
+      '${_workflowBase(value)}/${Uri.encodeComponent(id)}/templates',
+      data: {'name': name, 'description': description},
+    );
   }
 
-  Future<Map<String, dynamic>> instantiateWorkflowTemplate(String templateId, {String name = '', WorkflowApiTarget target = const WorkflowApiTarget.cloud()}) async {
+  Future<Map<String, dynamic>> instantiateWorkflowTemplate(
+    String templateId, {
+    String name = '',
+    WorkflowApiTarget target = const WorkflowApiTarget.cloud(),
+  }) async {
     final value = _kernelWorkflowTarget(target, 'workflow templates');
-    return await _api.post<Map<String, dynamic>>('${_workflowBase(value)}/templates/${Uri.encodeComponent(templateId)}/instantiate', data: {'name': name}) ?? <String, dynamic>{};
+    return await _api.post<Map<String, dynamic>>(
+          '${_workflowBase(value)}/templates/${Uri.encodeComponent(templateId)}/instantiate',
+          data: {'name': name},
+        ) ??
+        <String, dynamic>{};
   }
 
-  Future<void> deleteWorkflowTemplate(String templateId, {WorkflowApiTarget target = const WorkflowApiTarget.cloud()}) async {
+  Future<void> deleteWorkflowTemplate(
+    String templateId, {
+    WorkflowApiTarget target = const WorkflowApiTarget.cloud(),
+  }) async {
     final value = _kernelWorkflowTarget(target, 'workflow templates');
-    await _api.delete('${_workflowBase(value)}/templates/${Uri.encodeComponent(templateId)}');
+    await _api.delete(
+      '${_workflowBase(value)}/templates/${Uri.encodeComponent(templateId)}',
+    );
   }
 
-  Future<List<Map<String, dynamic>>> workflowRevisions(String id, {int limit = 50, WorkflowApiTarget target = const WorkflowApiTarget.cloud()}) async {
+  Future<List<Map<String, dynamic>>> workflowRevisions(
+    String id, {
+    int limit = 50,
+    WorkflowApiTarget target = const WorkflowApiTarget.cloud(),
+  }) async {
     final value = _kernelWorkflowTarget(target, 'workflow revisions');
-    final resp = await _api.get<Map<String, dynamic>>('${_workflowBase(value)}/${Uri.encodeComponent(id)}/revisions', queryParameters: {'limit': limit.clamp(1, 100)});
+    final resp = await _api.get<Map<String, dynamic>>(
+      '${_workflowBase(value)}/${Uri.encodeComponent(id)}/revisions',
+      queryParameters: {'limit': limit.clamp(1, 100)},
+    );
     final items = resp?['items'];
     if (items is! List) return const <Map<String, dynamic>>[];
-    return items.whereType<Map>().map((e) => e.cast<String, dynamic>()).toList(growable: false);
+    return items
+        .whereType<Map>()
+        .map((e) => e.cast<String, dynamic>())
+        .toList(growable: false);
   }
 
-  Future<Map<String, dynamic>> createWorkflowRevision(String id, {String note = '', WorkflowApiTarget target = const WorkflowApiTarget.cloud()}) async {
+  Future<Map<String, dynamic>> createWorkflowRevision(
+    String id, {
+    String note = '',
+    WorkflowApiTarget target = const WorkflowApiTarget.cloud(),
+  }) async {
     final value = _kernelWorkflowTarget(target, 'workflow revisions');
-    return await _api.post<Map<String, dynamic>>('${_workflowBase(value)}/${Uri.encodeComponent(id)}/revisions', data: {'note': note}) ?? <String, dynamic>{};
+    return await _api.post<Map<String, dynamic>>(
+          '${_workflowBase(value)}/${Uri.encodeComponent(id)}/revisions',
+          data: {'note': note},
+        ) ??
+        <String, dynamic>{};
   }
 
-  Future<Map<String, dynamic>> rollbackWorkflowRevision(String id, String revisionId, {WorkflowApiTarget target = const WorkflowApiTarget.cloud(), int? expectedRevision}) async {
+  Future<Map<String, dynamic>> rollbackWorkflowRevision(
+    String id,
+    String revisionId, {
+    WorkflowApiTarget target = const WorkflowApiTarget.cloud(),
+    int? expectedRevision,
+  }) async {
     final value = _kernelWorkflowTarget(target, 'workflow revisions');
     return await _api.post<Map<String, dynamic>>(
           '${_workflowBase(value)}/${Uri.encodeComponent(id)}/revisions/${Uri.encodeComponent(revisionId)}/rollback',
-          queryParameters: expectedRevision != null && expectedRevision > 0 ? {'expectedRevision': expectedRevision} : null,
+          queryParameters: expectedRevision != null && expectedRevision > 0
+              ? {'expectedRevision': expectedRevision}
+              : null,
         ) ??
         <String, dynamic>{};
   }
 
-  Future<Map<String, dynamic>> duplicateWorkflow(String id, {WorkflowApiTarget target = const WorkflowApiTarget.cloud()}) async {
+  Future<Map<String, dynamic>> duplicateWorkflow(
+    String id, {
+    WorkflowApiTarget target = const WorkflowApiTarget.cloud(),
+  }) async {
     final value = _kernelWorkflowTarget(target, 'workflow duplication');
-    return await _api.post<Map<String, dynamic>>('${_workflowBase(value)}/${Uri.encodeComponent(id)}/duplicate') ?? <String, dynamic>{};
+    return await _api.post<Map<String, dynamic>>(
+          '${_workflowBase(value)}/${Uri.encodeComponent(id)}/duplicate',
+        ) ??
+        <String, dynamic>{};
   }
 
-  Future<void> deleteWorkflow(String id, {WorkflowApiTarget target = const WorkflowApiTarget.cloud()}) async {
+  Future<void> deleteWorkflow(
+    String id, {
+    WorkflowApiTarget target = const WorkflowApiTarget.cloud(),
+  }) async {
     await _api.delete('${_workflowBase(target)}/${Uri.encodeComponent(id)}');
   }
 
@@ -1186,14 +1434,23 @@ class ExtensionService {
   }) async {
     return await _api.post<Map<String, dynamic>>(
           '${_workflowBase(target)}/${Uri.encodeComponent(id)}/${enabled ? 'enable' : 'disable'}',
-          queryParameters: expectedRevision != null && expectedRevision > 0 ? {'expectedRevision': expectedRevision} : null,
+          queryParameters: expectedRevision != null && expectedRevision > 0
+              ? {'expectedRevision': expectedRevision}
+              : null,
         ) ??
         <String, dynamic>{};
   }
 
-  Future<Map<String, dynamic>> validateWorkflow(Map<String, dynamic> definition, {WorkflowApiTarget target = const WorkflowApiTarget.cloud()}) async {
+  Future<Map<String, dynamic>> validateWorkflow(
+    Map<String, dynamic> definition, {
+    WorkflowApiTarget target = const WorkflowApiTarget.cloud(),
+  }) async {
     final value = _kernelWorkflowTarget(target, 'workflow validation');
-    return await _api.post<Map<String, dynamic>>('${_workflowBase(value)}/validate', data: definition) ?? <String, dynamic>{};
+    return await _api.post<Map<String, dynamic>>(
+          '${_workflowBase(value)}/validate',
+          data: definition,
+        ) ??
+        <String, dynamic>{};
   }
 
   Future<Map<String, dynamic>> runWorkflow(
@@ -1210,7 +1467,8 @@ class ExtensionService {
       if (!target.isDevice) 'wait': wait,
       if (mode.isNotEmpty && mode != 'live') 'mode': mode,
       if (mocks.isNotEmpty) 'mocks': mocks,
-      if (approvedSideEffects.isNotEmpty) 'approvedSideEffects': approvedSideEffects,
+      if (approvedSideEffects.isNotEmpty)
+        'approvedSideEffects': approvedSideEffects,
     };
     return await _api.post<Map<String, dynamic>>(
           '${_workflowBase(target)}/${Uri.encodeComponent(id)}/run',
@@ -1219,28 +1477,61 @@ class ExtensionService {
         <String, dynamic>{};
   }
 
-  Future<Map<String, dynamic>> workflowRuns(String id, {int limit = 50, int offset = 0, String status = '', WorkflowApiTarget target = const WorkflowApiTarget.cloud()}) async {
+  Future<Map<String, dynamic>> workflowRuns(
+    String id, {
+    int limit = 50,
+    int offset = 0,
+    String status = '',
+    WorkflowApiTarget target = const WorkflowApiTarget.cloud(),
+  }) async {
     return await _api.get<Map<String, dynamic>>(
           '${_workflowBase(target)}/${Uri.encodeComponent(id)}/runs',
-          queryParameters: {'limit': limit.clamp(1, 200), 'offset': offset < 0 ? 0 : offset, if (status.isNotEmpty) 'status': status},
+          queryParameters: {
+            'limit': limit.clamp(1, 200),
+            'offset': offset < 0 ? 0 : offset,
+            if (status.isNotEmpty) 'status': status,
+          },
         ) ??
         <String, dynamic>{'items': <dynamic>[], 'total': 0};
   }
 
-  Future<Map<String, dynamic>> getWorkflowRun(String runId, {WorkflowApiTarget target = const WorkflowApiTarget.cloud()}) async {
-    return await _api.get<Map<String, dynamic>>('${_workflowRunBase(target)}/${Uri.encodeComponent(runId)}') ?? <String, dynamic>{};
+  Future<Map<String, dynamic>> getWorkflowRun(
+    String runId, {
+    WorkflowApiTarget target = const WorkflowApiTarget.cloud(),
+  }) async {
+    return await _api.get<Map<String, dynamic>>(
+          '${_workflowRunBase(target)}/${Uri.encodeComponent(runId)}',
+        ) ??
+        <String, dynamic>{};
   }
 
-  Future<void> cancelWorkflowRun(String runId, {WorkflowApiTarget target = const WorkflowApiTarget.cloud()}) async {
-    await _api.post('${_workflowRunBase(target)}/${Uri.encodeComponent(runId)}/cancel');
+  Future<void> cancelWorkflowRun(
+    String runId, {
+    WorkflowApiTarget target = const WorkflowApiTarget.cloud(),
+  }) async {
+    await _api.post(
+      '${_workflowRunBase(target)}/${Uri.encodeComponent(runId)}/cancel',
+    );
   }
 
-  Future<void> pauseWorkflowRun(String runId, {String reason = 'Paused from Creative Workshop', WorkflowApiTarget target = const WorkflowApiTarget.cloud()}) async {
-    await _api.post('${_workflowRunBase(target)}/${Uri.encodeComponent(runId)}/pause', data: {'reason': reason});
+  Future<void> pauseWorkflowRun(
+    String runId, {
+    String reason = 'Paused from Creative Workshop',
+    WorkflowApiTarget target = const WorkflowApiTarget.cloud(),
+  }) async {
+    await _api.post(
+      '${_workflowRunBase(target)}/${Uri.encodeComponent(runId)}/pause',
+      data: {'reason': reason},
+    );
   }
 
-  Future<void> resumeWorkflowRun(String runId, {WorkflowApiTarget target = const WorkflowApiTarget.cloud()}) async {
-    await _api.post('${_workflowRunBase(target)}/${Uri.encodeComponent(runId)}/resume');
+  Future<void> resumeWorkflowRun(
+    String runId, {
+    WorkflowApiTarget target = const WorkflowApiTarget.cloud(),
+  }) async {
+    await _api.post(
+      '${_workflowRunBase(target)}/${Uri.encodeComponent(runId)}/resume',
+    );
   }
 
   Future<Map<String, dynamic>> confirmWorkflowRun(
@@ -1255,12 +1546,26 @@ class ExtensionService {
         <String, dynamic>{};
   }
 
-  Future<Map<String, dynamic>> rerunWorkflowRun(String runId, {bool wait = false, WorkflowApiTarget target = const WorkflowApiTarget.cloud()}) async {
-    return await _api.post<Map<String, dynamic>>('${_workflowRunBase(target)}/${Uri.encodeComponent(runId)}/rerun', data: <String, dynamic>{'wait': wait}) ?? <String, dynamic>{};
+  Future<Map<String, dynamic>> rerunWorkflowRun(
+    String runId, {
+    bool wait = false,
+    WorkflowApiTarget target = const WorkflowApiTarget.cloud(),
+  }) async {
+    return await _api.post<Map<String, dynamic>>(
+          '${_workflowRunBase(target)}/${Uri.encodeComponent(runId)}/rerun',
+          data: <String, dynamic>{'wait': wait},
+        ) ??
+        <String, dynamic>{};
   }
 
-  Future<Map<String, dynamic>> recoverWorkflowRun(String runId, {WorkflowApiTarget target = const WorkflowApiTarget.cloud()}) async {
-    return await _api.post<Map<String, dynamic>>('${_workflowRunBase(target)}/${Uri.encodeComponent(runId)}/recover') ?? <String, dynamic>{};
+  Future<Map<String, dynamic>> recoverWorkflowRun(
+    String runId, {
+    WorkflowApiTarget target = const WorkflowApiTarget.cloud(),
+  }) async {
+    return await _api.post<Map<String, dynamic>>(
+          '${_workflowRunBase(target)}/${Uri.encodeComponent(runId)}/recover',
+        ) ??
+        <String, dynamic>{};
   }
 
   Future<Map<String, dynamic>> dispatchWorkflowEvent(
@@ -1269,7 +1574,10 @@ class ExtensionService {
     WorkflowApiTarget target = const WorkflowApiTarget.cloud(),
   }) async {
     final value = _kernelWorkflowTarget(target, 'workflow event dispatch');
-    return await _api.post<Map<String, dynamic>>('${_workflowBase(value)}/events/${Uri.encodeComponent(eventType)}', data: payload) ?? <String, dynamic>{};
+    return await _api.post<Map<String, dynamic>>(
+          '${_workflowBase(value)}/events/${Uri.encodeComponent(eventType)}',
+          data: payload,
+        ) ??
+        <String, dynamic>{};
   }
-
 }

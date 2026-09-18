@@ -4,6 +4,7 @@ import type { UIContributionSummary } from "@/stores/extensionUI";
 
 export interface SandboxSessionRecord {
   sessionId: string;
+  generation: number;
   nonce: string;
   token: string;
   origin: string;
@@ -147,8 +148,13 @@ export function takeCachedSandboxSession(key: string): SandboxSessionRecord | nu
     revokeCachedSession(entry);
     return null;
   }
+  if (typeof entry.generation !== "number") {
+    revokeCachedSession(entry);
+    return null;
+  }
   return {
     sessionId: entry.sessionId,
+    generation: entry.generation,
     nonce: entry.nonce,
     token: entry.token,
     origin: entry.origin,
@@ -215,6 +221,7 @@ export async function getOrCreateSandboxSession(options: SandboxSessionOptions):
   const surfaceRole = surfaceRoleOf(context);
   const request = apiClient.post<{
     sessionId: string;
+    generation: number;
     nonce: string;
     token: string;
     origin: string;
@@ -248,6 +255,7 @@ export async function getOrCreateSandboxSession(options: SandboxSessionOptions):
     if (!data?.sessionId) throw new Error("session response missing sessionId");
     return {
       sessionId: data.sessionId,
+      generation: typeof data.generation === "number" ? data.generation : options.contribution.generation,
       nonce: data.nonce,
       token: data.token,
       origin: data.origin,

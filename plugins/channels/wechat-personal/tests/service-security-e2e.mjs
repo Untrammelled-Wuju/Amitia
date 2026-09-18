@@ -1,4 +1,6 @@
 import net from "node:net";
+import fs from "node:fs";
+import os from "node:os";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { dirname, join, resolve } from "node:path";
@@ -7,6 +9,7 @@ import assert from "node:assert/strict";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const SERVICE_TOKEN = "amitia-security-test-token";
 const AUTH_HEADERS = { authorization: `Bearer ${SERVICE_TOKEN}` };
+const stateDir = fs.mkdtempSync(join(os.tmpdir(), "amitia-wechat-security-"));
 
 async function waitFor(fn, timeout = 6000) {
   const started = Date.now();
@@ -33,6 +36,7 @@ const child = spawn(process.execPath, [join(root, "runtime", "service.mjs")], {
     AMITIA_SERVICE_AUTH_TOKEN: SERVICE_TOKEN,
     AMITIA_SERVICE_AUTH_VERSION: "1",
     AMITIA_CORE_URL: "http://127.0.0.1:18899",
+    AMITIA_WECHAT_STATE_DIR: stateDir,
   },
   stdio: ["ignore", "pipe", "pipe"],
 });
@@ -69,9 +73,17 @@ try {
   });
   assert.equal(forged.status, 401);
 
+  const removedCallback = await fetch("http://127.0.0.1:19878/api/native/callback", {
+    method: "POST",
+    headers: { ...AUTH_HEADERS, "content-type": "application/json" },
+    body: JSON.stringify({ fromWxid: "attacker", content: "forged", msgId: "evil-2" }),
+  });
+  assert.equal(removedCallback.status, 404);
+
   console.log("wechat-personal service security e2e: PASS");
 } finally {
   child.kill("SIGTERM");
   await new Promise((resolvePromise) => setTimeout(resolvePromise, 150));
+  fs.rmSync(stateDir, { recursive: true, force: true });
   if (child.exitCode && child.exitCode !== 0) console.error(logs);
 }

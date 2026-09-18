@@ -11,7 +11,6 @@ import '../../../../app/theme/app_typography.dart';
 import '../../../../core/app_update/app_update_models.dart';
 import '../../../../core/app_update/app_update_providers.dart';
 import '../../../../core/app_update/app_update_service.dart';
-import '../../../../core/backend_transport/providers/backend_transport_providers.dart';
 import '../../../../core/ui_runtime/ui_client_info.dart';
 import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
@@ -24,12 +23,6 @@ class AppUpdatePage extends ConsumerStatefulWidget {
 }
 
 class _AppUpdatePageState extends ConsumerState<AppUpdatePage> {
-  bool _loading = true;
-  bool _checking = false;
-  String? _error;
-  Map<String, dynamic> _coreVersion = const {};
-  Map<String, dynamic> _coreCheck = const {};
-  Map<String, dynamic> _coreConfig = const {};
   InstalledAppInfo? _installedApp;
   AppUpdateManifest? _availableAppUpdate;
   int? _downloadId;
@@ -46,77 +39,9 @@ class _AppUpdatePageState extends ConsumerState<AppUpdatePage> {
 
   String get _clientArchitecture => currentUIClientInfo().architecture;
 
-  Future<Map<String, dynamic>?> _get(String path) => ref
-      .read(backendServiceProvider)
-      .get<Map<String, dynamic>>(
-        path,
-        fromJson: (value) => Map<String, dynamic>.from(value as Map),
-      );
-
-  Future<Map<String, dynamic>?> _checkCoreUpdate() => ref
-      .read(backendServiceProvider)
-      .post<Map<String, dynamic>>(
-        '/api/update/check',
-        fromJson: (value) => Map<String, dynamic>.from(value as Map),
-      );
-
-  Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-    try {
-      final values = await Future.wait([
-        _get('/api/version'),
-        _checkCoreUpdate(),
-        _get('/api/update/config'),
-      ]);
-      if (!mounted) return;
-      setState(() {
-        _coreVersion = values[0] ?? const {};
-        _coreCheck = values[1] ?? const {};
-        _coreConfig = values[2] ?? const {};
-        _loading = false;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _error = e.toString();
-        _loading = false;
-      });
-    }
-  }
-
-  Future<void> _refreshCoreReleaseInfo() async {
-    setState(() => _checking = true);
-    try {
-      await ref
-          .read(backendServiceProvider)
-          .post<Map<String, dynamic>>(
-            '/api/release-check/run',
-            fromJson: (value) => Map<String, dynamic>.from(value as Map),
-          );
-      await _load();
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('业务 Core 版本信息已刷新')));
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('刷新失败：$e')));
-      }
-    } finally {
-      if (mounted) setState(() => _checking = false);
-    }
-  }
-
   @override
   void initState() {
     super.initState();
-    _load();
     unawaited(_checkAppUpdate(silent: true));
     unawaited(_consumeInstallResult());
   }
@@ -129,12 +54,6 @@ class _AppUpdatePageState extends ConsumerState<AppUpdatePage> {
 
   @override
   Widget build(BuildContext context) {
-    final coreCurrent =
-        (_coreVersion['version'] ?? _coreCheck['currentVersion'] ?? '—')
-            .toString();
-    final coreLatest = (_coreCheck['latestVersion'] ?? coreCurrent).toString();
-    final coreHasUpdate = _coreCheck['hasUpdate'] == true;
-    final coreChannel = (_coreConfig['channel'] ?? 'stable').toString();
     final clientVersion =
         _installedApp?.versionName ?? currentUIClientInfo().appVersion;
     final clientVersionCode = _installedApp?.versionCode ?? 0;
@@ -144,104 +63,37 @@ class _AppUpdatePageState extends ConsumerState<AppUpdatePage> {
         title: '版本与更新',
         navigation: AmitiaAppBarNavigation.back,
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : ListView(
-              padding: EdgeInsets.fromLTRB(
-                AppSpacing.pagePadding,
-                AppSpacing.md,
-                AppSpacing.pagePadding,
-                AppSpacing.xl,
+      body: ListView(
+        padding: EdgeInsets.fromLTRB(
+          AppSpacing.pagePadding,
+          AppSpacing.md,
+          AppSpacing.pagePadding,
+          AppSpacing.xl,
+        ),
+        children: [
+          _versionCard(
+            context,
+            icon: Icons.phone_android_outlined,
+            title: '当前客户端',
+            subtitle: '检查和安装本机 App 更新',
+            rows: [
+              MapEntry('客户端版本', clientVersion),
+              MapEntry(
+                '版本代码',
+                clientVersionCode > 0 ? clientVersionCode.toString() : '—',
               ),
-              children: [
-                _versionCard(
-                  context,
-                  icon: Icons.phone_android_outlined,
-                  title: '当前 Flutter 客户端',
-                  subtitle: '通过自建渠道检查和安装客户端更新',
-                  rows: [
-                    MapEntry('客户端版本', clientVersion),
-                    MapEntry(
-                      '版本代码',
-                      clientVersionCode > 0
-                          ? clientVersionCode.toString()
-                          : '—',
-                    ),
-                    MapEntry(
-                      '运行架构',
-                      _clientArchitecture.isEmpty ? '—' : _clientArchitecture,
-                    ),
-                    MapEntry('更新通道', AppUpdateService.updateChannel),
-                    const MapEntry('更新来源', '自建渠道'),
-                  ],
-                ),
-                SizedBox(height: AppSpacing.md),
-                _buildAppUpdateCard(context),
-                SizedBox(height: AppSpacing.lg),
-                if (_error != null) ...[
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(15),
-                    decoration: BoxDecoration(
-                      color: context.surfacePrimary,
-                      borderRadius: AppRadius.brMedium,
-                      border: Border.all(
-                        color: context.borderPrimary,
-                        width: 0.6,
-                      ),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Text(
-                          '业务 Core 信息加载失败',
-                          style: AppTypography.cardTitle(context),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(_error!, style: AppTypography.caption(context)),
-                        const SizedBox(height: 12),
-                        AmitiaButton(
-                          label: '重新加载 Core 信息',
-                          icon: Icons.refresh,
-                          isFullWidth: true,
-                          onPressed: _load,
-                        ),
-                      ],
-                    ),
-                  ),
-                  SizedBox(height: AppSpacing.lg),
-                ],
-                _versionCard(
-                  context,
-                  icon: Icons.dns_outlined,
-                  title: '当前连接的业务 Core',
-                  subtitle: coreHasUpdate
-                      ? 'Core 检测到可用更新'
-                      : '这是服务端/Core 版本，不代表当前手机 App 版本',
-                  rows: [
-                    MapEntry('Core 当前版本', coreCurrent),
-                    MapEntry('Core 最新版本', coreLatest),
-                    MapEntry('Core 更新通道', coreChannel),
-                    MapEntry(
-                      'Core 最后检查',
-                      (_coreCheck['lastCheckedAt'] ?? '未记录').toString(),
-                    ),
-                  ],
-                ),
-                SizedBox(height: AppSpacing.lg),
-                AmitiaButton(
-                  label: _checking ? '正在刷新…' : '刷新 Core 版本信息',
-                  icon: Icons.refresh,
-                  isFullWidth: true,
-                  onPressed: _checking ? null : _refreshCoreReleaseInfo,
-                ),
-                SizedBox(height: AppSpacing.sm),
-                Text(
-                  '云端模式下，业务 API 会连接 Cloud Core，因此上面的 Core 版本可能是云端服务版本；客户端版本始终读取本机安装包，客户端更新不依赖当前连接的业务 Core。',
-                  style: AppTypography.caption(context),
-                ),
-              ],
-            ),
+              MapEntry(
+                '运行架构',
+                _clientArchitecture.isEmpty ? '—' : _clientArchitecture,
+              ),
+              MapEntry('更新通道', AppUpdateService.updateChannel),
+              const MapEntry('更新来源', '自建渠道'),
+            ],
+          ),
+          SizedBox(height: AppSpacing.md),
+          _buildAppUpdateCard(context),
+        ],
+      ),
     );
   }
 
@@ -408,6 +260,8 @@ class _AppUpdatePageState extends ConsumerState<AppUpdatePage> {
           _appMessage = '当前已是最新版本';
         } else if (result.reason == 'rollout_excluded') {
           _appMessage = '当前设备暂未进入该版本灰度范围';
+        } else if (result.reason == 'manifest_unavailable') {
+          _appMessage = '更新服务暂未配置可用版本';
         } else if (result.hasUpdate) {
           _appMessage = '发现新版本 v${result.available!.versionName}';
         }

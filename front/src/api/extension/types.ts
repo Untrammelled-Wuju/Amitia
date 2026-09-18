@@ -230,6 +230,7 @@ export interface BackendBridgeResponse {
 
 export interface BackendOpenPageResult {
   sessionId: string;
+  generation: number;
   state: string;
   definition?: unknown;
   missingPermissions?: string[];
@@ -238,6 +239,7 @@ export interface BackendOpenPageResult {
 
 export interface BackendPageSessionStatus {
   sessionId: string;
+  generation: number;
   state: string;
   definition?: unknown;
   missingPermissions: string[];

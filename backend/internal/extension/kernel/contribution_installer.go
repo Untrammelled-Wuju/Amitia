@@ -1182,6 +1182,7 @@ func (i *TypedContributionInstaller) ActivateContributions(ctx context.Context, 
 	if err != nil {
 		return fmt.Errorf("contribution-installer: list contributions for activate %s: %w", extID, err)
 	}
+	i.applyLocalUnsignedTrustOverride(ctx, extID, contribs)
 
 	operationID := newOperationID("activate")
 	generation := int64(0)
@@ -1217,6 +1218,29 @@ func (i *TypedContributionInstaller) ActivateContributions(ctx context.Context, 
 	}
 
 	return nil
+}
+
+func (i *TypedContributionInstaller) applyLocalUnsignedTrustOverride(ctx context.Context, extID domain.ExtensionID, contribs []domain.ContributionDefinition) {
+	if !strings.EqualFold(strings.TrimSpace(os.Getenv("AMITIA_RUN_MODE")), "desktop") {
+		return
+	}
+	installation, err := i.container.InstallationRepository.GetInstallation(ctx, extID)
+	if err != nil {
+		return
+	}
+	artifact, err := i.container.PackageRepository.GetArtifact(ctx, installation.PackageID)
+	if err != nil || artifact.SignatureStatus != "unsigned" || (artifact.TrustDecision != "development" && artifact.TrustDecision != "user_trusted") {
+		return
+	}
+	for index := range contribs {
+		if contribs[index].Kind != domain.ContributionKindUIProvider {
+			continue
+		}
+		if contribs[index].Definition == nil {
+			contribs[index].Definition = map[string]any{}
+		}
+		contribs[index].Definition["trustLevel"] = "user_trusted"
+	}
 }
 
 func (i *TypedContributionInstaller) activateSingle(ctx context.Context, contrib domain.ContributionDefinition, generation int64) error {

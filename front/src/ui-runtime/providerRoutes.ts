@@ -187,7 +187,8 @@ export function syncProviderRoutes(router: Router, store: ExtensionUIStore): voi
       target.path !== route.path ||
       target.providerId !== route.meta.uiProviderId ||
       (target.capability ?? "page.provider") !== route.meta.uiCapability ||
-      target.extensionId !== route.meta.extensionId
+      target.extensionId !== route.meta.extensionId ||
+      route.meta.fullHeight !== true
     ) {
       router.removeRoute(name);
       registeredRouteNames.delete(name);
@@ -217,6 +218,7 @@ export function syncProviderRoutes(router: Router, store: ExtensionUIStore): voi
         extensionRoute: true,
         extensionId: route.extensionId,
         routeRegistryProviderId: route.registryProviderId,
+        fullHeight: true,
       },
     });
     registeredRouteNames.add(name);

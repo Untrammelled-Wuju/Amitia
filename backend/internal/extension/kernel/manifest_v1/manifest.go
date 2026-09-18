@@ -94,17 +94,28 @@ type ModulePolicies struct {
 }
 
 type RuntimeMeta struct {
-	Type            string            `json:"type"`
-	ServiceID       string            `json:"serviceId,omitempty"`
-	EntryPoint      string            `json:"entryPoint,omitempty"`
-	WorkerCount     int               `json:"workerCount,omitempty"`
-	Timeout         string            `json:"timeout,omitempty"`
-	Memory          int64             `json:"memory,omitempty"`
-	CPUPercent      int               `json:"cpuPercent,omitempty"`
-	MaxSubprocesses int               `json:"maxSubprocesses,omitempty"`
-	Permissions     []string          `json:"permissions,omitempty"`
-	Capabilities    map[string]bool   `json:"capabilities,omitempty"`
-	Env             map[string]string `json:"env,omitempty"`
+	Type             string                `json:"type"`
+	ServiceID        string                `json:"serviceId,omitempty"`
+	EntryPoint       string                `json:"entryPoint,omitempty"`
+	WorkerCount      int                   `json:"workerCount,omitempty"`
+	Timeout          string                `json:"timeout,omitempty"`
+	Memory           int64                 `json:"memory,omitempty"`
+	CPUPercent       int                   `json:"cpuPercent,omitempty"`
+	MaxSubprocesses  int                   `json:"maxSubprocesses,omitempty"`
+	Permissions      []string              `json:"permissions,omitempty"`
+	Capabilities     map[string]bool       `json:"capabilities,omitempty"`
+	Env              map[string]string     `json:"env,omitempty"`
+	NativeCompanions []NativeCompanionMeta `json:"nativeCompanions,omitempty"`
+}
+
+type NativeCompanionMeta struct {
+	ID           string   `json:"id"`
+	Platform     string   `json:"platform"`
+	Architecture string   `json:"architecture,omitempty"`
+	Path         string   `json:"path"`
+	SHA256       string   `json:"sha256"`
+	Executable   bool     `json:"executable"`
+	Args         []string `json:"args,omitempty"`
 }
 
 type ContributionMeta struct {
@@ -654,18 +665,31 @@ func (m ModuleMeta) ToDomain(extID domain.ExtensionID) (domain.ModuleDefinition,
 	var runtime *domain.RuntimeDefinition
 	if m.Runtime != nil {
 		timeout, _ := time.ParseDuration(m.Runtime.Timeout)
+		nativeCompanions := make([]domain.NativeCompanionDefinition, 0, len(m.Runtime.NativeCompanions))
+		for _, companion := range m.Runtime.NativeCompanions {
+			nativeCompanions = append(nativeCompanions, domain.NativeCompanionDefinition{
+				ID:           companion.ID,
+				Platform:     companion.Platform,
+				Architecture: companion.Architecture,
+				Path:         companion.Path,
+				SHA256:       companion.SHA256,
+				Executable:   companion.Executable,
+				Args:         companion.Args,
+			})
+		}
 		rd := domain.RuntimeDefinition{
-			Type:            domain.RuntimeType(m.Runtime.Type),
-			ServiceID:       m.Runtime.ServiceID,
-			EntryPoint:      m.Runtime.EntryPoint,
-			WorkerCount:     m.Runtime.WorkerCount,
-			Timeout:         timeout,
-			Memory:          m.Runtime.Memory,
-			CPUPercent:      m.Runtime.CPUPercent,
-			MaxSubprocesses: m.Runtime.MaxSubprocesses,
-			Permissions:     m.Runtime.Permissions,
-			Capabilities:    m.Runtime.Capabilities,
-			Env:             m.Runtime.Env,
+			Type:             domain.RuntimeType(m.Runtime.Type),
+			ServiceID:        m.Runtime.ServiceID,
+			EntryPoint:       m.Runtime.EntryPoint,
+			WorkerCount:      m.Runtime.WorkerCount,
+			Timeout:          timeout,
+			Memory:           m.Runtime.Memory,
+			CPUPercent:       m.Runtime.CPUPercent,
+			MaxSubprocesses:  m.Runtime.MaxSubprocesses,
+			Permissions:      m.Runtime.Permissions,
+			Capabilities:     m.Runtime.Capabilities,
+			Env:              m.Runtime.Env,
+			NativeCompanions: nativeCompanions,
 		}
 		runtime = &rd
 	}

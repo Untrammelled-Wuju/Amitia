@@ -190,6 +190,30 @@ func TestVerifyIntegrity(t *testing.T) {
 	}
 }
 
+func TestVerifyIntegrityAcceptsLegacyLocaleTreeHash(t *testing.T) {
+	files := []FileEntry{
+		{Path: "assets/legacy-source/source/front/src/views/proactive-rules/ProactiveRules.vue", Size: 4, Hash: hashBytes([]byte("root"))},
+		{Path: "assets/legacy-source/source/front/src/views/proactive-rules/components/ActiveMessageSettings.vue", Size: 9, Hash: hashBytes([]byte("component"))},
+	}
+	canonicalTree := ComputeTreeHash(files)
+	legacyTree := computeLegacyTreeHash(files)
+	if canonicalTree == legacyTree {
+		t.Fatal("expected canonical and legacy tree hashes to differ")
+	}
+	integrityFiles := make(map[string]FileEntry, len(files))
+	for _, file := range files {
+		integrityFiles[file.Path] = file
+	}
+	pkg := &Package{
+		Files:     files,
+		Integrity: IntegrityFilesDoc{Files: integrityFiles},
+		Tree:      IntegrityTreeDoc{TreeHash: legacyTree},
+	}
+	if err := VerifyIntegrity(pkg); err != nil {
+		t.Fatalf("VerifyIntegrity must accept the legacy locale tree hash: %v", err)
+	}
+}
+
 func TestInstall(t *testing.T) {
 	tmp := t.TempDir()
 	archivePath := filepath.Join(tmp, "test.amitiax")

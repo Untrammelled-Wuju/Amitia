@@ -264,12 +264,11 @@ onMounted(async () => {
 <style scoped>
 .char-config-page {
   width: 100%;
-  max-width: 1480px;
   height: 100%;
   min-width: 0;
   min-height: 0;
   margin: 0 auto;
-  padding: clamp(14px, 2vw, 20px);
+  padding: 0;
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
@@ -299,14 +298,6 @@ onMounted(async () => {
 .char-sidebar-stack :deep(.extension-slot) { max-height: 36%; overflow: auto; }
 .character-action-slot { margin-bottom: 10px; }
 .character-detail-slot { margin-top: 12px; }
-.char-config-page :deep(.extension-page-header) {
-  align-items: stretch;
-  flex-direction: column;
-  gap: 14px;
-}
-.char-config-page :deep(.header-actions) {
-  justify-content: flex-start;
-}
 
 .char-main {
   width: 100%;
@@ -359,10 +350,6 @@ onMounted(async () => {
 }
 
 @media (max-width: 1080px) {
-  .char-config-page {
-    padding: 16px;
-  }
-
   .char-main {
     padding: 16px;
   }

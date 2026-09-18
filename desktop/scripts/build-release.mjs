@@ -15,6 +15,7 @@ const cliPath = fileURLToPath(new URL("../node_modules/electron-builder/cli.js",
 const verifyPackagedPath = resolve(__dirname, "verify-packaged-desktop-pet.mjs");
 const verifyPackagedCorePath = resolve(__dirname, "verify-packaged-core.mjs");
 const buildAmitiaCorePath = resolve(__dirname, "build-amitiacore.mjs");
+const buildRuntimeHostsPath = resolve(__dirname, "build-runtime-hosts.mjs");
 const generateReleaseReportPath = resolve(__dirname, "generate-release-report.mjs");
 const prepareRuntimeAssetsPath = resolve(__dirname, "prepare-release-runtime-assets.mjs");
 const verifyPackagedRuntimeAssetsPath = resolve(__dirname, "verify-packaged-runtime-assets.mjs");
@@ -63,6 +64,9 @@ async function main() {
   await verifyPreBuildGates();
 
   if (existsSync(releaseDir)) rmSync(releaseDir, { recursive: true, force: true });
+
+  console.log("[build-release] building shared runtime hosts...");
+  run(process.execPath, [buildRuntimeHostsPath]);
 
   console.log("[build-release] building AmitiaCore from the frozen source...");
   run(process.execPath, [buildAmitiaCorePath], {

@@ -68,7 +68,7 @@ function buildIntegrityDocuments(staging) {
       const path = canonicalPath(staging, file);
       return { path, size: data.length, hash: sha256Raw(data), modified: generatedAt };
     })
-    .sort((a, b) => a.path.localeCompare(b.path));
+    .sort((a, b) => Buffer.compare(Buffer.from(a.path, 'utf8'), Buffer.from(b.path, 'utf8')));
 
   const files = Object.fromEntries(entries.map(entry => [entry.path, entry]));
   writeFileSync(join(integrityDir, 'files.json'), `${JSON.stringify({ algorithm: 'sha256', files, generatedAt }, null, 2)}\n`);
@@ -197,8 +197,9 @@ function verifyPackage(outputFile, expectedVersion, expectedTreeHash) {
   if (manifest.modules?.[0]?.runtime?.entryPoint !== executableName) throw new Error('native fixture entryPoint mismatch');
   if (treeDoc.treeHash !== expectedTreeHash) throw new Error('native fixture content tree mismatch');
 
-  const payloadNames = [...entries.keys()].filter(name => !name.startsWith('integrity/')).sort();
-  if (JSON.stringify(Object.keys(filesDoc.files || {}).sort()) !== JSON.stringify(payloadNames)) {
+  const comparePaths = (left, right) => Buffer.compare(Buffer.from(left, 'utf8'), Buffer.from(right, 'utf8'));
+  const payloadNames = [...entries.keys()].filter(name => !name.startsWith('integrity/')).sort(comparePaths);
+  if (JSON.stringify(Object.keys(filesDoc.files || {}).sort(comparePaths)) !== JSON.stringify(payloadNames)) {
     throw new Error('native fixture integrity coverage mismatch');
   }
   const tree = createHash('sha256');

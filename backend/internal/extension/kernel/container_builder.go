@@ -1742,6 +1742,8 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 
 		TrustedServiceSupervisor: trustedSupervisor,
 		TrustedServiceFactory:    trustedFactory,
+		ServiceDefinitions:       defProvider,
+		NodeEnvironmentResolver:  nodeResolver,
 		HookService:              hookService,
 		EventService:             eventSvc,
 		EventRuntimeBridge:       eventBridge,

@@ -70,7 +70,7 @@ function computeTree(entries, integrityFiles) {
     }
     canonical.push({ path: name, hash });
   }
-  canonical.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+  canonical.sort((a, b) => Buffer.compare(Buffer.from(a.path, 'utf8'), Buffer.from(b.path, 'utf8')));
   const h = createHash('sha256');
   for (const entry of canonical) {
     h.update(entry.path);
@@ -142,8 +142,9 @@ try {
   if (treeDoc?.algorithm !== 'sha256' || typeof treeDoc?.treeHash !== 'string' || !treeDoc.treeHash) errors.push('invalid integrity/content-tree.json');
 
   if (filesDoc?.files && treeDoc?.treeHash) {
-    const expectedNames = [...entries.keys()].filter(name => name !== 'integrity/files.json' && name !== 'integrity/content-tree.json' && !name.startsWith('signatures/') && name !== 'META-INF/amitia-signature.json').sort();
-    const declaredNames = Object.keys(filesDoc.files).sort();
+    const comparePaths = (left, right) => Buffer.compare(Buffer.from(left, 'utf8'), Buffer.from(right, 'utf8'));
+    const expectedNames = [...entries.keys()].filter(name => name !== 'integrity/files.json' && name !== 'integrity/content-tree.json' && !name.startsWith('signatures/') && name !== 'META-INF/amitia-signature.json').sort(comparePaths);
+    const declaredNames = Object.keys(filesDoc.files).sort(comparePaths);
     if (JSON.stringify(expectedNames) !== JSON.stringify(declaredNames)) errors.push('integrity/files.json does not exactly cover canonical payload files');
     const actualTree = computeTree(entries, filesDoc.files);
     if (actualTree !== treeDoc.treeHash) errors.push(`content tree mismatch: expected ${treeDoc.treeHash}, got ${actualTree}`);

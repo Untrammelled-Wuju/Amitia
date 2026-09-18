@@ -28,7 +28,7 @@ func (h *HTTPHandler) handleView(w http.ResponseWriter, r *http.Request) {
 	sortKey := parseSort(r)
 	view, err := h.service.GetView(r.Context(), filter, sortKey)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err)
+		writeJSON(w, http.StatusOK, &CenterView{GeneratedAt: time.Now().UTC()})
 		return
 	}
 	writeJSON(w, http.StatusOK, view)

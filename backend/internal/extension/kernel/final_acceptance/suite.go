@@ -29,7 +29,6 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/sandbox_webui"
 	"github.com/u-ai/backend/internal/extension/kernel/schema_ui"
 	"github.com/u-ai/backend/internal/extension/kernel/script_host"
-	"github.com/u-ai/backend/internal/extension/kernel/skill_migration"
 	"github.com/u-ai/backend/internal/extension/kernel/task_runtime"
 	"github.com/u-ai/backend/internal/extension/kernel/tool_migration"
 	"github.com/u-ai/backend/internal/extension/kernel/trusted_service"
@@ -289,7 +288,7 @@ func DefaultSuite() *Suite {
 		{ItemID: "stage3.runtimes", Stage: StageAmitiaxRuntime, Title: "多 Runtime 实现", Required: true, Description: "第35-40步：JSMain、Task、JSONRPC、TrustedService、WASM"},
 		{ItemID: "stage4.ui_contribution", Stage: StageUIContribution, Title: "UI Contribution 协议", Required: true, Description: "第41-48步：UIContribution、SchemaUI、SandboxWebUI、Slots、PageHost、ChatUI、Desktop、UIOrdering"},
 		{ItemID: "stage5.builtin_tools", Stage: StageMigration, Title: "内置 Tools 迁移", Required: true, Description: "第49步：内置 Tool 迁移到 system/amitia-core"},
-		{ItemID: "stage5.skills_mcp_workflow", Stage: StageMigration, Title: "Skill/MCP/Workflow 迁移", Required: true, Description: "第50-52步：AgentSkills、MCP、Workflows 迁移"},
+		{ItemID: "stage5.mcp_workflow", Stage: StageMigration, Title: "MCP/Workflow 迁移", Required: true, Description: "第51-52步：MCP、Workflows 迁移"},
 		{ItemID: "stage6.sdk_cli", Stage: StageDevEcosystem, Title: "TypeScript SDK 与 Plugin CLI", Required: true, Description: "第56-57步：Plugin SDK、Plugin CLI"},
 		{ItemID: "stage6.dev_mode_console", Stage: StageDevEcosystem, Title: "开发模式与 Developer Console", Required: true, Description: "第58-59步：DevMode、热重载、Developer Console"},
 		{ItemID: "stage6.center_detail", Stage: StageDevEcosystem, Title: "扩展中心与详情页", Required: true, Description: "第60-61步：ExtensionCenter、ExtensionDetailPage"},
@@ -334,8 +333,8 @@ func DefaultSuite() *Suite {
 			s.Register(it, verifyRuntimes)
 		case "stage5.builtin_tools":
 			s.Register(it, verifyBuiltinToolsMigration)
-		case "stage5.skills_mcp_workflow":
-			s.Register(it, verifySkillsMCPWorkflowMigration)
+		case "stage5.mcp_workflow":
+			s.Register(it, verifyMCPWorkflowMigration)
 		case "stage6.dev_mode_console":
 			s.Register(it, verifyDevModeConsole)
 		case "stage7.equivalence":
@@ -815,11 +814,6 @@ func verifyBaseExtraction(ctx context.Context) ([]string, error) {
 		return nil, fmt.Errorf("tool_migration.Registry must not be nil")
 	}
 
-	skillReg := skill_migration.NewSkillMigrationRegistry()
-	if skillReg == nil {
-		return nil, fmt.Errorf("skill_migration.Registry must not be nil")
-	}
-
 	mcpReg := mcp_migration.NewMCPMigrationRegistry()
 	if mcpReg == nil {
 		return nil, fmt.Errorf("mcp_migration.Registry must not be nil")
@@ -849,7 +843,6 @@ func verifyBaseExtraction(ctx context.Context) ([]string, error) {
 	return []string{
 		"amitiax.Installer 实例化成功",
 		"tool_migration.Registry 实例化成功",
-		"skill_migration.Registry 实例化成功",
 		"mcp_migration.Registry 实例化并验证注册/查询成功",
 		"workflow_migration.Registry 实例化成功",
 	}, nil
@@ -924,18 +917,7 @@ func verifyBuiltinToolsMigration(ctx context.Context) ([]string, error) {
 	}, nil
 }
 
-func verifySkillsMCPWorkflowMigration(ctx context.Context) ([]string, error) {
-	skillReg := skill_migration.NewSkillMigrationRegistry()
-	skillSpec := &skill_migration.SkillContributionSpec{
-		SkillID:        "system/amitia-core/greet",
-		LegacySkillID:  "greet",
-		Title:          "Greet",
-		RuntimeBinding: "javascript",
-	}
-	if err := skillReg.Register(skillSpec); err != nil {
-		return nil, fmt.Errorf("skill_migration.Register failed: %w", err)
-	}
-
+func verifyMCPWorkflowMigration(ctx context.Context) ([]string, error) {
 	mcpReg := mcp_migration.NewMCPMigrationRegistry()
 	mcpSpec := &mcp_migration.MCPContributionSpec{
 		ServerID:    "verify-mcp",
@@ -963,10 +945,9 @@ func verifySkillsMCPWorkflowMigration(ctx context.Context) ([]string, error) {
 	}
 
 	return []string{
-		"skill_migration.Registry 注册并查询成功",
 		"mcp_migration.Registry 注册并列表成功",
 		"workflow_migration.Registry 注册成功",
-		"Skill/MCP/Workflow 迁移注册表均可写入和读取",
+		"MCP/Workflow 迁移注册表均可写入和读取",
 	}, nil
 }
 
@@ -1110,29 +1091,12 @@ func verifyStability(ctx context.Context) ([]string, error) {
 }
 
 func verifyLegacySkillDeprecated(ctx context.Context) ([]string, error) {
-	reg := skill_migration.NewSkillMigrationRegistry()
-	if reg == nil {
-		return nil, fmt.Errorf("skill_migration.Registry must not be nil")
-	}
-
-	spec := &skill_migration.SkillContributionSpec{
-		SkillID:         "system/amitia-core/deprecated-skill",
-		LegacySkillID:   "deprecated-skill",
-		Title:           "Deprecated Skill",
-		Deprecated:      true,
-		DeprecationNote: "migrated to kernel skill handler",
-	}
-	if err := reg.Register(spec); err != nil {
-		return nil, fmt.Errorf("skill_migration.Register failed: %w", err)
-	}
-
 	counter := kernel.GlobalLegacyCallCounter()
 	if counter.Total() != 0 {
 		return nil, fmt.Errorf("LegacyCallCounter must be 0 (legacy skills not active), got %d", counter.Total())
 	}
 
 	return []string{
-		"skill_migration.Registry 注册成功",
 		"LegacyCallCounter.Total()=0 (旧 Skill Handler 不承担生产执行)",
 		"旧 Skill 兼容层已物理删除，Agent Skill 与 Workflow 使用 Kernel 主链",
 	}, nil

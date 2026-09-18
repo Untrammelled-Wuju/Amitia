@@ -50,7 +50,7 @@ func (r *Runtime) VerifyStoredPackage(ctx context.Context, artifact PackageArtif
 		if identityErr != nil || identity.TrustLevel != trust.TrustLevelOfficial && identity.TrustLevel != trust.TrustLevelTrusted && identity.TrustLevel != trust.TrustLevelUserTrusted {
 			return nil, fmt.Errorf("stored package publisher is not trusted")
 		}
-	} else if artifact.TrustDecision != string(trust.TrustLevelDevelopment) || artifact.SignatureStatus != "unsigned" {
+	} else if (artifact.TrustDecision != string(trust.TrustLevelDevelopment) && artifact.TrustDecision != string(trust.TrustLevelUserTrusted)) || artifact.SignatureStatus != "unsigned" {
 		return nil, fmt.Errorf("stored package signature required")
 	}
 	return pkg, nil

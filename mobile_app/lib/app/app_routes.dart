@@ -22,11 +22,8 @@ abstract final class AppRoutes {
   static const extensionsMcp = '/extensions/mcp';
   static const extensionsMcpNew = '/extensions/mcp/new';
   static const extensionsAgentSkills = '/extensions/agent-skills';
-  static const extensionsSkills = '/extensions/skills';
-  static const extensionsRuns = '/extensions/runs';
   static const workshop = '/workshop';
   static const workshopCharacterCards = '/workshop/character-cards';
-  static const workshopSkills = '/workshop/skills';
   static const workshopWorkflows = '/workshop/workflows';
   static const workshopPet = '/workshop/pet';
   static const workshopPetCreate = '/workshop/pet/create';
@@ -89,13 +86,11 @@ abstract final class AppRoutes {
   static String agentTask(String id) => '/agent/task/$id';
   static String mcpDetail(String id) => '/extensions/mcp/$id';
   static String mcpEdit(String id) => '/extensions/mcp/$id/edit';
-  static String skillDetail(String id) => '/extensions/skills/$id';
   static String extensionPage(String pageId, {String? extensionId}) => extensionId == null || extensionId.isEmpty
       ? '/extension/page/$pageId'
       : '/extension/page/$pageId?extensionId=${Uri.encodeQueryComponent(extensionId)}';
   static String petProcessing(String taskId) => '/workshop/pet/processing/$taskId';
   static String petActionEditor(String taskId, String actionKey) => '/workshop/pet/processing/$taskId/actions/$actionKey/editor';
-  static String skillDraftEditor(String id) => '/workshop/skills/$id/editor';
   static String workflowEditor(String id, {String location = 'cloud', String deviceId = ''}) {
     final query = <String, String>{'location': location, if (deviceId.isNotEmpty) 'deviceId': deviceId};
     return Uri(path: '/workshop/workflows/$id', queryParameters: query).toString();

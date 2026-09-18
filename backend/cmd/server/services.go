@@ -442,11 +442,6 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	if err := kernelContainer.Recover(context.Background()); err != nil {
 		log.Warn("kernel recovery warning: ", err)
 	}
-	if report, err := extension.MigrateLegacyWorkflowSkills(context.Background(), ctx.DB, kernelContainer); err != nil {
-		log.Warn("legacy workflow skill migration warning: ", err)
-	} else if report.Migrated > 0 || report.Failed > 0 {
-		log.Info(fmt.Sprintf("legacy workflow skill migration: migrated=%d skipped=%d failed=%d", report.Migrated, report.Skipped, report.Failed))
-	}
 	if kernelContainer.WorkflowExecutor != nil {
 		if _, err := kernelContainer.WorkflowExecutor.ReapStuck(context.Background(), 90*time.Second, 24*time.Hour, 100); err != nil {
 			log.Warn("workflow stuck-run reaper warning: ", err)

@@ -65,9 +65,6 @@ func (s *Suite) registerBuiltinToolChecks() {
 }
 
 func (s *Suite) registerSkillChecks() {
-	s.register(CategoryAgentSkills, "skill.migration_registry", "AgentSkills 迁移到 system/amitia-core", func(ctx context.Context) (EquivalenceResult, []Evidence, error) {
-		return ResultEquivalent, []Evidence{{Kind: "migration", Content: "skill_migration/registry.go 已建立"}}, nil
-	})
 	s.register(CategoryAgentSkills, "skill.enabled_state", "Skill Enabled 状态在新统一控制下", func(ctx context.Context) (EquivalenceResult, []Evidence, error) {
 		return ResultImproved, []Evidence{{Kind: "enablement", Content: "contribution_enablement_overrides 统一"}}, nil
 	})

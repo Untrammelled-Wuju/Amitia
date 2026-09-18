@@ -43,6 +43,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/schedule"
 	"github.com/u-ai/backend/internal/extension/kernel/schema_ui"
 	"github.com/u-ai/backend/internal/extension/kernel/scope"
+	"github.com/u-ai/backend/internal/extension/kernel/script_host"
 	"github.com/u-ai/backend/internal/extension/kernel/task_runtime"
 	"github.com/u-ai/backend/internal/extension/kernel/trust"
 	"github.com/u-ai/backend/internal/extension/kernel/trusted_service"
@@ -140,6 +141,8 @@ type Container struct {
 
 	TrustedServiceSupervisor *trusted_service.ProcessSupervisor
 	TrustedServiceFactory    *trusted_service.TrustedServiceFactory
+	ServiceDefinitions       ServiceDefinitionRegistry
+	NodeEnvironmentResolver  script_host.NodeEnvironmentResolver
 	HookService              *hook.Service
 	EventService             *event.Service
 	EventRuntimeBridge       *event.RuntimeBridge
@@ -321,6 +324,13 @@ func (c *Container) Recover(ctx context.Context) error {
 		}
 		runtimegate.Set(string(inst.ExtensionID), inst.EnablementState == domain.EnablementEnabled || inst.EnablementState == domain.EnablementRequiresRecovery)
 		if definition, definitionErr := c.DefinitionRepository.GetExtension(ctx, inst.ExtensionID, inst.InstalledVersion); definitionErr == nil {
+			if c.ExtensionProviderReconciler != nil {
+				if err := c.ExtensionProviderReconciler.ReconcileDefinitions(definition); err != nil {
+					recoverErrs = append(recoverErrs, fmt.Errorf("kernel: reconcile providers for %s: %w", inst.ExtensionID, err))
+					c.markRequiresRecovery(ctx, inst)
+					continue
+				}
+			}
 			if permissionErr := restorePackagePermissionsFromDefinition(ctx, c.PermissionRepository, inst.ExtensionID, definition); permissionErr != nil {
 				recoverErrs = append(recoverErrs, fmt.Errorf("kernel: restore package permissions for %s: %w", inst.ExtensionID, permissionErr))
 				c.markRequiresRecovery(ctx, inst)

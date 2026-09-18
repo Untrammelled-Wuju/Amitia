@@ -14,7 +14,13 @@ async function action(name, input = {}) {
 function text(id, value) { $(id).textContent = value == null || value === "" ? "—" : String(value); }
 function show(id, visible) { $(id).classList.toggle("hidden", !visible); }
 function setError(value) { text("error", value); show("error", Boolean(value)); }
-function setBusy(busy) { $("connect").disabled = busy; $("refresh").disabled = busy; }
+function setBusy(busy) {
+  const button = $("connect");
+  button.disabled = busy;
+  button.setAttribute("aria-busy", String(busy));
+  button.textContent = busy ? "正在获取..." : "获取登录二维码";
+  $("refresh").disabled = busy;
+}
 function capability(id, enabled) {
   const node = $(id);
   node.classList.toggle("enabled", Boolean(enabled));
@@ -24,8 +30,12 @@ function capability(id, enabled) {
 function statusLabel(s) {
   if (s.status === "connected_limited") return ["已登录 · 能力受限","warn"];
   if (s.connected || ["connected","online"].includes(s.status)) return ["已连接","ok"];
+  if (s.status === "scanned") return ["已扫码","warn"];
+  if (s.status === "verify_required") return ["需要验证码","warn"];
   if (s.status === "qr_ready") return ["等待扫码","warn"];
-  if (s.status === "driver_required") return ["缺少 Driver","warn"];
+  if (s.status === "login_expired") return ["二维码已过期","warn"];
+  if (s.status === "login_error" || s.status === "error") return ["连接异常","warn"];
+  if (s.status === "driver_required") return ["连接不可用","warn"];
   if (s.status === "waiting_login") return ["等待登录","warn"];
   return ["未连接",""];
 }
@@ -36,28 +46,19 @@ function renderStatus(raw) {
   text("status-message", s.message || s.lastError || "等待连接");
   text("nickname", s.nickname || (s.connected ? "个人微信" : "未登录"));
   text("account-id", s.alias || s.accountId || "—");
-  text("driver", s.driverKind && s.driverKind !== "none" ? `${s.driverKind}${s.driverVersion ? ` · ${s.driverVersion}` : ""}` : "未连接");
+  text("driver", s.protocol === "ilink" ? `腾讯 iLink${s.driverVersion ? ` · ${s.driverVersion}` : ""}` : "未连接");
   text("platform", `${s.platform || "—"}${s.architecture ? `/${s.architecture}` : ""}`);
-  const nativeBits = [];
-  if (s.nativeAgent === "running") nativeBits.push(s.nativeClientRunning ? "客户端已托管" : "Agent 正常");
-  else nativeBits.push(s.nativeAgent || "未启动");
-  if (s.nativeClientVersion) nativeBits.push(`微信 ${s.nativeClientVersion}`);
-  if (s.nativeClientStrategy) nativeBits.push(s.nativeClientStrategy);
-  if (s.nativeDriverClientVersion) nativeBits.push(`Driver目标 ${s.nativeDriverClientVersion}`);
-  if (s.driverKind === "amitia-native" && s.nativeDriverAvailable) {
-    nativeBits.push(s.nativeDriverVersionVerified ? "版本已验证" : "版本未验证");
-  }
-  if (s.connected && s.messageTransportReady === false) nativeBits.push("消息收发未启用");
-  text("native", nativeBits.join(" · "));
-  const caps = s.nativeDriverCapabilities || {};
-  capability("cap-qr", caps.qr || (s.driverKind && s.driverKind !== "amitia-native"));
-  capability("cap-login", caps.loginStatus || (s.driverKind && s.driverKind !== "amitia-native"));
-  capability("cap-recv", caps.receiveText || (s.driverKind && s.driverKind !== "amitia-native"));
-  capability("cap-send", caps.sendText || (s.driverKind && s.driverKind !== "amitia-native"));
+  text("native", s.localWechatRequired === false ? "插件自有账号 · 不读取本机微信" : "状态未知");
+  capability("cap-qr", true);
+  capability("cap-login", true);
+  capability("cap-recv", true);
+  capability("cap-send", true);
   text("received", s.messageCount || 0); text("sent", s.replyCount || 0);
   if (s.avatar) { $("avatar").style.backgroundImage = `url(${JSON.stringify(s.avatar).slice(1,-1)})`; $("avatar").textContent = ""; }
-  if (s.qrCodeUrl) { $("qr").src = s.qrCodeUrl; show("qr", true); show("qr-placeholder", false); }
+  const qrSource = s.qrImageUrl || s.qrCodeUrl;
+  if (qrSource) { $("qr").src = qrSource; show("qr", true); show("qr-placeholder", false); }
   else if (s.connected) { show("qr", false); show("qr-placeholder", true); text("qr-placeholder", "微信已连接，可关闭此页面保持后台运行"); }
+  show("verify-row", s.status === "verify_required");
   setError(s.lastError || "");
 }
 async function refresh() {
@@ -66,12 +67,19 @@ async function refresh() {
 async function connect() {
   setBusy(true); setError("");
   try {
-    const result = await action("connect", { launchWechat: true });
+    const result = await action("connect", { config: { force: true } });
     const data = result?.data || result || {};
-    if (data.qrCodeUrl) { $("qr").src = data.qrCodeUrl; show("qr", true); show("qr-placeholder", false); }
+    const qrSource = data.qrImageUrl || data.qrCodeUrl;
+    if (qrSource) { $("qr").src = qrSource; show("qr", true); show("qr-placeholder", false); }
     await refresh();
   } catch (e) { setError(e?.message || String(e)); }
   finally { setBusy(false); }
+}
+async function verify() {
+  const code = String($("verify-code").value || "").trim();
+  if (!code) { setError("请输入手机微信显示的数字"); return; }
+  try { await action("connect", { config: { verifyCode: code } }); $("verify-code").value = ""; await refresh(); }
+  catch (e) { setError(e?.message || String(e)); }
 }
 async function disconnect() {
   try { await action("disconnect"); await refresh(); } catch (e) { setError(e?.message || String(e)); }
@@ -105,7 +113,7 @@ async function start() {
   const route = String(ctx?.route || ctx?.uiContext?.route || "");
   const isMessages = route.includes("/messages");
   show("messages-view", isMessages); show("connect-view", !isMessages);
-  $("refresh").onclick = refresh; $("connect").onclick = connect; $("disconnect").onclick = disconnect; $("refresh-messages").onclick = loadMessages;
+  $("refresh").onclick = refresh; $("connect").onclick = connect; $("verify").onclick = verify; $("disconnect").onclick = disconnect; $("refresh-messages").onclick = loadMessages;
   if (isMessages) await loadMessages(); else await refresh();
 }
 void start();

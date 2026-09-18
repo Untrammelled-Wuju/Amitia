@@ -27,11 +27,8 @@ void main() {
         AppRoutes.extensionsMcp,
         AppRoutes.extensionsMcpNew,
         AppRoutes.extensionsAgentSkills,
-        AppRoutes.extensionsSkills,
-        AppRoutes.extensionsRuns,
         AppRoutes.workshop,
         AppRoutes.workshopCharacterCards,
-        AppRoutes.workshopSkills,
         AppRoutes.workshopPet,
         AppRoutes.workshopPetCreate,
         AppRoutes.workshopPetTasks,
@@ -79,11 +76,9 @@ void main() {
       expect(AppRoutes.agentTask('t1'), '/agent/task/t1');
       expect(AppRoutes.mcpDetail('m1'), '/extensions/mcp/m1');
       expect(AppRoutes.mcpEdit('m1'), '/extensions/mcp/m1/edit');
-      expect(AppRoutes.skillDetail('s1'), '/extensions/skills/s1');
       expect(AppRoutes.extensionPage('page1'), '/extension/page/page1');
       expect(AppRoutes.petProcessing('task1'), '/workshop/pet/processing/task1');
       expect(AppRoutes.petActionEditor('task1', 'wave'), '/workshop/pet/processing/task1/actions/wave/editor');
-      expect(AppRoutes.skillDraftEditor('d1'), '/workshop/skills/d1/editor');
       expect(AppRoutes.modelConfig('llm'), '/settings/models/llm');
       expect(AppRoutes.kernelPage('wasm'), '/developer/kernel/wasm');
     });
@@ -112,11 +107,8 @@ void main() {
         AppRoutes.extensionsMcp,
         AppRoutes.extensionsMcpNew,
         AppRoutes.extensionsAgentSkills,
-        AppRoutes.extensionsSkills,
-        AppRoutes.extensionsRuns,
         AppRoutes.workshop,
         AppRoutes.workshopCharacterCards,
-        AppRoutes.workshopSkills,
         AppRoutes.workshopPet,
         AppRoutes.workshopPetCreate,
         AppRoutes.workshopPetTasks,

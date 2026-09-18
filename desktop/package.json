@@ -7,7 +7,7 @@
   "type": "module",
   "main": "dist/main/index.cjs",
   "scripts": {
-    "dev": "vite --host 127.0.0.1",
+    "dev": "node scripts/build-runtime-hosts.mjs && vite --host 127.0.0.1",
     "build": "tsc -p tsconfig.json && vite build && node scripts/copy-static-assets.mjs && node scripts/verify-renderer-build.mjs && node scripts/verify-desktop-pet-package.mjs",
     "dist:win": "node scripts/build-release.mjs --win --x64",
     "dist:win:dir": "node scripts/build-release.mjs --win --x64 --dir",

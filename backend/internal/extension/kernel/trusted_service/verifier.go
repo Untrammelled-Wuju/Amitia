@@ -305,15 +305,17 @@ type EnvBuilder struct {
 func NewEnvBuilder() *EnvBuilder {
 	return &EnvBuilder{
 		allowed: map[string]bool{
-			"AMITIA_SESSION":      true,
-			"AMITIA_INSTANCE":     true,
-			"AMITIA_GENERATION":   true,
-			"AMITIA_TEMP_DIR":     true,
-			"AMITIA_LOG_LEVEL":    true,
-			"AMITIA_SECRET_LEASE": true,
-			"AMITIA_HOST_API":     true,
-			"AMITIA_PROTOCOL":     true,
-			"AMITIA_PLATFORM":     true,
+			"AMITIA_SESSION":                   true,
+			"AMITIA_INSTANCE":                  true,
+			"AMITIA_GENERATION":                true,
+			"AMITIA_TEMP_DIR":                  true,
+			"AMITIA_LOG_LEVEL":                 true,
+			"AMITIA_SECRET_LEASE":              true,
+			"AMITIA_HOST_API":                  true,
+			"AMITIA_PROTOCOL":                  true,
+			"AMITIA_PLATFORM":                  true,
+			"AMITIA_NATIVE_COMPANIONS":         true,
+			"AMITIA_NATIVE_COMPANIONS_VERSION": true,
 		},
 	}
 }

@@ -7,15 +7,12 @@ import '../../../../app/theme/app_typography.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_radius.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
-import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/runtime/runtime_bridge_provider.dart';
 import '../../../../core/runtime/runtime_bridge.dart';
 import '../../../../core/runtime/runtime_bridge_state.dart';
-import '../../../../core/runtime/status/runtime_status_phase.dart';
 import '../../../../core/runtime/status/runtime_status_provider.dart';
 import '../../../../core/runtime/status/runtime_status_snapshot.dart';
-import '../../../../shared/models/models.dart';
 
 String _runtimeStateLabel(RuntimeStatusSnapshot status) {
   if (status.runtimeReady) return '运行中';
@@ -69,13 +66,9 @@ bool _canInstall(RuntimeStatusSnapshot status) {
 
 bool _canRepair(RuntimeStatusSnapshot status) {
   return status.runtimeInstalled &&
-      !status.runtimeReady &&
       status.runtimeState != RuntimeBridgeState.starting &&
       status.runtimeState != RuntimeBridgeState.stopping &&
-      status.runtimeState != RuntimeBridgeState.installing &&
-      (status.runtimeState == RuntimeBridgeState.failed ||
-          status.runtimeState == RuntimeBridgeState.stopped ||
-          status.phase == RuntimeStatusPhase.degraded);
+      status.runtimeState != RuntimeBridgeState.installing;
 }
 
 class RuntimePage extends ConsumerStatefulWidget {
@@ -118,6 +111,42 @@ class _RuntimePageState extends ConsumerState<RuntimePage> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message), duration: const Duration(seconds: 2)),
     );
+  }
+
+  Future<void> _repairRuntime() async {
+    if (_commandInFlight) return;
+    setState(() => _commandInFlight = true);
+    try {
+      final bridge = ref.read(runtimeBridgeProvider);
+      if (ref.read(runtimeStatusCurrentProvider).runtimeReady) {
+        final stopResult = await bridge.stop();
+        if (stopResult.error != null) {
+          _showError(stopResult.error!.message);
+          return;
+        }
+        for (var attempt = 0; attempt < 80; attempt++) {
+          await Future<void>.delayed(const Duration(milliseconds: 250));
+          if (!mounted) return;
+          final state = ref.read(runtimeStatusCurrentProvider).runtimeState;
+          if (state == RuntimeBridgeState.stopped ||
+              state == RuntimeBridgeState.failed) {
+            break;
+          }
+        }
+      }
+
+      final repairResult = await bridge.repair();
+      if (!mounted) return;
+      _showOperationResult(repairResult);
+      if (repairResult.accepted && repairResult.error == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('运行环境已重新安装，正在启动')),
+        );
+        await bridge.start();
+      }
+    } finally {
+      if (mounted) setState(() => _commandInFlight = false);
+    }
   }
 
 
@@ -203,13 +232,11 @@ class _RuntimePageState extends ConsumerState<RuntimePage> {
               ),
               if (status.runtimeInstalled)
                 AmitiaButton(
-                  label: '修复环境',
+                  label: '重新安装环境',
                   icon: Icons.build_outlined,
                   isSecondary: true,
                   onPressed: _canRepair(status) && !_commandInFlight
-                      ? () => _runCommand(
-                            () => ref.read(runtimeBridgeProvider).repair(),
-                          )
+                      ? _repairRuntime
                       : null,
                 ),
             ],

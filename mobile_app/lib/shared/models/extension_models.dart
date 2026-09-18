@@ -96,7 +96,6 @@ class SystemPlugin {
   final List<String> hooks;
   final List<String> events;
   final List<String> schedules;
-  final List<String> registeredSkills;
   final bool isEnabled;
   final String version;
 
@@ -108,69 +107,8 @@ class SystemPlugin {
     this.hooks = const [],
     this.events = const [],
     this.schedules = const [],
-    this.registeredSkills = const [],
     this.isEnabled = true,
     this.version = '1.0.0',
-  });
-}
-
-class CompatibleSkill {
-  final String id;
-  final String name;
-  final String description;
-  final String version;
-  final String? previousVersion;
-  final bool isEnabled;
-  final String? lastTestResult;
-
-  CompatibleSkill({
-    required this.id,
-    required this.name,
-    required this.description,
-    this.version = '1.0.0',
-    this.previousVersion,
-    this.isEnabled = true,
-    this.lastTestResult,
-  });
-}
-
-class ExecutionRun {
-  final String id;
-  final String name;
-  final String status;
-  final String duration;
-  final String input;
-  final String output;
-  final String? error;
-  final List<ToolCallEntry> toolCalls;
-  final DateTime startTime;
-
-  ExecutionRun({
-    required this.id,
-    required this.name,
-    required this.status,
-    required this.duration,
-    required this.input,
-    required this.output,
-    this.error,
-    this.toolCalls = const [],
-    required this.startTime,
-  });
-}
-
-class ToolCallEntry {
-  final String toolName;
-  final String input;
-  final String output;
-  final String duration;
-  final String status;
-
-  ToolCallEntry({
-    required this.toolName,
-    required this.input,
-    required this.output,
-    required this.duration,
-    required this.status,
   });
 }
 

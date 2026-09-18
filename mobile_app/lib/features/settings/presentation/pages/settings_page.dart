@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../app/app_routes.dart';
 import '../../../../app/theme/app_colors.dart';
-import '../../../../app/theme/app_motion.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_radius.dart';
@@ -163,7 +162,7 @@ List<SettingGroup> _settingsGroups({
         title: '更新中心',
         icon: Icons.system_update_outlined,
         subtitle: '版本更新与回滚',
-        route: AppRoutes.kernelPage('updates'),
+        route: AppRoutes.settingsAppUpdate,
       ),
       SettingItem(
         title: '备份与恢复',

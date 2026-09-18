@@ -1345,7 +1345,6 @@ class _AmitiaChatInputState extends State<AmitiaChatInput> {
   late bool _ownsController;
   final _inputFocusNode = FocusNode();
   bool _hasText = false;
-  bool _isInputFocused = false;
   bool _voiceMode = false;
   bool _voiceRecording = false;
   Offset? _voiceStart;
@@ -1359,7 +1358,6 @@ class _AmitiaChatInputState extends State<AmitiaChatInput> {
     _controller = widget.controller ?? TextEditingController();
     _hasText = _controller.text.trim().isNotEmpty;
     _controller.addListener(_syncControllerText);
-    _inputFocusNode.addListener(_syncInputFocus);
   }
 
   @override
@@ -1378,10 +1376,6 @@ class _AmitiaChatInputState extends State<AmitiaChatInput> {
     final hasText = _controller.text.trim().isNotEmpty;
     if (hasText == _hasText || !mounted) return;
     setState(() => _hasText = hasText);
-  }
-
-  void _syncInputFocus() {
-    setState(() => _isInputFocused = _inputFocusNode.hasFocus);
   }
 
   void _toggleVoiceMode() {
@@ -1458,7 +1452,6 @@ class _AmitiaChatInputState extends State<AmitiaChatInput> {
   @override
   void dispose() {
     _controller.removeListener(_syncControllerText);
-    _inputFocusNode.removeListener(_syncInputFocus);
     _inputFocusNode.dispose();
     if (_ownsController) _controller.dispose();
     super.dispose();
@@ -1943,10 +1936,8 @@ class _AmitiaChatInputState extends State<AmitiaChatInput> {
             color: context.surfacePrimary,
             borderRadius: BorderRadius.circular(23),
             border: Border.all(
-              color: _isInputFocused
-                  ? context.accentPrimary
-                  : context.borderPrimary,
-              width: _isInputFocused ? 1.0 : 0.8,
+              color: context.borderPrimary,
+              width: 0.8,
             ),
             boxShadow: [
               BoxShadow(

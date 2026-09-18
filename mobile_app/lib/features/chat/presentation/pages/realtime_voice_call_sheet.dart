@@ -10,6 +10,7 @@ import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/backend_connection/backend_connection_availability.dart';
 import '../../../../core/backend_connection/providers/backend_connection_providers.dart';
+import '../../../../core/backend_transport/providers/backend_transport_providers.dart';
 import '../../../../core/backend_transport/websocket/backend_websocket_client.dart';
 import '../../../../core/backend_transport/websocket/backend_websocket_message.dart';
 import '../../../../core/backend_transport/websocket/backend_websocket_session.dart';
@@ -102,6 +103,18 @@ class _RealtimeVoiceCallSheetState
       final availability = await ref.read(backendConnectionProvider.future);
       if (availability is! BackendConnectionAvailable) {
         throw StateError('后端当前不可用');
+      }
+
+      final realtimeStatus = await ref
+          .read(backendServiceProvider)
+          .get<Map<String, dynamic>>(
+            '/api/voice/status',
+            fromJson: (value) => Map<String, dynamic>.from(value as Map),
+          );
+      if (realtimeStatus?['cascadeReady'] != true) {
+        throw StateError(
+          (realtimeStatus?['cascadeError'] ?? '实时语音服务尚未就绪').toString(),
+        );
       }
 
       try {

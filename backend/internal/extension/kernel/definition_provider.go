@@ -11,6 +11,11 @@ type memoryDefinitionProvider struct {
 	defs map[string]*trusted_service.ServiceRuntimeDefinition
 }
 
+type ServiceDefinitionRegistry interface {
+	trusted_service.DefinitionProvider
+	Register(def *trusted_service.ServiceRuntimeDefinition)
+}
+
 func newMemoryDefinitionProvider() *memoryDefinitionProvider {
 	return &memoryDefinitionProvider{
 		defs: make(map[string]*trusted_service.ServiceRuntimeDefinition),

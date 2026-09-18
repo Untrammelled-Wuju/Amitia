@@ -74,7 +74,7 @@ function buildIntegrity() {
         modified: generatedAt,
       };
     })
-    .sort((left, right) => left.path.localeCompare(right.path));
+    .sort((left, right) => Buffer.compare(Buffer.from(left.path, "utf8"), Buffer.from(right.path, "utf8")));
   const files = {};
   for (const entry of entries) files[entry.path] = entry;
   writeFileSync(

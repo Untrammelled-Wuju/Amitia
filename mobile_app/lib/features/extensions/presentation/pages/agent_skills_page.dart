@@ -2,14 +2,12 @@ import 'package:dio/dio.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../../app/app_routes.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_radius.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_misc.dart';
-import '../../../../core/widgets/amitia_drawer.dart';
 import '../../../../core/backend_connection/backend_connection_availability.dart';
 import '../../../../core/backend_connection/providers/backend_connection_providers.dart';
 import '../../../../core/artifact/artifact_providers.dart';
@@ -26,12 +24,36 @@ class AgentSkillsPage extends ConsumerStatefulWidget {
 class _AgentSkillsPageState extends ConsumerState<AgentSkillsPage> {
   List<Map<String, dynamic>> _skills = [];
   bool _loading = true;
+  bool _searchVisible = false;
   String? _error;
+  String _query = '';
+  final _searchController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
     _loadSkills();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  List<Map<String, dynamic>> get _searchResults {
+    final query = _query.trim().toLowerCase();
+    if (query.isEmpty) return const [];
+    return _skills.where((skill) {
+      final searchable = [
+        skill['name'],
+        skill['description'],
+        skill['compatibilityStatus'],
+        skill['compatibility'],
+        (skill['metadata'] as Map?)?['version'],
+      ].map((value) => (value ?? '').toString().toLowerCase());
+      return searchable.any((value) => value.contains(query));
+    }).toList(growable: false);
   }
 
   Future<void> _loadSkills() async {
@@ -87,31 +109,105 @@ class _AgentSkillsPageState extends ConsumerState<AgentSkillsPage> {
     }
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
-        title: 'Agent Skills',
+        title: _searchVisible ? '搜索 Agent Skill' : 'Agent Skills',
         showBackButton: true,
+        actions: _searchVisible
+            ? [
+                AmitiaIconButton(
+                  icon: Icons.close,
+                  tooltip: '退出搜索',
+                  onPressed: () => _toggleSearch(context),
+                ),
+              ]
+            : [
+                AmitiaIconButton(
+                  icon: Icons.search,
+                  tooltip: '搜索',
+                  onPressed: () => _toggleSearch(context),
+                ),
+                AmitiaIconButton(
+                  icon: Icons.file_download_outlined,
+                  tooltip: '导入 Agent Skill',
+                  onPressed: _showImportSheet,
+                ),
+              ],
       ),
       body: SafeArea(
         top: false,
-        child: _skills.isEmpty
+        child: _searchVisible
+            ? _buildSearchView()
+            : _skills.isEmpty
             ? AmitiaEmptyState(
                 icon: Icons.auto_awesome_outlined,
                 title: '暂无 Agent Skill',
-                subtitle: '点击右下角导入 Agent Skill',
+                subtitle: '点击右上角导入 Agent Skill',
                 actionText: '导入',
                 onAction: _showImportSheet,
               )
-            : ListView.separated(
-                padding: EdgeInsets.fromLTRB(AppSpacing.pagePadding, AppSpacing.sm, AppSpacing.pagePadding, AppSpacing.xxxl),
-                itemCount: _skills.length,
-                separatorBuilder: (_, _) => SizedBox(height: AppSpacing.sm),
-                itemBuilder: (context, index) => _buildSkillCard(context, _skills[index]),
-              ),
+            : _buildSkillList(_skills),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _showImportSheet,
-        backgroundColor: context.accentPrimary,
-        child: const Icon(Icons.file_download_outlined, color: Colors.white),
+    );
+  }
+
+  void _toggleSearch(BuildContext context) {
+    FocusScope.of(context).unfocus();
+    _searchController.clear();
+    setState(() {
+      _searchVisible = !_searchVisible;
+      _query = '';
+    });
+  }
+
+  Widget _buildSearchView() {
+    final query = _query.trim();
+    final results = _searchResults;
+    return Column(
+      children: [
+        Padding(
+          padding: EdgeInsets.fromLTRB(
+            AppSpacing.pagePadding,
+            AppSpacing.md,
+            AppSpacing.pagePadding,
+            AppSpacing.sm,
+          ),
+          child: AmitiaSearchField(
+            hintText: '搜索 Agent Skill 名称、描述或版本',
+            controller: _searchController,
+            autofocus: true,
+            onChanged: (value) => setState(() => _query = value),
+          ),
+        ),
+        Expanded(
+          child: query.isEmpty
+              ? const AmitiaEmptyState(
+                  icon: Icons.search,
+                  title: '输入关键词',
+                  subtitle: '在当前页面搜索 Agent Skill',
+                )
+              : results.isEmpty
+              ? const AmitiaEmptyState(
+                  icon: Icons.search_off,
+                  title: '未找到相关 Agent Skill',
+                  subtitle: '尝试更换关键词',
+                )
+              : _buildSkillList(results),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSkillList(List<Map<String, dynamic>> skills) {
+    return ListView.separated(
+      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+      padding: EdgeInsets.fromLTRB(
+        AppSpacing.pagePadding,
+        AppSpacing.sm,
+        AppSpacing.pagePadding,
+        AppSpacing.xxxl,
       ),
+      itemCount: skills.length,
+      separatorBuilder: (_, _) => SizedBox(height: AppSpacing.sm),
+      itemBuilder: (context, index) => _buildSkillCard(context, skills[index]),
     );
   }
 

@@ -12,15 +12,18 @@ type executableManifestView struct {
 	Modules []struct {
 		ID      string `json:"id"`
 		Runtime *struct {
-			Type       string `json:"type"`
-			EntryPoint string `json:"entryPoint"`
+			Type             string `json:"type"`
+			EntryPoint       string `json:"entryPoint"`
+			NativeCompanions []struct {
+				Path string `json:"path"`
+			} `json:"nativeCompanions"`
 		} `json:"runtime"`
 	} `json:"modules"`
 }
 
 // discoverDeclaredServiceExecutables returns only exact package paths that a
-// manifest declares as process service entry points. It deliberately does not
-// make arbitrary executable content legal.
+// manifest declares as process service entry points or native companions. It
+// deliberately does not make arbitrary executable content legal.
 func discoverDeclaredServiceExecutables(reader *zip.Reader, policy ArchivePolicy) map[string]struct{} {
 	allowed := make(map[string]struct{})
 	if reader == nil || !policy.AllowDeclaredExecutable {
@@ -56,16 +59,28 @@ func discoverDeclaredServiceExecutables(reader *zip.Reader, policy ArchivePolicy
 		return allowed
 	}
 	for _, module := range manifest.Modules {
-		if module.Runtime == nil || strings.TrimSpace(module.Runtime.Type) != "service" {
+		if module.Runtime == nil {
 			continue
 		}
 		moduleID := strings.TrimSpace(module.ID)
-		entryPoint := strings.TrimSpace(module.Runtime.EntryPoint)
-		if !safeModuleIDForExecutablePath(moduleID) || !safeRelativeEntrypoint(entryPoint) {
+		if !safeModuleIDForExecutablePath(moduleID) {
 			continue
 		}
-		packagePath := path.Join("modules", moduleID, entryPoint)
-		allowed[strings.ToLower(packagePath)] = struct{}{}
+		if strings.TrimSpace(module.Runtime.Type) == "service" {
+			entryPoint := strings.TrimSpace(module.Runtime.EntryPoint)
+			if safeRelativeEntrypoint(entryPoint) {
+				packagePath := path.Join("modules", moduleID, entryPoint)
+				allowed[strings.ToLower(packagePath)] = struct{}{}
+			}
+		}
+		for _, companion := range module.Runtime.NativeCompanions {
+			companionPath := strings.TrimSpace(companion.Path)
+			if !safeRelativeEntrypoint(companionPath) {
+				continue
+			}
+			packagePath := path.Join("modules", moduleID, companionPath)
+			allowed[strings.ToLower(packagePath)] = struct{}{}
+		}
 	}
 	return allowed
 }

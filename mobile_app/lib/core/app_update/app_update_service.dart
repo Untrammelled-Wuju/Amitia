@@ -46,25 +46,49 @@ class AppUpdateService {
     final installed = await getInstalledInfo();
     final normalizedChannel = _normalizeChannel(channel ?? updateChannel);
     final manifestUrl = '$_baseUrl/$normalizedChannel.json';
-    final manifestResponse = await _dio.get<List<int>>(
-      manifestUrl,
-      options: Options(
-        responseType: ResponseType.bytes,
-        headers: const <String, Object>{'Cache-Control': 'no-cache'},
-      ),
-    );
+    late final Response<List<int>> manifestResponse;
+    try {
+      manifestResponse = await _dio.get<List<int>>(
+        manifestUrl,
+        options: Options(
+          responseType: ResponseType.bytes,
+          headers: const <String, Object>{'Cache-Control': 'no-cache'},
+        ),
+      );
+    } on DioException catch (error) {
+      if (_isNotFound(error)) {
+        return AppUpdateCheckResult(
+          installed: installed,
+          available: null,
+          reason: 'manifest_unavailable',
+        );
+      }
+      rethrow;
+    }
     final manifestBytes = manifestResponse.data ?? const <int>[];
     if (manifestBytes.isEmpty) {
       throw StateError('更新清单为空');
     }
     final manifestText = utf8.decode(manifestBytes);
-    final signatureResponse = await _dio.get<String>(
-      '$manifestUrl.sig',
-      options: Options(
-        responseType: ResponseType.plain,
-        headers: const <String, Object>{'Cache-Control': 'no-cache'},
-      ),
-    );
+    late final Response<String> signatureResponse;
+    try {
+      signatureResponse = await _dio.get<String>(
+        '$manifestUrl.sig',
+        options: Options(
+          responseType: ResponseType.plain,
+          headers: const <String, Object>{'Cache-Control': 'no-cache'},
+        ),
+      );
+    } on DioException catch (error) {
+      if (_isNotFound(error)) {
+        return AppUpdateCheckResult(
+          installed: installed,
+          available: null,
+          reason: 'manifest_unavailable',
+        );
+      }
+      rethrow;
+    }
     final signature = (signatureResponse.data ?? '').trim();
     final signatureValid = await _channel.invokeMethod<bool>(
       'verifyManifest',
@@ -198,6 +222,10 @@ class AppUpdateService {
       return normalized;
     }
     return 'stable';
+  }
+
+  bool _isNotFound(DioException error) {
+    return error.response?.statusCode == 404;
   }
 
   void dispose() {

@@ -29,6 +29,9 @@ func TestLocalTrustedDevelopmentUnsignedPackageLifecycle(t *testing.T) {
 	if !preview.Installable || !preview.DevOnly || preview.DeveloperSessionID != localUnsignedDeveloperSessionID {
 		t.Fatalf("unexpected local development preview: %+v", preview)
 	}
+	if preview.TrustDecision != "user_trusted" {
+		t.Fatalf("local trusted preview decision = %q, want user_trusted", preview.TrustDecision)
+	}
 	confirmation, err := runtime.ConfirmPackagePreview(ctx, PackagePreviewConfirmationRequest{
 		SessionID:     preview.SessionID,
 		SpaceID:       "user-1",
@@ -78,6 +81,9 @@ func TestLocalTrustedUnsignedPackageLifecycleWithoutDevelopmentMode(t *testing.T
 	}
 	if !preview.Installable || !preview.DevOnly || preview.DeveloperSessionID != localUnsignedDeveloperSessionID {
 		t.Fatalf("unexpected local unsigned preview: %+v", preview)
+	}
+	if preview.TrustDecision != "user_trusted" {
+		t.Fatalf("local trusted preview decision = %q, want user_trusted", preview.TrustDecision)
 	}
 	confirmation, err := runtime.ConfirmPackagePreview(ctx, PackagePreviewConfirmationRequest{
 		SessionID:     preview.SessionID,
