@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/services.dart';
 import 'runtime_bridge.dart';
+import 'runtime_bridge_state.dart';
 import 'runtime_bridge_snapshot.dart';
 import 'runtime_bridge_error.dart';
 import 'runtime_manifest_summary.dart';
@@ -19,18 +20,25 @@ class RuntimeBridgeContract {
 }
 
 class MethodChannelRuntimeBridge implements RuntimeBridge {
-  static const MethodChannel _methodChannel =
-      MethodChannel(RuntimeBridgeContract.methodChannelName);
-  static const EventChannel _eventChannel =
-      EventChannel(RuntimeBridgeContract.eventChannelName);
+  static const MethodChannel _methodChannel = MethodChannel(
+    RuntimeBridgeContract.methodChannelName,
+  );
+  static const EventChannel _eventChannel = EventChannel(
+    RuntimeBridgeContract.eventChannelName,
+  );
 
   final StreamController<RuntimeBridgeSnapshot> _snapshotController =
       StreamController<RuntimeBridgeSnapshot>.broadcast();
 
   StreamSubscription<dynamic>? _eventSubscription;
   Timer? _reconnectTimer;
+  Timer? _snapshotPollTimer;
+  Duration? _snapshotPollInterval;
   int _reconnectAttempt = 0;
+  int _snapshotListenerCount = 0;
+  bool _snapshotPollInFlight = false;
   bool _disposed = false;
+  RuntimeBridgeSnapshot _lastSnapshot = RuntimeBridgeSnapshot.initial();
 
   MethodChannelRuntimeBridge() {
     _subscribeToEvents();
@@ -47,7 +55,7 @@ class MethodChannelRuntimeBridge implements RuntimeBridge {
             final snapshot = RuntimeBridgeSnapshot.fromMap(
               Map<String, dynamic>.from(event),
             );
-            _snapshotController.add(snapshot);
+            _emitSnapshot(snapshot);
           } catch (_) {
             // A malformed event must not permanently tear down runtime
             // observation; the next native snapshot can still recover state.
@@ -110,28 +118,96 @@ class MethodChannelRuntimeBridge implements RuntimeBridge {
   }
 
   @override
-  Stream<RuntimeBridgeSnapshot> get snapshots => _snapshotController.stream;
+  Stream<RuntimeBridgeSnapshot> get snapshots =>
+      Stream<RuntimeBridgeSnapshot>.multi((controller) {
+        final initialSnapshot = _lastSnapshot;
+        late final StreamSubscription<RuntimeBridgeSnapshot> subscription;
+        controller.onCancel = () {
+          _snapshotListenerCount--;
+          _syncSnapshotPolling();
+          unawaited(subscription.cancel());
+        };
+        subscription = _snapshotController.stream.listen(
+          controller.add,
+          onError: controller.addError,
+          onDone: controller.close,
+        );
+        _snapshotListenerCount++;
+        _syncSnapshotPolling();
+        unawaited(_refreshSnapshot());
+        controller.add(initialSnapshot);
+      }, isBroadcast: true);
 
   @override
   Future<RuntimeBridgeSnapshot> snapshot() async {
+    final result = await _readSnapshot();
+    if (result == null) return RuntimeBridgeSnapshot.initial();
+    _emitSnapshot(result);
+    return result;
+  }
+
+  Future<RuntimeBridgeSnapshot?> _readSnapshot() async {
     try {
       final result = await _methodChannel.invokeMethod<Map<Object?, Object?>>(
         RuntimeBridgeContract.methodSnapshot,
       );
-      if (result == null) return RuntimeBridgeSnapshot.initial();
+      if (result == null) return null;
       final map = <String, dynamic>{};
       for (final entry in result.entries) {
         map[entry.key.toString()] = entry.value;
       }
       return RuntimeBridgeSnapshot.fromMap(map);
     } on PlatformException {
-      return RuntimeBridgeSnapshot.initial();
+      return null;
     } on MissingPluginException {
-      return RuntimeBridgeSnapshot.initial();
+      return null;
     } catch (_) {
       // Treat malformed/forward-incompatible payloads as bridge unavailable
       // rather than letting bootstrap fail with an uncaught TypeError.
-      return RuntimeBridgeSnapshot.initial();
+      return null;
+    }
+  }
+
+  void _emitSnapshot(RuntimeBridgeSnapshot snapshot) {
+    if (_disposed || snapshot.generation < _lastSnapshot.generation) return;
+    if (snapshot == _lastSnapshot) return;
+    _lastSnapshot = snapshot;
+    _snapshotController.add(snapshot);
+    _syncSnapshotPolling();
+  }
+
+  void _syncSnapshotPolling() {
+    if (_disposed) return;
+    if (_snapshotListenerCount <= 0) {
+      _snapshotPollTimer?.cancel();
+      _snapshotPollTimer = null;
+      _snapshotPollInterval = null;
+      return;
+    }
+    final interval =
+        _lastSnapshot.state == RuntimeBridgeState.ready ||
+            _lastSnapshot.state == RuntimeBridgeState.failed
+        ? const Duration(seconds: 5)
+        : const Duration(seconds: 1);
+    if (_snapshotPollTimer != null && _snapshotPollInterval == interval) return;
+    _snapshotPollTimer?.cancel();
+    _snapshotPollInterval = interval;
+    _snapshotPollTimer = Timer.periodic(
+      interval,
+      (_) => unawaited(_refreshSnapshot()),
+    );
+  }
+
+  Future<void> _refreshSnapshot() async {
+    if (_disposed || _snapshotPollInFlight) return;
+    _snapshotPollInFlight = true;
+    try {
+      final snapshot = await _readSnapshot();
+      if (snapshot != null) {
+        _emitSnapshot(snapshot);
+      }
+    } finally {
+      _snapshotPollInFlight = false;
     }
   }
 
@@ -436,6 +512,9 @@ class MethodChannelRuntimeBridge implements RuntimeBridge {
     _disposed = true;
     _reconnectTimer?.cancel();
     _reconnectTimer = null;
+    _snapshotPollTimer?.cancel();
+    _snapshotPollTimer = null;
+    _snapshotListenerCount = 0;
     await _eventSubscription?.cancel();
     _eventSubscription = null;
     await _snapshotController.close();

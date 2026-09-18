@@ -42,7 +42,6 @@ type ExportInput struct {
 	SourceFormat        string
 	Preserved           map[string]json.RawMessage
 }
-
 func (e *Exporter) Export(input ExportInput, format string) (*CharacterCardExportResult, []byte, error) {
 	card := e.buildCard(input)
 
@@ -61,6 +60,7 @@ func (e *Exporter) Export(input ExportInput, format string) (*CharacterCardExpor
 
 	return nil, nil, ErrUnsupportedFormat
 }
+
 
 func (e *Exporter) buildCard(input ExportInput) *CharacterCard {
 	card := &CharacterCard{
@@ -413,4 +413,3 @@ func getCRC32Table() [256]uint32 {
 	}
 	return table
 }
-

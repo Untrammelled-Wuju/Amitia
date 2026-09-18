@@ -92,8 +92,6 @@ const pageItems = [
     to: "/dashboard/data",
     icon: DataAnalysis,
   },
-  { label: "微信连接", desc: "微信消息接入", to: "/wechat", icon: Connection },
-  { label: "QQ 连接", desc: "QQ 消息接入", to: "/qq", icon: ChatDotSquare },
   { label: "日程提醒", desc: "主动陪伴提醒", to: "/reminders", icon: Clock },
   {
     label: "角色管理",

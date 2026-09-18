@@ -36,20 +36,9 @@ final class TransportStateSnapshot {
   }
 }
 
-enum BackendHttpState {
-  idle,
-  available,
-  unavailable,
-  closed,
-}
+enum BackendHttpState { idle, available, unavailable, closed }
 
-enum BackendWebSocketState {
-  idle,
-  connecting,
-  connected,
-  disconnected,
-  closed,
-}
+enum BackendWebSocketState { idle, connecting, connected, disconnected, closed }
 
 class DefaultRuntimeStatusProjection implements RuntimeStatusProjection {
   final RuntimeBridge _bridge;
@@ -61,6 +50,8 @@ class DefaultRuntimeStatusProjection implements RuntimeStatusProjection {
 
   StreamSubscription<RuntimeBridgeSnapshot>? _bridgeSubscription;
   StreamSubscription<TransportStateSnapshot>? _transportSubscription;
+  Timer? _bridgeRefreshTimer;
+  bool _bridgeRefreshInFlight = false;
 
   RuntimeBridgeSnapshot _lastBridge = RuntimeBridgeSnapshot.initial();
   BackendConnectionAvailability _lastConnection =
@@ -74,9 +65,9 @@ class DefaultRuntimeStatusProjection implements RuntimeStatusProjection {
     required RuntimeBridge bridge,
     required BackendConnectionSource connectionSource,
     TransportStateSource? transportStateSource,
-  })  : _bridge = bridge,
-        _connectionSource = connectionSource,
-        _transportStateSource = transportStateSource;
+  }) : _bridge = bridge,
+       _connectionSource = connectionSource,
+       _transportStateSource = transportStateSource;
 
   Future<void> initialize() async {
     if (_disposed) return;
@@ -88,6 +79,7 @@ class DefaultRuntimeStatusProjection implements RuntimeStatusProjection {
 
     final currentBridge = await _bridge.snapshot();
     _handleBridgeSnapshot(currentBridge);
+    _syncBridgeRefreshTimer();
 
     if (_transportStateSource case final source?) {
       _transportSubscription = source.snapshots.listen(
@@ -103,7 +95,9 @@ class DefaultRuntimeStatusProjection implements RuntimeStatusProjection {
       final expectedGen = _lastBridge.state == RuntimeBridgeState.ready
           ? _lastBridge.generation
           : 0;
-      final result = await _connectionSource.resolve(expectedRuntimeGeneration: expectedGen);
+      final result = await _connectionSource.resolve(
+        expectedRuntimeGeneration: expectedGen,
+      );
       if (!_disposed) {
         _lastConnection = result;
         _rederive();
@@ -131,11 +125,14 @@ class DefaultRuntimeStatusProjection implements RuntimeStatusProjection {
     _lastBridge = snapshot;
 
     final generationChanged = snapshot.generation != previousGeneration;
-    final enteredReady = snapshot.state == RuntimeBridgeState.ready &&
+    final enteredReady =
+        snapshot.state == RuntimeBridgeState.ready &&
         previousState != RuntimeBridgeState.ready;
-    final leftReady = snapshot.state != RuntimeBridgeState.ready &&
+    final leftReady =
+        snapshot.state != RuntimeBridgeState.ready &&
         previousState == RuntimeBridgeState.ready;
-    final isTerminalState = snapshot.state == RuntimeBridgeState.stopping ||
+    final isTerminalState =
+        snapshot.state == RuntimeBridgeState.stopping ||
         snapshot.state == RuntimeBridgeState.stopped ||
         snapshot.state == RuntimeBridgeState.failed;
 
@@ -191,6 +188,39 @@ class DefaultRuntimeStatusProjection implements RuntimeStatusProjection {
       _current = derived;
       _snapshotController.add(_current);
     }
+    _syncBridgeRefreshTimer();
+  }
+
+  void _syncBridgeRefreshTimer() {
+    if (_disposed) return;
+    final shouldRefresh = switch (_current.runtimeState) {
+      RuntimeBridgeState.unavailable ||
+      RuntimeBridgeState.notInstalled ||
+      RuntimeBridgeState.stopped ||
+      RuntimeBridgeState.installing ||
+      RuntimeBridgeState.starting ||
+      RuntimeBridgeState.stopping => true,
+      RuntimeBridgeState.ready || RuntimeBridgeState.failed => false,
+    };
+    if (!shouldRefresh) {
+      _bridgeRefreshTimer?.cancel();
+      _bridgeRefreshTimer = null;
+      return;
+    }
+    _bridgeRefreshTimer ??= Timer.periodic(
+      const Duration(seconds: 1),
+      (_) => unawaited(_refreshBridgeFromNative()),
+    );
+  }
+
+  Future<void> _refreshBridgeFromNative() async {
+    if (_disposed || _bridgeRefreshInFlight) return;
+    _bridgeRefreshInFlight = true;
+    try {
+      _handleBridgeSnapshot(await _bridge.snapshot());
+    } finally {
+      _bridgeRefreshInFlight = false;
+    }
   }
 
   @override
@@ -203,6 +233,8 @@ class DefaultRuntimeStatusProjection implements RuntimeStatusProjection {
   Future<void> dispose() async {
     if (_disposed) return;
     _disposed = true;
+    _bridgeRefreshTimer?.cancel();
+    _bridgeRefreshTimer = null;
     await _bridgeSubscription?.cancel();
     _bridgeSubscription = null;
     await _transportSubscription?.cancel();
@@ -348,7 +380,8 @@ RuntimeStatusSnapshot deriveRuntimeStatus({
         businessAvailable: false,
         generation: runtime.generation,
         runtimeVersion: runtime.manifest?.runtimeVersion ?? '',
-        primaryError: _mapRuntimeError(runtime.lastError) ??
+        primaryError:
+            _mapRuntimeError(runtime.lastError) ??
             const RuntimeStatusError(
               source: RuntimeStatusErrorSource.runtime,
               code: 'RUNTIME_FAILED',
@@ -372,7 +405,8 @@ RuntimeStatusSnapshot deriveRuntimeStatus({
           primaryError: const RuntimeStatusError(
             source: RuntimeStatusErrorSource.runtime,
             code: 'RUNTIME_MANIFEST_MISSING',
-            message: 'Runtime reported ready without an installed runtime manifest',
+            message:
+                'Runtime reported ready without an installed runtime manifest',
           ),
         );
       }
@@ -402,7 +436,8 @@ RuntimeStatusSnapshot _deriveReadyStatus(
         businessAvailable: false,
         generation: runtime.generation,
         runtimeVersion: runtimeVersion,
-        primaryError: connectionError ??
+        primaryError:
+            connectionError ??
             const RuntimeStatusError(
               source: RuntimeStatusErrorSource.consistency,
               code: 'RUNTIME_STATUS_INCONSISTENT',
@@ -425,7 +460,11 @@ RuntimeStatusSnapshot _deriveReadyStatus(
     );
   }
 
-  final generationConsistent = _isGenerationConsistent(runtime, connection, transport);
+  final generationConsistent = _isGenerationConsistent(
+    runtime,
+    connection,
+    transport,
+  );
   if (!generationConsistent) {
     return RuntimeStatusSnapshot(
       phase: RuntimeStatusPhase.degraded,
@@ -438,7 +477,7 @@ RuntimeStatusSnapshot _deriveReadyStatus(
       businessAvailable: false,
       generation: runtime.generation,
       runtimeVersion: runtimeVersion,
-      primaryError: const RuntimeStatusError(
+      primaryError: RuntimeStatusError(
         source: RuntimeStatusErrorSource.consistency,
         code: 'GENERATION_MISMATCH',
         message: 'Backend transport generation mismatch',
@@ -447,8 +486,25 @@ RuntimeStatusSnapshot _deriveReadyStatus(
   }
 
   final httpAvailable = transport.httpState == BackendHttpState.available;
-  final webSocketConnected =
-      transport.webSocketState == BackendWebSocketState.connected;
+
+  final transportPending =
+      transport.generation == 0 &&
+      (transport.httpState == BackendHttpState.idle ||
+          transport.httpState == BackendHttpState.unavailable);
+  if (transportPending) {
+    return RuntimeStatusSnapshot(
+      phase: RuntimeStatusPhase.starting,
+      runtimeState: runtime.state,
+      runtimeReady: true,
+      runtimeInstalled: true,
+      backendConfigured: true,
+      httpAvailable: false,
+      webSocketConnected: false,
+      businessAvailable: false,
+      generation: runtime.generation,
+      runtimeVersion: runtimeVersion,
+    );
+  }
 
   if (!httpAvailable) {
     return RuntimeStatusSnapshot(
@@ -462,15 +518,24 @@ RuntimeStatusSnapshot _deriveReadyStatus(
       businessAvailable: false,
       generation: runtime.generation,
       runtimeVersion: runtimeVersion,
-      primaryError: const RuntimeStatusError(
+      primaryError: RuntimeStatusError(
         source: RuntimeStatusErrorSource.http,
         code: 'HTTP_UNAVAILABLE',
         message: 'HTTP transport unavailable',
+        details: <String, String>{
+          'runtimeGeneration': '${runtime.generation}',
+          'transportGeneration': '${transport.generation}',
+          'httpState': transport.httpState.name,
+          'webSocketState': transport.webSocketState.name,
+        },
       ),
     );
   }
 
-  if (!webSocketConnected) {
+  final webSocketReady =
+      transport.webSocketState == BackendWebSocketState.connected ||
+      transport.webSocketState == BackendWebSocketState.idle;
+  if (!webSocketReady) {
     return RuntimeStatusSnapshot(
       phase: RuntimeStatusPhase.degraded,
       runtimeState: runtime.state,
@@ -482,10 +547,16 @@ RuntimeStatusSnapshot _deriveReadyStatus(
       businessAvailable: true,
       generation: runtime.generation,
       runtimeVersion: runtimeVersion,
-      primaryError: const RuntimeStatusError(
+      primaryError: RuntimeStatusError(
         source: RuntimeStatusErrorSource.webSocket,
         code: 'WEBSOCKET_DISCONNECTED',
         message: 'WebSocket disconnected',
+        details: <String, String>{
+          'runtimeGeneration': '${runtime.generation}',
+          'transportGeneration': '${transport.generation}',
+          'httpState': transport.httpState.name,
+          'webSocketState': transport.webSocketState.name,
+        },
       ),
     );
   }
@@ -497,7 +568,8 @@ RuntimeStatusSnapshot _deriveReadyStatus(
     runtimeInstalled: true,
     backendConfigured: true,
     httpAvailable: true,
-    webSocketConnected: true,
+    webSocketConnected:
+        transport.webSocketState == BackendWebSocketState.connected,
     businessAvailable: true,
     generation: runtime.generation,
     runtimeVersion: runtimeVersion,
@@ -547,6 +619,7 @@ RuntimeStatusError? _mapRuntimeError(RuntimeBridgeError? lastError) {
     source: RuntimeStatusErrorSource.runtime,
     code: lastError.code,
     message: lastError.message,
+    details: lastError.details,
   );
 }
 

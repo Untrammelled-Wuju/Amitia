@@ -106,10 +106,7 @@ func (s *service) EnsureChannelConversation(channel string) (*Conversation, erro
 
 func (s *service) EnsureChannelConversationForSpace(channel, spaceID string) (*Conversation, error) {
 	owner := normalizeConversationOwner(spaceID)
-	title := "微信对话"
-	if channel == "qq" {
-		title = "QQ对话"
-	}
+	title := channel + "对话"
 
 	var c Conversation
 	query := s.db.Where("channel = ? AND deleted_at IS NULL", channel)
@@ -154,12 +151,7 @@ func (s *service) RecalculateMessageCounts() (int64, error) {
 func (s *service) BackfillMissingConversations() (int64, error) {
 	now := time.Now().Format("2006-01-02 15:04:05")
 	result := s.db.Exec(`INSERT OR IGNORE INTO conversations (id, space_id, title, channel, source, created_at, updated_at)
-		SELECT DISTINCT m.conversation_id, 'default', m.conversation_id,
-		CASE
-			WHEN m.conversation_id LIKE '%wechat%' THEN 'wechat'
-			WHEN m.conversation_id LIKE '%qq%' THEN 'qq'
-			ELSE 'web'
-		END,
+		SELECT DISTINCT m.conversation_id, 'default', m.conversation_id, 'web',
 		'webhook', ?, ?
 		FROM messages m
 		LEFT JOIN conversations c ON c.id = m.conversation_id

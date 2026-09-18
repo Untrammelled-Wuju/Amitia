@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../../../app/app_routes.dart';
 import '../../../../app/theme/app_colors.dart';
@@ -21,14 +20,6 @@ final _aboutInfoProvider = FutureProvider<Map<String, dynamic>>((ref) async {
 
 class AboutPageNew extends ConsumerWidget {
   const AboutPageNew({super.key});
-
-  static const _components = [
-    ('Flutter', 'BSD-3-Clause', 'UI 框架'),
-    ('Riverpod', 'MIT', '状态管理'),
-    ('Go Router', 'BSD-3-Clause', '路由导航'),
-    ('Qdrant', 'Apache-2.0', '向量数据库'),
-    ('Material Icons', 'Apache-2.0', '图标库'),
-  ];
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -86,34 +77,11 @@ class AboutPageNew extends ConsumerWidget {
             _row(context, '版权', about['copyright'] ?? 'Copyright (C) 2026 彭旭'),
           ]),
         ),
-        SizedBox(height: AppSpacing.md),
-        Padding(
-          padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
-          child: Column(children: [
-            AmitiaButton(
-              label: '进入更新中心',
-              icon: Icons.system_update,
-              isFullWidth: true,
-              onPressed: () => context.push('/developer/kernel/updates'),
-            ),
-            SizedBox(height: AppSpacing.sm),
-            AmitiaButton(
-              label: '隐私说明',
-              icon: Icons.privacy_tip_outlined,
-              isSecondary: true,
-              isFullWidth: true,
-              onPressed: () => context.push(AppRoutes.settingsPrivacyPolicy),
-            ),
-            SizedBox(height: AppSpacing.sm),
-            AmitiaButton(
-              label: '用户协议',
-              icon: Icons.description_outlined,
-              isSecondary: true,
-              isFullWidth: true,
-              onPressed: () => context.push(AppRoutes.settingsUserAgreement),
-            ),
-            if (sourceUrl.isNotEmpty) ...[
-              SizedBox(height: AppSpacing.sm),
+        if (sourceUrl.isNotEmpty) ...[
+          SizedBox(height: AppSpacing.md),
+          Padding(
+            padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+            child: Column(children: [
               AmitiaButton(
                 label: '复制项目地址',
                 icon: Icons.content_copy,
@@ -124,21 +92,9 @@ class AboutPageNew extends ConsumerWidget {
                   if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('项目地址已复制')));
                 },
               ),
-            ],
-          ]),
-        ),
-        SizedBox(height: AppSpacing.sectionGap),
-        _label(context, '开源组件'),
-        AmitiaCard(
-          margin: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
-          child: Column(children: _components.map((item) => Padding(
-            padding: EdgeInsets.symmetric(vertical: AppSpacing.sm),
-            child: Row(children: [
-              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(item.$1, style: AppTypography.body(context)), Text(item.$3, style: AppTypography.label(context))])),
-              AmitiaStatusBadge(label: item.$2, type: BadgeType.neutral),
             ]),
-          )).toList()),
-        ),
+          ),
+        ],
         SizedBox(height: AppSpacing.xl),
       ],
     );

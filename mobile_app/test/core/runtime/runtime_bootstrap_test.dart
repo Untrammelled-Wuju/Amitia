@@ -21,11 +21,15 @@ class FakeRuntimeBridge implements RuntimeBridge {
   RuntimeBridgeSnapshot _current;
 
   FakeRuntimeBridge({RuntimeBridgeSnapshot? initial})
-      : _current = initial ?? RuntimeBridgeSnapshot.initial();
+    : _current = initial ?? RuntimeBridgeSnapshot.initial();
 
   void emit(RuntimeBridgeSnapshot snapshot) {
     _current = snapshot;
     _controller.add(snapshot);
+  }
+
+  void setSnapshotWithoutEvent(RuntimeBridgeSnapshot snapshot) {
+    _current = snapshot;
   }
 
   @override
@@ -39,44 +43,29 @@ class FakeRuntimeBridge implements RuntimeBridge {
   @override
   Future<RuntimeBridgeCommandResult> start() async {
     startCallCount++;
-    return RuntimeBridgeCommandResult(
-      accepted: true,
-      snapshot: _current,
-    );
+    return RuntimeBridgeCommandResult(accepted: true, snapshot: _current);
   }
 
   @override
   Future<RuntimeBridgeCommandResult> stop() async {
     stopCallCount++;
-    return RuntimeBridgeCommandResult(
-      accepted: true,
-      snapshot: _current,
-    );
+    return RuntimeBridgeCommandResult(accepted: true, snapshot: _current);
   }
 
   @override
   Future<RuntimeBridgeCommandResult> install() async {
     installCallCount++;
-    return RuntimeBridgeCommandResult(
-      accepted: true,
-      snapshot: _current,
-    );
+    return RuntimeBridgeCommandResult(accepted: true, snapshot: _current);
   }
 
   @override
   Future<RuntimeBridgeCommandResult> verify() async {
-    return RuntimeBridgeCommandResult(
-      accepted: true,
-      snapshot: _current,
-    );
+    return RuntimeBridgeCommandResult(accepted: true, snapshot: _current);
   }
 
   @override
   Future<RuntimeBridgeCommandResult> repair() async {
-    return RuntimeBridgeCommandResult(
-      accepted: true,
-      snapshot: _current,
-    );
+    return RuntimeBridgeCommandResult(accepted: true, snapshot: _current);
   }
 
   @override
@@ -108,26 +97,60 @@ RuntimeBridgeSnapshot _makeSnapshot({
 
 void main() {
   group('Initialize once', () {
-    test('concurrent initialize calls only execute one install decision', () async {
+    test('polls native snapshot when event delivery is missed', () async {
       final bridge = FakeRuntimeBridge(
         initial: _makeSnapshot(
           state: RuntimeBridgeState.notInstalled,
+          runtimeInstalled: false,
         ),
       );
+      final bootstrap = DefaultRuntimeBootstrap(
+        bridge: bridge,
+        policy: const RuntimeBootstrapPolicy(autoInstallRuntime: false),
+      );
+      final ready = Completer<void>();
+      final subscription = bootstrap.snapshots.listen((snapshot) {
+        if (snapshot.phase == RuntimeBootstrapPhase.ready &&
+            !ready.isCompleted) {
+          ready.complete();
+        }
+      });
 
-      final bootstrap = DefaultRuntimeBootstrap(bridge: bridge);
-
-      await Future.wait([
-        bootstrap.initialize(),
-        bootstrap.initialize(),
-        bootstrap.initialize(),
-        bootstrap.initialize(),
-        bootstrap.initialize(),
-      ]);
-
-      await Future.delayed(const Duration(milliseconds: 200));
+      await bootstrap.initialize();
+      bridge.setSnapshotWithoutEvent(
+        _makeSnapshot(
+          state: RuntimeBridgeState.ready,
+          generation: 2,
+          runtimeInstalled: true,
+        ),
+      );
+      await ready.future.timeout(const Duration(seconds: 3));
+      await subscription.cancel();
       await bootstrap.dispose();
     });
+
+    test(
+      'concurrent initialize calls only execute one install decision',
+      () async {
+        final bridge = FakeRuntimeBridge(
+          initial: _makeSnapshot(state: RuntimeBridgeState.notInstalled),
+        );
+
+        final bootstrap = DefaultRuntimeBootstrap(bridge: bridge);
+
+        await Future.wait([
+          bootstrap.initialize(),
+          bootstrap.initialize(),
+          bootstrap.initialize(),
+          bootstrap.initialize(),
+          bootstrap.initialize(),
+        ]);
+
+        await Future.delayed(const Duration(milliseconds: 200));
+        expect(bridge.installCallCount, equals(1));
+        await bootstrap.dispose();
+      },
+    );
   });
 
   group('Initial state mapping', () {
@@ -193,10 +216,7 @@ void main() {
       );
 
       final bridge = FakeRuntimeBridge(
-        initial: _makeSnapshot(
-          state: RuntimeBridgeState.failed,
-          error: error,
-        ),
+        initial: _makeSnapshot(state: RuntimeBridgeState.failed, error: error),
       );
 
       final snapshots = <RuntimeBootstrapSnapshot>[];
@@ -214,26 +234,35 @@ void main() {
       await bootstrap.dispose();
     });
 
-    test('initial NOT_INSTALLED → phase installRequired, start calls = 0', () async {
-      final bridge = FakeRuntimeBridge(
-        initial: _makeSnapshot(state: RuntimeBridgeState.notInstalled),
-      );
+    test(
+      'initial NOT_INSTALLED → phase installRequired, start calls = 0',
+      () async {
+        final bridge = FakeRuntimeBridge(
+          initial: _makeSnapshot(state: RuntimeBridgeState.notInstalled),
+        );
 
-      final snapshots = <RuntimeBootstrapSnapshot>[];
-      final bootstrap = DefaultRuntimeBootstrap(bridge: bridge);
+        final snapshots = <RuntimeBootstrapSnapshot>[];
+        final bootstrap = DefaultRuntimeBootstrap(
+          bridge: bridge,
+          policy: const RuntimeBootstrapPolicy(autoInstallRuntime: false),
+        );
 
-      final sub = bootstrap.snapshots.listen(snapshots.add);
-      await bootstrap.initialize();
-      await Future.delayed(const Duration(milliseconds: 100));
+        final sub = bootstrap.snapshots.listen(snapshots.add);
+        await bootstrap.initialize();
+        await Future.delayed(const Duration(milliseconds: 100));
 
-      expect(bridge.startCallCount, equals(0));
-      expect(bridge.installCallCount, equals(0));
-      expect(snapshots.isNotEmpty, isTrue);
-      expect(snapshots.last.phase, equals(RuntimeBootstrapPhase.installRequired));
+        expect(bridge.startCallCount, equals(0));
+        expect(bridge.installCallCount, equals(0));
+        expect(snapshots.isNotEmpty, isTrue);
+        expect(
+          snapshots.last.phase,
+          equals(RuntimeBootstrapPhase.installRequired),
+        );
 
-      await sub.cancel();
-      await bootstrap.dispose();
-    });
+        await sub.cancel();
+        await bootstrap.dispose();
+      },
+    );
 
     test('initial UNAVAILABLE → start calls = 0', () async {
       final bridge = FakeRuntimeBridge(
@@ -299,28 +328,43 @@ void main() {
   group('User stop does not auto restart', () {
     test('READY → USER STOP → STOPPED does not re-trigger start', () async {
       final bridge = FakeRuntimeBridge(
-        initial: _makeSnapshot(state: RuntimeBridgeState.stopped, generation: 1),
+        initial: _makeSnapshot(
+          state: RuntimeBridgeState.stopped,
+          generation: 1,
+        ),
       );
 
       final bootstrap = DefaultRuntimeBootstrap(bridge: bridge);
       await bootstrap.initialize();
 
-      bridge.emit(_makeSnapshot(state: RuntimeBridgeState.stopping, generation: 2));
+      bridge.emit(
+        _makeSnapshot(state: RuntimeBridgeState.stopping, generation: 2),
+      );
       await Future.delayed(const Duration(milliseconds: 100));
 
-      bridge.emit(_makeSnapshot(state: RuntimeBridgeState.stopped, generation: 3));
+      bridge.emit(
+        _makeSnapshot(state: RuntimeBridgeState.stopped, generation: 3),
+      );
       await Future.delayed(const Duration(milliseconds: 100));
 
-      bridge.emit(_makeSnapshot(state: RuntimeBridgeState.starting, generation: 4));
+      bridge.emit(
+        _makeSnapshot(state: RuntimeBridgeState.starting, generation: 4),
+      );
       await Future.delayed(const Duration(milliseconds: 100));
 
-      bridge.emit(_makeSnapshot(state: RuntimeBridgeState.ready, generation: 5));
+      bridge.emit(
+        _makeSnapshot(state: RuntimeBridgeState.ready, generation: 5),
+      );
       await Future.delayed(const Duration(milliseconds: 100));
 
-      bridge.emit(_makeSnapshot(state: RuntimeBridgeState.stopping, generation: 6));
+      bridge.emit(
+        _makeSnapshot(state: RuntimeBridgeState.stopping, generation: 6),
+      );
       await Future.delayed(const Duration(milliseconds: 100));
 
-      bridge.emit(_makeSnapshot(state: RuntimeBridgeState.stopped, generation: 7));
+      bridge.emit(
+        _makeSnapshot(state: RuntimeBridgeState.stopped, generation: 7),
+      );
       await Future.delayed(const Duration(milliseconds: 100));
 
       expect(bridge.startCallCount, equals(0));
@@ -394,13 +438,16 @@ void main() {
       final sub = bootstrap.snapshots.listen(snapshots.add);
       await bootstrap.initialize();
       await Future.delayed(const Duration(milliseconds: 100));
+      final initialSnapshotCount = snapshots.length;
 
-      bridge.emit(_makeSnapshot(state: RuntimeBridgeState.stopped, generation: 3));
+      bridge.emit(
+        _makeSnapshot(state: RuntimeBridgeState.stopped, generation: 3),
+      );
       await Future.delayed(const Duration(milliseconds: 100));
 
-      final hasOldSnapshot = snapshots.any((s) =>
-          s.runtime.generation < 5 ||
-          (s.phase == RuntimeBootstrapPhase.stopped && s.runtime.generation < 5));
+      final hasOldSnapshot = snapshots
+          .skip(initialSnapshotCount)
+          .any((snapshot) => snapshot.runtime.generation < 5);
       expect(hasOldSnapshot, isFalse);
 
       await sub.cancel();

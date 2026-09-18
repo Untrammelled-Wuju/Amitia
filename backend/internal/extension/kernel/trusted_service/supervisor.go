@@ -15,6 +15,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/u-ai/backend/internal/extension/kernel/serviceauth"
 	"github.com/u-ai/backend/internal/platform/process"
 )
 
@@ -867,6 +868,10 @@ func (s *ProcessSupervisor) buildSafeEnvironment(exe *PlatformExecutable, def *S
 	envB.Set("AMITIA_HOST_API", "internal-rpc")
 	envB.Set("AMITIA_PROTOCOL", def.Protocol)
 	envB.Set("AMITIA_PLATFORM", string(CurrentPlatform()))
+	if token, err := serviceauth.Token(def.ExtensionID, def.ModuleID); err == nil {
+		envB.Set("AMITIA_SERVICE_AUTH_VERSION", serviceauth.ContractVersion)
+		envB.Set("AMITIA_SERVICE_AUTH_TOKEN", token)
+	}
 
 	for k, v := range exe.EnvTemplate {
 		if s.envBuilder.IsAllowed(k) {

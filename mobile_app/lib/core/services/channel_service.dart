@@ -14,7 +14,9 @@ class MCPService {
   Map<String, dynamic>? _asMap(dynamic response) {
     final value = _unwrapData(response);
     if (value is Map<String, dynamic>) return Map<String, dynamic>.from(value);
-    if (value is Map) return value.map((key, item) => MapEntry(key.toString(), item));
+    if (value is Map) {
+      return value.map((key, item) => MapEntry(key.toString(), item));
+    }
     return null;
   }
 
@@ -23,7 +25,9 @@ class MCPService {
     if (value is! List) return const <Map<String, dynamic>>[];
     return value
         .whereType<Map>()
-        .map((item) => item.map((key, value) => MapEntry(key.toString(), value)))
+        .map(
+          (item) => item.map((key, value) => MapEntry(key.toString(), value)),
+        )
         .toList(growable: false);
   }
 
@@ -35,7 +39,10 @@ class MCPService {
     return _asMap(await _api.post<dynamic>('/api/mcp/servers', data: data));
   }
 
-  Future<Map<String, dynamic>?> updateServer(String id, Map<String, dynamic> data) async {
+  Future<Map<String, dynamic>?> updateServer(
+    String id,
+    Map<String, dynamic> data,
+  ) async {
     return _asMap(await _api.put<dynamic>('/api/mcp/servers/$id', data: data));
   }
 
@@ -78,7 +85,10 @@ class MCPService {
 
   Future<Map<String, dynamic>> resources(String id) async {
     return _asMap(await _api.get<dynamic>('/api/mcp/servers/$id/resources')) ??
-        <String, dynamic>{'resources': <dynamic>[], 'resourceTemplates': <dynamic>[]};
+        <String, dynamic>{
+          'resources': <dynamic>[],
+          'resourceTemplates': <dynamic>[],
+        };
   }
 
   Future<List<Map<String, dynamic>>> tasks(String id) async {
@@ -95,10 +105,16 @@ class MCPService {
   }
 
   Future<List<Map<String, dynamic>>> capabilities(String id) async {
-    return _asMapList(await _api.get<dynamic>('/api/mcp/servers/$id/capabilities'));
+    return _asMapList(
+      await _api.get<dynamic>('/api/mcp/servers/$id/capabilities'),
+    );
   }
 
-  Future<void> setToolEnabled(String serverId, String toolId, bool enabled) async {
+  Future<void> setToolEnabled(
+    String serverId,
+    String toolId,
+    bool enabled,
+  ) async {
     await _api.put<dynamic>(
       '/api/mcp/servers/$serverId/tools/$toolId/scope',
       data: {'enabled': enabled},
@@ -174,8 +190,15 @@ class MCPService {
     );
   }
 
-  Future<Map<String, dynamic>?> cancelTask(String serverId, String taskId) async {
-    return _asMap(await _api.post<dynamic>('/api/mcp/servers/$serverId/tasks/$taskId/cancel'));
+  Future<Map<String, dynamic>?> cancelTask(
+    String serverId,
+    String taskId,
+  ) async {
+    return _asMap(
+      await _api.post<dynamic>(
+        '/api/mcp/servers/$serverId/tasks/$taskId/cancel',
+      ),
+    );
   }
 
   Future<Map<String, dynamic>?> startOAuth(
@@ -197,7 +220,9 @@ class MCPService {
   }
 
   Future<Map<String, dynamic>?> revokeOAuth(String serverId) async {
-    return _asMap(await _api.post<dynamic>('/api/mcp/servers/$serverId/oauth/revoke'));
+    return _asMap(
+      await _api.post<dynamic>('/api/mcp/servers/$serverId/oauth/revoke'),
+    );
   }
 
   Future<Map<String, dynamic>?> previewAgentSkillDependencies({
@@ -235,95 +260,39 @@ class MCPService {
     );
   }
 
-  Future<Map<String, dynamic>?> removeAgentSkillDependencies(String skillId) async {
+  Future<Map<String, dynamic>?> removeAgentSkillDependencies(
+    String skillId,
+  ) async {
     return _asMap(
-      await _api.deleteWithResponse<dynamic>('/api/mcp/agent-skills/$skillId/dependencies'),
+      await _api.deleteWithResponse<dynamic>(
+        '/api/mcp/agent-skills/$skillId/dependencies',
+      ),
     );
   }
 
-  Future<List<Map<String, dynamic>>> agentSkillDependencies(String skillId) async {
-    return _asMapList(await _api.get<dynamic>('/api/mcp/agent-skills/$skillId/dependencies'));
+  Future<List<Map<String, dynamic>>> agentSkillDependencies(
+    String skillId,
+  ) async {
+    return _asMapList(
+      await _api.get<dynamic>('/api/mcp/agent-skills/$skillId/dependencies'),
+    );
   }
 
   Future<List<Map<String, dynamic>>> interactions() async {
     return _asMapList(await _api.get<dynamic>('/api/mcp/interactions'));
   }
 
-  Future<Map<String, dynamic>?> resolveInteraction(String id, Map<String, dynamic> data) async {
-    return _asMap(await _api.post<dynamic>('/api/mcp/interactions/$id/resolve', data: data));
+  Future<Map<String, dynamic>?> resolveInteraction(
+    String id,
+    Map<String, dynamic> data,
+  ) async {
+    return _asMap(
+      await _api.post<dynamic>('/api/mcp/interactions/$id/resolve', data: data),
+    );
   }
 
   Future<List<Map<String, dynamic>>> operations() async {
     return _asMapList(await _api.get<dynamic>('/api/mcp/operations'));
-  }
-}
-
-class WechatService {
-  final BackendServiceApi _api;
-
-  WechatService(this._api);
-
-  Future<Map<String, dynamic>?> status() =>
-      _api.get<Map<String, dynamic>>('/api/wechat/status');
-
-  Future<Map<String, dynamic>?> bridgeStatus() =>
-      _api.get<Map<String, dynamic>>('/api/wechat/bridge/status-detail');
-
-  Future<Map<String, dynamic>?> qrCode() =>
-      _api.get<Map<String, dynamic>>('/api/wechat/bridge/qrcode');
-
-  Future<List<Map<String, dynamic>>> events() async {
-    final response = await _api.get<Map<String, dynamic>>('/api/wechat/events');
-    final raw = response?['events'];
-    if (raw is! List) return const [];
-    return raw.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
-  }
-
-  Future<Map<String, dynamic>?> startLogin() =>
-      _api.get<Map<String, dynamic>>('/api/wechat/login/start');
-
-  Future<Map<String, dynamic>?> rescan() =>
-      _api.post<Map<String, dynamic>>('/api/wechat/login/rescan');
-
-  Future<Map<String, dynamic>?> reconnect() =>
-      _api.post<Map<String, dynamic>>('/api/wechat/login/reconnect');
-
-  Future<Map<String, dynamic>?> waitForLogin() =>
-      _api.post<Map<String, dynamic>>('/api/wechat/login/wait');
-
-  Future<Map<String, dynamic>?> recoverBridge() =>
-      _api.post<Map<String, dynamic>>('/api/wechat/bridge/recover');
-
-  Future<Map<String, dynamic>?> riskSummary() =>
-      _api.get<Map<String, dynamic>>('/api/wechat/cloud-check/risk-summary');
-
-  Future<Map<String, dynamic>?> runCloudCheck() =>
-      _api.post<Map<String, dynamic>>('/api/wechat/cloud-check/run');
-}
-
-class QQService {
-  final BackendServiceApi _api;
-
-  QQService(this._api);
-
-  Future<Map<String, dynamic>?> status() async {
-    final resp = await _api.get<Map<String, dynamic>>('/api/qq/status');
-    return resp;
-  }
-
-  Future<Map<String, dynamic>?> config() async {
-    final resp = await _api.get<Map<String, dynamic>>('/api/qq/config');
-    return resp;
-  }
-
-  Future<Map<String, dynamic>?> connect(Map<String, dynamic> data) async {
-    final resp = await _api.post<Map<String, dynamic>>('/api/qq/connect', data: data);
-    return resp;
-  }
-
-  Future<Map<String, dynamic>?> disconnect() async {
-    final resp = await _api.post<Map<String, dynamic>>('/api/qq/disconnect');
-    return resp;
   }
 }
 
@@ -339,13 +308,20 @@ class ImageGenService {
   }
 
   Future<Map<String, dynamic>?> createConfig(Map<String, dynamic> data) async {
-    final resp = await _api.post<Map<String, dynamic>>('/api/imagegen/configs', data: data);
-    return resp;
+    return _api.post<Map<String, dynamic>>(
+      '/api/imagegen/configs',
+      data: data,
+    );
   }
 
-  Future<Map<String, dynamic>?> updateConfig(String id, Map<String, dynamic> data) async {
-    final resp = await _api.put<Map<String, dynamic>>('/api/imagegen/configs/$id', data: data);
-    return resp;
+  Future<Map<String, dynamic>?> updateConfig(
+    String id,
+    Map<String, dynamic> data,
+  ) async {
+    return _api.put<Map<String, dynamic>>(
+      '/api/imagegen/configs/$id',
+      data: data,
+    );
   }
 
   Future<bool> deleteConfig(String id) async {
@@ -359,8 +335,7 @@ class ImageGenService {
   }
 
   Future<Map<String, dynamic>?> test(String id) async {
-    final resp = await _api.post<Map<String, dynamic>>('/api/imagegen/configs/$id/test');
-    return resp;
+    return _api.post<Map<String, dynamic>>('/api/imagegen/configs/$id/test');
   }
 
   Future<List<Map<String, dynamic>>> providers() async {
@@ -382,13 +357,17 @@ class VisionService {
   }
 
   Future<Map<String, dynamic>?> createConfig(Map<String, dynamic> data) async {
-    final resp = await _api.post<Map<String, dynamic>>('/api/vision/configs', data: data);
-    return resp;
+    return _api.post<Map<String, dynamic>>('/api/vision/configs', data: data);
   }
 
-  Future<Map<String, dynamic>?> updateConfig(String id, Map<String, dynamic> data) async {
-    final resp = await _api.put<Map<String, dynamic>>('/api/vision/configs/$id', data: data);
-    return resp;
+  Future<Map<String, dynamic>?> updateConfig(
+    String id,
+    Map<String, dynamic> data,
+  ) async {
+    return _api.put<Map<String, dynamic>>(
+      '/api/vision/configs/$id',
+      data: data,
+    );
   }
 
   Future<bool> deleteConfig(String id) async {
@@ -402,8 +381,7 @@ class VisionService {
   }
 
   Future<Map<String, dynamic>?> test(String id) async {
-    final resp = await _api.post<Map<String, dynamic>>('/api/vision/configs/$id/test');
-    return resp;
+    return _api.post<Map<String, dynamic>>('/api/vision/configs/$id/test');
   }
 
   Future<List<Map<String, dynamic>>> providers() async {
@@ -425,13 +403,17 @@ class EmbeddingService {
   }
 
   Future<Map<String, dynamic>?> createConfig(Map<String, dynamic> data) async {
-    final resp = await _api.post<Map<String, dynamic>>('/api/embedding/configs', data: data);
-    return resp;
+    return _api.post<Map<String, dynamic>>('/api/embedding/configs', data: data);
   }
 
-  Future<Map<String, dynamic>?> updateConfig(String id, Map<String, dynamic> data) async {
-    final resp = await _api.put<Map<String, dynamic>>('/api/embedding/configs/$id', data: data);
-    return resp;
+  Future<Map<String, dynamic>?> updateConfig(
+    String id,
+    Map<String, dynamic> data,
+  ) async {
+    return _api.put<Map<String, dynamic>>(
+      '/api/embedding/configs/$id',
+      data: data,
+    );
   }
 
   Future<bool> deleteConfig(String id) async {
@@ -445,8 +427,7 @@ class EmbeddingService {
   }
 
   Future<Map<String, dynamic>?> test(String id) async {
-    final resp = await _api.post<Map<String, dynamic>>('/api/embedding/configs/$id/test');
-    return resp;
+    return _api.post<Map<String, dynamic>>('/api/embedding/configs/$id/test');
   }
 
   Future<List<Map<String, dynamic>>> providers() async {
@@ -468,13 +449,14 @@ class EmoteService {
   }
 
   Future<Map<String, dynamic>?> createGroup(Map<String, dynamic> data) async {
-    final resp = await _api.post<Map<String, dynamic>>('/api/emote-groups', data: data);
-    return resp;
+    return _api.post<Map<String, dynamic>>('/api/emote-groups', data: data);
   }
 
-  Future<Map<String, dynamic>?> updateGroup(String id, Map<String, dynamic> data) async {
-    final resp = await _api.put<Map<String, dynamic>>('/api/emote-groups/$id', data: data);
-    return resp;
+  Future<Map<String, dynamic>?> updateGroup(
+    String id,
+    Map<String, dynamic> data,
+  ) async {
+    return _api.put<Map<String, dynamic>>('/api/emote-groups/$id', data: data);
   }
 
   Future<bool> deleteGroup(String id) async {
@@ -504,19 +486,23 @@ class EmoteService {
     final resp = await _api.get<Map<String, dynamic>>('/api/emotes');
     final items = resp?['items'];
     if (items is! List) return [];
-    return items.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
+    return items
+        .whereType<Map>()
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList();
   }
 
   Future<Map<String, dynamic>?> uploadEmote(
     String filePath, {
     Map<String, dynamic> config = const {},
   }) async {
-    final resp = await _api.postMultipart<Map<String, dynamic>>(
+    return _api.postMultipart<Map<String, dynamic>>(
       '/api/emotes/upload',
       fields: {'config': jsonEncode(config)},
-      files: {'file': [filePath]},
+      files: {
+        'file': [filePath],
+      },
     );
-    return resp;
   }
 
   Future<Map<String, dynamic>> batchUploadEmotes(
@@ -531,7 +517,10 @@ class EmoteService {
     return resp ?? <String, dynamic>{};
   }
 
-  Future<Map<String, dynamic>?> updateEmote(String id, Map<String, dynamic> data) async {
+  Future<Map<String, dynamic>?> updateEmote(
+    String id,
+    Map<String, dynamic> data,
+  ) async {
     return _api.put<Map<String, dynamic>>('/api/emotes/$id', data: data);
   }
 
@@ -551,20 +540,31 @@ class EmoteService {
     return resp ?? <String, dynamic>{};
   }
 
-  Future<Map<String, dynamic>?> sendEmote(String conversationId, String characterId, String emoteId) async {
-    final resp = await _api.post<Map<String, dynamic>>(
+  Future<Map<String, dynamic>?> sendEmote(
+    String conversationId,
+    String characterId,
+    String emoteId,
+  ) async {
+    return _api.post<Map<String, dynamic>>(
       '/api/chat/send-emote',
-      data: {'conversationId': conversationId, 'characterId': characterId, 'emoteId': emoteId},
+      data: {
+        'conversationId': conversationId,
+        'characterId': characterId,
+        'emoteId': emoteId,
+      },
     );
-    return resp;
   }
 
   Future<Map<String, dynamic>?> getSettings(String characterId) async {
-    final resp = await _api.get<Map<String, dynamic>>('/api/characters/$characterId/emote-settings');
-    return resp;
+    return _api.get<Map<String, dynamic>>(
+      '/api/characters/$characterId/emote-settings',
+    );
   }
 
-  Future<bool> saveSettings(String characterId, Map<String, dynamic> data) async {
+  Future<bool> saveSettings(
+    String characterId,
+    Map<String, dynamic> data,
+  ) async {
     await _api.put('/api/characters/$characterId/emote-settings', data: data);
     return true;
   }
@@ -578,20 +578,27 @@ class ProactiveService {
   Future<List<Map<String, dynamic>>> rules({String? characterId}) async {
     final resp = await _api.get<List<dynamic>>(
       '/api/proactive/rules',
-      queryParameters: {if (characterId != null && characterId.isNotEmpty) 'characterId': characterId},
+      queryParameters: {
+        if (characterId != null && characterId.isNotEmpty)
+          'characterId': characterId,
+      },
     );
     if (resp == null) return [];
     return resp.map((e) => e as Map<String, dynamic>).toList();
   }
 
   Future<Map<String, dynamic>?> createRule(Map<String, dynamic> data) async {
-    final resp = await _api.post<Map<String, dynamic>>('/api/proactive/rules', data: data);
-    return resp;
+    return _api.post<Map<String, dynamic>>('/api/proactive/rules', data: data);
   }
 
-  Future<Map<String, dynamic>?> updateRule(String id, Map<String, dynamic> data) async {
-    final resp = await _api.put<Map<String, dynamic>>('/api/proactive/rules/$id', data: data);
-    return resp;
+  Future<Map<String, dynamic>?> updateRule(
+    String id,
+    Map<String, dynamic> data,
+  ) async {
+    return _api.put<Map<String, dynamic>>(
+      '/api/proactive/rules/$id',
+      data: data,
+    );
   }
 
   Future<bool> deleteRule(String id) async {
@@ -600,7 +607,10 @@ class ProactiveService {
   }
 
   Future<bool> toggleRule(String id, bool enabled) async {
-    await _api.post('/api/proactive/rules/$id/toggle', data: {'enabled': enabled});
+    await _api.post(
+      '/api/proactive/rules/$id/toggle',
+      data: {'enabled': enabled},
+    );
     return true;
   }
 
@@ -617,28 +627,35 @@ class ProactiveService {
     return _api.post<Map<String, dynamic>>(
       '/api/proactive/presets/reset',
       data: <String, dynamic>{
-        if (characterId != null && characterId.isNotEmpty) 'characterId': characterId,
+        if (characterId != null && characterId.isNotEmpty)
+          'characterId': characterId,
       },
     );
   }
 
   Future<List<Map<String, dynamic>>> ruleMessages(String id) async {
-    final resp = await _api.get<List<dynamic>>('/api/proactive/rules/$id/messages');
+    final resp = await _api.get<List<dynamic>>(
+      '/api/proactive/rules/$id/messages',
+    );
     if (resp == null) return const <Map<String, dynamic>>[];
-    return resp.whereType<Map>().map((item) => Map<String, dynamic>.from(item)).toList(growable: false);
+    return resp
+        .whereType<Map>()
+        .map((item) => Map<String, dynamic>.from(item))
+        .toList(growable: false);
   }
 
   Future<Map<String, dynamic>?> status({String? characterId}) async {
-    final resp = await _api.get<Map<String, dynamic>>(
+    return _api.get<Map<String, dynamic>>(
       '/api/proactive/status',
-      queryParameters: {if (characterId != null && characterId.isNotEmpty) 'characterId': characterId},
+      queryParameters: {
+        if (characterId != null && characterId.isNotEmpty)
+          'characterId': characterId,
+      },
     );
-    return resp;
   }
 
   Future<Map<String, dynamic>?> queueSummary() async {
-    final resp = await _api.get<Map<String, dynamic>>('/api/proactive/queue-summary');
-    return resp;
+    return _api.get<Map<String, dynamic>>('/api/proactive/queue-summary');
   }
 
   Future<List<Map<String, dynamic>>> history() async {
@@ -648,6 +665,9 @@ class ProactiveService {
     );
     final items = resp?['items'];
     if (items is! List) return const [];
-    return items.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList(growable: false);
+    return items
+        .whereType<Map>()
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList(growable: false);
   }
 }

@@ -67,6 +67,7 @@ internal class DefaultRuntimeStartupDetector(
         val deadlineEpochMs = startEpochMs + totalStartupTimeoutMs
         var probeIntervalMs = initialProbeIntervalMs
         var probeCount = 0
+        var lastProbeFailure: String? = null
 
         while (true) {
             if (cancelledFlag.get()) {
@@ -78,7 +79,12 @@ internal class DefaultRuntimeStartupDetector(
                 val elapsed = now - startEpochMs
                 return RuntimeStartupResult.Failed(
                     request.generation,
-                    RuntimeStartupError.Timeout(totalStartupTimeoutMs, elapsed, probeCount)
+                    RuntimeStartupError.Timeout(
+                        totalStartupTimeoutMs,
+                        elapsed,
+                        probeCount,
+                        lastProbeFailure
+                    )
                 )
             }
 
@@ -100,6 +106,7 @@ internal class DefaultRuntimeStartupDetector(
                     return RuntimeStartupResult.Ready(request.generation, elapsed, probeCount)
                 }
                 is SingleProbeOutcome.Continue -> {
+                    probeResult.diagnostic?.let { lastProbeFailure = it }
                 }
                 is SingleProbeOutcome.ProtocolFailure -> {
                     val elapsed = clock.nowEpochMillis() - startEpochMs
@@ -138,7 +145,7 @@ internal class DefaultRuntimeStartupDetector(
 
     private sealed class SingleProbeOutcome {
         data object Ready : SingleProbeOutcome()
-        data object Continue : SingleProbeOutcome()
+        data class Continue(val diagnostic: String? = null) : SingleProbeOutcome()
         data class ProtocolFailure(val reason: String) : SingleProbeOutcome()
         data class Fatal(val error: RuntimeStartupError) : SingleProbeOutcome()
     }
@@ -151,13 +158,21 @@ internal class DefaultRuntimeStartupDetector(
             }
             is RuntimeHealthProbeResult.Failure -> {
                 return when (result.error) {
-                    is RuntimeHealthProbeError.ConnectionRefused -> SingleProbeOutcome.Continue
-                    is RuntimeHealthProbeError.ConnectionTimeout -> SingleProbeOutcome.Continue
+                    is RuntimeHealthProbeError.ConnectionRefused -> SingleProbeOutcome.Continue(
+                        "readyz connection refused at ${request.endpoint.host}:${request.endpoint.port}"
+                    )
+                    is RuntimeHealthProbeError.ConnectionTimeout -> SingleProbeOutcome.Continue(
+                        "readyz connection timed out at ${request.endpoint.host}:${request.endpoint.port}"
+                    )
                     is RuntimeHealthProbeError.Unauthorized -> SingleProbeOutcome.Fatal(RuntimeStartupError.HealthAuthFailed)
                     is RuntimeHealthProbeError.Forbidden -> SingleProbeOutcome.Fatal(RuntimeStartupError.HealthAuthFailed)
                     is RuntimeHealthProbeError.NotFound -> SingleProbeOutcome.Fatal(RuntimeStartupError.HealthEndpointMissing)
-                    is RuntimeHealthProbeError.ServerError -> SingleProbeOutcome.Continue
-                    is RuntimeHealthProbeError.IOError -> SingleProbeOutcome.Continue
+                    is RuntimeHealthProbeError.ServerError -> SingleProbeOutcome.Continue(
+                        "readyz returned server error ${result.error.statusCode}"
+                    )
+                    is RuntimeHealthProbeError.IOError -> SingleProbeOutcome.Continue(
+                        "readyz io error: ${result.error.message}"
+                    )
                     is RuntimeHealthProbeError.MalformedResponse -> SingleProbeOutcome.ProtocolFailure("readiness probe io error")
                 }
             }
@@ -189,16 +204,16 @@ internal class DefaultRuntimeStartupDetector(
                         SingleProbeOutcome.Ready
                     }
                 } else if (status == "starting") {
-                    SingleProbeOutcome.Continue
+                    SingleProbeOutcome.Continue("readyz status starting")
                 } else {
                     SingleProbeOutcome.ProtocolFailure("readiness endpoint returned unexpected status: $status")
                 }
             }
             503 -> {
-                SingleProbeOutcome.Continue
+                SingleProbeOutcome.Continue("readyz status 503")
             }
             in 500..599 -> {
-                SingleProbeOutcome.Continue
+                SingleProbeOutcome.Continue("readyz status ${result.statusCode}")
             }
             401, 403 -> {
                 SingleProbeOutcome.Fatal(RuntimeStartupError.HealthAuthFailed)
@@ -213,7 +228,7 @@ internal class DefaultRuntimeStartupDetector(
                 if (result.statusCode in 400..499) {
                     SingleProbeOutcome.ProtocolFailure("readiness probe returned unsupported ${result.statusCode}")
                 } else {
-                    SingleProbeOutcome.Continue
+                    SingleProbeOutcome.Continue("readyz status ${result.statusCode}")
                 }
             }
         }

@@ -110,12 +110,12 @@ class _PrivacyPageState extends ConsumerState<PrivacyPage> {
                 SizedBox(height: AppSpacing.lg),
                 _Section(
                   icon: Icons.devices_other,
-                  title: '五、渠道连接（微信/QQ）',
+                  title: '五、插件渠道连接',
                   color: context.accentSecondary,
                   paragraphs: [
-                    '当连接微信或 QQ 渠道时，Amitia 需要获取相应的会话权限以接收和发送消息。',
-                    '渠道连接使用官方提供的接口或协议，Amitia 不会存储你的登录密码或敏感凭证。',
-                    '你可以随时在渠道管理页面断开连接，断开后 Amitia 将不再接收或发送该渠道的消息。',
+                    '当你安装并启用渠道插件时，Amitia 只会按插件声明授予必要的会话与网络权限。',
+                    '渠道凭据由插件管理，宿主不会保存插件未声明的额外敏感凭证。',
+                    '你可以随时停用或卸载渠道插件，停用后该渠道不再接收或发送消息。',
                   ],
                 ),
                 SizedBox(height: AppSpacing.lg),

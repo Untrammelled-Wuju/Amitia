@@ -55,7 +55,6 @@ export function createMainWindow(): BrowserWindow {
       "icon",
     ),
     frame: false,
-    borderRadius: 10,
     show: false,
     webPreferences: {
       preload: preloadPath,

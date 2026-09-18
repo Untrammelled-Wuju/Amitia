@@ -16,10 +16,6 @@ extraResources:
       - "AmitiaCore.exe"
       - "node/node.exe.zip"
       - "node/node.zip"
-      - "sidecar/bundle.mjs"
-      - "sidecar/launcher.mjs"
-      - "qq-sidecar/bundle.mjs"
-      - "qq-sidecar/launcher.mjs"
   - from: resources/bridge
     to: bridge
   - from: resources/migrations

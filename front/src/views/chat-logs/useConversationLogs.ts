@@ -73,13 +73,7 @@ export function useConversationLogs() {
     try {
       const r = await fetchConvsApi(params);
       let items: any[] = Array.isArray(r) ? r : r?.items || [];
-      const wechatItems = items.filter(
-        (c: any) => c.channel === "wechat" || c.source === "wechat",
-      );
-      const otherItems = items.filter(
-        (c: any) => c.channel !== "wechat" && c.source !== "wechat",
-      );
-      convs.value = [...wechatItems, ...otherItems];
+      convs.value = items;
       convTotal.value = r?.total || (Array.isArray(r) ? r.length : 0);
     } catch {}
   }

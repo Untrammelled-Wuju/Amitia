@@ -234,7 +234,6 @@ class BackendTransportApi {
   }
 }
 
-
 final deviceLocalBackendConnectionProvider =
     FutureProvider<BackendConnectionAvailability>((ref) async {
       final runtimeAsync = ref.watch(runtimeSnapshotProvider);
@@ -254,10 +253,11 @@ final deviceLocalBackendConnectionProvider =
       );
     });
 
-final deviceLocalBackendTransportProvider = AsyncNotifierProvider<
-  DeviceLocalBackendTransportNotifier,
-  BackendTransportState
->(DeviceLocalBackendTransportNotifier.new);
+final deviceLocalBackendTransportProvider =
+    AsyncNotifierProvider<
+      DeviceLocalBackendTransportNotifier,
+      BackendTransportState
+    >(DeviceLocalBackendTransportNotifier.new);
 
 class DeviceLocalBackendTransportNotifier
     extends AsyncNotifier<BackendTransportState> {
@@ -320,7 +320,9 @@ class DeviceLocalBackendTransportNotifier
   }
 }
 
-final deviceLocalBackendCurrentTransportProvider = Provider<BackendTransport?>((ref) {
+final deviceLocalBackendCurrentTransportProvider = Provider<BackendTransport?>((
+  ref,
+) {
   final state = ref.watch(deviceLocalBackendTransportProvider).asData?.value;
   if (state is! TransportAvailable) return null;
   final notifier = ref.read(deviceLocalBackendTransportProvider.notifier);
@@ -331,7 +333,9 @@ final deviceLocalBackendCurrentTransportProvider = Provider<BackendTransport?>((
   return transport;
 });
 
-final rawDeviceLocalBackendServiceApiProvider = Provider<BackendServiceApi?>((ref) {
+final rawDeviceLocalBackendServiceApiProvider = Provider<BackendServiceApi?>((
+  ref,
+) {
   final transport = ref.watch(deviceLocalBackendCurrentTransportProvider);
   if (transport == null) return null;
   return BackendServiceApi(transport.http, transport.generation);
@@ -347,6 +351,8 @@ final backendServiceProvider = Provider<BackendServiceApi>((ref) {
   final logService = ref.read(debugLogServiceProvider);
   DateTime? lastUnavailableAt;
   String? lastUnavailableKey;
+  DateTime? lastDeviceUnavailableAt;
+  String? lastDeviceUnavailableKey;
 
   final businessApi = DynamicBackendServiceApiProxy(
     currentApi: () => ref.read(rawBackendServiceApiProvider),
@@ -362,17 +368,20 @@ final backendServiceProvider = Provider<BackendServiceApi>((ref) {
     },
     onUnavailable: (error) {
       final now = DateTime.now();
-      final key = '${error.phase.name}:${error.generation}:${error.primaryError?.code ?? 'BUSINESS_UNAVAILABLE'}';
+      final primary = error.primaryError;
+      final key =
+          '${error.phase.name}:${error.generation}:${primary?.code ?? 'BUSINESS_UNAVAILABLE'}:'
+          '${primary?.message ?? ''}:${primary?.details ?? const <String, String>{}}';
       if (lastUnavailableKey == key &&
           lastUnavailableAt != null &&
-          now.difference(lastUnavailableAt!) < const Duration(seconds: 5)) {
+          now.difference(lastUnavailableAt!) < const Duration(seconds: 30)) {
         return;
       }
       lastUnavailableKey = key;
       lastUnavailableAt = now;
       logService.addBackendLog(
-        'Business backend unavailable: $error',
-        DebugLogLevel.error,
+        error.toString(),
+        primary == null ? DebugLogLevel.debug : DebugLogLevel.error,
       );
     },
   );
@@ -382,9 +391,22 @@ final backendServiceProvider = Provider<BackendServiceApi>((ref) {
     currentStatus: () => ref.read(runtimeStatusCurrentProvider),
     canUseApi: (_, api) => api != null,
     onUnavailable: (error) {
+      final now = DateTime.now();
+      final primary = error.primaryError;
+      final key =
+          '${error.phase.name}:${error.generation}:${primary?.code ?? 'BUSINESS_UNAVAILABLE'}:'
+          '${primary?.message ?? ''}:${primary?.details ?? const <String, String>{}}';
+      if (lastDeviceUnavailableKey == key &&
+          lastDeviceUnavailableAt != null &&
+          now.difference(lastDeviceUnavailableAt!) <
+              const Duration(seconds: 30)) {
+        return;
+      }
+      lastDeviceUnavailableKey = key;
+      lastDeviceUnavailableAt = now;
       logService.addBackendLog(
-        'Device-local backend unavailable: $error',
-        DebugLogLevel.error,
+        'DeviceLocalBackendUnavailable\n$error',
+        primary == null ? DebugLogLevel.debug : DebugLogLevel.error,
       );
     },
   );

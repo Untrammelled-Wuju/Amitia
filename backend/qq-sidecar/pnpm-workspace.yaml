@@ -1,9 +1,0 @@
-allowBuilds:
-  b: true
-  d: true
-  e: true
-  esbuild: true
-  i: true
-  l: true
-  s: true
-  u: true

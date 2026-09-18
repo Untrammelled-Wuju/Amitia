@@ -5,11 +5,13 @@ import "encoding/json"
 type CharacterCardFormat string
 
 const (
-	FormatV2JSON  CharacterCardFormat = "v2_json"
-	FormatV2PNG   CharacterCardFormat = "v2_png"
-	FormatV3JSON  CharacterCardFormat = "v3_json"
-	FormatV3PNG   CharacterCardFormat = "v3_png"
-	FormatV3CHARX CharacterCardFormat = "v3_charx"
+	FormatV2JSON     CharacterCardFormat = "v2_json"
+	FormatV2PNG      CharacterCardFormat = "v2_png"
+	FormatV3JSON     CharacterCardFormat = "v3_json"
+	FormatV3PNG      CharacterCardFormat = "v3_png"
+	FormatV3CHARX    CharacterCardFormat = "v3_charx"
+	FormatTavernJSON CharacterCardFormat = "tavern_json"
+	FormatTavernPNG  CharacterCardFormat = "tavern_png"
 )
 
 type CharacterCard struct {
@@ -52,17 +54,17 @@ type CharacterBook struct {
 }
 
 type CharacterBookEntry struct {
-	Keys           []string               `json:"keys"`
-	SecondaryKeys  []string               `json:"secondary_keys"`
-	Content        string                 `json:"content"`
-	Enabled        bool                   `json:"enabled"`
-	InsertionOrder int                    `json:"insertion_order"`
-	CaseSensitive  *bool                  `json:"case_sensitive"`
-	Selective      *bool                  `json:"selective"`
-	Constant       *bool                  `json:"constant"`
-	Position       *string                `json:"position"`
-	Priority       int                    `json:"priority"`
-	Extensions     map[string]any         `json:"extensions"`
+	Keys           []string                   `json:"keys"`
+	SecondaryKeys  []string                   `json:"secondary_keys"`
+	Content        string                     `json:"content"`
+	Enabled        bool                       `json:"enabled"`
+	InsertionOrder int                        `json:"insertion_order"`
+	CaseSensitive  *bool                      `json:"case_sensitive"`
+	Selective      *bool                      `json:"selective"`
+	Constant       *bool                      `json:"constant"`
+	Position       *string                    `json:"position"`
+	Priority       int                        `json:"priority"`
+	Extensions     map[string]any             `json:"extensions"`
 	Preserved      map[string]json.RawMessage `json:"-"`
 }
 

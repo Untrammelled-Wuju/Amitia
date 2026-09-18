@@ -36,46 +36,14 @@ SPDX-License-Identifier: AGPL-3.0-only
       </div>
     </div>
 
-    <div
-      v-if="cloudRisk && cloudRisk.hasRisk"
-      class="access-risk-alert"
-      :class="'risk-' + (cloudRisk.riskLevel === 'high' ? 'error' : 'warn')"
-    >
-      <div class="ara-header">
-        <el-icon :size="20"><Connection /></el-icon>
-        <span class="ara-title"
-          >WeChat Bridge Cloud Risk - {{ cloudRisk.riskCount }} issue(s)</span
-        >
-      </div>
-      <div class="ara-list">
-        <div
-          v-for="c in cloudRisk.items"
-          :key="c.name"
-          class="ara-item"
-          :class="'ara-' + (c.status === 'error' ? 'error' : 'warn')"
-        >
-          <span class="arai-dot"></span>
-          <span class="arai-name">{{ c.name }}</span>
-          <span class="arai-msg">{{
-            c.status === "error" ? "Error" : "Warning"
-          }}</span>
-        </div>
-      </div>
-      <div class="ara-footer">
-        <router-link to="/wechat" class="ara-link"
-          >Go to WeChat Cloud Check</router-link
-        >
-      </div>
-    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { Warning, Connection } from "@element-plus/icons-vue";
+import { Warning } from "@element-plus/icons-vue";
 
 defineProps<{
   accessRisk: any;
-  cloudRisk: any;
 }>();
 </script>
 

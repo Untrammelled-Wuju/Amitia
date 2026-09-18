@@ -25,9 +25,15 @@ class SchemaUIRenderer extends StatefulWidget {
   final List<String>? permissions;
   final Map<String, dynamic>? initialContext;
   final DataSourceLoader? dataSourceLoader;
-  final FutureOr<dynamic> Function(ActionInvocation invocation)? onActionDispatch;
+  final FutureOr<dynamic> Function(ActionInvocation invocation)?
+  onActionDispatch;
   final FutureOr<void> Function()? onReloadSchema;
-  final Widget Function(String slotId, String? contributionId, Map<String, dynamic> context)? slotBuilder;
+  final Widget Function(
+    String slotId,
+    String? contributionId,
+    Map<String, dynamic> context,
+  )?
+  slotBuilder;
   final bool embedded;
 
   const SchemaUIRenderer({
@@ -60,8 +66,12 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
   @override
   void initState() {
     super.initState();
-    _formState = Map<String, dynamic>.from(widget.initialContext?['formState'] ?? {});
-    _localState = Map<String, dynamic>.from(widget.initialContext?['localState'] ?? {});
+    _formState = Map<String, dynamic>.from(
+      widget.initialContext?['formState'] ?? {},
+    );
+    _localState = Map<String, dynamic>.from(
+      widget.initialContext?['localState'] ?? {},
+    );
     final initialStorage = widget.initialContext?['storage'];
     if (initialStorage is Map) {
       _storageState.addAll(initialStorage.cast<String, dynamic>());
@@ -76,7 +86,10 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
     if (!identical(oldWidget.document, widget.document) ||
         oldWidget.extensionId != widget.extensionId ||
         oldWidget.contributionId != widget.contributionId) {
-      widget.dataSourceLoader?.invalidate(widget.extensionId, widget.contributionId);
+      widget.dataSourceLoader?.invalidate(
+        widget.extensionId,
+        widget.contributionId,
+      );
       unawaited(_loadStorageBindings());
       unawaited(_loadDataSources());
     }
@@ -100,6 +113,7 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
         collect(child);
       }
     }
+
     for (final node in widget.document.children) {
       collect(node);
     }
@@ -128,13 +142,16 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
 
   Map<String, dynamic> _asMap(dynamic value) {
     if (value is Map<String, dynamic>) return Map<String, dynamic>.from(value);
-    if (value is Map) return value.map((key, value) => MapEntry(key.toString(), value));
+    if (value is Map)
+      return value.map((key, value) => MapEntry(key.toString(), value));
     return <String, dynamic>{};
   }
 
   Map<String, dynamic> _dataSourceGroup(String type) {
     final group = <String, dynamic>{};
-    for (final source in widget.document.dataSources.where((item) => item.type == type)) {
+    for (final source in widget.document.dataSources.where(
+      (item) => item.type == type,
+    )) {
       final result = _dataSources[source.id];
       if (result == null || !result.hasData) continue;
       final data = result.data;
@@ -166,8 +183,11 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
       if (mounted && _dataSources.isNotEmpty) setState(_dataSources.clear);
       return;
     }
-    final candidates = widget.document.dataSources.where(loader.requiresFetch).toList(growable: false);
-    final fetchLimit = widget.document.performanceBudget?.maxDataFetchCount ?? 0;
+    final candidates = widget.document.dataSources
+        .where(loader.requiresFetch)
+        .toList(growable: false);
+    final fetchLimit =
+        widget.document.performanceBudget?.maxDataFetchCount ?? 0;
     final sources = fetchLimit > 0
         ? candidates.take(fetchLimit).toList(growable: false)
         : candidates;
@@ -180,17 +200,19 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
       });
     }
     final results = await Future.wait(
-      sources.map((source) async => MapEntry(
-            source.id,
-            await loader.load(
-              DataSourceRequest(
-                dataSource: source,
-                input: _dataSourceInput(source),
-                extensionId: widget.extensionId,
-                contributionId: widget.contributionId,
-              ),
+      sources.map(
+        (source) async => MapEntry(
+          source.id,
+          await loader.load(
+            DataSourceRequest(
+              dataSource: source,
+              input: _dataSourceInput(source),
+              extensionId: widget.extensionId,
+              contributionId: widget.contributionId,
             ),
-          )),
+          ),
+        ),
+      ),
     );
     if (!mounted) return;
     setState(() {
@@ -214,11 +236,17 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
       ..._dataSourceGroup('runtime'),
     };
     final runtimeStatus = <String, dynamic>{
-      ..._asMap(widget.initialContext?['runtimeStatus'] ?? widget.initialContext?['runtime_status']),
+      ..._asMap(
+        widget.initialContext?['runtimeStatus'] ??
+            widget.initialContext?['runtime_status'],
+      ),
       ..._dataSourceGroup('runtime_status'),
     };
     final resourceList = <String, dynamic>{
-      ..._asMap(widget.initialContext?['resourceList'] ?? widget.initialContext?['resource_list']),
+      ..._asMap(
+        widget.initialContext?['resourceList'] ??
+            widget.initialContext?['resource_list'],
+      ),
       ..._dataSourceGroup('resource_list'),
     };
     final allDataSources = _allDataSourceValues();
@@ -256,7 +284,8 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
     if (!mounted || action.actionId.trim().isEmpty) return;
     final confirmation = action.confirmation?.trim() ?? '';
     if (confirmation.isNotEmpty) {
-      final confirmed = await showDialog<bool>(
+      final confirmed =
+          await showDialog<bool>(
             context: context,
             builder: (dialogContext) => AlertDialog(
               title: const Text('确认操作'),
@@ -325,9 +354,12 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
       });
       final message = data['message']?.toString().trim() ?? '';
       if (message.isNotEmpty && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(message)));
       }
-      final reloadSchema = data['reload_schema'] == true || data['reloadSchema'] == true;
+      final reloadSchema =
+          data['reload_schema'] == true || data['reloadSchema'] == true;
       if (reloadSchema) {
         await Future.sync(() => widget.onReloadSchema?.call());
       }
@@ -335,7 +367,11 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
       debugPrint('SchemaUI host action failed: $error');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('操作失败：${error.toString().replaceFirst('Bad state: ', '')}')),
+          SnackBar(
+            content: Text(
+              '操作失败：${error.toString().replaceFirst('Bad state: ', '')}',
+            ),
+          ),
         );
       }
     }
@@ -404,7 +440,9 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
     Widget content = Builder(
       builder: (context) {
         if (doc.children.isEmpty) return _buildEmptyState(context);
-        final children = doc.children.map((node) => _buildNode(context, node, 0)).toList();
+        final children = doc.children
+            .map((node) => _buildNode(context, node, 0))
+            .toList();
         if (widget.embedded) {
           return Padding(
             padding: EdgeInsets.all(AppSpacing.pagePadding),
@@ -430,7 +468,8 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
           Widget accessible = MediaQuery(
             data: media.copyWith(
               highContrast: media.highContrast || accessibility.highContrast,
-              disableAnimations: media.disableAnimations || accessibility.reducedMotion,
+              disableAnimations:
+                  media.disableAnimations || accessibility.reducedMotion,
             ),
             child: Semantics(
               container: true,
@@ -439,13 +478,19 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
               child: accessibilityChild,
             ),
           );
-          if (accessibility.keyboardNav) accessible = FocusTraversalGroup(child: accessible);
+          if (accessibility.keyboardNav)
+            accessible = FocusTraversalGroup(child: accessible);
           return accessible;
         },
       );
     }
     final locale = _parseLocale(doc.locale?.current);
-    if (locale != null) content = Localizations.override(context: context, locale: locale, child: content);
+    if (locale != null)
+      content = Localizations.override(
+        context: context,
+        locale: locale,
+        child: content,
+      );
     return SchemaUIThemeResolver(theme: doc.theme, child: content);
   }
 
@@ -469,11 +514,12 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
 
   Future<void> _openResourceHref(String href) async {
     final uri = Uri.tryParse(href.trim());
-    if (uri == null || !const {'http', 'https'}.contains(uri.scheme.toLowerCase())) {
+    if (uri == null ||
+        !const {'http', 'https'}.contains(uri.scheme.toLowerCase())) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('仅支持打开 http/https 资源链接')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('仅支持打开 http/https 资源链接')));
       }
       return;
     }
@@ -484,9 +530,7 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
     await Navigator.of(context).push<void>(
       MaterialPageRoute(
         builder: (pageContext) => Scaffold(
-          appBar: AppBar(
-            title: Text(uri.host.isEmpty ? '资源链接' : uri.host),
-          ),
+          appBar: AppBar(title: Text(uri.host.isEmpty ? '资源链接' : uri.host)),
           body: SafeArea(child: WebViewWidget(controller: controller)),
         ),
       ),
@@ -578,7 +622,10 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
         case SchemaUI.nodeExtensionSlot:
           return _buildExtensionSlot(context, renderedNode);
         default:
-          return _buildErrorWidget(context, 'Unknown node type: ${renderedNode.type}');
+          return _buildErrorWidget(
+            context,
+            'Unknown node type: ${renderedNode.type}',
+          );
       }
     } catch (e) {
       return _buildErrorWidget(context, 'Render error: $e');
@@ -615,7 +662,8 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
   }
 
   dynamic _resolvedNodeValue(SchemaUINode node, [SchemaUIBinding? binding]) {
-    final activeBinding = binding ?? (node.bindings.isNotEmpty ? node.bindings.first : null);
+    final activeBinding =
+        binding ?? (node.bindings.isNotEmpty ? node.bindings.first : null);
     return _bindingEngine.resolveBinding(activeBinding, _buildContext()) ??
         node.props?['__boundValue'] ??
         node.props?['value'];
@@ -647,15 +695,31 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
   Widget _buildExtensionSlot(BuildContext context, SchemaUINode node) {
     final builder = widget.slotBuilder;
     if (builder == null) return const SizedBox.shrink();
-    final slotId = (node.props?['slotId'] ?? node.props?['slot_id'] ?? '').toString().trim();
-    if (slotId.isEmpty) return _buildErrorWidget(context, 'extension_slot requires slotId');
-    final contributionId = (node.props?['contributionId'] ?? node.props?['contribution_id'])?.toString();
+    final slotId = (node.props?['slotId'] ?? node.props?['slot_id'] ?? '')
+        .toString()
+        .trim();
+    if (slotId.isEmpty)
+      return _buildErrorWidget(context, 'extension_slot requires slotId');
+    final contributionId =
+        (node.props?['contributionId'] ?? node.props?['contribution_id'])
+            ?.toString();
     final props = node.props ?? const <String, dynamic>{};
-    final dispatchKey = props['dispatchKey'] ?? props['dispatch_key'] ?? props['entryKey'] ?? props['entry_key'];
-    final dispatchOnly = props['dispatchOnly'] ?? props['dispatch_only'] ?? props['only'] ?? props['cellId'] ?? props['cell_id'];
+    final dispatchKey =
+        props['dispatchKey'] ??
+        props['dispatch_key'] ??
+        props['entryKey'] ??
+        props['entry_key'];
+    final dispatchOnly =
+        props['dispatchOnly'] ??
+        props['dispatch_only'] ??
+        props['only'] ??
+        props['cellId'] ??
+        props['cell_id'];
     final fallback = props['fallback']?.toString().trim();
     final layout = props['layout']?.toString().trim();
-    final surfaceRole = (props['surfaceRole'] ?? props['surface_role'])?.toString().trim();
+    final surfaceRole = (props['surfaceRole'] ?? props['surface_role'])
+        ?.toString()
+        .trim();
     return builder(slotId, contributionId, {
       ...?widget.initialContext,
       'schemaNodeId': node.id,
@@ -663,7 +727,8 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
       if (dispatchOnly != null) 'dispatchOnly': dispatchOnly,
       if (fallback != null && fallback.isNotEmpty) 'slotFallback': fallback,
       if (layout != null && layout.isNotEmpty) 'slotLayout': layout,
-      if (surfaceRole != null && surfaceRole.isNotEmpty) 'surfaceRole': surfaceRole,
+      if (surfaceRole != null && surfaceRole.isNotEmpty)
+        'surfaceRole': surfaceRole,
     });
   }
 
@@ -682,10 +747,12 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
           ],
           SizedBox(height: AppSpacing.sm),
         ],
-        ...node.children.map((child) => Padding(
-              padding: EdgeInsets.only(bottom: AppSpacing.componentGap),
-              child: _buildNode(context, child, depth + 1),
-            )),
+        ...node.children.map(
+          (child) => Padding(
+            padding: EdgeInsets.only(bottom: AppSpacing.componentGap),
+            child: _buildNode(context, child, depth + 1),
+          ),
+        ),
       ],
     );
     return AmitiaCard(
@@ -696,7 +763,10 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
 
   Widget _buildStack(BuildContext context, SchemaUINode node, int depth) {
     final gap = _dimension(node.props?['gap'], AppSpacing.sm);
-    final alignment = switch (node.props?['align']?.toString().trim().toLowerCase()) {
+    final alignment = switch (node.props?['align']
+        ?.toString()
+        .trim()
+        .toLowerCase()) {
       'center' => CrossAxisAlignment.center,
       'end' || 'flex-end' => CrossAxisAlignment.end,
       'stretch' => CrossAxisAlignment.stretch,
@@ -712,7 +782,10 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
 
   Widget _buildRow(BuildContext context, SchemaUINode node, int depth) {
     final gap = _dimension(node.props?['gap'], AppSpacing.sm);
-    final alignment = switch (node.props?['justify']?.toString().trim().toLowerCase()) {
+    final alignment = switch (node.props?['justify']
+        ?.toString()
+        .trim()
+        .toLowerCase()) {
       'center' => WrapAlignment.center,
       'end' || 'flex-end' => WrapAlignment.end,
       'space-between' || 'spacebetween' => WrapAlignment.spaceBetween,
@@ -720,7 +793,10 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
       'space-evenly' || 'spaceevenly' => WrapAlignment.spaceEvenly,
       _ => WrapAlignment.start,
     };
-    final crossAlignment = switch (node.props?['align']?.toString().trim().toLowerCase()) {
+    final crossAlignment = switch (node.props?['align']
+        ?.toString()
+        .trim()
+        .toLowerCase()) {
       'center' => WrapCrossAlignment.center,
       'end' || 'flex-end' => WrapCrossAlignment.end,
       _ => WrapCrossAlignment.start,
@@ -730,7 +806,9 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
       runSpacing: gap,
       alignment: alignment,
       crossAxisAlignment: crossAlignment,
-      children: node.children.map((child) => _buildNode(context, child, depth + 1)).toList(),
+      children: node.children
+          .map((child) => _buildNode(context, child, depth + 1))
+          .toList(),
     );
   }
 
@@ -762,24 +840,41 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
 
     final template = node.props?['columnsTemplate']?.toString().trim() ?? '';
     if (template.isNotEmpty) {
-      final repeat = RegExp(r'repeat\(\s*(\d+)\s*,', caseSensitive: false).firstMatch(template);
+      final repeat = RegExp(
+        r'repeat\(\s*(\d+)\s*,',
+        caseSensitive: false,
+      ).firstMatch(template);
       final repeated = int.tryParse(repeat?.group(1) ?? '');
-      if (repeated != null && repeated > 0) return repeated.clamp(1, 12).toInt();
+      if (repeated != null && repeated > 0)
+        return repeated.clamp(1, 12).toInt();
 
-      final minmax = RegExp(r'minmax\(\s*([0-9]+(?:\.[0-9]+)?)px', caseSensitive: false).firstMatch(template);
+      final minmax = RegExp(
+        r'minmax\(\s*([0-9]+(?:\.[0-9]+)?)px',
+        caseSensitive: false,
+      ).firstMatch(template);
       final minWidth = double.tryParse(minmax?.group(1) ?? '');
-      if (minWidth != null && minWidth > 0 && availableWidth.isFinite && availableWidth > 0) {
-        return ((availableWidth + gap) / (minWidth + gap)).floor().clamp(1, 12).toInt();
+      if (minWidth != null &&
+          minWidth > 0 &&
+          availableWidth.isFinite &&
+          availableWidth > 0) {
+        return ((availableWidth + gap) / (minWidth + gap))
+            .floor()
+            .clamp(1, 12)
+            .toInt();
       }
 
-      final fractionalTracks = RegExp(r'(?:(?:^|\s))(?:[0-9]+(?:\.[0-9]+)?)fr(?=\s|$)', caseSensitive: false)
-          .allMatches(template)
-          .length;
+      final fractionalTracks = RegExp(
+        r'(?:(?:^|\s))(?:[0-9]+(?:\.[0-9]+)?)fr(?=\s|$)',
+        caseSensitive: false,
+      ).allMatches(template).length;
       if (fractionalTracks > 0) return fractionalTracks.clamp(1, 12).toInt();
     }
 
     if (availableWidth.isFinite && availableWidth > 0) {
-      return ((availableWidth + gap) / (220 + gap)).floor().clamp(1, 12).toInt();
+      return ((availableWidth + gap) / (220 + gap))
+          .floor()
+          .clamp(1, 12)
+          .toInt();
     }
     return 2;
   }
@@ -795,14 +890,18 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
           physics: const NeverScrollableScrollPhysics(),
           crossAxisSpacing: gap,
           mainAxisSpacing: gap,
-          children: node.children.map((child) => _buildNode(context, child, depth + 1)).toList(),
+          children: node.children
+              .map((child) => _buildNode(context, child, depth + 1))
+              .toList(),
         );
       },
     );
   }
 
   Widget _buildTabs(BuildContext context, SchemaUINode node) {
-    final tabs = node.children.where((c) => c.type == SchemaUI.nodeTabItem).toList();
+    final tabs = node.children
+        .where((c) => c.type == SchemaUI.nodeTabItem)
+        .toList();
     if (tabs.isEmpty) return const SizedBox.shrink();
     final minHeight = (node.props?['minHeight'] as num?)?.toDouble();
     return _SchemaTabsView(
@@ -817,7 +916,9 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
           padding: EdgeInsets.all(AppSpacing.md),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
-            children: tab.children.map((child) => _buildNode(context, child, 0)).toList(),
+            children: tab.children
+                .map((child) => _buildNode(context, child, 0))
+                .toList(),
           ),
         );
       },
@@ -827,7 +928,8 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
   Widget _buildCard(BuildContext context, SchemaUINode node) {
     final title = node.props?['title']?.toString().trim() ?? '';
     final bordered = node.props?['bordered'] != false;
-    final shadow = node.props?['shadow']?.toString().trim().toLowerCase() ?? 'hover';
+    final shadow =
+        node.props?['shadow']?.toString().trim().toLowerCase() ?? 'hover';
     Widget card = AmitiaCard(
       border: bordered ? null : Border.all(color: Colors.transparent, width: 0),
       child: Padding(
@@ -839,10 +941,12 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
               Text(title, style: AppTypography.cardTitle(context)),
               SizedBox(height: AppSpacing.sm),
             ],
-            ...node.children.map((child) => Padding(
-                  padding: EdgeInsets.only(bottom: AppSpacing.sm),
-                  child: _buildNode(context, child, 0),
-                )),
+            ...node.children.map(
+              (child) => Padding(
+                padding: EdgeInsets.only(bottom: AppSpacing.sm),
+                child: _buildNode(context, child, 0),
+              ),
+            ),
           ],
         ),
       ),
@@ -853,7 +957,9 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
           borderRadius: AppRadius.brMedium,
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: shadow == 'always' ? 0.12 : 0.07),
+              color: Colors.black.withValues(
+                alpha: shadow == 'always' ? 0.12 : 0.07,
+              ),
               blurRadius: shadow == 'always' ? 14 : 8,
               offset: const Offset(0, 3),
             ),
@@ -866,7 +972,12 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
   }
 
   Widget _buildText(BuildContext context, SchemaUINode node) {
-    final text = (node.props?['text'] ?? node.props?['content'] ?? _resolvedNodeValue(node) ?? '').toString();
+    final text =
+        (node.props?['text'] ??
+                node.props?['content'] ??
+                _resolvedNodeValue(node) ??
+                '')
+            .toString();
     final style = node.props?['variant'] as String? ?? 'body';
     final styleResolved = _textStyle(context, style);
     return Text(text, style: styleResolved);
@@ -888,7 +999,12 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
   }
 
   Widget _buildMarkdown(BuildContext context, SchemaUINode node) {
-    final source = (node.props?['content'] ?? node.props?['text'] ?? node.props?['source'] ?? '').toString();
+    final source =
+        (node.props?['content'] ??
+                node.props?['text'] ??
+                node.props?['source'] ??
+                '')
+            .toString();
     final lines = source.split(RegExp(r'\r?\n'));
     final widgets = <Widget>[];
     final codeLines = <String>[];
@@ -914,12 +1030,19 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
       final heading = RegExp(r'^(#{1,6})\s+(.*)$').firstMatch(line);
       if (heading != null) {
         final level = heading.group(1)!.length;
-        final size = switch (level) { 1 => 22.0, 2 => 19.0, 3 => 17.0, _ => 15.0 };
-        widgets.add(_markdownInlineText(
-          context,
-          heading.group(2) ?? '',
-          AppTypography.sectionTitle(context).copyWith(fontSize: size),
-        ));
+        final size = switch (level) {
+          1 => 22.0,
+          2 => 19.0,
+          3 => 17.0,
+          _ => 15.0,
+        };
+        widgets.add(
+          _markdownInlineText(
+            context,
+            heading.group(2) ?? '',
+            AppTypography.sectionTitle(context).copyWith(fontSize: size),
+          ),
+        );
         continue;
       }
       final unordered = RegExp(r'^[-*+]\s+(.*)$').firstMatch(line);
@@ -929,23 +1052,35 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
       }
       final ordered = RegExp(r'^(\d+)\.\s+(.*)$').firstMatch(line);
       if (ordered != null) {
-        widgets.add(_markdownListRow(context, '${ordered.group(1)}.', ordered.group(2) ?? ''));
+        widgets.add(
+          _markdownListRow(
+            context,
+            '${ordered.group(1)}.',
+            ordered.group(2) ?? '',
+          ),
+        );
         continue;
       }
       final quote = RegExp(r'^>\s?(.*)$').firstMatch(line);
       if (quote != null) {
-        widgets.add(Container(
-          width: double.infinity,
-          padding: EdgeInsets.only(left: AppSpacing.sm, top: 4, bottom: 4),
-          decoration: BoxDecoration(
-            border: Border(left: BorderSide(color: context.borderPrimary, width: 3)),
+        widgets.add(
+          Container(
+            width: double.infinity,
+            padding: EdgeInsets.only(left: AppSpacing.sm, top: 4, bottom: 4),
+            decoration: BoxDecoration(
+              border: Border(
+                left: BorderSide(color: context.borderPrimary, width: 3),
+              ),
+            ),
+            child: _markdownInlineText(
+              context,
+              quote.group(1) ?? '',
+              AppTypography.bodySmall(
+                context,
+              ).copyWith(color: context.textSecondary),
+            ),
           ),
-          child: _markdownInlineText(
-            context,
-            quote.group(1) ?? '',
-            AppTypography.bodySmall(context).copyWith(color: context.textSecondary),
-          ),
-        ));
+        );
         continue;
       }
       if (RegExp(r'^(-{3,}|\*{3,}|_{3,})$').hasMatch(line.trim())) {
@@ -956,17 +1091,21 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
         widgets.add(SizedBox(height: AppSpacing.sm));
         continue;
       }
-      widgets.add(_markdownInlineText(context, line, AppTypography.bodySmall(context)));
+      widgets.add(
+        _markdownInlineText(context, line, AppTypography.bodySmall(context)),
+      );
     }
     if (inCode || codeLines.isNotEmpty) flushCode();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: widgets
-          .map((item) => Padding(
-                padding: EdgeInsets.only(bottom: AppSpacing.tightGap),
-                child: item,
-              ))
+          .map(
+            (item) => Padding(
+              padding: EdgeInsets.only(bottom: AppSpacing.tightGap),
+              child: item,
+            ),
+          )
           .toList(growable: false),
     );
   }
@@ -975,8 +1114,17 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        SizedBox(width: 28, child: Text(marker, style: AppTypography.bodySmall(context))),
-        Expanded(child: _markdownInlineText(context, text, AppTypography.bodySmall(context))),
+        SizedBox(
+          width: 28,
+          child: Text(marker, style: AppTypography.bodySmall(context)),
+        ),
+        Expanded(
+          child: _markdownInlineText(
+            context,
+            text,
+            AppTypography.bodySmall(context),
+          ),
+        ),
       ],
     );
   }
@@ -992,19 +1140,32 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
       ),
       child: SelectableText(
         code,
-        style: AppTypography.bodySmall(context).copyWith(fontFamily: 'monospace'),
+        style: AppTypography.bodySmall(
+          context,
+        ).copyWith(fontFamily: 'monospace'),
       ),
     );
   }
 
-  Widget _markdownInlineText(BuildContext context, String text, TextStyle baseStyle) {
+  Widget _markdownInlineText(
+    BuildContext context,
+    String text,
+    TextStyle baseStyle,
+  ) {
     return Text.rich(
-      TextSpan(children: _parseInlineSpans(context, text, baseStyle), style: baseStyle),
+      TextSpan(
+        children: _parseInlineSpans(context, text, baseStyle),
+        style: baseStyle,
+      ),
       softWrap: true,
     );
   }
 
-  List<InlineSpan> _parseInlineSpans(BuildContext context, String text, TextStyle baseStyle) {
+  List<InlineSpan> _parseInlineSpans(
+    BuildContext context,
+    String text,
+    TextStyle baseStyle,
+  ) {
     final spans = <InlineSpan>[];
     final regex = RegExp(
       r'`([^`]+)`|\*\*([^*]+)\*\*|__([^_]+)__|\*([^*]+)\*|_([^_]+)_|\[([^\]]+)\]\((https?://[^)]+)\)|(https?://[^\s]+)',
@@ -1013,34 +1174,56 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
     var lastEnd = 0;
     for (final match in regex.allMatches(text)) {
       if (match.start > lastEnd) {
-        spans.add(TextSpan(text: text.substring(lastEnd, match.start), style: baseStyle));
+        spans.add(
+          TextSpan(
+            text: text.substring(lastEnd, match.start),
+            style: baseStyle,
+          ),
+        );
       }
       if (match.group(1) != null) {
-        spans.add(TextSpan(
-          text: match.group(1),
-          style: baseStyle.copyWith(fontFamily: 'monospace', backgroundColor: context.surfaceSecondary),
-        ));
+        spans.add(
+          TextSpan(
+            text: match.group(1),
+            style: baseStyle.copyWith(
+              fontFamily: 'monospace',
+              backgroundColor: context.surfaceSecondary,
+            ),
+          ),
+        );
       } else if (match.group(2) != null || match.group(3) != null) {
-        spans.add(TextSpan(text: match.group(2) ?? match.group(3), style: baseStyle.copyWith(fontWeight: FontWeight.bold)));
+        spans.add(
+          TextSpan(
+            text: match.group(2) ?? match.group(3),
+            style: baseStyle.copyWith(fontWeight: FontWeight.bold),
+          ),
+        );
       } else if (match.group(4) != null || match.group(5) != null) {
-        spans.add(TextSpan(text: match.group(4) ?? match.group(5), style: baseStyle.copyWith(fontStyle: FontStyle.italic)));
+        spans.add(
+          TextSpan(
+            text: match.group(4) ?? match.group(5),
+            style: baseStyle.copyWith(fontStyle: FontStyle.italic),
+          ),
+        );
       } else {
         final label = match.group(6) ?? match.group(8) ?? '';
         final href = match.group(7) ?? match.group(8) ?? '';
-        spans.add(WidgetSpan(
-          alignment: PlaceholderAlignment.baseline,
-          baseline: TextBaseline.alphabetic,
-          child: InkWell(
-            onTap: href.isEmpty ? null : () => _openResourceHref(href),
-            child: Text(
-              label,
-              style: baseStyle.copyWith(
-                color: context.accentPrimary,
-                decoration: TextDecoration.underline,
+        spans.add(
+          WidgetSpan(
+            alignment: PlaceholderAlignment.baseline,
+            baseline: TextBaseline.alphabetic,
+            child: InkWell(
+              onTap: href.isEmpty ? null : () => _openResourceHref(href),
+              child: Text(
+                label,
+                style: baseStyle.copyWith(
+                  color: context.accentPrimary,
+                  decoration: TextDecoration.underline,
+                ),
               ),
             ),
           ),
-        ));
+        );
       }
       lastEnd = match.end;
     }
@@ -1052,8 +1235,15 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
 
   Widget _buildBadge(BuildContext context, SchemaUINode node) {
     if (_dismissedNodeIds.contains(node.id)) return const SizedBox.shrink();
-    final text = (node.props?['text'] ?? node.props?['label'] ?? _resolvedNodeValue(node) ?? '').toString();
-    final badgeType = _badgeType((node.props?['variant'] ?? node.props?['type'])?.toString());
+    final text =
+        (node.props?['text'] ??
+                node.props?['label'] ??
+                _resolvedNodeValue(node) ??
+                '')
+            .toString();
+    final badgeType = _badgeType(
+      (node.props?['variant'] ?? node.props?['type'])?.toString(),
+    );
     final badge = AmitiaStatusBadge(label: text, type: badgeType);
     if (node.props?['closable'] != true) return badge;
     return Row(
@@ -1073,17 +1263,25 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
 
   BadgeType _badgeType(String? variant) {
     switch (variant) {
-      case 'success': return BadgeType.success;
-      case 'warning': return BadgeType.warning;
-      case 'error': return BadgeType.error;
-      case 'info': return BadgeType.info;
-      case 'accent': return BadgeType.accent;
-      default: return BadgeType.neutral;
+      case 'success':
+        return BadgeType.success;
+      case 'warning':
+        return BadgeType.warning;
+      case 'error':
+        return BadgeType.error;
+      case 'info':
+        return BadgeType.info;
+      case 'accent':
+        return BadgeType.accent;
+      default:
+        return BadgeType.neutral;
     }
   }
 
   Widget _buildDivider(BuildContext context, SchemaUINode node) {
-    final direction = node.props?['direction']?.toString().trim().toLowerCase() ?? 'horizontal';
+    final direction =
+        node.props?['direction']?.toString().trim().toLowerCase() ??
+        'horizontal';
     final text = node.props?['text']?.toString().trim() ?? '';
     if (direction == 'vertical') {
       return SizedBox(
@@ -1092,7 +1290,8 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
       );
     }
     if (text.isEmpty) return const Divider(height: 1);
-    final position = node.props?['position']?.toString().trim().toLowerCase() ?? 'center';
+    final position =
+        node.props?['position']?.toString().trim().toLowerCase() ?? 'center';
     final leadingFlex = position == 'left' || position == 'start' ? 0 : 1;
     final trailingFlex = position == 'right' || position == 'end' ? 0 : 1;
     return Row(
@@ -1108,7 +1307,12 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
   }
 
   Widget _buildIcon(BuildContext context, SchemaUINode node) {
-    final iconName = (node.props?['name'] ?? node.props?['symbol'] ?? node.props?['label'] ?? 'help_outline').toString();
+    final iconName =
+        (node.props?['name'] ??
+                node.props?['symbol'] ??
+                node.props?['label'] ??
+                'help_outline')
+            .toString();
     final size = _dimension(node.props?['size'], 24);
     final color = _schemaColor(node.props?['color']) ?? context.accentPrimary;
     return Icon(_mapIconData(iconName), size: size, color: color);
@@ -1116,15 +1320,24 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
 
   IconData _mapIconData(String name) {
     switch (name) {
-      case 'home': return Icons.home_outlined;
-      case 'settings': return Icons.settings_outlined;
-      case 'person': return Icons.person_outlined;
-      case 'star': return Icons.star_outline;
-      case 'check': return Icons.check_circle_outline;
-      case 'close': return Icons.close;
-      case 'info': return Icons.info_outline;
-      case 'warning': return Icons.warning_amber_outlined;
-      default: return Icons.help_outline;
+      case 'home':
+        return Icons.home_outlined;
+      case 'settings':
+        return Icons.settings_outlined;
+      case 'person':
+        return Icons.person_outlined;
+      case 'star':
+        return Icons.star_outline;
+      case 'check':
+        return Icons.check_circle_outline;
+      case 'close':
+        return Icons.close;
+      case 'info':
+        return Icons.info_outline;
+      case 'warning':
+        return Icons.warning_amber_outlined;
+      default:
+        return Icons.help_outline;
     }
   }
 
@@ -1143,7 +1356,9 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
           color: context.surfaceSecondary,
           borderRadius: AppRadius.brSmall,
         ),
-        child: Center(child: Icon(Icons.image_outlined, color: context.textTertiary)),
+        child: Center(
+          child: Icon(Icons.image_outlined, color: context.textTertiary),
+        ),
       );
     }
 
@@ -1202,21 +1417,25 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
     required String alt,
   }) {
     Widget error() => Container(
-          width: width,
-          height: height ?? 80,
-          color: context.surfaceSecondary,
-          alignment: Alignment.center,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.broken_image_outlined, color: context.textTertiary),
-              if (alt.trim().isNotEmpty) ...[
-                const SizedBox(height: 4),
-                Text(alt, style: AppTypography.caption(context), textAlign: TextAlign.center),
-              ],
-            ],
-          ),
-        );
+      width: width,
+      height: height ?? 80,
+      color: context.surfaceSecondary,
+      alignment: Alignment.center,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.broken_image_outlined, color: context.textTertiary),
+          if (alt.trim().isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(
+              alt,
+              style: AppTypography.caption(context),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ],
+      ),
+    );
 
     if (src.startsWith('data:image/')) {
       final comma = src.indexOf(',');
@@ -1277,7 +1496,8 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
   }
 
   bool _isEditableBinding(SchemaUIBinding? binding) {
-    return binding != null && (binding.source == 'form' || binding.source == 'form_state');
+    return binding != null &&
+        (binding.source == 'form' || binding.source == 'form_state');
   }
 
   void _updateBinding(SchemaUIBinding? binding, dynamic value) {
@@ -1286,7 +1506,8 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
   }
 
   Widget _buildField(BuildContext context, SchemaUINode node) {
-    final label = (node.props?['label'] ?? node.props?['title'] ?? '').toString();
+    final label = (node.props?['label'] ?? node.props?['title'] ?? '')
+        .toString();
     final required = node.props?['required'] == true;
     final error = node.props?['error']?.toString().trim() ?? '';
     final binding = node.bindings.isNotEmpty ? node.bindings.first : null;
@@ -1296,13 +1517,21 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (label.isNotEmpty) ...[
-            Text(required ? '$label *' : label, style: AppTypography.label(context)),
+            Text(
+              required ? '$label *' : label,
+              style: AppTypography.label(context),
+            ),
             const SizedBox(height: 4),
           ],
           ...node.children.map((child) => _buildNode(context, child, 0)),
           if (error.isNotEmpty) ...[
             const SizedBox(height: 4),
-            Text(error, style: AppTypography.caption(context).copyWith(color: context.error)),
+            Text(
+              error,
+              style: AppTypography.caption(
+                context,
+              ).copyWith(color: context.error),
+            ),
           ],
         ],
       );
@@ -1310,10 +1539,13 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
     final value = _resolvedNodeValue(node, binding);
     final text = value?.toString() ?? '';
     final rows = ((node.props?['rows'] as num?) ?? 1).toInt().clamp(1, 20);
-    final variant = node.props?['variant']?.toString().trim().toLowerCase() ?? 'text';
+    final variant =
+        node.props?['variant']?.toString().trim().toLowerCase() ?? 'text';
     final multiline = variant == 'textarea' || rows > 1;
     final rawMaxLength = node.props?['maxlength'] ?? node.props?['maxLength'];
-    final maxLength = rawMaxLength is num ? rawMaxLength.toInt() : int.tryParse(rawMaxLength?.toString() ?? '');
+    final maxLength = rawMaxLength is num
+        ? rawMaxLength.toInt()
+        : int.tryParse(rawMaxLength?.toString() ?? '');
     final clearable = node.props?['clearable'] == true;
     final keyboardType = switch (variant) {
       'number' => TextInputType.number,
@@ -1325,7 +1557,10 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (label.isNotEmpty) ...[
-          Text(required ? '$label *' : label, style: AppTypography.label(context)),
+          Text(
+            required ? '$label *' : label,
+            style: AppTypography.label(context),
+          ),
           const SizedBox(height: 4),
         ],
         AmitiaTextField(
@@ -1352,7 +1587,8 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
   }
 
   Widget _buildSelect(BuildContext context, SchemaUINode node) {
-    final label = (node.props?['label'] ?? node.props?['title'] ?? '').toString();
+    final label = (node.props?['label'] ?? node.props?['title'] ?? '')
+        .toString();
     final binding = node.bindings.isNotEmpty ? node.bindings.first : null;
     final rawValue = _resolvedNodeValue(node, binding);
     final multiple = node.props?['multiple'] == true;
@@ -1364,7 +1600,9 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
     if (rawOptions is List) {
       for (final raw in rawOptions) {
         if (raw is Map) {
-          final value = raw.containsKey('value') ? raw['value'] : (raw['id'] ?? raw['label'] ?? raw['text']);
+          final value = raw.containsKey('value')
+              ? raw['value']
+              : (raw['id'] ?? raw['label'] ?? raw['text']);
           options.add(
             _SchemaSelectOption(
               value: value,
@@ -1372,7 +1610,9 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
             ),
           );
         } else {
-          options.add(_SchemaSelectOption(value: raw, label: raw?.toString() ?? ''));
+          options.add(
+            _SchemaSelectOption(value: raw, label: raw?.toString() ?? ''),
+          );
         }
       }
     }
@@ -1407,7 +1647,10 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
               borderRadius: AppRadius.brMedium,
               borderSide: BorderSide.none,
             ),
-            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: 4,
+            ),
             enabled: !disabled,
           ),
           child: Row(
@@ -1417,13 +1660,13 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
                   onTap: disabled
                       ? null
                       : () => _openSelectPicker(
-                            node: node,
-                            binding: binding,
-                            options: options,
-                            selectedValues: selectedValues,
-                            multiple: multiple,
-                            filterable: filterable,
-                          ),
+                          node: node,
+                          binding: binding,
+                          options: options,
+                          selectedValues: selectedValues,
+                          multiple: multiple,
+                          filterable: filterable,
+                        ),
                   child: Padding(
                     padding: const EdgeInsets.symmetric(vertical: 10),
                     child: Text(
@@ -1431,7 +1674,9 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: AppTypography.body(context).copyWith(
-                        color: displayText.isEmpty ? context.textTertiary : context.textPrimary,
+                        color: displayText.isEmpty
+                            ? context.textTertiary
+                            : context.textPrimary,
                       ),
                     ),
                   ),
@@ -1441,11 +1686,17 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
                 IconButton(
                   tooltip: '清除',
                   visualDensity: VisualDensity.compact,
-                  onPressed: () => _updateBinding(binding, multiple ? <dynamic>[] : null),
+                  onPressed: () =>
+                      _updateBinding(binding, multiple ? <dynamic>[] : null),
                   icon: const Icon(Icons.close, size: 18),
                 )
               else
-                Icon(Icons.arrow_drop_down, color: disabled ? context.textTertiary : context.textSecondary),
+                Icon(
+                  Icons.arrow_drop_down,
+                  color: disabled
+                      ? context.textTertiary
+                      : context.textSecondary,
+                ),
             ],
           ),
         ),
@@ -1475,8 +1726,12 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
             final visibleOptions = normalizedQuery.isEmpty
                 ? options
                 : options
-                    .where((option) => option.label.toLowerCase().contains(normalizedQuery))
-                    .toList(growable: false);
+                      .where(
+                        (option) => option.label.toLowerCase().contains(
+                          normalizedQuery,
+                        ),
+                      )
+                      .toList(growable: false);
             return SafeArea(
               child: Padding(
                 padding: EdgeInsets.only(
@@ -1498,37 +1753,48 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
                             prefixIcon: Icon(Icons.search),
                             hintText: '筛选选项',
                           ),
-                          onChanged: (value) => setSheetState(() => query = value),
+                          onChanged: (value) =>
+                              setSheetState(() => query = value),
                         ),
                         const SizedBox(height: 8),
                       ],
                       Flexible(
                         child: visibleOptions.isEmpty
-                            ? const Center(child: Padding(
-                                padding: EdgeInsets.all(24),
-                                child: Text('没有匹配的选项'),
-                              ))
+                            ? const Center(
+                                child: Padding(
+                                  padding: EdgeInsets.all(24),
+                                  child: Text('没有匹配的选项'),
+                                ),
+                              )
                             : ListView.builder(
                                 shrinkWrap: true,
                                 itemCount: visibleOptions.length,
                                 itemBuilder: (context, index) {
                                   final option = visibleOptions[index];
-                                  final selected = working.any((value) => value == option.value);
+                                  final selected = working.any(
+                                    (value) => value == option.value,
+                                  );
                                   if (multiple) {
                                     return CheckboxListTile(
                                       value: selected,
                                       title: Text(option.label),
-                                      controlAffinity: ListTileControlAffinity.leading,
+                                      controlAffinity:
+                                          ListTileControlAffinity.leading,
                                       onChanged: (checked) {
                                         setSheetState(() {
-                                          working.removeWhere((value) => value == option.value);
-                                          if (checked == true) working.add(option.value);
+                                          working.removeWhere(
+                                            (value) => value == option.value,
+                                          );
+                                          if (checked == true)
+                                            working.add(option.value);
                                         });
                                       },
                                     );
                                   }
                                   return ListTile(
-                                    leading: selected ? const Icon(Icons.check) : const SizedBox(width: 24),
+                                    leading: selected
+                                        ? const Icon(Icons.check)
+                                        : const SizedBox(width: 24),
                                     title: Text(option.label),
                                     onTap: () {
                                       _updateBinding(binding, option.value);
@@ -1543,13 +1809,18 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
                         Row(
                           children: [
                             TextButton(
-                              onPressed: working.isEmpty ? null : () => setSheetState(working.clear),
+                              onPressed: working.isEmpty
+                                  ? null
+                                  : () => setSheetState(working.clear),
                               child: const Text('清空'),
                             ),
                             const Spacer(),
                             FilledButton(
                               onPressed: () {
-                                _updateBinding(binding, List<dynamic>.from(working));
+                                _updateBinding(
+                                  binding,
+                                  List<dynamic>.from(working),
+                                );
                                 Navigator.of(sheetContext).pop();
                               },
                               child: const Text('确定'),
@@ -1569,11 +1840,16 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
   }
 
   Widget _buildSwitch(BuildContext context, SchemaUINode node) {
-    final label = (node.props?['label'] ?? node.props?['title'] ?? '').toString();
+    final label = (node.props?['label'] ?? node.props?['title'] ?? '')
+        .toString();
     final binding = node.bindings.isNotEmpty ? node.bindings.first : null;
     final raw = _resolvedNodeValue(node, binding);
-    final activeValue = node.props?.containsKey('activeValue') == true ? node.props!['activeValue'] : true;
-    final inactiveValue = node.props?.containsKey('inactiveValue') == true ? node.props!['inactiveValue'] : false;
+    final activeValue = node.props?.containsKey('activeValue') == true
+        ? node.props!['activeValue']
+        : true;
+    final inactiveValue = node.props?.containsKey('inactiveValue') == true
+        ? node.props!['inactiveValue']
+        : false;
     final value = raw == activeValue || (activeValue == true && raw == true);
     final activeText = node.props?['activeText']?.toString().trim() ?? '';
     final inactiveText = node.props?['inactiveText']?.toString().trim() ?? '';
@@ -1585,21 +1861,27 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
       value: value,
       onChanged: disabled
           ? null
-          : (enabled) => _updateBinding(binding, enabled ? activeValue : inactiveValue),
+          : (enabled) =>
+                _updateBinding(binding, enabled ? activeValue : inactiveValue),
     );
   }
 
   Widget _buildSlider(BuildContext context, SchemaUINode node) {
-    final label = (node.props?['label'] ?? node.props?['title'] ?? '').toString();
+    final label = (node.props?['label'] ?? node.props?['title'] ?? '')
+        .toString();
     final min = _dimension(node.props?['min'], 0);
     final rawMax = _dimension(node.props?['max'], 100);
     final max = rawMax > min ? rawMax : min + 1;
     final binding = node.bindings.isNotEmpty ? node.bindings.first : null;
     final raw = _resolvedNodeValue(node, binding);
-    final parsed = raw is num ? raw.toDouble() : double.tryParse(raw?.toString() ?? '') ?? min;
+    final parsed = raw is num
+        ? raw.toDouble()
+        : double.tryParse(raw?.toString() ?? '') ?? min;
     final value = parsed.clamp(min, max).toDouble();
     final rawStep = _dimension(node.props?['step'], 0);
-    final divisions = rawStep > 0 ? ((max - min) / rawStep).round().clamp(1, 10000) : null;
+    final divisions = rawStep > 0
+        ? ((max - min) / rawStep).round().clamp(1, 10000)
+        : null;
     final disabled = _isNodeDisabled(node) || !_isEditableBinding(binding);
     final showInput = node.props?['showInput'] == true;
     return Column(
@@ -1623,14 +1905,22 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
                 width: 88,
                 child: AmitiaTextField(
                   key: ValueKey('${node.id}:slider:$value'),
-                  controller: TextEditingController(text: value.toStringAsFixed(rawStep > 0 && rawStep < 1 ? 2 : 0)),
+                  controller: TextEditingController(
+                    text: value.toStringAsFixed(
+                      rawStep > 0 && rawStep < 1 ? 2 : 0,
+                    ),
+                  ),
                   readOnly: disabled,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                    signed: true,
+                  ),
                   onChanged: disabled
                       ? null
                       : (text) {
                           final next = double.tryParse(text);
-                          if (next != null) _updateBinding(binding, next.clamp(min, max));
+                          if (next != null)
+                            _updateBinding(binding, next.clamp(min, max));
                         },
                 ),
               ),
@@ -1642,9 +1932,14 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
   }
 
   Widget _buildButton(BuildContext context, SchemaUINode node) {
-    final label = (node.props?['text'] ?? node.props?['label'] ?? '按钮').toString();
-    final kind = (node.props?['variant'] ?? node.props?['type'] ?? '').toString().trim().toLowerCase();
-    final size = node.props?['size']?.toString().trim().toLowerCase() ?? 'default';
+    final label = (node.props?['text'] ?? node.props?['label'] ?? '按钮')
+        .toString();
+    final kind = (node.props?['variant'] ?? node.props?['type'] ?? '')
+        .toString()
+        .trim()
+        .toLowerCase();
+    final size =
+        node.props?['size']?.toString().trim().toLowerCase() ?? 'default';
     final loading = node.props?['loading'] == true;
     final disabled = _isNodeDisabled(node) || loading || node.actions.isEmpty;
     final height = switch (size) {
@@ -1659,7 +1954,9 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
       isDestructive: kind == 'danger' || kind == 'error',
       outlined: node.props?['plain'] == true,
       round: node.props?['round'] == true,
-      onPressed: disabled ? null : () => _handleActions(node.actions, nodeId: node.id),
+      onPressed: disabled
+          ? null
+          : () => _handleActions(node.actions, nodeId: node.id),
     );
   }
 
@@ -1667,7 +1964,8 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
     return Wrap(
       spacing: AppSpacing.sm,
       children: node.children.map((child) {
-        if (child.type == SchemaUI.nodeButton) return _buildButton(context, child);
+        if (child.type == SchemaUI.nodeButton)
+          return _buildButton(context, child);
         return _buildNode(context, child, 0);
       }).toList(),
     );
@@ -1678,19 +1976,26 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
     if (items.isNotEmpty) {
       return Column(
         children: items
-            .map((item) => ListTile(
-                  title: Text(item.toString(), style: AppTypography.bodySmall(context)),
-                  contentPadding: EdgeInsets.zero,
-                ))
+            .map(
+              (item) => ListTile(
+                title: Text(
+                  item.toString(),
+                  style: AppTypography.bodySmall(context),
+                ),
+                contentPadding: EdgeInsets.zero,
+              ),
+            )
             .toList(),
       );
     }
     return Column(
       children: node.children
-          .map((child) => Padding(
-                padding: EdgeInsets.only(bottom: AppSpacing.sm),
-                child: _buildNode(context, child, depth + 1),
-              ))
+          .map(
+            (child) => Padding(
+              padding: EdgeInsets.only(bottom: AppSpacing.sm),
+              child: _buildNode(context, child, depth + 1),
+            ),
+          )
           .toList(),
     );
   }
@@ -1702,7 +2007,8 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
     if (columns is List) {
       for (final column in columns) {
         if (column is Map) {
-          final key = (column['prop'] ?? column['key'] ?? column['field'] ?? '').toString();
+          final key = (column['prop'] ?? column['key'] ?? column['field'] ?? '')
+              .toString();
           if (key.isEmpty) continue;
           keys.add(key);
           headers.add((column['label'] ?? column['title'] ?? key).toString());
@@ -1721,7 +2027,8 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
         }
       }
     }
-    final rawRows = node.props?['data'] ?? node.props?['items'] ?? node.props?['rows'];
+    final rawRows =
+        node.props?['data'] ?? node.props?['items'] ?? node.props?['rows'];
     final rows = <List<String>>[];
     if (rawRows is List) {
       for (final row in rawRows) {
@@ -1747,7 +2054,8 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
       }
       rows.clear();
       for (final row in rawRows) {
-        if (row is Map) rows.add(keys.map((key) => row[key]?.toString() ?? '').toList());
+        if (row is Map)
+          rows.add(keys.map((key) => row[key]?.toString() ?? '').toList());
       }
     }
     if (headers.isEmpty) return const SizedBox.shrink();
@@ -1758,27 +2066,39 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
     final divider = Theme.of(context).dividerColor;
     final table = DataTable(
       border: bordered ? TableBorder.all(color: divider) : null,
-      columns: headers.map((h) => DataColumn(label: Text(h, style: AppTypography.label(context)))).toList(),
+      columns: headers
+          .map(
+            (h) =>
+                DataColumn(label: Text(h, style: AppTypography.label(context))),
+          )
+          .toList(),
       rows: rows
           .asMap()
           .entries
-          .map((entry) => DataRow(
-                color: striped && entry.key.isOdd
-                    ? WidgetStatePropertyAll(context.surfaceSecondary.withValues(alpha: 0.55))
-                    : null,
-                cells: List.generate(
-                  headers.length,
-                  (index) => DataCell(
-                    Text(
-                      index < entry.value.length ? entry.value[index] : '',
-                      style: AppTypography.bodySmall(context),
-                    ),
+          .map(
+            (entry) => DataRow(
+              color: striped && entry.key.isOdd
+                  ? WidgetStatePropertyAll(
+                      context.surfaceSecondary.withValues(alpha: 0.55),
+                    )
+                  : null,
+              cells: List.generate(
+                headers.length,
+                (index) => DataCell(
+                  Text(
+                    index < entry.value.length ? entry.value[index] : '',
+                    style: AppTypography.bodySmall(context),
                   ),
                 ),
-              ))
+              ),
+            ),
+          )
           .toList(),
     );
-    final horizontal = SingleChildScrollView(scrollDirection: Axis.horizontal, child: table);
+    final horizontal = SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: table,
+    );
     if (maxHeight > 0) {
       return SizedBox(
         height: maxHeight,
@@ -1790,9 +2110,17 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
 
   Widget _buildNodeEmptyState(BuildContext context, SchemaUINode node) {
     final iconName = node.props?['icon']?.toString() ?? 'inbox_outlined';
-    final title = (node.props?['title'] ?? node.props?['description'] ?? node.props?['text'] ?? '暂无数据').toString();
+    final title =
+        (node.props?['title'] ??
+                node.props?['description'] ??
+                node.props?['text'] ??
+                '暂无数据')
+            .toString();
     final subtitle = (node.props?['subtitle'])?.toString();
-    final imageSize = _dimension(node.props?['imageSize'], 60).clamp(24.0, 160.0).toDouble();
+    final imageSize = _dimension(
+      node.props?['imageSize'],
+      60,
+    ).clamp(24.0, 160.0).toDouble();
     return AmitiaEmptyState(
       icon: _mapIconData(iconName),
       title: title,
@@ -1804,8 +2132,15 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
   Widget _buildAlert(BuildContext context, SchemaUINode node) {
     if (_dismissedNodeIds.contains(node.id)) return const SizedBox.shrink();
     final title = node.props?['title']?.toString().trim() ?? '';
-    final text = (node.props?['text'] ?? node.props?['message'] ?? node.props?['description'] ?? node.props?['detail'] ?? '').toString();
-    final variant = (node.props?['variant'] ?? node.props?['type'] ?? 'info').toString();
+    final text =
+        (node.props?['text'] ??
+                node.props?['message'] ??
+                node.props?['description'] ??
+                node.props?['detail'] ??
+                '')
+            .toString();
+    final variant = (node.props?['variant'] ?? node.props?['type'] ?? 'info')
+        .toString();
     final color = _alertColor(context, variant);
     final showIcon = node.props?['showIcon'] != false;
     final closable = node.props?['closable'] != false;
@@ -1827,9 +2162,12 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (title.isNotEmpty) Text(title, style: AppTypography.label(context)),
-                if (title.isNotEmpty && text.isNotEmpty) const SizedBox(height: 2),
-                if (text.isNotEmpty) Text(text, style: AppTypography.bodySmall(context)),
+                if (title.isNotEmpty)
+                  Text(title, style: AppTypography.label(context)),
+                if (title.isNotEmpty && text.isNotEmpty)
+                  const SizedBox(height: 2),
+                if (text.isNotEmpty)
+                  Text(text, style: AppTypography.bodySmall(context)),
               ],
             ),
           ),
@@ -1861,14 +2199,23 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
 
   Widget _buildProgress(BuildContext context, SchemaUINode node) {
     final binding = node.bindings.isNotEmpty ? node.bindings.first : null;
-    final raw = _resolvedNodeValue(node, binding) ?? node.props?['percentage'] ?? 0;
-    var percentage = (raw is num ? raw.toDouble() : double.tryParse(raw.toString()) ?? 0).clamp(0.0, 100.0).toDouble();
-    if (percentage <= 1 && (raw is num && raw.toDouble() <= 1)) percentage *= 100;
+    final raw =
+        _resolvedNodeValue(node, binding) ?? node.props?['percentage'] ?? 0;
+    var percentage =
+        (raw is num ? raw.toDouble() : double.tryParse(raw.toString()) ?? 0)
+            .clamp(0.0, 100.0)
+            .toDouble();
+    if (percentage <= 1 && (raw is num && raw.toDouble() <= 1))
+      percentage *= 100;
     final progress = (percentage / 100).clamp(0.0, 1.0).toDouble();
-    final variant = node.props?['variant']?.toString().trim().toLowerCase() ?? 'line';
+    final variant =
+        node.props?['variant']?.toString().trim().toLowerCase() ?? 'line';
     final status = node.props?['status']?.toString().trim().toLowerCase() ?? '';
     final showText = node.props?['showText'] != false;
-    final strokeWidth = _dimension(node.props?['strokeWidth'], 6).clamp(2.0, 24.0).toDouble();
+    final strokeWidth = _dimension(
+      node.props?['strokeWidth'],
+      6,
+    ).clamp(2.0, 24.0).toDouble();
     final color = switch (status) {
       'success' => context.success,
       'warning' => context.warning,
@@ -1892,7 +2239,11 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
                 backgroundColor: context.accentSoft,
               ),
             ),
-            if (showText) Text('${percentage.round()}%', style: AppTypography.caption(context)),
+            if (showText)
+              Text(
+                '${percentage.round()}%',
+                style: AppTypography.caption(context),
+              ),
           ],
         ),
       );
@@ -1900,7 +2251,11 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
-        AmitiaProgressBar(progress: progress, height: strokeWidth, color: color),
+        AmitiaProgressBar(
+          progress: progress,
+          height: strokeWidth,
+          color: color,
+        ),
         if (showText) ...[
           const SizedBox(height: 4),
           Text('${percentage.round()}%', style: AppTypography.caption(context)),
@@ -1910,7 +2265,12 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
   }
 
   Widget _buildCode(BuildContext context, SchemaUINode node) {
-    final content = (node.props?['content'] ?? node.props?['text'] ?? node.props?['value'] ?? '').toString();
+    final content =
+        (node.props?['content'] ??
+                node.props?['text'] ??
+                node.props?['value'] ??
+                '')
+            .toString();
     final language = node.props?['language']?.toString().trim() ?? '';
     return Container(
       width: double.infinity,
@@ -1929,7 +2289,9 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
           ],
           SelectableText(
             content,
-            style: AppTypography.bodySmall(context).copyWith(fontFamily: 'monospace'),
+            style: AppTypography.bodySmall(
+              context,
+            ).copyWith(fontFamily: 'monospace'),
           ),
         ],
       ),
@@ -1938,10 +2300,12 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
 
   Widget _buildResourceLink(BuildContext context, SchemaUINode node) {
     final href = node.props?['href']?.toString().trim() ?? '';
-    final text = (node.props?['text'] ?? node.props?['label'] ?? href).toString();
+    final text = (node.props?['text'] ?? node.props?['label'] ?? href)
+        .toString();
     final disabled = node.props?['disabled'] == true;
     final underline = node.props?['underline'] != false;
-    final canActivate = !disabled && (node.actions.isNotEmpty || href.isNotEmpty);
+    final canActivate =
+        !disabled && (node.actions.isNotEmpty || href.isNotEmpty);
     return InkWell(
       borderRadius: AppRadius.brSmall,
       onTap: !canActivate
@@ -1968,8 +2332,12 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
               child: Text(
                 text,
                 style: AppTypography.bodySmall(context).copyWith(
-                  color: canActivate ? context.accentPrimary : context.textTertiary,
-                  decoration: canActivate && underline ? TextDecoration.underline : TextDecoration.none,
+                  color: canActivate
+                      ? context.accentPrimary
+                      : context.textTertiary,
+                  decoration: canActivate && underline
+                      ? TextDecoration.underline
+                      : TextDecoration.none,
                 ),
               ),
             ),
@@ -1982,7 +2350,12 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
   Widget _buildPermissionSummary(BuildContext context, SchemaUINode node) {
     final title = (node.props?['title'] ?? '权限概览').toString();
     final raw = node.props?['permissions'] ?? node.props?['items'];
-    final permissions = raw is List ? raw.map((item) => item.toString()).where((item) => item.trim().isNotEmpty).toList() : <String>[];
+    final permissions = raw is List
+        ? raw
+              .map((item) => item.toString())
+              .where((item) => item.trim().isNotEmpty)
+              .toList()
+        : <String>[];
     return AmitiaCard(
       child: Padding(
         padding: EdgeInsets.all(AppSpacing.md),
@@ -2002,7 +2375,12 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
                     children: [
                       Icon(Icons.circle, size: 6, color: context.textTertiary),
                       const SizedBox(width: 8),
-                      Expanded(child: Text(permission, style: AppTypography.bodySmall(context))),
+                      Expanded(
+                        child: Text(
+                          permission,
+                          style: AppTypography.bodySmall(context),
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -2014,9 +2392,11 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
   }
 
   Widget _buildRuntimeStatus(BuildContext context, SchemaUINode node) {
-    final status = (node.props?['status'] ?? node.props?['state'] ?? 'unknown').toString();
+    final status = (node.props?['status'] ?? node.props?['state'] ?? 'unknown')
+        .toString();
     final label = (node.props?['label'] ?? '运行时状态').toString();
-    final message = (node.props?['message'] ?? node.props?['detail'] ?? '').toString();
+    final message = (node.props?['message'] ?? node.props?['detail'] ?? '')
+        .toString();
     final normalized = status.toLowerCase();
     final badgeType = switch (normalized) {
       'ready' || 'running' || 'online' || 'healthy' => BadgeType.success,
@@ -2032,7 +2412,9 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
           children: [
             Row(
               children: [
-                Expanded(child: Text(label, style: AppTypography.label(context))),
+                Expanded(
+                  child: Text(label, style: AppTypography.label(context)),
+                ),
                 AmitiaStatusBadge(label: status, type: badgeType),
               ],
             ),
@@ -2051,12 +2433,15 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
     final entries = <MapEntry<String, String>>[];
     if (raw is Map) {
       for (final entry in raw.entries) {
-        entries.add(MapEntry(entry.key.toString(), entry.value?.toString() ?? ''));
+        entries.add(
+          MapEntry(entry.key.toString(), entry.value?.toString() ?? ''),
+        );
       }
     } else if (raw is List) {
       for (final item in raw) {
         if (item is Map) {
-          final key = (item['key'] ?? item['label'] ?? item['name'] ?? '').toString();
+          final key = (item['key'] ?? item['label'] ?? item['name'] ?? '')
+              .toString();
           final value = (item['value'] ?? item['content'] ?? '').toString();
           entries.add(MapEntry(key, value));
         } else {
@@ -2066,14 +2451,20 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
     }
     final title = node.props?['title']?.toString().trim() ?? '';
     final rawColumns = node.props?['columns'];
-    final columns = (rawColumns is num ? rawColumns.toInt() : int.tryParse(rawColumns?.toString() ?? '') ?? 1)
-        .clamp(1, 6)
-        .toInt();
+    final columns =
+        (rawColumns is num
+                ? rawColumns.toInt()
+                : int.tryParse(rawColumns?.toString() ?? '') ?? 1)
+            .clamp(1, 6)
+            .toInt();
     final bordered = node.props?['bordered'] != false;
 
     Widget item(MapEntry<String, String> entry) {
       return Container(
-        padding: EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: AppSpacing.tightGap),
+        padding: EdgeInsets.symmetric(
+          horizontal: AppSpacing.sm,
+          vertical: AppSpacing.tightGap,
+        ),
         decoration: bordered
             ? BoxDecoration(
                 border: Border.all(color: context.borderPrimary),
@@ -2083,7 +2474,9 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Expanded(child: Text(entry.key, style: AppTypography.label(context))),
+            Expanded(
+              child: Text(entry.key, style: AppTypography.label(context)),
+            ),
             const SizedBox(width: 12),
             Expanded(
               child: Text(
@@ -2108,13 +2501,19 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
           builder: (context, constraints) {
             final gap = AppSpacing.tightGap;
             final width = constraints.maxWidth.isFinite
-                ? ((constraints.maxWidth - gap * (columns - 1)) / columns).clamp(0.0, double.infinity).toDouble()
+                ? ((constraints.maxWidth - gap * (columns - 1)) / columns)
+                      .clamp(0.0, double.infinity)
+                      .toDouble()
                 : null;
             return Wrap(
               spacing: gap,
               runSpacing: gap,
               children: entries
-                  .map((entry) => width == null ? item(entry) : SizedBox(width: width, child: item(entry)))
+                  .map(
+                    (entry) => width == null
+                        ? item(entry)
+                        : SizedBox(width: width, child: item(entry)),
+                  )
                   .toList(),
             );
           },
@@ -2137,7 +2536,10 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
         color: context.error.withValues(alpha: 0.08),
         borderRadius: AppRadius.brSmall,
       ),
-      child: Text(message, style: AppTypography.caption(context).copyWith(color: context.error)),
+      child: Text(
+        message,
+        style: AppTypography.caption(context).copyWith(color: context.error),
+      ),
     );
   }
 }
@@ -2182,10 +2584,13 @@ class _SchemaTabsViewState extends State<_SchemaTabsView> {
   @override
   void didUpdateWidget(covariant _SchemaTabsView oldWidget) {
     super.didUpdateWidget(oldWidget);
-    final activeId = oldWidget.tabs.isNotEmpty && _activeIndex < oldWidget.tabs.length
+    final activeId =
+        oldWidget.tabs.isNotEmpty && _activeIndex < oldWidget.tabs.length
         ? oldWidget.tabs[_activeIndex].id
         : '';
-    final preserved = widget.tabs.indexWhere((tab) => tab.id == activeId && !widget.isDisabled(tab));
+    final preserved = widget.tabs.indexWhere(
+      (tab) => tab.id == activeId && !widget.isDisabled(tab),
+    );
     if (preserved >= 0) {
       _activeIndex = preserved;
       return;
@@ -2199,7 +2604,10 @@ class _SchemaTabsViewState extends State<_SchemaTabsView> {
   }
 
   void _activate(int index) {
-    if (index < 0 || index >= widget.tabs.length || widget.isDisabled(widget.tabs[index])) return;
+    if (index < 0 ||
+        index >= widget.tabs.length ||
+        widget.isDisabled(widget.tabs[index]))
+      return;
     if (_activeIndex != index) setState(() => _activeIndex = index);
   }
 
@@ -2207,11 +2615,14 @@ class _SchemaTabsViewState extends State<_SchemaTabsView> {
     final tab = widget.tabs[index];
     final disabled = widget.isDisabled(tab);
     final selected = index == _activeIndex;
-    final label = (tab.props?['label'] ?? tab.props?['title'] ?? tab.id).toString();
+    final label = (tab.props?['label'] ?? tab.props?['title'] ?? tab.id)
+        .toString();
     final variant = widget.variant.trim().toLowerCase();
     final scheme = Theme.of(context).colorScheme;
     final border = variant == 'card' || variant == 'border-card'
-        ? Border.all(color: selected ? scheme.primary : Theme.of(context).dividerColor)
+        ? Border.all(
+            color: selected ? scheme.primary : Theme.of(context).dividerColor,
+          )
         : Border(
             bottom: BorderSide(
               color: selected ? scheme.primary : Colors.transparent,
@@ -2231,19 +2642,21 @@ class _SchemaTabsViewState extends State<_SchemaTabsView> {
           decoration: BoxDecoration(
             border: border,
             borderRadius: variant == 'line' ? null : BorderRadius.circular(8),
-            color: selected && variant != 'line' ? scheme.primaryContainer.withValues(alpha: 0.35) : null,
+            color: selected && variant != 'line'
+                ? scheme.primaryContainer.withValues(alpha: 0.35)
+                : null,
           ),
           child: Text(
             label,
             textAlign: vertical ? TextAlign.start : TextAlign.center,
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: disabled
-                      ? Theme.of(context).disabledColor
-                      : selected
-                          ? scheme.primary
-                          : null,
-                  fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
-                ),
+              color: disabled
+                  ? Theme.of(context).disabledColor
+                  : selected
+                  ? scheme.primary
+                  : null,
+              fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+            ),
           ),
         ),
       ),
@@ -2309,7 +2722,10 @@ class _SchemaTabsViewState extends State<_SchemaTabsView> {
               const SizedBox(width: 8),
               Expanded(child: content),
             ];
-      return Row(crossAxisAlignment: CrossAxisAlignment.start, children: children);
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: children,
+      );
     }
     final header = _horizontalHeader(context);
     if (position == 'bottom') {
@@ -2358,19 +2774,30 @@ class SchemaUIThemeResolver extends StatelessWidget {
     };
     var colors = brightness == base.brightness
         ? (base.extension<AmitiaColorTokens>() ??
-            (brightness == Brightness.dark ? defaultDarkColorTokens() : defaultLightColorTokens()))
-        : (brightness == Brightness.dark ? defaultDarkColorTokens() : defaultLightColorTokens());
-    var layout = base.extension<AmitiaLayoutTokens>() ?? const AmitiaLayoutTokens();
+              (brightness == Brightness.dark
+                  ? defaultDarkColorTokens()
+                  : defaultLightColorTokens()))
+        : (brightness == Brightness.dark
+              ? defaultDarkColorTokens()
+              : defaultLightColorTokens());
+    var layout =
+        base.extension<AmitiaLayoutTokens>() ?? const AmitiaLayoutTokens();
     final overrides = theme!.overrides ?? const <String, String>{};
     Color? color(String key) => _parseColor(overrides[key]);
     colors = colors.copyWith(
-      backgroundPrimary: color('--amitia-bg-primary') ?? color('--amitia-color-background'),
+      backgroundPrimary:
+          color('--amitia-bg-primary') ?? color('--amitia-color-background'),
       backgroundSecondary: color('--amitia-bg-secondary'),
-      surfacePrimary: color('--amitia-bg-surface') ?? color('--amitia-color-surface'),
+      surfacePrimary:
+          color('--amitia-bg-surface') ?? color('--amitia-color-surface'),
       surfaceSecondary: color('--amitia-bg-surface-secondary'),
-      accentPrimary: color('--amitia-color-accent') ?? color('--amitia-color-primary'),
-      textPrimary: color('--amitia-text-primary') ?? color('--amitia-color-text'),
-      textSecondary: color('--amitia-text-secondary') ?? color('--amitia-color-text-secondary'),
+      accentPrimary:
+          color('--amitia-color-accent') ?? color('--amitia-color-primary'),
+      textPrimary:
+          color('--amitia-text-primary') ?? color('--amitia-color-text'),
+      textSecondary:
+          color('--amitia-text-secondary') ??
+          color('--amitia-color-text-secondary'),
       borderPrimary: color('--amitia-border') ?? color('--amitia-color-border'),
       success: color('--amitia-color-success'),
       warning: color('--amitia-color-warning'),
@@ -2382,11 +2809,16 @@ class SchemaUIThemeResolver extends StatelessWidget {
       radiusMedium: _parseDimension(overrides['--amitia-radius-md']),
       radiusLarge: _parseDimension(overrides['--amitia-radius-lg']),
     );
-    final extensions = <ThemeExtension<dynamic>>[
-      ...base.extensions.values.where((value) => value is! AmitiaColorTokens && value is! AmitiaLayoutTokens),
-      colors,
-      layout,
-    ];
+    final extensions = <ThemeExtension<dynamic>>[];
+    for (final value in base.extensions.values) {
+      final dynamic candidate = value;
+      if (candidate is AmitiaColorTokens || candidate is AmitiaLayoutTokens) {
+        continue;
+      }
+      extensions.add(candidate);
+    }
+    extensions.add(colors);
+    extensions.add(layout);
     final scheme = base.colorScheme.copyWith(
       brightness: brightness,
       primary: colors.accentPrimary,
@@ -2395,9 +2827,12 @@ class SchemaUIThemeResolver extends StatelessWidget {
       onSurface: colors.textPrimary,
     );
     return Theme(
-      data: base.copyWith(brightness: brightness, colorScheme: scheme, extensions: extensions),
+      data: base.copyWith(
+        brightness: brightness,
+        colorScheme: scheme,
+        extensions: extensions,
+      ),
       child: child,
     );
   }
 }
-

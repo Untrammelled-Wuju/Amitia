@@ -34,8 +34,6 @@ func (l *ChannelContextLoader) Load(ctx context.Context, scope InteractionScope,
 	case "web":
 		caps.SupportsImage = true
 		caps.SupportsVoice = true
-	case "wechat", "qq":
-		caps.SupportsImage = true
 	}
 	return FieldReady[any](caps, l.Name(), version), ctx.Err()
 }

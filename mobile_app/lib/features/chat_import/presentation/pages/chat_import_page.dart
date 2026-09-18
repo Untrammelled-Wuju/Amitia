@@ -38,8 +38,6 @@ class _ChatImportPageState extends ConsumerState<ChatImportPage> {
 
   final _steps = const ['选择来源', '输入内容', '解析预览', '编辑消息', '选择角色', '确认导入', '生成摘要', '提取记忆', '完成'];
   final _sources = const [
-    ('微信聊天记录', Icons.chat, '#52B788'),
-    ('QQ 聊天记录', Icons.message, '#6C8FEA'),
     ('Telegram', Icons.send, '#E9A23B'),
     ('手动输入', Icons.edit_note, '#8A5728'),
   ];

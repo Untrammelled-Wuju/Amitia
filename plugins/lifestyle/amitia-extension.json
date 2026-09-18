@@ -33,7 +33,9 @@
     "platforms": [
       "windows",
       "linux",
-      "macos"
+      "macos",
+      "android",
+      "ios"
     ]
   },
   "placement": "device",

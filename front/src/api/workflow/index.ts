@@ -106,6 +106,7 @@ export interface WorkflowNode {
   runtime: WorkflowRuntimeBinding;
   executionTarget?: WorkflowExecutionTarget;
   permissions?: string[];
+  requiredCapabilities?: string[];
   scope?: string;
   position?: WorkflowPosition;
   label?: string;

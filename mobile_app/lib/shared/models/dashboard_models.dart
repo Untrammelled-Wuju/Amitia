@@ -14,7 +14,7 @@ class DashboardRunInfo {
     this.agentRuntimeStatus = '空闲',
     this.modelStatus = 'GPT-4 已连接',
     this.databaseStatus = '正常',
-    this.channelStatus = '微信已连接',
+    this.channelStatus = '渠道正常',
     this.recentErrors = const [],
     this.accessRisk = '低风险',
     this.recentTasks = const [],

@@ -53,7 +53,7 @@
       >
         <el-icon><UploadFilled /></el-icon>
         <strong>选择或拖入 .amitiax 扩展包</strong>
-        <span>安装前将执行格式与 Manifest 校验</span>
+        <span>选择后将打开安装弹窗，在弹窗内完成安全检查与安装</span>
         <el-button
           type="primary"
           :disabled="!statusReady"
@@ -68,26 +68,6 @@
           accept=".amitiax"
           @change="onPackageFile"
         />
-      </div>
-      <div v-if="selectedFile" class="install-actions">
-        <el-tag type="info" closable @close="clearSelectedFile">
-          {{ selectedFile.name }}
-        </el-tag>
-        <el-button
-          type="success"
-          :loading="previewLoading"
-          @click="doPreview"
-        >
-          预览安装
-        </el-button>
-        <el-button
-          v-if="previewResult && previewResult.installable"
-          type="warning"
-          :loading="installLoading"
-          @click="doInstall"
-        >
-          确认安装
-        </el-button>
       </div>
     </section>
 
@@ -182,51 +162,144 @@
       </Suspense>
     </section>
 
-    <el-dialog v-model="previewVisible" title="安装预览" width="640px">
-      <div v-if="previewResult" class="preview-dialog">
-        <el-descriptions :column="2" border>
-          <el-descriptions-item label="扩展ID">{{ previewResult.extensionId }}</el-descriptions-item>
-          <el-descriptions-item label="名称">{{ previewResult.name }}</el-descriptions-item>
-          <el-descriptions-item label="版本">{{ previewResult.version }}</el-descriptions-item>
-          <el-descriptions-item label="发布者">{{ previewResult.publisher }}</el-descriptions-item>
-          <el-descriptions-item label="安全检查">
-            <el-tag :type="previewResult.securityPassed ? 'success' : 'danger'">
-              {{ previewResult.securityPassed ? '通过' : '未通过' }}
-            </el-tag>
-          </el-descriptions-item>
-          <el-descriptions-item label="可安装">
-            <el-tag :type="previewResult.installable ? 'success' : 'warning'">
-              {{ previewResult.installable ? '可安装' : '不可安装' }}
-            </el-tag>
-          </el-descriptions-item>
-        </el-descriptions>
-
-        <div v-if="previewResult.issues && previewResult.issues.length > 0" class="preview-section">
-          <h4>问题列表</h4>
-          <el-table :data="previewResult.issues" size="small" border>
-            <el-table-column prop="category" label="类别" width="140" />
-            <el-table-column prop="code" label="代码" width="160" />
-            <el-table-column prop="message" label="描述" />
-          </el-table>
-        </div>
-
-        <div v-if="previewResult.modules && previewResult.modules.length > 0" class="preview-section">
-          <h4>模块列表</h4>
-          <el-table :data="previewResult.modules" size="small" border>
-            <el-table-column prop="id" label="ID" width="160" />
-            <el-table-column prop="name" label="名称" />
-            <el-table-column prop="type" label="类型" width="100" />
-            <el-table-column prop="runtime" label="运行时" width="100" />
-            <el-table-column label="支持" width="80">
-              <template #default="{ row }">
-                <el-tag :type="row.supported ? 'success' : 'danger'" size="small">
-                  {{ row.supported ? '是' : '否' }}
-                </el-tag>
-              </template>
-            </el-table-column>
-          </el-table>
-        </div>
+    <el-dialog
+      v-model="installDialogVisible"
+      :title="installMode === 'update' ? `更新 ${installPreview?.name || '扩展包'}` : '安装扩展包'"
+      width="680px"
+      destroy-on-close
+      class="extension-install-dialog"
+      @closed="resetInstallState"
+    >
+      <div
+        class="package-drop-zone"
+        :class="{ 'has-file': !!installFile }"
+        @dragover.prevent
+        @drop.prevent="onPackageDrop"
+      >
+        <el-icon class="upload-icon"><UploadFilled /></el-icon>
+        <template v-if="installFile">
+          <strong>{{ installFile.name }}</strong>
+          <span>
+            {{ formatSize(installFile.size) }} ·
+            {{ previewLoading ? `正在检查 ${uploadProgress}%` : "已选择" }}
+          </span>
+        </template>
+        <template v-else>
+          <strong>选择或拖入 .amitiax 扩展包</strong>
+          <span>安装前将执行格式、签名、权限与兼容性检查</span>
+        </template>
+        <el-button :loading="previewLoading" @click="choosePackage">
+          {{ installFile ? "重新选择" : "选择文件" }}
+        </el-button>
       </div>
+
+      <el-progress
+        v-if="previewLoading"
+        class="upload-progress"
+        :percentage="uploadProgress"
+        :show-text="false"
+        :stroke-width="4"
+      />
+
+      <div v-if="installPreview" class="package-preview">
+        <div class="preview-head">
+          <div>
+            <span class="preview-kicker">安装预览</span>
+            <h3>{{ installPreview.name }}</h3>
+            <p>{{ installPreview.description || installPreview.id }}</p>
+          </div>
+          <span class="target-badge">扩展包</span>
+        </div>
+
+        <div class="preview-facts">
+          <div><span>版本</span><strong>{{ installPreview.version }}</strong></div>
+          <div><span>签名</span><strong>{{ signatureLabel(installPreview.signature?.status) }}</strong></div>
+          <div><span>兼容性</span><strong>{{ installPreview.compatible ? "通过" : "不兼容" }}</strong></div>
+          <div><span>目标</span><strong>{{ installPreview.managementTarget || "扩展中心" }}</strong></div>
+        </div>
+
+        <el-alert
+          v-if="installPreview.errors?.length"
+          :title="installPreview.errors.join('；')"
+          type="error"
+          show-icon
+          :closable="false"
+        />
+
+        <el-alert
+          v-else-if="previewMatchesInstalledVersion"
+          :title="`版本 ${installPreview.version} 已安装，无需重复安装。`"
+          type="info"
+          show-icon
+          :closable="false"
+        />
+
+        <div v-if="installPreview.highRiskCapabilities?.length" class="preview-block">
+          <span class="preview-label">高风险项</span>
+          <div class="chip-row">
+            <span
+              v-for="capability in installPreview.highRiskCapabilities"
+              :key="capability"
+              class="permission-chip risk"
+            >
+              {{ capability }}
+            </span>
+          </div>
+        </div>
+
+        <div v-else-if="installPreview.capabilities?.length" class="preview-block">
+          <span class="preview-label">申请能力</span>
+          <div class="chip-row">
+            <span
+              v-for="capability in installPreview.capabilities.slice(0, 8)"
+              :key="capability"
+              class="permission-chip"
+            >
+              {{ capability }}
+            </span>
+          </div>
+        </div>
+
+        <div v-if="installPreview.dependencies?.length" class="preview-block">
+          <span class="preview-label">依赖</span>
+          <div class="dependency-list">
+            <span v-for="dependency in installPreview.dependencies" :key="dependency.id">
+              {{ dependency.id }}
+              <small>{{ dependency.installed ? "已满足" : dependency.required ? "缺失" : "可选" }}</small>
+            </span>
+          </div>
+        </div>
+
+        <el-alert
+          v-for="warning in installPreview.warnings || []"
+          :key="warning"
+          :title="warning"
+          type="warning"
+          show-icon
+          :closable="false"
+          class="preview-warning"
+        />
+
+        <el-checkbox
+          v-if="needsInstallAcknowledgement"
+          v-model="installAcknowledged"
+          class="install-confirmation"
+        >
+          我已查看此扩展的签名、权限和风险信息，并确认继续{{ installMode === "update" ? "更新" : "安装" }}。
+        </el-checkbox>
+      </div>
+
+      <template #footer>
+        <el-button @click="installDialogVisible = false">取消</el-button>
+        <el-button
+          type="primary"
+          :loading="installLoading"
+          :disabled="!canInstallPreview"
+          @click="commitPackageInstall"
+        >
+          {{ installMode === "update" ? "确认更新" : "确认安装" }}
+        </el-button>
+      </template>
     </el-dialog>
 
     <el-dialog v-model="detailVisible" title="扩展详情" width="820px">
@@ -451,17 +524,16 @@
 </template>
 
 <script setup lang="ts">
-import { defineAsyncComponent, onMounted, ref, shallowRef, watch } from "vue";
+import { computed, defineAsyncComponent, onMounted, ref, shallowRef, watch } from "vue";
 import { useRouter } from "vue-router";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { UploadFilled, Loading, MoreFilled } from "@element-plus/icons-vue";
+import { apiClient } from "@/composables/useApi";
 import ExtensionPageHeader from "../components/ExtensionPageHeader.vue";
 import {
   getKernelStatus,
   listExtensions,
   getExtension,
-  previewInstall,
-  installExtension,
   enableExtension,
   disableExtension,
   uninstallExtension,
@@ -472,8 +544,12 @@ import {
   type KernelExtension,
   type KernelExtensionDetail,
   type KernelPermission,
-  type InstallPreview,
 } from "@/views/kernel/api";
+import {
+  installExtensionPackage,
+  previewExtensionPackage,
+} from "@/views/extensions/api";
+import type { PackageImportPreview } from "@/views/extensions/types";
 import {
   checkUpdates,
   downloadUpdate,
@@ -499,11 +575,39 @@ const statusCount = ref<number | undefined>(undefined);
 const extensions = ref<KernelExtension[]>([]);
 const listLoading = ref(false);
 
-const selectedFile = ref<File | null>(null);
+const installDialogVisible = ref(false);
+const installMode = ref<"install" | "update">("install");
+const installFile = ref<File | null>(null);
+const installPreview = ref<PackageImportPreview | null>(null);
 const previewLoading = ref(false);
-const previewResult = ref<InstallPreview | null>(null);
-const previewVisible = ref(false);
 const installLoading = ref(false);
+const uploadProgress = ref(0);
+const installAcknowledged = ref(false);
+
+const needsInstallAcknowledgement = computed(() => {
+  const preview = installPreview.value;
+  if (!preview) return false;
+  return preview.signature?.status === "unsigned"
+    || preview.scripts > 0
+    || (preview.highRiskCapabilities?.length || 0) > 0
+    || (preview.capabilityConfirmations?.length || 0) > 0
+    || (preview.warnings?.length || 0) > 0;
+});
+
+const previewMatchesInstalledVersion = computed(() => {
+  const preview = installPreview.value;
+  if (!preview?.currentVersion) return false;
+  return preview.conflict === "same-version-same-content"
+    || preview.currentVersion === preview.version;
+});
+
+const canInstallPreview = computed(() => {
+  const preview = installPreview.value;
+  if (!preview || previewLoading.value || installLoading.value) return false;
+  if (!preview.compatible || (preview.errors?.length || 0) > 0) return false;
+  if (previewMatchesInstalledVersion.value) return false;
+  return !needsInstallAcknowledgement.value || installAcknowledged.value;
+});
 
 const detailVisible = ref(false);
 const detail = ref<KernelExtensionDetail | null>(null);
@@ -579,11 +683,6 @@ async function refreshList() {
   }
 }
 
-function clearSelectedFile() {
-  selectedFile.value = null;
-  previewResult.value = null;
-}
-
 async function choosePackage() {
   const desktop = window.amitiaDesktop;
   if (!desktop?.selectExtensionPackage) {
@@ -595,69 +694,81 @@ async function choosePackage() {
   const bytes = Uint8Array.from(atob(selected.base64), (character) =>
     character.charCodeAt(0),
   );
-  selectedFile.value = new File([bytes], selected.name, { type: "application/zip" });
-  previewResult.value = null;
-  ElMessage.info("已选择文件: " + selected.name);
+  await setPackageFile(new File([bytes], selected.name, { type: "application/zip" }));
 }
 
-function onPackageFile(event: Event) {
+async function onPackageFile(event: Event) {
   const input = event.target as HTMLInputElement;
   const file = input.files?.[0];
-  if (file) {
-    if (!file.name.toLowerCase().endsWith(".amitiax")) {
-      ElMessage.warning("请选择 .amitiax 扩展包");
-      input.value = "";
-      return;
-    }
-    selectedFile.value = file;
-    previewResult.value = null;
-    ElMessage.info("已选择文件: " + file.name);
-  }
   input.value = "";
+  if (file) await setPackageFile(file);
 }
 
-function onPackageDrop(event: DragEvent) {
+async function onPackageDrop(event: DragEvent) {
   const file = event.dataTransfer?.files?.[0];
-  if (!file) return;
+  if (file) await setPackageFile(file);
+}
+
+async function setPackageFile(file: File) {
   if (!file.name.toLowerCase().endsWith(".amitiax")) {
     ElMessage.warning("请选择 .amitiax 扩展包");
     return;
   }
-  selectedFile.value = file;
-  previewResult.value = null;
-  ElMessage.info("已选择文件: " + file.name);
+  installFile.value = file;
+  installPreview.value = null;
+  installAcknowledged.value = false;
+  installMode.value = "install";
+  installDialogVisible.value = true;
+  await buildPackagePreview();
 }
 
-async function doPreview() {
-  if (!selectedFile.value) {
-    ElMessage.warning("请先选择扩展包");
-    return;
-  }
+async function buildPackagePreview() {
+  if (!installFile.value) return;
   previewLoading.value = true;
+  uploadProgress.value = 0;
   try {
-    const result = await previewInstall(selectedFile.value);
-    previewResult.value = result;
-    previewVisible.value = true;
+    const preview = await previewExtensionPackage(
+      installFile.value,
+      "global",
+      "",
+      "",
+      (percent) => {
+        uploadProgress.value = percent;
+      },
+    );
+    installPreview.value = preview;
+    installMode.value = preview.currentVersion ? "update" : "install";
   } catch (e: any) {
+    installPreview.value = null;
     ElMessage.error("预览失败: " + (e?.message || e));
   } finally {
     previewLoading.value = false;
+    uploadProgress.value = installPreview.value ? 100 : uploadProgress.value;
   }
 }
 
-async function doInstall() {
-  if (!selectedFile.value) {
-    ElMessage.warning("请先选择扩展包");
-    return;
-  }
+async function commitPackageInstall() {
+  const preview = installPreview.value;
+  if (!preview || !canInstallPreview.value) return;
   installLoading.value = true;
   try {
-    const result = await installExtension(selectedFile.value);
-    ElMessage.success(`安装成功: ${result.extensionId} v${result.version}`);
-    extensionUIStore.dispatchExtensionChanged("install");
-    previewVisible.value = false;
-    selectedFile.value = null;
-    previewResult.value = null;
+    const acknowledged = installAcknowledged.value || !needsInstallAcknowledgement.value;
+    const result = await installExtensionPackage(
+      preview,
+      {
+        unsigned: acknowledged,
+        scripts: acknowledged,
+        capabilities: acknowledged ? [...(preview.highRiskCapabilities || [])] : [],
+        versionChange: acknowledged,
+        signerChange: acknowledged,
+        configMigration: acknowledged,
+      },
+      installMode.value === "update" ? preview.id : "",
+    );
+    await waitForPackageOperation(result.operationId);
+    ElMessage.success(installMode.value === "update" ? "扩展包已更新" : "扩展包已安装");
+    extensionUIStore.dispatchExtensionChanged(installMode.value === "update" ? "update" : "install");
+    installDialogVisible.value = false;
     await refreshList();
     tab.value = "installed";
   } catch (e: any) {
@@ -665,6 +776,42 @@ async function doInstall() {
   } finally {
     installLoading.value = false;
   }
+}
+
+async function waitForPackageOperation(operationId?: string) {
+  if (!operationId) return;
+  for (let attempt = 0; attempt < 120; attempt += 1) {
+    const response = await apiClient.get<{ status?: string; errorCode?: string }>(
+      `/api/extensions/packages/operations/${encodeURIComponent(operationId)}`,
+    );
+    const status = String(response.data?.status || "").toLowerCase();
+    if (status === "completed") return;
+    if (status === "failed" || status === "requires_recovery") {
+      throw new Error(response.data?.errorCode || "扩展包操作失败");
+    }
+    await new Promise((resolve) => window.setTimeout(resolve, 500));
+  }
+  throw new Error("扩展包操作等待超时，请刷新页面检查最终状态");
+}
+
+function resetInstallState() {
+  installMode.value = "install";
+  installFile.value = null;
+  installPreview.value = null;
+  previewLoading.value = false;
+  installLoading.value = false;
+  uploadProgress.value = 0;
+  installAcknowledged.value = false;
+}
+
+function signatureLabel(status?: string) {
+  const labels: Record<string, string> = {
+    "valid-trusted": "可信签名",
+    "valid-untrusted": "有效但不受信任",
+    unsigned: "未签名",
+    invalid: "签名无效",
+  };
+  return status ? labels[status] || status : "未提供";
 }
 
 async function toggleEnable(row: KernelExtension, enable: boolean) {
@@ -1073,13 +1220,6 @@ p {
 .drop-zone span {
   color: var(--console-text-muted);
 }
-.install-actions {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-top: 16px;
-  flex-wrap: wrap;
-}
 .preview-section,
 .detail-section,
 .update-meta-section,
@@ -1144,6 +1284,159 @@ p {
   min-width: 46px;
   border-radius: 999px;
 }
+.package-drop-zone {
+  min-height: 188px;
+  padding: 24px;
+  border: 1px dashed var(--el-border-color);
+  border-radius: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  text-align: center;
+  background: var(--el-fill-color-lighter);
+  transition: border-color 160ms ease, background 160ms ease;
+}
+.package-drop-zone:hover,
+.package-drop-zone.has-file {
+  border-color: var(--el-color-primary-light-7);
+  background: var(--el-color-primary-light-9);
+}
+.upload-icon {
+  margin-bottom: 4px;
+  font-size: 32px;
+  color: var(--el-color-primary);
+}
+.package-drop-zone strong {
+  font-size: 14px;
+}
+.package-drop-zone span {
+  margin-bottom: 6px;
+  color: var(--console-text-muted);
+  font-size: 12px;
+}
+.upload-progress {
+  margin-top: 10px;
+}
+.package-preview {
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.preview-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+.preview-head h3 {
+  margin-top: 4px;
+  font-size: 18px;
+}
+.preview-head p {
+  max-width: 470px;
+  margin-top: 4px;
+  font-size: 12px;
+}
+.preview-kicker {
+  display: block;
+  color: var(--el-color-primary);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.target-badge {
+  flex-shrink: 0;
+  padding: 4px 8px;
+  border: 1px solid var(--el-color-primary-light-7);
+  border-radius: 999px;
+  color: var(--el-color-primary);
+  background: var(--el-color-primary-light-9);
+  font-size: 12px;
+}
+.preview-facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.preview-facts > div {
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 10px;
+  background: var(--el-fill-color-lighter);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.preview-facts span {
+  color: var(--console-text-muted);
+  font-size: 11px;
+}
+.preview-facts strong {
+  word-break: break-word;
+}
+.preview-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.preview-label {
+  display: block;
+  color: var(--el-color-primary);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.permission-chip {
+  max-width: 100%;
+  padding: 5px 8px;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 8px;
+  color: var(--console-text);
+  background: var(--el-fill-color-lighter);
+  font-size: 11px;
+  word-break: break-all;
+}
+.permission-chip.risk {
+  color: var(--el-color-danger);
+  background: var(--el-color-danger-light-9);
+  border-color: var(--el-color-danger-light-7);
+}
+.dependency-list {
+  display: grid;
+  gap: 6px;
+}
+.dependency-list > span {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 7px 9px;
+  border-radius: 8px;
+  background: var(--el-fill-color-lighter);
+  font-size: 11px;
+}
+.dependency-list small {
+  color: var(--console-text-muted);
+}
+.preview-warning {
+  margin-top: -2px;
+}
+.install-confirmation {
+  height: auto;
+  align-items: flex-start;
+  white-space: normal;
+}
 .sr-only {
   position: absolute;
   width: 1px;
@@ -1158,6 +1451,9 @@ p {
 @media (max-width: 760px) {
   .section-heading {
     flex-direction: column;
+  }
+  .preview-facts {
+    grid-template-columns: 1fr;
   }
 }
 </style>

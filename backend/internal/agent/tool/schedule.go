@@ -63,7 +63,7 @@ func init() {
 					},
 					"channel": {
 						Type:        "string",
-						Description: "发送通知的渠道：wechat/qq/all，默认all",
+						Description: "发送通知的 channelId；all 表示宿主默认渠道",
 					},
 				},
 				Required: []string{"title", "due_time"},

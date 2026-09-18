@@ -7,6 +7,8 @@ export interface LocalExtensionPackage {
   installedAt: string;
 }
 
+export type SkillTrigger = string;
+
 export type AgentSkillCompatibilityStatus =
   | "compatible"
   | "compatible_with_warnings"

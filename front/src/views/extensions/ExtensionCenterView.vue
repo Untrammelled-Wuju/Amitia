@@ -3,7 +3,7 @@
     <header class="center-header">
       <div>
         <h1>扩展中心</h1>
-        <p>插件系统 v1 · 统一管理扩展包、系统插件、Skill 与外部能力。</p>
+        <p>插件系统 v1 · 统一管理扩展包、工作流、系统插件、Skill 与外部能力。</p>
       </div>
       <ExtensionSlot
         slot-id="extension.center.header.action"
@@ -45,11 +45,13 @@ import {
   Box,
   Connection,
   DocumentChecked,
+  Share,
 } from "@element-plus/icons-vue";
 import ExtensionSlot from "@/components/extension/ExtensionSlot.vue";
 
 const entries = [
   { id: "packages", to: "/extensions/packages", title: "扩展包", description: "安装和管理 .amitiax 扩展包", icon: Box },
+  { id: "workflows", to: "/extensions/workflows", title: "工作流", description: "创建、运行和管理 DAG 自动化工作流", icon: Share },
   { id: "mcp", to: "/extensions/mcp", title: "MCP 服务", description: "连接外部 MCP 服务", icon: Connection },
   { id: "agent-skills", to: "/extensions/agent-skills", title: "Agent Skills", description: "管理 SKILL.md 指令包", icon: DocumentChecked },
 ];

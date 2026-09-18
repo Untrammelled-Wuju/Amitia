@@ -159,7 +159,7 @@ internal class VirtualDisplayNativeHandler(
         "height" to managed.height,
         "densityDpi" to managed.densityDpi,
         "generation" to managed.generation,
-        "surfaceAttached" to managed.virtualDisplay.surface != null,
+        "surfaceAttached" to (managed.virtualDisplay.surface != null),
         "active" to displays.containsKey(displayId),
         "provider" to "android_display_manager",
     )

@@ -62,12 +62,15 @@ class AgentTaskItem {
     Map<String, dynamic>? definition,
   }) {
     final status = parseStatus(json['status']?.toString());
-    final createdAt = DateTime.tryParse((json['createdAt'] ?? '').toString()) ?? DateTime.now();
+    final createdAt =
+        DateTime.tryParse((json['createdAt'] ?? '').toString()) ??
+        DateTime.now();
     final finishedAt = DateTime.tryParse((json['finishedAt'] ?? '').toString());
     final startedAt = DateTime.tryParse((json['startedAt'] ?? '').toString());
     final end = finishedAt ?? DateTime.now();
     final elapsedDuration = end.difference(startedAt ?? createdAt);
-    final title = (json['taskDefinitionId'] ?? json['taskRunId'] ?? '').toString();
+    final title = (json['taskDefinitionId'] ?? json['taskRunId'] ?? '')
+        .toString();
     final extensionId = (json['extensionId'] ?? '').toString();
     final moduleId = (json['moduleId'] ?? '').toString();
     final progress = _readProgress(json);
@@ -78,8 +81,14 @@ class AgentTaskItem {
     return AgentTaskItem(
       id: (json['taskRunId'] ?? json['id'] ?? '').toString(),
       title: title.isEmpty ? 'Kernel Task' : title,
-      description: [extensionId, moduleId].where((e) => e.isNotEmpty).join(' · '),
-      requiredAbilities: [if (extensionId.isNotEmpty) extensionId, if (moduleId.isNotEmpty) moduleId],
+      description: [
+        extensionId,
+        moduleId,
+      ].where((e) => e.isNotEmpty).join(' · '),
+      requiredAbilities: [
+        if (extensionId.isNotEmpty) extensionId,
+        if (moduleId.isNotEmpty) moduleId,
+      ],
       status: status,
       progress: progress,
       elapsed: formatDuration(elapsedDuration),
@@ -101,11 +110,14 @@ class AgentTaskItem {
     final raw = json['progress'];
     if (raw is Map) {
       final percentage = raw['percentage'];
-      if (percentage is num) return percentage.toDouble().clamp(0.0, 100.0).toDouble();
+      if (percentage is num)
+        return percentage.toDouble().clamp(0.0, 100.0).toDouble();
       final current = raw['current'];
       final total = raw['total'];
       if (current is num && total is num && total > 0) {
-        return (current.toDouble() / total.toDouble() * 100).clamp(0.0, 100.0).toDouble();
+        return (current.toDouble() / total.toDouble() * 100)
+            .clamp(0.0, 100.0)
+            .toDouble();
       }
     }
     return null;
@@ -113,22 +125,38 @@ class AgentTaskItem {
 
   static AgentTaskStatus parseStatus(String? value) {
     switch (value) {
-      case 'created': return AgentTaskStatus.created;
-      case 'queued': return AgentTaskStatus.queued;
-      case 'starting': return AgentTaskStatus.starting;
-      case 'running': return AgentTaskStatus.running;
-      case 'checkpointing': return AgentTaskStatus.checkpointing;
-      case 'pausing': return AgentTaskStatus.pausing;
-      case 'paused': return AgentTaskStatus.paused;
-      case 'resuming': return AgentTaskStatus.resuming;
-      case 'cancelling': return AgentTaskStatus.cancelling;
-      case 'cancelled': return AgentTaskStatus.cancelled;
-      case 'succeeded': return AgentTaskStatus.succeeded;
-      case 'failed': return AgentTaskStatus.failed;
-      case 'timed_out': return AgentTaskStatus.timedOut;
-      case 'recovery_required': return AgentTaskStatus.recoveryRequired;
-      case 'manual_intervention': return AgentTaskStatus.manualIntervention;
-      default: return AgentTaskStatus.created;
+      case 'created':
+        return AgentTaskStatus.created;
+      case 'queued':
+        return AgentTaskStatus.queued;
+      case 'starting':
+        return AgentTaskStatus.starting;
+      case 'running':
+        return AgentTaskStatus.running;
+      case 'checkpointing':
+        return AgentTaskStatus.checkpointing;
+      case 'pausing':
+        return AgentTaskStatus.pausing;
+      case 'paused':
+        return AgentTaskStatus.paused;
+      case 'resuming':
+        return AgentTaskStatus.resuming;
+      case 'cancelling':
+        return AgentTaskStatus.cancelling;
+      case 'cancelled':
+        return AgentTaskStatus.cancelled;
+      case 'succeeded':
+        return AgentTaskStatus.succeeded;
+      case 'failed':
+        return AgentTaskStatus.failed;
+      case 'timed_out':
+        return AgentTaskStatus.timedOut;
+      case 'recovery_required':
+        return AgentTaskStatus.recoveryRequired;
+      case 'manual_intervention':
+        return AgentTaskStatus.manualIntervention;
+      default:
+        return AgentTaskStatus.created;
     }
   }
 
@@ -141,25 +169,25 @@ class AgentTaskItem {
   }
 
   bool get isActive => const <AgentTaskStatus>{
-        AgentTaskStatus.created,
-        AgentTaskStatus.queued,
-        AgentTaskStatus.starting,
-        AgentTaskStatus.running,
-        AgentTaskStatus.checkpointing,
-        AgentTaskStatus.pausing,
-        AgentTaskStatus.paused,
-        AgentTaskStatus.resuming,
-        AgentTaskStatus.cancelling,
-        AgentTaskStatus.recoveryRequired,
-      }.contains(status);
+    AgentTaskStatus.created,
+    AgentTaskStatus.queued,
+    AgentTaskStatus.starting,
+    AgentTaskStatus.running,
+    AgentTaskStatus.checkpointing,
+    AgentTaskStatus.pausing,
+    AgentTaskStatus.paused,
+    AgentTaskStatus.resuming,
+    AgentTaskStatus.cancelling,
+    AgentTaskStatus.recoveryRequired,
+  }.contains(status);
 
   bool get isTerminal => const <AgentTaskStatus>{
-        AgentTaskStatus.succeeded,
-        AgentTaskStatus.failed,
-        AgentTaskStatus.cancelled,
-        AgentTaskStatus.timedOut,
-        AgentTaskStatus.manualIntervention,
-      }.contains(status);
+    AgentTaskStatus.succeeded,
+    AgentTaskStatus.failed,
+    AgentTaskStatus.cancelled,
+    AgentTaskStatus.timedOut,
+    AgentTaskStatus.manualIntervention,
+  }.contains(status);
 
   bool get needsAttention =>
       status == AgentTaskStatus.recoveryRequired ||
@@ -193,10 +221,7 @@ class AgentTaskItem {
       status == AgentTaskStatus.manualIntervention;
 
   bool get canRetry =>
-      isTerminal &&
-      retrySupported &&
-      maxAttempts > 0 &&
-      attempt < maxAttempts;
+      isTerminal && retrySupported && maxAttempts > 0 && attempt < maxAttempts;
 }
 
 class AgentTaskNotifier extends AsyncNotifier<List<AgentTaskItem>> {
@@ -212,10 +237,12 @@ class AgentTaskNotifier extends AsyncNotifier<List<AgentTaskItem>> {
           (definition['taskId'] ?? '').toString(): definition,
     };
     return values[0]
-        .map((row) => AgentTaskItem.fromJson(
-              row,
-              definition: definitions[(row['taskDefinitionId'] ?? '').toString()],
-            ))
+        .map(
+          (row) => AgentTaskItem.fromJson(
+            row,
+            definition: definitions[(row['taskDefinitionId'] ?? '').toString()],
+          ),
+        )
         .toList(growable: false);
   }
 
@@ -293,14 +320,18 @@ class AgentTaskNotifier extends AsyncNotifier<List<AgentTaskItem>> {
   Future<void> pause(String id) async {
     final current = await _current(id);
     if (!current.canPause) throw StateError('当前任务状态不允许暂停');
-    await ref.read(extensionTaskServiceProvider).pause(id, generation: current.generation);
+    await ref
+        .read(extensionTaskServiceProvider)
+        .pause(id, generation: current.generation);
     await refresh();
   }
 
   Future<void> resume(String id) async {
     final current = await _current(id);
     if (!current.canResume) throw StateError('当前任务状态不允许继续');
-    await ref.read(extensionTaskServiceProvider).resume(id, generation: current.generation);
+    await ref
+        .read(extensionTaskServiceProvider)
+        .resume(id, generation: current.generation);
     await refresh();
   }
 
@@ -339,12 +370,19 @@ class AgentTaskDefinitionOption {
     required this.extensionId,
     required this.moduleId,
     required this.executionPlacement,
+    this.checkpointSupported = false,
+    this.retrySupported = false,
   });
 
   String get label {
-    final owner = [extensionId, moduleId].where((part) => part.isNotEmpty).join(' / ');
+    final owner = [
+      extensionId,
+      moduleId,
+    ].where((part) => part.isNotEmpty).join(' / ');
     final placement = executionPlacement.isEmpty ? 'local' : executionPlacement;
-    return owner.isEmpty ? '$taskId · $placement' : '$taskId · $owner · $placement';
+    return owner.isEmpty
+        ? '$taskId · $placement'
+        : '$taskId · $owner · $placement';
   }
 
   factory AgentTaskDefinitionOption.fromJson(Map<String, dynamic> json) {
@@ -353,6 +391,8 @@ class AgentTaskDefinitionOption {
       extensionId: (json['extensionId'] ?? '').toString().trim(),
       moduleId: (json['moduleId'] ?? '').toString().trim(),
       executionPlacement: (json['executionPlacement'] ?? '').toString().trim(),
+      checkpointSupported: json['checkpointSupported'] == true,
+      retrySupported: json['retrySupported'] == true,
     );
   }
 }
@@ -369,30 +409,42 @@ class AgentTaskDeviceOption {
   });
 
   String get displayLabel {
-    final display = label.isNotEmpty ? label : (platform.isNotEmpty ? platform : 'device');
+    final display = label.isNotEmpty
+        ? label
+        : (platform.isNotEmpty ? platform : 'device');
     return '$display · $deviceId';
   }
 }
 
-final agentTaskDefinitionsProvider = FutureProvider.autoDispose<List<AgentTaskDefinitionOption>>((ref) async {
-  final rows = await ref.read(extensionTaskServiceProvider).listDefinitions();
-  return rows
-      .map(AgentTaskDefinitionOption.fromJson)
-      .where((item) => item.taskId.isNotEmpty)
-      .toList(growable: false);
-});
+final agentTaskDefinitionsProvider =
+    FutureProvider.autoDispose<List<AgentTaskDefinitionOption>>((ref) async {
+      final rows = await ref
+          .read(extensionTaskServiceProvider)
+          .listDefinitions();
+      return rows
+          .map(AgentTaskDefinitionOption.fromJson)
+          .where((item) => item.taskId.isNotEmpty)
+          .toList(growable: false);
+    });
 
-final agentTaskDevicesProvider = FutureProvider.autoDispose<List<AgentTaskDeviceOption>>((ref) async {
-  final rows = await ref.read(extensionServiceProvider).workflowDevices();
-  return rows
-      .where((row) => row['online'] == true && (row['deviceId'] ?? '').toString().trim().isNotEmpty)
-      .map((row) => AgentTaskDeviceOption(
-            deviceId: (row['deviceId'] ?? '').toString().trim(),
-            label: (row['label'] ?? '').toString().trim(),
-            platform: (row['platform'] ?? '').toString().trim(),
-          ))
-      .toList(growable: false);
-});
+final agentTaskDevicesProvider =
+    FutureProvider.autoDispose<List<AgentTaskDeviceOption>>((ref) async {
+      final rows = await ref.read(extensionServiceProvider).workflowDevices();
+      return rows
+          .where(
+            (row) =>
+                row['online'] == true &&
+                (row['deviceId'] ?? '').toString().trim().isNotEmpty,
+          )
+          .map(
+            (row) => AgentTaskDeviceOption(
+              deviceId: (row['deviceId'] ?? '').toString().trim(),
+              label: (row['label'] ?? '').toString().trim(),
+              platform: (row['platform'] ?? '').toString().trim(),
+            ),
+          )
+          .toList(growable: false);
+    });
 
 class AgentTaskRuntimeDetail {
   final Map<String, dynamic> run;
@@ -417,46 +469,56 @@ class AgentTaskRuntimeDetail {
     final current = progress['current'];
     final total = progress['total'];
     if (current is num && total is num && total > 0) {
-      return (current.toDouble() / total.toDouble() * 100).clamp(0.0, 100.0).toDouble();
+      return (current.toDouble() / total.toDouble() * 100)
+          .clamp(0.0, 100.0)
+          .toDouble();
     }
     return null;
   }
 }
 
-final agentTaskRuntimeDetailProvider = FutureProvider.autoDispose.family<AgentTaskRuntimeDetail, String>((ref, taskId) async {
-  final service = ref.read(extensionTaskServiceProvider);
-  final detail = await service.runtimeDetail(taskId);
-  Map<String, dynamic> part(String key) {
-    final value = detail[key];
-    return value is Map ? Map<String, dynamic>.from(value) : const <String, dynamic>{};
-  }
-  final run = part('run');
-  final definitionId = (run['taskDefinitionId'] ?? '').toString();
-  Map<String, dynamic>? definition;
-  if (definitionId.isNotEmpty) {
-    final definitions = await service.listDefinitions();
-    for (final row in definitions) {
-      if ((row['taskId'] ?? '').toString() == definitionId) {
-        definition = row;
-        break;
+final agentTaskRuntimeDetailProvider = FutureProvider.autoDispose
+    .family<AgentTaskRuntimeDetail, String>((ref, taskId) async {
+      final service = ref.read(extensionTaskServiceProvider);
+      final detail = await service.runtimeDetail(taskId);
+      Map<String, dynamic> part(String key) {
+        final value = detail[key];
+        return value is Map
+            ? Map<String, dynamic>.from(value)
+            : const <String, dynamic>{};
       }
-    }
-  }
-  return AgentTaskRuntimeDetail(
-    run: run,
-    progress: part('progress'),
-    result: part('result'),
-    checkpoint: part('checkpoint'),
-    definition: definition,
-  );
-});
 
-final agentTasksProvider = AsyncNotifierProvider<AgentTaskNotifier, List<AgentTaskItem>>(AgentTaskNotifier.new);
+      final run = part('run');
+      final definitionId = (run['taskDefinitionId'] ?? '').toString();
+      Map<String, dynamic>? definition;
+      if (definitionId.isNotEmpty) {
+        final definitions = await service.listDefinitions();
+        for (final row in definitions) {
+          if ((row['taskId'] ?? '').toString() == definitionId) {
+            definition = row;
+            break;
+          }
+        }
+      }
+      return AgentTaskRuntimeDetail(
+        run: run,
+        progress: part('progress'),
+        result: part('result'),
+        checkpoint: part('checkpoint'),
+        definition: definition,
+      );
+    });
 
-final agentTaskDetailProvider = FutureProvider.autoDispose.family<AgentTaskItem?, String>((ref, taskId) async {
-  final list = await ref.watch(agentTasksProvider.future);
-  for (final task in list) {
-    if (task.id == taskId) return task;
-  }
-  return null;
-});
+final agentTasksProvider =
+    AsyncNotifierProvider<AgentTaskNotifier, List<AgentTaskItem>>(
+      AgentTaskNotifier.new,
+    );
+
+final agentTaskDetailProvider = FutureProvider.autoDispose
+    .family<AgentTaskItem?, String>((ref, taskId) async {
+      final list = await ref.watch(agentTasksProvider.future);
+      for (final task in list) {
+        if (task.id == taskId) return task;
+      }
+      return null;
+    });

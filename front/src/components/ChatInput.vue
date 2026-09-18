@@ -366,13 +366,7 @@ SPDX-License-Identifier: AGPL-3.0-only
               ref="inputRef"
               v-model="text"
               class="input-field"
-              :placeholder="
-                isWechatActive
-                  ? '微信消息请在微信端发送...'
-                  : isQQActive
-                    ? 'QQ消息请在QQ端发送...'
-                    : '输入消息...'
-              "
+              placeholder="输入消息..."
               :disabled="isInputDisabled"
               rows="1"
               :aria-expanded="slashMenuOpen"
@@ -540,8 +534,6 @@ import {
 
 const env = resolveHostEnvironment();
 const props = withDefaults(defineProps<{
-  isWechatActive?: boolean;
-  isQQActive?: boolean;
   disabled?: boolean;
   sending?: boolean;
   generating?: boolean;
@@ -571,8 +563,7 @@ const emit = defineEmits<{
   file: [file: File];
 }>();
 
-const isDisabled = () =>
-  !!props.disabled || !!props.isWechatActive || !!props.isQQActive;
+const isDisabled = () => !!props.disabled;
 const isInputDisabled = computed(isDisabled);
 const textInput = useTextInput(emit as any, isDisabled);
 const mediaUpload = useMediaUpload(

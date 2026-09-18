@@ -26,16 +26,6 @@ func (s *service) GetMaintenanceStatus() map[string]interface{} {
 	if activeModel == "" {
 		issues = append(issues, map[string]interface{}{"type": "MODEL", "msg": "未配置活动模型"})
 	}
-	if !s.isWechatSidecarRunning() {
-		issues = append(issues, map[string]interface{}{"type": "WECHAT", "msg": "微信侧车未启动"})
-	} else if s.getWechatHealthStatus() != "connected" {
-		issues = append(issues, map[string]interface{}{"type": "WECHAT", "msg": "微信 Bridge 未连接"})
-	}
-	if !s.isQQSidecarRunning() {
-		issues = append(issues, map[string]interface{}{"type": "QQ", "msg": "QQ侧车未启动"})
-	} else if s.getQQHealthStatus() != "connected" {
-		issues = append(issues, map[string]interface{}{"type": "QQ", "msg": "QQ Bridge 未连接"})
-	}
 	if memMB > 500 {
 		issues = append(issues, map[string]interface{}{"type": "MEMORY", "msg": fmt.Sprintf("内存使用较高 (%dMB)", memMB)})
 	}
@@ -72,32 +62,6 @@ func (s *service) MaintenanceDiagnose() map[string]interface{} {
 		allPassed = false
 	}
 	checks = append(checks, modelCheck)
-	bridgeStatus := s.getWechatHealthStatus()
-	bridgeRunning := s.isWechatSidecarRunning()
-	bridgeOk := bridgeRunning && bridgeStatus == "connected"
-	bridgeCheck := map[string]interface{}{"name": "微信 Bridge", "pass": bridgeOk}
-	if !bridgeOk {
-		if !bridgeRunning {
-			bridgeCheck["error"] = "微信侧车未启动"
-		} else {
-			bridgeCheck["error"] = "Bridge 状态: " + bridgeStatus
-		}
-		allPassed = false
-	}
-	checks = append(checks, bridgeCheck)
-	qqBridgeStatus := s.getQQHealthStatus()
-	qqBridgeRunning := s.isQQSidecarRunning()
-	qqBridgeOk := qqBridgeRunning && qqBridgeStatus == "connected"
-	qqBridgeCheck := map[string]interface{}{"name": "QQ Bridge", "pass": qqBridgeOk}
-	if !qqBridgeOk {
-		if !qqBridgeRunning {
-			qqBridgeCheck["error"] = "QQ侧车未启动"
-		} else {
-			qqBridgeCheck["error"] = "QQ Bridge 状态: " + qqBridgeStatus
-		}
-		allPassed = false
-	}
-	checks = append(checks, qqBridgeCheck)
 	testFile := filepath.Join(s.dataDir, fmt.Sprintf(".write_test_%d", time.Now().UnixNano()))
 	storageOk := os.WriteFile(testFile, []byte("1"), 0644) == nil
 	if storageOk {
@@ -149,6 +113,5 @@ func (s *service) MaintenanceReloadConfig() map[string]interface{} {
 			s.setAppSetting("config_last_reload", time.Now().Format(time.DateTime))
 		}
 	}
-	go s.sidecarPost("/api/config/reload", map[string]interface{}{})
 	return map[string]interface{}{"reloaded": true, "reloadedAt": time.Now().Format(time.DateTime)}
 }

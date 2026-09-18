@@ -15,9 +15,9 @@ type orderedPlanAdapter struct {
 	delivered []string
 }
 
-func (a *orderedPlanAdapter) Name() string { return "qq" }
+func (a *orderedPlanAdapter) Name() string { return "test" }
 
-func (a *orderedPlanAdapter) ProviderInstanceID() string { return ProviderInstanceIDQQChannel }
+func (a *orderedPlanAdapter) ProviderInstanceID() string { return "test.channel" }
 
 func (a *orderedPlanAdapter) Deliver(intent DeliveryIntent) error {
 	a.delivered = append(a.delivered, intent.ContentType)
@@ -38,7 +38,7 @@ func TestMessagePlanFailureDoesNotStopLaterText(t *testing.T) {
 	}
 	createdAt := time.Now().UTC()
 	for index, contentType := range []string{"text", "image", "text"} {
-		intent := NewDeliveryIntent("interaction", "qq", "peer", contentType, []byte(`{}`))
+		intent := NewDeliveryIntent("interaction", "test", "peer", contentType, []byte(`{}`))
 		intent.ID = contentType + string(rune('1'+index))
 		intent.ResponseGroupID = "response"
 		intent.DeliverySequence = index + 1

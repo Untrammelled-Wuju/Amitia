@@ -50,22 +50,9 @@ SPDX-License-Identifier: AGPL-3.0-only
       </el-table-column>
       <el-table-column label="渠道" width="70">
         <template #default="{ row }"
-          ><el-tag
-            :type="
-              row.channel === 'wechat'
-                ? 'success'
-                : row.channel === 'qq'
-                  ? 'primary'
-                  : 'info'
-            "
-            size="small"
-            >{{
-              row.channel === "wechat"
-                ? "微信"
-                : row.channel === "qq"
-                  ? "QQ"
-                  : "Web"
-            }}</el-tag
+          ><el-tag type="info" size="small">{{
+            row.channel || "web"
+          }}</el-tag
           ></template
         >
       </el-table-column>

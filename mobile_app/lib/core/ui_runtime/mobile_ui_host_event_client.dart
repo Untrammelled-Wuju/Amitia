@@ -36,10 +36,7 @@ const Set<String> _uiRuntimeChangeEvents = <String>{
 };
 
 class MobileUIHostCommand {
-  const MobileUIHostCommand({
-    required this.eventType,
-    required this.envelope,
-  });
+  const MobileUIHostCommand({required this.eventType, required this.envelope});
 
   final String eventType;
   final Map<String, dynamic> envelope;
@@ -65,7 +62,9 @@ abstract final class MobileUIHostCommandBus {
   }
 }
 
-final mobileUIHostEventClientProvider = Provider<MobileUIHostEventClient?>((ref) {
+final mobileUIHostEventClientProvider = Provider<MobileUIHostEventClient?>((
+  ref,
+) {
   final availability = ref.watch(backendConnectionProvider).valueOrNull;
   if (availability is! BackendConnectionAvailable) return null;
 
@@ -77,8 +76,12 @@ final mobileUIHostEventClientProvider = Provider<MobileUIHostEventClient?>((ref)
     activeConversationId: () => ref.read(activeConversationIdProvider),
     applyClientRuntimeSnapshot: (conversationId, state) {
       ref
-          .read(clientRuntimePushedSessionStateProvider(conversationId).notifier)
-          .state = Map<String, dynamic>.unmodifiable(state);
+          .read(
+            clientRuntimePushedSessionStateProvider(conversationId).notifier,
+          )
+          .state = Map<String, dynamic>.unmodifiable(
+        state,
+      );
     },
     invalidateClientRuntime: (conversationId) {
       ref.invalidate(clientRuntimeSessionStateProvider(conversationId));
@@ -99,7 +102,8 @@ class MobileUIHostEventClient {
     required void Function(
       String conversationId,
       Map<String, dynamic> sessionState,
-    ) applyClientRuntimeSnapshot,
+    )
+    applyClientRuntimeSnapshot,
     required void Function(String conversationId) invalidateClientRuntime,
   }) : _extensionService = extensionService,
        _systemService = systemService,
@@ -113,10 +117,8 @@ class MobileUIHostEventClient {
   final SystemService _systemService;
   final NativeBridgePlatformDispatcher _nativeDispatcher;
   final String Function() _activeConversationId;
-  final void Function(
-    String conversationId,
-    Map<String, dynamic> sessionState,
-  ) _applyClientRuntimeSnapshot;
+  final void Function(String conversationId, Map<String, dynamic> sessionState)
+  _applyClientRuntimeSnapshot;
   final void Function(String conversationId) _invalidateClientRuntime;
   final UIDeviceIdentity _deviceIdentity = UIDeviceIdentity();
 
@@ -184,7 +186,9 @@ class MobileUIHostEventClient {
       UIRuntimeInvalidationBus.notifyChanged();
 
       var buffer = '';
-      await for (final chunk in body.stream.transform(utf8.decoder)) {
+      await for (final chunk in body.stream.cast<List<int>>().transform(
+        utf8.decoder,
+      )) {
         if (_disposed || version != _connectionVersion) return;
         buffer += chunk.replaceAll('\r', '');
         final boundary = buffer.lastIndexOf('\n\n');
@@ -196,7 +200,9 @@ class MobileUIHostEventClient {
         _scheduleReconnect();
       }
     } on DioException catch (error) {
-      if (!_disposed && version == _connectionVersion && !CancelToken.isCancel(error)) {
+      if (!_disposed &&
+          version == _connectionVersion &&
+          !CancelToken.isCancel(error)) {
         _scheduleReconnect();
       }
     } catch (_) {
@@ -217,7 +223,8 @@ class MobileUIHostEventClient {
       throw StateError('UI Host registration returned no host session');
     }
     _hostSessionId = sessionId;
-    final rawInterval = (response['heartbeatIntervalSeconds'] as num?)?.toInt() ?? 60;
+    final rawInterval =
+        (response['heartbeatIntervalSeconds'] as num?)?.toInt() ?? 60;
     final interval = Duration(seconds: max(20, rawInterval));
     _heartbeatTimer?.cancel();
     _heartbeatTimer = Timer.periodic(interval, (_) {
@@ -295,7 +302,8 @@ class MobileUIHostEventClient {
     final expiresAtText = (envelope['expiresAt'] ?? '').toString().trim();
     if (expiresAtText.isNotEmpty) {
       final expiresAt = DateTime.tryParse(expiresAtText);
-      if (expiresAt != null && expiresAt.toUtc().isBefore(DateTime.now().toUtc())) {
+      if (expiresAt != null &&
+          expiresAt.toUtc().isBefore(DateTime.now().toUtc())) {
         return false;
       }
     }
@@ -306,24 +314,35 @@ class MobileUIHostEventClient {
     return true;
   }
 
-  Future<void> _handleClientRuntimeCommand(Map<String, dynamic> envelope) async {
+  Future<void> _handleClientRuntimeCommand(
+    Map<String, dynamic> envelope,
+  ) async {
     final rawPayload = envelope['payload'];
     if (rawPayload is! Map) return;
     final payload = rawPayload.cast<String, dynamic>();
     final commandId = (payload['commandId'] ?? '').toString().trim();
     final conversationId = (payload['conversationId'] ?? '').toString().trim();
-    final hostClientId = (payload['hostClientId'] ?? envelope['hostClientId'] ?? _hostClientId)
-        .toString()
-        .trim();
-    final hostSessionId = (payload['hostSessionId'] ?? envelope['hostSessionId'] ?? _hostSessionId)
-        .toString()
-        .trim();
+    final hostClientId =
+        (payload['hostClientId'] ?? envelope['hostClientId'] ?? _hostClientId)
+            .toString()
+            .trim();
+    final hostSessionId =
+        (payload['hostSessionId'] ??
+                envelope['hostSessionId'] ??
+                _hostSessionId)
+            .toString()
+            .trim();
     final expectResponse = payload['expectResponse'] != false;
     final rawState = payload['sessionState'];
-    final sessionState = rawState is Map ? rawState.cast<String, dynamic>() : null;
+    final sessionState = rawState is Map
+        ? rawState.cast<String, dynamic>()
+        : null;
     final revision = (sessionState?['revision'] as num?)?.toInt() ?? 0;
 
-    Future<void> respond(Map<String, dynamic> result, [String error = '']) async {
+    Future<void> respond(
+      Map<String, dynamic> result, [
+      String error = '',
+    ]) async {
       if (!expectResponse || commandId.isEmpty) return;
       await _extensionService.sendClientRuntimeResponse(
         commandId: commandId,
@@ -336,7 +355,9 @@ class MobileUIHostEventClient {
 
     try {
       if (conversationId.isEmpty || sessionState == null) {
-        throw StateError('client runtime command is missing authoritative session state');
+        throw StateError(
+          'client runtime command is missing authoritative session state',
+        );
       }
       if (_activeConversationId().trim() != conversationId) {
         await respond(<String, dynamic>{
@@ -370,7 +391,9 @@ class MobileUIHostEventClient {
     if (messageId.isNotEmpty) {
       if (!_processedProactiveMessageIds.add(messageId)) return;
       if (_processedProactiveMessageIds.length > 200) {
-        _processedProactiveMessageIds.remove(_processedProactiveMessageIds.first);
+        _processedProactiveMessageIds.remove(
+          _processedProactiveMessageIds.first,
+        );
       }
     }
     final content = (payload['content'] ?? '').toString().trim();
@@ -380,7 +403,8 @@ class MobileUIHostEventClient {
     try {
       await _nativeDispatcher.execute(<String, dynamic>{
         'protocolVersion': 1,
-        'requestId': 'proactive-${messageId.isEmpty ? DateTime.now().microsecondsSinceEpoch : messageId}',
+        'requestId':
+            'proactive-${messageId.isEmpty ? DateTime.now().microsecondsSinceEpoch : messageId}',
         'platform': platform,
         'operation': 'notification.post',
         'payload': <String, dynamic>{
@@ -404,7 +428,9 @@ class MobileUIHostEventClient {
       return _notificationsEnabled;
     }
     try {
-      final settings = await _systemService.notificationSettings(deviceId: _deviceId);
+      final settings = await _systemService.notificationSettings(
+        deviceId: _deviceId,
+      );
       _notificationsEnabled =
           settings?['enabled'] == true && settings?['subscribed'] == true;
     } catch (_) {
@@ -463,9 +489,10 @@ class MobileUIHostEventClient {
 
   static String _buildHostClientId(String deviceId) {
     final random = Random.secure();
-    final suffix = List<int>.generate(6, (_) => random.nextInt(256))
-        .map((value) => value.toRadixString(16).padLeft(2, '0'))
-        .join();
+    final suffix = List<int>.generate(
+      6,
+      (_) => random.nextInt(256),
+    ).map((value) => value.toRadixString(16).padLeft(2, '0')).join();
     return 'flutter-ui-host-$deviceId-$suffix';
   }
 

@@ -10,7 +10,12 @@ internal sealed class RuntimeStartupError {
     data object BackendReadinessFailed : RuntimeStartupError()
     data object HealthAuthFailed : RuntimeStartupError()
     data object HealthEndpointMissing : RuntimeStartupError()
-    data class Timeout(val timeoutMs: Long, val elapsedMs: Long, val probeCount: Int) : RuntimeStartupError()
+    data class Timeout(
+        val timeoutMs: Long,
+        val elapsedMs: Long,
+        val probeCount: Int,
+        val lastProbeFailure: String? = null
+    ) : RuntimeStartupError()
     data object InvalidEndpoint : RuntimeStartupError()
     data class InvalidResponse(val reason: String, val elapsedMs: Long = 0L) : RuntimeStartupError()
     data class InternalError(val message: String) : RuntimeStartupError()

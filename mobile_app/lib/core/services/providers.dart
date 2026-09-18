@@ -134,13 +134,6 @@ final mcpServiceProvider = Provider<MCPService>(
   (ref) => MCPService(_getDynamicServiceApi(ref)),
 );
 
-final wechatServiceProvider = Provider<WechatService>(
-  (ref) => WechatService(_getDynamicServiceApi(ref)),
-);
-
-final qqServiceProvider = Provider<QQService>(
-  (ref) => QQService(_getDynamicServiceApi(ref)),
-);
 
 final imageGenServiceProvider = Provider<ImageGenService>(
   (ref) => ImageGenService(_getDynamicServiceApi(ref)),

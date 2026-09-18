@@ -50,13 +50,8 @@ func (s *service) GetRuntimeMode() map[string]interface{} {
 		host = "0.0.0.0"
 	}
 	port := envInt("AMITIA_SERVER_PORT", 18080)
-	bridgePort := envInt("AMITIA_WECHAT_SIDECAR_PORT", 8898)
 	publicBaseURL := s.getAppSetting("public_base_url")
 	requireAuth := s.getAppSetting("require_auth") != "false"
-	bridgeMode := "local"
-	if mode == "cloud-web" {
-		bridgeMode = "cloud"
-	}
 	return map[string]interface{}{
 		"mode":           mode,
 		"deployMode":     mode,
@@ -67,12 +62,6 @@ func (s *service) GetRuntimeMode() map[string]interface{} {
 			"enabled":       true,
 			"publicBaseUrl": publicBaseURL,
 			"requireAuth":   requireAuth,
-		},
-		"bridge": map[string]interface{}{
-			"enabled": true,
-			"mode":    bridgeMode,
-			"host":    "127.0.0.1",
-			"port":    bridgePort,
 		},
 		"storage": map[string]interface{}{"dataDir": s.dataDir},
 	}

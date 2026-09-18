@@ -4,8 +4,6 @@ import (
 	"strings"
 )
 
-const MaxWechatMessageLen = 2000
-const MaxQQMessageLen = 2000
 const MaxWebMessageLen = 2000
 const AmitiaMessageBreak = "[AMITIA_BR]"
 

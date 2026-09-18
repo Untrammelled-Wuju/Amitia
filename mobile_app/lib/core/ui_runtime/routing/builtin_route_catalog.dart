@@ -53,9 +53,6 @@ import '../../../features/workshop/presentation/pages/pet_processing_page.dart';
 import '../../../features/workshop/presentation/pages/pet_action_editor_page.dart';
 import '../../../features/workshop/presentation/pages/pet_installations_page.dart';
 import '../../../features/dashboard/presentation/pages/dashboard_page.dart';
-import '../../../features/channels/presentation/pages/wechat_page.dart';
-import '../../../features/channels/presentation/pages/qq_page.dart';
-import '../../../features/channels/presentation/pages/channel_center_page.dart';
 import '../../../features/characters/presentation/pages/character_create_page.dart';
 import '../../../features/settings/presentation/pages/settings_page.dart';
 import '../../../features/settings/presentation/pages/model_settings_page.dart';
@@ -68,7 +65,6 @@ import '../../../features/settings/presentation/pages/decision_viz_page.dart';
 import '../../../features/permissions/presentation/pages/permissions_page.dart';
 import '../../../features/permissions/presentation/pages/android_automation_page.dart';
 import '../../../features/settings/presentation/pages/backup_page.dart';
-import '../../../features/settings/presentation/pages/ai_config_page.dart';
 import '../../../features/settings/presentation/pages/asr_page.dart';
 import '../../../features/settings/presentation/pages/deployment_page.dart';
 import '../../../features/settings/presentation/pages/system_settings_page.dart';
@@ -135,29 +131,6 @@ GoRoute(
   path: '/dashboard',
   pageBuilder: (context, state) =>
       drawerSlideFadePage(state: state, child: const DashboardPage()),
-),
-GoRoute(
-  path: '/channels',
-  pageBuilder: (context, state) => drawerSlideFadePage(
-    state: state,
-    child: const ChannelCenterPage(),
-  ),
-),
-GoRoute(
-  path: '/channels/wechat',
-  pageBuilder: (context, state) => slideFadePage(
-    context: context,
-    state: state,
-    child: const WechatPage(),
-  ),
-),
-GoRoute(
-  path: '/channels/qq',
-  pageBuilder: (context, state) => slideFadePage(
-    context: context,
-    state: state,
-    child: const QqPage(),
-  ),
 ),
 GoRoute(
   path: '/agent',
@@ -622,14 +595,6 @@ GoRoute(
     context: context,
     state: state,
     child: const BackupPage(),
-  ),
-),
-GoRoute(
-  path: '/settings/ai',
-  pageBuilder: (context, state) => slideFadePage(
-    context: context,
-    state: state,
-    child: const AiConfigPage(),
   ),
 ),
 GoRoute(

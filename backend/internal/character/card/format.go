@@ -7,7 +7,7 @@ import (
 )
 
 type rawCardHeader struct {
-	Spec      string `json:"spec"`
+	Spec        string `json:"spec"`
 	SpecVersion string `json:"spec_version"`
 }
 
@@ -59,6 +59,9 @@ func detectPNGFormat(data []byte) (CharacterCardFormat, error) {
 	}
 	charaData := extractPNGTextChunk(data, "chara")
 	if len(charaData) > 0 {
+		if isTavernCard(charaData) {
+			return FormatTavernPNG, nil
+		}
 		return FormatV2PNG, nil
 	}
 	return "", ErrPNGMetadataMissing
@@ -80,6 +83,9 @@ func detectJSONFormat(data []byte) (CharacterCardFormat, error) {
 		return FormatV2JSON, nil
 	case "chara_card_v3":
 		return FormatV3JSON, nil
+	}
+	if isTavernCard(data) {
+		return FormatTavernJSON, nil
 	}
 	return "", ErrUnsupportedFormat
 }

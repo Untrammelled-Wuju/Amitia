@@ -42,6 +42,10 @@ func (p *CardParser) ParseWithFormat(data []byte, format CharacterCardFormat) (*
 		return parseV3PNG(data)
 	case FormatV3CHARX:
 		return parseCHARX(data)
+	case FormatTavernJSON:
+		return parseTavernJSON(data)
+	case FormatTavernPNG:
+		return parseTavernPNG(data)
 	}
 	return nil, nil, ErrUnsupportedFormat
 }

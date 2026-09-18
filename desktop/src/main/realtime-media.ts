@@ -19,7 +19,7 @@ export function registerRealtimeMediaHandlers(getMainWindow: () => BrowserWindow
   session.defaultSession.setPermissionCheckHandler((webContents, permission) => {
     const mainWindow = getMainWindow();
     const trusted = isTrustedWebContents(webContents, mainWindow);
-    return trusted && (permission === "media" || permission === "display-capture");
+    return trusted && permission === "media";
   });
 
   session.defaultSession.setDisplayMediaRequestHandler(
@@ -29,7 +29,12 @@ export function registerRealtimeMediaHandlers(getMainWindow: () => BrowserWindow
         callback({});
         return;
       }
-      const requestTop = request.frame.top;
+      const requestFrame = request.frame;
+      if (!requestFrame) {
+        callback({});
+        return;
+      }
+      const requestTop = requestFrame.top;
       const mainFrame = mainWindow.webContents.mainFrame;
       const trustedFrame =
         requestTop != null &&

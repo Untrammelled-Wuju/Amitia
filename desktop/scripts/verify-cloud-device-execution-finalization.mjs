@@ -132,7 +132,7 @@ assert(
 );
 assert(
   meshRuntime.includes("func (rt *Runtime) InvokeDeviceHandler(") &&
-    meshRuntime.includes("rt.Hub.GetByDevice(userID, targetDeviceID)") &&
+    meshRuntime.includes("rt.Hub.GetByDevice(spaceID, targetDeviceID)") &&
     meshRuntime.includes("RuntimeTypeGameHost") &&
     meshRuntime.includes("ProviderPlacementDevice"),
   "Device Mesh must provide an explicit target-device GameHost invocation primitive",

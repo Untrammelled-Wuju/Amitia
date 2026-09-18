@@ -38,8 +38,6 @@ export function useWebChatSSE(
   convId: Ref<string>,
   messages: Ref<any[]>,
   scrollToBottom: (smooth?: boolean) => void,
-  fetchWechatMsgCount: () => void,
-  fetchQQStatus: () => void,
   sending: Ref<boolean>,
 ) {
   let eventAbortController: AbortController | null = null;
@@ -75,8 +73,6 @@ export function useWebChatSSE(
       sortMessages();
       lastPolledMsgId = raw.id || lastPolledMsgId;
       scrollToBottom();
-      fetchWechatMsgCount();
-      fetchQQStatus();
       notifyDesktopPetChatState("assistant_finished", roundId);
       typingTimer = null;
       setTimeout(() => processTypingQueue(), 300);
@@ -280,8 +276,6 @@ export function useWebChatSSE(
             notifyDesktopPetChatState("assistant_finished", proactiveRoundId);
           }
         } catch {}
-        fetchWechatMsgCount();
-        fetchQQStatus();
       } catch {}
     };
     window.addEventListener("amitia:proactive-message", proactiveListener);

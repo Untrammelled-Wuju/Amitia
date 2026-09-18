@@ -681,9 +681,10 @@ assert(
 );
 
 assert(
-  frontendRequestAuth.includes('deployment.mode === "local" || deviceLocal') &&
-    frontendRequestAuth.includes('headers.delete("Authorization")') &&
-    frontendRequestAuth.includes("ensureValidToken()") &&
+  frontendRequestAuth.includes("const deviceLocal =") &&
+    frontendRequestAuth.includes('getBackendAuthHeaders(deviceLocal ? "local" : "business")') &&
+    frontendRuntimeAdapter.includes("return api.getBackendAuthHeaders(target);") &&
+    frontendRuntimeAdapter.includes("return getWebDeviceAuthHeaders(baseURL);") &&
     authenticatedSSE.includes("createAuthenticatedFetchInit") &&
     authenticatedSSE.includes('Accept: "text/event-stream"') &&
     generationTask.includes("consumeAuthenticatedSSE") &&

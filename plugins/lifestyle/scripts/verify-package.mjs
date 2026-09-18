@@ -72,6 +72,11 @@ function main() {
     if (!entries.has(path)) throw new Error(`missing package path: ${path}`);
   }
   if (manifest.extension?.id !== "com.amitia/lifestyle") throw new Error("unexpected extension id");
+  for (const platform of ["android", "ios"]) {
+    if (!manifest.compatibility?.platforms?.includes(platform)) {
+      throw new Error(`package must declare ${platform}`);
+    }
+  }
   const uiContribution = manifest.modules
     ?.flatMap((module) => module.contributions || [])
     .find((item) => item.kind === "ui_page");

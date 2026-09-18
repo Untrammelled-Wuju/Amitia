@@ -80,6 +80,45 @@ void main() {
         expect(uri.hasQuery, isFalse);
       });
 
+      test('normalizes scalar query parameter values', () {
+        final uri = builder.http(
+          _config(),
+          '/api/v1/chat',
+          queryParameters: <String, dynamic>{
+            'page': 2,
+            'pageSize': 50,
+            'enabled': true,
+          },
+        );
+        expect(uri.queryParameters['page'], '2');
+        expect(uri.queryParameters['pageSize'], '50');
+        expect(uri.queryParameters['enabled'], 'true');
+      });
+
+      test('normalizes iterable query parameter values', () {
+        final uri = builder.http(
+          _config(),
+          '/api/v1/chat',
+          queryParameters: <String, dynamic>{
+            'tag': ['alpha', 2, true],
+          },
+        );
+        expect(uri.queryParametersAll['tag'], ['alpha', '2', 'true']);
+      });
+
+      test('omits null query parameter values', () {
+        final uri = builder.http(
+          _config(),
+          '/api/v1/chat',
+          queryParameters: <String, dynamic>{
+            'empty': null,
+            'value': 'present',
+          },
+        );
+        expect(uri.queryParameters.containsKey('empty'), isFalse);
+        expect(uri.queryParameters['value'], 'present');
+      });
+
       test('rejects empty path', () {
         expect(
           () => builder.http(_config(), ''),

@@ -36,7 +36,9 @@ class _UserProfilesPageState extends ConsumerState<UserProfilesPage> {
 
   List<ProfileDto> _filtered(List<ProfileDto> profiles) {
     if (_selectedCategory.isEmpty) return profiles;
-    return profiles.where((item) => item.category == _selectedCategory).toList(growable: false);
+    return profiles
+        .where((item) => item.category == _selectedCategory)
+        .toList(growable: false);
   }
 
   @override
@@ -76,12 +78,15 @@ class _UserProfilesPageState extends ConsumerState<UserProfilesPage> {
                           onAction: () => _showEditor(null),
                         )
                       : RefreshIndicator(
-                          onRefresh: () async => ref.invalidate(profileListProvider),
+                          onRefresh: () async =>
+                              ref.invalidate(profileListProvider),
                           child: ListView.separated(
                             padding: EdgeInsets.all(AppSpacing.pagePadding),
                             itemCount: filtered.length,
-                            separatorBuilder: (_, _) => SizedBox(height: AppSpacing.sm),
-                            itemBuilder: (context, index) => _buildCard(filtered[index]),
+                            separatorBuilder: (_, _) =>
+                                SizedBox(height: AppSpacing.sm),
+                            itemBuilder: (context, index) =>
+                                _buildCard(filtered[index]),
                           ),
                         ),
                 ),
@@ -114,7 +119,9 @@ class _UserProfilesPageState extends ConsumerState<UserProfilesPage> {
               alignment: Alignment.center,
               padding: const EdgeInsets.symmetric(horizontal: 12),
               decoration: BoxDecoration(
-                color: selected ? context.accentPrimary : context.surfaceSecondary,
+                color: selected
+                    ? context.accentPrimary
+                    : context.surfaceSecondary,
                 borderRadius: AppRadius.brTag,
               ),
               child: Text(
@@ -148,16 +155,26 @@ class _UserProfilesPageState extends ConsumerState<UserProfilesPage> {
                   color: context.accentSoft,
                   borderRadius: AppRadius.brSmall,
                 ),
-                child: Icon(Icons.person_pin_outlined, color: context.accentPrimary, size: 20),
+                child: Icon(
+                  Icons.person_pin_outlined,
+                  color: context.accentPrimary,
+                  size: 20,
+                ),
               ),
               SizedBox(width: AppSpacing.md),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(profile.attributeName, style: AppTypography.cardTitle(context)),
+                    Text(
+                      profile.attributeName,
+                      style: AppTypography.cardTitle(context),
+                    ),
                     const SizedBox(height: 4),
-                    Text(profile.attributeValue, style: AppTypography.bodySmall(context)),
+                    Text(
+                      profile.attributeValue,
+                      style: AppTypography.bodySmall(context),
+                    ),
                   ],
                 ),
               ),
@@ -166,8 +183,8 @@ class _UserProfilesPageState extends ConsumerState<UserProfilesPage> {
                 type: profile.confidence >= 80
                     ? BadgeType.success
                     : profile.confidence >= 50
-                        ? BadgeType.warning
-                        : BadgeType.error,
+                    ? BadgeType.warning
+                    : BadgeType.error,
               ),
             ],
           ),
@@ -177,12 +194,22 @@ class _UserProfilesPageState extends ConsumerState<UserProfilesPage> {
             runSpacing: AppSpacing.xs,
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              AmitiaStatusBadge(label: _categoryLabel(profile.category), type: BadgeType.neutral),
-              if (verified) const AmitiaStatusBadge(label: '已确认', type: BadgeType.success),
+              AmitiaStatusBadge(
+                label: _categoryLabel(profile.category),
+                type: BadgeType.neutral,
+              ),
+              if (verified)
+                const AmitiaStatusBadge(label: '已确认', type: BadgeType.success),
               if (profile.source.trim().isNotEmpty)
-                Text('来源：${profile.source}', style: AppTypography.label(context)),
+                Text(
+                  '来源：${profile.source}',
+                  style: AppTypography.label(context),
+                ),
               if (profile.createdAt.trim().isNotEmpty)
-                Text(_formatDate(profile.createdAt), style: AppTypography.label(context)),
+                Text(
+                  _formatDate(profile.createdAt),
+                  style: AppTypography.label(context),
+                ),
             ],
           ),
           SizedBox(height: AppSpacing.sm),
@@ -195,7 +222,11 @@ class _UserProfilesPageState extends ConsumerState<UserProfilesPage> {
               ),
               TextButton.icon(
                 onPressed: () => _delete(profile),
-                icon: Icon(Icons.delete_outline, size: 16, color: context.error),
+                icon: Icon(
+                  Icons.delete_outline,
+                  size: 16,
+                  color: context.error,
+                ),
                 label: Text('删除', style: TextStyle(color: context.error)),
               ),
             ],
@@ -207,8 +238,12 @@ class _UserProfilesPageState extends ConsumerState<UserProfilesPage> {
 
   Future<void> _showEditor(ProfileDto? existing) async {
     final isEdit = existing != null;
-    final nameController = TextEditingController(text: existing?.attributeName ?? '');
-    final valueController = TextEditingController(text: existing?.attributeValue ?? '');
+    final nameController = TextEditingController(
+      text: existing?.attributeName ?? '',
+    );
+    final valueController = TextEditingController(
+      text: existing?.attributeValue ?? '',
+    );
     var category = existing?.category ?? 'personal_info';
     var confidence = (existing?.confidence ?? 50).toDouble().clamp(0, 100);
 
@@ -232,24 +267,38 @@ class _UserProfilesPageState extends ConsumerState<UserProfilesPage> {
                   child: Container(
                     width: 40,
                     height: 4,
-                    decoration: BoxDecoration(color: context.borderPrimary, borderRadius: BorderRadius.circular(2)),
+                    decoration: BoxDecoration(
+                      color: context.borderPrimary,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
                   ),
                 ),
                 SizedBox(height: AppSpacing.lg),
-                Text(isEdit ? '编辑画像' : '新增画像', style: AppTypography.sectionTitle(context)),
+                Text(
+                  isEdit ? '编辑画像' : '新增画像',
+                  style: AppTypography.sectionTitle(context),
+                ),
                 SizedBox(height: AppSpacing.lg),
                 Text('分类', style: AppTypography.label(context)),
                 SizedBox(height: AppSpacing.xs),
                 DropdownButtonFormField<String>(
                   value: category,
-                  decoration: const InputDecoration(border: OutlineInputBorder()),
+                  decoration: const InputDecoration(
+                    border: OutlineInputBorder(),
+                  ),
                   items: _categoryLabels.entries
-                      .map((entry) => DropdownMenuItem(value: entry.key, child: Text(entry.value)))
+                      .map(
+                        (entry) => DropdownMenuItem(
+                          value: entry.key,
+                          child: Text(entry.value),
+                        ),
+                      )
                       .toList(growable: false),
                   onChanged: isEdit
                       ? null
                       : (value) {
-                          if (value != null) setSheetState(() => category = value);
+                          if (value != null)
+                            setSheetState(() => category = value);
                         },
                 ),
                 SizedBox(height: AppSpacing.md),
@@ -263,17 +312,24 @@ class _UserProfilesPageState extends ConsumerState<UserProfilesPage> {
                 SizedBox(height: AppSpacing.md),
                 Text('属性值', style: AppTypography.label(context)),
                 SizedBox(height: AppSpacing.xs),
-                AmitiaTextField(controller: valueController, hintText: '输入画像事实', maxLines: 3),
+                AmitiaTextField(
+                  controller: valueController,
+                  hintText: '输入画像事实',
+                  maxLines: 3,
+                ),
                 SizedBox(height: AppSpacing.md),
                 Row(
                   children: [
                     Text('置信度', style: AppTypography.label(context)),
                     const Spacer(),
-                    Text('${confidence.round()}%', style: AppTypography.bodySmall(context)),
+                    Text(
+                      '${confidence.round()}%',
+                      style: AppTypography.bodySmall(context),
+                    ),
                   ],
                 ),
                 Slider(
-                  value: confidence,
+                  value: confidence.toDouble(),
                   min: 0,
                   max: 100,
                   divisions: 20,
@@ -287,7 +343,9 @@ class _UserProfilesPageState extends ConsumerState<UserProfilesPage> {
                     final attributeName = nameController.text.trim();
                     final attributeValue = valueController.text.trim();
                     if (attributeName.isEmpty || attributeValue.isEmpty) {
-                      ScaffoldMessenger.of(sheetContext).showSnackBar(const SnackBar(content: Text('属性名称和值不能为空')));
+                      ScaffoldMessenger.of(sheetContext).showSnackBar(
+                        const SnackBar(content: Text('属性名称和值不能为空')),
+                      );
                       return;
                     }
                     try {
@@ -311,7 +369,11 @@ class _UserProfilesPageState extends ConsumerState<UserProfilesPage> {
                     } catch (error) {
                       if (sheetContext.mounted) {
                         ScaffoldMessenger.of(sheetContext).showSnackBar(
-                          SnackBar(content: Text('保存失败：${error.toString().replaceFirst('Exception: ', '')}')),
+                          SnackBar(
+                            content: Text(
+                              '保存失败：${error.toString().replaceFirst('Exception: ', '')}',
+                            ),
+                          ),
                         );
                       }
                     }
@@ -330,10 +392,18 @@ class _UserProfilesPageState extends ConsumerState<UserProfilesPage> {
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('删除画像'),
-        content: Text('确定删除“${profile.attributeName}：${profile.attributeValue}”吗？'),
+        content: Text(
+          '确定删除“${profile.attributeName}：${profile.attributeValue}”吗？',
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('取消')),
-          TextButton(onPressed: () => Navigator.pop(dialogContext, true), child: Text('删除', style: TextStyle(color: context.error))),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: Text('删除', style: TextStyle(color: context.error)),
+          ),
         ],
       ),
     );
@@ -343,7 +413,9 @@ class _UserProfilesPageState extends ConsumerState<UserProfilesPage> {
       ref.invalidate(profileListProvider);
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('删除失败：$error')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('删除失败：$error')));
       }
     }
   }

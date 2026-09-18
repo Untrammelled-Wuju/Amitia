@@ -73,23 +73,10 @@ type Service interface {
 	GetUsageOverview() map[string]interface{}
 	GetUsageSources() map[string]interface{}
 	GetVersion() map[string]interface{}
-	GetWechatBridgeConfig() map[string]interface{}
-	GetWechatBridgeEvents() map[string]interface{}
-	GetWechatBridgeQRCode() map[string]interface{}
-	GetWechatBridgeStatus() map[string]interface{}
-	GetWechatBridgeStatusDetail() map[string]interface{}
-	GetQQBridgeStatus() map[string]interface{}
-	GetQQBridgeStatusDetail() map[string]interface{}
-	GetQQBridgeConfig() map[string]interface{}
-	GetQQBridgeEvents() map[string]interface{}
-	GetWechatEvents() map[string]interface{}
-	GetWechatStatus() map[string]interface{}
 	Health() map[string]interface{}
 	MaintenanceDiagnose() map[string]interface{}
 	MaintenanceExportDiagnostic() map[string]interface{}
 	MaintenanceReloadConfig() map[string]interface{}
-	MaintenanceRestartBridge() map[string]interface{}
-	MaintenanceRestartQQBridge() map[string]interface{}
 	MoodDetectionConfig() map[string]interface{}
 	UpdateMoodDetectionConfig(body map[string]interface{}) map[string]interface{}
 	NotificationsSubscribe(body map[string]interface{}, spaceID, deviceID string) map[string]interface{}
@@ -130,20 +117,7 @@ type Service interface {
 	UpdateSecurityAccessConfig(body map[string]interface{}) map[string]interface{}
 	UpdateTheme(body map[string]interface{}) map[string]interface{}
 	UpdateUpdateConfig(body map[string]interface{}) map[string]interface{}
-	UpdateWechatBridgeConfig(body map[string]interface{}) map[string]interface{}
 	ValidateMode() map[string]interface{}
-	WechatBridgeRecover() map[string]interface{}
-	QQBridgeRecover() map[string]interface{}
-	WechatCloudCheck() map[string]interface{}
-	WechatCloudCheckReport() map[string]interface{}
-	WechatCloudCheckRiskSummary() map[string]interface{}
-	WechatCloudCheckRun() map[string]interface{}
-	WechatLoginReconnect() map[string]interface{}
-	WechatLoginRescan() map[string]interface{}
-	WechatLoginStart() map[string]interface{}
-	WechatLoginWait() map[string]interface{}
-	WechatReplyTimingRecover() map[string]interface{}
-	WechatReplyTimingStatus() map[string]interface{}
 	AttachTemporalService(temporalSvc *temporal.Service)
 	SetDataPortabilityCoordinator(coord *dataportability.Coordinator)
 	GetDataPortabilityCoordinator() (*dataportability.Coordinator, bool)
@@ -179,11 +153,6 @@ func (s *service) GetDataPortabilityCoordinator() (*dataportability.Coordinator,
 	}
 	return s.coordinator, true
 }
-func (s *service) MaintenanceRestartBridge() map[string]interface{} {
-	result := s.readSidecarResponse(s.sidecarPost("/api/login/reconnect", nil))
-	return map[string]interface{}{"restarted": true, "restartedAt": time.Now().Format(time.DateTime), "bridgeResult": result}
-}
-
 func toFloat(v interface{}) float64 {
 	switch val := v.(type) {
 	case float64:

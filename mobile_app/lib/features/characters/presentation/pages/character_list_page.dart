@@ -29,8 +29,16 @@ enum _SortOrder { none, name, createdAt }
 
 class _CharacterListPageState extends ConsumerState<CharacterListPage> {
   List<CharacterDto> _characters = [];
+  bool _searchVisible = false;
   String _query = '';
   _SortOrder _sortOrder = _SortOrder.none;
+  final _searchController = TextEditingController();
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
   List<CharacterDto> get _activeCharacters {
     var list = _characters.where((c) {
@@ -59,121 +67,175 @@ class _CharacterListPageState extends ConsumerState<CharacterListPage> {
     final backendAvailability = ref.watch(backendConnectionProvider).valueOrNull;
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
-        title: '角色',
+        title: _searchVisible ? '搜索角色' : '角色',
         navigation: AmitiaAppBarNavigation.back,
+        actions: [
+          AmitiaIconButton(
+            icon: _searchVisible ? Icons.close : Icons.search,
+            tooltip: _searchVisible ? '退出搜索' : '搜索',
+            onPressed: () {
+              FocusScope.of(context).unfocus();
+              _searchController.clear();
+              setState(() {
+                _searchVisible = !_searchVisible;
+                _query = '';
+              });
+            },
+          ),
+        ],
       ),
       body: SafeArea(
         top: false,
-        child: Column(
-          children: [
-            Padding(
-              padding: EdgeInsets.fromLTRB(
-                AppSpacing.pagePadding,
-                AppSpacing.sm,
-                AppSpacing.pagePadding,
-                AppSpacing.sm,
-              ),
-              child: AmitiaSearchField(
-                hintText: '搜索角色',
-                onChanged: (value) => setState(() => _query = value),
-              ),
-            ),
-            Expanded(
-              child: charactersAsync.when(
-                loading: () => const Center(child: CircularProgressIndicator()),
-                error: (err, _) => Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(32),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.error_outline, size: 48, color: context.textSecondary),
-                        const SizedBox(height: 16),
-                        Text(
-                          '加载失败: ${err.toString().replaceFirst('Exception: ', '')}',
-                          style: AppTypography.body(context).copyWith(color: context.error),
-                          textAlign: TextAlign.center,
-                        ),
-                        const SizedBox(height: 16),
-                        AmitiaButton(
-                          label: '重试',
-                          onPressed: () => ref.invalidate(characterListProvider),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                data: (characters) {
-                  _characters = characters;
-                  final activeChars = _activeCharacters;
-                  if (activeChars.isEmpty) {
-                    return Center(
-                      child: Text(
-                        '暂无角色，请先创建',
-                        style: AppTypography.body(context).copyWith(color: context.textSecondary),
-                      ),
-                    );
-                  }
-                  return ListView.separated(
-                    padding: EdgeInsets.fromLTRB(
-                      AppSpacing.pagePadding,
-                      AppSpacing.xs,
-                      AppSpacing.pagePadding,
-                      AppSpacing.md,
-                    ),
-                    itemCount: activeChars.length,
-                    separatorBuilder: (_, _) => SizedBox(height: AppSpacing.sm),
-                    itemBuilder: (context, index) {
-                      final character = activeChars[index];
-                      final isDefault = character.isDefault;
-                      return AmitiaCharacterCard(
-                        name: isDefault ? '${character.name} (默认)' : character.name,
-                        status: character.status,
-                        identity: character.identity,
-                        avatarInitial: character.name.isNotEmpty ? character.name[0] : '?',
-                        avatarColor: '#8A5728',
-                        avatarUrl: _resolveAvatarUrl(character.avatar, backendAvailability),
-                        mood: '',
-                        lastActive: _getLastActive(character.isActive == 1),
-                        onTap: () => context.push(AppRoutes.character(character.id)),
-                      );
-                    },
-                  );
-                },
-              ),
-            ),
-            Padding(
-              padding: EdgeInsets.fromLTRB(
-                AppSpacing.pagePadding,
-                AppSpacing.xs,
-                AppSpacing.pagePadding,
-                AppSpacing.lg,
-              ),
-              child: Row(
+        child: charactersAsync.when(
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (err, _) => Center(
+            child: Padding(
+              padding: const EdgeInsets.all(32),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Expanded(
-                    child: AmitiaButton(
-                      label: '创建新角色',
-                      icon: Icons.person_add_alt_1,
-                      isFullWidth: true,
-                      onPressed: () => context.push(AppRoutes.charactersCreate),
-                    ),
+                  Icon(Icons.error_outline, size: 48, color: context.textSecondary),
+                  const SizedBox(height: 16),
+                  Text(
+                    '加载失败: ${err.toString().replaceFirst('Exception: ', '')}',
+                    style: AppTypography.body(context).copyWith(color: context.error),
+                    textAlign: TextAlign.center,
                   ),
-                  SizedBox(width: AppSpacing.md),
-                  Expanded(
-                    child: AmitiaButton(
-                      label: '管理角色',
-                      isSecondary: true,
-                      isFullWidth: true,
-                      onPressed: () => _showManageSheet(context),
-                    ),
+                  const SizedBox(height: 16),
+                  AmitiaButton(
+                    label: '重试',
+                    onPressed: () => ref.invalidate(characterListProvider),
                   ),
                 ],
               ),
             ),
-          ],
+          ),
+          data: (characters) {
+            _characters = characters;
+            if (_searchVisible) {
+              return _buildSearchView(context, backendAvailability);
+            }
+            final activeChars = _activeCharacters;
+            return Column(
+              children: [
+                Expanded(
+                  child: activeChars.isEmpty
+                      ? Center(
+                          child: Text(
+                            '暂无角色，请先创建',
+                            style: AppTypography.body(context).copyWith(color: context.textSecondary),
+                          ),
+                        )
+                      : _buildCharacterList(context, activeChars, backendAvailability),
+                ),
+                Padding(
+                  padding: EdgeInsets.fromLTRB(
+                    AppSpacing.pagePadding,
+                    AppSpacing.xs,
+                    AppSpacing.pagePadding,
+                    AppSpacing.lg,
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: AmitiaButton(
+                          label: '创建新角色',
+                          icon: Icons.person_add_alt_1,
+                          isFullWidth: true,
+                          onPressed: () => context.push(AppRoutes.charactersCreate),
+                        ),
+                      ),
+                      SizedBox(width: AppSpacing.md),
+                      Expanded(
+                        child: AmitiaButton(
+                          label: '管理角色',
+                          isSecondary: true,
+                          isFullWidth: true,
+                          onPressed: () => _showManageSheet(context),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            );
+          },
         ),
       ),
+    );
+  }
+
+  Widget _buildSearchView(
+    BuildContext context,
+    BackendConnectionAvailability? backendAvailability,
+  ) {
+    final query = _query.trim();
+    final results = query.isEmpty ? const <CharacterDto>[] : _activeCharacters;
+    return Column(
+      children: [
+        Padding(
+          padding: EdgeInsets.fromLTRB(
+            AppSpacing.pagePadding,
+            AppSpacing.md,
+            AppSpacing.pagePadding,
+            AppSpacing.sm,
+          ),
+          child: AmitiaSearchField(
+            hintText: '搜索角色名称、身份或描述',
+            controller: _searchController,
+            autofocus: true,
+            onChanged: (value) => setState(() => _query = value),
+          ),
+        ),
+        Expanded(
+          child: query.isEmpty
+              ? const AmitiaEmptyState(
+                  icon: Icons.search,
+                  title: '输入关键词',
+                  subtitle: '在当前页面搜索角色',
+                )
+              : results.isEmpty
+              ? const AmitiaEmptyState(
+                  icon: Icons.search_off,
+                  title: '未找到相关角色',
+                  subtitle: '尝试更换关键词',
+                )
+              : _buildCharacterList(context, results, backendAvailability),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCharacterList(
+    BuildContext context,
+    List<CharacterDto> characters,
+    BackendConnectionAvailability? backendAvailability,
+  ) {
+    return ListView.separated(
+      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+      padding: EdgeInsets.fromLTRB(
+        AppSpacing.pagePadding,
+        AppSpacing.xs,
+        AppSpacing.pagePadding,
+        AppSpacing.md,
+      ),
+      itemCount: characters.length,
+      separatorBuilder: (_, _) => SizedBox(height: AppSpacing.sm),
+      itemBuilder: (context, index) {
+        final character = characters[index];
+        final isDefault = character.isDefault;
+        return AmitiaCharacterCard(
+          name: isDefault ? '${character.name} (默认)' : character.name,
+          status: character.status,
+          identity: character.identity,
+          avatarInitial: character.name.isNotEmpty ? character.name[0] : '?',
+          avatarColor: '#8A5728',
+          avatarUrl: _resolveAvatarUrl(character.avatar, backendAvailability),
+          mood: '',
+          lastActive: _getLastActive(character.isActive == 1),
+          onTap: () => context.push(AppRoutes.character(character.id)),
+        );
+      },
     );
   }
 

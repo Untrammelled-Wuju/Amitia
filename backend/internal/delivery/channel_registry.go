@@ -6,78 +6,36 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 
-	"github.com/u-ai/backend/config"
-	"github.com/u-ai/backend/internal/extension/kernel/capability"
-	"github.com/u-ai/backend/internal/runtimeidentity"
+	basechannel "github.com/u-ai/backend/internal/channel"
 )
 
-const (
-	defaultQQSidecarURL     = "http://127.0.0.1:19877"
-	defaultWechatSidecarURL = "http://127.0.0.1:19876"
-)
-
-// BuildChannelResolverFromConfig constructs a ChannelResolver based on the
-// application configuration. The web channel is always registered. QQ and
-// Wechat channels are added only when the corresponding sidecar is enabled
-// in config. Sidecar URLs default to the standard local ports unless the
-// port value in config is non-zero.
-//
-// Note: This resolver is used as a Builtin Channel Provider internal implementation.
-// The formal Channel discovery mechanism is through CapabilityService → ProviderInvocation
-// (channel.deliver.web/qq/wechat capabilities).
-func BuildChannelResolverFromConfig() ChannelResolver {
-	adapters := []ChannelAdapter{
+func BuildBuiltinChannelResolver() ChannelResolver {
+	return NewMapChannelResolverWith([]ChannelAdapter{
 		NewWebChannelAdapter(),
-	}
-
-	cfg := config.AppCfg
-	if cfg == nil {
-		return NewMapChannelResolverWith(adapters)
-	}
-
-	if cfg.Runtime.Sidecars.QQ.Enabled {
-		adapters = append(adapters, NewQQChannelAdapter(sidecarURL(cfg.Runtime.Sidecars.QQ.Port, defaultQQSidecarURL)))
-	}
-	if cfg.Runtime.Sidecars.Wechat.Enabled {
-		adapters = append(adapters, NewWechatChannelAdapter(sidecarURL(cfg.Runtime.Sidecars.Wechat.Port, defaultWechatSidecarURL)))
-	}
-
-	return NewMapChannelResolverWith(adapters)
+	})
 }
 
-func sidecarURL(port int, defaultURL string) string {
-	if port <= 0 {
-		return defaultURL
-	}
-	return fmt.Sprintf("http://127.0.0.1:%d", port)
-}
-
-// BuildCapabilityChannelResolver constructs a ChannelResolver that delegates
-// to the CapabilityService for channel delivery. This is the formal Channel
-// discovery mechanism: channel.deliver.web/qq/wechat → CapabilityService → ProviderInvocation.
 type CapabilityChannelResolver struct {
-	providerInvoker CapabilityProviderInvoker
+	providers       *PluginChannelProviderRegistry
 	builtinResolver ChannelResolver
 }
 
-type CapabilityProviderInvoker interface {
-	InvokeCapability(ctx context.Context, capabilityID string, input []byte) ([]byte, error)
-}
-
-func NewCapabilityChannelResolver(invoker CapabilityProviderInvoker, builtin ChannelResolver) *CapabilityChannelResolver {
+func NewCapabilityChannelResolver(providers *PluginChannelProviderRegistry, builtin ChannelResolver) *CapabilityChannelResolver {
 	return &CapabilityChannelResolver{
-		providerInvoker: invoker,
+		providers:       providers,
 		builtinResolver: builtin,
 	}
 }
 
 func (r *CapabilityChannelResolver) Resolve(channelName string) ChannelAdapter {
-	if r.providerInvoker != nil {
-		capID := "channel.deliver." + channelName
-		return &capabilityChannelAdapter{
-			invoker: r.providerInvoker,
-			capID:   capID,
+	if r.providers != nil {
+		if provider, err := r.providers.Provider(channelName); err == nil {
+			return &pluginChannelAdapter{
+				name:     channelName,
+				provider: provider,
+			}
 		}
 	}
 	if r.builtinResolver != nil {
@@ -93,10 +51,15 @@ func (r *CapabilityChannelResolver) Register(adapter ChannelAdapter) {
 }
 
 func (r *CapabilityChannelResolver) Channels() []string {
+	result := make([]string, 0)
 	if r.builtinResolver != nil {
-		return r.builtinResolver.Channels()
+		result = append(result, r.builtinResolver.Channels()...)
 	}
-	return []string{}
+	if r.providers != nil {
+		result = append(result, r.providers.Channels()...)
+	}
+	sort.Strings(result)
+	return result
 }
 
 func (r *CapabilityChannelResolver) Unregister(channelName string) {
@@ -106,69 +69,43 @@ func (r *CapabilityChannelResolver) Unregister(channelName string) {
 }
 
 func (r *CapabilityChannelResolver) Has(channelName string) bool {
+	if r.providers != nil && r.providers.Has(channelName) {
+		return true
+	}
 	if r.builtinResolver != nil {
 		return r.builtinResolver.Has(channelName)
 	}
 	return false
 }
 
-type capabilityChannelAdapter struct {
-	invoker CapabilityProviderInvoker
-	capID   string
+type pluginChannelAdapter struct {
+	name     string
+	provider *basechannel.HTTPProvider
 }
 
-func (a *capabilityChannelAdapter) Name() string {
-	return a.capID
+func (a *pluginChannelAdapter) Name() string {
+	return a.name
 }
 
-func (a *capabilityChannelAdapter) ProviderInstanceID() string {
-	return "capability." + a.capID
+func (a *pluginChannelAdapter) ProviderInstanceID() string {
+	return "channel.provider." + a.name
 }
 
-func (a *capabilityChannelAdapter) Deliver(intent DeliveryIntent) error {
-	input := map[string]interface{}{
-		"channel":     intent.Channel,
-		"peerId":      intent.PeerID,
-		"contentType": intent.ContentType,
-		"payload":     intent.Payload,
+func (a *pluginChannelAdapter) Deliver(intent DeliveryIntent) error {
+	if a.provider == nil {
+		return fmt.Errorf("channel provider unavailable: %s", a.name)
 	}
-	inputBytes, err := json.Marshal(input)
-	if err != nil {
-		return fmt.Errorf("marshal channel input: %w", err)
+	request := basechannel.SendRequest{
+		Channel:        basechannel.ID(intent.Channel),
+		PeerID:         intent.PeerID,
+		ConversationID: intent.InteractionID,
+		ContentType:    intent.ContentType,
+		Payload:        json.RawMessage(intent.Payload),
+		IdempotencyKey: intent.ID,
 	}
-	_, err = a.invoker.InvokeCapability(nil, a.capID, inputBytes)
+	if intent.ContentType == "text" {
+		request.Text = extractContentFromPayload(intent.Payload)
+	}
+	_, err := a.provider.Send(context.Background(), request)
 	return err
-}
-
-// ProviderInvocationCapabilityInvoker adapts a capability.ProviderInvocationService
-// to the CapabilityProviderInvoker interface. This is the formal Channel discovery
-// mechanism: channel.deliver.* → CapabilityService → ProviderInvocation.
-type ProviderInvocationCapabilityInvoker struct {
-	invocationService *capability.ProviderInvocationService
-	spaceID           string
-}
-
-func NewProviderInvocationCapabilityInvoker(svc *capability.ProviderInvocationService, spaceID string) *ProviderInvocationCapabilityInvoker {
-	return &ProviderInvocationCapabilityInvoker{
-		invocationService: svc,
-		spaceID:           spaceID,
-	}
-}
-
-func (p *ProviderInvocationCapabilityInvoker) InvokeCapability(ctx context.Context, capabilityID string, input []byte) ([]byte, error) {
-	if p.invocationService == nil {
-		return nil, fmt.Errorf("provider invocation service not configured")
-	}
-	capID := capability.CapabilityID(capabilityID)
-	req := capability.ProviderInvocationRequest{
-		CapabilityID: capID,
-		Input:        input,
-		SpaceID:      runtimeidentity.SpaceID(p.spaceID),
-		AllowCore:    true,
-	}
-	result, err := p.invocationService.Invoke(ctx, req)
-	if err != nil {
-		return nil, err
-	}
-	return result.Output, nil
 }

@@ -20,7 +20,16 @@ class _DebugLogOverlayState extends ConsumerState<DebugLogOverlay> {
   bool _autoScroll = true;
   int? _expandedIndex;
 
-  static const List<String> _sources = ['all', 'flutter', 'runtime', 'backend', 'sidecar', 'proot', 'unhandled', 'flutter.error'];
+  static const List<String> _sources = [
+    'all',
+    'flutter',
+    'runtime',
+    'backend',
+    'sidecar',
+    'proot',
+    'unhandled',
+    'flutter.error',
+  ];
 
   @override
   void dispose() {
@@ -55,7 +64,13 @@ class _DebugLogOverlayState extends ConsumerState<DebugLogOverlay> {
   }
 
   void _copyAllLogs(List<DebugLogEntry> entries) {
-    final text = entries.map((e) => '[${e.timeStr}][${e.levelStr}][${e.source}] ${e.message}').join('\n');
+    final text = entries
+        .map(
+          (e) =>
+              '[${e.timeStr}][${e.levelStr}][${e.source}] ${e.message}'
+              '${e.stackTrace == null ? '' : '\n${e.stackTrace}'}',
+        )
+        .join('\n');
     Clipboard.setData(ClipboardData(text: text));
   }
 
@@ -76,8 +91,12 @@ class _DebugLogOverlayState extends ConsumerState<DebugLogOverlay> {
     final screenWidth = MediaQuery.of(context).size.width;
     final screenHeight = MediaQuery.of(context).size.height;
     final isMobile = screenWidth < 600;
-    final overlayWidth = _expanded ? (isMobile ? screenWidth * 0.85 : 480.0) : 200.0;
-    final overlayHeight = _expanded ? (isMobile ? screenHeight * 0.5 : 360.0) : 36.0;
+    final overlayWidth = _expanded
+        ? (isMobile ? screenWidth * 0.85 : 480.0)
+        : 200.0;
+    final overlayHeight = _expanded
+        ? (isMobile ? screenHeight * 0.5 : 360.0)
+        : 36.0;
 
     return Positioned(
       right: _expanded ? _right : _right,
@@ -108,9 +127,13 @@ class _DebugLogOverlayState extends ConsumerState<DebugLogOverlay> {
                   Expanded(
                     child: ListView.builder(
                       controller: _scrollCtrl,
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
                       itemCount: filtered.length,
-                      itemBuilder: (context, i) => _buildLogItem(filtered[i], i),
+                      itemBuilder: (context, i) =>
+                          _buildLogItem(filtered[i], i),
                     ),
                   ),
               ],
@@ -161,7 +184,11 @@ class _DebugLogOverlayState extends ConsumerState<DebugLogOverlay> {
                 },
                 child: const Padding(
                   padding: EdgeInsets.symmetric(horizontal: 4),
-                  child: Icon(Icons.delete_sweep_outlined, size: 14, color: Colors.white54),
+                  child: Icon(
+                    Icons.delete_sweep_outlined,
+                    size: 14,
+                    color: Colors.white54,
+                  ),
                 ),
               ),
             if (_expanded)
@@ -172,7 +199,11 @@ class _DebugLogOverlayState extends ConsumerState<DebugLogOverlay> {
                 },
                 child: const Padding(
                   padding: EdgeInsets.symmetric(horizontal: 4),
-                  child: Icon(Icons.copy_all_outlined, size: 14, color: Colors.white54),
+                  child: Icon(
+                    Icons.copy_all_outlined,
+                    size: 14,
+                    color: Colors.white54,
+                  ),
                 ),
               ),
             if (_expanded)
@@ -181,7 +212,9 @@ class _DebugLogOverlayState extends ConsumerState<DebugLogOverlay> {
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 4),
                   child: Icon(
-                    _autoScroll ? Icons.vertical_align_bottom : Icons.pause_circle_outline,
+                    _autoScroll
+                        ? Icons.vertical_align_bottom
+                        : Icons.pause_circle_outline,
                     size: 14,
                     color: _autoScroll ? Colors.greenAccent : Colors.white54,
                   ),
@@ -216,15 +249,22 @@ class _DebugLogOverlayState extends ConsumerState<DebugLogOverlay> {
                     onTap: () => setState(() => _filterSource = s),
                     child: Container(
                       margin: const EdgeInsets.only(right: 4),
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
                       decoration: BoxDecoration(
-                        color: selected ? const Color(0xFF3D5AFE) : const Color(0xFF333333),
+                        color: selected
+                            ? const Color(0xFF3D5AFE)
+                            : const Color(0xFF333333),
                         borderRadius: BorderRadius.circular(3),
                       ),
                       child: Text(
                         s == 'all' ? '全部' : s,
                         style: TextStyle(
-                          color: selected ? Colors.white : const Color(0xFFAAAAAA),
+                          color: selected
+                              ? Colors.white
+                              : const Color(0xFFAAAAAA),
                           fontSize: 10,
                         ),
                       ),
@@ -242,10 +282,34 @@ class _DebugLogOverlayState extends ConsumerState<DebugLogOverlay> {
             dropdownColor: const Color(0xFF2A2A2A),
             underline: const SizedBox(),
             items: const [
-              DropdownMenuItem(value: DebugLogLevel.debug, child: Text('DBG', style: TextStyle(color: Color(0xFF607D8B), fontSize: 11))),
-              DropdownMenuItem(value: DebugLogLevel.info, child: Text('INF', style: TextStyle(color: Color(0xFF4CAF50), fontSize: 11))),
-              DropdownMenuItem(value: DebugLogLevel.warn, child: Text('WRN', style: TextStyle(color: Color(0xFFFF9800), fontSize: 11))),
-              DropdownMenuItem(value: DebugLogLevel.error, child: Text('ERR', style: TextStyle(color: Color(0xFFF44336), fontSize: 11))),
+              DropdownMenuItem(
+                value: DebugLogLevel.debug,
+                child: Text(
+                  'DBG',
+                  style: TextStyle(color: Color(0xFF607D8B), fontSize: 11),
+                ),
+              ),
+              DropdownMenuItem(
+                value: DebugLogLevel.info,
+                child: Text(
+                  'INF',
+                  style: TextStyle(color: Color(0xFF4CAF50), fontSize: 11),
+                ),
+              ),
+              DropdownMenuItem(
+                value: DebugLogLevel.warn,
+                child: Text(
+                  'WRN',
+                  style: TextStyle(color: Color(0xFFFF9800), fontSize: 11),
+                ),
+              ),
+              DropdownMenuItem(
+                value: DebugLogLevel.error,
+                child: Text(
+                  'ERR',
+                  style: TextStyle(color: Color(0xFFF44336), fontSize: 11),
+                ),
+              ),
             ],
             onChanged: (v) {
               if (v != null) setState(() => _minLevel = v);
@@ -258,10 +322,12 @@ class _DebugLogOverlayState extends ConsumerState<DebugLogOverlay> {
 
   Widget _buildLogItem(DebugLogEntry entry, int index) {
     final hasStack = entry.stackTrace != null && entry.stackTrace!.isNotEmpty;
+    final hasDetails =
+        hasStack || entry.message.length > 120 || entry.message.contains('\n');
     final isExpanded = _expandedIndex == index;
 
     return GestureDetector(
-      onTap: hasStack
+      onTap: hasDetails
           ? () => setState(() => _expandedIndex = isExpanded ? null : index)
           : null,
       child: Padding(
@@ -276,7 +342,11 @@ class _DebugLogOverlayState extends ConsumerState<DebugLogOverlay> {
                   width: 56,
                   child: Text(
                     entry.timeStr,
-                    style: const TextStyle(color: Color(0xFF777777), fontSize: 9, fontFamily: 'monospace'),
+                    style: const TextStyle(
+                      color: Color(0xFF777777),
+                      fontSize: 9,
+                      fontFamily: 'monospace',
+                    ),
                   ),
                 ),
                 Container(
@@ -291,16 +361,19 @@ class _DebugLogOverlayState extends ConsumerState<DebugLogOverlay> {
                     ),
                   ),
                 ),
-                Container(
+                SizedBox(
                   width: 50,
                   child: Text(
                     entry.source,
-                    style: const TextStyle(color: Color(0xFF9C27B0), fontSize: 9),
+                    style: const TextStyle(
+                      color: Color(0xFF9C27B0),
+                      fontSize: 9,
+                    ),
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
                 const SizedBox(width: 4),
-                if (hasStack)
+                if (hasDetails)
                   Icon(
                     isExpanded ? Icons.expand_less : Icons.expand_more,
                     size: 12,
@@ -309,8 +382,12 @@ class _DebugLogOverlayState extends ConsumerState<DebugLogOverlay> {
                 Expanded(
                   child: Text(
                     entry.message,
-                    style: const TextStyle(color: Color(0xFFDDDDDD), fontSize: 9, fontFamily: 'monospace'),
-                    maxLines: isExpanded ? 10 : 3,
+                    style: const TextStyle(
+                      color: Color(0xFFDDDDDD),
+                      fontSize: 9,
+                      fontFamily: 'monospace',
+                    ),
+                    maxLines: isExpanded ? null : 5,
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),

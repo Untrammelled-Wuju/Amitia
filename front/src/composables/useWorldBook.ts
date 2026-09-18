@@ -10,6 +10,7 @@ export interface WorldBookEntry {
   matchScope: string;
   injectContent: string;
   priority: number;
+  characterId: string;
   hitCount: number;
   createdAt: string;
   updatedAt: string;
@@ -80,6 +81,13 @@ export function useWorldBook() {
     await fetchRules();
   }
 
+  async function createRules(items: Partial<WorldBookEntry>[]) {
+    for (const item of items) {
+      await apiClient.post("/api/world-book", item);
+    }
+    await fetchRules();
+  }
+
   async function updateRule(id: string, data: Partial<WorldBookEntry>) {
     await apiClient.put(`/api/world-book/${id}`, data);
     await fetchRules();
@@ -124,6 +132,7 @@ export function useWorldBook() {
     totalPages,
     fetchRules,
     createRule,
+    createRules,
     updateRule,
     deleteRule,
     testMatch,

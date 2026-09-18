@@ -1,3 +1,0 @@
-service:
-  http_port: 19178
-  grpc_port: 19179

@@ -10,7 +10,6 @@ import {
 import { join, basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { dirname } from "node:path";
-import https from "node:https";
 import { verifyReleaseGateStamp } from "./release-integrity.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -21,20 +20,6 @@ function formatBytes(bytes) {
   const mb = bytes / 1024 / 1024;
   if (mb >= 1) return `${mb.toFixed(2)} MB`;
   return `${(bytes / 1024).toFixed(0)} KB`;
-}
-
-function fetchUrl(url) {
-  return new Promise((resolve, reject) => {
-    const req = https.get(url, (res) => {
-      let data = "";
-      res.on("data", (chunk) => (data += chunk));
-      res.on("end", () => resolve({ status: res.statusCode, body: data }));
-    });
-    req.on("error", reject);
-    req.setTimeout(10000, () => {
-      req.destroy(new Error("验证请求超时"));
-    });
-  });
 }
 
 function uploadFile(localPath, remoteUrl, user, password, insecure) {
@@ -65,6 +50,10 @@ function uploadFile(localPath, remoteUrl, user, password, insecure) {
   });
 }
 
+function shellQuote(value) {
+  return `'${String(value).replaceAll("'", "'\\\"'\\\"'")}'`;
+}
+
 async function main() {
   if (!existsSync(configPath)) {
     console.error("配置文件不存在: scripts/.publish-config.json");
@@ -74,8 +63,9 @@ async function main() {
 
   const config = JSON.parse(readFileSync(configPath, "utf-8"));
 
+  let verified;
   try {
-    const verified = verifyReleaseGateStamp();
+    verified = verifyReleaseGateStamp();
     console.log(
       `[release-gate] verified source + artifacts for ${verified.stamp.packageVersion} (${verified.stamp.sourceGateSha256.slice(0, 12)}...)`,
     );
@@ -125,10 +115,12 @@ async function main() {
     join(releaseDir, blockmapFile),
     join(releaseDir, ymlFile),
   ];
+  const stagingRoot = String(config.stagingRemotePath || `${config.remotePath}/.staging`).replace(/\/+$/, "");
+  const stagingPath = `${stagingRoot}/${verified.stamp.packageVersion}`;
 
   console.log("=== Amitia 发布工具 ===\n");
   console.log("FTP 服务器:", `${config.host}:${config.port || 21}`);
-  console.log("远程路径:", config.remotePath);
+  console.log("临时目录:", stagingPath);
   console.log("\n待上传文件:");
   for (const f of uploadFiles) {
     const stat = statSync(f);
@@ -137,7 +129,7 @@ async function main() {
   console.log("");
 
   const protocol = config.secure ? "ftps" : "ftp";
-  const baseUrl = `${protocol}://${config.host}:${config.port || 21}${config.remotePath}`;
+  const baseUrl = `${protocol}://${config.host}:${config.port || 21}${stagingPath}`;
 
   for (const localPath of uploadFiles) {
     const fileName = basename(localPath);
@@ -160,26 +152,21 @@ async function main() {
     console.log(`\n  ${fileName} 上传完成\n`);
   }
 
-  if (config.url) {
-    console.log("验证 latest.yml...");
-    try {
-      const res = await fetchUrl(`${config.url}/latest.yml`);
-      if (res.status === 200) {
-        const versionMatch = res.body.match(/^version:\s*(.+)$/m);
-        if (versionMatch) {
-          console.log(`验证成功，线上最新版本: ${versionMatch[1].trim()}`);
-        } else {
-          console.log("验证成功，latest.yml 已可访问");
-        }
-      } else {
-        console.error(`验证失败，HTTP 状态码: ${res.status}`);
-      }
-    } catch (err) {
-      console.error("验证失败:", err.message);
-    }
+  if (config.serverReleaseRoot) {
+    const root = String(config.serverReleaseRoot).replace(/\/+$/, "");
+    const command = [
+      "set -euo pipefail",
+      `release_root=${shellQuote(root)}`,
+      `staged_dir=${shellQuote(`${root}/.staging/${verified.stamp.packageVersion}`)}`,
+      'install -m 0644 "$staged_dir/latest.yml" "$release_root/latest.yml"',
+      `install -m 0644 "$staged_dir/${exeFile}" "$release_root/${exeFile}"`,
+      `install -m 0644 "$staged_dir/${blockmapFile}" "$release_root/${blockmapFile}"`,
+    ].join("; ");
+    console.log("\n服务器替换命令:");
+    console.log(command);
+  } else {
+    console.log("\n暂存上传完成。请在 scripts/.publish-config.json 设置 serverReleaseRoot 后生成服务器替换命令。");
   }
-
-  console.log("\n发布完成！");
 }
 
 main();

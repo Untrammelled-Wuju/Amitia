@@ -1,10 +1,12 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:dio/dio.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
@@ -17,6 +19,9 @@ import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_message.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/widgets/amitia_drawer.dart';
+import '../../../../core/backend_connection/backend_connection_availability.dart';
+import '../../../../core/backend_connection/providers/backend_connection_providers.dart';
+import '../../../../core/realtime/realtime_audio_bridge.dart';
 import '../../../../core/services/providers.dart';
 import '../../../../core/services/chat_service.dart';
 import '../../../../core/services/workspace_service.dart';
@@ -42,7 +47,11 @@ import '../../../../shared/models/models.dart';
 import 'realtime_voice_call_sheet.dart';
 
 class ChatPage extends ConsumerStatefulWidget {
-  const ChatPage({super.key, this.initialConversationId, this.initialCharacterId});
+  const ChatPage({
+    super.key,
+    this.initialConversationId,
+    this.initialCharacterId,
+  });
 
   final String? initialConversationId;
   final String? initialCharacterId;
@@ -55,6 +64,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   final _scrollController = ScrollController();
   final _composerController = TextEditingController();
   late final ConversationRuntimeController _runtime;
+  late final StateController<String> _activeConversationIdController;
   Map<String, dynamic>? _cachedProviderContext;
   List<ChatMessage>? _cachedMessagesForContext;
   Map<String, FutureOr<dynamic> Function(dynamic)>? _cachedProviderActions;
@@ -63,17 +73,32 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   ChatMessage? _replyTarget;
   List<WorkspaceMountDto> _recentWorkspaces = const <WorkspaceMountDto>[];
   bool _workspaceBusy = false;
+  final RealtimeAudioBridge _realtimeAudio = RealtimeAudioBridge();
+  final BytesBuilder _voicePcm = BytesBuilder(copy: false);
+  StreamSubscription<Uint8List>? _voiceInputSubscription;
+  bool _voiceRecording = false;
 
   @override
   void initState() {
     super.initState();
-    _runtime = ConversationRuntimeController(ref.read(chatServiceProvider), ref.read(emoteServiceProvider));
+    _activeConversationIdController = ref.read(
+      activeConversationIdProvider.notifier,
+    );
+    _runtime = ConversationRuntimeController(
+      ref.read(chatServiceProvider),
+      ref.read(emoteServiceProvider),
+    );
     _runtime.addListener(_onRuntimeChanged);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _openInitialConversation());
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => _openInitialConversation(),
+    );
   }
 
   Future<void> _openInitialConversation() async {
-    final conversationId = widget.initialConversationId?.trim() ?? '';
+    final initialConversationId = widget.initialConversationId?.trim() ?? '';
+    final conversationId = initialConversationId.isNotEmpty
+        ? initialConversationId
+        : _activeConversationIdController.state.trim();
     if (!mounted) return;
     if (conversationId.isEmpty) {
       await _refreshRecentWorkspaces();
@@ -103,18 +128,28 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     ref.read(activeConversationIdProvider.notifier).state = conversationId;
     _conversationEventRefreshTimer?.cancel();
     if (conversationId.isNotEmpty) {
-      _conversationEventRefreshTimer = Timer(const Duration(milliseconds: 350), () {
-        if (!mounted) return;
-        ref.invalidate(conversationUIEventWindowProvider(conversationId));
-      });
+      _conversationEventRefreshTimer = Timer(
+        const Duration(milliseconds: 350),
+        () {
+          if (!mounted) return;
+          ref.invalidate(conversationUIEventWindowProvider(conversationId));
+        },
+      );
     }
     setState(() {});
     _scrollToBottom();
   }
 
-  Map<String, dynamic> _buildProviderContext(String characterId, String characterName, String avatarInitial, String avatarColor) {
+  Map<String, dynamic> _buildProviderContext(
+    String characterId,
+    String characterName,
+    String avatarInitial,
+    String avatarColor,
+  ) {
     final currentMessages = _runtime.messages;
-    if (_cachedProviderContext != null && _cachedMessagesForContext != null && _cachedMessagesForContext!.length == currentMessages.length) {
+    if (_cachedProviderContext != null &&
+        _cachedMessagesForContext != null &&
+        _cachedMessagesForContext!.length == currentMessages.length) {
       bool same = true;
       for (int i = 0; i < currentMessages.length; i++) {
         if (_cachedMessagesForContext![i].id != currentMessages[i].id ||
@@ -125,7 +160,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       }
       if (same) return _cachedProviderContext!;
     }
-    final messagesMap = currentMessages.map(_providerMessage).toList(growable: false);
+    final messagesMap = currentMessages
+        .map(_providerMessage)
+        .toList(growable: false);
     final workspace = _runtime.workspace;
     _cachedMessagesForContext = List<ChatMessage>.from(currentMessages);
     _cachedProviderContext = <String, dynamic>{
@@ -147,15 +184,17 @@ class _ChatPageState extends ConsumerState<ChatPage> {
               'rootUri': workspace.rootUri,
             },
       'recentWorkspaces': _recentWorkspaces
-          .map((mount) => <String, dynamic>{
-                'workspaceId': mount.id,
-                'name': mount.name,
-                'kind': mount.kind,
-                'rootUri': mount.rootUri,
-                'available': mount.available,
-                'status': mount.status,
-                'statusReason': mount.statusReason,
-              })
+          .map(
+            (mount) => <String, dynamic>{
+              'workspaceId': mount.id,
+              'name': mount.name,
+              'kind': mount.kind,
+              'rootUri': mount.rootUri,
+              'available': mount.available,
+              'status': mount.status,
+              'statusReason': mount.statusReason,
+            },
+          )
           .toList(growable: false),
     };
     return _cachedProviderContext!;
@@ -163,12 +202,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
   @override
   void dispose() {
-    final activeId = ref.read(activeConversationIdProvider);
-    final conversationId = _runtime.conversationId?.trim() ?? '';
-    if (activeId == conversationId) {
-      ref.read(activeConversationIdProvider.notifier).state = '';
-    }
     _conversationEventRefreshTimer?.cancel();
+    unawaited(_voiceInputSubscription?.cancel());
+    unawaited(_realtimeAudio.stopCapture());
     _runtime.removeListener(_onRuntimeChanged);
     _runtime.dispose();
     _scrollController.dispose();
@@ -191,10 +227,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   void _jumpToMessage(int index) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!_scrollController.hasClients) return;
-      final target = (index * 76.0).clamp(
-        0.0,
-        _scrollController.position.maxScrollExtent,
-      ).toDouble();
+      final target = (index * 76.0)
+          .clamp(0.0, _scrollController.position.maxScrollExtent)
+          .toDouble();
       _scrollController.animateTo(
         target,
         duration: AppMotion.extended,
@@ -206,10 +241,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   void _retryMessage(int index) {
     _runtime.retryMessage(index);
   }
-
-
-
-
 
   Future<void> _refreshRecentWorkspaces() async {
     try {
@@ -233,7 +264,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       return;
     }
     try {
-      final binding = await ref.read(chatServiceProvider).conversationWorkspace(id);
+      final binding = await ref
+          .read(chatServiceProvider)
+          .conversationWorkspace(id);
       if (!mounted || _runtime.conversationId?.trim() != id) return;
       _runtime.setWorkspace(binding);
     } catch (_) {
@@ -307,22 +340,29 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       final dispatcher = ref.read(nativeBridgePlatformDispatcherProvider);
       final response = await dispatcher.execute(<String, dynamic>{
         'protocolVersion': 1,
-        'requestId': 'workspace-picker-${DateTime.now().microsecondsSinceEpoch}',
+        'requestId':
+            'workspace-picker-${DateTime.now().microsecondsSinceEpoch}',
         'platform': 'android',
         'operation': 'workspace.saf.pick_tree',
         'payload': const <String, dynamic>{},
       });
       if ((response['status'] ?? '').toString() != 'success') {
         final rawError = response['error'];
-        final error = rawError is Map ? Map<String, dynamic>.from(rawError) : const <String, dynamic>{};
+        final error = rawError is Map
+            ? Map<String, dynamic>.from(rawError)
+            : const <String, dynamic>{};
         throw StateError((error['message'] ?? '系统目录授权失败').toString());
       }
       final rawResult = response['result'];
-      final result = rawResult is Map ? Map<String, dynamic>.from(rawResult) : const <String, dynamic>{};
+      final result = rawResult is Map
+          ? Map<String, dynamic>.from(rawResult)
+          : const <String, dynamic>{};
       if (result['cancelled'] == true) return null;
       final grantId = (result['grantId'] ?? '').toString().trim();
       if (grantId.isEmpty) throw StateError('系统目录授权未返回 grantId');
-      return ref.read(workspaceServiceProvider).registerSaf(
+      return ref
+          .read(workspaceServiceProvider)
+          .registerSaf(
             name: (result['name'] ?? '工作目录').toString(),
             grantId: grantId,
             readOnly: result['readOnly'] == true,
@@ -340,10 +380,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         .where((segment) => segment.trim().isNotEmpty)
         .toList(growable: false);
     final name = segments.isEmpty ? '工作目录' : segments.last;
-    return ref.read(workspaceServiceProvider).registerLocal(
-          name: name,
-          localRoot: localRoot,
-        );
+    return ref
+        .read(workspaceServiceProvider)
+        .registerLocal(name: name, localRoot: localRoot);
   }
 
   Future<void> _chooseWorkspaceDirectory() async {
@@ -374,7 +413,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     try {
       final conversationId = _runtime.conversationId?.trim() ?? '';
       if (conversationId.isNotEmpty) {
-        await ref.read(chatServiceProvider).clearConversationWorkspace(conversationId);
+        await ref
+            .read(chatServiceProvider)
+            .clearConversationWorkspace(conversationId);
       }
       _runtime.setWorkspace(null);
     } catch (error) {
@@ -429,8 +470,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                           mount.available
                               ? (mount.kind == 'saf' ? '系统授权目录' : '本机目录')
                               : (mount.statusReason.isNotEmpty
-                                  ? mount.statusReason
-                                  : '目录不可用'),
+                                    ? mount.statusReason
+                                    : '目录不可用'),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -478,42 +519,39 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     final label = workspace?.workspaceName.trim().isNotEmpty == true
         ? workspace!.workspaceName.trim()
         : '选择工作目录';
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 2, 12, 4),
-      child: Align(
-        alignment: Alignment.centerLeft,
-        child: Material(
-          color: Colors.transparent,
-          child: InkWell(
-            borderRadius: BorderRadius.circular(8),
-            onTap: _workspaceBusy ? null : _showWorkspacePicker,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.folder_outlined, size: 16),
-                  const SizedBox(width: 6),
-                  ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 230),
-                    child: Text(
-                      label,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 12),
-                    ),
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 180),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(8),
+          onTap: _workspaceBusy ? null : _showWorkspacePicker,
+          child: Container(
+            height: 31,
+            padding: const EdgeInsets.symmetric(horizontal: 7),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.folder_outlined, size: 16),
+                const SizedBox(width: 5),
+                Flexible(
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 12),
                   ),
-                  const SizedBox(width: 4),
-                  if (_workspaceBusy)
-                    const SizedBox(
-                      width: 12,
-                      height: 12,
-                      child: CircularProgressIndicator(strokeWidth: 1.5),
-                    )
-                  else
-                    const Icon(Icons.keyboard_arrow_down_rounded, size: 16),
-                ],
-              ),
+                ),
+                const SizedBox(width: 3),
+                if (_workspaceBusy)
+                  const SizedBox(
+                    width: 12,
+                    height: 12,
+                    child: CircularProgressIndicator(strokeWidth: 1.5),
+                  )
+                else
+                  const Icon(Icons.keyboard_arrow_down_rounded, size: 16),
+              ],
             ),
           ),
         ),
@@ -533,12 +571,186 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     );
   }
 
+  Future<void> _startRecordedVoice() async {
+    if (_voiceRecording) return;
+    await _voiceInputSubscription?.cancel();
+    _voicePcm.clear();
+    _voiceInputSubscription = _realtimeAudio.inputPcm.listen(_voicePcm.add);
+    try {
+      await _realtimeAudio.startCapture();
+      _voiceRecording = true;
+    } catch (error) {
+      await _voiceInputSubscription?.cancel();
+      _voiceInputSubscription = null;
+      if (mounted) amitiaSnackBar(context, '无法开始录音：$error');
+    }
+  }
+
+  Future<Uint8List?> _stopRecordedVoice() async {
+    if (!_voiceRecording) return null;
+    _voiceRecording = false;
+    try {
+      await _realtimeAudio.stopCapture();
+    } finally {
+      await _voiceInputSubscription?.cancel();
+      _voiceInputSubscription = null;
+    }
+    final pcm = _voicePcm.takeBytes();
+    if (pcm.isEmpty) return null;
+    return _encodeWavPcm16(pcm);
+  }
+
+  Future<void> _cancelRecordedVoice() async {
+    await _stopRecordedVoice();
+    _voicePcm.clear();
+    if (mounted) amitiaSnackBar(context, '已取消录音');
+  }
+
+  Future<void> _finishRecordedVoice({required bool transcribe}) async {
+    final wav = await _stopRecordedVoice();
+    if (!mounted || wav == null) return;
+    if (transcribe) {
+      await _transcribeRecordedVoice(wav);
+    } else {
+      await _sendRecordedVoice(wav);
+    }
+  }
+
+  Future<void> _sendRecordedVoice(Uint8List wav) async {
+    try {
+      final service = await ref.read(artifactServiceProvider.future);
+      final artifact = await service.uploadBytes(
+        bytes: wav,
+        kind: ArtifactKind.audio,
+        fileName: 'voice-${DateTime.now().millisecondsSinceEpoch}.wav',
+        mimeType: 'audio/wav',
+        source: 'chat_composer',
+      );
+      if (!mounted) return;
+      await _runtime.sendVoice(
+        resourceUri: artifact.resourceUri,
+        displayUrl: service.contentUrl(artifact.id),
+        fileName: artifact.filename,
+        mimeType: artifact.mimeType,
+        durationMs: _pcmDurationMs(wav),
+      );
+    } catch (error) {
+      if (mounted) amitiaSnackBar(context, '发送语音失败：$error');
+    }
+  }
+
+  Future<void> _transcribeRecordedVoice(Uint8List wav) async {
+    final connection = ref.read(backendConnectionProvider).asData?.value;
+    if (connection is! BackendConnectionAvailable) {
+      if (mounted) amitiaSnackBar(context, '后端未连接，无法转文字');
+      return;
+    }
+    final dio = createAuthenticatedDio(connection.config);
+    try {
+      final uploadResponse = await dio.post(
+        '/api/asr/upload',
+        data: FormData.fromMap({
+          'audio': MultipartFile.fromBytes(
+            wav,
+            filename: 'voice.wav',
+            contentType: DioMediaType.parse('audio/wav'),
+          ),
+        }),
+      );
+      final uploadBody = uploadResponse.data;
+      final uploadPayload = uploadBody is Map ? uploadBody['data'] : null;
+      final audioUrl = uploadPayload is Map
+          ? (uploadPayload['url'] ?? '').toString().trim()
+          : '';
+      if (audioUrl.isEmpty) throw StateError('后端未返回音频地址');
+
+      final submitResponse = await dio.post(
+        '/api/asr/submit',
+        data: FormData.fromMap({'audioUrl': audioUrl}),
+      );
+      final submitBody = submitResponse.data;
+      final submitPayload = submitBody is Map ? submitBody['data'] : null;
+      final taskId = submitPayload is Map
+          ? (submitPayload['taskId'] ?? '').toString().trim()
+          : '';
+      if (taskId.isEmpty) throw StateError('后端未返回识别任务');
+
+      for (var attempt = 0; attempt < 24; attempt++) {
+        await Future<void>.delayed(const Duration(milliseconds: 1200));
+        if (!mounted) return;
+        final queryResponse = await dio.get(
+          '/api/asr/query',
+          queryParameters: <String, dynamic>{'taskId': taskId},
+        );
+        final queryBody = queryResponse.data;
+        final queryPayload = queryBody is Map ? queryBody['data'] : null;
+        if (queryPayload is! Map) continue;
+        final status = (queryPayload['status'] ?? '').toString().toLowerCase();
+        final text = (queryPayload['result'] ?? queryPayload['text'] ?? '')
+            .toString()
+            .trim();
+        if (text.isNotEmpty &&
+            (status == 'success' ||
+                status == 'completed' ||
+                status == 'succeeded')) {
+          _composerController.text = text;
+          _composerController.selection = TextSelection.collapsed(
+            offset: text.length,
+          );
+          if (mounted) amitiaSnackBar(context, '语音已转为文字');
+          return;
+        }
+        if (status == 'failed' || status == 'error') {
+          throw StateError('语音识别失败');
+        }
+      }
+      throw StateError('语音识别超时');
+    } catch (error) {
+      if (mounted) amitiaSnackBar(context, '转文字失败：$error');
+    } finally {
+      dio.close(force: true);
+    }
+  }
+
+  Uint8List _encodeWavPcm16(Uint8List pcm, {int sampleRate = 16000}) {
+    final header = ByteData(44);
+    void ascii(int offset, String value) {
+      for (var index = 0; index < value.length; index++) {
+        header.setUint8(offset + index, value.codeUnitAt(index));
+      }
+    }
+
+    ascii(0, 'RIFF');
+    header.setUint32(4, 36 + pcm.length, Endian.little);
+    ascii(8, 'WAVE');
+    ascii(12, 'fmt ');
+    header.setUint32(16, 16, Endian.little);
+    header.setUint16(20, 1, Endian.little);
+    header.setUint16(22, 1, Endian.little);
+    header.setUint32(24, sampleRate, Endian.little);
+    header.setUint32(28, sampleRate * 2, Endian.little);
+    header.setUint16(32, 2, Endian.little);
+    header.setUint16(34, 16, Endian.little);
+    ascii(36, 'data');
+    header.setUint32(40, pcm.length, Endian.little);
+    final bytes = BytesBuilder(copy: false);
+    bytes.add(header.buffer.asUint8List());
+    bytes.add(pcm);
+    return bytes.takeBytes();
+  }
+
+  int _pcmDurationMs(Uint8List wav) {
+    if (wav.length <= 44) return 0;
+    return ((wav.length - 44) * 1000 / (16000 * 2)).round();
+  }
+
   String _replyExcerpt(ChatMessage message) {
     final content = message.content.trim();
     if (content.isNotEmpty) {
       return content.length <= 120 ? content : '${content.substring(0, 120)}…';
     }
-    if ((message.fileName ?? '').trim().isNotEmpty) return message.fileName!.trim();
+    if ((message.fileName ?? '').trim().isNotEmpty)
+      return message.fileName!.trim();
     return switch (message.type) {
       MessageType.image => '[图片]',
       MessageType.video => '[视频]',
@@ -715,8 +927,10 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     final encoded = input['imageBase64']?.toString().trim() ?? '';
     final resourceUri = input['resourceUri']?.toString().trim() ?? '';
     final text = input['text']?.toString() ?? '';
-    final fileName = (input['fileName'] ?? input['filename'] ?? 'image.png').toString();
-    final mimeType = (input['mimeType'] ?? input['mime_type'] ?? 'image/png').toString();
+    final fileName = (input['fileName'] ?? input['filename'] ?? 'image.png')
+        .toString();
+    final mimeType = (input['mimeType'] ?? input['mime_type'] ?? 'image/png')
+        .toString();
     if (encoded.isEmpty && resourceUri.isEmpty) {
       final camera = input['source']?.toString() == 'camera';
       await _pickAndSendImage(camera);
@@ -754,9 +968,15 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     final encoded = input['videoBase64']?.toString().trim() ?? '';
     final resourceUri = input['resourceUri']?.toString().trim() ?? '';
     final text = input['text']?.toString() ?? '';
-    final fileName = (input['fileName'] ?? input['filename'] ?? 'video.mp4').toString();
-    final mimeType = (input['mimeType'] ?? input['mime_type'] ?? 'video/mp4').toString();
-    final durationMs = int.tryParse((input['durationMs'] ?? input['duration_ms'] ?? '0').toString()) ?? 0;
+    final fileName = (input['fileName'] ?? input['filename'] ?? 'video.mp4')
+        .toString();
+    final mimeType = (input['mimeType'] ?? input['mime_type'] ?? 'video/mp4')
+        .toString();
+    final durationMs =
+        int.tryParse(
+          (input['durationMs'] ?? input['duration_ms'] ?? '0').toString(),
+        ) ??
+        0;
     if (encoded.isEmpty && resourceUri.isEmpty) {
       final camera = input['source']?.toString() == 'camera';
       await _pickAndSendVideo(camera);
@@ -776,7 +996,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
           displayUrl: service.contentUrl(artifact.id),
           fileName: artifact.filename,
           mimeType: artifact.mimeType,
-          durationMs: artifact.durationMs > 0 ? artifact.durationMs : durationMs,
+          durationMs: artifact.durationMs > 0
+              ? artifact.durationMs
+              : durationMs,
           text: text,
         );
         return;
@@ -798,9 +1020,17 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       await _pickAndSendFile();
       return;
     }
-    final fileName = (input['fileName'] ?? input['filename'] ?? '文件').toString().trim();
-    final sizeBytes = int.tryParse((input['sizeBytes'] ?? input['size_bytes'] ?? '0').toString()) ?? 0;
-    final mimeType = (input['mimeType'] ?? input['mime_type'] ?? 'application/octet-stream').toString();
+    final fileName = (input['fileName'] ?? input['filename'] ?? '文件')
+        .toString()
+        .trim();
+    final sizeBytes =
+        int.tryParse(
+          (input['sizeBytes'] ?? input['size_bytes'] ?? '0').toString(),
+        ) ??
+        0;
+    final mimeType =
+        (input['mimeType'] ?? input['mime_type'] ?? 'application/octet-stream')
+            .toString();
     await _runtime.sendFile(
       resourceUri: resourceUri,
       fileName: fileName.isEmpty ? '文件' : fileName,
@@ -810,21 +1040,30 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   }
 
   Future<void> _sendProviderVoice(Map<dynamic, dynamic> input) async {
-    final encoded = (input['audioBase64'] ?? input['voiceBase64'])?.toString().trim() ?? '';
+    final encoded =
+        (input['audioBase64'] ?? input['voiceBase64'])?.toString().trim() ?? '';
     final resourceUri = input['resourceUri']?.toString().trim() ?? '';
     final text = input['text']?.toString() ?? '';
     if (encoded.isEmpty && resourceUri.isEmpty) {
       if (text.trim().isNotEmpty) {
         _composerController.text = text;
-        _composerController.selection = TextSelection.collapsed(offset: _composerController.text.length);
+        _composerController.selection = TextSelection.collapsed(
+          offset: _composerController.text.length,
+        );
         return;
       }
       await _pickAndSendAudio();
       return;
     }
-    final fileName = (input['fileName'] ?? input['filename'] ?? 'voice.webm').toString();
-    final mimeType = (input['mimeType'] ?? input['mime_type'] ?? 'audio/webm').toString();
-    final durationMs = int.tryParse((input['durationMs'] ?? input['duration_ms'] ?? '0').toString()) ?? 0;
+    final fileName = (input['fileName'] ?? input['filename'] ?? 'voice.webm')
+        .toString();
+    final mimeType = (input['mimeType'] ?? input['mime_type'] ?? 'audio/webm')
+        .toString();
+    final durationMs =
+        int.tryParse(
+          (input['durationMs'] ?? input['duration_ms'] ?? '0').toString(),
+        ) ??
+        0;
     await _withArtifactUpload((service) async {
       if (encoded.isNotEmpty) {
         final artifact = await _uploadProviderBase64(
@@ -839,7 +1078,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
           displayUrl: service.contentUrl(artifact.id),
           fileName: artifact.filename,
           mimeType: artifact.mimeType,
-          durationMs: artifact.durationMs > 0 ? artifact.durationMs : durationMs,
+          durationMs: artifact.durationMs > 0
+              ? artifact.durationMs
+              : durationMs,
           text: text,
         );
         return;
@@ -883,8 +1124,11 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     );
   }
 
-  ({Map<String, List<AmitiaAgentActivity>> byMessageId, List<AmitiaAgentActivity> unpaired})
-      _projectAgentActivities(
+  ({
+    Map<String, List<AmitiaAgentActivity>> byMessageId,
+    List<AmitiaAgentActivity> unpaired,
+  })
+  _projectAgentActivities(
     List<ChatMessage> messages,
     List<MobileConversationEvent> events,
   ) {
@@ -898,7 +1142,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       for (var i = 0; i < messages.length; i++) {
         final message = messages[i];
         if (message.role == MessageRole.user &&
-            !message.time.isAfter(event.timestamp.add(const Duration(seconds: 2)))) {
+            !message.time.isAfter(
+              event.timestamp.add(const Duration(seconds: 2)),
+            )) {
           latestUserIndex = i;
         }
       }
@@ -918,7 +1164,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
             message.type == MessageType.systemNotice) {
           continue;
         }
-        if (!message.time.isBefore(event.timestamp.subtract(const Duration(seconds: 2)))) {
+        if (!message.time.isBefore(
+          event.timestamp.subtract(const Duration(seconds: 2)),
+        )) {
           target = message;
           break;
         }
@@ -927,7 +1175,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       if (target == null) {
         unpaired.add(activity);
       } else {
-        byMessageId.putIfAbsent(target.id, () => <AmitiaAgentActivity>[]).add(activity);
+        byMessageId
+            .putIfAbsent(target.id, () => <AmitiaAgentActivity>[])
+            .add(activity);
       }
     }
     for (final activities in byMessageId.values) {
@@ -937,36 +1187,30 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     return (byMessageId: byMessageId, unpaired: unpaired);
   }
 
-  Future<void> _showCallOptions(String characterId, String characterName) async {
-    final mode = await showAmitiaActionSheet<String>(
-      context,
-      title: '发起通话',
-      actions: const [
-        AmitiaActionSheetItem(
-          icon: Icons.videocam_outlined,
-          label: '视频通话',
-          value: 'video',
-        ),
-        AmitiaActionSheetItem(
-          icon: Icons.call_outlined,
-          label: '语音通话',
-          value: 'voice',
-        ),
-        AmitiaActionSheetItem(
-          icon: Icons.screen_share_outlined,
-          label: '屏幕通话',
-          value: 'screen',
-        ),
-      ],
-    );
-    if (!mounted || mode == null) return;
+  Future<void> _handleCallOption(
+    String characterId,
+    String characterName,
+    String mode,
+  ) async {
     switch (mode) {
       case 'voice':
-        await _startRealtimeCall(characterId, characterName, mode: RealtimeCallMode.voice);
+        await _startRealtimeCall(
+          characterId,
+          characterName,
+          mode: RealtimeCallMode.voice,
+        );
       case 'video':
-        await _startRealtimeCall(characterId, characterName, mode: RealtimeCallMode.video);
+        await _startRealtimeCall(
+          characterId,
+          characterName,
+          mode: RealtimeCallMode.video,
+        );
       case 'screen':
-        await _startRealtimeCall(characterId, characterName, mode: RealtimeCallMode.screen);
+        await _startRealtimeCall(
+          characterId,
+          characterName,
+          mode: RealtimeCallMode.screen,
+        );
     }
   }
 
@@ -1056,10 +1300,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       return;
     }
     try {
-      final url = await ref.read(chatServiceProvider).exportConversation(
-            conversationId,
-            format: format,
-          );
+      final url = await ref
+          .read(chatServiceProvider)
+          .exportConversation(conversationId, format: format);
       if (url.isNotEmpty) {
         await Clipboard.setData(ClipboardData(text: url));
         if (mounted) amitiaSnackBar(context, '导出完成，资源地址已复制');
@@ -1095,11 +1338,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
   Future<void> _showProfileSummary(BuildContext context) async {
     final characterId = ref.read(currentCharacterIdProvider).trim();
-    final future = ref.read(profileServiceProvider).list(
-          characterId: characterId,
-          page: 1,
-          pageSize: 10,
-        );
+    final future = ref
+        .read(profileServiceProvider)
+        .list(characterId: characterId, page: 1, pageSize: 10);
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -1131,11 +1372,16 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     );
   }
 
-  Future<Map<String, dynamic>> _loadChatMemoryContext(String conversationId, String characterId) async {
+  Future<Map<String, dynamic>> _loadChatMemoryContext(
+    String conversationId,
+    String characterId,
+  ) async {
     Future<List<MemoryDto>> loadMemories() async {
       try {
         if (characterId.isEmpty) return const <MemoryDto>[];
-        return await ref.read(memoryServiceProvider).list(characterId: characterId, page: 1, pageSize: 8);
+        return await ref
+            .read(memoryServiceProvider)
+            .list(characterId: characterId, page: 1, pageSize: 8);
       } catch (_) {
         return const <MemoryDto>[];
       }
@@ -1143,7 +1389,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
     Future<List<ProfileDto>> loadProfiles() async {
       try {
-        return await ref.read(profileServiceProvider).list(characterId: characterId, page: 1, pageSize: 5);
+        return await ref
+            .read(profileServiceProvider)
+            .list(characterId: characterId, page: 1, pageSize: 5);
       } catch (_) {
         return const <ProfileDto>[];
       }
@@ -1152,7 +1400,10 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     Future<Map<String, dynamic>> loadCompression() async {
       try {
         if (conversationId.isEmpty) return const <String, dynamic>{};
-        return await ref.read(systemServiceProvider).chatCompressionStatus(conversationId) ?? const <String, dynamic>{};
+        return await ref
+                .read(systemServiceProvider)
+                .chatCompressionStatus(conversationId) ??
+            const <String, dynamic>{};
       } catch (_) {
         return const <String, dynamic>{};
       }
@@ -1160,7 +1411,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
     Future<Map<String, dynamic>> loadPipeline() async {
       try {
-        return await ref.read(systemServiceProvider).pipelineStatus() ?? const <String, dynamic>{};
+        return await ref.read(systemServiceProvider).pipelineStatus() ??
+            const <String, dynamic>{};
       } catch (_) {
         return const <String, dynamic>{};
       }
@@ -1208,10 +1460,18 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                 fallback: _ChatMemoryContextSheet(
                   loading: snapshot.connectionState != ConnectionState.done,
                   error: snapshot.hasError ? snapshot.error : null,
-                  memories: (data['memories'] as List<MemoryDto>?) ?? const <MemoryDto>[],
-                  profiles: (data['profiles'] as List<ProfileDto>?) ?? const <ProfileDto>[],
-                  compression: (data['compression'] as Map<String, dynamic>?) ?? const <String, dynamic>{},
-                  pipeline: (data['pipeline'] as Map<String, dynamic>?) ?? const <String, dynamic>{},
+                  memories:
+                      (data['memories'] as List<MemoryDto>?) ??
+                      const <MemoryDto>[],
+                  profiles:
+                      (data['profiles'] as List<ProfileDto>?) ??
+                      const <ProfileDto>[],
+                  compression:
+                      (data['compression'] as Map<String, dynamic>?) ??
+                      const <String, dynamic>{},
+                  pipeline:
+                      (data['pipeline'] as Map<String, dynamic>?) ??
+                      const <String, dynamic>{},
                 ),
               );
             },
@@ -1221,88 +1481,43 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     );
   }
 
-  void _showChatActionsSheet(BuildContext context) {
-    showAmitiaActionSheet<int>(
-      context,
-      title: '当前对话',
-      actions: const [
-        AmitiaActionSheetItem(
-          icon: Icons.person_outline,
-          label: '查看角色详情',
-          value: 0,
-        ),
-        AmitiaActionSheetItem(
-          icon: Icons.search,
-          label: '搜索当前会话',
-          value: 1,
-        ),
-        AmitiaActionSheetItem(
-          icon: Icons.refresh_rounded,
-          label: '重新生成',
-          value: 2,
-        ),
-        AmitiaActionSheetItem(
-          icon: Icons.file_download_outlined,
-          label: '导出聊天记录',
-          value: 3,
-        ),
-        AmitiaActionSheetItem(
-          icon: Icons.badge_outlined,
-          label: '用户画像摘要',
-          value: 4,
-        ),
-        AmitiaActionSheetItem(
-          icon: Icons.psychology_alt_outlined,
-          label: '记忆上下文',
-          value: 5,
-        ),
-        AmitiaActionSheetItem(
-          icon: Icons.cleaning_services_outlined,
-          label: '清空聊天记录',
-          value: 6,
+  Future<void> _handleChatAction(int result) async {
+    switch (result) {
+      case 0:
+        final id = ref.read(currentCharacterIdProvider).trim();
+        if (id.isNotEmpty) context.push(AppRoutes.character(id));
+      case 1:
+        _showMessageSearch(context);
+      case 2:
+        final conversationId = _runtime.conversationId?.trim() ?? '';
+        if (conversationId.isEmpty) {
+          amitiaSnackBar(context, '当前还没有可重新生成的会话');
+          return;
+        }
+        await _runtime.regenerate();
+        if (!mounted) return;
+        final error = _runtime.lastError;
+        if (error != null) {
+          amitiaSnackBar(context, '重新生成失败：$error');
+        }
+      case 3:
+        _showExportSheet(context);
+      case 4:
+        await _showProfileSummary(context);
+      case 5:
+        await _showMemoryContext(context);
+      case 6:
+        final confirmed = await showAmitiaConfirmDialog(
+          context,
+          title: '清空聊天记录',
+          message: '确定要清空当前聊天记录吗？此操作不可撤销。',
+          confirmLabel: '清空',
           isDestructive: true,
-        ),
-      ],
-    ).then((result) async {
-      if (result == null || !mounted) return;
-      switch (result) {
-        case 0:
-          final id = ref.read(currentCharacterIdProvider).trim();
-          if (id.isNotEmpty) context.push(AppRoutes.character(id));
-        case 1:
-          _showMessageSearch(context);
-        case 2:
-          final conversationId = _runtime.conversationId?.trim() ?? '';
-          if (conversationId.isEmpty) {
-            amitiaSnackBar(context, '当前还没有可重新生成的会话');
-            return;
-          }
-          await _runtime.regenerate();
-          if (!mounted) return;
-          final error = _runtime.lastError;
-          if (error != null) {
-            amitiaSnackBar(context, '重新生成失败：$error');
-          }
-        case 3:
-          _showExportSheet(context);
-        case 4:
-          await _showProfileSummary(context);
-        case 5:
-          await _showMemoryContext(context);
-        case 6:
-          showAmitiaConfirmDialog(
-            context,
-            title: '清空聊天记录',
-            message: '确定要清空当前聊天记录吗？此操作不可撤销。',
-            confirmLabel: '清空',
-            isDestructive: true,
-          ).then((confirmed) {
-            if (confirmed == true && mounted) {
-              _clearCurrentConversation();
-            }
-          });
-      }
-    });
+        );
+        if (confirmed == true && mounted) {
+          await _clearCurrentConversation();
+        }
+    }
   }
 
   void _openDrawer(BuildContext context) {
@@ -1317,104 +1532,133 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   Map<String, dynamic> _providerMessage(ChatMessage message) =>
       _runtime.serializeMessage(message);
 
-  Map<String, FutureOr<dynamic> Function(dynamic)> _providerActions(String characterId) {
-    if (_cachedProviderActions != null && _cachedProviderActionsCharacterId == characterId) {
+  Map<String, FutureOr<dynamic> Function(dynamic)> _providerActions(
+    String characterId,
+  ) {
+    if (_cachedProviderActions != null &&
+        _cachedProviderActionsCharacterId == characterId) {
       return _cachedProviderActions!;
     }
     _cachedProviderActionsCharacterId = characterId;
-    return _cachedProviderActions = <String, FutureOr<dynamic> Function(dynamic)>{
-      ConversationUIAction.send: (input) async {
-        if (input is Map) {
-          final videoBase64 = input['videoBase64']?.toString().trim() ?? '';
-          final imageBase64 = input['imageBase64']?.toString().trim() ?? '';
-          if (videoBase64.isNotEmpty) {
-            await _sendProviderVideo(input);
+    return _cachedProviderActions =
+        <String, FutureOr<dynamic> Function(dynamic)>{
+          ConversationUIAction.send: (input) async {
+            if (input is Map) {
+              final videoBase64 = input['videoBase64']?.toString().trim() ?? '';
+              final imageBase64 = input['imageBase64']?.toString().trim() ?? '';
+              if (videoBase64.isNotEmpty) {
+                await _sendProviderVideo(input);
+                return null;
+              }
+              if (imageBase64.isNotEmpty) {
+                await _sendProviderImage(input);
+                return null;
+              }
+              final text = input['text']?.toString() ?? '';
+              if (text.trim().isNotEmpty) _onSend(text);
+              return null;
+            }
+            final text = input?.toString() ?? '';
+            if (text.trim().isNotEmpty) _onSend(text);
             return null;
-          }
-          if (imageBase64.isNotEmpty) {
-            await _sendProviderImage(input);
+          },
+          ConversationUIAction.retry: (input) {
+            final id = input is Map
+                ? input['messageId']?.toString()
+                : input?.toString();
+            final index = _runtime.messages.indexWhere(
+              (message) => message.id == id,
+            );
+            if (index >= 0) _retryMessage(index);
             return null;
-          }
-          final text = input['text']?.toString() ?? '';
-          if (text.trim().isNotEmpty) _onSend(text);
-          return null;
-        }
-        final text = input?.toString() ?? '';
-        if (text.trim().isNotEmpty) _onSend(text);
-        return null;
-      },
-      ConversationUIAction.retry: (input) {
-        final id = input is Map ? input['messageId']?.toString() : input?.toString();
-        final index = _runtime.messages.indexWhere((message) => message.id == id);
-        if (index >= 0) _retryMessage(index);
-        return null;
-      },
-      ConversationUIAction.regenerate: (input) {
-        final id = input is Map ? input['messageId']?.toString() : input?.toString();
-        return _runtime.regenerate(messageId: id);
-      },
-      ConversationUIAction.stop: (_) => _runtime.stop(),
-      ConversationUIAction.delete: (input) async {
-        final id = input is Map ? input['messageId']?.toString() : input?.toString();
-        if (id != null && id.isNotEmpty) await _runtime.deleteMessage(id);
-        return null;
-      },
-      ConversationUIAction.newConversation: (_) async {
-        _runtime.setWorkspace(null);
-        return _runtime.createConversation(characterId);
-      },
-      ConversationUIAction.openDrawer: (_) => _openDrawer(context),
-      ConversationUIAction.clear: (_) => _clearCurrentConversation(),
-      ConversationUIAction.reply: (input) {
-        final id = input is Map ? input['messageId']?.toString() : input?.toString();
-        if (id == null || id.isEmpty) return null;
-        final message = _runtime.messages.where((row) => row.id == id).firstOrNull;
-        if (message != null) _setReplyTarget(message);
-        return null;
-      },
-      ConversationUIAction.sendFile: (input) => input is Map ? _sendProviderFile(input) : _pickAndSendFile(),
-      ConversationUIAction.sendImage: (input) => input is Map ? _sendProviderImage(input) : _pickAndSendImage(false),
-      ConversationUIAction.sendCode: (input) {
-        final row = input is Map ? input : const <String, dynamic>{};
-        final language = row['language']?.toString() ?? 'text';
-        final code = row['code']?.toString() ?? '';
-        if (code.isNotEmpty) _runtime.sendCode(language, code);
-        return null;
-      },
-      ConversationUIAction.sendVoice: (input) => input is Map ? _sendProviderVoice(input) : _pickAndSendAudio(),
-      ConversationUIAction.sendEmote: (input) {
-        final row = input is Map ? input : const <String, dynamic>{};
-        final emoteId = row['emoteId']?.toString() ?? '';
-        final displayText = row['displayText']?.toString() ?? row['name']?.toString() ?? '';
-        if (emoteId.isNotEmpty) _runtime.sendEmote(emoteId, displayText);
-        return null;
-      },
-      ConversationUIAction.chooseWorkspace: (_) => _showWorkspacePicker(),
-      ConversationUIAction.selectWorkspace: (input) async {
-        final rawWorkspaceId = input is Map ? input['workspaceId'] : input;
-        final workspaceId = rawWorkspaceId?.toString().trim() ?? '';
-        if (workspaceId.isEmpty) {
-          await _showWorkspacePicker();
-          return null;
-        }
-        WorkspaceMountDto? mount = _recentWorkspaces.where((item) => item.id == workspaceId).firstOrNull;
-        if (mount == null) {
-          await _refreshRecentWorkspaces();
-          mount = _recentWorkspaces.where((item) => item.id == workspaceId).firstOrNull;
-        }
-        if (mount != null) await _selectWorkspaceMount(mount);
-        return null;
-      },
-      ConversationUIAction.clearWorkspace: (_) => _clearWorkspace(),
-      ConversationUIAction.refreshWorkspaces: (_) => _refreshRecentWorkspaces(),
-    };
+          },
+          ConversationUIAction.regenerate: (input) {
+            final id = input is Map
+                ? input['messageId']?.toString()
+                : input?.toString();
+            return _runtime.regenerate(messageId: id);
+          },
+          ConversationUIAction.stop: (_) => _runtime.stop(),
+          ConversationUIAction.delete: (input) async {
+            final id = input is Map
+                ? input['messageId']?.toString()
+                : input?.toString();
+            if (id != null && id.isNotEmpty) await _runtime.deleteMessage(id);
+            return null;
+          },
+          ConversationUIAction.newConversation: (_) async {
+            _runtime.setWorkspace(null);
+            return _runtime.createConversation(characterId);
+          },
+          ConversationUIAction.openDrawer: (_) => _openDrawer(context),
+          ConversationUIAction.clear: (_) => _clearCurrentConversation(),
+          ConversationUIAction.reply: (input) {
+            final id = input is Map
+                ? input['messageId']?.toString()
+                : input?.toString();
+            if (id == null || id.isEmpty) return null;
+            final message = _runtime.messages
+                .where((row) => row.id == id)
+                .firstOrNull;
+            if (message != null) _setReplyTarget(message);
+            return null;
+          },
+          ConversationUIAction.sendFile: (input) =>
+              input is Map ? _sendProviderFile(input) : _pickAndSendFile(),
+          ConversationUIAction.sendImage: (input) => input is Map
+              ? _sendProviderImage(input)
+              : _pickAndSendImage(false),
+          ConversationUIAction.sendCode: (input) {
+            final row = input is Map ? input : const <String, dynamic>{};
+            final language = row['language']?.toString() ?? 'text';
+            final code = row['code']?.toString() ?? '';
+            if (code.isNotEmpty) _runtime.sendCode(language, code);
+            return null;
+          },
+          ConversationUIAction.sendVoice: (input) =>
+              input is Map ? _sendProviderVoice(input) : _pickAndSendAudio(),
+          ConversationUIAction.sendEmote: (input) {
+            final row = input is Map ? input : const <String, dynamic>{};
+            final emoteId = row['emoteId']?.toString() ?? '';
+            final displayText =
+                row['displayText']?.toString() ?? row['name']?.toString() ?? '';
+            if (emoteId.isNotEmpty) _runtime.sendEmote(emoteId, displayText);
+            return null;
+          },
+          ConversationUIAction.chooseWorkspace: (_) => _showWorkspacePicker(),
+          ConversationUIAction.selectWorkspace: (input) async {
+            final rawWorkspaceId = input is Map ? input['workspaceId'] : input;
+            final workspaceId = rawWorkspaceId?.toString().trim() ?? '';
+            if (workspaceId.isEmpty) {
+              await _showWorkspacePicker();
+              return null;
+            }
+            WorkspaceMountDto? mount = _recentWorkspaces
+                .where((item) => item.id == workspaceId)
+                .firstOrNull;
+            if (mount == null) {
+              await _refreshRecentWorkspaces();
+              mount = _recentWorkspaces
+                  .where((item) => item.id == workspaceId)
+                  .firstOrNull;
+            }
+            if (mount != null) await _selectWorkspaceMount(mount);
+            return null;
+          },
+          ConversationUIAction.clearWorkspace: (_) => _clearWorkspace(),
+          ConversationUIAction.refreshWorkspaces: (_) =>
+              _refreshRecentWorkspaces(),
+        };
   }
 
   @override
   Widget build(BuildContext context) {
     final selectedCharacterId = ref.watch(currentCharacterIdProvider);
-    final characters = ref.watch(characterListProvider).valueOrNull ?? const <CharacterDto>[];
-    CharacterDto? character = characters.where((item) => item.id == selectedCharacterId).firstOrNull;
+    final characters =
+        ref.watch(characterListProvider).valueOrNull ?? const <CharacterDto>[];
+    CharacterDto? character = characters
+        .where((item) => item.id == selectedCharacterId)
+        .firstOrNull;
     character ??= characters.where((item) => item.isActive == 1).firstOrNull;
     character ??= characters.where((item) => item.isDefault).firstOrNull;
     character ??= characters.firstOrNull;
@@ -1429,7 +1673,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     if (characterId.isNotEmpty) _runtime.setCharacterId(characterId);
 
     final characterName = (character?.name ?? '').trim();
-    final avatarInitial = characterName.isNotEmpty ? characterName.characters.first : 'A';
+    final avatarInitial = characterName.isNotEmpty
+        ? characterName.characters.first
+        : 'A';
     const avatarColor = '#8A5728';
     final spaceProfile = ref.watch(currentSpaceProfileProvider).valueOrNull;
     final userName = (spaceProfile?.displayName ?? '').trim().isEmpty
@@ -1438,7 +1684,12 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     final userInitial = userName.characters.first;
     const userAvatarColor = '#5F6872';
 
-    final providerContext = _buildProviderContext(characterId, characterName, avatarInitial, avatarColor);
+    final providerContext = _buildProviderContext(
+      characterId,
+      characterName,
+      avatarInitial,
+      avatarColor,
+    );
     providerContext['user'] = {
       'name': userName,
       'avatarInitial': userInitial,
@@ -1453,7 +1704,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     final conversationId = _runtime.conversationId?.trim() ?? '';
     final runtimeSessionState = conversationId.isEmpty
         ? null
-        : ref.watch(clientRuntimeSessionStateProvider(conversationId)).valueOrNull;
+        : ref
+              .watch(clientRuntimeSessionStateProvider(conversationId))
+              .valueOrNull;
     bool hasExtensionSlot(String slotId) {
       if (uiSnapshot == null) return false;
       if (uiSnapshot.contributionsForSlot(slotId).isNotEmpty) return true;
@@ -1463,16 +1716,25 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         slotId: slotId,
       ).isNotEmpty;
     }
+
     bool externalProvider(String capability) {
       final provider = uiSnapshot?.resolve(capability);
       return provider != null && provider.enabled && !provider.builtin;
     }
-    final hasSidebarProvider = externalProvider(UICapability.conversationSidebar);
-    final hasSidebarExtensions = hasExtensionSlot('chat.sidebar.panel');
-    final hasOverlayProvider = externalProvider(UICapability.conversationOverlay);
 
-    final serializedMessages = _runtime.messages.map(_providerMessage).toList(growable: false);
-    final durableConversationRecords = ref
+    final hasSidebarProvider = externalProvider(
+      UICapability.conversationSidebar,
+    );
+    final hasSidebarExtensions = hasExtensionSlot('chat.sidebar.panel');
+    final hasOverlayProvider = externalProvider(
+      UICapability.conversationOverlay,
+    );
+
+    final serializedMessages = _runtime.messages
+        .map(_providerMessage)
+        .toList(growable: false);
+    final durableConversationRecords =
+        ref
             .watch(conversationUIEventWindowProvider(conversationId))
             .valueOrNull ??
         const <Map<String, dynamic>>[];
@@ -1491,12 +1753,19 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     final liveAgentActivities = lastUserTime == null
         ? const <AmitiaAgentActivity>[]
         : agentActivityProjection.unpaired
-            .where((activity) => !activity.time.isBefore(lastUserTime!.subtract(const Duration(seconds: 2))))
-            .toList(growable: false);
-    final hasAssistantAfterLastUser = lastUserTime != null && _runtime.messages.any(
-      (message) => message.role == MessageRole.assistant &&
-          !message.time.isBefore(lastUserTime!),
-    );
+              .where(
+                (activity) => !activity.time.isBefore(
+                  lastUserTime!.subtract(const Duration(seconds: 2)),
+                ),
+              )
+              .toList(growable: false);
+    final hasAssistantAfterLastUser =
+        lastUserTime != null &&
+        _runtime.messages.any(
+          (message) =>
+              message.role == MessageRole.assistant &&
+              !message.time.isBefore(lastUserTime!),
+        );
     final showLiveAgentProcess = _runtime.sending && !hasAssistantAfterLastUser;
 
     final projectionContributions = uiSnapshot == null
@@ -1518,23 +1787,26 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       ]),
       contributions: projectionContributions,
     );
-    final flowItems = <_MobileChatFlowItem>[
-      for (var index = 0; index < _runtime.messages.length; index++)
-        _MobileChatFlowItem.message(
-          message: _runtime.messages[index],
-          messageIndex: index,
-          timestamp: _runtime.messages[index].time,
-        ),
-      for (final node in conversationNodes)
-        _MobileChatFlowItem.node(node),
-    ]..sort((left, right) {
-      final order = MobileConversationProjection.compareTimeline(
-        left.sequence, left.timestamp, right.sequence, right.timestamp,
-      );
-      if (order != 0) return order;
-      if (left.isMessage != right.isMessage) return left.isMessage ? -1 : 1;
-      return left.key.compareTo(right.key);
-    });
+    final flowItems =
+        <_MobileChatFlowItem>[
+          for (var index = 0; index < _runtime.messages.length; index++)
+            _MobileChatFlowItem.message(
+              message: _runtime.messages[index],
+              messageIndex: index,
+              timestamp: _runtime.messages[index].time,
+            ),
+          for (final node in conversationNodes) _MobileChatFlowItem.node(node),
+        ]..sort((left, right) {
+          final order = MobileConversationProjection.compareTimeline(
+            left.sequence,
+            left.timestamp,
+            right.sequence,
+            right.timestamp,
+          );
+          if (order != 0) return order;
+          if (left.isMessage != right.isMessage) return left.isMessage ? -1 : 1;
+          return left.key.compareTo(right.key);
+        });
 
     final emptyStateSlotCount = flowItems.isEmpty ? 1 : 0;
 
@@ -1556,172 +1828,222 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                       fallback: Stack(
                         children: [
                           ListView.builder(
-                          controller: _scrollController,
-                          padding: const EdgeInsets.symmetric(vertical: 32),
-                          itemCount: emptyStateSlotCount + flowItems.length + (showLiveAgentProcess ? 1 : 0),
-                          itemBuilder: (context, flowIndex) {
-                            if (emptyStateSlotCount == 1 && flowIndex == 0) {
-                              return Padding(
-                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                                child: MobileExtensionSlot(
-                                  slotId: 'chat.empty_state.card',
-                                  context: {...providerContext, 'surface': 'empty-state'},
-                                  actions: providerActions,
-                                ),
-                              );
-                            }
-                            final contentIndex = flowIndex - emptyStateSlotCount;
-                            if (contentIndex >= flowItems.length) {
-                              return RepaintBoundary(
-                                child: AmitiaMessageBubble(
-                                  message: ChatMessage(
-                                    id: '__live_agent_process__',
-                                    role: MessageRole.assistant,
-                                    type: MessageType.text,
-                                    content: '',
-                                    time: DateTime.now(),
+                            controller: _scrollController,
+                            padding: const EdgeInsets.fromLTRB(
+                              0,
+                              _chatTopBarHeight + 24,
+                              0,
+                              32,
+                            ),
+                            itemCount:
+                                emptyStateSlotCount +
+                                flowItems.length +
+                                (showLiveAgentProcess ? 1 : 0),
+                            itemBuilder: (context, flowIndex) {
+                              if (emptyStateSlotCount == 1 && flowIndex == 0) {
+                                return Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                    vertical: 8,
                                   ),
-                                  showAvatar: true,
+                                  child: MobileExtensionSlot(
+                                    slotId: 'chat.empty_state.card',
+                                    context: {
+                                      ...providerContext,
+                                      'surface': 'empty-state',
+                                    },
+                                    actions: providerActions,
+                                  ),
+                                );
+                              }
+                              final contentIndex =
+                                  flowIndex - emptyStateSlotCount;
+                              if (contentIndex >= flowItems.length) {
+                                return RepaintBoundary(
+                                  child: AmitiaMessageBubble(
+                                    message: ChatMessage(
+                                      id: '__live_agent_process__',
+                                      role: MessageRole.assistant,
+                                      type: MessageType.text,
+                                      content: '',
+                                      time: DateTime.now(),
+                                    ),
+                                    showAvatar: true,
+                                    avatarInitial: avatarInitial,
+                                    avatarColor: avatarColor,
+                                    characterName: characterName,
+                                    userInitial: userInitial,
+                                    userAvatarColor: userAvatarColor,
+                                    userName: userName,
+                                    agentActivities: liveAgentActivities,
+                                    showThinking: true,
+                                  ),
+                                );
+                              }
+                              final item = flowItems[contentIndex];
+                              if (!item.isMessage) {
+                                final node = item.node!;
+                                return MobileExtensionSlot(
+                                  slotId: 'chat.conversation.node',
+                                  contributionId: node.contributionId,
+                                  context: {
+                                    ...providerContext,
+                                    'conversationNode': node.toJson(),
+                                    'eventType': node.eventType,
+                                  },
+                                  actions: providerActions,
+                                );
+                              }
+
+                              final index = item.messageIndex!;
+                              final message = item.message!;
+                              final isAgentTask =
+                                  message.type == MessageType.agentTask;
+                              final builtinMessage = RepaintBoundary(
+                                child: AmitiaMessageBubble(
+                                  message: message,
+                                  showAvatar: _shouldShowAvatar(index),
                                   avatarInitial: avatarInitial,
                                   avatarColor: avatarColor,
                                   characterName: characterName,
                                   userInitial: userInitial,
                                   userAvatarColor: userAvatarColor,
                                   userName: userName,
-                                  agentActivities: liveAgentActivities,
-                                  showThinking: true,
+                                  agentActivities:
+                                      agentActivityProjection
+                                          .byMessageId[message.id] ??
+                                      const <AmitiaAgentActivity>[],
+                                  onRetry: _runtime.canRetryMessage(index)
+                                      ? () => _retryMessage(index)
+                                      : null,
+                                  onReply:
+                                      message.type == MessageType.systemNotice
+                                      ? null
+                                      : () => _setReplyTarget(message),
+                                  onCopy:
+                                      message.type ==
+                                              MessageType.systemNotice ||
+                                          message.content.trim().isEmpty
+                                      ? null
+                                      : () => _copyMessage(message),
+                                  onAgentTaskTap: isAgentTask
+                                      ? () {
+                                          final taskId =
+                                              message.agentTaskId?.trim() ?? '';
+                                          context.push(
+                                            taskId.isEmpty
+                                                ? AppRoutes.agent
+                                                : AppRoutes.agentTask(taskId),
+                                          );
+                                        }
+                                      : null,
                                 ),
                               );
-                            }
-                            final item = flowItems[contentIndex];
-                            if (!item.isMessage) {
-                              final node = item.node!;
-                              return MobileExtensionSlot(
-                                slotId: 'chat.conversation.node',
-                                contributionId: node.contributionId,
+                              final messageRenderer =
+                                  UIMessageRendererRegistry.resolve(
+                                    uiSnapshot,
+                                    messageType: message.type.name,
+                                    role: message.role.name,
+                                  );
+                              final providerMessage = UIProviderHost(
+                                capability:
+                                    UICapability.conversationMessageRenderer,
+                                providerId: messageRenderer?.providerId,
+                                fallback: builtinMessage,
                                 context: {
                                   ...providerContext,
-                                  'conversationNode': node.toJson(),
-                                  'eventType': node.eventType,
+                                  'message': _providerMessage(message),
+                                  'messageIndex': index,
                                 },
                                 actions: providerActions,
                               );
-                            }
-
-                            final index = item.messageIndex!;
-                            final message = item.message!;
-                            final isAgentTask = message.type == MessageType.agentTask;
-                            final builtinMessage = RepaintBoundary(
-                              child: AmitiaMessageBubble(
-                                message: message,
-                                showAvatar: _shouldShowAvatar(index),
-                                avatarInitial: avatarInitial,
-                                avatarColor: avatarColor,
-                                characterName: characterName,
-                                userInitial: userInitial,
-                                userAvatarColor: userAvatarColor,
-                                userName: userName,
-                                agentActivities: agentActivityProjection.byMessageId[message.id] ??
-                                    const <AmitiaAgentActivity>[],
-                                onRetry: _runtime.canRetryMessage(index)
-                                    ? () => _retryMessage(index)
-                                    : null,
-                                onReply: message.type == MessageType.systemNotice
-                                    ? null
-                                    : () => _setReplyTarget(message),
-                                onCopy: message.type == MessageType.systemNotice || message.content.trim().isEmpty
-                                    ? null
-                                    : () => _copyMessage(message),
-                                onAgentTaskTap: isAgentTask
-                                    ? () {
-                                        final taskId = message.agentTaskId?.trim() ?? '';
-                                        context.push(taskId.isEmpty
-                                            ? AppRoutes.agent
-                                            : AppRoutes.agentTask(taskId));
-                                      }
-                                    : null,
-                              ),
-                            );
-                            final messageRenderer = UIMessageRendererRegistry.resolve(
-                              uiSnapshot,
-                              messageType: message.type.name,
-                              role: message.role.name,
-                            );
-                            final providerMessage = UIProviderHost(
-                              capability: UICapability.conversationMessageRenderer,
-                              providerId: messageRenderer?.providerId,
-                              fallback: builtinMessage,
-                              context: { ...providerContext, 'message': _providerMessage(message), 'messageIndex': index },
-                              actions: providerActions,
-                            );
-                            final messageContext = <String, dynamic>{
-                              ...providerContext,
-                              'messageId': message.id,
-                              'messageType': message.type.name,
-                              'message': _providerMessage(message),
-                              'messageIndex': index,
-                            };
-                            final standardRendered = MobileExtensionSlot(
-                              slotId: 'chat.message.renderer',
-                              context: messageContext,
-                              actions: providerActions,
-                              fallback: providerMessage,
-                            );
-                            final customRendered = MobileExtensionSlot(
-                              slotId: 'chat.message.custom_renderer',
-                              context: messageContext,
-                              actions: providerActions,
-                              fallback: standardRendered,
-                            );
-                            final hasAttachment = (message.resourceUri ?? '').trim().isNotEmpty ||
-                                (message.fileName ?? '').trim().isNotEmpty;
-                            return Column(
-                              mainAxisSize: MainAxisSize.min,
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                customRendered,
-                                if (hasAttachment)
+                              final messageContext = <String, dynamic>{
+                                ...providerContext,
+                                'messageId': message.id,
+                                'messageType': message.type.name,
+                                'message': _providerMessage(message),
+                                'messageIndex': index,
+                              };
+                              final standardRendered = MobileExtensionSlot(
+                                slotId: 'chat.message.renderer',
+                                context: messageContext,
+                                actions: providerActions,
+                                fallback: providerMessage,
+                              );
+                              final customRendered = MobileExtensionSlot(
+                                slotId: 'chat.message.custom_renderer',
+                                context: messageContext,
+                                actions: providerActions,
+                                fallback: standardRendered,
+                              );
+                              final hasAttachment =
+                                  (message.resourceUri ?? '')
+                                      .trim()
+                                      .isNotEmpty ||
+                                  (message.fileName ?? '').trim().isNotEmpty;
+                              return Column(
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  customRendered,
+                                  if (hasAttachment)
+                                    Padding(
+                                      padding: const EdgeInsets.fromLTRB(
+                                        52,
+                                        2,
+                                        12,
+                                        2,
+                                      ),
+                                      child: MobileExtensionSlot(
+                                        slotId:
+                                            'chat.message.attachment_renderer',
+                                        context: messageContext,
+                                        actions: providerActions,
+                                      ),
+                                    ),
                                   Padding(
-                                    padding: const EdgeInsets.fromLTRB(52, 2, 12, 2),
+                                    padding: const EdgeInsets.fromLTRB(
+                                      52,
+                                      0,
+                                      12,
+                                      2,
+                                    ),
                                     child: MobileExtensionSlot(
-                                      slotId: 'chat.message.attachment_renderer',
+                                      slotId: 'chat.message.badge',
                                       context: messageContext,
                                       actions: providerActions,
                                     ),
                                   ),
-                                Padding(
-                                  padding: const EdgeInsets.fromLTRB(52, 0, 12, 2),
-                                  child: MobileExtensionSlot(
-                                    slotId: 'chat.message.badge',
-                                    context: messageContext,
-                                    actions: providerActions,
+                                  Padding(
+                                    padding: const EdgeInsets.fromLTRB(
+                                      52,
+                                      0,
+                                      12,
+                                      6,
+                                    ),
+                                    child: MobileExtensionSlot(
+                                      slotId: 'chat.message.action',
+                                      context: messageContext,
+                                      actions: providerActions,
+                                    ),
                                   ),
-                                ),
-                                Padding(
-                                  padding: const EdgeInsets.fromLTRB(52, 0, 12, 6),
-                                  child: MobileExtensionSlot(
-                                    slotId: 'chat.message.action',
-                                    context: messageContext,
-                                    actions: providerActions,
-                                  ),
-                                ),
-                              ],
-                            );
-                          },
-                        ),
-                        _ChatScrollFade(
-                          alignment: Alignment.topCenter,
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          color: context.backgroundPrimary,
-                          height: _chatTopBarHeight,
-                        ),
-                        _ChatScrollFade(
-                          alignment: Alignment.bottomCenter,
-                          begin: Alignment.bottomCenter,
-                          end: Alignment.topCenter,
-                          color: context.backgroundPrimary,
-                        ),
+                                ],
+                              );
+                            },
+                          ),
+                          _ChatScrollFade(
+                            alignment: Alignment.topCenter,
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            color: context.backgroundPrimary,
+                            height: _chatTopBarHeight,
+                          ),
+                          _ChatScrollFade(
+                            alignment: Alignment.bottomCenter,
+                            begin: Alignment.bottomCenter,
+                            end: Alignment.topCenter,
+                            color: context.backgroundPrimary,
+                          ),
                         ],
                       ),
                     ),
@@ -1736,23 +2058,31 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                       children: [
                         MobileExtensionSlot(
                           slotId: 'chat.composer.hint',
-                          context: {...providerContext, 'surface': 'composer-hint'},
+                          context: {
+                            ...providerContext,
+                            'surface': 'composer-hint',
+                          },
                           actions: providerActions,
                         ),
-                        _buildWorkspaceBar(context),
                         AmitiaChatInput(
                           controller: _composerController,
                           onSend: _onSend,
                           recipientName: characterName,
+                          workspaceSelector: _buildWorkspaceBar(context),
                           onPickFile: _pickAndSendFile,
                           onPickImage: _pickAndSendImage,
                           onPickVideo: _pickAndSendVideo,
-                          onPickAudio: _pickAndSendAudio,
                           onSendCode: _onSendCode,
-                          onLoadEmotes: () => ref.read(emoteServiceProvider).listEmotes(),
+                          onLoadEmotes: () =>
+                              ref.read(emoteServiceProvider).listEmotes(),
                           onSendEmote: _onSendEmote,
                           onLoadAgentSkills: () => _loadAgentSkills(),
-                          replyPreview: _replyTarget == null ? null : _replyExcerpt(_replyTarget!),
+                          onStartVoiceRecording: _startRecordedVoice,
+                          onFinishVoiceRecording: _finishRecordedVoice,
+                          onCancelVoiceRecording: _cancelRecordedVoice,
+                          replyPreview: _replyTarget == null
+                              ? null
+                              : _replyExcerpt(_replyTarget!),
                           onCancelReply: () => _setReplyTarget(null),
                         ),
                         Padding(
@@ -1763,7 +2093,10 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                               Expanded(
                                 child: MobileExtensionSlot(
                                   slotId: 'chat.composer.action',
-                                  context: {...providerContext, 'surface': 'composer-action'},
+                                  context: {
+                                    ...providerContext,
+                                    'surface': 'composer-action',
+                                  },
                                   actions: providerActions,
                                 ),
                               ),
@@ -1771,7 +2104,10 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                               Expanded(
                                 child: MobileExtensionSlot(
                                   slotId: 'chat.composer.attachment',
-                                  context: {...providerContext, 'surface': 'composer-attachment'},
+                                  context: {
+                                    ...providerContext,
+                                    'surface': 'composer-attachment',
+                                  },
                                   actions: providerActions,
                                 ),
                               ),
@@ -1800,8 +2136,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
               actions: providerActions,
               fallback: _ChatTopBar(
                 onOpenDrawer: () => _openDrawer(context),
-                onCall: () => _showCallOptions(characterId, characterName),
-                onMore: () => _showChatActionsSheet(context),
+                onCallSelected: (mode) =>
+                    _handleCallOption(characterId, characterName, mode),
+                onMoreSelected: _handleChatAction,
                 extensionActions: MobileExtensionSlot(
                   slotId: 'chat.header.action',
                   context: {...providerContext, 'surface': 'header'},
@@ -1816,7 +2153,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
               right: 0,
               bottom: 0,
               child: SizedBox(
-                width: MediaQuery.sizeOf(context).width.clamp(240.0, 360.0).toDouble(),
+                width: MediaQuery.sizeOf(
+                  context,
+                ).width.clamp(240.0, 360.0).toDouble(),
                 child: UIProviderHost(
                   capability: UICapability.conversationSidebar,
                   context: {...providerContext, 'surface': 'sidebar'},
@@ -1841,8 +2180,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         ],
       ),
     );
-
-
 
     return UIProviderHost(
       capability: UICapability.conversationShell,
@@ -1905,68 +2242,84 @@ class _ChatProfileSummarySheet extends StatelessWidget {
             child: loading
                 ? const Center(child: CircularProgressIndicator())
                 : error != null
-                    ? Center(
-                        child: Text(
-                          '画像加载失败：$error',
-                          style: AppTypography.bodySmall(context).copyWith(color: context.error),
-                          textAlign: TextAlign.center,
-                        ),
-                      )
-                    : profiles.isEmpty
-                        ? Center(
-                            child: Text(
-                              '暂无画像数据。对话完成后系统会自动提取可用画像。',
-                              style: AppTypography.caption(context),
-                              textAlign: TextAlign.center,
-                            ),
-                          )
-                        : ListView.separated(
-                            itemCount: profiles.length,
-                            separatorBuilder: (_, _) => const SizedBox(height: 8),
-                            itemBuilder: (context, index) {
-                              final profile = profiles[index];
-                              final confidence = profile.confidence.clamp(0, 100);
-                              return AmitiaCard(
-                                padding: const EdgeInsets.all(12),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Row(
-                                      children: [
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                          decoration: BoxDecoration(
-                                            color: context.accentPrimary.withValues(alpha: 0.10),
-                                            borderRadius: BorderRadius.circular(999),
-                                          ),
-                                          child: Text(
-                                            _categoryLabel(profile.category),
-                                            style: AppTypography.label(context).copyWith(color: context.accentPrimary),
-                                          ),
-                                        ),
-                                        const Spacer(),
-                                        Text(
-                                          '置信度 $confidence%',
-                                          style: AppTypography.label(context).copyWith(
-                                            color: confidence >= 80 ? context.success : context.warning,
-                                          ),
-                                        ),
-                                      ],
+                ? Center(
+                    child: Text(
+                      '画像加载失败：$error',
+                      style: AppTypography.bodySmall(
+                        context,
+                      ).copyWith(color: context.error),
+                      textAlign: TextAlign.center,
+                    ),
+                  )
+                : profiles.isEmpty
+                ? Center(
+                    child: Text(
+                      '暂无画像数据。对话完成后系统会自动提取可用画像。',
+                      style: AppTypography.caption(context),
+                      textAlign: TextAlign.center,
+                    ),
+                  )
+                : ListView.separated(
+                    itemCount: profiles.length,
+                    separatorBuilder: (_, _) => const SizedBox(height: 8),
+                    itemBuilder: (context, index) {
+                      final profile = profiles[index];
+                      final confidence = profile.confidence.clamp(0, 100);
+                      return AmitiaCard(
+                        padding: const EdgeInsets.all(12),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 3,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: context.accentPrimary.withValues(
+                                      alpha: 0.10,
                                     ),
-                                    const SizedBox(height: 8),
-                                    Text(
-                                      profile.attributeName.isEmpty ? '未命名画像' : profile.attributeName,
-                                      style: AppTypography.cardTitle(context),
-                                    ),
-                                    if (profile.attributeValue.isNotEmpty) ...[
-                                      const SizedBox(height: 4),
-                                      Text(profile.attributeValue, style: AppTypography.bodySmall(context)),
-                                    ],
-                                  ],
+                                    borderRadius: BorderRadius.circular(999),
+                                  ),
+                                  child: Text(
+                                    _categoryLabel(profile.category),
+                                    style: AppTypography.label(
+                                      context,
+                                    ).copyWith(color: context.accentPrimary),
+                                  ),
                                 ),
-                              );
-                            },
-                          ),
+                                const Spacer(),
+                                Text(
+                                  '置信度 $confidence%',
+                                  style: AppTypography.label(context).copyWith(
+                                    color: confidence >= 80
+                                        ? context.success
+                                        : context.warning,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              profile.attributeName.isEmpty
+                                  ? '未命名画像'
+                                  : profile.attributeName,
+                              style: AppTypography.cardTitle(context),
+                            ),
+                            if (profile.attributeValue.isNotEmpty) ...[
+                              const SizedBox(height: 4),
+                              Text(
+                                profile.attributeValue,
+                                style: AppTypography.bodySmall(context),
+                              ),
+                            ],
+                          ],
+                        ),
+                      );
+                    },
+                  ),
           ),
         ],
       ),
@@ -2033,7 +2386,9 @@ class _ChatMemoryContextSheet extends StatelessWidget {
           padding: const EdgeInsets.all(24),
           child: Text(
             '记忆上下文加载失败：$error',
-            style: AppTypography.bodySmall(context).copyWith(color: context.error),
+            style: AppTypography.bodySmall(
+              context,
+            ).copyWith(color: context.error),
             textAlign: TextAlign.center,
           ),
         ),
@@ -2042,10 +2397,14 @@ class _ChatMemoryContextSheet extends StatelessWidget {
 
     final compressedRounds = _asInt(compression['compressedRounds']);
     final totalRounds = _asInt(compression['totalRounds']);
-    final lastCompressedAt = compression['lastCompressedAt']?.toString().trim() ?? '';
+    final lastCompressedAt =
+        compression['lastCompressedAt']?.toString().trim() ?? '';
     final rawLayers = pipeline['layers'];
     final layers = rawLayers is List
-        ? rawLayers.whereType<Map>().map((row) => Map<String, dynamic>.from(row)).toList(growable: false)
+        ? rawLayers
+              .whereType<Map>()
+              .map((row) => Map<String, dynamic>.from(row))
+              .toList(growable: false)
         : const <Map<String, dynamic>>[];
 
     return Padding(
@@ -2069,71 +2428,98 @@ class _ChatMemoryContextSheet extends StatelessWidget {
           Expanded(
             child: ListView(
               children: [
-                Text('相关记忆 (${memories.length})', style: AppTypography.sectionTitle(context)),
+                Text(
+                  '相关记忆 (${memories.length})',
+                  style: AppTypography.sectionTitle(context),
+                ),
                 const SizedBox(height: 8),
                 if (memories.isEmpty)
                   Text('暂无相关记忆', style: AppTypography.caption(context))
                 else
-                  ...memories.map((memory) => Padding(
-                        padding: const EdgeInsets.only(bottom: 8),
-                        child: AmitiaCard(
-                          padding: const EdgeInsets.all(12),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  Text(
-                                    _memoryTypeLabel(memory.memoryType),
-                                    style: AppTypography.label(context).copyWith(color: context.accentPrimary),
-                                  ),
-                                  const Spacer(),
-                                  Text('置信度 ${memory.confidence.clamp(0, 100)}%', style: AppTypography.label(context)),
-                                ],
+                  ...memories.map(
+                    (memory) => Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: AmitiaCard(
+                        padding: const EdgeInsets.all(12),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Text(
+                                  _memoryTypeLabel(memory.memoryType),
+                                  style: AppTypography.label(
+                                    context,
+                                  ).copyWith(color: context.accentPrimary),
+                                ),
+                                const Spacer(),
+                                Text(
+                                  '置信度 ${memory.confidence.clamp(0, 100)}%',
+                                  style: AppTypography.label(context),
+                                ),
+                              ],
+                            ),
+                            if (memory.key.isNotEmpty) ...[
+                              const SizedBox(height: 6),
+                              Text(
+                                memory.key,
+                                style: AppTypography.cardTitle(context),
                               ),
-                              if (memory.key.isNotEmpty) ...[
-                                const SizedBox(height: 6),
-                                Text(memory.key, style: AppTypography.cardTitle(context)),
-                              ],
-                              if (memory.value.isNotEmpty) ...[
-                                const SizedBox(height: 4),
-                                Text(memory.value, style: AppTypography.bodySmall(context)),
-                              ],
                             ],
-                          ),
+                            if (memory.value.isNotEmpty) ...[
+                              const SizedBox(height: 4),
+                              Text(
+                                memory.value,
+                                style: AppTypography.bodySmall(context),
+                              ),
+                            ],
+                          ],
                         ),
-                      )),
+                      ),
+                    ),
+                  ),
                 const SizedBox(height: 12),
-                Text('用户画像 (${profiles.length})', style: AppTypography.sectionTitle(context)),
+                Text(
+                  '用户画像 (${profiles.length})',
+                  style: AppTypography.sectionTitle(context),
+                ),
                 const SizedBox(height: 8),
                 if (profiles.isEmpty)
                   Text('暂无用户画像', style: AppTypography.caption(context))
                 else
                   AmitiaCard(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
                     child: Column(
                       children: profiles
-                          .map((profile) => Padding(
-                                padding: const EdgeInsets.symmetric(vertical: 7),
-                                child: Row(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Expanded(
-                                      child: Text(
-                                        '${profile.attributeName}: ${profile.attributeValue}',
-                                        style: AppTypography.bodySmall(context),
-                                      ),
+                          .map(
+                            (profile) => Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 7),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      '${profile.attributeName}: ${profile.attributeValue}',
+                                      style: AppTypography.bodySmall(context),
                                     ),
-                                    const SizedBox(width: 8),
-                                    Text(
-                                      '${profile.confidence.clamp(0, 100)}%',
-                                      style: AppTypography.label(context).copyWith(
-                                        color: profile.confidence >= 80 ? context.success : context.warning,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ))
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    '${profile.confidence.clamp(0, 100)}%',
+                                    style: AppTypography.label(context)
+                                        .copyWith(
+                                          color: profile.confidence >= 80
+                                              ? context.success
+                                              : context.warning,
+                                        ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          )
                           .toList(growable: false),
                     ),
                   ),
@@ -2145,10 +2531,16 @@ class _ChatMemoryContextSheet extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('已压缩 $compressedRounds / $totalRounds 轮', style: AppTypography.bodySmall(context)),
+                      Text(
+                        '已压缩 $compressedRounds / $totalRounds 轮',
+                        style: AppTypography.bodySmall(context),
+                      ),
                       if (lastCompressedAt.isNotEmpty) ...[
                         const SizedBox(height: 4),
-                        Text('上次压缩：$lastCompressedAt', style: AppTypography.caption(context)),
+                        Text(
+                          '上次压缩：$lastCompressedAt',
+                          style: AppTypography.caption(context),
+                        ),
                       ],
                     ],
                   ),
@@ -2162,29 +2554,43 @@ class _ChatMemoryContextSheet extends StatelessWidget {
                   AmitiaCard(
                     padding: const EdgeInsets.all(12),
                     child: Column(
-                      children: layers.map((layer) {
-                        final status = layer['status']?.toString() ?? 'unknown';
-                        final name = layer['name']?.toString() ?? '未命名层';
-                        final duration = _asInt(layer['durationMs']);
-                        return Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 5),
-                          child: Row(
-                            children: [
-                              Container(
-                                width: 8,
-                                height: 8,
-                                decoration: BoxDecoration(
-                                  color: _pipelineStatusColor(context, status),
-                                  shape: BoxShape.circle,
-                                ),
+                      children: layers
+                          .map((layer) {
+                            final status =
+                                layer['status']?.toString() ?? 'unknown';
+                            final name = layer['name']?.toString() ?? '未命名层';
+                            final duration = _asInt(layer['durationMs']);
+                            return Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 5),
+                              child: Row(
+                                children: [
+                                  Container(
+                                    width: 8,
+                                    height: 8,
+                                    decoration: BoxDecoration(
+                                      color: _pipelineStatusColor(
+                                        context,
+                                        status,
+                                      ),
+                                      shape: BoxShape.circle,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      name,
+                                      style: AppTypography.bodySmall(context),
+                                    ),
+                                  ),
+                                  Text(
+                                    '$status · ${duration}ms',
+                                    style: AppTypography.label(context),
+                                  ),
+                                ],
                               ),
-                              const SizedBox(width: 8),
-                              Expanded(child: Text(name, style: AppTypography.bodySmall(context))),
-                              Text('$status · ${duration}ms', style: AppTypography.label(context)),
-                            ],
-                          ),
-                        );
-                      }).toList(growable: false),
+                            );
+                          })
+                          .toList(growable: false),
                     ),
                   ),
               ],
@@ -2234,14 +2640,14 @@ class _ChatScrollFade extends StatelessWidget {
 
 class _ChatTopBar extends StatelessWidget implements PreferredSizeWidget {
   final VoidCallback onOpenDrawer;
-  final VoidCallback onCall;
-  final VoidCallback onMore;
+  final ValueChanged<String> onCallSelected;
+  final ValueChanged<int> onMoreSelected;
   final Widget? extensionActions;
 
   const _ChatTopBar({
     required this.onOpenDrawer,
-    required this.onCall,
-    required this.onMore,
+    required this.onCallSelected,
+    required this.onMoreSelected,
     this.extensionActions,
   });
 
@@ -2260,14 +2666,19 @@ class _ChatTopBar extends StatelessWidget implements PreferredSizeWidget {
         padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
         child: Row(
           children: [
-            _ChatTopBarButton(
-              icon: isApplePlatform
-                  ? CupertinoIcons.line_horizontal_3
-                  : Icons.menu_rounded,
-              size: 44,
-              iconSize: 20,
-              tooltip: '打开侧边栏',
-              onTap: onOpenDrawer,
+            Tooltip(
+              message: '打开侧边栏',
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: onOpenDrawer,
+                child: _ChatTopBarButton(
+                  icon: isApplePlatform
+                      ? CupertinoIcons.line_horizontal_3
+                      : Icons.menu_rounded,
+                  size: 44,
+                  iconSize: 20,
+                ),
+              ),
             ),
             const Spacer(),
             if (extensionActions != null) ...[
@@ -2277,20 +2688,110 @@ class _ChatTopBar extends StatelessWidget implements PreferredSizeWidget {
               ),
               const SizedBox(width: 8),
             ],
-            _ChatTopBarButton(
-              icon: Icons.call_outlined,
-              size: 44,
-              iconSize: 22,
+            PopupMenuButton<String>(
               tooltip: '发起通话',
-              onTap: onCall,
+              onSelected: onCallSelected,
+              itemBuilder: (context) => const [
+                PopupMenuItem(
+                  value: 'video',
+                  child: ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(Icons.videocam_outlined),
+                    title: Text('视频通话'),
+                  ),
+                ),
+                PopupMenuItem(
+                  value: 'voice',
+                  child: ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(Icons.call_outlined),
+                    title: Text('语音通话'),
+                  ),
+                ),
+                PopupMenuItem(
+                  value: 'screen',
+                  child: ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(Icons.screen_share_outlined),
+                    title: Text('屏幕通话'),
+                  ),
+                ),
+              ],
+              child: const _ChatTopBarButton(
+                icon: Icons.call_outlined,
+                size: 44,
+                iconSize: 22,
+              ),
             ),
             const SizedBox(width: 8),
-            _ChatTopBarButton(
-              icon: isApplePlatform ? CupertinoIcons.ellipsis : Icons.more_horiz,
-              size: 44,
-              iconSize: 22,
+            PopupMenuButton<int>(
               tooltip: '当前对话详情',
-              onTap: onMore,
+              onSelected: onMoreSelected,
+              itemBuilder: (context) => const [
+                PopupMenuItem(
+                  value: 0,
+                  child: ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(Icons.person_outline),
+                    title: Text('查看角色详情'),
+                  ),
+                ),
+                PopupMenuItem(
+                  value: 1,
+                  child: ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(Icons.search),
+                    title: Text('搜索当前会话'),
+                  ),
+                ),
+                PopupMenuItem(
+                  value: 2,
+                  child: ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(Icons.refresh_rounded),
+                    title: Text('重新生成'),
+                  ),
+                ),
+                PopupMenuItem(
+                  value: 3,
+                  child: ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(Icons.file_download_outlined),
+                    title: Text('导出聊天记录'),
+                  ),
+                ),
+                PopupMenuItem(
+                  value: 4,
+                  child: ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(Icons.badge_outlined),
+                    title: Text('用户画像摘要'),
+                  ),
+                ),
+                PopupMenuItem(
+                  value: 5,
+                  child: ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(Icons.psychology_alt_outlined),
+                    title: Text('记忆上下文'),
+                  ),
+                ),
+                PopupMenuItem(
+                  value: 6,
+                  child: ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(Icons.cleaning_services_outlined),
+                    title: Text('清空聊天记录'),
+                  ),
+                ),
+              ],
+              child: _ChatTopBarButton(
+                icon: isApplePlatform
+                    ? CupertinoIcons.ellipsis
+                    : Icons.more_horiz,
+                size: 44,
+                iconSize: 22,
+              ),
             ),
           ],
         ),
@@ -2303,35 +2804,20 @@ class _ChatTopBarButton extends StatelessWidget {
   final IconData icon;
   final double size;
   final double iconSize;
-  final String tooltip;
-  final VoidCallback onTap;
 
   const _ChatTopBarButton({
     required this.icon,
     required this.size,
     required this.iconSize,
-    required this.tooltip,
-    required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Tooltip(
-      message: tooltip,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: onTap,
-        child: Container(
-          width: size,
-          height: size,
-          decoration: BoxDecoration(
-            color: context.surfacePrimary,
-            borderRadius: BorderRadius.circular(13),
-            border: Border.all(color: context.borderPrimary),
-          ),
-          alignment: Alignment.center,
-          child: Icon(icon, size: iconSize, color: context.textPrimary),
-        ),
+    return SizedBox(
+      width: size,
+      height: size,
+      child: Center(
+        child: Icon(icon, size: iconSize, color: context.textPrimary),
       ),
     );
   }
@@ -2466,7 +2952,6 @@ class _MessageSearchSheetState extends State<_MessageSearchSheet> {
   }
 }
 
-
 class _MobileChatFlowItem {
   const _MobileChatFlowItem._({
     required this.key,
@@ -2488,12 +2973,13 @@ class _MobileChatFlowItem {
     messageIndex: messageIndex,
   );
 
-  factory _MobileChatFlowItem.node(MobileConversationNode node) => _MobileChatFlowItem._(
-    key: 'node:${node.nodeId}',
-    timestamp: node.anchorTimestamp,
-    sequence: node.anchorSeq,
-    node: node,
-  );
+  factory _MobileChatFlowItem.node(MobileConversationNode node) =>
+      _MobileChatFlowItem._(
+        key: 'node:${node.nodeId}',
+        timestamp: node.anchorTimestamp,
+        sequence: node.anchorSeq,
+        node: node,
+      );
 
   final String key;
   final DateTime timestamp;

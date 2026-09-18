@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../core/app_update/app_update_providers.dart';
 import '../core/native_bridge/providers/native_bridge_relay_bootstrap_provider.dart';
 import '../core/native_bridge/providers/device_timezone_bootstrap_provider.dart';
 import '../core/runtime/runtime_bootstrap_provider.dart';
@@ -24,6 +25,7 @@ import '../features/extensions/presentation/widgets/mcp_interaction_guard.dart';
 import 'theme/app_theme.dart';
 import 'theme/app_motion.dart';
 import 'theme/design_tokens.dart';
+import 'app_routes.dart';
 import 'router.dart';
 
 class AmitiaAppRoot extends ConsumerStatefulWidget {
@@ -66,6 +68,23 @@ class _AmitiaAppRootState extends ConsumerState<AmitiaAppRoot> {
 
     if (mounted) {
       setState(() => _bootstrapInitialized = true);
+    }
+    unawaited(_checkMandatoryUpdate());
+  }
+
+  Future<void> _checkMandatoryUpdate() async {
+    try {
+      final result = await ref.read(appUpdateServiceProvider).check();
+      final update = result.available;
+      if (!mounted || update == null) return;
+      if (!update.requiresVersion(result.installed.versionCode)) return;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          ref.read(goRouterProvider).go(AppRoutes.settingsAppUpdate);
+        }
+      });
+    } catch (_) {
+      return;
     }
   }
 
@@ -318,7 +337,9 @@ class AmitiaApp extends ConsumerWidget {
     ref.watch(desktopPetMobileRuntimeBootstrapProvider);
     ref.watch(mobileUIHostEventClientProvider);
     final appearance = ref.watch(appearancePreferencesProvider);
-    AppMotion.setAnimationsEnabled(appearance.dynamicEffect && !appearance.reduceAnimation);
+    AppMotion.setAnimationsEnabled(
+      appearance.dynamicEffect && !appearance.reduceAnimation,
+    );
     final runtimeSnapshot = ref.watch(uiRuntimeProvider).valueOrNull;
     if (runtimeSnapshot == null) {
       Future.microtask(
@@ -342,7 +363,8 @@ class AmitiaApp extends ConsumerWidget {
 
     ThemeData applyAppearance(ThemeData theme) {
       final colors = theme.extension<AmitiaColorTokens>();
-      final layout = theme.extension<AmitiaLayoutTokens>() ?? const AmitiaLayoutTokens();
+      final layout =
+          theme.extension<AmitiaLayoutTokens>() ?? const AmitiaLayoutTokens();
       if (colors == null) return theme;
 
       const lightAccents = [
@@ -357,13 +379,18 @@ class AmitiaApp extends ConsumerWidget {
         Color(0xFF78C99A),
         Color(0xFFF0B65D),
       ];
-      final accent = (theme.brightness == Brightness.dark ? darkAccents : lightAccents)[appearance.accentColorIndex];
+      final accent = (theme.brightness == Brightness.dark
+          ? darkAccents
+          : lightAccents)[appearance.accentColorIndex];
       final accentPressed = Color.lerp(
         accent,
         theme.brightness == Brightness.dark ? Colors.white : Colors.black,
         0.16,
       )!;
-      final accentSoft = Color.alphaBlend(accent.withValues(alpha: 0.14), colors.surfacePrimary);
+      final accentSoft = Color.alphaBlend(
+        accent.withValues(alpha: 0.14),
+        colors.surfacePrimary,
+      );
       final userColors = colors.copyWith(
         accentPrimary: accent,
         accentSecondary: accent,
@@ -372,16 +399,38 @@ class AmitiaApp extends ConsumerWidget {
       );
 
       final userLayout = switch (appearance.cornerStyleIndex) {
-        0 => layout.copyWith(radiusExtraSmall: 6, radiusSmall: 8, radiusMedium: 12, radiusLarge: 16, radiusTag: 8),
-        2 => layout.copyWith(radiusExtraSmall: 10, radiusSmall: 16, radiusMedium: 20, radiusLarge: 28, radiusTag: 14),
-        _ => layout.copyWith(radiusExtraSmall: 8, radiusSmall: 12, radiusMedium: 16, radiusLarge: 22, radiusTag: 10),
+        0 => layout.copyWith(
+          radiusExtraSmall: 6,
+          radiusSmall: 8,
+          radiusMedium: 12,
+          radiusLarge: 16,
+          radiusTag: 8,
+        ),
+        2 => layout.copyWith(
+          radiusExtraSmall: 10,
+          radiusSmall: 16,
+          radiusMedium: 20,
+          radiusLarge: 28,
+          radiusTag: 14,
+        ),
+        _ => layout.copyWith(
+          radiusExtraSmall: 8,
+          radiusSmall: 12,
+          radiusMedium: 16,
+          radiusLarge: 22,
+          radiusTag: 10,
+        ),
       };
       DesignTokenRuntime.activateLayout(userLayout);
-      final extensions = theme.extensions.values
-          .where((item) => item is! AmitiaColorTokens && item is! AmitiaLayoutTokens)
-          .toList(growable: true)
-        ..add(userColors)
-        ..add(userLayout);
+      final extensions =
+          theme.extensions.values
+              .where(
+                (item) =>
+                    item is! AmitiaColorTokens && item is! AmitiaLayoutTokens,
+              )
+              .toList(growable: true)
+            ..add(userColors)
+            ..add(userLayout);
       return theme.copyWith(
         colorScheme: theme.colorScheme.copyWith(
           primary: accent,
@@ -393,8 +442,12 @@ class AmitiaApp extends ConsumerWidget {
       );
     }
 
-    final lightTheme = applyAppearance(applyVisualProviders(AppTheme.lightTheme()));
-    final darkTheme = applyAppearance(applyVisualProviders(AppTheme.darkTheme()));
+    final lightTheme = applyAppearance(
+      applyVisualProviders(AppTheme.lightTheme()),
+    );
+    final darkTheme = applyAppearance(
+      applyVisualProviders(AppTheme.darkTheme()),
+    );
 
     return MaterialApp.router(
       title: 'Amitia',
@@ -402,15 +455,23 @@ class AmitiaApp extends ConsumerWidget {
       theme: lightTheme,
       darkTheme: darkTheme,
       themeMode: appearance.themeMode,
-      themeAnimationDuration: (!appearance.dynamicEffect || appearance.reduceAnimation) ? Duration.zero : const Duration(milliseconds: 200),
+      themeAnimationDuration:
+          (!appearance.dynamicEffect || appearance.reduceAnimation)
+          ? Duration.zero
+          : const Duration(milliseconds: 200),
       routerConfig: router,
       builder: (context, child) {
         final media = MediaQuery.of(context);
         final systemScale = media.textScaler.scale(1.0);
-        final effectiveScale = (systemScale * appearance.fontScale).clamp(0.8, 2.0).toDouble();
+        final effectiveScale = (systemScale * appearance.fontScale)
+            .clamp(0.8, 2.0)
+            .toDouble();
         final adjustedMedia = media.copyWith(
           textScaler: TextScaler.linear(effectiveScale),
-          disableAnimations: media.disableAnimations || !appearance.dynamicEffect || appearance.reduceAnimation,
+          disableAnimations:
+              media.disableAnimations ||
+              !appearance.dynamicEffect ||
+              appearance.reduceAnimation,
         );
         return MediaQuery(
           data: adjustedMedia,

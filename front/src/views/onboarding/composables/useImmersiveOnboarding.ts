@@ -89,8 +89,6 @@ export function useImmersiveOnboarding() {
   const permissions = reactive({
     autostart: false,
     web: true,
-    wechat: false,
-    qq: false,
   });
 
   watch(
@@ -588,8 +586,6 @@ const res = await post<any>("/api/model/detect-models", {
             ? serverURL.value.trim().replace(/\/+$/, "")
             : undefined,
         webChatEnabled: true,
-        wechatEnabled: permissions.wechat,
-        qqEnabled: permissions.qq,
         modelConfig: modelApiKey.value
           ? {
               name: "default",

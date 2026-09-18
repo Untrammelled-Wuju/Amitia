@@ -145,6 +145,10 @@ function renderGroups() {
   document.querySelectorAll("[data-view]").forEach((button) => {
     button.classList.toggle("active", button.dataset.view === state.activeView && !state.activeGroup);
   });
+  const mobileSelect = $("mobile-group-select");
+  if (mobileSelect) {
+    mobileSelect.value = state.activeGroup ? `group:${state.activeGroup}` : `view:${state.activeView}`;
+  }
   const list = $("group-list");
   if (!state.groups.length) {
     list.innerHTML = `<div class="muted">${state.groupsLoading ? "正在加载分组..." : "还没有分组"}</div>`;
@@ -219,11 +223,13 @@ function renderGrid() {
 
 function renderDetail() {
   const item = focusedEmote();
+  document.body.classList.toggle("has-detail", Boolean(item));
   if (!item) {
     $("detail").innerHTML = `<div class="empty-detail">选择一个表情查看详情</div>`;
     return;
   }
   $("detail").innerHTML = `
+    <div class="detail-mobile-head"><strong>表情详情</strong><button type="button" id="close-detail">关闭</button></div>
     <img class="preview" src="${escapeHTML(item.assetUrl || item.thumbnailUrl || "")}" alt="${escapeHTML(item.meaning || item.name)}">
     <div class="form-item"><label>名称</label><input class="el-input-native" id="detail-name" value="${escapeHTML(item.name)}"></div>
     <div class="form-item"><label>含义</label><textarea class="el-input-native" id="detail-meaning" rows="3">${escapeHTML(item.meaning || "")}</textarea><small>AI 可用时含义不能为空。</small></div>
@@ -244,12 +250,24 @@ function renderDetail() {
   `;
   $("save-detail").onclick = saveDetail;
   $("delete-detail").onclick = deleteFocused;
+  $("close-detail").onclick = () => {
+    state.focusedId = "";
+    renderGrid();
+    renderDetail();
+  };
 }
 
 function renderGroupOptions() {
   const options = state.groups.map((group) => `<option value="${escapeHTML(group.id)}">${escapeHTML(group.name)}</option>`).join("");
   $("bulk-group").innerHTML = `<option value="">加入分组</option>${options}`;
   $("default-group").innerHTML = options;
+  $("mobile-group-select").innerHTML = `
+    <option value="view:all">全部表情</option>
+    <option value="view:recent">最近使用</option>
+    <option value="view:unassigned">未分组</option>
+    ${state.groups.map((group) => `<option value="group:${escapeHTML(group.id)}">${escapeHTML(group.name)}</option>`).join("")}
+  `;
+  renderGroups();
 }
 
 function toggleSelection(id) {
@@ -262,6 +280,7 @@ function toggleSelection(id) {
 function selectView(view) {
   state.activeView = view;
   state.activeGroup = "";
+  state.focusedId = "";
   state.selectedIds.clear();
   state.groupMenuId = "";
   renderGroups();
@@ -270,6 +289,7 @@ function selectView(view) {
 
 function selectGroup(id) {
   state.activeGroup = id;
+  state.focusedId = "";
   state.selectedIds.clear();
   state.groupMenuId = "";
   renderGroups();
@@ -591,6 +611,11 @@ document.addEventListener("click", (event) => {
 });
 
 $("create-group").onclick = createGroup;
+$("mobile-group-select").onchange = (event) => {
+  const value = event.target.value;
+  if (value.startsWith("group:")) selectGroup(value.slice(6));
+  else selectView(value.slice(5));
+};
 $("search").oninput = () => {
   state.search = $("search").value;
   $("clear-search").hidden = !state.search;

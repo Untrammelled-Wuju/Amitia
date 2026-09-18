@@ -32,7 +32,9 @@
     "platforms": [
       "windows",
       "linux",
-      "macos"
+      "macos",
+      "android",
+      "ios"
     ]
   },
   "modules": [
@@ -325,6 +327,10 @@
                 "type": "web_restricted",
                 "contributionId": "emote-page"
               },
+              "mobile": {
+                "type": "web_restricted",
+                "contributionId": "emote-page"
+              },
               "electron_windows": {
                 "type": "web_restricted",
                 "contributionId": "emote-page"
@@ -359,6 +365,9 @@
             "trustLevel": "official",
             "entries": {
               "web": {
+                "type": "declarative"
+              },
+              "mobile": {
                 "type": "declarative"
               },
               "electron_windows": {
@@ -412,6 +421,10 @@
             "fallbackProviderId": "builtin.amitia.message-renderer",
             "entries": {
               "web": {
+                "type": "web_restricted",
+                "contributionId": "emote-message"
+              },
+              "mobile": {
                 "type": "web_restricted",
                 "contributionId": "emote-message"
               },

@@ -94,10 +94,11 @@ class RealtimeVisualPlugin : FlutterPlugin,
                 stopProjectionService()
                 return
             }
-            val manager = context.getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
-            try {
-                val mediaProjection = manager.getMediaProjection(resultCode, data)
-                startProjection(mediaProjection)
+                val manager = context.getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
+                try {
+                    val mediaProjection = manager.getMediaProjection(resultCode, data)
+                        ?: throw IllegalStateException("MediaProjection is unavailable")
+                    startProjection(mediaProjection)
                 result.success(null)
             } catch (error: Throwable) {
                 stopProjectionService()

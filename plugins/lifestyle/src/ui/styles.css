@@ -291,6 +291,13 @@ input[type="range"] {
 }
 
 @media (max-width: 560px) {
+  button,
+  input,
+  select,
+  textarea {
+    min-height: 44px;
+  }
+
   .grid {
     grid-template-columns: 1fr;
   }
@@ -300,8 +307,25 @@ input[type="range"] {
     flex-direction: column;
   }
 
+  .life-tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 4px;
+    scrollbar-width: thin;
+  }
+
+  .life-tabs button {
+    flex: 0 0 auto;
+    min-height: 44px;
+    padding-inline: 14px;
+  }
+
   .timeline-item {
     grid-template-columns: 1fr;
+  }
+
+  .actions button {
+    flex: 1 1 140px;
   }
 }
 

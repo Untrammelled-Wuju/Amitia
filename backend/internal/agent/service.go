@@ -54,7 +54,7 @@ type WebhookRequest struct {
 const systemFormatInstruction = `【回复格式 - 系统固定规则】
 
 每句话必须单独一行，用换行符分隔。
-每句话尽量短，像微信连续消息一样。
+每句话尽量短。
 能一句说完就一句，不要写长段落。
 不要把多句话连成一段。
 不要用句号连接多个意思。`
@@ -290,10 +290,6 @@ func (s *service) Webhook(ctx context.Context, req WebhookRequest) (map[string]i
 	forceVoice := result.Response.ForceVoice
 	replyText := result.Response.Reply
 	log.Printf("[DIAG-Webhook] forceVoice=%v channel=%s", forceVoice, req.Channel)
-	if req.Channel == "wechat" && forceVoice {
-		forceVoice = false
-		replyText = "抱歉，由于微信平台限制，暂不支持语音回复。以下为文字回复：\n\n" + replyText
-	}
 	outMsg := map[string]interface{}{"text": replyText, "forceVoice": forceVoice, "audioUrls": result.Response.AudioUrls}
 	if len(result.Response.Lines) > 0 {
 		outMsg["texts"] = result.Response.Lines

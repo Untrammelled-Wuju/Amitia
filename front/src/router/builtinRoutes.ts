@@ -30,8 +30,10 @@ export const builtinBusinessRoutes: RouteRecordRaw[] = [
 { path: "/extensions/packages", name: "extensionPackages", component: () => import("@/views/extensions/packages/PackageManagerView.vue"), meta: { requiresAuth: true } },
 { path: "/extensions/agent-skills", name: "extensionAgentSkills", component: () => import("@/views/extensions/agent-skills/AgentSkillListView.vue"), meta: { requiresAuth: true } },
 { path: "/creative-workshop", name: "creativeWorkshop", component: () => import("@/views/creative-workshop/CreativeWorkshopView.vue"), meta: { requiresAuth: true } },
-{ path: "/creative-workshop/workflows", name: "creativeWorkshopWorkflows", component: () => import("@/views/creative-workshop/workflows/WorkflowListView.vue"), meta: { requiresAuth: true } },
-{ path: "/creative-workshop/workflows/:id", name: "creativeWorkshopWorkflowBuilder", component: () => import("@/views/creative-workshop/workflows/WorkflowBuilderView.vue"), meta: { requiresAuth: true } },
+{ path: "/extensions/workflows", name: "extensionWorkflows", component: () => import("@/views/extensions/workflows/WorkflowListView.vue"), meta: { requiresAuth: true } },
+{ path: "/extensions/workflows/:id", name: "extensionWorkflowBuilder", component: () => import("@/views/extensions/workflows/WorkflowBuilderView.vue"), meta: { requiresAuth: true } },
+{ path: "/creative-workshop/workflows", redirect: (to) => ({ path: "/extensions/workflows", query: to.query }) },
+{ path: "/creative-workshop/workflows/:id", redirect: (to) => ({ path: `/extensions/workflows/${String(to.params.id)}`, query: to.query }) },
 
 { path: "/creative-workshop/pet", name: "creativeWorkshopPet", component: () => import("@/views/creative-workshop/PetHubView.vue"), meta: { requiresAuth: true } },
 { path: "/creative-workshop/pet/create", name: "creativeWorkshopPetCreate", component: () => import("@/views/creative-workshop/PetCreationView.vue"), meta: { requiresAuth: true } },
@@ -39,8 +41,6 @@ export const builtinBusinessRoutes: RouteRecordRaw[] = [
 { path: "/creative-workshop/pet/processing/:processingTaskId", name: "creativeWorkshopPetProcessing", component: () => import("@/views/creative-workshop/PetProcessingReviewView.vue"), meta: { requiresAuth: true } },
 { path: "/creative-workshop/pet/processing/:processingTaskId/actions/:actionKey/editor", name: "creativeWorkshopActionEditor", component: () => import("@/views/creative-workshop/ActionEditorView.vue"), meta: { requiresAuth: true } },
 { path: "/creative-workshop/pet/installations", name: "pet-installations", component: () => import("@/views/creative-workshop/PetInstallationsView.vue"), meta: { requiresAuth: true } },
-{ path: "/qq", name: "qq", component: () => import("@/views/qq-connect/QqConnectView.vue"), meta: { requiresAuth: true } },
-{ path: "/wechat", name: "wechat", component: () => import("@/views/wechat-connect/WechatConnectView.vue"), meta: { requiresAuth: true } },
 {
   path: "/settings",
   component: () => import("@/views/settings/SettingsView.vue"),

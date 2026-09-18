@@ -659,7 +659,7 @@ describe("DesktopPetManager disable transaction", () => {
 describe("DesktopPetManager lifecycle serialization", () => {
   it("queues shutdown behind an in-flight lifecycle mutation", async () => {
     const manager = makeManager();
-    let releaseMutation: (() => void) | null = null;
+    let releaseMutation: () => void = () => {};
     const internal = manager as never as {
       runLifecycleMutation: <T>(operation: () => Promise<T>) => Promise<T>;
       teardownRecoveryHandlers: ReturnType<typeof vi.fn>;
@@ -682,7 +682,7 @@ describe("DesktopPetManager lifecycle serialization", () => {
     await Promise.resolve();
     expect(internal.stopRuntime).not.toHaveBeenCalled();
 
-    (releaseMutation as () => void)();
+    releaseMutation();
     await mutation;
     await shutdown;
 
@@ -708,7 +708,7 @@ describe("DesktopPetManager lifecycle serialization", () => {
       calls.push("recovery");
     });
 
-    let releaseMutation: (() => void) | null = null;
+    let releaseMutation: () => void = () => {};
     const mutation = internal.runLifecycleMutation(
       () => new Promise<void>((resolve) => {
         calls.push("mutation-start");
@@ -723,7 +723,7 @@ describe("DesktopPetManager lifecycle serialization", () => {
     await Promise.resolve();
     expect(calls).toEqual(["mutation-start"]);
 
-    (releaseMutation as () => void)();
+    releaseMutation();
     await mutation;
     await recovery;
 

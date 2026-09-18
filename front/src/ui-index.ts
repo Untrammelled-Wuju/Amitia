@@ -12,7 +12,6 @@ export { default as ErrorPanel } from "./components/ErrorPanel.vue";
 
 // Shared Views
 export { default as WebChatView } from "./views/web-chat/WebChatView.vue";
-export { default as WechatConnectView } from "./views/wechat-connect/WechatConnectView.vue";
 export { default as ModelConfigView } from "./views/model-config/ModelConfigView.vue";
 export { default as CharacterConfigView } from "./views/character-config/CharacterConfigView.vue";
 export { default as CharacterVoiceView } from "./views/character-voice/CharacterVoiceView.vue";

@@ -230,16 +230,25 @@
           show-icon
           :closable="false"
         />
-        <el-alert
-          v-else-if="installPreview.errors?.length"
-          :title="installPreview.errors.join('；')"
-          type="error"
-          show-icon
-          :closable="false"
-        />
+        <template v-else>
+          <el-alert
+            v-if="previewRequiresAdministrator"
+            title="该游戏插件需要 Windows 管理员权限来配置网络隔离。请关闭 Amitia，右键 Amitia 并选择“以管理员身份运行”，然后重新选择该插件包。"
+            type="warning"
+            show-icon
+            :closable="false"
+          />
+          <el-alert
+            v-if="nonAdministratorPreviewErrors.length"
+            :title="nonAdministratorPreviewErrors.join('；')"
+            type="error"
+            show-icon
+            :closable="false"
+          />
+        </template>
 
         <el-alert
-          v-else-if="previewMatchesInstalledVersion"
+          v-if="previewIsGame && !installPreview.errors?.length && previewMatchesInstalledVersion"
           :title="`版本 ${installPreview.version} 已安装，无需重复安装。`"
           type="info"
           show-icon
@@ -511,6 +520,20 @@ const previewIsGame = computed(() => {
   if (!preview) return false;
   return preview.managementTarget === "game_center" || preview.contributionKinds?.includes("gamex") === true;
 });
+
+const previewRequiresAdministrator = computed(() =>
+  (installPreview.value?.errors || []).some((error) =>
+    error.includes("gamex_network_sandbox_unavailable")
+    && error.includes("Windows")
+    && (error.includes("requires elevation") || error.includes("exit status 5")),
+  ),
+);
+
+const nonAdministratorPreviewErrors = computed(() =>
+  (installPreview.value?.errors || []).filter(
+    (error) => !error.includes("gamex_network_sandbox_unavailable"),
+  ),
+);
 
 const needsInstallAcknowledgement = computed(() => {
   const preview = installPreview.value;

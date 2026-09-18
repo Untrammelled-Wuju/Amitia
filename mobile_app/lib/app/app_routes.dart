@@ -3,8 +3,6 @@ abstract final class AppRoutes {
   static const conversations = '/conversations';
   static const dashboard = '/dashboard';
   static const channels = '/channels';
-  static const channelsWechat = '/channels/wechat';
-  static const channelsQq = '/channels/qq';
   static const characters = '/characters';
   static const charactersCreate = '/characters/create';
   static const agent = '/agent';
@@ -45,7 +43,6 @@ abstract final class AppRoutes {
   static const settingsPermissions = '/settings/permissions';
   static const settingsAndroidAutomation = '/settings/android-automation';
   static const settingsBackup = '/settings/backup';
-  static const settingsAi = '/settings/ai';
   static const settingsAsr = '/settings/asr';
   static const settingsSystem = '/settings/system';
   static const settingsTemporal = '/settings/temporal';

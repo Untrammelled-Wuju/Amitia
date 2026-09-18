@@ -11,7 +11,7 @@ SPDX-License-Identifier: AGPL-3.0-only
       style="margin-bottom: 12px"
     >
       <template #title>
-        安全提示：角色不能声称自己是真人、真实恋人，不能诱导依赖、索要隐私、代替回复微信好友，不能输出成人化、操控式、威胁式或危险内容。
+        安全提示：角色不能声称自己是真人、真实恋人，不能诱导依赖、索要隐私、代替用户回复他人，不能输出成人化、操控式、威胁式或危险内容。
       </template>
     </el-alert>
 
@@ -217,6 +217,7 @@ const {
   exportPack,
   previewImport,
   confirmImport,
+  setSelectedFile,
   loadPackHistory,
   cancelImportPreview,
 } = useCharacterImportExport();

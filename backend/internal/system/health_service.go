@@ -28,8 +28,7 @@ func (s *service) Health() map[string]interface{} {
 	return map[string]interface{}{
 		"health": true, "version": "26.2.0-beta", "deployMode": "desktop-local",
 		"database": dbStatus, "model": modelStatus,
-		"wechat": s.getWechatHealthStatus(), "qq": s.getQQHealthStatus(), "web": "enabled",
-		"wechat_running": s.isWechatSidecarRunning(), "qq_running": s.isQQSidecarRunning(),
+		"web":    "enabled",
 		"uptime": int(time.Since(s.startTime).Seconds()),
 	}
 }

@@ -78,7 +78,9 @@ class _SystemSettingsPageState extends ConsumerState<SystemSettingsPage> {
       }
       setState(() {
         _healthData = health;
-        _notifications = notifications?['enabled'] == true && notifications?['subscribed'] == true;
+        _notifications =
+            notifications?['enabled'] == true &&
+            notifications?['subscribed'] == true;
         _language = language;
         _loadingHealth = false;
       });
@@ -116,9 +118,9 @@ class _SystemSettingsPageState extends ConsumerState<SystemSettingsPage> {
       if (result == null) return;
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('更新通知设置失败: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('更新通知设置失败: $e')));
       }
     } finally {
       if (mounted) setState(() => _notificationsUpdating = false);
@@ -136,14 +138,20 @@ class _SystemSettingsPageState extends ConsumerState<SystemSettingsPage> {
     final dispatcher = ref.read(nativeBridgePlatformDispatcherProvider);
     final response = await dispatcher.execute(<String, dynamic>{
       'protocolVersion': 1,
-      'requestId': 'settings-notification-permission-${DateTime.now().microsecondsSinceEpoch}',
+      'requestId':
+          'settings-notification-permission-${DateTime.now().microsecondsSinceEpoch}',
       'platform': platform,
       'operation': 'notification.request_permission',
       'payload': const <String, dynamic>{},
     });
-    if (!const {'success', 'ok'}.contains((response['status'] ?? '').toString())) {
+    if (!const {
+      'success',
+      'ok',
+    }.contains((response['status'] ?? '').toString())) {
       final error = response['error'];
-      final message = error is Map ? (error['message'] ?? error['code'])?.toString() : null;
+      final message = error is Map
+          ? (error['message'] ?? error['code'])?.toString()
+          : null;
       throw StateError(message?.isNotEmpty == true ? message! : '系统通知权限未授予');
     }
   }
@@ -156,9 +164,9 @@ class _SystemSettingsPageState extends ConsumerState<SystemSettingsPage> {
       if (mounted) setState(() => _language = language);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('保存语言设置失败: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('保存语言设置失败: $e')));
       }
     }
   }
@@ -172,7 +180,9 @@ class _SystemSettingsPageState extends ConsumerState<SystemSettingsPage> {
       final accepted = backendResult?['accepted'] == true;
       final reason = backendResult?['reason']?.toString();
       if (!accepted) {
-        throw StateError(reason?.isNotEmpty == true ? reason : '后端通知配置未就绪');
+        throw StateError(
+          reason != null && reason.isNotEmpty ? reason : '后端通知配置未就绪',
+        );
       }
       final platform = switch (defaultTargetPlatform) {
         TargetPlatform.android => 'android',
@@ -186,7 +196,8 @@ class _SystemSettingsPageState extends ConsumerState<SystemSettingsPage> {
       final dispatcher = ref.read(nativeBridgePlatformDispatcherProvider);
       final nativeResult = await dispatcher.execute({
         'protocolVersion': 1,
-        'requestId': 'settings-notification-test-${DateTime.now().microsecondsSinceEpoch}',
+        'requestId':
+            'settings-notification-test-${DateTime.now().microsecondsSinceEpoch}',
         'platform': platform,
         'operation': 'notification.post',
         'payload': const {
@@ -196,19 +207,28 @@ class _SystemSettingsPageState extends ConsumerState<SystemSettingsPage> {
           'silent': false,
         },
       });
-      if (!const {'success', 'ok'}.contains((nativeResult['status'] ?? '').toString())) {
+      if (!const {
+        'success',
+        'ok',
+      }.contains((nativeResult['status'] ?? '').toString())) {
         final error = nativeResult['error'];
-        final message = error is Map ? (error['message'] ?? error['code'])?.toString() : null;
+        final message = error is Map
+            ? (error['message'] ?? error['code'])?.toString()
+            : null;
         throw StateError(message?.isNotEmpty == true ? message! : '系统通知投递失败');
       }
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('测试通知已真实投递到系统通知中心')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('测试通知已真实投递到系统通知中心')));
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('发送测试通知失败: ${e.toString().replaceFirst('Bad state: ', '').replaceFirst('Unsupported operation: ', '')}')),
+          SnackBar(
+            content: Text(
+              '发送测试通知失败: ${e.toString().replaceFirst('Bad state: ', '').replaceFirst('Unsupported operation: ', '')}',
+            ),
+          ),
         );
       }
     }
@@ -217,7 +237,11 @@ class _SystemSettingsPageState extends ConsumerState<SystemSettingsPage> {
   @override
   Widget build(BuildContext context) {
     return AmitiaScaffold(
-      appBar: AmitiaAppBar(title: '系统设置', showBackButton: true, fallbackRoute: AppRoutes.settings),
+      appBar: AmitiaAppBar(
+        title: '系统设置',
+        showBackButton: true,
+        fallbackRoute: AppRoutes.settings,
+      ),
       body: ListView(
         padding: EdgeInsets.symmetric(vertical: AppSpacing.md),
         children: [
@@ -243,21 +267,45 @@ class _SystemSettingsPageState extends ConsumerState<SystemSettingsPage> {
               onChanged: _notificationsUpdating ? null : _setNotifications,
             ),
             _divider(),
-            _buildNavTile(icon: Icons.notifications_active_outlined, title: '发送测试通知', onTap: _testNotification),
+            _buildNavTile(
+              icon: Icons.notifications_active_outlined,
+              title: '发送测试通知',
+              onTap: _testNotification,
+            ),
           ]),
           SizedBox(height: AppSpacing.sectionGap),
           _SectionLabel(text: '功能入口'),
           SizedBox(height: AppSpacing.sm),
           _buildCard([
-            _buildNavTile(icon: Icons.record_voice_over_outlined, title: '语音识别', onTap: () => context.push(AppRoutes.settingsAsr)),
+            _buildNavTile(
+              icon: Icons.record_voice_over_outlined,
+              title: '语音识别',
+              onTap: () => context.push(AppRoutes.settingsAsr),
+            ),
             _divider(),
-            _buildNavTile(icon: Icons.palette_outlined, title: '外观设置', onTap: () => context.push(AppRoutes.settingsAppearance)),
+            _buildNavTile(
+              icon: Icons.palette_outlined,
+              title: '外观设置',
+              onTap: () => context.push(AppRoutes.settingsAppearance),
+            ),
             _divider(),
-            _buildNavTile(icon: Icons.schedule_outlined, title: '时间设置', onTap: () => context.push(AppRoutes.settingsTemporal)),
+            _buildNavTile(
+              icon: Icons.schedule_outlined,
+              title: '时间设置',
+              onTap: () => context.push(AppRoutes.settingsTemporal),
+            ),
             _divider(),
-            _buildNavTile(icon: Icons.color_lens_outlined, title: '主题设置', onTap: () => context.push(AppRoutes.settingsTheme)),
+            _buildNavTile(
+              icon: Icons.color_lens_outlined,
+              title: '主题设置',
+              onTap: () => context.push(AppRoutes.settingsTheme),
+            ),
             _divider(),
-            _buildNavTile(icon: Icons.cleaning_services_outlined, title: '存储清理', onTap: () => context.push(AppRoutes.settingsStorage)),
+            _buildNavTile(
+              icon: Icons.cleaning_services_outlined,
+              title: '存储清理',
+              onTap: () => context.push(AppRoutes.settingsStorage),
+            ),
           ]),
           SizedBox(height: AppSpacing.sectionGap),
           Padding(
@@ -312,11 +360,14 @@ class _SystemSettingsPageState extends ConsumerState<SystemSettingsPage> {
               child: Center(child: CircularProgressIndicator()),
             )
           : _healthError != null
-              ? Padding(
-                  padding: EdgeInsets.all(AppSpacing.md),
-                  child: Text('获取系统状态失败: $_healthError', style: TextStyle(color: context.error)),
-                )
-              : _buildHealthContent(),
+          ? Padding(
+              padding: EdgeInsets.all(AppSpacing.md),
+              child: Text(
+                '获取系统状态失败: $_healthError',
+                style: TextStyle(color: context.error),
+              ),
+            )
+          : _buildHealthContent(),
     );
   }
 
@@ -333,7 +384,8 @@ class _SystemSettingsPageState extends ConsumerState<SystemSettingsPage> {
         : <String, dynamic>{};
     final version = (health['version'] ?? '').toString();
     final ready = health['ready'] == true || health['health'] == true;
-    final databaseHealthy = health['database'] == 'ok' || checks['database'] == 'ok';
+    final databaseHealthy =
+        health['database'] == 'ok' || checks['database'] == 'ok';
     final modelConfigured = health['model'] == 'configured';
 
     final components = <({String name, bool ready})>[
@@ -359,13 +411,21 @@ class _SystemSettingsPageState extends ConsumerState<SystemSettingsPage> {
                 ),
               ),
               SizedBox(width: AppSpacing.sm),
-              Text(ready ? '系统就绪' : '系统未完全就绪', style: AppTypography.body(context)),
+              Text(
+                ready ? '系统就绪' : '系统未完全就绪',
+                style: AppTypography.body(context),
+              ),
               const Spacer(),
-              if (version.isNotEmpty) Text('v$version', style: AppTypography.label(context)),
+              if (version.isNotEmpty)
+                Text('v$version', style: AppTypography.label(context)),
               SizedBox(width: AppSpacing.sm),
               GestureDetector(
                 onTap: _loadSettings,
-                child: Icon(Icons.refresh, size: 18, color: context.textTertiary),
+                child: Icon(
+                  Icons.refresh,
+                  size: 18,
+                  color: context.textTertiary,
+                ),
               ),
             ],
           ),
@@ -398,7 +458,10 @@ class _SystemSettingsPageState extends ConsumerState<SystemSettingsPage> {
           ),
           if ((health['deployMode'] ?? '').toString().isNotEmpty) ...[
             SizedBox(height: AppSpacing.sm),
-            Text('部署模式：${health['deployMode']}', style: AppTypography.label(context)),
+            Text(
+              '部署模式：${health['deployMode']}',
+              style: AppTypography.label(context),
+            ),
           ],
         ],
       ),
@@ -412,7 +475,11 @@ class _SystemSettingsPageState extends ConsumerState<SystemSettingsPage> {
     );
   }
 
-  Widget _buildNavTile({required IconData icon, required String title, required VoidCallback onTap}) {
+  Widget _buildNavTile({
+    required IconData icon,
+    required String title,
+    required VoidCallback onTap,
+  }) {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
@@ -423,7 +490,10 @@ class _SystemSettingsPageState extends ConsumerState<SystemSettingsPage> {
             Container(
               width: 32,
               height: 32,
-              decoration: BoxDecoration(color: context.accentSoft, shape: BoxShape.circle),
+              decoration: BoxDecoration(
+                color: context.accentSoft,
+                shape: BoxShape.circle,
+              ),
               child: Icon(icon, size: 17, color: context.accentPrimary),
             ),
             const SizedBox(width: 12),
@@ -452,7 +522,10 @@ class _SystemSettingsPageState extends ConsumerState<SystemSettingsPage> {
             Container(
               width: 32,
               height: 32,
-              decoration: BoxDecoration(color: context.accentSoft, shape: BoxShape.circle),
+              decoration: BoxDecoration(
+                color: context.accentSoft,
+                shape: BoxShape.circle,
+              ),
               child: Icon(icon, size: 17, color: context.accentPrimary),
             ),
             const SizedBox(width: 12),
@@ -466,11 +539,18 @@ class _SystemSettingsPageState extends ConsumerState<SystemSettingsPage> {
     );
   }
 
-  void _showOptionSheet(String title, List<String> options, String current, ValueChanged<String> onChanged) {
+  void _showOptionSheet(
+    String title,
+    List<String> options,
+    String current,
+    ValueChanged<String> onChanged,
+  ) {
     showModalBottomSheet(
       context: context,
       backgroundColor: context.surfacePrimary,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
       builder: (ctx) {
         return SafeArea(
           child: Column(
@@ -484,9 +564,13 @@ class _SystemSettingsPageState extends ConsumerState<SystemSettingsPage> {
                 final isSelected = opt == current;
                 return ListTile(
                   leading: Icon(
-                    isSelected ? Icons.radio_button_checked : Icons.radio_button_off,
+                    isSelected
+                        ? Icons.radio_button_checked
+                        : Icons.radio_button_off,
                     size: 20,
-                    color: isSelected ? context.accentPrimary : context.textTertiary,
+                    color: isSelected
+                        ? context.accentPrimary
+                        : context.textTertiary,
                   ),
                   title: Text(opt, style: AppTypography.body(context)),
                   onTap: () {
@@ -502,7 +586,6 @@ class _SystemSettingsPageState extends ConsumerState<SystemSettingsPage> {
       },
     );
   }
-
 }
 
 class _SectionLabel extends StatelessWidget {
@@ -512,7 +595,12 @@ class _SectionLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.fromLTRB(AppSpacing.pagePadding, AppSpacing.sm, AppSpacing.pagePadding, AppSpacing.sm),
+      padding: EdgeInsets.fromLTRB(
+        AppSpacing.pagePadding,
+        AppSpacing.sm,
+        AppSpacing.pagePadding,
+        AppSpacing.sm,
+      ),
       child: Text(text, style: AppTypography.caption(context)),
     );
   }

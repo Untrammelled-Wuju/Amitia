@@ -1017,12 +1017,9 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	providerInvocationService := capability.NewProviderInvocationService(capabilityService, adapterRegistry)
 	kernelProviderInvoker := NewKernelProviderInvoker(providerInvocationService)
 
-	// CapabilityChannelResolver 是正式的 Channel 发现机制：
-	// channel.deliver.* → CapabilityService → ProviderInvocation
-	// 原 BuildChannelResolverFromConfig 只作为 Builtin Channel Provider 内部实现（fallback）
-	capabilityChannelInvoker := delivery.NewProviderInvocationCapabilityInvoker(providerInvocationService, "")
-	builtinChannelResolver := delivery.BuildChannelResolverFromConfig()
-	capabilityChannelResolver := delivery.NewCapabilityChannelResolver(capabilityChannelInvoker, builtinChannelResolver)
+	pluginChannelProviders := delivery.NewPluginChannelProviderRegistry(capabilityProviderRegistry)
+	builtinChannelResolver := delivery.BuildBuiltinChannelResolver()
+	capabilityChannelResolver := delivery.NewCapabilityChannelResolver(pluginChannelProviders, builtinChannelResolver)
 	if b.channelStore == nil {
 		b.channelStore = delivery.NewResolverChannelStore(capabilityChannelResolver)
 	}
@@ -1505,6 +1502,9 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	hostCmdRegistry := NewHostCommandRegistry()
 	if err := SetupDefaultHostCommands(hostCmdRegistry, hostAPIGateway); err != nil {
 		return nil, fmt.Errorf("kernel: setup host commands: %w", err)
+	}
+	if err := SetupChannelHostCommands(hostCmdRegistry, pluginChannelProviders); err != nil {
+		return nil, fmt.Errorf("kernel: setup channel host commands: %w", err)
 	}
 	actionExecutor := NewUIActionExecutor(hostAPIGateway, workflowExecutor, workflowExecRepo, hostCmdRegistry, opRepo, toolRegistry, scopeManager, newUIActionSnapshotDeriver(scopeStore, permSnapshotStore, permIDValidator))
 	sandboxDispatcher := buildSandboxActionDispatcher(sandboxActionDispatcherDeps{

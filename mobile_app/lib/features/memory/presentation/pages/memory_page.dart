@@ -72,19 +72,20 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
     final memoriesAsync = ref.watch(memoryListProvider);
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
-        title: '记忆',
+        title: _searchVisible ? '搜索记忆' : '记忆',
         navigation: AmitiaAppBarNavigation.back,
         actions: [
           AmitiaIconButton(
             icon: _searchVisible ? Icons.close : Icons.search,
+            tooltip: _searchVisible ? '退出搜索' : '搜索',
             onPressed: () {
+              FocusScope.of(context).unfocus();
+              _searchController.clear();
               setState(() {
                 _searchVisible = !_searchVisible;
-                if (!_searchVisible) {
-                  _searchController.clear();
-                  _searchQuery = '';
-              }
-            });
+                _selectedCategory = 0;
+                _searchQuery = '';
+              });
             },
           ),
         ],
@@ -111,28 +112,13 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
             ),
           ),
           data: (memories) {
+            if (_searchVisible) {
+              return _buildSearchView(context, memories);
+            }
             final filtered = _filterMemories(memories);
             return Column(
               children: [
                 _buildMemoryTools(context),
-                if (_searchVisible)
-                  Padding(
-                    padding: EdgeInsets.fromLTRB(
-                      AppSpacing.pagePadding,
-                      AppSpacing.sm,
-                      AppSpacing.pagePadding,
-                      AppSpacing.xs,
-                    ),
-                    child: AmitiaSearchField(
-                      hintText: '搜索记忆',
-                      controller: _searchController,
-                      onChanged: (value) {
-                        setState(() {
-                          _searchQuery = value;
-                        });
-                      },
-                    ),
-                  ),
                 _buildCategoryTabs(context),
                 SizedBox(height: AppSpacing.sm),
                 Expanded(
@@ -158,6 +144,59 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
           },
         ),
       ),
+    );
+  }
+
+  Widget _buildSearchView(BuildContext context, List<MemoryDto> memories) {
+    final query = _searchQuery.trim();
+    final results = query.isEmpty ? const <MemoryDto>[] : _filterMemories(memories);
+    return Column(
+      children: [
+        Padding(
+          padding: EdgeInsets.fromLTRB(
+            AppSpacing.pagePadding,
+            AppSpacing.md,
+            AppSpacing.pagePadding,
+            AppSpacing.sm,
+          ),
+          child: AmitiaSearchField(
+            hintText: '搜索记忆内容',
+            controller: _searchController,
+            autofocus: true,
+            onChanged: (value) {
+              setState(() {
+                _searchQuery = value;
+              });
+            },
+          ),
+        ),
+        Expanded(
+          child: query.isEmpty
+              ? const AmitiaEmptyState(
+                  icon: Icons.search,
+                  title: '输入关键词',
+                  subtitle: '在当前页面搜索记忆内容',
+                )
+              : results.isEmpty
+              ? const AmitiaEmptyState(
+                  icon: Icons.search_off,
+                  title: '未找到相关记忆',
+                  subtitle: '尝试更换关键词',
+                )
+              : ListView.separated(
+                  keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+                  padding: EdgeInsets.symmetric(
+                    horizontal: AppSpacing.pagePadding,
+                    vertical: AppSpacing.sm,
+                  ),
+                  itemCount: results.length,
+                  separatorBuilder: (_, _) => SizedBox(height: AppSpacing.sm),
+                  itemBuilder: (context, index) {
+                    return _buildMemoryCard(context, results[index]);
+                  },
+                ),
+        ),
+      ],
     );
   }
 

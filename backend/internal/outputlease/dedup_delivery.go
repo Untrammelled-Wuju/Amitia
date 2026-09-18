@@ -363,11 +363,9 @@ func DeliverableChannels(targetChannel string, seen map[string]bool) []string {
 			continue
 		}
 		if ch == "all" {
-			for _, c := range []string{"web", "wechat", "qq"} {
-				if !seen[c] && !seenLocal[c] {
-					result = append(result, c)
-					seenLocal[c] = true
-				}
+			if !seen["web"] && !seenLocal["web"] {
+				result = append(result, "web")
+				seenLocal["web"] = true
 			}
 			continue
 		}

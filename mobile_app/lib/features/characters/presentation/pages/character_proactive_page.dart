@@ -285,8 +285,6 @@ class _CharacterProactivePageState extends ConsumerState<CharacterProactivePage>
             items: const [
               DropdownMenuItem(value: 'all', child: Text('全部/自动')), 
               DropdownMenuItem(value: 'web', child: Text('Web')),
-              DropdownMenuItem(value: 'wechat', child: Text('微信')),
-              DropdownMenuItem(value: 'qq', child: Text('QQ')),
             ],
             onChanged: (value) => _setSetting('channel', value ?? 'all'),
           ),
@@ -494,7 +492,7 @@ class _CharacterProactivePageState extends ConsumerState<CharacterProactivePage>
               DropdownButton<String>(
                 value: channel,
                 isExpanded: true,
-                items: const ['all', 'web', 'wechat', 'qq', 'web,wechat'].map((value) => DropdownMenuItem(value: value, child: Text(value))).toList(),
+                items: const ['all', 'web'].map((value) => DropdownMenuItem(value: value, child: Text(value))).toList(),
                 onChanged: (value) => setSheetState(() => channel = value ?? 'web'),
               ),
               SizedBox(height: AppSpacing.md),

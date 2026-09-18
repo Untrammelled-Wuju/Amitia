@@ -460,15 +460,7 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 		reply = applyExpressionLengthLimit(reply, req.Runtime)
 	}
 
-	var maxLen int
-	switch kind {
-	case expression.ChannelWechat:
-		maxLen = util.MaxWechatMessageLen
-	case expression.ChannelQQ:
-		maxLen = util.MaxQQMessageLen
-	default:
-		maxLen = util.MaxWebMessageLen
-	}
+	maxLen := util.MaxWebMessageLen
 	realLines := util.SplitLongMessage(reply, maxLen)
 
 	realLines = DeduplicateAdjacentLines(realLines)
@@ -502,14 +494,7 @@ func resolveExpressionChannel(channel string, voiceMessage bool) expression.Chan
 	if voiceMessage {
 		return expression.ChannelVoice
 	}
-	switch strings.ToLower(strings.TrimSpace(channel)) {
-	case "wechat":
-		return expression.ChannelWechat
-	case "qq":
-		return expression.ChannelQQ
-	default:
-		return expression.ChannelWeb
-	}
+	return expression.ChannelWeb
 }
 
 func (s *service) PostCommitActions(ctx context.Context, result *ComputeResult) {

@@ -1,7 +1,6 @@
 import type { Component } from "vue";
 import {
   ChatDotRound,
-  ChatDotSquare,
   Connection,
   Odometer,
   Opportunity,
@@ -52,13 +51,6 @@ export const desktopNavGroups: AppNavGroup[] = [
     ],
   },
   {
-    key: "links",
-    items: [
-      { key: "wechat", to: "/wechat", label: "微信连接", icon: Connection },
-      { key: "qq", to: "/qq", label: "QQ 连接", icon: ChatDotSquare },
-    ],
-  },
-  {
     key: "system",
     items: [
       { key: "devices", to: "/devices", label: "我的设备", icon: Connection },
@@ -105,6 +97,7 @@ const extraTitles = [
   { path: "/emotes", label: "表情包管理" },
   { path: "/extensions/mcp", label: "MCP 服务" },
   { path: "/extensions/packages", label: "扩展包" },
+  { path: "/extensions/workflows", label: "工作流" },
   { path: "/extensions", label: "扩展中心" },
   { path: "/kernel", label: "扩展包" },
   { path: "/kernel/trusted-services", label: "可信服务运行时" },

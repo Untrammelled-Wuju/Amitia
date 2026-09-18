@@ -131,7 +131,7 @@ compatibility, maintenance, testing, and migration to Extension Kernel.
       destroy-on-close
     >
       <el-steps :active="preview ? 1 : 0" finish-status="success" simple
-        ><el-step title="选择来源" /><el-step title="检查并确认"
+        ><el-step title="选择来源" /><el-step title="检查并确认" />
       </el-steps>
 
       <div v-if="!preview" class="source-grid">

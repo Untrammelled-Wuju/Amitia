@@ -61,7 +61,13 @@ export function useCharacterImportExport() {
         "/api/characters/import-card/preview",
         selectedFile.value,
       );
-      importPreview.value = d;
+      importPreview.value = d?.preview
+        ? {
+            ...d.preview,
+            format: d.format || d.preview.format,
+            sourceHash: d.sourceHash,
+          }
+        : d;
     } catch (err: any) {
       ElMessage.error(
         "预览失败: " + (err.response?.data?.message || err.message),

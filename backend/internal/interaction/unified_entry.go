@@ -19,8 +19,6 @@ type EntrySource string
 
 const (
 	EntrySourceWeb       EntrySource = "web"
-	EntrySourceWeChat    EntrySource = "wechat"
-	EntrySourceQQ        EntrySource = "qq"
 	EntrySourceVoice     EntrySource = "voice"
 	EntrySourceProactive EntrySource = "proactive"
 	EntrySourceRuntime   EntrySource = "runtime"
@@ -29,12 +27,10 @@ const (
 
 func ParseEntrySource(source string) EntrySource {
 	s := EntrySource(strings.ToLower(strings.TrimSpace(source)))
-	switch s {
-	case EntrySourceWeb, EntrySourceWeChat, EntrySourceQQ, EntrySourceVoice, EntrySourceProactive, EntrySourceRuntime:
-		return s
-	default:
+	if s == "" {
 		return EntrySourceUnknown
 	}
+	return s
 }
 
 type BackpressureStatus string

@@ -304,8 +304,6 @@ class _RemindersPageState extends ConsumerState<RemindersPage> {
                     decoration: const InputDecoration(labelText: '渠道', border: OutlineInputBorder()),
                     items: const [
                       DropdownMenuItem(value: 'web', child: Text('Web / App')),
-                      DropdownMenuItem(value: 'wechat', child: Text('微信')),
-                      DropdownMenuItem(value: 'qq', child: Text('QQ')),
                     ],
                     onChanged: (value) { if (value != null) setSheetState(() => channel = value); },
                   ),

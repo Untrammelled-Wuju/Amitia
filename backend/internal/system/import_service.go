@@ -280,7 +280,6 @@ type parseWarning struct {
 
 func detectFormat(text string) string {
 	timestampPattern := regexp.MustCompile(`^\d{4}[-/]\d{2}[-/]\d{2}\s+\d{2}:\d{2}`)
-	wechatPattern := regexp.MustCompile(`^\d{4}[-/]\d{2}[-/]\d{2}\s+\d{2}:\d{2}:\d{2}\s+\S+`)
 	speakerPattern := regexp.MustCompile(`^[\p{L}\p{N}_\-\p{Han}]{1,20}[\s]*[:：]`)
 	lines := strings.Split(text, "\n")
 	tsCount := 0
@@ -303,10 +302,6 @@ func detectFormat(text string) string {
 		return "auto"
 	}
 	if float64(tsCount)/float64(totalNonBlank) >= 0.3 {
-		firstLine := strings.TrimSpace(lines[0])
-		if wechatPattern.MatchString(firstLine) {
-			return "wechat"
-		}
 		return "timestamp"
 	}
 	if float64(speakerCount)/float64(totalNonBlank) >= 0.3 {
@@ -443,54 +438,6 @@ func parseMultilineFormat(text string, defaultRole string) ([]parsedMessage, []p
 	return messages, warnings
 }
 
-func parseWechatFormat(text string, defaultRole string) ([]parsedMessage, []parseWarning) {
-	wechatRe := regexp.MustCompile(`^(\d{4}[-/]\d{2}[-/]\d{2}\s+\d{2}:\d{2}:\d{2})\s+(\S+)`)
-	lines := strings.Split(text, "\n")
-	messages := make([]parsedMessage, 0)
-	warnings := make([]parseWarning, 0)
-	var currentTs, currentSpeaker string
-	lineNo := 0
-	for _, rawLine := range lines {
-		lineNo++
-		line := strings.TrimSpace(rawLine)
-		if line == "" {
-			continue
-		}
-		m := wechatRe.FindStringSubmatch(line)
-		if m != nil {
-			currentTs = m[1]
-			currentSpeaker = m[2]
-		} else if currentSpeaker != "" {
-			lastIdx := len(messages) - 1
-			if lastIdx >= 0 && messages[lastIdx].Speaker == currentSpeaker {
-				if messages[lastIdx].Content == "" {
-					messages[lastIdx].Content = line
-				} else {
-					messages[lastIdx].Content += "\n" + line
-				}
-			} else {
-				messages = append(messages, parsedMessage{
-					Speaker:    currentSpeaker,
-					Role:       defaultRole,
-					Content:    line,
-					Confidence: 0.9,
-					Timestamp:  currentTs,
-					LineNo:     lineNo,
-				})
-			}
-		} else {
-			warnings = append(warnings, parseWarning{Type: "parse_error", Message: "无法解析此行", LineNo: lineNo})
-		}
-	}
-	filtered := make([]parsedMessage, 0)
-	for _, msg := range messages {
-		if msg.Content != "" {
-			filtered = append(filtered, msg)
-		}
-	}
-	return filtered, warnings
-}
-
 func mapSpeakerNames(messages []parsedMessage, userSpeakerInput, assistantSpeakerInput, defaultRole string) []parsedMessage {
 	userNames := splitNames(userSpeakerInput)
 	assistantNames := splitNames(assistantSpeakerInput)
@@ -585,8 +532,6 @@ func (h *Handler) ParseImportsText(c *gin.Context) {
 		messages, warnings = parseTimestampFormat(text, defaultRole)
 	case "multiline":
 		messages, warnings = parseMultilineFormat(text, defaultRole)
-	case "wechat":
-		messages, warnings = parseWechatFormat(text, defaultRole)
 	default:
 		messages, warnings = parseMultilineFormat(text, defaultRole)
 		savedFormat = "multiline"

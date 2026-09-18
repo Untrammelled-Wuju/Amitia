@@ -170,15 +170,7 @@ SPDX-License-Identifier: AGPL-3.0-only
       :characters="characters"
       :import-batches="importBatches"
       :active-char-id="characterId"
-      :wechat-msg-count="wechatMsgCount"
-      :is-wechat-active="isWechatActive"
-      :wechat-online="wechatOnline"
-      :qq-msg-count="qqMsgCount"
-      :isQQActive="isQQActive"
-      :qqOnline="qqOnline"
       @select-char="handleSwitchChar"
-      @select-wechat="handleSelectWechat"
-      @select-q-q="handleSelectQQ"
       @continue-import="handleContinueImport"
     />
 
@@ -318,7 +310,7 @@ const chatExtensionContext = computed(() => {
   return {
     characterId: characterId.value,
     conversationId: convId.value,
-    channel: isWechatActive.value ? "wechat" : isQQActive.value ? "qq" : "web",
+    channel: "web",
     platform: env.platform,
     host: env.host,
     os: env.os,
@@ -487,8 +479,6 @@ const {
   convId,
   messages,
   scrollToBottom,
-  () => fetchWechatMsgCount(),
-  () => fetchQQStatus(),
   sending,
 );
 
@@ -524,8 +514,6 @@ const {
   scrollToBottom,
   disconnectSSE,
   inputRef,
-  () => fetchWechatMsgCount(),
-  () => fetchQQStatus(),
   undefined,
   replyTarget,
 );
@@ -535,12 +523,6 @@ const {
   conversations,
   importBatches,
   memories,
-  isWechatActive,
-  wechatOnline,
-  wechatMsgCount,
-  isQQActive,
-  qqOnline,
-  qqMsgCount,
   showDrawer,
   showCharPicker,
   showMemories,
@@ -549,12 +531,8 @@ const {
   loadCharacterConversation,
   fetchConversations,
   handleSelectConv,
-  handleSelectWechat,
-  handleSelectQQ,
   handleContinueImport,
   handleViewMemories,
-  fetchWechatMsgCount,
-  fetchQQStatus,
   refreshCharacters,
   fetchConvSummary,
 } = useWebChatConversation(
@@ -683,11 +661,6 @@ watch(showDrawer, (open) => {
 });
 
 onMounted(async () => {
-  fetchWechatMsgCount();
-  fetchQQStatus();
-  setInterval(fetchWechatMsgCount, 30000);
-  setInterval(() => fetchQQStatus(), 15000);
-
   connectProactiveSSE();
   history.scrollRestoration = "manual";
 
@@ -720,15 +693,6 @@ onMounted(async () => {
     await cachedGet<any[]>("/api/characters");
   if (cachedChars.value?.length) {
     characters.value = cachedChars.value;
-    const lastConv = localStorage.getItem("webchat-last-conv");
-    if (lastConv === "wechat") {
-      await handleSelectWechat(true);
-      return;
-    }
-    if (lastConv === "qq") {
-      await handleSelectQQ(true);
-      return;
-    }
     const savedId = localStorage.getItem("webchat-char-id");
     const preferred = savedId
       ? characters.value.find((c: any) => c.id === savedId)

@@ -8,11 +8,8 @@ import (
 )
 
 func TestResolveChannelGroup(t *testing.T) {
-	if resolveChannelGroup("wechat") != ChannelGroupText {
-		t.Fatal("expected wechat to be text group")
-	}
-	if resolveChannelGroup("qq") != ChannelGroupText {
-		t.Fatal("expected qq to be text group")
+	if resolveChannelGroup("plugin-channel") != ChannelGroupText {
+		t.Fatal("expected plugin channel to be text group")
 	}
 	if resolveChannelGroup("web") != ChannelGroupText {
 		t.Fatal("expected web to be text group")
@@ -23,8 +20,8 @@ func TestResolveChannelGroup(t *testing.T) {
 	if resolveChannelGroup("tts") != ChannelGroupVoice {
 		t.Fatal("expected tts to be voice group")
 	}
-	if resolveChannelGroup("unknown") != ChannelGroupAll {
-		t.Fatal("expected unknown to be all group")
+	if resolveChannelGroup("unknown") != ChannelGroupText {
+		t.Fatal("expected unknown to be text group")
 	}
 }
 
@@ -65,8 +62,8 @@ func TestSwitchChannel_UpdatesBelief(t *testing.T) {
 func TestSwitchChannel_HistoryCapped(t *testing.T) {
 	belief := GetOrCreateChannelBelief("char-chan-3")
 	for i := 0; i < 25; i++ {
-		SwitchChannel("char-chan-3", "web", "qq", "test")
-		SwitchChannel("char-chan-3", "qq", "web", "test")
+		SwitchChannel("char-chan-3", "web", "plugin-channel", "test")
+		SwitchChannel("char-chan-3", "plugin-channel", "web", "test")
 	}
 	belief.mu.RLock()
 	hlen := len(belief.SwitchHistory)

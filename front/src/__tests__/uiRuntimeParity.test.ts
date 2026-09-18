@@ -359,7 +359,7 @@ describe("DSH parity runtime contracts", () => {
       component: {} as any,
       ordering: 0,
       priority: 20,
-    }];
+    }] as any[];
     const resolved = buildUnifiedSlotItems({ multiplicity: "replaceable_single" }, server, client);
     expect(resolved).toHaveLength(1);
     expect(resolved[0]?.source).toBe("client");

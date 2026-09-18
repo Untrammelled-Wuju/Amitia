@@ -29,6 +29,7 @@
         android:label="amitia_app"
         android:name="${applicationName}"
         android:enableOnBackInvokedCallback="true"
+        android:networkSecurityConfig="@xml/network_security_config"
         android:icon="@mipmap/ic_launcher">
         <activity
             android:name=".MainActivity"
@@ -109,6 +110,9 @@
         <receiver
             android:name="com.amitia.amitia_app.workflow.WorkflowIntentReceiver"
             android:exported="true" />
+        <receiver
+            android:name="com.amitia.amitia_app.update.AppUpdateInstallReceiver"
+            android:exported="false" />
         <service
             android:name="com.amitia.amitia_app.workflow.WorkflowAutomationHealthJobService"
             android:permission="android.permission.BIND_JOB_SERVICE"

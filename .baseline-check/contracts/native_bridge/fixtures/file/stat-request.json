@@ -1,9 +1,0 @@
-{
-  "protocolVersion": 1,
-  "requestId": "req-stat-001",
-  "operation": "file.stat",
-  "payload": {
-    "mountId": "mount-documents-001",
-    "relativePath": "projects/report.pdf"
-  }
-}

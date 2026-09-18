@@ -13,41 +13,170 @@ import '../../../../core/services/providers.dart';
 import '../../../../core/settings/appearance_preferences.dart';
 import '../../../../shared/models/models.dart';
 
-List<SettingGroup> _settingsGroups({required String modelSummary, required String appearanceSummary}) => <SettingGroup>[
-  SettingGroup(title: 'AI 与个性化', items: [
-    SettingItem(title: '模型设置', icon: Icons.psychology_outlined, value: modelSummary, route: AppRoutes.settingsModels),
-    SettingItem(title: 'AI 配置', icon: Icons.smart_toy_outlined, route: AppRoutes.settingsAi),
-    SettingItem(title: '语音识别', icon: Icons.transcribe_outlined, route: AppRoutes.settingsAsr),
-    SettingItem(title: '外观设置', icon: Icons.palette_outlined, value: appearanceSummary, route: AppRoutes.settingsAppearance),
-    SettingItem(title: '主题设置', icon: Icons.color_lens_outlined, route: AppRoutes.settingsTheme),
-    SettingItem(title: '界面提供者', icon: Icons.dashboard_customize_outlined, route: AppRoutes.settingsUIProviders),
-    SettingItem(title: '个人空间', icon: Icons.person_outline, route: AppRoutes.settingsUser),
-    SettingItem(title: '时间感知', icon: Icons.schedule_outlined, route: AppRoutes.settingsTemporal),
-  ]),
-  SettingGroup(title: '系统与维护', items: [
-    SettingItem(title: 'Runtime', icon: Icons.terminal, route: AppRoutes.settingsRuntime),
-    SettingItem(title: '运行模式', icon: Icons.hub_outlined, subtitle: '桌面本地 / 私有云部署模式', route: AppRoutes.settingsRuntimeMode),
-    SettingItem(title: '长期运行维护', icon: Icons.schedule_send_outlined, subtitle: '长期任务、健康历史与日志维护', route: AppRoutes.settingsLongRunning),
-    SettingItem(title: '高级系统', icon: Icons.admin_panel_settings_outlined, subtitle: 'Space、设备审计、Usage、Bridge 与 Voice Session', route: AppRoutes.settingsAdvanced),
-    SettingItem(title: 'BDI 决策可视化', icon: Icons.account_tree_outlined, subtitle: 'BehaviorPlan、ExpressionPlan 与降级状态', route: AppRoutes.settingsDecisionViz),
-    SettingItem(title: '系统权限', icon: Icons.lock_outlined, route: AppRoutes.settingsPermissions),
-    SettingItem(title: 'Android Automation', icon: Icons.smartphone_outlined, subtitle: '执行通道、视觉能力与 Virtual Display 健康状态', route: AppRoutes.settingsAndroidAutomation),
-    SettingItem(title: '存储管理', icon: Icons.storage_outlined, route: AppRoutes.settingsStorage),
-    SettingItem(title: '安全设置', icon: Icons.security_outlined, route: AppRoutes.settingsSafety),
-    SettingItem(title: '维护工具', icon: Icons.build_circle_outlined, route: AppRoutes.settingsMaintenance),
-    SettingItem(title: '工具箱', icon: Icons.handyman_outlined, subtitle: '运行日志、状态诊断与开发辅助工具', value: '诊断工具', route: AppRoutes.settingsToolbox),
-  ]),
-  SettingGroup(title: '部署与隐私', items: [
-    SettingItem(title: '部署配置', icon: Icons.cloud_upload_outlined, route: AppRoutes.settingsDeployment),
-    SettingItem(title: '隐私扫描', icon: Icons.privacy_tip_outlined, route: AppRoutes.settingsPrivacyScan),
-    SettingItem(title: '隐私政策', icon: Icons.policy_outlined, route: AppRoutes.settingsPrivacyPolicy),
-    SettingItem(title: '用户协议', icon: Icons.description_outlined, route: AppRoutes.settingsUserAgreement),
-    SettingItem(title: '系统设置', icon: Icons.settings_applications_outlined, route: AppRoutes.settingsSystem),
-  ]),
-  SettingGroup(title: '关于', items: [
-    SettingItem(title: '备份与恢复', icon: Icons.backup_outlined, route: AppRoutes.settingsBackup),
-    SettingItem(title: '关于 Amitia', icon: Icons.info_outline, route: AppRoutes.settingsAbout),
-  ]),
+List<SettingGroup> _settingsGroups({
+  required String modelSummary,
+  required String appearanceSummary,
+}) => <SettingGroup>[
+  SettingGroup(
+    title: 'AI 与个性化',
+    items: [
+      SettingItem(
+        title: '模型设置',
+        icon: Icons.psychology_outlined,
+        value: modelSummary,
+        route: AppRoutes.settingsModels,
+      ),
+      SettingItem(
+        title: '语音识别',
+        icon: Icons.transcribe_outlined,
+        route: AppRoutes.settingsAsr,
+      ),
+      SettingItem(
+        title: '外观设置',
+        icon: Icons.palette_outlined,
+        value: appearanceSummary,
+        route: AppRoutes.settingsAppearance,
+      ),
+      SettingItem(
+        title: '主题设置',
+        icon: Icons.color_lens_outlined,
+        route: AppRoutes.settingsTheme,
+      ),
+      SettingItem(
+        title: '界面提供者',
+        icon: Icons.dashboard_customize_outlined,
+        route: AppRoutes.settingsUIProviders,
+      ),
+      SettingItem(
+        title: '个人空间',
+        icon: Icons.person_outline,
+        route: AppRoutes.settingsUser,
+      ),
+      SettingItem(
+        title: '时间感知',
+        icon: Icons.schedule_outlined,
+        route: AppRoutes.settingsTemporal,
+      ),
+    ],
+  ),
+  SettingGroup(
+    title: '系统与维护',
+    items: [
+      SettingItem(
+        title: 'Runtime',
+        icon: Icons.terminal,
+        route: AppRoutes.settingsRuntime,
+      ),
+      SettingItem(
+        title: '运行模式',
+        icon: Icons.hub_outlined,
+        subtitle: '桌面本地 / 私有云部署模式',
+        route: AppRoutes.settingsRuntimeMode,
+      ),
+      SettingItem(
+        title: '长期运行维护',
+        icon: Icons.schedule_send_outlined,
+        subtitle: '长期任务、健康历史与日志维护',
+        route: AppRoutes.settingsLongRunning,
+      ),
+      SettingItem(
+        title: '高级系统',
+        icon: Icons.admin_panel_settings_outlined,
+        subtitle: 'Space、设备审计、Usage、Bridge 与 Voice Session',
+        route: AppRoutes.settingsAdvanced,
+      ),
+      SettingItem(
+        title: 'BDI 决策可视化',
+        icon: Icons.account_tree_outlined,
+        subtitle: 'BehaviorPlan、ExpressionPlan 与降级状态',
+        route: AppRoutes.settingsDecisionViz,
+      ),
+      SettingItem(
+        title: '系统权限',
+        icon: Icons.lock_outlined,
+        route: AppRoutes.settingsPermissions,
+      ),
+      SettingItem(
+        title: 'Android Automation',
+        icon: Icons.smartphone_outlined,
+        subtitle: '执行通道、视觉能力与 Virtual Display 健康状态',
+        route: AppRoutes.settingsAndroidAutomation,
+      ),
+      SettingItem(
+        title: '存储管理',
+        icon: Icons.storage_outlined,
+        route: AppRoutes.settingsStorage,
+      ),
+      SettingItem(
+        title: '安全设置',
+        icon: Icons.security_outlined,
+        route: AppRoutes.settingsSafety,
+      ),
+      SettingItem(
+        title: '维护工具',
+        icon: Icons.build_circle_outlined,
+        route: AppRoutes.settingsMaintenance,
+      ),
+      SettingItem(
+        title: '工具箱',
+        icon: Icons.handyman_outlined,
+        subtitle: '运行日志、状态诊断与开发辅助工具',
+        value: '诊断工具',
+        route: AppRoutes.settingsToolbox,
+      ),
+    ],
+  ),
+  SettingGroup(
+    title: '部署与隐私',
+    items: [
+      SettingItem(
+        title: '部署配置',
+        icon: Icons.cloud_upload_outlined,
+        route: AppRoutes.settingsDeployment,
+      ),
+      SettingItem(
+        title: '隐私扫描',
+        icon: Icons.privacy_tip_outlined,
+        route: AppRoutes.settingsPrivacyScan,
+      ),
+      SettingItem(
+        title: '隐私政策',
+        icon: Icons.policy_outlined,
+        route: AppRoutes.settingsPrivacyPolicy,
+      ),
+      SettingItem(
+        title: '用户协议',
+        icon: Icons.description_outlined,
+        route: AppRoutes.settingsUserAgreement,
+      ),
+      SettingItem(
+        title: '系统设置',
+        icon: Icons.settings_applications_outlined,
+        route: AppRoutes.settingsSystem,
+      ),
+    ],
+  ),
+  SettingGroup(
+    title: '关于',
+    items: [
+      SettingItem(
+        title: '更新中心',
+        icon: Icons.system_update_outlined,
+        subtitle: '版本更新与回滚',
+        route: AppRoutes.kernelPage('updates'),
+      ),
+      SettingItem(
+        title: '备份与恢复',
+        icon: Icons.backup_outlined,
+        route: AppRoutes.settingsBackup,
+      ),
+      SettingItem(
+        title: '关于 Amitia',
+        icon: Icons.info_outline,
+        route: AppRoutes.settingsAbout,
+      ),
+    ],
+  ),
 ];
 
 class SettingsPage extends ConsumerWidget {
@@ -55,13 +184,18 @@ class SettingsPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final modelConfigs = ref.watch(modelConfigListProvider).valueOrNull ?? const [];
-    final activeModel = modelConfigs.where((item) => item.isActive == 1).firstOrNull;
+    final modelConfigs =
+        ref.watch(modelConfigListProvider).valueOrNull ?? const [];
+    final activeModel = modelConfigs
+        .where((item) => item.isActive == 1)
+        .firstOrNull;
     final modelSummary = activeModel == null
         ? '未配置'
         : (activeModel.name.trim().isNotEmpty
-            ? activeModel.name.trim()
-            : (activeModel.model.trim().isNotEmpty ? activeModel.model.trim() : activeModel.provider.trim()));
+              ? activeModel.name.trim()
+              : (activeModel.model.trim().isNotEmpty
+                    ? activeModel.model.trim()
+                    : activeModel.provider.trim()));
     final appearance = ref.watch(appearancePreferencesProvider);
     final themeSummary = switch (appearance.themeMode) {
       ThemeMode.dark => '暗色',
@@ -69,8 +203,12 @@ class SettingsPage extends ConsumerWidget {
       _ => '亮色',
     };
     const accentNames = ['暖棕', '蓝色', '绿色', '琥珀'];
-    final appearanceSummary = '$themeSummary · ${accentNames[appearance.accentColorIndex]}';
-    final groups = _settingsGroups(modelSummary: modelSummary, appearanceSummary: appearanceSummary);
+    final appearanceSummary =
+        '$themeSummary · ${accentNames[appearance.accentColorIndex]}';
+    final groups = _settingsGroups(
+      modelSummary: modelSummary,
+      appearanceSummary: appearanceSummary,
+    );
     final isDevMode = ref.watch(isDeveloperModeProvider);
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
@@ -81,9 +219,7 @@ class SettingsPage extends ConsumerWidget {
         padding: EdgeInsets.symmetric(vertical: AppSpacing.md),
         children: [
           Padding(
-            padding: EdgeInsets.symmetric(
-              horizontal: AppSpacing.pagePadding,
-            ),
+            padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
             child: _buildUserInfoCard(context, ref),
           ),
           SizedBox(height: AppSpacing.md),
@@ -103,8 +239,7 @@ class SettingsPage extends ConsumerWidget {
                     )
                   : null,
             ),
-            if (i < groups.length - 1)
-              SizedBox(height: AppSpacing.sectionGap),
+            if (i < groups.length - 1) SizedBox(height: AppSpacing.sectionGap),
           ],
           SizedBox(height: AppSpacing.xl),
         ],
@@ -172,7 +307,10 @@ Widget _buildUserInfoCard(BuildContext context, WidgetRef ref) {
                     const SizedBox(height: 2),
                     Text(
                       spaceId.isEmpty ? '本地个人空间' : spaceId,
-                      style: TextStyle(fontSize: 11, color: context.textTertiary),
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: context.textTertiary,
+                      ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -240,9 +378,7 @@ class _SettingGroup extends StatelessWidget {
           child: Text(group.title, style: AppTypography.caption(context)),
         ),
         Container(
-          margin: EdgeInsets.symmetric(
-            horizontal: AppSpacing.pagePadding,
-          ),
+          margin: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
           decoration: BoxDecoration(
             color: context.surfacePrimary,
             borderRadius: AppRadius.brMedium,
@@ -270,6 +406,48 @@ class _SettingGroup extends StatelessWidget {
   }
 }
 
+class _DevModeToggle extends StatelessWidget {
+  final bool isDevMode;
+  final VoidCallback onTap;
+
+  const _DevModeToggle({required this.isDevMode, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+      padding: EdgeInsets.symmetric(
+        horizontal: AppSpacing.md,
+        vertical: AppSpacing.sm,
+      ),
+      decoration: BoxDecoration(
+        color: context.surfacePrimary,
+        borderRadius: AppRadius.brMedium,
+        border: Border.all(color: context.borderPrimary, width: 0.5),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.developer_mode_outlined, color: context.accentPrimary),
+          SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('开发模式', style: AppTypography.body(context)),
+                Text(
+                  isDevMode ? '已开启' : '已关闭',
+                  style: AppTypography.caption(context),
+                ),
+              ],
+            ),
+          ),
+          Switch.adaptive(value: isDevMode, onChanged: (_) => onTap()),
+        ],
+      ),
+    );
+  }
+}
+
 class _SettingTile extends StatelessWidget {
   final SettingItem item;
 
@@ -281,10 +459,7 @@ class _SettingTile extends StatelessWidget {
       behavior: HitTestBehavior.opaque,
       onTap: () => context.push(item.route),
       child: Padding(
-        padding: EdgeInsets.symmetric(
-          horizontal: AppSpacing.lg,
-          vertical: 13,
-        ),
+        padding: EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: 13),
         child: Row(
           children: [
             Container(

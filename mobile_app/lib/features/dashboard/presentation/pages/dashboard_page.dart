@@ -22,8 +22,6 @@ Future<Map<String, dynamic>?> _safeGet(Ref ref, String path, {Map<String, dynami
 final dashboardOverviewProvider = FutureProvider<Map<String, dynamic>>((ref) async {
   final values = await Future.wait([
     _safeGet(ref, '/api/health'),
-    _safeGet(ref, '/api/qq/status'),
-    _safeGet(ref, '/api/wechat/status'),
     _safeGet(ref, '/api/security/status'),
     _safeGet(ref, '/api/usage/overview'),
     _safeGet(ref, '/api/chats/stats'),
@@ -34,15 +32,13 @@ final dashboardOverviewProvider = FutureProvider<Map<String, dynamic>>((ref) asy
   ]);
   return {
     'health': values[0],
-    'qq': values[1],
-    'wechat': values[2],
-    'security': values[3],
-    'usage': values[4],
-    'stats': values[5],
-    'errors': values[6],
-    'imports': values[7],
-    'periodic': values[8],
-    'feedback': values[9],
+    'security': values[1],
+    'usage': values[2],
+    'stats': values[3],
+    'errors': values[4],
+    'imports': values[5],
+    'periodic': values[6],
+    'feedback': values[7],
   };
 });
 
@@ -58,12 +54,6 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
   bool _diagnosticsRunning = false;
   Map<String, dynamic>? _diagnosticsResult;
   String? _diagnosticsError;
-
-  bool _connected(Map<String, dynamic>? value) {
-    if (value == null) return false;
-    final data = value['data'] is Map ? Map<String, dynamic>.from(value['data'] as Map) : value;
-    return data['connected'] == true || data['qqOnline'] == true || data['status'] == 'online' || data['status'] == 'connected';
-  }
 
   Future<void> _runDiagnosticsNow() async {
     if (_diagnosticsRunning) return;
@@ -119,8 +109,6 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
     final unifiedEntry = checks['unifiedEntry'] is Map
         ? Map<String, dynamic>.from(checks['unifiedEntry'] as Map)
         : <String, dynamic>{};
-    final qqConnected = _connected(data['qq'] as Map<String, dynamic>?);
-    final wechatConnected = _connected(data['wechat'] as Map<String, dynamic>?);
     final security = data['security'] as Map<String, dynamic>?;
     final securityStatus = (security?['status'] ?? 'unknown').toString();
     final databaseHealthy = health?['database'] == 'ok' || checks['database'] == 'ok';
@@ -136,8 +124,6 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
           _StatusGrid(items: [
             _StatusItem(label: '后端', value: backendReady ? '就绪' : (databaseHealthy ? '运行中' : '异常'), icon: Icons.dns_outlined, type: backendReady ? BadgeType.success : (databaseHealthy ? BadgeType.warning : BadgeType.error)),
             _StatusItem(label: 'Agent Runtime', value: runtimeReady ? '就绪' : '未就绪', icon: Icons.auto_awesome, type: runtimeReady ? BadgeType.success : BadgeType.warning),
-            _StatusItem(label: 'QQ', value: qqConnected ? '已连接' : '未连接', icon: Icons.chat_bubble_outline, type: qqConnected ? BadgeType.success : BadgeType.neutral),
-            _StatusItem(label: '微信', value: wechatConnected ? '已连接' : '未连接', icon: Icons.wechat_outlined, type: wechatConnected ? BadgeType.success : BadgeType.neutral),
             _StatusItem(label: '数据库', value: databaseHealthy ? '正常' : '异常', icon: Icons.storage, type: databaseHealthy ? BadgeType.success : BadgeType.error),
             _StatusItem(label: '访问安全', value: securityStatus == 'secure' ? '安全' : securityStatus, icon: Icons.shield_outlined, type: securityStatus == 'secure' ? BadgeType.success : BadgeType.warning),
           ]),

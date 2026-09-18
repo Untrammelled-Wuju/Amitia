@@ -28,19 +28,9 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
     'image': '图像生成',
   };
 
-  static const Map<String, String> _scenarioLabels = <String, String>{
-    'chat': '聊天对话',
-    'summary': '会话摘要',
-    'memory_extract': '记忆提取',
-    'safety_rewrite': '安全改写',
-    'import_parse': '导入解析',
-    'reply_timing_check': '完整性判断',
-  };
-
   final Map<String, int> _testStates = <String, int>{};
   List<Map<String, dynamic>> _configs = const <Map<String, dynamic>>[];
   List<Map<String, dynamic>> _providers = const <Map<String, dynamic>>[];
-  List<Map<String, dynamic>> _routes = const <Map<String, dynamic>>[];
   bool _loading = true;
   bool _busy = false;
   String? _error;
@@ -72,12 +62,10 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
     try {
       final configs = await _loadConfigs();
       final providers = await _loadProviders();
-      final routes = _isText ? await ref.read(modelConfigServiceProvider).routes() : const <Map<String, dynamic>>[];
       if (!mounted) return;
       setState(() {
         _configs = configs;
         _providers = providers;
-        _routes = routes;
         _loading = false;
       });
     } catch (e) {
@@ -147,6 +135,11 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
         showBackButton: true,
         actions: <Widget>[
           IconButton(
+            tooltip: '新建',
+            onPressed: _busy ? null : () => _showConfigSheet(null),
+            icon: const Icon(Icons.add),
+          ),
+          IconButton(
             tooltip: '刷新',
             onPressed: _busy ? null : _load,
             icon: const Icon(Icons.refresh),
@@ -190,12 +183,6 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
             Icon(Icons.psychology_outlined, size: 20, color: context.accentPrimary),
             const SizedBox(width: 8),
             Expanded(child: Text('已配置 ${_configs.length} 个$_typeName', style: AppTypography.caption(context))),
-            AmitiaButton(
-              label: '新建',
-              icon: Icons.add,
-              height: 36,
-              onPressed: _busy ? null : () => _showConfigSheet(null),
-            ),
           ],
         ),
         SizedBox(height: AppSpacing.md),
@@ -203,10 +190,6 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
           const AmitiaEmptyState(icon: Icons.inbox_outlined, title: '暂无配置', subtitle: '点击右上角新建配置')
         else
           ..._configs.map(_buildConfigCard),
-        if (_isText) ...<Widget>[
-          SizedBox(height: AppSpacing.sectionGap),
-          _buildScenarioRoutes(),
-        ],
         if (widget.modelType == 'voice') ...<Widget>[
           SizedBox(height: AppSpacing.sectionGap),
           const VoiceCloneManager(),
@@ -305,87 +288,6 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
         ],
       ),
     );
-  }
-
-  Widget _buildScenarioRoutes() {
-    final byScenario = <String, String>{};
-    for (final route in _routes) {
-      final scenario = (route['scenario'] ?? '').toString();
-      if (scenario.isEmpty) continue;
-      byScenario[scenario] = (route['modelConfigId'] ?? '').toString();
-    }
-    final scenarios = <String>{..._scenarioLabels.keys, ...byScenario.keys}.toList(growable: false);
-    return Container(
-      padding: EdgeInsets.all(AppSpacing.cardPadding),
-      decoration: BoxDecoration(
-        color: context.surfacePrimary,
-        borderRadius: AppRadius.brMedium,
-        border: Border.all(color: context.borderPrimary, width: 0.5),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Text('用途分配', style: AppTypography.sectionTitle(context)),
-          const SizedBox(height: 4),
-          Text('为不同场景指定文本模型；未分配时使用默认模型。', style: AppTypography.caption(context)),
-          SizedBox(height: AppSpacing.md),
-          ...scenarios.map((scenario) {
-            final selected = byScenario[scenario] ?? '';
-            final valid = _configs.any((item) => _idOf(item) == selected);
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Row(
-                children: <Widget>[
-                  Expanded(child: Text(_scenarioLabels[scenario] ?? scenario, style: AppTypography.body(context))),
-                  const SizedBox(width: 12),
-                  SizedBox(
-                    width: 180,
-                    child: DropdownButtonFormField<String>(
-                      value: valid ? selected : '',
-                      isExpanded: true,
-                      decoration: const InputDecoration(isDense: true, border: OutlineInputBorder()),
-                      items: <DropdownMenuItem<String>>[
-                        const DropdownMenuItem<String>(value: '', child: Text('使用默认模型')),
-                        ..._configs.map(
-                          (item) => DropdownMenuItem<String>(
-                            value: _idOf(item),
-                            child: Text((item['name'] ?? _modelOf(item)).toString(), overflow: TextOverflow.ellipsis),
-                          ),
-                        ),
-                      ],
-                      onChanged: _busy ? null : (value) => _assignScenario(scenario, value ?? ''),
-                    ),
-                  ),
-                ],
-              ),
-            );
-          }),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _assignScenario(String scenario, String modelId) async {
-    final next = <String, Map<String, dynamic>>{};
-    for (final item in _routes) {
-      final key = (item['scenario'] ?? '').toString();
-      if (key.isNotEmpty) next[key] = Map<String, dynamic>.from(item);
-    }
-    if (modelId.isEmpty) {
-      next.remove(scenario);
-    } else {
-      next[scenario] = <String, dynamic>{'scenario': scenario, 'modelConfigId': int.tryParse(modelId) ?? modelId};
-    }
-    setState(() => _busy = true);
-    try {
-      await ref.read(modelConfigServiceProvider).updateRoutes(next.values.toList(growable: false));
-      await _load();
-      _toast('用途分配已更新');
-    } catch (e) {
-      _toast('用途分配失败：$e', error: true);
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
   }
 
   Future<void> _testConnection(Map<String, dynamic> config) async {

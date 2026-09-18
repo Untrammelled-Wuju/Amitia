@@ -137,3 +137,46 @@ select {
 .hidden {
   display: none;
 }
+
+@media (max-width: 720px) {
+  .wrap {
+    width: 44px;
+    height: 44px;
+  }
+
+  .emote-button {
+    width: 44px;
+    height: 44px;
+    font-size: 19px;
+  }
+
+  .panel {
+    bottom: 52px;
+    padding: 12px;
+    border-radius: 14px;
+  }
+
+  .head {
+    grid-template-columns: 1fr;
+  }
+
+  input,
+  select {
+    min-height: 44px;
+  }
+
+  .grid {
+    grid-template-columns: repeat(3, 1fr);
+    max-height: min(45vh, 320px);
+    gap: 8px;
+  }
+
+  .item {
+    min-height: 76px;
+    padding: 7px;
+  }
+
+  .item img {
+    height: 54px;
+  }
+}

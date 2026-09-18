@@ -123,6 +123,7 @@ internal class DefaultRuntimeEnvironmentBuilder(
         env["AMITIA_SECURITY_MODE"] = "local_single_user"
         env["AMITIA_ALLOW_REMOTE_ACCESS"] = "false"
         env["AMITIA_LOCAL_TOKEN_FILE"] = GuestLayout.LOCAL_TOKEN
+        env["SSL_CERT_FILE"] = GuestLayout.SECURITY_DIR + "/ca-certificates.crt"
 
 
         env["AMITIA_GRAPH_STORE_ENABLED"] = "false"

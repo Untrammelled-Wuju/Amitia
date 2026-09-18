@@ -7,8 +7,6 @@ type RouteAliasRule = {
 const ROUTE_ALIAS_RULES: RouteAliasRule[] = [
   { canonicalPrefix: "/characters", aliasPrefix: "/character" },
   { canonicalPrefix: "/workshop", aliasPrefix: "/creative-workshop" },
-  { canonicalPrefix: "/channels/wechat", aliasPrefix: "/wechat", exact: true },
-  { canonicalPrefix: "/channels/qq", aliasPrefix: "/qq", exact: true },
   { canonicalPrefix: "/settings/devices", aliasPrefix: "/devices" },
   { canonicalPrefix: "/developer/kernel", aliasPrefix: "/kernel" },
   { canonicalPrefix: "/memory/manager", aliasPrefix: "/memory-manager", exact: true },
@@ -67,8 +65,6 @@ export function canonicalUISurfaceId(rawRoute: string): string {
     return "surface.memory.detail";
   }
   if (hasPrefix("/workshop") || hasPrefix("/creative-workshop")) return "surface.workshop";
-  if (hasExact("/channels/wechat", "/wechat")) return "surface.channel.wechat";
-  if (hasExact("/channels/qq", "/qq")) return "surface.channel.qq";
   if (hasPrefix("/settings/devices") || hasPrefix("/devices")) return "surface.settings.devices";
   if (hasPrefix("/developer/kernel") || hasPrefix("/kernel")) return "surface.kernel";
   if (hasPrefix("/settings")) return "surface.settings.section";

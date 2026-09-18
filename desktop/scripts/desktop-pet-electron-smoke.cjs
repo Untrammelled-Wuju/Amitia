@@ -272,7 +272,7 @@ function registerIpc() {
     }
   });
   ipcMain.on(CHANNELS.click, (_event, payload) => {
-    if (Number.isFinite(payload?.x) && Number.isFinite(payload?.y)) observed.click = true;
+    if (Number.isFinite(payload?.canvasX) && Number.isFinite(payload?.canvasY)) observed.click = true;
   });
   ipcMain.on(CHANNELS.dragStart, (_event, payload) => {
     if (payload?.pointerId === 7) observed.dragStart = true;
@@ -318,11 +318,30 @@ async function exerciseInteractions() {
     if (!canvas) throw new Error("pet canvas missing");
     canvas.dispatchEvent(new MouseEvent("click", {
       bubbles: true,
+      button: 0,
+      buttons: 0,
+      detail: 1,
       clientX: 17,
       clientY: 29,
       screenX: 17,
       screenY: 29
     }));
+    canvas.dispatchEvent(new MouseEvent("click", {
+      bubbles: true,
+      button: 0,
+      buttons: 0,
+      detail: 1,
+      clientX: 100,
+      clientY: 100,
+      screenX: 100,
+      screenY: 100
+    }));
+  })()`);
+  await waitUntil("click IPC", () => observed.click, 4000);
+
+  await windowRef.webContents.executeJavaScript(`(() => {
+    const canvas = document.getElementById("pet-canvas");
+    if (!canvas) throw new Error("pet canvas missing");
     const emitPointer = (type, screenX, screenY) => canvas.dispatchEvent(new PointerEvent(type, {
       bubbles: true,
       pointerId: 7,
@@ -337,8 +356,8 @@ async function exerciseInteractions() {
     emitPointer("pointerup", 40, 55);
   })()`);
   await waitUntil(
-    "click/drag IPC",
-    () => observed.click && observed.dragStart && observed.dragMove && observed.dragEnd,
+    "drag IPC",
+    () => observed.dragStart && observed.dragMove && observed.dragEnd,
     4000,
   );
 }
@@ -431,6 +450,9 @@ app.whenReady().then(async () => {
     () => observed.runtimeReady >= 1 && observed.runtimeInitFailed.length === 0,
     6000,
   );
+  windowRef.show();
+  windowRef.focus();
+  windowRef.webContents.send(CHANNELS.windowShown);
   await waitUntil(
     "default action first frame",
     () => hasEvent("playback.action_started", "idle"),
@@ -441,10 +463,6 @@ app.whenReady().then(async () => {
     () => observed.hitMasks > 0,
     5000,
   );
-
-  // Hidden BrowserWindows are deliberately frozen by the production engine.
-  // Exercise the canonical visibility IPC before asserting time-based playback.
-  windowRef.webContents.send(CHANNELS.windowShown);
 
   await exerciseInteractions();
   await exerciseActionSwitch();

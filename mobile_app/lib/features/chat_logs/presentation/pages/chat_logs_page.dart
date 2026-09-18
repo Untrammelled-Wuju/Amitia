@@ -34,8 +34,6 @@ class _ChatLogsPageState extends ConsumerState<ChatLogsPage> {
   static const Map<String, String> _channelLabels = {
     '': '全部渠道',
     'web': 'App / Web',
-    'wechat': '微信',
-    'qq': 'QQ',
   };
 
   @override

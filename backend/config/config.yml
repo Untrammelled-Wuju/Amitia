@@ -72,19 +72,6 @@ components:
     enabled: true
     entryUri: ""
     workUri: ""
-  sidecars:
-    wechat:
-      enabled: true
-      entryUri: ""
-      workUri: ""
-      port: 19876
-      healthUrl: "http://127.0.0.1:19876/api/health"
-    qq:
-      enabled: true
-      entryUri: ""
-      workUri: ""
-      port: 19877
-      healthUrl: "http://127.0.0.1:19877/api/health"
 
 runtime:
   mode: "desktop"
@@ -97,19 +84,6 @@ runtime:
     enabled: true
     entryPath: ""
     workDir: ""
-  sidecars:
-    wechat:
-      enabled: true
-      entryPath: ""
-      workDir: ""
-      port: 19876
-      healthUrl: "http://127.0.0.1:19876/api/health"
-    qq:
-      enabled: true
-      entryPath: ""
-      workDir: ""
-      port: 19877
-      healthUrl: "http://127.0.0.1:19877/api/health"
 
 chat:
   mergeWindowMs: 6000

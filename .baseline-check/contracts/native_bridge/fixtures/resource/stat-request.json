@@ -1,8 +1,0 @@
-{
-  "protocolVersion": 1,
-  "requestId": "res-stat-001",
-  "operation": "native.resource.stat",
-  "payload": {
-    "nativeStagingId": "stg-abc123"
-  }
-}

@@ -37,11 +37,6 @@ class _AdvancedSystemPageState extends ConsumerState<AdvancedSystemPage> {
   Map<String, dynamic> _usageSources = const {};
   Map<String, dynamic> _accessConfig = const {};
   Map<String, dynamic> _accessStatus = const {};
-  Map<String, dynamic> _wechatBridge = const {};
-  Map<String, dynamic> _wechatEvents = const {};
-  Map<String, dynamic> _wechatReplyTiming = const {};
-  Map<String, dynamic> _qqBridge = const {};
-  Map<String, dynamic> _qqEvents = const {};
   List<dynamic> _voiceSessions = const [];
   Map<String, dynamic> _shadowStatus = const {};
   Map<String, dynamic> _shadowThresholds = const {};
@@ -86,18 +81,13 @@ class _AdvancedSystemPageState extends ConsumerState<AdvancedSystemPage> {
         _safe(() async => await api.get<Map<String, dynamic>>('/api/usage/sources') ?? <String, dynamic>{}, <String, dynamic>{}),
         _safe(() async => await api.get<Map<String, dynamic>>('/api/security/access-config') ?? <String, dynamic>{}, <String, dynamic>{}),
         _safe(() async => await api.get<Map<String, dynamic>>('/api/security/access-status') ?? <String, dynamic>{}, <String, dynamic>{}),
-        _safe(() async => await api.get<Map<String, dynamic>>('/api/wechat/bridge/status-detail') ?? <String, dynamic>{}, <String, dynamic>{}),
-        _safe(() async => await api.get<Map<String, dynamic>>('/api/wechat/bridge/events') ?? <String, dynamic>{}, <String, dynamic>{}),
-        _safe(() async => await api.get<Map<String, dynamic>>('/api/wechat/reply-timing/status') ?? <String, dynamic>{}, <String, dynamic>{}),
-        _safe(() async => await api.get<Map<String, dynamic>>('/api/qq/bridge/status-detail') ?? <String, dynamic>{}, <String, dynamic>{}),
-        _safe(() async => await api.get<Map<String, dynamic>>('/api/qq/bridge/events') ?? <String, dynamic>{}, <String, dynamic>{}),
         _safe(() async => await api.get<Map<String, dynamic>>('/api/voice/sessions') ?? <String, dynamic>{}, <String, dynamic>{}),
         _safe(() async => await api.get<Map<String, dynamic>>('/api/shadow/status') ?? <String, dynamic>{}, <String, dynamic>{}),
         _safe(() async => await api.get<Map<String, dynamic>>('/api/shadow/thresholds') ?? <String, dynamic>{}, <String, dynamic>{}),
         _safe(() async => await api.get<Map<String, dynamic>>('/api/shadow/rollbacks') ?? <String, dynamic>{}, <String, dynamic>{}),
       ]);
       if (!mounted) return;
-      final voice = values[21] as Map<String, dynamic>;
+      final voice = values[16] as Map<String, dynamic>;
       setState(() {
         _space = values[0] as Map<String, dynamic>;
         _devices = values[1] as List<dynamic>;
@@ -115,15 +105,10 @@ class _AdvancedSystemPageState extends ConsumerState<AdvancedSystemPage> {
         _usageSources = values[13] as Map<String, dynamic>;
         _accessConfig = values[14] as Map<String, dynamic>;
         _accessStatus = values[15] as Map<String, dynamic>;
-        _wechatBridge = values[16] as Map<String, dynamic>;
-        _wechatEvents = values[17] as Map<String, dynamic>;
-        _wechatReplyTiming = values[18] as Map<String, dynamic>;
-        _qqBridge = values[19] as Map<String, dynamic>;
-        _qqEvents = values[20] as Map<String, dynamic>;
         _voiceSessions = voice['sessions'] is List ? voice['sessions'] as List : const [];
-        _shadowStatus = values[22] as Map<String, dynamic>;
-        _shadowThresholds = values[23] as Map<String, dynamic>;
-        _shadowRollbacks = values[24] as Map<String, dynamic>;
+        _shadowStatus = values[17] as Map<String, dynamic>;
+        _shadowThresholds = values[18] as Map<String, dynamic>;
+        _shadowRollbacks = values[19] as Map<String, dynamic>;
         _loading = false;
       });
     } catch (e) {
@@ -251,8 +236,6 @@ class _AdvancedSystemPageState extends ConsumerState<AdvancedSystemPage> {
                       ]),
                       ListView(padding: EdgeInsets.all(AppSpacing.md), children: [
                         _jsonCard('访问安全', {'config': _accessConfig, 'status': _accessStatus}, actions: [TextButton(onPressed: _busy ? null : _editAccess, child: const Text('编辑'))]),
-                        _jsonCard('微信 Bridge', {'status': _wechatBridge, 'replyTiming': _wechatReplyTiming, 'events': _wechatEvents}, actions: [TextButton(onPressed: _busy ? null : () => _run(() async { final api=ref.read(backendServiceProvider); await api.post<Map<String,dynamic>>('/api/wechat/bridge/recover',data: const {}); await api.post<Map<String,dynamic>>('/api/wechat/reply-timing/recover',data: const {}); }, '微信 Bridge 恢复已执行'), child: const Text('恢复'))]),
-                        _jsonCard('QQ Bridge', {'status': _qqBridge, 'events': _qqEvents}, actions: [TextButton(onPressed: _busy ? null : () => _run(() async { await ref.read(backendServiceProvider).post<Map<String,dynamic>>('/api/qq/bridge/recover',data: const {}); }, 'QQ Bridge 恢复已执行'), child: const Text('恢复'))]),
                         Card(margin: EdgeInsets.only(bottom: AppSpacing.md), child: Padding(padding: EdgeInsets.all(AppSpacing.md), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                           Text('Voice Sessions', style: Theme.of(context).textTheme.titleMedium), const SizedBox(height: 8),
                           if (_voiceSessions.isEmpty) const Text('暂无活动 Voice Session') else for (final raw in _voiceSessions) if (raw is Map) ...[

@@ -126,15 +126,25 @@ class AmitiaMessageBubble extends StatelessWidget {
         ? ((userName ?? '').trim().isEmpty ? '我' : userName!.trim())
         : ((characterName ?? '').trim().isEmpty ? 'AI' : characterName!.trim());
     final initial = isUser
-        ? ((userInitial ?? '').trim().isEmpty ? displayName.characters.first : userInitial!.trim())
-        : ((avatarInitial ?? '').trim().isEmpty ? displayName.characters.first : avatarInitial!.trim());
+        ? ((userInitial ?? '').trim().isEmpty
+              ? displayName.characters.first
+              : userInitial!.trim())
+        : ((avatarInitial ?? '').trim().isEmpty
+              ? displayName.characters.first
+              : avatarInitial!.trim());
     final colorHex = isUser
-        ? ((userAvatarColor ?? '').trim().isEmpty ? '#5F6872' : userAvatarColor!.trim())
-        : ((avatarColor ?? '').trim().isEmpty ? '#8A5728' : avatarColor!.trim());
+        ? ((userAvatarColor ?? '').trim().isEmpty
+              ? '#5F6872'
+              : userAvatarColor!.trim())
+        : ((avatarColor ?? '').trim().isEmpty
+              ? '#8A5728'
+              : avatarColor!.trim());
 
     final messageColumn = Flexible(
       child: Column(
-        crossAxisAlignment: isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+        crossAxisAlignment: isUser
+            ? CrossAxisAlignment.end
+            : CrossAxisAlignment.start,
         children: [
           Padding(
             padding: EdgeInsets.only(
@@ -161,13 +171,17 @@ class AmitiaMessageBubble extends StatelessWidget {
               decoration: BoxDecoration(
                 color: context.surfaceSecondary,
                 borderRadius: AppRadius.brSmall,
-                border: Border(left: BorderSide(color: context.accentPrimary, width: 2)),
+                border: Border(
+                  left: BorderSide(color: context.accentPrimary, width: 2),
+                ),
               ),
               child: Text(
                 '引用：${(message.replyToExcerpt ?? '原消息').trim()}',
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
-                style: AppTypography.label(context).copyWith(color: context.textSecondary),
+                style: AppTypography.label(
+                  context,
+                ).copyWith(color: context.textSecondary),
               ),
             ),
           ],
@@ -180,10 +194,9 @@ class AmitiaMessageBubble extends StatelessWidget {
                 children: [
                   Text(
                     _formatTime(message.time),
-                    style: AppTypography.label(context).copyWith(
-                      fontSize: 9,
-                      color: context.textTertiary,
-                    ),
+                    style: AppTypography.label(
+                      context,
+                    ).copyWith(fontSize: 9, color: context.textTertiary),
                   ),
                   if (onReply != null) ...[
                     const SizedBox(width: 7),
@@ -191,8 +204,15 @@ class AmitiaMessageBubble extends StatelessWidget {
                       behavior: HitTestBehavior.opaque,
                       onTap: onReply,
                       child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
-                        child: Icon(Icons.reply_rounded, size: 14, color: context.textTertiary),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 2,
+                          vertical: 2,
+                        ),
+                        child: Icon(
+                          Icons.reply_rounded,
+                          size: 14,
+                          color: context.textTertiary,
+                        ),
                       ),
                     ),
                   ],
@@ -202,8 +222,15 @@ class AmitiaMessageBubble extends StatelessWidget {
                       behavior: HitTestBehavior.opaque,
                       onTap: onCopy,
                       child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
-                        child: Icon(Icons.copy_outlined, size: 13, color: context.textTertiary),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 2,
+                          vertical: 2,
+                        ),
+                        child: Icon(
+                          Icons.copy_outlined,
+                          size: 13,
+                          color: context.textTertiary,
+                        ),
                       ),
                     ),
                   ],
@@ -240,7 +267,9 @@ class AmitiaMessageBubble extends StatelessWidget {
         bottom: 14,
       ),
       child: Row(
-        mainAxisAlignment: isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
+        mainAxisAlignment: isUser
+            ? MainAxisAlignment.end
+            : MainAxisAlignment.start,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (!isUser) ...[
@@ -264,15 +293,24 @@ class AmitiaMessageBubble extends StatelessWidget {
   }
 
   Widget _buildContent(BuildContext context, bool isUser) {
-    if (!isUser && (showThinking || agentActivities.isNotEmpty || message.type == MessageType.toolCall)) {
+    if (!isUser &&
+        (showThinking ||
+            agentActivities.isNotEmpty ||
+            message.type == MessageType.toolCall)) {
       final activities = <AmitiaAgentActivity>[
         ...agentActivities,
         if (message.type == MessageType.toolCall)
           AmitiaAgentActivity(
             id: message.id,
-            title: (message.toolName ?? '').trim().isEmpty ? '工具调用' : message.toolName!.trim(),
-            status: message.status == MessageStatus.error ? 'failed' : 'completed',
-            errorCode: message.status == MessageStatus.error ? message.toolResult : null,
+            title: (message.toolName ?? '').trim().isEmpty
+                ? '工具调用'
+                : message.toolName!.trim(),
+            status: message.status == MessageStatus.error
+                ? 'failed'
+                : 'completed',
+            errorCode: message.status == MessageStatus.error
+                ? message.toolResult
+                : null,
             time: message.time,
           ),
       ];
@@ -303,18 +341,10 @@ class AmitiaMessageBubble extends StatelessWidget {
           isUser: isUser,
         );
       case MessageType.emote:
-        return _EmoteMessage(
-          emoji: message.content,
-          name: '',
-          isUser: isUser,
-        );
+        return _EmoteMessage(emoji: message.content, name: '', isUser: isUser);
       case MessageType.code:
         final parsed = _parseCodeFence(message.content);
-        return _CodeMessage(
-          lang: parsed.$1,
-          body: parsed.$2,
-          isUser: isUser,
-        );
+        return _CodeMessage(lang: parsed.$1, body: parsed.$2, isUser: isUser);
       case MessageType.file:
         return _FileMessage(
           fileName: message.fileName ?? message.content,
@@ -335,7 +365,9 @@ class AmitiaMessageBubble extends StatelessWidget {
       decoration: BoxDecoration(
         color: isUser ? context.accentSoft : context.surfacePrimary,
         borderRadius: BorderRadius.circular(17),
-        border: isUser ? null : Border.all(color: context.borderPrimary, width: 0.6),
+        border: isUser
+            ? null
+            : Border.all(color: context.borderPrimary, width: 0.6),
       ),
       child: Text(
         message.content,
@@ -360,7 +392,8 @@ class AmitiaMessageBubble extends StatelessWidget {
     }
     final withoutPrefix = trimmed.substring(3);
     final newline = withoutPrefix.indexOf('\n');
-    if (newline < 0) return ('text', withoutPrefix.replaceFirst(RegExp(r'```$'), ''));
+    if (newline < 0)
+      return ('text', withoutPrefix.replaceFirst(RegExp(r'```$'), ''));
     final language = withoutPrefix.substring(0, newline).trim();
     final body = withoutPrefix.substring(newline + 1, withoutPrefix.length - 3);
     return (language.isEmpty ? 'text' : language, body);
@@ -391,7 +424,9 @@ class _UnifiedAgentMessageState extends State<_UnifiedAgentMessage> {
     final hasProcess = widget.showThinking || count > 0;
     final hasFinal = widget.finalText.trim().isNotEmpty;
     return Container(
-      constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * 0.80),
+      constraints: BoxConstraints(
+        maxWidth: MediaQuery.sizeOf(context).width * 0.80,
+      ),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
         color: context.surfacePrimary,
@@ -405,7 +440,9 @@ class _UnifiedAgentMessageState extends State<_UnifiedAgentMessage> {
           if (hasProcess)
             GestureDetector(
               behavior: HitTestBehavior.opaque,
-              onTap: count > 0 ? () => setState(() => _expanded = !_expanded) : null,
+              onTap: count > 0
+                  ? () => setState(() => _expanded = !_expanded)
+                  : null,
               child: Padding(
                 padding: const EdgeInsets.symmetric(vertical: 1),
                 child: Row(
@@ -427,7 +464,11 @@ class _UnifiedAgentMessageState extends State<_UnifiedAgentMessage> {
                                 color: context.accentPrimary,
                               ),
                             )
-                          : Icon(Icons.auto_awesome_outlined, size: 15, color: context.accentPrimary),
+                          : Icon(
+                              Icons.auto_awesome_outlined,
+                              size: 15,
+                              color: context.accentPrimary,
+                            ),
                     ),
                     const SizedBox(width: 9),
                     Expanded(
@@ -446,11 +487,13 @@ class _UnifiedAgentMessageState extends State<_UnifiedAgentMessage> {
                             count == 0
                                 ? '正在处理你的请求'
                                 : widget.showThinking
-                                    ? '正在处理 · 已完成 $count 个工具调用'
-                                    : '已完成 $count 个工具调用',
+                                ? '正在处理 · 已完成 $count 个工具调用'
+                                : '已完成 $count 个工具调用',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: AppTypography.label(context).copyWith(fontSize: 9.5),
+                            style: AppTypography.label(
+                              context,
+                            ).copyWith(fontSize: 9.5),
                           ),
                         ],
                       ),
@@ -458,13 +501,19 @@ class _UnifiedAgentMessageState extends State<_UnifiedAgentMessage> {
                     if (count > 0) ...[
                       Text(
                         '$count 项',
-                        style: AppTypography.label(context).copyWith(fontSize: 9.5),
+                        style: AppTypography.label(
+                          context,
+                        ).copyWith(fontSize: 9.5),
                       ),
                       const SizedBox(width: 3),
                       AnimatedRotation(
                         turns: _expanded ? 0.25 : 0,
                         duration: AppMotion.standard,
-                        child: Icon(Icons.chevron_right, size: 16, color: context.textTertiary),
+                        child: Icon(
+                          Icons.chevron_right,
+                          size: 16,
+                          color: context.textTertiary,
+                        ),
                       ),
                     ],
                   ],
@@ -475,7 +524,8 @@ class _UnifiedAgentMessageState extends State<_UnifiedAgentMessage> {
             const SizedBox(height: 8),
             Container(height: 1, color: context.borderPrimary),
             const SizedBox(height: 7),
-            for (final activity in widget.activities) _AgentActivityRow(activity: activity),
+            for (final activity in widget.activities)
+              _AgentActivityRow(activity: activity),
           ],
           if (hasProcess && hasFinal) ...[
             const SizedBox(height: 9),
@@ -485,10 +535,9 @@ class _UnifiedAgentMessageState extends State<_UnifiedAgentMessage> {
           if (hasFinal)
             Text(
               widget.finalText,
-              style: AppTypography.bodySmall(context).copyWith(
-                color: context.textPrimary,
-                height: 1.52,
-              ),
+              style: AppTypography.bodySmall(
+                context,
+              ).copyWith(color: context.textPrimary, height: 1.52),
             ),
         ],
       ),
@@ -522,8 +571,8 @@ class _AgentActivityRow extends StatelessWidget {
               failed
                   ? Icons.error_outline
                   : activity.isMemoryActivity
-                      ? Icons.memory_outlined
-                      : Icons.build_outlined,
+                  ? Icons.memory_outlined
+                  : Icons.build_outlined,
               size: 14,
               color: failed ? context.error : context.textSecondary,
             ),
@@ -537,18 +586,19 @@ class _AgentActivityRow extends StatelessWidget {
                   activity.displayTitle,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: AppTypography.bodySmall(context).copyWith(
-                    fontWeight: FontWeight.w600,
-                    fontSize: 11,
-                  ),
+                  style: AppTypography.bodySmall(
+                    context,
+                  ).copyWith(fontWeight: FontWeight.w600, fontSize: 11),
                 ),
                 const SizedBox(height: 2),
                 Text(
                   failed
-                      ? ((activity.errorCode ?? '').isEmpty ? '执行失败' : '执行失败 · ${activity.errorCode}')
+                      ? ((activity.errorCode ?? '').isEmpty
+                            ? '执行失败'
+                            : '执行失败 · ${activity.errorCode}')
                       : activity.isMemoryActivity
-                          ? '已更新记忆'
-                          : '执行完成',
+                      ? '已更新记忆'
+                      : '执行完成',
                   style: AppTypography.label(context).copyWith(
                     fontSize: 9.5,
                     color: failed ? context.error : context.textTertiary,
@@ -698,11 +748,12 @@ class _ImageMessage extends StatelessWidget {
                       url!,
                       fit: BoxFit.cover,
                       cacheWidth: 360,
-                      frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
-                        if (wasSynchronouslyLoaded) return child;
-                        if (frame != null) return child;
-                        return _placeholder(context);
-                      },
+                      frameBuilder:
+                          (context, child, frame, wasSynchronouslyLoaded) {
+                            if (wasSynchronouslyLoaded) return child;
+                            if (frame != null) return child;
+                            return _placeholder(context);
+                          },
                       errorBuilder: (_, __, ___) => _placeholder(context),
                     )
                   : _placeholder(context),
@@ -722,14 +773,10 @@ class _ImageMessage extends StatelessWidget {
   }
 
   Widget _placeholder(BuildContext context) => Container(
-        color: context.accentSoft,
-        alignment: Alignment.center,
-        child: Icon(
-          Icons.image_outlined,
-          size: 40,
-          color: context.accentPrimary,
-        ),
-      );
+    color: context.accentSoft,
+    alignment: Alignment.center,
+    child: Icon(Icons.image_outlined, size: 40, color: context.accentPrimary),
+  );
 
   void _preview(BuildContext context) {
     final value = url;
@@ -804,10 +851,7 @@ class _VideoMessage extends StatelessWidget {
               color: context.accentSoft,
               borderRadius: AppRadius.brSmall,
             ),
-            child: Icon(
-              Icons.videocam_outlined,
-              color: context.accentPrimary,
-            ),
+            child: Icon(Icons.videocam_outlined, color: context.accentPrimary),
           ),
           const SizedBox(width: 10),
           Flexible(
@@ -1255,14 +1299,18 @@ class AmitiaChatInput extends StatefulWidget {
   final ValueChanged<String> onSend;
   final TextEditingController? controller;
   final String? recipientName;
+  final Widget? workspaceSelector;
   final FutureOr<void> Function()? onPickFile;
   final FutureOr<void> Function(bool camera)? onPickImage;
   final FutureOr<void> Function(bool camera)? onPickVideo;
-  final FutureOr<void> Function()? onPickAudio;
   final void Function(String lang, String code)? onSendCode;
   final Future<List<Map<String, dynamic>>> Function()? onLoadEmotes;
   final void Function(String emoteId, String displayText)? onSendEmote;
   final Future<List<Map<String, dynamic>>> Function()? onLoadAgentSkills;
+  final FutureOr<void> Function()? onStartVoiceRecording;
+  final FutureOr<void> Function({required bool transcribe})?
+  onFinishVoiceRecording;
+  final FutureOr<void> Function()? onCancelVoiceRecording;
   final String? replyPreview;
   final VoidCallback? onCancelReply;
 
@@ -1271,14 +1319,17 @@ class AmitiaChatInput extends StatefulWidget {
     required this.onSend,
     this.controller,
     this.recipientName,
+    this.workspaceSelector,
     this.onPickFile,
     this.onPickImage,
     this.onPickVideo,
-    this.onPickAudio,
     this.onSendCode,
     this.onLoadEmotes,
     this.onSendEmote,
     this.onLoadAgentSkills,
+    this.onStartVoiceRecording,
+    this.onFinishVoiceRecording,
+    this.onCancelVoiceRecording,
     this.replyPreview,
     this.onCancelReply,
   });
@@ -1288,11 +1339,17 @@ class AmitiaChatInput extends StatefulWidget {
 }
 
 class _AmitiaChatInputState extends State<AmitiaChatInput> {
+  static const double _composerInputHeight = 58;
+  static const double _composerInputVerticalInset = 7;
   late TextEditingController _controller;
   late bool _ownsController;
   final _inputFocusNode = FocusNode();
   bool _hasText = false;
   bool _isInputFocused = false;
+  bool _voiceMode = false;
+  bool _voiceRecording = false;
+  Offset? _voiceStart;
+  _VoiceGestureIntent _voiceIntent = _VoiceGestureIntent.send;
   final List<String> _selectedSkillNames = <String>[];
 
   @override
@@ -1327,6 +1384,77 @@ class _AmitiaChatInputState extends State<AmitiaChatInput> {
     setState(() => _isInputFocused = _inputFocusNode.hasFocus);
   }
 
+  void _toggleVoiceMode() {
+    _inputFocusNode.unfocus();
+    setState(() {
+      _voiceMode = !_voiceMode;
+      _voiceIntent = _VoiceGestureIntent.send;
+    });
+  }
+
+  Future<void> _startVoiceGesture(LongPressStartDetails details) async {
+    final start = widget.onStartVoiceRecording;
+    if (start == null) return;
+    setState(() {
+      _voiceStart = details.localPosition;
+      _voiceIntent = _VoiceGestureIntent.send;
+      _voiceRecording = true;
+    });
+    try {
+      await start();
+    } catch (error) {
+      if (mounted) {
+        setState(() => _voiceRecording = false);
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('录音失败：$error')));
+      }
+    }
+  }
+
+  void _updateVoiceGesture(LongPressMoveUpdateDetails details) {
+    final start = _voiceStart;
+    if (!_voiceRecording || start == null) return;
+    final dx = details.localPosition.dx - start.dx;
+    final dy = details.localPosition.dy - start.dy;
+    final next = dx < -52 && dy < -52
+        ? _VoiceGestureIntent.cancel
+        : dx > 52 && dy < -52
+        ? _VoiceGestureIntent.transcribe
+        : _VoiceGestureIntent.send;
+    if (next == _voiceIntent) return;
+    setState(() => _voiceIntent = next);
+  }
+
+  Future<void> _endVoiceGesture(LongPressEndDetails details) async {
+    if (!_voiceRecording) return;
+    final intent = _voiceIntent;
+    setState(() {
+      _voiceRecording = false;
+      _voiceStart = null;
+      _voiceIntent = _VoiceGestureIntent.send;
+      _voiceMode = false;
+    });
+    if (intent == _VoiceGestureIntent.cancel) {
+      await widget.onCancelVoiceRecording?.call();
+      return;
+    }
+    await widget.onFinishVoiceRecording?.call(
+      transcribe: intent == _VoiceGestureIntent.transcribe,
+    );
+  }
+
+  Future<void> _cancelVoiceGesture() async {
+    if (!_voiceRecording) return;
+    setState(() {
+      _voiceRecording = false;
+      _voiceStart = null;
+      _voiceIntent = _VoiceGestureIntent.send;
+      _voiceMode = false;
+    });
+    await widget.onCancelVoiceRecording?.call();
+  }
+
   @override
   void dispose() {
     _controller.removeListener(_syncControllerText);
@@ -1340,7 +1468,10 @@ class _AmitiaChatInputState extends State<AmitiaChatInput> {
     final text = _controller.text.trim();
     if (text.isEmpty && _selectedSkillNames.isEmpty) return;
     final prefix = _selectedSkillNames.map((name) => '\$$name').join(' ');
-    final outgoing = [prefix, text].where((part) => part.trim().isNotEmpty).join(' ');
+    final outgoing = [
+      prefix,
+      text,
+    ].where((part) => part.trim().isNotEmpty).join(' ');
     widget.onSend(outgoing);
     _controller.clear();
     setState(() {
@@ -1586,20 +1717,31 @@ class _AmitiaChatInputState extends State<AmitiaChatInput> {
     try {
       skills = await loader();
     } catch (error) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('加载 Agent Skill 失败：$error')));
+      if (mounted)
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('加载 Agent Skill 失败：$error')));
       return;
     }
     if (!mounted) return;
     final usable = skills.where((skill) {
-      final enabled = skill['enabled'] == true || skill['isEnabled'] == true || skill['enabled'] == 1;
-      final status = (skill['compatibilityStatus'] ?? skill['compatibility'] ?? '').toString().toLowerCase();
+      final enabled =
+          skill['enabled'] == true ||
+          skill['isEnabled'] == true ||
+          skill['enabled'] == 1;
+      final status =
+          (skill['compatibilityStatus'] ?? skill['compatibility'] ?? '')
+              .toString()
+              .toLowerCase();
       return enabled && status != 'blocked' && status != 'incompatible';
     }).toList();
     await showModalBottomSheet<void>(
       context: context,
       backgroundColor: context.surfacePrimary,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
       builder: (sheetContext) => StatefulBuilder(
         builder: (sheetContext, setSheetState) => SafeArea(
           child: SizedBox(
@@ -1610,32 +1752,56 @@ class _AmitiaChatInputState extends State<AmitiaChatInput> {
                   padding: const EdgeInsets.fromLTRB(20, 18, 12, 10),
                   child: Row(
                     children: [
-                      Expanded(child: Text('本次消息使用 Agent Skill', style: AppTypography.pageTitle(sheetContext))),
-                      IconButton(onPressed: () => Navigator.pop(sheetContext), icon: const Icon(Icons.close)),
+                      Expanded(
+                        child: Text(
+                          '本次消息使用 Agent Skill',
+                          style: AppTypography.pageTitle(sheetContext),
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: () => Navigator.pop(sheetContext),
+                        icon: const Icon(Icons.close),
+                      ),
                     ],
                   ),
                 ),
                 Divider(height: 1, color: sheetContext.borderSecondary),
                 Expanded(
                   child: usable.isEmpty
-                      ? Center(child: Text('暂无已启用且兼容的 Agent Skill', style: AppTypography.caption(sheetContext)))
+                      ? Center(
+                          child: Text(
+                            '暂无已启用且兼容的 Agent Skill',
+                            style: AppTypography.caption(sheetContext),
+                          ),
+                        )
                       : ListView.builder(
                           itemCount: usable.length,
                           itemBuilder: (_, index) {
                             final skill = usable[index];
                             final name = (skill['name'] ?? '').toString();
-                            final displayName = (skill['displayName'] ?? name).toString();
+                            final displayName = (skill['displayName'] ?? name)
+                                .toString();
                             final selected = _selectedSkillNames.contains(name);
                             return CheckboxListTile(
                               value: selected,
                               title: Text(displayName),
-                              subtitle: Text((skill['shortDescription'] ?? skill['description'] ?? '').toString(), maxLines: 2, overflow: TextOverflow.ellipsis),
+                              subtitle: Text(
+                                (skill['shortDescription'] ??
+                                        skill['description'] ??
+                                        '')
+                                    .toString(),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
                               onChanged: name.isEmpty
                                   ? null
                                   : (value) {
                                       setState(() {
                                         if (value == true) {
-                                          if (!_selectedSkillNames.contains(name)) _selectedSkillNames.add(name);
+                                          if (!_selectedSkillNames.contains(
+                                            name,
+                                          ))
+                                            _selectedSkillNames.add(name);
                                         } else {
                                           _selectedSkillNames.remove(name);
                                         }
@@ -1652,10 +1818,6 @@ class _AmitiaChatInputState extends State<AmitiaChatInput> {
         ),
       ),
     );
-  }
-
-  void _showVoiceSheet() {
-    widget.onPickAudio?.call();
   }
 
   void _showEmotePicker() {
@@ -1781,13 +1943,17 @@ class _AmitiaChatInputState extends State<AmitiaChatInput> {
             color: context.surfacePrimary,
             borderRadius: BorderRadius.circular(23),
             border: Border.all(
-              color: _isInputFocused ? context.accentPrimary : context.borderPrimary,
+              color: _isInputFocused
+                  ? context.accentPrimary
+                  : context.borderPrimary,
               width: _isInputFocused ? 1.0 : 0.8,
             ),
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withValues(
-                  alpha: Theme.of(context).brightness == Brightness.dark ? 0.16 : 0.045,
+                  alpha: Theme.of(context).brightness == Brightness.dark
+                      ? 0.16
+                      : 0.045,
                 ),
                 blurRadius: 18,
                 offset: const Offset(0, 6),
@@ -1801,14 +1967,38 @@ class _AmitiaChatInputState extends State<AmitiaChatInput> {
               if ((widget.replyPreview ?? '').trim().isNotEmpty)
                 Container(
                   margin: const EdgeInsets.fromLTRB(12, 10, 12, 2),
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-                  decoration: BoxDecoration(color: context.surfaceSecondary, borderRadius: AppRadius.brSmall),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 7,
+                  ),
+                  decoration: BoxDecoration(
+                    color: context.surfaceSecondary,
+                    borderRadius: AppRadius.brSmall,
+                  ),
                   child: Row(
                     children: [
-                      Icon(Icons.reply_rounded, size: 16, color: context.accentPrimary),
+                      Icon(
+                        Icons.reply_rounded,
+                        size: 16,
+                        color: context.accentPrimary,
+                      ),
                       const SizedBox(width: 7),
-                      Expanded(child: Text(widget.replyPreview!, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppTypography.caption(context))),
-                      GestureDetector(onTap: widget.onCancelReply, child: Icon(Icons.close, size: 17, color: context.textTertiary)),
+                      Expanded(
+                        child: Text(
+                          widget.replyPreview!,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppTypography.caption(context),
+                        ),
+                      ),
+                      GestureDetector(
+                        onTap: widget.onCancelReply,
+                        child: Icon(
+                          Icons.close,
+                          size: 17,
+                          color: context.textTertiary,
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -1818,45 +2008,83 @@ class _AmitiaChatInputState extends State<AmitiaChatInput> {
                   child: Wrap(
                     spacing: 6,
                     runSpacing: 6,
-                    children: _selectedSkillNames.map((name) => InputChip(
-                      visualDensity: VisualDensity.compact,
-                      avatar: const Icon(Icons.auto_awesome_outlined, size: 14),
-                      label: Text('\$$name'),
-                      onDeleted: () => setState(() => _selectedSkillNames.remove(name)),
-                    )).toList(),
+                    children: _selectedSkillNames
+                        .map(
+                          (name) => InputChip(
+                            visualDensity: VisualDensity.compact,
+                            avatar: const Icon(
+                              Icons.auto_awesome_outlined,
+                              size: 14,
+                            ),
+                            label: Text('\$$name'),
+                            onDeleted: () => setState(
+                              () => _selectedSkillNames.remove(name),
+                            ),
+                          ),
+                        )
+                        .toList(),
                   ),
                 ),
-              TapRegion(
-                onTapOutside: (_) => _inputFocusNode.unfocus(),
-                child: TextField(
-                  controller: _controller,
-                  focusNode: _inputFocusNode,
-                  minLines: 1,
-                  maxLines: 4,
-                  textCapitalization: TextCapitalization.sentences,
-                  onSubmitted: (_) => _send(),
-                  style: AppTypography.bodySmall(context).copyWith(fontSize: 16),
-                  decoration: InputDecoration(
-                    hintText: recipient.isEmpty ? '发消息…' : '给 $recipient 发消息…',
-                    hintStyle: TextStyle(color: context.textTertiary, fontSize: 16),
-                    isDense: true,
-                    contentPadding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
-                    border: InputBorder.none,
-                    enabledBorder: InputBorder.none,
-                    focusedBorder: InputBorder.none,
-                    disabledBorder: InputBorder.none,
-                    errorBorder: InputBorder.none,
-                    focusedErrorBorder: InputBorder.none,
-                    fillColor: Colors.transparent,
-                    focusColor: Colors.transparent,
-                    hoverColor: Colors.transparent,
+              if (_voiceMode)
+                SizedBox(
+                  height: _composerInputHeight,
+                  child: _buildHoldToTalkButton(context),
+                )
+              else
+                SizedBox(
+                  height: _composerInputHeight,
+                  child: Align(
+                    alignment: Alignment.center,
+                    child: SizedBox(
+                      width: double.infinity,
+                      child: TapRegion(
+                        onTapOutside: (_) => _inputFocusNode.unfocus(),
+                        child: TextField(
+                          controller: _controller,
+                          focusNode: _inputFocusNode,
+                          minLines: 1,
+                          maxLines: 2,
+                          textAlignVertical: TextAlignVertical.center,
+                          textCapitalization: TextCapitalization.sentences,
+                          onSubmitted: (_) => _send(),
+                          style: AppTypography.bodySmall(
+                            context,
+                          ).copyWith(fontSize: 16),
+                          decoration: InputDecoration(
+                            hintText: recipient.isEmpty
+                                ? '发消息…'
+                                : '给 $recipient 发消息…',
+                            hintStyle: AppTypography.bodySmall(context)
+                                .copyWith(
+                                  color: context.textTertiary,
+                                  fontSize: 16,
+                                ),
+                            isDense: true,
+                            contentPadding: const EdgeInsets.fromLTRB(
+                              16,
+                              10,
+                              16,
+                              10,
+                            ),
+                            border: InputBorder.none,
+                            enabledBorder: InputBorder.none,
+                            focusedBorder: InputBorder.none,
+                            disabledBorder: InputBorder.none,
+                            errorBorder: InputBorder.none,
+                            focusedErrorBorder: InputBorder.none,
+                            fillColor: Colors.transparent,
+                            focusColor: Colors.transparent,
+                            hoverColor: Colors.transparent,
+                          ),
+                        ),
+                      ),
+                    ),
                   ),
                 ),
-              ),
               Padding(
-                padding: const EdgeInsets.fromLTRB(9, 0, 9, 8),
+                padding: const EdgeInsets.fromLTRB(7, 0, 7, 7),
                 child: SizedBox(
-                  height: 48,
+                  height: 38,
                   child: Row(
                     children: [
                       _ComposerRoundButton(
@@ -1864,38 +2092,42 @@ class _AmitiaChatInputState extends State<AmitiaChatInput> {
                         tooltip: '添加内容',
                         onTap: _showComposerTools,
                       ),
+                      if (widget.workspaceSelector != null) ...[
+                        const SizedBox(width: 4),
+                        Flexible(child: widget.workspaceSelector!),
+                      ],
                       const Spacer(),
-                      _ComposerRoundButton(
-                        icon: Icons.mic_none_outlined,
-                        tooltip: '选择音频作为语音消息',
-                        onTap: _showVoiceSheet,
-                      ),
-                      const SizedBox(width: 6),
-                      GestureDetector(
-                        behavior: HitTestBehavior.opaque,
-                        onTap: (_hasText || _selectedSkillNames.isNotEmpty) ? _send : null,
-                        child: Tooltip(
-                          message: '发送消息',
-                          child: Container(
-                            width: 31,
-                            height: 31,
-                            decoration: BoxDecoration(
-                              color: (_hasText || _selectedSkillNames.isNotEmpty)
-                                  ? context.accentPrimary
-                                  : context.borderPrimary,
-                              shape: BoxShape.circle,
-                            ),
-                            alignment: Alignment.center,
-                            child: Icon(
-                              Icons.arrow_upward_rounded,
-                              size: 18,
-                              color: (_hasText || _selectedSkillNames.isNotEmpty)
-                                  ? context.surfacePrimary
-                                  : context.textTertiary,
+                      if (!_voiceMode &&
+                          (_hasText || _selectedSkillNames.isNotEmpty))
+                        GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: _send,
+                          child: Tooltip(
+                            message: '发送消息',
+                            child: Container(
+                              width: 31,
+                              height: 31,
+                              decoration: BoxDecoration(
+                                color: context.accentPrimary,
+                                shape: BoxShape.circle,
+                              ),
+                              alignment: Alignment.center,
+                              child: Icon(
+                                Icons.arrow_upward_rounded,
+                                size: 18,
+                                color: context.surfacePrimary,
+                              ),
                             ),
                           ),
+                        )
+                      else
+                        _ComposerRoundButton(
+                          icon: _voiceMode
+                              ? Icons.keyboard_outlined
+                              : Icons.mic_none_outlined,
+                          tooltip: _voiceMode ? '切换到键盘输入' : '按住说话',
+                          onTap: _toggleVoiceMode,
                         ),
-                      ),
                     ],
                   ),
                 ),
@@ -1906,7 +2138,70 @@ class _AmitiaChatInputState extends State<AmitiaChatInput> {
       ),
     );
   }
+
+  Widget _buildHoldToTalkButton(BuildContext context) {
+    final cancelling = _voiceIntent == _VoiceGestureIntent.cancel;
+    final transcribing = _voiceIntent == _VoiceGestureIntent.transcribe;
+    final label = cancelling
+        ? '松开取消'
+        : transcribing
+        ? '松开转文字'
+        : '按住说话';
+    final color = cancelling
+        ? context.error
+        : transcribing
+        ? context.accentPrimary
+        : context.textPrimary;
+    return Padding(
+      padding: const EdgeInsets.symmetric(
+        horizontal: 12,
+        vertical: _composerInputVerticalInset,
+      ),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onLongPressStart: (details) => unawaited(_startVoiceGesture(details)),
+        onLongPressMoveUpdate: _updateVoiceGesture,
+        onLongPressEnd: (details) => unawaited(_endVoiceGesture(details)),
+        onLongPressCancel: () => unawaited(_cancelVoiceGesture()),
+        child: Container(
+          key: const ValueKey('hold-to-talk-button'),
+          height: double.infinity,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: context.surfaceSecondary,
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                cancelling
+                    ? Icons.close_rounded
+                    : transcribing
+                    ? Icons.transcribe_outlined
+                    : Icons.mic_none_outlined,
+                size: 18,
+                color: color,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                label,
+                style: TextStyle(
+                  color: color,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  height: 1.5,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
+
+enum _VoiceGestureIntent { send, cancel, transcribe }
 
 class _ComposerRoundButton extends StatelessWidget {
   final IconData icon;
@@ -1929,11 +2224,6 @@ class _ComposerRoundButton extends StatelessWidget {
         child: Container(
           width: 31,
           height: 31,
-          decoration: BoxDecoration(
-            color: context.surfaceSecondary,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: context.borderPrimary),
-          ),
           alignment: Alignment.center,
           child: Icon(icon, size: 17, color: context.textPrimary),
         ),
@@ -1941,6 +2231,7 @@ class _ComposerRoundButton extends StatelessWidget {
     );
   }
 }
+
 class _ComposerTool extends StatelessWidget {
   final IconData icon;
   final String label;
@@ -2001,10 +2292,12 @@ class _EmotePickerState extends State<_EmotePicker> {
       final items = await loader();
       if (!mounted) return;
       setState(() {
-        _items = items.where((item) {
-          final enabled = item['enabled'];
-          return enabled == null || enabled == true || enabled == 1;
-        }).toList(growable: false);
+        _items = items
+            .where((item) {
+              final enabled = item['enabled'];
+              return enabled == null || enabled == true || enabled == 1;
+            })
+            .toList(growable: false);
         _loading = false;
       });
     } catch (e) {
@@ -2028,14 +2321,22 @@ class _EmotePickerState extends State<_EmotePicker> {
               child: Container(
                 width: 40,
                 height: 4,
-                decoration: BoxDecoration(color: context.borderPrimary, borderRadius: BorderRadius.circular(2)),
+                decoration: BoxDecoration(
+                  color: context.borderPrimary,
+                  borderRadius: BorderRadius.circular(2),
+                ),
               ),
             ),
             const SizedBox(height: 14),
             Row(
               children: [
-                Expanded(child: Text('角色表情', style: AppTypography.cardTitle(context))),
-                IconButton(onPressed: _load, icon: const Icon(Icons.refresh, size: 20)),
+                Expanded(
+                  child: Text('角色表情', style: AppTypography.cardTitle(context)),
+                ),
+                IconButton(
+                  onPressed: _load,
+                  icon: const Icon(Icons.refresh, size: 20),
+                ),
               ],
             ),
             const SizedBox(height: 8),
@@ -2044,45 +2345,89 @@ class _EmotePickerState extends State<_EmotePicker> {
               child: _loading
                   ? const Center(child: CircularProgressIndicator())
                   : _error != null
-                      ? Center(child: Text('加载表情失败：$_error', textAlign: TextAlign.center))
-                      : _items.isEmpty
-                          ? const Center(child: Text('暂无已启用的服务端表情，请先在“表情管理”中导入'))
-                          : GridView.builder(
-                              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                                crossAxisCount: 4,
-                                mainAxisSpacing: 8,
-                                crossAxisSpacing: 8,
-                                childAspectRatio: .9,
-                              ),
-                              itemCount: _items.length,
-                              itemBuilder: (context, index) {
-                                final item = _items[index];
-                                final id = (item['id'] ?? '').toString();
-                                final name = (item['name'] ?? item['altText'] ?? '表情').toString();
-                                final emoji = (item['emoji'] ?? '').toString();
-                                final imageUrl = (item['imageUrl'] ?? item['url'] ?? item['path'] ?? '').toString();
-                                return InkWell(
-                                  borderRadius: AppRadius.brSmall,
-                                  onTap: id.isEmpty ? null : () => widget.onSend(id, emoji.isNotEmpty ? emoji : name),
-                                  child: Container(
-                                    padding: const EdgeInsets.all(6),
-                                    decoration: BoxDecoration(color: context.surfaceSecondary, borderRadius: AppRadius.brSmall),
-                                    child: Column(
-                                      mainAxisAlignment: MainAxisAlignment.center,
-                                      children: [
-                                        Expanded(
-                                          child: imageUrl.startsWith('http') || imageUrl.startsWith('/')
-                                              ? Image.network(imageUrl, fit: BoxFit.contain, cacheWidth: 64, errorBuilder: (_, __, ___) => Text(emoji.isNotEmpty ? emoji : '🙂', style: const TextStyle(fontSize: 28)))
-                                              : Center(child: Text(emoji.isNotEmpty ? emoji : '🙂', style: const TextStyle(fontSize: 28))),
-                                        ),
-                                        const SizedBox(height: 4),
-                                        Text(name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 11)),
-                                      ],
-                                    ),
-                                  ),
-                                );
-                              },
+                  ? Center(
+                      child: Text(
+                        '加载表情失败：$_error',
+                        textAlign: TextAlign.center,
+                      ),
+                    )
+                  : _items.isEmpty
+                  ? const Center(child: Text('暂无已启用的服务端表情，请先在“表情管理”中导入'))
+                  : GridView.builder(
+                      gridDelegate:
+                          const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 4,
+                            mainAxisSpacing: 8,
+                            crossAxisSpacing: 8,
+                            childAspectRatio: .9,
+                          ),
+                      itemCount: _items.length,
+                      itemBuilder: (context, index) {
+                        final item = _items[index];
+                        final id = (item['id'] ?? '').toString();
+                        final name = (item['name'] ?? item['altText'] ?? '表情')
+                            .toString();
+                        final emoji = (item['emoji'] ?? '').toString();
+                        final imageUrl =
+                            (item['imageUrl'] ??
+                                    item['url'] ??
+                                    item['path'] ??
+                                    '')
+                                .toString();
+                        return InkWell(
+                          borderRadius: AppRadius.brSmall,
+                          onTap: id.isEmpty
+                              ? null
+                              : () => widget.onSend(
+                                  id,
+                                  emoji.isNotEmpty ? emoji : name,
+                                ),
+                          child: Container(
+                            padding: const EdgeInsets.all(6),
+                            decoration: BoxDecoration(
+                              color: context.surfaceSecondary,
+                              borderRadius: AppRadius.brSmall,
                             ),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Expanded(
+                                  child:
+                                      imageUrl.startsWith('http') ||
+                                          imageUrl.startsWith('/')
+                                      ? Image.network(
+                                          imageUrl,
+                                          fit: BoxFit.contain,
+                                          cacheWidth: 64,
+                                          errorBuilder: (_, __, ___) => Text(
+                                            emoji.isNotEmpty ? emoji : '🙂',
+                                            style: const TextStyle(
+                                              fontSize: 28,
+                                            ),
+                                          ),
+                                        )
+                                      : Center(
+                                          child: Text(
+                                            emoji.isNotEmpty ? emoji : '🙂',
+                                            style: const TextStyle(
+                                              fontSize: 28,
+                                            ),
+                                          ),
+                                        ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  name,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(fontSize: 11),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
             ),
           ],
         ),

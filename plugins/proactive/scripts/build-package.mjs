@@ -163,10 +163,17 @@ function main() {
   rmSync(outputFile, { force: true });
 
   mkdirSync(join(moduleRoot, "dist"), { recursive: true });
+  mkdirSync(join(stagingRoot, "modules", "proactive-ui"), { recursive: true });
   copyFileSync(
     join(packageRoot, "src", "index.mjs"),
     join(moduleRoot, "dist", "index.js"),
   );
+  for (const file of ["index.html", "app.js", "styles.css"]) {
+    copyFileSync(
+      join(packageRoot, "src", "ui", file),
+      join(stagingRoot, "modules", "proactive-ui", file),
+    );
+  }
   writeFileSync(
     join(moduleRoot, "package.json"),
     `${JSON.stringify({ type: "module" }, null, 2)}\n`,
@@ -175,6 +182,13 @@ function main() {
   const manifest = JSON.parse(
     readFileSync(join(packageRoot, "amitia-extension.json"), "utf8"),
   );
+  const uiContribution = manifest.modules
+    .flatMap((module) => module.contributions || [])
+    .find((item) => item.id === "proactive-character-tab");
+  if (!uiContribution) throw new Error("proactive ui contribution missing");
+  uiContribution.spec.entry.content_hash = `sha256-${createHash("sha256")
+    .update(readFileSync(join(stagingRoot, "modules", "proactive-ui", "index.html")))
+    .digest("base64")}`;
   manifest.integrity.algorithm = "sha256";
   manifest.integrity.contentTreeHash = "";
   writeFileSync(

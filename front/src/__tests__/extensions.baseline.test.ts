@@ -20,6 +20,20 @@ describe("Extension Center Baseline", () => {
       expect(route.name).toBe("extensionPackages")
     })
 
+    it("resolves workflow routes from extension center", async () => {
+      const router = (await import("@/router")).default
+      expect(router.resolve("/extensions/workflows").name).toBe("extensionWorkflows")
+      expect(router.resolve("/extensions/workflows/test-workflow-id").name).toBe("extensionWorkflowBuilder")
+    })
+
+    it("redirects legacy workflow routes to extension center", async () => {
+      const router = (await import("@/router")).default
+      const legacyList = router.resolve("/creative-workshop/workflows").matched.at(-1)
+      const legacyBuilder = router.resolve("/creative-workshop/workflows/test-workflow-id").matched.at(-1)
+      expect(typeof legacyList?.redirect).toBe("function")
+      expect(typeof legacyBuilder?.redirect).toBe("function")
+    })
+
     it("removes legacy skill list route", async () => {
       const router = (await import("@/router")).default
       const route = router.resolve("/extensions/skills")
@@ -69,6 +83,7 @@ describe("Extension Center Baseline", () => {
         "/extensions/mcp",
         "/extensions/packages",
         "/extensions/agent-skills",
+        "/extensions/workflows",
       ]
       for (const path of extRoutes) {
         const route = router.resolve(path)
@@ -95,6 +110,8 @@ describe("Extension Center Baseline", () => {
       { name: "ExtensionCenterView", path: "@/views/extensions/ExtensionCenterView.vue" },
       { name: "AgentSkillListView", path: "@/views/extensions/agent-skills/AgentSkillListView.vue" },
       { name: "PackageManagerView", path: "@/views/extensions/packages/PackageManagerView.vue" },
+      { name: "WorkflowListView", path: "@/views/extensions/workflows/WorkflowListView.vue" },
+      { name: "WorkflowBuilderView", path: "@/views/extensions/workflows/WorkflowBuilderView.vue" },
     ]
 
     for (const { name, path } of extensionViews) {
@@ -123,7 +140,7 @@ describe("Extension Center Baseline", () => {
     it("getPageTitle resolves creative workshop card paths", async () => {
       const { getPageTitle } = await import("@/navigation/app-nav")
       expect(getPageTitle("/creative-workshop/pet")).toBe("桌宠")
-      expect(getPageTitle("/creative-workshop/workflows")).toBe("创意工坊")
+      expect(getPageTitle("/extensions/workflows")).toBe("工作流")
     })
   })
 })

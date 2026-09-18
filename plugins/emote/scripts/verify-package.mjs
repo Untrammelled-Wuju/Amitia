@@ -71,12 +71,28 @@ function main() {
     if (!entries.has(path)) throw new Error(`missing package path: ${path}`);
   }
   if (manifest.extension?.id !== "com.amitia/emote") throw new Error("unexpected extension id");
+  for (const platform of ["android", "ios"]) {
+    if (!manifest.compatibility?.platforms?.includes(platform)) {
+      throw new Error(`package must declare ${platform}`);
+    }
+  }
   const contributions = manifest.modules?.flatMap((module) => module.contributions || []) || [];
   if (!contributions.some((item) => item.spec?.metadata?.["amitia.message.outputs"] === true)) {
     throw new Error("message output provider contribution missing");
   }
   if (!contributions.some((item) => item.spec?.entry?.path === "modules/emote-ui/ui/composer.html")) {
     throw new Error("composer contribution missing");
+  }
+  const mobileProviders = [
+    "emote-page-provider",
+    "emote-routes",
+    "emote-message-provider",
+  ];
+  for (const providerId of mobileProviders) {
+    const provider = contributions.find((item) => item.spec?.providerId === providerId);
+    if (!provider?.spec?.entries?.mobile) {
+      throw new Error(`mobile entry missing for ${providerId}`);
+    }
   }
   for (const file of ["index.html", "composer.html", "message.html"]) {
     const html = entries.get(`modules/emote-ui/ui/${file}`).toString("utf8");

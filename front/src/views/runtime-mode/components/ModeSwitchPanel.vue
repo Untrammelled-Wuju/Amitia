@@ -62,14 +62,12 @@ SPDX-License-Identifier: AGPL-3.0-only
           <li>Core 将在你的云服务器上运行</li>
           <li>Web UI 通过 HTTPS 访问</li>
           <li><strong>登录变为必需</strong>（系统自动开启）</li>
-          <li>微信桥 Bridge 在同一云服务器或内网运行</li>
           <li>你的个人电脑<strong>不需要常开</strong></li>
           <li>需要配置 publicBaseUrl 指向你的域名</li>
         </template>
         <template v-else>
           <li>Core 将在本机运行（127.0.0.1）</li>
           <li>登录可选择关闭（免登录模式）</li>
-          <li>微信桥 Bridge 在本机启动</li>
           <li>你的电脑需要<strong>保持开机</strong></li>
           <li>仅限本机访问，不暴露到网络</li>
         </template>

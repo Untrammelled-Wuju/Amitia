@@ -81,26 +81,12 @@ type GraphStoreProviderConfig struct {
 
 type ComponentsConfig struct {
 	TaskHost ProcessComponentConfig `mapstructure:"taskHost"`
-	Sidecars SidecarsConfig         `mapstructure:"sidecars"`
 }
 
 type ProcessComponentConfig struct {
 	Enabled  bool   `mapstructure:"enabled"`
 	EntryURI string `mapstructure:"entryUri"`
 	WorkURI  string `mapstructure:"workUri"`
-}
-
-type SidecarsConfig struct {
-	Wechat SidecarEntryConfig `mapstructure:"wechat"`
-	QQ     SidecarEntryConfig `mapstructure:"qq"`
-}
-
-type SidecarEntryConfig struct {
-	Enabled   bool   `mapstructure:"enabled"`
-	EntryURI  string `mapstructure:"entryUri"`
-	WorkURI   string `mapstructure:"workUri"`
-	Port      int    `mapstructure:"port"`
-	HealthURL string `mapstructure:"healthUrl"`
 }
 
 type ServerConfig struct {
@@ -181,7 +167,6 @@ type RuntimeConfig struct {
 	Node       NodeRuntimeConfig        `mapstructure:"node"`
 	TaskHost   ProcessHostRuntimeConfig `mapstructure:"taskHost"`
 	IOSSandbox IOSSandboxRuntimeConfig  `mapstructure:"iosSandbox"`
-	Sidecars   SidecarRuntimeConfig     `mapstructure:"sidecars"`
 }
 
 type IOSSandboxRuntimeConfig struct {
@@ -220,19 +205,6 @@ type ProcessHostRuntimeConfig struct {
 	Enabled   bool   `mapstructure:"enabled"`
 	EntryPath string `mapstructure:"entryPath"`
 	WorkDir   string `mapstructure:"workDir"`
-}
-
-type SidecarRuntimeConfig struct {
-	Wechat ManagedSidecarConfig `mapstructure:"wechat"`
-	QQ     ManagedSidecarConfig `mapstructure:"qq"`
-}
-
-type ManagedSidecarConfig struct {
-	Enabled   bool   `mapstructure:"enabled"`
-	EntryPath string `mapstructure:"entryPath"`
-	WorkDir   string `mapstructure:"workDir"`
-	Port      int    `mapstructure:"port"`
-	HealthURL string `mapstructure:"healthUrl"`
 }
 
 type DesktopPetRuntimeConfig struct {
@@ -378,16 +350,6 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("runtime.taskHost.enabled", true)
 	v.SetDefault("runtime.taskHost.entryPath", "")
 	v.SetDefault("runtime.taskHost.workDir", "")
-	v.SetDefault("runtime.sidecars.wechat.enabled", true)
-	v.SetDefault("runtime.sidecars.wechat.entryPath", "")
-	v.SetDefault("runtime.sidecars.wechat.workDir", "")
-	v.SetDefault("runtime.sidecars.wechat.port", 19876)
-	v.SetDefault("runtime.sidecars.wechat.healthUrl", "http://127.0.0.1:19876/api/health")
-	v.SetDefault("runtime.sidecars.qq.enabled", true)
-	v.SetDefault("runtime.sidecars.qq.entryPath", "")
-	v.SetDefault("runtime.sidecars.qq.workDir", "")
-	v.SetDefault("runtime.sidecars.qq.port", 19877)
-	v.SetDefault("runtime.sidecars.qq.healthUrl", "http://127.0.0.1:19877/api/health")
 	v.SetDefault("providers.scriptRuntime.enabled", true)
 	v.SetDefault("providers.scriptRuntime.required", false)
 	v.SetDefault("providers.scriptRuntime.provider", "builtin.node-process")
@@ -445,16 +407,6 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("components.taskHost.enabled", true)
 	v.SetDefault("components.taskHost.entryUri", "")
 	v.SetDefault("components.taskHost.workUri", "")
-	v.SetDefault("components.sidecars.wechat.enabled", true)
-	v.SetDefault("components.sidecars.wechat.entryUri", "")
-	v.SetDefault("components.sidecars.wechat.workUri", "")
-	v.SetDefault("components.sidecars.wechat.port", 19876)
-	v.SetDefault("components.sidecars.wechat.healthUrl", "http://127.0.0.1:19876/api/health")
-	v.SetDefault("components.sidecars.qq.enabled", true)
-	v.SetDefault("components.sidecars.qq.entryUri", "")
-	v.SetDefault("components.sidecars.qq.workUri", "")
-	v.SetDefault("components.sidecars.qq.port", 19877)
-	v.SetDefault("components.sidecars.qq.healthUrl", "http://127.0.0.1:19877/api/health")
 	v.SetDefault("runtime.iosSandbox.enabled", false)
 	v.SetDefault("runtime.iosSandbox.workspaceUri", "")
 	v.SetDefault("runtime.iosSandbox.rootfsUri", "")
@@ -502,16 +454,6 @@ var runtimeEnvEntries = []runtimeEnvEntry{
 	{key: "runtime.taskHost.enabled", environments: []string{"AMITIA_TASK_HOST_ENABLED"}},
 	{key: "runtime.taskHost.entryPath", environments: []string{"AMITIA_TASK_HOST_PATH"}},
 	{key: "runtime.taskHost.workDir", environments: []string{"AMITIA_TASK_HOST_WORK_DIR"}},
-	{key: "runtime.sidecars.wechat.enabled", environments: []string{"AMITIA_WECHAT_SIDECAR_ENABLED"}},
-	{key: "runtime.sidecars.wechat.entryPath", environments: []string{"AMITIA_WECHAT_SIDECAR_PATH"}},
-	{key: "runtime.sidecars.wechat.workDir", environments: []string{"AMITIA_WECHAT_SIDECAR_WORK_DIR"}},
-	{key: "runtime.sidecars.wechat.port", environments: []string{"AMITIA_WECHAT_SIDECAR_PORT"}},
-	{key: "runtime.sidecars.wechat.healthUrl", environments: []string{"AMITIA_WECHAT_SIDECAR_HEALTH_URL"}},
-	{key: "runtime.sidecars.qq.enabled", environments: []string{"AMITIA_QQ_SIDECAR_ENABLED"}},
-	{key: "runtime.sidecars.qq.entryPath", environments: []string{"AMITIA_QQ_SIDECAR_PATH"}},
-	{key: "runtime.sidecars.qq.workDir", environments: []string{"AMITIA_QQ_SIDECAR_WORK_DIR"}},
-	{key: "runtime.sidecars.qq.port", environments: []string{"AMITIA_QQ_SIDECAR_PORT"}},
-	{key: "runtime.sidecars.qq.healthUrl", environments: []string{"AMITIA_QQ_SIDECAR_HEALTH_URL"}},
 	{key: "runtime.iosSandbox.enabled", environments: []string{"AMITIA_IOS_SANDBOX_ENABLED"}},
 	{key: "providers.scriptRuntime.enabled", environments: []string{"AMITIA_SCRIPT_RUNTIME_ENABLED"}},
 	{key: "providers.scriptRuntime.required", environments: []string{"AMITIA_SCRIPT_RUNTIME_REQUIRED"}},
@@ -547,16 +489,6 @@ var runtimeEnvEntries = []runtimeEnvEntry{
 	{key: "components.taskHost.enabled", environments: []string{"AMITIA_TASK_HOST_ENABLED"}},
 	{key: "components.taskHost.entryUri", environments: []string{"AMITIA_TASK_HOST_URI"}},
 	{key: "components.taskHost.workUri", environments: []string{"AMITIA_TASK_HOST_WORK_URI"}},
-	{key: "components.sidecars.wechat.enabled", environments: []string{"AMITIA_WECHAT_SIDECAR_ENABLED"}},
-	{key: "components.sidecars.wechat.entryUri", environments: []string{"AMITIA_WECHAT_SIDECAR_URI"}},
-	{key: "components.sidecars.wechat.workUri", environments: []string{"AMITIA_WECHAT_SIDECAR_WORK_URI"}},
-	{key: "components.sidecars.wechat.port", environments: []string{"AMITIA_WECHAT_SIDECAR_PORT"}},
-	{key: "components.sidecars.wechat.healthUrl", environments: []string{"AMITIA_WECHAT_SIDECAR_HEALTH_URL"}},
-	{key: "components.sidecars.qq.enabled", environments: []string{"AMITIA_QQ_SIDECAR_ENABLED"}},
-	{key: "components.sidecars.qq.entryUri", environments: []string{"AMITIA_QQ_SIDECAR_URI"}},
-	{key: "components.sidecars.qq.workUri", environments: []string{"AMITIA_QQ_SIDECAR_WORK_URI"}},
-	{key: "components.sidecars.qq.port", environments: []string{"AMITIA_QQ_SIDECAR_PORT"}},
-	{key: "components.sidecars.qq.healthUrl", environments: []string{"AMITIA_QQ_SIDECAR_HEALTH_URL"}},
 	{key: "desktopPetRuntime.enabled", environments: []string{"AMITIA_DESKTOP_PET_RUNTIME_ENABLED"}},
 }
 
@@ -659,20 +591,6 @@ func validateConfig(cfg *Config) error {
 	if err := validateComponentURI(cfg.Components.TaskHost.EntryURI); err != nil {
 		return fmt.Errorf("taskHost.entryUri: %w", err)
 	}
-	if err := validateComponentURI(cfg.Components.Sidecars.Wechat.EntryURI); err != nil {
-		return fmt.Errorf("sidecars.wechat.entryUri: %w", err)
-	}
-	if err := validateComponentURI(cfg.Components.Sidecars.QQ.EntryURI); err != nil {
-		return fmt.Errorf("sidecars.qq.entryUri: %w", err)
-	}
-
-	if err := validateHealthURL(cfg.Components.Sidecars.Wechat.HealthURL); err != nil {
-		return fmt.Errorf("sidecars.wechat.healthUrl: %w", err)
-	}
-	if err := validateHealthURL(cfg.Components.Sidecars.QQ.HealthURL); err != nil {
-		return fmt.Errorf("sidecars.qq.healthUrl: %w", err)
-	}
-
 	if cfg.Providers.VectorStore.Qdrant.Enabled {
 		if cfg.Providers.VectorStore.Qdrant.Port < 0 || cfg.Providers.VectorStore.Qdrant.Port > 65535 {
 			return fmt.Errorf("qdrant.port 超有效范围: %d", cfg.Providers.VectorStore.Qdrant.Port)

@@ -42,10 +42,8 @@ func resolveChannelGroup(channel string) ChannelGroup {
 	switch channel {
 	case "voice", "tts":
 		return ChannelGroupVoice
-	case "wechat", "qq", "web":
-		return ChannelGroupText
 	default:
-		return ChannelGroupAll
+		return ChannelGroupText
 	}
 }
 

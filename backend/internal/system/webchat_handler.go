@@ -112,7 +112,7 @@ func (h *Handler) WebChatCreateConv(c *gin.Context) {
 	if body.Source == "" {
 		body.Source = "web"
 	}
-	if body.Channel == "wechat" || body.Channel == "qq" {
+	if body.Channel != "web" {
 		scoped, ok := h.chatSvc.(webChatScopedService)
 		if !ok {
 			util.ErrorResponse(c, response.InternalError, "chat service does not provide user-scoped operations", nil)

@@ -14,7 +14,7 @@ SPDX-License-Identifier: AGPL-3.0-only
         >
           {{ testPanelOpen ? "关闭测试" : "在线测试" }}
         </el-button>
-        <el-button size="small" @click="triggerImport">JSON导入</el-button>
+        <el-button size="small" @click="openImportDialog">JSON导入</el-button>
         <el-button size="small" @click="exportRules">JSON导出</el-button>
         <el-button size="small" type="primary" @click="showAddForm = true"
           >新增规则</el-button
@@ -134,6 +134,106 @@ SPDX-License-Identifier: AGPL-3.0-only
     </el-dialog>
 
     <el-dialog
+      v-model="importDialogVisible"
+      title="JSON 导入世界书"
+      width="780px"
+      align-center
+      destroy-on-close
+      @closed="resetImportState"
+    >
+      <div class="json-import-content">
+        <div
+          class="json-import-drop-zone"
+          :class="{ 'has-file': !!importFile }"
+          @dragover.prevent
+          @drop.prevent="onImportDrop"
+        >
+          <el-icon class="upload-icon"><UploadFilled /></el-icon>
+          <template v-if="importFile">
+            <strong>{{ importFile.name }}</strong>
+            <span>{{ importParsing ? "正在解析..." : `已解析 ${importRows.length} 条规则` }}</span>
+          </template>
+          <template v-else>
+            <strong>拖入 JSON 文件，或点击选择文件</strong>
+            <span>JSON 顶层必须是数组，每条记录对应一条世界书规则</span>
+          </template>
+          <el-button :loading="importParsing" @click="triggerImportFile">
+            {{ importFile ? "重新选择" : "选择 JSON" }}
+          </el-button>
+          <input
+            ref="importInput"
+            class="hidden-input"
+            type="file"
+            accept=".json,application/json"
+            @change="handleImport"
+          />
+        </div>
+
+        <el-alert
+          v-if="importParseError"
+          :title="importParseError"
+          type="error"
+          show-icon
+          :closable="false"
+          role="alert"
+        />
+
+        <div v-if="importRows.length > 0" class="import-summary">
+          <span>共 {{ importRows.length }} 条</span>
+          <span class="valid">可导入 {{ importValidCount }} 条</span>
+          <span v-if="importInvalidCount > 0" class="invalid">
+            需修正 {{ importInvalidCount }} 条
+          </span>
+        </div>
+
+        <el-table
+          v-if="importRows.length > 0"
+          :data="importRows"
+          border
+          size="small"
+          max-height="240"
+          empty-text="暂无导入数据"
+        >
+          <el-table-column type="index" label="#" width="52" />
+          <el-table-column label="状态" width="76">
+            <template #default="{ row }">
+              <el-tag :type="row.valid ? 'success' : 'danger'" size="small">
+                {{ row.valid ? "有效" : "错误" }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="matchType" label="匹配类型" width="100" />
+          <el-table-column prop="matchPattern" label="匹配内容" min-width="170" show-overflow-tooltip />
+          <el-table-column prop="message" label="说明" min-width="240" show-overflow-tooltip />
+        </el-table>
+
+        <section class="example-panel" aria-labelledby="worldbook-json-example-title">
+          <div class="example-panel-header">
+            <div>
+              <h3 id="worldbook-json-example-title">示例 JSON</h3>
+            </div>
+            <el-button text :icon="DocumentCopy" @click="copyImportExample">
+              复制
+            </el-button>
+          </div>
+          <pre class="example-code"><code>{{ importExampleJson }}</code></pre>
+        </section>
+      </div>
+
+      <template #footer>
+        <el-button @click="importDialogVisible = false">取消</el-button>
+        <el-button
+          type="primary"
+          :loading="importLoading"
+          :disabled="!canImportJson"
+          @click="confirmImport"
+        >
+          导入 {{ importValidCount }} 条
+        </el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog
       v-model="editVisible"
       title="编辑规则"
       width="500px"
@@ -224,20 +324,19 @@ SPDX-License-Identifier: AGPL-3.0-only
       />
     </div>
 
-    <input
-      ref="importInput"
-      type="file"
-      accept=".json"
-      style="display: none"
-      @change="handleImport"
-    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from "vue";
+import { computed, ref, reactive, onMounted } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
-import { useWorldBook } from "@/composables/useWorldBook";
+import { DocumentCopy, UploadFilled } from "@element-plus/icons-vue";
+import { useWorldBook, type WorldBookEntry } from "@/composables/useWorldBook";
+import {
+  importExampleJson,
+  parseWorldBookImport,
+  type WorldBookImportRow,
+} from "./worldBookImport";
 
 const {
   rules,
@@ -247,6 +346,7 @@ const {
   totalPages,
   fetchRules,
   createRule,
+  createRules,
   updateRule,
   deleteRule,
   testMatch,
@@ -263,6 +363,26 @@ const showAddForm = ref(false);
 const editVisible = ref(false);
 const editingEntry = ref<any>(null);
 const importInput = ref<HTMLInputElement | null>(null);
+const importDialogVisible = ref(false);
+const importFile = ref<File | null>(null);
+const importParsing = ref(false);
+const importLoading = ref(false);
+const importParseError = ref("");
+const importRows = ref<WorldBookImportRow[]>([]);
+
+const importValidCount = computed(
+  () => importRows.value.filter((row) => row.valid).length,
+);
+const importInvalidCount = computed(
+  () => importRows.value.filter((row) => !row.valid).length,
+);
+const canImportJson = computed(
+  () =>
+    importRows.value.length > 0
+    && importInvalidCount.value === 0
+    && !importParsing.value
+    && !importLoading.value,
+);
 
 const form = reactive({
   matchType: "keyword",
@@ -341,34 +461,80 @@ function highlightMatch(text: string, pattern: string): string {
   );
 }
 
-function triggerImport() {
+function openImportDialog() {
+  resetImportState();
+  importDialogVisible.value = true;
+}
+
+function resetImportState() {
+  importFile.value = null;
+  importParsing.value = false;
+  importLoading.value = false;
+  importParseError.value = "";
+  importRows.value = [];
+  if (importInput.value) importInput.value.value = "";
+}
+
+function triggerImportFile() {
   importInput.value?.click();
 }
 
 async function handleImport(e: Event) {
-  const file = (e.target as HTMLInputElement).files?.[0];
-  if (!file) return;
-  const text = await file.text();
-  let data: any[];
+  const input = e.target as HTMLInputElement;
+  const file = input.files?.[0];
+  input.value = "";
+  if (file) await loadImportFile(file);
+}
+
+async function onImportDrop(e: DragEvent) {
+  const file = e.dataTransfer?.files?.[0];
+  if (file) await loadImportFile(file);
+}
+
+async function loadImportFile(file: File) {
+  if (!file.name.toLowerCase().endsWith(".json")) {
+    ElMessage.warning("请选择 JSON 文件");
+    return;
+  }
+  importFile.value = file;
+  importParsing.value = true;
+  importParseError.value = "";
+  importRows.value = [];
   try {
-    data = JSON.parse(text);
+    const text = await file.text();
+    importRows.value = parseWorldBookImport(text);
+  } catch (error: any) {
+    importParseError.value = error?.message || "JSON 解析失败";
+    ElMessage.error(importParseError.value);
+  } finally {
+    importParsing.value = false;
+  }
+}
+
+async function confirmImport() {
+  if (!canImportJson.value) return;
+  const items = importRows.value
+    .filter((row) => row.valid && row.item)
+    .map((row) => row.item as Partial<WorldBookEntry>);
+  importLoading.value = true;
+  try {
+    await createRules(items);
+    ElMessage.success(`导入完成：成功 ${items.length} 条`);
+    importDialogVisible.value = false;
+  } catch (error: any) {
+    ElMessage.error("导入失败: " + (error?.message || error));
+  } finally {
+    importLoading.value = false;
+  }
+}
+
+async function copyImportExample() {
+  try {
+    await navigator.clipboard.writeText(importExampleJson);
+    ElMessage.success("示例 JSON 已复制");
   } catch {
-    ElMessage.error("JSON格式错误");
-    return;
+    ElMessage.error("复制失败，请手动选择示例内容");
   }
-  if (!Array.isArray(data)) {
-    ElMessage.error("JSON应为数组");
-    return;
-  }
-  let success = 0;
-  for (const item of data) {
-    try {
-      await createRule(item);
-      success++;
-    } catch {}
-  }
-  ElMessage.success(`导入完成：成功 ${success} / ${data.length}`);
-  fetchRules();
 }
 
 function exportRules() {
@@ -378,6 +544,7 @@ function exportRules() {
     matchScope: r.matchScope,
     injectContent: r.injectContent,
     priority: r.priority,
+    characterId: r.characterId,
   }));
   const blob = new Blob([JSON.stringify(data, null, 2)], {
     type: "application/json",
@@ -408,6 +575,96 @@ function exportRules() {
 .header-actions {
   display: flex;
   gap: 8px;
+}
+.hidden-input {
+  display: none;
+}
+.json-import-content {
+  max-height: 68vh;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+.json-import-drop-zone {
+  min-height: 176px;
+  padding: 22px;
+  border: 1px dashed var(--ac-color-border);
+  border-radius: 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  text-align: center;
+  background: var(--ac-color-bg-secondary);
+  transition: border-color 160ms ease, background 160ms ease;
+}
+.json-import-drop-zone:hover,
+.json-import-drop-zone.has-file {
+  border-color: var(--el-color-primary-light-7);
+  background: var(--el-color-primary-light-9);
+}
+.json-import-drop-zone .upload-icon {
+  margin-bottom: 4px;
+  font-size: 34px;
+  color: var(--el-color-primary);
+}
+.json-import-drop-zone strong {
+  font-size: 14px;
+}
+.json-import-drop-zone span {
+  margin-bottom: 6px;
+  color: var(--ac-color-text-muted);
+  font-size: 12px;
+}
+.import-summary {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin: 14px 0 10px;
+  font-size: 13px;
+}
+.import-summary .valid {
+  color: var(--el-color-success);
+}
+.import-summary .invalid {
+  color: var(--el-color-danger);
+}
+.example-panel {
+  margin-top: 18px;
+  padding: 14px;
+  border: 1px solid var(--ac-color-border);
+  border-radius: 12px;
+  background: var(--ac-color-bg-secondary);
+}
+.example-panel-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 10px;
+}
+.example-panel-header h3 {
+  margin: 0;
+  font-size: 15px;
+}
+.example-panel-header p {
+  margin: 4px 0 0;
+  color: var(--ac-color-text-muted);
+  font-size: 12px;
+}
+.example-code {
+  max-height: 320px;
+  margin: 0;
+  padding: 14px;
+  overflow: auto;
+  border: 1px solid var(--ac-color-border);
+  border-radius: 10px;
+  background: var(--ac-color-surface);
+  color: var(--ac-color-text-primary);
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre;
 }
 
 .filter-bar {

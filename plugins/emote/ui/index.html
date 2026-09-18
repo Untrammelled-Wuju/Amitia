@@ -40,6 +40,11 @@
             <input id="search" placeholder="搜索名称、含义或关键词" autocomplete="off">
             <button type="button" id="clear-search" class="clear-button" hidden aria-label="清空搜索">×</button>
           </label>
+          <select id="mobile-group-select" class="el-select mobile-group-select" aria-label="表情分类">
+            <option value="view:all">全部表情</option>
+            <option value="view:recent">最近使用</option>
+            <option value="view:unassigned">未分组</option>
+          </select>
           <button type="button" class="el-button" id="import-folder">导入文件夹</button>
           <button type="button" class="el-button primary" id="import-files">导入表情</button>
           <button type="button" class="el-button circle" id="refresh" aria-label="刷新">

@@ -69,6 +69,38 @@ let loginTimer = null;
 let nativeEventTimer = null;
 const seenInbound = new Map();
 const delivered = new Map();
+const messageHistory = new Map();
+
+function recordMessage(conversationId, peerId, role, content, createdAt = new Date().toISOString()) {
+  const key = String(conversationId || peerId || "default");
+  const list = messageHistory.get(key) || [];
+  list.push({
+    id: randomUUID(),
+    conversationId: key,
+    peerId: String(peerId || ""),
+    role,
+    content: String(content || ""),
+    createdAt,
+  });
+  if (list.length > 500) list.splice(0, list.length - 500);
+  messageHistory.set(key, list);
+}
+
+function readMessages(conversationId, limit, offset) {
+  const bindings = [...messageHistory.entries()].map(([id, items]) => ({
+    conversationId: id,
+    externalConversationId: items[0]?.peerId || id,
+    externalUserId: items[0]?.peerId || id,
+    displayName: items[0]?.peerId || id,
+  }));
+  const selected = conversationId
+    ? messageHistory.get(String(conversationId)) || []
+    : [...messageHistory.values()].flat();
+  return {
+    bindings,
+    messages: selected.slice(Math.max(0, offset), Math.max(0, offset) + Math.max(1, limit)),
+  };
+}
 
 function pruneMap(map, max = 1000) {
   if (map.size <= max) return;
@@ -562,6 +594,7 @@ async function sendText(peerId, text, deliveryKey = "") {
     pruneMap(delivered);
   }
   state.replyCount += 1;
+  recordMessage(`wechat-personal-${state.accountId || "default"}-${peerId}`.replace(/[^a-zA-Z0-9_@.-]/g, "_"), peerId, "assistant", text);
   return { duplicate: false, result };
 }
 
@@ -611,6 +644,10 @@ async function forwardInbound(raw) {
     body: JSON.stringify(payload),
   }, 180000);
   state.messageCount += 1;
+  const createdAt = Number.isFinite(Number(item.createdAt))
+    ? new Date(Number(item.createdAt)).toISOString()
+    : new Date().toISOString();
+  recordMessage(convKey, item.peerId, "user", item.text, createdAt);
   return { ignored: false, response };
 }
 
@@ -709,6 +746,17 @@ async function handleMain(req, res) {
         managedClient: true,
         nativeCompanion: state.nativeAgent,
         supportedDrivers: ["amitia-native-v1", "hero-compatible", "aixed-compatible"],
+      });
+    }
+    if (req.method === "POST" && url.pathname === "/api/messages") {
+      const body = await readJson(req);
+      return json(res, 200, {
+        success: true,
+        data: readMessages(
+          String(body.conversationId || ""),
+          Math.max(1, Math.min(1000, Number(body.limit || 200))),
+          Math.max(0, Number(body.offset || 0)),
+        ),
       });
     }
     if (req.method === "POST" && url.pathname === "/api/connect") {

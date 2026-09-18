@@ -10,6 +10,18 @@ const manifest = JSON.parse(execFileSync("unzip", ["-p", file, "manifest.json"],
 if (!manifest.compatibility?.platforms?.includes("windows") || !manifest.compatibility?.platforms?.includes("linux")) {
   throw new Error("package must declare both windows and linux");
 }
+const contributions = (manifest.modules || []).flatMap((mod) => mod.contributions || []);
+for (const providerId of [
+  "wechat-personal-routes",
+  "wechat-personal-page-provider",
+  "wechat-personal-messages-page-provider",
+  "wechat-personal-drawer",
+]) {
+  const provider = contributions.find((item) => item.spec?.providerId === providerId);
+  if (!provider?.spec?.entries?.mobile) {
+    throw new Error(`mobile entry missing for ${providerId}`);
+  }
+}
 for (const mod of manifest.modules || []) {
   for (const companion of mod.runtime?.nativeCompanions || []) {
     const path = `modules/${mod.id}/${companion.path}`;

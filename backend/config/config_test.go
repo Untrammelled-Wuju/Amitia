@@ -53,12 +53,6 @@ func TestProviderConfigDefaults(t *testing.T) {
 	if !cfg.Components.TaskHost.Enabled {
 		t.Error("TaskHost should be enabled by default")
 	}
-	if !cfg.Components.Sidecars.Wechat.Enabled {
-		t.Error("Wechat sidecar should be enabled by default")
-	}
-	if !cfg.Components.Sidecars.QQ.Enabled {
-		t.Error("QQ sidecar should be enabled by default")
-	}
 }
 
 func TestLoadCanonicalProviderConfig(t *testing.T) {
@@ -319,14 +313,10 @@ func TestProviderEnvironmentFalseOverridesDefaults(t *testing.T) {
 	t.Setenv("AMITIA_QDRANT_ENABLED", "false")
 	t.Setenv("AMITIA_SURREAL_ENABLED", "false")
 	t.Setenv("AMITIA_TASK_HOST_ENABLED", "false")
-	t.Setenv("AMITIA_WECHAT_SIDECAR_ENABLED", "false")
-	t.Setenv("AMITIA_QQ_SIDECAR_ENABLED", "false")
 	defer func() {
 		os.Unsetenv("AMITIA_QDRANT_ENABLED")
 		os.Unsetenv("AMITIA_SURREAL_ENABLED")
 		os.Unsetenv("AMITIA_TASK_HOST_ENABLED")
-		os.Unsetenv("AMITIA_WECHAT_SIDECAR_ENABLED")
-		os.Unsetenv("AMITIA_QQ_SIDECAR_ENABLED")
 	}()
 
 	cfg, err := loadConfig(dir)
@@ -342,12 +332,6 @@ func TestProviderEnvironmentFalseOverridesDefaults(t *testing.T) {
 	}
 	if cfg.Components.TaskHost.Enabled {
 		t.Error("TaskHost should be disabled via env false")
-	}
-	if cfg.Components.Sidecars.Wechat.Enabled {
-		t.Error("Wechat should be disabled via env false")
-	}
-	if cfg.Components.Sidecars.QQ.Enabled {
-		t.Error("QQ should be disabled via env false")
 	}
 }
 
@@ -457,74 +441,6 @@ func TestComponentEntryPathValidation(t *testing.T) {
 	_, err = loadConfig(dir3)
 	if err != nil {
 		t.Errorf("Empty entryUri should be allowed: %v", err)
-	}
-}
-
-func TestSidecarHealthURLValidation(t *testing.T) {
-	dir := t.TempDir()
-	yaml := "components:\n  sidecars:\n    wechat:\n      enabled: true\n      healthUrl: \"http://127.0.0.1:19876/api/health\"\n    qq:\n      enabled: true\n      healthUrl: \"https://example.com/health\"\n"
-	configFile := filepath.Join(dir, "config.yml")
-	if err := os.WriteFile(configFile, []byte(yaml), 0644); err != nil {
-		t.Fatal(err)
-	}
-
-	cfg, err := loadConfig(dir)
-	if err != nil {
-		t.Fatalf("loadConfig should accept valid URLs: %v", err)
-	}
-	if cfg.Components.Sidecars.Wechat.HealthURL != "http://127.0.0.1:19876/api/health" {
-		t.Errorf("Wechat healthUrl = %q", cfg.Components.Sidecars.Wechat.HealthURL)
-	}
-	if cfg.Components.Sidecars.QQ.HealthURL != "https://example.com/health" {
-		t.Errorf("QQ healthUrl = %q", cfg.Components.Sidecars.QQ.HealthURL)
-	}
-
-	dir2 := t.TempDir()
-	yaml2 := "components:\n  sidecars:\n    wechat:\n      healthUrl: \"\"\n"
-	configFile2 := filepath.Join(dir2, "config.yml")
-	if err := os.WriteFile(configFile2, []byte(yaml2), 0644); err != nil {
-		t.Fatal(err)
-	}
-
-	_, err = loadConfig(dir2)
-	if err != nil {
-		t.Errorf("Empty healthUrl should be allowed: %v", err)
-	}
-
-	dir3 := t.TempDir()
-	yaml3 := "components:\n  sidecars:\n    wechat:\n      healthUrl: \"ftp://example.com/health\"\n"
-	configFile3 := filepath.Join(dir3, "config.yml")
-	if err := os.WriteFile(configFile3, []byte(yaml3), 0644); err != nil {
-		t.Fatal(err)
-	}
-
-	_, err = loadConfig(dir3)
-	if err == nil {
-		t.Error("Should reject ftp:// scheme")
-	}
-
-	dir4 := t.TempDir()
-	yaml4 := "components:\n  sidecars:\n    wechat:\n      healthUrl: \"http:///health\"\n"
-	configFile4 := filepath.Join(dir4, "config.yml")
-	if err := os.WriteFile(configFile4, []byte(yaml4), 0644); err != nil {
-		t.Fatal(err)
-	}
-
-	_, err = loadConfig(dir4)
-	if err == nil {
-		t.Error("Should reject healthUrl without host")
-	}
-
-	dir5 := t.TempDir()
-	yaml5 := "components:\n  sidecars:\n    wechat:\n      healthUrl: \"http://user:pass@host/health\"\n"
-	configFile5 := filepath.Join(dir5, "config.yml")
-	if err := os.WriteFile(configFile5, []byte(yaml5), 0644); err != nil {
-		t.Fatal(err)
-	}
-
-	_, err = loadConfig(dir5)
-	if err == nil {
-		t.Error("Should reject healthUrl with userinfo")
 	}
 }
 
@@ -676,16 +592,12 @@ func TestAndroidStyleRequiredProviderOverrides(t *testing.T) {
 	t.Setenv("AMITIA_SCRIPT_RUNTIME_REQUIRED", "true")
 	t.Setenv("AMITIA_VECTOR_STORE_ENABLED", "true")
 	t.Setenv("AMITIA_GRAPH_STORE_ENABLED", "false")
-	t.Setenv("AMITIA_WECHAT_SIDECAR_ENABLED", "false")
-	t.Setenv("AMITIA_QQ_SIDECAR_ENABLED", "false")
 	t.Setenv("AMITIA_DESKTOP_PET_RUNTIME_ENABLED", "false")
 	defer func() {
 		os.Unsetenv("AMITIA_SCRIPT_RUNTIME_ENABLED")
 		os.Unsetenv("AMITIA_SCRIPT_RUNTIME_REQUIRED")
 		os.Unsetenv("AMITIA_VECTOR_STORE_ENABLED")
 		os.Unsetenv("AMITIA_GRAPH_STORE_ENABLED")
-		os.Unsetenv("AMITIA_WECHAT_SIDECAR_ENABLED")
-		os.Unsetenv("AMITIA_QQ_SIDECAR_ENABLED")
 		os.Unsetenv("AMITIA_DESKTOP_PET_RUNTIME_ENABLED")
 	}()
 
@@ -702,12 +614,6 @@ func TestAndroidStyleRequiredProviderOverrides(t *testing.T) {
 	}
 	if !cfg.Providers.VectorStore.Enabled {
 		t.Error("VectorStore should be enabled")
-	}
-	if cfg.Components.Sidecars.Wechat.Enabled {
-		t.Error("Wechat should be disabled")
-	}
-	if cfg.Components.Sidecars.QQ.Enabled {
-		t.Error("QQ should be disabled")
 	}
 	if cfg.DesktopPetRuntime.Enabled {
 		t.Error("DesktopPetRuntime should be disabled")

@@ -188,7 +188,6 @@ SPDX-License-Identifier: AGPL-3.0-only
       </el-descriptions-item>
       <el-descriptions-item label="Bridge 端口">
         <code>{{ mode.bridge.host }}:{{ mode.bridge.port }}</code>
-        <span class="form-tip">微信桥在同一台机器上运行</span>
       </el-descriptions-item>
       <el-descriptions-item label="数据位置">
         <code>{{ mode.storage.dataDir }}</code>

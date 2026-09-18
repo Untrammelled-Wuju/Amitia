@@ -84,7 +84,7 @@ const isContentPaddingDisabled = computed(() => {
 });
 const isContentFullHeight = computed(() => {
   const path = router.currentRoute.value.path;
-  return path === "/emotes" || path.startsWith("/character") || path.startsWith("/creative-workshop/workflows/");
+  return path === "/emotes" || path.startsWith("/character") || path.startsWith("/extensions/workflows/");
 });
 const pageTitle = computed(() => getPageTitle(router.currentRoute.value.path));
 
@@ -93,8 +93,6 @@ const health = ref({
   deployMode: "desktop-local",
   database: "ok",
   model: "not_configured",
-  wechat: "disconnected",
-  qq: "disconnected",
   web: "enabled",
 });
 
@@ -117,7 +115,6 @@ function handleWindowResize() {
 provide("theme", theme);
 async function refreshAll() {
   await fetchHealth();
-  await fetchQQStatus();
   await fetchActiveCharacter();
 }
 provide("refreshHealth", refreshAll);
@@ -132,21 +129,6 @@ async function fetchHealth() {
       health.value = { ...health.value, ...res.data };
     }
   } catch {}
-}
-
-async function fetchQQStatus() {
-  try {
-    const res = await apiClient.get("/api/qq/status");
-    const data = res.data?.data || res.data;
-    if (data) {
-      health.value.qq =
-        data.qqOnline || data.status === "online"
-          ? "connected"
-          : "disconnected";
-    }
-  } catch {
-    health.value.qq = "disconnected";
-  }
 }
 
 async function fetchActiveCharacter() {
@@ -194,7 +176,6 @@ async function fetchSpaceProfile() {
 onMounted(() => {
   window.addEventListener("resize", handleWindowResize);
   fetchHealth();
-  fetchQQStatus();
   fetchActiveCharacter();
   fetchSpaceProfile();
   connectUIHost();
@@ -216,7 +197,6 @@ onMounted(() => {
 
   healthInterval = window.setInterval(() => {
     void fetchHealth();
-    void fetchQQStatus();
   }, 30000);
 });
 

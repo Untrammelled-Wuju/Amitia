@@ -45,7 +45,6 @@ AI：那就休息一下。
             <el-radio-button value="standard">标准</el-radio-button>
             <el-radio-button value="timestamp">时间戳</el-radio-button>
             <el-radio-button value="multiline">多行</el-radio-button>
-            <el-radio-button value="wechat">微信</el-radio-button>
           </el-radio-group>
         </div>
       </div>

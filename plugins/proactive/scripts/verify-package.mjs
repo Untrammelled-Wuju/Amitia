@@ -70,6 +70,9 @@ function main() {
     "integrity/content-tree.json",
     "modules/proactive-runtime/package.json",
     "modules/proactive-runtime/dist/index.js",
+    "modules/proactive-ui/index.html",
+    "modules/proactive-ui/app.js",
+    "modules/proactive-ui/styles.css",
   ];
   for (const path of required) {
     if (!entries.has(path)) throw new Error(`missing package path: ${path}`);
@@ -84,6 +87,9 @@ function main() {
   if (!permissions.some((permission) => permission.name === "message.send")) {
     throw new Error("message.send permission missing");
   }
+  if (!permissions.some((permission) => permission.name === "tool.invoke")) {
+    throw new Error("tool.invoke permission missing");
+  }
   if (permissions.some((permission) => permission.name === "proactive.dispatch")) {
     throw new Error("legacy proactive.dispatch permission must not be present");
   }
@@ -93,6 +99,20 @@ function main() {
   }
   if (runtimeSource.includes("host.proactive.dispatch")) {
     throw new Error("legacy proactive host call must not be present");
+  }
+  const uiContribution = manifest.modules
+    ?.flatMap((module) => module.contributions || [])
+    .find((item) => item.id === "proactive-character-tab");
+  if (uiContribution?.spec?.slot?.slot_id !== "character.detail.tab") {
+    throw new Error("character detail proactive ui contribution missing");
+  }
+  if (
+    uiContribution?.spec?.entry?.content_hash !==
+    `sha256-${createHash("sha256")
+      .update(entries.get("modules/proactive-ui/index.html"))
+      .digest("base64")}`
+  ) {
+    throw new Error("proactive ui entry hash mismatch");
   }
   if (files.algorithm !== "sha256" || tree.algorithm !== "sha256") {
     throw new Error("invalid integrity algorithm");

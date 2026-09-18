@@ -98,6 +98,45 @@ class ProotEnvironmentAssemblerTest {
     }
 
     @Test
+    fun specMountsResolverWithProvidedDnsServers() {
+        val layout = createLayout()
+        val assembler = ProotEnvironmentAssembler(
+            layout = layout,
+            environmentBuilder = fakeBuilder(),
+            dnsServersProvider = { listOf("223.5.5.5", "119.29.29.29") },
+        )
+        val spec = assembler.assembleBackendLaunch(createProgramSource(layout))
+        val resolverMount = spec.bindMounts.first { it.guest == "/etc/resolv.conf" }
+        val resolver = File(resolverMount.host)
+        assertTrue(resolver.isFile)
+        assertEquals(
+            "nameserver 223.5.5.5\nnameserver 119.29.29.29\noptions timeout:2 attempts:3 rotate\n",
+            resolver.readText(),
+        )
+    }
+
+    @Test
+    fun assemblerWritesCaBundleForGuestTls() {
+        val layout = createLayout()
+        val caDirectory = tempFolder.newFolder("cacerts")
+        File(caDirectory, "test.0").writeText(
+            "-----BEGIN CERTIFICATE-----\nAQID\n-----END CERTIFICATE-----\n",
+        )
+        val assembler = ProotEnvironmentAssembler(
+            layout = layout,
+            environmentBuilder = fakeBuilder(),
+            caCertificateDirectories = listOf(caDirectory),
+        )
+        assembler.assembleBackendLaunch(createProgramSource(layout))
+        val bundle = File(layout.dataRoot, "security/ca-certificates.crt")
+        assertTrue(bundle.isFile)
+        assertEquals(
+            "-----BEGIN CERTIFICATE-----\nAQID\n-----END CERTIFICATE-----\n",
+            bundle.readText(),
+        )
+    }
+
+    @Test
     fun specHasDeterministicBinaryPath() {
         val layout = createLayout()
         val assembler = ProotEnvironmentAssembler(layout = layout, environmentBuilder = fakeBuilder())

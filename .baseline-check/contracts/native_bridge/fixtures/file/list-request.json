@@ -1,9 +1,0 @@
-{
-  "protocolVersion": 1,
-  "requestId": "req-list-001",
-  "operation": "file.list",
-  "payload": {
-    "mountId": "mount-documents-001",
-    "relativePath": "projects"
-  }
-}

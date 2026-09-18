@@ -58,11 +58,7 @@ class ConversationRuntimeController extends ChangeNotifier {
     notifyListeners();
   }
 
-  ChatMessage _copy(
-    ChatMessage message, {
-    String? id,
-    MessageStatus? status,
-  }) {
+  ChatMessage _copy(ChatMessage message, {String? id, MessageStatus? status}) {
     return ChatMessage(
       id: id ?? message.id,
       role: message.role,
@@ -88,7 +84,11 @@ class ConversationRuntimeController extends ChangeNotifier {
     );
   }
 
-  Future<void> sendText(String text, {String? replyToMessageId, String? replyToExcerpt}) async {
+  Future<void> sendText(
+    String text, {
+    String? replyToMessageId,
+    String? replyToExcerpt,
+  }) async {
     final value = text.trim();
     if (value.isEmpty || _sending) return;
     await _send(
@@ -129,7 +129,10 @@ class ConversationRuntimeController extends ChangeNotifier {
     if (emoteId.trim().isEmpty || _sending) return;
     final conv = _conversationId;
     final character = _characterId;
-    if (conv == null || conv.isEmpty || character == null || character.isEmpty) {
+    if (conv == null ||
+        conv.isEmpty ||
+        character == null ||
+        character.isEmpty) {
       _lastError = StateError('发送表情前需要有效会话和角色');
       notifyListeners();
       return;
@@ -274,6 +277,9 @@ class ConversationRuntimeController extends ChangeNotifier {
     String? replyToMessageId,
   }) async {
     _messages.add(localMessage);
+    debugPrint(
+      'Chat local message added id=${localMessage.id} total=${_messages.length}',
+    );
     _lastError = null;
     _sending = true;
     final epoch = ++_generationEpoch;
@@ -309,7 +315,9 @@ class ConversationRuntimeController extends ChangeNotifier {
             break;
           case 'queued':
             queued = true;
-            final conversationId = (event.data['conversationId'] ?? '').toString().trim();
+            final conversationId = (event.data['conversationId'] ?? '')
+                .toString()
+                .trim();
             if (conversationId.isNotEmpty) {
               _conversationId = conversationId;
               _restartLiveSync();
@@ -328,11 +336,16 @@ class ConversationRuntimeController extends ChangeNotifier {
         await _syncMessages();
       }
       _lastError = null;
-    } catch (error) {
+    } catch (error, stackTrace) {
       if (epoch != _generationEpoch || cancellation.isCancelled) return;
+      debugPrint('Chat send failed [${error.runtimeType}]: $error');
+      for (final line in stackTrace.toString().split('\n').take(24)) {
+        debugPrint(line);
+      }
       _lastError = error;
       final localIndex = _messages.indexWhere(
-        (m) => m.id == localMessage.id ||
+        (m) =>
+            m.id == localMessage.id ||
             (m.role == MessageRole.user && m.status == MessageStatus.sending),
       );
       if (localIndex >= 0) {
@@ -373,7 +386,9 @@ class ConversationRuntimeController extends ChangeNotifier {
       notifyListeners();
     }
     final workspace = _workspace;
-    if (epoch != _generationEpoch || workspace == null || conversationId.isEmpty) {
+    if (epoch != _generationEpoch ||
+        workspace == null ||
+        conversationId.isEmpty) {
       return;
     }
     try {
@@ -384,14 +399,12 @@ class ConversationRuntimeController extends ChangeNotifier {
     } catch (_) {}
   }
 
-  void _upsertStreamAssistant(
-    Map<String, dynamic> data,
-    MessageType type,
-  ) {
+  void _upsertStreamAssistant(Map<String, dynamic> data, MessageType type) {
     final id = (data['id'] ?? data['messageId'] ?? '').toString().trim();
     if (id.isEmpty) return;
     final content = (data['content'] ?? '').toString();
-    final createdAt = DateTime.tryParse((data['createdAt'] ?? '').toString()) ??
+    final createdAt =
+        DateTime.tryParse((data['createdAt'] ?? '').toString()) ??
         DateTime.now();
     final audioUrl = (data['audioUrl'] ?? '').toString().trim();
     final duration = (data['duration'] as num?)?.toDouble() ?? 0;
@@ -451,63 +464,115 @@ class ConversationRuntimeController extends ChangeNotifier {
     final conv = _conversationId;
     if (conv == null || conv.isEmpty) return;
     final persisted = await _chatService.getMessages(conv);
-    if (_disposed || _conversationId != conv || (background && _sending)) return;
-    if (persisted.isEmpty) return;
+    debugPrint(
+      'Chat sync persisted conversation=$conv count=${persisted.length}',
+    );
+    if (_disposed || _conversationId != conv || (background && _sending))
+      return;
+    if (persisted.isEmpty) {
+      debugPrint('Chat sync skipped empty persisted conversation=$conv');
+      return;
+    }
 
     final localById = <String, ChatMessage>{
       for (final message in _messages) message.id: message,
     };
     final transientErrors = _messages
-        .where((message) =>
-            message.role == MessageRole.assistant &&
-            message.status == MessageStatus.error &&
-            message.id.contains('-error-'))
+        .where(
+          (message) =>
+              message.role == MessageRole.assistant &&
+              message.status == MessageStatus.error &&
+              message.id.contains('-error-'),
+        )
         .toList(growable: false);
-    final mapped = persisted.map((dto) {
-      final existing = localById[dto.id];
-      final type = _typeForDto(dto, existing);
-      final agentTask = type == MessageType.agentTask
-          ? _agentTaskPayload(dto.content)
-          : const <String, dynamic>{};
-      return ChatMessage(
-        id: dto.id,
-        role: _roleFor(dto.role),
-        type: type,
-        content: dto.content,
-        time: DateTime.tryParse(dto.createdAt) ?? existing?.time ?? DateTime.now(),
-        status: dto.status == 'failed'
-            ? MessageStatus.error
-            : MessageStatus.delivered,
-        agentTaskId: _firstString(agentTask, const <String>['taskRunId', 'task_run_id', 'runId']) ?? existing?.agentTaskId,
-        agentTaskTitle: _firstString(agentTask, const <String>['title', 'taskTitle', 'taskDefinitionId']) ?? existing?.agentTaskTitle,
-        agentTaskSteps: _stringList(agentTask['steps']) ?? existing?.agentTaskSteps,
-        agentTaskProgress: _progressInt(agentTask) ?? existing?.agentTaskProgress,
-        agentTaskElapsed: _firstString(agentTask, const <String>['elapsed', 'elapsedTime']) ?? existing?.agentTaskElapsed,
-        fileName: existing?.fileName,
-        fileSizeKB: existing?.fileSizeKB,
-        resourceUri: _resourceForDto(dto, existing),
-        mediaUrl: existing?.mediaUrl,
-        mimeType: existing?.mimeType,
-        durationMs: dto.audioDuration > 0
-            ? (dto.audioDuration * 1000).round()
-            : existing?.durationMs,
-        toolName: existing?.toolName,
-        toolResult: existing?.toolResult,
-        replyToMessageId: dto.replyToMessageId ?? existing?.replyToMessageId,
-        replyToExcerpt: dto.replyToExcerpt ?? existing?.replyToExcerpt,
-      );
-    }).toList(growable: true);
+    final mapped = persisted
+        .map((dto) {
+          final existing = localById[dto.id];
+          final type = _typeForDto(dto, existing);
+          final agentTask = type == MessageType.agentTask
+              ? _agentTaskPayload(dto.content)
+              : const <String, dynamic>{};
+          return ChatMessage(
+            id: dto.id,
+            role: _roleFor(dto.role),
+            type: type,
+            content: dto.content,
+            time:
+                DateTime.tryParse(dto.createdAt) ??
+                existing?.time ??
+                DateTime.now(),
+            status: dto.status == 'failed'
+                ? MessageStatus.error
+                : MessageStatus.delivered,
+            agentTaskId:
+                _firstString(agentTask, const <String>[
+                  'taskRunId',
+                  'task_run_id',
+                  'runId',
+                ]) ??
+                existing?.agentTaskId,
+            agentTaskTitle:
+                _firstString(agentTask, const <String>[
+                  'title',
+                  'taskTitle',
+                  'taskDefinitionId',
+                ]) ??
+                existing?.agentTaskTitle,
+            agentTaskSteps:
+                _stringList(agentTask['steps']) ?? existing?.agentTaskSteps,
+            agentTaskProgress:
+                _progressInt(agentTask) ?? existing?.agentTaskProgress,
+            agentTaskElapsed:
+                _firstString(agentTask, const <String>[
+                  'elapsed',
+                  'elapsedTime',
+                ]) ??
+                existing?.agentTaskElapsed,
+            fileName: existing?.fileName,
+            fileSizeKB: existing?.fileSizeKB,
+            resourceUri: _resourceForDto(dto, existing),
+            mediaUrl: existing?.mediaUrl,
+            mimeType: existing?.mimeType,
+            durationMs: dto.audioDuration > 0
+                ? (dto.audioDuration * 1000).round()
+                : existing?.durationMs,
+            toolName: existing?.toolName,
+            toolResult: existing?.toolResult,
+            replyToMessageId:
+                dto.replyToMessageId ?? existing?.replyToMessageId,
+            replyToExcerpt: dto.replyToExcerpt ?? existing?.replyToExcerpt,
+          );
+        })
+        .toList(growable: true);
     for (final transient in transientErrors) {
       if (!mapped.any((message) => message.id == transient.id)) {
         mapped.add(transient);
       }
+    }
+    for (final local in _messages) {
+      if (local.status != MessageStatus.sending &&
+          local.status != MessageStatus.sent) {
+        continue;
+      }
+      if (mapped.any((message) => _samePersistedMessage(local, message))) {
+        continue;
+      }
+      mapped.add(local);
     }
     mapped.sort((a, b) => a.time.compareTo(b.time));
     if (_sameMessageList(_messages, mapped)) return;
     _messages
       ..clear()
       ..addAll(mapped);
+    debugPrint(
+      'Chat sync replaced conversation=$conv total=${_messages.length} ids=${mapped.map((item) => item.id).join(',')}',
+    );
     notifyListeners();
+  }
+
+  bool _samePersistedMessage(ChatMessage local, ChatMessage persisted) {
+    if (local.id == persisted.id) return true;
+    return local.role == persisted.role && local.content == persisted.content;
   }
 
   void _restartLiveSync() {
@@ -559,8 +624,8 @@ class ConversationRuntimeController extends ChangeNotifier {
               event.type != 'message_updated') {
             continue;
           }
-          final eventConversation =
-              (event.data['conversationId'] ?? '').toString();
+          final eventConversation = (event.data['conversationId'] ?? '')
+              .toString();
           if (eventConversation != conversationId) continue;
           if (_handleTransientModelError(event.data)) continue;
           unawaited(_pollPersistedMessages());
@@ -600,9 +665,10 @@ class ConversationRuntimeController extends ChangeNotifier {
       content: rawError.isNotEmpty
           ? rawError
           : content.isNotEmpty
-              ? content
-              : '模型响应失败',
-      time: DateTime.tryParse((event['createdAt'] ?? '').toString()) ??
+          ? content
+          : '模型响应失败',
+      time:
+          DateTime.tryParse((event['createdAt'] ?? '').toString()) ??
           DateTime.now(),
       status: MessageStatus.error,
     );
@@ -688,7 +754,9 @@ class ConversationRuntimeController extends ChangeNotifier {
     final items = value
         .map((item) {
           if (item is Map) {
-            return (item['title'] ?? item['name'] ?? item['label'] ?? '').toString().trim();
+            return (item['title'] ?? item['name'] ?? item['label'] ?? '')
+                .toString()
+                .trim();
           }
           return item.toString().trim();
         })
@@ -706,7 +774,10 @@ class ConversationRuntimeController extends ChangeNotifier {
       final current = direct['current'];
       final total = direct['total'];
       if (current is num && total is num && total > 0) {
-        return (current.toDouble() / total.toDouble() * 100).round().clamp(0, 100);
+        return (current.toDouble() / total.toDouble() * 100).round().clamp(
+          0,
+          100,
+        );
       }
     }
     return null;
@@ -846,7 +917,6 @@ class ConversationRuntimeController extends ChangeNotifier {
     }
   }
 
-
   Future<void> regenerate({String? messageId}) async {
     final conv = _conversationId;
     if (_sending || conv == null || conv.isEmpty) return;
@@ -897,9 +967,13 @@ class ConversationRuntimeController extends ChangeNotifier {
     }
   }
 
-  Future<void> openConversation(String conversationId, {String? characterId}) async {
+  Future<void> openConversation(
+    String conversationId, {
+    String? characterId,
+  }) async {
     final id = conversationId.trim();
     if (id.isEmpty) return;
+    debugPrint('Chat open conversation id=$id');
     _activeSendCancellation?.cancel('conversation changed');
     _activeSendCancellation = null;
     ++_generationEpoch;
@@ -969,7 +1043,8 @@ class ConversationRuntimeController extends ChangeNotifier {
         'content': message.content,
         'time': message.time.toIso8601String(),
         'status': message.status.name,
-        if ((message.agentTaskId ?? '').isNotEmpty) 'agentTaskId': message.agentTaskId,
+        if ((message.agentTaskId ?? '').isNotEmpty)
+          'agentTaskId': message.agentTaskId,
         if (message.fileName != null) 'fileName': message.fileName,
         if (message.fileSizeKB != null) 'fileSizeKB': message.fileSizeKB,
         if (message.resourceUri != null) 'resourceUri': message.resourceUri,
@@ -978,7 +1053,9 @@ class ConversationRuntimeController extends ChangeNotifier {
         if (message.durationMs != null) 'durationMs': message.durationMs,
         if (message.toolName != null) 'toolName': message.toolName,
         if (message.toolResult != null) 'toolResult': message.toolResult,
-        if ((message.replyToMessageId ?? '').isNotEmpty) 'replyToMessageId': message.replyToMessageId,
-        if ((message.replyToExcerpt ?? '').isNotEmpty) 'replyToExcerpt': message.replyToExcerpt,
+        if ((message.replyToMessageId ?? '').isNotEmpty)
+          'replyToMessageId': message.replyToMessageId,
+        if ((message.replyToExcerpt ?? '').isNotEmpty)
+          'replyToExcerpt': message.replyToExcerpt,
       };
 }

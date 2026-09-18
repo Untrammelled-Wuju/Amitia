@@ -19,8 +19,6 @@ class _RouteAliasRule {
 const _routeAliasRules = <_RouteAliasRule>[
   _RouteAliasRule('/characters', '/character'),
   _RouteAliasRule('/workshop', '/creative-workshop'),
-  _RouteAliasRule('/channels/wechat', '/wechat', exact: true),
-  _RouteAliasRule('/channels/qq', '/qq', exact: true),
   _RouteAliasRule('/settings/devices', '/devices'),
   _RouteAliasRule('/developer/kernel', '/kernel'),
   _RouteAliasRule('/memory/manager', '/memory-manager', exact: true),
@@ -95,12 +93,6 @@ String canonicalUISurfaceId(String rawRoute) {
   }
   if (hasPrefix('/workshop') || hasPrefix('/creative-workshop')) {
     return 'surface.workshop';
-  }
-  if (aliases.contains('/channels/wechat') || aliases.contains('/wechat')) {
-    return 'surface.channel.wechat';
-  }
-  if (aliases.contains('/channels/qq') || aliases.contains('/qq')) {
-    return 'surface.channel.qq';
   }
   if (hasPrefix('/settings/devices') || hasPrefix('/devices')) {
     return 'surface.settings.devices';

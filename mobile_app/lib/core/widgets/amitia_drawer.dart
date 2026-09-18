@@ -11,8 +11,6 @@ import '../../app/app_routes.dart';
 import '../../app/drawer_route_state.dart';
 import '../models/character.dart';
 import '../settings/appearance_preferences.dart';
-import '../runtime/backend/mobile_backend_providers.dart';
-import '../runtime/backend/mobile_deployment_mode.dart';
 import '../services/extension_service.dart';
 import '../services/providers.dart';
 import '../ui_runtime/ui_navigation_registry.dart';
@@ -34,7 +32,9 @@ class _CharInfo {
   const _CharInfo(this.name, this.avatarInitial);
 
   factory _CharInfo.fromCharacter(CharacterDto character) {
-    final name = character.name.trim().isEmpty ? '未命名角色' : character.name.trim();
+    final name = character.name.trim().isEmpty
+        ? '未命名角色'
+        : character.name.trim();
     return _CharInfo(name, name.characters.first);
   }
 }
@@ -57,7 +57,6 @@ class _AmitiaDrawerState extends ConsumerState<AmitiaDrawer> {
     router.push(route);
   }
 
-
   Future<void> _showGlobalSearch(
     List<UINavigationItem> navigationItems,
     List<CharacterDto> characters,
@@ -65,24 +64,73 @@ class _AmitiaDrawerState extends ConsumerState<AmitiaDrawer> {
     final pages = <_DrawerSearchPage>[
       for (final item in navigationItems)
         _DrawerSearchPage(item.label, item.route, item.icon),
-      const _DrawerSearchPage('会话列表', AppRoutes.conversations, Icons.forum_outlined),
-      const _DrawerSearchPage('微信连接', AppRoutes.channelsWechat, Icons.wechat_outlined),
-      const _DrawerSearchPage('QQ 连接', AppRoutes.channelsQq, Icons.chat_outlined),
-      const _DrawerSearchPage('日程提醒', AppRoutes.reminders, Icons.notifications_none),
-      const _DrawerSearchPage('记忆总览', AppRoutes.memory, Icons.psychology_outlined),
-      const _DrawerSearchPage('情景记忆', AppRoutes.memoryEpisodic, Icons.auto_stories_outlined),
-      const _DrawerSearchPage('记忆图谱', AppRoutes.memoryGraph, Icons.hub_outlined),
-      const _DrawerSearchPage('时间线', AppRoutes.memoryTimeline, Icons.timeline_outlined),
-      const _DrawerSearchPage('用户画像', AppRoutes.memoryProfiles, Icons.person_search_outlined),
-      const _DrawerSearchPage('世界书', AppRoutes.memoryWorldBook, Icons.menu_book_outlined),
-      const _DrawerSearchPage('聊天记录', AppRoutes.chatLogs, Icons.history_outlined),
-      const _DrawerSearchPage('导入记录', AppRoutes.chatImport, Icons.file_upload_outlined),
-      const _DrawerSearchPage('表情管理', AppRoutes.emotes, Icons.emoji_emotions_outlined),
-      const _DrawerSearchPage('设置', AppRoutes.settings, Icons.settings_outlined),
+      const _DrawerSearchPage(
+        '会话列表',
+        AppRoutes.conversations,
+        Icons.forum_outlined,
+      ),
+      const _DrawerSearchPage(
+        '日程提醒',
+        AppRoutes.reminders,
+        Icons.notifications_none,
+      ),
+      const _DrawerSearchPage(
+        '记忆总览',
+        AppRoutes.memory,
+        Icons.psychology_outlined,
+      ),
+      const _DrawerSearchPage(
+        '情景记忆',
+        AppRoutes.memoryEpisodic,
+        Icons.auto_stories_outlined,
+      ),
+      const _DrawerSearchPage(
+        '记忆图谱',
+        AppRoutes.memoryGraph,
+        Icons.hub_outlined,
+      ),
+      const _DrawerSearchPage(
+        '时间线',
+        AppRoutes.memoryTimeline,
+        Icons.timeline_outlined,
+      ),
+      const _DrawerSearchPage(
+        '用户画像',
+        AppRoutes.memoryProfiles,
+        Icons.person_search_outlined,
+      ),
+      const _DrawerSearchPage(
+        '世界书',
+        AppRoutes.memoryWorldBook,
+        Icons.menu_book_outlined,
+      ),
+      const _DrawerSearchPage(
+        '聊天记录',
+        AppRoutes.chatLogs,
+        Icons.history_outlined,
+      ),
+      const _DrawerSearchPage(
+        '导入记录',
+        AppRoutes.chatImport,
+        Icons.file_upload_outlined,
+      ),
+      const _DrawerSearchPage(
+        '表情管理',
+        AppRoutes.emotes,
+        Icons.emoji_emotions_outlined,
+      ),
+      const _DrawerSearchPage(
+        '设置',
+        AppRoutes.settings,
+        Icons.settings_outlined,
+      ),
     ];
     final result = await showSearch<_DrawerSearchResult>(
       context: context,
-      delegate: _AmitiaDrawerSearchDelegate(pages: pages, characters: characters),
+      delegate: _AmitiaDrawerSearchDelegate(
+        pages: pages,
+        characters: characters,
+      ),
     );
     if (!mounted || result == null || result.route.isEmpty) return;
     if (result.characterId != null) {
@@ -95,13 +143,22 @@ class _AmitiaDrawerState extends ConsumerState<AmitiaDrawer> {
   Widget build(BuildContext context) {
     final appearance = ref.watch(appearancePreferencesProvider);
     final platformBrightness = MediaQuery.platformBrightnessOf(context);
-    final isDark = appearance.themeMode == ThemeMode.dark ||
-        (appearance.themeMode == ThemeMode.system && platformBrightness == Brightness.dark);
+    final isDark =
+        appearance.themeMode == ThemeMode.dark ||
+        (appearance.themeMode == ThemeMode.system &&
+            platformBrightness == Brightness.dark);
     final characterId = ref.watch(currentCharacterIdProvider);
-    final characters = ref.watch(characterListProvider).valueOrNull ?? const <CharacterDto>[];
-    CharacterDto? selectedCharacter = characters.where((item) => item.id == characterId).firstOrNull;
-    selectedCharacter ??= characters.where((item) => item.isActive == 1).firstOrNull;
-    selectedCharacter ??= characters.where((item) => item.isDefault).firstOrNull;
+    final characters =
+        ref.watch(characterListProvider).valueOrNull ?? const <CharacterDto>[];
+    CharacterDto? selectedCharacter = characters
+        .where((item) => item.id == characterId)
+        .firstOrNull;
+    selectedCharacter ??= characters
+        .where((item) => item.isActive == 1)
+        .firstOrNull;
+    selectedCharacter ??= characters
+        .where((item) => item.isDefault)
+        .firstOrNull;
     selectedCharacter ??= characters.firstOrNull;
     if (selectedCharacter != null && selectedCharacter.id != characterId) {
       final resolvedId = selectedCharacter.id;
@@ -115,10 +172,10 @@ class _AmitiaDrawerState extends ConsumerState<AmitiaDrawer> {
         ? const _CharInfo('暂无角色', '角')
         : _CharInfo.fromCharacter(selectedCharacter);
     final spaceProfile = ref.watch(currentSpaceProfileProvider).valueOrNull;
-    final userName = (spaceProfile?.displayName ?? '').trim().isEmpty ? '我' : spaceProfile!.displayName.trim();
+    final userName = (spaceProfile?.displayName ?? '').trim().isEmpty
+        ? '我'
+        : spaceProfile!.displayName.trim();
     final userInitial = userName.characters.first;
-    final deployment = ref.watch(mobileDeploymentConfigProvider);
-    final runtimeLabel = deployment.mode == MobileDeploymentMode.cloud ? '云端运行' : '本地运行';
     final navigationItems = UINavigationRegistry.resolve(
       ref.watch(uiRuntimeProvider).valueOrNull,
     );
@@ -138,9 +195,9 @@ class _AmitiaDrawerState extends ConsumerState<AmitiaDrawer> {
             character: character,
             isDark: isDark,
             onToggleTheme: () {
-              ref.read(appearancePreferencesProvider.notifier).setThemeMode(
-                    isDark ? ThemeMode.light : ThemeMode.dark,
-                  );
+              ref
+                  .read(appearancePreferencesProvider.notifier)
+                  .setThemeMode(isDark ? ThemeMode.light : ThemeMode.dark);
             },
             onSearchTap: () => _showGlobalSearch(navigationItems, characters),
             onNavigate: _navigateTo,
@@ -151,7 +208,6 @@ class _AmitiaDrawerState extends ConsumerState<AmitiaDrawer> {
             settingsSelected: routeState.settingsSelected,
             userName: userName,
             userInitial: userInitial,
-            runtimeLabel: runtimeLabel,
           ),
         ),
       ),
@@ -172,7 +228,6 @@ class _DrawerMainPanel extends StatelessWidget {
   final bool settingsSelected;
   final String userName;
   final String userInitial;
-  final String runtimeLabel;
 
   const _DrawerMainPanel({
     required this.character,
@@ -187,7 +242,6 @@ class _DrawerMainPanel extends StatelessWidget {
     required this.settingsSelected,
     required this.userName,
     required this.userInitial,
-    required this.runtimeLabel,
   });
 
   @override
@@ -215,7 +269,9 @@ class _DrawerMainPanel extends StatelessWidget {
                       onTap: () => onNavigate(item.route),
                     ),
                   ),
-              if (navigationItems.any((item) => item.panel == UINavigationPanel.more)) ...[
+              if (navigationItems.any(
+                (item) => item.panel == UINavigationPanel.more,
+              )) ...[
                 const SizedBox(height: 14),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -255,7 +311,6 @@ class _DrawerMainPanel extends StatelessWidget {
           settingsSelected: settingsSelected,
           userName: userName,
           userInitial: userInitial,
-          runtimeLabel: runtimeLabel,
         ),
       ],
     );
@@ -281,7 +336,10 @@ class _DrawerMainPanel extends StatelessWidget {
             name: extension.displayName,
             status: extension.status,
             isEnabled: extension.enabled,
-            isSelected: isRouteFamily(currentRoute, AppRoutes.extensionsPackages),
+            isSelected: isRouteFamily(
+              currentRoute,
+              AppRoutes.extensionsPackages,
+            ),
             onTap: () => onNavigate(AppRoutes.extensionsPackages),
           ),
         ),
@@ -391,67 +449,53 @@ class _DrawerBottomArea extends StatelessWidget {
   final bool settingsSelected;
   final String userName;
   final String userInitial;
-  final String runtimeLabel;
 
   const _DrawerBottomArea({
     required this.onSettingsTap,
     required this.settingsSelected,
     required this.userName,
     required this.userInitial,
-    required this.runtimeLabel,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Divider(height: 1, color: context.borderPrimary),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(11, 8, 11, 12),
-          child: GestureDetector(
+    return Container(
+      decoration: BoxDecoration(
+        border: Border(top: BorderSide(color: context.borderPrimary)),
+      ),
+      padding: const EdgeInsets.only(top: 7, bottom: 8),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        child: Material(
+          color: settingsSelected ? context.accentSoft : Colors.transparent,
+          borderRadius: BorderRadius.circular(7),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(7),
             onTap: onSettingsTap,
             child: Container(
-              padding: const EdgeInsets.all(11),
-              decoration: BoxDecoration(
-                color: context.surfacePrimary,
-                borderRadius: BorderRadius.circular(19),
-                border: Border.all(color: context.borderPrimary, width: 1),
-                boxShadow: [
-                  BoxShadow(
-                    color: context.scrim.withValues(alpha: 0.05),
-                    blurRadius: 16,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
+              constraints: const BoxConstraints(minHeight: 38),
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
               child: Row(
                 children: [
                   Container(
-                    width: 42,
-                    height: 42,
+                    width: 28,
+                    height: 28,
                     decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(15),
-                      gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [
-                          context.accentPrimary,
-                          context.accentSecondary,
-                        ],
-                      ),
+                      color: context.accentPrimary,
+                      shape: BoxShape.circle,
                     ),
                     child: Center(
                       child: Text(
                         userInitial,
                         style: const TextStyle(
                           color: Colors.white,
-                          fontSize: 14,
+                          fontSize: 12,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
                     ),
                   ),
-                  const SizedBox(width: 10),
+                  const SizedBox(width: 9),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -460,59 +504,32 @@ class _DrawerBottomArea extends StatelessWidget {
                         Text(
                           userName,
                           style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
                             color: context.textPrimary,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
                           ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
-                        const SizedBox(height: 2),
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Container(
-                              width: 6,
-                              height: 6,
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF4F9B6B),
-                                shape: BoxShape.circle,
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: const Color(
-                                      0xFF4F9B6B,
-                                    ).withValues(alpha: 0.2),
-                                    blurRadius: 4,
-                                    spreadRadius: 1,
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              runtimeLabel,
-                              style: TextStyle(
-                                fontSize: 9,
-                                color: context.textTertiary,
-                              ),
-                            ),
-                          ],
+                        const SizedBox(height: 1),
+                        Text(
+                          '个人空间',
+                          style: TextStyle(
+                            color: context.textTertiary,
+                            fontSize: 10,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ],
                     ),
-                  ),
-                  const SizedBox(width: 6),
-                  Icon(
-                    Icons.settings_outlined,
-                    size: 17,
-                    color: context.textTertiary,
                   ),
                 ],
               ),
             ),
           ),
         ),
-      ],
+      ),
     );
   }
 }
@@ -658,15 +675,15 @@ class _AmitiaDrawerSearchDelegate extends SearchDelegate<_DrawerSearchResult> {
 
   @override
   List<Widget>? buildActions(BuildContext context) => [
-        if (query.isNotEmpty)
-          IconButton(icon: const Icon(Icons.clear), onPressed: () => query = ''),
-      ];
+    if (query.isNotEmpty)
+      IconButton(icon: const Icon(Icons.clear), onPressed: () => query = ''),
+  ];
 
   @override
   Widget? buildLeading(BuildContext context) => IconButton(
-        icon: const Icon(Icons.arrow_back),
-        onPressed: () => Navigator.of(context).maybePop(),
-      );
+    icon: const Icon(Icons.arrow_back),
+    onPressed: () => Navigator.of(context).maybePop(),
+  );
 
   @override
   Widget buildResults(BuildContext context) => _buildList(context);
@@ -681,7 +698,12 @@ class _AmitiaDrawerSearchDelegate extends SearchDelegate<_DrawerSearchResult> {
       uniquePages.putIfAbsent(page.route, () => page);
     }
     final matchedPages = uniquePages.values
-        .where((page) => keyword.isEmpty || page.label.toLowerCase().contains(keyword) || page.route.toLowerCase().contains(keyword))
+        .where(
+          (page) =>
+              keyword.isEmpty ||
+              page.label.toLowerCase().contains(keyword) ||
+              page.route.toLowerCase().contains(keyword),
+        )
         .toList(growable: false);
     final matchedCharacters = characters
         .where((character) {
@@ -700,32 +722,46 @@ class _AmitiaDrawerSearchDelegate extends SearchDelegate<_DrawerSearchResult> {
         if (matchedPages.isNotEmpty) ...[
           const Padding(
             padding: EdgeInsets.fromLTRB(16, 16, 16, 6),
-            child: Text('页面', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+            child: Text(
+              '页面',
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+            ),
           ),
-          ...matchedPages.map((page) => ListTile(
-                leading: Icon(page.icon),
-                title: Text(page.label),
-                subtitle: Text(page.route),
-                onTap: () => close(context, _DrawerSearchResult(page.route)),
-              )),
+          ...matchedPages.map(
+            (page) => ListTile(
+              leading: Icon(page.icon),
+              title: Text(page.label),
+              subtitle: Text(page.route),
+              onTap: () => close(context, _DrawerSearchResult(page.route)),
+            ),
+          ),
         ],
         if (matchedCharacters.isNotEmpty) ...[
           const Padding(
             padding: EdgeInsets.fromLTRB(16, 16, 16, 6),
-            child: Text('角色', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+            child: Text(
+              '角色',
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+            ),
           ),
-          ...matchedCharacters.map((character) => ListTile(
-                leading: const Icon(Icons.person_outline),
-                title: Text(character.name),
-                subtitle: Text(character.identity.isNotEmpty ? character.identity : character.description),
-                onTap: () => close(
-                  context,
-                  _DrawerSearchResult(
-                    AppRoutes.character(character.id),
-                    characterId: character.id,
-                  ),
+          ...matchedCharacters.map(
+            (character) => ListTile(
+              leading: const Icon(Icons.person_outline),
+              title: Text(character.name),
+              subtitle: Text(
+                character.identity.isNotEmpty
+                    ? character.identity
+                    : character.description,
+              ),
+              onTap: () => close(
+                context,
+                _DrawerSearchResult(
+                  AppRoutes.character(character.id),
+                  characterId: character.id,
                 ),
-              )),
+              ),
+            ),
+          ),
         ],
       ],
     );
@@ -762,7 +798,10 @@ class AmitiaCharacterCard extends StatelessWidget {
       int.parse('FF${avatarColor.replaceAll('#', '')}', radix: 16),
     );
     final normalizedStatus = status.toLowerCase();
-    final isOnline = normalizedStatus == '在线' || normalizedStatus == 'enabled' || normalizedStatus == 'online';
+    final isOnline =
+        normalizedStatus == '在线' ||
+        normalizedStatus == 'enabled' ||
+        normalizedStatus == 'online';
     return GestureDetector(
       onTap: onTap,
       child: Container(

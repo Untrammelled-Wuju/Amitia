@@ -25,26 +25,6 @@ SPDX-License-Identifier: AGPL-3.0-only
       </div>
     </div>
 
-    <div class="status-card" :class="wechatClass">
-      <div class="sc-icon">
-        <el-icon :size="22"><Connection /></el-icon>
-      </div>
-      <div class="sc-body">
-        <div class="sc-label">微信连接</div>
-        <div class="sc-value">{{ wechatLabel }}</div>
-      </div>
-    </div>
-
-    <div class="status-card" :class="qqClass">
-      <div class="sc-icon">
-        <el-icon :size="22"><ChatDotSquare /></el-icon>
-      </div>
-      <div class="sc-body">
-        <div class="sc-label">QQ连接</div>
-        <div class="sc-value">{{ qqLabel }}</div>
-      </div>
-    </div>
-
     <div class="status-card" :class="runtimeHealthClass">
       <div class="sc-icon">
         <el-icon :size="22"><CircleCheck /></el-icon>
@@ -62,8 +42,6 @@ import { computed } from "vue";
 import {
   Monitor,
   Cpu,
-  Connection,
-  ChatDotSquare,
   CircleCheck,
 } from "@element-plus/icons-vue";
 
@@ -73,10 +51,6 @@ const props = defineProps<{
   modelClass: string;
   modelLabel: string;
   modelName: string;
-  wechatClass: string;
-  wechatLabel: string;
-  qqClass: string;
-  qqLabel: string;
   runtimeHealth: any;
 }>();
 
@@ -102,7 +76,7 @@ const runtimeHealthLabel = computed(() =>
 <style scoped>
 .status-grid {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 18px;
   margin-bottom: 18px;
 }

@@ -224,7 +224,7 @@ async function tryLlmCompanionProactive(args: {
       tc.topicHints.length > 0 ? ` + "`" + `\n时段可自然聊到：${tc.topicHints.join('、')}` + "`" + ` : ''
     const channelLine = args.harass
        ? '你要在桌面 Amitia 聊天里主动发消息。'
-      : '用户暂时没回，你主动发一条微信。'
+      : '用户暂时没回，你主动发一条消息。'
 
     const formatLine = args.harass
       ? '只输出对用户直接说的 1～2 句正文，总共 ≤40 字，可用 [SPLIT] 分两条。'

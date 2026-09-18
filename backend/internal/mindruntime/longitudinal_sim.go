@@ -180,7 +180,7 @@ func generateSimBehaviors(roles []SimRoleConfig, behaviorsPerStep int, simTime t
 	}
 
 	actionTypes := []string{"chat", "command", "correction", "reaction", "silence", "farewell"}
-	channels := []string{"wechat", "qq", "web", "api"}
+	channels := []string{"web", "api"}
 	emotions := []string{"neutral", "happy", "sad", "angry", "anxious", "excited", "calm"}
 
 	count := len(roles) * behaviorsPerStep / 10

@@ -28,8 +28,6 @@ export function useWebChatSend(
   scrollToBottom: (smooth?: boolean) => void,
   disconnectSSE: () => void,
   inputRef: Ref<any>,
-  fetchWechatMsgCount: () => void,
-  fetchQQStatus: () => void,
   fetchWebMsgCount?: () => void,
   replyTarget?: Ref<any>,
 ) {
@@ -387,8 +385,6 @@ export function useWebChatSend(
       const lastMsg = messages.value[messages.value.length - 1];
       if (lastMsg?.id && lastMsg.id !== "streaming")
         lastPolledMsgId = lastMsg.id;
-      fetchWechatMsgCount();
-      fetchQQStatus();
       if (fetchWebMsgCount) fetchWebMsgCount();
     }
   }

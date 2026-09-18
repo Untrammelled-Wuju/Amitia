@@ -99,7 +99,7 @@ SPDX-License-Identifier: AGPL-3.0-only
               {{ shortId(m.sourceConvId) }}
             </span>
             <span class="time">{{ m.createdAt }}</span>
-            <el-dropdown trigger="click" @command="(level) => handleRetention(m, Number(level))">
+            <el-dropdown trigger="click" @command="(level: string | number) => handleRetention(m, Number(level))">
               <el-button size="small" text @click.stop>调整层级</el-button>
               <template #dropdown>
                 <el-dropdown-menu>
@@ -177,7 +177,7 @@ SPDX-License-Identifier: AGPL-3.0-only
               :model-value="normalizeRetention(detailMemory.retentionLevel)"
               size="small"
               style="width: 150px"
-              @change="(level) => handleRetention(detailMemory, Number(level))"
+              @change="(level: string | number) => handleRetention(detailMemory, Number(level))"
             >
               <el-option v-for="level in 5" :key="level" :label="`L${level}`" :value="level" />
             </el-select>
@@ -309,7 +309,8 @@ function retentionTagType(level: number | undefined) {
   return value <= 2 ? "success" : value === 3 ? "primary" : value === 4 ? "warning" : "info";
 }
 
-async function handleRetention(memory: EpisodicMemory, level: number) {
+async function handleRetention(memory: EpisodicMemory | null, level: number) {
+  if (!memory) return;
   try {
     await updateRetention(memory.id, level);
     if (detailMemory.value?.id === memory.id) {

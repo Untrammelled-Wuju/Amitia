@@ -49,12 +49,6 @@ func TestConfigTemplatesUseProviderLayout(t *testing.T) {
 			if cfg.Providers.GraphStore.Provider == "" {
 				t.Error("providers.graphStore.provider should be set")
 			}
-			if cfg.Components.Sidecars.Wechat.Port == 0 {
-				t.Error("components.sidecars.wechat.port should be set")
-			}
-			if cfg.Components.Sidecars.QQ.Port == 0 {
-				t.Error("components.sidecars.qq.port should be set")
-			}
 			if !cfg.DesktopPetRuntime.Enabled {
 				t.Error("desktopPetRuntime.enabled should be true in templates")
 			}

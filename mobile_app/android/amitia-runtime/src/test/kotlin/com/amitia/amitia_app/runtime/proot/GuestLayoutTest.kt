@@ -71,13 +71,6 @@ class GuestLayoutTest {
     }
 
     @Test
-    fun sidecarPaths_areDerivedFromProgram() {
-        assertTrue(GuestLayout.SIDECAR_LAUNCHER.startsWith(GuestLayout.PROGRAM))
-        assertTrue(GuestLayout.SIDECAR_BUNDLE.startsWith(GuestLayout.PROGRAM))
-        assertTrue(GuestLayout.QQ_SIDECAR_LAUNCHER.startsWith(GuestLayout.PROGRAM))
-        assertTrue(GuestLayout.QQ_SIDECAR_BUNDLE.startsWith(GuestLayout.PROGRAM))
-    }
-
     @Test
     fun localTokenPath_isWithinDataRoot() {
         assertEquals("/var/lib/amitia/security/local-token", GuestLayout.LOCAL_TOKEN)
@@ -119,7 +112,7 @@ class GuestLayoutTest {
             GuestLayout.CACHE, GuestLayout.LOGS, GuestLayout.RUN,
             GuestLayout.HOME, GuestLayout.TMP,
             GuestLayout.BACKEND_SERVER, GuestLayout.NODE_BIN,
-            GuestLayout.QDRANT_BIN, GuestLayout.SIDECAR_LAUNCHER,
+            GuestLayout.QDRANT_BIN,
             GuestLayout.LOCAL_TOKEN, GuestLayout.NPM_CACHE,
         )
         for (p in paths) {
@@ -152,8 +145,6 @@ class GuestLayoutTest {
         assertTrue(GuestLayout.PROGRAM_SUBDIRS.contains("backend"))
         assertTrue(GuestLayout.PROGRAM_SUBDIRS.contains("node"))
         assertTrue(GuestLayout.PROGRAM_SUBDIRS.contains("qdrant"))
-        assertTrue(GuestLayout.PROGRAM_SUBDIRS.contains("sidecar"))
-        assertTrue(GuestLayout.PROGRAM_SUBDIRS.contains("qq-sidecar"))
     }
 
     private companion object {

@@ -113,20 +113,6 @@ export async function getApiBaseURL(): Promise<string> {
   return conn.apiBaseURL;
 }
 
-export async function getQQApiBaseURL(): Promise<string> {
-  const isDev = (import.meta as any).env?.DEV === true;
-  if (isDev) {
-    return "/qq-api";
-  }
-  const base = (await getApiBaseURL()).replace(/\/+$/, "");
-  if (base === "http://127.0.0.1:18899") {
-    return "http://127.0.0.1:19877/api";
-  }
-  // In cloud mode QQ is a Business Core capability mounted under /api/qq.
-  // The local 19877 sidecar remains a local-only implementation detail.
-  return `${base}/api/qq`;
-}
-
 export async function resolveApiUrl(path: string): Promise<string> {
   const base = await getApiBaseURLForPath(path);
   return base + path;

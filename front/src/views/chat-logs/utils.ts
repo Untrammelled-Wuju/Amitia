@@ -2,8 +2,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 export const CHANNELS = [
   { label: "Web", value: "web" },
-  { label: "微信", value: "wechat" },
-  { label: "QQ", value: "qq" },
   { label: "导入", value: "import" },
   { label: "测试", value: "test" },
 ];

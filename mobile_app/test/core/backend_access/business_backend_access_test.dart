@@ -73,6 +73,10 @@ void main() {
             source: RuntimeStatusErrorSource.http,
             code: 'HTTP_UNAVAILABLE',
             message: 'HTTP transport unavailable',
+            details: <String, String>{
+              'endpoint': 'http://127.0.0.1:18899',
+              'lastProbeFailure': 'readyz connection refused',
+            },
           ),
         ),
       );
@@ -91,6 +95,8 @@ void main() {
         expect(e.phase, RuntimeStatusPhase.degraded);
         expect(e.generation, 5);
         expect(e.primaryError?.code, 'HTTP_UNAVAILABLE');
+        expect(e.toString(), contains('HTTP transport unavailable'));
+        expect(e.toString(), contains('readyz connection refused'));
       }
     });
 

@@ -172,6 +172,19 @@ export class DesktopPetAnimationEngine {
     }
   }
 
+  private emitFramePresented(frameIndex: number): void {
+    this.emit({
+      type: "playback.frame_presented",
+      playbackInstanceId: this.state.currentPlaybackInstanceId ?? undefined,
+      commandId: this.state.currentCommandId ?? undefined,
+      actionKey: this.state.currentAction?.actionKey,
+      frameIndex,
+      timestamp: Date.now(),
+      packageId: this.state.packageId ?? undefined,
+      packageRevision: this.state.packageRevision,
+    });
+  }
+
   async initialize(snapshot: PackagePlaybackSnapshot): Promise<void> {
     this.assertNotDisposed();
     if (this.state.phase !== "uninitialized" && this.state.phase !== "recovering") {
@@ -249,6 +262,7 @@ export class DesktopPetAnimationEngine {
         now: this.clock.now(),
       });
       this.dispatch({ type: "FRAME_PRESENTED", frameIndex: 0 });
+      this.emitFramePresented(0);
       this.consecutivePresentFailures = 0;
 
       this.startTickLoop();
@@ -504,6 +518,7 @@ export class DesktopPetAnimationEngine {
         now: startedAt,
       });
       this.dispatch({ type: "FRAME_PRESENTED", frameIndex: 0 });
+      this.emitFramePresented(0);
       this.consecutivePresentFailures = 0;
       this.startTickLoop();
 
@@ -687,6 +702,7 @@ export class DesktopPetAnimationEngine {
         now: this.clock.now(),
       });
       this.dispatch({ type: "FRAME_PRESENTED", frameIndex: 0 });
+      this.emitFramePresented(0);
       this.consecutivePresentFailures = 0;
       this.startTickLoop();
 
@@ -936,6 +952,7 @@ export class DesktopPetAnimationEngine {
           }
           this.consecutivePresentFailures = 0;
           this.dispatch({ type: "FRAME_PRESENTED", frameIndex });
+          this.emitFramePresented(frameIndex);
           this.telemetry.recordFramePresent(this.clock.now() - presentStart);
         } catch (error) {
           const pbError = PlaybackError.fromUnknown(error);
@@ -1182,6 +1199,7 @@ export class DesktopPetAnimationEngine {
         now: this.clock.now(),
       });
       this.dispatch({ type: "FRAME_PRESENTED", frameIndex: 0 });
+      this.emitFramePresented(0);
       this.consecutivePresentFailures = 0;
       this.startTickLoop();
       this.emit({

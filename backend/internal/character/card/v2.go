@@ -6,23 +6,23 @@ import (
 )
 
 type v2Card struct {
-	Spec             string         `json:"spec"`
-	SpecVersion      string         `json:"spec_version"`
-	Name             string         `json:"name"`
-	Description      string         `json:"description"`
-	Personality      string         `json:"personality"`
-	Scenario         string         `json:"scenario"`
-	FirstMes         string         `json:"first_mes"`
-	MesExample       string         `json:"mes_example"`
-	CreatorNotes     string         `json:"creator_notes"`
-	SystemPrompt     string         `json:"system_prompt"`
-	PostHistoryInstructions string  `json:"post_history_instructions"`
-	AlternateGreetings []string     `json:"alternate_greetings"`
-	CharacterBook    *v2CharacterBook `json:"character_book"`
-	Tags             []string       `json:"tags"`
-	Creator          string         `json:"creator"`
-	CharacterVersion string         `json:"character_version"`
-	Extensions       map[string]any `json:"extensions"`
+	Spec                    string           `json:"spec"`
+	SpecVersion             string           `json:"spec_version"`
+	Name                    string           `json:"name"`
+	Description             string           `json:"description"`
+	Personality             string           `json:"personality"`
+	Scenario                string           `json:"scenario"`
+	FirstMes                string           `json:"first_mes"`
+	MesExample              string           `json:"mes_example"`
+	CreatorNotes            string           `json:"creator_notes"`
+	SystemPrompt            string           `json:"system_prompt"`
+	PostHistoryInstructions string           `json:"post_history_instructions"`
+	AlternateGreetings      []string         `json:"alternate_greetings"`
+	CharacterBook           *v2CharacterBook `json:"character_book"`
+	Tags                    []string         `json:"tags"`
+	Creator                 string           `json:"creator"`
+	CharacterVersion        string           `json:"character_version"`
+	Extensions              map[string]any   `json:"extensions"`
 }
 
 type v2CharacterBook struct {
@@ -56,10 +56,18 @@ func parseV2JSON(data []byte) (*CharacterCard, map[string]json.RawMessage, error
 		safeRaw[k] = v
 	}
 
+	cardData := data
+	if payload, ok := raw["data"]; ok && len(payload) > 0 && string(payload) != "null" {
+		cardData = payload
+		if err := json.Unmarshal(payload, &raw); err != nil {
+			return nil, nil, ErrJSONInvalid
+		}
+	}
+
 	preserved := extractPreservedFields(raw, knownV2Fields())
 
 	var card v2Card
-	if err := json.Unmarshal(data, &card); err != nil {
+	if err := json.Unmarshal(cardData, &card); err != nil {
 		return nil, nil, ErrJSONInvalid
 	}
 
@@ -70,8 +78,8 @@ func parseV2JSON(data []byte) (*CharacterCard, map[string]json.RawMessage, error
 		Personality:             card.Personality,
 		Scenario:                card.Scenario,
 		FirstMessage:            card.FirstMes,
-		ExampleMessages:          card.MesExample,
-		AlternateGreetings:       card.AlternateGreetings,
+		ExampleMessages:         card.MesExample,
+		AlternateGreetings:      card.AlternateGreetings,
 		SystemPrompt:            card.SystemPrompt,
 		PostHistoryInstructions: card.PostHistoryInstructions,
 		CreatorNotes:            card.CreatorNotes,

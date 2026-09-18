@@ -7,12 +7,6 @@ SPDX-License-Identifier: AGPL-3.0-only
     <div class="page-header"><h2>导入聊天记录</h2></div>
     <el-card>
       <el-form label-width="100px">
-        <el-form-item label="导入类型">
-          <el-radio-group v-model="importType">
-            <el-radio value="plaintext">纯文本</el-radio>
-            <el-radio value="wechat">微信聊天记录</el-radio>
-          </el-radio-group>
-        </el-form-item>
         <el-form-item label="目标角色">
           <el-select
             v-model="characterId"
@@ -32,11 +26,7 @@ SPDX-License-Identifier: AGPL-3.0-only
             v-model="rawText"
             type="textarea"
             :rows="12"
-            :placeholder="
-              importType === 'wechat'
-                ? '粘贴微信聊天记录,每行一条消息...'
-                : '粘贴纯文本对话,每行一条消息...'
-            "
+            placeholder="粘贴纯文本对话,每行一条消息..."
           />
         </el-form-item>
         <el-form-item>
@@ -59,7 +49,6 @@ import { ElMessage } from "element-plus";
 import { apiClient } from "../../composables/useApi";
 
 const characters = ref<Character[]>([]);
-const importType = ref("plaintext");
 const characterId = ref("");
 const rawText = ref("");
 const importing = ref(false);
@@ -86,7 +75,7 @@ async function doImport() {
   importing.value = true;
   try {
     const { data } = await apiClient.post<ImportResult>("/api/import", {
-      source: importType.value,
+      source: "plaintext",
       characterId: characterId.value,
       raw: rawText.value,
     });

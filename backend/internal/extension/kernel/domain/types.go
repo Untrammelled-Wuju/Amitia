@@ -558,6 +558,16 @@ type RuntimeDefinition struct {
 	Env             map[string]string `json:"env,omitempty"`
 }
 
+type NativeCompanionDefinition struct {
+	ID           string   `json:"id"`
+	Platform     string   `json:"platform"`
+	Architecture string   `json:"architecture,omitempty"`
+	Path         string   `json:"path"`
+	SHA256       string   `json:"sha256"`
+	Executable   bool     `json:"executable"`
+	Args         []string `json:"args,omitempty"`
+}
+
 type RuntimeBinding struct {
 	RuntimeID   RuntimeID         `json:"runtimeId"`
 	RuntimeType RuntimeType       `json:"runtimeType"`

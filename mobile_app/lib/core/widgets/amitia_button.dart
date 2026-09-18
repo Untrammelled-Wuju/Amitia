@@ -252,12 +252,14 @@ class AmitiaSearchField extends StatelessWidget {
   final String hintText;
   final TextEditingController? controller;
   final ValueChanged<String>? onChanged;
+  final bool autofocus;
 
   const AmitiaSearchField({
     super.key,
     this.hintText = '搜索',
     this.controller,
     this.onChanged,
+    this.autofocus = false,
   });
 
   @override
@@ -270,6 +272,7 @@ class AmitiaSearchField extends StatelessWidget {
       child: TextField(
         controller: controller,
         onChanged: onChanged,
+        autofocus: autofocus,
         style: AppTypography.bodySmall(context).copyWith(
           fontSize: number('fontSize', context.uiTypography.bodySmallSize),
         ),

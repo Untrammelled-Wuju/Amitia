@@ -132,6 +132,16 @@ func ProviderDefinitionsFromExtension(def domain.ExtensionDefinition) ([]Capabil
 						providerMetadata[k] = v
 					}
 				}
+				if len(providerMeta.Labels) > 0 {
+					if providerMetadata == nil {
+						providerMetadata = make(map[string]any)
+					}
+					labels := make(map[string]any, len(providerMeta.Labels))
+					for k, v := range providerMeta.Labels {
+						labels[k] = v
+					}
+					providerMetadata["labels"] = labels
+				}
 			} else {
 				providerID = BuildManifestProviderID(def.ID, mod.ID, nil, CapabilityID(pc.ID))
 				priority = 0

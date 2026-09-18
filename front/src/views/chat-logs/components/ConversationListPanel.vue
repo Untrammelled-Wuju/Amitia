@@ -61,14 +61,7 @@ SPDX-License-Identifier: AGPL-3.0-only
         @click="$emit('select', c)"
       >
         <div class="ci-title">
-          {{
-            c.title ||
-            (c.channel === "qq"
-              ? "QQ聊天"
-              : c.channel === "wechat"
-                ? "微信聊天"
-                : "新对话")
-          }}
+          {{ c.title || "新对话" }}
         </div>
         <div class="ci-meta">
           <el-tag size="small" type="info">{{

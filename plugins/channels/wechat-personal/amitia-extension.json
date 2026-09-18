@@ -278,6 +278,9 @@
           "spec": {
             "capability": "route.registry",
             "entries": {
+              "mobile": {
+                "type": "declarative"
+              },
               "electron_windows": {
                 "type": "declarative"
               },
@@ -297,7 +300,9 @@
                   "order": 41,
                   "platforms": [
                     "windows",
-                    "linux"
+                    "linux",
+                    "android",
+                    "ios"
                   ],
                   "route": "/channels/wechat-personal",
                   "surface": "channels.center"
@@ -340,6 +345,10 @@
           "spec": {
             "capability": "page.provider",
             "entries": {
+              "mobile": {
+                "contributionId": "wechat-personal-page",
+                "type": "web_restricted"
+              },
               "electron_windows": {
                 "contributionId": "wechat-personal-page",
                 "type": "web_restricted"
@@ -372,6 +381,10 @@
           "spec": {
             "capability": "page.provider",
             "entries": {
+              "mobile": {
+                "contributionId": "wechat-personal-messages-page",
+                "type": "web_restricted"
+              },
               "electron_windows": {
                 "contributionId": "wechat-personal-messages-page",
                 "type": "web_restricted"
@@ -404,6 +417,9 @@
           "spec": {
             "capability": "conversation.drawer",
             "entries": {
+              "mobile": {
+                "type": "declarative"
+              },
               "electron_windows": {
                 "type": "declarative"
               },
@@ -422,7 +438,9 @@
                   "channelId": "wechat_personal",
                   "platforms": [
                     "windows",
-                    "linux"
+                    "linux",
+                    "android",
+                    "ios"
                   ]
                 }
               ]

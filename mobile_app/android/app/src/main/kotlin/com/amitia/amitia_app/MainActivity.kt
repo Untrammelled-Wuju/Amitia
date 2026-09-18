@@ -14,10 +14,11 @@ import com.amitia.amitia_app.nativeprovider.AndroidNativeCompositionRoot
 import com.amitia.amitia_app.runtime.bridge.RuntimeBridgePlugin
 import com.amitia.amitia_app.realtime.RealtimeAudioPlugin
 import com.amitia.amitia_app.realtime.RealtimeVisualPlugin
+import com.amitia.amitia_app.update.AppUpdatePlugin
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.android.FlutterView
 import io.flutter.embedding.engine.FlutterEngine
-import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.app.ActivityCompat
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -26,6 +27,9 @@ import java.lang.ref.WeakReference
 class MainActivity : FlutterActivity() {
     companion object {
         @Volatile private var activeActivity: WeakReference<MainActivity>? = null
+        private const val REQUEST_NOTIFICATION_POST = 4101
+        private const val REQUEST_NOTIFICATION_SETTINGS = 4102
+        private const val REQUEST_WORKSPACE_TREE = 4103
 
         fun currentActivity(): MainActivity? = activeActivity?.get()
     }
@@ -34,33 +38,6 @@ class MainActivity : FlutterActivity() {
     private var workspaceTreePending: CompletableDeferred<Pair<Uri, Int>?>? = null
     private var notificationPermissionPending: CompletableDeferred<Boolean>? = null
     private var notificationSettingsPending: CompletableDeferred<Unit>? = null
-    private val notificationPermissionLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestPermission(),
-    ) { granted ->
-        val pending = notificationPermissionPending
-        notificationPermissionPending = null
-        if (pending != null && !pending.isCompleted) pending.complete(granted)
-    }
-    private val notificationSettingsLauncher = registerForActivityResult(
-        ActivityResultContracts.StartActivityForResult(),
-    ) {
-        val pending = notificationSettingsPending
-        notificationSettingsPending = null
-        if (pending != null && !pending.isCompleted) pending.complete(Unit)
-    }
-    private val workspaceTreeLauncher = registerForActivityResult(
-        ActivityResultContracts.StartActivityForResult(),
-    ) { result ->
-        val pending = workspaceTreePending
-        workspaceTreePending = null
-        if (pending == null || pending.isCompleted) return@registerForActivityResult
-        val uri = result.data?.data
-        if (result.resultCode == Activity.RESULT_OK && uri != null) {
-            pending.complete(uri to (result.data?.flags ?: 0))
-        } else {
-            pending.complete(null)
-        }
-    }
 
     suspend fun selectWorkspaceDocumentTree(): Pair<Uri, Int>? = withContext(Dispatchers.Main.immediate) {
         if (workspaceTreePending != null) {
@@ -74,7 +51,7 @@ class MainActivity : FlutterActivity() {
             addFlags(Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
             addFlags(Intent.FLAG_GRANT_PREFIX_URI_PERMISSION)
         }
-        workspaceTreeLauncher.launch(intent)
+        startActivityForResult(intent, REQUEST_WORKSPACE_TREE)
         pending.await()
     }
 
@@ -88,7 +65,11 @@ class MainActivity : FlutterActivity() {
         }
         val pending = CompletableDeferred<Boolean>()
         notificationPermissionPending = pending
-        notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        ActivityCompat.requestPermissions(
+            this@MainActivity,
+            arrayOf(Manifest.permission.POST_NOTIFICATIONS),
+            REQUEST_NOTIFICATION_POST,
+        )
         pending.await()
     }
 
@@ -110,8 +91,46 @@ class MainActivity : FlutterActivity() {
                 Uri.parse("package:$packageName"),
             )
         }
-        notificationSettingsLauncher.launch(intent)
+        startActivityForResult(intent, REQUEST_NOTIFICATION_SETTINGS)
         pending.await()
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray,
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode != REQUEST_NOTIFICATION_POST) return
+        val pending = notificationPermissionPending
+        notificationPermissionPending = null
+        pending?.complete(
+            grantResults.isNotEmpty() &&
+                grantResults[0] == android.content.pm.PackageManager.PERMISSION_GRANTED,
+        )
+    }
+
+    @Deprecated("Deprecated in Java")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        when (requestCode) {
+            REQUEST_NOTIFICATION_SETTINGS -> {
+                val pending = notificationSettingsPending
+                notificationSettingsPending = null
+                pending?.complete(Unit)
+            }
+            REQUEST_WORKSPACE_TREE -> {
+                val pending = workspaceTreePending
+                workspaceTreePending = null
+                if (pending == null || pending.isCompleted) return
+                val uri = data?.data
+                if (resultCode == Activity.RESULT_OK && uri != null) {
+                    pending.complete(uri to (data?.flags ?: 0))
+                } else {
+                    pending.complete(null)
+                }
+            }
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -152,6 +171,7 @@ class MainActivity : FlutterActivity() {
         flutterEngine.plugins.add(AndroidNativeBridgePlugin())
         flutterEngine.plugins.add(RealtimeAudioPlugin())
         flutterEngine.plugins.add(RealtimeVisualPlugin())
+        flutterEngine.plugins.add(AppUpdatePlugin())
     }
 
     override fun onPostResume() {

@@ -21,10 +21,6 @@ REQUIRED_RUNTIME_FILES = {
     "qdrant/bin/qdrant",
     "plugin-host/dist/index.js",
     "task-host/dist/index.js",
-    "sidecar/bundle.mjs",
-    "sidecar/launcher.mjs",
-    "qq-sidecar/bundle.mjs",
-    "qq-sidecar/launcher.mjs",
     "scripts/node/amitia-node-prepare.sh",
     "scripts/node/amitia-node-probe.sh",
 }
