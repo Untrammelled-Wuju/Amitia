@@ -42,11 +42,6 @@ SPDX-License-Identifier: AGPL-3.0-only
       </div>
     </div>
 
-    <button class="new-chat" type="button" @click="handleNewChat">
-      <el-icon><Plus /></el-icon>
-      <span v-show="!appStore.sidebarCollapsed">新对话</span>
-    </button>
-
     <div class="sidebar-scroll">
       <el-menu
         :default-active="activeIndex"
@@ -55,6 +50,10 @@ SPDX-License-Identifier: AGPL-3.0-only
         router
         class="side-menu"
       >
+        <el-menu-item index="/chat" :style="navigationItemStyle" @click="handleNewChat">
+          <el-icon><Plus /></el-icon>
+          <span>新对话</span>
+        </el-menu-item>
         <template v-for="group in navigationGroups" :key="group.id">
           <el-sub-menu v-if="group.label && group.items.length > 1" :index="group.id">
             <template #title>
@@ -484,9 +483,6 @@ onUnmounted(() => {
 .toggle-icon { width: 20px; height: 20px; display: block; color: var(--text-muted); }
 .side-nav.is-collapsed .brand-row { justify-content: center; flex-direction: column; padding-bottom: 8px; }
 .side-nav.is-collapsed .brand-actions { width: 100%; justify-content: center; }
-.new-chat { display: flex; align-items: center; gap: 9px; min-height: 34px; width: 100%; margin: 2px 0 7px; padding: 0 9px; border: 0; border-radius: 7px; background: transparent; color: var(--text-primary); cursor: pointer; font: inherit; font-size: 13px; text-align: left; }
-.new-chat:hover, .new-chat:focus-visible { background: var(--workbench-sidebar-hover); outline: none; }
-.side-nav.is-collapsed .new-chat { justify-content: center; padding: 0; }
 .sidebar-scroll { min-height: 0; flex: 1 1 auto; overflow-y: auto; overflow-x: hidden; }
 .side-menu { border-right: none; background: transparent; width: 100%; margin-bottom: 12px; }
 .side-menu :deep(.el-menu-item), .side-menu :deep(.el-sub-menu__title) { height: 34px; line-height: 34px; min-height: 34px; margin: 1px 0; padding: 0 9px !important; border-radius: 7px; font-size: 13px; color: var(--text-secondary); }
