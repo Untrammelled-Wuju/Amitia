@@ -884,13 +884,6 @@ class _ConversationTile extends StatelessWidget {
     return ListTile(
       dense: compact,
       contentPadding: EdgeInsets.only(left: compact ? 12 : 20, right: 4),
-      leading: compact
-          ? null
-          : Icon(
-              Icons.chat_bubble_outline,
-              size: 19,
-              color: context.textSecondary,
-            ),
       title: Text(
         title,
         maxLines: 1,
@@ -902,50 +895,55 @@ class _ConversationTile extends StatelessWidget {
         ),
       ),
       onTap: onOpen,
-      trailing: PopupMenuButton<_ConversationAction>(
-        tooltip: '对话操作',
-        onSelected: (action) {
-          switch (action) {
-            case _ConversationAction.rename:
-              onRename();
-              return;
-            case _ConversationAction.pin:
-              onTogglePin();
-              return;
-            case _ConversationAction.archive:
-              onArchive();
-              return;
-          }
-        },
-        itemBuilder: (context) => [
-          const PopupMenuItem(
-            value: _ConversationAction.rename,
-            child: _ProjectMenuItem(
-              icon: Icons.drive_file_rename_outline,
-              label: '重命名',
+      onLongPress: () => _showActions(context),
+    );
+  }
+
+  void _showActions(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: context.surfacePrimary,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.drive_file_rename_outline),
+              title: const Text('重命名'),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                onRename();
+              },
             ),
-          ),
-          PopupMenuItem(
-            value: _ConversationAction.pin,
-            child: _ProjectMenuItem(
-              icon: conversation.pinnedAt.isEmpty
-                  ? Icons.push_pin_outlined
-                  : Icons.push_pin,
-              label: conversation.pinnedAt.isEmpty ? '置顶' : '取消置顶',
+            ListTile(
+              leading: const Icon(Icons.archive_outlined),
+              title: const Text('归档'),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                onArchive();
+              },
             ),
-          ),
-          const PopupMenuItem(
-            value: _ConversationAction.archive,
-            child: _ProjectMenuItem(icon: Icons.archive_outlined, label: '归档'),
-          ),
-        ],
-        icon: Icon(Icons.more_horiz, size: 19, color: context.textTertiary),
+            ListTile(
+              leading: Icon(
+                conversation.pinnedAt.isEmpty
+                    ? Icons.push_pin_outlined
+                    : Icons.push_pin,
+              ),
+              title: Text(conversation.pinnedAt.isEmpty ? '置顶' : '取消置顶'),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                onTogglePin();
+              },
+            ),
+          ],
+        ),
       ),
     );
   }
 }
-
-enum _ConversationAction { rename, pin, archive }
 
 class _ExpandableRecentList extends StatelessWidget {
   final List<ConversationDto> conversations;
