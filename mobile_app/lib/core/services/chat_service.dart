@@ -236,17 +236,36 @@ class ChatService {
     String conversationId, {
     int page = 1,
     int pageSize = 200,
+    bool latest = false,
   }) async {
+    final first = await _getMessagesPage(conversationId, page, pageSize);
+    if (!latest || page != 1) return first.items;
+    final totalPages = first.totalPages > 1 ? first.totalPages : 1;
+    if (totalPages <= 1) return first.items;
+    final last = await _getMessagesPage(conversationId, totalPages, pageSize);
+    return last.items;
+  }
+
+  Future<({List<MessageDto> items, int totalPages})> _getMessagesPage(
+    String conversationId,
+    int page,
+    int pageSize,
+  ) async {
     final resp = await _api.get<Map<String, dynamic>>(
       '/api/web-chat/conversations/$conversationId/messages',
       queryParameters: {'page': page, 'pageSize': pageSize},
     );
     final rows = resp?['items'];
-    if (rows is! List) return const [];
-    return rows
-        .whereType<Map>()
-        .map((row) => MessageDto.fromJson(Map<String, dynamic>.from(row)))
-        .toList(growable: false);
+    final items = rows is! List
+        ? const <MessageDto>[]
+        : rows
+              .whereType<Map>()
+              .map((row) => MessageDto.fromJson(Map<String, dynamic>.from(row)))
+              .toList(growable: false);
+    return (
+      items: items,
+      totalPages: (resp?['totalPages'] as num?)?.toInt() ?? 0,
+    );
   }
 
   Future<bool> deleteConversation(String id) async {

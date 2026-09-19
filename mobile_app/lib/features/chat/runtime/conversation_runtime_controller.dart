@@ -30,6 +30,7 @@ class ConversationRuntimeController extends ChangeNotifier {
   int _generationEpoch = 0;
   Timer? _liveSyncTimer;
   bool _syncingMessages = false;
+  int _messageSyncEpoch = 0;
   bool _disposed = false;
   ChatStreamCancellation? _activeSendCancellation;
   ChatStreamCancellation? _messageEventsCancellation;
@@ -479,11 +480,16 @@ class ConversationRuntimeController extends ChangeNotifier {
   Future<void> _syncMessages({bool background = false}) async {
     final conv = _conversationId;
     if (conv == null || conv.isEmpty) return;
-    final persisted = await _chatService.getMessages(conv);
+    if (background && _sending) return;
+    final syncEpoch = ++_messageSyncEpoch;
+    final persisted = await _chatService.getMessages(conv, latest: true);
     debugPrint(
       'Chat sync persisted conversation=$conv count=${persisted.length}',
     );
-    if (_disposed || _conversationId != conv || (background && _sending)) {
+    if (_disposed ||
+        syncEpoch != _messageSyncEpoch ||
+        _conversationId != conv ||
+        (background && _sending)) {
       return;
     }
     if (persisted.isEmpty) {
@@ -599,7 +605,11 @@ class ConversationRuntimeController extends ChangeNotifier {
     for (final local in _messages) {
       if (local.status != MessageStatus.sending &&
           local.status != MessageStatus.sent) {
-        continue;
+        if (local.time.isBefore(
+          DateTime.now().subtract(const Duration(minutes: 2)),
+        )) {
+          continue;
+        }
       }
       if (mapped.any((message) => _samePersistedMessage(local, message))) {
         continue;
@@ -1058,6 +1068,7 @@ class ConversationRuntimeController extends ChangeNotifier {
     _activeSendCancellation?.cancel('conversation changed');
     _activeSendCancellation = null;
     ++_generationEpoch;
+    _messageSyncEpoch++;
     _conversationId = id;
     _characterId = characterId?.trim().isEmpty == true ? null : characterId;
     _messages.clear();
@@ -1111,6 +1122,7 @@ class ConversationRuntimeController extends ChangeNotifier {
     _activeSendCancellation?.cancel('new conversation');
     _activeSendCancellation = null;
     ++_generationEpoch;
+    _messageSyncEpoch++;
     _liveSyncTimer?.cancel();
     _liveSyncTimer = null;
     _conversationId = null;

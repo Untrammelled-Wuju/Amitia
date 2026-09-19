@@ -15,7 +15,9 @@ class _FakeChatService extends ChatService {
     : super(_FakeBackendApi());
 
   final Stream<ChatStreamEvent> Function(String requestId) streamFactory;
-  final List<MessageDto> Function(String requestId) messagesFactory;
+  final List<MessageDto> Function(String requestId, bool latest)
+  messagesFactory;
+  bool latestRequested = false;
 
   @override
   ChatStreamCancellation createStreamCancellation() => ChatStreamCancellation();
@@ -42,8 +44,10 @@ class _FakeChatService extends ChatService {
     String conversationId, {
     int page = 1,
     int pageSize = 200,
+    bool latest = false,
   }) async {
-    return messagesFactory(clientMessageId);
+    latestRequested = latest;
+    return messagesFactory(clientMessageId, latest);
   }
 
   @override
@@ -86,7 +90,7 @@ void main() {
           'requestId': requestId,
         });
       },
-      messagesFactory: (requestId) => <MessageDto>[
+      messagesFactory: (requestId, latest) => <MessageDto>[
         _message(
           id: 'user-1',
           role: 'user',
@@ -127,6 +131,100 @@ void main() {
     ]);
     expect(controller.messages.first.content, '你好');
     expect(controller.messages.last.content, '你好呀');
+
+    controller.dispose();
+  });
+
+  test('latest sync keeps a streaming assistant reply', () async {
+    late final _FakeChatService service;
+    service = _FakeChatService(
+      streamFactory: (requestId) async* {
+        service.rememberRequestId(requestId);
+        yield ChatStreamEvent('message_start', <String, dynamic>{
+          'conversationId': 'conversation-1',
+          'userMessageId': 'user-1',
+        });
+        yield ChatStreamEvent('token', <String, dynamic>{
+          'id': 'assistant-1',
+          'conversationId': 'conversation-1',
+          'role': 'assistant',
+          'content': '正在回复',
+          'createdAt': '2026-09-19T18:00:00Z',
+        });
+      },
+      messagesFactory: (requestId, latest) => <MessageDto>[
+        _message(
+          id: 'user-1',
+          role: 'user',
+          content: '你好',
+          requestId: requestId,
+          createdAt: '2026-09-19T18:00:00Z',
+          sequence: 1,
+        ),
+      ],
+    );
+    final controller = ConversationRuntimeController(
+      service,
+      _FakeEmoteService(),
+    );
+
+    await controller.sendText('你好');
+
+    expect(service.latestRequested, isTrue);
+    expect(controller.messages.map((message) => message.id), <String>[
+      'user-1',
+      'assistant-1',
+    ]);
+    expect(controller.messages.last.content, '正在回复');
+
+    controller.dispose();
+  });
+
+  test('latest sync replaces the oldest page with the newest page', () async {
+    final service = _FakeChatService(
+      streamFactory: (requestId) => const Stream<ChatStreamEvent>.empty(),
+      messagesFactory: (requestId, latest) => latest
+          ? <MessageDto>[
+              _message(
+                id: 'latest-user',
+                role: 'user',
+                content: '最新消息',
+                requestId: 'latest-request',
+                createdAt: '2026-09-19T18:00:00Z',
+                sequence: 201,
+              ),
+              _message(
+                id: 'latest-assistant',
+                role: 'assistant',
+                content: '最新回复',
+                requestId: 'latest-request',
+                createdAt: '2026-09-19T18:00:01Z',
+                sequence: 202,
+              ),
+            ]
+          : <MessageDto>[
+              _message(
+                id: 'old-user',
+                role: 'user',
+                content: '旧消息',
+                requestId: 'old-request',
+                createdAt: '2026-09-19T17:00:00Z',
+                sequence: 1,
+              ),
+            ],
+    );
+    final controller = ConversationRuntimeController(
+      service,
+      _FakeEmoteService(),
+    );
+
+    await controller.openConversation('conversation-1');
+
+    expect(service.latestRequested, isTrue);
+    expect(controller.messages.map((message) => message.id), <String>[
+      'latest-user',
+      'latest-assistant',
+    ]);
 
     controller.dispose();
   });
