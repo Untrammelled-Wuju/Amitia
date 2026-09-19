@@ -14,7 +14,7 @@ void main() {
     expect(source, contains('FadeTransition'));
     expect(source, contains('ScaleTransition'));
     expect(source, contains('alignment: Alignment.bottomRight'));
-    expect(source, contains('width: 220'));
+    expect(source, contains('width: 190'));
     expect(source, contains('BorderRadius.circular(14)'));
     expect(source, contains('height: 46'));
     expect(source, contains('Divider('));

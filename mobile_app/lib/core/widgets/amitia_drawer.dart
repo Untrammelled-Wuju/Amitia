@@ -980,7 +980,7 @@ class _ConversationActionMenu extends StatelessWidget {
       borderRadius: BorderRadius.circular(14),
       clipBehavior: Clip.antiAlias,
       child: SizedBox(
-        width: 220,
+        width: 190,
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 6),
           child: Column(
