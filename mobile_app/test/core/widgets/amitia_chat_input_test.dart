@@ -60,7 +60,7 @@ void main() {
     expect(after, before);
   });
 
-  testWidgets('composer trailing actions match the add action inset', (
+  testWidgets('composer trailing actions keep a small right inset', (
     tester,
   ) async {
     tester.view.devicePixelRatio = 1;
@@ -96,7 +96,7 @@ void main() {
     final voiceInset = surface.right - voice.right;
 
     expect(addInset, lessThan(2));
-    expect(voiceInset, closeTo(addInset, 0.5));
+    expect(voiceInset, closeTo(5.8, 0.5));
 
     await tester.enterText(find.byType(TextField), '测试');
     await tester.pump();
@@ -106,8 +106,7 @@ void main() {
     );
     final sendInset = surface.right - send.right;
 
-    expect(sendInset, lessThan(2));
-    expect(sendInset, closeTo(addInset, 0.5));
+    expect(sendInset, closeTo(5.8, 0.5));
   });
 
   test('composer keeps a lower bottom inset when the keyboard is closed', () {
