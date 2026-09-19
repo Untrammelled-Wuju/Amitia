@@ -34,5 +34,8 @@ void main() {
     expect(page, contains('AnimatedSwitcher('));
     expect(page, contains('FadeTransition('));
     expect(page, contains("'conversation-messages:"));
+    expect(page, contains('showEmptyState'));
+    expect(page, contains('return Center('));
+    expect(page, contains('crossAxisAlignment: CrossAxisAlignment.stretch'));
   });
 }
