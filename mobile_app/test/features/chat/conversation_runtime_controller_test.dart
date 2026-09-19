@@ -80,6 +80,36 @@ MessageDto _message({
 }
 
 void main() {
+  test('starting a draft resets the conversation and emits a draft epoch', () {
+    final controller = ConversationRuntimeController(
+      _FakeChatService(
+        streamFactory: (_) => const Stream<ChatStreamEvent>.empty(),
+        messagesFactory: (_, _) => const <MessageDto>[],
+      ),
+      _FakeEmoteService(),
+    );
+
+    expect(controller.draftEpoch, 0);
+    controller.startDraft();
+    expect(controller.conversationId, isNull);
+    expect(controller.messages, isEmpty);
+    expect(controller.workspace, isNull);
+    expect(controller.draftEpoch, 1);
+
+    controller.startDraft(
+      workspace: const ConversationWorkspaceDto(
+        projectId: 'project-1',
+        workspaceId: 'workspace-1',
+        workspaceName: '项目',
+        rootUri: 'amitia://workspace/@workspace-1/',
+      ),
+    );
+    expect(controller.workspace?.projectId, 'project-1');
+    expect(controller.draftEpoch, 2);
+
+    controller.dispose();
+  });
+
   test('queued reply keeps user and assistant identities distinct', () async {
     late final _FakeChatService service;
     service = _FakeChatService(

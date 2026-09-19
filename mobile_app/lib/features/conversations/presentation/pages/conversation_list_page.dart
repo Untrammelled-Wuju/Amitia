@@ -10,6 +10,7 @@ import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/services/providers.dart';
 import '../../../../core/models/conversation.dart';
+import '../../../chat/runtime/conversation_runtime_controller.dart';
 
 class ConversationListPage extends ConsumerStatefulWidget {
   const ConversationListPage({super.key});
@@ -112,7 +113,13 @@ class _ConversationListPageState extends ConsumerState<ConversationListPage> {
                   icon: Icons.add_comment_outlined,
                   backgroundColor: context.accentPrimary,
                   color: Colors.white,
-                  onPressed: () => context.go(AppRoutes.chat),
+                  onPressed: () {
+                    ref
+                        .read(conversationRuntimeControllerProvider)
+                        .startDraft();
+                    ref.read(activeConversationIdProvider.notifier).state = '';
+                    context.go(AppRoutes.chat);
+                  },
                 ),
               ],
             ),
@@ -295,6 +302,7 @@ class _ConversationListPageState extends ConsumerState<ConversationListPage> {
     try {
       await ref.read(chatServiceProvider).renameConversation(conv.id, title);
       ref.invalidate(conversationListProvider);
+      ref.invalidate(conversationSidebarProvider);
       if (mounted) amitiaSnackBar(context, '对话已重命名');
     } catch (e) {
       if (mounted) amitiaSnackBar(context, '重命名失败：$e');
@@ -313,6 +321,7 @@ class _ConversationListPageState extends ConsumerState<ConversationListPage> {
     try {
       await ref.read(chatServiceProvider).deleteConversation(conv.id);
       ref.invalidate(conversationListProvider);
+      ref.invalidate(conversationSidebarProvider);
       if (mounted) amitiaSnackBar(context, '对话已删除');
     } catch (e) {
       if (mounted) amitiaSnackBar(context, '删除失败：$e');

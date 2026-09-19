@@ -83,6 +83,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   Timer? _composerDraftTimer;
   bool _loadingComposerDraft = false;
   String _activeComposerDraftKey = '';
+  int _lastDraftEpoch = 0;
 
   @override
   void initState() {
@@ -91,6 +92,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       activeConversationIdProvider.notifier,
     );
     _runtime = ref.read(conversationRuntimeControllerProvider);
+    _lastDraftEpoch = _runtime.draftEpoch;
     _runtime.addListener(_onRuntimeChanged);
     _composerController.addListener(_handleComposerChanged);
     WidgetsBinding.instance.addPostFrameCallback(
@@ -119,7 +121,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       if (newConversationId.isEmpty) {
-        _runtime.startDraft();
+        _prepareDraftRuntime(newProjectId);
         unawaited(_openDraftWorkspace(newProjectId));
       } else {
         unawaited(_openInitialConversation());
@@ -134,7 +136,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         : _activeConversationIdController.state.trim();
     if (!mounted) return;
     if (conversationId.isEmpty) {
-      _runtime.startDraft();
+      _prepareDraftRuntime(widget.initialProjectId);
       await _openDraftWorkspace(widget.initialProjectId);
       await _refreshRecentWorkspaces();
       return;
@@ -155,6 +157,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
   void _onRuntimeChanged() {
     if (!mounted) return;
+    _handleDraftReset();
     _cachedProviderContext = null;
     _cachedMessagesForContext = null;
     _cachedProviderActions = null;
@@ -175,6 +178,17 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     }
     setState(() {});
     _scrollToBottom();
+  }
+
+  void _handleDraftReset() {
+    if (_runtime.draftEpoch == _lastDraftEpoch) return;
+    _lastDraftEpoch = _runtime.draftEpoch;
+    _composerDraftTimer?.cancel();
+    _loadingComposerDraft = true;
+    _composerController.clear();
+    _loadingComposerDraft = false;
+    _activeComposerDraftKey = '';
+    _replyTarget = null;
   }
 
   Future<void> _openDraftWorkspace(String? projectId) async {
@@ -221,6 +235,16 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         '${AppRoutes.chat}?conversationId=${Uri.encodeQueryComponent(conversationId)}',
       );
     });
+  }
+
+  void _prepareDraftRuntime(String? projectId) {
+    final targetProjectId = projectId?.trim() ?? '';
+    final runtimeConversationId = _runtime.conversationId?.trim() ?? '';
+    final runtimeProjectId = _runtime.workspace?.projectId.trim() ?? '';
+    if (runtimeConversationId.isEmpty && runtimeProjectId == targetProjectId) {
+      return;
+    }
+    _runtime.startDraft();
   }
 
   Map<String, dynamic> _buildProviderContext(

@@ -32,6 +32,7 @@ class ConversationRuntimeController extends ChangeNotifier {
   bool _syncingMessages = false;
   int _messageSyncEpoch = 0;
   bool _disposed = false;
+  int _draftEpoch = 0;
   ChatStreamCancellation? _activeSendCancellation;
   ChatStreamCancellation? _messageEventsCancellation;
 
@@ -43,6 +44,7 @@ class ConversationRuntimeController extends ChangeNotifier {
   bool get sending => _sending;
   Object? get lastError => _lastError;
   String get state => _sending ? 'sending' : 'idle';
+  int get draftEpoch => _draftEpoch;
 
   void setCharacterId(String? characterId) {
     _characterId = characterId?.trim().isEmpty == true ? null : characterId;
@@ -987,6 +989,7 @@ class ConversationRuntimeController extends ChangeNotifier {
   void startDraft({ConversationWorkspaceDto? workspace}) {
     _activeSendCancellation?.cancel('new conversation');
     _activeSendCancellation = null;
+    _draftEpoch++;
     ++_generationEpoch;
     _messageSyncEpoch++;
     _liveSyncTimer?.cancel();

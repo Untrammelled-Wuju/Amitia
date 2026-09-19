@@ -15,10 +15,12 @@ import '../models/character.dart';
 import '../settings/appearance_preferences.dart';
 import '../services/extension_service.dart';
 import '../services/providers.dart';
+import '../services/chat_service.dart';
 import '../services/workspace_service.dart';
 import '../native_bridge/providers/native_bridge_relay_provider.dart';
 import '../models/project.dart';
 import '../models/conversation.dart';
+import '../../features/chat/runtime/conversation_runtime_controller.dart';
 import '../ui_runtime/ui_navigation_registry.dart';
 import '../ui_runtime/ui_runtime_controller.dart';
 import 'amitia_misc.dart';
@@ -141,8 +143,74 @@ class _AmitiaDrawerState extends ConsumerState<AmitiaDrawer> {
     _navigateTo(result.route);
   }
 
+  Future<void> _refreshConversationSidebar() async {
+    ref.invalidate(conversationListProvider);
+    ref.invalidate(conversationSidebarProvider);
+    await ref.read(conversationSidebarProvider.future);
+  }
+
+  Future<ConversationSidebarDto> _loadConversationSidebar() {
+    return ref.read(conversationSidebarProvider.future);
+  }
+
+  void _replaceActiveProjectWorkspace(
+    ProjectDto project, {
+    String? name,
+    String? workspaceId,
+    String? rootUri,
+  }) {
+    final runtime = ref.read(conversationRuntimeControllerProvider);
+    final workspace = runtime.workspace;
+    if (workspace == null || workspace.projectId != project.id) return;
+    runtime.setWorkspace(
+      ConversationWorkspaceDto(
+        conversationId: workspace.conversationId,
+        projectId: project.id,
+        workspaceId: workspaceId ?? workspace.workspaceId,
+        deviceId: workspace.deviceId,
+        workspaceName: name ?? workspace.workspaceName,
+        workspaceKind: workspace.workspaceKind,
+        rootUri: rootUri ?? workspace.rootUri,
+      ),
+    );
+  }
+
   Future<void> _createConversation({String projectId = ''}) async {
     final id = projectId.trim();
+    ConversationWorkspaceDto? workspace;
+    if (id.isNotEmpty) {
+      try {
+        final sidebar = await _loadConversationSidebar();
+        final project = sidebar.projects
+            .where((item) => item.id == id)
+            .firstOrNull;
+        if (project == null) throw StateError('项目不存在');
+        if (!project.available) {
+          throw StateError(
+            project.statusReason.trim().isEmpty
+                ? '项目目录当前不可用'
+                : project.statusReason,
+          );
+        }
+        workspace = ConversationWorkspaceDto(
+          projectId: project.id,
+          workspaceId: project.workspaceId,
+          deviceId: project.deviceId,
+          workspaceName: project.name,
+          workspaceKind: project.rootUri.startsWith('content://')
+              ? 'saf'
+              : 'local',
+          rootUri: project.rootUri,
+        );
+      } catch (error) {
+        if (mounted) amitiaSnackBar(context, '新建项目对话失败：$error');
+        return;
+      }
+    }
+    if (!mounted) return;
+    ref
+        .read(conversationRuntimeControllerProvider)
+        .startDraft(workspace: workspace);
     ref.read(activeConversationIdProvider.notifier).state = '';
     _navigateTo(
       id.isEmpty
@@ -205,7 +273,7 @@ class _AmitiaDrawerState extends ConsumerState<AmitiaDrawer> {
     try {
       final mount = await _pickWorkspaceMount();
       if (mount == null || !mounted) return;
-      final sidebar = await ref.read(chatServiceProvider).conversationSidebar();
+      final sidebar = await _loadConversationSidebar();
       if (!sidebar.projects.any((project) => project.workspaceId == mount.id)) {
         await ref
             .read(chatServiceProvider)
@@ -215,7 +283,7 @@ class _AmitiaDrawerState extends ConsumerState<AmitiaDrawer> {
               rootUri: mount.rootUri,
             );
       }
-      ref.invalidate(conversationSidebarProvider);
+      await _refreshConversationSidebar();
       if (mounted) amitiaSnackBar(context, '项目已添加');
     } catch (error) {
       if (mounted) amitiaSnackBar(context, '添加项目失败：$error');
@@ -233,7 +301,11 @@ class _AmitiaDrawerState extends ConsumerState<AmitiaDrawer> {
     if (confirmed != true) return;
     try {
       await ref.read(chatServiceProvider).deleteProject(project.id);
-      ref.invalidate(conversationSidebarProvider);
+      final runtime = ref.read(conversationRuntimeControllerProvider);
+      if (runtime.workspace?.projectId == project.id) {
+        runtime.setWorkspace(null);
+      }
+      await _refreshConversationSidebar();
       if (mounted) amitiaSnackBar(context, '项目已移除');
     } catch (error) {
       if (mounted) amitiaSnackBar(context, '移除项目失败：$error');
@@ -245,7 +317,7 @@ class _AmitiaDrawerState extends ConsumerState<AmitiaDrawer> {
       await ref
           .read(chatServiceProvider)
           .updateProject(project.id, pinned: project.pinnedAt.isEmpty);
-      ref.invalidate(conversationSidebarProvider);
+      await _refreshConversationSidebar();
     } catch (error) {
       if (mounted) amitiaSnackBar(context, '更新项目置顶失败：$error');
     }
@@ -318,7 +390,8 @@ class _AmitiaDrawerState extends ConsumerState<AmitiaDrawer> {
     if (name == null || name == project.name) return;
     try {
       await ref.read(chatServiceProvider).updateProject(project.id, name: name);
-      ref.invalidate(conversationSidebarProvider);
+      _replaceActiveProjectWorkspace(project, name: name);
+      await _refreshConversationSidebar();
     } catch (error) {
       if (mounted) amitiaSnackBar(context, '重命名项目失败：$error');
     }
@@ -335,7 +408,12 @@ class _AmitiaDrawerState extends ConsumerState<AmitiaDrawer> {
             workspaceId: mount.id,
             rootUri: mount.rootUri,
           );
-      ref.invalidate(conversationSidebarProvider);
+      _replaceActiveProjectWorkspace(
+        project,
+        workspaceId: mount.id,
+        rootUri: mount.rootUri,
+      );
+      await _refreshConversationSidebar();
       if (mounted) amitiaSnackBar(context, '项目根目录已更新');
     } catch (error) {
       if (mounted) amitiaSnackBar(context, '更新项目根目录失败：$error');
@@ -378,7 +456,7 @@ class _AmitiaDrawerState extends ConsumerState<AmitiaDrawer> {
       await ref
           .read(chatServiceProvider)
           .renameConversation(conversation.id, title);
-      ref.invalidate(conversationSidebarProvider);
+      await _refreshConversationSidebar();
     } catch (error) {
       if (mounted) amitiaSnackBar(context, '重命名失败：$error');
     }
@@ -392,7 +470,7 @@ class _AmitiaDrawerState extends ConsumerState<AmitiaDrawer> {
             conversation.id,
             conversation.pinnedAt.isEmpty,
           );
-      ref.invalidate(conversationSidebarProvider);
+      await _refreshConversationSidebar();
     } catch (error) {
       if (mounted) amitiaSnackBar(context, '更新置顶失败：$error');
     }
@@ -403,9 +481,10 @@ class _AmitiaDrawerState extends ConsumerState<AmitiaDrawer> {
       final archivingActive =
           ref.read(activeConversationIdProvider).trim() == conversation.id;
       await ref.read(chatServiceProvider).archiveConversation(conversation.id);
-      ref.invalidate(conversationSidebarProvider);
+      await _refreshConversationSidebar();
       if (!mounted) return;
       if (archivingActive) {
+        ref.read(conversationRuntimeControllerProvider).startDraft();
         ref.read(activeConversationIdProvider.notifier).state = '';
         _navigateTo(AppRoutes.chat);
       }

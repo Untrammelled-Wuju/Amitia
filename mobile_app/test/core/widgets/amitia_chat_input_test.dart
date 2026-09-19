@@ -60,7 +60,7 @@ void main() {
     expect(after, before);
   });
 
-  testWidgets('composer trailing action matches the add action inset', (
+  testWidgets('composer trailing actions match the add action inset', (
     tester,
   ) async {
     await tester.pumpWidget(
@@ -72,14 +72,29 @@ void main() {
     final surface = tester.getRect(
       find.byKey(const ValueKey('chat-composer-surface')),
     );
-    final add = tester.getRect(find.byIcon(Icons.add_rounded));
-    final voice = tester.getRect(find.byIcon(Icons.mic_none_outlined));
+    final add = tester.getRect(
+      find.byKey(const ValueKey('composer-add-button')),
+    );
+    final voice = tester.getRect(
+      find.byKey(const ValueKey('composer-trailing-button')),
+    );
 
     final addInset = add.left - surface.left;
     final voiceInset = surface.right - voice.right;
 
-    expect(addInset - voiceInset, closeTo(3, 0.5));
-    expect(voiceInset, lessThan(addInset));
+    expect(addInset, lessThan(2));
+    expect(voiceInset, closeTo(addInset, 0.5));
+
+    await tester.enterText(find.byType(TextField), '测试');
+    await tester.pump();
+
+    final send = tester.getRect(
+      find.byKey(const ValueKey('composer-send-button')),
+    );
+    final sendInset = surface.right - send.right;
+
+    expect(sendInset, lessThan(2));
+    expect(sendInset, closeTo(addInset, 0.5));
   });
 
   test('composer keeps a lower bottom inset when the keyboard is closed', () {

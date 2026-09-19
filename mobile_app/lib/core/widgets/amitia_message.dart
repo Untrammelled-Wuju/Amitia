@@ -2109,12 +2109,13 @@ class _AmitiaChatInputState extends State<AmitiaChatInput> {
                   ),
                 ),
               Padding(
-                padding: const EdgeInsets.fromLTRB(7, 0, 4, 7),
+                padding: const EdgeInsets.fromLTRB(1, 0, 1, 7),
                 child: SizedBox(
                   height: 38,
                   child: Row(
                     children: [
                       _ComposerRoundButton(
+                        key: const ValueKey('composer-add-button'),
                         icon: Icons.add_rounded,
                         tooltip: '添加内容',
                         onTap: _showComposerTools,
@@ -2132,6 +2133,7 @@ class _AmitiaChatInputState extends State<AmitiaChatInput> {
                           child: Tooltip(
                             message: '发送消息',
                             child: Container(
+                              key: const ValueKey('composer-send-button'),
                               width: 31,
                               height: 31,
                               decoration: BoxDecoration(
@@ -2149,6 +2151,7 @@ class _AmitiaChatInputState extends State<AmitiaChatInput> {
                         )
                       else
                         _ComposerRoundButton(
+                          key: const ValueKey('composer-trailing-button'),
                           icon: _voiceMode
                               ? Icons.keyboard_outlined
                               : Icons.mic_none_outlined,
@@ -2236,6 +2239,7 @@ class _ComposerRoundButton extends StatelessWidget {
   final VoidCallback onTap;
 
   const _ComposerRoundButton({
+    super.key,
     required this.icon,
     required this.tooltip,
     required this.onTap,
