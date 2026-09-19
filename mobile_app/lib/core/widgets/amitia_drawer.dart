@@ -890,29 +890,40 @@ class _ConversationTile extends StatelessWidget {
         child: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
       ),
       onTap: onOpen,
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          IconButton(
-            tooltip: conversation.pinnedAt.isEmpty ? '置顶' : '取消置顶',
-            onPressed: onTogglePin,
-            icon: Icon(
-              conversation.pinnedAt.isEmpty
+      trailing: PopupMenuButton<_ConversationAction>(
+        tooltip: '对话操作',
+        onSelected: (action) {
+          switch (action) {
+            case _ConversationAction.pin:
+              onTogglePin();
+              return;
+            case _ConversationAction.archive:
+              onArchive();
+              return;
+          }
+        },
+        itemBuilder: (context) => [
+          PopupMenuItem(
+            value: _ConversationAction.pin,
+            child: _ProjectMenuItem(
+              icon: conversation.pinnedAt.isEmpty
                   ? Icons.push_pin_outlined
                   : Icons.push_pin,
-              size: 20,
+              label: conversation.pinnedAt.isEmpty ? '置顶' : '取消置顶',
             ),
           ),
-          IconButton(
-            tooltip: '归档',
-            onPressed: onArchive,
-            icon: const Icon(Icons.archive_outlined, size: 20),
+          const PopupMenuItem(
+            value: _ConversationAction.archive,
+            child: _ProjectMenuItem(icon: Icons.archive_outlined, label: '归档'),
           ),
         ],
+        icon: Icon(Icons.more_horiz, size: 20, color: context.textTertiary),
       ),
     );
   }
 }
+
+enum _ConversationAction { pin, archive }
 
 class _ExpandableRecentList extends StatelessWidget {
   final List<ConversationDto> conversations;
