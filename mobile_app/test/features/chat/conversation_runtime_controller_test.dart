@@ -1,7 +1,9 @@
+import 'package:amitia_app/core/backend_access/business_backend_unavailable.dart';
 import 'package:amitia_app/core/backend_transport/backend_service_api.dart';
 import 'package:amitia_app/core/models/conversation.dart';
 import 'package:amitia_app/core/services/channel_service.dart';
 import 'package:amitia_app/core/services/chat_service.dart';
+import 'package:amitia_app/core/runtime/status/runtime_status_phase.dart';
 import 'package:amitia_app/features/chat/runtime/conversation_runtime_controller.dart';
 import 'package:amitia_app/shared/models/models.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -106,6 +108,58 @@ void main() {
     );
     expect(controller.workspace?.projectId, 'project-1');
     expect(controller.draftEpoch, 2);
+
+    controller.dispose();
+  });
+
+  test('send retries while the business backend is starting', () async {
+    late _FakeChatService service;
+    var attempts = 0;
+    service = _FakeChatService(
+      streamFactory: (requestId) async* {
+        attempts++;
+        if (attempts == 1) {
+          throw const BusinessBackendUnavailable(
+            phase: RuntimeStatusPhase.starting,
+            generation: 1,
+          );
+        }
+        service.rememberRequestId(requestId);
+        yield ChatStreamEvent('queued', <String, dynamic>{
+          'conversationId': 'conversation-1',
+          'requestId': requestId,
+        });
+      },
+      messagesFactory: (requestId, latest) => <MessageDto>[
+        _message(
+          id: 'user-1',
+          role: 'user',
+          content: '你好',
+          requestId: requestId,
+          createdAt: '2026-09-19 18:00:00',
+          sequence: 1,
+        ),
+        _message(
+          id: 'assistant-1',
+          role: 'assistant',
+          content: '你好呀',
+          requestId: requestId,
+          createdAt: '2026-09-19 18:00:01',
+          sequence: 2,
+        ),
+      ],
+    );
+    final controller = ConversationRuntimeController(
+      service,
+      _FakeEmoteService(),
+    );
+
+    await controller.sendText('你好');
+
+    expect(attempts, 2);
+    expect(controller.lastError, isNull);
+    expect(controller.messages, hasLength(2));
+    expect(controller.messages.last.status, MessageStatus.delivered);
 
     controller.dispose();
   });

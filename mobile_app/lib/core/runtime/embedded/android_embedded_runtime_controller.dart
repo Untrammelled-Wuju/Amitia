@@ -124,6 +124,16 @@ class AndroidEmbeddedRuntimeController implements EmbeddedRuntimeController {
           error.code == 'UNSUPPORTED_PLATFORM') {
         return EmbeddedRuntimeStatus.unsupported;
       }
+      if (error.code == 'OPERATION_ALREADY_RUNNING') {
+        final snapshot = await _readSnapshot();
+        final status = _mapSnapshotStatus(snapshot);
+        if (status == EmbeddedRuntimeStatus.ready &&
+            _activeProfile(snapshot) == requestedProfile) {
+          _lastEndpoint = await getEndpoint();
+          return EmbeddedRuntimeStatus.ready;
+        }
+        return EmbeddedRuntimeStatus.starting;
+      }
       return EmbeddedRuntimeStatus.failed;
     } catch (_) {
       return EmbeddedRuntimeStatus.failed;

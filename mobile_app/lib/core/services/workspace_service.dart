@@ -61,7 +61,7 @@ class WorkspaceService {
   }
 
   Future<List<WorkspaceMountDto>> listLocal() async {
-    final resp = await _api.get<List<dynamic>>('/api/local/workspaces');
+    final resp = await _api.get<List<dynamic>>('/api/workspaces');
     if (resp == null) return const [];
     final mounts = resp
         .whereType<Map>()
@@ -73,11 +73,12 @@ class WorkspaceService {
       if (mount.kind != 'saf' || mount.available) continue;
       try {
         final refreshed = await _api.post<Map<String, dynamic>>(
-          '/api/local/workspaces/${Uri.encodeComponent(mount.id)}/refresh',
+          '/api/workspaces/${Uri.encodeComponent(mount.id)}/refresh',
           fromJson: (e) => Map<String, dynamic>.from(e as Map),
         );
-        if (refreshed != null)
+        if (refreshed != null) {
           mounts[i] = WorkspaceMountDto.fromJson(refreshed);
+        }
       } catch (_) {
         // The native relay can still be connecting during app startup. The
         // next dropdown refresh will retry without losing the persisted mount.
@@ -97,7 +98,7 @@ class WorkspaceService {
     bool readOnly = false,
   }) async {
     final resp = await _api.post<Map<String, dynamic>>(
-      '/api/local/workspaces/local',
+      '/api/workspaces/local',
       data: <String, dynamic>{
         'name': name.trim().isEmpty ? '工作目录' : name.trim(),
         'localRoot': localRoot.trim(),
@@ -115,7 +116,7 @@ class WorkspaceService {
     bool readOnly = false,
   }) async {
     final resp = await _api.post<Map<String, dynamic>>(
-      '/api/local/workspaces/saf',
+      '/api/workspaces/saf',
       data: <String, dynamic>{
         'name': name.trim().isEmpty ? '工作目录' : name.trim(),
         'grantId': grantId.trim(),
@@ -129,7 +130,7 @@ class WorkspaceService {
 
   Future<void> touchLocal(String id) async {
     await _api.post<Map<String, dynamic>>(
-      '/api/local/workspaces/${Uri.encodeComponent(id)}/touch',
+      '/api/workspaces/${Uri.encodeComponent(id)}/touch',
     );
   }
 

@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/backend_access/business_backend_unavailable.dart';
 import '../../../core/models/conversation.dart';
 import '../../../core/services/chat_service.dart';
 import '../../../core/services/channel_service.dart';
@@ -37,6 +38,8 @@ class ConversationRuntimeController extends ChangeNotifier {
   ChatStreamCancellation? _messageEventsCancellation;
 
   static const Duration _liveSyncInterval = Duration(seconds: 15);
+  static const Duration _businessReadyRetryWindow = Duration(seconds: 20);
+  static const Duration _businessReadyRetryDelay = Duration(milliseconds: 250);
 
   List<ChatMessage> get messages => _messages.messages;
   String? get conversationId => _conversationId;
@@ -303,7 +306,7 @@ class ConversationRuntimeController extends ChangeNotifier {
 
     var queued = false;
     try {
-      await for (final event in _chatService.submitMessageStream(
+      await for (final event in _submitStreamWithReadinessRetry(
         message: message,
         clientMessageId: localMessage.renderId,
         conversationId: _conversationId,
@@ -377,6 +380,51 @@ class ConversationRuntimeController extends ChangeNotifier {
       if (epoch == _generationEpoch) {
         _sending = false;
         notifyListeners();
+      }
+    }
+  }
+
+  Stream<ChatStreamEvent> _submitStreamWithReadinessRetry({
+    required String message,
+    String? clientMessageId,
+    String? conversationId,
+    String? characterId,
+    String? imageUrl,
+    String? audioUrl,
+    double audioDuration = 0,
+    String? videoUrl,
+    String? replyToMessageId,
+    ConversationWorkspaceDto? workspace,
+    required ChatStreamCancellation cancellation,
+  }) async* {
+    final deadline = DateTime.now().add(_businessReadyRetryWindow);
+    while (true) {
+      var started = false;
+      try {
+        await for (final event in _chatService.submitMessageStream(
+          message: message,
+          clientMessageId: clientMessageId,
+          conversationId: conversationId,
+          characterId: characterId,
+          imageUrl: imageUrl,
+          audioUrl: audioUrl,
+          audioDuration: audioDuration,
+          videoUrl: videoUrl,
+          replyToMessageId: replyToMessageId,
+          workspace: workspace,
+          cancellation: cancellation,
+        )) {
+          started = true;
+          yield event;
+        }
+        return;
+      } on BusinessBackendUnavailable {
+        if (started ||
+            cancellation.isCancelled ||
+            DateTime.now().isAfter(deadline)) {
+          rethrow;
+        }
+        await Future<void>.delayed(_businessReadyRetryDelay);
       }
     }
   }
