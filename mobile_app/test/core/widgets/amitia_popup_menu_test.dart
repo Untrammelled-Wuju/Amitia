@@ -5,6 +5,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('custom popup menu default width is 200', () {
+    final button = AmitiaPopupMenuButton<String>(
+      itemBuilder: (_) => const <PopupMenuEntry<String>>[],
+    );
+
+    expect(button.menuWidth, 200);
+  });
+
   test('popup menu placement follows a left trigger', () {
     final placement = AmitiaPopupMenuPlacement.resolve(
       anchorRect: const Rect.fromLTWH(24, 80, 48, 48),

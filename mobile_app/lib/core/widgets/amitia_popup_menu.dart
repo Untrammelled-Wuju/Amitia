@@ -63,7 +63,7 @@ class AmitiaPopupMenuButton<T> extends StatefulWidget {
     this.icon,
     this.child,
     this.padding = const EdgeInsets.all(8),
-    this.menuWidth = 232,
+    this.menuWidth = 200,
     this.useRootNavigator = true,
   });
 
@@ -135,7 +135,7 @@ Future<T?> showAmitiaPopupMenu<T>({
   required Rect anchorRect,
   required List<PopupMenuEntry<T>> items,
   T? initialValue,
-  double menuWidth = 232,
+  double menuWidth = 200,
   double gap = 6,
   double margin = 8,
   bool useRootNavigator = true,
