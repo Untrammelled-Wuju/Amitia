@@ -16,6 +16,11 @@ void main() {
 
     expect(page, isNot(contains("slotId: 'chat.message.renderer'")));
     expect(page, isNot(contains("slotId: 'chat.message.custom_renderer'")));
+    expect(
+      page,
+      isNot(contains('capability: UICapability.conversationMessages')),
+    );
+    expect(page, isNot(contains("slotId: 'chat.empty_state.card'")));
     expect(page, contains('providerMessage,'));
     expect(
       providerHost,
