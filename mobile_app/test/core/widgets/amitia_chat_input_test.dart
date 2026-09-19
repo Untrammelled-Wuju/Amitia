@@ -95,7 +95,7 @@ void main() {
     final addInset = add.left - surface.left;
     final voiceInset = surface.right - voice.right;
 
-    expect(addInset, lessThan(2));
+    expect(addInset, closeTo(5.8, 0.5));
     expect(voiceInset, closeTo(5.8, 0.5));
 
     await tester.enterText(find.byType(TextField), '测试');
