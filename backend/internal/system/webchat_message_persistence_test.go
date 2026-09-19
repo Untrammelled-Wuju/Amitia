@@ -30,7 +30,7 @@ func TestPersistQueuedWebChatMessageIsImmediatelyQueryable(t *testing.T) {
 	if err := db.Exec("CREATE UNIQUE INDEX idx_messages_conv_sequence_unique ON messages(conversation_id, sequence)").Error; err != nil {
 		t.Fatal(err)
 	}
-	conv := &chat.Conversation{ID: "conv-1", CharacterID: "char-1", Title: "测试", Channel: "web", Source: "web"}
+	conv := &chat.Conversation{ID: "conv-1", Title: "测试", Channel: "web", Source: "web"}
 	if err := db.Create(conv).Error; err != nil {
 		t.Fatal(err)
 	}
@@ -39,7 +39,7 @@ func TestPersistQueuedWebChatMessageIsImmediatelyQueryable(t *testing.T) {
 	}
 	h := &Handler{db: db}
 	body := webChatSendRequest{AudioUrl: "audio", AudioDuration: 1.5, ImageUrl: "image", VideoUrl: "video"}
-	msg, err := h.persistQueuedWebChatMessage(body, conv.ID, conv.CharacterID, "web", "request-1", "新消息", "", nil, nil)
+	msg, err := h.persistQueuedWebChatMessage(body, conv.ID, "char-1", "web", "request-1", "新消息", "", nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -53,7 +53,7 @@ func TestPersistQueuedWebChatMessageIsImmediatelyQueryable(t *testing.T) {
 	if stored.Content != "新消息" || stored.RequestID != "request-1" || stored.Role != "user" {
 		t.Fatalf("unexpected stored message: %#v", stored)
 	}
-	replayed, err := h.persistQueuedWebChatMessage(body, conv.ID, conv.CharacterID, "web", "request-1", "新消息", "", nil, nil)
+	replayed, err := h.persistQueuedWebChatMessage(body, conv.ID, "char-1", "web", "request-1", "新消息", "", nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

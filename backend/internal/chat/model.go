@@ -69,13 +69,15 @@ type ModelCapabilities = modelprotocol.ModelCapabilities
 type Conversation struct {
 	ID           string  `gorm:"column:id;primaryKey" json:"id"`
 	SpaceID      string  `gorm:"column:space_id;not null;index" json:"-"`
-	CharacterID  string  `gorm:"column:character_id" json:"characterId"`
+	ProjectID    string  `gorm:"column:project_id;not null;default:'';index" json:"projectId"`
 	Title        string  `gorm:"column:title" json:"title"`
 	Channel      string  `gorm:"column:channel;default:web" json:"channel"`
 	Source       string  `gorm:"column:source;default:manual" json:"source"`
 	PeerID       string  `gorm:"column:peer_id" json:"peerId"`
 	MessageCount int     `gorm:"column:message_count;default:0" json:"messageCount"`
 	StateVersion string  `gorm:"column:state_version" json:"stateVersion"`
+	PinnedAt     *string `gorm:"column:pinned_at" json:"pinnedAt,omitempty"`
+	ArchivedAt   *string `gorm:"column:archived_at" json:"archivedAt,omitempty"`
 	CreatedAt    string  `gorm:"column:created_at" json:"createdAt"`
 	UpdatedAt    string  `gorm:"column:updated_at" json:"updatedAt"`
 	Revision     int64   `gorm:"column:revision;not null;default:1" json:"revision"`
@@ -101,6 +103,7 @@ func (c *Conversation) BeforeCreate(tx *gorm.DB) error {
 type Message struct {
 	ID               string  `gorm:"column:id;primaryKey" json:"id"`
 	ConversationID   string  `gorm:"column:conversation_id;not null;index" json:"conversationId"`
+	CharacterID      string  `gorm:"column:character_id;not null;default:'';index" json:"characterId"`
 	Sequence         int64   `gorm:"column:sequence;not null;default:0;index" json:"sequence"`
 	Role             string  `gorm:"column:role;not null" json:"role"`
 	Content          string  `gorm:"column:content;not null" json:"content"`
@@ -245,22 +248,90 @@ type WebChatRequest struct {
 }
 
 type CreateConversationRequest struct {
-	CharacterID string `json:"characterId" binding:"required"`
-	Title       string `json:"title"`
-	Channel     string `json:"channel"`
-	Source      string `json:"source"`
-	PeerID      string `json:"peerId"`
+	ProjectID string `json:"projectId"`
+	Title     string `json:"title"`
+	Channel   string `json:"channel"`
+	Source    string `json:"source"`
+	PeerID    string `json:"peerId"`
 }
 
 type ConversationQuery struct {
 	SpaceID              string `form:"-" json:"-"`
 	IncludeLegacyDefault bool   `form:"-" json:"-"`
+	IncludeArchived      bool   `form:"-" json:"-"`
+	ArchivedOnly         bool   `form:"archivedOnly" json:"-"`
 	Page                 int    `form:"page"`
 	PageSize             int    `form:"pageSize"`
 	Channel              string `form:"channel"`
 	Source               string `form:"source"`
-	CharacterID          string `form:"characterId"`
+	ProjectID            string `form:"projectId"`
+	RecentOnly           bool   `form:"recentOnly"`
 	Keyword              string `form:"keyword"`
+}
+
+type Project struct {
+	ID          string  `gorm:"column:id;primaryKey" json:"id"`
+	SpaceID     string  `gorm:"column:space_id;not null;index" json:"-"`
+	Name        string  `gorm:"column:name;not null" json:"name"`
+	WorkspaceID string  `gorm:"column:workspace_id;not null;index" json:"workspaceId"`
+	DeviceID    string  `gorm:"column:device_id;not null;default:''" json:"deviceId"`
+	RootURI     string  `gorm:"column:root_uri;not null;default:''" json:"rootUri"`
+	PinnedAt    *string `gorm:"column:pinned_at" json:"pinnedAt,omitempty"`
+	CreatedAt   string  `gorm:"column:created_at" json:"createdAt"`
+	UpdatedAt   string  `gorm:"column:updated_at" json:"updatedAt"`
+	Revision    int64   `gorm:"column:revision;not null;default:1" json:"revision"`
+}
+
+func (Project) TableName() string { return "projects" }
+
+func (p *Project) BeforeCreate(tx *gorm.DB) error {
+	if p.ID == "" {
+		p.ID = uuid.New().String()
+	}
+	now := time.Now().Format("2006-01-02 15:04:05")
+	if p.CreatedAt == "" {
+		p.CreatedAt = now
+	}
+	if p.UpdatedAt == "" {
+		p.UpdatedAt = now
+	}
+	return nil
+}
+
+type CreateProjectRequest struct {
+	Name        string `json:"name"`
+	WorkspaceID string `json:"workspaceId" binding:"required"`
+	DeviceID    string `json:"deviceId"`
+	RootURI     string `json:"rootUri"`
+}
+
+type UpdateProjectRequest struct {
+	Name        *string `json:"name"`
+	WorkspaceID *string `json:"workspaceId"`
+	DeviceID    *string `json:"deviceId"`
+	RootURI     *string `json:"rootUri"`
+	Pinned      *bool   `json:"pinned"`
+}
+
+type ProjectConversationSummary struct {
+	Project
+	Available         bool           `json:"available"`
+	Status            string         `json:"status"`
+	StatusReason      string         `json:"statusReason,omitempty"`
+	ConversationCount int64          `json:"conversationCount"`
+	Conversations     []Conversation `json:"conversations"`
+}
+
+type ConversationSidebarResponse struct {
+	Pinned   []Conversation               `json:"pinned"`
+	Recent   []Conversation               `json:"recent"`
+	Projects []ProjectConversationSummary `json:"projects"`
+}
+
+type ProjectOpenTarget struct {
+	Kind string `json:"kind"`
+	Path string `json:"path,omitempty"`
+	URI  string `json:"uri,omitempty"`
 }
 
 type MessageSearchQuery struct {
@@ -326,6 +397,7 @@ type ProcessMessageRequest struct {
 	CharacterID              string                       `json:"characterId"`
 	Message                  string                       `json:"message"`
 	ConversationID           string                       `json:"conversationId"`
+	ProjectID                string                       `json:"projectId"`
 	Sequence                 int64                        `gorm:"column:sequence;not null;default:0;index" json:"sequence"`
 	Channel                  string                       `json:"channel"`
 	Source                   string                       `json:"source"`

@@ -24,21 +24,20 @@ func (c *CharacterContributor) Name() string           { return "Character Recor
 func (c *CharacterContributor) Dependencies() []string { return nil }
 
 type characterExportRecord struct {
-	ID             string `json:"id"`
-	Name           string `json:"name"`
-	Description    string `json:"description"`
-	Personality    string `json:"personality"`
-	SystemPrompt   string `json:"system_prompt"`
-	BasePrompt     string `json:"base_prompt"`
-	CharacterBase  string `json:"character_base"`
-	Avatar         string `json:"avatar"`
-	Status         string `json:"status"`
-	IsActive       bool   `json:"is_active"`
-	ConversationID string `json:"conversation_id"`
-	CardDataJSON   string `json:"card_data_json"`
-	VoiceConfigID  string `json:"voice_config_id"`
-	Gender         string `json:"gender"`
-	SortOrder      int    `json:"sort_order"`
+	ID            string `json:"id"`
+	Name          string `json:"name"`
+	Description   string `json:"description"`
+	Personality   string `json:"personality"`
+	SystemPrompt  string `json:"system_prompt"`
+	BasePrompt    string `json:"base_prompt"`
+	CharacterBase string `json:"character_base"`
+	Avatar        string `json:"avatar"`
+	Status        string `json:"status"`
+	IsActive      bool   `json:"is_active"`
+	CardDataJSON  string `json:"card_data_json"`
+	VoiceConfigID string `json:"voice_config_id"`
+	Gender        string `json:"gender"`
+	SortOrder     int    `json:"sort_order"`
 }
 
 func (c *CharacterContributor) Plan(ctx context.Context, req BackupRequest) ([]BackupComponentPlan, error) {
@@ -70,7 +69,7 @@ func (c *CharacterContributor) Export(ctx context.Context, req BackupRequest, ou
 	defer compW.Close()
 
 	query := c.DB.WithContext(ctx).Table("characters").Select(
-		"id, name, description, personality, SUBSTR(base_prompt, 1, 10000) as system_prompt, base_prompt, character_base, avatar, status, is_active, conversation_id, card_data_json, voice_config_id, gender, sort_order",
+		"id, name, description, personality, SUBSTR(base_prompt, 1, 10000) as system_prompt, base_prompt, character_base, avatar, status, is_active, card_data_json, voice_config_id, gender, sort_order",
 	)
 	if req.Scope == ScopeCharacter && req.CharacterID != "" {
 		query = query.Where("id = ?", req.CharacterID)
@@ -206,7 +205,6 @@ func (c *CharacterContributor) RestoreCharacters(ctx context.Context, in BackupR
 			"avatar":          rec.Avatar,
 			"status":          rec.Status,
 			"is_active":       false,
-			"conversation_id": "",
 			"card_data_json":  rec.CardDataJSON,
 			"voice_config_id": "",
 			"gender":          rec.Gender,

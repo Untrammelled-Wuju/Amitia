@@ -2,214 +2,78 @@ package system
 
 import (
 	"context"
-	"errors"
-	"net/http"
 	"strings"
 	"time"
 
-	"github.com/gin-gonic/gin"
+	"github.com/u-ai/backend/internal/chat"
 	"github.com/u-ai/backend/internal/interaction"
-	"github.com/u-ai/backend/pkg/comment/response"
-	"github.com/u-ai/backend/pkg/util"
 	"gorm.io/gorm"
 )
 
 type conversationWorkspaceBinding struct {
-	ConversationID string    `json:"conversationId" gorm:"column:conversation_id"`
-	WorkspaceID    string    `json:"workspaceId" gorm:"column:workspace_id"`
-	DeviceID       string    `json:"deviceId,omitempty" gorm:"column:device_id"`
-	WorkspaceName  string    `json:"workspaceName,omitempty" gorm:"column:workspace_name"`
-	WorkspaceKind  string    `json:"workspaceKind" gorm:"column:workspace_kind"`
-	RootURI        string    `json:"rootUri" gorm:"column:root_uri"`
-	UpdatedAt      time.Time `json:"updatedAt" gorm:"column:updated_at"`
-}
-
-func normalizeConversationWorkspaceBinding(binding conversationWorkspaceBinding) (conversationWorkspaceBinding, error) {
-	binding.ConversationID = strings.TrimSpace(binding.ConversationID)
-	binding.WorkspaceID = strings.TrimSpace(binding.WorkspaceID)
-	binding.DeviceID = strings.TrimSpace(binding.DeviceID)
-	binding.WorkspaceName = strings.TrimSpace(binding.WorkspaceName)
-	binding.WorkspaceKind = strings.TrimSpace(binding.WorkspaceKind)
-	binding.RootURI = strings.TrimSpace(binding.RootURI)
-	if binding.ConversationID == "" {
-		return binding, errors.New("conversationId is required")
-	}
-	if binding.WorkspaceID == "" {
-		return binding, errors.New("workspaceId is required")
-	}
-	if binding.WorkspaceKind == "" {
-		binding.WorkspaceKind = "local"
-	}
-	if binding.RootURI == "" {
-		binding.RootURI = "amitia://workspace/@" + binding.WorkspaceID + "/"
-	}
-	expectedRoot := "amitia://workspace/@" + binding.WorkspaceID + "/"
-	if binding.RootURI != expectedRoot {
-		return binding, errors.New("rootUri does not match workspaceId")
-	}
-	binding.UpdatedAt = time.Now().UTC()
-	return binding, nil
-}
-
-func (h *Handler) loadConversationWorkspaceBindingForSpace(conversationID, spaceID string) (*conversationWorkspaceBinding, error) {
-	conversationID = strings.TrimSpace(conversationID)
-	if conversationID == "" {
-		return nil, nil
-	}
-	if _, err := h.requireWebChatConversation(conversationID, spaceID); err != nil {
-		return nil, err
-	}
-	var binding conversationWorkspaceBinding
-	err := h.db.Table("conversation_workspace_bindings").Where("conversation_id = ?", conversationID).Take(&binding).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	return &binding, nil
-}
-
-func (h *Handler) saveConversationWorkspaceBindingForSpace(binding conversationWorkspaceBinding, spaceID string) (*conversationWorkspaceBinding, error) {
-	normalized, err := normalizeConversationWorkspaceBinding(binding)
-	if err != nil {
-		return nil, err
-	}
-	if _, err := h.requireWebChatConversation(normalized.ConversationID, spaceID); err != nil {
-		return nil, err
-	}
-	err = h.db.Exec(`INSERT INTO conversation_workspace_bindings
-		(conversation_id, workspace_id, device_id, workspace_name, workspace_kind, root_uri, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?)
-		ON CONFLICT(conversation_id) DO UPDATE SET
-		workspace_id = excluded.workspace_id,
-		device_id = excluded.device_id,
-		workspace_name = excluded.workspace_name,
-		workspace_kind = excluded.workspace_kind,
-		root_uri = excluded.root_uri,
-		updated_at = excluded.updated_at`,
-		normalized.ConversationID,
-		normalized.WorkspaceID,
-		normalized.DeviceID,
-		normalized.WorkspaceName,
-		normalized.WorkspaceKind,
-		normalized.RootURI,
-		normalized.UpdatedAt,
-	).Error
-	if err != nil {
-		return nil, err
-	}
-	return &normalized, nil
+	ConversationID string    `json:"conversationId"`
+	WorkspaceID    string    `json:"workspaceId"`
+	DeviceID       string    `json:"deviceId,omitempty"`
+	WorkspaceName  string    `json:"workspaceName,omitempty"`
+	WorkspaceKind  string    `json:"workspaceKind"`
+	RootURI        string    `json:"rootUri"`
+	UpdatedAt      time.Time `json:"updatedAt"`
 }
 
 func (h *Handler) workspaceBindingForRequest(conversationID string, body webChatSendRequest, spaceID string) *conversationWorkspaceBinding {
-	if strings.TrimSpace(body.WorkspaceID) != "" {
-		binding := conversationWorkspaceBinding{
-			ConversationID: conversationID,
-			WorkspaceID:    body.WorkspaceID,
-			DeviceID:       body.WorkspaceDeviceID,
-			WorkspaceName:  body.WorkspaceName,
-			WorkspaceKind:  body.WorkspaceKind,
-			RootURI:        body.WorkspaceRootURI,
+	conversationID = strings.TrimSpace(conversationID)
+	if conversationID == "" {
+		if strings.TrimSpace(body.ProjectID) == "" {
+			return nil
 		}
-		// Existing conversations persist immediately. A brand-new conversation is
-		// normalized here and persisted after UnifiedEntry creates it.
-		if saved, err := h.saveConversationWorkspaceBindingForSpace(binding, spaceID); err == nil {
-			return saved
-		}
-		if normalized, err := normalizeConversationWorkspaceBinding(binding); err == nil {
-			return &normalized
-		}
+		return h.workspaceBindingForProject(body.ProjectID, conversationID)
 	}
-	binding, err := h.loadConversationWorkspaceBindingForSpace(conversationID, spaceID)
-	if err != nil {
+	var conversation chat.Conversation
+	if err := h.webChatOwnedConversationQuery(spaceID).Where("id = ?", conversationID).First(&conversation).Error; err != nil {
+		if strings.TrimSpace(body.ProjectID) == "" {
+			return nil
+		}
+		return h.workspaceBindingForProject(body.ProjectID, conversationID)
+	}
+	if strings.TrimSpace(conversation.ProjectID) == "" {
 		return nil
 	}
-	return binding
+	return h.workspaceBindingForProject(conversation.ProjectID, conversation.ID)
 }
 
-func (h *Handler) persistConversationWorkspaceBinding(conversationID string, binding *conversationWorkspaceBinding, spaceID string) {
-	if h == nil || binding == nil || strings.TrimSpace(conversationID) == "" {
-		return
+func (h *Handler) workspaceBindingForProject(projectID, conversationID string) *conversationWorkspaceBinding {
+	var project chat.Project
+	if err := h.db.Where("id = ?", strings.TrimSpace(projectID)).First(&project).Error; err != nil {
+		return nil
 	}
-	copyBinding := *binding
-	copyBinding.ConversationID = strings.TrimSpace(conversationID)
-	_, _ = h.saveConversationWorkspaceBindingForSpace(copyBinding, spaceID)
-}
-
-func applyWorkspaceBinding(req *interaction.UnifiedEntryRequest, binding *conversationWorkspaceBinding) {
-	if req == nil || binding == nil {
-		return
+	var mount struct {
+		Name string
+		Kind string
 	}
-	req.WorkspaceID = binding.WorkspaceID
-	req.WorkspaceDeviceID = binding.DeviceID
-	req.WorkspaceName = binding.WorkspaceName
-	req.WorkspaceKind = binding.WorkspaceKind
-	req.WorkspaceRootURI = binding.RootURI
+	if err := h.db.Table("workspace_mounts").Select("name", "kind").Where("id = ?", project.WorkspaceID).Take(&mount).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil
+		}
+		return nil
+	}
+	return &conversationWorkspaceBinding{
+		ConversationID: conversationID,
+		WorkspaceID:    project.WorkspaceID,
+		DeviceID:       project.DeviceID,
+		WorkspaceName:  mount.Name,
+		WorkspaceKind:  mount.Kind,
+		RootURI:        project.RootURI,
+		UpdatedAt:      time.Now().UTC(),
+	}
 }
 
 func (h *Handler) handleUnifiedEntryWithWorkspace(ctx context.Context, req *interaction.UnifiedEntryRequest, binding *conversationWorkspaceBinding) (*interaction.OrchestrationResult, error) {
-	applyWorkspaceBinding(req, binding)
+	if req != nil && binding != nil {
+		req.WorkspaceID = binding.WorkspaceID
+		req.WorkspaceDeviceID = binding.DeviceID
+		req.WorkspaceName = binding.WorkspaceName
+		req.WorkspaceKind = binding.WorkspaceKind
+		req.WorkspaceRootURI = binding.RootURI
+	}
 	return h.unifiedEntry.Handle(ctx, req)
-}
-
-func (h *Handler) WebChatGetWorkspace(c *gin.Context) {
-	binding, err := h.loadConversationWorkspaceBindingForSpace(c.Param("id"), webChatSpaceID(c))
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		util.ErrorResponse(c, response.DataNotFound, "对话不存在", nil)
-		return
-	}
-	if err != nil {
-		util.ErrorResponse(c, response.InternalError, "读取工作目录失败", nil)
-		return
-	}
-	if binding == nil {
-		c.JSON(http.StatusOK, gin.H{"code": 200, "msg": "ok", "data": nil})
-		return
-	}
-	util.SuccessResponse(c, binding)
-}
-
-func (h *Handler) WebChatSetWorkspace(c *gin.Context) {
-	var body struct {
-		WorkspaceID   string `json:"workspaceId" binding:"required"`
-		DeviceID      string `json:"deviceId"`
-		WorkspaceName string `json:"workspaceName"`
-		WorkspaceKind string `json:"workspaceKind"`
-		RootURI       string `json:"rootUri"`
-	}
-	if err := c.ShouldBindJSON(&body); err != nil {
-		util.ErrorResponse(c, response.InvalidParams, "无效工作目录", nil)
-		return
-	}
-	binding, err := h.saveConversationWorkspaceBindingForSpace(conversationWorkspaceBinding{
-		ConversationID: c.Param("id"),
-		WorkspaceID:    body.WorkspaceID,
-		DeviceID:       body.DeviceID,
-		WorkspaceName:  body.WorkspaceName,
-		WorkspaceKind:  body.WorkspaceKind,
-		RootURI:        body.RootURI,
-	}, webChatSpaceID(c))
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		util.ErrorResponse(c, response.DataNotFound, "对话不存在", nil)
-		return
-	}
-	if err != nil {
-		util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
-		return
-	}
-	util.SuccessResponse(c, binding)
-}
-
-func (h *Handler) WebChatClearWorkspace(c *gin.Context) {
-	convID := strings.TrimSpace(c.Param("id"))
-	if _, err := h.requireWebChatConversation(convID, webChatSpaceID(c)); err != nil {
-		util.ErrorResponse(c, response.DataNotFound, "对话不存在", nil)
-		return
-	}
-	if err := h.db.Exec("DELETE FROM conversation_workspace_bindings WHERE conversation_id = ?", convID).Error; err != nil {
-		util.ErrorResponse(c, response.InternalError, "清除工作目录失败", nil)
-		return
-	}
-	util.SuccessResponse(c, gin.H{"cleared": true})
 }

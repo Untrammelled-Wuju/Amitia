@@ -24,6 +24,7 @@ func TestMessageCommitRollsBackAssistantRowsWhenConversationCountUpdateFails(t *
 	if err := db.Exec(`CREATE TABLE messages (
 id TEXT PRIMARY KEY,
 conversation_id TEXT,
+character_id TEXT NOT NULL DEFAULT '',
 sequence INTEGER NOT NULL DEFAULT 0,
 role TEXT,
 content TEXT,

@@ -30,9 +30,10 @@ export function useWebChatSend(
   inputRef: Ref<any>,
   fetchWebMsgCount?: () => void,
   replyTarget?: Ref<any>,
+  onConversationCreated?: (conversationId: string) => void | Promise<void>,
 ) {
   const { post, del, get } = useApi();
-  const { getWorkspaceRequestFields, bindCurrentWorkspaceToConversation } =
+  const { currentWorkspace, getWorkspaceRequestFields, bindCurrentWorkspaceToConversation } =
     useConversationWorkspace();
   let lastPolledMsgId: string | null = null;
   const isSubmitting = ref(false);
@@ -302,6 +303,7 @@ export function useWebChatSend(
         ...requestEnvelope,
         clientMessageId,
         conversationId: convId.value || undefined,
+        projectId: currentWorkspace.value?.projectId || undefined,
         characterId: characterId.value || undefined,
         message: sendContent,
         imageUrl: imgUrl || "",
@@ -348,11 +350,16 @@ export function useWebChatSend(
         }
       }
       if (convId.value) { try { sessionStorage.removeItem(`uai-pending-msg:${convId.value}`) } catch {} }
-      if (result.conversationId && !convId.value)
+      const createdConversationId =
+        result.conversationId && !convId.value ? result.conversationId : "";
+      if (createdConversationId)
         convId.value = result.conversationId;
       if (result.conversationId) {
         localStorage.setItem("webchat-conv-id", result.conversationId);
         bindCurrentWorkspaceToConversation(result.conversationId).catch(() => {});
+        if (createdConversationId) {
+          await onConversationCreated?.(result.conversationId);
+        }
       }
       if (replyTarget) replyTarget.value = null;
       startGenerationPhaseTracking(result.mergeWindowMs);

@@ -47,7 +47,7 @@ func setupProcessMessageTest(t *testing.T, llm llmWithToolsFunc) (*gorm.DB, *ser
 	}).Error; err != nil {
 		t.Fatal(err)
 	}
-	if err := db.Create(&Conversation{ID: convID, SpaceID: normalizeConversationOwner(""), CharacterID: charID, Title: "hello", Channel: "web", Source: "manual"}).Error; err != nil {
+	if err := db.Create(&Conversation{ID: convID, SpaceID: normalizeConversationOwner(""), Title: "hello", Channel: "web", Source: "manual"}).Error; err != nil {
 		t.Fatal(err)
 	}
 	if err := db.Create(&ModelConfig{

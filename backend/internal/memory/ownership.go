@@ -73,16 +73,17 @@ func (s *service) requireConversationOwnerForMemory(conversationID, spaceID stri
 		return "", gorm.ErrRecordNotFound
 	}
 	var row struct {
-		SpaceID     string `gorm:"column:space_id"`
-		CharacterID string `gorm:"column:character_id"`
+		SpaceID string `gorm:"column:space_id"`
 	}
-	if err := s.db.Table("conversations").Select("space_id, character_id").Where("id = ? AND deleted_at IS NULL", conversationID).Take(&row).Error; err != nil {
+	if err := s.db.Table("conversations").Select("space_id").Where("id = ? AND deleted_at IS NULL", conversationID).Take(&row).Error; err != nil {
 		return "", err
 	}
 	if !memoryOwnerMatches(row.SpaceID, spaceID) {
 		return "", gorm.ErrRecordNotFound
 	}
-	return strings.TrimSpace(row.CharacterID), nil
+	var characterID string
+	_ = s.db.Table("messages").Select("character_id").Where("conversation_id = ? AND character_id <> ''", conversationID).Order("sequence DESC").Limit(1).Row().Scan(&characterID)
+	return strings.TrimSpace(characterID), nil
 }
 
 func (s *service) SubmitCandidateForSpace(req *SubmitCandidateRequest, spaceID string) (*MemoryCandidate, error) {

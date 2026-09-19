@@ -91,7 +91,7 @@ func setupMemoryIntegrationService(t *testing.T, profSvc profile.Service) *servi
 func TestExtractProfileUsesConversationPeerID(t *testing.T) {
 	profSvc := &captureProfileService{}
 	svc := setupMemoryIntegrationService(t, profSvc)
-	if err := svc.db.Create(&Conversation{ID: "conv-1", SpaceID: normalizeConversationOwner(""), CharacterID: "char-1", PeerID: "user-1"}).Error; err != nil {
+	if err := svc.db.Create(&Conversation{ID: "conv-1", SpaceID: normalizeConversationOwner(""), PeerID: "user-1"}).Error; err != nil {
 		t.Fatal(err)
 	}
 	if err := svc.db.Create(&Message{ID: "msg-1", ConversationID: "conv-1", Role: "user", Content: "我喜欢咖啡", IncludeInCtx: 1}).Error; err != nil {
@@ -117,7 +117,7 @@ func TestExtractProfileUsesConversationPeerID(t *testing.T) {
 func TestExtractProfileFallsBackToCharacterIDWithoutPeerID(t *testing.T) {
 	profSvc := &captureProfileService{}
 	svc := setupMemoryIntegrationService(t, profSvc)
-	if err := svc.db.Create(&Conversation{ID: "conv-1", SpaceID: normalizeConversationOwner(""), CharacterID: "char-1"}).Error; err != nil {
+	if err := svc.db.Create(&Conversation{ID: "conv-1", SpaceID: normalizeConversationOwner("")}).Error; err != nil {
 		t.Fatal(err)
 	}
 	if err := svc.db.Create(&Message{ID: "msg-1", ConversationID: "conv-1", Role: "user", Content: "我喜欢茶", IncludeInCtx: 1}).Error; err != nil {

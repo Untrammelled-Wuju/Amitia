@@ -43,16 +43,19 @@ func requireRealtimeConversationOwner(conversationID, spaceID string) (string, e
 		return "", gorm.ErrInvalidDB
 	}
 	var row struct {
-		SpaceID     string `gorm:"column:space_id"`
-		CharacterID string `gorm:"column:character_id"`
+		SpaceID string `gorm:"column:space_id"`
 	}
-	if err := dbInstance.Table("conversations").Select("space_id, character_id").Where("id = ? AND deleted_at IS NULL", conversationID).Take(&row).Error; err != nil {
+	if err := dbInstance.Table("conversations").Select("space_id").Where("id = ? AND deleted_at IS NULL", conversationID).Take(&row).Error; err != nil {
 		return "", err
 	}
 	if !realtimeOwnerMatches(row.SpaceID, spaceID) {
 		return "", gorm.ErrRecordNotFound
 	}
-	return strings.TrimSpace(row.CharacterID), nil
+	var characterID string
+	if err := dbInstance.Table("messages").Select("character_id").Where("conversation_id = ? AND character_id <> ''", conversationID).Order("sequence DESC").Limit(1).Row().Scan(&characterID); err != nil {
+		return "", nil
+	}
+	return strings.TrimSpace(characterID), nil
 }
 
 func requireRealtimeCharacterOwner(characterID, spaceID string) error {

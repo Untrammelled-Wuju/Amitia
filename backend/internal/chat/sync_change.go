@@ -26,13 +26,15 @@ func (s *service) recordConversationChangeTx(tx *gorm.DB, c *Conversation, op sy
 		c.SpaceID = normalizeChangeSpaceID(spaceID)
 	}
 	payload, err := json.Marshal(map[string]interface{}{
-		"id":          c.ID,
-		"spaceId":     c.SpaceID,
-		"characterId": c.CharacterID,
-		"title":       c.Title,
-		"channel":     c.Channel,
-		"source":      c.Source,
-		"peerId":      c.PeerID,
+		"id":         c.ID,
+		"spaceId":    c.SpaceID,
+		"projectId":  c.ProjectID,
+		"title":      c.Title,
+		"channel":    c.Channel,
+		"source":     c.Source,
+		"peerId":     c.PeerID,
+		"pinnedAt":   c.PinnedAt,
+		"archivedAt": c.ArchivedAt,
 	})
 	if err != nil {
 		return err
@@ -48,6 +50,7 @@ func (s *service) recordMessageChangeTx(tx *gorm.DB, m *Message, op syncapi.Oper
 	payload, err := json.Marshal(map[string]interface{}{
 		"id":             m.ID,
 		"conversationId": m.ConversationID,
+		"characterId":    m.CharacterID,
 		"role":           m.Role,
 		"content":        m.Content,
 		"sequence":       m.Sequence,

@@ -202,6 +202,8 @@ func DefaultMigrations() []Migration {
 		MessageExtensionTypeMigration(),
 		SpaceIdentityCutoverMigration(),
 		ConversationWorkspaceBindingsBaselineRepairMigration(),
+		SidebarProjectsMigration(),
+		SidebarPreferencesMigration(),
 	}
 }
 

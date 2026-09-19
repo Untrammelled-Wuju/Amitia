@@ -77,11 +77,11 @@ func (f *fakeWebChatService) EnsureChannelConversation(channel string) (*chat.Co
 func (f *fakeWebChatService) CreateConversation(req *chat.CreateConversationRequest) (*chat.Conversation, error) {
 	f.seq++
 	return &chat.Conversation{
-		ID:          fmt.Sprintf("conv-auto-%d", f.seq),
-		Title:       req.Title,
-		CharacterID: req.CharacterID,
-		Channel:     req.Channel,
-		Source:      req.Source,
+		ID:        fmt.Sprintf("conv-auto-%d", f.seq),
+		Title:     req.Title,
+		ProjectID: req.ProjectID,
+		Channel:   req.Channel,
+		Source:    req.Source,
 	}, nil
 }
 
@@ -120,10 +120,6 @@ func (f *fakeWebChatService) DeleteConversationForSpace(string, string) (bool, e
 	return true, nil
 }
 
-func (f *fakeWebChatService) ChangeCharacterForSpace(string, string, string) (*chat.Conversation, error) {
-	return nil, nil
-}
-
 func (f *fakeWebChatService) DeleteMessagesForSpace(string, string) error {
 	return nil
 }
@@ -153,10 +149,10 @@ func postWebChatCreateConv(t *testing.T, h *Handler, body map[string]any) map[st
 
 func TestWebChatCreateConvRejectsExternalChannelWithoutPeerID(t *testing.T) {
 	h, db := newWebChatScopeTestHandler(t)
-	if err := db.Exec("INSERT INTO characters (id, name, conversation_id) VALUES (?, ?, ?)", "char-1", "Amitia", "conv-old").Error; err != nil {
+	if err := db.Exec("INSERT INTO characters (id, name) VALUES (?, ?)", "char-1", "Amitia").Error; err != nil {
 		t.Fatal(err)
 	}
-	if err := db.Exec("INSERT INTO conversations (id, title, character_id, channel, source, peer_id) VALUES (?, ?, ?, ?, ?, ?)", "conv-old", "旧会话", "char-1", "qq", "manual", "peer-old").Error; err != nil {
+	if err := db.Exec("INSERT INTO conversations (id, title, channel, source, peer_id) VALUES (?, ?, ?, ?, ?)", "conv-old", "旧会话", "qq", "manual", "peer-old").Error; err != nil {
 		t.Fatal(err)
 	}
 
@@ -178,10 +174,10 @@ func TestWebChatCreateConvReturnsPeerBoundConversation(t *testing.T) {
 	if err := db.Exec("INSERT INTO characters (id, name) VALUES (?, ?)", "char-1", "Amitia").Error; err != nil {
 		t.Fatal(err)
 	}
-	if err := db.Exec("INSERT INTO conversations (id, title, character_id, channel, source, peer_id) VALUES (?, ?, ?, ?, ?, ?)", "conv-peer-1", "一号", "char-1", "qq", "qq", "peer-1").Error; err != nil {
+	if err := db.Exec("INSERT INTO conversations (id, title, channel, source, peer_id) VALUES (?, ?, ?, ?, ?)", "conv-peer-1", "一号", "qq", "qq", "peer-1").Error; err != nil {
 		t.Fatal(err)
 	}
-	if err := db.Exec("INSERT INTO conversations (id, title, character_id, channel, source, peer_id) VALUES (?, ?, ?, ?, ?, ?)", "conv-peer-2", "二号", "char-1", "qq", "qq", "peer-2").Error; err != nil {
+	if err := db.Exec("INSERT INTO conversations (id, title, channel, source, peer_id) VALUES (?, ?, ?, ?, ?)", "conv-peer-2", "二号", "qq", "qq", "peer-2").Error; err != nil {
 		t.Fatal(err)
 	}
 
@@ -200,7 +196,7 @@ func TestWebChatCreateConvReturnsPeerBoundConversation(t *testing.T) {
 
 func TestWebChatCreateConvCreatesExternalConversationForExplicitPeerTarget(t *testing.T) {
 	h, db := newWebChatScopeTestHandler(t)
-	if err := db.Exec("INSERT INTO characters (id, name, conversation_id) VALUES (?, ?, ?)", "char-1", "Amitia", "").Error; err != nil {
+	if err := db.Exec("INSERT INTO characters (id, name) VALUES (?, ?)", "char-1", "Amitia").Error; err != nil {
 		t.Fatal(err)
 	}
 
@@ -213,7 +209,7 @@ func TestWebChatCreateConvCreatesExternalConversationForExplicitPeerTarget(t *te
 		t.Fatalf("expected ok, got %#v", result)
 	}
 	data := result["data"].(map[string]any)
-	if data["channel"] != "wechat" || data["characterId"] != "char-1" {
+	if data["channel"] != "wechat" {
 		t.Fatalf("unexpected conversation: %#v", data)
 	}
 }

@@ -16,6 +16,7 @@ abstract final class AppRoutes {
   static const reminders = '/reminders';
   static const emotes = '/emotes';
   static const chatLogs = '/chat-logs';
+  static const channelMessages = '/channel-messages';
   static const chatImport = '/chat-import';
   static const extensions = '/extensions';
   static const extensionsPackages = '/extensions/packages';
@@ -86,15 +87,29 @@ abstract final class AppRoutes {
   static String agentTask(String id) => '/agent/task/$id';
   static String mcpDetail(String id) => '/extensions/mcp/$id';
   static String mcpEdit(String id) => '/extensions/mcp/$id/edit';
-  static String extensionPage(String pageId, {String? extensionId}) => extensionId == null || extensionId.isEmpty
+  static String extensionPage(String pageId, {String? extensionId}) =>
+      extensionId == null || extensionId.isEmpty
       ? '/extension/page/$pageId'
       : '/extension/page/$pageId?extensionId=${Uri.encodeQueryComponent(extensionId)}';
-  static String petProcessing(String taskId) => '/workshop/pet/processing/$taskId';
-  static String petActionEditor(String taskId, String actionKey) => '/workshop/pet/processing/$taskId/actions/$actionKey/editor';
-  static String workflowEditor(String id, {String location = 'cloud', String deviceId = ''}) {
-    final query = <String, String>{'location': location, if (deviceId.isNotEmpty) 'deviceId': deviceId};
-    return Uri(path: '/workshop/workflows/$id', queryParameters: query).toString();
+  static String petProcessing(String taskId) =>
+      '/workshop/pet/processing/$taskId';
+  static String petActionEditor(String taskId, String actionKey) =>
+      '/workshop/pet/processing/$taskId/actions/$actionKey/editor';
+  static String workflowEditor(
+    String id, {
+    String location = 'cloud',
+    String deviceId = '',
+  }) {
+    final query = <String, String>{
+      'location': location,
+      if (deviceId.isNotEmpty) 'deviceId': deviceId,
+    };
+    return Uri(
+      path: '/workshop/workflows/$id',
+      queryParameters: query,
+    ).toString();
   }
+
   static String modelConfig(String type) => '/settings/models/$type';
   static String kernelPage(String page) => '/developer/kernel/$page';
 }

@@ -393,10 +393,12 @@ class ConversationRuntimeController extends ChangeNotifier {
       return;
     }
     try {
-      _workspace = await _chatService.setConversationWorkspace(
-        conversationId,
-        workspace,
-      );
+      if (workspace.projectId.isNotEmpty) {
+        await _chatService.moveConversationToProject(
+          conversationId,
+          workspace.projectId,
+        );
+      }
     } catch (_) {}
   }
 
@@ -469,8 +471,9 @@ class ConversationRuntimeController extends ChangeNotifier {
     debugPrint(
       'Chat sync persisted conversation=$conv count=${persisted.length}',
     );
-    if (_disposed || _conversationId != conv || (background && _sending))
+    if (_disposed || _conversationId != conv || (background && _sending)) {
       return;
+    }
     if (persisted.isEmpty) {
       debugPrint('Chat sync skipped empty persisted conversation=$conv');
       return;
@@ -997,8 +1000,13 @@ class ConversationRuntimeController extends ChangeNotifier {
     }
   }
 
-  Future<bool> createConversation(String? characterId) async {
-    final conversation = await _chatService.createConversation(characterId);
+  Future<bool> createConversation(
+    String? characterId, {
+    String projectId = '',
+  }) async {
+    final conversation = await _chatService.createConversation(
+      projectId: projectId,
+    );
     if (conversation == null) return false;
     _conversationId = conversation.id;
     _characterId = characterId;
@@ -1022,6 +1030,20 @@ class ConversationRuntimeController extends ChangeNotifier {
         ),
       );
     }
+    notifyListeners();
+  }
+
+  void startDraft({ConversationWorkspaceDto? workspace}) {
+    _activeSendCancellation?.cancel('new conversation');
+    _activeSendCancellation = null;
+    ++_generationEpoch;
+    _liveSyncTimer?.cancel();
+    _liveSyncTimer = null;
+    _conversationId = null;
+    _messages.clear();
+    _lastError = null;
+    _sending = false;
+    setWorkspace(workspace);
     notifyListeners();
   }
 

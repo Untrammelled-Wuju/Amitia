@@ -155,7 +155,7 @@ func TestApplyDatabaseStartupMigrationsCreatesConversationScopeIndexes(t *testin
 		if row.Name == "idx_conversations_channel_peer_unique" {
 			foundUnique = row.Unique == 1 && row.Partial == 1
 		}
-		if row.Name == "idx_conversations_character_channel_updated" {
+		if row.Name == "idx_conversations_project_updated" {
 			foundScope = true
 		}
 	}
@@ -163,13 +163,13 @@ func TestApplyDatabaseStartupMigrationsCreatesConversationScopeIndexes(t *testin
 		t.Fatal("missing unique partial index for channel + peer")
 	}
 	if !foundScope {
-		t.Fatal("missing scope index for character + channel + updated_at")
+		t.Fatal("missing scope index for project + updated_at")
 	}
 
-	if err := db.Exec("INSERT INTO conversations (id, character_id, channel, peer_id) VALUES ('conv-1', 'char-1', 'qq', 'peer-1')").Error; err != nil {
+	if err := db.Exec("INSERT INTO conversations (id, project_id, channel, peer_id) VALUES ('conv-1', 'project-1', 'qq', 'peer-1')").Error; err != nil {
 		t.Fatal(err)
 	}
-	if err := db.Exec("INSERT INTO conversations (id, character_id, channel, peer_id) VALUES ('conv-2', 'char-2', 'qq', 'peer-1')").Error; err == nil {
+	if err := db.Exec("INSERT INTO conversations (id, project_id, channel, peer_id) VALUES ('conv-2', 'project-2', 'qq', 'peer-1')").Error; err == nil {
 		t.Fatal("expected duplicate peer binding to fail")
 	}
 }

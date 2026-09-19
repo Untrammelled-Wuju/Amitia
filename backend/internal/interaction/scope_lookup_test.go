@@ -50,7 +50,7 @@ func TestConversationScopeBindingLookupFindsPeerBinding(t *testing.T) {
 		t.Fatalf("expected one binding, got %#v", bindings)
 	}
 	binding := bindings[0]
-	if binding.ID != "conv-1" || binding.ConversationID != "conv-1" || binding.CharacterID != "char-1" || binding.State != ScopeBindingStateActive {
+	if binding.ID != "conv-1" || binding.ConversationID != "conv-1" || binding.CharacterID != "" || binding.State != ScopeBindingStateActive {
 		t.Fatalf("unexpected binding: %#v", binding)
 	}
 }

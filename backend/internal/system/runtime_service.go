@@ -183,7 +183,7 @@ func (s *service) RunNow() map[string]interface{} {
 
 func (s *service) GetLongRunningStatus() map[string]interface{} {
 	var tasks []map[string]interface{}
-	s.db.Raw("SELECT c.id, c.title, c.character_id, c.updated_at FROM conversations c WHERE c.channel = 'long_running' ORDER BY c.updated_at DESC LIMIT 10").Scan(&tasks)
+	s.db.Raw("SELECT c.id, c.title, COALESCE((SELECT character_id FROM messages m WHERE m.conversation_id = c.id AND m.character_id <> '' ORDER BY m.sequence DESC LIMIT 1), '') AS character_id, c.updated_at FROM conversations c WHERE c.channel = 'long_running' ORDER BY c.updated_at DESC LIMIT 10").Scan(&tasks)
 	if tasks == nil {
 		tasks = []map[string]interface{}{}
 	}

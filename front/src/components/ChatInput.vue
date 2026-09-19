@@ -297,7 +297,7 @@ SPDX-License-Identifier: AGPL-3.0-only
                   class="workspace-trigger"
                   :class="{ 'has-workspace': !!currentWorkspace }"
                   :disabled="workspaceLoading || isInputDisabled"
-                  title="选择当前对话的工作目录"
+                  title="选择或添加项目文件夹"
                 >
                   <el-icon><FolderOpened /></el-icon>
                   <span>{{ workspaceLabel }}</span>
@@ -307,8 +307,8 @@ SPDX-License-Identifier: AGPL-3.0-only
               <div class="workspace-picker">
                 <div class="workspace-picker-header">
                   <div>
-                    <strong>工作目录</strong>
-                    <small>当前对话的文件与 Agent 工具默认在此目录执行</small>
+                    <strong>项目</strong>
+                    <small>当前项目中的所有对话共用此文件夹</small>
                   </div>
                 </div>
                 <div v-if="recentWorkspaces.length" class="workspace-recent-list">
@@ -335,7 +335,7 @@ SPDX-License-Identifier: AGPL-3.0-only
                     ><Check /></el-icon>
                   </button>
                 </div>
-                <div v-else class="workspace-empty">暂无最近使用的工作目录</div>
+                <div v-else class="workspace-empty">暂无项目</div>
                 <div class="workspace-picker-divider"></div>
                 <button
                   type="button"
@@ -344,7 +344,7 @@ SPDX-License-Identifier: AGPL-3.0-only
                   @click="handleChooseWorkspaceDirectory"
                 >
                   <el-icon><FolderOpened /></el-icon>
-                  <span>选择其他目录…</span>
+                  <span>添加文件夹为项目…</span>
                 </button>
                 <button
                   v-if="currentWorkspace"
@@ -354,7 +354,7 @@ SPDX-License-Identifier: AGPL-3.0-only
                   @click="handleClearWorkspace"
                 >
                   <el-icon><CloseBold /></el-icon>
-                  <span>清除工作目录</span>
+                  <span>移出项目</span>
                 </button>
               </div>
             </el-popover>
@@ -565,24 +565,12 @@ const emit = defineEmits<{
 
 const isDisabled = () => !!props.disabled;
 const isInputDisabled = computed(isDisabled);
-const textInput = useTextInput(emit as any, isDisabled);
 const mediaUpload = useMediaUpload(
   (file: File, base64: string) => emit("image", file, base64),
   (file: File, videoUrl: string) => emit("video", file, videoUrl),
   () => emit("removeImage"),
   () => emit("removeVideo"),
 );
-
-const {
-  text,
-  inputRef,
-  sendWithImage,
-  sendWithVideo,
-  autoResize,
-  focus,
-  setText,
-  clear: clearText,
-} = textInput;
 
 const {
   attachedImage,
@@ -629,8 +617,25 @@ const {
   clearWorkspace,
 } = useConversationWorkspace();
 const workspaceLabel = computed(
-  () => currentWorkspace.value?.workspaceName || "选择工作目录",
+  () => currentWorkspace.value?.workspaceName || "选择项目",
 );
+const draftKey = computed(() => {
+  const conversationId = String(props.conversationId || "").trim();
+  if (conversationId) return `conversation:${conversationId}`;
+  const projectId = String(currentWorkspace.value?.projectId || "").trim();
+  return projectId ? `new:project:${projectId}` : "new:recent";
+});
+const textInput = useTextInput(emit as any, isDisabled, draftKey);
+const {
+  text,
+  inputRef,
+  sendWithImage,
+  sendWithVideo,
+  autoResize,
+  focus,
+  setText,
+  clear: clearText,
+} = textInput;
 const agentSkillNames = computed(() =>
   agentSkills.value.map((s) => s.name).filter(Boolean),
 );

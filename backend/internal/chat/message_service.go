@@ -219,22 +219,6 @@ func (s *service) SearchMessagesScoped(q MessageSearchQuery, characterID string)
 }
 
 func (s *service) requireConversationCharacter(convID string, characterID string) error {
-	convID = strings.TrimSpace(convID)
-	characterID = strings.TrimSpace(characterID)
-	if convID == "" || characterID == "" {
-		return nil
-	}
-	conv, err := s.repo.GetConversation(convID)
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return fmt.Errorf("会话不存在")
-		}
-		return err
-	}
-	actualCharacterID := strings.TrimSpace(conv.CharacterID)
-	if actualCharacterID != "" && actualCharacterID != characterID {
-		return fmt.Errorf("%w: conversation belongs to different character", ErrConversationScopeMismatch)
-	}
 	return nil
 }
 
@@ -282,7 +266,7 @@ func (s *service) Chat(req *ChatRequest) (*ChatResponse, error) {
 	}, nil
 }
 
-func (s *service) validateConversationScope(convID, characterID, channel, spaceID string) error {
+func (s *service) validateConversationScope(convID, channel, spaceID string) error {
 	convID = strings.TrimSpace(convID)
 	if convID == "" {
 		return nil
@@ -296,16 +280,6 @@ func (s *service) validateConversationScope(convID, characterID, channel, spaceI
 	}
 	if !conversationOwnerMatches(conv.SpaceID, spaceID) {
 		return fmt.Errorf("%w: space_id", ErrConversationScopeMismatch)
-	}
-	actualCharacterID := strings.TrimSpace(conv.CharacterID)
-	expectedCharacterID := strings.TrimSpace(characterID)
-	if expectedCharacterID == "" {
-		return fmt.Errorf("%w: character_id", ErrConversationScopeMismatch)
-	}
-	if actualCharacterID == "" {
-		s.repo.UpdateConversation(convID, map[string]interface{}{"character_id": expectedCharacterID})
-	} else if actualCharacterID != expectedCharacterID {
-		return fmt.Errorf("%w: character_id", ErrConversationScopeMismatch)
 	}
 	actualChannel := strings.ToLower(strings.TrimSpace(conv.Channel))
 	expectedChannel := strings.ToLower(strings.TrimSpace(channel))

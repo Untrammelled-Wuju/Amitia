@@ -26,7 +26,6 @@ type Character struct {
 	SceneRules          string  `gorm:"column:scene_rules;default:{}" json:"sceneRules"`
 	IsActive            int     `gorm:"column:is_active;default:0" json:"isActive"`
 	SortOrder           int     `gorm:"column:sort_order;default:0" json:"sortOrder"`
-	ConversationID      string  `gorm:"column:conversation_id" json:"conversationId"`
 	CreatedAt           string  `gorm:"column:created_at" json:"createdAt"`
 	UpdatedAt           string  `gorm:"column:updated_at" json:"updatedAt"`
 	Gender              string  `gorm:"column:gender;default:UNSPECIFIED" json:"gender"`

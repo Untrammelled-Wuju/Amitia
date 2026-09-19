@@ -5,6 +5,7 @@ import 'package:dio/dio.dart';
 
 import '../backend_transport/backend_service_api.dart';
 import '../models/conversation.dart';
+import '../models/project.dart';
 import '../native_bridge/device_timezone_cache.dart';
 
 class ChatSubmitResult {
@@ -50,6 +51,7 @@ class ChatStreamEvent {
 
 class ConversationWorkspaceDto {
   final String conversationId;
+  final String projectId;
   final String workspaceId;
   final String deviceId;
   final String workspaceName;
@@ -58,6 +60,7 @@ class ConversationWorkspaceDto {
 
   const ConversationWorkspaceDto({
     this.conversationId = '',
+    this.projectId = '',
     required this.workspaceId,
     this.deviceId = '',
     this.workspaceName = '',
@@ -69,21 +72,25 @@ class ConversationWorkspaceDto {
     final workspaceId = (json['workspaceId'] ?? '').toString().trim();
     return ConversationWorkspaceDto(
       conversationId: (json['conversationId'] ?? '').toString().trim(),
+      projectId: (json['projectId'] ?? '').toString().trim(),
       workspaceId: workspaceId,
       deviceId: (json['deviceId'] ?? '').toString().trim(),
       workspaceName: (json['workspaceName'] ?? '').toString().trim(),
       workspaceKind: (json['workspaceKind'] ?? 'local').toString().trim(),
-      rootUri: (json['rootUri'] ?? 'amitia://workspace/@$workspaceId/').toString().trim(),
+      rootUri: (json['rootUri'] ?? 'amitia://workspace/@$workspaceId/')
+          .toString()
+          .trim(),
     );
   }
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'workspaceId': workspaceId,
-        'deviceId': deviceId,
-        'workspaceName': workspaceName,
-        'workspaceKind': workspaceKind,
-        'rootUri': rootUri,
-      };
+    'workspaceId': workspaceId,
+    'projectId': projectId,
+    'deviceId': deviceId,
+    'workspaceName': workspaceName,
+    'workspaceKind': workspaceKind,
+    'rootUri': rootUri,
+  };
 }
 
 class ChatService {
@@ -104,53 +111,115 @@ class ChatService {
         .toList(growable: false);
   }
 
-  Future<ConversationDto?> createConversation(String? characterId) async {
-    final resp = await _api.post<Map<String, dynamic>>(
+  Future<List<ConversationDto>> archivedConversations() async {
+    final resp = await _api.get<Map<String, dynamic>>(
       '/api/web-chat/conversations',
-      data: {
-        if (characterId != null && characterId.isNotEmpty)
-          'characterId': characterId,
-        'channel': 'web',
-        'source': 'mobile',
-      },
+      queryParameters: const {'page': 1, 'pageSize': 200, 'archivedOnly': true},
+    );
+    final rows = resp?['items'];
+    if (rows is! List) return const [];
+    return rows
+        .whereType<Map>()
+        .map((row) => ConversationDto.fromJson(Map<String, dynamic>.from(row)))
+        .where((conversation) => conversation.channel == 'web')
+        .toList(growable: false);
+  }
+
+  Future<ConversationDto?> createConversation({String? projectId}) async {
+    final id = projectId?.trim() ?? '';
+    final path = id.isEmpty
+        ? '/api/web-chat/conversations'
+        : '/api/web-chat/projects/${Uri.encodeComponent(id)}/conversations';
+    final resp = await _api.post<Map<String, dynamic>>(
+      path,
+      data: {'projectId': id, 'channel': 'web', 'source': 'mobile'},
     );
     if (resp == null) return null;
     return ConversationDto.fromJson(resp);
   }
 
-  Future<ConversationWorkspaceDto?> conversationWorkspace(String conversationId) async {
-    final id = conversationId.trim();
-    if (id.isEmpty) return null;
+  Future<ConversationSidebarDto> conversationSidebar() async {
     final resp = await _api.get<Map<String, dynamic>>(
-      '/api/web-chat/conversations/${Uri.encodeComponent(id)}/workspace',
+      '/api/web-chat/sidebar',
       fromJson: (e) => Map<String, dynamic>.from(e as Map),
     );
-    if (resp == null || (resp['workspaceId'] ?? '').toString().trim().isEmpty) {
-      return null;
-    }
-    return ConversationWorkspaceDto.fromJson(resp);
+    return ConversationSidebarDto.fromJson(resp ?? const <String, dynamic>{});
   }
 
-  Future<ConversationWorkspaceDto> setConversationWorkspace(
-    String conversationId,
-    ConversationWorkspaceDto workspace,
-  ) async {
-    final id = conversationId.trim();
-    if (id.isEmpty) throw ArgumentError('conversationId 不能为空');
-    final resp = await _api.put<Map<String, dynamic>>(
-      '/api/web-chat/conversations/${Uri.encodeComponent(id)}/workspace',
-      data: workspace.toJson(),
+  Future<List<ConversationDto>> channelConversations() async {
+    final resp = await _api.get<Map<String, dynamic>>(
+      '/api/web-chat/channels',
       fromJson: (e) => Map<String, dynamic>.from(e as Map),
     );
-    if (resp == null) throw StateError('保存工作目录失败：后端未返回结果');
-    return ConversationWorkspaceDto.fromJson(resp);
+    final rows = resp?['items'];
+    if (rows is! List) return const [];
+    return rows
+        .whereType<Map>()
+        .map((row) => ConversationDto.fromJson(Map<String, dynamic>.from(row)))
+        .toList(growable: false);
   }
 
-  Future<void> clearConversationWorkspace(String conversationId) async {
-    final id = conversationId.trim();
-    if (id.isEmpty) return;
+  Future<ProjectDto> createProject({
+    required String name,
+    required String workspaceId,
+    String deviceId = '',
+    String rootUri = '',
+  }) async {
+    final resp = await _api.post<Map<String, dynamic>>(
+      '/api/web-chat/projects',
+      data: <String, dynamic>{
+        'name': name.trim(),
+        'workspaceId': workspaceId.trim(),
+        'deviceId': deviceId.trim(),
+        'rootUri': rootUri.trim(),
+      },
+      fromJson: (e) => Map<String, dynamic>.from(e as Map),
+    );
+    if (resp == null) throw StateError('创建项目失败：后端未返回结果');
+    return ProjectDto.fromJson(resp);
+  }
+
+  Future<void> deleteProject(String projectId) async {
     await _api.delete(
-      '/api/web-chat/conversations/${Uri.encodeComponent(id)}/workspace',
+      '/api/web-chat/projects/${Uri.encodeComponent(projectId)}',
+    );
+  }
+
+  Future<void> updateProject(
+    String projectId, {
+    String? name,
+    String? workspaceId,
+    String? deviceId,
+    String? rootUri,
+    bool? pinned,
+  }) async {
+    await _api.patch<Map<String, dynamic>>(
+      '/api/web-chat/projects/${Uri.encodeComponent(projectId)}',
+      data: <String, dynamic>{
+        if (name != null) 'name': name.trim(),
+        if (workspaceId != null) 'workspaceId': workspaceId.trim(),
+        if (deviceId != null) 'deviceId': deviceId.trim(),
+        if (rootUri != null) 'rootUri': rootUri.trim(),
+        if (pinned != null) 'pinned': pinned,
+      },
+    );
+  }
+
+  Future<Map<String, dynamic>> projectLocation(String projectId) async {
+    final resp = await _api.get<Map<String, dynamic>>(
+      '/api/web-chat/projects/${Uri.encodeComponent(projectId)}/location',
+      fromJson: (e) => Map<String, dynamic>.from(e as Map),
+    );
+    return resp ?? <String, dynamic>{};
+  }
+
+  Future<void> moveConversationToProject(
+    String conversationId,
+    String projectId,
+  ) async {
+    await _api.put<Map<String, dynamic>>(
+      '/api/web-chat/conversations/${Uri.encodeComponent(conversationId)}',
+      data: <String, dynamic>{'projectId': projectId.trim()},
     );
   }
 
@@ -185,6 +254,27 @@ class ChatService {
     );
   }
 
+  Future<void> setConversationPinned(String id, bool pinned) async {
+    await _api.put<Map<String, dynamic>>(
+      '/api/web-chat/conversations/$id',
+      data: {'pinned': pinned},
+    );
+  }
+
+  Future<void> archiveConversation(String id) async {
+    await _api.put<Map<String, dynamic>>(
+      '/api/web-chat/conversations/$id',
+      data: {'archived': true},
+    );
+  }
+
+  Future<void> restoreArchivedConversation(String id) async {
+    await _api.put<Map<String, dynamic>>(
+      '/api/web-chat/conversations/$id',
+      data: {'archived': false},
+    );
+  }
+
   Future<void> deleteMessages(String conversationId) async {
     await _api.delete('/api/chats/conversations/$conversationId/messages');
   }
@@ -197,35 +287,40 @@ class ChatService {
     await _api.delete('/api/chats/all');
   }
 
-  Future<ConversationDto?> changeCharacter(String conversationId, String characterId) async {
-    final resp = await _api.put<Map<String, dynamic>>(
-      '/api/chats/conversations/$conversationId/character',
-      data: {'characterId': characterId},
+  Future<Map<String, dynamic>?> conversationSummary(
+    String conversationId,
+  ) async {
+    return _api.get<Map<String, dynamic>>(
+      '/api/chats/conversations/$conversationId/summary',
     );
-    if (resp == null) return null;
-    return ConversationDto.fromJson(resp);
   }
 
-  Future<Map<String, dynamic>?> conversationSummary(String conversationId) async {
-    return _api.get<Map<String, dynamic>>('/api/chats/conversations/$conversationId/summary');
-  }
-
-  Future<Map<String, dynamic>?> generateConversationSummary(String conversationId) async {
-    return _api.post<Map<String, dynamic>>('/api/chats/conversations/$conversationId/summary/generate');
+  Future<Map<String, dynamic>?> generateConversationSummary(
+    String conversationId,
+  ) async {
+    return _api.post<Map<String, dynamic>>(
+      '/api/chats/conversations/$conversationId/summary/generate',
+    );
   }
 
   Future<void> deleteConversationSummary(String conversationId) async {
     await _api.delete('/api/chats/conversations/$conversationId/summary');
   }
 
-  Future<Map<String, dynamic>?> updateConversationSummary(String conversationId, String summaryText) {
+  Future<Map<String, dynamic>?> updateConversationSummary(
+    String conversationId,
+    String summaryText,
+  ) {
     return _api.put<Map<String, dynamic>>(
       '/api/chats/conversations/$conversationId/summary',
       data: {'summaryText': summaryText.trim()},
     );
   }
 
-  Future<String> exportConversation(String conversationId, {String format = 'markdown'}) async {
+  Future<String> exportConversation(
+    String conversationId, {
+    String format = 'markdown',
+  }) async {
     final resp = await _api.post<Map<String, dynamic>>(
       '/api/chats/export',
       data: {
@@ -242,7 +337,10 @@ class ChatService {
   }
 
   Future<List<Map<String, dynamic>>> recentFeedback({int limit = 100}) async {
-    final resp = await _api.get<dynamic>('/api/messages/feedback/recent', queryParameters: {'limit': limit});
+    final resp = await _api.get<dynamic>(
+      '/api/messages/feedback/recent',
+      queryParameters: {'limit': limit},
+    );
     return _mapList(resp, keys: const ['items']);
   }
 
@@ -257,14 +355,20 @@ class ChatService {
     return _api.get<Map<String, dynamic>>('/api/psyche/messages/$messageId');
   }
 
-  Future<List<MessageDto>> searchMessages(String keyword, {String? conversationId, int page = 1, int pageSize = 50}) async {
+  Future<List<MessageDto>> searchMessages(
+    String keyword, {
+    String? conversationId,
+    int page = 1,
+    int pageSize = 50,
+  }) async {
     final resp = await _api.get<Map<String, dynamic>>(
       '/api/chats/search',
       queryParameters: {
         'keyword': keyword,
         'page': page,
         'pageSize': pageSize,
-        if (conversationId != null && conversationId.isNotEmpty) 'conversationId': conversationId,
+        if (conversationId != null && conversationId.isNotEmpty)
+          'conversationId': conversationId,
       },
     );
     final rows = resp?['items'];
@@ -276,7 +380,9 @@ class ChatService {
   }
 
   Future<Map<String, dynamic>?> messageStatus(String messageId) async {
-    return _api.get<Map<String, dynamic>>('/api/web-chat/message-status/$messageId');
+    return _api.get<Map<String, dynamic>>(
+      '/api/web-chat/message-status/$messageId',
+    );
   }
 
   ChatStreamCancellation createStreamCancellation() => ChatStreamCancellation();
@@ -313,6 +419,7 @@ class ChatService {
         if (replyToMessageId != null && replyToMessageId.isNotEmpty)
           'replyToMessageId': replyToMessageId,
         if (workspace != null) ...<String, dynamic>{
+          if (workspace.projectId.isNotEmpty) 'projectId': workspace.projectId,
           'workspaceId': workspace.workspaceId,
           'workspaceDeviceId': workspace.deviceId,
           'workspaceName': workspace.workspaceName,
@@ -437,6 +544,7 @@ class ChatService {
         if (replyToMessageId != null && replyToMessageId.isNotEmpty)
           'replyToMessageId': replyToMessageId,
         if (workspace != null) ...<String, dynamic>{
+          if (workspace.projectId.isNotEmpty) 'projectId': workspace.projectId,
           'workspaceId': workspace.workspaceId,
           'workspaceDeviceId': workspace.deviceId,
           'workspaceName': workspace.workspaceName,
@@ -493,14 +601,23 @@ class ChatService {
     return resp;
   }
 
-  List<Map<String, dynamic>> _mapList(dynamic resp, {List<String> keys = const []}) {
+  List<Map<String, dynamic>> _mapList(
+    dynamic resp, {
+    List<String> keys = const [],
+  }) {
     dynamic raw = resp;
     if (raw is Map) {
       for (final key in keys) {
-        if (raw[key] is List) { raw = raw[key]; break; }
+        if (raw[key] is List) {
+          raw = raw[key];
+          break;
+        }
       }
     }
     if (raw is! List) return const [];
-    return raw.whereType<Map>().map((row) => Map<String, dynamic>.from(row)).toList(growable: false);
+    return raw
+        .whereType<Map>()
+        .map((row) => Map<String, dynamic>.from(row))
+        .toList(growable: false);
   }
 }

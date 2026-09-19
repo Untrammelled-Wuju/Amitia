@@ -1,793 +1,184 @@
-<!--
-SPDX-FileCopyrightText: 2026 彭旭
-SPDX-License-Identifier: AGPL-3.0-only
--->
 <template>
-  <div class="logs-page">
-    <div class="page-heading">
-      <h2 class="page-title">聊天记录</h2>
-      <div class="page-heading-actions">
-        <el-button size="small" @click="messageSearchVisible = true">全局搜索消息</el-button>
-        <el-button size="small" type="primary" plain @click="goToImport">导入记录</el-button>
-        <el-button size="small" type="danger" plain @click="deleteAllConversations">删除全部</el-button>
+  <div class="archive-page">
+    <aside class="archive-list">
+      <div class="archive-list-header">
+        <strong>归档对话</strong>
+        <el-button text :loading="loading" aria-label="刷新归档对话" title="刷新归档对话" @click="loadConversations">
+          <el-icon><Refresh /></el-icon>
+        </el-button>
       </div>
-    </div>
-
-    <div class="logs-layout">
-      <ConversationListPanel
-        :convs="convs"
-        :conv-keyword="convKeyword"
-        :character-filter="characterFilter"
-        :characters="characters"
-        :channel-filter="channelFilter"
-        :conv-page="convPage"
-        :conv-total="convTotal"
-        :selected-conv-id="selectedConvId"
-        @update:conv-keyword="convKeyword = $event"
-        @update:character-filter="characterFilter = $event"
-        @update:channel-filter="channelFilter = $event"
-        @update:conv-page="convPage = $event"
-        @search="fetchConvs"
-        @filter-change="fetchConvs"
-        @page-change="
-          convPage = $event;
-          fetchConvs();
-        "
-        @select="selectConv"
-      />
-
-      <main class="msg-detail" v-if="selectedConv">
-        <div class="detail-header">
-          <div class="dh-info">
-            <span class="dh-title">{{
-              selectedConv.title || "新对话"
-            }}</span>
-            <span class="dh-meta"
-              >{{ channelLabel(selectedConv.channel) }} ·
-              {{ selectedConv.messageCount || 0 }}条</span
-            >
-          </div>
-          <div class="dh-actions">
-            <el-dropdown trigger="click">
-              <el-button size="small"
-                >导出<el-icon style="margin-left: 4px"><ArrowDown /></el-icon
-              ></el-button>
-              <template #dropdown>
-                <el-dropdown-menu>
-                  <el-dropdown-item @click="exportConv('markdown')"
-                    >Markdown</el-dropdown-item
-                  >
-                  <el-dropdown-item @click="exportConv('json')"
-                    >JSON</el-dropdown-item
-                  >
-                </el-dropdown-menu>
-              </template>
-            </el-dropdown>
-            <el-button
-              size="small"
-              @click="clearConv"
-              :disabled="!messages.length"
-              >清空</el-button
-            >
-            <el-button size="small" @click="fetchContextPreview"
-              >上下文预览</el-button
-            >
-            <el-dropdown trigger="click" style="margin-left: 4px">
-              <el-button size="small"
-                >切换角色<el-icon style="margin-left: 4px"
-                  ><ArrowDown /></el-icon
-              ></el-button>
-              <template #dropdown>
-                <el-dropdown-menu>
-                  <el-dropdown-item
-                    v-for="c in characters"
-                    :key="c.id"
-                    @click="switchCharacter(c.id)"
-                    :class="{ 'is-active': selectedConv?.characterId === c.id }"
-                  >
-                    {{ c.name }}
-                    <el-tag
-                      size="small"
-                      type="success"
-                      v-if="c.isActive"
-                      style="margin-left: 6px"
-                      >当前</el-tag
-                    >
-                  </el-dropdown-item>
-                </el-dropdown-menu>
-              </template>
-            </el-dropdown>
-            <el-button size="small" @click="genSummary">Summary</el-button>
-            <el-select
-              v-model="continueCharId"
-              placeholder="角色"
-              size="small"
-              style="width: 120px"
-              v-if="selectedConv?.source?.startsWith('import')"
-            >
-              <el-option
-                v-for="c in characters"
-                :key="c.id"
-                :label="c.name"
-                :value="c.id"
-              />
-            </el-select>
-            <el-button
-              size="small"
-              type="primary"
-              @click="continueChat"
-              v-if="selectedConv?.source?.startsWith('import')"
-              >转为对话</el-button
-            >
-            <el-button size="small" type="danger" @click="delConv"
-              >删除</el-button
-            >
-          </div>
-        </div>
-
-        <div class="detail-summary" v-if="currentSummary">
-          <el-alert :closable="false" show-icon>
-            <template #title>
-              <span
-                >会话摘要 ({{
-                  fmtTime(currentSummary.updatedAt || currentSummary.compressedAt || currentSummary.createdAt)
-                }})</span
-              >
-              <el-button
-                text
-                size="small"
-                style="margin-left: 8px"
-                @click="viewSummary"
-                >详情</el-button
-              >
-              <el-button text size="small" type="danger" @click="delSummary"
-                >删除</el-button
-              >
-            </template>
-          </el-alert>
-          <el-dialog v-model="summaryVisible" title="会话摘要" width="500px">
-            <div class="summary-content">{{ currentSummary?.summaryText }}</div>
-            <div
-              class="summary-meta"
-              v-if="currentSummary?.updatedAt || currentSummary?.compressedAt || currentSummary?.createdAt"
-            >
-              生成时间:
-              {{
-                fmtTime(currentSummary.updatedAt || currentSummary.compressedAt || currentSummary.createdAt)
-              }}
-            </div>
-            <template #footer>
-              <el-button @click="summaryVisible = false">关闭</el-button>
-              <el-button type="primary" @click="editSummary">编辑摘要</el-button>
-            </template>
-          </el-dialog>
-        </div>
-
-        <div class="detail-filters">
-          <el-input
-            v-model="messageKeywordFilter"
-            placeholder="搜索消息"
-            size="small"
-            clearable
-            style="width: 160px"
-          />
-          <el-select
-            v-model="roleFilter"
-            placeholder="角色"
-            size="small"
-            clearable
-            style="width: 90px; margin-left: 8px"
-          >
-            <el-option label="用户" value="user" /><el-option
-              label="AI"
-              value="assistant"
-            />
-          </el-select>
-        </div>
-
-        <div class="msg-list" ref="msgListRef">
-          <div
-            v-for="m in filteredMessages"
-            :key="m.id"
-            class="msg-item"
-            :class="m.role"
-          >
-            <div class="mi-header">
-              <span class="mi-role">{{
-                m.role === "user" ? "用户" : "AI"
-              }}</span>
-              <span class="mi-time">{{ fmtTime(m.createdAt) }}</span>
-              <span class="mi-source" v-if="m.source">{{ m.source }}</span>
-              <span class="mi-model" v-if="m.modelName">{{ m.modelName }}</span>
-              <el-tag
-                v-if="moodMap[m.id]"
-                size="small"
-                type="warning"
-                class="mi-mood"
-                >{{ moodEmoji(moodMap[m.id]) }} {{ moodMap[m.id] }}</el-tag
-              >
-              <el-tag
-                v-if="feedbackMap[m.id]?.length"
-                size="small"
-                type="success"
-                class="mi-feedback"
-                >{{ feedbackMap[m.id][0].feedbackType }} ({{
-                  feedbackMap[m.id].length
-                }})</el-tag
-              >
-              <el-button
-                text
-                size="small"
-                :loading="messageStatusLoadingMap[m.id]"
-                @click="toggleMessageStatus(m.id)"
-                >{{ messageStatusMap[m.id] ? "收起状态" : "消息状态" }}</el-button
-              >
-              <el-button
-                text
-                size="small"
-                type="danger"
-                class="mi-delete"
-                @click="delMsg(m.id)"
-                >删除</el-button
-              >
-            </div>
-            <div v-if="messageStatusMap[m.id]" class="mi-status-panel">
-              <el-tag size="small" effect="plain">{{ messageStatusMap[m.id]?.status || "unknown" }}</el-tag>
-              <span v-if="messageStatusMap[m.id]?.interactionStatus">interaction: {{ messageStatusMap[m.id]?.interactionStatus }}</span>
-              <span v-if="messageStatusMap[m.id]?.updatedAt">updated: {{ fmtTime(messageStatusMap[m.id]?.updatedAt) }}</span>
-            </div>
-            <div class="mi-content">{{ m.content }}</div>
-            <div
-              class="mi-psyche-toggle"
-              v-if="m.role === 'assistant'"
-              @click="toggleMessagePsyche(m.id)"
-            >
-              <el-tag
-                size="small"
-                :type="psycheMap[m.id] ? 'primary' : 'info'"
-                effect="plain"
-                style="cursor: pointer"
-              >
-                {{ psycheMap[m.id] ? "收起心理快照" : "心理快照" }}
-              </el-tag>
-            </div>
-            <div v-if="psycheMap[m.id]" class="mi-psyche-panel">
-              <div class="psyche-section">
-                <div class="psyche-section-title">情绪维度</div>
-                <div class="psyche-bars">
-                  <div class="psyche-bar-row">
-                    <span class="psyche-bar-label">积极</span>
-                    <div class="psyche-bar-track">
-                      <div
-                        class="psyche-bar-fill psyche-fill-positive"
-                        :style="{
-                          width:
-                            (
-                              (psycheMap[m.id]?.emotion?.positive ?? 0) * 100
-                            ).toFixed(0) + '%',
-                        }"
-                      ></div>
-                    </div>
-                    <span class="psyche-bar-val">{{
-                      ((psycheMap[m.id]?.emotion?.positive ?? 0) * 100).toFixed(
-                        0,
-                      )
-                    }}</span>
-                  </div>
-                  <div class="psyche-bar-row">
-                    <span class="psyche-bar-label">消极</span>
-                    <div class="psyche-bar-track">
-                      <div
-                        class="psyche-bar-fill psyche-fill-negative"
-                        :style="{
-                          width:
-                            (
-                              (psycheMap[m.id]?.emotion?.negative ?? 0) * 100
-                            ).toFixed(0) + '%',
-                        }"
-                      ></div>
-                    </div>
-                    <span class="psyche-bar-val">{{
-                      ((psycheMap[m.id]?.emotion?.negative ?? 0) * 100).toFixed(
-                        0,
-                      )
-                    }}</span>
-                  </div>
-                  <div class="psyche-bar-row">
-                    <span class="psyche-bar-label">唤醒</span>
-                    <div class="psyche-bar-track">
-                      <div
-                        class="psyche-bar-fill psyche-fill-arousal"
-                        :style="{
-                          width:
-                            (
-                              (psycheMap[m.id]?.emotion?.arousal ?? 0) * 100
-                            ).toFixed(0) + '%',
-                        }"
-                      ></div>
-                    </div>
-                    <span class="psyche-bar-val">{{
-                      ((psycheMap[m.id]?.emotion?.arousal ?? 0) * 100).toFixed(
-                        0,
-                      )
-                    }}</span>
-                  </div>
-                </div>
-                <div v-if="psycheMap[m.id]?.affectLabel" class="psyche-affect">
-                  <el-tag size="small">{{
-                    psycheMap[m.id]?.affectLabel
-                  }}</el-tag>
-                </div>
-              </div>
-              <div
-                v-if="psycheMap[m.id]?.copingStrategy"
-                class="psyche-section"
-              >
-                <span class="psyche-section-title">应对策略: </span>
-                <el-tag size="small" type="warning">{{
-                  psycheMap[m.id]?.copingStrategy?.selected
-                }}</el-tag>
-                <div
-                  v-if="psycheMap[m.id]?.copingStrategy?.selectionReason"
-                  class="psyche-reason"
-                >
-                  {{ psycheMap[m.id]?.copingStrategy?.selectionReason }}
-                </div>
-              </div>
-              <div
-                v-if="psycheMap[m.id]?.cognitiveAppraisal"
-                class="psyche-section"
-              >
-                <span class="psyche-section-title">认知评价</span>
-                <div class="psyche-appraisal-grid">
-                  <div v-if="psycheMap[m.id]?.cognitiveAppraisal?.primary">
-                    <span class="psyche-appraisal-key">初级:</span>
-                    {{ psycheMap[m.id]?.cognitiveAppraisal?.primary }}
-                  </div>
-                  <div v-if="psycheMap[m.id]?.cognitiveAppraisal?.secondary">
-                    <span class="psyche-appraisal-key">次级:</span>
-                    {{ psycheMap[m.id]?.cognitiveAppraisal?.secondary }}
-                  </div>
-                  <div v-if="psycheMap[m.id]?.cognitiveAppraisal?.reappraisal">
-                    <span class="psyche-appraisal-key">再评价:</span>
-                    {{ psycheMap[m.id]?.cognitiveAppraisal?.reappraisal }}
-                  </div>
-                </div>
-              </div>
-              <div
-                v-if="psycheMap[m.id]?.stress !== undefined"
-                class="psyche-section"
-              >
-                <span class="psyche-section-title">压力: </span>
-                <el-tag
-                  :type="
-                    (psycheMap[m.id]?.stress ?? 0) > 0.6
-                      ? 'danger'
-                      : (psycheMap[m.id]?.stress ?? 0) > 0.3
-                        ? 'warning'
-                        : 'success'
-                  "
-                  size="small"
-                >
-                  {{ ((psycheMap[m.id]?.stress ?? 0) * 100).toFixed(0) }}
-                </el-tag>
-              </div>
-            </div>
-            <div v-if="psycheLoadingMap[m.id]" class="mi-psyche-loading">
-              加载心理数据...
-            </div>
-            <div class="mi-metadata" v-if="devMode && m.metadata">
-              <pre>{{ JSON.stringify(m.metadata, null, 2) }}</pre>
-            </div>
-          </div>
-        </div>
-
-        <el-pagination
-          v-if="msgTotal > 50"
-          :model-value="msgPage"
-          :page-size="50"
-          :total="msgTotal"
-          layout="prev,next"
+      <div
+        v-for="conversation in conversations"
+        :key="conversation.id"
+        class="archive-item"
+        :class="{ active: conversation.id === selectedId }"
+      >
+        <button type="button" class="archive-item-main" @click="selectConversation(conversation)">
+          <el-icon><Box /></el-icon>
+          <span class="archive-item-copy">
+            <strong>{{ conversation.title || "新对话" }}</strong>
+            <small>{{ formatTime(conversation.archivedAt) }} · {{ conversation.messageCount || 0 }} 条</small>
+          </span>
+        </button>
+        <el-button
+          text
           size="small"
-          @current-change="
-            msgPage = $event;
-            fetchMessages();
-          "
-          style="margin-top: 8px; justify-content: center"
-        />
-      </main>
-
-      <main class="msg-detail empty" v-else>
-        <el-empty description="选择左侧会话查看详情" :image-size="60" />
-      </main>
-    </div>
-
-    <el-dialog v-model="messageSearchVisible" title="全局搜索消息" width="720px">
-      <div class="global-search-toolbar">
-        <el-input
-          v-model="messageSearchKeyword"
-          clearable
-          placeholder="输入消息内容关键词"
-          @keyup.enter="searchMessagesGlobal"
-        />
-        <el-button type="primary" :loading="messageSearchLoading" @click="searchMessagesGlobal">搜索</el-button>
+          :loading="restoringId === conversation.id"
+          @click.stop="restoreConversation(conversation)"
+        >
+          撤销
+        </el-button>
       </div>
-      <div v-loading="messageSearchLoading" class="global-search-results">
-        <el-empty v-if="!messageSearchLoading && messageSearchResults.length === 0" description="暂无搜索结果" :image-size="48" />
-        <div v-for="item in messageSearchResults" :key="item.id" class="global-search-item">
-          <div class="global-search-meta">
-            <span>{{ item.role === 'user' ? '用户' : 'AI' }}</span>
-            <span>{{ fmtTime(item.createdAt) }}</span>
-            <span class="global-search-conv">{{ item.conversationId }}</span>
+      <el-empty v-if="!loading && conversations.length === 0" description="暂无归档对话" :image-size="60" />
+    </aside>
+
+    <section class="archive-main">
+      <template v-if="selectedConversation">
+        <header class="archive-main-header">
+          <div>
+            <strong>{{ selectedConversation.title || "新对话" }}</strong>
+            <small>归档于 {{ formatTime(selectedConversation.archivedAt) }}</small>
           </div>
-          <div class="global-search-content">{{ item.content }}</div>
+          <el-button
+            type="primary"
+            plain
+            size="small"
+            :loading="restoringId === selectedConversation.id"
+            @click="restoreConversation(selectedConversation)"
+          >
+            撤销归档
+          </el-button>
+        </header>
+        <div ref="messageListRef" v-loading="messageLoading" class="message-list">
+          <div v-for="message in messages" :key="message.id" class="archive-message" :class="message.role">
+            <div class="message-meta">{{ message.role === "user" ? "用户" : "AI" }} · {{ formatTime(message.createdAt) }}</div>
+            <div class="message-content">{{ message.content }}</div>
+          </div>
+          <el-empty v-if="!messageLoading && messages.length === 0" description="暂无消息" :image-size="60" />
         </div>
-      </div>
-    </el-dialog>
-
-    <ContextPreviewDialog
-      v-model="ctxPreviewVisible"
-      :loading="ctxPreviewLoading"
-      :data="ctxPreview"
-    />
+      </template>
+      <el-empty v-else description="选择归档对话查看消息" :image-size="80" />
+    </section>
   </div>
 </template>
 
 <script setup lang="ts">
-import { onMounted } from "vue";
-import { useRouter } from "vue-router";
-import { ArrowDown } from "@element-plus/icons-vue";
-import ConversationListPanel from "./components/ConversationListPanel.vue";
-import ContextPreviewDialog from "./components/ContextPreviewDialog.vue";
-import { useConversationLogs } from "./useConversationLogs";
-import { channelLabel, fmtTime, moodEmoji } from "./utils";
+import { computed, onMounted, ref } from "vue";
+import { Box, Refresh } from "@element-plus/icons-vue";
+import { ElMessage } from "element-plus";
+import { useApi } from "@/composables/useApi";
 
-const router = useRouter();
-
-const {
-  characters,
-  convs,
-  convKeyword,
-  characterFilter,
-  continueCharId,
-  channelFilter,
-  convPage,
-  convTotal,
-  selectedConv,
-  selectedConvId,
-  messages,
-  msgPage,
-  msgTotal,
-  messageKeywordFilter,
-  roleFilter,
-  msgListRef,
-  filteredMessages,
-  fetchConvs,
-  selectConv,
-  fetchMessages,
-  delMsg,
-  moodMap,
-  feedbackMap,
-  clearConv,
-  delConv,
-  deleteAllConversations,
-  messageSearchVisible,
-  messageSearchKeyword,
-  messageSearchResults,
-  messageSearchLoading,
-  searchMessagesGlobal,
-  exportConv,
-  currentSummary,
-  summaryVisible,
-  genSummaryLoading,
-  genSummary,
-  viewSummary,
-  editSummary,
-  delSummary,
-  devMode,
-  ctxPreviewVisible,
-  ctxPreviewLoading,
-  ctxPreview,
-  fetchContextPreview,
-  switchCharacter,
-  continueChat,
-  loadCharacters,
-  messageStatusMap,
-  messageStatusLoadingMap,
-  toggleMessageStatus,
-  psycheMap,
-  psycheLoadingMap,
-  toggleMessagePsyche,
-} = useConversationLogs();
-
-onMounted(() => {
-  fetchConvs();
-  loadCharacters();
-});
-
-function goToImport() {
-  router.push("/import");
+interface ArchivedConversation {
+  id: string;
+  title: string;
+  messageCount: number;
+  archivedAt?: string;
 }
+
+interface ArchivedMessage {
+  id: string;
+  role: string;
+  content: string;
+  createdAt: string;
+}
+
+const { get, put } = useApi();
+const conversations = ref<ArchivedConversation[]>([]);
+const messages = ref<ArchivedMessage[]>([]);
+const selectedId = ref("");
+const loading = ref(false);
+const messageLoading = ref(false);
+const restoringId = ref("");
+const messageListRef = ref<HTMLElement | null>(null);
+
+const selectedConversation = computed(
+  () => conversations.value.find((item) => item.id === selectedId.value) || null,
+);
+
+function formatTime(value?: string) {
+  if (!value) return "未知时间";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
+}
+
+async function loadConversations() {
+  loading.value = true;
+  try {
+    const response = await get<any>("/api/web-chat/conversations", {
+      page: 1,
+      pageSize: 200,
+      archivedOnly: true,
+    });
+    conversations.value = response?.items || [];
+    if (selectedId.value && !conversations.value.some((item) => item.id === selectedId.value)) {
+      selectedId.value = "";
+      messages.value = [];
+    }
+  } finally {
+    loading.value = false;
+  }
+}
+
+async function selectConversation(conversation: ArchivedConversation) {
+  selectedId.value = conversation.id;
+  messageLoading.value = true;
+  try {
+    const response = await get<any>(
+      `/api/web-chat/conversations/${encodeURIComponent(conversation.id)}/messages`,
+      { page: 1, pageSize: 200 },
+    );
+    messages.value = response?.items || [];
+    requestAnimationFrame(() => {
+      if (messageListRef.value) messageListRef.value.scrollTop = messageListRef.value.scrollHeight;
+    });
+  } finally {
+    messageLoading.value = false;
+  }
+}
+
+async function restoreConversation(conversation: ArchivedConversation) {
+  if (restoringId.value) return;
+  restoringId.value = conversation.id;
+  try {
+    await put(`/api/web-chat/conversations/${encodeURIComponent(conversation.id)}`, {
+      archived: false,
+    });
+    conversations.value = conversations.value.filter((item) => item.id !== conversation.id);
+    if (selectedId.value === conversation.id) {
+      selectedId.value = "";
+      messages.value = [];
+    }
+    ElMessage.success("对话已恢复");
+  } finally {
+    restoringId.value = "";
+  }
+}
+
+onMounted(loadConversations);
 </script>
 
 <style scoped>
-.logs-page {
-  padding: 0;
-}
-.page-title {
-  font-size: 24px;
-  font-weight: 600;
-  margin: 0 0 14px 0;
-  color: var(--ac-color-text);
-}
-.page-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-.logs-layout {
-  display: flex;
-  gap: 0;
-  height: calc(100vh - 184px);
-  min-height: 400px;
-  border: 1px solid var(--ac-color-border-light);
-  border-radius: var(--ac-radius-md);
-  overflow: hidden;
-}
-.msg-detail {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  min-width: 0;
-  padding: 12px;
-}
-.msg-detail.empty {
-  align-items: center;
-  justify-content: center;
-}
-.detail-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--ac-color-border-light);
-  flex-shrink: 0;
-}
-.dh-title {
-  font-weight: 600;
-  font-size: var(--ac-font-size-base);
-}
-.dh-meta {
-  font-size: var(--ac-font-size-xs);
-  color: var(--ac-color-text-muted);
-  margin-left: 10px;
-}
-.dh-actions {
-  display: flex;
-  gap: 6px;
-}
-.detail-filters {
-  padding: 6px 0;
-  flex-shrink: 0;
-}
-.msg-list {
-  flex: 1;
-  overflow-y: auto;
-}
-.msg-item {
-  padding: 12px;
-  border-bottom: 1px solid var(--ac-color-border-light);
-}
-.msg-item.assistant {
-  background: var(--ac-color-bg-secondary);
-}
-.mi-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 4px;
-}
-.mi-role {
-  font-weight: 600;
-  font-size: var(--ac-font-size-xs);
-}
-.mi-time {
-  font-size: 10px;
-  color: var(--ac-color-text-muted);
-}
-.mi-source {
-  font-size: 10px;
-  color: var(--ac-color-text-placeholder);
-  background: var(--ac-color-surface);
-  padding: 0 4px;
-  border-radius: 3px;
-}
-.mi-model {
-  font-size: 10px;
-  color: var(--ac-color-text-placeholder);
-}
-.mi-delete {
-  margin-left: auto;
-  opacity: 0;
-  transition: opacity var(--ac-transition-fast);
-}
-.msg-item:hover .mi-delete {
-  opacity: 1;
-}
-.mi-content {
-  font-size: var(--ac-font-size-sm);
-  line-height: 1.6;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-.mi-metadata {
-  margin-top: 8px;
-  padding: 8px;
-  background: var(--ac-color-bg-secondary);
-  color: var(--ac-color-text-secondary);
-  border-radius: 4px;
-}
-.mi-metadata pre {
-  margin: 0;
-  font-size: 11px;
-  font-family: Consolas, monospace;
-  white-space: pre-wrap;
-  word-break: break-all;
-}
-.detail-summary {
-  margin-bottom: 8px;
-}
-.summary-content {
-  white-space: pre-wrap;
-  line-height: 1.7;
-  font-size: var(--ac-font-size-sm);
-}
-.summary-meta {
-  font-size: var(--ac-font-size-xs);
-  color: var(--ac-color-text-muted);
-  margin-top: 10px;
-}
-
-@media (max-width: 768px) {
-  .logs-page {
-    max-width: 100%;
-    height: 100%;
-  }
-  .logs-layout {
-    flex-direction: column;
-  }
-  .msg-detail {
-    flex: 1;
-    overflow: hidden;
-  }
-  .detail-header {
-    flex-wrap: wrap;
-    gap: 6px;
-  }
-  .dh-actions {
-    width: 100%;
-    overflow-x: auto;
-    flex-wrap: nowrap;
-    gap: 4px;
-  }
-  .dh-actions .el-button {
-    white-space: nowrap;
-    font-size: var(--ac-font-size-xs);
-  }
-  .msg-item {
-    padding: 10px;
-  }
-  .mi-header {
-    flex-wrap: wrap;
-    gap: 4px;
-  }
-}
-.mi-psyche-toggle {
-  margin-top: 6px;
-}
-.mi-psyche-loading {
-  margin-top: 6px;
-  font-size: 11px;
-  color: var(--ac-color-text-muted);
-  padding: 4px 0;
-}
-.mi-psyche-panel {
-  margin-top: 8px;
-  padding: 10px;
-  background: var(--ac-color-bg-secondary);
-  border-radius: var(--ac-radius-sm);
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.psyche-section-title {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--ac-color-text-secondary);
-  margin-bottom: 4px;
-}
-.psyche-bars {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.psyche-bar-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.psyche-bar-label {
-  font-size: 11px;
-  color: var(--ac-color-text-muted);
-  width: 32px;
-  flex-shrink: 0;
-}
-.psyche-bar-track {
-  flex: 1;
-  height: 12px;
-  background: var(--ac-color-border-light);
-  border-radius: 3px;
-  overflow: hidden;
-}
-.psyche-bar-fill {
-  height: 100%;
-  border-radius: 3px;
-  transition: width 0.6s ease;
-  min-width: 2px;
-}
-.psyche-bar-val {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--ac-color-text);
-  width: 24px;
-  flex-shrink: 0;
-  text-align: right;
-}
-.psyche-fill-positive {
-  background: var(--ac-color-success);
-}
-.psyche-fill-negative {
-  background: var(--ac-color-danger);
-}
-.psyche-fill-arousal {
-  background: var(--ac-color-warning);
-}
-.psyche-affect {
-  margin-top: 2px;
-}
-.psyche-reason {
-  font-size: 11px;
-  color: var(--ac-color-text-muted);
-  margin-top: 2px;
-}
-.psyche-appraisal-grid {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  font-size: 12px;
-  color: var(--ac-color-text);
-}
-.psyche-appraisal-key {
-  font-weight: 600;
-  color: var(--ac-color-text-secondary);
-}
-
-.page-heading-actions { display: flex; gap: 8px; align-items: center; }
-.global-search-toolbar { display: flex; gap: 8px; margin-bottom: 12px; }
-.global-search-results { min-height: 180px; max-height: 480px; overflow-y: auto; }
-.global-search-item { padding: 10px 4px; border-bottom: 1px solid var(--ac-color-border-light); }
-.global-search-meta { display: flex; gap: 10px; color: var(--ac-color-text-muted); font-size: var(--ac-font-size-xs); margin-bottom: 5px; }
-.global-search-conv { margin-left: auto; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.global-search-content { white-space: pre-wrap; word-break: break-word; font-size: var(--ac-font-size-sm); }
-
-.mi-status-panel {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 6px 0;
-  font-size: 12px;
-  color: var(--el-text-color-secondary);
+.archive-page { display: grid; grid-template-columns: 300px minmax(0, 1fr); height: 100%; min-height: 0; background: var(--surface-bg); }
+.archive-list { display: flex; flex-direction: column; min-height: 0; overflow-y: auto; padding: 10px; border-right: 1px solid var(--surface-border); }
+.archive-list-header, .archive-main-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.archive-list-header { min-height: 36px; padding: 0 6px 8px; }
+.archive-item { display: flex; align-items: center; gap: 4px; width: 100%; min-height: 52px; padding: 2px 4px 2px 2px; border-radius: 8px; color: var(--text-secondary); }
+.archive-item:hover, .archive-item.active { background: var(--workbench-sidebar-hover); color: var(--text-primary); }
+.archive-item.active { background: var(--workbench-sidebar-active); }
+.archive-item-main { display: flex; align-items: center; gap: 9px; min-width: 0; flex: 1; min-height: 48px; padding: 5px 6px; border: 0; border-radius: 8px; background: transparent; color: inherit; cursor: pointer; font: inherit; text-align: left; }
+.archive-item-main:focus-visible { outline: 1px solid var(--ac-color-primary); outline-offset: -1px; }
+.archive-item-copy { min-width: 0; flex: 1; }
+.archive-item strong, .archive-item small, .archive-main-header strong, .archive-main-header small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.archive-item strong, .archive-main-header strong { font-size: 13px; }
+.archive-item small, .archive-main-header small, .message-meta { margin-top: 2px; color: var(--text-muted); font-size: 10px; }
+.archive-main { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.archive-main-header { min-height: 52px; padding: 8px 16px; border-bottom: 1px solid var(--surface-border); }
+.message-list { display: flex; flex-direction: column; gap: 12px; min-height: 0; flex: 1; overflow-y: auto; padding: 18px; }
+.archive-message { max-width: min(680px, 82%); padding: 9px 12px; border-radius: 10px; background: var(--ac-color-surface); }
+.archive-message.user { align-self: flex-end; background: var(--ac-color-primary-bg); }
+.message-content { white-space: pre-wrap; word-break: break-word; color: var(--text-primary); font-size: 13px; line-height: 1.55; }
+@media (max-width: 800px) {
+  .archive-page { grid-template-columns: 1fr; }
+  .archive-list { max-height: 38vh; border-right: 0; border-bottom: 1px solid var(--surface-border); }
 }
 </style>

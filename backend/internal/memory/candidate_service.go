@@ -133,7 +133,7 @@ func (s *service) generateCandidatesFromMessages(conversationID string, messages
 	assistantText := strings.Join(assistantParts, "\n")
 
 	var characterID string
-	s.db.Table("conversations").Select("character_id").Where("id = ?", conversationID).Row().Scan(&characterID)
+	s.db.Table("messages").Select("character_id").Where("conversation_id = ? AND character_id <> ''", conversationID).Order("sequence DESC").Limit(1).Row().Scan(&characterID)
 	cfg := s.getActiveModel()
 	if cfg == nil {
 		return nil, fmt.Errorf("no active model")

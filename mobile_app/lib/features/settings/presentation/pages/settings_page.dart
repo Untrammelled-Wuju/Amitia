@@ -89,6 +89,11 @@ List<SettingGroup> _settingsGroups({
         route: AppRoutes.settingsStorage,
       ),
       SettingItem(
+        title: '归档对话',
+        icon: Icons.archive_outlined,
+        route: AppRoutes.chatLogs,
+      ),
+      SettingItem(
         title: '安全设置',
         icon: Icons.security_outlined,
         route: AppRoutes.settingsSafety,
@@ -296,9 +301,7 @@ Widget _buildUserInfoCard(BuildContext context, WidgetRef ref) {
             Expanded(
               child: Text(
                 '个人空间资料暂不可用',
-                style: AppTypography.body(
-                  context,
-                ).copyWith(fontSize: 14.5),
+                style: AppTypography.body(context).copyWith(fontSize: 14.5),
               ),
             ),
             Icon(Icons.chevron_right, size: 20, color: context.textTertiary),
@@ -328,9 +331,7 @@ class _SettingGroup extends StatelessWidget {
           ),
           child: Text(
             group.title,
-            style: AppTypography.caption(
-              context,
-            ).copyWith(fontSize: 12.5),
+            style: AppTypography.caption(context).copyWith(fontSize: 12.5),
           ),
         ),
         Container(
@@ -391,9 +392,7 @@ class _SettingTile extends StatelessWidget {
             if (item.value != null) ...[
               Text(
                 item.value!,
-                style: AppTypography.caption(
-                  context,
-                ).copyWith(fontSize: 13.5),
+                style: AppTypography.caption(context).copyWith(fontSize: 13.5),
               ),
               const SizedBox(width: 4),
             ],

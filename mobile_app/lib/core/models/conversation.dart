@@ -1,20 +1,24 @@
 class ConversationDto {
   final String id;
-  final String characterId;
+  final String projectId;
   final String title;
   final String channel;
   final String source;
   final int messageCount;
+  final String pinnedAt;
+  final String archivedAt;
   final String createdAt;
   final String updatedAt;
 
   ConversationDto({
     required this.id,
-    required this.characterId,
+    this.projectId = '',
     this.title = '',
     this.channel = '',
     this.source = '',
     this.messageCount = 0,
+    this.pinnedAt = '',
+    this.archivedAt = '',
     this.createdAt = '',
     this.updatedAt = '',
   });
@@ -22,11 +26,13 @@ class ConversationDto {
   factory ConversationDto.fromJson(Map<String, dynamic> json) {
     return ConversationDto(
       id: (json['id'] ?? '').toString(),
-      characterId: (json['characterId'] ?? '').toString(),
+      projectId: (json['projectId'] ?? '').toString(),
       title: json['title'] as String? ?? '',
       channel: json['channel'] as String? ?? '',
       source: json['source'] as String? ?? '',
       messageCount: (json['messageCount'] as num?)?.toInt() ?? 0,
+      pinnedAt: (json['pinnedAt'] ?? '').toString(),
+      archivedAt: (json['archivedAt'] ?? '').toString(),
       createdAt: json['createdAt'] as String? ?? '',
       updatedAt: json['updatedAt'] as String? ?? '',
     );

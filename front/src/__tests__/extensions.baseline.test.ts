@@ -129,25 +129,24 @@ describe("Extension Center Baseline", () => {
   })
 
   describe("Navigation", () => {
-    it("getPageTitle resolves extension paths", async () => {
-      const { getPageTitle } = await import("@/navigation/app-nav")
-      const title = getPageTitle("/extensions")
-      expect(typeof title).toBe("string")
-      expect(title.length).toBeGreaterThan(0)
+    it("resolvePageTitle resolves extension paths", async () => {
+      const { resolvePageTitle } = await import("@/ui-runtime/navigationRegistry")
+      const title = resolvePageTitle("/extensions")
+      expect(title).toBe("扩展中心")
     })
 
-    it("getPageTitle resolves MCP path", async () => {
-      const { getPageTitle } = await import("@/navigation/app-nav")
-      const title = getPageTitle("/extensions/mcp")
-      expect(typeof title).toBe("string")
-      expect(title.length).toBeGreaterThan(0)
+    it("resolvePageTitle resolves MCP path", async () => {
+      const { resolvePageTitle } = await import("@/ui-runtime/navigationRegistry")
+      const title = resolvePageTitle("/extensions/mcp")
+      expect(title).toBe("MCP 服务")
     })
 
-    it("getPageTitle resolves creative workshop card paths", async () => {
-      const { getPageTitle } = await import("@/navigation/app-nav")
-      expect(getPageTitle("/creative-workshop/pet")).toBe("桌宠")
-      expect(getPageTitle("/creative-workshop/character-cards")).toBe("角色卡工坊")
-      expect(getPageTitle("/extensions/workflows")).toBe("工作流")
+    it("resolvePageTitle resolves creative workshop card paths", async () => {
+      const { resolvePageTitle } = await import("@/ui-runtime/navigationRegistry")
+      expect(resolvePageTitle("/chat")).toBe("新对话")
+      expect(resolvePageTitle("/creative-workshop/pet")).toBe("桌宠")
+      expect(resolvePageTitle("/creative-workshop/character-cards")).toBe("角色卡工坊")
+      expect(resolvePageTitle("/extensions/workflows")).toBe("工作流")
     })
   })
 })

@@ -10,6 +10,7 @@ import 'package:dio/dio.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../app/app_routes.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_motion.dart';
@@ -50,10 +51,12 @@ class ChatPage extends ConsumerStatefulWidget {
     super.key,
     this.initialConversationId,
     this.initialCharacterId,
+    this.initialProjectId,
   });
 
   final String? initialConversationId;
   final String? initialCharacterId;
+  final String? initialProjectId;
 
   @override
   ConsumerState<ChatPage> createState() => _ChatPageState();
@@ -76,6 +79,10 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   final BytesBuilder _voicePcm = BytesBuilder(copy: false);
   StreamSubscription<Uint8List>? _voiceInputSubscription;
   bool _voiceRecording = false;
+  String _routeSyncedConversationId = '';
+  Timer? _composerDraftTimer;
+  bool _loadingComposerDraft = false;
+  String _activeComposerDraftKey = '';
 
   @override
   void initState() {
@@ -88,9 +95,33 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       ref.read(emoteServiceProvider),
     );
     _runtime.addListener(_onRuntimeChanged);
+    _composerController.addListener(_handleComposerChanged);
     WidgetsBinding.instance.addPostFrameCallback(
       (_) => _openInitialConversation(),
     );
+  }
+
+  @override
+  void didUpdateWidget(covariant ChatPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final oldConversationId = oldWidget.initialConversationId?.trim() ?? '';
+    final newConversationId = widget.initialConversationId?.trim() ?? '';
+    final oldProjectId = oldWidget.initialProjectId?.trim() ?? '';
+    final newProjectId = widget.initialProjectId?.trim() ?? '';
+    if (oldConversationId == newConversationId &&
+        oldProjectId == newProjectId) {
+      return;
+    }
+    _routeSyncedConversationId = '';
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (newConversationId.isEmpty) {
+        _runtime.startDraft();
+        unawaited(_openDraftWorkspace(newProjectId));
+      } else {
+        unawaited(_openInitialConversation());
+      }
+    });
   }
 
   Future<void> _openInitialConversation() async {
@@ -100,6 +131,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         : _activeConversationIdController.state.trim();
     if (!mounted) return;
     if (conversationId.isEmpty) {
+      _runtime.startDraft();
+      await _openDraftWorkspace(widget.initialProjectId);
       await _refreshRecentWorkspaces();
       return;
     }
@@ -125,6 +158,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     _cachedProviderActionsCharacterId = '';
     final conversationId = _runtime.conversationId?.trim() ?? '';
     ref.read(activeConversationIdProvider.notifier).state = conversationId;
+    unawaited(_syncComposerDraft());
+    _syncCreatedConversationRoute(conversationId);
     _conversationEventRefreshTimer?.cancel();
     if (conversationId.isNotEmpty) {
       _conversationEventRefreshTimer = Timer(
@@ -137,6 +172,52 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     }
     setState(() {});
     _scrollToBottom();
+  }
+
+  Future<void> _openDraftWorkspace(String? projectId) async {
+    final id = projectId?.trim() ?? '';
+    if (id.isEmpty) {
+      _runtime.setWorkspace(null);
+      return;
+    }
+    try {
+      final sidebar = await ref.read(chatServiceProvider).conversationSidebar();
+      final project = sidebar.projects
+          .where((item) => item.id == id)
+          .firstOrNull;
+      if (!mounted) return;
+      _runtime.setWorkspace(
+        project == null
+            ? null
+            : ConversationWorkspaceDto(
+                projectId: project.id,
+                workspaceId: project.workspaceId,
+                deviceId: project.deviceId,
+                workspaceName: project.name,
+                workspaceKind: project.rootUri.startsWith('content://')
+                    ? 'saf'
+                    : 'local',
+                rootUri: project.rootUri,
+              ),
+      );
+    } catch (_) {
+      if (mounted) _runtime.setWorkspace(null);
+    }
+  }
+
+  void _syncCreatedConversationRoute(String conversationId) {
+    if (conversationId.isEmpty ||
+        _routeSyncedConversationId == conversationId ||
+        (widget.initialConversationId ?? '').trim().isNotEmpty) {
+      return;
+    }
+    _routeSyncedConversationId = conversationId;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      context.go(
+        '${AppRoutes.chat}?conversationId=${Uri.encodeQueryComponent(conversationId)}',
+      );
+    });
   }
 
   Map<String, dynamic> _buildProviderContext(
@@ -204,8 +285,46 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     return _cachedProviderContext!;
   }
 
+  Widget _buildEmptyChatState(
+    BuildContext context,
+    String characterName,
+    String workspaceName,
+  ) {
+    final resolvedCharacterName = characterName.trim().isEmpty
+        ? 'Amitia'
+        : characterName.trim();
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            '你好，我是 $resolvedCharacterName',
+            textAlign: TextAlign.center,
+            style: AppTypography.pageTitle(
+              context,
+            ).copyWith(fontSize: 20, fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            workspaceName.isEmpty
+                ? '随时可以和我聊聊天，或者做你想做的事。'
+                : '你想在 $workspaceName 中构建什么？',
+            textAlign: TextAlign.center,
+            style: AppTypography.body(
+              context,
+            ).copyWith(color: context.textSecondary),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   void dispose() {
+    _composerDraftTimer?.cancel();
+    unawaited(_persistComposerDraftNow(_activeComposerDraftKey));
+    _composerController.removeListener(_handleComposerChanged);
     _conversationEventRefreshTimer?.cancel();
     unawaited(_voiceInputSubscription?.cancel());
     unawaited(_realtimeAudio.stopCapture());
@@ -234,11 +353,28 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
   Future<void> _refreshRecentWorkspaces() async {
     try {
-      final items = await ref.read(workspaceServiceProvider).listLocal();
+      final sidebar = await ref.read(chatServiceProvider).conversationSidebar();
       if (!mounted) return;
       _cachedProviderContext = null;
       setState(() {
-        _recentWorkspaces = items.take(10).toList(growable: false);
+        _recentWorkspaces = sidebar.projects
+            .map(
+              (project) => WorkspaceMountDto(
+                id: project.workspaceId,
+                projectId: project.id,
+                name: project.name,
+                kind: project.rootUri.startsWith('content://')
+                    ? 'saf'
+                    : 'local',
+                rootUri: project.rootUri,
+                readOnly: project.status == 'read_only',
+                available: project.available,
+                status: project.status,
+                statusReason: project.statusReason,
+              ),
+            )
+            .take(20)
+            .toList(growable: false);
       });
     } catch (_) {
       if (!mounted) return;
@@ -254,11 +390,32 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       return;
     }
     try {
-      final binding = await ref
-          .read(chatServiceProvider)
-          .conversationWorkspace(id);
+      final sidebar = await ref.read(chatServiceProvider).conversationSidebar();
+      final conversation = <dynamic>[
+        ...sidebar.pinned,
+        ...sidebar.recent,
+        ...sidebar.projects.expand((project) => project.conversations),
+      ].where((item) => item.id == id).firstOrNull;
       if (!mounted || _runtime.conversationId?.trim() != id) return;
-      _runtime.setWorkspace(binding);
+      final projectId = conversation?.projectId?.toString() ?? '';
+      final project = projectId.isEmpty
+          ? null
+          : sidebar.projects.where((item) => item.id == projectId).firstOrNull;
+      _runtime.setWorkspace(
+        project == null
+            ? null
+            : ConversationWorkspaceDto(
+                conversationId: id,
+                projectId: project.id,
+                workspaceId: project.workspaceId,
+                deviceId: project.deviceId,
+                workspaceName: project.name,
+                workspaceKind: project.rootUri.startsWith('content://')
+                    ? 'saf'
+                    : 'local',
+                rootUri: project.rootUri,
+              ),
+      );
     } catch (_) {
       if (!mounted || _runtime.conversationId?.trim() != id) return;
       _runtime.setWorkspace(null);
@@ -283,6 +440,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     }
     return ConversationWorkspaceDto(
       conversationId: _runtime.conversationId?.trim() ?? '',
+      projectId: mount.projectId,
       workspaceId: mount.id,
       deviceId: deviceId,
       workspaceName: mount.name,
@@ -306,12 +464,12 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     }
     setState(() => _workspaceBusy = true);
     try {
-      var binding = await _workspaceBindingForMount(mount);
+      final binding = await _workspaceBindingForMount(mount);
       final conversationId = _runtime.conversationId?.trim() ?? '';
-      if (conversationId.isNotEmpty) {
-        binding = await ref
+      if (conversationId.isNotEmpty && mount.projectId.isNotEmpty) {
+        await ref
             .read(chatServiceProvider)
-            .setConversationWorkspace(conversationId, binding);
+            .moveConversationToProject(conversationId, mount.projectId);
       }
       _runtime.setWorkspace(binding);
       try {
@@ -381,12 +539,36 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     try {
       final mount = await _pickWorkspaceMount();
       if (mount == null) return;
-      var binding = await _workspaceBindingForMount(mount);
+      final sidebar = await ref.read(chatServiceProvider).conversationSidebar();
+      final existing = sidebar.projects
+          .where((project) => project.workspaceId == mount.id)
+          .firstOrNull;
+      final project =
+          existing ??
+          await ref
+              .read(chatServiceProvider)
+              .createProject(
+                name: mount.name.trim().isEmpty ? '项目' : mount.name,
+                workspaceId: mount.id,
+                rootUri: mount.rootUri,
+              );
+      final projectMount = WorkspaceMountDto(
+        id: mount.id,
+        projectId: project.id,
+        name: project.name,
+        kind: mount.kind,
+        rootUri: mount.rootUri,
+        readOnly: mount.readOnly,
+        available: project.available,
+        status: project.status,
+        statusReason: project.statusReason,
+      );
+      final binding = await _workspaceBindingForMount(projectMount);
       final conversationId = _runtime.conversationId?.trim() ?? '';
       if (conversationId.isNotEmpty) {
-        binding = await ref
+        await ref
             .read(chatServiceProvider)
-            .setConversationWorkspace(conversationId, binding);
+            .moveConversationToProject(conversationId, project.id);
       }
       _runtime.setWorkspace(binding);
       await _refreshRecentWorkspaces();
@@ -405,7 +587,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       if (conversationId.isNotEmpty) {
         await ref
             .read(chatServiceProvider)
-            .clearConversationWorkspace(conversationId);
+            .moveConversationToProject(conversationId, '');
       }
       _runtime.setWorkspace(null);
     } catch (error) {
@@ -433,14 +615,14 @@ class _ChatPageState extends ConsumerState<ChatPage> {
               const Padding(
                 padding: EdgeInsets.fromLTRB(20, 2, 20, 10),
                 child: Text(
-                  '工作目录',
+                  '项目',
                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                 ),
               ),
               if (_recentWorkspaces.isEmpty)
                 const Padding(
                   padding: EdgeInsets.symmetric(horizontal: 20, vertical: 18),
-                  child: Text('暂无最近使用的工作目录'),
+                  child: Text('暂无项目'),
                 )
               else
                 Flexible(
@@ -480,7 +662,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
               const Divider(height: 1),
               ListTile(
                 leading: const Icon(Icons.create_new_folder_outlined),
-                title: const Text('选择其他目录…'),
+                title: const Text('添加文件夹为项目…'),
                 enabled: !_workspaceBusy,
                 onTap: () {
                   Navigator.of(sheetContext).pop();
@@ -490,7 +672,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
               if (_runtime.workspace != null)
                 ListTile(
                   leading: const Icon(Icons.close_rounded),
-                  title: const Text('清除工作目录'),
+                  title: const Text('移出项目'),
                   enabled: !_workspaceBusy,
                   onTap: () {
                     Navigator.of(sheetContext).pop();
@@ -508,7 +690,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     final workspace = _runtime.workspace;
     final label = workspace?.workspaceName.trim().isNotEmpty == true
         ? workspace!.workspaceName.trim()
-        : '选择工作目录';
+        : '选择项目';
     return ConstrainedBox(
       constraints: const BoxConstraints(maxWidth: 180),
       child: Material(
@@ -550,6 +732,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   }
 
   void _onSend(String text) {
+    _composerDraftTimer?.cancel();
+    unawaited(_persistComposerDraftNow(_activeComposerDraftKey, value: ''));
     final reply = _replyTarget;
     if (reply != null) {
       setState(() => _replyTarget = null);
@@ -559,6 +743,53 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       replyToMessageId: reply?.id,
       replyToExcerpt: reply == null ? null : _replyExcerpt(reply),
     );
+  }
+
+  String _composerDraftKey() {
+    final conversationId = _runtime.conversationId?.trim() ?? '';
+    if (conversationId.isNotEmpty) return 'conversation:$conversationId';
+    final projectId = _runtime.workspace?.projectId.trim() ?? '';
+    return projectId.isEmpty ? 'new:recent' : 'new:project:$projectId';
+  }
+
+  void _handleComposerChanged() {
+    if (_loadingComposerDraft || _activeComposerDraftKey.isEmpty) return;
+    _composerDraftTimer?.cancel();
+    _composerDraftTimer = Timer(const Duration(milliseconds: 280), () {
+      unawaited(_persistComposerDraftNow(_activeComposerDraftKey));
+    });
+  }
+
+  Future<void> _persistComposerDraftNow(String key, {String? value}) async {
+    final normalizedKey = key.trim();
+    if (normalizedKey.isEmpty) return;
+    final storageKey = 'webchat_draft:$normalizedKey';
+    final draft = value ?? _composerController.text;
+    final preferences = await SharedPreferences.getInstance();
+    if (draft.trim().isEmpty) {
+      await preferences.remove(storageKey);
+    } else {
+      await preferences.setString(storageKey, draft);
+    }
+  }
+
+  Future<void> _syncComposerDraft() async {
+    final nextKey = _composerDraftKey();
+    if (nextKey == _activeComposerDraftKey) return;
+    final previousKey = _activeComposerDraftKey;
+    if (previousKey.isNotEmpty) {
+      await _persistComposerDraftNow(previousKey);
+    }
+    _activeComposerDraftKey = nextKey;
+    final preferences = await SharedPreferences.getInstance();
+    final draft = preferences.getString('webchat_draft:$nextKey') ?? '';
+    if (!mounted) return;
+    _loadingComposerDraft = true;
+    _composerController.value = TextEditingValue(
+      text: draft,
+      selection: TextSelection.collapsed(offset: draft.length),
+    );
+    _loadingComposerDraft = false;
   }
 
   Future<void> _startRecordedVoice() async {
@@ -739,8 +970,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     if (content.isNotEmpty) {
       return content.length <= 120 ? content : '${content.substring(0, 120)}…';
     }
-    if ((message.fileName ?? '').trim().isNotEmpty)
+    if ((message.fileName ?? '').trim().isNotEmpty) {
       return message.fileName!.trim();
+    }
     return switch (message.type) {
       MessageType.image => '[图片]',
       MessageType.video => '[视频]',
@@ -1212,7 +1444,10 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     var conversationId = _runtime.conversationId;
     if (conversationId == null || conversationId.isEmpty) {
       try {
-        final created = await _runtime.createConversation(characterId);
+        final created = await _runtime.createConversation(
+          characterId,
+          projectId: _runtime.workspace?.projectId ?? '',
+        );
         if (!created) {
           if (mounted) amitiaSnackBar(context, '无法创建语音通话会话');
           return;
@@ -1540,8 +1775,10 @@ class _ChatPageState extends ConsumerState<ChatPage> {
             return null;
           },
           ConversationUIAction.newConversation: (_) async {
-            _runtime.setWorkspace(null);
-            return _runtime.createConversation(characterId);
+            _runtime.startDraft();
+            _routeSyncedConversationId = '';
+            context.go(AppRoutes.chat);
+            return null;
           },
           ConversationUIAction.openDrawer: (_) => _openDrawer(context),
           ConversationUIAction.clear: (_) => _clearCurrentConversation(),
@@ -1762,6 +1999,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         });
 
     final emptyStateSlotCount = flowItems.isEmpty ? 1 : 0;
+    final workspaceName = _runtime.workspace?.workspaceName.trim() ?? '';
 
     final builtinConversation = AmitiaScaffold(
       resizeToAvoidBottomInset: false,
@@ -1806,6 +2044,11 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                                       'surface': 'empty-state',
                                     },
                                     actions: providerActions,
+                                    fallback: _buildEmptyChatState(
+                                      context,
+                                      characterName,
+                                      workspaceName,
+                                    ),
                                   ),
                                 );
                               }

@@ -115,17 +115,16 @@ func (r *Repository) ValidateConversationScope(ctx context.Context, scope Execut
 		return nil
 	}
 	var conversation struct {
-		CharacterID string `gorm:"column:character_id"`
-		Channel     string `gorm:"column:channel"`
+		Channel string `gorm:"column:channel"`
 	}
-	err := r.db.WithContext(ctx).Table("conversations").Select("character_id", "channel").Where("id = ?", scope.ConversationID).Take(&conversation).Error
+	err := r.db.WithContext(ctx).Table("conversations").Select("channel").Where("id = ?", scope.ConversationID).Take(&conversation).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return NewExtensionError(ErrSkillPermissionDenied, "Conversation scope is unavailable", scope.ConversationID, false, nil)
 	}
 	if err != nil {
 		return fmt.Errorf("validate conversation scope: %w", err)
 	}
-	if conversation.CharacterID != scope.CharacterID || (scope.Channel != "" && conversation.Channel != "" && !strings.EqualFold(conversation.Channel, scope.Channel)) {
+	if scope.Channel != "" && conversation.Channel != "" && !strings.EqualFold(conversation.Channel, scope.Channel) {
 		return NewExtensionError(ErrSkillPermissionDenied, "Conversation scope mismatch", scope.ConversationID, false, nil)
 	}
 	return nil

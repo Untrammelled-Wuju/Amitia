@@ -22,8 +22,14 @@ SPDX-License-Identifier: AGPL-3.0-only
 
     <div v-if="messages.length === 0 && !sending" class="empty-chat">
       <div class="empty-icon"><el-icon :size="48"><ChatDotRound /></el-icon></div>
-      <p class="empty-text">你好，我是 {{ charName || "AI 陪伴角色" }}</p>
-      <p class="empty-hint">随时可以和我聊聊天，我在这里陪你。</p>
+      <template v-if="workspaceName">
+        <p class="empty-text empty-text--project">你好，我是 {{ charName || "Amitia" }}</p>
+        <p class="empty-hint">你想在 {{ workspaceName }} 中构建什么？</p>
+      </template>
+      <template v-else>
+        <p class="empty-text">你好，我是 {{ charName || "AI 陪伴角色" }}</p>
+        <p class="empty-hint">随时可以和我聊聊天，或者做你想做的事。</p>
+      </template>
       <ChatEmptyStateExtensionHost :context="extensionContext || {}" />
     </div>
 
@@ -183,6 +189,13 @@ let durableRequestGeneration = 0;
 const conversationId = computed(() => String(
   props.extensionContext?.conversationId ?? props.messages[0]?.conversationId ?? "",
 ));
+const workspaceName = computed(() => {
+  const workspace = props.extensionContext?.workspace as
+    | Record<string, unknown>
+    | null
+    | undefined;
+  return String(workspace?.workspaceName ?? workspace?.name ?? "").trim();
+});
 
 const projectionContributions = computed(() => store.getVisibleContributions("chat.conversation.node", {
   ...(props.extensionContext ?? {}),
@@ -505,6 +518,9 @@ defineExpose({ rootEl });
   font-size: 18px;
   font-weight: 520;
   letter-spacing: -0.2px;
+}
+.empty-text--project {
+  font-weight: 650;
 }
 
 .empty-hint {

@@ -50,6 +50,11 @@ func NewRepository(ctx *app.AppContext) Repository {
 
 func (r *repository) ListConversations(q ConversationQuery) ([]Conversation, int64, error) {
 	query := r.db.Model(&Conversation{}).Where("deleted_at IS NULL")
+	if q.ArchivedOnly {
+		query = query.Where("COALESCE(archived_at, '') <> '' AND LOWER(channel) = 'web'")
+	} else if !q.IncludeArchived {
+		query = query.Where("COALESCE(archived_at, '') = ''")
+	}
 	if q.SpaceID != "" {
 		if q.IncludeLegacyDefault {
 			query = query.Where("space_id = ? OR space_id = '' OR space_id IS NULL OR space_id = 'default'", q.SpaceID)
@@ -63,8 +68,10 @@ func (r *repository) ListConversations(q ConversationQuery) ([]Conversation, int
 	if q.Source != "" {
 		query = query.Where("source = ?", q.Source)
 	}
-	if q.CharacterID != "" {
-		query = query.Where("character_id = ?", q.CharacterID)
+	if q.ProjectID != "" {
+		query = query.Where("project_id = ?", q.ProjectID)
+	} else if q.RecentOnly {
+		query = query.Where("COALESCE(project_id, '') = ''")
 	}
 	if q.Keyword != "" {
 		query = query.Where("title LIKE ?", "%"+q.Keyword+"%")

@@ -66,13 +66,19 @@ func (s *service) CreateConversationForSpace(req *CreateConversationRequest, spa
 	if req == nil {
 		return nil, fmt.Errorf("conversation request is required")
 	}
-	if strings.TrimSpace(req.CharacterID) != "" {
-		if _, err := s.getRoleRuntimeProfileForSpace(req.CharacterID, spaceID); err != nil {
-			return nil, fmt.Errorf("角色不存在")
+	projectID := strings.TrimSpace(req.ProjectID)
+	if existing, err := s.findReusableEmptyConversationForSpace(projectID, req.Channel, req.Source, spaceID); err != nil {
+		return nil, err
+	} else if existing != nil {
+		return existing, nil
+	}
+	if projectID != "" {
+		if _, err := s.requireProjectForSpace(projectID, spaceID); err != nil {
+			return nil, err
 		}
 	}
 	if req.Title == "" {
-		req.Title = "New Chat"
+		req.Title = "新对话"
 	}
 	if req.Channel == "" {
 		req.Channel = "web"
@@ -81,12 +87,12 @@ func (s *service) CreateConversationForSpace(req *CreateConversationRequest, spa
 		req.Source = "manual"
 	}
 	owner := normalizeConversationOwner(spaceID)
-	c := &Conversation{ID: uuid.New().String(), SpaceID: owner, CharacterID: req.CharacterID, Title: req.Title, Channel: req.Channel, Source: req.Source, PeerID: req.PeerID}
+	c := &Conversation{ID: uuid.New().String(), SpaceID: owner, ProjectID: projectID, Title: req.Title, Channel: req.Channel, Source: req.Source, PeerID: req.PeerID}
 
 	err := s.db.Transaction(func(tx *gorm.DB) error {
 		now := time.Now().Format("2006-01-02 15:04:05")
-		if err := tx.Exec("INSERT INTO conversations (id, space_id, character_id, title, channel, source, peer_id, created_at, updated_at, revision) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)",
-			c.ID, c.SpaceID, c.CharacterID, c.Title, c.Channel, c.Source, c.PeerID, now, now).Error; err != nil {
+		if err := tx.Exec("INSERT INTO conversations (id, space_id, project_id, title, channel, source, peer_id, created_at, updated_at, revision) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)",
+			c.ID, c.SpaceID, c.ProjectID, c.Title, c.Channel, c.Source, c.PeerID, now, now).Error; err != nil {
 			return err
 		}
 		if err := s.recordConversationChangeTx(tx, c, sync.OpCreate, 1, spaceID); err != nil {
@@ -128,14 +134,13 @@ func (s *service) EnsureChannelConversationForSpace(channel, spaceID string) (*C
 
 	now := time.Now().Format("2006-01-02 15:04:05")
 	c = Conversation{
-		ID:          uuid.New().String(),
-		SpaceID:     owner,
-		CharacterID: "",
-		Title:       title,
-		Channel:     channel,
-		Source:      "system",
-		CreatedAt:   now,
-		UpdatedAt:   now,
+		ID:        uuid.New().String(),
+		SpaceID:   owner,
+		Title:     title,
+		Channel:   channel,
+		Source:    "system",
+		CreatedAt: now,
+		UpdatedAt: now,
 	}
 	if err := s.persistConversationWithChange(&c, owner); err != nil {
 		return nil, err
@@ -164,10 +169,8 @@ func (s *service) DeleteConversation(id string) (bool, error) {
 }
 
 func (s *service) DeleteConversationForSpace(id string, spaceID string) (bool, error) {
-	characterDeleted := false
 	err := s.db.Transaction(func(tx *gorm.DB) error {
-		linked, err := s.tombstoneConversationTx(tx, id, spaceID)
-		characterDeleted = linked
+		_, err := s.tombstoneConversationTx(tx, id, spaceID)
 		return err
 	})
 	if err != nil {
@@ -176,22 +179,22 @@ func (s *service) DeleteConversationForSpace(id string, spaceID string) (bool, e
 	if err := pipelinecheckpoint.New(s.db).ResetConversation(id); err != nil {
 		return false, err
 	}
-	return characterDeleted, nil
+	return false, nil
 }
 
 func (s *service) tombstoneConversationTx(tx *gorm.DB, id string, spaceID string) (bool, error) {
 	var convRow struct {
-		ID          string
-		SpaceID     string
-		CharacterID string
-		Title       string
-		Channel     string
-		Source      string
-		PeerID      string
-		Revision    int64
+		ID        string
+		SpaceID   string
+		ProjectID string
+		Title     string
+		Channel   string
+		Source    string
+		PeerID    string
+		Revision  int64
 	}
 	if err := tx.Table("conversations").Where("id = ? AND deleted_at IS NULL", id).
-		Select("id", "space_id", "character_id", "title", "channel", "source", "peer_id", "COALESCE(revision, 1) AS revision").Take(&convRow).Error; err != nil {
+		Select("id", "space_id", "project_id", "title", "channel", "source", "peer_id", "COALESCE(revision, 1) AS revision").Take(&convRow).Error; err != nil {
 		return false, err
 	}
 	if !conversationOwnerMatches(convRow.SpaceID, spaceID) {
@@ -237,39 +240,6 @@ func (s *service) tombstoneConversationTx(tx *gorm.DB, id string, spaceID string
 		return false, err
 	}
 
-	characterChanged := false
-	if convRow.CharacterID != "" {
-		var characterRow struct {
-			ID       string
-			Revision int64
-		}
-		if err := tx.Table("characters").Where("id = ? AND deleted_at IS NULL", convRow.CharacterID).
-			Select("id", "COALESCE(revision, 1) AS revision").Take(&characterRow).Error; err == nil {
-			newCharacterRevision := characterRow.Revision + 1
-			result := tx.Table("characters").Where("id = ? AND revision = ?", characterRow.ID, characterRow.Revision).Updates(map[string]interface{}{
-				"conversation_id": "", "updated_at": now, "revision": newCharacterRevision,
-			})
-			if result.Error != nil {
-				return false, result.Error
-			}
-			if result.RowsAffected == 0 {
-				return false, fmt.Errorf("角色版本冲突")
-			}
-			if s.changeRecorder != nil {
-				payload, err := json.Marshal(map[string]interface{}{"id": characterRow.ID, "revision": newCharacterRevision, "meta": map[string]interface{}{"conversation_id": ""}})
-				if err != nil {
-					return false, err
-				}
-				if _, err := s.changeRecorder.RecordChange(tx, sync.EntityTypeCharacter, sync.EntityID(characterRow.ID), sync.OpUpdate, newCharacterRevision, newBusinessMutationID(sync.EntityTypeCharacter, characterRow.ID, sync.OpUpdate), normalizeChangeSpaceID(spaceID), sync.ScopeDevice, payload); err != nil {
-					return false, err
-				}
-			}
-			characterChanged = true
-		} else if err != gorm.ErrRecordNotFound {
-			return false, err
-		}
-	}
-
 	newRevision := convRow.Revision + 1
 	result := tx.Table("conversations").Where("id = ? AND revision = ? AND deleted_at IS NULL", id, convRow.Revision).Updates(map[string]interface{}{
 		"deleted_at": now, "updated_at": now, "revision": newRevision,
@@ -280,11 +250,11 @@ func (s *service) tombstoneConversationTx(tx *gorm.DB, id string, spaceID string
 	if result.RowsAffected == 0 {
 		return false, fmt.Errorf("会话版本冲突")
 	}
-	conversation := &Conversation{ID: convRow.ID, SpaceID: convRow.SpaceID, CharacterID: convRow.CharacterID, Title: convRow.Title, Channel: convRow.Channel, Source: convRow.Source, PeerID: convRow.PeerID}
+	conversation := &Conversation{ID: convRow.ID, SpaceID: convRow.SpaceID, ProjectID: convRow.ProjectID, Title: convRow.Title, Channel: convRow.Channel, Source: convRow.Source, PeerID: convRow.PeerID}
 	if err := s.recordConversationChangeTx(tx, conversation, sync.OpDelete, newRevision, spaceID); err != nil {
 		return false, err
 	}
-	return characterChanged, nil
+	return false, nil
 }
 
 func (s *service) DeleteAllConversations() error {
@@ -316,55 +286,6 @@ func (s *service) DeleteAllConversationsForSpace(spaceID string) error {
 		}
 	}
 	return nil
-}
-
-func (s *service) ChangeCharacter(convID, charID string) (*Conversation, error) {
-	return s.ChangeCharacterForSpace(convID, charID, requestidentity.CanonicalSpaceID())
-}
-
-func (s *service) ChangeCharacterForSpace(convID, charID, spaceID string) (*Conversation, error) {
-	charID = strings.TrimSpace(charID)
-	if charID == "" {
-		return nil, fmt.Errorf("角色不存在")
-	}
-	if _, err := s.getRoleRuntimeProfileForSpace(charID, spaceID); err != nil {
-		return nil, fmt.Errorf("角色不存在")
-	}
-	conv, err := s.requireConversationOwner(convID, spaceID)
-	if err != nil {
-		return nil, fmt.Errorf("会话不存在")
-	}
-
-	actualCharacterID := strings.TrimSpace(conv.CharacterID)
-	if actualCharacterID != "" && actualCharacterID != strings.TrimSpace(charID) {
-		msgCount := s.repo.CountMessagesByConv(convID)
-		if msgCount > 0 {
-			return nil, fmt.Errorf("非空会话禁止更换角色")
-		}
-	}
-
-	err = s.db.Transaction(func(tx *gorm.DB) error {
-		var currentRevision int64
-		if err := tx.Table("conversations").Where("id = ?", convID).Select("COALESCE(revision, 1)").Scan(&currentRevision).Error; err != nil {
-			return err
-		}
-		newRevision := currentRevision + 1
-		now := time.Now().Format("2006-01-02 15:04:05")
-		if err := tx.Table("conversations").Where("id = ?", convID).Updates(map[string]interface{}{
-			"character_id": charID,
-			"updated_at":   now,
-			"revision":     newRevision,
-		}).Error; err != nil {
-			return err
-		}
-		updated := *conv
-		updated.CharacterID = charID
-		return s.recordConversationChangeTx(tx, &updated, sync.OpUpdate, newRevision, spaceID)
-	})
-	if err != nil {
-		return nil, err
-	}
-	return s.requireConversationOwner(convID, spaceID)
 }
 
 func (s *service) GetStats() (*ChatStatsResponse, error) {
@@ -416,13 +337,6 @@ func (s *service) ExportConversation(convID string, format string) (string, erro
 	}
 
 	charName := ""
-	if conv.CharacterID != "" {
-		var c struct {
-			Name string `gorm:"column:name"`
-		}
-		s.db.Table("characters").Where("id = ?", conv.CharacterID).Select("name").Scan(&c)
-		charName = c.Name
-	}
 
 	dataDir := "data" + "/" + "exports"
 	_ = os.MkdirAll(dataDir, 0o700)

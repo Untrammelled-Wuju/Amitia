@@ -28,9 +28,8 @@ func (c *ChatBackupContributor) ID() string             { return "chat" }
 func (c *ChatBackupContributor) Name() string           { return "Chat" }
 func (c *ChatBackupContributor) Dependencies() []string { return []string{"character"} }
 
-type chatConversationV1 struct {
+type chatConversationV2 struct {
 	ID           string `json:"id"`
-	CharacterID  string `json:"characterId"`
 	Title        string `json:"title"`
 	Channel      string `json:"channel"`
 	Source       string `json:"source"`
@@ -41,9 +40,10 @@ type chatConversationV1 struct {
 	UpdatedAt    string `json:"updatedAt"`
 }
 
-type chatMessageV1 struct {
+type chatMessageV2 struct {
 	ID             string `json:"id"`
 	ConversationID string `json:"conversationId"`
+	CharacterID    string `json:"characterId"`
 	Sequence       int64  `json:"sequence"`
 	Role           string `json:"role"`
 	Content        string `json:"content"`
@@ -55,15 +55,18 @@ type chatMessageV1 struct {
 
 func (c *ChatBackupContributor) Plan(ctx context.Context, req dataportability.BackupRequest) ([]dataportability.BackupComponentPlan, error) {
 	var convCount int64
-	c.DB.WithContext(ctx).Model(&Conversation{}).Count(&convCount)
+	c.DB.WithContext(ctx).Model(&Conversation{}).Where("COALESCE(project_id, '') = ''").Count(&convCount)
 	var msgCount int64
-	c.DB.WithContext(ctx).Model(&Message{}).Count(&msgCount)
+	c.DB.WithContext(ctx).Model(&Message{}).
+		Joins("JOIN conversations ON conversations.id = messages.conversation_id").
+		Where("COALESCE(conversations.project_id, '') = ''").
+		Count(&msgCount)
 
 	return []dataportability.BackupComponentPlan{
 		{
 			ID:            ComponentIDChatConversations,
 			Kind:          dataportability.KindNDJSON,
-			LogicalName:   "chat.conversations.v1",
+			LogicalName:   "chat.conversations.v2",
 			Required:      true,
 			SourceOfTruth: true,
 			ItemCount:     convCount,
@@ -72,7 +75,7 @@ func (c *ChatBackupContributor) Plan(ctx context.Context, req dataportability.Ba
 		{
 			ID:            ComponentIDChatMessages,
 			Kind:          dataportability.KindNDJSON,
-			LogicalName:   "chat.messages.v1",
+			LogicalName:   "chat.messages.v2",
 			Required:      true,
 			SourceOfTruth: true,
 			ItemCount:     msgCount,
@@ -82,13 +85,13 @@ func (c *ChatBackupContributor) Plan(ctx context.Context, req dataportability.Ba
 }
 
 func (c *ChatBackupContributor) Export(ctx context.Context, req dataportability.BackupRequest, out dataportability.BackupWriter) error {
-	convComp, err := out.CreateComponent(ComponentIDChatConversations, "chat.conversations.v1", dataportability.KindNDJSON)
+	convComp, err := out.CreateComponent(ComponentIDChatConversations, "chat.conversations.v2", dataportability.KindNDJSON)
 	if err != nil {
 		return fmt.Errorf("export: create conversations component: %w", err)
 	}
 	defer convComp.Close()
 
-	rows, err := c.DB.WithContext(ctx).Model(&Conversation{}).Rows()
+	rows, err := c.DB.WithContext(ctx).Model(&Conversation{}).Where("COALESCE(project_id, '') = ''").Rows()
 	if err != nil {
 		return err
 	}
@@ -98,9 +101,8 @@ func (c *ChatBackupContributor) Export(ctx context.Context, req dataportability.
 		if err := c.DB.ScanRows(rows, &conv); err != nil {
 			continue
 		}
-		rec := chatConversationV1{
+		rec := chatConversationV2{
 			ID:           conv.ID,
-			CharacterID:  conv.CharacterID,
 			Title:        conv.Title,
 			Channel:      conv.Channel,
 			Source:       conv.Source,
@@ -118,13 +120,17 @@ func (c *ChatBackupContributor) Export(ctx context.Context, req dataportability.
 		convComp.Write([]byte("\n"))
 	}
 
-	msgComp, err := out.CreateComponent(ComponentIDChatMessages, "chat.messages.v1", dataportability.KindNDJSON)
+	msgComp, err := out.CreateComponent(ComponentIDChatMessages, "chat.messages.v2", dataportability.KindNDJSON)
 	if err != nil {
 		return fmt.Errorf("export: create messages component: %w", err)
 	}
 	defer msgComp.Close()
 
-	msgRows, err := c.DB.WithContext(ctx).Model(&Message{}).Order("conversation_id, sequence").Rows()
+	msgRows, err := c.DB.WithContext(ctx).Model(&Message{}).
+		Joins("JOIN conversations ON conversations.id = messages.conversation_id").
+		Where("COALESCE(conversations.project_id, '') = ''").
+		Order("messages.conversation_id, messages.sequence").
+		Rows()
 	if err != nil {
 		return err
 	}
@@ -134,9 +140,10 @@ func (c *ChatBackupContributor) Export(ctx context.Context, req dataportability.
 		if err := c.DB.ScanRows(msgRows, &msg); err != nil {
 			continue
 		}
-		rec := chatMessageV1{
+		rec := chatMessageV2{
 			ID:             msg.ID,
 			ConversationID: msg.ConversationID,
+			CharacterID:    msg.CharacterID,
 			Sequence:       msg.Sequence,
 			Role:           msg.Role,
 			Content:        msg.Content,
@@ -161,11 +168,11 @@ func (c *ChatBackupContributor) PreviewImport(ctx context.Context, req dataporta
 	convPreview := dataportability.ImportComponentPreview{
 		ComponentID: ComponentIDChatConversations,
 		Kind:        dataportability.KindNDJSON,
-		LogicalName: "chat.conversations.v1",
+		LogicalName: "chat.conversations.v2",
 		Collisions:  make([]dataportability.ComponentCollision, 0),
 		Warnings:    make([]string, 0),
 	}
-	convRC, err := in.ReadComponent(ComponentIDChatConversations + ".v1")
+	convRC, err := in.ReadComponent(ComponentIDChatConversations + ".v2")
 	if err == nil {
 		defer convRC.Close()
 		scanner := bufio.NewScanner(convRC)
@@ -175,7 +182,7 @@ func (c *ChatBackupContributor) PreviewImport(ctx context.Context, req dataporta
 				continue
 			}
 			convPreview.ItemCount++
-			var rec chatConversationV1
+			var rec chatConversationV2
 			if err := json.Unmarshal(line, &rec); err != nil {
 				continue
 			}
@@ -196,9 +203,9 @@ func (c *ChatBackupContributor) PreviewImport(ctx context.Context, req dataporta
 	msgPreview := dataportability.ImportComponentPreview{
 		ComponentID: ComponentIDChatMessages,
 		Kind:        dataportability.KindNDJSON,
-		LogicalName: "chat.messages.v1",
+		LogicalName: "chat.messages.v2",
 	}
-	msgRC, err := in.ReadComponent(ComponentIDChatMessages + ".v1")
+	msgRC, err := in.ReadComponent(ComponentIDChatMessages + ".v2")
 	if err == nil {
 		defer msgRC.Close()
 		scanner := bufio.NewScanner(msgRC)
@@ -234,20 +241,20 @@ func (c *ChatBackupContributor) RestoreChats(ctx context.Context, in dataportabi
 	}
 	idMap := opts.IdentityMap
 
-	convRC, err := in.ReadComponent(ComponentIDChatConversations + ".v1")
+	convRC, err := in.ReadComponent(ComponentIDChatConversations + ".v2")
 	if err != nil {
 		return fmt.Errorf("restore: conversations component missing: %w", err)
 	}
 	defer convRC.Close()
 
-	conversations := make([]chatConversationV1, 0)
+	conversations := make([]chatConversationV2, 0)
 	scanner := bufio.NewScanner(convRC)
 	for scanner.Scan() {
 		line := scanner.Bytes()
 		if len(line) == 0 {
 			continue
 		}
-		var rec chatConversationV1
+		var rec chatConversationV2
 		if err := json.Unmarshal(line, &rec); err != nil {
 			continue
 		}
@@ -269,10 +276,8 @@ func (c *ChatBackupContributor) RestoreChats(ctx context.Context, in dataportabi
 				newID = uuid.New().String()
 			}
 		}
-		newCharID := idMap.RemapCharacterRef(rec.CharacterID)
 		conv := Conversation{
 			ID:           newID,
-			CharacterID:  newCharID,
 			Title:        rec.Title,
 			Channel:      rec.Channel,
 			Source:       rec.Source,
@@ -289,7 +294,7 @@ func (c *ChatBackupContributor) RestoreChats(ctx context.Context, in dataportabi
 		idMap.AddConversation(rec.ID, newID)
 	}
 
-	msgRC, err := in.ReadComponent(ComponentIDChatMessages + ".v1")
+	msgRC, err := in.ReadComponent(ComponentIDChatMessages + ".v2")
 	if err != nil {
 		return nil
 	}
@@ -301,7 +306,7 @@ func (c *ChatBackupContributor) RestoreChats(ctx context.Context, in dataportabi
 		if len(line) == 0 {
 			continue
 		}
-		var rec chatMessageV1
+		var rec chatMessageV2
 		if err := json.Unmarshal(line, &rec); err != nil {
 			continue
 		}
@@ -310,6 +315,7 @@ func (c *ChatBackupContributor) RestoreChats(ctx context.Context, in dataportabi
 		msg := Message{
 			ID:             newMsgID,
 			ConversationID: newConvID,
+			CharacterID:    idMap.RemapCharacterRef(rec.CharacterID),
 			Sequence:       rec.Sequence,
 			Role:           rec.Role,
 			Content:        rec.Content,

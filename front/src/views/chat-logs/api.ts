@@ -68,10 +68,6 @@ export function deleteSummaryApi(convId: string) {
   return del(`/api/chats/conversations/${convId}/summary`);
 }
 
-export function switchCharacterApi(convId: string, characterId: string) {
-  return put(`/api/chats/conversations/${convId}/character`, { characterId });
-}
-
 export function fetchContextPreviewApi(conversationId: string) {
   return get<any>(
     `/api/agent/context-preview?conversationId=${conversationId}`,

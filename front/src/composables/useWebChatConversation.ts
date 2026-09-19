@@ -27,17 +27,15 @@ export function useWebChatConversation(
   setLastPolledMsgId: (id: string | null) => void,
   setCurrentCharName: (name: string) => void,
 ) {
-  const { get, post, del } = useApi();
+  const { get, del } = useApi();
   const { cachedGet, saveCache, invalidateCache } = useCachedApi();
 
   const characters = ref<any[]>([]);
   const conversations = ref<any[]>([]);
-  const importBatches = ref<any[]>([]);
   const memories = ref<any[]>([]);
 
   const webMsgCount = ref(0);
 
-  const showDrawer = ref(false);
   const showCharPicker = ref(false);
   const showMemories = ref(false);
 
@@ -137,8 +135,8 @@ export function useWebChatConversation(
   async function handleSwitchChar(c: any) {
     try {
       await ElMessageBox.confirm(
-        "切换角色后，将加载新角色的对话记录。",
-        "切换角色",
+        "切换后，当前对话的后续消息将使用新角色，历史消息保持不变。",
+        "选择角色",
         {
           confirmButtonText: "确认切换",
           cancelButtonText: "取消",
@@ -148,34 +146,18 @@ export function useWebChatConversation(
     } catch {
       return;
     }
-    localStorage.setItem("webchat-last-conv", "char");
-    localStorage.removeItem("webchat-conv-id");
     selectCharacter(c);
     showCharPicker.value = false;
     ElMessage.success("已切换角色: " + c.name);
-    await loadCharacterConversation();
-    if (!convId.value) messages.value = [];
-    fetchConversations();
+    await fetchConversations();
   }
 
   async function loadCharacterConversation() {
-    if (!characterId.value) return;
-    const c = characters.value.find((x: any) => x.id === characterId.value);
-    let dedicatedConvId = localStorage.getItem("webchat-conv-id") || c?.conversationId;
-    if (dedicatedConvId && !(await conversationExistsOnServer(dedicatedConvId))) {
-      localStorage.removeItem("webchat-conv-id");
-      dedicatedConvId = "";
+    let conversationID = String(convId.value || "").trim();
+    if (conversationID && !(await conversationExistsOnServer(conversationID))) {
+      conversationID = "";
     }
-    if (!dedicatedConvId) {
-      try {
-        const created = await post<any>("/api/web-chat/conversations", {
-          characterId: characterId.value,
-          title: "",
-        });
-        if (created?.id) dedicatedConvId = created.id;
-      } catch {}
-    }
-    if (!dedicatedConvId) {
+    if (!conversationID) {
       disconnectSSE();
       convId.value = "";
       convTitle.value = "";
@@ -184,11 +166,11 @@ export function useWebChatConversation(
       return;
     }
     disconnectSSE();
-    convId.value = dedicatedConvId;
-    convTitle.value = c?.name ? `${c.name} 的对话` : "";
+    convId.value = conversationID;
+    if (!convTitle.value) convTitle.value = "新对话";
     const version = ++messagesVersion;
     try {
-      const latestPage = await fetchLatestMessagesPage(dedicatedConvId);
+      const latestPage = await fetchLatestMessagesPage(conversationID);
       if (version !== messagesVersion) return;
       const r = latestPage.response;
       const items = r?.messages || r?.items || [];
@@ -209,10 +191,6 @@ export function useWebChatConversation(
   }
 
   async function fetchConversations() {
-    if (!characterId.value) {
-      conversations.value = [];
-      return;
-    }
     try {
       const r = await get<any>("/api/web-chat/conversations", {
         pageSize: 100,
@@ -223,56 +201,6 @@ export function useWebChatConversation(
       if (webConv) webMsgCount.value = webConv?.messageCount || 0;
     } catch {
       conversations.value = [];
-    }
-  }
-
-  async function handleSelectConv(conv: any) {
-    showDrawer.value = false;
-    const convIdStr = String(conv?.id || "");
-    disconnectSSE();
-    convId.value = conv.id;
-    convTitle.value = conv.title || "";
-    msgPage.value = 1;
-    hasMoreHistory.value = false;
-    const version = ++messagesVersion;
-    try {
-      const latestPage = await fetchLatestMessagesPage(String(conv.id));
-      if (version !== messagesVersion) return;
-      const r = latestPage.response;
-      const items = r?.messages || r?.items || [];
-      msgPage.value = latestPage.page;
-      hasMoreHistory.value = latestPage.page > 1;
-      if (items.length) {
-        mergeMessages(items);
-        scrollToBottom();
-      } else {
-        messages.value = [];
-      }
-      setLastPolledMsgId(messages.value[messages.value.length - 1]?.id || null);
-      connectSSE();
-    } catch {
-      if (version !== messagesVersion) return;
-      messages.value = [];
-    }
-  }
-
-  async function handleContinueImport(batch: any) {
-    showDrawer.value = false;
-    if (!batch?.id) return;
-    try {
-      await post<any>("/api/web-chat/conversations/from-import", {
-        conversationId: batch.id,
-      });
-      await handleSelectConv({
-        ...batch,
-        id: batch.id,
-        channel: batch.channel || "web",
-        source: batch.source || "import",
-        characterId: batch.characterId || batch.character_id || characterId.value,
-      });
-      ElMessage.success("已切换到导入记录对话");
-    } catch (error: any) {
-      ElMessage.error(error?.response?.data?.msg || "无法继续导入记录对话");
     }
   }
 
@@ -331,18 +259,14 @@ export function useWebChatConversation(
   return {
     characters,
     conversations,
-    importBatches,
     memories,
     webMsgCount,
-    showDrawer,
     showCharPicker,
     showMemories,
     selectCharacter,
     handleSwitchChar,
     loadCharacterConversation,
     fetchConversations,
-    handleSelectConv,
-    handleContinueImport,
     handleViewMemories,
     fetchWebMsgCount,
     refreshCharacters,

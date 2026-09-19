@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:go_router/go_router.dart';
 import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_motion.dart';
@@ -13,6 +15,10 @@ import '../models/character.dart';
 import '../settings/appearance_preferences.dart';
 import '../services/extension_service.dart';
 import '../services/providers.dart';
+import '../services/workspace_service.dart';
+import '../native_bridge/providers/native_bridge_relay_provider.dart';
+import '../models/project.dart';
+import '../models/conversation.dart';
 import '../ui_runtime/ui_navigation_registry.dart';
 import '../ui_runtime/ui_runtime_controller.dart';
 import 'amitia_misc.dart';
@@ -106,11 +112,6 @@ class _AmitiaDrawerState extends ConsumerState<AmitiaDrawer> {
         Icons.menu_book_outlined,
       ),
       const _DrawerSearchPage(
-        '聊天记录',
-        AppRoutes.chatLogs,
-        Icons.history_outlined,
-      ),
-      const _DrawerSearchPage(
         '导入记录',
         AppRoutes.chatImport,
         Icons.file_upload_outlined,
@@ -138,6 +139,280 @@ class _AmitiaDrawerState extends ConsumerState<AmitiaDrawer> {
       ref.read(currentCharacterIdProvider.notifier).state = result.characterId!;
     }
     _navigateTo(result.route);
+  }
+
+  Future<void> _createConversation({String projectId = ''}) async {
+    final id = projectId.trim();
+    ref.read(activeConversationIdProvider.notifier).state = '';
+    _navigateTo(
+      id.isEmpty
+          ? AppRoutes.chat
+          : '${AppRoutes.chat}?projectId=${Uri.encodeQueryComponent(id)}',
+    );
+  }
+
+  Future<WorkspaceMountDto?> _pickWorkspaceMount() async {
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      final dispatcher = ref.read(nativeBridgePlatformDispatcherProvider);
+      final response = await dispatcher.execute(<String, dynamic>{
+        'protocolVersion': 1,
+        'requestId': 'project-picker-${DateTime.now().microsecondsSinceEpoch}',
+        'platform': 'android',
+        'operation': 'workspace.saf.pick_tree',
+        'payload': const <String, dynamic>{},
+      });
+      if ((response['status'] ?? '').toString() != 'success') {
+        final rawError = response['error'];
+        final error = rawError is Map
+            ? Map<String, dynamic>.from(rawError)
+            : const <String, dynamic>{};
+        throw StateError((error['message'] ?? '系统目录授权失败').toString());
+      }
+      final rawResult = response['result'];
+      final result = rawResult is Map
+          ? Map<String, dynamic>.from(rawResult)
+          : const <String, dynamic>{};
+      if (result['cancelled'] == true) return null;
+      final grantId = (result['grantId'] ?? '').toString().trim();
+      if (grantId.isEmpty) throw StateError('系统目录授权未返回 grantId');
+      return ref
+          .read(workspaceServiceProvider)
+          .registerSaf(
+            name: (result['name'] ?? '项目').toString(),
+            grantId: grantId,
+            readOnly: result['readOnly'] == true,
+          );
+    }
+    final path = await FilePicker.platform.getDirectoryPath(
+      dialogTitle: '选择项目文件夹',
+    );
+    final localRoot = path?.trim() ?? '';
+    if (localRoot.isEmpty) return null;
+    final segments = localRoot
+        .replaceAll('\\', '/')
+        .split('/')
+        .where((segment) => segment.trim().isNotEmpty)
+        .toList(growable: false);
+    return ref
+        .read(workspaceServiceProvider)
+        .registerLocal(
+          name: segments.isEmpty ? '项目' : segments.last,
+          localRoot: localRoot,
+        );
+  }
+
+  Future<void> _addProject() async {
+    try {
+      final mount = await _pickWorkspaceMount();
+      if (mount == null || !mounted) return;
+      final sidebar = await ref.read(chatServiceProvider).conversationSidebar();
+      if (!sidebar.projects.any((project) => project.workspaceId == mount.id)) {
+        await ref
+            .read(chatServiceProvider)
+            .createProject(
+              name: mount.name.trim().isEmpty ? '项目' : mount.name,
+              workspaceId: mount.id,
+              rootUri: mount.rootUri,
+            );
+      }
+      ref.invalidate(conversationSidebarProvider);
+      if (mounted) amitiaSnackBar(context, '项目已添加');
+    } catch (error) {
+      if (mounted) amitiaSnackBar(context, '添加项目失败：$error');
+    }
+  }
+
+  Future<void> _removeProject(ProjectDto project) async {
+    final confirmed = await showAmitiaConfirmDialog(
+      context,
+      title: '移除项目',
+      message: '移除“${project.name}”项目？项目中的对话会移到最近，不会删除聊天记录。',
+      confirmLabel: '移除',
+      isDestructive: true,
+    );
+    if (confirmed != true) return;
+    try {
+      await ref.read(chatServiceProvider).deleteProject(project.id);
+      ref.invalidate(conversationSidebarProvider);
+      if (mounted) amitiaSnackBar(context, '项目已移除');
+    } catch (error) {
+      if (mounted) amitiaSnackBar(context, '移除项目失败：$error');
+    }
+  }
+
+  Future<void> _toggleProjectPin(ProjectDto project) async {
+    try {
+      await ref
+          .read(chatServiceProvider)
+          .updateProject(project.id, pinned: project.pinnedAt.isEmpty);
+      ref.invalidate(conversationSidebarProvider);
+    } catch (error) {
+      if (mounted) amitiaSnackBar(context, '更新项目置顶失败：$error');
+    }
+  }
+
+  Future<void> _openProject(ProjectDto project) async {
+    try {
+      final target = await ref
+          .read(chatServiceProvider)
+          .projectLocation(project.id);
+      final path = (target['path'] ?? '').toString().trim();
+      final uri = (target['uri'] ?? '').toString().trim();
+      if (path.isEmpty && uri.isEmpty) {
+        throw StateError('项目目录位置不可用');
+      }
+      final dispatcher = ref.read(nativeBridgePlatformDispatcherProvider);
+      final response = await dispatcher.execute(<String, dynamic>{
+        'protocolVersion': 1,
+        'requestId': 'project-open-${DateTime.now().microsecondsSinceEpoch}',
+        'platform': 'android',
+        'operation': 'workspace.open',
+        'payload': <String, dynamic>{
+          if (path.isNotEmpty) 'path': path,
+          if (uri.isNotEmpty) 'uri': uri,
+        },
+      });
+      if ((response['status'] ?? '').toString() != 'success') {
+        final rawError = response['error'];
+        final error = rawError is Map
+            ? Map<String, dynamic>.from(rawError)
+            : const <String, dynamic>{};
+        throw StateError((error['message'] ?? '打开项目目录失败').toString());
+      }
+    } catch (error) {
+      if (mounted) amitiaSnackBar(context, '打开项目目录失败：$error');
+    }
+  }
+
+  Future<void> _renameProject(ProjectDto project) async {
+    final controller = TextEditingController(text: project.name);
+    final name = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('重命名项目'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(hintText: '输入项目名称'),
+          onSubmitted: (value) {
+            final text = value.trim();
+            if (text.isNotEmpty) Navigator.pop(dialogContext, text);
+          },
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () {
+              final text = controller.text.trim();
+              if (text.isNotEmpty) Navigator.pop(dialogContext, text);
+            },
+            child: const Text('保存'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (name == null || name == project.name) return;
+    try {
+      await ref.read(chatServiceProvider).updateProject(project.id, name: name);
+      ref.invalidate(conversationSidebarProvider);
+    } catch (error) {
+      if (mounted) amitiaSnackBar(context, '重命名项目失败：$error');
+    }
+  }
+
+  Future<void> _changeProjectRoot(ProjectDto project) async {
+    try {
+      final mount = await _pickWorkspaceMount();
+      if (mount == null || !mounted) return;
+      await ref
+          .read(chatServiceProvider)
+          .updateProject(
+            project.id,
+            workspaceId: mount.id,
+            rootUri: mount.rootUri,
+          );
+      ref.invalidate(conversationSidebarProvider);
+      if (mounted) amitiaSnackBar(context, '项目根目录已更新');
+    } catch (error) {
+      if (mounted) amitiaSnackBar(context, '更新项目根目录失败：$error');
+    }
+  }
+
+  Future<void> _renameConversation(ConversationDto conversation) async {
+    final controller = TextEditingController(text: conversation.title);
+    final title = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('重命名对话'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(hintText: '输入对话名称'),
+          onSubmitted: (value) {
+            final text = value.trim();
+            if (text.isNotEmpty) Navigator.pop(dialogContext, text);
+          },
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () {
+              final text = controller.text.trim();
+              if (text.isNotEmpty) Navigator.pop(dialogContext, text);
+            },
+            child: const Text('保存'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (title == null || title == conversation.title) return;
+    try {
+      await ref
+          .read(chatServiceProvider)
+          .renameConversation(conversation.id, title);
+      ref.invalidate(conversationSidebarProvider);
+    } catch (error) {
+      if (mounted) amitiaSnackBar(context, '重命名失败：$error');
+    }
+  }
+
+  Future<void> _toggleConversationPin(ConversationDto conversation) async {
+    try {
+      await ref
+          .read(chatServiceProvider)
+          .setConversationPinned(
+            conversation.id,
+            conversation.pinnedAt.isEmpty,
+          );
+      ref.invalidate(conversationSidebarProvider);
+    } catch (error) {
+      if (mounted) amitiaSnackBar(context, '更新置顶失败：$error');
+    }
+  }
+
+  Future<void> _archiveConversation(ConversationDto conversation) async {
+    try {
+      final archivingActive =
+          ref.read(activeConversationIdProvider).trim() == conversation.id;
+      await ref.read(chatServiceProvider).archiveConversation(conversation.id);
+      ref.invalidate(conversationSidebarProvider);
+      if (!mounted) return;
+      if (archivingActive) {
+        ref.read(activeConversationIdProvider.notifier).state = '';
+        _navigateTo(AppRoutes.chat);
+      }
+      amitiaSnackBar(context, '对话已归档');
+    } catch (error) {
+      if (mounted) amitiaSnackBar(context, '归档失败：$error');
+    }
   }
 
   @override
@@ -180,6 +455,7 @@ class _AmitiaDrawerState extends ConsumerState<AmitiaDrawer> {
     final navigationItems = UINavigationRegistry.resolve(
       ref.watch(uiRuntimeProvider).valueOrNull,
     );
+    final conversationSidebar = ref.watch(conversationSidebarProvider);
     final routeState = resolveDrawerRouteState(widget.currentRoute);
     final installedExtensions = ref.watch(_installedExtensionViewProvider);
 
@@ -203,6 +479,22 @@ class _AmitiaDrawerState extends ConsumerState<AmitiaDrawer> {
             onSearchTap: () => _showGlobalSearch(navigationItems, characters),
             onNavigate: _navigateTo,
             onSettingsTap: () => _navigateTo(AppRoutes.settings),
+            onNewChat: () => _createConversation(),
+            onSelectConversation: (conversationId) => _navigateTo(
+              '${AppRoutes.chat}?conversationId=${Uri.encodeQueryComponent(conversationId)}',
+            ),
+            onRenameConversation: _renameConversation,
+            onToggleConversationPin: _toggleConversationPin,
+            onArchiveConversation: _archiveConversation,
+            onAddProject: _addProject,
+            onCreateProjectConversation: (projectId) =>
+                _createConversation(projectId: projectId),
+            onRenameProject: _renameProject,
+            onChangeProjectRoot: _changeProjectRoot,
+            onToggleProjectPin: _toggleProjectPin,
+            onOpenProject: _openProject,
+            onRemoveProject: _removeProject,
+            conversationSidebar: conversationSidebar,
             navigationItems: navigationItems,
             installedExtensions: installedExtensions,
             currentRoute: widget.currentRoute,
@@ -224,6 +516,19 @@ class _DrawerMainPanel extends StatelessWidget {
   final VoidCallback onSearchTap;
   final ValueChanged<String> onNavigate;
   final VoidCallback onSettingsTap;
+  final VoidCallback onNewChat;
+  final ValueChanged<String> onSelectConversation;
+  final ValueChanged<ConversationDto> onRenameConversation;
+  final ValueChanged<ConversationDto> onToggleConversationPin;
+  final ValueChanged<ConversationDto> onArchiveConversation;
+  final VoidCallback onAddProject;
+  final ValueChanged<String> onCreateProjectConversation;
+  final ValueChanged<ProjectDto> onRenameProject;
+  final ValueChanged<ProjectDto> onChangeProjectRoot;
+  final ValueChanged<ProjectDto> onToggleProjectPin;
+  final ValueChanged<ProjectDto> onOpenProject;
+  final ValueChanged<ProjectDto> onRemoveProject;
+  final AsyncValue<ConversationSidebarDto> conversationSidebar;
   final List<UINavigationItem> navigationItems;
   final AsyncValue<ExtensionCenterView> installedExtensions;
   final String currentRoute;
@@ -239,6 +544,19 @@ class _DrawerMainPanel extends StatelessWidget {
     required this.onSearchTap,
     required this.onNavigate,
     required this.onSettingsTap,
+    required this.onNewChat,
+    required this.onSelectConversation,
+    required this.onRenameConversation,
+    required this.onToggleConversationPin,
+    required this.onArchiveConversation,
+    required this.onAddProject,
+    required this.onCreateProjectConversation,
+    required this.onRenameProject,
+    required this.onChangeProjectRoot,
+    required this.onToggleProjectPin,
+    required this.onOpenProject,
+    required this.onRemoveProject,
+    required this.conversationSidebar,
     required this.navigationItems,
     required this.installedExtensions,
     required this.currentRoute,
@@ -263,6 +581,21 @@ class _DrawerMainPanel extends StatelessWidget {
                 onSearchTap: onSearchTap,
               ),
               SizedBox(height: AppSpacing.sm),
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 11,
+                  vertical: 2,
+                ),
+                child: ListTile(
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+                  leading: const Icon(Icons.add_comment_outlined),
+                  title: const Text('新对话'),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  onTap: onNewChat,
+                ),
+              ),
               ...navigationItems
                   .where((item) => item.panel == UINavigationPanel.main)
                   .map(
@@ -307,6 +640,110 @@ class _DrawerMainPanel extends StatelessWidget {
                 ),
                 error: (_, _) => const SizedBox.shrink(),
               ),
+              conversationSidebar.when(
+                loading: () => const Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Center(
+                    child: SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  ),
+                ),
+                error: (_, _) => const SizedBox.shrink(),
+                data: (sidebar) {
+                  final pinnedProjects = sidebar.projects
+                      .where((project) => project.pinnedAt.isNotEmpty)
+                      .toList(growable: false);
+                  final regularProjects = sidebar.projects
+                      .where((project) => project.pinnedAt.isEmpty)
+                      .toList(growable: false);
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (sidebar.pinned.isNotEmpty ||
+                          pinnedProjects.isNotEmpty) ...[
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(20, 16, 12, 4),
+                          child: Text(
+                            '置顶',
+                            style: AppTypography.label(context),
+                          ),
+                        ),
+                        _ExpandableConversationList(
+                          conversations: sidebar.pinned,
+                          onOpen: onSelectConversation,
+                          onRename: onRenameConversation,
+                          onTogglePin: onToggleConversationPin,
+                          onArchive: onArchiveConversation,
+                          emptyText: '暂无置顶对话',
+                        ),
+                        ...pinnedProjects.map(
+                          (project) => _ProjectTile(
+                            project: project,
+                            onOpenConversation: onSelectConversation,
+                            onRenameConversation: onRenameConversation,
+                            onToggleConversationPin: onToggleConversationPin,
+                            onArchiveConversation: onArchiveConversation,
+                            onCreateProjectConversation:
+                                onCreateProjectConversation,
+                            onRenameProject: onRenameProject,
+                            onChangeProjectRoot: onChangeProjectRoot,
+                            onToggleProjectPin: onToggleProjectPin,
+                            onOpenProject: onOpenProject,
+                            onRemoveProject: onRemoveProject,
+                          ),
+                        ),
+                      ],
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 16, 12, 4),
+                        child: Text('最近', style: AppTypography.label(context)),
+                      ),
+                      _ExpandableRecentList(
+                        conversations: sidebar.recent,
+                        onOpen: onSelectConversation,
+                        onRename: onRenameConversation,
+                        onTogglePin: onToggleConversationPin,
+                        onArchive: onArchiveConversation,
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(14, 12, 8, 4),
+                        child: Row(
+                          children: [
+                            const SizedBox(width: 6),
+                            Text('项目', style: AppTypography.label(context)),
+                            const Spacer(),
+                            IconButton(
+                              tooltip: '添加项目文件夹',
+                              onPressed: onAddProject,
+                              icon: const Icon(
+                                Icons.create_new_folder_outlined,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      ...regularProjects.map(
+                        (project) => _ProjectTile(
+                          project: project,
+                          onOpenConversation: onSelectConversation,
+                          onRenameConversation: onRenameConversation,
+                          onToggleConversationPin: onToggleConversationPin,
+                          onArchiveConversation: onArchiveConversation,
+                          onCreateProjectConversation:
+                              onCreateProjectConversation,
+                          onRenameProject: onRenameProject,
+                          onChangeProjectRoot: onChangeProjectRoot,
+                          onToggleProjectPin: onToggleProjectPin,
+                          onOpenProject: onOpenProject,
+                          onRemoveProject: onRemoveProject,
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
             ],
           ),
         ),
@@ -348,6 +785,350 @@ class _DrawerMainPanel extends StatelessWidget {
             onTap: () => onNavigate(AppRoutes.extensionsPackages),
           ),
         ),
+      ],
+    );
+  }
+}
+
+class _ConversationTile extends StatelessWidget {
+  final ConversationDto conversation;
+  final VoidCallback onOpen;
+  final VoidCallback onRename;
+  final VoidCallback onTogglePin;
+  final VoidCallback onArchive;
+  final bool compact;
+
+  const _ConversationTile({
+    required this.conversation,
+    required this.onOpen,
+    required this.onRename,
+    required this.onTogglePin,
+    required this.onArchive,
+    this.compact = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final title = conversation.title.trim().isEmpty
+        ? '新对话'
+        : conversation.title;
+    return ListTile(
+      dense: compact,
+      contentPadding: EdgeInsets.only(left: compact ? 12 : 20, right: 4),
+      leading: compact ? null : const Icon(Icons.chat_bubble_outline),
+      title: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onRename,
+        child: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
+      ),
+      onTap: onOpen,
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          IconButton(
+            tooltip: conversation.pinnedAt.isEmpty ? '置顶' : '取消置顶',
+            onPressed: onTogglePin,
+            icon: Icon(
+              conversation.pinnedAt.isEmpty
+                  ? Icons.push_pin_outlined
+                  : Icons.push_pin,
+              size: 20,
+            ),
+          ),
+          IconButton(
+            tooltip: '归档',
+            onPressed: onArchive,
+            icon: const Icon(Icons.archive_outlined, size: 20),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ExpandableRecentList extends StatelessWidget {
+  final List<ConversationDto> conversations;
+  final ValueChanged<String> onOpen;
+  final ValueChanged<ConversationDto> onRename;
+  final ValueChanged<ConversationDto> onTogglePin;
+  final ValueChanged<ConversationDto> onArchive;
+
+  const _ExpandableRecentList({
+    required this.conversations,
+    required this.onOpen,
+    required this.onRename,
+    required this.onTogglePin,
+    required this.onArchive,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return _ExpandableConversationList(
+      conversations: conversations,
+      onOpen: onOpen,
+      onRename: onRename,
+      onTogglePin: onTogglePin,
+      onArchive: onArchive,
+      emptyText: '暂无对话',
+    );
+  }
+}
+
+class _ProjectConversationList extends StatelessWidget {
+  final List<ConversationDto> conversations;
+  final ValueChanged<String> onOpen;
+  final ValueChanged<ConversationDto> onRename;
+  final ValueChanged<ConversationDto> onTogglePin;
+  final ValueChanged<ConversationDto> onArchive;
+
+  const _ProjectConversationList({
+    required this.conversations,
+    required this.onOpen,
+    required this.onRename,
+    required this.onTogglePin,
+    required this.onArchive,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return _ExpandableConversationList(
+      conversations: conversations,
+      onOpen: onOpen,
+      onRename: onRename,
+      onTogglePin: onTogglePin,
+      onArchive: onArchive,
+      compact: true,
+      emptyText: '暂无对话',
+    );
+  }
+}
+
+enum _ProjectAction { newChat, rename, changeRoot, pin, open, remove }
+
+class _ProjectTile extends StatelessWidget {
+  final ProjectDto project;
+  final ValueChanged<String> onOpenConversation;
+  final ValueChanged<ConversationDto> onRenameConversation;
+  final ValueChanged<ConversationDto> onToggleConversationPin;
+  final ValueChanged<ConversationDto> onArchiveConversation;
+  final ValueChanged<String> onCreateProjectConversation;
+  final ValueChanged<ProjectDto> onRenameProject;
+  final ValueChanged<ProjectDto> onChangeProjectRoot;
+  final ValueChanged<ProjectDto> onToggleProjectPin;
+  final ValueChanged<ProjectDto> onOpenProject;
+  final ValueChanged<ProjectDto> onRemoveProject;
+
+  const _ProjectTile({
+    required this.project,
+    required this.onOpenConversation,
+    required this.onRenameConversation,
+    required this.onToggleConversationPin,
+    required this.onArchiveConversation,
+    required this.onCreateProjectConversation,
+    required this.onRenameProject,
+    required this.onChangeProjectRoot,
+    required this.onToggleProjectPin,
+    required this.onOpenProject,
+    required this.onRemoveProject,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ExpansionTile(
+      tilePadding: const EdgeInsets.symmetric(horizontal: 18),
+      childrenPadding: const EdgeInsets.only(left: 18, right: 8),
+      leading: Icon(
+        project.available ? Icons.folder_outlined : Icons.folder_off_outlined,
+      ),
+      title: Row(
+        children: [
+          Expanded(
+            child: Text(
+              project.name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          PopupMenuButton<_ProjectAction>(
+            tooltip: '项目操作',
+            onSelected: _handleAction,
+            itemBuilder: (context) => [
+              PopupMenuItem(
+                value: _ProjectAction.newChat,
+                enabled: project.available,
+                child: const _ProjectMenuItem(
+                  icon: Icons.add_comment_outlined,
+                  label: '新建对话',
+                ),
+              ),
+              const PopupMenuItem(
+                value: _ProjectAction.rename,
+                child: _ProjectMenuItem(
+                  icon: Icons.drive_file_rename_outline,
+                  label: '重命名项目',
+                ),
+              ),
+              const PopupMenuItem(
+                value: _ProjectAction.changeRoot,
+                child: _ProjectMenuItem(
+                  icon: Icons.drive_file_move_outline,
+                  label: '更换根目录',
+                ),
+              ),
+              PopupMenuItem(
+                value: _ProjectAction.pin,
+                child: _ProjectMenuItem(
+                  icon: project.pinnedAt.isEmpty
+                      ? Icons.push_pin_outlined
+                      : Icons.push_pin,
+                  label: project.pinnedAt.isEmpty ? '置顶' : '取消置顶',
+                ),
+              ),
+              PopupMenuItem(
+                value: _ProjectAction.open,
+                enabled: project.available,
+                child: const _ProjectMenuItem(
+                  icon: Icons.folder_open_outlined,
+                  label: '在资源管理器中打开',
+                ),
+              ),
+              PopupMenuItem(
+                value: _ProjectAction.remove,
+                child: _ProjectMenuItem(
+                  icon: Icons.remove_circle_outline,
+                  label: '移除项目',
+                  isDestructive: true,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+      subtitle: project.available
+          ? null
+          : Text(project.statusReason.isEmpty ? '目录不可用' : project.statusReason),
+      children: [
+        _ProjectConversationList(
+          conversations: project.conversations,
+          onOpen: onOpenConversation,
+          onRename: onRenameConversation,
+          onTogglePin: onToggleConversationPin,
+          onArchive: onArchiveConversation,
+        ),
+      ],
+    );
+  }
+
+  void _handleAction(_ProjectAction action) {
+    switch (action) {
+      case _ProjectAction.newChat:
+        onCreateProjectConversation(project.id);
+        return;
+      case _ProjectAction.rename:
+        onRenameProject(project);
+        return;
+      case _ProjectAction.changeRoot:
+        onChangeProjectRoot(project);
+        return;
+      case _ProjectAction.pin:
+        onToggleProjectPin(project);
+        return;
+      case _ProjectAction.open:
+        onOpenProject(project);
+        return;
+      case _ProjectAction.remove:
+        onRemoveProject(project);
+        return;
+    }
+  }
+}
+
+class _ProjectMenuItem extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool isDestructive;
+
+  const _ProjectMenuItem({
+    required this.icon,
+    required this.label,
+    this.isDestructive = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final color = isDestructive ? context.error : context.textPrimary;
+    return Row(
+      children: [
+        Icon(icon, size: 20, color: color),
+        const SizedBox(width: 12),
+        Text(label, style: TextStyle(color: color)),
+      ],
+    );
+  }
+}
+
+class _ExpandableConversationList extends StatefulWidget {
+  final List<ConversationDto> conversations;
+  final ValueChanged<String> onOpen;
+  final ValueChanged<ConversationDto> onRename;
+  final ValueChanged<ConversationDto> onTogglePin;
+  final ValueChanged<ConversationDto> onArchive;
+  final bool compact;
+  final String emptyText;
+
+  const _ExpandableConversationList({
+    required this.conversations,
+    required this.onOpen,
+    required this.onRename,
+    required this.onTogglePin,
+    required this.onArchive,
+    required this.emptyText,
+    this.compact = false,
+  });
+
+  @override
+  State<_ExpandableConversationList> createState() =>
+      _ExpandableConversationListState();
+}
+
+class _ExpandableConversationListState
+    extends State<_ExpandableConversationList> {
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final visible = _expanded
+        ? widget.conversations
+        : widget.conversations.take(5).toList(growable: false);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        ...visible.map(
+          (conversation) => _ConversationTile(
+            conversation: conversation,
+            compact: widget.compact,
+            onOpen: () => widget.onOpen(conversation.id),
+            onRename: () => widget.onRename(conversation),
+            onTogglePin: () => widget.onTogglePin(conversation),
+            onArchive: () => widget.onArchive(conversation),
+          ),
+        ),
+        if (widget.conversations.isEmpty)
+          Padding(
+            padding: EdgeInsets.symmetric(
+              horizontal: widget.compact ? 12 : 20,
+              vertical: 6,
+            ),
+            child: Text(widget.emptyText),
+          ),
+        if (widget.conversations.length > 5)
+          Padding(
+            padding: EdgeInsets.only(left: widget.compact ? 12 : 20, bottom: 4),
+            child: TextButton(
+              onPressed: () => setState(() => _expanded = !_expanded),
+              child: Text(_expanded ? '收起' : '展开显示'),
+            ),
+          ),
       ],
     );
   }

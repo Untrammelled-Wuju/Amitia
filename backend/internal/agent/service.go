@@ -164,7 +164,7 @@ func (s *service) Test(characterID, message string) (map[string]interface{}, err
 
 func (s *service) ContextPreview(convID string) (map[string]interface{}, error) {
 	var charID, title string
-	err := s.db.Table("conversations").Select("character_id, title").Where("id = ?", convID).
+	err := s.db.Table("conversations").Select("COALESCE((SELECT character_id FROM messages WHERE conversation_id = conversations.id ORDER BY sequence DESC LIMIT 1), '') AS character_id, title").Where("id = ?", convID).
 		Row().Scan(&charID, &title)
 	if err != nil {
 		return nil, fmt.Errorf("对话不存在")
@@ -479,5 +479,5 @@ func (s *service) ensureWebhookConversation(convID, characterID, channel, text, 
 	}
 	now := time.Now().Format("2006-01-02 15:04:05")
 	owner := requestidentity.NormalizeSpaceID(spaceID)
-	return s.db.Exec("INSERT OR IGNORE INTO conversations (id, space_id, title, channel, character_id, source, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'webhook', ?, ?)", convID, owner, title, channel, characterID, now, now).Error
+	return s.db.Exec("INSERT OR IGNORE INTO conversations (id, space_id, title, channel, source, created_at, updated_at) VALUES (?, ?, ?, ?, 'webhook', ?, ?)", convID, owner, title, channel, now, now).Error
 }

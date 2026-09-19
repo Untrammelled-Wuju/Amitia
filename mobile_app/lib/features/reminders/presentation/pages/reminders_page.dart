@@ -46,10 +46,17 @@ class _RemindersPageState extends ConsumerState<RemindersPage> {
   Future<void> _load({bool showLoading = true}) async {
     if (_refreshing) return;
     _refreshing = true;
-    if (showLoading && mounted) setState(() { _loading = true; _error = null; });
+    if (showLoading && mounted)
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
     try {
       final service = ref.read(reminderServiceProvider);
-      final values = await Future.wait<dynamic>([service.list(), service.status()]);
+      final values = await Future.wait<dynamic>([
+        service.list(),
+        service.status(),
+      ]);
       if (!mounted) return;
       setState(() {
         _reminders = values[0] as List<ReminderDto>;
@@ -58,7 +65,11 @@ class _RemindersPageState extends ConsumerState<RemindersPage> {
         _error = null;
       });
     } catch (error) {
-      if (showLoading && mounted) setState(() { _error = error.toString(); _loading = false; });
+      if (showLoading && mounted)
+        setState(() {
+          _error = error.toString();
+          _loading = false;
+        });
     } finally {
       _refreshing = false;
     }
@@ -67,9 +78,13 @@ class _RemindersPageState extends ConsumerState<RemindersPage> {
   List<ReminderDto> get _visible {
     switch (_selectedSegment) {
       case 1:
-        return _reminders.where((item) => item.isEnabled).toList(growable: false);
+        return _reminders
+            .where((item) => item.isEnabled)
+            .toList(growable: false);
       case 2:
-        return _reminders.where((item) => !item.isEnabled).toList(growable: false);
+        return _reminders
+            .where((item) => !item.isEnabled)
+            .toList(growable: false);
       default:
         return _reminders;
     }
@@ -82,7 +97,10 @@ class _RemindersPageState extends ConsumerState<RemindersPage> {
         title: '日程提醒',
         navigation: AmitiaAppBarNavigation.back,
         actions: [
-          AmitiaIconButton(icon: Icons.monitor_heart_outlined, onPressed: _showSchedulerPanel),
+          AmitiaIconButton(
+            icon: Icons.monitor_heart_outlined,
+            onPressed: _showSchedulerPanel,
+          ),
           AmitiaIconButton(icon: Icons.add, onPressed: () => _showEditor(null)),
         ],
       ),
@@ -92,7 +110,12 @@ class _RemindersPageState extends ConsumerState<RemindersPage> {
           children: [
             _buildSchedulerStatus(),
             Padding(
-              padding: EdgeInsets.fromLTRB(AppSpacing.pagePadding, 0, AppSpacing.pagePadding, AppSpacing.sm),
+              padding: EdgeInsets.fromLTRB(
+                AppSpacing.pagePadding,
+                0,
+                AppSpacing.pagePadding,
+                AppSpacing.sm,
+              ),
               child: AmitiaSegmentedControl(
                 segments: const ['全部', '待触发', '已停用/已触发'],
                 selectedIndex: _selectedSegment,
@@ -103,24 +126,28 @@ class _RemindersPageState extends ConsumerState<RemindersPage> {
               child: _loading
                   ? const AmitiaLoadingState(message: '加载中…')
                   : _error != null
-                      ? AmitiaErrorState(message: _error!, onRetry: _load)
-                      : _visible.isEmpty
-                          ? AmitiaEmptyState(
-                              icon: Icons.notifications_none,
-                              title: '暂无提醒',
-                              subtitle: '创建一个一次性或重复提醒',
-                              actionText: '新建提醒',
-                              onAction: () => _showEditor(null),
-                            )
-                          : RefreshIndicator(
-                              onRefresh: _load,
-                              child: ListView.separated(
-                                padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
-                                itemCount: _visible.length,
-                                separatorBuilder: (_, _) => SizedBox(height: AppSpacing.sm),
-                                itemBuilder: (context, index) => _buildCard(_visible[index]),
-                              ),
-                            ),
+                  ? AmitiaErrorState(message: _error!, onRetry: _load)
+                  : _visible.isEmpty
+                  ? AmitiaEmptyState(
+                      icon: Icons.notifications_none,
+                      title: '暂无提醒',
+                      subtitle: '创建一个一次性或重复提醒',
+                      actionText: '新建提醒',
+                      onAction: () => _showEditor(null),
+                    )
+                  : RefreshIndicator(
+                      onRefresh: _load,
+                      child: ListView.separated(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: AppSpacing.pagePadding,
+                        ),
+                        itemCount: _visible.length,
+                        separatorBuilder: (_, _) =>
+                            SizedBox(height: AppSpacing.sm),
+                        itemBuilder: (context, index) =>
+                            _buildCard(_visible[index]),
+                      ),
+                    ),
             ),
           ],
         ),
@@ -133,21 +160,31 @@ class _RemindersPageState extends ConsumerState<RemindersPage> {
     final total = (_status['total'] as num?)?.toInt() ?? _reminders.length;
     final due = (_status['dueNow'] as num?)?.toInt() ?? 0;
     return Padding(
-      padding: EdgeInsets.fromLTRB(AppSpacing.pagePadding, AppSpacing.sm, AppSpacing.pagePadding, AppSpacing.sm),
+      padding: EdgeInsets.fromLTRB(
+        AppSpacing.pagePadding,
+        AppSpacing.sm,
+        AppSpacing.pagePadding,
+        AppSpacing.sm,
+      ),
       child: Row(
         children: [
-          AmitiaStatusBadge(label: running ? '调度器运行中' : '调度器未运行', type: running ? BadgeType.success : BadgeType.error),
+          AmitiaStatusBadge(
+            label: running ? '调度器运行中' : '调度器未运行',
+            type: running ? BadgeType.success : BadgeType.error,
+          ),
           SizedBox(width: AppSpacing.sm),
           AmitiaStatusBadge(label: '总计 $total', type: BadgeType.neutral),
           SizedBox(width: AppSpacing.sm),
-          if (due > 0) AmitiaStatusBadge(label: '已到期 $due', type: BadgeType.warning),
+          if (due > 0)
+            AmitiaStatusBadge(label: '已到期 $due', type: BadgeType.warning),
         ],
       ),
     );
   }
 
   Widget _buildCard(ReminderDto reminder) {
-    final repeatLabel = _repeatLabels[reminder.repeatRule] ?? reminder.repeatRule;
+    final repeatLabel =
+        _repeatLabels[reminder.repeatRule] ?? reminder.repeatRule;
     return AmitiaCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -158,23 +195,43 @@ class _RemindersPageState extends ConsumerState<RemindersPage> {
               Container(
                 width: 42,
                 height: 42,
-                decoration: BoxDecoration(color: context.accentSoft, borderRadius: AppRadius.brSmall),
-                child: Icon(Icons.notifications_active_outlined, size: 21, color: context.accentPrimary),
+                decoration: BoxDecoration(
+                  color: context.accentSoft,
+                  borderRadius: AppRadius.brSmall,
+                ),
+                child: Icon(
+                  Icons.notifications_active_outlined,
+                  size: 21,
+                  color: context.accentPrimary,
+                ),
               ),
               SizedBox(width: AppSpacing.md),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(reminder.title, style: AppTypography.cardTitle(context)),
+                    Text(
+                      reminder.title,
+                      style: AppTypography.cardTitle(context),
+                    ),
                     if (reminder.content.isNotEmpty) ...[
                       const SizedBox(height: 2),
-                      Text(reminder.content, style: AppTypography.caption(context), maxLines: 2, overflow: TextOverflow.ellipsis),
+                      Text(
+                        reminder.content,
+                        style: AppTypography.caption(context),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ],
                   ],
                 ),
               ),
-              AmitiaStatusBadge(label: reminder.isEnabled ? '启用' : '停用', type: reminder.isEnabled ? BadgeType.success : BadgeType.neutral),
+              AmitiaStatusBadge(
+                label: reminder.isEnabled ? '启用' : '停用',
+                type: reminder.isEnabled
+                    ? BadgeType.success
+                    : BadgeType.neutral,
+              ),
             ],
           ),
           SizedBox(height: AppSpacing.sm),
@@ -182,28 +239,63 @@ class _RemindersPageState extends ConsumerState<RemindersPage> {
             spacing: AppSpacing.sm,
             runSpacing: AppSpacing.xs,
             children: [
-              AmitiaStatusBadge(label: _formatTime(reminder.remindAt), type: BadgeType.accent),
+              AmitiaStatusBadge(
+                label: _formatTime(reminder.remindAt),
+                type: BadgeType.accent,
+              ),
               AmitiaStatusBadge(label: repeatLabel, type: BadgeType.info),
-              AmitiaStatusBadge(label: reminder.channel, type: BadgeType.neutral),
-              if (reminder.characterName.isNotEmpty) AmitiaStatusBadge(label: reminder.characterName, type: BadgeType.warning),
-              if (reminder.conversationTitle.isNotEmpty) AmitiaStatusBadge(label: reminder.conversationTitle, type: BadgeType.neutral),
+              AmitiaStatusBadge(
+                label: reminder.channel,
+                type: BadgeType.neutral,
+              ),
+              if (reminder.characterName.isNotEmpty)
+                AmitiaStatusBadge(
+                  label: reminder.characterName,
+                  type: BadgeType.warning,
+                ),
+              if (reminder.conversationTitle.isNotEmpty)
+                AmitiaStatusBadge(
+                  label: reminder.conversationTitle,
+                  type: BadgeType.neutral,
+                ),
             ],
           ),
           SizedBox(height: AppSpacing.sm),
           Wrap(
             spacing: AppSpacing.sm,
             children: [
-              TextButton.icon(onPressed: () => _test(reminder), icon: const Icon(Icons.science_outlined, size: 16), label: const Text('测试')),
-              TextButton.icon(onPressed: () => _trigger(reminder), icon: const Icon(Icons.send_outlined, size: 16), label: const Text('立即触发')),
+              TextButton.icon(
+                onPressed: () => _test(reminder),
+                icon: const Icon(Icons.science_outlined, size: 16),
+                label: const Text('测试'),
+              ),
+              TextButton.icon(
+                onPressed: () => _trigger(reminder),
+                icon: const Icon(Icons.send_outlined, size: 16),
+                label: const Text('立即触发'),
+              ),
               TextButton.icon(
                 onPressed: () => _toggle(reminder),
-                icon: Icon(reminder.isEnabled ? Icons.pause_circle_outline : Icons.play_circle_outline, size: 16),
+                icon: Icon(
+                  reminder.isEnabled
+                      ? Icons.pause_circle_outline
+                      : Icons.play_circle_outline,
+                  size: 16,
+                ),
                 label: Text(reminder.isEnabled ? '停用' : '启用'),
               ),
-              TextButton.icon(onPressed: () => _showEditor(reminder), icon: const Icon(Icons.edit_outlined, size: 16), label: const Text('编辑')),
+              TextButton.icon(
+                onPressed: () => _showEditor(reminder),
+                icon: const Icon(Icons.edit_outlined, size: 16),
+                label: const Text('编辑'),
+              ),
               TextButton.icon(
                 onPressed: () => _delete(reminder),
-                icon: Icon(Icons.delete_outline, size: 16, color: context.error),
+                icon: Icon(
+                  Icons.delete_outline,
+                  size: 16,
+                  color: context.error,
+                ),
                 label: Text('删除', style: TextStyle(color: context.error)),
               ),
             ],
@@ -223,22 +315,28 @@ class _RemindersPageState extends ConsumerState<RemindersPage> {
 
   Future<void> _showEditor(ReminderDto? existing) async {
     final titleController = TextEditingController(text: existing?.title ?? '');
-    final contentController = TextEditingController(text: existing?.content ?? '');
+    final contentController = TextEditingController(
+      text: existing?.content ?? '',
+    );
     var selectedConversationId = existing?.conversationId ?? '';
     var selectedCharacterId = existing?.characterId ?? '';
     var channel = existing?.channel ?? 'web';
     var repeatRule = existing?.repeatRule ?? 'none';
-    var remindAt = _parseBackendTime(existing?.remindAt) ?? DateTime.now().add(const Duration(minutes: 10));
+    var remindAt =
+        _parseBackendTime(existing?.remindAt) ??
+        DateTime.now().add(const Duration(minutes: 10));
 
     var characters = await ref.read(characterServiceProvider).list();
     var conversations = await ref.read(chatServiceProvider).listConversations();
     if (!mounted) return;
     final knownCharacterIds = characters.map((item) => item.id).toSet();
-    if (selectedCharacterId.isNotEmpty && !knownCharacterIds.contains(selectedCharacterId)) {
+    if (selectedCharacterId.isNotEmpty &&
+        !knownCharacterIds.contains(selectedCharacterId)) {
       selectedCharacterId = '';
     }
     final knownConversationIds = conversations.map((item) => item.id).toSet();
-    if (selectedConversationId.isNotEmpty && !knownConversationIds.contains(selectedConversationId)) {
+    if (selectedConversationId.isNotEmpty &&
+        !knownConversationIds.contains(selectedConversationId)) {
       selectedConversationId = '';
     }
 
@@ -247,10 +345,11 @@ class _RemindersPageState extends ConsumerState<RemindersPage> {
       isScrollControlled: true,
       builder: (sheetContext) => StatefulBuilder(
         builder: (sheetContext, setSheetState) {
-          final visibleConversations = selectedCharacterId.isEmpty
-              ? conversations
-              : conversations.where((item) => item.characterId == selectedCharacterId).toList(growable: false);
-          if (selectedConversationId.isNotEmpty && !visibleConversations.any((item) => item.id == selectedConversationId)) {
+          final visibleConversations = conversations;
+          if (selectedConversationId.isNotEmpty &&
+              !visibleConversations.any(
+                (item) => item.id == selectedConversationId,
+              )) {
             selectedConversationId = '';
           }
           return Padding(
@@ -265,86 +364,132 @@ class _RemindersPageState extends ConsumerState<RemindersPage> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(existing == null ? '新建提醒' : '编辑提醒', style: AppTypography.sectionTitle(context)),
+                  Text(
+                    existing == null ? '新建提醒' : '编辑提醒',
+                    style: AppTypography.sectionTitle(context),
+                  ),
                   SizedBox(height: AppSpacing.lg),
-                  AmitiaTextField(controller: titleController, hintText: '提醒标题'),
+                  AmitiaTextField(
+                    controller: titleController,
+                    hintText: '提醒标题',
+                  ),
                   SizedBox(height: AppSpacing.md),
-                  AmitiaTextField(controller: contentController, maxLines: 3, hintText: '提醒内容（可选）'),
+                  AmitiaTextField(
+                    controller: contentController,
+                    maxLines: 3,
+                    hintText: '提醒内容（可选）',
+                  ),
                   SizedBox(height: AppSpacing.md),
                   ListTile(
                     contentPadding: EdgeInsets.zero,
                     title: Text('提醒时间', style: AppTypography.label(context)),
-                    subtitle: Text(_formatBackendTime(remindAt), style: AppTypography.body(context)),
+                    subtitle: Text(
+                      _formatBackendTime(remindAt),
+                      style: AppTypography.body(context),
+                    ),
                     trailing: const Icon(Icons.calendar_month_outlined),
                     onTap: () async {
                       final date = await showDatePicker(
                         context: sheetContext,
                         initialDate: remindAt,
                         firstDate: DateTime.now(),
-                        lastDate: DateTime.now().add(const Duration(days: 3650)),
+                        lastDate: DateTime.now().add(
+                          const Duration(days: 3650),
+                        ),
                       );
                       if (date == null || !sheetContext.mounted) return;
-                      final time = await showTimePicker(context: sheetContext, initialTime: TimeOfDay.fromDateTime(remindAt));
+                      final time = await showTimePicker(
+                        context: sheetContext,
+                        initialTime: TimeOfDay.fromDateTime(remindAt),
+                      );
                       if (time == null) return;
                       setSheetState(() {
-                        remindAt = DateTime(date.year, date.month, date.day, time.hour, time.minute);
+                        remindAt = DateTime(
+                          date.year,
+                          date.month,
+                          date.day,
+                          time.hour,
+                          time.minute,
+                        );
                       });
                     },
                   ),
                   SizedBox(height: AppSpacing.md),
                   DropdownButtonFormField<String>(
                     value: repeatRule,
-                    decoration: const InputDecoration(labelText: '重复规则', border: OutlineInputBorder()),
-                    items: _repeatLabels.entries.map((e) => DropdownMenuItem(value: e.key, child: Text(e.value))).toList(growable: false),
-                    onChanged: (value) { if (value != null) setSheetState(() => repeatRule = value); },
+                    decoration: const InputDecoration(
+                      labelText: '重复规则',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: _repeatLabels.entries
+                        .map(
+                          (e) => DropdownMenuItem(
+                            value: e.key,
+                            child: Text(e.value),
+                          ),
+                        )
+                        .toList(growable: false),
+                    onChanged: (value) {
+                      if (value != null)
+                        setSheetState(() => repeatRule = value);
+                    },
                   ),
                   SizedBox(height: AppSpacing.md),
                   DropdownButtonFormField<String>(
                     value: channel,
-                    decoration: const InputDecoration(labelText: '渠道', border: OutlineInputBorder()),
+                    decoration: const InputDecoration(
+                      labelText: '渠道',
+                      border: OutlineInputBorder(),
+                    ),
                     items: const [
                       DropdownMenuItem(value: 'web', child: Text('Web / App')),
                     ],
-                    onChanged: (value) { if (value != null) setSheetState(() => channel = value); },
+                    onChanged: (value) {
+                      if (value != null) setSheetState(() => channel = value);
+                    },
                   ),
                   SizedBox(height: AppSpacing.md),
                   DropdownButtonFormField<String>(
                     value: selectedCharacterId,
-                    decoration: const InputDecoration(labelText: '目标角色（可选）', border: OutlineInputBorder()),
+                    decoration: const InputDecoration(
+                      labelText: '目标角色（可选）',
+                      border: OutlineInputBorder(),
+                    ),
                     items: [
                       const DropdownMenuItem(value: '', child: Text('不指定角色')),
-                      ...characters.map((item) => DropdownMenuItem(value: item.id, child: Text(item.name.isEmpty ? item.id : item.name))),
+                      ...characters.map(
+                        (item) => DropdownMenuItem(
+                          value: item.id,
+                          child: Text(item.name.isEmpty ? item.id : item.name),
+                        ),
+                      ),
                     ],
                     onChanged: (value) => setSheetState(() {
                       selectedCharacterId = value ?? '';
-                      if (selectedConversationId.isNotEmpty && !conversations.any((item) => item.id == selectedConversationId && (selectedCharacterId.isEmpty || item.characterId == selectedCharacterId))) {
-                        selectedConversationId = '';
-                      }
                     }),
                   ),
                   SizedBox(height: AppSpacing.md),
                   DropdownButtonFormField<String>(
                     value: selectedConversationId,
-                    decoration: const InputDecoration(labelText: '目标会话（可选）', border: OutlineInputBorder()),
+                    decoration: const InputDecoration(
+                      labelText: '目标会话（可选）',
+                      border: OutlineInputBorder(),
+                    ),
                     items: [
                       const DropdownMenuItem(value: '', child: Text('不指定会话')),
                       ...visibleConversations.map((item) {
-                        final characterName = _characterNameFor(characters, item.characterId);
-                        final title = item.title.trim().isEmpty ? item.id : item.title.trim();
+                        final title = item.title.trim().isEmpty
+                            ? item.id
+                            : item.title.trim();
                         return DropdownMenuItem(
                           value: item.id,
-                          child: Text(characterName == null || characterName.isEmpty ? title : '$title · $characterName'),
+                          child: Text(title),
                         );
                       }),
                     ],
                     onChanged: (value) => setSheetState(() {
                       selectedConversationId = value ?? '';
-                      if (selectedConversationId.isNotEmpty) {
-                        final conversation = _conversationById(conversations, selectedConversationId);
-                        if (conversation != null && conversation.characterId.isNotEmpty) {
-                          selectedCharacterId = conversation.characterId;
-                        }
-                      }
+                      if (selectedConversationId.isNotEmpty) {}
                     }),
                   ),
                   SizedBox(height: AppSpacing.lg),
@@ -353,11 +498,16 @@ class _RemindersPageState extends ConsumerState<RemindersPage> {
                     isFullWidth: true,
                     onPressed: () async {
                       if (titleController.text.trim().isEmpty) {
-                        ScaffoldMessenger.of(sheetContext).showSnackBar(const SnackBar(content: Text('标题不能为空')));
+                        ScaffoldMessenger.of(
+                          sheetContext,
+                        ).showSnackBar(const SnackBar(content: Text('标题不能为空')));
                         return;
                       }
-                      if (!remindAt.isAfter(DateTime.now()) && existing == null) {
-                        ScaffoldMessenger.of(sheetContext).showSnackBar(const SnackBar(content: Text('提醒时间必须晚于当前时间')));
+                      if (!remindAt.isAfter(DateTime.now()) &&
+                          existing == null) {
+                        ScaffoldMessenger.of(sheetContext).showSnackBar(
+                          const SnackBar(content: Text('提醒时间必须晚于当前时间')),
+                        );
                         return;
                       }
                       final data = <String, dynamic>{
@@ -380,7 +530,10 @@ class _RemindersPageState extends ConsumerState<RemindersPage> {
                         if (sheetContext.mounted) Navigator.pop(sheetContext);
                         await _load();
                       } catch (error) {
-                        if (sheetContext.mounted) ScaffoldMessenger.of(sheetContext).showSnackBar(SnackBar(content: Text('保存失败：$error')));
+                        if (sheetContext.mounted)
+                          ScaffoldMessenger.of(sheetContext).showSnackBar(
+                            SnackBar(content: Text('保存失败：$error')),
+                          );
                       }
                     },
                   ),
@@ -402,7 +555,10 @@ class _RemindersPageState extends ConsumerState<RemindersPage> {
     return null;
   }
 
-  dynamic _conversationById(List<dynamic> conversations, String conversationId) {
+  dynamic _conversationById(
+    List<dynamic> conversations,
+    String conversationId,
+  ) {
     for (final conversation in conversations) {
       if (conversation.id == conversationId) return conversation;
     }
@@ -425,32 +581,54 @@ class _RemindersPageState extends ConsumerState<RemindersPage> {
               _detail('渠道', (result['channel'] ?? reminder.channel).toString()),
               _detail('目标会话', (result['conversationId'] ?? '').toString()),
               _detail('消息内容', (result['messageContent'] ?? '').toString()),
-              _detail('提醒时间', (result['remindAt'] ?? reminder.remindAt).toString()),
+              _detail(
+                '提醒时间',
+                (result['remindAt'] ?? reminder.remindAt).toString(),
+              ),
             ],
           ),
-          actions: [TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('关闭'))],
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('关闭'),
+            ),
+          ],
         ),
       );
     } catch (error) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('测试失败：$error')));
+      if (mounted)
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('测试失败：$error')));
     }
   }
 
   Widget _detail(String label, String value) => Padding(
-        padding: const EdgeInsets.only(bottom: 6),
-        child: Text('$label：${value.isEmpty ? '—' : value}'),
-      );
+    padding: const EdgeInsets.only(bottom: 6),
+    child: Text('$label：${value.isEmpty ? '—' : value}'),
+  );
 
   Future<void> _trigger(ReminderDto reminder) async {
     try {
-      final result = await ref.read(reminderServiceProvider).trigger(reminder.id);
+      final result = await ref
+          .read(reminderServiceProvider)
+          .trigger(reminder.id);
       await _load();
       if (mounted) {
         final conversationId = (result['conversationId'] ?? '').toString();
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(conversationId.isEmpty ? '提醒已触发' : '提醒已触发到会话 $conversationId')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              conversationId.isEmpty ? '提醒已触发' : '提醒已触发到会话 $conversationId',
+            ),
+          ),
+        );
       }
     } catch (error) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('触发失败：$error')));
+      if (mounted)
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('触发失败：$error')));
     }
   }
 
@@ -459,7 +637,10 @@ class _RemindersPageState extends ConsumerState<RemindersPage> {
       await ref.read(reminderServiceProvider).toggle(reminder.id);
       await _load();
     } catch (error) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('操作失败：$error')));
+      if (mounted)
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('操作失败：$error')));
     }
   }
 
@@ -470,8 +651,14 @@ class _RemindersPageState extends ConsumerState<RemindersPage> {
         title: const Text('删除提醒'),
         content: Text('确定删除“${reminder.title}”吗？'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('取消')),
-          TextButton(onPressed: () => Navigator.pop(dialogContext, true), child: Text('删除', style: TextStyle(color: context.error))),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: Text('删除', style: TextStyle(color: context.error)),
+          ),
         ],
       ),
     );
@@ -501,11 +688,16 @@ class _RemindersPageState extends ConsumerState<RemindersPage> {
       prospective = values[3] as List<Map<String, dynamic>>;
       history = values[4] as Map<String, dynamic>;
     } catch (error) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('加载调度器状态失败：$error')));
+      if (mounted)
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('加载调度器状态失败：$error')));
       return;
     }
     if (!mounted) return;
-    final cleanupController = TextEditingController(text: (cleanup['cleanupDays'] ?? '0').toString());
+    final cleanupController = TextEditingController(
+      text: (cleanup['cleanupDays'] ?? '0').toString(),
+    );
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -524,10 +716,28 @@ class _RemindersPageState extends ConsumerState<RemindersPage> {
               spacing: AppSpacing.sm,
               runSpacing: AppSpacing.sm,
               children: [
-                AmitiaStatusBadge(label: status['schedulerRunning'] == true ? '调度器运行中' : '调度器未运行', type: status['schedulerRunning'] == true ? BadgeType.success : BadgeType.error),
-                AmitiaStatusBadge(label: '队列深度 ${queue['depth'] ?? 0}', type: BadgeType.neutral),
-                AmitiaStatusBadge(label: '失败 ${queue['recentFailures'] ?? 0}', type: BadgeType.warning),
-                AmitiaStatusBadge(label: queue['backpressure'] == true ? '存在背压' : '队列正常', type: queue['backpressure'] == true ? BadgeType.error : BadgeType.success),
+                AmitiaStatusBadge(
+                  label: status['schedulerRunning'] == true
+                      ? '调度器运行中'
+                      : '调度器未运行',
+                  type: status['schedulerRunning'] == true
+                      ? BadgeType.success
+                      : BadgeType.error,
+                ),
+                AmitiaStatusBadge(
+                  label: '队列深度 ${queue['depth'] ?? 0}',
+                  type: BadgeType.neutral,
+                ),
+                AmitiaStatusBadge(
+                  label: '失败 ${queue['recentFailures'] ?? 0}',
+                  type: BadgeType.warning,
+                ),
+                AmitiaStatusBadge(
+                  label: queue['backpressure'] == true ? '存在背压' : '队列正常',
+                  type: queue['backpressure'] == true
+                      ? BadgeType.error
+                      : BadgeType.success,
+                ),
               ],
             ),
             if (queue['backpressure'] == true) ...[
@@ -537,21 +747,35 @@ class _RemindersPageState extends ConsumerState<RemindersPage> {
                 isSecondary: true,
                 onPressed: () async {
                   await service.clearBackpressure();
-                  if (sheetContext.mounted) ScaffoldMessenger.of(sheetContext).showSnackBar(const SnackBar(content: Text('背压标记已清除')));
+                  if (sheetContext.mounted)
+                    ScaffoldMessenger.of(
+                      sheetContext,
+                    ).showSnackBar(const SnackBar(content: Text('背压标记已清除')));
                 },
               ),
             ],
             SizedBox(height: AppSpacing.lg),
             Text('自动清理', style: AppTypography.cardTitle(context)),
             SizedBox(height: AppSpacing.xs),
-            AmitiaTextField(controller: cleanupController, keyboardType: TextInputType.number, hintText: '触发后保留天数；0 表示不自动清理'),
+            AmitiaTextField(
+              controller: cleanupController,
+              keyboardType: TextInputType.number,
+              hintText: '触发后保留天数；0 表示不自动清理',
+            ),
             SizedBox(height: AppSpacing.sm),
             AmitiaButton(
               label: '保存清理策略',
               isSecondary: true,
               onPressed: () async {
-                await service.setCleanupConfig(cleanupController.text.trim().isEmpty ? '0' : cleanupController.text.trim());
-                if (sheetContext.mounted) ScaffoldMessenger.of(sheetContext).showSnackBar(const SnackBar(content: Text('清理策略已更新')));
+                await service.setCleanupConfig(
+                  cleanupController.text.trim().isEmpty
+                      ? '0'
+                      : cleanupController.text.trim(),
+                );
+                if (sheetContext.mounted)
+                  ScaffoldMessenger.of(
+                    sheetContext,
+                  ).showSnackBar(const SnackBar(content: Text('清理策略已更新')));
               },
             ),
             SizedBox(height: AppSpacing.lg),
@@ -560,21 +784,27 @@ class _RemindersPageState extends ConsumerState<RemindersPage> {
             if (prospective.isEmpty)
               Text('暂无待触发前瞻记忆', style: AppTypography.caption(context))
             else
-              ...prospective.map((item) => ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: Text((item['title'] ?? '').toString()),
-                    subtitle: Text((item['remindAt'] ?? '').toString()),
-                    trailing: Text((item['status'] ?? '').toString()),
-                  )),
+              ...prospective.map(
+                (item) => ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text((item['title'] ?? '').toString()),
+                  subtitle: Text((item['remindAt'] ?? '').toString()),
+                  trailing: Text((item['status'] ?? '').toString()),
+                ),
+              ),
             SizedBox(height: AppSpacing.lg),
             Text('最近触发历史', style: AppTypography.cardTitle(context)),
             SizedBox(height: AppSpacing.sm),
-            ...((history['items'] as List?) ?? const []).whereType<Map>().map((item) => ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text((item['title'] ?? '').toString()),
-                  subtitle: Text('${item['createdAt'] ?? ''}${(item['lastError'] ?? '').toString().isNotEmpty ? ' · ${item['lastError']}' : ''}'),
-                  trailing: Text((item['state'] ?? '').toString()),
-                )),
+            ...((history['items'] as List?) ?? const []).whereType<Map>().map(
+              (item) => ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text((item['title'] ?? '').toString()),
+                subtitle: Text(
+                  '${item['createdAt'] ?? ''}${(item['lastError'] ?? '').toString().isNotEmpty ? ' · ${item['lastError']}' : ''}',
+                ),
+                trailing: Text((item['state'] ?? '').toString()),
+              ),
+            ),
           ],
         ),
       ),

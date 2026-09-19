@@ -35,7 +35,9 @@ class UINavigationItem {
 
   bool matches(String location) {
     final prefixes = routePrefixes.isEmpty ? <String>[route] : routePrefixes;
-    return prefixes.any((prefix) => location == prefix || location.startsWith('$prefix/'));
+    return prefixes.any(
+      (prefix) => location == prefix || location.startsWith('$prefix/'),
+    );
   }
 }
 
@@ -48,16 +50,6 @@ abstract final class UINavigationRegistry {
       icon: Icons.dashboard_outlined,
       panel: UINavigationPanel.main,
       order: 5,
-      builtin: true,
-    ),
-    UINavigationItem(
-      id: 'builtin.chat',
-      label: '新对话',
-      route: AppRoutes.chat,
-      icon: Icons.chat_bubble_outline,
-      panel: UINavigationPanel.main,
-      order: 10,
-      routePrefixes: <String>['/chat', '/conversations'],
       builtin: true,
     ),
     UINavigationItem(
@@ -98,6 +90,15 @@ abstract final class UINavigationRegistry {
       builtin: true,
     ),
     UINavigationItem(
+      id: 'builtin.channelMessages',
+      label: '渠道消息',
+      route: AppRoutes.channelMessages,
+      icon: Icons.forum_outlined,
+      panel: UINavigationPanel.main,
+      order: 55,
+      builtin: true,
+    ),
+    UINavigationItem(
       id: 'builtin.workshop',
       label: '创意工坊',
       route: AppRoutes.workshop,
@@ -113,19 +114,24 @@ abstract final class UINavigationRegistry {
     if (snapshot == null) return _sorted(items);
     final platform = currentUIPlatform();
 
-    final sources = snapshot.providers
-        .where((provider) =>
-            provider.enabled &&
-            !provider.builtin &&
-            (provider.capability == UICapability.appNavigation ||
-                provider.capability == UICapability.routeRegistry) &&
-            provider.compatibleWith(snapshot.context, platform) &&
-            provider.metadata['navigationItems'] is List)
-        .toList()
-      ..sort((a, b) {
-        final priority = b.priority.compareTo(a.priority);
-        return priority != 0 ? priority : a.providerId.compareTo(b.providerId);
-      });
+    final sources =
+        snapshot.providers
+            .where(
+              (provider) =>
+                  provider.enabled &&
+                  !provider.builtin &&
+                  (provider.capability == UICapability.appNavigation ||
+                      provider.capability == UICapability.routeRegistry) &&
+                  provider.compatibleWith(snapshot.context, platform) &&
+                  provider.metadata['navigationItems'] is List,
+            )
+            .toList()
+          ..sort((a, b) {
+            final priority = b.priority.compareTo(a.priority);
+            return priority != 0
+                ? priority
+                : a.providerId.compareTo(b.providerId);
+          });
 
     final effectiveProviderRoutes = effectiveProviderRouteKeys(snapshot);
     final effectiveExtensionRoutes = effectiveExtensionRouteKeys(snapshot);
@@ -147,24 +153,31 @@ abstract final class UINavigationRegistry {
           continue;
         }
         if (provider.capability == UICapability.routeRegistry) {
-          if (!effectiveProviderRoutes.contains('${provider.providerId}\u0000$route')) {
+          if (!effectiveProviderRoutes.contains(
+            '${provider.providerId}\u0000$route',
+          )) {
             continue;
           }
         } else if (!isProtectedProviderRoutePath(route) &&
-            !effectiveExtensionRoutes.contains('${provider.extensionId}\u0000$route')) {
+            !effectiveExtensionRoutes.contains(
+              '${provider.extensionId}\u0000$route',
+            )) {
           continue;
         }
         if (!seenIds.add(compositeId)) continue;
         final rawOrder = row['order'];
         final rawPrefixes = row['routePrefixes'] ?? row['match'];
-        final baseIcon = UIIconRegistry.iconFromName((row['icon'] ?? 'extension').toString());
+        final baseIcon = UIIconRegistry.iconFromName(
+          (row['icon'] ?? 'extension').toString(),
+        );
         items.add(
           UINavigationItem(
             id: compositeId,
             label: label,
             route: route,
             icon: baseIcon,
-            panel: (row['panel'] ?? '').toString() == 'main' ||
+            panel:
+                (row['panel'] ?? '').toString() == 'main' ||
                     (row['panel'] == null && row['mobile'] == true)
                 ? UINavigationPanel.main
                 : UINavigationPanel.more,
@@ -172,10 +185,11 @@ abstract final class UINavigationRegistry {
                 ? '扩展'
                 : (row['group'] ?? '扩展').toString().trim(),
             order: rawOrder is num ? rawOrder.toInt() : 1000,
-            routePrefixes: (rawPrefixes is List ? rawPrefixes : const <dynamic>[])
-                .map((e) => e.toString().trim())
-                .where((e) => e.startsWith('/') && e != '/')
-                .toList(),
+            routePrefixes:
+                (rawPrefixes is List ? rawPrefixes : const <dynamic>[])
+                    .map((e) => e.toString().trim())
+                    .where((e) => e.startsWith('/') && e != '/')
+                    .toList(),
             extensionId: provider.extensionId,
           ),
         );
@@ -183,18 +197,20 @@ abstract final class UINavigationRegistry {
     }
 
     final withIconOverrides = items
-        .map((item) => UINavigationItem(
-              id: item.id,
-              label: item.label,
-              route: item.route,
-              icon: UIIconRegistry.resolve(snapshot, item.id, item.icon),
-              panel: item.panel,
-              group: item.group,
-              order: item.order,
-              routePrefixes: item.routePrefixes,
-              builtin: item.builtin,
-              extensionId: item.extensionId,
-            ))
+        .map(
+          (item) => UINavigationItem(
+            id: item.id,
+            label: item.label,
+            route: item.route,
+            icon: UIIconRegistry.resolve(snapshot, item.id, item.icon),
+            panel: item.panel,
+            group: item.group,
+            order: item.order,
+            routePrefixes: item.routePrefixes,
+            builtin: item.builtin,
+            extensionId: item.extensionId,
+          ),
+        )
         .toList();
     return _sorted(withIconOverrides);
   }

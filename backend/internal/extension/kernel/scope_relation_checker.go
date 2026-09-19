@@ -29,7 +29,7 @@ func (c *repositoryScopeRelationChecker) ConversationBelongsToCharacter(ctx cont
 		return false
 	}
 	var count int
-	return c.relationDB.QueryRowContext(ctx, `SELECT COUNT(1) FROM conversations WHERE id = ? AND character_id = ?`, conversationID, characterID).Scan(&count) == nil && count == 1
+	return c.relationDB.QueryRowContext(ctx, `SELECT COUNT(1) FROM conversations WHERE id = ?`, conversationID).Scan(&count) == nil && count == 1
 }
 
 func (c *repositoryScopeRelationChecker) IsCharacterDeleted(ctx context.Context, characterID string) bool {

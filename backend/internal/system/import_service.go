@@ -614,8 +614,8 @@ func (h *Handler) ConfirmImports(c *gin.Context) {
 	defaultRole, _ := body["defaultRole"].(string)
 
 	ownerID := requestidentity.NormalizeSpaceID(spaceID)
-	if err := h.db.Exec("INSERT OR IGNORE INTO conversations (id, space_id, character_id, title, channel, source, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-		convID, ownerID, charID, title, "web", "import", now, now).Error; err != nil {
+	if err := h.db.Exec("INSERT OR IGNORE INTO conversations (id, space_id, title, channel, source, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+		convID, ownerID, title, "web", "import", now, now).Error; err != nil {
 		util.ErrorResponse(c, response.InternalError, "创建导入会话失败", nil)
 		return
 	}
@@ -649,8 +649,8 @@ func (h *Handler) ConfirmImports(c *gin.Context) {
 			}
 		}
 		msgID := uuid.New().String()
-		if err := h.db.Exec("INSERT INTO messages (id, conversation_id, sequence, role, content, source, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-			msgID, convID, maxSeq, role, content, "import", createdAt).Error; err != nil {
+		if err := h.db.Exec("INSERT INTO messages (id, conversation_id, character_id, sequence, role, content, source, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+			msgID, convID, charID, maxSeq, role, content, "import", createdAt).Error; err != nil {
 			util.ErrorResponse(c, response.InternalError, "保存导入消息失败", nil)
 			return
 		}
@@ -709,13 +709,13 @@ func (h *Handler) DoImportData(c *gin.Context) {
 	}
 	ownerID := requestidentity.NormalizeSpaceID(spaceID)
 	if err := h.db.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Exec("INSERT OR IGNORE INTO conversations (id, space_id, character_id, title, channel, source, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-			convID, ownerID, charID, "导入的聊天记录", "web", "import", now, now).Error; err != nil {
+		if err := tx.Exec("INSERT OR IGNORE INTO conversations (id, space_id, title, channel, source, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+			convID, ownerID, "导入的聊天记录", "web", "import", now, now).Error; err != nil {
 			return err
 		}
 		for _, m := range msgs {
-			if err := tx.Exec("INSERT INTO messages (id, conversation_id, role, content, created_at) VALUES (?, ?, ?, ?, ?)",
-				m["id"], m["conversation_id"], m["role"], m["content"], m["created_at"]).Error; err != nil {
+			if err := tx.Exec("INSERT INTO messages (id, conversation_id, character_id, role, content, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+				m["id"], m["conversation_id"], charID, m["role"], m["content"], m["created_at"]).Error; err != nil {
 				return err
 			}
 		}

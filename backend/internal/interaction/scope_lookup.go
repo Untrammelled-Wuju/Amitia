@@ -26,16 +26,15 @@ func (l ConversationScopeBindingLookup) FindScopeBindings(ctx context.Context, s
 		return nil, nil
 	}
 	type conversationBinding struct {
-		ID          string
-		SpaceID     string
-		CharacterID string
-		Channel     string
-		PeerID      string
-		Source      string
+		ID      string
+		SpaceID string
+		Channel string
+		PeerID  string
+		Source  string
 	}
 	var rows []conversationBinding
 	err := l.db.WithContext(ctx).Table("conversations").
-		Select("id, space_id, character_id, channel, peer_id, source").
+		Select("id, space_id, channel, peer_id, source").
 		Where("space_id = ? AND LOWER(channel) = ? AND peer_id = ?", spaceID, channel, peerID).
 		Find(&rows).Error
 	if err != nil {
@@ -46,7 +45,6 @@ func (l ConversationScopeBindingLookup) FindScopeBindings(ctx context.Context, s
 		bindings = append(bindings, ScopeBinding{
 			ID:             row.ID,
 			SpaceID:        row.SpaceID,
-			CharacterID:    row.CharacterID,
 			ConversationID: row.ID,
 			Channel:        row.Channel,
 			PeerID:         row.PeerID,

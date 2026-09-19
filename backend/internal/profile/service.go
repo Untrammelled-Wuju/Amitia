@@ -540,7 +540,7 @@ func (s *service) profileScope(convID string, characterID ...string) string {
 		return ""
 	}
 	var scope string
-	if err := s.db.Table("conversations").Select("character_id").Where("id = ?", convID).Row().Scan(&scope); err != nil {
+	if err := s.db.Table("messages").Select("character_id").Where("conversation_id = ? AND character_id <> ''", convID).Order("sequence DESC").Limit(1).Row().Scan(&scope); err != nil {
 		return ""
 	}
 	return scope

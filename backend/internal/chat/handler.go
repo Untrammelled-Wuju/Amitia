@@ -47,7 +47,6 @@ type conversationChangeScopedService interface {
 	CreateConversationForSpace(req *CreateConversationRequest, spaceID string) (*Conversation, error)
 	DeleteConversationForSpace(id string, spaceID string) (bool, error)
 	DeleteAllConversationsForSpace(spaceID string) error
-	ChangeCharacterForSpace(convID, charID, spaceID string) (*Conversation, error)
 }
 
 type messageChangeScopedService interface {
@@ -209,29 +208,6 @@ func (h *Handler) SearchMessages(c *gin.Context) {
 		return
 	}
 	util.SuccessResponse(c, resp)
-}
-
-func (h *Handler) ChangeCharacter(c *gin.Context) {
-	id := c.Param("id")
-	var body struct {
-		CharacterID string `json:"characterId"`
-	}
-	if err := c.ShouldBindJSON(&body); err != nil || body.CharacterID == "" {
-		util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
-		return
-	}
-	var conv *Conversation
-	var err error
-	if scoped, ok := h.service.(conversationChangeScopedService); ok {
-		conv, err = scoped.ChangeCharacterForSpace(id, body.CharacterID, requestidentity.ResolveGin(c))
-	} else {
-		conv, err = h.service.ChangeCharacter(id, body.CharacterID)
-	}
-	if err != nil {
-		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
-		return
-	}
-	util.SuccessMsgResponse(c, "角色已切换", conv)
 }
 
 func (h *Handler) Stats(c *gin.Context) {

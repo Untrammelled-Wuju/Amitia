@@ -40,7 +40,6 @@ SPDX-License-Identifier: AGPL-3.0-only
       :show-mem-inject="showMemInject"
       :call-active="callActive"
       :has-summary="!!convSummary"
-      @toggle-drawer="showDrawer = true"
       @regenerate="handleRegenerate"
       @clear="handleClear"
       @view-memories="handleViewMemories"
@@ -165,15 +164,6 @@ SPDX-License-Identifier: AGPL-3.0-only
       @cancel-reply="replyTarget = null"
     /></div>
 
-    <ConversationDrawer
-      v-model:visible="showDrawer"
-      :characters="characters"
-      :import-batches="importBatches"
-      :active-char-id="characterId"
-      @select-char="handleSwitchChar"
-      @continue-import="handleContinueImport"
-    />
-
     <CharacterPickerDialog
       v-model:visible="showCharPicker"
       :characters="characters"
@@ -204,11 +194,12 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, nextTick, watch, inject } from "vue";
-import { useRouter } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import { ElMessage } from "element-plus";
 import { Menu as MenuIcon } from "@element-plus/icons-vue";
 import { useApi } from "../../composables/useApi";
 import { useCachedApi } from "../../composables/useCachedApi";
+import { useChatStore } from "@/stores/chat";
 import { useWebChatSSE } from "../../composables/useWebChatSSE";
 import { useWebChatScroll } from "../../composables/useWebChatScroll";
 import { useWebChatSend } from "../../composables/useWebChatSend";
@@ -218,7 +209,6 @@ import ChatBanners from "../../components/ChatBanners.vue";
 import ChatHeaderBar from "../../components/ChatHeaderBar.vue";
 import MessagesArea from "../../components/MessagesArea.vue";
 import ChatInput from "../../components/ChatInput.vue";
-import ConversationDrawer from "../../components/ConversationDrawer.vue";
 import CharacterPickerDialog from "../../components/CharacterPickerDialog.vue";
 import MemoryPanel from "../../components/MemoryPanel.vue";
 import RealtimeCallDialog from "../../components/RealtimeCallDialog.vue";
@@ -238,6 +228,7 @@ import { browserClientPluginRuntime } from "@/ui-runtime/clientPluginRuntime";
 import { hasUnifiedSlotItem } from "@/ui-runtime/slotLedger";
 
 const router = useRouter();
+const route = useRoute();
 const callActive = ref(false);
 const callMode = ref<"voice" | "video" | "screen">("voice");
 const ttsVoiceType = ref("");
@@ -264,6 +255,7 @@ const {
   recentWorkspaces,
   refreshRecentWorkspaces,
   loadConversationWorkspace,
+  startDraftConversation,
   chooseWorkspaceDirectory,
   selectWorkspaceMount,
   clearWorkspace,
@@ -271,13 +263,10 @@ const {
 const { cachedGet, invalidateCache } = useCachedApi();
 const currentCharName = inject<any>("currentCharName", null);
 const extensionUIStore = useExtensionUIStore();
-
-function onNewChatEvent(e: Event) {
-  void handleNewChat(e as CustomEvent);
-}
+const chatStore = useChatStore();
 
 const messages = ref<any[]>([]);
-const convId = ref("");
+const convId = ref(String(route.query.conversationId || ""));
 const convTitle = ref("");
 const characterId = ref("");
 const cachedDef = (() => {
@@ -372,30 +361,29 @@ const pendingAudioUrl = ref<string | null>(null);
 const pendingVideoUrl = ref<string | null>(null);
 
 async function handleNewChat(event?: CustomEvent) {
-  if (!characterId.value) return;
   const providedId = event?.detail?.conversationId;
   try {
-    let newConvId = providedId;
-    if (!newConvId) {
-      const created = await post<any>("/api/web-chat/conversations", {
-        characterId: characterId.value,
-        title: "",
-      });
-      newConvId = created?.id;
-    }
-    if (newConvId) {
+    if (providedId) {
       disconnectSSE();
-      convId.value = newConvId;
+      convId.value = providedId;
       convTitle.value = "";
       messages.value = [];
       replyTarget.value = null;
-      localStorage.setItem("webchat-conv-id", newConvId);
+      await router.replace({ path: "/chat", query: { conversationId: providedId } });
       nextTick(() => scrollToBottom(true));
       connectSSE();
-      ElMessage.success("已创建新对话");
+      return;
     }
+    disconnectSSE();
+    convId.value = "";
+    convTitle.value = "";
+    messages.value = [];
+    replyTarget.value = null;
+    await startDraftConversation();
+    await router.replace({ path: "/chat" });
+    nextTick(() => inputRef.value?.focus());
   } catch (e: any) {
-    ElMessage.error(e?.response?.data?.msg || "创建新对话失败");
+    ElMessage.error(e?.response?.data?.msg || e?.message || "新建对话失败");
   }
 }
 
@@ -516,22 +504,24 @@ const {
   inputRef,
   undefined,
   replyTarget,
+  async (conversationId) => {
+    await router.replace({
+      path: "/chat",
+      query: { conversationId },
+    });
+  },
 );
 
 const {
   characters,
   conversations,
-  importBatches,
   memories,
-  showDrawer,
   showCharPicker,
   showMemories,
   selectCharacter,
   handleSwitchChar,
   loadCharacterConversation,
   fetchConversations,
-  handleSelectConv,
-  handleContinueImport,
   handleViewMemories,
   refreshCharacters,
   fetchConvSummary,
@@ -562,7 +552,6 @@ const conversationHostActions: Record<string, (input?: any) => unknown | Promise
   "conversation.delete": async (input) => deleteConversationMessage(String(input?.messageId ?? input ?? "")),
   "conversation.new": async () => handleNewChat(),
   "conversation.clear": async () => handleClear(),
-  "conversation.openDrawer": async () => { showDrawer.value = true; },
   "conversation.reply": async (input) => { const msg = messages.value.find((item) => item.id === String(input?.messageId ?? input ?? "")); if (msg) handleSetReply(msg); },
   "conversation.sendFile": async (input) => {
     if (input?.file instanceof File) return handleFileSend(input.file);
@@ -602,7 +591,7 @@ watch(
   convId,
   (conversationId) => {
     const id = conversationId || "";
-    loadConversationWorkspace(id);
+    loadConversationWorkspace(id, id ? "" : String(route.query.projectId || ""));
     const requestedId = id;
     void fetchConvSummary(requestedId).then((summary) => {
       if ((convId.value || "") === requestedId) {
@@ -611,6 +600,54 @@ watch(
     });
   },
   { immediate: true },
+);
+
+watch(
+  () => String(route.query.conversationId || ""),
+  async (nextId) => {
+    if (!nextId) {
+      disconnectSSE();
+      convId.value = "";
+      convTitle.value = "";
+      messages.value = [];
+      replyTarget.value = null;
+      await loadConversationWorkspace("", String(route.query.projectId || ""));
+      return;
+    }
+    if (nextId === convId.value) return;
+    convId.value = nextId;
+    await chatStore.fetchSidebar();
+    const conversation = [
+      ...chatStore.sidebar.pinned,
+      ...chatStore.sidebar.recent,
+      ...chatStore.sidebar.projects.flatMap((project) => project.conversations),
+    ].find((item) => item.id === nextId);
+    convTitle.value = conversation?.title || "新对话";
+    chatStore.currentProjectId = conversation?.projectId || "";
+    await loadCharacterConversation();
+  },
+);
+
+watch(
+  () => String(route.query.projectId || ""),
+  async (projectId) => {
+    if (convId.value) return;
+    await loadConversationWorkspace("", projectId);
+  },
+);
+
+watch(
+  () => chatStore.sidebar,
+  (sidebar) => {
+    if (!convId.value) return;
+    const conversation = [
+      ...sidebar.pinned,
+      ...sidebar.recent,
+      ...sidebar.projects.flatMap((project) => project.conversations),
+    ].find((item) => item.id === convId.value);
+    if (conversation) convTitle.value = conversation.title || "新对话";
+  },
+  { deep: true },
 );
 
 watch(showSummaryDrawer, (visible) => {
@@ -656,10 +693,6 @@ watch(isOffline, (offline) => {
   }
 });
 
-watch(showDrawer, (open) => {
-  if (open) refreshCharacters();
-});
-
 onMounted(async () => {
   connectProactiveSSE();
   history.scrollRestoration = "manual";
@@ -673,7 +706,6 @@ onMounted(async () => {
     ElMessage.warning("网络已断开");
   });
 
-  window.addEventListener("amitia:new-chat", onNewChatEvent);
   window.addEventListener("resize", updateViewport);
   updateViewport();
 
@@ -751,13 +783,18 @@ onMounted(async () => {
       }
     }
   });
+  if (convId.value) {
+    await chatStore.fetchSidebar();
+    const conversation = [
+      ...chatStore.sidebar.pinned,
+      ...chatStore.sidebar.recent,
+      ...chatStore.sidebar.projects.flatMap((project) => project.conversations),
+    ].find((item) => item.id === convId.value);
+    convTitle.value = conversation?.title || "新对话";
+    chatStore.currentProjectId = conversation?.projectId || "";
+  }
   await loadCharacterConversation();
   await fetchConversations();
-
-  try {
-    const r = await get<any>("/api/imports/batches");
-    importBatches.value = r?.items || [];
-  } catch {}
 
   nextTick(() => inputRef.value?.focus());
 });
@@ -765,7 +802,6 @@ onMounted(async () => {
 onUnmounted(() => {
   cleanupSSE();
   disconnectProactiveSSE();
-  window.removeEventListener("amitia:new-chat", onNewChatEvent);
   window.removeEventListener("resize", updateViewport);
 });
 </script>

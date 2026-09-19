@@ -54,12 +54,13 @@ import { isNavigationAllowed } from "../navigation/nav-whitelist";
 import {
   apiClient,
 } from "../composables/useApi";
-import { getPageTitle } from "@/navigation/app-nav";
+import { resolvePageTitle, useUINavigationRegistry } from "@/ui-runtime/navigationRegistry";
 import { useAppStore } from "@/stores/app";
 import { useExtensionUIStore } from "@/stores/extensionUI";
 import { isDesktopShell } from "../runtime/runtime-capabilities";
 
 const router = useRouter();
+const { items: navigationItems } = useUINavigationRegistry();
 const { connect: connectUIHost, disconnect: disconnectUIHost } = useUIHostSSE();
 let electronNavCleanup: (() => void) | null = null;
 let disposeExtensionListener: (() => void) | null = null;
@@ -93,7 +94,7 @@ const isContentFullHeight = computed(() => {
     path.startsWith("/extensions/workflows/") ||
     isFullHeightRoute.value;
 });
-const pageTitle = computed(() => getPageTitle(router.currentRoute.value.path));
+const pageTitle = computed(() => resolvePageTitle(router.currentRoute.value.path, navigationItems.value));
 
 const health = ref({
   appStatus: "running",

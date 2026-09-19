@@ -49,21 +49,26 @@ func (s *service) requireProfileConversationOwner(conversationID, spaceID, reque
 		return strings.TrimSpace(requestedCharacterID), nil
 	}
 	var row struct {
-		SpaceID     string `gorm:"column:space_id"`
-		CharacterID string `gorm:"column:character_id"`
+		SpaceID string `gorm:"column:space_id"`
 	}
-	if err := s.db.Table("conversations").Select("space_id, character_id").Where("id = ? AND deleted_at IS NULL", conversationID).Take(&row).Error; err != nil {
+	if err := s.db.Table("conversations").Select("space_id").Where("id = ? AND deleted_at IS NULL", conversationID).Take(&row).Error; err != nil {
 		return "", err
 	}
 	if !profileOwnerMatches(row.SpaceID, spaceID) {
 		return "", gorm.ErrRecordNotFound
 	}
-	conversationCharacterID := strings.TrimSpace(row.CharacterID)
 	requestedCharacterID = strings.TrimSpace(requestedCharacterID)
-	if requestedCharacterID != "" && requestedCharacterID != conversationCharacterID {
-		return "", gorm.ErrRecordNotFound
+	if requestedCharacterID != "" {
+		if err := s.requireProfileCharacterOwner(requestedCharacterID, spaceID); err != nil {
+			return "", err
+		}
+		return requestedCharacterID, nil
 	}
-	return conversationCharacterID, nil
+	var conversationCharacterID string
+	if err := s.db.Table("messages").Select("character_id").Where("conversation_id = ? AND character_id <> ''", conversationID).Order("sequence DESC").Limit(1).Row().Scan(&conversationCharacterID); err != nil {
+		return "", nil
+	}
+	return strings.TrimSpace(conversationCharacterID), nil
 }
 
 func (s *service) CreateForSpace(req *CreateProfileRequest, spaceID string) (*UserProfile, error) {

@@ -206,28 +206,12 @@ func (s *service) CreateForSpace(req *CreateCharacterRequest, spaceID string) (*
 		if err := tx.Create(c).Error; err != nil {
 			return err
 		}
-		convID := uuid.New().String()
-		now := time.Now().Format("2006-01-02 15:04:05")
-		if err := tx.Exec("INSERT INTO conversations (id, space_id, character_id, title, channel, source, created_at, updated_at, revision) VALUES (?, ?, ?, ?, 'web', 'system', ?, ?, 1)", convID, normalizeCharacterOwner(spaceID), c.ID, c.Name, now, now).Error; err != nil {
-			return err
-		}
-		if err := tx.Table("characters").Where("id = ?", c.ID).Update("conversation_id", convID).Error; err != nil {
-			return err
-		}
 		if s.changeRecorder != nil {
 			payload, marshalErr := json.Marshal(map[string]interface{}{"id": c.ID, "name": c.Name, "meta": characterSyncMeta(c)})
 			if marshalErr != nil {
 				return marshalErr
 			}
 			if _, recErr := s.changeRecorder.RecordChange(tx, sync.EntityTypeCharacter, sync.EntityID(c.ID), sync.OpCreate, 1, sync.MutationID("business_character_"+c.ID+"_create_"+uuid.NewString()), normalizeCharacterChangeSpaceID(spaceID), sync.ScopeDevice, payload); recErr != nil {
-				createErr = recErr
-				return recErr
-			}
-			conversationPayload, marshalErr := json.Marshal(map[string]string{"id": convID, "characterId": c.ID, "title": c.Name, "channel": "web", "source": "system"})
-			if marshalErr != nil {
-				return marshalErr
-			}
-			if _, recErr := s.changeRecorder.RecordChange(tx, sync.EntityTypeConversation, sync.EntityID(convID), sync.OpCreate, 1, sync.MutationID("business_conversation_"+convID+"_create_"+uuid.NewString()), normalizeCharacterChangeSpaceID(spaceID), sync.ScopeDevice, conversationPayload); recErr != nil {
 				createErr = recErr
 				return recErr
 			}
@@ -515,7 +499,7 @@ func characterSyncMeta(c *Character) map[string]interface{} {
 		"emotion": c.Emotion, "emotion_scale": c.EmotionScale, "silence_duration": c.SilenceDuration,
 		"personality_config": c.PersonalityConfig, "is_default": c.IsDefault,
 		"chat_style_config": c.ChatStyleConfig, "scene_rules": c.SceneRules,
-		"avatar": c.Avatar, "conversation_id": c.ConversationID,
+		"avatar":       c.Avatar,
 		"gender_label": c.GenderLabel, "user_addressing_style": c.UserAddressingStyle,
 		"base_prompt": c.BasePrompt, "generated_prompt": c.GeneratedPrompt,
 		"personality_sliders": c.PersonalitySliders, "card_data_json": c.CardDataJSON,
@@ -763,31 +747,12 @@ func (s *service) ImportCardForSpace(data []byte, filename string, confirm bool,
 	char.CardDataJSON = string(cardDataBytes)
 
 	char.Revision = 1
-	convID := uuid.New().String()
-	now := time.Now().Format("2006-01-02 15:04:05")
 	err = s.db.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Create(char).Error; err != nil {
 			return err
 		}
-		if err := tx.Exec("INSERT INTO conversations (id, space_id, character_id, title, channel, source, created_at, updated_at, revision) VALUES (?, ?, ?, ?, 'web', 'system', ?, ?, 1)", convID, normalizeCharacterOwner(spaceID), char.ID, char.Name, now, now).Error; err != nil {
-			return err
-		}
-		if err := tx.Model(&Character{}).Where("id = ?", char.ID).Update("conversation_id", convID).Error; err != nil {
-			return err
-		}
-		char.ConversationID = convID
 		if err := s.recordCharacterChangeTx(tx, char, sync.OpCreate, spaceID); err != nil {
 			return err
-		}
-		if s.changeRecorder != nil {
-			payload, marshalErr := json.Marshal(map[string]string{"id": convID, "characterId": char.ID, "title": char.Name, "channel": "web", "source": "system"})
-			if marshalErr != nil {
-				return marshalErr
-			}
-			_, recErr := s.changeRecorder.RecordChange(tx, sync.EntityTypeConversation, sync.EntityID(convID), sync.OpCreate, 1, sync.MutationID("business_conversation_"+convID+"_create_"+uuid.NewString()), normalizeCharacterChangeSpaceID(spaceID), sync.ScopeDevice, payload)
-			if recErr != nil {
-				return recErr
-			}
 		}
 		return nil
 	})

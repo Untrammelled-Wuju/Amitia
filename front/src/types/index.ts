@@ -100,7 +100,7 @@ export interface Message {
 // Conversation
 export interface Conversation {
   id: string;
-  characterId: string;
+  projectId: string;
   title: string;
   channel: string;
   source: string;

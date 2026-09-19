@@ -65,6 +65,41 @@ func (s *Service) HasBackend(kind WorkspaceKind) bool {
 	return s.registry != nil && s.registry.HasBackend(kind)
 }
 
+func (s *Service) ResolveWorkspaceAvailability(workspaceID string) (bool, string, string) {
+	if s == nil || s.registry == nil || strings.TrimSpace(workspaceID) == "" {
+		return false, "missing", "项目根目录不存在"
+	}
+	mount, ok := s.registry.GetMountOrEmpty(WorkspaceID(workspaceID))
+	if !ok {
+		return false, "missing", "项目根目录不存在"
+	}
+	if mount.Kind == WorkspaceKindLocal && strings.TrimSpace(mount.LocalRoot) != "" {
+		info, err := os.Stat(mount.LocalRoot)
+		if err != nil {
+			return false, "missing", "项目根目录不可访问"
+		}
+		if !info.IsDir() {
+			return false, "missing", "项目根目录不是文件夹"
+		}
+	}
+	if !mount.Available {
+		reason := strings.TrimSpace(mount.StatusReason)
+		if reason == "" {
+			reason = "项目根目录不可用"
+		}
+		status := string(mount.Status)
+		if status == "" {
+			status = string(WorkspaceStatusUnavailable)
+		}
+		return false, status, reason
+	}
+	status := string(mount.Status)
+	if status == "" {
+		status = string(WorkspaceStatusReady)
+	}
+	return true, status, ""
+}
+
 func canonicalLocalRoot(localRoot string) (string, error) {
 	root := strings.TrimSpace(localRoot)
 	if root == "" {

@@ -35,6 +35,7 @@ coverage/
 *.tmp
 *.bak
 *.orig
+*.exe~
 .tmp-*/
 temp_apk_extract/
 .gradle-proot-build/

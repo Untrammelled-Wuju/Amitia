@@ -13,7 +13,6 @@ import (
 	"github.com/u-ai/backend/config"
 	"github.com/u-ai/backend/internal/graph"
 	"github.com/u-ai/backend/internal/pipelinecheckpoint"
-	"github.com/u-ai/backend/internal/requestidentity"
 	"github.com/u-ai/backend/internal/spaceidentity"
 	"github.com/u-ai/backend/pkg/app"
 	"gorm.io/gorm"
@@ -213,54 +212,6 @@ func TestProcessUsesCheckpointIncrementally(t *testing.T) {
 	}
 	if !strings.Contains(requests[1], "第二条新增事实") {
 		t.Fatalf("incremental request missing new message: %s", requests[1])
-	}
-}
-
-func TestToolUpsertUsesConversationCharacterScope(t *testing.T) {
-	svc, db := newProfileTestService(t)
-	if err := db.Exec(`INSERT INTO conversations (id, character_id) VALUES (?, ?)`, "conv-a", "char-a").Error; err != nil {
-		t.Fatalf("insert conversation: %v", err)
-	}
-
-	item, err := svc.UpsertFromTool("user-1", "preference", "饮料", "茶", 80, "conv-a")
-	if err != nil {
-		t.Fatalf("upsert from tool: %v", err)
-	}
-	if item.CharacterID != "char-a" {
-		t.Fatalf("tool profile scope = %q, want char-a", item.CharacterID)
-	}
-
-	items, err := svc.repo.GetScopedBySpaceID("user-1", "char-b")
-	if err != nil {
-		t.Fatalf("query char-b profiles: %v", err)
-	}
-	for _, got := range items {
-		if got.AttributeName == "饮料" && got.AttributeValue == "茶" {
-			t.Fatalf("char-b received char-a profile: %+v", got)
-		}
-	}
-}
-
-func TestDefaultUserInputDerivesProfileUserScopeFromCharacter(t *testing.T) {
-	svc, db := newProfileTestService(t)
-	if err := db.Exec(`INSERT INTO conversations (id, character_id) VALUES (?, ?)`, "conv-a", "char-a").Error; err != nil {
-		t.Fatalf("insert conversation: %v", err)
-	}
-
-	item, err := svc.UpsertFromTool("default", "preference", "饮料", "茶", 80, "conv-a")
-	if err != nil {
-		t.Fatalf("upsert from tool: %v", err)
-	}
-	if item.SpaceID != requestidentity.CanonicalSpaceID() {
-		t.Fatalf("tool profile user scope = %q, want canonical space", item.SpaceID)
-	}
-	if item.CharacterID != "char-a" {
-		t.Fatalf("tool profile character scope = %q, want char-a", item.CharacterID)
-	}
-
-	prompt := svc.ToSystemPrompt("default", "char-a")
-	if !strings.Contains(prompt, "茶") {
-		t.Fatalf("prompt missing derived character profile: %s", prompt)
 	}
 }
 

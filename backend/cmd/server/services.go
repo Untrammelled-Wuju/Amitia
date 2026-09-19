@@ -352,6 +352,9 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 			return nil, fmt.Errorf("initialize workspace services: %w", err)
 		}
 	}
+	if workspaceService != nil {
+		chatSvc.SetWorkspaceAvailabilityResolver(workspaceService)
+	}
 
 	var mediaService *media.Service
 	if bootstrap != nil {

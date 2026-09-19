@@ -77,7 +77,6 @@ export function resolveNavigationIcon(name?: string): Component {
 const builtinItems: UINavigationItem[] = [
   { id: "overview.run", route: "/dashboard/run", label: "运行概览", icon: DataLine, group: "overview", groupLabel: "概览", groupIcon: Odometer, order: 5 },
   { id: "overview.data", route: "/dashboard/data", label: "运行数据", icon: DataAnalysis, group: "overview", groupLabel: "概览", groupIcon: Odometer, order: 10 },
-  { id: "chat", route: "/chat", label: "新对话", icon: ChatLineRound, group: "chat", order: 15, mobile: true },
   { id: "character.manage", route: "/character", label: "角色管理", icon: User, group: "character", groupLabel: "角色", groupIcon: UserFilled, order: 20, mobile: true, match: ["/character"] },
   { id: "character.reminders", route: "/reminders", label: "日程提醒", icon: Calendar, group: "character", groupLabel: "角色", groupIcon: UserFilled, order: 25 },
   { id: "character.profiles", route: "/profiles", label: "用户画像", icon: Avatar, group: "character", groupLabel: "角色", groupIcon: UserFilled, order: 30 },
@@ -86,11 +85,47 @@ const builtinItems: UINavigationItem[] = [
   { id: "memory.episodic", route: "/episodic", label: "情景记忆", icon: Film, group: "memory", groupLabel: "记忆", groupIcon: Grid, order: 60 },
   { id: "memory.graph", route: "/graph", label: "记忆图谱", icon: Share, group: "memory", groupLabel: "记忆", groupIcon: Grid, order: 65 },
   { id: "memory.timeline", route: "/memory-timeline", label: "时间线", icon: Timer, group: "memory", groupLabel: "记忆", groupIcon: Grid, order: 70 },
-  { id: "memory.logs", route: "/logs", label: "聊天记录", icon: ChatLineRound, group: "memory", groupLabel: "记忆", groupIcon: Grid, order: 75 },
+  { id: "channels.messages", route: "/channel-messages", label: "渠道消息", icon: Connection, group: "channels", groupLabel: "渠道", groupIcon: Connection, order: 78 },
   { id: "workshop.game-center", route: "/game-center", label: "游戏模式", icon: MagicStick, group: "workshop", order: 80, runtimeCapability: "gameMode" },
   { id: "workshop", route: "/creative-workshop", label: "创意工坊", icon: MagicStick, group: "workshop", order: 85, match: ["/creative-workshop"] },
   { id: "extensions", route: "/extensions", label: "扩展中心", icon: Menu, group: "extensions", order: 90, match: ["/extensions", "/kernel"] },
 ];
+
+const pageTitleOverrides: Record<string, string> = {
+  "/onboarding": "引导",
+  "/privacy": "隐私说明",
+  "/usage-boundary": "使用边界",
+  "/storage": "存储清理",
+  "/runtime-mode": "运行模式",
+  "/runtime-debug": "运行时调试",
+  "/chat": "新对话",
+  "/user-settings": "用户信息",
+  "/creative-workshop/character-cards": "角色卡工坊",
+  "/creative-workshop/pet": "桌宠",
+  "/emotes": "表情包管理",
+  "/extensions/mcp": "MCP 服务",
+  "/extensions/packages": "扩展包",
+  "/extensions/workflows": "工作流",
+  "/kernel": "扩展包",
+  "/kernel/trusted-services": "可信服务运行时",
+  "/kernel/wasm": "WASM 运行时",
+  "/kernel/hooks": "Hook 中心",
+  "/kernel/tasks": "任务运行时",
+  "/kernel/events": "事件中心",
+  "/kernel/schedules": "调度中心",
+  "/kernel/desktop": "桌面贡献中心",
+  "/kernel/updates": "扩展更新中心",
+  "/kernel/dev-console": "开发者诊断控制台",
+  "/kernel/migrations": "迁移与灰度中心",
+  "/kernel/dev-mode": "开发模式中心",
+  "/devices": "我的设备",
+  "/workspaces": "工作区",
+  "/realtime-voice": "实时语音",
+  "/long-running": "长期运行维护",
+  "/settings/system-logs": "系统运行日志",
+  "/settings/prompt-trace": "Prompt Trace",
+  "/logs": "归档对话",
+};
 
 function finiteNumber(value: unknown, fallback: number): number {
   const parsed = Number(value);
@@ -216,4 +251,11 @@ export function useUINavigationRegistry() {
 export function isUINavigationItemActive(path: string, item: UINavigationItem): boolean {
   if (path === item.route || path.startsWith(`${item.route}/`)) return true;
   return (item.match ?? []).some((prefix) => path === prefix || path.startsWith(`${prefix}/`));
+}
+
+export function resolvePageTitle(path: string, items: UINavigationItem[] = builtinItems): string {
+  const override = pageTitleOverrides[path];
+  if (override) return override;
+  const item = items.find((entry) => isUINavigationItemActive(path, entry));
+  return item?.label ?? "AI-Amitia";
 }

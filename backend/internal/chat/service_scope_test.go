@@ -38,34 +38,9 @@ func setupScopedChatService(t *testing.T) *service {
 	return &service{repo: NewRepository(ctx), charRepo: character.NewRepository(ctx), db: db}
 }
 
-func TestProcessMessageRejectsConversationCharacterMismatch(t *testing.T) {
-	svc := setupScopedChatService(t)
-	if err := svc.db.Create(&Conversation{ID: "conv-1", SpaceID: normalizeConversationOwner(""), CharacterID: "char-2", Title: "旧会话", Channel: "web", Source: "manual"}).Error; err != nil {
-		t.Fatal(err)
-	}
-
-	_, err := svc.ProcessMessage(context.Background(), &ProcessMessageRequest{
-		CharacterID:    "char-1",
-		ConversationID: "conv-1",
-		Message:        "你好",
-		Channel:        "web",
-		RequestID:      "req-mismatch-char",
-	})
-	if err == nil || !strings.Contains(err.Error(), "会话与角色或渠道不匹配") {
-		t.Fatalf("expected scope mismatch error, got %v", err)
-	}
-	var count int64
-	if err := svc.db.Model(&Message{}).Where("conversation_id = ?", "conv-1").Count(&count).Error; err != nil {
-		t.Fatal(err)
-	}
-	if count != 0 {
-		t.Fatalf("expected no messages written, got %d", count)
-	}
-}
-
 func TestProcessMessageRejectsConversationChannelMismatch(t *testing.T) {
 	svc := setupScopedChatService(t)
-	if err := svc.db.Create(&Conversation{ID: "conv-2", SpaceID: normalizeConversationOwner(""), CharacterID: "char-1", Title: "旧会话", Channel: "qq", Source: "manual"}).Error; err != nil {
+	if err := svc.db.Create(&Conversation{ID: "conv-2", SpaceID: normalizeConversationOwner(""), Title: "旧会话", Channel: "qq", Source: "manual"}).Error; err != nil {
 		t.Fatal(err)
 	}
 
@@ -90,7 +65,7 @@ func TestProcessMessageRejectsConversationChannelMismatch(t *testing.T) {
 
 func TestChatRejectsConversationChannelMismatch(t *testing.T) {
 	svc := setupScopedChatService(t)
-	if err := svc.db.Create(&Conversation{ID: "conv-3", SpaceID: normalizeConversationOwner(""), CharacterID: "char-1", Title: "旧会话", Channel: "qq", Source: "manual"}).Error; err != nil {
+	if err := svc.db.Create(&Conversation{ID: "conv-3", SpaceID: normalizeConversationOwner(""), Title: "旧会话", Channel: "qq", Source: "manual"}).Error; err != nil {
 		t.Fatal(err)
 	}
 

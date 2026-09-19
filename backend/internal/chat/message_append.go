@@ -74,9 +74,6 @@ func (s *service) AppendConversationMessages(ctx context.Context, request *Appen
 	if !conversationOwnerMatches(conversation.SpaceID, request.SpaceID) {
 		return nil, gorm.ErrRecordNotFound
 	}
-	if conversation.CharacterID != request.CharacterID {
-		return nil, ErrConversationScopeMismatch
-	}
 	if request.Channel == "" {
 		request.Channel = conversation.Channel
 	}
@@ -192,6 +189,7 @@ func buildAppendMessage(request *AppendConversationMessagesRequest, responseGrou
 	message := &Message{
 		ID:               uuid.New().String(),
 		ConversationID:   request.ConversationID,
+		CharacterID:      request.CharacterID,
 		Role:             request.Role,
 		Content:          content,
 		MsgType:          part.Type,

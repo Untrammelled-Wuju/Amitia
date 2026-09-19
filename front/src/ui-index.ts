@@ -6,7 +6,6 @@ export { default as StatusBar } from "./components/StatusBar.vue";
 export { default as SideNav } from "./components/SideNav.vue";
 export { default as MobileNav } from "./components/MobileNav.vue";
 export { default as ChatBubble } from "./components/ChatBubble.vue";
-export { default as ConversationDrawer } from "./components/ConversationDrawer.vue";
 export { default as ChatInput } from "./components/ChatInput.vue";
 export { default as ErrorPanel } from "./components/ErrorPanel.vue";
 

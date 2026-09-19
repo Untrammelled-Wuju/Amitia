@@ -57,7 +57,6 @@ func setupChatFunctionalTest(t *testing.T) (*gorm.DB, *service, string, string) 
 	if err := db.Create(&Conversation{
 		ID:          convID,
 		SpaceID:     normalizeConversationOwner(""),
-		CharacterID: charID,
 		Title:       "功能测试对话",
 		Channel:     "web",
 		Source:      "manual",
@@ -259,7 +258,6 @@ func TestChatFunctional_TenRoundConsistency(t *testing.T) {
 			if err := db.Create(&Conversation{
 				ID:          c.id,
 				SpaceID:     normalizeConversationOwner(""),
-				CharacterID: charID,
 				Title:       c.channel + "十轮测试",
 				Channel:     c.channel,
 				Source:      "manual",
@@ -398,7 +396,6 @@ func TestChatFunctional_ChannelSpecificSplit(t *testing.T) {
 		db.Create(&Conversation{
 			ID:          convWechat,
 			SpaceID:     normalizeConversationOwner(""),
-			CharacterID: charID,
 			Title:       "微信对话",
 			Channel:     "wechat",
 			Source:      "sidecar",
@@ -435,7 +432,6 @@ func TestChatFunctional_ChannelSpecificSplit(t *testing.T) {
 		db.Create(&Conversation{
 			ID:          convQQ,
 			SpaceID:     normalizeConversationOwner(""),
-			CharacterID: charID,
 			Title:       "QQ对话",
 			Channel:     "qq",
 			Source:      "sidecar",
@@ -692,7 +688,7 @@ func setupChatFunctionalTestWithCapture(t *testing.T, personalityCfg string, cap
 	}).Error; err != nil {
 		t.Fatal(err)
 	}
-	if err := db.Create(&Conversation{ID: convID, SpaceID: normalizeConversationOwner(""), CharacterID: charID, Title: "capture", Channel: "web", Source: "manual"}).Error; err != nil {
+	if err := db.Create(&Conversation{ID: convID, SpaceID: normalizeConversationOwner(""), Title: "capture", Channel: "web", Source: "manual"}).Error; err != nil {
 		t.Fatal(err)
 	}
 	if err := db.Create(&ModelConfig{

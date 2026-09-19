@@ -32,7 +32,6 @@ func registerChatRoutes(r *gin.RouterGroup, handler *Handler) {
 		chatsGroup.DELETE("/conversations/:id/messages", handler.DeleteMessages)
 		chatsGroup.DELETE("/messages/:id", handler.DeleteSingleMessage)
 		chatsGroup.GET("/search", handler.SearchMessages)
-		chatsGroup.PUT("/conversations/:id/character", handler.ChangeCharacter)
 		chatsGroup.DELETE("/all", handler.DeleteAllConversations)
 		chatsGroup.GET("/conversations/:id/summary", handler.GetSummary)
 		chatsGroup.PUT("/conversations/:id/summary", handler.UpdateSummary)

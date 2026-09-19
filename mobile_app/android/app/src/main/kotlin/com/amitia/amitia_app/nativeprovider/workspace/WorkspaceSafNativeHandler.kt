@@ -8,6 +8,7 @@ import android.net.Uri
 import android.os.Build
 import android.provider.DocumentsContract
 import android.util.Base64
+import androidx.core.content.FileProvider
 import com.amitia.amitia_app.MainActivity
 import com.amitia.amitia_app.nativeprovider.AndroidNativeOperationHandler
 import com.amitia.amitia_app.nativeprovider.model.NativeBridgeError
@@ -17,6 +18,7 @@ import com.amitia.amitia_app.nativeprovider.model.NativeBridgeResponse
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.ArrayDeque
 import java.util.Date
@@ -42,6 +44,7 @@ internal class WorkspaceSafNativeHandler(context: Context) : AndroidNativeOperat
         OP_DELETE,
         OP_RESOLVE_PATH,
         OP_CREATE_FILE,
+        OP_OPEN,
     )
 
     override suspend fun execute(request: NativeBridgeRequest): NativeBridgeResponse = try {
@@ -59,6 +62,7 @@ internal class WorkspaceSafNativeHandler(context: Context) : AndroidNativeOperat
             OP_DELETE -> delete(request)
             OP_RESOLVE_PATH -> resolvePath(request)
             OP_CREATE_FILE -> createFile(request)
+            OP_OPEN -> open(request)
             else -> failure(request, "OPERATION_NOT_SUPPORTED", "unsupported SAF operation: ${request.operation}")
         }
     } catch (security: SecurityException) {
@@ -236,6 +240,39 @@ internal class WorkspaceSafNativeHandler(context: Context) : AndroidNativeOperat
             displayName,
         ) ?: return failure(request, "WRITE_FAILED", "provider refused to create file", "WRITE_FAILED")
         return success(request, requireDocument(treeUri, DocumentsContract.getDocumentId(created)).toStatMap())
+    }
+
+    private fun open(request: NativeBridgeRequest): NativeBridgeResponse {
+        val uriText = request.payload.string("uri")
+        val pathText = request.payload.string("path")
+        val target = when {
+            uriText.isNotBlank() -> Uri.parse(uriText)
+            pathText.isNotBlank() -> {
+                val file = File(pathText)
+                if (!file.exists()) {
+                    return failure(request, "FILE_NOT_FOUND", "project directory does not exist", "FILE_NOT_FOUND")
+                }
+                FileProvider.getUriForFile(
+                    appContext,
+                    "${appContext.packageName}.fileprovider",
+                    file,
+                )
+            }
+            else -> return invalid(request, "uri or path is required")
+        }
+        return try {
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(target, DocumentsContract.Document.MIME_TYPE_DIR)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            appContext.startActivity(Intent.createChooser(intent, "打开项目目录").apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            })
+            success(request, mapOf("opened" to true, "uri" to target.toString()))
+        } catch (error: Exception) {
+            failure(request, "OPEN_FAILED", error.message ?: "open project directory failed", "OPEN_FAILED")
+        }
     }
 
     private fun rename(request: NativeBridgeRequest): NativeBridgeResponse {
@@ -519,6 +556,7 @@ internal class WorkspaceSafNativeHandler(context: Context) : AndroidNativeOperat
         const val OP_DELETE = "workspace.saf.delete"
         const val OP_RESOLVE_PATH = "workspace.saf.resolve_path"
         const val OP_CREATE_FILE = "workspace.saf.create_file"
+        const val OP_OPEN = "workspace.open"
     }
 }
 

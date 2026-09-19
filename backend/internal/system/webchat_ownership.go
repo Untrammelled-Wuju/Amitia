@@ -19,7 +19,6 @@ type webChatScopedService interface {
 	CreateConversationForSpace(req *chat.CreateConversationRequest, spaceID string) (*chat.Conversation, error)
 	EnsureChannelConversationForSpace(channel, spaceID string) (*chat.Conversation, error)
 	DeleteConversationForSpace(id, spaceID string) (bool, error)
-	ChangeCharacterForSpace(id, characterID, spaceID string) (*chat.Conversation, error)
 	DeleteMessagesForSpace(convID, spaceID string) error
 }
 

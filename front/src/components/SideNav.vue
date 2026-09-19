@@ -42,21 +42,39 @@ SPDX-License-Identifier: AGPL-3.0-only
       </div>
     </div>
 
-    <el-menu
-      :default-active="activeIndex"
-      :collapse="appStore.sidebarCollapsed"
-      unique-opened
-      router
-      class="side-menu"
-    >
-      <template v-for="group in navigationGroups" :key="group.id">
-        <el-sub-menu v-if="group.label && group.items.length > 1" :index="group.id">
-          <template #title>
-            <el-icon><component :is="group.icon" /></el-icon>
-            <span>{{ group.label }}</span>
-          </template>
+    <button class="new-chat" type="button" @click="handleNewChat">
+      <el-icon><Plus /></el-icon>
+      <span v-show="!appStore.sidebarCollapsed">新对话</span>
+    </button>
+
+    <div class="sidebar-scroll">
+      <el-menu
+        :default-active="activeIndex"
+        :collapse="appStore.sidebarCollapsed"
+        unique-opened
+        router
+        class="side-menu"
+      >
+        <template v-for="group in navigationGroups" :key="group.id">
+          <el-sub-menu v-if="group.label && group.items.length > 1" :index="group.id">
+            <template #title>
+              <el-icon><component :is="group.icon" /></el-icon>
+              <span>{{ group.label }}</span>
+            </template>
+            <el-menu-item
+              v-for="item in group.items"
+              :key="item.id"
+              :index="item.route"
+              :style="navigationItemStyle"
+              @mouseenter="prewarmItem(item)"
+              @focus="prewarmItem(item)"
+            >
+              <el-icon><component :is="item.icon" /></el-icon>
+              <span>{{ item.label }}</span>
+            </el-menu-item>
+          </el-sub-menu>
           <el-menu-item
-            v-for="item in group.items"
+            v-for="item in group.label && group.items.length > 1 ? [] : group.items"
             :key="item.id"
             :index="item.route"
             :style="navigationItemStyle"
@@ -66,20 +84,83 @@ SPDX-License-Identifier: AGPL-3.0-only
             <el-icon><component :is="item.icon" /></el-icon>
             <span>{{ item.label }}</span>
           </el-menu-item>
-        </el-sub-menu>
-        <el-menu-item
-          v-for="item in group.label && group.items.length > 1 ? [] : group.items"
-          :key="item.id"
-          :index="item.route"
-          :style="navigationItemStyle"
-          @mouseenter="prewarmItem(item)"
-          @focus="prewarmItem(item)"
+        </template>
+      </el-menu>
+
+      <div v-show="!appStore.sidebarCollapsed" class="thread-sidebar">
+      <div v-if="chatStore.sidebar.pinned.length || pinnedProjects.length" class="thread-section">
+        <div class="section-caption">置顶</div>
+        <SidebarConversationRow
+          v-for="conversation in chatStore.sidebar.pinned"
+          :key="conversation.id"
+          :conversation="conversation"
+          :active="conversation.id === activeConversationId"
+          @select="handleSelectConversation"
+          @rename="handleConversationRename"
+          @toggle-pin="handleToggleConversationPin"
+          @archive="handleArchiveConversation"
+        />
+        <SidebarProjectBlock
+          v-for="project in pinnedProjects"
+          :key="project.id"
+          :project="project"
+          :active="project.id === chatStore.currentProjectId"
+          :active-conversation-id="activeConversationId"
+          @select="handleSelectConversation"
+          @create-conversation="handleCreateProjectConversation"
+          @command="handleProjectCommand"
+          @rename-conversation="handleConversationRename"
+          @toggle-pin-conversation="handleToggleConversationPin"
+          @archive-conversation="handleArchiveConversation"
+        />
+      </div>
+
+      <div class="thread-section">
+        <div class="section-caption">最近</div>
+        <SidebarConversationRow
+          v-for="conversation in visibleRecentConversations"
+          :key="conversation.id"
+          :conversation="conversation"
+          :active="conversation.id === activeConversationId"
+          @select="handleSelectConversation"
+          @rename="handleConversationRename"
+          @toggle-pin="handleToggleConversationPin"
+          @archive="handleArchiveConversation"
+        />
+        <button
+          v-if="chatStore.sidebar.recent.length > 5"
+          type="button"
+          class="thread-expand"
+          @click="expandAllRecent = !expandAllRecent"
         >
-          <el-icon><component :is="item.icon" /></el-icon>
-          <span>{{ item.label }}</span>
-        </el-menu-item>
-      </template>
-    </el-menu>
+          {{ expandAllRecent ? "收起" : "展开显示" }}
+        </button>
+        <div v-if="chatStore.sidebar.recent.length === 0" class="thread-empty">暂无对话</div>
+      </div>
+
+      <div class="thread-section">
+        <div class="section-caption project-caption">
+          <span>项目</span>
+          <button type="button" class="section-add" title="添加文件夹" aria-label="添加文件夹" @click="handleAddProject">
+            <el-icon><Plus /></el-icon>
+          </button>
+        </div>
+        <SidebarProjectBlock
+          v-for="project in regularProjects"
+          :key="project.id"
+          :project="project"
+          :active="project.id === chatStore.currentProjectId"
+          :active-conversation-id="activeConversationId"
+          @select="handleSelectConversation"
+          @create-conversation="handleCreateProjectConversation"
+          @command="handleProjectCommand"
+          @rename-conversation="handleConversationRename"
+          @toggle-pin-conversation="handleToggleConversationPin"
+          @archive-conversation="handleArchiveConversation"
+        />
+      </div>
+      </div>
+    </div>
 
     <div class="side-nav-bottom">
       <div
@@ -89,6 +170,10 @@ SPDX-License-Identifier: AGPL-3.0-only
         aria-label="个人空间选项"
         @click.stop
       >
+        <button type="button" role="menuitem" class="profile-menu__item" @click="openArchivedConversations">
+          <el-icon><Box /></el-icon>
+          <span>归档对话</span>
+        </button>
         <button type="button" role="menuitem" class="profile-menu__item" @click="openSettings">
           <el-icon><Setting /></el-icon>
           <span>设置</span>
@@ -138,20 +223,26 @@ SPDX-License-Identifier: AGPL-3.0-only
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import {
+  Box,
   Connection,
   Moon,
+  Plus,
   Search,
   Setting,
   Sunny,
   UserFilled,
 } from "@element-plus/icons-vue";
-import { ElMessage } from "element-plus";
+import { ElMessage, ElMessageBox } from "element-plus";
 import { useAppStore } from "@/stores/app";
+import { useChatStore, type ConversationItem, type ProjectItem } from "@/stores/chat";
 import { useExtensionUIStore } from "@/stores/extensionUI";
 import { useBrandLogo } from "@/composables/useBrandLogo";
 import { useApi } from "@/composables/useApi";
+import { useConversationWorkspace } from "@/composables/useConversationWorkspace";
 import { isDesktopShell } from "@/runtime/runtime-capabilities";
 import SearchModal from "./SearchModal.vue";
+import SidebarConversationRow from "./SidebarConversationRow.vue";
+import SidebarProjectBlock from "./SidebarProjectBlock.vue";
 import { isUINavigationItemActive, useUINavigationRegistry, type UINavigationItem } from "@/ui-runtime/navigationRegistry";
 import { prewarmNavigationItem } from "@/ui-runtime/navigationPrewarm";
 import { useUIComponentVariant } from "@/ui-runtime/componentRegistry";
@@ -162,11 +253,13 @@ const isOnboardingPage = computed(
   () => route.path === "/onboarding" || route.path.startsWith("/onboarding/"),
 );
 const appStore = useAppStore();
+const chatStore = useChatStore();
 const extensionUIStore = useExtensionUIStore();
 const { groups: navigationGroups, items: navigationItems } = useUINavigationRegistry();
 const { style: navigationItemStyle } = useUIComponentVariant("navigationItem");
 const { logoUrl } = useBrandLogo();
 const { get, post } = useApi();
+const { startDraftConversation } = useConversationWorkspace();
 defineProps<{
   username?: string;
   avatar?: string;
@@ -174,78 +267,142 @@ defineProps<{
 }>();
 const emit = defineEmits<{ toggleTheme: [] }>();
 const searchModal = ref<InstanceType<typeof SearchModal> | null>(null);
-const recentConversations = ref<any[]>([]);
-const activeConversationId = ref(localStorage.getItem("webchat-conv-id") || "");
+const activeConversationId = computed(() => String(route.query.conversationId || ""));
+const expandAllRecent = ref(false);
 const profileMenuOpen = ref(false);
 let isMounted = false;
-
-async function fetchRecentConversations() {
-  try {
-    const result = await get<any>("/api/web-chat/conversations", { page: 1, pageSize: 7, channel: "web" });
-    if (isMounted) {
-      recentConversations.value = (result?.items || result?.conversations || []).slice(0, 7);
-    }
-  } catch {
-    if (isMounted) {
-      recentConversations.value = [];
-    }
-  }
-}
-
-async function createNewConversation() {
-  try {
-    const currentCharId = localStorage.getItem("webchat-char-id");
-    const cachedChar = JSON.parse(localStorage.getItem("uai-default-char") || "{}");
-    const charId = currentCharId || cachedChar?.id;
-    if (!charId) {
-      ElMessage.warning("请先选择角色");
-      return null;
-    }
-    const created = await post<any>("/api/web-chat/conversations", {
-      characterId: charId,
-      title: "",
-    });
-    return created?.id || null;
-  } catch (e: any) {
-    ElMessage.error(e?.response?.data?.msg || "创建新对话失败");
-    return null;
-  }
-}
+const visibleRecentConversations = computed(() =>
+  expandAllRecent.value
+    ? chatStore.sidebar.recent
+    : chatStore.sidebar.recent.slice(0, 5),
+);
+const pinnedProjects = computed(() =>
+  chatStore.sidebar.projects.filter((project) => Boolean(project.pinnedAt)),
+);
+const regularProjects = computed(() =>
+  chatStore.sidebar.projects.filter((project) => !project.pinnedAt),
+);
 
 async function handleNewChat() {
-  if (!isMounted) return;
-  const newConvId = await createNewConversation();
-  if (!newConvId || !isMounted) return;
-  activeConversationId.value = newConvId;
-  localStorage.setItem("webchat-conv-id", newConvId);
-  localStorage.setItem("webchat-last-conv", "char");
-  await fetchRecentConversations();
-  window.dispatchEvent(new CustomEvent("amitia:conversation-list-changed"));
-  if (route.path === "/chat") {
-    window.dispatchEvent(new CustomEvent("amitia:new-chat", { detail: { conversationId: newConvId } }));
-  } else {
-    await router.push("/chat");
+  await startDraftConversation();
+  await router.push({ path: "/chat" });
+}
+
+async function handleSelectConversation(conversation: ConversationItem) {
+  chatStore.currentProjectId = conversation.projectId || "";
+  chatStore.setConversationId(conversation.id);
+  await router.push({ path: "/chat", query: { conversationId: conversation.id } });
+}
+
+async function handleConversationRename(conversation: ConversationItem, title: string) {
+  await chatStore.renameConversation(conversation.id, title);
+}
+
+async function handleToggleConversationPin(conversation: ConversationItem) {
+  await chatStore.setConversationPinned(conversation.id, !conversation.pinnedAt);
+}
+
+async function handleArchiveConversation(conversation: ConversationItem) {
+  const wasActive = activeConversationId.value === conversation.id;
+  await chatStore.archiveConversation(conversation.id);
+  if (wasActive) {
+    await router.replace({ path: "/chat" });
   }
 }
 
-async function handleSelectRecent(conversation: any) {
-  if (!conversation?.id || !isMounted) return;
-  activeConversationId.value = conversation.id;
-  localStorage.setItem("webchat-conv-id", conversation.id);
-  localStorage.setItem("webchat-last-conv", "char");
-  const charId = conversation.characterId || conversation.character_id;
-  if (charId) localStorage.setItem("webchat-char-id", charId);
-  if (route.path === "/chat") {
-    window.dispatchEvent(new CustomEvent("amitia:select-conversation", { detail: { conversation } }));
-  } else {
-    await router.push("/chat");
+async function handleCreateProjectConversation(project: ProjectItem) {
+  await startDraftConversation(project.id);
+  await router.push({ path: "/chat", query: { projectId: project.id } });
+}
+
+async function handleAddProject() {
+  if (!window.amitiaDesktop?.selectWorkspaceDirectory) {
+    ElMessage.warning("当前环境不支持直接选择本机目录");
+    return;
+  }
+  const selection = await window.amitiaDesktop.selectWorkspaceDirectory();
+  if (!selection?.path) return;
+  const mount = await post<any>("/api/workspaces/local", {
+    name: selection.name || "项目",
+    localRoot: selection.path,
+    readOnly: false,
+  });
+  if (!mount?.id) throw new Error("项目根目录注册失败");
+  await chatStore.fetchSidebar();
+  const existing = chatStore.sidebar.projects.find((item) => item.workspaceId === mount.id);
+  if (!existing) {
+    await chatStore.createProject({
+      name: mount.name || selection.name || "项目",
+      workspaceId: mount.id,
+      rootUri: mount.rootUri,
+    });
+  }
+  ElMessage.success("项目已添加");
+}
+
+async function handleProjectCommand(project: ProjectItem, command: string | number | object) {
+  if (command === "newChat") {
+    await handleCreateProjectConversation(project);
+    return;
+  }
+  if (command === "rename") {
+    const result = await ElMessageBox.prompt("输入新的项目名称", "重命名项目", {
+      inputValue: project.name,
+      confirmButtonText: "保存",
+      cancelButtonText: "取消",
+      inputValidator: (value) => Boolean(String(value || "").trim()) || "项目名称不能为空",
+    });
+    await chatStore.updateProject(project.id, { name: result.value.trim() });
+    return;
+  }
+  if (command === "changeRoot") {
+    if (!window.amitiaDesktop?.selectWorkspaceDirectory) {
+      ElMessage.warning("当前环境不支持直接选择本机文件夹");
+      return;
+    }
+    const selection = await window.amitiaDesktop.selectWorkspaceDirectory();
+    if (!selection?.path) return;
+    const mount = await post<any>("/api/workspaces/local", {
+      name: selection.name || project.name,
+      localRoot: selection.path,
+      readOnly: false,
+    });
+    if (!mount?.id) throw new Error("项目根目录注册失败");
+    await chatStore.updateProject(project.id, {
+      workspaceId: mount.id,
+      rootUri: mount.rootUri,
+    });
+    ElMessage.success("项目根目录已更新");
+    return;
+  }
+  if (command === "pin") {
+    await chatStore.updateProject(project.id, { pinned: !project.pinnedAt });
+    return;
+  }
+  if (command === "open") {
+    await handleOpenProject(project);
+    return;
+  }
+  if (command === "remove") {
+    await ElMessageBox.confirm("移除项目后，项目内对话会移回最近，磁盘文件夹不会被删除。", "移除项目", {
+      type: "warning",
+      confirmButtonText: "移除",
+      confirmButtonClass: "el-button--danger",
+    });
+    await chatStore.deleteProject(project.id);
+    ElMessage.success("项目已移除，对话已移至最近");
   }
 }
 
-function handleConversationListChanged() {
-  if (!isMounted) return;
-  activeConversationId.value = localStorage.getItem("webchat-conv-id") || "";
-  void fetchRecentConversations();
+async function handleOpenProject(project: ProjectItem) {
+  const location = await get<{ kind: string; path?: string; uri?: string }>(
+    `/api/web-chat/projects/${encodeURIComponent(project.id)}/location`,
+  );
+  if (location?.path && window.amitiaDesktop?.openPath) {
+    await window.amitiaDesktop.openPath(location.path);
+    return;
+  }
+  ElMessage.warning("当前环境不支持在资源管理器中打开该项目");
 }
 
 const activeIndex = computed(() => {
@@ -257,6 +414,11 @@ const activeIndex = computed(() => {
 function openUserProfile() {
   profileMenuOpen.value = false;
   router.push("/user-settings");
+}
+
+function openArchivedConversations() {
+  profileMenuOpen.value = false;
+  router.push("/logs");
 }
 
 function openDevices() {
@@ -287,15 +449,13 @@ function handleKeydown(event: KeyboardEvent) {
 
 onMounted(() => {
   isMounted = true;
-  void fetchRecentConversations();
-  window.addEventListener("amitia:conversation-list-changed", handleConversationListChanged);
+  void chatStore.fetchSidebar();
   window.addEventListener("click", closeProfileMenu);
   window.addEventListener("keydown", handleKeydown);
 });
 
 onUnmounted(() => {
   isMounted = false;
-  window.removeEventListener("amitia:conversation-list-changed", handleConversationListChanged);
   window.removeEventListener("click", closeProfileMenu);
   window.removeEventListener("keydown", handleKeydown);
 });
@@ -327,7 +487,8 @@ onUnmounted(() => {
 .new-chat { display: flex; align-items: center; gap: 9px; min-height: 34px; width: 100%; margin: 2px 0 7px; padding: 0 9px; border: 0; border-radius: 7px; background: transparent; color: var(--text-primary); cursor: pointer; font: inherit; font-size: 13px; text-align: left; }
 .new-chat:hover, .new-chat:focus-visible { background: var(--workbench-sidebar-hover); outline: none; }
 .side-nav.is-collapsed .new-chat { justify-content: center; padding: 0; }
-.side-menu { border-right: none; background: transparent; flex: 1 1 auto; min-height: 0; width: 100%; overflow-y: auto; overflow-x: visible; }
+.sidebar-scroll { min-height: 0; flex: 1 1 auto; overflow-y: auto; overflow-x: hidden; }
+.side-menu { border-right: none; background: transparent; width: 100%; margin-bottom: 12px; }
 .side-menu :deep(.el-menu-item), .side-menu :deep(.el-sub-menu__title) { height: 34px; line-height: 34px; min-height: 34px; margin: 1px 0; padding: 0 9px !important; border-radius: 7px; font-size: 13px; color: var(--text-secondary); }
 .side-menu :deep(.el-icon) { width: 18px; font-size: 15px; margin-right: 8px; }
 .side-menu :deep(.el-menu-item:hover), .side-menu :deep(.el-sub-menu__title:hover) { background: var(--workbench-sidebar-hover); color: var(--text-primary); }
@@ -341,6 +502,43 @@ onUnmounted(() => {
 .recent-item span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .recent-item:hover, .recent-item.active { background: var(--workbench-sidebar-hover); color: var(--text-primary); }
 .recent-item.active { background: var(--workbench-sidebar-active); }
+.thread-sidebar { display: flex; flex-direction: column; padding: 2px 0 8px; }
+.thread-row { display: flex; align-items: center; min-height: 30px; border-radius: 6px; color: var(--text-secondary); }
+.thread-row:hover, .thread-row.active { background: var(--workbench-sidebar-hover); color: var(--text-primary); }
+.thread-row.active { background: var(--workbench-sidebar-active); }
+.thread-main { display: flex; align-items: center; gap: 7px; min-width: 0; flex: 1; height: 30px; padding: 0 6px 0 8px; border: 0; background: transparent; color: inherit; cursor: pointer; font: inherit; font-size: 12px; text-align: left; }
+.thread-main span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.thread-name-input { min-width: 0; width: 100%; height: 24px; padding: 0 6px; border: 1px solid var(--ac-color-primary); border-radius: 5px; background: var(--surface-bg); color: var(--text-primary); font: inherit; outline: none; }
+.thread-delete { display: grid; place-items: center; width: 26px; height: 26px; margin-right: 2px; padding: 0; border: 0; border-radius: 5px; background: transparent; color: var(--text-muted); cursor: pointer; opacity: 0; }
+.thread-row:hover .thread-delete, .thread-row.active .thread-delete { opacity: 1; }
+.thread-actions { opacity: 0; }
+.thread-row:hover .thread-actions, .thread-row.active .thread-actions, .thread-row:focus-within .thread-actions { opacity: 1; }
+.thread-delete:hover { background: var(--control-hover-bg); color: var(--danger-color, #d9534f); }
+.thread-expand { align-self: flex-start; margin: 2px 0 2px 30px; padding: 3px 7px; border: 0; border-radius: 5px; background: transparent; color: var(--ac-color-primary); cursor: pointer; font: inherit; font-size: 11px; }
+.thread-expand:hover { background: var(--workbench-sidebar-hover); }
+.thread-section { display: flex; flex-direction: column; gap: 1px; padding: 4px 0; }
+.thread-section + .thread-section { margin-top: 6px; border-top: 1px solid var(--surface-border); padding-top: 10px; }
+.project-caption { display: flex; align-items: center; justify-content: space-between; }
+.section-add, .project-action { display: grid; place-items: center; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--text-muted); cursor: pointer; }
+.section-add:hover, .project-action:hover { background: var(--workbench-sidebar-hover); color: var(--text-primary); }
+.section-add { opacity: 0; pointer-events: none; transition: opacity 0.16s ease, background-color 0.16s ease, color 0.16s ease; }
+.project-caption:hover .section-add, .project-caption:focus-within .section-add { opacity: 1; pointer-events: auto; }
+.project-action:disabled { cursor: not-allowed; opacity: 0.35; }
+.project-action-wrap { opacity: 0; }
+.project-row:hover .project-action-wrap, .project-row:focus-within .project-action-wrap { opacity: 1; }
+.project-block { display: grid; gap: 1px; }
+.project-row { display: flex; align-items: center; gap: 2px; min-height: 32px; padding: 0 3px 0 7px; border-radius: 7px; color: var(--text-secondary); }
+.project-row:hover, .project-row.active { background: var(--workbench-sidebar-hover); color: var(--text-primary); }
+.project-main { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1; height: 32px; padding: 0; border: 0; background: transparent; color: inherit; cursor: pointer; font: inherit; font-size: 12px; text-align: left; }
+.project-main span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.project-main small { margin-left: auto; color: var(--text-muted); font-size: 9px; }
+.project-threads { display: grid; gap: 1px; padding-left: 18px; }
+.thread-item { display: flex; align-items: center; gap: 7px; width: 100%; min-height: 30px; padding: 0 8px; border: 0; border-radius: 6px; background: transparent; color: var(--text-secondary); cursor: pointer; font: inherit; font-size: 12px; text-align: left; }
+.thread-item span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.thread-item:hover, .thread-item.active { background: var(--workbench-sidebar-hover); color: var(--text-primary); }
+.thread-item.active { background: var(--workbench-sidebar-active); }
+.project-thread { min-height: 27px; font-size: 11px; }
+.thread-empty { padding: 5px 9px; color: var(--text-muted); font-size: 10px; }
 .side-nav-bottom { position: relative; flex: 0 0 auto; margin-top: auto; border-top: 1px solid var(--surface-border); padding: 7px 0 8px; }
 .profile-menu { position: absolute; right: 0; bottom: calc(100% + 8px); display: grid; gap: 2px; width: 100%; padding: 5px; border: 1px solid var(--surface-border); border-radius: 10px; background: var(--ac-color-surface); }
 .profile-menu__item { display: flex; align-items: center; gap: 9px; min-height: 34px; width: 100%; padding: 0 8px; border: 0; border-radius: 7px; background: transparent; color: var(--text-secondary); cursor: pointer; font: inherit; font-size: 12px; text-align: left; transition: background-color 0.18s ease, color 0.18s ease; }

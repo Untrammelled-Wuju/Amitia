@@ -2,6 +2,7 @@ import '../backend_transport/backend_service_api.dart';
 
 class WorkspaceMountDto {
   final String id;
+  final String projectId;
   final String name;
   final String kind;
   final String rootUri;
@@ -14,6 +15,7 @@ class WorkspaceMountDto {
 
   WorkspaceMountDto({
     required this.id,
+    this.projectId = '',
     required this.name,
     required this.kind,
     required this.rootUri,
@@ -28,6 +30,7 @@ class WorkspaceMountDto {
   factory WorkspaceMountDto.fromJson(Map<String, dynamic> json) {
     return WorkspaceMountDto(
       id: json['id'] as String? ?? '',
+      projectId: json['projectId'] as String? ?? '',
       name: json['name'] as String? ?? '',
       kind: json['kind'] as String? ?? 'local',
       rootUri: json['rootUri'] as String? ?? '',
@@ -36,7 +39,9 @@ class WorkspaceMountDto {
       status: json['status'] as String? ?? 'unavailable',
       statusReason: json['statusReason'] as String? ?? '',
       updatedAt: DateTime.tryParse((json['updatedAt'] ?? '').toString()),
-      lastUsedAt: DateTime.tryParse((json['lastUsedAt'] ?? json['updatedAt'] ?? '').toString()),
+      lastUsedAt: DateTime.tryParse(
+        (json['lastUsedAt'] ?? json['updatedAt'] ?? '').toString(),
+      ),
     );
   }
 }
@@ -71,7 +76,8 @@ class WorkspaceService {
           '/api/local/workspaces/${Uri.encodeComponent(mount.id)}/refresh',
           fromJson: (e) => Map<String, dynamic>.from(e as Map),
         );
-        if (refreshed != null) mounts[i] = WorkspaceMountDto.fromJson(refreshed);
+        if (refreshed != null)
+          mounts[i] = WorkspaceMountDto.fromJson(refreshed);
       } catch (_) {
         // The native relay can still be connecting during app startup. The
         // next dropdown refresh will retry without losing the persisted mount.
@@ -141,11 +147,13 @@ class WorkspaceService {
     return true;
   }
 
-  Future<Map<String, dynamic>> gitStatus(String workspaceUri, {bool includeIgnored = false}) =>
-      _postMap('/api/workspaces/git/status', {
-        'workspaceUri': workspaceUri,
-        'includeIgnored': includeIgnored,
-      });
+  Future<Map<String, dynamic>> gitStatus(
+    String workspaceUri, {
+    bool includeIgnored = false,
+  }) => _postMap('/api/workspaces/git/status', {
+    'workspaceUri': workspaceUri,
+    'includeIgnored': includeIgnored,
+  });
 
   Future<Map<String, dynamic>> gitDiff(
     String workspaceUri, {
@@ -154,41 +162,38 @@ class WorkspaceService {
     String target = '',
     List<String> paths = const [],
     int maxBytes = 1048576,
-  }) =>
-      _postMap('/api/workspaces/git/diff', {
-        'workspaceUri': workspaceUri,
-        'mode': mode,
-        'base': base,
-        'target': target,
-        if (paths.isNotEmpty) 'paths': paths,
-        'maxBytes': maxBytes,
-      });
+  }) => _postMap('/api/workspaces/git/diff', {
+    'workspaceUri': workspaceUri,
+    'mode': mode,
+    'base': base,
+    'target': target,
+    if (paths.isNotEmpty) 'paths': paths,
+    'maxBytes': maxBytes,
+  });
 
   Future<Map<String, dynamic>> gitLog(
     String workspaceUri, {
     int limit = 50,
     String path = '',
     String refName = '',
-  }) =>
-      _postMap('/api/workspaces/git/log', {
-        'workspaceUri': workspaceUri,
-        'limit': limit,
-        if (path.isNotEmpty) 'path': path,
-        if (refName.isNotEmpty) 'ref': refName,
-      });
+  }) => _postMap('/api/workspaces/git/log', {
+    'workspaceUri': workspaceUri,
+    'limit': limit,
+    if (path.isNotEmpty) 'path': path,
+    if (refName.isNotEmpty) 'ref': refName,
+  });
 
   Future<Map<String, dynamic>> gitAdd(
     String workspaceUri, {
     List<String> paths = const [],
     bool all = false,
     bool force = false,
-  }) =>
-      _postMap('/api/workspaces/git/add', {
-        'workspaceUri': workspaceUri,
-        'paths': paths,
-        'all': all,
-        'force': force,
-      });
+  }) => _postMap('/api/workspaces/git/add', {
+    'workspaceUri': workspaceUri,
+    'paths': paths,
+    'all': all,
+    'force': force,
+  });
 
   Future<Map<String, dynamic>> gitRestore(
     String workspaceUri, {
@@ -196,27 +201,25 @@ class WorkspaceService {
     String source = '',
     bool staged = false,
     bool worktree = true,
-  }) =>
-      _postMap('/api/workspaces/git/restore', {
-        'workspaceUri': workspaceUri,
-        'paths': paths,
-        if (source.isNotEmpty) 'source': source,
-        'staged': staged,
-        'worktree': worktree,
-      });
+  }) => _postMap('/api/workspaces/git/restore', {
+    'workspaceUri': workspaceUri,
+    'paths': paths,
+    if (source.isNotEmpty) 'source': source,
+    'staged': staged,
+    'worktree': worktree,
+  });
 
   Future<Map<String, dynamic>> gitCommit(
     String workspaceUri,
     String message, {
     String authorName = '',
     String authorEmail = '',
-  }) =>
-      _postMap('/api/workspaces/git/commit', {
-        'workspaceUri': workspaceUri,
-        'message': message,
-        if (authorName.isNotEmpty || authorEmail.isNotEmpty)
-          'author': {'name': authorName, 'email': authorEmail},
-      });
+  }) => _postMap('/api/workspaces/git/commit', {
+    'workspaceUri': workspaceUri,
+    'message': message,
+    if (authorName.isNotEmpty || authorEmail.isNotEmpty)
+      'author': {'name': authorName, 'email': authorEmail},
+  });
 
   Future<Map<String, dynamic>> gitBranches(String workspaceUri) =>
       _postMap('/api/workspaces/git/branches', {'workspaceUri': workspaceUri});
@@ -228,39 +231,36 @@ class WorkspaceService {
     String fromRef = '',
     bool detach = false,
     bool force = false,
-  }) =>
-      _postMap('/api/workspaces/git/checkout', {
-        'workspaceUri': workspaceUri,
-        'branch': branch,
-        'create': create,
-        if (fromRef.isNotEmpty) 'fromRef': fromRef,
-        'detach': detach,
-        'force': force,
-      });
+  }) => _postMap('/api/workspaces/git/checkout', {
+    'workspaceUri': workspaceUri,
+    'branch': branch,
+    'create': create,
+    if (fromRef.isNotEmpty) 'fromRef': fromRef,
+    'detach': detach,
+    'force': force,
+  });
 
   Future<Map<String, dynamic>> gitFetch(
     String workspaceUri, {
     String remote = '',
     int depth = 0,
     int deepen = 0,
-  }) =>
-      _postMap('/api/workspaces/git/fetch', {
-        'workspaceUri': workspaceUri,
-        if (remote.isNotEmpty) 'remote': remote,
-        if (depth > 0) 'depth': depth,
-        if (deepen > 0) 'deepen': deepen,
-      });
+  }) => _postMap('/api/workspaces/git/fetch', {
+    'workspaceUri': workspaceUri,
+    if (remote.isNotEmpty) 'remote': remote,
+    if (depth > 0) 'depth': depth,
+    if (deepen > 0) 'deepen': deepen,
+  });
 
   Future<Map<String, dynamic>> gitPull(
     String workspaceUri, {
     String remote = '',
     String branch = '',
-  }) =>
-      _postMap('/api/workspaces/git/pull', {
-        'workspaceUri': workspaceUri,
-        if (remote.isNotEmpty) 'remote': remote,
-        if (branch.isNotEmpty) 'branch': branch,
-      });
+  }) => _postMap('/api/workspaces/git/pull', {
+    'workspaceUri': workspaceUri,
+    if (remote.isNotEmpty) 'remote': remote,
+    if (branch.isNotEmpty) 'branch': branch,
+  });
 
   Future<Map<String, dynamic>> gitPush(
     String workspaceUri, {
@@ -268,14 +268,13 @@ class WorkspaceService {
     required String localRef,
     required String remoteRef,
     bool setUpstream = false,
-  }) =>
-      _postMap('/api/workspaces/git/push', {
-        'workspaceUri': workspaceUri,
-        'remote': remote,
-        'localRef': localRef,
-        'remoteRef': remoteRef,
-        'setUpstream': setUpstream,
-      });
+  }) => _postMap('/api/workspaces/git/push', {
+    'workspaceUri': workspaceUri,
+    'remote': remote,
+    'localRef': localRef,
+    'remoteRef': remoteRef,
+    'setUpstream': setUpstream,
+  });
 
   Future<Map<String, dynamic>> gitRemotes(String workspaceUri) =>
       _postMap('/api/workspaces/git/remotes', {'workspaceUri': workspaceUri});
@@ -290,22 +289,21 @@ class WorkspaceService {
     int depth = 0,
     bool readOnly = false,
     String lifetime = '',
-  }) =>
-      _postMap('/api/workspaces/isolated', {
-        'name': name,
-        'mode': mode,
-        if (sourceWorkspaceUri.isNotEmpty) 'sourceWorkspaceUri': sourceWorkspaceUri,
-        if (remoteUrl.isNotEmpty || remoteId.isNotEmpty)
-          'gitRemote': {
-            if (remoteId.isNotEmpty) 'remoteId': remoteId,
-            if (remoteUrl.isNotEmpty) 'url': remoteUrl,
-            if (refName.isNotEmpty) 'ref': refName,
-          },
+  }) => _postMap('/api/workspaces/isolated', {
+    'name': name,
+    'mode': mode,
+    if (sourceWorkspaceUri.isNotEmpty) 'sourceWorkspaceUri': sourceWorkspaceUri,
+    if (remoteUrl.isNotEmpty || remoteId.isNotEmpty)
+      'gitRemote': {
+        if (remoteId.isNotEmpty) 'remoteId': remoteId,
+        if (remoteUrl.isNotEmpty) 'url': remoteUrl,
         if (refName.isNotEmpty) 'ref': refName,
-        if (depth > 0) 'depth': depth,
-        'readOnly': readOnly,
-        if (lifetime.isNotEmpty) 'lifetime': lifetime,
-      });
+      },
+    if (refName.isNotEmpty) 'ref': refName,
+    if (depth > 0) 'depth': depth,
+    'readOnly': readOnly,
+    if (lifetime.isNotEmpty) 'lifetime': lifetime,
+  });
 
   Future<Map<String, dynamic>> isolatedInfo(String workspaceUri) =>
       _postMap('/api/workspaces/isolated/info', {'workspaceUri': workspaceUri});
@@ -318,7 +316,10 @@ class WorkspaceService {
     );
   }
 
-  Future<Map<String, dynamic>> _postMap(String path, Map<String, dynamic> data) async {
+  Future<Map<String, dynamic>> _postMap(
+    String path,
+    Map<String, dynamic> data,
+  ) async {
     return await _api.post<Map<String, dynamic>>(
           path,
           data: data,

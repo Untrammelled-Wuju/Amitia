@@ -45,7 +45,6 @@ type Service interface {
 	UpdateConversationSummary(convID, summaryText string) (*ConversationSummary, error)
 	DeleteConversationSummary(convID string) error
 	GenerateConversationSummary(ctx context.Context, convID string) (*ConversationSummary, error)
-	ChangeCharacter(convID, charID string) (*Conversation, error)
 	GetStats() (*ChatStatsResponse, error)
 	Chat(req *ChatRequest) (*ChatResponse, error)
 	ProcessMessage(ctx context.Context, req *ProcessMessageRequest) (*ProcessMessageResponse, error)
@@ -89,6 +88,7 @@ type Service interface {
 	SetReflectionProcessor(r interaction.ReflectionProcessor)
 	SetArtifactResolver(resolver ArtifactResolver)
 	GetArtifactResolver() ArtifactResolver
+	SetWorkspaceAvailabilityResolver(resolver WorkspaceAvailabilityResolver)
 }
 
 // systemFormatInstruction enforces the host line splitting contract.
@@ -129,6 +129,10 @@ type ArtifactResolution struct {
 	Revision     int64
 }
 
+type WorkspaceAvailabilityResolver interface {
+	ResolveWorkspaceAvailability(workspaceID string) (available bool, status string, reason string)
+}
+
 type service struct {
 	repo                Repository
 	charRepo            character.Repository
@@ -167,6 +171,7 @@ type service struct {
 	localModels         map[string]LocalModelInfer
 	cleanupMu           sync.Mutex
 	cleanupPlans        map[string]cleanupPlan
+	workspaceResolver   WorkspaceAvailabilityResolver
 }
 
 var visionModelConfigProviderMu sync.RWMutex
@@ -242,6 +247,10 @@ func (s *service) SetArtifactResolver(resolver ArtifactResolver) {
 
 func (s *service) GetArtifactResolver() ArtifactResolver {
 	return s.artifactResolver
+}
+
+func (s *service) SetWorkspaceAvailabilityResolver(resolver WorkspaceAvailabilityResolver) {
+	s.workspaceResolver = resolver
 }
 
 type ResolvedAttachment struct {

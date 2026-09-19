@@ -38,6 +38,9 @@ const api = {
   selectWorkspaceDirectory(): Promise<WorkspaceDirectorySelection | null> {
     return ipcRenderer.invoke(IPC_CHANNELS.selectWorkspaceDirectory);
   },
+  openPath(path: string): Promise<void> {
+    return ipcRenderer.invoke(IPC_CHANNELS.openPath, path);
+  },
   selectExtensionPackage(): Promise<ExtensionPackageSelection | null> {
     return ipcRenderer.invoke(IPC_CHANNELS.selectExtensionPackage);
   },

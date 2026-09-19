@@ -15,7 +15,8 @@ class ConversationListPage extends ConsumerStatefulWidget {
   const ConversationListPage({super.key});
 
   @override
-  ConsumerState<ConversationListPage> createState() => _ConversationListPageState();
+  ConsumerState<ConversationListPage> createState() =>
+      _ConversationListPageState();
 }
 
 class _ConversationListPageState extends ConsumerState<ConversationListPage> {
@@ -28,7 +29,9 @@ class _ConversationListPageState extends ConsumerState<ConversationListPage> {
     super.dispose();
   }
 
-  Map<String, List<ConversationDto>> _groupConversations(List<ConversationDto> conversations) {
+  Map<String, List<ConversationDto>> _groupConversations(
+    List<ConversationDto> conversations,
+  ) {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final yesterday = today.subtract(const Duration(days: 1));
@@ -76,10 +79,7 @@ class _ConversationListPageState extends ConsumerState<ConversationListPage> {
     final conversationsAsync = ref.watch(conversationListProvider);
 
     return AmitiaScaffold(
-      appBar: AmitiaAppBar(
-        title: '对话',
-        showBackButton: true,
-      ),
+      appBar: AmitiaAppBar(title: '对话', showBackButton: true),
       body: Column(
         children: [
           Padding(
@@ -94,7 +94,10 @@ class _ConversationListPageState extends ConsumerState<ConversationListPage> {
                     decoration: BoxDecoration(
                       color: context.surfacePrimary,
                       borderRadius: AppRadius.brMedium,
-                      border: Border.all(color: context.borderPrimary, width: 0.5),
+                      border: Border.all(
+                        color: context.borderPrimary,
+                        width: 0.5,
+                      ),
                     ),
                     padding: const EdgeInsets.symmetric(horizontal: 12),
                     child: AmitiaSearchField(
@@ -123,17 +126,24 @@ class _ConversationListPageState extends ConsumerState<ConversationListPage> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.error_outline, size: 48, color: context.textSecondary),
+                      Icon(
+                        Icons.error_outline,
+                        size: 48,
+                        color: context.textSecondary,
+                      ),
                       const SizedBox(height: 16),
                       Text(
                         '加载失败: ${err.toString().replaceFirst('Exception: ', '')}',
-                        style: AppTypography.body(context).copyWith(color: context.error),
+                        style: AppTypography.body(
+                          context,
+                        ).copyWith(color: context.error),
                         textAlign: TextAlign.center,
                       ),
                       const SizedBox(height: 16),
                       AmitiaButton(
                         label: '重试',
-                        onPressed: () => ref.invalidate(conversationListProvider),
+                        onPressed: () =>
+                            ref.invalidate(conversationListProvider),
                       ),
                     ],
                   ),
@@ -143,7 +153,9 @@ class _ConversationListPageState extends ConsumerState<ConversationListPage> {
                 final filtered = _searchQuery.isEmpty
                     ? conversations
                     : conversations.where((c) {
-                        return c.title.toLowerCase().contains(_searchQuery.toLowerCase());
+                        return c.title.toLowerCase().contains(
+                          _searchQuery.toLowerCase(),
+                        );
                       }).toList();
                 final groups = _groupConversations(filtered);
                 if (filtered.isEmpty) {
@@ -166,18 +178,23 @@ class _ConversationListPageState extends ConsumerState<ConversationListPage> {
                             AppSpacing.pagePadding,
                             AppSpacing.xs,
                           ),
-                          child: Text(entry.key, style: AppTypography.label(context)),
+                          child: Text(
+                            entry.key,
+                            style: AppTypography.label(context),
+                          ),
                         ),
-                        ...entry.value.map((conv) => _ConversationItem(
-                              conversation: conv,
-                              timeText: _formatTime(conv.updatedAt),
-                              onTap: () {
-                                final uri = '${AppRoutes.chat}?conversationId=${Uri.encodeQueryComponent(conv.id)}'
-                                    '${conv.characterId.isNotEmpty ? '&characterId=${Uri.encodeQueryComponent(conv.characterId)}' : ''}';
-                                context.go(uri);
-                              },
-                              onMore: () => _showActionsSheet(conv),
-                            )),
+                        ...entry.value.map(
+                          (conv) => _ConversationItem(
+                            conversation: conv,
+                            timeText: _formatTime(conv.updatedAt),
+                            onTap: () {
+                              final uri =
+                                  '${AppRoutes.chat}?conversationId=${Uri.encodeQueryComponent(conv.id)}';
+                              context.go(uri);
+                            },
+                            onMore: () => _showActionsSheet(conv),
+                          ),
+                        ),
                       ],
                     );
                   }).toList(),
@@ -195,7 +212,9 @@ class _ConversationListPageState extends ConsumerState<ConversationListPage> {
       context: context,
       backgroundColor: context.surfacePrimary,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.large)),
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(AppRadius.large),
+        ),
       ),
       builder: (sheetContext) {
         return SafeArea(
@@ -257,7 +276,10 @@ class _ConversationListPageState extends ConsumerState<ConversationListPage> {
         title: Text('重命名对话', style: AppTypography.cardTitle(dialogContext)),
         content: AmitiaTextField(controller: controller, hintText: '输入新的对话标题'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('取消')),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('取消'),
+          ),
           TextButton(
             onPressed: () {
               final value = controller.text.trim();
@@ -296,7 +318,6 @@ class _ConversationListPageState extends ConsumerState<ConversationListPage> {
       if (mounted) amitiaSnackBar(context, '删除失败：$e');
     }
   }
-
 }
 
 class _ConversationItem extends StatelessWidget {
@@ -356,9 +377,9 @@ class _ConversationItem extends StatelessWidget {
                   Flexible(
                     child: Text(
                       conversation.title,
-                      style: AppTypography.body(context).copyWith(
-                        fontWeight: FontWeight.w500,
-                      ),
+                      style: AppTypography.body(
+                        context,
+                      ).copyWith(fontWeight: FontWeight.w500),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -381,7 +402,11 @@ class _ConversationItem extends StatelessWidget {
                 const SizedBox(height: 6),
                 GestureDetector(
                   onTap: onMore,
-                  child: Icon(Icons.more_horiz, size: 18, color: context.textTertiary),
+                  child: Icon(
+                    Icons.more_horiz,
+                    size: 18,
+                    color: context.textTertiary,
+                  ),
                 ),
               ],
             ),

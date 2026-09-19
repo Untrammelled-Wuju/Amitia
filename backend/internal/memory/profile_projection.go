@@ -68,7 +68,8 @@ func (s *service) profileProjectionScope(m *Memory) (string, string) {
 	characterID := strings.TrimSpace(m.CharacterID)
 	if s != nil && s.db != nil && strings.TrimSpace(m.SourceConvID) != "" {
 		var peerID, convCharacterID string
-		_ = s.db.Table("conversations").Select("peer_id, character_id").Where("id = ?", m.SourceConvID).Row().Scan(&peerID, &convCharacterID)
+		_ = s.db.Table("conversations").Select("peer_id").Where("id = ?", m.SourceConvID).Row().Scan(&peerID)
+		_ = s.db.Table("messages").Select("character_id").Where("conversation_id = ? AND character_id <> ''", m.SourceConvID).Order("sequence DESC").Limit(1).Row().Scan(&convCharacterID)
 		peerID = strings.TrimSpace(peerID)
 		convCharacterID = strings.TrimSpace(convCharacterID)
 		if spaceID == "" && peerID != "" && peerID != "default" {

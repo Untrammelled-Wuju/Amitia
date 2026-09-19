@@ -184,6 +184,18 @@ export function registerIpcHandlers(
     return { path: selected, name: path.basename(selected) || selected };
   });
 
+  ipcMain.handle(IPC_CHANNELS.openPath, async (_event, targetPath: string) => {
+    if (
+      typeof targetPath !== "string" ||
+      !targetPath.trim() ||
+      targetPath.length > 4096
+    ) {
+      throw new Error("打开路径参数无效");
+    }
+    const error = await shell.openPath(path.resolve(targetPath));
+    if (error) throw new Error(error);
+  });
+
   ipcMain.handle(IPC_CHANNELS.selectExtensionPackage, async (event) => {
     const window = BrowserWindow.fromWebContents(event.sender);
     const options = {

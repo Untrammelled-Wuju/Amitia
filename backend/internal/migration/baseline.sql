@@ -52,7 +52,6 @@ CREATE TABLE IF NOT EXISTS characters (
     scene_rules TEXT DEFAULT '{}',
     is_active INTEGER DEFAULT 0,
     sort_order INTEGER DEFAULT 0,
-    conversation_id TEXT DEFAULT '',
     created_at TEXT DEFAULT '',
     updated_at TEXT DEFAULT '',
     gender TEXT DEFAULT 'UNSPECIFIED',
@@ -127,22 +126,40 @@ CREATE TABLE IF NOT EXISTS character_templates (
 CREATE TABLE IF NOT EXISTS conversations (
     id TEXT PRIMARY KEY,
     space_id TEXT NOT NULL DEFAULT '',
-    character_id TEXT DEFAULT '',
+    project_id TEXT NOT NULL DEFAULT '',
     title TEXT DEFAULT '',
     channel TEXT DEFAULT 'web',
     source TEXT DEFAULT 'manual',
     peer_id TEXT DEFAULT '',
     message_count INTEGER DEFAULT 0,
     state_version TEXT DEFAULT '',
+    pinned_at TEXT NOT NULL DEFAULT '',
+    archived_at TEXT NOT NULL DEFAULT '',
     created_at TEXT DEFAULT '',
     updated_at TEXT DEFAULT '',
     revision INTEGER NOT NULL DEFAULT 1,
     deleted_at DATETIME
 );
 
+CREATE TABLE IF NOT EXISTS projects (
+    id TEXT PRIMARY KEY,
+    space_id TEXT NOT NULL DEFAULT '',
+    name TEXT NOT NULL,
+    workspace_id TEXT NOT NULL,
+    device_id TEXT NOT NULL DEFAULT '',
+    root_uri TEXT NOT NULL DEFAULT '',
+    pinned_at TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL DEFAULT '',
+    revision INTEGER NOT NULL DEFAULT 1,
+    UNIQUE(space_id, workspace_id)
+);
+CREATE INDEX IF NOT EXISTS idx_projects_space_updated ON projects(space_id, updated_at);
+
 CREATE TABLE IF NOT EXISTS messages (
     id TEXT PRIMARY KEY,
     conversation_id TEXT NOT NULL,
+    character_id TEXT NOT NULL DEFAULT '',
     sequence INTEGER NOT NULL DEFAULT 0,
     role TEXT NOT NULL,
     content TEXT NOT NULL,
@@ -629,12 +646,8 @@ CREATE INDEX IF NOT EXISTS idx_messages_request ON messages(conversation_id, rol
 CREATE INDEX IF NOT EXISTS idx_pipeline_checkpoints_conversation ON pipeline_checkpoints(conversation_id);
 CREATE INDEX IF NOT EXISTS idx_pipeline_checkpoints_updated ON pipeline_checkpoints(updated_at);
 CREATE INDEX IF NOT EXISTS idx_conversations_user_updated ON conversations(space_id, updated_at);
-CREATE INDEX IF NOT EXISTS idx_conversations_user_character ON conversations(space_id, character_id);
-CREATE INDEX IF NOT EXISTS idx_conversations_character ON conversations(character_id);
 CREATE INDEX IF NOT EXISTS idx_conversations_channel_peer ON conversations(channel, peer_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_conversations_channel_peer_unique ON conversations(channel, peer_id) WHERE peer_id <> '';
-CREATE INDEX IF NOT EXISTS idx_conversations_character_channel_updated ON conversations(character_id, channel, updated_at);
-CREATE INDEX IF NOT EXISTS idx_conversations_character_updated ON conversations(character_id, updated_at);
 
 CREATE TABLE IF NOT EXISTS retrieval_logs (
     id TEXT PRIMARY KEY,
@@ -5728,19 +5741,6 @@ CREATE INDEX IF NOT EXISTS idx_dpbmo_device ON desktop_pet_behavior_mesh_outbox(
 -- Tenant ownership indexes kept in the baseline so fresh installs and upgraded databases converge.
 CREATE INDEX IF NOT EXISTS idx_characters_user_updated ON characters(space_id, updated_at);
 CREATE INDEX IF NOT EXISTS idx_characters_user_active ON characters(space_id, is_active, is_default);
-
---- 来源: conversation_workspace_bindings.go ---
-CREATE TABLE IF NOT EXISTS conversation_workspace_bindings (
-    conversation_id TEXT PRIMARY KEY,
-    workspace_id TEXT NOT NULL,
-    device_id TEXT NOT NULL DEFAULT '',
-    workspace_name TEXT NOT NULL DEFAULT '',
-    workspace_kind TEXT NOT NULL DEFAULT 'local',
-    root_uri TEXT NOT NULL DEFAULT '',
-    updated_at DATETIME NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_conversation_workspace_bindings_workspace ON conversation_workspace_bindings(workspace_id);
-CREATE INDEX IF NOT EXISTS idx_conversation_workspace_bindings_device ON conversation_workspace_bindings(device_id);
 
 --- 来源: sandbox_environment.go ---
 CREATE TABLE IF NOT EXISTS sandbox_environment_variables (

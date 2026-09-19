@@ -18,7 +18,6 @@ import {
   generateSummaryApi,
   updateSummaryApi,
   deleteSummaryApi,
-  switchCharacterApi,
   fetchContextPreviewApi,
   continueChatApi,
   loadCharactersApi,
@@ -33,11 +32,6 @@ export function useConversationLogs() {
 
   const convs = ref<any[]>([]);
   const convKeyword = ref("");
-  const characterFilter = ref("");
-
-  if (route.query.characterId) {
-    characterFilter.value = route.query.characterId as string;
-  }
   const continueCharId = ref("");
   const channelFilter = ref("");
   const convPage = ref(1);
@@ -69,7 +63,6 @@ export function useConversationLogs() {
     const params: any = { page: convPage.value, pageSize: 20 };
     if (convKeyword.value) params.keyword = convKeyword.value;
     if (channelFilter.value) params.channel = channelFilter.value;
-    if (characterFilter.value) params.characterId = characterFilter.value;
     try {
       const r = await fetchConvsApi(params);
       let items: any[] = Array.isArray(r) ? r : r?.items || [];
@@ -203,13 +196,7 @@ export function useConversationLogs() {
   }
 
   async function delConv() {
-    const boundChar = characters.value.find(
-      (c: any) => c.conversationId === selectedConvId.value,
-    );
-    const confirmMsg = boundChar
-      ? `该对话与角色「${boundChar.name}」永久绑定，删除对话将一同删除角色「${boundChar.name}」。此操作不可撤销。`
-      : "确定删除整个会话及其所有消息？此操作不可撤销。";
-    await ElMessageBox.confirm(confirmMsg, "警告", {
+    await ElMessageBox.confirm("确定删除整个会话及其所有消息？此操作不可撤销。", "警告", {
       type: "warning",
       confirmButtonText: "删除",
       confirmButtonClass: "el-button--danger",
@@ -356,35 +343,6 @@ export function useConversationLogs() {
     }
   }
 
-  async function switchCharacter(charId: string) {
-    if (!selectedConvId.value) return;
-    try {
-      await ElMessageBox.confirm(
-        "切换角色后，该会话的后续回复将按新角色风格生成，历史消息保持不变。",
-        "切换角色",
-        {
-          confirmButtonText: "确认切换",
-          cancelButtonText: "取消",
-          type: "warning",
-        },
-      );
-    } catch {
-      return;
-    }
-
-    try {
-      await switchCharacterApi(selectedConvId.value, charId);
-      ElMessage.success("角色已切换");
-      selectedConv.value.characterId = charId;
-      const char = characters.value.find((c: any) => c.id === charId);
-      if (char) selectedConv.value.characterName = char.name;
-    } catch (e: any) {
-      ElMessage.error(
-        "切换失败: " + (e?.response?.data?.message || e?.message || ""),
-      );
-    }
-  }
-
   async function continueChat() {
     if (!selectedConv.value) return;
     try {
@@ -412,7 +370,6 @@ export function useConversationLogs() {
     characters,
     convs,
     convKeyword,
-    characterFilter,
     continueCharId,
     channelFilter,
     convPage,
@@ -456,7 +413,6 @@ export function useConversationLogs() {
     ctxPreviewLoading,
     ctxPreview,
     fetchContextPreview,
-    switchCharacter,
     continueChat,
     loadCharacters,
     messageStatusMap,

@@ -27,6 +27,7 @@ import 'temporal_service.dart' as temporal_config;
 import 'onboarding_service.dart';
 import '../models/character.dart';
 import '../models/conversation.dart';
+import '../models/project.dart';
 import '../models/memory.dart';
 import '../models/profile.dart';
 import '../models/episodic.dart';
@@ -134,7 +135,6 @@ final mcpServiceProvider = Provider<MCPService>(
   (ref) => MCPService(_getDynamicServiceApi(ref)),
 );
 
-
 final imageGenServiceProvider = Provider<ImageGenService>(
   (ref) => ImageGenService(_getDynamicServiceApi(ref)),
 );
@@ -197,7 +197,9 @@ final moodServiceProvider = Provider<MoodService>(
   (ref) => MoodService(_getDynamicServiceApi(ref)),
 );
 
-final currentSpaceProfileProvider = FutureProvider.autoDispose<SpaceProfile?>((ref) async {
+final currentSpaceProfileProvider = FutureProvider.autoDispose<SpaceProfile?>((
+  ref,
+) async {
   try {
     return await ref.read(spaceProfileServiceProvider).fetch();
   } catch (_) {
@@ -216,6 +218,12 @@ final conversationListProvider =
     FutureProvider.autoDispose<List<ConversationDto>>((ref) async {
       final svc = ref.read(chatServiceProvider);
       return svc.listConversations();
+    });
+
+final conversationSidebarProvider =
+    FutureProvider.autoDispose<ConversationSidebarDto>((ref) async {
+      final svc = ref.read(chatServiceProvider);
+      return svc.conversationSidebar();
     });
 
 final activeConversationIdProvider = StateProvider<String>((ref) => '');

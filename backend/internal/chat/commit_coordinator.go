@@ -152,7 +152,7 @@ func (s *service) commitInteraction(ctx context.Context, plan messageCommitPlan)
 				}
 				text := plan.Lines[textIndex]
 				aiMsgID := uuid.New().String()
-				aiMsg := &Message{ID: aiMsgID, ConversationID: plan.Conversation, Role: "assistant", Content: text, MsgType: "text", Source: plan.Source, Tokens: plan.TotalTokens, RequestID: plan.Request.RequestID, ResponseGroupID: responseGroupID, DeliverySequence: sequence}
+				aiMsg := &Message{ID: aiMsgID, ConversationID: plan.Conversation, CharacterID: plan.Character, Role: "assistant", Content: text, MsgType: "text", Source: plan.Source, Tokens: plan.TotalTokens, RequestID: plan.Request.RequestID, ResponseGroupID: responseGroupID, DeliverySequence: sequence}
 				if err := tx.Create(aiMsg).Error; err != nil {
 					return err
 				}
@@ -170,7 +170,7 @@ func (s *service) commitInteraction(ctx context.Context, plan messageCommitPlan)
 			for sequence := 1; sequence <= totalItems; sequence++ {
 				text := plan.Lines[textIndex]
 				aiMsgID := uuid.New().String()
-				aiMsg := &Message{ID: aiMsgID, ConversationID: plan.Conversation, Role: "assistant", Content: text, MsgType: "text", Source: plan.Source, Tokens: plan.TotalTokens, RequestID: plan.Request.RequestID, ResponseGroupID: responseGroupID, DeliverySequence: sequence}
+				aiMsg := &Message{ID: aiMsgID, ConversationID: plan.Conversation, CharacterID: plan.Character, Role: "assistant", Content: text, MsgType: "text", Source: plan.Source, Tokens: plan.TotalTokens, RequestID: plan.Request.RequestID, ResponseGroupID: responseGroupID, DeliverySequence: sequence}
 				if err := tx.Create(aiMsg).Error; err != nil {
 					return err
 				}

@@ -80,27 +80,17 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 	charName := runtimeProfile.Name
 	convID := req.ConversationID
 	if convID == "" {
-		var existing struct{ ID string }
-		query := s.db.Table("conversations").Select("id").Where("deleted_at IS NULL AND character_id = ? AND channel = ?", charID, channel)
-		query = applyConversationOwnerScope(query, req.SpaceID)
-		err := query.Order("updated_at DESC").Limit(1).Row().Scan(&existing.ID)
-		if err == nil && existing.ID != "" {
-			convID = existing.ID
-		} else {
-			convID = uuid.New().String()
-			conversation := &Conversation{ID: convID, SpaceID: req.SpaceID, CharacterID: charID, Title: req.Message, Channel: channel, Source: source}
-			if err := s.persistConversationWithChange(conversation, req.SpaceID); err != nil {
-				return nil, err
-			}
-			applyConversationOwnerScope(s.db.Table("characters").Where("id = ?", charID), req.SpaceID).Update("conversation_id", convID)
+		convID = uuid.New().String()
+		conversation := &Conversation{ID: convID, SpaceID: req.SpaceID, ProjectID: strings.TrimSpace(req.ProjectID), Title: req.Message, Channel: channel, Source: source}
+		if err := s.persistConversationWithChange(conversation, req.SpaceID); err != nil {
+			return nil, err
 		}
-	} else if err := s.validateConversationScope(convID, charID, channel, req.SpaceID); err != nil {
+	} else if err := s.validateConversationScope(convID, channel, req.SpaceID); err != nil {
 		if strings.Contains(err.Error(), "会话不存在") {
-			conversation := &Conversation{ID: convID, SpaceID: req.SpaceID, CharacterID: charID, Title: req.Message, Channel: channel, Source: source}
+			conversation := &Conversation{ID: convID, SpaceID: req.SpaceID, ProjectID: strings.TrimSpace(req.ProjectID), Title: req.Message, Channel: channel, Source: source}
 			if createErr := s.persistConversationWithChange(conversation, req.SpaceID); createErr != nil {
 				return nil, createErr
 			}
-			applyConversationOwnerScope(s.db.Table("characters").Where("id = ?", charID), req.SpaceID).Update("conversation_id", convID)
 		} else {
 			applog.TraceError(trace.WithStage("conversation_scope_invalid"), applog.Fields{
 				"conversation_id": convID,
@@ -145,7 +135,7 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 			if source == "proactive" {
 				msgRole = "system"
 			}
-			userMsg := &Message{ID: uuid.New().String(), ConversationID: convID, Role: msgRole, Content: req.Message, MsgType: "text", Source: source, Status: "processing", AudioUrl: req.AudioUrl, AudioDuration: req.AudioDuration, ImageUrl: req.ImageUrl, VideoUrl: req.VideoUrl, RequestID: requestID, ReplyToMessageID: req.ReplyToMessageID}
+			userMsg := &Message{ID: uuid.New().String(), ConversationID: convID, CharacterID: charID, Role: msgRole, Content: req.Message, MsgType: "text", Source: source, Status: "processing", AudioUrl: req.AudioUrl, AudioDuration: req.AudioDuration, ImageUrl: req.ImageUrl, VideoUrl: req.VideoUrl, RequestID: requestID, ReplyToMessageID: req.ReplyToMessageID}
 			userMsgID = userMsg.ID
 			if err := s.repo.CreateMessage(userMsg); err != nil {
 				applog.TraceError(trace.WithStage("user_message_persist_failed"), applog.Fields{
