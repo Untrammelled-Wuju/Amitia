@@ -5,7 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/app_update/app_update_providers.dart';
 import '../core/native_bridge/providers/native_bridge_relay_bootstrap_provider.dart';
 import '../core/native_bridge/providers/device_timezone_bootstrap_provider.dart';
-import '../core/platform/device_form_factor.dart';
 import '../core/runtime/runtime_bootstrap_provider.dart';
 import '../core/runtime/runtime_bootstrap_phase.dart';
 import '../core/runtime/runtime_bootstrap_snapshot.dart';
@@ -36,26 +35,13 @@ class AmitiaAppRoot extends ConsumerStatefulWidget {
   ConsumerState<AmitiaAppRoot> createState() => _AmitiaAppRootState();
 }
 
-class _AmitiaAppRootState extends ConsumerState<AmitiaAppRoot>
-    with WidgetsBindingObserver {
+class _AmitiaAppRootState extends ConsumerState<AmitiaAppRoot> {
   bool _bootstrapInitialized = false;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(this);
     _initializeBootstrap();
-  }
-
-  @override
-  void didChangeMetrics() {
-    unawaited(applyDeviceOrientationPolicy());
-  }
-
-  @override
-  void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    super.dispose();
   }
 
   Future<void> _initializeBootstrap() async {
