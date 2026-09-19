@@ -912,37 +912,37 @@ class _ConversationTile extends StatelessWidget {
       8.0,
       overlayBox.size.height - 8,
     );
-    final action = await showMenu<_ConversationAction>(
+    final action = await showGeneralDialog<_ConversationAction>(
       context: context,
-      color: context.surfacePrimary,
-      position: RelativeRect.fromLTRB(
-        origin.dx + 12,
-        anchorTop,
-        overlayBox.size.width - origin.dx - tileBox.size.width + 12,
-        overlayBox.size.height - anchorTop,
+      barrierDismissible: true,
+      barrierLabel: '对话操作',
+      barrierColor: Colors.transparent,
+      transitionDuration: const Duration(milliseconds: 180),
+      pageBuilder: (dialogContext, _, _) => _ConversationActionMenu(
+        pinned: conversation.pinnedAt.isNotEmpty,
+        onSelected: (action) => Navigator.of(dialogContext).pop(action),
       ),
-      items: [
-        const PopupMenuItem(
-          value: _ConversationAction.rename,
-          child: _ProjectMenuItem(
-            icon: Icons.drive_file_rename_outline,
-            label: '重命名',
+      transitionBuilder: (context, animation, _, child) {
+        final curved = CurvedAnimation(
+          parent: animation,
+          curve: Curves.easeOutCubic,
+          reverseCurve: Curves.easeInCubic,
+        );
+        return FadeTransition(
+          opacity: curved,
+          child: Align(
+            alignment: Alignment.topRight,
+            child: Padding(
+              padding: EdgeInsets.only(top: anchorTop, right: 12),
+              child: ScaleTransition(
+                alignment: Alignment.bottomRight,
+                scale: Tween<double>(begin: 0.9, end: 1).animate(curved),
+                child: child,
+              ),
+            ),
           ),
-        ),
-        const PopupMenuItem(
-          value: _ConversationAction.archive,
-          child: _ProjectMenuItem(icon: Icons.archive_outlined, label: '归档'),
-        ),
-        PopupMenuItem(
-          value: _ConversationAction.pin,
-          child: _ProjectMenuItem(
-            icon: conversation.pinnedAt.isEmpty
-                ? Icons.push_pin_outlined
-                : Icons.push_pin,
-            label: conversation.pinnedAt.isEmpty ? '置顶' : '取消置顶',
-          ),
-        ),
-      ],
+        );
+      },
     );
     switch (action) {
       case _ConversationAction.rename:
@@ -961,6 +961,95 @@ class _ConversationTile extends StatelessWidget {
 }
 
 enum _ConversationAction { rename, archive, pin }
+
+class _ConversationActionMenu extends StatelessWidget {
+  final bool pinned;
+  final ValueChanged<_ConversationAction> onSelected;
+
+  const _ConversationActionMenu({
+    required this.pinned,
+    required this.onSelected,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: context.surfacePrimary,
+      elevation: 8,
+      shadowColor: Colors.black.withValues(alpha: 0.2),
+      borderRadius: BorderRadius.circular(14),
+      clipBehavior: Clip.antiAlias,
+      child: SizedBox(
+        width: 220,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _item(
+                context,
+                icon: Icons.drive_file_rename_outline,
+                label: '重命名',
+                value: _ConversationAction.rename,
+              ),
+              _divider(context),
+              _item(
+                context,
+                icon: Icons.archive_outlined,
+                label: '归档',
+                value: _ConversationAction.archive,
+              ),
+              _divider(context),
+              _item(
+                context,
+                icon: pinned ? Icons.push_pin : Icons.push_pin_outlined,
+                label: pinned ? '取消置顶' : '置顶',
+                value: _ConversationAction.pin,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _divider(BuildContext context) {
+    return Divider(
+      height: 1,
+      thickness: 0.6,
+      indent: 14,
+      endIndent: 14,
+      color: context.borderSecondary,
+    );
+  }
+
+  Widget _item(
+    BuildContext context, {
+    required IconData icon,
+    required String label,
+    required _ConversationAction value,
+  }) {
+    return InkWell(
+      onTap: () => onSelected(value),
+      child: SizedBox(
+        height: 46,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          child: Row(
+            children: [
+              Icon(icon, size: 18, color: context.textSecondary),
+              const SizedBox(width: 12),
+              Text(
+                label,
+                style: TextStyle(color: context.textPrimary, fontSize: 14.5),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
 
 class _ExpandableRecentList extends StatelessWidget {
   final List<ConversationDto> conversations;
