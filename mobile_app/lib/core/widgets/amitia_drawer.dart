@@ -933,7 +933,7 @@ class _ConversationTile extends StatelessWidget {
           child: Align(
             alignment: Alignment.topRight,
             child: Padding(
-              padding: EdgeInsets.only(top: anchorTop, right: 12),
+              padding: EdgeInsets.only(top: anchorTop, right: 75),
               child: ScaleTransition(
                 alignment: Alignment.bottomRight,
                 scale: Tween<double>(begin: 0.9, end: 1).animate(curved),
@@ -978,9 +978,9 @@ class _ConversationActionMenu extends StatelessWidget {
         borderRadius: BorderRadius.circular(14),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.18),
-            blurRadius: 20,
-            spreadRadius: 1,
+            color: Colors.black.withValues(alpha: 0.12),
+            blurRadius: 14,
+            spreadRadius: 0,
             offset: Offset.zero,
           ),
         ],
