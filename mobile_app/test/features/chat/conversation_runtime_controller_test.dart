@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:amitia_app/core/backend_access/business_backend_unavailable.dart';
 import 'package:amitia_app/core/backend_transport/backend_service_api.dart';
 import 'package:amitia_app/core/models/conversation.dart';
@@ -54,6 +56,17 @@ class _FakeChatService extends ChatService {
 
   @override
   Future<String> generationStatus(String conversationId) async => 'completed';
+
+  @override
+  Future<ConversationDto?> createConversation({String? projectId}) async {
+    return ConversationDto(
+      id: 'conversation-1',
+      projectId: projectId?.trim() ?? '',
+      title: '新对话',
+      channel: 'web',
+      source: 'mobile',
+    );
+  }
 
   String clientMessageId = '';
 
@@ -161,6 +174,46 @@ void main() {
     expect(controller.messages, hasLength(2));
     expect(controller.messages.last.status, MessageStatus.delivered);
 
+    controller.dispose();
+  });
+
+  test('conversation id is assigned before the reply stream starts', () async {
+    final streamStarted = Completer<void>();
+    final releaseStream = Completer<void>();
+    late _FakeChatService service;
+    service = _FakeChatService(
+      streamFactory: (requestId) async* {
+        streamStarted.complete();
+        await releaseStream.future;
+        service.rememberRequestId(requestId);
+        yield ChatStreamEvent('queued', <String, dynamic>{
+          'conversationId': 'conversation-1',
+          'requestId': requestId,
+        });
+      },
+      messagesFactory: (requestId, latest) => <MessageDto>[
+        _message(
+          id: 'user-1',
+          role: 'user',
+          content: '你好',
+          requestId: requestId,
+          createdAt: '2026-09-19 18:00:00',
+          sequence: 1,
+        ),
+      ],
+    );
+    final controller = ConversationRuntimeController(
+      service,
+      _FakeEmoteService(),
+    );
+
+    final send = controller.sendText('你好');
+    await streamStarted.future;
+
+    expect(controller.conversationId, 'conversation-1');
+
+    releaseStream.complete();
+    await send;
     controller.dispose();
   });
 

@@ -481,6 +481,7 @@ class _AmitiaDrawerState extends ConsumerState<AmitiaDrawer> {
       final archivingActive =
           ref.read(activeConversationIdProvider).trim() == conversation.id;
       await ref.read(chatServiceProvider).archiveConversation(conversation.id);
+      ref.read(conversationCollectionRevisionProvider.notifier).state++;
       await _refreshConversationSidebar();
       if (!mounted) return;
       if (archivingActive) {

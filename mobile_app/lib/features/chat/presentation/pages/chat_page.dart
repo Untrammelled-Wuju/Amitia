@@ -84,6 +84,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   bool _loadingComposerDraft = false;
   String _activeComposerDraftKey = '';
   int _lastDraftEpoch = 0;
+  String _lastSidebarConversationId = '';
 
   @override
   void initState() {
@@ -93,6 +94,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     );
     _runtime = ref.read(conversationRuntimeControllerProvider);
     _lastDraftEpoch = _runtime.draftEpoch;
+    _lastSidebarConversationId = _runtime.conversationId?.trim() ?? '';
     _runtime.addListener(_onRuntimeChanged);
     _composerController.addListener(_handleComposerChanged);
     WidgetsBinding.instance.addPostFrameCallback(
@@ -163,6 +165,13 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     _cachedProviderActions = null;
     _cachedProviderActionsCharacterId = '';
     final conversationId = _runtime.conversationId?.trim() ?? '';
+    if (conversationId.isNotEmpty &&
+        conversationId != _lastSidebarConversationId) {
+      ref.invalidate(conversationListProvider);
+      ref.invalidate(conversationSidebarProvider);
+      ref.read(conversationCollectionRevisionProvider.notifier).state++;
+    }
+    _lastSidebarConversationId = conversationId;
     ref.read(activeConversationIdProvider.notifier).state = conversationId;
     unawaited(_syncComposerDraft());
     _syncCreatedConversationRoute(conversationId);

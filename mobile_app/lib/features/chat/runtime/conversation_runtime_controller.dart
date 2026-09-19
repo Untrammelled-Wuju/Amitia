@@ -306,6 +306,7 @@ class ConversationRuntimeController extends ChangeNotifier {
 
     var queued = false;
     try {
+      await _ensureConversationForSend();
       await for (final event in _submitStreamWithReadinessRetry(
         message: message,
         clientMessageId: localMessage.renderId,
@@ -338,6 +339,8 @@ class ConversationRuntimeController extends ChangeNotifier {
             if (conversationId.isNotEmpty) {
               _conversationId = conversationId;
               _restartLiveSync();
+              await _bindConversationWorkspace(conversationId);
+              notifyListeners();
             }
             break;
           case 'message_end':
@@ -380,6 +383,29 @@ class ConversationRuntimeController extends ChangeNotifier {
       if (epoch == _generationEpoch) {
         _sending = false;
         notifyListeners();
+      }
+    }
+  }
+
+  Future<void> _ensureConversationForSend() async {
+    final existing = _conversationId?.trim() ?? '';
+    if (existing.isNotEmpty) return;
+    final deadline = DateTime.now().add(_businessReadyRetryWindow);
+    while (true) {
+      try {
+        final conversation = await _chatService.createConversation(
+          projectId: _workspace?.projectId ?? '',
+        );
+        if (conversation == null) {
+          throw StateError('创建会话未返回结果');
+        }
+        _conversationId = conversation.id;
+        _restartLiveSync();
+        notifyListeners();
+        return;
+      } on BusinessBackendUnavailable {
+        if (DateTime.now().isAfter(deadline)) rethrow;
+        await Future<void>.delayed(_businessReadyRetryDelay);
       }
     }
   }
@@ -449,14 +475,14 @@ class ConversationRuntimeController extends ChangeNotifier {
           status: MessageStatus.sent,
         ),
       );
-      notifyListeners();
     }
+    await _bindConversationWorkspace(conversationId);
+    if (current != null) notifyListeners();
+  }
+
+  Future<void> _bindConversationWorkspace(String conversationId) async {
     final workspace = _workspace;
-    if (epoch != _generationEpoch ||
-        workspace == null ||
-        conversationId.isEmpty) {
-      return;
-    }
+    if (workspace == null || conversationId.isEmpty) return;
     try {
       if (workspace.projectId.isNotEmpty) {
         await _chatService.moveConversationToProject(

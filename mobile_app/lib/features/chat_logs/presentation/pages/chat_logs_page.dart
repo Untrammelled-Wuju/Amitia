@@ -144,6 +144,9 @@ class _ChatLogsPageState extends ConsumerState<ChatLogsPage> {
           .read(chatServiceProvider)
           .restoreArchivedConversation(conversation.id);
       if (!mounted) return;
+      ref.read(conversationCollectionRevisionProvider.notifier).state++;
+      ref.invalidate(conversationListProvider);
+      ref.invalidate(conversationSidebarProvider);
       setState(() {
         _conversations = _conversations
             .where((item) => item.id != conversation.id)
@@ -164,6 +167,9 @@ class _ChatLogsPageState extends ConsumerState<ChatLogsPage> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<int>(conversationCollectionRevisionProvider, (previous, next) {
+      if (previous != next) unawaited(_load());
+    });
     return AmitiaScaffold(
       appBar: AmitiaAppBar(title: '归档对话', showBackButton: true),
       body: Column(
