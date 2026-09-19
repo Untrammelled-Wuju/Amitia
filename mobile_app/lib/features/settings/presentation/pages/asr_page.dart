@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:amitia_app/core/widgets/amitia_popup_menu.dart';
 
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_radius.dart';
@@ -494,7 +495,7 @@ class _AsrPageState extends ConsumerState<AsrPage> {
               ],
             ),
           ),
-          PopupMenuButton<String>(
+          AmitiaPopupMenuButton<String>(
             enabled: !_busy,
             onSelected: (value) {
               switch (value) {

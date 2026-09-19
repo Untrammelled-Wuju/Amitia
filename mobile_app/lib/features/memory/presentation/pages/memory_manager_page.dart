@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:amitia_app/core/widgets/amitia_popup_menu.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../app/theme/app_spacing.dart';
@@ -136,7 +137,7 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
                     padding: EdgeInsets.fromLTRB(AppSpacing.pagePadding, AppSpacing.sm, AppSpacing.pagePadding, AppSpacing.xs),
                     child: Row(
                       children: [
-                        PopupMenuButton<String>(
+                        AmitiaPopupMenuButton<String>(
                           initialValue: _searchMode,
                           onSelected: (v) => setState(() => _searchMode = v),
                           itemBuilder: (_) => const [

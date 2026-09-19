@@ -1,6 +1,7 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:amitia_app/core/widgets/amitia_popup_menu.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../app/theme/app_spacing.dart';
@@ -187,7 +188,7 @@ class _EmotesPageState extends ConsumerState<EmotesPage> {
           Text('已选 ${_selected.length} 项', style: AppTypography.bodySmall(context).copyWith(color: context.accentPrimary, fontWeight: FontWeight.w600)),
           const Spacer(),
           if (_selected.isNotEmpty) ...[
-            PopupMenuButton<String>(
+            AmitiaPopupMenuButton<String>(
               tooltip: '批量操作',
               onSelected: _runBatchAction,
               itemBuilder: (_) => const [

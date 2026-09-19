@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:amitia_app/core/widgets/amitia_popup_menu.dart';
 import '../../../../app/app_routes.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
@@ -385,7 +386,7 @@ class _ToolboxWorkspacePageState extends ConsumerState<ToolboxWorkspacePage> {
                                 dense: true,
                                 title: Text(uri, maxLines: 1, overflow: TextOverflow.ellipsis),
                                 subtitle: Text('staging=${entry['staging'] ?? '-'} · worktree=${entry['worktree'] ?? '-'}${entry['conflict'] == true ? ' · 冲突' : ''}'),
-                                trailing: PopupMenuButton<String>(
+                                trailing: AmitiaPopupMenuButton<String>(
                                   onSelected: (value) async {
                                     if (value == 'diff') {
                                       final diff = await svc.gitDiff(workspace.rootUri, paths: [uri]);

@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:amitia_app/core/widgets/amitia_popup_menu.dart';
 
 import '../../../../app/app_routes.dart';
 import '../../../../app/theme/app_colors.dart';
@@ -392,7 +393,7 @@ class _PetActionEditorPageState extends ConsumerState<PetActionEditorPage> {
                           '${revision['frameCount'] ?? 0} 帧 · ${revision['qualityVerdict'] ?? '-'}\n${revision['changeSummary'] ?? ''}',
                         ),
                         isThreeLine: true,
-                        trailing: PopupMenuButton<String>(
+                        trailing: AmitiaPopupMenuButton<String>(
                           onSelected: (value) async {
                             if (value == 'detail') {
                               await _showRevisionDetail(id);
@@ -1326,7 +1327,7 @@ class _PetActionEditorPageState extends ConsumerState<PetActionEditorPage> {
                 ],
               ),
             ),
-            PopupMenuButton<String>(
+            AmitiaPopupMenuButton<String>(
               enabled: !_busy,
               onSelected: (value) {
                 if (value == 'duration') _editDuration(id, duration);

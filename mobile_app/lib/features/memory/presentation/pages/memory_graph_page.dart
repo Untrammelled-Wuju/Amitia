@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:amitia_app/core/widgets/amitia_popup_menu.dart';
 
 import '../../../../app/app_routes.dart';
 import '../../../../app/theme/app_colors.dart';
@@ -100,7 +101,7 @@ class _MemoryGraphPageState extends ConsumerState<MemoryGraphPage> {
                     ),
                   ),
                   SizedBox(width: AppSpacing.sm),
-                  PopupMenuButton<String>(
+                  AmitiaPopupMenuButton<String>(
                     tooltip: '节点类型',
                     onSelected: (value) => setState(() => _type = value),
                     itemBuilder: (_) => [

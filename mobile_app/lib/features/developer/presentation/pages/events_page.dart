@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:amitia_app/core/widgets/amitia_popup_menu.dart';
 import '../../../../app/app_routes.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
@@ -236,7 +237,7 @@ class _EventsPageState extends ConsumerState<EventsPage> {
               title: Text(id),
               subtitle: Text('${item['eventTypeId'] ?? item['EventTypeID'] ?? ''} · ${item['extensionId'] ?? item['ExtensionID'] ?? ''}'),
               onTap: () => _fetchDetail('/api/extensions/events/subscriptions/$id', '订阅详情'),
-              trailing: PopupMenuButton<String>(
+              trailing: AmitiaPopupMenuButton<String>(
                 onSelected: (value) => value == 'reset' ? _resetCircuit(id) : _deleteSubscription(id),
                 itemBuilder: (_) => const [
                   PopupMenuItem(value: 'reset', child: Text('重置 Circuit')),

@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:go_router/go_router.dart';
+import 'package:amitia_app/core/widgets/amitia_popup_menu.dart';
 import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_motion.dart';
 import '../../app/theme/app_radius.dart';
@@ -1181,7 +1182,7 @@ class _ProjectTile extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
             ),
           ),
-          PopupMenuButton<_ProjectAction>(
+          AmitiaPopupMenuButton<_ProjectAction>(
             tooltip: '项目操作',
             onSelected: _handleAction,
             itemBuilder: (context) => [

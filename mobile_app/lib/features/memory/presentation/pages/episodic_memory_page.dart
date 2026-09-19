@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:amitia_app/core/widgets/amitia_popup_menu.dart';
 
 import '../../../../app/app_routes.dart';
 import '../../../../app/theme/app_colors.dart';
@@ -208,7 +209,7 @@ class _EpisodicMemoryPageState extends ConsumerState<EpisodicMemoryPage> {
                 icon: const Icon(Icons.visibility_outlined, size: 16),
                 label: const Text('详情'),
               ),
-              PopupMenuButton<int>(
+              AmitiaPopupMenuButton<int>(
                 tooltip: '调整 L1–L5',
                 onSelected: (level) => _updateRetention(context, memory, level),
                 itemBuilder: (_) => [

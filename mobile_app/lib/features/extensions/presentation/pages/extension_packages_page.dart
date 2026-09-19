@@ -3,6 +3,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:amitia_app/core/widgets/amitia_popup_menu.dart';
 
 import '../../../../app/app_routes.dart';
 import '../../../../app/theme/app_colors.dart';
@@ -149,7 +150,7 @@ class _ExtensionPackagesPageState extends ConsumerState<ExtensionPackagesPage> {
   }
 
   Widget _buildKernelMoreMenu(BuildContext context) {
-    return PopupMenuButton<String>(
+    return AmitiaPopupMenuButton<String>(
       tooltip: '更多',
       enabled: !_busy,
       icon: Icon(
@@ -356,7 +357,7 @@ class _ExtensionPackagesPageState extends ConsumerState<ExtensionPackagesPage> {
                   ],
                 ),
               ),
-              PopupMenuButton<String>(
+              AmitiaPopupMenuButton<String>(
                 tooltip: '更多操作',
                 enabled: !_busy,
                 padding: EdgeInsets.zero,

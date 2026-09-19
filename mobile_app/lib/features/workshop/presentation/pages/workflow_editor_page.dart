@@ -4,6 +4,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:amitia_app/core/widgets/amitia_popup_menu.dart';
 
 import '../../../../app/app_routes.dart';
 import '../../../../app/theme/app_colors.dart';
@@ -3665,7 +3666,7 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
           IconButton(tooltip: '预检', onPressed: _workflow == null ? null : _showPreflight, icon: const Icon(Icons.health_and_safety_outlined)),
           IconButton(tooltip: '保存', onPressed: _workflow == null || _saving ? null : _save, icon: _saving ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.save_outlined)),
           IconButton(tooltip: '运行', onPressed: _workflow == null ? null : _run, icon: const Icon(Icons.play_arrow)),
-          PopupMenuButton<String>(
+          AmitiaPopupMenuButton<String>(
             onSelected: (value) {
               switch (value) {
                 case 'settings':

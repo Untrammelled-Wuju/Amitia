@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:amitia_app/core/widgets/amitia_popup_menu.dart';
 
 import '../../../../app/app_routes.dart';
 import '../../../../app/theme/app_colors.dart';
@@ -247,7 +248,7 @@ class _ToolboxFileBrowserPageState extends ConsumerState<ToolboxFileBrowserPage>
                               ),
                             ),
                             if (_mounts.length > 1)
-                              PopupMenuButton<_WorkspaceMount>(
+                              AmitiaPopupMenuButton<_WorkspaceMount>(
                                 tooltip: '切换 Workspace',
                                 onSelected: _openMount,
                                 itemBuilder: (_) => _mounts

@@ -11,6 +11,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:amitia_app/core/widgets/amitia_popup_menu.dart';
 import '../../../../app/app_routes.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_motion.dart';
@@ -2950,7 +2951,7 @@ class _ChatTopBar extends StatelessWidget implements PreferredSizeWidget {
               ),
               const SizedBox(width: 8),
             ],
-            PopupMenuButton<String>(
+            AmitiaPopupMenuButton<String>(
               tooltip: '发起通话',
               onSelected: onCallSelected,
               itemBuilder: (context) => const [
@@ -2986,7 +2987,7 @@ class _ChatTopBar extends StatelessWidget implements PreferredSizeWidget {
               ),
             ),
             const SizedBox(width: 8),
-            PopupMenuButton<int>(
+            AmitiaPopupMenuButton<int>(
               tooltip: '当前对话详情',
               onSelected: onMoreSelected,
               itemBuilder: (context) => const [
