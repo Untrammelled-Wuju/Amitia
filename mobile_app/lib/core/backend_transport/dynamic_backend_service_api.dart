@@ -9,6 +9,7 @@ typedef BusinessApiAvailabilityResolver =
     bool Function(RuntimeStatusSnapshot status, BackendServiceApi? api);
 typedef BusinessBackendUnavailableListener =
     void Function(BusinessBackendUnavailable error);
+typedef BusinessApiAvailabilityWaiter = Future<void> Function();
 
 final class DynamicBackendServiceApiProxy implements BackendServiceApi {
   DynamicBackendServiceApiProxy({
@@ -16,29 +17,37 @@ final class DynamicBackendServiceApiProxy implements BackendServiceApi {
     required RuntimeStatusSnapshot Function() currentStatus,
     BusinessApiAvailabilityResolver? canUseApi,
     BusinessBackendUnavailableListener? onUnavailable,
+    BusinessApiAvailabilityWaiter? waitForAvailability,
   }) : _currentApi = currentApi,
        _currentStatus = currentStatus,
        _canUseApi = canUseApi ?? _defaultCanUseApi,
-       _onUnavailable = onUnavailable;
+       _onUnavailable = onUnavailable,
+       _waitForAvailability = waitForAvailability;
 
   final BackendServiceApiResolver _currentApi;
   final RuntimeStatusSnapshot Function() _currentStatus;
   final BusinessApiAvailabilityResolver _canUseApi;
   final BusinessBackendUnavailableListener? _onUnavailable;
+  final BusinessApiAvailabilityWaiter? _waitForAvailability;
 
-  BackendServiceApi _requireCurrentApi() {
+  Future<BackendServiceApi> _requireCurrentApi() async {
     final status = _currentStatus();
     final api = _currentApi();
-    if (!_canUseApi(status, api)) {
-      final error = BusinessBackendUnavailable(
-        phase: status.phase,
-        generation: status.generation,
-        primaryError: status.primaryError,
-      );
-      _onUnavailable?.call(error);
-      throw error;
+    if (_canUseApi(status, api)) return api!;
+    final waiter = _waitForAvailability;
+    if (waiter != null) {
+      await waiter();
+      final readyStatus = _currentStatus();
+      final readyApi = _currentApi();
+      if (_canUseApi(readyStatus, readyApi)) return readyApi!;
     }
-    return api!;
+    final error = BusinessBackendUnavailable(
+      phase: status.phase,
+      generation: status.generation,
+      primaryError: status.primaryError,
+    );
+    _onUnavailable?.call(error);
+    throw error;
   }
 
   static bool _defaultCanUseApi(
@@ -59,8 +68,8 @@ final class DynamicBackendServiceApiProxy implements BackendServiceApi {
     Map<String, dynamic>? queryParameters,
     Map<String, String>? headers,
     T Function(dynamic)? fromJson,
-  }) {
-    final api = _requireCurrentApi();
+  }) async {
+    final api = await _requireCurrentApi();
     return api.get<T>(
       path,
       queryParameters: queryParameters,
@@ -75,8 +84,8 @@ final class DynamicBackendServiceApiProxy implements BackendServiceApi {
     Map<String, dynamic>? queryParameters,
     Map<String, String>? headers,
     CancelToken? cancelToken,
-  }) {
-    final api = _requireCurrentApi();
+  }) async {
+    final api = await _requireCurrentApi();
     return api.getStream(
       path,
       queryParameters: queryParameters,
@@ -92,8 +101,8 @@ final class DynamicBackendServiceApiProxy implements BackendServiceApi {
     Map<String, dynamic>? queryParameters,
     Map<String, String>? headers,
     CancelToken? cancelToken,
-  }) {
-    final api = _requireCurrentApi();
+  }) async {
+    final api = await _requireCurrentApi();
     return api.postStream(
       path,
       data: data,
@@ -110,8 +119,8 @@ final class DynamicBackendServiceApiProxy implements BackendServiceApi {
     Map<String, List<String>> files = const {},
     Map<String, dynamic>? queryParameters,
     T Function(dynamic)? fromJson,
-  }) {
-    final api = _requireCurrentApi();
+  }) async {
+    final api = await _requireCurrentApi();
     return api.postMultipart<T>(
       path,
       fields: fields,
@@ -128,8 +137,8 @@ final class DynamicBackendServiceApiProxy implements BackendServiceApi {
     Map<String, dynamic>? queryParameters,
     Map<String, String>? headers,
     T Function(dynamic)? fromJson,
-  }) {
-    final api = _requireCurrentApi();
+  }) async {
+    final api = await _requireCurrentApi();
     return api.post<T>(
       path,
       data: data,
@@ -145,8 +154,8 @@ final class DynamicBackendServiceApiProxy implements BackendServiceApi {
     Object? data,
     Map<String, String>? headers,
     T Function(dynamic)? fromJson,
-  }) {
-    final api = _requireCurrentApi();
+  }) async {
+    final api = await _requireCurrentApi();
     return api.postPayload<T>(
       path,
       data: data,
@@ -162,8 +171,8 @@ final class DynamicBackendServiceApiProxy implements BackendServiceApi {
     Map<String, dynamic>? queryParameters,
     Map<String, String>? headers,
     T Function(dynamic)? fromJson,
-  }) {
-    final api = _requireCurrentApi();
+  }) async {
+    final api = await _requireCurrentApi();
     return api.put<T>(
       path,
       data: data,
@@ -180,8 +189,8 @@ final class DynamicBackendServiceApiProxy implements BackendServiceApi {
     Map<String, dynamic>? queryParameters,
     Map<String, String>? headers,
     T Function(dynamic)? fromJson,
-  }) {
-    final api = _requireCurrentApi();
+  }) async {
+    final api = await _requireCurrentApi();
     return api.patch<T>(
       path,
       data: data,
@@ -196,8 +205,8 @@ final class DynamicBackendServiceApiProxy implements BackendServiceApi {
     String path, {
     Map<String, dynamic>? queryParameters,
     Map<String, String>? headers,
-  }) {
-    final api = _requireCurrentApi();
+  }) async {
+    final api = await _requireCurrentApi();
     return api.delete(path, queryParameters: queryParameters, headers: headers);
   }
 
@@ -207,8 +216,8 @@ final class DynamicBackendServiceApiProxy implements BackendServiceApi {
     Object? data,
     Map<String, String>? headers,
     T Function(dynamic)? fromJson,
-  }) {
-    final api = _requireCurrentApi();
+  }) async {
+    final api = await _requireCurrentApi();
     return api.deleteWithResponse<T>(
       path,
       data: data,

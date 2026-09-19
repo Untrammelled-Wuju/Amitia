@@ -3,12 +3,15 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:logger/logger.dart';
 
+import '../../backend_access/business_backend_unavailable.dart';
 import '../../backend_connection/backend_connection_availability.dart';
 import '../../backend_connection/backend_connection_config.dart';
 import '../../backend_connection/backend_connection_error.dart';
 import '../../backend_connection/providers/backend_connection_providers.dart';
 import '../../backend_connection/providers/runtime_backend_connection_source.dart';
 import '../../runtime/status/runtime_status_provider.dart';
+import '../../runtime/status/runtime_status_phase.dart';
+import '../../runtime/status/runtime_status_snapshot.dart';
 import '../../runtime/runtime_bridge_provider.dart';
 import '../../runtime/runtime_bridge_state.dart';
 import '../../runtime/backend/mobile_backend_providers.dart';
@@ -29,6 +32,62 @@ import '../websocket/backend_websocket_client.dart';
 import '../state/backend_transport_state.dart';
 
 final _transportLogger = Logger();
+const Duration _backendAvailabilityWaitTimeout = Duration(seconds: 30);
+const Duration _backendAvailabilityPollInterval = Duration(milliseconds: 250);
+
+bool _isBusinessApiUsable(
+  Ref ref,
+  RuntimeStatusSnapshot status,
+  BackendServiceApi? api,
+) {
+  final mode = ref.read(mobileDeploymentConfigProvider).mode;
+  if (mode != MobileDeploymentMode.local) return api != null;
+  return status.businessAvailable &&
+      api != null &&
+      api.generation == status.generation;
+}
+
+BusinessBackendUnavailable _businessUnavailable(RuntimeStatusSnapshot status) {
+  return BusinessBackendUnavailable(
+    phase: status.phase,
+    generation: status.generation,
+    primaryError: status.primaryError,
+  );
+}
+
+Future<void> _waitForBusinessBackend(Ref ref) async {
+  final deadline = DateTime.now().add(_backendAvailabilityWaitTimeout);
+  var status = ref.read(runtimeStatusCurrentProvider);
+  while (DateTime.now().isBefore(deadline)) {
+    status = ref.read(runtimeStatusCurrentProvider);
+    if (_isBusinessApiUsable(
+      ref,
+      status,
+      ref.read(rawBackendServiceApiProvider),
+    )) {
+      return;
+    }
+    if (status.phase == RuntimeStatusPhase.failed) {
+      throw _businessUnavailable(status);
+    }
+    await Future<void>.delayed(_backendAvailabilityPollInterval);
+  }
+  throw _businessUnavailable(status);
+}
+
+Future<void> _waitForDeviceLocalBackend(Ref ref) async {
+  final deadline = DateTime.now().add(_backendAvailabilityWaitTimeout);
+  var status = ref.read(runtimeStatusCurrentProvider);
+  while (DateTime.now().isBefore(deadline)) {
+    status = ref.read(runtimeStatusCurrentProvider);
+    if (ref.read(rawDeviceLocalBackendServiceApiProvider) != null) return;
+    if (status.phase == RuntimeStatusPhase.failed) {
+      throw _businessUnavailable(status);
+    }
+    await Future<void>.delayed(_backendAvailabilityPollInterval);
+  }
+  throw _businessUnavailable(status);
+}
 
 final backendTransportProvider =
     AsyncNotifierProvider<BackendTransportNotifier, BackendTransportState>(
@@ -387,6 +446,7 @@ final backendServiceProvider = Provider<BackendServiceApi>((ref) {
         primary == null ? DebugLogLevel.debug : DebugLogLevel.error,
       );
     },
+    waitForAvailability: () => _waitForBusinessBackend(ref),
   );
 
   final deviceLocalApi = DynamicBackendServiceApiProxy(
@@ -412,6 +472,7 @@ final backendServiceProvider = Provider<BackendServiceApi>((ref) {
         primary == null ? DebugLogLevel.debug : DebugLogLevel.error,
       );
     },
+    waitForAvailability: () => _waitForDeviceLocalBackend(ref),
   );
 
   return RoutedBackendServiceApiProxy(

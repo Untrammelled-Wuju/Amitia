@@ -8,7 +8,7 @@ import 'package:amitia_app/core/runtime/status/runtime_status_snapshot.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('本地运行环境未就绪时记录并阻止业务请求', () {
+  test('本地运行环境未就绪时记录并阻止业务请求', () async {
     BusinessBackendUnavailable? recorded;
     final api = DynamicBackendServiceApiProxy(
       currentApi: () => _FakeApi(1),
@@ -16,8 +16,8 @@ void main() {
       onUnavailable: (error) => recorded = error,
     );
 
-    expect(
-      () => api.get('/api/test'),
+    await expectLater(
+      api.get('/api/test'),
       throwsA(isA<BusinessBackendUnavailable>()),
     );
     expect(recorded?.phase, RuntimeStatusPhase.installRequired);
@@ -30,6 +30,22 @@ void main() {
       currentApi: () => rawApi,
       currentStatus: _installRequiredStatus,
       canUseApi: (_, currentApi) => currentApi != null,
+    );
+
+    await api.get('/api/test');
+
+    expect(rawApi.getCount, 1);
+  });
+
+  test('业务后端启动时等待就绪后再发送请求', () async {
+    var ready = false;
+    final rawApi = _FakeApi(1);
+    final api = DynamicBackendServiceApiProxy(
+      currentApi: () => ready ? rawApi : null,
+      currentStatus: () => ready ? _readyStatus() : _startingStatus(),
+      waitForAvailability: () async {
+        ready = true;
+      },
     );
 
     await api.get('/api/test');
@@ -49,6 +65,34 @@ RuntimeStatusSnapshot _installRequiredStatus() {
     webSocketConnected: false,
     businessAvailable: false,
     generation: 0,
+  );
+}
+
+RuntimeStatusSnapshot _startingStatus() {
+  return const RuntimeStatusSnapshot(
+    phase: RuntimeStatusPhase.starting,
+    runtimeState: RuntimeBridgeState.starting,
+    runtimeReady: false,
+    runtimeInstalled: true,
+    backendConfigured: true,
+    httpAvailable: false,
+    webSocketConnected: false,
+    businessAvailable: false,
+    generation: 1,
+  );
+}
+
+RuntimeStatusSnapshot _readyStatus() {
+  return const RuntimeStatusSnapshot(
+    phase: RuntimeStatusPhase.ready,
+    runtimeState: RuntimeBridgeState.ready,
+    runtimeReady: true,
+    runtimeInstalled: true,
+    backendConfigured: true,
+    httpAvailable: true,
+    webSocketConnected: false,
+    businessAvailable: true,
+    generation: 1,
   );
 }
 
