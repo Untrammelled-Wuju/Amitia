@@ -581,27 +581,11 @@ class _DrawerMainPanel extends StatelessWidget {
                 onSearchTap: onSearchTap,
               ),
               SizedBox(height: AppSpacing.sm),
-              Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 11,
-                  vertical: 2,
-                ),
-                child: ListTile(
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 8),
-                  leading: const Icon(Icons.add_comment_outlined, size: 19),
-                  title: Text(
-                    '新对话',
-                    style: TextStyle(
-                      color: context.textPrimary,
-                      fontSize: 14.5,
-                      fontWeight: FontWeight.w400,
-                    ),
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  onTap: onNewChat,
-                ),
+              _MainMenuItem(
+                icon: Icons.add_comment_outlined,
+                label: '新对话',
+                isSelected: false,
+                onTap: onNewChat,
               ),
               ...navigationItems
                   .where((item) => item.panel == UINavigationPanel.main)
