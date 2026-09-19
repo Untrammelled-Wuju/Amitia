@@ -12,6 +12,8 @@ enum MainDrawerItem {
 
 enum MoreDrawerItem { none }
 
+enum DrawerNavigationAction { none, push, replace }
+
 class DrawerRouteState {
   const DrawerRouteState({
     required this.initialPanel,
@@ -28,6 +30,19 @@ class DrawerRouteState {
 
 bool isRouteFamily(String location, String root) {
   return location == root || location.startsWith('$root/');
+}
+
+DrawerNavigationAction resolveDrawerNavigationAction({
+  required String currentLocation,
+  required String targetLocation,
+}) {
+  if (currentLocation == targetLocation) return DrawerNavigationAction.none;
+  final currentPath = Uri.tryParse(currentLocation)?.path ?? currentLocation;
+  final targetPath = Uri.tryParse(targetLocation)?.path ?? targetLocation;
+  if (currentPath == '/chat' && targetPath == '/chat') {
+    return DrawerNavigationAction.replace;
+  }
+  return DrawerNavigationAction.push;
 }
 
 DrawerRouteState resolveDrawerRouteState(String location) {

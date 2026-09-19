@@ -31,5 +31,8 @@ void main() {
       contains('if (snapshot.hasError) return widget.fallback;'),
     );
     expect(extensionSlot, contains('fallback: widget.fallback'));
+    expect(page, contains('AnimatedSwitcher('));
+    expect(page, contains('FadeTransition('));
+    expect(page, contains("'conversation-messages:"));
   });
 }

@@ -35,6 +35,38 @@ void main() {
     });
   });
 
+  group('resolveDrawerNavigationAction', () {
+    test('keeps the current route when the location is unchanged', () {
+      expect(
+        resolveDrawerNavigationAction(
+          currentLocation: '/chat?conversationId=one',
+          targetLocation: '/chat?conversationId=one',
+        ),
+        DrawerNavigationAction.none,
+      );
+    });
+
+    test('replaces the page when switching between conversations', () {
+      expect(
+        resolveDrawerNavigationAction(
+          currentLocation: '/chat?conversationId=one',
+          targetLocation: '/chat?conversationId=two',
+        ),
+        DrawerNavigationAction.replace,
+      );
+    });
+
+    test('pushes when entering chat from another route', () {
+      expect(
+        resolveDrawerNavigationAction(
+          currentLocation: '/settings',
+          targetLocation: '/chat?conversationId=two',
+        ),
+        DrawerNavigationAction.push,
+      );
+    });
+  });
+
   group('resolveDrawerRouteState', () {
     test('chat route selects chat', () {
       final state = resolveDrawerRouteState('/chat');
@@ -55,13 +87,25 @@ void main() {
     });
 
     test('characters family selects characters', () {
-      expect(resolveDrawerRouteState('/characters').mainItem, MainDrawerItem.characters);
-      expect(resolveDrawerRouteState('/characters/c1').mainItem, MainDrawerItem.characters);
+      expect(
+        resolveDrawerRouteState('/characters').mainItem,
+        MainDrawerItem.characters,
+      );
+      expect(
+        resolveDrawerRouteState('/characters/c1').mainItem,
+        MainDrawerItem.characters,
+      );
     });
 
     test('memory family selects memory', () {
-      expect(resolveDrawerRouteState('/memory').mainItem, MainDrawerItem.memory);
-      expect(resolveDrawerRouteState('/memory/graph').mainItem, MainDrawerItem.memory);
+      expect(
+        resolveDrawerRouteState('/memory').mainItem,
+        MainDrawerItem.memory,
+      );
+      expect(
+        resolveDrawerRouteState('/memory/graph').mainItem,
+        MainDrawerItem.memory,
+      );
     });
 
     test('devices route selects the first-level devices item', () {
@@ -71,14 +115,29 @@ void main() {
     });
 
     test('extensions family is a main drawer item', () {
-      expect(resolveDrawerRouteState('/extensions').mainItem, MainDrawerItem.extensions);
-      expect(resolveDrawerRouteState('/extensions/mcp').mainItem, MainDrawerItem.extensions);
-      expect(resolveDrawerRouteState('/extension/page/demo').mainItem, MainDrawerItem.extensions);
+      expect(
+        resolveDrawerRouteState('/extensions').mainItem,
+        MainDrawerItem.extensions,
+      );
+      expect(
+        resolveDrawerRouteState('/extensions/mcp').mainItem,
+        MainDrawerItem.extensions,
+      );
+      expect(
+        resolveDrawerRouteState('/extension/page/demo').mainItem,
+        MainDrawerItem.extensions,
+      );
     });
 
     test('workshop family is a main drawer item', () {
-      expect(resolveDrawerRouteState('/workshop').mainItem, MainDrawerItem.workshop);
-      expect(resolveDrawerRouteState('/workshop/skills').mainItem, MainDrawerItem.workshop);
+      expect(
+        resolveDrawerRouteState('/workshop').mainItem,
+        MainDrawerItem.workshop,
+      );
+      expect(
+        resolveDrawerRouteState('/workshop/skills').mainItem,
+        MainDrawerItem.workshop,
+      );
     });
 
     test('settings-owned pages keep settings selected', () {
@@ -100,7 +159,11 @@ void main() {
     });
 
     test('removed drawer destinations remain unselected', () {
-      for (final route in <String>['/game-center', '/desktop-pet', '/developer']) {
+      for (final route in <String>[
+        '/game-center',
+        '/desktop-pet',
+        '/developer',
+      ]) {
         final state = resolveDrawerRouteState(route);
         expect(state.mainItem, MainDrawerItem.none, reason: route);
         expect(state.moreItem, MoreDrawerItem.none, reason: route);

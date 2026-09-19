@@ -62,8 +62,20 @@ class _AmitiaDrawerState extends ConsumerState<AmitiaDrawer> {
     final router = GoRouter.of(context);
     final currentRoute = router.routerDelegate.currentConfiguration.fullPath;
     Navigator.of(context).pop();
-    if (currentRoute == route) return;
-    router.push(route);
+    final action = resolveDrawerNavigationAction(
+      currentLocation: currentRoute,
+      targetLocation: route,
+    );
+    switch (action) {
+      case DrawerNavigationAction.none:
+        return;
+      case DrawerNavigationAction.push:
+        router.push(route);
+        return;
+      case DrawerNavigationAction.replace:
+        router.go(route);
+        return;
+    }
   }
 
   Future<void> _showGlobalSearch(
