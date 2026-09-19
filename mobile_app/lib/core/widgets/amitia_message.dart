@@ -302,7 +302,7 @@ class AmitiaMessageBubble extends StatelessWidget {
       padding: EdgeInsets.only(
         left: AppSpacing.lg,
         right: AppSpacing.lg,
-        bottom: 8,
+        bottom: 14,
       ),
       child: Row(
         mainAxisAlignment: isUser

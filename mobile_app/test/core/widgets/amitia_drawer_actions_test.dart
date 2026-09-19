@@ -23,5 +23,8 @@ void main() {
     expect(source, isNot(contains('Icons.chat_bubble_outline')));
     expect(source, isNot(contains('Icons.more_horiz')));
     expect(source, contains('fontSize: 14.5'));
+    expect(source, contains('minTileHeight: compact ? 34 : 38'));
+    expect(source, contains('minVerticalPadding: 0'));
+    expect(source, contains('visualDensity: VisualDensity.compact'));
   });
 }

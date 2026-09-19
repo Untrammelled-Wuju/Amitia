@@ -882,7 +882,10 @@ class _ConversationTile extends StatelessWidget {
         ? '新对话'
         : conversation.title;
     return ListTile(
-      dense: compact,
+      dense: true,
+      minTileHeight: compact ? 34 : 38,
+      minVerticalPadding: 0,
+      visualDensity: VisualDensity.compact,
       contentPadding: EdgeInsets.only(left: compact ? 12 : 20, right: 4),
       title: Text(
         title,
