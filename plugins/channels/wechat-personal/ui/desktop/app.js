@@ -2,6 +2,7 @@ const bridge = window.amitiaUI;
 const channelId = "wechat_personal";
 const $ = (id) => document.getElementById(id);
 let currentConversation = "";
+let loginWatchToken = 0;
 
 function unwrap(value) {
   if (value && typeof value === "object" && "data" in value && Object.keys(value).length <= 3) return value.data ?? value;
@@ -64,6 +65,19 @@ function renderStatus(raw) {
 async function refresh() {
   try { renderStatus(await action("status")); } catch (e) { setError(e?.message || String(e)); }
 }
+async function watchLogin() {
+  const token = ++loginWatchToken;
+  for (let attempt = 0; attempt < 150; attempt += 1) {
+    await new Promise((resolve) => window.setTimeout(resolve, 2000));
+    if (token !== loginWatchToken) return;
+    let raw;
+    try { raw = await action("status"); } catch (e) { setError(e?.message || String(e)); continue; }
+    if (token !== loginWatchToken) return;
+    renderStatus(raw);
+    const state = raw?.data || raw || {};
+    if (state.connected || ["connected", "connected_limited", "login_error", "login_expired", "error"].includes(state.status)) return;
+  }
+}
 async function connect() {
   setBusy(true); setError("");
   try {
@@ -72,6 +86,7 @@ async function connect() {
     const qrSource = data.qrImageUrl || data.qrCodeUrl;
     if (qrSource) { $("qr").src = qrSource; show("qr", true); show("qr-placeholder", false); }
     await refresh();
+    void watchLogin();
   } catch (e) { setError(e?.message || String(e)); }
   finally { setBusy(false); }
 }
@@ -82,6 +97,7 @@ async function verify() {
   catch (e) { setError(e?.message || String(e)); }
 }
 async function disconnect() {
+  loginWatchToken += 1;
   try { await action("disconnect"); await refresh(); } catch (e) { setError(e?.message || String(e)); }
 }
 function renderMessages(result) {

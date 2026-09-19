@@ -18,6 +18,8 @@ import {
   createPairingOffer as cloudCreatePairingOffer,
 } from "./device-mesh/remote-bootstrap-client";
 
+const EXTENSION_PACKAGE_MAX_BYTES = 512 * 1024 * 1024;
+
 export function registerIpcHandlers(
   configStore: ConfigStore,
   runtimeManager: DesktopRuntimeManager,
@@ -197,9 +199,9 @@ export function registerIpcHandlers(
     if (
       !stat.isFile() ||
       stat.isSymbolicLink() ||
-      stat.size > 100 * 1024 * 1024
+      stat.size > EXTENSION_PACKAGE_MAX_BYTES
     )
-      throw new Error("扩展包文件无效或超过 100 MB");
+      throw new Error("扩展包文件无效或超过 512 MB");
     const content = await fs.readFile(selected);
     return {
       name: path.basename(selected),
@@ -223,8 +225,8 @@ export function registerIpcHandlers(
       if (!suggestedName || !/\.(amitiax|gamex|petx|zip)$/i.test(suggestedName))
         throw new Error("导出文件名无效");
       const content = Buffer.from(request.base64, "base64");
-      if (!content.length || content.length > 100 * 1024 * 1024)
-        throw new Error("导出内容无效或超过 100 MB");
+      if (!content.length || content.length > EXTENSION_PACKAGE_MAX_BYTES)
+        throw new Error("导出内容无效或超过 512 MB");
       const window = BrowserWindow.fromWebContents(event.sender);
       const options = {
         defaultPath: suggestedName,

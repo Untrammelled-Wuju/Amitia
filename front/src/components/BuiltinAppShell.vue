@@ -175,6 +175,7 @@ async function fetchSpaceProfile() {
     const res = await apiClient.get("/api/space/profile");
     const profile = res.data?.data || res.data;
     authUsername.value = String(profile?.displayName || profile?.nickname || "本地用户");
+    appStore.setAvatar(String(profile?.avatar || ""));
   } catch {
     authUsername.value = "本地用户";
   }

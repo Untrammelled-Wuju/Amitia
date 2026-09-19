@@ -14,7 +14,13 @@ class ModelSettingsPage extends ConsumerWidget {
   static const _types = <(IconData, String, String, String)>[
     (Icons.chat_outlined, '文本模型', '对话与文本生成', 'text'),
     (Icons.visibility_outlined, '视觉模型', '图像理解与描述', 'vision'),
-    (Icons.record_voice_over_outlined, '语音模型', '语音合成与识别', 'voice'),
+    (
+      Icons.record_voice_over_outlined,
+      '语音模型',
+      '语音合成与音色配置',
+      'voice',
+    ),
+    (Icons.transcribe_outlined, '语音识别', '语音转文字与识别模型', 'asr'),
     (Icons.scatter_plot_outlined, '向量模型', '文本向量化与检索', 'vector'),
     (Icons.image_outlined, '图像生成模型', '文生图与图像编辑', 'image'),
   ];
@@ -34,7 +40,11 @@ class ModelSettingsPage extends ConsumerWidget {
                   icon: t.$1,
                   title: t.$2,
                   subtitle: t.$3,
-                  onTap: () => context.push(AppRoutes.modelConfig(t.$4)),
+                  onTap: () => context.push(
+                    t.$4 == 'asr'
+                        ? AppRoutes.settingsAsr
+                        : AppRoutes.modelConfig(t.$4),
+                  ),
                 ),
               )),
           SizedBox(height: AppSpacing.xl),

@@ -79,6 +79,15 @@ void main() {
     expect(source, isNot(contains('floatingActionButton:')));
   });
 
+  test('workflow list keeps its title without a standalone refresh action', () {
+    final source = File(
+      'lib/features/workshop/presentation/pages/workflow_list_page.dart',
+    ).readAsStringSync();
+
+    expect(source, contains("title: _searchVisible ? '搜索工作流' : '工作流'"));
+    expect(source, isNot(contains("tooltip: '刷新'")));
+  });
+
   test('agent skill page keeps search and import actions in the app bar', () {
     final source = File(
       'lib/features/extensions/presentation/pages/agent_skills_page.dart',

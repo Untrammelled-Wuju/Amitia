@@ -922,14 +922,7 @@ class _TemporalContentState extends ConsumerState<_TemporalContent> {
   }
 
   Widget _divider() {
-    return Padding(
-      padding: const EdgeInsets.only(left: 56),
-      child: Divider(
-        height: 1,
-        thickness: 0.5,
-        color: context.borderSecondary,
-      ),
-    );
+    return const SizedBox.shrink();
   }
 
   Widget _buildDropdownTile({

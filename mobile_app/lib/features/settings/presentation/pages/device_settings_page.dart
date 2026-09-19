@@ -171,14 +171,7 @@ class DeviceSettingsPage extends ConsumerWidget {
         ),
         child: Column(
           children: [
-            for (var i = 0; i < children.length; i++) ...[
-              children[i],
-              if (i < children.length - 1)
-                Padding(
-                  padding: const EdgeInsets.only(left: 56),
-                  child: Divider(height: 1, color: context.borderSecondary),
-                ),
-            ],
+            for (final child in children) child,
           ],
         ),
       );

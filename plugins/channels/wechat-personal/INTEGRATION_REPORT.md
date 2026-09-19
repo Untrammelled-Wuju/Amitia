@@ -2,26 +2,21 @@
 
 ## 结论
 
-个人微信渠道已从本机微信/Native Companion 方案切换为腾讯 iLink 协议方案。连接、账号状态和消息收发均由插件自身完成，不再依赖安装设备上的微信客户端。
+个人微信渠道已切换为 Wechaty Web 协议方案。连接、账号状态和消息收发均由插件自身完成，不再依赖安装设备上的微信客户端。
 
 ## 已移除依赖
 
-- 删除 `runtime.nativeCompanions` 声明
-- 删除本机微信安装路径探测
-- 删除本机微信进程启动、隐藏和窗口控制
-- 删除 `child_process` 调用
-- 删除 Native Agent、Hook Driver 和 Preload 运行链路
-- 删除无鉴权本地回调入口
+- 删除 iLink Bot 二维码、令牌和消息轮询链路
+- 删除 `bot_token`、`ilink_bot_id` 和 `context_token` 依赖
+- 保留宿主 Trusted Service 鉴权与统一渠道消息入口
 
 ## 当前链路
 
-1. `/api/connect` 调用 iLink `get_bot_qrcode`
-2. 插件将二维码转换为 PNG Data URL 返回页面
-3. 后台轮询 `get_qrcode_status`
-4. `confirmed` 后保存 `bot_token`、`ilink_bot_id` 和 `baseurl`
-5. 启动 `getupdates` 长轮询
-6. 文本消息转发到 `/api/channels/inbound`
-7. `/api/send` 使用入站消息携带的 `context_token` 调用 `sendmessage`
+1. `/api/connect` 启动 Wechaty 与 `wechaty-puppet-wechat4u`
+2. Wechaty `scan` 事件将二维码转换为 PNG Data URL 返回页面
+3. Wechaty `login` 事件保存独立账号标识与会话状态
+4. Wechaty `message` 事件将文本消息转发到 `/api/channels/inbound`
+5. `/api/send` 在当前联系人或群会话上调用文本发送
 
 ## 账号隔离
 
@@ -32,4 +27,4 @@
 - `service-e2e.mjs`：二维码、扫码确认、令牌保存、入站消息、文本回复、幂等和断开
 - `service-security-e2e.mjs`：Bearer 鉴权、无 wildcard CORS、旧回调入口不可用
 
-两个测试均使用模拟 iLink 服务，不要求真机扫码，也不启动本机微信。
+两个测试均使用模拟 Wechaty 运行时，不要求真机扫码，也不启动本机微信。

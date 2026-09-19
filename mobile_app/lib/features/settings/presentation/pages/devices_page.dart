@@ -138,11 +138,6 @@ class DevicesPage extends ConsumerWidget {
                             ref.invalidate(_devicesProvider);
                           },
                         ),
-                        if (i < items.length - 1)
-                          Padding(
-                            padding: const EdgeInsets.only(left: 56),
-                            child: Divider(height: 1, color: context.borderSecondary),
-                          ),
                       ],
                     ],
                   ),
@@ -399,4 +394,3 @@ class _DeviceTileState extends State<_DeviceTile> {
     return '${delta.inDays} 天前';
   }
 }
-

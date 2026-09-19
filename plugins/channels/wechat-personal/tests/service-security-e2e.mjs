@@ -29,6 +29,19 @@ function portOpen(port) {
   });
 }
 
+function freePort() {
+  return new Promise((resolvePromise, reject) => {
+    const current = net.createServer();
+    current.once("error", reject);
+    current.listen(0, "127.0.0.1", () => {
+      const port = current.address().port;
+      current.close(() => resolvePromise(port));
+    });
+  });
+}
+
+const servicePort = await freePort();
+const serviceUrl = `http://127.0.0.1:${servicePort}`;
 const child = spawn(process.execPath, [join(root, "runtime", "service.mjs")], {
   cwd: root,
   env: {
@@ -37,6 +50,7 @@ const child = spawn(process.execPath, [join(root, "runtime", "service.mjs")], {
     AMITIA_SERVICE_AUTH_VERSION: "1",
     AMITIA_CORE_URL: "http://127.0.0.1:18899",
     AMITIA_WECHAT_STATE_DIR: stateDir,
+    AMITIA_WECHAT_SERVICE_PORT: String(servicePort),
   },
   stdio: ["ignore", "pipe", "pipe"],
 });
@@ -46,34 +60,34 @@ child.stderr.on("data", (chunk) => { logs += chunk; });
 
 try {
   await waitFor(async () => {
-    const response = await fetch("http://127.0.0.1:19878/api/health", { headers: AUTH_HEADERS });
+    const response = await fetch(`${serviceUrl}/api/health`, { headers: AUTH_HEADERS });
     return response.ok;
   });
 
-  const noAuth = await fetch("http://127.0.0.1:19878/api/status");
+  const noAuth = await fetch(`${serviceUrl}/api/status`);
   assert.equal(noAuth.status, 401);
   assert.equal(noAuth.headers.get("access-control-allow-origin"), null);
 
-  const wrongAuth = await fetch("http://127.0.0.1:19878/api/status", {
+  const wrongAuth = await fetch(`${serviceUrl}/api/status`, {
     headers: { authorization: "Bearer definitely-wrong" },
   });
   assert.equal(wrongAuth.status, 401);
 
-  const authorized = await fetch("http://127.0.0.1:19878/api/status", { headers: AUTH_HEADERS });
+  const authorized = await fetch(`${serviceUrl}/api/status`, { headers: AUTH_HEADERS });
   assert.equal(authorized.status, 200);
 
   // The legacy unauthenticated hero receiver must not exist in production mode.
   assert.equal(await portOpen(9999), false);
 
   // A forged local callback without the service token must not enter the pipeline.
-  const forged = await fetch("http://127.0.0.1:19878/api/native/callback", {
+  const forged = await fetch(`${serviceUrl}/api/native/callback`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ fromWxid: "attacker", content: "forged", msgId: "evil-1" }),
   });
   assert.equal(forged.status, 401);
 
-  const removedCallback = await fetch("http://127.0.0.1:19878/api/native/callback", {
+  const removedCallback = await fetch(`${serviceUrl}/api/native/callback`, {
     method: "POST",
     headers: { ...AUTH_HEADERS, "content-type": "application/json" },
     body: JSON.stringify({ fromWxid: "attacker", content: "forged", msgId: "evil-2" }),

@@ -792,11 +792,6 @@ class _WorkflowListPageState extends ConsumerState<WorkflowListPage> {
                       : _createWithAI,
                   icon: const Icon(Icons.auto_awesome_outlined),
                 ),
-                IconButton(
-                  tooltip: '刷新',
-                  onPressed: _refresh,
-                  icon: const Icon(Icons.refresh),
-                ),
               ],
       ),
       body: SafeArea(

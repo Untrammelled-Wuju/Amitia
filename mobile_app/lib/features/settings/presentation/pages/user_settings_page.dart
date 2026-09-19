@@ -10,6 +10,7 @@ import '../../../../core/services/providers.dart';
 import '../../../../core/services/space_profile_service.dart';
 import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
+import '../../../../core/widgets/profile_avatar.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 
 class UserSettingsPage extends ConsumerStatefulWidget {
@@ -22,6 +23,7 @@ class UserSettingsPage extends ConsumerStatefulWidget {
 class _UserSettingsPageState extends ConsumerState<UserSettingsPage> {
   SpaceProfile? _profile;
   bool _loading = true;
+  bool _avatarUpdating = false;
 
   @override
   void initState() {
@@ -40,9 +42,9 @@ class _UserSettingsPageState extends ConsumerState<UserSettingsPage> {
     } catch (error) {
       if (!mounted) return;
       setState(() => _loading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('个人空间资料加载失败：$error')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('个人空间资料加载失败：$error')));
     }
   }
 
@@ -53,7 +55,9 @@ class _UserSettingsPageState extends ConsumerState<UserSettingsPage> {
   }) async {
     final current = _profile;
     if (current == null) return;
-    final updated = await ref.read(spaceProfileServiceProvider).update(
+    final updated = await ref
+        .read(spaceProfileServiceProvider)
+        .update(
           displayName: displayName ?? current.displayName,
           userLabel: userLabel ?? current.userLabel,
           bio: bio ?? current.bio,
@@ -63,6 +67,31 @@ class _UserSettingsPageState extends ConsumerState<UserSettingsPage> {
     if (!mounted) return;
     setState(() => _profile = updated);
     ref.invalidate(currentSpaceProfileProvider);
+  }
+
+  Future<void> _changeAvatar() async {
+    if (_avatarUpdating) return;
+    setState(() => _avatarUpdating = true);
+    try {
+      final avatar = await pickProfileAvatar(context);
+      if (avatar == null) return;
+      final updated = await ref
+          .read(spaceProfileServiceProvider)
+          .updateAvatar(avatar);
+      if (!mounted) return;
+      setState(() => _profile = updated);
+      ref.invalidate(currentSpaceProfileProvider);
+      ScaffoldMessenger.of(context)
+        ..clearSnackBars()
+        ..showSnackBar(const SnackBar(content: Text('头像已更新')));
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+        ..clearSnackBars()
+        ..showSnackBar(SnackBar(content: Text('头像更新失败：$error')));
+    } finally {
+      if (mounted) setState(() => _avatarUpdating = false);
+    }
   }
 
   @override
@@ -86,33 +115,34 @@ class _UserSettingsPageState extends ConsumerState<UserSettingsPage> {
               children: [
                 SizedBox(height: AppSpacing.lg),
                 Center(
-                  child: Container(
-                    width: 80,
-                    height: 80,
-                    decoration: BoxDecoration(
-                      color: context.accentPrimary,
-                      shape: BoxShape.circle,
-                    ),
-                    child: Center(
-                      child: Text(
-                        initial,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 32,
-                          fontWeight: FontWeight.w600,
-                        ),
+                  child: Semantics(
+                    button: true,
+                    label: '更换头像',
+                    child: GestureDetector(
+                      onTap: _avatarUpdating ? null : _changeAvatar,
+                      child: ProfileAvatar(
+                        avatar: profile?.avatar ?? '',
+                        initial: initial,
+                        size: 80,
+                        showEditBadge: true,
+                        loading: _avatarUpdating,
                       ),
                     ),
                   ),
                 ),
                 SizedBox(height: AppSpacing.md),
                 Center(
-                  child: Text(displayName, style: AppTypography.sectionTitle(context)),
+                  child: Text(
+                    displayName,
+                    style: AppTypography.sectionTitle(context),
+                  ),
                 ),
                 const SizedBox(height: 4),
                 Center(
                   child: Text(
-                    profile?.spaceId.isNotEmpty == true ? profile!.spaceId : '本地个人空间',
+                    profile?.spaceId.isNotEmpty == true
+                        ? profile!.spaceId
+                        : '本地个人空间',
                     style: AppTypography.caption(context),
                   ),
                 ),
@@ -132,7 +162,9 @@ class _UserSettingsPageState extends ConsumerState<UserSettingsPage> {
                   _divider(),
                   _buildEditTile(
                     'AI 对你的称呼',
-                    (profile?.userLabel ?? '').trim().isEmpty ? '未设置' : profile!.userLabel,
+                    (profile?.userLabel ?? '').trim().isEmpty
+                        ? '未设置'
+                        : profile!.userLabel,
                     () => _showEditSheet(
                       'AI 对你的称呼',
                       profile?.userLabel ?? '',
@@ -177,7 +209,9 @@ class _UserSettingsPageState extends ConsumerState<UserSettingsPage> {
                 ]),
                 SizedBox(height: AppSpacing.md),
                 Padding(
-                  padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+                  padding: EdgeInsets.symmetric(
+                    horizontal: AppSpacing.pagePadding,
+                  ),
                   child: Text(
                     'Amitia 不使用产品账号。Space ID 只表示数据归属；设备身份由 Device ID + Device Credential 管理。',
                     style: AppTypography.caption(context),
@@ -202,10 +236,7 @@ class _UserSettingsPageState extends ConsumerState<UserSettingsPage> {
   }
 
   Widget _divider() {
-    return Padding(
-      padding: const EdgeInsets.only(left: 56),
-      child: Divider(height: 1, thickness: 0.5, color: context.borderSecondary),
-    );
+    return const SizedBox.shrink();
   }
 
   Widget _buildEditTile(String title, String value, VoidCallback onTap) {
@@ -268,7 +299,10 @@ class _UserSettingsPageState extends ConsumerState<UserSettingsPage> {
             Container(
               width: 32,
               height: 32,
-              decoration: BoxDecoration(color: context.accentSoft, shape: BoxShape.circle),
+              decoration: BoxDecoration(
+                color: context.accentSoft,
+                shape: BoxShape.circle,
+              ),
               child: Icon(icon, size: 17, color: context.accentPrimary),
             ),
             const SizedBox(width: 12),
@@ -334,9 +368,9 @@ class _UserSettingsPageState extends ConsumerState<UserSettingsPage> {
                     await onSave(value);
                     if (!sheetContext.mounted || !mounted) return;
                     Navigator.pop(sheetContext);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('$title已更新')),
-                    );
+                    ScaffoldMessenger.of(
+                      context,
+                    ).showSnackBar(SnackBar(content: Text('$title已更新')));
                   } catch (error) {
                     if (!mounted) return;
                     ScaffoldMessenger.of(context).showSnackBar(

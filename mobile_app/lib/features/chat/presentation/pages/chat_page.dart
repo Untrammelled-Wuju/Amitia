@@ -2669,7 +2669,7 @@ class _ChatTopBar extends StatelessWidget implements PreferredSizeWidget {
                   value: 'voice',
                   child: ListTile(
                     contentPadding: EdgeInsets.zero,
-                    leading: Icon(Icons.call_outlined),
+                    leading: Icon(Icons.phone_in_talk_outlined),
                     title: Text('语音通话'),
                   ),
                 ),
@@ -2683,9 +2683,9 @@ class _ChatTopBar extends StatelessWidget implements PreferredSizeWidget {
                 ),
               ],
               child: const _ChatTopBarButton(
-                icon: Icons.call_outlined,
+                icon: Icons.phone_in_talk_outlined,
                 size: 44,
-                iconSize: 22,
+                iconSize: 20,
               ),
             ),
             const SizedBox(width: 8),
@@ -2731,7 +2731,7 @@ class _ChatTopBar extends StatelessWidget implements PreferredSizeWidget {
                     ? CupertinoIcons.ellipsis
                     : Icons.more_horiz,
                 size: 44,
-                iconSize: 22,
+                iconSize: 20,
               ),
             ),
           ],

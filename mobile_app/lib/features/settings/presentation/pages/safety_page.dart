@@ -179,7 +179,7 @@ class _SafetyContentState extends ConsumerState<_SafetyContent> {
                     ],
                   ),
                 ),
-                Divider(height: 1, color: sheetContext.borderSecondary),
+                const SizedBox.shrink(),
                 Expanded(
                   child: logs.isEmpty
                       ? Center(
@@ -191,10 +191,7 @@ class _SafetyContentState extends ConsumerState<_SafetyContent> {
                       : ListView.separated(
                           padding: EdgeInsets.all(AppSpacing.md),
                           itemCount: logs.length,
-                          separatorBuilder: (_, __) => Divider(
-                            height: 1,
-                            color: sheetContext.borderSecondary,
-                          ),
+                          separatorBuilder: (_, __) => const SizedBox.shrink(),
                           itemBuilder: (_, index) {
                             final log = logs[index];
                             final ruleId = (log['ruleId'] ?? '未标记规则')
@@ -397,7 +394,7 @@ class _SafetyContentState extends ConsumerState<_SafetyContent> {
                     ],
                   ),
                 ),
-                Divider(height: 1, color: sheetContext.borderSecondary),
+                const SizedBox.shrink(),
                 Expanded(
                   child: items.isEmpty
                       ? Center(
@@ -408,10 +405,7 @@ class _SafetyContentState extends ConsumerState<_SafetyContent> {
                         )
                       : ListView.separated(
                           itemCount: items.length,
-                          separatorBuilder: (_, __) => Divider(
-                            height: 1,
-                            color: sheetContext.borderSecondary,
-                          ),
+                          separatorBuilder: (_, __) => const SizedBox.shrink(),
                           itemBuilder: (_, index) {
                             final item = items[index];
                             final eventType = (item['eventType'] ?? 'unknown')
@@ -590,10 +584,7 @@ class _SafetyContentState extends ConsumerState<_SafetyContent> {
     child: Column(children: children),
   );
 
-  Widget _divider() => Padding(
-    padding: const EdgeInsets.only(left: 16),
-    child: Divider(height: 1, thickness: 0.5, color: context.borderSecondary),
-  );
+  Widget _divider() => const SizedBox.shrink();
 
   Widget _switch(
     String title,

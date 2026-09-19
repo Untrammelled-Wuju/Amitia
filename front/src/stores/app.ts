@@ -14,7 +14,7 @@ export const useAppStore = defineStore("app", () => {
 
   function setAvatar(value: string) {
     avatar.value = value;
-    if (value) {
+    if (value && value.length <= 512 * 1024) {
       localStorage.setItem(STORAGE_KEY, value);
     } else {
       localStorage.removeItem(STORAGE_KEY);

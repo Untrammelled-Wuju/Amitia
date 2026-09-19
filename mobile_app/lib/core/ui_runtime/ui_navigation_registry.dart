@@ -52,7 +52,7 @@ abstract final class UINavigationRegistry {
     ),
     UINavigationItem(
       id: 'builtin.chat',
-      label: '对话',
+      label: '新对话',
       route: AppRoutes.chat,
       icon: Icons.chat_bubble_outline,
       panel: UINavigationPanel.main,

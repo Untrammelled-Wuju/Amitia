@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:amitia_app/core/widgets/amitia_message.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -42,11 +44,13 @@ void main() {
       ),
     );
 
-    BoxDecoration decoration() => tester
-        .widget<Container>(
-          find.byKey(const ValueKey('chat-composer-surface')),
-        )
-        .decoration! as BoxDecoration;
+    BoxDecoration decoration() =>
+        tester
+                .widget<Container>(
+                  find.byKey(const ValueKey('chat-composer-surface')),
+                )
+                .decoration!
+            as BoxDecoration;
 
     final before = decoration().border;
     await tester.tap(find.byType(TextField));
@@ -54,5 +58,36 @@ void main() {
     final after = decoration().border;
 
     expect(after, before);
+  });
+
+  test('composer keeps a lower bottom inset when the keyboard is closed', () {
+    final source = File(
+      'lib/core/widgets/amitia_message.dart',
+    ).readAsStringSync();
+
+    expect(
+      source,
+      contains('padding: const EdgeInsets.fromLTRB(10, 8, 10, 4)'),
+    );
+  });
+
+  testWidgets('composer text and hold-to-talk use the compact size', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(body: AmitiaChatInput(onSend: (_) {})),
+      ),
+    );
+
+    final field = tester.widget<TextField>(find.byType(TextField));
+    expect(field.style?.fontSize, 15);
+    expect(field.decoration?.hintStyle?.fontSize, 15);
+
+    await tester.tap(find.byTooltip('按住说话'));
+    await tester.pumpAndSettle();
+
+    final holdToTalk = tester.widget<Text>(find.text('按住说话'));
+    expect(holdToTalk.style?.fontSize, 15);
   });
 }

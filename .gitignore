@@ -81,4 +81,18 @@ backend/testdata/extensions/**/dist-candidate-*/
 /desktop/resources/core/
 /desktop/scripts/.publish-config.json
 
+# Generated release, diagnostic, and signing output
+/desktop/dist-types/
+/desktop/release-*/
+/logs/
+/release-reports/
+/runtime/out/
+/U-Ai-*.zip
+/mobile_app/.update-signing/
+/mobile_app/*.txt
+/mobile_app/android/..gradle_info.txt
+/mobile_app/android/..gradle_stacktrace.txt
+/mobile_app/android/debug-init.gradle
+/mobile_app/android/scripts/__pycache__/
+
 Plugin/Emote/keys/

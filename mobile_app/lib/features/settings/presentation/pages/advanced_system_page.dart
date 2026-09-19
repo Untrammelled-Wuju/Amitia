@@ -246,7 +246,7 @@ class _AdvancedSystemPageState extends ConsumerState<AdvancedSystemPage> {
                               TextButton(onPressed: _busy ? null : () => _voiceAction('${raw['sessionId']}', 'wake/arm'), child: const Text('唤醒')),
                               TextButton(onPressed: _busy ? null : () => _voiceAction('${raw['sessionId']}', 'wake/disarm'), child: const Text('取消唤醒')),
                               TextButton(onPressed: _busy ? null : () => _voiceAction('${raw['sessionId']}', 'stop'), child: const Text('停止')),
-                            ]), const Divider(),
+                            ]), const SizedBox.shrink(),
                           ],
                         ]))),
                       ]),

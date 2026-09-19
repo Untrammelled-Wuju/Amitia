@@ -7,9 +7,9 @@
       "default": "个人微信渠道"
     },
     "description": {
-      "default": "以普通个人微信账号接入 Amitia；插件直接通过腾讯 iLink 协议生成二维码、保存独立账号令牌并完成消息收发，不依赖安装设备上的微信客户端。"
+      "default": "以普通个人微信账号接入 Amitia；插件通过 Wechaty Web 协议扫码登录、保存独立会话并完成消息收发，不依赖安装设备上的微信客户端。"
     },
-    "version": "1.6.0",
+    "version": "1.6.4",
     "license": "AGPL-3.0-only",
     "homepage": "https://amitia.untrammelled.top",
     "categories": [
@@ -19,7 +19,7 @@
     "keywords": [
       "wechat",
       "personal-wechat",
-      "ilink",
+      "wechaty",
       "channel"
     ]
   },
@@ -42,14 +42,14 @@
         "default": "个人微信渠道服务"
       },
       "description": {
-        "default": "通过腾讯 iLink 协议连接独立个人微信账号，并把消息桥接到 Amitia 统一入口。"
+        "default": "通过 Wechaty Web 协议连接独立个人微信账号，并把消息桥接到 Amitia 统一入口。"
       },
       "type": "service",
       "runtime": {
         "type": "service",
         "entryPoint": "launcher.mjs",
         "timeout": "30s",
-        "memory": 134217728,
+        "memory": 536870912,
         "maxSubprocesses": 1,
         "permissions": [
           "service.network.request",
@@ -161,7 +161,7 @@
             "contribution_id": "wechat-personal-page",
             "display": {
               "description": {
-                "default": "通过腾讯 iLink 扫码登录独立个人微信账号。"
+                "default": "通过 Wechaty Web 协议扫码登录独立个人微信账号。"
               },
               "icon": "channel",
               "title": {
@@ -465,9 +465,8 @@
       "scope": "extension"
     },
     {
-      "name": "service.process.spawn",
       "name": "service.network.request",
-      "reason": "连接腾讯 iLink 协议服务、Amitia Core 和本地渠道接口。",
+      "reason": "连接 Wechaty Web 协议服务、Amitia Core 和本地渠道接口。",
       "required": true,
       "scope": "extension"
     },

@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../../app/app_routes.dart';
+import '../../../../app/theme/app_spacing.dart';
+import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/ui_runtime/ui_provider.dart';
 import '../../../../core/ui_runtime/ui_runtime_controller.dart';
 
@@ -105,10 +108,11 @@ class _UIProviderSettingsPageState extends ConsumerState<UIProviderSettingsPage>
     final ctx = snapshot?.context;
 
     final scheme = Theme.of(context).colorScheme;
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('界面提供者'),
-        leading: BackButton(onPressed: () => Navigator.of(context).maybePop()),
+    return AmitiaScaffold(
+      appBar: AmitiaAppBar(
+        title: '界面提供者',
+        showBackButton: true,
+        fallbackRoute: AppRoutes.settings,
       ),
       body: RefreshIndicator(
         onRefresh: () async {
@@ -116,7 +120,7 @@ class _UIProviderSettingsPageState extends ConsumerState<UIProviderSettingsPage>
           await _loadScope();
         },
         child: ListView(
-          padding: EdgeInsets.all(24),
+          padding: EdgeInsets.all(AppSpacing.pagePadding),
           children: [
             Text('UI Profile 按云端默认 → 用户 → 平台/设备 → 运行时分层合并；本页只修改当前 override 层。', style: TextStyle(color: scheme.onSurfaceVariant)),
             SizedBox(height: 12),
@@ -126,21 +130,33 @@ class _UIProviderSettingsPageState extends ConsumerState<UIProviderSettingsPage>
             ],
             Card(
               child: Padding(
-                padding: EdgeInsets.all(12),
-                child: Wrap(
-                  spacing: 12,
-                  runSpacing: 8,
-                  crossAxisAlignment: WrapCrossAlignment.center,
+                padding: EdgeInsets.all(AppSpacing.md),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    DropdownButton<UIProfileScopeKind>(
-                      value: _scope,
+                    DropdownButtonFormField<UIProfileScopeKind>(
+                      key: ValueKey(_scope),
+                      initialValue: _scope,
+                      isExpanded: true,
+                      decoration: const InputDecoration(
+                        labelText: '配置作用域',
+                        isDense: true,
+                      ),
                       items: UIProfileScopeKind.values.map((value) => DropdownMenuItem(value: value, child: Text(_scopeLabel(value)))).toList(),
                       onChanged: _scopeLoading ? null : _changeScope,
                     ),
-                    Text('revision ${envelope?.scopeProfile.revision ?? 0}', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12)),
-                    if (ctx != null) Text('${ctx.runtimeProfile ?? ''} · ${ctx.platform ?? currentUIPlatform()}${(ctx.deviceId ?? '').isNotEmpty ? ' · ${ctx.deviceId}' : ''}', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12)),
-                    if (_scope != UIProfileScopeKind.global && envelope?.scopeExists == true)
-                      TextButton(onPressed: _scopeLoading ? null : _resetScope, child: const Text('清除此层覆盖')),
+                    SizedBox(height: AppSpacing.sm),
+                    Wrap(
+                      spacing: 12,
+                      runSpacing: 8,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        Text('revision ${envelope?.scopeProfile.revision ?? 0}', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12)),
+                        if (ctx != null) Text('${ctx.runtimeProfile ?? ''} · ${ctx.platform ?? currentUIPlatform()}${(ctx.deviceId ?? '').isNotEmpty ? ' · ${ctx.deviceId}' : ''}', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12)),
+                        if (_scope != UIProfileScopeKind.global && envelope?.scopeExists == true)
+                          TextButton(onPressed: _scopeLoading ? null : _resetScope, child: const Text('清除此层覆盖')),
+                      ],
+                    ),
                   ],
                 ),
               ),
@@ -162,7 +178,8 @@ class _UIProviderSettingsPageState extends ConsumerState<UIProviderSettingsPage>
                         capability: group.value[i], snapshot: snapshot, scopeProfile: envelope?.scopeProfile,
                         saving: _savingCapability == group.value[i], onChanged: (value) => _choose(group.value[i], value),
                       ),
-                      if (i != group.value.length - 1) const Divider(height: 1),
+                      if (i != group.value.length - 1)
+                        const SizedBox.shrink(),
                     ],
                   ]),
                 ),
@@ -191,10 +208,9 @@ class _ProviderRow extends StatelessWidget {
     final requested = scopeProfile?.selections[capability] ?? '';
     final explicit = candidates.any((provider) => provider.providerId == requested) ? requested : '';
     final resolved = snapshot.resolved[capability];
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      child: Row(children: [
-        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+    final details = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
           Text(capability, style: const TextStyle(fontWeight: FontWeight.w600)),
           const SizedBox(height: 2),
           Text(
@@ -203,26 +219,48 @@ class _ProviderRow extends StatelessWidget {
                 : '有效：${resolved?.providerId ?? '无可用 Provider'}${explicit.isEmpty ? ' · 当前层继承' : ''}',
             style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
           ),
-        ])),
-        const SizedBox(width: 12),
-        if (registryCapability)
-          Chip(label: Text('自动组合 ${candidates.where((p) => p.enabled && !p.builtin).length}'))
-        else if (saving)
-          const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-        else
-          DropdownButton<String>(
+      ],
+    );
+    final selector = registryCapability
+        ? Chip(label: Text('自动组合 ${candidates.where((p) => p.enabled && !p.builtin).length}'))
+        : saving
+        ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+        : DropdownButton<String>(
             value: explicit,
+            isExpanded: true,
             items: [
               const DropdownMenuItem(value: '', child: Text('此层继承')),
               ...candidates.map((p) => DropdownMenuItem(
                 value: p.providerId,
                 enabled: p.enabled,
-                child: Text('${p.providerId}${p.builtin ? ' · Built-in' : ''}${p.placement != UIProviderPlacement.any ? ' · ${p.placement.name}' : ''}', overflow: TextOverflow.ellipsis),
+                child: Text('${p.providerId}${p.builtin ? ' · Built-in' : ''}${p.placement != UIProviderPlacement.any ? ' · ${p.placement.name}' : ''}', maxLines: 1, overflow: TextOverflow.ellipsis),
               )),
             ],
             onChanged: (value) => onChanged(value?.isEmpty == true ? null : value),
-          ),
-      ]),
+          );
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxWidth < 560;
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          child: compact
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    details,
+                    const SizedBox(height: 8),
+                    Align(alignment: Alignment.centerLeft, child: selector),
+                  ],
+                )
+              : Row(
+                  children: [
+                    Expanded(flex: 3, child: details),
+                    const SizedBox(width: 12),
+                    SizedBox(width: 280, child: selector),
+                  ],
+                ),
+        );
+      },
     );
   }
 }

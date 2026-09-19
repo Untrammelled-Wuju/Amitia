@@ -122,11 +122,7 @@ class _AppearanceSettingsPageState extends ConsumerState<AppearanceSettingsPage>
                   value: appearance.dynamicEffect,
                   onChanged: notifier.setDynamicEffect,
                 ),
-                Divider(
-                  height: 1,
-                  indent: AppSpacing.lg,
-                  color: context.borderSecondary,
-                ),
+                const SizedBox.shrink(),
                 AmitiaSwitchTile(
                   title: '减少动画',
                   subtitle: '降低界面动画强度以提升性能',

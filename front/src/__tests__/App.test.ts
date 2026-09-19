@@ -24,6 +24,22 @@ describe("Web App", () => {
     expect(store.conversations).toBeDefined();
   });
 
+  it("keeps oversized avatars in memory instead of localStorage", async () => {
+    const { useAppStore } = await import("../stores/app.js");
+    const { createPinia, setActivePinia } = await import("pinia");
+    setActivePinia(createPinia());
+    const store = useAppStore();
+    const oversized = "x".repeat(512 * 1024 + 1);
+
+    store.setAvatar(oversized);
+
+    expect(store.avatar).toBe(oversized);
+    expect(localStorage.getItem("uai-user-avatar")).toBeNull();
+
+    store.setAvatar("data:image/png;base64,small");
+    expect(localStorage.getItem("uai-user-avatar")).toBe("data:image/png;base64,small");
+  });
+
   it("should import chat store", async () => {
     const { useChatStore } = await import("../stores/chat.js");
     expect(useChatStore).toBeDefined();

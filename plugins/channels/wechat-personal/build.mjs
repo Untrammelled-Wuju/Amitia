@@ -1,12 +1,12 @@
 import { createHash } from "node:crypto";
-import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { deflateRawSync } from "node:zlib";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)));
-const outputDir = resolve(process.argv[2] || join(root, "..", "..", "..", "plugin"));
+const outputDir = resolve(join(root, "..", "..", "..", "plugin"));
 const manifestPath = join(root, "amitia-extension.json");
 const staging = join(root, ".package-staging");
 const generatedAt = new Date().toISOString();
@@ -41,6 +41,17 @@ function rel(file) {
 
 function sha256(data) {
   return createHash("sha256").update(data).digest("hex");
+}
+
+function compareVersions(left, right) {
+  const parse = (value) => String(value).split("-", 1)[0].split(".").map((item) => Number.parseInt(item, 10) || 0);
+  const leftParts = parse(left);
+  const rightParts = parse(right);
+  for (let index = 0; index < Math.max(leftParts.length, rightParts.length); index += 1) {
+    const delta = (leftParts[index] || 0) - (rightParts[index] || 0);
+    if (delta !== 0) return delta > 0 ? 1 : -1;
+  }
+  return 0;
 }
 
 function browserHash(data) {
@@ -99,13 +110,14 @@ function zip(output) {
   writeFileSync(output, Buffer.concat([...locals, centralDirectory, end]));
 }
 
-function copyDirectory(source, target) {
+function copyDirectory(source, target, shouldSkip = () => false) {
   if (!existsSync(source) || !statSync(source).isDirectory()) throw new Error(`directory missing: ${source}`);
   mkdirSync(target, { recursive: true });
   for (const name of readdirSync(source).sort()) {
     const sourcePath = join(source, name);
     const targetPath = join(target, name);
-    if (statSync(sourcePath).isDirectory()) copyDirectory(sourcePath, targetPath);
+    if (shouldSkip(sourcePath)) continue;
+    if (statSync(sourcePath).isDirectory()) copyDirectory(sourcePath, targetPath, shouldSkip);
     else copyFileSync(sourcePath, targetPath);
   }
 }
@@ -127,6 +139,112 @@ function copyVendorRuntime(target) {
   copyFileSync(join(source, "node_modules", "dijkstrajs", "LICENSE.md"), join(dijkstraTarget, "LICENSE.md"));
 }
 
+function copyProductionRuntime(target, roots) {
+  const skippedDirectories = new Set([
+    ".github",
+    "__tests__",
+    "coverage",
+    "example",
+    "examples",
+    "fixture",
+    "fixtures",
+    "test",
+    "tests",
+  ]);
+
+  const skippedPackages = new Set([
+    "@swc/core",
+    "flash-store",
+    "level",
+    "leveldown",
+    "wechaty-grpc",
+    "wechaty-puppet-service",
+    "wechaty-redux",
+  ]);
+
+  const shouldSkipPackage = (name) => skippedPackages.has(name) || name.startsWith("@swc/");
+
+  const shouldSkipPath = (packageRoot, sourcePath) => {
+    const segments = relative(packageRoot, sourcePath).split(/[\\/]+/).filter(Boolean);
+    if (segments.some((segment) => skippedDirectories.has(segment.toLowerCase()))) return true;
+    const name = basename(sourcePath).toLowerCase();
+    return name.endsWith(".map") || /\.(node|exe|dll|so|dylib)$/i.test(name);
+  };
+
+  const resolveDependencySource = (name, parentSource) => {
+    if (parentSource) {
+      const sibling = join(dirname(realpathSync(parentSource)), ...name.split("/"));
+      if (existsSync(sibling)) return sibling;
+    }
+    return join(root, "node_modules", ...name.split("/"));
+  };
+
+  const dependenciesOf = (pkg) => {
+    const dependencies = new Set(Object.keys(pkg.dependencies || {}));
+    for (const dependency of Object.keys(pkg.peerDependencies || {})) {
+      if (!pkg.peerDependenciesMeta?.[dependency]?.optional) dependencies.add(dependency);
+    }
+    return [...dependencies].sort();
+  };
+
+  const scanned = new Set();
+  const candidates = new Map();
+  const scanPackage = (name, source) => {
+    if (!name || shouldSkipPackage(name)) return;
+    if (!existsSync(source)) throw new Error(`runtime dependency missing: ${name}`);
+    const canonical = realpathSync(source);
+    if (scanned.has(canonical)) return;
+    scanned.add(canonical);
+    const pkg = JSON.parse(readFileSync(join(source, "package.json"), "utf8"));
+    const list = candidates.get(name) || [];
+    list.push({ canonical, source, version: pkg.version });
+    candidates.set(name, list);
+    for (const dependency of dependenciesOf(pkg)) {
+      scanPackage(dependency, resolveDependencySource(dependency, source));
+    }
+  };
+
+  for (const name of roots) scanPackage(name, resolveDependencySource(name));
+
+  const flatPackages = new Map();
+  for (const [name, list] of candidates) {
+    const selected = list.reduce((current, candidate) =>
+      !current || compareVersions(candidate.version, current.version) > 0 ? candidate : current,
+    );
+    flatPackages.set(name, selected);
+  }
+
+  const copied = new Set();
+  const copyExactPackage = (name, source, destination) => {
+    if (!name || shouldSkipPackage(name)) return;
+    const canonical = realpathSync(source);
+    const copyKey = canonical + "|" + destination;
+    if (copied.has(copyKey)) return;
+    copied.add(copyKey);
+    copyDirectory(source, destination, (sourcePath) => shouldSkipPath(source, sourcePath));
+    const pkg = JSON.parse(readFileSync(join(source, "package.json"), "utf8"));
+    for (const dependency of dependenciesOf(pkg)) {
+      const dependencySource = resolveDependencySource(dependency, source);
+      const dependencyCanonical = realpathSync(dependencySource);
+      if (flatPackages.get(dependency)?.canonical === dependencyCanonical) continue;
+      copyExactPackage(
+        dependency,
+        dependencySource,
+        join(destination, "node_modules", ...dependency.split("/")),
+      );
+    }
+  };
+
+  for (const [name, selected] of flatPackages) {
+    copyExactPackage(name, selected.source, join(target, ...name.split("/")));
+  }
+
+  const executable = files(target).find((file) => /\.(node|exe|dll|so|dylib)$/i.test(file));
+  if (executable) {
+    throw new Error(`runtime package contains executable binary: ${rel(executable)}`);
+  }
+}
+
 function verifyIndependentRuntime(manifest) {
   const service = readFileSync(join(root, "runtime", "service.mjs"), "utf8");
   const forbidden = ["child_process", "AMITIA_NATIVE_COMPANIONS", "nativeCompanions", "Weixin.exe", "InstallPath"];
@@ -136,9 +254,9 @@ function verifyIndependentRuntime(manifest) {
   for (const mod of manifest.modules || []) {
     if (mod.runtime?.nativeCompanions) throw new Error(`native companion remains declared on ${mod.id}`);
   }
-  const required = ["ilink/bot/get_bot_qrcode", "ilink/bot/getupdates", "ilink/bot/sendmessage"];
+  const required = ["wechaty", "wechaty-puppet-wechat4u", "WechatyBuilder"];
   for (const endpoint of required) {
-    if (!service.includes(endpoint)) throw new Error(`iLink endpoint missing from runtime: ${endpoint}`);
+    if (!service.includes(endpoint)) throw new Error(`Wechaty runtime dependency missing: ${endpoint}`);
   }
 }
 
@@ -169,6 +287,10 @@ for (const name of ["launcher.mjs", "service.mjs"]) {
   copyFileSync(join(root, "runtime", name), join(staging, "modules", "wechat-personal-channel-service", name));
 }
 copyVendorRuntime(join(staging, "modules", "wechat-personal-channel-service", "vendor"));
+copyProductionRuntime(join(staging, "modules", "wechat-personal-channel-service", "node_modules"), [
+  "wechaty",
+  "wechaty-puppet-wechat4u",
+]);
 for (const name of ["index.html", "app.js", "styles.css"]) {
   copyFileSync(join(root, "ui", "desktop", name), join(staging, "modules", "wechat-personal-channel-ui", "desktop", name));
 }

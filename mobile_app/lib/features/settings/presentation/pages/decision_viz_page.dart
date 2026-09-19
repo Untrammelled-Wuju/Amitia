@@ -63,7 +63,7 @@ class _DecisionVizPageState extends ConsumerState<DecisionVizPage> {
             Text(title, style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 8),
             for (final field in fields) _field(field, plan[field]),
-            const Divider(),
+            const SizedBox.shrink(),
             ExpansionTile(
               tilePadding: EdgeInsets.zero,
               title: const Text('原始数据'),

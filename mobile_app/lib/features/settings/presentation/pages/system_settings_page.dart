@@ -296,12 +296,6 @@ class _SystemSettingsPageState extends ConsumerState<SystemSettingsPage> {
             ),
             _divider(),
             _buildNavTile(
-              icon: Icons.color_lens_outlined,
-              title: '主题设置',
-              onTap: () => context.push(AppRoutes.settingsTheme),
-            ),
-            _divider(),
-            _buildNavTile(
               icon: Icons.cleaning_services_outlined,
               title: '存储清理',
               onTap: () => context.push(AppRoutes.settingsStorage),
@@ -469,10 +463,7 @@ class _SystemSettingsPageState extends ConsumerState<SystemSettingsPage> {
   }
 
   Widget _divider() {
-    return Padding(
-      padding: const EdgeInsets.only(left: 56),
-      child: Divider(height: 1, thickness: 0.5, color: context.borderSecondary),
-    );
+    return const SizedBox.shrink();
   }
 
   Widget _buildNavTile({

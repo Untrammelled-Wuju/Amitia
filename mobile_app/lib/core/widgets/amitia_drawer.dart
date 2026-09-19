@@ -16,6 +16,7 @@ import '../services/providers.dart';
 import '../ui_runtime/ui_navigation_registry.dart';
 import '../ui_runtime/ui_runtime_controller.dart';
 import 'amitia_misc.dart';
+import 'profile_avatar.dart';
 
 final currentCharacterIdProvider = StateProvider<String>((ref) => '');
 final isDeveloperModeProvider = StateProvider<bool>((ref) => false);
@@ -208,6 +209,7 @@ class _AmitiaDrawerState extends ConsumerState<AmitiaDrawer> {
             settingsSelected: routeState.settingsSelected,
             userName: userName,
             userInitial: userInitial,
+            userAvatar: spaceProfile?.avatar ?? '',
           ),
         ),
       ),
@@ -228,6 +230,7 @@ class _DrawerMainPanel extends StatelessWidget {
   final bool settingsSelected;
   final String userName;
   final String userInitial;
+  final String userAvatar;
 
   const _DrawerMainPanel({
     required this.character,
@@ -242,6 +245,7 @@ class _DrawerMainPanel extends StatelessWidget {
     required this.settingsSelected,
     required this.userName,
     required this.userInitial,
+    required this.userAvatar,
   });
 
   @override
@@ -311,6 +315,7 @@ class _DrawerMainPanel extends StatelessWidget {
           settingsSelected: settingsSelected,
           userName: userName,
           userInitial: userInitial,
+          userAvatar: userAvatar,
         ),
       ],
     );
@@ -449,12 +454,14 @@ class _DrawerBottomArea extends StatelessWidget {
   final bool settingsSelected;
   final String userName;
   final String userInitial;
+  final String userAvatar;
 
   const _DrawerBottomArea({
     required this.onSettingsTap,
     required this.settingsSelected,
     required this.userName,
     required this.userInitial,
+    required this.userAvatar,
   });
 
   @override
@@ -466,68 +473,102 @@ class _DrawerBottomArea extends StatelessWidget {
       padding: const EdgeInsets.only(top: 7, bottom: 8),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 8),
-        child: Material(
-          color: settingsSelected ? context.accentSoft : Colors.transparent,
-          borderRadius: BorderRadius.circular(7),
-          child: InkWell(
-            borderRadius: BorderRadius.circular(7),
-            onTap: onSettingsTap,
-            child: Container(
-              constraints: const BoxConstraints(minHeight: 38),
-              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
-              child: Row(
-                children: [
-                  Container(
-                    width: 28,
-                    height: 28,
-                    decoration: BoxDecoration(
-                      color: context.accentPrimary,
-                      shape: BoxShape.circle,
-                    ),
-                    child: Center(
-                      child: Text(
-                        userInitial,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 9),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
+        child: Row(
+          children: [
+            Expanded(
+              child: Material(
+                color: Colors.transparent,
+                borderRadius: BorderRadius.circular(7),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(7),
+                  onTap: onSettingsTap,
+                  child: Container(
+                    constraints: const BoxConstraints(minHeight: 48),
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    child: Row(
                       children: [
-                        Text(
-                          userName,
-                          style: TextStyle(
-                            color: context.textPrimary,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
+                        SizedBox(
+                          width: 44,
+                          height: 44,
+                          child: Center(
+                            child: ProfileAvatar(
+                              avatar: userAvatar,
+                              initial: userInitial,
+                              size: 30,
+                            ),
                           ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
                         ),
-                        const SizedBox(height: 1),
-                        Text(
-                          '个人空间',
-                          style: TextStyle(
-                            color: context.textTertiary,
-                            fontSize: 10,
+                        const SizedBox(width: 7),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                userName,
+                                style: TextStyle(
+                                  color: context.textPrimary,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 1),
+                              Text(
+                                '个人空间',
+                                style: TextStyle(
+                                  color: context.textTertiary,
+                                  fontSize: 10,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
                           ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
                         ),
                       ],
                     ),
                   ),
-                ],
+                ),
               ),
             ),
-          ),
+            const SizedBox(width: 4),
+            Tooltip(
+              message: '设置',
+              child: Semantics(
+                button: true,
+                label: '设置',
+                child: SizedBox(
+                  width: 44,
+                  height: 44,
+                  child: Center(
+                    child: Material(
+                      color: settingsSelected
+                          ? context.accentSoft
+                          : Colors.transparent,
+                      borderRadius: BorderRadius.circular(12),
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(12),
+                        onTap: onSettingsTap,
+                        child: SizedBox(
+                          width: 36,
+                          height: 36,
+                          child: Icon(
+                            Icons.settings_outlined,
+                            size: 17,
+                            color: settingsSelected
+                                ? context.accentPrimary
+                                : context.textSecondary,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -604,7 +645,7 @@ class _MainMenuItem extends StatelessWidget {
       child: Padding(
         padding: EdgeInsets.symmetric(
           horizontal: number('outerPaddingX', 12),
-          vertical: number('outerPaddingY', 2),
+          vertical: number('outerPaddingY', 0),
         ),
         child: AnimatedContainer(
           duration: AppMotion.standard,
@@ -612,7 +653,7 @@ class _MainMenuItem extends StatelessWidget {
           constraints: BoxConstraints(minHeight: number('minHeight', 44)),
           padding: EdgeInsets.symmetric(
             horizontal: number('paddingX', 12),
-            vertical: number('paddingY', 11),
+            vertical: number('paddingY', 8),
           ),
           decoration: BoxDecoration(
             color: isSelected ? context.accentSoft : Colors.transparent,
@@ -624,7 +665,7 @@ class _MainMenuItem extends StatelessWidget {
             children: [
               Icon(
                 icon,
-                size: number('iconSize', 20),
+                size: number('iconSize', 19),
                 color: isSelected
                     ? context.accentPrimary
                     : context.textSecondary,
@@ -633,7 +674,7 @@ class _MainMenuItem extends StatelessWidget {
               Text(
                 label,
                 style: TextStyle(
-                  fontSize: 15,
+                  fontSize: 14.5,
                   fontWeight: isSelected ? FontWeight.w500 : FontWeight.w400,
                   color: isSelected
                       ? context.accentPrimary

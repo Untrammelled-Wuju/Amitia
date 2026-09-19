@@ -6,11 +6,13 @@ import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_radius.dart';
+import '../../../../core/widgets/profile_avatar.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
-import '../../../../core/widgets/amitia_drawer.dart';
 import '../../../../core/services/providers.dart';
 import '../../../../core/settings/appearance_preferences.dart';
 import '../../../../shared/models/models.dart';
+
+const double _settingsOptionFontSize = 15;
 
 List<SettingGroup> _settingsGroups({
   required String modelSummary,
@@ -26,30 +28,15 @@ List<SettingGroup> _settingsGroups({
         route: AppRoutes.settingsModels,
       ),
       SettingItem(
-        title: '语音识别',
-        icon: Icons.transcribe_outlined,
-        route: AppRoutes.settingsAsr,
-      ),
-      SettingItem(
         title: '外观设置',
         icon: Icons.palette_outlined,
         value: appearanceSummary,
         route: AppRoutes.settingsAppearance,
       ),
       SettingItem(
-        title: '主题设置',
-        icon: Icons.color_lens_outlined,
-        route: AppRoutes.settingsTheme,
-      ),
-      SettingItem(
         title: '界面提供者',
         icon: Icons.dashboard_customize_outlined,
         route: AppRoutes.settingsUIProviders,
-      ),
-      SettingItem(
-        title: '个人空间',
-        icon: Icons.person_outline,
-        route: AppRoutes.settingsUser,
       ),
       SettingItem(
         title: '时间感知',
@@ -69,25 +56,21 @@ List<SettingGroup> _settingsGroups({
       SettingItem(
         title: '运行模式',
         icon: Icons.hub_outlined,
-        subtitle: '桌面本地 / 私有云部署模式',
         route: AppRoutes.settingsRuntimeMode,
       ),
       SettingItem(
         title: '长期运行维护',
         icon: Icons.schedule_send_outlined,
-        subtitle: '长期任务、健康历史与日志维护',
         route: AppRoutes.settingsLongRunning,
       ),
       SettingItem(
         title: '高级系统',
         icon: Icons.admin_panel_settings_outlined,
-        subtitle: 'Space、设备审计、Usage、Bridge 与 Voice Session',
         route: AppRoutes.settingsAdvanced,
       ),
       SettingItem(
         title: 'BDI 决策可视化',
         icon: Icons.account_tree_outlined,
-        subtitle: 'BehaviorPlan、ExpressionPlan 与降级状态',
         route: AppRoutes.settingsDecisionViz,
       ),
       SettingItem(
@@ -98,7 +81,6 @@ List<SettingGroup> _settingsGroups({
       SettingItem(
         title: 'Android Automation',
         icon: Icons.smartphone_outlined,
-        subtitle: '执行通道、视觉能力与 Virtual Display 健康状态',
         route: AppRoutes.settingsAndroidAutomation,
       ),
       SettingItem(
@@ -119,7 +101,6 @@ List<SettingGroup> _settingsGroups({
       SettingItem(
         title: '工具箱',
         icon: Icons.handyman_outlined,
-        subtitle: '运行日志、状态诊断与开发辅助工具',
         value: '诊断工具',
         route: AppRoutes.settingsToolbox,
       ),
@@ -161,7 +142,6 @@ List<SettingGroup> _settingsGroups({
       SettingItem(
         title: '更新中心',
         icon: Icons.system_update_outlined,
-        subtitle: '版本更新与回滚',
         route: AppRoutes.settingsAppUpdate,
       ),
       SettingItem(
@@ -208,7 +188,6 @@ class SettingsPage extends ConsumerWidget {
       modelSummary: modelSummary,
       appearanceSummary: appearanceSummary,
     );
-    final isDevMode = ref.watch(isDeveloperModeProvider);
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
         title: '设置',
@@ -223,21 +202,7 @@ class SettingsPage extends ConsumerWidget {
           ),
           SizedBox(height: AppSpacing.md),
           for (int i = 0; i < groups.length; i++) ...[
-            _SettingGroup(
-              group: groups[i],
-              leading: groups[i].title == '系统与维护'
-                  ? Padding(
-                      padding: EdgeInsets.only(bottom: AppSpacing.sm),
-                      child: _DevModeToggle(
-                        isDevMode: isDevMode,
-                        onTap: () {
-                          ref.read(isDeveloperModeProvider.notifier).state =
-                              !isDevMode;
-                        },
-                      ),
-                    )
-                  : null,
-            ),
+            _SettingGroup(group: groups[i]),
             if (i < groups.length - 1) SizedBox(height: AppSpacing.sectionGap),
           ],
           SizedBox(height: AppSpacing.xl),
@@ -267,27 +232,11 @@ Widget _buildUserInfoCard(BuildContext context, WidgetRef ref) {
           ),
           child: Row(
             children: [
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(16),
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [context.accentPrimary, context.accentSecondary],
-                  ),
-                ),
-                child: Center(
-                  child: Text(
-                    initial,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
+              ProfileAvatar(
+                avatar: profile?.avatar ?? '',
+                initial: initial,
+                size: 44,
+                borderRadius: BorderRadius.circular(16),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -298,7 +247,7 @@ Widget _buildUserInfoCard(BuildContext context, WidgetRef ref) {
                     Text(
                       displayName,
                       style: TextStyle(
-                        fontSize: 14,
+                        fontSize: 14.5,
                         fontWeight: FontWeight.w600,
                         color: context.textPrimary,
                       ),
@@ -307,7 +256,7 @@ Widget _buildUserInfoCard(BuildContext context, WidgetRef ref) {
                     Text(
                       spaceId.isEmpty ? '本地个人空间' : spaceId,
                       style: TextStyle(
-                        fontSize: 11,
+                        fontSize: 11.5,
                         color: context.textTertiary,
                       ),
                       maxLines: 1,
@@ -345,7 +294,12 @@ Widget _buildUserInfoCard(BuildContext context, WidgetRef ref) {
             Icon(Icons.person_outline, color: context.textTertiary),
             const SizedBox(width: 12),
             Expanded(
-              child: Text('个人空间资料暂不可用', style: AppTypography.body(context)),
+              child: Text(
+                '个人空间资料暂不可用',
+                style: AppTypography.body(
+                  context,
+                ).copyWith(fontSize: 14.5),
+              ),
             ),
             Icon(Icons.chevron_right, size: 20, color: context.textTertiary),
           ],
@@ -357,16 +311,14 @@ Widget _buildUserInfoCard(BuildContext context, WidgetRef ref) {
 
 class _SettingGroup extends StatelessWidget {
   final SettingGroup group;
-  final Widget? leading;
 
-  const _SettingGroup({required this.group, this.leading});
+  const _SettingGroup({required this.group});
 
   @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (leading != null) leading!,
         Padding(
           padding: EdgeInsets.fromLTRB(
             AppSpacing.pagePadding,
@@ -374,7 +326,12 @@ class _SettingGroup extends StatelessWidget {
             AppSpacing.pagePadding,
             AppSpacing.sm,
           ),
-          child: Text(group.title, style: AppTypography.caption(context)),
+          child: Text(
+            group.title,
+            style: AppTypography.caption(
+              context,
+            ).copyWith(fontSize: 12.5),
+          ),
         ),
         Container(
           margin: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
@@ -385,64 +342,11 @@ class _SettingGroup extends StatelessWidget {
           ),
           child: Column(
             children: [
-              for (int i = 0; i < group.items.length; i++) ...[
-                _SettingTile(item: group.items[i]),
-                if (i < group.items.length - 1)
-                  Padding(
-                    padding: const EdgeInsets.only(left: 56),
-                    child: Divider(
-                      height: 1,
-                      thickness: 0.5,
-                      color: context.borderSecondary,
-                    ),
-                  ),
-              ],
+              for (final item in group.items) _SettingTile(item: item),
             ],
           ),
         ),
       ],
-    );
-  }
-}
-
-class _DevModeToggle extends StatelessWidget {
-  final bool isDevMode;
-  final VoidCallback onTap;
-
-  const _DevModeToggle({required this.isDevMode, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
-      padding: EdgeInsets.symmetric(
-        horizontal: AppSpacing.md,
-        vertical: AppSpacing.sm,
-      ),
-      decoration: BoxDecoration(
-        color: context.surfacePrimary,
-        borderRadius: AppRadius.brMedium,
-        border: Border.all(color: context.borderPrimary, width: 0.5),
-      ),
-      child: Row(
-        children: [
-          Icon(Icons.developer_mode_outlined, color: context.accentPrimary),
-          SizedBox(width: AppSpacing.sm),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('开发模式', style: AppTypography.body(context)),
-                Text(
-                  isDevMode ? '已开启' : '已关闭',
-                  style: AppTypography.caption(context),
-                ),
-              ],
-            ),
-          ),
-          Switch.adaptive(value: isDevMode, onChanged: (_) => onTap()),
-        ],
-      ),
     );
   }
 }
@@ -475,22 +379,22 @@ class _SettingTile extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(item.title, style: AppTypography.body(context)),
-                  if (item.subtitle != null)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 2),
-                      child: Text(
-                        item.subtitle!,
-                        style: AppTypography.caption(context),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
+                  Text(
+                    item.title,
+                    style: AppTypography.body(
+                      context,
+                    ).copyWith(fontSize: _settingsOptionFontSize),
+                  ),
                 ],
               ),
             ),
             if (item.value != null) ...[
-              Text(item.value!, style: AppTypography.caption(context)),
+              Text(
+                item.value!,
+                style: AppTypography.caption(
+                  context,
+                ).copyWith(fontSize: 13.5),
+              ),
               const SizedBox(width: 4),
             ],
             Icon(Icons.chevron_right, size: 20, color: context.textTertiary),

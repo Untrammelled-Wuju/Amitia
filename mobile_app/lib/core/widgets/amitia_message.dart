@@ -1341,6 +1341,7 @@ class AmitiaChatInput extends StatefulWidget {
 class _AmitiaChatInputState extends State<AmitiaChatInput> {
   static const double _composerInputHeight = 58;
   static const double _composerInputVerticalInset = 7;
+  static const double _composerTextSize = 15;
   late TextEditingController _controller;
   late bool _ownsController;
   final _inputFocusNode = FocusNode();
@@ -1928,7 +1929,7 @@ class _AmitiaChatInputState extends State<AmitiaChatInput> {
     return SafeArea(
       top: false,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(10, 8, 10, 12),
+        padding: const EdgeInsets.fromLTRB(10, 8, 10, 4),
         child: Container(
           key: const ValueKey('chat-composer-surface'),
           constraints: const BoxConstraints(minHeight: 98, maxHeight: 170),
@@ -2040,7 +2041,7 @@ class _AmitiaChatInputState extends State<AmitiaChatInput> {
                           onSubmitted: (_) => _send(),
                           style: AppTypography.bodySmall(
                             context,
-                          ).copyWith(fontSize: 16),
+                          ).copyWith(fontSize: _composerTextSize),
                           decoration: InputDecoration(
                             hintText: recipient.isEmpty
                                 ? '发消息…'
@@ -2048,7 +2049,7 @@ class _AmitiaChatInputState extends State<AmitiaChatInput> {
                             hintStyle: AppTypography.bodySmall(context)
                                 .copyWith(
                                   color: context.textTertiary,
-                                  fontSize: 16,
+                                  fontSize: _composerTextSize,
                                 ),
                             isDense: true,
                             contentPadding: const EdgeInsets.fromLTRB(
@@ -2179,7 +2180,7 @@ class _AmitiaChatInputState extends State<AmitiaChatInput> {
                 label,
                 style: TextStyle(
                   color: color,
-                  fontSize: 16,
+                  fontSize: _composerTextSize,
                   fontWeight: FontWeight.w600,
                   height: 1.5,
                 ),

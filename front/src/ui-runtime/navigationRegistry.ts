@@ -77,7 +77,7 @@ export function resolveNavigationIcon(name?: string): Component {
 const builtinItems: UINavigationItem[] = [
   { id: "overview.run", route: "/dashboard/run", label: "运行概览", icon: DataLine, group: "overview", groupLabel: "概览", groupIcon: Odometer, order: 5 },
   { id: "overview.data", route: "/dashboard/data", label: "运行数据", icon: DataAnalysis, group: "overview", groupLabel: "概览", groupIcon: Odometer, order: 10 },
-  { id: "chat", route: "/chat", label: "聊天", icon: ChatLineRound, group: "chat", order: 15, mobile: true },
+  { id: "chat", route: "/chat", label: "新对话", icon: ChatLineRound, group: "chat", order: 15, mobile: true },
   { id: "character.manage", route: "/character", label: "角色管理", icon: User, group: "character", groupLabel: "角色", groupIcon: UserFilled, order: 20, mobile: true, match: ["/character"] },
   { id: "character.reminders", route: "/reminders", label: "日程提醒", icon: Calendar, group: "character", groupLabel: "角色", groupIcon: UserFilled, order: 25 },
   { id: "character.profiles", route: "/profiles", label: "用户画像", icon: Avatar, group: "character", groupLabel: "角色", groupIcon: UserFilled, order: 30 },
