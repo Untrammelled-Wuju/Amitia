@@ -63,9 +63,22 @@ void main() {
   testWidgets('composer trailing actions match the add action inset', (
     tester,
   ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(375, 800);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
     await tester.pumpWidget(
       MaterialApp(
-        home: Scaffold(body: AmitiaChatInput(onSend: (_) {})),
+        home: Scaffold(
+          body: AmitiaChatInput(
+            onSend: (_) {},
+            workspaceSelector: const SizedBox(
+              width: 120,
+              height: 31,
+              child: Text('选择项目'),
+            ),
+          ),
+        ),
       ),
     );
 

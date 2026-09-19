@@ -2120,11 +2120,15 @@ class _AmitiaChatInputState extends State<AmitiaChatInput> {
                         tooltip: '添加内容',
                         onTap: _showComposerTools,
                       ),
-                      if (widget.workspaceSelector != null) ...[
-                        const SizedBox(width: 4),
-                        Flexible(child: widget.workspaceSelector!),
-                      ],
-                      const Spacer(),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: widget.workspaceSelector == null
+                            ? const SizedBox.shrink()
+                            : Align(
+                                alignment: Alignment.centerLeft,
+                                child: widget.workspaceSelector!,
+                              ),
+                      ),
                       if (!_voiceMode &&
                           (_hasText || _selectedSkillNames.isNotEmpty))
                         GestureDetector(

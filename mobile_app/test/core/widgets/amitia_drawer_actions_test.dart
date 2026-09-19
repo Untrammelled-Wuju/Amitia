@@ -14,6 +14,17 @@ void main() {
       contains("label: conversation.pinnedAt.isEmpty ? '置顶' : '取消置顶'"),
     );
     expect(source, contains("label: '归档'"));
+    expect(source, contains("label: '重命名'"));
+    expect(
+      source,
+      contains('PopupMenuItem(\n            value: _ConversationAction.rename'),
+    );
+    expect(
+      source,
+      isNot(
+        contains('behavior: HitTestBehavior.opaque,\n        onTap: onRename'),
+      ),
+    );
     expect(source, contains('fontSize: 14.5'));
     expect(
       source,

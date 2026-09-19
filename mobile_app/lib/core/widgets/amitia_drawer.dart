@@ -891,18 +891,14 @@ class _ConversationTile extends StatelessWidget {
               size: 19,
               color: context.textSecondary,
             ),
-      title: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: onRename,
-        child: Text(
-          title,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(
-            color: context.textPrimary,
-            fontSize: 14.5,
-            fontWeight: FontWeight.w400,
-          ),
+      title: Text(
+        title,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          color: context.textPrimary,
+          fontSize: 14.5,
+          fontWeight: FontWeight.w400,
         ),
       ),
       onTap: onOpen,
@@ -910,6 +906,9 @@ class _ConversationTile extends StatelessWidget {
         tooltip: '对话操作',
         onSelected: (action) {
           switch (action) {
+            case _ConversationAction.rename:
+              onRename();
+              return;
             case _ConversationAction.pin:
               onTogglePin();
               return;
@@ -919,6 +918,13 @@ class _ConversationTile extends StatelessWidget {
           }
         },
         itemBuilder: (context) => [
+          const PopupMenuItem(
+            value: _ConversationAction.rename,
+            child: _ProjectMenuItem(
+              icon: Icons.drive_file_rename_outline,
+              label: '重命名',
+            ),
+          ),
           PopupMenuItem(
             value: _ConversationAction.pin,
             child: _ProjectMenuItem(
@@ -939,7 +945,7 @@ class _ConversationTile extends StatelessWidget {
   }
 }
 
-enum _ConversationAction { pin, archive }
+enum _ConversationAction { rename, pin, archive }
 
 class _ExpandableRecentList extends StatelessWidget {
   final List<ConversationDto> conversations;
