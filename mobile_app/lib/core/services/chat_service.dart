@@ -111,10 +111,19 @@ class ChatService {
         .toList(growable: false);
   }
 
-  Future<List<ConversationDto>> archivedConversations() async {
+  Future<List<ConversationDto>> archivedConversations({
+    String projectId = '',
+    String keyword = '',
+  }) async {
     final resp = await _api.get<Map<String, dynamic>>(
       '/api/web-chat/conversations',
-      queryParameters: const {'page': 1, 'pageSize': 200, 'archivedOnly': true},
+      queryParameters: {
+        'page': 1,
+        'pageSize': 200,
+        'archivedOnly': true,
+        if (projectId.trim().isNotEmpty) 'projectId': projectId.trim(),
+        if (keyword.trim().isNotEmpty) 'keyword': keyword.trim(),
+      },
     );
     final rows = resp?['items'];
     if (rows is! List) return const [];

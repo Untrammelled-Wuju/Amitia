@@ -7,6 +7,27 @@
           <el-icon><Refresh /></el-icon>
         </el-button>
       </div>
+      <div class="archive-filters">
+        <el-select
+          v-model="projectFilter"
+          clearable
+          placeholder="全部项目"
+          @change="loadConversations"
+        >
+          <el-option
+            v-for="project in projects"
+            :key="project.id"
+            :label="project.name"
+            :value="project.id"
+          />
+        </el-select>
+        <el-input
+          v-model="keyword"
+          clearable
+          placeholder="搜索标题或消息内容"
+          @input="scheduleSearch"
+        />
+      </div>
       <div
         v-for="conversation in conversations"
         :key="conversation.id"
@@ -50,10 +71,15 @@
           </el-button>
         </header>
         <div ref="messageListRef" v-loading="messageLoading" class="message-list">
-          <div v-for="message in messages" :key="message.id" class="archive-message" :class="message.role">
-            <div class="message-meta">{{ message.role === "user" ? "用户" : "AI" }} · {{ formatTime(message.createdAt) }}</div>
-            <div class="message-content">{{ message.content }}</div>
-          </div>
+          <ChatBubble
+            v-for="message in messages"
+            :key="message.id"
+            :message="{ ...message, typingDone: true }"
+            :char-name="characterName(message.characterId)"
+            :char-avatar="characterAvatar(message.characterId)"
+            :character-id="message.characterId"
+            read-only
+          />
           <el-empty v-if="!messageLoading && messages.length === 0" description="暂无消息" :image-size="60" />
         </div>
       </template>
@@ -63,16 +89,18 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { Box, Refresh } from "@element-plus/icons-vue";
 import { ElMessage } from "element-plus";
 import { useApi } from "@/composables/useApi";
+import ChatBubble from "@/components/ChatBubble.vue";
 
 interface ArchivedConversation {
   id: string;
   title: string;
   messageCount: number;
   archivedAt?: string;
+  projectId?: string;
 }
 
 interface ArchivedMessage {
@@ -80,16 +108,26 @@ interface ArchivedMessage {
   role: string;
   content: string;
   createdAt: string;
+  characterId?: string;
+  imageUrl?: string;
+  videoUrl?: string;
+  audioUrl?: string;
+  audioDuration?: number;
 }
 
 const { get, put } = useApi();
 const conversations = ref<ArchivedConversation[]>([]);
 const messages = ref<ArchivedMessage[]>([]);
+const projects = ref<any[]>([]);
+const characters = ref<any[]>([]);
+const projectFilter = ref("");
+const keyword = ref("");
 const selectedId = ref("");
 const loading = ref(false);
 const messageLoading = ref(false);
 const restoringId = ref("");
 const messageListRef = ref<HTMLElement | null>(null);
+let searchTimer: ReturnType<typeof setTimeout> | null = null;
 
 const selectedConversation = computed(
   () => conversations.value.find((item) => item.id === selectedId.value) || null,
@@ -101,6 +139,31 @@ function formatTime(value?: string) {
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
 }
 
+function characterName(characterId?: string) {
+  return (
+    characters.value.find((item) => item.id === characterId)?.name ||
+    "AI"
+  );
+}
+
+function characterAvatar(characterId?: string) {
+  return characters.value.find((item) => item.id === characterId)?.avatar || "";
+}
+
+function scheduleSearch() {
+  if (searchTimer) clearTimeout(searchTimer);
+  searchTimer = setTimeout(loadConversations, 280);
+}
+
+async function loadFilters() {
+  const [sidebar, characterList] = await Promise.all([
+    get<any>("/api/web-chat/sidebar"),
+    get<any[]>("/api/characters"),
+  ]);
+  projects.value = sidebar?.projects || [];
+  characters.value = Array.isArray(characterList) ? characterList : [];
+}
+
 async function loadConversations() {
   loading.value = true;
   try {
@@ -108,6 +171,8 @@ async function loadConversations() {
       page: 1,
       pageSize: 200,
       archivedOnly: true,
+      projectId: projectFilter.value || undefined,
+      keyword: keyword.value.trim() || undefined,
     });
     conversations.value = response?.items || [];
     if (selectedId.value && !conversations.value.some((item) => item.id === selectedId.value)) {
@@ -154,7 +219,14 @@ async function restoreConversation(conversation: ArchivedConversation) {
   }
 }
 
-onMounted(loadConversations);
+onMounted(() => {
+  void loadFilters();
+  void loadConversations();
+});
+
+onBeforeUnmount(() => {
+  if (searchTimer) clearTimeout(searchTimer);
+});
 </script>
 
 <style scoped>
@@ -162,6 +234,8 @@ onMounted(loadConversations);
 .archive-list { display: flex; flex-direction: column; min-height: 0; overflow-y: auto; padding: 10px; border-right: 1px solid var(--surface-border); }
 .archive-list-header, .archive-main-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .archive-list-header { min-height: 36px; padding: 0 6px 8px; }
+.archive-filters { display: grid; gap: 6px; padding: 0 2px 8px; }
+.archive-filters :deep(.el-select), .archive-filters :deep(.el-input) { width: 100%; }
 .archive-item { display: flex; align-items: center; gap: 4px; width: 100%; min-height: 52px; padding: 2px 4px 2px 2px; border-radius: 8px; color: var(--text-secondary); }
 .archive-item:hover, .archive-item.active { background: var(--workbench-sidebar-hover); color: var(--text-primary); }
 .archive-item.active { background: var(--workbench-sidebar-active); }
@@ -174,9 +248,6 @@ onMounted(loadConversations);
 .archive-main { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
 .archive-main-header { min-height: 52px; padding: 8px 16px; border-bottom: 1px solid var(--surface-border); }
 .message-list { display: flex; flex-direction: column; gap: 12px; min-height: 0; flex: 1; overflow-y: auto; padding: 18px; }
-.archive-message { max-width: min(680px, 82%); padding: 9px 12px; border-radius: 10px; background: var(--ac-color-surface); }
-.archive-message.user { align-self: flex-end; background: var(--ac-color-primary-bg); }
-.message-content { white-space: pre-wrap; word-break: break-word; color: var(--text-primary); font-size: 13px; line-height: 1.55; }
 @media (max-width: 800px) {
   .archive-page { grid-template-columns: 1fr; }
   .archive-list { max-height: 38vh; border-right: 0; border-bottom: 1px solid var(--surface-border); }

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -5,8 +7,11 @@ import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/models/conversation.dart';
+import '../../../../core/models/project.dart';
 import '../../../../core/services/providers.dart';
+import '../../../../core/widgets/amitia_message.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
+import '../../../../shared/models/models.dart';
 
 class ChatLogsPage extends ConsumerStatefulWidget {
   const ChatLogsPage({super.key});
@@ -17,14 +22,100 @@ class ChatLogsPage extends ConsumerStatefulWidget {
 
 class _ChatLogsPageState extends ConsumerState<ChatLogsPage> {
   List<ConversationDto> _conversations = const [];
+  List<ProjectDto> _projects = const [];
   bool _loading = true;
   String _error = '';
   String _restoringId = '';
+  String _projectFilter = '';
+  final _searchController = TextEditingController();
+  Timer? _searchTimer;
 
   @override
   void initState() {
     super.initState();
-    _load();
+    _searchController.addListener(_scheduleSearch);
+    unawaited(_loadFilters());
+    unawaited(_load());
+  }
+
+  @override
+  void dispose() {
+    _searchTimer?.cancel();
+    _searchController.removeListener(_scheduleSearch);
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadFilters() async {
+    try {
+      final sidebar = await ref
+          .read(chatServiceProvider)
+          .conversationSidebar();
+      if (!mounted) return;
+      setState(() => _projects = sidebar.projects);
+    } catch (_) {}
+  }
+
+  void _scheduleSearch() {
+    if (mounted) setState(() {});
+    _searchTimer?.cancel();
+    _searchTimer = Timer(const Duration(milliseconds: 280), _load);
+  }
+
+  Widget _buildFilters(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.pagePadding,
+        AppSpacing.sm,
+        AppSpacing.pagePadding,
+        0,
+      ),
+      child: Column(
+        children: [
+          DropdownButtonFormField<String?>(
+            initialValue: _projectFilter.isEmpty ? null : _projectFilter,
+            decoration: const InputDecoration(
+              labelText: '项目',
+              prefixIcon: Icon(Icons.folder_outlined),
+            ),
+            items: [
+              const DropdownMenuItem<String?>(
+                value: null,
+                child: Text('全部项目'),
+              ),
+              for (final project in _projects)
+                DropdownMenuItem<String?>(
+                  value: project.id,
+                  child: Text(
+                    project.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+            ],
+            onChanged: (value) {
+              setState(() => _projectFilter = value ?? '');
+              unawaited(_load());
+            },
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          TextField(
+            controller: _searchController,
+            decoration: InputDecoration(
+              hintText: '搜索标题或消息内容',
+              prefixIcon: const Icon(Icons.search),
+              suffixIcon: _searchController.text.isEmpty
+                  ? null
+                  : IconButton(
+                      tooltip: '清除搜索',
+                      onPressed: _searchController.clear,
+                      icon: const Icon(Icons.close),
+                    ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _load() async {
@@ -35,7 +126,10 @@ class _ChatLogsPageState extends ConsumerState<ChatLogsPage> {
     try {
       final conversations = await ref
           .read(chatServiceProvider)
-          .archivedConversations();
+          .archivedConversations(
+            projectId: _projectFilter,
+            keyword: _searchController.text,
+          );
       if (!mounted) return;
       setState(() => _conversations = conversations);
     } catch (error) {

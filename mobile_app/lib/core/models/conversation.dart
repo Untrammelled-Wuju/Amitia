@@ -42,6 +42,7 @@ class ConversationDto {
 class MessageDto {
   final String id;
   final String conversationId;
+  final String characterId;
   final String role;
   final String content;
   final String status;
@@ -60,6 +61,7 @@ class MessageDto {
   MessageDto({
     required this.id,
     required this.conversationId,
+    this.characterId = '',
     required this.role,
     required this.content,
     required this.createdAt,
@@ -80,6 +82,7 @@ class MessageDto {
     return MessageDto(
       id: (json['id'] ?? '').toString(),
       conversationId: (json['conversationId'] ?? '').toString(),
+      characterId: (json['characterId'] ?? '').toString(),
       role: json['role'] as String? ?? '',
       content: json['content'] as String? ?? '',
       status: json['status'] as String? ?? 'sent',

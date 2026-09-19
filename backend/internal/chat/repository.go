@@ -74,7 +74,21 @@ func (r *repository) ListConversations(q ConversationQuery) ([]Conversation, int
 		query = query.Where("COALESCE(project_id, '') = ''")
 	}
 	if q.Keyword != "" {
-		query = query.Where("title LIKE ?", "%"+q.Keyword+"%")
+		pattern := "%" + q.Keyword + "%"
+		if q.ArchivedOnly {
+			query = query.Where(
+				`title LIKE ? OR EXISTS (
+					SELECT 1 FROM messages m
+					WHERE m.conversation_id = conversations.id
+						AND m.deleted_at IS NULL
+						AND m.content LIKE ?
+				)`,
+				pattern,
+				pattern,
+			)
+		} else {
+			query = query.Where("title LIKE ?", pattern)
+		}
 	}
 	var total int64
 	query.Count(&total)
@@ -84,8 +98,12 @@ func (r *repository) ListConversations(q ConversationQuery) ([]Conversation, int
 	if q.PageSize <= 0 {
 		q.PageSize = 20
 	}
-	if q.PageSize > 100 {
-		q.PageSize = 100
+	maxPageSize := 100
+	if q.ArchivedOnly {
+		maxPageSize = 200
+	}
+	if q.PageSize > maxPageSize {
+		q.PageSize = maxPageSize
 	}
 	var convs []Conversation
 	err := query.Order("updated_at DESC").Offset((q.Page - 1) * q.PageSize).Limit(q.PageSize).Find(&convs).Error

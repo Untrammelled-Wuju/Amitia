@@ -119,7 +119,7 @@ SPDX-License-Identifier: AGPL-3.0-only
           <el-icon><DocumentCopy /></el-icon>
         </el-button>
         <el-button
-          v-if="message.role === 'assistant'"
+          v-if="message.role === 'assistant' && !readOnly"
           text
           size="small"
           @click="$emit('reply', message)"
@@ -169,6 +169,7 @@ const props = defineProps<{
   isStreaming?: boolean;
   status?: string;
   characterId?: string;
+  readOnly?: boolean;
 }>();
 
 const emit = defineEmits<{
