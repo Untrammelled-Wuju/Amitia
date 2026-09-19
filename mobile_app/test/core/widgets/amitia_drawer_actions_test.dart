@@ -19,7 +19,8 @@ void main() {
     expect(source, contains('offset: Offset.zero'));
     expect(source, contains('blurRadius: 14'));
     expect(source, contains('spreadRadius: 0'));
-    expect(source, contains('right: 75'));
+    expect(source, contains('alignment: Alignment.topLeft'));
+    expect(source, contains('left: origin.dx + 12'));
     expect(source, contains('height: 46'));
     expect(source, contains('Divider('));
     expect(source, contains("label: '重命名'"));

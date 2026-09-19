@@ -931,9 +931,9 @@ class _ConversationTile extends StatelessWidget {
         return FadeTransition(
           opacity: curved,
           child: Align(
-            alignment: Alignment.topRight,
+            alignment: Alignment.topLeft,
             child: Padding(
-              padding: EdgeInsets.only(top: anchorTop, right: 75),
+              padding: EdgeInsets.only(top: anchorTop, left: origin.dx + 12),
               child: ScaleTransition(
                 alignment: Alignment.bottomRight,
                 scale: Tween<double>(begin: 0.9, end: 1).animate(curved),
