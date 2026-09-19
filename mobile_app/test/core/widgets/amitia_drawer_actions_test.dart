@@ -14,6 +14,12 @@ void main() {
       contains("label: conversation.pinnedAt.isEmpty ? '置顶' : '取消置顶'"),
     );
     expect(source, contains("label: '归档'"));
+    expect(source, contains('fontSize: 14.5'));
+    expect(
+      source,
+      contains('Icons.chat_bubble_outline,\n              size: 19'),
+    );
+    expect(source, contains('Icon(Icons.more_horiz, size: 19'));
     expect(
       source,
       isNot(contains("tooltip: '归档',\n            onPressed: onArchive")),

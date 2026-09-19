@@ -883,11 +883,26 @@ class _ConversationTile extends StatelessWidget {
     return ListTile(
       dense: compact,
       contentPadding: EdgeInsets.only(left: compact ? 12 : 20, right: 4),
-      leading: compact ? null : const Icon(Icons.chat_bubble_outline),
+      leading: compact
+          ? null
+          : Icon(
+              Icons.chat_bubble_outline,
+              size: 19,
+              color: context.textSecondary,
+            ),
       title: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: onRename,
-        child: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
+        child: Text(
+          title,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            color: context.textPrimary,
+            fontSize: 14.5,
+            fontWeight: FontWeight.w400,
+          ),
+        ),
       ),
       onTap: onOpen,
       trailing: PopupMenuButton<_ConversationAction>(
@@ -917,7 +932,7 @@ class _ConversationTile extends StatelessWidget {
             child: _ProjectMenuItem(icon: Icons.archive_outlined, label: '归档'),
           ),
         ],
-        icon: Icon(Icons.more_horiz, size: 20, color: context.textTertiary),
+        icon: Icon(Icons.more_horiz, size: 19, color: context.textTertiary),
       ),
     );
   }
