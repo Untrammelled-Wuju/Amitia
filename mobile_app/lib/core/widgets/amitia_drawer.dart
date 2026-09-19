@@ -589,7 +589,14 @@ class _DrawerMainPanel extends StatelessWidget {
                 child: ListTile(
                   contentPadding: const EdgeInsets.symmetric(horizontal: 8),
                   leading: const Icon(Icons.add_comment_outlined),
-                  title: const Text('新对话'),
+                  title: Text(
+                    '新对话',
+                    style: TextStyle(
+                      color: context.textPrimary,
+                      fontSize: 14.5,
+                      fontWeight: FontWeight.w400,
+                    ),
+                  ),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
