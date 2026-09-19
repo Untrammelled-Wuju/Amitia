@@ -48,9 +48,7 @@ class _ChatLogsPageState extends ConsumerState<ChatLogsPage> {
 
   Future<void> _loadFilters() async {
     try {
-      final sidebar = await ref
-          .read(chatServiceProvider)
-          .conversationSidebar();
+      final sidebar = await ref.read(chatServiceProvider).conversationSidebar();
       if (!mounted) return;
       setState(() => _projects = sidebar.projects);
     } catch (_) {}
@@ -79,10 +77,7 @@ class _ChatLogsPageState extends ConsumerState<ChatLogsPage> {
               prefixIcon: Icon(Icons.folder_outlined),
             ),
             items: [
-              const DropdownMenuItem<String?>(
-                value: null,
-                child: Text('全部项目'),
-              ),
+              const DropdownMenuItem<String?>(value: null, child: Text('全部项目')),
               for (final project in _projects)
                 DropdownMenuItem<String?>(
                   value: project.id,
@@ -168,87 +163,107 @@ class _ChatLogsPageState extends ConsumerState<ChatLogsPage> {
 
   @override
   Widget build(BuildContext context) {
+    final characters =
+        ref.watch(characterListProvider).valueOrNull ?? const <CharacterDto>[];
     return AmitiaScaffold(
       appBar: AmitiaAppBar(title: '归档对话', showBackButton: true),
-      body: RefreshIndicator(
-        onRefresh: _load,
-        child: _loading
-            ? const Center(child: CircularProgressIndicator())
-            : _error.isNotEmpty
-            ? Center(child: Text(_error))
-            : _conversations.isEmpty
-            ? const Center(child: Text('暂无归档对话'))
-            : ListView.separated(
-                padding: EdgeInsets.all(AppSpacing.pagePadding),
-                itemCount: _conversations.length,
-                separatorBuilder: (_, _) => SizedBox(height: AppSpacing.sm),
-                itemBuilder: (context, index) {
-                  final conversation = _conversations[index];
-                  return Material(
-                    color: context.surfacePrimary,
-                    borderRadius: BorderRadius.circular(12),
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(12),
-                      onTap: () => Navigator.of(context).push(
-                        MaterialPageRoute<void>(
-                          builder: (_) => ArchivedConversationDetailPage(
-                            conversation: conversation,
-                          ),
-                        ),
+      body: Column(
+        children: [
+          _buildFilters(context),
+          Expanded(
+            child: RefreshIndicator(
+              onRefresh: _load,
+              child: _loading
+                  ? const Center(child: CircularProgressIndicator())
+                  : _error.isNotEmpty
+                  ? Center(child: Text(_error))
+                  : _conversations.isEmpty
+                  ? Center(
+                      child: Text(
+                        _projectFilter.isNotEmpty ||
+                                _searchController.text.trim().isNotEmpty
+                            ? '没有匹配的归档对话'
+                            : '暂无归档对话',
                       ),
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(14, 10, 6, 10),
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.archive_outlined,
-                              color: context.textTertiary,
+                    )
+                  : ListView.separated(
+                      padding: EdgeInsets.all(AppSpacing.pagePadding),
+                      itemCount: _conversations.length,
+                      separatorBuilder: (_, _) =>
+                          SizedBox(height: AppSpacing.sm),
+                      itemBuilder: (context, index) {
+                        final conversation = _conversations[index];
+                        return Material(
+                          color: context.surfacePrimary,
+                          borderRadius: BorderRadius.circular(12),
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(12),
+                            onTap: () => Navigator.of(context).push(
+                              MaterialPageRoute<void>(
+                                builder: (_) => ArchivedConversationDetailPage(
+                                  conversation: conversation,
+                                ),
+                              ),
                             ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                mainAxisSize: MainAxisSize.min,
+                            child: Padding(
+                              padding: const EdgeInsets.fromLTRB(14, 10, 6, 10),
+                              child: Row(
                                 children: [
-                                  Text(
-                                    conversation.title.trim().isEmpty
-                                        ? '新对话'
-                                        : conversation.title,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: AppTypography.cardTitle(context),
+                                  Icon(
+                                    Icons.archive_outlined,
+                                    color: context.textTertiary,
                                   ),
-                                  const SizedBox(height: 3),
-                                  Text(
-                                    '${_formatTime(conversation.archivedAt)} · ${conversation.messageCount} 条消息',
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: AppTypography.label(context),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text(
+                                          conversation.title.trim().isEmpty
+                                              ? '新对话'
+                                              : conversation.title,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: AppTypography.cardTitle(
+                                            context,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 3),
+                                        Text(
+                                          '${_formatTime(conversation.archivedAt)} · ${conversation.messageCount} 条消息',
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: AppTypography.label(context),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  TextButton(
+                                    onPressed: _restoringId.isEmpty
+                                        ? () => _restore(conversation)
+                                        : null,
+                                    child: _restoringId == conversation.id
+                                        ? const SizedBox(
+                                            width: 16,
+                                            height: 16,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                            ),
+                                          )
+                                        : const Text('撤销'),
                                   ),
                                 ],
                               ),
                             ),
-                            TextButton(
-                              onPressed: _restoringId.isEmpty
-                                  ? () => _restore(conversation)
-                                  : null,
-                              child: _restoringId == conversation.id
-                                  ? const SizedBox(
-                                      width: 16,
-                                      height: 16,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                      ),
-                                    )
-                                  : const Text('撤销'),
-                            ),
-                          ],
-                        ),
-                      ),
+                          ),
+                        );
+                      },
                     ),
-                  );
-                },
-              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -310,48 +325,60 @@ class _ArchivedConversationDetailPageState
           ? Center(child: Text(_error))
           : _messages.isEmpty
           ? const Center(child: Text('暂无消息'))
-          : ListView.separated(
+          : ListView.builder(
               padding: EdgeInsets.all(AppSpacing.pagePadding),
               itemCount: _messages.length,
-              separatorBuilder: (_, _) => SizedBox(height: AppSpacing.sm),
               itemBuilder: (context, index) {
                 final message = _messages[index];
-                return Align(
-                  alignment: message.role == 'user'
-                      ? Alignment.centerRight
-                      : Alignment.centerLeft,
-                  child: Container(
-                    constraints: const BoxConstraints(maxWidth: 320),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 9,
-                    ),
-                    decoration: BoxDecoration(
-                      color: message.role == 'user'
-                          ? context.accentSoft
-                          : context.surfacePrimary,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          message.role == 'user' ? '用户' : 'AI',
-                          style: AppTypography.label(context),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          message.content,
-                          style: AppTypography.body(context),
-                        ),
-                      ],
-                    ),
-                  ),
+                final character = characters
+                    .where((item) => item.id == message.characterId)
+                    .firstOrNull;
+                return AmitiaMessageBubble(
+                  message: _toChatMessage(message),
+                  avatarInitial: character?.name.isNotEmpty == true
+                      ? character!.name.characters.first
+                      : 'AI',
+                  characterName: character?.name.trim().isNotEmpty == true
+                      ? character!.name.trim()
+                      : 'AI',
+                  showAvatar: true,
                 );
               },
             ),
     );
   }
+}
+
+ChatMessage _toChatMessage(MessageDto message) {
+  final type = message.imageUrl.isNotEmpty
+      ? MessageType.image
+      : message.audioUrl.isNotEmpty
+      ? MessageType.audio
+      : message.videoUrl.isNotEmpty
+      ? MessageType.video
+      : MessageType.text;
+  return ChatMessage(
+    id: message.id,
+    role: message.role == 'user'
+        ? MessageRole.user
+        : message.role == 'assistant'
+        ? MessageRole.assistant
+        : MessageRole.system,
+    type: type,
+    content: message.content,
+    time: DateTime.tryParse(message.createdAt) ?? DateTime.now(),
+    status: MessageStatus.sent,
+    mediaUrl: message.imageUrl.isNotEmpty
+        ? message.imageUrl
+        : message.audioUrl.isNotEmpty
+        ? message.audioUrl
+        : message.videoUrl.isNotEmpty
+        ? message.videoUrl
+        : null,
+    durationMs: (message.audioDuration * 1000).round(),
+    replyToMessageId: message.replyToMessageId,
+    replyToExcerpt: message.replyToExcerpt,
+  );
 }
 
 String _formatTime(String value) {

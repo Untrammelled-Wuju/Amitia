@@ -258,6 +258,14 @@ func TestArchivedConversationListOnlyReturnsArchived(t *testing.T) {
 	if _, err := svc.UpdateConversationSidebarStateForSpace(archivedConversation.ID, nil, &archived, ""); err != nil {
 		t.Fatal(err)
 	}
+	if err := svc.repo.CreateMessage(&Message{
+		ID:             "archived-search-message",
+		ConversationID: archivedConversation.ID,
+		Role:           "user",
+		Content:        "needle in archived content",
+	}); err != nil {
+		t.Fatal(err)
+	}
 	recentConversation, err := svc.CreateConversationForSpace(&CreateConversationRequest{Channel: "web", Title: "普通对话"}, "")
 	if err != nil {
 		t.Fatal(err)
@@ -275,5 +283,17 @@ func TestArchivedConversationListOnlyReturnsArchived(t *testing.T) {
 	}
 	if response.Items[0].ID == recentConversation.ID {
 		t.Fatal("ordinary conversation appeared in archived list")
+	}
+	searchResponse, err := svc.ListConversationsForSpace(ConversationQuery{
+		ArchivedOnly: true,
+		Keyword:      "needle",
+		Page:         1,
+		PageSize:     20,
+	}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(searchResponse.Items) != 1 || searchResponse.Items[0].ID != archivedConversation.ID {
+		t.Fatalf("archived content search mismatch: %#v", searchResponse.Items)
 	}
 }
