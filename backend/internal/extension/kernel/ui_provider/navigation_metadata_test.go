@@ -116,3 +116,34 @@ func TestValidateProviderMetadataRejectsFractionalOrdering(t *testing.T) {
 		t.Fatalf("expected integer ordering error, got %v", err)
 	}
 }
+
+func TestValidateProviderMetadataAcceptsChannelPresentation(t *testing.T) {
+	def := ProviderDefinition{
+		Capability: CapabilityChannelPresentation,
+		Metadata: map[string]any{
+			"channelId":   "wechat_personal",
+			"displayName": "个人微信",
+			"icon":        "channel",
+			"order":       float64(40),
+			"capabilities": map[string]any{
+				"text": true,
+				"file": true,
+			},
+		},
+	}
+	if err := validateProviderMetadata(def); err != nil {
+		t.Fatalf("expected channel presentation metadata to validate, got %v", err)
+	}
+}
+
+func TestValidateProviderMetadataRejectsInvalidChannelPresentationID(t *testing.T) {
+	def := ProviderDefinition{
+		Capability: CapabilityChannelPresentation,
+		Metadata: map[string]any{
+			"channelId": "wechat personal",
+		},
+	}
+	if err := validateProviderMetadata(def); err == nil || !strings.Contains(err.Error(), "valid channelId") {
+		t.Fatalf("expected invalid channelId error, got %v", err)
+	}
+}

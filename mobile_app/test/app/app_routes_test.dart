@@ -3,66 +3,79 @@ import 'package:amitia_app/app/app_routes.dart';
 
 void main() {
   group('AppRoutes', () {
-    test('all static route constants are non-empty strings starting with /', () {
-      const routes = [
-        AppRoutes.chat,
-        AppRoutes.conversations,
-        AppRoutes.dashboard,
-        AppRoutes.characters,
-        AppRoutes.charactersCreate,
-        AppRoutes.agent,
-        AppRoutes.memory,
-        AppRoutes.memoryTimeline,
-        AppRoutes.memoryGraph,
-        AppRoutes.memoryWorldBook,
-        AppRoutes.memoryEpisodic,
-        AppRoutes.memoryProfiles,
-        AppRoutes.memoryManager,
-        AppRoutes.reminders,
-        AppRoutes.emotes,
-        AppRoutes.chatLogs,
-        AppRoutes.chatImport,
-        AppRoutes.extensions,
-        AppRoutes.extensionsPackages,
-        AppRoutes.extensionsMcp,
-        AppRoutes.extensionsMcpNew,
-        AppRoutes.extensionsAgentSkills,
-        AppRoutes.workshop,
-        AppRoutes.workshopCharacterCards,
-        AppRoutes.workshopPet,
-        AppRoutes.workshopPetCreate,
-        AppRoutes.workshopPetTasks,
-        AppRoutes.workshopPetInstallations,
-        AppRoutes.settings,
-        AppRoutes.settingsModels,
-        AppRoutes.settingsAppearance,
-        AppRoutes.settingsRuntime,
-        AppRoutes.settingsPermissions,
-        AppRoutes.settingsBackup,
-        AppRoutes.settingsSystem,
-        AppRoutes.settingsTemporal,
-        AppRoutes.settingsSafety,
-        AppRoutes.settingsMaintenance,
-        AppRoutes.settingsStorage,
-        AppRoutes.settingsTheme,
-        AppRoutes.settingsUser,
-        AppRoutes.settingsPrivacyScan,
-        AppRoutes.settingsDeployment,
-        AppRoutes.settingsAbout,
-        AppRoutes.settingsToolbox,
-        AppRoutes.onboarding,
-        AppRoutes.privacy,
-        AppRoutes.developer,
-        AppRoutes.developerKernel,
-        AppRoutes.gameCenter,
-        AppRoutes.desktopPet,
-      ];
+    test(
+      'all static route constants are non-empty strings starting with /',
+      () {
+        const routes = [
+          AppRoutes.chat,
+          AppRoutes.conversations,
+          AppRoutes.dashboard,
+          AppRoutes.characters,
+          AppRoutes.charactersCreate,
+          AppRoutes.agent,
+          AppRoutes.memory,
+          AppRoutes.memoryTimeline,
+          AppRoutes.memoryGraph,
+          AppRoutes.memoryWorldBook,
+          AppRoutes.memoryEpisodic,
+          AppRoutes.memoryProfiles,
+          AppRoutes.memoryManager,
+          AppRoutes.reminders,
+          AppRoutes.emotes,
+          AppRoutes.chatLogs,
+          AppRoutes.chatImport,
+          AppRoutes.extensions,
+          AppRoutes.extensionsPackages,
+          AppRoutes.extensionsMcp,
+          AppRoutes.extensionsMcpNew,
+          AppRoutes.extensionsAgentSkills,
+          AppRoutes.workshop,
+          AppRoutes.workshopCharacterCards,
+          AppRoutes.workshopPet,
+          AppRoutes.workshopPetCreate,
+          AppRoutes.workshopPetTasks,
+          AppRoutes.workshopPetInstallations,
+          AppRoutes.settings,
+          AppRoutes.settingsOverview,
+          AppRoutes.settingsData,
+          AppRoutes.settingsModels,
+          AppRoutes.settingsAppearance,
+          AppRoutes.settingsRuntime,
+          AppRoutes.settingsPermissions,
+          AppRoutes.settingsBackup,
+          AppRoutes.settingsSystem,
+          AppRoutes.settingsTemporal,
+          AppRoutes.settingsSafety,
+          AppRoutes.settingsMaintenance,
+          AppRoutes.settingsStorage,
+          AppRoutes.settingsTheme,
+          AppRoutes.settingsUser,
+          AppRoutes.settingsPrivacyScan,
+          AppRoutes.settingsDeployment,
+          AppRoutes.settingsAbout,
+          AppRoutes.settingsToolbox,
+          AppRoutes.onboarding,
+          AppRoutes.privacy,
+          AppRoutes.developer,
+          AppRoutes.developerKernel,
+          AppRoutes.gameCenter,
+          AppRoutes.desktopPet,
+        ];
 
-      for (final route in routes) {
-        expect(route.startsWith('/'), isTrue, reason: '$route should start with /');
-        expect(route.length > 1, isTrue, reason: '$route should be longer than just /');
-      }
-    });
+        for (final route in routes) {
+          expect(
+            route.startsWith('/'),
+            isTrue,
+            reason: '$route should start with /',
+          );
+          expect(
+            route.length > 1,
+            isTrue,
+            reason: '$route should be longer than just /',
+          );
+        }
+      },
+    );
 
     test('dynamic route helpers produce correct paths', () {
       expect(AppRoutes.character('c1'), '/characters/c1');
@@ -77,8 +90,14 @@ void main() {
       expect(AppRoutes.mcpDetail('m1'), '/extensions/mcp/m1');
       expect(AppRoutes.mcpEdit('m1'), '/extensions/mcp/m1/edit');
       expect(AppRoutes.extensionPage('page1'), '/extension/page/page1');
-      expect(AppRoutes.petProcessing('task1'), '/workshop/pet/processing/task1');
-      expect(AppRoutes.petActionEditor('task1', 'wave'), '/workshop/pet/processing/task1/actions/wave/editor');
+      expect(
+        AppRoutes.petProcessing('task1'),
+        '/workshop/pet/processing/task1',
+      );
+      expect(
+        AppRoutes.petActionEditor('task1', 'wave'),
+        '/workshop/pet/processing/task1/actions/wave/editor',
+      );
       expect(AppRoutes.modelConfig('llm'), '/settings/models/llm');
       expect(AppRoutes.kernelPage('wasm'), '/developer/kernel/wasm');
     });
@@ -114,6 +133,8 @@ void main() {
         AppRoutes.workshopPetTasks,
         AppRoutes.workshopPetInstallations,
         AppRoutes.settings,
+        AppRoutes.settingsOverview,
+        AppRoutes.settingsData,
         AppRoutes.settingsModels,
         AppRoutes.settingsAppearance,
         AppRoutes.settingsRuntime,
@@ -139,8 +160,11 @@ void main() {
       ];
 
       final uniqueRoutes = routes.toSet();
-      expect(uniqueRoutes.length, routes.length,
-          reason: 'Duplicate route constants found');
+      expect(
+        uniqueRoutes.length,
+        routes.length,
+        reason: 'Duplicate route constants found',
+      );
     });
 
     test('settings toolbox route exists', () {
@@ -149,6 +173,11 @@ void main() {
 
     test('settings about route exists', () {
       expect(AppRoutes.settingsAbout, '/settings/about');
+    });
+
+    test('dashboard routes live under settings', () {
+      expect(AppRoutes.settingsOverview, '/settings/overview');
+      expect(AppRoutes.settingsData, '/settings/data');
     });
   });
 }

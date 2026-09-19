@@ -32,6 +32,15 @@ func (h *Handler) WebChatListChannelConversations(c *gin.Context) {
 		util.ErrorResponse(c, response.InternalError, "读取渠道消息失败", nil)
 		return
 	}
+	if h.channelAccess != nil {
+		filtered := make([]chat.Conversation, 0, len(items))
+		for _, item := range items {
+			if h.channelAccess.Has(item.Channel) {
+				filtered = append(filtered, item)
+			}
+		}
+		items = filtered
+	}
 	util.SuccessResponse(c, gin.H{"items": items})
 }
 

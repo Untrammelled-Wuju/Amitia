@@ -524,7 +524,13 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 		reminder.RegisterRouter(apiGroup, ctx.DB, services.Chat)
 		graph.RegisterGraphRouter(apiGroup, config.AppCfg.Providers.GraphStore.SurrealDB)
 		agent.RegisterAgentRouter(apiGroup, ctx, services.UnifiedEntry, agentToolFacade)
-		system.RegisterSystemRouter(apiGroup, ctx, services.Chat, services.UnifiedEntry, services.DataLifecycle, services.Reconciliation, services.Memory, services.Profile, services.Episodic, services.Graph, services.Temporal, services.DataPortability, services.Artifact.Service)
+		channelAccess := system.ChannelAvailabilityFunc(func(channelID string) bool {
+			if services.KernelContainer == nil || services.KernelContainer.ChannelResolver == nil {
+				return false
+			}
+			return services.KernelContainer.ChannelResolver.Has(channelID)
+		})
+		system.RegisterSystemRouter(apiGroup, ctx, services.Chat, services.UnifiedEntry, services.DataLifecycle, services.Reconciliation, services.Memory, services.Profile, services.Episodic, services.Graph, services.Temporal, services.DataPortability, services.Artifact.Service, channelAccess)
 		tts.RegisterTtsRouter(apiGroup, ctx)
 		asr.RegisterAsrRouter(apiGroup, ctx)
 		if services.AdapterManager != nil {

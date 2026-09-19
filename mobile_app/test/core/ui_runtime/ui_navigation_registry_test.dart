@@ -46,10 +46,10 @@ UIProviderSnapshot _snapshot(List<UIProviderDefinition> providers) {
 }
 
 UIProviderDefinition _page(String extensionId, String id) => _provider(
-      id: id,
-      extensionId: extensionId,
-      capability: UICapability.pageProvider,
-    );
+  id: id,
+  extensionId: extensionId,
+  capability: UICapability.pageProvider,
+);
 
 UIProviderDefinition _routes({
   required String extensionId,
@@ -82,81 +82,117 @@ UIProviderDefinition _routes({
 }
 
 void main() {
-  test('dashboard is a normal built-in navigation entry', () {
-    final items = UINavigationRegistry.resolve(_snapshot(const []));
-    final dashboard = items.singleWhere((item) => item.id == 'builtin.dashboard');
-    expect(dashboard.route, AppRoutes.dashboard);
-    expect(dashboard.panel, UINavigationPanel.main);
-  });
-
-  test('hides route.registry navigation entries that lost route arbitration', () {
-    final snapshot = _snapshot([
-      _routes(
-        extensionId: 'winner',
-        id: 'routes.winner',
-        path: '/extensions-ui/shared',
-        pageProviderId: 'page.winner',
-        priority: 100,
-        includeNavigation: true,
-      ),
-      _page('winner', 'page.winner'),
-      _routes(
-        extensionId: 'loser',
-        id: 'routes.loser',
-        path: '/extensions-ui/shared',
-        pageProviderId: 'page.loser',
-        priority: 1,
-        includeNavigation: true,
-      ),
-      _page('loser', 'page.loser'),
-    ]);
-
-    final extensions = UINavigationRegistry.resolve(snapshot)
-        .where((item) => item.extensionId != null)
-        .toList();
-    expect(extensions.map((item) => item.extensionId), ['winner']);
-  });
-
-  test('hides app.navigation links when the extension route is not effective', () {
-    final snapshot = _snapshot([
-      _provider(
-        id: 'nav.loser',
-        extensionId: 'loser',
-        capability: UICapability.appNavigation,
-        metadata: const {
-          'navigationItems': [
-            {
-              'id': 'main',
-              'label': 'Loser',
-              'route': '/extensions-ui/shared',
-            },
-          ],
-        },
-      ),
-      _routes(
-        extensionId: 'loser',
-        id: 'routes.loser',
-        path: '/extensions-ui/shared',
-        pageProviderId: 'page.loser',
-        priority: 1,
-      ),
-      _page('loser', 'page.loser'),
-      _routes(
-        extensionId: 'winner',
-        id: 'routes.winner',
-        path: '/extensions-ui/shared',
-        pageProviderId: 'page.winner',
-        priority: 100,
-      ),
-      _page('winner', 'page.winner'),
-    ]);
-
+  test('shows channel messages only when a channel presentation exists', () {
+    final empty = UINavigationRegistry.resolve(_snapshot(const []));
     expect(
-      UINavigationRegistry.resolve(snapshot)
-          .where((item) => item.extensionId == 'loser'),
-      isEmpty,
+      empty.any((item) => item.route == AppRoutes.channelMessages),
+      isFalse,
+    );
+    final withChannel = UINavigationRegistry.resolve(
+      _snapshot([
+        _provider(
+          id: 'channel.wechat.presentation',
+          extensionId: 'com.amitia/channel-wechat',
+          capability: UICapability.channelPresentation,
+          metadata: const {
+            'channelId': 'wechat_personal',
+            'displayName': '个人微信',
+          },
+        ),
+      ]),
+    );
+    expect(
+      withChannel.any((item) => item.route == AppRoutes.channelMessages),
+      isTrue,
     );
   });
+
+  test('dashboard is not a drawer navigation entry', () {
+    final items = UINavigationRegistry.resolve(_snapshot(const []));
+    expect(
+      items.any(
+        (item) =>
+            item.id == 'builtin.dashboard' || item.route == AppRoutes.dashboard,
+      ),
+      isFalse,
+    );
+  });
+
+  test(
+    'hides route.registry navigation entries that lost route arbitration',
+    () {
+      final snapshot = _snapshot([
+        _routes(
+          extensionId: 'winner',
+          id: 'routes.winner',
+          path: '/extensions-ui/shared',
+          pageProviderId: 'page.winner',
+          priority: 100,
+          includeNavigation: true,
+        ),
+        _page('winner', 'page.winner'),
+        _routes(
+          extensionId: 'loser',
+          id: 'routes.loser',
+          path: '/extensions-ui/shared',
+          pageProviderId: 'page.loser',
+          priority: 1,
+          includeNavigation: true,
+        ),
+        _page('loser', 'page.loser'),
+      ]);
+
+      final extensions = UINavigationRegistry.resolve(
+        snapshot,
+      ).where((item) => item.extensionId != null).toList();
+      expect(extensions.map((item) => item.extensionId), ['winner']);
+    },
+  );
+
+  test(
+    'hides app.navigation links when the extension route is not effective',
+    () {
+      final snapshot = _snapshot([
+        _provider(
+          id: 'nav.loser',
+          extensionId: 'loser',
+          capability: UICapability.appNavigation,
+          metadata: const {
+            'navigationItems': [
+              {
+                'id': 'main',
+                'label': 'Loser',
+                'route': '/extensions-ui/shared',
+              },
+            ],
+          },
+        ),
+        _routes(
+          extensionId: 'loser',
+          id: 'routes.loser',
+          path: '/extensions-ui/shared',
+          pageProviderId: 'page.loser',
+          priority: 1,
+        ),
+        _page('loser', 'page.loser'),
+        _routes(
+          extensionId: 'winner',
+          id: 'routes.winner',
+          path: '/extensions-ui/shared',
+          pageProviderId: 'page.winner',
+          priority: 100,
+        ),
+        _page('winner', 'page.winner'),
+      ]);
+
+      expect(
+        UINavigationRegistry.resolve(
+          snapshot,
+        ).where((item) => item.extensionId == 'loser'),
+        isEmpty,
+      );
+    },
+  );
 
   test('preserves the more panel contract for effective extension routes', () {
     final snapshot = _snapshot([
@@ -185,8 +221,9 @@ void main() {
       _page('tools', 'page.tools'),
     ]);
 
-    final item = UINavigationRegistry.resolve(snapshot)
-        .singleWhere((entry) => entry.extensionId == 'tools');
+    final item = UINavigationRegistry.resolve(
+      snapshot,
+    ).singleWhere((entry) => entry.extensionId == 'tools');
     expect(item.panel, UINavigationPanel.more);
   });
 }

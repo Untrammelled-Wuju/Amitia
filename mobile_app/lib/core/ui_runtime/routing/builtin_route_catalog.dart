@@ -120,11 +120,7 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
     pageBuilder: (context, state) =>
         drawerSlideFadePage(state: state, child: const ConversationListPage()),
   ),
-  GoRoute(
-    path: '/dashboard',
-    pageBuilder: (context, state) =>
-        drawerSlideFadePage(state: state, child: const DashboardPage()),
-  ),
+  GoRoute(path: '/dashboard', redirect: (_, _) => AppRoutes.settingsOverview),
   GoRoute(
     path: '/agent',
     pageBuilder: (context, state) =>
@@ -461,6 +457,22 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
     path: '/settings',
     pageBuilder: (context, state) =>
         drawerSlideFadePage(state: state, child: const SettingsPage()),
+  ),
+  GoRoute(
+    path: '/settings/overview',
+    pageBuilder: (context, state) => slideFadePage(
+      context: context,
+      state: state,
+      child: const DashboardPage(initialTab: 0),
+    ),
+  ),
+  GoRoute(
+    path: '/settings/data',
+    pageBuilder: (context, state) => slideFadePage(
+      context: context,
+      state: state,
+      child: const DashboardPage(initialTab: 1),
+    ),
   ),
   GoRoute(
     path: '/settings/models',

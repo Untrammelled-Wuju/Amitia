@@ -31,6 +31,8 @@ abstract final class AppRoutes {
   static const workshopPetTasks = '/workshop/pet/tasks';
   static const workshopPetInstallations = '/workshop/pet/installations';
   static const settings = '/settings';
+  static const settingsOverview = '/settings/overview';
+  static const settingsData = '/settings/data';
   static const settingsModels = '/settings/models';
   static const settingsAppearance = '/settings/appearance';
   static const settingsUIProviders = '/settings/ui-providers';

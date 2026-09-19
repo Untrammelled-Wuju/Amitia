@@ -40,8 +40,19 @@ type Handler struct {
 	reconciliation *mindruntime.ReconciliationEngine
 	versionInfo    atomic.Value
 	artifactSvc    *artifact.Service
+	channelAccess  ChannelAvailability
 	shadowMu       sync.RWMutex
 	shadowState    mindruntime.ShadowState
+}
+
+type ChannelAvailability interface {
+	Has(channelID string) bool
+}
+
+type ChannelAvailabilityFunc func(channelID string) bool
+
+func (f ChannelAvailabilityFunc) Has(channelID string) bool {
+	return f != nil && f(channelID)
 }
 
 func NewHandler(srv Service, db *gorm.DB, chatSvc chat.Service, dataLifecycle *mindruntime.DataLifecycleCoordinator, unifiedEntry *interaction.UnifiedEntry, reconciliation *mindruntime.ReconciliationEngine, memorySvc memory.Service) *Handler {
@@ -52,6 +63,10 @@ func NewHandler(srv Service, db *gorm.DB, chatSvc chat.Service, dataLifecycle *m
 
 func (h *Handler) SetArtifactService(svc *artifact.Service) {
 	h.artifactSvc = svc
+}
+
+func (h *Handler) SetChannelAvailability(availability ChannelAvailability) {
+	h.channelAccess = availability
 }
 
 func (h *Handler) getDBPath() string {

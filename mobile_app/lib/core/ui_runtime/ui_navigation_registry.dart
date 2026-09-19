@@ -4,6 +4,7 @@ import '../../app/app_routes.dart';
 import 'ui_provider.dart';
 import 'ui_icon_registry.dart';
 import 'ui_route_registry.dart';
+import 'channel_presentation.dart';
 
 enum UINavigationPanel { main, more }
 
@@ -44,15 +45,6 @@ class UINavigationItem {
 abstract final class UINavigationRegistry {
   static const List<UINavigationItem> builtinItems = <UINavigationItem>[
     UINavigationItem(
-      id: 'builtin.dashboard',
-      label: '概览',
-      route: AppRoutes.dashboard,
-      icon: Icons.dashboard_outlined,
-      panel: UINavigationPanel.main,
-      order: 5,
-      builtin: true,
-    ),
-    UINavigationItem(
       id: 'builtin.characters',
       label: '角色',
       route: AppRoutes.characters,
@@ -90,15 +82,6 @@ abstract final class UINavigationRegistry {
       builtin: true,
     ),
     UINavigationItem(
-      id: 'builtin.channelMessages',
-      label: '渠道消息',
-      route: AppRoutes.channelMessages,
-      icon: Icons.forum_outlined,
-      panel: UINavigationPanel.main,
-      order: 55,
-      builtin: true,
-    ),
-    UINavigationItem(
       id: 'builtin.workshop',
       label: '创意工坊',
       route: AppRoutes.workshop,
@@ -109,8 +92,22 @@ abstract final class UINavigationRegistry {
     ),
   ];
 
+  static const UINavigationItem channelMessagesItem = UINavigationItem(
+    id: 'builtin.channelMessages',
+    label: '渠道消息',
+    route: AppRoutes.channelMessages,
+    icon: Icons.forum_outlined,
+    panel: UINavigationPanel.main,
+    order: 55,
+    builtin: true,
+  );
+
   static List<UINavigationItem> resolve(UIProviderSnapshot? snapshot) {
-    final items = <UINavigationItem>[...builtinItems];
+    final items = <UINavigationItem>[
+      ...builtinItems,
+      if (ChannelPresentationRegistry.resolve(snapshot).isNotEmpty)
+        channelMessagesItem,
+    ];
     if (snapshot == null) return _sorted(items);
     final platform = currentUIPlatform();
 

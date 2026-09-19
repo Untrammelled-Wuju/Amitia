@@ -48,6 +48,7 @@ class MessageDto {
   final String reasoningContent;
   final String status;
   final String msgType;
+  final String extensionType;
   final String createdAt;
   final String imageUrl;
   final String audioUrl;
@@ -69,6 +70,7 @@ class MessageDto {
     required this.createdAt,
     this.status = 'sent',
     this.msgType = 'text',
+    this.extensionType = '',
     this.imageUrl = '',
     this.audioUrl = '',
     this.audioDuration = 0,
@@ -90,6 +92,7 @@ class MessageDto {
       reasoningContent: json['reasoningContent'] as String? ?? '',
       status: json['status'] as String? ?? 'sent',
       msgType: json['msgType'] as String? ?? 'text',
+      extensionType: json['extensionType'] as String? ?? '',
       createdAt: json['createdAt'] as String? ?? '',
       imageUrl: json['imageUrl'] as String? ?? '',
       audioUrl: json['audioUrl'] as String? ?? '',

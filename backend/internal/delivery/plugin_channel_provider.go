@@ -22,11 +22,19 @@ type ChannelProviderDefinitionSource interface {
 }
 
 type PluginChannelProviderRegistry struct {
-	source ChannelProviderDefinitionSource
+	source            ChannelProviderDefinitionSource
+	extensionIsActive func(extensionID string) bool
 }
 
 func NewPluginChannelProviderRegistry(source ChannelProviderDefinitionSource) *PluginChannelProviderRegistry {
 	return &PluginChannelProviderRegistry{source: source}
+}
+
+func (r *PluginChannelProviderRegistry) SetExtensionActiveChecker(checker func(extensionID string) bool) {
+	if r == nil {
+		return
+	}
+	r.extensionIsActive = checker
 }
 
 func (r *PluginChannelProviderRegistry) Provider(channelID string) (*basechannel.HTTPProvider, error) {
@@ -150,6 +158,9 @@ func (r *PluginChannelProviderRegistry) Channels() []string {
 	result := make([]string, 0, len(definitions))
 	seen := make(map[string]struct{}, len(definitions))
 	for _, def := range definitions {
+		if !r.definitionActive(def) {
+			continue
+		}
 		id := channelIDFromDefinition(def)
 		if id == "" {
 			continue
@@ -213,11 +224,25 @@ func (r *PluginChannelProviderRegistry) definition(channelID string) (*capabilit
 		if def == nil {
 			continue
 		}
+		if !r.definitionActive(def) {
+			continue
+		}
 		if channelIDFromDefinition(def) == channelID {
 			return def, nil
 		}
 	}
 	return nil, fmt.Errorf("channel provider not found: %s", channelID)
+}
+
+func (r *PluginChannelProviderRegistry) definitionActive(def *capability.CapabilityProviderDefinition) bool {
+	if def == nil {
+		return false
+	}
+	if r == nil || r.extensionIsActive == nil {
+		return true
+	}
+	extensionID := strings.TrimSpace(def.ExtensionID)
+	return extensionID == "" || r.extensionIsActive(extensionID)
 }
 
 func channelIDFromDefinition(def *capability.CapabilityProviderDefinition) string {

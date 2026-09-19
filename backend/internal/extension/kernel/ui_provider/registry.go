@@ -63,6 +63,7 @@ const (
 	CapabilityConversationComposer        Capability = "conversation.composer"
 	CapabilityConversationOverlay         Capability = "conversation.overlay"
 	CapabilityConversationDrawer          Capability = "conversation.drawer"
+	CapabilityChannelPresentation         Capability = "channel.presentation"
 	CapabilityCharacterShell              Capability = "character.shell"
 	CapabilityCharacterDetail             Capability = "character.detail"
 	CapabilityMemoryShell                 Capability = "memory.shell"
@@ -82,8 +83,8 @@ var knownCapabilities = map[Capability]struct{}{
 	CapabilityRouteRegistry: {}, CapabilityPageProvider: {},
 	CapabilityConversationShell: {}, CapabilityConversationHeader: {}, CapabilityConversationMessages: {},
 	CapabilityConversationMessageRenderer: {}, CapabilityConversationSidebar: {}, CapabilityConversationComposer: {}, CapabilityConversationOverlay: {},
-	CapabilityConversationDrawer: {},
-	CapabilityCharacterShell:     {}, CapabilityCharacterDetail: {}, CapabilityMemoryShell: {}, CapabilityMemoryDetail: {},
+	CapabilityConversationDrawer: {}, CapabilityChannelPresentation: {},
+	CapabilityCharacterShell: {}, CapabilityCharacterDetail: {}, CapabilityMemoryShell: {}, CapabilityMemoryDetail: {},
 	CapabilitySettingsShell: {}, CapabilitySettingsSection: {}, CapabilityExtensionCenter: {}, CapabilityExtensionPage: {},
 	CapabilityTheme: {}, CapabilityTokens: {}, CapabilityIcons: {}, CapabilityComponents: {},
 }
@@ -176,7 +177,7 @@ func requiresTrustedRootProvider(capability Capability) bool {
 }
 func supportsDeclarativeEntry(capability Capability) bool {
 	switch capability {
-	case CapabilityAppNavigation, CapabilityRouteRegistry, CapabilityTheme, CapabilityTokens, CapabilityIcons, CapabilityComponents, CapabilityConversationDrawer:
+	case CapabilityAppNavigation, CapabilityRouteRegistry, CapabilityTheme, CapabilityTokens, CapabilityIcons, CapabilityComponents, CapabilityConversationDrawer, CapabilityChannelPresentation:
 		return true
 	default:
 		return false
@@ -460,10 +461,28 @@ func validateProviderMetadata(d ProviderDefinition) error {
 		}
 	}
 	if d.Capability == CapabilityConversationMessageRenderer {
-		for _, name := range []string{"messageTypes", "roles", "mimeTypes", "extensionTypes"} {
+		for _, name := range []string{"messageTypes", "roles", "mimeTypes", "extensionTypes", "channelIds"} {
 			if _, err := arrayField(name); err != nil {
 				return err
 			}
+		}
+	}
+	if d.Capability == CapabilityChannelPresentation {
+		channelID := strings.TrimSpace(fmt.Sprint(d.Metadata["channelId"]))
+		if !validChannelID(channelID) {
+			return errors.New("ui_provider: channel.presentation requires a valid channelId")
+		}
+		if err := optionalString(d.Metadata, "displayName"); err != nil {
+			return err
+		}
+		if err := optionalString(d.Metadata, "icon"); err != nil {
+			return err
+		}
+		if err := optionalInteger(d.Metadata, "order"); err != nil {
+			return err
+		}
+		if err := objectField("capabilities"); err != nil {
+			return err
 		}
 	}
 	if d.Capability == CapabilityComponents {
@@ -479,6 +498,22 @@ func validateProviderMetadata(d ProviderDefinition) error {
 		}
 	}
 	return nil
+}
+
+func validChannelID(value string) bool {
+	if value == "" || len(value) > 128 {
+		return false
+	}
+	for index, char := range value {
+		if index == 0 && !((char >= 'a' && char <= 'z') || (char >= '0' && char <= '9')) {
+			return false
+		}
+		if (char >= 'a' && char <= 'z') || (char >= '0' && char <= '9') || char == '_' || char == '-' || char == '.' {
+			continue
+		}
+		return false
+	}
+	return true
 }
 
 type ProfileScope struct {

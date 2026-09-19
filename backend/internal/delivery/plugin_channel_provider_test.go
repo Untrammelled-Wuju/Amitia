@@ -96,6 +96,37 @@ func TestPluginChannelProviderRegistryUsesGenericProviderMetadata(t *testing.T) 
 	}
 }
 
+func TestPluginChannelProviderRegistryFiltersInactiveExtensions(t *testing.T) {
+	registry := NewPluginChannelProviderRegistry(staticChannelProviderSource{
+		definitions: []*capability.CapabilityProviderDefinition{
+			{
+				ExtensionID:  "com.example/active",
+				ModuleID:     "channel-service",
+				CapabilityID: channelProviderCapability,
+				Metadata:     map[string]any{"channelId": "active_channel"},
+			},
+			{
+				ExtensionID:  "com.example/inactive",
+				ModuleID:     "channel-service",
+				CapabilityID: channelProviderCapability,
+				Metadata:     map[string]any{"channelId": "inactive_channel"},
+			},
+		},
+	})
+	registry.SetExtensionActiveChecker(func(extensionID string) bool {
+		return extensionID == "com.example/active"
+	})
+	if !registry.Has("active_channel") {
+		t.Fatal("expected active channel provider")
+	}
+	if registry.Has("inactive_channel") {
+		t.Fatal("inactive channel provider must not be exposed")
+	}
+	if channels := registry.Channels(); len(channels) != 1 || channels[0] != "active_channel" {
+		t.Fatalf("unexpected active channels: %#v", channels)
+	}
+}
+
 func TestResolveTransportBaseURLUsesDynamicPort(t *testing.T) {
 	t.Setenv("AMITIA_TEST_CHANNEL_PORT", "19880")
 	baseURL, err := resolveTransportBaseURL(map[string]any{

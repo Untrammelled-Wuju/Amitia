@@ -1848,6 +1848,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 
 	builtin.SetUIAgentPublisher(newUIAgentPublisher(b.extRoot, schemaRegistry, uiContribRepo, uiHost))
 	builtin.SetUIAgentClientRuntime(uiHostNotifier)
+	pluginChannelProviders.SetExtensionActiveChecker(container.IsExtensionActive)
 	builtContainer = container
 
 	if b.iosNativeProvider != nil {

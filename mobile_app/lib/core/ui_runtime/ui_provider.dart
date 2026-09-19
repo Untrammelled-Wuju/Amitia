@@ -36,6 +36,7 @@ abstract final class UICapability {
   static const conversationSidebar = 'conversation.sidebar';
   static const conversationComposer = 'conversation.composer';
   static const conversationOverlay = 'conversation.overlay';
+  static const channelPresentation = 'channel.presentation';
   static const characterShell = 'character.shell';
   static const characterDetail = 'character.detail';
   static const memoryShell = 'memory.shell';
@@ -62,6 +63,7 @@ abstract final class UICapability {
     conversationSidebar,
     conversationComposer,
     conversationOverlay,
+    channelPresentation,
     characterShell,
     characterDetail,
     memoryShell,

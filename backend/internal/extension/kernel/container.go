@@ -300,6 +300,18 @@ func (c *Container) Close() error {
 	return firstErr
 }
 
+func (c *Container) IsExtensionActive(extensionID string) bool {
+	if c == nil || c.InstallationRepository == nil {
+		return true
+	}
+	inst, err := c.InstallationRepository.GetInstallation(context.Background(), domain.ExtensionID(extensionID))
+	if err != nil {
+		return false
+	}
+	return inst.InstallationState == domain.InstallationStateInstalled &&
+		inst.EnablementState == domain.EnablementEnabled
+}
+
 func (c *Container) Recover(ctx context.Context) error {
 	if c.CandidateMgr != nil {
 		if _, err := c.CandidateMgr.RecoverOrphanCandidates(ctx); err != nil {

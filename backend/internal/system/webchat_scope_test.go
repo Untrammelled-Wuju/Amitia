@@ -97,6 +97,44 @@ func (f *fakeWebChatService) GetMessagesForSpace(string, string, int, int) ([]ch
 	return nil, 0, nil
 }
 
+func (f *fakeWebChatService) ListChannelConversationsForSpace(string, int) ([]chat.Conversation, error) {
+	var conversations []chat.Conversation
+	err := f.db.Where("deleted_at IS NULL AND channel <> '' AND channel <> 'web'").Order("updated_at DESC").Find(&conversations).Error
+	return conversations, err
+}
+
+func (f *fakeWebChatService) ListConversationSidebarForSpace(string, int, int) (*chat.ConversationSidebarResponse, error) {
+	return &chat.ConversationSidebarResponse{}, nil
+}
+
+func (f *fakeWebChatService) CreateProjectForSpace(*chat.CreateProjectRequest, string) (*chat.Project, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+
+func (f *fakeWebChatService) UpdateProjectForSpace(string, *chat.UpdateProjectRequest, string) (*chat.Project, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+
+func (f *fakeWebChatService) DeleteProjectForSpace(string, string) error {
+	return nil
+}
+
+func (f *fakeWebChatService) CreateProjectConversationForSpace(string, *chat.CreateConversationRequest, string) (*chat.Conversation, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+
+func (f *fakeWebChatService) MoveConversationToProjectForSpace(string, string, string) (*chat.Conversation, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+
+func (f *fakeWebChatService) UpdateConversationSidebarStateForSpace(string, *bool, *bool, string) (*chat.Conversation, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+
+func (f *fakeWebChatService) GetProjectOpenTargetForSpace(string, string) (*chat.ProjectOpenTarget, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+
 func (f *fakeWebChatService) CreateConversationForSpace(req *chat.CreateConversationRequest, spaceID string) (*chat.Conversation, error) {
 	conv, err := f.CreateConversation(req)
 	if conv != nil {
@@ -166,6 +204,41 @@ func TestWebChatCreateConvRejectsExternalChannelWithoutPeerID(t *testing.T) {
 	data := result["data"].(map[string]any)
 	if data["id"] != "conv-old" || data["channel"] != "qq" {
 		t.Fatalf("expected existing conv for char with bound conversation, got %#v", data)
+	}
+}
+
+type fakeChannelAvailability map[string]bool
+
+func (f fakeChannelAvailability) Has(channelID string) bool {
+	return f[channelID]
+}
+
+func TestWebChatListChannelConversationsFiltersUnavailableChannels(t *testing.T) {
+	h, db := newWebChatScopeTestHandler(t)
+	h.SetChannelAvailability(fakeChannelAvailability{"wechat_personal": true})
+	if err := db.Exec("INSERT INTO conversations (id, title, channel, source, peer_id) VALUES (?, ?, ?, ?, ?)", "conv-wechat", "微信", "wechat_personal", "channel", "peer-wechat").Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Exec("INSERT INTO conversations (id, title, channel, source, peer_id) VALUES (?, ?, ?, ?, ?)", "conv-qq", "QQ", "qq", "channel", "peer-qq").Error; err != nil {
+		t.Fatal(err)
+	}
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodGet, "/web-chat/channels", nil)
+	h.WebChatListChannelConversations(c)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+	var result struct {
+		Data struct {
+			Items []chat.Conversation `json:"items"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &result); err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Data.Items) != 1 || result.Data.Items[0].ID != "conv-wechat" {
+		t.Fatalf("unexpected channel conversations: %#v", result.Data.Items)
 	}
 }
 

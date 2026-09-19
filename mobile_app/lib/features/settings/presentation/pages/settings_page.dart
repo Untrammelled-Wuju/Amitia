@@ -49,6 +49,16 @@ List<SettingGroup> _settingsGroups({
     title: '系统与维护',
     items: [
       SettingItem(
+        title: '运行概览',
+        icon: Icons.monitor_heart_outlined,
+        route: AppRoutes.settingsOverview,
+      ),
+      SettingItem(
+        title: '运行数据',
+        icon: Icons.insights_outlined,
+        route: AppRoutes.settingsData,
+      ),
+      SettingItem(
         title: 'Runtime',
         icon: Icons.terminal,
         route: AppRoutes.settingsRuntime,

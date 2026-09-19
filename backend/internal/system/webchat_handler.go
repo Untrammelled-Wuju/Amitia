@@ -66,6 +66,17 @@ func (h *Handler) WebChatGetMessages(c *gin.Context) {
 	id := c.Param("id")
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "50"))
+	if h.channelAccess != nil {
+		conversation, err := h.requireWebChatConversation(id, webChatSpaceID(c))
+		if err != nil {
+			util.ErrorResponse(c, response.NotFound, "会话不存在", nil)
+			return
+		}
+		if conversation.Channel != "" && conversation.Channel != "web" && !h.channelAccess.Has(conversation.Channel) {
+			util.ErrorResponse(c, response.NotFound, "渠道消息不可用", nil)
+			return
+		}
+	}
 	scoped, ok := h.chatSvc.(webChatScopedService)
 	if !ok {
 		util.ErrorResponse(c, response.InternalError, "chat service does not provide user-scoped operations", nil)
