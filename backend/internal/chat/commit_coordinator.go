@@ -35,6 +35,7 @@ type MessageCommitEvent struct {
 	UserMessageSequence int64
 	UserMessage         string
 	Reply               string
+	Reasoning           string
 	Lines               []string
 	SpaceID             string
 	PeerID              string
@@ -49,6 +50,7 @@ type messageCommitPlan struct {
 	CharacterName   string
 	UserMessageID   string
 	Reply           string
+	Reasoning       string
 	Lines           []string
 	Source          string
 	Runtime         *interaction.RuntimeAssembly
@@ -200,6 +202,22 @@ func (s *service) commitInteraction(ctx context.Context, plan messageCommitPlan)
 		if err := tx.Exec("UPDATE conversations SET updated_at = ?, message_count = (SELECT COUNT(*) FROM messages WHERE conversation_id = ?) WHERE id = ?", now, plan.Conversation, plan.Conversation).Error; err != nil {
 			return err
 		}
+		if strings.TrimSpace(plan.Reasoning) != "" && len(result.MessageIDs) > 0 {
+			var reasoningMessageID string
+			if err := tx.Table("messages").
+				Select("id").
+				Where("id IN ? AND role = ?", result.MessageIDs, "assistant").
+				Order("sequence ASC").
+				Limit(1).
+				Scan(&reasoningMessageID).Error; err != nil {
+				return err
+			}
+			if reasoningMessageID != "" {
+				if err := tx.Model(&Message{}).Where("id = ?", reasoningMessageID).Update("reasoning_content", plan.Reasoning).Error; err != nil {
+					return err
+				}
+			}
+		}
 		if err := s.commitAttachmentsTx(tx, plan, plan.UserMessageID); err != nil {
 			return err
 		}
@@ -255,6 +273,7 @@ func (s *service) commitInteraction(ctx context.Context, plan messageCommitPlan)
 			UserMessageSequence: userMessageSequence,
 			UserMessage:         plan.Request.Message,
 			Reply:               plan.Reply,
+			Reasoning:           plan.Reasoning,
 			Lines:               plan.Lines,
 			SpaceID:             plan.Request.SpaceID,
 			PeerID:              plan.Request.PeerID,

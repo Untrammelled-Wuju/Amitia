@@ -103,6 +103,11 @@ SPDX-License-Identifier: AGPL-3.0-only
       />
     </template>
 
+    <div v-if="sending && !hasAssistantReply" class="generating-indicator">
+      <el-icon class="generating-spinner"><Loading /></el-icon>
+      <span>AI 正在生成回复</span>
+    </div>
+
     <transition name="fade">
       <el-button
         v-if="showScrollBtn"
@@ -196,6 +201,14 @@ const workspaceName = computed(() => {
     | undefined;
   return String(workspace?.workspaceName ?? workspace?.name ?? "").trim();
 });
+const hasAssistantReply = computed(() =>
+  props.messages.some(
+    (message) =>
+      message?.role === "assistant" &&
+      (String(message?.content || "").trim() !== "" ||
+        ["streaming", "sending"].includes(String(message?.status || ""))),
+  ),
+);
 
 const projectionContributions = computed(() => store.getVisibleContributions("chat.conversation.node", {
   ...(props.extensionContext ?? {}),
@@ -530,6 +543,26 @@ defineExpose({ rootEl });
 }
 
 .empty-chat :deep(.extension-slot) { width: min(100%, 680px); margin-top: 20px; }
+
+.generating-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  width: min(100%, 820px);
+  margin: 12px auto 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.generating-spinner {
+  animation: generating-spin 1s linear infinite;
+}
+
+@keyframes generating-spin {
+  to { transform: rotate(360deg); }
+}
+
 
 .messages-area > [data-message-id] { width: min(100%, 820px); margin: 0 auto; }
 .conversation-flow-item--entering { animation: conversationMessageIn 0.25s ease-out; }

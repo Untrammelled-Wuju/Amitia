@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/u-ai/backend/internal/extension/kernel/sandbox_webui"
 )
 
 type fixedResourceLinkResolver struct {
@@ -84,5 +86,19 @@ func TestResourceLinkHandlerRejectsInvalidToken(t *testing.T) {
 	handler.handleResourceLink(recorder, request)
 	if recorder.Code != http.StatusNotFound {
 		t.Fatalf("expected status 404, got %d", recorder.Code)
+	}
+}
+
+func TestWebUISessionDeleteIsIdempotent(t *testing.T) {
+	handler := &HTTPHandler{sandboxHost: sandbox_webui.NewHost()}
+	request := httptest.NewRequest(
+		http.MethodDelete,
+		"/api/extension/webui/session/sess_missing",
+		nil,
+	)
+	recorder := httptest.NewRecorder()
+	handler.handleWebUISessionItem(recorder, request)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", recorder.Code, recorder.Body.String())
 	}
 }

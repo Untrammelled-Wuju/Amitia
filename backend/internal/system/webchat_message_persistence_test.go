@@ -69,6 +69,48 @@ func TestPersistQueuedWebChatMessageIsImmediatelyQueryable(t *testing.T) {
 	}
 }
 
+func TestPersistQueuedWebChatMessageCreatesConversationWithDefaults(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "app.db")), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		sqlDB.Close()
+	})
+	if err := db.AutoMigrate(&chat.Conversation{}, &chat.Message{}); err != nil {
+		t.Fatal(err)
+	}
+	h := &Handler{db: db}
+	msg, err := h.persistQueuedWebChatMessage(
+		webChatSendRequest{},
+		"conv-new",
+		"char-1",
+		"mobile",
+		"request-new",
+		"第一条消息",
+		"",
+		nil,
+		nil,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if msg.ID == "" || msg.ConversationID != "conv-new" {
+		t.Fatalf("unexpected message: %#v", msg)
+	}
+	var conversation chat.Conversation
+	if err := db.Where("id = ?", "conv-new").First(&conversation).Error; err != nil {
+		t.Fatal(err)
+	}
+	if conversation.PinnedAt != "" || conversation.ArchivedAt != "" {
+		t.Fatalf("conversation defaults were not persisted: %#v", conversation)
+	}
+}
+
 func TestAssistantMessageEventFilter(t *testing.T) {
 	if isAssistantMessageEvent(MessageEvent{Role: "user"}) {
 		t.Fatal("user event must not be streamed")

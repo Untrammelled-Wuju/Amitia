@@ -35,9 +35,9 @@
         :class="{ active: conversation.id === selectedId }"
       >
         <button type="button" class="archive-item-main" @click="selectConversation(conversation)">
-          <el-icon><Box /></el-icon>
+          <ArchiveConversationIcon class="archive-item-icon" />
           <span class="archive-item-copy">
-            <strong>{{ conversation.title || "新对话" }}</strong>
+            <strong>{{ conversationTitle(conversation) }}</strong>
             <small>{{ formatTime(conversation.archivedAt) }} · {{ conversation.messageCount || 0 }} 条</small>
           </span>
         </button>
@@ -57,7 +57,7 @@
       <template v-if="selectedConversation">
         <header class="archive-main-header">
           <div>
-            <strong>{{ selectedConversation.title || "新对话" }}</strong>
+            <strong>{{ conversationTitle(selectedConversation) }}</strong>
             <small>归档于 {{ formatTime(selectedConversation.archivedAt) }}</small>
           </div>
           <el-button
@@ -90,9 +90,10 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
-import { Box, Refresh } from "@element-plus/icons-vue";
+import { Refresh } from "@element-plus/icons-vue";
 import { ElMessage } from "element-plus";
 import { useApi } from "@/composables/useApi";
+import ArchiveConversationIcon from "@/components/ArchiveConversationIcon.vue";
 import ChatBubble from "@/components/ChatBubble.vue";
 
 interface ArchivedConversation {
@@ -148,6 +149,14 @@ function characterName(characterId?: string) {
 
 function characterAvatar(characterId?: string) {
   return characters.value.find((item) => item.id === characterId)?.avatar || "";
+}
+
+function conversationTitle(conversation: ArchivedConversation) {
+  const title = conversation.title || "新对话";
+  const project = projects.value.find(
+    (item) => item.id === conversation.projectId,
+  );
+  return project?.name ? `${project.name} - ${title}` : title;
 }
 
 function scheduleSearch() {
@@ -242,6 +251,7 @@ onBeforeUnmount(() => {
 .archive-item-main { display: flex; align-items: center; gap: 9px; min-width: 0; flex: 1; min-height: 48px; padding: 5px 6px; border: 0; border-radius: 8px; background: transparent; color: inherit; cursor: pointer; font: inherit; text-align: left; }
 .archive-item-main:focus-visible { outline: 1px solid var(--ac-color-primary); outline-offset: -1px; }
 .archive-item-copy { min-width: 0; flex: 1; }
+.archive-item-icon { width: 16px; height: 16px; flex: 0 0 auto; }
 .archive-item strong, .archive-item small, .archive-main-header strong, .archive-main-header small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .archive-item strong, .archive-main-header strong { font-size: 13px; }
 .archive-item small, .archive-main-header small, .message-meta { margin-top: 2px; color: var(--text-muted); font-size: 10px; }

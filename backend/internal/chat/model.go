@@ -76,8 +76,8 @@ type Conversation struct {
 	PeerID       string  `gorm:"column:peer_id" json:"peerId"`
 	MessageCount int     `gorm:"column:message_count;default:0" json:"messageCount"`
 	StateVersion string  `gorm:"column:state_version" json:"stateVersion"`
-	PinnedAt     *string `gorm:"column:pinned_at" json:"pinnedAt,omitempty"`
-	ArchivedAt   *string `gorm:"column:archived_at" json:"archivedAt,omitempty"`
+	PinnedAt     string  `gorm:"column:pinned_at;not null;default:''" json:"pinnedAt,omitempty"`
+	ArchivedAt   string  `gorm:"column:archived_at;not null;default:''" json:"archivedAt,omitempty"`
 	CreatedAt    string  `gorm:"column:created_at" json:"createdAt"`
 	UpdatedAt    string  `gorm:"column:updated_at" json:"updatedAt"`
 	Revision     int64   `gorm:"column:revision;not null;default:1" json:"revision"`
@@ -107,6 +107,7 @@ type Message struct {
 	Sequence         int64   `gorm:"column:sequence;not null;default:0;index" json:"sequence"`
 	Role             string  `gorm:"column:role;not null" json:"role"`
 	Content          string  `gorm:"column:content;not null" json:"content"`
+	ReasoningContent string  `gorm:"column:reasoning_content;not null;default:''" json:"reasoningContent,omitempty"`
 	MsgType          string  `gorm:"column:msg_type;default:text" json:"msgType"`
 	ExtensionType    string  `gorm:"column:extension_type;default:" json:"extensionType"`
 	Tokens           int     `gorm:"column:tokens;default:0" json:"tokens"`
@@ -270,16 +271,16 @@ type ConversationQuery struct {
 }
 
 type Project struct {
-	ID          string  `gorm:"column:id;primaryKey" json:"id"`
-	SpaceID     string  `gorm:"column:space_id;not null;index" json:"-"`
-	Name        string  `gorm:"column:name;not null" json:"name"`
-	WorkspaceID string  `gorm:"column:workspace_id;not null;index" json:"workspaceId"`
-	DeviceID    string  `gorm:"column:device_id;not null;default:''" json:"deviceId"`
-	RootURI     string  `gorm:"column:root_uri;not null;default:''" json:"rootUri"`
-	PinnedAt    *string `gorm:"column:pinned_at" json:"pinnedAt,omitempty"`
-	CreatedAt   string  `gorm:"column:created_at" json:"createdAt"`
-	UpdatedAt   string  `gorm:"column:updated_at" json:"updatedAt"`
-	Revision    int64   `gorm:"column:revision;not null;default:1" json:"revision"`
+	ID          string `gorm:"column:id;primaryKey" json:"id"`
+	SpaceID     string `gorm:"column:space_id;not null;index" json:"-"`
+	Name        string `gorm:"column:name;not null" json:"name"`
+	WorkspaceID string `gorm:"column:workspace_id;not null;index" json:"workspaceId"`
+	DeviceID    string `gorm:"column:device_id;not null;default:''" json:"deviceId"`
+	RootURI     string `gorm:"column:root_uri;not null;default:''" json:"rootUri"`
+	PinnedAt    string `gorm:"column:pinned_at;not null;default:''" json:"pinnedAt,omitempty"`
+	CreatedAt   string `gorm:"column:created_at" json:"createdAt"`
+	UpdatedAt   string `gorm:"column:updated_at" json:"updatedAt"`
+	Revision    int64  `gorm:"column:revision;not null;default:1" json:"revision"`
 }
 
 func (Project) TableName() string { return "projects" }
@@ -432,6 +433,7 @@ type ProcessMessageResponse struct {
 	ConversationID string                   `json:"conversationId"`
 	Sequence       int64                    `gorm:"column:sequence;not null;default:0;index" json:"sequence"`
 	Reply          string                   `json:"reply"`
+	Reasoning      string                   `json:"reasoning,omitempty"`
 	Lines          []string                 `json:"lines"`
 	CharacterID    string                   `json:"characterId"`
 	CharacterName  string                   `json:"characterName"`

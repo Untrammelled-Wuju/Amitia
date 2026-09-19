@@ -48,15 +48,16 @@ func (s *service) recordMessageChangeTx(tx *gorm.DB, m *Message, op syncapi.Oper
 		return nil
 	}
 	payload, err := json.Marshal(map[string]interface{}{
-		"id":             m.ID,
-		"conversationId": m.ConversationID,
-		"characterId":    m.CharacterID,
-		"role":           m.Role,
-		"content":        m.Content,
-		"sequence":       m.Sequence,
-		"msgType":        m.MsgType,
-		"extensionType":  m.ExtensionType,
-		"source":         m.Source,
+		"id":               m.ID,
+		"conversationId":   m.ConversationID,
+		"characterId":      m.CharacterID,
+		"role":             m.Role,
+		"content":          m.Content,
+		"reasoningContent": m.ReasoningContent,
+		"sequence":         m.Sequence,
+		"msgType":          m.MsgType,
+		"extensionType":    m.ExtensionType,
+		"source":           m.Source,
 	})
 	if err != nil {
 		return err

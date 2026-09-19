@@ -50,8 +50,17 @@ func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, chatSvc chat.
 				"requestId":           event.RequestID,
 			}
 			if event.MessagePlan != nil {
-				for _, item := range event.MessagePlan.Items {
-					bus.PublishMessageCreated(event.ConversationID, item.MessageID, channel, "outbound", "assistant", item.Content, nowStr, event.Sequences[item.MessageID], metadata)
+				for index, item := range event.MessagePlan.Items {
+					itemMetadata := metadata
+					if index == 0 && event.Reasoning != "" {
+						itemMetadata = map[string]interface{}{
+							"userMessageId":       event.UserMessageID,
+							"userMessageSequence": event.UserMessageSequence,
+							"requestId":           event.RequestID,
+							"reasoningContent":    event.Reasoning,
+						}
+					}
+					bus.PublishMessageCreated(event.ConversationID, item.MessageID, channel, "outbound", "assistant", item.Content, nowStr, event.Sequences[item.MessageID], itemMetadata)
 				}
 				return
 			}
@@ -60,7 +69,16 @@ func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, chatSvc chat.
 				if i < len(event.Lines) {
 					content = event.Lines[i]
 				}
-				bus.PublishMessageCreated(event.ConversationID, msgID, channel, "outbound", "assistant", content, nowStr, event.Sequences[msgID], metadata)
+				itemMetadata := metadata
+				if i == 0 && event.Reasoning != "" {
+					itemMetadata = map[string]interface{}{
+						"userMessageId":       event.UserMessageID,
+						"userMessageSequence": event.UserMessageSequence,
+						"requestId":           event.RequestID,
+						"reasoningContent":    event.Reasoning,
+					}
+				}
+				bus.PublishMessageCreated(event.ConversationID, msgID, channel, "outbound", "assistant", content, nowStr, event.Sequences[msgID], itemMetadata)
 			}
 		}
 	})

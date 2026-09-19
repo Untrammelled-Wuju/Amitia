@@ -45,6 +45,7 @@ class MessageDto {
   final String characterId;
   final String role;
   final String content;
+  final String reasoningContent;
   final String status;
   final String msgType;
   final String createdAt;
@@ -64,6 +65,7 @@ class MessageDto {
     this.characterId = '',
     required this.role,
     required this.content,
+    this.reasoningContent = '',
     required this.createdAt,
     this.status = 'sent',
     this.msgType = 'text',
@@ -85,6 +87,7 @@ class MessageDto {
       characterId: (json['characterId'] ?? '').toString(),
       role: json['role'] as String? ?? '',
       content: json['content'] as String? ?? '',
+      reasoningContent: json['reasoningContent'] as String? ?? '',
       status: json['status'] as String? ?? 'sent',
       msgType: json['msgType'] as String? ?? 'text',
       createdAt: json['createdAt'] as String? ?? '',

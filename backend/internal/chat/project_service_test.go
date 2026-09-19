@@ -221,7 +221,7 @@ func TestSidebarConversationPinArchiveAndProjectPin(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if project.PinnedAt == nil || *project.PinnedAt == "" {
+	if project.PinnedAt == "" {
 		t.Fatalf("project was not pinned: %#v", project)
 	}
 }

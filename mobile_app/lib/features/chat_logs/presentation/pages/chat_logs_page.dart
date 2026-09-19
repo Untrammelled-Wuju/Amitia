@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
+import '../../../../core/models/character.dart';
 import '../../../../core/models/conversation.dart';
 import '../../../../core/models/project.dart';
 import '../../../../core/services/providers.dart';
@@ -62,7 +63,7 @@ class _ChatLogsPageState extends ConsumerState<ChatLogsPage> {
 
   Widget _buildFilters(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(
+      padding: EdgeInsets.fromLTRB(
         AppSpacing.pagePadding,
         AppSpacing.sm,
         AppSpacing.pagePadding,
@@ -93,7 +94,7 @@ class _ChatLogsPageState extends ConsumerState<ChatLogsPage> {
               unawaited(_load());
             },
           ),
-          const SizedBox(height: AppSpacing.sm),
+          SizedBox(height: AppSpacing.sm),
           TextField(
             controller: _searchController,
             decoration: InputDecoration(
@@ -163,8 +164,6 @@ class _ChatLogsPageState extends ConsumerState<ChatLogsPage> {
 
   @override
   Widget build(BuildContext context) {
-    final characters =
-        ref.watch(characterListProvider).valueOrNull ?? const <CharacterDto>[];
     return AmitiaScaffold(
       appBar: AmitiaAppBar(title: '归档对话', showBackButton: true),
       body: Column(
@@ -202,6 +201,9 @@ class _ChatLogsPageState extends ConsumerState<ChatLogsPage> {
                               MaterialPageRoute<void>(
                                 builder: (_) => ArchivedConversationDetailPage(
                                   conversation: conversation,
+                                  projectName: _projectName(
+                                    conversation.projectId,
+                                  ),
                                 ),
                               ),
                             ),
@@ -210,7 +212,7 @@ class _ChatLogsPageState extends ConsumerState<ChatLogsPage> {
                               child: Row(
                                 children: [
                                   Icon(
-                                    Icons.archive_outlined,
+                                    Icons.inventory_2_outlined,
                                     color: context.textTertiary,
                                   ),
                                   const SizedBox(width: 12),
@@ -221,9 +223,7 @@ class _ChatLogsPageState extends ConsumerState<ChatLogsPage> {
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
                                         Text(
-                                          conversation.title.trim().isEmpty
-                                              ? '新对话'
-                                              : conversation.title,
+                                          _conversationTitle(conversation),
                                           maxLines: 1,
                                           overflow: TextOverflow.ellipsis,
                                           style: AppTypography.cardTitle(
@@ -267,12 +267,34 @@ class _ChatLogsPageState extends ConsumerState<ChatLogsPage> {
       ),
     );
   }
+
+  String _projectName(String projectId) {
+    final id = projectId.trim();
+    if (id.isEmpty) return '';
+    for (final project in _projects) {
+      if (project.id == id) return project.name.trim();
+    }
+    return '';
+  }
+
+  String _conversationTitle(ConversationDto conversation) {
+    final title = conversation.title.trim().isEmpty
+        ? '新对话'
+        : conversation.title.trim();
+    final projectName = _projectName(conversation.projectId);
+    return projectName.isEmpty ? title : '$projectName - $title';
+  }
 }
 
 class ArchivedConversationDetailPage extends ConsumerStatefulWidget {
   final ConversationDto conversation;
+  final String projectName;
 
-  const ArchivedConversationDetailPage({super.key, required this.conversation});
+  const ArchivedConversationDetailPage({
+    super.key,
+    required this.conversation,
+    this.projectName = '',
+  });
 
   @override
   ConsumerState<ArchivedConversationDetailPage> createState() =>
@@ -312,11 +334,15 @@ class _ArchivedConversationDetailPageState
 
   @override
   Widget build(BuildContext context) {
+    final characters =
+        ref.watch(characterListProvider).valueOrNull ?? const <CharacterDto>[];
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
-        title: widget.conversation.title.trim().isEmpty
-            ? '归档对话'
-            : widget.conversation.title,
+        title: widget.projectName.trim().isEmpty
+            ? (widget.conversation.title.trim().isEmpty
+                  ? '归档对话'
+                  : widget.conversation.title)
+            : '${widget.projectName} - ${widget.conversation.title.trim().isEmpty ? '新对话' : widget.conversation.title}',
         showBackButton: true,
       ),
       body: _loading
@@ -366,6 +392,7 @@ ChatMessage _toChatMessage(MessageDto message) {
         : MessageRole.system,
     type: type,
     content: message.content,
+    reasoningContent: message.reasoningContent,
     time: DateTime.tryParse(message.createdAt) ?? DateTime.now(),
     status: MessageStatus.sent,
     mediaUrl: message.imageUrl.isNotEmpty

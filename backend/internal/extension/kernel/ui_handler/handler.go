@@ -1002,8 +1002,10 @@ func (h *HTTPHandler) handleWebUISessionItem(w http.ResponseWriter, r *http.Requ
 		switch r.Method {
 		case http.MethodDelete:
 			if err := h.sandboxHost.CloseSession(sessionID, "api_request"); err != nil {
-				writeError(w, http.StatusNotFound, "webui_session_not_found", err.Error())
-				return
+				if !errors.Is(err, sandbox_webui.ErrSessionNotFound) {
+					writeError(w, http.StatusNotFound, "webui_session_not_found", err.Error())
+					return
+				}
 			}
 			writeJSON(w, http.StatusOK, map[string]any{"closed": true, "sessionId": sessionID})
 		case http.MethodGet:

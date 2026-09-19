@@ -316,7 +316,7 @@ func (h *Handler) WebChatSendStream(c *gin.Context) {
 			Limit(1).
 			Row().Scan(&userMessageID)
 	}
-	startData := gin.H{"conversationId": result.ConversationID, "messageId": "", "userMessageId": userMessageID, "role": "assistant", "channel": "web", "createdAt": time.Now().Format("2006-01-02 15:04:05")}
+	startData := gin.H{"conversationId": result.ConversationID, "messageId": "", "userMessageId": userMessageID, "role": "assistant", "channel": "web", "createdAt": time.Now().Format("2006-01-02 15:04:05"), "reasoningContent": result.Reasoning}
 	if len(result.MessageIDs) > 0 {
 		startData["messageId"] = result.MessageIDs[0]
 	}

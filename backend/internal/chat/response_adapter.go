@@ -15,6 +15,7 @@ func convertProcessMessageResponse(resp *ProcessMessageResponse) *interaction.Pr
 		ConversationID: resp.ConversationID,
 		Sequence:       resp.Sequence,
 		Reply:          resp.Reply,
+		Reasoning:      resp.Reasoning,
 		Lines:          lines,
 		CharacterID:    resp.CharacterID,
 		CharacterName:  resp.CharacterName,

@@ -103,6 +103,7 @@ export function useWebChatSSE(
       direction: event.direction,
       msgType: metadata.messageType,
       rawError: metadata.rawError,
+      reasoningContent: metadata.reasoningContent,
       requestId: metadata.requestId,
       anchorMessageId: metadata.userMessageId,
       anchorSequence: metadata.userMessageSequence,

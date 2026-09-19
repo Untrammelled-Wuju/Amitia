@@ -65,6 +65,7 @@ class ConversationRuntimeController extends ChangeNotifier {
       role: message.role,
       type: message.type,
       content: message.content,
+      reasoningContent: message.reasoningContent,
       time: message.time,
       status: status ?? message.status,
       agentTaskId: message.agentTaskId,
@@ -505,6 +506,9 @@ class ConversationRuntimeController extends ChangeNotifier {
             content: dto.content.trim().isNotEmpty || existing == null
                 ? dto.content
                 : existing.content,
+            reasoningContent: dto.reasoningContent.isNotEmpty
+                ? dto.reasoningContent
+                : existing?.reasoningContent ?? '',
             time:
                 DateTime.tryParse(dto.createdAt) ??
                 existing?.time ??

@@ -164,6 +164,7 @@ CREATE TABLE IF NOT EXISTS messages (
     sequence INTEGER NOT NULL DEFAULT 0,
     role TEXT NOT NULL,
     content TEXT NOT NULL,
+    reasoning_content TEXT NOT NULL DEFAULT '',
     msg_type TEXT DEFAULT 'text',
     tokens INTEGER DEFAULT 0,
     source TEXT DEFAULT 'manual',

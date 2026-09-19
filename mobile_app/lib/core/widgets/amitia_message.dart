@@ -185,6 +185,44 @@ class AmitiaMessageBubble extends StatelessWidget {
               ),
             ),
           ],
+          if (message.reasoningContent.trim().isNotEmpty)
+            Theme(
+              data: Theme.of(
+                context,
+              ).copyWith(dividerColor: Colors.transparent),
+              child: ExpansionTile(
+                tilePadding: EdgeInsets.zero,
+                childrenPadding: const EdgeInsets.only(bottom: 6),
+                dense: true,
+                iconColor: context.textTertiary,
+                collapsedIconColor: context.textTertiary,
+                title: Text(
+                  '思考内容',
+                  style: AppTypography.label(
+                    context,
+                  ).copyWith(color: context.textTertiary),
+                ),
+                children: [
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: context.surfaceSecondary,
+                      borderRadius: AppRadius.brSmall,
+                    ),
+                    child: SelectableText(
+                      message.reasoningContent,
+                      style: AppTypography.bodySmall(
+                        context,
+                      ).copyWith(color: context.textSecondary),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           _buildContent(context, isUser),
           if (!(showThinking && message.content.trim().isEmpty))
             Padding(
@@ -476,7 +514,7 @@ class _UnifiedAgentMessageState extends State<_UnifiedAgentMessage> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            widget.showThinking ? '思考中' : '执行过程',
+                            widget.showThinking ? 'AI 正在生成回复' : '执行过程',
                             style: AppTypography.bodySmall(context).copyWith(
                               fontWeight: FontWeight.w600,
                               fontSize: 12,
@@ -485,7 +523,7 @@ class _UnifiedAgentMessageState extends State<_UnifiedAgentMessage> {
                           const SizedBox(height: 2),
                           Text(
                             count == 0
-                                ? '正在处理你的请求'
+                                ? '正在思考并组织回复'
                                 : widget.showThinking
                                 ? '正在处理 · 已完成 $count 个工具调用'
                                 : '已完成 $count 个工具调用',
@@ -1936,10 +1974,7 @@ class _AmitiaChatInputState extends State<AmitiaChatInput> {
           decoration: BoxDecoration(
             color: context.surfacePrimary,
             borderRadius: BorderRadius.circular(23),
-            border: Border.all(
-              color: context.borderPrimary,
-              width: 0.8,
-            ),
+            border: Border.all(color: context.borderPrimary, width: 0.8),
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withValues(

@@ -204,6 +204,7 @@ func DefaultMigrations() []Migration {
 		ConversationWorkspaceBindingsBaselineRepairMigration(),
 		SidebarProjectsMigration(),
 		SidebarPreferencesMigration(),
+		MessageReasoningContentMigration(),
 	}
 }
 

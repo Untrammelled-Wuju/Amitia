@@ -112,6 +112,12 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         oldProjectId == newProjectId) {
       return;
     }
+    final runtimeConversationId = _runtime.conversationId?.trim() ?? '';
+    if (newConversationId.isNotEmpty &&
+        newConversationId == _routeSyncedConversationId &&
+        newConversationId == runtimeConversationId) {
+      return;
+    }
     _routeSyncedConversationId = '';
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;

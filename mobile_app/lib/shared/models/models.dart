@@ -31,6 +31,7 @@ class ChatMessage {
   final MessageRole role;
   final MessageType type;
   final String content;
+  final String reasoningContent;
   final DateTime time;
   final MessageStatus status;
   final String? agentTaskId;
@@ -55,6 +56,7 @@ class ChatMessage {
     required this.role,
     required this.type,
     required this.content,
+    this.reasoningContent = '',
     required this.time,
     this.status = MessageStatus.sent,
     this.agentTaskId,

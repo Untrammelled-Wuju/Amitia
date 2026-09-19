@@ -33,6 +33,10 @@ SPDX-License-Identifier: AGPL-3.0-only
         >
         <slot name="badges" :message="message" />
       </div>
+      <details v-if="message.reasoningContent" class="reasoning-block">
+        <summary>思考内容</summary>
+        <div class="reasoning-text">{{ message.reasoningContent }}</div>
+      </details>
       <MediaAttachmentPreview
         :image-url="(message as any).imageUrl"
         :video-url="(message as any).videoUrl"
@@ -163,6 +167,7 @@ const props = defineProps<{
     audioDuration?: number;
     typingStart?: number;
     typingDone?: boolean;
+    reasoningContent?: string;
   };
   charName?: string;
   charAvatar?: string;
@@ -479,6 +484,28 @@ async function copyContent() {
 .chat-bubble.assistant .bubble-text { padding: 5px 1px 7px; }
 .chat-bubble.user .bubble-text { padding: 8px 12px 9px; }
 .bubble-meta { margin-bottom: 2px; }
+.reasoning-block {
+  max-width: min(82%, 720px);
+  margin: 4px 0 6px;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+.reasoning-block summary {
+  width: fit-content;
+  cursor: pointer;
+  user-select: none;
+}
+.reasoning-text {
+  margin-top: 6px;
+  padding: 8px 10px;
+  border-left: 2px solid var(--surface-border);
+  border-radius: 0 6px 6px 0;
+  background: color-mix(in srgb, var(--surface-bg) 72%, transparent);
+  color: var(--text-secondary);
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
 .bubble-actions { padding-inline: 1px; }
 
 </style>

@@ -525,7 +525,7 @@ func (h *Handler) WebChatSend(c *gin.Context) {
 		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
 	}
-	util.SuccessResponse(c, gin.H{"conversationId": orchResult.Response.ConversationID, "reply": orchResult.Response.Reply, "messageIds": orchResult.Response.MessageIDs, "characterName": orchResult.Response.CharacterName, "requestId": requestID, "sessionId": sessionID, "spaceId": spaceID, "source": source})
+	util.SuccessResponse(c, gin.H{"conversationId": orchResult.Response.ConversationID, "reply": orchResult.Response.Reply, "reasoning": orchResult.Response.Reasoning, "messageIds": orchResult.Response.MessageIDs, "characterName": orchResult.Response.CharacterName, "requestId": requestID, "sessionId": sessionID, "spaceId": spaceID, "source": source})
 }
 
 func (h *Handler) WebChatSubmitMessage(c *gin.Context) {
