@@ -973,40 +973,51 @@ class _ConversationActionMenu extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: context.surfacePrimary,
-      elevation: 8,
-      shadowColor: Colors.black.withValues(alpha: 0.2),
-      borderRadius: BorderRadius.circular(14),
-      clipBehavior: Clip.antiAlias,
-      child: SizedBox(
-        width: 190,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 6),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _item(
-                context,
-                icon: Icons.drive_file_rename_outline,
-                label: '重命名',
-                value: _ConversationAction.rename,
-              ),
-              _divider(context),
-              _item(
-                context,
-                icon: Icons.archive_outlined,
-                label: '归档',
-                value: _ConversationAction.archive,
-              ),
-              _divider(context),
-              _item(
-                context,
-                icon: pinned ? Icons.push_pin : Icons.push_pin_outlined,
-                label: pinned ? '取消置顶' : '置顶',
-                value: _ConversationAction.pin,
-              ),
-            ],
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.18),
+            blurRadius: 20,
+            spreadRadius: 1,
+            offset: Offset.zero,
+          ),
+        ],
+      ),
+      child: Material(
+        color: context.surfacePrimary,
+        borderRadius: BorderRadius.circular(14),
+        clipBehavior: Clip.antiAlias,
+        child: SizedBox(
+          width: 190,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _item(
+                  context,
+                  icon: Icons.drive_file_rename_outline,
+                  label: '重命名',
+                  value: _ConversationAction.rename,
+                ),
+                _divider(context),
+                _item(
+                  context,
+                  icon: Icons.archive_outlined,
+                  label: '归档',
+                  value: _ConversationAction.archive,
+                ),
+                _divider(context),
+                _item(
+                  context,
+                  icon: pinned ? Icons.push_pin : Icons.push_pin_outlined,
+                  label: pinned ? '取消置顶' : '置顶',
+                  value: _ConversationAction.pin,
+                ),
+              ],
+            ),
           ),
         ),
       ),

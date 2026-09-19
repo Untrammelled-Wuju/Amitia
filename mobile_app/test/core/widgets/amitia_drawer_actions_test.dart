@@ -16,6 +16,8 @@ void main() {
     expect(source, contains('alignment: Alignment.bottomRight'));
     expect(source, contains('width: 190'));
     expect(source, contains('BorderRadius.circular(14)'));
+    expect(source, contains('offset: Offset.zero'));
+    expect(source, contains('spreadRadius: 1'));
     expect(source, contains('height: 46'));
     expect(source, contains('Divider('));
     expect(source, contains("label: '重命名'"));
