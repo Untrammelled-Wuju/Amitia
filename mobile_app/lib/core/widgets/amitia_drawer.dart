@@ -724,8 +724,8 @@ class _DrawerMainPanel extends StatelessWidget {
                             IconButton(
                               tooltip: '添加项目文件夹',
                               onPressed: onAddProject,
-                              icon: const Icon(
-                                Icons.create_new_folder_outlined,
+                              icon: _AddProjectFolderIcon(
+                                color: IconTheme.of(context).color,
                               ),
                             ),
                           ],
@@ -1406,6 +1406,64 @@ class _DrawerHeader extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+class _AddProjectFolderIcon extends StatelessWidget {
+  final Color? color;
+
+  const _AddProjectFolderIcon({this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomPaint(
+      size: const Size(21, 20),
+      painter: _AddProjectFolderIconPainter(
+        color: color ?? context.textSecondary,
+      ),
+    );
+  }
+}
+
+class _AddProjectFolderIconPainter extends CustomPainter {
+  final Color color;
+
+  const _AddProjectFolderIconPainter({required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.7
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+    final folder = Path()
+      ..moveTo(size.width * 0.10, size.height * 0.30)
+      ..lineTo(size.width * 0.42, size.height * 0.30)
+      ..lineTo(size.width * 0.54, size.height * 0.45)
+      ..lineTo(size.width * 0.90, size.height * 0.45)
+      ..lineTo(size.width * 0.90, size.height * 0.84)
+      ..lineTo(size.width * 0.10, size.height * 0.84)
+      ..close();
+    canvas.drawPath(folder, paint);
+    final center = Offset(size.width * 0.70, size.height * 0.65);
+    final arm = size.width * 0.10;
+    canvas.drawLine(
+      Offset(center.dx - arm, center.dy),
+      Offset(center.dx + arm, center.dy),
+      paint,
+    );
+    canvas.drawLine(
+      Offset(center.dx, center.dy - arm),
+      Offset(center.dx, center.dy + arm),
+      paint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _AddProjectFolderIconPainter oldDelegate) {
+    return oldDelegate.color != color;
   }
 }
 
