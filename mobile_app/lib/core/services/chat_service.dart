@@ -398,6 +398,7 @@ class ChatService {
 
   Stream<ChatStreamEvent> submitMessageStream({
     required String message,
+    String? clientMessageId,
     String? conversationId,
     String? characterId,
     String? imageUrl,
@@ -409,7 +410,10 @@ class ChatService {
     required ChatStreamCancellation cancellation,
   }) async* {
     final now = DateTime.now().microsecondsSinceEpoch;
-    final requestId = 'mobile-$now';
+    final normalizedClientMessageId = clientMessageId?.trim() ?? '';
+    final requestId = normalizedClientMessageId.isEmpty
+        ? 'mobile-$now'
+        : normalizedClientMessageId;
     final stream = await _api.postStream(
       '/api/web-chat/send-stream',
       data: {
@@ -524,6 +528,7 @@ class ChatService {
 
   Future<ChatSubmitResult> submitMessage({
     required String message,
+    String? clientMessageId,
     String? conversationId,
     String? characterId,
     String? imageUrl,
@@ -534,7 +539,10 @@ class ChatService {
     ConversationWorkspaceDto? workspace,
   }) async {
     final now = DateTime.now().microsecondsSinceEpoch;
-    final requestId = 'mobile-$now';
+    final normalizedClientMessageId = clientMessageId?.trim() ?? '';
+    final requestId = normalizedClientMessageId.isEmpty
+        ? 'mobile-$now'
+        : normalizedClientMessageId;
     final resp = await _api.post<Map<String, dynamic>>(
       '/api/web-chat/messages',
       data: {

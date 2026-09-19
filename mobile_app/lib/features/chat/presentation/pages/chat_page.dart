@@ -90,10 +90,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     _activeConversationIdController = ref.read(
       activeConversationIdProvider.notifier,
     );
-    _runtime = ConversationRuntimeController(
-      ref.read(chatServiceProvider),
-      ref.read(emoteServiceProvider),
-    );
+    _runtime = ref.read(conversationRuntimeControllerProvider);
     _runtime.addListener(_onRuntimeChanged);
     _composerController.addListener(_handleComposerChanged);
     WidgetsBinding.instance.addPostFrameCallback(
@@ -335,7 +332,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     unawaited(_voiceInputSubscription?.cancel());
     unawaited(_realtimeAudio.stopCapture());
     _runtime.removeListener(_onRuntimeChanged);
-    _runtime.dispose();
     _scrollController.dispose();
     _composerController.dispose();
     super.dispose();

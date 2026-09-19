@@ -3,10 +3,12 @@ import 'dart:collection';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/models/conversation.dart';
 import '../../../core/services/chat_service.dart';
 import '../../../core/services/channel_service.dart';
+import '../../../core/services/providers.dart';
 import '../../../shared/models/models.dart';
 
 /// UI-agnostic conversation runtime shared by the built-in UI and extension UI.
@@ -294,6 +296,7 @@ class ConversationRuntimeController extends ChangeNotifier {
     try {
       await for (final event in _chatService.submitMessageStream(
         message: message,
+        clientMessageId: localMessage.renderId,
         conversationId: _conversationId,
         characterId: _characterId,
         imageUrl: imageUrl,
@@ -483,6 +486,10 @@ class ConversationRuntimeController extends ChangeNotifier {
     final localById = <String, ChatMessage>{
       for (final message in _messages) message.id: message,
     };
+    final localByRenderId = <String, ChatMessage>{
+      for (final message in _messages)
+        if (message.renderId.trim().isNotEmpty) message.renderId: message,
+    };
     final transientErrors = _messages
         .where(
           (message) =>
@@ -493,14 +500,21 @@ class ConversationRuntimeController extends ChangeNotifier {
         .toList(growable: false);
     final mapped = persisted
         .map((dto) {
-          final existing = localById[dto.id];
+          final persistedRequestId = dto.requestId.trim();
+          final existing =
+              localById[dto.id] ??
+              (persistedRequestId.isEmpty
+                  ? null
+                  : localByRenderId[persistedRequestId]);
           final type = _typeForDto(dto, existing);
           final agentTask = type == MessageType.agentTask
               ? _agentTaskPayload(dto.content)
               : const <String, dynamic>{};
           return ChatMessage(
             id: dto.id,
-            renderId: existing?.renderId ?? dto.id,
+            renderId:
+                existing?.renderId ??
+                (persistedRequestId.isEmpty ? dto.id : persistedRequestId),
             role: _roleFor(dto.role),
             type: type,
             content: dto.content.trim().isNotEmpty || existing == null
@@ -584,6 +598,10 @@ class ConversationRuntimeController extends ChangeNotifier {
 
   bool _samePersistedMessage(ChatMessage local, ChatMessage persisted) {
     if (local.id == persisted.id) return true;
+    if (local.renderId.trim().isNotEmpty &&
+        local.renderId == persisted.renderId) {
+      return true;
+    }
     return local.role == persisted.role && local.content == persisted.content;
   }
 
@@ -985,6 +1003,11 @@ class ConversationRuntimeController extends ChangeNotifier {
   }) async {
     final id = conversationId.trim();
     if (id.isEmpty) return;
+    if (_conversationId == id) {
+      _characterId = characterId?.trim().isEmpty == true ? null : characterId;
+      await _syncMessages();
+      return;
+    }
     debugPrint('Chat open conversation id=$id');
     _activeSendCancellation?.cancel('conversation changed');
     _activeSendCancellation = null;
@@ -1091,3 +1114,13 @@ class ConversationRuntimeController extends ChangeNotifier {
           'replyToExcerpt': message.replyToExcerpt,
       };
 }
+
+final conversationRuntimeControllerProvider =
+    ChangeNotifierProvider<ConversationRuntimeController>((ref) {
+      final controller = ConversationRuntimeController(
+        ref.read(chatServiceProvider),
+        ref.read(emoteServiceProvider),
+      );
+      ref.onDispose(controller.dispose);
+      return controller;
+    });
