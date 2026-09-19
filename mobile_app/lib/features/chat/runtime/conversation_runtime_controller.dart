@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:collection';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
@@ -10,6 +9,7 @@ import '../../../core/services/chat_service.dart';
 import '../../../core/services/channel_service.dart';
 import '../../../core/services/providers.dart';
 import '../../../shared/models/models.dart';
+import 'conversation_message_ledger.dart';
 
 /// UI-agnostic conversation runtime shared by the built-in UI and extension UI.
 ///
@@ -21,7 +21,7 @@ class ConversationRuntimeController extends ChangeNotifier {
 
   final ChatService _chatService;
   final EmoteService _emoteService;
-  final List<ChatMessage> _messages = <ChatMessage>[];
+  final ConversationMessageLedger _messages = ConversationMessageLedger();
   String? _conversationId;
   String? _characterId;
   ConversationWorkspaceDto? _workspace;
@@ -37,8 +37,7 @@ class ConversationRuntimeController extends ChangeNotifier {
 
   static const Duration _liveSyncInterval = Duration(seconds: 15);
 
-  UnmodifiableListView<ChatMessage> get messages =>
-      UnmodifiableListView<ChatMessage>(_messages);
+  List<ChatMessage> get messages => _messages.messages;
   String? get conversationId => _conversationId;
   ConversationWorkspaceDto? get workspace => _workspace;
   bool get sending => _sending;
@@ -288,7 +287,7 @@ class ConversationRuntimeController extends ChangeNotifier {
     String? replyToMessageId,
   }) async {
     final pendingMessage = _copy(localMessage, sequence: _nextLocalSequence());
-    _messages.add(pendingMessage);
+    _messages.upsert(pendingMessage);
     debugPrint(
       'Chat local message added id=${pendingMessage.id} total=${_messages.length}',
     );
@@ -356,16 +355,18 @@ class ConversationRuntimeController extends ChangeNotifier {
         debugPrint(line);
       }
       _lastError = error;
-      final localIndex = _messages.indexWhere(
-        (m) =>
-            m.id == pendingMessage.id ||
-            (m.role == MessageRole.user && m.status == MessageStatus.sending),
-      );
-      if (localIndex >= 0) {
-        _messages[localIndex] = _copy(
-          _messages[localIndex],
-          status: MessageStatus.error,
-        );
+      var localMessage = _messages.findById(pendingMessage.id);
+      if (localMessage == null) {
+        for (final message in _messages.messages) {
+          if (message.role == MessageRole.user &&
+              message.status == MessageStatus.sending) {
+            localMessage = message;
+            break;
+          }
+        }
+      }
+      if (localMessage != null) {
+        _messages.upsert(_copy(localMessage, status: MessageStatus.error));
       }
     } finally {
       if (identical(_activeSendCancellation, cancellation)) {
@@ -389,12 +390,14 @@ class ConversationRuntimeController extends ChangeNotifier {
       _restartLiveSync();
     }
     final userMessageId = (data['userMessageId'] ?? '').toString().trim();
-    final localIndex = _messages.indexWhere((m) => m.id == localMessage.id);
-    if (localIndex >= 0) {
-      _messages[localIndex] = _copy(
-        _messages[localIndex],
-        id: userMessageId.isEmpty ? null : userMessageId,
-        status: MessageStatus.sent,
+    final current = _messages.findById(localMessage.id);
+    if (current != null) {
+      _messages.upsert(
+        _copy(
+          current,
+          id: userMessageId.isEmpty ? null : userMessageId,
+          status: MessageStatus.sent,
+        ),
       );
       notifyListeners();
     }
@@ -423,8 +426,9 @@ class ConversationRuntimeController extends ChangeNotifier {
         DateTime.now();
     final audioUrl = (data['audioUrl'] ?? '').toString().trim();
     final duration = (data['duration'] as num?)?.toDouble() ?? 0;
-    final index = _messages.indexWhere((message) => message.id == id);
-    final existing = index >= 0 ? _messages[index] : null;
+    final existing =
+        _messages.findById(id) ??
+        _messages.findByRenderId(id, role: MessageRole.assistant);
     final next = ChatMessage(
       id: id,
       renderId: existing?.renderId ?? id,
@@ -443,11 +447,7 @@ class ConversationRuntimeController extends ChangeNotifier {
       replyToMessageId: existing?.replyToMessageId,
       replyToExcerpt: existing?.replyToExcerpt,
     );
-    if (index >= 0) {
-      _messages[index] = next;
-    } else {
-      _messages.add(next);
-    }
+    _messages.upsert(next);
     notifyListeners();
   }
 
@@ -480,7 +480,6 @@ class ConversationRuntimeController extends ChangeNotifier {
   Future<void> _syncMessages({bool background = false}) async {
     final conv = _conversationId;
     if (conv == null || conv.isEmpty) return;
-    if (background && _sending) return;
     final syncEpoch = ++_messageSyncEpoch;
     final persisted = await _chatService.getMessages(conv, latest: true);
     debugPrint(
@@ -488,8 +487,7 @@ class ConversationRuntimeController extends ChangeNotifier {
     );
     if (_disposed ||
         syncEpoch != _messageSyncEpoch ||
-        _conversationId != conv ||
-        (background && _sending)) {
+        _conversationId != conv) {
       return;
     }
     if (persisted.isEmpty) {
@@ -497,164 +495,82 @@ class ConversationRuntimeController extends ChangeNotifier {
       return;
     }
 
-    final localById = <String, ChatMessage>{
-      for (final message in _messages) message.id: message,
-    };
-    final localByRoleAndRenderId = <String, ChatMessage>{
-      for (final message in _messages)
-        if (message.renderId.trim().isNotEmpty)
-          '${message.role.name}:${message.renderId}': message,
-    };
-    final usedRenderIds = <String>{};
-    final transientErrors = _messages
-        .where(
-          (message) =>
-              message.role == MessageRole.assistant &&
-              message.status == MessageStatus.error &&
-              message.id.contains('-error-'),
-        )
-        .toList(growable: false);
-    final mapped = persisted
-        .map((dto) {
-          final persistedRequestId = dto.requestId.trim();
-          final role = _roleFor(dto.role);
-          var existing = localById[dto.id];
-          if (existing != null && existing.role != role) existing = null;
-          if (existing == null && persistedRequestId.isNotEmpty) {
-            existing =
-                localByRoleAndRenderId['${role.name}:$persistedRequestId'];
-          }
-          final type = _typeForDto(dto, existing);
-          final agentTask = type == MessageType.agentTask
-              ? _agentTaskPayload(dto.content)
-              : const <String, dynamic>{};
-          final preferredRenderId =
-              existing?.renderId ??
-              (role == MessageRole.user && persistedRequestId.isNotEmpty
-                  ? persistedRequestId
-                  : dto.id);
-          final renderId = _uniqueRenderId(
-            preferredRenderId,
-            dto.id,
-            usedRenderIds,
-          );
-          return ChatMessage(
-            id: dto.id,
-            renderId: renderId,
-            role: role,
-            type: type,
-            content: dto.content.trim().isNotEmpty || existing == null
-                ? dto.content
-                : existing.content,
-            reasoningContent: dto.reasoningContent.isNotEmpty
-                ? dto.reasoningContent
-                : existing?.reasoningContent ?? '',
-            time:
-                DateTime.tryParse(dto.createdAt) ??
-                existing?.time ??
-                DateTime.now(),
-            sequence: dto.sequence > 0 ? dto.sequence : existing?.sequence,
-            status: dto.status == 'failed'
-                ? MessageStatus.error
-                : MessageStatus.delivered,
-            agentTaskId:
-                _firstString(agentTask, const <String>[
-                  'taskRunId',
-                  'task_run_id',
-                  'runId',
-                ]) ??
-                existing?.agentTaskId,
-            agentTaskTitle:
-                _firstString(agentTask, const <String>[
-                  'title',
-                  'taskTitle',
-                  'taskDefinitionId',
-                ]) ??
-                existing?.agentTaskTitle,
-            agentTaskSteps:
-                _stringList(agentTask['steps']) ?? existing?.agentTaskSteps,
-            agentTaskProgress:
-                _progressInt(agentTask) ?? existing?.agentTaskProgress,
-            agentTaskElapsed:
-                _firstString(agentTask, const <String>[
-                  'elapsed',
-                  'elapsedTime',
-                ]) ??
-                existing?.agentTaskElapsed,
-            fileName: existing?.fileName,
-            fileSizeKB: existing?.fileSizeKB,
-            resourceUri: _resourceForDto(dto, existing),
-            mediaUrl: existing?.mediaUrl,
-            mimeType: existing?.mimeType,
-            durationMs: dto.audioDuration > 0
-                ? (dto.audioDuration * 1000).round()
-                : existing?.durationMs,
-            toolName: existing?.toolName,
-            toolResult: existing?.toolResult,
-            replyToMessageId:
-                dto.replyToMessageId ?? existing?.replyToMessageId,
-            replyToExcerpt: dto.replyToExcerpt ?? existing?.replyToExcerpt,
-          );
-        })
-        .toList(growable: true);
-    for (final transient in transientErrors) {
-      if (!mapped.any((message) => message.id == transient.id)) {
-        mapped.add(transient);
+    var changed = false;
+    for (final dto in persisted) {
+      final persistedRequestId = dto.requestId.trim();
+      final role = _roleFor(dto.role);
+      var existing = _messages.findById(dto.id);
+      if (existing != null && existing.role != role) existing = null;
+      if (existing == null && persistedRequestId.isNotEmpty) {
+        existing = _messages.findByRenderId(persistedRequestId, role: role);
       }
+      final type = _typeForDto(dto, existing);
+      final agentTask = type == MessageType.agentTask
+          ? _agentTaskPayload(dto.content)
+          : const <String, dynamic>{};
+      final next = ChatMessage(
+        id: dto.id,
+        renderId:
+            existing?.renderId ??
+            (role == MessageRole.user && persistedRequestId.isNotEmpty
+                ? persistedRequestId
+                : dto.id),
+        role: role,
+        type: type,
+        content: dto.content.trim().isNotEmpty || existing == null
+            ? dto.content
+            : existing.content,
+        reasoningContent: dto.reasoningContent.isNotEmpty
+            ? dto.reasoningContent
+            : existing?.reasoningContent ?? '',
+        time:
+            DateTime.tryParse(dto.createdAt) ??
+            existing?.time ??
+            DateTime.now(),
+        sequence: dto.sequence > 0 ? dto.sequence : existing?.sequence,
+        status: dto.status == 'failed'
+            ? MessageStatus.error
+            : MessageStatus.delivered,
+        agentTaskId:
+            _firstString(agentTask, const <String>[
+              'taskRunId',
+              'task_run_id',
+              'runId',
+            ]) ??
+            existing?.agentTaskId,
+        agentTaskTitle:
+            _firstString(agentTask, const <String>[
+              'title',
+              'taskTitle',
+              'taskDefinitionId',
+            ]) ??
+            existing?.agentTaskTitle,
+        agentTaskSteps:
+            _stringList(agentTask['steps']) ?? existing?.agentTaskSteps,
+        agentTaskProgress:
+            _progressInt(agentTask) ?? existing?.agentTaskProgress,
+        agentTaskElapsed:
+            _firstString(agentTask, const <String>['elapsed', 'elapsedTime']) ??
+            existing?.agentTaskElapsed,
+        fileName: existing?.fileName,
+        fileSizeKB: existing?.fileSizeKB,
+        resourceUri: _resourceForDto(dto, existing),
+        mediaUrl: existing?.mediaUrl,
+        mimeType: existing?.mimeType,
+        durationMs: dto.audioDuration > 0
+            ? (dto.audioDuration * 1000).round()
+            : existing?.durationMs,
+        toolName: existing?.toolName,
+        toolResult: existing?.toolResult,
+        replyToMessageId: dto.replyToMessageId ?? existing?.replyToMessageId,
+        replyToExcerpt: dto.replyToExcerpt ?? existing?.replyToExcerpt,
+      );
+      changed = _messages.upsert(next) || changed;
     }
-    for (final local in _messages) {
-      if (local.status != MessageStatus.sending &&
-          local.status != MessageStatus.sent) {
-        if (local.time.isBefore(
-          DateTime.now().subtract(const Duration(minutes: 2)),
-        )) {
-          continue;
-        }
-      }
-      if (mapped.any((message) => _samePersistedMessage(local, message))) {
-        continue;
-      }
-      mapped.add(local);
-    }
-    if (_sameMessageList(_messages, mapped)) return;
-    _messages
-      ..clear()
-      ..addAll(mapped);
     debugPrint(
-      'Chat sync replaced conversation=$conv total=${_messages.length} ids=${mapped.map((item) => item.id).join(',')}',
+      'Chat sync reconciled conversation=$conv total=${_messages.length}',
     );
-    notifyListeners();
-  }
-
-  String _uniqueRenderId(String preferred, String fallback, Set<String> used) {
-    final normalizedPreferred = preferred.trim();
-    if (normalizedPreferred.isNotEmpty && used.add(normalizedPreferred)) {
-      return normalizedPreferred;
-    }
-    final normalizedFallback = fallback.trim();
-    if (normalizedFallback.isNotEmpty && used.add(normalizedFallback)) {
-      return normalizedFallback;
-    }
-    var index = 2;
-    var candidate = normalizedFallback.isEmpty
-        ? 'message-$index'
-        : '$normalizedFallback-$index';
-    while (!used.add(candidate)) {
-      index++;
-      candidate = normalizedFallback.isEmpty
-          ? 'message-$index'
-          : '$normalizedFallback-$index';
-    }
-    return candidate;
-  }
-
-  bool _samePersistedMessage(ChatMessage local, ChatMessage persisted) {
-    if (local.id == persisted.id) return true;
-    if (local.renderId.trim().isNotEmpty &&
-        local.renderId == persisted.renderId) {
-      return true;
-    }
-    return local.role == persisted.role && local.content == persisted.content;
+    if (changed) notifyListeners();
   }
 
   void _restartLiveSync() {
@@ -755,60 +671,11 @@ class ConversationRuntimeController extends ChangeNotifier {
       sequence: _nextLocalSequence(),
       status: MessageStatus.error,
     );
-    final index = _messages.indexWhere((item) => item.id == id);
-    if (index >= 0) {
-      _messages[index] = message;
-    } else {
-      _messages.add(message);
-    }
+    _messages.upsert(message);
     if (messageType == 'text_error') {
       _lastError = StateError(message.content);
     }
     notifyListeners();
-    return true;
-  }
-
-  bool _sameMessageList(List<ChatMessage> current, List<ChatMessage> next) {
-    if (current.length != next.length) return false;
-    for (var i = 0; i < current.length; i++) {
-      final a = current[i];
-      final b = next[i];
-      if (a.id != b.id ||
-          a.renderId != b.renderId ||
-          a.role != b.role ||
-          a.type != b.type ||
-          a.content != b.content ||
-          a.reasoningContent != b.reasoningContent ||
-          a.sequence != b.sequence ||
-          a.status != b.status ||
-          a.time != b.time ||
-          a.agentTaskId != b.agentTaskId ||
-          a.agentTaskTitle != b.agentTaskTitle ||
-          !_sameStringList(a.agentTaskSteps, b.agentTaskSteps) ||
-          a.agentTaskProgress != b.agentTaskProgress ||
-          a.agentTaskElapsed != b.agentTaskElapsed ||
-          a.fileName != b.fileName ||
-          a.fileSizeKB != b.fileSizeKB ||
-          a.resourceUri != b.resourceUri ||
-          a.mediaUrl != b.mediaUrl ||
-          a.mimeType != b.mimeType ||
-          a.durationMs != b.durationMs ||
-          a.toolName != b.toolName ||
-          a.toolResult != b.toolResult ||
-          a.replyToMessageId != b.replyToMessageId ||
-          a.replyToExcerpt != b.replyToExcerpt) {
-        return false;
-      }
-    }
-    return true;
-  }
-
-  bool _sameStringList(List<String>? a, List<String>? b) {
-    if (identical(a, b)) return true;
-    if (a == null || b == null || a.length != b.length) return false;
-    for (var i = 0; i < a.length; i++) {
-      if (a[i] != b[i]) return false;
-    }
     return true;
   }
 
@@ -929,12 +796,13 @@ class ConversationRuntimeController extends ChangeNotifier {
   }
 
   bool canRetryMessage(int index) {
-    if (_sending || index < 0 || index >= _messages.length) return false;
-    final message = _messages[index];
+    final messages = _messages.messages;
+    if (_sending || index < 0 || index >= messages.length) return false;
+    final message = messages[index];
     if (message.status != MessageStatus.error) return false;
     if (message.role == MessageRole.user) return true;
     if (message.role != MessageRole.assistant) return false;
-    final latestUserIndex = _messages.lastIndexWhere(
+    final latestUserIndex = messages.lastIndexWhere(
       (item) => item.role == MessageRole.user,
     );
     return latestUserIndex >= 0 && index > latestUserIndex;
@@ -942,12 +810,12 @@ class ConversationRuntimeController extends ChangeNotifier {
 
   Future<void> retryMessage(int index) async {
     if (!canRetryMessage(index)) return;
-    final message = _messages[index];
+    final message = _messages.messages[index];
     if (message.role == MessageRole.assistant) {
       await regenerate();
       return;
     }
-    _messages.removeAt(index);
+    _messages.remove(message);
     notifyListeners();
     switch (message.type) {
       case MessageType.image:
@@ -1027,9 +895,7 @@ class ConversationRuntimeController extends ChangeNotifier {
     final id = messageId.trim();
     if (id.isEmpty) return;
     await _chatService.deleteMessage(id);
-    final index = _messages.indexWhere((message) => message.id == id);
-    if (index >= 0) {
-      _messages.removeAt(index);
+    if (_messages.removeById(id)) {
       notifyListeners();
     }
   }
@@ -1104,7 +970,7 @@ class ConversationRuntimeController extends ChangeNotifier {
   void clear({bool addSystemNotice = false}) {
     _messages.clear();
     if (addSystemNotice) {
-      _messages.add(
+      _messages.upsert(
         ChatMessage(
           id: _localId('sys'),
           role: MessageRole.system,
@@ -1150,7 +1016,7 @@ class ConversationRuntimeController extends ChangeNotifier {
 
   int _nextLocalSequence() {
     var sequence = 0;
-    for (final message in _messages) {
+    for (final message in _messages.messages) {
       final current = message.sequence ?? 0;
       if (current > sequence) sequence = current;
     }

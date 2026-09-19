@@ -177,6 +177,14 @@ void main() {
     ]);
     expect(controller.messages.last.content, '正在回复');
 
+    await controller.openConversation('conversation-1');
+
+    expect(controller.messages.map((message) => message.id), <String>[
+      'user-1',
+      'assistant-1',
+    ]);
+    expect(controller.messages.last.content, '正在回复');
+
     controller.dispose();
   });
 
