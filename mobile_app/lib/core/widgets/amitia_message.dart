@@ -2109,7 +2109,7 @@ class _AmitiaChatInputState extends State<AmitiaChatInput> {
                   ),
                 ),
               Padding(
-                padding: const EdgeInsets.fromLTRB(7, 0, 7, 7),
+                padding: const EdgeInsets.fromLTRB(7, 0, 4, 7),
                 child: SizedBox(
                   height: 38,
                   child: Row(

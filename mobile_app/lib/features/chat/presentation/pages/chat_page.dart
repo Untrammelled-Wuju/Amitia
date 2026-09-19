@@ -3024,8 +3024,9 @@ class _MobileChatFlowItem {
     required int messageIndex,
     required DateTime timestamp,
   }) => _MobileChatFlowItem._(
-    key: 'message:${message.renderId}',
+    key: 'message:${message.role.name}:${message.renderId}',
     timestamp: timestamp,
+    sequence: message.sequence,
     message: message,
     messageIndex: messageIndex,
   );

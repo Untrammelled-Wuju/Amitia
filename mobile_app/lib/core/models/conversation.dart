@@ -50,6 +50,7 @@ class MessageDto {
   final String msgType;
   final String extensionType;
   final String requestId;
+  final int sequence;
   final String createdAt;
   final String imageUrl;
   final String audioUrl;
@@ -73,6 +74,7 @@ class MessageDto {
     this.msgType = 'text',
     this.extensionType = '',
     this.requestId = '',
+    this.sequence = 0,
     this.imageUrl = '',
     this.audioUrl = '',
     this.audioDuration = 0,
@@ -96,6 +98,7 @@ class MessageDto {
       msgType: json['msgType'] as String? ?? 'text',
       extensionType: json['extensionType'] as String? ?? '',
       requestId: (json['requestId'] ?? '').toString(),
+      sequence: (json['sequence'] as num?)?.toInt() ?? 0,
       createdAt: json['createdAt'] as String? ?? '',
       imageUrl: json['imageUrl'] as String? ?? '',
       audioUrl: json['audioUrl'] as String? ?? '',

@@ -60,6 +60,28 @@ void main() {
     expect(after, before);
   });
 
+  testWidgets('composer trailing action matches the add action inset', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(body: AmitiaChatInput(onSend: (_) {})),
+      ),
+    );
+
+    final surface = tester.getRect(
+      find.byKey(const ValueKey('chat-composer-surface')),
+    );
+    final add = tester.getRect(find.byIcon(Icons.add_rounded));
+    final voice = tester.getRect(find.byIcon(Icons.mic_none_outlined));
+
+    final addInset = add.left - surface.left;
+    final voiceInset = surface.right - voice.right;
+
+    expect(addInset - voiceInset, closeTo(3, 0.5));
+    expect(voiceInset, lessThan(addInset));
+  });
+
   test('composer keeps a lower bottom inset when the keyboard is closed', () {
     final source = File(
       'lib/core/widgets/amitia_message.dart',

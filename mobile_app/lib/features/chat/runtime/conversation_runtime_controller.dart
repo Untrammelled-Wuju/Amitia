@@ -60,7 +60,12 @@ class ConversationRuntimeController extends ChangeNotifier {
     notifyListeners();
   }
 
-  ChatMessage _copy(ChatMessage message, {String? id, MessageStatus? status}) {
+  ChatMessage _copy(
+    ChatMessage message, {
+    String? id,
+    int? sequence,
+    MessageStatus? status,
+  }) {
     return ChatMessage(
       id: id ?? message.id,
       renderId: message.renderId,
@@ -69,6 +74,7 @@ class ConversationRuntimeController extends ChangeNotifier {
       content: message.content,
       reasoningContent: message.reasoningContent,
       time: message.time,
+      sequence: sequence ?? message.sequence,
       status: status ?? message.status,
       agentTaskId: message.agentTaskId,
       agentTaskTitle: message.agentTaskTitle,
@@ -280,9 +286,10 @@ class ConversationRuntimeController extends ChangeNotifier {
     String? videoUrl,
     String? replyToMessageId,
   }) async {
-    _messages.add(localMessage);
+    final pendingMessage = _copy(localMessage, sequence: _nextLocalSequence());
+    _messages.add(pendingMessage);
     debugPrint(
-      'Chat local message added id=${localMessage.id} total=${_messages.length}',
+      'Chat local message added id=${pendingMessage.id} total=${_messages.length}',
     );
     _lastError = null;
     _sending = true;
@@ -310,7 +317,7 @@ class ConversationRuntimeController extends ChangeNotifier {
         if (epoch != _generationEpoch || cancellation.isCancelled) return;
         switch (event.type) {
           case 'message_start':
-            await _handleMessageStart(localMessage, event.data, epoch);
+            await _handleMessageStart(pendingMessage, event.data, epoch);
             break;
           case 'token':
             _upsertStreamAssistant(event.data, MessageType.text);
@@ -350,7 +357,7 @@ class ConversationRuntimeController extends ChangeNotifier {
       _lastError = error;
       final localIndex = _messages.indexWhere(
         (m) =>
-            m.id == localMessage.id ||
+            m.id == pendingMessage.id ||
             (m.role == MessageRole.user && m.status == MessageStatus.sending),
       );
       if (localIndex >= 0) {
@@ -424,6 +431,7 @@ class ConversationRuntimeController extends ChangeNotifier {
       type: audioUrl.isNotEmpty ? MessageType.audio : type,
       content: content.isNotEmpty ? content : existing?.content ?? '',
       time: existing?.time ?? createdAt,
+      sequence: existing?.sequence ?? _nextLocalSequence(),
       status: MessageStatus.sending,
       resourceUri: audioUrl.isNotEmpty ? audioUrl : existing?.resourceUri,
       mediaUrl: audioUrl.isNotEmpty ? audioUrl : existing?.mediaUrl,
@@ -486,10 +494,12 @@ class ConversationRuntimeController extends ChangeNotifier {
     final localById = <String, ChatMessage>{
       for (final message in _messages) message.id: message,
     };
-    final localByRenderId = <String, ChatMessage>{
+    final localByRoleAndRenderId = <String, ChatMessage>{
       for (final message in _messages)
-        if (message.renderId.trim().isNotEmpty) message.renderId: message,
+        if (message.renderId.trim().isNotEmpty)
+          '${message.role.name}:${message.renderId}': message,
     };
+    final usedRenderIds = <String>{};
     final transientErrors = _messages
         .where(
           (message) =>
@@ -501,21 +511,31 @@ class ConversationRuntimeController extends ChangeNotifier {
     final mapped = persisted
         .map((dto) {
           final persistedRequestId = dto.requestId.trim();
-          final existing =
-              localById[dto.id] ??
-              (persistedRequestId.isEmpty
-                  ? null
-                  : localByRenderId[persistedRequestId]);
+          final role = _roleFor(dto.role);
+          var existing = localById[dto.id];
+          if (existing != null && existing.role != role) existing = null;
+          if (existing == null && persistedRequestId.isNotEmpty) {
+            existing =
+                localByRoleAndRenderId['${role.name}:$persistedRequestId'];
+          }
           final type = _typeForDto(dto, existing);
           final agentTask = type == MessageType.agentTask
               ? _agentTaskPayload(dto.content)
               : const <String, dynamic>{};
+          final preferredRenderId =
+              existing?.renderId ??
+              (role == MessageRole.user && persistedRequestId.isNotEmpty
+                  ? persistedRequestId
+                  : dto.id);
+          final renderId = _uniqueRenderId(
+            preferredRenderId,
+            dto.id,
+            usedRenderIds,
+          );
           return ChatMessage(
             id: dto.id,
-            renderId:
-                existing?.renderId ??
-                (persistedRequestId.isEmpty ? dto.id : persistedRequestId),
-            role: _roleFor(dto.role),
+            renderId: renderId,
+            role: role,
             type: type,
             content: dto.content.trim().isNotEmpty || existing == null
                 ? dto.content
@@ -527,6 +547,7 @@ class ConversationRuntimeController extends ChangeNotifier {
                 DateTime.tryParse(dto.createdAt) ??
                 existing?.time ??
                 DateTime.now(),
+            sequence: dto.sequence > 0 ? dto.sequence : existing?.sequence,
             status: dto.status == 'failed'
                 ? MessageStatus.error
                 : MessageStatus.delivered,
@@ -585,7 +606,6 @@ class ConversationRuntimeController extends ChangeNotifier {
       }
       mapped.add(local);
     }
-    mapped.sort((a, b) => a.time.compareTo(b.time));
     if (_sameMessageList(_messages, mapped)) return;
     _messages
       ..clear()
@@ -594,6 +614,28 @@ class ConversationRuntimeController extends ChangeNotifier {
       'Chat sync replaced conversation=$conv total=${_messages.length} ids=${mapped.map((item) => item.id).join(',')}',
     );
     notifyListeners();
+  }
+
+  String _uniqueRenderId(String preferred, String fallback, Set<String> used) {
+    final normalizedPreferred = preferred.trim();
+    if (normalizedPreferred.isNotEmpty && used.add(normalizedPreferred)) {
+      return normalizedPreferred;
+    }
+    final normalizedFallback = fallback.trim();
+    if (normalizedFallback.isNotEmpty && used.add(normalizedFallback)) {
+      return normalizedFallback;
+    }
+    var index = 2;
+    var candidate = normalizedFallback.isEmpty
+        ? 'message-$index'
+        : '$normalizedFallback-$index';
+    while (!used.add(candidate)) {
+      index++;
+      candidate = normalizedFallback.isEmpty
+          ? 'message-$index'
+          : '$normalizedFallback-$index';
+    }
+    return candidate;
   }
 
   bool _samePersistedMessage(ChatMessage local, ChatMessage persisted) {
@@ -700,6 +742,7 @@ class ConversationRuntimeController extends ChangeNotifier {
       time:
           DateTime.tryParse((event['createdAt'] ?? '').toString()) ??
           DateTime.now(),
+      sequence: _nextLocalSequence(),
       status: MessageStatus.error,
     );
     final index = _messages.indexWhere((item) => item.id == id);
@@ -721,9 +764,12 @@ class ConversationRuntimeController extends ChangeNotifier {
       final a = current[i];
       final b = next[i];
       if (a.id != b.id ||
+          a.renderId != b.renderId ||
           a.role != b.role ||
           a.type != b.type ||
           a.content != b.content ||
+          a.reasoningContent != b.reasoningContent ||
+          a.sequence != b.sequence ||
           a.status != b.status ||
           a.time != b.time ||
           a.agentTaskId != b.agentTaskId ||
@@ -1054,6 +1100,7 @@ class ConversationRuntimeController extends ChangeNotifier {
           type: MessageType.systemNotice,
           content: '聊天记录已从当前界面清空',
           time: DateTime.now(),
+          sequence: _nextLocalSequence(),
         ),
       );
     }
@@ -1089,6 +1136,15 @@ class ConversationRuntimeController extends ChangeNotifier {
   String _localId(String prefix) =>
       '$prefix${DateTime.now().microsecondsSinceEpoch}';
 
+  int _nextLocalSequence() {
+    var sequence = 0;
+    for (final message in _messages) {
+      final current = message.sequence ?? 0;
+      if (current > sequence) sequence = current;
+    }
+    return sequence + 1;
+  }
+
   Map<String, dynamic> serializeMessage(ChatMessage message) =>
       <String, dynamic>{
         'id': message.id,
@@ -1097,6 +1153,7 @@ class ConversationRuntimeController extends ChangeNotifier {
         'type': message.type.name,
         'content': message.content,
         'time': message.time.toIso8601String(),
+        if (message.sequence != null) 'sequence': message.sequence,
         'status': message.status.name,
         if ((message.agentTaskId ?? '').isNotEmpty)
           'agentTaskId': message.agentTaskId,

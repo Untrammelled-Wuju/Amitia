@@ -33,6 +33,7 @@ class ChatMessage {
   final String content;
   final String reasoningContent;
   final DateTime time;
+  final int? sequence;
   final MessageStatus status;
   final String? agentTaskId;
   final String? agentTaskTitle;
@@ -58,6 +59,7 @@ class ChatMessage {
     required this.content,
     this.reasoningContent = '',
     required this.time,
+    this.sequence,
     this.status = MessageStatus.sent,
     this.agentTaskId,
     this.agentTaskTitle,
