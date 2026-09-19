@@ -2953,34 +2953,34 @@ class _ChatTopBar extends StatelessWidget implements PreferredSizeWidget {
             ],
             AmitiaPopupMenuButton<String>(
               tooltip: '发起通话',
-              itemVerticalPadding: 1,
-              itemFontSize: 14,
+              menuWidth: 190,
+              itemVerticalPadding: 0,
+              itemFontSize: 14.5,
               itemIconSize: 18,
-              itemMinHeight: 40,
+              itemHorizontalPadding: 14,
+              itemHorizontalMargin: 0,
+              itemMinHeight: 46,
               onSelected: onCallSelected,
               itemBuilder: (context) => const [
                 PopupMenuItem(
                   value: 'video',
-                  child: ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: Icon(Icons.videocam_outlined),
-                    title: Text('视频通话'),
+                  child: _ChatPopupMenuLabel(
+                    icon: Icons.videocam_outlined,
+                    label: '视频通话',
                   ),
                 ),
                 PopupMenuItem(
                   value: 'voice',
-                  child: ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: Icon(Icons.phone_in_talk_outlined),
-                    title: Text('语音通话'),
+                  child: _ChatPopupMenuLabel(
+                    icon: Icons.phone_in_talk_outlined,
+                    label: '语音通话',
                   ),
                 ),
                 PopupMenuItem(
                   value: 'screen',
-                  child: ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: Icon(Icons.screen_share_outlined),
-                    title: Text('屏幕通话'),
+                  child: _ChatPopupMenuLabel(
+                    icon: Icons.screen_share_outlined,
+                    label: '屏幕通话',
                   ),
                 ),
               ],
@@ -2993,42 +2993,41 @@ class _ChatTopBar extends StatelessWidget implements PreferredSizeWidget {
             const SizedBox(width: 8),
             AmitiaPopupMenuButton<int>(
               tooltip: '当前对话详情',
-              itemVerticalPadding: 1,
-              itemFontSize: 14,
+              menuWidth: 190,
+              itemVerticalPadding: 0,
+              itemFontSize: 14.5,
               itemIconSize: 18,
-              itemMinHeight: 40,
+              itemHorizontalPadding: 14,
+              itemHorizontalMargin: 0,
+              itemMinHeight: 46,
               onSelected: onMoreSelected,
               itemBuilder: (context) => const [
                 PopupMenuItem(
                   value: 0,
-                  child: ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: Icon(Icons.file_download_outlined),
-                    title: Text('导出聊天记录'),
+                  child: _ChatPopupMenuLabel(
+                    icon: Icons.file_download_outlined,
+                    label: '导出聊天记录',
                   ),
                 ),
                 PopupMenuItem(
                   value: 1,
-                  child: ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: Icon(Icons.badge_outlined),
-                    title: Text('用户画像摘要'),
+                  child: _ChatPopupMenuLabel(
+                    icon: Icons.badge_outlined,
+                    label: '用户画像摘要',
                   ),
                 ),
                 PopupMenuItem(
                   value: 2,
-                  child: ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: Icon(Icons.psychology_alt_outlined),
-                    title: Text('记忆上下文'),
+                  child: _ChatPopupMenuLabel(
+                    icon: Icons.psychology_alt_outlined,
+                    label: '记忆上下文',
                   ),
                 ),
                 PopupMenuItem(
                   value: 3,
-                  child: ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: Icon(Icons.cleaning_services_outlined),
-                    title: Text('清空聊天记录'),
+                  child: _ChatPopupMenuLabel(
+                    icon: Icons.cleaning_services_outlined,
+                    label: '清空聊天记录',
                   ),
                 ),
               ],
@@ -3043,6 +3042,24 @@ class _ChatTopBar extends StatelessWidget implements PreferredSizeWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _ChatPopupMenuLabel extends StatelessWidget {
+  const _ChatPopupMenuLabel({required this.icon, required this.label});
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(icon, size: 18, color: context.textSecondary),
+        const SizedBox(width: 12),
+        Text(label),
+      ],
     );
   }
 }

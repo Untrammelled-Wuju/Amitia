@@ -67,6 +67,8 @@ class AmitiaPopupMenuButton<T> extends StatefulWidget {
     this.itemVerticalPadding,
     this.itemFontSize,
     this.itemIconSize,
+    this.itemHorizontalPadding,
+    this.itemHorizontalMargin = 6,
     this.itemMinHeight,
     this.useRootNavigator = true,
   });
@@ -83,6 +85,8 @@ class AmitiaPopupMenuButton<T> extends StatefulWidget {
   final double? itemVerticalPadding;
   final double? itemFontSize;
   final double? itemIconSize;
+  final double? itemHorizontalPadding;
+  final double itemHorizontalMargin;
   final double? itemMinHeight;
   final bool useRootNavigator;
 
@@ -112,6 +116,8 @@ class _AmitiaPopupMenuButtonState<T> extends State<AmitiaPopupMenuButton<T>> {
       itemVerticalPadding: widget.itemVerticalPadding,
       itemFontSize: widget.itemFontSize,
       itemIconSize: widget.itemIconSize,
+      itemHorizontalPadding: widget.itemHorizontalPadding,
+      itemHorizontalMargin: widget.itemHorizontalMargin,
       itemMinHeight: widget.itemMinHeight,
       useRootNavigator: widget.useRootNavigator,
     );
@@ -151,6 +157,8 @@ Future<T?> showAmitiaPopupMenu<T>({
   double? itemVerticalPadding,
   double? itemFontSize,
   double? itemIconSize,
+  double? itemHorizontalPadding,
+  double itemHorizontalMargin = 6,
   double? itemMinHeight,
   double gap = 6,
   double margin = 8,
@@ -199,6 +207,8 @@ Future<T?> showAmitiaPopupMenu<T>({
         itemVerticalPadding: itemVerticalPadding,
         itemFontSize: itemFontSize,
         itemIconSize: itemIconSize,
+        itemHorizontalPadding: itemHorizontalPadding,
+        itemHorizontalMargin: itemHorizontalMargin,
         itemMinHeight: itemMinHeight,
       ),
     ),
@@ -338,6 +348,8 @@ class _AmitiaPopupMenuPanel<T> extends StatelessWidget {
     required this.itemVerticalPadding,
     required this.itemFontSize,
     required this.itemIconSize,
+    required this.itemHorizontalPadding,
+    required this.itemHorizontalMargin,
     required this.itemMinHeight,
   });
 
@@ -346,6 +358,8 @@ class _AmitiaPopupMenuPanel<T> extends StatelessWidget {
   final double? itemVerticalPadding;
   final double? itemFontSize;
   final double? itemIconSize;
+  final double? itemHorizontalPadding;
+  final double itemHorizontalMargin;
   final double? itemMinHeight;
 
   @override
@@ -443,7 +457,7 @@ class _AmitiaPopupMenuPanel<T> extends StatelessWidget {
     required Widget child,
   }) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 6),
+      padding: EdgeInsets.symmetric(horizontal: itemHorizontalMargin),
       child: Material(
         color: selected ? context.accentSoft : Colors.transparent,
         borderRadius: BorderRadius.circular(9),
@@ -463,7 +477,7 @@ class _AmitiaPopupMenuPanel<T> extends StatelessWidget {
               padding:
                   entry.padding ??
                   EdgeInsets.symmetric(
-                    horizontal: 10,
+                    horizontal: itemHorizontalPadding ?? 10,
                     vertical: itemVerticalPadding ?? 4,
                   ),
               child: Align(alignment: Alignment.centerLeft, child: child),
