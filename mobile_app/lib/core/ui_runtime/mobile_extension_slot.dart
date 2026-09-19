@@ -32,6 +32,7 @@ class MobileExtensionSlot extends ConsumerWidget {
 
   final String slotId;
   final String? contributionId;
+
   /// Restrict this slot to contributions owned by one extension.
   final String? extensionId;
   final String? dispatchKey;
@@ -44,7 +45,16 @@ class MobileExtensionSlot extends ConsumerWidget {
 
   String? _normalizedLayout(dynamic value) {
     final layout = value?.toString().trim().toLowerCase() ?? '';
-    const allowed = <String>{'inline', 'stack', 'row', 'grid', 'tabs', 'panel', 'drawer', 'modal'};
+    const allowed = <String>{
+      'inline',
+      'stack',
+      'row',
+      'grid',
+      'tabs',
+      'panel',
+      'drawer',
+      'modal',
+    };
     return allowed.contains(layout) ? layout : null;
   }
 
@@ -56,7 +66,15 @@ class MobileExtensionSlot extends ConsumerWidget {
 
   String? _normalizedSurfaceRole(dynamic value) {
     final role = value?.toString().trim().toLowerCase() ?? '';
-    const allowed = <String>{'header', 'status', 'sidebar', 'message', 'composer', 'main', 'overlay'};
+    const allowed = <String>{
+      'header',
+      'status',
+      'sidebar',
+      'message',
+      'composer',
+      'main',
+      'overlay',
+    };
     return allowed.contains(role) ? role : null;
   }
 
@@ -69,8 +87,19 @@ class MobileExtensionSlot extends ConsumerWidget {
       if (nested != null) return nested;
     }
     final text = surface?.toString().trim().toLowerCase() ?? '';
-    for (final role in const ['header', 'status', 'sidebar', 'message', 'composer', 'overlay']) {
-      if (text == role || text.startsWith('$role-') || text.startsWith('$role.')) return role;
+    for (final role in const [
+      'header',
+      'status',
+      'sidebar',
+      'message',
+      'composer',
+      'overlay',
+    ]) {
+      if (text == role ||
+          text.startsWith('$role-') ||
+          text.startsWith('$role.')) {
+        return role;
+      }
     }
     return 'main';
   }
@@ -82,7 +111,9 @@ class MobileExtensionSlot extends ConsumerWidget {
           height: 48,
           width: double.infinity,
           decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
+            color: Theme.of(
+              context,
+            ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
             borderRadius: BorderRadius.circular(8),
           ),
         );
@@ -100,7 +131,10 @@ class MobileExtensionSlot extends ConsumerWidget {
     final requestedFallback = _normalizedFallback(this.context['slotFallback']);
     final snapshot = ref.watch(uiRuntimeProvider).valueOrNull;
     if (snapshot == null) {
-      return _fallbackWidget(context, requestedFallback ?? (fallback == null ? 'none' : 'default'));
+      return _fallbackWidget(
+        context,
+        requestedFallback ?? (fallback == null ? 'none' : 'default'),
+      );
     }
     final conversationId = (this.context['conversationId'] ?? '')
         .toString()
@@ -117,10 +151,19 @@ class MobileExtensionSlot extends ConsumerWidget {
           slotId: slotId,
         );
     if (slot == null) {
-      return _fallbackWidget(context, requestedFallback ?? (fallback == null ? 'none' : 'default'));
+      return _fallbackWidget(
+        context,
+        requestedFallback ?? (fallback == null ? 'none' : 'default'),
+      );
     }
-    final fallbackMode = requestedFallback ?? _normalizedFallback(slot.fallbackPolicy) ?? (fallback == null ? 'none' : 'default');
-    final layout = _normalizedLayout(this.context['slotLayout']) ?? _normalizedLayout(slot.layout) ?? 'stack';
+    final fallbackMode =
+        requestedFallback ??
+        _normalizedFallback(slot.fallbackPolicy) ??
+        (fallback == null ? 'none' : 'default');
+    final layout =
+        _normalizedLayout(this.context['slotLayout']) ??
+        _normalizedLayout(slot.layout) ??
+        'stack';
     final surfaceRole = _resolveSurfaceRole();
     if (declaredBySlotId != null || declaredByOwner != null) {
       if (slot.parentSlotId != declaredBySlotId ||
@@ -153,21 +196,25 @@ class MobileExtensionSlot extends ConsumerWidget {
     );
     final serverVisible = snapshot
         .contributionsForSlot(slotId)
-        .where((item) => matchesMobileUIContributionVisibility(item, slotContext))
+        .where(
+          (item) => matchesMobileUIContributionVisibility(item, slotContext),
+        )
         .toList(growable: false);
     final dynamicVisible = dynamicContributions
-        .where((item) => matchesMobileUIContributionVisibility(item, slotContext))
+        .where(
+          (item) => matchesMobileUIContributionVisibility(item, slotContext),
+        )
         .toList(growable: false);
 
     final scopedServer = extensionId != null && extensionId!.isNotEmpty
         ? serverVisible
-            .where((item) => item.extensionId == extensionId)
-            .toList(growable: false)
+              .where((item) => item.extensionId == extensionId)
+              .toList(growable: false)
         : serverVisible;
     final scopedDynamic = extensionId != null && extensionId!.isNotEmpty
         ? dynamicVisible
-            .where((item) => item.extensionId == extensionId)
-            .toList(growable: false)
+              .where((item) => item.extensionId == extensionId)
+              .toList(growable: false)
         : dynamicVisible;
 
     var contributions = MobileDynamicRuntime.resolveSlot(
@@ -189,31 +236,31 @@ class MobileExtensionSlot extends ConsumerWidget {
     }
     if (contributions.isEmpty) return _fallbackWidget(context, fallbackMode);
 
-    final children = contributions.map((item) {
-      final matched = item.matched ??
-          (slot.kind == 'chain' && item.runtimePackageId?.isNotEmpty == true
-              ? <String, dynamic>{'owner': slotContext}
-              : null);
-      return _ContributionHost(
-        key: ValueKey(item.contributionId),
-        contribution: item,
-        runtimeContext: <String, dynamic>{
-          ...slotContext,
-          'slotId': slot.slotId,
-          'entryKey': _identity(item.entryKey, item.contributionId),
-          'cellId': _identity(item.cellId, item.contributionId),
-          if (matched != null) 'matched': matched,
-        },
-        actions: actions,
-      );
-    }).toList(growable: false);
+    final children = contributions
+        .map((item) {
+          final matched =
+              item.matched ??
+              (slot.kind == 'chain' && item.runtimePackageId?.isNotEmpty == true
+                  ? <String, dynamic>{'owner': slotContext}
+                  : null);
+          return _ContributionHost(
+            key: ValueKey(item.contributionId),
+            contribution: item,
+            fallback: _fallbackWidget(context, fallbackMode),
+            runtimeContext: <String, dynamic>{
+              ...slotContext,
+              'slotId': slot.slotId,
+              'entryKey': _identity(item.entryKey, item.contributionId),
+              'cellId': _identity(item.cellId, item.contributionId),
+              'matched': matched,
+            },
+            actions: actions,
+          );
+        })
+        .toList(growable: false);
 
     return switch (layout) {
-      'row' || 'inline' => Wrap(
-        spacing: 8,
-        runSpacing: 8,
-        children: children,
-      ),
+      'row' || 'inline' => Wrap(spacing: 8, runSpacing: 8, children: children),
       'grid' => GridView.count(
         crossAxisCount: 2,
         shrinkWrap: true,
@@ -224,7 +271,9 @@ class MobileExtensionSlot extends ConsumerWidget {
       ),
       'tabs' => Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: children.map((child) => Expanded(child: child)).toList(growable: false),
+        children: children
+            .map((child) => Expanded(child: child))
+            .toList(growable: false),
       ),
       'panel' => Padding(
         padding: const EdgeInsets.all(12),
@@ -243,16 +292,17 @@ class MobileExtensionSlot extends ConsumerWidget {
   }
 }
 
-
 class _ContributionHost extends ConsumerStatefulWidget {
   const _ContributionHost({
     super.key,
     required this.contribution,
+    required this.fallback,
     required this.runtimeContext,
     required this.actions,
   });
 
   final UIContributionSnapshotEntry contribution;
+  final Widget fallback;
   final Map<String, dynamic> runtimeContext;
   final Map<String, FutureOr<dynamic> Function(dynamic input)> actions;
 
@@ -289,14 +339,16 @@ class _ContributionHostState extends ConsumerState<_ContributionHost> {
   void initState() {
     super.initState();
     _bridge = SchemaUIBridgeController(ref.read(extensionServiceProvider));
-    _dataSourceLoader = DataSourceLoader(fetcher: (request) => _bridge.requestData(
-      request.dataSource.id,
-      contributionId: _sourceContributionId,
-      contractVersion: widget.contribution.contractVersion,
-      characterId: _characterId,
-      conversationId: _conversationId,
-      params: request.input,
-    ));
+    _dataSourceLoader = DataSourceLoader(
+      fetcher: (request) => _bridge.requestData(
+        request.dataSource.id,
+        contributionId: _sourceContributionId,
+        contractVersion: widget.contribution.contractVersion,
+        characterId: _characterId,
+        conversationId: _conversationId,
+        params: request.input,
+      ),
+    );
   }
 
   @override
@@ -335,10 +387,9 @@ class _ContributionHostState extends ConsumerState<_ContributionHost> {
   }
 
   Future<Map<String, dynamic>> _fetchSchema() {
-    return ref.read(extensionServiceProvider).getUISchema(
-          widget.contribution.extensionId,
-          _sourceContributionId,
-        );
+    return ref
+        .read(extensionServiceProvider)
+        .getUISchema(widget.contribution.extensionId, _sourceContributionId);
   }
 
   Future<void> _reloadSchema() async {
@@ -365,13 +416,11 @@ class _ContributionHostState extends ConsumerState<_ContributionHost> {
         return FutureBuilder<Map<String, dynamic>>(
           future: _schemaFuture,
           builder: (context, snapshot) {
-            if (snapshot.hasError) return const SizedBox.shrink();
+            if (snapshot.hasError) return widget.fallback;
             if (!snapshot.hasData) {
               return const Padding(
                 padding: EdgeInsets.all(8),
-                child: Center(
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
+                child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
               );
             }
             final document = SchemaUIDocument.fromJson(snapshot.data!);
@@ -435,10 +484,10 @@ class _ContributionHostState extends ConsumerState<_ContributionHost> {
           entry: entry,
           context: runtimeContext,
           actions: actions,
-          fallback: const SizedBox.shrink(),
+          fallback: widget.fallback,
         );
       default:
-        return const SizedBox.shrink();
+        return widget.fallback;
     }
   }
 }

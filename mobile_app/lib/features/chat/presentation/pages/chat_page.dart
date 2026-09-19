@@ -2170,18 +2170,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                                 'message': _providerMessage(message),
                                 'messageIndex': index,
                               };
-                              final standardRendered = MobileExtensionSlot(
-                                slotId: 'chat.message.renderer',
-                                context: messageContext,
-                                actions: providerActions,
-                                fallback: providerMessage,
-                              );
-                              final customRendered = MobileExtensionSlot(
-                                slotId: 'chat.message.custom_renderer',
-                                context: messageContext,
-                                actions: providerActions,
-                                fallback: standardRendered,
-                              );
                               final hasAttachment =
                                   (message.resourceUri ?? '')
                                       .trim()
@@ -2194,7 +2182,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                                   crossAxisAlignment:
                                       CrossAxisAlignment.stretch,
                                   children: [
-                                    customRendered,
+                                    providerMessage,
                                     if (hasAttachment)
                                       Padding(
                                         padding: const EdgeInsets.fromLTRB(

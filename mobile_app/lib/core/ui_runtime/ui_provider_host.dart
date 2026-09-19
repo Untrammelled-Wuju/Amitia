@@ -46,14 +46,18 @@ class _UIProviderHostState extends ConsumerState<UIProviderHost> {
 
   void _advanceFallback(Object error) {
     final snapshot = ref.read(uiRuntimeProvider).valueOrNull;
-    final chain = snapshot?.fallbackChain(
+    final chain =
+        snapshot?.fallbackChain(
           widget.capability,
           providerId: widget.providerId,
         ) ??
         const <UIProviderDefinition>[];
-    if (_fallbackIndex + 1 < chain.length && mounted) {
-      setState(() => _fallbackIndex++);
-    }
+    if (!mounted) return;
+    setState(() {
+      _fallbackIndex = _fallbackIndex + 1 < chain.length
+          ? _fallbackIndex + 1
+          : chain.length;
+    });
   }
 
   Widget _externalRenderer(
@@ -94,12 +98,14 @@ class _UIProviderHostState extends ConsumerState<UIProviderHost> {
   @override
   Widget build(BuildContext context) {
     final snapshot = ref.watch(uiRuntimeProvider).valueOrNull;
-    final chain = snapshot?.fallbackChain(
+    final chain =
+        snapshot?.fallbackChain(
           widget.capability,
           providerId: widget.providerId,
         ) ??
         const <UIProviderDefinition>[];
     if (chain.isEmpty) return widget.fallback;
+    if (_fallbackIndex >= chain.length) return widget.fallback;
     final index = _fallbackIndex.clamp(0, chain.length - 1).toInt();
     final provider = chain[index];
     if (provider.builtin || !provider.enabled) return widget.fallback;
