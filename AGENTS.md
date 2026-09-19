@@ -148,6 +148,38 @@ Android 构建与真机安装规则：
 - 仅允许构建、安装和验证 Release 版本 APK，禁止执行、安装或保留任何 Debug 版本 APK。
 - 真机安装前必须确认包名为 com.amitia.amitia_app；发现 com.amitia.amitia_app.debug 时必须先卸载，并在安装后复核该 Debug 包不存在。
 
+Android Release 构建方法：
+
+1. 禁止使用 scripts/build-apk.ps1 的临时源码复制流程。正式构建必须使用项目根目录中的同一份源码。
+2. 项目位于中文路径时，统一从 R: 盘符映射构建。R: 必须映射到 D:\桌面\跟进项目\U-Ai，先执行 subst.exe 检查；缺少映射时执行 subst.exe R: "D:\桌面\跟进项目\U-Ai"。R: 只是同一源码目录的盘符映射，不是源码副本，禁止将源码复制到其他目录构建。
+3. 当前进程必须配置正式签名环境变量 AMITIA_KEYSTORE_PATH、AMITIA_KEYSTORE_PASSWORD、AMITIA_KEY_ALIAS、AMITIA_KEY_PASSWORD。密钥和密码只能通过环境变量注入，禁止写入 AGENTS.md、源码、配置、日志或构建产物。
+4. 构建前设置：
+   - $env:PUB_HOSTED_URL = "https://pub.dev"
+   - 若 $env:JAVA_TOOL_OPTIONS 不含 jdk.net.unixdomain.tmpdir=，追加 -Djdk.net.unixdomain.tmpdir=C:\Temp，并确保 C:\Temp 存在。
+5. 在 R:\mobile_app 执行：
+   - flutter clean
+   - flutter pub get
+   - flutter build apk --release --target-platform android-arm64 --no-tree-shake-icons --config-only
+6. 在 R:\mobile_app\android 执行：
+   - .\gradlew.bat assembleRelease
+7. 必须使用 Gradle 返回码判断构建结果。由于中文路径下 Flutter 包装命令可能在产物查找阶段误报失败，禁止仅凭 flutter build apk 的产物查找结果判定构建失败或成功。
+8. APK 输出路径固定为 R:\mobile_app\android\app\build\outputs\flutter-apk\app-release.apk，等价实际路径为 D:\桌面\跟进项目\U-Ai\mobile_app\android\app\build\outputs\flutter-apk\app-release.apk。
+9. 安装前必须验证：
+   - applicationId 为 com.amitia.amitia_app
+   - versionName、versionCode 与项目当前版本一致
+   - apksigner 验证为正式 Release 签名
+   - zipalign 验证通过
+   - APK 仅包含 arm64-v8a
+   - APK 内 assets/runtime-package/amitia-runtime-1.0.0.zip 的 SHA-256 与构建输入一致
+10. 安装流程：
+   - adb devices -l
+   - adb shell pm list packages 检查 com.amitia.amitia_app.debug；存在时先执行 adb uninstall com.amitia.amitia_app.debug
+   - adb install -r <APK路径>
+   - adb shell dumpsys package com.amitia.amitia_app 复核版本，并再次确认 debug 包不存在
+   - adb shell am start -W -n com.amitia.amitia_app/.MainActivity 启动应用
+   - adb shell ps -A 与 adb shell dumpsys activity activities 复核应用进程和前台页面
+11. 正式 APK 必须复制到 artifacts/apk/，文件名使用 amitia-<version>-release-arm64-v8a-<yyyyMMdd-HHmmss>.apk，并记录文件大小和 SHA-256。
+
 源码副本规则：
 
 - 禁止使用临时复制的源码目录构建、打包、安装或验证正式版本。
