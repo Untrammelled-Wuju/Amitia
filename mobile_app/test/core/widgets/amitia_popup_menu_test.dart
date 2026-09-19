@@ -93,7 +93,8 @@ void main() {
         home: Scaffold(
           body: AmitiaPopupMenuButton<String>(
             itemVerticalPadding: 1,
-            itemFontSize: 13,
+            itemFontSize: 14,
+            itemIconSize: 18,
             itemMinHeight: 40,
             itemBuilder: (_) => const [
               PopupMenuItem(
@@ -121,7 +122,13 @@ void main() {
     );
     expect(theme.data.minTileHeight, 40);
     expect(theme.data.minVerticalPadding, 1);
-    expect(theme.data.titleTextStyle?.fontSize, 13);
+    expect(theme.data.titleTextStyle?.fontSize, 14);
+    final iconThemes = tester.widgetList<IconTheme>(
+      find.byWidgetPredicate(
+        (widget) => widget is IconTheme && widget.data.size == 18,
+      ),
+    );
+    expect(iconThemes, isNotEmpty);
   });
 
   test('built-in popup menu buttons are fully replaced', () {

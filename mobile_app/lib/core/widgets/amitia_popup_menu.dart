@@ -66,6 +66,7 @@ class AmitiaPopupMenuButton<T> extends StatefulWidget {
     this.menuWidth = 200,
     this.itemVerticalPadding,
     this.itemFontSize,
+    this.itemIconSize,
     this.itemMinHeight,
     this.useRootNavigator = true,
   });
@@ -81,6 +82,7 @@ class AmitiaPopupMenuButton<T> extends StatefulWidget {
   final double menuWidth;
   final double? itemVerticalPadding;
   final double? itemFontSize;
+  final double? itemIconSize;
   final double? itemMinHeight;
   final bool useRootNavigator;
 
@@ -109,6 +111,7 @@ class _AmitiaPopupMenuButtonState<T> extends State<AmitiaPopupMenuButton<T>> {
       menuWidth: widget.menuWidth,
       itemVerticalPadding: widget.itemVerticalPadding,
       itemFontSize: widget.itemFontSize,
+      itemIconSize: widget.itemIconSize,
       itemMinHeight: widget.itemMinHeight,
       useRootNavigator: widget.useRootNavigator,
     );
@@ -147,6 +150,7 @@ Future<T?> showAmitiaPopupMenu<T>({
   double menuWidth = 200,
   double? itemVerticalPadding,
   double? itemFontSize,
+  double? itemIconSize,
   double? itemMinHeight,
   double gap = 6,
   double margin = 8,
@@ -194,6 +198,7 @@ Future<T?> showAmitiaPopupMenu<T>({
         initialValue: initialValue,
         itemVerticalPadding: itemVerticalPadding,
         itemFontSize: itemFontSize,
+        itemIconSize: itemIconSize,
         itemMinHeight: itemMinHeight,
       ),
     ),
@@ -332,6 +337,7 @@ class _AmitiaPopupMenuPanel<T> extends StatelessWidget {
     required this.initialValue,
     required this.itemVerticalPadding,
     required this.itemFontSize,
+    required this.itemIconSize,
     required this.itemMinHeight,
   });
 
@@ -339,6 +345,7 @@ class _AmitiaPopupMenuPanel<T> extends StatelessWidget {
   final T? initialValue;
   final double? itemVerticalPadding;
   final double? itemFontSize;
+  final double? itemIconSize;
   final double? itemMinHeight;
 
   @override
@@ -480,6 +487,7 @@ class _AmitiaPopupMenuPanel<T> extends StatelessWidget {
         );
     var themedChild = child;
     if (itemFontSize != null ||
+        itemIconSize != null ||
         itemVerticalPadding != null ||
         itemMinHeight != null) {
       final listTileTheme = ListTileTheme.of(context);
@@ -496,6 +504,12 @@ class _AmitiaPopupMenuPanel<T> extends StatelessWidget {
           minVerticalPadding: itemVerticalPadding,
         ),
         child: child,
+      );
+    }
+    if (itemIconSize != null) {
+      themedChild = IconTheme.merge(
+        data: IconThemeData(size: itemIconSize),
+        child: themedChild,
       );
     }
     return DefaultTextStyle.merge(style: style, child: themedChild);
