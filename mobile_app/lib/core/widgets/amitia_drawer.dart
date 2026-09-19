@@ -907,6 +907,7 @@ class _ConversationTile extends StatelessWidget {
     final overlayBox = Overlay.of(context).context.findRenderObject();
     if (tileBox is! RenderBox || overlayBox is! RenderBox) return;
     final origin = tileBox.localToGlobal(Offset.zero);
+    const menuWidth = 190.0;
     const estimatedMenuHeight = 160.0;
     final anchorTop = (origin.dy - estimatedMenuHeight).clamp(
       8.0,
@@ -933,7 +934,10 @@ class _ConversationTile extends StatelessWidget {
           child: Align(
             alignment: Alignment.topLeft,
             child: Padding(
-              padding: EdgeInsets.only(top: anchorTop, left: origin.dx + 12),
+              padding: EdgeInsets.only(
+                top: anchorTop,
+                left: origin.dx + 12 + menuWidth / 2,
+              ),
               child: ScaleTransition(
                 alignment: Alignment.bottomRight,
                 scale: Tween<double>(begin: 0.9, end: 1).animate(curved),
