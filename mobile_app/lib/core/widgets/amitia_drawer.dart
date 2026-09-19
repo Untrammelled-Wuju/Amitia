@@ -899,51 +899,65 @@ class _ConversationTile extends StatelessWidget {
     );
   }
 
-  void _showActions(BuildContext context) {
-    showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: context.surfacePrimary,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (sheetContext) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.drive_file_rename_outline),
-              title: const Text('重命名'),
-              onTap: () {
-                Navigator.pop(sheetContext);
-                onRename();
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.archive_outlined),
-              title: const Text('归档'),
-              onTap: () {
-                Navigator.pop(sheetContext);
-                onArchive();
-              },
-            ),
-            ListTile(
-              leading: Icon(
-                conversation.pinnedAt.isEmpty
-                    ? Icons.push_pin_outlined
-                    : Icons.push_pin,
-              ),
-              title: Text(conversation.pinnedAt.isEmpty ? '置顶' : '取消置顶'),
-              onTap: () {
-                Navigator.pop(sheetContext);
-                onTogglePin();
-              },
-            ),
-          ],
-        ),
-      ),
+  Future<void> _showActions(BuildContext context) async {
+    final tileBox = context.findRenderObject();
+    final overlayBox = Overlay.of(context).context.findRenderObject();
+    if (tileBox is! RenderBox || overlayBox is! RenderBox) return;
+    final origin = tileBox.localToGlobal(Offset.zero);
+    const estimatedMenuHeight = 160.0;
+    final anchorTop = (origin.dy - estimatedMenuHeight).clamp(
+      8.0,
+      overlayBox.size.height - 8,
     );
+    final action = await showMenu<_ConversationAction>(
+      context: context,
+      color: context.surfacePrimary,
+      position: RelativeRect.fromLTRB(
+        origin.dx + 12,
+        anchorTop,
+        overlayBox.size.width - origin.dx - tileBox.size.width + 12,
+        overlayBox.size.height - anchorTop,
+      ),
+      items: [
+        const PopupMenuItem(
+          value: _ConversationAction.rename,
+          child: _ProjectMenuItem(
+            icon: Icons.drive_file_rename_outline,
+            label: '重命名',
+          ),
+        ),
+        const PopupMenuItem(
+          value: _ConversationAction.archive,
+          child: _ProjectMenuItem(icon: Icons.archive_outlined, label: '归档'),
+        ),
+        PopupMenuItem(
+          value: _ConversationAction.pin,
+          child: _ProjectMenuItem(
+            icon: conversation.pinnedAt.isEmpty
+                ? Icons.push_pin_outlined
+                : Icons.push_pin,
+            label: conversation.pinnedAt.isEmpty ? '置顶' : '取消置顶',
+          ),
+        ),
+      ],
+    );
+    switch (action) {
+      case _ConversationAction.rename:
+        onRename();
+        return;
+      case _ConversationAction.archive:
+        onArchive();
+        return;
+      case _ConversationAction.pin:
+        onTogglePin();
+        return;
+      case null:
+        return;
+    }
   }
 }
+
+enum _ConversationAction { rename, archive, pin }
 
 class _ExpandableRecentList extends StatelessWidget {
   final List<ConversationDto> conversations;

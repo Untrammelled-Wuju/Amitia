@@ -95,8 +95,8 @@ void main() {
     final addInset = add.left - surface.left;
     final voiceInset = surface.right - voice.right;
 
-    expect(addInset, closeTo(5.8, 0.5));
-    expect(voiceInset, closeTo(5.8, 0.5));
+    expect(addInset, closeTo(10.8, 0.5));
+    expect(voiceInset, closeTo(10.8, 0.5));
 
     await tester.enterText(find.byType(TextField), '测试');
     await tester.pump();
@@ -106,7 +106,7 @@ void main() {
     );
     final sendInset = surface.right - send.right;
 
-    expect(sendInset, closeTo(5.8, 0.5));
+    expect(sendInset, closeTo(10.8, 0.5));
   });
 
   test('composer keeps a lower bottom inset when the keyboard is closed', () {
