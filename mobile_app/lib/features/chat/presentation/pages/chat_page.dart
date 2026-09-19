@@ -2953,6 +2953,9 @@ class _ChatTopBar extends StatelessWidget implements PreferredSizeWidget {
             ],
             AmitiaPopupMenuButton<String>(
               tooltip: '发起通话',
+              itemVerticalPadding: 1,
+              itemFontSize: 13,
+              itemMinHeight: 40,
               onSelected: onCallSelected,
               itemBuilder: (context) => const [
                 PopupMenuItem(
@@ -2989,6 +2992,9 @@ class _ChatTopBar extends StatelessWidget implements PreferredSizeWidget {
             const SizedBox(width: 8),
             AmitiaPopupMenuButton<int>(
               tooltip: '当前对话详情',
+              itemVerticalPadding: 1,
+              itemFontSize: 13,
+              itemMinHeight: 40,
               onSelected: onMoreSelected,
               itemBuilder: (context) => const [
                 PopupMenuItem(

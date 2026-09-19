@@ -85,6 +85,45 @@ void main() {
     expect(selected, 'first');
   });
 
+  testWidgets('compact menu metrics apply to list tile options', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: AmitiaPopupMenuButton<String>(
+            itemVerticalPadding: 1,
+            itemFontSize: 13,
+            itemMinHeight: 40,
+            itemBuilder: (_) => const [
+              PopupMenuItem(
+                value: 'first',
+                child: ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(Icons.circle_outlined),
+                  title: Text('紧凑选项'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byType(IconButton));
+    await tester.pumpAndSettle();
+
+    final theme = tester.widget<ListTileTheme>(
+      find.ancestor(
+        of: find.text('紧凑选项'),
+        matching: find.byType(ListTileTheme),
+      ),
+    );
+    expect(theme.data.minTileHeight, 40);
+    expect(theme.data.minVerticalPadding, 1);
+    expect(theme.data.titleTextStyle?.fontSize, 13);
+  });
+
   test('built-in popup menu buttons are fully replaced', () {
     final pattern = RegExp(r'\bPopupMenuButton\s*<');
     final matches = <String>[];

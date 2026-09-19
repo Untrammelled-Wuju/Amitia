@@ -64,6 +64,9 @@ class AmitiaPopupMenuButton<T> extends StatefulWidget {
     this.child,
     this.padding = const EdgeInsets.all(8),
     this.menuWidth = 200,
+    this.itemVerticalPadding,
+    this.itemFontSize,
+    this.itemMinHeight,
     this.useRootNavigator = true,
   });
 
@@ -76,6 +79,9 @@ class AmitiaPopupMenuButton<T> extends StatefulWidget {
   final Widget? child;
   final EdgeInsetsGeometry padding;
   final double menuWidth;
+  final double? itemVerticalPadding;
+  final double? itemFontSize;
+  final double? itemMinHeight;
   final bool useRootNavigator;
 
   @override
@@ -101,6 +107,9 @@ class _AmitiaPopupMenuButtonState<T> extends State<AmitiaPopupMenuButton<T>> {
       items: widget.itemBuilder(context),
       initialValue: widget.initialValue,
       menuWidth: widget.menuWidth,
+      itemVerticalPadding: widget.itemVerticalPadding,
+      itemFontSize: widget.itemFontSize,
+      itemMinHeight: widget.itemMinHeight,
       useRootNavigator: widget.useRootNavigator,
     );
     if (value != null && mounted) widget.onSelected?.call(value);
@@ -136,6 +145,9 @@ Future<T?> showAmitiaPopupMenu<T>({
   required List<PopupMenuEntry<T>> items,
   T? initialValue,
   double menuWidth = 200,
+  double? itemVerticalPadding,
+  double? itemFontSize,
+  double? itemMinHeight,
   double gap = 6,
   double margin = 8,
   bool useRootNavigator = true,
@@ -177,7 +189,13 @@ Future<T?> showAmitiaPopupMenu<T>({
       gap: gap,
       margin: margin,
       menuWidth: resolvedWidth.toDouble(),
-      child: _AmitiaPopupMenuPanel<T>(items: items, initialValue: initialValue),
+      child: _AmitiaPopupMenuPanel<T>(
+        items: items,
+        initialValue: initialValue,
+        itemVerticalPadding: itemVerticalPadding,
+        itemFontSize: itemFontSize,
+        itemMinHeight: itemMinHeight,
+      ),
     ),
     transitionBuilder: (context, animation, _, child) {
       final curved = CurvedAnimation(
@@ -312,10 +330,16 @@ class _AmitiaPopupMenuPanel<T> extends StatelessWidget {
   const _AmitiaPopupMenuPanel({
     required this.items,
     required this.initialValue,
+    required this.itemVerticalPadding,
+    required this.itemFontSize,
+    required this.itemMinHeight,
   });
 
   final List<PopupMenuEntry<T>> items;
   final T? initialValue;
+  final double? itemVerticalPadding;
+  final double? itemFontSize;
+  final double? itemMinHeight;
 
   @override
   Widget build(BuildContext context) {
@@ -425,11 +449,16 @@ class _AmitiaPopupMenuPanel<T> extends StatelessWidget {
               : null,
           borderRadius: BorderRadius.circular(9),
           child: ConstrainedBox(
-            constraints: BoxConstraints(minHeight: entry.height),
+            constraints: BoxConstraints(
+              minHeight: itemMinHeight ?? entry.height,
+            ),
             child: Padding(
               padding:
                   entry.padding ??
-                  const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: itemVerticalPadding ?? 4,
+                  ),
               child: Align(alignment: Alignment.centerLeft, child: child),
             ),
           ),
@@ -447,8 +476,28 @@ class _AmitiaPopupMenuPanel<T> extends StatelessWidget {
         entry.textStyle ??
         TextStyle(
           color: entry.enabled ? context.textPrimary : context.textDisabled,
-          fontSize: 14.5,
+          fontSize: itemFontSize ?? 14.5,
         );
-    return DefaultTextStyle.merge(style: style, child: child);
+    var themedChild = child;
+    if (itemFontSize != null ||
+        itemVerticalPadding != null ||
+        itemMinHeight != null) {
+      final listTileTheme = ListTileTheme.of(context);
+      themedChild = ListTileTheme(
+        data: listTileTheme.copyWith(
+          titleTextStyle: (listTileTheme.titleTextStyle ?? const TextStyle())
+              .copyWith(
+                color: entry.enabled
+                    ? context.textPrimary
+                    : context.textDisabled,
+                fontSize: itemFontSize,
+              ),
+          minTileHeight: itemMinHeight,
+          minVerticalPadding: itemVerticalPadding,
+        ),
+        child: child,
+      );
+    }
+    return DefaultTextStyle.merge(style: style, child: themedChild);
   }
 }
