@@ -2,10 +2,8 @@ import 'package:flutter/widgets.dart';
 
 import '../amrp.dart';
 
-typedef AmrpExtensionRenderer = Widget Function(
-  BuildContext context,
-  AmrpExtensionBlock block,
-);
+typedef AmrpExtensionRenderer =
+    Widget Function(BuildContext context, AmrpExtensionBlock block);
 
 class AmrpRendererRegistry {
   AmrpRendererRegistry._();
@@ -29,4 +27,3 @@ class AmrpRendererRegistry {
   static List<String> get registeredExtensions =>
       _extensions.keys.toList(growable: false)..sort();
 }
-

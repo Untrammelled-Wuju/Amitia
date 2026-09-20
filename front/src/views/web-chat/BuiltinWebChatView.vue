@@ -106,6 +106,7 @@ SPDX-License-Identifier: AGPL-3.0-only
         @touch-end="onMsgTouchEnd"
         @retry="handleRetry"
         @reply="handleSetReply"
+        @edit="handleEditMessage"
         @scroll-to-bottom="scrollToBottom(true)"
       />
       <aside v-if="hasConversationSidebar && !isSmallViewport" class="chat-sidebar-region provider-sidebar-region">
@@ -195,7 +196,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, nextTick, watch, inject } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { ElMessage } from "element-plus";
+import { ElMessage, ElMessageBox } from "element-plus";
 import { Menu as MenuIcon } from "@element-plus/icons-vue";
 import { useApi } from "../../composables/useApi";
 import { useCachedApi } from "../../composables/useCachedApi";
@@ -249,7 +250,7 @@ function handleCallStateChange(state: string) {
   }
 }
 
-const { get, post, del } = useApi();
+const { get, post, put, del } = useApi();
 const {
   currentWorkspace,
   recentWorkspaces,
@@ -418,6 +419,35 @@ async function deleteConversationMessage(messageId: string) {
   if (index >= 0) messages.value.splice(index, 1);
 }
 
+async function handleEditMessage(msg: any) {
+  if (!msg?.id || msg.role !== "user") return;
+  try {
+    const result = await ElMessageBox.prompt("修改后将更新当前用户消息内容。", "修改消息", {
+      inputValue: String(msg.content || ""),
+      inputType: "textarea",
+      inputPlaceholder: "输入新的消息内容",
+      confirmButtonText: "保存",
+      cancelButtonText: "取消",
+      inputValidator: (value) => String(value || "").trim() ? true : "消息内容不能为空",
+    });
+    const content = String(result.value || "").trim();
+    if (!content || content === String(msg.content || "")) return;
+    const updated = await put<any>(`/api/web-chat/messages/${encodeURIComponent(msg.id)}`, { content });
+    const index = messages.value.findIndex((item) => String(item.id) === String(msg.id));
+    if (index >= 0) {
+      messages.value[index] = {
+        ...messages.value[index],
+        content: updated?.content ?? content,
+        updatedAt: updated?.updatedAt ?? new Date().toISOString(),
+      };
+    }
+    ElMessage.success("消息已修改");
+  } catch (error: any) {
+    if (error === "cancel" || error === "close") return;
+    ElMessage.error(error?.message || "修改失败");
+  }
+}
+
 function toggleProfiles() {
   showProfiles.value = !showProfiles.value;
   if (showProfiles.value) {
@@ -553,6 +583,7 @@ const conversationHostActions: Record<string, (input?: any) => unknown | Promise
   "conversation.new": async () => handleNewChat(),
   "conversation.clear": async () => handleClear(),
   "conversation.reply": async (input) => { const msg = messages.value.find((item) => item.id === String(input?.messageId ?? input ?? "")); if (msg) handleSetReply(msg); },
+  "conversation.edit": async (input) => { const msg = messages.value.find((item) => item.id === String(input?.messageId ?? input ?? "")); if (msg) await handleEditMessage(msg); },
   "conversation.sendFile": async (input) => {
     if (input?.file instanceof File) return handleFileSend(input.file);
     const resourceUri = String(input?.resourceUri ?? "").trim();

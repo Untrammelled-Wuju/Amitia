@@ -11,6 +11,9 @@ import '../../features/conversation/rendering/amitia_message_view.dart';
 import '../../features/conversation/rendering/amrp.dart';
 import 'amitia_button.dart';
 import 'amitia_misc.dart';
+import 'amitia_popup_menu.dart';
+
+enum _UserMessageAction { showTime, reply, copy, edit }
 
 class AmitiaAgentActivity {
   final String id;
@@ -71,8 +74,10 @@ class AmitiaMessageBubble extends StatelessWidget {
   final List<AmitiaAgentActivity> agentActivities;
   final bool showThinking;
   final VoidCallback? onRetry;
+  final VoidCallback? onRegenerate;
   final VoidCallback? onReply;
   final VoidCallback? onCopy;
+  final VoidCallback? onEdit;
   final VoidCallback? onAgentTaskTap;
   final VoidCallback? onPauseAgentTask;
   final VoidCallback? onResumeAgentTask;
@@ -91,8 +96,10 @@ class AmitiaMessageBubble extends StatelessWidget {
     this.agentActivities = const <AmitiaAgentActivity>[],
     this.showThinking = false,
     this.onRetry,
+    this.onRegenerate,
     this.onReply,
     this.onCopy,
+    this.onEdit,
     this.onAgentTaskTap,
     this.onPauseAgentTask,
     this.onResumeAgentTask,
@@ -103,12 +110,7 @@ class AmitiaMessageBubble extends StatelessWidget {
   Widget build(BuildContext context) {
     if (message.role != MessageRole.user) {
       return Padding(
-        padding: EdgeInsets.fromLTRB(
-          AppSpacing.lg,
-          0,
-          AppSpacing.lg,
-          38,
-        ),
+        padding: EdgeInsets.fromLTRB(AppSpacing.lg, 0, AppSpacing.lg, 38),
         child: AmitiaMessageView(
           key: ValueKey<String>('amrp:${message.renderId}'),
           message: message,
@@ -134,186 +136,107 @@ class AmitiaMessageBubble extends StatelessWidget {
               ),
           ],
           onRetry: onRetry,
+          onRegenerate: onRegenerate,
           onReply: onReply,
           onCopy: onCopy,
         ),
       );
     }
 
-    final isUser = true;
-    final displayName = isUser
-        ? ((userName ?? '').trim().isEmpty ? '我' : userName!.trim())
-        : ((characterName ?? '').trim().isEmpty ? 'AI' : characterName!.trim());
-    final initial = isUser
-        ? ((userInitial ?? '').trim().isEmpty
-              ? displayName.characters.first
-              : userInitial!.trim())
-        : ((avatarInitial ?? '').trim().isEmpty
-              ? displayName.characters.first
-              : avatarInitial!.trim());
-    final colorHex = isUser
-        ? ((userAvatarColor ?? '').trim().isEmpty
-              ? '#5F6872'
-              : userAvatarColor!.trim())
-        : ((avatarColor ?? '').trim().isEmpty
-              ? '#8A5728'
-              : avatarColor!.trim());
-
     final messageColumn = Flexible(
-      child: Column(
-        crossAxisAlignment: isUser
-            ? CrossAxisAlignment.end
-            : CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: EdgeInsets.only(
-              left: isUser ? 0 : 2,
-              right: isUser ? 2 : 0,
-              bottom: 4,
-            ),
-            child: Text(
-              displayName,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: AppTypography.label(context).copyWith(
-                fontSize: 10,
-                color: context.textTertiary,
-                height: 1.2,
-              ),
-            ),
-          ),
-          if ((message.replyToMessageId ?? '').isNotEmpty) ...[
-            Container(
-              constraints: const BoxConstraints(maxWidth: 280),
-              margin: const EdgeInsets.only(bottom: 5),
-              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
-              decoration: BoxDecoration(
-                color: context.surfaceSecondary,
-                borderRadius: AppRadius.brSmall,
-                border: Border(
-                  left: BorderSide(color: context.accentPrimary, width: 2),
-                ),
-              ),
-              child: Text(
-                '引用：${(message.replyToExcerpt ?? '原消息').trim()}',
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: AppTypography.label(
-                  context,
-                ).copyWith(color: context.textSecondary),
-              ),
-            ),
-          ],
-          if (message.reasoningContent.trim().isNotEmpty)
-            Theme(
-              data: Theme.of(
-                context,
-              ).copyWith(dividerColor: Colors.transparent),
-              child: ExpansionTile(
-                tilePadding: EdgeInsets.zero,
-                childrenPadding: const EdgeInsets.only(bottom: 6),
-                dense: true,
-                iconColor: context.textTertiary,
-                collapsedIconColor: context.textTertiary,
-                title: Text(
-                  '思考内容',
-                  style: AppTypography.label(
-                    context,
-                  ).copyWith(color: context.textTertiary),
-                ),
-                children: [
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 8,
-                    ),
-                    decoration: BoxDecoration(
-                      color: context.surfaceSecondary,
-                      borderRadius: AppRadius.brSmall,
-                    ),
-                    child: SelectableText(
-                      message.reasoningContent,
-                      style: AppTypography.bodySmall(
-                        context,
-                      ).copyWith(color: context.textSecondary),
+      child: Builder(
+        builder: (bubbleContext) => GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onLongPressStart: (_) => _showUserActions(bubbleContext, message),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              if ((message.replyToMessageId ?? '').isNotEmpty) ...[
+                Container(
+                  constraints: const BoxConstraints(maxWidth: 280),
+                  margin: const EdgeInsets.only(bottom: 5),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 9,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: context.surfaceSecondary,
+                    borderRadius: AppRadius.brSmall,
+                    border: Border(
+                      left: BorderSide(color: context.accentPrimary, width: 2),
                     ),
                   ),
-                ],
-              ),
-            ),
-          _buildContent(context, isUser),
-          if (!(showThinking && message.content.trim().isEmpty))
-            Padding(
-              padding: const EdgeInsets.only(top: 3),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    _formatTime(message.time),
+                  child: Text(
+                    '引用：${(message.replyToExcerpt ?? '原消息').trim()}',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                     style: AppTypography.label(
                       context,
-                    ).copyWith(fontSize: 9, color: context.textTertiary),
+                    ).copyWith(color: context.textSecondary),
                   ),
-                  if (onReply != null) ...[
-                    const SizedBox(width: 7),
-                    GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onTap: onReply,
-                      child: Padding(
+                ),
+              ],
+              if (message.reasoningContent.trim().isNotEmpty)
+                Theme(
+                  data: Theme.of(
+                    context,
+                  ).copyWith(dividerColor: Colors.transparent),
+                  child: ExpansionTile(
+                    tilePadding: EdgeInsets.zero,
+                    childrenPadding: const EdgeInsets.only(bottom: 6),
+                    dense: true,
+                    iconColor: context.textTertiary,
+                    collapsedIconColor: context.textTertiary,
+                    title: Text(
+                      '思考内容',
+                      style: AppTypography.label(
+                        context,
+                      ).copyWith(color: context.textTertiary),
+                    ),
+                    children: [
+                      Container(
+                        width: double.infinity,
                         padding: const EdgeInsets.symmetric(
-                          horizontal: 2,
-                          vertical: 2,
+                          horizontal: 10,
+                          vertical: 8,
                         ),
-                        child: Icon(
-                          Icons.reply_rounded,
-                          size: 14,
-                          color: context.textTertiary,
+                        decoration: BoxDecoration(
+                          color: context.surfaceSecondary,
+                          borderRadius: AppRadius.brSmall,
+                        ),
+                        child: SelectableText(
+                          message.reasoningContent,
+                          style: AppTypography.bodySmall(
+                            context,
+                          ).copyWith(color: context.textSecondary),
                         ),
                       ),
-                    ),
-                  ],
-                  if (onCopy != null) ...[
-                    const SizedBox(width: 7),
-                    GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onTap: onCopy,
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 2,
-                          vertical: 2,
-                        ),
-                        child: Icon(
-                          Icons.copy_outlined,
-                          size: 13,
-                          color: context.textTertiary,
+                    ],
+                  ),
+                ),
+              _buildContent(context, true),
+              if (message.status == MessageStatus.error)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.error_outline, size: 14, color: context.error),
+                      const SizedBox(width: 4),
+                      GestureDetector(
+                        onTap: onRetry,
+                        behavior: HitTestBehavior.opaque,
+                        child: Text(
+                          '重试',
+                          style: TextStyle(fontSize: 12, color: context.error),
                         ),
                       ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          if (message.status == MessageStatus.error)
-            Padding(
-              padding: const EdgeInsets.only(top: 4),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.error_outline, size: 14, color: context.error),
-                  const SizedBox(width: 4),
-                  GestureDetector(
-                    onTap: onRetry,
-                    behavior: HitTestBehavior.opaque,
-                    child: Text(
-                      '重试',
-                      style: TextStyle(fontSize: 12, color: context.error),
-                    ),
+                    ],
                   ),
-                ],
-              ),
-            ),
-        ],
+                ),
+            ],
+          ),
+        ),
       ),
     );
 
@@ -324,29 +247,82 @@ class AmitiaMessageBubble extends StatelessWidget {
         bottom: 14,
       ),
       child: Row(
-        mainAxisAlignment: isUser
-            ? MainAxisAlignment.end
-            : MainAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.end,
         crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (!isUser) ...[
-            if (showAvatar)
-              _MiniAvatar(initial: initial, colorHex: colorHex)
-            else
-              const SizedBox(width: 32, height: 32),
-            const SizedBox(width: 8),
-          ],
-          messageColumn,
-          if (isUser) ...[
-            const SizedBox(width: 8),
-            if (showAvatar)
-              _MiniAvatar(initial: initial, colorHex: colorHex)
-            else
-              const SizedBox(width: 32, height: 32),
-          ],
-        ],
+        children: [messageColumn],
       ),
     );
+  }
+
+  Future<void> _showUserActions(
+    BuildContext context,
+    ChatMessage message,
+  ) async {
+    final renderObject = context.findRenderObject();
+    if (renderObject is! RenderBox || !renderObject.hasSize) return;
+    final topLeft = renderObject.localToGlobal(Offset.zero);
+    final bottomRight = renderObject.localToGlobal(
+      renderObject.size.bottomRight(Offset.zero),
+    );
+    final action = await showAmitiaPopupMenu<_UserMessageAction>(
+      context: context,
+      anchorRect: Rect.fromPoints(topLeft, bottomRight),
+      menuWidth: 180,
+      itemHorizontalMargin: 0,
+      itemHorizontalPadding: 14,
+      itemVerticalPadding: 0,
+      itemFontSize: 14.5,
+      itemIconSize: 18,
+      itemMinHeight: 46,
+      items: [
+        const PopupMenuItem(
+          value: _UserMessageAction.showTime,
+          child: _UserMessageMenuLabel(
+            icon: Icons.schedule_rounded,
+            label: '显示时间',
+          ),
+        ),
+        PopupMenuItem(
+          value: _UserMessageAction.reply,
+          enabled: onReply != null,
+          child: const _UserMessageMenuLabel(
+            icon: Icons.format_quote_rounded,
+            label: '引用',
+          ),
+        ),
+        PopupMenuItem(
+          value: _UserMessageAction.copy,
+          enabled: onCopy != null,
+          child: const _UserMessageMenuLabel(
+            icon: Icons.copy_outlined,
+            label: '复制',
+          ),
+        ),
+        PopupMenuItem(
+          value: _UserMessageAction.edit,
+          enabled: onEdit != null,
+          child: const _UserMessageMenuLabel(
+            icon: Icons.edit_outlined,
+            label: '修改',
+          ),
+        ),
+      ],
+    );
+    if (!context.mounted || action == null) return;
+    switch (action) {
+      case _UserMessageAction.showTime:
+        amitiaSnackBar(context, '发送时间：${_formatDateTime(message.time)}');
+        return;
+      case _UserMessageAction.reply:
+        onReply?.call();
+        return;
+      case _UserMessageAction.copy:
+        onCopy?.call();
+        return;
+      case _UserMessageAction.edit:
+        onEdit?.call();
+        return;
+    }
   }
 
   Widget _buildContent(BuildContext context, bool isUser) {
@@ -442,6 +418,12 @@ class AmitiaMessageBubble extends StatelessWidget {
     return '$hour:$minute';
   }
 
+  String _formatDateTime(DateTime value) {
+    final month = value.month.toString().padLeft(2, '0');
+    final day = value.day.toString().padLeft(2, '0');
+    return '${value.year}-$month-$day ${_formatTime(value)}';
+  }
+
   (String, String) _parseCodeFence(String content) {
     final trimmed = content.trim();
     if (!trimmed.startsWith('```') || !trimmed.endsWith('```')) {
@@ -474,6 +456,25 @@ class AmitiaMessageBubble extends StatelessWidget {
       default:
         return AmrpToolStatus.success;
     }
+  }
+}
+
+class _UserMessageMenuLabel extends StatelessWidget {
+  final IconData icon;
+  final String label;
+
+  const _UserMessageMenuLabel({required this.icon, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, color: context.textSecondary),
+        const SizedBox(width: 10),
+        Text(label),
+      ],
+    );
   }
 }
 
@@ -688,42 +689,6 @@ class _AgentActivityRow extends StatelessWidget {
       ),
     );
   }
-}
-
-class _MiniAvatar extends StatelessWidget {
-  final String initial;
-  final String colorHex;
-  const _MiniAvatar({required this.initial, required this.colorHex});
-
-  @override
-  Widget build(BuildContext context) {
-    final color = Color(
-      int.parse('FF${colorHex.replaceAll('#', '')}', radix: 16),
-    );
-    return Container(
-      width: 32,
-      height: 32,
-      decoration: BoxDecoration(
-        color: color,
-        borderRadius: BorderRadius.circular(11),
-      ),
-      child: Center(
-        child: Text(
-          initial,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-Color _parseHex(String hex) {
-  final cleaned = hex.replaceAll('#', '');
-  return Color(int.parse('FF$cleaned', radix: 16));
 }
 
 class _FileMessage extends StatelessWidget {
@@ -2044,7 +2009,7 @@ class _AmitiaChatInputState extends State<AmitiaChatInput> {
                   child: Row(
                     children: [
                       Icon(
-                        Icons.reply_rounded,
+                        Icons.format_quote_rounded,
                         size: 16,
                         color: context.accentPrimary,
                       ),

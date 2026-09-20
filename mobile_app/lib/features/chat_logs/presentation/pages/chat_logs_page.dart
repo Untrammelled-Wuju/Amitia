@@ -399,6 +399,7 @@ ChatMessage _toChatMessage(MessageDto message) {
     type: type,
     content: message.content,
     reasoningContent: message.reasoningContent,
+    reasoningDurationMs: message.reasoningDurationMs,
     time: DateTime.tryParse(message.createdAt) ?? DateTime.now(),
     status: MessageStatus.sent,
     mediaUrl: message.imageUrl.isNotEmpty

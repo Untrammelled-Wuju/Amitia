@@ -31,4 +31,3 @@ class MarkdownStreamScheduler {
 }
 
 typedef VoidCallback = void Function();
-

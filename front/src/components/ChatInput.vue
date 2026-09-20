@@ -1091,11 +1091,6 @@ defineExpose({ focus, setText, clear: clearText });
     box-shadow 0.18s ease;
 }
 
-.input-wrapper:focus-within {
-  border-color: var(--composer-border-focus);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--composer-border-focus) 18%, transparent);
-}
-
 .workspace-trigger {
   display: inline-flex;
   align-items: center;
@@ -1825,10 +1820,6 @@ defineExpose({ focus, setText, clear: clearText });
   border-radius: 14px;
   background: var(--workbench-sidebar-bg);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
-}
-.input-wrapper:focus-within {
-  border-color: color-mix(in srgb, var(--composer-border-focus) 72%, var(--composer-border));
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--composer-border-focus) 18%, transparent), 0 8px 24px rgba(0, 0, 0, 0.14);
 }
 .input-row {
   display: grid;

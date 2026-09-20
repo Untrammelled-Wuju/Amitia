@@ -164,6 +164,7 @@ CREATE TABLE IF NOT EXISTS messages (
     role TEXT NOT NULL,
     content TEXT NOT NULL,
     reasoning_content TEXT NOT NULL DEFAULT '',
+    reasoning_duration_ms INTEGER NOT NULL DEFAULT 0,
     msg_type TEXT DEFAULT 'text',
     tokens INTEGER DEFAULT 0,
     source TEXT DEFAULT 'manual',

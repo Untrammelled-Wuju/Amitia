@@ -102,6 +102,7 @@ class ConversationMessageLedger {
         a.type == b.type &&
         a.content == b.content &&
         a.reasoningContent == b.reasoningContent &&
+        a.reasoningDurationMs == b.reasoningDurationMs &&
         a.time == b.time &&
         a.sequence == b.sequence &&
         a.status == b.status &&

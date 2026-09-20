@@ -12,7 +12,7 @@ class AppearancePreferences {
   final bool reduceAnimation;
 
   const AppearancePreferences({
-    this.themeMode = ThemeMode.light,
+    this.themeMode = ThemeMode.system,
     this.fontScale = 1.0,
     this.accentColorIndex = 0,
     this.cornerStyleIndex = 1,
@@ -62,9 +62,10 @@ class AppearancePreferencesNotifier extends StateNotifier<AppearancePreferences>
     final prefs = await SharedPreferences.getInstance();
     final rawTheme = prefs.getString(_themeKey);
     final theme = switch (rawTheme) {
+      'light' => ThemeMode.light,
       'dark' => ThemeMode.dark,
       'system' => ThemeMode.system,
-      _ => ThemeMode.light,
+      _ => ThemeMode.system,
     };
     state = AppearancePreferences(
       themeMode: theme,

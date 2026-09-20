@@ -47,10 +47,7 @@ class _AmitiaCitationListState extends State<AmitiaCitationList> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            '引用',
-            style: TextStyle(color: tokens.muted, fontSize: 11.5),
-          ),
+          Text('引用', style: TextStyle(color: tokens.muted, fontSize: 11.5)),
           const SizedBox(height: 5),
           Wrap(
             spacing: 5,
@@ -157,4 +154,3 @@ class _AmitiaCitationListState extends State<AmitiaCitationList> {
     ).showSnackBar(const SnackBar(content: Text('已复制引用')));
   }
 }
-

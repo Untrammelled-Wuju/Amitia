@@ -917,7 +917,7 @@ function onActionFromChild(payload: { action: SchemaUIActionBinding; node: Schem
   color: var(--amitia-color-text-secondary, rgba(127, 127, 127, 0.85));
 }
 .schema-ui-markdown :deep(a) {
-  color: var(--amitia-color-accent, #409eff);
+  color: var(--amitia-color-accent, #8a5728);
   text-decoration: none;
 }
 .schema-ui-markdown :deep(a:hover) {
@@ -1012,7 +1012,7 @@ function onActionFromChild(payload: { action: SchemaUIActionBinding; node: Schem
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: var(--amitia-color-accent, #409eff);
+  background: var(--amitia-color-accent, #8a5728);
   flex-shrink: 0;
 }
 .schema-ui-permission-summary__empty {

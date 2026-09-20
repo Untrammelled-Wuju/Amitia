@@ -12,18 +12,19 @@ func convertProcessMessageResponse(resp *ProcessMessageResponse) *interaction.Pr
 	}
 	lines := DeduplicateAdjacentLines(resp.Lines)
 	return &interaction.ProcessResponse{
-		ConversationID: resp.ConversationID,
-		Sequence:       resp.Sequence,
-		Reply:          resp.Reply,
-		Reasoning:      resp.Reasoning,
-		Lines:          lines,
-		CharacterID:    resp.CharacterID,
-		CharacterName:  resp.CharacterName,
-		MessageIDs:     resp.MessageIDs,
-		ForceVoice:     resp.ForceVoice,
-		AudioUrls:      resp.AudioUrls,
-		RequestID:      resp.RequestID,
-		MessagePlan:    resp.MessagePlan,
-		Events:         resp.Events,
+		ConversationID:      resp.ConversationID,
+		Sequence:            resp.Sequence,
+		Reply:               resp.Reply,
+		Reasoning:           resp.Reasoning,
+		ReasoningDurationMS: resp.ReasoningDurationMS,
+		Lines:               lines,
+		CharacterID:         resp.CharacterID,
+		CharacterName:       resp.CharacterName,
+		MessageIDs:          resp.MessageIDs,
+		ForceVoice:          resp.ForceVoice,
+		AudioUrls:           resp.AudioUrls,
+		RequestID:           resp.RequestID,
+		MessagePlan:         resp.MessagePlan,
+		Events:              resp.Events,
 	}
 }

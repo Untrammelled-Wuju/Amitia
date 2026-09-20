@@ -160,7 +160,10 @@ body{padding:20px}*{box-sizing:border-box}
               ),
             )
           else if (_controller != null)
-            SizedBox(height: 190, child: WebViewWidget(controller: _controller!)),
+            SizedBox(
+              height: 190,
+              child: WebViewWidget(controller: _controller!),
+            ),
         ],
       ),
     );

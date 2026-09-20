@@ -1189,14 +1189,14 @@ onMounted(() => {
 .game-mode-page {
   --game-primary: var(--tp-primary, #8a5728);
   --game-primary-hover: var(--tp-primary-hover, #74451e);
-  --game-primary-soft: var(--tp-primary-soft, #f1e4d4);
-  --game-panel: var(--tp-panel, #fcfbf8);
-  --game-panel-soft: var(--tp-panel-soft, #f6f3ed);
+  --game-primary-soft: var(--tp-primary-soft, #efe1d2);
+  --game-panel: var(--tp-panel, #ffffff);
+  --game-panel-soft: var(--tp-panel-soft, #f4f6f8);
   --game-text: var(--tp-text, #24221f);
   --game-text-secondary: var(--tp-text-secondary, #5f5b54);
   --game-text-muted: var(--tp-text-muted, #706b63);
-  --game-border: var(--tp-border, #d8d2c7);
-  --game-border-light: var(--tp-border-light, #e6e1d8);
+  --game-border: var(--tp-border, #e2e6eb);
+  --game-border-light: var(--tp-border-light, #eff1f4);
   --game-success: var(--tp-success, #3f7653);
   --game-success-soft: var(--tp-success-soft, #e4efe7);
   --game-danger: var(--tp-danger, #a83f3f);

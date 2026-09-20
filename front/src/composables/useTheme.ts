@@ -25,6 +25,7 @@ interface StoredAppearance {
 const STORAGE_KEY = "ai-companion-theme";
 const APPEARANCE_STORAGE_KEY = "ai-companion-appearance";
 const VALID_PRESETS: ThemePreset[] = ["system", "light", "dark"];
+const DEFAULT_THEME: ThemePreset = "dark";
 const DEFAULT_ACCENT = "#8A5728";
 
 export const FONT_SCALE_OPTIONS = [
@@ -60,7 +61,7 @@ export const THEME_PRESETS: {
 function normalizePreset(preset: unknown): ThemePreset {
   return VALID_PRESETS.includes(preset as ThemePreset)
     ? (preset as ThemePreset)
-    : "system";
+    : DEFAULT_THEME;
 }
 
 function normalizeFontScale(value: unknown): number {
@@ -166,12 +167,28 @@ function persistAppearance() {
 
 function applyAccent(html: HTMLElement, accent: string) {
   const normalized = normalizeAccentColor(accent);
+  const isDefaultLightAccent =
+    normalized === DEFAULT_ACCENT && resolvedMode.value === "light";
   html.style.setProperty("--tp-primary", normalized);
-  html.style.setProperty("--tp-primary-hover", mixHex(normalized, [0, 0, 0], 0.12));
-  html.style.setProperty("--tp-primary-active", mixHex(normalized, [0, 0, 0], 0.2));
-  html.style.setProperty("--tp-primary-soft", rgba(normalized, 0.14));
-  html.style.setProperty("--tp-primary-bg", rgba(normalized, 0.12));
-  html.style.setProperty("--tp-primary-border", rgba(normalized, 0.3));
+  html.style.setProperty(
+    "--tp-primary-hover",
+    isDefaultLightAccent ? "#6E421F" : mixHex(normalized, [0, 0, 0], 0.12),
+  );
+  html.style.setProperty(
+    "--tp-primary-active",
+    isDefaultLightAccent ? "#5E3518" : mixHex(normalized, [0, 0, 0], 0.2),
+  );
+  if (isDefaultLightAccent) {
+    html.style.setProperty("--tp-primary-soft", "#EFE1D2");
+    html.style.setProperty("--tp-primary-bg", "#EFE1D2");
+  } else {
+    html.style.setProperty("--tp-primary-soft", rgba(normalized, 0.14));
+    html.style.setProperty("--tp-primary-bg", rgba(normalized, 0.12));
+  }
+  html.style.setProperty(
+    "--tp-primary-border",
+    rgba(normalized, resolvedMode.value === "light" ? 0.24 : 0.3),
+  );
   html.style.setProperty("--tp-primary-light-3", mixHex(normalized, [255, 255, 255], 0.3));
   html.style.setProperty("--tp-primary-light-5", mixHex(normalized, [255, 255, 255], 0.5));
   html.style.setProperty("--tp-primary-light-7", mixHex(normalized, [255, 255, 255], 0.7));

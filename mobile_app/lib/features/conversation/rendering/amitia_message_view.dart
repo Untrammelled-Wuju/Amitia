@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../shared/models/models.dart';
+import '../../../core/widgets/amitia_popup_menu.dart';
 import 'amitia_message_theme.dart';
 import 'amrp.dart';
 import 'markdown/amitia_markdown.dart';
@@ -20,6 +21,7 @@ class AmitiaMessageView extends StatefulWidget {
   final bool showThinking;
   final List<AmrpToolBlock> toolBlocks;
   final VoidCallback? onRetry;
+  final VoidCallback? onRegenerate;
   final VoidCallback? onReply;
   final VoidCallback? onCopy;
 
@@ -35,6 +37,7 @@ class AmitiaMessageView extends StatefulWidget {
     this.showThinking = false,
     this.toolBlocks = const <AmrpToolBlock>[],
     this.onRetry,
+    this.onRegenerate,
     this.onReply,
     this.onCopy,
   });
@@ -133,6 +136,7 @@ class _AmitiaMessageViewState extends State<AmitiaMessageView> {
                       onCopyMarkdown: () => _copy(context, message.markdown),
                       onReply: widget.onReply,
                       onRetry: widget.onRetry,
+                      onRegenerate: widget.onRegenerate,
                     ),
                 ],
               ),
@@ -158,10 +162,12 @@ class _AmitiaMessageViewState extends State<AmitiaMessageView> {
         continue;
       }
       flushImages();
-      widgets.add(KeyedSubtree(
-        key: ValueKey<String>('$messageId:${block.id}'),
-        child: AmitiaRichBlockRenderer(block: block),
-      ));
+      widgets.add(
+        KeyedSubtree(
+          key: ValueKey<String>('$messageId:${block.id}'),
+          child: AmitiaRichBlockRenderer(block: block),
+        ),
+      );
     }
     flushImages();
     return widgets;
@@ -236,10 +242,7 @@ class _MessageHead extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 7),
-          Text(
-            role,
-            style: TextStyle(color: tokens.muted, fontSize: 11),
-          ),
+          Text(role, style: TextStyle(color: tokens.muted, fontSize: 11)),
           const SizedBox(width: 7),
           Text(
             time,
@@ -344,12 +347,15 @@ class _StateNotice extends StatelessWidget {
   }
 }
 
+enum _CopyMode { plain, markdown }
+
 class _MessageActions extends StatelessWidget {
   final bool streaming;
   final VoidCallback onCopy;
   final VoidCallback onCopyMarkdown;
   final VoidCallback? onReply;
   final VoidCallback? onRetry;
+  final VoidCallback? onRegenerate;
 
   const _MessageActions({
     required this.streaming,
@@ -357,24 +363,73 @@ class _MessageActions extends StatelessWidget {
     required this.onCopyMarkdown,
     this.onReply,
     this.onRetry,
+    this.onRegenerate,
   });
 
   @override
   Widget build(BuildContext context) {
+    final tokens = AmitiaMessageTheme.of(context);
     return Padding(
-      padding: const EdgeInsets.only(top: 9),
+      padding: const EdgeInsets.only(top: 6),
       child: Wrap(
-        spacing: 2,
+        spacing: 4,
         children: [
-          TextButton(onPressed: onCopy, child: const Text('复制')),
-          TextButton(
-            onPressed: onCopyMarkdown,
-            child: const Text('复制 Markdown'),
+          AmitiaPopupMenuButton<_CopyMode>(
+            tooltip: '复制',
+            menuWidth: 200,
+            itemHorizontalMargin: 0,
+            itemHorizontalPadding: 14,
+            itemVerticalPadding: 0,
+            itemFontSize: 14.5,
+            itemIconSize: 18,
+            itemMinHeight: 46,
+            icon: Icon(Icons.copy_outlined, size: 18, color: tokens.muted),
+            onSelected: (mode) {
+              switch (mode) {
+                case _CopyMode.plain:
+                  onCopy();
+                  return;
+                case _CopyMode.markdown:
+                  onCopyMarkdown();
+                  return;
+              }
+            },
+            itemBuilder: (_) => const [
+              PopupMenuItem(value: _CopyMode.plain, child: Text('复制纯文本')),
+              PopupMenuItem(
+                value: _CopyMode.markdown,
+                child: Text('复制 Markdown'),
+              ),
+            ],
           ),
           if (!streaming && onReply != null)
-            TextButton(onPressed: onReply, child: const Text('回复')),
-          if (!streaming && onRetry != null)
-            TextButton(onPressed: onRetry, child: const Text('重新生成')),
+            IconButton(
+              tooltip: '引用',
+              onPressed: onReply,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints.tightFor(width: 44, height: 44),
+              icon: Icon(
+                Icons.format_quote_rounded,
+                size: 18,
+                color: tokens.muted,
+              ),
+            ),
+          if (!streaming && onRegenerate != null)
+            IconButton(
+              tooltip: '重新生成',
+              onPressed: onRegenerate,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints.tightFor(width: 44, height: 44),
+              icon: Icon(Icons.refresh_rounded, size: 18, color: tokens.muted),
+            ),
+          if (!streaming && onRegenerate == null && onRetry != null)
+            IconButton(
+              tooltip: '重试',
+              onPressed: onRetry,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints.tightFor(width: 44, height: 44),
+              icon: Icon(Icons.refresh_rounded, size: 18, color: tokens.muted),
+            ),
         ],
       ),
     );
@@ -385,10 +440,7 @@ class _SystemNotice extends StatelessWidget {
   final AmrpMessage message;
   final AmitiaMessageTheme tokens;
 
-  const _SystemNotice({
-    required this.message,
-    required this.tokens,
-  });
+  const _SystemNotice({required this.message, required this.tokens});
 
   @override
   Widget build(BuildContext context) {
@@ -415,13 +467,11 @@ class _UserMessage extends StatelessWidget {
   final AmrpMessage message;
   final AmitiaMessageTheme tokens;
 
-  const _UserMessage({
-    required this.message,
-    required this.tokens,
-  });
+  const _UserMessage({required this.message, required this.tokens});
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Align(
       alignment: Alignment.centerRight,
       child: Container(
@@ -429,10 +479,10 @@ class _UserMessage extends StatelessWidget {
         margin: const EdgeInsets.only(bottom: 34),
         padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 11),
         decoration: BoxDecoration(
-          color: tokens.userBubble,
+          color: colorScheme.primaryContainer,
           borderRadius: const BorderRadius.only(
             topLeft: Radius.circular(18),
-            topRight: Radius.circular(6),
+            topRight: Radius.circular(18),
             bottomLeft: Radius.circular(18),
             bottomRight: Radius.circular(18),
           ),
@@ -440,7 +490,7 @@ class _UserMessage extends StatelessWidget {
         child: SelectableText(
           message.markdown,
           style: TextStyle(
-            color: tokens.text,
+            color: colorScheme.onPrimaryContainer,
             fontSize: 14,
             height: 1.6,
           ),
@@ -526,10 +576,7 @@ class _MinecraftServerBlock extends StatelessWidget {
                     ),
                     child: const Text(
                       'M',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                      ),
+                      style: TextStyle(color: Colors.white, fontSize: 16),
                     ),
                   ),
                   const SizedBox(width: 10),
@@ -540,8 +587,7 @@ class _MinecraftServerBlock extends StatelessWidget {
                         Padding(
                           padding: const EdgeInsets.only(top: 14),
                           child: Text(
-                            payload['title']?.toString() ??
-                                'Minecraft 服务器已连接',
+                            payload['title']?.toString() ?? 'Minecraft 服务器已连接',
                             style: TextStyle(
                               color: tokens.text,
                               fontWeight: FontWeight.w700,

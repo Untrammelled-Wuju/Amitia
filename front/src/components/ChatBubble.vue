@@ -8,11 +8,10 @@ SPDX-License-Identifier: AGPL-3.0-only
     :char-name="charName"
     :char-avatar="charAvatar"
     :character-id="characterId"
-    :user-avatar="appStore.avatar || ''"
-    :user-name="String((appStore as any).nickname || (appStore as any).userName || '我')"
     :read-only="readOnly"
     @retry="$emit('retry', $event)"
     @reply="$emit('reply', $event)"
+    @edit="$emit('edit', $event)"
     @scroll-to-message="$emit('scroll-to-message', $event)"
   >
     <template #badges="slotProps">
@@ -29,7 +28,6 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 <script setup lang="ts">
 import AIMessageRenderer from "@/conversation/rendering/AIMessageRenderer.vue";
-import { useAppStore } from "@/stores/app";
 
 withDefaults(
   defineProps<{
@@ -56,8 +54,8 @@ withDefaults(
 defineEmits<{
   retry: [message: Record<string, any>];
   reply: [message: Record<string, any>];
+  edit: [message: Record<string, any>];
   "scroll-to-message": [id: string];
 }>();
 
-const appStore = useAppStore();
 </script>

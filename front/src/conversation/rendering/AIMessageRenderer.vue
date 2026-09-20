@@ -15,16 +15,21 @@
           </div>
         </div>
         <div class="amrp-user-bubble">{{ message.markdown }}</div>
-        <div class="amrp-user-meta">
+        <div class="amrp-user-tools">
           <slot name="badges" :message="message" />
-          <span>{{ formatTime(message.createdAt) }}</span>
+          <span class="amrp-user-time">{{ formatTime(message.createdAt) }}</span>
+          <button type="button" title="引用" aria-label="引用" @click="emit('reply', message)">
+            <el-icon><ChatLineSquare /></el-icon>
+          </button>
+          <button type="button" title="复制" aria-label="复制" @click="copyUserMessage">
+            <el-icon><CopyDocument /></el-icon>
+          </button>
+          <button v-if="!readOnly" type="button" title="修改" aria-label="修改" @click="emit('edit', message)">
+            <el-icon><EditPen /></el-icon>
+          </button>
+          <slot name="actions" :message="message" />
         </div>
         <slot name="extension-content" :message="message" />
-        <slot name="actions" :message="message" />
-      </div>
-      <div v-if="showAvatar" class="amrp-avatar user">
-        <img v-if="userAvatar" :src="userAvatar" alt="" />
-        <span v-else>{{ userInitial }}</span>
       </div>
     </div>
 
@@ -79,10 +84,21 @@
         />
 
         <footer v-if="!readOnly" class="amrp-actions">
-          <button type="button" @click="copyPlainText">复制</button>
-          <button type="button" @click="copyMarkdown">复制 Markdown</button>
-          <button v-if="!streaming" type="button" @click="emit('reply', message)">回复</button>
-          <button v-if="!streaming" type="button" @click="emit('retry', message)">重新生成</button>
+          <div class="amrp-copy-action">
+            <button type="button" title="复制" aria-label="复制" @click="copyMenuOpen = !copyMenuOpen">
+              <el-icon><CopyDocument /></el-icon>
+            </button>
+            <div v-if="copyMenuOpen" class="amrp-copy-menu">
+              <button type="button" @click="handleCopy('plain')">复制纯文本</button>
+              <button type="button" @click="handleCopy('markdown')">复制 Markdown</button>
+            </div>
+          </div>
+          <button v-if="!streaming" type="button" title="回复" aria-label="回复" @click="emit('reply', message)">
+            <el-icon><ChatLineSquare /></el-icon>
+          </button>
+          <button v-if="!streaming" type="button" title="重新生成" aria-label="重新生成" @click="emit('retry', message)">
+            <el-icon><RefreshRight /></el-icon>
+          </button>
           <slot name="actions" :message="message" />
         </footer>
       </div>
@@ -93,6 +109,12 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import { ElMessage } from "element-plus";
+import {
+  ChatLineSquare,
+  CopyDocument,
+  EditPen,
+  RefreshRight,
+} from "@element-plus/icons-vue";
 import { useTheme } from "@/composables/useTheme";
 import type { AIMessageData, RichBlock } from "./types";
 import { aimMessagePlainText, normalizeAIMessage } from "./amrp";
@@ -122,8 +144,6 @@ const props = withDefaults(
     charName?: string;
     charAvatar?: string;
     characterId?: string;
-    userAvatar?: string;
-    userName?: string;
     showAvatar?: boolean;
     readOnly?: boolean;
   }>(),
@@ -131,8 +151,6 @@ const props = withDefaults(
     charName: "Amitia",
     charAvatar: "",
     characterId: "",
-    userAvatar: "",
-    userName: "我",
     showAvatar: true,
     readOnly: false,
   },
@@ -141,11 +159,13 @@ const props = withDefaults(
 const emit = defineEmits<{
   retry: [message: Record<string, any>];
   reply: [message: Record<string, any>];
+  edit: [message: Record<string, any>];
   "scroll-to-message": [id: string];
 }>();
 
 const { resolvedMode } = useTheme();
 const activeCitationId = ref("");
+const copyMenuOpen = ref(false);
 const message = computed<AIMessageData>(() =>
   normalizeAIMessage(props.message, {
     id: props.characterId,
@@ -155,7 +175,6 @@ const message = computed<AIMessageData>(() =>
 );
 const character = computed(() => message.value.character ?? { id: "", name: props.charName });
 const characterInitial = computed(() => (character.value.name || "A").trim().slice(0, 1));
-const userInitial = computed(() => (props.userName || "我").trim().slice(0, 1));
 const streaming = computed(() => message.value.state === "streaming" || message.value.state === "queued");
 const roleLabel = computed(() => String(props.message.roleLabel ?? props.message.characterRole ?? "默认角色"));
 const hasReply = computed(() => Boolean(props.message.replyToMessageId));
@@ -222,46 +241,59 @@ async function copyMarkdown() {
   copied ? ElMessage.success("已复制 Markdown") : ElMessage.warning("复制失败");
 }
 
+async function copyUserMessage() {
+  const copied = await copyText(message.value.markdown);
+  copied ? ElMessage.success("已复制") : ElMessage.warning("复制失败");
+}
+
+async function handleCopy(mode: "plain" | "markdown") {
+  copyMenuOpen.value = false;
+  if (mode === "markdown") return copyMarkdown();
+  return copyPlainText();
+}
+
 </script>
 
 <style scoped>
 .amrp-root {
-  --amrp-bg: #f7f7f8;
+  --amrp-bg: var(--tp-page);
   --amrp-text: #19191c;
   --amrp-muted: #8c8e95;
-  --amrp-line: #e8e8eb;
-  --amrp-user: #ece9ff;
+  --amrp-line: var(--tp-border);
+  --amrp-user: var(--tp-primary-bg);
+  --amrp-user-text: var(--tp-primary-active);
   --amrp-code-bg: #1b1c20;
   --amrp-code-head: #232429;
-  --amrp-soft: #f1f1f3;
-  --amrp-control: #e9e9ed;
-  --amrp-surface: #ffffff;
-  --amrp-inline-code: #ededf0;
+  --amrp-soft: var(--tp-panel-soft);
+  --amrp-control: var(--tp-control);
+  --amrp-surface: var(--tp-panel);
+  --amrp-inline-code: var(--tp-panel-soft);
   --amrp-tool-text: #5f6168;
-  --amrp-accent: #7060e8;
-  --amrp-accent-soft: #efedff;
-  --amrp-good: #3e8d5d;
-  --amrp-danger: #c85353;
+  --amrp-accent: var(--tp-primary);
+  --amrp-accent-soft: var(--tp-primary-soft);
+  --amrp-good: var(--tp-success);
+  --amrp-danger: var(--tp-danger);
   width: 100%;
 }
 
 .amrp-root.amrp-dark {
-  --amrp-bg: #17181b;
+  --amrp-bg: var(--workbench-bg);
   --amrp-text: #ececef;
   --amrp-muted: #9b9da5;
-  --amrp-line: #2a2b30;
-  --amrp-user: #302d4f;
+  --amrp-line: var(--tp-border);
+  --amrp-user: var(--tp-primary-bg);
+  --amrp-user-text: var(--tp-primary-active);
   --amrp-code-bg: #111216;
   --amrp-code-head: #1c1d22;
-  --amrp-soft: #24252a;
-  --amrp-control: #292a30;
-  --amrp-surface: #1d1e22;
-  --amrp-inline-code: #24252a;
+  --amrp-soft: var(--tp-panel-soft);
+  --amrp-control: var(--tp-control);
+  --amrp-surface: var(--tp-panel);
+  --amrp-inline-code: var(--tp-panel-soft);
   --amrp-tool-text: #a7a9b0;
-  --amrp-accent: #9a8cff;
-  --amrp-accent-soft: #2e294d;
-  --amrp-good: #6fbd8b;
-  --amrp-danger: #e07878;
+  --amrp-accent: var(--tp-primary);
+  --amrp-accent-soft: var(--tp-primary-soft);
+  --amrp-good: var(--tp-success);
+  --amrp-danger: var(--tp-danger);
 }
 
 .amrp-message {
@@ -284,7 +316,7 @@ async function copyMarkdown() {
   place-items: center;
   overflow: hidden;
   border-radius: 11px;
-  background: linear-gradient(145deg, #9185ed, #6858d4);
+  background: var(--tp-logo-bg);
   color: white;
   font-size: 12px;
   font-weight: 800;
@@ -342,7 +374,6 @@ async function copyMarkdown() {
 .amrp-user-row {
   display: flex;
   justify-content: flex-end;
-  gap: 10px;
   width: 100%;
   max-width: 820px;
   margin: 0 auto 34px;
@@ -356,21 +387,55 @@ async function copyMarkdown() {
 }
 
 .amrp-user-bubble {
-  border-radius: 18px 6px 18px 18px;
+  border-radius: 18px;
   padding: 11px 15px;
   background: var(--amrp-user);
-  color: var(--amrp-text);
+  color: var(--amrp-user-text);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 
-.amrp-user-meta {
+.amrp-user-tools {
   display: flex;
   align-items: center;
   gap: 7px;
   margin-top: 4px;
+  min-height: 24px;
   color: var(--amrp-muted);
   font-size: 10px;
+  opacity: 0;
+  transition: opacity 150ms ease;
+}
+
+.amrp-user-row:hover .amrp-user-tools,
+.amrp-user-row:focus-within .amrp-user-tools {
+  opacity: 1;
+}
+
+.amrp-user-time {
+  white-space: nowrap;
+}
+
+.amrp-user-tools button,
+.amrp-actions > button,
+.amrp-copy-action > button {
+  display: inline-grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border: 0;
+  border-radius: 6px;
+  padding: 0;
+  background: transparent;
+  color: var(--amrp-muted);
+  cursor: pointer;
+}
+
+.amrp-user-tools button:hover,
+.amrp-actions > button:hover,
+.amrp-copy-action > button:hover {
+  background: var(--amrp-soft);
+  color: var(--amrp-text);
 }
 
 .amrp-quote {
@@ -414,19 +479,38 @@ async function copyMarkdown() {
 }
 
 .amrp-actions button {
-  border: 0;
-  border-radius: 6px;
-  padding: 5px 7px;
-  background: transparent;
-  color: var(--amrp-muted);
   font: inherit;
-  font-size: 11px;
-  cursor: pointer;
 }
 
 .amrp-actions button:hover {
   background: var(--amrp-soft);
   color: var(--amrp-text);
+}
+
+.amrp-copy-action {
+  position: relative;
+}
+
+.amrp-copy-menu {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 6px);
+  z-index: 20;
+  min-width: 150px;
+  overflow: hidden;
+  border: 1px solid var(--amrp-line);
+  border-radius: 8px;
+  padding: 4px;
+  background: var(--amrp-surface);
+  box-shadow: var(--tp-shadow-float);
+}
+
+.amrp-copy-menu button {
+  width: 100%;
+  height: 30px;
+  padding: 0 8px;
+  text-align: left;
+  white-space: nowrap;
 }
 
 .amrp-message-state {

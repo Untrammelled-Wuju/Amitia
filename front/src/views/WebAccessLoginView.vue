@@ -108,7 +108,7 @@ onMounted(async () => {
   display: grid;
   place-items: center;
   border-radius: 12px;
-  background: var(--el-color-primary, #409eff);
+  background: var(--el-color-primary, #8a5728);
   color: white;
   font-size: 20px;
   font-weight: 700;
@@ -139,13 +139,13 @@ p {
   outline: none;
 }
 .login-input:focus {
-  border-color: var(--el-color-primary, #409eff);
+  border-color: var(--el-color-primary, #8a5728);
 }
 .login-button {
   height: 44px;
   border: 0;
   border-radius: 10px;
-  background: var(--el-color-primary, #409eff);
+  background: var(--el-color-primary, #8a5728);
   color: #fff;
   cursor: pointer;
   font-weight: 600;

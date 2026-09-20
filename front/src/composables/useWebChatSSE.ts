@@ -104,6 +104,7 @@ export function useWebChatSSE(
       msgType: metadata.messageType,
       rawError: metadata.rawError,
       reasoningContent: metadata.reasoningContent,
+      reasoningDurationMs: metadata.reasoningDurationMs,
       requestId: metadata.requestId,
       anchorMessageId: metadata.userMessageId,
       anchorSequence: metadata.userMessageSequence,

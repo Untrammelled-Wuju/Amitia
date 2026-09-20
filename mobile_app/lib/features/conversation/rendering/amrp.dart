@@ -22,11 +22,7 @@ class AmrpCharacter {
   final String name;
   final String avatar;
 
-  const AmrpCharacter({
-    this.id = '',
-    this.name = 'Amitia',
-    this.avatar = '',
-  });
+  const AmrpCharacter({this.id = '', this.name = 'Amitia', this.avatar = ''});
 }
 
 class AmrpThinkingBlock {
@@ -225,11 +221,7 @@ class AmrpUnknownBlock extends AmrpRichBlock {
   final String type;
   final Object? payload;
 
-  const AmrpUnknownBlock({
-    required super.id,
-    required this.type,
-    this.payload,
-  });
+  const AmrpUnknownBlock({required super.id, required this.type, this.payload});
 }
 
 class AmrpMessage {
@@ -278,6 +270,9 @@ class AmrpMessage {
           : AmrpThinkingBlock(
               content: message.reasoningContent,
               state: _stateFor(message),
+              duration: message.reasoningDurationMs > 0
+                  ? Duration(milliseconds: message.reasoningDurationMs)
+                  : null,
             ),
       blocks: _blocksFor(message),
       sources: const <AmrpCitationSource>[],
@@ -289,9 +284,14 @@ class AmrpMessage {
 
   static AmrpMessageState _stateFor(ChatMessage message) {
     return switch (message.status) {
-      MessageStatus.sending => AmrpMessageState.streaming,
+      MessageStatus.queued => AmrpMessageState.queued,
+      MessageStatus.sending ||
+      MessageStatus.streaming => AmrpMessageState.streaming,
+      MessageStatus.interrupted => AmrpMessageState.interrupted,
+      MessageStatus.cancelled => AmrpMessageState.cancelled,
       MessageStatus.error => AmrpMessageState.failed,
-      MessageStatus.sent || MessageStatus.delivered => AmrpMessageState.completed,
+      MessageStatus.sent ||
+      MessageStatus.delivered => AmrpMessageState.completed,
     };
   }
 
@@ -464,7 +464,8 @@ class AmrpMessage {
       AmrpArtifactBlock() => '${block.title}\n${block.content}',
       AmrpAgentTaskBlock() =>
         '${block.title}\n${block.steps.map((step) => step.title).join('\n')}',
-      AmrpExtensionBlock() => '${block.rendererId}\n${_stringify(block.payload)}',
+      AmrpExtensionBlock() =>
+        '${block.rendererId}\n${_stringify(block.payload)}',
       AmrpUnknownBlock() => _stringify(block.payload),
     };
   }
@@ -475,4 +476,3 @@ class AmrpMessage {
     return value.toString();
   }
 }
-

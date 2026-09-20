@@ -205,6 +205,7 @@ func DefaultMigrations() []Migration {
 		SidebarProjectsMigration(),
 		SidebarPreferencesMigration(),
 		MessageReasoningContentMigration(),
+		MessageReasoningDurationMigration(),
 	}
 }
 

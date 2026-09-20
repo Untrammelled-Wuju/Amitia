@@ -10,7 +10,16 @@ export 'kernel_models.dart';
 
 enum MessageRole { user, assistant, system }
 
-enum MessageStatus { sending, sent, delivered, error }
+enum MessageStatus {
+  queued,
+  sending,
+  streaming,
+  sent,
+  delivered,
+  interrupted,
+  cancelled,
+  error,
+}
 
 enum MessageType {
   text,
@@ -32,6 +41,7 @@ class ChatMessage {
   final MessageType type;
   final String content;
   final String reasoningContent;
+  final int reasoningDurationMs;
   final DateTime time;
   final int? sequence;
   final MessageStatus status;
@@ -58,6 +68,7 @@ class ChatMessage {
     required this.type,
     required this.content,
     this.reasoningContent = '',
+    this.reasoningDurationMs = 0,
     required this.time,
     this.sequence,
     this.status = MessageStatus.sent,

@@ -191,7 +191,7 @@ onBeforeUnmount(() => {
   width: 14px;
   height: 14px;
   border: 2px solid rgba(127, 127, 127, 0.2);
-  border-top-color: var(--el-color-primary, #409eff);
+  border-top-color: var(--el-color-primary, #8a5728);
   border-radius: 50%;
   animation: chat-sidebar-spin 0.9s linear infinite;
 }
@@ -229,8 +229,8 @@ onBeforeUnmount(() => {
 }
 
 .chat-sidebar-host__btn:hover {
-  border-color: var(--el-color-primary, #409eff);
-  color: var(--el-color-primary, #409eff);
+  border-color: var(--el-color-primary, #8a5728);
+  color: var(--el-color-primary, #8a5728);
 }
 
 .chat-sidebar-host__container {

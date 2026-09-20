@@ -293,9 +293,9 @@ async function renderGraph() {
   var styles = getComputedStyle(document.documentElement);
   var textColor =
     styles.getPropertyValue("--ac-color-text").trim() || "#1C201D";
-  var bgColor = styles.getPropertyValue("--ac-color-bg").trim() || "#F4F1EA";
+  var bgColor = styles.getPropertyValue("--ac-color-bg").trim() || "#F7F8FA";
   var lineColor =
-    styles.getPropertyValue("--ac-color-border").trim() || "#DDD8CE";
+    styles.getPropertyValue("--ac-color-border").trim() || "#E2E6EB";
   chartInstance.setOption(
     {
       backgroundColor: bgColor,

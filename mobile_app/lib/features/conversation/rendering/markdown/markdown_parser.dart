@@ -50,8 +50,9 @@ List<AmitiaMarkdownSegment> splitAmitiaMarkdown(String source) {
 
   for (var index = 0; index < lines.length; index++) {
     final line = lines[index];
-    final fence = RegExp(r'^\s*(`{3,}|~{3,})\s*([^\s`]*)?\s*(.*?)\s*$')
-        .firstMatch(line);
+    final fence = RegExp(
+      r'^\s*(`{3,}|~{3,})\s*([^\s`]*)?\s*(.*?)\s*$',
+    ).firstMatch(line);
     if (fence != null) {
       flushMarkdown();
       final marker = fence.group(1)!;
@@ -75,8 +76,10 @@ List<AmitiaMarkdownSegment> splitAmitiaMarkdown(String source) {
         r"'[^']+'|\S+)",
         caseSensitive: false,
       ).firstMatch(meta);
-      final filename = (filenameMatch?.group(1) ?? '')
-          .replaceAll(RegExp(r'''^["']|["']$'''), '');
+      final filename = (filenameMatch?.group(1) ?? '').replaceAll(
+        RegExp(r'''^["']|["']$'''),
+        '',
+      );
       segments.add(
         _fenceSegment(
           id: 'fence:${segmentIndex++}',

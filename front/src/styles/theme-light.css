@@ -3,25 +3,25 @@
 
 :root,
 html[data-theme="light"] {
-  --tp-page: #f3f2ee;
-  --workbench-bg: #f3f2ee;
-  --workbench-sidebar-bg: #f8f7f4;
-  --surface-bg: #fcfbf8;
-  --surface-bg-elevated: #fffdf9;
-  --tp-shell: rgba(250, 249, 246, 0.92);
-  --tp-panel: #fcfbf8;
-  --tp-panel-soft: #f6f3ed;
-  --tp-profile-bg: #f8f5ef;
-  --tp-control: #f1eee7;
-  --tp-control-hover: #e8e2d8;
-  --tp-float: #fffdf9;
+  --tp-page: #f7f8fa;
+  --workbench-bg: #f7f8fa;
+  --workbench-sidebar-bg: #f3f5f7;
+  --surface-bg: #ffffff;
+  --surface-bg-elevated: #ffffff;
+  --tp-shell: rgba(255, 255, 255, 0.92);
+  --tp-panel: #ffffff;
+  --tp-panel-soft: #f4f6f8;
+  --tp-profile-bg: #f4f6f8;
+  --tp-control: #f4f6f8;
+  --tp-control-hover: #e9edf1;
+  --tp-float: #ffffff;
   --tp-primary: #8a5728;
-  --tp-primary-hover: #74451e;
-  --tp-primary-active: #5e3516;
-  --tp-primary-soft: #f1e4d4;
-  --tp-primary-bg: #f1e4d4;
-  --tp-primary-border: rgba(138, 87, 40, 0.28);
-  --tp-primary-ring: rgba(138, 87, 40, 0.24);
+  --tp-primary-hover: #6e421f;
+  --tp-primary-active: #5e3518;
+  --tp-primary-soft: #efe1d2;
+  --tp-primary-bg: #efe1d2;
+  --tp-primary-border: rgba(138, 87, 40, 0.24);
+  --tp-primary-ring: rgba(138, 87, 40, 0.2);
   --tp-primary-light-3: #a67547;
   --tp-primary-light-5: #bf9974;
   --tp-primary-light-7: #dcc5ad;
@@ -33,9 +33,9 @@ html[data-theme="light"] {
   --tp-text-placeholder: #706b63;
   --tp-text-on-primary: #ffffff;
   --tp-text-on-status: #ffffff;
-  --tp-border: #d8d2c7;
-  --tp-border-light: #e6e1d8;
-  --tp-border-strong: #bfb7aa;
+  --tp-border: #e2e6eb;
+  --tp-border-light: #eff1f4;
+  --tp-border-strong: #d2d8df;
   --tp-success: #3f7653;
   --tp-success-soft: #e4efe7;
   --tp-warning: #8a5a18;
@@ -44,25 +44,17 @@ html[data-theme="light"] {
   --tp-danger-soft: #f5e3e1;
   --tp-info: #4e6c82;
   --tp-info-soft: #e8eff3;
-  --tp-overlay: rgba(30, 28, 25, 0.46);
-  --tp-glass-bg: rgba(252, 251, 248, 0.78);
-  --tp-glass-bg-strong: rgba(255, 253, 249, 0.94);
-  --tp-glass-border: rgba(81, 66, 47, 0.14);
+  --tp-overlay: rgba(15, 23, 42, 0.46);
+  --tp-glass-bg: rgba(255, 255, 255, 0.82);
+  --tp-glass-bg-strong: rgba(255, 255, 255, 0.94);
+  --tp-glass-border: rgba(15, 23, 42, 0.08);
   --tp-glass-blur: 14px;
   --tp-glass-saturate: 105%;
-  --tp-page-glow: radial-gradient(
-    circle at 8% 0%,
-    rgba(166, 117, 71, 0.08),
-    transparent 34%
-  );
-  --tp-sidebar-glow: linear-gradient(
-    180deg,
-    rgba(138, 87, 40, 0.06),
-    transparent 36%
-  );
+  --tp-page-glow: none;
+  --tp-sidebar-glow: none;
   --tp-logo-bg: linear-gradient(145deg, #a96f39, #74451e);
-  --tp-shadow-card: 0 1px 2px rgba(48, 40, 31, 0.05);
-  --tp-shadow-float: 0 18px 48px rgba(36, 32, 27, 0.15);
+  --tp-shadow-card: 0 1px 2px rgba(15, 23, 42, 0.04);
+  --tp-shadow-float: 0 16px 40px rgba(15, 23, 42, 0.12);
   --tp-bg: var(--tp-page);
   --tp-bg-secondary: var(--tp-panel-soft);
   --tp-surface: var(--tp-panel);
@@ -74,7 +66,7 @@ html[data-theme="light"] {
   --nav-active-color: var(--tp-primary);
   --nav-active-bg: var(--tp-primary-soft);
   --nav-hover-color: var(--tp-primary-hover);
-  --nav-hover-bg: rgba(138, 87, 40, 0.09);
+  --nav-hover-bg: rgba(138, 87, 40, 0.07);
   --status-ok-bg: var(--tp-success-soft);
   --status-ok-color: var(--tp-success);
   --status-off-bg: var(--tp-danger-soft);
@@ -101,13 +93,13 @@ html[data-theme="light"] {
   --console-value-ok-bg: var(--tp-success-soft);
   --console-value-warn-bg: var(--tp-warning-soft);
   --console-value-off-bg: var(--tp-danger-soft);
-  --console-blue-soft: #e8eff3;
-  --console-purple-soft: #efeaf2;
-  --console-violet-soft: #edeaf4;
-  --console-orange-soft: #f5e8d8;
-  --console-amber-soft: #f1e4d4;
-  --console-green-soft: #e4efe7;
+  --console-blue-soft: #eef2f6;
+  --console-purple-soft: #eef1f4;
+  --console-violet-soft: #e9edf1;
+  --console-orange-soft: #f7eee5;
+  --console-amber-soft: #f5eadf;
+  --console-green-soft: #eaf4ee;
   --console-diagnostic-warn-bg: var(--tp-warning-soft);
   --console-diagnostic-ok-bg: var(--tp-success-soft);
-  --console-avatar-bg: linear-gradient(180deg, #f1e4d4, #d8d2c7);
+  --console-avatar-bg: linear-gradient(180deg, #f4f6f8, #e2e6eb);
 }

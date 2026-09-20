@@ -306,6 +306,14 @@ export function normalizeAIMessage(
     rawThinking && typeof rawThinking === "object"
       ? firstString(rawThinking, ["content", "text"])
       : reasoningContent;
+  const thinkingDuration = Number(rawThinking?.duration ?? message.reasoningDuration ?? 0);
+  const reasoningDurationMs = Number(message.reasoningDurationMs ?? 0);
+  const thinkingDurationSeconds =
+    Number.isFinite(thinkingDuration) && thinkingDuration > 0
+      ? thinkingDuration
+      : Number.isFinite(reasoningDurationMs) && reasoningDurationMs > 0
+        ? reasoningDurationMs / 1000
+        : undefined;
   const state = normalizeMessageState(message);
   return {
     id: String(message.id ?? `message-${Date.now()}`),
@@ -323,7 +331,7 @@ export function normalizeAIMessage(
       ? {
           content: thinkingContent,
           state,
-          duration: Number(rawThinking?.duration ?? message.reasoningDuration ?? 0) || undefined,
+          duration: thinkingDurationSeconds,
         }
       : undefined,
     blocks: legacyBlocks(message),

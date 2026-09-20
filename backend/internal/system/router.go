@@ -59,6 +59,7 @@ func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, chatSvc chat.
 							"userMessageSequence": event.UserMessageSequence,
 							"requestId":           event.RequestID,
 							"reasoningContent":    event.Reasoning,
+							"reasoningDurationMs": event.ReasoningDurationMS,
 						}
 					}
 					bus.PublishMessageCreated(event.ConversationID, item.MessageID, channel, "outbound", "assistant", item.Content, nowStr, event.Sequences[item.MessageID], itemMetadata)
@@ -77,6 +78,7 @@ func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, chatSvc chat.
 						"userMessageSequence": event.UserMessageSequence,
 						"requestId":           event.RequestID,
 						"reasoningContent":    event.Reasoning,
+						"reasoningDurationMs": event.ReasoningDurationMS,
 					}
 				}
 				bus.PublishMessageCreated(event.ConversationID, msgID, channel, "outbound", "assistant", content, nowStr, event.Sequences[msgID], itemMetadata)
@@ -244,6 +246,7 @@ func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, chatSvc chat.
 	r.POST("/web-chat/conversations/:id/reply-timing/resume", handler.WebChatReplyTimingResume)
 	r.GET("/web-chat/conversations/:id/reply-timing/status", handler.WebChatReplyTimingStatus)
 	r.GET("/web-chat/message-status/:id", handler.WebChatMessageStatus)
+	r.PUT("/web-chat/messages/:id", handler.WebChatUpdateMessage)
 	r.POST("/web-chat/send", handler.WebChatSend)
 	r.POST("/web-chat/messages", handler.WebChatSubmitMessage)
 	r.POST("/web-chat/send-stream", handler.WebChatSendStream)

@@ -75,70 +75,71 @@ void main() {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                        AmitiaMessageView(
-                          message: _message(),
-                          characterName: '林澈',
-                          avatarInitial: '澈',
-                          avatarColor: '#7060E8',
-                          toolBlocks: const [
-                            AmrpToolBlock(
-                              id: 'tool-running',
-                              name: '执行命令',
-                              arguments: {
-                                'cwd': '/workspace/app',
-                                'timeout': 120,
-                              },
-                              status: AmrpToolStatus.running,
-                            ),
-                          ],
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.only(left: 42),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: const [
-                              AmitiaAgentTaskBlock(
-                                block: AmrpAgentTaskBlock(
-                                  id: 'agent',
-                                  title: '修复消息渲染链路',
-                                  status: AmrpAgentStepStatus.running,
-                                  progress: 68,
-                                  elapsed: '3.2s',
-                                  steps: [
-                                    AmrpAgentStep(
-                                      id: '1',
-                                      title: '读取聊天相关源码',
-                                      status: AmrpAgentStepStatus.done,
-                                      meta: '完成',
-                                    ),
-                                    AmrpAgentStep(
-                                      id: '2',
-                                      title: '定位重复拼接逻辑',
-                                      status: AmrpAgentStepStatus.done,
-                                      meta: '完成',
-                                    ),
-                                    AmrpAgentStep(
-                                      id: '3',
-                                      title: '修改双端 Renderer',
-                                      status: AmrpAgentStepStatus.running,
-                                      meta: '进行中',
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              AmitiaArtifactBlock(
-                                block: AmrpArtifactBlock(
-                                  id: 'artifact',
-                                  title: '消息渲染接缝报告',
-                                  artifactKind: 'Markdown',
-                                  mimeType: 'text/markdown',
-                                  content: '# Artifact\n\nRenderer registry ready.',
-                                  size: 28600,
-                                ),
+                          AmitiaMessageView(
+                            message: _message(),
+                            characterName: '林澈',
+                            avatarInitial: '澈',
+                            avatarColor: '#7060E8',
+                            toolBlocks: const [
+                              AmrpToolBlock(
+                                id: 'tool-running',
+                                name: '执行命令',
+                                arguments: {
+                                  'cwd': '/workspace/app',
+                                  'timeout': 120,
+                                },
+                                status: AmrpToolStatus.running,
                               ),
                             ],
                           ),
-                        ),
+                          Padding(
+                            padding: const EdgeInsets.only(left: 42),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: const [
+                                AmitiaAgentTaskBlock(
+                                  block: AmrpAgentTaskBlock(
+                                    id: 'agent',
+                                    title: '修复消息渲染链路',
+                                    status: AmrpAgentStepStatus.running,
+                                    progress: 68,
+                                    elapsed: '3.2s',
+                                    steps: [
+                                      AmrpAgentStep(
+                                        id: '1',
+                                        title: '读取聊天相关源码',
+                                        status: AmrpAgentStepStatus.done,
+                                        meta: '完成',
+                                      ),
+                                      AmrpAgentStep(
+                                        id: '2',
+                                        title: '定位重复拼接逻辑',
+                                        status: AmrpAgentStepStatus.done,
+                                        meta: '完成',
+                                      ),
+                                      AmrpAgentStep(
+                                        id: '3',
+                                        title: '修改双端 Renderer',
+                                        status: AmrpAgentStepStatus.running,
+                                        meta: '进行中',
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                AmitiaArtifactBlock(
+                                  block: AmrpArtifactBlock(
+                                    id: 'artifact',
+                                    title: '消息渲染接缝报告',
+                                    artifactKind: 'Markdown',
+                                    mimeType: 'text/markdown',
+                                    content:
+                                        '# Artifact\n\nRenderer registry ready.',
+                                    size: 28600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                         ],
                       ),
                     ),
@@ -154,9 +155,8 @@ void main() {
                     as RenderRepaintBoundary;
             final image = await boundary.toImage(pixelRatio: 1);
             final data = await image.toByteData(format: ui.ImageByteFormat.png);
-            final outDir = Directory(
-              '../artifacts/visual-validation',
-            )..createSync(recursive: true);
+            final outDir = Directory('../artifacts/visual-validation')
+              ..createSync(recursive: true);
             final file = File(
               '${outDir.path}/flutter-${dark ? 'dark' : 'light'}-'
               '${viewport.$1}x${viewport.$2}.png',

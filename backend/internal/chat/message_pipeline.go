@@ -20,30 +20,32 @@ func (s *service) ProcessMessage(ctx context.Context, req *ProcessMessageRequest
 	if computeResult.HasExistingUser {
 		s.db.Model(&Message{}).Where("id = ?", computeResult.UserMessageID).Updates(map[string]interface{}{"status": "sent", "updated_at": time.Now().Format("2006-01-02 15:04:05")})
 		return &ProcessMessageResponse{
-			ConversationID: computeResult.ConversationID,
-			Sequence:       computeResult.UserMessageSequence,
-			Reply:          computeResult.Reply,
-			Reasoning:      computeResult.Reasoning,
-			Lines:          computeResult.Lines,
-			CharacterID:    computeResult.CharacterID,
-			CharacterName:  computeResult.CharacterName,
-			UserMessageID:  computeResult.UserMessageID,
-			RequestID:      computeResult.RequestID,
+			ConversationID:      computeResult.ConversationID,
+			Sequence:            computeResult.UserMessageSequence,
+			Reply:               computeResult.Reply,
+			Reasoning:           computeResult.Reasoning,
+			ReasoningDurationMS: computeResult.ReasoningDurationMS,
+			Lines:               computeResult.Lines,
+			CharacterID:         computeResult.CharacterID,
+			CharacterName:       computeResult.CharacterName,
+			UserMessageID:       computeResult.UserMessageID,
+			RequestID:           computeResult.RequestID,
 		}, nil
 	}
 	commitResult, err := s.commitInteraction(ctx, messageCommitPlan{
-		Request:       req,
-		Conversation:  computeResult.ConversationID,
-		Character:     computeResult.CharacterID,
-		CharacterName: computeResult.CharacterName,
-		UserMessageID: computeResult.UserMessageID,
-		Reply:         computeResult.Reply,
-		Reasoning:     computeResult.Reasoning,
-		Lines:         computeResult.Lines,
-		Source:        computeResult.Source,
-		TotalTokens:   computeResult.TotalTokens,
-		ForceVoice:    computeResult.ForceVoice,
-		Runtime:       req.Runtime,
+		Request:             req,
+		Conversation:        computeResult.ConversationID,
+		Character:           computeResult.CharacterID,
+		CharacterName:       computeResult.CharacterName,
+		UserMessageID:       computeResult.UserMessageID,
+		Reply:               computeResult.Reply,
+		Reasoning:           computeResult.Reasoning,
+		ReasoningDurationMS: computeResult.ReasoningDurationMS,
+		Lines:               computeResult.Lines,
+		Source:              computeResult.Source,
+		TotalTokens:         computeResult.TotalTokens,
+		ForceVoice:          computeResult.ForceVoice,
+		Runtime:             req.Runtime,
 	})
 	if err != nil {
 		s.db.Model(&Message{}).Where("id = ?", computeResult.UserMessageID).Updates(map[string]interface{}{"status": "failed", "updated_at": time.Now().Format("2006-01-02 15:04:05")})
@@ -57,19 +59,20 @@ func (s *service) ProcessMessage(ctx context.Context, req *ProcessMessageRequest
 	applog.TraceInfo(computeResult.Trace.WithStage("db_commit_completed"), applog.Fields{"message_count": len(commitResult.MessageIDs)}, "process message db commit completed")
 	applog.TraceInfo(computeResult.Trace.WithStage("completed"), applog.Fields{"reply_size": len(computeResult.Reply)}, "process message completed")
 	return &ProcessMessageResponse{
-		ConversationID: computeResult.ConversationID,
-		Sequence:       commitResult.LastSequence,
-		Reply:          computeResult.Reply,
-		Reasoning:      computeResult.Reasoning,
-		Lines:          computeResult.Lines,
-		CharacterID:    computeResult.CharacterID,
-		CharacterName:  computeResult.CharacterName,
-		MessageIDs:     commitResult.MessageIDs,
-		ForceVoice:     computeResult.ForceVoice,
-		UserMessageID:  computeResult.UserMessageID,
-		RequestID:      computeResult.RequestID,
-		MessagePlan:    commitResult.MessagePlan,
-		Events:         commitResult.Events,
+		ConversationID:      computeResult.ConversationID,
+		Sequence:            commitResult.LastSequence,
+		Reply:               computeResult.Reply,
+		Reasoning:           computeResult.Reasoning,
+		ReasoningDurationMS: computeResult.ReasoningDurationMS,
+		Lines:               computeResult.Lines,
+		CharacterID:         computeResult.CharacterID,
+		CharacterName:       computeResult.CharacterName,
+		MessageIDs:          commitResult.MessageIDs,
+		ForceVoice:          computeResult.ForceVoice,
+		UserMessageID:       computeResult.UserMessageID,
+		RequestID:           computeResult.RequestID,
+		MessagePlan:         commitResult.MessagePlan,
+		Events:              commitResult.Events,
 	}, nil
 }
 
@@ -122,28 +125,30 @@ func (s *service) ProcessMessageCtx(ctx context.Context, req *interaction.Proces
 	}
 	if computeResult.HasExistingUser {
 		return &interaction.ProcessResponse{
-			ConversationID: computeResult.ConversationID,
-			Reply:          computeResult.Reply,
-			Reasoning:      computeResult.Reasoning,
-			Lines:          computeResult.Lines,
-			CharacterID:    computeResult.CharacterID,
-			CharacterName:  computeResult.CharacterName,
-			RequestID:      computeResult.RequestID,
+			ConversationID:      computeResult.ConversationID,
+			Reply:               computeResult.Reply,
+			Reasoning:           computeResult.Reasoning,
+			ReasoningDurationMS: computeResult.ReasoningDurationMS,
+			Lines:               computeResult.Lines,
+			CharacterID:         computeResult.CharacterID,
+			CharacterName:       computeResult.CharacterName,
+			RequestID:           computeResult.RequestID,
 		}, nil
 	}
 	commitResult, err := s.commitInteraction(ctx, messageCommitPlan{
-		Request:       chatReq,
-		Conversation:  computeResult.ConversationID,
-		Character:     computeResult.CharacterID,
-		CharacterName: computeResult.CharacterName,
-		UserMessageID: computeResult.UserMessageID,
-		Reply:         computeResult.Reply,
-		Reasoning:     computeResult.Reasoning,
-		Lines:         computeResult.Lines,
-		Source:        computeResult.Source,
-		TotalTokens:   computeResult.TotalTokens,
-		ForceVoice:    computeResult.ForceVoice,
-		Runtime:       req.Runtime,
+		Request:             chatReq,
+		Conversation:        computeResult.ConversationID,
+		Character:           computeResult.CharacterID,
+		CharacterName:       computeResult.CharacterName,
+		UserMessageID:       computeResult.UserMessageID,
+		Reply:               computeResult.Reply,
+		Reasoning:           computeResult.Reasoning,
+		ReasoningDurationMS: computeResult.ReasoningDurationMS,
+		Lines:               computeResult.Lines,
+		Source:              computeResult.Source,
+		TotalTokens:         computeResult.TotalTokens,
+		ForceVoice:          computeResult.ForceVoice,
+		Runtime:             req.Runtime,
 	})
 	if err != nil {
 		s.db.Model(&Message{}).Where("id = ?", computeResult.UserMessageID).Updates(map[string]interface{}{"status": "failed", "updated_at": time.Now().Format("2006-01-02 15:04:05")})
@@ -154,18 +159,19 @@ func (s *service) ProcessMessageCtx(ctx context.Context, req *interaction.Proces
 	s.PostCommitActions(ctx, computeResult)
 	s.dispatchPluginAfterReply(chatReq, computeResult, commitResult.MessageIDs)
 	return &interaction.ProcessResponse{
-		ConversationID: computeResult.ConversationID,
-		Sequence:       commitResult.LastSequence,
-		Reply:          computeResult.Reply,
-		Reasoning:      computeResult.Reasoning,
-		Lines:          computeResult.Lines,
-		CharacterID:    computeResult.CharacterID,
-		CharacterName:  computeResult.CharacterName,
-		MessageIDs:     commitResult.MessageIDs,
-		ForceVoice:     computeResult.ForceVoice,
-		RequestID:      computeResult.RequestID,
-		MessagePlan:    commitResult.MessagePlan,
-		Events:         commitResult.Events,
+		ConversationID:      computeResult.ConversationID,
+		Sequence:            commitResult.LastSequence,
+		Reply:               computeResult.Reply,
+		Reasoning:           computeResult.Reasoning,
+		ReasoningDurationMS: computeResult.ReasoningDurationMS,
+		Lines:               computeResult.Lines,
+		CharacterID:         computeResult.CharacterID,
+		CharacterName:       computeResult.CharacterName,
+		MessageIDs:          commitResult.MessageIDs,
+		ForceVoice:          computeResult.ForceVoice,
+		RequestID:           computeResult.RequestID,
+		MessagePlan:         commitResult.MessagePlan,
+		Events:              commitResult.Events,
 	}, nil
 }
 

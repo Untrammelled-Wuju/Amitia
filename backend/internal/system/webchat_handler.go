@@ -222,6 +222,37 @@ func (h *Handler) WebChatDeleteConvMessages(c *gin.Context) {
 	util.SuccessResponse(c, gin.H{"deleted": true})
 }
 
+func (h *Handler) WebChatUpdateMessage(c *gin.Context) {
+	id := strings.TrimSpace(c.Param("id"))
+	if id == "" {
+		util.ErrorResponse(c, response.InvalidParams, "缺少消息ID", nil)
+		return
+	}
+	var body struct {
+		Content string `json:"content"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		util.ErrorResponse(c, response.InvalidParams, "无效请求体", nil)
+		return
+	}
+	content := strings.TrimSpace(body.Content)
+	if content == "" {
+		util.ErrorResponse(c, response.InvalidParams, "消息内容不能为空", nil)
+		return
+	}
+	scoped, ok := h.chatSvc.(webChatMessageEditService)
+	if !ok {
+		util.ErrorResponse(c, response.InternalError, "chat service does not provide message edit operations", nil)
+		return
+	}
+	msg, err := scoped.UpdateMessageForSpace(id, webChatSpaceID(c), content)
+	if err != nil {
+		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
+		return
+	}
+	util.SuccessResponse(c, msg)
+}
+
 func (h *Handler) WebChatRegenerate(c *gin.Context) {
 	convID := strings.TrimSpace(c.Param("id"))
 	if convID == "" {

@@ -180,6 +180,57 @@ func (s *service) DeleteSingleMessageScoped(id string, characterID string) error
 	return s.DeleteSingleMessage(id)
 }
 
+func (s *service) UpdateMessageForSpace(id, spaceID, content string) (*Message, error) {
+	content = strings.TrimSpace(content)
+	if content == "" {
+		return nil, fmt.Errorf("消息内容不能为空")
+	}
+	owned, err := s.requireMessageOwner(id, spaceID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, fmt.Errorf("消息不存在")
+		}
+		return nil, err
+	}
+	if strings.TrimSpace(owned.Role) != "user" {
+		return nil, fmt.Errorf("只能修改用户消息")
+	}
+	var updated Message
+	err = s.db.Transaction(func(tx *gorm.DB) error {
+		var revision int64
+		if err := tx.Table("messages").Where("id = ?", id).Select("COALESCE(revision, 1)").Scan(&revision).Error; err != nil {
+			return err
+		}
+		now := time.Now().Format("2006-01-02 15:04:05")
+		result := tx.Table("messages").Where("id = ? AND revision = ? AND deleted_at IS NULL", id, revision).Updates(map[string]interface{}{
+			"content":    content,
+			"updated_at": now,
+			"revision":   revision + 1,
+		})
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected == 0 {
+			return fmt.Errorf("消息版本冲突")
+		}
+		owned.Content = content
+		owned.UpdatedAt = now
+		owned.Revision = revision + 1
+		if err := s.recordMessageChangeTx(tx, owned, syncapi.OpUpdate, revision+1, spaceID); err != nil {
+			return err
+		}
+		updated = *owned
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	if err := pipelinecheckpoint.New(s.db).ResetConversation(owned.ConversationID); err != nil {
+		return nil, err
+	}
+	return &updated, nil
+}
+
 func (s *service) SearchMessages(q MessageSearchQuery) (*MessageSearchResponse, error) {
 	if q.Page <= 0 {
 		q.Page = 1

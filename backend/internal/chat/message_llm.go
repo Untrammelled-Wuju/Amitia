@@ -17,25 +17,32 @@ import (
 	applog "github.com/u-ai/backend/log"
 )
 
-func (s *service) invokeLLMWithTools(ctx context.Context, cfg *ModelConfig, messages []map[string]interface{}, trace applog.TraceFields, promptTrace *promptir.PromptTrace, userMsgID, convID, charID, channel, requestID, spaceID, sessionID string, execCtx *coreexec.ExecutionContext, toolDefs []tool.Tool, seenTools map[string]bool, toolExecCtx context.Context) (string, string, bool, int, error) {
+func (s *service) invokeLLMWithTools(ctx context.Context, cfg *ModelConfig, messages []map[string]interface{}, trace applog.TraceFields, promptTrace *promptir.PromptTrace, userMsgID, convID, charID, channel, requestID, spaceID, sessionID string, execCtx *coreexec.ExecutionContext, toolDefs []tool.Tool, seenTools map[string]bool, toolExecCtx context.Context) (string, string, bool, int, int64, error) {
 	var reply string
 	var reasoningParts []string
 	var totalTokens int
+	var reasoningDurationMS int64
 	forceVoice := false
 	for round := 0; round < 3; round++ {
 		applog.TraceInfo(trace.WithStage("model_call_started"), applog.Fields{"round": round, "message_count": len(messages)}, "process message model call started")
+		callStartedAt := time.Now()
 		aiContent, reasoning, toolCalls, tok, llmErr := s.invokeProcessLLMWithTools(ctx, cfg, messages, toolDefs)
 		totalTokens = tok
 		if strings.TrimSpace(reasoning) != "" {
+			elapsedMS := time.Since(callStartedAt).Milliseconds()
+			if elapsedMS <= 0 {
+				elapsedMS = 1
+			}
+			reasoningDurationMS += elapsedMS
 			reasoningParts = append(reasoningParts, strings.TrimSpace(reasoning))
 		}
 		if llmErr != nil {
 			s.db.Model(&Message{}).Where("id = ?", userMsgID).Updates(map[string]interface{}{"status": "failed", "updated_at": time.Now().Format("2006-01-02 15:04:05")})
 			applog.TraceError(trace.WithStage("model_call_failed"), applog.Fields{"round": round, "user_message_id": userMsgID}, llmErr, "process message model call failed")
 			if ctx.Err() != nil {
-				return "", "", false, 0, ctx.Err()
+				return "", "", false, 0, 0, ctx.Err()
 			}
-			return "", "", false, 0, &TextModelCallError{RawError: llmErr.Error()}
+			return "", "", false, 0, 0, &TextModelCallError{RawError: llmErr.Error()}
 		}
 		applog.TraceInfo(trace.WithStage("model_call_completed"), applog.Fields{"round": round, "tool_call_count": len(toolCalls), "reply_size": len(aiContent), "reasoning_size": len(reasoning)}, "process message model call completed")
 		if len(toolCalls) == 0 {
@@ -151,7 +158,7 @@ func (s *service) invokeLLMWithTools(ctx context.Context, cfg *ModelConfig, mess
 			}
 		}
 	}
-	return reply, strings.Join(reasoningParts, "\n\n"), forceVoice, totalTokens, nil
+	return reply, strings.Join(reasoningParts, "\n\n"), forceVoice, totalTokens, reasoningDurationMS, nil
 }
 
 func appendAgentSkillPromptTrace(trace *promptir.PromptTrace, item promptir.AgentSkillTrace) {

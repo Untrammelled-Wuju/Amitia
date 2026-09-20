@@ -146,10 +146,7 @@ class _TerminalHeader extends StatelessWidget {
           Expanded(
             child: Text(
               filename.isEmpty ? 'Terminal' : filename,
-              style: const TextStyle(
-                color: Color(0xFFD2D3D6),
-                fontSize: 11.5,
-              ),
+              style: const TextStyle(color: Color(0xFFD2D3D6), fontSize: 11.5),
             ),
           ),
           Text(

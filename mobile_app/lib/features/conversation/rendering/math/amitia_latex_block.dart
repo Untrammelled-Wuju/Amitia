@@ -85,4 +85,3 @@ class AmitiaLatexBlock extends StatelessWidget {
     ).showSnackBar(const SnackBar(content: Text('已复制公式源码')));
   }
 }
-

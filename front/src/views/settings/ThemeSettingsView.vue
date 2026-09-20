@@ -213,13 +213,13 @@ function sameAccent(left: string, right: string) {
   border: 1px solid var(--ac-color-border);
 }
 .preview-light {
-  background: linear-gradient(135deg, #f4f1ea 0%, #faf8f3 52%, #9b642d 100%);
+  background: linear-gradient(135deg, #f7f8fa 0%, #ffffff 52%, #8a5728 100%);
 }
 .preview-dark {
   background: linear-gradient(135deg, #0b0b0c 0%, #18181b 58%, #c99557 100%);
 }
 .preview-system {
-  background: linear-gradient(135deg, #f4f1ea 0 50%, #0b0b0c 50% 100%);
+  background: linear-gradient(135deg, #f7f8fa 0 50%, #0b0b0c 50% 100%);
 }
 .theme-preset-info {
   flex: 1;

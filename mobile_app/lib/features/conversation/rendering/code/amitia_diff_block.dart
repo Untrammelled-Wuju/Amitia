@@ -41,6 +41,7 @@ class _AmitiaDiffBlockState extends State<AmitiaDiffBlock> {
             filename: widget.filename,
             expanded: _expanded,
             onExpand: () => setState(() => _expanded = !_expanded),
+            onFullscreen: _openFullscreen,
             onCopy: _copy,
           ),
           ConstrainedBox(
@@ -50,34 +51,13 @@ class _AmitiaDiffBlockState extends State<AmitiaDiffBlock> {
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: SingleChildScrollView(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    for (var index = 0; index < lines.length; index++)
-                      _DiffLine(
-                        index: index + 1,
-                        kind: _lineKind(lines[index]),
-                        line: lines[index],
-                        fontSize: tokens.codeFontSize,
-                      ),
-                  ],
-                ),
+                child: _DiffLines(lines: lines, tokens: tokens),
               ),
             ),
           ),
         ],
       ),
     );
-  }
-
-  _DiffLineKind _lineKind(String line) {
-    if (line.startsWith('@@')) return _DiffLineKind.hunk;
-    if (line.startsWith('+++') || line.startsWith('---')) {
-      return _DiffLineKind.meta;
-    }
-    if (line.startsWith('+')) return _DiffLineKind.add;
-    if (line.startsWith('-')) return _DiffLineKind.remove;
-    return _DiffLineKind.context;
   }
 
   Future<void> _copy() async {
@@ -87,6 +67,39 @@ class _AmitiaDiffBlockState extends State<AmitiaDiffBlock> {
       context,
     ).showSnackBar(const SnackBar(content: Text('已复制 Diff')));
   }
+
+  Future<void> _openFullscreen() async {
+    final tokens = AmitiaMessageTheme.of(context);
+    final lines = widget.diff.split('\n');
+    await showDialog<void>(
+      context: context,
+      builder: (context) => Dialog.fullscreen(
+        backgroundColor: tokens.codeBackground,
+        child: SafeArea(
+          child: Column(
+            children: [
+              _DiffHeader(
+                filename: widget.filename,
+                expanded: true,
+                onExpand: () {},
+                onFullscreen: () => Navigator.of(context).pop(),
+                onCopy: () => _copy(),
+                fullscreenClose: true,
+              ),
+              Expanded(
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: SingleChildScrollView(
+                    child: _DiffLines(lines: lines, tokens: tokens),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 enum _DiffLineKind { add, remove, hunk, meta, context }
@@ -95,13 +108,17 @@ class _DiffHeader extends StatelessWidget {
   final String filename;
   final bool expanded;
   final VoidCallback onExpand;
+  final VoidCallback onFullscreen;
   final VoidCallback onCopy;
+  final bool fullscreenClose;
 
   const _DiffHeader({
     required this.filename,
     required this.expanded,
     required this.onExpand,
+    required this.onFullscreen,
     required this.onCopy,
+    this.fullscreenClose = false,
   });
 
   @override
@@ -118,10 +135,7 @@ class _DiffHeader extends StatelessWidget {
               filename.isEmpty ? 'Diff' : filename,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: Color(0xFFD2D3D6),
-                fontSize: 11.5,
-              ),
+              style: const TextStyle(color: Color(0xFFD2D3D6), fontSize: 11.5),
             ),
           ),
           IconButton(
@@ -142,6 +156,25 @@ class _DiffHeader extends StatelessWidget {
             ),
           ),
           IconButton(
+            tooltip: fullscreenClose ? '关闭全屏' : '全屏',
+            onPressed: onFullscreen,
+            iconSize: 15,
+            color: const Color(0xFFC9CBD0),
+            visualDensity: VisualDensity.compact,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints.tightFor(width: 32, height: 32),
+            style: IconButton.styleFrom(
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              minimumSize: const Size(32, 32),
+              maximumSize: const Size(32, 32),
+            ),
+            icon: Icon(
+              fullscreenClose
+                  ? Icons.close_fullscreen_rounded
+                  : Icons.fullscreen_rounded,
+            ),
+          ),
+          IconButton(
             tooltip: '复制 Diff',
             onPressed: onCopy,
             iconSize: 15,
@@ -159,6 +192,39 @@ class _DiffHeader extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+class _DiffLines extends StatelessWidget {
+  final List<String> lines;
+  final AmitiaMessageTheme tokens;
+
+  const _DiffLines({required this.lines, required this.tokens});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (var index = 0; index < lines.length; index++)
+          _DiffLine(
+            index: index + 1,
+            kind: _lineKind(lines[index]),
+            line: lines[index],
+            fontSize: tokens.codeFontSize,
+          ),
+      ],
+    );
+  }
+
+  _DiffLineKind _lineKind(String line) {
+    if (line.startsWith('@@')) return _DiffLineKind.hunk;
+    if (line.startsWith('+++') || line.startsWith('---')) {
+      return _DiffLineKind.meta;
+    }
+    if (line.startsWith('+')) return _DiffLineKind.add;
+    if (line.startsWith('-')) return _DiffLineKind.remove;
+    return _DiffLineKind.context;
   }
 }
 

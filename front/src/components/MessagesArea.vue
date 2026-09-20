@@ -63,6 +63,7 @@ SPDX-License-Identifier: AGPL-3.0-only
           :status="item.message.status"
           @retry="$emit('retry', $event)"
           @reply="$emit('reply', $event)"
+          @edit="$emit('edit', $event)"
           @scroll-to-message="(id) => scrollToMessage(id)"
         >
           <template #badges>
@@ -193,6 +194,7 @@ const emit = defineEmits<{
   touchEnd: [];
   retry: [msg: any];
   reply: [msg: any];
+  edit: [msg: any];
   scrollToBottom: [];
 }>();
 
@@ -448,6 +450,7 @@ function messageActions(msg: any) {
     ...(props.providerActions ?? {}),
     "conversation.retry": async () => emit("retry", msg),
     "conversation.reply": async () => emit("reply", msg),
+    "conversation.edit": async () => emit("edit", msg),
     "conversation.scrollToMessage": async (input?: unknown) => scrollToMessage(String((input as any)?.messageId ?? input ?? msg.id)),
   };
 }

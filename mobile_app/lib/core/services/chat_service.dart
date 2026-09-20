@@ -311,6 +311,13 @@ class ChatService {
     await _api.delete('/api/chats/messages/$messageId');
   }
 
+  Future<void> updateMessage(String messageId, String content) async {
+    await _api.put<Map<String, dynamic>>(
+      '/api/web-chat/messages/$messageId',
+      data: {'content': content.trim()},
+    );
+  }
+
   Future<void> deleteAllConversations() async {
     await _api.delete('/api/chats/all');
   }

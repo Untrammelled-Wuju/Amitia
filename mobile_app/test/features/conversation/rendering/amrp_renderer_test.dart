@@ -26,42 +26,41 @@ void main() {
   });
 
   test('Markdown Fence 按 Renderer 类型拆分', () {
-    final segments = splitAmitiaMarkdown([
-      '正文',
-      '```dart',
-      'void main() {}',
-      '```',
-      '```diff',
-      '- old',
-      '+ new',
-      '```',
-      '```terminal',
-      r'$ flutter test',
-      '```',
-      '```mermaid',
-      'graph TD',
-      'A --> B',
-      '```',
-      '```html-preview',
-      '<h1>Hello</h1>',
-      '```',
-      r'$$',
-      'E=mc^2',
-      r'$$',
-    ].join('\n'));
-
-    expect(
-      segments.map((segment) => segment.type).toList(),
+    final segments = splitAmitiaMarkdown(
       [
-        AmitiaMarkdownSegmentType.markdown,
-        AmitiaMarkdownSegmentType.code,
-        AmitiaMarkdownSegmentType.diff,
-        AmitiaMarkdownSegmentType.terminal,
-        AmitiaMarkdownSegmentType.mermaid,
-        AmitiaMarkdownSegmentType.htmlPreview,
-        AmitiaMarkdownSegmentType.latex,
-      ],
+        '正文',
+        '```dart',
+        'void main() {}',
+        '```',
+        '```diff',
+        '- old',
+        '+ new',
+        '```',
+        '```terminal',
+        r'$ flutter test',
+        '```',
+        '```mermaid',
+        'graph TD',
+        'A --> B',
+        '```',
+        '```html-preview',
+        '<h1>Hello</h1>',
+        '```',
+        r'$$',
+        'E=mc^2',
+        r'$$',
+      ].join('\n'),
     );
+
+    expect(segments.map((segment) => segment.type).toList(), [
+      AmitiaMarkdownSegmentType.markdown,
+      AmitiaMarkdownSegmentType.code,
+      AmitiaMarkdownSegmentType.diff,
+      AmitiaMarkdownSegmentType.terminal,
+      AmitiaMarkdownSegmentType.mermaid,
+      AmitiaMarkdownSegmentType.htmlPreview,
+      AmitiaMarkdownSegmentType.latex,
+    ]);
     expect(segments[1].language, 'dart');
   });
 
@@ -69,5 +68,25 @@ void main() {
     final segments = splitAmitiaMarkdown('```dart\nclass Test {');
     expect(segments.single.type, AmitiaMarkdownSegmentType.code);
     expect(segments.single.streaming, isTrue);
+  });
+
+  test('完整消息状态映射到 AMRP', () {
+    AmrpMessage map(MessageStatus status) => AmrpMessage.fromChatMessage(
+      ChatMessage(
+        id: status.name,
+        role: MessageRole.assistant,
+        type: MessageType.text,
+        content: 'ok',
+        time: DateTime(2026, 9, 20),
+        status: status,
+      ),
+    );
+
+    expect(map(MessageStatus.queued).state, AmrpMessageState.queued);
+    expect(map(MessageStatus.streaming).state, AmrpMessageState.streaming);
+    expect(map(MessageStatus.delivered).state, AmrpMessageState.completed);
+    expect(map(MessageStatus.interrupted).state, AmrpMessageState.interrupted);
+    expect(map(MessageStatus.error).state, AmrpMessageState.failed);
+    expect(map(MessageStatus.cancelled).state, AmrpMessageState.cancelled);
   });
 }

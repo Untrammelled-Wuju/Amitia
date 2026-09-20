@@ -74,7 +74,7 @@ class ThemeSettings {
   final bool animationEnabled;
 
   ThemeSettings({
-    this.mode = ThemeMode.light,
+    this.mode = ThemeMode.system,
     this.fontScale = 1.0,
     this.animationEnabled = true,
   });

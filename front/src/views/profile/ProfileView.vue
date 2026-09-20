@@ -32,42 +32,76 @@ SPDX-License-Identifier: AGPL-3.0-only
     <div v-if="loading" class="loading">加载中...</div>
 
     <div v-else class="profile-grid">
-      <div
+      <article
         v-for="p in profiles"
         :key="p.id"
         class="profile-card"
-        :class="'confidence-' + confidenceColor(p.confidence)"
       >
-        <div class="card-header">
+        <header class="card-header">
           <span class="category-badge">{{ categoryLabel(p.category) }}</span>
           <div class="card-actions">
-            <el-button size="small" text @click="editProfile(p)">✏️</el-button>
-            <el-button size="small" text @click="handleDelete(p.id)"
-              >🗑️</el-button
-            >
+            <el-tooltip content="编辑画像" placement="top">
+              <el-button
+                class="card-action-button"
+                size="small"
+                text
+                circle
+                :aria-label="`编辑${p.attributeName}画像`"
+                @click="editProfile(p)"
+              >
+                <el-icon><EditPen /></el-icon>
+              </el-button>
+            </el-tooltip>
+            <el-tooltip content="删除画像" placement="top">
+              <el-button
+                class="card-action-button card-action-button--danger"
+                size="small"
+                text
+                circle
+                :aria-label="`删除${p.attributeName}画像`"
+                @click="handleDelete(p.id)"
+              >
+                <el-icon><Delete /></el-icon>
+              </el-button>
+            </el-tooltip>
           </div>
-        </div>
+        </header>
         <div class="card-body">
-          <div class="attr-name">{{ p.attributeName }}</div>
-          <div class="attr-value">{{ p.attributeValue }}</div>
+          <h3 class="attr-name">{{ p.attributeName }}</h3>
+          <p class="attr-value">{{ p.attributeValue }}</p>
         </div>
-        <div class="card-footer">
+        <footer class="card-footer">
           <div class="confidence-bar">
             <div
-              class="confidence-fill"
-              :style="{ width: p.confidence + '%' }"
-            ></div>
+              class="confidence-track"
+              role="progressbar"
+              :aria-label="`${p.attributeName}可信度`"
+              :aria-valuenow="p.confidence"
+              aria-valuemin="0"
+              aria-valuemax="100"
+            >
+              <div
+                class="confidence-fill"
+                :style="{ width: p.confidence + '%' }"
+              ></div>
+            </div>
             <span class="confidence-text">{{ p.confidence }}%</span>
           </div>
-          <div
+          <el-tooltip
             v-if="p.sourceConvId"
-            class="source-info"
-            :title="'来源对话: ' + p.sourceConvId"
+            content="查看来源对话"
+            placement="top"
           >
-            📎 对话追溯
-          </div>
-        </div>
-      </div>
+            <span
+              class="source-info"
+              :title="'来源对话: ' + p.sourceConvId"
+              :aria-label="`查看${p.attributeName}的来源对话`"
+            >
+              <el-icon><ChatLineRound /></el-icon>
+            </span>
+          </el-tooltip>
+        </footer>
+      </article>
 
       <div v-if="profiles.length === 0" class="empty-state">
         暂无画像数据，开始对话后将自动提取
@@ -124,6 +158,11 @@ SPDX-License-Identifier: AGPL-3.0-only
 <script setup lang="ts">
 import { ref, reactive, onMounted } from "vue";
 import { ElMessageBox } from "element-plus";
+import {
+  ChatLineRound,
+  Delete,
+  EditPen,
+} from "@element-plus/icons-vue";
 import { useProfile, type UserProfile } from "@/composables/useProfile";
 
 const {
@@ -134,7 +173,6 @@ const {
   updateProfile,
   deleteProfile,
   categoryLabel,
-  confidenceColor,
 } = useProfile();
 
 const categoryMap: Record<string, string> = {
@@ -234,6 +272,8 @@ async function handleDelete(id: string) {
 .page-header h2 {
   margin: 0;
   font-size: 24px;
+  line-height: 1.25;
+  color: var(--ac-color-text-primary);
 }
 .header-actions {
   display: flex;
@@ -242,85 +282,138 @@ async function handleDelete(id: string) {
 
 .profile-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 12px;
 }
 .profile-card {
-  background: var(--ac-color-bg-secondary);
-  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  min-height: 156px;
   padding: 16px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-  border-left: 4px solid var(--ac-color-border);
+  border: 1px solid var(--ac-color-border-light);
+  border-radius: var(--radius-sm);
+  background: var(--ac-color-surface);
+  transition:
+    border-color var(--ac-transition-fast),
+    background-color var(--ac-transition-fast);
 }
-.profile-card.confidence-success {
-  border-left-color: var(--ac-color-success);
-}
-.profile-card.confidence-warning {
-  border-left-color: var(--ac-color-warning);
-}
-.profile-card.confidence-danger {
-  border-left-color: var(--ac-color-danger);
+.profile-card:hover {
+  border-color: var(--ac-color-border-strong);
 }
 .card-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 12px;
+  gap: 8px;
+  margin-bottom: 14px;
 }
 .category-badge {
+  color: var(--ac-color-text-muted);
   font-size: 12px;
-  padding: 2px 8px;
-  background: var(--ac-color-bg-secondary);
-  border-radius: 4px;
-  color: var(--ac-color-text-secondary);
+  font-weight: 500;
 }
 .card-actions {
   display: flex;
-  gap: 4px;
+  flex: 0 0 auto;
+  gap: 0;
+  margin-right: -6px;
+}
+.card-action-button {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: 6px;
+  color: var(--ac-color-text-muted);
+  transition:
+    background-color var(--ac-transition-fast),
+    color var(--ac-transition-fast);
+}
+.card-action-button:hover,
+.card-action-button:focus-visible {
+  background: var(--ac-color-bg-hover);
+  color: var(--ac-color-primary);
+}
+.card-action-button--danger:hover,
+.card-action-button--danger:focus-visible {
+  background: var(--ac-color-danger-bg);
+  color: var(--ac-color-danger);
 }
 
 .card-body {
-  margin-bottom: 12px;
+  flex: 1;
+  min-width: 0;
+  margin-bottom: 14px;
 }
 .attr-name {
-  font-size: 13px;
-  color: var(--ac-color-text-secondary);
-  margin-bottom: 4px;
+  margin: 0 0 5px;
+  color: var(--ac-color-text-muted);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
 }
 .attr-value {
-  font-size: 16px;
-  font-weight: 500;
+  margin: 0;
   color: var(--ac-color-text-primary);
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
 }
 .card-footer {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
+  padding-top: 12px;
+  border-top: 1px solid var(--ac-color-border-light);
 }
 .confidence-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   flex: 1;
-  height: 6px;
-  background: var(--ac-color-border-light);
-  border-radius: 3px;
-  position: relative;
+  min-width: 0;
+}
+.confidence-track {
+  flex: 1;
+  height: 4px;
   overflow: hidden;
+  border-radius: 2px;
+  background: var(--ac-color-border-light);
 }
 .confidence-fill {
   height: 100%;
-  background: var(--ac-color-success);
-  border-radius: 3px;
-  transition: width 0.3s;
+  border-radius: inherit;
+  background: var(--ac-color-primary);
+  transition: width var(--ac-transition-normal);
 }
 .confidence-text {
-  font-size: 11px;
+  min-width: 32px;
   color: var(--ac-color-text-muted);
-  min-width: 36px;
+  font-family: var(--ac-font-family-mono);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
   text-align: right;
 }
 .source-info {
-  font-size: 11px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
   color: var(--ac-color-text-muted);
   cursor: help;
+  transition:
+    background-color var(--ac-transition-fast),
+    color var(--ac-transition-fast);
+}
+.source-info .el-icon {
+  font-size: 14px;
+}
+.source-info:hover {
+  background: var(--ac-color-bg-hover);
+  color: var(--ac-color-primary);
 }
 .empty-state {
   grid-column: 1 / -1;
@@ -346,5 +439,22 @@ async function handleDelete(id: string) {
   background: var(--ac-color-primary);
   color: var(--ac-color-text-on-primary);
   border-color: var(--ac-color-primary);
+}
+
+@media (max-width: 768px) {
+  .page-header {
+    align-items: flex-start;
+    gap: 14px;
+  }
+  .header-actions {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+  .profile-grid {
+    grid-template-columns: 1fr;
+  }
+  .profile-card {
+    min-height: 148px;
+  }
 }
 </style>

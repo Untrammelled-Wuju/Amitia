@@ -72,10 +72,9 @@ class _AmitiaCodeBlockState extends State<AmitiaCodeBlock> {
       _ => language,
     };
     try {
-      return SyntaxHighlighterPlus(theme: _themeName).highlight(
-        resolved,
-        widget.code,
-      );
+      return SyntaxHighlighterPlus(
+        theme: _themeName,
+      ).highlight(resolved, widget.code);
     } catch (_) {
       return null;
     }
@@ -331,9 +330,7 @@ class _HighlightedCode extends StatelessWidget {
       child: FutureBuilder<TextSpan?>(
         future: future,
         builder: (context, snapshot) {
-          final span =
-              snapshot.data ??
-              TextSpan(text: code, style: baseStyle);
+          final span = snapshot.data ?? TextSpan(text: code, style: baseStyle);
           return SelectableText.rich(
             span,
             style: baseStyle,

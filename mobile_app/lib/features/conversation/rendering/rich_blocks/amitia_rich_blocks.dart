@@ -12,57 +12,107 @@ import '../amrp.dart';
 import '../preview/amitia_html_preview.dart';
 import 'renderer_registry.dart';
 
-class AmitiaThinkingBlock extends StatelessWidget {
+class AmitiaThinkingBlock extends StatefulWidget {
   final AmrpThinkingBlock block;
 
-  const AmitiaThinkingBlock({
-    super.key,
-    required this.block,
-  });
+  const AmitiaThinkingBlock({super.key, required this.block});
+
+  @override
+  State<AmitiaThinkingBlock> createState() => _AmitiaThinkingBlockState();
+}
+
+class _AmitiaThinkingBlockState extends State<AmitiaThinkingBlock> {
+  bool _expanded = false;
 
   @override
   Widget build(BuildContext context) {
     final tokens = AmitiaMessageTheme.of(context);
-    return Theme(
-      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-      child: ExpansionTile(
-        tilePadding: const EdgeInsets.symmetric(horizontal: 9),
-        childrenPadding: const EdgeInsets.fromLTRB(10, 0, 10, 8),
-        dense: true,
-        shape: const Border(),
-        collapsedShape: const Border(),
-        iconColor: tokens.muted,
-        collapsedIconColor: tokens.muted,
-        title: Text(
-          block.state == AmrpMessageState.streaming
-              ? '正在思考'
-              : block.duration == null
-              ? '思考内容'
-              : '已思考 ${(block.duration!.inMilliseconds / 1000).toStringAsFixed(1)} 秒',
-          style: TextStyle(color: tokens.muted, fontSize: 12),
-        ),
+    final streaming = widget.block.state == AmrpMessageState.streaming;
+    final label = streaming
+        ? '思考中'
+        : widget.block.duration == null
+        ? '思考完成'
+        : '思考完成（${(widget.block.duration!.inMilliseconds / 1000).toStringAsFixed(2)}s）';
+    final hasContent = widget.block.content.trim().isNotEmpty;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 13),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            width: double.infinity,
-            constraints: const BoxConstraints(maxHeight: 260),
-            decoration: BoxDecoration(
-              color: tokens.soft,
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
               borderRadius: BorderRadius.circular(8),
-            ),
-            child: Scrollbar(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(10, 8, 8, 8),
-                child: SelectableText(
-                  block.content,
-                  style: TextStyle(
-                    color: tokens.muted,
-                    fontSize: 11.5,
-                    height: 1.6,
-                  ),
+              onTap: hasContent
+                  ? () => setState(() => _expanded = !_expanded)
+                  : null,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+                decoration: BoxDecoration(
+                  color: tokens.soft,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    AnimatedRotation(
+                      turns: _expanded ? 0.25 : 0,
+                      duration: const Duration(milliseconds: 150),
+                      curve: Curves.easeOut,
+                      child: Icon(
+                        Icons.chevron_right_rounded,
+                        color: tokens.muted,
+                        size: 14,
+                      ),
+                    ),
+                    const SizedBox(width: 7),
+                    Text(
+                      label,
+                      style: TextStyle(color: tokens.muted, fontSize: 12),
+                    ),
+                    if (streaming) ...[
+                      const SizedBox(width: 7),
+                      SizedBox(
+                        width: 12,
+                        height: 12,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 1.6,
+                          color: tokens.accent,
+                          backgroundColor: tokens.accent.withValues(
+                            alpha: 0.18,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ),
             ),
           ),
+          if (_expanded && hasContent)
+            Container(
+              width: double.infinity,
+              constraints: const BoxConstraints(maxWidth: 700),
+              margin: const EdgeInsets.only(top: 6),
+              padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+              decoration: BoxDecoration(
+                color: tokens.soft,
+                border: Border(left: BorderSide(color: tokens.line, width: 2)),
+                borderRadius: const BorderRadius.only(
+                  topRight: Radius.circular(8),
+                  bottomRight: Radius.circular(8),
+                ),
+              ),
+              child: SelectableText(
+                widget.block.content,
+                style: TextStyle(
+                  color: tokens.muted,
+                  fontSize: 11.5,
+                  height: 1.6,
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -72,10 +122,7 @@ class AmitiaThinkingBlock extends StatelessWidget {
 class AmitiaToolBlock extends StatefulWidget {
   final AmrpToolBlock block;
 
-  const AmitiaToolBlock({
-    super.key,
-    required this.block,
-  });
+  const AmitiaToolBlock({super.key, required this.block});
 
   @override
   State<AmitiaToolBlock> createState() => _AmitiaToolBlockState();
@@ -279,10 +326,7 @@ class _AmitiaToolBlockState extends State<AmitiaToolBlock> {
 class AmitiaFileBlock extends StatefulWidget {
   final AmrpFileBlock block;
 
-  const AmitiaFileBlock({
-    super.key,
-    required this.block,
-  });
+  const AmitiaFileBlock({super.key, required this.block});
 
   @override
   State<AmitiaFileBlock> createState() => _AmitiaFileBlockState();
@@ -294,10 +338,9 @@ class _AmitiaFileBlockState extends State<AmitiaFileBlock> {
   @override
   Widget build(BuildContext context) {
     final tokens = AmitiaMessageTheme.of(context);
-    final extension = RegExp(r'\.([A-Za-z0-9]+)$')
-        .firstMatch(widget.block.name)
-        ?.group(1)
-        ?.toUpperCase();
+    final extension = RegExp(
+      r'\.([A-Za-z0-9]+)$',
+    ).firstMatch(widget.block.name)?.group(1)?.toUpperCase();
     return Container(
       constraints: const BoxConstraints(maxWidth: 560),
       margin: const EdgeInsets.only(bottom: 10),
@@ -352,7 +395,9 @@ class _AmitiaFileBlockState extends State<AmitiaFileBlock> {
                   _status == AmrpAssetStatus.loading
                       ? '加载中'
                       : _status == AmrpAssetStatus.failed
-                      ? (widget.block.error.isEmpty ? '加载失败' : widget.block.error)
+                      ? (widget.block.error.isEmpty
+                            ? '加载失败'
+                            : widget.block.error)
                       : [
                           _formatBytes(widget.block.size),
                           widget.block.mimeType,
@@ -405,7 +450,10 @@ class _AmitiaFileBlockState extends State<AmitiaFileBlock> {
     }
     final file = File(value);
     if (await file.exists()) {
-      await launchUrl(Uri.file(file.path), mode: LaunchMode.externalApplication);
+      await launchUrl(
+        Uri.file(file.path),
+        mode: LaunchMode.externalApplication,
+      );
     }
   }
 }
@@ -413,10 +461,7 @@ class _AmitiaFileBlockState extends State<AmitiaFileBlock> {
 class AmitiaImageBlock extends StatefulWidget {
   final List<AmrpImageBlock> images;
 
-  const AmitiaImageBlock({
-    super.key,
-    required this.images,
-  });
+  const AmitiaImageBlock({super.key, required this.images});
 
   @override
   State<AmitiaImageBlock> createState() => _AmitiaImageBlockState();
@@ -516,10 +561,7 @@ class _ImageCard extends StatelessWidget {
   final AmrpImageBlock image;
   final VoidCallback onPreview;
 
-  const _ImageCard({
-    required this.image,
-    required this.onPreview,
-  });
+  const _ImageCard({required this.image, required this.onPreview});
 
   @override
   Widget build(BuildContext context) {
@@ -534,13 +576,8 @@ class _ImageCard extends StatelessWidget {
             fit: StackFit.expand,
             children: [
               _ImageCardImage(image: image),
-              if (image.animated ||
-                  image.url.toLowerCase().contains('.gif'))
-                Positioned(
-                  left: 7,
-                  top: 7,
-                  child: _Badge(label: 'GIF'),
-                ),
+              if (image.animated || image.url.toLowerCase().contains('.gif'))
+                Positioned(left: 7, top: 7, child: _Badge(label: 'GIF')),
               Positioned(
                 right: 7,
                 bottom: 7,
@@ -613,10 +650,7 @@ class _ImageFailure extends StatelessWidget {
             Icon(Icons.broken_image_outlined, color: tokens.danger),
             if (alt.isNotEmpty) ...[
               const SizedBox(height: 5),
-              Text(
-                alt,
-                style: TextStyle(color: tokens.muted, fontSize: 10),
-              ),
+              Text(alt, style: TextStyle(color: tokens.muted, fontSize: 10)),
             ],
           ],
         ),
@@ -628,10 +662,7 @@ class _ImageFailure extends StatelessWidget {
 class AmitiaAudioBlock extends StatefulWidget {
   final AmrpAudioBlock block;
 
-  const AmitiaAudioBlock({
-    super.key,
-    required this.block,
-  });
+  const AmitiaAudioBlock({super.key, required this.block});
 
   @override
   State<AmitiaAudioBlock> createState() => _AmitiaAudioBlockState();
@@ -714,9 +745,12 @@ class _AmitiaAudioBlockState extends State<AmitiaAudioBlock> {
                   builder: (context, snapshot) {
                     final playing = snapshot.data?.playing == true;
                     return IconButton.filledTonal(
-                      onPressed: () => playing ? _player.pause() : _player.play(),
+                      onPressed: () =>
+                          playing ? _player.pause() : _player.play(),
                       icon: Icon(
-                        playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                        playing
+                            ? Icons.pause_rounded
+                            : Icons.play_arrow_rounded,
                       ),
                     );
                   },
@@ -808,10 +842,7 @@ class _AmitiaAudioBlockState extends State<AmitiaAudioBlock> {
 class AmitiaVideoBlock extends StatefulWidget {
   final AmrpVideoBlock block;
 
-  const AmitiaVideoBlock({
-    super.key,
-    required this.block,
-  });
+  const AmitiaVideoBlock({super.key, required this.block});
 
   @override
   State<AmitiaVideoBlock> createState() => _AmitiaVideoBlockState();
@@ -830,10 +861,9 @@ class _AmitiaVideoBlockState extends State<AmitiaVideoBlock> {
   Future<void> _load() async {
     try {
       final uri = Uri.parse(widget.block.url);
-      final controller =
-          uri.scheme == 'file'
-              ? VideoPlayerController.file(File(uri.toFilePath()))
-              : VideoPlayerController.networkUrl(uri);
+      final controller = uri.scheme == 'file'
+          ? VideoPlayerController.file(File(uri.toFilePath()))
+          : VideoPlayerController.networkUrl(uri);
       await controller.initialize();
       if (!mounted) {
         await controller.dispose();
@@ -883,6 +913,26 @@ class _AmitiaVideoBlockState extends State<AmitiaVideoBlock> {
                       ? ''
                       : _formatDuration(_controller!.value.duration),
                   style: TextStyle(color: tokens.muted, fontSize: 10),
+                ),
+                IconButton(
+                  tooltip: '全屏',
+                  onPressed: _controller == null
+                      ? null
+                      : () => _openFullscreen(context),
+                  iconSize: 16,
+                  color: tokens.muted,
+                  visualDensity: VisualDensity.compact,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints.tightFor(
+                    width: 32,
+                    height: 32,
+                  ),
+                  style: IconButton.styleFrom(
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    minimumSize: const Size(32, 32),
+                    maximumSize: const Size(32, 32),
+                  ),
+                  icon: const Icon(Icons.fullscreen_rounded),
                 ),
               ],
             ),
@@ -955,15 +1005,119 @@ class _AmitiaVideoBlockState extends State<AmitiaVideoBlock> {
     final seconds = value.inSeconds.remainder(60).toString().padLeft(2, '0');
     return '$minutes:$seconds';
   }
+
+  Future<void> _openFullscreen(BuildContext context) async {
+    await showDialog<void>(
+      context: context,
+      builder: (context) => _FullscreenVideoDialog(
+        url: widget.block.url,
+        title: widget.block.title,
+      ),
+    );
+  }
+}
+
+class _FullscreenVideoDialog extends StatefulWidget {
+  final String url;
+  final String title;
+
+  const _FullscreenVideoDialog({required this.url, required this.title});
+
+  @override
+  State<_FullscreenVideoDialog> createState() => _FullscreenVideoDialogState();
+}
+
+class _FullscreenVideoDialogState extends State<_FullscreenVideoDialog> {
+  VideoPlayerController? _controller;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final uri = Uri.parse(widget.url);
+      final controller = uri.scheme == 'file'
+          ? VideoPlayerController.file(File(uri.toFilePath()))
+          : VideoPlayerController.networkUrl(uri);
+      await controller.initialize();
+      await controller.play();
+      if (!mounted) {
+        await controller.dispose();
+        return;
+      }
+      setState(() => _controller = controller);
+    } catch (error) {
+      if (mounted) setState(() => _error = error.toString());
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AmitiaMessageTheme.of(context);
+    return Dialog.fullscreen(
+      backgroundColor: Colors.black,
+      child: SafeArea(
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: _error != null
+                  ? Center(
+                      child: Text(
+                        '视频加载失败',
+                        style: TextStyle(color: tokens.danger),
+                      ),
+                    )
+                  : _controller == null
+                  ? const Center(child: CircularProgressIndicator())
+                  : Center(
+                      child: AspectRatio(
+                        aspectRatio: _controller!.value.aspectRatio,
+                        child: VideoPlayer(_controller!),
+                      ),
+                    ),
+            ),
+            Positioned(
+              right: 12,
+              top: 12,
+              child: IconButton(
+                tooltip: '关闭',
+                onPressed: () => Navigator.of(context).pop(),
+                color: Colors.white,
+                icon: const Icon(Icons.close_rounded),
+              ),
+            ),
+            Positioned(
+              left: 16,
+              right: 72,
+              bottom: 16,
+              child: Text(
+                widget.title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: Colors.white),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class AmitiaAgentTaskBlock extends StatelessWidget {
   final AmrpAgentTaskBlock block;
 
-  const AmitiaAgentTaskBlock({
-    super.key,
-    required this.block,
-  });
+  const AmitiaAgentTaskBlock({super.key, required this.block});
 
   @override
   Widget build(BuildContext context) {
@@ -1088,10 +1242,7 @@ class AmitiaAgentTaskBlock extends StatelessWidget {
 class AmitiaArtifactBlock extends StatelessWidget {
   final AmrpArtifactBlock block;
 
-  const AmitiaArtifactBlock({
-    super.key,
-    required this.block,
-  });
+  const AmitiaArtifactBlock({super.key, required this.block});
 
   @override
   Widget build(BuildContext context) {
@@ -1152,6 +1303,16 @@ class AmitiaArtifactBlock extends StatelessWidget {
                   onPressed: () => _showPreview(context),
                   child: const Text('预览'),
                 ),
+                if (block.url.isNotEmpty)
+                  TextButton(
+                    onPressed: () => _open(context),
+                    child: const Text('打开'),
+                  ),
+                if (block.url.isNotEmpty)
+                  TextButton(
+                    onPressed: () => _open(context),
+                    child: const Text('保存'),
+                  ),
                 TextButton(
                   onPressed: () => _copy(context),
                   child: const Text('复制'),
@@ -1246,15 +1407,18 @@ class AmitiaArtifactBlock extends StatelessWidget {
       context,
     ).showSnackBar(const SnackBar(content: Text('已复制 Artifact')));
   }
+
+  Future<void> _open(BuildContext context) async {
+    final uri = Uri.tryParse(block.url);
+    if (uri == null) return;
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
 }
 
 class AmitiaExtensionBlock extends StatelessWidget {
   final AmrpExtensionBlock block;
 
-  const AmitiaExtensionBlock({
-    super.key,
-    required this.block,
-  });
+  const AmitiaExtensionBlock({super.key, required this.block});
 
   @override
   Widget build(BuildContext context) {
@@ -1374,10 +1538,7 @@ class AmitiaFallbackBlock extends StatelessWidget {
 class AmitiaRichBlockRenderer extends StatelessWidget {
   final AmrpRichBlock block;
 
-  const AmitiaRichBlockRenderer({
-    super.key,
-    required this.block,
-  });
+  const AmitiaRichBlockRenderer({super.key, required this.block});
 
   @override
   Widget build(BuildContext context) {

@@ -2,15 +2,12 @@
   <details class="amrp-thinking" :open="open">
     <summary @click.prevent="open = !open">
       <span class="amrp-chevron" :class="{ open }">›</span>
-      <span v-if="state === 'streaming'">正在思考</span>
-      <span v-else-if="duration">已思考 {{ duration.toFixed(1) }} 秒</span>
-      <span v-else>思考内容</span>
-      <span v-if="state === 'streaming'" class="amrp-stream-dot"></span>
+      <span v-if="state === 'streaming'">思考中</span>
+      <span v-else-if="duration">思考完成（{{ duration.toFixed(2) }}s）</span>
+      <span v-else>思考完成</span>
+      <span v-if="state === 'streaming'" class="amrp-thinking-spinner"></span>
     </summary>
     <div class="amrp-thinking-body">
-      <div class="amrp-thinking-copy">
-        <button type="button" @click="copyThinking">复制</button>
-      </div>
       <pre>{{ content }}</pre>
     </div>
   </details>
@@ -18,11 +15,9 @@
 
 <script setup lang="ts">
 import { ref } from "vue";
-import { ElMessage } from "element-plus";
-import { copyText } from "../utils";
 import type { MessageState } from "../types";
 
-const props = withDefaults(
+withDefaults(
   defineProps<{
     content: string;
     state?: MessageState;
@@ -35,11 +30,6 @@ const props = withDefaults(
 );
 
 const open = ref(false);
-
-async function copyThinking() {
-  const copied = await copyText(props.content);
-  copied ? ElMessage.success("已复制思考内容") : ElMessage.warning("复制失败");
-}
 </script>
 
 <style scoped>
@@ -81,47 +71,29 @@ summary::-webkit-details-marker {
   transform: rotate(90deg);
 }
 
-.amrp-stream-dot {
-  width: 5px;
-  height: 5px;
+.amrp-thinking-spinner {
+  width: 11px;
+  height: 11px;
+  border: 1.5px solid color-mix(in srgb, var(--amrp-accent) 28%, transparent);
+  border-top-color: var(--amrp-accent);
   border-radius: 50%;
-  background: var(--amrp-accent);
-  animation: amrp-pulse 1s infinite;
+  animation: amrp-thinking-spin 700ms linear infinite;
 }
 
-@keyframes amrp-pulse {
-  50% { opacity: 0.25; }
+@keyframes amrp-thinking-spin {
+  to { transform: rotate(360deg); }
 }
 
 .amrp-thinking-body {
-  position: relative;
   width: min(700px, 100%);
-  max-height: 260px;
   margin-top: 6px;
-  overflow: auto;
   border-left: 2px solid var(--amrp-line);
   padding: 8px 10px;
   background: color-mix(in srgb, var(--amrp-soft) 70%, transparent);
 }
 
-.amrp-thinking-copy {
-  display: flex;
-  justify-content: flex-end;
-}
-
-button {
-  border: 0;
-  border-radius: 6px;
-  padding: 3px 6px;
-  background: var(--amrp-soft);
-  color: var(--amrp-muted);
-  font: inherit;
-  font-size: 10px;
-  cursor: pointer;
-}
-
 pre {
-  margin: 3px 0 0;
+  margin: 0;
   color: var(--amrp-muted);
   font: inherit;
   white-space: pre-wrap;

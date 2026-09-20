@@ -383,7 +383,7 @@ function formatDuration(seconds: number): string {
   width: 104px;
   height: 104px;
   border-radius: 32px;
-  background: var(--ac-color-primary, #6c7bff);
+  background: var(--ac-color-primary, #8a5728);
   border: 1px solid rgba(255, 255, 255, 0.14);
   color: #fff;
   font-size: 30px;
@@ -392,7 +392,7 @@ function formatDuration(seconds: number): string {
 }
 .call-avatar.speaking {
   border-width: 4px;
-  border-color: var(--ac-color-primary, #6c7bff);
+  border-color: var(--ac-color-primary, #8a5728);
   box-shadow: 0 0 0 6px rgba(108, 123, 255, 0.18);
 }
 .call-avatar.error {
@@ -452,7 +452,7 @@ function formatDuration(seconds: number): string {
   background: rgba(255, 255, 255, 0.16);
 }
 .call-control.selected .call-control-icon {
-  background: var(--ac-color-primary, #6c7bff);
+  background: var(--ac-color-primary, #8a5728);
   border-color: transparent;
   color: #fff;
 }

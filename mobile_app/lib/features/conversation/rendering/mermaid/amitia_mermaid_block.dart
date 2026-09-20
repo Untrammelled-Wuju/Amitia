@@ -58,10 +58,10 @@ class _AmitiaMermaidBlockState extends State<AmitiaMermaidBlock> {
   void _startRender() {
     _renderFuture = widget.streaming || widget.source.trim().isEmpty
         ? null
-        : compute(
-            _renderMermaidScene,
-            <String, Object>{'source': widget.source, 'dark': _dark},
-          );
+        : compute(_renderMermaidScene, <String, Object>{
+            'source': widget.source,
+            'dark': _dark,
+          });
   }
 
   @override

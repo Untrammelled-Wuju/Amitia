@@ -30,6 +30,7 @@ type ComputeResult struct {
 	UserMessageCreatedAt string
 	Reply                string
 	Reasoning            string
+	ReasoningDurationMS  int64
 	Lines                []string
 	Source               string
 	ForceVoice           bool
@@ -411,7 +412,7 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 		}
 	}
 	s.emitDesktopPetChat(ctx, req, charID, convID, userMsgID, "response.started", 3)
-	reply, reasoning, forceVoice, totalTokens, llmErr := s.invokeLLMWithTools(ctx, cfg, messages, trace, promptTrace, userMsgID, convID, charID, channel, requestID, req.SpaceID, req.SessionID, req.ExecContext, toolDefs, seenTools, toolExecCtx)
+	reply, reasoning, forceVoice, totalTokens, reasoningDurationMS, llmErr := s.invokeLLMWithTools(ctx, cfg, messages, trace, promptTrace, userMsgID, convID, charID, channel, requestID, req.SpaceID, req.SessionID, req.ExecContext, toolDefs, seenTools, toolExecCtx)
 	if llmErr != nil {
 		s.emitDesktopPetChat(ctx, req, charID, convID, userMsgID, "response.failed", 4)
 		return nil, llmErr
@@ -471,6 +472,7 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 		UserMessageCreatedAt: userMsgCreatedAt,
 		Reply:                reply,
 		Reasoning:            reasoning,
+		ReasoningDurationMS:  reasoningDurationMS,
 		Lines:                realLines,
 		Source:               source,
 		ForceVoice:           forceVoice,

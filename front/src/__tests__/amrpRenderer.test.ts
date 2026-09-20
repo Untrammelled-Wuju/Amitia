@@ -61,6 +61,19 @@ describe("AMRP renderer", () => {
     expect(segments[1].language).toBe("dart");
   });
 
+  it("normalizes persisted reasoning duration", () => {
+    const message = normalizeAIMessage({
+      id: "m2",
+      role: "assistant",
+      content: "回复",
+      reasoningContent: "思考",
+      reasoningDurationMs: 2850,
+      createdAt: "2026-09-20T00:00:00.000Z",
+    });
+
+    expect(message.thinking?.duration).toBe(2.85);
+  });
+
   it("sanitizes unsafe markdown links and keeps supported structure", () => {
     const html = renderMarkdownSegment([
       "# 标题",

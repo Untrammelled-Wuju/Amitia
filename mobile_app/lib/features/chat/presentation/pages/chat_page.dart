@@ -1533,6 +1533,64 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     if (mounted) amitiaSnackBar(context, '消息已复制');
   }
 
+  Future<void> _editMessage(ChatMessage message) async {
+    final controller = TextEditingController(text: message.content);
+    String? content;
+    try {
+      content = await showDialog<String>(
+        context: context,
+        builder: (dialogContext) {
+          String? errorText;
+          return StatefulBuilder(
+            builder: (context, setDialogState) => AlertDialog(
+              title: const Text('修改消息'),
+              content: TextField(
+                controller: controller,
+                autofocus: true,
+                minLines: 1,
+                maxLines: 8,
+                decoration: InputDecoration(
+                  labelText: '消息内容',
+                  errorText: errorText,
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: const Text('取消'),
+                ),
+                FilledButton(
+                  onPressed: () {
+                    final value = controller.text.trim();
+                    if (value.isEmpty) {
+                      setDialogState(() => errorText = '消息内容不能为空');
+                      return;
+                    }
+                    Navigator.of(dialogContext).pop(value);
+                  },
+                  child: const Text('保存'),
+                ),
+              ],
+            ),
+          );
+        },
+      );
+    } finally {
+      controller.dispose();
+    }
+    if (!mounted ||
+        content == null ||
+        content.trim() == message.content.trim()) {
+      return;
+    }
+    try {
+      await _runtime.editMessage(message.id, content);
+      if (mounted) amitiaSnackBar(context, '消息已修改');
+    } catch (error) {
+      if (mounted) amitiaSnackBar(context, '修改失败：$error');
+    }
+  }
+
   Future<void> _clearCurrentConversation() async {
     final conversationId = _runtime.conversationId?.trim() ?? '';
     if (conversationId.isEmpty) {
@@ -2182,6 +2240,17 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                                                 _runtime.canRetryMessage(index)
                                                 ? () => _retryMessage(index)
                                                 : null,
+                                            onRegenerate:
+                                                message.role ==
+                                                        MessageRole.assistant &&
+                                                    _runtime
+                                                        .canRegenerateMessage(
+                                                          index,
+                                                        )
+                                                ? () => _runtime.regenerate(
+                                                    messageId: message.id,
+                                                  )
+                                                : null,
                                             onReply:
                                                 message.type ==
                                                     MessageType.systemNotice
@@ -2197,6 +2266,10 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                                                         .isEmpty
                                                 ? null
                                                 : () => _copyMessage(message),
+                                            onEdit:
+                                                message.role == MessageRole.user
+                                                ? () => _editMessage(message)
+                                                : null,
                                             onAgentTaskTap: isAgentTask
                                                 ? () {
                                                     final taskId =

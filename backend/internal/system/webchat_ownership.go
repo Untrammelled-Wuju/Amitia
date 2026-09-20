@@ -22,6 +22,10 @@ type webChatScopedService interface {
 	DeleteMessagesForSpace(convID, spaceID string) error
 }
 
+type webChatMessageEditService interface {
+	UpdateMessageForSpace(id, spaceID, content string) (*chat.Message, error)
+}
+
 func webChatSpaceID(c *gin.Context) string {
 	return requestidentity.ResolveGin(c)
 }

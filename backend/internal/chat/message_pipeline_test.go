@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/glebarez/sqlite"
 	"github.com/u-ai/backend/internal/agent/tool"
@@ -93,6 +94,35 @@ func TestProcessMessageDoesNotCommitAssistantWhenGenerationFails(t *testing.T) {
 	}
 	if status != "failed" {
 		t.Fatalf("expected user message failed, got %s", status)
+	}
+}
+
+func TestProcessMessagePersistsReasoningDuration(t *testing.T) {
+	db, svc, convID := setupProcessMessageTest(t, func(context.Context, *ModelConfig, []map[string]interface{}, []tool.Tool) (string, string, []map[string]interface{}, int, error) {
+		time.Sleep(30 * time.Millisecond)
+		return "回复", "思考", nil, 12, nil
+	})
+
+	_, err := svc.ProcessMessage(context.Background(), &ProcessMessageRequest{
+		CharacterID:    "char-process",
+		ConversationID: convID,
+		Channel:        "web",
+		Source:         "manual",
+		Message:        "你好",
+		RequestID:      "req-reasoning-duration",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var message Message
+	if err := db.Where("conversation_id = ? AND role = ?", convID, "assistant").First(&message).Error; err != nil {
+		t.Fatal(err)
+	}
+	if message.ReasoningContent != "思考" {
+		t.Fatalf("expected reasoning content, got %q", message.ReasoningContent)
+	}
+	if message.ReasoningDurationMS <= 0 {
+		t.Fatalf("expected positive reasoning duration, got %d", message.ReasoningDurationMS)
 	}
 }
 

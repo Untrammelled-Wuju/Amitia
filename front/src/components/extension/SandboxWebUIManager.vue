@@ -88,5 +88,5 @@ onBeforeUnmount(() => {
 .webui-manager__stat--active .webui-manager__stat-value { color: #059669; }
 .webui-manager__stat--suspended .webui-manager__stat-value { color: #d97706; }
 .webui-manager__stat--failed .webui-manager__stat-value { color: #dc2626; }
-.webui-manager__stat--quarantined .webui-manager__stat-value { color: #7c3aed; }
+.webui-manager__stat--quarantined .webui-manager__stat-value { color: var(--tp-warning, #c9851b); }
 </style>

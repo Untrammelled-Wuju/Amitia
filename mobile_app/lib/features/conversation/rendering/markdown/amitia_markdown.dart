@@ -84,10 +84,7 @@ class _MarkdownBody extends StatelessWidget {
   final String source;
   final ValueChanged<String>? onCitation;
 
-  const _MarkdownBody({
-    required this.source,
-    this.onCitation,
-  });
+  const _MarkdownBody({required this.source, this.onCitation});
 
   @override
   Widget build(BuildContext context) {
@@ -162,7 +159,10 @@ class _MarkdownBody extends StatelessWidget {
             ),
           ),
         ),
-        listBullet: TextStyle(color: tokens.text, height: tokens.paragraphLineHeight),
+        listBullet: TextStyle(
+          color: tokens.text,
+          height: tokens.paragraphLineHeight,
+        ),
         listBulletPadding: const EdgeInsets.only(right: 6),
         listIndent: 20,
         tableHead: TextStyle(
@@ -188,10 +188,8 @@ class _MarkdownBody extends StatelessWidget {
         ),
         'citation': _CitationBuilder(onCitation: onCitation),
       },
-      imageBuilder: (uri, title, alt) => _AmitiaMarkdownImage(
-        uri: uri,
-        alt: alt ?? title ?? '',
-      ),
+      imageBuilder: (uri, title, alt) =>
+          _AmitiaMarkdownImage(uri: uri, alt: alt ?? title ?? ''),
       onTapLink: (text, href, title) {
         final value = href?.trim() ?? '';
         final uri = Uri.tryParse(value);
@@ -248,10 +246,7 @@ class _AmitiaMarkdownImage extends StatelessWidget {
   final Uri uri;
   final String alt;
 
-  const _AmitiaMarkdownImage({
-    required this.uri,
-    required this.alt,
-  });
+  const _AmitiaMarkdownImage({required this.uri, required this.alt});
 
   @override
   Widget build(BuildContext context) {

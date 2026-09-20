@@ -36,6 +36,7 @@ type MessageCommitEvent struct {
 	UserMessage         string
 	Reply               string
 	Reasoning           string
+	ReasoningDurationMS int64
 	Lines               []string
 	SpaceID             string
 	PeerID              string
@@ -44,22 +45,23 @@ type MessageCommitEvent struct {
 	IsInternal          bool
 }
 type messageCommitPlan struct {
-	Request         *ProcessMessageRequest
-	Conversation    string
-	Character       string
-	CharacterName   string
-	UserMessageID   string
-	Reply           string
-	Reasoning       string
-	Lines           []string
-	Source          string
-	Runtime         *interaction.RuntimeAssembly
-	CommitToken     string
-	CommitOwner     string
-	LeaseID         string
-	LeaseOwnerToken string
-	TotalTokens     int
-	ForceVoice      bool
+	Request             *ProcessMessageRequest
+	Conversation        string
+	Character           string
+	CharacterName       string
+	UserMessageID       string
+	Reply               string
+	Reasoning           string
+	ReasoningDurationMS int64
+	Lines               []string
+	Source              string
+	Runtime             *interaction.RuntimeAssembly
+	CommitToken         string
+	CommitOwner         string
+	LeaseID             string
+	LeaseOwnerToken     string
+	TotalTokens         int
+	ForceVoice          bool
 }
 
 type messageCommitResult struct {
@@ -213,7 +215,10 @@ func (s *service) commitInteraction(ctx context.Context, plan messageCommitPlan)
 				return err
 			}
 			if reasoningMessageID != "" {
-				if err := tx.Model(&Message{}).Where("id = ?", reasoningMessageID).Update("reasoning_content", plan.Reasoning).Error; err != nil {
+				if err := tx.Model(&Message{}).Where("id = ?", reasoningMessageID).Updates(map[string]interface{}{
+					"reasoning_content":     plan.Reasoning,
+					"reasoning_duration_ms": plan.ReasoningDurationMS,
+				}).Error; err != nil {
 					return err
 				}
 			}
@@ -274,6 +279,7 @@ func (s *service) commitInteraction(ctx context.Context, plan messageCommitPlan)
 			UserMessage:         plan.Request.Message,
 			Reply:               plan.Reply,
 			Reasoning:           plan.Reasoning,
+			ReasoningDurationMS: plan.ReasoningDurationMS,
 			Lines:               plan.Lines,
 			SpaceID:             plan.Request.SpaceID,
 			PeerID:              plan.Request.PeerID,

@@ -174,4 +174,3 @@ class AmitiaMessageTheme extends ThemeExtension<AmitiaMessageTheme> {
     return t < 0.5 ? this : other;
   }
 }
-
