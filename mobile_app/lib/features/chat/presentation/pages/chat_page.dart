@@ -770,15 +770,12 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                     style: const TextStyle(fontSize: 12),
                   ),
                 ),
-                const SizedBox(width: 3),
                 if (_workspaceBusy)
                   const SizedBox(
                     width: 12,
                     height: 12,
                     child: CircularProgressIndicator(strokeWidth: 1.5),
-                  )
-                else
-                  const Icon(Icons.keyboard_arrow_down_rounded, size: 16),
+                  ),
               ],
             ),
           ),

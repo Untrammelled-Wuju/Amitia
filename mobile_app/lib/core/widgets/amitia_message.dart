@@ -2295,6 +2295,15 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
                             onTap: _showComposerTools,
                           ),
                           const SizedBox(width: 4),
+                          Expanded(
+                            child: widget.workspaceSelector == null
+                                ? const SizedBox.shrink()
+                                : Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: widget.workspaceSelector!,
+                                  ),
+                          ),
+                          const SizedBox(width: 4),
                           Semantics(
                             button: true,
                             label: widget.permissionMode == 'full_access'
@@ -2305,6 +2314,7 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
                               icon: widget.permissionMode == 'full_access'
                                   ? Icons.lock_open_rounded
                                   : Icons.lock_outline_rounded,
+                              iconSize: 16,
                               tooltip: widget.permissionMode == 'full_access'
                                   ? '完全访问'
                                   : '请求批准',
@@ -2312,14 +2322,6 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
                             ),
                           ),
                           const SizedBox(width: 4),
-                          Expanded(
-                            child: widget.workspaceSelector == null
-                                ? const SizedBox.shrink()
-                                : Align(
-                                    alignment: Alignment.centerLeft,
-                                    child: widget.workspaceSelector!,
-                                  ),
-                          ),
                           CompositedTransformTarget(
                             link: _modelMenuLink,
                             child: OverlayPortal(
@@ -2356,7 +2358,7 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
                                       minWidth: 44,
                                       maxWidth: 64,
                                     ),
-                                    height: 28,
+                                    height: 31,
                                     padding: const EdgeInsets.symmetric(
                                       horizontal: 9,
                                     ),
@@ -2378,7 +2380,7 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
                                       overflow: TextOverflow.ellipsis,
                                       style: AppTypography.label(context)
                                           .copyWith(
-                                            fontSize: 10.5,
+                                            fontSize: 14,
                                             color: context.textSecondary,
                                           ),
                                     ),
@@ -2994,12 +2996,14 @@ enum _VoiceGestureIntent { send, cancel, transcribe }
 
 class _ComposerRoundButton extends StatelessWidget {
   final IconData icon;
+  final double iconSize;
   final String tooltip;
   final VoidCallback onTap;
 
   const _ComposerRoundButton({
     super.key,
     required this.icon,
+    this.iconSize = 17,
     required this.tooltip,
     required this.onTap,
   });
@@ -3015,7 +3019,7 @@ class _ComposerRoundButton extends StatelessWidget {
           width: 31,
           height: 31,
           alignment: Alignment.center,
-          child: Icon(icon, size: 17, color: context.textPrimary),
+          child: Icon(icon, size: iconSize, color: context.textPrimary),
         ),
       ),
     );
