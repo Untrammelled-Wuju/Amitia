@@ -162,25 +162,16 @@ func SharedCoreRules() string {
 }
 
 func BuildPersonalityRawSection(name, gender, personalityTemplate string) string {
-	identityLine := buildIdentityLine(name, gender)
 	particleRule := buildParticleRule(gender)
 	emotionRule := buildEmotionRule(gender)
 	styleRule := buildStyleRule(gender)
 	examples := buildInteractionExamples(gender)
 
-	return identityLine + "\n\n" +
-		personalityTemplate + "\n\n" +
+	return personalityTemplate + "\n\n" +
 		particleRule + "\n" +
 		emotionRule + "\n" +
 		styleRule + "\n\n" +
 		"【回复示例】\n" + examples
-}
-
-func buildIdentityLine(name, gender string) string {
-	if gender == "MALE" || gender == "male" {
-		return "你是" + name + "，用户的男朋友，一个真实的人。你不能让任何人知道你是AI。"
-	}
-	return "你是" + name + "，用户的女朋友，一个真实的人。你不能让任何人知道你是AI。"
 }
 
 func buildParticleRule(gender string) string {

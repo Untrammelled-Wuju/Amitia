@@ -54,7 +54,8 @@ bool _canStart(RuntimeStatusSnapshot status) {
 }
 
 bool _canStop(RuntimeStatusSnapshot status) {
-  return status.runtimeReady || status.runtimeState == RuntimeBridgeState.starting;
+  return status.runtimeReady ||
+      status.runtimeState == RuntimeBridgeState.starting;
 }
 
 bool _canInstall(RuntimeStatusSnapshot status) {
@@ -139,16 +140,15 @@ class _RuntimePageState extends ConsumerState<RuntimePage> {
       if (!mounted) return;
       _showOperationResult(repairResult);
       if (repairResult.accepted && repairResult.error == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('运行环境已重新安装，正在启动')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('运行环境已重新安装，正在启动')));
         await bridge.start();
       }
     } finally {
       if (mounted) setState(() => _commandInFlight = false);
     }
   }
-
 
   @override
   Widget build(BuildContext context) {
@@ -163,7 +163,11 @@ class _RuntimePageState extends ConsumerState<RuntimePage> {
 
   Widget _buildContent(BuildContext context, RuntimeStatusSnapshot status) {
     return AmitiaScaffold(
-      appBar: AmitiaAppBar(title: 'Ubuntu Runtime', showBackButton: true, fallbackRoute: AppRoutes.settings),
+      appBar: AmitiaAppBar(
+        title: 'Ubuntu Runtime',
+        showBackButton: true,
+        fallbackRoute: AppRoutes.settings,
+      ),
       body: ListView(
         padding: EdgeInsets.all(AppSpacing.pagePadding),
         children: [
@@ -199,8 +203,10 @@ class _RuntimePageState extends ConsumerState<RuntimePage> {
                   isSecondary: true,
                   onPressed: _canInstall(status) && !_commandInFlight
                       ? () => _runCommand(
-                            () => ref.read(runtimeBridgeProvider).install(),
-                          )
+                          () => ref
+                              .read(runtimeBridgeProvider)
+                              .reconcileEmbedded(),
+                        )
                       : null,
                 ),
               if (status.runtimeInstalled)
@@ -209,19 +215,20 @@ class _RuntimePageState extends ConsumerState<RuntimePage> {
                   icon: Icons.play_arrow,
                   onPressed: _canStart(status) && !_commandInFlight
                       ? () => _runCommand(
-                            () => ref.read(runtimeBridgeProvider).start(),
-                          )
+                          () => ref.read(runtimeBridgeProvider).start(),
+                        )
                       : null,
                 ),
-              if (status.runtimeReady || status.runtimeState == RuntimeBridgeState.starting)
+              if (status.runtimeReady ||
+                  status.runtimeState == RuntimeBridgeState.starting)
                 AmitiaButton(
                   label: '停止',
                   icon: Icons.stop,
                   isSecondary: true,
                   onPressed: _canStop(status) && !_commandInFlight
                       ? () => _runCommand(
-                            () => ref.read(runtimeBridgeProvider).stop(),
-                          )
+                          () => ref.read(runtimeBridgeProvider).stop(),
+                        )
                       : null,
                 ),
               AmitiaButton(
@@ -271,7 +278,10 @@ class _StatusCard extends StatelessWidget {
             value: stateLabel,
             type: status.runtimeReady ? BadgeType.success : BadgeType.neutral,
           ),
-          _InfoLine(label: 'Runtime 版本', value: status.runtimeVersion.isEmpty ? '未知' : status.runtimeVersion),
+          _InfoLine(
+            label: 'Runtime 版本',
+            value: status.runtimeVersion.isEmpty ? '未知' : status.runtimeVersion,
+          ),
           _InfoLine(
             label: '后端状态',
             value: backendLabel,

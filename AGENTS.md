@@ -1,4 +1,6 @@
 禁止使用cmd和powershell工具进行批量替换。
+构建手机端时必须从后端源码重新构建 Runtime Package，并使用同一份后端源码重新构建手机端所需后端文件，禁止使用旧 Runtime Package 或旧后端产物。
+任何修改必须先给出行业标准方案；如果现有设计不符合行业标准方案，必须先给出行业标准方案，等待用户确认无误后，再按照确认后的行业标准方案进行修改或重构。
 项目中不使用系统Node环境，必须使用nodeexe或Linux版本可直接运行的Node二进制文件。
 电脑中已经安装powershell7,必须使用powershell时优先使用powershell7。
 Go 安装路径：C:\Code\Go\bin\go.exe

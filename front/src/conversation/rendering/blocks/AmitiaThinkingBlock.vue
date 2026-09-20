@@ -1,23 +1,26 @@
 <template>
   <details class="amrp-thinking" :open="open">
-    <summary @click.prevent="open = !open">
-      <span class="amrp-chevron" :class="{ open }">›</span>
+    <summary
+      :class="{ 'amrp-thinking-status-only': !hasContent }"
+      @click.prevent="toggle"
+    >
+      <span v-if="hasContent" class="amrp-chevron" :class="{ open }">›</span>
       <span v-if="state === 'streaming'">思考中</span>
       <span v-else-if="duration">思考完成（{{ duration.toFixed(2) }}s）</span>
       <span v-else>思考完成</span>
       <span v-if="state === 'streaming'" class="amrp-thinking-spinner"></span>
     </summary>
-    <div class="amrp-thinking-body">
+    <div v-if="hasContent && open" class="amrp-thinking-body">
       <pre>{{ content }}</pre>
     </div>
   </details>
 </template>
 
 <script setup lang="ts">
-import { ref } from "vue";
+import { computed, ref } from "vue";
 import type { MessageState } from "../types";
 
-withDefaults(
+const props = withDefaults(
   defineProps<{
     content: string;
     state?: MessageState;
@@ -29,7 +32,16 @@ withDefaults(
   },
 );
 
+const hasContent = computed(() => String(props.content || "").trim().length > 0);
 const open = ref(false);
+
+function toggle() {
+  if (!hasContent.value) {
+    open.value = false;
+    return;
+  }
+  open.value = !open.value;
+}
 </script>
 
 <style scoped>
@@ -53,6 +65,10 @@ summary {
   cursor: pointer;
   list-style: none;
   user-select: none;
+}
+
+.amrp-thinking-status-only {
+  cursor: default;
 }
 
 summary::-webkit-details-marker {

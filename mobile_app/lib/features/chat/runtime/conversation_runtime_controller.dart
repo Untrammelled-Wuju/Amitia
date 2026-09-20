@@ -37,6 +37,10 @@ class ConversationRuntimeController extends ChangeNotifier {
   int _draftEpoch = 0;
   ChatStreamCancellation? _activeSendCancellation;
   ChatStreamCancellation? _messageEventsCancellation;
+  String _activeReasoningContent = '';
+  int _activeReasoningDurationMs = 0;
+  String _activeResponseGroupId = '';
+  bool _liveReasoningAttached = false;
   final MarkdownStreamScheduler _streamScheduler = MarkdownStreamScheduler();
 
   static const Duration _liveSyncInterval = Duration(seconds: 15);
@@ -76,6 +80,7 @@ class ConversationRuntimeController extends ChangeNotifier {
     return ChatMessage(
       id: id ?? message.id,
       renderId: message.renderId,
+      characterId: message.characterId,
       role: message.role,
       type: message.type,
       content: message.content,
@@ -99,6 +104,8 @@ class ConversationRuntimeController extends ChangeNotifier {
       toolResult: message.toolResult,
       replyToMessageId: message.replyToMessageId,
       replyToExcerpt: message.replyToExcerpt,
+      responseGroupId: message.responseGroupId,
+      deliverySequence: message.deliverySequence,
     );
   }
 
@@ -301,6 +308,10 @@ class ConversationRuntimeController extends ChangeNotifier {
     );
     _lastError = null;
     _sending = true;
+    _activeReasoningContent = '';
+    _activeReasoningDurationMs = 0;
+    _activeResponseGroupId = pendingMessage.renderId;
+    _liveReasoningAttached = false;
     final epoch = ++_generationEpoch;
     final cancellation = _chatService.createStreamCancellation();
     _activeSendCancellation?.cancel('superseded');
@@ -386,6 +397,7 @@ class ConversationRuntimeController extends ChangeNotifier {
         _activeSendCancellation = null;
       }
       if (epoch == _generationEpoch) {
+        _activeResponseGroupId = '';
         _sending = false;
         _streamScheduler.schedule(notifyListeners);
       }
@@ -471,6 +483,9 @@ class ConversationRuntimeController extends ChangeNotifier {
       _restartLiveSync();
     }
     final userMessageId = (data['userMessageId'] ?? '').toString().trim();
+    _activeReasoningContent = (data['reasoningContent'] ?? '').toString();
+    _activeReasoningDurationMs =
+        (data['reasoningDurationMs'] as num?)?.toInt() ?? 0;
     final current = _messages.findById(localMessage.id);
     if (current != null) {
       _messages.upsert(
@@ -510,20 +525,48 @@ class ConversationRuntimeController extends ChangeNotifier {
     final reasoningContent = (data['reasoningContent'] ?? '').toString();
     final reasoningDurationMs =
         (data['reasoningDurationMs'] as num?)?.toInt() ?? 0;
+    final responseGroupId =
+        (data['responseGroupId'] ??
+                data['response_group_id'] ??
+                _activeResponseGroupId)
+            .toString()
+            .trim();
+    final deliverySequence =
+        (data['deliverySequence'] as num?)?.toInt() ??
+        (data['delivery_sequence'] as num?)?.toInt() ??
+        0;
     final existing =
         _messages.findById(id) ??
         _messages.findByRenderId(id, role: MessageRole.assistant);
+    final characterId =
+        (data['characterId'] ??
+                data['character_id'] ??
+                existing?.characterId ??
+                _characterId)
+            .toString()
+            .trim();
+    final attachReasoning =
+        !_liveReasoningAttached &&
+        (reasoningContent.isNotEmpty || _activeReasoningContent.isNotEmpty);
+    final effectiveReasoningContent = reasoningContent.isNotEmpty
+        ? reasoningContent
+        : _activeReasoningContent;
+    final effectiveReasoningDurationMs = reasoningDurationMs > 0
+        ? reasoningDurationMs
+        : _activeReasoningDurationMs;
+    if (attachReasoning) _liveReasoningAttached = true;
     final next = ChatMessage(
       id: id,
       renderId: existing?.renderId ?? id,
+      characterId: characterId,
       role: MessageRole.assistant,
       type: audioUrl.isNotEmpty ? MessageType.audio : type,
       content: content.isNotEmpty ? content : existing?.content ?? '',
-      reasoningContent: reasoningContent.isNotEmpty
-          ? reasoningContent
+      reasoningContent: attachReasoning
+          ? effectiveReasoningContent
           : existing?.reasoningContent ?? '',
-      reasoningDurationMs: reasoningDurationMs > 0
-          ? reasoningDurationMs
+      reasoningDurationMs: attachReasoning
+          ? effectiveReasoningDurationMs
           : existing?.reasoningDurationMs ?? 0,
       time: existing?.time ?? createdAt,
       sequence: existing?.sequence ?? _nextLocalSequence(),
@@ -536,6 +579,8 @@ class ConversationRuntimeController extends ChangeNotifier {
           : existing?.durationMs,
       replyToMessageId: existing?.replyToMessageId,
       replyToExcerpt: existing?.replyToExcerpt,
+      responseGroupId: responseGroupId,
+      deliverySequence: deliverySequence,
     );
     _messages.upsert(next);
     notifyListeners();
@@ -586,7 +631,6 @@ class ConversationRuntimeController extends ChangeNotifier {
     }
 
     var changed = false;
-    DateTime? lastUserTime;
     for (final dto in persisted) {
       final persistedRequestId = dto.requestId.trim();
       final role = _roleFor(dto.role);
@@ -604,17 +648,14 @@ class ConversationRuntimeController extends ChangeNotifier {
       final reasoningContent = dto.reasoningContent.isNotEmpty
           ? dto.reasoningContent
           : existing?.reasoningContent ?? '';
-      var reasoningDurationMs = dto.reasoningDurationMs > 0
+      final reasoningDurationMs = dto.reasoningDurationMs > 0
           ? dto.reasoningDurationMs
           : existing?.reasoningDurationMs ?? 0;
-      if (reasoningDurationMs <= 0 &&
-          role == MessageRole.assistant &&
-          reasoningContent.trim().isNotEmpty &&
-          lastUserTime != null) {
-        final fallback = messageTime.difference(lastUserTime).inMilliseconds;
-        if (fallback > 0) reasoningDurationMs = fallback;
-      }
-      if (role == MessageRole.user) lastUserTime = messageTime;
+      final responseGroupId = dto.responseGroupId.trim().isNotEmpty
+          ? dto.responseGroupId.trim()
+          : role == MessageRole.assistant && persistedRequestId.isNotEmpty
+          ? persistedRequestId
+          : existing?.responseGroupId ?? '';
       final next = ChatMessage(
         id: dto.id,
         renderId:
@@ -622,6 +663,9 @@ class ConversationRuntimeController extends ChangeNotifier {
             (role == MessageRole.user && persistedRequestId.isNotEmpty
                 ? persistedRequestId
                 : dto.id),
+        characterId: dto.characterId.isNotEmpty
+            ? dto.characterId
+            : existing?.characterId ?? '',
         role: role,
         type: type,
         content: dto.content.trim().isNotEmpty || existing == null
@@ -665,6 +709,10 @@ class ConversationRuntimeController extends ChangeNotifier {
         toolResult: existing?.toolResult,
         replyToMessageId: dto.replyToMessageId ?? existing?.replyToMessageId,
         replyToExcerpt: dto.replyToExcerpt ?? existing?.replyToExcerpt,
+        responseGroupId: responseGroupId,
+        deliverySequence: dto.deliverySequence > 0
+            ? dto.deliverySequence
+            : existing?.deliverySequence ?? 0,
       );
       changed = _messages.upsert(next) || changed;
     }
@@ -757,8 +805,16 @@ class ConversationRuntimeController extends ChangeNotifier {
     if (id.isEmpty) return true;
     final rawError = (metadata['rawError'] ?? '').toString().trim();
     final content = (event['content'] ?? '').toString().trim();
+    final responseGroupId =
+        (metadata['responseGroupId'] ??
+                metadata['response_group_id'] ??
+                metadata['requestId'] ??
+                '')
+            .toString()
+            .trim();
     final message = ChatMessage(
       id: id,
+      characterId: _characterId ?? '',
       role: MessageRole.assistant,
       type: MessageType.systemNotice,
       content: rawError.isNotEmpty
@@ -771,6 +827,7 @@ class ConversationRuntimeController extends ChangeNotifier {
           DateTime.now(),
       sequence: _nextLocalSequence(),
       status: MessageStatus.error,
+      responseGroupId: responseGroupId,
     );
     _messages.upsert(message);
     if (messageType == 'text_error') {
@@ -916,42 +973,13 @@ class ConversationRuntimeController extends ChangeNotifier {
     final messages = _messages.messages;
     if (_sending || index < 0 || index >= messages.length) return false;
     final message = messages[index];
-    if (message.status != MessageStatus.error) return false;
-    if (message.role == MessageRole.user) return true;
-    if (message.role != MessageRole.assistant) return false;
-    final latestUserIndex = messages.lastIndexWhere(
-      (item) => item.role == MessageRole.user,
-    );
-    return latestUserIndex >= 0 && index > latestUserIndex;
-  }
-
-  bool canRegenerateMessage(int index) {
-    final messages = _messages.messages;
-    if (_sending || index < 0 || index >= messages.length) return false;
-    final message = messages[index];
-    if (message.role != MessageRole.assistant) return false;
-    if (message.status == MessageStatus.queued ||
-        message.status == MessageStatus.sending ||
-        message.status == MessageStatus.streaming) {
-      return false;
-    }
-    final latestUserIndex = messages.lastIndexWhere(
-      (item) => item.role == MessageRole.user,
-    );
-    if (latestUserIndex > index) return false;
-    return messages.lastIndexWhere(
-          (item) => item.role == MessageRole.assistant,
-        ) ==
-        index;
+    return message.role == MessageRole.user &&
+        message.status == MessageStatus.error;
   }
 
   Future<void> retryMessage(int index) async {
     if (!canRetryMessage(index)) return;
     final message = _messages.messages[index];
-    if (message.role == MessageRole.assistant) {
-      await regenerate();
-      return;
-    }
     _messages.remove(message);
     notifyListeners();
     switch (message.type) {
@@ -1008,26 +1036,6 @@ class ConversationRuntimeController extends ChangeNotifier {
     }
   }
 
-  Future<void> regenerate({String? messageId}) async {
-    final conv = _conversationId;
-    if (_sending || conv == null || conv.isEmpty) return;
-    _sending = true;
-    final epoch = ++_generationEpoch;
-    _lastError = null;
-    notifyListeners();
-    try {
-      await _chatService.regenerate(conv);
-      if (epoch == _generationEpoch) await _syncMessages();
-    } catch (error) {
-      if (epoch == _generationEpoch) _lastError = error;
-    } finally {
-      if (epoch == _generationEpoch) {
-        _sending = false;
-        notifyListeners();
-      }
-    }
-  }
-
   Future<void> deleteMessage(String messageId) async {
     final id = messageId.trim();
     if (id.isEmpty) return;
@@ -1048,6 +1056,7 @@ class ConversationRuntimeController extends ChangeNotifier {
       ChatMessage(
         id: existing.id,
         renderId: existing.renderId,
+        characterId: existing.characterId,
         role: existing.role,
         type: existing.type,
         content: value,
@@ -1071,6 +1080,8 @@ class ConversationRuntimeController extends ChangeNotifier {
         toolResult: existing.toolResult,
         replyToMessageId: existing.replyToMessageId,
         replyToExcerpt: existing.replyToExcerpt,
+        responseGroupId: existing.responseGroupId,
+        deliverySequence: existing.deliverySequence,
       ),
     );
     notifyListeners();
@@ -1206,6 +1217,7 @@ class ConversationRuntimeController extends ChangeNotifier {
       <String, dynamic>{
         'id': message.id,
         'renderId': message.renderId,
+        'characterId': message.characterId,
         'role': message.role.name,
         'type': message.type.name,
         'content': message.content,
@@ -1214,6 +1226,8 @@ class ConversationRuntimeController extends ChangeNotifier {
         'time': message.time.toIso8601String(),
         if (message.sequence != null) 'sequence': message.sequence,
         'status': message.status.name,
+        'responseGroupId': message.responseGroupId,
+        'deliverySequence': message.deliverySequence,
         if ((message.agentTaskId ?? '').isNotEmpty)
           'agentTaskId': message.agentTaskId,
         if (message.fileName != null) 'fileName': message.fileName,

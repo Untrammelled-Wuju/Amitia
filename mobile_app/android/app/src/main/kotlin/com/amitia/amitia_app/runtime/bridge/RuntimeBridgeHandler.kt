@@ -1,6 +1,9 @@
 package com.amitia.amitia_app.runtime.bridge
 
+import android.os.Handler
+import android.os.Looper
 import com.amitia.amitia_app.runtime.api.RuntimeController
+import com.amitia.amitia_app.runtime.api.RuntimeErrorCode
 import com.amitia.amitia_app.runtime.api.RuntimeInstallRequest
 import com.amitia.amitia_app.runtime.api.RuntimeOperationCallback
 import com.amitia.amitia_app.runtime.api.RuntimeOperationResult
@@ -22,7 +25,9 @@ import com.amitia.amitia_app.runtime.bridge.RuntimeBridgeSnapshotMapper
 import com.amitia.amitia_app.runtime.manifest.RuntimeManifestResult
 import com.amitia.amitia_app.runtime.manifest.RuntimeManifestStore
 import com.amitia.amitia_app.runtime.packagetrusted.RuntimePackageSource
+import com.amitia.amitia_app.runtime.packagetrusted.RuntimePackageReference
 import com.amitia.amitia_app.runtime.packagetrusted.RuntimePackageSourceResult
+import com.amitia.amitia_app.runtime.packagetrusted.TrustedRuntimePackageSource
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 
@@ -41,6 +46,7 @@ internal class RuntimeBridgeHandler(
                 RuntimeBridgeContract.METHOD_START_WITH_PROFILE -> handleStartWithProfile(call, result)
                 RuntimeBridgeContract.METHOD_STOP -> handleStop(result)
                 RuntimeBridgeContract.METHOD_INSTALL -> handleInstall(result)
+                RuntimeBridgeContract.METHOD_RECONCILE_EMBEDDED -> handleReconcileEmbedded(result)
                 RuntimeBridgeContract.METHOD_VERIFY -> handleVerify(result)
                 RuntimeBridgeContract.METHOD_REPAIR -> handleRepair(result)
                 RuntimeBridgeContract.METHOD_MANIFEST_SUMMARY -> handleManifestSummary(result)
@@ -183,6 +189,178 @@ internal class RuntimeBridgeHandler(
         }
     }
 
+    private fun handleReconcileEmbedded(result: MethodChannel.Result) {
+        emitRuntimeLog("INFO", "Runtime reconcile requested")
+        val expectedRuntimeVersion = TrustedRuntimePackageSource.expectedRuntimeVersion()
+        val expectedPackageSha256 = TrustedRuntimePackageSource.expectedPackageSha256()
+        val manifestResult = manifestStore?.read()
+        val installedManifest =
+            (manifestResult as? RuntimeManifestResult.Success)?.manifest
+        val identityMatches = installedManifest?.packageSha256
+            ?.equals(expectedPackageSha256, ignoreCase = true) == true
+        val snapshot = controller.snapshot()
+        val runtimeHealthy = identityMatches &&
+            snapshot.state != RuntimeState.CORRUPTED &&
+            snapshot.state != RuntimeState.FAILED
+        if (runtimeHealthy) {
+            emitRuntimeLog(
+                "INFO",
+                "Runtime identity already matches embedded package $expectedRuntimeVersion",
+            )
+            result.success(buildSnapshotResponse())
+            return
+        }
+
+        when (val source = runtimePackageSource.materialize()) {
+            is RuntimePackageSourceResult.Failed -> {
+                emitRuntimeLog(
+                    "ERROR",
+                    "Runtime package preparation failed [${source.code.name}]: ${source.message}",
+                )
+                result.error(
+                    source.code.name,
+                    source.message,
+                    null,
+                )
+            }
+            is RuntimePackageSourceResult.Ready -> {
+                val trustedRef = source.reference
+                continueReconcileEmbedded(trustedRef, result, 0)
+            }
+        }
+    }
+
+    private fun continueReconcileEmbedded(
+        trustedRef: RuntimePackageReference,
+        result: MethodChannel.Result,
+        attempt: Int,
+    ) {
+        val snapshot = controller.snapshot()
+        when (snapshot.state) {
+            RuntimeState.READY,
+            RuntimeState.DEGRADED,
+            RuntimeState.STARTING -> {
+                controller.stop(
+                    RuntimeStopRequest(
+                        reason = RuntimeStopReason.INSTALL_REPLACEMENT,
+                        force = false,
+                    ),
+                    object : RuntimeOperationCallback {
+                        override fun onCompleted(operationResult: RuntimeOperationResult) {
+                            if (operationResult !is RuntimeOperationResult.Success) {
+                                handleOperationResult(operationResult, result)
+                                return
+                            }
+                            scheduleReconcileEmbedded(trustedRef, result, attempt + 1)
+                        }
+                    },
+                )
+            }
+            RuntimeState.INSTALLED,
+            RuntimeState.STOPPED,
+            RuntimeState.CORRUPTED,
+            RuntimeState.FAILED -> repairEmbeddedRuntime(trustedRef, result, attempt)
+            RuntimeState.NOT_INSTALLED -> installEmbeddedRuntime(trustedRef, result, attempt)
+            RuntimeState.UNKNOWN,
+            RuntimeState.INSTALLING,
+            RuntimeState.VERIFYING,
+            RuntimeState.REPAIRING,
+            RuntimeState.STOPPING -> scheduleReconcileEmbedded(
+                trustedRef,
+                result,
+                attempt + 1,
+            )
+        }
+    }
+
+    private fun scheduleReconcileEmbedded(
+        trustedRef: RuntimePackageReference,
+        result: MethodChannel.Result,
+        attempt: Int,
+    ) {
+        if (attempt > RECONCILE_STABLE_STATE_MAX_ATTEMPTS) {
+            result.error(
+                "RUNTIME_BUSY",
+                "runtime did not reach a reconcile-safe state",
+                null,
+            )
+            return
+        }
+        Handler(Looper.getMainLooper()).postDelayed(
+            {
+                continueReconcileEmbedded(trustedRef, result, attempt)
+            },
+            RECONCILE_STABLE_STATE_POLL_MS,
+        )
+    }
+
+    private fun installEmbeddedRuntime(
+        trustedRef: RuntimePackageReference,
+        result: MethodChannel.Result,
+        attempt: Int,
+    ) {
+        emitRuntimeLog(
+            "INFO",
+            "Installing embedded Runtime ${trustedRef.expectedRuntimeVersion}",
+        )
+        val request = RuntimeInstallRequest(
+            packageUri = trustedRef.packageFile.absolutePath,
+            expectedVersion = trustedRef.expectedRuntimeVersion,
+            allowRepairExisting = true,
+        )
+        controller.install(request, object : RuntimeOperationCallback {
+            override fun onCompleted(operationResult: RuntimeOperationResult) {
+                if (retryTransientReconcileFailure(operationResult, trustedRef, result, attempt)) {
+                    return
+                }
+                handleOperationResult(operationResult, result)
+            }
+        })
+    }
+
+    private fun repairEmbeddedRuntime(
+        trustedRef: RuntimePackageReference,
+        result: MethodChannel.Result,
+        attempt: Int,
+    ) {
+        emitRuntimeLog(
+            "INFO",
+            "Repairing embedded Runtime ${trustedRef.expectedRuntimeVersion}",
+        )
+        val request = RuntimeRepairRequest(
+            packageUri = trustedRef.packageFile.absolutePath,
+            preserveUserData = true,
+            expectedVersion = trustedRef.expectedRuntimeVersion,
+        )
+        controller.repair(request, object : RuntimeOperationCallback {
+            override fun onCompleted(operationResult: RuntimeOperationResult) {
+                if (retryTransientReconcileFailure(operationResult, trustedRef, result, attempt)) {
+                    return
+                }
+                handleOperationResult(operationResult, result)
+            }
+        })
+    }
+
+    private fun retryTransientReconcileFailure(
+        operationResult: RuntimeOperationResult,
+        trustedRef: RuntimePackageReference,
+        result: MethodChannel.Result,
+        attempt: Int,
+    ): Boolean {
+        val failure = operationResult as? RuntimeOperationResult.Failure ?: return false
+        if (failure.error.code !in setOf(
+                RuntimeErrorCode.INVALID_STATE,
+                RuntimeErrorCode.OPERATION_ALREADY_RUNNING,
+                RuntimeErrorCode.RUNTIME_EXECUTION_NOT_AVAILABLE,
+            )
+        ) {
+            return false
+        }
+        scheduleReconcileEmbedded(trustedRef, result, attempt + 1)
+        return true
+    }
+
     private fun handleVerify(result: MethodChannel.Result) {
         emitRuntimeLog("INFO", "Runtime verification requested")
         val request = RuntimeVerifyRequest(deep = false)
@@ -216,6 +394,7 @@ internal class RuntimeBridgeHandler(
                 val request = RuntimeRepairRequest(
                     packageUri = trustedRef.packageFile.absolutePath,
                     preserveUserData = true,
+                    expectedVersion = trustedRef.expectedRuntimeVersion,
                 )
                 controller.repair(request, object : RuntimeOperationCallback {
                     override fun onCompleted(operationResult: RuntimeOperationResult) {
@@ -269,6 +448,19 @@ internal class RuntimeBridgeHandler(
                 )
             }
         }
+        val response = buildSnapshotResponse()
+        response["accepted"] = when (operationResult) {
+            is RuntimeOperationResult.Success -> true
+            is RuntimeOperationResult.Failure -> false
+            is RuntimeOperationResult.Cancelled -> false
+        }
+        if (operationResult is RuntimeOperationResult.Failure) {
+            response["error"] = RuntimeBridgeErrorMapper.mapToBridgeError(operationResult.error)
+        }
+        result.success(response)
+    }
+
+    private fun buildSnapshotResponse(): LinkedHashMap<String, Any?> {
         val snapshot = controller.snapshot()
         val manifest = manifestStore?.read()
         val runtimeInstalled = manifest is RuntimeManifestResult.Success
@@ -280,18 +472,10 @@ internal class RuntimeBridgeHandler(
             runtimeInstalled = runtimeInstalled,
             runtimeAvailable = runtimeAvailable,
         )
-
         val response = LinkedHashMap<String, Any?>()
-        response["accepted"] = when (operationResult) {
-            is RuntimeOperationResult.Success -> true
-            is RuntimeOperationResult.Failure -> false
-            is RuntimeOperationResult.Cancelled -> false
-        }
+        response["accepted"] = true
         response["snapshot"] = mappedSnapshot
-        if (operationResult is RuntimeOperationResult.Failure) {
-            response["error"] = RuntimeBridgeErrorMapper.mapToBridgeError(operationResult.error)
-        }
-        result.success(response)
+        return response
     }
 
     private fun emitRuntimeLog(level: String, message: String) {
@@ -308,5 +492,7 @@ internal class RuntimeBridgeHandler(
 
     private companion object {
         const val BRIDGE_LOG_TAG = "AmitiaRuntime"
+        const val RECONCILE_STABLE_STATE_POLL_MS = 250L
+        const val RECONCILE_STABLE_STATE_MAX_ATTEMPTS = 240
     }
 }

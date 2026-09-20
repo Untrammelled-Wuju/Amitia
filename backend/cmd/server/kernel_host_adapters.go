@@ -244,6 +244,7 @@ func (a *conversationMessageAppenderAdapter) AppendConversationMessages(ctx cont
 			request.Channel,
 			direction,
 			request.Role,
+			"sent",
 			part.Content,
 			now,
 			sequence,

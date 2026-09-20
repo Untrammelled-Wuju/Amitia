@@ -52,9 +52,6 @@ SPDX-License-Identifier: AGPL-3.0-only
         </button>
         <template #dropdown>
           <el-dropdown-menu>
-            <el-dropdown-item v-if="canRegenerate" @click="$emit('regenerate')">
-              <el-icon><Refresh /></el-icon> 重新生成
-            </el-dropdown-item>
             <el-dropdown-item @click="$emit('clear')" :disabled="messagesCount === 0">
               <el-icon><Delete /></el-icon> 清空会话
             </el-dropdown-item>
@@ -83,7 +80,6 @@ import {
   User,
   Connection,
   Phone,
-  Refresh,
   Microphone,
   VideoCamera,
   Monitor,
@@ -96,7 +92,6 @@ defineProps<{
   charAvatar?: string;
   charIdentity: string;
   convTitle: string;
-  canRegenerate?: boolean;
   messagesCount: number;
   convId: string;
   showProfiles: boolean;
@@ -106,7 +101,6 @@ defineProps<{
 }>();
 
 const emit = defineEmits<{
-  regenerate: [];
   clear: [];
   viewMemories: [];
   toggleCharPicker: [];

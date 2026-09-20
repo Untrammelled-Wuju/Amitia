@@ -65,6 +65,8 @@ class AmitiaAgentActivity {
 class AmitiaMessageBubble extends StatelessWidget {
   final ChatMessage message;
   final bool showAvatar;
+  final bool showHeader;
+  final bool compactBottom;
   final String? avatarInitial;
   final String? avatarColor;
   final String? characterName;
@@ -74,7 +76,6 @@ class AmitiaMessageBubble extends StatelessWidget {
   final List<AmitiaAgentActivity> agentActivities;
   final bool showThinking;
   final VoidCallback? onRetry;
-  final VoidCallback? onRegenerate;
   final VoidCallback? onReply;
   final VoidCallback? onCopy;
   final VoidCallback? onEdit;
@@ -87,6 +88,8 @@ class AmitiaMessageBubble extends StatelessWidget {
     super.key,
     required this.message,
     this.showAvatar = true,
+    this.showHeader = true,
+    this.compactBottom = false,
     this.avatarInitial,
     this.avatarColor,
     this.characterName,
@@ -96,7 +99,6 @@ class AmitiaMessageBubble extends StatelessWidget {
     this.agentActivities = const <AmitiaAgentActivity>[],
     this.showThinking = false,
     this.onRetry,
-    this.onRegenerate,
     this.onReply,
     this.onCopy,
     this.onEdit,
@@ -110,11 +112,16 @@ class AmitiaMessageBubble extends StatelessWidget {
   Widget build(BuildContext context) {
     if (message.role != MessageRole.user) {
       return Padding(
-        padding: EdgeInsets.fromLTRB(AppSpacing.lg, 0, AppSpacing.lg, 38),
+        padding: EdgeInsets.fromLTRB(
+          AppSpacing.lg,
+          0,
+          AppSpacing.lg,
+          compactBottom ? 10 : 38,
+        ),
         child: AmitiaMessageView(
           key: ValueKey<String>('amrp:${message.renderId}'),
           message: message,
-          characterId: '',
+          characterId: message.characterId,
           characterName: (characterName ?? '').trim().isEmpty
               ? 'Amitia'
               : characterName!.trim(),
@@ -125,6 +132,7 @@ class AmitiaMessageBubble extends StatelessWidget {
               ? '#7060E8'
               : avatarColor!.trim(),
           showAvatar: showAvatar,
+          showHeader: showHeader,
           showThinking: showThinking,
           toolBlocks: [
             for (final activity in agentActivities)
@@ -136,7 +144,6 @@ class AmitiaMessageBubble extends StatelessWidget {
               ),
           ],
           onRetry: onRetry,
-          onRegenerate: onRegenerate,
           onReply: onReply,
           onCopy: onCopy,
         ),

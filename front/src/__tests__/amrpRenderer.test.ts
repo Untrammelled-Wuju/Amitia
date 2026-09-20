@@ -74,6 +74,28 @@ describe("AMRP renderer", () => {
     expect(message.thinking?.duration).toBe(2.85);
   });
 
+  it("生成占位只显示思考状态，不伪造思考内容", () => {
+    const pending = normalizeAIMessage({
+      id: "generating-request",
+      role: "assistant",
+      content: "",
+      status: "streaming",
+      generationPending: true,
+    });
+    const completed = normalizeAIMessage({
+      id: "assistant-1",
+      role: "assistant",
+      content: "回复",
+      status: "sent",
+    });
+
+    expect(pending.thinking).toMatchObject({
+      content: "",
+      state: "streaming",
+    });
+    expect(completed.thinking).toBeUndefined();
+  });
+
   it("sanitizes unsafe markdown links and keeps supported structure", () => {
     const html = renderMarkdownSegment([
       "# 标题",

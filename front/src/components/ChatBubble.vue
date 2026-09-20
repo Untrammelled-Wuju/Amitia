@@ -9,6 +9,9 @@ SPDX-License-Identifier: AGPL-3.0-only
     :char-avatar="charAvatar"
     :character-id="characterId"
     :read-only="readOnly"
+    :show-avatar="showAvatar"
+    :show-header="showHeader"
+    :compact-bottom="compactBottom"
     @retry="$emit('retry', $event)"
     @reply="$emit('reply', $event)"
     @edit="$emit('edit', $event)"
@@ -39,6 +42,9 @@ withDefaults(
     characterId?: string;
     readOnly?: boolean;
     reasoningOpen?: boolean;
+    showAvatar?: boolean;
+    showHeader?: boolean;
+    compactBottom?: boolean;
   }>(),
   {
     charName: "Amitia",
@@ -48,6 +54,9 @@ withDefaults(
     characterId: "",
     readOnly: false,
     reasoningOpen: false,
+    showAvatar: true,
+    showHeader: true,
+    compactBottom: false,
   },
 );
 

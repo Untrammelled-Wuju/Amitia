@@ -8,6 +8,8 @@ import {
 } from "../utils/message-order";
 import messagesAreaSource from "../components/MessagesArea.vue?raw";
 import chatBubbleSource from "../components/ChatBubble.vue?raw";
+import aiMessageRendererSource from "../conversation/rendering/AIMessageRenderer.vue?raw";
+import amitiaThinkingBlockSource from "../conversation/rendering/blocks/AmitiaThinkingBlock.vue?raw";
 
 describe("聊天消息身份与动效", () => {
   it("服务端消息 ID 回填后保持同一个渲染身份", () => {
@@ -163,6 +165,64 @@ describe("聊天消息身份与动效", () => {
     });
   });
 
+  it("历史对账按请求标识收掉生成占位消息", () => {
+    const messages = [
+      {
+        id: "user-1",
+        conversationId: "conversation-1",
+        role: "user",
+        requestId: "request-1",
+        clientMessageId: "request-1",
+        content: "你好",
+        status: "sent",
+        createdAt: new Date().toISOString(),
+      },
+      {
+        id: "generating:request-1",
+        conversationId: "conversation-1",
+        role: "assistant",
+        requestId: "request-1",
+        uiKey: "generation:request-1",
+        content: "",
+        status: "streaming",
+        generationPending: true,
+        createdAt: new Date().toISOString(),
+      },
+    ];
+    const merged = mergeServerMessages(messages, [
+      {
+        id: "user-1",
+        conversationId: "conversation-1",
+        role: "user",
+        requestId: "request-1",
+        content: "你好",
+        sequence: 1,
+        status: "sent",
+        createdAt: "2026-09-20 12:00:00",
+      },
+      {
+        id: "assistant-1",
+        conversationId: "conversation-1",
+        role: "assistant",
+        requestId: "request-1",
+        content: "回复",
+        reasoningContent: "真实思考",
+        reasoningDurationMs: 1200,
+        sequence: 2,
+        status: "sent",
+        createdAt: "2026-09-20 12:00:01",
+      },
+    ]);
+
+    expect(merged.map((message) => message.id)).toEqual(["user-1", "assistant-1"]);
+    expect(merged[1]).toMatchObject({
+      uiKey: "generation:request-1",
+      generationPending: false,
+      reasoningContent: "真实思考",
+      status: "sent",
+    });
+  });
+
   it("历史对账不会混入其他会话的本地消息", () => {
     const merged = mergeServerMessages(
       [
@@ -197,10 +257,19 @@ describe("聊天消息身份与动效", () => {
     expect(chatBubbleSource).not.toContain("animation: bubbleIn");
   });
 
-  it("思考折叠标题保持单行宽度", () => {
-    expect(chatBubbleSource).toContain(".reasoning-block {\n  width: 100%;\n  max-width: 100%;");
-    expect(chatBubbleSource).not.toMatch(/\.reasoning-block\s*\{[^}]*max-width:\s*min\(82%,\s*720px\)/);
-    expect(chatBubbleSource).toContain("width: max-content");
-    expect(chatBubbleSource).toContain("white-space: nowrap");
+  it("思考折叠块保持内容宽度约束", () => {
+    expect(amitiaThinkingBlockSource).toContain(".amrp-thinking {");
+    expect(amitiaThinkingBlockSource).toContain("max-width: 100%");
+    expect(amitiaThinkingBlockSource).toContain("align-items: flex-start");
+    expect(amitiaThinkingBlockSource).toContain('v-if="hasContent"');
+    expect(amitiaThinkingBlockSource).toContain('v-if="hasContent && open"');
+    expect(amitiaThinkingBlockSource).toContain("amrp-thinking-status-only");
+  });
+
+  it("AI 消息生成中隐藏内置复制和引用操作", () => {
+    expect(aiMessageRendererSource).toContain(
+      'v-if="!readOnly && (!streaming || $slots.actions)"',
+    );
+    expect(aiMessageRendererSource).toContain("<template v-if=\"!streaming\">");
   });
 });

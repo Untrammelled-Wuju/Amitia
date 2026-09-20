@@ -41,5 +41,6 @@ data class RuntimeStopRequest(
 
 data class RuntimeRepairRequest(
     val packageUri: String?,
-    val preserveUserData: Boolean = true
+    val preserveUserData: Boolean = true,
+    val expectedVersion: String? = null
 )

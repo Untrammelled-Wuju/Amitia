@@ -255,14 +255,17 @@ class AmrpMessage {
     ChatMessage message, {
     AmrpCharacter character = const AmrpCharacter(),
   }) {
+    final role = message.type == MessageType.systemNotice
+        ? AmrpMessageRole.system
+        : switch (message.role) {
+            MessageRole.user => AmrpMessageRole.user,
+            MessageRole.system => AmrpMessageRole.system,
+            MessageRole.assistant => AmrpMessageRole.assistant,
+          };
     return AmrpMessage(
       id: message.id,
       conversationId: '',
-      role: switch (message.role) {
-        MessageRole.user => AmrpMessageRole.user,
-        MessageRole.system => AmrpMessageRole.system,
-        MessageRole.assistant => AmrpMessageRole.assistant,
-      },
+      role: role,
       character: character,
       markdown: _markdownFor(message),
       thinking: message.reasoningContent.trim().isEmpty
@@ -297,8 +300,7 @@ class AmrpMessage {
 
   static String _markdownFor(ChatMessage message) {
     if (message.type == MessageType.toolCall ||
-        message.type == MessageType.agentTask ||
-        message.type == MessageType.systemNotice) {
+        message.type == MessageType.agentTask) {
       return '';
     }
     if (message.type == MessageType.image && message.content == '[图片]') {

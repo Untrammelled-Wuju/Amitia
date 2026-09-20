@@ -44,6 +44,8 @@ import '../../../../core/ui_runtime/mobile_extension_slot.dart';
 import '../../../../core/ui_runtime/mobile_conversation_projection.dart';
 import '../../../../core/ui_runtime/mobile_dynamic_runtime.dart';
 import '../../runtime/conversation_runtime_controller.dart';
+import '../../../conversation/rendering/assistant_identity.dart';
+import '../../../conversation/rendering/role_switch_divider.dart';
 import '../../../../shared/models/models.dart';
 import 'realtime_voice_call_sheet.dart';
 
@@ -1377,9 +1379,24 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     _runtime.sendEmote(emoteId, displayText);
   }
 
-  bool _shouldShowAvatar(int index) {
+  bool _shouldShowAssistantIdentity(int index) {
     if (index < 0 || index >= _runtime.messages.length) return false;
-    return _runtime.messages[index].type != MessageType.systemNotice;
+    final message = _runtime.messages[index];
+    if (message.type == MessageType.systemNotice) return false;
+    return shouldShowAssistantIdentity(
+      message,
+      index > 0 ? _runtime.messages[index - 1] : null,
+    );
+  }
+
+  bool _shouldCompactBottom(int index) {
+    if (index < 0 || index >= _runtime.messages.length) return false;
+    return shouldCompactAfterAssistantMessage(
+      _runtime.messages[index],
+      index + 1 < _runtime.messages.length
+          ? _runtime.messages[index + 1]
+          : null,
+    );
   }
 
   AmitiaAgentActivity? _toolActivityForEvent(MobileConversationEvent event) {
@@ -1869,12 +1886,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
             if (index >= 0) _retryMessage(index);
             return null;
           },
-          ConversationUIAction.regenerate: (input) {
-            final id = input is Map
-                ? input['messageId']?.toString()
-                : input?.toString();
-            return _runtime.regenerate(messageId: id);
-          },
           ConversationUIAction.stop: (_) => _runtime.stop(),
           ConversationUIAction.delete: (input) async {
             final id = input is Map
@@ -1982,6 +1993,23 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         : spaceProfile!.displayName.trim();
     final userInitial = userName.characters.first;
     const userAvatarColor = '#5F6872';
+    final lastMessage = _runtime.messages.isEmpty
+        ? null
+        : _runtime.messages.last;
+    final pendingRoleSwitch =
+        lastMessage != null &&
+        characterId.isNotEmpty &&
+        shouldShowRoleSwitch(
+          lastMessage,
+          ChatMessage(
+            id: '__role_switch_pending__',
+            characterId: characterId,
+            role: MessageRole.assistant,
+            type: MessageType.text,
+            content: '',
+            time: DateTime.now(),
+          ),
+        );
 
     final providerContext = _buildProviderContext(
       characterId,
@@ -2164,9 +2192,14 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                                       ),
                                       itemCount:
                                           flowItems.length +
-                                          (showLiveAgentProcess ? 1 : 0),
+                                          (showLiveAgentProcess ? 1 : 0) +
+                                          (pendingRoleSwitch ? 1 : 0),
                                       itemBuilder: (context, contentIndex) {
-                                        if (contentIndex >= flowItems.length) {
+                                        final liveAgentProcessIndex =
+                                            flowItems.length;
+                                        if (showLiveAgentProcess &&
+                                            contentIndex ==
+                                                liveAgentProcessIndex) {
                                           return KeyedSubtree(
                                             key: const ValueKey(
                                               'message:live-agent-process',
@@ -2195,6 +2228,19 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                                             ),
                                           );
                                         }
+                                        final pendingRoleSwitchIndex =
+                                            liveAgentProcessIndex +
+                                            (showLiveAgentProcess ? 1 : 0);
+                                        if (pendingRoleSwitch &&
+                                            contentIndex ==
+                                                pendingRoleSwitchIndex) {
+                                          return AmitiaRoleSwitchDivider(
+                                            key: const ValueKey(
+                                              'role-switch-pending',
+                                            ),
+                                            characterName: characterName,
+                                          );
+                                        }
                                         final item = flowItems[contentIndex];
                                         if (!item.isMessage) {
                                           final node = item.node!;
@@ -2217,18 +2263,48 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
                                         final index = item.messageIndex!;
                                         final message = item.message!;
+                                        final messageCharacter = characters
+                                            .where(
+                                              (item) =>
+                                                  item.id ==
+                                                  message.characterId,
+                                            )
+                                            .firstOrNull;
+                                        final messageCharacterName =
+                                            messageCharacter?.name
+                                                    .trim()
+                                                    .isNotEmpty ==
+                                                true
+                                            ? messageCharacter!.name.trim()
+                                            : message.characterId.trim().isEmpty
+                                            ? characterName
+                                            : '未知角色';
+                                        final messageAvatarInitial =
+                                            messageCharacterName.isNotEmpty
+                                            ? messageCharacterName
+                                                  .characters
+                                                  .first
+                                            : '?';
                                         final isAgentTask =
                                             message.type ==
                                             MessageType.agentTask;
                                         final builtinMessage = RepaintBoundary(
                                           child: AmitiaMessageBubble(
                                             message: message,
-                                            showAvatar: _shouldShowAvatar(
+                                            showAvatar:
+                                                _shouldShowAssistantIdentity(
+                                                  index,
+                                                ),
+                                            showHeader:
+                                                _shouldShowAssistantIdentity(
+                                                  index,
+                                                ),
+                                            compactBottom: _shouldCompactBottom(
                                               index,
                                             ),
-                                            avatarInitial: avatarInitial,
+                                            avatarInitial: messageAvatarInitial,
                                             avatarColor: avatarColor,
-                                            characterName: characterName,
+                                            characterName: messageCharacterName,
                                             userInitial: userInitial,
                                             userAvatarColor: userAvatarColor,
                                             userName: userName,
@@ -2239,17 +2315,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                                             onRetry:
                                                 _runtime.canRetryMessage(index)
                                                 ? () => _retryMessage(index)
-                                                : null,
-                                            onRegenerate:
-                                                message.role ==
-                                                        MessageRole.assistant &&
-                                                    _runtime
-                                                        .canRegenerateMessage(
-                                                          index,
-                                                        )
-                                                ? () => _runtime.regenerate(
-                                                    messageId: message.id,
-                                                  )
                                                 : null,
                                             onReply:
                                                 message.type ==
@@ -2332,6 +2397,16 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                                             crossAxisAlignment:
                                                 CrossAxisAlignment.stretch,
                                             children: [
+                                              if (index > 0 &&
+                                                  shouldShowRoleSwitch(
+                                                    _runtime.messages[index -
+                                                        1],
+                                                    message,
+                                                  ))
+                                                AmitiaRoleSwitchDivider(
+                                                  characterName:
+                                                      messageCharacterName,
+                                                ),
                                               providerMessage,
                                               if (hasAttachment)
                                                 Padding(

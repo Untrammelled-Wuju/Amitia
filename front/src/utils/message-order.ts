@@ -193,6 +193,66 @@ export function getClientMessageId(message: any): string {
   return String(message?.requestId || "").trim();
 }
 
+export function getMessageRequestId(message: any): string {
+  return String(message?.requestId || message?.request_id || "").trim();
+}
+
+export function getMessageSenderId(message: any): string {
+  if (message?.role !== "assistant") return "";
+  return String(
+    field(message, "characterId", "character_id") ||
+      message?.senderId ||
+      message?.sender_id ||
+      "",
+  ).trim();
+}
+
+export function getMessageResponseGroupId(message: any): string {
+  if (message?.role !== "assistant") return "";
+  return String(
+    field(message, "responseGroupId", "response_group_id") ||
+      getMessageRequestId(message),
+  ).trim();
+}
+
+export function getMessageCharacterId(message: any): string {
+  return String(
+    field(message, "characterId", "character_id") ||
+      message?.senderId ||
+      message?.sender_id ||
+      "",
+  ).trim();
+}
+
+export function shouldShowRoleSwitch(previous: any, current: any): boolean {
+  const previousCharacterId = getMessageCharacterId(previous);
+  const currentCharacterId = getMessageCharacterId(current);
+  return (
+    !!previousCharacterId &&
+    !!currentCharacterId &&
+    previousCharacterId !== currentCharacterId
+  );
+}
+
+export function shouldShowAssistantIdentity(
+  current: any,
+  previous: any,
+): boolean {
+  if (current?.role !== "assistant") return true;
+  if (previous?.role !== "assistant") return true;
+  const currentSenderId = getMessageSenderId(current);
+  const previousSenderId = getMessageSenderId(previous);
+  if (currentSenderId && previousSenderId) {
+    return currentSenderId !== previousSenderId;
+  }
+  const currentGroupId = getMessageResponseGroupId(current);
+  const previousGroupId = getMessageResponseGroupId(previous);
+  if (currentGroupId && previousGroupId) {
+    return currentGroupId !== previousGroupId;
+  }
+  return true;
+}
+
 export function getMessageUIKey(message: any, index = 0): string {
   const uiKey = String(message?.uiKey || "").trim();
   if (uiKey) return uiKey;
@@ -228,21 +288,37 @@ export function hasAssistantReplyAfterLatestUser(messages: any[]): boolean {
 export function mergeChatMessage(messages: any[], incoming: any): boolean {
   const id = String(incoming?.id || "");
   const clientMessageId = getClientMessageId(incoming);
-  if (!id && !clientMessageId) return false;
+  const requestId = getMessageRequestId(incoming);
+  const uiKey = String(incoming?.uiKey || "").trim();
+  if (!id && !clientMessageId && !requestId && !uiKey) return false;
   const index = messages.findIndex(
     (message) =>
       (!!id && String(message?.id || "") === id) ||
-      (!!clientMessageId && getClientMessageId(message) === clientMessageId),
+      (!!clientMessageId && getClientMessageId(message) === clientMessageId) ||
+      (!!uiKey && String(message?.uiKey || "") === uiKey) ||
+      (!!requestId &&
+        incoming?.role === "assistant" &&
+        message?.role === "assistant" &&
+        message?.generationPending === true &&
+        getMessageRequestId(message) === requestId),
   );
   if (index < 0) return false;
   const current = messages[index];
+  const incomingStatus =
+    incoming?.status ||
+    (incoming?.role === "assistant" ? "sent" : undefined);
+  const definedIncoming = Object.fromEntries(
+    Object.entries(incoming).filter(([, value]) => value !== undefined),
+  );
   messages[index] = {
     ...current,
-    ...incoming,
+    ...definedIncoming,
+    status: incomingStatus || current?.status,
     clientMessageId:
       getClientMessageId(incoming) || getClientMessageId(current) || undefined,
     uiKey: current?.uiKey || incoming?.uiKey,
     animateIn: current?.animateIn ?? incoming?.animateIn,
+    generationPending: false,
   };
   return true;
 }
@@ -253,7 +329,8 @@ export function upsertStreamingAssistantMessage(
   preferredId?: string | null,
 ): number {
   const id = String(incoming?.id || preferredId || "").trim();
-  if (!id) return -1;
+  const requestId = getMessageRequestId(incoming);
+  if (!id && !requestId) return -1;
   let index = -1;
   if (preferredId) {
     index = messages.findIndex(
@@ -262,21 +339,32 @@ export function upsertStreamingAssistantMessage(
   }
   if (index < 0) {
     index = messages.findIndex(
-      (message) => String(message?.id || "") === id,
+      (message) =>
+        (!!id && String(message?.id || "") === id) ||
+        (!!requestId &&
+          incoming?.role === "assistant" &&
+          message?.role === "assistant" &&
+          message?.generationPending === true &&
+          getMessageRequestId(message) === requestId),
     );
   }
   if (index >= 0) {
     const current = messages[index];
+    const definedIncoming = Object.fromEntries(
+      Object.entries(incoming).filter(([, value]) => value !== undefined),
+    );
     messages[index] = {
       ...current,
-      ...incoming,
-      id,
+      ...definedIncoming,
+      id: id || current?.id,
       content: incoming?.content || current?.content || "",
       uiKey: current?.uiKey || incoming?.uiKey,
       animateIn: current?.animateIn ?? incoming?.animateIn,
+      generationPending: false,
     };
     return index;
   }
+  if (!id) return -1;
   messages.push({ ...incoming, id });
   return messages.length - 1;
 }
@@ -287,6 +375,8 @@ export function mergeServerMessages(messages: any[], serverItems: any[]): any[] 
   const serverClientIds = new Set<string>();
   const currentById = new Map<string, any>();
   const currentByClientMessageId = new Map<string, any>();
+  const currentAssistantPlaceholdersByRequestId = new Map<string, any>();
+  const serverAssistantRequestIds = new Set<string>();
   const serverConversationId = String(
     normalizedServer.find((message) => message?.conversationId)?.conversationId || "",
   );
@@ -294,20 +384,39 @@ export function mergeServerMessages(messages: any[], serverItems: any[]): any[] 
   for (const message of normalizedServer) {
     const id = String(message?.id || "");
     const clientMessageId = getClientMessageId(message);
+    const requestId = getMessageRequestId(message);
     if (id) serverById.set(id, message);
     if (clientMessageId) serverClientIds.add(clientMessageId);
+    if (message?.role === "assistant" && requestId) {
+      serverAssistantRequestIds.add(requestId);
+    }
   }
   for (const current of messages) {
     const id = String(current?.id || "");
     const clientMessageId = getClientMessageId(current);
+    const requestId = getMessageRequestId(current);
     if (id) currentById.set(id, current);
     if (clientMessageId) currentByClientMessageId.set(clientMessageId, current);
+    if (
+      current?.role === "assistant" &&
+      current?.generationPending === true &&
+      requestId
+    ) {
+      currentAssistantPlaceholdersByRequestId.set(requestId, current);
+    }
   }
 
   const merged = normalizedServer.map((message) => {
-    const existing =
+    const requestId = getMessageRequestId(message);
+    let existing =
       currentById.get(String(message?.id || "")) ||
       currentByClientMessageId.get(getClientMessageId(message));
+    if (!existing && message?.role === "assistant" && requestId) {
+      existing = currentAssistantPlaceholdersByRequestId.get(requestId);
+      if (existing) {
+        currentAssistantPlaceholdersByRequestId.delete(requestId);
+      }
+    }
     const next = {
       ...existing,
       ...message,
@@ -317,6 +426,7 @@ export function mergeServerMessages(messages: any[], serverItems: any[]): any[] 
         undefined,
       uiKey: existing?.uiKey || getMessageUIKey(message),
       animateIn: existing?.animateIn ?? false,
+      generationPending: false,
     };
     if (next.imageUrl && next.content === "[图片]") {
       return { ...next, content: "" };
@@ -327,8 +437,17 @@ export function mergeServerMessages(messages: any[], serverItems: any[]): any[] 
   for (const local of messages) {
     const id = String(local?.id || "");
     const clientMessageId = getClientMessageId(local);
+    const requestId = getMessageRequestId(local);
     if (serverById.has(id)) continue;
     if (clientMessageId && serverClientIds.has(clientMessageId)) continue;
+    if (
+      local?.role === "assistant" &&
+      local?.generationPending === true &&
+      requestId &&
+      serverAssistantRequestIds.has(requestId)
+    ) {
+      continue;
+    }
     const localConversationId = String(local?.conversationId || "");
     if (
       serverConversationId &&

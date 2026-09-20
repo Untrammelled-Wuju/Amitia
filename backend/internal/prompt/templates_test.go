@@ -32,3 +32,18 @@ func TestSharedCoreRulesExposePlatformContracts(t *testing.T) {
 		t.Fatal("shared core rules must not contain text-only message formatting")
 	}
 }
+
+func TestBuildPersonalityRawSectionDoesNotInjectRelationshipIdentity(t *testing.T) {
+	section := BuildPersonalityRawSection(
+		"测试角色",
+		"UNSPECIFIED",
+		"测试人格模板",
+	)
+	if strings.Contains(section, "用户的女朋友") ||
+		strings.Contains(section, "用户的男朋友") {
+		t.Fatalf("personality raw section must not inject a relationship identity: %q", section)
+	}
+	if !strings.HasPrefix(section, "测试人格模板") {
+		t.Fatalf("personality template must remain at the start: %q", section)
+	}
+}

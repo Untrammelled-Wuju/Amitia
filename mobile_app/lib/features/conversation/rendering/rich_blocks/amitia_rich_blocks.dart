@@ -25,6 +25,14 @@ class _AmitiaThinkingBlockState extends State<AmitiaThinkingBlock> {
   bool _expanded = false;
 
   @override
+  void didUpdateWidget(covariant AmitiaThinkingBlock oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (_expanded && widget.block.content.trim().isEmpty) {
+      _expanded = false;
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final tokens = AmitiaMessageTheme.of(context);
     final streaming = widget.block.state == AmrpMessageState.streaming;
@@ -56,17 +64,19 @@ class _AmitiaThinkingBlockState extends State<AmitiaThinkingBlock> {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    AnimatedRotation(
-                      turns: _expanded ? 0.25 : 0,
-                      duration: const Duration(milliseconds: 150),
-                      curve: Curves.easeOut,
-                      child: Icon(
-                        Icons.chevron_right_rounded,
-                        color: tokens.muted,
-                        size: 14,
+                    if (hasContent) ...[
+                      AnimatedRotation(
+                        turns: _expanded ? 0.25 : 0,
+                        duration: const Duration(milliseconds: 150),
+                        curve: Curves.easeOut,
+                        child: Icon(
+                          Icons.chevron_right_rounded,
+                          color: tokens.muted,
+                          size: 14,
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 7),
+                      const SizedBox(width: 7),
+                    ],
                     Text(
                       label,
                       style: TextStyle(color: tokens.muted, fontSize: 12),

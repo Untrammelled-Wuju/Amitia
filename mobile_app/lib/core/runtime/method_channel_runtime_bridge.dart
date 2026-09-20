@@ -14,6 +14,7 @@ class RuntimeBridgeContract {
   static const String methodStart = 'runtime.start';
   static const String methodStop = 'runtime.stop';
   static const String methodInstall = 'runtime.install';
+  static const String methodReconcileEmbedded = 'runtime.reconcileEmbedded';
   static const String methodVerify = 'runtime.verify';
   static const String methodRepair = 'runtime.repair';
   static const String methodManifestSummary = 'runtime.manifestSummary';
@@ -326,6 +327,61 @@ class MethodChannelRuntimeBridge implements RuntimeBridge {
     try {
       final result = await _methodChannel.invokeMethod<Map<Object?, Object?>>(
         RuntimeBridgeContract.methodInstall,
+      );
+      if (result == null) {
+        return RuntimeBridgeCommandResult(
+          accepted: false,
+          snapshot: RuntimeBridgeSnapshot.initial(),
+          error: const RuntimeBridgeError(
+            code: 'BRIDGE_UNAVAILABLE',
+            message: 'Runtime bridge returned null',
+            retryable: false,
+          ),
+        );
+      }
+      final map = <String, dynamic>{};
+      for (final entry in result.entries) {
+        map[entry.key.toString()] = entry.value;
+      }
+      return RuntimeBridgeCommandResult.fromMap(map);
+    } on PlatformException catch (e) {
+      return RuntimeBridgeCommandResult(
+        accepted: false,
+        snapshot: RuntimeBridgeSnapshot.initial(),
+        error: RuntimeBridgeError(
+          code: e.code,
+          message: e.message ?? 'Platform error',
+          retryable: false,
+        ),
+      );
+    } on MissingPluginException {
+      return RuntimeBridgeCommandResult(
+        accepted: false,
+        snapshot: RuntimeBridgeSnapshot.initial(),
+        error: const RuntimeBridgeError(
+          code: 'BRIDGE_UNAVAILABLE',
+          message: 'Runtime bridge not available',
+          retryable: false,
+        ),
+      );
+    } catch (error) {
+      return RuntimeBridgeCommandResult(
+        accepted: false,
+        snapshot: RuntimeBridgeSnapshot.initial(),
+        error: RuntimeBridgeError(
+          code: 'BRIDGE_PROTOCOL_ERROR',
+          message: 'Invalid runtime bridge response: ${error.runtimeType}',
+          retryable: true,
+        ),
+      );
+    }
+  }
+
+  @override
+  Future<RuntimeBridgeCommandResult> reconcileEmbedded() async {
+    try {
+      final result = await _methodChannel.invokeMethod<Map<Object?, Object?>>(
+        RuntimeBridgeContract.methodReconcileEmbedded,
       );
       if (result == null) {
         return RuntimeBridgeCommandResult(

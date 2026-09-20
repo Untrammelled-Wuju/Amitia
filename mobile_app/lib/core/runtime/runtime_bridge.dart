@@ -42,6 +42,8 @@ abstract interface class RuntimeBridge {
 
   Future<RuntimeBridgeCommandResult> install();
 
+  Future<RuntimeBridgeCommandResult> reconcileEmbedded();
+
   Future<RuntimeBridgeCommandResult> verify();
 
   Future<RuntimeBridgeCommandResult> repair();

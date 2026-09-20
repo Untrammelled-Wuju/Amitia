@@ -37,6 +37,7 @@ enum MessageType {
 class ChatMessage {
   final String id;
   final String renderId;
+  final String characterId;
   final MessageRole role;
   final MessageType type;
   final String content;
@@ -60,10 +61,13 @@ class ChatMessage {
   final String? toolResult;
   final String? replyToMessageId;
   final String? replyToExcerpt;
+  final String responseGroupId;
+  final int deliverySequence;
 
   ChatMessage({
     required this.id,
     String? renderId,
+    this.characterId = '',
     required this.role,
     required this.type,
     required this.content,
@@ -87,6 +91,8 @@ class ChatMessage {
     this.toolResult,
     this.replyToMessageId,
     this.replyToExcerpt,
+    this.responseGroupId = '',
+    this.deliverySequence = 0,
   }) : renderId = renderId ?? id;
 }
 

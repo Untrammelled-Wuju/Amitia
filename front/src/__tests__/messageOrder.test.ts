@@ -2,6 +2,9 @@ import { describe, it, expect } from "vitest";
 import {
   compareChatMessages,
   hasAssistantReplyAfterLatestUser,
+  getMessageUIKey,
+  shouldShowRoleSwitch,
+  shouldShowAssistantIdentity,
   parseMessageTime,
   mergeChatMessage,
   upsertStreamingAssistantMessage,
@@ -54,6 +57,144 @@ describe("parseMessageTime", () => {
     expect(parseMessageTime(null)).toBe(0);
     expect(parseMessageTime(undefined)).toBe(0);
     expect(parseMessageTime("not-a-date")).toBe(0);
+  });
+});
+
+describe("AI 消息发送者连续段", () => {
+  it("同一 AI 连续消息只在第一条显示身份", () => {
+    const previous = {
+      id: "assistant-1",
+      role: "assistant",
+      characterId: "character-1",
+      responseGroupId: "request-1",
+    };
+    const current = {
+      id: "assistant-2",
+      role: "assistant",
+      characterId: "character-1",
+      responseGroupId: "request-1",
+    };
+
+    expect(shouldShowAssistantIdentity(current, previous)).toBe(false);
+  });
+
+  it("不同 AI 连续发言时重新显示身份", () => {
+    const previous = {
+      id: "assistant-1",
+      role: "assistant",
+      characterId: "character-1",
+      responseGroupId: "request-1",
+    };
+    const current = {
+      id: "assistant-2",
+      role: "assistant",
+      characterId: "character-2",
+      responseGroupId: "request-2",
+    };
+
+    expect(shouldShowAssistantIdentity(current, previous)).toBe(true);
+  });
+
+  it("同一 AI 连续回复按发送顺序合并为一个连续段", () => {
+    const previous = {
+      id: "assistant-1",
+      role: "assistant",
+      characterId: "character-1",
+      responseGroupId: "request-1",
+    };
+    const current = {
+      id: "assistant-2",
+      role: "assistant",
+      characterId: "character-1",
+      responseGroupId: "request-2",
+    };
+
+    expect(shouldShowAssistantIdentity(current, previous)).toBe(false);
+  });
+
+  it("用户消息、系统消息或首条消息重新显示身份", () => {
+    const current = {
+      id: "assistant-1",
+      role: "assistant",
+      characterId: "character-1",
+      responseGroupId: "request-1",
+    };
+
+    expect(shouldShowAssistantIdentity(current, null)).toBe(true);
+    expect(
+      shouldShowAssistantIdentity(current, {
+        id: "user-1",
+        role: "user",
+      }),
+    ).toBe(true);
+    expect(
+      shouldShowAssistantIdentity(current, {
+        id: "system-1",
+        role: "system",
+      }),
+    ).toBe(true);
+  });
+
+  it("发送者标识缺失时使用回复分组判断连续性", () => {
+    const previous = {
+      id: "assistant-1",
+      role: "assistant",
+      responseGroupId: "request-1",
+    };
+    const continuation = {
+      id: "assistant-2",
+      role: "assistant",
+      responseGroupId: "request-1",
+    };
+    const nextReply = {
+      id: "assistant-3",
+      role: "assistant",
+      responseGroupId: "request-2",
+    };
+
+    expect(shouldShowAssistantIdentity(continuation, previous)).toBe(false);
+    expect(shouldShowAssistantIdentity(nextReply, previous)).toBe(true);
+  });
+});
+
+describe("对话角色切换", () => {
+  it("相邻消息角色变化时显示切换分隔", () => {
+    const messageA = {
+      id: "a1",
+      role: "assistant",
+      characterId: "character-a",
+    };
+    const messageB = {
+      id: "b1",
+      role: "user",
+      characterId: "character-b",
+    };
+    const messageAAgain = {
+      id: "a2",
+      role: "assistant",
+      characterId: "character-a",
+    };
+
+    expect(shouldShowRoleSwitch(messageA, messageB)).toBe(true);
+    expect(shouldShowRoleSwitch(messageB, messageAAgain)).toBe(true);
+  });
+
+  it("同一角色连续消息不重复显示切换分隔", () => {
+    expect(
+      shouldShowRoleSwitch(
+        { id: "a1", role: "assistant", characterId: "character-a" },
+        { id: "a2", role: "assistant", characterId: "character-a" },
+      ),
+    ).toBe(false);
+  });
+
+  it("缺少角色标识时不显示切换分隔", () => {
+    expect(
+      shouldShowRoleSwitch(
+        { id: "a1", role: "assistant", characterId: "" },
+        { id: "b1", role: "assistant", characterId: "character-b" },
+      ),
+    ).toBe(false);
   });
 });
 
@@ -202,5 +343,37 @@ describe("聊天时间线渲染顺序", () => {
     expect(messages).toHaveLength(1);
     expect(messages[0]!.content).toBe("你好");
     expect(messages[0]!.status).toBe("streaming");
+  });
+
+  it("生成占位消息合并服务端响应后保持稳定uiKey", () => {
+    const messages: any[] = [
+      {
+        id: "generating:request-1",
+        requestId: "request-1",
+        uiKey: "generation:request-1",
+        role: "assistant",
+        content: "",
+        status: "streaming",
+        generationPending: true,
+      },
+    ];
+
+    expect(
+      mergeChatMessage(messages, {
+        id: "assistant-1",
+        requestId: "request-1",
+        role: "assistant",
+        content: "回复",
+        createdAt: "2026-09-20 10:00:00",
+      }),
+    ).toBe(true);
+
+    expect(messages).toHaveLength(1);
+    expect(messages[0]!.id).toBe("assistant-1");
+    expect(messages[0]!.uiKey).toBe("generation:request-1");
+    expect(messages[0]!.generationPending).toBe(false);
+    expect(messages[0]!.status).toBe("sent");
+    expect(messages[0]!.reasoningContent).toBeUndefined();
+    expect(getMessageUIKey(messages[0])).toBe("generation:request-1");
   });
 });

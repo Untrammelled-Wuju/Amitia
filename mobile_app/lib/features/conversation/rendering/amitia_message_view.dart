@@ -17,11 +17,11 @@ class AmitiaMessageView extends StatefulWidget {
   final String avatarInitial;
   final String avatarColor;
   final bool showAvatar;
+  final bool showHeader;
   final String roleLabel;
   final bool showThinking;
   final List<AmrpToolBlock> toolBlocks;
   final VoidCallback? onRetry;
-  final VoidCallback? onRegenerate;
   final VoidCallback? onReply;
   final VoidCallback? onCopy;
 
@@ -33,11 +33,11 @@ class AmitiaMessageView extends StatefulWidget {
     this.avatarInitial = 'A',
     this.avatarColor = '#7060E8',
     this.showAvatar = true,
+    this.showHeader = true,
     this.roleLabel = '默认角色',
     this.showThinking = false,
     this.toolBlocks = const <AmrpToolBlock>[],
     this.onRetry,
-    this.onRegenerate,
     this.onReply,
     this.onCopy,
   });
@@ -69,6 +69,9 @@ class _AmitiaMessageViewState extends State<AmitiaMessageView> {
         avatar: widget.avatarColor,
       ),
     );
+    final streaming =
+        message.state == AmrpMessageState.streaming ||
+        message.state == AmrpMessageState.queued;
     if (message.role == AmrpMessageRole.system) {
       return _SystemNotice(message: message, tokens: tokens);
     }
@@ -94,18 +97,19 @@ class _AmitiaMessageViewState extends State<AmitiaMessageView> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _MessageHead(
-                    name: widget.characterName,
-                    role: widget.roleLabel,
-                    time: _formatTime(message.createdAt),
-                    tokens: tokens,
-                  ),
+                  if (widget.showHeader)
+                    _MessageHead(
+                      name: widget.characterName,
+                      role: widget.roleLabel,
+                      time: _formatTime(message.createdAt),
+                      tokens: tokens,
+                    ),
                   if (message.thinking != null)
                     AmitiaThinkingBlock(block: message.thinking!),
                   if (widget.showThinking && message.thinking == null)
                     AmitiaThinkingBlock(
                       block: AmrpThinkingBlock(
-                        content: '正在思考并组织回复',
+                        content: '',
                         state: AmrpMessageState.streaming,
                       ),
                     ),
@@ -129,14 +133,14 @@ class _AmitiaMessageViewState extends State<AmitiaMessageView> {
                     sources: message.sources,
                     highlightId: _highlightCitation,
                   ),
-                  if (!(widget.showThinking && message.markdown.trim().isEmpty))
+                  if (!streaming &&
+                      !(widget.showThinking && message.markdown.trim().isEmpty))
                     _MessageActions(
-                      streaming: message.state == AmrpMessageState.streaming,
+                      streaming: streaming,
                       onCopy: () => _copy(context, message.plainText),
                       onCopyMarkdown: () => _copy(context, message.markdown),
                       onReply: widget.onReply,
                       onRetry: widget.onRetry,
-                      onRegenerate: widget.onRegenerate,
                     ),
                 ],
               ),
@@ -355,7 +359,6 @@ class _MessageActions extends StatelessWidget {
   final VoidCallback onCopyMarkdown;
   final VoidCallback? onReply;
   final VoidCallback? onRetry;
-  final VoidCallback? onRegenerate;
 
   const _MessageActions({
     required this.streaming,
@@ -363,16 +366,15 @@ class _MessageActions extends StatelessWidget {
     required this.onCopyMarkdown,
     this.onReply,
     this.onRetry,
-    this.onRegenerate,
   });
 
   @override
   Widget build(BuildContext context) {
     final tokens = AmitiaMessageTheme.of(context);
     return Padding(
-      padding: const EdgeInsets.only(top: 6),
-      child: Wrap(
-        spacing: 4,
+      padding: const EdgeInsets.only(top: 2),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
           AmitiaPopupMenuButton<_CopyMode>(
             tooltip: '复制',
@@ -383,7 +385,6 @@ class _MessageActions extends StatelessWidget {
             itemFontSize: 14.5,
             itemIconSize: 18,
             itemMinHeight: 46,
-            icon: Icon(Icons.copy_outlined, size: 18, color: tokens.muted),
             onSelected: (mode) {
               switch (mode) {
                 case _CopyMode.plain:
@@ -401,37 +402,59 @@ class _MessageActions extends StatelessWidget {
                 child: Text('复制 Markdown'),
               ),
             ],
-          ),
-          if (!streaming && onReply != null)
-            IconButton(
-              tooltip: '引用',
-              onPressed: onReply,
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints.tightFor(width: 44, height: 44),
-              icon: Icon(
-                Icons.format_quote_rounded,
-                size: 18,
-                color: tokens.muted,
+            child: SizedBox(
+              width: 32,
+              height: 32,
+              child: Center(
+                child: Icon(Icons.copy_outlined, size: 15, color: tokens.muted),
               ),
             ),
-          if (!streaming && onRegenerate != null)
-            IconButton(
-              tooltip: '重新生成',
-              onPressed: onRegenerate,
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints.tightFor(width: 44, height: 44),
-              icon: Icon(Icons.refresh_rounded, size: 18, color: tokens.muted),
+          ),
+          if (!streaming && onReply != null) ...[
+            _CompactMessageAction(
+              tooltip: '引用',
+              onPressed: onReply!,
+              icon: Icons.format_quote_rounded,
+              color: tokens.muted,
             ),
-          if (!streaming && onRegenerate == null && onRetry != null)
-            IconButton(
+          ],
+          if (!streaming && onRetry != null)
+            _CompactMessageAction(
               tooltip: '重试',
-              onPressed: onRetry,
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints.tightFor(width: 44, height: 44),
-              icon: Icon(Icons.refresh_rounded, size: 18, color: tokens.muted),
+              onPressed: onRetry!,
+              icon: Icons.refresh_rounded,
+              color: tokens.muted,
             ),
         ],
       ),
+    );
+  }
+}
+
+class _CompactMessageAction extends StatelessWidget {
+  final String tooltip;
+  final VoidCallback? onPressed;
+  final IconData icon;
+  final Color color;
+
+  const _CompactMessageAction({
+    required this.tooltip,
+    required this.onPressed,
+    required this.icon,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      tooltip: tooltip,
+      onPressed: onPressed,
+      padding: EdgeInsets.zero,
+      style: IconButton.styleFrom(
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      ),
+      constraints: const BoxConstraints.tightFor(width: 32, height: 32),
+      icon: Icon(icon, size: 15, color: color),
     );
   }
 }

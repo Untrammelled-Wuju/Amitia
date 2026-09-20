@@ -100,7 +100,7 @@ export function useWebChatSSE(
       role: event.role,
       content: event.content || "",
       createdAt: event.createdAt || new Date().toISOString(),
-      status: event.status,
+      status: event.status || (event.role === "assistant" ? "sent" : undefined),
       channel: event.channel,
       direction: event.direction,
       msgType: metadata.messageType,

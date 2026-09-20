@@ -9,6 +9,7 @@ object RuntimeBridgeContract {
     const val METHOD_START_WITH_PROFILE = "runtime.startWithProfile"
     const val METHOD_STOP = "runtime.stop"
     const val METHOD_INSTALL = "runtime.install"
+    const val METHOD_RECONCILE_EMBEDDED = "runtime.reconcileEmbedded"
     const val METHOD_VERIFY = "runtime.verify"
     const val METHOD_REPAIR = "runtime.repair"
     const val METHOD_MANIFEST_SUMMARY = "runtime.manifestSummary"

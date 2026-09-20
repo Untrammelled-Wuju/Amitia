@@ -68,9 +68,8 @@ class DefaultRuntimeBootstrap implements RuntimeBootstrap {
     _handleRuntimeSnapshot(current);
 
     if (_disposed) return;
-    if (_policy.autoInstallRuntime &&
-        current.state == RuntimeBridgeState.notInstalled) {
-      final installed = await _requestInstall();
+    if (_policy.autoInstallRuntime) {
+      final installed = await _requestReconcileEmbedded();
 
       if (_disposed || !installed) return;
       final refreshed = await _bridge.snapshot();
@@ -121,9 +120,11 @@ class DefaultRuntimeBootstrap implements RuntimeBootstrap {
     _snapshotController.add(_current);
   }
 
-  Future<bool> _requestInstall() async {
+  Future<bool> _requestReconcileEmbedded() async {
     try {
-      final result = await _bridge.install().timeout(_policy.installTimeout);
+      final result = await _bridge.reconcileEmbedded().timeout(
+        _policy.installTimeout,
+      );
       if (_disposed) return false;
 
       if (!result.accepted || result.error != null) {

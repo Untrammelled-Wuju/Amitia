@@ -327,13 +327,14 @@ export function normalizeAIMessage(
         }
       : undefined,
     markdown,
-    thinking: thinkingContent
-      ? {
-          content: thinkingContent,
-          state,
-          duration: thinkingDurationSeconds,
-        }
-      : undefined,
+    thinking:
+      thinkingContent || message.generationPending === true
+        ? {
+            content: thinkingContent,
+            state: message.generationPending === true ? "streaming" : state,
+            duration: thinkingDurationSeconds,
+          }
+        : undefined,
     blocks: legacyBlocks(message),
     sources: normalizeSources(message),
     state,

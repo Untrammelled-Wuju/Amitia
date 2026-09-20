@@ -620,12 +620,6 @@ class ChatService {
     );
   }
 
-  Future<Map<String, dynamic>?> regenerate(String conversationId) {
-    return _api.post<Map<String, dynamic>>(
-      '/api/web-chat/conversations/$conversationId/regenerate',
-    );
-  }
-
   /// Compatibility helper for callers that still need a single blocking reply.
   Future<Map<String, dynamic>?> chat(
     String message, {

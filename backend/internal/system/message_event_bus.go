@@ -136,7 +136,7 @@ func (bus *MessageEventBus) PublishContext(ctx context.Context, event MessageEve
 	_ = payload
 }
 
-func (bus *MessageEventBus) PublishMessageCreated(convID, msgID, channel, direction, role, content, createdAt string, sequence int64, data interface{}) {
+func (bus *MessageEventBus) PublishMessageCreated(convID, msgID, channel, direction, role, status, content, createdAt string, sequence int64, data interface{}) {
 	bus.Publish(MessageEvent{
 		Type:           EventMessageCreated,
 		ConversationID: convID,
@@ -145,6 +145,7 @@ func (bus *MessageEventBus) PublishMessageCreated(convID, msgID, channel, direct
 		Channel:        channel,
 		Direction:      direction,
 		Role:           role,
+		Status:         status,
 		Content:        content,
 		CreatedAt:      createdAt,
 		Data:           data,

@@ -51,6 +51,8 @@ class MessageDto {
   final String msgType;
   final String extensionType;
   final String requestId;
+  final String responseGroupId;
+  final int deliverySequence;
   final int sequence;
   final String createdAt;
   final String imageUrl;
@@ -76,6 +78,8 @@ class MessageDto {
     this.msgType = 'text',
     this.extensionType = '',
     this.requestId = '',
+    this.responseGroupId = '',
+    this.deliverySequence = 0,
     this.sequence = 0,
     this.imageUrl = '',
     this.audioUrl = '',
@@ -101,6 +105,8 @@ class MessageDto {
       msgType: json['msgType'] as String? ?? 'text',
       extensionType: json['extensionType'] as String? ?? '',
       requestId: (json['requestId'] ?? '').toString(),
+      responseGroupId: (json['responseGroupId'] ?? '').toString(),
+      deliverySequence: (json['deliverySequence'] as num?)?.toInt() ?? 0,
       sequence: (json['sequence'] as num?)?.toInt() ?? 0,
       createdAt: json['createdAt'] as String? ?? '',
       imageUrl: json['imageUrl'] as String? ?? '',

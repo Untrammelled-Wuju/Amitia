@@ -59,6 +59,7 @@ void main() {
               content: '你好',
               time: DateTime(2026, 9, 20, 12, 35),
             ),
+            onReply: () {},
           ),
         ),
       ),
@@ -67,13 +68,82 @@ void main() {
     expect(find.text('复制'), findsNothing);
     expect(find.text('复制 Markdown'), findsNothing);
     expect(find.text('回复'), findsNothing);
-    expect(find.text('重新生成'), findsNothing);
+    expect(find.byIcon(Icons.refresh_rounded), findsNothing);
 
     await tester.tap(find.byIcon(Icons.copy_outlined));
     await tester.pumpAndSettle();
 
     expect(find.text('复制纯文本'), findsOneWidget);
     expect(find.text('复制 Markdown'), findsOneWidget);
+
+    final copyRect = tester.getRect(find.byIcon(Icons.copy_outlined));
+    final replyRect = tester.getRect(find.byIcon(Icons.format_quote_rounded));
+    expect(copyRect.width, 15);
+    expect(replyRect.left - copyRect.left, lessThanOrEqualTo(40));
+  });
+
+  testWidgets('assistant streaming hides copy and reply actions', (
+    tester,
+  ) async {
+    final message = ChatMessage(
+      id: 'assistant-streaming',
+      role: MessageRole.assistant,
+      type: MessageType.text,
+      content: '正在生成',
+      time: DateTime(2026, 9, 20, 12, 36),
+      status: MessageStatus.streaming,
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: AmitiaMessageView(message: message, onReply: () {}),
+        ),
+      ),
+    );
+
+    expect(find.byIcon(Icons.copy_outlined), findsNothing);
+    expect(find.byIcon(Icons.format_quote_rounded), findsNothing);
+  });
+
+  testWidgets('assistant continuation hides header and uses compact spacing', (
+    tester,
+  ) async {
+    final message = ChatMessage(
+      id: 'assistant-continuation',
+      characterId: 'character-1',
+      role: MessageRole.assistant,
+      type: MessageType.text,
+      content: '第二条消息',
+      time: DateTime(2026, 9, 20, 12, 36),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: AmitiaMessageBubble(
+            message: message,
+            showAvatar: false,
+            showHeader: false,
+            compactBottom: true,
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('Amitia'), findsNothing);
+    expect(find.text('12:36'), findsNothing);
+    final view = tester.widget<AmitiaMessageView>(
+      find.byType(AmitiaMessageView),
+    );
+    expect(view.characterId, 'character-1');
+    final padding = tester.widget<Padding>(
+      find
+          .descendant(
+            of: find.byType(AmitiaMessageBubble),
+            matching: find.byType(Padding),
+          )
+          .first,
+    );
+    expect(padding.padding.resolve(TextDirection.ltr).bottom, 10);
   });
 
   testWidgets('thinking content expands naturally without copy action', (
@@ -101,6 +171,7 @@ void main() {
     );
 
     expect(find.text('思考完成（2.85s）'), findsOneWidget);
+    expect(find.byIcon(Icons.chevron_right_rounded), findsOneWidget);
     await tester.tap(find.text('思考完成（2.85s）'));
     await tester.pumpAndSettle();
 
@@ -110,5 +181,29 @@ void main() {
       tester.getSize(find.byType(SelectableText)).height,
       greaterThan(260),
     );
+  });
+
+  testWidgets('thinking placeholder cannot expand without content', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData(extensions: [AmitiaMessageTheme.light]),
+        home: Scaffold(
+          body: AmitiaThinkingBlock(
+            block: const AmrpThinkingBlock(
+              content: '',
+              state: AmrpMessageState.streaming,
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('思考中'), findsOneWidget);
+    expect(find.byIcon(Icons.chevron_right_rounded), findsNothing);
+    await tester.tap(find.text('思考中'));
+    await tester.pump();
+    expect(find.byType(SelectableText), findsNothing);
   });
 }

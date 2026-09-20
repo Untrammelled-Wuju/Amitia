@@ -27,11 +27,6 @@ export function useChat() {
 
   let abortController: AbortController | null = null;
 
-  const canRegenerate = computed(() => {
-    if (messages.value.length === 0) return false;
-    return messages.value[messages.value.length - 1]?.role === "assistant";
-  });
-
   // ---- Characters ----
   async function fetchCharacters() {
     try {
@@ -318,29 +313,6 @@ export function useChat() {
     sending.value = false;
   }
 
-  async function regenerateLast() {
-    if (!canRegenerate.value || !convId.value) return false;
-    sending.value = true;
-    try {
-      const res = await post<any>(
-        `/api/web-chat/conversations/${convId.value}/regenerate`,
-      );
-      if (res?.assistantMessage) {
-        const last = messages.value[messages.value.length - 1];
-        if (last?.role === "assistant") {
-          messages.value[messages.value.length - 1] = res.assistantMessage;
-        } else {
-          messages.value.push(res.assistantMessage);
-        }
-      }
-      return true;
-    } catch {
-      return false;
-    } finally {
-      sending.value = false;
-    }
-  }
-
   async function clearMessages() {
     if (convId.value) {
       await del(`/api/web-chat/conversations/${convId.value}/messages`);
@@ -475,7 +447,6 @@ export function useChat() {
     streamingContent,
     convId,
     charId,
-    canRegenerate,
     hasMoreHistory,
 
     // Actions
@@ -488,7 +459,6 @@ export function useChat() {
     sendMessage,
     sendMessageStream,
     stopSending,
-    regenerateLast,
     clearMessages,
     loadMoreHistory,
     resetHistoryPagination,

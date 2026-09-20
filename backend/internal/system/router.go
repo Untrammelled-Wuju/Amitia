@@ -62,7 +62,7 @@ func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, chatSvc chat.
 							"reasoningDurationMs": event.ReasoningDurationMS,
 						}
 					}
-					bus.PublishMessageCreated(event.ConversationID, item.MessageID, channel, "outbound", "assistant", item.Content, nowStr, event.Sequences[item.MessageID], itemMetadata)
+					bus.PublishMessageCreated(event.ConversationID, item.MessageID, channel, "outbound", "assistant", "sent", item.Content, nowStr, event.Sequences[item.MessageID], itemMetadata)
 				}
 				return
 			}
@@ -81,7 +81,7 @@ func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, chatSvc chat.
 						"reasoningDurationMs": event.ReasoningDurationMS,
 					}
 				}
-				bus.PublishMessageCreated(event.ConversationID, msgID, channel, "outbound", "assistant", content, nowStr, event.Sequences[msgID], itemMetadata)
+				bus.PublishMessageCreated(event.ConversationID, msgID, channel, "outbound", "assistant", "sent", content, nowStr, event.Sequences[msgID], itemMetadata)
 			}
 		}
 	})
@@ -240,7 +240,6 @@ func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, chatSvc chat.
 	r.DELETE("/web-chat/conversations/:id", handler.WebChatDeleteConv)
 	r.PUT("/web-chat/conversations/:id", handler.WebChatUpdateConv)
 	r.DELETE("/web-chat/conversations/:id/messages", handler.WebChatDeleteConvMessages)
-	r.POST("/web-chat/conversations/:id/regenerate", handler.WebChatRegenerate)
 	r.POST("/web-chat/conversations/:id/reply-timing/force", handler.WebChatReplyTimingForce)
 	r.POST("/web-chat/conversations/:id/reply-timing/hold", handler.WebChatReplyTimingHold)
 	r.POST("/web-chat/conversations/:id/reply-timing/resume", handler.WebChatReplyTimingResume)

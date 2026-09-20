@@ -59,6 +59,9 @@ class FakeRuntimeBridge implements RuntimeBridge {
   }
 
   @override
+  Future<RuntimeBridgeCommandResult> reconcileEmbedded() => install();
+
+  @override
   Future<RuntimeBridgeCommandResult> verify() async {
     return RuntimeBridgeCommandResult(accepted: true, snapshot: _current);
   }
@@ -492,7 +495,7 @@ void main() {
 
       final bootstrap = DefaultRuntimeBootstrap(bridge: failingBridge);
 
-      final future = bootstrap.initialize();
+      unawaited(bootstrap.initialize());
 
       await Future.delayed(const Duration(milliseconds: 100));
       controller.addError(Exception('Bridge failure'));
@@ -577,6 +580,9 @@ class _FailingBridge implements RuntimeBridge {
       snapshot: RuntimeBridgeSnapshot.initial(),
     );
   }
+
+  @override
+  Future<RuntimeBridgeCommandResult> reconcileEmbedded() => install();
 
   @override
   Future<RuntimeBridgeCommandResult> verify() async {

@@ -71,15 +71,28 @@
           </el-button>
         </header>
         <div ref="messageListRef" v-loading="messageLoading" class="message-list">
-          <ChatBubble
-            v-for="message in messages"
+          <div
+            v-for="message in displayMessages"
             :key="message.id"
-            :message="{ ...message, typingDone: true }"
-            :char-name="characterName(message.characterId)"
-            :char-avatar="characterAvatar(message.characterId)"
-            :character-id="message.characterId"
-            read-only
-          />
+            class="archive-message-item"
+          >
+            <div
+              v-if="message.showRoleSwitchDivider"
+              class="archive-role-switch"
+            >
+              <span>当前对话角色已切换为 {{ characterName(message.roleSwitchCharacterId) }}</span>
+            </div>
+            <ChatBubble
+              :message="{ ...message, typingDone: true }"
+              :char-name="characterName(message.characterId)"
+              :char-avatar="characterAvatar(message.characterId)"
+              :character-id="message.characterId"
+              :show-avatar="message.showAssistantIdentity"
+              :show-header="message.showAssistantIdentity"
+              :compact-bottom="message.compactBottom"
+              read-only
+            />
+          </div>
           <el-empty v-if="!messageLoading && messages.length === 0" description="暂无消息" :image-size="60" />
         </div>
       </template>
@@ -96,6 +109,11 @@ import { useApi } from "@/composables/useApi";
 import ArchiveConversationIcon from "@/components/ArchiveConversationIcon.vue";
 import ChatBubble from "@/components/ChatBubble.vue";
 import { useChatStore } from "@/stores/chat";
+import {
+  getMessageCharacterId,
+  shouldShowAssistantIdentity,
+  shouldShowRoleSwitch,
+} from "@/utils/message-order";
 
 interface ArchivedConversation {
   id: string;
@@ -115,6 +133,8 @@ interface ArchivedMessage {
   videoUrl?: string;
   audioUrl?: string;
   audioDuration?: number;
+  responseGroupId?: string;
+  requestId?: string;
 }
 
 const { get } = useApi();
@@ -135,6 +155,26 @@ let searchTimer: ReturnType<typeof setTimeout> | null = null;
 const selectedConversation = computed(
   () => conversations.value.find((item) => item.id === selectedId.value) || null,
 );
+const displayMessages = computed(() =>
+  messages.value.map((message, index) => {
+    const previous = messages.value[index - 1];
+    const next = messages.value[index + 1];
+    const showAssistantIdentity = shouldShowAssistantIdentity(
+      message,
+      previous,
+    );
+    return {
+      ...message,
+      showAssistantIdentity,
+      showRoleSwitchDivider: shouldShowRoleSwitch(previous, message),
+      roleSwitchCharacterId: getMessageCharacterId(message),
+      compactBottom:
+        message.role === "assistant" &&
+        next?.role === "assistant" &&
+        !shouldShowAssistantIdentity(next, message),
+    };
+  }),
+);
 
 function formatTime(value?: string) {
   if (!value) return "未知时间";
@@ -143,10 +183,9 @@ function formatTime(value?: string) {
 }
 
 function characterName(characterId?: string) {
-  return (
-    characters.value.find((item) => item.id === characterId)?.name ||
-    "AI"
-  );
+  const id = String(characterId || "").trim();
+  return characters.value.find((item) => item.id === id)?.name ||
+    (id ? "未知角色" : "AI");
 }
 
 function characterAvatar(characterId?: string) {
@@ -271,6 +310,11 @@ onBeforeUnmount(() => {
 .archive-main { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
 .archive-main-header { min-height: 52px; padding: 8px 16px; border-bottom: 1px solid var(--surface-border); }
 .message-list { display: flex; flex-direction: column; gap: 12px; min-height: 0; flex: 1; overflow-y: auto; padding: 18px; }
+.archive-message-item { min-width: 0; }
+.archive-role-switch { display: flex; align-items: center; gap: 12px; margin: 2px 0 20px; color: var(--ac-color-text-muted); font-size: 12px; }
+.archive-role-switch::before,
+.archive-role-switch::after { content: ""; flex: 1 1 0; height: 1px; background: var(--ac-color-border); }
+.archive-role-switch span { flex: 0 0 auto; }
 @media (max-width: 800px) {
   .archive-page { grid-template-columns: 1fr; }
   .archive-list { max-height: 38vh; border-right: 0; border-bottom: 1px solid var(--surface-border); }

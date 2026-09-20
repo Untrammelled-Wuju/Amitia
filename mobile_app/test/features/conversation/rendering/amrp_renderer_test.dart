@@ -89,4 +89,20 @@ void main() {
     expect(map(MessageStatus.error).state, AmrpMessageState.failed);
     expect(map(MessageStatus.cancelled).state, AmrpMessageState.cancelled);
   });
+
+  test('系统提示按系统消息渲染并保留内容', () {
+    final message = AmrpMessage.fromChatMessage(
+      ChatMessage(
+        id: 'system-notice',
+        role: MessageRole.assistant,
+        type: MessageType.systemNotice,
+        content: '模型响应失败',
+        time: DateTime(2026, 9, 20),
+        status: MessageStatus.error,
+      ),
+    );
+
+    expect(message.role, AmrpMessageRole.system);
+    expect(message.markdown, '模型响应失败');
+  });
 }

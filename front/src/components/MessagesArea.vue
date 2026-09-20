@@ -38,13 +38,23 @@ SPDX-License-Identifier: AGPL-3.0-only
         v-if="item.kind === 'message'"
         :data-message-id="item.message.id"
         class="conversation-flow-item conversation-flow-item--message"
-        :class="{ 'conversation-flow-item--entering': item.message.animateIn === true }"
+        :class="{
+          'conversation-flow-item--entering': item.message.animateIn === true,
+          'conversation-flow-item--assistant': item.message.role === 'assistant',
+          'conversation-flow-item--continuation': item.isAssistantContinuation === true,
+        }"
         @animationend="finishMessageEntrance(item.message, $event)"
       >
+        <div
+          v-if="item.showRoleSwitchDivider"
+          class="conversation-role-switch"
+        >
+          <span>当前对话角色已切换为 {{ roleSwitchName(item.roleSwitchCharacterId) }}</span>
+        </div>
         <ExtensionSlot
           v-if="hasMessageSlotRenderer(item.message)"
           slot-id="chat.message.renderer"
-          :context="messageSlotContext(item.message)"
+          :context="messageSlotContext(item.message, item)"
           fallback="default"
           layout="stack"
           surface-role="message"
@@ -54,13 +64,16 @@ SPDX-License-Identifier: AGPL-3.0-only
           capability="conversation.message_renderer"
           :provider-id="messageRendererId(item.message)"
           :fallback="ChatBubble"
-          :context="{ ...(extensionContext || {}), message: messageContext(item.message) }"
+          :context="{ ...(extensionContext || {}), message: messageContext(item.message, item) }"
           :actions="messageActions(item.message)"
           :message="item.message"
-          :char-name="charName"
-          :char-avatar="charAvatar"
-          :character-id="characterId"
+          :char-name="messageCharacterName(item.message)"
+          :char-avatar="messageCharacterAvatar(item.message)"
+          :character-id="messageCharacterId(item.message)"
           :status="item.message.status"
+          :show-avatar="item.showAssistantIdentity !== false"
+          :show-header="item.showAssistantIdentity !== false"
+          :compact-bottom="item.compactAfter === true"
           @retry="$emit('retry', $event)"
           @reply="$emit('reply', $event)"
           @edit="$emit('edit', $event)"
@@ -72,14 +85,14 @@ SPDX-License-Identifier: AGPL-3.0-only
               :message-type="item.message.type || 'text'"
               :direction="item.message.role === 'user' ? 'outgoing' : item.message.role === 'assistant' ? 'incoming' : 'system'"
               :sender-type="item.message.role === 'user' ? 'user' : item.message.role === 'assistant' ? 'character' : 'system'"
-              :character-id="characterId"
+              :character-id="messageCharacterId(item.message)"
               :conversation-id="item.message.conversationId || conversationId"
             />
           </template>
           <template #extension-content>
             <MessageExtensionHost
               :message="messageExtensionSummary(item.message)"
-              :character-id="characterId"
+              :character-id="messageCharacterId(item.message)"
               :conversation-id="item.message.conversationId || conversationId"
             />
           </template>
@@ -89,7 +102,7 @@ SPDX-License-Identifier: AGPL-3.0-only
               :message-type="item.message.type || 'text'"
               :direction="item.message.role === 'user' ? 'outgoing' : item.message.role === 'assistant' ? 'incoming' : 'system'"
               :sender-type="item.message.role === 'user' ? 'user' : item.message.role === 'assistant' ? 'character' : 'system'"
-              :character-id="characterId"
+              :character-id="messageCharacterId(item.message)"
               :conversation-id="item.message.conversationId || conversationId"
             />
           </template>
@@ -104,23 +117,12 @@ SPDX-License-Identifier: AGPL-3.0-only
       />
     </template>
 
-    <ChatBubble
-      v-if="sending && !hasAssistantReply"
-      :message="{
-        id: '__generating__',
-        role: 'assistant',
-        content: '',
-        createdAt: '',
-        status: 'streaming',
-        typingDone: true,
-        reasoningContent: 'AI 正在生成回复',
-      }"
-      :char-name="charName"
-      :char-avatar="charAvatar"
-      :character-id="characterId"
-      read-only
-      reasoning-open
-    />
+    <div
+      v-if="pendingRoleSwitchName"
+      class="conversation-role-switch conversation-role-switch--pending"
+    >
+      <span>当前对话角色已切换为 {{ pendingRoleSwitchName }}</span>
+    </div>
 
     <transition name="fade">
       <el-button
@@ -153,8 +155,10 @@ import { acknowledgeClientRuntimeSessionState, fetchClientRuntimeSessionState, f
 import { createConversationUIEventStream } from "@/composables/useConversationUIEventStream";
 import { resolveMessageRenderer } from "@/ui-runtime/messageRendererRegistry";
 import {
+  getMessageCharacterId,
   getMessageUIKey,
-  hasAssistantReplyAfterLatestUser,
+  shouldShowRoleSwitch,
+  shouldShowAssistantIdentity,
 } from "@/utils/message-order";
 import {
   ConversationNodeAssembler,
@@ -182,6 +186,7 @@ const props = defineProps<{
   pullReady: boolean;
   pullLoading: boolean;
   pullText: string;
+  characters?: any[];
   extensionContext?: Record<string, unknown>;
   providerActions?: Record<string, (input?: unknown) => unknown | Promise<unknown>>;
 }>();
@@ -219,17 +224,24 @@ const workspaceName = computed(() => {
     | undefined;
   return String(workspace?.workspaceName ?? workspace?.name ?? "").trim();
 });
-const hasAssistantReply = computed(() =>
-  hasAssistantReplyAfterLatestUser(props.messages),
-);
-
 const projectionContributions = computed(() => store.getVisibleContributions("chat.conversation.node", {
   ...(props.extensionContext ?? {}),
   conversationId: conversationId.value,
 }));
 
 type FlowItem =
-  | { kind: "message"; key: string; message: any; sequence?: number; timestamp: string }
+  | {
+      kind: "message";
+      key: string;
+      message: any;
+      sequence?: number;
+      timestamp: string;
+      showAssistantIdentity?: boolean;
+      isAssistantContinuation?: boolean;
+      compactAfter?: boolean;
+      showRoleSwitchDivider?: boolean;
+      roleSwitchCharacterId?: string;
+    }
   | { kind: "node"; key: string; node: ConversationNode; sequence?: number; timestamp: string };
 
 const flowItems = computed<FlowItem[]>(() => {
@@ -249,7 +261,7 @@ const flowItems = computed<FlowItem[]>(() => {
       timestamp: node.anchorTimestamp,
     });
   }
-  return items.sort((a, b) => {
+  const ordered = items.sort((a, b) => {
     const anchorOrder = compareAnchorOrder(a, b);
     if (anchorOrder !== 0) return anchorOrder;
     const order = compareTimeline(a.sequence, a.timestamp, b.sequence, b.timestamp);
@@ -257,6 +269,90 @@ const flowItems = computed<FlowItem[]>(() => {
     if (a.kind !== b.kind) return a.kind === "message" ? -1 : 1;
     return a.key.localeCompare(b.key);
   });
+  let previousMessage: any = null;
+  for (const item of ordered) {
+    if (item.kind !== "message") {
+      previousMessage = null;
+      continue;
+    }
+    item.showAssistantIdentity = shouldShowAssistantIdentity(
+      item.message,
+      previousMessage,
+    );
+    item.isAssistantContinuation =
+      item.message?.role === "assistant" &&
+      item.showAssistantIdentity === false;
+    item.showRoleSwitchDivider = shouldShowRoleSwitch(
+      previousMessage,
+      item.message,
+    );
+    item.roleSwitchCharacterId = getMessageCharacterId(item.message);
+    previousMessage = item.message;
+  }
+  for (let index = 0; index < ordered.length; index += 1) {
+    const item = ordered[index];
+    const next = ordered[index + 1];
+    if (item.kind !== "message") continue;
+    item.compactAfter =
+      item.message?.role === "assistant" &&
+      next?.kind === "message" &&
+      next.isAssistantContinuation === true;
+  }
+  return ordered;
+});
+
+function resolveCharacter(characterId: unknown) {
+  const id = String(characterId || "").trim();
+  if (!id) {
+    return {
+      id: props.characterId,
+      name: props.charName || "未知角色",
+      avatar: props.charAvatar,
+    };
+  }
+  const character = props.characters?.find(
+    (item: any) => String(item?.id || "") === id,
+  );
+  if (character) {
+    return {
+      id,
+      name: String(character.name || "未知角色"),
+      avatar: String(character.avatar || ""),
+    };
+  }
+  if (id === props.characterId) {
+    return {
+      id,
+      name: props.charName || "未知角色",
+      avatar: props.charAvatar,
+    };
+  }
+  return { id, name: "未知角色", avatar: "" };
+}
+
+function messageCharacterId(msg: any) {
+  return resolveCharacter(getMessageCharacterId(msg)).id;
+}
+
+function messageCharacterName(msg: any) {
+  return resolveCharacter(getMessageCharacterId(msg)).name;
+}
+
+function messageCharacterAvatar(msg: any) {
+  return resolveCharacter(getMessageCharacterId(msg)).avatar;
+}
+
+function roleSwitchName(characterId: unknown) {
+  return resolveCharacter(characterId).name;
+}
+
+const pendingRoleSwitchName = computed(() => {
+  const lastMessage = props.messages[props.messages.length - 1];
+  if (!lastMessage || !props.characterId) return "";
+  if (!shouldShowRoleSwitch(lastMessage, { characterId: props.characterId })) {
+    return "";
+  }
+  return resolveCharacter(props.characterId).name;
 });
 
 function compareAnchorOrder(a: FlowItem, b: FlowItem): number {
@@ -387,7 +483,14 @@ watch(conversationId, (id) => {
   void loadClientRuntimeSession(id);
 }, { immediate: true });
 
-function messageContext(msg: any) {
+function messageContext(
+  msg: any,
+  presentation?: {
+    showAssistantIdentity?: boolean;
+    isAssistantContinuation?: boolean;
+    compactAfter?: boolean;
+  },
+) {
   const messageType = msg.msgType || msg.msg_type || msg.type || "text";
   return {
     messageId: msg.id,
@@ -408,10 +511,23 @@ function messageContext(msg: any) {
     height: msg.height || msg.media_height || 0,
     attachments: msg.attachments || [],
     metadata: msg.metadata || {},
+    characterId: messageCharacterId(msg),
+    characterName: messageCharacterName(msg),
+    characterAvatar: messageCharacterAvatar(msg),
+    showAssistantIdentity: presentation?.showAssistantIdentity !== false,
+    isAssistantContinuation: presentation?.isAssistantContinuation === true,
+    compactBottom: presentation?.compactAfter === true,
   };
 }
 
-function messageSlotContext(msg: any) {
+function messageSlotContext(
+  msg: any,
+  presentation?: {
+    showAssistantIdentity?: boolean;
+    isAssistantContinuation?: boolean;
+    compactAfter?: boolean;
+  },
+) {
   const messageType = msg.msgType || msg.msg_type || msg.type || "text";
   return {
     ...(props.extensionContext ?? {}),
@@ -419,9 +535,12 @@ function messageSlotContext(msg: any) {
     messageType,
     direction: msg.role === "user" ? "outgoing" : msg.role === "assistant" ? "incoming" : "system",
     senderType: msg.role === "user" ? "user" : msg.role === "assistant" ? "character" : "system",
-    characterId: props.characterId,
+    characterId: messageCharacterId(msg),
     conversationId: msg.conversationId || conversationId.value,
-    message: messageContext(msg),
+    message: messageContext(msg, presentation),
+    showAssistantIdentity: presentation?.showAssistantIdentity !== false,
+    isAssistantContinuation: presentation?.isAssistantContinuation === true,
+    compactBottom: presentation?.compactAfter === true,
   };
 }
 
@@ -561,6 +680,39 @@ defineExpose({ rootEl });
 
 
 .messages-area > [data-message-id] { width: min(100%, 820px); margin: 0 auto; }
+
+.conversation-flow-item--assistant {
+  margin-bottom: 0;
+}
+
+.conversation-role-switch {
+  width: min(100%, 820px);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 2px auto 20px;
+  color: var(--ac-color-text-muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.conversation-role-switch::before,
+.conversation-role-switch::after {
+  content: "";
+  flex: 1 1 0;
+  height: 1px;
+  background: var(--ac-color-border);
+}
+
+.conversation-role-switch--pending {
+  margin-top: 12px;
+}
+
+.conversation-role-switch span {
+  flex: 0 0 auto;
+  text-align: center;
+}
+
 .conversation-flow-item--entering { animation: conversationMessageIn 0.25s ease-out; }
 
 @keyframes conversationMessageIn {

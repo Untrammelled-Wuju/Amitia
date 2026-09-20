@@ -98,6 +98,7 @@ class ConversationMessageLedger {
   bool _same(ChatMessage a, ChatMessage b) {
     return a.id == b.id &&
         a.renderId == b.renderId &&
+        a.characterId == b.characterId &&
         a.role == b.role &&
         a.type == b.type &&
         a.content == b.content &&
@@ -120,7 +121,9 @@ class ConversationMessageLedger {
         a.toolName == b.toolName &&
         a.toolResult == b.toolResult &&
         a.replyToMessageId == b.replyToMessageId &&
-        a.replyToExcerpt == b.replyToExcerpt;
+        a.replyToExcerpt == b.replyToExcerpt &&
+        a.responseGroupId == b.responseGroupId &&
+        a.deliverySequence == b.deliverySequence;
   }
 
   bool _sameStringList(List<String>? a, List<String>? b) {

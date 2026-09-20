@@ -188,12 +188,6 @@ export function useWebChatSend(
     }, 60000);
   }
 
-  const canRegenerate = computed(() => {
-    if (!convId.value || messages.value.length === 0) return false;
-    const last = messages.value[messages.value.length - 1];
-    return last?.role === "assistant";
-  });
-
   function onImageAttached(file: File, base64: string) {
     currentImageFile.value = file;
     currentImageBase64.value = base64;
@@ -299,6 +293,8 @@ export function useWebChatSend(
     const userMsgLocalId = "user-" + Date.now();
     const clientMessageId = requestEnvelope.requestId;
     const uiKey = `client:${clientMessageId}`;
+    const assistantPlaceholderId = `generating:${requestEnvelope.requestId}`;
+    const assistantUiKey = `generation:${requestEnvelope.requestId}`;
     const imgUrl = pendingImageBase64.value;
     const finalAudioUrl = audioUrl || pendingAudioUrl.value;
     const finalVideoUrl = videoUrl || pendingVideoUrl.value;
@@ -342,6 +338,18 @@ export function useWebChatSend(
       replyToMessageId: replyTarget?.value?.id || undefined,
       replyToRole: replyTarget?.value?.role || undefined,
       replyToExcerpt: replyTarget?.value?.content || undefined,
+    });
+    messages.value.push({
+      id: assistantPlaceholderId,
+      requestId: requestEnvelope.requestId,
+      uiKey: assistantUiKey,
+      role: "assistant",
+      content: "",
+      status: "streaming",
+      conversationId: convId.value,
+      createdAt: new Date().toISOString(),
+      generationPending: true,
+      animateIn: false,
     });
     if (convId.value) {
       try {
@@ -451,8 +459,20 @@ export function useWebChatSend(
       if (tIdx >= 0) {
         messages.value[tIdx] = {
           ...messages.value[tIdx],
-          id: "failed-" + Date.now(),
           status: "failed",
+        };
+      }
+      const aIdx = messages.value.findIndex(
+        (m: any) =>
+          m.uiKey === assistantUiKey || m.id === assistantPlaceholderId,
+      );
+      if (aIdx >= 0) {
+        messages.value[aIdx] = {
+          ...messages.value[aIdx],
+          content: errMsg,
+          status: "failed",
+          generationPending: false,
+          rawError: errMsg,
         };
       }
       notifyDesktopPetChatState(
@@ -466,7 +486,11 @@ export function useWebChatSend(
       clearSendingTimer();
     } finally {
       const lastMsg = messages.value[messages.value.length - 1];
-      if (lastMsg?.id && lastMsg.id !== "streaming")
+      if (
+        lastMsg?.id &&
+        lastMsg.id !== "streaming" &&
+        !String(lastMsg.id).startsWith("generating:")
+      )
         lastPolledMsgId = lastMsg.id;
       if (fetchWebMsgCount) fetchWebMsgCount();
     }
@@ -508,69 +532,6 @@ export function useWebChatSend(
     }
   }
 
-  async function handleRegenerate() {
-    if (!canRegenerate.value || !convId.value || sending.value) return;
-    sending.value = true;
-    generating.value = true;
-    modelError.value = "";
-    notifyDesktopPetChatState("assistant_thinking", convId.value);
-    clearSendingTimer();
-    clearGenerationPhaseTimer();
-    let completed = false;
-    try {
-      const res = await post<any>(
-        `/api/web-chat/conversations/${convId.value}/regenerate`,
-      );
-      const regenerated = (res?.assistantMessages || [])
-        .map(normalizeRealtimeMessage)
-        .filter((message: any) => message?.id);
-      if (regenerated.length > 0) {
-        let lastUserIndex = -1;
-        for (let i = messages.value.length - 1; i >= 0; i -= 1) {
-          if (messages.value[i]?.role === "user") {
-            lastUserIndex = i;
-            break;
-          }
-        }
-        const prefix =
-          lastUserIndex >= 0
-            ? messages.value.slice(0, lastUserIndex + 1)
-            : messages.value.filter((message: any) => message?.role !== "assistant");
-        messages.value = [...prefix, ...regenerated].sort(compareChatMessages);
-        lastPolledMsgId = regenerated[regenerated.length - 1]?.id || lastPolledMsgId;
-      } else if (res?.reply) {
-        const first = await get<any>(
-          `/api/web-chat/conversations/${convId.value}/messages`,
-          { page: 1, pageSize: 50 },
-        );
-        const totalPages = Math.max(1, Number(first?.totalPages || 1));
-        const latest =
-          totalPages > 1
-            ? await get<any>(
-                `/api/web-chat/conversations/${convId.value}/messages`,
-                { page: totalPages, pageSize: 50 },
-              )
-            : first;
-        messages.value = (latest?.items || latest?.messages || [])
-          .map(normalizeRealtimeMessage)
-          .sort(compareChatMessages);
-        lastPolledMsgId = messages.value[messages.value.length - 1]?.id || null;
-      }
-      scrollToBottom(true);
-      if (fetchWebMsgCount) fetchWebMsgCount();
-      completed = true;
-    } catch (err: any) {
-      notifyDesktopPetChatState("assistant_error", convId.value, err?.message || "重新生成失败");
-      ElMessage.error(err?.message || "重新生成失败");
-    } finally {
-      sending.value = false;
-      generating.value = false;
-      if (completed) {
-        notifyDesktopPetChatState("assistant_finished", convId.value);
-      }
-    }
-  }
-
   async function handleClear() {
     try {
       await ElMessageBox.confirm("确定清空当前会话的所有消息？", "提示", {
@@ -587,7 +548,6 @@ export function useWebChatSend(
   }
 
   return {
-    canRegenerate,
     onImageAttached,
     onImageRemoved,
     onVideoAttached,
@@ -599,7 +559,6 @@ export function useWebChatSend(
     doActualSend,
     handleStop,
     handleRetry,
-    handleRegenerate,
     handleClear,
     getLastPolledMsgId,
     setLastPolledMsgId,

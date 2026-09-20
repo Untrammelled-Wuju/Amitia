@@ -13,6 +13,8 @@ import '../../../../core/services/providers.dart';
 import '../../../../core/widgets/amitia_message.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../shared/models/models.dart';
+import '../../../conversation/rendering/assistant_identity.dart';
+import '../../../conversation/rendering/role_switch_divider.dart';
 
 class ChatLogsPage extends ConsumerStatefulWidget {
   const ChatLogsPage({super.key});
@@ -362,18 +364,46 @@ class _ArchivedConversationDetailPageState
               itemCount: _messages.length,
               itemBuilder: (context, index) {
                 final message = _messages[index];
+                final current = _toChatMessage(message);
+                final previous = index > 0
+                    ? _toChatMessage(_messages[index - 1])
+                    : null;
+                final next = index + 1 < _messages.length
+                    ? _toChatMessage(_messages[index + 1])
+                    : null;
                 final character = characters
                     .where((item) => item.id == message.characterId)
                     .firstOrNull;
-                return AmitiaMessageBubble(
-                  message: _toChatMessage(message),
-                  avatarInitial: character?.name.isNotEmpty == true
-                      ? character!.name.characters.first
-                      : 'AI',
-                  characterName: character?.name.trim().isNotEmpty == true
-                      ? character!.name.trim()
-                      : 'AI',
-                  showAvatar: true,
+                final characterName = character?.name.trim().isNotEmpty == true
+                    ? character!.name.trim()
+                    : message.characterId.trim().isEmpty
+                    ? 'AI'
+                    : '未知角色';
+                return Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (shouldShowRoleSwitch(previous, current))
+                      AmitiaRoleSwitchDivider(characterName: characterName),
+                    AmitiaMessageBubble(
+                      message: current,
+                      avatarInitial: characterName.isNotEmpty
+                          ? characterName.characters.first
+                          : 'AI',
+                      characterName: characterName,
+                      showAvatar: shouldShowAssistantIdentity(
+                        current,
+                        previous,
+                      ),
+                      showHeader: shouldShowAssistantIdentity(
+                        current,
+                        previous,
+                      ),
+                      compactBottom: shouldCompactAfterAssistantMessage(
+                        current,
+                        next,
+                      ),
+                    ),
+                  ],
                 );
               },
             ),
@@ -391,6 +421,7 @@ ChatMessage _toChatMessage(MessageDto message) {
       : MessageType.text;
   return ChatMessage(
     id: message.id,
+    characterId: message.characterId,
     role: message.role == 'user'
         ? MessageRole.user
         : message.role == 'assistant'
@@ -412,6 +443,12 @@ ChatMessage _toChatMessage(MessageDto message) {
     durationMs: (message.audioDuration * 1000).round(),
     replyToMessageId: message.replyToMessageId,
     replyToExcerpt: message.replyToExcerpt,
+    responseGroupId: message.responseGroupId.isNotEmpty
+        ? message.responseGroupId
+        : message.role == 'assistant'
+        ? message.requestId
+        : '',
+    deliverySequence: message.deliverySequence,
   );
 }
 

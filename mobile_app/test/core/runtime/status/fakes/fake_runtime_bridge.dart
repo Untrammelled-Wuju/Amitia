@@ -13,6 +13,7 @@ class FakeRuntimeBridge implements RuntimeBridge {
   int _startCallCount = 0;
   int _stopCallCount = 0;
   int _installCallCount = 0;
+  int _reconcileCallCount = 0;
   int _verifyCallCount = 0;
   int _repairCallCount = 0;
   int _disposeCallCount = 0;
@@ -20,6 +21,7 @@ class FakeRuntimeBridge implements RuntimeBridge {
   int get startCallCount => _startCallCount;
   int get stopCallCount => _stopCallCount;
   int get installCallCount => _installCallCount;
+  int get reconcileCallCount => _reconcileCallCount;
   int get verifyCallCount => _verifyCallCount;
   int get repairCallCount => _repairCallCount;
   int get disposeCallCount => _disposeCallCount;
@@ -46,46 +48,37 @@ class FakeRuntimeBridge implements RuntimeBridge {
   @override
   Future<RuntimeBridgeCommandResult> start() async {
     _startCallCount++;
-    return RuntimeBridgeCommandResult(
-      accepted: true,
-      snapshot: _current,
-    );
+    return RuntimeBridgeCommandResult(accepted: true, snapshot: _current);
   }
 
   @override
   Future<RuntimeBridgeCommandResult> stop() async {
     _stopCallCount++;
-    return RuntimeBridgeCommandResult(
-      accepted: true,
-      snapshot: _current,
-    );
+    return RuntimeBridgeCommandResult(accepted: true, snapshot: _current);
   }
 
   @override
   Future<RuntimeBridgeCommandResult> install() async {
     _installCallCount++;
-    return RuntimeBridgeCommandResult(
-      accepted: true,
-      snapshot: _current,
-    );
+    return RuntimeBridgeCommandResult(accepted: true, snapshot: _current);
+  }
+
+  @override
+  Future<RuntimeBridgeCommandResult> reconcileEmbedded() async {
+    _reconcileCallCount++;
+    return RuntimeBridgeCommandResult(accepted: true, snapshot: _current);
   }
 
   @override
   Future<RuntimeBridgeCommandResult> verify() async {
     _verifyCallCount++;
-    return RuntimeBridgeCommandResult(
-      accepted: true,
-      snapshot: _current,
-    );
+    return RuntimeBridgeCommandResult(accepted: true, snapshot: _current);
   }
 
   @override
   Future<RuntimeBridgeCommandResult> repair() async {
     _repairCallCount++;
-    return RuntimeBridgeCommandResult(
-      accepted: true,
-      snapshot: _current,
-    );
+    return RuntimeBridgeCommandResult(accepted: true, snapshot: _current);
   }
 
   @override
@@ -101,6 +94,7 @@ class FakeRuntimeBridge implements RuntimeBridge {
     _startCallCount = 0;
     _stopCallCount = 0;
     _installCallCount = 0;
+    _reconcileCallCount = 0;
     _verifyCallCount = 0;
     _repairCallCount = 0;
     _disposeCallCount = 0;

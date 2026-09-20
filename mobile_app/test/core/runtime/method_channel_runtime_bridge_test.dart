@@ -1,7 +1,6 @@
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:amitia_app/core/runtime/method_channel_runtime_bridge.dart';
-import 'package:amitia_app/core/runtime/runtime_bridge_snapshot.dart';
 import 'package:amitia_app/core/runtime/runtime_bridge_state.dart';
 
 void main() {
@@ -38,6 +37,10 @@ void main() {
       expect(RuntimeBridgeContract.methodStart, 'runtime.start');
       expect(RuntimeBridgeContract.methodStop, 'runtime.stop');
       expect(RuntimeBridgeContract.methodInstall, 'runtime.install');
+      expect(
+        RuntimeBridgeContract.methodReconcileEmbedded,
+        'runtime.reconcileEmbedded',
+      );
       expect(RuntimeBridgeContract.methodVerify, 'runtime.verify');
       expect(RuntimeBridgeContract.methodRepair, 'runtime.repair');
       expect(
@@ -91,6 +94,21 @@ void main() {
           );
 
       final result = await bridge.install();
+      expect(result.accepted, false);
+      expect(result.error, isNotNull);
+      expect(result.error!.code, 'BRIDGE_UNAVAILABLE');
+    });
+
+    testWidgets('reconcileEmbedded returns bridge unavailable on null', (
+      tester,
+    ) async {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(
+            const MethodChannel(RuntimeBridgeContract.methodChannelName),
+            (call) async => null,
+          );
+
+      final result = await bridge.reconcileEmbedded();
       expect(result.accepted, false);
       expect(result.error, isNotNull);
       expect(result.error!.code, 'BRIDGE_UNAVAILABLE');

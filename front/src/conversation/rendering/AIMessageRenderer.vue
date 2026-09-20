@@ -33,14 +33,18 @@
       </div>
     </div>
 
-    <article v-else class="amrp-message">
+    <article
+      v-else
+      class="amrp-message"
+      :class="{ 'amrp-message--compact-bottom': compactBottom }"
+    >
       <div v-if="showAvatar" class="amrp-avatar">
         <img v-if="character.avatar" :src="character.avatar" alt="" />
         <span v-else>{{ characterInitial }}</span>
       </div>
       <div v-else class="amrp-avatar-spacer"></div>
       <div class="amrp-message-body">
-        <header class="amrp-head">
+        <header v-if="showHeader" class="amrp-head">
           <span class="amrp-name">{{ character.name || "Amitia" }}</span>
           <span class="amrp-role">{{ roleLabel }}</span>
           <span class="amrp-time">{{ formatTime(message.createdAt) }}</span>
@@ -83,22 +87,24 @@
           @highlight-consumed="activeCitationId = ''"
         />
 
-        <footer v-if="!readOnly" class="amrp-actions">
-          <div class="amrp-copy-action">
-            <button type="button" title="复制" aria-label="复制" @click="copyMenuOpen = !copyMenuOpen">
-              <el-icon><CopyDocument /></el-icon>
-            </button>
-            <div v-if="copyMenuOpen" class="amrp-copy-menu">
-              <button type="button" @click="handleCopy('plain')">复制纯文本</button>
-              <button type="button" @click="handleCopy('markdown')">复制 Markdown</button>
+        <footer
+          v-if="!readOnly && (!streaming || $slots.actions)"
+          class="amrp-actions"
+        >
+          <template v-if="!streaming">
+            <div class="amrp-copy-action">
+              <button type="button" title="复制" aria-label="复制" @click="copyMenuOpen = !copyMenuOpen">
+                <el-icon><CopyDocument /></el-icon>
+              </button>
+              <div v-if="copyMenuOpen" class="amrp-copy-menu">
+                <button type="button" @click="handleCopy('plain')">复制纯文本</button>
+                <button type="button" @click="handleCopy('markdown')">复制 Markdown</button>
+              </div>
             </div>
-          </div>
-          <button v-if="!streaming" type="button" title="回复" aria-label="回复" @click="emit('reply', message)">
-            <el-icon><ChatLineSquare /></el-icon>
-          </button>
-          <button v-if="!streaming" type="button" title="重新生成" aria-label="重新生成" @click="emit('retry', message)">
-            <el-icon><RefreshRight /></el-icon>
-          </button>
+            <button type="button" title="回复" aria-label="回复" @click="emit('reply', message)">
+              <el-icon><ChatLineSquare /></el-icon>
+            </button>
+          </template>
           <slot name="actions" :message="message" />
         </footer>
       </div>
@@ -113,7 +119,6 @@ import {
   ChatLineSquare,
   CopyDocument,
   EditPen,
-  RefreshRight,
 } from "@element-plus/icons-vue";
 import { useTheme } from "@/composables/useTheme";
 import type { AIMessageData, RichBlock } from "./types";
@@ -145,6 +150,8 @@ const props = withDefaults(
     charAvatar?: string;
     characterId?: string;
     showAvatar?: boolean;
+    showHeader?: boolean;
+    compactBottom?: boolean;
     readOnly?: boolean;
   }>(),
   {
@@ -152,12 +159,13 @@ const props = withDefaults(
     charAvatar: "",
     characterId: "",
     showAvatar: true,
+    showHeader: true,
+    compactBottom: false,
     readOnly: false,
   },
 );
 
 const emit = defineEmits<{
-  retry: [message: Record<string, any>];
   reply: [message: Record<string, any>];
   edit: [message: Record<string, any>];
   "scroll-to-message": [id: string];
@@ -303,6 +311,10 @@ async function handleCopy(mode: "plain" | "markdown") {
   width: 100%;
   max-width: 820px;
   margin: 0 auto 38px;
+}
+
+.amrp-message--compact-bottom {
+  margin-bottom: 10px;
 }
 
 .amrp-avatar,
@@ -542,6 +554,10 @@ async function handleCopy(mode: "plain" | "markdown") {
     grid-template-columns: 32px minmax(0, 1fr);
     gap: 9px;
     margin-bottom: 32px;
+  }
+
+  .amrp-message--compact-bottom {
+    margin-bottom: 10px;
   }
 
   .amrp-avatar,

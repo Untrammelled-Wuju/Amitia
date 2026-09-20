@@ -6,7 +6,6 @@ import 'dart:async';
 abstract final class ConversationUIAction {
   static const send = 'conversation.send';
   static const retry = 'conversation.retry';
-  static const regenerate = 'conversation.regenerate';
   static const stop = 'conversation.stop';
   static const delete = 'conversation.delete';
   static const newConversation = 'conversation.new';

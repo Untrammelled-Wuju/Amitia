@@ -188,7 +188,7 @@ class _BootstrapInstallRequiredWidgetState
 
     try {
       final bridge = ref.read(runtimeBridgeProvider);
-      final result = await bridge.install();
+      final result = await bridge.reconcileEmbedded();
       if (!mounted) return;
 
       if (result.error != null) {

@@ -90,15 +90,21 @@ MessageDto _message({
   required String requestId,
   required String createdAt,
   required int sequence,
+  String characterId = '',
+  String? responseGroupId,
+  int deliverySequence = 0,
   String reasoningContent = '',
   int reasoningDurationMs = 0,
 }) {
   return MessageDto(
     id: id,
     conversationId: 'conversation-1',
+    characterId: characterId,
     role: role,
     content: content,
     requestId: requestId,
+    responseGroupId: responseGroupId ?? requestId,
+    deliverySequence: deliverySequence,
     sequence: sequence,
     createdAt: createdAt,
     reasoningContent: reasoningContent,
@@ -168,6 +174,8 @@ void main() {
           id: 'assistant-1',
           role: 'assistant',
           content: '你好呀',
+          characterId: 'character-1',
+          deliverySequence: 1,
           requestId: requestId,
           createdAt: '2026-09-19 18:00:01',
           sequence: 2,
@@ -185,6 +193,9 @@ void main() {
     expect(controller.lastError, isNull);
     expect(controller.messages, hasLength(2));
     expect(controller.messages.last.status, MessageStatus.delivered);
+    expect(controller.messages.last.characterId, 'character-1');
+    expect(controller.messages.last.responseGroupId, isNotEmpty);
+    expect(controller.messages.last.deliverySequence, 1);
 
     controller.dispose();
   });
@@ -415,25 +426,27 @@ void main() {
     controller.dispose();
   });
 
-  test('latest completed assistant message can regenerate', () async {
+  test('assistant failures are not retryable', () async {
     final service = _FakeChatService(
       streamFactory: (_) => const Stream<ChatStreamEvent>.empty(),
       messagesFactory: (_, _) => <MessageDto>[
         _message(
-          id: 'user-regenerate',
+          id: 'user-retry',
           role: 'user',
           content: '你好',
-          requestId: 'request-regenerate',
+          requestId: 'request-retry',
           createdAt: '2026-09-20 10:00:00',
           sequence: 1,
         ),
-        _message(
-          id: 'assistant-regenerate',
+        MessageDto(
+          id: 'assistant-retry',
+          conversationId: 'conversation-1',
           role: 'assistant',
-          content: '你好呀',
-          requestId: 'request-regenerate',
+          content: '',
+          requestId: 'request-retry',
           createdAt: '2026-09-20 10:00:01',
           sequence: 2,
+          status: 'failed',
         ),
       ],
     );
@@ -444,47 +457,94 @@ void main() {
 
     await controller.openConversation('conversation-1');
 
-    expect(controller.canRegenerateMessage(0), isFalse);
-    expect(controller.canRegenerateMessage(1), isTrue);
+    expect(controller.canRetryMessage(0), isFalse);
+    expect(controller.canRetryMessage(1), isFalse);
 
     controller.dispose();
   });
 
-  test(
-    'reasoning duration falls back to message interval when missing',
-    () async {
-      final service = _FakeChatService(
-        streamFactory: (_) => const Stream<ChatStreamEvent>.empty(),
-        messagesFactory: (_, _) => <MessageDto>[
-          _message(
-            id: 'user-duration',
-            role: 'user',
-            content: '你好',
-            requestId: 'request-duration',
-            createdAt: '2026-09-20 10:00:00.000',
-            sequence: 1,
-          ),
-          _message(
-            id: 'assistant-duration',
-            role: 'assistant',
-            content: '你好呀',
-            requestId: 'request-duration',
-            createdAt: '2026-09-20 10:00:02.850',
-            sequence: 2,
-            reasoningContent: '思考内容',
-          ),
-        ],
-      );
-      final controller = ConversationRuntimeController(
-        service,
-        _FakeEmoteService(),
-      );
+  test('missing backend reasoning duration stays unset', () async {
+    final service = _FakeChatService(
+      streamFactory: (_) => const Stream<ChatStreamEvent>.empty(),
+      messagesFactory: (_, _) => <MessageDto>[
+        _message(
+          id: 'user-duration',
+          role: 'user',
+          content: '你好',
+          requestId: 'request-duration',
+          createdAt: '2026-09-20 10:00:00.000',
+          sequence: 1,
+        ),
+        _message(
+          id: 'assistant-duration',
+          role: 'assistant',
+          content: '你好呀',
+          requestId: 'request-duration',
+          createdAt: '2026-09-20 10:00:02.850',
+          sequence: 2,
+          reasoningContent: '思考内容',
+        ),
+      ],
+    );
+    final controller = ConversationRuntimeController(
+      service,
+      _FakeEmoteService(),
+    );
 
-      await controller.openConversation('conversation-1');
+    await controller.openConversation('conversation-1');
 
-      expect(controller.messages.last.reasoningDurationMs, 2850);
+    expect(controller.messages.last.reasoningDurationMs, 0);
 
-      controller.dispose();
-    },
-  );
+    controller.dispose();
+  });
+
+  test('live reasoning duration uses API duration only', () async {
+    final service = _FakeChatService(
+      streamFactory: (requestId) async* {
+        yield ChatStreamEvent('message_start', <String, dynamic>{
+          'conversationId': 'conversation-1',
+          'userMessageId': 'user-live',
+          'reasoningContent': '思考内容',
+          'reasoningDurationMs': 2850,
+        });
+        await Future<void>.delayed(const Duration(milliseconds: 30));
+        yield ChatStreamEvent('token', <String, dynamic>{
+          'id': 'assistant-live',
+          'conversationId': 'conversation-1',
+          'role': 'assistant',
+          'content': '回复',
+          'createdAt': '2026-09-20 10:00:02.850',
+        });
+      },
+      messagesFactory: (_, _) => <MessageDto>[
+        _message(
+          id: 'user-live',
+          role: 'user',
+          content: '你好',
+          requestId: 'request-live',
+          createdAt: '2026-09-20 10:00:00.000',
+          sequence: 1,
+        ),
+        _message(
+          id: 'assistant-live',
+          role: 'assistant',
+          content: '回复',
+          requestId: 'request-live',
+          createdAt: '2026-09-20 10:00:02.850',
+          sequence: 2,
+          reasoningContent: '思考内容',
+        ),
+      ],
+    );
+    final controller = ConversationRuntimeController(
+      service,
+      _FakeEmoteService(),
+    );
+
+    await controller.sendText('你好');
+
+    expect(controller.messages.last.reasoningDurationMs, 2850);
+
+    controller.dispose();
+  });
 }

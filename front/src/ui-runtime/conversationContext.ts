@@ -4,7 +4,6 @@ export interface ConversationUIActions {
   send(input: { text?: string; imageBase64?: string | null; audioUrl?: string | null; videoUrl?: string | null }): Promise<void>;
   stop(): Promise<void> | void;
   retry(messageId: string): Promise<void> | void;
-  regenerate?(messageId?: string): Promise<void> | void;
   delete?(messageId: string): Promise<void> | void;
   createConversation?(): Promise<void> | void;
 }

@@ -33,14 +33,12 @@ SPDX-License-Identifier: AGPL-3.0-only
       :char-avatar="charAvatar"
       :char-identity="charIdentity"
       :conv-title="convTitle"
-      :can-regenerate="canRegenerate"
       :messages-count="messages.length"
       :conv-id="convId"
       :show-profiles="showProfiles"
       :show-mem-inject="showMemInject"
       :call-active="callActive"
       :has-summary="!!convSummary"
-      @regenerate="handleRegenerate"
       @clear="handleClear"
       @view-memories="handleViewMemories"
       @toggle-char-picker="showCharPicker = true"
@@ -97,6 +95,7 @@ SPDX-License-Identifier: AGPL-3.0-only
         :pull-ready="pullReady"
         :pull-loading="pullLoading"
         :pull-text="pullText"
+        :characters="characters"
         :extension-context="chatExtensionContext"
         :provider-actions="conversationHostActions"
         @scroll="onScroll"
@@ -322,7 +321,6 @@ const conversationProviderContext = computed(() => ({
   sending: sending.value,
   generating: generating.value,
   offline: isOffline.value,
-  canRegenerate: canRegenerate.value,
 }));
 function hasSlotExtensions(slotId: string): boolean {
   browserClientPluginRuntime.slots.revision.value;
@@ -501,7 +499,6 @@ const {
 );
 
 const {
-  canRegenerate,
   onImageAttached,
   onImageRemoved,
   onVideoAttached,
@@ -512,7 +509,6 @@ const {
   handleSend,
   handleStop,
   handleRetry,
-  handleRegenerate,
   handleClear,
   getLastPolledMsgId,
   generating,
@@ -578,7 +574,6 @@ const conversationHostActions: Record<string, (input?: any) => unknown | Promise
   "conversation.send": async (input) => handleSend(String(input?.text ?? input ?? ""), input?.imageBase64, input?.videoBase64),
   "conversation.stop": async () => handleStop(),
   "conversation.retry": async (input) => { const id = String(input?.messageId ?? input ?? ""); const msg = messages.value.find((item) => item.id === id); if (msg) await handleRetry(msg); },
-  "conversation.regenerate": async () => handleRegenerate(),
   "conversation.delete": async (input) => deleteConversationMessage(String(input?.messageId ?? input ?? "")),
   "conversation.new": async () => handleNewChat(),
   "conversation.clear": async () => handleClear(),
@@ -709,7 +704,6 @@ provideConversationUIContext({
       const index = messages.value.findIndex((item) => item.id === messageId);
       if (index >= 0) await handleRetry(messages.value[index]);
     },
-    async regenerate() { await handleRegenerate(); },
     async createConversation() { await handleNewChat(); },
   },
 });

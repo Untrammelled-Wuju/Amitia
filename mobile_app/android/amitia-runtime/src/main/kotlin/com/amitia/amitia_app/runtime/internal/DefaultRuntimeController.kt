@@ -1713,7 +1713,7 @@ internal class DefaultRuntimeController(
             val installResult = installer.install(
                 com.amitia.amitia_app.runtime.install.RuntimeInstallRequest(
                     packageFile = java.io.File(packageUri),
-                    expectedRuntimeVersion = before.runtimeVersion,
+                    expectedRuntimeVersion = request.expectedVersion ?: before.runtimeVersion,
                     allowRepairExisting = true,
                 )
             )
