@@ -102,26 +102,14 @@ class _AppShellState extends ConsumerState<AppShell> {
   }
 }
 
-final goRouterProvider = Provider<GoRouter>((ref) {
-  // Recreate GoRouter only when the effective extension route table changes.
-  // Theme/profile polling must not destroy the active navigation stack.
-  ref.watch(
-    uiRuntimeProvider.select((state) => uiRouteRegistrySignature(state.valueOrNull)),
-  );
-  final providerSnapshot = ref.read(uiRuntimeProvider).valueOrNull;
-  return GoRouter(
-    initialLocation: AppRoutes.chat,
-    navigatorKey: appNavigatorKey,
+RoutingConfig _routingConfigFor(UIProviderSnapshot? providerSnapshot) {
+  return RoutingConfig(
     redirect: (context, state) async {
       final location = state.matchedLocation;
-
       if (location == '/about') return '/settings/about';
       if (location == '/toolbox') return '/settings/toolbox';
-
       return null;
     },
-    errorBuilder: (context, state) =>
-        NotFoundPage(attemptedPath: state.uri.toString()),
     routes: <RouteBase>[
       GoRoute(path: '/', redirect: (context, state) => AppRoutes.chat),
       GoRoute(
@@ -170,10 +158,7 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           );
           return MobileExtensionSlot(
             slotId: 'root',
-            context: {
-              'route': state.matchedLocation,
-              'surfaceRole': 'main',
-            },
+            context: {'route': state.matchedLocation, 'surfaceRole': 'main'},
             fallback: shell,
           );
         },
@@ -183,5 +168,31 @@ final goRouterProvider = Provider<GoRouter>((ref) {
         ],
       ),
     ],
+  );
+}
+
+final goRouterProvider = Provider<GoRouter>((ref) {
+  final initialSnapshot = ref.read(uiRuntimeProvider).valueOrNull;
+  final routingConfig = ValueNotifier<RoutingConfig>(
+    _routingConfigFor(initialSnapshot),
+  );
+  ref.onDispose(routingConfig.dispose);
+  ref.listen<String>(
+    uiRuntimeProvider.select(
+      (state) => uiRouteRegistrySignature(state.valueOrNull),
+    ),
+    (previous, next) {
+      if (previous == next) return;
+      routingConfig.value = _routingConfigFor(
+        ref.read(uiRuntimeProvider).valueOrNull,
+      );
+    },
+  );
+  return GoRouter.routingConfig(
+    routingConfig: routingConfig,
+    initialLocation: AppRoutes.chat,
+    navigatorKey: appNavigatorKey,
+    errorBuilder: (context, state) =>
+        NotFoundPage(attemptedPath: state.uri.toString()),
   );
 });

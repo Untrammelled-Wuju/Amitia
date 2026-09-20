@@ -207,18 +207,30 @@ final desktopPetMobileRuntimeProvider = StateNotifierProvider<
 /// Keeps the Android Runtime V1 renderer attached to the embedded Device Agent
 /// even when the desktop-pet page is not open.
 final desktopPetMobileRuntimeBootstrapProvider = Provider<int?>((ref) {
-  if (kIsWeb || !Platform.isAndroid) {
-    ref.read(desktopPetMobileRuntimeProvider.notifier).attach(null);
-    return null;
-  }
-  final localConnection = ref.watch(deviceLocalBackendConnectionProvider).valueOrNull;
+  if (kIsWeb || !Platform.isAndroid) return null;
+
+  final localConnection = ref.watch(deviceLocalBackendConnectionProvider);
   final notifier = ref.read(desktopPetMobileRuntimeProvider.notifier);
-  if (localConnection is! BackendConnectionAvailable) {
-    notifier.attach(null);
-    return null;
+
+  void scheduleAttach(AsyncValue<BackendConnectionAvailability> connection) {
+    Future.microtask(() {
+      final value = connection.valueOrNull;
+      notifier.attach(
+        value is BackendConnectionAvailable ? value.config : null,
+      );
+    });
   }
-  notifier.attach(localConnection.config);
-  return localConnection.config.generation;
+
+  ref.listen<AsyncValue<BackendConnectionAvailability>>(
+    deviceLocalBackendConnectionProvider,
+    (previous, next) => scheduleAttach(next),
+    fireImmediately: true,
+  );
+
+  final current = localConnection.valueOrNull;
+  return current is BackendConnectionAvailable
+      ? current.config.generation
+      : null;
 });
 
 class DesktopPetMobileRuntimeNotifier

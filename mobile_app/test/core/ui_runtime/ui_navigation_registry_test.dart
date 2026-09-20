@@ -1,6 +1,7 @@
 import 'package:amitia_app/app/app_routes.dart';
 import 'package:amitia_app/core/ui_runtime/ui_navigation_registry.dart';
 import 'package:amitia_app/core/ui_runtime/ui_provider.dart';
+import 'package:amitia_app/core/ui_runtime/ui_route_registry.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 UIProviderDefinition _provider({
@@ -82,6 +83,11 @@ UIProviderDefinition _routes({
 }
 
 void main() {
+  test('empty provider route tables keep the builtin router signature', () {
+    expect(uiRouteRegistrySignature(null), 'builtin');
+    expect(uiRouteRegistrySignature(_snapshot(const [])), 'builtin');
+  });
+
   test('shows channel messages only when a channel presentation exists', () {
     final empty = UINavigationRegistry.resolve(_snapshot(const []));
     expect(

@@ -14,8 +14,8 @@ class ProviderRouteUnavailable extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-        body: Center(child: Text('UI provider unavailable: $providerId')),
-      );
+    body: Center(child: Text('UI provider unavailable: $providerId')),
+  );
 }
 
 const _protectedRouteNamespaces = <String>{
@@ -45,7 +45,9 @@ String? _rootNamespace(String path) {
   final normalized = path.trim();
   if (!normalized.startsWith('/') || normalized == '/') return null;
   final segment = normalized.substring(1).split('/').first.trim();
-  if (segment.isEmpty || segment.startsWith(':') || segment.contains('*')) return null;
+  if (segment.isEmpty || segment.startsWith(':') || segment.contains('*')) {
+    return null;
+  }
   return '/$segment';
 }
 
@@ -69,7 +71,9 @@ bool _hasSafeProviderRouteSyntax(String path) {
   return normalized
       .substring(1)
       .split('/')
-      .every((segment) => segment.isNotEmpty && segment != '.' && segment != '..');
+      .every(
+        (segment) => segment.isNotEmpty && segment != '.' && segment != '..',
+      );
 }
 
 class _ProviderRouteSpec {
@@ -91,17 +95,22 @@ class _ProviderRouteSpec {
 
 List<UIProviderDefinition> _activeRegistries(UIProviderSnapshot snapshot) {
   final platform = currentUIPlatform();
-  final providers = snapshot.providers
-      .where((provider) =>
-          provider.enabled &&
-          !provider.builtin &&
-          provider.capability == UICapability.routeRegistry &&
-          provider.compatibleWith(snapshot.context, platform))
-      .toList()
-    ..sort((a, b) {
-      final priority = b.priority.compareTo(a.priority);
-      return priority != 0 ? priority : a.providerId.compareTo(b.providerId);
-    });
+  final providers =
+      snapshot.providers
+          .where(
+            (provider) =>
+                provider.enabled &&
+                !provider.builtin &&
+                provider.capability == UICapability.routeRegistry &&
+                provider.compatibleWith(snapshot.context, platform),
+          )
+          .toList()
+        ..sort((a, b) {
+          final priority = b.priority.compareTo(a.priority);
+          return priority != 0
+              ? priority
+              : a.providerId.compareTo(b.providerId);
+        });
   return providers;
 }
 
@@ -117,7 +126,9 @@ List<_ProviderRouteSpec> _routeSpecs(UIProviderSnapshot snapshot) {
       final id = (row['id'] ?? '').toString().trim();
       final path = (row['path'] ?? '').toString().trim();
       final providerId = (row['providerId'] ?? '').toString().trim();
-      final capability = (row['capability'] ?? UICapability.pageProvider).toString().trim();
+      final capability = (row['capability'] ?? UICapability.pageProvider)
+          .toString()
+          .trim();
       if (id.isEmpty ||
           providerId.isEmpty ||
           !_hasSafeProviderRouteSyntax(path) ||
@@ -125,7 +136,9 @@ List<_ProviderRouteSpec> _routeSpecs(UIProviderSnapshot snapshot) {
           isProtectedProviderRoutePath(path)) {
         continue;
       }
-      final target = snapshot.providers.where((p) => p.providerId == providerId).firstOrNull;
+      final target = snapshot.providers
+          .where((p) => p.providerId == providerId)
+          .firstOrNull;
       if (target == null ||
           target.extensionId != registry.extensionId ||
           target.capability != capability ||
@@ -134,14 +147,18 @@ List<_ProviderRouteSpec> _routeSpecs(UIProviderSnapshot snapshot) {
         continue;
       }
       final rawPriority = row['priority'];
-      specs.add(_ProviderRouteSpec(
-        registry: registry,
-        id: id,
-        path: path,
-        providerId: providerId,
-        capability: capability,
-        priority: rawPriority is num ? rawPriority.toInt() : registry.priority,
-      ));
+      specs.add(
+        _ProviderRouteSpec(
+          registry: registry,
+          id: id,
+          path: path,
+          providerId: providerId,
+          capability: capability,
+          priority: rawPriority is num
+              ? rawPriority.toInt()
+              : registry.priority,
+        ),
+      );
     }
   }
   specs.sort((a, b) {
@@ -158,29 +175,34 @@ List<_ProviderRouteSpec> _routeSpecs(UIProviderSnapshot snapshot) {
 
 /// Keys for routes that survived compatibility, ownership, core-namespace and
 /// path-conflict checks. Used by navigation registries to hide stale links.
-Set<String> effectiveProviderRouteKeys(UIProviderSnapshot snapshot) => _routeSpecs(snapshot)
-    .map((spec) => '${spec.registry.providerId}\u0000${spec.path}')
-    .toSet();
+Set<String> effectiveProviderRouteKeys(UIProviderSnapshot snapshot) =>
+    _routeSpecs(
+      snapshot,
+    ).map((spec) => '${spec.registry.providerId}\u0000${spec.path}').toSet();
 
-Set<String> effectiveExtensionRouteKeys(UIProviderSnapshot snapshot) => _routeSpecs(snapshot)
-    .map((spec) => '${spec.registry.extensionId}\u0000${spec.path}')
-    .toSet();
+Set<String> effectiveExtensionRouteKeys(UIProviderSnapshot snapshot) =>
+    _routeSpecs(
+      snapshot,
+    ).map((spec) => '${spec.registry.extensionId}\u0000${spec.path}').toSet();
 
 /// Stable signature used by the router provider. Snapshot/theme refreshes do not
 /// recreate GoRouter unless the effective extension route table actually changes.
 String uiRouteRegistrySignature(UIProviderSnapshot? snapshot) {
   if (snapshot == null) return 'builtin';
   final rows = _routeSpecs(snapshot)
-      .map((spec) => <String, Object?>{
-            'registry': spec.registry.providerId,
-            'generation': spec.registry.generation,
-            'id': spec.id,
-            'path': spec.path,
-            'providerId': spec.providerId,
-            'capability': spec.capability,
-            'priority': spec.priority,
-          })
+      .map(
+        (spec) => <String, Object?>{
+          'registry': spec.registry.providerId,
+          'generation': spec.registry.generation,
+          'id': spec.id,
+          'path': spec.path,
+          'providerId': spec.providerId,
+          'capability': spec.capability,
+          'priority': spec.priority,
+        },
+      )
       .toList(growable: false);
+  if (rows.isEmpty) return 'builtin';
   return jsonEncode(rows);
 }
 
@@ -188,24 +210,28 @@ String uiRouteRegistrySignature(UIProviderSnapshot? snapshot) {
 /// are deterministic: higher route/provider priority wins and core paths are protected.
 List<RouteBase> buildProviderRoutes(UIProviderSnapshot? snapshot) {
   if (snapshot == null) return const <RouteBase>[];
-  return _routeSpecs(snapshot).map((spec) {
-    final routeName = 'ui-provider-${spec.registry.extensionId}-${spec.registry.providerId}-${spec.id}'.replaceAll(':', '-');
-    return GoRoute(
-      name: routeName,
-      path: spec.path,
-      builder: (context, state) => UIProviderHost(
-        capability: spec.capability,
-        providerId: spec.providerId,
-        context: <String, dynamic>{
-          'route': state.uri.toString(),
-          'pathParameters': state.pathParameters,
-          'queryParameters': state.uri.queryParameters,
-          'routeRegistryProviderId': spec.registry.providerId,
-        },
-        fallback: ProviderRouteUnavailable(providerId: spec.providerId),
-      ),
-    );
-  }).toList(growable: false);
+  return _routeSpecs(snapshot)
+      .map((spec) {
+        final routeName =
+            'ui-provider-${spec.registry.extensionId}-${spec.registry.providerId}-${spec.id}'
+                .replaceAll(':', '-');
+        return GoRoute(
+          name: routeName,
+          path: spec.path,
+          builder: (context, state) => UIProviderHost(
+            capability: spec.capability,
+            providerId: spec.providerId,
+            context: <String, dynamic>{
+              'route': state.uri.toString(),
+              'pathParameters': state.pathParameters,
+              'queryParameters': state.uri.queryParameters,
+              'routeRegistryProviderId': spec.registry.providerId,
+            },
+            fallback: ProviderRouteUnavailable(providerId: spec.providerId),
+          ),
+        );
+      })
+      .toList(growable: false);
 }
 
 extension _FirstOrNull<T> on Iterable<T> {

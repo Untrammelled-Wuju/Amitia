@@ -8,18 +8,15 @@ Widget backTargetTransition({
   required Widget child,
 }) {
   final transition = CurvedAnimation(
-    parent: ReverseAnimation(secondaryAnimation),
-    curve: AppMotion.enterCurve,
-    reverseCurve: AppMotion.exitCurve,
+    parent: secondaryAnimation,
+    curve: AppMotion.exitCurve,
+    reverseCurve: AppMotion.enterCurve,
   );
   final slide = Tween<Offset>(
-    begin: const Offset(-0.08, 0),
-    end: Offset.zero,
+    begin: Offset.zero,
+    end: const Offset(-0.08, 0),
   ).animate(transition);
-  return FadeTransition(
-    opacity: transition,
-    child: SlideTransition(position: slide, child: child),
-  );
+  return SlideTransition(position: slide, child: child);
 }
 
 CustomTransitionPage<T> slideFadePage<T>({
