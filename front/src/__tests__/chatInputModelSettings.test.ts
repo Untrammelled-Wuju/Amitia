@@ -94,11 +94,11 @@ describe("ChatInput model settings", () => {
     state.applyReasoningIndex(3);
     expect(commit).toHaveBeenLastCalledWith(2, "xhigh", true);
     await wrapper.vm.$nextTick();
-    expect(state.reasoningActiveWidth).toBe("100%");
+    expect(state.reasoningActiveWidth).toBe("calc(100% - 16px)");
 
     state.applyReasoningIndex(0);
     await wrapper.vm.$nextTick();
-    expect(state.reasoningActiveWidth).toBe("0%");
+    expect(state.reasoningActiveWidth).toBe("16px");
   });
 
   it("keeps popup content visible after switching to the model page", async () => {

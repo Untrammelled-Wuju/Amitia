@@ -895,7 +895,12 @@ const reasoningMarkerOffsets = [
   "calc(66.667% - 10.667px)",
   "calc(100% - 32px)",
 ];
-const reasoningTrackWidths = ["0%", "33.333%", "66.667%", "100%"];
+const reasoningTrackWidths = [
+  "16px",
+  "calc(16px + (100% - 32px) * 0.333333)",
+  "calc(16px + (100% - 32px) * 0.666667)",
+  "calc(100% - 16px)",
+];
 const reasoningLabels: Record<string, string> = {
   low: "低",
   medium: "中",
