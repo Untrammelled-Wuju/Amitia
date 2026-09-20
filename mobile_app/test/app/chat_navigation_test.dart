@@ -86,50 +86,50 @@ void main() {
         scaffolds.where((widget) => widget.resizeToAvoidBottomInset == false),
         hasLength(1),
       );
-      expect(tester.getBottomRight(composerSurface).dy, closeTo(764, 0.01));
+      expect(tester.getBottomRight(composerSurface).dy, closeTo(766, 0.01));
 
       tester.view.viewInsets = const FakeViewPadding(bottom: 8);
       tester.view.padding = const FakeViewPadding(bottom: 16);
       await tester.pump();
-      expect(tester.getBottomRight(composerSurface).dy, closeTo(764, 0.01));
+      expect(tester.getBottomRight(composerSurface).dy, closeTo(766, 0.01));
 
       tester.view.viewInsets = const FakeViewPadding(bottom: 20);
       tester.view.padding = const FakeViewPadding(bottom: 4);
       await tester.pump();
-      expect(tester.getBottomRight(composerSurface).dy, closeTo(764, 0.01));
+      expect(tester.getBottomRight(composerSurface).dy, closeTo(766, 0.01));
 
       tester.view.viewInsets = const FakeViewPadding(bottom: 60);
       tester.view.padding = FakeViewPadding.zero;
       await tester.pump();
-      expect(tester.getBottomRight(composerSurface).dy, closeTo(728, 0.01));
+      expect(tester.getBottomRight(composerSurface).dy, closeTo(730, 0.01));
 
       tester.view.viewInsets = const FakeViewPadding(bottom: 120);
       await tester.pump();
-      expect(tester.getBottomRight(composerSurface).dy, closeTo(668, 0.01));
+      expect(tester.getBottomRight(composerSurface).dy, closeTo(670, 0.01));
 
       tester.view.viewInsets = const FakeViewPadding(bottom: 260);
       await tester.pump();
-      expect(tester.getBottomRight(composerSurface).dy, closeTo(528, 0.01));
+      expect(tester.getBottomRight(composerSurface).dy, closeTo(530, 0.01));
 
       await tester.pump(const Duration(milliseconds: 400));
-      expect(tester.getBottomRight(composerSurface).dy, closeTo(528, 0.01));
+      expect(tester.getBottomRight(composerSurface).dy, closeTo(530, 0.01));
 
       tester.view.viewInsets = const FakeViewPadding(bottom: 120);
       await tester.pump();
-      expect(tester.getBottomRight(composerSurface).dy, closeTo(668, 0.01));
+      expect(tester.getBottomRight(composerSurface).dy, closeTo(670, 0.01));
 
       tester.view.viewInsets = const FakeViewPadding(bottom: 20);
       tester.view.padding = const FakeViewPadding(bottom: 4);
       await tester.pump();
-      expect(tester.getBottomRight(composerSurface).dy, closeTo(764, 0.01));
+      expect(tester.getBottomRight(composerSurface).dy, closeTo(766, 0.01));
 
       tester.view.viewInsets = FakeViewPadding.zero;
       tester.view.padding = const FakeViewPadding(bottom: 24);
       await tester.pump();
-      expect(tester.getBottomRight(composerSurface).dy, closeTo(764, 0.01));
+      expect(tester.getBottomRight(composerSurface).dy, closeTo(766, 0.01));
 
       await tester.pump(const Duration(milliseconds: 300));
-      expect(tester.getBottomRight(composerSurface).dy, closeTo(764, 0.01));
+      expect(tester.getBottomRight(composerSurface).dy, closeTo(766, 0.01));
     },
   );
 

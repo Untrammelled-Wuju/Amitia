@@ -2173,6 +2173,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       resizeToAvoidBottomInset: false,
       body: Stack(
         key: const ValueKey('ime-single-scaffold-20260805-0325'),
+        fit: StackFit.expand,
         children: [
           Positioned.fill(
             child: SafeArea(

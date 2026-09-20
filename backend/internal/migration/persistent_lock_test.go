@@ -44,6 +44,39 @@ func TestPersistentLockOnlyOneOwner(t *testing.T) {
 	}
 }
 
+func TestPersistentLockWaitsForActiveLeaseRelease(t *testing.T) {
+	db := newPersistentLockTestDB(t)
+	lockDir := t.TempDir()
+	first := NewPersistentLock(db, lockDir)
+	second := NewPersistentLock(db, lockDir)
+
+	if err := first.Acquire(context.Background(), "desktop-pet", time.Minute); err != nil {
+		t.Fatalf("first acquire: %v", err)
+	}
+	result := make(chan error, 1)
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		result <- second.Acquire(ctx, "desktop-pet", time.Minute)
+	}()
+
+	time.Sleep(300 * time.Millisecond)
+	if err := first.Release("desktop-pet"); err != nil {
+		t.Fatalf("first release: %v", err)
+	}
+	select {
+	case err := <-result:
+		if err != nil {
+			t.Fatalf("second acquire after release: %v", err)
+		}
+	case <-time.After(4 * time.Second):
+		t.Fatal("second acquire did not resume after lease release")
+	}
+	if err := second.Release("desktop-pet"); err != nil {
+		t.Fatalf("second release: %v", err)
+	}
+}
+
 func TestPersistentLockRecoversCrashAfterLeaseExpiry(t *testing.T) {
 	db := newPersistentLockTestDB(t)
 	lockDir := t.TempDir()
