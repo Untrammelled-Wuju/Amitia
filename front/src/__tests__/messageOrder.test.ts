@@ -4,6 +4,7 @@ import {
   hasAssistantReplyAfterLatestUser,
   parseMessageTime,
   mergeChatMessage,
+  upsertStreamingAssistantMessage,
 } from "@/utils/message-order";
 import { compareTimeline } from "@/ui-runtime/conversationProjection";
 
@@ -174,5 +175,32 @@ describe("聊天时间线渲染顺序", () => {
     expect(mergeChatMessage(messages, incoming)).toBe(true);
     expect(messages[0]!.sequence).toBe(7);
     expect(messages[0]!.content).toBe("new");
+  });
+
+  it("流式助手消息按服务端ID原地更新而不是重复插入", () => {
+    const messages: any[] = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        content: "你好",
+        status: "sent",
+      },
+    ];
+
+    const index = upsertStreamingAssistantMessage(
+      messages,
+      {
+        id: "assistant-1",
+        role: "assistant",
+        content: "你好",
+        status: "streaming",
+      },
+      null,
+    );
+
+    expect(index).toBe(0);
+    expect(messages).toHaveLength(1);
+    expect(messages[0]!.content).toBe("你好");
+    expect(messages[0]!.status).toBe("streaming");
   });
 });
