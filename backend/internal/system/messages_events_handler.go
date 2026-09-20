@@ -84,5 +84,7 @@ func (h *Handler) MessagesEventsStream(c *gin.Context) {
 }
 
 func isAssistantMessageEvent(event MessageEvent) bool {
-	return event.Role == "assistant" || event.Type == EventAssistantTurnCompleted
+	return event.Role == "assistant" ||
+		event.Type == EventAssistantTurnCompleted ||
+		event.Type == EventAssistantTurnStream
 }

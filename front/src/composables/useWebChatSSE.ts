@@ -40,6 +40,7 @@ export function useWebChatSSE(
   scrollToBottom: (smooth?: boolean) => void,
   sending: Ref<boolean>,
   onAssistantTurnCompleted?: (conversationId: string, turnId: string) => void,
+  onAssistantTurnStream?: (event: Record<string, any>) => void,
 ) {
   let eventAbortController: AbortController | null = null;
   let lastPolledMsgId: string | null = null;
@@ -220,6 +221,12 @@ export function useWebChatSSE(
               onAssistantTurnCompleted?.(
                 String(payload.conversationId ?? ""),
                 String(payload?.data?.turnId ?? payload.messageId ?? ""),
+              );
+            } catch {}
+          } else if (data && type === "assistant_turn_stream") {
+            try {
+              onAssistantTurnStream?.(
+                JSON.parse(data) as Record<string, any>,
               );
             } catch {}
           }

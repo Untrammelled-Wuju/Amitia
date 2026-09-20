@@ -304,7 +304,7 @@ const showImportDetail = ref(false);
 const convSummary = ref("");
 const showSummaryDrawer = ref(false);
 const replyTarget = ref<any>(null);
-const { applyTurns, loadTurns } = useAssistantTurns(convId, messages);
+const { applyTurns, loadTurns, applyRealtimeStreamEvent } = useAssistantTurns(convId, messages);
 const llmModels = ref<any[]>([]);
 const selectedModelId = ref(0);
 const selectedReasoningEffort = ref("high");
@@ -665,6 +665,7 @@ const {
     if (conversationId && conversationId !== convId.value) return;
     void loadTurns();
   },
+  applyRealtimeStreamEvent,
 );
 
 const {

@@ -75,6 +75,29 @@ type AssistantTurnEvent struct {
 
 func (AssistantTurnEvent) TableName() string { return "assistant_turn_events" }
 
+type AssistantTurnStreamEvent struct {
+	EventType      string             `json:"eventType"`
+	TurnID         string             `json:"turnId"`
+	ConversationID string             `json:"conversationId"`
+	Channel        string             `json:"channel,omitempty"`
+	RequestID      string             `json:"requestId,omitempty"`
+	Status         string             `json:"status,omitempty"`
+	Item           *AssistantTurnItem `json:"item,omitempty"`
+}
+
+var assistantTurnStreamPublisher func(AssistantTurnStreamEvent)
+
+func SetAssistantTurnStreamPublisher(publisher func(AssistantTurnStreamEvent)) {
+	assistantTurnStreamPublisher = publisher
+}
+
+func publishAssistantTurnStreamEvent(event AssistantTurnStreamEvent) {
+	if assistantTurnStreamPublisher == nil {
+		return
+	}
+	assistantTurnStreamPublisher(event)
+}
+
 type assistantTurnRecorder struct {
 	db             *gorm.DB
 	TurnID         string
@@ -82,10 +105,11 @@ type assistantTurnRecorder struct {
 	CharacterID    string
 	UserMessageID  string
 	RequestID      string
+	Channel        string
 	enabled        bool
 }
 
-func newAssistantTurnRecorder(db *gorm.DB, conversationID, characterID, userMessageID, requestID string) *assistantTurnRecorder {
+func newAssistantTurnRecorder(db *gorm.DB, conversationID, characterID, userMessageID, requestID, channel string) *assistantTurnRecorder {
 	return &assistantTurnRecorder{
 		db:             db,
 		TurnID:         uuid.NewString(),
@@ -93,6 +117,7 @@ func newAssistantTurnRecorder(db *gorm.DB, conversationID, characterID, userMess
 		CharacterID:    strings.TrimSpace(characterID),
 		UserMessageID:  strings.TrimSpace(userMessageID),
 		RequestID:      strings.TrimSpace(requestID),
+		Channel:        strings.TrimSpace(channel),
 	}
 }
 
@@ -107,7 +132,7 @@ func (r *assistantTurnRecorder) Start(ctx context.Context) error {
 	}
 	r.enabled = true
 	now := nowString()
-	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var sequence int64
 		if err := tx.Model(&AssistantTurn{}).Where("conversation_id = ?", r.ConversationID).Select("COALESCE(MAX(sequence), 0) + 1").Scan(&sequence).Error; err != nil {
 			return err
@@ -132,6 +157,18 @@ func (r *assistantTurnRecorder) Start(ctx context.Context) error {
 			"requestId":      r.RequestID,
 		}, now)
 	})
+	if err != nil {
+		return err
+	}
+	publishAssistantTurnStreamEvent(AssistantTurnStreamEvent{
+		EventType:      "turn.started",
+		TurnID:         r.TurnID,
+		ConversationID: r.ConversationID,
+		Channel:        r.Channel,
+		RequestID:      r.RequestID,
+		Status:         assistantTurnStatusRunning,
+	})
+	return nil
 }
 
 func (r *assistantTurnRecorder) AddThinking(ctx context.Context, content string, durationMS int64) error {
@@ -194,6 +231,24 @@ func (r *assistantTurnRecorder) AddToolResult(ctx context.Context, callID, toolN
 	}).Error; err != nil {
 		return err
 	}
+	var toolCallItem AssistantTurnItem
+	if err := r.db.WithContext(ctx).Where(
+		"turn_id = ? AND item_type = ? AND call_id = ?",
+		r.TurnID,
+		assistantTurnItemToolCall,
+		strings.TrimSpace(callID),
+	).First(&toolCallItem).Error; err != nil {
+		return err
+	}
+	publishAssistantTurnStreamEvent(AssistantTurnStreamEvent{
+		EventType:      "item.updated",
+		TurnID:         r.TurnID,
+		ConversationID: r.ConversationID,
+		Channel:        r.Channel,
+		RequestID:      r.RequestID,
+		Status:         assistantTurnStatusRunning,
+		Item:           &toolCallItem,
+	})
 	return r.addItem(ctx, AssistantTurnItem{
 		ItemType:   assistantTurnItemToolResult,
 		Status:     status,
@@ -214,11 +269,22 @@ func (r *assistantTurnRecorder) Finalize(ctx context.Context, status string) err
 		status = assistantTurnStatusCompleted
 	}
 	now := nowString()
-	return r.db.WithContext(ctx).Model(&AssistantTurn{}).Where("id = ?", r.TurnID).Updates(map[string]any{
+	if err := r.db.WithContext(ctx).Model(&AssistantTurn{}).Where("id = ?", r.TurnID).Updates(map[string]any{
 		"status":       status,
 		"updated_at":   now,
 		"completed_at": now,
-	}).Error
+	}).Error; err != nil {
+		return err
+	}
+	publishAssistantTurnStreamEvent(AssistantTurnStreamEvent{
+		EventType:      "turn.updated",
+		TurnID:         r.TurnID,
+		ConversationID: r.ConversationID,
+		Channel:        r.Channel,
+		RequestID:      r.RequestID,
+		Status:         status,
+	})
+	return nil
 }
 
 func (r *assistantTurnRecorder) addItem(ctx context.Context, item AssistantTurnItem) error {
@@ -226,23 +292,41 @@ func (r *assistantTurnRecorder) addItem(ctx context.Context, item AssistantTurnI
 		return nil
 	}
 	now := nowString()
-	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		item.ID = uuid.NewString()
 		item.TurnID = r.TurnID
 		item.ConversationID = r.ConversationID
 		item.CreatedAt = now
 		item.UpdatedAt = now
-		return appendAssistantTurnItemTx(tx, item)
+		return appendAssistantTurnItemTx(tx, &item)
 	})
+	if err != nil {
+		return err
+	}
+	eventType := "item.completed"
+	if item.Status == "running" || item.Status == "pending" || item.Status == "queued" {
+		eventType = "item.started"
+	}
+	itemCopy := item
+	publishAssistantTurnStreamEvent(AssistantTurnStreamEvent{
+		EventType:      eventType,
+		TurnID:         r.TurnID,
+		ConversationID: r.ConversationID,
+		Channel:        r.Channel,
+		RequestID:      r.RequestID,
+		Status:         assistantTurnStatusRunning,
+		Item:           &itemCopy,
+	})
+	return nil
 }
 
-func appendAssistantTurnItemTx(tx *gorm.DB, item AssistantTurnItem) error {
+func appendAssistantTurnItemTx(tx *gorm.DB, item *AssistantTurnItem) error {
 	var sequence int64
 	if err := tx.Model(&AssistantTurnItem{}).Where("turn_id = ?", item.TurnID).Select("COALESCE(MAX(sequence), 0) + 1").Scan(&sequence).Error; err != nil {
 		return err
 	}
 	item.Sequence = sequence
-	if err := tx.Create(&item).Error; err != nil {
+	if err := tx.Create(item).Error; err != nil {
 		return err
 	}
 	payload, _ := json.Marshal(item)
@@ -304,7 +388,7 @@ func completeAssistantTurnTx(tx *gorm.DB, turnID, responseGroupID, reply string,
 			CreatedAt:       now,
 			UpdatedAt:       now,
 		}
-		if err := appendAssistantTurnItemTx(tx, item); err != nil {
+		if err := appendAssistantTurnItemTx(tx, &item); err != nil {
 			return err
 		}
 	}

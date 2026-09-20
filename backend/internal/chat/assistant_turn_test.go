@@ -24,7 +24,14 @@ func TestAssistantTurnRecorderPreservesItemOrder(t *testing.T) {
 	t.Cleanup(func() {
 		_ = sqlDB.Close()
 	})
-	recorder := newAssistantTurnRecorder(db, "conv-1", "char-1", "user-1", "request-1")
+	var streamEvents []AssistantTurnStreamEvent
+	SetAssistantTurnStreamPublisher(func(event AssistantTurnStreamEvent) {
+		streamEvents = append(streamEvents, event)
+	})
+	t.Cleanup(func() {
+		SetAssistantTurnStreamPublisher(nil)
+	})
+	recorder := newAssistantTurnRecorder(db, "conv-1", "char-1", "user-1", "request-1", "web")
 	if err := recorder.Start(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -64,5 +71,22 @@ func TestAssistantTurnRecorderPreservesItemOrder(t *testing.T) {
 	}
 	if items[3].IsFinal != 1 || items[3].LegacyMessageID != "message-1" {
 		t.Fatalf("final text linkage missing: %+v", items[3])
+	}
+	var startedToolEvent *AssistantTurnStreamEvent
+	var updatedToolEvent *AssistantTurnStreamEvent
+	for index := range streamEvents {
+		event := &streamEvents[index]
+		if event.EventType == "item.started" && event.Item != nil && event.Item.ItemType == assistantTurnItemToolCall {
+			startedToolEvent = event
+		}
+		if event.EventType == "item.updated" && event.Item != nil && event.Item.ItemType == assistantTurnItemToolCall {
+			updatedToolEvent = event
+		}
+	}
+	if startedToolEvent == nil || startedToolEvent.Item.Sequence != 2 || startedToolEvent.Status != assistantTurnStatusRunning {
+		t.Fatalf("tool start stream event missing sequence/running status: %+v", startedToolEvent)
+	}
+	if updatedToolEvent == nil || updatedToolEvent.Item.Sequence != 2 || updatedToolEvent.Item.ArgumentsJSON == "" || updatedToolEvent.Status != assistantTurnStatusRunning {
+		t.Fatalf("tool update stream event missing original item fields: %+v", updatedToolEvent)
 	}
 }

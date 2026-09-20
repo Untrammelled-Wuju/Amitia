@@ -16,6 +16,7 @@ const (
 	EventMessageUpdated         MessageEventType = "message_updated"
 	EventConversationUpdated    MessageEventType = "conversation_updated"
 	EventAssistantTurnCompleted MessageEventType = "assistant_turn_completed"
+	EventAssistantTurnStream    MessageEventType = "assistant_turn_stream"
 )
 
 type MessageEvent struct {
@@ -183,5 +184,15 @@ func (bus *MessageEventBus) PublishAssistantTurnCompleted(convID, turnID, channe
 		Data: map[string]interface{}{
 			"turnId": turnID,
 		},
+	})
+}
+
+func (bus *MessageEventBus) PublishAssistantTurnStream(conversationID, channel string, data interface{}) {
+	bus.Publish(MessageEvent{
+		Type:           EventAssistantTurnStream,
+		ConversationID: conversationID,
+		Channel:        channel,
+		Role:           "assistant",
+		Data:           data,
 	})
 }

@@ -1067,6 +1067,25 @@ func ensureScopeBinding(ctx context.Context, manager scope.ScopeManager, subject
 	return err
 }
 
+func ensureCoreToolScopeBindings(ctx context.Context, registry *capability.ToolRegistry, manager scope.ScopeManager) error {
+	if registry == nil || manager == nil {
+		return nil
+	}
+	definitions := registry.List(ctx, capability.ToolFilter{IncludeInternal: true})
+	for _, definition := range definitions {
+		if strings.TrimSpace(definition.ExtensionID) != "" {
+			continue
+		}
+		if definition.Source != capability.ToolSourceBuiltin && definition.Source != capability.ToolSourceInternal {
+			continue
+		}
+		if err := ensureScopeBinding(ctx, manager, scope.SubjectTool, definition.ID, scope.NewGlobalScope()); err != nil {
+			return fmt.Errorf("tool %s: %w", definition.ID, err)
+		}
+	}
+	return nil
+}
+
 func deleteScopeBindings(ctx context.Context, manager scope.ScopeManager, subjectType scope.ScopeSubjectType, subjectID string) error {
 	existing, err := manager.ListBindings(ctx, scope.ScopeBindingFilter{SubjectType: subjectType, SubjectID: subjectID})
 	if err != nil {

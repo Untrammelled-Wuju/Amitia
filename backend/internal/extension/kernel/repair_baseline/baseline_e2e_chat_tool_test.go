@@ -2,12 +2,45 @@ package repair_baseline
 
 import (
 	"context"
+	"encoding/json"
 	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/u-ai/backend/internal/extension/kernel"
 )
+
+func TestBaseline_E2E_ChatTool_ExecutesBuiltinWithoutProvider(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	tempDir := t.TempDir()
+	container, err := kernel.NewContainerBuilder().
+		WithDBPath(filepath.Join(tempDir, "kernel.db")).
+		WithExtensionRoot(filepath.Join(tempDir, "extensions")).
+		Build(ctx)
+	if err != nil {
+		t.Fatalf("ContainerBuilder.Build must succeed: %v", err)
+	}
+	defer container.Close()
+	result, found := container.ToolFacade.ExecuteModelTool(
+		ctx,
+		"calculate",
+		json.RawMessage(`{"expression":"1+1"}`),
+		kernel.InvocationScope{
+			SpaceID:        "test-user",
+			Channel:        "web",
+			SessionID:      "test-session",
+			PermissionMode: "full_access",
+		},
+		"",
+	)
+	if !found {
+		t.Fatal("calculate tool must be found")
+	}
+	if result.Status != "success" || result.Error != nil {
+		t.Fatalf("calculate must execute through legacy runtime, status=%s error=%+v output=%s", result.Status, result.Error, string(result.Output))
+	}
+}
 
 func TestBaseline_E2E_ChatTool_ToolFacadeConstructs(t *testing.T) {
 	if testing.Short() {

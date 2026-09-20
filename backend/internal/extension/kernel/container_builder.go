@@ -1317,6 +1317,9 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 			return nil, fmt.Errorf("kernel: restore user workflow agent tool %s: %w", definition.ID, err)
 		}
 	}
+	if err := ensureCoreToolScopeBindings(ctx, toolRegistry, scopeManager); err != nil {
+		return nil, fmt.Errorf("kernel: ensure core tool scope bindings: %w", err)
+	}
 
 	toolFacade := NewToolFacade(toolRegistry, executionKernel, DefaultToolFacadeConfig())
 	toolFacade.SetAgentSkillCatalog(agentSkillCatalog)

@@ -793,6 +793,9 @@ func (f *ToolFacade) resolveExecutionTarget(ctx context.Context, def capability.
 	if def.Runtime.RuntimeType == capability.RuntimeTypeGameHost {
 		return resolvedExecution{}
 	}
+	if strings.TrimSpace(string(def.CapabilityID)) == "" && def.Runtime.RuntimeType != "" {
+		return resolvedExecution{}
+	}
 	if f.capabilityResolver == nil {
 		return resolvedExecution{resolverUnavailable: true}
 	}

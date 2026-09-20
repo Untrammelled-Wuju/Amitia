@@ -30,6 +30,9 @@ func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, chatSvc chat.
 	handler.SetArtifactService(artifactSvc)
 	handler.SetChannelAvailability(channelAccess)
 	svc.AttachTemporalService(temporalSvc)
+	chat.SetAssistantTurnStreamPublisher(func(event chat.AssistantTurnStreamEvent) {
+		GetMessageEventBus().PublishAssistantTurnStream(event.ConversationID, event.Channel, event)
+	})
 
 	if dpCoord != nil {
 		svc.SetDataPortabilityCoordinator(dpCoord)

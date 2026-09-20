@@ -461,7 +461,7 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 		}
 	}
 	s.emitDesktopPetChat(ctx, req, charID, convID, userMsgID, "response.started", 3)
-	turnRecorder := newAssistantTurnRecorder(s.db, convID, charID, userMsgID, requestID)
+	turnRecorder := newAssistantTurnRecorder(s.db, convID, charID, userMsgID, requestID, channel)
 	if err := turnRecorder.Start(ctx); err != nil {
 		s.emitDesktopPetChat(ctx, req, charID, convID, userMsgID, "response.failed", 4)
 		return nil, err

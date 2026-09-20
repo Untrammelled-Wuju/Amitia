@@ -854,6 +854,84 @@ class ConversationRuntimeController extends ChangeNotifier {
         ),
       );
     }
+    for (final turnId in claimedTurns) {
+      _messages.removeById('turn:$turnId');
+    }
+    for (final turn in _assistantTurns) {
+      if (claimedTurns.contains(turn.id)) continue;
+      final provisionalId = 'turn:${turn.id}';
+      final existing = _messages.findById(provisionalId);
+      _messages.upsert(
+        ChatMessage(
+          id: provisionalId,
+          renderId: turn.requestId.isNotEmpty ? turn.requestId : provisionalId,
+          characterId: turn.characterId,
+          role: MessageRole.assistant,
+          type: MessageType.text,
+          content: '',
+          time: DateTime.tryParse(turn.createdAt) ?? DateTime.now(),
+          status: MessageStatus.streaming,
+          responseGroupId: turn.responseGroupId.isNotEmpty
+              ? turn.responseGroupId
+              : turn.requestId,
+          assistantTurn: turn,
+          sequence: existing?.sequence,
+        ),
+      );
+    }
+  }
+
+  void _applyAssistantTurnStreamEvent(Map<String, dynamic> event) {
+    final rawMetadata = event['data'];
+    if (rawMetadata is! Map) return;
+    final metadata = Map<String, dynamic>.from(rawMetadata);
+    final turnId = (metadata['turnId'] ?? '').toString().trim();
+    if (turnId.isEmpty) return;
+    final index = _assistantTurns.indexWhere((turn) => turn.id == turnId);
+    final existing = index >= 0 ? _assistantTurns[index] : null;
+    final items = <AssistantTurnItemDto>[...?existing?.items];
+    final rawItem = metadata['item'];
+    if (rawItem is Map) {
+      final item = AssistantTurnItemDto.fromJson(
+        Map<String, dynamic>.from(rawItem),
+      );
+      final itemIndex = items.indexWhere(
+        (candidate) =>
+            (item.id.isNotEmpty && candidate.id == item.id) ||
+            (item.callId.isNotEmpty &&
+                item.type.isNotEmpty &&
+                candidate.callId == item.callId &&
+                candidate.type == item.type),
+      );
+      if (itemIndex >= 0) items[itemIndex] = item;
+      else items.add(item);
+      items.sort((left, right) => left.sequence.compareTo(right.sequence));
+    }
+    final status = (metadata['status'] ?? existing?.status ?? 'running')
+        .toString();
+    final turn = AssistantTurnDto(
+      id: turnId,
+      conversationId:
+          (metadata['conversationId'] ?? existing?.conversationId ?? '')
+              .toString(),
+      characterId: existing?.characterId ?? '',
+      userMessageId: existing?.userMessageId ?? '',
+      requestId: (metadata['requestId'] ?? existing?.requestId ?? '')
+          .toString(),
+      responseGroupId: existing?.responseGroupId ?? '',
+      sequence: existing?.sequence ?? 0,
+      status: status,
+      createdAt: existing?.createdAt ?? DateTime.now().toIso8601String(),
+      updatedAt: DateTime.now().toIso8601String(),
+      completedAt: status == 'completed'
+          ? DateTime.now().toIso8601String()
+          : existing?.completedAt ?? '',
+      items: items,
+    );
+    if (index >= 0) _assistantTurns[index] = turn;
+    else _assistantTurns = <AssistantTurnDto>[..._assistantTurns, turn];
+    _applyAssistantTurnProjection();
+    notifyListeners();
   }
 
   void _restartLiveSync() {
@@ -906,6 +984,14 @@ class ConversationRuntimeController extends ChangeNotifier {
                 .toString();
             if (eventConversation == conversationId) {
               await _loadAssistantTurns();
+            }
+            continue;
+          }
+          if (event.type == 'assistant_turn_stream') {
+            final eventConversation = (event.data['conversationId'] ?? '')
+                .toString();
+            if (eventConversation == conversationId) {
+              _applyAssistantTurnStreamEvent(event.data);
             }
             continue;
           }
