@@ -69,7 +69,9 @@ export function useWebChatSSE(
     typingTimer = setTimeout(() => {
       raw.typingDone = true;
       raw.animateIn = true;
-      messages.value.push(raw);
+      if (!mergeChatMessage(messages.value, raw)) {
+        messages.value.push(raw);
+      }
       sortMessages();
       lastPolledMsgId = raw.id || lastPolledMsgId;
       scrollToBottom();

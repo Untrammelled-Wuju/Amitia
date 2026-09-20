@@ -6,6 +6,7 @@ import { useApi } from "./useApi";
 import { resolveApiUrl } from "../runtime/runtime-adapter";
 import { createAuthenticatedFetchInit } from "../runtime/request-auth";
 import { createRequestEnvelope } from "../utils/requestEnvelope";
+import { upsertStreamingAssistantMessage } from "../utils/message-order";
 
 export function useMessageSend(
   messages: Ref<any[]>,
@@ -201,39 +202,27 @@ export function useMessageSend(
               }
               if (data.conversationId && !convId.value)
                 convId.value = data.conversationId;
+              if (data.messageId) {
+                assistantStreamingId = String(data.messageId);
+              }
               continue;
             }
 
             if (eventType === "token" && data.content) {
               const nextId: string =
                 data.id || assistantStreamingId || "msg-" + Date.now();
-              const idx = assistantStreamingId
-                ? messages.value.findIndex(
-                    (m: any) => m.id === assistantStreamingId,
-                  )
-                : -1;
-              if (idx >= 0) {
-                const current = messages.value[idx];
-                const nextContent = `${current.content || ""}${data.content}`;
-                messages.value[idx] = {
-                  ...current,
-                  id: nextId,
-                  content: nextContent,
-                  conversationId:
-                    data.conversationId ||
-                    current.conversationId ||
-                    convId.value,
-                };
-              } else {
-                messages.value.push({
+              upsertStreamingAssistantMessage(
+                messages.value,
+                {
                   id: nextId,
                   role: "assistant",
                   content: data.content,
                   status: "streaming",
                   conversationId: data.conversationId || convId.value,
                   createdAt: data.createdAt || new Date().toISOString(),
-                });
-              }
+                },
+                assistantStreamingId,
+              );
               assistantStreamingId = nextId;
               scrollToBottom(true);
             }
@@ -241,26 +230,9 @@ export function useMessageSend(
             if (eventType === "voice_audio" && data.audioUrl) {
               const nextId: string =
                 data.messageId || assistantStreamingId || "msg-" + Date.now();
-              const idx = assistantStreamingId
-                ? messages.value.findIndex(
-                    (m: any) => m.id === assistantStreamingId,
-                  )
-                : -1;
-              if (idx >= 0) {
-                const current = messages.value[idx];
-                messages.value[idx] = {
-                  ...current,
-                  id: nextId,
-                  content: data.content || current.content || "",
-                  conversationId:
-                    data.conversationId ||
-                    current.conversationId ||
-                    convId.value,
-                  audioUrl: data.audioUrl,
-                  audioDuration: data.duration || 0,
-                };
-              } else {
-                messages.value.push({
+              upsertStreamingAssistantMessage(
+                messages.value,
+                {
                   id: nextId,
                   role: "assistant",
                   content: data.content || "",
@@ -269,8 +241,9 @@ export function useMessageSend(
                   createdAt: data.createdAt || new Date().toISOString(),
                   audioUrl: data.audioUrl,
                   audioDuration: data.duration || 0,
-                });
-              }
+                },
+                assistantStreamingId,
+              );
               assistantStreamingId = nextId;
               scrollToBottom(true);
             }

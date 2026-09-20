@@ -247,6 +247,40 @@ export function mergeChatMessage(messages: any[], incoming: any): boolean {
   return true;
 }
 
+export function upsertStreamingAssistantMessage(
+  messages: any[],
+  incoming: any,
+  preferredId?: string | null,
+): number {
+  const id = String(incoming?.id || preferredId || "").trim();
+  if (!id) return -1;
+  let index = -1;
+  if (preferredId) {
+    index = messages.findIndex(
+      (message) => String(message?.id || "") === String(preferredId),
+    );
+  }
+  if (index < 0) {
+    index = messages.findIndex(
+      (message) => String(message?.id || "") === id,
+    );
+  }
+  if (index >= 0) {
+    const current = messages[index];
+    messages[index] = {
+      ...current,
+      ...incoming,
+      id,
+      content: incoming?.content || current?.content || "",
+      uiKey: current?.uiKey || incoming?.uiKey,
+      animateIn: current?.animateIn ?? incoming?.animateIn,
+    };
+    return index;
+  }
+  messages.push({ ...incoming, id });
+  return messages.length - 1;
+}
+
 export function mergeServerMessages(messages: any[], serverItems: any[]): any[] {
   const normalizedServer = serverItems.map(normalizeRealtimeMessage);
   const serverById = new Map<string, any>();
