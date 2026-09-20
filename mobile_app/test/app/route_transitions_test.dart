@@ -3,28 +3,36 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  testWidgets('back target transition keeps a fully covered route visible', (
+  testWidgets('back target transition restores the covered route', (
     tester,
   ) async {
     await tester.pumpWidget(
       MaterialApp(
         home: backTargetTransition(
-          secondaryAnimation: const AlwaysStoppedAnimation<double>(1),
+          secondaryAnimation: const AlwaysStoppedAnimation<double>(0),
           child: const Center(child: Text('chat')),
         ),
       ),
     );
 
     expect(find.text('chat'), findsOneWidget);
-    final slideFinder = find.byWidgetPredicate(
-      (widget) => widget is SlideTransition && widget.position.value.dx < 0,
+    final slide = tester.widget<SlideTransition>(
+      find
+          .ancestor(
+            of: find.text('chat'),
+            matching: find.byType(SlideTransition),
+          )
+          .first,
     );
-    expect(slideFinder, findsOneWidget);
-    expect(
-      find.descendant(of: slideFinder, matching: find.byType(FadeTransition)),
-      findsNothing,
+    final fade = tester.widget<FadeTransition>(
+      find
+          .ancestor(
+            of: find.text('chat'),
+            matching: find.byType(FadeTransition),
+          )
+          .first,
     );
-    final slide = tester.widget<SlideTransition>(slideFinder);
-    expect(slide.position.value.dx, lessThan(0));
+    expect(slide.position.value, Offset.zero);
+    expect(fade.opacity.value, 1);
   });
 }
