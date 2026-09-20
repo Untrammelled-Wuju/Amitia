@@ -74,7 +74,7 @@ void main() {
           body: AmitiaChatInput(
             onSend: (_) {},
             workspaceSelector: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 170),
+              constraints: const BoxConstraints(maxWidth: 90),
               child: Container(
                 height: 31,
                 padding: const EdgeInsets.symmetric(horizontal: 7),
