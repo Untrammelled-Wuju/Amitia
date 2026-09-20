@@ -111,8 +111,8 @@ export function useModelConfig(options?: ModelConfigOptions) {
     maxTokens: 4096,
     timeoutSeconds: 60,
     retryCount: 1,
-    supportsReasoning: false,
-    defaultReasoningEffort: "medium",
+    supportsReasoning: true,
+    defaultReasoningEffort: "high",
   });
 
   if (extraFormFields) {
@@ -248,7 +248,7 @@ export function useModelConfig(options?: ModelConfigOptions) {
       form.timeoutSeconds = cfg.timeoutSeconds ?? 60;
       form.retryCount = cfg.retryCount ?? 1;
       form.supportsReasoning = cfg.supportsReasoning === true;
-      form.defaultReasoningEffort = cfg.defaultReasoningEffort || "medium";
+      form.defaultReasoningEffort = cfg.defaultReasoningEffort || "high";
     } else {
       form.name = "";
       form.apiType = defaultApiType;
@@ -260,8 +260,8 @@ export function useModelConfig(options?: ModelConfigOptions) {
       form.maxTokens = 4096;
       form.timeoutSeconds = 60;
       form.retryCount = 1;
-      form.supportsReasoning = false;
-      form.defaultReasoningEffort = "medium";
+      form.supportsReasoning = true;
+      form.defaultReasoningEffort = "high";
     }
     if (extraFormFields) {
       for (const [key, defaultVal] of Object.entries(extraFormFields)) {

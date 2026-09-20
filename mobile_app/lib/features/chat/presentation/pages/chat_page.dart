@@ -48,6 +48,7 @@ import '../../runtime/conversation_runtime_controller.dart';
 import '../../../conversation/rendering/assistant_identity.dart';
 import '../../../conversation/rendering/role_switch_divider.dart';
 import '../../../../shared/models/models.dart';
+import '../widgets/agent_approval_guard.dart';
 import 'realtime_voice_call_sheet.dart';
 
 class ChatPage extends ConsumerStatefulWidget {
@@ -2074,7 +2075,10 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       UICapability.conversationOverlay,
     );
 
-    final serializedMessages = _runtime.messages
+    final visibleMessages = _runtime.messages
+        .where((message) => !message.assistantTurnSuppressed)
+        .toList(growable: false);
+    final serializedMessages = visibleMessages
         .map(_providerMessage)
         .toList(growable: false);
     final durableConversationRecords =
@@ -2087,11 +2091,11 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       records: durableConversationRecords,
     );
     final agentActivityProjection = _projectAgentActivities(
-      _runtime.messages,
+      visibleMessages,
       durableEvents,
     );
     DateTime? lastUserTime;
-    for (final message in _runtime.messages) {
+    for (final message in visibleMessages) {
       if (message.role == MessageRole.user) lastUserTime = message.time;
     }
     final liveAgentActivities = lastUserTime == null
@@ -2105,7 +2109,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
               .toList(growable: false);
     final hasAssistantAfterLastUser =
         lastUserTime != null &&
-        _runtime.messages.any(
+        visibleMessages.any(
           (message) =>
               message.role == MessageRole.assistant &&
               !message.time.isBefore(lastUserTime!),
@@ -2133,11 +2137,13 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     );
     final flowItems =
         <_MobileChatFlowItem>[
-          for (var index = 0; index < _runtime.messages.length; index++)
+          for (final message in visibleMessages)
             _MobileChatFlowItem.message(
-              message: _runtime.messages[index],
-              messageIndex: index,
-              timestamp: _runtime.messages[index].time,
+              message: message,
+              messageIndex: _runtime.messages.indexWhere(
+                (candidate) => candidate.id == message.id,
+              ),
+              timestamp: message.time,
             ),
           for (final node in conversationNodes) _MobileChatFlowItem.node(node),
         ]..sort((left, right) {
@@ -2526,12 +2532,24 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                               .toList(growable: false),
                           selectedModelId: selectedModelConfigId,
                           reasoningEffort: _runtime.reasoningEffort,
+                          reasoningEnabled: _runtime.reasoningEnabled,
+                          permissionMode: _runtime.permissionMode,
                           supportsReasoning:
                               selectedModelConfig?.supportsReasoning ?? false,
-                          onModelChanged: (modelId, effort) {
+                          onModelPreviewChanged: (modelId, effort, enabled) {
+                            _runtime.previewModelSettings(
+                              modelId,
+                              effort,
+                              enabled,
+                            );
+                          },
+                          onModelChanged: (modelId, effort, enabled) {
                             _runtime
-                                .updateModelSettings(modelId, effort)
+                                .updateModelSettings(modelId, effort, enabled)
                                 .catchError((_) {});
+                          },
+                          onPermissionChanged: (mode) {
+                            _runtime.updatePermissionMode(mode).catchError((_) {});
                           },
                           onSend: _onSend,
                           recipientName: characterName,
@@ -2613,6 +2631,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                 ),
               ),
             ),
+          ),
+          AgentApprovalGuard(
+            conversationId: _runtime.conversationId ?? '',
           ),
           if (hasSidebarProvider || hasSidebarExtensions)
             Positioned(

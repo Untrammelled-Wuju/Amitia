@@ -149,22 +149,48 @@ class ChatService {
 
   Future<ConversationDto?> getConversation(String conversationId) async {
     final resp = await _api.get<Map<String, dynamic>>(
-      '/api/web-chat/conversations/$conversationId',
+      '/api/web-chat/conversations',
+      queryParameters: const <String, dynamic>{
+        'page': 1,
+        'pageSize': 200,
+      },
     );
-    return resp == null ? null : ConversationDto.fromJson(resp);
+    final items = resp?['items'];
+    if (items is! List) return null;
+    for (final item in items) {
+      if (item is Map &&
+          (item['id'] ?? '').toString() == conversationId) {
+        return ConversationDto.fromJson(
+          Map<String, dynamic>.from(item),
+        );
+      }
+    }
+    return null;
   }
 
   Future<void> updateConversationModelSettings(
     String conversationId, {
     required int modelConfigId,
     required String reasoningEffort,
+    required bool reasoningEnabled,
   }) async {
     await _api.put<Map<String, dynamic>>(
       '/api/web-chat/conversations/$conversationId',
       data: <String, dynamic>{
         'modelConfigId': modelConfigId,
         'reasoningEffort': reasoningEffort,
+        'reasoningEnabled': reasoningEnabled,
       },
+    );
+  }
+
+  Future<void> updateConversationPermissionMode(
+    String conversationId,
+    String permissionMode,
+  ) async {
+    await _api.put<Map<String, dynamic>>(
+      '/api/web-chat/conversations/$conversationId',
+      data: <String, dynamic>{'permissionMode': permissionMode},
     );
   }
 
@@ -265,6 +291,22 @@ class ChatService {
     if (totalPages <= 1) return first.items;
     final last = await _getMessagesPage(conversationId, totalPages, pageSize);
     return last.items;
+  }
+
+  Future<List<AssistantTurnDto>> getAssistantTurns(
+    String conversationId, {
+    int limit = 500,
+  }) async {
+    final resp = await _api.get<Map<String, dynamic>>(
+      '/api/web-chat/conversations/${Uri.encodeComponent(conversationId)}/turns',
+      queryParameters: <String, dynamic>{'limit': limit},
+    );
+    final rows = resp?['items'];
+    if (rows is! List) return const <AssistantTurnDto>[];
+    return rows
+        .whereType<Map>()
+        .map((row) => AssistantTurnDto.fromJson(Map<String, dynamic>.from(row)))
+        .toList(growable: false);
   }
 
   Future<({List<MessageDto> items, int totalPages})> _getMessagesPage(
@@ -455,6 +497,8 @@ class ChatService {
     String? replyToMessageId,
     int? modelConfigId,
     String? reasoningEffort,
+    bool? reasoningEnabled,
+    String? permissionMode,
     ConversationWorkspaceDto? workspace,
     required ChatStreamCancellation cancellation,
   }) async* {
@@ -484,6 +528,9 @@ class ChatService {
           'modelConfigId': modelConfigId,
         if (reasoningEffort != null && reasoningEffort.isNotEmpty)
           'reasoningEffort': reasoningEffort,
+        if (reasoningEnabled != null) 'reasoningEnabled': reasoningEnabled,
+        if (permissionMode != null && permissionMode.isNotEmpty)
+          'permissionMode': permissionMode,
         if (workspace != null) ...<String, dynamic>{
           if (workspace.projectId.isNotEmpty) 'projectId': workspace.projectId,
           'workspaceId': workspace.workspaceId,
@@ -644,6 +691,29 @@ class ChatService {
   Future<void> cancelGeneration(String conversationId) async {
     await _api.post<Map<String, dynamic>>(
       '/api/web-chat/conversations/$conversationId/generations/current/cancel',
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> listApprovals(
+    String conversationId,
+  ) async {
+    final resp = await _api.get<List<dynamic>>(
+      '/api/web-chat/approvals',
+      queryParameters: <String, dynamic>{
+        if (conversationId.trim().isNotEmpty)
+          'conversationId': conversationId,
+      },
+    );
+    return (resp ?? const <dynamic>[])
+        .whereType<Map>()
+        .map((item) => Map<String, dynamic>.from(item))
+        .toList(growable: false);
+  }
+
+  Future<void> resolveApproval(String id, bool approved) async {
+    await _api.post<Map<String, dynamic>>(
+      '/api/web-chat/approvals/$id/resolve',
+      data: <String, dynamic>{'approved': approved},
     );
   }
 

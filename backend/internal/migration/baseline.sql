@@ -133,6 +133,8 @@ CREATE TABLE IF NOT EXISTS conversations (
     peer_id TEXT DEFAULT '',
     model_config_id INTEGER NOT NULL DEFAULT 0,
     reasoning_effort TEXT NOT NULL DEFAULT '',
+    reasoning_enabled INTEGER NOT NULL DEFAULT -1,
+    permission_mode TEXT NOT NULL DEFAULT 'request_approval',
     message_count INTEGER DEFAULT 0,
     state_version TEXT DEFAULT '',
     pinned_at TEXT NOT NULL DEFAULT '',
@@ -248,6 +250,56 @@ CREATE TABLE IF NOT EXISTS tool_call_results (
 CREATE INDEX IF NOT EXISTS idx_tool_call_intents_request ON tool_call_intents(request_id, tool_name);
 CREATE INDEX IF NOT EXISTS idx_tool_call_intents_idempotency ON tool_call_intents(idempotency_key);
 CREATE INDEX IF NOT EXISTS idx_tool_call_results_request ON tool_call_results(request_id, status);
+
+CREATE TABLE IF NOT EXISTS assistant_turns (
+    id TEXT PRIMARY KEY,
+    conversation_id TEXT NOT NULL DEFAULT '',
+    character_id TEXT NOT NULL DEFAULT '',
+    user_message_id TEXT NOT NULL DEFAULT '',
+    request_id TEXT NOT NULL DEFAULT '',
+    response_group_id TEXT NOT NULL DEFAULT '',
+    sequence INTEGER NOT NULL DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'running',
+    created_at TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL DEFAULT '',
+    completed_at TEXT NOT NULL DEFAULT ''
+);
+
+CREATE TABLE IF NOT EXISTS assistant_turn_items (
+    id TEXT PRIMARY KEY,
+    turn_id TEXT NOT NULL DEFAULT '',
+    conversation_id TEXT NOT NULL DEFAULT '',
+    sequence INTEGER NOT NULL DEFAULT 0,
+    item_type TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'pending',
+    call_id TEXT NOT NULL DEFAULT '',
+    tool_name TEXT NOT NULL DEFAULT '',
+    content TEXT NOT NULL DEFAULT '',
+    arguments_json TEXT NOT NULL DEFAULT '',
+    result_json TEXT NOT NULL DEFAULT '',
+    error_code TEXT NOT NULL DEFAULT '',
+    duration_ms INTEGER NOT NULL DEFAULT 0,
+    is_final INTEGER NOT NULL DEFAULT 0,
+    legacy_message_id TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL DEFAULT ''
+);
+
+CREATE TABLE IF NOT EXISTS assistant_turn_events (
+    id TEXT PRIMARY KEY,
+    turn_id TEXT NOT NULL DEFAULT '',
+    item_id TEXT NOT NULL DEFAULT '',
+    sequence INTEGER NOT NULL DEFAULT 0,
+    event_type TEXT NOT NULL DEFAULT '',
+    payload_json TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT ''
+);
+
+CREATE INDEX IF NOT EXISTS idx_assistant_turns_conversation ON assistant_turns(conversation_id, sequence);
+CREATE INDEX IF NOT EXISTS idx_assistant_turns_request ON assistant_turns(request_id);
+CREATE INDEX IF NOT EXISTS idx_assistant_turn_items_turn ON assistant_turn_items(turn_id, sequence);
+CREATE INDEX IF NOT EXISTS idx_assistant_turn_items_call ON assistant_turn_items(turn_id, call_id);
+CREATE INDEX IF NOT EXISTS idx_assistant_turn_events_turn ON assistant_turn_events(turn_id, sequence);
 
 CREATE TABLE IF NOT EXISTS model_configs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

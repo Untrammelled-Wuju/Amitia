@@ -110,8 +110,10 @@ type AppConfig struct {
 }
 
 type ChatConfig struct {
-	MergeWindowMs          int `mapstructure:"mergeWindowMs"`
-	ContextWindowMaxRounds int `mapstructure:"contextWindowMaxRounds"`
+	MergeWindowMs           int `mapstructure:"mergeWindowMs"`
+	ContextWindowMaxRounds  int `mapstructure:"contextWindowMaxRounds"`
+	AgentTurnTimeoutSeconds int `mapstructure:"agentTurnTimeoutSeconds"`
+	AgentMaxParallelTools   int `mapstructure:"agentMaxParallelTools"`
 }
 
 type QdrantConfig struct {
@@ -314,6 +316,8 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("app.deployMode", "desktop-local")
 	v.SetDefault("chat.contextWindowMaxRounds", 20)
 	v.SetDefault("chat.mergeWindowMs", 6000)
+	v.SetDefault("chat.agentTurnTimeoutSeconds", 1800)
+	v.SetDefault("chat.agentMaxParallelTools", 4)
 	v.SetDefault("embedding.modelName", "doubao-embedding-vision-251215")
 	v.SetDefault("embedding.baseUrl", "")
 	v.SetDefault("embedding.apiKey", "")

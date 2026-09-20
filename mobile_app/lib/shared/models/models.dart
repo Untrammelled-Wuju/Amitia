@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../core/models/conversation.dart';
 
 export 'character_models.dart';
 export 'memory_models.dart';
@@ -63,6 +64,8 @@ class ChatMessage {
   final String? replyToExcerpt;
   final String responseGroupId;
   final int deliverySequence;
+  final AssistantTurnDto? assistantTurn;
+  final bool assistantTurnSuppressed;
 
   ChatMessage({
     required this.id,
@@ -93,6 +96,8 @@ class ChatMessage {
     this.replyToExcerpt,
     this.responseGroupId = '',
     this.deliverySequence = 0,
+    this.assistantTurn,
+    this.assistantTurnSuppressed = false,
   }) : renderId = renderId ?? id;
 }
 

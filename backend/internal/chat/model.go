@@ -4,6 +4,7 @@ package chat
 
 import (
 	"github.com/google/uuid"
+	"github.com/u-ai/backend/internal/agentpermission"
 	"github.com/u-ai/backend/internal/chat/modelprotocol"
 	coreexec "github.com/u-ai/backend/internal/execution"
 	"github.com/u-ai/backend/internal/interaction"
@@ -67,23 +68,25 @@ type ModelEventSink = modelprotocol.ModelEventSink
 type ModelCapabilities = modelprotocol.ModelCapabilities
 
 type Conversation struct {
-	ID              string  `gorm:"column:id;primaryKey" json:"id"`
-	SpaceID         string  `gorm:"column:space_id;not null;index" json:"-"`
-	ProjectID       string  `gorm:"column:project_id;not null;default:'';index" json:"projectId"`
-	Title           string  `gorm:"column:title" json:"title"`
-	Channel         string  `gorm:"column:channel;default:web" json:"channel"`
-	Source          string  `gorm:"column:source;default:manual" json:"source"`
-	PeerID          string  `gorm:"column:peer_id" json:"peerId"`
-	ModelConfigID   int     `gorm:"column:model_config_id;not null;default:0" json:"modelConfigId"`
-	ReasoningEffort string  `gorm:"column:reasoning_effort;not null;default:''" json:"reasoningEffort"`
-	MessageCount    int     `gorm:"column:message_count;default:0" json:"messageCount"`
-	StateVersion    string  `gorm:"column:state_version" json:"stateVersion"`
-	PinnedAt        string  `gorm:"column:pinned_at;not null;default:''" json:"pinnedAt,omitempty"`
-	ArchivedAt      string  `gorm:"column:archived_at;not null;default:''" json:"archivedAt,omitempty"`
-	CreatedAt       string  `gorm:"column:created_at" json:"createdAt"`
-	UpdatedAt       string  `gorm:"column:updated_at" json:"updatedAt"`
-	Revision        int64   `gorm:"column:revision;not null;default:1" json:"revision"`
-	DeletedAt       *string `gorm:"column:deleted_at" json:"-"`
+	ID               string  `gorm:"column:id;primaryKey" json:"id"`
+	SpaceID          string  `gorm:"column:space_id;not null;index" json:"-"`
+	ProjectID        string  `gorm:"column:project_id;not null;default:'';index" json:"projectId"`
+	Title            string  `gorm:"column:title" json:"title"`
+	Channel          string  `gorm:"column:channel;default:web" json:"channel"`
+	Source           string  `gorm:"column:source;default:manual" json:"source"`
+	PeerID           string  `gorm:"column:peer_id" json:"peerId"`
+	ModelConfigID    int     `gorm:"column:model_config_id;not null;default:0" json:"modelConfigId"`
+	ReasoningEffort  string  `gorm:"column:reasoning_effort;not null;default:''" json:"reasoningEffort"`
+	ReasoningEnabled int     `gorm:"column:reasoning_enabled;not null;default:-1" json:"reasoningEnabled"`
+	PermissionMode   string  `gorm:"column:permission_mode;not null;default:'request_approval'" json:"permissionMode"`
+	MessageCount     int     `gorm:"column:message_count;default:0" json:"messageCount"`
+	StateVersion     string  `gorm:"column:state_version" json:"stateVersion"`
+	PinnedAt         string  `gorm:"column:pinned_at;not null;default:''" json:"pinnedAt,omitempty"`
+	ArchivedAt       string  `gorm:"column:archived_at;not null;default:''" json:"archivedAt,omitempty"`
+	CreatedAt        string  `gorm:"column:created_at" json:"createdAt"`
+	UpdatedAt        string  `gorm:"column:updated_at" json:"updatedAt"`
+	Revision         int64   `gorm:"column:revision;not null;default:1" json:"revision"`
+	DeletedAt        *string `gorm:"column:deleted_at" json:"-"`
 }
 
 func (Conversation) TableName() string { return "conversations" }
@@ -426,6 +429,8 @@ type ProcessMessageRequest struct {
 	ReplyToMessageID         *string                      `json:"replyToMessageId,omitempty"`
 	ModelConfigID            int                          `json:"modelConfigId,omitempty"`
 	ReasoningEffort          string                       `json:"reasoningEffort,omitempty"`
+	ReasoningEnabled         *bool                        `json:"reasoningEnabled,omitempty"`
+	PermissionMode           string                       `json:"permissionMode,omitempty"`
 	ImageContext             string                       `json:"-"`
 	SpaceID                  string                       `json:"-"`
 	DeviceTimezone           string                       `json:"-"`
@@ -438,8 +443,13 @@ type ProcessMessageRequest struct {
 	SuppressReplyPersistence bool                         `json:"-"`
 }
 
+func normalizePermissionMode(value string) string {
+	return agentpermission.Normalize(value)
+}
+
 type ProcessMessageResponse struct {
 	ConversationID      string                   `json:"conversationId"`
+	TurnID              string                   `json:"turnId,omitempty"`
 	Sequence            int64                    `gorm:"column:sequence;not null;default:0;index" json:"sequence"`
 	Reply               string                   `json:"reply"`
 	Reasoning           string                   `json:"reasoning,omitempty"`

@@ -1,8 +1,11 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../shared/models/models.dart';
 import '../../../core/widgets/amitia_popup_menu.dart';
+import '../../../core/models/conversation.dart';
 import 'amitia_message_theme.dart';
 import 'amrp.dart';
 import 'markdown/amitia_markdown.dart';
@@ -104,31 +107,39 @@ class _AmitiaMessageViewState extends State<AmitiaMessageView> {
                       time: _formatTime(message.createdAt),
                       tokens: tokens,
                     ),
-                  if (message.thinking != null)
-                    AmitiaThinkingBlock(block: message.thinking!),
-                  if (widget.showThinking && message.thinking == null)
-                    AmitiaThinkingBlock(
-                      block: AmrpThinkingBlock(
-                        content: '',
-                        state: AmrpMessageState.streaming,
-                      ),
-                    ),
                   if (_stateNotice(message.state) != null)
                     _StateNotice(
                       data: _stateNotice(message.state)!,
                       state: message.state,
                       tokens: tokens,
                     ),
-                  if (message.markdown.isNotEmpty)
-                    AmitiaMarkdownView(
-                      source: message.markdown,
-                      streaming: message.state == AmrpMessageState.streaming,
-                      onCitation: (id) =>
-                          setState(() => _highlightCitation = id),
-                    ),
-                  ..._renderBlocks(message.blocks, message.id),
-                  for (final tool in widget.toolBlocks)
-                    AmitiaToolBlock(block: tool),
+                  if (widget.message.assistantTurn != null)
+                    ..._renderAssistantTurn(
+                      context,
+                      widget.message.assistantTurn!,
+                      tokens,
+                    )
+                  else ...[
+                    if (message.thinking != null)
+                      AmitiaThinkingBlock(block: message.thinking!),
+                    if (widget.showThinking && message.thinking == null)
+                      AmitiaThinkingBlock(
+                        block: AmrpThinkingBlock(
+                          content: '',
+                          state: AmrpMessageState.streaming,
+                        ),
+                      ),
+                    if (message.markdown.isNotEmpty)
+                      AmitiaMarkdownView(
+                        source: message.markdown,
+                        streaming: message.state == AmrpMessageState.streaming,
+                        onCitation: (id) =>
+                            setState(() => _highlightCitation = id),
+                      ),
+                    ..._renderBlocks(message.blocks, message.id),
+                    for (final tool in widget.toolBlocks)
+                      AmitiaToolBlock(block: tool),
+                  ],
                   AmitiaCitationList(
                     sources: message.sources,
                     highlightId: _highlightCitation,
@@ -175,6 +186,54 @@ class _AmitiaMessageViewState extends State<AmitiaMessageView> {
     }
     flushImages();
     return widgets;
+  }
+
+  List<Widget> _renderAssistantTurn(
+    BuildContext context,
+    AssistantTurnDto turn,
+    AmitiaMessageTheme tokens,
+  ) {
+    final items = [...turn.items]
+      ..sort((left, right) => left.sequence.compareTo(right.sequence));
+    final entries = <_TurnTimelineEntry>[];
+    _TurnTimelineEntry? toolGroup;
+    for (final item in items) {
+      if (item.type == 'tool_call' || item.type == 'tool_result') {
+        if (toolGroup == null) {
+          toolGroup = _TurnTimelineEntry.tools();
+          entries.add(toolGroup);
+        }
+        toolGroup.items.add(item);
+        continue;
+      }
+      toolGroup = null;
+      entries.add(_TurnTimelineEntry.item(item));
+    }
+    return [
+      for (final entry in entries)
+        if (entry.items.isNotEmpty)
+          _TurnToolStream(items: entry.items)
+        else
+          switch (entry.item!.type) {
+            'thinking' => AmitiaThinkingBlock(
+              block: AmrpThinkingBlock(
+                content: entry.item!.content,
+                state: _isTurnStreaming(entry.item!.status)
+                    ? AmrpMessageState.streaming
+                    : AmrpMessageState.completed,
+                duration: entry.item!.durationMs > 0
+                    ? Duration(milliseconds: entry.item!.durationMs)
+                    : null,
+              ),
+            ),
+            'text' => AmitiaMarkdownView(
+              source: entry.item!.content,
+              streaming: _isTurnStreaming(entry.item!.status),
+              onCitation: (id) => setState(() => _highlightCitation = id),
+            ),
+            _ => const SizedBox.shrink(),
+          },
+    ];
   }
 
   Map<String, String>? _stateNotice(AmrpMessageState state) {
@@ -634,6 +693,420 @@ class _MinecraftServerBlock extends StatelessWidget {
               ),
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+bool _isTurnStreaming(String status) {
+  final value = status.trim().toLowerCase();
+  return const <String>{
+    'running',
+    'streaming',
+    'sending',
+    'pending',
+    'queued',
+  }.contains(value);
+}
+
+Color _turnStatusColor(String status) {
+  final value = status.trim().toLowerCase();
+  if (const <String>{'failed', 'error', 'unknown'}.contains(value)) {
+    return const Color(0xFFD46B6B);
+  }
+  if (const <String>{'cancelled', 'canceled', 'stopped'}.contains(value)) {
+    return const Color(0xFFA0A1A6);
+  }
+  if (const <String>{
+    'completed',
+    'success',
+    'succeeded',
+    'sent',
+    'delivered',
+  }.contains(value)) {
+    return const Color(0xFF77A982);
+  }
+  return const Color(0xFFD1A24D);
+}
+
+String _turnStatusLabel(String status) {
+  final value = status.trim().toLowerCase();
+  if (const <String>{'failed', 'error', 'unknown'}.contains(value)) {
+    return '失败';
+  }
+  if (const <String>{'cancelled', 'canceled', 'stopped'}.contains(value)) {
+    return '已取消';
+  }
+  if (const <String>{
+    'completed',
+    'success',
+    'succeeded',
+    'sent',
+    'delivered',
+  }.contains(value)) {
+    return '完成';
+  }
+  return '运行中';
+}
+
+dynamic _decodeTurnJSON(String value) {
+  final source = value.trim();
+  if (source.isEmpty) return null;
+  try {
+    return jsonDecode(source);
+  } catch (_) {
+    return source;
+  }
+}
+
+String _turnJSONText(dynamic value) {
+  if (value == null) return '';
+  if (value is String) return value;
+  try {
+    return const JsonEncoder.withIndent('  ').convert(value);
+  } catch (_) {
+    return value.toString();
+  }
+}
+
+String _turnToolSubject(AssistantTurnItemDto item) {
+  final decoded = _decodeTurnJSON(item.argumentsJson);
+  if (decoded is Map) {
+    for (final key in const <String>[
+      'path',
+      'file',
+      'filePath',
+      'query',
+      'command',
+      'url',
+      'cwd',
+    ]) {
+      final value = decoded[key]?.toString().trim() ?? '';
+      if (value.isNotEmpty) return value;
+    }
+  }
+  final text = _turnJSONText(decoded).replaceAll(RegExp(r'\s+'), ' ').trim();
+  return text.length > 72 ? '${text.substring(0, 72)}…' : text;
+}
+
+String _turnResultText(AssistantTurnItemDto item) {
+  final text = _turnJSONText(_decodeTurnJSON(item.resultJson));
+  if (text.trim().isNotEmpty) return text;
+  return item.errorCode.trim().isNotEmpty ? item.errorCode : '无返回内容';
+}
+
+class _TurnTimelineEntry {
+  final AssistantTurnItemDto? item;
+  final List<AssistantTurnItemDto> items;
+
+  const _TurnTimelineEntry.item(this.item) : items = const [];
+  _TurnTimelineEntry.tools() : item = null, items = <AssistantTurnItemDto>[];
+}
+
+class _TurnToolStream extends StatefulWidget {
+  final List<AssistantTurnItemDto> items;
+
+  const _TurnToolStream({required this.items});
+
+  @override
+  State<_TurnToolStream> createState() => _TurnToolStreamState();
+}
+
+class _TurnToolStreamState extends State<_TurnToolStream> {
+  late bool _expanded;
+  bool _touched = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _expanded = _hasRunning(widget.items);
+  }
+
+  @override
+  void didUpdateWidget(covariant _TurnToolStream oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (_touched) return;
+    final next = _hasRunning(widget.items);
+    if (next != _expanded) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) setState(() => _expanded = next);
+      });
+    }
+  }
+
+  bool _hasRunning(List<AssistantTurnItemDto> items) =>
+      items.any((item) => _isTurnStreaming(item.status));
+
+  String _summary() {
+    final calls = widget.items
+        .where((item) => item.type == 'tool_call')
+        .toList(growable: false);
+    final failed = widget.items
+        .where((item) => item.status.toLowerCase().contains('fail'))
+        .length;
+    final running = widget.items.any((item) => _isTurnStreaming(item.status));
+    final total = calls.isEmpty ? widget.items.length : calls.length;
+    if (failed > 0) return '$total 个工具 · $failed 个失败';
+    if (running) {
+      final completed = widget.items
+          .where((item) => item.status.toLowerCase().contains('complete'))
+          .length;
+      return '执行中 · $completed/$total 完成';
+    }
+    return '$total 个工具 · 已完成';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AmitiaMessageTheme.of(context);
+    return Container(
+      constraints: const BoxConstraints(maxWidth: 700),
+      margin: const EdgeInsets.symmetric(vertical: 8),
+      decoration: BoxDecoration(
+        border: Border.all(color: tokens.line),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Semantics(
+            button: true,
+            expanded: _expanded,
+            label: '工具执行流，${_summary()}',
+            child: InkWell(
+              key: const ValueKey('tool-stream-toggle'),
+              onTap: () => setState(() {
+                _touched = true;
+                _expanded = !_expanded;
+              }),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+                child: Row(
+                  children: [
+                    AnimatedRotation(
+                      turns: _expanded ? 0.25 : 0,
+                      duration: const Duration(milliseconds: 180),
+                      child: Icon(
+                        Icons.chevron_right_rounded,
+                        size: 17,
+                        color: tokens.muted,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      '工具执行流',
+                      style: TextStyle(
+                        color: tokens.text,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        _summary(),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(color: tokens.muted, fontSize: 10.5),
+                      ),
+                    ),
+                    Text(
+                      _expanded ? '收起' : '展开',
+                      style: TextStyle(color: tokens.accent, fontSize: 10.5),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          AnimatedSize(
+            duration: const Duration(milliseconds: 180),
+            curve: Curves.easeOut,
+            child: _expanded
+                ? Container(
+                    padding: const EdgeInsets.fromLTRB(8, 2, 8, 8),
+                    decoration: BoxDecoration(
+                      border: Border(top: BorderSide(color: tokens.line)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        for (final item in widget.items)
+                          item.type == 'tool_call'
+                              ? _TurnToolCallRow(item: item)
+                              : _TurnToolResultBlock(item: item),
+                      ],
+                    ),
+                  )
+                : const SizedBox.shrink(),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TurnToolCallRow extends StatelessWidget {
+  final AssistantTurnItemDto item;
+
+  const _TurnToolCallRow({required this.item});
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AmitiaMessageTheme.of(context);
+    final subject = _turnToolSubject(item);
+    final duration = item.durationMs > 0 ? ' · ${item.durationMs} ms' : '';
+    return Container(
+      constraints: const BoxConstraints(maxWidth: 700),
+      margin: const EdgeInsets.symmetric(vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 7),
+      decoration: BoxDecoration(
+        color: tokens.soft,
+        borderRadius: BorderRadius.circular(9),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 7,
+            height: 7,
+            decoration: BoxDecoration(
+              color: _turnStatusColor(item.status),
+              shape: BoxShape.circle,
+            ),
+          ),
+          const SizedBox(width: 9),
+          Text(
+            item.toolName.trim().isEmpty ? '工具调用' : item.toolName,
+            style: TextStyle(
+              color: tokens.text,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          if (subject.isNotEmpty) ...[
+            const SizedBox(width: 9),
+            Expanded(
+              child: Text(
+                subject,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(color: tokens.muted, fontSize: 11.5),
+              ),
+            ),
+          ] else
+            const Spacer(),
+          const SizedBox(width: 8),
+          Text(
+            '${_turnStatusLabel(item.status)}$duration',
+            style: TextStyle(
+              color: item.status.toLowerCase().contains('fail')
+                  ? tokens.danger
+                  : tokens.muted,
+              fontSize: 11,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TurnToolResultBlock extends StatefulWidget {
+  final AssistantTurnItemDto item;
+
+  const _TurnToolResultBlock({required this.item});
+
+  @override
+  State<_TurnToolResultBlock> createState() => _TurnToolResultBlockState();
+}
+
+class _TurnToolResultBlockState extends State<_TurnToolResultBlock> {
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AmitiaMessageTheme.of(context);
+    final result = _turnResultText(widget.item);
+    final summary = result.replaceAll(RegExp(r'\s+'), ' ').trim();
+    return Container(
+      constraints: const BoxConstraints(maxWidth: 700),
+      margin: const EdgeInsets.only(bottom: 15),
+      decoration: BoxDecoration(
+        border: Border.all(color: tokens.line),
+        borderRadius: BorderRadius.circular(9),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          InkWell(
+            onTap: () => setState(() => _expanded = !_expanded),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 7),
+              color: tokens.soft,
+              child: Row(
+                children: [
+                  Container(
+                    width: 7,
+                    height: 7,
+                    decoration: BoxDecoration(
+                      color: _turnStatusColor(widget.item.status),
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    widget.item.toolName.trim().isEmpty
+                        ? '工具结果'
+                        : widget.item.toolName,
+                    style: TextStyle(
+                      color: tokens.text,
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  if (summary.isNotEmpty) ...[
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        summary.length > 80
+                            ? '${summary.substring(0, 80)}…'
+                            : summary,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(color: tokens.muted, fontSize: 10.5),
+                      ),
+                    ),
+                  ] else
+                    const Spacer(),
+                  Text(
+                    _expanded ? '收起' : '展开',
+                    style: TextStyle(color: tokens.accent, fontSize: 10.5),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          if (_expanded)
+            Container(
+              constraints: const BoxConstraints(maxHeight: 240),
+              padding: const EdgeInsets.fromLTRB(11, 9, 11, 10),
+              child: SingleChildScrollView(
+                child: SelectableText(
+                  result,
+                  style: TextStyle(
+                    color: tokens.muted,
+                    fontFamily: 'monospace',
+                    fontSize: 10.5,
+                    height: 1.55,
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
     );

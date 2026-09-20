@@ -20,7 +20,7 @@ SPDX-License-Identifier: AGPL-3.0-only
       <span>{{ pullText }}</span>
     </div>
 
-    <div v-if="messages.length === 0 && !sending" class="empty-chat">
+    <div v-if="visibleMessages.length === 0 && !sending" class="empty-chat">
       <div class="empty-icon"><el-icon :size="48"><ChatDotRound /></el-icon></div>
       <template v-if="workspaceName">
         <p class="empty-text empty-text--project">你好，我是 {{ charName || "Amitia" }}</p>
@@ -215,8 +215,11 @@ let stopCanonicalConversationStream: (() => void) | null = null;
 let durableRequestGeneration = 0;
 
 const conversationId = computed(() => String(
-  props.extensionContext?.conversationId ?? props.messages[0]?.conversationId ?? "",
+  props.extensionContext?.conversationId ?? visibleMessages.value[0]?.conversationId ?? "",
 ));
+const visibleMessages = computed(() =>
+  props.messages.filter((message) => message?.assistantTurnSuppressed !== true),
+);
 const workspaceName = computed(() => {
   const workspace = props.extensionContext?.workspace as
     | Record<string, unknown>
@@ -245,13 +248,13 @@ type FlowItem =
   | { kind: "node"; key: string; node: ConversationNode; sequence?: number; timestamp: string };
 
 const flowItems = computed<FlowItem[]>(() => {
-  const items: FlowItem[] = props.messages.map((message, index) => ({
-    kind: "message",
-    key: `message:${getMessageUIKey(message, index)}`,
-    message,
-    sequence: finiteNumber(message?.seq ?? message?.sequence),
-    timestamp: String(message?.createdAt ?? message?.timestamp ?? ""),
-  }));
+  const items: FlowItem[] = visibleMessages.value.map((message, index) => ({
+      kind: "message",
+      key: `message:${getMessageUIKey(message, index)}`,
+      message,
+      sequence: finiteNumber(message?.seq ?? message?.sequence),
+      timestamp: String(message?.createdAt ?? message?.timestamp ?? ""),
+    }));
   for (const node of conversationNodes.value) {
     items.push({
       kind: "node",
@@ -347,7 +350,7 @@ function roleSwitchName(characterId: unknown) {
 }
 
 const pendingRoleSwitchName = computed(() => {
-  const lastMessage = props.messages[props.messages.length - 1];
+  const lastMessage = visibleMessages.value[visibleMessages.value.length - 1];
   if (!lastMessage || !props.characterId) return "";
   if (!shouldShowRoleSwitch(lastMessage, { characterId: props.characterId })) {
     return "";
@@ -376,7 +379,7 @@ function rebuildConversationEventLog() {
     return;
   }
   runtimeEvents.value = mergeConversationEvents(
-    messageHistoryEvents(props.messages, id),
+    messageHistoryEvents(visibleMessages.value, id),
     durableEvents.value.filter((event) => event.conversationId === id),
     loadConversationEventJournal(id),
     runtimeEvents.value.filter((event) => event.conversationId === id && event.source !== "history" && event.source !== "durable"),

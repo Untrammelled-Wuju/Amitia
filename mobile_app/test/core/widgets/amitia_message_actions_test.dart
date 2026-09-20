@@ -170,9 +170,9 @@ void main() {
       ),
     );
 
-    expect(find.text('思考完成（2.85s）'), findsOneWidget);
+    expect(find.text('已思考 2.9 秒'), findsOneWidget);
     expect(find.byIcon(Icons.chevron_right_rounded), findsOneWidget);
-    await tester.tap(find.text('思考完成（2.85s）'));
+    await tester.tap(find.text('已思考 2.9 秒'));
     await tester.pumpAndSettle();
 
     expect(find.text('复制'), findsNothing);
@@ -200,9 +200,9 @@ void main() {
       ),
     );
 
-    expect(find.text('思考中'), findsOneWidget);
+    expect(find.text('正在思考'), findsOneWidget);
     expect(find.byIcon(Icons.chevron_right_rounded), findsNothing);
-    await tester.tap(find.text('思考中'));
+    await tester.tap(find.text('正在思考'));
     await tester.pump();
     expect(find.byType(SelectableText), findsNothing);
   });

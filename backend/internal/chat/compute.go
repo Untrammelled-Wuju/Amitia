@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/u-ai/backend/config"
 	"github.com/u-ai/backend/internal/agent/tool"
 	"github.com/u-ai/backend/internal/decision"
 	"github.com/u-ai/backend/internal/expression"
@@ -22,6 +23,7 @@ import (
 
 type ComputeResult struct {
 	RequestID            string
+	TurnID               string
 	ConversationID       string
 	CharacterID          string
 	CharacterName        string
@@ -83,13 +85,21 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 	convID := req.ConversationID
 	if convID == "" {
 		convID = uuid.New().String()
-		conversation := &Conversation{ID: convID, SpaceID: req.SpaceID, ProjectID: strings.TrimSpace(req.ProjectID), Title: req.Message, Channel: channel, Source: source, ModelConfigID: req.ModelConfigID, ReasoningEffort: normalizeReasoningEffort(req.ReasoningEffort)}
+		reasoningEnabled := -1
+		if req.ReasoningEnabled != nil {
+			if *req.ReasoningEnabled {
+				reasoningEnabled = 1
+			} else {
+				reasoningEnabled = 0
+			}
+		}
+		conversation := &Conversation{ID: convID, SpaceID: req.SpaceID, ProjectID: strings.TrimSpace(req.ProjectID), Title: req.Message, Channel: channel, Source: source, ModelConfigID: req.ModelConfigID, ReasoningEffort: normalizeReasoningEffort(req.ReasoningEffort), ReasoningEnabled: reasoningEnabled, PermissionMode: normalizePermissionMode(req.PermissionMode)}
 		if err := s.persistConversationWithChange(conversation, req.SpaceID); err != nil {
 			return nil, err
 		}
 	} else if err := s.validateConversationScope(convID, channel, req.SpaceID); err != nil {
 		if strings.Contains(err.Error(), "会话不存在") {
-			conversation := &Conversation{ID: convID, SpaceID: req.SpaceID, ProjectID: strings.TrimSpace(req.ProjectID), Title: req.Message, Channel: channel, Source: source}
+			conversation := &Conversation{ID: convID, SpaceID: req.SpaceID, ProjectID: strings.TrimSpace(req.ProjectID), Title: req.Message, Channel: channel, Source: source, PermissionMode: normalizePermissionMode(req.PermissionMode)}
 			if createErr := s.persistConversationWithChange(conversation, req.SpaceID); createErr != nil {
 				return nil, createErr
 			}
@@ -101,13 +111,23 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 			}, err, "process message conversation scope invalid")
 			return nil, fmt.Errorf("会话与角色或渠道不匹配")
 		}
-	} else if req.ModelConfigID > 0 || strings.TrimSpace(req.ReasoningEffort) != "" {
+	} else if req.ModelConfigID > 0 || strings.TrimSpace(req.ReasoningEffort) != "" || strings.TrimSpace(req.PermissionMode) != "" {
 		updates := map[string]interface{}{}
 		if req.ModelConfigID > 0 {
 			updates["model_config_id"] = req.ModelConfigID
 		}
 		if effort := normalizeReasoningEffort(req.ReasoningEffort); effort != "" {
 			updates["reasoning_effort"] = effort
+		}
+		if req.ReasoningEnabled != nil {
+			if *req.ReasoningEnabled {
+				updates["reasoning_enabled"] = 1
+			} else {
+				updates["reasoning_enabled"] = 0
+			}
+		}
+		if strings.TrimSpace(req.PermissionMode) != "" {
+			updates["permission_mode"] = normalizePermissionMode(req.PermissionMode)
 		}
 		if len(updates) > 0 {
 			s.db.Model(&Conversation{}).Where("id = ?", convID).Updates(updates)
@@ -186,6 +206,9 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 		return nil, fmt.Errorf("没有可用的模型配置")
 	}
 	applyReasoningCapabilities(cfg)
+	if req.ReasoningEnabled != nil {
+		cfg.SupportsReasoning = *req.ReasoningEnabled
+	}
 	cfg.ReasoningEffort = normalizeReasoningEffort(req.ReasoningEffort)
 	if cfg.ReasoningEffort == "" {
 		cfg.ReasoningEffort = cfg.DefaultReasoningEffort
@@ -373,7 +396,11 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 		"plugin_contribution_sources": pluginSources,
 	}, "process message prompt ready")
 	seenTools := map[string]bool{}
-	toolExecCtx, cancelTools := context.WithTimeout(ctx, 60*time.Second)
+	turnTimeout := 30 * time.Minute
+	if config.AppCfg != nil && config.AppCfg.Chat.AgentTurnTimeoutSeconds > 0 {
+		turnTimeout = time.Duration(config.AppCfg.Chat.AgentTurnTimeoutSeconds) * time.Second
+	}
+	toolExecCtx, cancelTools := context.WithTimeout(ctx, turnTimeout)
 	defer cancelTools()
 
 	s.hasActionDirective = false
@@ -434,8 +461,14 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 		}
 	}
 	s.emitDesktopPetChat(ctx, req, charID, convID, userMsgID, "response.started", 3)
-	reply, reasoning, forceVoice, totalTokens, reasoningDurationMS, llmErr := s.invokeLLMWithTools(ctx, cfg, messages, trace, promptTrace, userMsgID, convID, charID, channel, requestID, req.SpaceID, req.SessionID, req.ExecContext, toolDefs, seenTools, toolExecCtx)
+	turnRecorder := newAssistantTurnRecorder(s.db, convID, charID, userMsgID, requestID)
+	if err := turnRecorder.Start(ctx); err != nil {
+		s.emitDesktopPetChat(ctx, req, charID, convID, userMsgID, "response.failed", 4)
+		return nil, err
+	}
+	reply, reasoning, forceVoice, totalTokens, reasoningDurationMS, llmErr := s.invokeLLMWithTools(ctx, cfg, messages, trace, promptTrace, userMsgID, convID, charID, channel, requestID, req.SpaceID, req.SessionID, normalizePermissionMode(req.PermissionMode), req.ExecContext, toolDefs, seenTools, toolExecCtx, turnRecorder)
 	if llmErr != nil {
+		_ = turnRecorder.Finalize(ctx, assistantTurnStatusFailed)
 		s.emitDesktopPetChat(ctx, req, charID, convID, userMsgID, "response.failed", 4)
 		return nil, llmErr
 	}
@@ -486,6 +519,7 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 
 	return &ComputeResult{
 		RequestID:            requestID,
+		TurnID:               turnRecorder.TurnID,
 		ConversationID:       convID,
 		CharacterID:          charID,
 		CharacterName:        charName,

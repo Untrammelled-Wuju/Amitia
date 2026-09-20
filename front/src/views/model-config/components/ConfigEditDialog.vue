@@ -136,7 +136,7 @@ SPDX-License-Identifier: AGPL-3.0-only
             :disabled="!form.supportsReasoning"
             style="width: 160px"
           >
-            <el-option label="轻" value="low" />
+            <el-option label="低" value="low" />
             <el-option label="中" value="medium" />
             <el-option label="高" value="high" />
             <el-option label="极高" value="xhigh" />

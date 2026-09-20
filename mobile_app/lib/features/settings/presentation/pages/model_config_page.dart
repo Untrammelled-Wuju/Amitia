@@ -473,9 +473,11 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
     final realtimeAccessTokenCtrl = TextEditingController();
     final realtimeSecretKeyCtrl = TextEditingController();
     bool isActive = existing == null ? _configs.isEmpty : _activeOf(existing);
-    bool supportsReasoning = existing?['supportsReasoning'] == true;
+    bool supportsReasoning = existing == null
+        ? true
+        : existing['supportsReasoning'] == true;
     String defaultReasoningEffort =
-        (existing?['defaultReasoningEffort'] ?? 'medium').toString();
+        (existing?['defaultReasoningEffort'] ?? 'high').toString();
     bool detecting = false;
     List<Map<String, dynamic>> detectedModels = const <Map<String, dynamic>>[];
 
@@ -762,14 +764,14 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
                                 'xhigh',
                               ].contains(defaultReasoningEffort)
                               ? defaultReasoningEffort
-                              : 'medium',
+                              : 'high',
                           decoration: const InputDecoration(
                             border: OutlineInputBorder(),
                             isDense: true,
                             labelText: '默认思考强度',
                           ),
                           items: const <DropdownMenuItem<String>>[
-                            DropdownMenuItem(value: 'low', child: Text('轻')),
+                            DropdownMenuItem(value: 'low', child: Text('低')),
                             DropdownMenuItem(value: 'medium', child: Text('中')),
                             DropdownMenuItem(value: 'high', child: Text('高')),
                             DropdownMenuItem(value: 'xhigh', child: Text('极高')),

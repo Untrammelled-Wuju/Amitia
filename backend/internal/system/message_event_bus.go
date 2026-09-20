@@ -12,9 +12,10 @@ import (
 type MessageEventType string
 
 const (
-	EventMessageCreated      MessageEventType = "message_created"
-	EventMessageUpdated      MessageEventType = "message_updated"
-	EventConversationUpdated MessageEventType = "conversation_updated"
+	EventMessageCreated         MessageEventType = "message_created"
+	EventMessageUpdated         MessageEventType = "message_updated"
+	EventConversationUpdated    MessageEventType = "conversation_updated"
+	EventAssistantTurnCompleted MessageEventType = "assistant_turn_completed"
 )
 
 type MessageEvent struct {
@@ -168,5 +169,19 @@ func (bus *MessageEventBus) PublishConversationUpdated(convID, channel string, d
 		ConversationID: convID,
 		Channel:        channel,
 		Data:           data,
+	})
+}
+
+func (bus *MessageEventBus) PublishAssistantTurnCompleted(convID, turnID, channel string) {
+	bus.Publish(MessageEvent{
+		Type:           EventAssistantTurnCompleted,
+		ConversationID: convID,
+		MessageID:      turnID,
+		Channel:        channel,
+		Role:           "assistant",
+		Status:         "completed",
+		Data: map[string]interface{}{
+			"turnId": turnID,
+		},
 	})
 }

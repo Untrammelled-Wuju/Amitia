@@ -49,6 +49,8 @@ type ProcessRequest struct {
 	ReplyToMessageID         *string                    `json:"replyToMessageId,omitempty"`
 	ModelConfigID            int                        `json:"modelConfigId,omitempty"`
 	ReasoningEffort          string                     `json:"reasoningEffort,omitempty"`
+	ReasoningEnabled         *bool                      `json:"reasoningEnabled,omitempty"`
+	PermissionMode           string                     `json:"permissionMode,omitempty"`
 	RequestID                string                     `json:"requestId,omitempty"`
 	InteractionID            string                     `json:"-"`
 	ExpectedStatusVersion    int64                      `json:"-"`
@@ -60,6 +62,7 @@ type ProcessRequest struct {
 
 type ProcessResponse struct {
 	ConversationID      string                `json:"conversationId"`
+	TurnID              string                `json:"turnId,omitempty"`
 	Sequence            int64                 `json:"sequence"`
 	Reply               string                `json:"reply"`
 	Reasoning           string                `json:"reasoning,omitempty"`

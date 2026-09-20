@@ -635,13 +635,36 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	capabilityProviderRegistry := capability.NewProviderRegistry()
 	providerExecutionResolver := capability.NewProviderRuntimeExecutionResolver(&capability.ProviderRegistryExecutionLookup{Registry: capabilityProviderRegistry})
 
+	approvalBroker := execution.NewApprovalBroker()
+	approvalGate := execution.NewApprovalGate()
+	approvalGate.OnEvaluate = func(ctx context.Context, tool capability.ToolDefinition, inv capability.ToolInvocationContext, decision execution.PermissionDecision, input json.RawMessage) (bool, error) {
+		if inv.ApprovalMode == capability.ApprovalModeAuto || inv.ApprovalMode == capability.ApprovalModeSession {
+			return true, nil
+		}
+		if inv.ConversationID == "" || inv.IsBackground {
+			return false, nil
+		}
+		toolName := strings.TrimSpace(tool.ModelName)
+		if toolName == "" {
+			toolName = strings.TrimSpace(tool.Name)
+		}
+		return approvalBroker.Await(ctx, execution.ApprovalRequest{
+			SpaceID:        inv.SpaceID,
+			ConversationID: inv.ConversationID,
+			RequestID:      inv.OperationID,
+			ToolCallID:     inv.ExternalCallID,
+			ToolName:       toolName,
+			Arguments:      string(input),
+			RiskLevel:      string(tool.RiskLevel),
+		}, 5*time.Minute)
+	}
 	executionKernel := &execution.ExecutionPipeline{
 		InvocationValidator: execution.NewInvocationValidator(),
 		InputValidator:      execution.NewInputValidator(),
 		AvailabilityGate:    execution.NewAvailabilityGate(nil),
 		ScopeGate:           execution.NewScopeGate(),
 		PermissionGate:      execution.NewPermissionGate(),
-		ApprovalGate:        execution.NewApprovalGate(),
+		ApprovalGate:        approvalGate,
 		ConcurrencyCtrl:     concurrencyCtrl,
 		RateLimiter:         rateLimiter,
 		IdempotencyGuard:    execution.NewIdempotencyGuard(execution.NewExecutionIdempotencyStorage(db)),
@@ -1682,6 +1705,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		DependencyResolver:     dependencyResolver,
 		RuntimeSupervisor:      supervisor,
 		ExecutionKernel:        executionKernel,
+		ApprovalBroker:         approvalBroker,
 		HostAPIGateway:         hostAPIGateway,
 		PermissionBroker:       permBroker,
 		PermissionDefinitions:  permDefRegistry,

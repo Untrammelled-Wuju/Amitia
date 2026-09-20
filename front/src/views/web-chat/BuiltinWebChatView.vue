@@ -156,6 +156,10 @@ SPDX-License-Identifier: AGPL-3.0-only
       :selected-model-id="selectedModelId"
       :reasoning-effort="selectedReasoningEffort"
       :supports-reasoning="selectedModelSupportsReasoning"
+      :reasoning-enabled="selectedReasoningEnabled"
+      :permission-mode="selectedPermissionMode"
+      :model-preview-change="handleModelSettingPreviewChange"
+      :model-commit-change="handleModelSettingChange"
       @send="handleSend"
       @image="onImageAttached"
       @removeImage="onImageRemoved"
@@ -166,7 +170,7 @@ SPDX-License-Identifier: AGPL-3.0-only
       @removeVideo="onVideoRemoved"
       @file="handleFileSend"
       @cancel-reply="replyTarget = null"
-      @update:model="handleModelSettingChange"
+      @update:permission="handlePermissionModeChange"
     /></div>
 
     <CharacterPickerDialog
@@ -213,6 +217,7 @@ import { useConversationWorkspace } from "../../composables/useConversationWorks
 import ChatBanners from "../../components/ChatBanners.vue";
 import ChatHeaderBar from "../../components/ChatHeaderBar.vue";
 import MessagesArea from "../../components/MessagesArea.vue";
+import { useAssistantTurns } from "@/composables/useAssistantTurns";
 import ChatInput from "../../components/ChatInput.vue";
 import CharacterPickerDialog from "../../components/CharacterPickerDialog.vue";
 import MemoryPanel from "../../components/MemoryPanel.vue";
@@ -299,15 +304,19 @@ const showImportDetail = ref(false);
 const convSummary = ref("");
 const showSummaryDrawer = ref(false);
 const replyTarget = ref<any>(null);
+const { applyTurns, loadTurns } = useAssistantTurns(convId, messages);
 const llmModels = ref<any[]>([]);
 const selectedModelId = ref(0);
-const selectedReasoningEffort = ref("medium");
+const selectedReasoningEffort = ref("high");
+const selectedReasoningEnabled = ref(true);
+const selectedPermissionMode = ref("request_approval");
 const selectedModelSupportsReasoning = computed(() => {
   const model = llmModels.value.find(
     (item: any) => Number(item.id) === selectedModelId.value,
   );
   return model?.supportsReasoning === true;
 });
+const modelSettingsDraftKey = "amitia.chat.model-settings.draft.v1";
 const chatExtensionContext = computed(() => {
   const env = resolveHostEnvironment();
   return {
@@ -501,35 +510,127 @@ async function loadLlmModels() {
 }
 
 async function loadConversationModelSettings(conversationId: string) {
-  if (!conversationId) return;
+  if (!conversationId) {
+    try {
+      const draft = JSON.parse(
+        localStorage.getItem(modelSettingsDraftKey) || "{}",
+      );
+      selectedModelId.value = Number(draft.modelConfigId || 0);
+      selectedReasoningEffort.value = String(
+        draft.reasoningEffort || "high",
+      );
+      selectedReasoningEnabled.value = draft.reasoningEnabled === true;
+      selectedPermissionMode.value =
+        draft.permissionMode === "full_access" ? "full_access" : "request_approval";
+    } catch {}
+    return;
+  }
   try {
-    const conversation = await get<any>(
-      `/api/web-chat/conversations/${encodeURIComponent(conversationId)}`,
+    const response = await get<any>("/api/web-chat/conversations", {
+      page: 1,
+      pageSize: 200,
+    });
+    const conversation = (response?.items || []).find(
+      (item: any) => String(item?.id || "") === conversationId,
     );
     selectedModelId.value = Number(conversation?.modelConfigId || 0);
     selectedReasoningEffort.value =
-      String(conversation?.reasoningEffort || "medium");
+      String(conversation?.reasoningEffort || "high");
+    selectedReasoningEnabled.value =
+      conversation?.reasoningEnabled === 1 ||
+      conversation?.reasoningEnabled === true;
+    selectedPermissionMode.value =
+      conversation?.permissionMode === "full_access"
+        ? "full_access"
+        : "request_approval";
+    localStorage.removeItem(modelSettingsDraftKey);
   } catch {}
+}
+
+function saveModelSettingsDraft(
+  modelId: number,
+  reasoningEffort: string,
+  reasoningEnabled: boolean,
+) {
+  try {
+    localStorage.setItem(
+      modelSettingsDraftKey,
+      JSON.stringify({
+        modelConfigId: modelId,
+        reasoningEffort,
+        reasoningEnabled,
+        permissionMode: selectedPermissionMode.value,
+      }),
+    );
+  } catch {}
+}
+
+async function handlePermissionModeChange(mode: string) {
+  const next = mode === "full_access" ? "full_access" : "request_approval";
+  selectedPermissionMode.value = next;
+  if (!convId.value) {
+    saveModelSettingsDraft(
+      selectedModelId.value,
+      selectedReasoningEffort.value,
+      selectedReasoningEnabled.value,
+    );
+    return;
+  }
+  try {
+    await put(
+      `/api/web-chat/conversations/${encodeURIComponent(convId.value)}`,
+      { permissionMode: next },
+    );
+  } catch {
+    await loadConversationModelSettings(convId.value);
+    ElMessage.error("保存权限模式失败");
+  }
 }
 
 async function handleModelSettingChange(
   modelId: number,
   reasoningEffort: string,
+  reasoningEnabled: boolean,
 ) {
-  selectedModelId.value = Number(modelId || 0);
-  selectedReasoningEffort.value = reasoningEffort || "medium";
-  if (!convId.value) return;
+  const nextModelId = Number(modelId || 0);
+  const nextReasoningEffort = reasoningEffort || "high";
+  const nextReasoningEnabled = reasoningEnabled === true;
+  handleModelSettingPreviewChange(
+    nextModelId,
+    nextReasoningEffort,
+    nextReasoningEnabled,
+  );
+  if (!convId.value) {
+    saveModelSettingsDraft(
+      nextModelId,
+      nextReasoningEffort,
+      nextReasoningEnabled,
+    );
+    return;
+  }
   try {
     await put(
       `/api/web-chat/conversations/${encodeURIComponent(convId.value)}`,
       {
-        modelConfigId: selectedModelId.value,
-        reasoningEffort: selectedReasoningEffort.value,
+        modelConfigId: nextModelId,
+        reasoningEffort: nextReasoningEffort,
+        reasoningEnabled: nextReasoningEnabled,
       },
     );
   } catch {
+    await loadConversationModelSettings(convId.value);
     ElMessage.error("保存模型设置失败");
   }
+}
+
+function handleModelSettingPreviewChange(
+  modelId: number,
+  reasoningEffort: string,
+  reasoningEnabled: boolean,
+) {
+  selectedModelId.value = Number(modelId || 0);
+  selectedReasoningEffort.value = reasoningEffort || "high";
+  selectedReasoningEnabled.value = reasoningEnabled === true;
 }
 
 const {
@@ -560,6 +661,10 @@ const {
   messages,
   scrollToBottom,
   sending,
+  (conversationId) => {
+    if (conversationId && conversationId !== convId.value) return;
+    void loadTurns();
+  },
 );
 
 const {
@@ -602,6 +707,8 @@ const {
   },
   selectedModelId,
   selectedReasoningEffort,
+  selectedReasoningEnabled,
+  selectedPermissionMode,
 );
 
 const {
@@ -698,8 +805,14 @@ watch(
   convId,
   (conversationId) => {
     void loadConversationModelSettings(conversationId || "");
+    void loadTurns();
   },
   { immediate: true },
+);
+
+watch(
+  () => messages.value.map((message) => String(message?.id || "")).join("|"),
+  () => applyTurns(),
 );
 
 watch(

@@ -25,6 +25,7 @@ type SkillScope struct {
 	ToolCallID     string
 	CorrelationID  string
 	CausationID    string
+	PermissionMode string
 	ExecContext    *coreexec.ExecutionContext
 }
 

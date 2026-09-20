@@ -34,6 +34,8 @@ export function useWebChatSend(
   onConversationCreated?: (conversationId: string) => void | Promise<void>,
   modelConfigId?: Ref<number>,
   reasoningEffort?: Ref<string>,
+  reasoningEnabled?: Ref<boolean>,
+  permissionMode?: Ref<string>,
 ) {
   const { post, del, get } = useApi();
   const { currentWorkspace, getWorkspaceRequestFields, bindCurrentWorkspaceToConversation } =
@@ -399,6 +401,8 @@ export function useWebChatSend(
         replyToMessageId: replyTarget?.value?.id || undefined,
         modelConfigId: modelConfigId?.value || undefined,
         reasoningEffort: reasoningEffort?.value || undefined,
+        reasoningEnabled: reasoningEnabled?.value,
+        permissionMode: permissionMode?.value || undefined,
         ...getWorkspaceRequestFields(),
       };
       const [url, init] = await Promise.all([

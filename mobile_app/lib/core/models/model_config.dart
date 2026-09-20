@@ -25,8 +25,8 @@ class ModelConfigDto {
     this.timeoutSeconds = 60,
     this.retryCount = 1,
     this.hasApiKey = false,
-    this.supportsReasoning = false,
-    this.defaultReasoningEffort = 'medium',
+    this.supportsReasoning = true,
+    this.defaultReasoningEffort = 'high',
   });
 
   factory ModelConfigDto.fromJson(Map<String, dynamic> json) {
@@ -42,8 +42,10 @@ class ModelConfigDto {
       timeoutSeconds: (json['timeoutSeconds'] as num?)?.toInt() ?? 60,
       retryCount: (json['retryCount'] as num?)?.toInt() ?? 1,
       hasApiKey: json['hasApiKey'] == true,
-      supportsReasoning: json['supportsReasoning'] == true,
-      defaultReasoningEffort: (json['defaultReasoningEffort'] ?? 'medium')
+      supportsReasoning: json['supportsReasoning'] == null
+          ? true
+          : json['supportsReasoning'] == true,
+      defaultReasoningEffort: (json['defaultReasoningEffort'] ?? 'high')
           .toString(),
     );
   }

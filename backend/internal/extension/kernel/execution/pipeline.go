@@ -240,7 +240,7 @@ func (p *ExecutionPipeline) execute(ctx context.Context, request ToolExecutionRe
 				Message:  "permission denied",
 			}))), nil
 		case PermissionRequireApproval:
-			approvalResult := p.handleApproval(timeoutCtx, tool, inv, decision, budget)
+			approvalResult := p.handleApproval(timeoutCtx, tool, inv, decision, budget, request.Input)
 			if approvalResult != nil {
 				return *approvalResult, nil
 			}
@@ -929,7 +929,7 @@ func (p *ExecutionPipeline) checkChildScopeEscalation(ctx context.Context, inv c
 	return nil
 }
 
-func (p *ExecutionPipeline) handleApproval(ctx context.Context, tool capability.ToolDefinition, inv capability.ToolInvocationContext, decision PermissionDecision, budget TimeoutBudget) *capability.UnifiedToolResult {
+func (p *ExecutionPipeline) handleApproval(ctx context.Context, tool capability.ToolDefinition, inv capability.ToolInvocationContext, decision PermissionDecision, budget TimeoutBudget, input json.RawMessage) *capability.UnifiedToolResult {
 	toolID := string(tool.ID)
 	result, cancelled := p.checkTimeout(ctx, inv, toolID, budget, TimeoutPhasePreDispatch)
 	if cancelled {
@@ -945,7 +945,7 @@ func (p *ExecutionPipeline) handleApproval(ctx context.Context, tool capability.
 		return &r
 	}
 
-	approvalDecision := p.runApprovalWithReEvaluate(ctx, tool, inv, decision, budget)
+	approvalDecision := p.runApprovalWithReEvaluate(ctx, tool, inv, decision, budget, input)
 	switch approvalDecision {
 	case approvalDecisionApproved:
 		grantedPerms := collectGrantedPermissionIDs(tool)
@@ -986,14 +986,14 @@ const (
 	approvalDecisionError     approvalFlowDecision = "error"
 )
 
-func (p *ExecutionPipeline) runApprovalWithReEvaluate(ctx context.Context, tool capability.ToolDefinition, inv capability.ToolInvocationContext, decision PermissionDecision, budget TimeoutBudget) approvalFlowDecision {
+func (p *ExecutionPipeline) runApprovalWithReEvaluate(ctx context.Context, tool capability.ToolDefinition, inv capability.ToolInvocationContext, decision PermissionDecision, budget TimeoutBudget, input json.RawMessage) approvalFlowDecision {
 	if p.PermissionGate == nil || p.PermissionGate.Broker == nil {
 		return approvalDecisionError
 	}
 
 	broker := p.PermissionGate.Broker
 
-	approved, appErr := p.ApprovalGate.Evaluate(ctx, tool, inv, decision)
+	approved, appErr := p.ApprovalGate.Evaluate(ctx, tool, inv, decision, input)
 
 	if appErr != nil {
 		if approvalTimeout(appErr) || errors.Is(ctx.Err(), context.DeadlineExceeded) {

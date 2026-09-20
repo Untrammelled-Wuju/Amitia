@@ -45,6 +45,9 @@ func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, chatSvc chat.
 			channel = "web"
 		}
 		if !event.IsInternal {
+			if event.TurnID != "" {
+				bus.PublishAssistantTurnCompleted(event.ConversationID, event.TurnID, channel)
+			}
 			metadata := map[string]interface{}{
 				"userMessageId":       event.UserMessageID,
 				"userMessageSequence": event.UserMessageSequence,
@@ -229,6 +232,7 @@ func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, chatSvc chat.
 
 	r.GET("/web-chat/conversations", handler.WebChatListConversations)
 	r.GET("/web-chat/conversations/:id", handler.WebChatGetConv)
+	r.GET("/web-chat/conversations/:id/turns", handler.WebChatListAssistantTurns)
 	r.GET("/web-chat/sidebar", handler.WebChatConversationSidebar)
 	r.GET("/web-chat/channels", handler.WebChatListChannelConversations)
 	r.POST("/web-chat/projects", handler.WebChatCreateProject)
@@ -246,6 +250,8 @@ func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, chatSvc chat.
 	r.POST("/web-chat/conversations/:id/reply-timing/resume", handler.WebChatReplyTimingResume)
 	r.GET("/web-chat/conversations/:id/reply-timing/status", handler.WebChatReplyTimingStatus)
 	r.GET("/web-chat/message-status/:id", handler.WebChatMessageStatus)
+	r.GET("/web-chat/approvals", handler.WebChatListApprovals)
+	r.POST("/web-chat/approvals/:id/resolve", handler.WebChatResolveApproval)
 	r.PUT("/web-chat/messages/:id", handler.WebChatUpdateMessage)
 	r.POST("/web-chat/send", handler.WebChatSend)
 	r.POST("/web-chat/messages", handler.WebChatSubmitMessage)

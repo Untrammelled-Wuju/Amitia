@@ -14,6 +14,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/config"
+	"github.com/u-ai/backend/internal/agentpermission"
 	"github.com/u-ai/backend/internal/chat"
 	"github.com/u-ai/backend/internal/interaction"
 	"github.com/u-ai/backend/internal/modelerror"
@@ -46,6 +47,8 @@ type webChatSendRequest struct {
 	ReplyToMessageID *string `json:"replyToMessageId,omitempty"`
 	ModelConfigID    int     `json:"modelConfigId"`
 	ReasoningEffort  string  `json:"reasoningEffort"`
+	ReasoningEnabled *bool   `json:"reasoningEnabled"`
+	PermissionMode   string  `json:"permissionMode"`
 }
 
 func (h *Handler) WebChatListConversations(c *gin.Context) {
@@ -76,6 +79,50 @@ func (h *Handler) WebChatGetConv(c *gin.Context) {
 		return
 	}
 	util.SuccessResponse(c, conversation)
+}
+
+func (h *Handler) WebChatListAssistantTurns(c *gin.Context) {
+	convID := strings.TrimSpace(c.Param("id"))
+	if convID == "" {
+		util.ErrorResponse(c, response.InvalidParams, "缺少会话ID", nil)
+		return
+	}
+	if _, err := h.requireWebChatConversation(convID, webChatSpaceID(c)); err != nil {
+		util.ErrorResponse(c, response.NotFound, "会话不存在", nil)
+		return
+	}
+	after, _ := strconv.ParseInt(strings.TrimSpace(c.DefaultQuery("after", "0")), 10, 64)
+	limit, _ := strconv.Atoi(strings.TrimSpace(c.DefaultQuery("limit", "100")))
+	if limit <= 0 {
+		limit = 100
+	}
+	if limit > 500 {
+		limit = 500
+	}
+	query := h.db.WithContext(c.Request.Context()).Model(&chat.AssistantTurn{}).Where("conversation_id = ?", convID)
+	if after > 0 {
+		query = query.Where("sequence > ?", after)
+	}
+	turns := make([]chat.AssistantTurn, 0)
+	if err := query.Order("sequence ASC").Limit(limit).Find(&turns).Error; err != nil {
+		util.ErrorResponse(c, response.OperationFailed, "读取发言轮次失败", nil)
+		return
+	}
+	for index := range turns {
+		turns[index].Items = make([]chat.AssistantTurnItem, 0)
+		if err := h.db.WithContext(c.Request.Context()).
+			Where("turn_id = ?", turns[index].ID).
+			Order("sequence ASC").
+			Find(&turns[index].Items).Error; err != nil {
+			util.ErrorResponse(c, response.OperationFailed, "读取发言内容块失败", nil)
+			return
+		}
+	}
+	nextAfter := after
+	if len(turns) > 0 {
+		nextAfter = turns[len(turns)-1].Sequence
+	}
+	util.SuccessResponse(c, gin.H{"items": turns, "nextAfter": nextAfter})
 }
 
 func (h *Handler) WebChatGetMessages(c *gin.Context) {
@@ -172,12 +219,14 @@ func (h *Handler) WebChatDeleteConv(c *gin.Context) {
 func (h *Handler) WebChatUpdateConv(c *gin.Context) {
 	id := c.Param("id")
 	var body struct {
-		Title           *string `json:"title"`
-		ProjectID       *string `json:"projectId"`
-		Pinned          *bool   `json:"pinned"`
-		Archived        *bool   `json:"archived"`
-		ModelConfigID   *int    `json:"modelConfigId"`
-		ReasoningEffort *string `json:"reasoningEffort"`
+		Title            *string `json:"title"`
+		ProjectID        *string `json:"projectId"`
+		Pinned           *bool   `json:"pinned"`
+		Archived         *bool   `json:"archived"`
+		ModelConfigID    *int    `json:"modelConfigId"`
+		ReasoningEffort  *string `json:"reasoningEffort"`
+		ReasoningEnabled *bool   `json:"reasoningEnabled"`
+		PermissionMode   *string `json:"permissionMode"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
 		util.ErrorResponse(c, response.InvalidParams, "无效请求体", nil)
@@ -239,6 +288,21 @@ func (h *Handler) WebChatUpdateConv(c *gin.Context) {
 			return
 		}
 		conversationUpdates["reasoning_effort"] = effort
+	}
+	if body.ReasoningEnabled != nil {
+		value := 0
+		if *body.ReasoningEnabled {
+			value = 1
+		}
+		conversationUpdates["reasoning_enabled"] = value
+	}
+	if body.PermissionMode != nil {
+		mode := strings.TrimSpace(*body.PermissionMode)
+		if !agentpermission.Valid(mode) {
+			util.ErrorResponse(c, response.InvalidParams, "权限模式无效", nil)
+			return
+		}
+		conversationUpdates["permission_mode"] = agentpermission.Normalize(mode)
 	}
 	if len(conversationUpdates) > 0 {
 		if err := h.webChatOwnedConversationQuery(spaceID).Where("id = ?", id).Updates(conversationUpdates).Error; err != nil {
@@ -591,6 +655,8 @@ func (h *Handler) WebChatSubmitMessage(c *gin.Context) {
 			ReplyToMessageID: body.ReplyToMessageID,
 			ModelConfigID:    body.ModelConfigID,
 			ReasoningEffort:  body.ReasoningEffort,
+			ReasoningEnabled: body.ReasoningEnabled,
+			PermissionMode:   body.PermissionMode,
 		}, workspaceBinding)
 		if err != nil {
 			applog.Warn(fmt.Sprintf("[WebChatSubmitMessage] generation failed: %v", err))

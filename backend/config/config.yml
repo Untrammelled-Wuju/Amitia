@@ -88,6 +88,8 @@ runtime:
 chat:
   mergeWindowMs: 6000
   contextWindowMaxRounds: 20
+  agentTurnTimeoutSeconds: 1800
+  agentMaxParallelTools: 4
 
 embedding:
   modelName: "text-embedding-3-small"

@@ -51,32 +51,39 @@
           <slot name="badges" :message="message" />
         </header>
 
-        <AmitiaThinkingBlock
-          v-if="message.thinking"
-          :content="message.thinking.content"
-          :state="message.thinking.state"
-          :duration="message.thinking.duration"
-        />
-
         <div v-if="stateNotice" class="amrp-message-state" :class="message.state">
           <b>{{ stateNotice.title }}</b>
           <span>{{ stateNotice.detail }}</span>
         </div>
 
-        <RendererErrorBoundary label="Markdown Renderer">
-          <MarkdownContent
-            v-if="message.markdown"
-            :source="message.markdown"
-            :streaming="message.state === 'streaming'"
-            @citation="activeCitationId = $event"
-          />
-        </RendererErrorBoundary>
+        <AssistantTurnTimeline
+          v-if="assistantTurn"
+          :turn="assistantTurn"
+        />
 
-        <template v-for="item in renderedBlocks" :key="item.key">
-          <RendererErrorBoundary :label="blockLabel(item)">
-            <AmitiaImageBlock v-if="item.kind === 'images'" :images="item.images" />
-            <RichBlockRenderer v-else :block="item.block" />
+        <template v-else>
+          <AmitiaThinkingBlock
+            v-if="message.thinking"
+            :content="message.thinking.content"
+            :state="message.thinking.state"
+            :duration="message.thinking.duration"
+          />
+
+          <RendererErrorBoundary label="Markdown Renderer">
+            <MarkdownContent
+              v-if="message.markdown"
+              :source="message.markdown"
+              :streaming="message.state === 'streaming'"
+              @citation="activeCitationId = $event"
+            />
           </RendererErrorBoundary>
+
+          <template v-for="item in renderedBlocks" :key="item.key">
+            <RendererErrorBoundary :label="blockLabel(item)">
+              <AmitiaImageBlock v-if="item.kind === 'images'" :images="item.images" />
+              <RichBlockRenderer v-else :block="item.block" />
+            </RendererErrorBoundary>
+          </template>
         </template>
 
         <slot name="extension-content" :message="message" />
@@ -122,6 +129,7 @@ import {
 } from "@element-plus/icons-vue";
 import { useTheme } from "@/composables/useTheme";
 import type { AIMessageData, RichBlock } from "./types";
+import AssistantTurnTimeline from "./AssistantTurnTimeline.vue";
 import { aimMessagePlainText, normalizeAIMessage } from "./amrp";
 import { copyText } from "./utils";
 import MarkdownContent from "./markdown/MarkdownContent.vue";
@@ -181,6 +189,7 @@ const message = computed<AIMessageData>(() =>
     avatar: props.charAvatar,
   }),
 );
+const assistantTurn = computed(() => props.message?.assistantTurn ?? null);
 const character = computed(() => message.value.character ?? { id: "", name: props.charName });
 const characterInitial = computed(() => (character.value.name || "A").trim().slice(0, 1));
 const streaming = computed(() => message.value.state === "streaming" || message.value.state === "queued");

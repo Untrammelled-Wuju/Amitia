@@ -101,6 +101,7 @@ type Container struct {
 	DependencyResolver        dependency.Resolver
 	RuntimeSupervisor         runtime_supervisor.Supervisor
 	ExecutionKernel           *execution.ExecutionPipeline
+	ApprovalBroker            *execution.ApprovalBroker
 	HostAPIGateway            *host_api.DefaultGateway
 	PermissionBroker          permission.PermissionBroker
 	PermissionDefinitions     *permission.PermissionDefinitionRegistry

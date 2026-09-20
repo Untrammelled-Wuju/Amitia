@@ -262,6 +262,8 @@ func (h *Handler) WebChatSendStream(c *gin.Context) {
 		ReplyToMessageID: body.ReplyToMessageID,
 		ModelConfigID:    body.ModelConfigID,
 		ReasoningEffort:  body.ReasoningEffort,
+		ReasoningEnabled: body.ReasoningEnabled,
+		PermissionMode:   body.PermissionMode,
 	}, workspaceBinding)
 	if errors.Is(err, interaction.ErrOrchestratorProcessing) {
 		util.ErrorResponse(c, response.InternalError, "请求处理中", nil)
@@ -318,7 +320,7 @@ func (h *Handler) WebChatSendStream(c *gin.Context) {
 			Limit(1).
 			Row().Scan(&userMessageID)
 	}
-	startData := gin.H{"conversationId": result.ConversationID, "messageId": "", "userMessageId": userMessageID, "role": "assistant", "channel": "web", "createdAt": time.Now().Format("2006-01-02 15:04:05"), "reasoningContent": result.Reasoning, "reasoningDurationMs": result.ReasoningDurationMS}
+	startData := gin.H{"conversationId": result.ConversationID, "turnId": result.TurnID, "messageId": "", "userMessageId": userMessageID, "role": "assistant", "channel": "web", "createdAt": time.Now().Format("2006-01-02 15:04:05"), "reasoningContent": result.Reasoning, "reasoningDurationMs": result.ReasoningDurationMS}
 	if len(result.MessageIDs) > 0 {
 		startData["messageId"] = result.MessageIDs[0]
 	}
@@ -390,7 +392,7 @@ func (h *Handler) WebChatSendStream(c *gin.Context) {
 	if len(result.MessageIDs) > 0 {
 		lastMsgID = result.MessageIDs[len(result.MessageIDs)-1]
 	}
-	endData := gin.H{"messageId": lastMsgID, "status": "completed", "conversationId": result.ConversationID, "finalContentLength": len(result.Reply)}
+	endData := gin.H{"messageId": lastMsgID, "turnId": result.TurnID, "status": "completed", "conversationId": result.ConversationID, "finalContentLength": len(result.Reply)}
 	if len(result.MessageIDs) == 0 {
 		endData["messageId"] = ""
 		endData["status"] = "empty"

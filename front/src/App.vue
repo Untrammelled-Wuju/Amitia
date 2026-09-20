@@ -6,6 +6,7 @@ SPDX-License-Identifier: AGPL-3.0-only
   <DesktopTitleBar v-if="isDesktopShell()" :transparent="isOnboardingPage" />
   <div id="amitia-overlay-root" aria-live="polite"></div>
   <UpdateDialog />
+  <AgentApprovalGuard />
   <PrivacyConsent v-if="!isPublicPage && !renderError" />
   <NotFoundView v-if="renderError" :error="capturedError" />
   <Transition v-else name="route-slide" mode="out-in">
@@ -31,6 +32,7 @@ import { AppLayout } from "./ui-index";
 import { apiClient } from "./ui-index";
 import PrivacyConsent from "./components/PrivacyConsent.vue";
 import UpdateDialog from "./components/UpdateDialog.vue";
+import AgentApprovalGuard from "./components/AgentApprovalGuard.vue";
 import DesktopTitleBar from "./components/DesktopTitleBar.vue";
 import { useTheme } from "./ui-index";
 import { isDesktopShell } from "./runtime/runtime-capabilities";

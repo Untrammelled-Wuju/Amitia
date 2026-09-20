@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/internal/agent/tool"
+	"github.com/u-ai/backend/internal/agentpermission"
 	"github.com/u-ai/backend/internal/extension/kernel/agent_skill"
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	"github.com/u-ai/backend/internal/extension/kernel/capability/acquisition"
@@ -490,6 +491,25 @@ func (f *ToolFacade) ResolveModelTool(modelName string) (ResolvedToolReference, 
 	}, nil
 }
 
+func (f *ToolFacade) IsModelToolParallelSafe(ctx context.Context, modelName string, scope InvocationScope) bool {
+	if f == nil || f.toolRegistry == nil {
+		return false
+	}
+	def, ok := f.toolRegistry.GetByModelName(ctx, modelName)
+	if !ok {
+		return false
+	}
+	if def.ExecutionPolicy.MaxConcurrency == 1 || !def.Idempotent {
+		return false
+	}
+	switch def.SideEffect {
+	case capability.SideEffectNone, capability.SideEffectReadOnly:
+		return true
+	default:
+		return false
+	}
+}
+
 func (f *ToolFacade) ExecuteTool(ctx context.Context, toolID capability.CapabilityID, input json.RawMessage, scope InvocationScope, externalCallID string, idempotencyKey string) (ToolDispatchResult, bool) {
 	f.counters.IncExecuteModelTool()
 	if f.toolRegistry == nil {
@@ -901,6 +921,7 @@ func (f *ToolFacade) executeResolvedTool(ctx context.Context, def capability.Too
 	}
 
 	metadata := map[string]any{"execution_mode": "capability_resolved"}
+	approvalMode := capabilityApprovalMode(scope.PermissionMode)
 	invocation := capability.NewToolInvocationContext(capability.ToolInvocationOptions{
 		ExternalCallID:  externalCallID,
 		SpaceID:         scope.SpaceID,
@@ -911,6 +932,7 @@ func (f *ToolFacade) executeResolvedTool(ctx context.Context, def capability.Too
 		ExtensionID:     def.ExtensionID,
 		ModuleID:        def.ModuleID,
 		Source:          capability.InvocationSourceModel,
+		ApprovalMode:    approvalMode,
 		IdempotencyKey:  idempotencyKey,
 		TraceID:         scope.TraceID,
 		OperationID:     scope.RequestID,
@@ -961,6 +983,7 @@ func (f *ToolFacade) ExecuteModelToolStream(ctx context.Context, modelName strin
 		return ToolDispatchResult{Status: "FAILED", VisibleText: fmt.Sprintf("capability not available: %s", resolved.missingCapability), Error: &ToolDispatchError{Code: "CAPABILITY_NOT_REGISTERED", Message: string(resolved.missingCapability)}}, true, nil
 	}
 	streamMetadata := map[string]any{"execution_mode": "capability_resolved"}
+	approvalMode := capabilityApprovalMode(scope.PermissionMode)
 	invocation := capability.NewToolInvocationContext(capability.ToolInvocationOptions{
 		ExternalCallID:  scope.ToolCallID,
 		SpaceID:         scope.SpaceID,
@@ -971,6 +994,7 @@ func (f *ToolFacade) ExecuteModelToolStream(ctx context.Context, modelName strin
 		ExtensionID:     def.ExtensionID,
 		ModuleID:        def.ModuleID,
 		Source:          capability.InvocationSourceModel,
+		ApprovalMode:    approvalMode,
 		IdempotencyKey:  idempotencyKey,
 		TraceID:         scope.TraceID,
 		OperationID:     scope.RequestID,
@@ -990,6 +1014,15 @@ func (f *ToolFacade) ExecuteModelToolStream(ctx context.Context, modelName strin
 	result, err := streamingKernel.ExecuteStream(ctx, req, sink)
 	legacy := unifiedResultToDispatch(result)
 	return legacy, true, err
+}
+
+func capabilityApprovalMode(mode string) capability.ApprovalMode {
+	switch agentpermission.Normalize(mode) {
+	case agentpermission.FullAccess:
+		return capability.ApprovalModeAuto
+	default:
+		return capability.ApprovalModeManual
+	}
 }
 
 func unifiedResultToDispatch(result capability.UnifiedToolResult) ToolDispatchResult {

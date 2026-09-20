@@ -26,6 +26,7 @@ func RegisterMessageCommitHook(hook MessageCommitHook) {
 
 type MessageCommitEvent struct {
 	ConversationID      string
+	TurnID              string
 	CharacterID         string
 	Channel             string
 	Source              string
@@ -46,6 +47,7 @@ type MessageCommitEvent struct {
 }
 type messageCommitPlan struct {
 	Request             *ProcessMessageRequest
+	TurnID              string
 	Conversation        string
 	Character           string
 	CharacterName       string
@@ -66,6 +68,7 @@ type messageCommitPlan struct {
 
 type messageCommitResult struct {
 	CommitID          string
+	TurnID            string
 	MessageIDs        []string
 	LastSequence      int64
 	Events            []newoutbox.OutboxRecord
@@ -223,6 +226,10 @@ func (s *service) commitInteraction(ctx context.Context, plan messageCommitPlan)
 				}
 			}
 		}
+		if err := completeAssistantTurnTx(tx, plan.TurnID, responseGroupID, plan.Reply, result.MessageIDs); err != nil {
+			return err
+		}
+		result.TurnID = plan.TurnID
 		if err := s.commitAttachmentsTx(tx, plan, plan.UserMessageID); err != nil {
 			return err
 		}
@@ -269,6 +276,7 @@ func (s *service) commitInteraction(ctx context.Context, plan messageCommitPlan)
 	if len(messageCommitHooks) > 0 {
 		event := &MessageCommitEvent{
 			ConversationID:      plan.Conversation,
+			TurnID:              result.TurnID,
 			CharacterID:         plan.Character,
 			Channel:             plan.Request.Channel,
 			Source:              plan.Source,

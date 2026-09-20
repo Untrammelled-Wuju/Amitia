@@ -129,6 +129,8 @@ type UnifiedEntryRequest struct {
 	ReplyToMessageID         *string         `json:"replyToMessageId,omitempty"`
 	ModelConfigID            int             `json:"modelConfigId,omitempty"`
 	ReasoningEffort          string          `json:"reasoningEffort,omitempty"`
+	ReasoningEnabled         *bool           `json:"reasoningEnabled,omitempty"`
+	PermissionMode           string          `json:"permissionMode,omitempty"`
 	RequestID                string          `json:"requestId,omitempty"`
 	SessionID                string          `json:"sessionId,omitempty"`
 	IsInternal               bool            `json:"-"`
@@ -256,6 +258,8 @@ func (e *UnifiedEntry) Handle(ctx context.Context, req *UnifiedEntryRequest) (*O
 		ReplyToMessageID:         req.ReplyToMessageID,
 		ModelConfigID:            req.ModelConfigID,
 		ReasoningEffort:          req.ReasoningEffort,
+		ReasoningEnabled:         req.ReasoningEnabled,
+		PermissionMode:           req.PermissionMode,
 		IsInternal:               req.IsInternal,
 		SuppressReplyPersistence: req.SuppressReplyPersistence,
 		ProactiveTaskInstruction: req.ProactiveTaskInstruction,

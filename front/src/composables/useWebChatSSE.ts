@@ -39,6 +39,7 @@ export function useWebChatSSE(
   messages: Ref<any[]>,
   scrollToBottom: (smooth?: boolean) => void,
   sending: Ref<boolean>,
+  onAssistantTurnCompleted?: (conversationId: string, turnId: string) => void,
 ) {
   let eventAbortController: AbortController | null = null;
   let lastPolledMsgId: string | null = null;
@@ -213,6 +214,14 @@ export function useWebChatSSE(
           }
           if (data && (type === "message_created" || type === "message_updated")) {
             handleMessageEvent({ data } as MessageEvent);
+          } else if (data && type === "assistant_turn_completed") {
+            try {
+              const payload = JSON.parse(data) as Record<string, any>;
+              onAssistantTurnCompleted?.(
+                String(payload.conversationId ?? ""),
+                String(payload?.data?.turnId ?? payload.messageId ?? ""),
+              );
+            } catch {}
           }
           boundary = buffer.indexOf("\n\n");
         }

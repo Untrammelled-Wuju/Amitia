@@ -149,6 +149,41 @@ export interface AIMessageData {
   raw: Record<string, unknown>;
 }
 
+export interface AssistantTurnItem {
+  id: string;
+  turnId: string;
+  conversationId: string;
+  sequence: number;
+  type: "thinking" | "tool_call" | "tool_result" | "text" | string;
+  status: string;
+  callId?: string;
+  toolName?: string;
+  content?: string;
+  argumentsJson?: string;
+  resultJson?: string;
+  errorCode?: string;
+  durationMs?: number;
+  isFinal?: number;
+  legacyMessageId?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface AssistantTurnData {
+  id: string;
+  conversationId: string;
+  characterId?: string;
+  userMessageId?: string;
+  requestId?: string;
+  responseGroupId?: string;
+  sequence: number;
+  status: string;
+  createdAt?: string;
+  updatedAt?: string;
+  completedAt?: string;
+  items: AssistantTurnItem[];
+}
+
 export interface MarkdownSegment {
   id: string;
   type:
@@ -164,4 +199,3 @@ export interface MarkdownSegment {
   filename?: string;
   streaming?: boolean;
 }
-

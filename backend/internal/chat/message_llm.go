@@ -7,8 +7,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
+	"github.com/u-ai/backend/config"
 	"github.com/u-ai/backend/internal/agent/tool"
 	"github.com/u-ai/backend/internal/decision"
 	coreexec "github.com/u-ai/backend/internal/execution"
@@ -17,13 +19,34 @@ import (
 	applog "github.com/u-ai/backend/log"
 )
 
-func (s *service) invokeLLMWithTools(ctx context.Context, cfg *ModelConfig, messages []map[string]interface{}, trace applog.TraceFields, promptTrace *promptir.PromptTrace, userMsgID, convID, charID, channel, requestID, spaceID, sessionID string, execCtx *coreexec.ExecutionContext, toolDefs []tool.Tool, seenTools map[string]bool, toolExecCtx context.Context) (string, string, bool, int, int64, error) {
+type agentToolCall struct {
+	ID          string
+	Name        string
+	Arguments   string
+	Scope       SkillScope
+	Fingerprint string
+}
+
+type agentToolExecution struct {
+	Outcome    toolExecOutcome
+	DurationMS int64
+}
+
+type agentToolParallelRuntime interface {
+	IsModelToolParallelSafe(ctx context.Context, modelName string, scope SkillScope) bool
+}
+
+func (s *service) invokeLLMWithTools(ctx context.Context, cfg *ModelConfig, messages []map[string]interface{}, trace applog.TraceFields, promptTrace *promptir.PromptTrace, userMsgID, convID, charID, channel, requestID, spaceID, sessionID, permissionMode string, execCtx *coreexec.ExecutionContext, toolDefs []tool.Tool, seenTools map[string]bool, toolExecCtx context.Context, turnRecorder *assistantTurnRecorder) (string, string, bool, int, int64, error) {
 	var reply string
 	var reasoningParts []string
 	var totalTokens int
 	var reasoningDurationMS int64
 	forceVoice := false
-	for round := 0; round < 3; round++ {
+	baseMessageCount := len(messages)
+	fingerprints := map[string]int{}
+
+	for round := 0; ; round++ {
+		messages = s.compactAgentMessages(ctx, cfg, messages, baseMessageCount)
 		applog.TraceInfo(trace.WithStage("model_call_started"), applog.Fields{"round": round, "message_count": len(messages)}, "process message model call started")
 		callStartedAt := time.Now()
 		aiContent, reasoning, toolCalls, tok, llmErr := s.invokeProcessLLMWithTools(ctx, cfg, messages, toolDefs)
@@ -35,6 +58,9 @@ func (s *service) invokeLLMWithTools(ctx context.Context, cfg *ModelConfig, mess
 			}
 			reasoningDurationMS += elapsedMS
 			reasoningParts = append(reasoningParts, strings.TrimSpace(reasoning))
+			if err := turnRecorder.AddThinking(ctx, reasoning, elapsedMS); err != nil {
+				return "", "", false, 0, 0, err
+			}
 		}
 		if llmErr != nil {
 			s.db.Model(&Message{}).Where("id = ?", userMsgID).Updates(map[string]interface{}{"status": "failed", "updated_at": time.Now().Format("2006-01-02 15:04:05")})
@@ -54,102 +80,53 @@ func (s *service) invokeLLMWithTools(ctx context.Context, cfg *ModelConfig, mess
 			reply = aiContent
 			break
 		}
+
 		assistantToolCall := map[string]interface{}{"role": "assistant", "content": aiContent, "tool_calls": toolCalls}
 		if reasoning != "" {
 			assistantToolCall["reasoning_content"] = reasoning
 		}
 		messages = append(messages, assistantToolCall)
-		for _, tc := range toolCalls {
-			name, _ := tc["function"].(map[string]interface{})["name"].(string)
-			args, _ := tc["function"].(map[string]interface{})["arguments"].(string)
-			toolCallID, _ := tc["id"].(string)
-			if name == "create_schedule" {
-				dedupKey := name + "|" + args
-				if seenTools[dedupKey] {
-					continue
-				}
-				seenTools[dedupKey] = true
-				var toolArgs map[string]interface{}
-				json.Unmarshal([]byte(args), &toolArgs)
-				toolArgs["conversation_id"] = convID
-				toolArgs["character_id"] = charID
-				if channel == "web" {
-					toolArgs["channel"] = "all"
-				} else if channel != "" {
-					toolArgs["channel"] = channel
-				}
-				newArgs, _ := json.Marshal(toolArgs)
-				args = string(newArgs)
+		if strings.TrimSpace(aiContent) != "" {
+			if err := turnRecorder.AddText(ctx, aiContent); err != nil {
+				return "", "", false, 0, 0, err
 			}
-			applog.TraceInfo(trace.WithStage("tool_call_started"), applog.Fields{"round": round, "tool_name": name, "tool_call_id": toolCallID, "args_size": len(args)}, "process message tool call started")
-			toolScope := SkillScope{SpaceID: spaceID, CharacterID: charID, ConversationID: convID, Channel: channel, SessionID: sessionID, Trigger: string(extension.TriggerLLM), TraceID: requestID, RequestID: requestID, ToolCallID: toolCallID, CorrelationID: trace.CorrelationID, CausationID: trace.CausationID, ExecContext: execCtx}
-			s.emitDesktopPetTool(ctx, toolScope, toolCallID, name, "started", "", round)
-			result := ""
-			ok := false
-			status := "FAILED"
-			errorCode := ""
-			toolForceVoice := false
-			activationPrompt := ""
-			var outcome toolExecOutcome
-			if s.toolRuntime != nil {
-				toolResult, found := s.toolRuntime.ExecuteModelTool(toolExecCtx, name, json.RawMessage(args), toolScope, "")
-				outcome = toolResultToOutcome(toolResult, found)
-			} else {
-				outcome = toolExecOutcome{VisibleText: "工具运行时不可用", Status: "FAILED", ErrorCode: extension.ErrSkillExecutionFailed, HasError: true, Found: false}
-			}
-			ok = outcome.Found
-			result = outcome.VisibleText
-			status = outcome.Status
-			toolForceVoice = outcome.ForceVoice
-			if outcome.HasError {
-				errorCode = outcome.ErrorCode
-			}
-			if name == "agent_skill_activate" && !outcome.HasError {
-				var activation struct {
-					Prompt              string      `json:"prompt"`
-					ActivationID        string      `json:"activationId"`
-					ExtensionID         string      `json:"extensionId"`
-					Name                string      `json:"name"`
-					Source              string      `json:"source"`
-					Scope               string      `json:"scope"`
-					CompatibilityStatus string      `json:"compatibilityStatus"`
-					BodyTokens          int         `json:"bodyTokens"`
-					ToolMappings        interface{} `json:"toolMappings"`
-					InstructionPosition string      `json:"instructionPosition"`
-					Status              string      `json:"status"`
-				}
-				if json.Unmarshal(outcome.Output, &activation) == nil && activation.Prompt != "" {
-					activationPrompt = activation.Prompt
-					appendAgentSkillPromptTrace(promptTrace, promptir.AgentSkillTrace{ActivationID: activation.ActivationID, ExtensionID: activation.ExtensionID, Name: activation.Name, Source: activation.Source, Scope: activation.Scope, Trigger: "automatic", CompatibilityStatus: activation.CompatibilityStatus, BodyTokens: activation.BodyTokens, ScriptsUsed: false, ToolMappings: activation.ToolMappings, InstructionPosition: activation.InstructionPosition, Status: activation.Status})
-				}
-			} else if name == "agent_skill_activate" && outcome.HasError {
-				var input struct {
-					AgentSkill string `json:"agentSkill"`
-				}
-				_ = json.Unmarshal([]byte(args), &input)
-				appendAgentSkillPromptTrace(promptTrace, promptir.AgentSkillTrace{Name: input.AgentSkill, Trigger: "automatic", ScriptsUsed: false, Status: "failed", ErrorCode: outcome.ErrorCode})
-			} else if name == "agent_skill_read_resource" && !outcome.HasError {
-				var input struct {
-					AgentSkill string `json:"agentSkill"`
-				}
-				var content struct {
-					Path string `json:"path"`
-				}
-				_ = json.Unmarshal([]byte(args), &input)
-				if json.Unmarshal(outcome.Output, &content) == nil {
-					appendAgentSkillResourceTrace(promptTrace, input.AgentSkill, content.Path)
-				}
-			}
-			if toolForceVoice {
+		}
+
+		calls, err := s.prepareAgentToolCalls(ctx, toolCalls, seenTools, convID, charID, channel, requestID, spaceID, sessionID, permissionMode, trace, execCtx, turnRecorder, fingerprints)
+		if err != nil {
+			return "", "", false, 0, 0, err
+		}
+		if len(calls) == 0 {
+			reply = aiContent
+			break
+		}
+		executions := s.executeAgentToolCalls(toolExecCtx, cfg, calls, trace, round)
+		roundFingerprints := map[string]struct{}{}
+		for index, call := range calls {
+			execution := executions[index]
+			outcome := execution.Outcome
+			roundFingerprints[call.Fingerprint] = struct{}{}
+			if outcome.ForceVoice {
 				forceVoice = true
 			}
-			if outcome.HasError || !ok {
-				s.emitDesktopPetTool(ctx, toolScope, toolCallID, name, "failed", errorCode, round)
+			if outcome.HasError || !outcome.Found {
+				s.emitDesktopPetTool(ctx, call.Scope, call.ID, call.Name, "failed", outcome.ErrorCode, round)
 			} else {
-				s.emitDesktopPetTool(ctx, toolScope, toolCallID, name, "completed", "", round)
+				s.emitDesktopPetTool(ctx, call.Scope, call.ID, call.Name, "completed", "", round)
 			}
-			applog.TraceInfo(trace.WithStage("tool_call_completed"), applog.Fields{"round": round, "tool_name": name, "tool_call_id": toolCallID, "ok": ok, "status": status, "error_code": errorCode, "result_size": len(result), "force_voice": toolForceVoice}, "process message tool call completed")
-			messages = append(messages, map[string]interface{}{"role": "tool", "tool_call_id": tc["id"], "content": result})
+			toolStatus := assistantTurnStatusCompleted
+			if outcome.HasError || !outcome.Found {
+				toolStatus = assistantTurnStatusFailed
+			}
+			if err := turnRecorder.AddToolResult(ctx, call.ID, call.Name, outcome.VisibleText, toolStatus, outcome.ErrorCode, execution.DurationMS); err != nil {
+				return "", "", false, 0, 0, err
+			}
+			applog.TraceInfo(trace.WithStage("tool_call_completed"), applog.Fields{"round": round, "tool_name": call.Name, "tool_call_id": call.ID, "ok": outcome.Found, "status": outcome.Status, "error_code": outcome.ErrorCode, "result_size": len(outcome.VisibleText), "force_voice": outcome.ForceVoice}, "process message tool call completed")
+			messages = append(messages, map[string]interface{}{"role": "tool", "tool_call_id": call.ID, "content": outcome.VisibleText})
+			activationPrompt, traceItem := agentSkillTraceFromOutcome(promptTrace, call.Name, call.Arguments, outcome)
+			if traceItem != nil {
+				appendAgentSkillPromptTrace(promptTrace, *traceItem)
+			}
 			if activationPrompt != "" {
 				content := promptir.RenderAgentSkillContribution([]promptir.AgentSkillContribution{{Content: activationPrompt, InstructionPosition: "after_character_rules"}})
 				if len(messages) > 0 && messages[0]["role"] == "system" {
@@ -157,8 +134,244 @@ func (s *service) invokeLLMWithTools(ctx context.Context, cfg *ModelConfig, mess
 				}
 			}
 		}
+		allRepeated := len(roundFingerprints) > 0
+		for fingerprint := range roundFingerprints {
+			if fingerprints[fingerprint] < 4 {
+				allRepeated = false
+				break
+			}
+		}
+		if allRepeated {
+			reply = aiContent
+			break
+		}
 	}
 	return reply, strings.Join(reasoningParts, "\n\n"), forceVoice, totalTokens, reasoningDurationMS, nil
+}
+
+func (s *service) prepareAgentToolCalls(ctx context.Context, toolCalls []map[string]interface{}, seenTools map[string]bool, convID, charID, channel, requestID, spaceID, sessionID, permissionMode string, trace applog.TraceFields, execCtx *coreexec.ExecutionContext, turnRecorder *assistantTurnRecorder, fingerprints map[string]int) ([]agentToolCall, error) {
+	result := make([]agentToolCall, 0, len(toolCalls))
+	for _, tc := range toolCalls {
+		function, _ := tc["function"].(map[string]interface{})
+		name, _ := function["name"].(string)
+		args, _ := function["arguments"].(string)
+		toolCallID, _ := tc["id"].(string)
+		if strings.TrimSpace(name) == "" {
+			continue
+		}
+		if name == "create_schedule" {
+			dedupKey := name + "|" + args
+			if seenTools[dedupKey] {
+				continue
+			}
+			seenTools[dedupKey] = true
+			var toolArgs map[string]interface{}
+			json.Unmarshal([]byte(args), &toolArgs)
+			toolArgs["conversation_id"] = convID
+			toolArgs["character_id"] = charID
+			if channel == "web" {
+				toolArgs["channel"] = "all"
+			} else if channel != "" {
+				toolArgs["channel"] = channel
+			}
+			newArgs, _ := json.Marshal(toolArgs)
+			args = string(newArgs)
+		}
+		scope := SkillScope{SpaceID: spaceID, CharacterID: charID, ConversationID: convID, Channel: channel, SessionID: sessionID, Trigger: string(extension.TriggerLLM), TraceID: requestID, RequestID: requestID, ToolCallID: toolCallID, CorrelationID: trace.CorrelationID, CausationID: trace.CausationID, PermissionMode: permissionMode, ExecContext: execCtx}
+		fingerprint := name + "|" + args
+		fingerprints[fingerprint]++
+		applog.TraceInfo(trace.WithStage("tool_call_started"), applog.Fields{"tool_name": name, "tool_call_id": toolCallID, "args_size": len(args)}, "process message tool call started")
+		if err := turnRecorder.AddToolCall(ctx, toolCallID, name, args, "running"); err != nil {
+			return nil, err
+		}
+		s.emitDesktopPetTool(ctx, scope, toolCallID, name, "started", "", fingerprints[fingerprint])
+		result = append(result, agentToolCall{ID: toolCallID, Name: name, Arguments: args, Scope: scope, Fingerprint: fingerprint})
+	}
+	return result, nil
+}
+
+func (s *service) executeAgentToolCalls(ctx context.Context, cfg *ModelConfig, calls []agentToolCall, trace applog.TraceFields, round int) []agentToolExecution {
+	executions := make([]agentToolExecution, len(calls))
+	if len(calls) == 0 {
+		return executions
+	}
+	parallel := len(calls) > 1
+	if parallelRuntime, ok := s.toolRuntime.(agentToolParallelRuntime); ok {
+		for _, call := range calls {
+			if !parallelRuntime.IsModelToolParallelSafe(ctx, call.Name, call.Scope) {
+				parallel = false
+				break
+			}
+		}
+	} else {
+		parallel = false
+	}
+	if !parallel {
+		for index, call := range calls {
+			executions[index] = s.executeAgentToolCall(ctx, call, trace, round)
+		}
+		return executions
+	}
+
+	limit := 4
+	if config.AppCfg != nil && config.AppCfg.Chat.AgentMaxParallelTools > 0 {
+		limit = config.AppCfg.Chat.AgentMaxParallelTools
+	}
+	sem := make(chan struct{}, limit)
+	var waitGroup sync.WaitGroup
+	for index, call := range calls {
+		index := index
+		call := call
+		waitGroup.Add(1)
+		go func() {
+			defer waitGroup.Done()
+			sem <- struct{}{}
+			executions[index] = s.executeAgentToolCall(ctx, call, trace, round)
+			<-sem
+		}()
+	}
+	waitGroup.Wait()
+	return executions
+}
+
+func (s *service) executeAgentToolCall(ctx context.Context, call agentToolCall, trace applog.TraceFields, round int) agentToolExecution {
+	startedAt := time.Now()
+	if s.toolRuntime == nil {
+		return agentToolExecution{Outcome: toolExecOutcome{VisibleText: "工具运行时不可用", Status: "FAILED", ErrorCode: extension.ErrSkillExecutionFailed, HasError: true, Found: false}, DurationMS: time.Since(startedAt).Milliseconds()}
+	}
+	toolResult, found := s.toolRuntime.ExecuteModelTool(ctx, call.Name, json.RawMessage(call.Arguments), call.Scope, "")
+	return agentToolExecution{Outcome: toolResultToOutcome(toolResult, found), DurationMS: time.Since(startedAt).Milliseconds()}
+}
+
+func agentSkillTraceFromOutcome(promptTrace *promptir.PromptTrace, name, arguments string, outcome toolExecOutcome) (string, *promptir.AgentSkillTrace) {
+	switch name {
+	case "agent_skill_activate":
+		if outcome.HasError {
+			var input struct {
+				AgentSkill string `json:"agentSkill"`
+			}
+			_ = json.Unmarshal([]byte(arguments), &input)
+			return "", &promptir.AgentSkillTrace{Name: input.AgentSkill, Trigger: "automatic", ScriptsUsed: false, Status: "failed", ErrorCode: outcome.ErrorCode}
+		}
+		var activation struct {
+			Prompt              string      `json:"prompt"`
+			ActivationID        string      `json:"activationId"`
+			ExtensionID         string      `json:"extensionId"`
+			Name                string      `json:"name"`
+			Source              string      `json:"source"`
+			Scope               string      `json:"scope"`
+			CompatibilityStatus string      `json:"compatibilityStatus"`
+			BodyTokens          int         `json:"bodyTokens"`
+			ToolMappings        interface{} `json:"toolMappings"`
+			InstructionPosition string      `json:"instructionPosition"`
+			Status              string      `json:"status"`
+		}
+		if json.Unmarshal(outcome.Output, &activation) != nil {
+			return "", nil
+		}
+		trace := &promptir.AgentSkillTrace{ActivationID: activation.ActivationID, ExtensionID: activation.ExtensionID, Name: activation.Name, Source: activation.Source, Scope: activation.Scope, Trigger: "automatic", CompatibilityStatus: activation.CompatibilityStatus, BodyTokens: activation.BodyTokens, ScriptsUsed: false, ToolMappings: activation.ToolMappings, InstructionPosition: activation.InstructionPosition, Status: activation.Status}
+		return activation.Prompt, trace
+	case "agent_skill_read_resource":
+		if outcome.HasError {
+			return "", nil
+		}
+		var input struct {
+			AgentSkill string `json:"agentSkill"`
+		}
+		var content struct {
+			Path string `json:"path"`
+		}
+		_ = json.Unmarshal([]byte(arguments), &input)
+		if json.Unmarshal(outcome.Output, &content) == nil && content.Path != "" {
+			appendAgentSkillResourceTrace(promptTrace, input.AgentSkill, content.Path)
+		}
+		return "", nil
+	default:
+		return "", nil
+	}
+}
+
+func (s *service) compactAgentMessages(ctx context.Context, cfg *ModelConfig, messages []map[string]interface{}, baseMessageCount int) []map[string]interface{} {
+	if len(messages) <= baseMessageCount+5 {
+		return messages
+	}
+	contextWindow := 128000
+	if cfg != nil && cfg.ContextWindow > 0 {
+		contextWindow = cfg.ContextWindow
+	}
+	if estimateModelMessagesTokens(messages) <= int(float64(contextWindow)*0.82) {
+		return messages
+	}
+	tailCount := 6
+	if len(messages)-baseMessageCount <= tailCount {
+		return messages
+	}
+	middleEnd := len(messages) - tailCount
+	if middleEnd <= baseMessageCount {
+		return messages
+	}
+	var text strings.Builder
+	for _, message := range messages[baseMessageCount:middleEnd] {
+		content, _ := message["content"].(string)
+		if strings.TrimSpace(content) == "" {
+			continue
+		}
+		text.WriteString(fmt.Sprint(message["role"]))
+		text.WriteString(": ")
+		text.WriteString(content)
+		text.WriteByte('\n')
+	}
+	summary := ""
+	if s.compressor != nil && text.Len() > 0 {
+		summary = strings.TrimSpace(s.compressor.generateSummary(ctx, text.String(), ""))
+	}
+	if summary == "" {
+		raw := text.String()
+		if len(raw) > 12000 {
+			raw = raw[len(raw)-12000:]
+		}
+		summary = raw
+	}
+	if strings.TrimSpace(summary) == "" {
+		return messages
+	}
+	compacted := make([]map[string]interface{}, 0, baseMessageCount+1+tailCount)
+	compacted = append(compacted, messages[:baseMessageCount]...)
+	compacted = append(compacted, map[string]interface{}{"role": "system", "content": "【本轮工具执行摘要】\n" + summary})
+	compacted = append(compacted, messages[middleEnd:]...)
+	return compacted
+}
+
+func estimateModelMessagesTokens(messages []map[string]interface{}) int {
+	total := 0
+	for _, message := range messages {
+		total += 8
+		if content, ok := message["content"].(string); ok {
+			total += estimateTextTokens(content)
+		}
+		if toolCalls, ok := message["tool_calls"]; ok {
+			encoded, err := json.Marshal(toolCalls)
+			if err == nil {
+				total += len(encoded)/4 + 1
+			}
+		}
+	}
+	return total
+}
+
+func estimateTextTokens(text string) int {
+	if text == "" {
+		return 0
+	}
+	runes := len([]rune(text))
+	ascii := 0
+	for _, value := range text {
+		if value < 128 {
+			ascii++
+		}
+	}
+	nonASCII := runes - ascii
+	return ascii/4 + nonASCII + 1
 }
 
 func appendAgentSkillPromptTrace(trace *promptir.PromptTrace, item promptir.AgentSkillTrace) {

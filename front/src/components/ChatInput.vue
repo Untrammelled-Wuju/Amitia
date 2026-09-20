@@ -280,6 +280,71 @@ SPDX-License-Identifier: AGPL-3.0-only
               </div>
             </el-popover>
             <el-popover
+              v-model:visible="permissionMenuOpen"
+              placement="top-start"
+              :width="280"
+              trigger="click"
+              :hide-after="0"
+              :teleported="true"
+              append-to="#amitia-overlay-root"
+              popper-class="permission-picker-popper"
+            >
+              <template #reference>
+                <button
+                  type="button"
+                  class="permission-trigger"
+                  :class="{ 'is-full-access': permissionMode === 'full_access' }"
+                  :disabled="isInputDisabled"
+                  :aria-expanded="permissionMenuOpen"
+                  aria-haspopup="menu"
+                  :title="permissionLabel"
+                >
+                  <el-icon>
+                    <Unlock v-if="permissionMode === 'full_access'" />
+                    <Lock v-else />
+                  </el-icon>
+                  <span>{{ permissionLabel }}</span>
+                  <el-icon class="permission-chevron"><ArrowDown /></el-icon>
+                </button>
+              </template>
+              <div class="permission-picker" role="menu">
+                <div class="permission-picker-header">
+                  <strong>工具权限</strong>
+                  <small>权限模式仅影响从下一条消息开始的工具执行</small>
+                </div>
+                <button
+                  type="button"
+                  class="permission-option"
+                  :class="{ 'is-selected': permissionMode !== 'full_access' }"
+                  role="menuitemradio"
+                  :aria-checked="permissionMode !== 'full_access'"
+                  @click="selectPermissionMode('request_approval')"
+                >
+                  <span class="permission-option-icon"><el-icon><Lock /></el-icon></span>
+                  <span class="permission-option-copy">
+                    <strong>请求批准</strong>
+                    <small>敏感工具执行前需要你批准</small>
+                  </span>
+                  <el-icon v-if="permissionMode !== 'full_access'" class="permission-check"><Check /></el-icon>
+                </button>
+                <button
+                  type="button"
+                  class="permission-option"
+                  :class="{ 'is-selected': permissionMode === 'full_access' }"
+                  role="menuitemradio"
+                  :aria-checked="permissionMode === 'full_access'"
+                  @click="selectPermissionMode('full_access')"
+                >
+                  <span class="permission-option-icon"><el-icon><Unlock /></el-icon></span>
+                  <span class="permission-option-copy">
+                    <strong>完全访问</strong>
+                    <small>自动放行当前会话中可批准的工具操作</small>
+                  </span>
+                  <el-icon v-if="permissionMode === 'full_access'" class="permission-check"><Check /></el-icon>
+                </button>
+              </div>
+            </el-popover>
+            <el-popover
               v-if="supportsWorkspaceDirectory"
               v-model:visible="workspaceMenuOpen"
               placement="top-start"
@@ -470,7 +535,7 @@ SPDX-License-Identifier: AGPL-3.0-only
               :teleported="true"
               append-to="#amitia-overlay-root"
               popper-class="composer-model-popper"
-              @hide="modelMenuView = 'main'"
+              @hide="resetModelMenu"
             >
               <template #reference>
                 <button
@@ -480,18 +545,32 @@ SPDX-License-Identifier: AGPL-3.0-only
                 >
                   <span>{{ selectedModelLabel }}</span>
                   <span> · </span>
-                  <strong>{{ reasoningLabel }}</strong>
+                  <span>{{ reasoningLabel }}</span>
                 </button>
               </template>
+              <div class="model-menu-viewport">
+              <Transition name="model-menu-fade" mode="out-in">
+                <div :key="modelMenuView" class="model-menu-page">
               <div v-if="modelMenuView === 'main'" class="model-effort-menu">
                 <div class="model-effort-row">
                   <span>强度</span>
-                  <strong>{{ reasoningLabel }}</strong>
+                  <strong>{{ draftReasoningLabel }}</strong>
                 </div>
                 <button
                   type="button"
                   class="model-effort-row model-effort-row--button"
-                  @click="modelMenuView = 'models'"
+                  @click="openModelMenuPage('reasoning')"
+                >
+                  <span>思考</span>
+                  <span class="model-effort-model">
+                    {{ draftReasoningEnabled ? "支持" : "不支持" }}
+                    <el-icon><ArrowRight /></el-icon>
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  class="model-effort-row model-effort-row--button"
+                  @click="openModelMenuPage('models')"
                 >
                   <span>模型</span>
                   <span class="model-effort-model">
@@ -500,26 +579,83 @@ SPDX-License-Identifier: AGPL-3.0-only
                   </span>
                 </button>
                 <div class="model-effort-slider">
-                  <el-slider
-                    v-model="draftReasoningIndex"
-                    :min="0"
-                    :max="3"
-                    :step="1"
-                    :show-tooltip="false"
-                    :disabled="!supportsReasoning"
-                    @change="applyReasoningIndex"
-                  />
-                  <div class="model-effort-labels">
-                    <span>轻</span><span>中</span><span>高</span><span>极高</span>
+                  <div
+                    class="model-effort-slider-track"
+                    :class="{ disabled: !draftReasoningEnabled }"
+                  >
+                    <div class="model-effort-track-range">
+                      <div class="model-effort-track-base"></div>
+                      <div
+                        class="model-effort-track-active"
+                        :style="{ width: reasoningActiveWidth }"
+                      ></div>
+                    </div>
+                    <div class="model-effort-markers" aria-hidden="true">
+                      <span
+                        v-for="index in 4"
+                        :key="index"
+                        :class="{ active: draftReasoningValue >= index - 1 }"
+                        :style="{
+                          left: reasoningMarkerOffsets[index - 1],
+                        }"
+                      ></span>
+                    </div>
+                    <el-slider
+                      class="model-effort-range"
+                      v-model="draftReasoningValue"
+                      :min="0"
+                      :max="3"
+                      :step="1"
+                      :show-tooltip="false"
+                      :disabled="!draftReasoningEnabled"
+                      @input="previewReasoningIndex"
+                      @change="applyReasoningIndex"
+                    />
                   </div>
-                  <div v-if="!supportsReasoning" class="model-effort-hint">
+                  <div class="model-effort-labels">
+                    <span>低</span><span>中</span><span>高</span><span>极高</span>
+                  </div>
+                  <div v-if="!draftReasoningEnabled" class="model-effort-hint">
                     该模型不支持思考强度
                   </div>
                 </div>
               </div>
+              <div
+                v-else-if="modelMenuView === 'reasoning'"
+                class="model-list-panel"
+              >
+                <div class="model-list-header">
+                  <button
+                    type="button"
+                    aria-label="返回"
+                    @click="backModelMenuPage"
+                  >
+                    <el-icon><ArrowLeft /></el-icon>
+                  </button>
+                  <strong>选择思考模式</strong>
+                </div>
+                <button
+                  v-for="option in reasoningModeOptions"
+                  :key="String(option.value)"
+                  type="button"
+                  class="model-list-item"
+                  :class="{ active: draftReasoningEnabled === option.value }"
+                  @click="selectReasoningEnabled(option.value)"
+                >
+                  <span>
+                    <strong>{{ option.label }}</strong>
+                    <small>{{ option.description }}</small>
+                  </span>
+                  <el-icon
+                    v-if="draftReasoningEnabled === option.value"
+                  >
+                    <Check />
+                  </el-icon>
+                </button>
+              </div>
               <div v-else class="model-list-panel">
                 <div class="model-list-header">
-                  <button type="button" aria-label="返回" @click="modelMenuView = 'main'">
+                  <button type="button" aria-label="返回" @click="backModelMenuPage">
                     <el-icon><ArrowLeft /></el-icon>
                   </button>
                   <strong>选择模型</strong>
@@ -538,6 +674,9 @@ SPDX-License-Identifier: AGPL-3.0-only
                   </span>
                   <el-icon v-if="model.id === selectedModelId"><Check /></el-icon>
                 </button>
+              </div>
+                </div>
+              </Transition>
               </div>
             </el-popover>
             <el-button
@@ -597,6 +736,8 @@ import {
   VideoCamera,
   Document,
   FolderOpened,
+  Lock,
+  Unlock,
 } from "@element-plus/icons-vue";
 import { useTextInput } from "../composables/useTextInput";
 import { useMediaUpload } from "../composables/useMediaUpload";
@@ -626,14 +767,28 @@ const props = withDefaults(defineProps<{
   selectedModelId?: number;
   reasoningEffort?: string;
   supportsReasoning?: boolean;
+  reasoningEnabled?: boolean;
+  permissionMode?: string;
+  modelPreviewChange?: (
+    modelId: number,
+    reasoningEffort: string,
+    reasoningEnabled: boolean,
+  ) => void;
+  modelCommitChange?: (
+    modelId: number,
+    reasoningEffort: string,
+    reasoningEnabled: boolean,
+  ) => void;
 }>(), {
   characterId: "",
   conversationId: "",
   channel: "web",
   models: () => [],
   selectedModelId: 0,
-  reasoningEffort: "medium",
+  reasoningEffort: "high",
   supportsReasoning: false,
+  reasoningEnabled: true,
+  permissionMode: "request_approval",
 });
 
 const emit = defineEmits<{
@@ -648,7 +803,17 @@ const emit = defineEmits<{
   removeVideo: [];
   cancelReply: [];
   file: [file: File];
-  "update:model": [modelId: number, reasoningEffort: string];
+  "preview-model": [
+    modelId: number,
+    reasoningEffort: string,
+    reasoningEnabled: boolean,
+  ];
+  "update:model": [
+    modelId: number,
+    reasoningEffort: string,
+    reasoningEnabled: boolean,
+  ];
+  "update:permission": [mode: string];
 }>();
 
 const isDisabled = () => !!props.disabled;
@@ -691,12 +856,24 @@ const slashActiveIndex = ref(0);
 const skillsLoading = ref(false);
 const voiceMode = ref(false);
 const modelMenuOpen = ref(false);
-const modelMenuView = ref<"main" | "models">("main");
-const draftReasoningIndex = ref(1);
+const modelMenuView = ref<"main" | "models" | "reasoning">("main");
+const draftReasoningValue = ref(1);
+const draftReasoningEnabled = ref(false);
+const modelSliderDragging = ref(false);
 const workspaceMenuOpen = ref(false);
+const permissionMenuOpen = ref(false);
 const supportsWorkspaceDirectory = computed(
   () => typeof window !== "undefined" && !!window.amitiaDesktop?.selectWorkspaceDirectory,
 );
+const permissionLabel = computed(() =>
+  props.permissionMode === "full_access" ? "完全访问" : "请求批准",
+);
+
+function selectPermissionMode(mode: string) {
+  const next = mode === "full_access" ? "full_access" : "request_approval";
+  emit("update:permission", next);
+  permissionMenuOpen.value = false;
+}
 const {
   currentWorkspace,
   recentWorkspaces,
@@ -712,12 +889,31 @@ const workspaceLabel = computed(
 );
 
 const reasoningOptions = ["low", "medium", "high", "xhigh"];
+const reasoningMarkerOffsets = [
+  "32px",
+  "calc(33.333% + 10.667px)",
+  "calc(66.667% - 10.667px)",
+  "calc(100% - 32px)",
+];
+const reasoningTrackWidths = ["0%", "33.333%", "66.667%", "100%"];
 const reasoningLabels: Record<string, string> = {
-  low: "轻",
+  low: "低",
   medium: "中",
   high: "高",
   xhigh: "极高",
 };
+const reasoningModeOptions = [
+  {
+    value: true,
+    label: "支持",
+    description: "允许模型按所选强度进行思考",
+  },
+  {
+    value: false,
+    label: "不支持",
+    description: "关闭模型的思考过程",
+  },
+];
 const llmModels = computed(() =>
   (props.models || []).filter((model: any) => {
     const type = String(model.apiType || model.provider || "").toLowerCase();
@@ -733,31 +929,138 @@ const selectedModelLabel = computed(
 const reasoningLabel = computed(
   () => reasoningLabels[props.reasoningEffort] || "中",
 );
-
+const draftReasoningLevel = computed(() =>
+  Math.min(Math.max(Math.round(draftReasoningValue.value), 0), 3),
+);
+const draftReasoningLabel = computed(
+  () => reasoningLabels[reasoningOptions[draftReasoningLevel.value]] || "中",
+);
+const reasoningActiveWidth = computed(
+  () => reasoningTrackWidths[draftReasoningLevel.value],
+);
 watch(
   () => props.reasoningEffort,
   (value) => {
-    draftReasoningIndex.value = Math.max(
+    if (modelSliderDragging.value) return;
+    draftReasoningValue.value = Math.max(
       0,
-      reasoningOptions.indexOf(String(value || "medium")),
+      reasoningOptions.indexOf(String(value || "high")),
     );
   },
   { immediate: true },
 );
 
-function applyReasoningIndex(value: number | number[]) {
+watch(
+  () => props.reasoningEnabled,
+  (value) => {
+    draftReasoningEnabled.value = value === true;
+  },
+  { immediate: true },
+);
+
+function reasoningValueFromInput(value: number | number[]) {
   const index = Array.isArray(value) ? Number(value[0]) : Number(value);
-  const effort = reasoningOptions[index] || "medium";
-  emit("update:model", Number(props.selectedModelId), effort);
+  return Math.min(Math.max(Number.isFinite(index) ? index : 1, 0), 3);
+}
+
+function reasoningEffortFromIndex(index: number) {
+  return reasoningOptions[index] || "high";
+}
+
+function notifyModelPreview(
+  modelId: number,
+  reasoningEffort: string,
+  reasoningEnabled: boolean,
+) {
+  props.modelPreviewChange?.(
+    modelId,
+    reasoningEffort,
+    reasoningEnabled,
+  );
+  emit(
+    "preview-model",
+    modelId,
+    reasoningEffort,
+    reasoningEnabled,
+  );
+}
+
+function notifyModelCommit(
+  modelId: number,
+  reasoningEffort: string,
+  reasoningEnabled: boolean,
+) {
+  props.modelCommitChange?.(
+    modelId,
+    reasoningEffort,
+    reasoningEnabled,
+  );
+  emit(
+    "update:model",
+    modelId,
+    reasoningEffort,
+    reasoningEnabled,
+  );
+}
+
+function previewReasoningIndex(value: number | number[]) {
+  const index = Math.round(reasoningValueFromInput(value));
+  modelSliderDragging.value = true;
+  draftReasoningValue.value = index;
+  notifyModelPreview(
+    Number(props.selectedModelId),
+    reasoningEffortFromIndex(index),
+    draftReasoningEnabled.value,
+  );
+}
+
+function applyReasoningIndex(value: number | number[]) {
+  const index = Math.round(reasoningValueFromInput(value));
+  const effort = reasoningEffortFromIndex(index);
+  modelSliderDragging.value = false;
+  draftReasoningValue.value = index;
+  notifyModelCommit(
+    Number(props.selectedModelId),
+    effort,
+    draftReasoningEnabled.value,
+  );
+}
+
+function openModelMenuPage(view: "models" | "reasoning") {
+  modelMenuView.value = view;
+}
+
+function backModelMenuPage() {
+  modelMenuView.value = "main";
+}
+
+function resetModelMenu() {
+  modelMenuView.value = "main";
 }
 
 function selectModel(model: any) {
-  emit(
-    "update:model",
+  modelSliderDragging.value = false;
+  draftReasoningEnabled.value = model.supportsReasoning === true;
+  const effort =
+    model.defaultReasoningEffort || props.reasoningEffort || "high";
+  draftReasoningValue.value = Math.max(0, reasoningOptions.indexOf(effort));
+  notifyModelCommit(
     Number(model.id),
-    model.defaultReasoningEffort || props.reasoningEffort || "medium",
+    effort,
+    draftReasoningEnabled.value,
   );
-  modelMenuView.value = "main";
+  backModelMenuPage();
+}
+
+function selectReasoningEnabled(value: boolean) {
+  modelSliderDragging.value = false;
+  draftReasoningEnabled.value = value;
+  notifyModelCommit(
+    Number(props.selectedModelId),
+    props.reasoningEffort || "high",
+    value,
+  );
+  backModelMenuPage();
 }
 
 function providerLabel(model: any) {
@@ -1235,6 +1538,132 @@ defineExpose({ focus, setText, clear: clearText });
     box-shadow 0.18s ease;
 }
 
+.permission-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ac-color-text-muted);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  transition:
+    border-color 0.18s ease,
+    background-color 0.18s ease,
+    color 0.18s ease;
+}
+
+.permission-trigger:hover,
+.permission-trigger:focus-visible {
+  border-color: var(--ac-color-border);
+  background: var(--ac-color-bg-secondary);
+  color: var(--ac-color-text);
+}
+
+.permission-trigger.is-full-access {
+  color: var(--ac-color-warning, #b7791f);
+}
+
+.permission-trigger:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.permission-trigger > span {
+  max-width: 72px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.permission-chevron {
+  flex: 0 0 auto;
+  font-size: 10px;
+}
+
+.permission-picker-header {
+  padding: 4px 6px 9px;
+}
+
+.permission-picker-header strong,
+.permission-picker-header small {
+  display: block;
+}
+
+.permission-picker-header strong {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.permission-picker-header small {
+  margin-top: 3px;
+  color: var(--ac-color-text-muted);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.permission-option {
+  display: flex;
+  width: 100%;
+  min-height: 50px;
+  align-items: center;
+  gap: 9px;
+  border: 0;
+  border-radius: 8px;
+  padding: 7px 8px;
+  background: transparent;
+  color: var(--ac-color-text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.permission-option:hover,
+.permission-option.is-selected {
+  background: var(--ac-color-bg-secondary);
+}
+
+.permission-option-icon {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 8px;
+  background: var(--ac-color-bg-secondary);
+  color: var(--ac-color-text-secondary);
+}
+
+.permission-option-copy {
+  min-width: 0;
+  flex: 1;
+}
+
+.permission-option-copy strong,
+.permission-option-copy small {
+  display: block;
+}
+
+.permission-option-copy strong {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.permission-option-copy small {
+  margin-top: 2px;
+  color: var(--ac-color-text-muted);
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.permission-check {
+  flex: 0 0 auto;
+  color: var(--ac-color-primary);
+}
+
 .workspace-trigger {
   display: inline-flex;
   align-items: center;
@@ -1526,7 +1955,7 @@ defineExpose({ focus, setText, clear: clearText });
   max-width: 200px;
   height: 28px;
   overflow: hidden;
-  border: 1px solid var(--composer-border);
+  border: 1px solid transparent;
   border-radius: 8px;
   padding: 0 9px;
   background: transparent;
@@ -1536,10 +1965,15 @@ defineExpose({ focus, setText, clear: clearText });
   text-overflow: ellipsis;
   white-space: nowrap;
   cursor: pointer;
+  transition:
+    border-color 160ms ease,
+    background-color 160ms ease;
 }
 
-.model-effort-trigger strong {
-  color: var(--ac-color-text);
+.model-effort-trigger:hover,
+.model-effort-trigger:focus-visible {
+  border-color: var(--composer-border);
+  background: var(--ac-color-bg-secondary);
 }
 
 .model-effort-menu,
@@ -1547,6 +1981,36 @@ defineExpose({ focus, setText, clear: clearText });
   display: flex;
   flex-direction: column;
   gap: 4px;
+}
+
+.model-menu-viewport {
+  position: relative;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.model-menu-page {
+  min-width: 0;
+}
+
+.model-menu-fade-enter-active {
+  transition: opacity 220ms cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: opacity;
+}
+
+.model-menu-fade-leave-active {
+  transition: opacity 150ms ease-in;
+  pointer-events: none;
+}
+
+.model-menu-fade-enter-from,
+.model-menu-fade-leave-to {
+  opacity: 0;
+}
+
+:global(.composer-model-popper.el-popover.el-popper) {
+  --el-popper-border-radius: 16px;
+  border-radius: 16px;
 }
 
 .model-effort-row {
@@ -1584,13 +2048,129 @@ defineExpose({ focus, setText, clear: clearText });
 }
 
 .model-effort-slider {
-  padding: 2px 8px 6px;
+  padding: 7px 8px 4px;
+}
+
+.model-effort-slider-track {
+  --model-effort-cap-inset: 16px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  height: 48px;
+}
+
+.model-effort-track-range {
+  position: absolute;
+  top: 9px;
+  right: var(--model-effort-cap-inset);
+  left: var(--model-effort-cap-inset);
+  height: 30px;
+}
+
+.model-effort-track-base,
+.model-effort-track-active {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  border-radius: 999px;
+}
+
+.model-effort-track-base {
+  right: 0;
+  border: 1px solid var(--ac-color-border);
+  background: var(--ac-color-bg-secondary);
+}
+
+.model-effort-track-active {
+  background: var(--ac-color-primary);
+  transition: width 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.model-effort-markers {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  left: 0;
+  z-index: 1;
+  height: 6px;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.model-effort-markers span {
+  position: absolute;
+  top: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ac-color-text-muted);
+  opacity: 0.62;
+  transform: translateX(-50%);
+  transition:
+    background-color 180ms ease,
+    opacity 180ms ease;
+}
+
+.model-effort-markers span.active {
+  background: #fff;
+  opacity: 0.78;
+}
+
+.model-effort-slider :deep(.el-slider) {
+  position: relative;
+  z-index: 2;
+  --el-slider-height: 30px;
+  --el-slider-button-size: 32px;
+  --el-slider-button-wrapper-size: 48px;
+  --el-slider-button-wrapper-offset: -9px;
+  height: 48px;
+}
+
+.model-effort-slider :deep(.el-slider__button-wrapper) {
+  transition: left 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.model-effort-slider :deep(.el-slider__runway) {
+  background: transparent;
+  margin: 0 32px;
+}
+
+.model-effort-slider :deep(.el-slider__bar) {
+  background: transparent;
+}
+
+.model-effort-slider :deep(.el-slider__button) {
+  border: 0;
+  background: #fff;
+  box-shadow:
+    0 2px 7px rgba(0, 0, 0, 0.24),
+    0 0 0 1px rgba(0, 0, 0, 0.05);
+}
+
+.model-effort-slider :deep(.el-slider__button:hover),
+.model-effort-slider :deep(.el-slider__button.hover),
+.model-effort-slider :deep(.el-slider__button.dragging) {
+  transform: scale(1.04);
+}
+
+.model-effort-slider :deep(.el-slider.is-disabled .el-slider__button) {
+  opacity: 0.72;
+}
+
+.model-effort-slider-track.disabled .model-effort-track-base,
+.model-effort-slider-track.disabled .model-effort-track-active {
+  opacity: 0.45;
+}
+
+.model-effort-slider-track.disabled .model-effort-markers {
+  opacity: 0.5;
 }
 
 .model-effort-labels {
   display: flex;
   justify-content: space-between;
-  margin-top: -4px;
+  margin-top: -3px;
   color: var(--ac-color-text-muted);
   font-size: 10px;
 }

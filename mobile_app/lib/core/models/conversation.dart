@@ -11,6 +11,8 @@ class ConversationDto {
   final String updatedAt;
   final int modelConfigId;
   final String reasoningEffort;
+  final int reasoningEnabled;
+  final String permissionMode;
 
   ConversationDto({
     required this.id,
@@ -25,6 +27,8 @@ class ConversationDto {
     this.updatedAt = '',
     this.modelConfigId = 0,
     this.reasoningEffort = '',
+    this.reasoningEnabled = -1,
+    this.permissionMode = 'request_approval',
   });
 
   factory ConversationDto.fromJson(Map<String, dynamic> json) {
@@ -41,6 +45,8 @@ class ConversationDto {
       updatedAt: json['updatedAt'] as String? ?? '',
       modelConfigId: (json['modelConfigId'] as num?)?.toInt() ?? 0,
       reasoningEffort: (json['reasoningEffort'] ?? '').toString(),
+      reasoningEnabled: (json['reasoningEnabled'] as num?)?.toInt() ?? -1,
+      permissionMode: (json['permissionMode'] ?? 'request_approval').toString(),
     );
   }
 }
@@ -124,6 +130,129 @@ class MessageDto {
       tokens: (json['tokens'] as num?)?.toInt(),
       replyToMessageId: json['replyToMessageId'] as String?,
       replyToExcerpt: json['replyToExcerpt'] as String?,
+    );
+  }
+}
+
+class AssistantTurnItemDto {
+  final String id;
+  final String turnId;
+  final String conversationId;
+  final int sequence;
+  final String type;
+  final String status;
+  final String callId;
+  final String toolName;
+  final String content;
+  final String argumentsJson;
+  final String resultJson;
+  final String errorCode;
+  final int durationMs;
+  final bool isFinal;
+  final String legacyMessageId;
+  final String createdAt;
+  final String updatedAt;
+
+  const AssistantTurnItemDto({
+    required this.id,
+    this.turnId = '',
+    this.conversationId = '',
+    this.sequence = 0,
+    this.type = '',
+    this.status = '',
+    this.callId = '',
+    this.toolName = '',
+    this.content = '',
+    this.argumentsJson = '',
+    this.resultJson = '',
+    this.errorCode = '',
+    this.durationMs = 0,
+    this.isFinal = false,
+    this.legacyMessageId = '',
+    this.createdAt = '',
+    this.updatedAt = '',
+  });
+
+  factory AssistantTurnItemDto.fromJson(Map<String, dynamic> json) {
+    return AssistantTurnItemDto(
+      id: (json['id'] ?? '').toString(),
+      turnId: (json['turnId'] ?? '').toString(),
+      conversationId: (json['conversationId'] ?? '').toString(),
+      sequence: (json['sequence'] as num?)?.toInt() ?? 0,
+      type: (json['type'] ?? '').toString(),
+      status: (json['status'] ?? '').toString(),
+      callId: (json['callId'] ?? '').toString(),
+      toolName: (json['toolName'] ?? '').toString(),
+      content: (json['content'] ?? '').toString(),
+      argumentsJson: (json['argumentsJson'] ?? '').toString(),
+      resultJson: (json['resultJson'] ?? '').toString(),
+      errorCode: (json['errorCode'] ?? '').toString(),
+      durationMs: (json['durationMs'] as num?)?.toInt() ?? 0,
+      isFinal: (json['isFinal'] as num?)?.toInt() == 1,
+      legacyMessageId: (json['legacyMessageId'] ?? '').toString(),
+      createdAt: (json['createdAt'] ?? '').toString(),
+      updatedAt: (json['updatedAt'] ?? '').toString(),
+    );
+  }
+}
+
+class AssistantTurnDto {
+  final String id;
+  final String conversationId;
+  final String characterId;
+  final String userMessageId;
+  final String requestId;
+  final String responseGroupId;
+  final int sequence;
+  final String status;
+  final String createdAt;
+  final String updatedAt;
+  final String completedAt;
+  final List<AssistantTurnItemDto> items;
+
+  const AssistantTurnDto({
+    required this.id,
+    this.conversationId = '',
+    this.characterId = '',
+    this.userMessageId = '',
+    this.requestId = '',
+    this.responseGroupId = '',
+    this.sequence = 0,
+    this.status = '',
+    this.createdAt = '',
+    this.updatedAt = '',
+    this.completedAt = '',
+    this.items = const <AssistantTurnItemDto>[],
+  });
+
+  factory AssistantTurnDto.fromJson(Map<String, dynamic> json) {
+    final rawItems = json['items'];
+    final items = rawItems is List
+        ? rawItems
+              .whereType<Map>()
+              .map(
+                (item) => AssistantTurnItemDto.fromJson(
+                  Map<String, dynamic>.from(item),
+                ),
+              )
+              .toList()
+        : const <AssistantTurnItemDto>[];
+    if (items.length > 1) {
+      items.sort((left, right) => left.sequence.compareTo(right.sequence));
+    }
+    return AssistantTurnDto(
+      id: (json['id'] ?? '').toString(),
+      conversationId: (json['conversationId'] ?? '').toString(),
+      characterId: (json['characterId'] ?? '').toString(),
+      userMessageId: (json['userMessageId'] ?? '').toString(),
+      requestId: (json['requestId'] ?? '').toString(),
+      responseGroupId: (json['responseGroupId'] ?? '').toString(),
+      sequence: (json['sequence'] as num?)?.toInt() ?? 0,
+      status: (json['status'] ?? '').toString(),
+      createdAt: (json['createdAt'] ?? '').toString(),
+      updatedAt: (json['updatedAt'] ?? '').toString(),
+      completedAt: (json['completedAt'] ?? '').toString(),
+      items: items,
     );
   }
 }

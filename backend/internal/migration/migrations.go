@@ -207,6 +207,76 @@ func DefaultMigrations() []Migration {
 		MessageReasoningContentMigration(),
 		MessageReasoningDurationMigration(),
 		ConversationModelSettingsMigration(),
+		AssistantTurnItemsMigration(),
+		ConversationReasoningEnabledRepairMigration(),
+		ConversationPermissionModeMigration(),
+	}
+}
+
+func ConversationReasoningEnabledRepairMigration() Migration {
+	return Migration{
+		Version: "20260920004",
+		Name:    "repair_conversation_reasoning_enabled",
+		Up: func(s *Step) error {
+			s.AddColumn("conversations", "reasoning_enabled", "INTEGER NOT NULL DEFAULT -1")
+			return nil
+		},
+	}
+}
+
+func AssistantTurnItemsMigration() Migration {
+	return Migration{
+		Version: "20260920003",
+		Name:    "create_assistant_turn_items",
+		Up: func(s *Step) error {
+			s.CreateTable(`CREATE TABLE IF NOT EXISTS assistant_turns (
+				id TEXT PRIMARY KEY,
+				conversation_id TEXT NOT NULL DEFAULT '',
+				character_id TEXT NOT NULL DEFAULT '',
+				user_message_id TEXT NOT NULL DEFAULT '',
+				request_id TEXT NOT NULL DEFAULT '',
+				response_group_id TEXT NOT NULL DEFAULT '',
+				sequence INTEGER NOT NULL DEFAULT 0,
+				status TEXT NOT NULL DEFAULT 'running',
+				created_at TEXT NOT NULL DEFAULT '',
+				updated_at TEXT NOT NULL DEFAULT '',
+				completed_at TEXT NOT NULL DEFAULT ''
+			)`)
+			s.CreateTable(`CREATE TABLE IF NOT EXISTS assistant_turn_items (
+				id TEXT PRIMARY KEY,
+				turn_id TEXT NOT NULL DEFAULT '',
+				conversation_id TEXT NOT NULL DEFAULT '',
+				sequence INTEGER NOT NULL DEFAULT 0,
+				item_type TEXT NOT NULL DEFAULT '',
+				status TEXT NOT NULL DEFAULT 'pending',
+				call_id TEXT NOT NULL DEFAULT '',
+				tool_name TEXT NOT NULL DEFAULT '',
+				content TEXT NOT NULL DEFAULT '',
+				arguments_json TEXT NOT NULL DEFAULT '',
+				result_json TEXT NOT NULL DEFAULT '',
+				error_code TEXT NOT NULL DEFAULT '',
+				duration_ms INTEGER NOT NULL DEFAULT 0,
+				is_final INTEGER NOT NULL DEFAULT 0,
+				legacy_message_id TEXT NOT NULL DEFAULT '',
+				created_at TEXT NOT NULL DEFAULT '',
+				updated_at TEXT NOT NULL DEFAULT ''
+			)`)
+			s.CreateTable(`CREATE TABLE IF NOT EXISTS assistant_turn_events (
+				id TEXT PRIMARY KEY,
+				turn_id TEXT NOT NULL DEFAULT '',
+				item_id TEXT NOT NULL DEFAULT '',
+				sequence INTEGER NOT NULL DEFAULT 0,
+				event_type TEXT NOT NULL DEFAULT '',
+				payload_json TEXT NOT NULL DEFAULT '',
+				created_at TEXT NOT NULL DEFAULT ''
+			)`)
+			s.CreateIndex("idx_assistant_turns_conversation", "assistant_turns", []string{"conversation_id", "sequence"}, false)
+			s.CreateIndex("idx_assistant_turns_request", "assistant_turns", []string{"request_id"}, false)
+			s.CreateIndex("idx_assistant_turn_items_turn", "assistant_turn_items", []string{"turn_id", "sequence"}, false)
+			s.CreateIndex("idx_assistant_turn_items_call", "assistant_turn_items", []string{"turn_id", "call_id"}, false)
+			s.CreateIndex("idx_assistant_turn_events_turn", "assistant_turn_events", []string{"turn_id", "sequence"}, false)
+			return nil
+		},
 	}
 }
 

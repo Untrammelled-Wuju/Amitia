@@ -876,7 +876,7 @@ func TestPipelineApprovalApproved(t *testing.T) {
 	p.PermissionGate.OnEvaluate = func(ctx context.Context, tool capability.ToolDefinition, inv capability.ToolInvocationContext) PermissionDecision {
 		return PermissionRequireApproval
 	}
-	p.ApprovalGate.OnEvaluate = func(ctx context.Context, tool capability.ToolDefinition, inv capability.ToolInvocationContext, decision PermissionDecision) (bool, error) {
+	p.ApprovalGate.OnEvaluate = func(ctx context.Context, tool capability.ToolDefinition, inv capability.ToolInvocationContext, decision PermissionDecision, input json.RawMessage) (bool, error) {
 		return true, nil
 	}
 

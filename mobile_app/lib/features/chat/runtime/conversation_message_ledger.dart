@@ -123,7 +123,9 @@ class ConversationMessageLedger {
         a.replyToMessageId == b.replyToMessageId &&
         a.replyToExcerpt == b.replyToExcerpt &&
         a.responseGroupId == b.responseGroupId &&
-        a.deliverySequence == b.deliverySequence;
+        a.deliverySequence == b.deliverySequence &&
+        a.assistantTurn == b.assistantTurn &&
+        a.assistantTurnSuppressed == b.assistantTurnSuppressed;
   }
 
   bool _sameStringList(List<String>? a, List<String>? b) {

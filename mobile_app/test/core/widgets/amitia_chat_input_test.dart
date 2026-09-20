@@ -91,12 +91,16 @@ void main() {
     final voice = tester.getRect(
       find.byKey(const ValueKey('composer-trailing-button')),
     );
+    final trigger = tester.getRect(
+      find.byKey(const ValueKey('composer-model-trigger')),
+    );
 
     final addInset = add.left - surface.left;
     final voiceInset = surface.right - voice.right;
 
     expect(addInset, closeTo(10.8, 0.5));
     expect(voiceInset, closeTo(10.8, 0.5));
+    expect(voice.left - trigger.right, closeTo(4, 0.5));
 
     await tester.enterText(find.byType(TextField), '测试');
     await tester.pump();
@@ -107,6 +111,7 @@ void main() {
     final sendInset = surface.right - send.right;
 
     expect(sendInset, closeTo(10.8, 0.5));
+    expect(send.left - trigger.right, closeTo(4, 0.5));
   });
 
   test('composer keeps a lower bottom inset when the keyboard is closed', () {
@@ -138,5 +143,133 @@ void main() {
 
     final holdToTalk = tester.widget<Text>(find.text('按住说话'));
     expect(holdToTalk.style?.fontSize, 15);
+  });
+
+  testWidgets(
+    'reasoning slider previews while dragging and commits on release',
+    (tester) async {
+      final previews = <String>[];
+      final commits = <String>[];
+      final modeCommits = <bool>[];
+      var effort = 'medium';
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Align(
+              alignment: Alignment.bottomCenter,
+              child: StatefulBuilder(
+                builder: (context, setState) {
+                  return AmitiaChatInput(
+                    onSend: (_) {},
+                    models: const <Map<String, dynamic>>[
+                      <String, dynamic>{
+                        'id': 7,
+                        'name': 'gpt-5',
+                        'modelName': 'gpt-5',
+                        'apiType': 'openai',
+                        'supportsReasoning': true,
+                        'defaultReasoningEffort': 'medium',
+                      },
+                    ],
+                    selectedModelId: 7,
+                    reasoningEffort: effort,
+                    reasoningEnabled: true,
+                    onModelPreviewChanged: (_, nextEffort, _) {
+                      previews.add(nextEffort);
+                      setState(() => effort = nextEffort);
+                    },
+                    onModelChanged: (_, nextEffort, enabled) {
+                      commits.add(nextEffort);
+                      modeCommits.add(enabled);
+                      setState(() => effort = nextEffort);
+                    },
+                  );
+                },
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.byKey(const ValueKey('composer-reasoning-label')));
+      await tester.pumpAndSettle();
+      final slider = find.byType(Slider);
+      expect(slider, findsOneWidget);
+      expect(find.byType(Switch), findsNothing);
+
+      final sliderRect = tester.getRect(slider);
+      final gesture = await tester.startGesture(
+        Offset(sliderRect.left + sliderRect.width * 0.37, sliderRect.center.dy),
+      );
+      await gesture.moveBy(Offset(sliderRect.width * 0.28, 0));
+      await tester.pump();
+
+      expect(previews, isNotEmpty);
+      expect(commits, isEmpty);
+      expect(
+        tester
+            .widget<Text>(
+              find.byKey(const ValueKey('composer-reasoning-label')),
+            )
+            .data,
+        '高',
+      );
+
+      await gesture.up();
+      await tester.pumpAndSettle();
+
+      expect(commits, isNotEmpty);
+
+      await tester.tap(find.text('思考'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('选择思考模式'), findsOneWidget);
+      expect(find.text('不支持'), findsOneWidget);
+
+      await tester.tap(find.text('不支持'));
+      await tester.pumpAndSettle();
+
+      expect(modeCommits.last, isFalse);
+    },
+  );
+
+  testWidgets('model selection page keeps model entries visible', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Align(
+            alignment: Alignment.bottomCenter,
+            child: AmitiaChatInput(
+              onSend: (_) {},
+              models: const <Map<String, dynamic>>[
+                <String, dynamic>{
+                  'id': 7,
+                  'name': 'GPT-5',
+                  'modelName': 'gpt-5',
+                  'apiType': 'openai',
+                  'supportsReasoning': true,
+                  'defaultReasoningEffort': 'high',
+                },
+              ],
+              selectedModelId: 7,
+              reasoningEffort: 'high',
+              reasoningEnabled: true,
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byKey(const ValueKey('composer-reasoning-label')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('模型'));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('选择模型'), findsOneWidget);
+    expect(find.text('gpt-5'), findsOneWidget);
+    expect(find.textContaining('GPT-5 · openai'), findsOneWidget);
   });
 }

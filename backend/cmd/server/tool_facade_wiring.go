@@ -44,6 +44,7 @@ func (a *chatToolRuntimeAdapter) toInvocationScope(scope chat.SkillScope) kernel
 		ToolCallID:     scope.ToolCallID,
 		CorrelationID:  scope.CorrelationID,
 		CausationID:    scope.CausationID,
+		PermissionMode: scope.PermissionMode,
 		ExecContext:    scope.ExecContext,
 	}
 }
@@ -122,6 +123,10 @@ func (a *chatToolRuntimeAdapter) ModelTools(ctx context.Context, scope chat.Skil
 func (a *chatToolRuntimeAdapter) ExecuteModelTool(ctx context.Context, modelName string, input json.RawMessage, scope chat.SkillScope, idempotencyKey string) (chat.ToolResult, bool) {
 	result, found := a.facade.ExecuteModelTool(ctx, modelName, input, a.toInvocationScope(scope), idempotencyKey)
 	return a.toChatResult(result), found
+}
+
+func (a *chatToolRuntimeAdapter) IsModelToolParallelSafe(ctx context.Context, modelName string, scope chat.SkillScope) bool {
+	return a.facade.IsModelToolParallelSafe(ctx, modelName, a.toInvocationScope(scope))
 }
 
 func (a *chatToolRuntimeAdapter) AfterReply(scope chat.SkillScope, reply chat.ReplyView) bool {

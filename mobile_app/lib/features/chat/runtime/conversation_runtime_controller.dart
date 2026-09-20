@@ -41,8 +41,11 @@ class ConversationRuntimeController extends ChangeNotifier {
   int _activeReasoningDurationMs = 0;
   String _activeResponseGroupId = '';
   int _modelConfigId = 0;
-  String _reasoningEffort = 'medium';
+  String _reasoningEffort = 'high';
+  bool _reasoningEnabled = true;
+  String _permissionMode = 'request_approval';
   bool _liveReasoningAttached = false;
+  List<AssistantTurnDto> _assistantTurns = const <AssistantTurnDto>[];
   final MarkdownStreamScheduler _streamScheduler = MarkdownStreamScheduler();
 
   static const Duration _liveSyncInterval = Duration(seconds: 15);
@@ -58,6 +61,8 @@ class ConversationRuntimeController extends ChangeNotifier {
   int get draftEpoch => _draftEpoch;
   int get modelConfigId => _modelConfigId;
   String get reasoningEffort => _reasoningEffort;
+  bool get reasoningEnabled => _reasoningEnabled;
+  String get permissionMode => _permissionMode;
 
   void setCharacterId(String? characterId) {
     _characterId = characterId?.trim().isEmpty == true ? null : characterId;
@@ -78,16 +83,42 @@ class ConversationRuntimeController extends ChangeNotifier {
   Future<void> updateModelSettings(
     int modelConfigId,
     String reasoningEffort,
+    bool reasoningEnabled,
   ) async {
-    _modelConfigId = modelConfigId;
-    _reasoningEffort = reasoningEffort.isEmpty ? 'medium' : reasoningEffort;
-    notifyListeners();
+    previewModelSettings(modelConfigId, reasoningEffort, reasoningEnabled);
     final conversationId = _conversationId?.trim() ?? '';
     if (conversationId.isEmpty) return;
     await _chatService.updateConversationModelSettings(
       conversationId,
       modelConfigId: _modelConfigId,
       reasoningEffort: _reasoningEffort,
+      reasoningEnabled: _reasoningEnabled,
+    );
+  }
+
+  void previewModelSettings(
+    int modelConfigId,
+    String reasoningEffort,
+    bool reasoningEnabled,
+  ) {
+    _modelConfigId = modelConfigId;
+    _reasoningEffort = reasoningEffort.isEmpty ? 'high' : reasoningEffort;
+    _reasoningEnabled = reasoningEnabled;
+    notifyListeners();
+  }
+
+  Future<void> updatePermissionMode(String permissionMode) async {
+    final next = permissionMode == 'full_access'
+        ? 'full_access'
+        : 'request_approval';
+    if (_permissionMode == next) return;
+    _permissionMode = next;
+    notifyListeners();
+    final conversationId = _conversationId?.trim() ?? '';
+    if (conversationId.isEmpty) return;
+    await _chatService.updateConversationPermissionMode(
+      conversationId,
+      _permissionMode,
     );
   }
 
@@ -96,6 +127,9 @@ class ConversationRuntimeController extends ChangeNotifier {
     String? id,
     int? sequence,
     MessageStatus? status,
+    AssistantTurnDto? assistantTurn,
+    bool? assistantTurnSuppressed,
+    bool clearAssistantTurn = false,
   }) {
     return ChatMessage(
       id: id ?? message.id,
@@ -126,6 +160,11 @@ class ConversationRuntimeController extends ChangeNotifier {
       replyToExcerpt: message.replyToExcerpt,
       responseGroupId: message.responseGroupId,
       deliverySequence: message.deliverySequence,
+      assistantTurn: clearAssistantTurn
+          ? null
+          : assistantTurn ?? message.assistantTurn,
+      assistantTurnSuppressed:
+          assistantTurnSuppressed ?? message.assistantTurnSuppressed,
     );
   }
 
@@ -391,6 +430,7 @@ class ConversationRuntimeController extends ChangeNotifier {
       } else {
         await _syncMessages();
       }
+      await _loadAssistantTurns();
       _lastError = null;
     } catch (error, stackTrace) {
       if (epoch != _generationEpoch || cancellation.isCancelled) return;
@@ -476,6 +516,8 @@ class ConversationRuntimeController extends ChangeNotifier {
           replyToMessageId: replyToMessageId,
           modelConfigId: _modelConfigId,
           reasoningEffort: _reasoningEffort,
+          reasoningEnabled: _reasoningEnabled,
+          permissionMode: _permissionMode,
           workspace: workspace,
           cancellation: cancellation,
         )) {
@@ -741,7 +783,77 @@ class ConversationRuntimeController extends ChangeNotifier {
     debugPrint(
       'Chat sync reconciled conversation=$conv total=${_messages.length}',
     );
+    _applyAssistantTurnProjection();
     if (changed) notifyListeners();
+  }
+
+  Future<void> _loadAssistantTurns() async {
+    final conv = _conversationId?.trim() ?? '';
+    if (conv.isEmpty) {
+      _assistantTurns = const <AssistantTurnDto>[];
+      _applyAssistantTurnProjection();
+      notifyListeners();
+      return;
+    }
+    try {
+      final turns = await _chatService.getAssistantTurns(conv);
+      if (_disposed || _conversationId != conv) return;
+      _assistantTurns = turns;
+      _applyAssistantTurnProjection();
+      notifyListeners();
+    } catch (_) {}
+  }
+
+  void _applyAssistantTurnProjection() {
+    final byRequest = <String, AssistantTurnDto>{};
+    final byGroup = <String, AssistantTurnDto>{};
+    for (final turn in _assistantTurns) {
+      if (turn.requestId.isNotEmpty) byRequest[turn.requestId] = turn;
+      if (turn.responseGroupId.isNotEmpty) byGroup[turn.responseGroupId] = turn;
+    }
+    final claimedTurns = <String>{};
+    for (final message in _messages.messages) {
+      if (message.role != MessageRole.assistant) {
+        if (message.assistantTurn != null || message.assistantTurnSuppressed) {
+          _messages.upsert(
+            _copy(
+              message,
+              clearAssistantTurn: true,
+              assistantTurnSuppressed: false,
+            ),
+          );
+        }
+        continue;
+      }
+      final requestId = message.responseGroupId.trim().isNotEmpty
+          ? message.responseGroupId.trim()
+          : message.renderId.trim();
+      final turn =
+          byGroup[message.responseGroupId] ??
+          byRequest[requestId] ??
+          byRequest[message.responseGroupId];
+      if (turn == null) {
+        if (message.assistantTurn != null || message.assistantTurnSuppressed) {
+          _messages.upsert(
+            _copy(
+              message,
+              clearAssistantTurn: true,
+              assistantTurnSuppressed: false,
+            ),
+          );
+        }
+        continue;
+      }
+      final first = claimedTurns.add(turn.id);
+      _messages.upsert(
+        _copy(
+          message,
+          assistantTurn: first ? turn : null,
+          assistantTurnSuppressed: !first,
+          clearAssistantTurn: !first,
+        ),
+      );
+    }
   }
 
   void _restartLiveSync() {
@@ -788,6 +900,14 @@ class ConversationRuntimeController extends ChangeNotifier {
               cancellation.isCancelled ||
               _conversationId != conversationId) {
             return;
+          }
+          if (event.type == 'assistant_turn_completed') {
+            final eventConversation = (event.data['conversationId'] ?? '')
+                .toString();
+            if (eventConversation == conversationId) {
+              await _loadAssistantTurns();
+            }
+            continue;
           }
           if (event.type != 'message_created' &&
               event.type != 'message_updated') {
@@ -1148,6 +1268,7 @@ class ConversationRuntimeController extends ChangeNotifier {
     _conversationId = id;
     _characterId = characterId?.trim().isEmpty == true ? null : characterId;
     _messages.clear();
+    _assistantTurns = const <AssistantTurnDto>[];
     _lastError = null;
     _sending = false;
     try {
@@ -1155,15 +1276,22 @@ class ConversationRuntimeController extends ChangeNotifier {
       _modelConfigId = conversation?.modelConfigId ?? 0;
       _reasoningEffort = conversation?.reasoningEffort.isNotEmpty == true
           ? conversation!.reasoningEffort
-          : 'medium';
+          : 'high';
+      _reasoningEnabled = conversation?.reasoningEnabled != 0;
+      _permissionMode = conversation?.permissionMode == 'full_access'
+          ? 'full_access'
+          : 'request_approval';
     } catch (_) {
       _modelConfigId = 0;
-      _reasoningEffort = 'medium';
+      _reasoningEffort = 'high';
+      _reasoningEnabled = true;
+      _permissionMode = 'request_approval';
     }
     _restartLiveSync();
     notifyListeners();
     try {
       await _syncMessages();
+      await _loadAssistantTurns();
     } catch (error) {
       _lastError = error;
       notifyListeners();
@@ -1181,6 +1309,7 @@ class ConversationRuntimeController extends ChangeNotifier {
     _conversationId = conversation.id;
     _characterId = characterId;
     _messages.clear();
+    _assistantTurns = const <AssistantTurnDto>[];
     _lastError = null;
     _restartLiveSync();
     notifyListeners();

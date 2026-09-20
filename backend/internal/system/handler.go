@@ -13,6 +13,7 @@ import (
 
 	"github.com/u-ai/backend/internal/artifact"
 	"github.com/u-ai/backend/internal/chat"
+	"github.com/u-ai/backend/internal/extension/kernel/execution"
 	"github.com/u-ai/backend/internal/interaction"
 	"github.com/u-ai/backend/internal/memory"
 	"github.com/u-ai/backend/internal/mindruntime"
@@ -43,6 +44,7 @@ type Handler struct {
 	channelAccess  ChannelAvailability
 	shadowMu       sync.RWMutex
 	shadowState    mindruntime.ShadowState
+	approvalBroker *execution.ApprovalBroker
 }
 
 type ChannelAvailability interface {
@@ -67,6 +69,10 @@ func (h *Handler) SetArtifactService(svc *artifact.Service) {
 
 func (h *Handler) SetChannelAvailability(availability ChannelAvailability) {
 	h.channelAccess = availability
+}
+
+func (h *Handler) SetApprovalBroker(broker *execution.ApprovalBroker) {
+	h.approvalBroker = broker
 }
 
 func (h *Handler) getDBPath() string {

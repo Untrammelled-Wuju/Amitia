@@ -363,6 +363,9 @@ func applyReasoningCapabilities(cfg *ModelConfig) {
 	if cfg.SupportsReasoning && len(cfg.ReasoningLevels) == 0 {
 		cfg.ReasoningLevels = []string{"low", "medium", "high", "xhigh"}
 	}
+	if cfg.SupportsReasoning && cfg.DefaultReasoningEffort == "" {
+		cfg.DefaultReasoningEffort = "high"
+	}
 }
 
 func mergeReasoningCapabilities(raw map[string]interface{}, existingJSON string) string {
@@ -383,6 +386,9 @@ func mergeReasoningCapabilities(raw map[string]interface{}, existingJSON string)
 		if _, ok := current["reasoningLevels"]; !ok {
 			current["reasoningLevels"] = []string{"low", "medium", "high", "xhigh"}
 		}
+		if _, ok := current["defaultReasoningEffort"]; !ok {
+			current["defaultReasoningEffort"] = "high"
+		}
 	}
 	data, err := json.Marshal(current)
 	if err != nil {
@@ -393,7 +399,7 @@ func mergeReasoningCapabilities(raw map[string]interface{}, existingJSON string)
 
 func normalizeReasoningEffort(value string) string {
 	switch strings.ToLower(strings.TrimSpace(value)) {
-	case "low", "轻":
+	case "low", "低", "轻":
 		return "low"
 	case "medium", "中":
 		return "medium"

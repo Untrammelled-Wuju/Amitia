@@ -175,6 +175,9 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 
 	systemSvc := system.NewService(ctx, services.RuntimeProfile)
 	systemHandler := system.NewHandler(systemSvc, ctx.DB, services.Chat, services.DataLifecycle, services.UnifiedEntry, services.Reconciliation, services.Memory)
+	if services.KernelContainer != nil {
+		systemHandler.SetApprovalBroker(services.KernelContainer.ApprovalBroker)
+	}
 
 	spaceStore := spaceidentity.DefaultStore()
 	if spaceStore == nil {
