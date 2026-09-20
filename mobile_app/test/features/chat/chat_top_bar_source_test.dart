@@ -12,7 +12,7 @@ void main() {
     expect(
       source,
       contains(
-        'icon: Icons.phone_in_talk_outlined,\n                size: 32,\n                iconSize: 14,',
+        'icon: Icons.phone_in_talk_outlined,\n                size: 36,\n                iconSize: 14,',
       ),
     );
     expect(

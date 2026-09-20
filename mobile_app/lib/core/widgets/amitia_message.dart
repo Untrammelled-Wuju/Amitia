@@ -2991,7 +2991,7 @@ class _ComposerReasoningSliderState extends State<_ComposerReasoningSlider> {
                   begin: index.toDouble(),
                   end: index.toDouble(),
                 ),
-                duration: const Duration(milliseconds: 260),
+                duration: const Duration(milliseconds: 180),
                 curve: Curves.easeInOutCubic,
                 builder: (context, animatedIndex, _) {
                   final thumbCenter = 32 + span * animatedIndex / 3;

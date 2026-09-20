@@ -3217,7 +3217,7 @@ class _ChatTopBar extends StatelessWidget implements PreferredSizeWidget {
               ],
               child: const _ChatTopBarButton(
                 icon: Icons.phone_in_talk_outlined,
-                size: 32,
+                size: 36,
                 iconSize: 14,
               ),
             ),
