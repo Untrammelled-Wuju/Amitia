@@ -6,6 +6,18 @@ SPDX-License-Identifier: AGPL-3.0-only
   <div class="settings-layout">
     <div class="settings-tabs">
       <router-link
+        to="/settings/overview"
+        class="settings-tab"
+        active-class="settings-tab-active"
+        >运行概览</router-link
+      >
+      <router-link
+        to="/settings/data"
+        class="settings-tab"
+        active-class="settings-tab-active"
+        >运行数据</router-link
+      >
+      <router-link
         to="/settings/runtime"
         class="settings-tab"
         active-class="settings-tab-active"

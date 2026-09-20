@@ -34,6 +34,6 @@ export function providerHasRouteSelectors(provider: UIProviderDefinition): boole
 
 export function providerHasMessageSelectors(provider: UIProviderDefinition): boolean {
   const metadata = provider.metadata ?? {};
-  return ["messageTypes", "roles", "mimeTypes", "extensionTypes"]
+  return ["messageTypes", "roles", "mimeTypes", "extensionTypes", "channelIds"]
     .some((key) => Array.isArray(metadata[key]) && (metadata[key] as unknown[]).length > 0);
 }

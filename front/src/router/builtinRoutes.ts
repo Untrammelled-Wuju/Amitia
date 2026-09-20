@@ -2,9 +2,9 @@ import type { RouteRecordRaw } from "vue-router";
 
 /** Built-in business pages. Core router owns only bootstrap/recovery routes. */
 export const builtinBusinessRoutes: RouteRecordRaw[] = [
-{ path: "/dashboard", redirect: "/dashboard/data" },
-  { path: "/dashboard/run", name: "dashboardRun", component: () => import("@/views/dashboard/RunView.vue"), meta: { requiresAuth: true } },
-  { path: "/dashboard/data", name: "dashboardData", component: () => import("@/views/dashboard/DataView.vue"), meta: { requiresAuth: true } },
+{ path: "/dashboard", redirect: "/settings/overview" },
+  { path: "/dashboard/run", redirect: "/settings/overview" },
+  { path: "/dashboard/data", redirect: "/settings/data" },
 { path: "/chat", name: "chat", component: () => import("@/views/web-chat/WebChatView.vue"), meta: { requiresAuth: true } },
 /**
  * Deprecated: Legacy extension architecture.
@@ -48,6 +48,8 @@ export const builtinBusinessRoutes: RouteRecordRaw[] = [
   meta: { requiresAuth: true },
   redirect: "/settings/runtime",
   children: [
+    { path: "overview", name: "settingsOverview", component: () => import("@/views/dashboard/RunView.vue"), meta: { requiresAuth: true } },
+    { path: "data", name: "settingsData", component: () => import("@/views/dashboard/DataView.vue"), meta: { requiresAuth: true } },
     { path: "deployment", name: "settingsDeployment", component: () => import("@/views/settings/DeploymentPanel.vue"), meta: { requiresAuth: true } },
     { path: "runtime", name: "settingsRuntime", component: () => import("@/views/settings/RuntimePanel.vue"), meta: { requiresAuth: true } },
     { path: "system", name: "settingsSystem", component: () => import("@/views/settings/SystemSettingsPanel.vue"), meta: { requiresAuth: true } },

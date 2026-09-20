@@ -85,11 +85,11 @@ const characters = ref<any[]>([]);
 
 const pageItems = [
   { label: "聊天", desc: "AI 对话", to: "/chat", icon: ChatDotRound },
-  { label: "运行", desc: "服务运行状态", to: "/dashboard/run", icon: Odometer },
+  { label: "运行概览", desc: "服务运行状态", to: "/settings/overview", icon: Odometer },
   {
-    label: "数据",
+    label: "运行数据",
     desc: "使用数据统计",
-    to: "/dashboard/data",
+    to: "/settings/data",
     icon: DataAnalysis,
   },
   { label: "日程提醒", desc: "主动陪伴提醒", to: "/reminders", icon: Clock },

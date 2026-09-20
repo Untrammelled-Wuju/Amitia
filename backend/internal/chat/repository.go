@@ -106,7 +106,11 @@ func (r *repository) ListConversations(q ConversationQuery) ([]Conversation, int
 		q.PageSize = maxPageSize
 	}
 	var convs []Conversation
-	err := query.Order("updated_at DESC").Offset((q.Page - 1) * q.PageSize).Limit(q.PageSize).Find(&convs).Error
+	order := "updated_at DESC"
+	if q.ArchivedOnly {
+		order = "archived_at DESC"
+	}
+	err := query.Order(order).Offset((q.Page - 1) * q.PageSize).Limit(q.PageSize).Find(&convs).Error
 	if convs == nil {
 		convs = []Conversation{}
 	}

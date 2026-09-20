@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createMemoryHistory, createRouter } from "vue-router";
 import type { UIProviderDefinition } from "@/ui-runtime/types";
-import { collectExtensionNavigationItems } from "@/ui-runtime/navigationRegistry";
+import { collectExtensionNavigationItems, resolveBuiltinNavigationItems } from "@/ui-runtime/navigationRegistry";
 import { collectEffectiveProviderRoutes, shadowsProtectedRoute, syncProviderRoutes } from "@/ui-runtime/providerRoutes";
 
 function provider(input: Partial<UIProviderDefinition> & Pick<UIProviderDefinition, "providerId" | "extensionId" | "capability">): UIProviderDefinition {
@@ -62,6 +62,24 @@ function pageProvider(extensionId: string, providerId: string) {
 }
 
 describe("extension navigation registry", () => {
+  it("keeps dashboard entries out of the sidebar", () => {
+    const items = resolveBuiltinNavigationItems(store([]));
+    expect(items.some((item) => item.route.startsWith("/dashboard"))).toBe(false);
+  });
+
+  it("shows the channel center only when a channel presentation is available", () => {
+    expect(resolveBuiltinNavigationItems(store([])).some((item) => item.route === "/channel-messages")).toBe(false);
+    const channels = resolveBuiltinNavigationItems(store([
+      provider({
+        providerId: "channel.wechat.presentation",
+        extensionId: "com.amitia/channel-wechat",
+        capability: "channel.presentation",
+        metadata: { channelId: "wechat_personal", displayName: "个人微信" },
+      }),
+    ]));
+    expect(channels.some((item) => item.route === "/channel-messages")).toBe(true);
+  });
+
   it("aggregates navigation items from multiple enabled providers", () => {
     const providers = [
       provider({

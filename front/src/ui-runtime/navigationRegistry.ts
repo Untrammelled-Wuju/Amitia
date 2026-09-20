@@ -24,6 +24,7 @@ import { isRuntimeCapabilityAvailable, isRuntimeRouteAvailable, type RuntimeCapa
 import type { UIProviderDefinition } from "@/ui-runtime/types";
 import { collectRegistryProviders } from "./providerCollection";
 import { effectiveExtensionRouteKeys, effectiveProviderRouteKeys, shadowsProtectedRoute } from "./providerRoutes";
+import { resolveChannelPresentations } from "./channelPresentation";
 
 export interface UINavigationItem {
   id: string;
@@ -75,8 +76,6 @@ export function resolveNavigationIcon(name?: string): Component {
 }
 
 const builtinItems: UINavigationItem[] = [
-  { id: "overview.run", route: "/dashboard/run", label: "运行概览", icon: DataLine, group: "overview", groupLabel: "概览", groupIcon: Odometer, order: 5 },
-  { id: "overview.data", route: "/dashboard/data", label: "运行数据", icon: DataAnalysis, group: "overview", groupLabel: "概览", groupIcon: Odometer, order: 10 },
   { id: "character.manage", route: "/character", label: "角色管理", icon: User, group: "character", groupLabel: "角色", groupIcon: UserFilled, order: 20, mobile: true, match: ["/character"] },
   { id: "character.reminders", route: "/reminders", label: "日程提醒", icon: Calendar, group: "character", groupLabel: "角色", groupIcon: UserFilled, order: 25 },
   { id: "character.profiles", route: "/profiles", label: "用户画像", icon: Avatar, group: "character", groupLabel: "角色", groupIcon: UserFilled, order: 30 },
@@ -85,11 +84,21 @@ const builtinItems: UINavigationItem[] = [
   { id: "memory.episodic", route: "/episodic", label: "情景记忆", icon: Film, group: "memory", groupLabel: "记忆", groupIcon: Grid, order: 60 },
   { id: "memory.graph", route: "/graph", label: "记忆图谱", icon: Share, group: "memory", groupLabel: "记忆", groupIcon: Grid, order: 65 },
   { id: "memory.timeline", route: "/memory-timeline", label: "时间线", icon: Timer, group: "memory", groupLabel: "记忆", groupIcon: Grid, order: 70 },
-  { id: "channels.messages", route: "/channel-messages", label: "渠道消息", icon: Connection, group: "channels", groupLabel: "渠道", groupIcon: Connection, order: 78 },
   { id: "workshop.game-center", route: "/game-center", label: "游戏模式", icon: MagicStick, group: "workshop", order: 80, runtimeCapability: "gameMode" },
   { id: "workshop", route: "/creative-workshop", label: "创意工坊", icon: MagicStick, group: "workshop", order: 85, match: ["/creative-workshop"] },
   { id: "extensions", route: "/extensions", label: "扩展中心", icon: Menu, group: "extensions", order: 90, match: ["/extensions", "/kernel"] },
 ];
+
+const channelCenterItem: UINavigationItem = {
+  id: "channels.messages",
+  route: "/channel-messages",
+  label: "渠道消息",
+  icon: Connection,
+  group: "channels",
+  groupLabel: "渠道",
+  groupIcon: Connection,
+  order: 78,
+};
 
 const pageTitleOverrides: Record<string, string> = {
   "/onboarding": "引导",
@@ -99,6 +108,9 @@ const pageTitleOverrides: Record<string, string> = {
   "/runtime-mode": "运行模式",
   "/runtime-debug": "运行时调试",
   "/chat": "新对话",
+  "/settings/overview": "运行概览",
+  "/settings/data": "运行数据",
+  "/channel-messages": "渠道消息",
   "/user-settings": "用户信息",
   "/creative-workshop/character-cards": "角色卡工坊",
   "/creative-workshop/pet": "桌宠",
@@ -219,13 +231,19 @@ function applyIconProvider(store: ReturnType<typeof useExtensionUIStore>, items:
   });
 }
 
+export function resolveBuiltinNavigationItems(store: ReturnType<typeof useExtensionUIStore>): UINavigationItem[] {
+  const available = builtinItems.filter(
+    (item) => !item.runtimeCapability || isRuntimeCapabilityAvailable(item.runtimeCapability),
+  );
+  return resolveChannelPresentations(store).length > 0
+    ? [...available, channelCenterItem]
+    : available;
+}
+
 export function useUINavigationRegistry() {
   const store = useExtensionUIStore();
   const items = computed<UINavigationItem[]>(() => {
-    const availableBuiltinItems = builtinItems.filter(
-      (item) => !item.runtimeCapability || isRuntimeCapabilityAvailable(item.runtimeCapability),
-    );
-    const merged = applyIconProvider(store, [...availableBuiltinItems, ...collectExtensionNavigationItems(store)]);
+    const merged = applyIconProvider(store, [...resolveBuiltinNavigationItems(store), ...collectExtensionNavigationItems(store)]);
     return merged.sort((a, b) => a.order - b.order || a.id.localeCompare(b.id));
   });
   const groups = computed<UINavigationGroup[]>(() => {

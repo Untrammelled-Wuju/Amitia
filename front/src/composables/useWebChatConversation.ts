@@ -5,9 +5,7 @@ import { ElMessage, ElMessageBox } from "element-plus";
 import { useApi } from "./useApi";
 import { useCachedApi } from "./useCachedApi";
 import {
-  compareChatMessages,
-  getClientMessageId,
-  getMessageUIKey,
+  mergeServerMessages,
   normalizeRealtimeMessage,
 } from "@/utils/message-order";
 
@@ -41,11 +39,6 @@ export function useWebChatConversation(
 
   const HISTORY_PAGE_SIZE = 50;
   let messagesVersion = 0;
-
-  function isLocalMessage(m: any) {
-    const id = String(m.id || "");
-    return id.startsWith("user-") || id.startsWith("failed-");
-  }
 
   async function conversationExistsOnServer(conversationID: string): Promise<boolean> {
     try {
@@ -81,47 +74,21 @@ export function useWebChatConversation(
     for (const item of serverItems) {
       if (item.id) serverMap.set(String(item.id), item);
     }
-    const localOnly = messages.value.filter((m) => isLocalMessage(m));
+    const current = [...messages.value];
     const pendingKey = `uai-pending-msg:${convId.value}`;
     let pendingMsg: any = null;
     try {
       const raw = sessionStorage.getItem(pendingKey);
       if (raw) pendingMsg = JSON.parse(raw);
     } catch {}
-    if (pendingMsg && !serverMap.has(String(pendingMsg.id)) && !localOnly.some((m: any) => m.id === pendingMsg.id)) {
-      localOnly.push(pendingMsg);
+    if (
+      pendingMsg &&
+      !serverMap.has(String(pendingMsg.id)) &&
+      !current.some((message: any) => message.id === pendingMsg.id)
+    ) {
+      current.push(pendingMsg);
     }
-    const currentById = new Map<string, any>();
-    const currentByClientMessageId = new Map<string, any>();
-    for (const current of messages.value) {
-      const id = String(current?.id || "");
-      const clientMessageId = getClientMessageId(current);
-      if (id) currentById.set(id, current);
-      if (clientMessageId) currentByClientMessageId.set(clientMessageId, current);
-    }
-    const merged = serverItems.map((raw: any) => {
-      const m = normalizeRealtimeMessage(raw);
-      const existing =
-        currentById.get(String(m.id || "")) ||
-        currentByClientMessageId.get(getClientMessageId(m));
-      const next = {
-        ...existing,
-        ...m,
-        clientMessageId:
-          getClientMessageId(m) || getClientMessageId(existing) || undefined,
-        uiKey: existing?.uiKey || getMessageUIKey(m),
-        animateIn: existing?.animateIn ?? false,
-      };
-      if (next.imageUrl && next.content === "[图片]") return { ...next, content: "" };
-      return next;
-    });
-    for (const local of localOnly) {
-      if (!serverMap.has(String(local.id))) {
-        merged.push(local);
-      }
-    }
-    merged.sort(compareChatMessages);
-    messages.value = merged;
+    messages.value = mergeServerMessages(current, serverItems);
   }
 
   function selectCharacter(c: any) {

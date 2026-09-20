@@ -22,7 +22,7 @@
         @keydown.esc.prevent="cancelRename"
         @blur="saveRename"
       />
-      <span v-else @click.stop="beginRename">{{ conversation.title || "新对话" }}</span>
+      <span v-else @dblclick.stop.prevent="beginRename">{{ conversation.title || "新对话" }}</span>
     </div>
     <button
       type="button"

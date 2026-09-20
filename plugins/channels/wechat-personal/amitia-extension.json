@@ -9,7 +9,7 @@
     "description": {
       "default": "以普通个人微信账号接入 Amitia；插件通过 Wechaty Web 协议扫码登录、保存独立会话并完成消息收发，不依赖安装设备上的微信客户端。"
     },
-    "version": "1.6.4",
+    "version": "1.6.5",
     "license": "AGPL-3.0-only",
     "homepage": "https://amitia.untrammelled.top",
     "categories": [
@@ -288,8 +288,7 @@
                     "android",
                     "ios"
                   ],
-                  "route": "/channels/wechat-personal",
-                  "surface": "channels.center"
+                  "route": "/channels/wechat-personal"
                 }
               ],
               "routes": [
@@ -314,6 +313,47 @@
             "mode": "replace",
             "priority": 210,
             "providerId": "wechat-personal-routes",
+            "trustLevel": "official"
+          }
+        },
+        {
+          "id": "wechat-personal-presentation",
+          "kind": "ui_provider",
+          "name": {
+            "default": "个人微信渠道展示"
+          },
+          "description": {
+            "default": "向宿主渠道消息页提供个人微信的展示信息。"
+          },
+          "spec": {
+            "capability": "channel.presentation",
+            "entries": {
+              "mobile": {
+                "type": "declarative"
+              },
+              "electron_windows": {
+                "type": "declarative"
+              },
+              "electron_linux": {
+                "type": "declarative"
+              }
+            },
+            "metadata": {
+              "channelId": "wechat_personal",
+              "displayName": "个人微信",
+              "icon": "channel",
+              "order": 40,
+              "capabilities": {
+                "text": true,
+                "image": true,
+                "voice": true,
+                "file": true,
+                "reply": true
+              }
+            },
+            "mode": "replace",
+            "priority": 210,
+            "providerId": "wechat-personal-presentation",
             "trustLevel": "official"
           }
         },

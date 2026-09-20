@@ -1,0 +1,35 @@
+[package]
+name = "syntax_highlighter_plus"
+version = "0.3.1"
+edition = "2021"
+
+[lib]
+name = "syntax_highlighter_plus"
+crate-type = ["cdylib", "staticlib"]
+
+[dependencies]
+flutter_rust_bridge = "=2.13.0"
+anyhow = "1"
+onig = { version = "6.5", default-features = false }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# Pure-Rust zstd decompressor. The `zstd` crate (C libzstd) decompresses
+# faster but adds a few hundred KB of binary; we only decompress each grammar
+# once, so the smaller dependency wins.
+ruzstd = "0.8"
+
+[build-dependencies]
+serde_json = "1"
+ruzstd = "0.8"
+
+[profile.release]
+lto = true
+codegen-units = 1
+# "s" measured identical to 3 on the perf_smoke throughput test (regex
+# execution dominates and Oniguruma's C build, which inherits this level via
+# the cc crate, is unaffected). Re-check perf_smoke before going to "z".
+opt-level = "s"
+strip = "symbols"
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(frb_expand)'] }

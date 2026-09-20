@@ -7,6 +7,8 @@ import '../../app/theme/app_spacing.dart';
 import '../../app/theme/app_radius.dart';
 import '../../app/theme/app_typography.dart';
 import '../../shared/models/models.dart';
+import '../../features/conversation/rendering/amitia_message_view.dart';
+import '../../features/conversation/rendering/amrp.dart';
 import 'amitia_button.dart';
 import 'amitia_misc.dart';
 
@@ -99,29 +101,46 @@ class AmitiaMessageBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (message.type == MessageType.systemNotice) {
+    if (message.role != MessageRole.user) {
       return Padding(
-        padding: EdgeInsets.symmetric(vertical: AppSpacing.sm),
-        child: Center(
-          child: Text(
-            message.content,
-            style: TextStyle(fontSize: 11, color: context.textTertiary),
-          ),
+        padding: EdgeInsets.fromLTRB(
+          AppSpacing.lg,
+          0,
+          AppSpacing.lg,
+          38,
+        ),
+        child: AmitiaMessageView(
+          key: ValueKey<String>('amrp:${message.renderId}'),
+          message: message,
+          characterId: '',
+          characterName: (characterName ?? '').trim().isEmpty
+              ? 'Amitia'
+              : characterName!.trim(),
+          avatarInitial: (avatarInitial ?? '').trim().isEmpty
+              ? 'A'
+              : avatarInitial!.trim(),
+          avatarColor: (avatarColor ?? '').trim().isEmpty
+              ? '#7060E8'
+              : avatarColor!.trim(),
+          showAvatar: showAvatar,
+          showThinking: showThinking,
+          toolBlocks: [
+            for (final activity in agentActivities)
+              AmrpToolBlock(
+                id: activity.id,
+                name: activity.displayTitle,
+                error: activity.errorCode ?? '',
+                status: _toolStatus(activity.status),
+              ),
+          ],
+          onRetry: onRetry,
+          onReply: onReply,
+          onCopy: onCopy,
         ),
       );
     }
 
-    if (message.type == MessageType.agentTask) {
-      return _AgentTaskMessage(
-        message: message,
-        onAgentTaskTap: onAgentTaskTap,
-        onPauseAgentTask: onPauseAgentTask,
-        onResumeAgentTask: onResumeAgentTask,
-        statusLabel: agentTaskStatusLabel ?? '运行中',
-      );
-    }
-
-    final isUser = message.role == MessageRole.user;
+    final isUser = true;
     final displayName = isUser
         ? ((userName ?? '').trim().isEmpty ? '我' : userName!.trim())
         : ((characterName ?? '').trim().isEmpty ? 'AI' : characterName!.trim());
@@ -435,6 +454,26 @@ class AmitiaMessageBubble extends StatelessWidget {
     final language = withoutPrefix.substring(0, newline).trim();
     final body = withoutPrefix.substring(newline + 1, withoutPrefix.length - 3);
     return (language.isEmpty ? 'text' : language, body);
+  }
+
+  AmrpToolStatus _toolStatus(String value) {
+    switch (value.trim().toUpperCase()) {
+      case 'QUEUED':
+      case 'PENDING':
+        return AmrpToolStatus.queued;
+      case 'RUNNING':
+      case 'SENDING':
+        return AmrpToolStatus.running;
+      case 'CANCELLED':
+      case 'CANCELED':
+        return AmrpToolStatus.cancelled;
+      case 'FAILED':
+      case 'ERROR':
+      case 'UNKNOWN':
+        return AmrpToolStatus.failed;
+      default:
+        return AmrpToolStatus.success;
+    }
   }
 }
 

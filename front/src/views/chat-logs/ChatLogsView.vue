@@ -89,12 +89,13 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { Refresh } from "@element-plus/icons-vue";
 import { ElMessage } from "element-plus";
 import { useApi } from "@/composables/useApi";
 import ArchiveConversationIcon from "@/components/ArchiveConversationIcon.vue";
 import ChatBubble from "@/components/ChatBubble.vue";
+import { useChatStore } from "@/stores/chat";
 
 interface ArchivedConversation {
   id: string;
@@ -116,7 +117,8 @@ interface ArchivedMessage {
   audioDuration?: number;
 }
 
-const { get, put } = useApi();
+const { get } = useApi();
+const chatStore = useChatStore();
 const conversations = ref<ArchivedConversation[]>([]);
 const messages = ref<ArchivedMessage[]>([]);
 const projects = ref<any[]>([]);
@@ -183,7 +185,13 @@ async function loadConversations() {
       projectId: projectFilter.value || undefined,
       keyword: keyword.value.trim() || undefined,
     });
-    conversations.value = response?.items || [];
+    conversations.value = [...(response?.items || [])].sort((left, right) => {
+      const leftTime = Date.parse(left.archivedAt || "");
+      const rightTime = Date.parse(right.archivedAt || "");
+      const leftOrder = Number.isNaN(leftTime) ? 0 : leftTime;
+      const rightOrder = Number.isNaN(rightTime) ? 0 : rightTime;
+      return rightOrder - leftOrder;
+    });
     if (selectedId.value && !conversations.value.some((item) => item.id === selectedId.value)) {
       selectedId.value = "";
       messages.value = [];
@@ -214,9 +222,7 @@ async function restoreConversation(conversation: ArchivedConversation) {
   if (restoringId.value) return;
   restoringId.value = conversation.id;
   try {
-    await put(`/api/web-chat/conversations/${encodeURIComponent(conversation.id)}`, {
-      archived: false,
-    });
+    await chatStore.restoreConversation(conversation.id);
     conversations.value = conversations.value.filter((item) => item.id !== conversation.id);
     if (selectedId.value === conversation.id) {
       selectedId.value = "";
@@ -232,6 +238,13 @@ onMounted(() => {
   void loadFilters();
   void loadConversations();
 });
+
+watch(
+  () => chatStore.archivedRevision,
+  () => {
+    void loadConversations();
+  },
+);
 
 onBeforeUnmount(() => {
   if (searchTimer) clearTimeout(searchTimer);

@@ -61,7 +61,7 @@ const saving = ref<UIProviderCapability | "">("");
 const groups: Array<{ name: string; capabilities: UIProviderCapability[] }> = [
   { name: "应用外壳", capabilities: ["app.shell", "app.navigation", "app.workspace", "route.registry", "page.provider"] },
   { name: "对话", capabilities: ["conversation.shell", "conversation.header", "conversation.messages", "conversation.message_renderer", "conversation.sidebar", "conversation.composer", "conversation.overlay"] },
-  { name: "业务页面", capabilities: ["character.shell", "character.detail", "memory.shell", "memory.detail", "settings.shell", "settings.section", "extension.center", "extension.page"] },
+  { name: "业务页面", capabilities: ["channel.presentation", "character.shell", "character.detail", "memory.shell", "memory.detail", "settings.shell", "settings.section", "extension.center", "extension.page"] },
   { name: "设计系统", capabilities: ["ui.theme", "ui.tokens", "ui.icons", "ui.components"] },
 ];
 const scopeOptions: Array<{ value: UIProfileScopeKind; label: string }> = [

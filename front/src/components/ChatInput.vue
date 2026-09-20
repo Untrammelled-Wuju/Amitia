@@ -1881,6 +1881,7 @@ defineExpose({ focus, setText, clear: clearText });
   .chat-input-bar { padding: 6px 8px calc(10px + var(--ac-safe-area-bottom)); }
   .composer-stack { flex-basis: 100%; width: 100%; }
   .input-wrapper { border-radius: 13px; }
+  .input-actions { position: relative; right: -3px; }
   .input-field { max-height: 132px; }
 }
 

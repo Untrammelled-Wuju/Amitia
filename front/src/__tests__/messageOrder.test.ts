@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   compareChatMessages,
+  hasAssistantReplyAfterLatestUser,
   parseMessageTime,
   mergeChatMessage,
 } from "@/utils/message-order";
@@ -63,6 +64,33 @@ describe("compareChatMessages 同秒平局", () => {
       "u1",
       "a1",
     ]);
+  });
+});
+
+describe("hasAssistantReplyAfterLatestUser", () => {
+  it("忽略上一轮回复并识别当前轮是否已有回复", () => {
+    const messages: any[] = [
+      { id: "u1", role: "user", content: "第一轮", sequence: 1 },
+      { id: "a1", role: "assistant", content: "第一轮回复", sequence: 2 },
+      { id: "u2", role: "user", content: "第二轮", sequence: 3 },
+    ];
+    expect(hasAssistantReplyAfterLatestUser(messages)).toBe(false);
+    messages.push({
+      id: "a2",
+      role: "assistant",
+      content: "第二轮回复",
+      status: "streaming",
+      sequence: 4,
+    });
+    expect(hasAssistantReplyAfterLatestUser(messages)).toBe(true);
+  });
+
+  it("没有用户消息时不显示生成占位", () => {
+    expect(
+      hasAssistantReplyAfterLatestUser([
+        { id: "a1", role: "assistant", content: "历史回复" },
+      ]),
+    ).toBe(false);
   });
 });
 

@@ -10,6 +10,7 @@ import '../../../core/services/chat_service.dart';
 import '../../../core/services/channel_service.dart';
 import '../../../core/services/providers.dart';
 import '../../../shared/models/models.dart';
+import '../../conversation/rendering/stream/markdown_stream_scheduler.dart';
 import 'conversation_message_ledger.dart';
 
 /// UI-agnostic conversation runtime shared by the built-in UI and extension UI.
@@ -36,6 +37,7 @@ class ConversationRuntimeController extends ChangeNotifier {
   int _draftEpoch = 0;
   ChatStreamCancellation? _activeSendCancellation;
   ChatStreamCancellation? _messageEventsCancellation;
+  final MarkdownStreamScheduler _streamScheduler = MarkdownStreamScheduler();
 
   static const Duration _liveSyncInterval = Duration(seconds: 15);
   static const Duration _businessReadyRetryWindow = Duration(seconds: 20);
@@ -345,6 +347,8 @@ class ConversationRuntimeController extends ChangeNotifier {
             break;
           case 'message_end':
           case 'done':
+            _streamScheduler.flush();
+            break;
           case 'connected':
             break;
         }
@@ -382,7 +386,7 @@ class ConversationRuntimeController extends ChangeNotifier {
       }
       if (epoch == _generationEpoch) {
         _sending = false;
-        notifyListeners();
+        _streamScheduler.schedule(notifyListeners);
       }
     }
   }
@@ -981,6 +985,7 @@ class ConversationRuntimeController extends ChangeNotifier {
     final conv = _conversationId;
     _activeSendCancellation?.cancel('user stopped');
     _activeSendCancellation = null;
+    _streamScheduler.flush();
     ++_generationEpoch;
     _sending = false;
     notifyListeners();
@@ -1079,6 +1084,7 @@ class ConversationRuntimeController extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    _streamScheduler.dispose();
     _activeSendCancellation?.cancel('disposed');
     _activeSendCancellation = null;
     _messageEventsCancellation?.cancel('disposed');

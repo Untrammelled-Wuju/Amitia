@@ -14,6 +14,7 @@ export type UIProviderCapability =
   | "conversation.composer"
   | "conversation.overlay"
   | "conversation.drawer"
+  | "channel.presentation"
   | "character.shell"
   | "character.detail"
   | "memory.shell"
@@ -31,7 +32,7 @@ export const UI_PROVIDER_CAPABILITIES: readonly UIProviderCapability[] = [
   "app.shell", "app.navigation", "app.workspace", "route.registry", "page.provider",
   "conversation.shell", "conversation.header", "conversation.messages", "conversation.message_renderer",
   "conversation.sidebar", "conversation.composer", "conversation.overlay",
-  "conversation.drawer",
+  "conversation.drawer", "channel.presentation",
   "character.shell", "character.detail", "memory.shell", "memory.detail",
   "settings.shell", "settings.section", "extension.center", "extension.page",
   "ui.theme", "ui.tokens", "ui.icons", "ui.components",

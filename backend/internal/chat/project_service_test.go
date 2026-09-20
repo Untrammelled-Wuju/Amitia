@@ -297,3 +297,42 @@ func TestArchivedConversationListOnlyReturnsArchived(t *testing.T) {
 		t.Fatalf("archived content search mismatch: %#v", searchResponse.Items)
 	}
 }
+
+func TestArchivedConversationListOrdersByArchivedAt(t *testing.T) {
+	svc := newProjectTestService(t)
+	olderArchive, err := svc.CreateConversationForSpace(&CreateConversationRequest{Channel: "web", Title: "较早归档"}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	newerArchive, err := svc.CreateConversationForSpace(&CreateConversationRequest{Channel: "web", Title: "较晚归档"}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.db.Model(&Conversation{}).Where("id = ?", olderArchive.ID).Updates(map[string]interface{}{
+		"archived_at": "2026-09-19 10:00:00",
+		"updated_at":  "2026-09-19 12:00:00",
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.db.Model(&Conversation{}).Where("id = ?", newerArchive.ID).Updates(map[string]interface{}{
+		"archived_at": "2026-09-19 11:00:00",
+		"updated_at":  "2026-09-19 09:00:00",
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	response, err := svc.ListConversationsForSpace(ConversationQuery{
+		ArchivedOnly: true,
+		Page:         1,
+		PageSize:     20,
+	}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(response.Items) != 2 {
+		t.Fatalf("archived list size = %d, want 2", len(response.Items))
+	}
+	if response.Items[0].ID != newerArchive.ID || response.Items[1].ID != olderArchive.ID {
+		t.Fatalf("archived list order mismatch: %#v", response.Items)
+	}
+}

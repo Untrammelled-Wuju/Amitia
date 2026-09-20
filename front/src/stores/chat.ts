@@ -44,6 +44,7 @@ export const useChatStore = defineStore("chat", () => {
   const currentConversationId = ref<string | null>(null);
   const currentProjectId = ref("");
   const sidebar = ref<SidebarData>({ pinned: [], recent: [], projects: [] });
+  const archivedRevision = ref(0);
 
   function setMessages(msgs: Message[]) {
     messages.value = msgs;
@@ -122,6 +123,13 @@ export const useChatStore = defineStore("chat", () => {
       currentProjectId.value = "";
     }
     await fetchSidebar();
+    archivedRevision.value += 1;
+  }
+
+  async function restoreConversation(conversationId: string) {
+    await apiClient.put(`/api/web-chat/conversations/${encodeURIComponent(conversationId)}`, { archived: false });
+    await fetchSidebar();
+    archivedRevision.value += 1;
   }
 
   async function deleteConversation(conversationId: string) {
@@ -143,6 +151,7 @@ export const useChatStore = defineStore("chat", () => {
     setConversationId,
     currentProjectId,
     sidebar,
+    archivedRevision,
     fetchSidebar,
     createConversation,
     createProject,
@@ -152,6 +161,7 @@ export const useChatStore = defineStore("chat", () => {
     renameConversation,
     setConversationPinned,
     archiveConversation,
+    restoreConversation,
     deleteConversation,
   };
 });

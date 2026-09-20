@@ -33,14 +33,17 @@ function scoreProvider(provider: UIProviderDefinition, message: Record<string, a
   const roles = stringList(metadata.roles);
   const mimeTypes = stringList(metadata.mimeTypes);
   const extensionTypes = stringList(metadata.extensionTypes);
-  const type = String(message.type ?? message.messageType ?? "text").toLowerCase();
+  const channelIds = stringList(metadata.channelIds);
+  const type = String(message.type ?? message.messageType ?? message.msgType ?? "text").toLowerCase();
   const role = String(message.role ?? "").toLowerCase();
   const extensionType = String(message.extensionType ?? message.extension_type ?? "").toLowerCase();
+  const channelId = String(message.channelId ?? message.channel ?? "").toLowerCase();
   const actualMimes = messageMimeTypes(message);
 
   if (messageTypes.length && !messageTypes.includes(type) && !messageTypes.includes("*")) return null;
   if (roles.length && !roles.includes(role) && !roles.includes("*")) return null;
   if (extensionTypes.length && !extensionTypes.includes(extensionType) && !extensionTypes.includes("*")) return null;
+  if (channelIds.length && !channelIds.includes(channelId) && !channelIds.includes("*")) return null;
   if (mimeTypes.length && !actualMimes.some((actual) => mimeTypes.some((expected) => mimeMatches(actual, expected)))) return null;
 
   let specificity = 0;
@@ -48,6 +51,7 @@ function scoreProvider(provider: UIProviderDefinition, message: Record<string, a
   if (roles.length) specificity += 4;
   if (mimeTypes.length) specificity += 4;
   if (extensionTypes.length) specificity += 8;
+  if (channelIds.length) specificity += 8;
   return (provider.priority ?? 0) * 100 + specificity;
 }
 

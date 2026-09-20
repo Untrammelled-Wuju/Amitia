@@ -8,6 +8,7 @@ import { createAuthenticatedFetchInit } from "../runtime/request-auth";
 import { createRequestEnvelope } from "../utils/requestEnvelope";
 import {
   compareChatMessages,
+  mergeServerMessages,
   normalizeRealtimeMessage,
 } from "@/utils/message-order";
 import { notifyDesktopPetChatState } from "@/runtime/desktop-pet-chat-state";
@@ -40,6 +41,7 @@ export function useWebChatSend(
   const generating = ref(false);
   let sendingTimer: ReturnType<typeof setTimeout> | null = null;
   let generationPhaseTimer: ReturnType<typeof setTimeout> | null = null;
+  let generationSettlementEpoch = 0;
 
   function getLastPolledMsgId() {
     return lastPolledMsgId;
@@ -62,36 +64,110 @@ export function useWebChatSend(
     }
   }
 
+  async function reconcilePersistedMessages(conversationId: string) {
+    const path = `/api/web-chat/conversations/${encodeURIComponent(conversationId)}/messages`;
+    const first = await get<any>(path, { page: 1, pageSize: 50 });
+    const totalPages = Math.max(1, Number(first?.totalPages || 1));
+    const latest =
+      totalPages > 1
+        ? await get<any>(path, { page: totalPages, pageSize: 50 })
+        : first;
+    const items = latest?.items || latest?.messages || [];
+    if (!Array.isArray(items) || items.length === 0) return;
+    messages.value = mergeServerMessages(messages.value, items);
+    lastPolledMsgId = messages.value[messages.value.length - 1]?.id || lastPolledMsgId;
+    scrollToBottom(true);
+  }
+
   function startGenerationPhaseTracking(mergeWindowMs: unknown) {
-    if (generating.value || generationPhaseTimer) return;
+    clearGenerationPhaseTimer();
+    const epoch = ++generationSettlementEpoch;
     const parsedWindow = Number(mergeWindowMs);
     const fallbackDelay =
       Number.isFinite(parsedWindow) && parsedWindow >= 0 ? parsedWindow : 5000;
     const startedAt = Date.now();
+    const deadline = startedAt + 120000;
+    let sawActiveState = false;
+
+    const schedule = (delay: number) => {
+      if (epoch !== generationSettlementEpoch) return;
+      generationPhaseTimer = setTimeout(poll, delay);
+    };
+
     const poll = async () => {
       generationPhaseTimer = null;
-      if (!sending.value || generating.value || !convId.value) return;
+      const conversationId = String(convId.value || "").trim();
+      if (
+        epoch !== generationSettlementEpoch ||
+        !sending.value ||
+        !conversationId
+      ) {
+        return;
+      }
+      if (Date.now() >= deadline) {
+        try {
+          await reconcilePersistedMessages(conversationId);
+        } finally {
+          if (epoch === generationSettlementEpoch) {
+            clearSendingTimer();
+            sending.value = false;
+            generating.value = false;
+          }
+        }
+        return;
+      }
       try {
         const result = await get<{ status?: string }>(
-          `/api/web-chat/conversations/${convId.value}/generations/current/status`,
+          `/api/web-chat/conversations/${conversationId}/generations/current/status`,
         );
-        if (result?.status === "processing") {
+        const status = String(result?.status || "").toLowerCase();
+        if (status === "collecting" || status === "processing") {
+          sawActiveState = true;
           generating.value = true;
+          schedule(500);
+          return;
+        }
+        if (
+          status === "completed" ||
+          status === "failed" ||
+          status === "cancelled" ||
+          (status === "idle" && sawActiveState)
+        ) {
+          try {
+            await reconcilePersistedMessages(conversationId);
+          } finally {
+            if (epoch === generationSettlementEpoch) {
+              clearSendingTimer();
+              sending.value = false;
+              generating.value = false;
+            }
+          }
           return;
         }
       } catch {
-        if (Date.now() - startedAt >= fallbackDelay) {
-          generating.value = true;
-          return;
+        schedule(Date.now() - startedAt >= fallbackDelay ? 750 : 150);
+        return;
+      }
+      if (!sawActiveState && Date.now() - startedAt < fallbackDelay) {
+        schedule(150);
+        return;
+      }
+      try {
+        await reconcilePersistedMessages(conversationId);
+      } finally {
+        if (epoch === generationSettlementEpoch) {
+          clearSendingTimer();
+          sending.value = false;
+          generating.value = false;
         }
       }
-      generationPhaseTimer = setTimeout(poll, 150);
     };
     generationPhaseTimer = setTimeout(poll, 0);
   }
 
   watch(sending, (active) => {
     if (active) return;
+    generationSettlementEpoch++;
     clearGenerationPhaseTimer();
     generating.value = false;
   });

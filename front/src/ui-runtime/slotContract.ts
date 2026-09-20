@@ -288,6 +288,7 @@ export interface ClientSlotMap {
   "provider.conversation.sidebar": ClientChain<ClientProviderSessionOwner, "session-maybe">;
   "provider.conversation.composer": ClientChain<ClientProviderSessionOwner, "session-maybe">;
   "provider.conversation.overlay": ClientList<ClientProviderSessionOwner, "session-maybe">;
+  "provider.channel.presentation": ClientList<ClientProviderOwner>;
   "provider.character.shell": ClientChain<ClientProviderOwner>;
   "provider.character.detail": ClientChain<ClientProviderOwner>;
   "provider.memory.shell": ClientChain<ClientProviderOwner>;

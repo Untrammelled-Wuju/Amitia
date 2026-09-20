@@ -23,6 +23,17 @@ dependencies:
   flutter_secure_storage: ^9.2.2
   logger: ^2.0.2+1
   webview_flutter: ^4.10.0
+  flutter_markdown_plus: ^1.0.12
+  flutter_markdown_plus_latex: ^1.0.5
+  flutter_math_fork: ^0.7.4
+  markdown: ^7.3.1
+  mermaid_core:
+    path: third_party/mermaid_core
+  syntax_highlighter_plus:
+    path: third_party/syntax_highlighter_plus
+  url_launcher: ^6.3.2
+  just_audio: ^0.10.6
+  video_player: ^2.11.1
 
 dev_dependencies:
   flutter_test:
@@ -31,6 +42,10 @@ dev_dependencies:
 
 dependency_overrides:
   jni: 1.0.3
+  elk:
+    path: third_party/elk
+  katex_dart:
+    path: third_party/katex_dart
 
 flutter:
   uses-material-design: true

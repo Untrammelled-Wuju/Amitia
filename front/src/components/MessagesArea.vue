@@ -103,10 +103,23 @@ SPDX-License-Identifier: AGPL-3.0-only
       />
     </template>
 
-    <div v-if="sending && !hasAssistantReply" class="generating-indicator">
-      <el-icon class="generating-spinner"><Loading /></el-icon>
-      <span>AI 正在生成回复</span>
-    </div>
+    <ChatBubble
+      v-if="sending && !hasAssistantReply"
+      :message="{
+        id: '__generating__',
+        role: 'assistant',
+        content: '',
+        createdAt: '',
+        status: 'streaming',
+        typingDone: true,
+        reasoningContent: 'AI 正在生成回复',
+      }"
+      :char-name="charName"
+      :char-avatar="charAvatar"
+      :character-id="characterId"
+      read-only
+      reasoning-open
+    />
 
     <transition name="fade">
       <el-button
@@ -138,7 +151,10 @@ import { hasUnifiedSlotItem } from "@/ui-runtime/slotLedger";
 import { acknowledgeClientRuntimeSessionState, fetchClientRuntimeSessionState, fetchConversationUIEventsBeforeSequence } from "@/api/extension";
 import { createConversationUIEventStream } from "@/composables/useConversationUIEventStream";
 import { resolveMessageRenderer } from "@/ui-runtime/messageRendererRegistry";
-import { getMessageUIKey } from "@/utils/message-order";
+import {
+  getMessageUIKey,
+  hasAssistantReplyAfterLatestUser,
+} from "@/utils/message-order";
 import {
   ConversationNodeAssembler,
   compareTimeline,
@@ -202,12 +218,7 @@ const workspaceName = computed(() => {
   return String(workspace?.workspaceName ?? workspace?.name ?? "").trim();
 });
 const hasAssistantReply = computed(() =>
-  props.messages.some(
-    (message) =>
-      message?.role === "assistant" &&
-      (String(message?.content || "").trim() !== "" ||
-        ["streaming", "sending"].includes(String(message?.status || ""))),
-  ),
+  hasAssistantReplyAfterLatestUser(props.messages),
 );
 
 const projectionContributions = computed(() => store.getVisibleContributions("chat.conversation.node", {
@@ -544,24 +555,6 @@ defineExpose({ rootEl });
 
 .empty-chat :deep(.extension-slot) { width: min(100%, 680px); margin-top: 20px; }
 
-.generating-indicator {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  width: min(100%, 820px);
-  margin: 12px auto 0;
-  color: var(--text-muted);
-  font-size: 12px;
-}
-
-.generating-spinner {
-  animation: generating-spin 1s linear infinite;
-}
-
-@keyframes generating-spin {
-  to { transform: rotate(360deg); }
-}
 
 
 .messages-area > [data-message-id] { width: min(100%, 820px); margin: 0 auto; }

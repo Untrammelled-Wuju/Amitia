@@ -203,6 +203,28 @@ export function getMessageUIKey(message: any, index = 0): string {
   return `fallback:${String(message?.role || "unknown")}:${String(message?.createdAt || message?.timestamp || "")}:${index}`;
 }
 
+export function hasAssistantReplyAfterLatestUser(messages: any[]): boolean {
+  let latestUserIndex = -1;
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    if (messages[index]?.role === "user") {
+      latestUserIndex = index;
+      break;
+    }
+  }
+  if (latestUserIndex < 0) return false;
+  for (let index = latestUserIndex + 1; index < messages.length; index += 1) {
+    const message = messages[index];
+    if (message?.role !== "assistant") continue;
+    if (
+      String(message?.content || "").trim() !== "" ||
+      ["streaming", "sending"].includes(String(message?.status || ""))
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
 export function mergeChatMessage(messages: any[], incoming: any): boolean {
   const id = String(incoming?.id || "");
   const clientMessageId = getClientMessageId(incoming);
@@ -223,4 +245,85 @@ export function mergeChatMessage(messages: any[], incoming: any): boolean {
     animateIn: current?.animateIn ?? incoming?.animateIn,
   };
   return true;
+}
+
+export function mergeServerMessages(messages: any[], serverItems: any[]): any[] {
+  const normalizedServer = serverItems.map(normalizeRealtimeMessage);
+  const serverById = new Map<string, any>();
+  const serverClientIds = new Set<string>();
+  const currentById = new Map<string, any>();
+  const currentByClientMessageId = new Map<string, any>();
+  const serverConversationId = String(
+    normalizedServer.find((message) => message?.conversationId)?.conversationId || "",
+  );
+
+  for (const message of normalizedServer) {
+    const id = String(message?.id || "");
+    const clientMessageId = getClientMessageId(message);
+    if (id) serverById.set(id, message);
+    if (clientMessageId) serverClientIds.add(clientMessageId);
+  }
+  for (const current of messages) {
+    const id = String(current?.id || "");
+    const clientMessageId = getClientMessageId(current);
+    if (id) currentById.set(id, current);
+    if (clientMessageId) currentByClientMessageId.set(clientMessageId, current);
+  }
+
+  const merged = normalizedServer.map((message) => {
+    const existing =
+      currentById.get(String(message?.id || "")) ||
+      currentByClientMessageId.get(getClientMessageId(message));
+    const next = {
+      ...existing,
+      ...message,
+      clientMessageId:
+        getClientMessageId(message) ||
+        getClientMessageId(existing) ||
+        undefined,
+      uiKey: existing?.uiKey || getMessageUIKey(message),
+      animateIn: existing?.animateIn ?? false,
+    };
+    if (next.imageUrl && next.content === "[图片]") {
+      return { ...next, content: "" };
+    }
+    return next;
+  });
+
+  for (const local of messages) {
+    const id = String(local?.id || "");
+    const clientMessageId = getClientMessageId(local);
+    if (serverById.has(id)) continue;
+    if (clientMessageId && serverClientIds.has(clientMessageId)) continue;
+    const localConversationId = String(local?.conversationId || "");
+    if (
+      serverConversationId &&
+      localConversationId &&
+      localConversationId !== serverConversationId
+    ) {
+      continue;
+    }
+    const status = String(local?.status || "").toLowerCase();
+    const transientStatus = [
+      "streaming",
+      "sending",
+      "queued",
+      "interrupted",
+      "failed",
+      "error",
+      "timeout",
+    ].includes(status);
+    const createdAt = parseMessageTime(local?.createdAt || local?.timestamp);
+    const recentlyCreated =
+      createdAt > 0 && Date.now() - createdAt <= 120000;
+    const isLocal =
+      id.startsWith("user-") ||
+      id.startsWith("failed-") ||
+      transientStatus ||
+      recentlyCreated;
+    if (!isLocal) continue;
+    merged.push(local);
+  }
+
+  return merged.sort(compareChatMessages);
 }
