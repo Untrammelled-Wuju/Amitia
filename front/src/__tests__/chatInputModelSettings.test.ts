@@ -140,6 +140,14 @@ describe("ChatInput model settings", () => {
     await wrapper.find(".model-effort-trigger").trigger("click");
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(overlayRoot.textContent).toContain("强度");
+    const state = (wrapper.vm as any).$.setupState;
+    state.applyReasoningIndex(0);
+    await wrapper.vm.$nextTick();
+    expect(
+      overlayRoot
+        .querySelector(".model-effort-track-active")
+        ?.classList.contains("is-empty"),
+    ).toBe(true);
 
     const modelButton = Array.from(
       overlayRoot.querySelectorAll("button"),

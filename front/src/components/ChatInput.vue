@@ -587,6 +587,7 @@ SPDX-License-Identifier: AGPL-3.0-only
                       <div class="model-effort-track-base"></div>
                       <div
                         class="model-effort-track-active"
+                        :class="{ 'is-empty': draftReasoningLevel === 0 }"
                         :style="{ width: reasoningActiveWidth }"
                       ></div>
                     </div>
@@ -2089,7 +2090,13 @@ defineExpose({ focus, setText, clear: clearText });
 
 .model-effort-track-active {
   background: var(--ac-color-primary);
-  transition: width 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  transition:
+    width 180ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    background-color 180ms ease;
+}
+
+.model-effort-track-active.is-empty {
+  background: transparent;
 }
 
 .model-effort-markers {

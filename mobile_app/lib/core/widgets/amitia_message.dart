@@ -2095,10 +2095,15 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
               const SizedBox(height: 10),
               ListTile(
                 shape: RoundedRectangleBorder(borderRadius: AppRadius.brSmall),
-                leading: Icon(Icons.lock_outline_rounded, color: context.textPrimary),
+                leading: Icon(
+                  Icons.lock_outline_rounded,
+                  color: context.textPrimary,
+                ),
                 title: const Text('请求批准'),
                 subtitle: const Text('敏感工具执行前需要你批准'),
-                trailing: fullAccess ? null : Icon(Icons.check_rounded, color: context.accentPrimary),
+                trailing: fullAccess
+                    ? null
+                    : Icon(Icons.check_rounded, color: context.accentPrimary),
                 onTap: () {
                   widget.onPermissionChanged?.call('request_approval');
                   Navigator.pop(sheetContext);
@@ -2106,10 +2111,15 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
               ),
               ListTile(
                 shape: RoundedRectangleBorder(borderRadius: AppRadius.brSmall),
-                leading: Icon(Icons.lock_open_rounded, color: fullAccess ? context.warning : context.textPrimary),
+                leading: Icon(
+                  Icons.lock_open_rounded,
+                  color: fullAccess ? context.warning : context.textPrimary,
+                ),
                 title: const Text('完全访问'),
                 subtitle: const Text('自动放行当前会话中可批准的工具操作'),
-                trailing: fullAccess ? Icon(Icons.check_rounded, color: context.accentPrimary) : null,
+                trailing: fullAccess
+                    ? Icon(Icons.check_rounded, color: context.accentPrimary)
+                    : null,
                 onTap: () {
                   widget.onPermissionChanged?.call('full_access');
                   Navigator.pop(sheetContext);
@@ -2287,20 +2297,17 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
                           const SizedBox(width: 4),
                           Semantics(
                             button: true,
-                            label:
-                                widget.permissionMode == 'full_access'
-                                    ? '完全访问'
-                                    : '请求批准',
+                            label: widget.permissionMode == 'full_access'
+                                ? '完全访问'
+                                : '请求批准',
                             child: _ComposerRoundButton(
                               key: const ValueKey('composer-permission-button'),
-                              icon:
-                                  widget.permissionMode == 'full_access'
-                                      ? Icons.lock_open_rounded
-                                      : Icons.lock_outline_rounded,
-                              tooltip:
-                                  widget.permissionMode == 'full_access'
-                                      ? '完全访问'
-                                      : '请求批准',
+                              icon: widget.permissionMode == 'full_access'
+                                  ? Icons.lock_open_rounded
+                                  : Icons.lock_outline_rounded,
+                              tooltip: widget.permissionMode == 'full_access'
+                                  ? '完全访问'
+                                  : '请求批准',
                               onTap: _showPermissionPicker,
                             ),
                           ),
@@ -2911,10 +2918,18 @@ class _ReasoningSliderTrackShape extends SliderTrackShape
         end: sliderTheme.inactiveTrackColor,
       ).evaluate(enableAnimation)!;
     final radius = Radius.circular(trackRect.height / 2);
-    final visualTrackRect = Rect.fromLTRB(
-      offset.dx,
-      trackRect.top,
+    final thumbRadius =
+        sliderTheme.thumbShape!.getPreferredSize(isEnabled, isDiscrete).width /
+        2;
+    final visualTrackLeft = math.max(offset.dx, trackRect.left - thumbRadius);
+    final visualTrackRight = math.min(
       offset.dx + parentBox.size.width,
+      trackRect.right + thumbRadius,
+    );
+    final visualTrackRect = Rect.fromLTRB(
+      visualTrackLeft,
+      trackRect.top,
+      visualTrackRight,
       trackRect.bottom,
     );
     context.canvas.drawRRect(
@@ -2930,7 +2945,10 @@ class _ReasoningSliderTrackShape extends SliderTrackShape
     final activeRight = textDirection == TextDirection.ltr
         ? clampedThumbX
         : visualTrackRect.right;
-    if (activeRight > activeLeft) {
+    final showActive = textDirection == TextDirection.ltr
+        ? clampedThumbX > trackRect.left + 0.5
+        : clampedThumbX < trackRect.right - 0.5;
+    if (showActive && activeRight > activeLeft) {
       context.canvas.drawRRect(
         RRect.fromRectAndRadius(
           Rect.fromLTRB(
