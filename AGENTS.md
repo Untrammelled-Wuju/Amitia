@@ -90,7 +90,7 @@ electron-builder保持compression: normal，实际7z压缩等级由scripts/build
 最近发布源码基线：
 
 - Desktop NSIS：暂无
-- Android Release：版本 26.2.0-beta，源码基线提交 c4639dfdd，提交日志 fix: align mobile model settings popup with desktop，安装包 amitia-26.2.0-beta-release-arm64-v8a-20260920-215258.apk，SHA-256 805226490a21c0faa921041f69bab415f603c1a2465d401baca67b480d6b7fdd，记录时间 2026-09-20 21:54:37 +08:00
+- Android Release：版本 26.2.0-beta.1，源码基线提交 6609e10e0，提交日志 fix: align mobile model settings interactions，安装包 amitia-26.2.0-beta.1-release-arm64-v8a-20260920-222848.apk，SHA-256 24e3990339fe819ca227d5d627f43e2c50709e33e926313d73be637d35702f03，记录时间 2026-09-20 22:30:01 +08:00
 
 发布配置：
 
