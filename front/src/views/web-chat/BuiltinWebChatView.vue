@@ -666,6 +666,13 @@ const {
     void loadTurns();
   },
   applyRealtimeStreamEvent,
+  async (event) => {
+    const conversationId = String(event?.conversationId || "").trim();
+    if (conversationId && conversationId !== convId.value) return;
+    await chatStore.fetchSidebar();
+    const title = String(event?.data?.title || "").trim();
+    if (title && conversationId === convId.value) convTitle.value = title;
+  },
 );
 
 const {

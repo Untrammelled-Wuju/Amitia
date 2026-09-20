@@ -18,13 +18,23 @@ class _FakeChatService extends ChatService {
   _FakeChatService({
     required this.streamFactory,
     required this.messagesFactory,
+    this.messagePageFactory,
     this.turnsFactory,
+    this.messageEventsFactory,
   }) : super(_FakeBackendApi());
 
   final Stream<ChatStreamEvent> Function(String requestId) streamFactory;
   final List<MessageDto> Function(String requestId, bool latest)
   messagesFactory;
+  final MessagePageDto Function(
+    String requestId,
+    bool latest,
+    int page,
+    int pageSize,
+  )?
+  messagePageFactory;
   final List<AssistantTurnDto> Function()? turnsFactory;
+  final Stream<ChatStreamEvent> Function()? messageEventsFactory;
   bool latestRequested = false;
   String? updatedMessageId;
   String? updatedMessageContent;
@@ -88,11 +98,41 @@ class _FakeChatService extends ChatService {
   }
 
   @override
+  Future<MessagePageDto> getMessagePage(
+    String conversationId, {
+    int page = 1,
+    int pageSize = 200,
+    bool latest = false,
+  }) async {
+    latestRequested = latest;
+    final factory = messagePageFactory;
+    if (factory != null) {
+      return factory(clientMessageId, latest, page, pageSize);
+    }
+    final items = messagesFactory(clientMessageId, latest);
+    return MessagePageDto(
+      items: items,
+      page: latest && page == 1 ? 2 : page,
+      pageSize: pageSize,
+      total: items.length,
+      totalPages: 2,
+    );
+  }
+
+  @override
   Future<List<AssistantTurnDto>> getAssistantTurns(
     String conversationId, {
     int limit = 500,
   }) async {
     return turnsFactory?.call() ?? const <AssistantTurnDto>[];
+  }
+
+  @override
+  Stream<ChatStreamEvent> messageEvents({
+    required ChatStreamCancellation cancellation,
+  }) {
+    return messageEventsFactory?.call() ??
+        const Stream<ChatStreamEvent>.empty();
   }
 
   @override
@@ -466,6 +506,90 @@ void main() {
     controller.dispose();
   });
 
+  test('older history pages merge in order without duplicates', () async {
+    final service = _FakeChatService(
+      streamFactory: (_) => const Stream<ChatStreamEvent>.empty(),
+      messagesFactory: (_, _) => const <MessageDto>[],
+      messagePageFactory: (_, latest, page, pageSize) {
+        if (latest) {
+          return MessagePageDto(
+            items: <MessageDto>[
+              _message(
+                id: 'latest-user',
+                role: 'user',
+                content: '最新消息',
+                requestId: 'latest-request',
+                createdAt: '2026-09-19T18:00:00Z',
+                sequence: 201,
+              ),
+              _message(
+                id: 'latest-assistant',
+                role: 'assistant',
+                content: '最新回复',
+                requestId: 'latest-request',
+                createdAt: '2026-09-19T18:00:01Z',
+                sequence: 202,
+              ),
+            ],
+            page: 2,
+            pageSize: pageSize,
+            total: 202,
+            totalPages: 2,
+          );
+        }
+        return MessagePageDto(
+          items: <MessageDto>[
+            _message(
+              id: 'old-user',
+              role: 'user',
+              content: '较早消息',
+              requestId: 'old-request',
+              createdAt: '2026-09-19T17:00:00Z',
+              sequence: 1,
+            ),
+            _message(
+              id: 'old-assistant',
+              role: 'assistant',
+              content: '较早回复',
+              requestId: 'old-request',
+              createdAt: '2026-09-19T17:00:01Z',
+              sequence: 2,
+            ),
+          ],
+          page: page,
+          pageSize: pageSize,
+          total: 202,
+          totalPages: 2,
+        );
+      },
+    );
+    final controller = ConversationRuntimeController(
+      service,
+      _FakeEmoteService(),
+    );
+
+    await controller.openConversation('conversation-1');
+    expect(controller.hasMoreHistory, isTrue);
+    expect(controller.messages.map((message) => message.id), <String>[
+      'latest-user',
+      'latest-assistant',
+    ]);
+
+    expect(await controller.loadOlderMessages(), isTrue);
+    expect(controller.hasMoreHistory, isFalse);
+    expect(controller.messages.map((message) => message.id), <String>[
+      'old-user',
+      'old-assistant',
+      'latest-user',
+      'latest-assistant',
+    ]);
+
+    expect(await controller.loadOlderMessages(), isFalse);
+    expect(controller.messages.length, 4);
+
+    controller.dispose();
+  });
+
   test('edit message updates the backend and local ledger', () async {
     final service = _FakeChatService(
       streamFactory: (_) => const Stream<ChatStreamEvent>.empty(),
@@ -528,6 +652,36 @@ void main() {
 
     expect(controller.canRetryMessage(0), isFalse);
     expect(controller.canRetryMessage(1), isFalse);
+
+    controller.dispose();
+  });
+
+  test('conversation title updates refresh the collection revision', () async {
+    final service = _FakeChatService(
+      streamFactory: (_) => const Stream<ChatStreamEvent>.empty(),
+      messagesFactory: (_, _) => const <MessageDto>[],
+      messageEventsFactory: () async* {
+        yield ChatStreamEvent('conversation_updated', <String, dynamic>{
+          'conversationId': 'conversation-1',
+          'data': <String, dynamic>{'title': 'AI 标题'},
+        });
+      },
+    );
+    final controller = ConversationRuntimeController(
+      service,
+      _FakeEmoteService(),
+    );
+
+    await controller.openConversation('conversation-1');
+    for (
+      var attempt = 0;
+      attempt < 100 && controller.conversationUpdateEpoch == 0;
+      attempt += 1
+    ) {
+      await Future<void>.delayed(const Duration(milliseconds: 5));
+    }
+
+    expect(controller.conversationUpdateEpoch, 1);
 
     controller.dispose();
   });
@@ -613,6 +767,105 @@ void main() {
     await controller.sendText('你好');
 
     expect(controller.messages.last.reasoningDurationMs, 2850);
+
+    controller.dispose();
+  });
+
+  test('streaming tokens only reuse the temporary turn placeholder', () async {
+    final releaseTokens = Completer<void>();
+    late final _FakeChatService service;
+    service = _FakeChatService(
+      streamFactory: (requestId) async* {
+        service.rememberRequestId(requestId);
+        yield ChatStreamEvent('message_start', <String, dynamic>{
+          'conversationId': 'conversation-1',
+          'userMessageId': 'user-1',
+        });
+        await releaseTokens.future;
+        yield ChatStreamEvent('token', <String, dynamic>{
+          'id': 'assistant-1',
+          'conversationId': 'conversation-1',
+          'role': 'assistant',
+          'content': '第一段',
+          'createdAt': '2026-09-20T10:00:01Z',
+        });
+        yield ChatStreamEvent('token', <String, dynamic>{
+          'id': 'assistant-2',
+          'conversationId': 'conversation-1',
+          'role': 'assistant',
+          'content': '第二段',
+          'createdAt': '2026-09-20T10:00:02Z',
+        });
+      },
+      messageEventsFactory: () async* {
+        while (service.clientMessageId.isEmpty) {
+          await Future<void>.delayed(const Duration(milliseconds: 1));
+        }
+        yield ChatStreamEvent('assistant_turn_stream', <String, dynamic>{
+          'conversationId': 'conversation-1',
+          'data': <String, dynamic>{
+            'eventType': 'turn.started',
+            'turnId': 'turn-1',
+            'conversationId': 'conversation-1',
+            'requestId': service.clientMessageId,
+            'status': 'running',
+          },
+        });
+      },
+      messagesFactory: (requestId, latest) => <MessageDto>[
+        _message(
+          id: 'user-1',
+          role: 'user',
+          content: '你好',
+          requestId: requestId,
+          createdAt: '2026-09-20T10:00:00Z',
+          sequence: 1,
+        ),
+        _message(
+          id: 'assistant-1',
+          role: 'assistant',
+          content: '第一段',
+          requestId: requestId,
+          deliverySequence: 1,
+          createdAt: '2026-09-20T10:00:01Z',
+          sequence: 2,
+        ),
+        _message(
+          id: 'assistant-2',
+          role: 'assistant',
+          content: '第二段',
+          requestId: requestId,
+          deliverySequence: 2,
+          createdAt: '2026-09-20T10:00:02Z',
+          sequence: 3,
+        ),
+      ],
+    );
+    final controller = ConversationRuntimeController(
+      service,
+      _FakeEmoteService(),
+    );
+
+    final send = controller.sendText('你好');
+    var sawTurnPlaceholder = false;
+    for (var attempt = 0; attempt < 100; attempt += 1) {
+      await Future<void>.delayed(const Duration(milliseconds: 5));
+      sawTurnPlaceholder = controller.messages.any(
+        (message) => message.id.startsWith('turn:'),
+      );
+      if (sawTurnPlaceholder) break;
+    }
+    expect(sawTurnPlaceholder, isTrue);
+
+    releaseTokens.complete();
+    await send;
+
+    expect(controller.messages.map((message) => message.id), <String>[
+      'user-1',
+      'assistant-1',
+      'assistant-2',
+    ]);
+    expect(controller.messages.last.content, '第二段');
 
     controller.dispose();
   });

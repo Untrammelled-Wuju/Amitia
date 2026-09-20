@@ -118,6 +118,7 @@ class _AmitiaMessageViewState extends State<AmitiaMessageView> {
                       context,
                       widget.message.assistantTurn!,
                       tokens,
+                      widget.message,
                     )
                   else ...[
                     if (message.thinking != null)
@@ -192,9 +193,51 @@ class _AmitiaMessageViewState extends State<AmitiaMessageView> {
     BuildContext context,
     AssistantTurnDto turn,
     AmitiaMessageTheme tokens,
+    ChatMessage message,
   ) {
     final items = [...turn.items]
       ..sort((left, right) => left.sequence.compareTo(right.sequence));
+    final hasThinking = items.any((item) => item.type == 'thinking');
+    final fallbackReasoning = message.reasoningContent.trim();
+    if (!hasThinking &&
+        (fallbackReasoning.isNotEmpty || _isTurnStreaming(turn.status))) {
+      items.add(
+        AssistantTurnItemDto(
+          id: '${turn.id}:fallback-thinking',
+          turnId: turn.id,
+          conversationId: turn.conversationId,
+          sequence: -1,
+          type: 'thinking',
+          status: _isTurnStreaming(turn.status) ? 'running' : 'completed',
+          content: fallbackReasoning,
+          durationMs: message.reasoningDurationMs,
+        ),
+      );
+    }
+    final hasText = items.any(
+      (item) => item.type == 'text' && item.content.trim().isNotEmpty,
+    );
+    if (!hasText &&
+        message.type == MessageType.text &&
+        message.content.trim().isNotEmpty) {
+      final sequence = items.fold<int>(
+        0,
+        (maximum, item) => item.sequence > maximum ? item.sequence : maximum,
+      );
+      items.add(
+        AssistantTurnItemDto(
+          id: '${turn.id}:fallback-text',
+          turnId: turn.id,
+          conversationId: turn.conversationId,
+          sequence: sequence + 1,
+          type: 'text',
+          status: _isTurnStreaming(turn.status) ? 'streaming' : 'completed',
+          content: message.content,
+          isFinal: true,
+        ),
+      );
+    }
+    items.sort((left, right) => left.sequence.compareTo(right.sequence));
     final entries = <_TurnTimelineEntry>[];
     _TurnTimelineEntry? toolGroup;
     for (final item in items) {

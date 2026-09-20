@@ -89,9 +89,11 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   bool _loadingComposerDraft = false;
   String _activeComposerDraftKey = '';
   int _lastDraftEpoch = 0;
+  int _lastConversationUpdateEpoch = 0;
   String _lastSidebarConversationId = '';
   bool _scrollToBottomScheduled = false;
   bool _diagnosticLogged = false;
+  bool _historyLoadInFlight = false;
 
   @override
   void initState() {
@@ -101,9 +103,11 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     );
     _runtime = ref.read(conversationRuntimeControllerProvider);
     _lastDraftEpoch = _runtime.draftEpoch;
+    _lastConversationUpdateEpoch = _runtime.conversationUpdateEpoch;
     _lastSidebarConversationId = _runtime.conversationId?.trim() ?? '';
     _runtime.addListener(_onRuntimeChanged);
     _composerController.addListener(_handleComposerChanged);
+    _scrollController.addListener(_handleChatScroll);
     WidgetsBinding.instance.addPostFrameCallback(
       (_) => _openInitialConversation(),
     );
@@ -172,6 +176,12 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     _cachedProviderActions = null;
     _cachedProviderActionsCharacterId = '';
     final conversationId = _runtime.conversationId?.trim() ?? '';
+    if (_runtime.conversationUpdateEpoch != _lastConversationUpdateEpoch) {
+      _lastConversationUpdateEpoch = _runtime.conversationUpdateEpoch;
+      ref.invalidate(conversationListProvider);
+      ref.invalidate(conversationSidebarProvider);
+      ref.read(conversationCollectionRevisionProvider.notifier).state++;
+    }
     if (conversationId.isNotEmpty &&
         conversationId != _lastSidebarConversationId) {
       ref.invalidate(conversationListProvider);
@@ -378,6 +388,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     unawaited(_voiceInputSubscription?.cancel());
     unawaited(_realtimeAudio.stopCapture());
     _runtime.removeListener(_onRuntimeChanged);
+    _scrollController.removeListener(_handleChatScroll);
     _scrollController.dispose();
     _composerController.dispose();
     super.dispose();
@@ -401,6 +412,37 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         );
       }
     });
+  }
+
+  void _handleChatScroll() {
+    if (!_scrollController.hasClients) return;
+    if (_scrollController.position.pixels <= 96) {
+      unawaited(_loadOlderMessages());
+    }
+  }
+
+  Future<void> _loadOlderMessages() async {
+    if (_historyLoadInFlight || !_runtime.hasMoreHistory) return;
+    final position = _scrollController.hasClients
+        ? _scrollController.position
+        : null;
+    final previousMaxExtent = position?.maxScrollExtent ?? 0;
+    final previousOffset = position?.pixels ?? 0;
+    _historyLoadInFlight = true;
+    try {
+      final loaded = await _runtime.loadOlderMessages();
+      if (!loaded || !mounted || !_scrollController.hasClients) return;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!_scrollController.hasClients) return;
+        final nextPosition = _scrollController.position;
+        final delta = nextPosition.maxScrollExtent - previousMaxExtent;
+        if (delta > 0) {
+          nextPosition.jumpTo(previousOffset + delta);
+        }
+      });
+    } finally {
+      _historyLoadInFlight = false;
+    }
   }
 
   void _retryMessage(int index) {
@@ -2164,6 +2206,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         });
 
     final showEmptyState = flowItems.isEmpty && !showLiveAgentProcess;
+    final showHistoryLoader =
+        _runtime.hasMoreHistory || _runtime.isLoadingOlderMessages;
     final workspaceName = _runtime.workspace?.workspaceName.trim() ?? '';
 
     final builtinConversation = AmitiaScaffold(
@@ -2222,12 +2266,42 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                                       itemCount:
                                           flowItems.length +
                                           (showLiveAgentProcess ? 1 : 0) +
-                                          (pendingRoleSwitch ? 1 : 0),
+                                          (pendingRoleSwitch ? 1 : 0) +
+                                          (showHistoryLoader ? 1 : 0),
                                       itemBuilder: (context, contentIndex) {
+                                        if (showHistoryLoader &&
+                                            contentIndex == 0) {
+                                          return SizedBox(
+                                            height: 56,
+                                            child: Center(
+                                              child:
+                                                  _runtime
+                                                      .isLoadingOlderMessages
+                                                  ? const SizedBox(
+                                                      width: 18,
+                                                      height: 18,
+                                                      child:
+                                                          CircularProgressIndicator(
+                                                            strokeWidth: 2,
+                                                          ),
+                                                    )
+                                                  : Text(
+                                                      '正在加载更早消息…',
+                                                      style:
+                                                          AppTypography.caption(
+                                                            context,
+                                                          ),
+                                                    ),
+                                            ),
+                                          );
+                                        }
+                                        final adjustedIndex = showHistoryLoader
+                                            ? contentIndex - 1
+                                            : contentIndex;
                                         final liveAgentProcessIndex =
                                             flowItems.length;
                                         if (showLiveAgentProcess &&
-                                            contentIndex ==
+                                            adjustedIndex ==
                                                 liveAgentProcessIndex) {
                                           return KeyedSubtree(
                                             key: const ValueKey(
@@ -2261,7 +2335,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                                             liveAgentProcessIndex +
                                             (showLiveAgentProcess ? 1 : 0);
                                         if (pendingRoleSwitch &&
-                                            contentIndex ==
+                                            adjustedIndex ==
                                                 pendingRoleSwitchIndex) {
                                           return AmitiaRoleSwitchDivider(
                                             key: const ValueKey(
@@ -2270,7 +2344,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                                             characterName: characterName,
                                           );
                                         }
-                                        final item = flowItems[contentIndex];
+                                        final item = flowItems[adjustedIndex];
                                         if (!item.isMessage) {
                                           final node = item.node!;
                                           return KeyedSubtree(

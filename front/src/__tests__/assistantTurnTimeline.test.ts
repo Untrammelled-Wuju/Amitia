@@ -58,9 +58,9 @@ describe("AssistantTurnTimeline", () => {
       },
     });
     const classes = wrapper
-      .findAll(".turn-thinking, .turn-tool-stream, .turn-text")
+      .findAll(".amrp-thinking, .turn-tool-stream, .turn-text")
       .map((node) => node.classes().join(" "));
-    expect(classes[0]).toContain("turn-thinking");
+    expect(classes[0]).toContain("amrp-thinking");
     expect(classes[1]).toContain("turn-tool-stream");
     expect(classes[2]).toContain("turn-text");
     expect(wrapper.find(".turn-tool-line").exists()).toBe(false);

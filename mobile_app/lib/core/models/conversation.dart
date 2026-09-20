@@ -134,6 +134,24 @@ class MessageDto {
   }
 }
 
+class MessagePageDto {
+  final List<MessageDto> items;
+  final int page;
+  final int pageSize;
+  final int total;
+  final int totalPages;
+
+  const MessagePageDto({
+    required this.items,
+    required this.page,
+    required this.pageSize,
+    required this.total,
+    required this.totalPages,
+  });
+
+  bool get hasPreviousPage => page > 1;
+}
+
 class AssistantTurnItemDto {
   final String id;
   final String turnId;

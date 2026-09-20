@@ -37,10 +37,10 @@ class _AmitiaThinkingBlockState extends State<AmitiaThinkingBlock> {
     final tokens = AmitiaMessageTheme.of(context);
     final streaming = widget.block.state == AmrpMessageState.streaming;
     final label = streaming
-        ? '正在思考'
+        ? '思考中'
         : widget.block.duration == null
-        ? '已思考'
-        : '已思考 ${(widget.block.duration!.inMilliseconds / 1000).toStringAsFixed(1)} 秒';
+        ? '思考完成'
+        : '思考完成（${(widget.block.duration!.inMilliseconds / 1000).toStringAsFixed(1)} 秒）';
     final hasContent = widget.block.content.trim().isNotEmpty;
     return Padding(
       padding: const EdgeInsets.only(bottom: 13),

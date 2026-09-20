@@ -30,7 +30,10 @@ type ComputeResult struct {
 	UserMessageID        string
 	UserMessageSequence  int64
 	UserMessageCreatedAt string
+	UserMessageContent   string
+	ModelConfigID        int
 	Reply                string
+	TitleSourceReply     string
 	Reasoning            string
 	ReasoningDurationMS  int64
 	Lines                []string
@@ -477,6 +480,7 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 		applog.TraceWarn(trace.WithStage("reply_fallback"), nil, "process message reply fallback")
 		reply = "操作已完成"
 	}
+	titleSourceReply := strings.TrimSpace(reply)
 
 	kind = resolveExpressionChannel(channel, req.VoiceMessage)
 
@@ -526,7 +530,10 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 		UserMessageID:        userMsgID,
 		UserMessageSequence:  userMsgSequence,
 		UserMessageCreatedAt: userMsgCreatedAt,
+		UserMessageContent:   req.Message,
+		ModelConfigID:        cfg.ID,
 		Reply:                reply,
+		TitleSourceReply:     titleSourceReply,
 		Reasoning:            reasoning,
 		ReasoningDurationMS:  reasoningDurationMS,
 		Lines:                realLines,
@@ -554,6 +561,12 @@ func (s *service) PostCommitActions(ctx context.Context, result *ComputeResult) 
 	if s.wmCache != nil {
 		s.wmCache.UpdateSummary(result.ConversationID, result.Reply)
 	}
+	go s.generateConversationTitle(
+		result.ConversationID,
+		result.ModelConfigID,
+		result.UserMessageContent,
+		result.TitleSourceReply,
+	)
 	s.startPostProcessing(ctx, result.Trace, result.ConversationID, result.CharacterID, result.Source, result.RequestID, result.PipelineMessages, result.Reply)
 }
 

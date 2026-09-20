@@ -1,18 +1,12 @@
 <template>
   <div class="turn-timeline">
-    <template v-for="item in orderedItems" :key="item.id">
-      <div
+    <template v-for="item in orderedItems" :key="timelineItemKey(item)">
+      <AmitiaThinkingBlock
         v-if="item.type === 'thinking'"
-        class="turn-thinking"
-        :class="{ expanded: expandedThinking.has(item.id) }"
-        @click="toggleThinking(item.id)"
-      >
-        <span class="turn-chev">{{ expandedThinking.has(item.id) ? "⌄" : "›" }}</span>
-        <span>{{ thinkingLabel(item) }}</span>
-      </div>
-      <div v-if="item.type === 'thinking' && expandedThinking.has(item.id)" class="turn-thinking-detail">
-        {{ item.content }}
-      </div>
+        :content="item.content || ''"
+        :state="thinkingState(item.status)"
+        :duration="thinkingDuration(item)"
+      />
 
       <div v-else-if="item.type === 'tool_group'" class="turn-tool-stream">
         <button
@@ -69,7 +63,12 @@
 
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from "vue";
-import type { AssistantTurnData, AssistantTurnItem } from "./types";
+import type {
+  AssistantTurnData,
+  AssistantTurnItem,
+  MessageState,
+} from "./types";
+import AmitiaThinkingBlock from "./blocks/AmitiaThinkingBlock.vue";
 import MarkdownContent from "./markdown/MarkdownContent.vue";
 import RendererErrorBoundary from "./blocks/RendererErrorBoundary.vue";
 
@@ -77,7 +76,6 @@ const props = defineProps<{
   turn: AssistantTurnData;
 }>();
 
-const expandedThinking = reactive(new Set<string>());
 const expandedResults = reactive(new Set<string>());
 const toolStreamExpanded = ref(hasRunningTool(props.turn));
 const toolStreamTouched = ref(false);
@@ -108,10 +106,6 @@ watch(
     toolStreamExpanded.value = isStreamingStatus(status);
   },
 );
-
-function toggleThinking(id: string) {
-  expandedThinking.has(id) ? expandedThinking.delete(id) : expandedThinking.add(id);
-}
 
 function toggleResult(id: string) {
   expandedResults.has(id) ? expandedResults.delete(id) : expandedResults.add(id);
@@ -175,10 +169,22 @@ function stringify(value: unknown): string {
   }
 }
 
-function thinkingLabel(item: AssistantTurnItem): string {
+function thinkingState(status: string): MessageState {
+  return isStreamingStatus(status) ? "streaming" : "completed";
+}
+
+function thinkingDuration(item: AssistantTurnItem): number {
   const duration = Number(item.durationMs || 0);
-  if (duration > 0) return `已思考 ${(duration / 1000).toFixed(1)} 秒`;
-  return isStreamingStatus(item.status) ? "正在思考" : "已思考";
+  return Number.isFinite(duration) && duration > 0 ? duration / 1000 : 0;
+}
+
+function timelineItemKey(item: AssistantTurnItem & { type: string }): string {
+  if (item.type !== "thinking") return item.id;
+  const thinkingItems = orderedItems.value.filter(
+    (candidate) => candidate.type === "thinking",
+  );
+  const index = thinkingItems.findIndex((candidate) => candidate.id === item.id);
+  return `thinking:${props.turn.id}:${Math.max(0, index)}`;
 }
 
 function toolSubject(item: AssistantTurnItem): string {
@@ -226,34 +232,9 @@ function resultSummary(item: AssistantTurnItem): string {
   max-width: 700px;
 }
 
-.turn-thinking {
-  display: inline-flex;
-  width: fit-content;
-  align-items: center;
-  gap: 7px;
-  margin: 2px 0 13px;
-  padding: 6px 9px;
-  border-radius: 8px;
-  background: var(--tp-panel-soft, #efeff1);
-  color: var(--tp-text-muted, #6f7178);
-  font-size: 12px;
-  cursor: pointer;
-  user-select: none;
-}
-
 .turn-chev {
   color: var(--tp-text-secondary, #999);
   font-size: 10px;
-}
-
-.turn-thinking-detail {
-  margin: -7px 0 13px;
-  padding: 8px 10px;
-  border-left: 2px solid var(--tp-border, #dedee3);
-  color: var(--tp-text-secondary, #7b7d84);
-  font-size: 11.5px;
-  line-height: 1.65;
-  white-space: pre-wrap;
 }
 
 .turn-tool-stream {

@@ -66,6 +66,10 @@ func (s *service) callLLMJSON(ctx context.Context, cfg *ModelConfig, messages []
 	return s.callLLMMode(ctx, cfg, messages, true)
 }
 
+func (s *service) callLLMWithoutThinking(ctx context.Context, cfg *ModelConfig, messages []map[string]interface{}) (string, int, error) {
+	return s.callLLMWithAdapterMode(ctx, cfg, messages, false, true)
+}
+
 func (s *service) callLLMMode(ctx context.Context, cfg *ModelConfig, messages []map[string]interface{}, jsonOnly bool) (string, int, error) {
 	switch protocolForApiType(cfg.APIType) {
 	case "mnn":
@@ -665,9 +669,14 @@ func cfgToProviderConfig(cfg *ModelConfig) modelprotocol.ProviderConfig {
 }
 
 func (s *service) callLLMWithAdapter(ctx context.Context, cfg *ModelConfig, messages []map[string]interface{}, jsonOnly bool) (string, int, error) {
+	return s.callLLMWithAdapterMode(ctx, cfg, messages, jsonOnly, false)
+}
+
+func (s *service) callLLMWithAdapterMode(ctx context.Context, cfg *ModelConfig, messages []map[string]interface{}, jsonOnly bool, disableThinking bool) (string, int, error) {
 	protocol := resolveProtocol(cfg)
 	adapter := modelprotocol.AdapterForProtocol(protocol)
 	req := messagesToModelRequest(cfg, messages, nil, jsonOnly)
+	req.DisableThinking = disableThinking
 	pcfg := cfgToProviderConfig(cfg)
 	result, err := adapter.Generate(ctx, pcfg, req)
 	if err != nil {

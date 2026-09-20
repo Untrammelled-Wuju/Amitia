@@ -44,7 +44,9 @@ func (a *AnthropicAdapter) Generate(ctx context.Context, cfg ProviderConfig, req
 	if len(req.Tools) > 0 {
 		requestBody["tools"] = a.buildTools(req.Tools)
 	}
-	applyAnthropicThinking(requestBody, req.ReasoningEffort, cfg.MaxOutputTokens)
+	if !req.DisableThinking {
+		applyAnthropicThinking(requestBody, req.ReasoningEffort, cfg.MaxOutputTokens)
+	}
 
 	jsonBody, _ := json.Marshal(requestBody)
 	url := baseURL + "/v1/messages"
@@ -90,7 +92,9 @@ func (a *AnthropicAdapter) Stream(ctx context.Context, cfg ProviderConfig, req M
 	if len(req.Tools) > 0 {
 		requestBody["tools"] = a.buildTools(req.Tools)
 	}
-	applyAnthropicThinking(requestBody, req.ReasoningEffort, cfg.MaxOutputTokens)
+	if !req.DisableThinking {
+		applyAnthropicThinking(requestBody, req.ReasoningEffort, cfg.MaxOutputTokens)
+	}
 
 	jsonBody, _ := json.Marshal(requestBody)
 	url := baseURL + "/v1/messages"

@@ -6,7 +6,7 @@
     >
       <span v-if="hasContent" class="amrp-chevron" :class="{ open }">›</span>
       <span v-if="state === 'streaming'">思考中</span>
-      <span v-else-if="duration">思考完成（{{ duration.toFixed(2) }}s）</span>
+      <span v-else-if="duration">思考完成（{{ duration.toFixed(1) }} 秒）</span>
       <span v-else>思考完成</span>
       <span v-if="state === 'streaming'" class="amrp-thinking-spinner"></span>
     </summary>

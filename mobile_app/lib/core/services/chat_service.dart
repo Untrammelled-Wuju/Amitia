@@ -150,19 +150,13 @@ class ChatService {
   Future<ConversationDto?> getConversation(String conversationId) async {
     final resp = await _api.get<Map<String, dynamic>>(
       '/api/web-chat/conversations',
-      queryParameters: const <String, dynamic>{
-        'page': 1,
-        'pageSize': 200,
-      },
+      queryParameters: const <String, dynamic>{'page': 1, 'pageSize': 200},
     );
     final items = resp?['items'];
     if (items is! List) return null;
     for (final item in items) {
-      if (item is Map &&
-          (item['id'] ?? '').toString() == conversationId) {
-        return ConversationDto.fromJson(
-          Map<String, dynamic>.from(item),
-        );
+      if (item is Map && (item['id'] ?? '').toString() == conversationId) {
+        return ConversationDto.fromJson(Map<String, dynamic>.from(item));
       }
     }
     return null;
@@ -285,12 +279,24 @@ class ChatService {
     int pageSize = 200,
     bool latest = false,
   }) async {
+    final result = await getMessagePage(
+      conversationId,
+      page: page,
+      pageSize: pageSize,
+      latest: latest,
+    );
+    return result.items;
+  }
+
+  Future<MessagePageDto> getMessagePage(
+    String conversationId, {
+    int page = 1,
+    int pageSize = 200,
+    bool latest = false,
+  }) async {
     final first = await _getMessagesPage(conversationId, page, pageSize);
-    if (!latest || page != 1) return first.items;
-    final totalPages = first.totalPages > 1 ? first.totalPages : 1;
-    if (totalPages <= 1) return first.items;
-    final last = await _getMessagesPage(conversationId, totalPages, pageSize);
-    return last.items;
+    if (!latest || page != 1 || first.totalPages <= 1) return first;
+    return _getMessagesPage(conversationId, first.totalPages, pageSize);
   }
 
   Future<List<AssistantTurnDto>> getAssistantTurns(
@@ -309,7 +315,7 @@ class ChatService {
         .toList(growable: false);
   }
 
-  Future<({List<MessageDto> items, int totalPages})> _getMessagesPage(
+  Future<MessagePageDto> _getMessagesPage(
     String conversationId,
     int page,
     int pageSize,
@@ -325,8 +331,11 @@ class ChatService {
               .whereType<Map>()
               .map((row) => MessageDto.fromJson(Map<String, dynamic>.from(row)))
               .toList(growable: false);
-    return (
+    return MessagePageDto(
       items: items,
+      page: (resp?['page'] as num?)?.toInt() ?? page,
+      pageSize: (resp?['pageSize'] as num?)?.toInt() ?? pageSize,
+      total: (resp?['total'] as num?)?.toInt() ?? items.length,
       totalPages: (resp?['totalPages'] as num?)?.toInt() ?? 0,
     );
   }
@@ -700,8 +709,7 @@ class ChatService {
     final resp = await _api.get<List<dynamic>>(
       '/api/web-chat/approvals',
       queryParameters: <String, dynamic>{
-        if (conversationId.trim().isNotEmpty)
-          'conversationId': conversationId,
+        if (conversationId.trim().isNotEmpty) 'conversationId': conversationId,
       },
     );
     return (resp ?? const <dynamic>[])

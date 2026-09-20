@@ -571,7 +571,7 @@ class _UnifiedAgentMessageState extends State<_UnifiedAgentMessage> {
                           const SizedBox(height: 2),
                           Text(
                             count == 0
-                                ? '正在思考并组织回复'
+                                ? '思考中'
                                 : widget.showThinking
                                 ? '正在处理 · 已完成 $count 个工具调用'
                                 : '已完成 $count 个工具调用',

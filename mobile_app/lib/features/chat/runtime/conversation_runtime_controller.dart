@@ -33,6 +33,11 @@ class ConversationRuntimeController extends ChangeNotifier {
   Timer? _liveSyncTimer;
   bool _syncingMessages = false;
   int _messageSyncEpoch = 0;
+  int _messagePage = 1;
+  int _messageTotalPages = 0;
+  bool _loadingOlderMessages = false;
+  int _historyLoadEpoch = 0;
+  int _conversationUpdateEpoch = 0;
   bool _disposed = false;
   int _draftEpoch = 0;
   ChatStreamCancellation? _activeSendCancellation;
@@ -63,6 +68,18 @@ class ConversationRuntimeController extends ChangeNotifier {
   String get reasoningEffort => _reasoningEffort;
   bool get reasoningEnabled => _reasoningEnabled;
   String get permissionMode => _permissionMode;
+  bool get hasMoreHistory => _messagePage > 1;
+  bool get isLoadingOlderMessages => _loadingOlderMessages;
+  int get messagePage => _messagePage;
+  int get messageTotalPages => _messageTotalPages;
+  int get conversationUpdateEpoch => _conversationUpdateEpoch;
+
+  void _resetMessagePagination() {
+    _messagePage = 1;
+    _messageTotalPages = 0;
+    _loadingOlderMessages = false;
+    _historyLoadEpoch++;
+  }
 
   void setCharacterId(String? characterId) {
     _characterId = characterId?.trim().isEmpty == true ? null : characterId;
@@ -599,9 +616,21 @@ class ConversationRuntimeController extends ChangeNotifier {
         (data['deliverySequence'] as num?)?.toInt() ??
         (data['delivery_sequence'] as num?)?.toInt() ??
         0;
+    ChatMessage? provisional;
+    if (responseGroupId.isNotEmpty) {
+      for (final message in _messages.messages) {
+        if (message.role == MessageRole.assistant &&
+            message.id.startsWith('turn:') &&
+            message.responseGroupId == responseGroupId) {
+          provisional = message;
+          break;
+        }
+      }
+    }
     final existing =
         _messages.findById(id) ??
-        _messages.findByRenderId(id, role: MessageRole.assistant);
+        _messages.findByRenderId(id, role: MessageRole.assistant) ??
+        provisional;
     final characterId =
         (data['characterId'] ??
                 data['character_id'] ??
@@ -645,6 +674,8 @@ class ConversationRuntimeController extends ChangeNotifier {
       replyToExcerpt: existing?.replyToExcerpt,
       responseGroupId: responseGroupId,
       deliverySequence: deliverySequence,
+      assistantTurn: existing?.assistantTurn,
+      assistantTurnSuppressed: existing?.assistantTurnSuppressed ?? false,
     );
     _messages.upsert(next);
     notifyListeners();
@@ -680,7 +711,8 @@ class ConversationRuntimeController extends ChangeNotifier {
     final conv = _conversationId;
     if (conv == null || conv.isEmpty) return;
     final syncEpoch = ++_messageSyncEpoch;
-    final persisted = await _chatService.getMessages(conv, latest: true);
+    final page = await _chatService.getMessagePage(conv, latest: true);
+    final persisted = page.items;
     debugPrint(
       'Chat sync persisted conversation=$conv count=${persisted.length}',
     );
@@ -693,7 +725,23 @@ class ConversationRuntimeController extends ChangeNotifier {
       debugPrint('Chat sync skipped empty persisted conversation=$conv');
       return;
     }
+    _messagePage = page.page;
+    _messageTotalPages = page.totalPages;
+    final changed = _mergePersistedMessages(persisted, conv, syncEpoch);
+    if (changed) notifyListeners();
+  }
 
+  bool _mergePersistedMessages(
+    List<MessageDto> persisted,
+    String conv,
+    int? syncEpoch,
+  ) {
+    if (_disposed ||
+        (syncEpoch != null && syncEpoch != _messageSyncEpoch) ||
+        _conversationId != conv) {
+      return false;
+    }
+    if (persisted.isEmpty) return false;
     var changed = false;
     for (final dto in persisted) {
       final persistedRequestId = dto.requestId.trim();
@@ -777,6 +825,8 @@ class ConversationRuntimeController extends ChangeNotifier {
         deliverySequence: dto.deliverySequence > 0
             ? dto.deliverySequence
             : existing?.deliverySequence ?? 0,
+        assistantTurn: existing?.assistantTurn,
+        assistantTurnSuppressed: existing?.assistantTurnSuppressed ?? false,
       );
       changed = _messages.upsert(next) || changed;
     }
@@ -784,7 +834,41 @@ class ConversationRuntimeController extends ChangeNotifier {
       'Chat sync reconciled conversation=$conv total=${_messages.length}',
     );
     _applyAssistantTurnProjection();
-    if (changed) notifyListeners();
+    return changed;
+  }
+
+  Future<bool> loadOlderMessages() async {
+    final conv = _conversationId;
+    if (conv == null ||
+        conv.isEmpty ||
+        !hasMoreHistory ||
+        _loadingOlderMessages) {
+      return false;
+    }
+    final requestEpoch = ++_historyLoadEpoch;
+    _loadingOlderMessages = true;
+    notifyListeners();
+    try {
+      final page = await _chatService.getMessagePage(
+        conv,
+        page: _messagePage - 1,
+      );
+      if (_disposed ||
+          requestEpoch != _historyLoadEpoch ||
+          _conversationId != conv) {
+        return false;
+      }
+      _messagePage = page.page;
+      _messageTotalPages = page.totalPages;
+      final changed = _mergePersistedMessages(page.items, conv, null);
+      if (changed) notifyListeners();
+      return changed;
+    } finally {
+      if (!_disposed && requestEpoch == _historyLoadEpoch) {
+        _loadingOlderMessages = false;
+        notifyListeners();
+      }
+    }
   }
 
   Future<void> _loadAssistantTurns() async {
@@ -903,8 +987,10 @@ class ConversationRuntimeController extends ChangeNotifier {
                 candidate.callId == item.callId &&
                 candidate.type == item.type),
       );
-      if (itemIndex >= 0) items[itemIndex] = item;
-      else items.add(item);
+      if (itemIndex >= 0)
+        items[itemIndex] = item;
+      else
+        items.add(item);
       items.sort((left, right) => left.sequence.compareTo(right.sequence));
     }
     final status = (metadata['status'] ?? existing?.status ?? 'running')
@@ -928,8 +1014,10 @@ class ConversationRuntimeController extends ChangeNotifier {
           : existing?.completedAt ?? '',
       items: items,
     );
-    if (index >= 0) _assistantTurns[index] = turn;
-    else _assistantTurns = <AssistantTurnDto>[..._assistantTurns, turn];
+    if (index >= 0)
+      _assistantTurns[index] = turn;
+    else
+      _assistantTurns = <AssistantTurnDto>[..._assistantTurns, turn];
     _applyAssistantTurnProjection();
     notifyListeners();
   }
@@ -992,6 +1080,15 @@ class ConversationRuntimeController extends ChangeNotifier {
                 .toString();
             if (eventConversation == conversationId) {
               _applyAssistantTurnStreamEvent(event.data);
+            }
+            continue;
+          }
+          if (event.type == 'conversation_updated') {
+            final eventConversation = (event.data['conversationId'] ?? '')
+                .toString();
+            if (eventConversation == conversationId) {
+              _conversationUpdateEpoch++;
+              notifyListeners();
             }
             continue;
           }
@@ -1354,6 +1451,7 @@ class ConversationRuntimeController extends ChangeNotifier {
     _conversationId = id;
     _characterId = characterId?.trim().isEmpty == true ? null : characterId;
     _messages.clear();
+    _resetMessagePagination();
     _assistantTurns = const <AssistantTurnDto>[];
     _lastError = null;
     _sending = false;
@@ -1395,6 +1493,7 @@ class ConversationRuntimeController extends ChangeNotifier {
     _conversationId = conversation.id;
     _characterId = characterId;
     _messages.clear();
+    _resetMessagePagination();
     _assistantTurns = const <AssistantTurnDto>[];
     _lastError = null;
     _restartLiveSync();
@@ -1404,6 +1503,7 @@ class ConversationRuntimeController extends ChangeNotifier {
 
   void clear({bool addSystemNotice = false}) {
     _messages.clear();
+    _resetMessagePagination();
     if (addSystemNotice) {
       _messages.upsert(
         ChatMessage(
@@ -1429,6 +1529,7 @@ class ConversationRuntimeController extends ChangeNotifier {
     _liveSyncTimer = null;
     _conversationId = null;
     _messages.clear();
+    _resetMessagePagination();
     _lastError = null;
     _sending = false;
     setWorkspace(workspace);

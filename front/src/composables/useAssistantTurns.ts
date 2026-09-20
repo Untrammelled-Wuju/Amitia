@@ -39,8 +39,6 @@ export function useAssistantTurns(
       });
       if (!matched.length) continue;
       matched[0].assistantTurn = turn;
-      matched[0].reasoningContent = "";
-      matched[0].reasoningDurationMs = 0;
       for (const duplicate of matched.slice(1)) {
         duplicate.assistantTurnSuppressed = true;
       }

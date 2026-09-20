@@ -128,7 +128,12 @@ import {
   EditPen,
 } from "@element-plus/icons-vue";
 import { useTheme } from "@/composables/useTheme";
-import type { AIMessageData, RichBlock } from "./types";
+import type {
+  AIMessageData,
+  AssistantTurnData,
+  AssistantTurnItem,
+  RichBlock,
+} from "./types";
 import AssistantTurnTimeline from "./AssistantTurnTimeline.vue";
 import { aimMessagePlainText, normalizeAIMessage } from "./amrp";
 import { copyText } from "./utils";
@@ -189,7 +194,61 @@ const message = computed<AIMessageData>(() =>
     avatar: props.charAvatar,
   }),
 );
-const assistantTurn = computed(() => props.message?.assistantTurn ?? null);
+function isRunningTurn(status: unknown): boolean {
+  return ["running", "streaming", "sending", "pending", "queued"].includes(
+    String(status || "").toLowerCase(),
+  );
+}
+
+const assistantTurn = computed<AssistantTurnData | null>(() => {
+  const raw = props.message?.assistantTurn;
+  if (!raw || typeof raw !== "object") return null;
+  const turn = raw as AssistantTurnData;
+  const items = Array.isArray(turn.items) ? [...turn.items] : [];
+  items.sort((left, right) => Number(left.sequence || 0) - Number(right.sequence || 0));
+  const hasThinking = items.some((item) => String(item.type || "") === "thinking");
+  const fallbackThinking = message.value.thinking;
+  if (
+    !hasThinking &&
+    (fallbackThinking?.content.trim() ||
+      isRunningTurn(turn.status) ||
+      fallbackThinking?.state === "streaming")
+  ) {
+    items.unshift({
+      id: `${turn.id || "turn"}:fallback-thinking`,
+      turnId: turn.id,
+      conversationId: turn.conversationId,
+      sequence: -1,
+      type: "thinking",
+      status:
+        isRunningTurn(turn.status) || fallbackThinking?.state === "streaming"
+          ? "running"
+          : "completed",
+      content: fallbackThinking?.content || "",
+      durationMs: Math.max(0, Math.round(Number(fallbackThinking?.duration || 0) * 1000)),
+    } satisfies AssistantTurnItem);
+  }
+  const hasText = items.some(
+    (item) => String(item.type || "") === "text" && String(item.content || "").trim(),
+  );
+  if (!hasText && message.value.markdown.trim()) {
+    const sequence = items.reduce(
+      (maximum, item) => Math.max(maximum, Number(item.sequence || 0)),
+      0,
+    );
+    items.push({
+      id: `${turn.id || "turn"}:fallback-text`,
+      turnId: turn.id,
+      conversationId: turn.conversationId,
+      sequence: sequence + 1,
+      type: "text",
+      status: isRunningTurn(turn.status) ? "streaming" : "completed",
+      content: message.value.markdown,
+      isFinal: 1,
+    } satisfies AssistantTurnItem);
+  }
+  return { ...turn, items };
+});
 const character = computed(() => message.value.character ?? { id: "", name: props.charName });
 const characterInitial = computed(() => (character.value.name || "A").trim().slice(0, 1));
 const streaming = computed(() => message.value.state === "streaming" || message.value.state === "queued");
