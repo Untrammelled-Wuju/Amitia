@@ -29,6 +29,36 @@ describe("ChatInput model settings", () => {
     document.body.innerHTML = "";
   });
 
+  it("shows the request model instead of the config alias in the composer trigger", () => {
+    const overlayRoot = document.createElement("div");
+    overlayRoot.id = "amitia-overlay-root";
+    document.body.appendChild(overlayRoot);
+    const pinia = createPinia();
+    setActivePinia(pinia);
+    const wrapper = mount(ChatInput, {
+      props: {
+        models: [
+          {
+            id: 1,
+            name: "123",
+            modelName: "gpt-5.1",
+            apiType: "openai",
+          },
+        ],
+        selectedModelId: 1,
+        reasoningEffort: "medium",
+      },
+      global: {
+        plugins: [pinia, ElementPlus],
+      },
+    });
+
+    const trigger = wrapper.get(".model-effort-trigger");
+    expect(trigger.text()).toContain("gpt-5.1");
+    expect(trigger.text()).toContain("中");
+    expect(trigger.text()).not.toContain("123");
+  });
+
   it("notifies the selected model and closes the model page", async () => {
     const overlayRoot = document.createElement("div");
     overlayRoot.id = "amitia-overlay-root";

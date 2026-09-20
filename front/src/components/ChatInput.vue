@@ -928,7 +928,7 @@ const selectedModel = computed(() =>
   llmModels.value.find((model: any) => Number(model.id) === Number(props.selectedModelId)),
 );
 const selectedModelLabel = computed(
-  () => selectedModel.value?.name || selectedModel.value?.modelName || "选择模型",
+  () => selectedModel.value?.modelName || selectedModel.value?.name || "选择模型",
 );
 const reasoningLabel = computed(
   () => reasoningLabels[props.reasoningEffort] || "中",
