@@ -2475,33 +2475,26 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
   }
 
   Widget _buildModelMenuSurface(BuildContext context) {
-    return AnimatedSize(
-      duration: const Duration(milliseconds: 220),
-      reverseDuration: const Duration(milliseconds: 150),
-      curve: Curves.easeOutQuint,
-      alignment: Alignment.bottomCenter,
-      clipBehavior: Clip.hardEdge,
-      child: AmitiaPopupSurface(
-        width: 260,
-        maxHeight: MediaQuery.sizeOf(context).height * 0.72,
-        padding: const EdgeInsets.all(12),
-        child: AnimatedSwitcher(
-          duration: const Duration(milliseconds: 220),
-          reverseDuration: const Duration(milliseconds: 150),
-          switchInCurve: Curves.easeOutCubic,
-          switchOutCurve: Curves.easeInCubic,
-          transitionBuilder: (child, animation) =>
-              FadeTransition(opacity: animation, child: child),
-          child: KeyedSubtree(
-            key: ValueKey(_modelMenuPage),
-            child: switch (_modelMenuPage) {
-              _ComposerModelMenuPage.models => _buildModelList(context),
-              _ComposerModelMenuPage.reasoning => _buildReasoningModeList(
-                context,
-              ),
-              _ComposerModelMenuPage.effort => _buildModelEffortPanel(context),
-            },
-          ),
+    return AmitiaPopupSurface(
+      width: 260,
+      maxHeight: MediaQuery.sizeOf(context).height * 0.72,
+      padding: const EdgeInsets.all(12),
+      child: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 220),
+        reverseDuration: const Duration(milliseconds: 150),
+        switchInCurve: Curves.easeOutCubic,
+        switchOutCurve: Curves.easeInCubic,
+        transitionBuilder: (child, animation) =>
+            FadeTransition(opacity: animation, child: child),
+        child: KeyedSubtree(
+          key: ValueKey(_modelMenuPage),
+          child: switch (_modelMenuPage) {
+            _ComposerModelMenuPage.models => _buildModelList(context),
+            _ComposerModelMenuPage.reasoning => _buildReasoningModeList(
+              context,
+            ),
+            _ComposerModelMenuPage.effort => _buildModelEffortPanel(context),
+          },
         ),
       ),
     );
@@ -2654,45 +2647,36 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
           title: '选择模型',
           onBack: _backToModelEffort,
         ),
-        Flexible(
-          child: ListView(
-            shrinkWrap: true,
-            children: [
-              for (final model in _llmModels)
-                _buildModelSelectionItem(
-                  context: context,
-                  selected: _intValue(model['id']) == widget.selectedModelId,
-                  title: Text(
-                    (model['name'] ?? model['modelName'] ?? '').toString(),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontSize: 14, color: context.textPrimary),
-                  ),
-                  subtitle: Text(
-                    '${_modelDisplayName(model)} · ${_modelProviderLabel(model)}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontSize: 10, color: context.textTertiary),
-                  ),
-                  onTap: () {
-                    final effort = (model['defaultReasoningEffort'] ?? 'high')
-                        .toString();
-                    widget.onModelChanged?.call(
-                      _intValue(model['id']),
-                      effort,
-                      model['supportsReasoning'] == true,
-                    );
-                    setState(() {
-                      _draftReasoningValue = _reasoningIndexFor(
-                        effort,
-                      ).toDouble();
-                    });
-                    _backToModelEffort();
-                  },
-                ),
-            ],
+        for (final model in _llmModels)
+          _buildModelSelectionItem(
+            context: context,
+            selected: _intValue(model['id']) == widget.selectedModelId,
+            title: Text(
+              (model['name'] ?? model['modelName'] ?? '').toString(),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 14, color: context.textPrimary),
+            ),
+            subtitle: Text(
+              '${_modelDisplayName(model)} · ${_modelProviderLabel(model)}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 10, color: context.textTertiary),
+            ),
+            onTap: () {
+              final effort = (model['defaultReasoningEffort'] ?? 'high')
+                  .toString();
+              widget.onModelChanged?.call(
+                _intValue(model['id']),
+                effort,
+                model['supportsReasoning'] == true,
+              );
+              setState(() {
+                _draftReasoningValue = _reasoningIndexFor(effort).toDouble();
+              });
+              _backToModelEffort();
+            },
           ),
-        ),
       ],
     );
   }
@@ -2965,8 +2949,6 @@ class _ComposerReasoningSliderState extends State<_ComposerReasoningSlider> {
         final width = constraints.maxWidth;
         final span = math.max(0.0, width - 64);
         final trackWidth = math.max(0.0, width - 32);
-        final activeWidth = math.max(0.0, 16 + (trackWidth - 32) * index / 3);
-        final thumbCenter = 32 + span * index / 3;
         final opacity = widget.enabled ? 1.0 : 0.45;
         return Semantics(
           slider: true,
@@ -3004,94 +2986,103 @@ class _ComposerReasoningSliderState extends State<_ComposerReasoningSlider> {
                 : null,
             child: Opacity(
               opacity: opacity,
-              child: SizedBox(
-                height: 48,
-                child: Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    Positioned(
-                      left: 16,
-                      top: 9,
-                      width: trackWidth,
-                      height: 30,
-                      child: DecoratedBox(
-                        key: const ValueKey('composer-reasoning-track-base'),
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(999),
-                          border: Border.all(color: context.borderPrimary),
-                          color: context.surfaceSecondary,
-                        ),
-                      ),
-                    ),
-                    TweenAnimationBuilder<double>(
-                      tween: Tween<double>(
-                        begin: activeWidth,
-                        end: activeWidth,
-                      ),
-                      duration: const Duration(milliseconds: 180),
-                      curve: Curves.easeOut,
-                      builder: (context, width, _) => Positioned(
-                        left: 16,
-                        top: 9,
-                        width: width,
-                        height: 30,
-                        child: AnimatedContainer(
-                          key: const ValueKey(
-                            'composer-reasoning-active-track',
-                          ),
-                          duration: const Duration(milliseconds: 180),
-                          curve: Curves.easeInOut,
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(999),
-                            color: index == 0
-                                ? Colors.transparent
-                                : context.accentPrimary,
-                          ),
-                        ),
-                      ),
-                    ),
-                    for (var marker = 0; marker < 4; marker += 1)
-                      Positioned(
-                        key: ValueKey('composer-reasoning-marker-$marker'),
-                        left: 32 + span * marker / 3 - 3,
-                        top: 21,
-                        width: 6,
-                        height: 6,
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: marker <= index
-                                ? context.surfacePrimary.withValues(alpha: 0.78)
-                                : context.textTertiary.withValues(alpha: 0.55),
-                          ),
-                        ),
-                      ),
-                    Positioned(
-                      key: const ValueKey('composer-reasoning-thumb'),
-                      left: thumbCenter - 16,
-                      top: 8,
-                      width: 32,
-                      height: 32,
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: context.surfacePrimary,
-                          boxShadow: const [
-                            BoxShadow(
-                              color: Color(0x3D000000),
-                              blurRadius: 7,
-                              offset: Offset(0, 2),
-                            ),
-                            BoxShadow(
-                              color: Color(0x0D000000),
-                              spreadRadius: 1,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
+              child: TweenAnimationBuilder<double>(
+                tween: Tween<double>(
+                  begin: index.toDouble(),
+                  end: index.toDouble(),
                 ),
+                duration: const Duration(milliseconds: 260),
+                curve: Curves.easeInOutCubic,
+                builder: (context, animatedIndex, _) {
+                  final thumbCenter = 32 + span * animatedIndex / 3;
+                  final activeWidth = math.max(0.0, thumbCenter - 16);
+                  final activeOpacity = animatedIndex.clamp(0.0, 1.0);
+                  return SizedBox(
+                    height: 52,
+                    child: Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        Positioned(
+                          left: 16,
+                          top: 11,
+                          width: trackWidth,
+                          height: 30,
+                          child: DecoratedBox(
+                            key: const ValueKey(
+                              'composer-reasoning-track-base',
+                            ),
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(999),
+                              border: Border.all(color: context.borderPrimary),
+                              color: context.surfaceSecondary,
+                            ),
+                          ),
+                        ),
+                        Positioned(
+                          left: 16,
+                          top: 11,
+                          width: activeWidth,
+                          height: 30,
+                          child: DecoratedBox(
+                            key: const ValueKey(
+                              'composer-reasoning-active-track',
+                            ),
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(999),
+                              color: context.accentPrimary.withValues(
+                                alpha: activeOpacity,
+                              ),
+                            ),
+                          ),
+                        ),
+                        for (var marker = 0; marker < 4; marker += 1)
+                          Positioned(
+                            key: ValueKey('composer-reasoning-marker-$marker'),
+                            left: 32 + span * marker / 3 - 3,
+                            top: 23,
+                            width: 6,
+                            height: 6,
+                            child: DecoratedBox(
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: marker <= animatedIndex
+                                    ? context.surfacePrimary.withValues(
+                                        alpha: 0.78,
+                                      )
+                                    : context.textTertiary.withValues(
+                                        alpha: 0.55,
+                                      ),
+                              ),
+                            ),
+                          ),
+                        Positioned(
+                          key: const ValueKey('composer-reasoning-thumb'),
+                          left: thumbCenter - 18,
+                          top: 8,
+                          width: 36,
+                          height: 36,
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: context.surfacePrimary,
+                              boxShadow: const [
+                                BoxShadow(
+                                  color: Color(0x3D000000),
+                                  blurRadius: 7,
+                                  offset: Offset(0, 2),
+                                ),
+                                BoxShadow(
+                                  color: Color(0x0D000000),
+                                  spreadRadius: 1,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
               ),
             ),
           ),

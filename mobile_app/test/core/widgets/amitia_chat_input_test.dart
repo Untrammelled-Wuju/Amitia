@@ -370,19 +370,15 @@ void main() {
     expect(track.left - slider.left, closeTo(16, 0.1));
     expect(slider.right - track.right, closeTo(16, 0.1));
     expect(track.height, closeTo(30, 0.1));
-    expect(thumb.width, closeTo(32, 0.1));
+    expect(thumb.width, closeTo(36, 0.1));
     expect(thumb.center.dx, closeTo(firstMarker.center.dx, 0.1));
-    expect(thumb.left, closeTo(track.left, 0.1));
     expect(firstMarker.center.dx - slider.left, closeTo(32, 0.1));
     expect(lastMarker.center.dx - slider.left, closeTo(slider.width - 32, 0.1));
 
-    final activeTrack = tester.widget<AnimatedContainer>(
+    final activeTrack = tester.widget<DecoratedBox>(
       find.byKey(const ValueKey('composer-reasoning-active-track')),
     );
-    expect(
-      (activeTrack.decoration! as BoxDecoration).color,
-      Colors.transparent,
-    );
+    expect((activeTrack.decoration as BoxDecoration).color!.a, 0);
     expect(
       tester
           .getSize(
@@ -396,6 +392,14 @@ void main() {
       find.byKey(const ValueKey('composer-reasoning-slider')),
       Offset(slider.width * 0.8, 0),
     );
+    await tester.pump(const Duration(milliseconds: 110));
+    final animatingTrack = tester.getRect(
+      find.byKey(const ValueKey('composer-reasoning-active-track')),
+    );
+    final animatingThumb = tester.getRect(
+      find.byKey(const ValueKey('composer-reasoning-thumb')),
+    );
+    expect(animatingTrack.right, closeTo(animatingThumb.center.dx, 0.1));
     await tester.pumpAndSettle();
 
     final expandedTrack = tester.getRect(
@@ -404,14 +408,14 @@ void main() {
     final expandedThumb = tester.getRect(
       find.byKey(const ValueKey('composer-reasoning-thumb')),
     );
-    final expandedActiveTrack = tester.widget<AnimatedContainer>(
+    final expandedActiveTrack = tester.widget<DecoratedBox>(
       find.byKey(const ValueKey('composer-reasoning-active-track')),
     );
     expect(expandedTrack.width, greaterThan(16));
     expect(expandedTrack.right, closeTo(expandedThumb.center.dx, 0.1));
     expect(
-      (expandedActiveTrack.decoration! as BoxDecoration).color,
-      isNot(Colors.transparent),
+      (expandedActiveTrack.decoration as BoxDecoration).color!.a,
+      greaterThan(0),
     );
   });
 
