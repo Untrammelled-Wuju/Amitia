@@ -91,6 +91,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   int _lastDraftEpoch = 0;
   String _lastSidebarConversationId = '';
   bool _scrollToBottomScheduled = false;
+  bool _diagnosticLogged = false;
 
   @override
   void initState() {
@@ -1965,6 +1966,13 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
   @override
   Widget build(BuildContext context) {
+    if (!_diagnosticLogged) {
+      _diagnosticLogged = true;
+      debugPrint(
+        '[diag] ChatPage build conversation=${_runtime.conversationId} '
+        'messages=${_runtime.messages.length}',
+      );
+    }
     final selectedCharacterId = ref.watch(currentCharacterIdProvider);
     final characters =
         ref.watch(characterListProvider).valueOrNull ?? const <CharacterDto>[];
@@ -2549,7 +2557,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                                 .catchError((_) {});
                           },
                           onPermissionChanged: (mode) {
-                            _runtime.updatePermissionMode(mode).catchError((_) {});
+                            _runtime
+                                .updatePermissionMode(mode)
+                                .catchError((_) {});
                           },
                           onSend: _onSend,
                           recipientName: characterName,
@@ -2632,9 +2642,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
               ),
             ),
           ),
-          AgentApprovalGuard(
-            conversationId: _runtime.conversationId ?? '',
-          ),
+          AgentApprovalGuard(conversationId: _runtime.conversationId ?? ''),
           if (hasSidebarProvider || hasSidebarExtensions)
             Positioned(
               top: _chatTopBarHeight,

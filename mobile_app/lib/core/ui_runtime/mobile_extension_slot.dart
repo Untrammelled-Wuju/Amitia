@@ -42,6 +42,7 @@ class MobileExtensionSlot extends ConsumerWidget {
   final Widget? fallback;
   final String? declaredBySlotId;
   final String? declaredByOwner;
+  static final Set<String> _diagnosticSlots = <String>{};
 
   String? _normalizedLayout(dynamic value) {
     final layout = value?.toString().trim().toLowerCase() ?? '';
@@ -150,6 +151,15 @@ class MobileExtensionSlot extends ConsumerWidget {
           sessionState: runtimeState,
           slotId: slotId,
         );
+    if (slotId == 'root' &&
+        _diagnosticSlots.add(
+          '${snapshot.version}:${slot?.contributions.length}:${runtimeState != null}',
+        )) {
+      debugPrint(
+        '[diag] root slot slot=${slot != null} '
+        'contributions=${slot?.contributions.length ?? 0}',
+      );
+    }
     if (slot == null) {
       return _fallbackWidget(
         context,

@@ -35,6 +35,7 @@ class AppShell extends ConsumerStatefulWidget {
 class _AppShellState extends ConsumerState<AppShell> {
   final _scaffoldKey = GlobalKey<ScaffoldState>();
   DateTime? _lastBackPress;
+  bool _diagnosticLogged = false;
 
   @override
   void didUpdateWidget(AppShell oldWidget) {
@@ -66,6 +67,10 @@ class _AppShellState extends ConsumerState<AppShell> {
 
   @override
   Widget build(BuildContext context) {
+    if (!_diagnosticLogged) {
+      _diagnosticLogged = true;
+      debugPrint('[diag] AppShell route=${widget.currentRoute}');
+    }
     final isChatRoute = widget.currentRoute == AppRoutes.chat;
     final router = GoRouter.of(context);
     return PopScope(
@@ -158,7 +163,11 @@ RoutingConfig _routingConfigFor(UIProviderSnapshot? providerSnapshot) {
           );
           return MobileExtensionSlot(
             slotId: 'root',
-            context: {'route': state.matchedLocation, 'surfaceRole': 'main'},
+            context: {
+              'route': state.matchedLocation,
+              'surfaceRole': 'main',
+              'slotFallback': 'default',
+            },
             fallback: shell,
           );
         },

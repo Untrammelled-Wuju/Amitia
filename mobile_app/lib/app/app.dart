@@ -102,6 +102,10 @@ class _BootstrapGate extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    debugPrint(
+      '[diag] BootstrapGate initialized=$bootstrapInitialized '
+      'deployment=${ref.watch(mobileDeploymentConfigProvider).mode.name}',
+    );
     Widget content;
     if (!bootstrapInitialized) {
       content = const _BootstrapInitializingWidget();

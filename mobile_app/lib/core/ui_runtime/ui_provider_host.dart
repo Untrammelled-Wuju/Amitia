@@ -26,6 +26,7 @@ class UIProviderHost extends ConsumerStatefulWidget {
 
 class _UIProviderHostState extends ConsumerState<UIProviderHost> {
   int _fallbackIndex = 0;
+  static final Set<String> _diagnosticSelections = <String>{};
 
   @override
   void initState() {
@@ -108,6 +109,15 @@ class _UIProviderHostState extends ConsumerState<UIProviderHost> {
     if (_fallbackIndex >= chain.length) return widget.fallback;
     final index = _fallbackIndex.clamp(0, chain.length - 1).toInt();
     final provider = chain[index];
+    if (_diagnosticSelections.add(
+      '${widget.capability}:${provider.providerId}:$index',
+    )) {
+      debugPrint(
+        '[diag] UIHost ${widget.capability} provider=${provider.providerId} '
+        'mode=${provider.mode.name} builtin=${provider.builtin} '
+        'enabled=${provider.enabled} entry=${provider.entryFor(currentUIPlatform())?.type.name}',
+      );
+    }
     if (provider.builtin || !provider.enabled) return widget.fallback;
     final entry = provider.entryFor(currentUIPlatform());
     if (entry == null ||
