@@ -90,7 +90,7 @@ electron-builder保持compression: normal，实际7z压缩等级由scripts/build
 最近发布源码基线：
 
 - Desktop NSIS：暂无
-- Android Release：版本 26.2.0-beta，源码基线提交 75cc20f7a，提交日志 fix(mobile): restore shell fallback for empty root slot，安装包 amitia-26.2.0-beta-release-arm64-v8a-20260920-180717.apk，SHA-256 80bc8753a43daf92742b2a8fe44c70907d2410c53e786dc187db90771891b738，记录时间 2026-09-20 18:07:17 +08:00
+- Android Release：版本 26.2.0-beta，源码基线提交 32612ea6e，提交日志 fix: prevent mobile chat white screen and runtime lock deadlock，安装包 amitia-26.2.0-beta-release-arm64-v8a-20260920-190811.apk，SHA-256 3f8d858c52fd951152bdbab6e88564c022acc230ec52b05187339572215ef935，记录时间 2026-09-20 19:08:11 +08:00
 
 发布配置：
 
