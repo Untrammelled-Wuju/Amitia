@@ -206,6 +206,7 @@ func DefaultMigrations() []Migration {
 		SidebarPreferencesMigration(),
 		MessageReasoningContentMigration(),
 		MessageReasoningDurationMigration(),
+		ConversationModelSettingsMigration(),
 	}
 }
 

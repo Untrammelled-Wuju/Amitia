@@ -373,6 +373,9 @@ func (s *service) callOpenAIWithTools(ctx context.Context, cfg *ModelConfig, mes
 	if cfg.TopP > 0 && cfg.TopP < 1 {
 		reqMap["top_p"] = cfg.TopP
 	}
+	if cfg.ReasoningEffort != "" {
+		reqMap["reasoning_effort"] = cfg.ReasoningEffort
+	}
 	reqBody, _ := json.Marshal(reqMap)
 	req, _ := http.NewRequestWithContext(ctx, "POST", base+"/chat/completions", bytes.NewReader(reqBody))
 	req.Header.Set("Content-Type", "application/json")
@@ -499,6 +502,9 @@ func (s *service) callOllamaWithTools(ctx context.Context, cfg *ModelConfig, mes
 	if len(tools) > 0 {
 		reqBody["tools"] = tools
 	}
+	if cfg.ReasoningEffort != "" {
+		reqBody["think"] = cfg.ReasoningEffort
+	}
 	jsonBody, _ := json.Marshal(reqBody)
 	req, _ := http.NewRequestWithContext(ctx, "POST", base+"/api/chat", bytes.NewReader(jsonBody))
 	req.Header.Set("Content-Type", "application/json")
@@ -567,9 +573,10 @@ func messagesToModelRequest(cfg *ModelConfig, messages []map[string]interface{},
 		}
 	}
 	req := ModelRequest{
-		Model:    cfg.ModelName,
-		Messages: msgs,
-		Stream:   false,
+		Model:           cfg.ModelName,
+		Messages:        msgs,
+		Stream:          false,
+		ReasoningEffort: cfg.ReasoningEffort,
 	}
 	if cfg.MaxOutputTokens > 0 {
 		req.MaxOutputTokens = cfg.MaxOutputTokens
@@ -687,6 +694,39 @@ type noopEventSink struct{}
 
 func (noopEventSink) Emit(ctx context.Context, event ModelEvent) error { return nil }
 
+func reasoningBudget(effort string) int {
+	switch effort {
+	case "low":
+		return 1024
+	case "medium":
+		return 4096
+	case "high":
+		return 8192
+	case "xhigh":
+		return 16384
+	default:
+		return 0
+	}
+}
+
+func applyLegacyAnthropicThinking(
+	requestBody map[string]interface{},
+	effort string,
+	maxTokens int,
+) {
+	budget := reasoningBudget(effort)
+	if budget <= 0 {
+		return
+	}
+	if maxTokens <= budget {
+		requestBody["max_tokens"] = budget + 2048
+	}
+	requestBody["thinking"] = map[string]interface{}{
+		"type":          "enabled",
+		"budget_tokens": budget,
+	}
+}
+
 func (s *service) callLLMStreamAdapter(ctx context.Context, cfg *ModelConfig, messages []map[string]interface{}, tools []tool.Tool, jsonOnly bool, disableThinking bool, sink ModelEventSink) (*ModelResult, error) {
 	protocol := resolveProtocol(cfg)
 	adapter := modelprotocol.AdapterForProtocol(protocol)
@@ -782,6 +822,7 @@ func (s *service) callAnthropicWithTools(ctx context.Context, cfg *ModelConfig, 
 	if len(anthropicTools) > 0 {
 		reqBody["tools"] = anthropicTools
 	}
+	applyLegacyAnthropicThinking(reqBody, cfg.ReasoningEffort, cfg.MaxTokens)
 	jsonBody, _ := json.Marshal(reqBody)
 	req, _ := http.NewRequestWithContext(ctx, "POST", base+"/v1/messages", bytes.NewReader(jsonBody))
 	req.Header.Set("Content-Type", "application/json")
@@ -853,6 +894,11 @@ func (s *service) callGeminiMode(ctx context.Context, cfg *ModelConfig, messages
 	}
 	if cfg.TopP > 0 && cfg.TopP < 1 {
 		genConfig["topP"] = cfg.TopP
+	}
+	if budget := reasoningBudget(cfg.ReasoningEffort); budget > 0 {
+		genConfig["thinkingConfig"] = map[string]interface{}{
+			"thinkingBudget": budget,
+		}
 	}
 	if jsonOnly {
 		genConfig["responseMimeType"] = "application/json"

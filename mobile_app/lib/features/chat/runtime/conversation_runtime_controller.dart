@@ -40,6 +40,8 @@ class ConversationRuntimeController extends ChangeNotifier {
   String _activeReasoningContent = '';
   int _activeReasoningDurationMs = 0;
   String _activeResponseGroupId = '';
+  int _modelConfigId = 0;
+  String _reasoningEffort = 'medium';
   bool _liveReasoningAttached = false;
   final MarkdownStreamScheduler _streamScheduler = MarkdownStreamScheduler();
 
@@ -54,6 +56,8 @@ class ConversationRuntimeController extends ChangeNotifier {
   Object? get lastError => _lastError;
   String get state => _sending ? 'sending' : 'idle';
   int get draftEpoch => _draftEpoch;
+  int get modelConfigId => _modelConfigId;
+  String get reasoningEffort => _reasoningEffort;
 
   void setCharacterId(String? characterId) {
     _characterId = characterId?.trim().isEmpty == true ? null : characterId;
@@ -69,6 +73,22 @@ class ConversationRuntimeController extends ChangeNotifier {
     }
     _workspace = workspace;
     notifyListeners();
+  }
+
+  Future<void> updateModelSettings(
+    int modelConfigId,
+    String reasoningEffort,
+  ) async {
+    _modelConfigId = modelConfigId;
+    _reasoningEffort = reasoningEffort.isEmpty ? 'medium' : reasoningEffort;
+    notifyListeners();
+    final conversationId = _conversationId?.trim() ?? '';
+    if (conversationId.isEmpty) return;
+    await _chatService.updateConversationModelSettings(
+      conversationId,
+      modelConfigId: _modelConfigId,
+      reasoningEffort: _reasoningEffort,
+    );
   }
 
   ChatMessage _copy(
@@ -454,6 +474,8 @@ class ConversationRuntimeController extends ChangeNotifier {
           audioDuration: audioDuration,
           videoUrl: videoUrl,
           replyToMessageId: replyToMessageId,
+          modelConfigId: _modelConfigId,
+          reasoningEffort: _reasoningEffort,
           workspace: workspace,
           cancellation: cancellation,
         )) {
@@ -1128,6 +1150,16 @@ class ConversationRuntimeController extends ChangeNotifier {
     _messages.clear();
     _lastError = null;
     _sending = false;
+    try {
+      final conversation = await _chatService.getConversation(id);
+      _modelConfigId = conversation?.modelConfigId ?? 0;
+      _reasoningEffort = conversation?.reasoningEffort.isNotEmpty == true
+          ? conversation!.reasoningEffort
+          : 'medium';
+    } catch (_) {
+      _modelConfigId = 0;
+      _reasoningEffort = 'medium';
+    }
     _restartLiveSync();
     notifyListeners();
     try {

@@ -131,6 +131,8 @@ CREATE TABLE IF NOT EXISTS conversations (
     channel TEXT DEFAULT 'web',
     source TEXT DEFAULT 'manual',
     peer_id TEXT DEFAULT '',
+    model_config_id INTEGER NOT NULL DEFAULT 0,
+    reasoning_effort TEXT NOT NULL DEFAULT '',
     message_count INTEGER DEFAULT 0,
     state_version TEXT DEFAULT '',
     pinned_at TEXT NOT NULL DEFAULT '',

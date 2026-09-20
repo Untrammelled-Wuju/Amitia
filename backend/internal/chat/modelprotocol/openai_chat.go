@@ -129,6 +129,9 @@ func applyOpenAIChatControls(requestBody map[string]interface{}, cfg ProviderCon
 	if req.DisableThinking && strings.Contains(strings.ToLower(cfg.BaseURL), "deepseek.com") {
 		requestBody["thinking"] = map[string]string{"type": "disabled"}
 	}
+	if req.ReasoningEffort != "" && !req.DisableThinking {
+		requestBody["reasoning_effort"] = req.ReasoningEffort
+	}
 }
 
 func (a *OpenAIChatAdapter) buildMessages(req ModelRequest) []map[string]interface{} {

@@ -44,6 +44,8 @@ type webChatSendRequest struct {
 	ImageUrl         string  `json:"imageUrl"`
 	VideoUrl         string  `json:"videoUrl"`
 	ReplyToMessageID *string `json:"replyToMessageId,omitempty"`
+	ModelConfigID    int     `json:"modelConfigId"`
+	ReasoningEffort  string  `json:"reasoningEffort"`
 }
 
 func (h *Handler) WebChatListConversations(c *gin.Context) {
@@ -60,6 +62,20 @@ func (h *Handler) WebChatListConversations(c *gin.Context) {
 		return
 	}
 	util.SuccessResponse(c, resp)
+}
+
+func (h *Handler) WebChatGetConv(c *gin.Context) {
+	id := strings.TrimSpace(c.Param("id"))
+	if id == "" {
+		util.ErrorResponse(c, response.InvalidParams, "缺少会话ID", nil)
+		return
+	}
+	var conversation chat.Conversation
+	if err := h.webChatOwnedConversationQuery(webChatSpaceID(c)).Where("id = ?", id).First(&conversation).Error; err != nil {
+		util.ErrorResponse(c, response.NotFound, "会话不存在", nil)
+		return
+	}
+	util.SuccessResponse(c, conversation)
 }
 
 func (h *Handler) WebChatGetMessages(c *gin.Context) {
@@ -156,10 +172,12 @@ func (h *Handler) WebChatDeleteConv(c *gin.Context) {
 func (h *Handler) WebChatUpdateConv(c *gin.Context) {
 	id := c.Param("id")
 	var body struct {
-		Title     *string `json:"title"`
-		ProjectID *string `json:"projectId"`
-		Pinned    *bool   `json:"pinned"`
-		Archived  *bool   `json:"archived"`
+		Title           *string `json:"title"`
+		ProjectID       *string `json:"projectId"`
+		Pinned          *bool   `json:"pinned"`
+		Archived        *bool   `json:"archived"`
+		ModelConfigID   *int    `json:"modelConfigId"`
+		ReasoningEffort *string `json:"reasoningEffort"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
 		util.ErrorResponse(c, response.InvalidParams, "无效请求体", nil)
@@ -200,6 +218,31 @@ func (h *Handler) WebChatUpdateConv(c *gin.Context) {
 		}
 		if _, err := scoped.UpdateConversationSidebarStateForSpace(id, body.Pinned, body.Archived, spaceID); err != nil {
 			util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
+			return
+		}
+	}
+	conversationUpdates := map[string]interface{}{}
+	if body.ModelConfigID != nil {
+		if *body.ModelConfigID > 0 {
+			var exists int64
+			if err := h.db.Table("model_configs").Where("id = ?", *body.ModelConfigID).Count(&exists).Error; err != nil || exists == 0 {
+				util.ErrorResponse(c, response.InvalidParams, "模型配置不存在", nil)
+				return
+			}
+		}
+		conversationUpdates["model_config_id"] = *body.ModelConfigID
+	}
+	if body.ReasoningEffort != nil {
+		effort := chat.NormalizeReasoningEffort(*body.ReasoningEffort)
+		if effort == "" {
+			util.ErrorResponse(c, response.InvalidParams, "思考强度无效", nil)
+			return
+		}
+		conversationUpdates["reasoning_effort"] = effort
+	}
+	if len(conversationUpdates) > 0 {
+		if err := h.webChatOwnedConversationQuery(spaceID).Where("id = ?", id).Updates(conversationUpdates).Error; err != nil {
+			util.ErrorResponse(c, response.OperationFailed, "更新模型设置失败", nil)
 			return
 		}
 	}
@@ -546,6 +589,8 @@ func (h *Handler) WebChatSubmitMessage(c *gin.Context) {
 			VideoUrl:         body.VideoUrl,
 			ImageContext:     imageCtx,
 			ReplyToMessageID: body.ReplyToMessageID,
+			ModelConfigID:    body.ModelConfigID,
+			ReasoningEffort:  body.ReasoningEffort,
 		}, workspaceBinding)
 		if err != nil {
 			applog.Warn(fmt.Sprintf("[WebChatSubmitMessage] generation failed: %v", err))

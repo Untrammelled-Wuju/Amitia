@@ -32,6 +32,8 @@ export function useWebChatSend(
   fetchWebMsgCount?: () => void,
   replyTarget?: Ref<any>,
   onConversationCreated?: (conversationId: string) => void | Promise<void>,
+  modelConfigId?: Ref<number>,
+  reasoningEffort?: Ref<string>,
 ) {
   const { post, del, get } = useApi();
   const { currentWorkspace, getWorkspaceRequestFields, bindCurrentWorkspaceToConversation } =
@@ -395,6 +397,8 @@ export function useWebChatSend(
         voiceMessage: !!finalAudioUrl,
         videoUrl: finalVideoUrl || "",
         replyToMessageId: replyTarget?.value?.id || undefined,
+        modelConfigId: modelConfigId?.value || undefined,
+        reasoningEffort: reasoningEffort?.value || undefined,
         ...getWorkspaceRequestFields(),
       };
       const [url, init] = await Promise.all([

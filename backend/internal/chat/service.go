@@ -50,6 +50,7 @@ type Service interface {
 	ProcessMessage(ctx context.Context, req *ProcessMessageRequest) (*ProcessMessageResponse, error)
 	AppendConversationMessages(ctx context.Context, request *AppendConversationMessagesRequest) (*AppendConversationMessagesResult, error)
 	ListModels() ([]ModelConfig, error)
+	GetModel(id int) (*ModelConfig, error)
 	CreateModel(cfg *ModelConfig) (*ModelConfig, error)
 	UpdateModel(id int, updates map[string]interface{}) (*ModelConfig, error)
 	DeleteModel(id int) error

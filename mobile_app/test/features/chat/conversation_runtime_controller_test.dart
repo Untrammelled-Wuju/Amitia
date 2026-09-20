@@ -39,6 +39,8 @@ class _FakeChatService extends ChatService {
     double audioDuration = 0,
     String? videoUrl,
     String? replyToMessageId,
+    int? modelConfigId,
+    String? reasoningEffort,
     ConversationWorkspaceDto? workspace,
     required ChatStreamCancellation cancellation,
   }) {

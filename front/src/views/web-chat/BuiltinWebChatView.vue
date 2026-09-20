@@ -152,6 +152,10 @@ SPDX-License-Identifier: AGPL-3.0-only
       :character-id="characterId"
       :conversation-id="convId"
       :channel="chatExtensionContext.channel"
+      :models="llmModels"
+      :selected-model-id="selectedModelId"
+      :reasoning-effort="selectedReasoningEffort"
+      :supports-reasoning="selectedModelSupportsReasoning"
       @send="handleSend"
       @image="onImageAttached"
       @removeImage="onImageRemoved"
@@ -162,6 +166,7 @@ SPDX-License-Identifier: AGPL-3.0-only
       @removeVideo="onVideoRemoved"
       @file="handleFileSend"
       @cancel-reply="replyTarget = null"
+      @update:model="handleModelSettingChange"
     /></div>
 
     <CharacterPickerDialog
@@ -294,6 +299,15 @@ const showImportDetail = ref(false);
 const convSummary = ref("");
 const showSummaryDrawer = ref(false);
 const replyTarget = ref<any>(null);
+const llmModels = ref<any[]>([]);
+const selectedModelId = ref(0);
+const selectedReasoningEffort = ref("medium");
+const selectedModelSupportsReasoning = computed(() => {
+  const model = llmModels.value.find(
+    (item: any) => Number(item.id) === selectedModelId.value,
+  );
+  return model?.supportsReasoning === true;
+});
 const chatExtensionContext = computed(() => {
   const env = resolveHostEnvironment();
   return {
@@ -468,6 +482,56 @@ function handleSetReply(msg: any) {
   };
 }
 
+async function loadLlmModels() {
+  try {
+    const models = await get<any[]>("/api/model/configs");
+    llmModels.value = Array.isArray(models)
+      ? models.filter((model: any) => {
+          const type = String(model.apiType || "").toLowerCase();
+          return !["voice", "asr", "embedding", "vector", "vision", "imagegen"].includes(type);
+        })
+      : [];
+    if (!selectedModelId.value && llmModels.value.length > 0) {
+      const active = llmModels.value.find((model: any) => !!model.isActive);
+      selectedModelId.value = Number((active || llmModels.value[0]).id || 0);
+    }
+  } catch {
+    llmModels.value = [];
+  }
+}
+
+async function loadConversationModelSettings(conversationId: string) {
+  if (!conversationId) return;
+  try {
+    const conversation = await get<any>(
+      `/api/web-chat/conversations/${encodeURIComponent(conversationId)}`,
+    );
+    selectedModelId.value = Number(conversation?.modelConfigId || 0);
+    selectedReasoningEffort.value =
+      String(conversation?.reasoningEffort || "medium");
+  } catch {}
+}
+
+async function handleModelSettingChange(
+  modelId: number,
+  reasoningEffort: string,
+) {
+  selectedModelId.value = Number(modelId || 0);
+  selectedReasoningEffort.value = reasoningEffort || "medium";
+  if (!convId.value) return;
+  try {
+    await put(
+      `/api/web-chat/conversations/${encodeURIComponent(convId.value)}`,
+      {
+        modelConfigId: selectedModelId.value,
+        reasoningEffort: selectedReasoningEffort.value,
+      },
+    );
+  } catch {
+    ElMessage.error("保存模型设置失败");
+  }
+}
+
 const {
   scrollToBottom,
   onScroll,
@@ -536,6 +600,8 @@ const {
       query: { conversationId },
     });
   },
+  selectedModelId,
+  selectedReasoningEffort,
 );
 
 const {
@@ -624,6 +690,14 @@ watch(
         convSummary.value = summary;
       }
     });
+  },
+  { immediate: true },
+);
+
+watch(
+  convId,
+  (conversationId) => {
+    void loadConversationModelSettings(conversationId || "");
   },
   { immediate: true },
 );
@@ -719,6 +793,7 @@ watch(isOffline, (offline) => {
 });
 
 onMounted(async () => {
+  void loadLlmModels();
   connectProactiveSSE();
   history.scrollRestoration = "manual";
 

@@ -461,6 +461,85 @@ SPDX-License-Identifier: AGPL-3.0-only
           </div>
 
                     <div class="input-actions">
+            <el-popover
+              v-model:visible="modelMenuOpen"
+              placement="top-end"
+              :width="260"
+              trigger="click"
+              :hide-after="0"
+              :teleported="true"
+              append-to="#amitia-overlay-root"
+              popper-class="composer-model-popper"
+              @hide="modelMenuView = 'main'"
+            >
+              <template #reference>
+                <button
+                  type="button"
+                  class="model-effort-trigger"
+                  :disabled="isInputDisabled"
+                >
+                  <span>{{ selectedModelLabel }}</span>
+                  <span> · </span>
+                  <strong>{{ reasoningLabel }}</strong>
+                </button>
+              </template>
+              <div v-if="modelMenuView === 'main'" class="model-effort-menu">
+                <div class="model-effort-row">
+                  <span>强度</span>
+                  <strong>{{ reasoningLabel }}</strong>
+                </div>
+                <button
+                  type="button"
+                  class="model-effort-row model-effort-row--button"
+                  @click="modelMenuView = 'models'"
+                >
+                  <span>模型</span>
+                  <span class="model-effort-model">
+                    {{ selectedModelLabel }}
+                    <el-icon><ArrowRight /></el-icon>
+                  </span>
+                </button>
+                <div class="model-effort-slider">
+                  <el-slider
+                    v-model="draftReasoningIndex"
+                    :min="0"
+                    :max="3"
+                    :step="1"
+                    :show-tooltip="false"
+                    :disabled="!supportsReasoning"
+                    @change="applyReasoningIndex"
+                  />
+                  <div class="model-effort-labels">
+                    <span>轻</span><span>中</span><span>高</span><span>极高</span>
+                  </div>
+                  <div v-if="!supportsReasoning" class="model-effort-hint">
+                    该模型不支持思考强度
+                  </div>
+                </div>
+              </div>
+              <div v-else class="model-list-panel">
+                <div class="model-list-header">
+                  <button type="button" aria-label="返回" @click="modelMenuView = 'main'">
+                    <el-icon><ArrowLeft /></el-icon>
+                  </button>
+                  <strong>选择模型</strong>
+                </div>
+                <button
+                  v-for="model in llmModels"
+                  :key="model.id"
+                  type="button"
+                  class="model-list-item"
+                  :class="{ active: model.id === selectedModelId }"
+                  @click="selectModel(model)"
+                >
+                  <span>
+                    <strong>{{ model.name || model.modelName }}</strong>
+                    <small>{{ model.modelName }} · {{ providerLabel(model) }}</small>
+                  </span>
+                  <el-icon v-if="model.id === selectedModelId"><Check /></el-icon>
+                </button>
+              </div>
+            </el-popover>
             <el-button
               :icon="Microphone"
               circle
@@ -543,10 +622,18 @@ const props = withDefaults(defineProps<{
   characterId?: string;
   conversationId?: string;
   channel?: string;
+  models?: any[];
+  selectedModelId?: number;
+  reasoningEffort?: string;
+  supportsReasoning?: boolean;
 }>(), {
   characterId: "",
   conversationId: "",
   channel: "web",
+  models: () => [],
+  selectedModelId: 0,
+  reasoningEffort: "medium",
+  supportsReasoning: false,
 });
 
 const emit = defineEmits<{
@@ -561,6 +648,7 @@ const emit = defineEmits<{
   removeVideo: [];
   cancelReply: [];
   file: [file: File];
+  "update:model": [modelId: number, reasoningEffort: string];
 }>();
 
 const isDisabled = () => !!props.disabled;
@@ -602,6 +690,9 @@ const slashRange = ref<{ start: number; end: number } | null>(null);
 const slashActiveIndex = ref(0);
 const skillsLoading = ref(false);
 const voiceMode = ref(false);
+const modelMenuOpen = ref(false);
+const modelMenuView = ref<"main" | "models">("main");
+const draftReasoningIndex = ref(1);
 const workspaceMenuOpen = ref(false);
 const supportsWorkspaceDirectory = computed(
   () => typeof window !== "undefined" && !!window.amitiaDesktop?.selectWorkspaceDirectory,
@@ -619,6 +710,59 @@ const {
 const workspaceLabel = computed(
   () => currentWorkspace.value?.workspaceName || "选择项目",
 );
+
+const reasoningOptions = ["low", "medium", "high", "xhigh"];
+const reasoningLabels: Record<string, string> = {
+  low: "轻",
+  medium: "中",
+  high: "高",
+  xhigh: "极高",
+};
+const llmModels = computed(() =>
+  (props.models || []).filter((model: any) => {
+    const type = String(model.apiType || model.provider || "").toLowerCase();
+    return !["voice", "asr", "embedding", "vector", "vision", "imagegen"].includes(type);
+  }),
+);
+const selectedModel = computed(() =>
+  llmModels.value.find((model: any) => Number(model.id) === Number(props.selectedModelId)),
+);
+const selectedModelLabel = computed(
+  () => selectedModel.value?.name || selectedModel.value?.modelName || "选择模型",
+);
+const reasoningLabel = computed(
+  () => reasoningLabels[props.reasoningEffort] || "中",
+);
+
+watch(
+  () => props.reasoningEffort,
+  (value) => {
+    draftReasoningIndex.value = Math.max(
+      0,
+      reasoningOptions.indexOf(String(value || "medium")),
+    );
+  },
+  { immediate: true },
+);
+
+function applyReasoningIndex(value: number | number[]) {
+  const index = Array.isArray(value) ? Number(value[0]) : Number(value);
+  const effort = reasoningOptions[index] || "medium";
+  emit("update:model", Number(props.selectedModelId), effort);
+}
+
+function selectModel(model: any) {
+  emit(
+    "update:model",
+    Number(model.id),
+    model.defaultReasoningEffort || props.reasoningEffort || "medium",
+  );
+  modelMenuView.value = "main";
+}
+
+function providerLabel(model: any) {
+  return String(model.apiType || model.provider || "");
+}
 const draftKey = computed(() => {
   const conversationId = String(props.conversationId || "").trim();
   if (conversationId) return `conversation:${conversationId}`;
@@ -1376,6 +1520,147 @@ defineExpose({ focus, setText, clear: clearText });
   border-color: var(--ac-color-border-strong);
   background: var(--ac-color-bg-secondary);
   color: var(--ac-color-text);
+}
+
+.model-effort-trigger {
+  max-width: 200px;
+  height: 28px;
+  overflow: hidden;
+  border: 1px solid var(--composer-border);
+  border-radius: 8px;
+  padding: 0 9px;
+  background: transparent;
+  color: var(--ac-color-text-muted);
+  font: inherit;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.model-effort-trigger strong {
+  color: var(--ac-color-text);
+}
+
+.model-effort-menu,
+.model-list-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.model-effort-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 34px;
+  padding: 0 8px;
+  color: var(--ac-color-text-muted);
+  font-size: 12px;
+}
+
+.model-effort-row--button {
+  width: 100%;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+
+.model-effort-row--button:hover {
+  background: var(--ac-color-primary-bg);
+}
+
+.model-effort-model {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 170px;
+  overflow: hidden;
+  color: var(--ac-color-text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.model-effort-slider {
+  padding: 2px 8px 6px;
+}
+
+.model-effort-labels {
+  display: flex;
+  justify-content: space-between;
+  margin-top: -4px;
+  color: var(--ac-color-text-muted);
+  font-size: 10px;
+}
+
+.model-effort-hint {
+  margin-top: 6px;
+  color: var(--ac-color-danger);
+  font-size: 11px;
+}
+
+.model-list-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 4px 8px;
+}
+
+.model-list-header button {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  place-items: center;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ac-color-text-muted);
+  cursor: pointer;
+}
+
+.model-list-header button:hover {
+  background: var(--ac-color-primary-bg);
+}
+
+.model-list-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-height: 48px;
+  border: 0;
+  border-radius: 8px;
+  padding: 6px 8px;
+  background: transparent;
+  color: var(--ac-color-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.model-list-item:hover,
+.model-list-item.active {
+  background: var(--ac-color-primary-bg);
+}
+
+.model-list-item span {
+  min-width: 0;
+}
+
+.model-list-item strong,
+.model-list-item small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.model-list-item small {
+  margin-top: 2px;
+  color: var(--ac-color-text-muted);
+  font-size: 10px;
 }
 
 .hold-voice-btn {

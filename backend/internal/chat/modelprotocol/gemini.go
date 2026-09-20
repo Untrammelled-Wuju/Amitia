@@ -32,7 +32,7 @@ func (a *GeminiAdapter) Generate(ctx context.Context, cfg ProviderConfig, req Mo
 
 	requestBody := map[string]interface{}{
 		"contents":         a.buildContents(req),
-		"generationConfig": a.buildGenConfig(cfg),
+		"generationConfig": a.buildGenConfig(cfg, req),
 	}
 
 	if len(req.Instructions) > 0 {
@@ -81,7 +81,7 @@ func (a *GeminiAdapter) Stream(ctx context.Context, cfg ProviderConfig, req Mode
 
 	requestBody := map[string]interface{}{
 		"contents":         a.buildContents(req),
-		"generationConfig": a.buildGenConfig(cfg),
+		"generationConfig": a.buildGenConfig(cfg, req),
 	}
 
 	if len(req.Instructions) > 0 {
@@ -174,7 +174,7 @@ func (a *GeminiAdapter) buildContents(req ModelRequest) []map[string]interface{}
 	return contents
 }
 
-func (a *GeminiAdapter) buildGenConfig(cfg ProviderConfig) map[string]interface{} {
+func (a *GeminiAdapter) buildGenConfig(cfg ProviderConfig, req ModelRequest) map[string]interface{} {
 	config := map[string]interface{}{
 		"temperature":     cfg.Temperature,
 		"maxOutputTokens": cfg.MaxOutputTokens,
@@ -182,6 +182,22 @@ func (a *GeminiAdapter) buildGenConfig(cfg ProviderConfig) map[string]interface{
 
 	if cfg.TopP > 0 && cfg.TopP < 1 {
 		config["topP"] = cfg.TopP
+	}
+	budget := 0
+	switch req.ReasoningEffort {
+	case "low":
+		budget = 1024
+	case "medium":
+		budget = 4096
+	case "high":
+		budget = 8192
+	case "xhigh":
+		budget = 16384
+	}
+	if budget > 0 && !req.DisableThinking {
+		config["thinkingConfig"] = map[string]interface{}{
+			"thinkingBudget": budget,
+		}
 	}
 
 	return config

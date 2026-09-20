@@ -141,6 +141,10 @@ func (s *service) ListModels() ([]ModelConfig, error) {
 	return s.repo.ListModels()
 }
 
+func (s *service) GetModel(id int) (*ModelConfig, error) {
+	return s.repo.GetModelByID(id)
+}
+
 func (s *service) CreateModel(cfg *ModelConfig) (*ModelConfig, error) {
 	count, err := s.repo.CountModels()
 	if err != nil {

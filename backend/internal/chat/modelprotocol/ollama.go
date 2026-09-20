@@ -44,6 +44,9 @@ func (a *OllamaAdapter) Generate(ctx context.Context, cfg ProviderConfig, req Mo
 	if cfg.TopP > 0 && cfg.TopP < 1 {
 		requestBody["options"].(map[string]interface{})["top_p"] = cfg.TopP
 	}
+	if req.ReasoningEffort != "" && !req.DisableThinking {
+		requestBody["think"] = req.ReasoningEffort
+	}
 
 	if len(req.Tools) > 0 {
 		requestBody["tools"] = a.buildTools(req.Tools)
@@ -92,6 +95,9 @@ func (a *OllamaAdapter) Stream(ctx context.Context, cfg ProviderConfig, req Mode
 
 	if cfg.TopP > 0 && cfg.TopP < 1 {
 		requestBody["options"].(map[string]interface{})["top_p"] = cfg.TopP
+	}
+	if req.ReasoningEffort != "" && !req.DisableThinking {
+		requestBody["think"] = req.ReasoningEffort
 	}
 
 	if len(req.Tools) > 0 {

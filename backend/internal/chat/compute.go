@@ -83,7 +83,7 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 	convID := req.ConversationID
 	if convID == "" {
 		convID = uuid.New().String()
-		conversation := &Conversation{ID: convID, SpaceID: req.SpaceID, ProjectID: strings.TrimSpace(req.ProjectID), Title: req.Message, Channel: channel, Source: source}
+		conversation := &Conversation{ID: convID, SpaceID: req.SpaceID, ProjectID: strings.TrimSpace(req.ProjectID), Title: req.Message, Channel: channel, Source: source, ModelConfigID: req.ModelConfigID, ReasoningEffort: normalizeReasoningEffort(req.ReasoningEffort)}
 		if err := s.persistConversationWithChange(conversation, req.SpaceID); err != nil {
 			return nil, err
 		}
@@ -100,6 +100,17 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 				"character_id":    charID,
 			}, err, "process message conversation scope invalid")
 			return nil, fmt.Errorf("会话与角色或渠道不匹配")
+		}
+	} else if req.ModelConfigID > 0 || strings.TrimSpace(req.ReasoningEffort) != "" {
+		updates := map[string]interface{}{}
+		if req.ModelConfigID > 0 {
+			updates["model_config_id"] = req.ModelConfigID
+		}
+		if effort := normalizeReasoningEffort(req.ReasoningEffort); effort != "" {
+			updates["reasoning_effort"] = effort
+		}
+		if len(updates) > 0 {
+			s.db.Model(&Conversation{}).Where("id = ?", convID).Updates(updates)
 		}
 	}
 	trace = updateProcessTraceScope(trace, convID, charID, channel)
@@ -164,12 +175,23 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 	s.emitDesktopPetChat(ctx, req, charID, convID, userMsgID, "context.loading", 2)
 
 	cfg, err := s.repo.GetActiveModel()
+	if req.ModelConfigID > 0 {
+		cfg, err = s.repo.GetModelByID(req.ModelConfigID)
+	}
 	if err != nil {
 		s.db.Model(&Message{}).Where("id = ?", userMsgID).Updates(map[string]interface{}{"status": "failed", "updated_at": time.Now().Format("2006-01-02 15:04:05")})
 		applog.TraceError(trace.WithStage("model_config_missing"), applog.Fields{
 			"user_message_id": userMsgID,
 		}, err, "process message model config missing")
 		return nil, fmt.Errorf("没有可用的模型配置")
+	}
+	applyReasoningCapabilities(cfg)
+	cfg.ReasoningEffort = normalizeReasoningEffort(req.ReasoningEffort)
+	if cfg.ReasoningEffort == "" {
+		cfg.ReasoningEffort = cfg.DefaultReasoningEffort
+	}
+	if !cfg.SupportsReasoning {
+		cfg.ReasoningEffort = ""
 	}
 
 	sys1Result := s.sys1Builder(convID, runtimeProfile, req.Message, req.Runtime)

@@ -67,21 +67,23 @@ type ModelEventSink = modelprotocol.ModelEventSink
 type ModelCapabilities = modelprotocol.ModelCapabilities
 
 type Conversation struct {
-	ID           string  `gorm:"column:id;primaryKey" json:"id"`
-	SpaceID      string  `gorm:"column:space_id;not null;index" json:"-"`
-	ProjectID    string  `gorm:"column:project_id;not null;default:'';index" json:"projectId"`
-	Title        string  `gorm:"column:title" json:"title"`
-	Channel      string  `gorm:"column:channel;default:web" json:"channel"`
-	Source       string  `gorm:"column:source;default:manual" json:"source"`
-	PeerID       string  `gorm:"column:peer_id" json:"peerId"`
-	MessageCount int     `gorm:"column:message_count;default:0" json:"messageCount"`
-	StateVersion string  `gorm:"column:state_version" json:"stateVersion"`
-	PinnedAt     string  `gorm:"column:pinned_at;not null;default:''" json:"pinnedAt,omitempty"`
-	ArchivedAt   string  `gorm:"column:archived_at;not null;default:''" json:"archivedAt,omitempty"`
-	CreatedAt    string  `gorm:"column:created_at" json:"createdAt"`
-	UpdatedAt    string  `gorm:"column:updated_at" json:"updatedAt"`
-	Revision     int64   `gorm:"column:revision;not null;default:1" json:"revision"`
-	DeletedAt    *string `gorm:"column:deleted_at" json:"-"`
+	ID              string  `gorm:"column:id;primaryKey" json:"id"`
+	SpaceID         string  `gorm:"column:space_id;not null;index" json:"-"`
+	ProjectID       string  `gorm:"column:project_id;not null;default:'';index" json:"projectId"`
+	Title           string  `gorm:"column:title" json:"title"`
+	Channel         string  `gorm:"column:channel;default:web" json:"channel"`
+	Source          string  `gorm:"column:source;default:manual" json:"source"`
+	PeerID          string  `gorm:"column:peer_id" json:"peerId"`
+	ModelConfigID   int     `gorm:"column:model_config_id;not null;default:0" json:"modelConfigId"`
+	ReasoningEffort string  `gorm:"column:reasoning_effort;not null;default:''" json:"reasoningEffort"`
+	MessageCount    int     `gorm:"column:message_count;default:0" json:"messageCount"`
+	StateVersion    string  `gorm:"column:state_version" json:"stateVersion"`
+	PinnedAt        string  `gorm:"column:pinned_at;not null;default:''" json:"pinnedAt,omitempty"`
+	ArchivedAt      string  `gorm:"column:archived_at;not null;default:''" json:"archivedAt,omitempty"`
+	CreatedAt       string  `gorm:"column:created_at" json:"createdAt"`
+	UpdatedAt       string  `gorm:"column:updated_at" json:"updatedAt"`
+	Revision        int64   `gorm:"column:revision;not null;default:1" json:"revision"`
+	DeletedAt       *string `gorm:"column:deleted_at" json:"-"`
 }
 
 func (Conversation) TableName() string { return "conversations" }
@@ -160,29 +162,33 @@ func (m *Message) BeforeCreate(tx *gorm.DB) error {
 }
 
 type ModelConfig struct {
-	ID                 int     `gorm:"column:id;primaryKey;autoIncrement" json:"id"`
-	Name               string  `gorm:"column:name" json:"name"`
-	APIType            string  `gorm:"column:api_type" json:"apiType"`
-	Protocol           string  `gorm:"column:protocol" json:"protocol"`
-	BaseURL            string  `gorm:"column:base_url" json:"baseUrl"`
-	APIKey             string  `gorm:"column:api_key" json:"apiKey"`
-	ModelName          string  `gorm:"column:model_name" json:"modelName"`
-	Temperature        float64 `gorm:"column:temperature;default:0.7" json:"temperature"`
-	MaxTokens          int     `gorm:"column:max_tokens;default:4096" json:"maxTokens"`
-	ContextWindow      int     `gorm:"column:context_window;default:0" json:"contextWindow"`
-	MaxOutputTokens    int     `gorm:"column:max_output_tokens;default:0" json:"maxOutputTokens"`
-	CapabilitiesJSON   string  `gorm:"column:capabilities_json" json:"capabilitiesJson"`
-	ProviderConfigJSON string  `gorm:"column:provider_config_json;default:{}" json:"providerConfig,omitempty"`
-	TopP               float64 `gorm:"column:top_p;default:1" json:"topP"`
-	TimeoutSeconds     int     `gorm:"column:timeout_seconds;default:60" json:"timeoutSeconds"`
-	RetryCount         int     `gorm:"column:retry_count;default:1" json:"retryCount"`
-	IsActive           int     `gorm:"column:is_active;default:0" json:"isActive"`
-	LastTestStatus     string  `gorm:"column:last_test_status" json:"lastTestStatus"`
-	LastTestMessage    string  `gorm:"column:last_test_message" json:"lastTestMessage"`
-	LastTestAt         string  `gorm:"column:last_test_at" json:"lastTestAt"`
-	HasAPIKey          bool    `gorm:"-" json:"hasApiKey"`
-	CreatedAt          string  `gorm:"column:created_at" json:"createdAt"`
-	UpdatedAt          string  `gorm:"column:updated_at" json:"updatedAt"`
+	ID                     int      `gorm:"column:id;primaryKey;autoIncrement" json:"id"`
+	Name                   string   `gorm:"column:name" json:"name"`
+	APIType                string   `gorm:"column:api_type" json:"apiType"`
+	Protocol               string   `gorm:"column:protocol" json:"protocol"`
+	BaseURL                string   `gorm:"column:base_url" json:"baseUrl"`
+	APIKey                 string   `gorm:"column:api_key" json:"apiKey"`
+	ModelName              string   `gorm:"column:model_name" json:"modelName"`
+	Temperature            float64  `gorm:"column:temperature;default:0.7" json:"temperature"`
+	MaxTokens              int      `gorm:"column:max_tokens;default:4096" json:"maxTokens"`
+	ContextWindow          int      `gorm:"column:context_window;default:0" json:"contextWindow"`
+	MaxOutputTokens        int      `gorm:"column:max_output_tokens;default:0" json:"maxOutputTokens"`
+	CapabilitiesJSON       string   `gorm:"column:capabilities_json" json:"capabilitiesJson"`
+	SupportsReasoning      bool     `gorm:"-" json:"supportsReasoning"`
+	DefaultReasoningEffort string   `gorm:"-" json:"defaultReasoningEffort"`
+	ReasoningLevels        []string `gorm:"-" json:"reasoningLevels"`
+	ReasoningEffort        string   `gorm:"-" json:"-"`
+	ProviderConfigJSON     string   `gorm:"column:provider_config_json;default:{}" json:"providerConfig,omitempty"`
+	TopP                   float64  `gorm:"column:top_p;default:1" json:"topP"`
+	TimeoutSeconds         int      `gorm:"column:timeout_seconds;default:60" json:"timeoutSeconds"`
+	RetryCount             int      `gorm:"column:retry_count;default:1" json:"retryCount"`
+	IsActive               int      `gorm:"column:is_active;default:0" json:"isActive"`
+	LastTestStatus         string   `gorm:"column:last_test_status" json:"lastTestStatus"`
+	LastTestMessage        string   `gorm:"column:last_test_message" json:"lastTestMessage"`
+	LastTestAt             string   `gorm:"column:last_test_at" json:"lastTestAt"`
+	HasAPIKey              bool     `gorm:"-" json:"hasApiKey"`
+	CreatedAt              string   `gorm:"column:created_at" json:"createdAt"`
+	UpdatedAt              string   `gorm:"column:updated_at" json:"updatedAt"`
 }
 
 type MessageAttachment struct {
@@ -418,6 +424,8 @@ type ProcessMessageRequest struct {
 	Attachments              []MessageAttachmentInput     `json:"attachments,omitempty"`
 	RequestID                string                       `json:"requestId"`
 	ReplyToMessageID         *string                      `json:"replyToMessageId,omitempty"`
+	ModelConfigID            int                          `json:"modelConfigId,omitempty"`
+	ReasoningEffort          string                       `json:"reasoningEffort,omitempty"`
 	ImageContext             string                       `json:"-"`
 	SpaceID                  string                       `json:"-"`
 	DeviceTimezone           string                       `json:"-"`

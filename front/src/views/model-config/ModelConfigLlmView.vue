@@ -54,6 +54,7 @@ SPDX-License-Identifier: AGPL-3.0-only
       :saving="saving"
       :show-advanced="showAdvanced"
       :show-detect="showDetect"
+      :show-reasoning="true"
       :model-placeholder="modelPlaceholder"
       @save="saveConfig"
       @on-provider-change="onProviderChange"

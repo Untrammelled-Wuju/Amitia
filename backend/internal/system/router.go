@@ -228,6 +228,7 @@ func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, chatSvc chat.
 	r.GET("/messages/events", handler.MessagesEventsStream)
 
 	r.GET("/web-chat/conversations", handler.WebChatListConversations)
+	r.GET("/web-chat/conversations/:id", handler.WebChatGetConv)
 	r.GET("/web-chat/sidebar", handler.WebChatConversationSidebar)
 	r.GET("/web-chat/channels", handler.WebChatListChannelConversations)
 	r.POST("/web-chat/projects", handler.WebChatCreateProject)

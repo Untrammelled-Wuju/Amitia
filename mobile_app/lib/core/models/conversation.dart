@@ -9,6 +9,8 @@ class ConversationDto {
   final String archivedAt;
   final String createdAt;
   final String updatedAt;
+  final int modelConfigId;
+  final String reasoningEffort;
 
   ConversationDto({
     required this.id,
@@ -21,6 +23,8 @@ class ConversationDto {
     this.archivedAt = '',
     this.createdAt = '',
     this.updatedAt = '',
+    this.modelConfigId = 0,
+    this.reasoningEffort = '',
   });
 
   factory ConversationDto.fromJson(Map<String, dynamic> json) {
@@ -35,6 +39,8 @@ class ConversationDto {
       archivedAt: (json['archivedAt'] ?? '').toString(),
       createdAt: json['createdAt'] as String? ?? '',
       updatedAt: json['updatedAt'] as String? ?? '',
+      modelConfigId: (json['modelConfigId'] as num?)?.toInt() ?? 0,
+      reasoningEffort: (json['reasoningEffort'] ?? '').toString(),
     );
   }
 }

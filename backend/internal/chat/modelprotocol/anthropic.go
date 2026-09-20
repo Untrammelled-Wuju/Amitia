@@ -44,6 +44,7 @@ func (a *AnthropicAdapter) Generate(ctx context.Context, cfg ProviderConfig, req
 	if len(req.Tools) > 0 {
 		requestBody["tools"] = a.buildTools(req.Tools)
 	}
+	applyAnthropicThinking(requestBody, req.ReasoningEffort, cfg.MaxOutputTokens)
 
 	jsonBody, _ := json.Marshal(requestBody)
 	url := baseURL + "/v1/messages"
@@ -89,6 +90,7 @@ func (a *AnthropicAdapter) Stream(ctx context.Context, cfg ProviderConfig, req M
 	if len(req.Tools) > 0 {
 		requestBody["tools"] = a.buildTools(req.Tools)
 	}
+	applyAnthropicThinking(requestBody, req.ReasoningEffort, cfg.MaxOutputTokens)
 
 	jsonBody, _ := json.Marshal(requestBody)
 	url := baseURL + "/v1/messages"
@@ -114,6 +116,31 @@ func (a *AnthropicAdapter) Stream(ctx context.Context, cfg ProviderConfig, req M
 	}
 
 	return a.parseStream(resp.Body, sink)
+}
+
+func applyAnthropicThinking(requestBody map[string]interface{}, effort string, maxTokens int) {
+	budget := 0
+	switch effort {
+	case "low":
+		budget = 1024
+	case "medium":
+		budget = 4096
+	case "high":
+		budget = 8192
+	case "xhigh":
+		budget = 16384
+	}
+	if budget <= 0 {
+		return
+	}
+	if maxTokens <= budget {
+		maxTokens = budget + 2048
+		requestBody["max_tokens"] = maxTokens
+	}
+	requestBody["thinking"] = map[string]interface{}{
+		"type":          "enabled",
+		"budget_tokens": budget,
+	}
 }
 
 func (a *AnthropicAdapter) buildMessages(req ModelRequest) []map[string]interface{} {

@@ -97,6 +97,7 @@ type ModelRequest struct {
 	ToolResults     []ModelToolResult       `json:"toolResults"`
 	ResponseFormat  ModelResponseFormat     `json:"responseFormat"`
 	DisableThinking bool                    `json:"disableThinking"`
+	ReasoningEffort string                  `json:"reasoningEffort,omitempty"`
 	Temperature     *float64                `json:"temperature,omitempty"`
 	TopP            *float64                `json:"topP,omitempty"`
 	MaxOutputTokens int                     `json:"maxOutputTokens"`

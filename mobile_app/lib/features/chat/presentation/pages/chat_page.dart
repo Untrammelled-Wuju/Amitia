@@ -31,6 +31,7 @@ import '../../../../core/runtime/backend/mobile_deployment_mode.dart';
 import '../../../../core/native_bridge/providers/native_bridge_relay_provider.dart';
 import '../../../../core/models/character.dart';
 import '../../../../core/models/memory.dart';
+import '../../../../core/models/model_config.dart';
 import '../../../../core/models/profile.dart';
 import '../../../../core/artifact/artifact_model.dart';
 import '../../../../core/artifact/artifact_providers.dart';
@@ -1966,6 +1967,22 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     final selectedCharacterId = ref.watch(currentCharacterIdProvider);
     final characters =
         ref.watch(characterListProvider).valueOrNull ?? const <CharacterDto>[];
+    final modelConfigs =
+        ref.watch(modelConfigListProvider).valueOrNull ??
+        const <ModelConfigDto>[];
+    final selectedModelConfigId = _runtime.modelConfigId > 0
+        ? _runtime.modelConfigId
+        : int.tryParse(
+                modelConfigs
+                        .where((model) => model.isActive == 1)
+                        .firstOrNull
+                        ?.id ??
+                    '',
+              ) ??
+              0;
+    final selectedModelConfig = modelConfigs
+        .where((model) => int.tryParse(model.id) == selectedModelConfigId)
+        .firstOrNull;
     CharacterDto? character = characters
         .where((item) => item.id == selectedCharacterId)
         .firstOrNull;
@@ -2494,6 +2511,28 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                         ),
                         AmitiaChatInput(
                           controller: _composerController,
+                          models: modelConfigs
+                              .map(
+                                (model) => <String, dynamic>{
+                                  'id': model.id,
+                                  'name': model.name,
+                                  'modelName': model.model,
+                                  'apiType': model.provider,
+                                  'supportsReasoning': model.supportsReasoning,
+                                  'defaultReasoningEffort':
+                                      model.defaultReasoningEffort,
+                                },
+                              )
+                              .toList(growable: false),
+                          selectedModelId: selectedModelConfigId,
+                          reasoningEffort: _runtime.reasoningEffort,
+                          supportsReasoning:
+                              selectedModelConfig?.supportsReasoning ?? false,
+                          onModelChanged: (modelId, effort) {
+                            _runtime
+                                .updateModelSettings(modelId, effort)
+                                .catchError((_) {});
+                          },
                           onSend: _onSend,
                           recipientName: characterName,
                           workspaceSelector: _buildWorkspaceBar(context),

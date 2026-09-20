@@ -124,6 +124,29 @@ SPDX-License-Identifier: AGPL-3.0-only
         </div>
       </el-form-item>
 
+      <el-form-item v-if="showReasoningSettings" label="思考能力">
+        <div class="reasoning-settings">
+          <el-switch
+            v-model="form.supportsReasoning"
+            active-text="支持思考强度"
+            inactive-text="不支持"
+          />
+          <el-select
+            v-model="form.defaultReasoningEffort"
+            :disabled="!form.supportsReasoning"
+            style="width: 160px"
+          >
+            <el-option label="轻" value="low" />
+            <el-option label="中" value="medium" />
+            <el-option label="高" value="high" />
+            <el-option label="极高" value="xhigh" />
+          </el-select>
+        </div>
+        <div class="form-hint">
+          由用户声明模型能力，对话输入框会根据该设置展示思考强度。
+        </div>
+      </el-form-item>
+
       <slot name="extraFields" />
 
       <el-row v-if="showAdvanced" :gutter="12">
@@ -207,6 +230,7 @@ const props = defineProps<{
   showAdvanced?: boolean;
   showDetect?: boolean;
   modelPlaceholder?: string;
+  showReasoning?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -228,6 +252,7 @@ const isApiKeyOptional = computed(() => {
 const showAdvanced = computed(() => props.showAdvanced ?? true);
 const showDetect = computed(() => props.showDetect ?? true);
 const modelPlaceholder = computed(() => props.modelPlaceholder ?? "gpt-4o-mini / qwen2.5:7b / deepseek-chat");
+const showReasoningSettings = computed(() => props.showReasoning === true);
 
 const formRef = ref<FormInstance>();
 const localDetectError = ref("");
@@ -268,6 +293,14 @@ function capLabel(key: string | number): string {
   color: var(--ac-color-text-muted);
   margin-top: 4px;
   line-height: 1.4;
+}
+
+.reasoning-settings {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
 }
 
 .model-detect-wrap {

@@ -47,6 +47,8 @@ type ProcessRequest struct {
 	VideoUrl                 string                     `json:"videoUrl,omitempty"`
 	ImageContext             string                     `json:"imageContext,omitempty"`
 	ReplyToMessageID         *string                    `json:"replyToMessageId,omitempty"`
+	ModelConfigID            int                        `json:"modelConfigId,omitempty"`
+	ReasoningEffort          string                     `json:"reasoningEffort,omitempty"`
 	RequestID                string                     `json:"requestId,omitempty"`
 	InteractionID            string                     `json:"-"`
 	ExpectedStatusVersion    int64                      `json:"-"`

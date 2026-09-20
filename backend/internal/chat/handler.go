@@ -4,6 +4,7 @@ package chat
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -328,6 +329,94 @@ func redactModelConfigForResponse(cfg *ModelConfig) {
 	}
 	cfg.HasAPIKey = cfg.APIKey != ""
 	cfg.APIKey = ""
+	applyReasoningCapabilities(cfg)
+}
+
+func applyReasoningCapabilities(cfg *ModelConfig) {
+	if cfg == nil {
+		return
+	}
+	cfg.SupportsReasoning = false
+	cfg.DefaultReasoningEffort = ""
+	cfg.ReasoningLevels = []string{}
+	if strings.TrimSpace(cfg.CapabilitiesJSON) == "" {
+		return
+	}
+	var raw map[string]interface{}
+	if json.Unmarshal([]byte(cfg.CapabilitiesJSON), &raw) != nil {
+		return
+	}
+	if value, ok := raw["supportsReasoning"].(bool); ok {
+		cfg.SupportsReasoning = value
+	}
+	if value, ok := raw["defaultReasoningEffort"].(string); ok {
+		cfg.DefaultReasoningEffort = normalizeReasoningEffort(value)
+	}
+	if values, ok := raw["reasoningLevels"].([]interface{}); ok {
+		for _, item := range values {
+			level := normalizeReasoningEffort(fmt.Sprint(item))
+			if level != "" && !containsString(cfg.ReasoningLevels, level) {
+				cfg.ReasoningLevels = append(cfg.ReasoningLevels, level)
+			}
+		}
+	}
+	if cfg.SupportsReasoning && len(cfg.ReasoningLevels) == 0 {
+		cfg.ReasoningLevels = []string{"low", "medium", "high", "xhigh"}
+	}
+}
+
+func mergeReasoningCapabilities(raw map[string]interface{}, existingJSON string) string {
+	current := map[string]interface{}{}
+	if strings.TrimSpace(existingJSON) != "" {
+		_ = json.Unmarshal([]byte(existingJSON), &current)
+	}
+	if value, ok := raw["supportsReasoning"]; ok {
+		current["supportsReasoning"] = value == true || fmt.Sprint(value) == "1"
+	}
+	if value, ok := raw["defaultReasoningEffort"]; ok {
+		current["defaultReasoningEffort"] = normalizeReasoningEffort(fmt.Sprint(value))
+	}
+	if value, ok := raw["reasoningLevels"]; ok {
+		current["reasoningLevels"] = value
+	}
+	if current["supportsReasoning"] == true {
+		if _, ok := current["reasoningLevels"]; !ok {
+			current["reasoningLevels"] = []string{"low", "medium", "high", "xhigh"}
+		}
+	}
+	data, err := json.Marshal(current)
+	if err != nil {
+		return existingJSON
+	}
+	return string(data)
+}
+
+func normalizeReasoningEffort(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "low", "轻":
+		return "low"
+	case "medium", "中":
+		return "medium"
+	case "high", "高":
+		return "high"
+	case "xhigh", "极高":
+		return "xhigh"
+	default:
+		return ""
+	}
+}
+
+func NormalizeReasoningEffort(value string) string {
+	return normalizeReasoningEffort(value)
+}
+
+func containsString(values []string, target string) bool {
+	for _, value := range values {
+		if value == target {
+			return true
+		}
+	}
+	return false
 }
 
 func (h *Handler) ListModels(c *gin.Context) {
@@ -401,6 +490,7 @@ func (h *Handler) CreateModel(c *gin.Context) {
 	if v, ok := raw["capabilitiesJson"].(string); ok {
 		cfg.CapabilitiesJSON = v
 	}
+	cfg.CapabilitiesJSON = mergeReasoningCapabilities(raw, cfg.CapabilitiesJSON)
 	if v, ok := raw["isActive"]; ok {
 		switch val := v.(type) {
 		case bool:
@@ -437,6 +527,17 @@ func (h *Handler) UpdateModel(c *gin.Context) {
 	if err := c.ShouldBindJSON(&updates); err != nil {
 		util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
 		return
+	}
+	if _, hasSupport := updates["supportsReasoning"]; hasSupport {
+		existing, err := h.service.GetModel(id)
+		if err != nil {
+			util.ErrorResponse(c, response.NotFound, "模型配置不存在", nil)
+			return
+		}
+		updates["capabilitiesJson"] = mergeReasoningCapabilities(updates, existing.CapabilitiesJSON)
+		delete(updates, "supportsReasoning")
+		delete(updates, "defaultReasoningEffort")
+		delete(updates, "reasoningLevels")
 	}
 	result, err := h.service.UpdateModel(id, updates)
 	if err != nil {

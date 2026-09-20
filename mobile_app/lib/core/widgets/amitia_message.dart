@@ -1362,6 +1362,11 @@ class AmitiaChatInput extends StatefulWidget {
   final FutureOr<void> Function()? onCancelVoiceRecording;
   final String? replyPreview;
   final VoidCallback? onCancelReply;
+  final List<Map<String, dynamic>> models;
+  final int selectedModelId;
+  final String reasoningEffort;
+  final bool supportsReasoning;
+  final void Function(int modelId, String reasoningEffort)? onModelChanged;
 
   const AmitiaChatInput({
     super.key,
@@ -1381,6 +1386,11 @@ class AmitiaChatInput extends StatefulWidget {
     this.onCancelVoiceRecording,
     this.replyPreview,
     this.onCancelReply,
+    this.models = const <Map<String, dynamic>>[],
+    this.selectedModelId = 0,
+    this.reasoningEffort = 'medium',
+    this.supportsReasoning = false,
+    this.onModelChanged,
   });
 
   @override
@@ -1400,6 +1410,8 @@ class _AmitiaChatInputState extends State<AmitiaChatInput> {
   Offset? _voiceStart;
   _VoiceGestureIntent _voiceIntent = _VoiceGestureIntent.send;
   final List<String> _selectedSkillNames = <String>[];
+  bool _modelMenuOpen = false;
+  bool _modelListOpen = false;
 
   @override
   void initState() {
@@ -1977,210 +1989,416 @@ class _AmitiaChatInputState extends State<AmitiaChatInput> {
     final recipient = (widget.recipientName ?? '').trim();
     return SafeArea(
       top: false,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(10, 8, 10, 4),
-        child: Container(
-          key: const ValueKey('chat-composer-surface'),
-          constraints: const BoxConstraints(minHeight: 98, maxHeight: 170),
-          decoration: BoxDecoration(
-            color: context.surfacePrimary,
-            borderRadius: BorderRadius.circular(23),
-            border: Border.all(color: context.borderPrimary, width: 0.8),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(
-                  alpha: Theme.of(context).brightness == Brightness.dark
-                      ? 0.16
-                      : 0.045,
-                ),
-                blurRadius: 18,
-                offset: const Offset(0, 6),
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(10, 8, 10, 4),
+            child: Container(
+              key: const ValueKey('chat-composer-surface'),
+              constraints: const BoxConstraints(minHeight: 98, maxHeight: 170),
+              decoration: BoxDecoration(
+                color: context.surfacePrimary,
+                borderRadius: BorderRadius.circular(23),
+                border: Border.all(color: context.borderPrimary, width: 0.8),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(
+                      alpha: Theme.of(context).brightness == Brightness.dark
+                          ? 0.16
+                          : 0.045,
+                    ),
+                    blurRadius: 18,
+                    offset: const Offset(0, 6),
+                  ),
+                ],
               ),
-            ],
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if ((widget.replyPreview ?? '').trim().isNotEmpty)
-                Container(
-                  margin: const EdgeInsets.fromLTRB(12, 10, 12, 2),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 7,
-                  ),
-                  decoration: BoxDecoration(
-                    color: context.surfaceSecondary,
-                    borderRadius: AppRadius.brSmall,
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.format_quote_rounded,
-                        size: 16,
-                        color: context.accentPrimary,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if ((widget.replyPreview ?? '').trim().isNotEmpty)
+                    Container(
+                      margin: const EdgeInsets.fromLTRB(12, 10, 12, 2),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 7,
                       ),
-                      const SizedBox(width: 7),
-                      Expanded(
-                        child: Text(
-                          widget.replyPreview!,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: AppTypography.caption(context),
-                        ),
+                      decoration: BoxDecoration(
+                        color: context.surfaceSecondary,
+                        borderRadius: AppRadius.brSmall,
                       ),
-                      GestureDetector(
-                        onTap: widget.onCancelReply,
-                        child: Icon(
-                          Icons.close,
-                          size: 17,
-                          color: context.textTertiary,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              if (_selectedSkillNames.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-                  child: Wrap(
-                    spacing: 6,
-                    runSpacing: 6,
-                    children: _selectedSkillNames
-                        .map(
-                          (name) => InputChip(
-                            visualDensity: VisualDensity.compact,
-                            avatar: const Icon(
-                              Icons.auto_awesome_outlined,
-                              size: 14,
-                            ),
-                            label: Text('\$$name'),
-                            onDeleted: () => setState(
-                              () => _selectedSkillNames.remove(name),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.format_quote_rounded,
+                            size: 16,
+                            color: context.accentPrimary,
+                          ),
+                          const SizedBox(width: 7),
+                          Expanded(
+                            child: Text(
+                              widget.replyPreview!,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: AppTypography.caption(context),
                             ),
                           ),
-                        )
-                        .toList(),
-                  ),
-                ),
-              if (_voiceMode)
-                SizedBox(
-                  height: _composerInputHeight,
-                  child: _buildHoldToTalkButton(context),
-                )
-              else
-                SizedBox(
-                  height: _composerInputHeight,
-                  child: Align(
-                    alignment: Alignment.center,
-                    child: SizedBox(
-                      width: double.infinity,
-                      child: TapRegion(
-                        onTapOutside: (_) => _inputFocusNode.unfocus(),
-                        child: TextField(
-                          controller: _controller,
-                          focusNode: _inputFocusNode,
-                          minLines: 1,
-                          maxLines: 2,
-                          textAlignVertical: TextAlignVertical.center,
-                          textCapitalization: TextCapitalization.sentences,
-                          onSubmitted: (_) => _send(),
-                          style: AppTypography.bodySmall(
-                            context,
-                          ).copyWith(fontSize: _composerTextSize),
-                          decoration: InputDecoration(
-                            hintText: recipient.isEmpty
-                                ? '发消息…'
-                                : '给 $recipient 发消息…',
-                            hintStyle: AppTypography.bodySmall(context)
-                                .copyWith(
-                                  color: context.textTertiary,
-                                  fontSize: _composerTextSize,
-                                ),
-                            isDense: true,
-                            contentPadding: const EdgeInsets.fromLTRB(
-                              16,
-                              10,
-                              16,
-                              10,
+                          GestureDetector(
+                            onTap: widget.onCancelReply,
+                            child: Icon(
+                              Icons.close,
+                              size: 17,
+                              color: context.textTertiary,
                             ),
-                            border: InputBorder.none,
-                            enabledBorder: InputBorder.none,
-                            focusedBorder: InputBorder.none,
-                            disabledBorder: InputBorder.none,
-                            errorBorder: InputBorder.none,
-                            focusedErrorBorder: InputBorder.none,
-                            fillColor: Colors.transparent,
-                            focusColor: Colors.transparent,
-                            hoverColor: Colors.transparent,
+                          ),
+                        ],
+                      ),
+                    ),
+                  if (_selectedSkillNames.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+                      child: Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: _selectedSkillNames
+                            .map(
+                              (name) => InputChip(
+                                visualDensity: VisualDensity.compact,
+                                avatar: const Icon(
+                                  Icons.auto_awesome_outlined,
+                                  size: 14,
+                                ),
+                                label: Text('\$$name'),
+                                onDeleted: () => setState(
+                                  () => _selectedSkillNames.remove(name),
+                                ),
+                              ),
+                            )
+                            .toList(),
+                      ),
+                    ),
+                  if (_voiceMode)
+                    SizedBox(
+                      height: _composerInputHeight,
+                      child: _buildHoldToTalkButton(context),
+                    )
+                  else
+                    SizedBox(
+                      height: _composerInputHeight,
+                      child: Align(
+                        alignment: Alignment.center,
+                        child: SizedBox(
+                          width: double.infinity,
+                          child: TapRegion(
+                            onTapOutside: (_) => _inputFocusNode.unfocus(),
+                            child: TextField(
+                              controller: _controller,
+                              focusNode: _inputFocusNode,
+                              minLines: 1,
+                              maxLines: 2,
+                              textAlignVertical: TextAlignVertical.center,
+                              textCapitalization: TextCapitalization.sentences,
+                              onSubmitted: (_) => _send(),
+                              style: AppTypography.bodySmall(
+                                context,
+                              ).copyWith(fontSize: _composerTextSize),
+                              decoration: InputDecoration(
+                                hintText: recipient.isEmpty
+                                    ? '发消息…'
+                                    : '给 $recipient 发消息…',
+                                hintStyle: AppTypography.bodySmall(context)
+                                    .copyWith(
+                                      color: context.textTertiary,
+                                      fontSize: _composerTextSize,
+                                    ),
+                                isDense: true,
+                                contentPadding: const EdgeInsets.fromLTRB(
+                                  16,
+                                  10,
+                                  16,
+                                  10,
+                                ),
+                                border: InputBorder.none,
+                                enabledBorder: InputBorder.none,
+                                focusedBorder: InputBorder.none,
+                                disabledBorder: InputBorder.none,
+                                errorBorder: InputBorder.none,
+                                focusedErrorBorder: InputBorder.none,
+                                fillColor: Colors.transparent,
+                                focusColor: Colors.transparent,
+                                hoverColor: Colors.transparent,
+                              ),
+                            ),
                           ),
                         ),
                       ),
                     ),
-                  ),
-                ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(10, 0, 10, 7),
-                child: SizedBox(
-                  height: 38,
-                  child: Row(
-                    children: [
-                      _ComposerRoundButton(
-                        key: const ValueKey('composer-add-button'),
-                        icon: Icons.add_rounded,
-                        tooltip: '添加内容',
-                        onTap: _showComposerTools,
-                      ),
-                      const SizedBox(width: 4),
-                      Expanded(
-                        child: widget.workspaceSelector == null
-                            ? const SizedBox.shrink()
-                            : Align(
-                                alignment: Alignment.centerLeft,
-                                child: widget.workspaceSelector!,
-                              ),
-                      ),
-                      if (!_voiceMode &&
-                          (_hasText || _selectedSkillNames.isNotEmpty))
-                        GestureDetector(
-                          behavior: HitTestBehavior.opaque,
-                          onTap: _send,
-                          child: Tooltip(
-                            message: '发送消息',
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(10, 0, 10, 7),
+                    child: SizedBox(
+                      height: 38,
+                      child: Row(
+                        children: [
+                          _ComposerRoundButton(
+                            key: const ValueKey('composer-add-button'),
+                            icon: Icons.add_rounded,
+                            tooltip: '添加内容',
+                            onTap: _showComposerTools,
+                          ),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: widget.workspaceSelector == null
+                                ? const SizedBox.shrink()
+                                : Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: widget.workspaceSelector!,
+                                  ),
+                          ),
+                          GestureDetector(
+                            onTap: () => setState(() {
+                              _modelMenuOpen = !_modelMenuOpen;
+                              _modelListOpen = false;
+                            }),
                             child: Container(
-                              key: const ValueKey('composer-send-button'),
-                              width: 31,
-                              height: 31,
+                              constraints: const BoxConstraints(maxWidth: 150),
+                              height: 28,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 9,
+                              ),
                               decoration: BoxDecoration(
-                                color: context.accentPrimary,
-                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: context.borderPrimary,
+                                ),
+                                borderRadius: BorderRadius.circular(8),
                               ),
                               alignment: Alignment.center,
-                              child: Icon(
-                                Icons.arrow_upward_rounded,
-                                size: 18,
-                                color: context.surfacePrimary,
+                              child: Text(
+                                '${_selectedModelLabel()} · ${_reasoningLabel()}',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: AppTypography.label(context).copyWith(
+                                  fontSize: 10.5,
+                                  color: context.textSecondary,
+                                ),
                               ),
                             ),
                           ),
-                        )
-                      else
-                        _ComposerRoundButton(
-                          key: const ValueKey('composer-trailing-button'),
-                          icon: _voiceMode
-                              ? Icons.keyboard_outlined
-                              : Icons.mic_none_outlined,
-                          tooltip: _voiceMode ? '切换到键盘输入' : '按住说话',
-                          onTap: _toggleVoiceMode,
-                        ),
-                    ],
+                          const SizedBox(width: 4),
+                          if (!_voiceMode &&
+                              (_hasText || _selectedSkillNames.isNotEmpty))
+                            GestureDetector(
+                              behavior: HitTestBehavior.opaque,
+                              onTap: _send,
+                              child: Tooltip(
+                                message: '发送消息',
+                                child: Container(
+                                  key: const ValueKey('composer-send-button'),
+                                  width: 31,
+                                  height: 31,
+                                  decoration: BoxDecoration(
+                                    color: context.accentPrimary,
+                                    shape: BoxShape.circle,
+                                  ),
+                                  alignment: Alignment.center,
+                                  child: Icon(
+                                    Icons.arrow_upward_rounded,
+                                    size: 18,
+                                    color: context.surfacePrimary,
+                                  ),
+                                ),
+                              ),
+                            )
+                          else
+                            _ComposerRoundButton(
+                              key: const ValueKey('composer-trailing-button'),
+                              icon: _voiceMode
+                                  ? Icons.keyboard_outlined
+                                  : Icons.mic_none_outlined,
+                              tooltip: _voiceMode ? '切换到键盘输入' : '按住说话',
+                              onTap: _toggleVoiceMode,
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          if (_modelMenuOpen)
+            Positioned(right: 12, bottom: 104, child: _buildModelMenu(context)),
+        ],
+      ),
+    );
+  }
+
+  List<Map<String, dynamic>> get _llmModels => widget.models
+      .where((model) {
+        final type = (model['apiType'] ?? model['provider'] ?? '')
+            .toString()
+            .toLowerCase();
+        return !const <String>{
+          'voice',
+          'asr',
+          'embedding',
+          'vector',
+          'vision',
+          'imagegen',
+        }.contains(type);
+      })
+      .toList(growable: false);
+
+  String _selectedModelLabel() {
+    final selected = _llmModels
+        .where((model) => _intValue(model['id']) == widget.selectedModelId)
+        .firstOrNull;
+    return (selected?['name'] ?? selected?['modelName'] ?? '选择模型').toString();
+  }
+
+  String _reasoningLabel() {
+    return switch (widget.reasoningEffort) {
+      'low' => '轻',
+      'high' => '高',
+      'xhigh' => '极高',
+      _ => '中',
+    };
+  }
+
+  int _intValue(dynamic value) {
+    if (value is num) return value.toInt();
+    return int.tryParse(value?.toString() ?? '') ?? 0;
+  }
+
+  Widget _buildModelMenu(BuildContext context) {
+    return Material(
+      elevation: 12,
+      color: context.surfacePrimary,
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        width: 250,
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          border: Border.all(color: context.borderPrimary),
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: _modelListOpen
+            ? _buildModelList(context)
+            : _buildModelEffortPanel(context),
+      ),
+    );
+  }
+
+  Widget _buildModelEffortPanel(BuildContext context) {
+    final index = switch (widget.reasoningEffort) {
+      'low' => 0,
+      'high' => 2,
+      'xhigh' => 3,
+      _ => 1,
+    };
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          children: [
+            const Expanded(child: Text('强度')),
+            Text(_reasoningLabel(), style: AppTypography.cardTitle(context)),
+          ],
+        ),
+        InkWell(
+          onTap: () => setState(() => _modelListOpen = true),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            child: Row(
+              children: [
+                const Text('模型'),
+                const Spacer(),
+                Flexible(
+                  child: Text(
+                    _selectedModelLabel(),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
-              ),
+                const Icon(Icons.chevron_right_rounded, size: 18),
+              ],
+            ),
+          ),
+        ),
+        Slider(
+          value: index.toDouble(),
+          min: 0,
+          max: 3,
+          divisions: 3,
+          onChanged: widget.supportsReasoning
+              ? (value) => _applyReasoningIndex(value.round())
+              : null,
+        ),
+        const Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [Text('轻'), Text('中'), Text('高'), Text('极高')],
+        ),
+        if (!widget.supportsReasoning)
+          const Padding(
+            padding: EdgeInsets.only(top: 6),
+            child: Text('该模型不支持思考强度'),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildModelList(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          children: [
+            IconButton(
+              onPressed: () => setState(() => _modelListOpen = false),
+              icon: const Icon(Icons.arrow_back_rounded),
+            ),
+            const Text('选择模型'),
+          ],
+        ),
+        Flexible(
+          child: ListView(
+            shrinkWrap: true,
+            children: [
+              for (final model in _llmModels)
+                ListTile(
+                  dense: true,
+                  selected: _intValue(model['id']) == widget.selectedModelId,
+                  title: Text(
+                    (model['name'] ?? model['modelName'] ?? '').toString(),
+                  ),
+                  subtitle: Text(
+                    '${model['modelName'] ?? ''} · ${model['apiType'] ?? ''}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  trailing: _intValue(model['id']) == widget.selectedModelId
+                      ? const Icon(Icons.check_rounded)
+                      : null,
+                  onTap: () {
+                    widget.onModelChanged?.call(
+                      _intValue(model['id']),
+                      (model['defaultReasoningEffort'] ?? 'medium').toString(),
+                    );
+                    setState(() => _modelListOpen = false);
+                  },
+                ),
             ],
           ),
         ),
-      ),
+      ],
+    );
+  }
+
+  void _applyReasoningIndex(int index) {
+    const efforts = <String>['low', 'medium', 'high', 'xhigh'];
+    widget.onModelChanged?.call(
+      widget.selectedModelId,
+      efforts[index.clamp(0, efforts.length - 1)],
     );
   }
 

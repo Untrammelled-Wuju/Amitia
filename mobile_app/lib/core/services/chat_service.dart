@@ -147,6 +147,27 @@ class ChatService {
     return ConversationDto.fromJson(resp);
   }
 
+  Future<ConversationDto?> getConversation(String conversationId) async {
+    final resp = await _api.get<Map<String, dynamic>>(
+      '/api/web-chat/conversations/$conversationId',
+    );
+    return resp == null ? null : ConversationDto.fromJson(resp);
+  }
+
+  Future<void> updateConversationModelSettings(
+    String conversationId, {
+    required int modelConfigId,
+    required String reasoningEffort,
+  }) async {
+    await _api.put<Map<String, dynamic>>(
+      '/api/web-chat/conversations/$conversationId',
+      data: <String, dynamic>{
+        'modelConfigId': modelConfigId,
+        'reasoningEffort': reasoningEffort,
+      },
+    );
+  }
+
   Future<ConversationSidebarDto> conversationSidebar() async {
     final resp = await _api.get<Map<String, dynamic>>(
       '/api/web-chat/sidebar',
@@ -432,6 +453,8 @@ class ChatService {
     double audioDuration = 0,
     String? videoUrl,
     String? replyToMessageId,
+    int? modelConfigId,
+    String? reasoningEffort,
     ConversationWorkspaceDto? workspace,
     required ChatStreamCancellation cancellation,
   }) async* {
@@ -457,6 +480,10 @@ class ChatService {
         if (videoUrl != null && videoUrl.isNotEmpty) 'videoUrl': videoUrl,
         if (replyToMessageId != null && replyToMessageId.isNotEmpty)
           'replyToMessageId': replyToMessageId,
+        if (modelConfigId != null && modelConfigId > 0)
+          'modelConfigId': modelConfigId,
+        if (reasoningEffort != null && reasoningEffort.isNotEmpty)
+          'reasoningEffort': reasoningEffort,
         if (workspace != null) ...<String, dynamic>{
           if (workspace.projectId.isNotEmpty) 'projectId': workspace.projectId,
           'workspaceId': workspace.workspaceId,

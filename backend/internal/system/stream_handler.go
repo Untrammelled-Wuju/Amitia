@@ -260,6 +260,8 @@ func (h *Handler) WebChatSendStream(c *gin.Context) {
 		VideoUrl:         body.VideoUrl,
 		ImageContext:     imageCtx,
 		ReplyToMessageID: body.ReplyToMessageID,
+		ModelConfigID:    body.ModelConfigID,
+		ReasoningEffort:  body.ReasoningEffort,
 	}, workspaceBinding)
 	if errors.Is(err, interaction.ErrOrchestratorProcessing) {
 		util.ErrorResponse(c, response.InternalError, "请求处理中", nil)

@@ -50,6 +50,11 @@ func (a *OpenAIResponsesAdapter) Generate(ctx context.Context, cfg ProviderConfi
 	if cfg.TopP > 0 && cfg.TopP < 1 {
 		requestBody["top_p"] = cfg.TopP
 	}
+	if req.ReasoningEffort != "" && !req.DisableThinking {
+		requestBody["reasoning"] = map[string]interface{}{
+			"effort": req.ReasoningEffort,
+		}
+	}
 
 	if req.ResponseFormat.Type != "" {
 		requestBody["text"] = map[string]interface{}{
@@ -106,6 +111,11 @@ func (a *OpenAIResponsesAdapter) Stream(ctx context.Context, cfg ProviderConfig,
 
 	if cfg.TopP > 0 && cfg.TopP < 1 {
 		requestBody["top_p"] = cfg.TopP
+	}
+	if req.ReasoningEffort != "" && !req.DisableThinking {
+		requestBody["reasoning"] = map[string]interface{}{
+			"effort": req.ReasoningEffort,
+		}
 	}
 
 	jsonBody, _ := json.Marshal(requestBody)

@@ -10,6 +10,8 @@ class ModelConfigDto {
   final int timeoutSeconds;
   final int retryCount;
   final bool hasApiKey;
+  final bool supportsReasoning;
+  final String defaultReasoningEffort;
 
   ModelConfigDto({
     required this.id,
@@ -23,6 +25,8 @@ class ModelConfigDto {
     this.timeoutSeconds = 60,
     this.retryCount = 1,
     this.hasApiKey = false,
+    this.supportsReasoning = false,
+    this.defaultReasoningEffort = 'medium',
   });
 
   factory ModelConfigDto.fromJson(Map<String, dynamic> json) {
@@ -38,6 +42,9 @@ class ModelConfigDto {
       timeoutSeconds: (json['timeoutSeconds'] as num?)?.toInt() ?? 60,
       retryCount: (json['retryCount'] as num?)?.toInt() ?? 1,
       hasApiKey: json['hasApiKey'] == true,
+      supportsReasoning: json['supportsReasoning'] == true,
+      defaultReasoningEffort: (json['defaultReasoningEffort'] ?? 'medium')
+          .toString(),
     );
   }
 
@@ -54,6 +61,8 @@ class ModelConfigDto {
       'timeoutSeconds': timeoutSeconds,
       'retryCount': retryCount,
       'hasApiKey': hasApiKey,
+      'supportsReasoning': supportsReasoning,
+      'defaultReasoningEffort': defaultReasoningEffort,
     };
   }
 }
