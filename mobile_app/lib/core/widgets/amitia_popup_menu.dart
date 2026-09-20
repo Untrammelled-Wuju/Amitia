@@ -210,6 +210,37 @@ Future<T?> showAmitiaPopupMenu<T>({
   double margin = 8,
   bool useRootNavigator = true,
 }) {
+  return showAmitiaPopupSurface<T>(
+    context: context,
+    anchorRect: anchorRect,
+    menuWidth: menuWidth,
+    gap: gap,
+    margin: margin,
+    useRootNavigator: useRootNavigator,
+    estimatedHeight: _estimateMenuHeight(items),
+    builder: (context) => _AmitiaPopupMenuPanel<T>(
+      items: items,
+      initialValue: initialValue,
+      itemVerticalPadding: itemVerticalPadding,
+      itemFontSize: itemFontSize,
+      itemIconSize: itemIconSize,
+      itemHorizontalPadding: itemHorizontalPadding,
+      itemHorizontalMargin: itemHorizontalMargin,
+      itemMinHeight: itemMinHeight,
+    ),
+  );
+}
+
+Future<T?> showAmitiaPopupSurface<T>({
+  required BuildContext context,
+  required Rect anchorRect,
+  required WidgetBuilder builder,
+  double menuWidth = 200,
+  double gap = 6,
+  double margin = 8,
+  double estimatedHeight = 240,
+  bool useRootNavigator = true,
+}) {
   final overlayState = Overlay.of(context, rootOverlay: useRootNavigator);
   final overlayBox = overlayState.context.findRenderObject();
   final overlaySize = overlayBox is RenderBox
@@ -220,11 +251,10 @@ Future<T?> showAmitiaPopupMenu<T>({
       : Offset.zero;
   final localAnchorRect = anchorRect.shift(-overlayOrigin);
   final overlayRect = Offset.zero & overlaySize;
-  final estimatedMenuHeight = _estimateMenuHeight(items);
   final placement = AmitiaPopupMenuPlacement.resolve(
     anchorRect: localAnchorRect,
     overlayRect: overlayRect,
-    estimatedMenuHeight: estimatedMenuHeight,
+    estimatedMenuHeight: estimatedHeight,
     gap: gap,
     margin: margin,
   );
@@ -247,16 +277,7 @@ Future<T?> showAmitiaPopupMenu<T>({
       gap: gap,
       margin: margin,
       menuWidth: resolvedWidth.toDouble(),
-      child: _AmitiaPopupMenuPanel<T>(
-        items: items,
-        initialValue: initialValue,
-        itemVerticalPadding: itemVerticalPadding,
-        itemFontSize: itemFontSize,
-        itemIconSize: itemIconSize,
-        itemHorizontalPadding: itemHorizontalPadding,
-        itemHorizontalMargin: itemHorizontalMargin,
-        itemMinHeight: itemMinHeight,
-      ),
+      child: builder(context),
     ),
     transitionBuilder: (context, animation, _, child) {
       final curved = CurvedAnimation(

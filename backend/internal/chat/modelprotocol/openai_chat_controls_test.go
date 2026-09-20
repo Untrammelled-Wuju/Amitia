@@ -36,12 +36,14 @@ func TestApplyOpenAIChatControlsDoesNotSendDeepSeekThinkingToOtherProviders(t *t
 }
 
 func TestApplyOpenAIChatControlsSendsReasoningEffort(t *testing.T) {
-	requestBody := map[string]interface{}{}
-	applyOpenAIChatControls(requestBody, ProviderConfig{
-		BaseURL: "https://api.openai.com/v1",
-	}, ModelRequest{ReasoningEffort: "high"})
+	for _, effort := range []string{"low", "medium", "high", "xhigh"} {
+		requestBody := map[string]interface{}{}
+		applyOpenAIChatControls(requestBody, ProviderConfig{
+			BaseURL: "https://api.openai.com/v1",
+		}, ModelRequest{ReasoningEffort: effort})
 
-	if requestBody["reasoning_effort"] != "high" {
-		t.Fatalf("unexpected reasoning effort: %#v", requestBody["reasoning_effort"])
+		if requestBody["reasoning_effort"] != effort {
+			t.Fatalf("effort %q: unexpected request value %#v", effort, requestBody["reasoning_effort"])
+		}
 	}
 }

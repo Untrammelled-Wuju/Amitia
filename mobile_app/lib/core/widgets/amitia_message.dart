@@ -1432,12 +1432,8 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
   final List<String> _selectedSkillNames = <String>[];
   bool _modelMenuOpen = false;
   bool _modelMenuTriggerHovered = false;
-  final LayerLink _modelMenuLink = LayerLink();
-  final OverlayPortalController _modelMenuController =
-      OverlayPortalController();
   _ComposerModelMenuPage _modelMenuPage = _ComposerModelMenuPage.effort;
-  _ComposerModelMenuPage? _pendingModelMenuPage;
-  late final AnimationController _modelMenuFadeController;
+  StateSetter? _modelMenuStateSetter;
   double _draftReasoningValue = 1;
   bool _reasoningDragging = false;
 
@@ -1450,11 +1446,6 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
     _draftReasoningValue = _reasoningIndexFor(
       widget.reasoningEffort,
     ).toDouble();
-    _modelMenuFadeController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 220),
-      value: 1,
-    )..addListener(_handleModelMenuFade);
     _controller.addListener(_syncControllerText);
   }
 
@@ -1480,34 +1471,6 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
     final hasText = _controller.text.trim().isNotEmpty;
     if (hasText == _hasText || !mounted) return;
     setState(() => _hasText = hasText);
-  }
-
-  double get _modelMenuOpacity {
-    if (!_modelMenuFadeController.isAnimating) return 1;
-    final value = _modelMenuFadeController.value;
-    if (value <= 0.42) {
-      return (1 - value / 0.42).clamp(0, 1).toDouble();
-    }
-    return ((value - 0.42) / 0.58).clamp(0, 1).toDouble();
-  }
-
-  void _handleModelMenuFade() {
-    if (!mounted) return;
-    if (_modelMenuFadeController.value >= 0.42 &&
-        _pendingModelMenuPage != null) {
-      setState(() {
-        _modelMenuPage = _pendingModelMenuPage!;
-        _pendingModelMenuPage = null;
-      });
-    }
-  }
-
-  void _switchModelMenuPage(_ComposerModelMenuPage page) {
-    if (page == _modelMenuPage && _pendingModelMenuPage == null) return;
-    _pendingModelMenuPage = page;
-    if (!_modelMenuFadeController.isAnimating) {
-      _modelMenuFadeController.forward(from: 0);
-    }
   }
 
   void _toggleVoiceMode() {
@@ -1583,9 +1546,6 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
 
   @override
   void dispose() {
-    _modelMenuFadeController
-      ..removeListener(_handleModelMenuFade)
-      ..dispose();
     _controller.removeListener(_syncControllerText);
     _inputFocusNode.dispose();
     if (_ownsController) _controller.dispose();
@@ -2325,68 +2285,49 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
                             ),
                           ] else
                             const Spacer(),
-                          CompositedTransformTarget(
-                            link: _modelMenuLink,
-                            child: OverlayPortal(
-                              controller: _modelMenuController,
-                              overlayChildBuilder: (overlayContext) =>
-                                  Positioned(
-                                    top: 0,
-                                    left: 0,
-                                    child: CompositedTransformFollower(
-                                      link: _modelMenuLink,
-                                      showWhenUnlinked: false,
-                                      targetAnchor: Alignment.topRight,
-                                      followerAnchor: Alignment.bottomRight,
-                                      offset: const Offset(0, -8),
-                                      child: _buildModelMenu(overlayContext),
-                                    ),
+                          Builder(
+                            builder: (anchorContext) => MouseRegion(
+                              onEnter: (_) => setState(
+                                () => _modelMenuTriggerHovered = true,
+                              ),
+                              onExit: (_) => setState(
+                                () => _modelMenuTriggerHovered = false,
+                              ),
+                              child: GestureDetector(
+                                onTap: () => _showModelMenu(anchorContext),
+                                child: AnimatedContainer(
+                                  key: const ValueKey('composer-model-trigger'),
+                                  duration: const Duration(milliseconds: 160),
+                                  curve: Curves.easeOut,
+                                  constraints: const BoxConstraints(
+                                    minWidth: 44,
+                                    maxWidth: 64,
                                   ),
-                              child: MouseRegion(
-                                onEnter: (_) => setState(
-                                  () => _modelMenuTriggerHovered = true,
-                                ),
-                                onExit: (_) => setState(
-                                  () => _modelMenuTriggerHovered = false,
-                                ),
-                                child: GestureDetector(
-                                  onTap: _toggleModelMenu,
-                                  child: AnimatedContainer(
+                                  height: 31,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 9,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    border: Border.all(
+                                      color: _modelMenuTriggerHovered
+                                          ? context.borderPrimary
+                                          : Colors.transparent,
+                                    ),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  alignment: Alignment.center,
+                                  child: Text(
+                                    _reasoningLabel(),
                                     key: const ValueKey(
-                                      'composer-model-trigger',
+                                      'composer-reasoning-label',
                                     ),
-                                    duration: const Duration(milliseconds: 160),
-                                    curve: Curves.easeOut,
-                                    constraints: const BoxConstraints(
-                                      minWidth: 44,
-                                      maxWidth: 64,
-                                    ),
-                                    height: 31,
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 9,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      border: Border.all(
-                                        color: _modelMenuTriggerHovered
-                                            ? context.borderPrimary
-                                            : Colors.transparent,
-                                      ),
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    alignment: Alignment.center,
-                                    child: Text(
-                                      _reasoningLabel(),
-                                      key: const ValueKey(
-                                        'composer-reasoning-label',
-                                      ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: AppTypography.label(context)
-                                          .copyWith(
-                                            fontSize: 14,
-                                            color: context.textSecondary,
-                                          ),
-                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: AppTypography.label(context)
+                                        .copyWith(
+                                          fontSize: 14,
+                                          color: context.textSecondary,
+                                        ),
                                   ),
                                 ),
                               ),
@@ -2439,21 +2380,39 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
     );
   }
 
-  void _toggleModelMenu() {
-    final next = !_modelMenuOpen;
+  Future<void> _showModelMenu(BuildContext anchorContext) async {
+    if (_modelMenuOpen) return;
+    final anchorBox = anchorContext.findRenderObject();
+    if (anchorBox is! RenderBox || !anchorBox.hasSize) return;
+    final topLeft = anchorBox.localToGlobal(Offset.zero);
+    final bottomRight = anchorBox.localToGlobal(
+      anchorBox.size.bottomRight(Offset.zero),
+    );
     setState(() {
-      _modelMenuOpen = next;
-      if (!next) {
-        _pendingModelMenuPage = null;
-        _modelMenuFadeController.value = 1;
-        _modelMenuPage = _ComposerModelMenuPage.effort;
-      }
+      _modelMenuOpen = true;
+      _modelMenuPage = _ComposerModelMenuPage.effort;
+      _draftReasoningValue = _reasoningIndexFor(
+        widget.reasoningEffort,
+      ).toDouble();
     });
-    if (next) {
-      _modelMenuController.show();
-    } else {
-      _modelMenuController.hide();
-    }
+    await showAmitiaPopupSurface<void>(
+      context: context,
+      anchorRect: Rect.fromPoints(topLeft, bottomRight),
+      menuWidth: 260,
+      estimatedHeight: 380,
+      builder: (popupContext) => StatefulBuilder(
+        builder: (context, setPopupState) {
+          _modelMenuStateSetter = setPopupState;
+          return _buildModelMenuSurface(context);
+        },
+      ),
+    );
+    _modelMenuStateSetter = null;
+    if (!mounted) return;
+    setState(() {
+      _modelMenuOpen = false;
+      _modelMenuPage = _ComposerModelMenuPage.effort;
+    });
   }
 
   List<Map<String, dynamic>> get _llmModels => widget.models
@@ -2515,35 +2474,36 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
     return int.tryParse(value?.toString() ?? '') ?? 0;
   }
 
-  Widget _buildModelMenu(BuildContext context) {
+  Widget _buildModelMenuSurface(BuildContext context) {
     return AnimatedSize(
       duration: const Duration(milliseconds: 220),
       reverseDuration: const Duration(milliseconds: 150),
       curve: Curves.easeOutQuint,
-      alignment: Alignment.topCenter,
+      alignment: Alignment.bottomCenter,
       clipBehavior: Clip.hardEdge,
-      child: AnimatedBuilder(
-        animation: _modelMenuFadeController,
-        builder: (context, child) => IgnorePointer(
-          ignoring: _modelMenuFadeController.isAnimating,
-          child: Opacity(opacity: _modelMenuOpacity, child: child),
+      child: AmitiaPopupSurface(
+        width: 260,
+        maxHeight: MediaQuery.sizeOf(context).height * 0.72,
+        padding: const EdgeInsets.all(12),
+        child: AnimatedSwitcher(
+          duration: const Duration(milliseconds: 220),
+          reverseDuration: const Duration(milliseconds: 150),
+          switchInCurve: Curves.easeOutCubic,
+          switchOutCurve: Curves.easeInCubic,
+          transitionBuilder: (child, animation) =>
+              FadeTransition(opacity: animation, child: child),
+          child: KeyedSubtree(
+            key: ValueKey(_modelMenuPage),
+            child: switch (_modelMenuPage) {
+              _ComposerModelMenuPage.models => _buildModelList(context),
+              _ComposerModelMenuPage.reasoning => _buildReasoningModeList(
+                context,
+              ),
+              _ComposerModelMenuPage.effort => _buildModelEffortPanel(context),
+            },
+          ),
         ),
-        child: _buildModelMenuSurface(context),
       ),
-    );
-  }
-
-  Widget _buildModelMenuSurface(BuildContext context) {
-    return AmitiaPopupSurface(
-      key: ValueKey(_modelMenuPage),
-      width: 260,
-      maxHeight: MediaQuery.sizeOf(context).height * 0.72,
-      padding: const EdgeInsets.all(12),
-      child: switch (_modelMenuPage) {
-        _ComposerModelMenuPage.models => _buildModelList(context),
-        _ComposerModelMenuPage.reasoning => _buildReasoningModeList(context),
-        _ComposerModelMenuPage.effort => _buildModelEffortPanel(context),
-      },
     );
   }
 
@@ -2677,46 +2637,11 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
   }
 
   Widget _buildReasoningSlider(BuildContext context) {
-    final enabled = widget.reasoningEnabled;
-    return SliderTheme(
-      data: SliderTheme.of(context).copyWith(
-        trackHeight: 30,
-        trackShape: const _ReasoningSliderTrackShape(),
-        tickMarkShape: SliderTickMarkShape.noTickMark,
-        thumbShape: const RoundSliderThumbShape(
-          enabledThumbRadius: 16,
-          elevation: 2,
-          pressedElevation: 3,
-        ),
-        overlayShape: const RoundSliderOverlayShape(overlayRadius: 20),
-        activeTrackColor: context.accentPrimary,
-        inactiveTrackColor: context.borderPrimary.withValues(
-          alpha: context.isDark ? 0.58 : 0.82,
-        ),
-        disabledActiveTrackColor: context.accentPrimary.withValues(alpha: 0.3),
-        disabledInactiveTrackColor: context.borderPrimary.withValues(
-          alpha: 0.4,
-        ),
-        thumbColor: context.surfacePrimary,
-        disabledThumbColor: context.surfacePrimary.withValues(alpha: 0.78),
-        overlayColor: context.accentPrimary.withValues(alpha: 0.12),
-        activeTickMarkColor: context.surfacePrimary.withValues(alpha: 0.78),
-        inactiveTickMarkColor: context.textTertiary.withValues(alpha: 0.55),
-        disabledActiveTickMarkColor: context.surfacePrimary.withValues(
-          alpha: 0.5,
-        ),
-        disabledInactiveTickMarkColor: context.textTertiary.withValues(
-          alpha: 0.3,
-        ),
-      ),
-      child: Slider(
-        value: _draftReasoningValue,
-        min: 0,
-        max: 3,
-        divisions: 3,
-        onChanged: enabled ? _previewReasoningIndex : null,
-        onChangeEnd: enabled ? _applyReasoningIndex : null,
-      ),
+    return _ComposerReasoningSlider(
+      value: _draftReasoningValue,
+      enabled: widget.reasoningEnabled,
+      onChanged: _previewReasoningIndex,
+      onChangeEnd: _applyReasoningIndex,
     );
   }
 
@@ -2898,11 +2823,13 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
   }
 
   void _openModelMenuPage(_ComposerModelMenuPage page) {
-    _switchModelMenuPage(page);
+    if (page == _modelMenuPage) return;
+    setState(() => _modelMenuPage = page);
+    _modelMenuStateSetter?.call(() {});
   }
 
   void _backToModelEffort() {
-    _switchModelMenuPage(_ComposerModelMenuPage.effort);
+    _openModelMenuPage(_ComposerModelMenuPage.effort);
   }
 
   void _applyReasoningIndex(double value) {
@@ -2910,6 +2837,7 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
     const efforts = <String>['low', 'medium', 'high', 'xhigh'];
     final clamped = value.round().clamp(0, efforts.length - 1);
     setState(() => _draftReasoningValue = clamped.toDouble());
+    _modelMenuStateSetter?.call(() {});
     widget.onModelChanged?.call(
       widget.selectedModelId,
       efforts[clamped],
@@ -2924,6 +2852,7 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
       _draftReasoningValue = clamped;
       _reasoningDragging = true;
     });
+    _modelMenuStateSetter?.call(() {});
     widget.onModelPreviewChanged?.call(
       widget.selectedModelId,
       efforts[clamped.round()],
@@ -2993,137 +2922,183 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
   }
 }
 
-class _ReasoningSliderTrackShape extends SliderTrackShape
-    with BaseSliderTrackShape {
-  const _ReasoningSliderTrackShape();
+class _ComposerReasoningSlider extends StatefulWidget {
+  const _ComposerReasoningSlider({
+    required this.value,
+    required this.enabled,
+    required this.onChanged,
+    required this.onChangeEnd,
+  });
+
+  final double value;
+  final bool enabled;
+  final ValueChanged<double> onChanged;
+  final ValueChanged<double> onChangeEnd;
 
   @override
-  Rect getPreferredRect({
-    required RenderBox parentBox,
-    Offset offset = Offset.zero,
-    required SliderThemeData sliderTheme,
-    bool isEnabled = false,
-    bool isDiscrete = false,
-  }) {
-    final thumbWidth = sliderTheme.thumbShape!
-        .getPreferredSize(isEnabled, isDiscrete)
-        .width;
-    final overlayWidth = sliderTheme.overlayShape!
-        .getPreferredSize(isEnabled, isDiscrete)
-        .width;
-    final trackHeight = sliderTheme.trackHeight ?? 0;
-    final minimumInset = math.max(overlayWidth / 2, thumbWidth / 2 + 4);
-    final horizontalInset = math.max(32.0, minimumInset);
-    final trackLeft = offset.dx + horizontalInset;
-    final trackTop = offset.dy + (parentBox.size.height - trackHeight) / 2;
-    final trackWidth = math.max(
-      0.0,
-      parentBox.size.width - horizontalInset * 2,
-    );
-    return Rect.fromLTWH(trackLeft, trackTop, trackWidth, trackHeight);
+  State<_ComposerReasoningSlider> createState() =>
+      _ComposerReasoningSliderState();
+}
+
+class _ComposerReasoningSliderState extends State<_ComposerReasoningSlider> {
+  int? _dragIndex;
+
+  int _indexAt(double x, double width) {
+    final span = math.max(1.0, width - 64);
+    final ratio = ((x - 32) / span).clamp(0.0, 1.0);
+    return (ratio * 3).round();
+  }
+
+  void _previewAt(double x, double width) {
+    if (!widget.enabled) return;
+    final index = _indexAt(x, width);
+    _dragIndex = index;
+    widget.onChanged(index.toDouble());
   }
 
   @override
-  void paint(
-    PaintingContext context,
-    Offset offset, {
-    required RenderBox parentBox,
-    required SliderThemeData sliderTheme,
-    required Animation<double> enableAnimation,
-    required Offset thumbCenter,
-    Offset? secondaryOffset,
-    bool isEnabled = false,
-    bool isDiscrete = false,
-    required TextDirection textDirection,
-  }) {
-    final trackHeight = sliderTheme.trackHeight ?? 0;
-    if (trackHeight <= 0) return;
-    final trackRect = getPreferredRect(
-      parentBox: parentBox,
-      offset: offset,
-      sliderTheme: sliderTheme,
-      isEnabled: isEnabled,
-      isDiscrete: isDiscrete,
-    );
-    final activePaint = Paint()
-      ..color = ColorTween(
-        begin: sliderTheme.disabledActiveTrackColor,
-        end: sliderTheme.activeTrackColor,
-      ).evaluate(enableAnimation)!;
-    final inactivePaint = Paint()
-      ..color = ColorTween(
-        begin: sliderTheme.disabledInactiveTrackColor,
-        end: sliderTheme.inactiveTrackColor,
-      ).evaluate(enableAnimation)!;
-    final radius = Radius.circular(trackRect.height / 2);
-    final thumbRadius =
-        sliderTheme.thumbShape!.getPreferredSize(isEnabled, isDiscrete).width /
-        2;
-    final visualTrackLeft = math.max(offset.dx, trackRect.left - thumbRadius);
-    final visualTrackRight = math.min(
-      offset.dx + parentBox.size.width,
-      trackRect.right + thumbRadius,
-    );
-    final visualTrackRect = Rect.fromLTRB(
-      visualTrackLeft,
-      trackRect.top,
-      visualTrackRight,
-      trackRect.bottom,
-    );
-    context.canvas.drawRRect(
-      RRect.fromRectAndRadius(visualTrackRect, radius),
-      inactivePaint,
-    );
-    final clampedThumbX = thumbCenter.dx
-        .clamp(trackRect.left, trackRect.right)
-        .toDouble();
-    final activeLeft = textDirection == TextDirection.ltr
-        ? visualTrackRect.left
-        : clampedThumbX;
-    final activeRight = textDirection == TextDirection.ltr
-        ? clampedThumbX
-        : visualTrackRect.right;
-    final showActive = textDirection == TextDirection.ltr
-        ? clampedThumbX > trackRect.left + 0.5
-        : clampedThumbX < trackRect.right - 0.5;
-    if (showActive && activeRight > activeLeft) {
-      context.canvas.drawRRect(
-        RRect.fromRectAndRadius(
-          Rect.fromLTRB(
-            activeLeft,
-            visualTrackRect.top,
-            activeRight,
-            visualTrackRect.bottom,
+  Widget build(BuildContext context) {
+    final index = widget.value.round().clamp(0, 3);
+    final labels = const <String>['低', '中', '高', '极高'];
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.maxWidth;
+        final span = math.max(0.0, width - 64);
+        final trackWidth = math.max(0.0, width - 32);
+        final activeWidth = math.max(0.0, 16 + (trackWidth - 32) * index / 3);
+        final thumbCenter = 32 + span * index / 3;
+        final opacity = widget.enabled ? 1.0 : 0.45;
+        return Semantics(
+          slider: true,
+          enabled: widget.enabled,
+          value: labels[index],
+          increasedValue: labels[math.min(index + 1, 3)],
+          decreasedValue: labels[math.max(index - 1, 0)],
+          onIncrease: widget.enabled && index < 3
+              ? () => widget.onChangeEnd((index + 1).toDouble())
+              : null,
+          onDecrease: widget.enabled && index > 0
+              ? () => widget.onChangeEnd((index - 1).toDouble())
+              : null,
+          child: GestureDetector(
+            key: const ValueKey('composer-reasoning-slider'),
+            behavior: HitTestBehavior.opaque,
+            onTapDown: widget.enabled
+                ? (details) {
+                    final next = _indexAt(details.localPosition.dx, width);
+                    widget.onChangeEnd(next.toDouble());
+                  }
+                : null,
+            onHorizontalDragStart: widget.enabled
+                ? (details) => _previewAt(details.localPosition.dx, width)
+                : null,
+            onHorizontalDragUpdate: widget.enabled
+                ? (details) => _previewAt(details.localPosition.dx, width)
+                : null,
+            onHorizontalDragEnd: widget.enabled
+                ? (_) {
+                    final next = _dragIndex ?? index;
+                    _dragIndex = null;
+                    widget.onChangeEnd(next.toDouble());
+                  }
+                : null,
+            child: Opacity(
+              opacity: opacity,
+              child: SizedBox(
+                height: 48,
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    Positioned(
+                      left: 16,
+                      top: 9,
+                      width: trackWidth,
+                      height: 30,
+                      child: DecoratedBox(
+                        key: const ValueKey('composer-reasoning-track-base'),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(999),
+                          border: Border.all(color: context.borderPrimary),
+                          color: context.surfaceSecondary,
+                        ),
+                      ),
+                    ),
+                    TweenAnimationBuilder<double>(
+                      tween: Tween<double>(
+                        begin: activeWidth,
+                        end: activeWidth,
+                      ),
+                      duration: const Duration(milliseconds: 180),
+                      curve: Curves.easeOut,
+                      builder: (context, width, _) => Positioned(
+                        left: 16,
+                        top: 9,
+                        width: width,
+                        height: 30,
+                        child: AnimatedContainer(
+                          key: const ValueKey(
+                            'composer-reasoning-active-track',
+                          ),
+                          duration: const Duration(milliseconds: 180),
+                          curve: Curves.easeInOut,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(999),
+                            color: index == 0
+                                ? Colors.transparent
+                                : context.accentPrimary,
+                          ),
+                        ),
+                      ),
+                    ),
+                    for (var marker = 0; marker < 4; marker += 1)
+                      Positioned(
+                        key: ValueKey('composer-reasoning-marker-$marker'),
+                        left: 32 + span * marker / 3 - 3,
+                        top: 21,
+                        width: 6,
+                        height: 6,
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: marker <= index
+                                ? context.surfacePrimary.withValues(alpha: 0.78)
+                                : context.textTertiary.withValues(alpha: 0.55),
+                          ),
+                        ),
+                      ),
+                    Positioned(
+                      key: const ValueKey('composer-reasoning-thumb'),
+                      left: thumbCenter - 16,
+                      top: 8,
+                      width: 32,
+                      height: 32,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: context.surfacePrimary,
+                          boxShadow: const [
+                            BoxShadow(
+                              color: Color(0x3D000000),
+                              blurRadius: 7,
+                              offset: Offset(0, 2),
+                            ),
+                            BoxShadow(
+                              color: Color(0x0D000000),
+                              spreadRadius: 1,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ),
-          radius,
-        ),
-        activePaint,
-      );
-    }
-    for (var index = 0; index < 4; index += 1) {
-      final dotCenter = Offset(
-        trackRect.left + trackRect.width * index / 3,
-        trackRect.center.dy,
-      );
-      final active = textDirection == TextDirection.ltr
-          ? dotCenter.dx <= clampedThumbX
-          : dotCenter.dx >= clampedThumbX;
-      final dotPaint = Paint()
-        ..color = active
-            ? ColorTween(
-                begin: sliderTheme.disabledActiveTickMarkColor,
-                end: sliderTheme.activeTickMarkColor,
-              ).evaluate(enableAnimation)!
-            : ColorTween(
-                begin: sliderTheme.disabledInactiveTickMarkColor,
-                end: sliderTheme.inactiveTickMarkColor,
-              ).evaluate(enableAnimation)!;
-      context.canvas.drawCircle(dotCenter, 3, dotPaint);
-    }
+        );
+      },
+    );
   }
-
-  @override
-  bool get isRounded => true;
 }
 
 enum _ComposerModelMenuPage { effort, models, reasoning }

@@ -1,4 +1,4 @@
-Amitia 26.2.0-bata.1
+Amitia 26.2.0-beta.1
 
 本次更新
 

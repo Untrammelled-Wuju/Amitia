@@ -28,6 +28,13 @@ class _FakeChatService extends ChatService {
   bool latestRequested = false;
   String? updatedMessageId;
   String? updatedMessageContent;
+  String? updatedModelConversationId;
+  int? updatedModelConfigId;
+  String? updatedReasoningEffort;
+  bool? updatedReasoningEnabled;
+  int? submittedModelConfigId;
+  String? submittedReasoningEffort;
+  bool? submittedReasoningEnabled;
 
   @override
   ChatStreamCancellation createStreamCancellation() => ChatStreamCancellation();
@@ -50,7 +57,23 @@ class _FakeChatService extends ChatService {
     ConversationWorkspaceDto? workspace,
     required ChatStreamCancellation cancellation,
   }) {
+    submittedModelConfigId = modelConfigId;
+    submittedReasoningEffort = reasoningEffort;
+    submittedReasoningEnabled = reasoningEnabled;
     return streamFactory(clientMessageId ?? '');
+  }
+
+  @override
+  Future<void> updateConversationModelSettings(
+    String conversationId, {
+    required int modelConfigId,
+    required String reasoningEffort,
+    required bool reasoningEnabled,
+  }) async {
+    updatedModelConversationId = conversationId;
+    updatedModelConfigId = modelConfigId;
+    updatedReasoningEffort = reasoningEffort;
+    updatedReasoningEnabled = reasoningEnabled;
   }
 
   @override
@@ -158,6 +181,36 @@ void main() {
 
     controller.dispose();
   });
+
+  test(
+    'model settings persist and are included in the next send request',
+    () async {
+      final service = _FakeChatService(
+        streamFactory: (_) => const Stream<ChatStreamEvent>.empty(),
+        messagesFactory: (_, _) => const <MessageDto>[],
+      );
+      final controller = ConversationRuntimeController(
+        service,
+        _FakeEmoteService(),
+      );
+
+      await controller.openConversation('conversation-1');
+      await controller.updateModelSettings(7, 'xhigh', true);
+
+      expect(service.updatedModelConversationId, 'conversation-1');
+      expect(service.updatedModelConfigId, 7);
+      expect(service.updatedReasoningEffort, 'xhigh');
+      expect(service.updatedReasoningEnabled, isTrue);
+
+      await controller.sendText('测试强度');
+
+      expect(service.submittedModelConfigId, 7);
+      expect(service.submittedReasoningEffort, 'xhigh');
+      expect(service.submittedReasoningEnabled, isTrue);
+
+      controller.dispose();
+    },
+  );
 
   test('send retries while the business backend is starting', () async {
     late _FakeChatService service;
@@ -564,105 +617,108 @@ void main() {
     controller.dispose();
   });
 
-  test('assistant turn projection keeps ordered items and suppresses split messages', () async {
-    final service = _FakeChatService(
-      streamFactory: (_) => const Stream<ChatStreamEvent>.empty(),
-      messagesFactory: (_, _) => <MessageDto>[
-        _message(
-          id: 'user-turn',
-          role: 'user',
-          content: '执行工具',
-          requestId: 'request-turn',
-          createdAt: '2026-09-20 10:00:00.000',
-          sequence: 1,
-        ),
-        _message(
-          id: 'assistant-turn-1',
-          role: 'assistant',
-          content: '第一段',
-          requestId: 'request-turn',
-          deliverySequence: 1,
-          createdAt: '2026-09-20 10:00:01.000',
-          sequence: 2,
-        ),
-        _message(
-          id: 'assistant-turn-2',
-          role: 'assistant',
-          content: '第二段',
-          requestId: 'request-turn',
-          deliverySequence: 2,
-          createdAt: '2026-09-20 10:00:02.000',
-          sequence: 3,
-        ),
-      ],
-      turnsFactory: () => <AssistantTurnDto>[
-        AssistantTurnDto(
-          id: 'turn-1',
-          conversationId: 'conversation-1',
-          requestId: 'request-turn',
-          responseGroupId: 'request-turn',
-          status: 'completed',
-          items: const <AssistantTurnItemDto>[
-            AssistantTurnItemDto(
-              id: 'item-1',
-              turnId: 'turn-1',
-              sequence: 1,
-              type: 'thinking',
-              status: 'completed',
-              content: '思考',
-            ),
-            AssistantTurnItemDto(
-              id: 'item-2',
-              turnId: 'turn-1',
-              sequence: 2,
-              type: 'tool_call',
-              status: 'completed',
-              callId: 'call-1',
-              toolName: 'query_memory',
-            ),
-            AssistantTurnItemDto(
-              id: 'item-3',
-              turnId: 'turn-1',
-              sequence: 3,
-              type: 'tool_result',
-              status: 'completed',
-              callId: 'call-1',
-              toolName: 'query_memory',
-              resultJson: '"ok"',
-            ),
-            AssistantTurnItemDto(
-              id: 'item-4',
-              turnId: 'turn-1',
-              sequence: 4,
-              type: 'text',
-              status: 'completed',
-              content: '最终回复',
-              isFinal: true,
-            ),
-          ],
-        ),
-      ],
-    );
-    final controller = ConversationRuntimeController(
-      service,
-      _FakeEmoteService(),
-    );
+  test(
+    'assistant turn projection keeps ordered items and suppresses split messages',
+    () async {
+      final service = _FakeChatService(
+        streamFactory: (_) => const Stream<ChatStreamEvent>.empty(),
+        messagesFactory: (_, _) => <MessageDto>[
+          _message(
+            id: 'user-turn',
+            role: 'user',
+            content: '执行工具',
+            requestId: 'request-turn',
+            createdAt: '2026-09-20 10:00:00.000',
+            sequence: 1,
+          ),
+          _message(
+            id: 'assistant-turn-1',
+            role: 'assistant',
+            content: '第一段',
+            requestId: 'request-turn',
+            deliverySequence: 1,
+            createdAt: '2026-09-20 10:00:01.000',
+            sequence: 2,
+          ),
+          _message(
+            id: 'assistant-turn-2',
+            role: 'assistant',
+            content: '第二段',
+            requestId: 'request-turn',
+            deliverySequence: 2,
+            createdAt: '2026-09-20 10:00:02.000',
+            sequence: 3,
+          ),
+        ],
+        turnsFactory: () => <AssistantTurnDto>[
+          AssistantTurnDto(
+            id: 'turn-1',
+            conversationId: 'conversation-1',
+            requestId: 'request-turn',
+            responseGroupId: 'request-turn',
+            status: 'completed',
+            items: const <AssistantTurnItemDto>[
+              AssistantTurnItemDto(
+                id: 'item-1',
+                turnId: 'turn-1',
+                sequence: 1,
+                type: 'thinking',
+                status: 'completed',
+                content: '思考',
+              ),
+              AssistantTurnItemDto(
+                id: 'item-2',
+                turnId: 'turn-1',
+                sequence: 2,
+                type: 'tool_call',
+                status: 'completed',
+                callId: 'call-1',
+                toolName: 'query_memory',
+              ),
+              AssistantTurnItemDto(
+                id: 'item-3',
+                turnId: 'turn-1',
+                sequence: 3,
+                type: 'tool_result',
+                status: 'completed',
+                callId: 'call-1',
+                toolName: 'query_memory',
+                resultJson: '"ok"',
+              ),
+              AssistantTurnItemDto(
+                id: 'item-4',
+                turnId: 'turn-1',
+                sequence: 4,
+                type: 'text',
+                status: 'completed',
+                content: '最终回复',
+                isFinal: true,
+              ),
+            ],
+          ),
+        ],
+      );
+      final controller = ConversationRuntimeController(
+        service,
+        _FakeEmoteService(),
+      );
 
-    await controller.openConversation('conversation-1');
+      await controller.openConversation('conversation-1');
 
-    final first = controller.messages.firstWhere(
-      (message) => message.id == 'assistant-turn-1',
-    );
-    final second = controller.messages.firstWhere(
-      (message) => message.id == 'assistant-turn-2',
-    );
-    expect(first.assistantTurn, isNotNull);
-    expect(
-      first.assistantTurn!.items.map((item) => item.type).toList(),
-      <String>['thinking', 'tool_call', 'tool_result', 'text'],
-    );
-    expect(second.assistantTurnSuppressed, isTrue);
+      final first = controller.messages.firstWhere(
+        (message) => message.id == 'assistant-turn-1',
+      );
+      final second = controller.messages.firstWhere(
+        (message) => message.id == 'assistant-turn-2',
+      );
+      expect(first.assistantTurn, isNotNull);
+      expect(
+        first.assistantTurn!.items.map((item) => item.type).toList(),
+        <String>['thinking', 'tool_call', 'tool_result', 'text'],
+      );
+      expect(second.assistantTurnSuppressed, isTrue);
 
-    controller.dispose();
-  });
+      controller.dispose();
+    },
+  );
 }

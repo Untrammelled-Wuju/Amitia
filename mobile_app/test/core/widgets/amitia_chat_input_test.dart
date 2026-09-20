@@ -234,7 +234,7 @@ void main() {
         tester.getSize(find.byType(AmitiaPopupSurface)).width,
         closeTo(260, 0.1),
       );
-      final slider = find.byType(Slider);
+      final slider = find.byKey(const ValueKey('composer-reasoning-slider'));
       expect(slider, findsOneWidget);
       expect(find.byType(Switch), findsNothing);
 
@@ -260,6 +260,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(commits, isNotEmpty);
+      expect(commits.last, 'high');
 
       await tester.tap(find.text('思考'));
       await tester.pumpAndSettle();
@@ -273,6 +274,146 @@ void main() {
       expect(modeCommits.last, isFalse);
     },
   );
+
+  testWidgets('model menu closes on outside tap with an exit animation', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Align(
+            alignment: Alignment.bottomCenter,
+            child: AmitiaChatInput(
+              onSend: (_) {},
+              models: const <Map<String, dynamic>>[
+                <String, dynamic>{
+                  'id': 7,
+                  'name': 'DeepSeek',
+                  'modelName': 'deepseek-chat',
+                  'apiType': 'openai',
+                  'supportsReasoning': true,
+                },
+              ],
+              selectedModelId: 7,
+              reasoningEffort: 'high',
+              reasoningEnabled: true,
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byKey(const ValueKey('composer-reasoning-label')));
+    await tester.pumpAndSettle();
+    expect(find.byType(AmitiaPopupSurface), findsOneWidget);
+
+    await tester.tapAt(const Offset(8, 8));
+    await tester.pump();
+    expect(find.byType(AmitiaPopupSurface), findsOneWidget);
+    await tester.pump(const Duration(milliseconds: 80));
+    expect(find.byType(AmitiaPopupSurface), findsOneWidget);
+    await tester.pumpAndSettle();
+    expect(find.byType(AmitiaPopupSurface), findsNothing);
+  });
+
+  testWidgets('reasoning slider keeps desktop geometry and low-track fade', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(375, 800);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Align(
+            alignment: Alignment.bottomCenter,
+            child: AmitiaChatInput(
+              onSend: (_) {},
+              models: const <Map<String, dynamic>>[
+                <String, dynamic>{
+                  'id': 7,
+                  'name': 'GPT-5',
+                  'modelName': 'gpt-5',
+                  'apiType': 'openai',
+                  'supportsReasoning': true,
+                },
+              ],
+              selectedModelId: 7,
+              reasoningEffort: 'low',
+              reasoningEnabled: true,
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byKey(const ValueKey('composer-reasoning-label')));
+    await tester.pumpAndSettle();
+
+    final slider = tester.getRect(
+      find.byKey(const ValueKey('composer-reasoning-slider')),
+    );
+    final track = tester.getRect(
+      find.byKey(const ValueKey('composer-reasoning-track-base')),
+    );
+    final thumb = tester.getRect(
+      find.byKey(const ValueKey('composer-reasoning-thumb')),
+    );
+    final firstMarker = tester.getRect(
+      find.byKey(const ValueKey('composer-reasoning-marker-0')),
+    );
+    final lastMarker = tester.getRect(
+      find.byKey(const ValueKey('composer-reasoning-marker-3')),
+    );
+
+    expect(track.left - slider.left, closeTo(16, 0.1));
+    expect(slider.right - track.right, closeTo(16, 0.1));
+    expect(track.height, closeTo(30, 0.1));
+    expect(thumb.width, closeTo(32, 0.1));
+    expect(thumb.center.dx, closeTo(firstMarker.center.dx, 0.1));
+    expect(thumb.left, closeTo(track.left, 0.1));
+    expect(firstMarker.center.dx - slider.left, closeTo(32, 0.1));
+    expect(lastMarker.center.dx - slider.left, closeTo(slider.width - 32, 0.1));
+
+    final activeTrack = tester.widget<AnimatedContainer>(
+      find.byKey(const ValueKey('composer-reasoning-active-track')),
+    );
+    expect(
+      (activeTrack.decoration! as BoxDecoration).color,
+      Colors.transparent,
+    );
+    expect(
+      tester
+          .getSize(
+            find.byKey(const ValueKey('composer-reasoning-active-track')),
+          )
+          .width,
+      closeTo(16, 0.1),
+    );
+
+    await tester.drag(
+      find.byKey(const ValueKey('composer-reasoning-slider')),
+      Offset(slider.width * 0.8, 0),
+    );
+    await tester.pumpAndSettle();
+
+    final expandedTrack = tester.getRect(
+      find.byKey(const ValueKey('composer-reasoning-active-track')),
+    );
+    final expandedThumb = tester.getRect(
+      find.byKey(const ValueKey('composer-reasoning-thumb')),
+    );
+    final expandedActiveTrack = tester.widget<AnimatedContainer>(
+      find.byKey(const ValueKey('composer-reasoning-active-track')),
+    );
+    expect(expandedTrack.width, greaterThan(16));
+    expect(expandedTrack.right, closeTo(expandedThumb.center.dx, 0.1));
+    expect(
+      (expandedActiveTrack.decoration! as BoxDecoration).color,
+      isNot(Colors.transparent),
+    );
+  });
 
   testWidgets('model selection page keeps model entries visible', (
     tester,
@@ -305,7 +446,13 @@ void main() {
 
     await tester.tap(find.byKey(const ValueKey('composer-reasoning-label')));
     await tester.pumpAndSettle();
+    final surfaceElement = tester.element(find.byType(AmitiaPopupSurface));
     await tester.tap(find.text('模型'));
+    await tester.pump(const Duration(milliseconds: 80));
+    expect(
+      tester.element(find.byType(AmitiaPopupSurface)),
+      same(surfaceElement),
+    );
     await tester.pumpAndSettle();
 
     expect(tester.takeException(), isNull);

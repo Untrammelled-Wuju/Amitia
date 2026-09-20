@@ -1,7 +1,7 @@
 name: amitia_app
 description: "Amitia - AI 角色陪伴个人智能体应用"
 publish_to: 'none'
-version: 26.2.0-beta+2
+version: 26.2.0-beta.1+3
 
 environment:
   sdk: ^3.10.7
