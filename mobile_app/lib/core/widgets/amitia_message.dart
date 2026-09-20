@@ -2314,8 +2314,7 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
                           ),
                           if (widget.workspaceSelector != null) ...[
                             const SizedBox(width: 4),
-                            Flexible(
-                              fit: FlexFit.loose,
+                            Expanded(
                               child: Align(
                                 key: const ValueKey(
                                   'composer-workspace-selector',
@@ -2324,8 +2323,8 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
                                 child: widget.workspaceSelector!,
                               ),
                             ),
-                          ],
-                          const Spacer(),
+                          ] else
+                            const Spacer(),
                           CompositedTransformTarget(
                             link: _modelMenuLink,
                             child: OverlayPortal(

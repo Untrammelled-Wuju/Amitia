@@ -748,7 +748,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         ? workspace!.workspaceName.trim()
         : '选择项目';
     return ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 180),
+      constraints: const BoxConstraints(maxWidth: 170),
       child: Material(
         color: Colors.transparent,
         child: InkWell(

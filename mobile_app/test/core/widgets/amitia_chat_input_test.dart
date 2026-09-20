@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:amitia_app/core/widgets/amitia_message.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -72,10 +73,27 @@ void main() {
         home: Scaffold(
           body: AmitiaChatInput(
             onSend: (_) {},
-            workspaceSelector: const SizedBox(
-              width: 120,
-              height: 31,
-              child: Text('选择项目'),
+            workspaceSelector: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 170),
+              child: Container(
+                height: 31,
+                padding: const EdgeInsets.symmetric(horizontal: 7),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.folder_outlined, size: 16),
+                    SizedBox(width: 5),
+                    Flexible(
+                      child: Text(
+                        '选择项目',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(fontSize: 12),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
           ),
         ),
@@ -108,8 +126,12 @@ void main() {
     expect(voiceInset, closeTo(10.8, 0.5));
     expect(permission.left - add.right, closeTo(4, 0.5));
     expect(workspace.left - permission.right, closeTo(4, 0.5));
-    expect(trigger.left - workspace.right, greaterThan(4));
+    expect(trigger.left, greaterThanOrEqualTo(workspace.right));
     expect(voice.left - trigger.right, closeTo(4, 0.5));
+    expect(
+      tester.renderObject<RenderParagraph>(find.text('选择项目')).didExceedMaxLines,
+      isFalse,
+    );
 
     await tester.enterText(find.byType(TextField), '测试');
     await tester.pump();
