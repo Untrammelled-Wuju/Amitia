@@ -1452,7 +1452,7 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
     ).toDouble();
     _modelMenuFadeController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 360),
+      duration: const Duration(milliseconds: 220),
       value: 1,
     )..addListener(_handleModelMenuFade);
     _controller.addListener(_syncControllerText);
@@ -2517,8 +2517,8 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
 
   Widget _buildModelMenu(BuildContext context) {
     return AnimatedSize(
-      duration: const Duration(milliseconds: 260),
-      reverseDuration: const Duration(milliseconds: 220),
+      duration: const Duration(milliseconds: 220),
+      reverseDuration: const Duration(milliseconds: 150),
       curve: Curves.easeOutQuint,
       alignment: Alignment.topCenter,
       clipBehavior: Clip.hardEdge,
@@ -2534,24 +2534,76 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
   }
 
   Widget _buildModelMenuSurface(BuildContext context) {
-    return Material(
+    return AmitiaPopupSurface(
       key: ValueKey(_modelMenuPage),
-      elevation: 12,
-      color: context.surfacePrimary,
-      borderRadius: BorderRadius.circular(14),
-      child: Container(
-        width: 250,
-        padding: const EdgeInsets.all(10),
-        decoration: BoxDecoration(
-          border: Border.all(color: context.borderPrimary),
-          borderRadius: BorderRadius.circular(14),
-        ),
-        child: switch (_modelMenuPage) {
-          _ComposerModelMenuPage.models => _buildModelList(context),
-          _ComposerModelMenuPage.reasoning => _buildReasoningModeList(context),
-          _ComposerModelMenuPage.effort => _buildModelEffortPanel(context),
-        },
+      width: 260,
+      maxHeight: MediaQuery.sizeOf(context).height * 0.72,
+      padding: const EdgeInsets.all(12),
+      child: switch (_modelMenuPage) {
+        _ComposerModelMenuPage.models => _buildModelList(context),
+        _ComposerModelMenuPage.reasoning => _buildReasoningModeList(context),
+        _ComposerModelMenuPage.effort => _buildModelEffortPanel(context),
+      },
+    );
+  }
+
+  Widget _buildModelMenuRow({
+    required BuildContext context,
+    required String label,
+    required Widget trailing,
+    VoidCallback? onTap,
+  }) {
+    final row = Container(
+      constraints: const BoxConstraints(minHeight: 34),
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      child: Row(
+        children: [
+          Text(
+            label,
+            style: TextStyle(fontSize: 12, color: context.textTertiary),
+          ),
+          const Spacer(),
+          Flexible(child: trailing),
+        ],
       ),
+    );
+    if (onTap == null) return row;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(7),
+        child: row,
+      ),
+    );
+  }
+
+  Widget _buildModelMenuValue({
+    required BuildContext context,
+    required String label,
+    bool showArrow = true,
+  }) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Flexible(
+          child: Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.right,
+            style: TextStyle(fontSize: 12, color: context.textPrimary),
+          ),
+        ),
+        if (showArrow) ...[
+          const SizedBox(width: 5),
+          Icon(
+            Icons.chevron_right_rounded,
+            size: 18,
+            color: context.textTertiary,
+          ),
+        ],
+      ],
     );
   }
 
@@ -2559,64 +2611,67 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Row(
-          children: [
-            const Expanded(child: Text('强度')),
-            Text(
-              _reasoningLabelForValue(_draftReasoningValue),
-              style: AppTypography.cardTitle(context),
-            ),
-          ],
-        ),
-        InkWell(
-          onTap: () => _openModelMenuPage(_ComposerModelMenuPage.reasoning),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 10),
-            child: Row(
-              children: [
-                const Text('思考'),
-                const Spacer(),
-                Text(
-                  widget.reasoningEnabled ? '支持' : '不支持',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(width: 6),
-                const Icon(Icons.chevron_right_rounded, size: 18),
-              ],
+        _buildModelMenuRow(
+          context: context,
+          label: '强度',
+          trailing: Text(
+            _reasoningLabelForValue(_draftReasoningValue),
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: context.textPrimary,
             ),
           ),
         ),
-        InkWell(
+        _buildModelMenuRow(
+          context: context,
+          label: '思考',
+          onTap: () => _openModelMenuPage(_ComposerModelMenuPage.reasoning),
+          trailing: _buildModelMenuValue(
+            context: context,
+            label: widget.reasoningEnabled ? '支持' : '不支持',
+          ),
+        ),
+        _buildModelMenuRow(
+          context: context,
+          label: '模型',
           onTap: () => _openModelMenuPage(_ComposerModelMenuPage.models),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 10),
-            child: Row(
-              children: [
-                const Text('模型'),
-                const Spacer(),
-                Flexible(
-                  child: Text(
-                    _selectedModelLabel(),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+          trailing: _buildModelMenuValue(
+            context: context,
+            label: _selectedModelLabel(),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(8, 7, 8, 4),
+          child: Column(
+            children: [
+              _buildReasoningSlider(context),
+              Transform.translate(
+                offset: const Offset(0, -3),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: const [
+                    Text('低', style: TextStyle(fontSize: 10)),
+                    Text('中', style: TextStyle(fontSize: 10)),
+                    Text('高', style: TextStyle(fontSize: 10)),
+                    Text('极高', style: TextStyle(fontSize: 10)),
+                  ],
+                ),
+              ),
+              if (!widget.reasoningEnabled)
+                Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      '该模型不支持思考强度',
+                      style: TextStyle(fontSize: 11, color: context.error),
+                    ),
                   ),
                 ),
-                const Icon(Icons.chevron_right_rounded, size: 18),
-              ],
-            ),
+            ],
           ),
         ),
-        _buildReasoningSlider(context),
-        const Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [Text('低'), Text('中'), Text('高'), Text('极高')],
-        ),
-        if (!widget.reasoningEnabled)
-          const Padding(
-            padding: EdgeInsets.only(top: 6),
-            child: Text('该模型不支持思考强度'),
-          ),
       ],
     );
   }
@@ -2669,32 +2724,31 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Row(
-          children: [
-            IconButton(
-              onPressed: _backToModelEffort,
-              icon: const Icon(Icons.arrow_back_rounded),
-            ),
-            const Text('选择模型'),
-          ],
+        _buildModelMenuHeader(
+          context: context,
+          title: '选择模型',
+          onBack: _backToModelEffort,
         ),
         Flexible(
           child: ListView(
             shrinkWrap: true,
             children: [
               for (final model in _llmModels)
-                ListTile(
-                  dense: true,
+                _buildModelSelectionItem(
+                  context: context,
                   selected: _intValue(model['id']) == widget.selectedModelId,
-                  title: Text(_modelDisplayName(model)),
-                  subtitle: Text(
-                    '${model['name'] ?? ''} · ${model['apiType'] ?? ''}',
+                  title: Text(
+                    (model['name'] ?? model['modelName'] ?? '').toString(),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 14, color: context.textPrimary),
                   ),
-                  trailing: _intValue(model['id']) == widget.selectedModelId
-                      ? const Icon(Icons.check_rounded)
-                      : null,
+                  subtitle: Text(
+                    '${_modelDisplayName(model)} · ${_modelProviderLabel(model)}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 10, color: context.textTertiary),
+                  ),
                   onTap: () {
                     final effort = (model['defaultReasoningEffort'] ?? 'high')
                         .toString();
@@ -2722,37 +2776,116 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Row(
-          children: [
-            IconButton(
-              onPressed: _backToModelEffort,
-              icon: const Icon(Icons.arrow_back_rounded),
-            ),
-            const Text('选择思考模式'),
-          ],
+        _buildModelMenuHeader(
+          context: context,
+          title: '选择思考模式',
+          onBack: _backToModelEffort,
         ),
-        ListTile(
-          dense: true,
+        _buildModelSelectionItem(
+          context: context,
           selected: widget.reasoningEnabled,
-          title: const Text('支持'),
-          subtitle: const Text('允许模型按所选强度进行思考'),
-          trailing: widget.reasoningEnabled
-              ? const Icon(Icons.check_rounded)
-              : null,
+          title: Text(
+            '支持',
+            style: TextStyle(fontSize: 14, color: context.textPrimary),
+          ),
+          subtitle: Text(
+            '允许模型按所选强度进行思考',
+            style: TextStyle(fontSize: 10, color: context.textTertiary),
+          ),
           onTap: () => _selectReasoningEnabled(true),
         ),
-        ListTile(
-          dense: true,
+        _buildModelSelectionItem(
+          context: context,
           selected: !widget.reasoningEnabled,
-          title: const Text('不支持'),
-          subtitle: const Text('关闭模型的思考过程'),
-          trailing: widget.reasoningEnabled
-              ? null
-              : const Icon(Icons.check_rounded),
+          title: Text(
+            '不支持',
+            style: TextStyle(fontSize: 14, color: context.textPrimary),
+          ),
+          subtitle: Text(
+            '关闭模型的思考过程',
+            style: TextStyle(fontSize: 10, color: context.textTertiary),
+          ),
           onTap: () => _selectReasoningEnabled(false),
         ),
       ],
     );
+  }
+
+  Widget _buildModelMenuHeader({
+    required BuildContext context,
+    required String title,
+    required VoidCallback onBack,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 2, 4, 8),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 26,
+            height: 26,
+            child: IconButton(
+              padding: EdgeInsets.zero,
+              iconSize: 18,
+              onPressed: onBack,
+              icon: Icon(Icons.arrow_back_rounded, color: context.textTertiary),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: context.textPrimary,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildModelSelectionItem({
+    required BuildContext context,
+    required bool selected,
+    required Widget title,
+    required Widget subtitle,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: selected ? context.accentSoft : Colors.transparent,
+      borderRadius: BorderRadius.circular(8),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          constraints: const BoxConstraints(minHeight: 48),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [title, const SizedBox(height: 2), subtitle],
+                ),
+              ),
+              if (selected) ...[
+                const SizedBox(width: 10),
+                Icon(
+                  Icons.check_rounded,
+                  size: 18,
+                  color: context.accentPrimary,
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _modelProviderLabel(Map<String, dynamic> model) {
+    return (model['apiType'] ?? model['provider'] ?? '').toString();
   }
 
   void _selectReasoningEnabled(bool value) {

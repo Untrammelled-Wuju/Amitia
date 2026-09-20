@@ -52,6 +52,52 @@ class AmitiaPopupMenuPlacement {
   }
 }
 
+class AmitiaPopupSurface extends StatelessWidget {
+  const AmitiaPopupSurface({
+    super.key,
+    required this.child,
+    this.width,
+    this.maxHeight,
+    this.padding = const EdgeInsets.symmetric(vertical: 6),
+  });
+
+  final Widget child;
+  final double? width;
+  final double? maxHeight;
+  final EdgeInsetsGeometry padding;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: width,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(14),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.12),
+              blurRadius: 14,
+              spreadRadius: 0,
+              offset: Offset.zero,
+            ),
+          ],
+        ),
+        child: Material(
+          color: context.surfacePrimary,
+          borderRadius: BorderRadius.circular(14),
+          clipBehavior: Clip.antiAlias,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxHeight: maxHeight ?? double.infinity,
+            ),
+            child: SingleChildScrollView(padding: padding, child: child),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class AmitiaPopupMenuButton<T> extends StatefulWidget {
   const AmitiaPopupMenuButton({
     super.key,
@@ -364,35 +410,13 @@ class _AmitiaPopupMenuPanel<T> extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(14),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.12),
-            blurRadius: 14,
-            spreadRadius: 0,
-            offset: Offset.zero,
-          ),
+    return AmitiaPopupSurface(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (var index = 0; index < items.length; index++)
+            _buildEntry(context, items[index], index),
         ],
-      ),
-      child: Material(
-        color: context.surfacePrimary,
-        borderRadius: BorderRadius.circular(14),
-        clipBehavior: Clip.antiAlias,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxHeight: double.infinity),
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(vertical: 6),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                for (var index = 0; index < items.length; index++)
-                  _buildEntry(context, items[index], index),
-              ],
-            ),
-          ),
-        ),
       ),
     );
   }

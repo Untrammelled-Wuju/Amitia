@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:amitia_app/core/widgets/amitia_message.dart';
+import 'package:amitia_app/core/widgets/amitia_popup_menu.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -179,6 +180,10 @@ void main() {
   testWidgets(
     'reasoning slider previews while dragging and commits on release',
     (tester) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(375, 800);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.view.resetPhysicalSize);
       final previews = <String>[];
       final commits = <String>[];
       final modeCommits = <bool>[];
@@ -224,6 +229,11 @@ void main() {
 
       await tester.tap(find.byKey(const ValueKey('composer-reasoning-label')));
       await tester.pumpAndSettle();
+      expect(find.byType(AmitiaPopupSurface), findsOneWidget);
+      expect(
+        tester.getSize(find.byType(AmitiaPopupSurface)).width,
+        closeTo(260, 0.1),
+      );
       final slider = find.byType(Slider);
       expect(slider, findsOneWidget);
       expect(find.byType(Switch), findsNothing);
@@ -300,7 +310,7 @@ void main() {
 
     expect(tester.takeException(), isNull);
     expect(find.text('选择模型'), findsOneWidget);
-    expect(find.text('gpt-5'), findsOneWidget);
-    expect(find.textContaining('GPT-5 · openai'), findsOneWidget);
+    expect(find.text('GPT-5'), findsOneWidget);
+    expect(find.textContaining('gpt-5 · openai'), findsOneWidget);
   });
 }
