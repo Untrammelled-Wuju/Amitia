@@ -90,7 +90,7 @@ electron-builder保持compression: normal，实际7z压缩等级由scripts/build
 最近发布源码基线：
 
 - Desktop NSIS：暂无
-- Android Release：版本 26.2.0-beta.1，源码基线提交 536dc8083，提交日志 fix: polish mobile reasoning slider interactions，安装包 amitia-26.2.0-beta.1-release-arm64-v8a-20260920-224155.apk，SHA-256 e0d7d36fa29b9e57949abfb37ad6d8e8e834df7812767c52edea16d90376a4a0，记录时间 2026-09-20 22:42:49 +08:00
+- Android Release：版本 26.2.0-beta.1，源码基线提交 15b1174ef，提交日志 fix: tune mobile reasoning slider and call control，安装包 amitia-26.2.0-beta.1-release-arm64-v8a-20260920-225056.apk，SHA-256 b1cc80d7773545257a2fc3ff1f74cb16d8b431db6ac32ef5337474a329c07140，记录时间 2026-09-20 22:51:24 +08:00
 
 发布配置：
 
