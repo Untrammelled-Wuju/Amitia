@@ -280,6 +280,70 @@ SPDX-License-Identifier: AGPL-3.0-only
               </div>
             </el-popover>
             <el-popover
+              v-model:visible="permissionMenuOpen"
+              placement="top-start"
+              :width="280"
+              trigger="click"
+              :hide-after="0"
+              :teleported="true"
+              append-to="#amitia-overlay-root"
+              popper-class="permission-picker-popper"
+            >
+              <template #reference>
+                <button
+                  type="button"
+                  class="permission-trigger"
+                  :class="{ 'is-full-access': permissionMode === 'full_access' }"
+                  :disabled="isInputDisabled"
+                  :aria-expanded="permissionMenuOpen"
+                  aria-haspopup="menu"
+                  :title="permissionLabel"
+                >
+                  <el-icon>
+                    <Unlock v-if="permissionMode === 'full_access'" />
+                    <Lock v-else />
+                  </el-icon>
+                  <span>{{ permissionLabel }}</span>
+                </button>
+              </template>
+              <div class="permission-picker" role="menu">
+                <div class="permission-picker-header">
+                  <strong>工具权限</strong>
+                  <small>权限模式仅影响从下一条消息开始的工具执行</small>
+                </div>
+                <button
+                  type="button"
+                  class="permission-option"
+                  :class="{ 'is-selected': permissionMode !== 'full_access' }"
+                  role="menuitemradio"
+                  :aria-checked="permissionMode !== 'full_access'"
+                  @click="selectPermissionMode('request_approval')"
+                >
+                  <span class="permission-option-icon"><el-icon><Lock /></el-icon></span>
+                  <span class="permission-option-copy">
+                    <strong>请求批准</strong>
+                    <small>敏感工具执行前需要你批准</small>
+                  </span>
+                  <el-icon v-if="permissionMode !== 'full_access'" class="permission-check"><Check /></el-icon>
+                </button>
+                <button
+                  type="button"
+                  class="permission-option"
+                  :class="{ 'is-selected': permissionMode === 'full_access' }"
+                  role="menuitemradio"
+                  :aria-checked="permissionMode === 'full_access'"
+                  @click="selectPermissionMode('full_access')"
+                >
+                  <span class="permission-option-icon"><el-icon><Unlock /></el-icon></span>
+                  <span class="permission-option-copy">
+                    <strong>完全访问</strong>
+                    <small>自动放行当前会话中可批准的工具操作</small>
+                  </span>
+                  <el-icon v-if="permissionMode === 'full_access'" class="permission-check"><Check /></el-icon>
+                </button>
+              </div>
+            </el-popover>
+            <el-popover
               v-if="supportsWorkspaceDirectory"
               v-model:visible="workspaceMenuOpen"
               placement="top-start"
@@ -354,70 +418,6 @@ SPDX-License-Identifier: AGPL-3.0-only
                 >
                   <el-icon><CloseBold /></el-icon>
                   <span>移出项目</span>
-                </button>
-              </div>
-            </el-popover>
-            <el-popover
-              v-model:visible="permissionMenuOpen"
-              placement="top-start"
-              :width="280"
-              trigger="click"
-              :hide-after="0"
-              :teleported="true"
-              append-to="#amitia-overlay-root"
-              popper-class="permission-picker-popper"
-            >
-              <template #reference>
-                <button
-                  type="button"
-                  class="permission-trigger"
-                  :class="{ 'is-full-access': permissionMode === 'full_access' }"
-                  :disabled="isInputDisabled"
-                  :aria-expanded="permissionMenuOpen"
-                  aria-haspopup="menu"
-                  :title="permissionLabel"
-                >
-                  <el-icon>
-                    <Unlock v-if="permissionMode === 'full_access'" />
-                    <Lock v-else />
-                  </el-icon>
-                  <span>{{ permissionLabel }}</span>
-                </button>
-              </template>
-              <div class="permission-picker" role="menu">
-                <div class="permission-picker-header">
-                  <strong>工具权限</strong>
-                  <small>权限模式仅影响从下一条消息开始的工具执行</small>
-                </div>
-                <button
-                  type="button"
-                  class="permission-option"
-                  :class="{ 'is-selected': permissionMode !== 'full_access' }"
-                  role="menuitemradio"
-                  :aria-checked="permissionMode !== 'full_access'"
-                  @click="selectPermissionMode('request_approval')"
-                >
-                  <span class="permission-option-icon"><el-icon><Lock /></el-icon></span>
-                  <span class="permission-option-copy">
-                    <strong>请求批准</strong>
-                    <small>敏感工具执行前需要你批准</small>
-                  </span>
-                  <el-icon v-if="permissionMode !== 'full_access'" class="permission-check"><Check /></el-icon>
-                </button>
-                <button
-                  type="button"
-                  class="permission-option"
-                  :class="{ 'is-selected': permissionMode === 'full_access' }"
-                  role="menuitemradio"
-                  :aria-checked="permissionMode === 'full_access'"
-                  @click="selectPermissionMode('full_access')"
-                >
-                  <span class="permission-option-icon"><el-icon><Unlock /></el-icon></span>
-                  <span class="permission-option-copy">
-                    <strong>完全访问</strong>
-                    <small>自动放行当前会话中可批准的工具操作</small>
-                  </span>
-                  <el-icon v-if="permissionMode === 'full_access'" class="permission-check"><Check /></el-icon>
                 </button>
               </div>
             </el-popover>

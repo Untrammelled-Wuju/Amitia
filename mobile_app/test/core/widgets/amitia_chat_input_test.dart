@@ -106,9 +106,9 @@ void main() {
 
     expect(addInset, closeTo(10.8, 0.5));
     expect(voiceInset, closeTo(10.8, 0.5));
-    expect(workspace.left - add.right, closeTo(4, 0.5));
-    expect(permission.left - workspace.right, closeTo(4, 0.5));
-    expect(trigger.left - permission.right, greaterThan(4));
+    expect(permission.left - add.right, closeTo(4, 0.5));
+    expect(workspace.left - permission.right, closeTo(4, 0.5));
+    expect(trigger.left - workspace.right, greaterThan(4));
     expect(voice.left - trigger.right, closeTo(4, 0.5));
 
     await tester.enterText(find.byType(TextField), '测试');

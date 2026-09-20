@@ -2295,19 +2295,6 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
                             onTap: _showComposerTools,
                           ),
                           const SizedBox(width: 4),
-                          if (widget.workspaceSelector != null) ...[
-                            Flexible(
-                              fit: FlexFit.loose,
-                              child: Align(
-                                key: const ValueKey(
-                                  'composer-workspace-selector',
-                                ),
-                                alignment: Alignment.centerLeft,
-                                child: widget.workspaceSelector!,
-                              ),
-                            ),
-                            const SizedBox(width: 4),
-                          ],
                           Semantics(
                             button: true,
                             label: widget.permissionMode == 'full_access'
@@ -2325,6 +2312,19 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
                               onTap: _showPermissionPicker,
                             ),
                           ),
+                          if (widget.workspaceSelector != null) ...[
+                            const SizedBox(width: 4),
+                            Flexible(
+                              fit: FlexFit.loose,
+                              child: Align(
+                                key: const ValueKey(
+                                  'composer-workspace-selector',
+                                ),
+                                alignment: Alignment.centerLeft,
+                                child: widget.workspaceSelector!,
+                              ),
+                            ),
+                          ],
                           const Spacer(),
                           CompositedTransformTarget(
                             link: _modelMenuLink,

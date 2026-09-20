@@ -185,4 +185,34 @@ describe("ChatInput model settings", () => {
       "full_access",
     ]);
   });
+
+  it("places permission before workspace in the left action group", () => {
+    const overlayRoot = document.createElement("div");
+    overlayRoot.id = "amitia-overlay-root";
+    document.body.appendChild(overlayRoot);
+    (window as any).amitiaDesktop = {
+      selectWorkspaceDirectory: vi.fn(),
+    };
+    const pinia = createPinia();
+    setActivePinia(pinia);
+    const wrapper = mount(ChatInput, {
+      global: {
+        plugins: [pinia, ElementPlus],
+      },
+    });
+
+    const add = wrapper.get(".add-btn").element;
+    const permission = wrapper.get(".permission-trigger").element;
+    const workspace = wrapper.get(".workspace-trigger").element;
+
+    expect(
+      add.compareDocumentPosition(permission) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      permission.compareDocumentPosition(workspace) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+
+    delete (window as any).amitiaDesktop;
+  });
 });
