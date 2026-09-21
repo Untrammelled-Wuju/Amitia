@@ -15,6 +15,7 @@ type Repository interface {
 	DeleteConversation(id string) error
 	DeleteAllConversations() error
 	GetMessages(convID string, page, pageSize int) ([]Message, int64, error)
+	GetMessagesBefore(convID string, beforeSequence int64, limit int) ([]Message, bool, error)
 	CreateMessage(m *Message) error
 	DeleteMessage(id string) error
 	DeleteMessagesByConv(convID string) error
@@ -157,6 +158,31 @@ func (r *repository) GetMessages(convID string, page, pageSize int) ([]Message, 
 		msgs = []Message{}
 	}
 	return msgs, total, err
+}
+
+func (r *repository) GetMessagesBefore(convID string, beforeSequence int64, limit int) ([]Message, bool, error) {
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+	query := r.db.Where("conversation_id = ? AND deleted_at IS NULL", convID)
+	if beforeSequence > 0 {
+		query = query.Where("sequence < ?", beforeSequence)
+	}
+	var rows []Message
+	if err := query.Order("sequence DESC").Limit(limit + 1).Find(&rows).Error; err != nil {
+		return nil, false, err
+	}
+	hasMore := len(rows) > limit
+	if hasMore {
+		rows = rows[:limit]
+	}
+	for left, right := 0, len(rows)-1; left < right; left, right = left+1, right-1 {
+		rows[left], rows[right] = rows[right], rows[left]
+	}
+	if rows == nil {
+		rows = []Message{}
+	}
+	return rows, hasMore, nil
 }
 
 func (r *repository) CreateMessage(m *Message) error {

@@ -30,7 +30,7 @@ func compileWithPolicy(policy ChannelPolicy) CompiledPrompt {
 	case "short_per_line":
 		instructionParts = append(instructionParts,
 			"每句话必须单独一行，用换行符分隔。",
-			"每句话尽量短，适合连续消息展示。",
+			"每句话尽量短，但整轮只输出一条连续消息。",
 			"能一句说完就一句，不要写长段落。",
 			"不要把多句话连成一段。",
 			"不要用句号连接多个意思。",
@@ -40,7 +40,7 @@ func compileWithPolicy(policy ChannelPolicy) CompiledPrompt {
 			"回复要自然、有反应、有一点态度，可以适当使用「嗯？、喔、奥奥、ok、好、行、确实、懂了」等语气词。",
 			"用户随口聊，你就自然接话；用户认真问问题，你再认真回答。",
 			"不要客服腔，不要过度正式，不要每次都完整总结，也不要动不动分点讲大道理。",
-			"回复格式适合连续消息：",
+			"回复格式使用同一条消息内的短句换行：",
 			"用户发一句话时，你可以回复 1 到 4 句短句。",
 			"不要写成一整段长文。",
 			"整体目标是：像一个熟悉用户、说话自然、有判断力的人。该短就短，该认真就认真，不端着，也不表演过头。",
@@ -121,10 +121,6 @@ func ApplyPostValidation(raw string, kind ChannelKind) string {
 }
 
 func stripMarkdown(input string) string {
-	const (
-		messageBreak = "[AMITIA_BR]"
-		placeholder  = "\x00AMITIABRPLACEHOLDER\x00"
-	)
 	replacements := []struct{ old, new string }{
 		{"**", ""},
 		{"__", ""},
@@ -133,9 +129,9 @@ func stripMarkdown(input string) string {
 		{"`", ""},
 		{"#", ""},
 	}
-	result := strings.ReplaceAll(input, messageBreak, placeholder)
+	result := input
 	for _, r := range replacements {
 		result = strings.ReplaceAll(result, r.old, r.new)
 	}
-	return strings.ReplaceAll(result, placeholder, messageBreak)
+	return result
 }

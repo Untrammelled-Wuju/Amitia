@@ -437,7 +437,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		panic("failed to initialize kernel container")
 	}
 	extensionRuntime.Kernel.SetContainer(kernelContainer)
-	wireMessageEventDurableBridge(kernelContainer.EventService)
+	wireConversationEventDurableStore(kernelContainer.EventService)
 	if err := extensionRuntime.Kernel.RecoverPackageOperations(context.Background()); err != nil {
 		log.Error("package operation recovery failed: ", err)
 		panic("failed to recover package operations")
@@ -1545,11 +1545,11 @@ type chatDeliveryAdapter struct {
 func (a *chatDeliveryAdapter) CreateDeliveryIntent(interactionID, channel, peerID, contentType string, payload []byte) error {
 	intent := delivery.NewDeliveryIntent(interactionID, channel, peerID, contentType, payload)
 	var metadata struct {
-		ResponseGroupID  string `json:"responseGroupId"`
+		DeliveryGroupID  string `json:"deliveryGroupId"`
 		DeliverySequence int    `json:"deliverySequence"`
 	}
 	if err := json.Unmarshal(payload, &metadata); err == nil {
-		intent.ResponseGroupID = metadata.ResponseGroupID
+		intent.DeliveryGroupID = metadata.DeliveryGroupID
 		intent.DeliverySequence = metadata.DeliverySequence
 	}
 	return a.store.CreateIntent(intent)

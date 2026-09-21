@@ -29,7 +29,7 @@ type AppendConversationMessagesRequest struct {
 type AppendConversationMessagesResult struct {
 	MessageIDs      []string `json:"messageIds"`
 	Sequences       []int64  `json:"sequences"`
-	ResponseGroupID string   `json:"responseGroupId"`
+	DeliveryGroupID string   `json:"deliveryGroupId"`
 	LastSequence    int64    `json:"lastSequence"`
 }
 
@@ -59,12 +59,19 @@ func (s *service) AppendConversationMessages(ctx context.Context, request *Appen
 		return nil, fmt.Errorf("parts must contain between 1 and %d items", MaxConversationMessageParts)
 	}
 	parts := make([]MessagePart, len(request.Parts))
+	textParts := 0
 	for index, part := range request.Parts {
 		normalized, err := normalizeAppendMessagePart(index, part)
 		if err != nil {
 			return nil, err
 		}
+		if normalized.Type == "text" {
+			textParts++
+		}
 		parts[index] = normalized
+	}
+	if request.Role == "assistant" && textParts > 1 {
+		return nil, fmt.Errorf("assistant append accepts at most one text part")
 	}
 
 	var conversation Conversation
@@ -80,9 +87,9 @@ func (s *service) AppendConversationMessages(ctx context.Context, request *Appen
 	if request.Source == "" {
 		request.Source = "extension"
 	}
-	responseGroupID := request.RequestID
-	if responseGroupID == "" {
-		responseGroupID = uuid.New().String()
+	deliveryGroupID := request.RequestID
+	if deliveryGroupID == "" {
+		deliveryGroupID = uuid.New().String()
 	}
 	messageIDs := make([]string, 0, len(parts))
 	sequences := make([]int64, 0, len(parts))
@@ -90,7 +97,7 @@ func (s *service) AppendConversationMessages(ctx context.Context, request *Appen
 	var lastSequence int64
 	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		for index, part := range parts {
-			message := buildAppendMessage(request, responseGroupID, index+1, part)
+			message := buildAppendMessage(request, deliveryGroupID, index+1, part)
 			if err := tx.Create(message).Error; err != nil {
 				return err
 			}
@@ -105,7 +112,7 @@ func (s *service) AppendConversationMessages(ctx context.Context, request *Appen
 					"messageId":        message.ID,
 					"conversationId":   request.ConversationID,
 					"characterId":      request.CharacterID,
-					"responseGroupId":  responseGroupID,
+					"deliveryGroupId":  deliveryGroupID,
 					"deliverySequence": index + 1,
 					"content":          message.Content,
 					"mimeType":         part.MIMEType,
@@ -132,7 +139,7 @@ func (s *service) AppendConversationMessages(ctx context.Context, request *Appen
 	if s.deliveryStore != nil && len(deliveryPayloads) > 0 {
 		peerID := conversation.PeerID
 		for index, payload := range deliveryPayloads {
-			if err := s.deliveryStore.CreateDeliveryIntent(responseGroupID, request.Channel, peerID, parts[index].Type, payload); err != nil {
+			if err := s.deliveryStore.CreateDeliveryIntent(deliveryGroupID, request.Channel, peerID, parts[index].Type, payload); err != nil {
 				return nil, err
 			}
 		}
@@ -140,7 +147,7 @@ func (s *service) AppendConversationMessages(ctx context.Context, request *Appen
 	return &AppendConversationMessagesResult{
 		MessageIDs:      messageIDs,
 		Sequences:       sequences,
-		ResponseGroupID: responseGroupID,
+		DeliveryGroupID: deliveryGroupID,
 		LastSequence:    lastSequence,
 	}, nil
 }
@@ -165,7 +172,7 @@ func normalizeAppendMessagePart(index int, part MessagePart) (MessagePart, error
 	return part, nil
 }
 
-func buildAppendMessage(request *AppendConversationMessagesRequest, responseGroupID string, sequence int, part MessagePart) *Message {
+func buildAppendMessage(request *AppendConversationMessagesRequest, deliveryGroupID string, sequence int, part MessagePart) *Message {
 	content := part.Content
 	if content == "" {
 		content = part.AltText
@@ -202,7 +209,7 @@ func buildAppendMessage(request *AppendConversationMessagesRequest, responseGrou
 		MediaHeight:      part.Height,
 		OriginalAsset:    part.URL,
 		FallbackAsset:    part.FallbackURL,
-		ResponseGroupID:  responseGroupID,
+		DeliveryGroupID:  deliveryGroupID,
 		DeliverySequence: sequence,
 		RequestID:        request.RequestID,
 		ReplyToMessageID: request.ReplyToMessageID,

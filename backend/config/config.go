@@ -110,7 +110,7 @@ type AppConfig struct {
 }
 
 type ChatConfig struct {
-	MergeWindowMs           int `mapstructure:"mergeWindowMs"`
+	EventReplayRingSize     int `mapstructure:"eventReplayRingSize"`
 	ContextWindowMaxRounds  int `mapstructure:"contextWindowMaxRounds"`
 	AgentTurnTimeoutSeconds int `mapstructure:"agentTurnTimeoutSeconds"`
 	AgentMaxParallelTools   int `mapstructure:"agentMaxParallelTools"`
@@ -314,8 +314,8 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("app.name", "U-Ai")
 	v.SetDefault("app.version", "26.2.0-beta.1")
 	v.SetDefault("app.deployMode", "desktop-local")
+	v.SetDefault("chat.eventReplayRingSize", 4096)
 	v.SetDefault("chat.contextWindowMaxRounds", 20)
-	v.SetDefault("chat.mergeWindowMs", 6000)
 	v.SetDefault("chat.agentTurnTimeoutSeconds", 1800)
 	v.SetDefault("chat.agentMaxParallelTools", 4)
 	v.SetDefault("embedding.modelName", "doubao-embedding-vision-251215")

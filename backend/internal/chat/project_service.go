@@ -331,13 +331,17 @@ func (s *service) MoveConversationToProjectForSpace(conversationID, projectID, s
 	now := time.Now().Format("2006-01-02 15:04:05")
 	revision := conversation.Revision + 1
 	if err := s.db.Model(&Conversation{}).Where("id = ?", conversation.ID).Updates(map[string]interface{}{
-		"project_id": projectID,
-		"updated_at": now,
-		"revision":   revision,
+		"project_id":          projectID,
+		"workspace_id":        "",
+		"workspace_device_id": "",
+		"updated_at":          now,
+		"revision":            revision,
 	}).Error; err != nil {
 		return nil, err
 	}
 	conversation.ProjectID = projectID
+	conversation.WorkspaceID = ""
+	conversation.WorkspaceDeviceID = ""
 	conversation.UpdatedAt = now
 	conversation.Revision = revision
 	return conversation, nil

@@ -18,7 +18,6 @@ enum MessageStatus {
   sent,
   delivered,
   interrupted,
-  cancelled,
   error,
 }
 
@@ -62,10 +61,7 @@ class ChatMessage {
   final String? toolResult;
   final String? replyToMessageId;
   final String? replyToExcerpt;
-  final String responseGroupId;
-  final int deliverySequence;
   final AssistantTurnDto? assistantTurn;
-  final bool assistantTurnSuppressed;
 
   ChatMessage({
     required this.id,
@@ -94,10 +90,7 @@ class ChatMessage {
     this.toolResult,
     this.replyToMessageId,
     this.replyToExcerpt,
-    this.responseGroupId = '',
-    this.deliverySequence = 0,
     this.assistantTurn,
-    this.assistantTurnSuppressed = false,
   }) : renderId = renderId ?? id;
 }
 

@@ -132,9 +132,12 @@ type UnifiedEntryRequest struct {
 	ReasoningEnabled         *bool           `json:"reasoningEnabled,omitempty"`
 	PermissionMode           string          `json:"permissionMode,omitempty"`
 	RequestID                string          `json:"requestId,omitempty"`
+	TurnID                   string          `json:"turnId,omitempty"`
+	ExecutionID              string          `json:"executionId,omitempty"`
 	SessionID                string          `json:"sessionId,omitempty"`
 	IsInternal               bool            `json:"-"`
 	SuppressReplyPersistence bool            `json:"-"`
+	ForceRegenerate          bool            `json:"-"`
 }
 
 type UnifiedEntry struct {
@@ -248,6 +251,8 @@ func (e *UnifiedEntry) Handle(ctx context.Context, req *UnifiedEntryRequest) (*O
 		DeviceTimezone:           req.DeviceTimezone,
 		SessionID:                resolution.Scope.SessionID,
 		RequestID:                requestID,
+		TurnID:                   req.TurnID,
+		ExecutionID:              req.ExecutionID,
 		AudioUrl:                 req.AudioUrl,
 		AudioDuration:            req.AudioDuration,
 		VoiceMessage:             req.VoiceMessage,
@@ -262,6 +267,7 @@ func (e *UnifiedEntry) Handle(ctx context.Context, req *UnifiedEntryRequest) (*O
 		PermissionMode:           req.PermissionMode,
 		IsInternal:               req.IsInternal,
 		SuppressReplyPersistence: req.SuppressReplyPersistence,
+		ForceRegenerate:          req.ForceRegenerate,
 		ProactiveTaskInstruction: req.ProactiveTaskInstruction,
 		ProactiveTimeContext:     req.ProactiveTimeContext,
 		ProactiveRecentContext:   req.ProactiveRecentContext,

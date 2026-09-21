@@ -23,7 +23,6 @@ import {
   loadCharactersApi,
   type MessagePsycheSnapshot,
   fetchMessagePsycheApi,
-  fetchMessageStatusApi,
 } from "./api";
 
 export function useConversationLogs() {
@@ -276,28 +275,6 @@ export function useConversationLogs() {
     ElMessage.success("已删除");
   }
 
-  const messageStatusMap = ref<Record<string, any>>({});
-  const messageStatusLoadingMap = ref<Record<string, boolean>>({});
-
-  async function toggleMessageStatus(messageId: string) {
-    if (messageStatusMap.value[messageId]) {
-      const next = { ...messageStatusMap.value };
-      delete next[messageId];
-      messageStatusMap.value = next;
-      return;
-    }
-    if (messageStatusLoadingMap.value[messageId]) return;
-    messageStatusLoadingMap.value = { ...messageStatusLoadingMap.value, [messageId]: true };
-    try {
-      const data = await fetchMessageStatusApi(messageId);
-      messageStatusMap.value = { ...messageStatusMap.value, [messageId]: data || {} };
-    } catch {
-      ElMessage.error("读取消息状态失败");
-    } finally {
-      messageStatusLoadingMap.value = { ...messageStatusLoadingMap.value, [messageId]: false };
-    }
-  }
-
   const psycheMap = ref<Record<string, MessagePsycheSnapshot>>({});
   const psycheLoadingMap = ref<Record<string, boolean>>({});
 
@@ -415,9 +392,6 @@ export function useConversationLogs() {
     fetchContextPreview,
     continueChat,
     loadCharacters,
-    messageStatusMap,
-    messageStatusLoadingMap,
-    toggleMessageStatus,
     psycheMap,
     psycheLoadingMap,
     loadMessagePsyche,

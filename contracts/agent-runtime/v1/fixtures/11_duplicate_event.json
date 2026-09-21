@@ -1,0 +1,55 @@
+{
+  "name": "duplicate_event",
+  "version": 1,
+  "initialState": {
+    "lastEventSequence": 0,
+    "turns": []
+  },
+  "events": [
+    {
+      "version": 1,
+      "eventId": "evt-dup",
+      "eventSequence": 1,
+      "conversationId": "conversation-1",
+      "requestId": "request-1",
+      "executionId": "execution-1",
+      "turnId": "turn-1",
+      "turnSequence": 1,
+      "type": "turn.queued",
+      "createdAt": "2026-09-21T10:00:00Z",
+      "status": "queued",
+      "payload": {}
+    },
+    {
+      "version": 1,
+      "eventId": "evt-dup",
+      "eventSequence": 1,
+      "conversationId": "conversation-1",
+      "requestId": "request-1",
+      "executionId": "execution-1",
+      "turnId": "turn-1",
+      "turnSequence": 1,
+      "type": "turn.queued",
+      "createdAt": "2026-09-21T10:00:00Z",
+      "status": "queued",
+      "payload": {}
+    }
+  ],
+  "expectedState": {
+    "lastEventSequence": 1,
+    "activeTurnId": "turn-1",
+    "turns": [
+      {
+        "turnId": "turn-1",
+        "turnSequence": 1,
+        "executionId": "execution-1",
+        "status": "queued",
+        "blocks": []
+      }
+    ]
+  },
+  "expectedApplyResults": [
+    "applied",
+    "duplicate"
+  ]
+}

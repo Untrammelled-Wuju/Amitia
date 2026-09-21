@@ -172,25 +172,41 @@ export function useConversationWorkspace() {
   ): Promise<void> {
     const id = String(conversationId || "").trim();
     activeConversationId.value = id;
-    await chatStore.fetchSidebar();
     if (!id) {
       await startDraftConversation(draftProjectId);
       return;
     }
-    const conversation = [
-      ...chatStore.sidebar.pinned,
-      ...chatStore.sidebar.recent,
-      ...chatStore.sidebar.projects.flatMap((project) => project.conversations),
-    ].find((item) => item.id === id);
-    const project = conversation?.projectId
-      ? chatStore.sidebar.projects.find((item) => item.id === conversation.projectId)
-      : undefined;
-    currentWorkspace.value = project ? projectToBinding(project) : null;
-    chatStore.currentProjectId = project?.id || "";
+    currentWorkspace.value = null;
+  }
+
+  function applySnapshotWorkspace(
+    workspace?: Record<string, any> | null,
+    conversationProjectId = "",
+  ): void {
+    if (!workspace || !String(workspace.workspaceId || "").trim()) {
+      currentWorkspace.value = null;
+      chatStore.currentProjectId = String(conversationProjectId || "").trim();
+      return;
+    }
+    const projectId = String(workspace.projectId || "").trim();
+    currentWorkspace.value = {
+      projectId,
+      workspaceId: String(workspace.workspaceId || "").trim(),
+      deviceId: String(workspace.deviceId || "").trim() || undefined,
+      workspaceName: String(workspace.workspaceName || "").trim(),
+      workspaceKind: String(workspace.workspaceKind || "local").trim() || "local",
+      rootUri: String(workspace.rootUri || "").trim(),
+    };
+    chatStore.currentProjectId = projectId;
   }
 
   function getWorkspaceRequestFields(): Record<string, string> {
-    return {};
+    const workspace = currentWorkspace.value;
+    if (!workspace || workspace.projectId) return {};
+    return {
+      workspaceId: workspace.workspaceId,
+      ...(workspace.deviceId ? { workspaceDeviceId: workspace.deviceId } : {}),
+    };
   }
 
   return {
@@ -200,6 +216,7 @@ export function useConversationWorkspace() {
     workspaceLoading,
     refreshRecentWorkspaces,
     loadConversationWorkspace,
+    applySnapshotWorkspace,
     startDraftConversation,
     chooseWorkspaceDirectory,
     selectWorkspaceMount,

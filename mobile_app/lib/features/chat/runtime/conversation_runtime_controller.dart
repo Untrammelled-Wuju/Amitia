@@ -4,58 +4,44 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/backend_access/business_backend_unavailable.dart';
 import '../../../core/models/conversation.dart';
 import '../../../core/services/chat_service.dart';
 import '../../../core/services/channel_service.dart';
 import '../../../core/services/providers.dart';
 import '../../../shared/models/models.dart';
 import '../../conversation/rendering/stream/markdown_stream_scheduler.dart';
+import 'agent_event_reducer.dart';
 import 'conversation_message_ledger.dart';
 
-/// UI-agnostic conversation runtime shared by the built-in UI and extension UI.
-///
-/// Mobile uses the same streaming web-chat contract as the desktop client:
-/// send-stream SSE is the primary reply path, while persisted-message sync and
-/// generation status are reconciliation fallbacks for queued/remote delivery.
 class ConversationRuntimeController extends ChangeNotifier {
   ConversationRuntimeController(this._chatService, this._emoteService);
 
   final ChatService _chatService;
   final EmoteService _emoteService;
   final ConversationMessageLedger _messages = ConversationMessageLedger();
+  final AgentEventReducer _agentReducer = AgentEventReducer();
+  final MarkdownStreamScheduler _streamScheduler = MarkdownStreamScheduler();
+  final Map<String, Map<String, dynamic>> _pendingApprovals = <String, Map<String, dynamic>>{};
   String? _conversationId;
   String? _characterId;
   ConversationWorkspaceDto? _workspace;
   bool _sending = false;
   Object? _lastError;
-  int _generationEpoch = 0;
-  Timer? _liveSyncTimer;
-  bool _syncingMessages = false;
-  int _messageSyncEpoch = 0;
-  int _messagePage = 1;
-  int _messageTotalPages = 0;
-  bool _loadingOlderMessages = false;
-  int _historyLoadEpoch = 0;
-  int _conversationUpdateEpoch = 0;
-  bool _disposed = false;
   int _draftEpoch = 0;
-  ChatStreamCancellation? _activeSendCancellation;
-  ChatStreamCancellation? _messageEventsCancellation;
-  String _activeReasoningContent = '';
-  int _activeReasoningDurationMs = 0;
-  String _activeResponseGroupId = '';
+  int _conversationUpdateEpoch = 0;
   int _modelConfigId = 0;
   String _reasoningEffort = 'high';
   bool _reasoningEnabled = true;
   String _permissionMode = 'request_approval';
-  bool _liveReasoningAttached = false;
-  List<AssistantTurnDto> _assistantTurns = const <AssistantTurnDto>[];
-  final MarkdownStreamScheduler _streamScheduler = MarkdownStreamScheduler();
-
-  static const Duration _liveSyncInterval = Duration(seconds: 15);
-  static const Duration _businessReadyRetryWindow = Duration(seconds: 20);
-  static const Duration _businessReadyRetryDelay = Duration(milliseconds: 250);
+  bool _disposed = false;
+  int _runtimeEpoch = 0;
+  ChatStreamCancellation? _eventCancellation;
+  bool _loadingSnapshot = false;
+  bool _loadingOlderMessages = false;
+  int _messageBeforeSequence = 0;
+  bool _hasMoreMessageHistory = false;
+  bool _hasMoreTurnHistory = false;
+  int _oldestTurnSequence = 0;
 
   List<ChatMessage> get messages => _messages.messages;
   String? get conversationId => _conversationId;
@@ -68,26 +54,23 @@ class ConversationRuntimeController extends ChangeNotifier {
   String get reasoningEffort => _reasoningEffort;
   bool get reasoningEnabled => _reasoningEnabled;
   String get permissionMode => _permissionMode;
-  bool get hasMoreHistory => _messagePage > 1;
+  bool get hasMoreHistory => _hasMoreMessageHistory || _hasMoreTurnHistory;
   bool get isLoadingOlderMessages => _loadingOlderMessages;
-  int get messagePage => _messagePage;
-  int get messageTotalPages => _messageTotalPages;
   int get conversationUpdateEpoch => _conversationUpdateEpoch;
-
-  void _resetMessagePagination() {
-    _messagePage = 1;
-    _messageTotalPages = 0;
-    _loadingOlderMessages = false;
-    _historyLoadEpoch++;
-  }
+  String get activeTurnId => _agentReducer.activeTurnId;
+  String get activeExecutionId => _agentReducer.activeExecutionId;
+  List<Map<String, dynamic>> get pendingApprovals =>
+      _pendingApprovals.values.map((item) => Map<String, dynamic>.from(item)).toList(growable: false);
 
   void setCharacterId(String? characterId) {
-    _characterId = characterId?.trim().isEmpty == true ? null : characterId;
+    final value = characterId?.trim() ?? '';
+    _characterId = value.isEmpty ? null : value;
   }
 
   void setWorkspace(ConversationWorkspaceDto? workspace) {
     final previous = _workspace;
     if (previous?.workspaceId == workspace?.workspaceId &&
+        previous?.projectId == workspace?.projectId &&
         previous?.deviceId == workspace?.deviceId &&
         previous?.workspaceName == workspace?.workspaceName &&
         previous?.rootUri == workspace?.rootUri) {
@@ -103,10 +86,10 @@ class ConversationRuntimeController extends ChangeNotifier {
     bool reasoningEnabled,
   ) async {
     previewModelSettings(modelConfigId, reasoningEffort, reasoningEnabled);
-    final conversationId = _conversationId?.trim() ?? '';
-    if (conversationId.isEmpty) return;
+    final id = _conversationId?.trim() ?? '';
+    if (id.isEmpty) return;
     await _chatService.updateConversationModelSettings(
-      conversationId,
+      id,
       modelConfigId: _modelConfigId,
       reasoningEffort: _reasoningEffort,
       reasoningEnabled: _reasoningEnabled,
@@ -119,7 +102,9 @@ class ConversationRuntimeController extends ChangeNotifier {
     bool reasoningEnabled,
   ) {
     _modelConfigId = modelConfigId;
-    _reasoningEffort = reasoningEffort.isEmpty ? 'high' : reasoningEffort;
+    _reasoningEffort = reasoningEffort.trim().isEmpty
+        ? 'high'
+        : reasoningEffort.trim();
     _reasoningEnabled = reasoningEnabled;
     notifyListeners();
   }
@@ -131,58 +116,9 @@ class ConversationRuntimeController extends ChangeNotifier {
     if (_permissionMode == next) return;
     _permissionMode = next;
     notifyListeners();
-    final conversationId = _conversationId?.trim() ?? '';
-    if (conversationId.isEmpty) return;
-    await _chatService.updateConversationPermissionMode(
-      conversationId,
-      _permissionMode,
-    );
-  }
-
-  ChatMessage _copy(
-    ChatMessage message, {
-    String? id,
-    int? sequence,
-    MessageStatus? status,
-    AssistantTurnDto? assistantTurn,
-    bool? assistantTurnSuppressed,
-    bool clearAssistantTurn = false,
-  }) {
-    return ChatMessage(
-      id: id ?? message.id,
-      renderId: message.renderId,
-      characterId: message.characterId,
-      role: message.role,
-      type: message.type,
-      content: message.content,
-      reasoningContent: message.reasoningContent,
-      reasoningDurationMs: message.reasoningDurationMs,
-      time: message.time,
-      sequence: sequence ?? message.sequence,
-      status: status ?? message.status,
-      agentTaskId: message.agentTaskId,
-      agentTaskTitle: message.agentTaskTitle,
-      agentTaskSteps: message.agentTaskSteps,
-      agentTaskProgress: message.agentTaskProgress,
-      agentTaskElapsed: message.agentTaskElapsed,
-      fileName: message.fileName,
-      fileSizeKB: message.fileSizeKB,
-      resourceUri: message.resourceUri,
-      mediaUrl: message.mediaUrl,
-      mimeType: message.mimeType,
-      durationMs: message.durationMs,
-      toolName: message.toolName,
-      toolResult: message.toolResult,
-      replyToMessageId: message.replyToMessageId,
-      replyToExcerpt: message.replyToExcerpt,
-      responseGroupId: message.responseGroupId,
-      deliverySequence: message.deliverySequence,
-      assistantTurn: clearAssistantTurn
-          ? null
-          : assistantTurn ?? message.assistantTurn,
-      assistantTurnSuppressed:
-          assistantTurnSuppressed ?? message.assistantTurnSuppressed,
-    );
+    final id = _conversationId?.trim() ?? '';
+    if (id.isEmpty) return;
+    await _chatService.updateConversationPermissionMode(id, next);
   }
 
   Future<void> sendText(
@@ -228,26 +164,19 @@ class ConversationRuntimeController extends ChangeNotifier {
 
   Future<void> sendEmote(String emoteId, String displayText) async {
     if (emoteId.trim().isEmpty || _sending) return;
-    final conv = _conversationId;
-    final character = _characterId;
-    if (conv == null ||
-        conv.isEmpty ||
-        character == null ||
-        character.isEmpty) {
+    final conv = _conversationId?.trim() ?? '';
+    final character = _characterId?.trim() ?? '';
+    if (conv.isEmpty || character.isEmpty) {
       _lastError = StateError('发送表情前需要有效会话和角色');
       notifyListeners();
       return;
     }
-    _sending = true;
     _lastError = null;
-    notifyListeners();
     try {
       await _emoteService.sendEmote(conv, character, emoteId);
-      await _syncMessages();
+      await _refreshSnapshot(conv);
     } catch (error) {
       _lastError = error;
-    } finally {
-      _sending = false;
       notifyListeners();
     }
   }
@@ -377,29 +306,22 @@ class ConversationRuntimeController extends ChangeNotifier {
     String? videoUrl,
     String? replyToMessageId,
   }) async {
-    final pendingMessage = _copy(localMessage, sequence: _nextLocalSequence());
-    _messages.upsert(pendingMessage);
-    debugPrint(
-      'Chat local message added id=${pendingMessage.id} total=${_messages.length}',
+    if (_sending) return;
+    final requestId = _localId('mobile-');
+    final pending = _cloneMessage(
+      localMessage,
+      renderId: requestId,
+      sequence: _nextLocalSequence(),
+      status: MessageStatus.sending,
     );
+    _messages.upsert(pending);
     _lastError = null;
     _sending = true;
-    _activeReasoningContent = '';
-    _activeReasoningDurationMs = 0;
-    _activeResponseGroupId = pendingMessage.renderId;
-    _liveReasoningAttached = false;
-    final epoch = ++_generationEpoch;
-    final cancellation = _chatService.createStreamCancellation();
-    _activeSendCancellation?.cancel('superseded');
-    _activeSendCancellation = cancellation;
     notifyListeners();
-
-    var queued = false;
     try {
-      await _ensureConversationForSend();
-      await for (final event in _submitStreamWithReadinessRetry(
+      final result = await _chatService.submitMessage(
         message: message,
-        clientMessageId: localMessage.renderId,
+        clientMessageId: requestId,
         conversationId: _conversationId,
         characterId: _characterId,
         imageUrl: imageUrl,
@@ -407,759 +329,660 @@ class ConversationRuntimeController extends ChangeNotifier {
         audioDuration: audioDuration,
         videoUrl: videoUrl,
         replyToMessageId: replyToMessageId,
+        modelConfigId: _modelConfigId,
+        reasoningEffort: _reasoningEffort,
+        reasoningEnabled: _reasoningEnabled,
+        permissionMode: _permissionMode,
         workspace: _workspace,
-        cancellation: cancellation,
-      )) {
-        if (epoch != _generationEpoch || cancellation.isCancelled) return;
-        switch (event.type) {
-          case 'message_start':
-            await _handleMessageStart(pendingMessage, event.data, epoch);
-            break;
-          case 'token':
-            _upsertStreamAssistant(event.data, MessageType.text);
-            break;
-          case 'voice_audio':
-            _upsertStreamAssistant(event.data, MessageType.audio);
-            break;
-          case 'queued':
-            queued = true;
-            final conversationId = (event.data['conversationId'] ?? '')
-                .toString()
-                .trim();
-            if (conversationId.isNotEmpty) {
-              _conversationId = conversationId;
-              _restartLiveSync();
-              await _bindConversationWorkspace(conversationId);
-              notifyListeners();
-            }
-            break;
-          case 'message_end':
-          case 'done':
-            _streamScheduler.flush();
-            break;
-          case 'connected':
-            break;
-        }
+      );
+      final authoritativeConversation = result.conversationId.trim();
+      if (authoritativeConversation.isEmpty) {
+        throw StateError('消息提交未返回会话ID');
       }
-      if (epoch != _generationEpoch) return;
-      if (queued) {
-        await _awaitQueuedGeneration(epoch);
-      } else {
-        await _syncMessages();
+      final wasDraft = (_conversationId?.trim() ?? '').isEmpty;
+      _conversationId = authoritativeConversation;
+      final current = _messages.findByRenderId(requestId, role: MessageRole.user);
+      if (current != null) {
+        _messages.upsert(
+          _cloneMessage(
+            current,
+            id: result.userMessageId.trim().isEmpty
+                ? current.id
+                : result.userMessageId.trim(),
+            status: MessageStatus.queued,
+          ),
+        );
       }
-      await _loadAssistantTurns();
-      _lastError = null;
+      if (wasDraft) {
+        _conversationUpdateEpoch++;
+      }
+      _connectEventStream(authoritativeConversation);
+      notifyListeners();
     } catch (error, stackTrace) {
-      if (epoch != _generationEpoch || cancellation.isCancelled) return;
-      debugPrint('Chat send failed [${error.runtimeType}]: $error');
-      for (final line in stackTrace.toString().split('\n').take(24)) {
+      debugPrint('Chat command failed [${error.runtimeType}]: $error');
+      for (final line in stackTrace.toString().split('\n').take(16)) {
         debugPrint(line);
       }
       _lastError = error;
-      var localMessage = _messages.findById(pendingMessage.id);
-      if (localMessage == null) {
-        for (final message in _messages.messages) {
-          if (message.role == MessageRole.user &&
-              message.status == MessageStatus.sending) {
-            localMessage = message;
-            break;
-          }
-        }
+      final current = _messages.findByRenderId(requestId, role: MessageRole.user);
+      if (current != null) {
+        _messages.upsert(_cloneMessage(current, status: MessageStatus.error));
       }
-      if (localMessage != null) {
-        _messages.upsert(_copy(localMessage, status: MessageStatus.error));
-      }
+      _sending = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> _refreshSnapshot(String conversationId) async {
+    if (_loadingSnapshot || _disposed || _conversationId != conversationId) return;
+    _loadingSnapshot = true;
+    try {
+      final snapshot = await _chatService.conversationSnapshot(conversationId);
+      if (_disposed || _conversationId != conversationId) return;
+      _applySnapshot(snapshot);
     } finally {
-      if (identical(_activeSendCancellation, cancellation)) {
-        _activeSendCancellation = null;
-      }
-      if (epoch == _generationEpoch) {
-        _activeResponseGroupId = '';
-        _sending = false;
-        _streamScheduler.schedule(notifyListeners);
-      }
+      _loadingSnapshot = false;
     }
   }
 
-  Future<void> _ensureConversationForSend() async {
-    final existing = _conversationId?.trim() ?? '';
-    if (existing.isNotEmpty) return;
-    final deadline = DateTime.now().add(_businessReadyRetryWindow);
-    while (true) {
-      try {
-        final conversation = await _chatService.createConversation(
-          projectId: _workspace?.projectId ?? '',
-        );
-        if (conversation == null) {
-          throw StateError('创建会话未返回结果');
-        }
-        _conversationId = conversation.id;
-        _restartLiveSync();
-        notifyListeners();
-        return;
-      } on BusinessBackendUnavailable {
-        if (DateTime.now().isAfter(deadline)) rethrow;
-        await Future<void>.delayed(_businessReadyRetryDelay);
-      }
+  void _applySnapshot(ConversationSnapshotDto snapshot) {
+    if (snapshot.version != 1) {
+      throw StateError('不支持的会话快照版本: ${snapshot.version}');
     }
+    final conversation = snapshot.conversation;
+    if (conversation != null) {
+      _conversationId = conversation.id;
+      _modelConfigId = conversation.modelConfigId;
+      _reasoningEffort = conversation.reasoningEffort.trim().isEmpty
+          ? 'high'
+          : conversation.reasoningEffort.trim();
+      _reasoningEnabled = conversation.reasoningEnabled != 0;
+      _permissionMode = conversation.permissionMode == 'full_access'
+          ? 'full_access'
+          : 'request_approval';
+    }
+    if (snapshot.workspace != null) {
+      _workspace = snapshot.workspace;
+    } else if ((conversation?.projectId ?? '').isEmpty) {
+      _workspace = null;
+    }
+    _messages.clear();
+    for (final dto in snapshot.messages) {
+      _messages.upsert(_messageFromDto(dto));
+    }
+    _agentReducer.reset(
+      turns: snapshot.turns,
+      lastEventSequence: snapshot.lastEventSequence,
+      activeTurn: snapshot.activeTurn,
+    );
+    _pendingApprovals.clear();
+    for (final approval in snapshot.approvals) {
+      final approvalId = (approval['id'] ?? '').toString().trim();
+      if (approvalId.isEmpty) continue;
+      _pendingApprovals[approvalId] = Map<String, dynamic>.from(approval);
+    }
+    _messageBeforeSequence = snapshot.messageNextBefore;
+    _hasMoreMessageHistory = snapshot.hasMoreMessages;
+    _oldestTurnSequence = snapshot.turnNextBefore > 0
+        ? snapshot.turnNextBefore
+        : (snapshot.turns.isEmpty ? 0 : snapshot.turns.first.sequence);
+    _hasMoreTurnHistory = snapshot.hasMoreTurns;
+    _sending = _agentReducer.activeTurnId.isNotEmpty;
+    _projectTurns();
+    notifyListeners();
   }
 
-  Stream<ChatStreamEvent> _submitStreamWithReadinessRetry({
-    required String message,
-    String? clientMessageId,
-    String? conversationId,
-    String? characterId,
-    String? imageUrl,
-    String? audioUrl,
-    double audioDuration = 0,
-    String? videoUrl,
-    String? replyToMessageId,
-    ConversationWorkspaceDto? workspace,
-    required ChatStreamCancellation cancellation,
-  }) async* {
-    final deadline = DateTime.now().add(_businessReadyRetryWindow);
-    while (true) {
-      var started = false;
+  void _connectEventStream(String conversationId) {
+    final id = conversationId.trim();
+    if (id.isEmpty || _disposed) return;
+    _eventCancellation?.cancel('conversation changed');
+    _eventCancellation = null;
+    final epoch = ++_runtimeEpoch;
+    unawaited(_runEventStream(id, epoch));
+  }
+
+  Future<void> _runEventStream(String conversationId, int epoch) async {
+    while (!_disposed &&
+        epoch == _runtimeEpoch &&
+        _conversationId == conversationId) {
+      final cancellation = _chatService.createStreamCancellation();
+      _eventCancellation = cancellation;
       try {
-        await for (final event in _chatService.submitMessageStream(
-          message: message,
-          clientMessageId: clientMessageId,
+        await for (final streamEvent in _chatService.conversationEvents(
           conversationId: conversationId,
-          characterId: characterId,
-          imageUrl: imageUrl,
-          audioUrl: audioUrl,
-          audioDuration: audioDuration,
-          videoUrl: videoUrl,
-          replyToMessageId: replyToMessageId,
-          modelConfigId: _modelConfigId,
-          reasoningEffort: _reasoningEffort,
-          reasoningEnabled: _reasoningEnabled,
-          permissionMode: _permissionMode,
-          workspace: workspace,
+          afterSequence: _agentReducer.lastEventSequence,
           cancellation: cancellation,
         )) {
-          started = true;
-          yield event;
+          if (_disposed ||
+              epoch != _runtimeEpoch ||
+              cancellation.isCancelled ||
+              _conversationId != conversationId) {
+            return;
+          }
+          if (streamEvent.type == 'snapshot.required') {
+            await _refreshSnapshot(conversationId);
+            cancellation.cancel('snapshot refreshed');
+            break;
+          }
+          if (streamEvent.type != 'agent_ui_event') continue;
+          final event = AgentUIEvent.fromJson(streamEvent.data);
+          final result = _agentReducer.apply(event);
+          if (result == AgentEventApplyResult.gap) {
+            await _refreshSnapshot(conversationId);
+            cancellation.cancel('event gap');
+            break;
+          }
+          if (result != AgentEventApplyResult.applied) continue;
+          _handleAppliedEvent(event);
         }
-        return;
-      } on BusinessBackendUnavailable {
-        if (started ||
+      } catch (error) {
+        if (_disposed ||
+            epoch != _runtimeEpoch ||
             cancellation.isCancelled ||
-            DateTime.now().isAfter(deadline)) {
-          rethrow;
+            _conversationId != conversationId) {
+          return;
         }
-        await Future<void>.delayed(_businessReadyRetryDelay);
+        debugPrint('Conversation event stream reconnect: $error');
+      } finally {
+        if (identical(_eventCancellation, cancellation)) {
+          _eventCancellation = null;
+        }
       }
-    }
-  }
-
-  Future<void> _handleMessageStart(
-    ChatMessage localMessage,
-    Map<String, dynamic> data,
-    int epoch,
-  ) async {
-    final conversationId = (data['conversationId'] ?? '').toString().trim();
-    if (conversationId.isNotEmpty && conversationId != _conversationId) {
-      _conversationId = conversationId;
-      _restartLiveSync();
-    }
-    final userMessageId = (data['userMessageId'] ?? '').toString().trim();
-    _activeReasoningContent = (data['reasoningContent'] ?? '').toString();
-    _activeReasoningDurationMs =
-        (data['reasoningDurationMs'] as num?)?.toInt() ?? 0;
-    final current = _messages.findById(localMessage.id);
-    if (current != null) {
-      _messages.upsert(
-        _copy(
-          current,
-          id: userMessageId.isEmpty ? null : userMessageId,
-          status: MessageStatus.sent,
-        ),
-      );
-    }
-    await _bindConversationWorkspace(conversationId);
-    if (current != null) notifyListeners();
-  }
-
-  Future<void> _bindConversationWorkspace(String conversationId) async {
-    final workspace = _workspace;
-    if (workspace == null || conversationId.isEmpty) return;
-    try {
-      if (workspace.projectId.isNotEmpty) {
-        await _chatService.moveConversationToProject(
-          conversationId,
-          workspace.projectId,
-        );
+      if (_disposed || epoch != _runtimeEpoch || _conversationId != conversationId) {
+        return;
       }
-    } catch (_) {}
+      await Future<void>.delayed(const Duration(milliseconds: 900));
+    }
   }
 
-  void _upsertStreamAssistant(Map<String, dynamic> data, MessageType type) {
-    final id = (data['id'] ?? data['messageId'] ?? '').toString().trim();
-    if (id.isEmpty) return;
-    final content = (data['content'] ?? '').toString();
-    final createdAt =
-        DateTime.tryParse((data['createdAt'] ?? '').toString()) ??
-        DateTime.now();
-    final audioUrl = (data['audioUrl'] ?? '').toString().trim();
-    final duration = (data['duration'] as num?)?.toDouble() ?? 0;
-    final reasoningContent = (data['reasoningContent'] ?? '').toString();
-    final reasoningDurationMs =
-        (data['reasoningDurationMs'] as num?)?.toInt() ?? 0;
-    final responseGroupId =
-        (data['responseGroupId'] ??
-                data['response_group_id'] ??
-                _activeResponseGroupId)
-            .toString()
-            .trim();
-    final deliverySequence =
-        (data['deliverySequence'] as num?)?.toInt() ??
-        (data['delivery_sequence'] as num?)?.toInt() ??
-        0;
-    ChatMessage? provisional;
-    if (responseGroupId.isNotEmpty) {
-      for (final message in _messages.messages) {
-        if (message.role == MessageRole.assistant &&
-            message.id.startsWith('turn:') &&
-            message.responseGroupId == responseGroupId) {
-          provisional = message;
+  void _handleAppliedEvent(AgentUIEvent event) {
+    final type = event.type;
+    if (type == 'approval.requested') {
+      final approvalId = (event.payload['approvalId'] ?? '').toString().trim();
+      if (approvalId.isNotEmpty) {
+        _pendingApprovals[approvalId] = <String, dynamic>{
+          'id': approvalId,
+          'conversationId': event.conversationId,
+          'turnId': event.turnId,
+          'toolCallId': event.callId,
+          'toolName': event.payload['tool'] ?? event.payload['toolName'] ?? '工具调用',
+          'arguments': event.payload['arguments'] ?? '',
+          'riskLevel': event.payload['risk'] ?? event.payload['riskLevel'] ?? '',
+          'expiresAt': event.payload['expiresAt'] ?? '',
+        };
+      }
+    } else if (type == 'approval.approved' ||
+        type == 'approval.denied' ||
+        type == 'approval.expired') {
+      final approvalId = (event.payload['approvalId'] ?? '').toString().trim();
+      if (approvalId.isNotEmpty) _pendingApprovals.remove(approvalId);
+    }
+    if (type == 'turn.queued' || type == 'turn.started') {
+      _sending = true;
+    }
+    final terminal = type == 'turn.completed' ||
+        type == 'turn.failed' ||
+        type == 'turn.interrupted';
+    if (terminal) {
+      _sending = false;
+      _conversationUpdateEpoch++;
+      _streamScheduler.schedule(_flushStreamingProjection);
+      _streamScheduler.flush();
+      final id = _conversationId?.trim() ?? '';
+      if (id.isNotEmpty) unawaited(_refreshSnapshot(id));
+      return;
+    }
+    _streamScheduler.schedule(_flushStreamingProjection);
+  }
+
+  void _flushStreamingProjection() {
+    if (_disposed) return;
+    _projectTurns();
+    notifyListeners();
+  }
+
+  Future<void> resolveApproval(String approvalId, bool approved) async {
+    final id = approvalId.trim();
+    final conversationId = _conversationId?.trim() ?? '';
+    final approval = _pendingApprovals[id];
+    final turnId = (approval?['turnId'] ?? '').toString().trim();
+    if (id.isEmpty || conversationId.isEmpty || turnId.isEmpty) {
+      throw StateError('审批请求缺少 Conversation 或 Turn 绑定');
+    }
+    await _chatService.resolveTurnApproval(
+      conversationId,
+      turnId,
+      id,
+      approved,
+    );
+  }
+
+  void _projectTurns() {
+    final turns = _agentReducer.turns;
+    final attached = <String>{};
+    final liveIds = _messages.messages
+        .where((message) => message.id.startsWith('turn:'))
+        .map((message) => message.id)
+        .toList(growable: false);
+    for (final id in liveIds) {
+      _messages.removeById(id);
+    }
+    final messageById = <String, ChatMessage>{
+      for (final message in _messages.messages) message.id: message,
+    };
+    for (final turn in turns) {
+      AssistantTurnItemDto? finalItem;
+      for (final item in turn.items.reversed) {
+        if (item.type == 'text' && item.messageId.trim().isNotEmpty) {
+          finalItem = item;
           break;
         }
       }
-    }
-    final existing =
-        _messages.findById(id) ??
-        _messages.findByRenderId(id, role: MessageRole.assistant) ??
-        provisional;
-    final characterId =
-        (data['characterId'] ??
-                data['character_id'] ??
-                existing?.characterId ??
-                _characterId)
-            .toString()
-            .trim();
-    final attachReasoning =
-        !_liveReasoningAttached &&
-        (reasoningContent.isNotEmpty || _activeReasoningContent.isNotEmpty);
-    final effectiveReasoningContent = reasoningContent.isNotEmpty
-        ? reasoningContent
-        : _activeReasoningContent;
-    final effectiveReasoningDurationMs = reasoningDurationMs > 0
-        ? reasoningDurationMs
-        : _activeReasoningDurationMs;
-    if (attachReasoning) _liveReasoningAttached = true;
-    final next = ChatMessage(
-      id: id,
-      renderId: existing?.renderId ?? id,
-      characterId: characterId,
-      role: MessageRole.assistant,
-      type: audioUrl.isNotEmpty ? MessageType.audio : type,
-      content: content.isNotEmpty ? content : existing?.content ?? '',
-      reasoningContent: attachReasoning
-          ? effectiveReasoningContent
-          : existing?.reasoningContent ?? '',
-      reasoningDurationMs: attachReasoning
-          ? effectiveReasoningDurationMs
-          : existing?.reasoningDurationMs ?? 0,
-      time: existing?.time ?? createdAt,
-      sequence: existing?.sequence ?? _nextLocalSequence(),
-      status: MessageStatus.sending,
-      resourceUri: audioUrl.isNotEmpty ? audioUrl : existing?.resourceUri,
-      mediaUrl: audioUrl.isNotEmpty ? audioUrl : existing?.mediaUrl,
-      mimeType: audioUrl.isNotEmpty ? 'audio/*' : existing?.mimeType,
-      durationMs: duration > 0
-          ? (duration * 1000).round()
-          : existing?.durationMs,
-      replyToMessageId: existing?.replyToMessageId,
-      replyToExcerpt: existing?.replyToExcerpt,
-      responseGroupId: responseGroupId,
-      deliverySequence: deliverySequence,
-      assistantTurn: existing?.assistantTurn,
-      assistantTurnSuppressed: existing?.assistantTurnSuppressed ?? false,
-    );
-    _messages.upsert(next);
-    notifyListeners();
-  }
-
-  Future<void> _awaitQueuedGeneration(int epoch) async {
-    final conv = _conversationId;
-    if (conv == null || conv.isEmpty) return;
-    final deadline = DateTime.now().add(const Duration(minutes: 2));
-    var sawActiveState = false;
-    while (epoch == _generationEpoch && DateTime.now().isBefore(deadline)) {
-      final status = await _chatService.generationStatus(conv);
-      if (status == 'collecting' || status == 'processing') {
-        sawActiveState = true;
-        await Future<void>.delayed(const Duration(milliseconds: 1000));
-        continue;
+      if (finalItem != null) {
+        final persisted = messageById[finalItem.messageId];
+        if (persisted != null && persisted.role == MessageRole.assistant) {
+          _messages.upsert(
+            _cloneMessage(
+              persisted,
+              assistantTurn: turn,
+            ),
+          );
+          attached.add(turn.id);
+        }
       }
-      if (status == 'failed') throw StateError('AI 生成失败');
-      if (status == 'cancelled') {
-        await _syncMessages();
-        return;
-      }
-      if (status == 'completed' || (status == 'idle' && sawActiveState)) {
-        await _syncMessages();
-        return;
-      }
-      await Future<void>.delayed(const Duration(milliseconds: 750));
     }
-    if (epoch == _generationEpoch) await _syncMessages();
-  }
-
-  Future<void> _syncMessages({bool background = false}) async {
-    final conv = _conversationId;
-    if (conv == null || conv.isEmpty) return;
-    final syncEpoch = ++_messageSyncEpoch;
-    final page = await _chatService.getMessagePage(conv, latest: true);
-    final persisted = page.items;
-    debugPrint(
-      'Chat sync persisted conversation=$conv count=${persisted.length}',
-    );
-    if (_disposed ||
-        syncEpoch != _messageSyncEpoch ||
-        _conversationId != conv) {
-      return;
-    }
-    if (persisted.isEmpty) {
-      debugPrint('Chat sync skipped empty persisted conversation=$conv');
-      return;
-    }
-    _messagePage = page.page;
-    _messageTotalPages = page.totalPages;
-    final changed = _mergePersistedMessages(persisted, conv, syncEpoch);
-    if (changed) notifyListeners();
-  }
-
-  bool _mergePersistedMessages(
-    List<MessageDto> persisted,
-    String conv,
-    int? syncEpoch,
-  ) {
-    if (_disposed ||
-        (syncEpoch != null && syncEpoch != _messageSyncEpoch) ||
-        _conversationId != conv) {
-      return false;
-    }
-    if (persisted.isEmpty) return false;
-    var changed = false;
-    for (final dto in persisted) {
-      final persistedRequestId = dto.requestId.trim();
-      final role = _roleFor(dto.role);
-      var existing = _messages.findById(dto.id);
-      if (existing != null && existing.role != role) existing = null;
-      if (existing == null && persistedRequestId.isNotEmpty) {
-        existing = _messages.findByRenderId(persistedRequestId, role: role);
-      }
-      final type = _typeForDto(dto, existing);
-      final agentTask = type == MessageType.agentTask
-          ? _agentTaskPayload(dto.content)
-          : const <String, dynamic>{};
-      final messageTime =
-          DateTime.tryParse(dto.createdAt) ?? existing?.time ?? DateTime.now();
-      final reasoningContent = dto.reasoningContent.isNotEmpty
-          ? dto.reasoningContent
-          : existing?.reasoningContent ?? '';
-      final reasoningDurationMs = dto.reasoningDurationMs > 0
-          ? dto.reasoningDurationMs
-          : existing?.reasoningDurationMs ?? 0;
-      final responseGroupId = dto.responseGroupId.trim().isNotEmpty
-          ? dto.responseGroupId.trim()
-          : role == MessageRole.assistant && persistedRequestId.isNotEmpty
-          ? persistedRequestId
-          : existing?.responseGroupId ?? '';
-      final next = ChatMessage(
-        id: dto.id,
-        renderId:
-            existing?.renderId ??
-            (role == MessageRole.user && persistedRequestId.isNotEmpty
-                ? persistedRequestId
-                : dto.id),
-        characterId: dto.characterId.isNotEmpty
-            ? dto.characterId
-            : existing?.characterId ?? '',
-        role: role,
-        type: type,
-        content: dto.content.trim().isNotEmpty || existing == null
-            ? dto.content
-            : existing.content,
-        reasoningContent: reasoningContent,
-        reasoningDurationMs: reasoningDurationMs,
-        time: messageTime,
-        sequence: dto.sequence > 0 ? dto.sequence : existing?.sequence,
-        status: _statusForDto(dto.status),
-        agentTaskId:
-            _firstString(agentTask, const <String>[
-              'taskRunId',
-              'task_run_id',
-              'runId',
-            ]) ??
-            existing?.agentTaskId,
-        agentTaskTitle:
-            _firstString(agentTask, const <String>[
-              'title',
-              'taskTitle',
-              'taskDefinitionId',
-            ]) ??
-            existing?.agentTaskTitle,
-        agentTaskSteps:
-            _stringList(agentTask['steps']) ?? existing?.agentTaskSteps,
-        agentTaskProgress:
-            _progressInt(agentTask) ?? existing?.agentTaskProgress,
-        agentTaskElapsed:
-            _firstString(agentTask, const <String>['elapsed', 'elapsedTime']) ??
-            existing?.agentTaskElapsed,
-        fileName: existing?.fileName,
-        fileSizeKB: existing?.fileSizeKB,
-        resourceUri: _resourceForDto(dto, existing),
-        mediaUrl: existing?.mediaUrl,
-        mimeType: existing?.mimeType,
-        durationMs: dto.audioDuration > 0
-            ? (dto.audioDuration * 1000).round()
-            : existing?.durationMs,
-        toolName: existing?.toolName,
-        toolResult: existing?.toolResult,
-        replyToMessageId: dto.replyToMessageId ?? existing?.replyToMessageId,
-        replyToExcerpt: dto.replyToExcerpt ?? existing?.replyToExcerpt,
-        responseGroupId: responseGroupId,
-        deliverySequence: dto.deliverySequence > 0
-            ? dto.deliverySequence
-            : existing?.deliverySequence ?? 0,
-        assistantTurn: existing?.assistantTurn,
-        assistantTurnSuppressed: existing?.assistantTurnSuppressed ?? false,
+    for (final turn in turns) {
+      if (attached.contains(turn.id)) continue;
+      final text = turn.items
+          .where((item) => item.type == 'text')
+          .map((item) => item.content)
+          .join();
+      final reasoning = turn.items
+          .where((item) => item.type == 'reasoning')
+          .map((item) => item.content)
+          .join();
+      final terminal = _isTerminalTurn(turn.status);
+      final status = switch (turn.status.toLowerCase()) {
+        'failed' => MessageStatus.error,
+        'interrupted' => MessageStatus.interrupted,
+        'completed' => MessageStatus.delivered,
+        _ => MessageStatus.streaming,
+      };
+      if (terminal && text.isEmpty && turn.items.isEmpty) continue;
+      _messages.upsert(
+        ChatMessage(
+          id: 'turn:${turn.id}',
+          renderId: 'turn:${turn.id}',
+          characterId: turn.characterId,
+          role: MessageRole.assistant,
+          type: MessageType.text,
+          content: text,
+          reasoningContent: reasoning,
+          time: DateTime.tryParse(turn.createdAt) ?? DateTime.now(),
+          status: status,
+          assistantTurn: turn,
+        ),
       );
-      changed = _messages.upsert(next) || changed;
     }
-    debugPrint(
-      'Chat sync reconciled conversation=$conv total=${_messages.length}',
+  }
+
+  ChatMessage _messageFromDto(MessageDto dto) {
+    final type = _typeForDto(dto, null);
+    final task = type == MessageType.agentTask
+        ? _agentTaskPayload(dto.content)
+        : const <String, dynamic>{};
+    return ChatMessage(
+      id: dto.id,
+      renderId: dto.requestId.trim().isNotEmpty && dto.role == 'user'
+          ? dto.requestId.trim()
+          : dto.id,
+      characterId: dto.characterId,
+      role: _roleFor(dto.role),
+      type: type,
+      content: dto.content,
+      reasoningContent: dto.reasoningContent,
+      reasoningDurationMs: dto.reasoningDurationMs,
+      time: DateTime.tryParse(dto.createdAt) ?? DateTime.now(),
+      sequence: dto.sequence > 0 ? dto.sequence : null,
+      status: _statusForDto(dto.status),
+      agentTaskId: _firstString(task, const <String>['taskRunId', 'task_run_id', 'runId']),
+      agentTaskTitle: _firstString(task, const <String>['title', 'taskTitle', 'taskDefinitionId']),
+      agentTaskSteps: _stringList(task['steps']),
+      agentTaskProgress: _progressInt(task),
+      agentTaskElapsed: _firstString(task, const <String>['elapsed', 'elapsedTime']),
+      resourceUri: _resourceForDto(dto, null),
+      mediaUrl: _resourceForDto(dto, null),
+      mimeType: dto.imageUrl.isNotEmpty
+          ? 'image/*'
+          : dto.videoUrl.isNotEmpty
+          ? 'video/*'
+          : dto.audioUrl.isNotEmpty
+          ? 'audio/*'
+          : null,
+      durationMs: dto.audioDuration > 0
+          ? (dto.audioDuration * 1000).round()
+          : null,
+      replyToMessageId: dto.replyToMessageId,
+      replyToExcerpt: dto.replyToExcerpt,
     );
-    _applyAssistantTurnProjection();
-    return changed;
   }
 
   Future<bool> loadOlderMessages() async {
-    final conv = _conversationId;
-    if (conv == null ||
-        conv.isEmpty ||
-        !hasMoreHistory ||
-        _loadingOlderMessages) {
-      return false;
-    }
-    final requestEpoch = ++_historyLoadEpoch;
+    final conv = _conversationId?.trim() ?? '';
+    if (conv.isEmpty || _loadingOlderMessages || !hasMoreHistory) return false;
     _loadingOlderMessages = true;
     notifyListeners();
+    var changed = false;
     try {
-      final page = await _chatService.getMessagePage(
-        conv,
-        page: _messagePage - 1,
-      );
-      if (_disposed ||
-          requestEpoch != _historyLoadEpoch ||
-          _conversationId != conv) {
-        return false;
+      if (_hasMoreMessageHistory && _messageBeforeSequence > 0) {
+        final page = await _chatService.getMessageHistory(
+          conv,
+          beforeSequence: _messageBeforeSequence,
+          limit: 50,
+        );
+        if (_disposed || _conversationId != conv) return false;
+        _messageBeforeSequence = page.nextBefore;
+        _hasMoreMessageHistory = page.hasMore;
+        for (final dto in page.items) {
+          changed = _messages.upsert(_messageFromDto(dto)) || changed;
+        }
       }
-      _messagePage = page.page;
-      _messageTotalPages = page.totalPages;
-      final changed = _mergePersistedMessages(page.items, conv, null);
+      if (_hasMoreTurnHistory && _oldestTurnSequence > 0) {
+        final turnPage = await _chatService.getAssistantTurnPage(
+          conv,
+          before: _oldestTurnSequence,
+          limit: 50,
+        );
+        if (_disposed || _conversationId != conv) return false;
+        _agentReducer.mergeTurns(turnPage.items);
+        if (turnPage.items.isNotEmpty) {
+          _oldestTurnSequence = turnPage.items.first.sequence;
+          changed = true;
+        }
+        _hasMoreTurnHistory = turnPage.hasMore;
+      }
+      _projectTurns();
       if (changed) notifyListeners();
       return changed;
     } finally {
-      if (!_disposed && requestEpoch == _historyLoadEpoch) {
+      if (!_disposed) {
         _loadingOlderMessages = false;
         notifyListeners();
       }
     }
   }
 
-  Future<void> _loadAssistantTurns() async {
+  bool canRetryMessage(int index) {
+    final list = _messages.messages;
+    if (_sending || index < 0 || index >= list.length) return false;
+    final message = list[index];
+    final turn = message.assistantTurn;
+    if (turn != null) {
+      final status = turn.status.toLowerCase();
+      if (status == 'failed' || status == 'interrupted') {
+        return true;
+      }
+    }
+    return message.role == MessageRole.user && message.status == MessageStatus.error;
+  }
+
+  Future<void> retryMessage(int index) async {
+    if (!canRetryMessage(index)) return;
+    final message = _messages.messages[index];
+    final turn = message.assistantTurn;
     final conv = _conversationId?.trim() ?? '';
-    if (conv.isEmpty) {
-      _assistantTurns = const <AssistantTurnDto>[];
-      _applyAssistantTurnProjection();
-      notifyListeners();
+    if (turn != null && conv.isNotEmpty) {
+      try {
+        await _chatService.retryTurn(conv, turn.id);
+        _sending = true;
+        _lastError = null;
+        _connectEventStream(conv);
+        notifyListeners();
+      } catch (error) {
+        _lastError = error;
+        notifyListeners();
+      }
       return;
     }
+    _messages.remove(message);
+    notifyListeners();
+    switch (message.type) {
+      case MessageType.image:
+        if (message.resourceUri == null || message.mediaUrl == null) {
+          return sendText(message.content);
+        }
+        return sendImage(
+          resourceUri: message.resourceUri!,
+          displayUrl: message.mediaUrl!,
+          fileName: message.fileName ?? 'image',
+          mimeType: message.mimeType ?? 'image/*',
+          text: message.content == '[图片]' ? '' : message.content,
+        );
+      case MessageType.video:
+        if (message.resourceUri == null || message.mediaUrl == null) {
+          return sendText(message.content);
+        }
+        return sendVideo(
+          resourceUri: message.resourceUri!,
+          displayUrl: message.mediaUrl!,
+          fileName: message.fileName ?? 'video',
+          mimeType: message.mimeType ?? 'video/*',
+          durationMs: message.durationMs ?? 0,
+          text: message.content == '[视频]' ? '' : message.content,
+        );
+      case MessageType.audio:
+        if (message.resourceUri == null || message.mediaUrl == null) {
+          return sendText(message.content);
+        }
+        return sendVoice(
+          resourceUri: message.resourceUri!,
+          displayUrl: message.mediaUrl!,
+          fileName: message.fileName ?? 'audio',
+          mimeType: message.mimeType ?? 'audio/*',
+          durationMs: message.durationMs ?? 0,
+          text: message.content == '[语音]' ? '' : message.content,
+        );
+      case MessageType.file:
+        if (message.resourceUri == null) return sendText(message.content);
+        return sendFile(
+          resourceUri: message.resourceUri!,
+          fileName: message.fileName ?? 'file',
+          sizeBytes: (message.fileSizeKB ?? 0) * 1024,
+          mimeType: message.mimeType ?? 'application/octet-stream',
+        );
+      case MessageType.code:
+      case MessageType.emote:
+      case MessageType.text:
+      case MessageType.agentTask:
+      case MessageType.toolCall:
+      case MessageType.systemNotice:
+        return sendText(message.content);
+    }
+  }
+
+  Future<void> stop() async {
+    final conv = _conversationId?.trim() ?? '';
+    final turnId = _agentReducer.activeTurnId.trim();
+    if (!_sending || conv.isEmpty || turnId.isEmpty) return;
     try {
-      final turns = await _chatService.getAssistantTurns(conv);
-      if (_disposed || _conversationId != conv) return;
-      _assistantTurns = turns;
-      _applyAssistantTurnProjection();
+      await _chatService.interruptTurn(conv, turnId);
+    } catch (error) {
+      _lastError = error;
       notifyListeners();
-    } catch (_) {}
-  }
-
-  void _applyAssistantTurnProjection() {
-    final byRequest = <String, AssistantTurnDto>{};
-    final byGroup = <String, AssistantTurnDto>{};
-    for (final turn in _assistantTurns) {
-      if (turn.requestId.isNotEmpty) byRequest[turn.requestId] = turn;
-      if (turn.responseGroupId.isNotEmpty) byGroup[turn.responseGroupId] = turn;
-    }
-    final claimedTurns = <String>{};
-    for (final message in _messages.messages) {
-      if (message.role != MessageRole.assistant) {
-        if (message.assistantTurn != null || message.assistantTurnSuppressed) {
-          _messages.upsert(
-            _copy(
-              message,
-              clearAssistantTurn: true,
-              assistantTurnSuppressed: false,
-            ),
-          );
-        }
-        continue;
-      }
-      final requestId = message.responseGroupId.trim().isNotEmpty
-          ? message.responseGroupId.trim()
-          : message.renderId.trim();
-      final turn =
-          byGroup[message.responseGroupId] ??
-          byRequest[requestId] ??
-          byRequest[message.responseGroupId];
-      if (turn == null) {
-        if (message.assistantTurn != null || message.assistantTurnSuppressed) {
-          _messages.upsert(
-            _copy(
-              message,
-              clearAssistantTurn: true,
-              assistantTurnSuppressed: false,
-            ),
-          );
-        }
-        continue;
-      }
-      final first = claimedTurns.add(turn.id);
-      _messages.upsert(
-        _copy(
-          message,
-          assistantTurn: first ? turn : null,
-          assistantTurnSuppressed: !first,
-          clearAssistantTurn: !first,
-        ),
-      );
-    }
-    for (final turnId in claimedTurns) {
-      _messages.removeById('turn:$turnId');
-    }
-    for (final turn in _assistantTurns) {
-      if (claimedTurns.contains(turn.id)) continue;
-      final provisionalId = 'turn:${turn.id}';
-      final existing = _messages.findById(provisionalId);
-      _messages.upsert(
-        ChatMessage(
-          id: provisionalId,
-          renderId: turn.requestId.isNotEmpty ? turn.requestId : provisionalId,
-          characterId: turn.characterId,
-          role: MessageRole.assistant,
-          type: MessageType.text,
-          content: '',
-          time: DateTime.tryParse(turn.createdAt) ?? DateTime.now(),
-          status: MessageStatus.streaming,
-          responseGroupId: turn.responseGroupId.isNotEmpty
-              ? turn.responseGroupId
-              : turn.requestId,
-          assistantTurn: turn,
-          sequence: existing?.sequence,
-        ),
-      );
     }
   }
 
-  void _applyAssistantTurnStreamEvent(Map<String, dynamic> event) {
-    final rawMetadata = event['data'];
-    if (rawMetadata is! Map) return;
-    final metadata = Map<String, dynamic>.from(rawMetadata);
-    final turnId = (metadata['turnId'] ?? '').toString().trim();
-    if (turnId.isEmpty) return;
-    final index = _assistantTurns.indexWhere((turn) => turn.id == turnId);
-    final existing = index >= 0 ? _assistantTurns[index] : null;
-    final items = <AssistantTurnItemDto>[...?existing?.items];
-    final rawItem = metadata['item'];
-    if (rawItem is Map) {
-      final item = AssistantTurnItemDto.fromJson(
-        Map<String, dynamic>.from(rawItem),
-      );
-      final itemIndex = items.indexWhere(
-        (candidate) =>
-            (item.id.isNotEmpty && candidate.id == item.id) ||
-            (item.callId.isNotEmpty &&
-                item.type.isNotEmpty &&
-                candidate.callId == item.callId &&
-                candidate.type == item.type),
-      );
-      if (itemIndex >= 0)
-        items[itemIndex] = item;
-      else
-        items.add(item);
-      items.sort((left, right) => left.sequence.compareTo(right.sequence));
-    }
-    final status = (metadata['status'] ?? existing?.status ?? 'running')
-        .toString();
-    final turn = AssistantTurnDto(
-      id: turnId,
-      conversationId:
-          (metadata['conversationId'] ?? existing?.conversationId ?? '')
-              .toString(),
-      characterId: existing?.characterId ?? '',
-      userMessageId: existing?.userMessageId ?? '',
-      requestId: (metadata['requestId'] ?? existing?.requestId ?? '')
-          .toString(),
-      responseGroupId: existing?.responseGroupId ?? '',
-      sequence: existing?.sequence ?? 0,
-      status: status,
-      createdAt: existing?.createdAt ?? DateTime.now().toIso8601String(),
-      updatedAt: DateTime.now().toIso8601String(),
-      completedAt: status == 'completed'
-          ? DateTime.now().toIso8601String()
-          : existing?.completedAt ?? '',
-      items: items,
-    );
-    if (index >= 0)
-      _assistantTurns[index] = turn;
-    else
-      _assistantTurns = <AssistantTurnDto>[..._assistantTurns, turn];
-    _applyAssistantTurnProjection();
+  Future<void> steer(String content) async {
+    final value = content.trim();
+    final conv = _conversationId?.trim() ?? '';
+    final turnId = _agentReducer.activeTurnId.trim();
+    if (value.isEmpty || conv.isEmpty || turnId.isEmpty) return;
+    await _chatService.steerTurn(conv, turnId, value);
+  }
+
+  Future<void> deleteMessage(String messageId) async {
+    final id = messageId.trim();
+    if (id.isEmpty || id.startsWith('turn:')) return;
+    await _chatService.deleteMessage(id);
+    if (_messages.removeById(id)) notifyListeners();
+  }
+
+  Future<void> editMessage(String messageId, String content) async {
+    final id = messageId.trim();
+    final value = content.trim();
+    if (id.isEmpty || value.isEmpty || id.startsWith('turn:')) return;
+    await _chatService.updateMessage(id, value);
+    final existing = _messages.findById(id);
+    if (existing == null) return;
+    _messages.upsert(_cloneMessage(existing, content: value));
     notifyListeners();
   }
 
-  void _restartLiveSync() {
-    _liveSyncTimer?.cancel();
-    _messageEventsCancellation?.cancel('conversation changed');
-    _messageEventsCancellation = null;
-    final conv = _conversationId?.trim() ?? '';
-    if (_disposed || conv.isEmpty) return;
-    _liveSyncTimer = Timer.periodic(_liveSyncInterval, (_) {
-      if (_disposed || _syncingMessages) return;
-      unawaited(_pollPersistedMessages());
-    });
-    final cancellation = _chatService.createStreamCancellation();
-    _messageEventsCancellation = cancellation;
-    unawaited(_runMessageEvents(conv, cancellation));
-  }
-
-  Future<void> _pollPersistedMessages() async {
-    if (_syncingMessages) return;
-    _syncingMessages = true;
+  Future<void> openConversation(
+    String conversationId, {
+    String? characterId,
+  }) async {
+    final id = conversationId.trim();
+    if (id.isEmpty) return;
+    _characterId = characterId?.trim().isEmpty == true ? null : characterId?.trim();
+    if (_conversationId != id) {
+      _disconnectRuntime();
+      _conversationId = id;
+      _messages.clear();
+      _agentReducer.reset(turns: const <AssistantTurnDto>[], lastEventSequence: 0);
+      _resetHistory();
+      _lastError = null;
+      _sending = false;
+      notifyListeners();
+    }
     try {
-      await _syncMessages(background: true);
-    } catch (_) {
-      // Proactive/reminder reconciliation is a background fallback. A transient
-      // transport failure must not replace the current conversation with an
-      // error state; explicit user actions still surface their own failures.
-    } finally {
-      _syncingMessages = false;
+      final snapshot = await _chatService.conversationSnapshot(id);
+      if (_disposed || _conversationId != id) return;
+      _applySnapshot(snapshot);
+      _connectEventStream(id);
+    } catch (error) {
+      _lastError = error;
+      notifyListeners();
     }
   }
 
-  Future<void> _runMessageEvents(
-    String conversationId,
-    ChatStreamCancellation cancellation,
-  ) async {
-    while (!_disposed &&
-        !cancellation.isCancelled &&
-        _conversationId == conversationId) {
-      try {
-        await for (final event in _chatService.messageEvents(
-          cancellation: cancellation,
-        )) {
-          if (_disposed ||
-              cancellation.isCancelled ||
-              _conversationId != conversationId) {
-            return;
-          }
-          if (event.type == 'assistant_turn_completed') {
-            final eventConversation = (event.data['conversationId'] ?? '')
-                .toString();
-            if (eventConversation == conversationId) {
-              await _loadAssistantTurns();
-            }
-            continue;
-          }
-          if (event.type == 'assistant_turn_stream') {
-            final eventConversation = (event.data['conversationId'] ?? '')
-                .toString();
-            if (eventConversation == conversationId) {
-              _applyAssistantTurnStreamEvent(event.data);
-            }
-            continue;
-          }
-          if (event.type == 'conversation_updated') {
-            final eventConversation = (event.data['conversationId'] ?? '')
-                .toString();
-            if (eventConversation == conversationId) {
-              _conversationUpdateEpoch++;
-              notifyListeners();
-            }
-            continue;
-          }
-          if (event.type != 'message_created' &&
-              event.type != 'message_updated') {
-            continue;
-          }
-          final eventConversation = (event.data['conversationId'] ?? '')
-              .toString();
-          if (eventConversation != conversationId) continue;
-          if (_handleTransientModelError(event.data)) continue;
-          unawaited(_pollPersistedMessages());
-        }
-      } catch (_) {
-        if (_disposed ||
-            cancellation.isCancelled ||
-            _conversationId != conversationId) {
-          return;
-        }
-      }
-      await Future<void>.delayed(const Duration(seconds: 3));
-    }
-  }
-
-  bool _handleTransientModelError(Map<String, dynamic> event) {
-    final rawMetadata = event['data'];
-    if (rawMetadata is! Map) return false;
-    final metadata = Map<String, dynamic>.from(rawMetadata);
-    final messageType = (metadata['messageType'] ?? '').toString();
-    if (!const <String>{
-      'vision_error',
-      'text_error',
-      'voice_error',
-      'vector_error',
-    }.contains(messageType)) {
+  Future<bool> createRealtimeConversation(
+    String? characterId, {
+    String projectId = '',
+  }) async {
+    try {
+      final conversation = await _chatService.createRealtimeConversation(projectId: projectId);
+      if (conversation == null) return false;
+      _disconnectRuntime();
+      _conversationId = conversation.id;
+      _characterId = characterId;
+      _messages.clear();
+      _agentReducer.reset(turns: const <AssistantTurnDto>[], lastEventSequence: 0);
+      _resetHistory();
+      _lastError = null;
+      _sending = false;
+      _modelConfigId = conversation.modelConfigId;
+      _reasoningEffort = conversation.reasoningEffort.trim().isEmpty
+          ? 'high'
+          : conversation.reasoningEffort.trim();
+      _reasoningEnabled = conversation.reasoningEnabled != 0;
+      _permissionMode = conversation.permissionMode == 'full_access'
+          ? 'full_access'
+          : 'request_approval';
+      _conversationUpdateEpoch++;
+      _connectEventStream(conversation.id);
+      notifyListeners();
+      return true;
+    } catch (error) {
+      _lastError = error;
+      notifyListeners();
       return false;
     }
-    final id = (event['messageId'] ?? '').toString().trim();
-    if (id.isEmpty) return true;
-    final rawError = (metadata['rawError'] ?? '').toString().trim();
-    final content = (event['content'] ?? '').toString().trim();
-    final responseGroupId =
-        (metadata['responseGroupId'] ??
-                metadata['response_group_id'] ??
-                metadata['requestId'] ??
-                '')
-            .toString()
-            .trim();
-    final message = ChatMessage(
-      id: id,
-      characterId: _characterId ?? '',
-      role: MessageRole.assistant,
-      type: MessageType.systemNotice,
-      content: rawError.isNotEmpty
-          ? rawError
-          : content.isNotEmpty
-          ? content
-          : '模型响应失败',
-      time:
-          DateTime.tryParse((event['createdAt'] ?? '').toString()) ??
-          DateTime.now(),
-      sequence: _nextLocalSequence(),
-      status: MessageStatus.error,
-      responseGroupId: responseGroupId,
-    );
-    _messages.upsert(message);
-    if (messageType == 'text_error') {
-      _lastError = StateError(message.content);
+  }
+
+  void clear({bool addSystemNotice = false}) {
+    _messages.clear();
+    if (addSystemNotice) {
+      _messages.upsert(
+        ChatMessage(
+          id: _localId('sys'),
+          role: MessageRole.system,
+          type: MessageType.systemNotice,
+          content: '聊天记录已从当前界面清空',
+          time: DateTime.now(),
+          sequence: _nextLocalSequence(),
+        ),
+      );
     }
     notifyListeners();
-    return true;
+  }
+
+  void startDraft({ConversationWorkspaceDto? workspace}) {
+    _disconnectRuntime();
+    _draftEpoch++;
+    _conversationId = null;
+    _messages.clear();
+    _agentReducer.reset(turns: const <AssistantTurnDto>[], lastEventSequence: 0);
+    _pendingApprovals.clear();
+    _resetHistory();
+    _lastError = null;
+    _sending = false;
+    _workspace = workspace;
+    notifyListeners();
+  }
+
+  void _disconnectRuntime() {
+    _runtimeEpoch++;
+    _eventCancellation?.cancel('runtime disconnected');
+    _eventCancellation = null;
+  }
+
+  void _resetHistory() {
+    _messageBeforeSequence = 0;
+    _hasMoreMessageHistory = false;
+    _hasMoreTurnHistory = false;
+    _oldestTurnSequence = 0;
+    _loadingOlderMessages = false;
+  }
+
+  ChatMessage _cloneMessage(
+    ChatMessage message, {
+    String? id,
+    String? renderId,
+    String? content,
+    int? sequence,
+    MessageStatus? status,
+    AssistantTurnDto? assistantTurn,
+  }) {
+    return ChatMessage(
+      id: id ?? message.id,
+      renderId: renderId ?? message.renderId,
+      characterId: message.characterId,
+      role: message.role,
+      type: message.type,
+      content: content ?? message.content,
+      reasoningContent: message.reasoningContent,
+      reasoningDurationMs: message.reasoningDurationMs,
+      time: message.time,
+      sequence: sequence ?? message.sequence,
+      status: status ?? message.status,
+      agentTaskId: message.agentTaskId,
+      agentTaskTitle: message.agentTaskTitle,
+      agentTaskSteps: message.agentTaskSteps,
+      agentTaskProgress: message.agentTaskProgress,
+      agentTaskElapsed: message.agentTaskElapsed,
+      fileName: message.fileName,
+      fileSizeKB: message.fileSizeKB,
+      resourceUri: message.resourceUri,
+      mediaUrl: message.mediaUrl,
+      mimeType: message.mimeType,
+      durationMs: message.durationMs,
+      toolName: message.toolName,
+      toolResult: message.toolResult,
+      replyToMessageId: message.replyToMessageId,
+      replyToExcerpt: message.replyToExcerpt,
+      assistantTurn: assistantTurn ?? message.assistantTurn,
+    );
   }
 
   Map<String, dynamic> _agentTaskPayload(String content) {
@@ -1187,7 +1010,7 @@ class ConversationRuntimeController extends ChangeNotifier {
 
   List<String>? _stringList(dynamic value) {
     if (value is! List) return null;
-    final items = value
+    final result = value
         .map((item) {
           if (item is Map) {
             return (item['title'] ?? item['name'] ?? item['label'] ?? '')
@@ -1198,7 +1021,7 @@ class ConversationRuntimeController extends ChangeNotifier {
         })
         .where((item) => item.isNotEmpty)
         .toList(growable: false);
-    return items.isEmpty ? null : items;
+    return result.isEmpty ? null : result;
   }
 
   int? _progressInt(Map<String, dynamic> source) {
@@ -1210,10 +1033,7 @@ class ConversationRuntimeController extends ChangeNotifier {
       final current = direct['current'];
       final total = direct['total'];
       if (current is num && total is num && total > 0) {
-        return (current.toDouble() / total.toDouble() * 100).round().clamp(
-          0,
-          100,
-        );
+        return (current.toDouble() / total.toDouble() * 100).round().clamp(0, 100);
       }
     }
     return null;
@@ -1283,270 +1103,18 @@ class ConversationRuntimeController extends ChangeNotifier {
     return switch (status) {
       'queued' || 'pending' => MessageStatus.queued,
       'sending' => MessageStatus.sending,
-      'streaming' ||
-      'generating' ||
-      'collecting' ||
-      'processing' => MessageStatus.streaming,
+      'streaming' || 'generating' || 'collecting' || 'processing' => MessageStatus.streaming,
       'interrupted' || 'paused' => MessageStatus.interrupted,
-      'cancelled' || 'canceled' || 'stopped' => MessageStatus.cancelled,
       'failed' || 'error' => MessageStatus.error,
       _ => MessageStatus.delivered,
     };
   }
 
-  bool canRetryMessage(int index) {
-    final messages = _messages.messages;
-    if (_sending || index < 0 || index >= messages.length) return false;
-    final message = messages[index];
-    return message.role == MessageRole.user &&
-        message.status == MessageStatus.error;
-  }
-
-  Future<void> retryMessage(int index) async {
-    if (!canRetryMessage(index)) return;
-    final message = _messages.messages[index];
-    _messages.remove(message);
-    notifyListeners();
-    switch (message.type) {
-      case MessageType.image:
-        if (message.resourceUri == null || message.mediaUrl == null) {
-          return sendText(message.content);
-        }
-        return sendImage(
-          resourceUri: message.resourceUri!,
-          displayUrl: message.mediaUrl!,
-          fileName: message.fileName ?? 'image',
-          mimeType: message.mimeType ?? 'image/*',
-          text: message.content == '[图片]' ? '' : message.content,
-        );
-      case MessageType.video:
-        if (message.resourceUri == null || message.mediaUrl == null) {
-          return sendText(message.content);
-        }
-        return sendVideo(
-          resourceUri: message.resourceUri!,
-          displayUrl: message.mediaUrl!,
-          fileName: message.fileName ?? 'video',
-          mimeType: message.mimeType ?? 'video/*',
-          durationMs: message.durationMs ?? 0,
-          text: message.content == '[视频]' ? '' : message.content,
-        );
-      case MessageType.audio:
-        if (message.resourceUri == null || message.mediaUrl == null) {
-          return sendText(message.content);
-        }
-        return sendVoice(
-          resourceUri: message.resourceUri!,
-          displayUrl: message.mediaUrl!,
-          fileName: message.fileName ?? 'audio',
-          mimeType: message.mimeType ?? 'audio/*',
-          durationMs: message.durationMs ?? 0,
-          text: message.content == '[语音]' ? '' : message.content,
-        );
-      case MessageType.file:
-        if (message.resourceUri == null) return sendText(message.content);
-        return sendFile(
-          resourceUri: message.resourceUri!,
-          fileName: message.fileName ?? 'file',
-          sizeBytes: (message.fileSizeKB ?? 0) * 1024,
-          mimeType: message.mimeType ?? 'application/octet-stream',
-        );
-      case MessageType.code:
-      case MessageType.emote:
-      case MessageType.text:
-      case MessageType.agentTask:
-      case MessageType.toolCall:
-      case MessageType.systemNotice:
-        return sendText(message.content);
-    }
-  }
-
-  Future<void> deleteMessage(String messageId) async {
-    final id = messageId.trim();
-    if (id.isEmpty) return;
-    await _chatService.deleteMessage(id);
-    if (_messages.removeById(id)) {
-      notifyListeners();
-    }
-  }
-
-  Future<void> editMessage(String messageId, String content) async {
-    final id = messageId.trim();
-    final value = content.trim();
-    if (id.isEmpty || value.isEmpty) return;
-    await _chatService.updateMessage(id, value);
-    final existing = _messages.findById(id);
-    if (existing == null) return;
-    _messages.upsert(
-      ChatMessage(
-        id: existing.id,
-        renderId: existing.renderId,
-        characterId: existing.characterId,
-        role: existing.role,
-        type: existing.type,
-        content: value,
-        reasoningContent: existing.reasoningContent,
-        reasoningDurationMs: existing.reasoningDurationMs,
-        time: existing.time,
-        sequence: existing.sequence,
-        status: existing.status,
-        agentTaskId: existing.agentTaskId,
-        agentTaskTitle: existing.agentTaskTitle,
-        agentTaskSteps: existing.agentTaskSteps,
-        agentTaskProgress: existing.agentTaskProgress,
-        agentTaskElapsed: existing.agentTaskElapsed,
-        fileName: existing.fileName,
-        fileSizeKB: existing.fileSizeKB,
-        resourceUri: existing.resourceUri,
-        mediaUrl: existing.mediaUrl,
-        mimeType: existing.mimeType,
-        durationMs: existing.durationMs,
-        toolName: existing.toolName,
-        toolResult: existing.toolResult,
-        replyToMessageId: existing.replyToMessageId,
-        replyToExcerpt: existing.replyToExcerpt,
-        responseGroupId: existing.responseGroupId,
-        deliverySequence: existing.deliverySequence,
-      ),
-    );
-    notifyListeners();
-  }
-
-  Future<void> stop() async {
-    if (!_sending) return;
-    final conv = _conversationId;
-    _activeSendCancellation?.cancel('user stopped');
-    _activeSendCancellation = null;
-    _streamScheduler.flush();
-    ++_generationEpoch;
-    _sending = false;
-    notifyListeners();
-    if (conv != null && conv.isNotEmpty) {
-      try {
-        await _chatService.cancelGeneration(conv);
-        await _syncMessages();
-      } catch (error) {
-        _lastError = error;
-        notifyListeners();
-      }
-    }
-  }
-
-  Future<void> openConversation(
-    String conversationId, {
-    String? characterId,
-  }) async {
-    final id = conversationId.trim();
-    if (id.isEmpty) return;
-    if (_conversationId == id) {
-      _characterId = characterId?.trim().isEmpty == true ? null : characterId;
-      await _syncMessages();
-      return;
-    }
-    debugPrint('Chat open conversation id=$id');
-    _activeSendCancellation?.cancel('conversation changed');
-    _activeSendCancellation = null;
-    ++_generationEpoch;
-    _messageSyncEpoch++;
-    _conversationId = id;
-    _characterId = characterId?.trim().isEmpty == true ? null : characterId;
-    _messages.clear();
-    _resetMessagePagination();
-    _assistantTurns = const <AssistantTurnDto>[];
-    _lastError = null;
-    _sending = false;
-    try {
-      final conversation = await _chatService.getConversation(id);
-      _modelConfigId = conversation?.modelConfigId ?? 0;
-      _reasoningEffort = conversation?.reasoningEffort.isNotEmpty == true
-          ? conversation!.reasoningEffort
-          : 'high';
-      _reasoningEnabled = conversation?.reasoningEnabled != 0;
-      _permissionMode = conversation?.permissionMode == 'full_access'
-          ? 'full_access'
-          : 'request_approval';
-    } catch (_) {
-      _modelConfigId = 0;
-      _reasoningEffort = 'high';
-      _reasoningEnabled = true;
-      _permissionMode = 'request_approval';
-    }
-    _restartLiveSync();
-    notifyListeners();
-    try {
-      await _syncMessages();
-      await _loadAssistantTurns();
-    } catch (error) {
-      _lastError = error;
-      notifyListeners();
-    }
-  }
-
-  Future<bool> createConversation(
-    String? characterId, {
-    String projectId = '',
-  }) async {
-    final conversation = await _chatService.createConversation(
-      projectId: projectId,
-    );
-    if (conversation == null) return false;
-    _conversationId = conversation.id;
-    _characterId = characterId;
-    _messages.clear();
-    _resetMessagePagination();
-    _assistantTurns = const <AssistantTurnDto>[];
-    _lastError = null;
-    _restartLiveSync();
-    notifyListeners();
-    return true;
-  }
-
-  void clear({bool addSystemNotice = false}) {
-    _messages.clear();
-    _resetMessagePagination();
-    if (addSystemNotice) {
-      _messages.upsert(
-        ChatMessage(
-          id: _localId('sys'),
-          role: MessageRole.system,
-          type: MessageType.systemNotice,
-          content: '聊天记录已从当前界面清空',
-          time: DateTime.now(),
-          sequence: _nextLocalSequence(),
-        ),
-      );
-    }
-    notifyListeners();
-  }
-
-  void startDraft({ConversationWorkspaceDto? workspace}) {
-    _activeSendCancellation?.cancel('new conversation');
-    _activeSendCancellation = null;
-    _draftEpoch++;
-    ++_generationEpoch;
-    _messageSyncEpoch++;
-    _liveSyncTimer?.cancel();
-    _liveSyncTimer = null;
-    _conversationId = null;
-    _messages.clear();
-    _resetMessagePagination();
-    _lastError = null;
-    _sending = false;
-    setWorkspace(workspace);
-    notifyListeners();
-  }
-
-  @override
-  void dispose() {
-    _disposed = true;
-    _streamScheduler.dispose();
-    _activeSendCancellation?.cancel('disposed');
-    _activeSendCancellation = null;
-    _messageEventsCancellation?.cancel('disposed');
-    _messageEventsCancellation = null;
-    _liveSyncTimer?.cancel();
-    _liveSyncTimer = null;
-    super.dispose();
+  bool _isTerminalTurn(String status) {
+    final value = status.trim().toLowerCase();
+    return value == 'completed' ||
+        value == 'failed' ||
+        value == 'interrupted';
   }
 
   String _localId(String prefix) =>
@@ -1574,8 +1142,6 @@ class ConversationRuntimeController extends ChangeNotifier {
         'time': message.time.toIso8601String(),
         if (message.sequence != null) 'sequence': message.sequence,
         'status': message.status.name,
-        'responseGroupId': message.responseGroupId,
-        'deliverySequence': message.deliverySequence,
         if ((message.agentTaskId ?? '').isNotEmpty)
           'agentTaskId': message.agentTaskId,
         if (message.fileName != null) 'fileName': message.fileName,
@@ -1591,6 +1157,14 @@ class ConversationRuntimeController extends ChangeNotifier {
         if ((message.replyToExcerpt ?? '').isNotEmpty)
           'replyToExcerpt': message.replyToExcerpt,
       };
+
+  @override
+  void dispose() {
+    _disposed = true;
+    _disconnectRuntime();
+    _streamScheduler.dispose();
+    super.dispose();
+  }
 }
 
 final conversationRuntimeControllerProvider =

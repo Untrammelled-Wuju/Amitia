@@ -40,7 +40,7 @@ func TestMessagePlanFailureDoesNotStopLaterText(t *testing.T) {
 	for index, contentType := range []string{"text", "image", "text"} {
 		intent := NewDeliveryIntent("interaction", "test", "peer", contentType, []byte(`{}`))
 		intent.ID = contentType + string(rune('1'+index))
-		intent.ResponseGroupID = "response"
+		intent.DeliveryGroupID = "response"
 		intent.DeliverySequence = index + 1
 		intent.CreatedAt = createdAt
 		intent.MaxRetries = 1

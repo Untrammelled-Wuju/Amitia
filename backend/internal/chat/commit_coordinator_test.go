@@ -119,7 +119,6 @@ func TestCommitInteractionPersistsMessagesStateRelationshipAndOutboxAtomically(t
 		CharacterName: "Amitia",
 		UserMessageID: "user-commit",
 		Reply:         "ok",
-		Lines:         []string{"ok"},
 		Source:        "system",
 		Runtime:       req.Runtime,
 	})
@@ -199,7 +198,6 @@ func TestCommitInteractionSuppressesReplyPersistence(t *testing.T) {
 		CharacterName: "Amitia",
 		UserMessageID: "user-commit",
 		Reply:         "sent through plugin",
-		Lines:         []string{"sent through plugin"},
 		Source:        "runtime",
 	})
 	if err != nil {
@@ -237,7 +235,6 @@ func TestCommitInteractionRollsBackWhenOutboxCommitFails(t *testing.T) {
 		CharacterName: "Amitia",
 		UserMessageID: "user-commit",
 		Reply:         "ok",
-		Lines:         []string{"ok"},
 		Source:        "system",
 		Runtime:       req.Runtime,
 	})
@@ -325,7 +322,6 @@ func TestCommitInteractionRejectsStaleInteractionRecord(t *testing.T) {
 				CharacterName: "Amitia",
 				UserMessageID: "user-commit",
 				Reply:         "stale",
-				Lines:         []string{"stale"},
 				Source:        "system",
 				Runtime:       req.Runtime,
 			})

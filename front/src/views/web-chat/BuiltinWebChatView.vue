@@ -209,7 +209,7 @@ import { Menu as MenuIcon } from "@element-plus/icons-vue";
 import { useApi } from "../../composables/useApi";
 import { useCachedApi } from "../../composables/useCachedApi";
 import { useChatStore } from "@/stores/chat";
-import { useWebChatSSE } from "../../composables/useWebChatSSE";
+import { useConversationRuntime } from "../../composables/useConversationRuntime";
 import { useWebChatScroll } from "../../composables/useWebChatScroll";
 import { useWebChatSend } from "../../composables/useWebChatSend";
 import { useWebChatConversation } from "../../composables/useWebChatConversation";
@@ -217,7 +217,6 @@ import { useConversationWorkspace } from "../../composables/useConversationWorks
 import ChatBanners from "../../components/ChatBanners.vue";
 import ChatHeaderBar from "../../components/ChatHeaderBar.vue";
 import MessagesArea from "../../components/MessagesArea.vue";
-import { useAssistantTurns } from "@/composables/useAssistantTurns";
 import ChatInput from "../../components/ChatInput.vue";
 import CharacterPickerDialog from "../../components/CharacterPickerDialog.vue";
 import MemoryPanel from "../../components/MemoryPanel.vue";
@@ -265,6 +264,7 @@ const {
   recentWorkspaces,
   refreshRecentWorkspaces,
   loadConversationWorkspace,
+  applySnapshotWorkspace,
   startDraftConversation,
   chooseWorkspaceDirectory,
   selectWorkspaceMount,
@@ -304,7 +304,6 @@ const showImportDetail = ref(false);
 const convSummary = ref("");
 const showSummaryDrawer = ref(false);
 const replyTarget = ref<any>(null);
-const { applyTurns, loadTurns, applyRealtimeStreamEvent } = useAssistantTurns(convId, messages);
 const llmModels = ref<any[]>([]);
 const selectedModelId = ref(0);
 const selectedReasoningEffort = ref("high");
@@ -509,42 +508,28 @@ async function loadLlmModels() {
   }
 }
 
-async function loadConversationModelSettings(conversationId: string) {
-  if (!conversationId) {
-    try {
-      const draft = JSON.parse(
-        localStorage.getItem(modelSettingsDraftKey) || "{}",
-      );
-      selectedModelId.value = Number(draft.modelConfigId || 0);
-      selectedReasoningEffort.value = String(
-        draft.reasoningEffort || "high",
-      );
-      selectedReasoningEnabled.value = draft.reasoningEnabled === true;
-      selectedPermissionMode.value =
-        draft.permissionMode === "full_access" ? "full_access" : "request_approval";
-    } catch {}
-    return;
-  }
+function loadDraftModelSettings() {
   try {
-    const response = await get<any>("/api/web-chat/conversations", {
-      page: 1,
-      pageSize: 200,
-    });
-    const conversation = (response?.items || []).find(
-      (item: any) => String(item?.id || "") === conversationId,
+    const draft = JSON.parse(
+      localStorage.getItem(modelSettingsDraftKey) || "{}",
     );
-    selectedModelId.value = Number(conversation?.modelConfigId || 0);
-    selectedReasoningEffort.value =
-      String(conversation?.reasoningEffort || "high");
-    selectedReasoningEnabled.value =
-      conversation?.reasoningEnabled === 1 ||
-      conversation?.reasoningEnabled === true;
+    selectedModelId.value = Number(draft.modelConfigId || 0);
+    selectedReasoningEffort.value = String(draft.reasoningEffort || "high");
+    selectedReasoningEnabled.value = draft.reasoningEnabled === true;
     selectedPermissionMode.value =
-      conversation?.permissionMode === "full_access"
-        ? "full_access"
-        : "request_approval";
-    localStorage.removeItem(modelSettingsDraftKey);
+      draft.permissionMode === "full_access" ? "full_access" : "request_approval";
   } catch {}
+}
+
+function applyConversationSettings(conversation?: Record<string, any>) {
+  if (!conversation) return;
+  selectedModelId.value = Number(conversation.modelConfigId || 0);
+  selectedReasoningEffort.value = String(conversation.reasoningEffort || "high");
+  selectedReasoningEnabled.value =
+    conversation.reasoningEnabled === 1 || conversation.reasoningEnabled === true;
+  selectedPermissionMode.value =
+    conversation.permissionMode === "full_access" ? "full_access" : "request_approval";
+  localStorage.removeItem(modelSettingsDraftKey);
 }
 
 function saveModelSettingsDraft(
@@ -582,7 +567,7 @@ async function handlePermissionModeChange(mode: string) {
       { permissionMode: next },
     );
   } catch {
-    await loadConversationModelSettings(convId.value);
+    await reloadConversationSnapshot();
     ElMessage.error("保存权限模式失败");
   }
 }
@@ -618,7 +603,7 @@ async function handleModelSettingChange(
       },
     );
   } catch {
-    await loadConversationModelSettings(convId.value);
+    await reloadConversationSnapshot();
     ElMessage.error("保存模型设置失败");
   }
 }
@@ -633,6 +618,8 @@ function handleModelSettingPreviewChange(
   selectedReasoningEnabled.value = reasoningEnabled === true;
 }
 
+let loadOlderRuntimeTurns: () => Promise<unknown> = async () => undefined;
+
 const {
   scrollToBottom,
   onScroll,
@@ -646,34 +633,39 @@ const {
   pullText,
   hasMoreHistory,
   isLoadingHistory,
-  msgPage,
-} = useWebChatScroll(msgAreaRef, messages, convId, showScrollBtn);
+  applyHistorySnapshot,
+} = useWebChatScroll(
+  msgAreaRef,
+  messages,
+  convId,
+  showScrollBtn,
+  () => loadOlderRuntimeTurns(),
+);
 
 const {
-  connectSSE,
-  disconnectSSE,
-  connectProactiveSSE,
-  disconnectProactiveSSE,
+  activeTurnId,
+  loadSnapshot: reloadConversationSnapshot,
+  loadOlderTurns: loadOlderConversationTurns,
+  connect: connectSSE,
+  disconnect: disconnectSSE,
   cleanup: cleanupSSE,
-  setLastPolledMsgId,
-} = useWebChatSSE(
+  connectProactiveMessages: connectProactiveSSE,
+  disconnectProactiveMessages: disconnectProactiveSSE,
+} = useConversationRuntime(
   convId,
   messages,
-  scrollToBottom,
   sending,
-  (conversationId) => {
-    if (conversationId && conversationId !== convId.value) return;
-    void loadTurns();
-  },
-  applyRealtimeStreamEvent,
-  async (event) => {
-    const conversationId = String(event?.conversationId || "").trim();
-    if (conversationId && conversationId !== convId.value) return;
-    await chatStore.fetchSidebar();
-    const title = String(event?.data?.title || "").trim();
-    if (title && conversationId === convId.value) convTitle.value = title;
+  scrollToBottom,
+  async (conversation, workspace, snapshot) => {
+    const title = String(conversation?.title || "").trim();
+    if (title) convTitle.value = title;
+    applyConversationSettings(conversation);
+    applySnapshotWorkspace(workspace, String(conversation?.projectId || ""));
+    applyHistorySnapshot(snapshot?.messageHistory);
   },
 );
+
+loadOlderRuntimeTurns = loadOlderConversationTurns;
 
 const {
   onImageAttached,
@@ -687,7 +679,6 @@ const {
   handleStop,
   handleRetry,
   handleClear,
-  getLastPolledMsgId,
   generating,
   isSubmitting,
 } = useWebChatSend(
@@ -712,11 +703,13 @@ const {
       path: "/chat",
       query: { conversationId },
     });
+    await connectSSE(false);
   },
   selectedModelId,
   selectedReasoningEffort,
   selectedReasoningEnabled,
   selectedPermissionMode,
+  activeTurnId,
 );
 
 const {
@@ -741,14 +734,8 @@ const {
   charIdentity,
   charAvatar,
   hasMoreHistory,
-  msgPage,
-  scrollToBottom,
   disconnectSSE,
   connectSSE,
-  setLastPolledMsgId,
-  (name: string) => {
-    if (currentCharName) currentCharName.value = name;
-  },
 );
 
 const conversationHostActions: Record<string, (input?: any) => unknown | Promise<unknown>> = {
@@ -812,15 +799,9 @@ watch(
 watch(
   convId,
   (conversationId) => {
-    void loadConversationModelSettings(conversationId || "");
-    void loadTurns();
+    if (!conversationId) loadDraftModelSettings();
   },
   { immediate: true },
-);
-
-watch(
-  () => messages.value.map((message) => String(message?.id || "")).join("|"),
-  () => applyTurns(),
 );
 
 watch(
@@ -837,14 +818,7 @@ watch(
     }
     if (nextId === convId.value) return;
     convId.value = nextId;
-    await chatStore.fetchSidebar();
-    const conversation = [
-      ...chatStore.sidebar.pinned,
-      ...chatStore.sidebar.recent,
-      ...chatStore.sidebar.projects.flatMap((project) => project.conversations),
-    ].find((item) => item.id === nextId);
-    convTitle.value = conversation?.title || "新对话";
-    chatStore.currentProjectId = conversation?.projectId || "";
+    convTitle.value = "新对话";
     await loadCharacterConversation();
   },
 );
@@ -855,20 +829,6 @@ watch(
     if (convId.value) return;
     await loadConversationWorkspace("", projectId);
   },
-);
-
-watch(
-  () => chatStore.sidebar,
-  (sidebar) => {
-    if (!convId.value) return;
-    const conversation = [
-      ...sidebar.pinned,
-      ...sidebar.recent,
-      ...sidebar.projects.flatMap((project) => project.conversations),
-    ].find((item) => item.id === convId.value);
-    if (conversation) convTitle.value = conversation.title || "新对话";
-  },
-  { deep: true },
 );
 
 watch(showSummaryDrawer, (visible) => {
@@ -1004,16 +964,7 @@ onMounted(async () => {
       }
     }
   });
-  if (convId.value) {
-    await chatStore.fetchSidebar();
-    const conversation = [
-      ...chatStore.sidebar.pinned,
-      ...chatStore.sidebar.recent,
-      ...chatStore.sidebar.projects.flatMap((project) => project.conversations),
-    ].find((item) => item.id === convId.value);
-    convTitle.value = conversation?.title || "新对话";
-    chatStore.currentProjectId = conversation?.projectId || "";
-  }
+  if (convId.value) convTitle.value = "新对话";
   await loadCharacterConversation();
   await fetchConversations();
 

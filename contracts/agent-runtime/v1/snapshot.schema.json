@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://amitia.local/contracts/agent-runtime/v1/snapshot.schema.json",
+  "title": "Amitia Conversation Snapshot v1",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "version",
+    "revision",
+    "lastEventSequence",
+    "messages",
+    "turns",
+    "messageHistory",
+    "turnHistory"
+  ],
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "lastEventSequence": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "conversation": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "workspace": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "messages": {
+      "type": "array"
+    },
+    "turns": {
+      "type": "array"
+    },
+    "activeTurn": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "approvals": {
+      "type": "array"
+    },
+    "messageHistory": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "nextBefore",
+        "hasMore"
+      ],
+      "properties": {
+        "nextBefore": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "hasMore": {
+          "type": "boolean"
+        }
+      }
+    },
+    "turnHistory": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "nextBefore",
+        "hasMore"
+      ],
+      "properties": {
+        "nextBefore": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "hasMore": {
+          "type": "boolean"
+        }
+      }
+    }
+  }
+}

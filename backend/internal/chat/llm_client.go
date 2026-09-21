@@ -87,28 +87,82 @@ func (s *service) callLLMMode(ctx context.Context, cfg *ModelConfig, messages []
 	}
 }
 
-func (s *service) invokeProcessLLMWithTools(ctx context.Context, cfg *ModelConfig, messages []map[string]interface{}, tools []tool.Tool) (string, string, []map[string]interface{}, int, error) {
-	if s.llmWithTools != nil {
-		return s.llmWithTools(ctx, cfg, messages, tools)
-	}
-	return s.callLLMWithTools(ctx, cfg, messages, tools)
+type localModelEventSink struct {
+	ctx  context.Context
+	sink ModelEventSink
 }
 
-func (s *service) callLLMWithTools(ctx context.Context, cfg *ModelConfig, messages []map[string]interface{}, tools []tool.Tool) (string, string, []map[string]interface{}, int, error) {
-	switch protocolForApiType(cfg.APIType) {
-	case "mnn":
-		return s.callMNNWithTools(ctx, cfg, messages, tools)
-	case "llama_cpp":
-		return s.callLlamaCppWithTools(ctx, cfg, messages, tools)
-	case "ollama":
-		return s.callOllamaWithTools(ctx, cfg, messages, tools)
-	case "anthropic":
-		return s.callAnthropicWithTools(ctx, cfg, messages, tools)
-	case "gemini":
-		return s.callGeminiWithTools(ctx, cfg, messages, tools)
-	default:
-		return s.callOpenAIWithTools(ctx, cfg, messages, tools)
+func (s localModelEventSink) OnTextDelta(text string) error {
+	return s.sink.Emit(s.ctx, ModelEvent{Type: ModelEventTextDelta, TextDelta: text})
+}
+
+func (s localModelEventSink) OnReasoningDelta(text string) error {
+	return s.sink.Emit(s.ctx, ModelEvent{Type: ModelEventReasoningSummaryDelta, TextDelta: text})
+}
+
+func (s localModelEventSink) OnToolCallDelta(callID string, name string, arguments string) error {
+	if err := s.sink.Emit(s.ctx, ModelEvent{Type: ModelEventToolCallStarted, ToolCallID: callID, ToolName: name}); err != nil {
+		return err
 	}
+	if arguments == "" {
+		return nil
+	}
+	return s.sink.Emit(s.ctx, ModelEvent{Type: ModelEventToolCallArgumentsDelta, ToolCallID: callID, ToolName: name, ArgumentsDelta: arguments})
+}
+
+func (s localModelEventSink) OnUsage(usage localmodel.LocalModelUsage) error {
+	return s.sink.Emit(s.ctx, ModelEvent{Type: ModelEventUsage, Usage: &ModelUsage{InputTokens: usage.PromptTokens, OutputTokens: usage.CompletionTokens, TotalTokens: usage.TotalTokens}})
+}
+
+func (s *service) invokeProcessLLMWithToolsStream(ctx context.Context, cfg *ModelConfig, messages []map[string]interface{}, tools []tool.Tool, sink ModelEventSink) (string, string, []map[string]interface{}, int, error) {
+	if sink == nil {
+		sink = noopEventSink{}
+	}
+	if s.llmWithTools != nil {
+		text, reasoning, calls, tokens, err := s.llmWithTools(ctx, cfg, messages, tools)
+		if reasoning != "" {
+			if emitErr := sink.Emit(ctx, ModelEvent{Type: ModelEventReasoningSummaryDelta, TextDelta: reasoning}); emitErr != nil {
+				return "", "", nil, 0, emitErr
+			}
+			_ = sink.Emit(ctx, ModelEvent{Type: ModelEventReasoningSummaryDone})
+		}
+		if text != "" {
+			if emitErr := sink.Emit(ctx, ModelEvent{Type: ModelEventTextDelta, TextDelta: text}); emitErr != nil {
+				return "", "", nil, 0, emitErr
+			}
+			_ = sink.Emit(ctx, ModelEvent{Type: ModelEventTextDone})
+		}
+		if err == nil {
+			_ = sink.Emit(ctx, ModelEvent{Type: ModelEventCompleted})
+		}
+		return text, reasoning, calls, tokens, err
+	}
+	protocol := protocolForApiType(cfg.APIType)
+	if protocol == "mnn" || protocol == "llama_cpp" {
+		backend, err := s.getLocalModelBackend(ctx, cfg)
+		if err != nil {
+			return "", "", nil, 0, err
+		}
+		req := messagesToModelRequest(cfg, messages, tools, false)
+		localReq := toLocalModelRequest(req, messages)
+		localReq.Tools = toolsToLocalModelTools(tools)
+		result, err := backend.Generate(ctx, localReq, localModelEventSink{ctx: ctx, sink: sink})
+		if err != nil {
+			return "", "", nil, 0, err
+		}
+		calls := make([]map[string]interface{}, 0, len(result.ToolCalls))
+		for _, tc := range result.ToolCalls {
+			calls = append(calls, map[string]interface{}{"id": tc.ID, "type": "function", "function": map[string]interface{}{"name": tc.Name, "arguments": tc.Arguments}})
+		}
+		_ = sink.Emit(ctx, ModelEvent{Type: ModelEventCompleted})
+		return result.Text, "", calls, result.Usage.TotalTokens, nil
+	}
+	result, err := s.callLLMStreamAdapter(ctx, cfg, messages, tools, false, false, sink)
+	if err != nil {
+		return "", "", nil, 0, err
+	}
+	text, reasoning, calls, tokens := modelResultToLegacy(result)
+	return text, reasoning, calls, tokens, nil
 }
 
 func (s *service) callMNNMode(ctx context.Context, cfg *ModelConfig, messages []map[string]interface{}, jsonOnly bool) (string, int, error) {
@@ -127,35 +181,6 @@ func (s *service) callMNNMode(ctx context.Context, cfg *ModelConfig, messages []
 	return result.Text, result.Usage.TotalTokens, nil
 }
 
-func (s *service) callMNNWithTools(ctx context.Context, cfg *ModelConfig, messages []map[string]interface{}, tools []tool.Tool) (string, string, []map[string]interface{}, int, error) {
-	backend, err := s.getLocalModelBackend(ctx, cfg)
-	if err != nil {
-		return "", "", nil, 0, err
-	}
-
-	req := messagesToModelRequest(cfg, messages, tools, false)
-	localReq := toLocalModelRequest(req, messages)
-	localReq.Tools = toolsToLocalModelTools(tools)
-
-	result, err := backend.Generate(ctx, localReq, nil)
-	if err != nil {
-		return "", "", nil, 0, err
-	}
-
-	var toolCalls []map[string]interface{}
-	for _, tc := range result.ToolCalls {
-		toolCalls = append(toolCalls, map[string]interface{}{
-			"id":   tc.ID,
-			"type": "function",
-			"function": map[string]interface{}{
-				"name":      tc.Name,
-				"arguments": tc.Arguments,
-			},
-		})
-	}
-	return result.Text, "", toolCalls, result.Usage.TotalTokens, nil
-}
-
 func (s *service) callLlamaCppMode(ctx context.Context, cfg *ModelConfig, messages []map[string]interface{}, jsonOnly bool) (string, int, error) {
 	backend, err := s.getLocalModelBackend(ctx, cfg)
 	if err != nil {
@@ -170,35 +195,6 @@ func (s *service) callLlamaCppMode(ctx context.Context, cfg *ModelConfig, messag
 		return "", 0, err
 	}
 	return result.Text, result.Usage.TotalTokens, nil
-}
-
-func (s *service) callLlamaCppWithTools(ctx context.Context, cfg *ModelConfig, messages []map[string]interface{}, tools []tool.Tool) (string, string, []map[string]interface{}, int, error) {
-	backend, err := s.getLocalModelBackend(ctx, cfg)
-	if err != nil {
-		return "", "", nil, 0, err
-	}
-
-	req := messagesToModelRequest(cfg, messages, tools, false)
-	localReq := toLocalModelRequest(req, messages)
-	localReq.Tools = toolsToLocalModelTools(tools)
-
-	result, err := backend.Generate(ctx, localReq, nil)
-	if err != nil {
-		return "", "", nil, 0, err
-	}
-
-	var toolCalls []map[string]interface{}
-	for _, tc := range result.ToolCalls {
-		toolCalls = append(toolCalls, map[string]interface{}{
-			"id":   tc.ID,
-			"type": "function",
-			"function": map[string]interface{}{
-				"name":      tc.Name,
-				"arguments": tc.Arguments,
-			},
-		})
-	}
-	return result.Text, "", toolCalls, result.Usage.TotalTokens, nil
 }
 
 func (s *service) getLocalModelBackend(ctx context.Context, cfg *ModelConfig) (LocalModelInfer, error) {
@@ -367,66 +363,6 @@ func (s *service) callOpenAIMode(ctx context.Context, cfg *ModelConfig, messages
 	return result.Choices[0].Message.Content, result.Usage.TotalTokens, nil
 }
 
-func (s *service) callOpenAIWithTools(ctx context.Context, cfg *ModelConfig, messages []map[string]interface{}, tools []tool.Tool) (string, string, []map[string]interface{}, int, error) {
-	base := strings.TrimRight(cfg.BaseURL, "/")
-	reqMap := map[string]interface{}{"model": cfg.ModelName, "messages": messages, "temperature": cfg.Temperature, "max_tokens": cfg.MaxTokens, "stream": false}
-	compatibleTools := openAICompatibleTools(tools)
-	if len(compatibleTools) > 0 {
-		reqMap["tools"] = compatibleTools
-	}
-	if cfg.TopP > 0 && cfg.TopP < 1 {
-		reqMap["top_p"] = cfg.TopP
-	}
-	if cfg.ReasoningEffort != "" {
-		reqMap["reasoning_effort"] = cfg.ReasoningEffort
-	}
-	reqBody, _ := json.Marshal(reqMap)
-	req, _ := http.NewRequestWithContext(ctx, "POST", base+"/chat/completions", bytes.NewReader(reqBody))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+cfg.APIKey)
-	resp, err := (&http.Client{Timeout: 180 * time.Second}).Do(req)
-	if err != nil {
-		return "", "", nil, 0, err
-	}
-	defer resp.Body.Close()
-	rb, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode != 200 {
-		return "", "", nil, 0, fmt.Errorf("API %d: %s", resp.StatusCode, string(rb))
-	}
-	var r struct {
-		Choices []struct {
-			Message struct {
-				Content          string `json:"content"`
-				ReasoningContent string `json:"reasoning_content"`
-				ToolCalls        []struct {
-					ID       string `json:"id"`
-					Type     string `json:"type"`
-					Function struct {
-						Name      string `json:"name"`
-						Arguments string `json:"arguments"`
-					} `json:"function"`
-				} `json:"tool_calls"`
-			}
-		}
-		Usage struct{ TotalTokens int }
-	}
-	if err := json.Unmarshal(rb, &r); err != nil {
-		return "", "", nil, 0, fmt.Errorf("解析响应失败: %v; 原始响应: %s", err, string(rb))
-	}
-	if len(r.Choices) == 0 {
-		return "", "", nil, 0, fmt.Errorf("API 未返回有效回复，原始响应: %s", string(rb))
-	}
-	choice := r.Choices[0]
-	var toolCalls []map[string]interface{}
-	for _, tc := range choice.Message.ToolCalls {
-		toolCalls = append(toolCalls, map[string]interface{}{
-			"id": tc.ID, "type": "function",
-			"function": map[string]interface{}{"name": tc.Function.Name, "arguments": tc.Function.Arguments},
-		})
-	}
-	return choice.Message.Content, choice.Message.ReasoningContent, toolCalls, r.Usage.TotalTokens, nil
-}
-
 func openAICompatibleTools(tools []tool.Tool) []tool.Tool {
 	result := make([]tool.Tool, 0, len(tools))
 	for _, candidate := range tools {
@@ -490,66 +426,6 @@ func (s *service) callOllamaMode(ctx context.Context, cfg *ModelConfig, messages
 	}
 	total := result.EvalCount + result.PromptEvalCount
 	return result.Message.Content, total, nil
-}
-
-func (s *service) callOllamaWithTools(ctx context.Context, cfg *ModelConfig, messages []map[string]interface{}, tools []tool.Tool) (string, string, []map[string]interface{}, int, error) {
-	base := strings.TrimRight(cfg.BaseURL, "/")
-	reqBody := map[string]interface{}{
-		"model":    cfg.ModelName,
-		"messages": messages,
-		"stream":   false,
-		"options": map[string]interface{}{
-			"temperature": cfg.Temperature,
-			"num_ctx":     cfg.MaxTokens,
-		},
-	}
-	if len(tools) > 0 {
-		reqBody["tools"] = tools
-	}
-	if cfg.ReasoningEffort != "" {
-		reqBody["think"] = cfg.ReasoningEffort
-	}
-	jsonBody, _ := json.Marshal(reqBody)
-	req, _ := http.NewRequestWithContext(ctx, "POST", base+"/api/chat", bytes.NewReader(jsonBody))
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := (&http.Client{Timeout: 180 * time.Second}).Do(req)
-	if err != nil {
-		return "", "", nil, 0, err
-	}
-	defer resp.Body.Close()
-	rb, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode != 200 {
-		return "", "", nil, 0, fmt.Errorf("API %d: %s", resp.StatusCode, string(rb))
-	}
-	var r struct {
-		Message struct {
-			Content   string `json:"content"`
-			ToolCalls []struct {
-				Function struct {
-					Name      string          `json:"name"`
-					Arguments json.RawMessage `json:"arguments"`
-				} `json:"function"`
-			} `json:"tool_calls"`
-		} `json:"message"`
-		EvalCount       int `json:"eval_count"`
-		PromptEvalCount int `json:"prompt_eval_count"`
-	}
-	if err := json.Unmarshal(rb, &r); err != nil {
-		return "", "", nil, 0, fmt.Errorf("解析响应失败: %v; 原始响应: %s", err, string(rb))
-	}
-	var toolCalls []map[string]interface{}
-	for i, tc := range r.Message.ToolCalls {
-		toolCalls = append(toolCalls, map[string]interface{}{
-			"id":   fmt.Sprintf("call_%d_%d", time.Now().UnixNano(), i),
-			"type": "function",
-			"function": map[string]interface{}{
-				"name":      tc.Function.Name,
-				"arguments": string(tc.Function.Arguments),
-			},
-		})
-	}
-	total := r.EvalCount + r.PromptEvalCount
-	return r.Message.Content, "", toolCalls, total, nil
 }
 
 func messagesToModelRequest(cfg *ModelConfig, messages []map[string]interface{}, tools []tool.Tool, jsonOnly bool) ModelRequest {
@@ -686,19 +562,6 @@ func (s *service) callLLMWithAdapterMode(ctx context.Context, cfg *ModelConfig, 
 	return text, tokens, nil
 }
 
-func (s *service) callLLMWithToolsAdapter(ctx context.Context, cfg *ModelConfig, messages []map[string]interface{}, tools []tool.Tool) (string, string, []map[string]interface{}, int, error) {
-	protocol := resolveProtocol(cfg)
-	adapter := modelprotocol.AdapterForProtocol(protocol)
-	req := messagesToModelRequest(cfg, messages, tools, false)
-	pcfg := cfgToProviderConfig(cfg)
-	result, err := adapter.Generate(ctx, pcfg, req)
-	if err != nil {
-		return "", "", nil, 0, err
-	}
-	text, reasoning, toolCalls, tokens := modelResultToLegacy(result)
-	return text, reasoning, toolCalls, tokens, nil
-}
-
 type noopEventSink struct{}
 
 func (noopEventSink) Emit(ctx context.Context, event ModelEvent) error { return nil }
@@ -808,80 +671,6 @@ func (s *service) callAnthropicMode(ctx context.Context, cfg *ModelConfig, messa
 	return content, result.Usage.InputTokens + result.Usage.OutputTokens, nil
 }
 
-func (s *service) callAnthropicWithTools(ctx context.Context, cfg *ModelConfig, messages []map[string]interface{}, tools []tool.Tool) (string, string, []map[string]interface{}, int, error) {
-	systemPrompt, chatMessages := extractSystemMessage(messages)
-	base := strings.TrimRight(cfg.BaseURL, "/")
-	var anthropicTools []map[string]interface{}
-	for _, t := range tools {
-		anthropicTools = append(anthropicTools, map[string]interface{}{
-			"name":         t.Function.Name,
-			"description":  t.Function.Description,
-			"input_schema": t.Function.Parameters,
-		})
-	}
-	reqBody := map[string]interface{}{
-		"model":       cfg.ModelName,
-		"messages":    chatMessages,
-		"max_tokens":  cfg.MaxTokens,
-		"temperature": cfg.Temperature,
-	}
-	if systemPrompt != "" {
-		reqBody["system"] = systemPrompt
-	}
-	if len(anthropicTools) > 0 {
-		reqBody["tools"] = anthropicTools
-	}
-	applyLegacyAnthropicThinking(reqBody, cfg.ReasoningEffort, cfg.MaxTokens)
-	jsonBody, _ := json.Marshal(reqBody)
-	req, _ := http.NewRequestWithContext(ctx, "POST", base+"/v1/messages", bytes.NewReader(jsonBody))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("x-api-key", cfg.APIKey)
-	req.Header.Set("anthropic-version", "2023-06-01")
-	resp, err := (&http.Client{Timeout: 180 * time.Second}).Do(req)
-	if err != nil {
-		return "", "", nil, 0, err
-	}
-	defer resp.Body.Close()
-	rb, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode != 200 {
-		return "", "", nil, 0, fmt.Errorf("API %d: %s", resp.StatusCode, string(rb))
-	}
-	var r struct {
-		Content []struct {
-			Type  string          `json:"type"`
-			Text  string          `json:"text"`
-			ID    string          `json:"id"`
-			Name  string          `json:"name"`
-			Input json.RawMessage `json:"input"`
-		} `json:"content"`
-		Usage struct {
-			InputTokens  int `json:"input_tokens"`
-			OutputTokens int `json:"output_tokens"`
-		} `json:"usage"`
-	}
-	if err := json.Unmarshal(rb, &r); err != nil {
-		return "", "", nil, 0, fmt.Errorf("解析响应失败: %v; 原始响应: %s", err, string(rb))
-	}
-	var content string
-	var toolCalls []map[string]interface{}
-	for _, block := range r.Content {
-		switch block.Type {
-		case "text":
-			content += block.Text
-		case "tool_use":
-			toolCalls = append(toolCalls, map[string]interface{}{
-				"id":   block.ID,
-				"type": "function",
-				"function": map[string]interface{}{
-					"name":      block.Name,
-					"arguments": string(block.Input),
-				},
-			})
-		}
-	}
-	return content, "", toolCalls, r.Usage.InputTokens + r.Usage.OutputTokens, nil
-}
-
 func (s *service) callGeminiMode(ctx context.Context, cfg *ModelConfig, messages []map[string]interface{}, jsonOnly bool) (string, int, error) {
 	systemPrompt, chatMessages := extractSystemMessage(messages)
 	base := strings.TrimRight(cfg.BaseURL, "/")
@@ -966,108 +755,6 @@ func (s *service) callGeminiMode(ctx context.Context, cfg *ModelConfig, messages
 		content += part.Text
 	}
 	return content, result.UsageMetadata.TotalTokenCount, nil
-}
-
-func (s *service) callGeminiWithTools(ctx context.Context, cfg *ModelConfig, messages []map[string]interface{}, tools []tool.Tool) (string, string, []map[string]interface{}, int, error) {
-	systemPrompt, chatMessages := extractSystemMessage(messages)
-	base := strings.TrimRight(cfg.BaseURL, "/")
-	var contents []map[string]interface{}
-	for _, msg := range chatMessages {
-		role, _ := msg["role"].(string)
-		if role == "assistant" {
-			role = "model"
-		}
-		content, _ := msg["content"].(string)
-		contents = append(contents, map[string]interface{}{
-			"role":  role,
-			"parts": []map[string]interface{}{{"text": content}},
-		})
-	}
-	var funcDecls []map[string]interface{}
-	for _, t := range tools {
-		funcDecls = append(funcDecls, map[string]interface{}{
-			"name":        t.Function.Name,
-			"description": t.Function.Description,
-			"parameters":  t.Function.Parameters,
-		})
-	}
-	genConfig := map[string]interface{}{
-		"temperature":     cfg.Temperature,
-		"maxOutputTokens": cfg.MaxTokens,
-	}
-	if cfg.TopP > 0 && cfg.TopP < 1 {
-		genConfig["topP"] = cfg.TopP
-	}
-	reqBody := map[string]interface{}{
-		"contents":         contents,
-		"generationConfig": genConfig,
-	}
-	if systemPrompt != "" {
-		reqBody["systemInstruction"] = map[string]interface{}{
-			"parts": []map[string]interface{}{{"text": systemPrompt}},
-		}
-	}
-	if len(funcDecls) > 0 {
-		reqBody["tools"] = []map[string]interface{}{
-			{"functionDeclarations": funcDecls},
-		}
-	}
-	jsonBody, _ := json.Marshal(reqBody)
-	url := fmt.Sprintf("%s/v1beta/models/%s:generateContent", base, cfg.ModelName)
-	req, _ := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(jsonBody))
-	req.Header.Set("Content-Type", "application/json")
-	q := req.URL.Query()
-	q.Set("key", cfg.APIKey)
-	req.URL.RawQuery = q.Encode()
-	resp, err := (&http.Client{Timeout: 180 * time.Second}).Do(req)
-	if err != nil {
-		return "", "", nil, 0, err
-	}
-	defer resp.Body.Close()
-	rb, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode != 200 {
-		return "", "", nil, 0, fmt.Errorf("API %d: %s", resp.StatusCode, string(rb))
-	}
-	var r struct {
-		Candidates []struct {
-			Content struct {
-				Parts []struct {
-					Text     string `json:"text"`
-					FuncCall struct {
-						Name string          `json:"name"`
-						Args json.RawMessage `json:"args"`
-					} `json:"functionCall"`
-				} `json:"parts"`
-			} `json:"content"`
-		} `json:"candidates"`
-		UsageMetadata struct {
-			TotalTokenCount int `json:"totalTokenCount"`
-		} `json:"usageMetadata"`
-	}
-	if err := json.Unmarshal(rb, &r); err != nil {
-		return "", "", nil, 0, fmt.Errorf("解析响应失败: %v; 原始响应: %s", err, string(rb))
-	}
-	if len(r.Candidates) == 0 {
-		return "", "", nil, 0, fmt.Errorf("API 未返回有效回复，原始响应: %s", string(rb))
-	}
-	var content string
-	var toolCalls []map[string]interface{}
-	for _, part := range r.Candidates[0].Content.Parts {
-		if part.Text != "" {
-			content += part.Text
-		}
-		if part.FuncCall.Name != "" {
-			toolCalls = append(toolCalls, map[string]interface{}{
-				"id":   fmt.Sprintf("call_%d", time.Now().UnixNano()),
-				"type": "function",
-				"function": map[string]interface{}{
-					"name":      part.FuncCall.Name,
-					"arguments": string(part.FuncCall.Args),
-				},
-			})
-		}
-	}
-	return content, "", toolCalls, r.UsageMetadata.TotalTokenCount, nil
 }
 
 func truncateStr(s string, n int) string {

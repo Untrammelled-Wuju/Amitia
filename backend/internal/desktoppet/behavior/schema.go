@@ -199,7 +199,7 @@ func registerInteractionSchemas() {
 		}},
 		{"chat.response.completed", ReliabilityDurable, 24 * time.Hour, map[string]string{
 			"interactionId": "string", "commitId": "string",
-			"messageCount": "int", "responseGroupId": "string", "origin": "string",
+			"messageCount": "int", "deliveryGroupId": "string", "origin": "string",
 		}},
 		{"chat.response.failed", ReliabilityDurable, 24 * time.Hour, map[string]string{
 			"interactionId": "string", "statusVersion": "int64",
@@ -228,15 +228,15 @@ func registerDeliverySchemas() {
 		fields      map[string]string
 	}{
 		{"delivery.started", ReliabilityRecoverable, 60 * time.Second, map[string]string{
-			"interactionId": "string", "responseGroupId": "string",
+			"interactionId": "string", "deliveryGroupId": "string",
 			"channel": "string", "deliverySequence": "int64",
 		}},
 		{"delivery.completed", ReliabilityDurable, 7 * 24 * time.Hour, map[string]string{
-			"deliveryId": "string", "responseGroupId": "string",
+			"deliveryId": "string", "deliveryGroupId": "string",
 			"channel": "string", "status": "string",
 		}},
 		{"delivery.failed", ReliabilityDurable, 7 * 24 * time.Hour, map[string]string{
-			"deliveryId": "string", "responseGroupId": "string",
+			"deliveryId": "string", "deliveryGroupId": "string",
 			"channel": "string", "errorClass": "string",
 		}},
 	}

@@ -331,23 +331,23 @@ func (a *AnthropicAdapter) parseStream(body io.Reader, sink ModelEventSink) (*Mo
 				switch event.Type {
 				case "content_block_start":
 					if event.ContentBlock.Type == "tool_use" {
-						toolCalls[event.Index] = &toolCallInfo{
-							ID:   event.ContentBlock.ID,
-							Name: event.ContentBlock.Name,
-						}
+						toolCalls[event.Index] = &toolCallInfo{ID: event.ContentBlock.ID, Name: event.ContentBlock.Name}
+						sink.Emit(ctx, ModelEvent{Type: ModelEventToolCallStarted, ToolCallID: event.ContentBlock.ID, ToolName: event.ContentBlock.Name})
 					}
 				case "content_block_delta":
 					switch event.Delta.Type {
 					case "text_delta":
 						result.Text += event.Delta.Text
-						sink.Emit(context.Background(), ModelEvent{
-							Type:      ModelEventTextDelta,
-							TextDelta: event.Delta.Text,
-						})
+						sink.Emit(ctx, ModelEvent{Type: ModelEventTextDelta, TextDelta: event.Delta.Text})
 					case "input_json_delta":
 						if tc, ok := toolCalls[event.Index]; ok {
 							tc.Args.WriteString(event.Delta.PartialJSON)
+							sink.Emit(ctx, ModelEvent{Type: ModelEventToolCallArgumentsDelta, ToolCallID: tc.ID, ToolName: tc.Name, ArgumentsDelta: event.Delta.PartialJSON})
 						}
+					}
+				case "content_block_stop":
+					if tc, ok := toolCalls[event.Index]; ok {
+						sink.Emit(ctx, ModelEvent{Type: ModelEventToolCallDone, ToolCallID: tc.ID, ToolName: tc.Name})
 					}
 				case "message_stop":
 					for _, tc := range toolCalls {
@@ -357,7 +357,7 @@ func (a *AnthropicAdapter) parseStream(body io.Reader, sink ModelEventSink) (*Mo
 							ArgumentsJSON: tc.Args.String(),
 						})
 					}
-					sink.Emit(context.Background(), ModelEvent{
+					sink.Emit(ctx, ModelEvent{
 						Type: ModelEventCompleted,
 					})
 					return result, nil

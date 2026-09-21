@@ -135,59 +135,6 @@ func stripAntiRepeatPhrases(content string) string {
 	return strings.Join(result, "\n")
 }
 
-func DeduplicateAdjacentLines(lines []string) []string {
-	if len(lines) <= 1 {
-		return lines
-	}
-
-	var result []string
-	result = append(result, lines[0])
-
-	for i := 1; i < len(lines); i++ {
-		prev := lines[i-1]
-		curr := lines[i]
-
-		if strings.TrimSpace(curr) == "" || strings.TrimSpace(prev) == "" {
-			result = append(result, curr)
-			continue
-		}
-
-		prevWords := extractNonStopWords(prev)
-		currWords := extractNonStopWords(curr)
-
-		if len(prevWords) == 0 || len(currWords) == 0 {
-			result = append(result, curr)
-			continue
-		}
-
-		matchCount := 0
-		for _, cw := range currWords {
-			for _, pw := range prevWords {
-				if cw == pw {
-					matchCount++
-					break
-				}
-			}
-		}
-
-		overlapRatio := float64(matchCount) / float64(len(currWords))
-		if overlapRatio > 0.5 {
-			continue
-		}
-
-		for _, phrase := range antiRepeatPhrases {
-			if strings.TrimSpace(curr) == phrase {
-				goto skip
-			}
-		}
-
-		result = append(result, curr)
-	skip:
-	}
-
-	return result
-}
-
 func CollapseAdjacentSemanticDuplicates(raw string, priorReplies []string) string {
 	if raw == "" {
 		return ""

@@ -127,6 +127,8 @@ CREATE TABLE IF NOT EXISTS conversations (
     id TEXT PRIMARY KEY,
     space_id TEXT NOT NULL DEFAULT '',
     project_id TEXT NOT NULL DEFAULT '',
+    workspace_id TEXT NOT NULL DEFAULT '',
+    workspace_device_id TEXT NOT NULL DEFAULT '',
     title TEXT DEFAULT '',
     channel TEXT DEFAULT 'web',
     source TEXT DEFAULT 'manual',
@@ -158,6 +160,7 @@ CREATE TABLE IF NOT EXISTS projects (
     revision INTEGER NOT NULL DEFAULT 1,
     UNIQUE(space_id, workspace_id)
 );
+CREATE INDEX IF NOT EXISTS idx_conversations_workspace ON conversations(workspace_id);
 CREATE INDEX IF NOT EXISTS idx_projects_space_updated ON projects(space_id, updated_at);
 
 CREATE TABLE IF NOT EXISTS messages (
@@ -192,7 +195,7 @@ CREATE TABLE IF NOT EXISTS messages (
     media_height INTEGER NOT NULL DEFAULT 0,
     original_asset_reference TEXT NOT NULL DEFAULT '',
     fallback_asset_reference TEXT NOT NULL DEFAULT '',
-    response_group_id TEXT NOT NULL DEFAULT '',
+    delivery_group_id TEXT NOT NULL DEFAULT '',
     delivery_sequence INTEGER NOT NULL DEFAULT 0,
     extension_type TEXT NOT NULL DEFAULT '',
     revision INTEGER NOT NULL DEFAULT 1,
@@ -257,7 +260,10 @@ CREATE TABLE IF NOT EXISTS assistant_turns (
     character_id TEXT NOT NULL DEFAULT '',
     user_message_id TEXT NOT NULL DEFAULT '',
     request_id TEXT NOT NULL DEFAULT '',
-    response_group_id TEXT NOT NULL DEFAULT '',
+    execution_id TEXT NOT NULL DEFAULT '',
+    parent_turn_id TEXT NOT NULL DEFAULT '',
+    parent_block_id TEXT NOT NULL DEFAULT '',
+    agent_id TEXT NOT NULL DEFAULT '',
     sequence INTEGER NOT NULL DEFAULT 0,
     status TEXT NOT NULL DEFAULT 'running',
     created_at TEXT NOT NULL DEFAULT '',
@@ -272,6 +278,7 @@ CREATE TABLE IF NOT EXISTS assistant_turn_items (
     sequence INTEGER NOT NULL DEFAULT 0,
     item_type TEXT NOT NULL DEFAULT '',
     status TEXT NOT NULL DEFAULT 'pending',
+    revision INTEGER NOT NULL DEFAULT 0,
     call_id TEXT NOT NULL DEFAULT '',
     tool_name TEXT NOT NULL DEFAULT '',
     content TEXT NOT NULL DEFAULT '',
@@ -280,26 +287,18 @@ CREATE TABLE IF NOT EXISTS assistant_turn_items (
     error_code TEXT NOT NULL DEFAULT '',
     duration_ms INTEGER NOT NULL DEFAULT 0,
     is_final INTEGER NOT NULL DEFAULT 0,
-    legacy_message_id TEXT NOT NULL DEFAULT '',
+    message_id TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL DEFAULT '',
     updated_at TEXT NOT NULL DEFAULT ''
 );
 
-CREATE TABLE IF NOT EXISTS assistant_turn_events (
-    id TEXT PRIMARY KEY,
-    turn_id TEXT NOT NULL DEFAULT '',
-    item_id TEXT NOT NULL DEFAULT '',
-    sequence INTEGER NOT NULL DEFAULT 0,
-    event_type TEXT NOT NULL DEFAULT '',
-    payload_json TEXT NOT NULL DEFAULT '',
-    created_at TEXT NOT NULL DEFAULT ''
-);
-
 CREATE INDEX IF NOT EXISTS idx_assistant_turns_conversation ON assistant_turns(conversation_id, sequence);
 CREATE INDEX IF NOT EXISTS idx_assistant_turns_request ON assistant_turns(request_id);
+CREATE INDEX IF NOT EXISTS idx_assistant_turns_execution ON assistant_turns(execution_id);
+CREATE INDEX IF NOT EXISTS idx_assistant_turns_parent ON assistant_turns(parent_turn_id);
+CREATE INDEX IF NOT EXISTS idx_assistant_turns_agent ON assistant_turns(agent_id);
 CREATE INDEX IF NOT EXISTS idx_assistant_turn_items_turn ON assistant_turn_items(turn_id, sequence);
 CREATE INDEX IF NOT EXISTS idx_assistant_turn_items_call ON assistant_turn_items(turn_id, call_id);
-CREATE INDEX IF NOT EXISTS idx_assistant_turn_events_turn ON assistant_turn_events(turn_id, sequence);
 
 CREATE TABLE IF NOT EXISTS model_configs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -3491,7 +3490,7 @@ lease_owner TEXT NOT NULL DEFAULT '',
 lease_token TEXT NOT NULL DEFAULT '',
 lease_until TEXT NOT NULL DEFAULT '',
 next_retry TEXT NOT NULL DEFAULT '',
-response_group_id TEXT NOT NULL DEFAULT '',
+delivery_group_id TEXT NOT NULL DEFAULT '',
 delivery_sequence INTEGER NOT NULL DEFAULT 0
 );
 

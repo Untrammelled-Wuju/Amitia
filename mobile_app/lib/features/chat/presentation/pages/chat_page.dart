@@ -162,10 +162,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       conversationId,
       characterId: characterId.isEmpty ? null : characterId,
     );
-    await Future.wait<void>([
-      _loadConversationWorkspace(conversationId),
-      _refreshRecentWorkspaces(),
-    ]);
+    await _refreshRecentWorkspaces();
   }
 
   void _onRuntimeChanged() {
@@ -478,45 +475,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       if (!mounted) return;
       _cachedProviderContext = null;
       setState(() => _recentWorkspaces = const <WorkspaceMountDto>[]);
-    }
-  }
-
-  Future<void> _loadConversationWorkspace(String conversationId) async {
-    final id = conversationId.trim();
-    if (id.isEmpty) {
-      _runtime.setWorkspace(null);
-      return;
-    }
-    try {
-      final sidebar = await ref.read(chatServiceProvider).conversationSidebar();
-      final conversation = <dynamic>[
-        ...sidebar.pinned,
-        ...sidebar.recent,
-        ...sidebar.projects.expand((project) => project.conversations),
-      ].where((item) => item.id == id).firstOrNull;
-      if (!mounted || _runtime.conversationId?.trim() != id) return;
-      final projectId = conversation?.projectId?.toString() ?? '';
-      final project = projectId.isEmpty
-          ? null
-          : sidebar.projects.where((item) => item.id == projectId).firstOrNull;
-      _runtime.setWorkspace(
-        project == null
-            ? null
-            : ConversationWorkspaceDto(
-                conversationId: id,
-                projectId: project.id,
-                workspaceId: project.workspaceId,
-                deviceId: project.deviceId,
-                workspaceName: project.name,
-                workspaceKind: project.rootUri.startsWith('content://')
-                    ? 'saf'
-                    : 'local',
-                rootUri: project.rootUri,
-              ),
-      );
-    } catch (_) {
-      if (!mounted || _runtime.conversationId?.trim() != id) return;
-      _runtime.setWorkspace(null);
     }
   }
 
@@ -1554,7 +1512,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     var conversationId = _runtime.conversationId;
     if (conversationId == null || conversationId.isEmpty) {
       try {
-        final created = await _runtime.createConversation(
+        final created = await _runtime.createRealtimeConversation(
           characterId,
           projectId: _runtime.workspace?.projectId ?? '',
         );
@@ -2122,9 +2080,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       UICapability.conversationOverlay,
     );
 
-    final visibleMessages = _runtime.messages
-        .where((message) => !message.assistantTurnSuppressed)
-        .toList(growable: false);
+    final visibleMessages = _runtime.messages;
     final serializedMessages = visibleMessages
         .map(_providerMessage)
         .toList(growable: false);

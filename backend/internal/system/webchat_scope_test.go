@@ -14,7 +14,6 @@ import (
 	"github.com/u-ai/backend/config"
 	"github.com/u-ai/backend/internal/chat"
 	"github.com/u-ai/backend/internal/spaceidentity"
-	"github.com/u-ai/backend/pkg/comment/response"
 	"gorm.io/gorm"
 )
 
@@ -97,6 +96,10 @@ func (f *fakeWebChatService) GetMessagesForSpace(string, string, int, int) ([]ch
 	return nil, 0, nil
 }
 
+func (f *fakeWebChatService) GetMessagesBeforeForSpace(string, string, int64, int) ([]chat.Message, bool, error) {
+	return nil, false, nil
+}
+
 func (f *fakeWebChatService) ListChannelConversationsForSpace(string, int) ([]chat.Conversation, error) {
 	var conversations []chat.Conversation
 	err := f.db.Where("deleted_at IS NULL AND channel <> '' AND channel <> 'web'").Order("updated_at DESC").Find(&conversations).Error
@@ -162,51 +165,6 @@ func (f *fakeWebChatService) DeleteMessagesForSpace(string, string) error {
 	return nil
 }
 
-func postWebChatCreateConv(t *testing.T, h *Handler, body map[string]any) map[string]any {
-	t.Helper()
-	gin.SetMode(gin.TestMode)
-	payload, err := json.Marshal(body)
-	if err != nil {
-		t.Fatal(err)
-	}
-	req := httptest.NewRequest(http.MethodPost, "/web-chat/conversations", bytes.NewReader(payload))
-	req.Header.Set("Content-Type", "application/json")
-	rec := httptest.NewRecorder()
-	c, _ := gin.CreateTestContext(rec)
-	c.Request = req
-	h.WebChatCreateConv(c)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
-	}
-	var result map[string]any
-	if err := json.Unmarshal(rec.Body.Bytes(), &result); err != nil {
-		t.Fatal(err)
-	}
-	return result
-}
-
-func TestWebChatCreateConvRejectsExternalChannelWithoutPeerID(t *testing.T) {
-	h, db := newWebChatScopeTestHandler(t)
-	if err := db.Exec("INSERT INTO characters (id, name) VALUES (?, ?)", "char-1", "Amitia").Error; err != nil {
-		t.Fatal(err)
-	}
-	if err := db.Exec("INSERT INTO conversations (id, title, channel, source, peer_id) VALUES (?, ?, ?, ?, ?)", "conv-old", "旧会话", "qq", "manual", "peer-old").Error; err != nil {
-		t.Fatal(err)
-	}
-
-	result := postWebChatCreateConv(t, h, map[string]any{
-		"characterId": "char-1",
-		"channel":     "qq",
-	})
-	if int(result["code"].(float64)) != response.OK {
-		t.Fatalf("expected ok, got %#v", result)
-	}
-	data := result["data"].(map[string]any)
-	if data["id"] != "conv-old" || data["channel"] != "qq" {
-		t.Fatalf("expected existing conv for char with bound conversation, got %#v", data)
-	}
-}
-
 type fakeChannelAvailability map[string]bool
 
 func (f fakeChannelAvailability) Has(channelID string) bool {
@@ -242,54 +200,9 @@ func TestWebChatListChannelConversationsFiltersUnavailableChannels(t *testing.T)
 	}
 }
 
-func TestWebChatCreateConvReturnsPeerBoundConversation(t *testing.T) {
-	h, db := newWebChatScopeTestHandler(t)
-	if err := db.Exec("INSERT INTO characters (id, name) VALUES (?, ?)", "char-1", "Amitia").Error; err != nil {
-		t.Fatal(err)
-	}
-	if err := db.Exec("INSERT INTO conversations (id, title, channel, source, peer_id) VALUES (?, ?, ?, ?, ?)", "conv-peer-1", "一号", "qq", "qq", "peer-1").Error; err != nil {
-		t.Fatal(err)
-	}
-	if err := db.Exec("INSERT INTO conversations (id, title, channel, source, peer_id) VALUES (?, ?, ?, ?, ?)", "conv-peer-2", "二号", "qq", "qq", "peer-2").Error; err != nil {
-		t.Fatal(err)
-	}
-
-	result := postWebChatCreateConv(t, h, map[string]any{
-		"channel": "qq",
-		"peerId":  "peer-2",
-	})
-	if int(result["code"].(float64)) != response.OK {
-		t.Fatalf("expected ok, got %#v", result)
-	}
-	data := result["data"].(map[string]any)
-	if data["channel"] != "qq" || len(data["id"].(string)) == 0 {
-		t.Fatalf("unexpected conversation: %#v", data)
-	}
-}
-
-func TestWebChatCreateConvCreatesExternalConversationForExplicitPeerTarget(t *testing.T) {
-	h, db := newWebChatScopeTestHandler(t)
-	if err := db.Exec("INSERT INTO characters (id, name) VALUES (?, ?)", "char-1", "Amitia").Error; err != nil {
-		t.Fatal(err)
-	}
-
-	result := postWebChatCreateConv(t, h, map[string]any{
-		"characterId": "char-1",
-		"channel":     "wechat",
-		"peerId":      "peer-new",
-	})
-	if int(result["code"].(float64)) != response.OK {
-		t.Fatalf("expected ok, got %#v", result)
-	}
-	data := result["data"].(map[string]any)
-	if data["channel"] != "wechat" {
-		t.Fatalf("unexpected conversation: %#v", data)
-	}
-}
-
 func TestWebChatEnvelopeResolvesStableIDs(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	req := httptest.NewRequest(http.MethodPost, "/web-chat/send", bytes.NewReader(nil))
+	req := httptest.NewRequest(http.MethodPost, "/web-chat/messages", bytes.NewReader(nil))
 	req.Header.Set("X-Request-ID", "header-request")
 	req.Header.Set("X-Session-ID", "header-session")
 	req.Header.Set("X-User-ID", "header-user")
@@ -303,7 +216,7 @@ func TestWebChatEnvelopeResolvesStableIDs(t *testing.T) {
 		SpaceID:   "body-user",
 		PeerID:    "body-peer",
 	}
-	if got := resolveRequestID(c, body.RequestID, body.ClientMessageID, body.MessageID); got != "body-request" {
+	if got := resolveRequestID(c, body.RequestID, body.ClientMessageID, ""); got != "body-request" {
 		t.Fatalf("unexpected request id: %s", got)
 	}
 	if got := resolveHeaderBackedValue(c, body.SessionID, "X-Session-ID"); got != "body-session" {
@@ -320,7 +233,7 @@ func TestWebChatEnvelopeResolvesStableIDs(t *testing.T) {
 	}
 
 	body = webChatSendRequest{}
-	if got := resolveRequestID(c, body.RequestID, body.ClientMessageID, body.MessageID); got != "header-request" {
+	if got := resolveRequestID(c, body.RequestID, body.ClientMessageID, ""); got != "header-request" {
 		t.Fatalf("unexpected header request id: %s", got)
 	}
 	if got := resolveHeaderBackedValue(c, body.SessionID, "X-Session-ID"); got != "header-session" {
@@ -336,12 +249,12 @@ func TestWebChatEnvelopeResolvesStableIDs(t *testing.T) {
 
 func TestWebChatEnvelopeResolvesQueryAndSource(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	req := httptest.NewRequest(http.MethodPost, "/web-chat/send?requestId=query-request&sessionId=query-session&spaceId=query-user&peerId=query-peer&source=wechat", bytes.NewReader(nil))
+	req := httptest.NewRequest(http.MethodPost, "/web-chat/messages?requestId=query-request&sessionId=query-session&spaceId=query-user&peerId=query-peer&source=wechat", bytes.NewReader(nil))
 	c, _ := gin.CreateTestContext(httptest.NewRecorder())
 	c.Request = req
 
 	body := webChatSendRequest{}
-	if got := resolveRequestID(c, body.RequestID, body.ClientMessageID, body.MessageID); got != "query-request" {
+	if got := resolveRequestID(c, body.RequestID, body.ClientMessageID, ""); got != "query-request" {
 		t.Fatalf("unexpected query request id: %s", got)
 	}
 	if got := resolveRequestBackedValue(c, body.SessionID, "X-Session-ID", "sessionId", "session_id"); got != "query-session" {

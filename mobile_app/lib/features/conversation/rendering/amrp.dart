@@ -8,10 +8,9 @@ enum AmrpMessageState {
   completed,
   interrupted,
   failed,
-  cancelled,
 }
 
-enum AmrpToolStatus { queued, running, success, failed, cancelled }
+enum AmrpToolStatus { queued, running, success, failed, interrupted }
 
 enum AmrpAssetStatus { loading, ready, failed }
 
@@ -291,7 +290,6 @@ class AmrpMessage {
       MessageStatus.sending ||
       MessageStatus.streaming => AmrpMessageState.streaming,
       MessageStatus.interrupted => AmrpMessageState.interrupted,
-      MessageStatus.cancelled => AmrpMessageState.cancelled,
       MessageStatus.error => AmrpMessageState.failed,
       MessageStatus.sent ||
       MessageStatus.delivered => AmrpMessageState.completed,

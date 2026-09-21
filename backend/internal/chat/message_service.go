@@ -20,6 +20,17 @@ func (s *service) GetMessages(convID string, page, pageSize int) ([]Message, int
 	return s.repo.GetMessages(convID, page, pageSize)
 }
 
+func (s *service) GetMessagesBefore(convID string, beforeSequence int64, limit int) ([]Message, bool, error) {
+	return s.repo.GetMessagesBefore(convID, beforeSequence, limit)
+}
+
+func (s *service) GetMessagesBeforeForSpace(convID, spaceID string, beforeSequence int64, limit int) ([]Message, bool, error) {
+	if _, err := s.requireConversationOwner(convID, spaceID); err != nil {
+		return nil, false, err
+	}
+	return s.repo.GetMessagesBefore(convID, beforeSequence, limit)
+}
+
 func (s *service) GetMessagesForSpace(convID, spaceID string, page, pageSize int) ([]Message, int64, error) {
 	if _, err := s.requireConversationOwner(convID, spaceID); err != nil {
 		return nil, 0, err

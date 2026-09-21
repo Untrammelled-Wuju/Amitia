@@ -100,7 +100,7 @@ function makeHost(options = {}) {
       }
       if (method === "host.conversation.message.append") {
         calls.messageAppend.push(params);
-        return { messageIds: ["message-1"], sequences: [1], responseGroupId: "response-1", lastSequence: 1 };
+        return { messageIds: ["message-1"], sequences: [1], deliveryGroupId: "response-1", lastSequence: 1 };
       }
       throw new Error(`unexpected host method: ${method}`);
     },
@@ -198,7 +198,6 @@ console.log("\n[2] AI 抉择发送表情（output）");
     characterId: "char-1",
     conversationId: "conv-1",
     reply: "今天真的太开心啦",
-    lines: ["今天真的太开心啦"],
     userMessage: "哈哈",
     source: "ai",
     requestId: "req-1",
@@ -207,15 +206,13 @@ console.log("\n[2] AI 抉择发送表情（output）");
   const part = result.outputs[0]?.part;
   check("输出为 image 类型且 extensionType=emote", part?.type === "image" && part?.extensionType === "emote");
   check("altText 包含表情名", part?.altText === "[表情：微笑]" || part?.altText === "[表情：流泪]");
-  check("sendMode 为 after_all_text", result.outputs[0]?.sendMode === "after_all_text");
-  check("insertAfter 与 lines 对齐", result.outputs[0]?.insertAfter === 1);
+  check("placement 为 after_text", result.outputs[0]?.placement === "after_text");
   check("sendRecords 已记录 ai_random", env.host.getState().sendRecords.some((r) => r.triggerType === "ai_random" && r.hit === true));
 
   const suppressed = await tools.get("output")({
     characterId: "char-1",
     conversationId: "conv-1",
     reply: "操作失败了，出现错误",
-    lines: ["操作失败了，出现错误"],
     source: "ai",
   });
   check("负面语境（错误/失败）被抑制", suppressed.outputs.length === 0);
@@ -225,7 +222,6 @@ console.log("\n[2] AI 抉择发送表情（output）");
     characterId: "char-1",
     conversationId: "conv-1",
     reply: "这是一条普通回复",
-    lines: ["这是一条普通回复"],
     source: "ai",
   });
   check("向量低分候选被拒（<0.35）", lowScore.outputs.length === 0);

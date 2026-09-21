@@ -268,7 +268,7 @@ func (a *OllamaAdapter) parseStream(body io.Reader, sink ModelEventSink) (*Model
 		}
 
 		if chunk.Error != "" {
-			sink.Emit(context.Background(), ModelEvent{
+			sink.Emit(ctx, ModelEvent{
 				Type: ModelEventFailed,
 				Error: &ModelError{
 					Code:     "MODEL_PROVIDER_FAILED",
@@ -281,7 +281,7 @@ func (a *OllamaAdapter) parseStream(body io.Reader, sink ModelEventSink) (*Model
 
 		if chunk.Message.Content != "" {
 			result.Text += chunk.Message.Content
-			sink.Emit(context.Background(), ModelEvent{
+			sink.Emit(ctx, ModelEvent{
 				Type:      ModelEventTextDelta,
 				TextDelta: chunk.Message.Content,
 			})
@@ -302,7 +302,7 @@ func (a *OllamaAdapter) parseStream(body io.Reader, sink ModelEventSink) (*Model
 				OutputTokens: chunk.EvalCount,
 				TotalTokens:  chunk.PromptEvalCount + chunk.EvalCount,
 			}
-			sink.Emit(context.Background(), ModelEvent{
+			sink.Emit(ctx, ModelEvent{
 				Type: ModelEventCompleted,
 			})
 			return result, nil

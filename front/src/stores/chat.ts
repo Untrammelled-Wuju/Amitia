@@ -70,14 +70,6 @@ export const useChatStore = defineStore("chat", () => {
     };
   }
 
-  async function createConversation(projectId = "", title = ""): Promise<ConversationItem> {
-    const path = projectId
-      ? `/api/web-chat/projects/${encodeURIComponent(projectId)}/conversations`
-      : "/api/web-chat/conversations";
-    const response = await apiClient.post<ConversationItem>(path, { title, projectId });
-    await fetchSidebar();
-    return response.data;
-  }
 
   async function createProject(input: {
     name: string;
@@ -153,7 +145,6 @@ export const useChatStore = defineStore("chat", () => {
     sidebar,
     archivedRevision,
     fetchSidebar,
-    createConversation,
     createProject,
     updateProject,
     deleteProject,

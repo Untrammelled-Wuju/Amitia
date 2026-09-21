@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://amitia.local/contracts/agent-runtime/v1/fixture.schema.json",
+  "title": "Amitia Agent Runtime Golden Fixture v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["name", "version", "initialState", "events", "expectedState"],
+  "properties": {
+    "name": { "type": "string", "minLength": 1 },
+    "version": { "const": 1 },
+    "initialState": {
+      "type": "object",
+      "required": ["lastEventSequence", "turns"],
+      "properties": {
+        "lastEventSequence": { "type": "integer", "minimum": 0 },
+        "turns": { "type": "array" }
+      }
+    },
+    "events": {
+      "type": "array",
+      "items": { "$ref": "agent-ui-event.schema.json" }
+    },
+    "expectedApplyResults": {
+      "type": "array",
+      "items": { "enum": ["applied", "duplicate", "stale", "gap", "unsupported"] }
+    },
+    "expectedState": {
+      "type": "object",
+      "required": ["lastEventSequence", "activeTurnId", "turns"],
+      "properties": {
+        "lastEventSequence": { "type": "integer", "minimum": 0 },
+        "activeTurnId": { "type": "string" },
+        "turns": { "type": "array" }
+      }
+    }
+  }
+}

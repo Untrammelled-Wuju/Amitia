@@ -180,7 +180,7 @@ func TestConversationMessageAppendRouteUsesResolvedScope(t *testing.T) {
 		result: ConversationMessageAppendResult{
 			MessageIDs:      []string{"message-1"},
 			Sequences:       []int64{2},
-			ResponseGroupID: "append-1",
+			DeliveryGroupID: "append-1",
 			LastSequence:    2,
 		},
 	}

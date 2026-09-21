@@ -22,7 +22,7 @@ const (
 type DeliveryIntent struct {
 	ID               string         `json:"id"`
 	InteractionID    string         `json:"interactionId"`
-	ResponseGroupID  string         `json:"responseGroupId"`
+	DeliveryGroupID  string         `json:"deliveryGroupId"`
 	DeliverySequence int            `json:"deliverySequence"`
 	Channel          string         `json:"channel"`
 	PeerID           string         `json:"peerId"`

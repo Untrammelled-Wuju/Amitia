@@ -151,7 +151,6 @@ func (a *chatToolRuntimeAdapter) PlanMessageOutputs(ctx context.Context, scope c
 		"source":         event.Source,
 		"userMessage":    event.UserMessage,
 		"reply":          event.Reply,
-		"lines":          event.Lines,
 		"spaceId":        event.SpaceID,
 		"peerId":         event.PeerID,
 		"requestId":      event.RequestID,

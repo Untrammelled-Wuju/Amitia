@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://amitia.local/contracts/agent-runtime/v1/command.schema.json",
+  "title": "Amitia Web Chat Message Command v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["requestId", "content"],
+  "properties": {
+    "requestId": { "type": "string", "minLength": 1 },
+    "clientMessageId": { "type": "string" },
+    "conversationId": { "type": "string" },
+    "projectId": { "type": "string" },
+    "workspaceId": { "type": "string" },
+    "workspaceDeviceId": { "type": "string" },
+    "characterId": { "type": "string" },
+    "content": { "type": "string" },
+    "peerId": { "type": "string" },
+    "sessionId": { "type": "string" },
+    "source": { "type": "string" },
+    "deviceTimezone": { "type": "string" },
+    "voiceMessage": { "type": "boolean" },
+    "audioUrl": { "type": "string" },
+    "audioDuration": { "type": "number", "minimum": 0 },
+    "imageUrl": { "type": "string" },
+    "videoUrl": { "type": "string" },
+    "replyToMessageId": { "type": ["string", "null"] },
+    "modelConfigId": { "type": "integer", "minimum": 0 },
+    "reasoningEffort": { "type": "string" },
+    "reasoningEnabled": { "type": ["boolean", "null"] },
+    "permissionMode": {
+      "type": "string",
+      "enum": ["", "request_approval", "full_access"]
+    }
+  }
+}

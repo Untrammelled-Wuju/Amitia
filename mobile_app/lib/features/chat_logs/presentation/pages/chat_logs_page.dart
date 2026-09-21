@@ -443,12 +443,6 @@ ChatMessage _toChatMessage(MessageDto message) {
     durationMs: (message.audioDuration * 1000).round(),
     replyToMessageId: message.replyToMessageId,
     replyToExcerpt: message.replyToExcerpt,
-    responseGroupId: message.responseGroupId.isNotEmpty
-        ? message.responseGroupId
-        : message.role == 'assistant'
-        ? message.requestId
-        : '',
-    deliverySequence: message.deliverySequence,
   );
 }
 

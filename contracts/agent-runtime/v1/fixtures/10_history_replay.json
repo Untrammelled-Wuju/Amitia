@@ -1,0 +1,96 @@
+{
+  "name": "history_replay",
+  "version": 1,
+  "initialState": {
+    "lastEventSequence": 100,
+    "turns": [
+      {
+        "turnId": "turn-old",
+        "turnSequence": 9,
+        "executionId": "execution-old",
+        "status": "completed",
+        "blocks": [
+          {
+            "blockId": "text-old",
+            "blockSequence": 1,
+            "type": "text",
+            "status": "completed",
+            "content": "history"
+          }
+        ]
+      }
+    ]
+  },
+  "events": [
+    {
+      "version": 1,
+      "eventId": "evt-101",
+      "eventSequence": 101,
+      "conversationId": "conversation-1",
+      "requestId": "request-1",
+      "executionId": "execution-10",
+      "turnId": "turn-10",
+      "turnSequence": 10,
+      "type": "turn.queued",
+      "createdAt": "2026-09-21T10:00:00Z",
+      "status": "queued",
+      "payload": {}
+    },
+    {
+      "version": 1,
+      "eventId": "evt-102",
+      "eventSequence": 102,
+      "conversationId": "conversation-1",
+      "requestId": "request-1",
+      "executionId": "execution-10",
+      "turnId": "turn-10",
+      "turnSequence": 10,
+      "type": "turn.started",
+      "createdAt": "2026-09-21T10:00:00Z",
+      "status": "running",
+      "payload": {}
+    },
+    {
+      "version": 1,
+      "eventId": "evt-103",
+      "eventSequence": 103,
+      "conversationId": "conversation-1",
+      "requestId": "request-1",
+      "executionId": "execution-10",
+      "turnId": "turn-10",
+      "turnSequence": 10,
+      "type": "turn.completed",
+      "createdAt": "2026-09-21T10:00:00Z",
+      "status": "completed",
+      "payload": {}
+    }
+  ],
+  "expectedState": {
+    "lastEventSequence": 103,
+    "activeTurnId": "",
+    "turns": [
+      {
+        "turnId": "turn-old",
+        "turnSequence": 9,
+        "executionId": "execution-old",
+        "status": "completed",
+        "blocks": [
+          {
+            "blockId": "text-old",
+            "blockSequence": 1,
+            "type": "text",
+            "status": "completed",
+            "content": "history"
+          }
+        ]
+      },
+      {
+        "turnId": "turn-10",
+        "turnSequence": 10,
+        "executionId": "execution-10",
+        "status": "completed",
+        "blocks": []
+      }
+    ]
+  }
+}

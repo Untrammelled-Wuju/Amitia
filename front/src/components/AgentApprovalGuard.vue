@@ -52,6 +52,8 @@ import { apiClient } from "@/composables/useApi";
 type ApprovalItem = {
   id: string;
   conversationId: string;
+  turnId: string;
+  toolCallId?: string;
   toolName: string;
   arguments?: string;
   riskLevel?: string;
@@ -59,14 +61,16 @@ type ApprovalItem = {
 };
 
 const route = useRoute();
-const current = ref<ApprovalItem>();
+const pending = ref<ApprovalItem[]>([]);
 const resolving = ref(false);
-let timer: ReturnType<typeof setInterval> | undefined;
 
 const conversationId = computed(() =>
   route.path.startsWith("/chat")
     ? String(route.query.conversationId || "").trim()
     : "",
+);
+const current = computed(() =>
+  pending.value.find((item) => item.conversationId === conversationId.value),
 );
 const visible = computed({
   get: () => Boolean(current.value),
@@ -87,48 +91,73 @@ function formatTime(value: string) {
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
 }
 
-async function load() {
-  if (current.value || !route.path.startsWith("/chat")) return;
-  try {
-    const response = await apiClient.get("/api/web-chat/approvals");
-    const data = response.data?.data ?? response.data;
-    if (Array.isArray(data) && data.length > 0) {
-      current.value = data[0] as ApprovalItem;
-    }
-  } catch {}
+function onApprovalEvent(event: Event) {
+  const detail = (event as CustomEvent<Record<string, any>>).detail || {};
+  const action = String(detail.action || "");
+  const targetConversationId = String(detail.conversationId || "").trim();
+  if (action === "reset") {
+    pending.value = pending.value.filter(
+      (item) => item.conversationId !== targetConversationId,
+    );
+    return;
+  }
+  const id = String(detail.id || detail.approvalId || "").trim();
+  if (!id) return;
+  if (action === "resolved") {
+    pending.value = pending.value.filter((item) => item.id !== id);
+    return;
+  }
+  if (action !== "requested") return;
+  const item: ApprovalItem = {
+    id,
+    conversationId: targetConversationId,
+    turnId: String(detail.turnId || "").trim(),
+    toolCallId: String(detail.toolCallId || "").trim() || undefined,
+    toolName: String(detail.toolName || detail.tool || "工具调用"),
+    arguments: String(detail.arguments || ""),
+    riskLevel: String(detail.riskLevel || detail.risk || ""),
+    expiresAt: String(detail.expiresAt || ""),
+  };
+  const index = pending.value.findIndex((candidate) => candidate.id === id);
+  if (index >= 0) pending.value[index] = item;
+  else pending.value.push(item);
 }
 
 async function resolve(approved: boolean) {
-  if (!current.value) return;
+  const item = current.value;
+  if (!item) return;
+  if (!item.conversationId || !item.turnId || !item.id) {
+    ElMessage.error("审批请求缺少 Conversation 或 Turn 绑定");
+    return;
+  }
   resolving.value = true;
   try {
     await apiClient.post(
-      `/api/web-chat/approvals/${encodeURIComponent(current.value.id)}/resolve`,
+      `/api/web-chat/conversations/${encodeURIComponent(item.conversationId)}/turns/${encodeURIComponent(item.turnId)}/approvals/${encodeURIComponent(item.id)}`,
       { approved },
     );
-    current.value = undefined;
-    await load();
   } catch (error: any) {
     const status = error?.response?.status;
-    if (status === 400 || status === 404) current.value = undefined;
-    else ElMessage.error(error?.response?.data?.msg || "审批处理失败");
+    if (status === 400 || status === 404) {
+      pending.value = pending.value.filter((candidate) => candidate.id !== item.id);
+    } else {
+      ElMessage.error(error?.response?.data?.msg || "审批处理失败");
+    }
   } finally {
     resolving.value = false;
   }
 }
 
 watch(conversationId, () => {
-  current.value = undefined;
-  void load();
+  resolving.value = false;
 });
 
 onMounted(() => {
-  void load();
-  timer = setInterval(() => void load(), 1200);
+  window.addEventListener("amitia:agent-approval", onApprovalEvent);
 });
 
 onBeforeUnmount(() => {
-  if (timer) clearInterval(timer);
+  window.removeEventListener("amitia:agent-approval", onApprovalEvent);
 });
 </script>
 

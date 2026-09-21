@@ -210,6 +210,32 @@ func DefaultMigrations() []Migration {
 		AssistantTurnItemsMigration(),
 		ConversationReasoningEnabledRepairMigration(),
 		ConversationPermissionModeMigration(),
+		AgentRuntimeV1Migration(),
+	}
+}
+
+func AgentRuntimeV1Migration() Migration {
+	return Migration{
+		Version: "20260921001",
+		Name:    "agent_runtime_v1",
+		Up: func(s *Step) error {
+			s.AddColumn("messages", "delivery_group_id", "TEXT NOT NULL DEFAULT ''")
+			s.AddColumn("delivery_intents", "delivery_group_id", "TEXT NOT NULL DEFAULT ''")
+			s.AddColumn("conversations", "workspace_id", "TEXT NOT NULL DEFAULT ''")
+			s.AddColumn("conversations", "workspace_device_id", "TEXT NOT NULL DEFAULT ''")
+			s.CreateIndex("idx_conversations_workspace", "conversations", []string{"workspace_id"}, false)
+			s.AddColumn("assistant_turns", "execution_id", "TEXT NOT NULL DEFAULT ''")
+			s.AddColumn("assistant_turns", "parent_turn_id", "TEXT NOT NULL DEFAULT ''")
+			s.AddColumn("assistant_turns", "parent_block_id", "TEXT NOT NULL DEFAULT ''")
+			s.AddColumn("assistant_turns", "agent_id", "TEXT NOT NULL DEFAULT ''")
+			s.AddColumn("assistant_turn_items", "revision", "INTEGER NOT NULL DEFAULT 0")
+			s.AddColumn("assistant_turn_items", "message_id", "TEXT NOT NULL DEFAULT ''")
+			s.Execute("UPDATE assistant_turn_items SET item_type='reasoning' WHERE item_type='thinking'")
+			s.CreateIndex("idx_assistant_turns_execution", "assistant_turns", []string{"execution_id"}, false)
+			s.CreateIndex("idx_assistant_turns_parent", "assistant_turns", []string{"parent_turn_id"}, false)
+			s.CreateIndex("idx_assistant_turns_agent", "assistant_turns", []string{"agent_id"}, false)
+			return nil
+		},
 	}
 }
 

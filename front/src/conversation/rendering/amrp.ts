@@ -34,9 +34,8 @@ export function normalizeMessageState(message: Record<string, any>): MessageStat
   if (["streaming", "sending", "generating", "collecting", "processing"].includes(raw)) {
     return "streaming";
   }
-  if (["interrupted", "paused"].includes(raw)) return "interrupted";
+  if (raw === "interrupted") return "interrupted";
   if (["failed", "error"].includes(raw)) return "failed";
-  if (["cancelled", "canceled", "stopped"].includes(raw)) return "cancelled";
   if (message.typingStart && message.typingDone !== true) return "streaming";
   return "completed";
 }
@@ -46,7 +45,7 @@ function normalizeStatus(value: unknown): ToolBlock["status"] {
   if (["queued", "pending"].includes(raw)) return "queued";
   if (["running", "streaming", "sending"].includes(raw)) return "running";
   if (["failed", "error"].includes(raw)) return "failed";
-  if (["cancelled", "canceled", "stopped"].includes(raw)) return "cancelled";
+  if (raw === "interrupted") return "interrupted";
   return "success";
 }
 
@@ -327,14 +326,13 @@ export function normalizeAIMessage(
         }
       : undefined,
     markdown,
-    thinking:
-      thinkingContent || message.generationPending === true
-        ? {
-            content: thinkingContent,
-            state: message.generationPending === true ? "streaming" : state,
-            duration: thinkingDurationSeconds,
-          }
-        : undefined,
+    thinking: thinkingContent
+      ? {
+          content: thinkingContent,
+          state,
+          duration: thinkingDurationSeconds,
+        }
+      : undefined,
     blocks: legacyBlocks(message),
     sources: normalizeSources(message),
     state,

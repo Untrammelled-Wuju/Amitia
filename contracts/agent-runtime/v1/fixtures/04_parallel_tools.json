@@ -1,0 +1,270 @@
+{
+  "name": "parallel_tools",
+  "version": 1,
+  "initialState": {
+    "lastEventSequence": 0,
+    "turns": []
+  },
+  "events": [
+    {
+      "version": 1,
+      "eventId": "evt-1",
+      "eventSequence": 1,
+      "conversationId": "conversation-1",
+      "requestId": "request-1",
+      "executionId": "execution-1",
+      "turnId": "turn-1",
+      "turnSequence": 1,
+      "type": "turn.queued",
+      "createdAt": "2026-09-21T10:00:00Z",
+      "payload": {},
+      "status": "queued"
+    },
+    {
+      "version": 1,
+      "eventId": "evt-2",
+      "eventSequence": 2,
+      "conversationId": "conversation-1",
+      "requestId": "request-1",
+      "executionId": "execution-1",
+      "turnId": "turn-1",
+      "turnSequence": 1,
+      "type": "turn.started",
+      "createdAt": "2026-09-21T10:00:00Z",
+      "payload": {},
+      "status": "running"
+    },
+    {
+      "version": 1,
+      "eventId": "evt-3",
+      "eventSequence": 3,
+      "conversationId": "conversation-1",
+      "requestId": "request-1",
+      "executionId": "execution-1",
+      "turnId": "turn-1",
+      "turnSequence": 1,
+      "type": "tool.started",
+      "createdAt": "2026-09-21T10:00:00Z",
+      "payload": {
+        "blockType": "tool_call",
+        "toolName": "a"
+      },
+      "blockId": "tool-a",
+      "blockSequence": 1,
+      "status": "running",
+      "revision": 1,
+      "callId": "call-a"
+    },
+    {
+      "version": 1,
+      "eventId": "evt-4",
+      "eventSequence": 4,
+      "conversationId": "conversation-1",
+      "requestId": "request-1",
+      "executionId": "execution-1",
+      "turnId": "turn-1",
+      "turnSequence": 1,
+      "type": "tool.started",
+      "createdAt": "2026-09-21T10:00:00Z",
+      "payload": {
+        "blockType": "tool_call",
+        "toolName": "b"
+      },
+      "blockId": "tool-b",
+      "blockSequence": 2,
+      "status": "running",
+      "revision": 1,
+      "callId": "call-b"
+    },
+    {
+      "version": 1,
+      "eventId": "evt-5",
+      "eventSequence": 5,
+      "conversationId": "conversation-1",
+      "requestId": "request-1",
+      "executionId": "execution-1",
+      "turnId": "turn-1",
+      "turnSequence": 1,
+      "type": "tool.completed",
+      "createdAt": "2026-09-21T10:00:00Z",
+      "payload": {
+        "blockType": "tool_call",
+        "toolName": "b",
+        "recoveryCheckpoint": true
+      },
+      "blockId": "tool-b",
+      "blockSequence": 2,
+      "status": "completed",
+      "revision": 2,
+      "callId": "call-b"
+    },
+    {
+      "version": 1,
+      "eventId": "evt-6",
+      "eventSequence": 6,
+      "conversationId": "conversation-1",
+      "requestId": "request-1",
+      "executionId": "execution-1",
+      "turnId": "turn-1",
+      "turnSequence": 1,
+      "type": "block.started",
+      "createdAt": "2026-09-21T10:00:00Z",
+      "payload": {
+        "blockType": "tool_result",
+        "result": "B done",
+        "recoveryCheckpoint": true
+      },
+      "blockId": "result-b",
+      "blockSequence": 3,
+      "status": "completed",
+      "revision": 1,
+      "callId": "call-b"
+    },
+    {
+      "version": 1,
+      "eventId": "evt-7",
+      "eventSequence": 7,
+      "conversationId": "conversation-1",
+      "requestId": "request-1",
+      "executionId": "execution-1",
+      "turnId": "turn-1",
+      "turnSequence": 1,
+      "type": "block.completed",
+      "createdAt": "2026-09-21T10:00:00Z",
+      "payload": {
+        "blockType": "tool_result",
+        "result": "B done",
+        "recoveryCheckpoint": true
+      },
+      "blockId": "result-b",
+      "blockSequence": 3,
+      "status": "completed",
+      "revision": 2,
+      "callId": "call-b"
+    },
+    {
+      "version": 1,
+      "eventId": "evt-8",
+      "eventSequence": 8,
+      "conversationId": "conversation-1",
+      "requestId": "request-1",
+      "executionId": "execution-1",
+      "turnId": "turn-1",
+      "turnSequence": 1,
+      "type": "tool.completed",
+      "createdAt": "2026-09-21T10:00:00Z",
+      "payload": {
+        "blockType": "tool_call",
+        "toolName": "a",
+        "recoveryCheckpoint": true
+      },
+      "blockId": "tool-a",
+      "blockSequence": 1,
+      "status": "completed",
+      "revision": 2,
+      "callId": "call-a"
+    },
+    {
+      "version": 1,
+      "eventId": "evt-9",
+      "eventSequence": 9,
+      "conversationId": "conversation-1",
+      "requestId": "request-1",
+      "executionId": "execution-1",
+      "turnId": "turn-1",
+      "turnSequence": 1,
+      "type": "block.started",
+      "createdAt": "2026-09-21T10:00:00Z",
+      "payload": {
+        "blockType": "tool_result",
+        "result": "A done",
+        "recoveryCheckpoint": true
+      },
+      "blockId": "result-a",
+      "blockSequence": 4,
+      "status": "completed",
+      "revision": 1,
+      "callId": "call-a"
+    },
+    {
+      "version": 1,
+      "eventId": "evt-10",
+      "eventSequence": 10,
+      "conversationId": "conversation-1",
+      "requestId": "request-1",
+      "executionId": "execution-1",
+      "turnId": "turn-1",
+      "turnSequence": 1,
+      "type": "block.completed",
+      "createdAt": "2026-09-21T10:00:00Z",
+      "payload": {
+        "blockType": "tool_result",
+        "result": "A done",
+        "recoveryCheckpoint": true
+      },
+      "blockId": "result-a",
+      "blockSequence": 4,
+      "status": "completed",
+      "revision": 2,
+      "callId": "call-a"
+    },
+    {
+      "version": 1,
+      "eventId": "evt-11",
+      "eventSequence": 11,
+      "conversationId": "conversation-1",
+      "requestId": "request-1",
+      "executionId": "execution-1",
+      "turnId": "turn-1",
+      "turnSequence": 1,
+      "type": "turn.completed",
+      "createdAt": "2026-09-21T10:00:00Z",
+      "payload": {},
+      "status": "completed"
+    }
+  ],
+  "expectedState": {
+    "lastEventSequence": 11,
+    "activeTurnId": "",
+    "turns": [
+      {
+        "turnId": "turn-1",
+        "turnSequence": 1,
+        "executionId": "execution-1",
+        "status": "completed",
+        "blocks": [
+          {
+            "blockId": "tool-a",
+            "blockSequence": 1,
+            "type": "tool_call",
+            "status": "completed",
+            "callId": "call-a"
+          },
+          {
+            "blockId": "tool-b",
+            "blockSequence": 2,
+            "type": "tool_call",
+            "status": "completed",
+            "callId": "call-b"
+          },
+          {
+            "blockId": "result-b",
+            "blockSequence": 3,
+            "type": "tool_result",
+            "status": "completed",
+            "callId": "call-b",
+            "result": "B done"
+          },
+          {
+            "blockId": "result-a",
+            "blockSequence": 4,
+            "type": "tool_result",
+            "status": "completed",
+            "callId": "call-a",
+            "result": "A done"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -698,9 +698,9 @@ assert(
   desktopPreload.includes("notifyDesktopPetChatState") &&
     frontendPetChatState.includes("window.amitiaDesktop?.notifyDesktopPetChatState?.") &&
     (await read("front/src/composables/useWebChatSend.ts")).includes('notifyDesktopPetChatState("assistant_thinking"') &&
-    (await read("front/src/composables/useWebChatSend.ts")).includes("let completed = false") &&
-    (await read("front/src/composables/useWebChatSend.ts")).includes("if (completed)") &&
-    (await read("front/src/composables/useWebChatSSE.ts")).includes('notifyDesktopPetChatState("assistant_speaking"') &&
+    !(await read("front/src/composables/useWebChatSend.ts")).includes("generationStatus") &&
+    (await read("front/src/composables/useConversationRuntime.ts")).includes('notifyDesktopPetChatState("assistant_speaking"') &&
+    (await read("front/src/composables/useConversationRuntime.ts")).includes('notifyDesktopPetChatState("assistant_finished"') &&
     realtimeCallDialog.includes('"assistant_speaking"') &&
     realtimeCallDialog.includes('"assistant_listening"'),
   "cloud/local text and realtime voice lifecycles must drive the local pet speaking/thinking/listening state through Electron IPC",

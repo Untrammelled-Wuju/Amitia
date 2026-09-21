@@ -54,7 +54,7 @@ const stateLabel = computed(() => {
     running: "运行中",
     success: "完成",
     failed: "失败",
-    cancelled: "已取消",
+    interrupted: "已中断",
   };
   return `${labels[props.block.status]}${props.block.duration ? ` · ${props.block.duration} ms` : ""}`;
 });
@@ -108,7 +108,7 @@ async function copyDetails() {
   background: #d46b6b;
 }
 
-.amrp-tool-line.cancelled .amrp-tool-dot {
+.amrp-tool-line.interrupted .amrp-tool-dot {
   background: #a0a1a6;
 }
 

@@ -26,7 +26,6 @@ func (s *service) ProcessMessage(ctx context.Context, req *ProcessMessageRequest
 			Reply:               computeResult.Reply,
 			Reasoning:           computeResult.Reasoning,
 			ReasoningDurationMS: computeResult.ReasoningDurationMS,
-			Lines:               computeResult.Lines,
 			CharacterID:         computeResult.CharacterID,
 			CharacterName:       computeResult.CharacterName,
 			UserMessageID:       computeResult.UserMessageID,
@@ -43,14 +42,13 @@ func (s *service) ProcessMessage(ctx context.Context, req *ProcessMessageRequest
 		Reply:               computeResult.Reply,
 		Reasoning:           computeResult.Reasoning,
 		ReasoningDurationMS: computeResult.ReasoningDurationMS,
-		Lines:               computeResult.Lines,
 		Source:              computeResult.Source,
 		TotalTokens:         computeResult.TotalTokens,
 		ForceVoice:          computeResult.ForceVoice,
 		Runtime:             req.Runtime,
 	})
 	if err != nil {
-		s.db.Model(&Message{}).Where("id = ?", computeResult.UserMessageID).Updates(map[string]interface{}{"status": "failed", "updated_at": time.Now().Format("2006-01-02 15:04:05")})
+		_ = finalizeAssistantTurnFailureByID(s.db, computeResult.TurnID, err)
 		s.emitDesktopPetChat(ctx, req, computeResult.CharacterID, computeResult.ConversationID, computeResult.UserMessageID, "response.failed", 5)
 		return nil, err
 	}
@@ -67,7 +65,6 @@ func (s *service) ProcessMessage(ctx context.Context, req *ProcessMessageRequest
 		Reply:               computeResult.Reply,
 		Reasoning:           computeResult.Reasoning,
 		ReasoningDurationMS: computeResult.ReasoningDurationMS,
-		Lines:               computeResult.Lines,
 		CharacterID:         computeResult.CharacterID,
 		CharacterName:       computeResult.CharacterName,
 		MessageIDs:          commitResult.MessageIDs,
@@ -81,7 +78,6 @@ func (s *service) ProcessMessage(ctx context.Context, req *ProcessMessageRequest
 
 func (s *service) abortMessageCommitIfCancelled(ctx context.Context, trace applog.TraceFields, userMsgID string) error {
 	if err := ctx.Err(); err != nil {
-		s.db.Model(&Message{}).Where("id = ?", userMsgID).Updates(map[string]interface{}{"status": "failed", "updated_at": time.Now().Format("2006-01-02 15:04:05")})
 		applog.TraceWarn(trace.WithStage("request_cancelled_before_commit"), applog.Fields{
 			"user_message_id": userMsgID,
 		}, "process message request cancelled before db commit")
@@ -107,6 +103,8 @@ func (s *service) ProcessMessageCtx(ctx context.Context, req *interaction.Proces
 		VideoUrl:                 req.VideoUrl,
 		ImageContext:             req.ImageContext,
 		RequestID:                req.RequestID,
+		TurnID:                   req.TurnID,
+		ExecutionID:              req.ExecutionID,
 		InteractionID:            req.InteractionID,
 		ReplyToMessageID:         req.ReplyToMessageID,
 		ModelConfigID:            req.ModelConfigID,
@@ -118,6 +116,7 @@ func (s *service) ProcessMessageCtx(ctx context.Context, req *interaction.Proces
 		ExecContext:              req.ExecContext,
 		IsInternal:               req.IsInternal,
 		SuppressReplyPersistence: req.SuppressReplyPersistence,
+		ForceRegenerate:          req.ForceRegenerate,
 		ProactiveTimeContext:     req.ProactiveTimeContext,
 		ProactiveRecentContext:   req.ProactiveRecentContext,
 		ProactiveTaskInstruction: req.ProactiveTaskInstruction,
@@ -137,7 +136,6 @@ func (s *service) ProcessMessageCtx(ctx context.Context, req *interaction.Proces
 			Reply:               computeResult.Reply,
 			Reasoning:           computeResult.Reasoning,
 			ReasoningDurationMS: computeResult.ReasoningDurationMS,
-			Lines:               computeResult.Lines,
 			CharacterID:         computeResult.CharacterID,
 			CharacterName:       computeResult.CharacterName,
 			RequestID:           computeResult.RequestID,
@@ -153,14 +151,13 @@ func (s *service) ProcessMessageCtx(ctx context.Context, req *interaction.Proces
 		Reply:               computeResult.Reply,
 		Reasoning:           computeResult.Reasoning,
 		ReasoningDurationMS: computeResult.ReasoningDurationMS,
-		Lines:               computeResult.Lines,
 		Source:              computeResult.Source,
 		TotalTokens:         computeResult.TotalTokens,
 		ForceVoice:          computeResult.ForceVoice,
 		Runtime:             req.Runtime,
 	})
 	if err != nil {
-		s.db.Model(&Message{}).Where("id = ?", computeResult.UserMessageID).Updates(map[string]interface{}{"status": "failed", "updated_at": time.Now().Format("2006-01-02 15:04:05")})
+		_ = finalizeAssistantTurnFailureByID(s.db, computeResult.TurnID, err)
 		s.emitDesktopPetChat(ctx, chatReq, computeResult.CharacterID, computeResult.ConversationID, computeResult.UserMessageID, "response.failed", 5)
 		return nil, err
 	}
@@ -174,7 +171,6 @@ func (s *service) ProcessMessageCtx(ctx context.Context, req *interaction.Proces
 		Reply:               computeResult.Reply,
 		Reasoning:           computeResult.Reasoning,
 		ReasoningDurationMS: computeResult.ReasoningDurationMS,
-		Lines:               computeResult.Lines,
 		CharacterID:         computeResult.CharacterID,
 		CharacterName:       computeResult.CharacterName,
 		MessageIDs:          commitResult.MessageIDs,

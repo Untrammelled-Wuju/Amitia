@@ -88,7 +88,7 @@ func createDeliveryIntentsInTx(tx *gorm.DB, plan messageCommitPlan, messagePlan 
 		peerID = plan.Request.PeerID
 	}
 	for _, item := range messagePlan.Items {
-		stableID := delivery.GenerateDeliveryID(messagePlan.ResponseGroupID, channel, peerID, item.MessageID)
+		stableID := delivery.GenerateDeliveryID(messagePlan.DeliveryGroupID, channel, peerID, item.MessageID)
 		payloadData := map[string]interface{}{
 			"messageId":      item.MessageID,
 			"conversationId": plan.Conversation,
@@ -106,8 +106,8 @@ func createDeliveryIntentsInTx(tx *gorm.DB, plan messageCommitPlan, messagePlan 
 			maxRetries = 3
 		}
 		payload, _ := json.Marshal(payloadData)
-		result := tx.Exec("INSERT OR IGNORE INTO delivery_intents (id, interaction_id, channel, peer_id, content_type, payload, status, created_at, max_retries, response_group_id, delivery_sequence) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-			stableID, plan.Request.InteractionID, channel, peerID, item.Type, string(payload), "pending", now.Format("2006-01-02 15:04:05"), maxRetries, messagePlan.ResponseGroupID, item.Sequence)
+		result := tx.Exec("INSERT OR IGNORE INTO delivery_intents (id, interaction_id, channel, peer_id, content_type, payload, status, created_at, max_retries, delivery_group_id, delivery_sequence) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+			stableID, plan.Request.InteractionID, channel, peerID, item.Type, string(payload), "pending", now.Format("2006-01-02 15:04:05"), maxRetries, messagePlan.DeliveryGroupID, item.Sequence)
 		if result.Error != nil {
 			return ids, result.Error
 		}

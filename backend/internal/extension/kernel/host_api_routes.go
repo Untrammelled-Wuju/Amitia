@@ -267,7 +267,7 @@ type ConversationMessageAppendRequest struct {
 type ConversationMessageAppendResult struct {
 	MessageIDs      []string `json:"messageIds"`
 	Sequences       []int64  `json:"sequences"`
-	ResponseGroupID string   `json:"responseGroupId"`
+	DeliveryGroupID string   `json:"deliveryGroupId"`
 	LastSequence    int64    `json:"lastSequence"`
 }
 

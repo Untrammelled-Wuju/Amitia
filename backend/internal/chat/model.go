@@ -68,25 +68,27 @@ type ModelEventSink = modelprotocol.ModelEventSink
 type ModelCapabilities = modelprotocol.ModelCapabilities
 
 type Conversation struct {
-	ID               string  `gorm:"column:id;primaryKey" json:"id"`
-	SpaceID          string  `gorm:"column:space_id;not null;index" json:"-"`
-	ProjectID        string  `gorm:"column:project_id;not null;default:'';index" json:"projectId"`
-	Title            string  `gorm:"column:title" json:"title"`
-	Channel          string  `gorm:"column:channel;default:web" json:"channel"`
-	Source           string  `gorm:"column:source;default:manual" json:"source"`
-	PeerID           string  `gorm:"column:peer_id" json:"peerId"`
-	ModelConfigID    int     `gorm:"column:model_config_id;not null;default:0" json:"modelConfigId"`
-	ReasoningEffort  string  `gorm:"column:reasoning_effort;not null;default:''" json:"reasoningEffort"`
-	ReasoningEnabled int     `gorm:"column:reasoning_enabled;not null;default:-1" json:"reasoningEnabled"`
-	PermissionMode   string  `gorm:"column:permission_mode;not null;default:'request_approval'" json:"permissionMode"`
-	MessageCount     int     `gorm:"column:message_count;default:0" json:"messageCount"`
-	StateVersion     string  `gorm:"column:state_version" json:"stateVersion"`
-	PinnedAt         string  `gorm:"column:pinned_at;not null;default:''" json:"pinnedAt,omitempty"`
-	ArchivedAt       string  `gorm:"column:archived_at;not null;default:''" json:"archivedAt,omitempty"`
-	CreatedAt        string  `gorm:"column:created_at" json:"createdAt"`
-	UpdatedAt        string  `gorm:"column:updated_at" json:"updatedAt"`
-	Revision         int64   `gorm:"column:revision;not null;default:1" json:"revision"`
-	DeletedAt        *string `gorm:"column:deleted_at" json:"-"`
+	ID                string  `gorm:"column:id;primaryKey" json:"id"`
+	SpaceID           string  `gorm:"column:space_id;not null;index" json:"-"`
+	ProjectID         string  `gorm:"column:project_id;not null;default:'';index" json:"projectId"`
+	WorkspaceID       string  `gorm:"column:workspace_id;not null;default:'';index" json:"workspaceId,omitempty"`
+	WorkspaceDeviceID string  `gorm:"column:workspace_device_id;not null;default:''" json:"workspaceDeviceId,omitempty"`
+	Title             string  `gorm:"column:title" json:"title"`
+	Channel           string  `gorm:"column:channel;default:web" json:"channel"`
+	Source            string  `gorm:"column:source;default:manual" json:"source"`
+	PeerID            string  `gorm:"column:peer_id" json:"peerId"`
+	ModelConfigID     int     `gorm:"column:model_config_id;not null;default:0" json:"modelConfigId"`
+	ReasoningEffort   string  `gorm:"column:reasoning_effort;not null;default:''" json:"reasoningEffort"`
+	ReasoningEnabled  int     `gorm:"column:reasoning_enabled;not null;default:-1" json:"reasoningEnabled"`
+	PermissionMode    string  `gorm:"column:permission_mode;not null;default:'request_approval'" json:"permissionMode"`
+	MessageCount      int     `gorm:"column:message_count;default:0" json:"messageCount"`
+	StateVersion      string  `gorm:"column:state_version" json:"stateVersion"`
+	PinnedAt          string  `gorm:"column:pinned_at;not null;default:''" json:"pinnedAt,omitempty"`
+	ArchivedAt        string  `gorm:"column:archived_at;not null;default:''" json:"archivedAt,omitempty"`
+	CreatedAt         string  `gorm:"column:created_at" json:"createdAt"`
+	UpdatedAt         string  `gorm:"column:updated_at" json:"updatedAt"`
+	Revision          int64   `gorm:"column:revision;not null;default:1" json:"revision"`
+	DeletedAt         *string `gorm:"column:deleted_at" json:"-"`
 }
 
 func (Conversation) TableName() string { return "conversations" }
@@ -131,8 +133,8 @@ type Message struct {
 	MediaHeight         int     `gorm:"column:media_height;default:0" json:"height"`
 	OriginalAsset       string  `gorm:"column:original_asset_reference;default:" json:"originalAssetReference"`
 	FallbackAsset       string  `gorm:"column:fallback_asset_reference;default:" json:"fallbackAssetReference"`
-	ResponseGroupID     string  `gorm:"column:response_group_id;default:" json:"responseGroupId"`
-	DeliverySequence    int     `gorm:"column:delivery_sequence;default:0" json:"deliverySequence"`
+	DeliveryGroupID     string  `gorm:"column:delivery_group_id;default:" json:"-"`
+	DeliverySequence    int     `gorm:"column:delivery_sequence;default:0" json:"-"`
 	RequestID           string  `gorm:"column:request_id;default:" json:"requestId"`
 	ReplyToMessageID    *string `gorm:"column:reply_to_message_id" json:"replyToMessageId,omitempty"`
 	ReplyToRole         *string `gorm:"column:reply_to_role" json:"replyToRole,omitempty"`
@@ -426,6 +428,8 @@ type ProcessMessageRequest struct {
 	VideoUrl                 string                       `json:"videoUrl"`
 	Attachments              []MessageAttachmentInput     `json:"attachments,omitempty"`
 	RequestID                string                       `json:"requestId"`
+	TurnID                   string                       `json:"turnId,omitempty"`
+	ExecutionID              string                       `json:"executionId,omitempty"`
 	ReplyToMessageID         *string                      `json:"replyToMessageId,omitempty"`
 	ModelConfigID            int                          `json:"modelConfigId,omitempty"`
 	ReasoningEffort          string                       `json:"reasoningEffort,omitempty"`
@@ -441,6 +445,7 @@ type ProcessMessageRequest struct {
 	ExecContext              *coreexec.ExecutionContext   `json:"-"`
 	IsInternal               bool                         `json:"-"`
 	SuppressReplyPersistence bool                         `json:"-"`
+	ForceRegenerate          bool                         `json:"-"`
 }
 
 func normalizePermissionMode(value string) string {
@@ -454,7 +459,6 @@ type ProcessMessageResponse struct {
 	Reply               string                   `json:"reply"`
 	Reasoning           string                   `json:"reasoning,omitempty"`
 	ReasoningDurationMS int64                    `json:"reasoningDurationMs"`
-	Lines               []string                 `json:"lines"`
 	CharacterID         string                   `json:"characterId"`
 	CharacterName       string                   `json:"characterName"`
 	MessageIDs          []string                 `json:"messageIds"`

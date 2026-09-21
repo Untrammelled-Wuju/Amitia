@@ -3,8 +3,6 @@
 package system
 
 import (
-	"time"
-
 	"github.com/u-ai/backend/config"
 
 	"github.com/gin-gonic/gin"
@@ -30,9 +28,6 @@ func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, chatSvc chat.
 	handler.SetArtifactService(artifactSvc)
 	handler.SetChannelAvailability(channelAccess)
 	svc.AttachTemporalService(temporalSvc)
-	chat.SetAssistantTurnStreamPublisher(func(event chat.AssistantTurnStreamEvent) {
-		GetMessageEventBus().PublishAssistantTurnStream(event.ConversationID, event.Channel, event)
-	})
 	chat.SetConversationTitleUpdatedPublisher(func(event chat.ConversationTitleUpdatedEvent) {
 		channel := event.Channel
 		if channel == "" {
@@ -48,58 +43,6 @@ func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, chatSvc chat.
 	}
 
 	modelerror.SetReporter(handler.publishModelError)
-
-	chat.RegisterMessageCommitHook(func(event *chat.MessageCommitEvent) {
-		bus := GetMessageEventBus()
-		nowStr := time.Now().Format("2006-01-02 15:04:05")
-		channel := event.Channel
-		if channel == "" {
-			channel = "web"
-		}
-		if !event.IsInternal {
-			if event.TurnID != "" {
-				bus.PublishAssistantTurnCompleted(event.ConversationID, event.TurnID, channel)
-			}
-			metadata := map[string]interface{}{
-				"userMessageId":       event.UserMessageID,
-				"userMessageSequence": event.UserMessageSequence,
-				"requestId":           event.RequestID,
-			}
-			if event.MessagePlan != nil {
-				for index, item := range event.MessagePlan.Items {
-					itemMetadata := metadata
-					if index == 0 && event.Reasoning != "" {
-						itemMetadata = map[string]interface{}{
-							"userMessageId":       event.UserMessageID,
-							"userMessageSequence": event.UserMessageSequence,
-							"requestId":           event.RequestID,
-							"reasoningContent":    event.Reasoning,
-							"reasoningDurationMs": event.ReasoningDurationMS,
-						}
-					}
-					bus.PublishMessageCreated(event.ConversationID, item.MessageID, channel, "outbound", "assistant", "sent", item.Content, nowStr, event.Sequences[item.MessageID], itemMetadata)
-				}
-				return
-			}
-			for i, msgID := range event.MessageIDs {
-				content := ""
-				if i < len(event.Lines) {
-					content = event.Lines[i]
-				}
-				itemMetadata := metadata
-				if i == 0 && event.Reasoning != "" {
-					itemMetadata = map[string]interface{}{
-						"userMessageId":       event.UserMessageID,
-						"userMessageSequence": event.UserMessageSequence,
-						"requestId":           event.RequestID,
-						"reasoningContent":    event.Reasoning,
-						"reasoningDurationMs": event.ReasoningDurationMS,
-					}
-				}
-				bus.PublishMessageCreated(event.ConversationID, msgID, channel, "outbound", "assistant", "sent", content, nowStr, event.Sequences[msgID], itemMetadata)
-			}
-		}
-	})
 
 	r.GET("/health", handler.Health)
 	r.GET("/readyz", handler.Readyz)
@@ -237,41 +180,31 @@ func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, chatSvc chat.
 	r.GET("/release-check/export", sharedCoreAdminOnly(), handler.ReleaseCheckExport)
 	r.POST("/release-check/run", sharedCoreAdminOnly(), handler.ReleaseCheckRun)
 
-	r.GET("/messages/stream", handler.MessagesStream)
 	r.GET("/proactive-sse", sse.SSEHandler)
-
-	r.GET("/messages/events", handler.MessagesEventsStream)
 
 	r.GET("/web-chat/conversations", handler.WebChatListConversations)
 	r.GET("/web-chat/conversations/:id", handler.WebChatGetConv)
 	r.GET("/web-chat/conversations/:id/turns", handler.WebChatListAssistantTurns)
+	r.GET("/web-chat/conversations/:id/snapshot", handler.WebChatConversationSnapshot)
+	r.GET("/web-chat/conversations/:id/events", handler.WebChatConversationEvents)
+	r.POST("/web-chat/conversations/:id/turns/:turnId/interrupt", handler.WebChatInterruptTurn)
+	r.POST("/web-chat/conversations/:id/turns/:turnId/steer", handler.WebChatSteerTurn)
+	r.POST("/web-chat/conversations/:id/turns/:turnId/retry", handler.WebChatRetryTurn)
+	r.POST("/web-chat/conversations/:id/turns/:turnId/approvals/:approvalId", handler.WebChatResolveTurnApproval)
 	r.GET("/web-chat/sidebar", handler.WebChatConversationSidebar)
 	r.GET("/web-chat/channels", handler.WebChatListChannelConversations)
 	r.POST("/web-chat/projects", handler.WebChatCreateProject)
 	r.PATCH("/web-chat/projects/:id", handler.WebChatUpdateProject)
 	r.DELETE("/web-chat/projects/:id", handler.WebChatDeleteProject)
 	r.GET("/web-chat/projects/:id/location", handler.WebChatProjectLocation)
-	r.POST("/web-chat/projects/:id/conversations", handler.WebChatCreateProjectConversation)
-	r.POST("/web-chat/conversations", handler.WebChatCreateConv)
+	r.POST("/web-chat/realtime-conversations", handler.WebChatCreateRealtimeConversation)
 	r.GET("/web-chat/conversations/:id/messages", handler.WebChatGetMessages)
 	r.DELETE("/web-chat/conversations/:id", handler.WebChatDeleteConv)
 	r.PUT("/web-chat/conversations/:id", handler.WebChatUpdateConv)
 	r.DELETE("/web-chat/conversations/:id/messages", handler.WebChatDeleteConvMessages)
-	r.POST("/web-chat/conversations/:id/reply-timing/force", handler.WebChatReplyTimingForce)
-	r.POST("/web-chat/conversations/:id/reply-timing/hold", handler.WebChatReplyTimingHold)
-	r.POST("/web-chat/conversations/:id/reply-timing/resume", handler.WebChatReplyTimingResume)
-	r.GET("/web-chat/conversations/:id/reply-timing/status", handler.WebChatReplyTimingStatus)
-	r.GET("/web-chat/message-status/:id", handler.WebChatMessageStatus)
-	r.GET("/web-chat/approvals", handler.WebChatListApprovals)
-	r.POST("/web-chat/approvals/:id/resolve", handler.WebChatResolveApproval)
 	r.PUT("/web-chat/messages/:id", handler.WebChatUpdateMessage)
-	r.POST("/web-chat/send", handler.WebChatSend)
 	r.POST("/web-chat/messages", handler.WebChatSubmitMessage)
-	r.POST("/web-chat/send-stream", handler.WebChatSendStream)
 	r.POST("/web-chat/conversations/from-import", handler.WebChatFromImport)
-	r.GET("/web-chat/conversations/:id/generations/current/status", handler.WebChatGenerationStatus)
-	r.POST("/web-chat/conversations/:id/generations/current/cancel", handler.WebChatCancelGeneration)
-	r.POST("/web-chat/conversations/:id/generations/:generationId/cancel", handler.WebChatCancelGeneration)
 	r.POST("/voice/upload", handler.VoiceUpload)
 	r.POST("/image/upload", handler.ImageUpload)
 	r.POST("/video/upload", handler.VideoUpload)

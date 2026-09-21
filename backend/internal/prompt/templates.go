@@ -4,7 +4,6 @@ import (
 	"strings"
 
 	"github.com/u-ai/backend/internal/prompt/textlib"
-	"github.com/u-ai/backend/pkg/util"
 )
 
 func platformPolicy() string {
@@ -147,7 +146,7 @@ func BaseIdentitySection() string {
 6. 禁止使用任何括号。禁止说教。
 7. 适当使用呀、呢、啦、嘛、哼等语气词。
 8. 情绪顺着上下文走，不要突然换情绪。
-9. 如果一次回复需要分成多条短消息，必须使用 ` + util.AmitiaMessageBreak + ` 分隔，不要把分隔符写进正文。`
+9. 整个回复作为同一个连续消息输出，禁止使用任何自定义分隔标记拆成多条消息。`
 }
 
 func SharedCoreRules() string {

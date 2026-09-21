@@ -82,10 +82,6 @@ export function loadCharactersApi() {
   return get<any[]>("/api/characters");
 }
 
-export function fetchMessageStatusApi(messageId: string) {
-  return get<any>(`/api/web-chat/message-status/${messageId}`);
-}
-
 export interface MessagePsycheSnapshot {
   messageId: string;
   emotion?: {

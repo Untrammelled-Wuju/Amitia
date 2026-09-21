@@ -3,17 +3,13 @@ package chat
 import (
 	"context"
 	"fmt"
-	"regexp"
 	"strings"
 	"time"
 	"unicode"
 
 	syncapi "github.com/u-ai/backend/internal/sync"
-	"github.com/u-ai/backend/pkg/util"
 	"gorm.io/gorm"
 )
-
-var amitiaTitleTagPattern = regexp.MustCompile(`(?i)\[AMITIA_[A-Z0-9_]+\]`)
 
 type ConversationTitleUpdatedEvent struct {
 	ConversationID string
@@ -100,8 +96,6 @@ func (s *service) generateConversationTitle(
 }
 
 func normalizeTitleGenerationReply(value string) string {
-	value = strings.ReplaceAll(value, util.AmitiaMessageBreak, "\n")
-	value = amitiaTitleTagPattern.ReplaceAllString(value, "\n")
 	lines := strings.Split(value, "\n")
 	for index, line := range lines {
 		lines[index] = strings.TrimSpace(line)

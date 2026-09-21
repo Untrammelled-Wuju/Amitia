@@ -63,8 +63,6 @@ class MessageDto {
   final String msgType;
   final String extensionType;
   final String requestId;
-  final String responseGroupId;
-  final int deliverySequence;
   final int sequence;
   final String createdAt;
   final String imageUrl;
@@ -90,8 +88,6 @@ class MessageDto {
     this.msgType = 'text',
     this.extensionType = '',
     this.requestId = '',
-    this.responseGroupId = '',
-    this.deliverySequence = 0,
     this.sequence = 0,
     this.imageUrl = '',
     this.audioUrl = '',
@@ -117,8 +113,6 @@ class MessageDto {
       msgType: json['msgType'] as String? ?? 'text',
       extensionType: json['extensionType'] as String? ?? '',
       requestId: (json['requestId'] ?? '').toString(),
-      responseGroupId: (json['responseGroupId'] ?? '').toString(),
-      deliverySequence: (json['deliverySequence'] as num?)?.toInt() ?? 0,
       sequence: (json['sequence'] as num?)?.toInt() ?? 0,
       createdAt: json['createdAt'] as String? ?? '',
       imageUrl: json['imageUrl'] as String? ?? '',
@@ -134,22 +128,16 @@ class MessageDto {
   }
 }
 
-class MessagePageDto {
+class MessageHistoryPageDto {
   final List<MessageDto> items;
-  final int page;
-  final int pageSize;
-  final int total;
-  final int totalPages;
+  final int nextBefore;
+  final bool hasMore;
 
-  const MessagePageDto({
+  const MessageHistoryPageDto({
     required this.items,
-    required this.page,
-    required this.pageSize,
-    required this.total,
-    required this.totalPages,
+    required this.nextBefore,
+    required this.hasMore,
   });
-
-  bool get hasPreviousPage => page > 1;
 }
 
 class AssistantTurnItemDto {
@@ -159,6 +147,7 @@ class AssistantTurnItemDto {
   final int sequence;
   final String type;
   final String status;
+  final int revision;
   final String callId;
   final String toolName;
   final String content;
@@ -167,7 +156,7 @@ class AssistantTurnItemDto {
   final String errorCode;
   final int durationMs;
   final bool isFinal;
-  final String legacyMessageId;
+  final String messageId;
   final String createdAt;
   final String updatedAt;
 
@@ -178,6 +167,7 @@ class AssistantTurnItemDto {
     this.sequence = 0,
     this.type = '',
     this.status = '',
+    this.revision = 0,
     this.callId = '',
     this.toolName = '',
     this.content = '',
@@ -186,7 +176,7 @@ class AssistantTurnItemDto {
     this.errorCode = '',
     this.durationMs = 0,
     this.isFinal = false,
-    this.legacyMessageId = '',
+    this.messageId = '',
     this.createdAt = '',
     this.updatedAt = '',
   });
@@ -199,6 +189,7 @@ class AssistantTurnItemDto {
       sequence: (json['sequence'] as num?)?.toInt() ?? 0,
       type: (json['type'] ?? '').toString(),
       status: (json['status'] ?? '').toString(),
+      revision: (json['revision'] as num?)?.toInt() ?? 0,
       callId: (json['callId'] ?? '').toString(),
       toolName: (json['toolName'] ?? '').toString(),
       content: (json['content'] ?? '').toString(),
@@ -207,7 +198,7 @@ class AssistantTurnItemDto {
       errorCode: (json['errorCode'] ?? '').toString(),
       durationMs: (json['durationMs'] as num?)?.toInt() ?? 0,
       isFinal: (json['isFinal'] as num?)?.toInt() == 1,
-      legacyMessageId: (json['legacyMessageId'] ?? '').toString(),
+      messageId: (json['messageId'] ?? '').toString(),
       createdAt: (json['createdAt'] ?? '').toString(),
       updatedAt: (json['updatedAt'] ?? '').toString(),
     );
@@ -220,7 +211,10 @@ class AssistantTurnDto {
   final String characterId;
   final String userMessageId;
   final String requestId;
-  final String responseGroupId;
+  final String executionId;
+  final String parentTurnId;
+  final String parentBlockId;
+  final String agentId;
   final int sequence;
   final String status;
   final String createdAt;
@@ -234,7 +228,10 @@ class AssistantTurnDto {
     this.characterId = '',
     this.userMessageId = '',
     this.requestId = '',
-    this.responseGroupId = '',
+    this.executionId = '',
+    this.parentTurnId = '',
+    this.parentBlockId = '',
+    this.agentId = '',
     this.sequence = 0,
     this.status = '',
     this.createdAt = '',
@@ -264,7 +261,10 @@ class AssistantTurnDto {
       characterId: (json['characterId'] ?? '').toString(),
       userMessageId: (json['userMessageId'] ?? '').toString(),
       requestId: (json['requestId'] ?? '').toString(),
-      responseGroupId: (json['responseGroupId'] ?? '').toString(),
+      executionId: (json['executionId'] ?? '').toString(),
+      parentTurnId: (json['parentTurnId'] ?? '').toString(),
+      parentBlockId: (json['parentBlockId'] ?? '').toString(),
+      agentId: (json['agentId'] ?? '').toString(),
       sequence: (json['sequence'] as num?)?.toInt() ?? 0,
       status: (json['status'] ?? '').toString(),
       createdAt: (json['createdAt'] ?? '').toString(),

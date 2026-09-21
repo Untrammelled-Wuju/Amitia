@@ -18,11 +18,7 @@ import navigationSource from "../ui-runtime/navigationRegistry.ts?raw";
 import navigationPrewarmSource from "../ui-runtime/navigationPrewarm.ts?raw";
 import webChatSource from "../views/web-chat/BuiltinWebChatView.vue?raw";
 import settingsSource from "../views/settings/SettingsView.vue?raw";
-import {
-  compareChatMessages,
-  mergeChatMessage,
-  normalizeRealtimeMessage,
-} from "../utils/message-order";
+import { compareChatMessages, normalizeRealtimeMessage } from "../utils/message-order";
 
 describe("表情包前端", () => {
   it("管理页面可进入且包含导入、分组、未分组、多选和批量设置", async () => {
@@ -117,70 +113,31 @@ describe("表情包前端", () => {
     expect(manifestSource).toContain('"path": "modules/emote-ui/ui/message.html"');
   });
 
-  it("同一回复组严格按消息计划顺序显示", () => {
+  it("文本与 Rich Block 投影按持久 messageSequence 稳定排序", () => {
     const createdAt = "2026-07-18 14:00:00";
     const messages = [
-      {
-        id: "text-2",
-        responseGroupId: "response-1",
-        deliverySequence: 3,
-        sequence: 13,
-        createdAt,
-      },
-      {
-        id: "emote",
-        responseGroupId: "response-1",
-        deliverySequence: 2,
-        sequence: 12,
-        createdAt,
-      },
-      {
-        id: "text-1",
-        responseGroupId: "response-1",
-        deliverySequence: 1,
-        sequence: 11,
-        createdAt,
-      },
+      { id: "after-text", sequence: 13, createdAt },
+      { id: "emote", sequence: 12, createdAt },
+      { id: "text", sequence: 11, createdAt },
     ].sort(compareChatMessages);
-    expect(messages.map((message) => message.id)).toEqual([
-      "text-1",
-      "emote",
-      "text-2",
-    ]);
+    expect(messages.map((message) => message.id)).toEqual(["text", "emote", "after-text"]);
   });
 
-  it("外部实时图片消息保留通用媒体字段并能被完整消息补全", () => {
-    const proactive = normalizeRealtimeMessage({
+  it("外部图片消息仅归一化通用媒体字段，不依赖回复分组做占位替换", () => {
+    const normalized = normalizeRealtimeMessage({
       messageId: "image-1",
-      conversationId: "conv-1",
+      conversation_id: "conv-1",
       msg_type: "image",
       extension_type: "emote",
       original_asset_reference: "/extension-assets/original.gif",
-      response_group_id: "response-1",
-      delivery_sequence: 2,
+      created_at: "2026-07-18 14:00:00",
     });
-    expect(proactive).toMatchObject({
+    expect(normalized).toMatchObject({
       id: "image-1",
+      conversationId: "conv-1",
       msgType: "image",
       extensionType: "emote",
       originalAssetReference: "/extension-assets/original.gif",
-      responseGroupId: "response-1",
-      deliverySequence: 2,
-    });
-
-    const messages = [
-      {
-        id: "image-1",
-        role: "assistant",
-        content: "[图片]",
-        source: "proactive",
-      },
-    ];
-    expect(mergeChatMessage(messages, proactive)).toBe(true);
-    expect(messages[0]).toMatchObject({
-      msgType: "image",
-      extensionType: "emote",
-      source: "proactive",
     });
   });
 

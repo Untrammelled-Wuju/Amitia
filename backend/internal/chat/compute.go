@@ -2,6 +2,7 @@ package chat
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -18,7 +19,6 @@ import (
 	promptir "github.com/u-ai/backend/internal/prompt"
 	"github.com/u-ai/backend/internal/temporal"
 	applog "github.com/u-ai/backend/log"
-	"github.com/u-ai/backend/pkg/util"
 )
 
 type ComputeResult struct {
@@ -36,7 +36,6 @@ type ComputeResult struct {
 	TitleSourceReply     string
 	Reasoning            string
 	ReasoningDurationMS  int64
-	Lines                []string
 	Source               string
 	ForceVoice           bool
 	HasExistingUser      bool
@@ -138,7 +137,7 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 	}
 	trace = updateProcessTraceScope(trace, convID, charID, channel)
 	existingUser, existingAssistants, hasExistingUser := s.findRequestMessages(convID, requestID)
-	if len(existingAssistants) > 0 {
+	if len(existingAssistants) > 0 && !req.ForceRegenerate {
 		return &ComputeResult{
 			RequestID:            requestID,
 			ConversationID:       convID,
@@ -171,7 +170,7 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 			if source == "proactive" {
 				msgRole = "system"
 			}
-			userMsg := &Message{ID: uuid.New().String(), ConversationID: convID, CharacterID: charID, Role: msgRole, Content: req.Message, MsgType: "text", Source: source, Status: "processing", AudioUrl: req.AudioUrl, AudioDuration: req.AudioDuration, ImageUrl: req.ImageUrl, VideoUrl: req.VideoUrl, RequestID: requestID, ReplyToMessageID: req.ReplyToMessageID}
+			userMsg := &Message{ID: uuid.New().String(), ConversationID: convID, CharacterID: charID, Role: msgRole, Content: req.Message, MsgType: "text", Source: source, Status: "sent", AudioUrl: req.AudioUrl, AudioDuration: req.AudioDuration, ImageUrl: req.ImageUrl, VideoUrl: req.VideoUrl, RequestID: requestID, ReplyToMessageID: req.ReplyToMessageID}
 			userMsgID = userMsg.ID
 			if err := s.repo.CreateMessage(userMsg); err != nil {
 				applog.TraceError(trace.WithStage("user_message_persist_failed"), applog.Fields{
@@ -183,14 +182,14 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 			userMsgCreatedAt = userMsg.CreatedAt
 			applog.TraceInfo(trace.WithStage("user_message_persisted"), applog.Fields{
 				"user_message_id": userMsgID,
-				"status":          "processing",
+				"status":          "sent",
 			}, "process message user message persisted")
 		}
 	} else {
-		s.db.Model(&Message{}).Where("id = ?", userMsgID).Updates(map[string]interface{}{"status": "processing", "updated_at": time.Now().Format("2006-01-02 15:04:05")})
+		s.db.Model(&Message{}).Where("id = ?", userMsgID).Updates(map[string]interface{}{"status": "sent", "updated_at": time.Now().Format("2006-01-02 15:04:05")})
 		applog.TraceInfo(trace.WithStage("user_message_reused"), applog.Fields{
 			"user_message_id": userMsgID,
-			"status":          "processing",
+			"status":          "sent",
 		}, "process message user message reused")
 	}
 
@@ -202,7 +201,6 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 		cfg, err = s.repo.GetModelByID(req.ModelConfigID)
 	}
 	if err != nil {
-		s.db.Model(&Message{}).Where("id = ?", userMsgID).Updates(map[string]interface{}{"status": "failed", "updated_at": time.Now().Format("2006-01-02 15:04:05")})
 		applog.TraceError(trace.WithStage("model_config_missing"), applog.Fields{
 			"user_message_id": userMsgID,
 		}, err, "process message model config missing")
@@ -442,7 +440,6 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 	if req.Runtime != nil && req.Runtime.ExpressionPlan != nil {
 		ep := req.Runtime.ExpressionPlan
 		if ep.SafetyBlocked || ep.DoNotSend {
-			s.db.Model(&Message{}).Where("id = ?", userMsgID).Updates(map[string]interface{}{"status": "blocked", "updated_at": time.Now().Format("2006-01-02 15:04:05")})
 			applog.TraceWarn(trace.WithStage("expression_blocked"), applog.Fields{
 				"safety_blocked": ep.SafetyBlocked,
 				"do_not_send":    ep.DoNotSend,
@@ -464,57 +461,31 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 		}
 	}
 	s.emitDesktopPetChat(ctx, req, charID, convID, userMsgID, "response.started", 3)
-	turnRecorder := newAssistantTurnRecorder(s.db, convID, charID, userMsgID, requestID, channel)
+	turnRecorder := newAssistantTurnRecorder(s.db, convID, charID, userMsgID, requestID, req.TurnID, req.ExecutionID)
+	turnRecorder.Provider = strings.TrimSpace(cfg.APIType)
 	if err := turnRecorder.Start(ctx); err != nil {
+		_ = turnRecorder.FinalizeFailure(context.Background(), assistantTurnStatusFailed, err)
 		s.emitDesktopPetChat(ctx, req, charID, convID, userMsgID, "response.failed", 4)
 		return nil, err
 	}
 	reply, reasoning, forceVoice, totalTokens, reasoningDurationMS, llmErr := s.invokeLLMWithTools(ctx, cfg, messages, trace, promptTrace, userMsgID, convID, charID, channel, requestID, req.SpaceID, req.SessionID, normalizePermissionMode(req.PermissionMode), req.ExecContext, toolDefs, seenTools, toolExecCtx, turnRecorder)
 	if llmErr != nil {
-		_ = turnRecorder.Finalize(ctx, assistantTurnStatusFailed)
+		turnStatus := assistantTurnStatusFailed
+		if errors.Is(llmErr, context.Canceled) || errors.Is(ctx.Err(), context.Canceled) {
+			turnStatus = assistantTurnStatusInterrupted
+		}
+		_ = turnRecorder.FinalizeFailure(context.Background(), turnStatus, llmErr)
 		s.emitDesktopPetChat(ctx, req, charID, convID, userMsgID, "response.failed", 4)
 		return nil, llmErr
 	}
 	s.emitDesktopPetChat(ctx, req, charID, convID, userMsgID, "response.ready", 4)
-	if reply == "" {
-		applog.TraceWarn(trace.WithStage("reply_fallback"), nil, "process message reply fallback")
-		reply = "操作已完成"
-	}
 	titleSourceReply := strings.TrimSpace(reply)
 
-	kind = resolveExpressionChannel(channel, req.VoiceMessage)
-
-	priorAssistant := extractAssistantReplies(history)
-	var qualityFlags promptir.QualityFlags
-	rawReplyLength := len(reply)
-	reply, qualityFlags = SanitizeReply(reply, charName, priorAssistant)
-	if reply == "" {
-		reply = "嗯"
-		qualityFlags.EmptyFallbackUsed = true
-	}
-
-	reply = CollapseAdjacentSemanticDuplicates(reply, priorAssistant)
-	if reply == "" {
-		reply = "嗯"
-		qualityFlags.EmptyFallbackUsed = true
-	}
-
 	if promptTrace != nil {
-		promptTrace.QualityFlags = qualityFlags
-		promptTrace.RawReplyLength = rawReplyLength
+		promptTrace.RawReplyLength = len(reply)
 		promptTrace.FinalReplyLength = len(reply)
 	}
 	logPromptTrace(trace, promptTrace, source)
-
-	reply = expression.ApplyPostValidation(reply, kind)
-	if req.Runtime != nil && req.Runtime.ExpressionPlan != nil {
-		reply = applyExpressionLengthLimit(reply, req.Runtime)
-	}
-
-	maxLen := util.MaxWebMessageLen
-	realLines := util.SplitLongMessage(reply, maxLen)
-
-	realLines = DeduplicateAdjacentLines(realLines)
 
 	pipelineMessages := make([]map[string]string, 0, len(history)+2)
 	pipelineMessages = append(pipelineMessages, history...)
@@ -536,7 +507,6 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 		TitleSourceReply:     titleSourceReply,
 		Reasoning:            reasoning,
 		ReasoningDurationMS:  reasoningDurationMS,
-		Lines:                realLines,
 		Source:               source,
 		ForceVoice:           forceVoice,
 		HasExistingUser:      false,

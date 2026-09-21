@@ -87,7 +87,6 @@ void main() {
     expect(map(MessageStatus.delivered).state, AmrpMessageState.completed);
     expect(map(MessageStatus.interrupted).state, AmrpMessageState.interrupted);
     expect(map(MessageStatus.error).state, AmrpMessageState.failed);
-    expect(map(MessageStatus.cancelled).state, AmrpMessageState.cancelled);
   });
 
   test('系统提示按系统消息渲染并保留内容', () {

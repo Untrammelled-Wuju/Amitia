@@ -394,8 +394,7 @@ export function useModelConfig(options?: ModelConfigOptions) {
       memory_extract: "记忆提取",
       safety_rewrite: "安全改写",
       import_parse: "导入解析",
-      reply_timing_check: "完整性判断",
-    };
+      };
     return labels[scenario] || scenario;
   }
 
@@ -406,8 +405,7 @@ export function useModelConfig(options?: ModelConfigOptions) {
       memory_extract: "从对话中提取用户记忆",
       safety_rewrite: "安全边界内容改写",
       import_parse: "解析导入的聊天记录文本",
-      reply_timing_check: "判断回复用户是否发送完成完整信息",
-    };
+      };
     return descs[scenario] || "";
   }
 

@@ -239,16 +239,7 @@ func (s *service) Webhook(ctx context.Context, req WebhookRequest) (map[string]i
 	sessionID := stableWebhookSessionID(req, convID)
 	source := stableWebhookSource(req)
 
-	var mergedText string
-	if req.SkipTiming {
-		mergedText = req.Text
-	} else {
-		msgs, bufErr := chat.GetBuffer().Buffer(convID, req.Text)
-		if bufErr != nil {
-			return map[string]interface{}{"outgoingMessage": map[string]interface{}{"text": ""}, "conversationId": convID, "requestId": requestID, "sessionId": sessionID}, nil
-		}
-		mergedText = strings.Join(msgs, "\n")
-	}
+	messageText := req.Text
 
 	audioUrl := ""
 	if req.AudioBase64 != "" {
@@ -268,7 +259,7 @@ func (s *service) Webhook(ctx context.Context, req WebhookRequest) (map[string]i
 	reqCtx, cancel := context.WithTimeout(ctx, 180*time.Second)
 	defer cancel()
 	result, err := s.unifiedEntry.Handle(reqCtx, &interaction.UnifiedEntryRequest{
-		Message:        mergedText,
+		Message:        messageText,
 		ConversationID: convID,
 		Channel:        req.Channel,
 		Source:         source,

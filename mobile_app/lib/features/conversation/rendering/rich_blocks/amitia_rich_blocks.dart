@@ -148,7 +148,7 @@ class _AmitiaToolBlockState extends State<AmitiaToolBlock> {
     final statusColor = switch (widget.block.status) {
       AmrpToolStatus.running => const Color(0xFFD1A24D),
       AmrpToolStatus.failed => const Color(0xFFD46B6B),
-      AmrpToolStatus.cancelled => const Color(0xFFA0A1A6),
+      AmrpToolStatus.interrupted => const Color(0xFFA0A1A6),
       AmrpToolStatus.queued => tokens.muted,
       AmrpToolStatus.success => const Color(0xFF77A982),
     };
@@ -157,7 +157,7 @@ class _AmitiaToolBlockState extends State<AmitiaToolBlock> {
       AmrpToolStatus.running => '运行中',
       AmrpToolStatus.success => '完成',
       AmrpToolStatus.failed => '失败',
-      AmrpToolStatus.cancelled => '已取消',
+      AmrpToolStatus.interrupted => '已中断',
     };
     final summary = _toolSummary(widget.block);
     final details = _toolDetails(widget.block);

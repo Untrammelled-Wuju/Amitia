@@ -1,0 +1,100 @@
+{
+  "name": "out_of_order_event",
+  "version": 1,
+  "initialState": {
+    "lastEventSequence": 0,
+    "turns": []
+  },
+  "events": [
+    {
+      "version": 1,
+      "eventId": "evt-1",
+      "eventSequence": 1,
+      "conversationId": "conversation-1",
+      "requestId": "request-1",
+      "executionId": "execution-1",
+      "turnId": "turn-1",
+      "turnSequence": 1,
+      "type": "turn.queued",
+      "createdAt": "2026-09-21T10:00:00Z",
+      "status": "queued",
+      "payload": {}
+    },
+    {
+      "version": 1,
+      "eventId": "evt-3",
+      "eventSequence": 3,
+      "conversationId": "conversation-1",
+      "requestId": "request-1",
+      "executionId": "execution-1",
+      "turnId": "turn-1",
+      "turnSequence": 1,
+      "type": "text.started",
+      "createdAt": "2026-09-21T10:00:00Z",
+      "blockId": "text-1",
+      "blockSequence": 1,
+      "status": "streaming",
+      "payload": {
+        "blockType": "text"
+      }
+    },
+    {
+      "version": 1,
+      "eventId": "evt-2",
+      "eventSequence": 2,
+      "conversationId": "conversation-1",
+      "requestId": "request-1",
+      "executionId": "execution-1",
+      "turnId": "turn-1",
+      "turnSequence": 1,
+      "type": "turn.started",
+      "createdAt": "2026-09-21T10:00:00Z",
+      "status": "running",
+      "payload": {}
+    },
+    {
+      "version": 1,
+      "eventId": "evt-3-replay",
+      "eventSequence": 3,
+      "conversationId": "conversation-1",
+      "requestId": "request-1",
+      "executionId": "execution-1",
+      "turnId": "turn-1",
+      "turnSequence": 1,
+      "type": "text.started",
+      "createdAt": "2026-09-21T10:00:00Z",
+      "blockId": "text-1",
+      "blockSequence": 1,
+      "status": "streaming",
+      "payload": {
+        "blockType": "text"
+      }
+    }
+  ],
+  "expectedState": {
+    "lastEventSequence": 3,
+    "activeTurnId": "turn-1",
+    "turns": [
+      {
+        "turnId": "turn-1",
+        "turnSequence": 1,
+        "executionId": "execution-1",
+        "status": "running",
+        "blocks": [
+          {
+            "blockId": "text-1",
+            "blockSequence": 1,
+            "type": "text",
+            "status": "streaming"
+          }
+        ]
+      }
+    ]
+  },
+  "expectedApplyResults": [
+    "applied",
+    "gap",
+    "applied",
+    "applied"
+  ]
+}

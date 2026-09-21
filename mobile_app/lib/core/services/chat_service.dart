@@ -11,24 +11,123 @@ import '../native_bridge/device_timezone_cache.dart';
 class ChatSubmitResult {
   final String conversationId;
   final String userMessageId;
+  final String requestId;
+  final String turnId;
+  final String executionId;
   final String status;
-  final int mergeWindowMs;
 
   const ChatSubmitResult({
     required this.conversationId,
     required this.userMessageId,
+    required this.requestId,
+    required this.turnId,
+    required this.executionId,
     required this.status,
-    required this.mergeWindowMs,
   });
 
   factory ChatSubmitResult.fromJson(Map<String, dynamic> json) {
     return ChatSubmitResult(
       conversationId: (json['conversationId'] ?? '').toString(),
       userMessageId: (json['userMessageId'] ?? '').toString(),
+      requestId: (json['requestId'] ?? '').toString(),
+      turnId: (json['turnId'] ?? '').toString(),
+      executionId: (json['executionId'] ?? '').toString(),
       status: (json['status'] ?? '').toString(),
-      mergeWindowMs: (json['mergeWindowMs'] as num?)?.toInt() ?? 0,
     );
   }
+}
+
+class ConversationSnapshotDto {
+  final int version;
+  final int revision;
+  final int lastEventSequence;
+  final ConversationDto? conversation;
+  final ConversationWorkspaceDto? workspace;
+  final List<MessageDto> messages;
+  final List<AssistantTurnDto> turns;
+  final int messageNextBefore;
+  final bool hasMoreMessages;
+  final int turnNextBefore;
+  final bool hasMoreTurns;
+  final Map<String, dynamic>? activeTurn;
+  final List<Map<String, dynamic>> approvals;
+
+  const ConversationSnapshotDto({
+    required this.version,
+    required this.revision,
+    required this.lastEventSequence,
+    required this.conversation,
+    required this.workspace,
+    required this.messages,
+    required this.turns,
+    required this.messageNextBefore,
+    required this.hasMoreMessages,
+    required this.turnNextBefore,
+    required this.hasMoreTurns,
+    required this.activeTurn,
+    required this.approvals,
+  });
+
+  factory ConversationSnapshotDto.fromJson(Map<String, dynamic> json) {
+    final rawConversation = json['conversation'];
+    final rawWorkspace = json['workspace'];
+    final rawMessages = json['messages'];
+    final rawTurns = json['turns'];
+    final rawMessageHistory = json['messageHistory'];
+    final rawTurnHistory = json['turnHistory'];
+    final messageHistory = rawMessageHistory is Map ? Map<String, dynamic>.from(rawMessageHistory) : const <String, dynamic>{};
+    final turnHistory = rawTurnHistory is Map ? Map<String, dynamic>.from(rawTurnHistory) : const <String, dynamic>{};
+    final rawActiveTurn = json['activeTurn'];
+    final rawApprovals = json['approvals'];
+    return ConversationSnapshotDto(
+      version: (json['version'] as num?)?.toInt() ?? 0,
+      revision: (json['revision'] as num?)?.toInt() ?? 0,
+      lastEventSequence: (json['lastEventSequence'] as num?)?.toInt() ?? 0,
+      conversation: rawConversation is Map
+          ? ConversationDto.fromJson(Map<String, dynamic>.from(rawConversation))
+          : null,
+      workspace: rawWorkspace is Map
+          ? ConversationWorkspaceDto.fromJson(Map<String, dynamic>.from(rawWorkspace))
+          : null,
+      messages: rawMessages is List
+          ? rawMessages
+                .whereType<Map>()
+                .map((item) => MessageDto.fromJson(Map<String, dynamic>.from(item)))
+                .toList(growable: false)
+          : const <MessageDto>[],
+      turns: rawTurns is List
+          ? rawTurns
+                .whereType<Map>()
+                .map((item) => AssistantTurnDto.fromJson(Map<String, dynamic>.from(item)))
+                .toList(growable: false)
+          : const <AssistantTurnDto>[],
+      messageNextBefore: (messageHistory['nextBefore'] as num?)?.toInt() ?? 0,
+      hasMoreMessages: messageHistory['hasMore'] == true,
+      turnNextBefore: (turnHistory['nextBefore'] as num?)?.toInt() ?? 0,
+      hasMoreTurns: turnHistory['hasMore'] == true,
+      activeTurn: rawActiveTurn is Map
+          ? Map<String, dynamic>.from(rawActiveTurn)
+          : null,
+      approvals: rawApprovals is List
+          ? rawApprovals
+                .whereType<Map>()
+                .map((item) => Map<String, dynamic>.from(item))
+                .toList(growable: false)
+          : const <Map<String, dynamic>>[],
+    );
+  }
+}
+
+class AssistantTurnPageDto {
+  final List<AssistantTurnDto> items;
+  final int nextBefore;
+  final bool hasMore;
+
+  const AssistantTurnPageDto({
+    required this.items,
+    required this.nextBefore,
+    required this.hasMore,
+  });
 }
 
 class ChatStreamCancellation {
@@ -134,32 +233,14 @@ class ChatService {
         .toList(growable: false);
   }
 
-  Future<ConversationDto?> createConversation({String? projectId}) async {
+  Future<ConversationDto?> createRealtimeConversation({String? projectId}) async {
     final id = projectId?.trim() ?? '';
-    final path = id.isEmpty
-        ? '/api/web-chat/conversations'
-        : '/api/web-chat/projects/${Uri.encodeComponent(id)}/conversations';
     final resp = await _api.post<Map<String, dynamic>>(
-      path,
-      data: {'projectId': id, 'channel': 'web', 'source': 'mobile'},
+      '/api/web-chat/realtime-conversations',
+      data: <String, dynamic>{if (id.isNotEmpty) 'projectId': id},
     );
     if (resp == null) return null;
     return ConversationDto.fromJson(resp);
-  }
-
-  Future<ConversationDto?> getConversation(String conversationId) async {
-    final resp = await _api.get<Map<String, dynamic>>(
-      '/api/web-chat/conversations',
-      queryParameters: const <String, dynamic>{'page': 1, 'pageSize': 200},
-    );
-    final items = resp?['items'];
-    if (items is! List) return null;
-    for (final item in items) {
-      if (item is Map && (item['id'] ?? '').toString() == conversationId) {
-        return ConversationDto.fromJson(Map<String, dynamic>.from(item));
-      }
-    }
-    return null;
   }
 
   Future<void> updateConversationModelSettings(
@@ -275,54 +356,28 @@ class ChatService {
 
   Future<List<MessageDto>> getMessages(
     String conversationId, {
-    int page = 1,
-    int pageSize = 200,
-    bool latest = false,
+    int beforeSequence = 0,
+    int limit = 50,
   }) async {
-    final result = await getMessagePage(
+    final result = await getMessageHistory(
       conversationId,
-      page: page,
-      pageSize: pageSize,
-      latest: latest,
+      beforeSequence: beforeSequence,
+      limit: limit,
     );
     return result.items;
   }
 
-  Future<MessagePageDto> getMessagePage(
+  Future<MessageHistoryPageDto> getMessageHistory(
     String conversationId, {
-    int page = 1,
-    int pageSize = 200,
-    bool latest = false,
-  }) async {
-    final first = await _getMessagesPage(conversationId, page, pageSize);
-    if (!latest || page != 1 || first.totalPages <= 1) return first;
-    return _getMessagesPage(conversationId, first.totalPages, pageSize);
-  }
-
-  Future<List<AssistantTurnDto>> getAssistantTurns(
-    String conversationId, {
-    int limit = 500,
+    int beforeSequence = 0,
+    int limit = 50,
   }) async {
     final resp = await _api.get<Map<String, dynamic>>(
-      '/api/web-chat/conversations/${Uri.encodeComponent(conversationId)}/turns',
-      queryParameters: <String, dynamic>{'limit': limit},
-    );
-    final rows = resp?['items'];
-    if (rows is! List) return const <AssistantTurnDto>[];
-    return rows
-        .whereType<Map>()
-        .map((row) => AssistantTurnDto.fromJson(Map<String, dynamic>.from(row)))
-        .toList(growable: false);
-  }
-
-  Future<MessagePageDto> _getMessagesPage(
-    String conversationId,
-    int page,
-    int pageSize,
-  ) async {
-    final resp = await _api.get<Map<String, dynamic>>(
-      '/api/web-chat/conversations/$conversationId/messages',
-      queryParameters: {'page': page, 'pageSize': pageSize},
+      '/api/web-chat/conversations/${Uri.encodeComponent(conversationId)}/messages',
+      queryParameters: <String, dynamic>{
+        if (beforeSequence > 0) 'beforeSequence': beforeSequence,
+        'limit': limit,
+      },
     );
     final rows = resp?['items'];
     final items = rows is! List
@@ -331,13 +386,75 @@ class ChatService {
               .whereType<Map>()
               .map((row) => MessageDto.fromJson(Map<String, dynamic>.from(row)))
               .toList(growable: false);
-    return MessagePageDto(
+    return MessageHistoryPageDto(
       items: items,
-      page: (resp?['page'] as num?)?.toInt() ?? page,
-      pageSize: (resp?['pageSize'] as num?)?.toInt() ?? pageSize,
-      total: (resp?['total'] as num?)?.toInt() ?? items.length,
-      totalPages: (resp?['totalPages'] as num?)?.toInt() ?? 0,
+      nextBefore: (resp?['nextBefore'] as num?)?.toInt() ??
+          (items.isEmpty ? 0 : items.first.sequence),
+      hasMore: resp?['hasMore'] == true,
     );
+  }
+
+  Future<AssistantTurnPageDto> getAssistantTurnPage(
+    String conversationId, {
+    int before = 0,
+    int limit = 50,
+  }) async {
+    final resp = await _api.get<Map<String, dynamic>>(
+      '/api/web-chat/conversations/${Uri.encodeComponent(conversationId)}/turns',
+      queryParameters: <String, dynamic>{
+        if (before > 0) 'before': before,
+        'limit': limit,
+      },
+    );
+    final rows = resp?['items'];
+    final items = rows is List
+        ? rows
+              .whereType<Map>()
+              .map((row) => AssistantTurnDto.fromJson(Map<String, dynamic>.from(row)))
+              .toList(growable: false)
+        : const <AssistantTurnDto>[];
+    return AssistantTurnPageDto(
+      items: items,
+      nextBefore: (resp?['nextBefore'] as num?)?.toInt() ?? 0,
+      hasMore: resp?['hasMore'] == true,
+    );
+  }
+
+  Future<List<AssistantTurnDto>> getAssistantTurns(
+    String conversationId, {
+    int limit = 50,
+  }) async {
+    final page = await getAssistantTurnPage(conversationId, limit: limit);
+    return page.items;
+  }
+
+  Future<ConversationSnapshotDto> conversationSnapshot(String conversationId) async {
+    final resp = await _api.get<Map<String, dynamic>>(
+      '/api/web-chat/conversations/${Uri.encodeComponent(conversationId)}/snapshot',
+    );
+    if (resp == null) {
+      throw StateError('会话快照未返回结果');
+    }
+    return ConversationSnapshotDto.fromJson(resp);
+  }
+
+  Stream<ChatStreamEvent> conversationEvents({
+    required String conversationId,
+    required int afterSequence,
+    required ChatStreamCancellation cancellation,
+  }) async* {
+    final stream = await _api.getStream(
+      '/api/web-chat/conversations/${Uri.encodeComponent(conversationId)}/events',
+      queryParameters: <String, dynamic>{
+        if (afterSequence > 0) 'afterSequence': afterSequence,
+      },
+      headers: <String, String>{
+        'Accept': 'text/event-stream',
+        if (afterSequence > 0) 'Last-Event-ID': '$afterSequence',
+      },
+      cancelToken: cancellation.token,
+    );
+    yield* _decodeEventStream(stream);
   }
 
   Future<bool> deleteConversation(String id) async {
@@ -486,91 +603,8 @@ class ChatService {
         .toList(growable: false);
   }
 
-  Future<Map<String, dynamic>?> messageStatus(String messageId) async {
-    return _api.get<Map<String, dynamic>>(
-      '/api/web-chat/message-status/$messageId',
-    );
-  }
-
   ChatStreamCancellation createStreamCancellation() => ChatStreamCancellation();
 
-  Stream<ChatStreamEvent> submitMessageStream({
-    required String message,
-    String? clientMessageId,
-    String? conversationId,
-    String? characterId,
-    String? imageUrl,
-    String? audioUrl,
-    double audioDuration = 0,
-    String? videoUrl,
-    String? replyToMessageId,
-    int? modelConfigId,
-    String? reasoningEffort,
-    bool? reasoningEnabled,
-    String? permissionMode,
-    ConversationWorkspaceDto? workspace,
-    required ChatStreamCancellation cancellation,
-  }) async* {
-    final now = DateTime.now().microsecondsSinceEpoch;
-    final normalizedClientMessageId = clientMessageId?.trim() ?? '';
-    final requestId = normalizedClientMessageId.isEmpty
-        ? 'mobile-$now'
-        : normalizedClientMessageId;
-    final stream = await _api.postStream(
-      '/api/web-chat/send-stream',
-      data: {
-        'message': message,
-        if (conversationId != null && conversationId.isNotEmpty)
-          'conversationId': conversationId,
-        if (characterId != null && characterId.isNotEmpty)
-          'characterId': characterId,
-        if (imageUrl != null && imageUrl.isNotEmpty) 'imageUrl': imageUrl,
-        if (audioUrl != null && audioUrl.isNotEmpty) ...{
-          'audioUrl': audioUrl,
-          'audioDuration': audioDuration,
-          'voiceMessage': true,
-        },
-        if (videoUrl != null && videoUrl.isNotEmpty) 'videoUrl': videoUrl,
-        if (replyToMessageId != null && replyToMessageId.isNotEmpty)
-          'replyToMessageId': replyToMessageId,
-        if (modelConfigId != null && modelConfigId > 0)
-          'modelConfigId': modelConfigId,
-        if (reasoningEffort != null && reasoningEffort.isNotEmpty)
-          'reasoningEffort': reasoningEffort,
-        if (reasoningEnabled != null) 'reasoningEnabled': reasoningEnabled,
-        if (permissionMode != null && permissionMode.isNotEmpty)
-          'permissionMode': permissionMode,
-        if (workspace != null) ...<String, dynamic>{
-          if (workspace.projectId.isNotEmpty) 'projectId': workspace.projectId,
-          'workspaceId': workspace.workspaceId,
-          'workspaceDeviceId': workspace.deviceId,
-          'workspaceName': workspace.workspaceName,
-          'workspaceKind': workspace.workspaceKind,
-          'workspaceRootUri': workspace.rootUri,
-        },
-        'source': 'mobile',
-        'requestId': requestId,
-        'clientMessageId': requestId,
-        if (DeviceTimezoneCache.hasValue)
-          'deviceTimezone': DeviceTimezoneCache.ianaTimezone,
-      },
-      headers: const {'Accept': 'text/event-stream'},
-      cancelToken: cancellation.token,
-    );
-    yield* _decodeEventStream(stream);
-  }
-
-  Stream<ChatStreamEvent> messageEvents({
-    required ChatStreamCancellation cancellation,
-  }) async* {
-    final stream = await _api.getStream(
-      '/api/messages/events',
-      queryParameters: const {'channel': 'web'},
-      headers: const {'Accept': 'text/event-stream'},
-      cancelToken: cancellation.token,
-    );
-    yield* _decodeEventStream(stream);
-  }
 
   Stream<ChatStreamEvent> _decodeEventStream(Stream<List<int>> source) async* {
     final text = source.transform(utf8.decoder);
@@ -645,6 +679,10 @@ class ChatService {
     double audioDuration = 0,
     String? videoUrl,
     String? replyToMessageId,
+    int? modelConfigId,
+    String? reasoningEffort,
+    bool? reasoningEnabled,
+    String? permissionMode,
     ConversationWorkspaceDto? workspace,
   }) async {
     final now = DateTime.now().microsecondsSinceEpoch;
@@ -655,7 +693,7 @@ class ChatService {
     final resp = await _api.post<Map<String, dynamic>>(
       '/api/web-chat/messages',
       data: {
-        'message': message,
+        'content': message,
         if (conversationId != null && conversationId.isNotEmpty)
           'conversationId': conversationId,
         if (characterId != null && characterId.isNotEmpty)
@@ -669,13 +707,19 @@ class ChatService {
         if (videoUrl != null && videoUrl.isNotEmpty) 'videoUrl': videoUrl,
         if (replyToMessageId != null && replyToMessageId.isNotEmpty)
           'replyToMessageId': replyToMessageId,
-        if (workspace != null) ...<String, dynamic>{
-          if (workspace.projectId.isNotEmpty) 'projectId': workspace.projectId,
+        if (modelConfigId != null && modelConfigId > 0)
+          'modelConfigId': modelConfigId,
+        if (reasoningEffort != null && reasoningEffort.isNotEmpty)
+          'reasoningEffort': reasoningEffort,
+        if (reasoningEnabled != null) 'reasoningEnabled': reasoningEnabled,
+        if (permissionMode != null && permissionMode.isNotEmpty)
+          'permissionMode': permissionMode,
+        if (workspace != null && workspace.projectId.isNotEmpty)
+          'projectId': workspace.projectId,
+        if (workspace != null && workspace.projectId.isEmpty) ...<String, dynamic>{
           'workspaceId': workspace.workspaceId,
-          'workspaceDeviceId': workspace.deviceId,
-          'workspaceName': workspace.workspaceName,
-          'workspaceKind': workspace.workspaceKind,
-          'workspaceRootUri': workspace.rootUri,
+          if (workspace.deviceId.isNotEmpty)
+            'workspaceDeviceId': workspace.deviceId,
         },
         'source': 'mobile',
         'requestId': requestId,
@@ -690,57 +734,44 @@ class ChatService {
     return ChatSubmitResult.fromJson(resp);
   }
 
-  Future<String> generationStatus(String conversationId) async {
-    final resp = await _api.get<Map<String, dynamic>>(
-      '/api/web-chat/conversations/$conversationId/generations/current/status',
-    );
-    return (resp?['status'] ?? 'idle').toString();
-  }
 
-  Future<void> cancelGeneration(String conversationId) async {
+
+  Future<void> interruptTurn(String conversationId, String turnId) async {
     await _api.post<Map<String, dynamic>>(
-      '/api/web-chat/conversations/$conversationId/generations/current/cancel',
+      '/api/web-chat/conversations/${Uri.encodeComponent(conversationId)}/turns/${Uri.encodeComponent(turnId)}/interrupt',
     );
   }
 
-  Future<List<Map<String, dynamic>>> listApprovals(
+  Future<void> steerTurn(String conversationId, String turnId, String content) async {
+    await _api.post<Map<String, dynamic>>(
+      '/api/web-chat/conversations/${Uri.encodeComponent(conversationId)}/turns/${Uri.encodeComponent(turnId)}/steer',
+      data: <String, dynamic>{'content': content.trim()},
+    );
+  }
+
+  Future<ChatSubmitResult> retryTurn(String conversationId, String turnId) async {
+    final resp = await _api.post<Map<String, dynamic>>(
+      '/api/web-chat/conversations/${Uri.encodeComponent(conversationId)}/turns/${Uri.encodeComponent(turnId)}/retry',
+    );
+    if (resp == null) {
+      throw StateError('重试未返回结果');
+    }
+    return ChatSubmitResult.fromJson(<String, dynamic>{
+      ...resp,
+      'userMessageId': resp['userMessageId'] ?? '',
+    });
+  }
+
+  Future<void> resolveTurnApproval(
     String conversationId,
+    String turnId,
+    String approvalId,
+    bool approved,
   ) async {
-    final resp = await _api.get<List<dynamic>>(
-      '/api/web-chat/approvals',
-      queryParameters: <String, dynamic>{
-        if (conversationId.trim().isNotEmpty) 'conversationId': conversationId,
-      },
-    );
-    return (resp ?? const <dynamic>[])
-        .whereType<Map>()
-        .map((item) => Map<String, dynamic>.from(item))
-        .toList(growable: false);
-  }
-
-  Future<void> resolveApproval(String id, bool approved) async {
     await _api.post<Map<String, dynamic>>(
-      '/api/web-chat/approvals/$id/resolve',
+      '/api/web-chat/conversations/${Uri.encodeComponent(conversationId)}/turns/${Uri.encodeComponent(turnId)}/approvals/${Uri.encodeComponent(approvalId)}',
       data: <String, dynamic>{'approved': approved},
     );
-  }
-
-  /// Compatibility helper for callers that still need a single blocking reply.
-  Future<Map<String, dynamic>?> chat(
-    String message, {
-    String? conversationId,
-    String? characterId,
-  }) async {
-    final resp = await _api.post<Map<String, dynamic>>(
-      '/api/web-chat/send',
-      data: {
-        'message': message,
-        if (conversationId != null) 'conversationId': conversationId,
-        if (characterId != null) 'characterId': characterId,
-        'source': 'mobile',
-      },
-    );
-    return resp;
   }
 
   List<Map<String, dynamic>> _mapList(

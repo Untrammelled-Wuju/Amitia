@@ -1,0 +1,151 @@
+{
+  "name": "simple_text",
+  "version": 1,
+  "initialState": {
+    "lastEventSequence": 0,
+    "turns": []
+  },
+  "events": [
+    {
+      "version": 1,
+      "eventId": "evt-1",
+      "eventSequence": 1,
+      "conversationId": "conversation-1",
+      "requestId": "request-1",
+      "executionId": "execution-1",
+      "turnId": "turn-1",
+      "turnSequence": 1,
+      "type": "turn.queued",
+      "createdAt": "2026-09-21T10:00:00Z",
+      "status": "queued",
+      "payload": {}
+    },
+    {
+      "version": 1,
+      "eventId": "evt-2",
+      "eventSequence": 2,
+      "conversationId": "conversation-1",
+      "requestId": "request-1",
+      "executionId": "execution-1",
+      "turnId": "turn-1",
+      "turnSequence": 1,
+      "type": "turn.started",
+      "createdAt": "2026-09-21T10:00:00Z",
+      "status": "running",
+      "payload": {}
+    },
+    {
+      "version": 1,
+      "eventId": "evt-3",
+      "eventSequence": 3,
+      "conversationId": "conversation-1",
+      "requestId": "request-1",
+      "executionId": "execution-1",
+      "turnId": "turn-1",
+      "turnSequence": 1,
+      "type": "text.started",
+      "createdAt": "2026-09-21T10:00:00Z",
+      "blockId": "text-1",
+      "blockSequence": 1,
+      "status": "streaming",
+      "revision": 1,
+      "payload": {
+        "blockType": "text"
+      }
+    },
+    {
+      "version": 1,
+      "eventId": "evt-4",
+      "eventSequence": 4,
+      "conversationId": "conversation-1",
+      "requestId": "request-1",
+      "executionId": "execution-1",
+      "turnId": "turn-1",
+      "turnSequence": 1,
+      "type": "text.delta",
+      "createdAt": "2026-09-21T10:00:00Z",
+      "blockId": "text-1",
+      "blockSequence": 1,
+      "status": "streaming",
+      "revision": 2,
+      "payload": {
+        "delta": "你"
+      }
+    },
+    {
+      "version": 1,
+      "eventId": "evt-5",
+      "eventSequence": 5,
+      "conversationId": "conversation-1",
+      "requestId": "request-1",
+      "executionId": "execution-1",
+      "turnId": "turn-1",
+      "turnSequence": 1,
+      "type": "text.delta",
+      "createdAt": "2026-09-21T10:00:00Z",
+      "blockId": "text-1",
+      "blockSequence": 1,
+      "status": "streaming",
+      "revision": 3,
+      "payload": {
+        "delta": "好"
+      }
+    },
+    {
+      "version": 1,
+      "eventId": "evt-6",
+      "eventSequence": 6,
+      "conversationId": "conversation-1",
+      "requestId": "request-1",
+      "executionId": "execution-1",
+      "turnId": "turn-1",
+      "turnSequence": 1,
+      "type": "text.completed",
+      "createdAt": "2026-09-21T10:00:00Z",
+      "blockId": "text-1",
+      "blockSequence": 1,
+      "status": "completed",
+      "revision": 4,
+      "messageId": "msg-a1",
+      "payload": {
+        "content": "你好"
+      }
+    },
+    {
+      "version": 1,
+      "eventId": "evt-7",
+      "eventSequence": 7,
+      "conversationId": "conversation-1",
+      "requestId": "request-1",
+      "executionId": "execution-1",
+      "turnId": "turn-1",
+      "turnSequence": 1,
+      "type": "turn.completed",
+      "createdAt": "2026-09-21T10:00:00Z",
+      "status": "completed",
+      "messageId": "msg-a1",
+      "payload": {}
+    }
+  ],
+  "expectedState": {
+    "lastEventSequence": 7,
+    "activeTurnId": "",
+    "turns": [
+      {
+        "turnId": "turn-1",
+        "turnSequence": 1,
+        "executionId": "execution-1",
+        "status": "completed",
+        "blocks": [
+          {
+            "blockId": "text-1",
+            "blockSequence": 1,
+            "type": "text",
+            "status": "completed",
+            "content": "你好"
+          }
+        ]
+      }
+    ]
+  }
+}

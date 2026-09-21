@@ -3,8 +3,7 @@ export type MessageState =
   | "streaming"
   | "completed"
   | "interrupted"
-  | "failed"
-  | "cancelled";
+  | "failed";
 
 export interface CharacterIdentity {
   id: string;
@@ -34,7 +33,7 @@ export interface ToolBlock {
   result?: unknown;
   duration?: number;
   error?: string;
-  status: "queued" | "running" | "success" | "failed" | "cancelled";
+  status: "queued" | "running" | "success" | "failed" | "interrupted";
 }
 
 export interface FileBlock {
@@ -154,8 +153,9 @@ export interface AssistantTurnItem {
   turnId: string;
   conversationId: string;
   sequence: number;
-  type: "thinking" | "tool_call" | "tool_result" | "text" | string;
+  type: "reasoning" | "tool_call" | "tool_result" | "text" | string;
   status: string;
+  revision?: number;
   callId?: string;
   toolName?: string;
   content?: string;
@@ -164,7 +164,7 @@ export interface AssistantTurnItem {
   errorCode?: string;
   durationMs?: number;
   isFinal?: number;
-  legacyMessageId?: string;
+  messageId?: string;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -175,7 +175,10 @@ export interface AssistantTurnData {
   characterId?: string;
   userMessageId?: string;
   requestId?: string;
-  responseGroupId?: string;
+  executionId?: string;
+  parentTurnId?: string;
+  parentBlockId?: string;
+  agentId?: string;
   sequence: number;
   status: string;
   createdAt?: string;

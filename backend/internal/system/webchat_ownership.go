@@ -16,6 +16,7 @@ type webChatScopedService interface {
 	ListConversationsForSpace(q chat.ConversationQuery, spaceID string) (*chat.ConversationListResponse, error)
 	GetConversationForSpace(id, spaceID string) (*chat.Conversation, error)
 	GetMessagesForSpace(convID, spaceID string, page, pageSize int) ([]chat.Message, int64, error)
+	GetMessagesBeforeForSpace(convID, spaceID string, beforeSequence int64, limit int) ([]chat.Message, bool, error)
 	CreateConversationForSpace(req *chat.CreateConversationRequest, spaceID string) (*chat.Conversation, error)
 	EnsureChannelConversationForSpace(channel, spaceID string) (*chat.Conversation, error)
 	DeleteConversationForSpace(id, spaceID string) (bool, error)
@@ -95,6 +96,29 @@ func (h *Handler) webChatOwnedMessageQuery(spaceID string) *gorm.DB {
 		return q.Where("(conversations.space_id = ? OR conversations.space_id = '' OR conversations.space_id IS NULL OR conversations.space_id = ?)", owner, requestidentity.LegacySpaceID)
 	}
 	return q.Where("conversations.space_id = ?", owner)
+}
+
+func (h *Handler) findWebChatConversationByRequest(spaceID, requestID string) (string, error) {
+	requestID = strings.TrimSpace(requestID)
+	if requestID == "" {
+		return "", nil
+	}
+	var row struct {
+		ConversationID string `gorm:"column:conversation_id"`
+	}
+	result := h.webChatOwnedMessageQuery(spaceID).
+		Select("messages.conversation_id").
+		Where("messages.request_id = ? AND messages.role = ?", requestID, "user").
+		Order("messages.created_at ASC, messages.id ASC").
+		Limit(1).
+		Scan(&row)
+	if result.Error != nil {
+		return "", result.Error
+	}
+	if result.RowsAffected == 0 {
+		return "", nil
+	}
+	return strings.TrimSpace(row.ConversationID), nil
 }
 
 func (h *Handler) webChatCharacterQuery(spaceID string) *gorm.DB {

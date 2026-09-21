@@ -24,6 +24,7 @@ type ApprovalRequest struct {
 	ID             string         `json:"id"`
 	SpaceID        string         `json:"-"`
 	ConversationID string         `json:"conversationId"`
+	TurnID         string         `json:"turnId,omitempty"`
 	RequestID      string         `json:"requestId,omitempty"`
 	ToolCallID     string         `json:"toolCallId,omitempty"`
 	ToolName       string         `json:"toolName"`
@@ -41,12 +42,24 @@ type pendingApproval struct {
 }
 
 type ApprovalBroker struct {
-	mu      sync.Mutex
-	pending map[string]*pendingApproval
+	mu          sync.Mutex
+	pending     map[string]*pendingApproval
+	onRequested func(ApprovalRequest) error
+	onResolved  func(ApprovalRequest) error
 }
 
 func NewApprovalBroker() *ApprovalBroker {
 	return &ApprovalBroker{pending: make(map[string]*pendingApproval)}
+}
+
+func (b *ApprovalBroker) SetObservers(onRequested func(ApprovalRequest) error, onResolved func(ApprovalRequest) error) {
+	if b == nil {
+		return
+	}
+	b.mu.Lock()
+	b.onRequested = onRequested
+	b.onResolved = onResolved
+	b.mu.Unlock()
 }
 
 func (b *ApprovalBroker) Await(ctx context.Context, request ApprovalRequest, timeout time.Duration) (bool, error) {
@@ -71,7 +84,16 @@ func (b *ApprovalBroker) Await(ctx context.Context, request ApprovalRequest, tim
 	entry := &pendingApproval{value: request, decision: make(chan bool, 1)}
 	b.mu.Lock()
 	b.pending[request.ID] = entry
+	onRequested := b.onRequested
 	b.mu.Unlock()
+	if onRequested != nil {
+		if err := onRequested(request); err != nil {
+			b.mu.Lock()
+			delete(b.pending, request.ID)
+			b.mu.Unlock()
+			return false, err
+		}
+	}
 	defer func() {
 		b.mu.Lock()
 		delete(b.pending, request.ID)
@@ -84,8 +106,14 @@ func (b *ApprovalBroker) Await(ctx context.Context, request ApprovalRequest, tim
 	case approved := <-entry.decision:
 		return approved, nil
 	case <-ctx.Done():
+		if err := b.expire(request.ID); err != nil {
+			return false, err
+		}
 		return false, ctx.Err()
 	case <-timer.C:
+		if err := b.expire(request.ID); err != nil {
+			return false, err
+		}
 		return false, context.DeadlineExceeded
 	}
 }
@@ -125,28 +153,64 @@ func (b *ApprovalBroker) Resolve(id string, approved bool) error {
 	if b == nil {
 		return fmt.Errorf("approval broker unavailable")
 	}
+	id = strings.TrimSpace(id)
 	b.mu.Lock()
-	entry, ok := b.pending[strings.TrimSpace(id)]
-	if ok && entry.resolved {
-		b.mu.Unlock()
-		return fmt.Errorf("approval already resolved")
-	}
-	if ok {
-		entry.resolved = true
-	}
-	b.mu.Unlock()
+	entry, ok := b.pending[id]
 	if !ok {
+		b.mu.Unlock()
 		return fmt.Errorf("approval not found")
 	}
-	select {
-	case entry.decision <- approved:
-		return nil
-	default:
-		b.mu.Lock()
-		entry.resolved = false
+	if entry.resolved {
 		b.mu.Unlock()
 		return fmt.Errorf("approval already resolved")
 	}
+	request := entry.value
+	if approved {
+		request.Status = ApprovalStatusApproved
+	} else {
+		request.Status = ApprovalStatusDenied
+	}
+	entry.resolved = true
+	entry.value = request
+	onResolved := b.onResolved
+	b.mu.Unlock()
+	if onResolved != nil {
+		if err := onResolved(request); err != nil {
+			b.mu.Lock()
+			if current, exists := b.pending[id]; exists && current == entry {
+				current.resolved = false
+				current.value.Status = ApprovalStatusPending
+			}
+			b.mu.Unlock()
+			return err
+		}
+	}
+	entry.decision <- approved
+	return nil
+}
+
+func (b *ApprovalBroker) expire(id string) error {
+	if b == nil {
+		return fmt.Errorf("approval broker unavailable")
+	}
+	b.mu.Lock()
+	entry, ok := b.pending[strings.TrimSpace(id)]
+	if !ok || entry.resolved {
+		b.mu.Unlock()
+		return nil
+	}
+	request := entry.value
+	request.Status = ApprovalStatusExpired
+	entry.resolved = true
+	entry.value = request
+	onResolved := b.onResolved
+	b.mu.Unlock()
+	if onResolved != nil {
+		if err := onResolved(request); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func truncateApprovalText(value string, limit int) string {

@@ -16,11 +16,6 @@ bool shouldShowAssistantIdentity(ChatMessage current, ChatMessage? previous) {
   if (currentSenderId.isNotEmpty && previousSenderId.isNotEmpty) {
     return currentSenderId != previousSenderId;
   }
-  final currentGroupId = current.responseGroupId.trim();
-  final previousGroupId = previous.responseGroupId.trim();
-  if (currentGroupId.isNotEmpty && previousGroupId.isNotEmpty) {
-    return currentGroupId != previousGroupId;
-  }
   return true;
 }
 

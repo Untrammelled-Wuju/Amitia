@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/u-ai/backend/internal/chat"
+	"github.com/u-ai/backend/internal/conversationstream"
 	"github.com/u-ai/backend/internal/graph"
 	"github.com/u-ai/backend/internal/mindruntime"
 	"github.com/u-ai/backend/internal/temporal"
@@ -54,6 +55,7 @@ func main() {
 	runtimeRoot := util.RuntimeRoot()
 	configDir := util.RuntimeConfigDir(runtimeRoot)
 	config.InitConfig(configDir)
+	conversationstream.DefaultManager().SetRingSize(config.AppCfg.Chat.EventReplayRingSize)
 
 	profileResolution, err := runtimeprofile.Resolve(runtimeprofile.ResolveInput{
 		Args:             os.Args[1:],
@@ -287,7 +289,6 @@ func main() {
 		agenttool.SetOnEpisodicSaved(func(id string) {
 			services.Episodic.SyncGraphEpisodic(id)
 		})
-		chat.InitBuffer(config.AppCfg.Chat.MergeWindowMs)
 		count, err := services.Chat.RecalculateMessageCounts()
 		backfilled, backfillErr := services.Chat.BackfillMissingConversations()
 		if backfillErr != nil {

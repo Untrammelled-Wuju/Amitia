@@ -8,17 +8,15 @@ import (
 )
 
 func TestExternalTextEntrypointsUseUnifiedEntry(t *testing.T) {
-	streamHandler := readGuardFile(t, "stream_handler.go")
-	if strings.Contains(streamHandler, "chatSvc.ProcessMessage") {
-		t.Fatal("WebChatSendStream must not call chatSvc.ProcessMessage directly")
-	}
-	if !strings.Contains(streamHandler, "h.handleUnifiedEntryWithWorkspace") {
-		t.Fatal("WebChatSendStream must call UnifiedEntry.Handle")
-	}
-
 	webHandler := readGuardFile(t, "webchat_handler.go")
+	if strings.Contains(webHandler, "func (h *Handler) WebChatSend(") || strings.Contains(webHandler, "WebChatSendStream") {
+		t.Fatal("legacy blocking/fake-stream web chat entrypoints must be removed")
+	}
+	if !strings.Contains(webHandler, "func (h *Handler) WebChatSubmitMessage(") {
+		t.Fatal("formal web chat command endpoint is missing")
+	}
 	if !strings.Contains(webHandler, "h.handleUnifiedEntryWithWorkspace") {
-		t.Fatal("WebChatSend must call UnifiedEntry.Handle")
+		t.Fatal("WebChatSubmitMessage must call UnifiedEntry.Handle")
 	}
 
 	agentService := readGuardFile(t, "..", "agent", "service.go")

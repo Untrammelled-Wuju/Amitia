@@ -13,7 +13,7 @@ import (
 type DeliveryIntentModel struct {
 	ID               string `gorm:"primaryKey;column:id"`
 	InteractionID    string `gorm:"column:interaction_id;index"`
-	ResponseGroupID  string `gorm:"column:response_group_id;index:idx_delivery_message_plan,priority:1"`
+	DeliveryGroupID  string `gorm:"column:delivery_group_id;index:idx_delivery_message_plan,priority:1"`
 	DeliverySequence int    `gorm:"column:delivery_sequence;index:idx_delivery_message_plan,priority:2"`
 	Channel          string `gorm:"column:channel"`
 	PeerID           string `gorm:"column:peer_id"`
@@ -72,7 +72,7 @@ func (s *SQLiteDeliveryStore) SubmitIntent(intent DeliveryIntent) (bool, error) 
 	model := DeliveryIntentModel{
 		ID:               intent.ID,
 		InteractionID:    intent.InteractionID,
-		ResponseGroupID:  intent.ResponseGroupID,
+		DeliveryGroupID:  intent.DeliveryGroupID,
 		DeliverySequence: intent.DeliverySequence,
 		Channel:          intent.Channel,
 		PeerID:           intent.PeerID,
@@ -82,8 +82,8 @@ func (s *SQLiteDeliveryStore) SubmitIntent(intent DeliveryIntent) (bool, error) 
 		CreatedAt:        now,
 		MaxRetries:       intent.MaxRetries,
 	}
-	result := s.db.Exec("INSERT OR IGNORE INTO delivery_intents (id, interaction_id, channel, peer_id, content_type, payload, status, created_at, max_retries, response_group_id, delivery_sequence) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-		model.ID, model.InteractionID, model.Channel, model.PeerID, model.ContentType, model.Payload, model.Status, model.CreatedAt, model.MaxRetries, model.ResponseGroupID, model.DeliverySequence)
+	result := s.db.Exec("INSERT OR IGNORE INTO delivery_intents (id, interaction_id, channel, peer_id, content_type, payload, status, created_at, max_retries, delivery_group_id, delivery_sequence) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+		model.ID, model.InteractionID, model.Channel, model.PeerID, model.ContentType, model.Payload, model.Status, model.CreatedAt, model.MaxRetries, model.DeliveryGroupID, model.DeliverySequence)
 	if result.Error != nil {
 		return false, result.Error
 	}
@@ -95,7 +95,7 @@ func (s *SQLiteDeliveryStore) CreateIntent(intent DeliveryIntent) error {
 	model := DeliveryIntentModel{
 		ID:               intent.ID,
 		InteractionID:    intent.InteractionID,
-		ResponseGroupID:  intent.ResponseGroupID,
+		DeliveryGroupID:  intent.DeliveryGroupID,
 		DeliverySequence: intent.DeliverySequence,
 		Channel:          intent.Channel,
 		PeerID:           intent.PeerID,
@@ -144,7 +144,7 @@ func (s *SQLiteDeliveryStore) ListPending(limit int) ([]DeliveryIntent, error) {
 	var models []DeliveryIntentModel
 	now := time.Now().UTC().Format("2006-01-02 15:04:05")
 	err := s.db.Where("status = ? OR (status = ? AND (next_retry IS NULL OR next_retry = '' OR next_retry <= ?))", string(DeliveryStatusPending), string(DeliveryStatusRetry), now).
-		Order("created_at ASC, response_group_id ASC, CASE WHEN status = 'pending' THEN 0 ELSE 1 END ASC, delivery_sequence ASC").Limit(limit).Find(&models).Error
+		Order("created_at ASC, delivery_group_id ASC, CASE WHEN status = 'pending' THEN 0 ELSE 1 END ASC, delivery_sequence ASC").Limit(limit).Find(&models).Error
 	if err != nil {
 		return nil, err
 	}
@@ -227,7 +227,7 @@ func (s *SQLiteDeliveryStore) ClaimNextIntents(batchSize int) ([]DeliveryIntent,
 	var models []DeliveryIntentModel
 	err := s.db.Where("(status = ? OR (status = ? AND (next_retry IS NULL OR next_retry = '' OR next_retry <= ?))) AND (lease_until IS NULL OR lease_until = '' OR lease_until <= ?)",
 		string(DeliveryStatusPending), string(DeliveryStatusRetry), nowStr, nowStr).
-		Order("created_at ASC, response_group_id ASC, CASE WHEN status = 'pending' THEN 0 ELSE 1 END ASC, delivery_sequence ASC").Limit(batchSize).Find(&models).Error
+		Order("created_at ASC, delivery_group_id ASC, CASE WHEN status = 'pending' THEN 0 ELSE 1 END ASC, delivery_sequence ASC").Limit(batchSize).Find(&models).Error
 	if err != nil {
 		return nil, err
 	}
@@ -339,10 +339,10 @@ func (s *SQLiteDeliveryStore) updateMessageStatusForIntent(tx *gorm.DB, id, stat
 		return
 	}
 	var intent DeliveryIntentModel
-	if err := tx.Select("response_group_id", "delivery_sequence").Where("id = ?", id).Take(&intent).Error; err != nil {
+	if err := tx.Select("delivery_group_id", "delivery_sequence").Where("id = ?", id).Take(&intent).Error; err != nil {
 		return
 	}
-	if strings.TrimSpace(intent.ResponseGroupID) == "" || intent.DeliverySequence <= 0 {
+	if strings.TrimSpace(intent.DeliveryGroupID) == "" || intent.DeliverySequence <= 0 {
 		return
 	}
 	updates := map[string]interface{}{
@@ -350,7 +350,7 @@ func (s *SQLiteDeliveryStore) updateMessageStatusForIntent(tx *gorm.DB, id, stat
 		"updated_at": time.Now().UTC().Format("2006-01-02 15:04:05"),
 	}
 	_ = tx.Table("messages").
-		Where("response_group_id = ? AND delivery_sequence = ?", intent.ResponseGroupID, intent.DeliverySequence).
+		Where("delivery_group_id = ? AND delivery_sequence = ?", intent.DeliveryGroupID, intent.DeliverySequence).
 		Updates(updates).Error
 }
 
@@ -417,7 +417,7 @@ func modelToIntent(m *DeliveryIntentModel) *DeliveryIntent {
 	return &DeliveryIntent{
 		ID:               m.ID,
 		InteractionID:    m.InteractionID,
-		ResponseGroupID:  m.ResponseGroupID,
+		DeliveryGroupID:  m.DeliveryGroupID,
 		DeliverySequence: m.DeliverySequence,
 		Channel:          m.Channel,
 		PeerID:           m.PeerID,

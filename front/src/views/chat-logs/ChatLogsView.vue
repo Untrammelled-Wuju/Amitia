@@ -133,7 +133,6 @@ interface ArchivedMessage {
   videoUrl?: string;
   audioUrl?: string;
   audioDuration?: number;
-  responseGroupId?: string;
   requestId?: string;
 }
 

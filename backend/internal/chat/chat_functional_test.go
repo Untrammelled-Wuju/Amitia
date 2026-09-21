@@ -55,11 +55,11 @@ func setupChatFunctionalTest(t *testing.T) (*gorm.DB, *service, string, string) 
 		t.Fatal(err)
 	}
 	if err := db.Create(&Conversation{
-		ID:          convID,
-		SpaceID:     normalizeConversationOwner(""),
-		Title:       "功能测试对话",
-		Channel:     "web",
-		Source:      "manual",
+		ID:      convID,
+		SpaceID: normalizeConversationOwner(""),
+		Title:   "功能测试对话",
+		Channel: "web",
+		Source:  "manual",
 	}).Error; err != nil {
 		t.Fatal(err)
 	}
@@ -124,122 +124,64 @@ func verifyConversationMessageCount(t *testing.T, db *gorm.DB, convID string, ex
 }
 
 func TestChatFunctional_NormalMultiLineReply(t *testing.T) {
-	t.Run("multi_line_web", func(t *testing.T) {
-		db, svc, charID, convID := setupChatFunctionalTest(t)
-
-		replyText := "这是第一句回复[AMITIA_BR]这是第二句回复[AMITIA_BR]这是第三句回复"
-
-		svc.llmWithTools = func(ctx context.Context, _ *ModelConfig, _ []map[string]interface{}, _ []tool.Tool) (string, string, []map[string]interface{}, int, error) {
-			return replyText, "", nil, 30, nil
-		}
-
-		reqID := "req-multi-web"
-		resp, err := svc.ProcessMessage(context.Background(), &ProcessMessageRequest{
-			CharacterID:    charID,
-			ConversationID: convID,
-			Channel:        "web",
-			Source:         "manual",
-			Message:        "你好",
-			RequestID:      reqID,
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-		if resp.Reply != replyText {
-			t.Fatalf("Reply不匹配: 期望=%q, 实际=%q", replyText, resp.Reply)
-		}
-		expectedLines := []string{"这是第一句回复", "这是第二句回复", "这是第三句回复"}
-		if len(resp.MessageIDs) != len(expectedLines) {
-			t.Fatalf("MessageIDs数量不匹配: 期望=%d, 实际=%d", len(expectedLines), len(resp.MessageIDs))
-		}
-
-		verifyMessagesInDB(t, db, convID, reqID, expectedLines)
-		verifyUserMessageStatus(t, db, reqID, "sent")
-		verifyConversationMessageCount(t, db, convID, 4)
+	db, svc, charID, convID := setupChatFunctionalTest(t)
+	replyText := `这是第一句回复
+这是第二句回复
+这是第三句回复`
+	svc.llmWithTools = func(context.Context, *ModelConfig, []map[string]interface{}, []tool.Tool) (string, string, []map[string]interface{}, int, error) {
+		return replyText, "", nil, 30, nil
+	}
+	resp, err := svc.ProcessMessage(context.Background(), &ProcessMessageRequest{
+		CharacterID: charID, ConversationID: convID, Channel: "web", Source: "manual", Message: "你好", RequestID: "req-multi-web",
 	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.Reply != replyText {
+		t.Fatalf("Reply不匹配: %q", resp.Reply)
+	}
+	if len(resp.MessageIDs) != 1 {
+		t.Fatalf("多段 Markdown 文本必须只持久化为1条 assistant 消息, 实际=%d", len(resp.MessageIDs))
+	}
+	verifyMessagesInDB(t, db, convID, "req-multi-web", []string{replyText})
+	verifyUserMessageStatus(t, db, "req-multi-web", "sent")
+	verifyConversationMessageCount(t, db, convID, 2)
 }
 
 func TestChatFunctional_SingleLineReply(t *testing.T) {
-	t.Run("single_line", func(t *testing.T) {
-		db, svc, charID, convID := setupChatFunctionalTest(t)
-
-		svc.llmWithTools = func(ctx context.Context, _ *ModelConfig, _ []map[string]interface{}, _ []tool.Tool) (string, string, []map[string]interface{}, int, error) {
-			return "只有一句话", "", nil, 5, nil
-		}
-
-		reqID := "req-single"
-		resp, err := svc.ProcessMessage(context.Background(), &ProcessMessageRequest{
-			CharacterID:    charID,
-			ConversationID: convID,
-			Channel:        "web",
-			Source:         "manual",
-			Message:        "你好",
-			RequestID:      reqID,
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-		expectedLines := []string{"只有一句话"}
-		if len(resp.MessageIDs) != 1 {
-			t.Fatalf("期望1条消息, 实际=%d", len(resp.MessageIDs))
-		}
-
-		verifyMessagesInDB(t, db, convID, reqID, expectedLines)
-		verifyUserMessageStatus(t, db, reqID, "sent")
-		verifyConversationMessageCount(t, db, convID, 2)
-	})
+	db, svc, charID, convID := setupChatFunctionalTest(t)
+	svc.llmWithTools = func(context.Context, *ModelConfig, []map[string]interface{}, []tool.Tool) (string, string, []map[string]interface{}, int, error) {
+		return "只有一句话", "", nil, 5, nil
+	}
+	resp, err := svc.ProcessMessage(context.Background(), &ProcessMessageRequest{CharacterID: charID, ConversationID: convID, Channel: "web", Source: "manual", Message: "你好", RequestID: "req-single"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(resp.MessageIDs) != 1 {
+		t.Fatalf("期望1条消息, 实际=%d", len(resp.MessageIDs))
+	}
+	verifyMessagesInDB(t, db, convID, "req-single", []string{"只有一句话"})
+	verifyConversationMessageCount(t, db, convID, 2)
 }
 
 func TestChatFunctional_LongMultiLineSplit(t *testing.T) {
-	t.Run("long_multi_line", func(t *testing.T) {
-		db, svc, charID, convID := setupChatFunctionalTest(t)
-
-		var sb strings.Builder
-		for i := 0; i < 10; i++ {
-			sb.WriteString(fmt.Sprintf("这是一句需要拆分的长文本内容[第%d行]", i))
-			sb.WriteString("[AMITIA_BR]")
-		}
-		replyText := strings.TrimSuffix(sb.String(), "[AMITIA_BR]")
-
-		svc.llmWithTools = func(ctx context.Context, _ *ModelConfig, _ []map[string]interface{}, _ []tool.Tool) (string, string, []map[string]interface{}, int, error) {
-			return replyText, "", nil, 200, nil
-		}
-
-		reqID := "req-long-multi"
-		resp, err := svc.ProcessMessage(context.Background(), &ProcessMessageRequest{
-			CharacterID:    charID,
-			ConversationID: convID,
-			Channel:        "web",
-			Source:         "manual",
-			Message:        "长文本",
-			RequestID:      reqID,
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		var msgs []Message
-		if err := db.Where("conversation_id = ? AND role = ? AND request_id = ?", convID, "assistant", reqID).
-			Order("sequence ASC").Find(&msgs).Error; err != nil {
-			t.Fatal(err)
-		}
-		if len(msgs) < 2 {
-			t.Fatalf("期望至少2条消息, 实际=%d", len(msgs))
-		}
-
-		for _, msg := range msgs {
-			runeCount := len([]rune(msg.Content))
-			if runeCount > 2000 {
-				t.Fatalf("拆分后单条消息超过2000个字符: %d", runeCount)
-			}
-		}
-
-		if resp.Reply != replyText {
-			t.Fatalf("Reply被修改")
-		}
-
-		t.Logf("多行拆分: %d条消息 (ApplyPostValidation截断后)", len(msgs))
-	})
+	db, svc, charID, convID := setupChatFunctionalTest(t)
+	var sb strings.Builder
+	for i := 0; i < 10; i++ {
+		fmt.Fprintf(&sb, "这是一段较长文本内容[第%d段]\n", i)
+	}
+	replyText := strings.TrimSuffix(sb.String(), "\n")
+	svc.llmWithTools = func(context.Context, *ModelConfig, []map[string]interface{}, []tool.Tool) (string, string, []map[string]interface{}, int, error) {
+		return replyText, "", nil, 200, nil
+	}
+	resp, err := svc.ProcessMessage(context.Background(), &ProcessMessageRequest{CharacterID: charID, ConversationID: convID, Channel: "web", Source: "manual", Message: "长文本", RequestID: "req-long-multi"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(resp.MessageIDs) != 1 {
+		t.Fatalf("长文本不得拆成多条 assistant 消息, 实际=%d", len(resp.MessageIDs))
+	}
+	verifyMessagesInDB(t, db, convID, "req-long-multi", []string{replyText})
 }
 
 func TestChatFunctional_TenRoundConsistency(t *testing.T) {
@@ -256,11 +198,11 @@ func TestChatFunctional_TenRoundConsistency(t *testing.T) {
 			{convQQ, "qq"},
 		} {
 			if err := db.Create(&Conversation{
-				ID:          c.id,
-				SpaceID:     normalizeConversationOwner(""),
-				Title:       c.channel + "十轮测试",
-				Channel:     c.channel,
-				Source:      "manual",
+				ID:      c.id,
+				SpaceID: normalizeConversationOwner(""),
+				Title:   c.channel + "十轮测试",
+				Channel: c.channel,
+				Source:  "manual",
 			}).Error; err != nil {
 				t.Fatal(err)
 			}
@@ -316,8 +258,8 @@ func TestChatFunctional_TenRoundConsistency(t *testing.T) {
 				Order("sequence ASC").Find(&assistantMsgs).Error; err != nil {
 				t.Fatal(err)
 			}
-			if len(assistantMsgs) == 0 {
-				t.Fatalf("第%d轮(%s): 没有assistant消息", i+1, round.label)
+			if len(assistantMsgs) != 1 {
+				t.Fatalf("第%d轮(%s): 每轮必须恰好1条assistant文本消息, 实际=%d", i+1, round.label, len(assistantMsgs))
 			}
 			if len(resp.MessageIDs) != len(assistantMsgs) {
 				t.Fatalf("第%d轮(%s): MessageIDs数量(%d)与DB消息数(%d)不匹配", i+1, round.label, len(resp.MessageIDs), len(assistantMsgs))
@@ -325,7 +267,7 @@ func TestChatFunctional_TenRoundConsistency(t *testing.T) {
 
 			totalAssistantMsgs += int64(len(assistantMsgs))
 			totalUserMsgs++
-			t.Logf("第%d轮(%s/%s): 拆分为%d条, 回复长度=%d字符", i+1, round.label, roundChannel, len(assistantMsgs), len([]rune(roundReply)))
+			t.Logf("第%d轮(%s/%s): 单条连续回复, 长度=%d字符", i+1, round.label, roundChannel, len([]rune(roundReply)))
 		}
 
 		for _, cid := range []string{convWeb, convWechat, convQQ} {
@@ -389,107 +331,51 @@ func TestChatFunctional_IdempotentRequest(t *testing.T) {
 }
 
 func TestChatFunctional_ChannelSpecificSplit(t *testing.T) {
-	t.Run("wechat_split", func(t *testing.T) {
-		db, svc, charID, _ := setupChatFunctionalTest(t)
-
-		convWechat := "conv-wechat-test"
-		db.Create(&Conversation{
-			ID:          convWechat,
-			SpaceID:     normalizeConversationOwner(""),
-			Title:       "微信对话",
-			Channel:     "wechat",
-			Source:      "sidecar",
+	for _, tc := range []struct{ channel, convID, reply string }{
+		{"wechat", "conv-wechat-test", `微信消息1
+微信消息2
+微信消息3`},
+		{"qq", "conv-qq-test", `QQ消息1
+QQ消息2
+QQ消息3
+QQ消息4`},
+	} {
+		t.Run(tc.channel+"_single_stream_text", func(t *testing.T) {
+			db, svc, charID, _ := setupChatFunctionalTest(t)
+			if err := db.Create(&Conversation{ID: tc.convID, SpaceID: normalizeConversationOwner(""), Title: tc.channel + "对话", Channel: tc.channel, Source: "sidecar"}).Error; err != nil {
+				t.Fatal(err)
+			}
+			svc.llmWithTools = func(context.Context, *ModelConfig, []map[string]interface{}, []tool.Tool) (string, string, []map[string]interface{}, int, error) {
+				return tc.reply, "", nil, 20, nil
+			}
+			resp, err := svc.ProcessMessage(context.Background(), &ProcessMessageRequest{CharacterID: charID, ConversationID: tc.convID, Channel: tc.channel, Source: "sidecar", Message: "测试", RequestID: "req-" + tc.channel})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(resp.MessageIDs) != 1 {
+				t.Fatalf("%s 渠道正文也必须保持单消息, 实际=%d", tc.channel, len(resp.MessageIDs))
+			}
+			verifyMessagesInDB(t, db, tc.convID, "req-"+tc.channel, []string{tc.reply})
 		})
-
-		replyText := "微信消息1[AMITIA_BR]微信消息2[AMITIA_BR]微信消息3"
-
-		svc.llmWithTools = func(ctx context.Context, _ *ModelConfig, _ []map[string]interface{}, _ []tool.Tool) (string, string, []map[string]interface{}, int, error) {
-			return replyText, "", nil, 15, nil
-		}
-
-		reqID := "req-wechat"
-		resp, err := svc.ProcessMessage(context.Background(), &ProcessMessageRequest{
-			CharacterID:    charID,
-			ConversationID: convWechat,
-			Channel:        "wechat",
-			Source:         "sidecar",
-			Message:        "微信测试",
-			RequestID:      reqID,
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-		t.Logf("wechat reply=%q lines=%v ids=%d", resp.Reply, resp.Lines, len(resp.MessageIDs))
-		if len(resp.MessageIDs) != 3 {
-			t.Fatalf("微信渠道期望3条消息, 实际=%d", len(resp.MessageIDs))
-		}
-	})
-
-	t.Run("qq_split", func(t *testing.T) {
-		db, svc, charID, _ := setupChatFunctionalTest(t)
-
-		convQQ := "conv-qq-test"
-		db.Create(&Conversation{
-			ID:          convQQ,
-			SpaceID:     normalizeConversationOwner(""),
-			Title:       "QQ对话",
-			Channel:     "qq",
-			Source:      "sidecar",
-		})
-
-		replyText := "QQ消息1[AMITIA_BR]QQ消息2[AMITIA_BR]QQ消息3[AMITIA_BR]QQ消息4"
-
-		svc.llmWithTools = func(ctx context.Context, _ *ModelConfig, _ []map[string]interface{}, _ []tool.Tool) (string, string, []map[string]interface{}, int, error) {
-			return replyText, "", nil, 20, nil
-		}
-
-		reqID := "req-qq"
-		resp, err := svc.ProcessMessage(context.Background(), &ProcessMessageRequest{
-			CharacterID:    charID,
-			ConversationID: convQQ,
-			Channel:        "qq",
-			Source:         "sidecar",
-			Message:        "QQ测试",
-			RequestID:      reqID,
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-		t.Logf("qq reply=%q lines=%v ids=%d", resp.Reply, resp.Lines, len(resp.MessageIDs))
-		if len(resp.MessageIDs) != 4 {
-			t.Fatalf("QQ渠道期望4条消息, 实际=%d", len(resp.MessageIDs))
-		}
-	})
+	}
 }
 
 func TestChatFunctional_EmptyLinesFiltered(t *testing.T) {
-	t.Run("empty_lines", func(t *testing.T) {
-		db, svc, charID, convID := setupChatFunctionalTest(t)
+	db, svc, charID, convID := setupChatFunctionalTest(t)
+	replyText := `第一句
 
-		replyText := "第一句[AMITIA_BR]第二句"
-
-		svc.llmWithTools = func(ctx context.Context, _ *ModelConfig, _ []map[string]interface{}, _ []tool.Tool) (string, string, []map[string]interface{}, int, error) {
-			return replyText, "", nil, 10, nil
-		}
-
-		reqID := "req-empty"
-		resp, err := svc.ProcessMessage(context.Background(), &ProcessMessageRequest{
-			CharacterID:    charID,
-			ConversationID: convID,
-			Channel:        "web",
-			Source:         "manual",
-			Message:        "空行测试",
-			RequestID:      reqID,
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-		expectedLines := []string{"第一句", "第二句"}
-		if len(resp.MessageIDs) != len(expectedLines) {
-			t.Fatalf("期望 %d 条消息(空行被过滤), 实际=%d", len(expectedLines), len(resp.MessageIDs))
-		}
-		verifyMessagesInDB(t, db, convID, reqID, expectedLines)
-	})
+第二句`
+	svc.llmWithTools = func(context.Context, *ModelConfig, []map[string]interface{}, []tool.Tool) (string, string, []map[string]interface{}, int, error) {
+		return replyText, "", nil, 10, nil
+	}
+	resp, err := svc.ProcessMessage(context.Background(), &ProcessMessageRequest{CharacterID: charID, ConversationID: convID, Channel: "web", Source: "manual", Message: "空行测试", RequestID: "req-empty"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(resp.MessageIDs) != 1 {
+		t.Fatalf("Markdown 空行不能触发消息拆分, 实际=%d", len(resp.MessageIDs))
+	}
+	verifyMessagesInDB(t, db, convID, "req-empty", []string{replyText})
 }
 
 func TestChatFunctional_MessageSequenceMonotonic(t *testing.T) {
@@ -626,40 +512,20 @@ func TestChatFunctional_SequentialRequests(t *testing.T) {
 }
 
 func TestChatFunctional_ComputeInteractionOnlySplitsOnce(t *testing.T) {
-	t.Run("split_once", func(t *testing.T) {
-		_, svc, charID, convID := setupChatFunctionalTest(t)
-
-		replyText := "拆分测试1[AMITIA_BR]拆分测试2[AMITIA_BR]拆分测试3"
-		svc.llmWithTools = func(ctx context.Context, _ *ModelConfig, _ []map[string]interface{}, _ []tool.Tool) (string, string, []map[string]interface{}, int, error) {
-			return replyText, "", nil, 15, nil
-		}
-
-		computeResult, err := svc.ComputeInteraction(context.Background(), &ProcessMessageRequest{
-			CharacterID:    charID,
-			ConversationID: convID,
-			Channel:        "web",
-			Source:         "manual",
-			Message:        "拆分测试",
-			RequestID:      "req-split-once",
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		expectedLines := []string{"拆分测试1", "拆分测试2", "拆分测试3"}
-		if len(computeResult.Lines) != 3 {
-			t.Fatalf("ComputeInteraction拆分结果数量不对: 期望3, 实际=%d", len(computeResult.Lines))
-		}
-		for i, line := range computeResult.Lines {
-			if line != expectedLines[i] {
-				t.Fatalf("ComputeInteraction第%d条不匹配: 期望=%q, 实际=%q", i+1, expectedLines[i], line)
-			}
-		}
-		if computeResult.Reply != replyText {
-			t.Fatalf("原始Reply被修改: 期望=%q, 实际=%q", replyText, computeResult.Reply)
-		}
-		t.Logf("拆分点唯一验证通过: Lines=%v, Reply=%q", computeResult.Lines, computeResult.Reply)
-	})
+	_, svc, charID, convID := setupChatFunctionalTest(t)
+	replyText := `第一段
+第二段
+第三段`
+	svc.llmWithTools = func(context.Context, *ModelConfig, []map[string]interface{}, []tool.Tool) (string, string, []map[string]interface{}, int, error) {
+		return replyText, "", nil, 15, nil
+	}
+	computeResult, err := svc.ComputeInteraction(context.Background(), &ProcessMessageRequest{CharacterID: charID, ConversationID: convID, Channel: "web", Source: "manual", Message: "连续文本测试", RequestID: "req-single-text"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if computeResult.Reply != replyText {
+		t.Fatalf("连续回复被修改: %q", computeResult.Reply)
+	}
 }
 
 func setupChatFunctionalTestWithCapture(t *testing.T, personalityCfg string, capture *[]map[string]interface{}, reply string) (*gorm.DB, *service, string, string) {

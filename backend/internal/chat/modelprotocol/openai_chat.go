@@ -277,6 +277,7 @@ func (a *OpenAIChatAdapter) parseStream(ctx context.Context, body io.Reader, sin
 	var argumentsBuffers map[string]string
 	toolCallBuffers = make(map[string]*ModelToolCall)
 	argumentsBuffers = make(map[string]string)
+	toolCallIDs := make(map[int]string)
 
 	buf := make([]byte, 4096)
 	var buffer strings.Builder
@@ -316,8 +317,9 @@ func (a *OpenAIChatAdapter) parseStream(ctx context.Context, body io.Reader, sin
 				var chunk struct {
 					Choices []struct {
 						Delta struct {
-							Content   string `json:"content"`
-							ToolCalls []struct {
+							Content          string `json:"content"`
+							ReasoningContent string `json:"reasoning_content"`
+							ToolCalls        []struct {
 								Index    int    `json:"index"`
 								ID       string `json:"id"`
 								Function struct {
@@ -342,25 +344,38 @@ func (a *OpenAIChatAdapter) parseStream(ctx context.Context, body io.Reader, sin
 
 				if choice.Delta.Content != "" {
 					result.Text += choice.Delta.Content
-					if err := sink.Emit(ctx, ModelEvent{
-						Type:      ModelEventTextDelta,
-						TextDelta: choice.Delta.Content,
-					}); err != nil {
+					if err := sink.Emit(ctx, ModelEvent{Type: ModelEventTextDelta, TextDelta: choice.Delta.Content}); err != nil {
+						return result, err
+					}
+				}
+				if choice.Delta.ReasoningContent != "" {
+					if err := sink.Emit(ctx, ModelEvent{Type: ModelEventReasoningSummaryDelta, TextDelta: choice.Delta.ReasoningContent}); err != nil {
 						return result, err
 					}
 				}
 
 				for _, tc := range choice.Delta.ToolCalls {
-					if tc.ID != "" {
-						toolCallBuffers[tc.ID] = &ModelToolCall{
-							ID:   tc.ID,
-							Name: tc.Function.Name,
+					id := strings.TrimSpace(tc.ID)
+					if id != "" {
+						toolCallIDs[tc.Index] = id
+						toolCallBuffers[id] = &ModelToolCall{ID: id, Name: tc.Function.Name}
+						if err := sink.Emit(ctx, ModelEvent{Type: ModelEventToolCallStarted, ToolCallID: id, ToolName: tc.Function.Name}); err != nil {
+							return result, err
 						}
-					}
-					if args, ok := argumentsBuffers[tc.ID]; ok {
-						argumentsBuffers[tc.ID] = args + tc.Function.Arguments
 					} else {
-						argumentsBuffers[tc.ID] = tc.Function.Arguments
+						id = toolCallIDs[tc.Index]
+					}
+					if id == "" {
+						continue
+					}
+					if tc.Function.Name != "" && toolCallBuffers[id] != nil {
+						toolCallBuffers[id].Name = tc.Function.Name
+					}
+					argumentsBuffers[id] += tc.Function.Arguments
+					if tc.Function.Arguments != "" {
+						if err := sink.Emit(ctx, ModelEvent{Type: ModelEventToolCallArgumentsDelta, ToolCallID: id, ToolName: tc.Function.Name, ArgumentsDelta: tc.Function.Arguments}); err != nil {
+							return result, err
+						}
 					}
 				}
 
@@ -383,6 +398,9 @@ func (a *OpenAIChatAdapter) parseStream(ctx context.Context, body io.Reader, sin
 	for id, tc := range toolCallBuffers {
 		tc.ArgumentsJSON = argumentsBuffers[id]
 		result.ToolCalls = append(result.ToolCalls, *tc)
+		if err := sink.Emit(ctx, ModelEvent{Type: ModelEventToolCallDone, ToolCallID: id, ToolName: tc.Name}); err != nil {
+			return result, err
+		}
 	}
 
 	if err := ctx.Err(); err != nil {

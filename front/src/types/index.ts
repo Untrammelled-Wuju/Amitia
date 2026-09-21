@@ -85,8 +85,6 @@ export interface Message {
   height?: number;
   originalAssetReference?: string;
   fallbackAssetReference?: string;
-  responseGroupId?: string;
-  deliverySequence?: number;
   sequence?: number;
   tokens?: number;
   source: string;

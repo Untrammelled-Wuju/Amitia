@@ -52,12 +52,15 @@ type ProcessRequest struct {
 	ReasoningEnabled         *bool                      `json:"reasoningEnabled,omitempty"`
 	PermissionMode           string                     `json:"permissionMode,omitempty"`
 	RequestID                string                     `json:"requestId,omitempty"`
+	TurnID                   string                     `json:"turnId,omitempty"`
+	ExecutionID              string                     `json:"executionId,omitempty"`
 	InteractionID            string                     `json:"-"`
 	ExpectedStatusVersion    int64                      `json:"-"`
 	Runtime                  *RuntimeAssembly           `json:"-"`
 	ExecContext              *coreexec.ExecutionContext `json:"-"`
 	IsInternal               bool                       `json:"-"`
 	SuppressReplyPersistence bool                       `json:"-"`
+	ForceRegenerate          bool                       `json:"-"`
 }
 
 type ProcessResponse struct {
@@ -67,7 +70,6 @@ type ProcessResponse struct {
 	Reply               string                `json:"reply"`
 	Reasoning           string                `json:"reasoning,omitempty"`
 	ReasoningDurationMS int64                 `json:"reasoningDurationMs"`
-	Lines               []string              `json:"lines"`
 	CharacterID         string                `json:"characterId"`
 	CharacterName       string                `json:"characterName"`
 	MessageIDs          []string              `json:"messageIds"`
@@ -79,7 +81,7 @@ type ProcessResponse struct {
 }
 
 type MessagePlan struct {
-	ResponseGroupID string            `json:"responseGroupId"`
+	DeliveryGroupID string            `json:"deliveryGroupId"`
 	Managed         bool              `json:"managed"`
 	Items           []MessagePlanItem `json:"items"`
 }

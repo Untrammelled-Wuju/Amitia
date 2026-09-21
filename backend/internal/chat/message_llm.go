@@ -12,6 +12,7 @@ import (
 
 	"github.com/u-ai/backend/config"
 	"github.com/u-ai/backend/internal/agent/tool"
+	"github.com/u-ai/backend/internal/conversationstream"
 	"github.com/u-ai/backend/internal/decision"
 	coreexec "github.com/u-ai/backend/internal/execution"
 	"github.com/u-ai/backend/internal/extension"
@@ -46,11 +47,28 @@ func (s *service) invokeLLMWithTools(ctx context.Context, cfg *ModelConfig, mess
 	fingerprints := map[string]int{}
 
 	for round := 0; ; round++ {
+		if steers := conversationstream.DefaultManager().ConsumeSteer(convID, turnRecorder.TurnID); len(steers) > 0 {
+			for _, steer := range steers {
+				messages = append(messages, map[string]interface{}{"role": "user", "content": steer})
+			}
+			_, _ = conversationstream.DefaultManager().Publish(context.Background(), conversationstream.AgentUIEvent{ConversationID: convID, RequestID: requestID, ExecutionID: turnRecorder.ExecutionID, TurnID: turnRecorder.TurnID, TurnSequence: turnRecorder.TurnSequence, Type: "turn.steered", Status: assistantTurnStatusRunning, Payload: map[string]any{"inputs": steers}}, true)
+		}
 		messages = s.compactAgentMessages(ctx, cfg, messages, baseMessageCount)
 		applog.TraceInfo(trace.WithStage("model_call_started"), applog.Fields{"round": round, "message_count": len(messages)}, "process message model call started")
 		callStartedAt := time.Now()
-		aiContent, reasoning, toolCalls, tok, llmErr := s.invokeProcessLLMWithTools(ctx, cfg, messages, toolDefs)
+		projector := newModelEventProjector(turnRecorder)
+		providerCtx, providerCancel := context.WithCancel(ctx)
+		conversationstream.DefaultManager().RegisterProviderCancel(convID, turnRecorder.TurnID, providerCancel)
+		aiContent, reasoning, toolCalls, tok, llmErr := s.invokeProcessLLMWithToolsStream(providerCtx, cfg, messages, toolDefs, projector)
+		providerCancel()
+		conversationstream.DefaultManager().ClearProviderCancel(convID, turnRecorder.TurnID)
 		totalTokens = tok
+		if streamedReasoning := strings.TrimSpace(projector.Reasoning()); streamedReasoning != "" {
+			reasoning = streamedReasoning
+		}
+		if streamedText := projector.Text(); streamedText != "" {
+			aiContent = streamedText
+		}
 		if strings.TrimSpace(reasoning) != "" {
 			elapsedMS := time.Since(callStartedAt).Milliseconds()
 			if elapsedMS <= 0 {
@@ -58,20 +76,35 @@ func (s *service) invokeLLMWithTools(ctx context.Context, cfg *ModelConfig, mess
 			}
 			reasoningDurationMS += elapsedMS
 			reasoningParts = append(reasoningParts, strings.TrimSpace(reasoning))
-			if err := turnRecorder.AddThinking(ctx, reasoning, elapsedMS); err != nil {
-				return "", "", false, 0, 0, err
-			}
 		}
 		if llmErr != nil {
-			s.db.Model(&Message{}).Where("id = ?", userMsgID).Updates(map[string]interface{}{"status": "failed", "updated_at": time.Now().Format("2006-01-02 15:04:05")})
-			applog.TraceError(trace.WithStage("model_call_failed"), applog.Fields{"round": round, "user_message_id": userMsgID}, llmErr, "process message model call failed")
+			if ctx.Err() == nil && providerCtx.Err() != nil {
+				steers := conversationstream.DefaultManager().ConsumeSteer(convID, turnRecorder.TurnID)
+				if len(steers) > 0 {
+					_ = projector.Complete(context.Background(), assistantTurnStatusInterrupted)
+					for _, steer := range steers {
+						messages = append(messages, map[string]interface{}{"role": "user", "content": steer})
+					}
+					_, _ = conversationstream.DefaultManager().Publish(context.Background(), conversationstream.AgentUIEvent{ConversationID: convID, RequestID: requestID, ExecutionID: turnRecorder.ExecutionID, TurnID: turnRecorder.TurnID, TurnSequence: turnRecorder.TurnSequence, Type: "turn.steered", Status: assistantTurnStatusRunning, Payload: map[string]any{"inputs": steers}}, true)
+					continue
+				}
+			}
 			if ctx.Err() != nil {
+				_ = projector.Complete(context.Background(), assistantTurnStatusInterrupted)
 				return "", "", false, 0, 0, ctx.Err()
 			}
+			_ = projector.Complete(context.Background(), assistantTurnStatusFailed)
+			applog.TraceError(trace.WithStage("model_call_failed"), applog.Fields{"round": round, "user_message_id": userMsgID}, llmErr, "process message model call failed")
 			return "", "", false, 0, 0, &TextModelCallError{RawError: llmErr.Error()}
 		}
 		applog.TraceInfo(trace.WithStage("model_call_completed"), applog.Fields{"round": round, "tool_call_count": len(toolCalls), "reply_size": len(aiContent), "reasoning_size": len(reasoning)}, "process message model call completed")
 		if len(toolCalls) == 0 {
+			if strings.TrimSpace(aiContent) == "" {
+				if err := projector.EnsureText(ctx, "操作已完成"); err != nil {
+					return "", "", false, 0, 0, err
+				}
+				aiContent = projector.Text()
+			}
 			reply = aiContent
 			break
 		}
@@ -86,12 +119,6 @@ func (s *service) invokeLLMWithTools(ctx context.Context, cfg *ModelConfig, mess
 			assistantToolCall["reasoning_content"] = reasoning
 		}
 		messages = append(messages, assistantToolCall)
-		if strings.TrimSpace(aiContent) != "" {
-			if err := turnRecorder.AddText(ctx, aiContent); err != nil {
-				return "", "", false, 0, 0, err
-			}
-		}
-
 		calls, err := s.prepareAgentToolCalls(ctx, toolCalls, seenTools, convID, charID, channel, requestID, spaceID, sessionID, permissionMode, trace, execCtx, turnRecorder, fingerprints)
 		if err != nil {
 			return "", "", false, 0, 0, err

@@ -1,8 +1,6 @@
 package system
 
 import (
-	"context"
-	"encoding/json"
 	"fmt"
 	"sync"
 
@@ -12,11 +10,9 @@ import (
 type MessageEventType string
 
 const (
-	EventMessageCreated         MessageEventType = "message_created"
-	EventMessageUpdated         MessageEventType = "message_updated"
-	EventConversationUpdated    MessageEventType = "conversation_updated"
-	EventAssistantTurnCompleted MessageEventType = "assistant_turn_completed"
-	EventAssistantTurnStream    MessageEventType = "assistant_turn_stream"
+	EventMessageCreated      MessageEventType = "message_created"
+	EventMessageUpdated      MessageEventType = "message_updated"
+	EventConversationUpdated MessageEventType = "conversation_updated"
 )
 
 type MessageEvent struct {
@@ -46,14 +42,6 @@ type MessageEventSubscriber struct {
 type MessageEventBus struct {
 	mu          sync.RWMutex
 	subscribers map[string]*MessageEventSubscriber
-	durable     MessageDurablePublisher
-}
-
-type MessageDurablePublisher interface {
-	PublishMessageEvent(
-		ctx context.Context,
-		event MessageEvent,
-	) error
 }
 
 var globalMessageEventBus *MessageEventBus
@@ -66,12 +54,6 @@ func GetMessageEventBus() *MessageEventBus {
 		}
 	})
 	return globalMessageEventBus
-}
-
-func (bus *MessageEventBus) SetDurablePublisher(publisher MessageDurablePublisher) {
-	bus.mu.Lock()
-	defer bus.mu.Unlock()
-	bus.durable = publisher
 }
 
 func (bus *MessageEventBus) Subscribe(id string, channels []string) *MessageEventSubscriber {
@@ -102,23 +84,13 @@ func (bus *MessageEventBus) Unsubscribe(id string) {
 }
 
 func (bus *MessageEventBus) Publish(event MessageEvent) {
-	bus.PublishContext(context.Background(), event)
-}
-
-// PublishContext publishes to the realtime in-process subscribers and mirrors the
-// same event into the configured durable event log. Realtime delivery remains
-// best-effort; durable publishing is isolated from the subscriber lock so a slow
-// persistence backend cannot block subscription management.
-func (bus *MessageEventBus) PublishContext(ctx context.Context, event MessageEvent) {
 	bus.mu.RLock()
 	subscribers := make([]*MessageEventSubscriber, 0, len(bus.subscribers))
 	for _, sub := range bus.subscribers {
 		subscribers = append(subscribers, sub)
 	}
-	durable := bus.durable
 	bus.mu.RUnlock()
 
-	payload, _ := json.Marshal(event)
 	applog.Info(fmt.Sprintf("[MessageEventBus] publish event=%s channel=%s", event.Type, event.Channel))
 	for _, sub := range subscribers {
 		if len(sub.Channels) == 0 || sub.Channels[event.Channel] {
@@ -130,12 +102,6 @@ func (bus *MessageEventBus) PublishContext(ctx context.Context, event MessageEve
 		}
 	}
 
-	if durable != nil {
-		if err := durable.PublishMessageEvent(ctx, event); err != nil {
-			applog.Warn(fmt.Sprintf("[MessageEventBus] durable publish failed event=%s conversation=%s: %v", event.Type, event.ConversationID, err))
-		}
-	}
-	_ = payload
 }
 
 func (bus *MessageEventBus) PublishMessageCreated(convID, msgID, channel, direction, role, status, content, createdAt string, sequence int64, data interface{}) {
@@ -169,30 +135,6 @@ func (bus *MessageEventBus) PublishConversationUpdated(convID, channel string, d
 		Type:           EventConversationUpdated,
 		ConversationID: convID,
 		Channel:        channel,
-		Data:           data,
-	})
-}
-
-func (bus *MessageEventBus) PublishAssistantTurnCompleted(convID, turnID, channel string) {
-	bus.Publish(MessageEvent{
-		Type:           EventAssistantTurnCompleted,
-		ConversationID: convID,
-		MessageID:      turnID,
-		Channel:        channel,
-		Role:           "assistant",
-		Status:         "completed",
-		Data: map[string]interface{}{
-			"turnId": turnID,
-		},
-	})
-}
-
-func (bus *MessageEventBus) PublishAssistantTurnStream(conversationID, channel string, data interface{}) {
-	bus.Publish(MessageEvent{
-		Type:           EventAssistantTurnStream,
-		ConversationID: conversationID,
-		Channel:        channel,
-		Role:           "assistant",
 		Data:           data,
 	})
 }

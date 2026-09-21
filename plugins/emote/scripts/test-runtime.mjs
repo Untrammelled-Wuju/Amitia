@@ -58,7 +58,7 @@ const host = {
     if (method === "host.vector.search") return { items: [] };
     if (method === "host.vector.delete") return { deleted: params.ids.length };
     if (method === "host.character.list") return { items: [] };
-    if (method === "host.conversation.message.append") return { messageIds: ["message-1"], sequences: [1], responseGroupId: "response-1", lastSequence: 1 };
+    if (method === "host.conversation.message.append") return { messageIds: ["message-1"], sequences: [1], deliveryGroupId: "response-1", lastSequence: 1 };
     throw new Error(`unexpected host method: ${method}`);
   },
 };

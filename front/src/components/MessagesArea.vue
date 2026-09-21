@@ -217,9 +217,7 @@ let durableRequestGeneration = 0;
 const conversationId = computed(() => String(
   props.extensionContext?.conversationId ?? visibleMessages.value[0]?.conversationId ?? "",
 ));
-const visibleMessages = computed(() =>
-  props.messages.filter((message) => message?.assistantTurnSuppressed !== true),
-);
+const visibleMessages = computed(() => props.messages);
 const workspaceName = computed(() => {
   const workspace = props.extensionContext?.workspace as
     | Record<string, unknown>

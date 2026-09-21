@@ -115,10 +115,7 @@ class _AmitiaMessageViewState extends State<AmitiaMessageView> {
                     ),
                   if (widget.message.assistantTurn != null)
                     ..._renderAssistantTurn(
-                      context,
                       widget.message.assistantTurn!,
-                      tokens,
-                      widget.message,
                     )
                   else ...[
                     if (message.thinking != null)
@@ -189,55 +186,9 @@ class _AmitiaMessageViewState extends State<AmitiaMessageView> {
     return widgets;
   }
 
-  List<Widget> _renderAssistantTurn(
-    BuildContext context,
-    AssistantTurnDto turn,
-    AmitiaMessageTheme tokens,
-    ChatMessage message,
-  ) {
+  List<Widget> _renderAssistantTurn(AssistantTurnDto turn) {
     final items = [...turn.items]
       ..sort((left, right) => left.sequence.compareTo(right.sequence));
-    final hasThinking = items.any((item) => item.type == 'thinking');
-    final fallbackReasoning = message.reasoningContent.trim();
-    if (!hasThinking &&
-        (fallbackReasoning.isNotEmpty || _isTurnStreaming(turn.status))) {
-      items.add(
-        AssistantTurnItemDto(
-          id: '${turn.id}:fallback-thinking',
-          turnId: turn.id,
-          conversationId: turn.conversationId,
-          sequence: -1,
-          type: 'thinking',
-          status: _isTurnStreaming(turn.status) ? 'running' : 'completed',
-          content: fallbackReasoning,
-          durationMs: message.reasoningDurationMs,
-        ),
-      );
-    }
-    final hasText = items.any(
-      (item) => item.type == 'text' && item.content.trim().isNotEmpty,
-    );
-    if (!hasText &&
-        message.type == MessageType.text &&
-        message.content.trim().isNotEmpty) {
-      final sequence = items.fold<int>(
-        0,
-        (maximum, item) => item.sequence > maximum ? item.sequence : maximum,
-      );
-      items.add(
-        AssistantTurnItemDto(
-          id: '${turn.id}:fallback-text',
-          turnId: turn.id,
-          conversationId: turn.conversationId,
-          sequence: sequence + 1,
-          type: 'text',
-          status: _isTurnStreaming(turn.status) ? 'streaming' : 'completed',
-          content: message.content,
-          isFinal: true,
-        ),
-      );
-    }
-    items.sort((left, right) => left.sequence.compareTo(right.sequence));
     final entries = <_TurnTimelineEntry>[];
     _TurnTimelineEntry? toolGroup;
     for (final item in items) {
@@ -258,7 +209,7 @@ class _AmitiaMessageViewState extends State<AmitiaMessageView> {
           _TurnToolStream(items: entry.items)
         else
           switch (entry.item!.type) {
-            'thinking' => AmitiaThinkingBlock(
+            'reasoning' => AmitiaThinkingBlock(
               block: AmrpThinkingBlock(
                 content: entry.item!.content,
                 state: _isTurnStreaming(entry.item!.status)
@@ -288,10 +239,6 @@ class _AmitiaMessageViewState extends State<AmitiaMessageView> {
       AmrpMessageState.failed => <String, String>{
         'title': '生成失败',
         'detail': '网络错误 · 可重试',
-      },
-      AmrpMessageState.cancelled => <String, String>{
-        'title': '已取消',
-        'detail': '用户主动停止生成',
       },
       AmrpMessageState.queued => <String, String>{
         'title': '等待开始生成',
@@ -758,7 +705,7 @@ Color _turnStatusColor(String status) {
   if (const <String>{'failed', 'error', 'unknown'}.contains(value)) {
     return const Color(0xFFD46B6B);
   }
-  if (const <String>{'cancelled', 'canceled', 'stopped'}.contains(value)) {
+  if (value == 'interrupted') {
     return const Color(0xFFA0A1A6);
   }
   if (const <String>{
@@ -778,8 +725,8 @@ String _turnStatusLabel(String status) {
   if (const <String>{'failed', 'error', 'unknown'}.contains(value)) {
     return '失败';
   }
-  if (const <String>{'cancelled', 'canceled', 'stopped'}.contains(value)) {
-    return '已取消';
+  if (value == 'interrupted') {
+    return '已中断';
   }
   if (const <String>{
     'completed',

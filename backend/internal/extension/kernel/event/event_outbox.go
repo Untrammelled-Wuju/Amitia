@@ -465,6 +465,62 @@ func (r *OutboxRepository) ListConversationUIEventsAfterSequence(ctx context.Con
 	return scanOutboxRecords(rows)
 }
 
+func (r *OutboxRepository) ListAgentUIEventsAfterSequence(ctx context.Context, conversationID string, afterSequence int64, limit int) ([]OutboxRecord, error) {
+	conversationID = strings.TrimSpace(conversationID)
+	if conversationID == "" {
+		return nil, errors.New("event: conversation id required")
+	}
+	if afterSequence < 0 {
+		afterSequence = 0
+	}
+	if limit <= 0 {
+		limit = 500
+	}
+	if limit > 5000 {
+		limit = 5000
+	}
+	rows, err := r.db.QueryContext(ctx, outboxSelectQuery+`
+		 WHERE event_type_id = ?
+		   AND aggregate_type = ?
+		   AND aggregate_id = ?
+		   AND json_valid(payload_json) = 1
+		   AND CAST(COALESCE(json_extract(payload_json, '$.version'), 0) AS INTEGER) = 1
+		   AND CAST(COALESCE(json_extract(payload_json, '$.eventSequence'), 0) AS INTEGER) > ?
+		 ORDER BY CAST(json_extract(payload_json, '$.eventSequence') AS INTEGER) ASC,
+		          occurred_at ASC, created_at ASC, event_id ASC
+		 LIMIT ?`,
+		"conversation.ui_event", "conversation", conversationID, afterSequence, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanOutboxRecords(rows)
+}
+
+func (r *OutboxRepository) LatestAgentUISequence(ctx context.Context, conversationID string) (int64, error) {
+	conversationID = strings.TrimSpace(conversationID)
+	if conversationID == "" {
+		return 0, errors.New("event: conversation id required")
+	}
+	var sequence sql.NullInt64
+	err := r.db.QueryRowContext(ctx, `
+		SELECT MAX(CAST(json_extract(payload_json, '$.eventSequence') AS INTEGER))
+		FROM extension_event_outbox
+		WHERE event_type_id = ?
+		  AND aggregate_type = ?
+		  AND aggregate_id = ?
+		  AND json_valid(payload_json) = 1
+		  AND CAST(COALESCE(json_extract(payload_json, '$.version'), 0) AS INTEGER) = 1
+	`, "conversation.ui_event", "conversation", conversationID).Scan(&sequence)
+	if err != nil {
+		return 0, err
+	}
+	if !sequence.Valid {
+		return 0, nil
+	}
+	return sequence.Int64, nil
+}
+
 // LatestWorkflowSyncCursor returns the current durable tail for one user. Clients
 // use this as their initial baseline so opening a page does not replay old events.
 func (r *OutboxRepository) LatestWorkflowSyncCursor(ctx context.Context, partitionKey string) (int64, error) {

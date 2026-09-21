@@ -320,7 +320,7 @@ func (a *GeminiAdapter) parseStream(body io.Reader, sink ModelEventSink) (*Model
 				for _, part := range chunk.Candidates[0].Content.Parts {
 					if part.Text != "" {
 						result.Text += part.Text
-						sink.Emit(context.Background(), ModelEvent{
+						sink.Emit(ctx, ModelEvent{
 							Type:      ModelEventTextDelta,
 							TextDelta: part.Text,
 						})
@@ -342,7 +342,7 @@ func (a *GeminiAdapter) parseStream(body io.Reader, sink ModelEventSink) (*Model
 		}
 	}
 
-	sink.Emit(context.Background(), ModelEvent{
+	sink.Emit(ctx, ModelEvent{
 		Type: ModelEventCompleted,
 	})
 

@@ -15,7 +15,6 @@ type webChatProjectService interface {
 	CreateProjectForSpace(req *chat.CreateProjectRequest, spaceID string) (*chat.Project, error)
 	UpdateProjectForSpace(projectID string, req *chat.UpdateProjectRequest, spaceID string) (*chat.Project, error)
 	DeleteProjectForSpace(projectID, spaceID string) error
-	CreateProjectConversationForSpace(projectID string, req *chat.CreateConversationRequest, spaceID string) (*chat.Conversation, error)
 	MoveConversationToProjectForSpace(conversationID, projectID, spaceID string) (*chat.Conversation, error)
 	UpdateConversationSidebarStateForSpace(conversationID string, pinned, archived *bool, spaceID string) (*chat.Conversation, error)
 	GetProjectOpenTargetForSpace(projectID, spaceID string) (*chat.ProjectOpenTarget, error)
@@ -121,23 +120,4 @@ func (h *Handler) WebChatProjectLocation(c *gin.Context) {
 		return
 	}
 	util.SuccessResponse(c, target)
-}
-
-func (h *Handler) WebChatCreateProjectConversation(c *gin.Context) {
-	var body chat.CreateConversationRequest
-	if err := c.ShouldBindJSON(&body); err != nil {
-		util.ErrorResponse(c, response.InvalidParams, "无效请求体", nil)
-		return
-	}
-	scoped, ok := h.chatSvc.(webChatProjectService)
-	if !ok {
-		util.ErrorResponse(c, response.InternalError, "chat service does not provide project operations", nil)
-		return
-	}
-	conversation, err := scoped.CreateProjectConversationForSpace(strings.TrimSpace(c.Param("id")), &body, webChatSpaceID(c))
-	if err != nil {
-		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
-		return
-	}
-	util.SuccessResponse(c, conversation)
 }

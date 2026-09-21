@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import AssistantTurnTimeline from "../conversation/rendering/AssistantTurnTimeline.vue";
 
 describe("AssistantTurnTimeline", () => {
-  it("renders thinking, collapsed tool stream and text in sequence order", async () => {
+  it("renders reasoning, collapsed tool stream and text in sequence order", async () => {
     const wrapper = mount(AssistantTurnTimeline, {
       props: {
         turn: {
@@ -48,7 +48,7 @@ describe("AssistantTurnTimeline", () => {
               turnId: "turn-1",
               conversationId: "conv-1",
               sequence: 1,
-              type: "thinking",
+              type: "reasoning",
               status: "completed",
               content: "分析",
               durationMs: 1200,

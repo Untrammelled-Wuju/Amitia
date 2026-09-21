@@ -18,7 +18,6 @@ const (
 	CatProactive      Category = "proactive"
 	CatOutputCleaning Category = "output_cleaning"
 	CatChannelRules   Category = "channel_rules"
-	CatWaveMessages   Category = "wave_messages"
 	CatAntiRepeat     Category = "anti_repeat"
 )
 
@@ -47,7 +46,6 @@ var AllConstants = []PromptConstant{
 	{Name: "RawMemoryContradictionDetector", SourceSet: SourceSetA, Category: CatMemory, Raw: RawMemoryContradictionDetector},
 	{Name: "RawMemoryEpisodeExtractor", SourceSet: SourceSetA, Category: CatMemory, Raw: RawMemoryEpisodeExtractor},
 	{Name: "RawMemoryUserDossier", SourceSet: SourceSetA, Category: CatMemory, Raw: RawMemoryUserDossier},
-	{Name: "RawChatBuildWaveMessages", SourceSet: SourceSetA, Category: CatWaveMessages, Raw: RawChatBuildWaveMessages},
 	{Name: "RawCompanionProactiveCompose", SourceSet: SourceSetA, Category: CatProactive, Raw: RawCompanionProactiveCompose},
 	{Name: "RawCompanionProactivePersonalityContext", SourceSet: SourceSetA, Category: CatProactive, Raw: RawCompanionProactivePersonalityContext},
 	{Name: "RawPersonalityPresets", SourceSet: SourceSetA, Category: CatPersonality, Raw: RawPersonalityPresets},
@@ -57,14 +55,12 @@ var AllConstants = []PromptConstant{
 	{Name: "RawCommonRolePromptProvider", SourceSet: SourceSetRefB, Category: CatMainChat, Raw: RawCommonRolePromptProvider},
 	{Name: "RawFeatureChatUiViewmodelChatPromptBuilder", SourceSet: SourceSetRefB, Category: CatMainChat, Raw: RawFeatureChatUiViewmodelChatPromptBuilder},
 	{Name: "RawNetworkResponsePostProcessor", SourceSet: SourceSetRefB, Category: CatOutputCleaning, Raw: RawNetworkResponsePostProcessor},
-	{Name: "RawFeatureChatUiViewmodelAiResponseFinalizer", SourceSet: SourceSetRefB, Category: CatOutputCleaning, Raw: RawFeatureChatUiViewmodelAiResponseFinalizer},
 	{Name: "RawCommonContentFilter", SourceSet: SourceSetRefB, Category: CatOutputCleaning, Raw: RawCommonContentFilter},
 	{Name: "RawChannelWebDesktopRules", SourceSet: SourceSetRefB, Category: CatChannelRules, Raw: RawChannelWebDesktopRules},
 	{Name: "RawAntiRepeat", SourceSet: SourceSetA, Category: CatAntiRepeat, Raw: RawAntiRepeat},
 	{Name: "RawAntiRepeatPriorAware", SourceSet: SourceSetA, Category: CatAntiRepeat, Raw: RawAntiRepeatPriorAware},
 	{Name: "RawFeatureMemoryEngineMemoryManager", SourceSet: SourceSetRefB, Category: CatMemory, Raw: RawFeatureMemoryEngineMemoryManager},
 	{Name: "RawDatabaseRepositoryMemoryRepository", SourceSet: SourceSetRefB, Category: CatMemory, Raw: RawDatabaseRepositoryMemoryRepository},
-	{Name: "RawFeatureNotificationCompanionMessageWorker", SourceSet: SourceSetRefB, Category: CatProactive, Raw: RawFeatureNotificationCompanionMessageWorker},
 	{Name: "RawFeatureNotificationAiReplyWorker", SourceSet: SourceSetRefB, Category: CatProactive, Raw: RawFeatureNotificationAiReplyWorker},
 	{Name: "RawFeatureQqbotDataQQBotChatBridge", SourceSet: SourceSetRefB, Category: CatChannelRules, Raw: RawFeatureQqbotDataQQBotChatBridge},
 	{Name: "RawDatabaseRolePresets", SourceSet: SourceSetRefB, Category: CatPersonality, Raw: RawDatabaseRolePresets},

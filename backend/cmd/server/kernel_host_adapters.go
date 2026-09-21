@@ -263,7 +263,7 @@ func (a *conversationMessageAppenderAdapter) AppendConversationMessages(ctx cont
 	return kernel.ConversationMessageAppendResult{
 		MessageIDs:      result.MessageIDs,
 		Sequences:       result.Sequences,
-		ResponseGroupID: result.ResponseGroupID,
+		DeliveryGroupID: result.DeliveryGroupID,
 		LastSequence:    result.LastSequence,
 	}, nil
 }

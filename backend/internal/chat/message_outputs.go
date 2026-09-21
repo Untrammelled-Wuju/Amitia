@@ -18,7 +18,6 @@ type MessageOutputPlanningEvent struct {
 	Source         string
 	UserMessage    string
 	Reply          string
-	Lines          []string
 	SpaceID        string
 	PeerID         string
 	RequestID      string
@@ -42,8 +41,7 @@ type MessagePart struct {
 type MessageOutput struct {
 	OutputID    string      `json:"outputId,omitempty"`
 	ExtensionID string      `json:"extensionId,omitempty"`
-	InsertAfter int         `json:"insertAfter,omitempty"`
-	SendMode    string      `json:"sendMode,omitempty"`
+	Placement   string      `json:"placement,omitempty"`
 	Part        MessagePart `json:"part"`
 }
 
@@ -81,7 +79,6 @@ func (s *service) planMessageOutputs(ctx context.Context, plan messageCommitPlan
 		Source:         plan.Source,
 		UserMessage:    plan.Request.Message,
 		Reply:          plan.Reply,
-		Lines:          append([]string(nil), plan.Lines...),
 		SpaceID:        plan.Request.SpaceID,
 		PeerID:         plan.Request.PeerID,
 		RequestID:      requestID,
@@ -90,10 +87,10 @@ func (s *service) planMessageOutputs(ctx context.Context, plan messageCommitPlan
 	if err != nil {
 		return nil, err
 	}
-	return normalizeMessageOutputs(outputs, len(plan.Lines))
+	return normalizeMessageOutputs(outputs)
 }
 
-func normalizeMessageOutputs(outputs []MessageOutput, lineCount int) ([]MessageOutput, error) {
+func normalizeMessageOutputs(outputs []MessageOutput) ([]MessageOutput, error) {
 	if len(outputs) == 0 {
 		return nil, nil
 	}
@@ -110,32 +107,29 @@ func normalizeMessageOutputs(outputs []MessageOutput, lineCount int) ([]MessageO
 		part.URL = strings.TrimSpace(part.URL)
 		part.FallbackURL = strings.TrimSpace(part.FallbackURL)
 		part.AltText = strings.TrimSpace(part.AltText)
-		if !validMessagePartType(part.Type) {
-			return nil, fmt.Errorf("message output %d has invalid part type %q", index, part.Type)
+		if !validMessageOutputPartType(part.Type) {
+			return nil, fmt.Errorf("message output %d has invalid part type %q; assistant text must remain in the turn text block", index, part.Type)
 		}
-		if part.Type == "text" {
-			if part.Content == "" {
-				return nil, fmt.Errorf("message output %d text part is empty", index)
-			}
-		} else if part.URL == "" {
+		if part.URL == "" {
 			return nil, fmt.Errorf("message output %d %s part requires url", index, part.Type)
 		}
-		if output.InsertAfter < 0 {
-			output.InsertAfter = 0
+		output.Placement = strings.ToLower(strings.TrimSpace(output.Placement))
+		if output.Placement == "" {
+			output.Placement = "after_text"
 		}
-		if output.InsertAfter > lineCount {
-			output.InsertAfter = lineCount
-		}
-		switch output.SendMode {
-		case "", "after_all_text", "between_text_messages", "replace_text":
+		switch output.Placement {
+		case "before_text", "after_text":
 		default:
-			return nil, fmt.Errorf("message output %d has invalid send mode %q", index, output.SendMode)
+			return nil, fmt.Errorf("message output %d has invalid placement %q", index, output.Placement)
 		}
 		output.Part = part
 		normalized = append(normalized, output)
 	}
 	sort.SliceStable(normalized, func(i, j int) bool {
-		return normalized[i].InsertAfter < normalized[j].InsertAfter
+		if normalized[i].Placement == normalized[j].Placement {
+			return false
+		}
+		return normalized[i].Placement == "before_text"
 	})
 	return normalized, nil
 }
@@ -149,7 +143,16 @@ func validMessagePartType(value string) bool {
 	}
 }
 
-func buildMessageFromOutput(plan messageCommitPlan, responseGroupID string, sequence int, output MessageOutput) *Message {
+func validMessageOutputPartType(value string) bool {
+	switch value {
+	case "image", "audio", "video", "file":
+		return true
+	default:
+		return false
+	}
+}
+
+func buildMessageFromOutput(plan messageCommitPlan, deliveryGroupID string, sequence int, output MessageOutput) *Message {
 	part := output.Part
 	content := part.Content
 	if content == "" {
@@ -190,7 +193,7 @@ func buildMessageFromOutput(plan messageCommitPlan, responseGroupID string, sequ
 		MediaHeight:      part.Height,
 		OriginalAsset:    part.URL,
 		FallbackAsset:    part.FallbackURL,
-		ResponseGroupID:  responseGroupID,
+		DeliveryGroupID:  deliveryGroupID,
 		DeliverySequence: sequence,
 		RequestID:        plan.Request.RequestID,
 	}

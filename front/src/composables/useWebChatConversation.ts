@@ -4,10 +4,6 @@ import { ref, type Ref } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { useApi } from "./useApi";
 import { useCachedApi } from "./useCachedApi";
-import {
-  mergeServerMessages,
-  normalizeRealtimeMessage,
-} from "@/utils/message-order";
 
 export function useWebChatConversation(
   messages: Ref<any[]>,
@@ -18,15 +14,11 @@ export function useWebChatConversation(
   charIdentity: Ref<string>,
   charAvatar: Ref<string>,
   hasMoreHistory: Ref<boolean>,
-  msgPage: Ref<number>,
-  scrollToBottom: (smooth?: boolean) => void,
   disconnectSSE: () => void,
   connectSSE: () => void,
-  setLastPolledMsgId: (id: string | null) => void,
-  setCurrentCharName: (name: string) => void,
 ) {
   const { get, del } = useApi();
-  const { cachedGet, saveCache, invalidateCache } = useCachedApi();
+  const { saveCache } = useCachedApi();
 
   const characters = ref<any[]>([]);
   const conversations = ref<any[]>([]);
@@ -36,60 +28,6 @@ export function useWebChatConversation(
 
   const showCharPicker = ref(false);
   const showMemories = ref(false);
-
-  const HISTORY_PAGE_SIZE = 50;
-  let messagesVersion = 0;
-
-  async function conversationExistsOnServer(conversationID: string): Promise<boolean> {
-    try {
-      const page = await get<any>("/api/web-chat/conversations", {
-        page: 1,
-        pageSize: 100,
-      });
-      const items = page?.conversations || page?.items || [];
-      const total = Number(page?.total ?? items.length);
-      if (total > items.length) return true;
-      return items.some((item: any) => String(item?.id || "") === conversationID);
-    } catch {
-      return true;
-    }
-  }
-
-  async function fetchLatestMessagesPage(conversationID: string) {
-    const url = `/api/web-chat/conversations/${encodeURIComponent(conversationID)}/messages`;
-    const first = await get<any>(url, { page: 1, pageSize: HISTORY_PAGE_SIZE });
-    const totalPages = Math.max(1, Number(first?.totalPages || 1));
-    if (totalPages <= 1) {
-      return { response: first, page: 1, totalPages };
-    }
-    const latest = await get<any>(url, {
-      page: totalPages,
-      pageSize: HISTORY_PAGE_SIZE,
-    });
-    return { response: latest, page: totalPages, totalPages };
-  }
-
-  function mergeMessages(serverItems: any[]) {
-    const serverMap = new Map<string, any>();
-    for (const item of serverItems) {
-      if (item.id) serverMap.set(String(item.id), item);
-    }
-    const current = [...messages.value];
-    const pendingKey = `uai-pending-msg:${convId.value}`;
-    let pendingMsg: any = null;
-    try {
-      const raw = sessionStorage.getItem(pendingKey);
-      if (raw) pendingMsg = JSON.parse(raw);
-    } catch {}
-    if (
-      pendingMsg &&
-      !serverMap.has(String(pendingMsg.id)) &&
-      !current.some((message: any) => message.id === pendingMsg.id)
-    ) {
-      current.push(pendingMsg);
-    }
-    messages.value = mergeServerMessages(current, serverItems);
-  }
 
   function selectCharacter(c: any) {
     characterId.value = c.id;
@@ -120,41 +58,18 @@ export function useWebChatConversation(
   }
 
   async function loadCharacterConversation() {
-    let conversationID = String(convId.value || "").trim();
-    if (conversationID && !(await conversationExistsOnServer(conversationID))) {
-      conversationID = "";
-    }
+    const conversationID = String(convId.value || "").trim();
+    disconnectSSE();
     if (!conversationID) {
-      disconnectSSE();
-      convId.value = "";
       convTitle.value = "";
       messages.value = [];
-      setLastPolledMsgId(null);
       return;
     }
-    disconnectSSE();
     convId.value = conversationID;
     if (!convTitle.value) convTitle.value = "新对话";
-    const version = ++messagesVersion;
-    try {
-      const latestPage = await fetchLatestMessagesPage(conversationID);
-      if (version !== messagesVersion) return;
-      const r = latestPage.response;
-      const items = r?.messages || r?.items || [];
-      msgPage.value = latestPage.page;
-      hasMoreHistory.value = latestPage.page > 1;
-      if (items.length) {
-        mergeMessages(items);
-        scrollToBottom();
-      } else {
-        messages.value = [];
-      }
-      setLastPolledMsgId(messages.value[messages.value.length - 1]?.id || null);
-      connectSSE();
-    } catch {
-      if (version !== messagesVersion) return;
-      if (messages.value.length === 0) messages.value = [];
-    }
+    messages.value = [];
+    hasMoreHistory.value = true;
+    connectSSE();
   }
 
   async function fetchConversations() {

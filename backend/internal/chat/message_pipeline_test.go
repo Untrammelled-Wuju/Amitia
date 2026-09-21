@@ -128,7 +128,7 @@ func TestProcessMessagePersistsReasoningDuration(t *testing.T) {
 
 func TestProcessMessageCommitsAssistantAfterGenerationSucceeds(t *testing.T) {
 	db, svc, convID := setupProcessMessageTest(t, func(context.Context, *ModelConfig, []map[string]interface{}, []tool.Tool) (string, string, []map[string]interface{}, int, error) {
-		return "第一句[AMITIA_BR]第二句", "", nil, 12, nil
+		return "第一句\n第二句", "", nil, 12, nil
 	})
 	resp, err := svc.ProcessMessage(context.Background(), &ProcessMessageRequest{
 		CharacterID:    "char-process",
@@ -141,7 +141,7 @@ func TestProcessMessageCommitsAssistantAfterGenerationSucceeds(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if resp.Reply != "第一句[AMITIA_BR]第二句" || len(resp.MessageIDs) != 2 {
+	if resp.Reply != "第一句\n第二句" || len(resp.MessageIDs) != 1 {
 		t.Fatalf("unexpected response: %#v", resp)
 	}
 	if resp.Sequence == 0 {
@@ -151,8 +151,8 @@ func TestProcessMessageCommitsAssistantAfterGenerationSucceeds(t *testing.T) {
 	if err := db.Model(&Message{}).Where("conversation_id = ? AND role = ? AND request_id = ?", convID, "assistant", "req-ok").Count(&assistantCount).Error; err != nil {
 		t.Fatal(err)
 	}
-	if assistantCount != 2 {
-		t.Fatalf("expected two assistant messages, got %d", assistantCount)
+	if assistantCount != 1 {
+		t.Fatalf("expected one assistant message, got %d", assistantCount)
 	}
 	var status string
 	if err := db.Model(&Message{}).Select("status").Where("conversation_id = ? AND role = ? AND request_id = ?", convID, "user", "req-ok").Row().Scan(&status); err != nil {

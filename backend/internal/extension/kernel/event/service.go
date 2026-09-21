@@ -391,7 +391,9 @@ func (s *Service) publishConversationUIEventTx(ctx context.Context, tx *sql.Tx, 
 		return PublishResult{}, 0, err
 	}
 	body["conversationId"] = conversationID
-	body["sequence"] = sequence
+	if _, isAgentRuntimeEvent := body["eventSequence"]; !isAgentRuntimeEvent {
+		body["sequence"] = sequence
+	}
 	if strings.TrimSpace(fmt.Sprint(body["createdAt"])) == "" || fmt.Sprint(body["createdAt"]) == "<nil>" {
 		body["createdAt"] = time.Now().UTC().Format(time.RFC3339Nano)
 	}
@@ -473,6 +475,20 @@ func (s *Service) ListConversationUIEventsAfterSequence(ctx context.Context, con
 		return nil, errors.New("event: conversation id required")
 	}
 	return s.outboxRepo.ListConversationUIEventsAfterSequence(ctx, conversationID, afterSequence, limit)
+}
+
+func (s *Service) ListAgentUIEventsAfterSequence(ctx context.Context, conversationID string, afterSequence int64, limit int) ([]OutboxRecord, error) {
+	if strings.TrimSpace(conversationID) == "" {
+		return nil, errors.New("event: conversation id required")
+	}
+	return s.outboxRepo.ListAgentUIEventsAfterSequence(ctx, conversationID, afterSequence, limit)
+}
+
+func (s *Service) LatestAgentUISequence(ctx context.Context, conversationID string) (int64, error) {
+	if strings.TrimSpace(conversationID) == "" {
+		return 0, errors.New("event: conversation id required")
+	}
+	return s.outboxRepo.LatestAgentUISequence(ctx, conversationID)
 }
 
 func (s *Service) LatestWorkflowSyncCursor(ctx context.Context, partitionKey string) (int64, error) {

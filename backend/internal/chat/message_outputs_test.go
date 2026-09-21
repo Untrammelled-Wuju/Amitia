@@ -20,8 +20,7 @@ func TestCommitInteractionAppliesGenericMessageOutputs(t *testing.T) {
 	svc.toolRuntime = fixedMessageOutputPlanner{outputs: []MessageOutput{
 		{
 			ExtensionID: "com.example/media",
-			InsertAfter: 1,
-			SendMode:    "between_text_messages",
+			Placement:   "after_text",
 			Part: MessagePart{
 				Type:          "image",
 				ExtensionType: "media-card",
@@ -40,21 +39,16 @@ func TestCommitInteractionAppliesGenericMessageOutputs(t *testing.T) {
 		Character:     "char-commit",
 		UserMessageID: "user-commit",
 		Reply:         "第一句\n第二句",
-		Lines:         []string{"第一句", "第二句"},
 		Source:        "manual",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.MessagePlan == nil || len(result.MessagePlan.Items) != 3 {
-		t.Fatalf("expected three planned messages, got %#v", result.MessagePlan)
+	if result.MessagePlan == nil || len(result.MessagePlan.Items) != 2 {
+		t.Fatalf("expected one text message plus one rich output, got %#v", result.MessagePlan)
 	}
-	types := []string{
-		result.MessagePlan.Items[0].Type,
-		result.MessagePlan.Items[1].Type,
-		result.MessagePlan.Items[2].Type,
-	}
-	if types[0] != "text" || types[1] != "image" || types[2] != "text" {
+	types := []string{result.MessagePlan.Items[0].Type, result.MessagePlan.Items[1].Type}
+	if types[0] != "text" || types[1] != "image" {
 		t.Fatalf("unexpected planned output order: %#v", types)
 	}
 	var image Message
@@ -99,5 +93,35 @@ func TestAppendConversationMessagesPersistsGenericParts(t *testing.T) {
 	}
 	if messages[1].MsgType != "image" || messages[1].ExtensionType != "media-card" || messages[1].ImageUrl != "/api/extension/resources/example" {
 		t.Fatalf("unexpected appended image message: %#v", messages[1])
+	}
+}
+
+func TestAppendConversationMessagesRejectsMultipleAssistantTextParts(t *testing.T) {
+	db, svc, convID := setupCommitCoordinatorTest(t, false)
+	if err := db.Model(&Conversation{}).Where("id = ?", convID).Update("space_id", "user:web").Error; err != nil {
+		t.Fatal(err)
+	}
+	_, err := svc.AppendConversationMessages(context.Background(), &AppendConversationMessagesRequest{
+		SpaceID:        "user:web",
+		CharacterID:    "char-commit",
+		ConversationID: convID,
+		Channel:        "web",
+		Role:           "assistant",
+		Source:         "extension:com.example/media",
+		RequestID:      "append-assistant-split",
+		Parts: []MessagePart{
+			{Type: "text", Content: "第一段"},
+			{Type: "text", Content: "第二段"},
+		},
+	})
+	if err == nil {
+		t.Fatal("expected multiple assistant text parts to be rejected")
+	}
+	var count int64
+	if err := db.Model(&Message{}).Where("conversation_id = ? AND request_id = ?", convID, "append-assistant-split").Count(&count).Error; err != nil {
+		t.Fatal(err)
+	}
+	if count != 0 {
+		t.Fatalf("expected no assistant messages to persist, got %d", count)
 	}
 }

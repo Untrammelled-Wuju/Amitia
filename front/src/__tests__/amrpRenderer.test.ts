@@ -74,13 +74,12 @@ describe("AMRP renderer", () => {
     expect(message.thinking?.duration).toBe(2.85);
   });
 
-  it("生成占位只显示思考状态，不伪造思考内容", () => {
+  it("没有 reasoning 内容时不伪造 Thinking Block", () => {
     const pending = normalizeAIMessage({
       id: "generating-request",
       role: "assistant",
       content: "",
       status: "streaming",
-      generationPending: true,
     });
     const completed = normalizeAIMessage({
       id: "assistant-1",
@@ -89,10 +88,7 @@ describe("AMRP renderer", () => {
       status: "sent",
     });
 
-    expect(pending.thinking).toMatchObject({
-      content: "",
-      state: "streaming",
-    });
+    expect(pending.thinking).toBeUndefined();
     expect(completed.thinking).toBeUndefined();
   });
 

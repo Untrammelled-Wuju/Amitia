@@ -26,7 +26,6 @@ export { default as ChatCleanupView } from "./views/chat-cleanup/ChatCleanupView
 export { default as PrivacyScanView } from "./views/privacy-scan/PrivacyScanView.vue";
 
 // Composables
-export { useChat } from "./composables/useChat";
 export { useTheme } from "./composables/useTheme";
 export {
   useApi,

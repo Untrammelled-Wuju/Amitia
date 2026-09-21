@@ -1,0 +1,146 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://amitia.local/contracts/agent-runtime/v1/agent-ui-event.schema.json",
+  "title": "Amitia Agent UI Event v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "eventId",
+    "eventSequence",
+    "conversationId",
+    "type",
+    "createdAt"
+  ],
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "eventId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "eventSequence": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "conversationId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "requestId": {
+      "type": "string"
+    },
+    "executionId": {
+      "type": "string"
+    },
+    "turnId": {
+      "type": "string"
+    },
+    "parentTurnId": {
+      "type": "string"
+    },
+    "parentBlockId": {
+      "type": "string"
+    },
+    "agentId": {
+      "type": "string"
+    },
+    "turnSequence": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "blockId": {
+      "type": "string"
+    },
+    "blockSequence": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "messageId": {
+      "type": "string"
+    },
+    "messageSequence": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "callId": {
+      "type": "string"
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "turn.queued",
+        "turn.started",
+        "turn.cancelling",
+        "turn.steered",
+        "turn.completed",
+        "turn.failed",
+        "turn.interrupted",
+        "block.started",
+        "block.checkpoint",
+        "block.delta",
+        "block.completed",
+        "block.failed",
+        "block.interrupted",
+        "reasoning.started",
+        "reasoning.delta",
+        "reasoning.completed",
+        "reasoning.failed",
+        "reasoning.interrupted",
+        "text.started",
+        "text.delta",
+        "text.completed",
+        "text.failed",
+        "text.interrupted",
+        "tool.started",
+        "tool.arguments.delta",
+        "tool.arguments.completed",
+        "tool.running",
+        "tool.progress",
+        "tool.completed",
+        "tool.failed",
+        "tool.interrupted",
+        "approval.requested",
+        "approval.approved",
+        "approval.denied",
+        "approval.expired",
+        "audio.started",
+        "audio.completed",
+        "audio.failed",
+        "agent_task.started",
+        "agent_task.progress",
+        "agent_task.completed",
+        "agent_task.failed"
+      ]
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "",
+        "queued",
+        "starting",
+        "running",
+        "streaming",
+        "waiting_tool",
+        "waiting_approval",
+        "waiting_user",
+        "cancelling",
+        "completed",
+        "failed",
+        "interrupted"
+      ]
+    },
+    "payload": {
+      "type": "object"
+    },
+    "createdAt": {
+      "type": "string",
+      "minLength": 1
+    }
+  }
+}

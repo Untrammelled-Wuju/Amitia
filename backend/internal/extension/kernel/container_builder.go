@@ -14,6 +14,7 @@ import (
 	appconfig "github.com/u-ai/backend/config"
 	"github.com/u-ai/backend/internal/agent/tool"
 	"github.com/u-ai/backend/internal/browser"
+	"github.com/u-ai/backend/internal/conversationstream"
 	"github.com/u-ai/backend/internal/delivery"
 	"github.com/u-ai/backend/internal/desktoppet/integration"
 	"github.com/u-ai/backend/internal/desktoppet/plugin_boundary"
@@ -636,6 +637,39 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	providerExecutionResolver := capability.NewProviderRuntimeExecutionResolver(&capability.ProviderRegistryExecutionLookup{Registry: capabilityProviderRegistry})
 
 	approvalBroker := execution.NewApprovalBroker()
+	approvalBroker.SetObservers(func(request execution.ApprovalRequest) error {
+		runtime := conversationstream.DefaultManager().RuntimeSnapshot(request.ConversationID)
+		event := conversationstream.AgentUIEvent{ConversationID: request.ConversationID, RequestID: request.RequestID, TurnID: request.TurnID, Type: "approval.requested", Status: "waiting_approval", CallID: request.ToolCallID, Payload: map[string]any{"approvalId": request.ID, "tool": request.ToolName, "operation": request.ToolName, "risk": request.RiskLevel, "arguments": request.Arguments, "expiresAt": request.ExpiresAt}}
+		if runtime.ActiveTurn != nil {
+			event.TurnID = runtime.ActiveTurn.TurnID
+			event.TurnSequence = runtime.ActiveTurn.TurnSequence
+			event.ExecutionID = runtime.ActiveTurn.ExecutionID
+			if event.RequestID == "" {
+				event.RequestID = runtime.ActiveTurn.RequestID
+			}
+		}
+		_, err := conversationstream.DefaultManager().Publish(context.Background(), event, true)
+		return err
+	}, func(request execution.ApprovalRequest) error {
+		runtime := conversationstream.DefaultManager().RuntimeSnapshot(request.ConversationID)
+		eventType := "approval.denied"
+		if request.Status == execution.ApprovalStatusApproved {
+			eventType = "approval.approved"
+		} else if request.Status == execution.ApprovalStatusExpired {
+			eventType = "approval.expired"
+		}
+		event := conversationstream.AgentUIEvent{ConversationID: request.ConversationID, RequestID: request.RequestID, TurnID: request.TurnID, Type: eventType, Status: "running", CallID: request.ToolCallID, Payload: map[string]any{"approvalId": request.ID, "approved": request.Status == execution.ApprovalStatusApproved, "status": request.Status}}
+		if runtime.ActiveTurn != nil {
+			event.TurnID = runtime.ActiveTurn.TurnID
+			event.TurnSequence = runtime.ActiveTurn.TurnSequence
+			event.ExecutionID = runtime.ActiveTurn.ExecutionID
+			if event.RequestID == "" {
+				event.RequestID = runtime.ActiveTurn.RequestID
+			}
+		}
+		_, err := conversationstream.DefaultManager().Publish(context.Background(), event, true)
+		return err
+	})
 	approvalGate := execution.NewApprovalGate()
 	approvalGate.OnEvaluate = func(ctx context.Context, tool capability.ToolDefinition, inv capability.ToolInvocationContext, decision execution.PermissionDecision, input json.RawMessage) (bool, error) {
 		if inv.ApprovalMode == capability.ApprovalModeAuto || inv.ApprovalMode == capability.ApprovalModeSession {
@@ -648,9 +682,15 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		if toolName == "" {
 			toolName = strings.TrimSpace(tool.Name)
 		}
+		runtime := conversationstream.DefaultManager().RuntimeSnapshot(inv.ConversationID)
+		turnID := ""
+		if runtime.ActiveTurn != nil {
+			turnID = runtime.ActiveTurn.TurnID
+		}
 		return approvalBroker.Await(ctx, execution.ApprovalRequest{
 			SpaceID:        inv.SpaceID,
 			ConversationID: inv.ConversationID,
+			TurnID:         turnID,
 			RequestID:      inv.OperationID,
 			ToolCallID:     inv.ExternalCallID,
 			ToolName:       toolName,

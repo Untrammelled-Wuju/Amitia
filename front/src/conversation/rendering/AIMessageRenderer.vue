@@ -131,7 +131,6 @@ import { useTheme } from "@/composables/useTheme";
 import type {
   AIMessageData,
   AssistantTurnData,
-  AssistantTurnItem,
   RichBlock,
 } from "./types";
 import AssistantTurnTimeline from "./AssistantTurnTimeline.vue";
@@ -194,59 +193,12 @@ const message = computed<AIMessageData>(() =>
     avatar: props.charAvatar,
   }),
 );
-function isRunningTurn(status: unknown): boolean {
-  return ["running", "streaming", "sending", "pending", "queued"].includes(
-    String(status || "").toLowerCase(),
-  );
-}
-
 const assistantTurn = computed<AssistantTurnData | null>(() => {
   const raw = props.message?.assistantTurn;
   if (!raw || typeof raw !== "object") return null;
   const turn = raw as AssistantTurnData;
   const items = Array.isArray(turn.items) ? [...turn.items] : [];
   items.sort((left, right) => Number(left.sequence || 0) - Number(right.sequence || 0));
-  const hasThinking = items.some((item) => String(item.type || "") === "thinking");
-  const fallbackThinking = message.value.thinking;
-  if (
-    !hasThinking &&
-    (fallbackThinking?.content.trim() ||
-      isRunningTurn(turn.status) ||
-      fallbackThinking?.state === "streaming")
-  ) {
-    items.unshift({
-      id: `${turn.id || "turn"}:fallback-thinking`,
-      turnId: turn.id,
-      conversationId: turn.conversationId,
-      sequence: -1,
-      type: "thinking",
-      status:
-        isRunningTurn(turn.status) || fallbackThinking?.state === "streaming"
-          ? "running"
-          : "completed",
-      content: fallbackThinking?.content || "",
-      durationMs: Math.max(0, Math.round(Number(fallbackThinking?.duration || 0) * 1000)),
-    } satisfies AssistantTurnItem);
-  }
-  const hasText = items.some(
-    (item) => String(item.type || "") === "text" && String(item.content || "").trim(),
-  );
-  if (!hasText && message.value.markdown.trim()) {
-    const sequence = items.reduce(
-      (maximum, item) => Math.max(maximum, Number(item.sequence || 0)),
-      0,
-    );
-    items.push({
-      id: `${turn.id || "turn"}:fallback-text`,
-      turnId: turn.id,
-      conversationId: turn.conversationId,
-      sequence: sequence + 1,
-      type: "text",
-      status: isRunningTurn(turn.status) ? "streaming" : "completed",
-      content: message.value.markdown,
-      isFinal: 1,
-    } satisfies AssistantTurnItem);
-  }
   return { ...turn, items };
 });
 const character = computed(() => message.value.character ?? { id: "", name: props.charName });
@@ -264,8 +216,6 @@ const stateNotice = computed(() => {
       return { title: "已中断", detail: "保留已生成内容 · 可继续生成" };
     case "failed":
       return { title: "生成失败", detail: "网络错误 · 可重试" };
-    case "cancelled":
-      return { title: "已取消", detail: "用户主动停止生成" };
     case "queued":
       return { title: "等待开始生成", detail: "任务已进入队列" };
     default:

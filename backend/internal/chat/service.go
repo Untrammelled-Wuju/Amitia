@@ -38,6 +38,7 @@ type Service interface {
 	DeleteConversation(id string) (bool, error)
 	DeleteAllConversations() error
 	GetMessages(convID string, page, pageSize int) ([]Message, int64, error)
+	GetMessagesBefore(convID string, beforeSequence int64, limit int) ([]Message, bool, error)
 	DeleteMessages(convID string) error
 	DeleteSingleMessage(id string) error
 	SearchMessages(q MessageSearchQuery) (*MessageSearchResponse, error)

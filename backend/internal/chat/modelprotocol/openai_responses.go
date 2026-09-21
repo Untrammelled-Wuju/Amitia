@@ -299,7 +299,7 @@ func (a *OpenAIResponsesAdapter) parseStream(body io.Reader, sink ModelEventSink
 
 				content := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
 				if content == "[DONE]" {
-					sink.Emit(context.Background(), ModelEvent{
+					sink.Emit(ctx, ModelEvent{
 						Type: ModelEventCompleted,
 					})
 					return result, nil
@@ -326,38 +326,35 @@ func (a *OpenAIResponsesAdapter) parseStream(body io.Reader, sink ModelEventSink
 				switch event.Type {
 				case "response.output_text.delta":
 					result.Text += event.Delta
-					sink.Emit(context.Background(), ModelEvent{
+					sink.Emit(ctx, ModelEvent{
 						Type:      ModelEventTextDelta,
 						TextDelta: event.Delta,
 					})
 				case "response.output_text.done":
-					sink.Emit(context.Background(), ModelEvent{
+					sink.Emit(ctx, ModelEvent{
 						Type: ModelEventTextDone,
 					})
 				case "response.function_call_arguments.delta":
-					sink.Emit(context.Background(), ModelEvent{
+					sink.Emit(ctx, ModelEvent{
 						Type:           ModelEventToolCallArgumentsDelta,
 						ToolCallID:     event.ItemID,
 						ArgumentsDelta: event.Delta,
 					})
 				case "response.function_call_arguments.done":
-					result.ToolCalls = append(result.ToolCalls, ModelToolCall{
-						ID:            event.ItemID,
-						Name:          event.Name,
-						ArgumentsJSON: event.Arguments,
-					})
+					result.ToolCalls = append(result.ToolCalls, ModelToolCall{ID: event.ItemID, Name: event.Name, ArgumentsJSON: event.Arguments})
+					sink.Emit(ctx, ModelEvent{Type: ModelEventToolCallDone, ToolCallID: event.ItemID, ToolName: event.Name})
 				case "response.reasoning_summary_text.delta":
-					sink.Emit(context.Background(), ModelEvent{
+					sink.Emit(ctx, ModelEvent{
 						Type:      ModelEventReasoningSummaryDelta,
 						TextDelta: event.Delta,
 					})
 				case "response.completed":
-					sink.Emit(context.Background(), ModelEvent{
+					sink.Emit(ctx, ModelEvent{
 						Type: ModelEventCompleted,
 					})
 					return result, nil
 				case "response.failed":
-					sink.Emit(context.Background(), ModelEvent{
+					sink.Emit(ctx, ModelEvent{
 						Type: ModelEventFailed,
 						Error: &ModelError{
 							Code:     "MODEL_PROVIDER_FAILED",

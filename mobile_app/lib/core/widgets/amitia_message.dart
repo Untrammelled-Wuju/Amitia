@@ -454,9 +454,8 @@ class AmitiaMessageBubble extends StatelessWidget {
       case 'RUNNING':
       case 'SENDING':
         return AmrpToolStatus.running;
-      case 'CANCELLED':
-      case 'CANCELED':
-        return AmrpToolStatus.cancelled;
+      case 'INTERRUPTED':
+        return AmrpToolStatus.interrupted;
       case 'FAILED':
       case 'ERROR':
       case 'UNKNOWN':

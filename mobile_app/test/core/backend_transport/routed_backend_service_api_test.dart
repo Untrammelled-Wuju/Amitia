@@ -203,19 +203,19 @@ void main() {
     });
 
 
-    test('chat send stream stays on business core', () async {
-      await proxy.postStream(
-        '/api/web-chat/send-stream',
-        data: const {'message': 'hello'},
+    test('chat command stays on business core', () async {
+      await proxy.post(
+        '/api/web-chat/messages',
+        data: const {'content': 'hello'},
       );
       expect(businessApi.calls.length, 1);
       expect(deviceLocalApi.calls.length, 0);
-      expect(businessApi.calls.first.method, 'POST_STREAM');
-      expect(businessApi.calls.first.path, '/api/web-chat/send-stream');
+      expect(businessApi.calls.first.method, 'POST');
+      expect(businessApi.calls.first.path, '/api/web-chat/messages');
     });
 
-    test('message events stream stays on business core', () async {
-      await proxy.getStream('/api/messages/events');
+    test('conversation event stream stays on business core', () async {
+      await proxy.getStream('/api/web-chat/conversations/conv-1/events');
       expect(businessApi.calls.length, 1);
       expect(deviceLocalApi.calls.length, 0);
       expect(businessApi.calls.first.method, 'GET_STREAM');

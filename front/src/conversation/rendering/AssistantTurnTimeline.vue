@@ -2,7 +2,7 @@
   <div class="turn-timeline">
     <template v-for="item in orderedItems" :key="timelineItemKey(item)">
       <AmitiaThinkingBlock
-        v-if="item.type === 'thinking'"
+        v-if="item.type === 'reasoning'"
         :content="item.content || ''"
         :state="thinkingState(item.status)"
         :duration="thinkingDuration(item)"
@@ -139,7 +139,7 @@ function toolStreamSummary(items?: AssistantTurnItem[]): string {
 function statusClass(status: string): string {
   const value = String(status || "").toLowerCase();
   if (["failed", "error", "unknown"].includes(value)) return "failed";
-  if (["cancelled", "canceled", "stopped"].includes(value)) return "cancelled";
+  if (value === "interrupted") return "interrupted";
   if (["completed", "success", "succeeded", "sent", "delivered"].includes(value)) return "completed";
   return "running";
 }
@@ -179,9 +179,9 @@ function thinkingDuration(item: AssistantTurnItem): number {
 }
 
 function timelineItemKey(item: AssistantTurnItem & { type: string }): string {
-  if (item.type !== "thinking") return item.id;
+  if (item.type !== "reasoning") return item.id;
   const thinkingItems = orderedItems.value.filter(
-    (candidate) => candidate.type === "thinking",
+    (candidate) => candidate.type === "reasoning",
   );
   const index = thinkingItems.findIndex((candidate) => candidate.id === item.id);
   return `thinking:${props.turn.id}:${Math.max(0, index)}`;
@@ -207,7 +207,7 @@ function toolStateLabel(item: AssistantTurnItem): string {
   const suffix = duration > 0 ? ` · ${duration} ms` : "";
   if (status === "completed") return `完成${suffix}`;
   if (status === "failed") return `失败${suffix}`;
-  if (status === "cancelled") return "已取消";
+  if (status === "interrupted") return "已中断";
   return `运行中${suffix}`;
 }
 
@@ -347,8 +347,8 @@ function resultSummary(item: AssistantTurnItem): string {
   box-shadow: none;
 }
 
-.turn-tool-line.cancelled .turn-tool-dot,
-.turn-tool-dot.cancelled {
+.turn-tool-line.interrupted .turn-tool-dot,
+.turn-tool-dot.interrupted {
   background: #a0a1a6;
   box-shadow: none;
 }

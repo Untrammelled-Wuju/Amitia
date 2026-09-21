@@ -25,7 +25,7 @@ app:
   deployMode: "desktop-local"
 
 chat:
-  mergeWindowMs: 5000
+  eventReplayRingSize: 4096
   contextWindowMaxRounds: 20
 
 providers:

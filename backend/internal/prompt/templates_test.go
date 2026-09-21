@@ -3,13 +3,12 @@ package prompt
 import (
 	"strings"
 	"testing"
-
-	"github.com/u-ai/backend/pkg/util"
 )
 
-func TestBaseIdentitySectionIncludesAmitiaMessageBreak(t *testing.T) {
-	if !strings.Contains(BaseIdentitySection(), util.AmitiaMessageBreak) {
-		t.Fatalf("base identity section must document %s", util.AmitiaMessageBreak)
+func TestBaseIdentitySectionRequiresSingleContinuousMessage(t *testing.T) {
+	section := BaseIdentitySection()
+	if !strings.Contains(section, "同一个连续消息") {
+		t.Fatal("base identity section must require one continuous assistant message")
 	}
 }
 
@@ -28,9 +27,6 @@ func TestSharedCoreRulesExposePlatformContracts(t *testing.T) {
 			t.Fatalf("shared core rules missing %q", want)
 		}
 	}
-	if strings.Contains(shared, util.AmitiaMessageBreak) {
-		t.Fatal("shared core rules must not contain text-only message formatting")
-	}
 }
 
 func TestBuildPersonalityRawSectionDoesNotInjectRelationshipIdentity(t *testing.T) {
@@ -39,8 +35,7 @@ func TestBuildPersonalityRawSectionDoesNotInjectRelationshipIdentity(t *testing.
 		"UNSPECIFIED",
 		"测试人格模板",
 	)
-	if strings.Contains(section, "用户的女朋友") ||
-		strings.Contains(section, "用户的男朋友") {
+	if strings.Contains(section, "用户的女朋友") || strings.Contains(section, "用户的男朋友") {
 		t.Fatalf("personality raw section must not inject a relationship identity: %q", section)
 	}
 	if !strings.HasPrefix(section, "测试人格模板") {

@@ -678,9 +678,8 @@ async function output(host, input) {
   const snapshot = await readState(host);
   const state = snapshot.state;
   const settings = state.settings;
-  const lines = Array.isArray(event.lines) ? event.lines : [];
   const reply = text(event.reply);
-  const emoteOnly = lines.length === 0 && !reply && settings.allowEmoteOnly;
+  const emoteOnly = !reply && settings.allowEmoteOnly;
   if (!settings.enabled || (!reply && !emoteOnly) || event.forceVoice || suppressedContext(event.source, reply)) {
     return { outputs: [] };
   }
@@ -720,12 +719,7 @@ async function output(host, input) {
   const item = selected.item;
   const assetUrl = item.assetUrl || await resourceLink(host, item.filePath);
   const fallbackUrl = item.fallbackUrl || await resourceLink(host, item.fallbackPath);
-  let insertAfter = lines.length;
-  let sendMode = emoteOnly ? "emote_only" : "after_all_text";
-  if (!emoteOnly && lines.length >= 2 && reply.length <= 240 && Math.random() < 0.25) {
-    insertAfter = 1 + Math.floor(Math.random() * (lines.length - 1));
-    sendMode = "between_text_messages";
-  }
+  const placement = "after_text";
   await mutateState(host, (next) => {
     next.sendRecords.unshift({
       id: crypto.randomUUID(),
@@ -738,7 +732,7 @@ async function output(host, input) {
       sample,
       score: selected.score,
       hit: true,
-      sendMode,
+      placement,
       createdAt: nowISO(),
     });
     next.sendRecords = next.sendRecords.slice(0, MAX_SEND_RECORDS);
@@ -748,8 +742,7 @@ async function output(host, input) {
     outputs: [{
       outputId: text(event.requestId) || crypto.randomUUID(),
       extensionId: "com.amitia/emote",
-      insertAfter,
-      sendMode,
+      placement,
       part: {
         type: "image",
         extensionType: "emote",

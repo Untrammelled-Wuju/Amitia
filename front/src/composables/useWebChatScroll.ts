@@ -1,9 +1,9 @@
 // SPDX-FileCopyrightText: 2026 彭旭
 // SPDX-License-Identifier: AGPL-3.0-only
-import { ref, type Ref, nextTick } from "vue";
+import { ref, type Ref, nextTick, watch } from "vue";
 import { useApi } from "./useApi";
 import {
-  compareChatMessages,
+  mergeMessageCollections,
   normalizeRealtimeMessage,
 } from "@/utils/message-order";
 
@@ -12,6 +12,7 @@ export function useWebChatScroll(
   messages: Ref<any[]>,
   convId: Ref<string>,
   showScrollBtn: Ref<boolean>,
+  loadOlderTurns?: () => Promise<unknown>,
 ) {
   const { get } = useApi();
   const userScrolledUp = ref(false);
@@ -22,10 +23,20 @@ export function useWebChatScroll(
   const pullStartY = ref(0);
   const isLoadingHistory = ref(false);
   const hasMoreHistory = ref(true);
-  const msgPage = ref(1);
+  const historyBeforeSequence = ref(0);
   const HISTORY_PAGE_SIZE = 50;
 
+  watch(convId, () => {
+    historyBeforeSequence.value = 0;
+    hasMoreHistory.value = true;
+  });
+
   function attachLocalImages(_msgs: any[]) {}
+
+  function applyHistorySnapshot(history?: { nextBefore?: number; hasMore?: boolean } | null) {
+    historyBeforeSequence.value = Number(history?.nextBefore || 0);
+    hasMoreHistory.value = history?.hasMore === true;
+  }
 
   function scrollToBottom(smooth = false) {
     if (!smooth && userScrolledUp.value) return;
@@ -77,41 +88,44 @@ export function useWebChatScroll(
   }
 
   async function loadOlderMessages() {
-    if (
-      isLoadingHistory.value ||
-      !hasMoreHistory.value ||
-      !convId.value ||
-      msgPage.value <= 1
-    ) {
-      hasMoreHistory.value = msgPage.value > 1;
-      return;
+    if (isLoadingHistory.value || !hasMoreHistory.value || !convId.value) return;
+    if (historyBeforeSequence.value <= 0) {
+      const sequences = messages.value
+        .map((message) => Number(message?.sequence || 0))
+        .filter((sequence) => sequence > 0);
+      if (sequences.length === 0) {
+        hasMoreHistory.value = false;
+        return;
+      }
+      historyBeforeSequence.value = Math.min(...sequences);
     }
     isLoadingHistory.value = true;
     try {
-      const targetPage = msgPage.value - 1;
-      const r = await get<any>(
-        `/api/web-chat/conversations/${convId.value}/messages`,
-        {
-          page: targetPage,
-          pageSize: HISTORY_PAGE_SIZE,
-        },
-      );
-      const older = (r?.items || r?.messages || []).map(normalizeRealtimeMessage);
-      if (older.length === 0) {
-        hasMoreHistory.value = false;
-      } else {
-        const el = msgAreaRef.value?.rootEl;
-        const prevHeight = el?.scrollHeight || 0;
+      const [r] = await Promise.all([
+        get<any>(
+          `/api/web-chat/conversations/${convId.value}/messages`,
+          {
+            beforeSequence: historyBeforeSequence.value,
+            limit: HISTORY_PAGE_SIZE,
+          },
+        ),
+        loadOlderTurns?.(),
+      ]);
+      const older = (r?.items || []).map(normalizeRealtimeMessage);
+      const el = msgAreaRef.value?.rootEl;
+      const prevHeight = el?.scrollHeight || 0;
+      if (older.length > 0) {
         attachLocalImages(older);
-        messages.value = [...older, ...messages.value].sort(compareChatMessages);
-        msgPage.value = targetPage;
-        hasMoreHistory.value = targetPage > 1;
+        messages.value = mergeMessageCollections(messages.value, older);
+        const responseCursor = Number(r?.nextBefore || 0);
+        historyBeforeSequence.value = responseCursor > 0
+          ? responseCursor
+          : Math.min(...older.map((message: any) => Number(message?.sequence || 0)).filter((sequence: number) => sequence > 0));
         nextTick(() => {
-          if (el) {
-            el.scrollTop = el.scrollHeight - prevHeight;
-          }
+          if (el) el.scrollTop = el.scrollHeight - prevHeight;
         });
       }
+      hasMoreHistory.value = r?.hasMore === true;
     } catch {
     } finally {
       isLoadingHistory.value = false;
@@ -167,6 +181,6 @@ export function useWebChatScroll(
     pullText,
     hasMoreHistory,
     isLoadingHistory,
-    msgPage,
+    applyHistorySnapshot,
   };
 }
