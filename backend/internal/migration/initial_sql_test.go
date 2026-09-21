@@ -282,3 +282,76 @@ func TestApplyBaselineAfterEmbeddedBaseline(t *testing.T) {
 		t.Fatalf("second baseline apply should be idempotent without error, got: %v", err)
 	}
 }
+
+func TestApplyBaselineThenAgentRuntimeMigrationUpgradesLegacyTables(t *testing.T) {
+	db := openInitialSQLTestDB(t)
+	if err := db.Exec(`
+CREATE TABLE conversations (
+	id TEXT PRIMARY KEY,
+	space_id TEXT NOT NULL DEFAULT '',
+	project_id TEXT NOT NULL DEFAULT '',
+	channel TEXT NOT NULL DEFAULT '',
+	peer_id TEXT NOT NULL DEFAULT '',
+	updated_at TEXT NOT NULL DEFAULT ''
+);
+CREATE TABLE assistant_turns (
+	id TEXT PRIMARY KEY,
+	conversation_id TEXT NOT NULL DEFAULT '',
+	request_id TEXT NOT NULL DEFAULT '',
+	sequence INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE assistant_turn_items (
+	id TEXT PRIMARY KEY,
+	turn_id TEXT NOT NULL DEFAULT '',
+	sequence INTEGER NOT NULL DEFAULT 0,
+	call_id TEXT NOT NULL DEFAULT '',
+	item_type TEXT NOT NULL DEFAULT ''
+);
+`).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := ApplyBaseline(db); err != nil {
+		t.Fatalf("apply baseline to legacy database failed: %v", err)
+	}
+	runner := Runner{DB: db, SkipBackup: true}
+	if err := runner.Apply([]Migration{AgentRuntimeV1Migration()}); err != nil {
+		t.Fatalf("apply agent runtime migration failed: %v", err)
+	}
+
+	columns := []struct {
+		table string
+		name  string
+	}{
+		{"conversations", "workspace_id"},
+		{"assistant_turns", "execution_id"},
+		{"assistant_turns", "parent_turn_id"},
+		{"assistant_turns", "agent_id"},
+		{"assistant_turn_items", "revision"},
+		{"assistant_turn_items", "message_id"},
+	}
+	for _, column := range columns {
+		var count int64
+		if err := db.Raw("SELECT COUNT(*) FROM pragma_table_info(?) WHERE name = ?", column.table, column.name).Scan(&count).Error; err != nil {
+			t.Fatal(err)
+		}
+		if count != 1 {
+			t.Fatalf("%s.%s count = %d, want 1", column.table, column.name, count)
+		}
+	}
+
+	indexes := []string{
+		"idx_conversations_workspace",
+		"idx_assistant_turns_execution",
+		"idx_assistant_turns_parent",
+		"idx_assistant_turns_agent",
+	}
+	for _, index := range indexes {
+		var count int64
+		if err := db.Raw("SELECT COUNT(*) FROM sqlite_master WHERE type = 'index' AND name = ?", index).Scan(&count).Error; err != nil {
+			t.Fatal(err)
+		}
+		if count != 1 {
+			t.Fatalf("index %s count = %d, want 1", index, count)
+		}
+	}
+}

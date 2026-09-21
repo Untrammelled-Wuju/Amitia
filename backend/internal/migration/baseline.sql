@@ -160,7 +160,6 @@ CREATE TABLE IF NOT EXISTS projects (
     revision INTEGER NOT NULL DEFAULT 1,
     UNIQUE(space_id, workspace_id)
 );
-CREATE INDEX IF NOT EXISTS idx_conversations_workspace ON conversations(workspace_id);
 CREATE INDEX IF NOT EXISTS idx_projects_space_updated ON projects(space_id, updated_at);
 
 CREATE TABLE IF NOT EXISTS messages (
@@ -294,9 +293,6 @@ CREATE TABLE IF NOT EXISTS assistant_turn_items (
 
 CREATE INDEX IF NOT EXISTS idx_assistant_turns_conversation ON assistant_turns(conversation_id, sequence);
 CREATE INDEX IF NOT EXISTS idx_assistant_turns_request ON assistant_turns(request_id);
-CREATE INDEX IF NOT EXISTS idx_assistant_turns_execution ON assistant_turns(execution_id);
-CREATE INDEX IF NOT EXISTS idx_assistant_turns_parent ON assistant_turns(parent_turn_id);
-CREATE INDEX IF NOT EXISTS idx_assistant_turns_agent ON assistant_turns(agent_id);
 CREATE INDEX IF NOT EXISTS idx_assistant_turn_items_turn ON assistant_turn_items(turn_id, sequence);
 CREATE INDEX IF NOT EXISTS idx_assistant_turn_items_call ON assistant_turn_items(turn_id, call_id);
 

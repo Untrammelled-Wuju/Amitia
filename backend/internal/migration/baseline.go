@@ -37,6 +37,18 @@ func ensureOptionalBaselineIndexes(db *gorm.DB) error {
 		}
 		return false, nil
 	}
+	hasColumns := func(table string, columns ...string) (bool, error) {
+		for _, column := range columns {
+			exists, err := hasColumn(table, column)
+			if err != nil {
+				return false, err
+			}
+			if !exists {
+				return false, nil
+			}
+		}
+		return true, nil
+	}
 	projectColumn, err := hasColumn("conversations", "project_id")
 	if err != nil {
 		return err
@@ -77,6 +89,30 @@ func ensureOptionalBaselineIndexes(db *gorm.DB) error {
 	}
 	if projectPinnedColumn {
 		if err := db.Exec("CREATE INDEX IF NOT EXISTS idx_projects_sidebar_pinned ON projects(space_id, pinned_at, updated_at)").Error; err != nil {
+			return err
+		}
+	}
+	conversationWorkspaceColumns, err := hasColumns("conversations", "workspace_id")
+	if err != nil {
+		return err
+	}
+	if conversationWorkspaceColumns {
+		if err := db.Exec("CREATE INDEX IF NOT EXISTS idx_conversations_workspace ON conversations(workspace_id)").Error; err != nil {
+			return err
+		}
+	}
+	assistantTurnRuntimeColumns, err := hasColumns("assistant_turns", "execution_id", "parent_turn_id", "agent_id")
+	if err != nil {
+		return err
+	}
+	if assistantTurnRuntimeColumns {
+		if err := db.Exec("CREATE INDEX IF NOT EXISTS idx_assistant_turns_execution ON assistant_turns(execution_id)").Error; err != nil {
+			return err
+		}
+		if err := db.Exec("CREATE INDEX IF NOT EXISTS idx_assistant_turns_parent ON assistant_turns(parent_turn_id)").Error; err != nil {
+			return err
+		}
+		if err := db.Exec("CREATE INDEX IF NOT EXISTS idx_assistant_turns_agent ON assistant_turns(agent_id)").Error; err != nil {
 			return err
 		}
 	}
