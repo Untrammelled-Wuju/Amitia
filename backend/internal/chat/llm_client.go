@@ -301,17 +301,10 @@ func cfgTopP(req ModelRequest) float64 {
 func toolsToLocalModelTools(tools []tool.Tool) []localmodel.LocalModelTool {
 	result := make([]localmodel.LocalModelTool, 0, len(tools))
 	for _, t := range tools {
-		params := map[string]any{
-			"type":       t.Function.Parameters.Type,
-			"properties": t.Function.Parameters.Properties,
-		}
-		if len(t.Function.Parameters.Required) > 0 {
-			params["required"] = t.Function.Parameters.Required
-		}
 		result = append(result, localmodel.LocalModelTool{
 			Name:        t.Function.Name,
 			Description: t.Function.Description,
-			Parameters:  params,
+			Parameters:  modelToolParameters(t.Function.Parameters),
 		})
 	}
 	return result
@@ -429,6 +422,9 @@ func (s *service) callOllamaMode(ctx context.Context, cfg *ModelConfig, messages
 }
 
 func messagesToModelRequest(cfg *ModelConfig, messages []map[string]interface{}, tools []tool.Tool, jsonOnly bool) ModelRequest {
+	if protocol := resolveProtocol(cfg); protocol == ProtocolOpenAIChat || protocol == ProtocolOpenAIResponses {
+		tools = openAICompatibleTools(tools)
+	}
 	var instructions []string
 	var msgs []ModelMessage
 	for _, m := range messages {
@@ -446,10 +442,11 @@ func messagesToModelRequest(cfg *ModelConfig, messages []map[string]interface{},
 			if len(parts) == 0 {
 				parts = []ModelContentPart{{Type: ContentTypeText, Text: ""}}
 			}
-			msgs = append(msgs, ModelMessage{Role: "assistant", Parts: parts})
+			msgs = append(msgs, ModelMessage{Role: "assistant", Parts: parts, ToolCalls: modelToolCallsFromLegacy(m["tool_calls"])})
 		case "tool":
 			parts := extractContentParts(m)
-			msgs = append(msgs, ModelMessage{Role: "tool", Parts: parts})
+			toolCallID, _ := m["tool_call_id"].(string)
+			msgs = append(msgs, ModelMessage{Role: "tool", Parts: parts, ToolCallID: strings.TrimSpace(toolCallID)})
 		}
 	}
 	req := ModelRequest{
@@ -480,6 +477,36 @@ func messagesToModelRequest(cfg *ModelConfig, messages []map[string]interface{},
 	return req
 }
 
+func modelToolCallsFromLegacy(value interface{}) []ModelToolCall {
+	var rawCalls []map[string]interface{}
+	switch calls := value.(type) {
+	case []map[string]interface{}:
+		rawCalls = calls
+	case []interface{}:
+		rawCalls = make([]map[string]interface{}, 0, len(calls))
+		for _, item := range calls {
+			call, ok := item.(map[string]interface{})
+			if ok {
+				rawCalls = append(rawCalls, call)
+			}
+		}
+	default:
+		return nil
+	}
+	result := make([]ModelToolCall, 0, len(rawCalls))
+	for _, call := range rawCalls {
+		function, _ := call["function"].(map[string]interface{})
+		id, _ := call["id"].(string)
+		name, _ := function["name"].(string)
+		arguments, _ := function["arguments"].(string)
+		if strings.TrimSpace(id) == "" || strings.TrimSpace(name) == "" {
+			continue
+		}
+		result = append(result, ModelToolCall{ID: strings.TrimSpace(id), Name: strings.TrimSpace(name), ArgumentsJSON: arguments})
+	}
+	return result
+}
+
 func extractContentParts(m map[string]interface{}) []ModelContentPart {
 	if content, ok := m["content"].(string); ok {
 		if content == "" {
@@ -496,20 +523,28 @@ func extractContentParts(m map[string]interface{}) []ModelContentPart {
 func toolsToDefinitions(tools []tool.Tool) []ModelToolDefinition {
 	defs := make([]ModelToolDefinition, 0, len(tools))
 	for _, t := range tools {
-		params := map[string]any{
-			"type":       t.Function.Parameters.Type,
-			"properties": t.Function.Parameters.Properties,
-		}
-		if len(t.Function.Parameters.Required) > 0 {
-			params["required"] = t.Function.Parameters.Required
-		}
 		defs = append(defs, ModelToolDefinition{
 			Name:        t.Function.Name,
 			Description: t.Function.Description,
-			Parameters:  params,
+			Parameters:  modelToolParameters(t.Function.Parameters),
 		})
 	}
 	return defs
+}
+
+func modelToolParameters(parameters tool.Parameters) map[string]any {
+	result := map[string]any{}
+	raw, err := json.Marshal(parameters)
+	if err == nil {
+		_ = json.Unmarshal(raw, &result)
+	}
+	if result["type"] != "object" {
+		return map[string]any{"type": "object", "properties": map[string]any{}}
+	}
+	if _, ok := result["properties"]; !ok {
+		result["properties"] = map[string]any{}
+	}
+	return result
 }
 
 func modelResultToLegacy(result *ModelResult) (string, string, []map[string]interface{}, int) {
@@ -529,6 +564,13 @@ func modelResultToLegacy(result *ModelResult) (string, string, []map[string]inte
 }
 
 func cfgToProviderConfig(cfg *ModelConfig) modelprotocol.ProviderConfig {
+	maxOutputTokens := cfg.MaxOutputTokens
+	if maxOutputTokens <= 0 {
+		maxOutputTokens = cfg.MaxTokens
+	}
+	if maxOutputTokens <= 0 {
+		maxOutputTokens = 4096
+	}
 	return modelprotocol.ProviderConfig{
 		ModelName:        cfg.ModelName,
 		BaseURL:          cfg.BaseURL,
@@ -537,7 +579,7 @@ func cfgToProviderConfig(cfg *ModelConfig) modelprotocol.ProviderConfig {
 		TopP:             cfg.TopP,
 		TimeoutSeconds:   cfg.TimeoutSeconds,
 		MaxTokens:        cfg.MaxTokens,
-		MaxOutputTokens:  cfg.MaxOutputTokens,
+		MaxOutputTokens:  maxOutputTokens,
 		ContextWindow:    cfg.ContextWindow,
 		Protocol:         cfg.Protocol,
 		CapabilitiesJSON: cfg.CapabilitiesJSON,

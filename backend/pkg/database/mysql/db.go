@@ -20,8 +20,9 @@ func NewSQLite(dataDir string) *gorm.DB {
 	}
 	dbPath := filepath.Join(dataDir, "app.db")
 	log.Printf("[DB] 连接 SQLite: %s", dbPath)
+	dsn := dbPath + "?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_pragma=foreign_keys(ON)"
 
-	db, err := gorm.Open(sqlite.Open(dbPath), &gorm.Config{
+	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{
 		Logger: logger.Default.LogMode(logger.Warn),
 	})
 	if err != nil {

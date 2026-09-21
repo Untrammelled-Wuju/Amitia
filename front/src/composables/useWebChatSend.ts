@@ -32,6 +32,8 @@ export function useWebChatSend(
   reasoningEnabled?: Ref<boolean>,
   permissionMode?: Ref<string>,
   activeTurnId?: Ref<string>,
+  beginPendingAssistant?: (requestId: string, characterId?: string) => void,
+  failPendingAssistant?: (requestId: string) => void,
 ) {
   const { post, del } = useApi();
   const { currentWorkspace, getWorkspaceRequestFields } = useConversationWorkspace();
@@ -129,7 +131,6 @@ export function useWebChatSend(
       requestId: requestEnvelope.requestId,
       clientMessageId: requestEnvelope.requestId,
       uiKey: userMsgLocalId,
-      animateIn: true,
       role: "user",
       content: sendContent,
       imageUrl: imgUrl || undefined,
@@ -142,6 +143,7 @@ export function useWebChatSend(
       replyToRole: replyTarget?.value?.role || undefined,
       replyToExcerpt: replyTarget?.value?.content || undefined,
     });
+    beginPendingAssistant?.(requestEnvelope.requestId, characterId.value);
     scrollToBottom(true);
     sending.value = true;
     modelError.value = "";
@@ -189,6 +191,7 @@ export function useWebChatSend(
       if (replyTarget) replyTarget.value = null;
     } catch (err: any) {
       const errMsg = err?.message || "发送失败";
+      failPendingAssistant?.(requestEnvelope.requestId);
       modelError.value = errMsg;
       ElMessage.error(errMsg);
       const index = messages.value.findIndex((message) => message.id === userMsgLocalId);

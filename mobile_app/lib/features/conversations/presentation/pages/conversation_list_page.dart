@@ -236,16 +236,6 @@ class _ConversationListPageState extends ConsumerState<ConversationListPage> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Center(
-                  child: Container(
-                    width: 36,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: context.borderPrimary,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                ),
                 SizedBox(height: AppSpacing.lg),
                 _SheetActionItem(
                   icon: Icons.edit_outlined,

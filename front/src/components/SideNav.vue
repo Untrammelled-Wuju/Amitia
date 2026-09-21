@@ -115,7 +115,12 @@ SPDX-License-Identifier: AGPL-3.0-only
       </div>
 
       <div class="thread-section">
-        <div class="section-caption">最近</div>
+        <div class="section-caption project-caption">
+          <span>最近</span>
+          <button type="button" class="section-add" title="新建对话" aria-label="新建对话" @click="handleNewChat">
+            <el-icon><Plus /></el-icon>
+          </button>
+        </div>
         <SidebarConversationRow
           v-for="conversation in visibleRecentConversations"
           :key="conversation.id"

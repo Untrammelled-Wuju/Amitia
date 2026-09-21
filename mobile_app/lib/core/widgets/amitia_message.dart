@@ -1951,14 +1951,6 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Container(
-                width: 36,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: context.borderPrimary,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
               const SizedBox(height: 12),
               _ComposerTool(
                 icon: Icons.photo_library_outlined,
@@ -2030,14 +2022,6 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Container(
-                width: 36,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: context.borderPrimary,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
               const SizedBox(height: 14),
               Align(
                 alignment: Alignment.centerLeft,
@@ -3212,16 +3196,6 @@ class _EmotePickerState extends State<_EmotePicker> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Center(
-              child: Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: context.borderPrimary,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ),
             const SizedBox(height: 14),
             Row(
               children: [

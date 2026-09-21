@@ -1636,16 +1636,6 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const SizedBox(height: 8),
-                Center(
-                  child: Container(
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: context.borderPrimary,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                ),
                 const SizedBox(height: 20),
                 Text('角色操作', style: AppTypography.pageTitle(context)),
                 const SizedBox(height: 16),

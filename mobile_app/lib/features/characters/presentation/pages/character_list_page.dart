@@ -375,16 +375,6 @@ class _CharacterListPageState extends ConsumerState<CharacterListPage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                 const SizedBox(height: 8),
-                Center(
-                  child: Container(
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: context.borderPrimary,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                ),
                 const SizedBox(height: 20),
                 Text('管理角色', style: AppTypography.pageTitle(context)),
                 const SizedBox(height: 16),
@@ -687,16 +677,6 @@ class _CharacterListPageState extends ConsumerState<CharacterListPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const SizedBox(height: 8),
-                Center(
-                  child: Container(
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: context.borderPrimary,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                ),
                 const SizedBox(height: 20),
                 Text('排序方式', style: AppTypography.pageTitle(context)),
                 const SizedBox(height: 16),
@@ -761,16 +741,6 @@ class _CharacterListPageState extends ConsumerState<CharacterListPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const SizedBox(height: 8),
-                Center(
-                  child: Container(
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: context.borderPrimary,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                ),
                 const SizedBox(height: 20),
                 Text(title, style: AppTypography.pageTitle(context)),
                 const SizedBox(height: 16),

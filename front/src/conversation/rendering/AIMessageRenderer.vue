@@ -46,7 +46,6 @@
       <div class="amrp-message-body">
         <header v-if="showHeader" class="amrp-head">
           <span class="amrp-name">{{ character.name || "Amitia" }}</span>
-          <span class="amrp-role">{{ roleLabel }}</span>
           <span class="amrp-time">{{ formatTime(message.createdAt) }}</span>
           <slot name="badges" :message="message" />
         </header>
@@ -56,8 +55,15 @@
           <span>{{ stateNotice.detail }}</span>
         </div>
 
+        <AmitiaThinkingBlock
+          v-if="showPendingThinking"
+          content=""
+          state="streaming"
+          :duration="0"
+        />
+
         <AssistantTurnTimeline
-          v-if="assistantTurn"
+          v-else-if="assistantTurn"
           :turn="assistantTurn"
         />
 
@@ -201,10 +207,16 @@ const assistantTurn = computed<AssistantTurnData | null>(() => {
   items.sort((left, right) => Number(left.sequence || 0) - Number(right.sequence || 0));
   return { ...turn, items };
 });
+const showPendingThinking = computed(() => {
+  const turn = assistantTurn.value;
+  if (!turn || turn.items.length > 0) return false;
+  return ["queued", "running", "streaming", "waiting_approval", "waiting_tool", "cancelling"].includes(
+    String(turn.status || "").toLowerCase(),
+  );
+});
 const character = computed(() => message.value.character ?? { id: "", name: props.charName });
 const characterInitial = computed(() => (character.value.name || "A").trim().slice(0, 1));
 const streaming = computed(() => message.value.state === "streaming" || message.value.state === "queued");
-const roleLabel = computed(() => String(props.message.roleLabel ?? props.message.characterRole ?? "默认角色"));
 const hasReply = computed(() => Boolean(props.message.replyToMessageId));
 const replyId = computed(() => String(props.message.replyToMessageId ?? ""));
 const replySender = computed(() => String(props.message.replyToRole === "user" ? "你" : props.charName));
@@ -214,10 +226,6 @@ const stateNotice = computed(() => {
   switch (message.value.state) {
     case "interrupted":
       return { title: "已中断", detail: "保留已生成内容 · 可继续生成" };
-    case "failed":
-      return { title: "生成失败", detail: "网络错误 · 可重试" };
-    case "queued":
-      return { title: "等待开始生成", detail: "任务已进入队列" };
     default:
       return null;
   }
@@ -380,7 +388,6 @@ async function handleCopy(mode: "plain" | "markdown") {
   font-weight: 720;
 }
 
-.amrp-role,
 .amrp-time {
   color: var(--amrp-muted);
   font-size: 11px;
@@ -561,10 +568,6 @@ async function handleCopy(mode: "plain" | "markdown") {
 
 .amrp-message-state span {
   color: var(--amrp-muted);
-}
-
-.amrp-message-state.failed {
-  border-color: color-mix(in srgb, var(--amrp-danger) 45%, var(--amrp-line));
 }
 
 @media (max-width: 700px) {

@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import '../../../core/models/conversation.dart';
 
 class AgentUIEvent {
@@ -209,7 +211,26 @@ class AgentEventReducer {
           return _copyItem(item, status: terminalStatus);
         }
         return item;
-      }).toList(growable: false);
+      }).toList();
+      if (terminalStatus == 'failed' &&
+          !items.any((item) => item.type == 'error')) {
+        items.add(
+          AssistantTurnItemDto(
+            id: 'turn-error:$turnId',
+            turnId: turnId,
+            conversationId: turn.conversationId,
+            sequence: 1 << 30,
+            type: 'error',
+            status: 'failed',
+            revision: 1,
+            content: (event.payload['userMessage'] ?? '').toString(),
+            resultJson: jsonEncode(event.payload),
+            errorCode: (event.payload['errorCode'] ?? '').toString(),
+            createdAt: event.createdAt,
+            updatedAt: event.createdAt,
+          ),
+        );
+      }
       final messageId = event.messageId.trim();
       if (messageId.isNotEmpty) {
         for (var index = items.length - 1; index >= 0; index -= 1) {

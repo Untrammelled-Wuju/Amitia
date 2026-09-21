@@ -781,8 +781,19 @@ class _DrawerMainPanel extends StatelessWidget {
                         ),
                       ],
                       Padding(
-                        padding: const EdgeInsets.fromLTRB(20, 16, 12, 4),
-                        child: Text('最近', style: AppTypography.label(context)),
+                        padding: const EdgeInsets.fromLTRB(14, 16, 8, 4),
+                        child: Row(
+                          children: [
+                            const SizedBox(width: 6),
+                            Text('最近', style: AppTypography.label(context)),
+                            const Spacer(),
+                            IconButton(
+                              tooltip: '新建普通对话',
+                              onPressed: onNewChat,
+                              icon: const Icon(Icons.add, size: 20),
+                            ),
+                          ],
+                        ),
                       ),
                       _ExpandableRecentList(
                         conversations: sidebar.recent,

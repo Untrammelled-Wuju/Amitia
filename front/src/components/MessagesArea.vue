@@ -39,11 +39,9 @@ SPDX-License-Identifier: AGPL-3.0-only
         :data-message-id="item.message.id"
         class="conversation-flow-item conversation-flow-item--message"
         :class="{
-          'conversation-flow-item--entering': item.message.animateIn === true,
           'conversation-flow-item--assistant': item.message.role === 'assistant',
           'conversation-flow-item--continuation': item.isAssistantContinuation === true,
         }"
-        @animationend="finishMessageEntrance(item.message, $event)"
       >
         <div
           v-if="item.showRoleSwitchDivider"
@@ -110,11 +108,25 @@ SPDX-License-Identifier: AGPL-3.0-only
       </div>
 
       <ConversationProjectionHost
-        v-else
+        v-else-if="item.kind === 'node'"
         class="conversation-flow-item conversation-flow-item--node"
         :node="item.node"
         :context="extensionContext"
       />
+
+      <div
+        v-else
+        class="conversation-flow-item conversation-flow-item--error"
+      >
+        <div class="conversation-error-divider">
+          <span class="conversation-error-line"></span>
+          <div class="conversation-error-text">
+            <b>生成失败</b>
+            <span>{{ item.detail }}</span>
+          </div>
+          <span class="conversation-error-line"></span>
+        </div>
+      </div>
     </template>
 
     <div
@@ -154,6 +166,7 @@ import { hasUnifiedSlotItem } from "@/ui-runtime/slotLedger";
 import { acknowledgeClientRuntimeSessionState, fetchClientRuntimeSessionState, fetchConversationUIEventsBeforeSequence } from "@/api/extension";
 import { createConversationUIEventStream } from "@/composables/useConversationUIEventStream";
 import { resolveMessageRenderer } from "@/ui-runtime/messageRendererRegistry";
+import { normalizeMessageState } from "@/conversation/rendering/amrp";
 import {
   getMessageCharacterId,
   getMessageUIKey,
@@ -177,6 +190,7 @@ import {
 
 const props = defineProps<{
   messages: any[];
+  historyMessages?: any[];
   charName: string;
   charAvatar: string;
   characterId: string;
@@ -214,10 +228,11 @@ let unsubscribeConversationDefinitions: (() => void) | null = null;
 let stopCanonicalConversationStream: (() => void) | null = null;
 let durableRequestGeneration = 0;
 
-const conversationId = computed(() => String(
-  props.extensionContext?.conversationId ?? visibleMessages.value[0]?.conversationId ?? "",
-));
 const visibleMessages = computed(() => props.messages);
+const historyMessages = computed(() => props.historyMessages ?? props.messages);
+const conversationId = computed(() => String(
+  props.extensionContext?.conversationId ?? historyMessages.value[0]?.conversationId ?? visibleMessages.value[0]?.conversationId ?? "",
+));
 const workspaceName = computed(() => {
   const workspace = props.extensionContext?.workspace as
     | Record<string, unknown>
@@ -243,7 +258,36 @@ type FlowItem =
       showRoleSwitchDivider?: boolean;
       roleSwitchCharacterId?: string;
     }
-  | { kind: "node"; key: string; node: ConversationNode; sequence?: number; timestamp: string };
+  | { kind: "node"; key: string; node: ConversationNode; sequence?: number; timestamp: string }
+  | { kind: "error"; key: string; detail: string; sequence?: number; timestamp: string };
+
+function turnErrorDetail(turn: any): string {
+  const item = [...(turn?.items || [])].reverse().find((candidate) => candidate?.type === "error");
+  if (!item) return "网络错误";
+  let payload: Record<string, unknown>;
+  try {
+    const parsed = JSON.parse(String(item.resultJson || "{}"));
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return item.errorCode || "网络错误";
+    payload = parsed as Record<string, unknown>;
+  } catch {
+    return String(item.errorCode || "网络错误");
+  }
+  const toText = (value: unknown): string => {
+    if (value === undefined || value === null) return "";
+    if (typeof value === "string") return value.trim();
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return String(value).trim();
+    }
+  };
+  const internalMessage = toText(payload.internalMessage);
+  const userMessage = toText(payload.userMessage);
+  const errorCode = toText(payload.errorCode) || String(item.errorCode || "").trim();
+  const provider = toText(payload.provider);
+  const message = internalMessage || userMessage || errorCode || "网络错误";
+  return [provider, errorCode, message].filter(Boolean).join(" · ");
+}
 
 const flowItems = computed<FlowItem[]>(() => {
   const items: FlowItem[] = visibleMessages.value.map((message, index) => ({
@@ -298,6 +342,24 @@ const flowItems = computed<FlowItem[]>(() => {
       item.message?.role === "assistant" &&
       next?.kind === "message" &&
       next.isAssistantContinuation === true;
+  }
+  const lastMessage = visibleMessages.value[visibleMessages.value.length - 1];
+  if (
+    lastMessage?.role === "assistant" &&
+    normalizeMessageState(lastMessage) === "failed"
+  ) {
+    const messageIndex = ordered.findIndex(
+      (candidate) => candidate.kind === "message" && candidate.message?.id === lastMessage.id,
+    );
+    if (messageIndex >= 0) {
+      ordered.splice(messageIndex + 1, 0, {
+        kind: "error",
+        key: `error:${lastMessage.assistantTurn?.id || lastMessage.id}`,
+        detail: turnErrorDetail(lastMessage.assistantTurn),
+        sequence: finiteNumber(lastMessage?.seq ?? lastMessage?.sequence),
+        timestamp: String(lastMessage?.createdAt ?? lastMessage?.timestamp ?? ""),
+      });
+    }
   }
   return ordered;
 });
@@ -377,7 +439,7 @@ function rebuildConversationEventLog() {
     return;
   }
   runtimeEvents.value = mergeConversationEvents(
-    messageHistoryEvents(visibleMessages.value, id),
+    messageHistoryEvents(historyMessages.value, id),
     durableEvents.value.filter((event) => event.conversationId === id),
     loadConversationEventJournal(id),
     runtimeEvents.value.filter((event) => event.conversationId === id && event.source !== "history" && event.source !== "durable"),
@@ -478,7 +540,7 @@ async function loadClientRuntimeSession(id: string) {
   }
 }
 
-watch(() => [conversationId.value, props.messages, projectionContributions.value] as const, rebuildConversationEventLog, { deep: true });
+watch(() => [conversationId.value, historyMessages.value, projectionContributions.value] as const, rebuildConversationEventLog, { deep: true });
 watch(conversationId, (id) => {
   void loadDurableConversationEventWindow(id);
   void loadClientRuntimeSession(id);
@@ -598,11 +660,6 @@ function finiteNumber(value: unknown): number | undefined {
   return Number.isFinite(number) ? number : undefined;
 }
 
-function finishMessageEntrance(message: any, event: AnimationEvent) {
-  if (event.target !== event.currentTarget) return;
-  message.animateIn = false;
-}
-
 function scrollToMessage(messageId: string) {
   if (!rootEl.value) return;
   const el = rootEl.value.querySelector(`[data-message-id="${messageId}"]`);
@@ -686,6 +743,38 @@ defineExpose({ rootEl });
   margin-bottom: 0;
 }
 
+.conversation-flow-item--error {
+  margin-bottom: 38px;
+}
+
+.conversation-error-divider {
+  width: min(100%, 820px);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 auto;
+  color: var(--ac-color-text-muted);
+  font-size: 11px;
+}
+
+.conversation-error-line {
+  flex: 1 1 0;
+  height: 1px;
+  background: var(--ac-color-border);
+}
+
+.conversation-error-text {
+  flex: 4 1 0;
+  min-width: 0;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+.conversation-error-text b {
+  margin-right: 6px;
+  color: var(--ac-color-danger, #e5484d);
+}
+
 .conversation-role-switch {
   width: min(100%, 820px);
   display: flex;
@@ -712,13 +801,6 @@ defineExpose({ rootEl });
 .conversation-role-switch span {
   flex: 0 0 auto;
   text-align: center;
-}
-
-.conversation-flow-item--entering { animation: conversationMessageIn 0.25s ease-out; }
-
-@keyframes conversationMessageIn {
-  from { opacity: 0; transform: translateY(6px); }
-  to { opacity: 1; transform: translateY(0); }
 }
 
 @media (max-width: 768px) { .messages-area { padding: 12px 8px; } }

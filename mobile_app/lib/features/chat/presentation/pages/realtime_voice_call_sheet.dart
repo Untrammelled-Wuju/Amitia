@@ -603,14 +603,6 @@ class _RealtimeVoiceCallSheetState
           ),
           child: Column(
             children: [
-              Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: context.borderPrimary,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
               const SizedBox(height: 18),
               Align(
                 alignment: Alignment.centerLeft,

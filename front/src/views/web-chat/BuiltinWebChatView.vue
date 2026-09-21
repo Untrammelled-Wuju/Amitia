@@ -86,6 +86,7 @@ SPDX-License-Identifier: AGPL-3.0-only
         :actions="conversationHostActions"
         ref="msgAreaRef"
         :messages="messages"
+        :history-messages="persistedMessages"
         :char-name="charName"
         :char-avatar="charAvatar"
         :character-id="characterId"
@@ -275,7 +276,7 @@ const currentCharName = inject<any>("currentCharName", null);
 const extensionUIStore = useExtensionUIStore();
 const chatStore = useChatStore();
 
-const messages = ref<any[]>([]);
+const persistedMessages = ref<any[]>([]);
 const convId = ref(String(route.query.conversationId || ""));
 const convTitle = ref("");
 const characterId = ref("");
@@ -385,20 +386,18 @@ async function handleNewChat(event?: CustomEvent) {
   const providedId = event?.detail?.conversationId;
   try {
     if (providedId) {
-      disconnectSSE();
+      disconnectAndResetConversation();
       convId.value = providedId;
       convTitle.value = "";
-      messages.value = [];
       replyTarget.value = null;
       await router.replace({ path: "/chat", query: { conversationId: providedId } });
       nextTick(() => scrollToBottom(true));
       connectSSE();
       return;
     }
-    disconnectSSE();
+    disconnectAndResetConversation();
     convId.value = "";
     convTitle.value = "";
-    messages.value = [];
     replyTarget.value = null;
     await startDraftConversation();
     await router.replace({ path: "/chat" });
@@ -435,8 +434,8 @@ async function deleteConversationMessage(messageId: string) {
   const id = String(messageId || "").trim();
   if (!id) return;
   await del(`/api/chats/messages/${encodeURIComponent(id)}`);
-  const index = messages.value.findIndex((item) => String(item.id) === id);
-  if (index >= 0) messages.value.splice(index, 1);
+  const index = persistedMessages.value.findIndex((item) => String(item.id) === id);
+  if (index >= 0) persistedMessages.value.splice(index, 1);
 }
 
 async function handleEditMessage(msg: any) {
@@ -453,10 +452,10 @@ async function handleEditMessage(msg: any) {
     const content = String(result.value || "").trim();
     if (!content || content === String(msg.content || "")) return;
     const updated = await put<any>(`/api/web-chat/messages/${encodeURIComponent(msg.id)}`, { content });
-    const index = messages.value.findIndex((item) => String(item.id) === String(msg.id));
+    const index = persistedMessages.value.findIndex((item) => String(item.id) === String(msg.id));
     if (index >= 0) {
-      messages.value[index] = {
-        ...messages.value[index],
+      persistedMessages.value[index] = {
+        ...persistedMessages.value[index],
         content: updated?.content ?? content,
         updatedAt: updated?.updatedAt ?? new Date().toISOString(),
       };
@@ -636,24 +635,28 @@ const {
   applyHistorySnapshot,
 } = useWebChatScroll(
   msgAreaRef,
-  messages,
+  persistedMessages,
   convId,
   showScrollBtn,
   () => loadOlderRuntimeTurns(),
 );
 
 const {
+  messages,
   activeTurnId,
   loadSnapshot: reloadConversationSnapshot,
   loadOlderTurns: loadOlderConversationTurns,
   connect: connectSSE,
   disconnect: disconnectSSE,
+  clear: clearRuntime,
+  beginPendingAssistant,
+  failPendingAssistant,
   cleanup: cleanupSSE,
   connectProactiveMessages: connectProactiveSSE,
   disconnectProactiveMessages: disconnectProactiveSSE,
 } = useConversationRuntime(
   convId,
-  messages,
+  persistedMessages,
   sending,
   scrollToBottom,
   async (conversation, workspace, snapshot) => {
@@ -666,6 +669,16 @@ const {
 );
 
 loadOlderRuntimeTurns = loadOlderConversationTurns;
+
+function resetConversationMessages() {
+  clearRuntime();
+  persistedMessages.value = [];
+}
+
+function disconnectAndResetConversation() {
+  disconnectSSE();
+  resetConversationMessages();
+}
 
 const {
   onImageAttached,
@@ -682,7 +695,7 @@ const {
   generating,
   isSubmitting,
 } = useWebChatSend(
-  messages,
+  persistedMessages,
   convId,
   characterId,
   sending,
@@ -694,7 +707,7 @@ const {
   pendingAudioUrl,
   pendingVideoUrl,
   scrollToBottom,
-  disconnectSSE,
+  disconnectAndResetConversation,
   inputRef,
   undefined,
   replyTarget,
@@ -703,13 +716,15 @@ const {
       path: "/chat",
       query: { conversationId },
     });
-    await connectSSE(false);
+    void connectSSE(false);
   },
   selectedModelId,
   selectedReasoningEffort,
   selectedReasoningEnabled,
   selectedPermissionMode,
   activeTurnId,
+  beginPendingAssistant,
+  failPendingAssistant,
 );
 
 const {
@@ -726,7 +741,7 @@ const {
   refreshCharacters,
   fetchConvSummary,
 } = useWebChatConversation(
-  messages,
+  persistedMessages,
   convId,
   characterId,
   convTitle,
@@ -734,7 +749,7 @@ const {
   charIdentity,
   charAvatar,
   hasMoreHistory,
-  disconnectSSE,
+  disconnectAndResetConversation,
   connectSSE,
 );
 
@@ -808,10 +823,9 @@ watch(
   () => String(route.query.conversationId || ""),
   async (nextId) => {
     if (!nextId) {
-      disconnectSSE();
+      disconnectAndResetConversation();
       convId.value = "";
       convTitle.value = "";
-      messages.value = [];
       replyTarget.value = null;
       await loadConversationWorkspace("", String(route.query.projectId || ""));
       return;
@@ -867,7 +881,7 @@ watch(isOffline, (offline) => {
   if (
     !offline &&
     sending.value &&
-    messages.value.some((m) => m.status === "sending")
+    persistedMessages.value.some((m) => m.status === "sending")
   ) {
     ElMessage.info("网络已恢复，可重新发送消息");
   }

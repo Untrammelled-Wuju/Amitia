@@ -226,9 +226,6 @@ class _HooksPageState extends ConsumerState<HooksPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const SizedBox(height: 8),
-                Center(
-                  child: Container(width: 40, height: 4, decoration: BoxDecoration(color: context.borderPrimary, borderRadius: BorderRadius.circular(2))),
-                ),
                 const SizedBox(height: 20),
                 Text('Hook 贡献详情', style: AppTypography.pageTitle(context)),
                 const SizedBox(height: 16),
@@ -284,9 +281,6 @@ class _HooksPageState extends ConsumerState<HooksPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const SizedBox(height: 8),
-                Center(
-                  child: Container(width: 40, height: 4, decoration: BoxDecoration(color: context.borderPrimary, borderRadius: BorderRadius.circular(2))),
-                ),
                 const SizedBox(height: 20),
                 Row(
                   children: [

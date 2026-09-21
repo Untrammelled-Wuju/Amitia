@@ -466,7 +466,7 @@ func (h *Handler) WebChatSubmitMessage(c *gin.Context) {
 		Status:         "queued",
 	}, true); err != nil {
 		applog.Error(fmt.Sprintf("[WebChatSubmitMessage] publish queued turn failed: %v", err))
-		h.finalizeWebChatTurnRuntime(queuedTurn, msgID, "failed", "event_persist_failed", true, "Turn 事件持久化失败")
+		h.finalizeWebChatTurnRuntime(queuedTurn, msgID, "failed", "event_persist_failed", true, "Turn 事件持久化失败", err.Error())
 		util.ErrorResponse(c, response.InternalError, "消息运行时初始化失败", nil)
 		return
 	}
@@ -474,7 +474,7 @@ func (h *Handler) WebChatSubmitMessage(c *gin.Context) {
 	c.Header("X-Request-ID", requestID)
 	genCtx, genCancel, executionStarted := conversationstream.DefaultManager().BeginExecution(convID, queuedTurn.ID)
 	if !executionStarted {
-		h.finalizeWebChatTurnRuntime(queuedTurn, msgID, "failed", "conversation_busy", true, "当前会话已有正在执行的 Turn，请使用中途干预或先停止当前 Turn")
+		h.finalizeWebChatTurnRuntime(queuedTurn, msgID, "failed", "conversation_busy", true, "当前会话已有正在执行的 Turn，请使用中途干预或先停止当前 Turn", "")
 		util.SuccessResponse(c, gin.H{
 			"conversationId":  convID,
 			"userMessageId":   msgID,
@@ -492,7 +492,7 @@ func (h *Handler) WebChatSubmitMessage(c *gin.Context) {
 		defer func() {
 			if r := recover(); r != nil {
 				applog.Error(fmt.Sprintf("[WebChatSubmitMessage] panic recovered: %v\n%s", r, debug.Stack()))
-				h.finalizeWebChatTurnRuntime(queuedTurn, msgID, "failed", "runtime_panic", true, "Agent 运行时异常中止")
+				h.finalizeWebChatTurnRuntime(queuedTurn, msgID, "failed", "runtime_panic", true, "Agent 运行时异常中止", fmt.Sprint(r))
 			}
 		}()
 		imageContext, visionError := chat.AnalyzeImageContext(spaceID, body.ImageUrl)
@@ -517,7 +517,7 @@ func (h *Handler) WebChatSubmitMessage(c *gin.Context) {
 
 		if genCtx.Err() != nil {
 			applog.Info(fmt.Sprintf("[WebChatSubmitMessage] generation cancelled before LLM call for %s", convID))
-			h.finalizeWebChatTurnRuntime(queuedTurn, msgID, "interrupted", "interrupted", false, "已停止生成")
+			h.finalizeWebChatTurnRuntime(queuedTurn, msgID, "interrupted", "interrupted", false, "已停止生成", "")
 			return
 		}
 
@@ -542,9 +542,9 @@ func (h *Handler) WebChatSubmitMessage(c *gin.Context) {
 		if err != nil {
 			applog.Warn(fmt.Sprintf("[WebChatSubmitMessage] generation failed: %v", err))
 			if genCtx.Err() != nil || errors.Is(err, context.Canceled) {
-				h.finalizeWebChatTurnRuntime(queuedTurn, msgID, "interrupted", "interrupted", false, "已停止生成")
+				h.finalizeWebChatTurnRuntime(queuedTurn, msgID, "interrupted", "interrupted", false, "已停止生成", err.Error())
 			} else {
-				h.finalizeWebChatTurnRuntime(queuedTurn, msgID, "failed", "generation_failed", true, "Agent 执行失败")
+				h.finalizeWebChatTurnRuntime(queuedTurn, msgID, "failed", "generation_failed", true, "Agent 执行失败", err.Error())
 			}
 		} else if orchResult != nil && orchResult.Response != nil {
 			applog.Info(fmt.Sprintf("[WebChatSubmitMessage] generation completed for %s, assistant count=%d", convID, len(orchResult.Response.MessageIDs)))
@@ -656,7 +656,7 @@ func (h *Handler) persistQueuedWebChatMessage(body webChatSendRequest, convID, c
 	return msg, turn, createdTurn, nil
 }
 
-func (h *Handler) finalizeWebChatTurnRuntime(turn *chat.AssistantTurn, userMessageID, status, errorCode string, retryable bool, userMessage string) {
+func (h *Handler) finalizeWebChatTurnRuntime(turn *chat.AssistantTurn, userMessageID, status, errorCode string, retryable bool, userMessage, internalMessage string) {
 	if h == nil || h.db == nil || turn == nil || strings.TrimSpace(turn.ID) == "" {
 		return
 	}
@@ -687,6 +687,11 @@ func (h *Handler) finalizeWebChatTurnRuntime(turn *chat.AssistantTurn, userMessa
 	if strings.TrimSpace(userMessageID) != "" {
 		_ = h.db.Model(&chat.Message{}).Where("id = ?", userMessageID).Updates(map[string]any{"status": "sent", "updated_at": now}).Error
 	}
+	if status == "failed" {
+		_ = chat.PersistAssistantTurnError(
+			context.Background(), h.db, *turn, errorCode, "runtime", userMessage, internalMessage, "", retryable,
+		)
+	}
 	eventType := "turn.failed"
 	if status == "interrupted" {
 		eventType = "turn.interrupted"
@@ -697,6 +702,9 @@ func (h *Handler) finalizeWebChatTurnRuntime(turn *chat.AssistantTurn, userMessa
 		"retryable":          retryable,
 		"userMessage":        strings.TrimSpace(userMessage),
 		"recoveryCheckpoint": true,
+	}
+	if strings.TrimSpace(internalMessage) != "" {
+		payload["internalMessage"] = strings.TrimSpace(internalMessage)
 	}
 	_, _ = conversationstream.DefaultManager().Publish(context.Background(), conversationstream.AgentUIEvent{
 		ConversationID: turn.ConversationID,

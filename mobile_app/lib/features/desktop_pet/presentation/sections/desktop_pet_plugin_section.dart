@@ -373,16 +373,6 @@ class _PluginDetailSheetState extends State<_PluginDetailSheet> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const SizedBox(height: 8),
-            Center(
-              child: Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: context.borderPrimary,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ),
             const SizedBox(height: 20),
             Text(widget.name, style: AppTypography.pageTitle(context)),
             const SizedBox(height: 4),

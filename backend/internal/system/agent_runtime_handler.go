@@ -49,7 +49,7 @@ func (h *Handler) WebChatConversationSnapshot(c *gin.Context) {
 	runtime := conversationstream.DefaultManager().RuntimeSnapshot(conversationID)
 	for index := range turns {
 		if isRecoverableTurnStatus(turns[index].Status) && runtime.ActiveTurn == nil && !conversationstream.DefaultManager().HasExecution(conversationID, turns[index].ID) {
-			h.finalizeWebChatTurnRuntime(&turns[index], turns[index].UserMessageID, "interrupted", "runtime_restarted", true, "运行时已重启，可重试该 Turn")
+			h.finalizeWebChatTurnRuntime(&turns[index], turns[index].UserMessageID, "interrupted", "runtime_restarted", true, "运行时已重启，可重试该 Turn", "")
 			now := time.Now().UTC().Format(time.RFC3339Nano)
 			turns[index].Status = "interrupted"
 			turns[index].UpdatedAt = now
@@ -294,7 +294,7 @@ func (h *Handler) WebChatRetryTurn(c *gin.Context) {
 	_, _ = conversationstream.DefaultManager().Publish(c.Request.Context(), conversationstream.AgentUIEvent{ConversationID: conversationID, RequestID: newTurn.RequestID, ExecutionID: newTurn.ExecutionID, TurnID: newTurn.ID, TurnSequence: newTurn.Sequence, Type: "turn.queued", Status: "queued"}, true)
 	genCtx, cancel, executionStarted := conversationstream.DefaultManager().BeginExecution(conversationID, newTurn.ID)
 	if !executionStarted {
-		h.finalizeWebChatTurnRuntime(&newTurn, "", "failed", "conversation_busy", true, "当前会话已有正在执行的 Turn")
+		h.finalizeWebChatTurnRuntime(&newTurn, "", "failed", "conversation_busy", true, "当前会话已有正在执行的 Turn", "")
 		util.SuccessResponse(c, gin.H{"conversationId": conversationID, "turnId": newTurn.ID, "executionId": newTurn.ExecutionID, "requestId": newTurn.RequestID, "status": "failed", "errorCode": "conversation_busy"})
 		return
 	}
@@ -310,9 +310,9 @@ func (h *Handler) WebChatRetryTurn(c *gin.Context) {
 		}, binding)
 		if runErr != nil {
 			if genCtx.Err() != nil {
-				h.finalizeWebChatTurnRuntime(&newTurn, "", "interrupted", "interrupted", false, "已停止生成")
+				h.finalizeWebChatTurnRuntime(&newTurn, "", "interrupted", "interrupted", false, "已停止生成", runErr.Error())
 			} else {
-				h.finalizeWebChatTurnRuntime(&newTurn, "", "failed", "generation_failed", true, "Agent 重试执行失败")
+				h.finalizeWebChatTurnRuntime(&newTurn, "", "failed", "generation_failed", true, "Agent 重试执行失败", runErr.Error())
 			}
 			return
 		}

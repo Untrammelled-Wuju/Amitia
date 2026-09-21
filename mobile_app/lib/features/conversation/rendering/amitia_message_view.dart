@@ -21,7 +21,6 @@ class AmitiaMessageView extends StatefulWidget {
   final String avatarColor;
   final bool showAvatar;
   final bool showHeader;
-  final String roleLabel;
   final bool showThinking;
   final List<AmrpToolBlock> toolBlocks;
   final VoidCallback? onRetry;
@@ -37,7 +36,6 @@ class AmitiaMessageView extends StatefulWidget {
     this.avatarColor = '#7060E8',
     this.showAvatar = true,
     this.showHeader = true,
-    this.roleLabel = '默认角色',
     this.showThinking = false,
     this.toolBlocks = const <AmrpToolBlock>[],
     this.onRetry,
@@ -75,6 +73,22 @@ class _AmitiaMessageViewState extends State<AmitiaMessageView> {
     final streaming =
         message.state == AmrpMessageState.streaming ||
         message.state == AmrpMessageState.queued;
+    final hasAssistantTurnContent =
+        widget.message.assistantTurn?.items.isNotEmpty == true;
+    final hasVisibleContent =
+        message.markdown.trim().isNotEmpty ||
+        message.blocks.isNotEmpty ||
+        message.thinking != null ||
+        widget.toolBlocks.isNotEmpty ||
+        hasAssistantTurnContent;
+    final isActiveAssistant =
+        message.role == AmrpMessageRole.assistant &&
+        (message.state == AmrpMessageState.queued ||
+            message.state == AmrpMessageState.streaming);
+    final showThinkingPlaceholder =
+        message.role == AmrpMessageRole.assistant &&
+        message.thinking == null &&
+        ((isActiveAssistant && !hasVisibleContent) || widget.showThinking);
     if (message.role == AmrpMessageRole.system) {
       return _SystemNotice(message: message, tokens: tokens);
     }
@@ -103,7 +117,6 @@ class _AmitiaMessageViewState extends State<AmitiaMessageView> {
                   if (widget.showHeader)
                     _MessageHead(
                       name: widget.characterName,
-                      role: widget.roleLabel,
                       time: _formatTime(message.createdAt),
                       tokens: tokens,
                     ),
@@ -113,20 +126,19 @@ class _AmitiaMessageViewState extends State<AmitiaMessageView> {
                       state: message.state,
                       tokens: tokens,
                     ),
-                  if (widget.message.assistantTurn != null)
-                    ..._renderAssistantTurn(
-                      widget.message.assistantTurn!,
+                  if (showThinkingPlaceholder)
+                    AmitiaThinkingBlock(
+                      block: const AmrpThinkingBlock(
+                        content: '',
+                        state: AmrpMessageState.streaming,
+                      ),
                     )
+                  else if (widget.message.assistantTurn?.items.isNotEmpty ==
+                      true)
+                    ..._renderAssistantTurn(widget.message.assistantTurn!)
                   else ...[
                     if (message.thinking != null)
                       AmitiaThinkingBlock(block: message.thinking!),
-                    if (widget.showThinking && message.thinking == null)
-                      AmitiaThinkingBlock(
-                        block: AmrpThinkingBlock(
-                          content: '',
-                          state: AmrpMessageState.streaming,
-                        ),
-                      ),
                     if (message.markdown.isNotEmpty)
                       AmitiaMarkdownView(
                         source: message.markdown,
@@ -236,14 +248,6 @@ class _AmitiaMessageViewState extends State<AmitiaMessageView> {
         'title': '已中断',
         'detail': '保留已生成内容 · 可继续生成',
       },
-      AmrpMessageState.failed => <String, String>{
-        'title': '生成失败',
-        'detail': '网络错误 · 可重试',
-      },
-      AmrpMessageState.queued => <String, String>{
-        'title': '等待开始生成',
-        'detail': '任务已进入队列',
-      },
       _ => null,
     };
   }
@@ -265,13 +269,11 @@ class _AmitiaMessageViewState extends State<AmitiaMessageView> {
 
 class _MessageHead extends StatelessWidget {
   final String name;
-  final String role;
   final String time;
   final AmitiaMessageTheme tokens;
 
   const _MessageHead({
     required this.name,
-    required this.role,
     required this.time,
     required this.tokens,
   });
@@ -294,8 +296,6 @@ class _MessageHead extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(width: 7),
-          Text(role, style: TextStyle(color: tokens.muted, fontSize: 11)),
           const SizedBox(width: 7),
           Text(
             time,
@@ -364,17 +364,50 @@ class _StateNotice extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (state == AmrpMessageState.failed) {
+      return Container(
+        constraints: const BoxConstraints(maxWidth: 700),
+        margin: const EdgeInsets.only(bottom: 10),
+        child: Row(
+          children: [
+            Expanded(child: Container(height: 1, color: tokens.line)),
+            const SizedBox(width: 10),
+            Flexible(
+              flex: 4,
+              child: Text.rich(
+                TextSpan(
+                  children: [
+                    TextSpan(
+                      text: data['title']!,
+                      style: TextStyle(
+                        color: tokens.danger,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const TextSpan(text: '  '),
+                    TextSpan(
+                      text: data['detail']!,
+                      style: TextStyle(color: tokens.muted, fontSize: 11),
+                    ),
+                  ],
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(child: Container(height: 1, color: tokens.line)),
+          ],
+        ),
+      );
+    }
     return Container(
       constraints: const BoxConstraints(maxWidth: 700),
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
         color: tokens.surface,
-        border: Border.all(
-          color: state == AmrpMessageState.failed
-              ? tokens.danger.withValues(alpha: 0.45)
-              : tokens.line,
-        ),
+        border: Border.all(color: tokens.line),
         borderRadius: BorderRadius.circular(tokens.toolRadius),
       ),
       child: Row(
@@ -873,7 +906,10 @@ class _TurnToolStreamState extends State<_TurnToolStream> {
                 _expanded = !_expanded;
               }),
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 9,
+                ),
                 child: Row(
                   children: [
                     AnimatedRotation(

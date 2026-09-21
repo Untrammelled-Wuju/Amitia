@@ -26,6 +26,7 @@ const (
 	assistantTurnItemToolCall   = "tool_call"
 	assistantTurnItemToolResult = "tool_result"
 	assistantTurnItemText       = "text"
+	assistantTurnItemError      = "error"
 )
 
 type AssistantTurn struct {
@@ -362,6 +363,11 @@ func (r *assistantTurnRecorder) finalize(ctx context.Context, status string, pay
 	if status != assistantTurnStatusFailed && status != assistantTurnStatusInterrupted {
 		return nil
 	}
+	if status == assistantTurnStatusFailed && payload != nil {
+		if err := r.persistErrorItem(context.WithoutCancel(ctx), payload); err != nil {
+			return err
+		}
+	}
 	eventType := "turn.failed"
 	if status == assistantTurnStatusInterrupted {
 		eventType = "turn.interrupted"
@@ -371,6 +377,58 @@ func (r *assistantTurnRecorder) finalize(ctx context.Context, status string, pay
 	}
 	_, err := conversationstream.DefaultManager().Publish(context.Background(), conversationstream.AgentUIEvent{ConversationID: r.ConversationID, RequestID: r.RequestID, ExecutionID: r.ExecutionID, TurnID: r.TurnID, TurnSequence: r.TurnSequence, Type: eventType, Status: status, Payload: payload}, true)
 	return err
+}
+
+func (r *assistantTurnRecorder) persistErrorItem(ctx context.Context, payload map[string]any) error {
+	if r == nil || r.db == nil || !r.enabled || payload == nil {
+		return nil
+	}
+	encoded, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+	userMessage := strings.TrimSpace(fmt.Sprint(payload["userMessage"]))
+	errorCode := strings.TrimSpace(fmt.Sprint(payload["errorCode"]))
+	now := nowString()
+	var existing AssistantTurnItem
+	err = r.db.WithContext(ctx).
+		Where("turn_id = ? AND item_type = ?", r.TurnID, assistantTurnItemError).
+		Order("sequence ASC").
+		First(&existing).Error
+	if err == nil {
+		revision := existing.Revision + 1
+		if revision < 2 {
+			revision = 2
+		}
+		if err := r.db.WithContext(ctx).Model(&AssistantTurnItem{}).Where("id = ?", existing.ID).Updates(map[string]any{
+			"status":      assistantTurnStatusFailed,
+			"content":     userMessage,
+			"result_json": string(encoded),
+			"error_code":  errorCode,
+			"revision":    revision,
+			"updated_at":  now,
+		}).Error; err != nil {
+			return err
+		}
+		existing.Status = assistantTurnStatusFailed
+		existing.Content = userMessage
+		existing.ResultJSON = string(encoded)
+		existing.ErrorCode = errorCode
+		existing.Revision = revision
+		existing.UpdatedAt = now
+		return r.publishItemEvents(ctx, existing)
+	}
+	if err != gorm.ErrRecordNotFound {
+		return err
+	}
+	return r.addItem(ctx, AssistantTurnItem{
+		ItemType:   assistantTurnItemError,
+		Status:     assistantTurnStatusFailed,
+		ErrorCode:  errorCode,
+		Content:    userMessage,
+		ResultJSON: string(encoded),
+		Revision:   2,
+	})
 }
 
 func (r *assistantTurnRecorder) addItem(ctx context.Context, item AssistantTurnItem) error {
@@ -467,22 +525,17 @@ func PersistAssistantTurnError(ctx context.Context, db *gorm.DB, turn AssistantT
 	if trimmedInternalMessage != "" && json.Valid([]byte(trimmedInternalMessage)) {
 		encodedInternalMessage = json.RawMessage(trimmedInternalMessage)
 	}
-	encoded, err := json.Marshal(map[string]any{
-		"errorType": errorType, "retryable": retryable, "userMessage": userMessage,
-		"internalMessage": encodedInternalMessage, "provider": provider,
-	})
-	if err != nil {
-		return err
+	payload := map[string]any{
+		"errorCode": strings.TrimSpace(errorCode), "errorType": strings.TrimSpace(errorType), "retryable": retryable,
+		"userMessage": strings.TrimSpace(userMessage), "internalMessage": encodedInternalMessage,
+		"provider": strings.TrimSpace(provider), "recoveryCheckpoint": true,
 	}
 	recorder := &assistantTurnRecorder{
 		db: db, TurnID: turn.ID, ConversationID: turn.ConversationID, CharacterID: turn.CharacterID,
 		UserMessageID: turn.UserMessageID, RequestID: turn.RequestID, ExecutionID: turn.ExecutionID,
 		TurnSequence: turn.Sequence, enabled: true,
 	}
-	return recorder.addItem(ctx, AssistantTurnItem{
-		ItemType: "error", Status: assistantTurnStatusFailed, ErrorCode: strings.TrimSpace(errorCode),
-		Content: strings.TrimSpace(userMessage), ResultJSON: string(encoded),
-	})
+	return recorder.persistErrorItem(ctx, payload)
 }
 
 func appendAssistantTurnItemTx(tx *gorm.DB, item *AssistantTurnItem) error {

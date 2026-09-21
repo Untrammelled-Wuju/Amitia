@@ -21,7 +21,8 @@ class ConversationRuntimeController extends ChangeNotifier {
   final ConversationMessageLedger _messages = ConversationMessageLedger();
   final AgentEventReducer _agentReducer = AgentEventReducer();
   final MarkdownStreamScheduler _streamScheduler = MarkdownStreamScheduler();
-  final Map<String, Map<String, dynamic>> _pendingApprovals = <String, Map<String, dynamic>>{};
+  final Map<String, Map<String, dynamic>> _pendingApprovals =
+      <String, Map<String, dynamic>>{};
   String? _conversationId;
   String? _characterId;
   ConversationWorkspaceDto? _workspace;
@@ -59,8 +60,9 @@ class ConversationRuntimeController extends ChangeNotifier {
   int get conversationUpdateEpoch => _conversationUpdateEpoch;
   String get activeTurnId => _agentReducer.activeTurnId;
   String get activeExecutionId => _agentReducer.activeExecutionId;
-  List<Map<String, dynamic>> get pendingApprovals =>
-      _pendingApprovals.values.map((item) => Map<String, dynamic>.from(item)).toList(growable: false);
+  List<Map<String, dynamic>> get pendingApprovals => _pendingApprovals.values
+      .map((item) => Map<String, dynamic>.from(item))
+      .toList(growable: false);
 
   void setCharacterId(String? characterId) {
     final value = characterId?.trim() ?? '';
@@ -315,6 +317,10 @@ class ConversationRuntimeController extends ChangeNotifier {
       status: MessageStatus.sending,
     );
     _messages.upsert(pending);
+    final assistantPlaceholder = _assistantPlaceholder(requestId);
+    if (assistantPlaceholder != null) {
+      _messages.upsert(assistantPlaceholder);
+    }
     _lastError = null;
     _sending = true;
     notifyListeners();
@@ -341,7 +347,10 @@ class ConversationRuntimeController extends ChangeNotifier {
       }
       final wasDraft = (_conversationId?.trim() ?? '').isEmpty;
       _conversationId = authoritativeConversation;
-      final current = _messages.findByRenderId(requestId, role: MessageRole.user);
+      final current = _messages.findByRenderId(
+        requestId,
+        role: MessageRole.user,
+      );
       if (current != null) {
         _messages.upsert(
           _cloneMessage(
@@ -364,7 +373,11 @@ class ConversationRuntimeController extends ChangeNotifier {
         debugPrint(line);
       }
       _lastError = error;
-      final current = _messages.findByRenderId(requestId, role: MessageRole.user);
+      _messages.removeById(_assistantRenderId(requestId));
+      final current = _messages.findByRenderId(
+        requestId,
+        role: MessageRole.user,
+      );
       if (current != null) {
         _messages.upsert(_cloneMessage(current, status: MessageStatus.error));
       }
@@ -374,7 +387,8 @@ class ConversationRuntimeController extends ChangeNotifier {
   }
 
   Future<void> _refreshSnapshot(String conversationId) async {
-    if (_loadingSnapshot || _disposed || _conversationId != conversationId) return;
+    if (_loadingSnapshot || _disposed || _conversationId != conversationId)
+      return;
     _loadingSnapshot = true;
     try {
       final snapshot = await _chatService.conversationSnapshot(conversationId);
@@ -406,10 +420,18 @@ class ConversationRuntimeController extends ChangeNotifier {
     } else if ((conversation?.projectId ?? '').isEmpty) {
       _workspace = null;
     }
-    _messages.clear();
+    final snapshotMessageIds = <String>{};
     for (final dto in snapshot.messages) {
-      _messages.upsert(_messageFromDto(dto));
+      final message = _messageFromDto(dto);
+      snapshotMessageIds.add(message.id);
+      _messages.upsert(message);
     }
+    _messages.removeWhere(
+      (message) =>
+          !snapshotMessageIds.contains(message.id) &&
+          !_isLiveAssistantMessage(message) &&
+          message.status != MessageStatus.sending,
+    );
     _agentReducer.reset(
       turns: snapshot.turns,
       lastEventSequence: snapshot.lastEventSequence,
@@ -488,7 +510,9 @@ class ConversationRuntimeController extends ChangeNotifier {
           _eventCancellation = null;
         }
       }
-      if (_disposed || epoch != _runtimeEpoch || _conversationId != conversationId) {
+      if (_disposed ||
+          epoch != _runtimeEpoch ||
+          _conversationId != conversationId) {
         return;
       }
       await Future<void>.delayed(const Duration(milliseconds: 900));
@@ -505,9 +529,11 @@ class ConversationRuntimeController extends ChangeNotifier {
           'conversationId': event.conversationId,
           'turnId': event.turnId,
           'toolCallId': event.callId,
-          'toolName': event.payload['tool'] ?? event.payload['toolName'] ?? '工具调用',
+          'toolName':
+              event.payload['tool'] ?? event.payload['toolName'] ?? '工具调用',
           'arguments': event.payload['arguments'] ?? '',
-          'riskLevel': event.payload['risk'] ?? event.payload['riskLevel'] ?? '',
+          'riskLevel':
+              event.payload['risk'] ?? event.payload['riskLevel'] ?? '',
           'expiresAt': event.payload['expiresAt'] ?? '',
         };
       }
@@ -520,7 +546,8 @@ class ConversationRuntimeController extends ChangeNotifier {
     if (type == 'turn.queued' || type == 'turn.started') {
       _sending = true;
     }
-    final terminal = type == 'turn.completed' ||
+    final terminal =
+        type == 'turn.completed' ||
         type == 'turn.failed' ||
         type == 'turn.interrupted';
     if (terminal) {
@@ -559,18 +586,10 @@ class ConversationRuntimeController extends ChangeNotifier {
 
   void _projectTurns() {
     final turns = _agentReducer.turns;
-    final attached = <String>{};
-    final liveIds = _messages.messages
-        .where((message) => message.id.startsWith('turn:'))
-        .map((message) => message.id)
-        .toList(growable: false);
-    for (final id in liveIds) {
-      _messages.removeById(id);
-    }
-    final messageById = <String, ChatMessage>{
-      for (final message in _messages.messages) message.id: message,
-    };
+    final activeRenderIds = <String>{};
     for (final turn in turns) {
+      final renderId = _assistantRenderIdForTurn(turn);
+      activeRenderIds.add(renderId);
       AssistantTurnItemDto? finalItem;
       for (final item in turn.items.reversed) {
         if (item.type == 'text' && item.messageId.trim().isNotEmpty) {
@@ -579,65 +598,90 @@ class ConversationRuntimeController extends ChangeNotifier {
         }
       }
       if (finalItem != null) {
-        final persisted = messageById[finalItem.messageId];
+        final persisted = _messages.findById(finalItem.messageId);
         if (persisted != null && persisted.role == MessageRole.assistant) {
           _messages.upsert(
-            _cloneMessage(
-              persisted,
-              assistantTurn: turn,
-            ),
+            _cloneMessage(persisted, renderId: renderId, assistantTurn: turn),
           );
-          attached.add(turn.id);
+          continue;
         }
       }
-    }
-    for (final turn in turns) {
-      if (attached.contains(turn.id)) continue;
+
+      final existing = _messages.findByRenderId(
+        renderId,
+        role: MessageRole.assistant,
+      );
       final text = turn.items
           .where((item) => item.type == 'text')
           .map((item) => item.content)
           .join();
-      final reasoning = turn.items
+      final reasoningItems = turn.items
           .where((item) => item.type == 'reasoning')
-          .map((item) => item.content)
-          .join();
+          .toList(growable: false);
+      final reasoning = reasoningItems.map((item) => item.content).join();
+      final reasoningDurationMs = reasoningItems.fold<int>(
+        0,
+        (total, item) => total + item.durationMs,
+      );
       final terminal = _isTerminalTurn(turn.status);
       final status = switch (turn.status.toLowerCase()) {
+        'queued' || 'pending' => MessageStatus.queued,
         'failed' => MessageStatus.error,
         'interrupted' => MessageStatus.interrupted,
         'completed' => MessageStatus.delivered,
         _ => MessageStatus.streaming,
       };
-      if (terminal && text.isEmpty && turn.items.isEmpty) continue;
+      if (terminal &&
+          text.isEmpty &&
+          turn.items.isEmpty &&
+          status != MessageStatus.error) {
+        if (existing != null) _messages.remove(existing);
+        continue;
+      }
+      final characterId = turn.characterId.trim().isNotEmpty
+          ? turn.characterId
+          : (existing?.characterId ?? _characterId ?? '');
       _messages.upsert(
         ChatMessage(
-          id: 'turn:${turn.id}',
-          renderId: 'turn:${turn.id}',
-          characterId: turn.characterId,
+          id: existing?.id ?? renderId,
+          renderId: renderId,
+          characterId: characterId,
           role: MessageRole.assistant,
           type: MessageType.text,
           content: text,
           reasoningContent: reasoning,
-          time: DateTime.tryParse(turn.createdAt) ?? DateTime.now(),
+          reasoningDurationMs: reasoningDurationMs,
+          time:
+              existing?.time ??
+              DateTime.tryParse(turn.createdAt) ??
+              DateTime.now(),
           status: status,
           assistantTurn: turn,
         ),
       );
     }
+    _messages.removeWhere(
+      (message) =>
+          _isLiveAssistantMessage(message) &&
+          !activeRenderIds.contains(message.renderId),
+    );
   }
 
   ChatMessage _messageFromDto(MessageDto dto) {
+    final role = _roleFor(dto.role);
     final type = _typeForDto(dto, null);
     final task = type == MessageType.agentTask
         ? _agentTaskPayload(dto.content)
         : const <String, dynamic>{};
     return ChatMessage(
       id: dto.id,
-      renderId: dto.requestId.trim().isNotEmpty && dto.role == 'user'
-          ? dto.requestId.trim()
-          : dto.id,
+      renderId: dto.requestId.trim().isEmpty
+          ? dto.id
+          : role == MessageRole.assistant
+          ? _assistantRenderId(dto.requestId)
+          : dto.requestId.trim(),
       characterId: dto.characterId,
-      role: _roleFor(dto.role),
+      role: role,
       type: type,
       content: dto.content,
       reasoningContent: dto.reasoningContent,
@@ -645,11 +689,22 @@ class ConversationRuntimeController extends ChangeNotifier {
       time: DateTime.tryParse(dto.createdAt) ?? DateTime.now(),
       sequence: dto.sequence > 0 ? dto.sequence : null,
       status: _statusForDto(dto.status),
-      agentTaskId: _firstString(task, const <String>['taskRunId', 'task_run_id', 'runId']),
-      agentTaskTitle: _firstString(task, const <String>['title', 'taskTitle', 'taskDefinitionId']),
+      agentTaskId: _firstString(task, const <String>[
+        'taskRunId',
+        'task_run_id',
+        'runId',
+      ]),
+      agentTaskTitle: _firstString(task, const <String>[
+        'title',
+        'taskTitle',
+        'taskDefinitionId',
+      ]),
       agentTaskSteps: _stringList(task['steps']),
       agentTaskProgress: _progressInt(task),
-      agentTaskElapsed: _firstString(task, const <String>['elapsed', 'elapsedTime']),
+      agentTaskElapsed: _firstString(task, const <String>[
+        'elapsed',
+        'elapsedTime',
+      ]),
       resourceUri: _resourceForDto(dto, null),
       mediaUrl: _resourceForDto(dto, null),
       mimeType: dto.imageUrl.isNotEmpty
@@ -723,7 +778,8 @@ class ConversationRuntimeController extends ChangeNotifier {
         return true;
       }
     }
-    return message.role == MessageRole.user && message.status == MessageStatus.error;
+    return message.role == MessageRole.user &&
+        message.status == MessageStatus.error;
   }
 
   Future<void> retryMessage(int index) async {
@@ -844,12 +900,17 @@ class ConversationRuntimeController extends ChangeNotifier {
   }) async {
     final id = conversationId.trim();
     if (id.isEmpty) return;
-    _characterId = characterId?.trim().isEmpty == true ? null : characterId?.trim();
+    _characterId = characterId?.trim().isEmpty == true
+        ? null
+        : characterId?.trim();
     if (_conversationId != id) {
       _disconnectRuntime();
       _conversationId = id;
       _messages.clear();
-      _agentReducer.reset(turns: const <AssistantTurnDto>[], lastEventSequence: 0);
+      _agentReducer.reset(
+        turns: const <AssistantTurnDto>[],
+        lastEventSequence: 0,
+      );
       _resetHistory();
       _lastError = null;
       _sending = false;
@@ -871,13 +932,18 @@ class ConversationRuntimeController extends ChangeNotifier {
     String projectId = '',
   }) async {
     try {
-      final conversation = await _chatService.createRealtimeConversation(projectId: projectId);
+      final conversation = await _chatService.createRealtimeConversation(
+        projectId: projectId,
+      );
       if (conversation == null) return false;
       _disconnectRuntime();
       _conversationId = conversation.id;
       _characterId = characterId;
       _messages.clear();
-      _agentReducer.reset(turns: const <AssistantTurnDto>[], lastEventSequence: 0);
+      _agentReducer.reset(
+        turns: const <AssistantTurnDto>[],
+        lastEventSequence: 0,
+      );
       _resetHistory();
       _lastError = null;
       _sending = false;
@@ -922,7 +988,10 @@ class ConversationRuntimeController extends ChangeNotifier {
     _draftEpoch++;
     _conversationId = null;
     _messages.clear();
-    _agentReducer.reset(turns: const <AssistantTurnDto>[], lastEventSequence: 0);
+    _agentReducer.reset(
+      turns: const <AssistantTurnDto>[],
+      lastEventSequence: 0,
+    );
     _pendingApprovals.clear();
     _resetHistory();
     _lastError = null;
@@ -1033,7 +1102,10 @@ class ConversationRuntimeController extends ChangeNotifier {
       final current = direct['current'];
       final total = direct['total'];
       if (current is num && total is num && total > 0) {
-        return (current.toDouble() / total.toDouble() * 100).round().clamp(0, 100);
+        return (current.toDouble() / total.toDouble() * 100).round().clamp(
+          0,
+          100,
+        );
       }
     }
     return null;
@@ -1103,7 +1175,10 @@ class ConversationRuntimeController extends ChangeNotifier {
     return switch (status) {
       'queued' || 'pending' => MessageStatus.queued,
       'sending' => MessageStatus.sending,
-      'streaming' || 'generating' || 'collecting' || 'processing' => MessageStatus.streaming,
+      'streaming' ||
+      'generating' ||
+      'collecting' ||
+      'processing' => MessageStatus.streaming,
       'interrupted' || 'paused' => MessageStatus.interrupted,
       'failed' || 'error' => MessageStatus.error,
       _ => MessageStatus.delivered,
@@ -1112,9 +1187,7 @@ class ConversationRuntimeController extends ChangeNotifier {
 
   bool _isTerminalTurn(String status) {
     final value = status.trim().toLowerCase();
-    return value == 'completed' ||
-        value == 'failed' ||
-        value == 'interrupted';
+    return value == 'completed' || value == 'failed' || value == 'interrupted';
   }
 
   String _localId(String prefix) =>
@@ -1127,6 +1200,36 @@ class ConversationRuntimeController extends ChangeNotifier {
       if (current > sequence) sequence = current;
     }
     return sequence + 1;
+  }
+
+  String _assistantRenderId(String requestId) {
+    final value = requestId.trim();
+    return value.isEmpty ? '' : 'request:$value';
+  }
+
+  String _assistantRenderIdForTurn(AssistantTurnDto turn) {
+    final renderId = _assistantRenderId(turn.requestId);
+    return renderId.isEmpty ? 'turn:${turn.id}' : renderId;
+  }
+
+  ChatMessage? _assistantPlaceholder(String requestId) {
+    final renderId = _assistantRenderId(requestId);
+    if (renderId.isEmpty) return null;
+    return ChatMessage(
+      id: renderId,
+      renderId: renderId,
+      characterId: _characterId?.trim() ?? '',
+      role: MessageRole.assistant,
+      type: MessageType.text,
+      content: '',
+      time: DateTime.now(),
+      status: MessageStatus.queued,
+    );
+  }
+
+  bool _isLiveAssistantMessage(ChatMessage message) {
+    if (message.role != MessageRole.assistant) return false;
+    return message.id.startsWith('request:') || message.id.startsWith('turn:');
   }
 
   Map<String, dynamic> serializeMessage(ChatMessage message) =>

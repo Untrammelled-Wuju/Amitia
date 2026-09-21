@@ -5803,3 +5803,8 @@ CREATE TABLE IF NOT EXISTS sandbox_environment_variables (
     PRIMARY KEY (scope_id, name)
 );
 CREATE INDEX IF NOT EXISTS idx_sandbox_environment_scope ON sandbox_environment_variables(scope_id);
+
+CREATE TABLE IF NOT EXISTS model_scenario_routes (
+    scenario TEXT PRIMARY KEY,
+    model_config_id INTEGER NOT NULL DEFAULT 0
+);

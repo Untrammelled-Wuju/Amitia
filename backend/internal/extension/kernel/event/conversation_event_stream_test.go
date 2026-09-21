@@ -103,3 +103,43 @@ func TestConversationUIEventBeforeSequenceReturnsAscendingStablePage(t *testing.
 		t.Fatalf("older page sequences = %#v, want [2 3]", older)
 	}
 }
+
+func TestAgentUIEventKeepsCanonicalSequenceWhenEventSequenceExists(t *testing.T) {
+	svc, _, _, _, cleanup := setupTestService(t, true, true, true, true)
+	defer cleanup()
+	if _, err := svc.db.Exec(`CREATE TABLE IF NOT EXISTS extension_conversation_event_sequences (
+		conversation_id TEXT PRIMARY KEY,
+		last_sequence INTEGER NOT NULL DEFAULT 0,
+		updated_at DATETIME NOT NULL
+	)`); err != nil {
+		t.Fatalf("create sequence table: %v", err)
+	}
+
+	payload, _ := json.Marshal(map[string]interface{}{
+		"type":           "turn.queued",
+		"conversationId": "conv-agent-ui",
+		"eventSequence":  1,
+		"status":         "queued",
+	})
+	if _, _, err := svc.PublishConversationUIEvent(context.Background(), "conv-agent-ui", payload, ""); err != nil {
+		t.Fatalf("publish agent ui event: %v", err)
+	}
+
+	records, err := svc.ListConversationUIEventsAfterSequence(context.Background(), "conv-agent-ui", 0, 10)
+	if err != nil {
+		t.Fatalf("list canonical events: %v", err)
+	}
+	if len(records) != 1 {
+		t.Fatalf("canonical event count = %d, want 1", len(records))
+	}
+	var stored map[string]interface{}
+	if err := json.Unmarshal(records[0].Payload, &stored); err != nil {
+		t.Fatalf("decode canonical payload: %v", err)
+	}
+	if got := int64(stored["sequence"].(float64)); got != 1 {
+		t.Fatalf("canonical payload sequence = %d, want 1", got)
+	}
+	if got := int64(stored["eventSequence"].(float64)); got != 1 {
+		t.Fatalf("agent event sequence = %d, want 1", got)
+	}
+}

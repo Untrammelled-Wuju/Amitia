@@ -32,6 +32,7 @@ void main() {
 
     expect(find.text('思考完成（1.2 秒）'), findsOneWidget);
     expect(find.text('最终回复'), findsOneWidget);
+    expect(find.text('默认角色'), findsNothing);
 
     await tester.tap(find.text('思考完成（1.2 秒）'));
     await tester.pumpAndSettle();
@@ -39,19 +40,15 @@ void main() {
     expect(find.text('思考内容'), findsOneWidget);
   });
 
-  testWidgets('运行中的空助手回合显示正在思考', (tester) async {
+  testWidgets('AI 占位消息立即显示名称头像和思考中', (tester) async {
     final message = ChatMessage(
-      id: 'assistant-1',
+      id: 'request:request-1',
+      renderId: 'request:request-1',
       role: MessageRole.assistant,
       type: MessageType.text,
       content: '',
       time: DateTime(2026, 9, 20),
-      status: MessageStatus.streaming,
-      assistantTurn: const AssistantTurnDto(
-        id: 'turn-1',
-        conversationId: 'conversation-1',
-        status: 'running',
-      ),
+      status: MessageStatus.queued,
     );
 
     await tester.pumpWidget(
@@ -61,6 +58,9 @@ void main() {
       ),
     );
 
+    expect(find.text('Amitia'), findsOneWidget);
+    expect(find.text('A'), findsOneWidget);
     expect(find.text('思考中'), findsOneWidget);
+    expect(find.text('默认角色'), findsNothing);
   });
 }

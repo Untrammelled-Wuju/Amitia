@@ -211,6 +211,21 @@ func DefaultMigrations() []Migration {
 		ConversationReasoningEnabledRepairMigration(),
 		ConversationPermissionModeMigration(),
 		AgentRuntimeV1Migration(),
+		ModelScenarioRoutesMigration(),
+	}
+}
+
+func ModelScenarioRoutesMigration() Migration {
+	return Migration{
+		Version: "20260921002",
+		Name:    "create_model_scenario_routes",
+		Up: func(s *Step) error {
+			s.CreateTable(`CREATE TABLE IF NOT EXISTS model_scenario_routes (
+				scenario TEXT PRIMARY KEY,
+				model_config_id INTEGER NOT NULL DEFAULT 0
+			)`)
+			return nil
+		},
 	}
 }
 

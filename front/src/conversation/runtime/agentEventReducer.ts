@@ -228,6 +228,22 @@ export class AgentEventReducer {
         }
         return copy;
       });
+      if (terminalStatus === "failed" && !items.some((item) => item.type === "error")) {
+        items.push({
+          id: `turn-error:${turnId}`,
+          turnId,
+          conversationId: turn.conversationId,
+          sequence: Number.MAX_SAFE_INTEGER,
+          type: "error",
+          status: "failed",
+          revision: 1,
+          content: String(event.payload?.userMessage || ""),
+          resultJson: JSON.stringify(event.payload || {}),
+          errorCode: String(event.payload?.errorCode || ""),
+          createdAt: event.createdAt || "",
+          updatedAt: event.createdAt || "",
+        });
+      }
       const messageId = String(event.messageId || "").trim();
       if (messageId) {
         for (let index = items.length - 1; index >= 0; index -= 1) {

@@ -122,6 +122,7 @@ onMounted(() => { if (!store.snapshot) void store.refreshSnapshot(); });
     layout="stack"
     surface-role="main"
     :render-contributions="false"
+    render-fallback-while-scope-pending
     bare
   >
     <template #default>

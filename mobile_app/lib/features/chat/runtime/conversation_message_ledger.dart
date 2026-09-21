@@ -57,6 +57,17 @@ class ConversationMessageLedger {
     return message != null && remove(message);
   }
 
+  bool removeWhere(bool Function(ChatMessage message) test) {
+    final keys = _items.entries
+        .where((entry) => test(entry.value))
+        .map((entry) => entry.key)
+        .toList(growable: false);
+    for (final key in keys) {
+      _items.remove(key);
+    }
+    return keys.isNotEmpty;
+  }
+
   void clear() {
     _items.clear();
   }

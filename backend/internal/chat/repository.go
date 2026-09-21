@@ -275,7 +275,9 @@ func (r *repository) ActivateModel(id int) error {
 
 func (r *repository) GetModelRoutes() ([]map[string]interface{}, error) {
 	var routes []map[string]interface{}
-	r.db.Table("model_scenario_routes").Find(&routes)
+	if err := r.db.Table("model_scenario_routes").Find(&routes).Error; err != nil {
+		return nil, err
+	}
 	if routes == nil {
 		routes = []map[string]interface{}{}
 	}
@@ -283,12 +285,18 @@ func (r *repository) GetModelRoutes() ([]map[string]interface{}, error) {
 }
 
 func (r *repository) UpdateModelRoutes(routes []map[string]interface{}) error {
-	r.db.Exec("DELETE FROM model_scenario_routes")
-	for _, route := range routes {
-		r.db.Exec("INSERT INTO model_scenario_routes (scenario, model_config_id) VALUES (?, ?)",
-			route["scenario"], route["modelConfigId"])
-	}
-	return nil
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Exec("DELETE FROM model_scenario_routes").Error; err != nil {
+			return err
+		}
+		for _, route := range routes {
+			if err := tx.Exec("INSERT INTO model_scenario_routes (scenario, model_config_id) VALUES (?, ?)",
+				route["scenario"], route["modelConfigId"]).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }
 
 func (r *repository) GetConversationByChannel(channel string) (*Conversation, error) {

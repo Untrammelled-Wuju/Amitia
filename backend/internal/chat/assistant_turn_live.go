@@ -46,6 +46,9 @@ func (p *modelEventProjector) Emit(ctx context.Context, event ModelEvent) error 
 	defer p.mu.Unlock()
 	switch event.Type {
 	case ModelEventTextDelta:
+		if err := p.completeReasoningIfOpen(ctx); err != nil {
+			return err
+		}
 		block, err := p.ensureBlock(ctx, "text", "", "")
 		if err != nil {
 			return err
@@ -64,15 +67,24 @@ func (p *modelEventProjector) Emit(ctx context.Context, event ModelEvent) error 
 	case ModelEventReasoningSummaryDone:
 		return p.completeBlock(ctx, p.reasoning, assistantTurnStatusCompleted)
 	case ModelEventToolCallStarted:
+		if err := p.completeReasoningIfOpen(ctx); err != nil {
+			return err
+		}
 		_, err := p.ensureBlock(ctx, "tool_call", event.ToolCallID, event.ToolName)
 		return err
 	case ModelEventToolCallArgumentsDelta:
+		if err := p.completeReasoningIfOpen(ctx); err != nil {
+			return err
+		}
 		block, err := p.ensureBlock(ctx, "tool_call", event.ToolCallID, event.ToolName)
 		if err != nil {
 			return err
 		}
 		return p.appendDelta(ctx, block, event.ArgumentsDelta, true)
 	case ModelEventToolCallDone:
+		if err := p.completeReasoningIfOpen(ctx); err != nil {
+			return err
+		}
 		block := p.tools[strings.TrimSpace(event.ToolCallID)]
 		if block == nil {
 			var err error
@@ -126,6 +138,9 @@ func (p *modelEventProjector) EnsureText(ctx context.Context, text string) error
 	}
 	if p.text != nil && (p.text.item.Status == assistantTurnStatusCompleted || p.text.item.Status == assistantTurnStatusFailed || p.text.item.Status == assistantTurnStatusInterrupted) {
 		p.text = nil
+	}
+	if err := p.completeReasoningIfOpen(ctx); err != nil {
+		return err
 	}
 	block, err := p.ensureBlock(ctx, "text", "", "")
 	if err != nil {
@@ -319,6 +334,13 @@ func (p *modelEventProjector) completeOpenContentBlocks(ctx context.Context) err
 		return err
 	}
 	return p.completeBlock(ctx, p.text, assistantTurnStatusCompleted)
+}
+
+func (p *modelEventProjector) completeReasoningIfOpen(ctx context.Context) error {
+	if p.reasoning == nil {
+		return nil
+	}
+	return p.completeBlock(ctx, p.reasoning, assistantTurnStatusCompleted)
 }
 
 func (p *modelEventProjector) completeOpenBlocks(ctx context.Context, status string) error {

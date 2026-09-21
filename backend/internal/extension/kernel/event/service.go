@@ -391,9 +391,7 @@ func (s *Service) publishConversationUIEventTx(ctx context.Context, tx *sql.Tx, 
 		return PublishResult{}, 0, err
 	}
 	body["conversationId"] = conversationID
-	if _, isAgentRuntimeEvent := body["eventSequence"]; !isAgentRuntimeEvent {
-		body["sequence"] = sequence
-	}
+	body["sequence"] = sequence
 	if strings.TrimSpace(fmt.Sprint(body["createdAt"])) == "" || fmt.Sprint(body["createdAt"]) == "<nil>" {
 		body["createdAt"] = time.Now().UTC().Format(time.RFC3339Nano)
 	}

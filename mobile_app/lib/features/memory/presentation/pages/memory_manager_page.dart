@@ -1066,7 +1066,6 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-              Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: context.borderPrimary, borderRadius: BorderRadius.circular(2)))),
               SizedBox(height: AppSpacing.lg),
               Text(isEdit ? '编辑记忆' : '新建记忆', style: AppTypography.sectionTitle(context)),
               SizedBox(height: AppSpacing.lg),

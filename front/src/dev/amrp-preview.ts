@@ -182,7 +182,6 @@ createApp({
           message,
           charName: "林澈",
           characterId: "lin-che",
-          roleLabel: "默认角色",
         }),
       ]);
   },

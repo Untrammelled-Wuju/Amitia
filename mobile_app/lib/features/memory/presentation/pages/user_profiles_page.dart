@@ -263,16 +263,6 @@ class _UserProfilesPageState extends ConsumerState<UserProfilesPage> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Center(
-                  child: Container(
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: context.borderPrimary,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                ),
                 SizedBox(height: AppSpacing.lg),
                 Text(
                   isEdit ? '编辑画像' : '新增画像',

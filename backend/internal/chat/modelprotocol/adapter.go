@@ -51,8 +51,10 @@ type ModelContentPart struct {
 }
 
 type ModelMessage struct {
-	Role  string             `json:"role"`
-	Parts []ModelContentPart `json:"parts"`
+	Role       string             `json:"role"`
+	Parts      []ModelContentPart `json:"parts"`
+	ToolCallID string             `json:"toolCallId,omitempty"`
+	ToolCalls  []ModelToolCall    `json:"toolCalls,omitempty"`
 }
 
 type ModelToolDefinition struct {

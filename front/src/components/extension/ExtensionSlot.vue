@@ -32,6 +32,7 @@ const props = withDefaults(
     authorizedBy?: string;
     bare?: boolean;
     renderContributions?: boolean;
+    renderFallbackWhileScopePending?: boolean;
   }>(),
   {
     fallback: undefined,
@@ -48,6 +49,7 @@ const props = withDefaults(
     authorizedBy: undefined,
     bare: false,
     renderContributions: true,
+    renderFallbackWhileScopePending: false,
   }
 );
 
@@ -167,7 +169,10 @@ const visibleItems = computed<RenderItem[]>(() => {
 
 const layoutClass = computed(() => `extension-slot--layout-${resolvedLayout.value}`);
 
-const isHidden = computed(() => !scopeReady.value || (!props.chainOverlay && visibleItems.value.length === 0 && resolvedFallback.value === 'none'));
+const isHidden = computed(() =>
+  (!scopeReady.value && !props.renderFallbackWhileScopePending)
+  || (!props.chainOverlay && visibleItems.value.length === 0 && resolvedFallback.value === 'none'),
+);
 
 const rootEl = computed(() => rootRef.value ?? null);
 function interactiveElement(): HTMLInputElement | HTMLTextAreaElement | HTMLElement | null {

@@ -66,6 +66,48 @@ func TestInvokeLLMWithToolsTracksReasoningDuration(t *testing.T) {
 	}
 }
 
+func TestMessagesToModelRequestFiltersInvalidOpenAIToolNames(t *testing.T) {
+	cfg := &ModelConfig{
+		APIType:   "openai-compatible",
+		ModelName: "test-model",
+	}
+	parameters, err := tool.ParseParametersSchema(json.RawMessage(`{"type":"object","additionalProperties":true}`))
+	if err != nil {
+		t.Fatalf("parse parameters: %v", err)
+	}
+	tools := []tool.Tool{
+		{Function: tool.Function{Name: "valid_tool", Parameters: parameters}},
+		{Function: tool.Function{Name: "invalid.tool", Parameters: parameters}},
+		{Function: tool.Function{Name: "valid-tool", Parameters: parameters}},
+	}
+
+	request := messagesToModelRequest(cfg, nil, tools, false)
+	if len(request.Tools) != 2 {
+		t.Fatalf("tool count = %d, want 2", len(request.Tools))
+	}
+	if request.Tools[0].Name != "valid_tool" || request.Tools[1].Name != "valid-tool" {
+		t.Fatalf("tool names = %q, want valid_tool and valid-tool", []string{request.Tools[0].Name, request.Tools[1].Name})
+	}
+	if request.Tools[0].Parameters["additionalProperties"] != true {
+		t.Fatalf("additionalProperties = %v, want true", request.Tools[0].Parameters["additionalProperties"])
+	}
+	if _, ok := request.Tools[0].Parameters["properties"]; !ok {
+		t.Fatal("properties schema is missing")
+	}
+}
+
+func TestCfgToProviderConfigFallsBackToMaxTokens(t *testing.T) {
+	cfg := &ModelConfig{MaxTokens: 4096}
+	if got := cfgToProviderConfig(cfg).MaxOutputTokens; got != 4096 {
+		t.Fatalf("max output tokens = %d, want 4096", got)
+	}
+
+	cfg = &ModelConfig{}
+	if got := cfgToProviderConfig(cfg).MaxOutputTokens; got != 4096 {
+		t.Fatalf("default max output tokens = %d, want 4096", got)
+	}
+}
+
 func TestInvokeLLMWithToolsContinuesUntilFinalAnswer(t *testing.T) {
 	runtime := &dynamicRoundToolRuntime{}
 	svc := &service{toolRuntime: runtime}

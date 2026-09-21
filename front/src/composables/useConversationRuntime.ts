@@ -1,4 +1,4 @@
-import { type Ref, ref } from "vue";
+import { type Ref, ref, shallowRef, watch } from "vue";
 import { useApi } from "./useApi";
 import { resolveApiUrl } from "../runtime/runtime-adapter";
 import { createAuthenticatedFetchInit } from "../runtime/request-auth";
@@ -11,7 +11,11 @@ import {
   isTerminalTurn,
   normalizedTurnStatus,
 } from "@/conversation/runtime/agentEventReducer";
-import { compareChatMessages, normalizeRealtimeMessage } from "@/utils/message-order";
+import {
+  compareChatMessages,
+  getMessageUIKey,
+  normalizeRealtimeMessage,
+} from "@/utils/message-order";
 import { notifyDesktopPetChatState } from "@/runtime/desktop-pet-chat-state";
 
 interface ConversationSnapshot {
@@ -28,9 +32,15 @@ interface ConversationSnapshot {
   activeTurn?: RuntimeTurnSnapshot | null;
 }
 
+interface PendingAssistantRequest {
+  requestId: string;
+  characterId: string;
+  createdAt: string;
+}
+
 export function useConversationRuntime(
   conversationId: Ref<string>,
-  messages: Ref<any[]>,
+  persistedMessages: Ref<any[]>,
   sending: Ref<boolean>,
   scrollToBottom: (smooth?: boolean) => void,
   onConversationSnapshot?: (
@@ -41,11 +51,15 @@ export function useConversationRuntime(
 ) {
   const { get } = useApi();
   const reducer = new AgentEventReducer();
+  const messages = shallowRef<any[]>([]);
   const activeTurnId = ref("");
   const activeExecutionId = ref("");
   const lastEventSequence = ref(0);
   const turnHistoryBefore = ref(0);
   const hasMoreTurnHistory = ref(false);
+  let projectionCache = new Map<string, any>();
+  let projectionSignatures = new Map<string, string>();
+  const pendingAssistantRequests = new Map<string, PendingAssistantRequest>();
   let abortController: AbortController | null = null;
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   let renderTimer: ReturnType<typeof setTimeout> | null = null;
@@ -63,13 +77,57 @@ export function useConversationRuntime(
     window.dispatchEvent(new CustomEvent("amitia:agent-approval", { detail }));
   }
 
+  function turnSignature(turn: AssistantTurnData): string {
+    return [
+      turn.id,
+      turn.status,
+      turn.sequence,
+      ...(turn.items || []).map((item) => [
+        item.id,
+        item.type,
+        item.status,
+        item.revision,
+        item.messageId,
+        item.errorCode,
+        item.durationMs,
+      ].join("\u0001")),
+    ].join("\u0002");
+  }
+
+  function messageSignature(message: any): string {
+    return [
+      message?.id,
+      message?.uiKey,
+      message?.role,
+      message?.content,
+      message?.status,
+      message?.createdAt,
+      message?.updatedAt,
+      message?.clientMessageId,
+      message?.requestId,
+      message?.turnId,
+      message?.conversationId,
+      message?.imageUrl,
+      message?.audioUrl,
+      message?.videoUrl,
+      message?.replyToMessageId,
+      message?.replyToRole,
+      message?.replyToExcerpt,
+    ].map((value) => String(value ?? "")).join("\u0002");
+  }
+
+  function assistantRowKey(turn: AssistantTurnData): string {
+    const requestId = String(turn.requestId || "").trim();
+    return requestId ? `request:${requestId}` : `turn:${turn.id}`;
+  }
+
   function liveMessageForTurn(turn: AssistantTurnData): any {
     const textItems = (turn.items || []).filter((item) => item.type === "text");
     const markdown = textItems.map((item) => String(item.content || "")).join("");
     const finalItem = [...textItems].reverse().find((item) => item.messageId);
     return {
       id: finalItem?.messageId || `turn:${turn.id}`,
-      uiKey: `turn:${turn.id}`,
+      uiKey: assistantRowKey(turn),
       role: "assistant",
       conversationId: turn.conversationId,
       turnId: turn.id,
@@ -78,44 +136,107 @@ export function useConversationRuntime(
       status: isTerminalTurn(turn.status) ? normalizedTurnStatus(turn.status) : "streaming",
       createdAt: turn.createdAt || new Date().toISOString(),
       assistantTurn: cloneTurn(turn),
-      animateIn: true,
+    };
+  }
+
+  function pendingAssistantMessage(request: PendingAssistantRequest): any {
+    const turn: AssistantTurnData = {
+      id: `pending:${request.requestId}`,
+      conversationId: conversationId.value,
+      requestId: request.requestId,
+      sequence: 0,
+      status: "queued",
+      createdAt: request.createdAt,
+      updatedAt: request.createdAt,
+      items: [],
+    };
+    return {
+      id: turn.id,
+      uiKey: `request:${request.requestId}`,
+      role: "assistant",
+      conversationId: conversationId.value,
+      characterId: request.characterId,
+      requestId: request.requestId,
+      turnId: "",
+      content: "",
+      status: "queued",
+      createdAt: request.createdAt,
+      assistantTurn: turn,
     };
   }
 
   function projectTurns() {
     renderTimer = null;
     const turnList = reducer.turns;
-    const byMessageId = new Map<string, AssistantTurnData>();
-    const liveTurns: AssistantTurnData[] = [];
+    const turnByMessageId = new Map<string, AssistantTurnData>();
     for (const turn of turnList) {
       const finalText = [...(turn.items || [])]
         .reverse()
         .find((item) => item.type === "text" && String(item.messageId || "").trim());
-      if (finalText?.messageId) byMessageId.set(String(finalText.messageId), turn);
-      if (!isTerminalTurn(turn.status) || !finalText?.messageId) liveTurns.push(turn);
+      if (finalText?.messageId) {
+        turnByMessageId.set(String(finalText.messageId), turn);
+      }
     }
-    const next = messages.value
-      .filter((message) => !String(message?.uiKey || "").startsWith("turn:"))
-      .map((message) => {
-        const turn = byMessageId.get(String(message?.id || ""));
-        if (!turn) return message;
-        return {
-          ...message,
-          turnId: turn.id,
-          requestId: turn.requestId || message.requestId,
-          assistantTurn: cloneTurn(turn),
-          status: isTerminalTurn(turn.status) ? normalizedTurnStatus(turn.status) : message.status,
-        };
-      });
-    for (const turn of liveTurns) {
-      const finalText = [...(turn.items || [])]
-        .reverse()
-        .find((item) => item.type === "text" && String(item.messageId || "").trim());
-      if (finalText?.messageId && next.some((message) => String(message?.id || "") === finalText.messageId)) continue;
-      next.push(liveMessageForTurn(turn));
+
+    const nextCache = new Map<string, any>();
+    const nextSignatures = new Map<string, string>();
+    const renderedTurnIds = new Set<string>();
+    const activeRequestIds = new Set<string>();
+    const next = persistedMessages.value.map((message, index) => {
+      const turn = turnByMessageId.get(String(message?.id || ""));
+      const key = turn ? assistantRowKey(turn) : getMessageUIKey(message, index);
+      const candidate = turn
+        ? {
+            ...message,
+            uiKey: key,
+            turnId: turn.id,
+            requestId: turn.requestId || message.requestId,
+            assistantTurn: cloneTurn(turn),
+            status: isTerminalTurn(turn.status) ? normalizedTurnStatus(turn.status) : message.status,
+          }
+        : message;
+      const signature = `persisted:${messageSignature(candidate)}${turn ? `:${turnSignature(turn)}` : ""}`;
+      const previous = projectionCache.get(key);
+      const row = previous && projectionSignatures.get(key) === signature ? previous : candidate;
+      nextCache.set(key, row);
+      nextSignatures.set(key, signature);
+      if (turn) {
+        renderedTurnIds.add(turn.id);
+        if (turn.requestId) activeRequestIds.add(String(turn.requestId));
+      }
+      return row;
+    });
+
+    for (const turn of turnList) {
+      if (turn.requestId) activeRequestIds.add(String(turn.requestId));
+      if (renderedTurnIds.has(turn.id)) continue;
+      const uiKey = assistantRowKey(turn);
+      const signature = `live:${turnSignature(turn)}`;
+      const previous = projectionCache.get(uiKey);
+      const row = previous && projectionSignatures.get(uiKey) === signature
+        ? previous
+        : liveMessageForTurn(turn);
+      nextCache.set(uiKey, row);
+      nextSignatures.set(uiKey, signature);
+      next.push(row);
+    }
+    for (const request of pendingAssistantRequests.values()) {
+      if (activeRequestIds.has(request.requestId)) continue;
+      const uiKey = `request:${request.requestId}`;
+      const message = pendingAssistantMessage(request);
+      const signature = `pending:${request.requestId}:${request.createdAt}:${conversationId.value}`;
+      const previous = projectionCache.get(uiKey);
+      const row = previous && projectionSignatures.get(uiKey) === signature ? previous : message;
+      nextCache.set(uiKey, row);
+      nextSignatures.set(uiKey, signature);
+      next.push(row);
     }
     next.sort(compareChatMessages);
-    messages.value = next;
+    projectionCache = nextCache;
+    projectionSignatures = nextSignatures;
+    const unchanged = next.length === messages.value.length
+      && next.every((message, index) => message === messages.value[index]);
+    if (!unchanged) messages.value = next;
     scrollToBottom();
   }
 
@@ -133,6 +254,7 @@ export function useConversationRuntime(
     }
     if (result !== "applied") return;
     syncReducerState();
+    if (event.requestId) pendingAssistantRequests.delete(String(event.requestId));
 
     if (event.type === "approval.requested") {
       publishApprovalState({
@@ -194,7 +316,32 @@ export function useConversationRuntime(
     sending.value = !!reducer.activeTurnId;
     publishApprovalState({ action: "reset", conversationId: conversationId.value });
     for (const approval of snapshot.approvals || []) publishApprovalState({ action: "requested", ...approval });
-    messages.value = (snapshot.messages || []).map((message) => normalizeRealtimeMessage(message));
+    persistedMessages.value = (snapshot.messages || []).map((message) => normalizeRealtimeMessage(message));
+    projectTurns();
+  }
+
+  function clear() {
+    reducer.reset([], 0, null);
+    pendingAssistantRequests.clear();
+    syncReducerState();
+    sending.value = false;
+    projectTurns();
+  }
+
+  function beginPendingAssistant(requestId: string, characterId?: string) {
+    const id = String(requestId || "").trim();
+    if (!id) return;
+    pendingAssistantRequests.set(id, {
+      requestId: id,
+      characterId: String(characterId || "").trim(),
+      createdAt: new Date().toISOString(),
+    });
+    projectTurns();
+  }
+
+  function failPendingAssistant(requestId: string) {
+    const id = String(requestId || "").trim();
+    if (!id || !pendingAssistantRequests.delete(id)) return;
     projectTurns();
   }
 
@@ -202,9 +349,7 @@ export function useConversationRuntime(
     const id = String(conversationId.value || "").trim();
     const epoch = ++snapshotEpoch;
     if (!id) {
-      reducer.reset([], 0, null);
-      syncReducerState();
-      sending.value = false;
+      clear();
       return;
     }
     const snapshot = await get<ConversationSnapshot>(`/api/web-chat/conversations/${encodeURIComponent(id)}/snapshot`);
@@ -331,10 +476,10 @@ export function useConversationRuntime(
       try {
         const message = normalizeRealtimeMessage(JSON.parse(data));
         if (String(message?.conversationId || "") !== String(conversationId.value || "")) return;
-        const index = messages.value.findIndex((candidate) => String(candidate?.id || "") === String(message?.id || ""));
-        if (index >= 0) messages.value[index] = { ...messages.value[index], ...message };
-        else messages.value.push({ ...message, animateIn: true });
-        messages.value.sort(compareChatMessages);
+        const index = persistedMessages.value.findIndex((candidate) => String(candidate?.id || "") === String(message?.id || ""));
+        if (index >= 0) persistedMessages.value[index] = { ...persistedMessages.value[index], ...message };
+        else persistedMessages.value.push(message);
+        persistedMessages.value.sort(compareChatMessages);
         scrollToBottom();
       } catch {}
     };
@@ -357,7 +502,11 @@ export function useConversationRuntime(
     }
   }
 
+  watch(persistedMessages, scheduleProjection, { deep: true });
+  projectTurns();
+
   return {
+    messages,
     activeTurnId,
     activeExecutionId,
     lastEventSequence,
@@ -368,6 +517,9 @@ export function useConversationRuntime(
     loadSnapshot,
     loadOlderTurns,
     applyEvent,
+    clear,
+    beginPendingAssistant,
+    failPendingAssistant,
     connectProactiveMessages,
     disconnectProactiveMessages,
   };

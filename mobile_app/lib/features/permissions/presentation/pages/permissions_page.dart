@@ -239,16 +239,6 @@ class _PermissionGuideSheet extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Center(
-              child: Container(
-                width: 36,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: context.borderPrimary,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ),
             SizedBox(height: AppSpacing.lg),
             Text(item.name, style: AppTypography.sectionTitle(context)),
             SizedBox(height: AppSpacing.sm),

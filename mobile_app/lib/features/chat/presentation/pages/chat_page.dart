@@ -30,6 +30,7 @@ import '../../../../core/runtime/backend/mobile_backend_providers.dart';
 import '../../../../core/runtime/backend/mobile_deployment_mode.dart';
 import '../../../../core/native_bridge/providers/native_bridge_relay_provider.dart';
 import '../../../../core/models/character.dart';
+import '../../../../core/models/conversation.dart';
 import '../../../../core/models/memory.dart';
 import '../../../../core/models/model_config.dart';
 import '../../../../core/models/profile.dart';
@@ -2097,27 +2098,25 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       visibleMessages,
       durableEvents,
     );
-    DateTime? lastUserTime;
-    for (final message in visibleMessages) {
-      if (message.role == MessageRole.user) lastUserTime = message.time;
+    String liveAssistantMessageId = '';
+    for (final message in visibleMessages.reversed) {
+      if (message.role != MessageRole.assistant) continue;
+      if (message.status != MessageStatus.queued &&
+          message.status != MessageStatus.streaming &&
+          message.status != MessageStatus.sending) {
+        continue;
+      }
+      liveAssistantMessageId = message.id;
+      break;
     }
-    final liveAgentActivities = lastUserTime == null
-        ? const <AmitiaAgentActivity>[]
-        : agentActivityProjection.unpaired
-              .where(
-                (activity) => !activity.time.isBefore(
-                  lastUserTime!.subtract(const Duration(seconds: 2)),
-                ),
-              )
-              .toList(growable: false);
-    final hasAssistantAfterLastUser =
-        lastUserTime != null &&
-        visibleMessages.any(
-          (message) =>
-              message.role == MessageRole.assistant &&
-              !message.time.isBefore(lastUserTime!),
-        );
-    final showLiveAgentProcess = _runtime.sending && !hasAssistantAfterLastUser;
+    List<AmitiaAgentActivity> activitiesForMessage(ChatMessage message) {
+      final mapped = agentActivityProjection.byMessageId[message.id];
+      if (mapped != null && mapped.isNotEmpty) return mapped;
+      if (message.id == liveAssistantMessageId) {
+        return agentActivityProjection.unpaired;
+      }
+      return const <AmitiaAgentActivity>[];
+    }
 
     final projectionContributions = uiSnapshot == null
         ? const <UIContributionSnapshotEntry>[]
@@ -2160,11 +2159,138 @@ class _ChatPageState extends ConsumerState<ChatPage> {
           if (left.isMessage != right.isMessage) return left.isMessage ? -1 : 1;
           return left.key.compareTo(right.key);
         });
+    final lastVisibleMessage = visibleMessages.isEmpty
+        ? null
+        : visibleMessages.last;
+    if (lastVisibleMessage?.role == MessageRole.assistant &&
+        lastVisibleMessage?.status == MessageStatus.error) {
+      final messageIndex = flowItems.indexWhere(
+        (item) => item.message?.id == lastVisibleMessage!.id,
+      );
+      if (messageIndex >= 0) {
+        flowItems.insert(
+          messageIndex + 1,
+          _MobileChatFlowItem.error(
+            key:
+                'error:${lastVisibleMessage!.assistantTurn?.id ?? lastVisibleMessage.id}',
+            detail: _turnErrorDetail(lastVisibleMessage.assistantTurn),
+            timestamp: lastVisibleMessage.time,
+            sequence: lastVisibleMessage.sequence,
+          ),
+        );
+      }
+    }
 
-    final showEmptyState = flowItems.isEmpty && !showLiveAgentProcess;
+    final showEmptyState = flowItems.isEmpty;
     final showHistoryLoader =
         _runtime.hasMoreHistory || _runtime.isLoadingOlderMessages;
     final workspaceName = _runtime.workspace?.workspaceName.trim() ?? '';
+
+    final conversationComposer = Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        UIProviderHost(
+          capability: UICapability.conversationComposer,
+          context: providerContext,
+          actions: providerActions,
+          fallback: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              MobileExtensionSlot(
+                slotId: 'chat.composer.hint',
+                context: {...providerContext, 'surface': 'composer-hint'},
+                actions: providerActions,
+              ),
+              AmitiaChatInput(
+                controller: _composerController,
+                models: modelConfigs
+                    .map(
+                      (model) => <String, dynamic>{
+                        'id': model.id,
+                        'name': model.name,
+                        'modelName': model.model,
+                        'apiType': model.provider,
+                        'supportsReasoning': model.supportsReasoning,
+                        'defaultReasoningEffort': model.defaultReasoningEffort,
+                      },
+                    )
+                    .toList(growable: false),
+                selectedModelId: selectedModelConfigId,
+                reasoningEffort: _runtime.reasoningEffort,
+                reasoningEnabled: _runtime.reasoningEnabled,
+                permissionMode: _runtime.permissionMode,
+                supportsReasoning:
+                    selectedModelConfig?.supportsReasoning ?? false,
+                onModelPreviewChanged: (modelId, effort, enabled) {
+                  _runtime.previewModelSettings(modelId, effort, enabled);
+                },
+                onModelChanged: (modelId, effort, enabled) {
+                  _runtime
+                      .updateModelSettings(modelId, effort, enabled)
+                      .catchError((_) {});
+                },
+                onPermissionChanged: (mode) {
+                  _runtime.updatePermissionMode(mode).catchError((_) {});
+                },
+                onSend: _onSend,
+                recipientName: characterName,
+                workspaceSelector: _buildWorkspaceBar(context),
+                onPickFile: _pickAndSendFile,
+                onPickImage: _pickAndSendImage,
+                onPickVideo: _pickAndSendVideo,
+                onSendCode: _onSendCode,
+                onLoadEmotes: () => ref.read(emoteServiceProvider).listEmotes(),
+                onSendEmote: _onSendEmote,
+                onLoadAgentSkills: () => _loadAgentSkills(),
+                onStartVoiceRecording: _startRecordedVoice,
+                onFinishVoiceRecording: _finishRecordedVoice,
+                onCancelVoiceRecording: _cancelRecordedVoice,
+                replyPreview: _replyTarget == null
+                    ? null
+                    : _replyExcerpt(_replyTarget!),
+                onCancelReply: () => _setReplyTarget(null),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 0, 12, 6),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: MobileExtensionSlot(
+                        slotId: 'chat.composer.action',
+                        context: {
+                          ...providerContext,
+                          'surface': 'composer-action',
+                        },
+                        actions: providerActions,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: MobileExtensionSlot(
+                        slotId: 'chat.composer.attachment',
+                        context: {
+                          ...providerContext,
+                          'surface': 'composer-attachment',
+                        },
+                        actions: providerActions,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        MobileExtensionSlot(
+          slotId: 'chat.status.item',
+          context: {...providerContext, 'surface': 'status'},
+          actions: providerActions,
+        ),
+      ],
+    );
 
     final builtinConversation = AmitiaScaffold(
       resizeToAvoidBottomInset: false,
@@ -2173,480 +2299,391 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         fit: StackFit.expand,
         children: [
           Positioned.fill(
-            child: SafeArea(
-              bottom: false,
-              child: Column(
-                children: [
-                  Expanded(
-                    child: Stack(
-                      children: [
-                        Positioned.fill(
-                          child: AnimatedSwitcher(
-                            duration: AppMotion.standard,
-                            reverseDuration: AppMotion.quick,
-                            switchInCurve: AppMotion.enterCurve,
-                            switchOutCurve: AppMotion.exitCurve,
-                            layoutBuilder: (currentChild, previousChildren) {
-                              return Stack(
-                                fit: StackFit.expand,
-                                children: [
-                                  ...previousChildren,
-                                  if (currentChild != null) currentChild,
-                                ],
-                              );
-                            },
-                            transitionBuilder: (child, animation) {
-                              return FadeTransition(
-                                opacity: animation,
-                                child: child,
-                              );
-                            },
-                            child: KeyedSubtree(
-                              key: ValueKey<String>(
-                                'conversation-messages:${conversationId.isEmpty ? 'draft' : conversationId}',
-                              ),
-                              child: showEmptyState
-                                  ? _buildEmptyChatState(
-                                      context,
-                                      characterName,
-                                      workspaceName,
-                                    )
-                                  : ListView.builder(
-                                      controller: _scrollController,
-                                      padding: const EdgeInsets.fromLTRB(
-                                        0,
-                                        _chatTopBarHeight + 24,
-                                        0,
-                                        32,
-                                      ),
-                                      itemCount:
-                                          flowItems.length +
-                                          (showLiveAgentProcess ? 1 : 0) +
-                                          (pendingRoleSwitch ? 1 : 0) +
-                                          (showHistoryLoader ? 1 : 0),
-                                      itemBuilder: (context, contentIndex) {
-                                        if (showHistoryLoader &&
-                                            contentIndex == 0) {
-                                          return SizedBox(
-                                            height: 56,
-                                            child: Center(
-                                              child:
-                                                  _runtime
-                                                      .isLoadingOlderMessages
-                                                  ? const SizedBox(
-                                                      width: 18,
-                                                      height: 18,
-                                                      child:
-                                                          CircularProgressIndicator(
-                                                            strokeWidth: 2,
-                                                          ),
-                                                    )
-                                                  : Text(
-                                                      '正在加载更早消息…',
-                                                      style:
-                                                          AppTypography.caption(
-                                                            context,
-                                                          ),
-                                                    ),
-                                            ),
-                                          );
-                                        }
-                                        final adjustedIndex = showHistoryLoader
-                                            ? contentIndex - 1
-                                            : contentIndex;
-                                        final liveAgentProcessIndex =
-                                            flowItems.length;
-                                        if (showLiveAgentProcess &&
-                                            adjustedIndex ==
-                                                liveAgentProcessIndex) {
-                                          return KeyedSubtree(
-                                            key: const ValueKey(
-                                              'message:live-agent-process',
-                                            ),
-                                            child: RepaintBoundary(
-                                              child: AmitiaMessageBubble(
-                                                message: ChatMessage(
-                                                  id: '__live_agent_process__',
-                                                  role: MessageRole.assistant,
-                                                  type: MessageType.text,
-                                                  content: '',
-                                                  time: DateTime.now(),
-                                                ),
-                                                showAvatar: true,
-                                                avatarInitial: avatarInitial,
-                                                avatarColor: avatarColor,
-                                                characterName: characterName,
-                                                userInitial: userInitial,
-                                                userAvatarColor:
-                                                    userAvatarColor,
-                                                userName: userName,
-                                                agentActivities:
-                                                    liveAgentActivities,
-                                                showThinking: true,
-                                              ),
-                                            ),
-                                          );
-                                        }
-                                        final pendingRoleSwitchIndex =
-                                            liveAgentProcessIndex +
-                                            (showLiveAgentProcess ? 1 : 0);
-                                        if (pendingRoleSwitch &&
-                                            adjustedIndex ==
-                                                pendingRoleSwitchIndex) {
-                                          return AmitiaRoleSwitchDivider(
-                                            key: const ValueKey(
-                                              'role-switch-pending',
-                                            ),
-                                            characterName: characterName,
-                                          );
-                                        }
-                                        final item = flowItems[adjustedIndex];
-                                        if (!item.isMessage) {
-                                          final node = item.node!;
-                                          return KeyedSubtree(
-                                            key: ValueKey(item.key),
-                                            child: MobileExtensionSlot(
-                                              slotId: 'chat.conversation.node',
-                                              contributionId:
-                                                  node.contributionId,
-                                              context: {
-                                                ...providerContext,
-                                                'conversationNode': node
-                                                    .toJson(),
-                                                'eventType': node.eventType,
-                                              },
-                                              actions: providerActions,
-                                            ),
-                                          );
-                                        }
-
-                                        final index = item.messageIndex!;
-                                        final message = item.message!;
-                                        final messageCharacter = characters
-                                            .where(
-                                              (item) =>
-                                                  item.id ==
-                                                  message.characterId,
-                                            )
-                                            .firstOrNull;
-                                        final messageCharacterName =
-                                            messageCharacter?.name
-                                                    .trim()
-                                                    .isNotEmpty ==
-                                                true
-                                            ? messageCharacter!.name.trim()
-                                            : message.characterId.trim().isEmpty
-                                            ? characterName
-                                            : '未知角色';
-                                        final messageAvatarInitial =
-                                            messageCharacterName.isNotEmpty
-                                            ? messageCharacterName
-                                                  .characters
-                                                  .first
-                                            : '?';
-                                        final isAgentTask =
-                                            message.type ==
-                                            MessageType.agentTask;
-                                        final builtinMessage = RepaintBoundary(
-                                          child: AmitiaMessageBubble(
-                                            message: message,
-                                            showAvatar:
-                                                _shouldShowAssistantIdentity(
-                                                  index,
-                                                ),
-                                            showHeader:
-                                                _shouldShowAssistantIdentity(
-                                                  index,
-                                                ),
-                                            compactBottom: _shouldCompactBottom(
-                                              index,
-                                            ),
-                                            avatarInitial: messageAvatarInitial,
-                                            avatarColor: avatarColor,
-                                            characterName: messageCharacterName,
-                                            userInitial: userInitial,
-                                            userAvatarColor: userAvatarColor,
-                                            userName: userName,
-                                            agentActivities:
-                                                agentActivityProjection
-                                                    .byMessageId[message.id] ??
-                                                const <AmitiaAgentActivity>[],
-                                            onRetry:
-                                                _runtime.canRetryMessage(index)
-                                                ? () => _retryMessage(index)
-                                                : null,
-                                            onReply:
-                                                message.type ==
-                                                    MessageType.systemNotice
-                                                ? null
-                                                : () =>
-                                                      _setReplyTarget(message),
-                                            onCopy:
-                                                message.type ==
-                                                        MessageType
-                                                            .systemNotice ||
-                                                    message.content
-                                                        .trim()
-                                                        .isEmpty
-                                                ? null
-                                                : () => _copyMessage(message),
-                                            onEdit:
-                                                message.role == MessageRole.user
-                                                ? () => _editMessage(message)
-                                                : null,
-                                            onAgentTaskTap: isAgentTask
-                                                ? () {
-                                                    final taskId =
-                                                        message.agentTaskId
-                                                            ?.trim() ??
-                                                        '';
-                                                    context.push(
-                                                      taskId.isEmpty
-                                                          ? AppRoutes.agent
-                                                          : AppRoutes.agentTask(
-                                                              taskId,
-                                                            ),
-                                                    );
-                                                  }
-                                                : null,
-                                          ),
-                                        );
-                                        final messageRenderer =
-                                            UIMessageRendererRegistry.resolve(
-                                              uiSnapshot,
-                                              messageType: message.type.name,
-                                              role: message.role.name,
-                                            );
-                                        final providerMessage = UIProviderHost(
-                                          capability: UICapability
-                                              .conversationMessageRenderer,
-                                          providerId:
-                                              messageRenderer?.providerId,
-                                          fallback: builtinMessage,
-                                          context: {
-                                            ...providerContext,
-                                            'message': _providerMessage(
-                                              message,
-                                            ),
-                                            'messageIndex': index,
-                                          },
-                                          actions: providerActions,
-                                        );
-                                        final messageContext =
-                                            <String, dynamic>{
-                                              ...providerContext,
-                                              'messageId': message.id,
-                                              'messageType': message.type.name,
-                                              'message': _providerMessage(
-                                                message,
-                                              ),
-                                              'messageIndex': index,
-                                            };
-                                        final hasAttachment =
-                                            (message.resourceUri ?? '')
-                                                .trim()
-                                                .isNotEmpty ||
-                                            (message.fileName ?? '')
-                                                .trim()
-                                                .isNotEmpty;
-                                        return KeyedSubtree(
-                                          key: ValueKey(item.key),
-                                          child: Column(
-                                            mainAxisSize: MainAxisSize.min,
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.stretch,
-                                            children: [
-                                              if (index > 0 &&
-                                                  shouldShowRoleSwitch(
-                                                    _runtime.messages[index -
-                                                        1],
-                                                    message,
-                                                  ))
-                                                AmitiaRoleSwitchDivider(
-                                                  characterName:
-                                                      messageCharacterName,
-                                                ),
-                                              providerMessage,
-                                              if (hasAttachment)
-                                                Padding(
-                                                  padding:
-                                                      const EdgeInsets.fromLTRB(
-                                                        52,
-                                                        2,
-                                                        12,
-                                                        2,
-                                                      ),
-                                                  child: MobileExtensionSlot(
-                                                    slotId:
-                                                        'chat.message.attachment_renderer',
-                                                    context: messageContext,
-                                                    actions: providerActions,
-                                                  ),
-                                                ),
-                                              Padding(
-                                                padding:
-                                                    const EdgeInsets.fromLTRB(
-                                                      52,
-                                                      0,
-                                                      12,
-                                                      2,
-                                                    ),
-                                                child: MobileExtensionSlot(
-                                                  slotId: 'chat.message.badge',
-                                                  context: messageContext,
-                                                  actions: providerActions,
-                                                ),
-                                              ),
-                                              Padding(
-                                                padding:
-                                                    const EdgeInsets.fromLTRB(
-                                                      52,
-                                                      0,
-                                                      12,
-                                                      6,
-                                                    ),
-                                                child: MobileExtensionSlot(
-                                                  slotId: 'chat.message.action',
-                                                  context: messageContext,
-                                                  actions: providerActions,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
+            child: Column(
+              children: [
+                Expanded(
+                  child: Stack(
+                    children: [
+                      Positioned.fill(
+                        child: SafeArea(
+                          bottom: false,
+                          child: Stack(
+                            children: [
+                              Positioned.fill(
+                                child: AnimatedSwitcher(
+                                  duration: AppMotion.standard,
+                                  reverseDuration: AppMotion.quick,
+                                  switchInCurve: AppMotion.enterCurve,
+                                  switchOutCurve: AppMotion.exitCurve,
+                                  layoutBuilder:
+                                      (currentChild, previousChildren) {
+                                        return Stack(
+                                          fit: StackFit.expand,
+                                          children: [
+                                            ...previousChildren,
+                                            if (currentChild != null)
+                                              currentChild,
+                                          ],
                                         );
                                       },
-                                    ),
-                            ),
-                          ),
-                        ),
-                        _ChatScrollFade(
-                          alignment: Alignment.topCenter,
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          color: context.backgroundPrimary,
-                          height: _chatTopBarHeight,
-                        ),
-                        _ChatScrollFade(
-                          alignment: Alignment.bottomCenter,
-                          begin: Alignment.bottomCenter,
-                          end: Alignment.topCenter,
-                          color: context.backgroundPrimary,
-                        ),
-                      ],
-                    ),
-                  ),
-                  UIProviderHost(
-                    capability: UICapability.conversationComposer,
-                    context: providerContext,
-                    actions: providerActions,
-                    fallback: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        MobileExtensionSlot(
-                          slotId: 'chat.composer.hint',
-                          context: {
-                            ...providerContext,
-                            'surface': 'composer-hint',
-                          },
-                          actions: providerActions,
-                        ),
-                        AmitiaChatInput(
-                          controller: _composerController,
-                          models: modelConfigs
-                              .map(
-                                (model) => <String, dynamic>{
-                                  'id': model.id,
-                                  'name': model.name,
-                                  'modelName': model.model,
-                                  'apiType': model.provider,
-                                  'supportsReasoning': model.supportsReasoning,
-                                  'defaultReasoningEffort':
-                                      model.defaultReasoningEffort,
-                                },
-                              )
-                              .toList(growable: false),
-                          selectedModelId: selectedModelConfigId,
-                          reasoningEffort: _runtime.reasoningEffort,
-                          reasoningEnabled: _runtime.reasoningEnabled,
-                          permissionMode: _runtime.permissionMode,
-                          supportsReasoning:
-                              selectedModelConfig?.supportsReasoning ?? false,
-                          onModelPreviewChanged: (modelId, effort, enabled) {
-                            _runtime.previewModelSettings(
-                              modelId,
-                              effort,
-                              enabled,
-                            );
-                          },
-                          onModelChanged: (modelId, effort, enabled) {
-                            _runtime
-                                .updateModelSettings(modelId, effort, enabled)
-                                .catchError((_) {});
-                          },
-                          onPermissionChanged: (mode) {
-                            _runtime
-                                .updatePermissionMode(mode)
-                                .catchError((_) {});
-                          },
-                          onSend: _onSend,
-                          recipientName: characterName,
-                          workspaceSelector: _buildWorkspaceBar(context),
-                          onPickFile: _pickAndSendFile,
-                          onPickImage: _pickAndSendImage,
-                          onPickVideo: _pickAndSendVideo,
-                          onSendCode: _onSendCode,
-                          onLoadEmotes: () =>
-                              ref.read(emoteServiceProvider).listEmotes(),
-                          onSendEmote: _onSendEmote,
-                          onLoadAgentSkills: () => _loadAgentSkills(),
-                          onStartVoiceRecording: _startRecordedVoice,
-                          onFinishVoiceRecording: _finishRecordedVoice,
-                          onCancelVoiceRecording: _cancelRecordedVoice,
-                          replyPreview: _replyTarget == null
-                              ? null
-                              : _replyExcerpt(_replyTarget!),
-                          onCancelReply: () => _setReplyTarget(null),
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(12, 0, 12, 6),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Expanded(
-                                child: MobileExtensionSlot(
-                                  slotId: 'chat.composer.action',
-                                  context: {
-                                    ...providerContext,
-                                    'surface': 'composer-action',
+                                  transitionBuilder: (child, animation) {
+                                    return FadeTransition(
+                                      opacity: animation,
+                                      child: child,
+                                    );
                                   },
-                                  actions: providerActions,
+                                  child: KeyedSubtree(
+                                    key: ValueKey<String>(
+                                      'conversation-messages:${conversationId.isEmpty ? 'draft' : conversationId}',
+                                    ),
+                                    child: showEmptyState
+                                        ? _buildEmptyChatState(
+                                            context,
+                                            characterName,
+                                            workspaceName,
+                                          )
+                                        : ListView.builder(
+                                            controller: _scrollController,
+                                            padding: EdgeInsets.fromLTRB(
+                                              0,
+                                              _chatTopBarHeight + 24,
+                                              0,
+                                              32,
+                                            ),
+                                            itemCount:
+                                                flowItems.length +
+                                                (pendingRoleSwitch ? 1 : 0) +
+                                                (showHistoryLoader ? 1 : 0),
+                                            itemBuilder: (context, contentIndex) {
+                                              if (showHistoryLoader &&
+                                                  contentIndex == 0) {
+                                                return SizedBox(
+                                                  height: 56,
+                                                  child: Center(
+                                                    child:
+                                                        _runtime
+                                                            .isLoadingOlderMessages
+                                                        ? const SizedBox(
+                                                            width: 18,
+                                                            height: 18,
+                                                            child:
+                                                                CircularProgressIndicator(
+                                                                  strokeWidth:
+                                                                      2,
+                                                                ),
+                                                          )
+                                                        : Text(
+                                                            '正在加载更早消息…',
+                                                            style:
+                                                                AppTypography.caption(
+                                                                  context,
+                                                                ),
+                                                          ),
+                                                  ),
+                                                );
+                                              }
+                                              final adjustedIndex =
+                                                  showHistoryLoader
+                                                  ? contentIndex - 1
+                                                  : contentIndex;
+                                              final pendingRoleSwitchIndex =
+                                                  flowItems.length;
+                                              if (pendingRoleSwitch &&
+                                                  adjustedIndex ==
+                                                      pendingRoleSwitchIndex) {
+                                                return AmitiaRoleSwitchDivider(
+                                                  key: const ValueKey(
+                                                    'role-switch-pending',
+                                                  ),
+                                                  characterName: characterName,
+                                                );
+                                              }
+                                              final item =
+                                                  flowItems[adjustedIndex];
+                                              if (item.errorDetail != null) {
+                                                return KeyedSubtree(
+                                                  key: ValueKey(item.key),
+                                                  child: _ChatErrorNotice(
+                                                    detail: item.errorDetail!,
+                                                  ),
+                                                );
+                                              }
+                                              if (!item.isMessage) {
+                                                final node = item.node!;
+                                                return KeyedSubtree(
+                                                  key: ValueKey(item.key),
+                                                  child: MobileExtensionSlot(
+                                                    slotId:
+                                                        'chat.conversation.node',
+                                                    contributionId:
+                                                        node.contributionId,
+                                                    context: {
+                                                      ...providerContext,
+                                                      'conversationNode': node
+                                                          .toJson(),
+                                                      'eventType':
+                                                          node.eventType,
+                                                    },
+                                                    actions: providerActions,
+                                                  ),
+                                                );
+                                              }
+
+                                              final index = item.messageIndex!;
+                                              final message = item.message!;
+                                              final messageCharacter =
+                                                  characters
+                                                      .where(
+                                                        (item) =>
+                                                            item.id ==
+                                                            message.characterId,
+                                                      )
+                                                      .firstOrNull;
+                                              final messageCharacterName =
+                                                  messageCharacter?.name
+                                                          .trim()
+                                                          .isNotEmpty ==
+                                                      true
+                                                  ? messageCharacter!.name
+                                                        .trim()
+                                                  : message.characterId
+                                                        .trim()
+                                                        .isEmpty
+                                                  ? characterName
+                                                  : '未知角色';
+                                              final messageAvatarInitial =
+                                                  messageCharacterName
+                                                      .isNotEmpty
+                                                  ? messageCharacterName
+                                                        .characters
+                                                        .first
+                                                  : '?';
+                                              final isAgentTask =
+                                                  message.type ==
+                                                  MessageType.agentTask;
+                                              final builtinMessage = RepaintBoundary(
+                                                child: AmitiaMessageBubble(
+                                                  message: message,
+                                                  showAvatar:
+                                                      _shouldShowAssistantIdentity(
+                                                        index,
+                                                      ),
+                                                  showHeader:
+                                                      _shouldShowAssistantIdentity(
+                                                        index,
+                                                      ),
+                                                  compactBottom:
+                                                      _shouldCompactBottom(
+                                                        index,
+                                                      ),
+                                                  avatarInitial:
+                                                      messageAvatarInitial,
+                                                  avatarColor: avatarColor,
+                                                  characterName:
+                                                      messageCharacterName,
+                                                  userInitial: userInitial,
+                                                  userAvatarColor:
+                                                      userAvatarColor,
+                                                  userName: userName,
+                                                  agentActivities:
+                                                      activitiesForMessage(
+                                                        message,
+                                                      ),
+                                                  onRetry:
+                                                      _runtime.canRetryMessage(
+                                                        index,
+                                                      )
+                                                      ? () =>
+                                                            _retryMessage(index)
+                                                      : null,
+                                                  onReply:
+                                                      message.type ==
+                                                          MessageType
+                                                              .systemNotice
+                                                      ? null
+                                                      : () => _setReplyTarget(
+                                                          message,
+                                                        ),
+                                                  onCopy:
+                                                      message.type ==
+                                                              MessageType
+                                                                  .systemNotice ||
+                                                          message.content
+                                                              .trim()
+                                                              .isEmpty
+                                                      ? null
+                                                      : () => _copyMessage(
+                                                          message,
+                                                        ),
+                                                  onEdit:
+                                                      message.role ==
+                                                          MessageRole.user
+                                                      ? () => _editMessage(
+                                                          message,
+                                                        )
+                                                      : null,
+                                                  onAgentTaskTap: isAgentTask
+                                                      ? () {
+                                                          final taskId =
+                                                              message
+                                                                  .agentTaskId
+                                                                  ?.trim() ??
+                                                              '';
+                                                          context.push(
+                                                            taskId.isEmpty
+                                                                ? AppRoutes
+                                                                      .agent
+                                                                : AppRoutes.agentTask(
+                                                                    taskId,
+                                                                  ),
+                                                          );
+                                                        }
+                                                      : null,
+                                                ),
+                                              );
+                                              final messageRenderer =
+                                                  UIMessageRendererRegistry.resolve(
+                                                    uiSnapshot,
+                                                    messageType:
+                                                        message.type.name,
+                                                    role: message.role.name,
+                                                  );
+                                              final providerMessage =
+                                                  UIProviderHost(
+                                                    capability: UICapability
+                                                        .conversationMessageRenderer,
+                                                    providerId: messageRenderer
+                                                        ?.providerId,
+                                                    fallback: builtinMessage,
+                                                    context: {
+                                                      ...providerContext,
+                                                      'message':
+                                                          _providerMessage(
+                                                            message,
+                                                          ),
+                                                      'messageIndex': index,
+                                                    },
+                                                    actions: providerActions,
+                                                  );
+                                              final messageContext =
+                                                  <String, dynamic>{
+                                                    ...providerContext,
+                                                    'messageId': message.id,
+                                                    'messageType':
+                                                        message.type.name,
+                                                    'message': _providerMessage(
+                                                      message,
+                                                    ),
+                                                    'messageIndex': index,
+                                                  };
+                                              final hasAttachment =
+                                                  (message.resourceUri ?? '')
+                                                      .trim()
+                                                      .isNotEmpty ||
+                                                  (message.fileName ?? '')
+                                                      .trim()
+                                                      .isNotEmpty;
+                                              return KeyedSubtree(
+                                                key: ValueKey(item.key),
+                                                child: Column(
+                                                  mainAxisSize:
+                                                      MainAxisSize.min,
+                                                  crossAxisAlignment:
+                                                      CrossAxisAlignment
+                                                          .stretch,
+                                                  children: [
+                                                    if (index > 0 &&
+                                                        shouldShowRoleSwitch(
+                                                          _runtime
+                                                              .messages[index -
+                                                              1],
+                                                          message,
+                                                        ))
+                                                      AmitiaRoleSwitchDivider(
+                                                        characterName:
+                                                            messageCharacterName,
+                                                      ),
+                                                    providerMessage,
+                                                    if (hasAttachment)
+                                                      Padding(
+                                                        padding:
+                                                            const EdgeInsets.fromLTRB(
+                                                              52,
+                                                              2,
+                                                              12,
+                                                              2,
+                                                            ),
+                                                        child: MobileExtensionSlot(
+                                                          slotId:
+                                                              'chat.message.attachment_renderer',
+                                                          context:
+                                                              messageContext,
+                                                          actions:
+                                                              providerActions,
+                                                        ),
+                                                      ),
+                                                    Padding(
+                                                      padding:
+                                                          const EdgeInsets.fromLTRB(
+                                                            52,
+                                                            0,
+                                                            12,
+                                                            2,
+                                                          ),
+                                                      child: MobileExtensionSlot(
+                                                        slotId:
+                                                            'chat.message.badge',
+                                                        context: messageContext,
+                                                        actions:
+                                                            providerActions,
+                                                      ),
+                                                    ),
+                                                    Padding(
+                                                      padding:
+                                                          const EdgeInsets.fromLTRB(
+                                                            52,
+                                                            0,
+                                                            12,
+                                                            6,
+                                                          ),
+                                                      child: MobileExtensionSlot(
+                                                        slotId:
+                                                            'chat.message.action',
+                                                        context: messageContext,
+                                                        actions:
+                                                            providerActions,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              );
+                                            },
+                                          ),
+                                  ),
                                 ),
                               ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: MobileExtensionSlot(
-                                  slotId: 'chat.composer.attachment',
-                                  context: {
-                                    ...providerContext,
-                                    'surface': 'composer-attachment',
-                                  },
-                                  actions: providerActions,
-                                ),
+                              _ChatScrollFade(
+                                alignment: Alignment.topCenter,
+                                begin: Alignment.topCenter,
+                                end: Alignment.bottomCenter,
+                                color: context.backgroundPrimary,
+                                height: _chatTopBarHeight,
+                              ),
+                              _ChatScrollFade(
+                                alignment: Alignment.bottomCenter,
+                                begin: Alignment.bottomCenter,
+                                end: Alignment.topCenter,
+                                color: context.backgroundPrimary,
                               ),
                             ],
                           ),
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
-                  MobileExtensionSlot(
-                    slotId: 'chat.status.item',
-                    context: {...providerContext, 'surface': 'status'},
-                    actions: providerActions,
-                  ),
-                ],
-              ),
+                ),
+                conversationComposer,
+              ],
             ),
           ),
           Positioned(
@@ -2747,16 +2784,6 @@ class _ChatProfileSummarySheet extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Center(
-            child: Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: context.borderPrimary,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-          ),
           const SizedBox(height: 16),
           Text('用户画像摘要', style: AppTypography.pageTitle(context)),
           const SizedBox(height: 4),
@@ -2936,16 +2963,6 @@ class _ChatMemoryContextSheet extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Center(
-            child: Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: context.borderPrimary,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-          ),
           const SizedBox(height: 16),
           Text('记忆上下文', style: AppTypography.pageTitle(context)),
           const SizedBox(height: 12),
@@ -3356,6 +3373,7 @@ class _MobileChatFlowItem {
     this.message,
     this.messageIndex,
     this.node,
+    this.errorDetail,
   });
 
   factory _MobileChatFlowItem.message({
@@ -3378,12 +3396,112 @@ class _MobileChatFlowItem {
         node: node,
       );
 
+  factory _MobileChatFlowItem.error({
+    required String key,
+    required String detail,
+    required DateTime timestamp,
+    int? sequence,
+  }) => _MobileChatFlowItem._(
+    key: key,
+    timestamp: timestamp,
+    sequence: sequence,
+    errorDetail: detail,
+  );
+
   final String key;
   final DateTime timestamp;
   final int? sequence;
   final ChatMessage? message;
   final int? messageIndex;
   final MobileConversationNode? node;
+  final String? errorDetail;
 
   bool get isMessage => message != null;
+}
+
+String _turnErrorDetail(AssistantTurnDto? turn) {
+  final items =
+      turn?.items.where((candidate) => candidate.type == 'error').toList() ??
+      const <AssistantTurnItemDto>[];
+  if (items.isEmpty) return '网络错误';
+  final item = items.last;
+  dynamic decoded;
+  try {
+    decoded = jsonDecode(item.resultJson);
+  } catch (_) {
+    return item.errorCode.trim().isNotEmpty ? item.errorCode : '网络错误';
+  }
+  if (decoded is! Map) {
+    return item.errorCode.trim().isNotEmpty ? item.errorCode : '网络错误';
+  }
+  String errorValueText(dynamic value) {
+    if (value == null) return '';
+    if (value is String) return value.trim();
+    try {
+      return jsonEncode(value);
+    } catch (_) {
+      return value.toString().trim();
+    }
+  }
+
+  final internalMessage = errorValueText(decoded['internalMessage']);
+  final userMessage = errorValueText(decoded['userMessage']);
+  final errorCode = errorValueText(decoded['errorCode'] ?? item.errorCode);
+  final provider = errorValueText(decoded['provider']);
+  final message = internalMessage.isNotEmpty
+      ? internalMessage
+      : userMessage.isNotEmpty
+      ? userMessage
+      : errorCode.isNotEmpty
+      ? errorCode
+      : '网络错误';
+  return <String>[
+    provider,
+    errorCode,
+    message,
+  ].where((value) => value.isNotEmpty).join(' · ');
+}
+
+class _ChatErrorNotice extends StatelessWidget {
+  final String detail;
+
+  const _ChatErrorNotice({required this.detail});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 38),
+      child: Row(
+        children: [
+          Expanded(child: Divider(color: context.borderPrimary, height: 1)),
+          const SizedBox(width: 10),
+          Flexible(
+            flex: 4,
+            child: Text.rich(
+              TextSpan(
+                children: [
+                  TextSpan(
+                    text: '生成失败',
+                    style: TextStyle(
+                      color: context.error,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const TextSpan(text: '  '),
+                  TextSpan(
+                    text: detail,
+                    style: TextStyle(color: context.textTertiary, fontSize: 11),
+                  ),
+                ],
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(child: Divider(color: context.borderPrimary, height: 1)),
+        ],
+      ),
+    );
+  }
 }

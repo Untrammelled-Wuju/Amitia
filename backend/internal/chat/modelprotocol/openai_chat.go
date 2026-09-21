@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 )
@@ -146,10 +147,28 @@ func (a *OpenAIChatAdapter) buildMessages(req ModelRequest) []map[string]interfa
 
 	for _, msg := range req.Messages {
 		content := a.buildContent(msg.Parts)
-		messages = append(messages, map[string]interface{}{
+		message := map[string]interface{}{
 			"role":    msg.Role,
 			"content": content,
-		})
+		}
+		if msg.Role == "tool" && msg.ToolCallID != "" {
+			message["tool_call_id"] = msg.ToolCallID
+		}
+		if len(msg.ToolCalls) > 0 {
+			toolCalls := make([]map[string]interface{}, 0, len(msg.ToolCalls))
+			for _, call := range msg.ToolCalls {
+				toolCalls = append(toolCalls, map[string]interface{}{
+					"id":   call.ID,
+					"type": "function",
+					"function": map[string]interface{}{
+						"name":      call.Name,
+						"arguments": call.ArgumentsJSON,
+					},
+				})
+			}
+			message["tool_calls"] = toolCalls
+		}
+		messages = append(messages, message)
 	}
 
 	for _, tr := range req.ToolResults {
@@ -273,11 +292,36 @@ func (a *OpenAIChatAdapter) parseStream(ctx context.Context, body io.Reader, sin
 		return result, err
 	}
 
-	var toolCallBuffers map[string]*ModelToolCall
-	var argumentsBuffers map[string]string
-	toolCallBuffers = make(map[string]*ModelToolCall)
-	argumentsBuffers = make(map[string]string)
-	toolCallIDs := make(map[int]string)
+	type toolCallState struct {
+		call      ModelToolCall
+		arguments strings.Builder
+	}
+	toolCalls := make(map[int]*toolCallState)
+	finalized := false
+
+	finalizeToolCalls := func() error {
+		if finalized {
+			return nil
+		}
+		finalized = true
+		indexes := make([]int, 0, len(toolCalls))
+		for index := range toolCalls {
+			indexes = append(indexes, index)
+		}
+		sort.Ints(indexes)
+		for _, index := range indexes {
+			state := toolCalls[index]
+			if state == nil || strings.TrimSpace(state.call.ID) == "" {
+				continue
+			}
+			state.call.ArgumentsJSON = state.arguments.String()
+			result.ToolCalls = append(result.ToolCalls, state.call)
+			if err := sink.Emit(ctx, ModelEvent{Type: ModelEventToolCallDone, ToolCallID: state.call.ID, ToolName: state.call.Name}); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
 
 	buf := make([]byte, 4096)
 	var buffer strings.Builder
@@ -303,6 +347,9 @@ func (a *OpenAIChatAdapter) parseStream(ctx context.Context, body io.Reader, sin
 
 				content := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
 				if content == "[DONE]" {
+					if err := finalizeToolCalls(); err != nil {
+						return result, err
+					}
 					if err := sink.Emit(ctx, ModelEvent{
 						Type: ModelEventCompleted,
 					}); err != nil {
@@ -356,24 +403,30 @@ func (a *OpenAIChatAdapter) parseStream(ctx context.Context, body io.Reader, sin
 
 				for _, tc := range choice.Delta.ToolCalls {
 					id := strings.TrimSpace(tc.ID)
-					if id != "" {
-						toolCallIDs[tc.Index] = id
-						toolCallBuffers[id] = &ModelToolCall{ID: id, Name: tc.Function.Name}
-						if err := sink.Emit(ctx, ModelEvent{Type: ModelEventToolCallStarted, ToolCallID: id, ToolName: tc.Function.Name}); err != nil {
-							return result, err
-						}
-					} else {
-						id = toolCallIDs[tc.Index]
+					state := toolCalls[tc.Index]
+					isNew := id != "" && (state == nil || state.call.ID != id)
+					if isNew {
+						state = &toolCallState{}
+						state.call.ID = id
+						toolCalls[tc.Index] = state
 					}
-					if id == "" {
+					if state == nil {
 						continue
 					}
-					if tc.Function.Name != "" && toolCallBuffers[id] != nil {
-						toolCallBuffers[id].Name = tc.Function.Name
+					if id == "" {
+						id = state.call.ID
 					}
-					argumentsBuffers[id] += tc.Function.Arguments
+					if tc.Function.Name != "" {
+						state.call.Name = tc.Function.Name
+					}
+					if isNew {
+						if err := sink.Emit(ctx, ModelEvent{Type: ModelEventToolCallStarted, ToolCallID: id, ToolName: state.call.Name}); err != nil {
+							return result, err
+						}
+					}
 					if tc.Function.Arguments != "" {
-						if err := sink.Emit(ctx, ModelEvent{Type: ModelEventToolCallArgumentsDelta, ToolCallID: id, ToolName: tc.Function.Name, ArgumentsDelta: tc.Function.Arguments}); err != nil {
+						state.arguments.WriteString(tc.Function.Arguments)
+						if err := sink.Emit(ctx, ModelEvent{Type: ModelEventToolCallArgumentsDelta, ToolCallID: id, ToolName: state.call.Name, ArgumentsDelta: tc.Function.Arguments}); err != nil {
 							return result, err
 						}
 					}
@@ -395,12 +448,8 @@ func (a *OpenAIChatAdapter) parseStream(ctx context.Context, body io.Reader, sin
 		}
 	}
 
-	for id, tc := range toolCallBuffers {
-		tc.ArgumentsJSON = argumentsBuffers[id]
-		result.ToolCalls = append(result.ToolCalls, *tc)
-		if err := sink.Emit(ctx, ModelEvent{Type: ModelEventToolCallDone, ToolCallID: id, ToolName: tc.Name}); err != nil {
-			return result, err
-		}
+	if err := finalizeToolCalls(); err != nil {
+		return result, err
 	}
 
 	if err := ctx.Err(); err != nil {

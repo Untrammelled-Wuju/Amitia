@@ -1332,16 +1332,6 @@ class _PackagePreviewSheet extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Center(
-              child: Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: context.borderPrimary,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ),
             const SizedBox(height: 20),
             Text(
               currentVersion.isEmpty ? '安装扩展包' : '更新扩展包',
