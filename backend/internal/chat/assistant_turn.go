@@ -462,9 +462,14 @@ func PersistAssistantTurnError(ctx context.Context, db *gorm.DB, turn AssistantT
 	if db == nil || strings.TrimSpace(turn.ID) == "" {
 		return nil
 	}
+	var encodedInternalMessage any = internalMessage
+	trimmedInternalMessage := strings.TrimSpace(internalMessage)
+	if trimmedInternalMessage != "" && json.Valid([]byte(trimmedInternalMessage)) {
+		encodedInternalMessage = json.RawMessage(trimmedInternalMessage)
+	}
 	encoded, err := json.Marshal(map[string]any{
 		"errorType": errorType, "retryable": retryable, "userMessage": userMessage,
-		"internalMessage": internalMessage, "provider": provider,
+		"internalMessage": encodedInternalMessage, "provider": provider,
 	})
 	if err != nil {
 		return err

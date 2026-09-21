@@ -39,7 +39,7 @@ func newModelEventProjector(recorder *assistantTurnRecorder) *modelEventProjecto
 }
 
 func (p *modelEventProjector) Emit(ctx context.Context, event ModelEvent) error {
-	if p == nil || p.recorder == nil {
+	if p == nil || p.recorder == nil || strings.TrimSpace(p.recorder.ConversationID) == "" {
 		return nil
 	}
 	p.mu.Lock()

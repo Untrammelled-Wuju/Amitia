@@ -74,6 +74,10 @@ class _FakeChatService extends ChatService {
       workspace: null,
       messages: const <MessageDto>[],
       turns: const <AssistantTurnDto>[],
+      messageNextBefore: 0,
+      hasMoreMessages: false,
+      turnNextBefore: 0,
+      hasMoreTurns: false,
       activeTurn: null,
       approvals: const <Map<String, dynamic>>[],
     );

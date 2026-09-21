@@ -15,7 +15,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"github.com/u-ai/backend/config"
 	"github.com/u-ai/backend/internal/agentpermission"
 	"github.com/u-ai/backend/internal/chat"
 	"github.com/u-ai/backend/internal/conversationstream"

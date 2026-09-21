@@ -140,7 +140,7 @@ func (a *OpenAIResponsesAdapter) Stream(ctx context.Context, cfg ProviderConfig,
 		return nil, fmt.Errorf("API 返回 %d: %s", resp.StatusCode, string(respBytes))
 	}
 
-	return a.parseStream(resp.Body, sink)
+	return a.parseStream(ctx, resp.Body, sink)
 }
 
 func (a *OpenAIResponsesAdapter) buildInput(req ModelRequest) []map[string]interface{} {
@@ -270,7 +270,7 @@ func (a *OpenAIResponsesAdapter) parseResponse(respBytes []byte) (*ModelResult, 
 	return res, nil
 }
 
-func (a *OpenAIResponsesAdapter) parseStream(body io.Reader, sink ModelEventSink) (*ModelResult, error) {
+func (a *OpenAIResponsesAdapter) parseStream(ctx context.Context, body io.Reader, sink ModelEventSink) (*ModelResult, error) {
 	result := &ModelResult{
 		ToolCalls: []ModelToolCall{},
 	}

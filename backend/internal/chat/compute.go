@@ -465,6 +465,7 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 	turnRecorder.Provider = strings.TrimSpace(cfg.APIType)
 	if err := turnRecorder.Start(ctx); err != nil {
 		_ = turnRecorder.FinalizeFailure(context.Background(), assistantTurnStatusFailed, err)
+		s.markUserMessageFailed(userMsgID)
 		s.emitDesktopPetChat(ctx, req, charID, convID, userMsgID, "response.failed", 4)
 		return nil, err
 	}
@@ -475,6 +476,7 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 			turnStatus = assistantTurnStatusInterrupted
 		}
 		_ = turnRecorder.FinalizeFailure(context.Background(), turnStatus, llmErr)
+		s.markUserMessageFailed(userMsgID)
 		s.emitDesktopPetChat(ctx, req, charID, convID, userMsgID, "response.failed", 4)
 		return nil, llmErr
 	}

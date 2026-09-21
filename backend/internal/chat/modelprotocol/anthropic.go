@@ -119,7 +119,7 @@ func (a *AnthropicAdapter) Stream(ctx context.Context, cfg ProviderConfig, req M
 		return nil, fmt.Errorf("API 返回 %d: %s", resp.StatusCode, string(respBytes))
 	}
 
-	return a.parseStream(resp.Body, sink)
+	return a.parseStream(ctx, resp.Body, sink)
 }
 
 func applyAnthropicThinking(requestBody map[string]interface{}, effort string, maxTokens int) {
@@ -263,7 +263,7 @@ func (a *AnthropicAdapter) parseResponse(respBytes []byte) (*ModelResult, error)
 	return res, nil
 }
 
-func (a *AnthropicAdapter) parseStream(body io.Reader, sink ModelEventSink) (*ModelResult, error) {
+func (a *AnthropicAdapter) parseStream(ctx context.Context, body io.Reader, sink ModelEventSink) (*ModelResult, error) {
 	result := &ModelResult{
 		ToolCalls: []ModelToolCall{},
 	}

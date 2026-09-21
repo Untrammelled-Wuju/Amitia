@@ -87,15 +87,15 @@ func TestProcessMessageTraceCoversInputModelAndDBCommit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if resp.RequestID != "req-trace-success" || len(resp.MessageIDs) != 2 {
+	if resp.RequestID != "req-trace-success" || len(resp.MessageIDs) != 1 {
 		t.Fatalf("unexpected response: %#v", resp)
 	}
 	var assistantCount int64
 	if err := svc.db.Model(&Message{}).Where("request_id = ? AND role = ?", "req-trace-success", "assistant").Count(&assistantCount).Error; err != nil {
 		t.Fatal(err)
 	}
-	if assistantCount != 2 {
-		t.Fatalf("expected assistant messages linked by request_id, got %d", assistantCount)
+	if assistantCount != 1 {
+		t.Fatalf("expected one assistant message linked by request_id, got %d", assistantCount)
 	}
 	rawLogs := logs.String()
 	for _, want := range []string{"req-trace-success", "corr-req-trace-success", "cause-req-trace-success", "input_received", "model_call_started", "model_call_completed", "db_commit_completed", "completed"} {

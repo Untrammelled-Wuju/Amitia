@@ -38,6 +38,9 @@ type agentToolParallelRuntime interface {
 }
 
 func (s *service) invokeLLMWithTools(ctx context.Context, cfg *ModelConfig, messages []map[string]interface{}, trace applog.TraceFields, promptTrace *promptir.PromptTrace, userMsgID, convID, charID, channel, requestID, spaceID, sessionID, permissionMode string, execCtx *coreexec.ExecutionContext, toolDefs []tool.Tool, seenTools map[string]bool, toolExecCtx context.Context, turnRecorder *assistantTurnRecorder) (string, string, bool, int, int64, error) {
+	if turnRecorder == nil {
+		turnRecorder = newAssistantTurnRecorder(nil, convID, charID, userMsgID, requestID)
+	}
 	var reply string
 	var reasoningParts []string
 	var totalTokens int

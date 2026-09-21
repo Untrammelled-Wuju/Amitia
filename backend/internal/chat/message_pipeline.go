@@ -4,6 +4,7 @@ package chat
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/u-ai/backend/internal/extension"
@@ -49,6 +50,7 @@ func (s *service) ProcessMessage(ctx context.Context, req *ProcessMessageRequest
 	})
 	if err != nil {
 		_ = finalizeAssistantTurnFailureByID(s.db, computeResult.TurnID, err)
+		s.markUserMessageFailed(computeResult.UserMessageID)
 		s.emitDesktopPetChat(ctx, req, computeResult.CharacterID, computeResult.ConversationID, computeResult.UserMessageID, "response.failed", 5)
 		return nil, err
 	}
@@ -78,12 +80,23 @@ func (s *service) ProcessMessage(ctx context.Context, req *ProcessMessageRequest
 
 func (s *service) abortMessageCommitIfCancelled(ctx context.Context, trace applog.TraceFields, userMsgID string) error {
 	if err := ctx.Err(); err != nil {
+		s.markUserMessageFailed(userMsgID)
 		applog.TraceWarn(trace.WithStage("request_cancelled_before_commit"), applog.Fields{
 			"user_message_id": userMsgID,
 		}, "process message request cancelled before db commit")
 		return err
 	}
 	return nil
+}
+
+func (s *service) markUserMessageFailed(userMsgID string) {
+	if s == nil || s.db == nil || strings.TrimSpace(userMsgID) == "" {
+		return
+	}
+	_ = s.db.Model(&Message{}).Where("id = ?", strings.TrimSpace(userMsgID)).Updates(map[string]interface{}{
+		"status":     "failed",
+		"updated_at": time.Now().Format("2006-01-02 15:04:05"),
+	}).Error
 }
 
 func (s *service) ProcessMessageCtx(ctx context.Context, req *interaction.ProcessRequest) (*interaction.ProcessResponse, error) {

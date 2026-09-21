@@ -122,7 +122,7 @@ func (a *GeminiAdapter) Stream(ctx context.Context, cfg ProviderConfig, req Mode
 		return nil, fmt.Errorf("API 返回 %d: %s", resp.StatusCode, string(respBytes))
 	}
 
-	return a.parseStream(resp.Body, sink)
+	return a.parseStream(ctx, resp.Body, sink)
 }
 
 func (a *GeminiAdapter) buildContents(req ModelRequest) []map[string]interface{} {
@@ -266,7 +266,7 @@ func (a *GeminiAdapter) parseResponse(respBytes []byte) (*ModelResult, error) {
 	return res, nil
 }
 
-func (a *GeminiAdapter) parseStream(body io.Reader, sink ModelEventSink) (*ModelResult, error) {
+func (a *GeminiAdapter) parseStream(ctx context.Context, body io.Reader, sink ModelEventSink) (*ModelResult, error) {
 	result := &ModelResult{
 		ToolCalls: []ModelToolCall{},
 	}

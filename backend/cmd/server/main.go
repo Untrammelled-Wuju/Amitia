@@ -6,7 +6,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/u-ai/backend/internal/chat"
 	"github.com/u-ai/backend/internal/conversationstream"
 	"github.com/u-ai/backend/internal/graph"
 	"github.com/u-ai/backend/internal/mindruntime"

@@ -18,7 +18,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/config"
-	"github.com/u-ai/backend/internal/chat"
 	extensionkernel "github.com/u-ai/backend/internal/extension/kernel"
 	"github.com/u-ai/backend/internal/interaction"
 	"github.com/u-ai/backend/internal/prompt"
@@ -282,14 +281,22 @@ func (s *service) Webhook(ctx context.Context, req WebhookRequest) (map[string]i
 	replyText := result.Response.Reply
 	log.Printf("[DIAG-Webhook] forceVoice=%v channel=%s", forceVoice, req.Channel)
 	outMsg := map[string]interface{}{"text": replyText, "forceVoice": forceVoice, "audioUrls": result.Response.AudioUrls}
-	if len(result.Response.Lines) > 0 {
-		outMsg["texts"] = result.Response.Lines
+	var texts []string
+	if result.Response.MessagePlan != nil {
+		for _, item := range result.Response.MessagePlan.Items {
+			if strings.EqualFold(item.Type, "text") && strings.TrimSpace(item.Content) != "" {
+				texts = append(texts, item.Content)
+			}
+		}
+	}
+	if len(texts) > 0 {
+		outMsg["texts"] = texts
 	}
 	if result.Response.MessagePlan != nil {
 		outMsg["messagePlan"] = result.Response.MessagePlan
 		outMsg["messagePlanManaged"] = result.Response.MessagePlan.Managed
 	}
-	log.Printf("[DIAG-Webhook] 返回: replyLen=%d forceVoice=%v lines=%d", len(replyText), forceVoice, len(result.Response.Lines))
+	log.Printf("[DIAG-Webhook] 返回: replyLen=%d forceVoice=%v texts=%d", len(replyText), forceVoice, len(texts))
 	return map[string]interface{}{"outgoingMessage": outMsg, "conversationId": convID, "requestId": requestID, "sessionId": sessionID, "spaceId": spaceID, "source": source}, nil
 }
 
