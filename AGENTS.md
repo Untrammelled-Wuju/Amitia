@@ -90,7 +90,7 @@ electron-builder保持compression: normal，实际7z压缩等级由scripts/build
 最近发布源码基线：
 
 - Desktop NSIS：暂无
-- Android Release：版本 26.2.0-beta.1，源码基线提交 13825641c，提交日志 fix(runtime): complete agent runtime integration，安装包 amitia-26.2.0-beta.1-release-arm64-v8a-20260921-161107.apk，SHA-256 0ef074f589a06fb64781fdb09c357846b884ce67d415e06f77f4290513dae915，记录时间 2026-09-21 16:11:39 +08:00
+- Android Release：版本 26.2.0-beta.1，源码基线提交 ca76cfae0，提交日志 fix(runtime): support legacy database upgrades，安装包 amitia-26.2.0-beta.1-release-arm64-v8a-20260921-163702.apk，SHA-256 7c6fa188f0dd1eddf4948d6c2e81a4e00f510231fc25bdba435ceed6c5cd0e9d，记录时间 2026-09-21 16:39:51 +08:00
 
 发布配置：
 
@@ -149,6 +149,7 @@ Android 构建与真机安装规则：
 
 - 仅允许构建、安装和验证 Release 版本 APK，禁止执行、安装或保留任何 Debug 版本 APK。
 - 真机安装前必须确认包名为 com.amitia.amitia_app；发现 com.amitia.amitia_app.debug 时必须先卸载，并在安装后复核该 Debug 包不存在。
+- 每次修复完成后，只要修改涉及手机端或手机内置 Runtime，必须自动构建 Release APK 并安装到已连接真机；只有用户明确说明仅修改源码或暂不构建时才可以跳过。
 
 Android Release 构建方法：
 
