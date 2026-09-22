@@ -27,6 +27,7 @@ type ProcessRequest struct {
 	CharacterID              string                     `json:"characterId,omitempty"`
 	Message                  string                     `json:"message"`
 	ConversationID           string                     `json:"conversationId,omitempty"`
+	ThreadID                 string                     `json:"threadId,omitempty"`
 	Channel                  string                     `json:"channel,omitempty"`
 	Source                   string                     `json:"source,omitempty"`
 	ProactiveTaskInstruction string                     `json:"-"`
@@ -65,6 +66,7 @@ type ProcessRequest struct {
 
 type ProcessResponse struct {
 	ConversationID      string                `json:"conversationId"`
+	ThreadID            string                `json:"threadId,omitempty"`
 	TurnID              string                `json:"turnId,omitempty"`
 	Sequence            int64                 `json:"sequence"`
 	Reply               string                `json:"reply"`
@@ -229,6 +231,7 @@ func (o *Orchestrator) buildScope(req *ProcessRequest) InteractionScope {
 		SpaceID:        req.SpaceID,
 		CharacterID:    req.CharacterID,
 		ConversationID: req.ConversationID,
+		ThreadID:       req.ThreadID,
 		Channel:        req.Channel,
 		PeerID:         req.PeerID,
 		SessionID:      req.SessionID,

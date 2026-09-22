@@ -46,6 +46,9 @@ func (r *Renderer) Render(ir GwIR) ([]GwMessage, error) {
 		case GwSectionTemporalContext, GwSectionRelationshipTime:
 			trustedContextParts = append(trustedContextParts, renderTrustedDataSection(s))
 
+		case GwSectionContinuityContext:
+			contextParts = append(contextParts, renderUntrustedSection(s))
+
 		case GwSectionMemoryContext, GwSectionProfileContext, GwSectionWorldbookContext, GwSectionPluginContext, GwSectionConversationHistory,
 			GwSectionMemoryInjectRaw, GwSectionMemoryExtractRaw,
 			GwSectionProactiveTimeContext, GwSectionProactiveRecentContext,
@@ -115,7 +118,7 @@ func (r *Renderer) Render(ir GwIR) ([]GwMessage, error) {
 	return messages, nil
 }
 
-var allSectionTags = []string{"untrusted_data", "temporal_context", "relationship_time", "character_contract", "runtime_plan", "expression_plan", "personality_raw", "emotion_fusion_raw", "adult_intimacy_raw", "output_shape_raw", "anti_repeat_raw", "proactive_raw", "proactive_personality", "proactive_relationship", "proactive_emotion", "proactive_memory", "proactive_scene", "proactive_time_context", "proactive_recent_context", "proactive_task_instruction", "channel_short_raw", "memory_inject_raw", "memory_extract_raw", "plugin_context", "agent_skill_context", "active_agent_skill", "available_agent_skills", "agent_skill_resource", "current_user_message"}
+var allSectionTags = []string{"untrusted_data", "temporal_context", "continuity_context", "relationship_time", "character_contract", "runtime_plan", "expression_plan", "personality_raw", "emotion_fusion_raw", "adult_intimacy_raw", "output_shape_raw", "anti_repeat_raw", "proactive_raw", "proactive_personality", "proactive_relationship", "proactive_emotion", "proactive_memory", "proactive_scene", "proactive_time_context", "proactive_recent_context", "proactive_task_instruction", "channel_short_raw", "memory_inject_raw", "memory_extract_raw", "plugin_context", "agent_skill_context", "active_agent_skill", "available_agent_skills", "agent_skill_resource", "current_user_message"}
 
 func renderTaggedSection(s GwSection) string {
 	tagName := string(s.Type)

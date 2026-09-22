@@ -356,6 +356,9 @@ func (t *SQLiteInteractionTracker) list(ctx context.Context, scope InteractionSc
 	if scope.ConversationID != "" {
 		query = query.Where("conversation_id = ?", scope.ConversationID)
 	}
+	if scope.ThreadID != "" {
+		query = query.Where("thread_id = ?", scope.ThreadID)
+	}
 	if scope.Channel != "" {
 		query = query.Where("channel = ?", scope.Channel)
 	}

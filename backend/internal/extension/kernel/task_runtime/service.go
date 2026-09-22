@@ -24,7 +24,9 @@ type TaskRuntimeService struct {
 	limiter *ConcurrencyLimiter
 	config  TaskRuntimeConfig
 
-	events TaskEventSink
+	eventMu        sync.RWMutex
+	events         TaskEventSink
+	eventObservers []TaskEventSink
 
 	mu          sync.RWMutex
 	activeHosts map[string]*TaskProcessHost
@@ -68,7 +70,20 @@ func NewTaskRuntimeService(store TaskStore, config TaskRuntimeConfig) *TaskRunti
 }
 
 func (s *TaskRuntimeService) SetEventSink(sink TaskEventSink) {
+	s.eventMu.Lock()
 	s.events = sink
+	s.eventMu.Unlock()
+}
+
+// AddEventSink adds a best-effort observer while preserving the primary
+// durable event sink configured by the task runtime.
+func (s *TaskRuntimeService) AddEventSink(sink TaskEventSink) {
+	if sink == nil {
+		return
+	}
+	s.eventMu.Lock()
+	s.eventObservers = append(s.eventObservers, sink)
+	s.eventMu.Unlock()
 }
 
 func (s *TaskRuntimeService) SetRemoteExecutor(executor RemoteTaskExecutor) {
@@ -80,7 +95,11 @@ func (s *TaskRuntimeService) RemoteExecutor() RemoteTaskExecutor {
 }
 
 func (s *TaskRuntimeService) publishTaskEvent(ctx context.Context, eventType TaskDomainEventType, run *TaskRun, reason, errorCode string) error {
-	if s.events == nil {
+	s.eventMu.RLock()
+	primary := s.events
+	observers := append([]TaskEventSink(nil), s.eventObservers...)
+	s.eventMu.RUnlock()
+	if primary == nil && len(observers) == 0 {
 		return nil
 	}
 	event := TaskDomainEvent{
@@ -90,8 +109,15 @@ func (s *TaskRuntimeService) publishTaskEvent(ctx context.Context, eventType Tas
 		ErrorCode:  errorCode,
 		OccurredAt: time.Now().UTC(),
 	}
-	if err := s.events.TaskEvent(ctx, event); err != nil {
-		return fmt.Errorf("task_runtime: publish event %s: %w", eventType, err)
+	if primary != nil {
+		if err := primary.TaskEvent(ctx, event); err != nil {
+			return fmt.Errorf("task_runtime: publish event %s: %w", eventType, err)
+		}
+	}
+	for _, observer := range observers {
+		if observer != nil {
+			_ = observer.TaskEvent(ctx, event)
+		}
 	}
 	return nil
 }

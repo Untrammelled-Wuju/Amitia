@@ -367,6 +367,9 @@ func startCoreWorkers(appCtx context.Context, services *AppServices, r *http.Ser
 	services.UnifiedEntry.SetOrchestratorReady(true)
 	services.OutboxWorker.Start(appCtx)
 	services.DeliveryWorker.Start(appCtx)
+	if services.ContinuityCoordinator != nil {
+		services.ContinuityCoordinator.Start(appCtx)
+	}
 
 	selfHeal := startSelfHealMonitor(appCtx, services.DB)
 	defer selfHeal.Stop()

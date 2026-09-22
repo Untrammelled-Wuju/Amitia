@@ -178,6 +178,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 	if services.KernelContainer != nil {
 		systemHandler.SetApprovalBroker(services.KernelContainer.ApprovalBroker)
 	}
+	systemHandler.SetContinuityRuntime(services.Continuity, services.ContinuityCoordinator)
 
 	spaceStore := spaceidentity.DefaultStore()
 	if spaceStore == nil {
@@ -533,7 +534,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 			}
 			return services.KernelContainer.ChannelResolver.Has(channelID)
 		})
-		system.RegisterSystemRouter(apiGroup, ctx, services.Chat, services.UnifiedEntry, services.DataLifecycle, services.Reconciliation, services.Memory, services.Profile, services.Episodic, services.Graph, services.Temporal, services.DataPortability, services.Artifact.Service, channelAccess)
+		system.RegisterSystemRouter(apiGroup, ctx, services.Chat, services.UnifiedEntry, services.DataLifecycle, services.Reconciliation, services.Memory, services.Profile, services.Episodic, services.Graph, services.Temporal, services.DataPortability, services.Artifact.Service, services.Continuity, services.ContinuityCoordinator, channelAccess)
 		tts.RegisterTtsRouter(apiGroup, ctx)
 		asr.RegisterAsrRouter(apiGroup, ctx)
 		if services.AdapterManager != nil {

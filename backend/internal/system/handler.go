@@ -13,6 +13,7 @@ import (
 
 	"github.com/u-ai/backend/internal/artifact"
 	"github.com/u-ai/backend/internal/chat"
+	"github.com/u-ai/backend/internal/continuity"
 	"github.com/u-ai/backend/internal/extension/kernel/execution"
 	"github.com/u-ai/backend/internal/interaction"
 	"github.com/u-ai/backend/internal/memory"
@@ -32,19 +33,21 @@ const SystemFormatInstruction = `【回复格式 - 系统固定规则】
 不要用句号连接多个意思。`
 
 type Handler struct {
-	service        Service
-	db             *gorm.DB
-	chatSvc        chat.Service
-	memorySvc      memory.Service
-	dataLifecycle  *mindruntime.DataLifecycleCoordinator
-	unifiedEntry   *interaction.UnifiedEntry
-	reconciliation *mindruntime.ReconciliationEngine
-	versionInfo    atomic.Value
-	artifactSvc    *artifact.Service
-	channelAccess  ChannelAvailability
-	shadowMu       sync.RWMutex
-	shadowState    mindruntime.ShadowState
-	approvalBroker *execution.ApprovalBroker
+	service               Service
+	db                    *gorm.DB
+	chatSvc               chat.Service
+	memorySvc             memory.Service
+	dataLifecycle         *mindruntime.DataLifecycleCoordinator
+	unifiedEntry          *interaction.UnifiedEntry
+	reconciliation        *mindruntime.ReconciliationEngine
+	versionInfo           atomic.Value
+	artifactSvc           *artifact.Service
+	channelAccess         ChannelAvailability
+	shadowMu              sync.RWMutex
+	shadowState           mindruntime.ShadowState
+	approvalBroker        *execution.ApprovalBroker
+	continuityRepo        *continuity.Repository
+	continuityCoordinator *continuity.WaitCoordinator
 }
 
 type ChannelAvailability interface {
@@ -73,6 +76,11 @@ func (h *Handler) SetChannelAvailability(availability ChannelAvailability) {
 
 func (h *Handler) SetApprovalBroker(broker *execution.ApprovalBroker) {
 	h.approvalBroker = broker
+}
+
+func (h *Handler) SetContinuityRuntime(repo *continuity.Repository, coordinator *continuity.WaitCoordinator) {
+	h.continuityRepo = repo
+	h.continuityCoordinator = coordinator
 }
 
 func (h *Handler) getDBPath() string {

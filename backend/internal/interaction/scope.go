@@ -17,6 +17,7 @@ type InteractionScope struct {
 	SpaceID        string `json:"spaceId,omitempty"`
 	CharacterID    string `json:"characterId,omitempty"`
 	ConversationID string `json:"conversationId,omitempty"`
+	ThreadID       string `json:"threadId,omitempty"`
 	Channel        string `json:"channel,omitempty"`
 	PeerID         string `json:"peerId,omitempty"`
 	SessionID      string `json:"sessionId,omitempty"`
@@ -30,6 +31,7 @@ func (s InteractionScope) Normalize() InteractionScope {
 	s.SpaceID = normalizeScopeValue(s.SpaceID)
 	s.CharacterID = normalizeScopeValue(s.CharacterID)
 	s.ConversationID = normalizeScopeValue(s.ConversationID)
+	s.ThreadID = normalizeScopeValue(s.ThreadID)
 	s.Channel = strings.ToLower(normalizeScopeValue(s.Channel))
 	s.PeerID = normalizeScopeValue(s.PeerID)
 	s.SessionID = normalizeScopeValue(s.SessionID)

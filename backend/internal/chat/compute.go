@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/config"
 	"github.com/u-ai/backend/internal/agent/tool"
+	"github.com/u-ai/backend/internal/continuity"
 	"github.com/u-ai/backend/internal/decision"
 	"github.com/u-ai/backend/internal/expression"
 	"github.com/u-ai/backend/internal/extension"
@@ -25,6 +26,9 @@ type ComputeResult struct {
 	RequestID            string
 	TurnID               string
 	ConversationID       string
+	ThreadID             string
+	SpaceID              string
+	ExecutionID          string
 	CharacterID          string
 	CharacterName        string
 	UserMessageID        string
@@ -333,6 +337,11 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 		req.Runtime.Context.Temporal.Value.RelationshipTime.Policy = &policy
 		relationshipTimeContext = temporal.RenderRelationshipTime(*req.Runtime.Context.Temporal.Value.RelationshipTime, policy)
 	}
+	continuityContext := ""
+	if req.Runtime != nil && req.Runtime.Context.Continuity.Status == interaction.LoadStatusReady {
+		continuityContext = continuity.RenderContext(req.Runtime.Context.Continuity.Value)
+	}
+
 	emotionFusionRaw := buildEmotionFusionRaw(req.Runtime, charName)
 	if emotionContext, emotionErr := s.LoadRealtimeEmotionContext(ctx, req.SpaceID, charID); emotionErr == nil && emotionContext != nil {
 		if prompt := strings.TrimSpace(emotionContext.Prompt); prompt != "" {
@@ -355,6 +364,7 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 		AntiRepeatRaw:             antiRepeatRaw,
 		ProfileContext:            mergeContext(sys1Result.ProfileContext, sys1Result.EpisodicContext),
 		TemporalContext:           temporalContext,
+		ContinuityContext:         continuityContext,
 		RelationshipTimeContext:   relationshipTimeContext,
 		MemoryContext:             sys2Result.MemoryContext,
 		Worldbook:                 sys1Result.Worldbook,
@@ -498,6 +508,9 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 		RequestID:            requestID,
 		TurnID:               turnRecorder.TurnID,
 		ConversationID:       convID,
+		ThreadID:             req.ThreadID,
+		SpaceID:              req.SpaceID,
+		ExecutionID:          req.ExecutionID,
 		CharacterID:          charID,
 		CharacterName:        charName,
 		UserMessageID:        userMsgID,
@@ -539,7 +552,7 @@ func (s *service) PostCommitActions(ctx context.Context, result *ComputeResult) 
 		result.UserMessageContent,
 		result.TitleSourceReply,
 	)
-	s.startPostProcessing(ctx, result.Trace, result.ConversationID, result.CharacterID, result.Source, result.RequestID, result.PipelineMessages, result.Reply)
+	s.startPostProcessing(ctx, result.Trace, result.SpaceID, result.ConversationID, result.ThreadID, result.ExecutionID, result.CharacterID, result.Source, result.RequestID, result.UserMessageContent, result.PipelineMessages, result.Reply)
 }
 
 func applyExpressionLengthLimit(reply string, rt *interaction.RuntimeAssembly) string {

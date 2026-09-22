@@ -22,6 +22,7 @@ func (s *service) ProcessMessage(ctx context.Context, req *ProcessMessageRequest
 		s.db.Model(&Message{}).Where("id = ?", computeResult.UserMessageID).Updates(map[string]interface{}{"status": "sent", "updated_at": time.Now().Format("2006-01-02 15:04:05")})
 		return &ProcessMessageResponse{
 			ConversationID:      computeResult.ConversationID,
+			ThreadID:            computeResult.ThreadID,
 			TurnID:              computeResult.TurnID,
 			Sequence:            computeResult.UserMessageSequence,
 			Reply:               computeResult.Reply,
@@ -62,6 +63,7 @@ func (s *service) ProcessMessage(ctx context.Context, req *ProcessMessageRequest
 	applog.TraceInfo(computeResult.Trace.WithStage("completed"), applog.Fields{"reply_size": len(computeResult.Reply)}, "process message completed")
 	return &ProcessMessageResponse{
 		ConversationID:      computeResult.ConversationID,
+		ThreadID:            computeResult.ThreadID,
 		TurnID:              computeResult.TurnID,
 		Sequence:            commitResult.LastSequence,
 		Reply:               computeResult.Reply,
@@ -104,6 +106,7 @@ func (s *service) ProcessMessageCtx(ctx context.Context, req *interaction.Proces
 		CharacterID:              req.CharacterID,
 		Message:                  req.Message,
 		ConversationID:           req.ConversationID,
+		ThreadID:                 req.ThreadID,
 		Channel:                  req.Channel,
 		Source:                   req.Source,
 		PeerID:                   req.PeerID,
@@ -145,6 +148,7 @@ func (s *service) ProcessMessageCtx(ctx context.Context, req *interaction.Proces
 	if computeResult.HasExistingUser {
 		return &interaction.ProcessResponse{
 			ConversationID:      computeResult.ConversationID,
+			ThreadID:            computeResult.ThreadID,
 			TurnID:              computeResult.TurnID,
 			Reply:               computeResult.Reply,
 			Reasoning:           computeResult.Reasoning,
@@ -179,6 +183,7 @@ func (s *service) ProcessMessageCtx(ctx context.Context, req *interaction.Proces
 	s.dispatchPluginAfterReply(chatReq, computeResult, commitResult.MessageIDs)
 	return &interaction.ProcessResponse{
 		ConversationID:      computeResult.ConversationID,
+		ThreadID:            computeResult.ThreadID,
 		TurnID:              computeResult.TurnID,
 		Sequence:            commitResult.LastSequence,
 		Reply:               computeResult.Reply,

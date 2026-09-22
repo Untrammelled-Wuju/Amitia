@@ -12,6 +12,7 @@ func convertProcessMessageResponse(resp *ProcessMessageResponse) *interaction.Pr
 	}
 	return &interaction.ProcessResponse{
 		ConversationID:      resp.ConversationID,
+		ThreadID:            resp.ThreadID,
 		Sequence:            resp.Sequence,
 		Reply:               resp.Reply,
 		Reasoning:           resp.Reasoning,

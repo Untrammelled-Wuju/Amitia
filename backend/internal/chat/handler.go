@@ -258,6 +258,7 @@ func (h *Handler) Chat(c *gin.Context) {
 			CharacterID:    req.CharacterID,
 			Message:        req.Message,
 			ConversationID: req.ConversationID,
+			ThreadID:       req.ThreadID,
 			Channel:        channel,
 			Source:         source,
 			PeerID:         req.PeerID,

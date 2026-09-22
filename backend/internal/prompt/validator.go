@@ -57,6 +57,10 @@ func (v *Validator) ValidateIR(ir GwIR) error {
 			if s.TrustLevel != TrustTrusted || s.InstructionMode != ModeDataOnly {
 				return fmt.Errorf("temporal context must be trusted data_only: %s", s.ID)
 			}
+		case GwSectionContinuityContext:
+			if s.TrustLevel != TrustUntrusted || s.InstructionMode != ModeDataOnly || s.Source != "continuity-runtime" || s.Priority != 435 || s.TokenBudget < 240 || s.TokenBudget > 420 {
+				return fmt.Errorf("continuity context metadata is invalid: %s", s.ID)
+			}
 		case GwSectionRelationshipTime:
 			if s.TrustLevel != TrustTrusted || s.InstructionMode != ModeDataOnly {
 				return fmt.Errorf("relationship time must be trusted data_only: %s", s.ID)
@@ -119,6 +123,7 @@ func (v *Validator) ValidateMessages(messages []GwMessage) error {
 				"<untrusted_data",
 				"<conversation_history",
 				"<memory_context",
+				"<continuity_context",
 				"<worldbook_context",
 				"<tool_result",
 				"<multimodal_text",

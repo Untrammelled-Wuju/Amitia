@@ -19,6 +19,9 @@ func appendContextSections(ctx *buildContext) {
 	if req.TemporalContext != "" {
 		ctx.sections = append(ctx.sections, GwSection{Enabled: true, ID: "temporal_context", Type: GwSectionTemporalContext, TrustLevel: TrustTrusted, InstructionMode: ModeDataOnly, Source: "temporal-runtime", Priority: 430, TokenBudget: 220, Content: req.TemporalContext, SourceProject: "prompt", SourceFile: "builder_context.go", SourceConstant: "GwSectionTemporalContext"})
 	}
+	if continuity := strings.TrimSpace(req.ContinuityContext); continuity != "" {
+		ctx.sections = append(ctx.sections, GwSection{Enabled: true, ID: "continuity_context", Type: GwSectionContinuityContext, TrustLevel: TrustUntrusted, InstructionMode: ModeDataOnly, Source: "continuity-runtime", Priority: 435, TokenBudget: 360, Content: continuity, SourceProject: "prompt", SourceFile: "builder_context.go", SourceConstant: "GwSectionContinuityContext"})
+	}
 	if relationshipTime := strings.TrimSpace(req.RelationshipTimeContext); relationshipTime != "" {
 		ctx.sections = append(ctx.sections, GwSection{Enabled: true, ID: "relationship_time", Type: GwSectionRelationshipTime, TrustLevel: TrustTrusted, InstructionMode: ModeDataOnly, Source: "temporal-runtime", Priority: 440, TokenBudget: 160, Content: relationshipTimePolicy + "\n" + relationshipTime, SourceProject: "prompt", SourceFile: "builder_context.go", SourceConstant: "GwSectionRelationshipTime"})
 	}

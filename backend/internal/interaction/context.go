@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"time"
 
+	"github.com/u-ai/backend/internal/continuity"
 	"github.com/u-ai/backend/internal/temporal"
 )
 
@@ -11,6 +12,7 @@ type ContextSnapshot struct {
 	Version           string                             `json:"version"`
 	RuntimeProfile    SnapshotField[RuntimeProfile]      `json:"runtimeProfile"`
 	Conversation      SnapshotField[ConversationState]   `json:"conversation"`
+	Continuity        SnapshotField[continuity.Context]  `json:"continuity"`
 	Psyche            SnapshotField[PsycheState]         `json:"psyche"`
 	Relationship      SnapshotField[RelationshipState]   `json:"relationship"`
 	Beliefs           SnapshotField[BeliefSet]           `json:"beliefs"`

@@ -8,6 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/u-ai/backend/internal/artifact"
 	"github.com/u-ai/backend/internal/chat"
+	"github.com/u-ai/backend/internal/continuity"
 	"github.com/u-ai/backend/internal/episodic"
 	"github.com/u-ai/backend/internal/graph"
 	"github.com/u-ai/backend/internal/interaction"
@@ -22,10 +23,11 @@ import (
 	"github.com/u-ai/backend/pkg/sse"
 )
 
-func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, chatSvc chat.Service, unifiedEntry *interaction.UnifiedEntry, dataLifecycle *mindruntime.DataLifecycleCoordinator, reconciliation *mindruntime.ReconciliationEngine, memSvc memory.Service, profSvc profile.Service, epiSvc episodic.Service, graphSvc graph.Service, temporalSvc *temporal.Service, dpCoord *dataportability.Coordinator, artifactSvc *artifact.Service, channelAccess ChannelAvailability) {
+func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, chatSvc chat.Service, unifiedEntry *interaction.UnifiedEntry, dataLifecycle *mindruntime.DataLifecycleCoordinator, reconciliation *mindruntime.ReconciliationEngine, memSvc memory.Service, profSvc profile.Service, epiSvc episodic.Service, graphSvc graph.Service, temporalSvc *temporal.Service, dpCoord *dataportability.Coordinator, artifactSvc *artifact.Service, continuityRepo *continuity.Repository, continuityCoordinator *continuity.WaitCoordinator, channelAccess ChannelAvailability) {
 	svc := NewService(ctx, runtimeprofile.Profile(""))
 	handler := NewHandler(svc, ctx.DB, chatSvc, dataLifecycle, unifiedEntry, reconciliation, memSvc)
 	handler.SetArtifactService(artifactSvc)
+	handler.SetContinuityRuntime(continuityRepo, continuityCoordinator)
 	handler.SetChannelAvailability(channelAccess)
 	svc.AttachTemporalService(temporalSvc)
 	chat.SetConversationTitleUpdatedPublisher(func(event chat.ConversationTitleUpdatedEvent) {
@@ -59,6 +61,17 @@ func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, chatSvc chat.
 	r.POST("/onboarding/complete", sharedCoreAdminOnly(), handler.OnboardingComplete)
 	r.POST("/onboarding/reset", sharedCoreAdminOnly(), handler.OnboardingReset)
 	r.GET("/runtime/capabilities", handler.RuntimeCapabilities)
+
+	r.GET("/continuity/threads", handler.ContinuityListThreads)
+	r.POST("/continuity/threads", handler.ContinuityCreateThread)
+	r.GET("/continuity/threads/:id", handler.ContinuityGetThread)
+	r.PATCH("/continuity/threads/:id", handler.ContinuityUpdateThread)
+	r.GET("/continuity/threads/:id/events", handler.ContinuityListEvents)
+	r.GET("/continuity/threads/:id/waits", handler.ContinuityListWaits)
+	r.POST("/continuity/threads/:id/waits", handler.ContinuityCreateWait)
+	r.POST("/continuity/threads/:id/waits/:waitId/resolve", handler.ContinuityResolveWait)
+	r.POST("/continuity/threads/:id/waits/:waitId/cancel", handler.ContinuityCancelWait)
+	r.POST("/continuity/signals", handler.ContinuitySignal)
 
 	r.GET("/config", sharedCoreAdminOnly(), handler.AppConfig)
 	r.PUT("/config", sharedCoreAdminOnly(), handler.UpdateConfig)

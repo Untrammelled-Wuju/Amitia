@@ -53,24 +53,25 @@ func wrapPostconditionHandler(base StepHandler, nodeID string, expr *WorkflowExp
 }
 
 type WorkflowExecutor struct {
-	registry      *WorkflowRegistry
-	handlers      map[string]StepHandler
-	checkpoint    CheckpointStore
-	compensation  *CompensationManager
-	retryMax      int
-	runStore      RunStore
-	guard         StepGuard
-	activeMu      sync.Mutex
-	active        map[string]context.CancelFunc
-	pauseMu       sync.Mutex
-	pauseControls map[string]*WorkflowExecutionControl
-	remoteMu      sync.RWMutex
-	remoteRunner  RemoteWorkflowRunner
-	runEventMu    sync.RWMutex
-	runEventSink  WorkflowRunLifecycleSink
-	concurrencyMu sync.Mutex
-	revisionMu    sync.RWMutex
-	revisionBind  WorkflowRevisionBinder
+	registry          *WorkflowRegistry
+	handlers          map[string]StepHandler
+	checkpoint        CheckpointStore
+	compensation      *CompensationManager
+	retryMax          int
+	runStore          RunStore
+	guard             StepGuard
+	activeMu          sync.Mutex
+	active            map[string]context.CancelFunc
+	pauseMu           sync.Mutex
+	pauseControls     map[string]*WorkflowExecutionControl
+	remoteMu          sync.RWMutex
+	remoteRunner      RemoteWorkflowRunner
+	runEventMu        sync.RWMutex
+	runEventSink      WorkflowRunLifecycleSink
+	runEventObservers []WorkflowRunLifecycleSink
+	concurrencyMu     sync.Mutex
+	revisionMu        sync.RWMutex
+	revisionBind      WorkflowRevisionBinder
 }
 
 // WorkflowRevisionBinder resolves (and, when necessary, creates/promotes) the
@@ -87,6 +88,10 @@ type WorkflowRunLifecycleEvent struct {
 	ExecutionID    string
 	InstallationID string
 	SpaceID        string
+	CharacterID    string
+	ConversationID string
+	OperationID    string
+	InvocationID   string
 	DeviceID       string
 	Status         RunStatus
 	Generation     int64
@@ -234,17 +239,34 @@ func (e *WorkflowExecutor) SetRunLifecycleSink(sink WorkflowRunLifecycleSink) {
 	e.runEventMu.Unlock()
 }
 
-func (e *WorkflowExecutor) emitRunLifecycle(ctx context.Context, event WorkflowRunLifecycleEvent) {
-	e.runEventMu.RLock()
-	sink := e.runEventSink
-	e.runEventMu.RUnlock()
+// AddRunLifecycleSink registers a best-effort observer without replacing the
+// durable/event sink installed by the kernel. Observers must never become a
+// second authority for workflow execution.
+func (e *WorkflowExecutor) AddRunLifecycleSink(sink WorkflowRunLifecycleSink) {
 	if sink == nil {
 		return
 	}
+	e.runEventMu.Lock()
+	e.runEventObservers = append(e.runEventObservers, sink)
+	e.runEventMu.Unlock()
+}
+
+func (e *WorkflowExecutor) emitRunLifecycle(ctx context.Context, event WorkflowRunLifecycleEvent) {
+	e.runEventMu.RLock()
+	sink := e.runEventSink
+	observers := append([]WorkflowRunLifecycleSink(nil), e.runEventObservers...)
+	e.runEventMu.RUnlock()
 	if event.Timestamp.IsZero() {
 		event.Timestamp = time.Now().UTC()
 	}
-	sink(ctx, event)
+	if sink != nil {
+		sink(ctx, event)
+	}
+	for _, observer := range observers {
+		if observer != nil {
+			observer(ctx, event)
+		}
+	}
 }
 
 func runLifecycleEvent(kind string, run WorkflowRun) WorkflowRunLifecycleEvent {
@@ -254,6 +276,10 @@ func runLifecycleEvent(kind string, run WorkflowRun) WorkflowRunLifecycleEvent {
 		ExecutionID:    run.ExecutionID,
 		InstallationID: run.Context.InstallationID,
 		SpaceID:        run.Context.SpaceID,
+		CharacterID:    run.Context.CharacterID,
+		ConversationID: run.Context.ConversationID,
+		OperationID:    run.Context.OperationID,
+		InvocationID:   run.Context.InvocationID,
 		DeviceID:       run.Context.DeviceID,
 		Status:         run.Status,
 		Generation:     run.Generation,

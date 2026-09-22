@@ -205,6 +205,9 @@ func (a *OpenAIChatAdapter) buildContent(parts []ModelContentPart) interface{} {
 			})
 		}
 	}
+	if len(content) == 0 {
+		return ""
+	}
 	return content
 }
 

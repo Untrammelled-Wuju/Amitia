@@ -238,6 +238,7 @@ type ChatRequest struct {
 	CharacterID    string `json:"characterId" binding:"required"`
 	Message        string `json:"message" binding:"required"`
 	ConversationID string `json:"conversationId"`
+	ThreadID       string `json:"threadId,omitempty"`
 	Sequence       int64  `gorm:"column:sequence;not null;default:0;index" json:"sequence"`
 	Channel        string `json:"channel"`
 	Source         string `json:"source"`
@@ -410,6 +411,7 @@ type ProcessMessageRequest struct {
 	CharacterID              string                       `json:"characterId"`
 	Message                  string                       `json:"message"`
 	ConversationID           string                       `json:"conversationId"`
+	ThreadID                 string                       `json:"threadId,omitempty"`
 	ProjectID                string                       `json:"projectId"`
 	Sequence                 int64                        `gorm:"column:sequence;not null;default:0;index" json:"sequence"`
 	Channel                  string                       `json:"channel"`
@@ -454,6 +456,7 @@ func normalizePermissionMode(value string) string {
 
 type ProcessMessageResponse struct {
 	ConversationID      string                   `json:"conversationId"`
+	ThreadID            string                   `json:"threadId,omitempty"`
 	TurnID              string                   `json:"turnId,omitempty"`
 	Sequence            int64                    `gorm:"column:sequence;not null;default:0;index" json:"sequence"`
 	Reply               string                   `json:"reply"`

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/u-ai/backend/internal/continuity"
 	coreexec "github.com/u-ai/backend/internal/execution"
 	"github.com/u-ai/backend/internal/runtimeidentity"
 	"github.com/u-ai/backend/internal/temporal"
@@ -114,6 +115,7 @@ type UnifiedEntryRequest struct {
 	ProactiveMemory          string          `json:"-"`
 	CharacterID              string          `json:"characterId,omitempty"`
 	ConversationID           string          `json:"conversationId,omitempty"`
+	ThreadID                 string          `json:"threadId,omitempty"`
 	WorkspaceID              string          `json:"workspaceId,omitempty"`
 	WorkspaceDeviceID        string          `json:"workspaceDeviceId,omitempty"`
 	WorkspaceName            string          `json:"workspaceName,omitempty"`
@@ -144,6 +146,7 @@ type UnifiedEntry struct {
 	orchestrator *Orchestrator
 	resolver     ScopeResolver
 	execService  *coreexec.ExecutionService
+	continuity   *continuity.Resolver
 	bpCfg        BackpressureConfig
 	bpState      *BackpressureState
 	mu           sync.Mutex
@@ -166,6 +169,12 @@ func (e *UnifiedEntry) SetExecutionService(svc *coreexec.ExecutionService) {
 	e.execService = svc
 }
 
+func (e *UnifiedEntry) SetContinuityResolver(resolver *continuity.Resolver) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.continuity = resolver
+}
+
 func (e *UnifiedEntry) Handle(ctx context.Context, req *UnifiedEntryRequest) (*OrchestrationResult, error) {
 	e.mu.Lock()
 	now := e.clock.Now()
@@ -177,6 +186,7 @@ func (e *UnifiedEntry) Handle(ctx context.Context, req *UnifiedEntryRequest) (*O
 	e.bpState.updateStatusLocked(e.bpCfg)
 	status := e.bpState.Status
 	execService := e.execService
+	continuityResolver := e.continuity
 	e.mu.Unlock()
 
 	defer func() {
@@ -211,6 +221,24 @@ func (e *UnifiedEntry) Handle(ctx context.Context, req *UnifiedEntryRequest) (*O
 		return nil, err
 	}
 
+	if continuityResolver != nil {
+		continuityResolution, continuityErr := continuityResolver.Resolve(ctx, continuity.ResolveInput{
+			SpaceID:        resolution.Scope.SpaceID,
+			CharacterID:    resolution.Scope.CharacterID,
+			ConversationID: resolution.Scope.ConversationID,
+			WorkspaceID:    req.WorkspaceID,
+			ThreadID:       req.ThreadID,
+			Message:        req.Message,
+			SuppressCreate: req.IsInternal || source == string(EntrySourceProactive) || source == string(EntrySourceRuntime),
+		})
+		if continuityErr != nil {
+			log.Printf("[unified_entry] continuity resolution degraded: %v", continuityErr)
+		} else if continuityResolution.Thread != nil {
+			resolution.Scope.ThreadID = continuityResolution.Thread.ID
+			req.ThreadID = continuityResolution.Thread.ID
+		}
+	}
+
 	var execCtx *coreexec.ExecutionContext
 	if execService != nil {
 		rootID := ""
@@ -220,9 +248,15 @@ func (e *UnifiedEntry) Handle(ctx context.Context, req *UnifiedEntryRequest) (*O
 		}
 		created := execService.StartExecution(ctx, rootID, spaceID)
 		created.ConversationID = resolution.Scope.ConversationID
+		if strings.TrimSpace(req.ExecutionID) == "" {
+			req.ExecutionID = created.ExecutionID
+		}
 		created.WorkspaceID = strings.TrimSpace(req.WorkspaceID)
 		if created.Metadata == nil {
 			created.Metadata = make(map[string]any)
+		}
+		if resolution.Scope.ThreadID != "" {
+			created.Metadata["threadId"] = resolution.Scope.ThreadID
 		}
 		if created.WorkspaceID != "" {
 			created.Metadata["workspaceName"] = strings.TrimSpace(req.WorkspaceName)
@@ -238,11 +272,19 @@ func (e *UnifiedEntry) Handle(ctx context.Context, req *UnifiedEntryRequest) (*O
 			}
 		}
 		execCtx = &created
+		if continuityResolver != nil && resolution.Scope.ThreadID != "" {
+			_ = continuityResolver.Bind(resolution.Scope.ThreadID, "execution", created.ExecutionID, "unified_entry", 1)
+			_ = continuityResolver.Bind(resolution.Scope.ThreadID, "request", requestID, "unified_entry", 1)
+			if strings.TrimSpace(req.ExecutionID) != "" && req.ExecutionID != created.ExecutionID {
+				_ = continuityResolver.Bind(resolution.Scope.ThreadID, "execution", req.ExecutionID, "request", 1)
+			}
+		}
 	}
 
 	procReq := &ProcessRequest{
 		CharacterID:              resolution.Scope.CharacterID,
 		ConversationID:           resolution.Scope.ConversationID,
+		ThreadID:                 resolution.Scope.ThreadID,
 		Message:                  req.Message,
 		Channel:                  resolution.Scope.Channel,
 		Source:                   resolution.Source,

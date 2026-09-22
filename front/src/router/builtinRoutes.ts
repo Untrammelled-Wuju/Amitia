@@ -84,6 +84,7 @@ export const builtinBusinessRoutes: RouteRecordRaw[] = [
 { path: "/maintenance", redirect: "/settings/maintenance" },
 { path: "/character", name: "character", component: () => import("../views/character/CharacterView.vue"), meta: { requiresAuth: true } },
 { path: "/graph", name: "graph", component: () => import("@/views/graph/GraphView.vue"), meta: { requiresAuth: true } },
+{ path: "/continuity", name: "continuity", component: () => import("@/views/continuity/ContinuityThreadsView.vue"), meta: { requiresAuth: true } },
 { path: "/character/:id", redirect: (to: any) => `/character/${to.params.id}/life-rules` },
 { path: "/character/:id/life-rules", name: "characterLifeRules", component: () => import("../views/character/CharacterView.vue"), meta: { requiresAuth: true } },
 { path: "/character/:id/voice", name: "characterVoice", component: () => import("../views/character/CharacterView.vue"), meta: { requiresAuth: true } },

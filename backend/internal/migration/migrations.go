@@ -212,6 +212,8 @@ func DefaultMigrations() []Migration {
 		ConversationPermissionModeMigration(),
 		AgentRuntimeV1Migration(),
 		ModelScenarioRoutesMigration(),
+		ContinuityThreadRuntimeMigration(),
+		ContinuityRuntimeCompletionMigration(),
 	}
 }
 

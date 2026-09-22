@@ -21,6 +21,7 @@ import (
 	"github.com/u-ai/backend/internal/browser"
 	"github.com/u-ai/backend/internal/character"
 	"github.com/u-ai/backend/internal/chat"
+	"github.com/u-ai/backend/internal/continuity"
 	"github.com/u-ai/backend/internal/decision"
 	"github.com/u-ai/backend/internal/delivery"
 	"github.com/u-ai/backend/internal/desktoppet"
@@ -70,6 +71,7 @@ import (
 	"github.com/u-ai/backend/internal/devicemesh"
 	devicemeshagent "github.com/u-ai/backend/internal/devicemesh/agent"
 	devicemeshserver "github.com/u-ai/backend/internal/devicemesh/server"
+	"github.com/u-ai/backend/internal/embedding"
 	"github.com/u-ai/backend/internal/episodic"
 	"github.com/u-ai/backend/internal/extension"
 	"github.com/u-ai/backend/internal/extension/kernel"
@@ -137,6 +139,9 @@ type AppServices struct {
 	Vision                       vision.Service
 	Chat                         chat.Service
 	UnifiedEntry                 *interaction.UnifiedEntry
+	Continuity                   *continuity.Repository
+	ContinuityCoordinator        *continuity.WaitCoordinator
+	ContinuityBridge             *continuity.RuntimeBridge
 	DataLifecycle                *mindruntime.DataLifecycleCoordinator
 	RuntimeQueue                 *queue.SQLiteRuntimeQueueStore
 	NewOutbox                    *newoutbox.SQLiteOutboxStore
@@ -586,6 +591,19 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		log.Error("failed to init outbox store schema:", err)
 		panic("failed to init outbox store schema")
 	}
+	continuityRepo := continuity.NewRepository(ctx.DB)
+	if err := continuityRepo.InitSchema(); err != nil {
+		log.Error("failed to init continuity runtime schema:", err)
+		panic("failed to init continuity runtime schema")
+	}
+	continuityResolver := continuity.NewResolver(continuityRepo)
+	continuityResolver.SetSemanticMatcher(continuity.NewEmbeddingSemanticMatcher(embedding.NewService(ctx.DB)))
+	continuityResolver.SetDisambiguator(continuity.NewLLMThreadDisambiguator(chatSvc))
+	continuityObserver := continuity.NewObserver(continuityRepo)
+	continuityObserver.SetIntelligence(continuity.NewIntelligence(chatSvc))
+	continuityCoordinator := continuity.NewWaitCoordinator(continuityRepo, nil, continuity.DefaultWaitCoordinatorConfig())
+	continuityObserver.SetWaitCoordinator(continuityCoordinator)
+	continuityBridge := continuity.NewRuntimeBridge(continuityRepo, continuityCoordinator)
 	runtimeQueue := queue.NewSQLiteRuntimeQueueStore(ctx.DB)
 	deliveryStore := delivery.NewSQLiteDeliveryStore(ctx.DB)
 	if kernelContainer.ChannelResolver == nil {
@@ -604,10 +622,12 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 
 	dispatchedPublisher := newoutbox.NewDispatchedPublisher(newoutbox.LogOnlyPublisher())
 	postProcessAdapter := &postProcessPublisherAdapter{chatSvc: chatSvc}
+	continuityAdapter := &continuityObserverPublisher{observer: continuityObserver}
 	dispatchedPublisher.Register("postprocess.pipeline.execute", postProcessAdapter)
 	dispatchedPublisher.Register("postprocess.context.trim", postProcessAdapter)
 	dispatchedPublisher.Register("postprocess.mood.recovery", postProcessAdapter)
 	dispatchedPublisher.Register("postprocess.compressor.maybe", postProcessAdapter)
+	dispatchedPublisher.Register("continuity.observe", continuityAdapter)
 
 	newOutboxWorker := newoutbox.NewWorker(newOutboxStore, dispatchedPublisher, newoutbox.DefaultWorkerConfig())
 
@@ -626,6 +646,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		chatSvc.SetRelationshipTimeCoordinator(relTimeCoordinator)
 	}
 	runtimeRegistry := newRuntimeContextLoaderRegistry(ctx, charRepo, extensionContextProvider, temporalSvc)
+	runtimeRegistry.Register(interaction.NewContinuityContextLoader(continuityRepo))
 	runtimePipeline := interaction.NewRuntimePipeline(runtimeRegistry, interaction.NewPathClassifier(), interaction.NewTokenBudgetManager(2400))
 	runtimePipeline.SetPersonalityCompiler(personality.NewCompiler(personality.DefaultCompilerConfig()))
 	runtimePipeline.SetSafetyGovernor(safety.NewGovernor(safety.DefaultGovernorConfig()))
@@ -678,6 +699,9 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		coordinatorSetter.SetDataLifecycleCoordinator(dataLifecycle)
 	}
 	entry := interaction.NewUnifiedEntry(orch, resolver, temporal.SystemClock{})
+	entry.SetContinuityResolver(continuityResolver)
+	continuityCoordinator.SetDispatcher(&continuityWakeDispatcher{entry: entry})
+	wireContinuityKernelObservers(kernelContainer, continuityBridge)
 	if kernelContainer != nil && kernelContainer.GameHost != nil {
 		kernelContainer.GameHost.SetAgentWakeupPort(&gameHostAgentWakeupAdapter{entry: entry, defaultCharacterProvider: defaultCharProvider})
 	}
@@ -1121,6 +1145,9 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		Vision:                       visionSvc,
 		Chat:                         chatSvc,
 		UnifiedEntry:                 entry,
+		Continuity:                   continuityRepo,
+		ContinuityCoordinator:        continuityCoordinator,
+		ContinuityBridge:             continuityBridge,
 		DataLifecycle:                dataLifecycle,
 		RuntimeQueue:                 runtimeQueue,
 		NewOutbox:                    newOutboxStore,
@@ -1273,6 +1300,11 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 					}
 				}()
 				services.Extension.StartWorkflowDeviceSync(spaceID.String(), deviceID.String())
+			})
+		}
+		if deviceMeshRuntime.Handler != nil && continuityBridge != nil {
+			deviceMeshRuntime.Handler.AddOnReady(func(spaceID runtimeidentity.SpaceID, deviceID runtimeidentity.DeviceID) {
+				continuityBridge.OnDeviceReady(context.Background(), spaceID.String(), deviceID.String())
 			})
 		}
 		if behaviorMeshPublisher != nil {
@@ -1658,6 +1690,21 @@ type postProcessPublisherAdapter struct {
 
 func (a *postProcessPublisherAdapter) Publish(record newoutbox.OutboxRecord) error {
 	return a.chatSvc.ReplayPostProcess(record.EventType, record.Payload)
+}
+
+type continuityObserverPublisher struct {
+	observer *continuity.Observer
+}
+
+func (p *continuityObserverPublisher) Publish(record newoutbox.OutboxRecord) error {
+	if p == nil || p.observer == nil {
+		return nil
+	}
+	var payload continuity.ObservePayload
+	if err := json.Unmarshal(record.Payload, &payload); err != nil {
+		return err
+	}
+	return p.observer.Observe(context.Background(), payload)
 }
 
 type noopPublisher struct{}

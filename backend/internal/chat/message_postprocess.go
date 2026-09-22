@@ -7,15 +7,17 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/u-ai/backend/internal/continuity"
 	applog "github.com/u-ai/backend/log"
 )
 
 const (
-	postProcessEventPipelineExecute = "postprocess.pipeline.execute"
-	postProcessEventContextTrim     = "postprocess.context.trim"
-	postProcessEventMoodRecovery    = "postprocess.mood.recovery"
-	postProcessEventCompressorMaybe = "postprocess.compressor.maybe"
-	postProcessPayloadVersion       = "v1"
+	postProcessEventPipelineExecute   = "postprocess.pipeline.execute"
+	postProcessEventContextTrim       = "postprocess.context.trim"
+	postProcessEventMoodRecovery      = "postprocess.mood.recovery"
+	postProcessEventCompressorMaybe   = "postprocess.compressor.maybe"
+	postProcessEventContinuityObserve = "continuity.observe"
+	postProcessPayloadVersion         = "v1"
 )
 
 type PostProcessPayload struct {
@@ -28,7 +30,7 @@ type PostProcessPayload struct {
 	PipelineMessages []map[string]string `json:"pipelineMessages"`
 }
 
-func (s *service) startPostProcessing(ctx context.Context, trace applog.TraceFields, convID, charID, source, requestID string, pipelineMessages []map[string]string, reply string) {
+func (s *service) startPostProcessing(ctx context.Context, trace applog.TraceFields, spaceID, convID, threadID, executionID, charID, source, requestID, userMessage string, pipelineMessages []map[string]string, reply string) {
 	if err := ctx.Err(); err != nil {
 		applog.TraceWarn(trace.WithStage("postprocess_skipped_cancelled"), applog.Fields{"conversation_id": convID}, "process message postprocess skipped because request context was cancelled")
 		return
@@ -45,6 +47,11 @@ func (s *service) startPostProcessing(ctx context.Context, trace applog.TraceFie
 	}
 	if s.compressor != nil {
 		s.appendPostProcessOutbox(convID, postProcessEventCompressorMaybe, requestID+"|"+postProcessEventCompressorMaybe, data)
+	}
+	if threadID != "" {
+		continuityPayload := continuity.ObservePayload{Version: "v1", ThreadID: threadID, SpaceID: spaceID, CharacterID: charID, ConversationID: convID, RequestID: requestID, ExecutionID: executionID, UserMessage: userMessage, AssistantReply: reply, Source: source}
+		continuityData, _ := json.Marshal(continuityPayload)
+		s.appendPostProcessOutbox(threadID, postProcessEventContinuityObserve, requestID+"|"+postProcessEventContinuityObserve, continuityData)
 	}
 }
 

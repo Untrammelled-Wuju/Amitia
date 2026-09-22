@@ -158,6 +158,8 @@ func sectionRank(sectionType SectionType) int {
 		return 40
 	case SectionTypeTemporalContext:
 		return 41
+	case SectionTypeContinuityContext:
+		return 42
 	case SectionTypeRelationshipTime:
 		return 42
 	case SectionTypeMemoryInjectRaw:

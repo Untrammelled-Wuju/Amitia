@@ -21,3 +21,4 @@ qdrant-linux-arm64-staging/
 qdrant*.zip
 qdrant*.tar.gz
 .qdrant-initialized
+AmitiaData/

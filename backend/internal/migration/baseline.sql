@@ -3432,6 +3432,7 @@ CREATE TABLE IF NOT EXISTS interaction_records (
 				space_id TEXT,
 				character_id TEXT,
 				conversation_id TEXT,
+				thread_id TEXT NOT NULL DEFAULT '',
 				channel TEXT,
 				peer_id TEXT,
 				session_id TEXT,
@@ -3466,6 +3467,10 @@ CREATE TABLE IF NOT EXISTS interaction_records (
 				correlation_id TEXT DEFAULT '',
 				causation_id TEXT DEFAULT ''
 			);
+
+ALTER TABLE interaction_records ADD COLUMN thread_id TEXT NOT NULL DEFAULT '';
+
+CREATE INDEX IF NOT EXISTS idx_interaction_records_thread_id ON interaction_records(thread_id);
 
 -- 来源: message_plan.go
 CREATE TABLE IF NOT EXISTS delivery_intents (
@@ -5808,3 +5813,80 @@ CREATE TABLE IF NOT EXISTS model_scenario_routes (
     scenario TEXT PRIMARY KEY,
     model_config_id INTEGER NOT NULL DEFAULT 0
 );
+
+--- 来源: continuity_thread_runtime.go ---
+CREATE TABLE IF NOT EXISTS continuity_threads (
+    id TEXT PRIMARY KEY,
+    space_id TEXT NOT NULL,
+    character_id TEXT NOT NULL DEFAULT '',
+    parent_thread_id TEXT NOT NULL DEFAULT '',
+    title TEXT NOT NULL,
+    goal TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'active',
+    summary TEXT NOT NULL DEFAULT '',
+    current_state TEXT NOT NULL DEFAULT '',
+    next_action TEXT NOT NULL DEFAULT '',
+    priority INTEGER NOT NULL DEFAULT 0,
+    confidence REAL NOT NULL DEFAULT 1,
+    revision INTEGER NOT NULL DEFAULT 1,
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL,
+    last_active_at DATETIME NOT NULL,
+    completed_at DATETIME
+);
+CREATE INDEX IF NOT EXISTS idx_continuity_threads_scope_status ON continuity_threads(space_id, status, last_active_at);
+CREATE INDEX IF NOT EXISTS idx_continuity_threads_character ON continuity_threads(character_id, last_active_at);
+
+CREATE TABLE IF NOT EXISTS continuity_thread_bindings (
+    id TEXT PRIMARY KEY,
+    thread_id TEXT NOT NULL,
+    binding_type TEXT NOT NULL,
+    binding_id TEXT NOT NULL,
+    role TEXT NOT NULL DEFAULT 'context',
+    confidence REAL NOT NULL DEFAULT 1,
+    source TEXT NOT NULL DEFAULT '',
+    created_at DATETIME NOT NULL,
+    last_active_at DATETIME NOT NULL,
+    UNIQUE(thread_id, binding_type, binding_id)
+);
+CREATE INDEX IF NOT EXISTS idx_continuity_bindings_lookup ON continuity_thread_bindings(binding_type, binding_id, last_active_at);
+
+CREATE TABLE IF NOT EXISTS continuity_thread_events (
+    id TEXT PRIMARY KEY,
+    thread_id TEXT NOT NULL,
+    event_type TEXT NOT NULL,
+    source_type TEXT NOT NULL DEFAULT '',
+    source_id TEXT NOT NULL DEFAULT '',
+    conversation_id TEXT NOT NULL DEFAULT '',
+    request_id TEXT NOT NULL DEFAULT '',
+    execution_id TEXT NOT NULL DEFAULT '',
+    payload_json TEXT NOT NULL DEFAULT '{}',
+    idempotency_key TEXT NOT NULL UNIQUE,
+    occurred_at DATETIME NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_continuity_events_thread_time ON continuity_thread_events(thread_id, occurred_at);
+
+CREATE TABLE IF NOT EXISTS continuity_waits (
+    id TEXT PRIMARY KEY,
+    thread_id TEXT NOT NULL,
+    wait_type TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'waiting',
+    description TEXT NOT NULL DEFAULT '',
+    condition_json TEXT NOT NULL DEFAULT '{}',
+    resume_hint TEXT NOT NULL DEFAULT '',
+    due_at DATETIME,
+    resolved_at DATETIME,
+    resolved_by TEXT NOT NULL DEFAULT '',
+    resolution_json TEXT NOT NULL DEFAULT '{}',
+    source_execution_id TEXT NOT NULL DEFAULT '',
+    auto_resume INTEGER NOT NULL DEFAULT 1,
+    wake_state TEXT NOT NULL DEFAULT '',
+    wake_request_id TEXT NOT NULL DEFAULT '',
+    wake_attempts INTEGER NOT NULL DEFAULT 0,
+    next_wake_at DATETIME,
+    last_wake_error TEXT NOT NULL DEFAULT '',
+    wake_delivered_at DATETIME,
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_continuity_waits_thread_status ON continuity_waits(thread_id, status, wait_type);

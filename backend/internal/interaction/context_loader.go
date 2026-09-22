@@ -122,6 +122,8 @@ func applySnapshotField(snapshot *ContextSnapshot, name string, field SnapshotFi
 		setSnapshotField(&snapshot.RuntimeProfile, field)
 	case "conversation":
 		setSnapshotField(&snapshot.Conversation, field)
+	case "continuity":
+		setSnapshotField(&snapshot.Continuity, field)
 	case "psyche":
 		setSnapshotField(&snapshot.Psyche, field)
 	case "relationship":

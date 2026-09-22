@@ -2,6 +2,7 @@ package modelprotocol
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 )
@@ -111,5 +112,40 @@ func TestOpenAIChatBuildMessagesPreservesToolLoopState(t *testing.T) {
 	}
 	if messages[1]["tool_call_id"] != "call_calculate" {
 		t.Fatalf("tool_call_id missing: %#v", messages[1])
+	}
+}
+
+func TestOpenAIChatBuildMessagesNeverSerializesNullContent(t *testing.T) {
+	req := ModelRequest{
+		Messages: []ModelMessage{
+			{
+				Role: "assistant",
+				ToolCalls: []ModelToolCall{
+					{ID: "call_empty", Name: "read_file_part", ArgumentsJSON: `{}`},
+				},
+			},
+			{
+				Role:       "tool",
+				ToolCallID: "call_empty",
+			},
+		},
+	}
+
+	messages := (&OpenAIChatAdapter{}).buildMessages(req)
+	if len(messages) != 2 {
+		t.Fatalf("message count = %d, want 2", len(messages))
+	}
+	for index, message := range messages {
+		content, ok := message["content"].(string)
+		if !ok || content != "" {
+			t.Fatalf("message %d content = %#v, want empty string", index, message["content"])
+		}
+	}
+	encoded, err := json.Marshal(messages)
+	if err != nil {
+		t.Fatalf("marshal messages: %v", err)
+	}
+	if strings.Contains(string(encoded), `"content":null`) {
+		t.Fatalf("messages contain null content: %s", encoded)
 	}
 }

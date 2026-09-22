@@ -3,6 +3,7 @@ package chat
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"time"
 
 	"github.com/u-ai/backend/internal/agent/tool"
@@ -126,4 +127,17 @@ func toolResultToOutcome(r ToolResult, found bool) toolExecOutcome {
 		out.HasError = true
 	}
 	return out
+}
+
+func toolResultContent(outcome toolExecOutcome) string {
+	if strings.TrimSpace(outcome.VisibleText) != "" {
+		return outcome.VisibleText
+	}
+	if !outcome.HasError && outcome.Found {
+		return ""
+	}
+	if code := strings.TrimSpace(outcome.ErrorCode); code != "" {
+		return "工具执行失败：" + code
+	}
+	return "工具执行失败"
 }

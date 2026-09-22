@@ -47,7 +47,7 @@ func (o *Orchestrator) handleIdempotentHit(existing *InteractionRecord) (*Orches
 	case InteractionStatusCompleted, InteractionStatusCommitted, InteractionStatusDeliveryPending, InteractionStatusDelivered:
 		var resp *ProcessResponse
 		if existing.ResultRef != "" {
-			resp = &ProcessResponse{RequestID: existing.Scope.RequestID, ConversationID: existing.Scope.ConversationID, CharacterID: existing.Scope.CharacterID, Reply: existing.ResultRef}
+			resp = &ProcessResponse{RequestID: existing.Scope.RequestID, ConversationID: existing.Scope.ConversationID, ThreadID: existing.Scope.ThreadID, CharacterID: existing.Scope.CharacterID, Reply: existing.ResultRef}
 		}
 		return o.buildResult(existing, resp, outcome, nil), nil
 	case InteractionStatusReceived, InteractionStatusNormalized, InteractionStatusQueued, InteractionStatusProcessing, InteractionStatusContextReady, InteractionStatusDecided, InteractionStatusGenerated:

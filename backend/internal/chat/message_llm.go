@@ -148,11 +148,12 @@ func (s *service) invokeLLMWithTools(ctx context.Context, cfg *ModelConfig, mess
 			if outcome.HasError || !outcome.Found {
 				toolStatus = assistantTurnStatusFailed
 			}
-			if err := turnRecorder.AddToolResult(ctx, call.ID, call.Name, outcome.VisibleText, toolStatus, outcome.ErrorCode, execution.DurationMS); err != nil {
+			toolContent := toolResultContent(outcome)
+			if err := turnRecorder.AddToolResult(ctx, call.ID, call.Name, toolContent, toolStatus, outcome.ErrorCode, execution.DurationMS); err != nil {
 				return "", "", false, 0, 0, err
 			}
-			applog.TraceInfo(trace.WithStage("tool_call_completed"), applog.Fields{"round": round, "tool_name": call.Name, "tool_call_id": call.ID, "ok": outcome.Found, "status": outcome.Status, "error_code": outcome.ErrorCode, "result_size": len(outcome.VisibleText), "force_voice": outcome.ForceVoice}, "process message tool call completed")
-			messages = append(messages, map[string]interface{}{"role": "tool", "tool_call_id": call.ID, "content": outcome.VisibleText})
+			applog.TraceInfo(trace.WithStage("tool_call_completed"), applog.Fields{"round": round, "tool_name": call.Name, "tool_call_id": call.ID, "ok": outcome.Found, "status": outcome.Status, "error_code": outcome.ErrorCode, "result_size": len(toolContent), "force_voice": outcome.ForceVoice}, "process message tool call completed")
+			messages = append(messages, map[string]interface{}{"role": "tool", "tool_call_id": call.ID, "content": toolContent})
 			activationPrompt, traceItem := agentSkillTraceFromOutcome(promptTrace, call.Name, call.Arguments, outcome)
 			if traceItem != nil {
 				appendAgentSkillPromptTrace(promptTrace, *traceItem)

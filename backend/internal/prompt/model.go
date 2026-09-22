@@ -12,6 +12,7 @@ const (
 	SectionTypeCurrentInput             SectionType = "current_input"
 	SectionTypeWorldbook                SectionType = "worldbook"
 	SectionTypeTemporalContext          SectionType = "temporal_context"
+	SectionTypeContinuityContext        SectionType = "continuity_context"
 	SectionTypeRelationshipTime         SectionType = "relationship_time"
 	SectionTypeBaseIdentity             SectionType = "base_identity"
 	SectionTypePersonalityRaw           SectionType = "personality_raw"

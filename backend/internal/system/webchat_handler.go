@@ -39,6 +39,7 @@ func webChatRequestLock(spaceID, requestID string) *sync.Mutex {
 
 type webChatSendRequest struct {
 	ConversationID    string  `json:"conversationId"`
+	ThreadID          string  `json:"threadId,omitempty"`
 	ProjectID         string  `json:"projectId"`
 	WorkspaceID       string  `json:"workspaceId"`
 	WorkspaceDeviceID string  `json:"workspaceDeviceId"`
@@ -522,7 +523,7 @@ func (h *Handler) WebChatSubmitMessage(c *gin.Context) {
 		}
 
 		orchResult, err := h.handleUnifiedEntryWithWorkspace(genCtx, &interaction.UnifiedEntryRequest{
-			ConversationID: convID, Channel: "web", Source: source,
+			ConversationID: convID, ThreadID: body.ThreadID, Channel: "web", Source: source,
 			SpaceID: spaceID, PeerID: peerID, RequestID: requestID, SessionID: sessionID,
 			DeviceTimezone: deviceTimezone,
 			CharacterID:    characterID, Message: msgContent,

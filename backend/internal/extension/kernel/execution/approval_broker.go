@@ -42,10 +42,12 @@ type pendingApproval struct {
 }
 
 type ApprovalBroker struct {
-	mu          sync.Mutex
-	pending     map[string]*pendingApproval
-	onRequested func(ApprovalRequest) error
-	onResolved  func(ApprovalRequest) error
+	mu                 sync.Mutex
+	pending            map[string]*pendingApproval
+	onRequested        func(ApprovalRequest) error
+	onResolved         func(ApprovalRequest) error
+	requestedObservers []func(ApprovalRequest) error
+	resolvedObservers  []func(ApprovalRequest) error
 }
 
 func NewApprovalBroker() *ApprovalBroker {
@@ -59,6 +61,22 @@ func (b *ApprovalBroker) SetObservers(onRequested func(ApprovalRequest) error, o
 	b.mu.Lock()
 	b.onRequested = onRequested
 	b.onResolved = onResolved
+	b.mu.Unlock()
+}
+
+// AddObservers adds best-effort observers without replacing the primary UI/event
+// callbacks. Observer failures never block approval execution.
+func (b *ApprovalBroker) AddObservers(onRequested func(ApprovalRequest) error, onResolved func(ApprovalRequest) error) {
+	if b == nil {
+		return
+	}
+	b.mu.Lock()
+	if onRequested != nil {
+		b.requestedObservers = append(b.requestedObservers, onRequested)
+	}
+	if onResolved != nil {
+		b.resolvedObservers = append(b.resolvedObservers, onResolved)
+	}
 	b.mu.Unlock()
 }
 
@@ -85,6 +103,7 @@ func (b *ApprovalBroker) Await(ctx context.Context, request ApprovalRequest, tim
 	b.mu.Lock()
 	b.pending[request.ID] = entry
 	onRequested := b.onRequested
+	requestedObservers := append([]func(ApprovalRequest) error(nil), b.requestedObservers...)
 	b.mu.Unlock()
 	if onRequested != nil {
 		if err := onRequested(request); err != nil {
@@ -92,6 +111,11 @@ func (b *ApprovalBroker) Await(ctx context.Context, request ApprovalRequest, tim
 			delete(b.pending, request.ID)
 			b.mu.Unlock()
 			return false, err
+		}
+	}
+	for _, observer := range requestedObservers {
+		if observer != nil {
+			_ = observer(request)
 		}
 	}
 	defer func() {
@@ -173,6 +197,7 @@ func (b *ApprovalBroker) Resolve(id string, approved bool) error {
 	entry.resolved = true
 	entry.value = request
 	onResolved := b.onResolved
+	resolvedObservers := append([]func(ApprovalRequest) error(nil), b.resolvedObservers...)
 	b.mu.Unlock()
 	if onResolved != nil {
 		if err := onResolved(request); err != nil {
@@ -183,6 +208,11 @@ func (b *ApprovalBroker) Resolve(id string, approved bool) error {
 			}
 			b.mu.Unlock()
 			return err
+		}
+	}
+	for _, observer := range resolvedObservers {
+		if observer != nil {
+			_ = observer(request)
 		}
 	}
 	entry.decision <- approved
@@ -204,10 +234,16 @@ func (b *ApprovalBroker) expire(id string) error {
 	entry.resolved = true
 	entry.value = request
 	onResolved := b.onResolved
+	resolvedObservers := append([]func(ApprovalRequest) error(nil), b.resolvedObservers...)
 	b.mu.Unlock()
 	if onResolved != nil {
 		if err := onResolved(request); err != nil {
 			return err
+		}
+	}
+	for _, observer := range resolvedObservers {
+		if observer != nil {
+			_ = observer(request)
 		}
 	}
 	return nil
