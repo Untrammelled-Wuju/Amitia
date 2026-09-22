@@ -86,6 +86,9 @@ func TestValidateEndpoint_RejectLinkLocal(t *testing.T) {
 
 func TestValidateEndpoint_PublicHost(t *testing.T) {
 	st := NewSecureTransport()
+	st.resolver = func(context.Context, string) ([]net.IP, error) {
+		return []net.IP{net.ParseIP("1.1.1.1")}, nil
+	}
 	ep, err := st.ValidateEndpoint(context.Background(), "https://api.search.brave.com/res/v1/web/search")
 	if err != nil {
 		t.Fatalf("public host should validate: %v", err)

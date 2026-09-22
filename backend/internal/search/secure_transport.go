@@ -14,12 +14,14 @@ import (
 type endpointPolicy struct {
 	allowLoopback      bool
 	allowPrivate       bool
+	allowHTTP          bool
 	maxRedirects       int
 	allowHostRedirects bool
 }
 
 type SecureTransport struct {
-	policy endpointPolicy
+	policy   endpointPolicy
+	resolver func(context.Context, string) ([]net.IP, error)
 }
 
 type validatedEndpoint struct {
@@ -33,10 +35,21 @@ func NewSecureTransport() *SecureTransport {
 		policy: endpointPolicy{
 			allowLoopback:      false,
 			allowPrivate:       false,
+			allowHTTP:          false,
 			maxRedirects:       3,
 			allowHostRedirects: false,
 		},
 	}
+}
+
+func NewConfiguredTransport(allowHTTP, allowPrivate, allowHostRedirects bool) *SecureTransport {
+	return &SecureTransport{policy: endpointPolicy{
+		allowLoopback:      allowPrivate,
+		allowPrivate:       allowPrivate,
+		allowHTTP:          allowHTTP,
+		maxRedirects:       3,
+		allowHostRedirects: allowHostRedirects,
+	}}
 }
 
 func (t *SecureTransport) ValidateEndpoint(ctx context.Context, rawURL string) (*validatedEndpoint, error) {
@@ -48,7 +61,7 @@ func (t *SecureTransport) ValidateEndpoint(ctx context.Context, rawURL string) (
 	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
 		return nil, &Error{Code: SEARCH_BLOCKED_BY_NETWORK}
 	}
-	if parsed.Scheme != "https" {
+	if parsed.Scheme != "https" && !(t.policy.allowHTTP && parsed.Scheme == "http") {
 		return nil, &Error{Code: SEARCH_BLOCKED_BY_NETWORK}
 	}
 	if parsed.User != nil {
@@ -99,7 +112,7 @@ func (t *SecureTransport) NewHTTPClient(timeout time.Duration) *http.Client {
 			if !t.policy.allowHostRedirects && !strings.EqualFold(req.URL.Host, via[0].URL.Host) {
 				return fmt.Errorf("search cross-host redirect rejected")
 			}
-			if req.URL.Scheme != "https" {
+			if req.URL.Scheme != "https" && !(t.policy.allowHTTP && req.URL.Scheme == "http") {
 				return fmt.Errorf("search redirect scheme downgrade rejected")
 			}
 			return nil
@@ -114,7 +127,7 @@ func (t *SecureTransport) PinHTTPClient(endpoint *validatedEndpoint, timeout tim
 	tr := http.DefaultTransport.(*http.Transport).Clone()
 	dialer := &net.Dialer{Timeout: 10 * time.Second, KeepAlive: 30 * time.Second}
 	approved := append([]net.IP(nil), endpoint.addresses...)
-	hostname := strings.ToLower(endpoint.url.Host)
+	hostname := strings.ToLower(endpoint.url.Hostname())
 	tr.DialContext = func(ctx context.Context, network, address string) (net.Conn, error) {
 		host, port, err := net.SplitHostPort(address)
 		if err != nil {
@@ -143,7 +156,7 @@ func (t *SecureTransport) PinHTTPClient(endpoint *validatedEndpoint, timeout tim
 			if !t.policy.allowHostRedirects && !strings.EqualFold(req.URL.Host, endpoint.url.Host) {
 				return fmt.Errorf("search cross-host redirect rejected")
 			}
-			if req.URL.Scheme != "https" {
+			if req.URL.Scheme != "https" && !(t.policy.allowHTTP && req.URL.Scheme == "http") {
 				return fmt.Errorf("search redirect scheme downgrade rejected")
 			}
 			return nil
@@ -154,6 +167,16 @@ func (t *SecureTransport) PinHTTPClient(endpoint *validatedEndpoint, timeout tim
 func (t *SecureTransport) resolve(ctx context.Context, host string) ([]net.IP, error) {
 	if ip := net.ParseIP(host); ip != nil {
 		return []net.IP{ip}, nil
+	}
+	if t != nil && t.resolver != nil {
+		ips, err := t.resolver(ctx, host)
+		if err != nil {
+			return nil, err
+		}
+		if len(ips) == 0 {
+			return nil, fmt.Errorf("no addresses for host")
+		}
+		return ips, nil
 	}
 	ips, err := net.DefaultResolver.LookupIP(ctx, "ip", host)
 	if err != nil {
@@ -166,12 +189,39 @@ func (t *SecureTransport) resolve(ctx context.Context, host string) ([]net.IP, e
 }
 
 func (t *SecureTransport) deniedIP(ip net.IP) bool {
-	if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsUnspecified() || ip.IsMulticast() {
+	if ip.IsLoopback() && !t.policy.allowLoopback {
+		return true
+	}
+	if ip.IsPrivate() && !t.policy.allowPrivate {
+		return true
+	}
+	if ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsUnspecified() || ip.IsMulticast() {
 		return true
 	}
 	if ip.Equal(net.ParseIP("169.254.169.254")) || ip.Equal(net.ParseIP("100.100.100.200")) {
 		return true
 	}
+	if isReservedNetworkIP(ip) {
+		return true
+	}
 	return false
 }
 
+func isReservedNetworkIP(ip net.IP) bool {
+	for _, cidr := range []string{
+		"100.64.0.0/10",
+		"192.0.0.0/24",
+		"192.0.2.0/24",
+		"198.18.0.0/15",
+		"198.51.100.0/24",
+		"203.0.113.0/24",
+		"240.0.0.0/4",
+		"2001:db8::/32",
+	} {
+		_, network, err := net.ParseCIDR(cidr)
+		if err == nil && network.Contains(ip) {
+			return true
+		}
+	}
+	return false
+}

@@ -15,6 +15,7 @@ class MemoryService {
     String? verifiedStatus,
     int? retentionLevel,
     String? decayState,
+    String? sort,
     bool? pinned,
     int page = 1,
     int pageSize = 200,
@@ -24,12 +25,21 @@ class MemoryService {
       queryParameters: <String, dynamic>{
         'page': page,
         'pageSize': pageSize,
-        if (characterId != null && characterId.isNotEmpty) 'characterId': characterId,
-        if (keyword != null && keyword.trim().isNotEmpty) 'keyword': keyword.trim(),
-        if (memoryType != null && memoryType.isNotEmpty) 'memoryType': memoryType,
-        if (verifiedStatus != null && verifiedStatus.isNotEmpty) 'verifiedStatus': verifiedStatus,
-        if (retentionLevel != null && retentionLevel >= 1 && retentionLevel <= 5) 'retentionLevel': retentionLevel,
-        if (decayState != null && decayState.isNotEmpty) 'decayState': decayState,
+        if (characterId != null && characterId.isNotEmpty)
+          'characterId': characterId,
+        if (keyword != null && keyword.trim().isNotEmpty)
+          'keyword': keyword.trim(),
+        if (memoryType != null && memoryType.isNotEmpty)
+          'memoryType': memoryType,
+        if (verifiedStatus != null && verifiedStatus.isNotEmpty)
+          'verifiedStatus': verifiedStatus,
+        if (retentionLevel != null &&
+            retentionLevel >= 1 &&
+            retentionLevel <= 5)
+          'retentionLevel': retentionLevel,
+        if (decayState != null && decayState.isNotEmpty)
+          'decayState': decayState,
+        if (sort != null && sort.trim().isNotEmpty) 'sort': sort.trim(),
         if (pinned != null) 'pinned': pinned,
       },
     );
@@ -38,20 +48,28 @@ class MemoryService {
 
   Future<MemoryDto?> create(Map<String, dynamic> data) async {
     final normalized = _normalizeWritePayload(data, isCreate: true);
-    final resp = await _api.post<Map<String, dynamic>>('/api/memories', data: normalized);
+    final resp = await _api.post<Map<String, dynamic>>(
+      '/api/memories',
+      data: normalized,
+    );
     if (resp == null) return null;
     return MemoryDto.fromJson(resp);
   }
 
   Future<MemoryDto?> update(String id, Map<String, dynamic> data) async {
     final normalized = _normalizeWritePayload(data, isCreate: false);
-    final resp = await _api.put<Map<String, dynamic>>('/api/memories/$id', data: normalized);
+    final resp = await _api.put<Map<String, dynamic>>(
+      '/api/memories/$id',
+      data: normalized,
+    );
     if (resp == null) return null;
     return MemoryDto.fromJson(resp);
   }
 
   Future<MemoryDto?> restore(String id) async {
-    final resp = await _api.post<Map<String, dynamic>>('/api/memories/$id/restore');
+    final resp = await _api.post<Map<String, dynamic>>(
+      '/api/memories/$id/restore',
+    );
     if (resp == null) return null;
     return MemoryDto.fromJson(resp);
   }
@@ -64,7 +82,9 @@ class MemoryService {
   Future<bool> deleteAll({String? characterId}) async {
     await _api.delete(
       '/api/memories',
-      queryParameters: characterId == null || characterId.isEmpty ? null : {'characterId': characterId},
+      queryParameters: characterId == null || characterId.isEmpty
+          ? null
+          : {'characterId': characterId},
     );
     return true;
   }
@@ -79,7 +99,8 @@ class MemoryService {
       '/api/memories/search',
       data: <String, dynamic>{
         'keyword': query.trim(),
-        if (characterId != null && characterId.isNotEmpty) 'characterId': characterId,
+        if (characterId != null && characterId.isNotEmpty)
+          'characterId': characterId,
         'limit': limit,
         if (types != null && types.isNotEmpty) 'types': types,
       },
@@ -97,7 +118,8 @@ class MemoryService {
       data: <String, dynamic>{
         'query': query,
         'keyword': query,
-        if (characterId != null && characterId.isNotEmpty) 'characterId': characterId,
+        if (characterId != null && characterId.isNotEmpty)
+          'characterId': characterId,
         'limit': limit,
       },
     );
@@ -114,7 +136,8 @@ class MemoryService {
       data: <String, dynamic>{
         'query': query,
         'keyword': query,
-        if (characterId != null && characterId.isNotEmpty) 'characterId': characterId,
+        if (characterId != null && characterId.isNotEmpty)
+          'characterId': characterId,
         'limit': limit,
       },
     );
@@ -145,16 +168,19 @@ class MemoryService {
         '/api/memories/hybrid-search',
         data: {'keyword': keyword, 'query': keyword, 'limit': limitPerType},
       );
-      memories = _mapList(memoryResp, keys: const ['items']).map((row) {
-        final nested = row['memory'];
-        final memory = nested is Map
-            ? Map<String, dynamic>.from(nested)
-            : Map<String, dynamic>.from(row);
-        memory['score'] = row['score'];
-        memory['matchType'] = row['matchType'];
-        memory['memoryLayer'] = row['memoryLayer'];
-        return memory;
-      }).take(limitPerType).toList(growable: false);
+      memories = _mapList(memoryResp, keys: const ['items'])
+          .map((row) {
+            final nested = row['memory'];
+            final memory = nested is Map
+                ? Map<String, dynamic>.from(nested)
+                : Map<String, dynamic>.from(row);
+            memory['score'] = row['score'];
+            memory['matchType'] = row['matchType'];
+            memory['memoryLayer'] = row['memoryLayer'];
+            return memory;
+          })
+          .take(limitPerType)
+          .toList(growable: false);
     } catch (_) {}
 
     Future<List<Map<String, dynamic>>> fetchAndFilter(String path) async {
@@ -197,9 +223,11 @@ class MemoryService {
       queryParameters: <String, dynamic>{
         'page': page,
         'pageSize': pageSize,
-        if (characterId != null && characterId.isNotEmpty) 'characterId': characterId,
+        if (characterId != null && characterId.isNotEmpty)
+          'characterId': characterId,
         if (source != null && source.isNotEmpty) 'source': source,
-        if (memoryType != null && memoryType.isNotEmpty) 'memoryType': memoryType,
+        if (memoryType != null && memoryType.isNotEmpty)
+          'memoryType': memoryType,
         if (type != null && type.isNotEmpty) 'type': type,
       },
     );
@@ -220,11 +248,14 @@ class MemoryService {
 
   Future<List<MemoryCandidateDto>> listCandidates({String? characterId}) async {
     final resp = await _api.get<dynamic>('/api/memory-candidates');
-    final all = _mapList(resp, keys: const ['candidates'])
-        .map(MemoryCandidateDto.fromJson)
-        .toList(growable: false);
+    final all = _mapList(
+      resp,
+      keys: const ['candidates'],
+    ).map(MemoryCandidateDto.fromJson).toList(growable: false);
     if (characterId == null || characterId.isEmpty) return all;
-    return all.where((e) => e.characterId == characterId).toList(growable: false);
+    return all
+        .where((e) => e.characterId == characterId)
+        .toList(growable: false);
   }
 
   Future<bool> acceptCandidate(String id) async {
@@ -242,13 +273,22 @@ class MemoryService {
     return true;
   }
 
-  Future<bool> batchVerify(List<String> ids, {String status = 'user_verified'}) async {
-    await _api.post('/api/memories/batch-verify', data: {'ids': ids, 'status': status});
+  Future<bool> batchVerify(
+    List<String> ids, {
+    String status = 'user_verified',
+  }) async {
+    await _api.post(
+      '/api/memories/batch-verify',
+      data: {'ids': ids, 'status': status},
+    );
     return true;
   }
 
   Future<bool> batchSetImportance(List<String> ids, int importance) async {
-    await _api.post('/api/memories/batch-importance', data: {'ids': ids, 'importance': importance});
+    await _api.post(
+      '/api/memories/batch-importance',
+      data: {'ids': ids, 'importance': importance},
+    );
     return true;
   }
 
@@ -298,19 +338,23 @@ class MemoryService {
 
   Future<List<MemoryCandidateDto>> extractCandidates() async {
     final resp = await _api.post<dynamic>('/api/memories/extract-candidates');
-    return _mapList(resp, keys: const ['candidates'])
-        .map(MemoryCandidateDto.fromJson)
-        .toList(growable: false);
+    return _mapList(
+      resp,
+      keys: const ['candidates'],
+    ).map(MemoryCandidateDto.fromJson).toList(growable: false);
   }
 
-  Future<List<MemoryCandidateDto>> generateCandidates(String conversationId) async {
+  Future<List<MemoryCandidateDto>> generateCandidates(
+    String conversationId,
+  ) async {
     final resp = await _api.post<dynamic>(
       '/api/memory-candidates/generate',
       data: {'conversationId': conversationId},
     );
-    return _mapList(resp, keys: const ['candidates'])
-        .map(MemoryCandidateDto.fromJson)
-        .toList(growable: false);
+    return _mapList(
+      resp,
+      keys: const ['candidates'],
+    ).map(MemoryCandidateDto.fromJson).toList(growable: false);
   }
 
   Future<MemoryCandidateDto?> updateCandidate(
@@ -346,7 +390,8 @@ class MemoryService {
     final resp = await _api.get<dynamic>(
       '/api/memories/ranked',
       queryParameters: {
-        if (characterId != null && characterId.isNotEmpty) 'characterId': characterId,
+        if (characterId != null && characterId.isNotEmpty)
+          'characterId': characterId,
         if (spaceId != null && spaceId.isNotEmpty) 'spaceId': spaceId,
         if (query.trim().isNotEmpty) 'query': query.trim(),
         'limit': limit,
@@ -356,7 +401,9 @@ class MemoryService {
   }
 
   Future<Map<String, dynamic>> retrievalStats() async {
-    final resp = await _api.get<Map<String, dynamic>>('/api/memory/retrieval/stats');
+    final resp = await _api.get<Map<String, dynamic>>(
+      '/api/memory/retrieval/stats',
+    );
     return resp ?? <String, dynamic>{};
   }
 
@@ -365,7 +412,10 @@ class MemoryService {
     return true;
   }
 
-  Map<String, dynamic> _normalizeWritePayload(Map<String, dynamic> data, {required bool isCreate}) {
+  Map<String, dynamic> _normalizeWritePayload(
+    Map<String, dynamic> data, {
+    required bool isCreate,
+  }) {
     final result = Map<String, dynamic>.from(data);
     if (result.containsKey('content') && !result.containsKey('value')) {
       result['value'] = result.remove('content');
@@ -412,22 +462,27 @@ class MemoryService {
   }
 
   List<MemoryDto> _memoryList(dynamic resp) {
-    return _mapList(resp, keys: const ['items'])
-        .map(MemoryDto.fromJson)
-        .toList(growable: false);
+    return _mapList(
+      resp,
+      keys: const ['items'],
+    ).map(MemoryDto.fromJson).toList(growable: false);
   }
 
   List<MemoryDto> _scoredMemoryList(dynamic resp) {
     return _mapList(resp, keys: const ['items'])
         .map((row) {
           final nested = row['memory'];
-          if (nested is Map) return MemoryDto.fromJson(Map<String, dynamic>.from(nested));
+          if (nested is Map)
+            return MemoryDto.fromJson(Map<String, dynamic>.from(nested));
           return MemoryDto.fromJson(row);
         })
         .toList(growable: false);
   }
 
-  List<Map<String, dynamic>> _mapList(dynamic resp, {List<String> keys = const []}) {
+  List<Map<String, dynamic>> _mapList(
+    dynamic resp, {
+    List<String> keys = const [],
+  }) {
     dynamic raw = resp;
     if (raw is Map) {
       for (final key in keys) {

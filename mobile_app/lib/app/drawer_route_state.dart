@@ -4,6 +4,7 @@ enum MainDrawerItem {
   chat,
   characters,
   memory,
+  continuity,
   devices,
   extensions,
   workshop,
@@ -56,6 +57,8 @@ DrawerRouteState resolveDrawerRouteState(String location) {
     mainItem = MainDrawerItem.characters;
   } else if (isRouteFamily(location, '/memory')) {
     mainItem = MainDrawerItem.memory;
+  } else if (isRouteFamily(location, '/continuity')) {
+    mainItem = MainDrawerItem.continuity;
   } else if (isRouteFamily(location, '/settings/devices')) {
     mainItem = MainDrawerItem.devices;
   } else if (isRouteFamily(location, '/extensions') ||

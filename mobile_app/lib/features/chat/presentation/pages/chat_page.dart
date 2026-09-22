@@ -1406,7 +1406,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     if (toolName.isEmpty) return null;
     return AmitiaAgentActivity(
       id: event.id,
-      title: toolName,
+      title: toolName == 'web_run' || toolName == 'web.run' ? '联网研究' : toolName,
       status: (event.payload['status'] ?? 'completed').toString(),
       errorCode: (event.payload['errorCode'] ?? '').toString().trim().isEmpty
           ? null
@@ -1713,7 +1713,12 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         if (characterId.isEmpty) return const <MemoryDto>[];
         return await ref
             .read(memoryServiceProvider)
-            .list(characterId: characterId, page: 1, pageSize: 8);
+            .list(
+              characterId: characterId,
+              page: 1,
+              pageSize: 8,
+              sort: 'recently_used',
+            );
       } catch (_) {
         return const <MemoryDto>[];
       }
@@ -2769,7 +2774,7 @@ class _ChatProfileSummarySheet extends StatelessWidget {
       'personal_info': '个人信息',
       'preference': '偏好',
       'habit': '习惯',
-      'fear': '顾虑',
+      'fear': '恐惧',
       'relationship': '关系',
       'health': '健康',
       'plan': '计划',

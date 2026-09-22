@@ -24,6 +24,8 @@ import '../../../features/memory/presentation/pages/memory_timeline_page.dart';
 import '../../../features/memory/presentation/pages/user_profiles_page.dart';
 import '../../../features/memory/presentation/pages/world_book_page.dart';
 import '../../../features/reminders/presentation/pages/reminders_page.dart';
+import '../../../features/continuity/presentation/pages/continuity_page.dart';
+import '../../../features/continuity/presentation/pages/continuity_detail_page.dart';
 import '../../../features/emotes/presentation/pages/emotes_page.dart';
 import '../../../features/chat_logs/presentation/pages/chat_logs_page.dart';
 import '../../../features/chat_import/presentation/pages/chat_import_page.dart';
@@ -268,6 +270,19 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
     path: '/reminders',
     pageBuilder: (context, state) =>
         drawerSlideFadePage(state: state, child: const RemindersPage()),
+  ),
+  GoRoute(
+    path: '/continuity',
+    pageBuilder: (context, state) =>
+        drawerSlideFadePage(state: state, child: const ContinuityPage()),
+  ),
+  GoRoute(
+    path: '/continuity/:id',
+    pageBuilder: (context, state) => slideFadePage(
+      context: context,
+      state: state,
+      child: ContinuityDetailPage(threadId: state.pathParameters['id']!),
+    ),
   ),
   GoRoute(
     path: '/emotes',

@@ -87,6 +87,17 @@ type ModelToolRuntime interface {
 	AfterReply(scope SkillScope, reply ReplyView) bool
 }
 
+type ToolProgressEvent struct {
+	Fraction      float64
+	Indeterminate bool
+	Message       string
+	Metadata      map[string]any
+}
+
+type ModelToolProgressRuntime interface {
+	ExecuteModelToolWithProgress(ctx context.Context, modelName string, input json.RawMessage, scope SkillScope, idempotencyKey string, emit func(context.Context, ToolProgressEvent) error) (ToolResult, bool, error)
+}
+
 func toolScopeFromExtension(es extension.ExecutionScope) SkillScope {
 	return SkillScope{
 		SpaceID:        es.SpaceID,
@@ -129,7 +140,15 @@ func toolResultToOutcome(r ToolResult, found bool) toolExecOutcome {
 	return out
 }
 
-func toolResultContent(outcome toolExecOutcome) string {
+func toolResultContent(toolName string, outcome toolExecOutcome) string {
+	// web_run is a structured research tool. Its JSON payload is the evidence
+	// contract the model must read in the next reasoning step (including stable
+	// citation indexes), so never replace it with an empty/human-only summary.
+	if !outcome.HasError && outcome.Found && (toolName == "web_run" || toolName == "web.run") {
+		if payload := strings.TrimSpace(string(outcome.Output)); payload != "" {
+			return payload
+		}
+	}
 	if strings.TrimSpace(outcome.VisibleText) != "" {
 		return outcome.VisibleText
 	}

@@ -2440,6 +2440,65 @@ var schemaMigrations = []string{
 		PRIMARY KEY(event_id, binding_id)
 	)`,
 	`CREATE INDEX IF NOT EXISTS idx_ext_wf_trigger_receipts_updated ON extension_workflow_trigger_receipts(updated_at)`,
+
+	`CREATE TABLE IF NOT EXISTS web_references (
+		ref_id TEXT PRIMARY KEY,
+		conversation_id TEXT NOT NULL,
+		turn_id TEXT,
+		invocation_id TEXT,
+		kind TEXT NOT NULL,
+		url TEXT NOT NULL,
+		canonical_url TEXT NOT NULL,
+		title TEXT,
+		snippet TEXT,
+		provider TEXT,
+		query_text TEXT,
+		rank_value INTEGER NOT NULL DEFAULT 0,
+		published_at DATETIME,
+		created_at DATETIME NOT NULL,
+		expires_at DATETIME NOT NULL
+	)`,
+	`CREATE INDEX IF NOT EXISTS idx_web_references_conversation ON web_references(conversation_id, created_at)`,
+	`CREATE INDEX IF NOT EXISTS idx_web_references_canonical ON web_references(canonical_url)`,
+	`CREATE TABLE IF NOT EXISTS web_pages (
+		ref_id TEXT PRIMARY KEY,
+		source_ref_id TEXT,
+		conversation_id TEXT NOT NULL,
+		url TEXT NOT NULL,
+		canonical_url TEXT NOT NULL,
+		title TEXT,
+		content_type TEXT NOT NULL,
+		content TEXT NOT NULL,
+		content_hash TEXT NOT NULL,
+		links_json TEXT NOT NULL,
+		truncated INTEGER NOT NULL DEFAULT 0,
+		dynamic INTEGER NOT NULL DEFAULT 0,
+		fetched_at DATETIME NOT NULL
+	)`,
+	`CREATE INDEX IF NOT EXISTS idx_web_pages_conversation ON web_pages(conversation_id, fetched_at)`,
+	`CREATE INDEX IF NOT EXISTS idx_web_pages_hash ON web_pages(content_hash)`,
+	`CREATE TABLE IF NOT EXISTS web_evidence (
+		evidence_id TEXT PRIMARY KEY,
+		conversation_id TEXT NOT NULL,
+		page_ref_id TEXT NOT NULL,
+		query_text TEXT,
+		text_value TEXT NOT NULL,
+		text_hash TEXT NOT NULL,
+		locator_json TEXT NOT NULL,
+		relevance REAL NOT NULL DEFAULT 0,
+		created_at DATETIME NOT NULL
+	)`,
+	`CREATE INDEX IF NOT EXISTS idx_web_evidence_page ON web_evidence(page_ref_id, relevance DESC)`,
+	`CREATE INDEX IF NOT EXISTS idx_web_evidence_conversation ON web_evidence(conversation_id, created_at)`,
+	`CREATE TABLE IF NOT EXISTS web_turn_citations (
+		turn_id TEXT NOT NULL,
+		ref_id TEXT NOT NULL,
+		citation_number INTEGER NOT NULL,
+		created_at DATETIME NOT NULL,
+		PRIMARY KEY(turn_id, ref_id),
+		UNIQUE(turn_id, citation_number)
+	)`,
+	`CREATE INDEX IF NOT EXISTS idx_web_turn_citations_turn ON web_turn_citations(turn_id, citation_number)`,
 }
 
 type dbExecutor interface {

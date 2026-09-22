@@ -85,11 +85,11 @@ func TestWrapHTTPError_Retryable(t *testing.T) {
 	}
 }
 
-func TestWrapHTTPError_NonRetryable(t *testing.T) {
+func TestWrapHTTPError_RetryableCommonTransientStatuses(t *testing.T) {
 	for _, status := range []int{502, 503, 504, 429, 500} {
 		e := WrapHTTPError(SEARCH_PROVIDER_TIMEOUT, "p", status, nil)
-		if e.Retryable {
-			t.Fatalf("%d should NOT be retryable per spec", status)
+		if !e.Retryable {
+			t.Fatalf("%d should be retryable", status)
 		}
 	}
 }
@@ -99,11 +99,11 @@ func TestIsRetryableStatus(t *testing.T) {
 		200: false,
 		400: false,
 		403: false,
-		429: false,
-		500: false,
-		502: false,
-		503: false,
-		504: false,
+		429: true,
+		500: true,
+		502: true,
+		503: true,
+		504: true,
 		505: true,
 	}
 	for status, want := range cases {

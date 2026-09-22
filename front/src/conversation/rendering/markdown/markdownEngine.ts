@@ -58,8 +58,14 @@ markdown.inline.ruler.before("link", "amrp_citation", (state, silent) => {
   return true;
 });
 
-markdown.renderer.rules.amrp_citation = (tokens, index) => {
+markdown.renderer.rules.amrp_citation = (tokens, index, _options, env) => {
   const id = escapeHtml(tokens[index].content);
+  const citationIds = Array.isArray(env?.citationIds)
+    ? new Set(env.citationIds.map((value: unknown) => String(value)))
+    : null;
+  if (citationIds && citationIds.size > 0 && !citationIds.has(tokens[index].content)) {
+    return `[${id}]`;
+  }
   return `<button type="button" class="amrp-citation-ref" data-citation-id="${id}">[${id}]</button>`;
 };
 
@@ -185,7 +191,7 @@ export function splitMarkdownSegments(source: string): MarkdownSegment[] {
   return segments;
 }
 
-export function renderMarkdownSegment(source: string): string {
+export function renderMarkdownSegment(source: string, citationIds: string[] = []): string {
   const mathTokens: string[] = [];
   let protectedSource = String(source ?? "").replace(/\$\$([\s\S]+?)\$\$/g, (_match, formula: string) => {
     const index = mathTokens.length;
@@ -214,7 +220,7 @@ export function renderMarkdownSegment(source: string): string {
     return `${mathPlaceholderPrefix}${index}END`;
   });
 
-  let html = markdown.render(protectedSource);
+  let html = markdown.render(protectedSource, { citationIds });
   html = html.replace(new RegExp(`${mathPlaceholderPrefix}(\\d+)END`, "g"), (_match, index: string) => {
     const rendered = mathTokens[Number(index)] ?? "";
     return `<span class="amrp-katex">${rendered}</span>`;

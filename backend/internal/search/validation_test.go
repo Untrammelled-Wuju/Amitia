@@ -246,14 +246,14 @@ func TestHTTPStatusHelpers(t *testing.T) {
 	if IsClientError(429) {
 		t.Fatal("429 should not be client error")
 	}
-	if IsRetryableStatus(429) {
-		t.Fatal("429 should not be retryable")
+	if !IsRetryableStatus(429) {
+		t.Fatal("429 should be retryable")
 	}
 	if IsRetryableStatus(401) {
 		t.Fatal("401 should not be retryable")
 	}
-	if IsRetryableStatus(503) {
-		t.Fatal("503 should NOT be retryable (in explicit denylist)")
+	if !IsRetryableStatus(503) {
+		t.Fatal("503 should be retryable")
 	}
 	if !IsRetryableStatus(505) {
 		t.Fatal("505 should be retryable")

@@ -3,12 +3,16 @@ package kernel
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"time"
 
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	"github.com/u-ai/backend/internal/extension/kernel/secret"
 	"github.com/u-ai/backend/internal/search"
 	"github.com/u-ai/backend/internal/search/providers/brave"
+	"github.com/u-ai/backend/internal/search/providers/searxng"
+	"github.com/u-ai/backend/internal/webresearch"
+	applog "github.com/u-ai/backend/log"
 )
 
 type secretLeaseAdapter struct {
@@ -73,17 +77,60 @@ func buildSearchProviders(set *search.ProviderSet, config search.Config) {
 			continue
 		}
 		var p search.Provider
-		switch pc.Type {
+		switch strings.ToLower(strings.TrimSpace(pc.Type)) {
 		case "brave":
-			p = brave.NewProvider("", pc.CredentialRef, pc.Endpoint, true)
+			provider := brave.NewProvider("", pc.CredentialRef, pc.Endpoint, true)
+			provider.SetMaxResponseBytes(config.EffectiveMaxResponseBytes())
+			p = provider
+		case "searxng":
+			provider := searxng.NewProvider(pc.Endpoint, true, pc.AllowHTTP, pc.AllowPrivate)
+			provider.SetMaxResponseBytes(config.EffectiveMaxResponseBytes())
+			p = provider
 		}
 		if p != nil {
-			set.Register(id, p)
+			p = restrictSearchProviderKinds(p, pc.Kinds)
+			set.RegisterWithPriority(id, p, pc.Priority)
 		}
 	}
 }
 
-func buildSearchCallFunc(svc *search.Service) capability.SearchCallFunc {
+type configuredSearchProvider struct {
+	search.Provider
+	capabilities search.ProviderCapabilities
+}
+
+func (p *configuredSearchProvider) Capabilities() search.ProviderCapabilities {
+	return p.capabilities
+}
+
+func restrictSearchProviderKinds(provider search.Provider, configured []string) search.Provider {
+	if provider == nil || len(configured) == 0 {
+		return provider
+	}
+	allowed := make(map[search.SearchKind]struct{}, len(configured))
+	for _, raw := range configured {
+		kind := search.SearchKind(strings.ToLower(strings.TrimSpace(raw)))
+		if kind.Valid() {
+			allowed[kind] = struct{}{}
+		}
+	}
+	if len(allowed) == 0 {
+		return provider
+	}
+	caps := provider.Capabilities()
+	_, allowWeb := allowed[search.SearchKindWeb]
+	caps.GeneralWeb = caps.GeneralWeb && allowWeb
+	filtered := make([]search.SearchKind, 0, len(caps.SearchKinds))
+	for _, kind := range caps.SearchKinds {
+		if _, ok := allowed[kind]; ok {
+			filtered = append(filtered, kind)
+		}
+	}
+	caps.SearchKinds = filtered
+	return &configuredSearchProvider{Provider: provider, capabilities: caps}
+}
+
+func buildWebResearchCallFunc(runtime *webresearch.Runtime) capability.SearchCallFunc {
 	return func(
 		ctx context.Context,
 		providerID string,
@@ -91,15 +138,227 @@ func buildSearchCallFunc(svc *search.Service) capability.SearchCallFunc {
 		invocation capability.ToolInvocationContext,
 		input json.RawMessage,
 	) (json.RawMessage, error) {
-		if svc == nil {
-			return nil, noSearchServiceError()
+		return executeWebResearch(ctx, runtime, handlerName, invocation, input, nil)
+	}
+}
+
+func buildWebResearchStreamCallFunc(runtime *webresearch.Runtime) capability.SearchStreamCallFunc {
+	return func(
+		ctx context.Context,
+		providerID string,
+		handlerName string,
+		invocation capability.ToolInvocationContext,
+		input json.RawMessage,
+		emitter capability.ToolStreamEmitter,
+	) (json.RawMessage, error) {
+		progress := func(event webresearch.Progress) error {
+			if emitter == nil {
+				return nil
+			}
+			message := webResearchProgressMessage(event)
+			metadata := map[string]any{
+				"phase": event.Phase,
+			}
+			if event.Query != "" {
+				metadata["query"] = event.Query
+			}
+			if event.RefID != "" {
+				metadata["refId"] = event.RefID
+			}
+			if event.Title != "" {
+				metadata["title"] = event.Title
+			}
+			if event.Completed > 0 {
+				metadata["completed"] = event.Completed
+			}
+			if event.Total > 0 {
+				metadata["total"] = event.Total
+			}
+			return emitter.Emit(ctx, capability.ToolStreamEmission{
+				Type: capability.ToolStreamEventProgress,
+				Progress: &capability.ToolStreamProgress{
+					Fraction:      event.Fraction,
+					Indeterminate: event.Indeterminate,
+					Message:       message,
+				},
+				Metadata: metadata,
+			})
 		}
-		resp, serr := svc.ExecuteFromJSON(ctx, input, invocation.InvocationID)
-		if serr != nil {
-			return nil, mapSearchToToolError(serr)
+		return executeWebResearch(ctx, runtime, handlerName, invocation, input, progress)
+	}
+}
+
+func webResearchProgressMessage(event webresearch.Progress) string {
+	if message := strings.TrimSpace(event.Message); message != "" {
+		return message
+	}
+	switch strings.TrimSpace(event.Phase) {
+	case "searching":
+		if query := strings.TrimSpace(event.Query); query != "" {
+			return "Searching: " + query
 		}
-		out := search.ToolOutputFromResponse(resp)
-		return json.Marshal(out)
+		return "Searching the web"
+	case "source_found":
+		if title := strings.TrimSpace(event.Title); title != "" {
+			return "Found source: " + title
+		}
+		return "Found a relevant source"
+	case "opening":
+		if title := strings.TrimSpace(event.Title); title != "" {
+			return "Reading: " + title
+		}
+		return "Reading source"
+	case "opened":
+		if title := strings.TrimSpace(event.Title); title != "" {
+			return "Read source: " + title
+		}
+		return "Source read complete"
+	case "found":
+		return "Located matching content"
+	case "research_round":
+		return "Running research round"
+	case "screenshot":
+		return "Captured web evidence"
+	default:
+		if phase := strings.TrimSpace(event.Phase); phase != "" {
+			return strings.ReplaceAll(phase, "_", " ")
+		}
+		return "Web research in progress"
+	}
+}
+
+func executeWebResearch(
+	ctx context.Context,
+	runtime *webresearch.Runtime,
+	handlerName string,
+	invocation capability.ToolInvocationContext,
+	input json.RawMessage,
+	emit webresearch.ProgressFunc,
+) (json.RawMessage, error) {
+	trace := webResearchTrace(invocation)
+	applog.TraceInfo(trace.WithStage("web_research_started"), applog.Fields{
+		"invocation_id": invocation.InvocationID,
+		"input_bytes":   len(input),
+	}, "web research invocation started")
+	if runtime == nil {
+		return nil, noSearchServiceError()
+	}
+	if handlerName != "" && handlerName != "web.run" {
+		return nil, &capability.ToolError{
+			Code:        capability.ErrorCodeInvalidInput,
+			Message:     "unsupported web runtime handler",
+			DomainCode:  webresearch.ErrInvalidInput,
+			UserVisible: true,
+		}
+	}
+	turnID := invocation.RootID
+	if turnID == "" {
+		turnID = invocation.ParentID
+	}
+	if turnID == "" {
+		turnID = invocation.InvocationID
+	}
+	conversationID := invocation.ConversationID
+	if conversationID == "" {
+		conversationID = "execution:" + turnID
+	}
+	result, webErr := runtime.Execute(ctx, webresearch.Scope{
+		ConversationID: conversationID,
+		TurnID:         turnID,
+		InvocationID:   invocation.InvocationID,
+	}, input, emit)
+	if webErr != nil {
+		applog.TraceError(trace.WithStage("web_research_failed"), applog.Fields{
+			"invocation_id": invocation.InvocationID,
+			"error_code":    webErr.Code,
+			"retryable":     webErr.Retryable,
+		}, webErr, "web research invocation failed")
+		return nil, mapWebResearchToToolError(webErr)
+	}
+	partial := false
+	stopReason := ""
+	if result != nil && result.Research != nil {
+		partial = result.Research.Partial
+		stopReason = result.Research.StopReason
+	}
+	applog.TraceInfo(trace.WithStage("web_research_completed"), applog.Fields{
+		"invocation_id":           invocation.InvocationID,
+		"operation":               result.Operation,
+		"mode":                    result.Mode,
+		"search_calls":            result.Stats.SearchCalls,
+		"fetch_calls":             result.Stats.FetchCalls,
+		"browser_calls":           result.Stats.BrowserCalls,
+		"search_cache_hits":       result.Stats.CacheHits,
+		"page_cache_hits":         result.Stats.PageCacheHits,
+		"duration_ms":             result.Stats.DurationMs,
+		"search_results":          len(result.Search),
+		"pages":                   len(result.Pages),
+		"citations":               len(result.Citations),
+		"screenshots":             len(result.Screenshots),
+		"partial":                 partial,
+		"stop_reason":             stopReason,
+		"prompt_injection_signal": result.Security.PotentialPromptInjection,
+	}, "web research invocation completed")
+	payload, err := json.Marshal(result)
+	if err != nil {
+		return nil, &capability.ToolError{
+			Code:        capability.ErrorCodeInvalidResult,
+			Message:     "failed to encode web runtime result",
+			DomainCode:  "WEB_INVALID_RESULT",
+			UserVisible: false,
+			Cause:       err,
+		}
+	}
+	return payload, nil
+}
+
+func webResearchTrace(invocation capability.ToolInvocationContext) applog.TraceFields {
+	requestID := strings.TrimSpace(invocation.TraceID)
+	if requestID == "" {
+		requestID = strings.TrimSpace(invocation.InvocationID)
+	}
+	return applog.TraceFields{
+		RequestID:     requestID,
+		CorrelationID: strings.TrimSpace(invocation.CorrelationID),
+		CausationID:   strings.TrimSpace(invocation.CausationID),
+		Character:     strings.TrimSpace(invocation.CharacterID),
+		Conversation:  strings.TrimSpace(invocation.ConversationID),
+		Channel:       strings.TrimSpace(invocation.Channel),
+		StateVersion:  "web-research-v1",
+		Path:          "web.run",
+	}
+}
+
+func mapWebResearchToToolError(webErr *webresearch.Error) *capability.ToolError {
+	if webErr == nil {
+		return nil
+	}
+	code := capability.ErrorCodeExecutionFailed
+	switch webErr.Code {
+	case webresearch.ErrInvalidInput:
+		code = capability.ErrorCodeInvalidInput
+	case webresearch.ErrNotConfigured, webresearch.ErrBrowserUnavailable:
+		code = capability.ErrorCodeNotAvailable
+	case webresearch.ErrReferenceNotFound:
+		code = capability.ErrorCodeInvalidInput
+	case webresearch.ErrReferenceScope:
+		code = capability.ErrorCodeScopeDenied
+	case webresearch.ErrFetchBlocked:
+		code = capability.ErrorCodePermissionDenied
+	case webresearch.ErrUnsupportedContent:
+		code = capability.ErrorCodeNotAvailable
+	case webresearch.ErrBudgetExhausted:
+		code = capability.ErrorCodeResourceLimitExceeded
+	case webresearch.ErrCancelled:
+		code = capability.ErrorCodeCancelled
+	}
+	return &capability.ToolError{
+		Code:        code,
+		Message:     webErr.Error(),
+		DomainCode:  webErr.Code,
+		Retryable:   webErr.Retryable,
+		UserVisible: true,
+		Cause:       webErr,
 	}
 }
 
@@ -108,52 +367,12 @@ func buildSearchHealthFunc(svc *search.Service) capability.SearchHealthFunc {
 		if svc == nil {
 			return capability.HealthUnknown
 		}
-		_, health := svc.DefaultProviderHealth(ctx)
+		providerID = strings.TrimSpace(providerID)
+		if providerID == "search-runtime" || providerID == "default" {
+			providerID = ""
+		}
+		health := svc.ProviderHealth(ctx, providerID)
 		return mapSearchHealth(health)
-	}
-}
-
-func mapSearchToToolError(serr *search.Error) *capability.ToolError {
-	code := capability.ErrorCodeExecutionFailed
-	retryable := false
-	switch serr.Code {
-	case search.SEARCH_DISABLED:
-		code = capability.ErrorCodeNotAvailable
-	case search.SEARCH_PROVIDER_NOT_CONFIGURED:
-		code = capability.ErrorCodeNotAvailable
-	case search.SEARCH_PROVIDER_UNAVAILABLE:
-		retryable = serr.Retryable
-	case search.SEARCH_PROVIDER_AUTH_FAILED:
-		code = capability.ErrorCodeNotAvailable
-	case search.SEARCH_PROVIDER_RATE_LIMITED:
-		code = capability.ErrorCodeRateLimited
-	case search.SEARCH_PROVIDER_TIMEOUT:
-		code = capability.ErrorCodeTimeout
-		retryable = true
-	case search.SEARCH_PROVIDER_REQUEST_FAILED:
-		retryable = serr.Retryable
-	case search.SEARCH_PROVIDER_REQUEST_REJECTED:
-		code = capability.ErrorCodeInvalidInput
-	case search.SEARCH_PROVIDER_INVALID_RESPONSE:
-	case search.SEARCH_INVALID_QUERY, search.SEARCH_INVALID_LIMIT,
-		search.SEARCH_INVALID_OFFSET, search.SEARCH_INVALID_LANGUAGE,
-		search.SEARCH_INVALID_COUNTRY, search.SEARCH_INVALID_SAFE_SEARCH,
-		search.SEARCH_INVALID_KIND, search.SEARCH_SPECIALIZED_OPTIONS_INVALID:
-		code = capability.ErrorCodeInvalidInput
-	case search.SEARCH_KIND_UNSUPPORTED, search.SEARCH_FILTER_UNSUPPORTED,
-		search.SEARCH_TIME_RANGE_UNSUPPORTED, search.SEARCH_DOMAIN_FILTER_UNSUPPORTED:
-		code = capability.ErrorCodeNotAvailable
-	case search.SEARCH_CANCELLED:
-		code = capability.ErrorCodeCancelled
-	default:
-		retryable = serr.Retryable
-	}
-	return &capability.ToolError{
-		Code:        code,
-		Message:     serr.Error(),
-		DomainCode:  serr.Code,
-		Retryable:   retryable,
-		UserVisible: true,
 	}
 }
 
@@ -163,6 +382,8 @@ func mapSearchHealth(health search.ProviderHealth) capability.HealthStatus {
 		return capability.HealthReady
 	case search.ProviderHealthDegraded:
 		return capability.HealthDegraded
+	case search.ProviderHealthDisabled:
+		return capability.HealthUnhealthy
 	case search.ProviderHealthMisconfigured,
 		search.ProviderHealthCredentialMiss,
 		search.ProviderHealthNetworkDown:
@@ -178,57 +399,4 @@ func noSearchServiceError() *capability.ToolError {
 		DomainCode:  search.SEARCH_DISABLED,
 		UserVisible: false,
 	}
-}
-
-type SearchToolsDeps struct {
-	Registry *capability.ToolRegistry
-	Service  *search.Service
-	Config   search.Config
-}
-
-func RegisterWebSearchTool(deps SearchToolsDeps) error {
-	if deps.Registry == nil || deps.Service == nil {
-		return nil
-	}
-	inputSchema := json.RawMessage(`{"type":"object","additionalProperties":false,"required":["query"],"properties":{"query":{"type":"string","minLength":1,"maxLength":2048},"kind":{"type":"string","enum":["web","news","academic","code","image","video","places","product"]},"limit":{"type":"integer","minimum":1,"maximum":20},"offset":{"type":"integer","minimum":0,"maximum":100},"language":{"type":"string"},"country":{"type":"string"},"safeSearch":{"type":"string","enum":["off","moderate","strict"]},"domains":{"type":"array","maxItems":16,"items":{"type":"string","maxLength":253}},"specialized":{"type":"object"}}}`)
-	outputSchema := json.RawMessage(`{"type":"object","additionalProperties":false,"required":["query","provider","results","returned","retrievedAt"],"properties":{"query":{"type":"string"},"kind":{"type":"string"},"provider":{"type":"string"},"results":{"type":"array","items":{"type":"object"}},"returned":{"type":"integer"},"hasMore":{"type":"boolean"},"retrievedAt":{"type":"string","format":"date-time"},"citations":{"type":"array","items":{"type":"object"}}}}`)
-	enabled := deps.Config.Enabled && deps.Config.HasProvider()
-	definition := capability.ToolDefinition{
-		ID:           "internal/search/web",
-		ModelName:    "web_search",
-		CapabilityID: "search.web",
-		Source:       capability.ToolSourceInternal,
-		Name:         "Web Search",
-		Description:  "Search the web using the configured provider.",
-		InputSchema:  inputSchema,
-		OutputSchema: outputSchema,
-		Permissions: []capability.PermissionRequirement{
-			{Capability: "network.request", Description: "Sends query to external search provider"},
-		},
-		RiskLevel:      capability.RiskMedium,
-		SideEffect:     capability.SideEffectExternal,
-		HasSideEffects: true,
-		Idempotent:     true,
-		Retryable:      true,
-		Enabled:        enabled,
-		TimeoutMS:      30000,
-		Runtime: capability.RuntimeBinding{
-			RuntimeType: "search",
-			RuntimeID:   "default",
-			HandlerName: "search.general",
-		},
-		RoutingMode: capability.RoutingModeProviderRequired,
-		ProviderID:  "com.amitia.builtin.search.provider",
-		ExecutionPolicy: capability.ToolExecutionPolicy{
-			Timeout:     30 * time.Second,
-			Idempotent:  true,
-			RetryPolicy: capability.RetryPolicy{MaxRetries: 1, BackoffBase: 1 * time.Second},
-		},
-		ResultPolicy: capability.ToolResultPolicy{
-			SanitizeError:  true,
-			MaxOutputBytes: 131072,
-			Streaming:      capability.ToolStreamingPolicy{Enabled: false},
-		},
-	}
-	return deps.Registry.Replace(context.Background(), definition)
 }

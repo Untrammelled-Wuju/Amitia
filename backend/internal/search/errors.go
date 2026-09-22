@@ -34,12 +34,12 @@ const (
 )
 
 type Error struct {
-	Code       string        `json:"-"`
-	Provider   string        `json:"-"`
-	HTTPStatus int           `json:"-"`
-	RetryAfter DurationMs    `json:"retryAfterMs,omitempty"`
-	Retryable  bool          `json:"retryable"`
-	Cause      error         `json:"-"`
+	Code       string     `json:"-"`
+	Provider   string     `json:"-"`
+	HTTPStatus int        `json:"-"`
+	RetryAfter DurationMs `json:"retryAfterMs,omitempty"`
+	Retryable  bool       `json:"retryable"`
+	Cause      error      `json:"-"`
 }
 
 type DurationMs int64
@@ -104,7 +104,7 @@ func IsRetryableStatus(status int) bool {
 		http.StatusGatewayTimeout == status,
 		http.StatusInternalServerError == status,
 		http.StatusTooManyRequests == status:
-		return false
+		return true
 	case status >= 500:
 		return true
 	}
@@ -126,4 +126,3 @@ func IsClientError(status int) bool {
 func IsServerError(status int) bool {
 	return status >= 500 && status != 501
 }
-

@@ -1,6 +1,7 @@
 package browser
 
 import (
+	"context"
 	"net"
 	"net/url"
 	"strings"
@@ -26,6 +27,7 @@ type NavigationPolicy struct {
 	MaxURLBytes    int
 	DefaultTimeout time.Duration
 	MaxTimeout     time.Duration
+	lookupIP       func(context.Context, string) ([]net.IPAddr, error)
 }
 
 func NewNavigationPolicy(config BrowserConfig) *NavigationPolicy {
@@ -42,6 +44,7 @@ func NewNavigationPolicy(config BrowserConfig) *NavigationPolicy {
 		MaxURLBytes:    16 * 1024,
 		DefaultTimeout: config.NavigationTimeout,
 		MaxTimeout:     config.MaxNavigationTimeout,
+		lookupIP:       net.DefaultResolver.LookupIPAddr,
 	}
 }
 
@@ -213,4 +216,39 @@ func (p *NavigationPolicy) CanNavigate(rawURL string) (NavigationSecurityClass, 
 		}
 	}
 	return class, p.CheckPermission(class)
+}
+
+func (p *NavigationPolicy) CanNavigateContext(ctx context.Context, rawURL string) (NavigationSecurityClass, *BrowserError) {
+	class, err := p.ValidateURL(rawURL)
+	if err != nil {
+		return NavClassUnknown, err
+	}
+	parsed, parseErr := url.Parse(rawURL)
+	if parseErr != nil {
+		return NavClassUnknown, &BrowserError{Code: ErrCodeNavigationFailed, Message: "invalid url format", Cause: parseErr}
+	}
+	host := strings.ToLower(parsed.Hostname())
+	if net.ParseIP(host) != nil || class != NavClassPublic {
+		return class, p.CheckPermission(class)
+	}
+	if p.lookupIP == nil {
+		return NavClassUnknown, &BrowserError{Code: ErrCodeNavigationFailed, Message: "dns resolver unavailable"}
+	}
+	resolveCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	addresses, resolveErr := p.lookupIP(resolveCtx, host)
+	if resolveErr != nil || len(addresses) == 0 {
+		return NavClassUnknown, &BrowserError{Code: ErrCodeNavigationFailed, Message: "could not resolve navigation host", Cause: resolveErr}
+	}
+	resolvedClass := NavClassPublic
+	for _, address := range addresses {
+		current := p.classifyHost(address.IP.String())
+		if permissionErr := p.CheckPermission(current); permissionErr != nil {
+			return current, permissionErr
+		}
+		if current != NavClassPublic {
+			resolvedClass = current
+		}
+	}
+	return resolvedClass, p.CheckPermission(resolvedClass)
 }

@@ -303,3 +303,52 @@ func TestService_ExecuteFromJSON_SafeSearchDefault(t *testing.T) {
 		t.Fatalf("expected 1 result, got %d", len(resp.Results))
 	}
 }
+
+func TestService_CircuitBreakerOpensAfterRetryableFailures(t *testing.T) {
+	provider := &fakeProviderForService{
+		enabled: true,
+		err:     NewError(SEARCH_PROVIDER_TIMEOUT, "fake", true, errors.New("timeout")),
+	}
+	svc := newTestService(provider)
+	svc.config.CircuitFailures = 2
+	svc.config.CircuitOpen = time.Minute
+
+	for i := 0; i < 2; i++ {
+		_, err := svc.SearchAdvancedWithProvider(context.Background(), SearchRequest{Query: "circuit-test", Kind: SearchKindWeb}, "", "fake")
+		if err == nil || err.Code != SEARCH_PROVIDER_TIMEOUT {
+			t.Fatalf("attempt %d: expected provider timeout, got %v", i+1, err)
+		}
+	}
+	if provider.calls != 2 {
+		t.Fatalf("expected provider to be called twice, got %d", provider.calls)
+	}
+
+	_, err := svc.SearchAdvancedWithProvider(context.Background(), SearchRequest{Query: "circuit-test-3", Kind: SearchKindWeb}, "", "fake")
+	if err == nil || err.Code != SEARCH_PROVIDER_UNAVAILABLE {
+		t.Fatalf("expected open circuit to return provider unavailable, got %v", err)
+	}
+	if provider.calls != 2 {
+		t.Fatalf("open circuit should skip provider call, got %d calls", provider.calls)
+	}
+	if ids := svc.CandidateProviderIDs(SearchKindWeb); len(ids) != 0 {
+		t.Fatalf("open circuit provider must be omitted from candidates: %v", ids)
+	}
+	if health := svc.Health(context.Background())["fake"]; health != ProviderHealthDegraded {
+		t.Fatalf("expected degraded health while circuit open, got %s", health)
+	}
+}
+
+func TestService_CircuitBreakerResetsAfterOpenWindow(t *testing.T) {
+	provider := &fakeProviderForService{enabled: true, results: []SearchResult{{Title: "ok", URL: "https://ok.example/", Source: SearchSourceMetadata{Provider: "fake"}}}}
+	svc := newTestService(provider)
+	svc.circuits["fake"] = providerCircuitState{ConsecutiveFailures: 3, OpenUntil: time.Now().Add(-time.Second)}
+
+	ids := svc.CandidateProviderIDs(SearchKindWeb)
+	if len(ids) != 1 || ids[0] != "fake" {
+		t.Fatalf("expired circuit should allow provider again: %v", ids)
+	}
+	resp, err := svc.SearchAdvancedWithProvider(context.Background(), SearchRequest{Query: "recovered", Kind: SearchKindWeb}, "", "fake")
+	if err != nil || resp == nil || resp.Returned != 1 {
+		t.Fatalf("expected provider recovery, resp=%v err=%v", resp, err)
+	}
+}

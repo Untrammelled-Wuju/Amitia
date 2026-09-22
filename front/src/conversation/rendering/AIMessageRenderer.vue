@@ -65,6 +65,8 @@
         <AssistantTurnTimeline
           v-else-if="assistantTurn"
           :turn="assistantTurn"
+          :citation-ids="citationSources.map((source) => source.id)"
+          @citation="activeCitationId = $event"
         />
 
         <template v-else>
@@ -80,6 +82,7 @@
               v-if="message.markdown"
               :source="message.markdown"
               :streaming="message.state === 'streaming'"
+              :citation-ids="citationSources.map((source) => source.id)"
               @citation="activeCitationId = $event"
             />
           </RendererErrorBoundary>
@@ -95,7 +98,7 @@
         <slot name="extension-content" :message="message" />
 
         <AmitiaCitationList
-          :sources="message.sources"
+          :sources="citationSources"
           :highlight-id="activeCitationId"
           @highlight-consumed="activeCitationId = ''"
         />
@@ -137,6 +140,7 @@ import { useTheme } from "@/composables/useTheme";
 import type {
   AIMessageData,
   AssistantTurnData,
+  CitationSource,
   RichBlock,
 } from "./types";
 import AssistantTurnTimeline from "./AssistantTurnTimeline.vue";
@@ -207,6 +211,47 @@ const assistantTurn = computed<AssistantTurnData | null>(() => {
   items.sort((left, right) => Number(left.sequence || 0) - Number(right.sequence || 0));
   return { ...turn, items };
 });
+const citationSources = computed<CitationSource[]>(() => {
+  const byId = new Map<string, CitationSource>();
+  for (const source of message.value.sources) {
+    const id = String(source.id || "").trim();
+    if (id) byId.set(id, source);
+  }
+  const turn = assistantTurn.value;
+  if (!turn) return [...byId.values()].sort(compareCitationSources);
+  for (const item of turn.items) {
+    if (item.type !== "tool_result" || !["web_run", "web.run"].includes(String(item.toolName || ""))) continue;
+    const raw = String(item.resultJson || "").trim();
+    if (!raw) continue;
+    try {
+      const result = JSON.parse(raw) as Record<string, unknown>;
+      const citations = Array.isArray(result.citations) ? result.citations : [];
+      for (const entry of citations) {
+        if (!entry || typeof entry !== "object" || Array.isArray(entry)) continue;
+        const citation = entry as Record<string, unknown>;
+        const index = Number(citation.index || 0);
+        const id = index > 0 ? String(index) : String(citation.ref_id || citation.evidence_id || "").trim();
+        if (!id || byId.has(id)) continue;
+        byId.set(id, {
+          id,
+          title: String(citation.title || citation.url || `Source ${id}`),
+          url: String(citation.url || "") || undefined,
+          snippet: String(citation.text || "") || undefined,
+        });
+      }
+    } catch {
+      // Tool results from non-JSON/legacy turns are simply not citation sources.
+    }
+  }
+  return [...byId.values()].sort(compareCitationSources);
+});
+
+function compareCitationSources(left: CitationSource, right: CitationSource): number {
+  const leftNumber = Number(left.id);
+  const rightNumber = Number(right.id);
+  if (Number.isFinite(leftNumber) && Number.isFinite(rightNumber)) return leftNumber - rightNumber;
+  return left.id.localeCompare(right.id);
+}
 const showPendingThinking = computed(() => {
   const turn = assistantTurn.value;
   if (!turn || turn.items.length > 0) return false;

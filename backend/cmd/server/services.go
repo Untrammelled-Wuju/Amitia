@@ -107,7 +107,6 @@ import (
 	"github.com/u-ai/backend/internal/runtimeprofile"
 	"github.com/u-ai/backend/internal/safety"
 	"github.com/u-ai/backend/internal/scriptruntime/commandenv"
-	"github.com/u-ai/backend/internal/search"
 	syncpkg "github.com/u-ai/backend/internal/sync"
 	"github.com/u-ai/backend/internal/system/dataportability"
 	"github.com/u-ai/backend/internal/temporal"
@@ -407,8 +406,8 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		WithVectorStore(newKernelVectorStoreAdapter(ctx.DB)).
 		WithNodeEnvironmentResolver(nodeResolver).
 		WithHostArtifactResolver(artifactResolver).
-		WithSearchConfig(search.DefaultConfig()).
-		WithDeepSearchTaskEntry("tasks/deep-search/index.js").
+		WithSearchConfig(searchConfigFromAppConfig(config.AppCfg)).
+		WithWebResearchConfig(webResearchConfigFromAppConfig(config.AppCfg)).
 		WithVisionService(visionSvc).
 		WithImageGenService(imagegenSvc).
 		WithImageProviderRegistry(providerRegistry).

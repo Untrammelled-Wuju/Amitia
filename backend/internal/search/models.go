@@ -44,15 +44,15 @@ func (k SearchKind) Valid() bool {
 }
 
 type ProviderCapabilities struct {
-	GeneralWeb     bool         `json:"generalWeb"`
-	SearchKinds    []SearchKind `json:"searchKinds,omitempty"`
-	LanguageFilter bool         `json:"languageFilter"`
-	CountryFilter  bool         `json:"countryFilter"`
-	SafeSearch     bool         `json:"safeSearch"`
-	Pagination     bool         `json:"pagination"`
-	TimeRangeFilter bool       `json:"timeRangeFilter,omitempty"`
-	DomainFilter    bool        `json:"domainFilter,omitempty"`
-	MaxResults     int          `json:"maxResults"`
+	GeneralWeb      bool         `json:"generalWeb"`
+	SearchKinds     []SearchKind `json:"searchKinds,omitempty"`
+	LanguageFilter  bool         `json:"languageFilter"`
+	CountryFilter   bool         `json:"countryFilter"`
+	SafeSearch      bool         `json:"safeSearch"`
+	Pagination      bool         `json:"pagination"`
+	TimeRangeFilter bool         `json:"timeRangeFilter,omitempty"`
+	DomainFilter    bool         `json:"domainFilter,omitempty"`
+	MaxResults      int          `json:"maxResults"`
 }
 
 type ProviderHealth string
@@ -72,15 +72,15 @@ type TimeRangeFilter struct {
 }
 
 type NewsSearchOptions struct {
-	From     *time.Time `json:"from,omitempty"`
-	To       *time.Time `json:"to,omitempty"`
-	Freshness string    `json:"freshness,omitempty"`
+	From      *time.Time `json:"from,omitempty"`
+	To        *time.Time `json:"to,omitempty"`
+	Freshness string     `json:"freshness,omitempty"`
 }
 
 type AcademicSearchOptions struct {
-	FromYear       *int  `json:"fromYear,omitempty"`
-	ToYear         *int  `json:"toYear,omitempty"`
-	OpenAccessOnly bool  `json:"openAccessOnly,omitempty"`
+	FromYear       *int `json:"fromYear,omitempty"`
+	ToYear         *int `json:"toYear,omitempty"`
+	OpenAccessOnly bool `json:"openAccessOnly,omitempty"`
 }
 
 type CodeSearchOptions struct {
@@ -135,15 +135,15 @@ type GeneralSearchRequest struct {
 }
 
 type SearchRequest struct {
-	Query      string         `json:"query"`
-	Kind       SearchKind     `json:"kind,omitempty"`
-	Limit      int            `json:"limit,omitempty"`
-	Offset     int            `json:"offset,omitempty"`
-	Language   string         `json:"language,omitempty"`
-	Country    string         `json:"country,omitempty"`
-	SafeSearch SafeSearchMode `json:"safeSearch,omitempty"`
-	TimeRange  *TimeRangeFilter `json:"timeRange,omitempty"`
-	Domains    []string       `json:"domains,omitempty"`
+	Query       string                   `json:"query"`
+	Kind        SearchKind               `json:"kind,omitempty"`
+	Limit       int                      `json:"limit,omitempty"`
+	Offset      int                      `json:"offset,omitempty"`
+	Language    string                   `json:"language,omitempty"`
+	Country     string                   `json:"country,omitempty"`
+	SafeSearch  SafeSearchMode           `json:"safeSearch,omitempty"`
+	TimeRange   *TimeRangeFilter         `json:"timeRange,omitempty"`
+	Domains     []string                 `json:"domains,omitempty"`
 	Specialized SpecializedSearchOptions `json:"specialized,omitempty"`
 }
 
@@ -156,19 +156,19 @@ type SearchSourceMetadata struct {
 }
 
 type SearchResultMetadata struct {
-	Type     string `json:"type,omitempty"`
-	Authors  []string `json:"authors,omitempty"`
-	DOI      string `json:"doi,omitempty"`
-	Journal  string `json:"journal,omitempty"`
-	Year     int    `json:"year,omitempty"`
-	Repository string `json:"repository,omitempty"`
-	Path       string `json:"path,omitempty"`
-	License    string `json:"license,omitempty"`
-	ThumbnailURL string `json:"thumbnailUrl,omitempty"`
-	MediaURL     string `json:"mediaUrl,omitempty"`
-	Width        int     `json:"width,omitempty"`
-	Height       int     `json:"height,omitempty"`
-	DurationSeconds float64 `json:"durationSeconds,omitempty"`
+	Type            string   `json:"type,omitempty"`
+	Authors         []string `json:"authors,omitempty"`
+	DOI             string   `json:"doi,omitempty"`
+	Journal         string   `json:"journal,omitempty"`
+	Year            int      `json:"year,omitempty"`
+	Repository      string   `json:"repository,omitempty"`
+	Path            string   `json:"path,omitempty"`
+	License         string   `json:"license,omitempty"`
+	ThumbnailURL    string   `json:"thumbnailUrl,omitempty"`
+	MediaURL        string   `json:"mediaUrl,omitempty"`
+	Width           int      `json:"width,omitempty"`
+	Height          int      `json:"height,omitempty"`
+	DurationSeconds float64  `json:"durationSeconds,omitempty"`
 	Address         string   `json:"address,omitempty"`
 	Latitude        *float64 `json:"latitude,omitempty"`
 	Longitude       *float64 `json:"longitude,omitempty"`
@@ -187,32 +187,32 @@ type CitationRef struct {
 }
 
 type SearchResult struct {
-	Rank        int                 `json:"rank"`
-	Title       string              `json:"title"`
-	URL         string              `json:"url"`
-	DisplayURL  string              `json:"displayUrl,omitempty"`
-	Domain      string              `json:"domain"`
-	Snippet     string              `json:"snippet"`
-	PublishedAt *time.Time          `json:"publishedAt,omitempty"`
-	Language    string              `json:"language,omitempty"`
+	Rank        int                  `json:"rank"`
+	Title       string               `json:"title"`
+	URL         string               `json:"url"`
+	DisplayURL  string               `json:"displayUrl,omitempty"`
+	Domain      string               `json:"domain"`
+	Snippet     string               `json:"snippet"`
+	PublishedAt *time.Time           `json:"publishedAt,omitempty"`
+	Language    string               `json:"language,omitempty"`
 	Source      SearchSourceMetadata `json:"source"`
 	Metadata    SearchResultMetadata `json:"metadata,omitempty"`
 	Citation    CitationRef          `json:"citation"`
 }
 
 type Citation struct {
-	ID           string    `json:"id"`
-	Index        int       `json:"index"`
-	Title        string    `json:"title"`
-	URL          string    `json:"url"`
-	CanonicalURL string    `json:"canonicalUrl"`
-	Domain       string    `json:"domain"`
-	Provider     string    `json:"provider"`
-	ProviderRank int       `json:"providerRank"`
-	RetrievedAt  time.Time `json:"retrievedAt"`
-	PublishedAt  *time.Time `json:"publishedAt,omitempty"`
-	Snippet      string    `json:"snippet,omitempty"`
-	Kind         SearchKind `json:"kind,omitempty"`
+	ID           string               `json:"id"`
+	Index        int                  `json:"index"`
+	Title        string               `json:"title"`
+	URL          string               `json:"url"`
+	CanonicalURL string               `json:"canonicalUrl"`
+	Domain       string               `json:"domain"`
+	Provider     string               `json:"provider"`
+	ProviderRank int                  `json:"providerRank"`
+	RetrievedAt  time.Time            `json:"retrievedAt"`
+	PublishedAt  *time.Time           `json:"publishedAt,omitempty"`
+	Snippet      string               `json:"snippet,omitempty"`
+	Kind         SearchKind           `json:"kind,omitempty"`
 	Metadata     SearchResultMetadata `json:"metadata,omitempty"`
 }
 
@@ -241,18 +241,19 @@ type SearchResponse struct {
 	HasMore     bool           `json:"hasMore,omitempty"`
 	RetrievedAt time.Time      `json:"retrievedAt"`
 	DurationMs  int64          `json:"durationMs"`
+	CacheHit    bool           `json:"cacheHit,omitempty"`
 	CitationSet CitationSet    `json:"citationSet,omitempty"`
 }
 
 type ToolInput struct {
-	Query       string         `json:"query"`
-	Kind        SearchKind     `json:"kind,omitempty"`
-	Limit       int            `json:"limit,omitempty"`
-	Offset      int            `json:"offset,omitempty"`
-	Language    string         `json:"language,omitempty"`
-	Country     string         `json:"country,omitempty"`
-	SafeSearch  SafeSearchMode `json:"safeSearch,omitempty"`
-	Domains     []string       `json:"domains,omitempty"`
+	Query       string                   `json:"query"`
+	Kind        SearchKind               `json:"kind,omitempty"`
+	Limit       int                      `json:"limit,omitempty"`
+	Offset      int                      `json:"offset,omitempty"`
+	Language    string                   `json:"language,omitempty"`
+	Country     string                   `json:"country,omitempty"`
+	SafeSearch  SafeSearchMode           `json:"safeSearch,omitempty"`
+	Domains     []string                 `json:"domains,omitempty"`
 	Specialized SpecializedSearchOptions `json:"specialized,omitempty"`
 }
 

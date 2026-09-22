@@ -3,8 +3,8 @@ package search
 import "context"
 
 type HealthReport struct {
-	Enabled         bool                     `json:"enabled"`
-	DefaultProvider string                   `json:"defaultProvider"`
+	Enabled         bool                      `json:"enabled"`
+	DefaultProvider string                    `json:"defaultProvider"`
 	Providers       map[string]ProviderHealth `json:"providers"`
 }
 
@@ -19,7 +19,7 @@ func (s *Service) BuildHealthReport(ctx context.Context) HealthReport {
 		return report
 	}
 	for id, p := range s.providers.All() {
-		report.Providers[id] = p.Health(ctx)
+		report.Providers[id] = s.effectiveProviderHealth(id, p.Health(ctx))
 	}
 	return report
 }

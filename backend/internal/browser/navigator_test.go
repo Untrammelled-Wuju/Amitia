@@ -3,6 +3,7 @@ package browser
 import (
 	"context"
 	"errors"
+	"net"
 	"testing"
 	"time"
 )
@@ -59,11 +60,15 @@ func (c *fakePageController) Stop(_ context.Context, _ TargetID) error {
 }
 
 func newTestPolicy() *NavigationPolicy {
-	return NewNavigationPolicy(BrowserConfig{
+	policy := NewNavigationPolicy(BrowserConfig{
 		AllowedSchemes:       []string{"http", "https", "about"},
 		NavigationTimeout:    30 * time.Second,
 		MaxNavigationTimeout: 120 * time.Second,
 	})
+	policy.lookupIP = func(context.Context, string) ([]net.IPAddr, error) {
+		return []net.IPAddr{{IP: net.ParseIP("93.184.216.34")}}, nil
+	}
+	return policy
 }
 
 func TestProductionNavigatorNavigateSuccess(t *testing.T) {
@@ -612,5 +617,19 @@ func TestNavigationPolicyClassifyHostPublic(t *testing.T) {
 	class := policy.classifyHost("example.com")
 	if class != NavClassPublic {
 		t.Fatalf("expected public class, got: %s", class)
+	}
+}
+
+func TestNavigationPolicyCanNavigateContextRejectsPrivateDNSResult(t *testing.T) {
+	policy := newTestPolicy()
+	policy.lookupIP = func(context.Context, string) ([]net.IPAddr, error) {
+		return []net.IPAddr{{IP: net.ParseIP("10.0.0.9")}}, nil
+	}
+	class, err := policy.CanNavigateContext(context.Background(), "https://example.test")
+	if err == nil {
+		t.Fatal("expected private DNS resolution to be blocked")
+	}
+	if class != NavClassPrivate {
+		t.Fatalf("expected private class, got %s", class)
 	}
 }

@@ -19,12 +19,14 @@ class AmitiaMarkdownView extends StatelessWidget {
   final String source;
   final bool streaming;
   final ValueChanged<String>? onCitation;
+  final Set<String> citationIds;
 
   const AmitiaMarkdownView({
     super.key,
     required this.source,
     this.streaming = false,
     this.onCitation,
+    this.citationIds = const <String>{},
   });
 
   @override
@@ -42,6 +44,7 @@ class AmitiaMarkdownView extends StatelessWidget {
               child: _MarkdownBody(
                 source: segment.content,
                 onCitation: onCitation,
+                citationIds: citationIds,
               ),
             ),
             AmitiaMarkdownSegmentType.code => AmitiaCodeBlock(
@@ -83,8 +86,13 @@ class AmitiaMarkdownView extends StatelessWidget {
 class _MarkdownBody extends StatelessWidget {
   final String source;
   final ValueChanged<String>? onCitation;
+  final Set<String> citationIds;
 
-  const _MarkdownBody({required this.source, this.onCitation});
+  const _MarkdownBody({
+    required this.source,
+    this.onCitation,
+    this.citationIds = const <String>{},
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -186,7 +194,7 @@ class _MarkdownBody extends StatelessWidget {
         'latex': LatexElementBuilder(
           textStyle: TextStyle(color: tokens.text, fontSize: 18),
         ),
-        'citation': _CitationBuilder(onCitation: onCitation),
+        'citation': _CitationBuilder(onCitation: onCitation, citationIds: citationIds),
       },
       imageBuilder: (uri, title, alt) =>
           _AmitiaMarkdownImage(uri: uri, alt: alt ?? title ?? ''),
@@ -218,8 +226,9 @@ class AmitiaCitationSyntax extends md.InlineSyntax {
 
 class _CitationBuilder extends MarkdownElementBuilder {
   final ValueChanged<String>? onCitation;
+  final Set<String> citationIds;
 
-  _CitationBuilder({this.onCitation});
+  _CitationBuilder({this.onCitation, this.citationIds = const <String>{}});
 
   @override
   Widget visitElementAfterWithContext(
@@ -229,15 +238,20 @@ class _CitationBuilder extends MarkdownElementBuilder {
     TextStyle? parentStyle,
   ) {
     final id = element.textContent;
+    final isKnown = citationIds.isEmpty || citationIds.contains(id);
+    final text = Text(
+      '[$id]',
+      style: TextStyle(
+        color: isKnown
+            ? AmitiaMessageTheme.of(context).accent
+            : (preferredStyle?.color ?? AmitiaMessageTheme.of(context).text),
+        fontSize: 13,
+      ),
+    );
+    if (!isKnown) return text;
     return GestureDetector(
       onTap: () => onCitation?.call(id),
-      child: Text(
-        '[$id]',
-        style: TextStyle(
-          color: AmitiaMessageTheme.of(context).accent,
-          fontSize: 13,
-        ),
-      ),
+      child: text,
     );
   }
 }

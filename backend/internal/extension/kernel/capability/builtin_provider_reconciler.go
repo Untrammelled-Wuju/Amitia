@@ -1,6 +1,7 @@
 package capability
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -39,7 +40,7 @@ func (r *BuiltinProviderReconciler) reconcileSearchWeb() error {
 		Runtime: RuntimeBinding{
 			RuntimeType: RuntimeTypeSearch,
 			RuntimeID:   "search-runtime",
-			HandlerName: "search.general",
+			HandlerName: "web.run",
 		},
 		Priority: 100,
 	}
@@ -67,7 +68,7 @@ func (r *BuiltinProviderReconciler) reconcileSearchWeb() error {
 		if !adapter.Supports(providerDef.Runtime) {
 			return fmt.Errorf("register search.web instance: runtime adapter does not support binding")
 		}
-		adapterHealth := adapter.Health(nil, providerDef.Runtime)
+		adapterHealth := adapter.Health(context.Background(), providerDef.Runtime)
 		if adapterHealth == HealthUnhealthy || adapterHealth == HealthUnknown {
 			health = HealthUnknown
 			availability = ProviderAvailabilityUnknown

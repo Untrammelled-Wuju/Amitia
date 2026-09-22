@@ -63,6 +63,15 @@ abstract final class UINavigationRegistry {
       builtin: true,
     ),
     UINavigationItem(
+      id: 'builtin.continuity',
+      label: '持续事项',
+      route: AppRoutes.continuity,
+      icon: Icons.checklist_rtl,
+      panel: UINavigationPanel.main,
+      order: 35,
+      builtin: true,
+    ),
+    UINavigationItem(
       id: 'builtin.devices',
       label: '设备',
       route: AppRoutes.settingsDevices,

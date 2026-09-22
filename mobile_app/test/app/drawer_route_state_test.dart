@@ -7,6 +7,7 @@ void main() {
       expect(MainDrawerItem.values, contains(MainDrawerItem.chat));
       expect(MainDrawerItem.values, contains(MainDrawerItem.characters));
       expect(MainDrawerItem.values, contains(MainDrawerItem.memory));
+      expect(MainDrawerItem.values, contains(MainDrawerItem.continuity));
       expect(MainDrawerItem.values, contains(MainDrawerItem.devices));
       expect(MainDrawerItem.values, contains(MainDrawerItem.extensions));
       expect(MainDrawerItem.values, contains(MainDrawerItem.workshop));
@@ -105,6 +106,17 @@ void main() {
       expect(
         resolveDrawerRouteState('/memory/graph').mainItem,
         MainDrawerItem.memory,
+      );
+    });
+
+    test('continuity family selects continuity', () {
+      expect(
+        resolveDrawerRouteState('/continuity').mainItem,
+        MainDrawerItem.continuity,
+      );
+      expect(
+        resolveDrawerRouteState('/continuity/thread-1').mainItem,
+        MainDrawerItem.continuity,
       );
     });
 

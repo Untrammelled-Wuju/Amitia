@@ -2,6 +2,7 @@ package search
 
 import (
 	"context"
+	"sort"
 	"sync"
 )
 
@@ -20,22 +21,29 @@ type ProviderSearchResponse struct {
 }
 
 type ProviderSet struct {
-	mu         sync.RWMutex
-	providers  map[string]Provider
-	defaultID  string
+	mu        sync.RWMutex
+	providers map[string]Provider
+	priority  map[string]int
+	defaultID string
 }
 
 func NewProviderSet(defaultID string) *ProviderSet {
 	return &ProviderSet{
-		providers:  make(map[string]Provider),
-		defaultID:  defaultID,
+		providers: make(map[string]Provider),
+		priority:  make(map[string]int),
+		defaultID: defaultID,
 	}
 }
 
 func (s *ProviderSet) Register(id string, p Provider) {
+	s.RegisterWithPriority(id, p, 0)
+}
+
+func (s *ProviderSet) RegisterWithPriority(id string, p Provider, priority int) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.providers[id] = p
+	s.priority[id] = priority
 }
 
 func (s *ProviderSet) Get(id string) (Provider, bool) {
@@ -94,11 +102,62 @@ func (s *ProviderSet) All() map[string]Provider {
 func (s *ProviderSet) Candidates(kind SearchKind) []Provider {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	var result []Provider
-	for _, p := range s.providers {
+	type candidate struct {
+		id       string
+		priority int
+		provider Provider
+	}
+	items := make([]candidate, 0, len(s.providers))
+	for id, p := range s.providers {
 		if SupportsKind(p.Capabilities(), kind) {
-			result = append(result, p)
+			items = append(items, candidate{id: id, priority: s.priority[id], provider: p})
 		}
+	}
+	sort.Slice(items, func(i, j int) bool {
+		iDefault := items[i].id == s.defaultID
+		jDefault := items[j].id == s.defaultID
+		if iDefault != jDefault {
+			return iDefault
+		}
+		if items[i].priority != items[j].priority {
+			return items[i].priority > items[j].priority
+		}
+		return items[i].id < items[j].id
+	})
+	result := make([]Provider, 0, len(items))
+	for _, item := range items {
+		result = append(result, item.provider)
+	}
+	return result
+}
+
+func (s *ProviderSet) CandidateIDs(kind SearchKind) []string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	type candidate struct {
+		id       string
+		priority int
+	}
+	items := make([]candidate, 0, len(s.providers))
+	for id, p := range s.providers {
+		if SupportsKind(p.Capabilities(), kind) {
+			items = append(items, candidate{id: id, priority: s.priority[id]})
+		}
+	}
+	sort.Slice(items, func(i, j int) bool {
+		iDefault := items[i].id == s.defaultID
+		jDefault := items[j].id == s.defaultID
+		if iDefault != jDefault {
+			return iDefault
+		}
+		if items[i].priority != items[j].priority {
+			return items[i].priority > items[j].priority
+		}
+		return items[i].id < items[j].id
+	})
+	result := make([]string, 0, len(items))
+	for _, item := range items {
+		result = append(result, item.id)
 	}
 	return result
 }

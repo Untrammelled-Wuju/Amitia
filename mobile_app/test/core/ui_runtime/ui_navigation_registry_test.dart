@@ -124,6 +124,15 @@ void main() {
     );
   });
 
+  test('continuity is a builtin drawer navigation entry', () {
+    final items = UINavigationRegistry.resolve(_snapshot(const []));
+    final continuity = items.singleWhere(
+      (item) => item.route == AppRoutes.continuity,
+    );
+    expect(continuity.label, '持续事项');
+    expect(continuity.panel, UINavigationPanel.main);
+  });
+
   test(
     'hides route.registry navigation entries that lost route arbitration',
     () {

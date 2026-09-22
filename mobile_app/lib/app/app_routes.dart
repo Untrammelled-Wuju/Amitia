@@ -14,6 +14,7 @@ abstract final class AppRoutes {
   static const memoryProfiles = '/memory/profiles';
   static const memoryManager = '/memory/manager';
   static const reminders = '/reminders';
+  static const continuity = '/continuity';
   static const emotes = '/emotes';
   static const chatLogs = '/chat-logs';
   static const channelMessages = '/channel-messages';
@@ -87,6 +88,7 @@ abstract final class AppRoutes {
   static String characterPsyche(String id) => '/characters/$id/psyche';
   static String characterDebug(String id) => '/characters/$id/debug';
   static String agentTask(String id) => '/agent/task/$id';
+  static String continuityDetail(String id) => '/continuity/$id';
   static String mcpDetail(String id) => '/extensions/mcp/$id';
   static String mcpEdit(String id) => '/extensions/mcp/$id/edit';
   static String extensionPage(String pageId, {String? extensionId}) =>

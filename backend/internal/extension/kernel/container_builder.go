@@ -93,6 +93,7 @@ import (
 	"github.com/u-ai/backend/internal/uiagent/schema"
 	"github.com/u-ai/backend/internal/uiagent/source"
 	"github.com/u-ai/backend/internal/vision"
+	"github.com/u-ai/backend/internal/webresearch"
 	"github.com/u-ai/backend/internal/workspace"
 	"github.com/u-ai/backend/pkg/resourceuri"
 	"github.com/u-ai/backend/pkg/sse"
@@ -114,7 +115,7 @@ type ContainerBuilder struct {
 	iosNativeProvider            capability.IOSProvider
 	host                         runtimehost.RuntimeHost
 	searchConfig                 search.Config
-	deepSearchTaskEntry          string
+	webResearchConfig            webresearch.Config
 	visionSvc                    vision.Service
 	imagegenSvc                  imagegen.Service
 	imageProviderRegistry        *imageprovider.Registry
@@ -250,8 +251,8 @@ func (b *ContainerBuilder) WithSearchConfig(cfg search.Config) *ContainerBuilder
 	return b
 }
 
-func (b *ContainerBuilder) WithDeepSearchTaskEntry(entry string) *ContainerBuilder {
-	b.deepSearchTaskEntry = entry
+func (b *ContainerBuilder) WithWebResearchConfig(cfg webresearch.Config) *ContainerBuilder {
+	b.webResearchConfig = cfg
 	return b
 }
 
@@ -1283,6 +1284,22 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		deviceRuntimePort = capability.NewMeshDeviceRuntimeInvocationPort(meshPorts)
 	}
 
+	searchService := buildSearchService(b.searchConfig, kernelSecretBroker)
+	webStore := webresearch.NewStore(db)
+	if err := webStore.EnsureSchema(ctx); err != nil {
+		return nil, fmt.Errorf("kernel: ensure web research schema: %w", err)
+	}
+	var webBrowser webresearch.BrowserReader
+	if b.browserProvider != nil {
+		webBrowser = webresearch.NewAmitiaBrowserReader(b.browserProvider)
+	}
+	webConfig := b.webResearchConfig
+	if webConfig == (webresearch.Config{}) {
+		webConfig = webresearch.DefaultConfig()
+	}
+	webConfig.Enabled = webConfig.Enabled && b.searchConfig.Enabled && b.searchConfig.HasProvider()
+	webRuntime := webresearch.NewRuntime(webConfig, searchService, webStore, webBrowser)
+
 	if err := RegisterProductionAdapters(adapterRegistry, AdapterRegistrationDeps{
 		JSGlobalFactory:   jsFactory,
 		WASMFactory:       wasmFactory,
@@ -1297,8 +1314,9 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		},
 		AndroidLinuxProvider:  b.androidLinuxProvider,
 		AndroidNativeProvider: b.androidNativeProvider,
-		SearchCaller:          makeSearchCallFunc(b.searchConfig, kernelSecretBroker),
-		SearchHealth:          makeSearchHealthFunc(b.searchConfig, kernelSecretBroker),
+		SearchCaller:          buildWebResearchCallFunc(webRuntime),
+		SearchStreamCaller:    buildWebResearchStreamCallFunc(webRuntime),
+		SearchHealth:          buildSearchHealthFunc(searchService),
 		InternalDispatcher:    internalDispatcher,
 		MediaCaller:           mediaCaller,
 		MediaHealth:           mediaHealth,
@@ -1338,8 +1356,8 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	if err := RegisterBuiltinUtilityTools(ctx, toolRegistry, builtinUtilityTools); err != nil {
 		return nil, fmt.Errorf("kernel: register builtin utility tools: %w", err)
 	}
-	if err := registerDeepSearchSystemTask(ctx, taskRuntimeService, b.deepSearchTaskEntry); err != nil {
-		return nil, fmt.Errorf("kernel: register deep search system task: %w", err)
+	if err := taskRuntimeService.DeleteTaskDefinition(ctx, "system.search.deep"); err != nil {
+		return nil, fmt.Errorf("kernel: remove legacy deep search task: %w", err)
 	}
 	registerWorkflowStepHandlers(workflowExecutor, executionKernel, adapterRegistry, NewWorkflowExecutionRouter(capabilityService, toolRegistry, taskRuntimeService, sessionService))
 
@@ -2267,26 +2285,6 @@ func validateExecutionWiring(kernel *execution.ExecutionPipeline, adapters *capa
 		return fmt.Errorf("tool registry is nil")
 	}
 	return nil
-}
-
-func makeSearchCallFunc(cfg search.Config, broker *secret.Broker) capability.SearchCallFunc {
-	svc := buildSearchService(cfg, broker)
-	if svc == nil {
-		return nil
-	}
-	return buildSearchCallFunc(svc)
-}
-
-func makeSearchHealthFunc(cfg search.Config, broker *secret.Broker) capability.SearchHealthFunc {
-	svc := buildSearchService(cfg, broker)
-	if svc == nil {
-		return nil
-	}
-	return buildSearchHealthFunc(svc)
-}
-
-func registerDeepSearchSystemTask(ctx context.Context, svc *task_runtime.TaskRuntimeService, entry string) error {
-	return RegisterDeepSearchSystemTask(ctx, svc, entry)
 }
 
 // kernelArtifactStoreAdapter adapts PackageArtifactStore to the acquisition RemoteArtifactStorer interface.

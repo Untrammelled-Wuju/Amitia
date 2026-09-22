@@ -21,6 +21,7 @@ void main() {
           AppRoutes.memoryProfiles,
           AppRoutes.memoryManager,
           AppRoutes.reminders,
+          AppRoutes.continuity,
           AppRoutes.emotes,
           AppRoutes.chatLogs,
           AppRoutes.chatImport,
@@ -87,6 +88,7 @@ void main() {
       expect(AppRoutes.characterPsyche('c1'), '/characters/c1/psyche');
       expect(AppRoutes.characterDebug('c1'), '/characters/c1/debug');
       expect(AppRoutes.agentTask('t1'), '/agent/task/t1');
+      expect(AppRoutes.continuityDetail('c1'), '/continuity/c1');
       expect(AppRoutes.mcpDetail('m1'), '/extensions/mcp/m1');
       expect(AppRoutes.mcpEdit('m1'), '/extensions/mcp/m1/edit');
       expect(AppRoutes.extensionPage('page1'), '/extension/page/page1');
@@ -118,6 +120,7 @@ void main() {
         AppRoutes.memoryProfiles,
         AppRoutes.memoryManager,
         AppRoutes.reminders,
+        AppRoutes.continuity,
         AppRoutes.emotes,
         AppRoutes.chatLogs,
         AppRoutes.chatImport,

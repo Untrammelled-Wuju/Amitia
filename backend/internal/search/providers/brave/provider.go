@@ -30,8 +30,8 @@ type braveWebResult struct {
 }
 
 type braveWebResponse struct {
-	Type    string             `json:"type"`
-	Results []braveWebResult   `json:"results"`
+	Type    string           `json:"type"`
+	Results []braveWebResult `json:"results"`
 }
 
 type braveResponse struct {
@@ -95,21 +95,27 @@ func (p *Provider) SetCredential(cred string) {
 	p.credential = cred
 }
 
+func (p *Provider) SetMaxResponseBytes(limit int64) {
+	if limit > 0 {
+		p.maxBytes = limit
+	}
+}
+
 func (p *Provider) ID() string {
 	return providerID
 }
 
 func (p *Provider) Capabilities() search.ProviderCapabilities {
 	return search.ProviderCapabilities{
-		GeneralWeb:     true,
-		SearchKinds:    []search.SearchKind{search.SearchKindWeb, search.SearchKindNews, search.SearchKindImage},
-		LanguageFilter: true,
-		CountryFilter:  true,
-		SafeSearch:     true,
-		Pagination:     true,
+		GeneralWeb:      true,
+		SearchKinds:     []search.SearchKind{search.SearchKindWeb, search.SearchKindNews},
+		LanguageFilter:  true,
+		CountryFilter:   true,
+		SafeSearch:      true,
+		Pagination:      true,
 		TimeRangeFilter: true,
 		DomainFilter:    true,
-		MaxResults:     maxResults,
+		MaxResults:      maxResults,
 	}
 }
 
@@ -117,7 +123,11 @@ func (p *Provider) Search(ctx context.Context, req search.SearchRequest) (search
 	if !p.enabled {
 		return search.ProviderSearchResponse{}, search.NewError(search.SEARCH_DISABLED, providerID, false, nil)
 	}
-	if p.credential == "" {
+	credential := search.ProviderCredentialFromContext(ctx)
+	if credential == "" {
+		credential = p.credential
+	}
+	if credential == "" {
 		return search.ProviderSearchResponse{}, search.NewError(search.SEARCH_PROVIDER_AUTH_FAILED, providerID, false, nil)
 	}
 	validated, terr := p.transport.ValidateEndpoint(ctx, p.endpoint)
@@ -129,12 +139,15 @@ func (p *Provider) Search(ctx context.Context, req search.SearchRequest) (search
 		return search.ProviderSearchResponse{}, search.NewError(search.SEARCH_BLOCKED_BY_NETWORK, providerID, false, terr)
 	}
 	client := p.transport.PinHTTPClient(validated, 10*time.Second)
-	httpReq, err := p.buildRequest(ctx, req)
+	httpReq, err := p.buildRequest(ctx, req, credential)
 	if err != nil {
 		return search.ProviderSearchResponse{}, err
 	}
 	resp, err := client.Do(httpReq)
 	if err != nil {
+		if ctx.Err() != nil {
+			return search.ProviderSearchResponse{}, search.NewError(search.SEARCH_CANCELLED, providerID, false, ctx.Err())
+		}
 		return search.ProviderSearchResponse{}, search.NewError(search.SEARCH_PROVIDER_TIMEOUT, providerID, true, err)
 	}
 	defer resp.Body.Close()
@@ -172,13 +185,13 @@ func (p *Provider) Health(ctx context.Context) search.ProviderHealth {
 	return search.ProviderHealthReady
 }
 
-func (p *Provider) buildRequest(ctx context.Context, req search.SearchRequest) (*http.Request, error) {
+func (p *Provider) buildRequest(ctx context.Context, req search.SearchRequest, credential string) (*http.Request, error) {
 	u, err := url.Parse(p.endpoint)
 	if err != nil {
 		return nil, search.NewError(search.SEARCH_PROVIDER_REQUEST_FAILED, providerID, false, err)
 	}
 	q := u.Query()
-	q.Set("q", req.Query)
+	q.Set("q", queryWithDomains(req.Query, req.Domains))
 	limit := req.Limit
 	if limit < 1 {
 		limit = search.DefaultLimit
@@ -195,7 +208,9 @@ func (p *Provider) buildRequest(ctx context.Context, req search.SearchRequest) (
 	}
 	if req.Country != "" {
 		q.Set("country", req.Country)
-		q.Set("ui_lang", req.Country)
+	}
+	if freshness := mapTimeRange(req.TimeRange); freshness != "" {
+		q.Set("freshness", freshness)
 	}
 	q.Set("safesearch", mapSafeSearch(req.SafeSearch))
 	q.Set("text_decorations", "0")
@@ -206,10 +221,56 @@ func (p *Provider) buildRequest(ctx context.Context, req search.SearchRequest) (
 		return nil, search.NewError(search.SEARCH_PROVIDER_REQUEST_FAILED, providerID, false, err)
 	}
 	httpReq.Header.Set("Accept", "application/json")
-	httpReq.Header.Set("Accept-Encoding", "gzip")
 	httpReq.Header.Set("User-Agent", userAgent)
-	httpReq.Header.Set("X-Subscription-Token", p.credential)
+	httpReq.Header.Set("X-Subscription-Token", credential)
 	return httpReq, nil
+}
+
+func queryWithDomains(query string, domains []string) string {
+	query = strings.TrimSpace(query)
+	if len(domains) == 0 {
+		return query
+	}
+	parts := make([]string, 0, len(domains))
+	for _, domain := range domains {
+		domain = strings.TrimSpace(domain)
+		if domain == "" {
+			continue
+		}
+		parts = append(parts, "site:"+domain)
+	}
+	if len(parts) == 0 {
+		return query
+	}
+	if len(parts) == 1 {
+		return strings.TrimSpace(query + " " + parts[0])
+	}
+	return strings.TrimSpace(query + " (" + strings.Join(parts, " OR ") + ")")
+}
+
+func mapTimeRange(filter *search.TimeRangeFilter) string {
+	if filter == nil {
+		return ""
+	}
+	if filter.From != nil && filter.To != nil {
+		from := filter.From.UTC().Format("2006-01-02")
+		to := filter.To.UTC().Format("2006-01-02")
+		return from + "to" + to
+	}
+	if filter.From == nil {
+		return ""
+	}
+	age := time.Since(filter.From.UTC())
+	if age <= 48*time.Hour {
+		return "pd"
+	}
+	if age <= 10*24*time.Hour {
+		return "pw"
+	}
+	if age <= 45*24*time.Hour {
+		return "pm"
+	}
+	return "py"
 }
 
 func mapSafeSearch(mode search.SafeSearchMode) string {

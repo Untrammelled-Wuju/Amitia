@@ -51,7 +51,7 @@ func TestSearchRuntimeAdapter_Execute_Success(t *testing.T) {
 		if providerID != "myprovider" {
 			t.Fatalf("providerID mismatch: %s", providerID)
 		}
-		if handlerName != "search.general" {
+		if handlerName != "web.run" {
 			t.Fatalf("handlerName mismatch: %s", handlerName)
 		}
 		if string(input) != `{"query":"test"}` {
@@ -61,7 +61,7 @@ func TestSearchRuntimeAdapter_Execute_Success(t *testing.T) {
 	}, nil)
 	inv := ToolInvocationContext{InvocationID: "i2", SpaceID: "u1"}
 	res := a.Execute(context.Background(),
-		RuntimeBinding{RuntimeType: RuntimeTypeSearch, RuntimeID: "myprovider", HandlerName: "search.general"},
+		RuntimeBinding{RuntimeType: RuntimeTypeSearch, RuntimeID: "myprovider", HandlerName: "web.run"},
 		inv, json.RawMessage(`{"query":"test"}`))
 	if res.Status != ToolResultStatusSuccess {
 		t.Fatalf("expected success, got %s (err: %v)", res.Status, res.Error)

@@ -10,6 +10,7 @@ import 'memory_service.dart';
 import 'profile_service.dart';
 import 'episodic_service.dart';
 import 'worldbook_service.dart';
+import 'continuity_service.dart';
 import 'reminder_service.dart';
 import 'companion_service.dart';
 import 'model_config_service.dart';
@@ -73,6 +74,10 @@ final episodicServiceProvider = Provider<EpisodicService>(
 
 final worldBookServiceProvider = Provider<WorldBookService>(
   (ref) => WorldBookService(_getDynamicServiceApi(ref)),
+);
+
+final continuityServiceProvider = Provider<ContinuityService>(
+  (ref) => ContinuityService(_getDynamicServiceApi(ref)),
 );
 
 final reminderServiceProvider = Provider<ReminderService>(

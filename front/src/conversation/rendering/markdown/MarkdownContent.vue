@@ -4,7 +4,7 @@
       <div
         v-if="segment.type === 'markdown'"
         class="amrp-markdown-segment"
-        v-html="renderMarkdownSegment(segment.content)"
+        v-html="renderMarkdownSegment(segment.content, citationIds)"
       ></div>
       <AmitiaCodeBlock
         v-else-if="segment.type === 'code'"
@@ -71,9 +71,11 @@ const props = withDefaults(
   defineProps<{
     source: string;
     streaming?: boolean;
+    citationIds?: string[];
   }>(),
   {
     streaming: false,
+    citationIds: () => [],
   },
 );
 

@@ -7,10 +7,10 @@ import (
 )
 
 type fakeLeaseIssuer struct {
-	leaseIDs    []string
-	consumeIDs  []string
-	credential  string
-	issueErr    error
+	leaseIDs     []string
+	consumeIDs   []string
+	credential   string
+	issueErr     error
 	consumeErr   error
 	refusalLease string
 }

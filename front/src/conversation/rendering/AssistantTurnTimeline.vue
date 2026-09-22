@@ -28,14 +28,14 @@
               :class="statusClass(toolItem.status)"
             >
               <span class="turn-tool-dot"></span>
-              <span class="turn-tool-name">{{ toolItem.toolName || "工具调用" }}</span>
+              <span class="turn-tool-name">{{ toolDisplayName(toolItem.toolName, "工具调用") }}</span>
               <span class="turn-tool-subject">{{ toolSubject(toolItem) }}</span>
               <span class="turn-tool-state">{{ toolStateLabel(toolItem) }}</span>
             </div>
             <div v-else-if="toolItem.type === 'tool_result'" class="turn-tool-result">
               <button type="button" class="turn-result-head" @click="toggleResult(toolItem.id)">
                 <span class="turn-tool-dot" :class="statusClass(toolItem.status)"></span>
-                <strong>{{ toolItem.toolName || "工具结果" }}</strong>
+                <strong>{{ toolDisplayName(toolItem.toolName, "工具结果") }}</strong>
                 <span>{{ resultSummary(toolItem) }}</span>
                 <span class="turn-result-toggle">{{ expandedResults.has(toolItem.id) ? "收起" : "展开" }}</span>
               </button>
@@ -54,6 +54,8 @@
             v-if="item.content"
             :source="item.content"
             :streaming="isStreamingStatus(item.status)"
+            :citation-ids="citationIds"
+            @citation="emit('citation', $event)"
           />
         </RendererErrorBoundary>
       </div>
@@ -74,6 +76,13 @@ import RendererErrorBoundary from "./blocks/RendererErrorBoundary.vue";
 
 const props = defineProps<{
   turn: AssistantTurnData;
+  citationIds?: string[];
+}>();
+
+const citationIds = computed(() => props.citationIds ?? []);
+
+const emit = defineEmits<{
+  citation: [id: string];
 }>();
 
 const expandedResults = reactive(new Set<string>());
@@ -187,14 +196,37 @@ function timelineItemKey(item: AssistantTurnItem & { type: string }): string {
   return `thinking:${props.turn.id}:${Math.max(0, index)}`;
 }
 
+function toolDisplayName(name?: string, fallback = "工具调用"): string {
+  const value = String(name || "").trim();
+  if (!value) return fallback;
+  if (value === "web_run" || value === "web.run") return "联网研究";
+  return value;
+}
+
 function toolSubject(item: AssistantTurnItem): string {
+  const progress = String(item.content || "").replace(/\s+/g, " ").trim();
+  if (progress && isStreamingStatus(item.status)) {
+    return progress.length > 96 ? `${progress.slice(0, 96)}…` : progress;
+  }
   const value = parseJSON(item.argumentsJson);
   if (value && typeof value === "object" && !Array.isArray(value)) {
     const record = value as Record<string, unknown>;
+    const searchQueries = Array.isArray(record.search_query) ? record.search_query : [];
+    if (searchQueries.length > 0) {
+      const first = searchQueries[0];
+      if (first && typeof first === "object" && !Array.isArray(first)) {
+        const query = String((first as Record<string, unknown>).q || "").trim();
+        if (query) return searchQueries.length > 1 ? `${query} · ${searchQueries.length} 个查询` : query;
+      }
+    }
     for (const key of ["path", "file", "filePath", "query", "command", "url", "cwd"]) {
       if (record[key] !== undefined && String(record[key]).trim()) {
         return String(record[key]).trim();
       }
+    }
+    for (const key of ["open", "find", "click", "screenshot"]) {
+      const commands = Array.isArray(record[key]) ? record[key] : [];
+      if (commands.length > 0) return `${key} · ${commands.length}`;
     }
   }
   const text = stringify(value).replace(/\s+/g, " ").trim();
@@ -219,6 +251,24 @@ function resultText(item: AssistantTurnItem): string {
 }
 
 function resultSummary(item: AssistantTurnItem): string {
+  const value = parseJSON(item.resultJson);
+  if ((item.toolName === "web_run" || item.toolName === "web.run") && value && typeof value === "object" && !Array.isArray(value)) {
+    const record = value as Record<string, unknown>;
+    const results = Array.isArray(record.search) ? record.search.length : 0;
+    const pages = Array.isArray(record.pages) ? record.pages.length : 0;
+    const citations = Array.isArray(record.citations) ? record.citations.length : 0;
+    const operation = String(record.operation || "research").trim();
+    const parts = [operation === "search" ? "搜索完成" : operation === "open" ? "网页读取完成" : "研究完成"];
+    if (results > 0) parts.push(`${results} 个来源`);
+    if (pages > 0) parts.push(`读取 ${pages} 页`);
+    if (citations > 0) parts.push(`${citations} 条证据`);
+    const research = record.research;
+    if (research && typeof research === "object" && !Array.isArray(research)) {
+      const rounds = Number((research as Record<string, unknown>).rounds_completed || 0);
+      if (rounds > 1) parts.push(`${rounds} 轮`);
+    }
+    return parts.join(" · ");
+  }
   const text = resultText(item).replace(/\s+/g, " ").trim();
   if (!text) return "";
   return text.length > 80 ? `${text.slice(0, 80)}…` : text;

@@ -2,6 +2,7 @@ package browser
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"time"
 )
@@ -74,7 +75,7 @@ func (n *productionNavigator) Navigate(ctx context.Context, sessionID BrowserSes
 		}
 	}
 
-	_, policyErr := n.policy.CanNavigate(rawURL)
+	_, policyErr := n.policy.CanNavigateContext(ctx, rawURL)
 	if policyErr != nil {
 		return NavigationResult{}, policyErr
 	}
@@ -109,6 +110,19 @@ func (n *productionNavigator) Navigate(ctx context.Context, sessionID BrowserSes
 				Message: "navigation failed: " + navigateErr.Error(),
 				Cause:   navigateErr,
 			}
+	}
+
+	if result != nil && strings.TrimSpace(result.FinalURL) != "" {
+		if _, finalPolicyErr := n.policy.CanNavigateContext(ctx, result.FinalURL); finalPolicyErr != nil {
+			return NavigationResult{
+				SessionID:    sessionID,
+				TabID:        tabID,
+				RequestedURL: rawURL,
+				FinalURL:     result.FinalURL,
+				WaitUntil:    waitUntil,
+				DurationMS:   time.Since(startTime).Milliseconds(),
+			}, finalPolicyErr
+		}
 	}
 
 	n.bumpDocumentGeneration(tabID, resolved.RuntimeGeneration)

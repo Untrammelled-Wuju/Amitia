@@ -12,7 +12,7 @@ type testProvider struct {
 	err  error
 }
 
-func (p *testProvider) ID() string                        { return p.id }
+func (p *testProvider) ID() string                         { return p.id }
 func (p *testProvider) Capabilities() ProviderCapabilities { return p.caps }
 func (p *testProvider) Search(_ context.Context, _ SearchRequest) (ProviderSearchResponse, error) {
 	return ProviderSearchResponse{}, p.err
@@ -115,5 +115,35 @@ func TestProviderSet_DefaultID(t *testing.T) {
 	set.SetDefault("first")
 	if set.DefaultID() != "first" {
 		t.Fatalf("DefaultID should remain 'first'")
+	}
+}
+
+func TestProviderSet_CandidatesAreDeterministicByPriority(t *testing.T) {
+	set := NewProviderSet("")
+	caps := ProviderCapabilities{GeneralWeb: true}
+	set.RegisterWithPriority("z-low", &testProvider{id: "z-low", caps: caps}, 10)
+	set.RegisterWithPriority("b-high", &testProvider{id: "b-high", caps: caps}, 100)
+	set.RegisterWithPriority("a-high", &testProvider{id: "a-high", caps: caps}, 100)
+
+	ids := set.CandidateIDs(SearchKindWeb)
+	want := []string{"a-high", "b-high", "z-low"}
+	if len(ids) != len(want) {
+		t.Fatalf("unexpected candidate count: %v", ids)
+	}
+	for i := range want {
+		if ids[i] != want[i] {
+			t.Fatalf("candidate[%d]=%q, want %q", i, ids[i], want[i])
+		}
+	}
+}
+
+func TestProviderSet_DefaultProviderPrecedesHigherPriorityFallback(t *testing.T) {
+	caps := ProviderCapabilities{GeneralWeb: true}
+	set := NewProviderSet("preferred")
+	set.RegisterWithPriority("preferred", &testProvider{id: "preferred", caps: caps}, 10)
+	set.RegisterWithPriority("fallback", &testProvider{id: "fallback", caps: caps}, 100)
+	ids := set.CandidateIDs(SearchKindWeb)
+	if len(ids) != 2 || ids[0] != "preferred" || ids[1] != "fallback" {
+		t.Fatalf("unexpected provider order: %v", ids)
 	}
 }

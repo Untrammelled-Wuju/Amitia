@@ -72,6 +72,60 @@ providers:
       username: "root"
       password: ""
       dataPath: "data/graph.db"
+  search:
+    enabled: false
+    defaultProvider: "searxng"
+    defaultLimit: 8
+    maxLimit: 20
+    timeoutSec: 10
+    maxResponseBytes: 2097152
+    cacheTtlSec: 120
+    cacheMaxEntries: 512
+    circuitFailures: 3
+    circuitOpenSec: 30
+    research:
+      maxExecutionSec: 120
+      maxToolOutputChars: 120000
+      maxQueries: 4
+      maxProvidersPerQuery: 2
+      maxSearchResults: 12
+      maxOpenPages: 4
+      maxDeepOpenPages: 6
+      maxDeepRounds: 3
+      maxDeepSearchCalls: 12
+      minDeepNewSources: 2
+      maxParallelSearch: 4
+      maxParallelFetch: 3
+      searchTimeoutSec: 20
+      fetchTimeoutSec: 20
+      maxFetchBytes: 6291456
+      maxPageChars: 60000
+      maxEvidencePerPage: 12
+      maxEvidenceChars: 3500
+      referenceTtlHours: 168
+      pageCacheTtlSec: 600
+      autoBrowserEscalation: true
+      minStaticContentChars: 240
+      maxRedirects: 5
+    providers:
+      searxng:
+        type: "searxng"
+        endpoint: "http://127.0.0.1:8080"
+        credentialRef: ""
+        enabled: false
+        priority: 100
+        kinds: ["web", "news", "academic", "code", "image", "video"]
+        allowHttp: true
+        allowPrivate: true
+      brave:
+        type: "brave"
+        endpoint: "https://api.search.brave.com/res/v1/web/search"
+        credentialRef: ""
+        enabled: false
+        priority: 90
+        kinds: ["web", "news"]
+        allowHttp: false
+        allowPrivate: false
 
 components:
   taskHost:

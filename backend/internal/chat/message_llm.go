@@ -130,7 +130,7 @@ func (s *service) invokeLLMWithTools(ctx context.Context, cfg *ModelConfig, mess
 			reply = aiContent
 			break
 		}
-		executions := s.executeAgentToolCalls(toolExecCtx, cfg, calls, trace, round)
+		executions := s.executeAgentToolCalls(toolExecCtx, cfg, calls, trace, round, turnRecorder)
 		roundFingerprints := map[string]struct{}{}
 		for index, call := range calls {
 			execution := executions[index]
@@ -148,7 +148,7 @@ func (s *service) invokeLLMWithTools(ctx context.Context, cfg *ModelConfig, mess
 			if outcome.HasError || !outcome.Found {
 				toolStatus = assistantTurnStatusFailed
 			}
-			toolContent := toolResultContent(outcome)
+			toolContent := toolResultContent(call.Name, outcome)
 			if err := turnRecorder.AddToolResult(ctx, call.ID, call.Name, toolContent, toolStatus, outcome.ErrorCode, execution.DurationMS); err != nil {
 				return "", "", false, 0, 0, err
 			}
@@ -175,6 +175,20 @@ func (s *service) invokeLLMWithTools(ctx context.Context, cfg *ModelConfig, mess
 		if allRepeated {
 			reply = aiContent
 			break
+		}
+	}
+	citationAudit := turnRecorder.AuditCitationMarkers(reply)
+	if len(citationAudit.Available) > 0 {
+		fields := applog.Fields{
+			"available_citations": len(citationAudit.Available),
+			"used_citations":      len(citationAudit.Used),
+			"unknown_citations":   len(citationAudit.Unknown),
+		}
+		if len(citationAudit.Unknown) > 0 {
+			fields["unknown_citation_ids"] = citationAudit.Unknown
+			applog.TraceWarn(trace.WithStage("citation_audit_invalid"), fields, "assistant reply referenced citation ids that were not produced by web research")
+		} else {
+			applog.TraceInfo(trace.WithStage("citation_audit_completed"), fields, "assistant reply citation audit completed")
 		}
 	}
 	return reply, strings.Join(reasoningParts, "\n\n"), forceVoice, totalTokens, reasoningDurationMS, nil
@@ -221,7 +235,7 @@ func (s *service) prepareAgentToolCalls(ctx context.Context, toolCalls []map[str
 	return result, nil
 }
 
-func (s *service) executeAgentToolCalls(ctx context.Context, cfg *ModelConfig, calls []agentToolCall, trace applog.TraceFields, round int) []agentToolExecution {
+func (s *service) executeAgentToolCalls(ctx context.Context, cfg *ModelConfig, calls []agentToolCall, trace applog.TraceFields, round int, turnRecorder *assistantTurnRecorder) []agentToolExecution {
 	executions := make([]agentToolExecution, len(calls))
 	if len(calls) == 0 {
 		return executions
@@ -239,7 +253,7 @@ func (s *service) executeAgentToolCalls(ctx context.Context, cfg *ModelConfig, c
 	}
 	if !parallel {
 		for index, call := range calls {
-			executions[index] = s.executeAgentToolCall(ctx, call, trace, round)
+			executions[index] = s.executeAgentToolCall(ctx, call, trace, round, turnRecorder)
 		}
 		return executions
 	}
@@ -257,7 +271,7 @@ func (s *service) executeAgentToolCalls(ctx context.Context, cfg *ModelConfig, c
 		go func() {
 			defer waitGroup.Done()
 			sem <- struct{}{}
-			executions[index] = s.executeAgentToolCall(ctx, call, trace, round)
+			executions[index] = s.executeAgentToolCall(ctx, call, trace, round, turnRecorder)
 			<-sem
 		}()
 	}
@@ -265,10 +279,26 @@ func (s *service) executeAgentToolCalls(ctx context.Context, cfg *ModelConfig, c
 	return executions
 }
 
-func (s *service) executeAgentToolCall(ctx context.Context, call agentToolCall, trace applog.TraceFields, round int) agentToolExecution {
+func (s *service) executeAgentToolCall(ctx context.Context, call agentToolCall, trace applog.TraceFields, round int, turnRecorder *assistantTurnRecorder) agentToolExecution {
 	startedAt := time.Now()
 	if s.toolRuntime == nil {
 		return agentToolExecution{Outcome: toolExecOutcome{VisibleText: "工具运行时不可用", Status: "FAILED", ErrorCode: extension.ErrSkillExecutionFailed, HasError: true, Found: false}, DurationMS: time.Since(startedAt).Milliseconds()}
+	}
+	if streamingRuntime, ok := s.toolRuntime.(ModelToolProgressRuntime); ok {
+		toolResult, found, err := streamingRuntime.ExecuteModelToolWithProgress(ctx, call.Name, json.RawMessage(call.Arguments), call.Scope, "", func(progressCtx context.Context, event ToolProgressEvent) error {
+			if turnRecorder == nil {
+				return nil
+			}
+			return turnRecorder.AddToolProgress(progressCtx, call.ID, call.Name, event)
+		})
+		if err != nil {
+			if toolResult.Error == nil {
+				toolResult.Status = "FAILED"
+				toolResult.VisibleText = "工具流式执行失败"
+				toolResult.Error = &ToolError{Code: "TOOL_STREAM_FAILED", Message: err.Error(), Detail: err.Error(), Retryable: false}
+			}
+		}
+		return agentToolExecution{Outcome: toolResultToOutcome(toolResult, found), DurationMS: time.Since(startedAt).Milliseconds()}
 	}
 	toolResult, found := s.toolRuntime.ExecuteModelTool(ctx, call.Name, json.RawMessage(call.Arguments), call.Scope, "")
 	return agentToolExecution{Outcome: toolResultToOutcome(toolResult, found), DurationMS: time.Since(startedAt).Milliseconds()}

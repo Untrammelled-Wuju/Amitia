@@ -73,6 +73,11 @@ class _AmitiaMessageViewState extends State<AmitiaMessageView> {
     final streaming =
         message.state == AmrpMessageState.streaming ||
         message.state == AmrpMessageState.queued;
+    final citationSources = _mergeCitationSources(
+      message.sources,
+      widget.message.assistantTurn,
+    );
+    final citationIds = citationSources.map((source) => source.id).toSet();
     final hasAssistantTurnContent =
         widget.message.assistantTurn?.items.isNotEmpty == true;
     final hasVisibleContent =
@@ -135,7 +140,7 @@ class _AmitiaMessageViewState extends State<AmitiaMessageView> {
                     )
                   else if (widget.message.assistantTurn?.items.isNotEmpty ==
                       true)
-                    ..._renderAssistantTurn(widget.message.assistantTurn!)
+                    ..._renderAssistantTurn(widget.message.assistantTurn!, citationIds)
                   else ...[
                     if (message.thinking != null)
                       AmitiaThinkingBlock(block: message.thinking!),
@@ -143,6 +148,7 @@ class _AmitiaMessageViewState extends State<AmitiaMessageView> {
                       AmitiaMarkdownView(
                         source: message.markdown,
                         streaming: message.state == AmrpMessageState.streaming,
+                        citationIds: citationIds,
                         onCitation: (id) =>
                             setState(() => _highlightCitation = id),
                       ),
@@ -151,7 +157,7 @@ class _AmitiaMessageViewState extends State<AmitiaMessageView> {
                       AmitiaToolBlock(block: tool),
                   ],
                   AmitiaCitationList(
-                    sources: message.sources,
+                    sources: citationSources,
                     highlightId: _highlightCitation,
                   ),
                   if (!streaming &&
@@ -198,7 +204,7 @@ class _AmitiaMessageViewState extends State<AmitiaMessageView> {
     return widgets;
   }
 
-  List<Widget> _renderAssistantTurn(AssistantTurnDto turn) {
+  List<Widget> _renderAssistantTurn(AssistantTurnDto turn, Set<String> citationIds) {
     final items = [...turn.items]
       ..sort((left, right) => left.sequence.compareTo(right.sequence));
     final entries = <_TurnTimelineEntry>[];
@@ -235,11 +241,68 @@ class _AmitiaMessageViewState extends State<AmitiaMessageView> {
             'text' => AmitiaMarkdownView(
               source: entry.item!.content,
               streaming: _isTurnStreaming(entry.item!.status),
+              citationIds: citationIds,
               onCitation: (id) => setState(() => _highlightCitation = id),
             ),
             _ => const SizedBox.shrink(),
           },
     ];
+  }
+
+  List<AmrpCitationSource> _mergeCitationSources(
+    List<AmrpCitationSource> messageSources,
+    AssistantTurnDto? turn,
+  ) {
+    final byId = <String, AmrpCitationSource>{
+      for (final source in messageSources) source.id: source,
+    };
+    if (turn != null) {
+      for (final item in turn.items) {
+        if (item.type != 'tool_result' ||
+            (item.toolName != 'web_run' && item.toolName != 'web.run') ||
+            item.resultJson.trim().isEmpty) {
+          continue;
+        }
+        try {
+          final decoded = jsonDecode(item.resultJson);
+          if (decoded is! Map) continue;
+          final citations = decoded['citations'];
+          if (citations is! List) continue;
+          for (final raw in citations) {
+            if (raw is! Map) continue;
+            final citation = Map<String, dynamic>.from(raw);
+            final index = (citation['index'] as num?)?.toInt() ?? 0;
+            final fallbackId = (citation['ref_id'] ?? citation['evidence_id'] ?? '')
+                .toString()
+                .trim();
+            final id = index > 0 ? index.toString() : fallbackId;
+            if (id.isEmpty || byId.containsKey(id)) continue;
+            final url = (citation['url'] ?? '').toString();
+            final title = (citation['title'] ?? '').toString().trim();
+            byId[id] = AmrpCitationSource(
+              id: id,
+              title: title.isNotEmpty
+                  ? title
+                  : (url.isNotEmpty ? url : 'Source $id'),
+              url: url,
+              snippet: (citation['text'] ?? '').toString(),
+            );
+          }
+        } catch (_) {
+          // Ignore legacy/non-JSON tool results.
+        }
+      }
+    }
+    final sources = byId.values.toList();
+    sources.sort((left, right) {
+      final leftNumber = int.tryParse(left.id);
+      final rightNumber = int.tryParse(right.id);
+      if (leftNumber != null && rightNumber != null) {
+        return leftNumber.compareTo(rightNumber);
+      }
+      return left.id.compareTo(right.id);
+    });
+    return sources;
   }
 
   Map<String, String>? _stateNotice(AmrpMessageState state) {
@@ -793,9 +856,37 @@ String _turnJSONText(dynamic value) {
   }
 }
 
+String _turnToolDisplayName(String raw, {String fallback = '工具调用'}) {
+  final value = raw.trim();
+  if (value.isEmpty) return fallback;
+  if (value == 'web_run' || value == 'web.run') return '联网研究';
+  return value;
+}
+
 String _turnToolSubject(AssistantTurnItemDto item) {
+  final status = item.status.toLowerCase();
+  final progress = item.content.replaceAll(RegExp(r'\s+'), ' ').trim();
+  final isRunning = status == 'queued' ||
+      status == 'starting' ||
+      status == 'running' ||
+      status == 'waiting_tool' ||
+      status == 'pending' ||
+      status == 'streaming';
+  if (progress.isNotEmpty && isRunning) {
+    return progress.length > 96 ? '${progress.substring(0, 96)}…' : progress;
+  }
   final decoded = _decodeTurnJSON(item.argumentsJson);
   if (decoded is Map) {
+    final searchQueries = decoded['search_query'];
+    if (searchQueries is List && searchQueries.isNotEmpty) {
+      final first = searchQueries.first;
+      if (first is Map) {
+        final query = first['q']?.toString().trim() ?? '';
+        if (query.isNotEmpty) {
+          return searchQueries.length > 1 ? '$query · ${searchQueries.length} 个查询' : query;
+        }
+      }
+    }
     for (final key in const <String>[
       'path',
       'file',
@@ -808,6 +899,10 @@ String _turnToolSubject(AssistantTurnItemDto item) {
       final value = decoded[key]?.toString().trim() ?? '';
       if (value.isNotEmpty) return value;
     }
+    for (final key in const <String>['open', 'find', 'click', 'screenshot']) {
+      final commands = decoded[key];
+      if (commands is List && commands.isNotEmpty) return '$key · ${commands.length}';
+    }
   }
   final text = _turnJSONText(decoded).replaceAll(RegExp(r'\s+'), ' ').trim();
   return text.length > 72 ? '${text.substring(0, 72)}…' : text;
@@ -817,6 +912,29 @@ String _turnResultText(AssistantTurnItemDto item) {
   final text = _turnJSONText(_decodeTurnJSON(item.resultJson));
   if (text.trim().isNotEmpty) return text;
   return item.errorCode.trim().isNotEmpty ? item.errorCode : '无返回内容';
+}
+
+String _turnResultSummary(AssistantTurnItemDto item) {
+  final decoded = _decodeTurnJSON(item.resultJson);
+  if ((item.toolName == 'web_run' || item.toolName == 'web.run') && decoded is Map) {
+    final operation = decoded['operation']?.toString() ?? 'research';
+    final parts = <String>[
+      operation == 'search' ? '搜索完成' : operation == 'open' ? '网页读取完成' : '研究完成',
+    ];
+    final results = decoded['search'];
+    final pages = decoded['pages'];
+    final citations = decoded['citations'];
+    if (results is List && results.isNotEmpty) parts.add('${results.length} 个来源');
+    if (pages is List && pages.isNotEmpty) parts.add('读取 ${pages.length} 页');
+    if (citations is List && citations.isNotEmpty) parts.add('${citations.length} 条证据');
+    final research = decoded['research'];
+    if (research is Map) {
+      final rounds = int.tryParse(research['rounds_completed']?.toString() ?? '') ?? 0;
+      if (rounds > 1) parts.add('$rounds 轮');
+    }
+    return parts.join(' · ');
+  }
+  return _turnResultText(item).replaceAll(RegExp(r'\s+'), ' ').trim();
 }
 
 class _TurnTimelineEntry {
@@ -1005,7 +1123,7 @@ class _TurnToolCallRow extends StatelessWidget {
           ),
           const SizedBox(width: 9),
           Text(
-            item.toolName.trim().isEmpty ? '工具调用' : item.toolName,
+            _turnToolDisplayName(item.toolName),
             style: TextStyle(
               color: tokens.text,
               fontSize: 12,
@@ -1056,7 +1174,7 @@ class _TurnToolResultBlockState extends State<_TurnToolResultBlock> {
   Widget build(BuildContext context) {
     final tokens = AmitiaMessageTheme.of(context);
     final result = _turnResultText(widget.item);
-    final summary = result.replaceAll(RegExp(r'\s+'), ' ').trim();
+    final summary = _turnResultSummary(widget.item);
     return Container(
       constraints: const BoxConstraints(maxWidth: 700),
       margin: const EdgeInsets.only(bottom: 15),
@@ -1086,9 +1204,7 @@ class _TurnToolResultBlockState extends State<_TurnToolResultBlock> {
                   ),
                   const SizedBox(width: 8),
                   Text(
-                    widget.item.toolName.trim().isEmpty
-                        ? '工具结果'
-                        : widget.item.toolName,
+                    _turnToolDisplayName(widget.item.toolName, fallback: '工具结果'),
                     style: TextStyle(
                       color: tokens.text,
                       fontSize: 11.5,

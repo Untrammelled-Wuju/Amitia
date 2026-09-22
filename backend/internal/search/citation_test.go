@@ -19,9 +19,9 @@ func TestCitationBuilder_Build_DeterministicID(t *testing.T) {
 			},
 		},
 		{
-			Rank:   2,
-			URL:    "https://example.com/page1",
-			Domain: "example.com",
+			Rank:     2,
+			URL:      "https://example.com/page1",
+			Domain:   "example.com",
 			Citation: CitationRef{},
 			Source: SearchSourceMetadata{
 				Provider:     "brave",

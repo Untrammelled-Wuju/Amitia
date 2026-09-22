@@ -8,6 +8,7 @@ import (
 	"github.com/u-ai/backend/internal/agent/tool"
 	"github.com/u-ai/backend/internal/chat"
 	"github.com/u-ai/backend/internal/extension/kernel"
+	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	"github.com/u-ai/backend/internal/mcp"
 )
 
@@ -123,6 +124,31 @@ func (a *chatToolRuntimeAdapter) ModelTools(ctx context.Context, scope chat.Skil
 func (a *chatToolRuntimeAdapter) ExecuteModelTool(ctx context.Context, modelName string, input json.RawMessage, scope chat.SkillScope, idempotencyKey string) (chat.ToolResult, bool) {
 	result, found := a.facade.ExecuteModelTool(ctx, modelName, input, a.toInvocationScope(scope), idempotencyKey)
 	return a.toChatResult(result), found
+}
+
+type chatToolProgressSink struct {
+	emit func(context.Context, chat.ToolProgressEvent) error
+}
+
+func (s chatToolProgressSink) Emit(ctx context.Context, event capability.ToolStreamEvent) error {
+	if s.emit == nil || event.Type != capability.ToolStreamEventProgress || event.Progress == nil {
+		return nil
+	}
+	return s.emit(ctx, chat.ToolProgressEvent{
+		Fraction:      event.Progress.Fraction,
+		Indeterminate: event.Progress.Indeterminate,
+		Message:       event.Progress.Message,
+		Metadata:      event.Metadata,
+	})
+}
+
+func (a *chatToolRuntimeAdapter) ExecuteModelToolWithProgress(ctx context.Context, modelName string, input json.RawMessage, scope chat.SkillScope, idempotencyKey string, emit func(context.Context, chat.ToolProgressEvent) error) (chat.ToolResult, bool, error) {
+	result, streamed, err := a.facade.ExecuteModelToolStream(ctx, modelName, input, a.toInvocationScope(scope), idempotencyKey, chatToolProgressSink{emit: emit})
+	found := streamed
+	if !found && (result.Error == nil || result.Error.Code != "TOOL_NOT_FOUND") {
+		found = true
+	}
+	return a.toChatResult(result), found, err
 }
 
 func (a *chatToolRuntimeAdapter) IsModelToolParallelSafe(ctx context.Context, modelName string, scope chat.SkillScope) bool {

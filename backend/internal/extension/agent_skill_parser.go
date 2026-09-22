@@ -441,7 +441,7 @@ func mapAgentSkillTools(value string) []AgentSkillToolMapping {
 			mapping.Status = "mapped"
 			mapping.Reason = "restricted to resources of the active Agent Skill"
 		case lower == "websearch" || lower == "web-search":
-			mapping.TargetSkillID = "web_search"
+			mapping.TargetSkillID = "web_run"
 			mapping.Status = "partially_mapped"
 			mapping.Reason = "available only when the existing Amitia skill and permission policy allow it"
 		case strings.HasPrefix(lower, "bash") || lower == "shell" || lower == "powershell" || lower == "python" || lower == "node":
