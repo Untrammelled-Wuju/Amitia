@@ -10,6 +10,7 @@ import (
 	"github.com/u-ai/backend/internal/chat"
 	"github.com/u-ai/backend/internal/continuity"
 	"github.com/u-ai/backend/internal/episodic"
+	"github.com/u-ai/backend/internal/extension/kernel/execution"
 	"github.com/u-ai/backend/internal/graph"
 	"github.com/u-ai/backend/internal/interaction"
 	"github.com/u-ai/backend/internal/memory"
@@ -23,9 +24,22 @@ import (
 	"github.com/u-ai/backend/pkg/sse"
 )
 
-func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, chatSvc chat.Service, unifiedEntry *interaction.UnifiedEntry, dataLifecycle *mindruntime.DataLifecycleCoordinator, reconciliation *mindruntime.ReconciliationEngine, memSvc memory.Service, profSvc profile.Service, epiSvc episodic.Service, graphSvc graph.Service, temporalSvc *temporal.Service, dpCoord *dataportability.Coordinator, artifactSvc *artifact.Service, continuityRepo *continuity.Repository, continuityCoordinator *continuity.WaitCoordinator, channelAccess ChannelAvailability) {
+type SystemRouterOption func(*Handler)
+
+func WithApprovalBroker(broker *execution.ApprovalBroker) SystemRouterOption {
+	return func(handler *Handler) {
+		handler.SetApprovalBroker(broker)
+	}
+}
+
+func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, chatSvc chat.Service, unifiedEntry *interaction.UnifiedEntry, dataLifecycle *mindruntime.DataLifecycleCoordinator, reconciliation *mindruntime.ReconciliationEngine, memSvc memory.Service, profSvc profile.Service, epiSvc episodic.Service, graphSvc graph.Service, temporalSvc *temporal.Service, dpCoord *dataportability.Coordinator, artifactSvc *artifact.Service, continuityRepo *continuity.Repository, continuityCoordinator *continuity.WaitCoordinator, channelAccess ChannelAvailability, options ...SystemRouterOption) {
 	svc := NewService(ctx, runtimeprofile.Profile(""))
 	handler := NewHandler(svc, ctx.DB, chatSvc, dataLifecycle, unifiedEntry, reconciliation, memSvc)
+	for _, option := range options {
+		if option != nil {
+			option(handler)
+		}
+	}
 	handler.SetArtifactService(artifactSvc)
 	handler.SetContinuityRuntime(continuityRepo, continuityCoordinator)
 	handler.SetChannelAvailability(channelAccess)
@@ -122,6 +136,10 @@ func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, chatSvc chat.
 	r.POST("/notifications/subscribe", handler.NotificationsSubscribe)
 	r.POST("/notifications/test", handler.NotificationsTest)
 	r.POST("/notifications/unsubscribe", handler.NotificationsUnsubscribe)
+
+	r.GET("/search/credentials", sharedCoreAdminOnly(), handler.SearchCredentialList)
+	r.PUT("/search/credentials/:engineId", sharedCoreAdminOnly(), handler.SearchCredentialSave)
+	r.DELETE("/search/credentials/:engineId", sharedCoreAdminOnly(), handler.SearchCredentialDelete)
 
 	r.GET("/security/access-config", sharedCoreAdminOnly(), handler.SecurityAccessConfig)
 	r.PUT("/security/access-config", sharedCoreAdminOnly(), handler.UpdateSecurityAccessConfig)

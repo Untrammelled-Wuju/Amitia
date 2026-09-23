@@ -35,6 +35,7 @@ abstract final class AppRoutes {
   static const settingsOverview = '/settings/overview';
   static const settingsData = '/settings/data';
   static const settingsModels = '/settings/models';
+  static const settingsSearchApi = '/settings/search-api';
   static const settingsAppearance = '/settings/appearance';
   static const settingsUIProviders = '/settings/ui-providers';
   static const settingsRuntime = '/settings/runtime';

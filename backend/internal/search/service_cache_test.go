@@ -15,25 +15,29 @@ func (p *cacheTestProvider) ID() string { return "cache-test" }
 
 func (p *cacheTestProvider) Capabilities() ProviderCapabilities {
 	return ProviderCapabilities{
-		GeneralWeb:      true,
-		SearchKinds:     []SearchKind{SearchKindWeb},
-		LanguageFilter:  true,
-		CountryFilter:   true,
-		SafeSearch:      true,
-		Pagination:      true,
-		TimeRangeFilter: true,
-		DomainFilter:    true,
-		MaxResults:      20,
+		GeneralWeb:          true,
+		SearchKinds:         []SearchKind{SearchKindWeb},
+		LanguageFilter:      true,
+		CountryFilter:       true,
+		SafeSearch:          true,
+		Pagination:          true,
+		TimeRangeFilter:     true,
+		DomainFilter:        true,
+		ExcludeDomainFilter: true,
+		MaxResults:          20,
 	}
 }
 
 func (p *cacheTestProvider) Search(_ context.Context, req SearchRequest) (ProviderSearchResponse, error) {
 	p.calls.Add(1)
-	return ProviderSearchResponse{Results: []SearchResult{{
-		Title:   "cached result",
-		URL:     "https://example.com/result",
-		Snippet: req.Query,
-	}}}, nil
+	return ProviderSearchResponse{
+		Results: []SearchResult{{
+			Title:   "cached result",
+			URL:     "https://example.com/result",
+			Snippet: req.Query,
+		}},
+		Usage: ProviderUsage{CostUSD: 0.0125, Credits: 1},
+	}, nil
 }
 
 func (p *cacheTestProvider) Health(context.Context) ProviderHealth { return ProviderHealthReady }
@@ -61,12 +65,18 @@ func TestServiceSearchAdvancedUsesCache(t *testing.T) {
 	if first.CacheHit {
 		t.Fatal("first search must not be a cache hit")
 	}
+	if first.Usage.CostUSD != 0.0125 || first.Usage.Credits != 1 {
+		t.Fatalf("first usage=%#v, want provider usage", first.Usage)
+	}
 	second, err := service.SearchAdvancedWithProvider(context.Background(), req, "invoke-2", "primary")
 	if err != nil {
 		t.Fatalf("second search: %v", err)
 	}
 	if !second.CacheHit {
 		t.Fatal("second search should be served from cache")
+	}
+	if second.Usage.CostUSD != 0 || second.Usage.Credits != 0 {
+		t.Fatalf("cache hit must not charge provider usage: %#v", second.Usage)
 	}
 	if got := provider.calls.Load(); got != 1 {
 		t.Fatalf("provider called %d times, want 1", got)
@@ -176,5 +186,123 @@ func TestServiceSearchCacheEvictsWhenCapacityReached(t *testing.T) {
 	}
 	if _, ok := service.cache[service.searchCacheKey("primary", SearchRequest{Query: "one", Kind: SearchKindWeb})]; ok {
 		t.Fatal("oldest cache entry should have been evicted")
+	}
+}
+
+func TestCandidateProviderIDsUsesConfiguredRouteOrder(t *testing.T) {
+	primary := &cacheTestProvider{}
+	backup := &cacheTestProvider{}
+	providers := NewProviderSet("searxng_local")
+	providers.RegisterWithPriority("searxng_local", primary, 100)
+	providers.RegisterWithPriority("brave_primary", backup, 90)
+	service := NewService(Config{
+		Enabled:         true,
+		DefaultProvider: "searxng_local",
+		Providers: map[string]ProviderConfig{
+			"searxng_local": {Enabled: true},
+			"brave_primary": {Enabled: true},
+		},
+		Routes: map[string]ProviderRouteConfig{
+			"general": {Preferred: []string{"brave_primary"}, Fallback: []string{"searxng_local"}},
+		},
+	}, providers)
+
+	got := service.CandidateProviderIDs(SearchKindWeb)
+	if len(got) != 2 || got[0] != "brave_primary" || got[1] != "searxng_local" {
+		t.Fatalf("unexpected route order: %#v", got)
+	}
+}
+
+func TestSearchAdvancedTagsConfiguredProviderInstance(t *testing.T) {
+	provider := &cacheTestProvider{}
+	providers := NewProviderSet("brave_primary")
+	providers.RegisterWithPriority("brave_primary", provider, 100)
+	service := NewService(Config{
+		Enabled:         true,
+		DefaultProvider: "brave_primary",
+		Providers: map[string]ProviderConfig{
+			"brave_primary": {Enabled: true},
+		},
+	}, providers)
+
+	resp, err := service.SearchAdvancedWithProvider(context.Background(), SearchRequest{Query: "instance identity", Kind: SearchKindWeb}, "invoke", "brave_primary")
+	if err != nil {
+		t.Fatalf("search: %v", err)
+	}
+	if resp.Provider != "brave_primary" {
+		t.Fatalf("response provider=%q, want brave_primary", resp.Provider)
+	}
+	if len(resp.Results) != 1 || resp.Results[0].Source.Provider != "brave_primary" {
+		t.Fatalf("result provider identity not normalized to configured instance: %#v", resp.Results)
+	}
+}
+
+func TestServiceNegativeCacheUsesShortTTLAndMetrics(t *testing.T) {
+	providers := NewProviderSet("empty")
+	empty := &fakeProviderForService{enabled: true}
+	providers.RegisterWithPriority("empty", empty, 100)
+	service := NewService(Config{
+		Enabled:          true,
+		DefaultProvider:  "empty",
+		CacheTTL:         time.Minute,
+		NegativeCacheTTL: 20 * time.Millisecond,
+		Providers: map[string]ProviderConfig{
+			"empty": {Enabled: true},
+		},
+	}, providers)
+
+	req := SearchRequest{Query: "no results", Kind: SearchKindWeb}
+	first, err := service.SearchAdvancedWithProvider(context.Background(), req, "invoke", "empty")
+	if err != nil {
+		t.Fatalf("first search: %v", err)
+	}
+	if first.Returned != 0 || first.CacheHit {
+		t.Fatalf("unexpected first response: %#v", first)
+	}
+	second, err := service.SearchAdvancedWithProvider(context.Background(), req, "invoke", "empty")
+	if err != nil {
+		t.Fatalf("second search: %v", err)
+	}
+	if !second.CacheHit {
+		t.Fatal("empty response should be negative-cache hit")
+	}
+	metrics := service.CacheMetrics()
+	if metrics.NegativeHit != 1 || metrics.Miss < 1 {
+		t.Fatalf("unexpected cache metrics: %#v", metrics)
+	}
+	time.Sleep(30 * time.Millisecond)
+	third, err := service.SearchAdvancedWithProvider(context.Background(), req, "invoke", "empty")
+	if err != nil {
+		t.Fatalf("third search: %v", err)
+	}
+	if third.CacheHit {
+		t.Fatal("negative cache entry should expire using the shorter TTL")
+	}
+}
+
+func TestSearchCacheKeySeparatesExcludedDomains(t *testing.T) {
+	service := NewService(Config{Enabled: true, CacheTTL: time.Minute}, NewProviderSet(""))
+	base := SearchRequest{Query: "same query", Kind: SearchKindWeb, Domains: []string{"docs.example.com"}}
+	first := base
+	first.ExcludeDomains = []string{"spam.example"}
+	second := base
+	second.ExcludeDomains = []string{"ads.example"}
+	if service.searchCacheKey("provider", first) == service.searchCacheKey("provider", second) {
+		t.Fatal("different excludeDomains must not share the same cache key")
+	}
+
+	third := base
+	third.ExcludeDomains = []string{"SPAM.EXAMPLE", " spam.example "}
+	if service.searchCacheKey("provider", first) != service.searchCacheKey("provider", third) {
+		t.Fatal("equivalent excludeDomains should canonicalize to the same cache key")
+	}
+}
+
+func TestSearchCacheKeyCanonicalizesQueryCaseAndWhitespace(t *testing.T) {
+	service := NewService(Config{Enabled: true, CacheTTL: time.Minute}, NewProviderSet(""))
+	first := SearchRequest{Query: "  Codex   Search  ", Kind: SearchKindWeb}
+	second := SearchRequest{Query: "codex search", Kind: SearchKindWeb}
+	if service.searchCacheKey("provider", first) != service.searchCacheKey("provider", second) {
+		t.Fatal("query case and repeated whitespace should canonicalize to the same cache key")
 	}
 }

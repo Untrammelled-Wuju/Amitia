@@ -115,7 +115,10 @@ type ContainerBuilder struct {
 	iosNativeProvider            capability.IOSProvider
 	host                         runtimehost.RuntimeHost
 	searchConfig                 search.Config
+	searchProviders              []SearchProviderRegistration
 	webResearchConfig            webresearch.Config
+	webResearchReranker          webresearch.SemanticReranker
+	webResearchFetchProviders    []webresearch.AdvancedFetchProvider
 	visionSvc                    vision.Service
 	imagegenSvc                  imagegen.Service
 	imageProviderRegistry        *imageprovider.Registry
@@ -251,8 +254,25 @@ func (b *ContainerBuilder) WithSearchConfig(cfg search.Config) *ContainerBuilder
 	return b
 }
 
+func (b *ContainerBuilder) WithSearchProvider(registration SearchProviderRegistration) *ContainerBuilder {
+	b.searchProviders = append(b.searchProviders, registration)
+	return b
+}
+
 func (b *ContainerBuilder) WithWebResearchConfig(cfg webresearch.Config) *ContainerBuilder {
 	b.webResearchConfig = cfg
+	return b
+}
+
+func (b *ContainerBuilder) WithWebResearchSemanticReranker(reranker webresearch.SemanticReranker) *ContainerBuilder {
+	b.webResearchReranker = reranker
+	return b
+}
+
+func (b *ContainerBuilder) WithWebResearchFetchProvider(provider webresearch.AdvancedFetchProvider) *ContainerBuilder {
+	if provider != nil {
+		b.webResearchFetchProviders = append(b.webResearchFetchProviders, provider)
+	}
 	return b
 }
 
@@ -1284,21 +1304,24 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		deviceRuntimePort = capability.NewMeshDeviceRuntimeInvocationPort(meshPorts)
 	}
 
-	searchService := buildSearchService(b.searchConfig, kernelSecretBroker)
+	searchService := buildSearchService(b.searchConfig, kernelSecretBroker, b.scopeRelationDB, b.searchProviders)
 	webStore := webresearch.NewStore(db)
 	if err := webStore.EnsureSchema(ctx); err != nil {
 		return nil, fmt.Errorf("kernel: ensure web research schema: %w", err)
-	}
-	var webBrowser webresearch.BrowserReader
-	if b.browserProvider != nil {
-		webBrowser = webresearch.NewAmitiaBrowserReader(b.browserProvider)
 	}
 	webConfig := b.webResearchConfig
 	if webConfig == (webresearch.Config{}) {
 		webConfig = webresearch.DefaultConfig()
 	}
-	webConfig.Enabled = webConfig.Enabled && b.searchConfig.Enabled && b.searchConfig.HasProvider()
-	webRuntime := webresearch.NewRuntime(webConfig, searchService, webStore, webBrowser)
+	var webBrowser webresearch.BrowserReader
+	if b.browserProvider != nil {
+		webBrowser = webresearch.NewAmitiaBrowserReader(b.browserProvider).WithMaxScrolls(webConfig.MaxBrowserScrolls)
+	}
+	webConfig.Enabled = webConfig.Enabled && b.searchConfig.Enabled && (b.searchConfig.HasProvider() || len(b.searchProviders) > 0)
+	webRuntime := webresearch.NewRuntime(webConfig, searchService, webStore, webBrowser).WithSemanticReranker(b.webResearchReranker)
+	for _, fetchProvider := range b.webResearchFetchProviders {
+		webRuntime.WithFetchProvider(fetchProvider)
+	}
 
 	if err := RegisterProductionAdapters(adapterRegistry, AdapterRegistrationDeps{
 		JSGlobalFactory:   jsFactory,

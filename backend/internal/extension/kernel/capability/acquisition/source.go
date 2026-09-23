@@ -97,6 +97,9 @@ func (s *InstalledSource) searchByCapability(requestedID capability.CapabilityID
 		}
 		candidate := CapabilityCandidate{
 			ID:           string(def.ID),
+			ExtensionID:  def.ExtensionID,
+			PackageName:  def.ExtensionID,
+			ProviderID:   string(def.ID),
 			Kind:         CandidateInstalledExtension,
 			Name:         string(def.CapabilityID),
 			Description:  "Installed but not enabled capability",
@@ -107,6 +110,11 @@ func (s *InstalledSource) searchByCapability(requestedID capability.CapabilityID
 			},
 			Trust: CandidateTrust{
 				Level: TrustVerified,
+			},
+			Metadata: map[string]any{
+				"extensionId": def.ExtensionID,
+				"packageName": def.ExtensionID,
+				"providerId":  string(def.ID),
 			},
 		}
 		candidates = append(candidates, candidate)
@@ -134,6 +142,9 @@ func (s *InstalledSource) searchAllInstalled() ([]CapabilityCandidate, error) {
 
 		candidate := CapabilityCandidate{
 			ID:           string(def.ID),
+			ExtensionID:  def.ExtensionID,
+			PackageName:  def.ExtensionID,
+			ProviderID:   string(def.ID),
 			Kind:         CandidateInstalledExtension,
 			Name:         string(def.CapabilityID),
 			Description:  "Installed but not enabled capability",
@@ -144,6 +155,11 @@ func (s *InstalledSource) searchAllInstalled() ([]CapabilityCandidate, error) {
 			},
 			Trust: CandidateTrust{
 				Level: TrustVerified,
+			},
+			Metadata: map[string]any{
+				"extensionId": def.ExtensionID,
+				"packageName": def.ExtensionID,
+				"providerId":  string(def.ID),
 			},
 		}
 		candidates = append(candidates, candidate)
@@ -222,6 +238,8 @@ func (s *AgentSkillSource) buildCandidate(item agent_skill.AgentSkillDefinition,
 
 	return &CapabilityCandidate{
 		ID:           item.ExtensionID,
+		ExtensionID:  item.ExtensionID,
+		PackageName:  item.ExtensionID,
 		Kind:         CandidateAgentSkill,
 		Name:         item.Name,
 		Description:  item.Description,
@@ -231,6 +249,10 @@ func (s *AgentSkillSource) buildCandidate(item agent_skill.AgentSkillDefinition,
 		},
 		Trust: CandidateTrust{
 			Level: TrustVerified,
+		},
+		Metadata: map[string]any{
+			"extensionId": item.ExtensionID,
+			"packageName": item.ExtensionID,
 		},
 	}
 }
@@ -508,6 +530,8 @@ func (s *ExtensionCatalogSource) buildCandidate(card extension_center.ExtensionC
 
 	return CapabilityCandidate{
 		ID:           card.ExtensionID,
+		ExtensionID:  card.ExtensionID,
+		PackageName:  card.ExtensionID,
 		Kind:         CandidateExtensionPackage,
 		Name:         card.DisplayName,
 		Description:  card.Description,

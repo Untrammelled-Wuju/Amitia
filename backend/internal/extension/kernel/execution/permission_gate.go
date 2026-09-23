@@ -2,6 +2,8 @@ package execution
 
 import (
 	"context"
+	"log"
+	"strings"
 
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	"github.com/u-ai/backend/internal/extension/kernel/permission"
@@ -26,48 +28,64 @@ type PermissionGate struct {
 	Broker     permission.PermissionBroker
 }
 
+type PermissionGateEvaluation struct {
+	Decision PermissionDecision
+	Subject  permission.PermissionSubject
+	Reasons  []permission.PermissionReason
+}
+
 func (g *PermissionGate) Evaluate(ctx context.Context, tool capability.ToolDefinition, inv capability.ToolInvocationContext) PermissionDecision {
+	return g.EvaluateDetailed(ctx, tool, inv).Decision
+}
+
+func (g *PermissionGate) EvaluateDetailed(ctx context.Context, tool capability.ToolDefinition, inv capability.ToolInvocationContext) PermissionGateEvaluation {
 	if g.OnEvaluate != nil {
-		return g.OnEvaluate(ctx, tool, inv)
+		return PermissionGateEvaluation{Decision: g.OnEvaluate(ctx, tool, inv)}
 	}
 	if g.Broker == nil {
-		return PermissionDeny
+		return PermissionGateEvaluation{Decision: PermissionDeny}
 	}
 	return g.evaluateWithBroker(ctx, tool, inv)
 }
 
-func (g *PermissionGate) evaluateWithBroker(ctx context.Context, tool capability.ToolDefinition, inv capability.ToolInvocationContext) PermissionDecision {
-	subject := permission.SubjectForTool(tool.ExtensionID, tool.ID)
-	if tool.ExtensionID == "" {
-		subject = permission.PermissionSubject{Type: permission.SubjectSystem, ID: "core"}
-	}
+func (g *PermissionGate) evaluateWithBroker(ctx context.Context, tool capability.ToolDefinition, inv capability.ToolInvocationContext) PermissionGateEvaluation {
+	subject := permission.SubjectForToolDefinition(tool)
 
-	scope := permission.PermissionScope{}
-	if inv.CharacterID != "" {
+	scope := permission.ScopeGlobalOnly()
+	if tool.ExtensionID != "" && inv.CharacterID != "" {
 		scope = permission.ScopeForCharacter(inv.CharacterID)
-	} else if inv.ConversationID != "" {
+	} else if tool.ExtensionID != "" && inv.ConversationID != "" {
 		scope = permission.ScopeForConversation(inv.ConversationID)
-	} else {
-		scope = permission.ScopeGlobalOnly()
 	}
 
 	requirements := permission.BuildRequirements(tool, scope)
 	if len(requirements) == 0 {
-		return PermissionAllow
+		return PermissionGateEvaluation{Decision: PermissionAllow, Subject: subject}
 	}
 
 	request := permission.BuildEvaluationRequestFromInvocation(subject, requirements, inv, string(tool.RiskLevel))
 
 	result := g.Broker.Evaluate(ctx, request)
+	if result.Decision != permission.DecisionAllow {
+		reasons := make([]string, 0, len(result.Reasons))
+		for _, reason := range result.Reasons {
+			value := reason.Code
+			if reason.Permission != "" {
+				value += ":" + reason.Permission
+			}
+			reasons = append(reasons, value)
+		}
+		log.Printf("[permission-gate] tool=%s subject=%s/%s approval_mode=%s scope_snapshot=%s decision=%s reasons=%s", tool.ID, subject.Type, subject.ID, inv.ApprovalMode, inv.ScopeSnapshotID, result.Decision, strings.Join(reasons, ","))
+	}
 
 	switch result.Decision {
 	case permission.DecisionAllow:
-		return PermissionAllow
+		return PermissionGateEvaluation{Decision: PermissionAllow, Subject: subject, Reasons: result.Reasons}
 	case permission.DecisionDeny:
-		return PermissionDeny
+		return PermissionGateEvaluation{Decision: PermissionDeny, Subject: subject, Reasons: result.Reasons}
 	case permission.DecisionRequireApproval:
-		return PermissionRequireApproval
+		return PermissionGateEvaluation{Decision: PermissionRequireApproval, Subject: subject, Reasons: result.Reasons}
 	default:
-		return PermissionDeny
+		return PermissionGateEvaluation{Decision: PermissionDeny, Subject: subject, Reasons: result.Reasons}
 	}
 }

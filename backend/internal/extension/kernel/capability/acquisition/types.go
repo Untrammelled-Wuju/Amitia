@@ -143,6 +143,9 @@ type CandidateMatch struct {
 
 type CapabilityCandidate struct {
 	ID           string                     `json:"id"`
+	ExtensionID  string                     `json:"extensionId,omitempty"`
+	PackageName  string                     `json:"packageName,omitempty"`
+	ProviderID   string                     `json:"providerId,omitempty"`
 	Kind         CandidateKind              `json:"kind"`
 	Name         string                     `json:"name"`
 	Description  string                     `json:"description"`

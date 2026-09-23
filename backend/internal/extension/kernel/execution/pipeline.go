@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
@@ -231,16 +232,16 @@ func (p *ExecutionPipeline) execute(ctx context.Context, request ToolExecutionRe
 	}
 
 	if p.PermissionGate != nil {
-		decision := p.PermissionGate.Evaluate(timeoutCtx, tool, inv)
-		switch decision {
+		evaluation := p.PermissionGate.EvaluateDetailed(timeoutCtx, tool, inv)
+		switch evaluation.Decision {
 		case PermissionDeny:
 			return p.finalizeCancellation(timeoutCtx, inv, p.failWithAudit(timeoutCtx, inv, toolID, capability.NewToolFailureResult(inv.InvocationID, toolID, &capability.ToolError{
 				Code:     capability.ErrorCodePermissionDenied,
 				Category: capability.ToolErrorCategoryPermission,
-				Message:  "permission denied",
+				Message:  permissionEvaluationMessage(evaluation),
 			}))), nil
 		case PermissionRequireApproval:
-			approvalResult := p.handleApproval(timeoutCtx, tool, inv, decision, budget, request.Input)
+			approvalResult := p.handleApproval(timeoutCtx, tool, inv, evaluation.Decision, budget, request.Input)
 			if approvalResult != nil {
 				return *approvalResult, nil
 			}
@@ -929,6 +930,22 @@ func (p *ExecutionPipeline) checkChildScopeEscalation(ctx context.Context, inv c
 	return nil
 }
 
+func permissionEvaluationMessage(evaluation PermissionGateEvaluation) string {
+	message := fmt.Sprintf("permission denied: subject=%s/%s", evaluation.Subject.Type, evaluation.Subject.ID)
+	if len(evaluation.Reasons) == 0 {
+		return message
+	}
+	reasons := make([]string, 0, len(evaluation.Reasons))
+	for _, reason := range evaluation.Reasons {
+		if reason.Permission == "" {
+			reasons = append(reasons, reason.Code)
+		} else {
+			reasons = append(reasons, reason.Code+":"+reason.Permission)
+		}
+	}
+	return message + ", reasons=" + strings.Join(reasons, ",")
+}
+
 func (p *ExecutionPipeline) handleApproval(ctx context.Context, tool capability.ToolDefinition, inv capability.ToolInvocationContext, decision PermissionDecision, budget TimeoutBudget, input json.RawMessage) *capability.UnifiedToolResult {
 	toolID := string(tool.ID)
 	result, cancelled := p.checkTimeout(ctx, inv, toolID, budget, TimeoutPhasePreDispatch)
@@ -1031,7 +1048,7 @@ func (p *ExecutionPipeline) runApprovalWithReEvaluate(ctx context.Context, tool 
 	}
 
 	reEvalReq := permission.PermissionEvaluationRequest{
-		Subject:          permission.SubjectForTool(tool.ExtensionID, tool.ID),
+		Subject:          permission.SubjectForToolDefinition(tool),
 		Requirements:     buildPermissionRequirements(tool, inv),
 		InvocationID:     inv.InvocationID,
 		RiskLevel:        string(tool.RiskLevel),
@@ -1140,13 +1157,7 @@ func inferScopeExpression(tool capability.ToolDefinition) scope.ScopeExpression 
 }
 
 func buildPermissionRequirements(tool capability.ToolDefinition, inv capability.ToolInvocationContext) []permission.PermissionRequirement {
-	requirements := make([]permission.PermissionRequirement, 0)
-	for _, p := range tool.Permissions {
-		requirements = append(requirements, permission.PermissionRequirement{
-			PermissionID: p.Capability,
-		})
-	}
-	return requirements
+	return permission.BuildRequirements(tool, permission.ResolveScopeForInvocation(inv))
 }
 
 func collectGrantedPermissionIDs(tool capability.ToolDefinition) []string {

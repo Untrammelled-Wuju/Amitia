@@ -28,6 +28,11 @@ List<SettingGroup> _settingsGroups({
         route: AppRoutes.settingsModels,
       ),
       SettingItem(
+        title: '搜索 API',
+        icon: Icons.manage_search_outlined,
+        route: AppRoutes.settingsSearchApi,
+      ),
+      SettingItem(
         title: '外观设置',
         icon: Icons.palette_outlined,
         value: appearanceSummary,

@@ -1,0 +1,270 @@
+package engines
+
+import (
+	"context"
+	"net/http"
+	"strings"
+
+	"github.com/u-ai/backend/internal/search"
+	"github.com/u-ai/backend/internal/search/native"
+)
+
+type serperEngine struct {
+	fetcher *native.Fetcher
+}
+
+func NewSerperEngine(fetcher *native.Fetcher) *serperEngine {
+	return &serperEngine{fetcher: fetcherFor(fetcher)}
+}
+
+func (e *serperEngine) Descriptor() native.EngineDescriptor {
+	return native.EngineDescriptor{
+		ID:       "serper",
+		Name:     "Serper",
+		Priority: 92,
+		Weight:   1.4,
+		Capabilities: search.ProviderCapabilities{
+			GeneralWeb:      true,
+			SearchKinds:     []search.SearchKind{search.SearchKindWeb, search.SearchKindNews, search.SearchKindImage},
+			LanguageFilter:  true,
+			CountryFilter:   true,
+			SafeSearch:      true,
+			Pagination:      true,
+			TimeRangeFilter: true,
+			DomainFilter:    true,
+			MaxResults:      100,
+		},
+	}
+}
+
+func (e *serperEngine) Search(ctx context.Context, request search.SearchRequest) (search.ProviderSearchResponse, error) {
+	credential := search.EngineCredentialFromContext(ctx, e.Descriptor().ID)
+	if credential == "" {
+		return search.ProviderSearchResponse{}, search.NewError(search.SEARCH_PROVIDER_AUTH_FAILED, e.Descriptor().ID, false, nil)
+	}
+	path := "https://google.serper.dev/search"
+	switch request.Kind {
+	case search.SearchKindNews:
+		path = "https://google.serper.dev/news"
+	case search.SearchKindImage:
+		path = "https://google.serper.dev/images"
+	}
+	payload := map[string]any{
+		"q":   queryWithDomains(request.Query, request.Domains),
+		"num": boundedLimit(request.Limit, 8, 100),
+	}
+	if request.Language != "" {
+		payload["hl"] = request.Language
+	}
+	if request.Country != "" {
+		payload["gl"] = request.Country
+	}
+	body, status, err := e.fetcher.PostJSON(ctx, e.Descriptor().ID, path, http.Header{
+		"X-API-KEY": []string{credential},
+	}, payload)
+	if err != nil {
+		return search.ProviderSearchResponse{}, err
+	}
+	payloadData, err := decodeJSON[struct {
+		Organic []struct {
+			Title    string `json:"title"`
+			Link     string `json:"link"`
+			Snippet  string `json:"snippet"`
+			Date     string `json:"date"`
+			ImageURL string `json:"imageUrl"`
+			Source   string `json:"source"`
+		} `json:"organic"`
+		News []struct {
+			Title    string `json:"title"`
+			Link     string `json:"link"`
+			Snippet  string `json:"snippet"`
+			Date     string `json:"date"`
+			ImageURL string `json:"imageUrl"`
+			Source   string `json:"source"`
+		} `json:"news"`
+		Images []struct {
+			Title    string `json:"title"`
+			Link     string `json:"link"`
+			ImageURL string `json:"imageUrl"`
+			Source   string `json:"source"`
+		} `json:"images"`
+	}](body)
+	if err != nil {
+		return search.ProviderSearchResponse{}, search.NewError(search.SEARCH_PROVIDER_INVALID_RESPONSE, e.Descriptor().ID, false, err)
+	}
+	results := make([]search.SearchResult, 0, len(payloadData.Organic)+len(payloadData.News)+len(payloadData.Images))
+	for _, item := range payloadData.Organic {
+		if item.Title == "" || item.Link == "" {
+			continue
+		}
+		current := result(e.Descriptor().ID, item.Title, item.Link, item.Snippet, len(results)+1)
+		current.Metadata.Type = "web"
+		current.Metadata.Merchant = item.Source
+		if parsed := parseTime(item.Date); parsed != nil {
+			current.PublishedAt = parsed
+		}
+		results = append(results, current)
+	}
+	for _, item := range payloadData.News {
+		if item.Title == "" || item.Link == "" {
+			continue
+		}
+		current := result(e.Descriptor().ID, item.Title, item.Link, item.Snippet, len(results)+1)
+		current.Metadata.Type = "news"
+		current.Metadata.Merchant = item.Source
+		current.Metadata.ThumbnailURL = item.ImageURL
+		if parsed := parseTime(item.Date); parsed != nil {
+			current.PublishedAt = parsed
+		}
+		results = append(results, current)
+	}
+	for _, item := range payloadData.Images {
+		if item.Title == "" || item.Link == "" {
+			continue
+		}
+		current := result(e.Descriptor().ID, item.Title, item.Link, item.Source, len(results)+1)
+		current.Metadata.Type = "image"
+		current.Metadata.MediaURL = item.ImageURL
+		current.Metadata.ThumbnailURL = item.ImageURL
+		results = append(results, current)
+	}
+	return search.ProviderSearchResponse{Results: withProviders(e.Descriptor().ID, results), HasMore: len(results) >= boundedLimit(request.Limit, 8, 100), HTTPStatus: status, RawBytes: len(body)}, nil
+}
+
+type tavilyEngine struct {
+	fetcher *native.Fetcher
+}
+
+func NewTavilyEngine(fetcher *native.Fetcher) *tavilyEngine {
+	return &tavilyEngine{fetcher: fetcherFor(fetcher)}
+}
+
+func (e *tavilyEngine) Descriptor() native.EngineDescriptor {
+	return native.EngineDescriptor{
+		ID:       "tavily",
+		Name:     "Tavily",
+		Priority: 88,
+		Weight:   1.3,
+		Capabilities: search.ProviderCapabilities{
+			GeneralWeb:  true,
+			SearchKinds: []search.SearchKind{search.SearchKindWeb, search.SearchKindNews},
+			Pagination:  true,
+			MaxResults:  20,
+		},
+	}
+}
+
+func (e *tavilyEngine) Search(ctx context.Context, request search.SearchRequest) (search.ProviderSearchResponse, error) {
+	credential := search.EngineCredentialFromContext(ctx, e.Descriptor().ID)
+	if credential == "" {
+		return search.ProviderSearchResponse{}, search.NewError(search.SEARCH_PROVIDER_AUTH_FAILED, e.Descriptor().ID, false, nil)
+	}
+	payload := map[string]any{
+		"api_key":      credential,
+		"query":        strings.TrimSpace(request.Query),
+		"max_results":  boundedLimit(request.Limit, 8, 20),
+		"search_depth": "basic",
+	}
+	body, status, err := e.fetcher.PostJSON(ctx, e.Descriptor().ID, "https://api.tavily.com/search", nil, payload)
+	if err != nil {
+		return search.ProviderSearchResponse{}, err
+	}
+	payloadData, err := decodeJSON[struct {
+		Results []struct {
+			Title         string  `json:"title"`
+			URL           string  `json:"url"`
+			Content       string  `json:"content"`
+			Score         float64 `json:"score"`
+			PublishedDate string  `json:"published_date"`
+		} `json:"results"`
+	}](body)
+	if err != nil {
+		return search.ProviderSearchResponse{}, search.NewError(search.SEARCH_PROVIDER_INVALID_RESPONSE, e.Descriptor().ID, false, err)
+	}
+	results := make([]search.SearchResult, 0, len(payloadData.Results))
+	for _, item := range payloadData.Results {
+		if item.Title == "" || item.URL == "" {
+			continue
+		}
+		current := result(e.Descriptor().ID, item.Title, item.URL, item.Content, len(results)+1)
+		current.Metadata.Type = "web"
+		current.Metadata.Rating = floatPointer(item.Score)
+		if parsed := parseTime(item.PublishedDate); parsed != nil {
+			current.PublishedAt = parsed
+		}
+		results = append(results, current)
+	}
+	return search.ProviderSearchResponse{Results: withProviders(e.Descriptor().ID, results), HasMore: len(results) >= boundedLimit(request.Limit, 8, 20), HTTPStatus: status, RawBytes: len(body)}, nil
+}
+
+type exaEngine struct {
+	fetcher *native.Fetcher
+}
+
+func NewExaEngine(fetcher *native.Fetcher) *exaEngine {
+	return &exaEngine{fetcher: fetcherFor(fetcher)}
+}
+
+func (e *exaEngine) Descriptor() native.EngineDescriptor {
+	return native.EngineDescriptor{
+		ID:       "exa",
+		Name:     "Exa",
+		Priority: 84,
+		Weight:   1.2,
+		Capabilities: search.ProviderCapabilities{
+			GeneralWeb:  true,
+			SearchKinds: []search.SearchKind{search.SearchKindWeb, search.SearchKindAcademic},
+			Pagination:  true,
+			MaxResults:  100,
+		},
+	}
+}
+
+func (e *exaEngine) Search(ctx context.Context, request search.SearchRequest) (search.ProviderSearchResponse, error) {
+	credential := search.EngineCredentialFromContext(ctx, e.Descriptor().ID)
+	if credential == "" {
+		return search.ProviderSearchResponse{}, search.NewError(search.SEARCH_PROVIDER_AUTH_FAILED, e.Descriptor().ID, false, nil)
+	}
+	payload := map[string]any{
+		"query":      strings.TrimSpace(request.Query),
+		"numResults": boundedLimit(request.Limit, 8, 100),
+		"type":       "auto",
+		"contents": map[string]any{
+			"text": map[string]any{"maxCharacters": 1200},
+		},
+	}
+	body, status, err := e.fetcher.PostJSON(ctx, e.Descriptor().ID, "https://api.exa.ai/search", http.Header{
+		"x-api-key": []string{credential},
+	}, payload)
+	if err != nil {
+		return search.ProviderSearchResponse{}, err
+	}
+	payloadData, err := decodeJSON[struct {
+		Results []struct {
+			Title         string  `json:"title"`
+			URL           string  `json:"url"`
+			Text          string  `json:"text"`
+			PublishedDate string  `json:"publishedDate"`
+			Author        string  `json:"author"`
+			Score         float64 `json:"score"`
+		} `json:"results"`
+	}](body)
+	if err != nil {
+		return search.ProviderSearchResponse{}, search.NewError(search.SEARCH_PROVIDER_INVALID_RESPONSE, e.Descriptor().ID, false, err)
+	}
+	results := make([]search.SearchResult, 0, len(payloadData.Results))
+	for _, item := range payloadData.Results {
+		if item.Title == "" || item.URL == "" {
+			continue
+		}
+		current := result(e.Descriptor().ID, item.Title, item.URL, item.Text, len(results)+1)
+		current.Metadata.Type = "web"
+		current.Metadata.Authors = []string{item.Author}
+		current.Metadata.Rating = floatPointer(item.Score)
+		if parsed := parseTime(item.PublishedDate); parsed != nil {
+			current.PublishedAt = parsed
+		}
+		results = append(results, current)
+	}
+	return search.ProviderSearchResponse{Results: withProviders(e.Descriptor().ID, results), HasMore: len(results) >= boundedLimit(request.Limit, 8, 100), HTTPStatus: status, RawBytes: len(body)}, nil
+}

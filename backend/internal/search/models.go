@@ -24,35 +24,46 @@ func (m SafeSearchMode) Valid() bool {
 type SearchKind string
 
 const (
-	SearchKindWeb      SearchKind = "web"
-	SearchKindNews     SearchKind = "news"
-	SearchKindAcademic SearchKind = "academic"
-	SearchKindCode     SearchKind = "code"
-	SearchKindImage    SearchKind = "image"
-	SearchKindVideo    SearchKind = "video"
-	SearchKindPlaces   SearchKind = "places"
-	SearchKindProduct  SearchKind = "product"
+	SearchKindWeb         SearchKind = "web"
+	SearchKindNews        SearchKind = "news"
+	SearchKindAcademic    SearchKind = "academic"
+	SearchKindCode        SearchKind = "code"
+	SearchKindImage       SearchKind = "image"
+	SearchKindVideo       SearchKind = "video"
+	SearchKindPlaces      SearchKind = "places"
+	SearchKindProduct     SearchKind = "product"
+	SearchKindMusic       SearchKind = "music"
+	SearchKindFiles       SearchKind = "files"
+	SearchKindSocial      SearchKind = "social"
+	SearchKindSoftware    SearchKind = "software"
+	SearchKindTranslation SearchKind = "translation"
+	SearchKindDictionary  SearchKind = "dictionary"
+	SearchKindWeather     SearchKind = "weather"
+	SearchKindCurrency    SearchKind = "currency"
 )
 
 func (k SearchKind) Valid() bool {
 	switch k {
 	case SearchKindWeb, SearchKindNews, SearchKindAcademic, SearchKindCode,
-		SearchKindImage, SearchKindVideo, SearchKindPlaces, SearchKindProduct:
+		SearchKindImage, SearchKindVideo, SearchKindPlaces, SearchKindProduct,
+		SearchKindMusic, SearchKindFiles, SearchKindSocial, SearchKindSoftware,
+		SearchKindTranslation, SearchKindDictionary, SearchKindWeather, SearchKindCurrency:
 		return true
 	}
 	return false
 }
 
 type ProviderCapabilities struct {
-	GeneralWeb      bool         `json:"generalWeb"`
-	SearchKinds     []SearchKind `json:"searchKinds,omitempty"`
-	LanguageFilter  bool         `json:"languageFilter"`
-	CountryFilter   bool         `json:"countryFilter"`
-	SafeSearch      bool         `json:"safeSearch"`
-	Pagination      bool         `json:"pagination"`
-	TimeRangeFilter bool         `json:"timeRangeFilter,omitempty"`
-	DomainFilter    bool         `json:"domainFilter,omitempty"`
-	MaxResults      int          `json:"maxResults"`
+	GeneralWeb          bool         `json:"generalWeb"`
+	SearchKinds         []SearchKind `json:"searchKinds,omitempty"`
+	LanguageFilter      bool         `json:"languageFilter"`
+	CountryFilter       bool         `json:"countryFilter"`
+	SafeSearch          bool         `json:"safeSearch"`
+	Pagination          bool         `json:"pagination"`
+	TimeRangeFilter     bool         `json:"timeRangeFilter,omitempty"`
+	DomainFilter        bool         `json:"domainFilter,omitempty"`
+	ExcludeDomainFilter bool         `json:"excludeDomainFilter,omitempty"`
+	MaxResults          int          `json:"maxResults"`
 }
 
 type ProviderHealth string
@@ -135,16 +146,17 @@ type GeneralSearchRequest struct {
 }
 
 type SearchRequest struct {
-	Query       string                   `json:"query"`
-	Kind        SearchKind               `json:"kind,omitempty"`
-	Limit       int                      `json:"limit,omitempty"`
-	Offset      int                      `json:"offset,omitempty"`
-	Language    string                   `json:"language,omitempty"`
-	Country     string                   `json:"country,omitempty"`
-	SafeSearch  SafeSearchMode           `json:"safeSearch,omitempty"`
-	TimeRange   *TimeRangeFilter         `json:"timeRange,omitempty"`
-	Domains     []string                 `json:"domains,omitempty"`
-	Specialized SpecializedSearchOptions `json:"specialized,omitempty"`
+	Query          string                   `json:"query"`
+	Kind           SearchKind               `json:"kind,omitempty"`
+	Limit          int                      `json:"limit,omitempty"`
+	Offset         int                      `json:"offset,omitempty"`
+	Language       string                   `json:"language,omitempty"`
+	Country        string                   `json:"country,omitempty"`
+	SafeSearch     SafeSearchMode           `json:"safeSearch,omitempty"`
+	TimeRange      *TimeRangeFilter         `json:"timeRange,omitempty"`
+	Domains        []string                 `json:"domains,omitempty"`
+	ExcludeDomains []string                 `json:"excludeDomains,omitempty"`
+	Specialized    SpecializedSearchOptions `json:"specialized,omitempty"`
 }
 
 type SearchSourceMetadata struct {
@@ -160,6 +172,7 @@ type SearchResultMetadata struct {
 	Authors         []string `json:"authors,omitempty"`
 	DOI             string   `json:"doi,omitempty"`
 	Journal         string   `json:"journal,omitempty"`
+	Album           string   `json:"album,omitempty"`
 	Year            int      `json:"year,omitempty"`
 	Repository      string   `json:"repository,omitempty"`
 	Path            string   `json:"path,omitempty"`
@@ -229,6 +242,7 @@ type GeneralSearchResponse struct {
 	HasMore     bool           `json:"hasMore,omitempty"`
 	RetrievedAt time.Time      `json:"retrievedAt"`
 	DurationMs  int64          `json:"durationMs"`
+	Usage       ProviderUsage  `json:"usage,omitempty"`
 }
 
 type SearchResponse struct {
@@ -242,32 +256,35 @@ type SearchResponse struct {
 	RetrievedAt time.Time      `json:"retrievedAt"`
 	DurationMs  int64          `json:"durationMs"`
 	CacheHit    bool           `json:"cacheHit,omitempty"`
+	Usage       ProviderUsage  `json:"usage,omitempty"`
 	CitationSet CitationSet    `json:"citationSet,omitempty"`
 }
 
 type ToolInput struct {
-	Query       string                   `json:"query"`
-	Kind        SearchKind               `json:"kind,omitempty"`
-	Limit       int                      `json:"limit,omitempty"`
-	Offset      int                      `json:"offset,omitempty"`
-	Language    string                   `json:"language,omitempty"`
-	Country     string                   `json:"country,omitempty"`
-	SafeSearch  SafeSearchMode           `json:"safeSearch,omitempty"`
-	Domains     []string                 `json:"domains,omitempty"`
-	Specialized SpecializedSearchOptions `json:"specialized,omitempty"`
+	Query          string                   `json:"query"`
+	Kind           SearchKind               `json:"kind,omitempty"`
+	Limit          int                      `json:"limit,omitempty"`
+	Offset         int                      `json:"offset,omitempty"`
+	Language       string                   `json:"language,omitempty"`
+	Country        string                   `json:"country,omitempty"`
+	SafeSearch     SafeSearchMode           `json:"safeSearch,omitempty"`
+	Domains        []string                 `json:"domains,omitempty"`
+	ExcludeDomains []string                 `json:"excludeDomains,omitempty"`
+	Specialized    SpecializedSearchOptions `json:"specialized,omitempty"`
 }
 
 func (in *ToolInput) ToRequest() SearchRequest {
 	return SearchRequest{
-		Query:       in.Query,
-		Kind:        in.Kind,
-		Limit:       in.Limit,
-		Offset:      in.Offset,
-		Language:    in.Language,
-		Country:     in.Country,
-		SafeSearch:  in.SafeSearch,
-		Domains:     in.Domains,
-		Specialized: in.Specialized,
+		Query:          in.Query,
+		Kind:           in.Kind,
+		Limit:          in.Limit,
+		Offset:         in.Offset,
+		Language:       in.Language,
+		Country:        in.Country,
+		SafeSearch:     in.SafeSearch,
+		Domains:        in.Domains,
+		ExcludeDomains: in.ExcludeDomains,
+		Specialized:    in.Specialized,
 	}
 }
 

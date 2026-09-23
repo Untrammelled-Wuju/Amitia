@@ -194,7 +194,10 @@ class _MarkdownBody extends StatelessWidget {
         'latex': LatexElementBuilder(
           textStyle: TextStyle(color: tokens.text, fontSize: 18),
         ),
-        'citation': _CitationBuilder(onCitation: onCitation, citationIds: citationIds),
+        'citation': _CitationBuilder(
+          onCitation: onCitation,
+          citationIds: citationIds,
+        ),
       },
       imageBuilder: (uri, title, alt) =>
           _AmitiaMarkdownImage(uri: uri, alt: alt ?? title ?? ''),
@@ -238,7 +241,7 @@ class _CitationBuilder extends MarkdownElementBuilder {
     TextStyle? parentStyle,
   ) {
     final id = element.textContent;
-    final isKnown = citationIds.isEmpty || citationIds.contains(id);
+    final isKnown = citationIds.contains(id);
     final text = Text(
       '[$id]',
       style: TextStyle(
@@ -249,10 +252,7 @@ class _CitationBuilder extends MarkdownElementBuilder {
       ),
     );
     if (!isKnown) return text;
-    return GestureDetector(
-      onTap: () => onCitation?.call(id),
-      child: text,
-    );
+    return GestureDetector(onTap: () => onCitation?.call(id), child: text);
   }
 }
 

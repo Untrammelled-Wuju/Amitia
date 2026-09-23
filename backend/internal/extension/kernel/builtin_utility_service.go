@@ -67,8 +67,16 @@ func (s *BuiltinUtilityService) Supports(name string) bool {
 	switch name {
 	case "read_file_part", "apply_file":
 		return s.workspace != nil
-	case "visit_web", "browser_close_all", "browser_fill_form":
-		return s.browser != nil
+	case "visit_web":
+		if s.browser == nil {
+			return false
+		}
+		caps := s.browser.BrowserCapabilities()
+		return caps.SupportsNavigation && caps.SupportsDOM
+	case "browser_close_all":
+		return s.browser != nil && s.browser.BrowserCapabilities().SupportsNavigation
+	case "browser_fill_form":
+		return s.browser != nil && s.browser.BrowserCapabilities().SupportsInteraction
 	case "bluetooth_send_and_read", "bluetooth_ble_write_and_read_characteristic", "press_key", "combined_operation":
 		return s.android != nil
 	case "execute_terminal", "execute_in_terminal_session_streaming", "get_terminal_session_screen", "ssh_login", "ssh_exit":

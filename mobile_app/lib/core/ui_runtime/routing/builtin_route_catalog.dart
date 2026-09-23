@@ -53,6 +53,7 @@ import '../../../features/dashboard/presentation/pages/dashboard_page.dart';
 import '../../../features/characters/presentation/pages/character_create_page.dart';
 import '../../../features/settings/presentation/pages/settings_page.dart';
 import '../../../features/settings/presentation/pages/model_settings_page.dart';
+import '../../../features/settings/presentation/pages/search_api_settings_page.dart';
 import '../../../features/settings/presentation/pages/appearance_settings_page.dart';
 import '../../../features/runtime/presentation/pages/runtime_page.dart';
 import '../../../features/settings/presentation/pages/runtime_mode_page.dart';
@@ -503,6 +504,14 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
       context: context,
       state: state,
       child: ModelConfigPage(modelType: state.pathParameters['modelType']!),
+    ),
+  ),
+  GoRoute(
+    path: AppRoutes.settingsSearchApi,
+    pageBuilder: (context, state) => slideFadePage(
+      context: context,
+      state: state,
+      child: const SearchApiSettingsPage(),
     ),
   ),
   GoRoute(

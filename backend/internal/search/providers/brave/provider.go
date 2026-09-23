@@ -107,15 +107,16 @@ func (p *Provider) ID() string {
 
 func (p *Provider) Capabilities() search.ProviderCapabilities {
 	return search.ProviderCapabilities{
-		GeneralWeb:      true,
-		SearchKinds:     []search.SearchKind{search.SearchKindWeb, search.SearchKindNews},
-		LanguageFilter:  true,
-		CountryFilter:   true,
-		SafeSearch:      true,
-		Pagination:      true,
-		TimeRangeFilter: true,
-		DomainFilter:    true,
-		MaxResults:      maxResults,
+		GeneralWeb:          true,
+		SearchKinds:         []search.SearchKind{search.SearchKindWeb, search.SearchKindNews},
+		LanguageFilter:      true,
+		CountryFilter:       true,
+		SafeSearch:          true,
+		Pagination:          true,
+		TimeRangeFilter:     true,
+		DomainFilter:        true,
+		ExcludeDomainFilter: true,
+		MaxResults:          maxResults,
 	}
 }
 
@@ -155,7 +156,11 @@ func (p *Provider) Search(ctx context.Context, req search.SearchRequest) (search
 	if readErr != nil {
 		return search.ProviderSearchResponse{}, readErr
 	}
-	return p.handleResponse(resp.StatusCode, body, req)
+	result, mappedErr := p.handleResponse(resp.StatusCode, body, req)
+	if searchErr, ok := mappedErr.(*search.Error); ok && searchErr.Code == search.SEARCH_PROVIDER_RATE_LIMITED {
+		searchErr.RetryAfter = search.ParseRetryAfter(resp.Header.Get("Retry-After"), time.Now())
+	}
+	return result, mappedErr
 }
 
 func AsSearchError(err error, target **search.Error) bool {
@@ -191,7 +196,7 @@ func (p *Provider) buildRequest(ctx context.Context, req search.SearchRequest, c
 		return nil, search.NewError(search.SEARCH_PROVIDER_REQUEST_FAILED, providerID, false, err)
 	}
 	q := u.Query()
-	q.Set("q", queryWithDomains(req.Query, req.Domains))
+	q.Set("q", queryWithDomains(req.Query, req.Domains, req.ExcludeDomains))
 	limit := req.Limit
 	if limit < 1 {
 		limit = search.DefaultLimit
@@ -226,26 +231,33 @@ func (p *Provider) buildRequest(ctx context.Context, req search.SearchRequest, c
 	return httpReq, nil
 }
 
-func queryWithDomains(query string, domains []string) string {
+func queryWithDomains(query string, domains, excludeDomains []string) string {
 	query = strings.TrimSpace(query)
-	if len(domains) == 0 {
-		return query
-	}
-	parts := make([]string, 0, len(domains))
+	parts := make([]string, 0, len(domains)+len(excludeDomains))
+	positive := make([]string, 0, len(domains))
 	for _, domain := range domains {
 		domain = strings.TrimSpace(domain)
 		if domain == "" {
 			continue
 		}
-		parts = append(parts, "site:"+domain)
+		positive = append(positive, "site:"+domain)
+	}
+	if len(positive) == 1 {
+		parts = append(parts, positive[0])
+	} else if len(positive) > 1 {
+		parts = append(parts, "("+strings.Join(positive, " OR ")+")")
+	}
+	for _, domain := range excludeDomains {
+		domain = strings.TrimSpace(domain)
+		if domain == "" {
+			continue
+		}
+		parts = append(parts, "-site:"+domain)
 	}
 	if len(parts) == 0 {
 		return query
 	}
-	if len(parts) == 1 {
-		return strings.TrimSpace(query + " " + parts[0])
-	}
-	return strings.TrimSpace(query + " (" + strings.Join(parts, " OR ") + ")")
+	return strings.TrimSpace(query + " " + strings.Join(parts, " "))
 }
 
 func mapTimeRange(filter *search.TimeRangeFilter) string {

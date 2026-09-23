@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 )
@@ -256,6 +257,13 @@ func (b *DefaultPermissionBroker) Evaluate(ctx context.Context, request Permissi
 			})
 			continue
 		}
+		if b.validateApprovalRecord(req.PermissionID, request) {
+			result.Reasons = append(result.Reasons, PermissionReason{
+				Code:       "approval_record_matched",
+				Permission: req.PermissionID,
+			})
+			continue
+		}
 
 		grants := b.cache.GetOrLoad(ctx, request.Subject, req.PermissionID, func() []PermissionGrant {
 			filter := PermissionGrantFilter{
@@ -388,10 +396,6 @@ func (b *DefaultPermissionBroker) validateApprovalRecord(permissionID string, re
 		return false
 	}
 	if currentKey != record.ExecutionBindingKey {
-		return false
-	}
-
-	if !record.ExecutionContext.IsDeviceExecution() {
 		return false
 	}
 
@@ -741,6 +745,9 @@ func (b *DefaultPermissionBroker) buildApprovalRequest(request PermissionEvaluat
 }
 
 func (b *DefaultPermissionBroker) isNotTrusted(subject PermissionSubject) bool {
+	if subject.Type == SubjectSystem && strings.TrimSpace(subject.ID) == "core" {
+		return false
+	}
 	b.mu.RLock()
 	checker := b.trustChecker
 	b.mu.RUnlock()

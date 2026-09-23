@@ -214,6 +214,22 @@ func DefaultMigrations() []Migration {
 		ModelScenarioRoutesMigration(),
 		ContinuityThreadRuntimeMigration(),
 		ContinuityRuntimeCompletionMigration(),
+		SearchApiCredentialsMigration(),
+	}
+}
+
+func SearchApiCredentialsMigration() Migration {
+	return Migration{
+		Version: "20260923001",
+		Name:    "create_search_api_credentials",
+		Up: func(s *Step) error {
+			s.CreateTable(`CREATE TABLE IF NOT EXISTS search_api_keys (
+				engine_id TEXT PRIMARY KEY,
+				api_key TEXT NOT NULL DEFAULT '',
+				updated_at DATETIME NOT NULL
+			)`)
+			return nil
+		},
 	}
 }
 

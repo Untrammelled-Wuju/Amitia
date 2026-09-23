@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/url"
 	"testing"
+	"time"
 )
 
 func TestValidateEndpoint_EmptyURL(t *testing.T) {
@@ -174,5 +175,48 @@ func TestSecureTransport_ResolveDirectIP(t *testing.T) {
 	}
 	if len(ips) != 1 || !ips[0].Equal(net.ParseIP("1.1.1.1")) {
 		t.Fatalf("wrong IP: %v", ips)
+	}
+}
+
+func TestSecureTransportRejectsObfuscatedNumericIPHosts(t *testing.T) {
+	transport := NewConfiguredTransport(true, false, false)
+	for _, rawURL := range []string{
+		"http://2130706433/",
+		"http://0x7f000001/",
+		"http://0177.0.0.1/",
+		"http://[fe80::1%25eth0]/",
+	} {
+		if _, err := transport.ValidateEndpoint(context.Background(), rawURL); err == nil {
+			t.Fatalf("expected URL to be rejected: %s", rawURL)
+		}
+	}
+}
+
+func TestValidateEndpointRejectsMixedPublicPrivateDNSAnswers(t *testing.T) {
+	st := NewSecureTransport()
+	st.resolver = func(context.Context, string) ([]net.IP, error) {
+		return []net.IP{net.ParseIP("1.1.1.1"), net.ParseIP("10.0.0.2")}, nil
+	}
+	if _, err := st.ValidateEndpoint(context.Background(), "https://mixed.example/"); err == nil {
+		t.Fatal("mixed public/private DNS answer must be rejected")
+	}
+}
+
+func TestDenyIPIPv4MappedIPv6AndIPv6PrivateRanges(t *testing.T) {
+	st := NewSecureTransport()
+	for _, raw := range []string{"::ffff:127.0.0.1", "fc00::1", "fe80::1", "::"} {
+		if !st.deniedIP(net.ParseIP(raw)) {
+			t.Fatalf("%s should be denied", raw)
+		}
+	}
+}
+
+func TestPinHTTPClientRejectsDialHostMutation(t *testing.T) {
+	st := NewSecureTransport()
+	u, _ := url.Parse("https://example.com")
+	client := st.PinHTTPClient(&validatedEndpoint{url: u, addresses: []net.IP{net.ParseIP("1.1.1.1")}}, time.Second)
+	transport := client.Transport.(*http.Transport)
+	if _, err := transport.DialContext(context.Background(), "tcp", "other.example:443"); err == nil {
+		t.Fatal("pinned transport must reject host mutation before dialing")
 	}
 }

@@ -259,3 +259,24 @@ func TestHTTPStatusHelpers(t *testing.T) {
 		t.Fatal("505 should be retryable")
 	}
 }
+
+func TestSanitizeQueryNormalizesWhitespace(t *testing.T) {
+	q, err := sanitizeQuery("  Codex\t  web\nresearch  ")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if q != "Codex web research" {
+		t.Fatalf("query whitespace not normalized: %q", q)
+	}
+}
+
+func TestValidateAndNormalizeCanonicalizesLanguageAndCountry(t *testing.T) {
+	in := &ToolInput{Query: "test", Language: "EN", Country: "us"}
+	v, err := validateAndNormalize(in)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if v.language != "en" || v.country != "US" {
+		t.Fatalf("unexpected canonical filters: language=%q country=%q", v.language, v.country)
+	}
+}

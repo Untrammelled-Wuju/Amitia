@@ -285,3 +285,66 @@ func TestWithDocumentPageFragmentUsesZeroBasedPage(t *testing.T) {
 		t.Fatalf("unexpected page fragment: %q", got)
 	}
 }
+
+func TestRuntimeRejectsDeepResearchWhenFeatureFlagDisabled(t *testing.T) {
+	providers := search.NewProviderSet("primary")
+	providers.RegisterWithPriority("primary", &runtimeTestProvider{id: "primary"}, 100)
+	searchService := search.NewService(search.Config{
+		Enabled:         true,
+		DefaultProvider: "primary",
+		Providers: map[string]search.ProviderConfig{
+			"primary": {Enabled: true},
+		},
+	}, providers)
+	cfg := DefaultConfig()
+	cfg.DeepResearchEnabled = false
+	runtime := NewRuntime(cfg, searchService, NewStore(nil), nil)
+	_, err := runtime.Execute(context.Background(), Scope{ConversationID: "c", TurnID: "t", InvocationID: "i"}, json.RawMessage(`{"mode":"deep_research","search_query":[{"q":"amitia"}]}`), nil)
+	if err == nil || err.Code != ErrNotConfigured {
+		t.Fatalf("expected feature flag error, got %#v", err)
+	}
+}
+
+func TestFuseResultsRespectsDomainDiversityLimit(t *testing.T) {
+	now := time.Now().UTC()
+	observations := []searchObservation{
+		{result: search.SearchResult{Rank: 1, Title: "One", URL: "https://same.example/1"}, query: "q", provider: "p", retrievedAt: now},
+		{result: search.SearchResult{Rank: 2, Title: "Two", URL: "https://same.example/2"}, query: "q", provider: "p", retrievedAt: now},
+		{result: search.SearchResult{Rank: 3, Title: "Three", URL: "https://same.example/3"}, query: "q", provider: "p", retrievedAt: now},
+		{result: search.SearchResult{Rank: 4, Title: "Other", URL: "https://other.example/1"}, query: "q", provider: "p", retrievedAt: now},
+	}
+	got := fuseResults(observations, 3, 2)
+	if len(got) != 3 {
+		t.Fatalf("expected 3 results, got %d", len(got))
+	}
+	count := 0
+	for _, item := range got {
+		if domainOf(item.result.URL) == "same.example" {
+			count++
+		}
+	}
+	if count > 2 {
+		t.Fatalf("domain diversity limit not respected: %d", count)
+	}
+}
+
+func TestCanonicalizeURLRemovesTrackingAndDefaultPort(t *testing.T) {
+	got := canonicalizeURL("HTTPS://Example.COM:443/path?id=7&utm_source=test&fbclid=abc#section")
+	if got != "https://example.com/path?id=7" {
+		t.Fatalf("unexpected canonical URL: %q", got)
+	}
+}
+
+func TestToolOutputUsesExplicitExternalContentTrustLabel(t *testing.T) {
+	out := &ToolOutput{
+		ContentTrust:             ExternalContentTrustLabel,
+		UntrustedExternalContent: true,
+	}
+	security := assessExternalContent(out)
+	if out.ContentTrust != ExternalContentTrustLabel {
+		t.Fatalf("unexpected output trust label %q", out.ContentTrust)
+	}
+	if security.TrustLabel != ExternalContentTrustLabel || !security.UntrustedExternalContent {
+		t.Fatalf("unexpected security summary %#v", security)
+	}
+}

@@ -92,7 +92,7 @@ func NormalizeDomains(domains []string) []string {
 	return result
 }
 
-func ProviderSupportsFilter(caps ProviderCapabilities, kind SearchKind, hasLanguage, hasCountry, hasSafeSearch bool, hasTimeRange, hasDomains bool) *Error {
+func ProviderSupportsFilter(caps ProviderCapabilities, kind SearchKind, hasLanguage, hasCountry, hasSafeSearch bool, hasTimeRange, hasDomains, hasExcludeDomains bool) *Error {
 	if hasLanguage && !caps.LanguageFilter {
 		return NewError(SEARCH_FILTER_UNSUPPORTED, "", false, nil)
 	}
@@ -106,6 +106,9 @@ func ProviderSupportsFilter(caps ProviderCapabilities, kind SearchKind, hasLangu
 		return NewError(SEARCH_TIME_RANGE_UNSUPPORTED, "", false, nil)
 	}
 	if hasDomains && !caps.DomainFilter {
+		return NewError(SEARCH_DOMAIN_FILTER_UNSUPPORTED, "", false, nil)
+	}
+	if hasExcludeDomains && !caps.ExcludeDomainFilter {
 		return NewError(SEARCH_DOMAIN_FILTER_UNSUPPORTED, "", false, nil)
 	}
 	if !SupportsKind(caps, kind) {

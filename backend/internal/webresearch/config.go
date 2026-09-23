@@ -13,15 +13,24 @@ const (
 
 type Config struct {
 	Enabled               bool
+	DeepResearchEnabled   bool
+	BrowserEnabled        bool
+	PDFEnabled            bool
+	PDFTextCommand        string
+	PDFInfoCommand        string
+	PDFTimeout            time.Duration
 	MaxExecution          time.Duration
 	MaxToolOutputChars    int
 	MaxQueries            int
 	MaxProvidersPerQuery  int
 	MaxSearchResults      int
+	MaxResultsPerDomain   int
 	MaxOpenPages          int
 	MaxDeepOpenPages      int
 	MaxDeepRounds         int
-	MaxDeepSearchCalls    int
+	MaxSearchCalls        int
+	MaxProviderCostUSD    float64
+	MaxProviderCredits    float64
 	MinDeepNewSources     int
 	MaxParallelSearch     int
 	MaxParallelFetch      int
@@ -36,20 +45,32 @@ type Config struct {
 	AutoBrowserEscalation bool
 	MinStaticContentChars int
 	MaxRedirects          int
+	MaxBrowserPages       int
+	MaxBrowserScrolls     int
+	MaxBrowserTime        time.Duration
 }
 
 func DefaultConfig() Config {
 	return Config{
 		Enabled:               true,
+		DeepResearchEnabled:   true,
+		BrowserEnabled:        true,
+		PDFEnabled:            true,
+		PDFTextCommand:        "pdftotext",
+		PDFInfoCommand:        "pdfinfo",
+		PDFTimeout:            20 * time.Second,
 		MaxExecution:          2 * time.Minute,
 		MaxToolOutputChars:    120000,
 		MaxQueries:            4,
 		MaxProvidersPerQuery:  2,
 		MaxSearchResults:      12,
+		MaxResultsPerDomain:   3,
 		MaxOpenPages:          4,
 		MaxDeepOpenPages:      6,
 		MaxDeepRounds:         3,
-		MaxDeepSearchCalls:    12,
+		MaxSearchCalls:        12,
+		MaxProviderCostUSD:    1.0,
+		MaxProviderCredits:    20,
 		MinDeepNewSources:     2,
 		MaxParallelSearch:     4,
 		MaxParallelFetch:      3,
@@ -64,11 +85,23 @@ func DefaultConfig() Config {
 		AutoBrowserEscalation: true,
 		MinStaticContentChars: 240,
 		MaxRedirects:          5,
+		MaxBrowserPages:       2,
+		MaxBrowserScrolls:     2,
+		MaxBrowserTime:        30 * time.Second,
 	}
 }
 
 func (c Config) normalize() Config {
 	d := DefaultConfig()
+	if c.PDFTextCommand == "" {
+		c.PDFTextCommand = d.PDFTextCommand
+	}
+	if c.PDFInfoCommand == "" {
+		c.PDFInfoCommand = d.PDFInfoCommand
+	}
+	if c.PDFTimeout <= 0 {
+		c.PDFTimeout = d.PDFTimeout
+	}
 	if c.MaxExecution <= 0 {
 		c.MaxExecution = d.MaxExecution
 	}
@@ -84,6 +117,9 @@ func (c Config) normalize() Config {
 	if c.MaxSearchResults <= 0 {
 		c.MaxSearchResults = d.MaxSearchResults
 	}
+	if c.MaxResultsPerDomain <= 0 {
+		c.MaxResultsPerDomain = d.MaxResultsPerDomain
+	}
 	if c.MaxOpenPages <= 0 {
 		c.MaxOpenPages = d.MaxOpenPages
 	}
@@ -93,8 +129,14 @@ func (c Config) normalize() Config {
 	if c.MaxDeepRounds <= 0 {
 		c.MaxDeepRounds = d.MaxDeepRounds
 	}
-	if c.MaxDeepSearchCalls <= 0 {
-		c.MaxDeepSearchCalls = d.MaxDeepSearchCalls
+	if c.MaxSearchCalls <= 0 {
+		c.MaxSearchCalls = d.MaxSearchCalls
+	}
+	if c.MaxProviderCostUSD <= 0 {
+		c.MaxProviderCostUSD = d.MaxProviderCostUSD
+	}
+	if c.MaxProviderCredits <= 0 {
+		c.MaxProviderCredits = d.MaxProviderCredits
 	}
 	if c.MinDeepNewSources <= 0 {
 		c.MinDeepNewSources = d.MinDeepNewSources
@@ -136,6 +178,17 @@ func (c Config) normalize() Config {
 	}
 	if c.MaxRedirects <= 0 {
 		c.MaxRedirects = d.MaxRedirects
+	}
+	if c.MaxBrowserPages <= 0 {
+		c.MaxBrowserPages = d.MaxBrowserPages
+	}
+	if c.MaxBrowserScrolls < 0 {
+		c.MaxBrowserScrolls = 0
+	} else if c.MaxBrowserScrolls == 0 {
+		c.MaxBrowserScrolls = d.MaxBrowserScrolls
+	}
+	if c.MaxBrowserTime <= 0 {
+		c.MaxBrowserTime = d.MaxBrowserTime
 	}
 	return c
 }

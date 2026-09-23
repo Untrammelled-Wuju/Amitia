@@ -63,7 +63,7 @@ markdown.renderer.rules.amrp_citation = (tokens, index, _options, env) => {
   const citationIds = Array.isArray(env?.citationIds)
     ? new Set(env.citationIds.map((value: unknown) => String(value)))
     : null;
-  if (citationIds && citationIds.size > 0 && !citationIds.has(tokens[index].content)) {
+  if (!citationIds || !citationIds.has(tokens[index].content)) {
     return `[${id}]`;
   }
   return `<button type="button" class="amrp-citation-ref" data-citation-id="${id}">[${id}]</button>`;

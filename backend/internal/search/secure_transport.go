@@ -165,8 +165,15 @@ func (t *SecureTransport) PinHTTPClient(endpoint *validatedEndpoint, timeout tim
 }
 
 func (t *SecureTransport) resolve(ctx context.Context, host string) ([]net.IP, error) {
+	host = strings.TrimSuffix(strings.TrimSpace(host), ".")
+	if host == "" || strings.Contains(host, "%") {
+		return nil, fmt.Errorf("invalid host")
+	}
 	if ip := net.ParseIP(host); ip != nil {
 		return []net.IP{ip}, nil
+	}
+	if isObfuscatedNumericHost(host) {
+		return nil, fmt.Errorf("obfuscated numeric IP host is not allowed")
 	}
 	if t != nil && t.resolver != nil {
 		ips, err := t.resolver(ctx, host)
@@ -186,6 +193,46 @@ func (t *SecureTransport) resolve(ctx context.Context, host string) ([]net.IP, e
 		return nil, fmt.Errorf("no addresses for host")
 	}
 	return ips, nil
+}
+
+func isObfuscatedNumericHost(host string) bool {
+	lower := strings.ToLower(strings.TrimSpace(host))
+	if lower == "" {
+		return false
+	}
+	if strings.HasPrefix(lower, "0x") {
+		return true
+	}
+	allDigits := true
+	for _, r := range lower {
+		if r < '0' || r > '9' {
+			allDigits = false
+			break
+		}
+	}
+	if allDigits {
+		return true
+	}
+	parts := strings.Split(lower, ".")
+	if len(parts) > 1 {
+		suspicious := true
+		for _, part := range parts {
+			if part == "" {
+				return true
+			}
+			if strings.HasPrefix(part, "0x") || (len(part) > 1 && part[0] == '0') {
+				continue
+			}
+			for _, r := range part {
+				if r < '0' || r > '9' {
+					suspicious = false
+					break
+				}
+			}
+		}
+		return suspicious
+	}
+	return false
 }
 
 func (t *SecureTransport) deniedIP(ip net.IP) bool {

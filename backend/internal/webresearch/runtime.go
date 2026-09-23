@@ -16,11 +16,15 @@ import (
 )
 
 type Runtime struct {
-	config  Config
-	search  *search.Service
-	store   *Store
-	fetcher *Fetcher
-	browser BrowserReader
+	config         Config
+	search         *search.Service
+	store          *Store
+	fetcher        *Fetcher
+	browser        BrowserReader
+	reranker       SemanticReranker
+	observer       Observer
+	metrics        *MetricsObserver
+	fetchProviders []AdvancedFetchProvider
 }
 
 type searchObservation struct {
@@ -44,10 +48,35 @@ type fusedResult struct {
 
 func NewRuntime(config Config, searchService *search.Service, store *Store, browser BrowserReader) *Runtime {
 	config = config.normalize()
-	return &Runtime{config: config, search: searchService, store: store, fetcher: NewFetcher(config), browser: browser}
+	return &Runtime{config: config, search: searchService, store: store, fetcher: NewFetcher(config), browser: browser, metrics: NewMetricsObserver()}
 }
 
-func (r *Runtime) Execute(ctx context.Context, scope Scope, raw json.RawMessage, emit ProgressFunc) (*ToolOutput, *Error) {
+func (r *Runtime) Execute(ctx context.Context, scope Scope, raw json.RawMessage, emit ProgressFunc) (result *ToolOutput, resultErr *Error) {
+	executionStarted := time.Now()
+	defer func() {
+		observation := Observation{Name: "web.run", InvocationID: strings.TrimSpace(scope.InvocationID), DurationMs: time.Since(executionStarted).Milliseconds()}
+		if result != nil {
+			observation.Operation = result.Operation
+			observation.Mode = result.Mode
+			observation.SearchCalls = result.Stats.SearchCalls
+			observation.FetchCalls = result.Stats.FetchCalls
+			observation.BrowserCalls = result.Stats.BrowserCalls
+			observation.CacheHits = result.Stats.CacheHits
+			observation.PageCacheHits = result.Stats.PageCacheHits
+			observation.SourceCount = len(result.Search)
+			observation.EvidenceCount = len(result.Citations)
+			observation.ProviderCostUSD = result.Stats.ProviderCostUSD
+			observation.ProviderCredits = result.Stats.ProviderCredits
+			if result.Research != nil {
+				observation.Partial = result.Research.Partial
+			}
+		}
+		if resultErr != nil {
+			observation.ErrorCode = string(resultErr.Code)
+		}
+		r.observe(context.WithoutCancel(ctx), observation)
+	}()
+
 	if r == nil || !r.config.Enabled || r.search == nil || r.store == nil {
 		return nil, newError(ErrNotConfigured, "web research runtime is not configured", false, nil)
 	}
@@ -56,6 +85,7 @@ func (r *Runtime) Execute(ctx context.Context, scope Scope, raw json.RawMessage,
 		ctx, cancel = context.WithTimeout(ctx, r.config.MaxExecution)
 		defer cancel()
 	}
+	ctx = contextWithBrowserBudget(ctx, r.config)
 	if err := r.store.EnsureSchema(ctx); err != nil {
 		return nil, newError(ErrNotConfigured, "web research store unavailable", true, err)
 	}
@@ -70,8 +100,10 @@ func (r *Runtime) Execute(ctx context.Context, scope Scope, raw json.RawMessage,
 		return nil, err
 	}
 	mode := normalizeMode(input.Mode, input)
-	start := time.Now()
-	output := &ToolOutput{Mode: mode, UntrustedExternalContent: true}
+	if mode == ModeDeepResearch && !r.config.DeepResearchEnabled {
+		return nil, newError(ErrNotConfigured, "deep research is disabled by feature flag", false, nil)
+	}
+	output := &ToolOutput{Mode: mode, ContentTrust: ExternalContentTrustLabel, UntrustedExternalContent: true}
 	var execErr *Error
 	switch {
 	case len(input.SearchQuery) > 0:
@@ -90,7 +122,19 @@ func (r *Runtime) Execute(ctx context.Context, scope Scope, raw json.RawMessage,
 		output.Operation = "screenshot"
 		execErr = r.executeScreenshot(ctx, scope, input, output, emit)
 	}
-	output.Stats.DurationMs = time.Since(start).Milliseconds()
+	output.Stats.DurationMs = time.Since(executionStarted).Milliseconds()
+	if budget := browserBudgetFromContext(ctx); budget != nil {
+		output.Stats.BrowserDurationMs = budget.used().Milliseconds()
+	}
+	if output.Research != nil {
+		output.Research.Cost.SearchRequests = output.Stats.SearchCalls
+		output.Research.Cost.FetchRequests = output.Stats.FetchCalls
+		output.Research.Cost.BrowserCalls = output.Stats.BrowserCalls
+		output.Research.Cost.BrowserSeconds = float64(output.Stats.BrowserDurationMs) / 1000.0
+		output.Research.Cost.ProviderCostUSD = output.Stats.ProviderCostUSD
+		output.Research.Cost.ProviderCredits = output.Stats.ProviderCredits
+		output.Research.Cost.DurationMs = output.Stats.DurationMs
+	}
 	if execErr != nil {
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 			return nil, newError(ErrBudgetExhausted, "web research execution deadline exceeded", true, ctx.Err())
@@ -102,9 +146,13 @@ func (r *Runtime) Execute(ctx context.Context, scope Scope, raw json.RawMessage,
 	}
 	output.Security = assessExternalContent(output)
 	compactToolOutput(output, input.ResponseLength, r.config.MaxToolOutputChars)
+	if len(output.Citations) > 0 {
+		_ = emitProgress(emit, Progress{Phase: "evidence_check", Completed: len(output.Citations), Total: len(output.Citations), Fraction: 1})
+	}
 	if err := r.assignCitationNumbers(ctx, scope, output); err != nil {
 		return nil, err
 	}
+	output.EvidenceGraph = buildEvidenceGraphSummary(output)
 	return output, nil
 }
 
@@ -125,6 +173,11 @@ func (r *Runtime) assignCitationNumbers(ctx context.Context, scope Scope, output
 			return newError(ErrNotConfigured, "failed to allocate citation number", true, err)
 		}
 		output.Citations[i].Index = number
+		if evidenceID := strings.TrimSpace(output.Citations[i].EvidenceID); evidenceID != "" {
+			if err := r.store.BindCitationEvidence(ctx, turnID, number, output.Citations[i].RefID, evidenceID); err != nil {
+				return newError(ErrNotConfigured, "failed to persist citation evidence binding", true, err)
+			}
+		}
 	}
 	return nil
 }
@@ -182,10 +235,10 @@ func validateInput(input ToolInput) *Error {
 		if query.SafeSearch != "" && !search.SafeSearchMode(strings.ToLower(strings.TrimSpace(query.SafeSearch))).Valid() {
 			return newError(ErrInvalidInput, "unsupported safe_search value", false, nil)
 		}
-		if len(query.Domains) > 10 {
+		if len(query.Domains) > 10 || len(query.ExcludeDomains) > 10 {
 			return newError(ErrInvalidInput, "domain filter exceeds limit", false, nil)
 		}
-		for _, domain := range query.Domains {
+		for _, domain := range append(append([]string{}, query.Domains...), query.ExcludeDomains...) {
 			if !validDomainFilter(domain) {
 				return newError(ErrInvalidInput, "domain filter must be a hostname", false, nil)
 			}
@@ -262,13 +315,20 @@ func (r *Runtime) executeSearch(ctx context.Context, scope Scope, input ToolInpu
 		return newError(ErrInvalidInput, "no valid search queries", false, nil)
 	}
 	_ = emitProgress(emit, Progress{Phase: "searching", Message: "searching web", Total: len(queries), Indeterminate: true})
-	observations, providers, callCount, partial, err := r.searchQueries(ctx, scope, queries, mode, 0, emit)
+	observations, providers, callCount, usage, partial, err := r.searchQueries(ctx, scope, queries, mode, 0, emit)
 	output.Stats.SearchCalls += callCount
+	output.Stats.ProviderCostUSD += usage.CostUSD
+	output.Stats.ProviderCredits += usage.Credits
 	output.Stats.CacheHits += countCacheHitCalls(observations)
 	if err != nil && len(observations) == 0 {
 		return err
 	}
-	fused := fuseResults(observations, r.config.MaxSearchResults)
+	fused := fuseResults(observations, r.config.MaxSearchResults, r.config.MaxResultsPerDomain)
+	if used, rerankErr := r.semanticRerank(ctx, rerankQuery(queries), fused); used {
+		output.Stats.SemanticRerankCalls++
+	} else if rerankErr != nil {
+		output.Stats.SemanticRerankFailures++
+	}
 	for index, item := range fused {
 		ref, refErr := r.referenceFromSearch(ctx, scope, item, index+1)
 		if refErr != nil {
@@ -313,7 +373,7 @@ func (r *Runtime) executeSearch(ctx context.Context, scope Scope, input ToolInpu
 	return nil
 }
 
-func (r *Runtime) searchQueries(ctx context.Context, scope Scope, queries []SearchQueryCommand, mode Mode, maxCalls int, emit ProgressFunc) ([]searchObservation, []string, int, bool, *Error) {
+func (r *Runtime) searchQueries(ctx context.Context, scope Scope, queries []SearchQueryCommand, mode Mode, maxCalls int, emit ProgressFunc) ([]searchObservation, []string, int, search.ProviderUsage, bool, *Error) {
 	if mode == ModeFast {
 		return r.searchQueriesFast(ctx, scope, queries, emit)
 	}
@@ -343,7 +403,7 @@ func (r *Runtime) searchQueries(ctx context.Context, scope Scope, queries []Sear
 		jobs = jobs[:maxCalls]
 	}
 	if len(jobs) == 0 {
-		return nil, nil, 0, false, newError(ErrNotConfigured, "no search provider available", false, nil)
+		return nil, nil, 0, search.ProviderUsage{}, false, newError(ErrNotConfigured, "no search provider available", false, nil)
 	}
 	providerSet := map[string]struct{}{}
 	for _, item := range jobs {
@@ -351,6 +411,7 @@ func (r *Runtime) searchQueries(ctx context.Context, scope Scope, queries []Sear
 	}
 	type result struct {
 		observations []searchObservation
+		usage        search.ProviderUsage
 		err          *Error
 	}
 	results := make(chan result, len(jobs))
@@ -368,20 +429,29 @@ func (r *Runtime) searchQueries(ctx context.Context, scope Scope, queries []Sear
 				return
 			}
 			defer func() { <-sem }()
+			providerStarted := time.Now()
 			searchCtx, cancel := context.WithTimeout(ctx, r.config.SearchTimeout)
 			defer cancel()
 			_ = emitProgress(emit, Progress{Phase: "search_query", Query: item.query.Q, Message: "searching source providers", Indeterminate: true})
 			req := searchRequest(item.query)
 			resp, serr := r.search.SearchAdvancedWithProvider(searchCtx, req, scope.InvocationID, item.providerID)
+			providerObservation := Observation{Name: "web.search", InvocationID: strings.TrimSpace(scope.InvocationID), Operation: "search", Mode: mode, Provider: item.providerID, DurationMs: time.Since(providerStarted).Milliseconds()}
 			if serr != nil {
+				providerObservation.ErrorCode = string(serr.Code)
+				r.observe(context.WithoutCancel(ctx), providerObservation)
 				results <- result{err: newError(mapSearchErrorCode(serr), serr.Error(), serr.Retryable, serr)}
 				return
 			}
+			providerObservation.SourceCount = len(resp.Results)
+			providerObservation.CacheHits = boolInt(resp.CacheHit)
+			providerObservation.ProviderCostUSD = resp.Usage.CostUSD
+			providerObservation.ProviderCredits = resp.Usage.Credits
+			r.observe(context.WithoutCancel(ctx), providerObservation)
 			observations := make([]searchObservation, 0, len(resp.Results))
 			for _, value := range resp.Results {
 				observations = append(observations, searchObservation{result: value, query: item.query.Q, provider: resp.Provider, retrievedAt: resp.RetrievedAt, cacheHit: resp.CacheHit})
 			}
-			results <- result{observations: observations}
+			results <- result{observations: observations, usage: resp.Usage}
 		}()
 	}
 	go func() {
@@ -389,6 +459,7 @@ func (r *Runtime) searchQueries(ctx context.Context, scope Scope, queries []Sear
 		close(results)
 	}()
 	observations := make([]searchObservation, 0)
+	usage := search.ProviderUsage{}
 	var firstErr *Error
 	failures := 0
 	for item := range results {
@@ -400,20 +471,22 @@ func (r *Runtime) searchQueries(ctx context.Context, scope Scope, queries []Sear
 			continue
 		}
 		observations = append(observations, item.observations...)
+		usage = usage.Add(item.usage)
 	}
 	providers := make([]string, 0, len(providerSet))
 	for providerID := range providerSet {
 		providers = append(providers, providerID)
 	}
 	sort.Strings(providers)
-	return observations, providers, len(jobs), failures > 0, firstErr
+	return observations, providers, len(jobs), usage, failures > 0, firstErr
 }
 
-func (r *Runtime) searchQueriesFast(ctx context.Context, scope Scope, queries []SearchQueryCommand, emit ProgressFunc) ([]searchObservation, []string, int, bool, *Error) {
+func (r *Runtime) searchQueriesFast(ctx context.Context, scope Scope, queries []SearchQueryCommand, emit ProgressFunc) ([]searchObservation, []string, int, search.ProviderUsage, bool, *Error) {
 	type result struct {
 		observations []searchObservation
 		providers    []string
 		calls        int
+		usage        search.ProviderUsage
 		err          *Error
 	}
 	results := make(chan result, len(queries))
@@ -444,21 +517,30 @@ func (r *Runtime) searchQueriesFast(ctx context.Context, scope Scope, queries []
 				}
 				attempted = append(attempted, providerID)
 				_ = emitProgress(emit, Progress{Phase: "search_query", Query: query.Q, Message: "searching source provider", Indeterminate: true})
+				providerStarted := time.Now()
 				searchCtx, cancel := context.WithTimeout(ctx, r.config.SearchTimeout)
 				resp, serr := r.search.SearchAdvancedWithProvider(searchCtx, searchRequest(query), scope.InvocationID, providerID)
 				cancel()
+				providerObservation := Observation{Name: "web.search", InvocationID: strings.TrimSpace(scope.InvocationID), Operation: "search", Mode: ModeFast, Provider: providerID, DurationMs: time.Since(providerStarted).Milliseconds()}
 				if serr != nil {
+					providerObservation.ErrorCode = string(serr.Code)
+					r.observe(context.WithoutCancel(ctx), providerObservation)
 					lastErr = newError(mapSearchErrorCode(serr), serr.Error(), serr.Retryable, serr)
 					if !searchErrorAllowsFallback(serr) {
 						break
 					}
 					continue
 				}
+				providerObservation.SourceCount = len(resp.Results)
+				providerObservation.CacheHits = boolInt(resp.CacheHit)
+				providerObservation.ProviderCostUSD = resp.Usage.CostUSD
+				providerObservation.ProviderCredits = resp.Usage.Credits
+				r.observe(context.WithoutCancel(ctx), providerObservation)
 				observations := make([]searchObservation, 0, len(resp.Results))
 				for _, value := range resp.Results {
 					observations = append(observations, searchObservation{result: value, query: query.Q, provider: resp.Provider, retrievedAt: resp.RetrievedAt, cacheHit: resp.CacheHit})
 				}
-				results <- result{observations: observations, providers: attempted, calls: len(attempted)}
+				results <- result{observations: observations, providers: attempted, calls: len(attempted), usage: resp.Usage}
 				return
 			}
 			results <- result{providers: attempted, calls: len(attempted), err: lastErr}
@@ -471,6 +553,7 @@ func (r *Runtime) searchQueriesFast(ctx context.Context, scope Scope, queries []
 
 	observations := make([]searchObservation, 0)
 	providerSet := make(map[string]struct{})
+	usage := search.ProviderUsage{}
 	calls := 0
 	failures := 0
 	var firstErr *Error
@@ -487,13 +570,14 @@ func (r *Runtime) searchQueriesFast(ctx context.Context, scope Scope, queries []
 			continue
 		}
 		observations = append(observations, item.observations...)
+		usage = usage.Add(item.usage)
 	}
 	providers := make([]string, 0, len(providerSet))
 	for providerID := range providerSet {
 		providers = append(providers, providerID)
 	}
 	sort.Strings(providers)
-	return observations, providers, calls, failures > 0, firstErr
+	return observations, providers, calls, usage, failures > 0, firstErr
 }
 
 func countCacheHitCalls(observations []searchObservation) int {
@@ -626,8 +710,8 @@ func (r *Runtime) executeClick(ctx context.Context, scope Scope, input ToolInput
 }
 
 func (r *Runtime) executeScreenshot(ctx context.Context, scope Scope, input ToolInput, output *ToolOutput, emit ProgressFunc) *Error {
-	if r.browser == nil || !r.browser.Available(ctx) {
-		return newError(ErrBrowserUnavailable, "screenshot requires browser runtime", true, nil)
+	if !r.config.BrowserEnabled || r.browser == nil || !r.browser.Available(ctx) {
+		return newError(ErrBrowserUnavailable, "screenshot requires enabled browser runtime", true, nil)
 	}
 	for _, command := range input.Screenshot {
 		var rawURL string
@@ -650,7 +734,7 @@ func (r *Runtime) executeScreenshot(ctx context.Context, scope Scope, input Tool
 		if validationErr := r.fetcher.ValidateURL(ctx, rawURL); validationErr != nil {
 			return validationErr
 		}
-		shot, err := r.browser.Screenshot(ctx, rawURL, command.Page, command.FullPage)
+		shot, err := r.browserScreenshot(ctx, rawURL, command.Page, command.FullPage)
 		if err != nil {
 			return err
 		}
@@ -705,11 +789,19 @@ func (r *Runtime) openTopSources(ctx context.Context, scope Scope, hits []Search
 	citations := make([]Citation, 0)
 	fetchCalls := 0
 	browserCalls := 0
+	seenContent := make(map[string]struct{}, len(items))
 	for _, item := range items {
-		pages = append(pages, item.page)
-		citations = append(citations, item.citations...)
 		fetchCalls += item.fetchCalls
 		browserCalls += item.browserCalls
+		contentHash := strings.TrimSpace(item.page.ContentHash)
+		if contentHash != "" {
+			if _, duplicate := seenContent[contentHash]; duplicate {
+				continue
+			}
+			seenContent[contentHash] = struct{}{}
+		}
+		pages = append(pages, item.page)
+		citations = append(citations, item.citations...)
 	}
 	return pages, citations, fetchCalls, browserCalls
 }
@@ -763,12 +855,27 @@ func (r *Runtime) resolvePage(ctx context.Context, scope Scope, refID, query, re
 	}
 
 	_ = emitProgress(emit, Progress{Phase: "opening", RefID: ref.RefID, Title: ref.Title, Indeterminate: true})
+	fetchStarted := time.Now()
 	fetched, ferr := r.fetcher.Fetch(ctx, ref.URL, query)
+	fetchObservation := Observation{Name: "web.fetch", InvocationID: strings.TrimSpace(scope.InvocationID), Operation: "open", Domain: domainOf(ref.URL), PolicyDecision: "allowed", DurationMs: time.Since(fetchStarted).Milliseconds()}
+	if ferr != nil {
+		fetchObservation.ErrorCode = string(ferr.Code)
+		if ferr.Code == ErrFetchBlocked {
+			fetchObservation.PolicyDecision = "blocked"
+		}
+	}
+	r.observe(context.WithoutCancel(ctx), fetchObservation)
 	fetchCalls := 1
 	browserCalls := 0
 	if ferr != nil {
-		if ferr.Code == ErrUnsupportedContent && r.browser != nil && r.browser.Available(ctx) {
-			browserPage, browserErr := r.browser.Read(ctx, ref.URL)
+		if ferr.Code == ErrUnsupportedContent || ferr.Code == ErrFetchFailed {
+			if advancedPage, used, _ := r.advancedFetch(ctx, ref.URL, query); used {
+				fetched = advancedPage
+				ferr = nil
+			}
+		}
+		if ferr != nil && ferr.Code == ErrUnsupportedContent && r.config.BrowserEnabled && r.browser != nil && r.browser.Available(ctx) {
+			browserPage, browserErr := r.browserRead(ctx, ref.URL)
 			if browserErr == nil && strings.TrimSpace(browserPage.Content) != "" {
 				fetched = browserPage
 				browserCalls++
@@ -779,8 +886,13 @@ func (r *Runtime) resolvePage(ctx context.Context, scope Scope, refID, query, re
 			return Page{}, nil, fetchCalls, browserCalls, ferr
 		}
 	}
-	if r.config.AutoBrowserEscalation && fetched.Dynamic && len([]rune(fetched.Content)) < r.config.MinStaticContentChars && r.browser != nil && r.browser.Available(ctx) {
-		if browserPage, berr := r.browser.Read(ctx, fetched.URL); berr == nil && len(strings.TrimSpace(browserPage.Content)) > len(strings.TrimSpace(fetched.Content)) {
+	if fetched.Dynamic && len([]rune(fetched.Content)) < r.config.MinStaticContentChars {
+		if advancedPage, used, _ := r.advancedFetch(ctx, fetched.URL, query); used && len(strings.TrimSpace(advancedPage.Content)) > len(strings.TrimSpace(fetched.Content)) {
+			fetched = advancedPage
+		}
+	}
+	if r.config.BrowserEnabled && r.config.AutoBrowserEscalation && fetched.Dynamic && len([]rune(fetched.Content)) < r.config.MinStaticContentChars && r.browser != nil && r.browser.Available(ctx) {
+		if browserPage, berr := r.browserRead(ctx, fetched.URL); berr == nil && len(strings.TrimSpace(browserPage.Content)) > len(strings.TrimSpace(fetched.Content)) {
 			fetched = browserPage
 			browserCalls++
 		}
@@ -792,7 +904,7 @@ func (r *Runtime) resolvePage(ctx context.Context, scope Scope, refID, query, re
 	if len(blocks) == 0 {
 		blocks = splitTextBlocks(fetched.Content)
 	}
-	evidence := buildEvidence(scope.ConversationID, page.RefID, query, blocks, r.config.MaxEvidencePerPage, r.config.MaxEvidenceChars)
+	evidence := r.buildPageEvidence(ctx, page, query, blocks)
 	if err := r.store.PutPageArtifact(ctx, page, pageReference, evidence); err != nil {
 		return Page{}, nil, fetchCalls, browserCalls, newError(ErrNotConfigured, "failed to persist page artifact", true, err)
 	}
@@ -801,13 +913,13 @@ func (r *Runtime) resolvePage(ctx context.Context, scope Scope, refID, query, re
 }
 
 func (r *Runtime) citationsForPageQuery(ctx context.Context, page Page, query string) ([]Citation, *Error) {
-	items, err := r.store.EvidenceForPageQuery(ctx, page.ConversationID, page.RefID, query)
+	items, err := r.store.EvidenceForPageVersionQuery(ctx, page.ConversationID, page.RefID, page.ContentHash, query)
 	if err != nil {
 		return nil, newError(ErrNotConfigured, "failed to load page evidence", true, err)
 	}
 	if len(items) == 0 {
 		blocks := splitTextBlocks(page.Content)
-		items = buildEvidence(page.ConversationID, page.RefID, query, blocks, r.config.MaxEvidencePerPage, r.config.MaxEvidenceChars)
+		items = r.buildPageEvidence(ctx, page, query, blocks)
 		if err := r.store.PutEvidence(ctx, items); err != nil {
 			return nil, newError(ErrNotConfigured, "failed to persist query evidence", true, err)
 		}
@@ -818,7 +930,7 @@ func (r *Runtime) citationsForPageQuery(ctx context.Context, page Page, query st
 func citationsFromEvidence(page Page, items []Evidence) []Citation {
 	citations := make([]Citation, 0, len(items))
 	for _, item := range items {
-		citations = append(citations, Citation{EvidenceID: item.ID, RefID: page.RefID, Title: page.Title, URL: page.URL, Text: item.Text, Relevance: item.Relevance})
+		citations = append(citations, Citation{EvidenceID: item.ID, RefID: page.RefID, Title: page.Title, URL: page.URL, Text: item.Text, Locator: item.Locator, Relevance: item.Relevance})
 	}
 	return citations
 }
@@ -871,7 +983,7 @@ func searchRequest(command SearchQueryCommand) search.SearchRequest {
 	if limit > 20 {
 		limit = 20
 	}
-	req := search.SearchRequest{Query: strings.TrimSpace(command.Q), Kind: parseKind(command.Kind), Limit: limit, Language: strings.TrimSpace(command.Language), Country: strings.TrimSpace(command.Country), SafeSearch: parseSafeSearch(command.SafeSearch), Domains: normalizeDomains(command.Domains)}
+	req := search.SearchRequest{Query: strings.TrimSpace(command.Q), Kind: parseKind(command.Kind), Limit: limit, Language: strings.TrimSpace(command.Language), Country: strings.TrimSpace(command.Country), SafeSearch: parseSafeSearch(command.SafeSearch), Domains: normalizeDomains(command.Domains), ExcludeDomains: normalizeDomains(command.ExcludeDomains)}
 	if command.RecencyDays > 0 {
 		from := nowUTC().Add(-time.Duration(command.RecencyDays) * 24 * time.Hour)
 		req.TimeRange = &search.TimeRangeFilter{From: &from}
@@ -888,7 +1000,11 @@ func parseKind(value string) search.SearchKind {
 }
 
 func parseSafeSearch(value string) search.SafeSearchMode {
-	mode := search.SafeSearchMode(strings.ToLower(strings.TrimSpace(value)))
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	mode := search.SafeSearchMode(strings.ToLower(value))
 	if !mode.Valid() {
 		return search.SafeSearchModerate
 	}
@@ -947,21 +1063,11 @@ func expandQueries(input []SearchQueryCommand, focus []string, mode Mode, maxQue
 			candidate.Q = strings.TrimSpace(base.Q + " " + area)
 			add(candidate)
 		}
-		if mode == ModeDeepResearch && len(out) < maxQueries {
-			candidate := base
-			candidate.Q = strings.TrimSpace(base.Q + " official documentation")
-			add(candidate)
-		}
-		if mode == ModeDeepResearch && len(out) < maxQueries && parseKind(base.Kind) == search.SearchKindCode {
-			candidate := base
-			candidate.Q = strings.TrimSpace(base.Q + " GitHub architecture source code")
-			add(candidate)
-		}
 	}
 	return out
 }
 
-func fuseResults(observations []searchObservation, limit int) []fusedResult {
+func fuseResults(observations []searchObservation, limit int, maxPerDomain ...int) []fusedResult {
 	if limit <= 0 {
 		limit = 12
 	}
@@ -975,6 +1081,9 @@ func fuseResults(observations []searchObservation, limit int) []fusedResult {
 			continue
 		}
 		score := 1.0 / float64(maxInt(1, observation.result.Rank))
+		score += lexicalResultScore(observation.query, observation.result) * 0.40
+		score += freshnessResultScore(observation.query, observation.result.PublishedAt, observation.retrievedAt) * 0.35
+		score += authorityResultScore(observation.result.URL) * 0.15
 		queryKey := normalizedQuery(observation.query)
 		providerKey := strings.TrimSpace(observation.provider)
 		if existing, ok := byURL[canonical]; ok {
@@ -1009,12 +1118,16 @@ func fuseResults(observations []searchObservation, limit int) []fusedResult {
 		}
 		return items[i].result.URL < items[j].result.URL
 	})
+	domainLimit := 3
+	if len(maxPerDomain) > 0 && maxPerDomain[0] > 0 {
+		domainLimit = maxPerDomain[0]
+	}
 	domainCounts := map[string]int{}
 	diverse := make([]fusedResult, 0, minInt(limit, len(items)))
 	overflow := make([]fusedResult, 0)
 	for _, item := range items {
 		domain := domainOf(item.result.URL)
-		if domain != "" && domainCounts[domain] >= 3 {
+		if domain != "" && domainCounts[domain] >= domainLimit {
 			overflow = append(overflow, item)
 			continue
 		}
@@ -1031,6 +1144,76 @@ func fuseResults(observations []searchObservation, limit int) []fusedResult {
 		diverse = append(diverse, item)
 	}
 	return diverse
+}
+
+func lexicalResultScore(query string, result search.SearchResult) float64 {
+	queryTokens := tokenize(query)
+	if len(queryTokens) == 0 {
+		return 0
+	}
+	textTokens := tokenize(result.Title + " " + result.Snippet)
+	return overlapScore(queryTokens, textTokens)
+}
+
+func freshnessResultScore(query string, publishedAt *time.Time, retrievedAt time.Time) float64 {
+	if !freshnessSensitiveQuery(query) || publishedAt == nil {
+		return 0
+	}
+	now := retrievedAt
+	if now.IsZero() {
+		now = nowUTC()
+	}
+	age := now.Sub(publishedAt.UTC())
+	if age < 0 {
+		age = 0
+	}
+	switch {
+	case age <= 48*time.Hour:
+		return 1
+	case age <= 7*24*time.Hour:
+		return 0.85
+	case age <= 30*24*time.Hour:
+		return 0.65
+	case age <= 180*24*time.Hour:
+		return 0.35
+	case age <= 365*24*time.Hour:
+		return 0.15
+	default:
+		return 0
+	}
+}
+
+func freshnessSensitiveQuery(query string) bool {
+	lower := strings.ToLower(query)
+	for _, token := range []string{"latest", "current", "today", "recent", "newest", "this week", "this month", "最新", "当前", "今天", "近期", "最近", "本周", "本月", "2026"} {
+		if strings.Contains(lower, token) {
+			return true
+		}
+	}
+	return false
+}
+
+func authorityResultScore(rawURL string) float64 {
+	u, err := url.Parse(strings.TrimSpace(rawURL))
+	if err != nil {
+		return 0
+	}
+	host := strings.ToLower(strings.TrimPrefix(u.Hostname(), "www."))
+	path := strings.ToLower(u.EscapedPath())
+	switch {
+	case strings.HasSuffix(host, ".gov") || strings.HasSuffix(host, ".gov.cn"):
+		return 1
+	case strings.HasSuffix(host, ".edu") || strings.HasSuffix(host, ".edu.cn"):
+		return 0.9
+	case strings.HasPrefix(host, "docs.") || strings.Contains(path, "/docs/") || strings.Contains(path, "/documentation/"):
+		return 0.8
+	case host == "github.com" && (strings.Contains(path, "/releases") || strings.Contains(path, "/blob/") || strings.Contains(path, "/tree/")):
+		return 0.75
+	case host == "github.com":
+		return 0.65
+	default:
+		return 0.4
+	}
 }
 
 func mergeFusedObservation(existing *fusedResult, observation searchObservation, rankScore float64, queryKey, providerKey string) {
@@ -1141,7 +1324,7 @@ func appendUniqueCitationValues(existing, incoming []Citation) []Citation {
 }
 
 func assessExternalContent(output *ToolOutput) SecuritySummary {
-	summary := SecuritySummary{UntrustedExternalContent: true}
+	summary := SecuritySummary{TrustLabel: ExternalContentTrustLabel, UntrustedExternalContent: true}
 	if output == nil {
 		return summary
 	}
@@ -1154,6 +1337,13 @@ func assessExternalContent(output *ToolOutput) SecuritySummary {
 		"execute this command",
 		"call this tool",
 		"upload your",
+		"read your environment",
+		"read environment variables",
+		"authorization: bearer",
+		"api key",
+		"ssh key",
+		"browser cookie",
+		"send your token",
 	}
 	check := func(value string) {
 		lower := strings.ToLower(value)
@@ -1247,6 +1437,12 @@ func compactToolOutput(output *ToolOutput, responseLength string, configuredMaxC
 		output.Search[i].Snippet = truncateRunes(output.Search[i].Snippet, 1400)
 	}
 	pageBudget := maxChars * 70 / 100
+	if output.Research != nil && output.Research.Mode == ModeDeepResearch {
+		// Deep research consumes the question-scoped Findings and Evidence excerpts.
+		// Keep only a source preview in ToolResult; the full immutable Page remains
+		// in the durable store and can be reopened by ref when needed.
+		pageBudget = minInt(pageBudget, maxInt(1800*len(output.Pages), 1800))
+	}
 	if len(output.Pages) > 0 {
 		perPage := pageBudget / len(output.Pages)
 		if perPage < 2500 {

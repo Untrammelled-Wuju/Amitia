@@ -2,6 +2,9 @@ package search
 
 import (
 	"net/http"
+	"strconv"
+	"strings"
+	"time"
 )
 
 const (
@@ -125,4 +128,29 @@ func IsClientError(status int) bool {
 
 func IsServerError(status int) bool {
 	return status >= 500 && status != 501
+}
+
+func ParseRetryAfter(value string, now time.Time) DurationMs {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return 0
+	}
+	if seconds, err := strconv.Atoi(value); err == nil {
+		if seconds <= 0 {
+			return 0
+		}
+		return DurationMs(time.Duration(seconds) * time.Second / time.Millisecond)
+	}
+	when, err := http.ParseTime(value)
+	if err != nil {
+		return 0
+	}
+	if now.IsZero() {
+		now = time.Now()
+	}
+	delay := when.Sub(now)
+	if delay <= 0 {
+		return 0
+	}
+	return DurationMs(delay / time.Millisecond)
 }

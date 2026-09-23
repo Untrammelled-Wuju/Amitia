@@ -110,4 +110,14 @@ describe("AMRP renderer", () => {
     expect(html).toContain("katex");
     expect(html).not.toContain('href="javascript:');
   });
+  it("renders only registered citation ids as interactive references", () => {
+    const withoutSources = renderMarkdownSegment("unknown [99]", []);
+    expect(withoutSources).toContain("[99]");
+    expect(withoutSources).not.toContain('data-citation-id="99"');
+
+    const mixed = renderMarkdownSegment("known [1], unknown [99]", ["1"]);
+    expect(mixed).toContain('data-citation-id="1"');
+    expect(mixed).not.toContain('data-citation-id="99"');
+  });
+
 });

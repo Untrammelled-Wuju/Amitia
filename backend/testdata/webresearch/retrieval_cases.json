@@ -1,0 +1,962 @@
+[
+  {
+    "id": "wr-001",
+    "category": "ordinary_fact",
+    "query": "HTTP status code semantics",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-002",
+    "category": "ordinary_fact",
+    "query": "SQLite WAL mode behavior",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-003",
+    "category": "ordinary_fact",
+    "query": "Go context cancellation rules",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-004",
+    "category": "ordinary_fact",
+    "query": "UTF-8 encoding definition",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-005",
+    "category": "ordinary_fact",
+    "query": "DNS CNAME behavior",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-006",
+    "category": "ordinary_fact",
+    "query": "TLS certificate chain purpose",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-007",
+    "category": "ordinary_fact",
+    "query": "Git object model overview",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-008",
+    "category": "ordinary_fact",
+    "query": "JSON number grammar",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-009",
+    "category": "ordinary_fact",
+    "query": "WebSocket closing handshake",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-010",
+    "category": "ordinary_fact",
+    "query": "SSE Last-Event-ID behavior",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-011",
+    "category": "ordinary_fact",
+    "query": "B-tree index purpose",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-012",
+    "category": "ordinary_fact",
+    "query": "OAuth PKCE purpose",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-013",
+    "category": "ordinary_fact",
+    "query": "CSS cascade layers",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-014",
+    "category": "ordinary_fact",
+    "query": "HTTP cache-control no-store",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-015",
+    "category": "ordinary_fact",
+    "query": "Unicode normalization forms",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-016",
+    "category": "freshness",
+    "query": "latest stable Go release",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-017",
+    "category": "freshness",
+    "query": "latest Flutter stable release",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-018",
+    "category": "freshness",
+    "query": "latest Node.js LTS release",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-019",
+    "category": "freshness",
+    "query": "latest SQLite release",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-020",
+    "category": "freshness",
+    "query": "latest Chromium stable release",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-021",
+    "category": "freshness",
+    "query": "current OpenTelemetry Go version",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-022",
+    "category": "freshness",
+    "query": "current Vue stable version",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-023",
+    "category": "freshness",
+    "query": "current TypeScript stable version",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-024",
+    "category": "freshness",
+    "query": "current Playwright release",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-025",
+    "category": "freshness",
+    "query": "current PostgreSQL stable release",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-026",
+    "category": "freshness",
+    "query": "latest Android SDK platform",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-027",
+    "category": "freshness",
+    "query": "current iOS SDK version",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-028",
+    "category": "freshness",
+    "query": "latest Rust stable release",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-029",
+    "category": "freshness",
+    "query": "current Redis stable release",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-030",
+    "category": "freshness",
+    "query": "latest Docker Engine release",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-031",
+    "category": "technical_docs",
+    "query": "Go net/http Transport DNS dialing",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-032",
+    "category": "technical_docs",
+    "query": "SQLite migration ALTER TABLE add column",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-033",
+    "category": "technical_docs",
+    "query": "Playwright browser context isolation",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-034",
+    "category": "technical_docs",
+    "query": "Flutter markdown rendering package API",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-035",
+    "category": "technical_docs",
+    "query": "Vue 3 script setup documentation",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-036",
+    "category": "technical_docs",
+    "query": "OpenTelemetry span semantic conventions",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-037",
+    "category": "technical_docs",
+    "query": "HTTP RFC redirect security",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-038",
+    "category": "technical_docs",
+    "query": "Content-Security-Policy specification",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-039",
+    "category": "technical_docs",
+    "query": "robots.txt RFC specification",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-040",
+    "category": "technical_docs",
+    "query": "PDF text extraction metadata",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-041",
+    "category": "technical_docs",
+    "query": "BM25 ranking formula",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-042",
+    "category": "technical_docs",
+    "query": "nDCG retrieval metric",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-043",
+    "category": "technical_docs",
+    "query": "circuit breaker half-open state",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-044",
+    "category": "technical_docs",
+    "query": "DNS rebinding mitigation",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-045",
+    "category": "technical_docs",
+    "query": "gzip decompression bomb defense",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-046",
+    "category": "github",
+    "query": "GitHub repository release notes and source architecture",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-047",
+    "category": "github",
+    "query": "GitHub issue discussing browser fallback",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-048",
+    "category": "github",
+    "query": "GitHub pull request adding SSE reconnect",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-049",
+    "category": "github",
+    "query": "GitHub README self hosted search provider",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-050",
+    "category": "github",
+    "query": "GitHub source code citation registry",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-051",
+    "category": "github",
+    "query": "GitHub repository semantic reranker implementation",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-052",
+    "category": "github",
+    "query": "GitHub project SSRF secure transport",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-053",
+    "category": "github",
+    "query": "GitHub project deep research planner",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-054",
+    "category": "github",
+    "query": "GitHub project evidence graph implementation",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-055",
+    "category": "github",
+    "query": "GitHub project provider plugin registry",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-056",
+    "category": "github",
+    "query": "GitHub project Flutter streaming markdown",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-057",
+    "category": "github",
+    "query": "GitHub project Electron agent tool rendering",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-058",
+    "category": "github",
+    "query": "GitHub project PDF parser Go",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-059",
+    "category": "github",
+    "query": "GitHub project SearXNG integration",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-060",
+    "category": "github",
+    "query": "GitHub project Tavily search provider",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-061",
+    "category": "comparison",
+    "query": "compare SSE and WebSocket for AI chat streaming",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-062",
+    "category": "comparison",
+    "query": "compare BM25 and embedding reranking",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-063",
+    "category": "comparison",
+    "query": "compare SearXNG Brave Exa Tavily search",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-064",
+    "category": "comparison",
+    "query": "compare Playwright and raw HTTP extraction",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-065",
+    "category": "comparison",
+    "query": "compare SQLite and PostgreSQL for local event logs",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-066",
+    "category": "comparison",
+    "query": "compare Flutter markdown renderers",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-067",
+    "category": "comparison",
+    "query": "compare Vue markdown renderers",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-068",
+    "category": "comparison",
+    "query": "compare PDF text parsers",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-069",
+    "category": "comparison",
+    "query": "compare circuit breaker algorithms",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-070",
+    "category": "comparison",
+    "query": "compare cache LRU and LFU",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-071",
+    "category": "comparison",
+    "query": "compare search fusion RRF and weighted scoring",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-072",
+    "category": "comparison",
+    "query": "compare DNS pinning approaches",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-073",
+    "category": "comparison",
+    "query": "compare HTML readability extractors",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-074",
+    "category": "comparison",
+    "query": "compare research planner architectures",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-075",
+    "category": "comparison",
+    "query": "compare citation verification methods",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-076",
+    "category": "chinese_web",
+    "query": "Go 语言最新稳定版本 官方文档",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-077",
+    "category": "chinese_web",
+    "query": "Flutter 流式 Markdown 渲染方案",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-078",
+    "category": "chinese_web",
+    "query": "SSE 断线重连 Last-Event-ID",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-079",
+    "category": "chinese_web",
+    "query": "SQLite 数据库迁移 幂等",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-080",
+    "category": "chinese_web",
+    "query": "网页抓取 SSRF 防护",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-081",
+    "category": "chinese_web",
+    "query": "DNS Rebinding 防护方案",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-082",
+    "category": "chinese_web",
+    "query": "深度研究 Evidence Citation 架构",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-083",
+    "category": "chinese_web",
+    "query": "搜索结果融合 去重 排序",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-084",
+    "category": "chinese_web",
+    "query": "浏览器自动化 Playwright 安全",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-085",
+    "category": "chinese_web",
+    "query": "PDF 文本解析 页码引用",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-086",
+    "category": "chinese_web",
+    "query": "大模型工具调用 流式事件协议",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-087",
+    "category": "chinese_web",
+    "query": "多 Provider 搜索熔断降级",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-088",
+    "category": "chinese_web",
+    "query": "语义重排 BM25 Embedding",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-089",
+    "category": "chinese_web",
+    "query": "Prompt Injection 网页内容防护",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-090",
+    "category": "chinese_web",
+    "query": "Electron AI 工具过程渲染",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-091",
+    "category": "ambiguous_entity",
+    "query": "Mercury software project",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-092",
+    "category": "ambiguous_entity",
+    "query": "Phoenix framework current release",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-093",
+    "category": "ambiguous_entity",
+    "query": "Atlas search architecture",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-094",
+    "category": "ambiguous_entity",
+    "query": "Hermes agent repository",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-095",
+    "category": "ambiguous_entity",
+    "query": "Airi AI project",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-096",
+    "category": "ambiguous_entity",
+    "query": "Onyx agentic search",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-097",
+    "category": "ambiguous_entity",
+    "query": "Codex desktop source",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-098",
+    "category": "ambiguous_entity",
+    "query": "Operit AI agent",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-099",
+    "category": "ambiguous_entity",
+    "query": "Firecrawl search API",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-100",
+    "category": "ambiguous_entity",
+    "query": "Crawl4AI extraction",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-101",
+    "category": "ambiguous_entity",
+    "query": "Brave search API limits",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-102",
+    "category": "ambiguous_entity",
+    "query": "Exa search API filters",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-103",
+    "category": "ambiguous_entity",
+    "query": "Tavily search usage credits",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-104",
+    "category": "ambiguous_entity",
+    "query": "SearXNG JSON API",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-105",
+    "category": "ambiguous_entity",
+    "query": "Cherry Studio agent renderer",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-106",
+    "category": "time_sensitive",
+    "query": "today security advisory Go",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-107",
+    "category": "time_sensitive",
+    "query": "recent Chromium security update",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-108",
+    "category": "time_sensitive",
+    "query": "recent SQLite CVE",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-109",
+    "category": "time_sensitive",
+    "query": "latest GitHub release of Playwright",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-110",
+    "category": "time_sensitive",
+    "query": "current npm package deprecation status",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-111",
+    "category": "time_sensitive",
+    "query": "recent OpenTelemetry specification change",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-112",
+    "category": "time_sensitive",
+    "query": "latest browser WebSocket compatibility",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-113",
+    "category": "time_sensitive",
+    "query": "current Android target SDK requirement",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-114",
+    "category": "time_sensitive",
+    "query": "current Apple notarization requirement",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-115",
+    "category": "time_sensitive",
+    "query": "recent Electron security release",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-116",
+    "category": "time_sensitive",
+    "query": "latest TLS recommendation",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-117",
+    "category": "time_sensitive",
+    "query": "current OAuth security best practice",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-118",
+    "category": "time_sensitive",
+    "query": "recent HTTP RFC publication",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-119",
+    "category": "time_sensitive",
+    "query": "current Docker API version",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  },
+  {
+    "id": "wr-120",
+    "category": "time_sensitive",
+    "query": "latest PostgreSQL security update",
+    "gold_urls": [],
+    "gold_domains": [],
+    "notes": "Fill gold URLs from pinned benchmark snapshot before scored CI run."
+  }
+]

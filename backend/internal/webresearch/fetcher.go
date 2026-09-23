@@ -1,6 +1,8 @@
 package webresearch
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -33,6 +35,7 @@ type Fetcher struct {
 	maxBytes     int64
 	maxChars     int
 	maxRedirects int
+	pdfParser    PDFParser
 }
 
 func NewFetcher(config Config) *Fetcher {
@@ -43,6 +46,7 @@ func NewFetcher(config Config) *Fetcher {
 		maxBytes:     config.MaxFetchBytes,
 		maxChars:     config.MaxPageChars,
 		maxRedirects: config.MaxRedirects,
+		pdfParser:    newPopplerPDFParser(config),
 	}
 }
 
@@ -76,7 +80,11 @@ func (f *Fetcher) Fetch(ctx context.Context, rawURL, query string) (fetchedPage,
 		if err != nil {
 			return fetchedPage{}, newError(ErrInvalidInput, "invalid URL", false, err)
 		}
-		req.Header.Set("Accept", "text/html,application/xhtml+xml,text/plain,application/json;q=0.8,*/*;q=0.1")
+		req.Header.Set("Accept", "text/html,application/xhtml+xml,application/pdf,text/plain,text/markdown,application/json;q=0.8,*/*;q=0.1")
+		// Ask servers not to compress so byte limits apply before decompression.
+		// If a server ignores this header, readResponse still enforces both raw
+		// and decoded limits for gzip payloads.
+		req.Header.Set("Accept-Encoding", "identity")
 		req.Header.Set("User-Agent", "Amitia-WebResearch/1.0")
 		resp, err := client.Do(req)
 		if err != nil {
@@ -103,14 +111,14 @@ func (f *Fetcher) Fetch(ctx context.Context, rawURL, query string) (fetchedPage,
 			retryable := resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500
 			return fetchedPage{}, newError(ErrFetchFailed, "unexpected HTTP status", retryable, nil)
 		}
-		page, ferr := f.readResponse(resp, current, query)
+		page, ferr := f.readResponse(ctx, resp, current, query)
 		resp.Body.Close()
 		return page, ferr
 	}
 	return fetchedPage{}, newError(ErrFetchFailed, "redirect limit exceeded", false, nil)
 }
 
-func (f *Fetcher) readResponse(resp *http.Response, current, query string) (fetchedPage, *Error) {
+func (f *Fetcher) readResponse(ctx context.Context, resp *http.Response, current, query string) (fetchedPage, *Error) {
 	contentType := strings.TrimSpace(resp.Header.Get("Content-Type"))
 	mediaType, _, _ := mime.ParseMediaType(contentType)
 	mediaType = strings.ToLower(mediaType)
@@ -118,19 +126,29 @@ func (f *Fetcher) readResponse(resp *http.Response, current, query string) (fetc
 		mediaType = "application/octet-stream"
 	}
 	switch mediaType {
-	case "text/html", "application/xhtml+xml", "text/plain", "application/json", "application/ld+json":
+	case "text/html", "application/xhtml+xml", "application/pdf", "text/plain", "text/markdown", "application/json", "application/ld+json":
 	default:
 		return fetchedPage{}, newError(ErrUnsupportedContent, mediaType, false, nil)
 	}
-	reader := io.LimitReader(resp.Body, f.maxBytes+1)
-	body, err := io.ReadAll(reader)
-	if err != nil {
-		return fetchedPage{}, newError(ErrFetchFailed, "read response failed", true, err)
-	}
-	if int64(len(body)) > f.maxBytes {
+	if resp.ContentLength > f.maxBytes && resp.ContentLength >= 0 {
 		return fetchedPage{}, newError(ErrFetchFailed, "response exceeds byte limit", false, nil)
 	}
+	body, err := readBoundedHTTPBody(resp.Body, resp.Header.Get("Content-Encoding"), f.maxBytes)
+	if err != nil {
+		return fetchedPage{}, err
+	}
 	canonical := canonicalizeURL(current)
+	if mediaType == "application/pdf" {
+		if f.pdfParser == nil || !f.pdfParser.Available(ctx) {
+			return fetchedPage{}, newError(ErrUnsupportedContent, "application/pdf parser unavailable", false, nil)
+		}
+		doc, parseErr := f.pdfParser.Parse(ctx, body)
+		if parseErr != nil {
+			return fetchedPage{}, parseErr
+		}
+		content, truncated := formatPDFDocument(doc, f.maxChars)
+		return fetchedPage{URL: current, CanonicalURL: canonical, Title: doc.Title, ContentType: mediaType, Content: content, Truncated: truncated, Hash: hashBytes(body)}, nil
+	}
 	raw := string(body)
 	if mediaType == "text/html" || mediaType == "application/xhtml+xml" {
 		doc, err := extractHTML(raw, current, "", f.maxChars)
@@ -151,6 +169,42 @@ func (f *Fetcher) readResponse(resp *http.Response, current, query string) (fetc
 	return fetchedPage{URL: current, CanonicalURL: canonical, ContentType: mediaType, Content: content, Blocks: blocks, Truncated: truncated, Hash: hashBytes(body)}, nil
 }
 
+func readBoundedHTTPBody(body io.Reader, contentEncoding string, maxBytes int64) ([]byte, *Error) {
+	if maxBytes <= 0 {
+		maxBytes = 6 * 1024 * 1024
+	}
+	raw, err := io.ReadAll(io.LimitReader(body, maxBytes+1))
+	if err != nil {
+		return nil, newError(ErrFetchFailed, "read response failed", true, err)
+	}
+	if int64(len(raw)) > maxBytes {
+		return nil, newError(ErrFetchFailed, "raw response exceeds byte limit", false, nil)
+	}
+	encoding := strings.ToLower(strings.TrimSpace(contentEncoding))
+	if encoding == "" || encoding == "identity" {
+		return raw, nil
+	}
+	if encoding != "gzip" {
+		return nil, newError(ErrUnsupportedContent, "unsupported content encoding: "+encoding, false, nil)
+	}
+	zr, err := gzip.NewReader(bytes.NewReader(raw))
+	if err != nil {
+		return nil, newError(ErrFetchFailed, "invalid gzip response", false, err)
+	}
+	defer zr.Close()
+	decoded, err := io.ReadAll(io.LimitReader(zr, maxBytes+1))
+	if err != nil {
+		return nil, newError(ErrFetchFailed, "decompress response failed", false, err)
+	}
+	if int64(len(decoded)) > maxBytes {
+		return nil, newError(ErrFetchFailed, "decoded response exceeds byte limit", false, nil)
+	}
+	if len(raw) > 0 && len(decoded) > len(raw)*100 {
+		return nil, newError(ErrFetchFailed, "response decompression ratio exceeds limit", false, nil)
+	}
+	return decoded, nil
+}
+
 func resolveRedirect(baseURL, location string) (string, error) {
 	base, err := url.Parse(baseURL)
 	if err != nil {
@@ -165,14 +219,30 @@ func resolveRedirect(baseURL, location string) (string, error) {
 
 func canonicalizeURL(raw string) string {
 	u, err := url.Parse(strings.TrimSpace(raw))
-	if err != nil {
+	if err != nil || u.Scheme == "" || u.Host == "" {
 		return strings.TrimSpace(raw)
+	}
+	u.Scheme = strings.ToLower(u.Scheme)
+	hostname := strings.ToLower(strings.TrimSuffix(u.Hostname(), "."))
+	port := u.Port()
+	if (u.Scheme == "http" && port == "80") || (u.Scheme == "https" && port == "443") {
+		port = ""
+	}
+	if strings.Contains(hostname, ":") {
+		if port != "" {
+			u.Host = "[" + hostname + "]:" + port
+		} else {
+			u.Host = "[" + hostname + "]"
+		}
+	} else if port != "" {
+		u.Host = hostname + ":" + port
+	} else {
+		u.Host = hostname
 	}
 	u.Fragment = ""
 	query := u.Query()
 	for key := range query {
-		lower := strings.ToLower(key)
-		if strings.HasPrefix(lower, "utm_") || lower == "fbclid" || lower == "gclid" || lower == "mc_cid" || lower == "mc_eid" {
+		if isTrackingURLParam(key) {
 			query.Del(key)
 		}
 	}
@@ -181,6 +251,19 @@ func canonicalizeURL(raw string) string {
 		u.Path = "/"
 	}
 	return u.String()
+}
+
+func isTrackingURLParam(key string) bool {
+	key = strings.ToLower(strings.TrimSpace(key))
+	if strings.HasPrefix(key, "utm_") {
+		return true
+	}
+	switch key {
+	case "fbclid", "gclid", "dclid", "msclkid", "mc_cid", "mc_eid", "igshid", "yclid", "vero_id", "_hsenc", "_hsmi":
+		return true
+	default:
+		return false
+	}
 }
 
 func hashBytes(value []byte) string {

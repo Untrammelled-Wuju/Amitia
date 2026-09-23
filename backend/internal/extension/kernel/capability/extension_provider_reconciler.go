@@ -39,6 +39,9 @@ func (r *ExtensionProviderReconciler) ReconcileDefinitions(def domain.ExtensionD
 
 	for id := range existingByID {
 		if _, ok := defByID[id]; !ok {
+			if existingByID[id] != nil && existingByID[id].Kind == ProviderKindBuiltin {
+				continue
+			}
 			if r.lifecycle != nil {
 				if _, err := r.lifecycle.UnregisterProvider(id); err != nil {
 					return fmt.Errorf("unregister provider %s: %w", id, err)

@@ -178,15 +178,27 @@ func (s *service) invokeLLMWithTools(ctx context.Context, cfg *ModelConfig, mess
 		}
 	}
 	citationAudit := turnRecorder.AuditCitationMarkers(reply)
-	if len(citationAudit.Available) > 0 {
+	if len(citationAudit.Available) > 0 || len(citationAudit.Unknown) > 0 || len(citationAudit.MissingCitation) > 0 {
+		claimStatusCounts := map[string]int{}
+		for _, claim := range citationAudit.Claims {
+			claimStatusCounts[claim.Status]++
+		}
 		fields := applog.Fields{
-			"available_citations": len(citationAudit.Available),
-			"used_citations":      len(citationAudit.Used),
-			"unknown_citations":   len(citationAudit.Unknown),
+			"available_citations":     len(citationAudit.Available),
+			"used_citations":          len(citationAudit.Used),
+			"unknown_citations":       len(citationAudit.Unknown),
+			"claims_checked":          len(citationAudit.Claims),
+			"claim_statuses":          claimStatusCounts,
+			"missing_citation_claims": len(citationAudit.MissingCitation),
 		}
 		if len(citationAudit.Unknown) > 0 {
 			fields["unknown_citation_ids"] = citationAudit.Unknown
 			applog.TraceWarn(trace.WithStage("citation_audit_invalid"), fields, "assistant reply referenced citation ids that were not produced by web research")
+		} else if len(citationAudit.MissingCitation) > 0 {
+			fields["missing_citation_samples"] = citationAudit.MissingCitation
+			applog.TraceWarn(trace.WithStage("citation_audit_missing"), fields, "assistant reply contains factual claims without a citation after web research")
+		} else if claimStatusCounts["unsupported"] > 0 || claimStatusCounts["insufficient"] > 0 {
+			applog.TraceWarn(trace.WithStage("citation_claim_verification_incomplete"), fields, "assistant reply contains claims whose cited evidence did not pass structural support verification")
 		} else {
 			applog.TraceInfo(trace.WithStage("citation_audit_completed"), fields, "assistant reply citation audit completed")
 		}

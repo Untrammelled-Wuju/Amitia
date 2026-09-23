@@ -141,10 +141,7 @@ func toolResultToOutcome(r ToolResult, found bool) toolExecOutcome {
 }
 
 func toolResultContent(toolName string, outcome toolExecOutcome) string {
-	// web_run is a structured research tool. Its JSON payload is the evidence
-	// contract the model must read in the next reasoning step (including stable
-	// citation indexes), so never replace it with an empty/human-only summary.
-	if !outcome.HasError && outcome.Found && (toolName == "web_run" || toolName == "web.run") {
+	if !outcome.HasError && outcome.Found && structuredToolResult(toolName) {
 		if payload := strings.TrimSpace(string(outcome.Output)); payload != "" {
 			return payload
 		}
@@ -159,4 +156,21 @@ func toolResultContent(toolName string, outcome toolExecOutcome) string {
 		return "工具执行失败：" + code
 	}
 	return "工具执行失败"
+}
+
+func structuredToolResult(toolName string) bool {
+	switch toolName {
+	case "web_run",
+		"web.run",
+		"find_capability",
+		"acquire_capability",
+		"use_package",
+		"run_skill_script",
+		"list_skill_resources",
+		"read_skill_resource",
+		"materialize_skill_resource":
+		return true
+	default:
+		return false
+	}
 }

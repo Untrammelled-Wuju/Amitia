@@ -341,7 +341,7 @@ func TestService_CircuitBreakerOpensAfterRetryableFailures(t *testing.T) {
 func TestService_CircuitBreakerResetsAfterOpenWindow(t *testing.T) {
 	provider := &fakeProviderForService{enabled: true, results: []SearchResult{{Title: "ok", URL: "https://ok.example/", Source: SearchSourceMetadata{Provider: "fake"}}}}
 	svc := newTestService(provider)
-	svc.circuits["fake"] = providerCircuitState{ConsecutiveFailures: 3, OpenUntil: time.Now().Add(-time.Second)}
+	svc.circuits["fake"] = providerCircuitState{Phase: circuitOpen, ConsecutiveFailures: 3, OpenUntil: time.Now().Add(-time.Second)}
 
 	ids := svc.CandidateProviderIDs(SearchKindWeb)
 	if len(ids) != 1 || ids[0] != "fake" {
@@ -350,5 +350,94 @@ func TestService_CircuitBreakerResetsAfterOpenWindow(t *testing.T) {
 	resp, err := svc.SearchAdvancedWithProvider(context.Background(), SearchRequest{Query: "recovered", Kind: SearchKindWeb}, "", "fake")
 	if err != nil || resp == nil || resp.Returned != 1 {
 		t.Fatalf("expected provider recovery, resp=%v err=%v", resp, err)
+	}
+}
+
+func TestService_CircuitBreakerHalfOpenAllowsSingleProbe(t *testing.T) {
+	provider := &fakeProviderForService{enabled: true, results: []SearchResult{{Title: "ok", URL: "https://ok.example/"}}}
+	svc := newTestService(provider)
+	svc.circuits["fake"] = providerCircuitState{Phase: circuitOpen, ConsecutiveFailures: 3, OpenUntil: time.Now().Add(-time.Second)}
+
+	if !svc.providerCircuitAllows("fake", time.Now()) {
+		t.Fatal("first half-open probe should be allowed")
+	}
+	if svc.providerCircuitAllows("fake", time.Now()) {
+		t.Fatal("second concurrent half-open probe should be rejected")
+	}
+	svc.recordProviderOutcome("fake", nil)
+	if !svc.providerCircuitAllows("fake", time.Now()) {
+		t.Fatal("successful half-open probe should close the circuit")
+	}
+}
+
+func TestService_CircuitBreakerHonorsRetryAfter(t *testing.T) {
+	svc := newTestService(&fakeProviderForService{enabled: true})
+	svc.config.CircuitFailures = 1
+	svc.config.CircuitOpen = time.Second
+	svc.recordProviderOutcome("fake", &Error{Code: SEARCH_PROVIDER_RATE_LIMITED, Retryable: true, RetryAfter: DurationMs(5000)})
+
+	state := svc.circuits["fake"]
+	if state.Phase != circuitOpen {
+		t.Fatalf("phase=%s, want open", state.Phase)
+	}
+	if time.Until(state.OpenUntil) < 4*time.Second {
+		t.Fatalf("Retry-After was not honored, open until %s", state.OpenUntil)
+	}
+}
+
+func TestServiceProviderErrorUsesConfiguredInstanceID(t *testing.T) {
+	providers := NewProviderSet("brave_primary")
+	provider := &fakeProviderForService{enabled: true, err: NewError(SEARCH_PROVIDER_RATE_LIMITED, "brave", true, errors.New("limited"))}
+	providers.RegisterWithPriority("brave_primary", provider, 100)
+	svc := NewService(Config{
+		Enabled: true, DefaultProvider: "brave_primary",
+		Providers: map[string]ProviderConfig{"brave_primary": {Enabled: true}},
+	}, providers)
+
+	_, got := svc.SearchAdvancedWithProvider(context.Background(), SearchRequest{Query: "test", Kind: SearchKindWeb}, "invoke", "brave_primary")
+	if got == nil {
+		t.Fatal("expected provider error")
+	}
+	if got.Provider != "brave_primary" {
+		t.Fatalf("provider error identity=%q, want brave_primary", got.Provider)
+	}
+	if got.Code != SEARCH_PROVIDER_RATE_LIMITED || !got.Retryable {
+		t.Fatalf("provider error metadata lost: %#v", got)
+	}
+}
+
+func TestCircuitStatusTracksRollingFailuresAndRecovery(t *testing.T) {
+	providers := NewProviderSet("brave_primary")
+	provider := &fakeProviderForService{enabled: true, err: NewError(SEARCH_PROVIDER_TIMEOUT, "brave", true, errors.New("timeout"))}
+	providers.RegisterWithPriority("brave_primary", provider, 100)
+	cfg := DefaultConfig()
+	cfg.Enabled = true
+	cfg.DefaultProvider = "brave_primary"
+	cfg.CircuitFailures = 2
+	cfg.CircuitOpen = time.Millisecond
+	cfg.Providers = map[string]ProviderConfig{"brave_primary": {Enabled: true}}
+	svc := NewService(cfg, providers)
+
+	for i := 0; i < 2; i++ {
+		_, _ = svc.SearchAdvancedWithProvider(context.Background(), SearchRequest{Query: "circuit", Kind: SearchKindWeb}, "invoke", "brave_primary")
+	}
+	status := svc.CircuitStatus("brave_primary")
+	if status.Phase != string(circuitOpen) || status.ConsecutiveFailures != 2 || status.FailureRate <= 0 {
+		t.Fatalf("unexpected open status: %+v", status)
+	}
+	if status.OpenedAt == nil || status.OpenUntil == nil || status.LastFailure == nil {
+		t.Fatalf("missing circuit timestamps: %+v", status)
+	}
+
+	time.Sleep(2 * time.Millisecond)
+	provider.err = nil
+	provider.results = []SearchResult{{Title: "ok", URL: "https://example.com"}}
+	_, err := svc.SearchAdvancedWithProvider(context.Background(), SearchRequest{Query: "recovery", Kind: SearchKindWeb}, "invoke", "brave_primary")
+	if err != nil {
+		t.Fatalf("half-open recovery failed: %v", err)
+	}
+	status = svc.CircuitStatus("brave_primary")
+	if status.Phase != string(circuitClosed) || status.RecoveryAttempts < 1 || status.RecoveryInFlight {
+		t.Fatalf("unexpected recovered status: %+v", status)
 	}
 }

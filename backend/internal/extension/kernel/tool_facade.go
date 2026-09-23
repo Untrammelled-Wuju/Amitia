@@ -528,6 +528,24 @@ func (f *ToolFacade) ExecuteTool(ctx context.Context, toolID capability.Capabili
 
 func (f *ToolFacade) ExecuteModelTool(ctx context.Context, modelName string, input json.RawMessage, scope InvocationScope, idempotencyKey string) (ToolDispatchResult, bool) {
 	f.counters.IncExecuteModelTool()
+	if result, handled := f.executeModelToolSpecial(ctx, modelName, input, scope); handled {
+		return result, true
+	}
+	if f.toolRegistry == nil {
+		return ToolDispatchResult{Status: "FAILED", VisibleText: "tool registry not configured", Error: &ToolDispatchError{Code: "TOOL_REGISTRY_UNAVAILABLE"}}, false
+	}
+	def, ok := f.toolRegistry.GetByModelName(ctx, modelName)
+	if !ok {
+		return ToolDispatchResult{Status: "FAILED", VisibleText: fmt.Sprintf("tool %s not found in kernel registry", modelName), Error: &ToolDispatchError{Code: "TOOL_NOT_FOUND", Message: modelName}}, false
+	}
+	if !workflowToolAllowedForSpace(def, scope.SpaceID) {
+		return ToolDispatchResult{Status: "FAILED", VisibleText: fmt.Sprintf("tool %s not found in kernel registry", modelName), Error: &ToolDispatchError{Code: "TOOL_NOT_FOUND", Message: modelName}}, false
+	}
+	f.counters.IncPipelineExecution()
+	return f.executeResolvedTool(ctx, def, input, scope, scope.ToolCallID, idempotencyKey), true
+}
+
+func (f *ToolFacade) executeModelToolSpecial(ctx context.Context, modelName string, input json.RawMessage, scope InvocationScope) (ToolDispatchResult, bool) {
 	if modelName == ActivateSkillToolName && f.agentSkillBackend != nil {
 		result, _ := f.handleActivateSkill(ctx, input, scope)
 		return result, true
@@ -560,18 +578,7 @@ func (f *ToolFacade) ExecuteModelTool(ctx context.Context, modelName string, inp
 		result, _ := f.handleAcquireCapability(ctx, input, scope)
 		return result, true
 	}
-	if f.toolRegistry == nil {
-		return ToolDispatchResult{Status: "FAILED", VisibleText: "tool registry not configured", Error: &ToolDispatchError{Code: "TOOL_REGISTRY_UNAVAILABLE"}}, false
-	}
-	def, ok := f.toolRegistry.GetByModelName(ctx, modelName)
-	if !ok {
-		return ToolDispatchResult{Status: "FAILED", VisibleText: fmt.Sprintf("tool %s not found in kernel registry", modelName), Error: &ToolDispatchError{Code: "TOOL_NOT_FOUND", Message: modelName}}, false
-	}
-	if !workflowToolAllowedForSpace(def, scope.SpaceID) {
-		return ToolDispatchResult{Status: "FAILED", VisibleText: fmt.Sprintf("tool %s not found in kernel registry", modelName), Error: &ToolDispatchError{Code: "TOOL_NOT_FOUND", Message: modelName}}, false
-	}
-	f.counters.IncPipelineExecution()
-	return f.executeResolvedTool(ctx, def, input, scope, scope.ToolCallID, idempotencyKey), true
+	return ToolDispatchResult{}, false
 }
 
 func (f *ToolFacade) AfterReply(scope InvocationScope, reply ReplyView) bool {
@@ -780,6 +787,8 @@ func (f *ToolFacade) buildKernelModelTools(ctx context.Context, scope Invocation
 type resolvedExecution struct {
 	target              capability.InvocationExecutionTarget
 	missingCapability   capability.CapabilityID
+	resolutionCode      string
+	resolutionDetail    string
 	resolverUnavailable bool
 }
 
@@ -829,7 +838,21 @@ func (f *ToolFacade) resolveExecutionTarget(ctx context.Context, def capability.
 	}
 	result, err := f.capabilityResolver.Resolve(req)
 	if err != nil || !result.HasResult() {
-		return resolvedExecution{missingCapability: capID}
+		code := "CAPABILITY_NO_AVAILABLE_PROVIDER"
+		for _, reason := range result.ReasonCodes {
+			if reason == string(capability.ResolutionFailureCapabilityNotRegistered) {
+				code = "CAPABILITY_NOT_REGISTERED"
+				break
+			}
+		}
+		detail := ""
+		if err != nil {
+			detail = err.Error()
+		}
+		if detail == "" {
+			detail = fmt.Sprintf("capability %s has no executable provider", capID)
+		}
+		return resolvedExecution{missingCapability: capID, resolutionCode: code, resolutionDetail: detail}
 	}
 	return resolvedExecution{target: result.ExecutionTarget}
 }
@@ -912,13 +935,13 @@ func (f *ToolFacade) executeResolvedTool(ctx context.Context, def capability.Too
 		}
 		if resolved.missingCapability != "" {
 			return ToolDispatchResult{
-				Status:      "FAILED",
-				VisibleText: fmt.Sprintf("capability not available: %s", resolved.missingCapability),
+				Status: "FAILED",
 				Error: &ToolDispatchError{
-					Code:    "CAPABILITY_NOT_REGISTERED",
+					Code:    resolved.resolutionCode,
 					Message: string(resolved.missingCapability),
-					Detail:  fmt.Sprintf("capability %s has no executable provider", resolved.missingCapability),
+					Detail:  resolved.resolutionDetail,
 				},
+				VisibleText: resolved.resolutionDetail,
 			}
 		}
 	}
@@ -955,11 +978,14 @@ func (f *ToolFacade) executeResolvedTool(ctx context.Context, def capability.Too
 }
 
 func (f *ToolFacade) ExecuteModelToolStream(ctx context.Context, modelName string, input json.RawMessage, scope InvocationScope, idempotencyKey string, sink capability.ToolStreamSink) (ToolDispatchResult, bool, error) {
-	if f.toolRegistry == nil {
-		return ToolDispatchResult{Status: "FAILED", VisibleText: "tool registry not configured", Error: &ToolDispatchError{Code: "TOOL_REGISTRY_UNAVAILABLE"}}, false, nil
-	}
 	if sink == nil {
 		return ToolDispatchResult{Status: "FAILED", VisibleText: "stream sink is required", Error: &ToolDispatchError{Code: "STREAM_SINK_REQUIRED"}}, false, fmt.Errorf("stream sink is nil")
+	}
+	if result, handled := f.executeModelToolSpecial(ctx, modelName, input, scope); handled {
+		return result, true, nil
+	}
+	if f.toolRegistry == nil {
+		return ToolDispatchResult{Status: "FAILED", VisibleText: "tool registry not configured", Error: &ToolDispatchError{Code: "TOOL_REGISTRY_UNAVAILABLE"}}, false, nil
 	}
 
 	def, ok := f.toolRegistry.GetByModelName(ctx, modelName)
@@ -983,7 +1009,7 @@ func (f *ToolFacade) ExecuteModelToolStream(ctx context.Context, modelName strin
 		return ToolDispatchResult{Status: "FAILED", VisibleText: "capability resolver unavailable", Error: &ToolDispatchError{Code: "CAPABILITY_RESOLVER_UNAVAILABLE", Message: string(def.ID)}}, true, nil
 	}
 	if resolved.missingCapability != "" {
-		return ToolDispatchResult{Status: "FAILED", VisibleText: fmt.Sprintf("capability not available: %s", resolved.missingCapability), Error: &ToolDispatchError{Code: "CAPABILITY_NOT_REGISTERED", Message: string(resolved.missingCapability)}}, true, nil
+		return ToolDispatchResult{Status: "FAILED", VisibleText: resolved.resolutionDetail, Error: &ToolDispatchError{Code: resolved.resolutionCode, Message: string(resolved.missingCapability), Detail: resolved.resolutionDetail}}, true, nil
 	}
 	streamMetadata := map[string]any{"execution_mode": "capability_resolved"}
 	approvalMode := capabilityApprovalMode(scope.PermissionMode)

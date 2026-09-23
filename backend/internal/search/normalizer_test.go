@@ -249,3 +249,19 @@ func TestValidateResultURL_BlobScheme(t *testing.T) {
 		t.Fatal("blob should be rejected")
 	}
 }
+
+func TestCanonicalizeURLStripsTrackingParamsButKeepsBusinessParams(t *testing.T) {
+	u, _ := validateResultURL("https://Example.com/article?id=42&utm_source=newsletter&fbclid=abc&utm_campaign=launch")
+	got := canonicalizeURL(u)
+	if got != "https://example.com/article?id=42" {
+		t.Fatalf("unexpected canonical URL: %q", got)
+	}
+}
+
+func TestCanonicalizeURLPreservesDistinctBusinessQuery(t *testing.T) {
+	first, _ := validateResultURL("https://example.com/item?id=1")
+	second, _ := validateResultURL("https://example.com/item?id=2")
+	if canonicalizeURL(first) == canonicalizeURL(second) {
+		t.Fatal("canonicalization must not merge distinct business query parameters")
+	}
+}

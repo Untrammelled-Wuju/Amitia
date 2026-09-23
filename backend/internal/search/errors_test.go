@@ -2,7 +2,9 @@ package search
 
 import (
 	"errors"
+	"net/http"
 	"testing"
+	"time"
 )
 
 func TestNewError_Basic(t *testing.T) {
@@ -149,5 +151,20 @@ func TestIsServerError(t *testing.T) {
 	}
 	if IsServerError(400) || IsServerError(200) {
 		t.Fatal("non-5xx should not be server errors")
+	}
+}
+
+func TestParseRetryAfterSeconds(t *testing.T) {
+	if got := ParseRetryAfter("5", time.Unix(0, 0)); got != DurationMs(5000) {
+		t.Fatalf("retry after=%dms, want 5000", got)
+	}
+}
+
+func TestParseRetryAfterHTTPDate(t *testing.T) {
+	now := time.Date(2026, 9, 23, 12, 0, 0, 0, time.UTC)
+	value := now.Add(7 * time.Second).Format(http.TimeFormat)
+	got := ParseRetryAfter(value, now)
+	if got < DurationMs(6900) || got > DurationMs(7100) {
+		t.Fatalf("retry after=%dms, want about 7000", got)
 	}
 }

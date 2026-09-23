@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/spf13/viper"
+	"github.com/u-ai/backend/internal/search"
 	"github.com/u-ai/backend/pkg/resourceuri"
 )
 
@@ -36,56 +37,77 @@ type ProvidersConfig struct {
 	Search        SearchRuntimeProviderConfig  `mapstructure:"search"`
 }
 
+type SearchProviderRouteRuntimeConfig struct {
+	Preferred []string `mapstructure:"preferred"`
+	Fallback  []string `mapstructure:"fallback"`
+}
+
 type SearchRuntimeProviderConfig struct {
-	Enabled          bool                                   `mapstructure:"enabled"`
-	DefaultProvider  string                                 `mapstructure:"defaultProvider"`
-	DefaultLimit     int                                    `mapstructure:"defaultLimit"`
-	MaxLimit         int                                    `mapstructure:"maxLimit"`
-	TimeoutSec       int                                    `mapstructure:"timeoutSec"`
-	MaxResponseBytes int64                                  `mapstructure:"maxResponseBytes"`
-	CacheTTLSec      int                                    `mapstructure:"cacheTtlSec"`
-	CacheMaxEntries  int                                    `mapstructure:"cacheMaxEntries"`
-	CircuitFailures  int                                    `mapstructure:"circuitFailures"`
-	CircuitOpenSec   int                                    `mapstructure:"circuitOpenSec"`
-	Research         WebResearchRuntimeConfig               `mapstructure:"research"`
-	Providers        map[string]SearchProviderRuntimeConfig `mapstructure:"providers"`
+	Enabled             bool                                        `mapstructure:"enabled"`
+	DefaultProvider     string                                      `mapstructure:"defaultProvider"`
+	DefaultLimit        int                                         `mapstructure:"defaultLimit"`
+	MaxLimit            int                                         `mapstructure:"maxLimit"`
+	TimeoutSec          int                                         `mapstructure:"timeoutSec"`
+	MaxResponseBytes    int64                                       `mapstructure:"maxResponseBytes"`
+	CacheTTLSec         int                                         `mapstructure:"cacheTtlSec"`
+	CacheMaxEntries     int                                         `mapstructure:"cacheMaxEntries"`
+	NegativeCacheTTLSec int                                         `mapstructure:"negativeCacheTtlSec"`
+	CircuitFailures     int                                         `mapstructure:"circuitFailures"`
+	CircuitOpenSec      int                                         `mapstructure:"circuitOpenSec"`
+	Research            WebResearchRuntimeConfig                    `mapstructure:"research"`
+	Providers           map[string]SearchProviderRuntimeConfig      `mapstructure:"providers"`
+	Routes              map[string]SearchProviderRouteRuntimeConfig `mapstructure:"routes"`
 }
 
 type WebResearchRuntimeConfig struct {
-	MaxExecutionSec       int   `mapstructure:"maxExecutionSec"`
-	MaxToolOutputChars    int   `mapstructure:"maxToolOutputChars"`
-	MaxQueries            int   `mapstructure:"maxQueries"`
-	MaxProvidersPerQuery  int   `mapstructure:"maxProvidersPerQuery"`
-	MaxSearchResults      int   `mapstructure:"maxSearchResults"`
-	MaxOpenPages          int   `mapstructure:"maxOpenPages"`
-	MaxDeepOpenPages      int   `mapstructure:"maxDeepOpenPages"`
-	MaxDeepRounds         int   `mapstructure:"maxDeepRounds"`
-	MaxDeepSearchCalls    int   `mapstructure:"maxDeepSearchCalls"`
-	MinDeepNewSources     int   `mapstructure:"minDeepNewSources"`
-	MaxParallelSearch     int   `mapstructure:"maxParallelSearch"`
-	MaxParallelFetch      int   `mapstructure:"maxParallelFetch"`
-	SearchTimeoutSec      int   `mapstructure:"searchTimeoutSec"`
-	FetchTimeoutSec       int   `mapstructure:"fetchTimeoutSec"`
-	MaxFetchBytes         int64 `mapstructure:"maxFetchBytes"`
-	MaxPageChars          int   `mapstructure:"maxPageChars"`
-	MaxEvidencePerPage    int   `mapstructure:"maxEvidencePerPage"`
-	MaxEvidenceChars      int   `mapstructure:"maxEvidenceChars"`
-	ReferenceTTLHours     int   `mapstructure:"referenceTtlHours"`
-	PageCacheTTLSec       int   `mapstructure:"pageCacheTtlSec"`
-	AutoBrowserEscalation bool  `mapstructure:"autoBrowserEscalation"`
-	MinStaticContentChars int   `mapstructure:"minStaticContentChars"`
-	MaxRedirects          int   `mapstructure:"maxRedirects"`
+	DeepResearchEnabled   bool    `mapstructure:"deepResearchEnabled"`
+	BrowserEnabled        bool    `mapstructure:"browserEnabled"`
+	PDFEnabled            bool    `mapstructure:"pdfEnabled"`
+	PDFTextCommand        string  `mapstructure:"pdfTextCommand"`
+	PDFInfoCommand        string  `mapstructure:"pdfInfoCommand"`
+	PDFTimeoutSec         int     `mapstructure:"pdfTimeoutSec"`
+	MaxExecutionSec       int     `mapstructure:"maxExecutionSec"`
+	MaxToolOutputChars    int     `mapstructure:"maxToolOutputChars"`
+	MaxQueries            int     `mapstructure:"maxQueries"`
+	MaxProvidersPerQuery  int     `mapstructure:"maxProvidersPerQuery"`
+	MaxSearchResults      int     `mapstructure:"maxSearchResults"`
+	MaxResultsPerDomain   int     `mapstructure:"maxResultsPerDomain"`
+	MaxOpenPages          int     `mapstructure:"maxOpenPages"`
+	MaxDeepOpenPages      int     `mapstructure:"maxDeepOpenPages"`
+	MaxDeepRounds         int     `mapstructure:"maxDeepRounds"`
+	MaxDeepSearchCalls    int     `mapstructure:"maxDeepSearchCalls"`
+	MaxSearchCalls        int     `mapstructure:"maxSearchCalls"`
+	MaxProviderCostUSD    float64 `mapstructure:"maxProviderCostUsd"`
+	MaxProviderCredits    float64 `mapstructure:"maxProviderCredits"`
+	MinDeepNewSources     int     `mapstructure:"minDeepNewSources"`
+	MaxParallelSearch     int     `mapstructure:"maxParallelSearch"`
+	MaxParallelFetch      int     `mapstructure:"maxParallelFetch"`
+	SearchTimeoutSec      int     `mapstructure:"searchTimeoutSec"`
+	FetchTimeoutSec       int     `mapstructure:"fetchTimeoutSec"`
+	MaxFetchBytes         int64   `mapstructure:"maxFetchBytes"`
+	MaxPageChars          int     `mapstructure:"maxPageChars"`
+	MaxEvidencePerPage    int     `mapstructure:"maxEvidencePerPage"`
+	MaxEvidenceChars      int     `mapstructure:"maxEvidenceChars"`
+	ReferenceTTLHours     int     `mapstructure:"referenceTtlHours"`
+	PageCacheTTLSec       int     `mapstructure:"pageCacheTtlSec"`
+	AutoBrowserEscalation bool    `mapstructure:"autoBrowserEscalation"`
+	MinStaticContentChars int     `mapstructure:"minStaticContentChars"`
+	MaxRedirects          int     `mapstructure:"maxRedirects"`
+	MaxBrowserPages       int     `mapstructure:"maxBrowserPages"`
+	MaxBrowserScrolls     int     `mapstructure:"maxBrowserScrolls"`
+	MaxBrowserSeconds     int     `mapstructure:"maxBrowserSeconds"`
 }
 
 type SearchProviderRuntimeConfig struct {
-	Type          string   `mapstructure:"type"`
-	Endpoint      string   `mapstructure:"endpoint"`
-	CredentialRef string   `mapstructure:"credentialRef"`
-	Enabled       bool     `mapstructure:"enabled"`
-	Priority      int      `mapstructure:"priority"`
-	Kinds         []string `mapstructure:"kinds"`
-	AllowHTTP     bool     `mapstructure:"allowHttp"`
-	AllowPrivate  bool     `mapstructure:"allowPrivate"`
+	Type              string            `mapstructure:"type"`
+	Endpoint          string            `mapstructure:"endpoint"`
+	CredentialRef     string            `mapstructure:"credentialRef"`
+	Enabled           bool              `mapstructure:"enabled"`
+	Priority          int               `mapstructure:"priority"`
+	Kinds             []string          `mapstructure:"kinds"`
+	AllowHTTP         bool              `mapstructure:"allowHttp"`
+	AllowPrivate      bool              `mapstructure:"allowPrivate"`
+	EngineCredentials map[string]string `mapstructure:"engineCredentials"`
 }
 
 type BrowserRuntimeProviderConfig struct {
@@ -466,24 +488,35 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("providers.browser.navigationTimeoutSec", 30)
 	v.SetDefault("providers.browser.maxNavigationTimeoutSec", 120)
 	v.SetDefault("providers.search.enabled", false)
-	v.SetDefault("providers.search.defaultProvider", "searxng")
+	v.SetDefault("providers.search.defaultProvider", "native")
 	v.SetDefault("providers.search.defaultLimit", 8)
 	v.SetDefault("providers.search.maxLimit", 20)
 	v.SetDefault("providers.search.timeoutSec", 10)
 	v.SetDefault("providers.search.maxResponseBytes", 2097152)
 	v.SetDefault("providers.search.cacheTtlSec", 120)
 	v.SetDefault("providers.search.cacheMaxEntries", 512)
+	v.SetDefault("providers.search.negativeCacheTtlSec", 30)
 	v.SetDefault("providers.search.circuitFailures", 3)
 	v.SetDefault("providers.search.circuitOpenSec", 30)
+	v.SetDefault("providers.search.research.deepResearchEnabled", true)
+	v.SetDefault("providers.search.research.browserEnabled", true)
+	v.SetDefault("providers.search.research.pdfEnabled", true)
+	v.SetDefault("providers.search.research.pdfTextCommand", "pdftotext")
+	v.SetDefault("providers.search.research.pdfInfoCommand", "pdfinfo")
+	v.SetDefault("providers.search.research.pdfTimeoutSec", 20)
 	v.SetDefault("providers.search.research.maxQueries", 4)
 	v.SetDefault("providers.search.research.maxExecutionSec", 120)
 	v.SetDefault("providers.search.research.maxToolOutputChars", 120000)
 	v.SetDefault("providers.search.research.maxProvidersPerQuery", 2)
 	v.SetDefault("providers.search.research.maxSearchResults", 12)
+	v.SetDefault("providers.search.research.maxResultsPerDomain", 3)
 	v.SetDefault("providers.search.research.maxOpenPages", 4)
 	v.SetDefault("providers.search.research.maxDeepOpenPages", 6)
 	v.SetDefault("providers.search.research.maxDeepRounds", 3)
 	v.SetDefault("providers.search.research.maxDeepSearchCalls", 12)
+	v.SetDefault("providers.search.research.maxSearchCalls", 12)
+	v.SetDefault("providers.search.research.maxProviderCostUsd", 1.0)
+	v.SetDefault("providers.search.research.maxProviderCredits", 20.0)
 	v.SetDefault("providers.search.research.minDeepNewSources", 2)
 	v.SetDefault("providers.search.research.maxParallelSearch", 4)
 	v.SetDefault("providers.search.research.maxParallelFetch", 3)
@@ -498,6 +531,9 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("providers.search.research.autoBrowserEscalation", true)
 	v.SetDefault("providers.search.research.minStaticContentChars", 240)
 	v.SetDefault("providers.search.research.maxRedirects", 5)
+	v.SetDefault("providers.search.research.maxBrowserPages", 2)
+	v.SetDefault("providers.search.research.maxBrowserScrolls", 2)
+	v.SetDefault("providers.search.research.maxBrowserSeconds", 30)
 	v.SetDefault("components.taskHost.enabled", true)
 	v.SetDefault("components.taskHost.entryUri", "")
 	v.SetDefault("components.taskHost.workUri", "")
@@ -709,10 +745,13 @@ func validateSearchRuntimeConfig(cfg SearchRuntimeProviderConfig) error {
 	if !cfg.Enabled {
 		return nil
 	}
-	if len(cfg.Providers) == 0 {
+	if len(cfg.Providers) == 0 && !strings.EqualFold(strings.TrimSpace(cfg.DefaultProvider), search.ProviderNative) {
 		return fmt.Errorf("enabled=true 但未配置 provider")
 	}
 	enabledCount := 0
+	if len(cfg.Providers) == 0 && strings.EqualFold(strings.TrimSpace(cfg.DefaultProvider), search.ProviderNative) {
+		enabledCount = 1
+	}
 	for id, provider := range cfg.Providers {
 		id = strings.TrimSpace(id)
 		if id == "" {
@@ -727,9 +766,12 @@ func validateSearchRuntimeConfig(cfg SearchRuntimeProviderConfig) error {
 		enabledCount++
 		providerType := strings.ToLower(strings.TrimSpace(provider.Type))
 		switch providerType {
-		case "brave", "searxng":
+		case "brave", "native", "exa", "tavily":
 		default:
 			return fmt.Errorf("provider %q type 不受支持: %q", id, provider.Type)
+		}
+		if providerType == "native" {
+			continue
 		}
 		endpoint := strings.TrimSpace(provider.Endpoint)
 		if endpoint == "" {
@@ -742,9 +784,6 @@ func validateSearchRuntimeConfig(cfg SearchRuntimeProviderConfig) error {
 		if parsedEndpoint.Scheme == "http" && !provider.AllowHTTP {
 			return fmt.Errorf("provider %q 使用 http endpoint 但 allowHttp=false", id)
 		}
-		if providerType == "brave" && strings.TrimSpace(provider.CredentialRef) == "" {
-			return fmt.Errorf("provider %q 缺少 credentialRef", id)
-		}
 	}
 	if enabledCount == 0 {
 		return fmt.Errorf("enabled=true 但没有启用的 provider")
@@ -752,12 +791,38 @@ func validateSearchRuntimeConfig(cfg SearchRuntimeProviderConfig) error {
 	defaultID := strings.TrimSpace(cfg.DefaultProvider)
 	if defaultID != "" {
 		provider, ok := cfg.Providers[defaultID]
-		if !ok || !provider.Enabled {
+		if !strings.EqualFold(defaultID, search.ProviderNative) && (!ok || !provider.Enabled) {
 			return fmt.Errorf("defaultProvider %q 未配置或未启用", defaultID)
+		}
+	}
+	for routeName, route := range cfg.Routes {
+		routeName = strings.ToLower(strings.TrimSpace(routeName))
+		if routeName == "" {
+			return fmt.Errorf("search route 名称不能为空")
+		}
+		seen := map[string]struct{}{}
+		for _, providerID := range append(append([]string{}, route.Preferred...), route.Fallback...) {
+			providerID = strings.TrimSpace(providerID)
+			if providerID == "" {
+				return fmt.Errorf("search route %q 包含空 provider ID", routeName)
+			}
+			if _, duplicate := seen[providerID]; duplicate {
+				return fmt.Errorf("search route %q 重复引用 provider %q", routeName, providerID)
+			}
+			seen[providerID] = struct{}{}
+			if strings.EqualFold(providerID, search.ProviderNative) {
+				continue
+			}
+			if _, ok := cfg.Providers[providerID]; !ok {
+				return fmt.Errorf("search route %q 引用未配置 provider %q", routeName, providerID)
+			}
 		}
 	}
 	if cfg.CacheTTLSec < -1 || cfg.CacheTTLSec > 24*60*60 {
 		return fmt.Errorf("cacheTtlSec 必须为 -1（禁用）、0（默认）或不超过 86400 秒")
+	}
+	if cfg.NegativeCacheTTLSec < -1 || cfg.NegativeCacheTTLSec > 24*60*60 {
+		return fmt.Errorf("negativeCacheTtlSec 必须为 -1（禁用）、0（默认）或不超过 86400 秒")
 	}
 	if cfg.CacheMaxEntries < 0 || cfg.CacheMaxEntries > 10000 {
 		return fmt.Errorf("cacheMaxEntries 必须为 0（默认）或不超过 10000")
@@ -766,12 +831,16 @@ func validateSearchRuntimeConfig(cfg SearchRuntimeProviderConfig) error {
 		return fmt.Errorf("provider circuit breaker 配置超出安全范围")
 	}
 	r := cfg.Research
-	if r.MaxExecutionSec < 0 || r.MaxExecutionSec > 30*60 || r.MaxToolOutputChars < 0 || r.MaxToolOutputChars > 500000 ||
+	if r.PDFTimeoutSec < 0 || r.PDFTimeoutSec > 5*60 || r.MaxExecutionSec < 0 || r.MaxExecutionSec > 30*60 || r.MaxToolOutputChars < 0 || r.MaxToolOutputChars > 500000 ||
 		r.MaxQueries < 0 || r.MaxQueries > 16 || r.MaxProvidersPerQuery < 0 || r.MaxProvidersPerQuery > 8 ||
-		r.MaxSearchResults < 0 || r.MaxSearchResults > 100 || r.MaxOpenPages < 0 || r.MaxOpenPages > 32 ||
+		r.MaxSearchResults < 0 || r.MaxSearchResults > 100 || r.MaxResultsPerDomain < 0 || r.MaxResultsPerDomain > 20 || r.MaxOpenPages < 0 || r.MaxOpenPages > 32 ||
 		r.MaxDeepOpenPages < 0 || r.MaxDeepOpenPages > 64 || r.MaxDeepRounds < 0 || r.MaxDeepRounds > 8 ||
-		r.MaxDeepSearchCalls < 0 || r.MaxDeepSearchCalls > 64 || r.MaxParallelSearch < 0 || r.MaxParallelSearch > 16 ||
-		r.MaxParallelFetch < 0 || r.MaxParallelFetch > 16 || r.MaxRedirects < 0 || r.MaxRedirects > 10 {
+		r.MaxDeepSearchCalls < 0 || r.MaxDeepSearchCalls > 64 || r.MaxSearchCalls < 0 || r.MaxSearchCalls > 64 ||
+		r.MaxProviderCostUSD < 0 || r.MaxProviderCostUSD > 1000 || r.MaxProviderCredits < 0 || r.MaxProviderCredits > 100000 ||
+		r.MaxParallelSearch < 0 || r.MaxParallelSearch > 16 ||
+		r.MaxParallelFetch < 0 || r.MaxParallelFetch > 16 || r.MaxRedirects < 0 || r.MaxRedirects > 10 ||
+		r.MaxBrowserPages < 0 || r.MaxBrowserPages > 16 || r.MaxBrowserScrolls < 0 || r.MaxBrowserScrolls > 16 ||
+		r.MaxBrowserSeconds < 0 || r.MaxBrowserSeconds > 15*60 {
 		return fmt.Errorf("research 预算配置超出安全范围")
 	}
 	if r.MaxFetchBytes < 0 || r.MaxFetchBytes > 32*1024*1024 || r.MaxPageChars < 0 || r.MaxPageChars > 250000 ||

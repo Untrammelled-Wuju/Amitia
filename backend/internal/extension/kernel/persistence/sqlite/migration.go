@@ -2499,6 +2499,31 @@ var schemaMigrations = []string{
 		UNIQUE(turn_id, citation_number)
 	)`,
 	`CREATE INDEX IF NOT EXISTS idx_web_turn_citations_turn ON web_turn_citations(turn_id, citation_number)`,
+	`CREATE TABLE IF NOT EXISTS web_page_versions (
+		ref_id TEXT NOT NULL,
+		content_hash TEXT NOT NULL,
+		title TEXT,
+		content_type TEXT NOT NULL,
+		content TEXT NOT NULL,
+		links_json TEXT NOT NULL,
+		truncated INTEGER NOT NULL DEFAULT 0,
+		dynamic INTEGER NOT NULL DEFAULT 0,
+		first_seen_at DATETIME NOT NULL,
+		last_seen_at DATETIME NOT NULL,
+		PRIMARY KEY(ref_id, content_hash)
+	)`,
+	`CREATE INDEX IF NOT EXISTS idx_web_page_versions_ref ON web_page_versions(ref_id, first_seen_at)`,
+	`ALTER TABLE web_evidence ADD COLUMN page_content_hash TEXT NOT NULL DEFAULT ''`,
+	`CREATE TABLE IF NOT EXISTS web_turn_citation_evidence (
+		turn_id TEXT NOT NULL,
+		citation_number INTEGER NOT NULL,
+		ref_id TEXT NOT NULL,
+		evidence_id TEXT NOT NULL,
+		created_at DATETIME NOT NULL,
+		PRIMARY KEY(turn_id, evidence_id)
+	)`,
+	`CREATE INDEX IF NOT EXISTS idx_web_turn_citation_evidence_number ON web_turn_citation_evidence(turn_id, citation_number)`,
+	`CREATE INDEX IF NOT EXISTS idx_web_turn_citation_evidence_ref ON web_turn_citation_evidence(ref_id)`,
 }
 
 type dbExecutor interface {

@@ -92,11 +92,43 @@ func canonicalizeURL(u *url.URL) string {
 	cloned.Scheme = strings.ToLower(cloned.Scheme)
 	cloned.Host = canonicalHost(cloned.Host)
 	cloned.Fragment = ""
-	if (cloned.Scheme == "http" && cloned.Port() == "80") ||
-		(cloned.Scheme == "https" && cloned.Port() == "443") {
-		cloned.Host = cloned.Hostname()
+	hostname := strings.ToLower(strings.TrimSuffix(cloned.Hostname(), "."))
+	port := cloned.Port()
+	if (cloned.Scheme == "http" && port == "80") || (cloned.Scheme == "https" && port == "443") {
+		port = ""
 	}
+	if strings.Contains(hostname, ":") {
+		if port != "" {
+			cloned.Host = "[" + hostname + "]:" + port
+		} else {
+			cloned.Host = "[" + hostname + "]"
+		}
+	} else if port != "" {
+		cloned.Host = hostname + ":" + port
+	} else {
+		cloned.Host = hostname
+	}
+	query := cloned.Query()
+	for key := range query {
+		if isTrackingQueryParam(key) {
+			query.Del(key)
+		}
+	}
+	cloned.RawQuery = query.Encode()
 	return cloned.String()
+}
+
+func isTrackingQueryParam(key string) bool {
+	key = strings.ToLower(strings.TrimSpace(key))
+	if strings.HasPrefix(key, "utm_") {
+		return true
+	}
+	switch key {
+	case "fbclid", "gclid", "dclid", "msclkid", "mc_cid", "mc_eid", "igshid", "yclid", "vero_id", "_hsenc", "_hsmi":
+		return true
+	default:
+		return false
+	}
 }
 
 func canonicalHost(host string) string {
@@ -163,6 +195,7 @@ func (n *Normalizer) NormalizeMetadata(meta *SearchResultMetadata) {
 	}
 	meta.DOI = sanitizeText(meta.DOI, 256)
 	meta.Journal = sanitizeText(meta.Journal, 512)
+	meta.Album = sanitizeText(meta.Album, 512)
 	meta.Repository = sanitizeText(meta.Repository, 512)
 	meta.Path = sanitizeText(meta.Path, 1024)
 	meta.License = sanitizeText(meta.License, 128)

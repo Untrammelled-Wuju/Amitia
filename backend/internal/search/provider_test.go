@@ -147,3 +147,60 @@ func TestProviderSet_DefaultProviderPrecedesHigherPriorityFallback(t *testing.T)
 		t.Fatalf("unexpected provider order: %v", ids)
 	}
 }
+
+func TestProviderSetUnregisterClearsDefaultAndPriority(t *testing.T) {
+	set := NewProviderSet("primary")
+	set.RegisterWithPriority("primary", &testProvider{id: "primary"}, 100)
+	set.RegisterWithPriority("backup", &testProvider{id: "backup"}, 50)
+
+	if !set.Unregister("primary") {
+		t.Fatal("expected unregister to succeed")
+	}
+	if set.Has("primary") || set.DefaultID() != "" {
+		t.Fatalf("provider/default not cleared: has=%v default=%q", set.Has("primary"), set.DefaultID())
+	}
+	if _, ok := set.Priority("primary"); ok {
+		t.Fatal("priority entry should be removed with provider")
+	}
+	if !set.Has("backup") {
+		t.Fatal("unrelated provider should remain registered")
+	}
+}
+
+func TestProviderSetResolveUsesInstanceOrDefault(t *testing.T) {
+	set := NewProviderSet("primary")
+	set.RegisterWithPriority("primary", &testProvider{id: "impl-primary"}, 100)
+	set.RegisterWithPriority("backup", &testProvider{id: "impl-backup"}, 50)
+
+	resolved, ok := set.Resolve("")
+	if !ok || resolved.ID() != "impl-primary" {
+		t.Fatalf("default resolve failed: %#v %v", resolved, ok)
+	}
+	resolved, ok = set.Resolve("backup")
+	if !ok || resolved.ID() != "impl-backup" {
+		t.Fatalf("instance resolve failed: %#v %v", resolved, ok)
+	}
+}
+
+func TestProviderSetManifestDefaultsToActualCapabilities(t *testing.T) {
+	set := NewProviderSet("")
+	provider := &testProvider{id: "plugin", caps: ProviderCapabilities{GeneralWeb: true, SearchKinds: []SearchKind{SearchKindWeb}, DomainFilter: true}}
+	if err := set.RegisterWithManifest("plugin_primary", provider, 50, ProviderManifest{NetworkScopes: []string{"https://api.example.com", "https://api.example.com"}}); err != nil {
+		t.Fatal(err)
+	}
+	manifest, ok := set.Manifest("plugin_primary")
+	if !ok {
+		t.Fatal("manifest not registered")
+	}
+	if manifest.ID != "plugin_primary" || len(manifest.Capabilities) == 0 || len(manifest.NetworkScopes) != 1 {
+		t.Fatalf("unexpected manifest: %#v", manifest)
+	}
+}
+
+func TestProviderSetRejectsMismatchedManifestID(t *testing.T) {
+	set := NewProviderSet("")
+	err := set.RegisterWithManifest("instance", &testProvider{id: "impl"}, 1, ProviderManifest{ID: "other"})
+	if err == nil {
+		t.Fatal("expected manifest id mismatch error")
+	}
+}

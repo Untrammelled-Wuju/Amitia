@@ -245,14 +245,166 @@ function toolStateLabel(item: AssistantTurnItem): string {
 
 function resultText(item: AssistantTurnItem): string {
   const value = parseJSON(item.resultJson);
+  if (isWebResearchTool(item.toolName) && value && typeof value === "object" && !Array.isArray(value)) {
+    const formatted = formatWebResearchDetails(value as Record<string, unknown>);
+    if (formatted) return formatted;
+  }
   const text = stringify(value);
   if (text) return text;
   return item.errorCode || "无返回内容";
 }
 
+function isWebResearchTool(name?: string): boolean {
+  return name === "web_run" || name === "web.run";
+}
+
+function formatWebResearchDetails(record: Record<string, unknown>): string {
+  const lines: string[] = [];
+  const operation = String(record.operation || "research").trim();
+  const operationLabel: Record<string, string> = {
+    search: "搜索",
+    open: "网页读取",
+    find: "页面查找",
+    click: "链接读取",
+    screenshot: "视觉证据",
+  };
+  lines.push(`联网研究 · ${operationLabel[operation] || "研究"}`);
+
+  const research = record.research;
+  if (research && typeof research === "object" && !Array.isArray(research)) {
+    const researchRecord = research as Record<string, unknown>;
+    const plan = researchRecord.plan;
+    const unresolved = new Set(
+      (Array.isArray(researchRecord.unresolved_questions) ? researchRecord.unresolved_questions : [])
+        .map((value) => String(value || "").trim())
+        .filter(Boolean),
+    );
+    if (plan && typeof plan === "object" && !Array.isArray(plan)) {
+      const planRecord = plan as Record<string, unknown>;
+      const goal = String(planRecord.goal || "").trim();
+      if (goal) lines.push("", `研究目标：${goal}`);
+      const questions = Array.isArray(planRecord.questions) ? planRecord.questions : [];
+      if (questions.length > 0) {
+        lines.push("", "研究计划");
+        for (const question of questions) {
+          if (!question || typeof question !== "object" || Array.isArray(question)) continue;
+          const text = String((question as Record<string, unknown>).question || "").trim();
+          if (!text) continue;
+          lines.push(`${unresolved.has(text) ? "…" : "✓"} ${text}`);
+        }
+      }
+    }
+    const findings = Array.isArray(researchRecord.findings) ? researchRecord.findings : [];
+    if (findings.length > 0) {
+      lines.push("", "研究结论");
+      for (const finding of findings.slice(0, 12)) {
+        if (!finding || typeof finding !== "object" || Array.isArray(finding)) continue;
+        const row = finding as Record<string, unknown>;
+        const question = String(row.question || "").trim();
+        const status = String(row.status || "insufficient").trim();
+        const icon = status === "corroborated" ? "✓✓" : status === "supported" ? "✓" : "…";
+        if (question) lines.push(`${icon} ${question}`);
+        const summary = String(row.summary || "").trim();
+        if (summary) lines.push(`  ${summary.replace(/\s+/g, " ").slice(0, 600)}`);
+      }
+    }
+    const stopReason = String(researchRecord.stop_reason || "").trim();
+    if (stopReason) lines.push("", `停止条件：${researchStopReasonText(stopReason)}`);
+  }
+
+  const search = Array.isArray(record.search) ? record.search : [];
+  if (search.length > 0) {
+    lines.push("", `来源（${search.length}）`);
+    for (const source of search.slice(0, 20)) {
+      if (!source || typeof source !== "object" || Array.isArray(source)) continue;
+      const row = source as Record<string, unknown>;
+      const title = String(row.title || row.url || "来源").trim();
+      const url = String(row.url || "").trim();
+      lines.push(`- ${title}${url ? `\n  ${url}` : ""}`);
+    }
+  }
+
+  const citations = Array.isArray(record.citations) ? record.citations : [];
+  if (citations.length > 0) {
+    lines.push("", `证据与引用（${citations.length}）`);
+    for (const citation of citations.slice(0, 24)) {
+      if (!citation || typeof citation !== "object" || Array.isArray(citation)) continue;
+      const row = citation as Record<string, unknown>;
+      const index = Number(row.index || 0);
+      const title = String(row.title || row.url || "证据").trim();
+      const locator = row.locator;
+      let locatorText = "";
+      if (locator && typeof locator === "object" && !Array.isArray(locator)) {
+        const loc = locator as Record<string, unknown>;
+        if (loc.kind === "pdf_page") {
+          const page = Number(loc.page);
+          if (Number.isFinite(page)) locatorText = ` · PDF 第 ${page + 1} 页`;
+        }
+      }
+      lines.push(`- ${index > 0 ? `[${index}] ` : ""}${title}${locatorText}`);
+    }
+  }
+
+  const graph = record.evidence_graph;
+  if (graph && typeof graph === "object" && !Array.isArray(graph)) {
+    const graphRecord = graph as Record<string, unknown>;
+    const conflicts = Number(graphRecord.conflict_count || 0);
+    if (conflicts > 0) lines.push("", `证据冲突：${conflicts} 组（已保留供最终回答审计）`);
+  }
+
+  const security = record.security;
+  if (security && typeof security === "object" && !Array.isArray(security)) {
+    const securityRecord = security as Record<string, unknown>;
+    if (securityRecord.potential_prompt_injection === true) {
+      lines.push("", "安全：检测到网页中的指令型文本，已按不可信外部内容处理。");
+    }
+  }
+
+  const stats = record.stats;
+  const cost = research && typeof research === "object" && !Array.isArray(research)
+    ? (research as Record<string, unknown>).cost
+    : undefined;
+  if (stats && typeof stats === "object" && !Array.isArray(stats)) {
+    const row = stats as Record<string, unknown>;
+    const calls = Number(row.search_calls || 0);
+    const fetches = Number(row.fetch_calls || 0);
+    const duration = Number(row.duration_ms || 0);
+    const summary: string[] = [];
+    if (calls > 0) summary.push(`${calls} 次搜索`);
+    if (fetches > 0) summary.push(`${fetches} 次抓取`);
+    if (duration > 0) summary.push(`${duration} ms`);
+    if (summary.length > 0) lines.push("", `运行统计：${summary.join(" · ")}`);
+  }
+  if (cost && typeof cost === "object" && !Array.isArray(cost)) {
+    const row = cost as Record<string, unknown>;
+    const usd = Number(row.provider_cost_usd || 0);
+    const credits = Number(row.provider_credits || 0);
+    const values: string[] = [];
+    if (usd > 0) values.push(`$${usd.toFixed(4)}`);
+    if (credits > 0) values.push(`${credits} credits`);
+    if (values.length > 0) lines.push(`Provider 成本：${values.join(" · ")}`);
+  }
+  return lines.join("\n").trim();
+}
+
+function researchStopReasonText(reason: string): string {
+  const labels: Record<string, string> = {
+    coverage_satisfied: "关键问题已覆盖",
+    max_rounds: "达到研究轮次上限",
+    max_search_calls: "达到搜索调用上限",
+    max_provider_cost: "达到 Provider 成本上限",
+    max_provider_credits: "达到 Provider credits 上限",
+    no_new_queries: "没有新的有效查询",
+    no_new_sources: "没有发现新的有效来源",
+    low_information_gain: "新增信息已低于阈值",
+    budget_satisfied: "研究预算已满足",
+  };
+  return labels[reason] || reason;
+}
+
 function resultSummary(item: AssistantTurnItem): string {
   const value = parseJSON(item.resultJson);
-  if ((item.toolName === "web_run" || item.toolName === "web.run") && value && typeof value === "object" && !Array.isArray(value)) {
+  if (isWebResearchTool(item.toolName) && value && typeof value === "object" && !Array.isArray(value)) {
     const record = value as Record<string, unknown>;
     const results = Array.isArray(record.search) ? record.search.length : 0;
     const pages = Array.isArray(record.pages) ? record.pages.length : 0;

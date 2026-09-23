@@ -77,6 +77,13 @@ func BuildRequirements(tool capability.ToolDefinition, scope PermissionScope) []
 	return reqs
 }
 
+func SubjectForToolDefinition(tool capability.ToolDefinition) PermissionSubject {
+	if tool.ExtensionID == "" {
+		return PermissionSubject{Type: SubjectSystem, ID: "core"}
+	}
+	return SubjectForTool(tool.ExtensionID, tool.ID)
+}
+
 func BuildRequirementsFromIDs(permissionIDs []string, scope PermissionScope) []PermissionRequirement {
 	reqs := make([]PermissionRequirement, 0, len(permissionIDs))
 	for _, id := range permissionIDs {

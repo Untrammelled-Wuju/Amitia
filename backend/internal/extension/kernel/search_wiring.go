@@ -2,18 +2,32 @@ package kernel
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"time"
 
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	"github.com/u-ai/backend/internal/extension/kernel/secret"
 	"github.com/u-ai/backend/internal/search"
+	"github.com/u-ai/backend/internal/search/native"
+	nativeengines "github.com/u-ai/backend/internal/search/native/engines"
 	"github.com/u-ai/backend/internal/search/providers/brave"
-	"github.com/u-ai/backend/internal/search/providers/searxng"
+	"github.com/u-ai/backend/internal/search/providers/exa"
+	"github.com/u-ai/backend/internal/search/providers/tavily"
 	"github.com/u-ai/backend/internal/webresearch"
 	applog "github.com/u-ai/backend/log"
 )
+
+type SearchProviderRegistration struct {
+	InstanceID    string
+	Provider      search.Provider
+	Priority      int
+	CredentialRef string
+	Kinds         []string
+	Manifest      search.ProviderManifest
+}
 
 type secretLeaseAdapter struct {
 	broker *secret.Broker
@@ -58,17 +72,62 @@ func zeroSecretBytes(b []byte) {
 	}
 }
 
-func buildSearchService(config search.Config, broker *secret.Broker) *search.Service {
-	providers := search.NewProviderSet(config.DefaultProvider)
-	if config.HasProvider() {
-		buildSearchProviders(providers, config)
+func buildSearchService(config search.Config, broker *secret.Broker, db *sql.DB, external []SearchProviderRegistration) *search.Service {
+	runtimeConfig := config
+	runtimeConfig.Providers = cloneSearchProviderConfig(config.Providers)
+	providers := search.NewProviderSet(runtimeConfig.DefaultProvider)
+	if runtimeConfig.Enabled {
+		buildSearchProviders(providers, runtimeConfig)
 	}
-	svc := search.NewService(config, providers)
+	for _, registration := range external {
+		id := strings.TrimSpace(registration.InstanceID)
+		if id == "" || registration.Provider == nil {
+			continue
+		}
+		provider := restrictSearchProviderKinds(registration.Provider, registration.Kinds)
+		if err := providers.RegisterWithManifest(id, provider, registration.Priority, registration.Manifest); err != nil {
+			applog.Warn("search provider registration rejected", "provider", id, "error", err)
+			continue
+		}
+		runtimeConfig.Providers[id] = search.ProviderConfig{
+			Type:          "plugin",
+			CredentialRef: strings.TrimSpace(registration.CredentialRef),
+			Enabled:       true,
+			Priority:      registration.Priority,
+			Kinds:         append([]string(nil), registration.Kinds...),
+		}
+	}
+	svc := search.NewService(runtimeConfig, providers)
 	if broker != nil {
 		bridge := search.NewSecretBridge(newSecretLeaseAdapter(broker))
 		svc.WithCredentialResolver(bridge.Resolve)
 	}
+	if db != nil {
+		svc.WithEngineCredentialResolver(search.NewCredentialStore(db).ResolveEngineCredentials)
+	}
 	return svc
+}
+
+func cloneSearchProviderConfig(input map[string]search.ProviderConfig) map[string]search.ProviderConfig {
+	out := make(map[string]search.ProviderConfig, len(input))
+	for id, config := range input {
+		copyConfig := config
+		copyConfig.Kinds = append([]string(nil), config.Kinds...)
+		copyConfig.EngineCredentials = cloneCredentialMap(config.EngineCredentials)
+		out[id] = copyConfig
+	}
+	return out
+}
+
+func cloneCredentialMap(input map[string]string) map[string]string {
+	if len(input) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(input))
+	for key, value := range input {
+		out[key] = value
+	}
+	return out
 }
 
 func buildSearchProviders(set *search.ProviderSet, config search.Config) {
@@ -82,8 +141,15 @@ func buildSearchProviders(set *search.ProviderSet, config search.Config) {
 			provider := brave.NewProvider("", pc.CredentialRef, pc.Endpoint, true)
 			provider.SetMaxResponseBytes(config.EffectiveMaxResponseBytes())
 			p = provider
-		case "searxng":
-			provider := searxng.NewProvider(pc.Endpoint, true, pc.AllowHTTP, pc.AllowPrivate)
+		case "native":
+			provider := native.NewProvider(nativeengines.DefaultRegistry(nil), true, config.EffectiveMaxResponseBytes())
+			p = provider
+		case "exa":
+			provider := exa.NewProvider("", pc.CredentialRef, pc.Endpoint, true)
+			provider.SetMaxResponseBytes(config.EffectiveMaxResponseBytes())
+			p = provider
+		case "tavily":
+			provider := tavily.NewProvider("", pc.CredentialRef, pc.Endpoint, true)
 			provider.SetMaxResponseBytes(config.EffectiveMaxResponseBytes())
 			p = provider
 		}
@@ -92,6 +158,20 @@ func buildSearchProviders(set *search.ProviderSet, config search.Config) {
 			set.RegisterWithPriority(id, p, pc.Priority)
 		}
 	}
+	if _, ok := set.Get(native.ProviderID); !ok && nativeProviderEnabled(config) {
+		set.RegisterWithPriority(native.ProviderID, native.NewProvider(nativeengines.DefaultRegistry(nil), true, config.EffectiveMaxResponseBytes()), 100)
+	}
+}
+
+func nativeProviderEnabled(config search.Config) bool {
+	if !strings.EqualFold(strings.TrimSpace(config.DefaultProvider), native.ProviderID) {
+		return false
+	}
+	provider, ok := config.Providers[native.ProviderID]
+	if !ok {
+		return true
+	}
+	return provider.Enabled
 }
 
 type configuredSearchProvider struct {
@@ -189,41 +269,102 @@ func buildWebResearchStreamCallFunc(runtime *webresearch.Runtime) capability.Sea
 }
 
 func webResearchProgressMessage(event webresearch.Progress) string {
+	phase := strings.TrimSpace(event.Phase)
+	progress := func(prefix string) string {
+		if event.Total > 0 && event.Completed > 0 {
+			return fmt.Sprintf("%s %d/%d", prefix, event.Completed, event.Total)
+		}
+		if event.Completed > 0 {
+			return fmt.Sprintf("%s %d", prefix, event.Completed)
+		}
+		return prefix
+	}
+	switch phase {
+	case "searching":
+		if event.Total > 0 {
+			return fmt.Sprintf("正在准备 %d 个搜索查询", event.Total)
+		}
+		return "正在搜索网络"
+	case "search_query":
+		if query := strings.TrimSpace(event.Query); query != "" {
+			return "正在搜索：" + query
+		}
+		return "正在搜索来源"
+	case "source_found":
+		message := progress("已发现来源")
+		if title := strings.TrimSpace(event.Title); title != "" {
+			return message + " · " + title
+		}
+		return message
+	case "opening":
+		if title := strings.TrimSpace(event.Title); title != "" {
+			return "正在阅读：" + title
+		}
+		return "正在阅读来源"
+	case "opened":
+		message := progress("已读取来源")
+		if title := strings.TrimSpace(event.Title); title != "" {
+			return message + " · " + title
+		}
+		return message
+	case "found":
+		if event.Completed > 0 {
+			return fmt.Sprintf("已定位 %d 处相关内容", event.Completed)
+		}
+		return "已定位相关内容"
+	case "research_round":
+		if event.Total > 0 && event.Completed > 0 {
+			return fmt.Sprintf("正在进行第 %d/%d 轮研究", event.Completed, event.Total)
+		}
+		return "正在进行深度研究"
+	case "research_followup":
+		if query := strings.TrimSpace(event.Query); query != "" {
+			return "正在补充证据：" + query
+		}
+		return "正在补充证据"
+	case "evidence_check":
+		if event.Total > 0 {
+			return fmt.Sprintf("正在交叉验证 %d 条证据", event.Total)
+		}
+		return "正在交叉验证证据"
+	case "research_stop":
+		return "研究已收敛 · " + researchStopReasonLabel(strings.TrimSpace(event.Message))
+	case "screenshot":
+		return "正在获取视觉证据"
+	}
 	if message := strings.TrimSpace(event.Message); message != "" {
 		return message
 	}
-	switch strings.TrimSpace(event.Phase) {
-	case "searching":
-		if query := strings.TrimSpace(event.Query); query != "" {
-			return "Searching: " + query
-		}
-		return "Searching the web"
-	case "source_found":
-		if title := strings.TrimSpace(event.Title); title != "" {
-			return "Found source: " + title
-		}
-		return "Found a relevant source"
-	case "opening":
-		if title := strings.TrimSpace(event.Title); title != "" {
-			return "Reading: " + title
-		}
-		return "Reading source"
-	case "opened":
-		if title := strings.TrimSpace(event.Title); title != "" {
-			return "Read source: " + title
-		}
-		return "Source read complete"
-	case "found":
-		return "Located matching content"
-	case "research_round":
-		return "Running research round"
-	case "screenshot":
-		return "Captured web evidence"
+	if phase != "" {
+		return strings.ReplaceAll(phase, "_", " ")
+	}
+	return "联网研究进行中"
+}
+
+func researchStopReasonLabel(reason string) string {
+	switch reason {
+	case "coverage_satisfied":
+		return "关键问题已覆盖"
+	case "max_rounds":
+		return "达到研究轮次上限"
+	case "max_search_calls":
+		return "达到搜索调用上限"
+	case "max_provider_cost":
+		return "达到 Provider 成本上限"
+	case "max_provider_credits":
+		return "达到 Provider credits 上限"
+	case "no_new_queries":
+		return "没有新的有效查询"
+	case "no_new_sources":
+		return "没有发现新的有效来源"
+	case "low_information_gain":
+		return "新增信息已低于阈值"
+	case "budget_satisfied":
+		return "研究预算已满足"
+	case "":
+		return "完成"
 	default:
-		if phase := strings.TrimSpace(event.Phase); phase != "" {
-			return strings.ReplaceAll(phase, "_", " ")
-		}
-		return "Web research in progress"
+		return reason
 	}
 }
 

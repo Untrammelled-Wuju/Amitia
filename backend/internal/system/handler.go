@@ -18,6 +18,7 @@ import (
 	"github.com/u-ai/backend/internal/interaction"
 	"github.com/u-ai/backend/internal/memory"
 	"github.com/u-ai/backend/internal/mindruntime"
+	"github.com/u-ai/backend/internal/search"
 	"github.com/u-ai/backend/internal/tts"
 	"gorm.io/gorm"
 )
@@ -48,6 +49,7 @@ type Handler struct {
 	approvalBroker        *execution.ApprovalBroker
 	continuityRepo        *continuity.Repository
 	continuityCoordinator *continuity.WaitCoordinator
+	searchCredentials     *search.CredentialStore
 }
 
 type ChannelAvailability interface {
@@ -62,6 +64,11 @@ func (f ChannelAvailabilityFunc) Has(channelID string) bool {
 
 func NewHandler(srv Service, db *gorm.DB, chatSvc chat.Service, dataLifecycle *mindruntime.DataLifecycleCoordinator, unifiedEntry *interaction.UnifiedEntry, reconciliation *mindruntime.ReconciliationEngine, memorySvc memory.Service) *Handler {
 	h := &Handler{service: srv, db: db, chatSvc: chatSvc, memorySvc: memorySvc, unifiedEntry: unifiedEntry, dataLifecycle: dataLifecycle, reconciliation: reconciliation, shadowState: mindruntime.NewShadowState()}
+	if db != nil {
+		if sqlDB, err := db.DB(); err == nil {
+			h.searchCredentials = search.NewCredentialStore(sqlDB)
+		}
+	}
 	h.versionInfo.Store(srv.GetVersion())
 	return h
 }

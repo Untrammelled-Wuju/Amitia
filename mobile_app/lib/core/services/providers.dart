@@ -20,6 +20,7 @@ import 'extension_service.dart';
 import 'extension_task_service.dart';
 import 'extension_view_invalidator.dart';
 import 'system_service.dart';
+import 'search_api_service.dart';
 import 'channel_service.dart';
 import 'workspace_service.dart';
 import 'device_mesh_service.dart';
@@ -130,6 +131,10 @@ final extensionTaskServiceProvider = Provider<ExtensionTaskService>(
 
 final systemServiceProvider = Provider<SystemService>(
   (ref) => SystemService(_getDynamicServiceApi(ref)),
+);
+
+final searchApiServiceProvider = Provider<SearchApiService>(
+  (ref) => SearchApiService(_getDynamicServiceApi(ref)),
 );
 
 final safetyServiceProvider = Provider<SafetyService>(

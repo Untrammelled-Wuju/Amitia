@@ -13,13 +13,14 @@ func TestBuildRequestUsesScopedCredentialAndFilters(t *testing.T) {
 	provider := NewProvider("", "secret://brave", "", true)
 	from := time.Now().UTC().Add(-24 * time.Hour)
 	req, err := provider.buildRequest(context.Background(), search.SearchRequest{
-		Query:      "amitia runtime",
-		Limit:      7,
-		Language:   "en",
-		Country:    "US",
-		SafeSearch: search.SafeSearchStrict,
-		Domains:    []string{"github.com"},
-		TimeRange:  &search.TimeRangeFilter{From: &from},
+		Query:          "amitia runtime",
+		Limit:          7,
+		Language:       "en",
+		Country:        "US",
+		SafeSearch:     search.SafeSearchStrict,
+		Domains:        []string{"github.com"},
+		ExcludeDomains: []string{"example.com"},
+		TimeRange:      &search.TimeRangeFilter{From: &from},
 	}, "scoped-token")
 	if err != nil {
 		t.Fatalf("build request: %v", err)
@@ -36,5 +37,8 @@ func TestBuildRequestUsesScopedCredentialAndFilters(t *testing.T) {
 	}
 	if !strings.Contains(q.Get("q"), "site:github.com") {
 		t.Fatalf("domain filter missing: %q", q.Get("q"))
+	}
+	if !strings.Contains(q.Get("q"), "-site:example.com") {
+		t.Fatalf("exclude domain filter missing: %q", q.Get("q"))
 	}
 }

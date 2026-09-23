@@ -5890,3 +5890,9 @@ CREATE TABLE IF NOT EXISTS continuity_waits (
     updated_at DATETIME NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_continuity_waits_thread_status ON continuity_waits(thread_id, status, wait_type);
+
+CREATE TABLE IF NOT EXISTS search_api_keys (
+    engine_id TEXT PRIMARY KEY,
+    api_key TEXT NOT NULL DEFAULT '',
+    updated_at DATETIME NOT NULL
+);

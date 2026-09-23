@@ -149,6 +149,8 @@ func (s *RemoteCatalogSource) toCandidate(entry RemoteCatalogEntry) CapabilityCa
 	}
 	return CapabilityCandidate{
 		ID:           entry.ExtensionID,
+		ExtensionID:  entry.ExtensionID,
+		PackageName:  entry.ExtensionID,
 		Kind:         CandidateExtensionPackage,
 		Name:         entry.Name,
 		Description:  entry.Description,

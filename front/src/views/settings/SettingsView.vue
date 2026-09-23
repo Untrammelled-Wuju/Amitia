@@ -60,6 +60,12 @@ SPDX-License-Identifier: AGPL-3.0-only
         >模型配置</router-link
       >
       <router-link
+        to="/settings/search-api"
+        class="settings-tab"
+        active-class="settings-tab-active"
+        >搜索 API</router-link
+      >
+      <router-link
         to="/settings/safety"
         class="settings-tab"
         active-class="settings-tab-active"

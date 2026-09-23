@@ -21,6 +21,12 @@ func TestToolResultContent(t *testing.T) {
 			want:     `{"citations":[{"index":1}]}`,
 		},
 		{
+			name:     "capability discovery structured output",
+			toolName: "find_capability",
+			outcome:  toolExecOutcome{VisibleText: "Found 1 candidate(s)", Output: []byte(`{"candidates":[{"id":"provider","extensionId":"com.example/ext"}]}`), Found: true},
+			want:     `{"candidates":[{"id":"provider","extensionId":"com.example/ext"}]}`,
+		},
+		{
 			name:    "empty successful result",
 			outcome: toolExecOutcome{Found: true},
 			want:    "",
@@ -60,5 +66,65 @@ func TestAssistantTurnRecorderCitationAudit(t *testing.T) {
 	}
 	if len(audit.Unknown) != 1 || audit.Unknown[0] != 2 {
 		t.Fatalf("unknown = %#v, want [2]", audit.Unknown)
+	}
+}
+
+func TestAssistantTurnRecorderCitationAuditUnknownWithoutAvailableCitations(t *testing.T) {
+	recorder := newAssistantTurnRecorder(nil, "conversation-1", "character-1", "message-1", "request-1")
+	audit := recorder.AuditCitationMarkers("unsupported marker [99], code `value[88]`")
+	if len(audit.Available) != 0 || len(audit.Used) != 0 {
+		t.Fatalf("unexpected available/used: %#v", audit)
+	}
+	if len(audit.Unknown) != 1 || audit.Unknown[0] != 99 {
+		t.Fatalf("unknown = %#v, want [99]", audit.Unknown)
+	}
+}
+
+func TestAssistantTurnRecorderCitationClaimVerifier(t *testing.T) {
+	recorder := newAssistantTurnRecorder(nil, "conversation-1", "character-1", "message-1", "request-1")
+	if err := recorder.AddToolResult(nil, "call-1", "web_run", `{"citations":[{"index":1,"evidence_id":"ev-1","ref_id":"ref-1","title":"Release","url":"https://example.com","text":"Amitia version 2.0 was released in September 2026."}]}`, "completed", "", 1); err != nil {
+		t.Fatalf("AddToolResult() error = %v", err)
+	}
+	audit := recorder.AuditCitationMarkers("Amitia version 2.0 was released in September 2026 [1].")
+	if len(audit.Claims) != 1 {
+		t.Fatalf("claims = %#v", audit.Claims)
+	}
+	if audit.Claims[0].Status != "supported" || audit.Claims[0].SupportScore <= 0 {
+		t.Fatalf("claim audit = %#v", audit.Claims[0])
+	}
+}
+
+func TestAssistantTurnRecorderDetectsMissingCitationClaimAfterWebResearch(t *testing.T) {
+	recorder := newAssistantTurnRecorder(nil, "conversation-1", "character-1", "message-1", "request-1")
+	if err := recorder.AddToolResult(nil, "call-1", "web_run", `{"citations":[{"index":1,"evidence_id":"ev-1","ref_id":"ref-1","text":"Amitia version 2.0 was released in September 2026."}]}`, "completed", "", 1); err != nil {
+		t.Fatalf("AddToolResult() error = %v", err)
+	}
+	audit := recorder.AuditCitationMarkers("Amitia version 2.0 was released in September 2026. The project supports Linux [1].")
+	if len(audit.MissingCitation) != 1 {
+		t.Fatalf("missing citations = %#v", audit.MissingCitation)
+	}
+}
+
+func TestAssistantTurnRecorderDoesNotFlagOpinionAsMissingCitation(t *testing.T) {
+	recorder := newAssistantTurnRecorder(nil, "conversation-1", "character-1", "message-1", "request-1")
+	if err := recorder.AddToolResult(nil, "call-1", "web_run", `{"citations":[{"index":1,"evidence_id":"ev-1","ref_id":"ref-1","text":"Reference evidence."}]}`, "completed", "", 1); err != nil {
+		t.Fatalf("AddToolResult() error = %v", err)
+	}
+	audit := recorder.AuditCitationMarkers("我认为 2026 版本的交互更顺手。")
+	if len(audit.MissingCitation) != 0 {
+		t.Fatalf("opinion should not be flagged: %#v", audit.MissingCitation)
+	}
+}
+
+func TestCitationAuditFlagsMissingClaimsWhenWebResearchReturnedNoCitations(t *testing.T) {
+	recorder := newAssistantTurnRecorder(nil, "conv-1", "char-1", "msg-1", "req-1")
+	recorder.captureCitationIDs("web_run", `{"operation":"search","citations":[]}`)
+
+	audit := recorder.AuditCitationMarkers("Project X version 2.0 was released in 2026.")
+	if len(audit.Available) != 0 {
+		t.Fatalf("expected no available citations, got %#v", audit.Available)
+	}
+	if len(audit.MissingCitation) == 0 {
+		t.Fatalf("expected missing citation audit after web research with no citations")
 	}
 }

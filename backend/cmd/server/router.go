@@ -534,7 +534,11 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 			}
 			return services.KernelContainer.ChannelResolver.Has(channelID)
 		})
-		system.RegisterSystemRouter(apiGroup, ctx, services.Chat, services.UnifiedEntry, services.DataLifecycle, services.Reconciliation, services.Memory, services.Profile, services.Episodic, services.Graph, services.Temporal, services.DataPortability, services.Artifact.Service, services.Continuity, services.ContinuityCoordinator, channelAccess)
+		var systemRouterOptions []system.SystemRouterOption
+		if services.KernelContainer != nil {
+			systemRouterOptions = append(systemRouterOptions, system.WithApprovalBroker(services.KernelContainer.ApprovalBroker))
+		}
+		system.RegisterSystemRouter(apiGroup, ctx, services.Chat, services.UnifiedEntry, services.DataLifecycle, services.Reconciliation, services.Memory, services.Profile, services.Episodic, services.Graph, services.Temporal, services.DataPortability, services.Artifact.Service, services.Continuity, services.ContinuityCoordinator, channelAccess, systemRouterOptions...)
 		tts.RegisterTtsRouter(apiGroup, ctx)
 		asr.RegisterAsrRouter(apiGroup, ctx)
 		if services.AdapterManager != nil {

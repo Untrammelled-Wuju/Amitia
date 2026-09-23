@@ -74,25 +74,36 @@ providers:
       dataPath: "data/graph.db"
   search:
     enabled: false
-    defaultProvider: "searxng"
+    defaultProvider: "native"
     defaultLimit: 8
     maxLimit: 20
     timeoutSec: 10
     maxResponseBytes: 2097152
     cacheTtlSec: 120
     cacheMaxEntries: 512
+    negativeCacheTtlSec: 30
     circuitFailures: 3
     circuitOpenSec: 30
     research:
+      deepResearchEnabled: true
+      browserEnabled: true
+      pdfEnabled: true
+      pdfTextCommand: "pdftotext"
+      pdfInfoCommand: "pdfinfo"
+      pdfTimeoutSec: 20
       maxExecutionSec: 120
       maxToolOutputChars: 120000
       maxQueries: 4
       maxProvidersPerQuery: 2
       maxSearchResults: 12
+      maxResultsPerDomain: 3
       maxOpenPages: 4
       maxDeepOpenPages: 6
       maxDeepRounds: 3
       maxDeepSearchCalls: 12
+      maxSearchCalls: 12
+      maxProviderCostUsd: 1.0
+      maxProviderCredits: 20
       minDeepNewSources: 2
       maxParallelSearch: 4
       maxParallelFetch: 3
@@ -107,22 +118,47 @@ providers:
       autoBrowserEscalation: true
       minStaticContentChars: 240
       maxRedirects: 5
+      maxBrowserPages: 2
+      maxBrowserScrolls: 2
+      maxBrowserSeconds: 30
+    routes:
+      general:
+        preferred: ["native"]
+        fallback: ["brave"]
     providers:
-      searxng:
-        type: "searxng"
-        endpoint: "http://127.0.0.1:8080"
+      native:
+        type: "native"
+        endpoint: ""
         credentialRef: ""
-        enabled: false
+        enabled: true
         priority: 100
-        kinds: ["web", "news", "academic", "code", "image", "video"]
-        allowHttp: true
-        allowPrivate: true
+        kinds: ["web", "news", "academic", "code", "image", "video", "places", "product", "music", "files", "social", "software", "translation", "dictionary", "weather", "currency"]
+        allowHttp: false
+        allowPrivate: false
       brave:
         type: "brave"
         endpoint: "https://api.search.brave.com/res/v1/web/search"
         credentialRef: ""
         enabled: false
         priority: 90
+        kinds: ["web", "news"]
+        allowHttp: false
+        allowPrivate: false
+      exa:
+        type: "exa"
+        endpoint: "https://api.exa.ai/search"
+        credentialRef: ""
+        enabled: false
+        priority: 80
+        kinds: ["web"]
+        allowHttp: false
+        allowPrivate: false
+      tavily:
+        type: "tavily"
+        endpoint: "https://api.tavily.com/search"
+        credentialRef: ""
+        enabled: false
+        priority: 70
         kinds: ["web", "news"]
         allowHttp: false
         allowPrivate: false

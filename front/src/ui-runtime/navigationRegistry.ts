@@ -111,6 +111,7 @@ const pageTitleOverrides: Record<string, string> = {
   "/chat": "新对话",
   "/settings/overview": "运行概览",
   "/settings/data": "运行数据",
+  "/settings/search-api": "搜索 API",
   "/channel-messages": "渠道消息",
   "/continuity": "持续事项",
   "/user-settings": "用户信息",

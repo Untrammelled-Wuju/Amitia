@@ -7,26 +7,75 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
 type CredentialResolver func(ctx context.Context, providerID, invocation, credentialRef string) (credential string, release func(), err error)
+type EngineCredentialResolver func(ctx context.Context, providerID, invocation string) (credentials map[string]string, release func(), err error)
 
-type Service struct {
-	providers          *ProviderSet
-	config             Config
-	normalizer         *Normalizer
-	credentialResolver CredentialResolver
-	citationBuilder    *CitationBuilder
-	cacheMu            sync.RWMutex
-	cache              map[string]searchCacheEntry
-	circuitMu          sync.Mutex
-	circuits           map[string]providerCircuitState
+type CacheMetrics struct {
+	Hit         int64 `json:"hit"`
+	Miss        int64 `json:"miss"`
+	Expired     int64 `json:"expired"`
+	Evicted     int64 `json:"evicted"`
+	NegativeHit int64 `json:"negative_hit"`
 }
 
+type cacheMetricCounters struct {
+	hit         atomic.Int64
+	miss        atomic.Int64
+	expired     atomic.Int64
+	evicted     atomic.Int64
+	negativeHit atomic.Int64
+}
+
+type Service struct {
+	providers                *ProviderSet
+	config                   Config
+	normalizer               *Normalizer
+	credentialResolver       CredentialResolver
+	engineCredentialResolver EngineCredentialResolver
+	citationBuilder          *CitationBuilder
+	cacheMu                  sync.RWMutex
+	cache                    map[string]searchCacheEntry
+	circuitMu                sync.Mutex
+	circuits                 map[string]providerCircuitState
+	cacheMetrics             cacheMetricCounters
+}
+
+type circuitPhase string
+
+const (
+	circuitClosed   circuitPhase = "closed"
+	circuitOpen     circuitPhase = "open"
+	circuitHalfOpen circuitPhase = "half_open"
+)
+
 type providerCircuitState struct {
+	Phase               circuitPhase
 	ConsecutiveFailures int
 	OpenUntil           time.Time
+	OpenedAt            time.Time
+	RecoveryInFlight    bool
+	RecoveryAttempts    int
+	RecentFailures      int
+	RecentTotal         int
+	RecentOutcomes      []bool
+	LastFailure         time.Time
+}
+
+type CircuitStatus struct {
+	Phase               string     `json:"phase"`
+	ConsecutiveFailures int        `json:"consecutiveFailures"`
+	FailureRate         float64    `json:"failureRate"`
+	RecentFailures      int        `json:"recentFailures"`
+	RecentTotal         int        `json:"recentTotal"`
+	LastFailure         *time.Time `json:"lastFailure,omitempty"`
+	OpenedAt            *time.Time `json:"openedAt,omitempty"`
+	OpenUntil           *time.Time `json:"openUntil,omitempty"`
+	RecoveryAttempts    int        `json:"recoveryAttempts"`
+	RecoveryInFlight    bool       `json:"recoveryInFlight"`
 }
 
 type searchCacheEntry struct {
@@ -50,6 +99,13 @@ func NewService(config Config, providers *ProviderSet) *Service {
 func (s *Service) WithCredentialResolver(r CredentialResolver) *Service {
 	if r != nil {
 		s.credentialResolver = r
+	}
+	return s
+}
+
+func (s *Service) WithEngineCredentialResolver(r EngineCredentialResolver) *Service {
+	if r != nil {
+		s.engineCredentialResolver = r
 	}
 	return s
 }
@@ -90,12 +146,12 @@ func (s *Service) Search(ctx context.Context, req GeneralSearchRequest, invocati
 		SafeSearch: req.SafeSearch,
 	})
 	if perr != nil {
-		searchErr := s.normalizeProviderError(provider.ID(), perr)
+		searchErr := s.normalizeProviderError(resolvedProviderID, perr)
 		s.recordProviderOutcome(resolvedProviderID, searchErr)
 		return nil, searchErr
 	}
 	s.recordProviderOutcome(resolvedProviderID, nil)
-	results, _ := s.normalizer.NormalizeResults(raw.Results, provider.ID())
+	results, _ := s.normalizer.NormalizeResults(raw.Results, resolvedProviderID)
 	s.normalizer.AssignRanks(results)
 	resp := &GeneralSearchResponse{
 		Query:       req.Query,
@@ -106,6 +162,7 @@ func (s *Service) Search(ctx context.Context, req GeneralSearchRequest, invocati
 		HasMore:     raw.HasMore,
 		RetrievedAt: time.Now().UTC(),
 		DurationMs:  time.Since(start).Milliseconds(),
+		Usage:       raw.Usage,
 	}
 	return resp, nil
 }
@@ -126,13 +183,14 @@ func (s *Service) SearchAdvancedWithProvider(ctx context.Context, req SearchRequ
 	if serr != nil {
 		return nil, serr
 	}
-	ferr := ProviderSupportsFilter(provider.Capabilities(), kind, req.Language != "", req.Country != "", req.SafeSearch != "", req.TimeRange != nil, len(req.Domains) > 0)
+	ferr := ProviderSupportsFilter(provider.Capabilities(), kind, req.Language != "", req.Country != "", req.SafeSearch != "", req.TimeRange != nil, len(req.Domains) > 0, len(req.ExcludeDomains) > 0)
 	if ferr != nil {
 		return nil, ferr
 	}
 	cacheKey := s.searchCacheKey(resolvedProviderID, req)
 	if cached, ok := s.getCachedSearch(cacheKey); ok {
 		cached.CacheHit = true
+		cached.Usage = ProviderUsage{}
 		return &cached, nil
 	}
 	if !s.providerCircuitAllows(resolvedProviderID, time.Now()) {
@@ -148,12 +206,12 @@ func (s *Service) SearchAdvancedWithProvider(ctx context.Context, req SearchRequ
 	defer cancel()
 	raw, perr := provider.Search(searchCtx, req)
 	if perr != nil {
-		searchErr := s.normalizeProviderError(provider.ID(), perr)
+		searchErr := s.normalizeProviderError(resolvedProviderID, perr)
 		s.recordProviderOutcome(resolvedProviderID, searchErr)
 		return nil, searchErr
 	}
 	s.recordProviderOutcome(resolvedProviderID, nil)
-	results, _ := s.normalizer.NormalizeResults(raw.Results, provider.ID())
+	results, _ := s.normalizer.NormalizeResults(raw.Results, resolvedProviderID)
 	s.normalizer.AssignRanks(results)
 	citationSet := s.citationBuilder.Build(results, kind)
 	s.citationBuilder.AssignCitations(results, citationSet)
@@ -167,6 +225,7 @@ func (s *Service) SearchAdvancedWithProvider(ctx context.Context, req SearchRequ
 		HasMore:     raw.HasMore,
 		RetrievedAt: time.Now().UTC(),
 		DurationMs:  time.Since(start).Milliseconds(),
+		Usage:       raw.Usage,
 		CitationSet: citationSet,
 	}
 	s.putCachedSearch(cacheKey, *resp)
@@ -216,14 +275,60 @@ func (s *Service) resolveProviderForKindWithID(kind SearchKind, providerID strin
 }
 
 func (s *Service) CandidateProviderIDs(kind SearchKind) []string {
-	ids := s.providers.CandidateIDs(NormalizeKind(kind))
+	kind = NormalizeKind(kind)
+	ids := s.providers.CandidateIDs(kind)
 	if len(ids) == 0 {
 		return ids
 	}
-	now := time.Now()
-	filtered := make([]string, 0, len(ids))
+
+	candidateSet := make(map[string]struct{}, len(ids))
 	for _, id := range ids {
-		if s.providerCircuitAllows(id, now) {
+		candidateSet[id] = struct{}{}
+	}
+	ordered := make([]string, 0, len(ids))
+	seen := make(map[string]struct{}, len(ids))
+	appendID := func(id string) {
+		id = strings.TrimSpace(id)
+		if id == "" {
+			return
+		}
+		if _, ok := candidateSet[id]; !ok {
+			return
+		}
+		if _, ok := seen[id]; ok {
+			return
+		}
+		seen[id] = struct{}{}
+		ordered = append(ordered, id)
+	}
+
+	routeKeys := []string{string(kind)}
+	if kind != SearchKindWeb {
+		routeKeys = append(routeKeys, "general")
+	} else {
+		routeKeys = []string{"general", string(kind)}
+	}
+	for _, key := range routeKeys {
+		route, ok := s.config.Routes[key]
+		if !ok {
+			continue
+		}
+		for _, id := range route.Preferred {
+			appendID(id)
+		}
+		for _, id := range route.Fallback {
+			appendID(id)
+		}
+		break
+	}
+	for _, id := range ids {
+		appendID(id)
+	}
+
+	now := time.Now()
+	filtered := make([]string, 0, len(ordered))
+	for _, id := range ordered {
+		if s.providerCircuitCandidateAllowed(id, now) {
 			filtered = append(filtered, id)
 		}
 	}
@@ -249,9 +354,35 @@ func (s *Service) DefaultProviderHealth(ctx context.Context) (string, ProviderHe
 
 func (s *Service) normalizeProviderError(providerID string, err error) *Error {
 	if searchErr, ok := err.(*Error); ok {
-		return searchErr
+		return &Error{
+			Code:       searchErr.Code,
+			Provider:   providerID,
+			HTTPStatus: searchErr.HTTPStatus,
+			RetryAfter: searchErr.RetryAfter,
+			Retryable:  searchErr.Retryable,
+			Cause:      searchErr.Cause,
+		}
 	}
 	return NewError(SEARCH_PROVIDER_UNAVAILABLE, providerID, true, err)
+}
+
+func (s *Service) providerCircuitCandidateAllowed(providerID string, now time.Time) bool {
+	if strings.TrimSpace(providerID) == "" {
+		return true
+	}
+	s.circuitMu.Lock()
+	defer s.circuitMu.Unlock()
+	state, ok := s.circuits[providerID]
+	if !ok || state.Phase == "" || state.Phase == circuitClosed {
+		return true
+	}
+	if state.Phase == circuitOpen {
+		return !now.Before(state.OpenUntil)
+	}
+	if state.Phase == circuitHalfOpen {
+		return !state.RecoveryInFlight
+	}
+	return true
 }
 
 func (s *Service) providerCircuitAllows(providerID string, now time.Time) bool {
@@ -260,47 +391,205 @@ func (s *Service) providerCircuitAllows(providerID string, now time.Time) bool {
 	}
 	s.circuitMu.Lock()
 	defer s.circuitMu.Unlock()
-	state, ok := s.circuits[providerID]
-	if !ok || state.OpenUntil.IsZero() {
-		return true
+	state := s.circuits[providerID]
+	if state.Phase == "" {
+		state.Phase = circuitClosed
 	}
-	if !now.Before(state.OpenUntil) {
-		state.OpenUntil = time.Time{}
-		state.ConsecutiveFailures = 0
+	switch state.Phase {
+	case circuitClosed:
+		s.circuits[providerID] = state
+		return true
+	case circuitOpen:
+		if now.Before(state.OpenUntil) {
+			return false
+		}
+		state.Phase = circuitHalfOpen
+		state.RecoveryInFlight = true
+		state.RecoveryAttempts++
+		s.circuits[providerID] = state
+		return true
+	case circuitHalfOpen:
+		if state.RecoveryInFlight {
+			return false
+		}
+		state.RecoveryInFlight = true
+		s.circuits[providerID] = state
+		return true
+	default:
+		state.Phase = circuitClosed
 		s.circuits[providerID] = state
 		return true
 	}
-	return false
 }
 
 func (s *Service) recordProviderOutcome(providerID string, searchErr *Error) {
 	if strings.TrimSpace(providerID) == "" {
 		return
 	}
+	now := time.Now()
 	s.circuitMu.Lock()
 	defer s.circuitMu.Unlock()
 	state := s.circuits[providerID]
-	if searchErr == nil {
-		state.ConsecutiveFailures = 0
-		state.OpenUntil = time.Time{}
+	if state.Phase == "" {
+		state.Phase = circuitClosed
+	}
+	if searchErr != nil && searchErr.Code == SEARCH_CANCELLED {
+		state.RecoveryInFlight = false
 		s.circuits[providerID] = state
 		return
 	}
-	if !searchErr.Retryable || searchErr.Code == SEARCH_CANCELLED {
+	retryableFailure := searchErr != nil && searchErr.Retryable
+	state = appendCircuitOutcome(state, retryableFailure)
+	if searchErr == nil {
+		state.Phase = circuitClosed
+		state.ConsecutiveFailures = 0
+		state.OpenUntil = time.Time{}
+		state.OpenedAt = time.Time{}
+		state.RecoveryInFlight = false
+		s.circuits[providerID] = state
 		return
 	}
+	if !searchErr.Retryable {
+		if state.Phase == circuitHalfOpen {
+			state.Phase = circuitClosed
+			state.OpenUntil = time.Time{}
+			state.OpenedAt = time.Time{}
+		}
+		state.RecoveryInFlight = false
+		s.circuits[providerID] = state
+		return
+	}
+	state.LastFailure = now
 	state.ConsecutiveFailures++
-	if state.ConsecutiveFailures >= s.config.EffectiveCircuitFailures() {
-		state.OpenUntil = time.Now().Add(s.config.EffectiveCircuitOpen())
+	failureRate := circuitFailureRate(state)
+	shouldOpen := state.Phase == circuitHalfOpen ||
+		state.ConsecutiveFailures >= s.config.EffectiveCircuitFailures() ||
+		(state.RecentTotal >= 5 && failureRate >= 0.60)
+	if shouldOpen {
+		openFor := s.config.EffectiveCircuitOpen()
+		if searchErr.RetryAfter > 0 {
+			retryAfter := time.Duration(searchErr.RetryAfter) * time.Millisecond
+			if retryAfter > openFor {
+				openFor = retryAfter
+			}
+		}
+		state.Phase = circuitOpen
+		state.OpenedAt = now
+		state.OpenUntil = now.Add(openFor)
+		state.RecoveryInFlight = false
 	}
 	s.circuits[providerID] = state
+}
+
+func appendCircuitOutcome(state providerCircuitState, failure bool) providerCircuitState {
+	const window = 20
+	state.RecentOutcomes = append(state.RecentOutcomes, failure)
+	if len(state.RecentOutcomes) > window {
+		state.RecentOutcomes = append([]bool(nil), state.RecentOutcomes[len(state.RecentOutcomes)-window:]...)
+	}
+	state.RecentTotal = len(state.RecentOutcomes)
+	state.RecentFailures = 0
+	for _, failed := range state.RecentOutcomes {
+		if failed {
+			state.RecentFailures++
+		}
+	}
+	return state
+}
+
+func circuitFailureRate(state providerCircuitState) float64 {
+	if state.RecentTotal <= 0 {
+		return 0
+	}
+	return float64(state.RecentFailures) / float64(state.RecentTotal)
+}
+
+func (s *Service) CircuitStatus(providerID string) CircuitStatus {
+	if s == nil || strings.TrimSpace(providerID) == "" {
+		return CircuitStatus{Phase: string(circuitClosed)}
+	}
+	s.circuitMu.Lock()
+	defer s.circuitMu.Unlock()
+	state, ok := s.circuits[strings.TrimSpace(providerID)]
+	if !ok || state.Phase == "" {
+		state.Phase = circuitClosed
+	}
+	return circuitStatusFromState(state)
+}
+
+func (s *Service) CircuitStatuses() map[string]CircuitStatus {
+	result := make(map[string]CircuitStatus)
+	if s == nil || s.providers == nil {
+		return result
+	}
+	s.circuitMu.Lock()
+	defer s.circuitMu.Unlock()
+	for _, id := range s.providers.CandidateIDs(SearchKindWeb) {
+		state := s.circuits[id]
+		if state.Phase == "" {
+			state.Phase = circuitClosed
+		}
+		result[id] = circuitStatusFromState(state)
+	}
+	for id := range s.providers.All() {
+		if _, exists := result[id]; exists {
+			continue
+		}
+		state := s.circuits[id]
+		if state.Phase == "" {
+			state.Phase = circuitClosed
+		}
+		result[id] = circuitStatusFromState(state)
+	}
+	return result
+}
+
+func circuitStatusFromState(state providerCircuitState) CircuitStatus {
+	status := CircuitStatus{
+		Phase:               string(state.Phase),
+		ConsecutiveFailures: state.ConsecutiveFailures,
+		FailureRate:         circuitFailureRate(state),
+		RecentFailures:      state.RecentFailures,
+		RecentTotal:         state.RecentTotal,
+		RecoveryAttempts:    state.RecoveryAttempts,
+		RecoveryInFlight:    state.RecoveryInFlight,
+	}
+	if !state.LastFailure.IsZero() {
+		value := state.LastFailure.UTC()
+		status.LastFailure = &value
+	}
+	if !state.OpenedAt.IsZero() {
+		value := state.OpenedAt.UTC()
+		status.OpenedAt = &value
+	}
+	if !state.OpenUntil.IsZero() {
+		value := state.OpenUntil.UTC()
+		status.OpenUntil = &value
+	}
+	return status
+}
+
+func (s *Service) providerCircuitDegraded(providerID string, now time.Time) bool {
+	if strings.TrimSpace(providerID) == "" {
+		return false
+	}
+	s.circuitMu.Lock()
+	defer s.circuitMu.Unlock()
+	state, ok := s.circuits[providerID]
+	if !ok || state.Phase == "" || state.Phase == circuitClosed {
+		return false
+	}
+	if state.Phase == circuitOpen && !now.Before(state.OpenUntil) {
+		return true
+	}
+	return state.Phase == circuitOpen || state.Phase == circuitHalfOpen
 }
 
 func (s *Service) effectiveProviderHealth(providerID string, base ProviderHealth) ProviderHealth {
 	if base != ProviderHealthReady {
 		return base
 	}
-	if !s.providerCircuitAllows(providerID, time.Now()) {
+	if s.providerCircuitDegraded(providerID, time.Now()) {
 		return ProviderHealthDegraded
 	}
 	return base
@@ -328,22 +617,60 @@ func (s *Service) ExecuteFromJSONWithProvider(ctx context.Context, input json.Ra
 	req.SafeSearch = validated.safeSearch
 	req.Kind = validated.kind
 	req.Domains = validated.domains
+	req.ExcludeDomains = validated.excludeDomains
 	return s.SearchAdvancedWithProvider(ctx, req, invocation, providerID)
 }
 
 func (s *Service) contextWithCredential(ctx context.Context, providerID, invocation string) (context.Context, func(), *Error) {
 	credRef := s.config.ProviderCredentialRef(providerID)
-	if s.credentialResolver == nil || credRef == "" {
-		return ctx, func() {}, nil
+	engineRefs := s.config.ProviderEngineCredentials(providerID)
+	releases := make([]func(), 0, len(engineRefs)+1)
+	releaseAll := func() {
+		for index := len(releases) - 1; index >= 0; index-- {
+			if releases[index] != nil {
+				releases[index]()
+			}
+		}
 	}
-	credential, release, err := s.credentialResolver(ctx, providerID, invocation, credRef)
-	if err != nil {
-		return ctx, func() {}, NewError(SEARCH_PROVIDER_AUTH_FAILED, providerID, false, err)
+	if credRef != "" {
+		if s.credentialResolver != nil {
+			credential, release, err := s.credentialResolver(ctx, providerID, invocation, credRef)
+			if err != nil {
+				return ctx, releaseAll, NewError(SEARCH_PROVIDER_AUTH_FAILED, providerID, false, err)
+			}
+			if release != nil {
+				releases = append(releases, release)
+			}
+			ctx = ContextWithProviderCredential(ctx, credential)
+		}
 	}
-	if release == nil {
-		release = func() {}
+	for engineID, ref := range engineRefs {
+		ref = strings.TrimSpace(ref)
+		if ref == "" || s.credentialResolver == nil {
+			continue
+		}
+		credential, release, err := s.credentialResolver(ctx, providerID, invocation, ref)
+		if err != nil {
+			return ctx, releaseAll, NewError(SEARCH_PROVIDER_AUTH_FAILED, providerID, false, err)
+		}
+		if release != nil {
+			releases = append(releases, release)
+		}
+		ctx = ContextWithEngineCredential(ctx, engineID, credential)
 	}
-	return ContextWithProviderCredential(ctx, credential), release, nil
+	if s.engineCredentialResolver != nil {
+		credentials, release, err := s.engineCredentialResolver(ctx, providerID, invocation)
+		if err != nil {
+			return ctx, releaseAll, NewError(SEARCH_PROVIDER_AUTH_FAILED, providerID, false, err)
+		}
+		if release != nil {
+			releases = append(releases, release)
+		}
+		for engineID, credential := range credentials {
+			ctx = ContextWithEngineCredential(ctx, engineID, credential)
+		}
+	}
+	return ctx, releaseAll, nil
 }
 
 func (s *Service) searchCacheKey(providerID string, req SearchRequest) string {
@@ -356,11 +683,12 @@ func (s *Service) searchCacheKey(providerID string, req SearchRequest) string {
 }
 
 func canonicalSearchRequest(req SearchRequest) SearchRequest {
-	req.Query = strings.Join(strings.Fields(strings.TrimSpace(req.Query)), " ")
+	req.Query = strings.ToLower(strings.Join(strings.Fields(strings.TrimSpace(req.Query)), " "))
 	req.Kind = NormalizeKind(req.Kind)
 	req.Language = strings.ToLower(strings.TrimSpace(req.Language))
 	req.Country = strings.ToUpper(strings.TrimSpace(req.Country))
 	req.Domains = canonicalStringSet(req.Domains)
+	req.ExcludeDomains = canonicalStringSet(req.ExcludeDomains)
 	if req.TimeRange != nil {
 		clone := *req.TimeRange
 		clone.From = canonicalCacheTime(clone.From)
@@ -411,14 +739,22 @@ func (s *Service) getCachedSearch(key string) (SearchResponse, bool) {
 	defer s.cacheMu.Unlock()
 	entry, ok := s.cache[key]
 	if !ok {
+		s.cacheMetrics.miss.Add(1)
 		return SearchResponse{}, false
 	}
 	if !entry.expiresAt.After(now) {
 		delete(s.cache, key)
+		s.cacheMetrics.expired.Add(1)
+		s.cacheMetrics.miss.Add(1)
 		return SearchResponse{}, false
 	}
 	entry.touchedAt = now
 	s.cache[key] = entry
+	if entry.response.Returned == 0 {
+		s.cacheMetrics.negativeHit.Add(1)
+	} else {
+		s.cacheMetrics.hit.Add(1)
+	}
 	return cloneSearchResponse(entry.response), true
 }
 
@@ -433,6 +769,7 @@ func (s *Service) putCachedSearch(key string, response SearchResponse) {
 	for existingKey, entry := range s.cache {
 		if !entry.expiresAt.After(now) {
 			delete(s.cache, existingKey)
+			s.cacheMetrics.expired.Add(1)
 		}
 	}
 	maxEntries := s.config.EffectiveCacheMaxEntries()
@@ -451,11 +788,22 @@ func (s *Service) putCachedSearch(key string, response SearchResponse) {
 		}
 		if oldestKey != "" {
 			delete(s.cache, oldestKey)
+			s.cacheMetrics.evicted.Add(1)
 		}
 	}
 	response.CacheHit = false
+	ttl := s.config.EffectiveCacheTTL()
+	if response.Returned == 0 {
+		negativeTTL := s.config.EffectiveNegativeCacheTTL()
+		if negativeTTL <= 0 {
+			return
+		}
+		if negativeTTL < ttl {
+			ttl = negativeTTL
+		}
+	}
 	s.cache[key] = searchCacheEntry{
-		expiresAt: now.Add(s.config.EffectiveCacheTTL()),
+		expiresAt: now.Add(ttl),
 		touchedAt: now,
 		response:  cloneSearchResponse(response),
 	}
@@ -505,4 +853,24 @@ func (s *Service) DebugCacheSize() int {
 	s.cacheMu.RLock()
 	defer s.cacheMu.RUnlock()
 	return len(s.cache)
+}
+
+func (s *Service) CacheMetrics() CacheMetrics {
+	if s == nil {
+		return CacheMetrics{}
+	}
+	return CacheMetrics{
+		Hit:         s.cacheMetrics.hit.Load(),
+		Miss:        s.cacheMetrics.miss.Load(),
+		Expired:     s.cacheMetrics.expired.Load(),
+		Evicted:     s.cacheMetrics.evicted.Load(),
+		NegativeHit: s.cacheMetrics.negativeHit.Load(),
+	}
+}
+
+func (s *Service) ProviderManifests() []ProviderManifest {
+	if s == nil || s.providers == nil {
+		return nil
+	}
+	return s.providers.Manifests()
 }

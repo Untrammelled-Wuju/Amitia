@@ -268,9 +268,18 @@ func (i *EnableExistingInstaller) Install(
 	var serverName string
 	switch candidate.Kind {
 	case CandidateExtensionPackage, CandidateInstalledExtension:
-		extID, _ = candidate.Metadata["extensionId"].(string)
+		extID = strings.TrimSpace(candidate.ExtensionID)
 		if extID == "" {
-			return InstalledCapability{}, fmt.Errorf("enable existing installer: missing extensionId")
+			extID, _ = candidate.Metadata["extensionId"].(string)
+			extID = strings.TrimSpace(extID)
+		}
+		if extID == "" {
+			return InstalledCapability{}, fmt.Errorf(
+				"enable existing installer: missing extensionId (candidate=%s package=%s capability=%s stage=resolve_extension)",
+				candidate.ID,
+				candidate.PackageName,
+				strings.Join(capabilityIDsToStrings(candidate.Capabilities), ","),
+			)
 		}
 		err = i.enablePort.EnableExtension(ctx, extID)
 	case CandidateAgentSkill:
@@ -308,6 +317,16 @@ func (i *EnableExistingInstaller) Install(
 	}
 
 	return installed, nil
+}
+
+func capabilityIDsToStrings(ids []capability.CapabilityID) []string {
+	result := make([]string, 0, len(ids))
+	for _, id := range ids {
+		if value := strings.TrimSpace(string(id)); value != "" {
+			result = append(result, value)
+		}
+	}
+	return result
 }
 
 func (i *EnableExistingInstaller) Rollback(

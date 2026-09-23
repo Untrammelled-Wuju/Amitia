@@ -63,7 +63,7 @@ func sanitizeQuery(query string) (string, *Error) {
 	if len(trimmed) > MaxQueryBytes {
 		return "", &Error{Code: SEARCH_INVALID_QUERY}
 	}
-	return trimmed, nil
+	return strings.Join(strings.Fields(trimmed), " "), nil
 }
 
 func normalizeLimit(limit int) int {
@@ -160,14 +160,15 @@ func validateTimeRange(tr *TimeRangeFilter) *Error {
 }
 
 type validatedInput struct {
-	query      string
-	limit      int
-	offset     int
-	language   string
-	country    string
-	safeSearch SafeSearchMode
-	kind       SearchKind
-	domains    []string
+	query          string
+	limit          int
+	offset         int
+	language       string
+	country        string
+	safeSearch     SafeSearchMode
+	kind           SearchKind
+	domains        []string
+	excludeDomains []string
 }
 
 func validateAndNormalize(in *ToolInput) (*validatedInput, *Error) {
@@ -183,11 +184,11 @@ func validateAndNormalize(in *ToolInput) (*validatedInput, *Error) {
 	if err := validateOffset(offset); err != nil {
 		return nil, err
 	}
-	lang := strings.TrimSpace(in.Language)
+	lang := strings.ToLower(strings.TrimSpace(in.Language))
 	if err := validateLanguage(lang); err != nil {
 		return nil, err
 	}
-	country := strings.TrimSpace(in.Country)
+	country := strings.ToUpper(strings.TrimSpace(in.Country))
 	if err := validateCountry(country); err != nil {
 		return nil, err
 	}
@@ -200,6 +201,9 @@ func validateAndNormalize(in *ToolInput) (*validatedInput, *Error) {
 	if err := validateDomains(in.Domains); err != nil {
 		return nil, err
 	}
+	if err := validateDomains(in.ExcludeDomains); err != nil {
+		return nil, err
+	}
 	if err := validateTimeRange(in.Specialized.timeRange()); err != nil {
 		return nil, err
 	}
@@ -210,14 +214,15 @@ func validateAndNormalize(in *ToolInput) (*validatedInput, *Error) {
 		in.SafeSearch = SafeSearchModerate
 	}
 	return &validatedInput{
-		query:      query,
-		limit:      limit,
-		offset:     offset,
-		language:   lang,
-		country:    country,
-		safeSearch: in.SafeSearch,
-		kind:       in.Kind,
-		domains:    NormalizeDomains(in.Domains),
+		query:          query,
+		limit:          limit,
+		offset:         offset,
+		language:       lang,
+		country:        country,
+		safeSearch:     in.SafeSearch,
+		kind:           in.Kind,
+		domains:        NormalizeDomains(in.Domains),
+		excludeDomains: NormalizeDomains(in.ExcludeDomains),
 	}, nil
 }
 

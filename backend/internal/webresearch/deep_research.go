@@ -2,209 +2,98 @@ package webresearch
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"strings"
 )
 
 const (
-	deepStopCoverageSatisfied = "coverage_satisfied"
-	deepStopMaxRounds         = "max_rounds"
-	deepStopMaxSearchCalls    = "max_search_calls"
-	deepStopNoNewQueries      = "no_new_queries"
-	deepStopNoNewSources      = "no_new_sources"
-	deepStopBudgetSatisfied   = "budget_satisfied"
+	deepStopCoverageSatisfied   = "coverage_satisfied"
+	deepStopMaxRounds           = "max_rounds"
+	deepStopMaxSearchCalls      = "max_search_calls"
+	deepStopMaxProviderCost     = "max_provider_cost"
+	deepStopMaxProviderCredits  = "max_provider_credits"
+	deepStopNoNewQueries        = "no_new_queries"
+	deepStopNoNewSources        = "no_new_sources"
+	deepStopLowInformationGain  = "low_information_gain"
+	deepStopBudgetSatisfied     = "budget_satisfied"
+	deepInformationGainFloor    = 0.15
+	deepLowGainRoundsBeforeStop = 2
 )
 
 func (r *Runtime) executeDeepResearch(ctx context.Context, scope Scope, input ToolInput, output *ToolOutput, emit ProgressFunc) *Error {
-	initial := expandQueries(input.SearchQuery, input.FocusAreas, ModeDeepResearch, r.config.MaxQueries)
-	if len(initial) == 0 {
-		return newError(ErrInvalidInput, "no valid search queries", false, nil)
-	}
-
-	executed := make(map[string]struct{})
-	allQueries := make([]string, 0, r.config.MaxDeepRounds*r.config.MaxQueries)
-	followUpQueries := make([]string, 0)
-	allObservations := make([]searchObservation, 0)
-	providerSet := make(map[string]struct{})
-	referenceByCanonical := make(map[string]Reference)
-	discovered := make(map[string]struct{})
-	opened := make(map[string]struct{})
-	pageSeen := make(map[string]struct{})
-	citationSeen := make(map[string]struct{})
-	current := initial
-	stopReason := deepStopMaxRounds
-	partial := false
-	roundsCompleted := 0
-	totalSearchCalls := 0
-	remainingOpen := r.config.MaxDeepOpenPages
-
-	for round := 1; round <= r.config.MaxDeepRounds; round++ {
-		if len(current) == 0 {
-			stopReason = deepStopNoNewQueries
-			break
-		}
-		remainingCalls := r.config.MaxDeepSearchCalls - totalSearchCalls
-		if remainingCalls <= 0 {
-			stopReason = deepStopMaxSearchCalls
-			break
-		}
-		for _, query := range current {
-			key := normalizedQuery(query.Q)
-			if key != "" {
-				executed[key] = struct{}{}
-				allQueries = append(allQueries, query.Q)
-			}
-		}
-		_ = emitProgress(emit, Progress{
-			Phase:         "research_round",
-			Message:       "running deep research round",
-			Completed:     round,
-			Total:         r.config.MaxDeepRounds,
-			Fraction:      float64(round-1) / float64(maxInt(1, r.config.MaxDeepRounds)),
-			Indeterminate: false,
-		})
-
-		observations, providers, calls, roundPartial, roundErr := r.searchQueries(ctx, scope, current, ModeDeepResearch, remainingCalls, emit)
-		totalSearchCalls += calls
-		output.Stats.SearchCalls += calls
-		output.Stats.CacheHits += countCacheHitCalls(observations)
-		for _, provider := range providers {
-			providerSet[provider] = struct{}{}
-		}
-		if roundPartial || roundErr != nil {
-			partial = true
-		}
-		if roundErr != nil && len(allObservations) == 0 && len(observations) == 0 {
-			return roundErr
-		}
-		if ctx.Err() != nil {
-			return newError(ErrCancelled, "deep research cancelled", false, ctx.Err())
-		}
-		allObservations = append(allObservations, observations...)
-		roundsCompleted = round
-
-		deepResultLimit := maxInt(r.config.MaxSearchResults, r.config.MaxDeepOpenPages*3)
-		fused := fuseResults(allObservations, deepResultLimit)
-		newSources := 0
-		for _, item := range fused {
-			canonical := fusedCanonical(item)
-			if canonical == "" {
-				continue
-			}
-			if _, exists := discovered[canonical]; !exists {
-				discovered[canonical] = struct{}{}
-				newSources++
-			}
-		}
-
-		if remainingOpen > 0 {
-			openBatch := make([]SearchHit, 0, remainingOpen)
-			for index, item := range fused {
-				if len(openBatch) >= remainingOpen {
-					break
-				}
-				canonical := fusedCanonical(item)
-				if canonical == "" {
-					continue
-				}
-				if _, exists := opened[canonical]; exists {
-					continue
-				}
-				ref, refErr := r.ensureSearchReference(ctx, scope, item, index+1, referenceByCanonical)
-				if refErr != nil {
-					return refErr
-				}
-				opened[canonical] = struct{}{}
-				openBatch = append(openBatch, searchHitFromReference(ref, item, index+1))
-			}
-			if len(openBatch) > 0 {
-				pages, citations, fetchCalls, browserCalls := r.openTopSources(ctx, scope, openBatch, input.ResponseLength, emit)
-				output.Stats.FetchCalls += fetchCalls
-				output.Stats.BrowserCalls += browserCalls
-				output.Stats.PageCacheHits += maxInt(0, len(pages)-fetchCalls)
-				if ctx.Err() != nil {
-					return newError(ErrCancelled, "deep research cancelled", false, ctx.Err())
-				}
-				if len(pages) < len(openBatch) {
-					partial = true
-				}
-				appendUniquePages(output, pages, pageSeen)
-				appendUniqueCitations(output, citations, citationSeen)
-				remainingOpen -= len(openBatch)
-				if remainingOpen < 0 {
-					remainingOpen = 0
-				}
-			}
-		}
-
-		uniqueDomains := countFusedDomains(fused)
-		if deepCoverageSatisfied(input.FocusAreas, output.Citations, uniqueDomains, round) {
-			stopReason = deepStopCoverageSatisfied
-			break
-		}
-		if totalSearchCalls >= r.config.MaxDeepSearchCalls {
-			stopReason = deepStopMaxSearchCalls
-			break
-		}
-		if round >= r.config.MaxDeepRounds {
-			stopReason = deepStopMaxRounds
-			break
-		}
-		if round > 1 && newSources < r.config.MinDeepNewSources {
-			stopReason = deepStopNoNewSources
-			break
-		}
-
-		next := r.buildDeepFollowUps(input, executed, output.Citations, round+1)
-		if len(next) == 0 {
-			stopReason = deepStopNoNewQueries
-			break
-		}
-		for _, query := range next {
-			followUpQueries = append(followUpQueries, query.Q)
-			_ = emitProgress(emit, Progress{Phase: "research_followup", Query: query.Q, Message: "planning follow-up search", Indeterminate: true})
-		}
-		current = next
-	}
-
-	finalFused := fuseResults(allObservations, r.config.MaxSearchResults)
-	for index, item := range finalFused {
-		ref, refErr := r.ensureSearchReference(ctx, scope, item, index+1, referenceByCanonical)
-		if refErr != nil {
-			return refErr
-		}
-		output.Search = append(output.Search, searchHitFromReference(ref, item, index+1))
-	}
-
-	providers := make([]string, 0, len(providerSet))
-	for provider := range providerSet {
-		providers = append(providers, provider)
-	}
-	sort.Strings(providers)
-	uniqueDomains := countSearchHitDomains(output.Search)
-	if roundsCompleted == 0 && len(output.Search) > 0 {
-		roundsCompleted = 1
-	}
-	if stopReason == "" {
-		stopReason = deepStopBudgetSatisfied
-	}
-	output.Research = &ResearchSummary{
-		Mode:            ModeDeepResearch,
-		Queries:         dedupeStrings(allQueries),
-		FollowUpQueries: dedupeStrings(followUpQueries),
-		Providers:       providers,
-		RoundsCompleted: roundsCompleted,
-		OpenedPages:     len(output.Pages),
-		EvidenceCount:   len(output.Citations),
-		UniqueDomains:   uniqueDomains,
-		StopReason:      stopReason,
-		Partial:         partial,
-	}
-	_ = emitProgress(emit, Progress{Phase: "research_stop", Message: stopReason, Completed: roundsCompleted, Total: r.config.MaxDeepRounds, Fraction: 1})
-	return nil
+	return newResearchSupervisor(r, scope, input, output, emit).Run(ctx)
 }
 
-func (r *Runtime) buildDeepFollowUps(input ToolInput, executed map[string]struct{}, citations []Citation, round int) []SearchQueryCommand {
+func (r *Runtime) buildResearchPlan(input ToolInput) ResearchPlan {
+	goalParts := make([]string, 0, len(input.SearchQuery))
+	questions := make([]ResearchQuestion, 0, len(input.SearchQuery)+len(input.FocusAreas))
+	seen := make(map[string]string)
+	addQuestion := func(text string, priority int, required bool, dependencies []string) string {
+		text = strings.TrimSpace(text)
+		key := normalizedQuery(text)
+		if key == "" {
+			return ""
+		}
+		if id, exists := seen[key]; exists {
+			return id
+		}
+		id := fmt.Sprintf("q%d", len(questions)+1)
+		seen[key] = id
+		questions = append(questions, ResearchQuestion{
+			ID:           id,
+			Question:     text,
+			Priority:     priority,
+			Required:     required,
+			Dependencies: dedupeStrings(dependencies),
+			SuccessCriteria: []string{
+				"at least one directly relevant evidence item",
+			},
+		})
+		return id
+	}
+
+	// Broad user queries are roots in the research DAG. Focus questions depend
+	// on those roots so later follow-up rounds first establish the requested
+	// subject before spending budget on narrower branches. The first round may
+	// still search the user's explicit focus areas directly; dependencies govern
+	// dynamic follow-up scheduling, not whether user-supplied queries are valid.
+	rootIDs := make([]string, 0, len(input.SearchQuery))
+	for _, command := range input.SearchQuery {
+		if q := strings.TrimSpace(command.Q); q != "" {
+			goalParts = append(goalParts, q)
+			if id := addQuestion(q, 100, len(input.FocusAreas) == 0, nil); id != "" {
+				rootIDs = append(rootIDs, id)
+			}
+		}
+	}
+	rootIDs = dedupeStrings(rootIDs)
+	for _, focus := range input.FocusAreas {
+		addQuestion(focus, 120, true, rootIDs)
+	}
+	goal := strings.Join(dedupeStrings(goalParts), "; ")
+	if goal == "" && len(questions) > 0 {
+		goal = questions[0].Question
+	}
+	return ResearchPlan{
+		Goal:      goal,
+		Questions: questions,
+		SuccessCriteria: []string{
+			"cover every required research question",
+			"prefer evidence from multiple independent domains when available",
+			"stop when additional searches produce little new evidence",
+		},
+		Budget: ResearchBudget{
+			MaxRounds:          r.config.MaxDeepRounds,
+			MaxSearchCalls:     r.config.MaxSearchCalls,
+			MaxOpenPages:       r.config.MaxDeepOpenPages,
+			MaxProviderCostUSD: r.config.MaxProviderCostUSD,
+			MaxProviderCredits: r.config.MaxProviderCredits,
+		},
+	}
+}
+
+func (r *Runtime) buildDeepFollowUps(input ToolInput, plan ResearchPlan, executed map[string]struct{}, citations []Citation) []SearchQueryCommand {
 	if len(input.SearchQuery) == 0 {
 		return nil
 	}
@@ -219,7 +108,8 @@ func (r *Runtime) buildDeepFollowUps(input ToolInput, executed map[string]struct
 		if len(out) >= maxQueries {
 			return
 		}
-		key := normalizedQuery(value.Q)
+		value.Q = strings.TrimSpace(value.Q)
+		key := researchQueryIdentity(value)
 		if key == "" {
 			return
 		}
@@ -233,47 +123,106 @@ func (r *Runtime) buildDeepFollowUps(input ToolInput, executed map[string]struct
 		out = append(out, value)
 	}
 
-	for _, area := range input.FocusAreas {
-		area = strings.TrimSpace(area)
-		if area == "" || focusCovered(area, citations) {
+	questions := append([]ResearchQuestion(nil), plan.Questions...)
+	sort.SliceStable(questions, func(i, j int) bool {
+		if questions[i].Priority != questions[j].Priority {
+			return questions[i].Priority > questions[j].Priority
+		}
+		return questions[i].ID < questions[j].ID
+	})
+	for _, question := range questions {
+		if researchQuestionCovered(question, citations) {
+			continue
+		}
+		if !researchQuestionDependenciesSatisfied(plan, question, citations) {
 			continue
 		}
 		candidate := base
-		candidate.Q = strings.TrimSpace(base.Q + " " + area)
+		if normalizedQuery(question.Question) == normalizedQuery(base.Q) {
+			candidate.Q = question.Question
+		} else {
+			candidate.Q = strings.TrimSpace(base.Q + " " + question.Question)
+		}
 		add(candidate)
 	}
-
-	var suffixes []string
-	switch round {
-	case 2:
-		suffixes = []string{"official documentation", "architecture implementation", "source code"}
-	default:
-		suffixes = []string{"limitations issues", "benchmark comparison", "recent changes"}
-	}
-	for _, suffix := range suffixes {
-		candidate := base
-		candidate.Q = strings.TrimSpace(base.Q + " " + suffix)
-		add(candidate)
+	for _, command := range input.SearchQuery[1:] {
+		add(command)
 	}
 	return out
 }
 
-func deepCoverageSatisfied(focusAreas []string, citations []Citation, uniqueDomains, round int) bool {
-	if round < 2 {
-		return false
+func researchQuestionDependenciesSatisfied(plan ResearchPlan, question ResearchQuestion, citations []Citation) bool {
+	if len(question.Dependencies) == 0 {
+		return true
 	}
-	if len(citations) < 4 || uniqueDomains < 2 {
-		return false
+	byID := make(map[string]ResearchQuestion, len(plan.Questions))
+	for _, candidate := range plan.Questions {
+		byID[candidate.ID] = candidate
 	}
-	for _, area := range focusAreas {
-		if strings.TrimSpace(area) != "" && !focusCovered(area, citations) {
+	for _, dependencyID := range question.Dependencies {
+		dependency, ok := byID[dependencyID]
+		if !ok || !researchQuestionCovered(dependency, citations) {
 			return false
 		}
 	}
-	if len(focusAreas) == 0 {
+	return true
+}
+
+func researchPlanCoverageSatisfied(plan ResearchPlan, citations []Citation, uniqueDomains, round int) bool {
+	if round < 2 || len(citations) < 4 || uniqueDomains < 2 {
+		return false
+	}
+	for _, question := range plan.Questions {
+		if question.Required && !researchQuestionCovered(question, citations) {
+			return false
+		}
+	}
+	if len(plan.Questions) == 0 {
 		return len(citations) >= 6 && uniqueDomains >= 3
 	}
 	return true
+}
+
+func unresolvedResearchQuestions(plan ResearchPlan, citations []Citation) []string {
+	out := make([]string, 0)
+	for _, question := range plan.Questions {
+		if question.Required && !researchQuestionCovered(question, citations) {
+			out = append(out, question.Question)
+		}
+	}
+	return out
+}
+
+func researchQuestionCovered(question ResearchQuestion, citations []Citation) bool {
+	return focusCovered(question.Question, citations)
+}
+
+func researchQueryIdentity(command SearchQueryCommand) string {
+	query := normalizedQuery(command.Q)
+	if query == "" {
+		return ""
+	}
+	kind := strings.ToLower(strings.TrimSpace(command.Kind))
+	domains := normalizeDomains(command.Domains)
+	sort.Strings(domains)
+	return query + "\x00" + kind + "\x00" + strings.Join(domains, ",")
+}
+
+func deepInformationGain(newSources, newEvidence, newDomains, minNewSources int) float64 {
+	if minNewSources <= 0 {
+		minNewSources = 2
+	}
+	sourceGain := minFloat(1, float64(newSources)/float64(minNewSources))
+	evidenceGain := minFloat(1, float64(newEvidence)/4.0)
+	domainGain := minFloat(1, float64(newDomains)/2.0)
+	return sourceGain*0.45 + evidenceGain*0.35 + domainGain*0.20
+}
+
+func minFloat(a, b float64) float64 {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 func focusCovered(focus string, citations []Citation) bool {
