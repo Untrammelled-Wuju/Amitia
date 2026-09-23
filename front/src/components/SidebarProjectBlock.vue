@@ -55,12 +55,12 @@
           @archive="emit('archiveConversation', $event)"
         />
         <button
-          v-if="project.conversations.length > 5"
+          v-if="canToggleConversations"
           type="button"
           class="thread-expand"
-          @click="expandedConversations = !expandedConversations"
+          @click="toggleConversations"
         >
-          {{ expandedConversations ? "收起" : "展开显示" }}
+          {{ hasMoreConversations ? "展开显示" : "收起" }}
         </button>
         <div v-if="project.conversations.length === 0" class="thread-empty">暂无对话</div>
       </div>
@@ -69,9 +69,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { ref } from "vue";
 import { FolderOpened, MoreFilled, Plus } from "@element-plus/icons-vue";
 import type { ConversationItem, ProjectItem } from "@/stores/chat";
+import { useConversationDisclosure } from "@/composables/useConversationDisclosure";
 import SidebarConversationRow from "./SidebarConversationRow.vue";
 
 const props = defineProps<{
@@ -90,12 +91,12 @@ const emit = defineEmits<{
 }>();
 
 const expanded = ref(false);
-const expandedConversations = ref(false);
-const visibleConversations = computed(() =>
-  expandedConversations.value
-    ? props.project.conversations
-    : props.project.conversations.slice(0, 5),
-);
+const {
+  visible: visibleConversations,
+  hasMore: hasMoreConversations,
+  canToggle: canToggleConversations,
+  toggle: toggleConversations,
+} = useConversationDisclosure(() => props.project.conversations);
 </script>
 
 <style scoped>

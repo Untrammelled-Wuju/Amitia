@@ -13,6 +13,21 @@ type Provider interface {
 	Health(ctx context.Context) ProviderHealth
 }
 
+// ContextCapabilitiesProvider exposes capabilities that are actually usable for
+// the current request context (for example after credential availability and
+// circuit state are known).
+type ContextCapabilitiesProvider interface {
+	CapabilitiesForContext(ctx context.Context) ProviderCapabilities
+}
+
+// RequestCapabilityProvider validates one fully-specified search request against
+// the provider's current runtime state. This is more precise than static
+// capabilities for metasearch providers whose usable engines depend on
+// credentials, health, filters, pagination and runtime policy.
+type RequestCapabilityProvider interface {
+	ValidateSearchRequest(ctx context.Context, request SearchRequest) *Error
+}
+
 type ProviderUsage struct {
 	CostUSD float64 `json:"costUsd,omitempty"`
 	Credits float64 `json:"credits,omitempty"`

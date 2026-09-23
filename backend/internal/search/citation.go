@@ -44,6 +44,7 @@ func (b CitationBuilder) Build(results []SearchResult, kind SearchKind) Citation
 			Domain:       r.Domain,
 			Provider:     r.Source.Provider,
 			ProviderRank: r.Source.ProviderRank,
+			Engines:      append([]string(nil), r.Source.Engines...),
 			RetrievedAt:  r.Source.RetrievedAt,
 			PublishedAt:  r.PublishedAt,
 			Snippet:      r.Snippet,

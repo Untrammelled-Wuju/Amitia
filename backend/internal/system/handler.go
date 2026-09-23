@@ -3,6 +3,7 @@
 package system
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -15,11 +16,13 @@ import (
 	"github.com/u-ai/backend/internal/chat"
 	"github.com/u-ai/backend/internal/continuity"
 	"github.com/u-ai/backend/internal/extension/kernel/execution"
+	"github.com/u-ai/backend/internal/extension/kernel/secret"
 	"github.com/u-ai/backend/internal/interaction"
 	"github.com/u-ai/backend/internal/memory"
 	"github.com/u-ai/backend/internal/mindruntime"
 	"github.com/u-ai/backend/internal/search"
 	"github.com/u-ai/backend/internal/tts"
+	applog "github.com/u-ai/backend/log"
 	"gorm.io/gorm"
 )
 
@@ -83,6 +86,18 @@ func (h *Handler) SetChannelAvailability(availability ChannelAvailability) {
 
 func (h *Handler) SetApprovalBroker(broker *execution.ApprovalBroker) {
 	h.approvalBroker = broker
+}
+
+func (h *Handler) SetSearchCredentialSecretBroker(broker *secret.Broker) {
+	if h == nil || h.searchCredentials == nil || broker == nil {
+		return
+	}
+	h.searchCredentials.WithVault(newSearchCredentialVault(broker))
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	if err := h.searchCredentials.MigrateLegacyCredentials(ctx); err != nil {
+		applog.Warn("system search credential migration to SecretBroker failed", "error", err)
+	}
 }
 
 func (h *Handler) SetContinuityRuntime(repo *continuity.Repository, coordinator *continuity.WaitCoordinator) {

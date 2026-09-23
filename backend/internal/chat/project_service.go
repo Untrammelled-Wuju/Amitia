@@ -46,11 +46,23 @@ func (s *service) ListConversationSidebarForSpace(spaceID string, recentLimit, p
 		Recent:   recent,
 		Projects: make([]ProjectConversationSummary, 0, len(projects)),
 	}
+	workspaceKinds := map[string]string{}
+	var workspaceRows []struct {
+		ID   string
+		Kind string
+	}
+	if err := s.db.Table("workspace_mounts").Select("id", "kind").Find(&workspaceRows).Error; err != nil {
+		return nil, err
+	}
+	for _, row := range workspaceRows {
+		workspaceKinds[row.ID] = row.Kind
+	}
 	for _, project := range projects {
 		summary := ProjectConversationSummary{
 			Project:       project,
 			Available:     true,
 			Status:        "ready",
+			WorkspaceKind: workspaceKinds[project.WorkspaceID],
 			Conversations: make([]Conversation, 0),
 		}
 		if s.workspaceResolver != nil {

@@ -336,3 +336,33 @@ func TestCleanupExpiredRemovesCitationEvidenceBindings(t *testing.T) {
 		t.Fatalf("durable citation evidence count=%d, want 0", count)
 	}
 }
+
+func TestReferenceEngineProvenanceSurvivesRestart(t *testing.T) {
+	store, db := newSQLiteWebResearchStore(t)
+	ctx := context.Background()
+	if err := store.EnsureSchema(ctx); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	ref := Reference{
+		RefID: "ref-engine-provenance", ConversationID: "conv", Kind: "search",
+		URL: "https://example.com/source", CanonicalURL: "https://example.com/source",
+		Provider: "native", Engines: []string{"duckduckgo_html", "wikipedia"},
+		CreatedAt: now, ExpiresAt: now.Add(time.Hour),
+	}
+	if err := store.PutReference(ctx, ref); err != nil {
+		t.Fatal(err)
+	}
+
+	restarted := NewStore(db)
+	if err := restarted.EnsureSchema(ctx); err != nil {
+		t.Fatal(err)
+	}
+	got, err := restarted.GetReference(ctx, "conv", ref.RefID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(got.Engines, ",") != "duckduckgo_html,wikipedia" {
+		t.Fatalf("engines=%v", got.Engines)
+	}
+}

@@ -48,6 +48,7 @@ func (s *service) ProcessMessage(ctx context.Context, req *ProcessMessageRequest
 		TotalTokens:         computeResult.TotalTokens,
 		ForceVoice:          computeResult.ForceVoice,
 		Runtime:             req.Runtime,
+		TurnItems:           computeResult.TurnItems,
 	})
 	if err != nil {
 		_ = finalizeAssistantTurnFailureByID(s.db, computeResult.TurnID, err)
@@ -172,6 +173,7 @@ func (s *service) ProcessMessageCtx(ctx context.Context, req *interaction.Proces
 		TotalTokens:         computeResult.TotalTokens,
 		ForceVoice:          computeResult.ForceVoice,
 		Runtime:             req.Runtime,
+		TurnItems:           computeResult.TurnItems,
 	})
 	if err != nil {
 		_ = finalizeAssistantTurnFailureByID(s.db, computeResult.TurnID, err)

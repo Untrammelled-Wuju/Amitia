@@ -1790,6 +1790,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		RuntimeSupervisor:      supervisor,
 		ExecutionKernel:        executionKernel,
 		ApprovalBroker:         approvalBroker,
+		SecretBroker:           kernelSecretBroker,
 		HostAPIGateway:         hostAPIGateway,
 		PermissionBroker:       permBroker,
 		PermissionDefinitions:  permDefRegistry,

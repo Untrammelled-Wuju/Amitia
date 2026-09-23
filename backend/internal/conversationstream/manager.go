@@ -80,6 +80,7 @@ type executionState struct {
 	ctx            context.Context
 	cancel         context.CancelFunc
 	providerCancel context.CancelFunc
+	release        func()
 	steers         []string
 }
 
@@ -94,16 +95,17 @@ type conversationState struct {
 }
 
 type Manager struct {
-	mu       sync.RWMutex
-	states   map[string]*conversationState
-	ringSize int
-	durable  DurableStore
+	mu             sync.RWMutex
+	states         map[string]*conversationState
+	ringSize       int
+	durable        DurableStore
+	executionSlots chan struct{}
 }
 
 var defaultManager = NewManager()
 
 func NewManager() *Manager {
-	return &Manager{states: map[string]*conversationState{}, ringSize: 4096}
+	return &Manager{states: map[string]*conversationState{}, ringSize: 4096, executionSlots: make(chan struct{}, 16)}
 }
 
 func DefaultManager() *Manager {
@@ -122,6 +124,15 @@ func (m *Manager) SetRingSize(size int) {
 func (m *Manager) SetDurableStore(store DurableStore) {
 	m.mu.Lock()
 	m.durable = store
+	m.mu.Unlock()
+}
+
+func (m *Manager) SetMaxConcurrentExecutions(size int) {
+	if size <= 0 {
+		size = 16
+	}
+	m.mu.Lock()
+	m.executionSlots = make(chan struct{}, size)
 	m.mu.Unlock()
 }
 
@@ -277,12 +288,31 @@ func (m *Manager) BeginExecution(conversationID, turnID string) (context.Context
 	turnID = strings.TrimSpace(turnID)
 	state := m.state(conversationID)
 	state.mu.Lock()
-	defer state.mu.Unlock()
 	if state.execution != nil {
+		state.mu.Unlock()
+		return nil, func() {}, false
+	}
+	state.mu.Unlock()
+	slots := m.currentExecutionSlots()
+	if slots != nil {
+		slots <- struct{}{}
+	}
+	state.mu.Lock()
+	if state.execution != nil {
+		state.mu.Unlock()
+		if slots != nil {
+			<-slots
+		}
 		return nil, func() {}, false
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	state.execution = &executionState{turnID: turnID, ctx: ctx, cancel: cancel}
+	release := func() {
+		if slots != nil {
+			<-slots
+		}
+	}
+	state.execution = &executionState{turnID: turnID, ctx: ctx, cancel: cancel, release: release}
+	state.mu.Unlock()
 	return ctx, cancel, true
 }
 
@@ -297,6 +327,9 @@ func (m *Manager) ClearExecution(conversationID, turnID string) {
 		state.execution.providerCancel()
 	}
 	state.execution.cancel()
+	if state.execution.release != nil {
+		state.execution.release()
+	}
 	state.execution = nil
 }
 
@@ -389,6 +422,12 @@ func (m *Manager) durableStore() DurableStore {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return m.durable
+}
+
+func (m *Manager) currentExecutionSlots() chan struct{} {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.executionSlots
 }
 
 func (m *Manager) currentRingSize() int {

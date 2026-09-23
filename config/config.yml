@@ -27,6 +27,9 @@ app:
 chat:
   eventReplayRingSize: 4096
   contextWindowMaxRounds: 20
+  agentTurnTimeoutSeconds: 1800
+  agentMaxParallelTools: 4
+  agentMaxParallelTurns: 16
 
 providers:
   scriptRuntime:
@@ -135,6 +138,12 @@ providers:
         kinds: ["web", "news", "academic", "code", "image", "video", "places", "product", "music", "files", "social", "software", "translation", "dictionary", "weather", "currency"]
         allowHttp: false
         allowPrivate: false
+        native:
+          maxEngines: 6
+          defaultEngineTimeoutSec: 8
+          defaultRatePerMinute: 60
+          defaultBurst: 6
+          engines: {}
       brave:
         type: "brave"
         endpoint: "https://api.search.brave.com/res/v1/web/search"

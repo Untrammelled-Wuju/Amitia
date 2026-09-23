@@ -69,6 +69,42 @@ func TestB17ToolFacadeModelNameConflictResolved(t *testing.T) {
 	}
 }
 
+func TestBuildModelToolsSkipsInvalidSchema(t *testing.T) {
+	definitions := []capability.ToolDefinition{
+		{
+			ID:          "valid-tool",
+			ModelName:   "valid_tool",
+			Source:      capability.ToolSourceBuiltin,
+			Name:        "Valid Tool",
+			Description: "Valid tool",
+			Enabled:     true,
+			InputSchema: []byte(`{
+				"type": "object",
+				"properties": {
+					"value": {"type": ["string", "number", "boolean", "null"]}
+				}
+			}`),
+		},
+		{
+			ID:          "invalid-tool",
+			ModelName:   "invalid_tool",
+			Source:      capability.ToolSourceBuiltin,
+			Name:        "Invalid Tool",
+			Description: "Invalid tool",
+			Enabled:     true,
+			InputSchema: []byte(`{"type":"object","required":[1]}`),
+		},
+	}
+
+	tools := buildModelToolsFromDefinitions(definitions, InvocationScope{})
+	if len(tools) != 1 {
+		t.Fatalf("expected invalid schema to be skipped, got %d tools", len(tools))
+	}
+	if tools[0].Function.Name != "valid_tool" {
+		t.Fatalf("expected valid_tool, got %s", tools[0].Function.Name)
+	}
+}
+
 func TestB17ToolFacadeExecuteModelToolResolved(t *testing.T) {
 	toolRegistry := capability.NewToolRegistry()
 	executionKernel := &execution.ExecutionPipeline{}

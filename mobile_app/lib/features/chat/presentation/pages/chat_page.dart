@@ -235,9 +235,11 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                 workspaceId: project.workspaceId,
                 deviceId: project.deviceId,
                 workspaceName: project.name,
-                workspaceKind: project.rootUri.startsWith('content://')
-                    ? 'saf'
-                    : 'local',
+                workspaceKind: project.workspaceKind.trim().isEmpty
+                    ? (project.rootUri.startsWith('content://')
+                          ? 'saf'
+                          : 'local')
+                    : project.workspaceKind,
                 rootUri: project.rootUri,
               ),
       );
@@ -449,7 +451,11 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
   Future<void> _refreshRecentWorkspaces() async {
     try {
-      final sidebar = await ref.read(chatServiceProvider).conversationSidebar();
+      try {
+        await ref.read(workspaceServiceProvider).listLocal();
+      } catch (_) {}
+      ref.invalidate(conversationSidebarProvider);
+      final sidebar = await ref.read(conversationSidebarProvider.future);
       if (!mounted) return;
       _cachedProviderContext = null;
       setState(() {
@@ -459,9 +465,11 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                 id: project.workspaceId,
                 projectId: project.id,
                 name: project.name,
-                kind: project.rootUri.startsWith('content://')
-                    ? 'saf'
-                    : 'local',
+                kind: project.workspaceKind.trim().isEmpty
+                    ? (project.rootUri.startsWith('content://')
+                          ? 'saf'
+                          : 'local')
+                    : project.workspaceKind,
                 rootUri: project.rootUri,
                 readOnly: project.status == 'read_only',
                 available: project.available,
@@ -1969,6 +1977,14 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<AsyncValue<void>>(nativeBridgeRelayClientProvider, (
+      previous,
+      next,
+    ) {
+      if (next is AsyncData && previous is! AsyncData && mounted) {
+        unawaited(_refreshRecentWorkspaces());
+      }
+    });
     if (!_diagnosticLogged) {
       _diagnosticLogged = true;
       debugPrint(

@@ -9,7 +9,16 @@ import (
 
 func TestDefaultRegistryCoversCoreKinds(t *testing.T) {
 	registry := DefaultRegistry(nil)
-	require.GreaterOrEqual(t, registry.Count(), 86)
+	require.GreaterOrEqual(t, registry.Count(), 84)
+
+	ids := map[string]bool{}
+	for _, engine := range registry.All() {
+		ids[engine.Descriptor().ID] = true
+	}
+	require.True(t, ids["duckduckgo_html"])
+	require.False(t, ids["brave_api"])
+	require.False(t, ids["exa"])
+	require.False(t, ids["tavily"])
 	covered := make(map[search.SearchKind]bool)
 	for _, engine := range registry.All() {
 		caps := engine.Descriptor().Capabilities

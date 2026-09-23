@@ -1,17 +1,18 @@
 package engines
 
 import (
+	"sort"
+	"strings"
+
 	"github.com/u-ai/backend/internal/search/native"
 )
 
 func DefaultRegistry(fetcher *native.Fetcher) *native.Registry {
 	return native.NewRegistry(
-		NewBraveAPIEngine(fetcher),
+		NewDuckDuckGoEngine(fetcher),
 		NewGoogleCSEEngine(fetcher),
 		NewGoogleBooksEngine(fetcher),
 		NewSerperEngine(fetcher),
-		NewTavilyEngine(fetcher),
-		NewExaEngine(fetcher),
 		NewGitHubEngine(fetcher),
 		NewarXivEngine(fetcher),
 		NewEuropePMCBatchEngine(fetcher),
@@ -93,4 +94,31 @@ func DefaultRegistry(fetcher *native.Fetcher) *native.Registry {
 		NewWordnikEngine(fetcher),
 		NewInternetArchiveEngine(fetcher),
 	)
+}
+
+// KnownEngineIDs returns the canonical built-in native engine identifiers. It
+// is intentionally derived from the same registry used at runtime so config
+// validation cannot drift from the actual engine set.
+func KnownEngineIDs() []string {
+	registry := DefaultRegistry(nil)
+	items := registry.All()
+	ids := make([]string, 0, len(items))
+	for _, engine := range items {
+		id := strings.ToLower(strings.TrimSpace(engine.Descriptor().ID))
+		if id != "" {
+			ids = append(ids, id)
+		}
+	}
+	sort.Strings(ids)
+	return ids
+}
+
+func IsKnownEngineID(engineID string) bool {
+	engineID = strings.ToLower(strings.TrimSpace(engineID))
+	if engineID == "" {
+		return false
+	}
+	ids := KnownEngineIDs()
+	index := sort.SearchStrings(ids, engineID)
+	return index < len(ids) && ids[index] == engineID
 }

@@ -90,6 +90,7 @@ chat:
   contextWindowMaxRounds: 20
   agentTurnTimeoutSeconds: 1800
   agentMaxParallelTools: 4
+  agentMaxParallelTurns: 16
 
 embedding:
   modelName: "text-embedding-3-small"

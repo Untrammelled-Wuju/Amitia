@@ -25,7 +25,7 @@ func TestDefaultRegistryMeetsCapabilityFilterMatrix(t *testing.T) {
 		{kind: search.SearchKindAcademic, pagination: true, timeRange: true},
 		{kind: search.SearchKindCode, pagination: true},
 		{kind: search.SearchKindImage, language: true, country: true, safe: true, pagination: true, timeRange: true, domains: true},
-		{kind: search.SearchKindVideo, language: true, country: true, safe: true, pagination: true, timeRange: true, domains: true},
+		{kind: search.SearchKindVideo, language: true, pagination: true},
 		{kind: search.SearchKindPlaces, language: true, country: true},
 		{kind: search.SearchKindProduct, country: true, pagination: true},
 		{kind: search.SearchKindMusic, language: true, country: true, pagination: true},

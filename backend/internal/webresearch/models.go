@@ -65,6 +65,7 @@ type Reference struct {
 	Title          string     `json:"title,omitempty"`
 	Snippet        string     `json:"snippet,omitempty"`
 	Provider       string     `json:"provider,omitempty"`
+	Engines        []string   `json:"engines,omitempty"`
 	Query          string     `json:"query,omitempty"`
 	Rank           int        `json:"rank,omitempty"`
 	PublishedAt    *time.Time `json:"published_at,omitempty"`
@@ -80,6 +81,7 @@ type SearchHit struct {
 	Domain      string     `json:"domain"`
 	Snippet     string     `json:"snippet"`
 	Provider    string     `json:"provider"`
+	Engines     []string   `json:"engines,omitempty"`
 	PublishedAt *time.Time `json:"published_at,omitempty"`
 	RetrievedAt time.Time  `json:"retrieved_at"`
 	Score       float64    `json:"score,omitempty"`
@@ -99,6 +101,7 @@ type Page struct {
 	URL            string    `json:"url"`
 	CanonicalURL   string    `json:"canonical_url"`
 	Title          string    `json:"title,omitempty"`
+	Engines        []string  `json:"engines,omitempty"`
 	ContentType    string    `json:"content_type"`
 	Content        string    `json:"content"`
 	ContentHash    string    `json:"content_hash"`
@@ -150,6 +153,7 @@ type Citation struct {
 	RefID      string          `json:"ref_id"`
 	Title      string          `json:"title,omitempty"`
 	URL        string          `json:"url"`
+	Engines    []string        `json:"engines,omitempty"`
 	Text       string          `json:"text"`
 	Locator    EvidenceLocator `json:"locator"`
 	Relevance  float64         `json:"relevance"`

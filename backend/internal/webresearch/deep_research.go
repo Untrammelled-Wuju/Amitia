@@ -285,6 +285,7 @@ func searchHitFromReference(ref Reference, item fusedResult, rank int) SearchHit
 		Domain:      domainOf(ref.URL),
 		Snippet:     ref.Snippet,
 		Provider:    ref.Provider,
+		Engines:     append([]string(nil), ref.Engines...),
 		PublishedAt: ref.PublishedAt,
 		RetrievedAt: item.retrievedAt,
 		Score:       item.score,

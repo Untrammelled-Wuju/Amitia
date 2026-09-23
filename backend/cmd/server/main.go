@@ -55,6 +55,7 @@ func main() {
 	configDir := util.RuntimeConfigDir(runtimeRoot)
 	config.InitConfig(configDir)
 	conversationstream.DefaultManager().SetRingSize(config.AppCfg.Chat.EventReplayRingSize)
+	conversationstream.DefaultManager().SetMaxConcurrentExecutions(config.AppCfg.Chat.AgentMaxParallelTurns)
 
 	profileResolution, err := runtimeprofile.Resolve(runtimeprofile.ResolveInput{
 		Args:             os.Args[1:],
@@ -122,12 +123,24 @@ func main() {
 	appCtx, appCancel := context.WithCancel(rootCtx)
 	triggerShutdown = appCancel
 
+	conversationEventStore, err := conversationstream.NewFileStore(filepath.Join(paths.DataDir, "conversations"))
+	if err != nil {
+		log.Error("会话事件存储初始化失败:", err)
+		os.Exit(1)
+	}
+	conversationEventFileStore = conversationEventStore
+	conversationstream.DefaultManager().SetDurableStore(conversationEventStore)
+
 	db := mysql.NewSQLite(config.AppCfg.Storage.DataDir)
 
 	sqlDB, _ := db.DB()
 	agenttool.SetDB(sqlDB)
 	if err := applyDatabaseStartupMigrations(db, paths.DataDir); err != nil {
 		log.Error("数据库启动迁移失败:", err)
+		os.Exit(1)
+	}
+	if err := backfillConversationEventFiles(db, conversationEventFileStore); err != nil {
+		log.Error("会话事件历史回填失败:", err)
 		os.Exit(1)
 	}
 	ctx := app.NewAppContext(db, nil)

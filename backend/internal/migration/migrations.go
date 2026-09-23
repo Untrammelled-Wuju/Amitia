@@ -215,6 +215,8 @@ func DefaultMigrations() []Migration {
 		ContinuityThreadRuntimeMigration(),
 		ContinuityRuntimeCompletionMigration(),
 		SearchApiCredentialsMigration(),
+		TemporalRelationshipPresenceUniqueIndexMigration(),
+		TemporalRelationshipIndexesRepairMigration(),
 	}
 }
 

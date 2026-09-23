@@ -17,6 +17,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/execution"
 	"github.com/u-ai/backend/internal/extension/kernel/hook"
 	"github.com/u-ai/backend/internal/runtimeidentity"
+	applog "github.com/u-ai/backend/log"
 )
 
 type ToolFacadeConfig struct {
@@ -757,6 +758,10 @@ func (f *ToolFacade) parseContextContributions(result json.RawMessage) []Context
 
 func (f *ToolFacade) buildKernelModelTools(ctx context.Context, scope InvocationScope) ([]tool.Tool, error) {
 	defs := f.toolRegistry.List(ctx, capability.ToolFilter{Enabled: boolPtr(true)})
+	return buildModelToolsFromDefinitions(defs, scope), nil
+}
+
+func buildModelToolsFromDefinitions(defs []capability.ToolDefinition, scope InvocationScope) []tool.Tool {
 	tools := make([]tool.Tool, 0, len(defs))
 	for _, def := range defs {
 		if !def.Enabled {
@@ -770,7 +775,12 @@ func (f *ToolFacade) buildKernelModelTools(ctx context.Context, scope Invocation
 		}
 		params, err := tool.ParseParametersSchema(def.InputSchema)
 		if err != nil {
-			return nil, fmt.Errorf("tool %s input schema: %w", def.ID, err)
+			applog.Warn("model tool schema skipped", applog.Fields{
+				"tool_id":    def.ID,
+				"model_name": def.ModelName,
+				"error":      err.Error(),
+			})
+			continue
 		}
 		tools = append(tools, tool.Tool{
 			Type: "function",
@@ -781,7 +791,7 @@ func (f *ToolFacade) buildKernelModelTools(ctx context.Context, scope Invocation
 			},
 		})
 	}
-	return tools, nil
+	return tools
 }
 
 type resolvedExecution struct {

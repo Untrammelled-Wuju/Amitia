@@ -42,6 +42,9 @@ func TestAssistantTurnRecorderPreservesItemOrderAndFinalMessageLink(t *testing.T
 		t.Fatal(err)
 	}
 	if err := db.Transaction(func(tx *gorm.DB) error {
+		if err := recorder.persistItemsTx(tx); err != nil {
+			return err
+		}
 		return completeAssistantTurnTx(tx, recorder.TurnID, "最终回复", "message-1")
 	}); err != nil {
 		t.Fatal(err)
@@ -100,6 +103,11 @@ func TestModelEventProjectorCompletesReasoningBeforeText(t *testing.T) {
 	if err := projector.Emit(context.Background(), ModelEvent{Type: ModelEventTextDelta, TextDelta: "最终回复"}); err != nil {
 		t.Fatal(err)
 	}
+	if err := db.Transaction(func(tx *gorm.DB) error {
+		return recorder.persistItemsTx(tx)
+	}); err != nil {
+		t.Fatal(err)
+	}
 
 	var items []AssistantTurnItem
 	if err := db.Where("turn_id = ?", recorder.TurnID).Order("sequence ASC").Find(&items).Error; err != nil {
@@ -152,5 +160,46 @@ func TestAssistantTurnRecorderPersistsRawFailureMessage(t *testing.T) {
 	}
 	if payload["internalMessage"] != rawError {
 		t.Fatalf("raw error was not persisted: %s", item.ResultJSON)
+	}
+}
+
+func TestAssistantTurnRecorderClassifiesSQLiteBusyAsStorageError(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "assistant-turn.db")), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AutoMigrate(&AssistantTurn{}, &AssistantTurnItem{}); err != nil {
+		t.Fatal(err)
+	}
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = sqlDB.Close() })
+
+	recorder := newAssistantTurnRecorder(db, "conv-1", "char-1", "user-1", "request-1")
+	if err := recorder.Start(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if err := recorder.FinalizeFailure(context.Background(), assistantTurnStatusFailed, &TextModelCallError{RawError: "database is locked (5) (SQLITE_BUSY)"}); err != nil {
+		t.Fatal(err)
+	}
+
+	var item AssistantTurnItem
+	if err := db.Where("turn_id = ? AND item_type = ?", recorder.TurnID, assistantTurnItemError).First(&item).Error; err != nil {
+		t.Fatal(err)
+	}
+	if item.ErrorCode != "storage_error" {
+		t.Fatalf("error code = %q, want storage_error", item.ErrorCode)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(item.ResultJSON), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload["errorType"] != "storage" {
+		t.Fatalf("error type = %#v, want storage", payload["errorType"])
+	}
+	if payload["retryable"] != true {
+		t.Fatalf("retryable = %#v, want true", payload["retryable"])
 	}
 }

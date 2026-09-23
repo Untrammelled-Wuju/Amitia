@@ -76,6 +76,16 @@ func (b *Broker) Store(ctx context.Context, namespace string, value []byte) (Sec
 	return ref.Canonical(), nil
 }
 
+func (b *Broker) Delete(ctx context.Context, ref SecretRef) error {
+	if b == nil || b.store == nil {
+		return ErrSecretStoreUnavailable
+	}
+	if ref == "" || !ref.Valid() {
+		return ErrSecretRefInvalid
+	}
+	return b.store.Delete(ctx, string(ref.Canonical()))
+}
+
 func (b *Broker) Issue(ctx context.Context, req LeaseRequest) (Lease, error) {
 	if b.store == nil {
 		return Lease{}, ErrSecretStoreUnavailable

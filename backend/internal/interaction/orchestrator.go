@@ -134,7 +134,7 @@ type OrchestratorConfig struct {
 
 func DefaultOrchestratorConfig() OrchestratorConfig {
 	return OrchestratorConfig{
-		MaxConcurrent:   10,
+		MaxConcurrent:   16,
 		SupersedePolicy: SupersedePolicyLatest,
 		DefaultTimeout:  180 * time.Second,
 	}
@@ -155,6 +155,7 @@ type Orchestrator struct {
 	relationshipTimeMu         sync.Mutex
 	queueLocks                 map[string]*sync.Mutex
 	preparedRelationshipClaims map[string]struct{}
+	executionSlots             chan struct{}
 	active                     int
 	ready                      bool
 }
@@ -180,6 +181,7 @@ func newOrchestratorWithStores(cfg OrchestratorConfig, processor MessageProcesso
 		cancels:                    NewCancellationRegistry(),
 		queueLocks:                 map[string]*sync.Mutex{},
 		preparedRelationshipClaims: map[string]struct{}{},
+		executionSlots:             make(chan struct{}, cfg.MaxConcurrent),
 		ready:                      false,
 	}
 }

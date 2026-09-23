@@ -93,6 +93,50 @@ func TestB18ParseParametersSchemaRejectsInvalidJSON(t *testing.T) {
 	}
 }
 
+func TestParseParametersSchemaSupportsUnionPropertyTypes(t *testing.T) {
+	schema := json.RawMessage(`{
+		"type": "object",
+		"required": ["namespace", "key"],
+		"properties": {
+			"namespace": {
+				"type": "string",
+				"enum": ["system", "secure", "global"]
+			},
+			"key": {
+				"type": "string"
+			},
+			"value": {
+				"type": ["string", "number", "boolean", "null"]
+			}
+		},
+		"additionalProperties": false
+	}`)
+
+	params, err := ParseParametersSchema(schema)
+	if err != nil {
+		t.Fatalf("unexpected parse error: %v", err)
+	}
+
+	encoded, err := json.Marshal(params)
+	if err != nil {
+		t.Fatalf("unexpected marshal error: %v", err)
+	}
+
+	var decoded map[string]any
+	if err := json.Unmarshal(encoded, &decoded); err != nil {
+		t.Fatalf("unexpected unmarshal error: %v", err)
+	}
+	properties := decoded["properties"].(map[string]any)
+	value := properties["value"].(map[string]any)
+	types, ok := value["type"].([]any)
+	if !ok || len(types) != 4 {
+		t.Fatalf("expected union type to be preserved, got %v", value["type"])
+	}
+	if params.Properties["value"].Type != "string" {
+		t.Fatalf("expected first non-null type to be decoded, got %q", params.Properties["value"].Type)
+	}
+}
+
 func TestB18MarshalJSONFallsBackToTypedFields(t *testing.T) {
 	params := Parameters{
 		Type: "object",

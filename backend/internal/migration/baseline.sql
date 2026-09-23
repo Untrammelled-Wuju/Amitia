@@ -3774,6 +3774,8 @@ state_version INTEGER NOT NULL DEFAULT 0,
 created_at_utc TEXT NOT NULL DEFAULT '',
 updated_at_utc TEXT NOT NULL DEFAULT ''
 );
+CREATE UNIQUE INDEX IF NOT EXISTS idx_temporal_relationship_presence_scope
+ON temporal_relationship_presence_states(space_id, character_id);
 
 -- 来源: temporal_relationship_time.go
 CREATE TABLE IF NOT EXISTS temporal_cadence_samples (
@@ -3788,6 +3790,8 @@ sample_kind TEXT NOT NULL DEFAULT 'relationship',
 included INTEGER NOT NULL DEFAULT 1,
 created_at_utc TEXT NOT NULL DEFAULT ''
 );
+CREATE UNIQUE INDEX IF NOT EXISTS idx_temporal_cadence_interaction
+ON temporal_cadence_samples(interaction_id, sample_kind);
 
 -- 来源: temporal_relationship_time.go
 CREATE TABLE IF NOT EXISTS temporal_reunion_episodes (
@@ -3816,6 +3820,8 @@ idempotency_key TEXT NOT NULL DEFAULT '',
 created_at_utc TEXT NOT NULL DEFAULT '',
 updated_at_utc TEXT NOT NULL DEFAULT ''
 );
+CREATE UNIQUE INDEX IF NOT EXISTS idx_temporal_reunion_idempotency
+ON temporal_reunion_episodes(idempotency_key);
 
 -- 来源: temporal_relationship_time.go
 CREATE TABLE IF NOT EXISTS temporal_interaction_receipts (
@@ -3834,6 +3840,10 @@ status TEXT NOT NULL DEFAULT 'observed',
 created_at_utc TEXT NOT NULL DEFAULT '',
 updated_at_utc TEXT NOT NULL DEFAULT ''
 );
+CREATE UNIQUE INDEX IF NOT EXISTS idx_temporal_receipt_request
+ON temporal_interaction_receipts(space_id, request_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_temporal_receipt_interaction
+ON temporal_interaction_receipts(interaction_id);
 
 -- 来源: temporal_relationship_time.go
 CREATE TABLE IF NOT EXISTS temporal_effect_ledger (
@@ -3847,6 +3857,8 @@ interaction_id TEXT NOT NULL DEFAULT '',
 payload_json TEXT NOT NULL DEFAULT '{}',
 applied_at_utc TEXT NOT NULL DEFAULT ''
 );
+CREATE UNIQUE INDEX IF NOT EXISTS idx_temporal_effect_key
+ON temporal_effect_ledger(effect_key);
 
 -- 来源: temporal_relationship_time.go
 CREATE TABLE IF NOT EXISTS temporal_relationship_time_settings (

@@ -13,6 +13,7 @@ import (
 
 type CredentialResolver func(ctx context.Context, providerID, invocation, credentialRef string) (credential string, release func(), err error)
 type EngineCredentialResolver func(ctx context.Context, providerID, invocation string) (credentials map[string]string, release func(), err error)
+type EngineCredentialSourceFactory func(ctx context.Context, providerID, invocation string) (source EngineCredentialSource, release func(), err error)
 
 type CacheMetrics struct {
 	Hit         int64 `json:"hit"`
@@ -31,17 +32,18 @@ type cacheMetricCounters struct {
 }
 
 type Service struct {
-	providers                *ProviderSet
-	config                   Config
-	normalizer               *Normalizer
-	credentialResolver       CredentialResolver
-	engineCredentialResolver EngineCredentialResolver
-	citationBuilder          *CitationBuilder
-	cacheMu                  sync.RWMutex
-	cache                    map[string]searchCacheEntry
-	circuitMu                sync.Mutex
-	circuits                 map[string]providerCircuitState
-	cacheMetrics             cacheMetricCounters
+	providers                     *ProviderSet
+	config                        Config
+	normalizer                    *Normalizer
+	credentialResolver            CredentialResolver
+	engineCredentialResolver      EngineCredentialResolver
+	engineCredentialSourceFactory EngineCredentialSourceFactory
+	citationBuilder               *CitationBuilder
+	cacheMu                       sync.RWMutex
+	cache                         map[string]searchCacheEntry
+	circuitMu                     sync.Mutex
+	circuits                      map[string]providerCircuitState
+	cacheMetrics                  cacheMetricCounters
 }
 
 type circuitPhase string
@@ -106,6 +108,13 @@ func (s *Service) WithCredentialResolver(r CredentialResolver) *Service {
 func (s *Service) WithEngineCredentialResolver(r EngineCredentialResolver) *Service {
 	if r != nil {
 		s.engineCredentialResolver = r
+	}
+	return s
+}
+
+func (s *Service) WithEngineCredentialSourceFactory(factory EngineCredentialSourceFactory) *Service {
+	if factory != nil {
+		s.engineCredentialSourceFactory = factory
 	}
 	return s
 }
@@ -183,10 +192,6 @@ func (s *Service) SearchAdvancedWithProvider(ctx context.Context, req SearchRequ
 	if serr != nil {
 		return nil, serr
 	}
-	ferr := ProviderSupportsFilter(provider.Capabilities(), kind, req.Language != "", req.Country != "", req.SafeSearch != "", req.TimeRange != nil, len(req.Domains) > 0, len(req.ExcludeDomains) > 0)
-	if ferr != nil {
-		return nil, ferr
-	}
 	cacheKey := s.searchCacheKey(resolvedProviderID, req)
 	if cached, ok := s.getCachedSearch(cacheKey); ok {
 		cached.CacheHit = true
@@ -201,6 +206,24 @@ func (s *Service) SearchAdvancedWithProvider(ctx context.Context, req SearchRequ
 		return nil, rerr
 	}
 	defer releaseCred()
+	if validator, ok := provider.(RequestCapabilityProvider); ok {
+		if ferr := validator.ValidateSearchRequest(ctx, req); ferr != nil {
+			return nil, ferr
+		}
+	} else {
+		caps := provider.Capabilities()
+		if contextual, ok := provider.(ContextCapabilitiesProvider); ok {
+			caps = contextual.CapabilitiesForContext(ctx)
+		}
+		if req.Offset > 0 && !caps.Pagination {
+			return nil, NewError(SEARCH_FILTER_UNSUPPORTED, resolvedProviderID, false, fmt.Errorf("provider does not support pagination"))
+		}
+		ferr := ProviderSupportsFilter(caps, kind, req.Language != "", req.Country != "", req.SafeSearch != "", req.TimeRange != nil, len(req.Domains) > 0, len(req.ExcludeDomains) > 0)
+		if ferr != nil {
+			ferr.Provider = resolvedProviderID
+			return nil, ferr
+		}
+	}
 	start := time.Now()
 	searchCtx, cancel := context.WithTimeout(ctx, s.config.EffectiveTimeout())
 	defer cancel()
@@ -621,10 +644,127 @@ func (s *Service) ExecuteFromJSONWithProvider(ctx context.Context, input json.Ra
 	return s.SearchAdvancedWithProvider(ctx, req, invocation, providerID)
 }
 
+type referenceEngineCredentialSource struct {
+	providerID string
+	invocation string
+	refs       map[string]string
+	resolver   CredentialResolver
+}
+
+func (s *referenceEngineCredentialSource) Available(_ context.Context, engineID string) bool {
+	if s == nil || s.resolver == nil {
+		return false
+	}
+	engineID = normalizeEngineCredentialID(engineID)
+	if engineID == "google_cse" {
+		// google_cse may be stored as one composite JSON secret or as two
+		// separate secret references (API key + CX). A primary reference is
+		// required in either form.
+		return strings.TrimSpace(s.refs["google_cse"]) != ""
+	}
+	return strings.TrimSpace(s.refs[engineID]) != ""
+}
+
+func (s *referenceEngineCredentialSource) Resolve(ctx context.Context, engineID string) (string, func(), error) {
+	if s == nil || s.resolver == nil {
+		return "", func() {}, nil
+	}
+	engineID = normalizeEngineCredentialID(engineID)
+	ref := strings.TrimSpace(s.refs[engineID])
+	if ref == "" {
+		return "", func() {}, nil
+	}
+	primary, primaryRelease, err := s.resolver(ctx, s.providerID, s.invocation, ref)
+	if err != nil {
+		return "", primaryRelease, err
+	}
+	if engineID != "google_cse" {
+		return primary, primaryRelease, nil
+	}
+	// A single reference is allowed to contain the already-composed JSON
+	// credential. If a separate CX reference is configured, compose a JSON
+	// payload compatible with googleCSEEngine and release both leases together.
+	cxRef := strings.TrimSpace(s.refs["google_cse_cx"])
+	if cxRef == "" {
+		return primary, primaryRelease, nil
+	}
+	cx, cxRelease, err := s.resolver(ctx, s.providerID, s.invocation, cxRef)
+	if err != nil {
+		if primaryRelease != nil {
+			primaryRelease()
+		}
+		return "", cxRelease, err
+	}
+	payload, err := json.Marshal(map[string]string{"apiKey": primary, "cx": cx})
+	if err != nil {
+		if cxRelease != nil {
+			cxRelease()
+		}
+		if primaryRelease != nil {
+			primaryRelease()
+		}
+		return "", func() {}, err
+	}
+	release := func() {
+		if cxRelease != nil {
+			cxRelease()
+		}
+		if primaryRelease != nil {
+			primaryRelease()
+		}
+	}
+	return string(payload), release, nil
+}
+
+type chainedEngineCredentialSource struct {
+	sources []EngineCredentialSource
+}
+
+func (s *chainedEngineCredentialSource) Available(ctx context.Context, engineID string) bool {
+	if s == nil {
+		return false
+	}
+	for _, source := range s.sources {
+		if source != nil && source.Available(ctx, engineID) {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *chainedEngineCredentialSource) Resolve(ctx context.Context, engineID string) (string, func(), error) {
+	if s == nil {
+		return "", func() {}, nil
+	}
+	for _, source := range s.sources {
+		if source == nil || !source.Available(ctx, engineID) {
+			continue
+		}
+		return source.Resolve(ctx, engineID)
+	}
+	return "", func() {}, nil
+}
+
+func chainEngineCredentialSources(sources ...EngineCredentialSource) EngineCredentialSource {
+	filtered := make([]EngineCredentialSource, 0, len(sources))
+	for _, source := range sources {
+		if source != nil {
+			filtered = append(filtered, source)
+		}
+	}
+	if len(filtered) == 0 {
+		return nil
+	}
+	if len(filtered) == 1 {
+		return filtered[0]
+	}
+	return &chainedEngineCredentialSource{sources: filtered}
+}
+
 func (s *Service) contextWithCredential(ctx context.Context, providerID, invocation string) (context.Context, func(), *Error) {
 	credRef := s.config.ProviderCredentialRef(providerID)
 	engineRefs := s.config.ProviderEngineCredentials(providerID)
-	releases := make([]func(), 0, len(engineRefs)+1)
+	releases := make([]func(), 0, 2)
 	releaseAll := func() {
 		for index := len(releases) - 1; index >= 0; index-- {
 			if releases[index] != nil {
@@ -644,21 +784,37 @@ func (s *Service) contextWithCredential(ctx context.Context, providerID, invocat
 			ctx = ContextWithProviderCredential(ctx, credential)
 		}
 	}
-	for engineID, ref := range engineRefs {
-		ref = strings.TrimSpace(ref)
-		if ref == "" || s.credentialResolver == nil {
-			continue
+	var configuredSource EngineCredentialSource
+	if len(engineRefs) > 0 && s.credentialResolver != nil {
+		normalized := make(map[string]string, len(engineRefs))
+		for engineID, ref := range engineRefs {
+			engineID = normalizeEngineCredentialID(engineID)
+			ref = strings.TrimSpace(ref)
+			if engineID != "" && ref != "" {
+				normalized[engineID] = ref
+			}
 		}
-		credential, release, err := s.credentialResolver(ctx, providerID, invocation, ref)
+		if len(normalized) > 0 {
+			configuredSource = &referenceEngineCredentialSource{providerID: providerID, invocation: invocation, refs: normalized, resolver: s.credentialResolver}
+		}
+	}
+	var storedSource EngineCredentialSource
+	if s.engineCredentialSourceFactory != nil && s.providerUsesEngineCredentials(providerID) {
+		source, release, err := s.engineCredentialSourceFactory(ctx, providerID, invocation)
 		if err != nil {
 			return ctx, releaseAll, NewError(SEARCH_PROVIDER_AUTH_FAILED, providerID, false, err)
 		}
 		if release != nil {
 			releases = append(releases, release)
 		}
-		ctx = ContextWithEngineCredential(ctx, engineID, credential)
+		storedSource = source
 	}
-	if s.engineCredentialResolver != nil {
+	if source := chainEngineCredentialSources(configuredSource, storedSource); source != nil {
+		ctx = ContextWithEngineCredentialSource(ctx, source)
+	} else if s.engineCredentialResolver != nil {
+		// Legacy compatibility path for older integrations/tests. Production
+		// wiring uses the lazy source factory above so native search never loads
+		// every engine secret into one request context.
 		credentials, release, err := s.engineCredentialResolver(ctx, providerID, invocation)
 		if err != nil {
 			return ctx, releaseAll, NewError(SEARCH_PROVIDER_AUTH_FAILED, providerID, false, err)
@@ -671,6 +827,23 @@ func (s *Service) contextWithCredential(ctx context.Context, providerID, invocat
 		}
 	}
 	return ctx, releaseAll, nil
+}
+
+func (s *Service) providerUsesEngineCredentials(providerID string) bool {
+	providerID = strings.TrimSpace(providerID)
+	if providerID == "" {
+		return false
+	}
+	if provider, ok := s.config.Providers[providerID]; ok {
+		if strings.EqualFold(strings.TrimSpace(provider.Type), ProviderNative) {
+			return true
+		}
+		// Custom/plugin providers may explicitly declare engine credentials. Keep
+		// that extension point without making every ordinary top-level provider
+		// query the native credential store.
+		return len(provider.EngineCredentials) > 0
+	}
+	return strings.EqualFold(providerID, ProviderNative)
 }
 
 func (s *Service) searchCacheKey(providerID string, req SearchRequest) string {
@@ -814,8 +987,13 @@ func cloneSearchResponse(in SearchResponse) SearchResponse {
 	out.Results = append([]SearchResult(nil), in.Results...)
 	for i := range out.Results {
 		out.Results[i].Metadata.Authors = append([]string(nil), in.Results[i].Metadata.Authors...)
+		out.Results[i].Source.Engines = append([]string(nil), in.Results[i].Source.Engines...)
 	}
 	out.CitationSet.Citations = append([]Citation(nil), in.CitationSet.Citations...)
+	for i := range out.CitationSet.Citations {
+		out.CitationSet.Citations[i].Engines = append([]string(nil), in.CitationSet.Citations[i].Engines...)
+		out.CitationSet.Citations[i].Metadata.Authors = append([]string(nil), in.CitationSet.Citations[i].Metadata.Authors...)
+	}
 	return out
 }
 

@@ -80,6 +80,9 @@ func TestProjectConversationLifecycle(t *testing.T) {
 	if len(sidebar.Projects) != 1 || len(sidebar.Projects[0].Conversations) != 1 {
 		t.Fatalf("unexpected sidebar: %#v", sidebar)
 	}
+	if sidebar.Projects[0].WorkspaceKind != "local" {
+		t.Fatalf("workspace kind = %q, want local", sidebar.Projects[0].WorkspaceKind)
+	}
 	if _, err := svc.MoveConversationToProjectForSpace(conversation.ID, "", ""); err != nil {
 		t.Fatal(err)
 	}

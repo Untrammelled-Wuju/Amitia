@@ -82,6 +82,18 @@ func (s *Service) ResolveWorkspaceAvailability(workspaceID string) (bool, string
 			return false, "missing", "项目根目录不是文件夹"
 		}
 	}
+	if mount.Kind == WorkspaceKindSAF &&
+		!mount.Available &&
+		s.safGrantResolver != nil &&
+		strings.TrimSpace(mount.NativeGrant) != "" {
+		if status, err := s.safGrantResolver.ResolveGrant(mount.NativeGrant); err == nil {
+			statusValue, available := GrantStatusToMountUpdate(mount.NativeGrant, status)
+			s.registry.UpdateStatus(mount.ID, statusValue, available)
+			if refreshed, ok := s.registry.GetMountOrEmpty(mount.ID); ok {
+				mount = refreshed
+			}
+		}
+	}
 	if !mount.Available {
 		reason := strings.TrimSpace(mount.StatusReason)
 		if reason == "" {

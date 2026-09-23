@@ -44,7 +44,7 @@ func (s *Store) EnsureSchema(ctx context.Context) error {
 		return nil
 	}
 	statements := []string{
-		`CREATE TABLE IF NOT EXISTS web_references (ref_id TEXT PRIMARY KEY, conversation_id TEXT NOT NULL, turn_id TEXT, invocation_id TEXT, kind TEXT NOT NULL, url TEXT NOT NULL, canonical_url TEXT NOT NULL, title TEXT, snippet TEXT, provider TEXT, query_text TEXT, rank_value INTEGER NOT NULL DEFAULT 0, published_at DATETIME, created_at DATETIME NOT NULL, expires_at DATETIME NOT NULL)`,
+		`CREATE TABLE IF NOT EXISTS web_references (ref_id TEXT PRIMARY KEY, conversation_id TEXT NOT NULL, turn_id TEXT, invocation_id TEXT, kind TEXT NOT NULL, url TEXT NOT NULL, canonical_url TEXT NOT NULL, title TEXT, snippet TEXT, provider TEXT, engines_json TEXT NOT NULL DEFAULT '[]', query_text TEXT, rank_value INTEGER NOT NULL DEFAULT 0, published_at DATETIME, created_at DATETIME NOT NULL, expires_at DATETIME NOT NULL)`,
 		`CREATE INDEX IF NOT EXISTS idx_web_references_conversation ON web_references(conversation_id, created_at)`,
 		`CREATE INDEX IF NOT EXISTS idx_web_references_canonical ON web_references(canonical_url)`,
 		`CREATE TABLE IF NOT EXISTS web_pages (ref_id TEXT PRIMARY KEY, source_ref_id TEXT, conversation_id TEXT NOT NULL, url TEXT NOT NULL, canonical_url TEXT NOT NULL, title TEXT, content_type TEXT NOT NULL, content TEXT NOT NULL, content_hash TEXT NOT NULL, links_json TEXT NOT NULL, truncated INTEGER NOT NULL DEFAULT 0, dynamic INTEGER NOT NULL DEFAULT 0, fetched_at DATETIME NOT NULL)`,
@@ -69,7 +69,43 @@ func (s *Store) EnsureSchema(ctx context.Context) error {
 	if err := ensureEvidencePageContentHashColumn(ctx, s.db); err != nil {
 		return err
 	}
+	if err := ensureReferenceEnginesColumn(ctx, s.db); err != nil {
+		return err
+	}
 	return nil
+}
+
+func ensureReferenceEnginesColumn(ctx context.Context, db *sql.DB) error {
+	rows, err := db.QueryContext(ctx, `PRAGMA table_info(web_references)`)
+	if err != nil {
+		return err
+	}
+	found := false
+	for rows.Next() {
+		var cid int
+		var name, columnType string
+		var notNull, pk int
+		var defaultValue sql.NullString
+		if err := rows.Scan(&cid, &name, &columnType, &notNull, &defaultValue, &pk); err != nil {
+			_ = rows.Close()
+			return err
+		}
+		if strings.EqualFold(strings.TrimSpace(name), "engines_json") {
+			found = true
+		}
+	}
+	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		return err
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	if found {
+		return nil
+	}
+	_, err = db.ExecContext(ctx, `ALTER TABLE web_references ADD COLUMN engines_json TEXT NOT NULL DEFAULT '[]'`)
+	return err
 }
 
 func ensureEvidencePageContentHashColumn(ctx context.Context, db *sql.DB) error {
@@ -213,7 +249,11 @@ func (s *Store) PutReference(ctx context.Context, ref Reference) error {
 		return errors.New("nil web store")
 	}
 	if s.db != nil {
-		if _, err := s.db.ExecContext(ctx, `INSERT INTO web_references (ref_id, conversation_id, turn_id, invocation_id, kind, url, canonical_url, title, snippet, provider, query_text, rank_value, published_at, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(ref_id) DO UPDATE SET conversation_id=excluded.conversation_id, turn_id=excluded.turn_id, invocation_id=excluded.invocation_id, kind=excluded.kind, url=excluded.url, canonical_url=excluded.canonical_url, title=excluded.title, snippet=excluded.snippet, provider=excluded.provider, query_text=excluded.query_text, rank_value=excluded.rank_value, published_at=excluded.published_at, expires_at=excluded.expires_at`, ref.RefID, ref.ConversationID, ref.TurnID, ref.InvocationID, ref.Kind, ref.URL, ref.CanonicalURL, ref.Title, ref.Snippet, ref.Provider, ref.Query, ref.Rank, nullableTime(ref.PublishedAt), ref.CreatedAt, ref.ExpiresAt); err != nil {
+		enginesJSON, err := json.Marshal(ref.Engines)
+		if err != nil {
+			return err
+		}
+		if _, err := s.db.ExecContext(ctx, `INSERT INTO web_references (ref_id, conversation_id, turn_id, invocation_id, kind, url, canonical_url, title, snippet, provider, engines_json, query_text, rank_value, published_at, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(ref_id) DO UPDATE SET conversation_id=excluded.conversation_id, turn_id=excluded.turn_id, invocation_id=excluded.invocation_id, kind=excluded.kind, url=excluded.url, canonical_url=excluded.canonical_url, title=excluded.title, snippet=excluded.snippet, provider=excluded.provider, engines_json=excluded.engines_json, query_text=excluded.query_text, rank_value=excluded.rank_value, published_at=excluded.published_at, expires_at=excluded.expires_at`, ref.RefID, ref.ConversationID, ref.TurnID, ref.InvocationID, ref.Kind, ref.URL, ref.CanonicalURL, ref.Title, ref.Snippet, ref.Provider, string(enginesJSON), ref.Query, ref.Rank, nullableTime(ref.PublishedAt), ref.CreatedAt, ref.ExpiresAt); err != nil {
 			return err
 		}
 	}
@@ -243,8 +283,9 @@ func (s *Store) GetReference(ctx context.Context, conversationID, refID string) 
 		return Reference{}, newError(ErrReferenceNotFound, "reference not found", false, nil)
 	}
 	var published sql.NullTime
-	row := s.db.QueryRowContext(ctx, `SELECT ref_id, conversation_id, turn_id, invocation_id, kind, url, canonical_url, title, snippet, provider, query_text, rank_value, published_at, created_at, expires_at FROM web_references WHERE ref_id = ?`, refID)
-	if err := row.Scan(&ref.RefID, &ref.ConversationID, &ref.TurnID, &ref.InvocationID, &ref.Kind, &ref.URL, &ref.CanonicalURL, &ref.Title, &ref.Snippet, &ref.Provider, &ref.Query, &ref.Rank, &published, &ref.CreatedAt, &ref.ExpiresAt); err != nil {
+	var enginesJSON string
+	row := s.db.QueryRowContext(ctx, `SELECT ref_id, conversation_id, turn_id, invocation_id, kind, url, canonical_url, title, snippet, provider, engines_json, query_text, rank_value, published_at, created_at, expires_at FROM web_references WHERE ref_id = ?`, refID)
+	if err := row.Scan(&ref.RefID, &ref.ConversationID, &ref.TurnID, &ref.InvocationID, &ref.Kind, &ref.URL, &ref.CanonicalURL, &ref.Title, &ref.Snippet, &ref.Provider, &enginesJSON, &ref.Query, &ref.Rank, &published, &ref.CreatedAt, &ref.ExpiresAt); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return Reference{}, newError(ErrReferenceNotFound, "reference not found", false, nil)
 		}
@@ -253,6 +294,11 @@ func (s *Store) GetReference(ctx context.Context, conversationID, refID string) 
 	if published.Valid {
 		value := published.Time.UTC()
 		ref.PublishedAt = &value
+	}
+	if strings.TrimSpace(enginesJSON) != "" {
+		if err := json.Unmarshal([]byte(enginesJSON), &ref.Engines); err != nil {
+			return Reference{}, err
+		}
 	}
 	if ref.ConversationID != conversationID {
 		return Reference{}, newError(ErrReferenceScope, "reference belongs to another conversation", false, nil)
@@ -371,6 +417,11 @@ func (s *Store) PutPageArtifact(ctx context.Context, page Page, ref Reference, i
 		locators[i] = string(encoded)
 	}
 
+	enginesJSON, err := json.Marshal(ref.Engines)
+	if err != nil {
+		return err
+	}
+
 	if s.db != nil {
 		tx, err := s.db.BeginTx(ctx, nil)
 		if err != nil {
@@ -387,7 +438,7 @@ func (s *Store) PutPageArtifact(ctx context.Context, page Page, ref Reference, i
 		if _, err := tx.ExecContext(ctx, upsertPageVersionSQL, page.RefID, page.ContentHash, page.Title, page.ContentType, page.Content, string(links), boolInt(page.Truncated), boolInt(page.Dynamic), seenAt, seenAt); err != nil {
 			return err
 		}
-		if _, err := tx.ExecContext(ctx, `INSERT INTO web_references (ref_id, conversation_id, turn_id, invocation_id, kind, url, canonical_url, title, snippet, provider, query_text, rank_value, published_at, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(ref_id) DO UPDATE SET conversation_id=excluded.conversation_id, turn_id=excluded.turn_id, invocation_id=excluded.invocation_id, kind=excluded.kind, url=excluded.url, canonical_url=excluded.canonical_url, title=excluded.title, snippet=excluded.snippet, provider=excluded.provider, query_text=excluded.query_text, rank_value=excluded.rank_value, published_at=excluded.published_at, expires_at=excluded.expires_at`, ref.RefID, ref.ConversationID, ref.TurnID, ref.InvocationID, ref.Kind, ref.URL, ref.CanonicalURL, ref.Title, ref.Snippet, ref.Provider, ref.Query, ref.Rank, nullableTime(ref.PublishedAt), ref.CreatedAt, ref.ExpiresAt); err != nil {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO web_references (ref_id, conversation_id, turn_id, invocation_id, kind, url, canonical_url, title, snippet, provider, engines_json, query_text, rank_value, published_at, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(ref_id) DO UPDATE SET conversation_id=excluded.conversation_id, turn_id=excluded.turn_id, invocation_id=excluded.invocation_id, kind=excluded.kind, url=excluded.url, canonical_url=excluded.canonical_url, title=excluded.title, snippet=excluded.snippet, provider=excluded.provider, engines_json=excluded.engines_json, query_text=excluded.query_text, rank_value=excluded.rank_value, published_at=excluded.published_at, expires_at=excluded.expires_at`, ref.RefID, ref.ConversationID, ref.TurnID, ref.InvocationID, ref.Kind, ref.URL, ref.CanonicalURL, ref.Title, ref.Snippet, ref.Provider, string(enginesJSON), ref.Query, ref.Rank, nullableTime(ref.PublishedAt), ref.CreatedAt, ref.ExpiresAt); err != nil {
 			return err
 		}
 		for i, item := range items {

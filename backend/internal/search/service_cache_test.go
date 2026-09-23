@@ -192,23 +192,23 @@ func TestServiceSearchCacheEvictsWhenCapacityReached(t *testing.T) {
 func TestCandidateProviderIDsUsesConfiguredRouteOrder(t *testing.T) {
 	primary := &cacheTestProvider{}
 	backup := &cacheTestProvider{}
-	providers := NewProviderSet("searxng_local")
-	providers.RegisterWithPriority("searxng_local", primary, 100)
+	providers := NewProviderSet("local_backup")
+	providers.RegisterWithPriority("local_backup", primary, 100)
 	providers.RegisterWithPriority("brave_primary", backup, 90)
 	service := NewService(Config{
 		Enabled:         true,
-		DefaultProvider: "searxng_local",
+		DefaultProvider: "local_backup",
 		Providers: map[string]ProviderConfig{
-			"searxng_local": {Enabled: true},
+			"local_backup":  {Enabled: true},
 			"brave_primary": {Enabled: true},
 		},
 		Routes: map[string]ProviderRouteConfig{
-			"general": {Preferred: []string{"brave_primary"}, Fallback: []string{"searxng_local"}},
+			"general": {Preferred: []string{"brave_primary"}, Fallback: []string{"local_backup"}},
 		},
 	}, providers)
 
 	got := service.CandidateProviderIDs(SearchKindWeb)
-	if len(got) != 2 || got[0] != "brave_primary" || got[1] != "searxng_local" {
+	if len(got) != 2 || got[0] != "brave_primary" || got[1] != "local_backup" {
 		t.Fatalf("unexpected route order: %#v", got)
 	}
 }

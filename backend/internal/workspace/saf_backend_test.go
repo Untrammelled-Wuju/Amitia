@@ -381,9 +381,9 @@ func TestSAFBackend_WriteNotWritable(t *testing.T) {
 
 func TestSAFBackend_GrantStatusToMount(t *testing.T) {
 	tests := []struct {
-		name     string
-		status   SAFGrantStatus
-		wantStat WorkspaceStatus
+		name      string
+		status    SAFGrantStatus
+		wantStat  WorkspaceStatus
 		wantAvail bool
 	}{
 		{
@@ -428,6 +428,53 @@ func TestSAFBackend_GrantStatusToMount(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestResolveWorkspaceAvailabilityRetriesSAFGrant(t *testing.T) {
+	registry := NewRegistry()
+	mount, err := registry.RegisterSAFMount(
+		context.Background(),
+		"Project",
+		"content://provider/tree/project",
+		false,
+	)
+	if err != nil {
+		t.Fatalf("unexpected register error: %v", err)
+	}
+	registry.UpdateStatus(mount.ID, WorkspaceStatusUnavailable, false)
+
+	resolver := &countingSAFGrantResolver{
+		status: SAFGrantStatus{
+			Valid:             true,
+			Readable:          true,
+			Writable:          true,
+			ProviderAvailable: true,
+			RootExists:        true,
+		},
+	}
+	service := &Service{registry: registry, safGrantResolver: resolver}
+
+	available, status, reason := service.ResolveWorkspaceAvailability(string(mount.ID))
+	if !available {
+		t.Fatalf("expected SAF mount to recover, status=%s reason=%s", status, reason)
+	}
+	if status != string(WorkspaceStatusReady) {
+		t.Fatalf("expected ready status, got %s", status)
+	}
+	if resolver.calls != 1 {
+		t.Fatalf("expected one grant retry, got %d", resolver.calls)
+	}
+}
+
+type countingSAFGrantResolver struct {
+	status SAFGrantStatus
+	err    error
+	calls  int
+}
+
+func (r *countingSAFGrantResolver) ResolveGrant(string) (SAFGrantStatus, error) {
+	r.calls++
+	return r.status, r.err
 }
 
 func TestSAFBackend_NativeGrantNotExposed(t *testing.T) {

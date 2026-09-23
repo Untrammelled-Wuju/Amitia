@@ -16,14 +16,10 @@ func (o *Orchestrator) Process(ctx context.Context, req *ProcessRequest) (*Orche
 	if !o.IsReady() {
 		return nil, ErrOrchestratorNotReady
 	}
-	o.mu.Lock()
-	if o.active >= o.cfg.MaxConcurrent {
-		o.mu.Unlock()
-		return nil, ErrOrchestratorBusy
+	if err := o.acquireExecutionSlot(ctx); err != nil {
+		return nil, err
 	}
-	o.active++
-	o.mu.Unlock()
-	defer func() { o.mu.Lock(); o.active--; o.mu.Unlock() }()
+	defer o.releaseExecutionSlot()
 	if req.RequestID == "" {
 		req.RequestID = uuid.New().String()
 	}
@@ -158,6 +154,40 @@ func (o *Orchestrator) Process(ctx context.Context, req *ProcessRequest) (*Orche
 		record = fresh
 	}
 	return o.finalizeProcessorSuccess(ctx, record, req, resp, runtime, duration)
+}
+
+func (o *Orchestrator) acquireExecutionSlot(ctx context.Context) error {
+	o.mu.Lock()
+	slots := o.executionSlots
+	if slots == nil {
+		slots = make(chan struct{}, o.cfg.MaxConcurrent)
+		o.executionSlots = slots
+	}
+	o.mu.Unlock()
+	select {
+	case slots <- struct{}{}:
+		o.mu.Lock()
+		o.active++
+		o.mu.Unlock()
+		return nil
+	case <-ctx.Done():
+		return ErrOrchestratorBusy
+	}
+}
+
+func (o *Orchestrator) releaseExecutionSlot() {
+	o.mu.Lock()
+	slots := o.executionSlots
+	if o.active > 0 {
+		o.active--
+	}
+	o.mu.Unlock()
+	if slots != nil {
+		select {
+		case <-slots:
+		default:
+		}
+	}
 }
 
 func (o *Orchestrator) handleProcessorError(ctx context.Context, record *InteractionRecord, req *ProcessRequest, resp *ProcessResponse, duration time.Duration, procErr error) (*OrchestrationResult, error) {

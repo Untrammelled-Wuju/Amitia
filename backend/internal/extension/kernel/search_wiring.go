@@ -72,6 +72,45 @@ func zeroSecretBytes(b []byte) {
 	}
 }
 
+func (a *secretLeaseAdapter) Store(ctx context.Context, namespace string, value []byte) (string, error) {
+	if a == nil || a.broker == nil {
+		return "", fmt.Errorf("search secret broker is unavailable")
+	}
+	ref, err := a.broker.Store(ctx, namespace, value)
+	if err != nil {
+		return "", err
+	}
+	return ref.String(), nil
+}
+
+func (a *secretLeaseAdapter) Resolve(ctx context.Context, rawRef string) ([]byte, error) {
+	if a == nil || a.broker == nil {
+		return nil, fmt.Errorf("search secret broker is unavailable")
+	}
+	ref, err := secret.ParseRef(rawRef)
+	if err != nil {
+		return nil, err
+	}
+	lease, err := a.broker.Issue(ctx, secret.LeaseRequest{
+		Ref: ref, Purpose: "search-engine-credential", RuntimeInstanceID: "search", TTL: 30 * time.Second, MaxUses: 1,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return a.broker.Consume(ctx, lease.ID, secret.LeaseUseContext{RuntimeInstanceID: "search"})
+}
+
+func (a *secretLeaseAdapter) Delete(ctx context.Context, rawRef string) error {
+	if a == nil || a.broker == nil {
+		return fmt.Errorf("search secret broker is unavailable")
+	}
+	ref, err := secret.ParseRef(rawRef)
+	if err != nil {
+		return err
+	}
+	return a.broker.Delete(ctx, ref)
+}
+
 func buildSearchService(config search.Config, broker *secret.Broker, db *sql.DB, external []SearchProviderRegistration) *search.Service {
 	runtimeConfig := config
 	runtimeConfig.Providers = cloneSearchProviderConfig(config.Providers)
@@ -103,7 +142,17 @@ func buildSearchService(config search.Config, broker *secret.Broker, db *sql.DB,
 		svc.WithCredentialResolver(bridge.Resolve)
 	}
 	if db != nil {
-		svc.WithEngineCredentialResolver(search.NewCredentialStore(db).ResolveEngineCredentials)
+		store := search.NewCredentialStore(db)
+		if broker != nil {
+			vault := newSecretLeaseAdapter(broker)
+			store.WithVault(vault)
+			migrationCtx, cancelMigration := context.WithTimeout(context.Background(), 15*time.Second)
+			if err := store.MigrateLegacyCredentials(migrationCtx); err != nil {
+				applog.Warn("search credential migration to SecretBroker failed", "error", err)
+			}
+			cancelMigration()
+		}
+		svc.WithEngineCredentialSourceFactory(store.EngineCredentialSourceFactory)
 	}
 	return svc
 }
@@ -114,6 +163,12 @@ func cloneSearchProviderConfig(input map[string]search.ProviderConfig) map[strin
 		copyConfig := config
 		copyConfig.Kinds = append([]string(nil), config.Kinds...)
 		copyConfig.EngineCredentials = cloneCredentialMap(config.EngineCredentials)
+		if len(config.Native.Engines) > 0 {
+			copyConfig.Native.Engines = make(map[string]search.NativeEngineRuntimeConfig, len(config.Native.Engines))
+			for engineID, engineConfig := range config.Native.Engines {
+				copyConfig.Native.Engines[engineID] = engineConfig
+			}
+		}
 		out[id] = copyConfig
 	}
 	return out
@@ -142,7 +197,7 @@ func buildSearchProviders(set *search.ProviderSet, config search.Config) {
 			provider.SetMaxResponseBytes(config.EffectiveMaxResponseBytes())
 			p = provider
 		case "native":
-			provider := native.NewProvider(nativeengines.DefaultRegistry(nil), true, config.EffectiveMaxResponseBytes())
+			provider := native.NewProvider(nativeengines.DefaultRegistry(nil), true, config.EffectiveMaxResponseBytes()).Configure(nativeProviderRuntimeConfig(pc.Native))
 			p = provider
 		case "exa":
 			provider := exa.NewProvider("", pc.CredentialRef, pc.Endpoint, true)
@@ -159,8 +214,37 @@ func buildSearchProviders(set *search.ProviderSet, config search.Config) {
 		}
 	}
 	if _, ok := set.Get(native.ProviderID); !ok && nativeProviderEnabled(config) {
-		set.RegisterWithPriority(native.ProviderID, native.NewProvider(nativeengines.DefaultRegistry(nil), true, config.EffectiveMaxResponseBytes()), 100)
+		nativeConfig := search.NativeProviderRuntimeConfig{}
+		if configured, ok := config.Providers[native.ProviderID]; ok {
+			nativeConfig = configured.Native
+		}
+		set.RegisterWithPriority(native.ProviderID, native.NewProvider(nativeengines.DefaultRegistry(nil), true, config.EffectiveMaxResponseBytes()).Configure(nativeProviderRuntimeConfig(nativeConfig)), 100)
 	}
+}
+
+func nativeProviderRuntimeConfig(config search.NativeProviderRuntimeConfig) native.ProviderRuntimeConfig {
+	result := native.DefaultProviderRuntimeConfig()
+	if config.MaxEngines > 0 {
+		result.MaxEngines = config.MaxEngines
+	}
+	if config.DefaultEngineTimeout > 0 {
+		result.DefaultEngineTimeout = config.DefaultEngineTimeout
+	}
+	if config.DefaultRatePerMinute > 0 {
+		result.DefaultRatePerMinute = config.DefaultRatePerMinute
+	}
+	if config.DefaultBurst > 0 {
+		result.DefaultBurst = config.DefaultBurst
+	}
+	if len(config.Engines) > 0 {
+		result.Engines = make(map[string]native.EngineRuntimeConfig, len(config.Engines))
+		for id, engine := range config.Engines {
+			result.Engines[strings.ToLower(strings.TrimSpace(id))] = native.EngineRuntimeConfig{
+				Enabled: engine.Enabled, Timeout: engine.Timeout, RateLimitPerMinute: engine.RateLimitPerMinute, Burst: engine.Burst,
+			}
+		}
+	}
+	return result
 }
 
 func nativeProviderEnabled(config search.Config) bool {
@@ -177,10 +261,47 @@ func nativeProviderEnabled(config search.Config) bool {
 type configuredSearchProvider struct {
 	search.Provider
 	capabilities search.ProviderCapabilities
+	allowedKinds map[search.SearchKind]struct{}
 }
 
 func (p *configuredSearchProvider) Capabilities() search.ProviderCapabilities {
 	return p.capabilities
+}
+
+func (p *configuredSearchProvider) CapabilitiesForContext(ctx context.Context) search.ProviderCapabilities {
+	caps := p.Provider.Capabilities()
+	if contextual, ok := p.Provider.(search.ContextCapabilitiesProvider); ok {
+		caps = contextual.CapabilitiesForContext(ctx)
+	}
+	return restrictSearchCapabilities(caps, p.allowedKinds)
+}
+
+func (p *configuredSearchProvider) ValidateSearchRequest(ctx context.Context, request search.SearchRequest) *search.Error {
+	kind := search.NormalizeKind(request.Kind)
+	if _, ok := p.allowedKinds[kind]; !ok {
+		return search.NewError(search.SEARCH_KIND_UNSUPPORTED, p.ID(), false, nil)
+	}
+	if validator, ok := p.Provider.(search.RequestCapabilityProvider); ok {
+		return validator.ValidateSearchRequest(ctx, request)
+	}
+	caps := p.CapabilitiesForContext(ctx)
+	return search.ProviderSupportsFilter(caps, kind, request.Language != "", request.Country != "", request.SafeSearch != "", request.TimeRange != nil, len(request.Domains) > 0, len(request.ExcludeDomains) > 0)
+}
+
+func restrictSearchCapabilities(caps search.ProviderCapabilities, allowed map[search.SearchKind]struct{}) search.ProviderCapabilities {
+	if len(allowed) == 0 {
+		return caps
+	}
+	_, allowWeb := allowed[search.SearchKindWeb]
+	caps.GeneralWeb = caps.GeneralWeb && allowWeb
+	filtered := make([]search.SearchKind, 0, len(caps.SearchKinds))
+	for _, kind := range caps.SearchKinds {
+		if _, ok := allowed[kind]; ok {
+			filtered = append(filtered, kind)
+		}
+	}
+	caps.SearchKinds = filtered
+	return caps
 }
 
 func restrictSearchProviderKinds(provider search.Provider, configured []string) search.Provider {
@@ -197,17 +318,8 @@ func restrictSearchProviderKinds(provider search.Provider, configured []string) 
 	if len(allowed) == 0 {
 		return provider
 	}
-	caps := provider.Capabilities()
-	_, allowWeb := allowed[search.SearchKindWeb]
-	caps.GeneralWeb = caps.GeneralWeb && allowWeb
-	filtered := make([]search.SearchKind, 0, len(caps.SearchKinds))
-	for _, kind := range caps.SearchKinds {
-		if _, ok := allowed[kind]; ok {
-			filtered = append(filtered, kind)
-		}
-	}
-	caps.SearchKinds = filtered
-	return &configuredSearchProvider{Provider: provider, capabilities: caps}
+	caps := restrictSearchCapabilities(provider.Capabilities(), allowed)
+	return &configuredSearchProvider{Provider: provider, capabilities: caps, allowedKinds: allowed}
 }
 
 func buildWebResearchCallFunc(runtime *webresearch.Runtime) capability.SearchCallFunc {

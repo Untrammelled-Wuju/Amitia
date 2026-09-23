@@ -24,6 +24,8 @@ const (
 	maxInboxBackoff        = 30 * time.Second
 	inboxLeaseDuration     = 30 * time.Second
 	inboxHeartbeatInterval = 10 * time.Second
+	inboxPollInterval      = 2 * time.Second
+	inboxBatchSize         = 64
 )
 
 func DefaultEngineConfig() EngineConfig {
@@ -854,7 +856,7 @@ func (e *BehaviorEngine) inboxWorker(ctx context.Context, coordinator *Coordinat
 		e.mu.Unlock()
 	}()
 
-	ticker := time.NewTicker(500 * time.Millisecond)
+	ticker := time.NewTicker(inboxPollInterval)
 	defer ticker.Stop()
 
 	for {
@@ -871,7 +873,7 @@ func (e *BehaviorEngine) inboxWorker(ctx context.Context, coordinator *Coordinat
 
 func (e *BehaviorEngine) processInboxBatch(ctx context.Context) {
 	leaseToken := e.idGen.NewID()
-	records, err := e.repo.LeaseInbox(ctx, 16, leaseToken)
+	records, err := e.repo.LeaseInbox(ctx, inboxBatchSize, leaseToken)
 	if err != nil {
 		log.Warn("behavior engine: lease inbox failed", map[string]interface{}{"error": err.Error()})
 		return

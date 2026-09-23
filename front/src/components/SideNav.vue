@@ -132,12 +132,12 @@ SPDX-License-Identifier: AGPL-3.0-only
           @archive="handleArchiveConversation"
         />
         <button
-          v-if="chatStore.sidebar.recent.length > 5"
+          v-if="canToggleRecentConversations"
           type="button"
           class="thread-expand"
-          @click="expandAllRecent = !expandAllRecent"
+          @click="toggleRecentConversations"
         >
-          {{ expandAllRecent ? "收起" : "展开显示" }}
+          {{ hasMoreRecentConversations ? "展开显示" : "收起" }}
         </button>
         <div v-if="chatStore.sidebar.recent.length === 0" class="thread-empty">暂无对话</div>
       </div>
@@ -242,6 +242,7 @@ import { useChatStore, type ConversationItem, type ProjectItem } from "@/stores/
 import { useExtensionUIStore } from "@/stores/extensionUI";
 import { useBrandLogo } from "@/composables/useBrandLogo";
 import { useApi } from "@/composables/useApi";
+import { useConversationDisclosure } from "@/composables/useConversationDisclosure";
 import { useConversationWorkspace } from "@/composables/useConversationWorkspace";
 import { isDesktopShell } from "@/runtime/runtime-capabilities";
 import SearchModal from "./SearchModal.vue";
@@ -272,14 +273,14 @@ defineProps<{
 const emit = defineEmits<{ toggleTheme: [] }>();
 const searchModal = ref<InstanceType<typeof SearchModal> | null>(null);
 const activeConversationId = computed(() => String(route.query.conversationId || ""));
-const expandAllRecent = ref(false);
 const profileMenuOpen = ref(false);
 let isMounted = false;
-const visibleRecentConversations = computed(() =>
-  expandAllRecent.value
-    ? chatStore.sidebar.recent
-    : chatStore.sidebar.recent.slice(0, 5),
-);
+const {
+  visible: visibleRecentConversations,
+  hasMore: hasMoreRecentConversations,
+  canToggle: canToggleRecentConversations,
+  toggle: toggleRecentConversations,
+} = useConversationDisclosure(() => chatStore.sidebar.recent);
 const pinnedProjects = computed(() =>
   chatStore.sidebar.projects.filter((project) => Boolean(project.pinnedAt)),
 );

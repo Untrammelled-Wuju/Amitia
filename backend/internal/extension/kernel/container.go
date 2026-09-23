@@ -44,6 +44,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/schema_ui"
 	"github.com/u-ai/backend/internal/extension/kernel/scope"
 	"github.com/u-ai/backend/internal/extension/kernel/script_host"
+	"github.com/u-ai/backend/internal/extension/kernel/secret"
 	"github.com/u-ai/backend/internal/extension/kernel/task_runtime"
 	"github.com/u-ai/backend/internal/extension/kernel/trust"
 	"github.com/u-ai/backend/internal/extension/kernel/trusted_service"
@@ -102,6 +103,7 @@ type Container struct {
 	RuntimeSupervisor         runtime_supervisor.Supervisor
 	ExecutionKernel           *execution.ExecutionPipeline
 	ApprovalBroker            *execution.ApprovalBroker
+	SecretBroker              *secret.Broker
 	HostAPIGateway            *host_api.DefaultGateway
 	PermissionBroker          permission.PermissionBroker
 	PermissionDefinitions     *permission.PermissionDefinitionRegistry

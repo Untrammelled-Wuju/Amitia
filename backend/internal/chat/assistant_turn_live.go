@@ -8,7 +8,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/conversationstream"
-	"gorm.io/gorm"
 )
 
 const (
@@ -174,7 +173,7 @@ func (p *modelEventProjector) ensureBlock(ctx context.Context, blockType, callID
 	itemType := blockType
 	item := AssistantTurnItem{ID: uuid.NewString(), TurnID: p.recorder.TurnID, ConversationID: p.recorder.ConversationID, ItemType: itemType, Status: assistantTurnStatusRunning, Revision: 1, CallID: strings.TrimSpace(callID), ToolName: strings.TrimSpace(toolName), CreatedAt: nowString(), UpdatedAt: nowString()}
 	if p.recorder.enabled && p.recorder.db != nil {
-		if err := p.recorder.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error { return appendAssistantTurnItemTx(tx, &item) }); err != nil {
+		if err := p.recorder.rememberItem(&item); err != nil {
 			return nil, err
 		}
 	}
@@ -231,17 +230,21 @@ func (p *modelEventProjector) checkpoint(ctx context.Context, block *liveTurnBlo
 		return nil
 	}
 	block.revision++
-	updates := map[string]any{"revision": block.revision, "updated_at": nowString()}
-	if block.content.Len() > 0 {
-		updates["content"] = block.content.String()
-	}
-	if block.arguments.Len() > 0 {
-		updates["arguments_json"] = block.arguments.String()
-	}
-	if err := p.recorder.db.WithContext(ctx).Model(&AssistantTurnItem{}).Where("id = ?", block.item.ID).Updates(updates).Error; err != nil {
+	updated, err := p.recorder.updateItem(block.item.ID, func(item *AssistantTurnItem) {
+		item.Revision = block.revision
+		item.UpdatedAt = nowString()
+		if block.content.Len() > 0 {
+			item.Content = block.content.String()
+		}
+		if block.arguments.Len() > 0 {
+			item.ArgumentsJSON = block.arguments.String()
+		}
+	})
+	if err != nil {
 		block.revision--
 		return err
 	}
+	block.item = updated
 	block.checkpointSize = block.content.Len() + block.arguments.Len()
 	block.lastCheckpoint = time.Now()
 	payload := map[string]any{
@@ -255,7 +258,7 @@ func (p *modelEventProjector) checkpoint(ctx context.Context, block *liveTurnBlo
 	if block.item.ToolName != "" {
 		payload["toolName"] = block.item.ToolName
 	}
-	_, err := conversationstream.DefaultManager().Publish(ctx, p.recorder.event(block, "block.checkpoint", assistantTurnStatusRunning, payload), true)
+	_, err = conversationstream.DefaultManager().Publish(ctx, p.recorder.event(block, "block.checkpoint", assistantTurnStatusRunning, payload), true)
 	return err
 }
 
@@ -268,14 +271,16 @@ func (p *modelEventProjector) argumentsCompleted(ctx context.Context, block *liv
 	}
 	block.revision++
 	if p.recorder.enabled && p.recorder.db != nil {
-		if err := p.recorder.db.WithContext(ctx).Model(&AssistantTurnItem{}).Where("id = ?", block.item.ID).Updates(map[string]any{
-			"arguments_json": block.arguments.String(),
-			"revision":       block.revision,
-			"updated_at":     nowString(),
-		}).Error; err != nil {
+		updated, err := p.recorder.updateItem(block.item.ID, func(item *AssistantTurnItem) {
+			item.ArgumentsJSON = block.arguments.String()
+			item.Revision = block.revision
+			item.UpdatedAt = nowString()
+		})
+		if err != nil {
 			block.revision--
 			return err
 		}
+		block.item = updated
 	}
 	payload := map[string]any{"blockType": block.blockType, "arguments": block.arguments.String(), "toolName": block.item.ToolName, "recoveryCheckpoint": true}
 	_, err := conversationstream.DefaultManager().Publish(ctx, p.recorder.event(block, "tool.arguments.completed", assistantTurnStatusRunning, payload), true)
@@ -290,18 +295,21 @@ func (p *modelEventProjector) completeBlock(ctx context.Context, block *liveTurn
 	block.revision++
 	if p.recorder.enabled && p.recorder.db != nil {
 		now := nowString()
-		updates := map[string]any{"status": status, "revision": block.revision, "updated_at": now}
-		if block.content.Len() > 0 {
-			updates["content"] = block.content.String()
-		}
-		if block.arguments.Len() > 0 {
-			updates["arguments_json"] = block.arguments.String()
-		}
-		if err := p.recorder.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-			return tx.Model(&AssistantTurnItem{}).Where("id = ?", block.item.ID).Updates(updates).Error
-		}); err != nil {
+		updated, err := p.recorder.updateItem(block.item.ID, func(item *AssistantTurnItem) {
+			item.Status = status
+			item.Revision = block.revision
+			item.UpdatedAt = now
+			if block.content.Len() > 0 {
+				item.Content = block.content.String()
+			}
+			if block.arguments.Len() > 0 {
+				item.ArgumentsJSON = block.arguments.String()
+			}
+		})
+		if err != nil {
 			return err
 		}
+		block.item = updated
 	}
 	payload := map[string]any{"blockType": block.blockType, "content": block.content.String(), "recoveryCheckpoint": true}
 	if block.arguments.Len() > 0 {

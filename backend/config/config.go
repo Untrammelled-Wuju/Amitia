@@ -12,6 +12,7 @@ import (
 
 	"github.com/spf13/viper"
 	"github.com/u-ai/backend/internal/search"
+	nativeengines "github.com/u-ai/backend/internal/search/native/engines"
 	"github.com/u-ai/backend/pkg/resourceuri"
 )
 
@@ -98,16 +99,32 @@ type WebResearchRuntimeConfig struct {
 	MaxBrowserSeconds     int     `mapstructure:"maxBrowserSeconds"`
 }
 
+type SearchNativeEngineRuntimeConfig struct {
+	Enabled            *bool `mapstructure:"enabled"`
+	TimeoutSec         int   `mapstructure:"timeoutSec"`
+	RateLimitPerMinute int   `mapstructure:"rateLimitPerMinute"`
+	Burst              int   `mapstructure:"burst"`
+}
+
+type SearchNativeProviderRuntimeConfig struct {
+	MaxEngines              int                                        `mapstructure:"maxEngines"`
+	DefaultEngineTimeoutSec int                                        `mapstructure:"defaultEngineTimeoutSec"`
+	DefaultRatePerMinute    int                                        `mapstructure:"defaultRatePerMinute"`
+	DefaultBurst            int                                        `mapstructure:"defaultBurst"`
+	Engines                 map[string]SearchNativeEngineRuntimeConfig `mapstructure:"engines"`
+}
+
 type SearchProviderRuntimeConfig struct {
-	Type              string            `mapstructure:"type"`
-	Endpoint          string            `mapstructure:"endpoint"`
-	CredentialRef     string            `mapstructure:"credentialRef"`
-	Enabled           bool              `mapstructure:"enabled"`
-	Priority          int               `mapstructure:"priority"`
-	Kinds             []string          `mapstructure:"kinds"`
-	AllowHTTP         bool              `mapstructure:"allowHttp"`
-	AllowPrivate      bool              `mapstructure:"allowPrivate"`
-	EngineCredentials map[string]string `mapstructure:"engineCredentials"`
+	Type              string                            `mapstructure:"type"`
+	Endpoint          string                            `mapstructure:"endpoint"`
+	CredentialRef     string                            `mapstructure:"credentialRef"`
+	Enabled           bool                              `mapstructure:"enabled"`
+	Priority          int                               `mapstructure:"priority"`
+	Kinds             []string                          `mapstructure:"kinds"`
+	AllowHTTP         bool                              `mapstructure:"allowHttp"`
+	AllowPrivate      bool                              `mapstructure:"allowPrivate"`
+	EngineCredentials map[string]string                 `mapstructure:"engineCredentials"`
+	Native            SearchNativeProviderRuntimeConfig `mapstructure:"native"`
 }
 
 type BrowserRuntimeProviderConfig struct {
@@ -189,6 +206,7 @@ type ChatConfig struct {
 	ContextWindowMaxRounds  int `mapstructure:"contextWindowMaxRounds"`
 	AgentTurnTimeoutSeconds int `mapstructure:"agentTurnTimeoutSeconds"`
 	AgentMaxParallelTools   int `mapstructure:"agentMaxParallelTools"`
+	AgentMaxParallelTurns   int `mapstructure:"agentMaxParallelTurns"`
 }
 
 type QdrantConfig struct {
@@ -397,6 +415,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("chat.contextWindowMaxRounds", 20)
 	v.SetDefault("chat.agentTurnTimeoutSeconds", 1800)
 	v.SetDefault("chat.agentMaxParallelTools", 4)
+	v.SetDefault("chat.agentMaxParallelTurns", 16)
 	v.SetDefault("embedding.modelName", "doubao-embedding-vision-251215")
 	v.SetDefault("embedding.baseUrl", "")
 	v.SetDefault("embedding.apiKey", "")
@@ -498,6 +517,13 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("providers.search.negativeCacheTtlSec", 30)
 	v.SetDefault("providers.search.circuitFailures", 3)
 	v.SetDefault("providers.search.circuitOpenSec", 30)
+	v.SetDefault("providers.search.providers.native.type", "native")
+	v.SetDefault("providers.search.providers.native.enabled", true)
+	v.SetDefault("providers.search.providers.native.priority", 100)
+	v.SetDefault("providers.search.providers.native.native.maxEngines", 6)
+	v.SetDefault("providers.search.providers.native.native.defaultEngineTimeoutSec", 8)
+	v.SetDefault("providers.search.providers.native.native.defaultRatePerMinute", 60)
+	v.SetDefault("providers.search.providers.native.native.defaultBurst", 6)
 	v.SetDefault("providers.search.research.deepResearchEnabled", true)
 	v.SetDefault("providers.search.research.browserEnabled", true)
 	v.SetDefault("providers.search.research.pdfEnabled", true)
@@ -741,6 +767,14 @@ func validateConfig(cfg *Config) error {
 	return nil
 }
 
+func isSearchSecretReference(value string) bool {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return false
+	}
+	return strings.HasPrefix(value, "secret://") || strings.HasPrefix(value, "mcp-secret://")
+}
+
 func validateSearchRuntimeConfig(cfg SearchRuntimeProviderConfig) error {
 	if !cfg.Enabled {
 		return nil
@@ -770,7 +804,53 @@ func validateSearchRuntimeConfig(cfg SearchRuntimeProviderConfig) error {
 		default:
 			return fmt.Errorf("provider %q type 不受支持: %q", id, provider.Type)
 		}
+		if providerType != "native" {
+			credentialRef := strings.TrimSpace(provider.CredentialRef)
+			if credentialRef == "" {
+				return fmt.Errorf("provider %q 已启用但 credentialRef 为空", id)
+			}
+			if !isSearchSecretReference(credentialRef) {
+				return fmt.Errorf("provider %q credentialRef 必须是 secret:// 引用，禁止在配置中保存明文密钥", id)
+			}
+		}
+		for engineID, credentialRef := range provider.EngineCredentials {
+			engineID = strings.ToLower(strings.TrimSpace(engineID))
+			if engineID == "" {
+				return fmt.Errorf("provider %q engineCredentials 包含空 engine ID", id)
+			}
+			if providerType != "native" {
+				return fmt.Errorf("provider %q 不是 native provider，不能配置 engineCredentials", id)
+			}
+			if !search.IsSupportedEngineCredentialID(engineID) {
+				return fmt.Errorf("provider %q engineCredentials[%q] 不是受支持的 Native Engine 凭证 ID", id, engineID)
+			}
+			if !isSearchSecretReference(credentialRef) {
+				return fmt.Errorf("provider %q engineCredentials[%q] 必须是 secret:// 引用，禁止保存明文密钥", id, engineID)
+			}
+		}
 		if providerType == "native" {
+			nativeCfg := provider.Native
+			if nativeCfg.MaxEngines < 0 || nativeCfg.MaxEngines > 32 {
+				return fmt.Errorf("provider %q native.maxEngines 必须为 0（默认）或不超过 32", id)
+			}
+			if nativeCfg.DefaultEngineTimeoutSec < 0 || nativeCfg.DefaultEngineTimeoutSec > 120 {
+				return fmt.Errorf("provider %q native.defaultEngineTimeoutSec 超出安全范围", id)
+			}
+			if nativeCfg.DefaultRatePerMinute < 0 || nativeCfg.DefaultRatePerMinute > 10000 || nativeCfg.DefaultBurst < 0 || nativeCfg.DefaultBurst > 1000 {
+				return fmt.Errorf("provider %q native rate-limit 配置超出安全范围", id)
+			}
+			for engineID, engine := range nativeCfg.Engines {
+				engineID = strings.ToLower(strings.TrimSpace(engineID))
+				if engineID == "" {
+					return fmt.Errorf("provider %q native engine ID 不能为空", id)
+				}
+				if !nativeengines.IsKnownEngineID(engineID) {
+					return fmt.Errorf("provider %q native engine %q 不存在；请使用已注册的内建 Engine ID", id, engineID)
+				}
+				if engine.TimeoutSec < 0 || engine.TimeoutSec > 120 || engine.RateLimitPerMinute < 0 || engine.RateLimitPerMinute > 10000 || engine.Burst < 0 || engine.Burst > 1000 {
+					return fmt.Errorf("provider %q native engine %q 配置超出安全范围", id, engineID)
+				}
+			}
 			continue
 		}
 		endpoint := strings.TrimSpace(provider.Endpoint)

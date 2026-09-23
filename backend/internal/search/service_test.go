@@ -441,3 +441,63 @@ func TestCircuitStatusTracksRollingFailuresAndRecovery(t *testing.T) {
 		t.Fatalf("unexpected recovered status: %+v", status)
 	}
 }
+
+type requestValidatingProvider struct {
+	fakeProviderForService
+	validationErr *Error
+	validated     int
+}
+
+func (p *requestValidatingProvider) ValidateSearchRequest(ctx context.Context, request SearchRequest) *Error {
+	p.validated++
+	return p.validationErr
+}
+
+func TestService_SearchAdvancedUsesRequestCapabilityProvider(t *testing.T) {
+	provider := &requestValidatingProvider{
+		fakeProviderForService: fakeProviderForService{enabled: true},
+		validationErr:          NewError(SEARCH_FILTER_UNSUPPORTED, "validator", false, nil),
+	}
+	cfg := DefaultConfig()
+	cfg.Enabled = true
+	cfg.Providers = map[string]ProviderConfig{"validator": {Type: "probe", Enabled: true}}
+	set := NewProviderSet("validator")
+	set.Register("validator", provider)
+	svc := NewService(cfg, set)
+	_, err := svc.SearchAdvancedWithProvider(context.Background(), SearchRequest{Query: "test", Kind: SearchKindWeb}, "", "validator")
+	if err == nil || err.Code != SEARCH_FILTER_UNSUPPORTED {
+		t.Fatalf("expected SEARCH_FILTER_UNSUPPORTED, got %v", err)
+	}
+	if provider.validated != 1 {
+		t.Fatalf("validation calls = %d", provider.validated)
+	}
+	if provider.calls != 0 {
+		t.Fatalf("provider search should not run after request validation failure; calls=%d", provider.calls)
+	}
+}
+
+func TestService_TopLevelProviderDoesNotLoadNativeCredentialStore(t *testing.T) {
+	provider := &fakeProviderForService{enabled: true, results: []SearchResult{{Title: "ok", URL: "https://example.com"}}}
+	cfg := DefaultConfig()
+	cfg.Enabled = true
+	cfg.DefaultProvider = "brave_primary"
+	cfg.Providers = map[string]ProviderConfig{
+		"brave_primary": {Type: "brave", Enabled: true},
+	}
+	set := NewProviderSet("brave_primary")
+	set.Register("brave_primary", provider)
+	svc := NewService(cfg, set)
+	factoryCalls := 0
+	svc.WithEngineCredentialSourceFactory(func(ctx context.Context, providerID, invocation string) (EngineCredentialSource, func(), error) {
+		factoryCalls++
+		return nil, func() {}, nil
+	})
+
+	resp, err := svc.SearchAdvancedWithProvider(context.Background(), SearchRequest{Query: "test", Kind: SearchKindWeb}, "invoke", "brave_primary")
+	if err != nil || resp == nil {
+		t.Fatalf("unexpected search result: resp=%v err=%v", resp, err)
+	}
+	if factoryCalls != 0 {
+		t.Fatalf("top-level provider should not query native engine credential store; calls=%d", factoryCalls)
+	}
+}

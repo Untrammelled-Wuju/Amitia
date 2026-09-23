@@ -12,15 +12,15 @@
         <button
           type="button"
           class="turn-tool-stream-head"
-          :aria-expanded="toolStreamExpanded"
-          @click="toggleToolStream"
+          :aria-expanded="isToolStreamExpanded(item)"
+          @click="toggleToolStream(item)"
         >
-          <span class="turn-chev">{{ toolStreamExpanded ? "⌄" : "›" }}</span>
+          <span class="turn-chev">{{ isToolStreamExpanded(item) ? "⌄" : "›" }}</span>
           <strong>工具执行流</strong>
           <span class="turn-tool-stream-summary">{{ toolStreamSummary(item.items) }}</span>
-          <span class="turn-tool-stream-toggle">{{ toolStreamExpanded ? "收起" : "展开" }}</span>
+          <span class="turn-tool-stream-toggle">{{ isToolStreamExpanded(item) ? "收起" : "展开" }}</span>
         </button>
-        <div v-if="toolStreamExpanded" class="turn-tool-stream-body">
+        <div v-if="isToolStreamExpanded(item)" class="turn-tool-stream-body">
           <template v-for="toolItem in item.items" :key="toolItem.id">
             <div
               v-if="toolItem.type === 'tool_call'"
@@ -64,7 +64,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from "vue";
+import { computed, reactive } from "vue";
 import type {
   AssistantTurnData,
   AssistantTurnItem,
@@ -85,9 +85,13 @@ const emit = defineEmits<{
   citation: [id: string];
 }>();
 
+type TimelineToolStreamItem = AssistantTurnItem & {
+  type: string;
+  items?: AssistantTurnItem[];
+};
+
 const expandedResults = reactive(new Set<string>());
-const toolStreamExpanded = ref(hasRunningTool(props.turn));
-const toolStreamTouched = ref(false);
+const toolStreamOverrides = reactive(new Map<string, boolean>());
 
 const orderedItems = computed(() => {
   const items = [...(props.turn.items || [])].sort((left, right) => left.sequence - right.sequence);
@@ -108,25 +112,26 @@ const orderedItems = computed(() => {
   return result;
 });
 
-watch(
-  () => props.turn.status,
-  (status) => {
-    if (toolStreamTouched.value) return;
-    toolStreamExpanded.value = isStreamingStatus(status);
-  },
-);
-
 function toggleResult(id: string) {
   expandedResults.has(id) ? expandedResults.delete(id) : expandedResults.add(id);
 }
 
-function toggleToolStream() {
-  toolStreamTouched.value = true;
-  toolStreamExpanded.value = !toolStreamExpanded.value;
+function toolStreamKey(item: TimelineToolStreamItem): string {
+  return `tool-stream:${props.turn.id}:${item.id}`;
 }
 
-function hasRunningTool(turn: AssistantTurnData): boolean {
-  return (turn.items || []).some(
+function isToolStreamExpanded(item: TimelineToolStreamItem): boolean {
+  const override = toolStreamOverrides.get(toolStreamKey(item));
+  if (override !== undefined) return override;
+  return hasRunningTool(item.items);
+}
+
+function toggleToolStream(item: TimelineToolStreamItem) {
+  toolStreamOverrides.set(toolStreamKey(item), !isToolStreamExpanded(item));
+}
+
+function hasRunningTool(items?: AssistantTurnItem[]): boolean {
+  return (items || []).some(
     (item) =>
       (item.type === "tool_call" || item.type === "tool_result") &&
       isStreamingStatus(item.status),

@@ -34,6 +34,7 @@ type messageCommitPlan struct {
 	LeaseOwnerToken     string
 	TotalTokens         int
 	ForceVoice          bool
+	TurnItems           []AssistantTurnItem
 }
 
 type messageCommitResult struct {
@@ -186,6 +187,9 @@ func (s *service) commitInteraction(ctx context.Context, plan messageCommitPlan)
 			}).Error; err != nil {
 				return err
 			}
+		}
+		if err := persistAssistantTurnItemsTx(tx, plan.TurnItems); err != nil {
+			return err
 		}
 		if err := completeAssistantTurnTx(tx, plan.TurnID, plan.Reply, result.TextMessageID); err != nil {
 			return err

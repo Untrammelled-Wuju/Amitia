@@ -334,7 +334,7 @@ func (r *Runtime) executeSearch(ctx context.Context, scope Scope, input ToolInpu
 		if refErr != nil {
 			return refErr
 		}
-		hit := SearchHit{RefID: ref.RefID, Rank: index + 1, Title: ref.Title, URL: ref.URL, Domain: domainOf(ref.URL), Snippet: ref.Snippet, Provider: ref.Provider, PublishedAt: ref.PublishedAt, RetrievedAt: item.retrievedAt, Score: item.score, SeenCount: item.seenCount}
+		hit := SearchHit{RefID: ref.RefID, Rank: index + 1, Title: ref.Title, URL: ref.URL, Domain: domainOf(ref.URL), Snippet: ref.Snippet, Provider: ref.Provider, Engines: append([]string(nil), ref.Engines...), PublishedAt: ref.PublishedAt, RetrievedAt: item.retrievedAt, Score: item.score, SeenCount: item.seenCount}
 		output.Search = append(output.Search, hit)
 		_ = emitProgress(emit, Progress{Phase: "source_found", RefID: ref.RefID, Title: ref.Title, Completed: index + 1, Total: len(fused), Fraction: float64(index+1) / float64(maxInt(1, len(fused)))})
 	}
@@ -618,7 +618,7 @@ func (r *Runtime) referenceFromSearch(ctx context.Context, scope Scope, item fus
 		canonical = canonicalizeURL(item.result.URL)
 	}
 	now := nowUTC()
-	ref := Reference{RefID: newID("web_s"), ConversationID: scope.ConversationID, TurnID: scope.TurnID, InvocationID: scope.InvocationID, Kind: "search", URL: item.result.URL, CanonicalURL: canonical, Title: item.result.Title, Snippet: item.result.Snippet, Provider: item.provider, Query: item.query, Rank: rank, PublishedAt: item.result.PublishedAt, CreatedAt: now, ExpiresAt: now.Add(r.config.ReferenceTTL)}
+	ref := Reference{RefID: newID("web_s"), ConversationID: scope.ConversationID, TurnID: scope.TurnID, InvocationID: scope.InvocationID, Kind: "search", URL: item.result.URL, CanonicalURL: canonical, Title: item.result.Title, Snippet: item.result.Snippet, Provider: item.provider, Engines: append([]string(nil), item.result.Source.Engines...), Query: item.query, Rank: rank, PublishedAt: item.result.PublishedAt, CreatedAt: now, ExpiresAt: now.Add(r.config.ReferenceTTL)}
 	if err := r.store.PutReference(ctx, ref); err != nil {
 		return Reference{}, newError(ErrNotConfigured, "failed to persist search reference", true, err)
 	}
@@ -837,6 +837,7 @@ func (r *Runtime) resolvePage(ctx context.Context, scope Scope, refID, query, re
 
 	if page, found, pageErr := r.store.PageForSource(ctx, scope.ConversationID, refID); pageErr == nil && found {
 		if r.config.PageCacheTTL > 0 && nowUTC().Sub(page.FetchedAt) <= r.config.PageCacheTTL {
+			page = r.enrichPageProvenance(ctx, page)
 			citations, citationErr := r.citationsForPageQuery(ctx, page, query)
 			if citationErr != nil {
 				return Page{}, nil, 0, 0, citationErr
@@ -846,6 +847,7 @@ func (r *Runtime) resolvePage(ctx context.Context, scope Scope, refID, query, re
 	}
 	if ref.Kind == "page" {
 		if page, pageErr := r.store.GetPage(ctx, scope.ConversationID, refID); pageErr == nil {
+			page = r.enrichPageProvenance(ctx, page)
 			citations, citationErr := r.citationsForPageQuery(ctx, page, query)
 			if citationErr != nil {
 				return Page{}, nil, 0, 0, citationErr
@@ -898,8 +900,8 @@ func (r *Runtime) resolvePage(ctx context.Context, scope Scope, refID, query, re
 		}
 	}
 	pageRef := newID("web_p")
-	page := Page{RefID: pageRef, SourceRefID: ref.RefID, ConversationID: scope.ConversationID, URL: fetched.URL, CanonicalURL: fetched.CanonicalURL, Title: chooseTitle(fetched.Title, ref.Title), ContentType: fetched.ContentType, Content: fetched.Content, ContentHash: fetched.Hash, Links: fetched.Links, Truncated: fetched.Truncated, Dynamic: fetched.Dynamic, FetchedAt: nowUTC()}
-	pageReference := Reference{RefID: page.RefID, ConversationID: scope.ConversationID, TurnID: scope.TurnID, InvocationID: scope.InvocationID, Kind: "page", URL: page.URL, CanonicalURL: page.CanonicalURL, Title: page.Title, Provider: ref.Provider, Query: query, CreatedAt: nowUTC(), ExpiresAt: nowUTC().Add(r.config.ReferenceTTL)}
+	page := Page{RefID: pageRef, SourceRefID: ref.RefID, ConversationID: scope.ConversationID, URL: fetched.URL, CanonicalURL: fetched.CanonicalURL, Title: chooseTitle(fetched.Title, ref.Title), Engines: append([]string(nil), ref.Engines...), ContentType: fetched.ContentType, Content: fetched.Content, ContentHash: fetched.Hash, Links: fetched.Links, Truncated: fetched.Truncated, Dynamic: fetched.Dynamic, FetchedAt: nowUTC()}
+	pageReference := Reference{RefID: page.RefID, ConversationID: scope.ConversationID, TurnID: scope.TurnID, InvocationID: scope.InvocationID, Kind: "page", URL: page.URL, CanonicalURL: page.CanonicalURL, Title: page.Title, Provider: ref.Provider, Engines: append([]string(nil), ref.Engines...), Query: query, CreatedAt: nowUTC(), ExpiresAt: nowUTC().Add(r.config.ReferenceTTL)}
 	blocks := fetched.Blocks
 	if len(blocks) == 0 {
 		blocks = splitTextBlocks(fetched.Content)
@@ -910,6 +912,18 @@ func (r *Runtime) resolvePage(ctx context.Context, scope Scope, refID, query, re
 	}
 	citations := citationsFromEvidence(page, evidence)
 	return page, citations, fetchCalls, browserCalls, nil
+}
+
+func (r *Runtime) enrichPageProvenance(ctx context.Context, page Page) Page {
+	if len(page.Engines) > 0 || strings.TrimSpace(page.SourceRefID) == "" || r == nil || r.store == nil {
+		return page
+	}
+	ref, err := r.store.GetReference(ctx, page.ConversationID, page.SourceRefID)
+	if err != nil {
+		return page
+	}
+	page.Engines = append([]string(nil), ref.Engines...)
+	return page
 }
 
 func (r *Runtime) citationsForPageQuery(ctx context.Context, page Page, query string) ([]Citation, *Error) {
@@ -930,7 +944,7 @@ func (r *Runtime) citationsForPageQuery(ctx context.Context, page Page, query st
 func citationsFromEvidence(page Page, items []Evidence) []Citation {
 	citations := make([]Citation, 0, len(items))
 	for _, item := range items {
-		citations = append(citations, Citation{EvidenceID: item.ID, RefID: page.RefID, Title: page.Title, URL: page.URL, Text: item.Text, Locator: item.Locator, Relevance: item.Relevance})
+		citations = append(citations, Citation{EvidenceID: item.ID, RefID: page.RefID, Title: page.Title, URL: page.URL, Engines: append([]string(nil), page.Engines...), Text: item.Text, Locator: item.Locator, Relevance: item.Relevance})
 	}
 	return citations
 }

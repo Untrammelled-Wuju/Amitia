@@ -5,6 +5,8 @@ package system
 import (
 	"runtime"
 	"time"
+
+	"github.com/u-ai/backend/pkg/database/mysql"
 )
 
 func (s *service) Health() map[string]interface{} {
@@ -28,8 +30,9 @@ func (s *service) Health() map[string]interface{} {
 	return map[string]interface{}{
 		"health": true, "version": "26.2.0-beta.1", "deployMode": "desktop-local",
 		"database": dbStatus, "model": modelStatus,
-		"web":    "enabled",
-		"uptime": int(time.Since(s.startTime).Seconds()),
+		"web":     "enabled",
+		"uptime":  int(time.Since(s.startTime).Seconds()),
+		"storage": mysql.SQLiteStats(s.db),
 	}
 }
 

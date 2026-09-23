@@ -332,6 +332,7 @@ type ProjectConversationSummary struct {
 	Available         bool           `json:"available"`
 	Status            string         `json:"status"`
 	StatusReason      string         `json:"statusReason,omitempty"`
+	WorkspaceKind     string         `json:"workspaceKind"`
 	ConversationCount int64          `json:"conversationCount"`
 	Conversations     []Conversation `json:"conversations"`
 }

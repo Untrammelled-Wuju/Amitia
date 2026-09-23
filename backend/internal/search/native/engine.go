@@ -2,6 +2,7 @@ package native
 
 import (
 	"context"
+	"time"
 
 	"github.com/u-ai/backend/internal/search"
 )
@@ -14,6 +15,18 @@ type EngineDescriptor struct {
 	Priority     int
 	Weight       float64
 	Capabilities search.ProviderCapabilities
+
+	// Runtime policy metadata. Zero values are intentionally permissive for
+	// legacy/free engines. Credentialed engines declare their requirements via
+	// BuiltinEnginePolicy when they do not set these fields explicitly.
+	CredentialIDs      []string
+	DefaultDisabled    bool
+	Commercial         bool
+	Group              string
+	Timeout            time.Duration
+	RateLimitPerMinute int
+	Burst              int
+	EstimatedUsage     search.ProviderUsage
 }
 
 type Engine interface {

@@ -12,16 +12,32 @@ type ProviderRouteConfig struct {
 	Fallback  []string `mapstructure:"fallback"`
 }
 
+type NativeEngineRuntimeConfig struct {
+	Enabled            *bool         `mapstructure:"enabled"`
+	Timeout            time.Duration `mapstructure:"timeout"`
+	RateLimitPerMinute int           `mapstructure:"rateLimitPerMinute"`
+	Burst              int           `mapstructure:"burst"`
+}
+
+type NativeProviderRuntimeConfig struct {
+	MaxEngines           int                                  `mapstructure:"maxEngines"`
+	DefaultEngineTimeout time.Duration                        `mapstructure:"defaultEngineTimeout"`
+	DefaultRatePerMinute int                                  `mapstructure:"defaultRatePerMinute"`
+	DefaultBurst         int                                  `mapstructure:"defaultBurst"`
+	Engines              map[string]NativeEngineRuntimeConfig `mapstructure:"engines"`
+}
+
 type ProviderConfig struct {
-	Type              string            `mapstructure:"type"`
-	Endpoint          string            `mapstructure:"endpoint"`
-	CredentialRef     string            `mapstructure:"credentialRef"`
-	Enabled           bool              `mapstructure:"enabled"`
-	Priority          int               `mapstructure:"priority"`
-	Kinds             []string          `mapstructure:"kinds"`
-	AllowHTTP         bool              `mapstructure:"allowHttp"`
-	AllowPrivate      bool              `mapstructure:"allowPrivate"`
-	EngineCredentials map[string]string `mapstructure:"engineCredentials"`
+	Type              string                      `mapstructure:"type"`
+	Endpoint          string                      `mapstructure:"endpoint"`
+	CredentialRef     string                      `mapstructure:"credentialRef"`
+	Enabled           bool                        `mapstructure:"enabled"`
+	Priority          int                         `mapstructure:"priority"`
+	Kinds             []string                    `mapstructure:"kinds"`
+	AllowHTTP         bool                        `mapstructure:"allowHttp"`
+	AllowPrivate      bool                        `mapstructure:"allowPrivate"`
+	EngineCredentials map[string]string           `mapstructure:"engineCredentials"`
+	Native            NativeProviderRuntimeConfig `mapstructure:"native"`
 }
 
 type Config struct {

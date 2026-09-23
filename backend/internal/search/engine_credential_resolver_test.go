@@ -49,3 +49,70 @@ func TestService_DynamicEngineCredentialResolver(t *testing.T) {
 		t.Fatalf("dynamic credential = %q", provider.credential)
 	}
 }
+
+type lazyCredentialProbeProvider struct {
+	credential string
+}
+
+func (p *lazyCredentialProbeProvider) ID() string { return "lazy-probe" }
+func (p *lazyCredentialProbeProvider) Capabilities() ProviderCapabilities {
+	return ProviderCapabilities{GeneralWeb: true, MaxResults: 1}
+}
+func (p *lazyCredentialProbeProvider) Search(ctx context.Context, request SearchRequest) (ProviderSearchResponse, error) {
+	credential, release, err := ResolveEngineCredential(ctx, "serper")
+	if release != nil {
+		defer release()
+	}
+	if err != nil {
+		return ProviderSearchResponse{}, err
+	}
+	p.credential = credential
+	return ProviderSearchResponse{}, nil
+}
+func (p *lazyCredentialProbeProvider) Health(context.Context) ProviderHealth {
+	return ProviderHealthReady
+}
+
+func TestService_ConfigEngineCredentialRefsResolveLazily(t *testing.T) {
+	provider := &lazyCredentialProbeProvider{}
+	config := DefaultConfig()
+	config.Enabled = true
+	config.Providers = map[string]ProviderConfig{
+		"lazy-probe": {
+			Type:    "probe",
+			Enabled: true,
+			EngineCredentials: map[string]string{
+				"serper":  "secret://search/serper",
+				"youtube": "secret://search/youtube",
+			},
+		},
+	}
+	providers := NewProviderSet("lazy-probe")
+	providers.Register("lazy-probe", provider)
+	calls := map[string]int{}
+	service := NewService(config, providers).WithCredentialResolver(
+		func(ctx context.Context, providerID, invocation, credentialRef string) (string, func(), error) {
+			calls[credentialRef]++
+			switch credentialRef {
+			case "secret://search/serper":
+				return "serper-key", func() {}, nil
+			case "secret://search/youtube":
+				return "youtube-key", func() {}, nil
+			default:
+				return "", func() {}, nil
+			}
+		},
+	)
+	if _, searchErr := service.Search(context.Background(), GeneralSearchRequest{Query: "test"}, "inv-lazy"); searchErr != nil {
+		t.Fatalf("unexpected search error: %v", searchErr)
+	}
+	if provider.credential != "serper-key" {
+		t.Fatalf("resolved credential = %q", provider.credential)
+	}
+	if calls["secret://search/serper"] != 1 {
+		t.Fatalf("serper resolver calls = %d", calls["secret://search/serper"])
+	}
+	if calls["secret://search/youtube"] != 0 {
+		t.Fatalf("youtube credential was resolved eagerly: %d calls", calls["secret://search/youtube"])
+	}
+}

@@ -165,6 +165,7 @@ type SearchSourceMetadata struct {
 	OriginalURL  string    `json:"originalUrl"`
 	CanonicalURL string    `json:"canonicalUrl"`
 	RetrievedAt  time.Time `json:"retrievedAt"`
+	Engines      []string  `json:"engines,omitempty"`
 }
 
 type SearchResultMetadata struct {
@@ -222,6 +223,7 @@ type Citation struct {
 	Domain       string               `json:"domain"`
 	Provider     string               `json:"provider"`
 	ProviderRank int                  `json:"providerRank"`
+	Engines      []string             `json:"engines,omitempty"`
 	RetrievedAt  time.Time            `json:"retrievedAt"`
 	PublishedAt  *time.Time           `json:"publishedAt,omitempty"`
 	Snippet      string               `json:"snippet,omitempty"`

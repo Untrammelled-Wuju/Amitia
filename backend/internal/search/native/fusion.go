@@ -39,9 +39,9 @@ func fuseResults(results []search.SearchResult, limit int, weights ...map[string
 		if rank <= 0 {
 			rank = 1
 		}
-		weight := weightFor(result.Source.Provider)
+		engineID := strings.ToLower(strings.TrimSpace(result.Source.Provider))
+		weight := weightFor(engineID)
 		score := weight / float64(rank)
-		source := strings.TrimSpace(result.Source.Provider)
 		if existing, ok := byURL[key]; ok {
 			existing.score += score * 0.35
 			if existing.result.Snippet == "" && result.Snippet != "" {
@@ -50,17 +50,17 @@ func fuseResults(results []search.SearchResult, limit int, weights ...map[string
 			if existing.result.PublishedAt == nil && result.PublishedAt != nil {
 				existing.result.PublishedAt = result.PublishedAt
 			}
-			if source != "" {
-				if _, exists := existing.sources[source]; !exists {
-					existing.sources[source] = struct{}{}
+			if engineID != "" {
+				if _, exists := existing.sources[engineID]; !exists {
+					existing.sources[engineID] = struct{}{}
 					existing.score += 0.25
 				}
 			}
 			continue
 		}
 		item := &rankedResult{result: result, score: score, sources: map[string]struct{}{}}
-		if source != "" {
-			item.sources[source] = struct{}{}
+		if engineID != "" {
+			item.sources[engineID] = struct{}{}
 		}
 		byURL[key] = item
 	}
@@ -83,7 +83,15 @@ func fuseResults(results []search.SearchResult, limit int, weights ...map[string
 	}
 	fused := make([]search.SearchResult, 0, len(items))
 	for index, item := range items {
+		engines := make([]string, 0, len(item.sources))
+		for source := range item.sources {
+			engines = append(engines, source)
+		}
+		sort.Strings(engines)
 		item.result.Rank = index + 1
+		item.result.Source.Provider = ProviderID
+		item.result.Source.ProviderRank = index + 1
+		item.result.Source.Engines = engines
 		fused = append(fused, item.result)
 	}
 	return fused

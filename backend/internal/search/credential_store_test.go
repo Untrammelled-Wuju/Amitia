@@ -37,7 +37,7 @@ func TestCredentialStoreStoresAndResolvesGoogleCredentials(t *testing.T) {
 	require.NoError(t, err)
 	_, err = store.Set(ctx, "google_cse_cx", "google-cx")
 	require.NoError(t, err)
-	_, err = store.Set(ctx, "brave_api", "brave-key")
+	_, err = store.Set(ctx, "serper", "serper-key")
 	require.NoError(t, err)
 
 	rows, err := db.Query("SELECT api_key FROM search_api_keys ORDER BY engine_id")
@@ -49,12 +49,12 @@ func TestCredentialStoreStoresAndResolvesGoogleCredentials(t *testing.T) {
 		require.NoError(t, rows.Scan(&value))
 		stored = append(stored, value)
 	}
-	require.ElementsMatch(t, []string{"brave-key", "google-api-key", "google-cx"}, stored)
+	require.ElementsMatch(t, []string{"serper-key", "google-api-key", "google-cx"}, stored)
 
 	credentials, release, err := store.ResolveEngineCredentials(ctx, ProviderNative, "test")
 	require.NoError(t, err)
 	require.NotNil(t, release)
-	require.Equal(t, "brave-key", credentials["brave_api"])
+	require.Equal(t, "serper-key", credentials["serper"])
 	require.NotContains(t, credentials, "google_cse_cx")
 	var googleConfig struct {
 		APIKey string `json:"apiKey"`

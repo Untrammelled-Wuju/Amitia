@@ -36,6 +36,66 @@ type Property struct {
 	Type        string   `json:"type"`
 	Description string   `json:"description"`
 	Enum        []string `json:"enum,omitempty"`
+
+	rawSchema json.RawMessage
+}
+
+func (p *Property) UnmarshalJSON(data []byte) error {
+	if p == nil {
+		return fmt.Errorf("property is nil")
+	}
+
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+
+	p.Type = ""
+	p.Description = ""
+	p.Enum = nil
+	p.rawSchema = append(p.rawSchema[:0], data...)
+
+	if value, ok := raw["type"]; ok {
+		p.Type = decodePropertyType(value)
+	}
+	if value, ok := raw["description"]; ok {
+		_ = json.Unmarshal(value, &p.Description)
+	}
+	if value, ok := raw["enum"]; ok {
+		_ = json.Unmarshal(value, &p.Enum)
+	}
+	return nil
+}
+
+func (p Property) MarshalJSON() ([]byte, error) {
+	if len(p.rawSchema) > 0 {
+		if !json.Valid(p.rawSchema) {
+			return nil, fmt.Errorf("invalid raw property schema")
+		}
+		return append([]byte(nil), p.rawSchema...), nil
+	}
+
+	type plain Property
+
+	return json.Marshal(plain(p))
+}
+
+func decodePropertyType(raw json.RawMessage) string {
+	var value string
+	if err := json.Unmarshal(raw, &value); err == nil {
+		return value
+	}
+
+	var values []string
+	if err := json.Unmarshal(raw, &values); err != nil {
+		return ""
+	}
+	for _, candidate := range values {
+		if candidate != "" && candidate != "null" {
+			return candidate
+		}
+	}
+	return ""
 }
 
 type ToolExecutionContext struct {

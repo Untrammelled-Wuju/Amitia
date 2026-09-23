@@ -340,7 +340,7 @@ async function handleCopy(mode: "plain" | "markdown") {
   --amrp-muted: #8c8e95;
   --amrp-line: var(--tp-border);
   --amrp-user: var(--tp-primary-bg);
-  --amrp-user-text: var(--tp-primary-active);
+  --amrp-user-text: #000000;
   --amrp-code-bg: #1b1c20;
   --amrp-code-head: #232429;
   --amrp-soft: var(--tp-panel-soft);
@@ -361,7 +361,7 @@ async function handleCopy(mode: "plain" | "markdown") {
   --amrp-muted: #9b9da5;
   --amrp-line: var(--tp-border);
   --amrp-user: var(--tp-primary-bg);
-  --amrp-user-text: var(--tp-primary-active);
+  --amrp-user-text: #ffffff;
   --amrp-code-bg: #111216;
   --amrp-code-head: #1c1d22;
   --amrp-soft: var(--tp-panel-soft);

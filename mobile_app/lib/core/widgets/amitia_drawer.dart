@@ -25,6 +25,7 @@ import '../../features/chat/runtime/conversation_runtime_controller.dart';
 import '../ui_runtime/ui_navigation_registry.dart';
 import '../ui_runtime/ui_runtime_controller.dart';
 import 'amitia_misc.dart';
+import 'conversation_visibility.dart';
 import 'profile_avatar.dart';
 
 final currentCharacterIdProvider = StateProvider<String>((ref) => '');
@@ -210,9 +211,9 @@ class _AmitiaDrawerState extends ConsumerState<AmitiaDrawer> {
           workspaceId: project.workspaceId,
           deviceId: project.deviceId,
           workspaceName: project.name,
-          workspaceKind: project.rootUri.startsWith('content://')
-              ? 'saf'
-              : 'local',
+          workspaceKind: project.workspaceKind.trim().isEmpty
+              ? (project.rootUri.startsWith('content://') ? 'saf' : 'local')
+              : project.workspaceKind,
           rootUri: project.rootUri,
         );
       } catch (error) {
@@ -1337,13 +1338,27 @@ class _ExpandableConversationList extends StatefulWidget {
 
 class _ExpandableConversationListState
     extends State<_ExpandableConversationList> {
-  bool _expanded = false;
+  int _visibleCount = sidebarConversationPageSize;
+
+  @override
+  void didUpdateWidget(covariant _ExpandableConversationList oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _visibleCount = normalizeSidebarConversationCount(
+      _visibleCount,
+      widget.conversations.length,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    final visible = _expanded
-        ? widget.conversations
-        : widget.conversations.take(5).toList(growable: false);
+    final visibleCount = normalizeSidebarConversationCount(
+      _visibleCount,
+      widget.conversations.length,
+    );
+    final visible = widget.conversations
+        .take(visibleCount)
+        .toList(growable: false);
+    final hasMore = visibleCount < widget.conversations.length;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1369,8 +1384,15 @@ class _ExpandableConversationListState
           Padding(
             padding: EdgeInsets.only(left: widget.compact ? 12 : 20, bottom: 4),
             child: TextButton(
-              onPressed: () => setState(() => _expanded = !_expanded),
-              child: Text(_expanded ? '收起' : '展开显示'),
+              onPressed: () => setState(() {
+                _visibleCount = hasMore
+                    ? expandSidebarConversationCount(
+                        visibleCount,
+                        widget.conversations.length,
+                      )
+                    : sidebarConversationPageSize;
+              }),
+              child: Text(hasMore ? '展开显示' : '收起'),
             ),
           ),
       ],

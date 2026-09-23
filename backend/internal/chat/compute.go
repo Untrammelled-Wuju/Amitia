@@ -47,6 +47,7 @@ type ComputeResult struct {
 	Trace                applog.TraceFields
 	PipelineMessages     []map[string]string
 	TotalTokens          int
+	TurnItems            []AssistantTurnItem
 }
 
 func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageRequest) (*ComputeResult, error) {
@@ -529,6 +530,7 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 		Trace:                trace,
 		TotalTokens:          totalTokens,
 		PipelineMessages:     pipelineMessages,
+		TurnItems:            turnRecorder.snapshotItems(),
 	}, nil
 }
 

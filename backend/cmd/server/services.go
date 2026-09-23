@@ -580,6 +580,9 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		chatSvc.SetHookInvoker(chat.NewHookAdapter(kernelContainer.HookService))
 	}
 	orchCfg := interaction.DefaultOrchestratorConfig()
+	if config.AppCfg.Chat.AgentMaxParallelTurns > 0 {
+		orchCfg.MaxConcurrent = config.AppCfg.Chat.AgentMaxParallelTurns
+	}
 	tracker := interaction.NewSQLiteInteractionTracker(ctx.DB)
 	if err := tracker.InitSchema(); err != nil {
 		log.Error("failed to init interaction tracker schema:", err)

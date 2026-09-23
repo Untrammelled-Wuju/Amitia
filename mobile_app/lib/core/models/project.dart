@@ -6,6 +6,7 @@ class ProjectDto {
   final String workspaceId;
   final String deviceId;
   final String rootUri;
+  final String workspaceKind;
   final bool available;
   final String status;
   final String statusReason;
@@ -19,6 +20,7 @@ class ProjectDto {
     required this.workspaceId,
     this.deviceId = '',
     this.rootUri = '',
+    this.workspaceKind = '',
     this.available = true,
     this.status = 'ready',
     this.statusReason = '',
@@ -34,6 +36,7 @@ class ProjectDto {
       workspaceId: (json['workspaceId'] ?? '').toString(),
       deviceId: (json['deviceId'] ?? '').toString(),
       rootUri: (json['rootUri'] ?? '').toString(),
+      workspaceKind: (json['workspaceKind'] ?? '').toString(),
       available: json['available'] != false,
       status: (json['status'] ?? 'ready').toString(),
       statusReason: (json['statusReason'] ?? '').toString(),

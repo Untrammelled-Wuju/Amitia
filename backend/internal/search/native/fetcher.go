@@ -88,7 +88,7 @@ func (f *Fetcher) do(ctx context.Context, engineID, method, rawURL string, heade
 		return nil, response.StatusCode, search.NewError(search.SEARCH_PROVIDER_RESPONSE_TOO_LARGE, engineID, false, err)
 	}
 	if response.StatusCode >= 400 {
-		return nil, response.StatusCode, mapHTTPError(engineID, response.StatusCode)
+		return nil, response.StatusCode, mapHTTPError(engineID, response.StatusCode, response.Header, time.Now())
 	}
 	return body, response.StatusCode, nil
 }
@@ -107,12 +107,16 @@ func readLimited(reader io.Reader, maxBytes int64) ([]byte, error) {
 	return body, nil
 }
 
-func mapHTTPError(engineID string, status int) error {
+func mapHTTPError(engineID string, status int, headers http.Header, now time.Time) error {
 	if search.IsAuthError(status) {
 		return search.WrapHTTPError(search.SEARCH_PROVIDER_AUTH_FAILED, engineID, status, nil)
 	}
 	if search.IsRateLimited(status) {
-		return search.WrapHTTPError(search.SEARCH_PROVIDER_RATE_LIMITED, engineID, status, nil)
+		err := search.WrapHTTPError(search.SEARCH_PROVIDER_RATE_LIMITED, engineID, status, nil)
+		if headers != nil {
+			err.RetryAfter = search.ParseRetryAfter(headers.Get("Retry-After"), now)
+		}
+		return err
 	}
 	if search.IsServerError(status) {
 		return search.WrapHTTPError(search.SEARCH_PROVIDER_REQUEST_FAILED, engineID, status, nil)

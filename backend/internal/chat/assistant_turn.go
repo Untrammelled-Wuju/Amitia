@@ -87,6 +87,10 @@ type assistantTurnRecorder struct {
 	TurnSequence     int64
 	Provider         string
 	enabled          bool
+	itemMu           sync.Mutex
+	items            []AssistantTurnItem
+	itemByID         map[string]int
+	toolCallByID     map[string]int
 	progressMu       sync.Mutex
 	citationMu       sync.RWMutex
 	citationIDs      map[int]struct{}
@@ -119,6 +123,8 @@ func newAssistantTurnRecorder(db *gorm.DB, conversationID, characterID, userMess
 		UserMessageID:    strings.TrimSpace(userMessageID),
 		RequestID:        strings.TrimSpace(requestID),
 		ExecutionID:      executionID,
+		itemByID:         make(map[string]int),
+		toolCallByID:     make(map[string]int),
 		citationIDs:      make(map[int]struct{}),
 		citationEvidence: make(map[int]citationEvidence),
 	}
@@ -172,11 +178,38 @@ func (r *assistantTurnRecorder) Start(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	if err := r.loadPersistedItems(ctx); err != nil {
+		return err
+	}
 	if _, err := conversationstream.DefaultManager().Publish(ctx, conversationstream.AgentUIEvent{
 		ConversationID: r.ConversationID, RequestID: r.RequestID, ExecutionID: r.ExecutionID, TurnID: r.TurnID,
 		TurnSequence: r.TurnSequence, Type: "turn.started", Status: assistantTurnStatusRunning,
 	}, true); err != nil {
 		return err
+	}
+	return nil
+}
+
+func (r *assistantTurnRecorder) loadPersistedItems(ctx context.Context) error {
+	if r == nil || r.db == nil || !r.enabled {
+		return nil
+	}
+	var items []AssistantTurnItem
+	if err := r.db.WithContext(ctx).Where("turn_id = ?", r.TurnID).Order("sequence ASC").Find(&items).Error; err != nil {
+		return err
+	}
+	r.itemMu.Lock()
+	defer r.itemMu.Unlock()
+	r.items = make([]AssistantTurnItem, len(items))
+	r.itemByID = make(map[string]int, len(items))
+	r.toolCallByID = make(map[string]int)
+	for index := range items {
+		item := items[index]
+		r.items[index] = item
+		r.itemByID[item.ID] = index
+		if item.ItemType == assistantTurnItemToolCall && strings.TrimSpace(item.CallID) != "" {
+			r.toolCallByID[item.CallID] = index
+		}
 	}
 	return nil
 }
@@ -191,26 +224,27 @@ func (r *assistantTurnRecorder) AddToolCall(ctx context.Context, callID, toolNam
 		status = assistantTurnStatusRunning
 	}
 	if r.db != nil && r.enabled && callID != "" {
-		var existing AssistantTurnItem
-		err := r.db.WithContext(ctx).Where("turn_id = ? AND item_type = ? AND call_id = ?", r.TurnID, assistantTurnItemToolCall, callID).Order("sequence ASC").First(&existing).Error
-		if err == nil {
+		if existing, ok := r.toolCall(callID); ok {
 			revision := existing.Revision + 1
 			if revision < 2 {
 				revision = 2
 			}
 			argumentsJSON := normalizeTurnJSON(arguments)
-			updates := map[string]any{"status": status, "tool_name": toolName, "arguments_json": argumentsJSON, "revision": revision, "updated_at": nowString()}
-			if err := r.db.WithContext(ctx).Model(&AssistantTurnItem{}).Where("id = ?", existing.ID).Updates(updates).Error; err != nil {
+			updated, err := r.updateItem(existing.ID, func(item *AssistantTurnItem) {
+				item.Status = status
+				item.ToolName = toolName
+				item.ArgumentsJSON = argumentsJSON
+				item.Revision = revision
+				item.UpdatedAt = nowString()
+			})
+			if err != nil {
 				return err
 			}
 			_, err = conversationstream.DefaultManager().Publish(ctx, conversationstream.AgentUIEvent{
 				ConversationID: r.ConversationID, RequestID: r.RequestID, ExecutionID: r.ExecutionID, TurnID: r.TurnID, TurnSequence: r.TurnSequence,
-				BlockID: existing.ID, BlockSequence: existing.Sequence, CallID: callID, Revision: revision, Type: "tool.running", Status: status,
+				BlockID: updated.ID, BlockSequence: updated.Sequence, CallID: callID, Revision: revision, Type: "tool.running", Status: status,
 				Payload: map[string]any{"blockType": "tool_call", "toolName": toolName, "arguments": argumentsJSON, "recoveryCheckpoint": true},
 			}, true)
-			return err
-		}
-		if err != gorm.ErrRecordNotFound {
 			return err
 		}
 	}
@@ -229,20 +263,21 @@ func (r *assistantTurnRecorder) AddToolProgress(ctx context.Context, callID, too
 	if callID == "" || message == "" {
 		return nil
 	}
-	var item AssistantTurnItem
-	if err := r.db.WithContext(ctx).Where("turn_id = ? AND item_type = ? AND call_id = ?", r.TurnID, assistantTurnItemToolCall, callID).Order("sequence ASC").First(&item).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
-			return nil
-		}
-		return err
+	item, ok := r.toolCall(callID)
+	if !ok {
+		return nil
 	}
 	revision := item.Revision + 1
 	if revision < 2 {
 		revision = 2
 	}
-	if err := r.db.WithContext(ctx).Model(&AssistantTurnItem{}).Where("id = ? AND revision = ?", item.ID, item.Revision).Updates(map[string]any{
-		"content": message, "status": assistantTurnStatusRunning, "revision": revision, "updated_at": nowString(),
-	}).Error; err != nil {
+	item, err := r.updateItem(item.ID, func(current *AssistantTurnItem) {
+		current.Content = message
+		current.Status = assistantTurnStatusRunning
+		current.Revision = revision
+		current.UpdatedAt = nowString()
+	})
+	if err != nil {
 		return err
 	}
 	payload := map[string]any{
@@ -255,7 +290,7 @@ func (r *assistantTurnRecorder) AddToolProgress(ctx context.Context, callID, too
 	if len(progress.Metadata) > 0 {
 		payload["metadata"] = progress.Metadata
 	}
-	_, err := conversationstream.DefaultManager().Publish(ctx, conversationstream.AgentUIEvent{
+	_, err = conversationstream.DefaultManager().Publish(ctx, conversationstream.AgentUIEvent{
 		ConversationID: r.ConversationID, RequestID: r.RequestID, ExecutionID: r.ExecutionID, TurnID: r.TurnID, TurnSequence: r.TurnSequence,
 		BlockID: item.ID, BlockSequence: item.Sequence, CallID: callID, Revision: revision, Type: "tool.progress", Status: assistantTurnStatusRunning, Payload: payload,
 	}, false)
@@ -278,7 +313,6 @@ func (r *assistantTurnRecorder) AddToolResult(ctx context.Context, callID, toolN
 	toolName = strings.TrimSpace(toolName)
 	errorCode = strings.TrimSpace(errorCode)
 	now := nowString()
-	var toolCallItem AssistantTurnItem
 	resultItem := AssistantTurnItem{
 		ID:             uuid.NewString(),
 		TurnID:         r.TurnID,
@@ -294,22 +328,24 @@ func (r *assistantTurnRecorder) AddToolResult(ctx context.Context, callID, toolN
 		CreatedAt:      now,
 		UpdatedAt:      now,
 	}
-	var toolRevision int64
-	if err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := tx.Where("turn_id = ? AND item_type = ? AND call_id = ?", r.TurnID, assistantTurnItemToolCall, callID).Order("sequence ASC").First(&toolCallItem).Error; err != nil {
-			return err
-		}
-		toolRevision = toolCallItem.Revision + 1
-		if toolRevision < 2 {
-			toolRevision = 2
-		}
-		if err := tx.Model(&AssistantTurnItem{}).Where("id = ?", toolCallItem.ID).Updates(map[string]any{
-			"status": status, "duration_ms": durationMS, "revision": toolRevision, "updated_at": now,
-		}).Error; err != nil {
-			return err
-		}
-		return appendAssistantTurnItemTx(tx, &resultItem)
-	}); err != nil {
+	toolCallItem, ok := r.toolCall(callID)
+	if !ok {
+		return fmt.Errorf("tool call item not found: %s", callID)
+	}
+	toolRevision := toolCallItem.Revision + 1
+	if toolRevision < 2 {
+		toolRevision = 2
+	}
+	toolCallItem, err := r.updateItem(toolCallItem.ID, func(item *AssistantTurnItem) {
+		item.Status = status
+		item.DurationMS = durationMS
+		item.Revision = toolRevision
+		item.UpdatedAt = now
+	})
+	if err != nil {
+		return err
+	}
+	if err := r.addItem(ctx, resultItem); err != nil {
 		return err
 	}
 	eventType := "tool.completed"
@@ -738,13 +774,23 @@ func (r *assistantTurnRecorder) FinalizeFailure(ctx context.Context, status stri
 	}
 	if cause != nil {
 		payload["internalMessage"] = cause.Error()
+		raw := cause.Error()
 		var modelErr *TextModelCallError
 		if errors.As(cause, &modelErr) {
+			raw = modelErr.RawError
+			payload["internalMessage"] = raw
+		}
+		lower := strings.ToLower(raw)
+		switch {
+		case isSQLiteBusyError(lower):
+			payload["errorCode"] = "storage_error"
+			payload["errorType"] = "storage"
+			payload["retryable"] = true
+			payload["userMessage"] = "本地数据库繁忙，请重试"
+		case modelErr != nil:
 			payload["errorCode"] = "provider_error"
 			payload["errorType"] = "provider"
-			payload["internalMessage"] = modelErr.RawError
-			raw := strings.ToLower(modelErr.RawError)
-			payload["retryable"] = strings.Contains(raw, "429") || strings.Contains(raw, "500") || strings.Contains(raw, "502") || strings.Contains(raw, "503") || strings.Contains(raw, "504") || strings.Contains(raw, "timeout") || strings.Contains(raw, "busy") || strings.Contains(raw, "unavailable")
+			payload["retryable"] = strings.Contains(lower, "429") || strings.Contains(lower, "500") || strings.Contains(lower, "502") || strings.Contains(lower, "503") || strings.Contains(lower, "504") || strings.Contains(lower, "timeout") || strings.Contains(lower, "busy") || strings.Contains(lower, "unavailable")
 		}
 	}
 	if status == assistantTurnStatusInterrupted {
@@ -756,6 +802,17 @@ func (r *assistantTurnRecorder) FinalizeFailure(ctx context.Context, status stri
 	return r.finalize(ctx, status, payload)
 }
 
+func isSQLiteBusyError(message string) bool {
+	message = strings.ToLower(strings.TrimSpace(message))
+	if message == "" {
+		return false
+	}
+	return strings.Contains(message, "database is locked") ||
+		strings.Contains(message, "sqlite_busy") ||
+		strings.Contains(message, "database table is locked") ||
+		strings.Contains(message, "database schema is locked")
+}
+
 func (r *assistantTurnRecorder) finalize(ctx context.Context, status string, payload map[string]any) error {
 	if r == nil || r.db == nil || !r.enabled {
 		return nil
@@ -765,6 +822,11 @@ func (r *assistantTurnRecorder) finalize(ctx context.Context, status string, pay
 		status = assistantTurnStatusCompleted
 	}
 	now := nowString()
+	if status == assistantTurnStatusFailed && payload != nil {
+		if err := r.persistErrorItem(context.WithoutCancel(ctx), payload); err != nil {
+			return err
+		}
+	}
 	if err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Model(&AssistantTurn{}).Where("id = ?", r.TurnID).Updates(map[string]any{
 			"status":       status,
@@ -774,9 +836,10 @@ func (r *assistantTurnRecorder) finalize(ctx context.Context, status string, pay
 			return err
 		}
 		if status == assistantTurnStatusFailed || status == assistantTurnStatusInterrupted {
-			return tx.Model(&AssistantTurnItem{}).Where("turn_id = ? AND status NOT IN ?", r.TurnID, []string{assistantTurnStatusCompleted, assistantTurnStatusFailed, assistantTurnStatusInterrupted}).Updates(map[string]any{
-				"status": status, "revision": gorm.Expr("revision + 1"), "updated_at": now,
-			}).Error
+			r.updateOpenItems(status, now)
+			if err := r.persistItemsTx(tx); err != nil {
+				return err
+			}
 		}
 		return nil
 	}); err != nil {
@@ -784,11 +847,6 @@ func (r *assistantTurnRecorder) finalize(ctx context.Context, status string, pay
 	}
 	if status != assistantTurnStatusFailed && status != assistantTurnStatusInterrupted {
 		return nil
-	}
-	if status == assistantTurnStatusFailed && payload != nil {
-		if err := r.persistErrorItem(context.WithoutCancel(ctx), payload); err != nil {
-			return err
-		}
 	}
 	eventType := "turn.failed"
 	if status == assistantTurnStatusInterrupted {
@@ -812,36 +870,24 @@ func (r *assistantTurnRecorder) persistErrorItem(ctx context.Context, payload ma
 	userMessage := strings.TrimSpace(fmt.Sprint(payload["userMessage"]))
 	errorCode := strings.TrimSpace(fmt.Sprint(payload["errorCode"]))
 	now := nowString()
-	var existing AssistantTurnItem
-	err = r.db.WithContext(ctx).
-		Where("turn_id = ? AND item_type = ?", r.TurnID, assistantTurnItemError).
-		Order("sequence ASC").
-		First(&existing).Error
-	if err == nil {
+	existing, found := r.firstItemByType(assistantTurnItemError)
+	if found {
 		revision := existing.Revision + 1
 		if revision < 2 {
 			revision = 2
 		}
-		if err := r.db.WithContext(ctx).Model(&AssistantTurnItem{}).Where("id = ?", existing.ID).Updates(map[string]any{
-			"status":      assistantTurnStatusFailed,
-			"content":     userMessage,
-			"result_json": string(encoded),
-			"error_code":  errorCode,
-			"revision":    revision,
-			"updated_at":  now,
-		}).Error; err != nil {
+		existing, err = r.updateItem(existing.ID, func(item *AssistantTurnItem) {
+			item.Status = assistantTurnStatusFailed
+			item.Content = userMessage
+			item.ResultJSON = string(encoded)
+			item.ErrorCode = errorCode
+			item.Revision = revision
+			item.UpdatedAt = now
+		})
+		if err != nil {
 			return err
 		}
-		existing.Status = assistantTurnStatusFailed
-		existing.Content = userMessage
-		existing.ResultJSON = string(encoded)
-		existing.ErrorCode = errorCode
-		existing.Revision = revision
-		existing.UpdatedAt = now
 		return r.publishItemEvents(ctx, existing)
-	}
-	if err != gorm.ErrRecordNotFound {
-		return err
 	}
 	return r.addItem(ctx, AssistantTurnItem{
 		ItemType:   assistantTurnItemError,
@@ -858,21 +904,21 @@ func (r *assistantTurnRecorder) addItem(ctx context.Context, item AssistantTurnI
 		return nil
 	}
 	now := nowString()
-	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	item.ID = strings.TrimSpace(item.ID)
+	if item.ID == "" {
 		item.ID = uuid.NewString()
-		if item.Revision <= 0 {
-			item.Revision = 1
-		}
-		if item.Status != assistantTurnStatusRunning && item.Status != assistantTurnStatusQueued && item.Status != "pending" && item.Revision < 2 {
-			item.Revision = 2
-		}
-		item.TurnID = r.TurnID
-		item.ConversationID = r.ConversationID
-		item.CreatedAt = now
-		item.UpdatedAt = now
-		return appendAssistantTurnItemTx(tx, &item)
-	})
-	if err != nil {
+	}
+	if item.Revision <= 0 {
+		item.Revision = 1
+	}
+	if item.Status != assistantTurnStatusRunning && item.Status != assistantTurnStatusQueued && item.Status != "pending" && item.Revision < 2 {
+		item.Revision = 2
+	}
+	item.TurnID = r.TurnID
+	item.ConversationID = r.ConversationID
+	item.CreatedAt = now
+	item.UpdatedAt = now
+	if err := r.rememberItem(&item); err != nil {
 		return err
 	}
 	return r.publishItemEvents(ctx, item)
@@ -956,8 +1002,163 @@ func PersistAssistantTurnError(ctx context.Context, db *gorm.DB, turn AssistantT
 		db: db, TurnID: turn.ID, ConversationID: turn.ConversationID, CharacterID: turn.CharacterID,
 		UserMessageID: turn.UserMessageID, RequestID: turn.RequestID, ExecutionID: turn.ExecutionID,
 		TurnSequence: turn.Sequence, enabled: true,
+		itemByID:     make(map[string]int),
+		toolCallByID: make(map[string]int),
 	}
-	return recorder.persistErrorItem(ctx, payload)
+	if err := recorder.persistErrorItem(ctx, payload); err != nil {
+		return err
+	}
+	return db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		return recorder.persistItemsTx(tx)
+	})
+}
+
+func (r *assistantTurnRecorder) rememberItem(item *AssistantTurnItem) error {
+	if r == nil || item == nil {
+		return errors.New("assistant turn item is required")
+	}
+	r.itemMu.Lock()
+	defer r.itemMu.Unlock()
+	if r.itemByID == nil {
+		r.itemByID = make(map[string]int)
+	}
+	if r.toolCallByID == nil {
+		r.toolCallByID = make(map[string]int)
+	}
+	if strings.TrimSpace(item.ID) == "" {
+		item.ID = uuid.NewString()
+	}
+	if existingIndex, exists := r.itemByID[item.ID]; exists {
+		r.items[existingIndex] = *item
+		return nil
+	}
+	if item.Sequence <= 0 {
+		var maxSequence int64
+		for index := range r.items {
+			if r.items[index].Sequence > maxSequence {
+				maxSequence = r.items[index].Sequence
+			}
+		}
+		item.Sequence = maxSequence + 1
+	}
+	index := len(r.items)
+	r.items = append(r.items, *item)
+	r.itemByID[item.ID] = index
+	if item.ItemType == assistantTurnItemToolCall && strings.TrimSpace(item.CallID) != "" {
+		r.toolCallByID[item.CallID] = index
+	}
+	return nil
+}
+
+func (r *assistantTurnRecorder) updateItem(itemID string, update func(*AssistantTurnItem)) (AssistantTurnItem, error) {
+	if r == nil {
+		return AssistantTurnItem{}, errors.New("assistant turn recorder is nil")
+	}
+	r.itemMu.Lock()
+	defer r.itemMu.Unlock()
+	index, exists := r.itemByID[itemID]
+	if !exists || index < 0 || index >= len(r.items) {
+		return AssistantTurnItem{}, gorm.ErrRecordNotFound
+	}
+	item := r.items[index]
+	update(&item)
+	r.items[index] = item
+	return item, nil
+}
+
+func (r *assistantTurnRecorder) toolCall(callID string) (AssistantTurnItem, bool) {
+	if r == nil {
+		return AssistantTurnItem{}, false
+	}
+	callID = strings.TrimSpace(callID)
+	if callID == "" {
+		return AssistantTurnItem{}, false
+	}
+	r.itemMu.Lock()
+	defer r.itemMu.Unlock()
+	index, exists := r.toolCallByID[callID]
+	if !exists || index < 0 || index >= len(r.items) {
+		return AssistantTurnItem{}, false
+	}
+	return r.items[index], true
+}
+
+func (r *assistantTurnRecorder) firstItemByType(itemType string) (AssistantTurnItem, bool) {
+	if r == nil {
+		return AssistantTurnItem{}, false
+	}
+	r.itemMu.Lock()
+	defer r.itemMu.Unlock()
+	for index := range r.items {
+		if r.items[index].ItemType == itemType {
+			return r.items[index], true
+		}
+	}
+	return AssistantTurnItem{}, false
+}
+
+func (r *assistantTurnRecorder) snapshotItems() []AssistantTurnItem {
+	if r == nil {
+		return nil
+	}
+	r.itemMu.Lock()
+	defer r.itemMu.Unlock()
+	result := make([]AssistantTurnItem, len(r.items))
+	copy(result, r.items)
+	sort.SliceStable(result, func(i, j int) bool {
+		return result[i].Sequence < result[j].Sequence
+	})
+	return result
+}
+
+func (r *assistantTurnRecorder) updateOpenItems(status, updatedAt string) {
+	if r == nil {
+		return
+	}
+	r.itemMu.Lock()
+	defer r.itemMu.Unlock()
+	for index := range r.items {
+		switch r.items[index].Status {
+		case assistantTurnStatusCompleted, assistantTurnStatusFailed, assistantTurnStatusInterrupted:
+			continue
+		}
+		r.items[index].Status = status
+		r.items[index].Revision++
+		r.items[index].UpdatedAt = updatedAt
+	}
+}
+
+func (r *assistantTurnRecorder) persistItemsTx(tx *gorm.DB) error {
+	if r == nil || tx == nil {
+		return nil
+	}
+	items := r.snapshotItems()
+	for index := range items {
+		item := items[index]
+		if strings.TrimSpace(item.ID) == "" || strings.TrimSpace(item.TurnID) == "" {
+			continue
+		}
+		if err := tx.Save(&item).Error; err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func persistAssistantTurnItemsTx(tx *gorm.DB, items []AssistantTurnItem) error {
+	if tx == nil || len(items) == 0 {
+		return nil
+	}
+	for index := range items {
+		item := items[index]
+		if strings.TrimSpace(item.ID) == "" || strings.TrimSpace(item.TurnID) == "" {
+			continue
+		}
+		if err := tx.Save(&item).Error; err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func appendAssistantTurnItemTx(tx *gorm.DB, item *AssistantTurnItem) error {

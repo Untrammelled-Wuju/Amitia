@@ -177,6 +177,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 	systemHandler := system.NewHandler(systemSvc, ctx.DB, services.Chat, services.DataLifecycle, services.UnifiedEntry, services.Reconciliation, services.Memory)
 	if services.KernelContainer != nil {
 		systemHandler.SetApprovalBroker(services.KernelContainer.ApprovalBroker)
+		systemHandler.SetSearchCredentialSecretBroker(services.KernelContainer.SecretBroker)
 	}
 	systemHandler.SetContinuityRuntime(services.Continuity, services.ContinuityCoordinator)
 
