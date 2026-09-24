@@ -188,17 +188,6 @@ SPDX-License-Identifier: AGPL-3.0-only
       <el-empty v-else description="暂无会话摘要" :image-size="88" />
     </el-drawer>
 
-    <RealtimeCallDialog
-      v-if="callActive"
-      :mode="callMode"
-      :voice-type="ttsVoiceType"
-      :resource-id="ttsResourceId"
-      :conversation-id="convId"
-      :char-name="charName"
-      :char-avatar="charAvatar"
-      @state-change="handleCallStateChange"
-      @close="callActive = false"
-    />
     </section>
   </div>
 </template>
@@ -221,7 +210,6 @@ import MessagesArea from "../../components/MessagesArea.vue";
 import ChatInput from "../../components/ChatInput.vue";
 import CharacterPickerDialog from "../../components/CharacterPickerDialog.vue";
 import MemoryPanel from "../../components/MemoryPanel.vue";
-import RealtimeCallDialog from "../../components/RealtimeCallDialog.vue";
 import ProfileSummaryPanel from "./components/ProfileSummaryPanel.vue";
 import MemoryInjectPanel from "./components/MemoryInjectPanel.vue";
 import { normalizeRealtimeMessage } from "@/utils/message-order";
@@ -243,20 +231,34 @@ const callActive = ref(false);
 const callMode = ref<"voice" | "video" | "screen">("voice");
 const ttsVoiceType = ref("");
 const ttsResourceId = ref("");
+let stopCallWindowListener: (() => void) | null = null;
 
-function handleStartCall(mode: "voice" | "video" | "screen") {
+async function handleStartCall(mode: "voice" | "video" | "screen") {
   callMode.value = mode;
-  callActive.value = true;
-}
-
-function handleEndCall() {
-  callActive.value = false;
-}
-
-function handleCallStateChange(state: string) {
-  if (state === "idle") {
-    callActive.value = false;
+  const desktopApi = window.amitiaDesktop;
+  if (!desktopApi?.openRealtimeCallWindow) {
+    ElMessage.error("当前环境不支持独立通话窗口");
+    return;
   }
+  try {
+    const result = await desktopApi.openRealtimeCallWindow({
+      mode,
+      voiceType: ttsVoiceType.value,
+      resourceId: ttsResourceId.value,
+      conversationId: convId.value,
+      charName: charName.value,
+      charAvatar: charAvatar.value,
+    });
+    callActive.value = result.opened;
+  } catch (error) {
+    callActive.value = false;
+    ElMessage.error(error instanceof Error ? error.message : "打开通话窗口失败");
+  }
+}
+
+async function handleEndCall() {
+  await window.amitiaDesktop?.closeRealtimeCallWindow?.();
+  callActive.value = false;
 }
 
 const { get, post, put, del } = useApi();
@@ -888,6 +890,10 @@ watch(isOffline, (offline) => {
 });
 
 onMounted(async () => {
+  stopCallWindowListener =
+    window.amitiaDesktop?.onRealtimeCallWindowClosed?.(() => {
+      callActive.value = false;
+    }) ?? null;
   void loadLlmModels();
   connectProactiveSSE();
   history.scrollRestoration = "manual";
@@ -986,6 +992,8 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
+  stopCallWindowListener?.();
+  stopCallWindowListener = null;
   cleanupSSE();
   disconnectProactiveSSE();
   window.removeEventListener("resize", updateViewport);

@@ -35,7 +35,7 @@ async function readOnboardingCompleted(force = false): Promise<boolean | null> {
   }
 }
 
-const PUBLIC_PATHS = new Set(["/web-access", "/onboarding", "/privacy", "/usage-boundary"]);
+const PUBLIC_PATHS = new Set(["/web-access", "/onboarding", "/privacy", "/usage-boundary", "/call-window"]);
 
 const router = createRouter({
   history: shouldUseHashRouting() ? createWebHashHistory() : createWebHistory(),

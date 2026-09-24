@@ -6,6 +6,7 @@ import type {
   DesktopEnvironment,
   ExtensionPackageSelection,
   RuntimeStatus,
+  RealtimeCallWindowRequest,
   SaveExtensionPackageRequest,
   LocalVoiceASRFinalEvent,
   WorkspaceDirectorySelection,
@@ -109,6 +110,17 @@ const api = {
   },
   publishLocalVoiceASRFinal(event: LocalVoiceASRFinalEvent): Promise<{ accepted: boolean; eventId: string; eventType: string }> {
     return ipcRenderer.invoke(IPC_CHANNELS.publishLocalVoiceASRFinal, event);
+  },
+  openRealtimeCallWindow(request: RealtimeCallWindowRequest): Promise<{ opened: boolean }> {
+    return ipcRenderer.invoke(IPC_CHANNELS.openRealtimeCallWindow, request);
+  },
+  closeRealtimeCallWindow(): Promise<void> {
+    return ipcRenderer.invoke(IPC_CHANNELS.closeRealtimeCallWindow);
+  },
+  onRealtimeCallWindowClosed(callback: () => void): () => void {
+    const listener = () => callback();
+    ipcRenderer.on(IPC_CHANNELS.realtimeCallWindowClosed, listener);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.realtimeCallWindowClosed, listener);
   },
   getMeshIdentity(): Promise<{ deviceId: string; runtimeId: string; platform: string } | null> {
     return ipcRenderer.invoke(IPC_CHANNELS.meshGetIdentity);

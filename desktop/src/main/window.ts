@@ -14,6 +14,23 @@ const DEV_SERVER_URL = (
   ""
 ).replace(/\/$/, "");
 
+export function buildRendererURL(
+  path: string,
+  query: Record<string, string | undefined> = {},
+): string {
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(query)) {
+    const normalized = value?.trim();
+    if (normalized) search.set(key, normalized);
+  }
+  const params = search.toString();
+  const hash = `#${normalizedPath}${params ? `?${params}` : ""}`;
+  return isDevMode()
+    ? `${DEV_SERVER_URL}/${hash}`
+    : `${APP_PROTOCOL_ORIGIN}/${hash}`;
+}
+
 function healthCheck(url: string, timeoutMs = 3000): Promise<boolean> {
   return new Promise((resolve) => {
     const req = httpGet(url, (res) => {

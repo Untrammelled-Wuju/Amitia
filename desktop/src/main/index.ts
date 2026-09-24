@@ -24,6 +24,7 @@ import { registerPetIpcHandlers } from "./pet-ipc";
 import { ClipboardBridge } from "./clipboard-bridge";
 import { DesktopDeploymentLifecycle } from "./deployment-lifecycle";
 import { registerRealtimeMediaHandlers } from "./realtime-media";
+import { registerRealtimeCallWindowHandlers } from "./realtime-call-window";
 
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
@@ -142,6 +143,7 @@ async function enterMainApp(): Promise<void> {
 
   mainWindow = createMainWindow();
   registerRealtimeMediaHandlers(() => mainWindow);
+  registerRealtimeCallWindowHandlers(() => mainWindow);
   const trayResult = createAppTray(
     mainWindow,
     () => currentConfig,
