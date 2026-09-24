@@ -65,7 +65,7 @@ async function main() {
 
   let verified;
   try {
-    verified = verifyReleaseGateStamp();
+    verified = await verifyReleaseGateStamp();
     console.log(
       `[release-gate] verified source + artifacts for ${verified.stamp.packageVersion} (${verified.stamp.sourceGateSha256.slice(0, 12)}...)`,
     );
