@@ -5,32 +5,40 @@ SPDX-License-Identifier: AGPL-3.0-only
 <template>
   <teleport to="body">
     <div class="call-overlay">
-      <div class="call-page">
-        <div class="call-mode-label">{{ modeLabel }}</div>
-        <div class="call-stage">
-          <video v-show="media.screen" ref="screenPreview" class="call-stage-video" autoplay muted playsinline />
-          <video v-show="media.camera && !media.screen" ref="cameraPreview" class="call-stage-video" autoplay muted playsinline />
-          <video v-show="media.camera && media.screen" ref="cameraPip" class="call-pip" autoplay muted playsinline />
+      <div class="call-page" :style="callPageStyle">
+        <div class="call-backdrop" aria-hidden="true">
+          <div class="call-backdrop-image" />
+          <div class="call-backdrop-gradient" />
+        </div>
+        <video v-show="media.screen" ref="screenPreview" class="call-media call-media-screen" autoplay muted playsinline />
+        <video v-show="media.camera && !media.screen" ref="cameraPreview" class="call-media call-media-camera" autoplay muted playsinline />
+        <video v-show="media.camera && media.screen" ref="cameraPip" class="call-pip" autoplay muted playsinline />
+        <div class="call-center">
           <div
-            v-if="!media.camera && !media.screen"
             class="call-avatar"
             :class="{ speaking: aiSpeaking, error: callState === 'error' }"
+            :style="avatarBackground ? { background: avatarBackground } : undefined"
           >
             <el-icon v-if="callState === 'error'" class="call-avatar-error"><WarningFilled /></el-icon>
-            <span v-else>{{ avatarInitial }}</span>
+            <span v-else-if="!avatarBackground">{{ avatarInitial }}</span>
           </div>
+          <div class="call-name">{{ displayName }}</div>
+          <div class="call-status" :class="{ error: callState === 'error' }">{{ statusText }}</div>
+          <div class="call-detail" :class="{ error: callState === 'error' }">{{ detailText }}</div>
         </div>
-        <div class="call-name">{{ displayName }}</div>
-        <div class="call-status" :class="{ error: callState === 'error' }">{{ statusText }}</div>
         <div class="call-controls">
           <template v-if="callState === 'error'">
+            <button class="call-control" type="button" @click="restart">
+              <span class="call-control-icon"><el-icon><RefreshRight /></el-icon></span>
+              <span class="call-control-label">重试</span>
+            </button>
+            <button class="call-control destructive" type="button" @click="hangUp">
+              <span class="call-control-icon"><el-icon class="call-end-icon"><Phone /></el-icon></span>
+              <span class="call-control-label">挂断</span>
+            </button>
             <button class="call-control" type="button" @click="emit('close')">
               <span class="call-control-icon"><el-icon><Close /></el-icon></span>
               <span class="call-control-label">关闭</span>
-            </button>
-            <button class="call-control" type="button" @click="restart">
-              <span class="call-control-icon"><el-icon><RefreshRight /></el-icon></span>
-              <span class="call-control-label">重新连接</span>
             </button>
           </template>
           <template v-else>
@@ -45,16 +53,7 @@ SPDX-License-Identifier: AGPL-3.0-only
               <span class="call-control-label">{{ media.muted ? "取消静音" : "静音" }}</span>
             </button>
             <button
-              class="call-control"
-              :class="{ selected: media.camera }"
-              type="button"
-              :disabled="callState !== 'connected'"
-              @click="toggleCamera"
-            >
-              <span class="call-control-icon"><el-icon><VideoCamera /></el-icon></span>
-              <span class="call-control-label">{{ media.camera ? "关闭视频" : "视频" }}</span>
-            </button>
-            <button
+              v-if="mode === 'screen'"
               class="call-control"
               :class="{ selected: media.screen }"
               type="button"
@@ -64,9 +63,20 @@ SPDX-License-Identifier: AGPL-3.0-only
               <span class="call-control-icon"><el-icon><Monitor /></el-icon></span>
               <span class="call-control-label">{{ media.screen ? "停止共享" : "共享屏幕" }}</span>
             </button>
+            <button
+              v-else
+              class="call-control"
+              :class="{ selected: media.camera }"
+              type="button"
+              :disabled="callState !== 'connected'"
+              @click="toggleCamera"
+            >
+              <span class="call-control-icon"><el-icon><VideoCamera /></el-icon></span>
+              <span class="call-control-label">{{ media.camera ? "关闭视频" : "视频" }}</span>
+            </button>
             <button class="call-control destructive" type="button" @click="hangUp">
               <span class="call-control-icon"><el-icon class="call-end-icon"><Phone /></el-icon></span>
-              <span class="call-control-label">结束</span>
+              <span class="call-control-label">挂断</span>
             </button>
           </template>
         </div>
@@ -129,6 +139,9 @@ const avatarInitial = computed(() => displayName.value.charAt(0).toUpperCase());
 const avatarBackground = computed(() =>
   props.charAvatar ? `center / cover no-repeat url(${JSON.stringify(props.charAvatar)})` : "",
 );
+const callPageStyle = computed<Record<string, string>>(() => ({
+  "--call-avatar-background": avatarBackground.value || "none",
+}));
 
 const modeLabel = computed(() => {
   if (media.value.screen) return "屏幕通话";
@@ -137,17 +150,21 @@ const modeLabel = computed(() => {
 });
 
 const statusText = computed(() => {
-  if (callState.value === "connecting") return "正在连接实时通话…";
-  if (callState.value === "connected") {
-    if (aiSpeaking.value) return "对方正在说话";
-    if (media.value.muted) return "麦克风已静音";
-    const parts = [`${modeLabel.value}中`, formatDuration(callDuration.value)];
-    if (visionStatus.value) parts.push(visionStatus.value);
-    return parts.join(" · ");
-  }
-  if (callState.value === "error") return errorMsg.value || "连接失败";
-  return "通话已结束";
+  const stateLabel =
+    callState.value === "connecting"
+      ? "正在建立通话"
+      : callState.value === "connected"
+        ? "通话中"
+        : callState.value === "error"
+          ? "通话连接失败"
+          : "通话已结束";
+  return `${stateLabel} · ${formatDuration(callDuration.value)} · AI 实时语音`;
 });
+const detailText = computed(() =>
+  callState.value === "error"
+    ? errorMsg.value || "连接失败"
+    : visionStatus.value || (media.value.muted ? "麦克风已静音" : modeLabel.value),
+);
 
 onMounted(() => { void start(); });
 onUnmounted(() => {
@@ -312,160 +329,186 @@ function formatDuration(seconds: number): string {
   position: fixed;
   inset: 0;
   z-index: 3000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(8, 10, 16, 0.86);
-  backdrop-filter: blur(10px);
+  background: #121212;
+}
+.call-page {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background: #121212;
+  color: #fff;
   animation: call-overlay-in .22s ease;
 }
 @keyframes call-overlay-in {
   from { opacity: 0; }
   to { opacity: 1; }
 }
-.call-page {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  width: min(520px, calc(100vw - 48px));
-  max-height: calc(100vh - 64px);
-  padding: 26px 30px 24px;
-  border-radius: 24px;
-  background: linear-gradient(160deg, #232a3a 0%, #161a26 58%, #10131c 100%);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.55);
-  animation: call-page-in .26s cubic-bezier(.2, .9, .3, 1.2);
-}
-@keyframes call-page-in {
-  from { opacity: 0; transform: translateY(26px) scale(.96); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
-}
-.call-mode-label {
-  align-self: flex-start;
-  color: rgba(255, 255, 255, 0.55);
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: .04em;
-}
-.call-stage {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  height: 300px;
-  margin-top: 14px;
-  border-radius: 18px;
-  background: #0b0d13;
+.call-backdrop {
+  position: absolute;
+  inset: 0;
   overflow: hidden;
+  pointer-events: none;
 }
-.call-stage-video {
+.call-backdrop-image {
+  position: absolute;
+  inset: -18%;
+  background: var(--call-avatar-background, #2b2b2d) center / cover no-repeat;
+  filter: blur(36px);
+  opacity: .72;
+  transform: scale(1.24);
+}
+.call-backdrop-gradient {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, .3),
+    rgba(0, 0, 0, .45) 55%,
+    rgba(0, 0, 0, .65)
+  );
+}
+.call-media {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
+  z-index: 1;
+  background: #000;
+}
+.call-media-screen {
+  object-fit: contain;
+}
+.call-media-camera {
   object-fit: cover;
-  background: #0b0d13;
 }
 .call-pip {
   position: absolute;
-  right: 12px;
-  bottom: 12px;
-  width: 116px;
-  height: 156px;
+  top: clamp(80px, 12vh, 132px);
+  right: clamp(18px, 3vw, 40px);
+  z-index: 3;
+  width: 132px;
+  height: 176px;
   object-fit: cover;
-  border-radius: 14px;
+  border-radius: 16px;
   border: 1px solid rgba(255, 255, 255, 0.22);
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
-  background: #0b0d13;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.42);
+  background: #000;
+}
+.call-center {
+  position: absolute;
+  top: clamp(84px, 16vh, 180px);
+  left: 50%;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: min(460px, calc(100vw - 48px));
+  transform: translateX(-50%);
+  pointer-events: none;
 }
 .call-avatar {
   display: grid;
   place-items: center;
-  width: 104px;
-  height: 104px;
-  border-radius: 32px;
-  background: var(--ac-color-primary, #8a5728);
-  border: 1px solid rgba(255, 255, 255, 0.14);
+  width: 96px;
+  height: 96px;
+  border-radius: 24px;
+  background: #2b2b2d center / cover no-repeat;
+  border: 1px solid rgba(255, 255, 255, 0.24);
   color: #fff;
-  font-size: 30px;
+  font-size: 34px;
   font-weight: 700;
-  transition: border-color .18s ease, box-shadow .18s ease;
+  overflow: hidden;
+  transition: border-color .18s ease, border-width .18s ease;
 }
 .call-avatar.speaking {
-  border-width: 4px;
-  border-color: var(--ac-color-primary, #8a5728);
-  box-shadow: 0 0 0 6px rgba(108, 123, 255, 0.18);
+  border-width: 3px;
+  border-color: #fff;
 }
 .call-avatar.error {
-  background: rgba(245, 108, 108, 0.16);
-  color: var(--el-color-danger);
-  border-color: rgba(245, 108, 108, 0.4);
+  background: #2b2b2d;
+  color: #ff453a;
+  border-color: rgba(255, 69, 58, 0.55);
 }
 .call-avatar-error { font-size: 36px; }
 .call-name {
   margin-top: 16px;
   color: #fff;
-  font-size: 20px;
-  font-weight: 700;
+  font-size: 21px;
+  font-weight: 650;
 }
 .call-status {
   margin-top: 7px;
-  min-height: 18px;
-  color: rgba(255, 255, 255, 0.6);
-  font-size: 13px;
+  color: #bcbcc0;
+  font-size: 11px;
   text-align: center;
   font-variant-numeric: tabular-nums;
 }
-.call-status.error { color: var(--el-color-danger); }
+.call-status.error { color: #ff453a; }
+.call-detail {
+  max-width: 290px;
+  min-height: 26px;
+  margin-top: 14px;
+  color: #8e8e93;
+  font-size: 10px;
+  line-height: 1.35;
+  text-align: center;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+.call-detail.error { color: #ff453a; }
 .call-controls {
+  position: absolute;
+  right: 0;
+  bottom: clamp(42px, 6vh, 72px);
+  left: 0;
+  z-index: 5;
   display: flex;
   align-items: flex-start;
   justify-content: center;
-  gap: 18px;
-  margin-top: 20px;
-  flex-wrap: wrap;
+  gap: 28px;
 }
 .call-control {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 7px;
-  width: 72px;
+  width: 66px;
   padding: 0;
   border: 0;
   background: transparent;
   cursor: pointer;
 }
-.call-control:disabled { cursor: not-allowed; opacity: .55; }
+.call-control:disabled { cursor: not-allowed; opacity: .45; }
 .call-control-icon {
   display: grid;
   place-items: center;
-  width: 54px;
-  height: 54px;
+  width: 58px;
+  height: 58px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  color: rgba(255, 255, 255, 0.88);
-  font-size: 22px;
-  transition: background .18s ease, color .18s ease, border-color .18s ease;
+  background: #2b2b2d;
+  color: #fff;
+  font-size: 25px;
+  transition: background .18s ease, color .18s ease, transform .18s ease;
 }
 .call-control:not(:disabled):hover .call-control-icon {
-  background: rgba(255, 255, 255, 0.16);
+  background: #3a3a3d;
+  transform: translateY(-1px);
 }
 .call-control.selected .call-control-icon {
-  background: var(--ac-color-primary, #8a5728);
-  border-color: transparent;
-  color: #fff;
+  background: #fff;
+  color: #111;
 }
 .call-control.destructive .call-control-icon {
-  background: var(--el-color-danger);
-  border-color: transparent;
+  background: #ff453a;
   color: #fff;
 }
 .call-end-icon { transform: rotate(135deg); }
 .call-control-label {
-  color: rgba(255, 255, 255, 0.72);
-  font-size: 12px;
+  color: #c3c3c6;
+  font-size: 9px;
   white-space: nowrap;
 }
-.call-control.selected .call-control-label { color: #fff; }
 </style>
