@@ -106,6 +106,20 @@ electron-builder保持compression: normal，实际7z压缩等级由scripts/build
 - 脚本会自动上传 latest.yml、AmitiaSetup-${version}-x64.exe、AmitiaSetup-${version}-x64.exe.blockmap 三个文件
 - 上传完成后自动验证 https://amitia.untrammelled.top/amitia/latest.yml 是否可访问
 
+SSH发布流程：
+
+- 服务器地址：8.156.72.48
+- 部署用户：codexdeploy
+- 专用私钥：C:\Users\Untrammelled\.ssh\codex_ashareking_ed25519_20260912
+- Windows OpenSSH 可能存在兼容问题，上传使用 Paramiko，连接时禁用 agent 和自动查找密钥
+- 生产目录：/www/wwwroot/amitia.untrammelled.top/amitia
+- codexdeploy 无生产目录写权限，先上传到 /tmp/amitia-<version>-<timestamp>
+- 上传后使用 sha256sum 核对远端文件与本地文件哈希，再提供宝塔 root 终端替换命令
+- 桌面端替换 latest.yml、AmitiaSetup-<version>-x64.exe 和 blockmap
+- Android 端替换 android/beta.json、android/beta.json.sig，并将 APK 放入 android/releases/<versionCode>/
+- 替换完成后删除旧安装包、旧 Android APK 和失效频道清单
+- 发布验收必须通过 HTTPS 检查 latest.yml、beta.json、beta.json.sig、EXE 和 APK 均返回 200
+
 发布前检查项：
 
 - 构建产物必须完整（exe + blockmap + latest.yml 三件套）
