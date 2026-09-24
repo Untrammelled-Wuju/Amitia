@@ -69,11 +69,11 @@ async function main() {
   const target = parseTarget();
   console.log(`[build-release] target=${target.platform}-${target.arch}${target.dirOnly ? " (dir)" : ""}`);
 
+  if (existsSync(releaseDir)) rmSync(releaseDir, { recursive: true, force: true });
+
   console.log("[build-release] running mandatory release gate...");
   runPnpm(["run", "release:gate"]);
   await verifyPreBuildGates();
-
-  if (existsSync(releaseDir)) rmSync(releaseDir, { recursive: true, force: true });
 
   console.log("[build-release] building shared runtime hosts...");
   run(process.execPath, [buildRuntimeHostsPath]);
