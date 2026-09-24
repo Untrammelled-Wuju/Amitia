@@ -50,7 +50,7 @@ import '../../../conversation/rendering/assistant_identity.dart';
 import '../../../conversation/rendering/role_switch_divider.dart';
 import '../../../../shared/models/models.dart';
 import '../widgets/agent_approval_guard.dart';
-import 'realtime_voice_call_sheet.dart';
+import 'realtime_call_page.dart';
 
 class ChatPage extends ConsumerStatefulWidget {
   const ChatPage({
@@ -1489,6 +1489,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   Future<void> _handleCallOption(
     String characterId,
     String characterName,
+    String characterAvatar,
     String mode,
   ) async {
     switch (mode) {
@@ -1496,18 +1497,21 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         await _startRealtimeCall(
           characterId,
           characterName,
+          characterAvatar: characterAvatar,
           mode: RealtimeCallMode.voice,
         );
       case 'video':
         await _startRealtimeCall(
           characterId,
           characterName,
+          characterAvatar: characterAvatar,
           mode: RealtimeCallMode.video,
         );
       case 'screen':
         await _startRealtimeCall(
           characterId,
           characterName,
+          characterAvatar: characterAvatar,
           mode: RealtimeCallMode.screen,
         );
     }
@@ -1516,6 +1520,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   Future<void> _startRealtimeCall(
     String characterId,
     String characterName, {
+    String characterAvatar = '',
     RealtimeCallMode mode = RealtimeCallMode.voice,
   }) async {
     var conversationId = _runtime.conversationId;
@@ -1536,18 +1541,15 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       }
     }
     if (!mounted || conversationId == null || conversationId.isEmpty) return;
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: context.surfacePrimary,
-      useSafeArea: false,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (_) => RealtimeVoiceCallSheet(
-        conversationId: conversationId!,
-        characterName: characterName,
-        initialMode: mode,
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        fullscreenDialog: true,
+        builder: (_) => RealtimeCallPage(
+          conversationId: conversationId!,
+          characterName: characterName,
+          characterAvatar: characterAvatar,
+          initialMode: mode,
+        ),
       ),
     );
   }
@@ -2717,8 +2719,12 @@ class _ChatPageState extends ConsumerState<ChatPage> {
               actions: providerActions,
               fallback: _ChatTopBar(
                 onOpenDrawer: () => _openDrawer(context),
-                onCallSelected: (mode) =>
-                    _handleCallOption(characterId, characterName, mode),
+                onCallSelected: (mode) => _handleCallOption(
+                  characterId,
+                  characterName,
+                  character?.avatar ?? '',
+                  mode,
+                ),
                 onMoreSelected: _handleChatAction,
                 extensionActions: MobileExtensionSlot(
                   slotId: 'chat.header.action',

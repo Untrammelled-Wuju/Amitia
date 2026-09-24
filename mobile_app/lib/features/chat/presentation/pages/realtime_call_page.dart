@@ -1,13 +1,11 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../app/theme/app_colors.dart';
-import '../../../../app/theme/app_spacing.dart';
-import '../../../../app/theme/app_typography.dart';
 import '../../../../core/backend_connection/backend_connection_availability.dart';
 import '../../../../core/backend_connection/providers/backend_connection_providers.dart';
 import '../../../../core/backend_transport/providers/backend_transport_providers.dart';
@@ -21,25 +19,25 @@ import '../../../../core/widgets/amitia_misc.dart';
 
 enum RealtimeCallMode { voice, video, screen }
 
-class RealtimeVoiceCallSheet extends ConsumerStatefulWidget {
-  const RealtimeVoiceCallSheet({
+class RealtimeCallPage extends ConsumerStatefulWidget {
+  const RealtimeCallPage({
     super.key,
     required this.conversationId,
     required this.characterName,
+    this.characterAvatar = '',
     this.initialMode = RealtimeCallMode.voice,
   });
 
   final String conversationId;
   final String characterName;
+  final String characterAvatar;
   final RealtimeCallMode initialMode;
 
   @override
-  ConsumerState<RealtimeVoiceCallSheet> createState() =>
-      _RealtimeVoiceCallSheetState();
+  ConsumerState<RealtimeCallPage> createState() => _RealtimeCallPageState();
 }
 
-class _RealtimeVoiceCallSheetState
-    extends ConsumerState<RealtimeVoiceCallSheet> {
+class _RealtimeCallPageState extends ConsumerState<RealtimeCallPage> {
   final RealtimeAudioBridge _audio = RealtimeAudioBridge();
   final RealtimeVisualBridge _visual = RealtimeVisualBridge();
 
@@ -589,117 +587,72 @@ class _RealtimeVoiceCallSheetState
         : _state == 'error'
         ? (_error ?? '连接失败')
         : '通话已结束';
+    final detailText = (_error ?? '').trim().isNotEmpty
+        ? _error!.trim()
+        : (_visionStatus ?? '').trim();
+    final systemPadding = MediaQuery.paddingOf(context);
+    final primaryFrame = _screenActive
+        ? _latestScreenFrame
+        : _cameraActive
+        ? _latestCameraFrame
+        : null;
 
-    return SafeArea(
-      top: false,
-      child: SizedBox(
-        height: MediaQuery.sizeOf(context).height * 0.82,
-        child: Padding(
-          padding: EdgeInsets.fromLTRB(
-            AppSpacing.lg,
-            AppSpacing.md,
-            AppSpacing.lg,
-            AppSpacing.lg,
-          ),
-          child: Column(
+    return Scaffold(
+      backgroundColor: const Color(0xFF121212),
+      body: MediaQuery.removePadding(
+        context: context,
+        removeTop: true,
+        removeBottom: true,
+        removeLeft: true,
+        removeRight: true,
+        child: MediaQuery(
+          data: MediaQuery.of(
+            context,
+          ).copyWith(textScaler: TextScaler.noScaling),
+          child: Stack(
+            fit: StackFit.expand,
+            clipBehavior: Clip.hardEdge,
             children: [
-              const SizedBox(height: 18),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  callMode,
-                  style: AppTypography.bodySmall(context).copyWith(
-                    color: context.textSecondary,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 14),
-              Expanded(child: _buildVisualStage(context, initial)),
-              const SizedBox(height: 14),
-              Text(name, style: AppTypography.pageTitle(context)),
-              const SizedBox(height: 7),
-              Text(
-                connected
-                    ? '$statusText · $_duration${_visionStatus == null ? '' : ' · $_visionStatus'}'
-                    : statusText,
-                textAlign: TextAlign.center,
-                style: AppTypography.bodySmall(context).copyWith(
-                  color: _state == 'error'
-                      ? context.error
-                      : context.textSecondary,
-                ),
-              ),
-              const SizedBox(height: 18),
-              if (_state == 'error')
-                Row(
-                  children: [
-                    Expanded(
-                      child: AmitiaButton(
-                        label: '关闭',
-                        isSecondary: true,
-                        onPressed: () => Navigator.of(context).pop(),
+              _buildBackground(initial, primaryFrame),
+              if (_screenActive && _cameraActive && _latestCameraFrame != null)
+                Positioned(
+                  right: 16,
+                  top: systemPadding.top + 96,
+                  width: 104,
+                  height: 140,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(16),
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: Colors.black,
+                        border: Border.all(color: Colors.white24),
+                      ),
+                      child: Image.memory(
+                        _latestCameraFrame!,
+                        fit: BoxFit.cover,
+                        gaplessPlayback: true,
                       ),
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: AmitiaButton(
-                        label: '重新连接',
-                        onPressed: () async {
-                          await _shutdown(sendStop: false);
-                          await _connect();
-                        },
-                      ),
-                    ),
-                  ],
-                )
-              else
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      _RealtimeCallControl(
-                        icon: _muted
-                            ? Icons.mic_off_outlined
-                            : Icons.mic_none_outlined,
-                        label: _muted ? '取消静音' : '静音',
-                        selected: _muted,
-                        enabled: connected,
-                        onTap: _toggleMute,
-                      ),
-                      const SizedBox(width: 18),
-                      _RealtimeCallControl(
-                        icon: _cameraActive
-                            ? Icons.videocam_off_outlined
-                            : Icons.videocam_outlined,
-                        label: _cameraActive ? '关闭视频' : '视频',
-                        selected: _cameraActive,
-                        enabled: connected && _cameraSupported,
-                        onTap: _toggleCamera,
-                      ),
-                      const SizedBox(width: 18),
-                      _RealtimeCallControl(
-                        icon: _screenActive
-                            ? Icons.stop_screen_share_outlined
-                            : Icons.screen_share_outlined,
-                        label: _screenActive ? '停止共享' : '共享屏幕',
-                        selected: _screenActive,
-                        enabled: connected && _screenSupported,
-                        onTap: _toggleScreen,
-                      ),
-                      const SizedBox(width: 18),
-                      _RealtimeCallControl(
-                        icon: Icons.call_end,
-                        label: '结束',
-                        destructive: true,
-                        enabled: true,
-                        onTap: _endCall,
-                      ),
-                    ],
                   ),
                 ),
-              const SizedBox(height: 8),
+              Positioned(
+                top: systemPadding.top + 64,
+                left: 0,
+                right: 0,
+                child: _buildCenterSection(
+                  name: name,
+                  initial: initial,
+                  callMode: callMode,
+                  statusText: statusText,
+                  detailText: detailText,
+                ),
+              ),
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: systemPadding.bottom + 52,
+                child: _buildControlBar(connected),
+              ),
             ],
           ),
         ),
@@ -707,78 +660,223 @@ class _RealtimeVoiceCallSheetState
     );
   }
 
-  Widget _buildVisualStage(BuildContext context, String initial) {
-    final primary = _screenActive
-        ? _latestScreenFrame
-        : _cameraActive
-        ? _latestCameraFrame
-        : null;
-    if (primary == null) {
-      return Center(
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
-          width: 104,
-          height: 104,
-          decoration: BoxDecoration(
-            color: _state == 'error'
-                ? context.error.withValues(alpha: 0.12)
-                : context.accentPrimary,
-            borderRadius: BorderRadius.circular(30),
-            border: Border.all(
-              color: _aiSpeaking
-                  ? context.accentPrimary
-                  : context.borderPrimary,
-              width: _aiSpeaking ? 4 : 1,
+  Widget _buildBackground(String initial, Uint8List? primaryFrame) {
+    return Stack(
+      fit: StackFit.expand,
+      clipBehavior: Clip.hardEdge,
+      children: [
+        const ColoredBox(color: Color(0xFF121212)),
+        Opacity(
+          opacity: 0.72,
+          child: ImageFiltered(
+            imageFilter: ui.ImageFilter.blur(sigmaX: 36, sigmaY: 36),
+            child: Transform.scale(
+              scale: 1.24,
+              child: _buildAvatarImage(initial),
             ),
           ),
-          alignment: Alignment.center,
-          child: _state == 'error'
-              ? Icon(Icons.error_outline, size: 38, color: context.error)
-              : Text(
-                  initial,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 30,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
         ),
-      );
-    }
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(18),
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          Container(color: Colors.black),
-          Image.memory(
-            primary,
-            fit: _screenActive ? BoxFit.contain : BoxFit.cover,
-            gaplessPlayback: true,
-          ),
-          if (_screenActive && _cameraActive && _latestCameraFrame != null)
-            Positioned(
-              right: 12,
-              bottom: 12,
-              width: 116,
-              height: 156,
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(14),
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    border: Border.all(color: Colors.white24),
-                    color: Colors.black,
-                  ),
-                  child: Image.memory(
-                    _latestCameraFrame!,
-                    fit: BoxFit.cover,
-                    gaplessPlayback: true,
-                  ),
-                ),
-              ),
+        if (primaryFrame != null)
+          ColoredBox(
+            color: Colors.black,
+            child: Image.memory(
+              primaryFrame,
+              fit: _screenActive ? BoxFit.contain : BoxFit.cover,
+              gaplessPlayback: true,
             ),
-        ],
+          ),
+        const DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [Color(0x4D000000), Color(0x73000000), Color(0xA6000000)],
+              stops: [0, 0.55, 1],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildAvatarImage(String initial) {
+    final avatar = widget.characterAvatar.trim();
+    final fallback = Container(
+      color: const Color(0xFF2B2B2D),
+      alignment: Alignment.center,
+      child: Text(
+        initial,
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 34,
+          fontWeight: FontWeight.w700,
+        ),
       ),
+    );
+    if (avatar.isEmpty) return fallback;
+    return Image.network(
+      avatar,
+      fit: BoxFit.cover,
+      errorBuilder: (_, __, ___) => fallback,
+    );
+  }
+
+  Widget _buildCenterSection({
+    required String name,
+    required String initial,
+    required String callMode,
+    required String statusText,
+    required String detailText,
+  }) {
+    final stateLabel = _state == 'connecting'
+        ? '正在建立通话'
+        : _state == 'error'
+        ? '通话连接失败'
+        : _state == 'connected'
+        ? '通话中'
+        : '通话已结束';
+    final detail = detailText.isNotEmpty
+        ? detailText
+        : _state == 'connected'
+        ? statusText
+        : callMode;
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          width: 96,
+          height: 96,
+          padding: const EdgeInsets.all(2),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(
+              color: _aiSpeaking ? Colors.white : Colors.white24,
+              width: _aiSpeaking ? 3 : 1,
+            ),
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(21),
+            child: _buildAvatarImage(initial),
+          ),
+        ),
+        const SizedBox(height: 16),
+        Text(
+          name,
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 21,
+            fontWeight: FontWeight.w600,
+            fontVariations: <ui.FontVariation>[ui.FontVariation('wght', 650)],
+          ),
+        ),
+        const SizedBox(height: 7),
+        Text(
+          '$stateLabel · $_duration · AI 实时语音',
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            color: Color(0xFFBCBCC0),
+            fontSize: 11,
+            fontWeight: FontWeight.w400,
+          ),
+        ),
+        const SizedBox(height: 14),
+        ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 290),
+          child: Text(
+            detail,
+            textAlign: TextAlign.center,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: Color(0xFF8E8E93),
+              fontSize: 10,
+              fontWeight: FontWeight.w400,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildControlBar(bool connected) {
+    if (_state == 'error') return _buildErrorControls();
+    final modeControl = widget.initialMode == RealtimeCallMode.screen
+        ? _RealtimeCallControl(
+            icon: _screenActive
+                ? Icons.stop_screen_share_outlined
+                : Icons.screen_share_outlined,
+            label: _screenActive ? '停止共享' : '共享屏幕',
+            selected: _screenActive,
+            enabled: connected && _screenSupported,
+            onTap: _toggleScreen,
+          )
+        : _RealtimeCallControl(
+            icon: _cameraActive
+                ? Icons.videocam_off_outlined
+                : Icons.videocam_outlined,
+            label: _cameraActive ? '关闭视频' : '视频',
+            selected: _cameraActive,
+            enabled: connected && _cameraSupported,
+            onTap: _toggleCamera,
+          );
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _RealtimeCallControl(
+          icon: _muted ? Icons.mic_off_outlined : Icons.mic_none_outlined,
+          label: _muted ? '取消静音' : '静音',
+          selected: _muted,
+          enabled: connected,
+          onTap: _toggleMute,
+        ),
+        const SizedBox(width: 28),
+        modeControl,
+        const SizedBox(width: 28),
+        _RealtimeCallControl(
+          icon: Icons.call_end,
+          label: '挂断',
+          destructive: true,
+          enabled: true,
+          onTap: _endCall,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildErrorControls() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _RealtimeCallControl(
+          icon: Icons.refresh,
+          label: '重试',
+          enabled: true,
+          onTap: () async {
+            await _shutdown(sendStop: false);
+            await _connect();
+          },
+        ),
+        const SizedBox(width: 28),
+        _RealtimeCallControl(
+          icon: Icons.call_end,
+          label: '挂断',
+          destructive: true,
+          enabled: true,
+          onTap: _endCall,
+        ),
+        const SizedBox(width: 28),
+        _RealtimeCallControl(
+          icon: Icons.close,
+          label: '关闭',
+          enabled: true,
+          onTap: _endCall,
+        ),
+      ],
     );
   }
 }
@@ -803,42 +901,43 @@ class _RealtimeCallControl extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final background = destructive
-        ? context.error
+        ? const Color(0xFFFF453A)
         : selected
-        ? context.accentSoft
-        : context.surfaceSecondary;
+        ? Colors.white
+        : const Color(0xFF2B2B2D);
     final foreground = destructive
         ? Colors.white
         : selected
-        ? context.accentPrimary
+        ? const Color(0xFF111111)
         : enabled
-        ? context.textPrimary
-        : context.textTertiary;
+        ? Colors.white
+        : Colors.white38;
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: enabled ? onTap : null,
       child: SizedBox(
-        width: 72,
+        width: 66,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              width: 54,
-              height: 54,
+              width: 58,
+              height: 58,
               decoration: BoxDecoration(
                 color: background,
                 shape: BoxShape.circle,
-                border: destructive
-                    ? null
-                    : Border.all(color: context.borderPrimary),
               ),
               alignment: Alignment.center,
-              child: Icon(icon, size: 23, color: foreground),
+              child: Icon(icon, size: 25, color: foreground),
             ),
             const SizedBox(height: 7),
             Text(
               label,
-              style: AppTypography.label(context).copyWith(color: foreground),
+              style: const TextStyle(
+                color: Color(0xFFC3C3C6),
+                fontSize: 9,
+                fontWeight: FontWeight.w400,
+              ),
               textAlign: TextAlign.center,
             ),
           ],
