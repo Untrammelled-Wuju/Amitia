@@ -6,13 +6,10 @@ package platform
 
 import (
 	"errors"
-	"net"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
-	"syscall"
-	"time"
 )
 
 type androidPlatform struct{}
@@ -69,43 +66,15 @@ func (androidPlatform) IsAndroidEmbedded() bool {
 	return true
 }
 
-func (p androidPlatform) KillExistingServer(addr string) error {
-	conn, err := net.DialTimeout("tcp", addr, 1*time.Second)
-	if err != nil {
-		return nil
+func (p androidPlatform) KillExistingServer(addr, dataDir string) error {
+	if dataDir == "" {
+		dataDir = p.DefaultDataDir()
 	}
-	conn.Close()
-
-	dataDir := p.DefaultDataDir()
 	if absDir := os.Getenv("AMITIA_DATA_DIR"); absDir != "" {
 		dataDir = absDir
 	}
 
-	pid, pidErr := p.ReadPidFile(dataDir)
-	if pidErr != nil {
-		return nil
-	}
-	if pid <= 0 {
-		return nil
-	}
-
-	proc, findErr := os.FindProcess(pid)
-	if findErr != nil {
-		return nil
-	}
-	_ = proc.Signal(syscall.SIGTERM)
-	done := make(chan struct{})
-	go func() {
-		_, _ = proc.Wait()
-		close(done)
-	}()
-	select {
-	case <-done:
-	case <-time.After(2 * time.Second):
-		_ = proc.Kill()
-	}
-	time.Sleep(1 * time.Second)
-	return nil
+	return killExistingServer(addr, dataDir, p.ReadPidFile, p.RemovePidFile)
 }
 
 func (androidPlatform) WritePidFile(dataDir string) error {
@@ -115,11 +84,7 @@ func (androidPlatform) WritePidFile(dataDir string) error {
 	if absDir := os.Getenv("AMITIA_DATA_DIR"); absDir != "" {
 		dataDir = absDir
 	}
-	if err := os.MkdirAll(dataDir, 0755); err != nil {
-		return err
-	}
-	pidPath := filepath.Join(dataDir, ".amitia-backend.pid")
-	return os.WriteFile(pidPath, []byte(strconv.Itoa(os.Getpid())), 0644)
+	return writePidFile(dataDir)
 }
 
 func (androidPlatform) ReadPidFile(dataDir string) (int, error) {

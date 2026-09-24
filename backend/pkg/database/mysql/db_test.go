@@ -3,8 +3,10 @@ package mysql
 import (
 	"database/sql"
 	"fmt"
+	"path/filepath"
 	"sync"
 	"testing"
+	"time"
 
 	"gorm.io/gorm"
 )
@@ -90,6 +92,65 @@ func TestNewSQLiteSerializesConcurrentWrites(t *testing.T) {
 	}
 	if count != workers {
 		t.Fatalf("row count = %d, want %d", count, workers)
+	}
+}
+
+func TestNewSQLiteWriteTransactionsUseImmediateLock(t *testing.T) {
+	dataDir := t.TempDir()
+	db := NewSQLite(dataDir)
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatalf("get sql db: %v", err)
+	}
+	defer closeSQLiteTestDB(db, sqlDB)
+
+	if err := db.Exec("CREATE TABLE locked_rows (id INTEGER PRIMARY KEY, value INTEGER NOT NULL)").Error; err != nil {
+		t.Fatalf("create table: %v", err)
+	}
+	if err := db.Exec("INSERT INTO locked_rows(id, value) VALUES (1, 1)").Error; err != nil {
+		t.Fatalf("insert row: %v", err)
+	}
+
+	dbPath := filepath.Join(dataDir, "app.db")
+	external, err := sql.Open("sqlite", dbPath+"?_pragma=busy_timeout(10000)&_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_pragma=foreign_keys(ON)")
+	if err != nil {
+		t.Fatalf("open external connection: %v", err)
+	}
+	defer external.Close()
+	externalTx, err := external.Begin()
+	if err != nil {
+		t.Fatalf("begin external transaction: %v", err)
+	}
+	defer externalTx.Rollback()
+	if _, err := externalTx.Exec("UPDATE locked_rows SET value = 2 WHERE id = 1"); err != nil {
+		t.Fatalf("acquire external write lock: %v", err)
+	}
+
+	started := make(chan struct{})
+	release := make(chan struct{})
+	errs := make(chan error, 1)
+	go func() {
+		errs <- db.Transaction(func(tx *gorm.DB) error {
+			close(started)
+			var value int
+			if err := tx.Table("locked_rows").Select("value").Where("id = 1").Scan(&value).Error; err != nil {
+				return err
+			}
+			<-release
+			return tx.Exec("UPDATE locked_rows SET value = value + 1 WHERE id = 1").Error
+		})
+	}()
+
+	select {
+	case <-started:
+	case <-time.After(250 * time.Millisecond):
+	}
+	if err := externalTx.Commit(); err != nil {
+		t.Fatalf("commit external transaction: %v", err)
+	}
+	close(release)
+	if err := <-errs; err != nil {
+		t.Fatalf("write transaction failed under snapshot contention: %v", err)
 	}
 }
 

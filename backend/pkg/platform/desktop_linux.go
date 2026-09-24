@@ -5,14 +5,10 @@
 package platform
 
 import (
-	"fmt"
-	"net"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
-	"syscall"
-	"time"
 )
 
 type linuxPlatform struct{}
@@ -71,43 +67,18 @@ func (linuxPlatform) IsAndroidEmbedded() bool {
 	return false
 }
 
-func (p linuxPlatform) KillExistingServer(addr string) error {
-	conn, err := net.DialTimeout("tcp", addr, 1*time.Second)
-	if err != nil {
-		return nil
+func (p linuxPlatform) KillExistingServer(addr, dataDir string) error {
+	if dataDir == "" {
+		dataDir = p.DefaultDataDir()
 	}
-	conn.Close()
-
-	if _, _, splitErr := net.SplitHostPort(addr); splitErr != nil {
-		return fmt.Errorf("parse addr failed: %w", splitErr)
-	}
-
-	dataDir := p.DefaultDataDir()
-
-	if pid, pidErr := p.ReadPidFile(dataDir); pidErr == nil && pid > 0 {
-		if pid == os.Getpid() {
-			return fmt.Errorf("port occupied by current process pid=%d", pid)
-		}
-		if killErr := killPid(pid); killErr == nil {
-			time.Sleep(2 * time.Second)
-			return nil
-		}
-		_ = p.RemovePidFile(dataDir)
-		return fmt.Errorf("port occupied by pid=%d (process not responsive)", pid)
-	}
-
-	return fmt.Errorf("port occupied by unknown process (no valid pid file found)")
+	return killExistingServer(addr, dataDir, p.ReadPidFile, p.RemovePidFile)
 }
 
 func (linuxPlatform) WritePidFile(dataDir string) error {
 	if dataDir == "" {
 		dataDir = linuxPlatform{}.DefaultDataDir()
 	}
-	if err := os.MkdirAll(dataDir, 0755); err != nil {
-		return err
-	}
-	pidPath := filepath.Join(dataDir, ".amitia-backend.pid")
-	return os.WriteFile(pidPath, []byte(strconv.Itoa(os.Getpid())), 0644)
+	return writePidFile(dataDir)
 }
 
 func (linuxPlatform) ReadPidFile(dataDir string) (int, error) {
@@ -131,25 +102,3 @@ func (linuxPlatform) RemovePidFile(dataDir string) error {
 }
 
 var _ RuntimePlatform = linuxPlatform{}
-
-func killPid(pid int) error {
-	proc, err := os.FindProcess(pid)
-	if err != nil {
-		return err
-	}
-	if err := proc.Signal(syscall.SIGTERM); err != nil {
-		return err
-	}
-	done := make(chan struct{})
-	go func() {
-		_, _ = proc.Wait()
-		close(done)
-	}()
-	select {
-	case <-done:
-		return nil
-	case <-time.After(2 * time.Second):
-		_ = proc.Kill()
-		return nil
-	}
-}

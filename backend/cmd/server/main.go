@@ -34,10 +34,16 @@ import (
 	"github.com/u-ai/backend/internal/runtimeorchestrator"
 )
 
-func killExistingServer(addr string) {
-	log.Warn("检测到服务端口已被占用，正在终止旧进程...")
-	if err := platform.Get().KillExistingServer(addr); err != nil {
-		log.Warn("终止旧进程失败:", err)
+func ensureSingleInstance(addr, dataDir string) {
+	if err := platform.Get().KillExistingServer(addr, dataDir); err != nil {
+		log.Error("检查已有服务实例失败:", err)
+		fmt.Fprintf(os.Stderr, "检查已有服务实例失败: %v\n", err)
+		os.Exit(1)
+	}
+	if err := platform.Get().WritePidFile(dataDir); err != nil {
+		log.Error("写入服务进程标识失败:", err)
+		fmt.Fprintf(os.Stderr, "写入服务进程标识失败: %v\n", err)
+		os.Exit(1)
 	}
 }
 
@@ -116,6 +122,9 @@ func main() {
 	log.Info("Workspace Dir: ", paths.WorkspaceDir)
 	log.Info("Cache Dir: ", paths.CacheDir)
 	log.Info("Temp Dir: ", paths.TempDir)
+	serverAddr := config.AppCfg.Server.Addr()
+	ensureSingleInstance(serverAddr, config.AppCfg.Storage.DataDir)
+	defer platform.Get().RemovePidFile(config.AppCfg.Storage.DataDir)
 
 	rootCtx, stopRoot := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stopRoot()
@@ -277,7 +286,6 @@ func main() {
 		defer temporalScheduler.Stop()
 	}
 
-	serverAddr := config.AppCfg.Server.Addr()
 	fmt.Printf("\n  ========================================\n")
 	fmt.Printf("    %s Backend Server\n", config.AppCfg.App.Name)
 	fmt.Printf("    Version:        %s\n", config.AppCfg.App.Version)
@@ -315,8 +323,6 @@ func main() {
 			log.Info("消息计数已修复，影响", count, "条对话")
 		}
 	}
-
-	killExistingServer(serverAddr)
 
 	if !policy.VectorStore {
 		log.Info("Qdrant: disabled by runtime profile")

@@ -18,7 +18,7 @@ func IsAndroidPRootMode(v string) bool {
 
 type RuntimePlatform interface {
 	Name() string
-	KillExistingServer(addr string) error
+	KillExistingServer(addr, dataDir string) error
 	ExecutableSuffix() string
 	BinarySuffix() string
 	RootFSDir() string

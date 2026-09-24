@@ -22,7 +22,7 @@ func NewSQLite(dataDir string) *gorm.DB {
 	}
 	dbPath := filepath.Join(dataDir, "app.db")
 	log.Printf("[DB] 连接 SQLite: %s", dbPath)
-	writerDSN := dbPath + "?_pragma=busy_timeout(10000)&_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_pragma=foreign_keys(ON)"
+	writerDSN := dbPath + "?_txlock=immediate&_pragma=busy_timeout(10000)&_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_pragma=foreign_keys(ON)"
 	readerDSN := dbPath + "?_pragma=busy_timeout(10000)&_pragma=synchronous(NORMAL)&_pragma=foreign_keys(ON)&_pragma=query_only(1)"
 
 	writer, err := sql.Open("sqlite", writerDSN)

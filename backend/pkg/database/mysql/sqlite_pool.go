@@ -4,10 +4,18 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"math/rand/v2"
 	"strings"
 	"sync/atomic"
+	"time"
 
 	"gorm.io/gorm"
+)
+
+const (
+	sqliteBusyMaxAttempts  = 4
+	sqliteBusyInitialDelay = 50 * time.Millisecond
+	sqliteBusyMaxDelay     = 500 * time.Millisecond
 )
 
 type sqliteRoutingPool struct {
@@ -41,8 +49,13 @@ func (p *sqliteRoutingPool) PrepareContext(ctx context.Context, query string) (*
 
 func (p *sqliteRoutingPool) ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
 	sqliteCounters.writeOperations.Add(1)
-	result, err := p.writer.ExecContext(ctx, query, args...)
-	recordSQLiteBusy(err)
+	var result sql.Result
+	err := retrySQLiteBusy(ctx, func() error {
+		var attemptErr error
+		result, attemptErr = p.writer.ExecContext(ctx, query, args...)
+		recordSQLiteBusy(attemptErr)
+		return attemptErr
+	})
 	return result, err
 }
 
@@ -68,8 +81,13 @@ func (p *sqliteRoutingPool) QueryRowContext(ctx context.Context, query string, a
 
 func (p *sqliteRoutingPool) BeginTx(ctx context.Context, opts *sql.TxOptions) (gorm.ConnPool, error) {
 	sqliteCounters.writeOperations.Add(1)
-	tx, err := p.writer.BeginTx(ctx, opts)
-	recordSQLiteBusy(err)
+	var tx *sql.Tx
+	err := retrySQLiteBusy(ctx, func() error {
+		var attemptErr error
+		tx, attemptErr = p.writer.BeginTx(ctx, opts)
+		recordSQLiteBusy(attemptErr)
+		return attemptErr
+	})
 	return tx, err
 }
 
@@ -124,6 +142,35 @@ func recordSQLiteBusy(err error) {
 	if isSQLiteBusy(err) {
 		sqliteCounters.busyErrors.Add(1)
 	}
+}
+
+func retrySQLiteBusy(ctx context.Context, operation func() error) error {
+	delay := sqliteBusyInitialDelay
+	var err error
+	for attempt := 0; attempt < sqliteBusyMaxAttempts; attempt++ {
+		err = operation()
+		if err == nil || !isSQLiteBusy(err) {
+			return err
+		}
+		if attempt == sqliteBusyMaxAttempts-1 {
+			break
+		}
+		wait := delay/2 + time.Duration(rand.IntN(int(delay/2)+1))
+		timer := time.NewTimer(wait)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return ctx.Err()
+		case <-timer.C:
+		}
+		if delay < sqliteBusyMaxDelay {
+			delay *= 2
+			if delay > sqliteBusyMaxDelay {
+				delay = sqliteBusyMaxDelay
+			}
+		}
+	}
+	return err
 }
 
 func isSQLiteBusy(err error) bool {

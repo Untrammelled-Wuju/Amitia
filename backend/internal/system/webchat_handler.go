@@ -665,6 +665,10 @@ func (h *Handler) finalizeWebChatTurnRuntime(turn *chat.AssistantTurn, userMessa
 	if status != "failed" && status != "interrupted" {
 		return
 	}
+	errorType := "runtime"
+	if status == "failed" {
+		errorCode, userMessage, errorType = classifyWebChatRuntimeError(errorCode, userMessage, internalMessage)
+	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	updated := false
 	err := h.db.Transaction(func(tx *gorm.DB) error {
@@ -690,7 +694,7 @@ func (h *Handler) finalizeWebChatTurnRuntime(turn *chat.AssistantTurn, userMessa
 	}
 	if status == "failed" {
 		_ = chat.PersistAssistantTurnError(
-			context.Background(), h.db, *turn, errorCode, "runtime", userMessage, internalMessage, "", retryable,
+			context.Background(), h.db, *turn, errorCode, errorType, userMessage, internalMessage, "", retryable,
 		)
 	}
 	eventType := "turn.failed"
@@ -699,7 +703,7 @@ func (h *Handler) finalizeWebChatTurnRuntime(turn *chat.AssistantTurn, userMessa
 	}
 	payload := map[string]any{
 		"errorCode":          strings.TrimSpace(errorCode),
-		"errorType":          "runtime",
+		"errorType":          errorType,
 		"retryable":          retryable,
 		"userMessage":        strings.TrimSpace(userMessage),
 		"recoveryCheckpoint": true,
@@ -717,6 +721,21 @@ func (h *Handler) finalizeWebChatTurnRuntime(turn *chat.AssistantTurn, userMessa
 		Status:         status,
 		Payload:        payload,
 	}, true)
+}
+
+func classifyWebChatRuntimeError(errorCode, userMessage, internalMessage string) (string, string, string) {
+	message := strings.ToLower(strings.TrimSpace(internalMessage))
+	busy := strings.Contains(message, "database is locked") ||
+		strings.Contains(message, "sqlite_busy") ||
+		strings.Contains(message, "database table is locked") ||
+		strings.Contains(message, "database schema is locked")
+	if !busy {
+		return errorCode, userMessage, "runtime"
+	}
+	if strings.TrimSpace(errorCode) == "" || errorCode == "generation_failed" || errorCode == "event_persist_failed" {
+		errorCode = "storage_error"
+	}
+	return errorCode, "本地数据库繁忙，请重试", "storage"
 }
 
 func (h *Handler) publishModelError(event modelerror.Event) {

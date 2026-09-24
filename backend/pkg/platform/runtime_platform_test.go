@@ -146,19 +146,21 @@ func TestSetOverride(t *testing.T) {
 
 type fakePlatform struct{}
 
-func (fakePlatform) Name() string                         { return "fake" }
-func (fakePlatform) KillExistingServer(addr string) error { return nil }
-func (fakePlatform) ExecutableSuffix() string             { return "" }
-func (fakePlatform) BinarySuffix() string                 { return "" }
-func (fakePlatform) RootFSDir() string                    { return "" }
-func (fakePlatform) DefaultDataDir() string               { return "data" }
-func (fakePlatform) IsWindows() bool                      { return false }
-func (fakePlatform) IsLinux() bool                        { return false }
-func (fakePlatform) IsAndroid() bool                      { return false }
-func (fakePlatform) IsAndroidEmbedded() bool              { return false }
-func (fakePlatform) WritePidFile(string) error            { return nil }
-func (fakePlatform) ReadPidFile(string) (int, error)      { return 0, nil }
-func (fakePlatform) RemovePidFile(string) error           { return nil }
+func (fakePlatform) Name() string { return "fake" }
+func (fakePlatform) KillExistingServer(addr, dataDir string) error {
+	return nil
+}
+func (fakePlatform) ExecutableSuffix() string        { return "" }
+func (fakePlatform) BinarySuffix() string            { return "" }
+func (fakePlatform) RootFSDir() string               { return "" }
+func (fakePlatform) DefaultDataDir() string          { return "data" }
+func (fakePlatform) IsWindows() bool                 { return false }
+func (fakePlatform) IsLinux() bool                   { return false }
+func (fakePlatform) IsAndroid() bool                 { return false }
+func (fakePlatform) IsAndroidEmbedded() bool         { return false }
+func (fakePlatform) WritePidFile(string) error       { return nil }
+func (fakePlatform) ReadPidFile(string) (int, error) { return 0, nil }
+func (fakePlatform) RemovePidFile(string) error      { return nil }
 func (fakePlatform) Descriptor() RuntimeDescriptor {
 	return RuntimeDescriptor{
 		Host:         HostPlatformUnknown,
@@ -230,7 +232,7 @@ func TestRootFSDirEmptyOnWindows(t *testing.T) {
 
 func TestKillExistingServerUnoccupiedPort(t *testing.T) {
 	p := Detect()
-	err := p.KillExistingServer("127.0.0.1:1")
+	err := p.KillExistingServer("127.0.0.1:1", t.TempDir())
 	if err != nil {
 		t.Fatalf("KillExistingServer on unoccupied port should return nil, got %v", err)
 	}
@@ -243,7 +245,7 @@ func TestKillExistingServerInvalidAddrNoPanic(t *testing.T) {
 			t.Fatalf("KillExistingServer panicked on invalid addr: %v", r)
 		}
 	}()
-	_ = p.KillExistingServer("not-a-valid-addr")
+	_ = p.KillExistingServer("not-a-valid-addr", t.TempDir())
 }
 
 func TestPidFileLifecycle(t *testing.T) {
@@ -269,6 +271,18 @@ func TestPidFileLifecycle(t *testing.T) {
 
 	if _, err := os.Stat(filepath.Join(dataDir, ".amitia-backend.pid")); !os.IsNotExist(err) {
 		t.Fatalf("pid file still exists after RemovePidFile")
+	}
+}
+
+func TestPidFileLifecycleRejectsDuplicateOwner(t *testing.T) {
+	p := Detect()
+	dataDir := t.TempDir()
+	if err := p.WritePidFile(dataDir); err != nil {
+		t.Fatalf("first WritePidFile failed: %v", err)
+	}
+	defer p.RemovePidFile(dataDir)
+	if err := p.WritePidFile(dataDir); err == nil {
+		t.Fatal("second WritePidFile succeeded for the same data dir")
 	}
 }
 
