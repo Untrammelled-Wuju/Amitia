@@ -72,6 +72,9 @@ providers:
       username: "root"
       password: ""
       dataPath: "data/graph.db"
+  search:
+    enabled: true
+    defaultProvider: "native"
 
 components:
   taskHost:

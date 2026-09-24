@@ -400,6 +400,8 @@ class RuntimeEnvironmentBuilderTest {
         assertEquals("/var/lib/amitia/security/local-token", guest["AMITIA_LOCAL_TOKEN_FILE"])
         assertEquals("false", guest["AMITIA_GRAPH_STORE_ENABLED"])
         assertEquals("false", guest["AMITIA_GRAPH_STORE_REQUIRED"])
+        assertEquals("true", guest["AMITIA_SEARCH_ENABLED"])
+        assertEquals("native", guest["AMITIA_SEARCH_DEFAULT_PROVIDER"])
     }
 
     @Test

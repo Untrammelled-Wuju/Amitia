@@ -66,6 +66,9 @@ providers:
       username: "root"
       password: "root"
       dataPath: "surrealdb/data"
+  search:
+    enabled: true
+    defaultProvider: "native"
 
 components:
   taskHost:

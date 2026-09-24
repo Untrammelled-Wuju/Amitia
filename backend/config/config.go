@@ -506,7 +506,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("providers.browser.maxTabsTotal", 32)
 	v.SetDefault("providers.browser.navigationTimeoutSec", 30)
 	v.SetDefault("providers.browser.maxNavigationTimeoutSec", 120)
-	v.SetDefault("providers.search.enabled", false)
+	v.SetDefault("providers.search.enabled", true)
 	v.SetDefault("providers.search.defaultProvider", "native")
 	v.SetDefault("providers.search.defaultLimit", 8)
 	v.SetDefault("providers.search.maxLimit", 20)

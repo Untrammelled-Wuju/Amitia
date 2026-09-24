@@ -1,6 +1,21 @@
 package config
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/spf13/viper"
+)
+
+func TestSearchRuntimeIsEnabledByDefault(t *testing.T) {
+	defaults := viper.New()
+	setDefaults(defaults)
+	if !defaults.GetBool("providers.search.enabled") {
+		t.Fatal("native search should be enabled by default")
+	}
+	if defaults.GetString("providers.search.defaultProvider") != "native" {
+		t.Fatalf("default search provider = %q, want native", defaults.GetString("providers.search.defaultProvider"))
+	}
+}
 
 func TestValidateSearchRuntimeAllowsImplicitNativeProvider(t *testing.T) {
 	err := validateSearchRuntimeConfig(SearchRuntimeProviderConfig{

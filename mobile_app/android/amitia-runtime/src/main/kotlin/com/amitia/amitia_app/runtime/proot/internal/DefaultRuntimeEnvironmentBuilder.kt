@@ -129,6 +129,8 @@ internal class DefaultRuntimeEnvironmentBuilder(
         env["AMITIA_GRAPH_STORE_ENABLED"] = "false"
         env["AMITIA_GRAPH_STORE_REQUIRED"] = "false"
         env["AMITIA_SURREAL_ENABLED"] = "false"
+        env["AMITIA_SEARCH_ENABLED"] = "true"
+        env["AMITIA_SEARCH_DEFAULT_PROVIDER"] = "native"
 
         env["HOME"] = GuestLayoutContract.HOME
         env["TMPDIR"] = GuestLayoutContract.TEMP_ROOT
