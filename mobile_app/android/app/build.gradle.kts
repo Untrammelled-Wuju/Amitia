@@ -228,12 +228,24 @@ tasks.register("validateBundledRuntimePackage") {
         }
 
         try {
+            val repositoryRoot = rootProject.projectDir.parentFile.parentFile
+            val gitExecutable = System.getenv("GIT_BIN")?.trim()?.takeIf { it.isNotEmpty() }
+                ?: if (System.getProperty("os.name").lowercase().contains("windows")) {
+                    "C:\\Code\\Git\\Git\\bin\\git.exe"
+                } else {
+                    "git"
+                }
+            val sourceCommit = providers.exec {
+                commandLine(gitExecutable, "-C", repositoryRoot.absolutePath, "rev-parse", "HEAD")
+            }.standardOutput.asText.get().trim().lowercase()
             exec {
                 commandLine(
                     python,
                     validator.absolutePath,
                     "--package",
                     packageFile.absolutePath,
+                    "--expected-source-commit",
+                    sourceCommit,
                 )
             }
         } catch (error: Exception) {

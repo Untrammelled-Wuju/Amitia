@@ -165,12 +165,20 @@ function Build-Runtime {
         if (-not $pythonCommand) { $pythonCommand = Get-Command python -ErrorAction SilentlyContinue }
         if (-not $pythonCommand) { throw '缺少 Python：Runtime Package 刷新器无法运行' }
         $python = $pythonCommand.Source
+        $git = 'C:\Code\Git\Git\bin\git.exe'
+        if (-not (Test-Path -LiteralPath $git)) {
+            $gitCommand = Get-Command git.exe -ErrorAction SilentlyContinue
+            if (-not $gitCommand) { throw '缺少 Git：无法读取源码提交' }
+            $git = $gitCommand.Source
+        }
+        $sourceCommit = (& $git -C $root rev-parse HEAD).Trim()
         Invoke-Checked $python @(
             $builder,
             '--base-package', $base,
             '--backend', $server,
             '--surrealdb', $surreal,
             '--surrealdb-version', $surrealDbVersion,
+            '--source-commit', $sourceCommit,
             '--output', $runtimeOutput
         ) $root
         Test-RuntimePackage $runtimeOutput

@@ -107,6 +107,9 @@ def validate(package_path: str) -> dict[str, object]:
             raise RuntimeError("missing metadata: " + ", ".join(missing_metadata))
 
         package_index = json.loads(archive.read("metadata/package-index.json"))
+        source_commit = str(package_index.get("sourceCommit") or "").strip().lower()
+        if len(source_commit) != 40 or any(ch not in "0123456789abcdef" for ch in source_commit):
+            raise RuntimeError("package-index sourceCommit must be a 40-character git revision")
 
         file_manifest = json.loads(archive.read("metadata/file-manifest.json"))
         if not isinstance(file_manifest, list):
@@ -218,6 +221,7 @@ def validate(package_path: str) -> dict[str, object]:
         return {
             "packageSha256": package_hash,
             "runtimeVersion": package_index.get("runtimeVersion"),
+            "sourceCommit": source_commit,
             "requiredFiles": sorted(REQUIRED_RUNTIME_FILES),
             "components": sorted(str(item) for item in components if item),
         }
@@ -226,8 +230,16 @@ def validate(package_path: str) -> dict[str, object]:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--package", required=True)
+    parser.add_argument("--expected-source-commit")
     args = parser.parse_args()
     result = validate(args.package)
+    expected = (args.expected_source_commit or "").strip().lower()
+    if expected and result["sourceCommit"] != expected:
+        raise RuntimeError(
+            f"runtime package sourceCommit mismatch: expected={expected} actual={result['sourceCommit']}"
+        )
+    if expected:
+        result["expectedSourceCommit"] = expected
     print(json.dumps(result, indent=2, ensure_ascii=False))
 
 
