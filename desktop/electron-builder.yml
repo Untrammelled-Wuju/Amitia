@@ -65,3 +65,4 @@ releaseInfo:
 publish:
   - provider: generic
     url: https://amitia.untrammelled.top/amitia
+    channel: latest
