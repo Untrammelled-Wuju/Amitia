@@ -1,4 +1,10 @@
-# Amitia Android 26.2.0-beta.1
+# Amitia Android 26.2.0-beta.2
+
+- 版本升级至 26.2.0-beta.2，versionCode 提升至 4。
+- 使用当前后端源码重新构建 Android Runtime Package，并同步内嵌核心。
+- 与桌面端版本号统一，保留更新清单签名、ABI 校验、哈希校验和灰度发布机制。
+
+Amitia Android 26.2.0-beta.1
 
 - 修复内置 Runtime 在旧版数据库升级时因索引先于字段迁移创建而启动失败的问题，覆盖安装后可正常完成数据库升级。
 - 恢复手机端页面切换和返回对话页的原滑动淡入动画，修正返回过程中前后页面动画衔接不一致的问题。

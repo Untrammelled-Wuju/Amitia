@@ -20,9 +20,9 @@ func currentPackageHostVersion() string {
 	if value := strings.TrimSpace(os.Getenv("AMITIA_VERSION")); value != "" {
 		return value
 	}
-	// The production extension runtime is currently constructed with 26.2.0-beta.1.
+	// The production extension runtime is currently constructed with 26.2.0-beta.2.
 	// Release builds can override the compatibility identity via AMITIA_VERSION.
-	return "26.2.0-beta.1"
+	return "26.2.0-beta.2"
 }
 
 func normalizePackagePlatform(value string) string {
