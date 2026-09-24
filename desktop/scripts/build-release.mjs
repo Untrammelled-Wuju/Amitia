@@ -1,4 +1,4 @@
-import { existsSync, rmSync } from "node:fs";
+import { copyFileSync, existsSync, readdirSync, rmSync } from "node:fs";
 import { resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -55,6 +55,16 @@ function parseTarget() {
   return { dirOnly: args.has("--dir"), platform: "win", arch: "x64" };
 }
 
+function ensureLatestUpdateMetadata() {
+  const names = readdirSync(releaseDir);
+  if (names.includes("latest.yml")) return;
+  const channelMetadata = names.find((name) => /^(alpha|beta|rc)\.yml$/.test(name));
+  if (!channelMetadata) {
+    throw new Error("electron-builder did not produce update metadata for the requested release");
+  }
+  copyFileSync(resolve(releaseDir, channelMetadata), resolve(releaseDir, "latest.yml"));
+}
+
 async function main() {
   const target = parseTarget();
   console.log(`[build-release] target=${target.platform}-${target.arch}${target.dirOnly ? " (dir)" : ""}`);
@@ -87,6 +97,8 @@ async function main() {
   run(process.execPath, builderArgs, {
     env: { ...process.env, ELECTRON_BUILDER_COMPRESSION_LEVEL: compressionLevel },
   });
+
+  ensureLatestUpdateMetadata();
 
   const unpacked = resolve(releaseDir, "win-unpacked");
   run(process.execPath, [verifyPackagedPath, unpacked]);
