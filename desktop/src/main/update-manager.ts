@@ -175,7 +175,7 @@ export async function waitForStartupCheck(): Promise<void> {
   }
   try {
     const result = await autoUpdater.checkForUpdates();
-    if (!result || !result.updateInfo) {
+    if (!result || !result.isUpdateAvailable) {
       console.log("[UpdateManager] 启动检测: 无更新 (dev模式或已是最新)");
       return;
     }
