@@ -3238,7 +3238,7 @@ class _ChatTopBar extends StatelessWidget implements PreferredSizeWidget {
                       ? CupertinoIcons.line_horizontal_3
                       : Icons.menu_rounded,
                   size: 44,
-                  iconSize: 20,
+                  iconSize: 22,
                 ),
               ),
             ),
@@ -3286,7 +3286,7 @@ class _ChatTopBar extends StatelessWidget implements PreferredSizeWidget {
               child: const _ChatTopBarButton(
                 icon: Icons.phone_in_talk_outlined,
                 size: 44,
-                iconSize: 16,
+                iconSize: 18,
               ),
             ),
             const SizedBox(width: 8),
@@ -3335,7 +3335,7 @@ class _ChatTopBar extends StatelessWidget implements PreferredSizeWidget {
                     ? CupertinoIcons.ellipsis
                     : Icons.more_horiz,
                 size: 44,
-                iconSize: 20,
+                iconSize: 22,
               ),
             ),
           ],
