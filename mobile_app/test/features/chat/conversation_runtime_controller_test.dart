@@ -2,15 +2,12 @@ import 'dart:async';
 
 import 'package:amitia_app/core/backend_transport/backend_service_api.dart';
 import 'package:amitia_app/core/models/conversation.dart';
-import 'package:amitia_app/core/services/channel_service.dart';
 import 'package:amitia_app/core/services/chat_service.dart';
 import 'package:amitia_app/features/chat/runtime/conversation_runtime_controller.dart';
 import 'package:amitia_app/shared/models/models.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 class _FakeBackendApi extends Fake implements BackendServiceApi {}
-
-class _FakeEmoteService extends Fake implements EmoteService {}
 
 class _FakeChatService extends ChatService {
   _FakeChatService(this.events, {this.submitError}) : super(_FakeBackendApi());
@@ -121,10 +118,7 @@ void main() {
   test('Command ACK 不在客户端伪造 Turn 状态，queued 必须来自服务端事件', () async {
     final events = StreamController<ChatStreamEvent>.broadcast();
     final service = _FakeChatService(events);
-    final controller = ConversationRuntimeController(
-      service,
-      _FakeEmoteService(),
-    );
+    final controller = ConversationRuntimeController(service);
 
     await controller.sendText('你好');
 
@@ -177,10 +171,7 @@ void main() {
   test('发送失败时移除 AI 占位消息', () async {
     final events = StreamController<ChatStreamEvent>.broadcast();
     final service = _FakeChatService(events, submitError: StateError('failed'));
-    final controller = ConversationRuntimeController(
-      service,
-      _FakeEmoteService(),
-    );
+    final controller = ConversationRuntimeController(service);
 
     await controller.sendText('失败消息');
 
@@ -203,10 +194,7 @@ void main() {
   test('openConversation 只接受 v1 Snapshot 作为权威状态', () async {
     final events = StreamController<ChatStreamEvent>.broadcast();
     final service = _FakeChatService(events);
-    final controller = ConversationRuntimeController(
-      service,
-      _FakeEmoteService(),
-    );
+    final controller = ConversationRuntimeController(service);
 
     await controller.openConversation('conversation-1');
 

@@ -4,6 +4,11 @@ import { bootstrap, BootstrapSpec } from "./bootstrap";
 import { HandlerRegistry, InvocationContext } from "./handler-registry";
 import { getState, setState, shutdown, onShutdown } from "./shutdown";
 import { LoadedExtension } from "./module-loader";
+import { applyNetworkDisabledPolicy } from "./network-policy";
+
+if (process.env.AMITIA_NETWORK_DISABLED === "1") {
+  applyNetworkDisabledPolicy();
+}
 
 function log(message: string): void {
   process.stderr.write("[plugin-host] " + message + "\n");

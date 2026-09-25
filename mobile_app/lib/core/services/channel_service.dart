@@ -1,4 +1,3 @@
-import 'dart:convert';
 import '../backend_transport/backend_service_api.dart';
 
 class MCPService {
@@ -7,7 +6,8 @@ class MCPService {
   MCPService(this._api);
 
   dynamic _unwrapData(dynamic response) {
-    if (response is Map && response.containsKey('data')) return response['data'];
+    if (response is Map && response.containsKey('data'))
+      return response['data'];
     return response;
   }
 
@@ -136,7 +136,10 @@ class MCPService {
     );
   }
 
-  Future<Map<String, dynamic>?> readResource(String serverId, String uri) async {
+  Future<Map<String, dynamic>?> readResource(
+    String serverId,
+    String uri,
+  ) async {
     return _asMap(
       await _api.post<dynamic>(
         '/api/mcp/servers/$serverId/resources/read',
@@ -308,10 +311,7 @@ class ImageGenService {
   }
 
   Future<Map<String, dynamic>?> createConfig(Map<String, dynamic> data) async {
-    return _api.post<Map<String, dynamic>>(
-      '/api/imagegen/configs',
-      data: data,
-    );
+    return _api.post<Map<String, dynamic>>('/api/imagegen/configs', data: data);
   }
 
   Future<Map<String, dynamic>?> updateConfig(
@@ -403,7 +403,10 @@ class EmbeddingService {
   }
 
   Future<Map<String, dynamic>?> createConfig(Map<String, dynamic> data) async {
-    return _api.post<Map<String, dynamic>>('/api/embedding/configs', data: data);
+    return _api.post<Map<String, dynamic>>(
+      '/api/embedding/configs',
+      data: data,
+    );
   }
 
   Future<Map<String, dynamic>?> updateConfig(
@@ -434,240 +437,5 @@ class EmbeddingService {
     final resp = await _api.get<List<dynamic>>('/api/embedding/providers');
     if (resp == null) return [];
     return resp.map((e) => e as Map<String, dynamic>).toList();
-  }
-}
-
-class EmoteService {
-  final BackendServiceApi _api;
-
-  EmoteService(this._api);
-
-  Future<List<Map<String, dynamic>>> groups() async {
-    final resp = await _api.get<List<dynamic>>('/api/emote-groups');
-    if (resp == null) return [];
-    return resp.map((e) => e as Map<String, dynamic>).toList();
-  }
-
-  Future<Map<String, dynamic>?> createGroup(Map<String, dynamic> data) async {
-    return _api.post<Map<String, dynamic>>('/api/emote-groups', data: data);
-  }
-
-  Future<Map<String, dynamic>?> updateGroup(
-    String id,
-    Map<String, dynamic> data,
-  ) async {
-    return _api.put<Map<String, dynamic>>('/api/emote-groups/$id', data: data);
-  }
-
-  Future<bool> deleteGroup(String id) async {
-    await _api.delete('/api/emote-groups/$id');
-    return true;
-  }
-
-  Future<bool> reorderGroups(List<String> ids) async {
-    await _api.post('/api/emote-groups/reorder', data: {'ids': ids});
-    return true;
-  }
-
-  Future<bool> addEmotesToGroup(String groupId, List<String> emoteIds) async {
-    await _api.post(
-      '/api/emote-groups/$groupId/emotes',
-      data: {'emoteIds': emoteIds},
-    );
-    return true;
-  }
-
-  Future<bool> removeEmoteFromGroup(String groupId, String emoteId) async {
-    await _api.delete('/api/emote-groups/$groupId/emotes/$emoteId');
-    return true;
-  }
-
-  Future<List<Map<String, dynamic>>> listEmotes() async {
-    final resp = await _api.get<Map<String, dynamic>>('/api/emotes');
-    final items = resp?['items'];
-    if (items is! List) return [];
-    return items
-        .whereType<Map>()
-        .map((e) => Map<String, dynamic>.from(e))
-        .toList();
-  }
-
-  Future<Map<String, dynamic>?> uploadEmote(
-    String filePath, {
-    Map<String, dynamic> config = const {},
-  }) async {
-    return _api.postMultipart<Map<String, dynamic>>(
-      '/api/emotes/upload',
-      fields: {'config': jsonEncode(config)},
-      files: {
-        'file': [filePath],
-      },
-    );
-  }
-
-  Future<Map<String, dynamic>> batchUploadEmotes(
-    List<String> filePaths, {
-    List<Map<String, dynamic>> configs = const [],
-  }) async {
-    final resp = await _api.postMultipart<Map<String, dynamic>>(
-      '/api/emotes/batch-upload',
-      fields: {'configs': jsonEncode(configs)},
-      files: {'files': filePaths},
-    );
-    return resp ?? <String, dynamic>{};
-  }
-
-  Future<Map<String, dynamic>?> updateEmote(
-    String id,
-    Map<String, dynamic> data,
-  ) async {
-    return _api.put<Map<String, dynamic>>('/api/emotes/$id', data: data);
-  }
-
-  Future<bool> deleteEmote(String id) async {
-    await _api.delete('/api/emotes/$id');
-    return true;
-  }
-
-  Future<Map<String, dynamic>> batchUpdateEmotes(
-    List<String> ids,
-    Map<String, dynamic> update,
-  ) async {
-    final resp = await _api.post<Map<String, dynamic>>(
-      '/api/emotes/batch-update',
-      data: {'ids': ids, 'update': update},
-    );
-    return resp ?? <String, dynamic>{};
-  }
-
-  Future<Map<String, dynamic>?> sendEmote(
-    String conversationId,
-    String characterId,
-    String emoteId,
-  ) async {
-    return _api.post<Map<String, dynamic>>(
-      '/api/chat/send-emote',
-      data: {
-        'conversationId': conversationId,
-        'characterId': characterId,
-        'emoteId': emoteId,
-      },
-    );
-  }
-
-  Future<Map<String, dynamic>?> getSettings(String characterId) async {
-    return _api.get<Map<String, dynamic>>(
-      '/api/characters/$characterId/emote-settings',
-    );
-  }
-
-  Future<bool> saveSettings(
-    String characterId,
-    Map<String, dynamic> data,
-  ) async {
-    await _api.put('/api/characters/$characterId/emote-settings', data: data);
-    return true;
-  }
-}
-
-class ProactiveService {
-  final BackendServiceApi _api;
-
-  ProactiveService(this._api);
-
-  Future<List<Map<String, dynamic>>> rules({String? characterId}) async {
-    final resp = await _api.get<List<dynamic>>(
-      '/api/proactive/rules',
-      queryParameters: {
-        if (characterId != null && characterId.isNotEmpty)
-          'characterId': characterId,
-      },
-    );
-    if (resp == null) return [];
-    return resp.map((e) => e as Map<String, dynamic>).toList();
-  }
-
-  Future<Map<String, dynamic>?> createRule(Map<String, dynamic> data) async {
-    return _api.post<Map<String, dynamic>>('/api/proactive/rules', data: data);
-  }
-
-  Future<Map<String, dynamic>?> updateRule(
-    String id,
-    Map<String, dynamic> data,
-  ) async {
-    return _api.put<Map<String, dynamic>>(
-      '/api/proactive/rules/$id',
-      data: data,
-    );
-  }
-
-  Future<bool> deleteRule(String id) async {
-    await _api.delete('/api/proactive/rules/$id');
-    return true;
-  }
-
-  Future<bool> toggleRule(String id, bool enabled) async {
-    await _api.post(
-      '/api/proactive/rules/$id/toggle',
-      data: {'enabled': enabled},
-    );
-    return true;
-  }
-
-  Future<bool> triggerRule(String id) async {
-    await _api.post('/api/proactive/rules/$id/trigger');
-    return true;
-  }
-
-  Future<Map<String, dynamic>?> testRule(String id) {
-    return _api.post<Map<String, dynamic>>('/api/proactive/rules/test/$id');
-  }
-
-  Future<Map<String, dynamic>?> resetPresets({String? characterId}) {
-    return _api.post<Map<String, dynamic>>(
-      '/api/proactive/presets/reset',
-      data: <String, dynamic>{
-        if (characterId != null && characterId.isNotEmpty)
-          'characterId': characterId,
-      },
-    );
-  }
-
-  Future<List<Map<String, dynamic>>> ruleMessages(String id) async {
-    final resp = await _api.get<List<dynamic>>(
-      '/api/proactive/rules/$id/messages',
-    );
-    if (resp == null) return const <Map<String, dynamic>>[];
-    return resp
-        .whereType<Map>()
-        .map((item) => Map<String, dynamic>.from(item))
-        .toList(growable: false);
-  }
-
-  Future<Map<String, dynamic>?> status({String? characterId}) async {
-    return _api.get<Map<String, dynamic>>(
-      '/api/proactive/status',
-      queryParameters: {
-        if (characterId != null && characterId.isNotEmpty)
-          'characterId': characterId,
-      },
-    );
-  }
-
-  Future<Map<String, dynamic>?> queueSummary() async {
-    return _api.get<Map<String, dynamic>>('/api/proactive/queue-summary');
-  }
-
-  Future<List<Map<String, dynamic>>> history() async {
-    final resp = await _api.get<Map<String, dynamic>>(
-      '/api/proactive/history',
-      queryParameters: const {'page': 1, 'pageSize': 20},
-    );
-    final items = resp?['items'];
-    if (items is! List) return const [];
-    return items
-        .whereType<Map>()
-        .map((e) => Map<String, dynamic>.from(e))
-        .toList(growable: false);
   }
 }

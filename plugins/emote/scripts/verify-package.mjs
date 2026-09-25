@@ -57,15 +57,24 @@ function main() {
     "modules/emote-runtime/package.json",
     "modules/emote-runtime/dist/index.js",
     "modules/emote-ui/package.json",
-    "modules/emote-ui/ui/index.html",
-    "modules/emote-ui/ui/index.js",
-    "modules/emote-ui/ui/styles.css",
-    "modules/emote-ui/ui/composer.html",
-    "modules/emote-ui/ui/composer.js",
-    "modules/emote-ui/ui/composer.css",
-    "modules/emote-ui/ui/message.html",
-    "modules/emote-ui/ui/message.js",
-    "modules/emote-ui/ui/message.css",
+    "modules/emote-ui/desktop/index.html",
+    "modules/emote-ui/desktop/index.js",
+    "modules/emote-ui/desktop/styles.css",
+    "modules/emote-ui/desktop/composer.html",
+    "modules/emote-ui/desktop/composer.js",
+    "modules/emote-ui/desktop/composer.css",
+    "modules/emote-ui/desktop/message.html",
+    "modules/emote-ui/desktop/message.js",
+    "modules/emote-ui/desktop/message.css",
+    "modules/emote-ui/mobile/index.html",
+    "modules/emote-ui/mobile/index.js",
+    "modules/emote-ui/mobile/styles.css",
+    "modules/emote-ui/mobile/composer.html",
+    "modules/emote-ui/mobile/composer.js",
+    "modules/emote-ui/mobile/composer.css",
+    "modules/emote-ui/mobile/message.html",
+    "modules/emote-ui/mobile/message.js",
+    "modules/emote-ui/mobile/message.css",
   ];
   for (const path of required) {
     if (!entries.has(path)) throw new Error(`missing package path: ${path}`);
@@ -80,8 +89,11 @@ function main() {
   if (!contributions.some((item) => item.spec?.metadata?.["amitia.message.outputs"] === true)) {
     throw new Error("message output provider contribution missing");
   }
-  if (!contributions.some((item) => item.spec?.entry?.path === "modules/emote-ui/ui/composer.html")) {
+  if (!contributions.some((item) => item.spec?.entry?.path === "modules/emote-ui/desktop/composer.html")) {
     throw new Error("composer contribution missing");
+  }
+  if (!contributions.some((item) => item.spec?.entry?.path === "modules/emote-ui/mobile/composer.html")) {
+    throw new Error("mobile composer contribution missing");
   }
   const mobileProviders = [
     "emote-page-provider",
@@ -94,10 +106,12 @@ function main() {
       throw new Error(`mobile entry missing for ${providerId}`);
     }
   }
-  for (const file of ["index.html", "composer.html", "message.html"]) {
-    const html = entries.get(`modules/emote-ui/ui/${file}`).toString("utf8");
-    if (/<style[\s>]/i.test(html) || /<script(?![^>]*\bsrc=)[^>]*>/i.test(html)) {
-      throw new Error(`inline CSP resource found: ${file}`);
+  for (const target of ["desktop", "mobile"]) {
+    for (const file of ["index.html", "composer.html", "message.html"]) {
+      const html = entries.get(`modules/emote-ui/${target}/${file}`).toString("utf8");
+      if (/<style[\s>]/i.test(html) || /<script(?![^>]*\bsrc=)[^>]*>/i.test(html)) {
+        throw new Error(`inline CSP resource found: ${target}/${file}`);
+      }
     }
   }
   const payload = [...entries.entries()].filter(([name]) =>

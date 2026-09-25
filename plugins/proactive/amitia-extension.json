@@ -8,7 +8,7 @@
     "description": {
       "default": "为角色提供主动消息规则、调度、发送、历史记录和独立启停能力。"
     },
-    "version": "1.0.1",
+    "version": "1.0.8",
     "license": "AGPL-3.0-only",
     "homepage": "https://amitia.untrammelled.top",
     "categories": [
@@ -149,7 +149,7 @@
             },
             "entry": {
               "type": "web_restricted",
-              "path": "modules/proactive-ui/index.html",
+              "path": "modules/proactive-ui/desktop/index.html",
               "content_hash": "pending"
             },
             "sandbox": {
@@ -158,6 +158,13 @@
             },
             "ordering": {
               "priority": 220
+            },
+            "visibility": {
+              "platforms": [
+                "windows",
+                "linux",
+                "macos"
+              ]
             },
             "dispatch": {
               "entry_key": "proactive",
@@ -183,6 +190,194 @@
           "requiredPermissions": [
             "tool.invoke"
           ]
+        },
+        {
+          "id": "proactive-character-tab-mobile",
+          "kind": "ui_page",
+          "name": {
+            "default": "主动消息"
+          },
+          "description": {
+            "default": "配置角色主动消息规则和发送策略。"
+          },
+          "spec": {
+            "contribution_id": "proactive-character-tab-mobile",
+            "extension_id": "com.amitia/proactive",
+            "module_id": "proactive-ui",
+            "kind": "web_page",
+            "slot": {
+              "slot_id": "character.detail.tab",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "主动消息"
+              },
+              "description": {
+                "default": "管理主动消息开关、全局参数、规则和运行历史。"
+              },
+              "icon": "message"
+            },
+            "entry": {
+              "type": "web_restricted",
+              "path": "modules/proactive-ui/mobile/index.html",
+              "content_hash": "pending"
+            },
+            "sandbox": {
+              "type": "web_restricted",
+              "enable_scripts": true
+            },
+            "ordering": {
+              "priority": 220
+            },
+            "visibility": {
+              "platforms": [
+                "android",
+                "ios"
+              ]
+            },
+            "dispatch": {
+              "entry_key": "proactive",
+              "cell_id": "proactive"
+            },
+            "actions": [
+              {
+                "action_id": "command",
+                "title": {
+                  "default": "执行主动消息操作"
+                },
+                "target": {
+                  "type": "tool",
+                  "tool_id": "com.amitia/proactive/command"
+                },
+                "risk_level": "medium"
+              }
+            ],
+            "integrity": {
+              "definition_hash": "proactive-character-tab-mobile-v1"
+            }
+          },
+          "requiredPermissions": [
+            "tool.invoke"
+          ]
+        },
+        {
+          "id": "proactive-page",
+          "kind": "ui_page",
+          "name": {
+            "default": "主动消息"
+          },
+          "description": {
+            "default": "管理主动消息规则、全局参数、测试触发和运行历史。"
+          },
+          "requiredPermissions": [
+            "tool.invoke"
+          ],
+          "spec": {
+            "contribution_id": "proactive-page",
+            "extension_id": "com.amitia/proactive",
+            "module_id": "proactive-ui",
+            "kind": "web_page",
+            "slot": {
+              "slot_id": "provider.page.provider",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "主动消息"
+              },
+              "description": {
+                "default": "管理主动消息规则、全局参数、测试触发和运行历史。"
+              },
+              "icon": "notification"
+            },
+            "entry": {
+              "type": "web_restricted",
+              "path": "modules/proactive-ui/mobile/index.html",
+              "content_hash": "pending"
+            },
+            "sandbox": {
+              "type": "web_restricted",
+              "enable_scripts": true
+            },
+            "ordering": {
+              "priority": 220
+            },
+            "actions": [
+              {
+                "action_id": "command",
+                "title": {
+                  "default": "执行主动消息操作"
+                },
+                "target": {
+                  "type": "tool",
+                  "tool_id": "com.amitia/proactive/command"
+                },
+                "risk_level": "medium"
+              }
+            ],
+            "integrity": {
+              "definition_hash": "proactive-page-v1"
+            }
+          }
+        },
+        {
+          "id": "proactive-routes",
+          "kind": "ui_provider",
+          "name": {
+            "default": "主动消息路由"
+          },
+          "spec": {
+            "providerId": "proactive-routes",
+            "capability": "route.registry",
+            "mode": "replace",
+            "priority": 230,
+            "trustLevel": "official",
+            "entries": {
+              "mobile": {
+                "type": "declarative"
+              }
+            },
+            "metadata": {
+              "routes": [
+                {
+                  "id": "proactive",
+                  "path": "/characters/:id/proactive",
+                  "providerId": "proactive-page-provider",
+                  "capability": "page.provider",
+                  "title": "主动消息",
+                  "priority": 230
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "proactive-page-provider",
+          "kind": "ui_provider",
+          "name": {
+            "default": "主动消息页面 Provider"
+          },
+          "spec": {
+            "providerId": "proactive-page-provider",
+            "capability": "page.provider",
+            "mode": "replace",
+            "priority": 230,
+            "trustLevel": "official",
+            "entries": {
+              "mobile": {
+                "type": "web_restricted",
+                "contributionId": "proactive-page"
+              }
+            },
+            "metadata": {
+              "routes": [
+                "/characters/:id/proactive"
+              ]
+            }
+          }
         }
       ]
     }

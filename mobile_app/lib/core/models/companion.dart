@@ -27,32 +27,6 @@ class CompanionStateDto {
   }
 }
 
-class LifeStateDto {
-  final String mood;
-  final int energy;
-  final int social;
-  final int hunger;
-  final String location;
-
-  LifeStateDto({
-    this.mood = '',
-    this.energy = 100,
-    this.social = 100,
-    this.hunger = 100,
-    this.location = '',
-  });
-
-  factory LifeStateDto.fromJson(Map<String, dynamic> json) {
-    return LifeStateDto(
-      mood: json['mood'] as String? ?? '',
-      energy: json['energy'] as int? ?? 100,
-      social: json['social'] as int? ?? 100,
-      hunger: json['hunger'] as int? ?? 100,
-      location: json['location'] as String? ?? '',
-    );
-  }
-}
-
 class ScheduleEventDto {
   final String id;
   final String title;

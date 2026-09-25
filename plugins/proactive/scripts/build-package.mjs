@@ -23,7 +23,8 @@ const outputDir =
   readOption("--output") ||
   process.env.AMITIA_PLUGIN_OUTPUT_DIR ||
   join("..", "..", "Plugin", "Character");
-const outputFile = join(outputDir, "amitia-\u4e3b\u52a8\u6d88\u606f-1.0.1.amitiax");
+const manifestInfo = JSON.parse(readFileSync(join(packageRoot, "amitia-extension.json"), "utf8"));
+const outputFile = join(outputDir, `amitia-\u4e3b\u52a8\u6d88\u606f-${manifestInfo.extension.version}.amitiax`);
 const moduleID = "proactive-runtime";
 const moduleRoot = join(stagingRoot, "modules", moduleID);
 const generatedAt = "2026-01-01T00:00:00Z";
@@ -163,32 +164,36 @@ function main() {
   rmSync(outputFile, { force: true });
 
   mkdirSync(join(moduleRoot, "dist"), { recursive: true });
-  mkdirSync(join(stagingRoot, "modules", "proactive-ui"), { recursive: true });
+  mkdirSync(join(stagingRoot, "modules", "proactive-ui", "desktop"), { recursive: true });
+  mkdirSync(join(stagingRoot, "modules", "proactive-ui", "mobile"), { recursive: true });
   copyFileSync(
     join(packageRoot, "src", "index.mjs"),
     join(moduleRoot, "dist", "index.js"),
   );
-  for (const file of ["index.html", "app.js", "styles.css"]) {
-    copyFileSync(
-      join(packageRoot, "src", "ui", file),
-      join(stagingRoot, "modules", "proactive-ui", file),
-    );
+  for (const target of ["desktop", "mobile"]) {
+    for (const file of ["index.html", "app.js", "styles.css"]) {
+      copyFileSync(
+        join(packageRoot, "src", "ui", file),
+        join(stagingRoot, "modules", "proactive-ui", target, file),
+      );
+    }
   }
   writeFileSync(
     join(moduleRoot, "package.json"),
     `${JSON.stringify({ type: "module" }, null, 2)}\n`,
   );
 
-  const manifest = JSON.parse(
-    readFileSync(join(packageRoot, "amitia-extension.json"), "utf8"),
-  );
-  const uiContribution = manifest.modules
-    .flatMap((module) => module.contributions || [])
-    .find((item) => item.id === "proactive-character-tab");
-  if (!uiContribution) throw new Error("proactive ui contribution missing");
-  uiContribution.spec.entry.content_hash = `sha256-${createHash("sha256")
-    .update(readFileSync(join(stagingRoot, "modules", "proactive-ui", "index.html")))
-    .digest("base64")}`;
+  const manifest = manifestInfo;
+  for (const module of manifest.modules || []) {
+    for (const contribution of module.contributions || []) {
+      const entryPath = contribution.spec?.entry?.path;
+      if (entryPath) {
+        contribution.spec.entry.content_hash = `sha256-${createHash("sha256")
+          .update(readFileSync(join(stagingRoot, entryPath)))
+          .digest("base64")}`;
+      }
+    }
+  }
   manifest.integrity.algorithm = "sha256";
   manifest.integrity.contentTreeHash = "";
   writeFileSync(

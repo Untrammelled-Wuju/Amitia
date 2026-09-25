@@ -157,14 +157,6 @@ final embeddingServiceProvider = Provider<EmbeddingService>(
   (ref) => EmbeddingService(_getDynamicServiceApi(ref)),
 );
 
-final emoteServiceProvider = Provider<EmoteService>(
-  (ref) => EmoteService(_getDynamicServiceApi(ref)),
-);
-
-final proactiveServiceProvider = Provider<ProactiveService>(
-  (ref) => ProactiveService(_getDynamicServiceApi(ref)),
-);
-
 final temporalServiceProvider = Provider<temporal_config.TemporalService>(
   (ref) => temporal_config.TemporalService(_getDynamicServiceApi(ref)),
 );

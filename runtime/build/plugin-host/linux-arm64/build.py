@@ -10,14 +10,14 @@ import sys
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 BUILD_COMMON = os.path.join(SCRIPT_DIR, "..", "..", "common")
-sys.path.insert(0, BUILD_COMMON)
+sys.path.insert(0, os.path.dirname(BUILD_COMMON))
 
-from artifact_record import FrozenArtifactRecord, validate
-from errors import BuildError
-from atomic_publish import atomic_publish_dir
-from tree_manifest import compute_tree_manifest, write_tree_manifest
-from hashing import sha256_file
-from version_policy import same_version_gate
+from common.artifact_record import FrozenArtifactRecord, validate
+from common.errors import BuildError
+from common.atomic_publish import atomic_publish_dir
+from common.tree_manifest import compute_tree_manifest, write_tree_manifest
+from common.hashing import sha256_file, sha256_tree
+from common.version_policy import same_version_gate
 
 PLUGIN_HOST_ROOT = os.path.join(SCRIPT_DIR, "..", "..", "..", "plugin-host")
 SRC_DIR = os.path.join(PLUGIN_HOST_ROOT, "src")
@@ -63,11 +63,13 @@ def build_plugin_host(input_dir, output_root, node_bin=None):
     if os.path.exists(staging):
         shutil.rmtree(staging)
     os.makedirs(staging, exist_ok=True)
+    staging_src = os.path.join(staging, "src")
+    os.makedirs(staging_src, exist_ok=True)
 
     try:
         for fn in os.listdir(SRC_DIR):
             src = os.path.join(SRC_DIR, fn)
-            dst = os.path.join(staging, fn)
+            dst = os.path.join(staging_src, fn)
             if os.path.isfile(src):
                 shutil.copy2(src, dst)
 
@@ -89,13 +91,14 @@ def build_plugin_host(input_dir, output_root, node_bin=None):
         compile_cmd = [node_bin, tsc_path, "--project", os.path.join(staging, "tsconfig.json")]
         result = subprocess.run(compile_cmd, cwd=staging, env=env, capture_output=True, text=True)
         if result.returncode != 0:
-            raise BuildError(f"TypeScript compilation failed:\n{result.stderr}")
+            diagnostics = "\n".join(part.strip() for part in (result.stdout, result.stderr) if part.strip())
+            raise BuildError(f"TypeScript compilation failed:\n{diagnostics}")
 
         index_js = os.path.join(staging, "dist", "index.js")
         if not os.path.isfile(index_js):
             raise BuildError(f"Expected output not found: dist/index.js")
 
-        tree_sha = compute_tree_manifest(staging)
+        tree_sha = sha256_tree(staging)
         artifact_sha = sha256_file(index_js)
 
         record = FrozenArtifactRecord(

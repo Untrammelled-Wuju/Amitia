@@ -20,36 +20,6 @@ class Reminder {
   });
 }
 
-class EmoteItem {
-  final String id;
-  final String name;
-  final String meaning;
-  final String group;
-  final String? characterId;
-  final bool isEnabled;
-  final int sendProbability;
-  final String emoji;
-
-  EmoteItem({
-    required this.id,
-    required this.name,
-    required this.meaning,
-    required this.group,
-    this.characterId,
-    this.isEnabled = true,
-    this.sendProbability = 50,
-    this.emoji = '😊',
-  });
-}
-
-class EmoteGroup {
-  final String id;
-  final String name;
-  final int count;
-
-  EmoteGroup({required this.id, required this.name, this.count = 0});
-}
-
 class EpisodicMemory {
   final String id;
   final DateTime time;

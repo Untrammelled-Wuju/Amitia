@@ -1328,12 +1328,6 @@ class _ToolCallMessage extends StatelessWidget {
   }
 }
 
-const List<(String, List<String>)> _emojiGroups = [
-  ('常用', ['😀', '😂', '🥰', '😎', '🤔', '😴', '👍', '❤️', '🔥', '🎉']),
-  ('Amitia', ['😊', '🤗', '✨', '🌟', '💫', '🌸', '🌈', '☕']),
-  ('动物', ['🐶', '🐱', '🐰', '🦊', '🐼', '🐨', '🐯', '🐸']),
-];
-
 const List<String> _codeLanguages = [
   'Dart',
   'Python',
@@ -1353,8 +1347,6 @@ class AmitiaChatInput extends StatefulWidget {
   final FutureOr<void> Function(bool camera)? onPickImage;
   final FutureOr<void> Function(bool camera)? onPickVideo;
   final void Function(String lang, String code)? onSendCode;
-  final Future<List<Map<String, dynamic>>> Function()? onLoadEmotes;
-  final void Function(String emoteId, String displayText)? onSendEmote;
   final Future<List<Map<String, dynamic>>> Function()? onLoadAgentSkills;
   final FutureOr<void> Function()? onStartVoiceRecording;
   final FutureOr<void> Function({required bool transcribe})?
@@ -1392,8 +1384,6 @@ class AmitiaChatInput extends StatefulWidget {
     this.onPickImage,
     this.onPickVideo,
     this.onSendCode,
-    this.onLoadEmotes,
-    this.onSendEmote,
     this.onLoadAgentSkills,
     this.onStartVoiceRecording,
     this.onFinishVoiceRecording,
@@ -1907,25 +1897,6 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
     );
   }
 
-  void _showEmotePicker() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: context.surfacePrimary,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (sheetCtx) {
-        return _EmotePicker(
-          loadEmotes: widget.onLoadEmotes,
-          onSend: (emoteId, displayText) {
-            Navigator.pop(sheetCtx);
-            widget.onSendEmote?.call(emoteId, displayText);
-          },
-        );
-      },
-    );
-  }
-
   Widget _sheetIcon(BuildContext context, IconData icon, Color color) {
     return Container(
       width: 36,
@@ -1993,14 +1964,6 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
                     _showAgentSkillPicker();
                   },
                 ),
-              _ComposerTool(
-                icon: Icons.emoji_emotions_outlined,
-                label: '选择表情',
-                onTap: () {
-                  Navigator.pop(sheetContext);
-                  _showEmotePicker();
-                },
-              ),
             ],
           ),
         ),
@@ -3134,170 +3097,6 @@ class _ComposerTool extends StatelessWidget {
             Icon(icon, size: 22, color: context.textPrimary),
             const SizedBox(width: 16),
             Text(label, style: AppTypography.body(context)),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _EmotePicker extends StatefulWidget {
-  final Future<List<Map<String, dynamic>>> Function()? loadEmotes;
-  final void Function(String emoteId, String displayText) onSend;
-  const _EmotePicker({this.loadEmotes, required this.onSend});
-
-  @override
-  State<_EmotePicker> createState() => _EmotePickerState();
-}
-
-class _EmotePickerState extends State<_EmotePicker> {
-  bool _loading = true;
-  String? _error;
-  List<Map<String, dynamic>> _items = const [];
-
-  @override
-  void initState() {
-    super.initState();
-    _load();
-  }
-
-  Future<void> _load() async {
-    final loader = widget.loadEmotes;
-    if (loader == null) {
-      setState(() => _loading = false);
-      return;
-    }
-    try {
-      final items = await loader();
-      if (!mounted) return;
-      setState(() {
-        _items = items
-            .where((item) {
-              final enabled = item['enabled'];
-              return enabled == null || enabled == true || enabled == 1;
-            })
-            .toList(growable: false);
-        _loading = false;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _error = e.toString();
-        _loading = false;
-      });
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 8, 12, 20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(height: 14),
-            Row(
-              children: [
-                Expanded(
-                  child: Text('角色表情', style: AppTypography.cardTitle(context)),
-                ),
-                IconButton(
-                  onPressed: _load,
-                  icon: const Icon(Icons.refresh, size: 20),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            SizedBox(
-              height: 240,
-              child: _loading
-                  ? const Center(child: CircularProgressIndicator())
-                  : _error != null
-                  ? Center(
-                      child: Text(
-                        '加载表情失败：$_error',
-                        textAlign: TextAlign.center,
-                      ),
-                    )
-                  : _items.isEmpty
-                  ? const Center(child: Text('暂无已启用的服务端表情，请先在“表情管理”中导入'))
-                  : GridView.builder(
-                      gridDelegate:
-                          const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 4,
-                            mainAxisSpacing: 8,
-                            crossAxisSpacing: 8,
-                            childAspectRatio: .9,
-                          ),
-                      itemCount: _items.length,
-                      itemBuilder: (context, index) {
-                        final item = _items[index];
-                        final id = (item['id'] ?? '').toString();
-                        final name = (item['name'] ?? item['altText'] ?? '表情')
-                            .toString();
-                        final emoji = (item['emoji'] ?? '').toString();
-                        final imageUrl =
-                            (item['imageUrl'] ??
-                                    item['url'] ??
-                                    item['path'] ??
-                                    '')
-                                .toString();
-                        return InkWell(
-                          borderRadius: AppRadius.brSmall,
-                          onTap: id.isEmpty
-                              ? null
-                              : () => widget.onSend(
-                                  id,
-                                  emoji.isNotEmpty ? emoji : name,
-                                ),
-                          child: Container(
-                            padding: const EdgeInsets.all(6),
-                            decoration: BoxDecoration(
-                              color: context.surfaceSecondary,
-                              borderRadius: AppRadius.brSmall,
-                            ),
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Expanded(
-                                  child:
-                                      imageUrl.startsWith('http') ||
-                                          imageUrl.startsWith('/')
-                                      ? Image.network(
-                                          imageUrl,
-                                          fit: BoxFit.contain,
-                                          cacheWidth: 64,
-                                          errorBuilder: (_, __, ___) => Text(
-                                            emoji.isNotEmpty ? emoji : '🙂',
-                                            style: const TextStyle(
-                                              fontSize: 28,
-                                            ),
-                                          ),
-                                        )
-                                      : Center(
-                                          child: Text(
-                                            emoji.isNotEmpty ? emoji : '🙂',
-                                            style: const TextStyle(
-                                              fontSize: 28,
-                                            ),
-                                          ),
-                                        ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  name,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(fontSize: 11),
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-            ),
           ],
         ),
       ),

@@ -1023,15 +1023,23 @@ class _ExtensionPackagesPageState extends ConsumerState<ExtensionPackagesPage> {
   }
 
   Future<void> _showInstallLocalSheet() async {
+    final platform = Theme.of(context).platform;
+    final mobile =
+        platform == TargetPlatform.android || platform == TargetPlatform.iOS;
     final picked = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: const ['amitiax', 'zip'],
+      type: mobile ? FileType.any : FileType.custom,
+      allowedExtensions: mobile ? null : const ['amitiax', 'zip'],
       withData: false,
     );
     if (picked == null || picked.files.isEmpty) return;
     final file = picked.files.first;
     if (file.path == null || file.path!.isEmpty) {
       _toast('无法读取所选文件', error: true);
+      return;
+    }
+    final fileName = file.name.toLowerCase();
+    if (!fileName.endsWith('.amitiax') && !fileName.endsWith('.zip')) {
+      _toast('请选择 .amitiax 或 .zip 扩展包', error: true);
       return;
     }
 

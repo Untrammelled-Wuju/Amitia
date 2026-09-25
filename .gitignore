@@ -10,12 +10,15 @@
 
 # Runtime data and local databases
 /AmitiaData/
+/admin-data/
+/admin-system/
 /data/
 /surrealdb/
 /qdrant/
 /qdrant/storage/
 /data/storage/
 /runtime/storage/
+/runtime/mysql-admin/
 .qdrant-initialized
 *.db
 *.db-shm
@@ -74,6 +77,7 @@ backend/testdata/extensions/**/dist-candidate-*/
 /backend/runtime/
 /backend/scripts/__pycache__/
 /backend/server-linux-arm64
+/backend/admin-server.exe
 /backend/surrealdb/
 /.baseline-check/desktop/resources/qdrant/
 /.baseline-check/desktop/resources/surrealdb/
@@ -81,6 +85,7 @@ backend/testdata/extensions/**/dist-candidate-*/
 # Desktop packaging inputs and local publishing credentials
 /desktop/resources/core/
 /desktop/scripts/.publish-config.json
+/config/admin-mysql.local.json
 
 # Generated release, diagnostic, and signing output
 /desktop/dist-types/

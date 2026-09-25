@@ -352,7 +352,7 @@ class RuntimeEnvironmentBuilderTest {
     }
 
     @Test
-    fun hostProcessDisablesProotSeccompForAndroidCompatibility() {
+    fun hostProcessDoesNotDisableProotSeccomp() {
         val layout = createLayout()
         val builder = createBuilder()
         val request = RuntimeEnvironmentRequest(
@@ -360,7 +360,7 @@ class RuntimeEnvironmentBuilderTest {
             endpoint = BackendEndpointPolicy("127.0.0.1", 18899, "http", "ws")
         )
         val result = builder.build(request) as RuntimeEnvironmentResult.Success
-        assertEquals("1", result.environment.hostProcess["PROOT_NO_SECCOMP"])
+        assertFalse(result.environment.hostProcess.containsKey("PROOT_NO_SECCOMP"))
         assertEquals("/system", result.environment.hostProcess["ANDROID_ROOT"])
         assertEquals("/data", result.environment.hostProcess["ANDROID_DATA"])
     }

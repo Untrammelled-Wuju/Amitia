@@ -6,7 +6,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/models/conversation.dart';
 import '../../../core/services/chat_service.dart';
-import '../../../core/services/channel_service.dart';
 import '../../../core/services/providers.dart';
 import '../../../shared/models/models.dart';
 import '../../conversation/rendering/stream/markdown_stream_scheduler.dart';
@@ -14,10 +13,9 @@ import 'agent_event_reducer.dart';
 import 'conversation_message_ledger.dart';
 
 class ConversationRuntimeController extends ChangeNotifier {
-  ConversationRuntimeController(this._chatService, this._emoteService);
+  ConversationRuntimeController(this._chatService);
 
   final ChatService _chatService;
-  final EmoteService _emoteService;
   final ConversationMessageLedger _messages = ConversationMessageLedger();
   final AgentEventReducer _agentReducer = AgentEventReducer();
   final MarkdownStreamScheduler _streamScheduler = MarkdownStreamScheduler();
@@ -162,25 +160,6 @@ class ConversationRuntimeController extends ChangeNotifier {
       ),
       message: content,
     );
-  }
-
-  Future<void> sendEmote(String emoteId, String displayText) async {
-    if (emoteId.trim().isEmpty || _sending) return;
-    final conv = _conversationId?.trim() ?? '';
-    final character = _characterId?.trim() ?? '';
-    if (conv.isEmpty || character.isEmpty) {
-      _lastError = StateError('发送表情前需要有效会话和角色');
-      notifyListeners();
-      return;
-    }
-    _lastError = null;
-    try {
-      await _emoteService.sendEmote(conv, character, emoteId);
-      await _refreshSnapshot(conv);
-    } catch (error) {
-      _lastError = error;
-      notifyListeners();
-    }
   }
 
   Future<void> sendImage({
@@ -1274,7 +1253,6 @@ final conversationRuntimeControllerProvider =
     ChangeNotifierProvider<ConversationRuntimeController>((ref) {
       final controller = ConversationRuntimeController(
         ref.read(chatServiceProvider),
-        ref.read(emoteServiceProvider),
       );
       ref.onDispose(controller.dispose);
       return controller;

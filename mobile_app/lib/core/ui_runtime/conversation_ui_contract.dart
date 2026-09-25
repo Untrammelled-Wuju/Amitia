@@ -16,7 +16,6 @@ abstract final class ConversationUIAction {
   static const sendImage = 'conversation.sendImage';
   static const sendCode = 'conversation.sendCode';
   static const sendVoice = 'conversation.sendVoice';
-  static const sendEmote = 'conversation.sendEmote';
   static const chooseWorkspace = 'conversation.workspace.choose';
   static const selectWorkspace = 'conversation.workspace.select';
   static const clearWorkspace = 'conversation.workspace.clear';

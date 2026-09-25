@@ -10,8 +10,13 @@ import 'ui_runtime_controller.dart';
 String? capabilityForBuiltinRoute(String route) {
   if (route == '/chat') return null; // Conversation runtime has its own host.
   if (route == '/characters') return UICapability.characterShell;
+  if (route.startsWith('/characters/') &&
+      (route.endsWith('/life-rules') || route.endsWith('/proactive'))) {
+    return UICapability.pageProvider;
+  }
   if (route.startsWith('/characters/')) return UICapability.characterDetail;
-  if (route == '/memory' || route == '/memory/manager') return UICapability.memoryShell;
+  if (route == '/memory' || route == '/memory/manager')
+    return UICapability.memoryShell;
   if (route.startsWith('/memory/')) return UICapability.memoryDetail;
   if (route == '/settings/ui-providers') return null;
   if (route == '/settings') return UICapability.settingsShell;

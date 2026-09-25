@@ -51,7 +51,7 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
   bool _savingSettings = false;
   bool _uploadingAvatar = false;
 
-  final _tabs = const ['概览', '设定', '记忆', '关系', '能力', '生活'];
+  final _tabs = const ['概览', '设定', '记忆', '关系', '能力'];
 
   @override
   void dispose() {
@@ -100,15 +100,6 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
         .watch(backendConnectionProvider)
         .valueOrNull;
     final uiSnapshot = ref.watch(uiRuntimeProvider).valueOrNull;
-    final featurePluginEnablement =
-        ref.watch(kernelExtensionEnablementProvider).valueOrNull ??
-        const <String, bool>{};
-    final proactiveEnabled =
-        featurePluginEnablement['com.amitia/proactive'] ?? false;
-    final emotionEnabled =
-        featurePluginEnablement['com.amitia.builtin.emotion'] ?? false;
-    final lifestyleEnabled =
-        featurePluginEnablement['com.amitia.builtin.lifestyle'] ?? false;
     final hasExtensionTab =
         uiSnapshot
             ?.contributionsForSlot('character.detail.tab')
@@ -142,9 +133,6 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
             [],
             hasExtensionTab,
             backendAvailability,
-            proactiveEnabled,
-            emotionEnabled,
-            lifestyleEnabled,
           ),
           data: (memories) => _buildScaffold(
             context,
@@ -152,9 +140,6 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
             memories.take(5).toList(),
             hasExtensionTab,
             backendAvailability,
-            proactiveEnabled,
-            emotionEnabled,
-            lifestyleEnabled,
           ),
         );
       },
@@ -177,9 +162,6 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
     List<MemoryDto> memories,
     bool hasExtensionTab,
     BackendConnectionAvailability? backendAvailability,
-    bool proactiveEnabled,
-    bool emotionEnabled,
-    bool lifestyleEnabled,
   ) {
     final tabs = <String>[..._tabs, if (hasExtensionTab) '扩展'];
     final selectedTab = _selectedTab < tabs.length ? _selectedTab : 0;
@@ -238,9 +220,6 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
                 character,
                 memories,
                 hasExtensionTab,
-                proactiveEnabled,
-                emotionEnabled,
-                lifestyleEnabled,
               ),
             ),
           ],
@@ -531,20 +510,10 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
     CharacterDto character,
     List<MemoryDto> memories,
     bool hasExtensionTab,
-    bool proactiveEnabled,
-    bool emotionEnabled,
-    bool lifestyleEnabled,
   ) {
     switch (_selectedTab) {
       case 0:
-        return _buildOverviewTab(
-          context,
-          character,
-          memories,
-          proactiveEnabled,
-          emotionEnabled,
-          lifestyleEnabled,
-        );
+        return _buildOverviewTab(context, character, memories);
       case 1:
         return _buildSettingsTab(context, character);
       case 2:
@@ -554,8 +523,6 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
       case 4:
         return _buildAbilityTab(context, character);
       case 5:
-        return _buildLifeTab(context, character);
-      case 6:
         if (hasExtensionTab) {
           return ListView(
             padding: EdgeInsets.all(AppSpacing.pagePadding),
@@ -577,9 +544,6 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
     BuildContext context,
     CharacterDto character,
     List<MemoryDto> memories,
-    bool proactiveEnabled,
-    bool emotionEnabled,
-    bool lifestyleEnabled,
   ) {
     return ListView(
       padding: EdgeInsets.all(AppSpacing.pagePadding),
@@ -623,13 +587,7 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
           ),
         ),
         SizedBox(height: AppSpacing.sm),
-        _buildManagementSection(
-          context,
-          character,
-          proactiveEnabled,
-          emotionEnabled,
-          lifestyleEnabled,
-        ),
+        _buildManagementSection(context),
       ],
     );
   }
@@ -956,382 +914,7 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
           '速度 ${character.voiceSpeed?.toStringAsFixed(2) ?? '-'} · 音调 ${character.voicePitch?.toStringAsFixed(2) ?? '-'} · 音量 ${character.voiceVolume?.toStringAsFixed(2) ?? '-'}',
           Icons.tune_outlined,
         ),
-        SizedBox(height: AppSpacing.sm),
-        AmitiaCard(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Emote AI 策略', style: AppTypography.cardTitle(context)),
-              SizedBox(height: AppSpacing.xs),
-              Text(
-                '控制 AI 回复时自动发送角色表情的概率、频率与冷却规则。',
-                style: AppTypography.caption(context),
-              ),
-              SizedBox(height: AppSpacing.md),
-              AmitiaButton(
-                label: '配置表情策略',
-                icon: Icons.emoji_emotions_outlined,
-                isSecondary: true,
-                isFullWidth: true,
-                onPressed: () => _showEmoteSettings(character),
-              ),
-            ],
-          ),
-        ),
       ],
-    );
-  }
-
-  Future<void> _showEmoteSettings(CharacterDto character) async {
-    try {
-      final service = ref.read(emoteServiceProvider);
-      final raw =
-          await service.getSettings(character.id) ?? const <String, dynamic>{};
-      if (!mounted) return;
-      var enabled = _boolValue(raw['enabled'], fallback: true);
-      var allowEmoteOnly = _boolValue(raw['allowEmoteOnly']);
-      final baseController = TextEditingController(
-        text:
-            ((_doubleValue(raw['baseProbability']) == 0 &&
-                        !raw.containsKey('baseProbability'))
-                    ? 0.10
-                    : _doubleValue(raw['baseProbability']))
-                .toString(),
-      );
-      final maxController = TextEditingController(
-        text:
-            ((_doubleValue(raw['maxProbability']) == 0 &&
-                        !raw.containsKey('maxProbability'))
-                    ? 0.30
-                    : _doubleValue(raw['maxProbability']))
-                .toString(),
-      );
-      final perHourController = TextEditingController(
-        text:
-            (_intValue(raw['maxPerHour']) == 0 && !raw.containsKey('maxPerHour')
-                    ? 5
-                    : _intValue(raw['maxPerHour']))
-                .toString(),
-      );
-      final gapController = TextEditingController(
-        text:
-            (_intValue(raw['minReplyGap']) == 0 &&
-                        !raw.containsKey('minReplyGap')
-                    ? 3
-                    : _intValue(raw['minReplyGap']))
-                .toString(),
-      );
-      final cooldownController = TextEditingController(
-        text:
-            (_intValue(raw['sameEmoteCooldownMinutes']) == 0 &&
-                        !raw.containsKey('sameEmoteCooldownMinutes')
-                    ? 30
-                    : _intValue(raw['sameEmoteCooldownMinutes']))
-                .toString(),
-      );
-      var saving = false;
-      try {
-        await showDialog<void>(
-          context: context,
-          builder: (dialogContext) => StatefulBuilder(
-            builder: (dialogContext, setDialogState) {
-              Future<void> save() async {
-                if (saving) return;
-                var base = double.tryParse(baseController.text.trim()) ?? 0.10;
-                var max = double.tryParse(maxController.text.trim()) ?? 0.30;
-                base = base.clamp(0, 1).toDouble();
-                max = max.clamp(0, 1).toDouble();
-                if (max < base) max = base;
-                final maxPerHour =
-                    (int.tryParse(perHourController.text.trim()) ?? 5).clamp(
-                      1,
-                      100,
-                    );
-                final minReplyGap =
-                    (int.tryParse(gapController.text.trim()) ?? 3).clamp(
-                      0,
-                      1000,
-                    );
-                final cooldown =
-                    (int.tryParse(cooldownController.text.trim()) ?? 30).clamp(
-                      0,
-                      1440,
-                    );
-                setDialogState(() => saving = true);
-                try {
-                  await service.saveSettings(character.id, <String, dynamic>{
-                    'enabled': enabled,
-                    'baseProbability': base,
-                    'maxProbability': max,
-                    'maxPerHour': maxPerHour,
-                    'minReplyGap': minReplyGap,
-                    'sameEmoteCooldownMinutes': cooldown,
-                    'allowEmoteOnly': allowEmoteOnly,
-                  });
-                  if (dialogContext.mounted) Navigator.pop(dialogContext);
-                  if (mounted)
-                    ScaffoldMessenger.of(
-                      context,
-                    ).showSnackBar(const SnackBar(content: Text('表情策略已保存')));
-                } catch (e) {
-                  if (dialogContext.mounted) {
-                    ScaffoldMessenger.of(
-                      dialogContext,
-                    ).showSnackBar(SnackBar(content: Text('保存失败：$e')));
-                    setDialogState(() => saving = false);
-                  }
-                }
-              }
-
-              return AlertDialog(
-                title: const Text('Emote AI 策略'),
-                content: SizedBox(
-                  width: 560,
-                  child: SingleChildScrollView(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        SwitchListTile(
-                          contentPadding: EdgeInsets.zero,
-                          title: const Text('启用 AI 自动表情'),
-                          value: enabled,
-                          onChanged: saving
-                              ? null
-                              : (value) =>
-                                    setDialogState(() => enabled = value),
-                        ),
-                        _buildDialogNumberField(
-                          baseController,
-                          '基础发送概率',
-                          '0.00 - 1.00',
-                          enabled && !saving,
-                        ),
-                        _buildDialogNumberField(
-                          maxController,
-                          '最大发送概率',
-                          '0.00 - 1.00',
-                          enabled && !saving,
-                        ),
-                        _buildDialogNumberField(
-                          perHourController,
-                          '每小时最多发送',
-                          '次数',
-                          enabled && !saving,
-                          decimal: false,
-                        ),
-                        _buildDialogNumberField(
-                          gapController,
-                          '最小回复间隔',
-                          '回复轮数',
-                          enabled && !saving,
-                          decimal: false,
-                        ),
-                        _buildDialogNumberField(
-                          cooldownController,
-                          '同一表情冷却',
-                          '分钟',
-                          enabled && !saving,
-                          decimal: false,
-                        ),
-                        SwitchListTile(
-                          contentPadding: EdgeInsets.zero,
-                          title: const Text('允许仅发送表情'),
-                          subtitle: const Text('关闭时优先在文字回复之后发送表情'),
-                          value: allowEmoteOnly,
-                          onChanged: !enabled || saving
-                              ? null
-                              : (value) => setDialogState(
-                                  () => allowEmoteOnly = value,
-                                ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                actions: [
-                  TextButton(
-                    onPressed: saving
-                        ? null
-                        : () => Navigator.pop(dialogContext),
-                    child: const Text('取消'),
-                  ),
-                  TextButton(
-                    onPressed: saving ? null : save,
-                    child: Text(saving ? '保存中...' : '保存'),
-                  ),
-                ],
-              );
-            },
-          ),
-        );
-      } finally {
-        baseController.dispose();
-        maxController.dispose();
-        perHourController.dispose();
-        gapController.dispose();
-        cooldownController.dispose();
-      }
-    } catch (e) {
-      if (mounted)
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('表情策略加载失败：$e')));
-    }
-  }
-
-  Widget _buildDialogNumberField(
-    TextEditingController controller,
-    String label,
-    String hint,
-    bool enabled, {
-    bool decimal = true,
-  }) {
-    return Padding(
-      padding: EdgeInsets.only(bottom: AppSpacing.sm),
-      child: TextField(
-        controller: controller,
-        enabled: enabled,
-        keyboardType: TextInputType.numberWithOptions(decimal: decimal),
-        decoration: InputDecoration(labelText: label, helperText: hint),
-      ),
-    );
-  }
-
-  Widget _buildLifeTab(BuildContext context, CharacterDto character) {
-    final companion = ref.read(companionServiceProvider);
-    return FutureBuilder<List<dynamic>>(
-      future: Future.wait<dynamic>([
-        companion.state(characterId: character.id),
-        companion.schedule(characterId: character.id),
-        companion.workProfile(characterId: character.id),
-        companion.sleepSetting(characterId: character.id),
-      ]),
-      builder: (context, snapshot) {
-        final values = snapshot.data ?? const <dynamic>[];
-        final state = values.isNotEmpty ? values[0] : null;
-        final schedule = values.length > 1 && values[1] is Map
-            ? Map<String, dynamic>.from(values[1] as Map)
-            : const <String, dynamic>{};
-        final work = values.length > 2 && values[2] is Map
-            ? Map<String, dynamic>.from(values[2] as Map)
-            : const <String, dynamic>{};
-        final sleep = values.length > 3 && values[3] is Map
-            ? Map<String, dynamic>.from(values[3] as Map)
-            : const <String, dynamic>{};
-        return ListView(
-          padding: EdgeInsets.all(AppSpacing.pagePadding),
-          children: [
-            AmitiaCard(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          '当前状态',
-                          style: AppTypography.cardTitle(context),
-                        ),
-                      ),
-                      if (snapshot.connectionState == ConnectionState.waiting)
-                        const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        ),
-                    ],
-                  ),
-                  SizedBox(height: AppSpacing.sm),
-                  _buildInfoRow(
-                    context,
-                    '状态',
-                    state?.state ?? character.status,
-                  ),
-                  _buildInfoRow(context, '当前活动', state?.currentActivity ?? '-'),
-                  _buildInfoRow(context, '下一活动', state?.nextActivity ?? '-'),
-                  _buildInfoRow(
-                    context,
-                    '睡眠中',
-                    state?.isSleeping == true ? '是' : '否',
-                  ),
-                  _buildInfoRow(context, '生活场景', character.lifeIdentity),
-                ],
-              ),
-            ),
-            SizedBox(height: AppSpacing.sm),
-            AmitiaCard(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('今日作息', style: AppTypography.cardTitle(context)),
-                  SizedBox(height: AppSpacing.sm),
-                  if (schedule.isEmpty &&
-                      snapshot.connectionState != ConnectionState.waiting)
-                    Text('暂无作息数据', style: AppTypography.caption(context))
-                  else ...[
-                    _buildScheduleItem(
-                      context,
-                      _clock(schedule['wakeTime']),
-                      '起床',
-                    ),
-                    _buildScheduleItem(
-                      context,
-                      _clock(schedule['lunchTime']),
-                      '午饭',
-                    ),
-                    if (schedule['hasNap'] == true)
-                      _buildScheduleItem(
-                        context,
-                        '${_clock(schedule['napStartTime'])} - ${_clock(schedule['napEndTime'])}',
-                        '午睡',
-                      ),
-                    _buildScheduleItem(
-                      context,
-                      _clock(schedule['dinnerTime']),
-                      '晚饭',
-                    ),
-                    _buildScheduleItem(
-                      context,
-                      _clock(schedule['sleepTime']),
-                      '睡觉',
-                    ),
-                  ],
-                ],
-              ),
-            ),
-            SizedBox(height: AppSpacing.sm),
-            AmitiaCard(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('工作与睡眠配置', style: AppTypography.cardTitle(context)),
-                  SizedBox(height: AppSpacing.sm),
-                  _buildInfoRow(
-                    context,
-                    '工作状态',
-                    work['enabled'] == true ? '启用' : '未启用',
-                  ),
-                  _buildInfoRow(
-                    context,
-                    '工作时间',
-                    '${work['workStartTime'] ?? '-'} - ${work['workEndTime'] ?? '-'}',
-                  ),
-                  _buildInfoRow(
-                    context,
-                    '睡眠规则',
-                    sleep['enabled'] == false ? '关闭' : '启用',
-                  ),
-                  _buildInfoRow(
-                    context,
-                    '睡眠时间',
-                    '${sleep['bedTime'] ?? '-'} - ${sleep['wakeTime'] ?? '-'}',
-                  ),
-                ],
-              ),
-            ),
-          ],
-        );
-      },
     );
   }
 
@@ -1447,27 +1030,6 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
     );
   }
 
-  Widget _buildScheduleItem(
-    BuildContext context,
-    String time,
-    String activity,
-  ) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 5),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 120,
-            child: Text(time, style: AppTypography.caption(context)),
-          ),
-          Expanded(
-            child: Text(activity, style: AppTypography.bodySmall(context)),
-          ),
-        ],
-      ),
-    );
-  }
-
   String _displayTime(dynamic value) {
     final text = value?.toString().trim() ?? '';
     if (text.isEmpty || text.startsWith('0001-01-01')) return '-';
@@ -1486,17 +1048,6 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
   double _doubleValue(dynamic value) {
     if (value is num) return value.toDouble();
     return double.tryParse(value?.toString() ?? '') ?? 0;
-  }
-
-  bool _boolValue(dynamic value, {bool fallback = false}) {
-    if (value is bool) return value;
-    if (value is num) return value != 0;
-    final normalized = value?.toString().trim().toLowerCase();
-    if (normalized == 'true' || normalized == '1' || normalized == 'yes')
-      return true;
-    if (normalized == 'false' || normalized == '0' || normalized == 'no')
-      return false;
-    return fallback;
   }
 
   String _formatScore(dynamic value) {
@@ -1518,30 +1069,12 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
     return parts.isEmpty ? '$total 秒' : parts.join(' ');
   }
 
-  String _clock(dynamic value) {
-    final text = value?.toString().trim() ?? '';
-    if (text.isEmpty) return '-';
-    final parsed = DateTime.tryParse(text);
-    if (parsed == null) {
-      final match = RegExp(r'\b([01]?\d|2[0-3]):[0-5]\d\b').firstMatch(text);
-      return match?.group(0) ?? text;
-    }
-    final local = parsed.toLocal();
-    return '${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}';
-  }
-
-  Widget _buildManagementSection(
-    BuildContext context,
-    CharacterDto character,
-    bool proactiveEnabled,
-    bool emotionEnabled,
-    bool lifestyleEnabled,
-  ) {
+  Widget _buildManagementSection(BuildContext context) {
     final entries = <_ManageEntry>[
       _ManageEntry(
-        title: '生活规则',
-        icon: Icons.rule_outlined,
-        route: AppRoutes.characterLifeRules(widget.characterId),
+        title: '表情包',
+        icon: Icons.emoji_emotions_outlined,
+        route: AppRoutes.emotes,
       ),
       _ManageEntry(
         title: '语音与声音复刻',
@@ -1558,24 +1091,11 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
         icon: Icons.timeline_outlined,
         route: AppRoutes.characterTimeline(widget.characterId),
       ),
-      if (proactiveEnabled)
-        _ManageEntry(
-          title: '主动消息',
-          icon: Icons.send_outlined,
-          route: AppRoutes.characterProactive(widget.characterId),
-        ),
-      if (emotionEnabled)
-        _ManageEntry(
-          title: '心理状态',
-          icon: Icons.psychology_outlined,
-          route: AppRoutes.characterPsyche(widget.characterId),
-        ),
-      if (lifestyleEnabled)
-        _ManageEntry(
-          title: '生活系统',
-          icon: Icons.tune_outlined,
-          route: AppRoutes.characterDebug(widget.characterId),
-        ),
+      _ManageEntry(
+        title: '心理状态',
+        icon: Icons.psychology_outlined,
+        route: AppRoutes.characterPsyche(widget.characterId),
+      ),
     ];
 
     return AmitiaCard(

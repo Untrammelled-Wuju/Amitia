@@ -8,7 +8,7 @@
     "description": {
       "default": "提供表情包管理、AI 表情选择、聊天发送和消息渲染。"
     },
-    "version": "1.0.21",
+    "version": "1.0.24",
     "license": "AGPL-3.0-only",
     "homepage": "https://amitia.untrammelled.top",
     "categories": [
@@ -198,7 +198,7 @@
             },
             "entry": {
               "type": "web_restricted",
-              "path": "modules/emote-ui/ui/index.html",
+              "path": "modules/emote-ui/desktop/index.html",
               "content_hash": "emote-page-v1"
             },
             "sandbox": {
@@ -220,6 +220,61 @@
             ],
             "integrity": {
               "definition_hash": "emote-page-v1"
+            }
+          }
+        },
+        {
+          "id": "emote-mobile-page",
+          "kind": "ui_page",
+          "name": {
+            "default": "表情包管理（手机）"
+          },
+          "requiredPermissions": [
+            "tool.invoke"
+          ],
+          "spec": {
+            "contribution_id": "emote-mobile-page",
+            "extension_id": "com.amitia/emote",
+            "module_id": "emote-ui",
+            "kind": "web_page",
+            "slot": {
+              "slot_id": "provider.page.provider",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "表情包管理"
+              },
+              "description": {
+                "default": "管理表情、分组和 AI 使用设置。"
+              },
+              "icon": "star"
+            },
+            "entry": {
+              "type": "web_restricted",
+              "path": "modules/emote-ui/mobile/index.html",
+              "content_hash": "pending"
+            },
+            "sandbox": {
+              "type": "web_restricted",
+              "enable_scripts": true
+            },
+            "actions": [
+              {
+                "action_id": "command",
+                "title": {
+                  "default": "执行表情包命令"
+                },
+                "target": {
+                  "type": "tool",
+                  "tool_id": "com.amitia/emote/command"
+                },
+                "risk_level": "high"
+              }
+            ],
+            "integrity": {
+              "definition_hash": "emote-mobile-page-v1"
             }
           }
         },
@@ -250,12 +305,19 @@
             },
             "entry": {
               "type": "web_restricted",
-              "path": "modules/emote-ui/ui/composer.html",
+              "path": "modules/emote-ui/desktop/composer.html",
               "content_hash": "emote-composer-v1"
             },
             "sandbox": {
               "type": "web_restricted",
               "enable_scripts": true
+            },
+            "visibility": {
+              "platforms": [
+                "windows",
+                "linux",
+                "macos"
+              ]
             },
             "actions": [
               {
@@ -272,6 +334,64 @@
             ],
             "integrity": {
               "definition_hash": "emote-composer-v1"
+            }
+          }
+        },
+        {
+          "id": "emote-mobile-composer",
+          "kind": "ui_page",
+          "name": {
+            "default": "表情包发送入口（手机）"
+          },
+          "requiredPermissions": [
+            "tool.invoke"
+          ],
+          "spec": {
+            "contribution_id": "emote-mobile-composer",
+            "extension_id": "com.amitia/emote",
+            "module_id": "emote-ui",
+            "kind": "composer_action",
+            "slot": {
+              "slot_id": "chat.composer.action",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "发送表情"
+              },
+              "icon": "emote"
+            },
+            "entry": {
+              "type": "web_restricted",
+              "path": "modules/emote-ui/mobile/composer.html",
+              "content_hash": "pending"
+            },
+            "sandbox": {
+              "type": "web_restricted",
+              "enable_scripts": true
+            },
+            "visibility": {
+              "platforms": [
+                "android",
+                "ios"
+              ]
+            },
+            "actions": [
+              {
+                "action_id": "command",
+                "title": {
+                  "default": "发送表情"
+                },
+                "target": {
+                  "type": "tool",
+                  "tool_id": "com.amitia/emote/command"
+                },
+                "risk_level": "high"
+              }
+            ],
+            "integrity": {
+              "definition_hash": "emote-mobile-composer-v1"
             }
           }
         },
@@ -298,7 +418,7 @@
             },
             "entry": {
               "type": "web_restricted",
-              "path": "modules/emote-ui/ui/message.html",
+              "path": "modules/emote-ui/desktop/message.html",
               "content_hash": "emote-message-v1"
             },
             "sandbox": {
@@ -307,6 +427,41 @@
             },
             "integrity": {
               "definition_hash": "emote-message-v1"
+            }
+          }
+        },
+        {
+          "id": "emote-mobile-message",
+          "kind": "ui_page",
+          "name": {
+            "default": "表情消息渲染（手机）"
+          },
+          "spec": {
+            "contribution_id": "emote-mobile-message",
+            "extension_id": "com.amitia/emote",
+            "module_id": "emote-ui",
+            "kind": "message_renderer",
+            "slot": {
+              "slot_id": "provider.conversation.message_renderer",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "表情消息"
+              }
+            },
+            "entry": {
+              "type": "web_restricted",
+              "path": "modules/emote-ui/mobile/message.html",
+              "content_hash": "pending"
+            },
+            "sandbox": {
+              "type": "web_restricted",
+              "enable_scripts": true
+            },
+            "integrity": {
+              "definition_hash": "emote-mobile-message-v1"
             }
           }
         },
@@ -329,7 +484,7 @@
               },
               "mobile": {
                 "type": "web_restricted",
-                "contributionId": "emote-page"
+                "contributionId": "emote-mobile-page"
               },
               "electron_windows": {
                 "type": "web_restricted",
@@ -426,7 +581,7 @@
               },
               "mobile": {
                 "type": "web_restricted",
-                "contributionId": "emote-message"
+                "contributionId": "emote-mobile-message"
               },
               "electron_windows": {
                 "type": "web_restricted",

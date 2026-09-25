@@ -40,6 +40,10 @@ function sha256(buffer) {
   return createHash("sha256").update(buffer).digest("hex");
 }
 
+function browserHash(buffer) {
+  return `sha256-${createHash("sha256").update(buffer).digest("base64")}`;
+}
+
 function packagePath(file) {
   return relative(stagingRoot, file).replace(/\\/g, "/");
 }
@@ -132,12 +136,13 @@ function createZip() {
 function main() {
   rmSync(stagingRoot, { recursive: true, force: true });
   mkdirSync(join(stagingRoot, "modules", "emote-runtime", "dist"), { recursive: true });
-  mkdirSync(join(stagingRoot, "modules", "emote-ui", "ui"), { recursive: true });
+  mkdirSync(join(stagingRoot, "modules", "emote-ui", "desktop"), { recursive: true });
+  mkdirSync(join(stagingRoot, "modules", "emote-ui", "mobile"), { recursive: true });
   mkdirSync(outputDir, { recursive: true });
   rmSync(outputFile, { force: true });
   copyFileSync(join(packageRoot, "src", "index.mjs"), join(stagingRoot, "modules", "emote-runtime", "dist", "index.js"));
   writeFileSync(join(stagingRoot, "modules", "emote-runtime", "package.json"), `${JSON.stringify({ type: "module" }, null, 2)}\n`);
-  for (const file of [
+  const uiFiles = [
     "index.html",
     "index.js",
     "styles.css",
@@ -147,10 +152,23 @@ function main() {
     "message.html",
     "message.js",
     "message.css",
-  ]) {
-    copyFileSync(join(packageRoot, "ui", file), join(stagingRoot, "modules", "emote-ui", "ui", file));
+  ];
+  for (const target of ["desktop", "mobile"]) {
+    for (const file of uiFiles) {
+      copyFileSync(join(packageRoot, "ui", file), join(stagingRoot, "modules", "emote-ui", target, file));
+    }
   }
   writeFileSync(join(stagingRoot, "modules", "emote-ui", "package.json"), `${JSON.stringify({ type: "module" }, null, 2)}\n`);
+  for (const module of manifest.modules || []) {
+    for (const contribution of module.contributions || []) {
+      const entryPath = contribution.spec?.entry?.path;
+      if (entryPath) {
+        contribution.spec.entry.content_hash = browserHash(
+          readFileSync(join(stagingRoot, entryPath)),
+        );
+      }
+    }
+  }
   manifest.integrity.algorithm = "sha256";
   manifest.integrity.contentTreeHash = "";
   writeFileSync(join(stagingRoot, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);

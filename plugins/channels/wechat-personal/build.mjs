@@ -282,6 +282,7 @@ verifyIndependentRuntime(manifest);
 rmSync(staging, { recursive: true, force: true });
 mkdirSync(join(staging, "modules", "wechat-personal-channel-service"), { recursive: true });
 mkdirSync(join(staging, "modules", "wechat-personal-channel-ui", "desktop"), { recursive: true });
+mkdirSync(join(staging, "modules", "wechat-personal-channel-ui", "mobile"), { recursive: true });
 mkdirSync(join(staging, "assets", "docs"), { recursive: true });
 for (const name of ["launcher.mjs", "service.mjs"]) {
   copyFileSync(join(root, "runtime", name), join(staging, "modules", "wechat-personal-channel-service", name));
@@ -291,8 +292,10 @@ copyProductionRuntime(join(staging, "modules", "wechat-personal-channel-service"
   "wechaty",
   "wechaty-puppet-wechat4u",
 ]);
-for (const name of ["index.html", "app.js", "styles.css"]) {
-  copyFileSync(join(root, "ui", "desktop", name), join(staging, "modules", "wechat-personal-channel-ui", "desktop", name));
+for (const target of ["desktop", "mobile"]) {
+  for (const name of ["index.html", "app.js", "styles.css"]) {
+    copyFileSync(join(root, "ui", "desktop", name), join(staging, "modules", "wechat-personal-channel-ui", target, name));
+  }
 }
 for (const doc of ["README.md", "INTEGRATION_REPORT.md"]) {
   const source = join(root, doc);

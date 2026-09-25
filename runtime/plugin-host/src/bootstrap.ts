@@ -21,7 +21,9 @@ export async function bootstrap(
     throw new Error("Bootstrap spec is missing entry path");
   }
   const context = createRuntimeContext(rpc, registry);
-  const extension = loadExtension(spec.entry);
+  const extension = loadExtension(spec.entry, {
+    networkDisabled: process.env.AMITIA_NETWORK_DISABLED === "1",
+  });
   if (typeof extension.activate !== "function") {
     throw new Error(
       `Extension activate is not a function: type=${typeof extension} activateType=${typeof (extension as any).activate} keys=${Object.keys(extension).join(",")} entry=${spec.entry}`

@@ -9,11 +9,9 @@ import '../../../features/agent/presentation/pages/agent_task_detail_page.dart';
 import '../../../features/characters/presentation/pages/character_list_page.dart';
 import '../../../features/characters/presentation/pages/character_card_workshop_page.dart';
 import '../../../features/characters/presentation/pages/character_detail_page.dart';
-import '../../../features/characters/presentation/pages/character_life_rules_page.dart';
 import '../../../features/characters/presentation/pages/character_voice_page.dart';
 import '../../../features/characters/presentation/pages/character_memory_page.dart';
 import '../../../features/characters/presentation/pages/character_timeline_page.dart';
-import '../../../features/characters/presentation/pages/character_proactive_page.dart';
 import '../../../features/characters/presentation/pages/character_psyche_page.dart';
 import '../../../features/characters/presentation/pages/character_debug_page.dart';
 import '../../../features/memory/presentation/pages/memory_page.dart';
@@ -26,7 +24,6 @@ import '../../../features/memory/presentation/pages/world_book_page.dart';
 import '../../../features/reminders/presentation/pages/reminders_page.dart';
 import '../../../features/continuity/presentation/pages/continuity_page.dart';
 import '../../../features/continuity/presentation/pages/continuity_detail_page.dart';
-import '../../../features/emotes/presentation/pages/emotes_page.dart';
 import '../../../features/chat_logs/presentation/pages/chat_logs_page.dart';
 import '../../../features/chat_import/presentation/pages/chat_import_page.dart';
 import '../../../features/extensions/presentation/pages/extension_center_page.dart';
@@ -102,6 +99,7 @@ import '../../../features/developer/presentation/pages/updates_page.dart';
 import '../../../features/developer/presentation/pages/dev_console_page.dart';
 import '../../../features/developer/presentation/pages/migrations_page.dart';
 import '../../../features/developer/presentation/pages/dev_mode_page.dart';
+import '../../../core/widgets/plugin_unavailable_page.dart';
 
 /// All built-in business routes live in this catalog instead of the app
 /// bootstrap router. The router only owns recovery/authentication boundaries,
@@ -163,7 +161,11 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
     pageBuilder: (context, state) => slideFadePage(
       context: context,
       state: state,
-      child: CharacterLifeRulesPage(characterId: state.pathParameters['id']!),
+      child: const PluginUnavailablePage(
+        title: '生活',
+        description: '请安装并启用角色生活插件后管理生活规则、日程和状态。',
+        fallbackRoute: AppRoutes.characters,
+      ),
     ),
   ),
   GoRoute(
@@ -195,7 +197,11 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
     pageBuilder: (context, state) => slideFadePage(
       context: context,
       state: state,
-      child: CharacterProactivePage(characterId: state.pathParameters['id']!),
+      child: const PluginUnavailablePage(
+        title: '主动消息',
+        description: '请安装并启用主动消息插件后配置规则、调度和运行历史。',
+        fallbackRoute: AppRoutes.characters,
+      ),
     ),
   ),
   GoRoute(
@@ -287,8 +293,14 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
   ),
   GoRoute(
     path: '/emotes',
-    pageBuilder: (context, state) =>
-        drawerSlideFadePage(state: state, child: const EmotesPage()),
+    pageBuilder: (context, state) => drawerSlideFadePage(
+      state: state,
+      child: const PluginUnavailablePage(
+        title: '表情包',
+        description: '请安装并启用表情包插件后管理表情、分组和 AI 使用策略。',
+        fallbackRoute: AppRoutes.chat,
+      ),
+    ),
   ),
   GoRoute(
     path: '/chat-logs',

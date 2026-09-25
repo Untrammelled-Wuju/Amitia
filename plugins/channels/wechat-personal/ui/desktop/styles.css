@@ -503,11 +503,22 @@ summary:focus-visible {
 
 @media (max-width: 720px) {
   #app {
-    padding: 10px 14px 14px;
+    padding: 10px 14px calc(18px + env(safe-area-inset-bottom));
+  }
+
+  .page-head {
+    flex-direction: column;
   }
 
   .page-head h1 {
     font-size: 20px;
+  }
+
+  .button,
+  .button.ghost,
+  .input {
+    min-height: 44px;
+    min-width: 44px;
   }
 
   .card {
@@ -531,7 +542,15 @@ summary:focus-visible {
   }
 
   .stats {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: 1fr;
+  }
+
+  .actions {
+    flex-direction: column;
+  }
+
+  .actions .button {
+    width: 100%;
   }
 }
 

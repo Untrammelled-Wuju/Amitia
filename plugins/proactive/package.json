@@ -1,6 +1,6 @@
 {
   "name": "@amitia/proactive-extension",
-  "version": "1.0.1",
+  "version": "1.0.8",
   "private": true,
   "type": "module",
   "scripts": {

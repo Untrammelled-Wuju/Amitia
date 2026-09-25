@@ -27,15 +27,39 @@ const FORBIDDEN_BUILTINS: Set<string> = new Set([
   "worker_threads",
 ]);
 
-function isForbiddenRequest(request: string, extensionRoot: string): boolean {
+const NETWORK_BUILTINS: Set<string> = new Set([
+  "child_process",
+  "cluster",
+  "dgram",
+  "dns",
+  "http",
+  "https",
+  "module",
+  "net",
+  "tls",
+]);
+
+export interface ModuleLoadOptions {
+  networkDisabled?: boolean;
+}
+
+function builtinName(request: string): string {
+  if (request.startsWith("node:")) {
+    return request.slice(5).split("/")[0];
+  }
+  return request;
+}
+
+function isForbiddenRequest(request: string, extensionRoot: string, options: ModuleLoadOptions): boolean {
   if (!request || typeof request !== "string") {
     return true;
   }
-  if (request.startsWith("node:")) {
-    const name = request.slice(5).split("/")[0];
-    if (FORBIDDEN_BUILTINS.has(name)) {
-      return true;
-    }
+  const name = builtinName(request);
+  if (FORBIDDEN_BUILTINS.has(name)) {
+    return true;
+  }
+  if (options.networkDisabled && NETWORK_BUILTINS.has(name)) {
+    return true;
   }
   if (path.isAbsolute(request)) {
     return true;
@@ -57,7 +81,7 @@ function isForbiddenRequest(request: string, extensionRoot: string): boolean {
   return false;
 }
 
-export function loadExtension(entryPath: string): LoadedExtension {
+export function loadExtension(entryPath: string, options: ModuleLoadOptions = {}): LoadedExtension {
   const absoluteEntry = path.resolve(entryPath);
   if (!fs.existsSync(absoluteEntry)) {
     throw new Error("Extension entry not found: " + absoluteEntry);
@@ -78,7 +102,7 @@ export function loadExtension(entryPath: string): LoadedExtension {
 
     const originalRequire = mod.require.bind(mod);
     (mod as any).require = function (request: string) {
-      if (isForbiddenRequest(request, extensionRoot)) {
+      if (isForbiddenRequest(request, extensionRoot, options)) {
         throw new Error("Forbidden module in extension sandbox: " + request);
       }
       return originalRequire(request);

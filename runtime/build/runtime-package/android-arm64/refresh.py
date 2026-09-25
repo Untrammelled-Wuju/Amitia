@@ -47,6 +47,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--base-package", required=True)
     parser.add_argument("--backend", required=True)
+    parser.add_argument("--plugin-host", required=True)
     parser.add_argument("--surrealdb", required=True)
     parser.add_argument("--surrealdb-version", default="2.3.8")
     parser.add_argument("--source-commit", required=True)
@@ -58,8 +59,11 @@ def main():
     source_commit = args.source_commit.strip().lower()
     if len(source_commit) != 40 or any(ch not in "0123456789abcdef" for ch in source_commit):
         raise RuntimeError("source commit must be a 40-character git revision")
+    plugin_host = Path(args.plugin_host).resolve()
     required = [base_package, Path(args.backend), Path(args.surrealdb)]
     missing = [str(path) for path in required if not path.is_file()]
+    if not plugin_host.is_dir():
+        missing.append(str(plugin_host))
     if missing:
         raise RuntimeError("missing input: " + ", ".join(missing))
 
@@ -87,6 +91,11 @@ def main():
         shutil.rmtree(runtime_root / "qq-sidecar", ignore_errors=True)
         copy_file(Path(args.backend), runtime_root / "backend" / "amitia-server")
         copy_file(Path(args.surrealdb), runtime_root / "surrealdb" / "surreal")
+        plugin_host_target = runtime_root / "plugin-host"
+        if plugin_host_target.exists():
+            shutil.rmtree(plugin_host_target)
+        shutil.copytree(plugin_host / "dist", plugin_host_target / "dist")
+        copy_file(plugin_host / "package.json", plugin_host_target / "package.json")
 
         for relative in [
             "backend/amitia-server",
@@ -158,10 +167,20 @@ def main():
         component_index_path = root / "metadata" / "component-index.json"
         component_index = json.loads(component_index_path.read_text(encoding="utf-8"))
         backend_hash = digest(Path(args.backend))
+        plugin_host_hash = digest(plugin_host / "dist" / "index.js")
+        plugin_host_tree_hash = ""
+        plugin_host_record = plugin_host / "plugin-host-frozen-record.json"
+        if plugin_host_record.is_file():
+            plugin_host_tree_hash = json.loads(
+                plugin_host_record.read_text(encoding="utf-8")
+            ).get("treeSha256", "")
         surrealdb_hash = digest(Path(args.surrealdb))
         for component in component_index["components"]:
             if component.get("id") == "runtime.backend":
                 component["sha256"] = backend_hash
+            if component.get("id") == "runtime.plugin-host":
+                component["sha256"] = plugin_host_hash
+                component["treeSha256"] = plugin_host_tree_hash
         legacy_channel_components = {"runtime.sidecar", "runtime.qq-sidecar"}
         surreal_components = [
             item
@@ -192,6 +211,9 @@ def main():
             backend_lock = lock_components.get("backend")
             if isinstance(backend_lock, dict):
                 backend_lock["sha256"] = backend_hash
+            plugin_host_lock = lock_components.get("pluginHost")
+            if isinstance(plugin_host_lock, dict) and plugin_host_tree_hash:
+                plugin_host_lock["treeSha256"] = plugin_host_tree_hash
             lock_components["surrealdb"] = {
                 "componentId": "runtime.surrealdb",
                 "version": args.surrealdb_version,

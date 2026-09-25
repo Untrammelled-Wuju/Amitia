@@ -6,7 +6,7 @@ import { inflateRawSync } from "node:zlib";
 const packageFile =
   process.argv[2] ||
   process.env.AMITIA_PROACTIVE_PACKAGE ||
-  join("..", "..", "Plugin", "Character", "amitia-\u4e3b\u52a8\u6d88\u606f-1.0.1.amitiax");
+  join("..", "..", "Plugin", "Character", "amitia-\u4e3b\u52a8\u6d88\u606f-1.0.8.amitiax");
 
 function readEntries(buffer) {
   const entries = new Map();
@@ -70,9 +70,12 @@ function main() {
     "integrity/content-tree.json",
     "modules/proactive-runtime/package.json",
     "modules/proactive-runtime/dist/index.js",
-    "modules/proactive-ui/index.html",
-    "modules/proactive-ui/app.js",
-    "modules/proactive-ui/styles.css",
+    "modules/proactive-ui/desktop/index.html",
+    "modules/proactive-ui/desktop/app.js",
+    "modules/proactive-ui/desktop/styles.css",
+    "modules/proactive-ui/mobile/index.html",
+    "modules/proactive-ui/mobile/app.js",
+    "modules/proactive-ui/mobile/styles.css",
   ];
   for (const path of required) {
     if (!entries.has(path)) throw new Error(`missing package path: ${path}`);
@@ -100,19 +103,25 @@ function main() {
   if (runtimeSource.includes("host.proactive.dispatch")) {
     throw new Error("legacy proactive host call must not be present");
   }
-  const uiContribution = manifest.modules
-    ?.flatMap((module) => module.contributions || [])
-    .find((item) => item.id === "proactive-character-tab");
-  if (uiContribution?.spec?.slot?.slot_id !== "character.detail.tab") {
-    throw new Error("character detail proactive ui contribution missing");
-  }
-  if (
-    uiContribution?.spec?.entry?.content_hash !==
-    `sha256-${createHash("sha256")
-      .update(entries.get("modules/proactive-ui/index.html"))
-      .digest("base64")}`
-  ) {
-    throw new Error("proactive ui entry hash mismatch");
+  for (const contributionId of [
+    "proactive-character-tab",
+    "proactive-character-tab-mobile",
+    "proactive-page",
+  ]) {
+    const contribution = manifest.modules
+      ?.flatMap((module) => module.contributions || [])
+      .find((item) => item.id === contributionId);
+    if (!contribution?.spec?.entry?.path) {
+      throw new Error(`${contributionId} missing`);
+    }
+    if (
+      contribution.spec.entry.content_hash !==
+      `sha256-${createHash("sha256")
+        .update(entries.get(contribution.spec.entry.path))
+        .digest("base64")}`
+    ) {
+      throw new Error(`${contributionId} entry hash mismatch`);
+    }
   }
   if (files.algorithm !== "sha256" || tree.algorithm !== "sha256") {
     throw new Error("invalid integrity algorithm");

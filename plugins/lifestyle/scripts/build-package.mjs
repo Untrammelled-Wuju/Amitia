@@ -153,7 +153,8 @@ function createZip() {
 function main() {
   rmSync(stagingRoot, { recursive: true, force: true });
   mkdirSync(join(stagingRoot, "modules", "lifestyle-runtime", "dist"), { recursive: true });
-  mkdirSync(join(stagingRoot, "modules", "lifestyle-ui"), { recursive: true });
+  mkdirSync(join(stagingRoot, "modules", "lifestyle-ui", "desktop"), { recursive: true });
+  mkdirSync(join(stagingRoot, "modules", "lifestyle-ui", "mobile"), { recursive: true });
   mkdirSync(outputDir, { recursive: true });
   rmSync(outputFile, { force: true });
 
@@ -165,22 +166,26 @@ function main() {
     join(stagingRoot, "modules", "lifestyle-runtime", "package.json"),
     `${JSON.stringify({ type: "module" }, null, 2)}\n`,
   );
-  for (const file of ["index.html", "app.js", "styles.css"]) {
-    copyFileSync(
-      join(packageRoot, "src", "ui", file),
-      join(stagingRoot, "modules", "lifestyle-ui", file),
-    );
+  for (const target of ["desktop", "mobile"]) {
+    for (const file of ["index.html", "app.js", "styles.css"]) {
+      copyFileSync(
+        join(packageRoot, "src", "ui", file),
+        join(stagingRoot, "modules", "lifestyle-ui", target, file),
+      );
+    }
   }
 
   const manifest = JSON.parse(readFileSync(join(packageRoot, "amitia-extension.json"), "utf8"));
-  const uiContribution = manifest.modules
-    .flatMap((module) => module.contributions || [])
-    .find((item) => item.kind === "ui_page");
-  if (!uiContribution) throw new Error("ui_page contribution missing");
-  const uiEntry = uiContribution.spec.entry;
-  uiEntry.content_hash = browserHash(
-    readFileSync(join(stagingRoot, "modules", "lifestyle-ui", "index.html")),
-  );
+  for (const module of manifest.modules || []) {
+    for (const contribution of module.contributions || []) {
+      const entryPath = contribution.spec?.entry?.path;
+      if (entryPath) {
+        contribution.spec.entry.content_hash = browserHash(
+          readFileSync(join(stagingRoot, entryPath)),
+        );
+      }
+    }
+  }
   manifest.integrity.algorithm = "sha256";
   manifest.integrity.contentTreeHash = "";
   writeFileSync(

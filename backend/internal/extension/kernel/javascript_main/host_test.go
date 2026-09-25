@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -98,6 +99,33 @@ func TestPluginHostStartRejectsMissingSessionToken(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatalf("create: %v", err)
+	}
+}
+
+func TestPluginHostNetworkDisabledEnvironment(t *testing.T) {
+	t.Setenv("AMITIA_RUNTIME_MODE", "android-proot")
+
+	host := makeTestHost(t)
+	host.networkDisabled = true
+	host.expectedNonce = "test-nonce"
+	host.rpcVersion = "1"
+	host.definitionHash = "sha256:abc"
+
+	values := map[string]string{}
+	for _, entry := range host.buildProcessEnvironment() {
+		parts := strings.SplitN(entry, "=", 2)
+		if len(parts) == 2 {
+			values[parts[0]] = parts[1]
+		}
+	}
+	if values["AMITIA_NETWORK_DISABLED"] != "1" {
+		t.Fatalf("expected AMITIA_NETWORK_DISABLED=1, got %q", values["AMITIA_NETWORK_DISABLED"])
+	}
+	if _, ok := values["NODE_OPTIONS"]; ok {
+		t.Fatalf("expected NODE_OPTIONS to be unset, got %q", values["NODE_OPTIONS"])
+	}
+	if value, ok := values["UV_USE_IO_URING"]; ok {
+		t.Fatalf("expected UV_USE_IO_URING to be unset, got %q", value)
 	}
 }
 

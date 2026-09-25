@@ -225,6 +225,9 @@ textarea {
   display: inline-flex;
   flex: 0 0 auto;
   align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
 }
 
 .switch input,

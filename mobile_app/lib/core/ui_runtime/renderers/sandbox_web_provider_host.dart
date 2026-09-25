@@ -20,6 +20,7 @@ class SandboxWebProviderHost extends ConsumerStatefulWidget {
     this.actions = const {},
     this.fallback,
     this.onFailure,
+    this.inlineComposerAction = false,
   });
 
   final UIProviderDefinition provider;
@@ -28,19 +29,106 @@ class SandboxWebProviderHost extends ConsumerStatefulWidget {
   final Map<String, FutureOr<dynamic> Function(dynamic input)> actions;
   final Widget? fallback;
   final ValueChanged<Object>? onFailure;
+  final bool inlineComposerAction;
 
   @override
   ConsumerState<SandboxWebProviderHost> createState() =>
       _SandboxWebProviderHostState();
 }
 
-class _SandboxWebProviderHostState
-    extends ConsumerState<SandboxWebProviderHost> with WidgetsBindingObserver {
+class _SandboxWebProviderHostState extends ConsumerState<SandboxWebProviderHost>
+    with WidgetsBindingObserver {
   WebViewController? _controller;
   String? _sessionId;
   Object? _error;
   bool _loading = true;
   int _loadToken = 0;
+  bool _inlineOverlayOpen = false;
+  OverlayEntry? _inlineOverlay;
+  Size _inlineOverlaySize = const Size(360, 480);
+
+  void _closeInlineOverlay({bool notifyWeb = false, bool rebuild = true}) {
+    _inlineOverlay?.remove();
+    _inlineOverlay?.dispose();
+    _inlineOverlay = null;
+    if (_inlineOverlayOpen && mounted && rebuild) {
+      setState(() => _inlineOverlayOpen = false);
+    } else {
+      _inlineOverlayOpen = false;
+    }
+    if (notifyWeb && _controller != null) {
+      unawaited(
+        _controller!
+            .runJavaScript(
+              'window.dispatchEvent(new CustomEvent('
+              '"amitia:host-context", '
+              '{detail:{surfaceState:{open:false,dismissToken:Date.now()}}}));',
+            )
+            .catchError((_) {}),
+      );
+    }
+  }
+
+  void _openInlineOverlay(Size size) {
+    _inlineOverlaySize = size;
+    if (_inlineOverlayOpen) {
+      _inlineOverlay?.markNeedsBuild();
+      return;
+    }
+    setState(() => _inlineOverlayOpen = true);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_inlineOverlayOpen || _controller == null) return;
+      final overlay = Overlay.of(context, rootOverlay: true);
+      _inlineOverlay = OverlayEntry(
+        builder: (overlayContext) {
+          final screen = MediaQuery.sizeOf(overlayContext);
+          final padding = MediaQuery.paddingOf(overlayContext);
+          final anchor = context.findRenderObject();
+          final anchorTop = anchor is RenderBox && anchor.hasSize
+              ? anchor.localToGlobal(Offset.zero)
+              : Offset(screen.width / 2, screen.height);
+          final width = _inlineOverlaySize.width
+              .clamp(100.0, screen.width - 16)
+              .toDouble();
+          final height = _inlineOverlaySize.height
+              .clamp(100.0, screen.height - padding.top - padding.bottom - 16)
+              .toDouble();
+          final left = anchorTop.dx
+              .clamp(8.0, screen.width - width - 8)
+              .toDouble();
+          final top = (anchorTop.dy - height - 8)
+              .clamp(
+                padding.top + 8,
+                screen.height - padding.bottom - height - 8,
+              )
+              .toDouble();
+          return Stack(
+            children: [
+              Positioned.fill(
+                child: GestureDetector(
+                  behavior: HitTestBehavior.translucent,
+                  onTap: () => _closeInlineOverlay(notifyWeb: true),
+                ),
+              ),
+              Positioned(
+                left: left,
+                top: top,
+                width: width,
+                height: height,
+                child: Material(
+                  elevation: 12,
+                  borderRadius: BorderRadius.circular(14),
+                  clipBehavior: Clip.antiAlias,
+                  child: WebViewWidget(controller: _controller!),
+                ),
+              ),
+            ],
+          );
+        },
+      );
+      overlay.insert(_inlineOverlay!);
+    });
+  }
 
   String _contextValue(String directKey, String nestedKey) {
     final direct = widget.context[directKey];
@@ -56,8 +144,7 @@ class _SandboxWebProviderHostState
   }
 
   String get _characterId => _contextValue('characterId', 'character');
-  String get _conversationId =>
-      _contextValue('conversationId', 'conversation');
+  String get _conversationId => _contextValue('conversationId', 'conversation');
 
   String _surfaceRoleFor(Map<String, dynamic> runtimeContext) {
     const roles = <String>{
@@ -69,7 +156,8 @@ class _SandboxWebProviderHostState
       'main',
       'overlay',
     };
-    String normalize(dynamic value) => value?.toString().trim().toLowerCase() ?? '';
+    String normalize(dynamic value) =>
+        value?.toString().trim().toLowerCase() ?? '';
 
     final explicit = normalize(runtimeContext['surfaceRole']);
     if (roles.contains(explicit)) return explicit;
@@ -81,7 +169,8 @@ class _SandboxWebProviderHostState
     final surfaceText = normalize(surface);
     if (roles.contains(surfaceText)) return surfaceText;
     for (final role in roles) {
-      if (surfaceText.startsWith('$role-') || surfaceText.startsWith('$role.')) {
+      if (surfaceText.startsWith('$role-') ||
+          surfaceText.startsWith('$role.')) {
         return role;
       }
     }
@@ -103,7 +192,10 @@ class _SandboxWebProviderHostState
   @override
   void didChangeMetrics() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _pushHostState();
+      if (mounted) {
+        _inlineOverlay?.markNeedsBuild();
+        _pushHostState();
+      }
     });
   }
 
@@ -175,10 +267,11 @@ class _SandboxWebProviderHostState
         'platform': currentUIPlatform(),
         'characterId': _characterId,
         'conversationId': _conversationId,
-        'locale': WidgetsBinding.instance.platformDispatcher.locale.toLanguageTag(),
+        'locale': WidgetsBinding.instance.platformDispatcher.locale
+            .toLanguageTag(),
       });
 
-      createdSessionId = session?['sessionId']?.toString();
+      createdSessionId = session['sessionId']?.toString();
       if (createdSessionId == null || createdSessionId.isEmpty) {
         throw StateError('web UI session did not return sessionId');
       }
@@ -188,8 +281,8 @@ class _SandboxWebProviderHostState
       }
       _sessionId = createdSessionId;
 
-      final rawUrl =
-          (session?['resourceUrl'] ?? session?['entryUrl'] ?? '').toString();
+      final rawUrl = (session['resourceUrl'] ?? session['entryUrl'] ?? '')
+          .toString();
       if (rawUrl.isEmpty) {
         throw StateError('web UI session did not return resourceUrl');
       }
@@ -200,8 +293,9 @@ class _SandboxWebProviderHostState
       }
       final base = BackendUriBuilder().httpBase(availability.config);
       final parsed = Uri.tryParse(rawUrl);
-      final resolved =
-          (parsed != null && parsed.hasScheme) ? parsed : base.resolve(rawUrl);
+      final resolved = (parsed != null && parsed.hasScheme)
+          ? parsed
+          : base.resolve(rawUrl);
       final resourcePrefix =
           '/api/extension/webui/resource/${Uri.encodeComponent(createdSessionId)}/';
 
@@ -224,10 +318,10 @@ class _SandboxWebProviderHostState
               final inputMap = input is Map
                   ? input.cast<String, dynamic>()
                   : const <String, dynamic>{};
-              final actionId =
-                  (inputMap['actionId'] ?? inputMap['action_id'])?.toString();
-              final localAction = method == 'ui.action.invoke' &&
-                      actionId != null
+              final actionId = (inputMap['actionId'] ?? inputMap['action_id'])
+                  ?.toString();
+              final localAction =
+                  method == 'ui.action.invoke' && actionId != null
                   ? widget.actions[actionId]
                   : null;
               if (localAction != null) {
@@ -242,8 +336,25 @@ class _SandboxWebProviderHostState
                     'error': error.toString(),
                   };
                 }
+              } else if (widget.inlineComposerAction &&
+                  method == 'ui.resize.request') {
+                final width = (inputMap['width'] as num?)?.toDouble() ?? 0;
+                final height = (inputMap['height'] as num?)?.toDouble() ?? 0;
+                if (width >= 100 && height >= 100) {
+                  _openInlineOverlay(Size(width, height));
+                } else {
+                  _closeInlineOverlay();
+                }
+                result = <String, dynamic>{
+                  'ok': true,
+                  'output': <String, dynamic>{
+                    'ok': true,
+                    'width': width,
+                    'height': height,
+                  },
+                };
               } else {
-                result = await service.invokeWebUIBridge(sid, payload) ?? const <String, dynamic>{};
+                result = await service.invokeWebUIBridge(sid, payload);
               }
               final response = <String, dynamic>{
                 ...result,
@@ -270,7 +381,8 @@ class _SandboxWebProviderHostState
               if (target.scheme == 'about' && target.path == 'blank') {
                 return NavigationDecision.navigate;
               }
-              final sameOrigin = target.scheme == resolved.scheme &&
+              final sameOrigin =
+                  target.scheme == resolved.scheme &&
                   target.host == resolved.host &&
                   target.port == resolved.port;
               final sameSession = target.path.startsWith(resourcePrefix);
@@ -279,7 +391,7 @@ class _SandboxWebProviderHostState
                   : NavigationDecision.prevent;
             },
             onPageFinished: (_) async {
-              if (_controller == null) _controller = controller;
+              _controller ??= controller;
               await _pushHostState(controller: controller);
             },
           ),
@@ -363,6 +475,7 @@ class _SandboxWebProviderHostState
   }
 
   Future<void> _disposeSession() async {
+    _closeInlineOverlay();
     final sid = _sessionId;
     _sessionId = null;
     _controller = null;
@@ -376,6 +489,7 @@ class _SandboxWebProviderHostState
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _loadToken++;
+    _closeInlineOverlay(rebuild: false);
     _disposeSession();
     super.dispose();
   }
@@ -383,16 +497,34 @@ class _SandboxWebProviderHostState
   @override
   Widget build(BuildContext context) {
     if (_loading) {
-      return const Center(child: CircularProgressIndicator(strokeWidth: 2));
+      final loading = const Center(
+        child: CircularProgressIndicator(strokeWidth: 2),
+      );
+      return widget.inlineComposerAction
+          ? SizedBox(width: 44, height: 44, child: loading)
+          : loading;
     }
     if (_error != null || _controller == null) {
-      return widget.fallback ??
+      final unavailable =
+          widget.fallback ??
           Center(
             child: Text(
               'Web UI provider unavailable: ${_error ?? 'unknown error'}',
             ),
           );
+      return widget.inlineComposerAction
+          ? SizedBox(width: 44, height: 44, child: unavailable)
+          : unavailable;
     }
-    return WebViewWidget(controller: _controller!);
+    if (!widget.inlineComposerAction) {
+      return WebViewWidget(controller: _controller!);
+    }
+    return SizedBox(
+      width: 44,
+      height: 44,
+      child: _inlineOverlayOpen
+          ? const SizedBox.shrink()
+          : WebViewWidget(controller: _controller!),
+    );
   }
 }

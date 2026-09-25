@@ -84,6 +84,9 @@ type PluginHost struct {
 	exitErr         error
 	helloCh         chan *jsonrpc.Notification
 	readyCh         chan *jsonrpc.Notification
+	stderrMu        sync.Mutex
+	stderrTail      []string
+	stderrWG        sync.WaitGroup
 }
 
 type PluginHostConfig struct {
@@ -320,27 +323,7 @@ func (h *PluginHost) startProcess(ctx context.Context) error {
 		cmd.Dir = h.workDir
 	}
 
-	env := process.NewEnvironmentBuilder().
-		SetRuntimeInstance(h.instanceID).
-		SetExtensionID(h.extensionID).
-		SetModuleID(h.moduleID).
-		Set("AMITIA_NONCE", h.expectedNonce).
-		Set("AMITIA_HOST_API_VERSION", h.rpcVersion).
-		Set("AMITIA_DEFINITION_HASH", h.definitionHash)
-
-	if h.networkDisabled {
-		env.Set("AMITIA_NETWORK_DISABLED", "1")
-		env.Set("NODE_OPTIONS", "--no-experimental-fetch --disable-network-imports")
-	}
-
-	for _, e := range h.env {
-		parts := strings.SplitN(e, "=", 2)
-		if len(parts) == 2 && !secretpkg.IsSensitiveEnvKey(parts[0]) {
-			env.Set(parts[0], parts[1])
-		}
-	}
-
-	cmd.Env = env.Build()
+	cmd.Env = h.buildProcessEnvironment()
 
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
@@ -374,9 +357,36 @@ func (h *PluginHost) startProcess(ctx context.Context) error {
 	h.mu.Unlock()
 
 	go h.readLoop()
-	go h.readStderr()
+	h.stderrWG.Add(1)
+	go func() {
+		defer h.stderrWG.Done()
+		h.readStderr()
+	}()
 
 	return nil
+}
+
+func (h *PluginHost) buildProcessEnvironment() []string {
+	env := process.NewEnvironmentBuilder().
+		SetRuntimeInstance(h.instanceID).
+		SetExtensionID(h.extensionID).
+		SetModuleID(h.moduleID).
+		Set("AMITIA_NONCE", h.expectedNonce).
+		Set("AMITIA_HOST_API_VERSION", h.rpcVersion).
+		Set("AMITIA_DEFINITION_HASH", h.definitionHash)
+
+	if h.networkDisabled {
+		env.Set("AMITIA_NETWORK_DISABLED", "1")
+	}
+
+	for _, e := range h.env {
+		parts := strings.SplitN(e, "=", 2)
+		if len(parts) == 2 && !secretpkg.IsSensitiveEnvKey(parts[0]) {
+			env.Set(parts[0], parts[1])
+		}
+	}
+
+	return env.Build()
 }
 
 func (h *PluginHost) readLoop() {
@@ -407,16 +417,21 @@ func (h *PluginHost) readLoop() {
 			h.handleRequest(env.Request)
 		}
 	}
-	h.mu.Lock()
-	h.exitErr = scanner.Err()
-	h.mu.Unlock()
-	h.markDone()
 	h.mu.RLock()
 	cmd := h.cmd
 	h.mu.RUnlock()
 	if cmd != nil {
-		_ = cmd.Wait()
+		waitErr := cmd.Wait()
+		h.mu.Lock()
+		if waitErr != nil {
+			h.exitErr = waitErr
+		} else {
+			h.exitErr = scanner.Err()
+		}
+		h.mu.Unlock()
 	}
+	h.stderrWG.Wait()
+	h.markDone()
 	h.handleUnexpectedExit()
 }
 
@@ -431,12 +446,32 @@ func (h *PluginHost) readStderr() {
 	for {
 		line, err := reader.ReadString('\n')
 		if len(line) > 0 {
+			h.appendStderr(line)
 			fmt.Fprintf(os.Stderr, "[js-runtime:%s] %s", h.instanceID, line)
 		}
 		if err != nil {
 			return
 		}
 	}
+}
+
+func (h *PluginHost) appendStderr(line string) {
+	line = strings.TrimRight(line, "\r\n")
+	if line == "" {
+		return
+	}
+	h.stderrMu.Lock()
+	defer h.stderrMu.Unlock()
+	h.stderrTail = append(h.stderrTail, line)
+	if len(h.stderrTail) > 50 {
+		h.stderrTail = append([]string(nil), h.stderrTail[len(h.stderrTail)-50:]...)
+	}
+}
+
+func (h *PluginHost) stderrSnapshot() string {
+	h.stderrMu.Lock()
+	defer h.stderrMu.Unlock()
+	return strings.Join(h.stderrTail, "\n")
 }
 
 func (h *PluginHost) handleNotification(n *jsonrpc.Notification) {
@@ -596,6 +631,9 @@ func (h *PluginHost) waitForHello(ctx context.Context) error {
 		h.mu.RLock()
 		err := h.exitErr
 		h.mu.RUnlock()
+		if stderr := h.stderrSnapshot(); stderr != "" {
+			return fmt.Errorf("process exited before hello: %v: %s", err, stderr)
+		}
 		return fmt.Errorf("process exited before hello: %v", err)
 	}
 }
@@ -632,6 +670,9 @@ func (h *PluginHost) waitForReady(ctx context.Context) error {
 		h.mu.RLock()
 		err := h.exitErr
 		h.mu.RUnlock()
+		if stderr := h.stderrSnapshot(); stderr != "" {
+			return fmt.Errorf("process exited before ready: %v: %s", err, stderr)
+		}
 		return fmt.Errorf("process exited before ready: %v", err)
 	}
 }

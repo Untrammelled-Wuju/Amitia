@@ -1,6 +1,6 @@
 {
   "name": "@amitia/emote-extension",
-  "version": "1.0.19",
+  "version": "1.0.24",
   "private": true,
   "type": "module",
   "scripts": {

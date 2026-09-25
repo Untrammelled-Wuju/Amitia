@@ -38,6 +38,9 @@ var (
 )
 
 func attachProcessTreeWithLimits(cmd *exec.Cmd, limits ResourceLimits) (ProcessTreeHandle, error) {
+	if strings.TrimSpace(os.Getenv("AMITIA_RUNTIME_MODE")) == "android-proot" {
+		return attachProcessTree(cmd)
+	}
 	if limits.MaxMemoryBytes == 0 && limits.MaxCPUPercent == 0 && limits.MaxProcesses == 0 {
 		return attachProcessTree(cmd)
 	}

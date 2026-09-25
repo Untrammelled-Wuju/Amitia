@@ -1,0 +1,15 @@
+{
+  "host": "127.0.0.1",
+  "port": 3306,
+  "managed": false,
+  "baseDir": "C:/Program Files/MySQL/MySQL Server 9.2",
+  "dataDir": "runtime/mysql-admin",
+  "username": "amitia_admin",
+  "password": "replace-with-a-strong-password",
+  "database": "amitia_admin",
+  "charset": "utf8mb4",
+  "loc": "Local",
+  "maxOpenConns": 50,
+  "maxIdleConns": 10,
+  "connMaxLifetimeMinutes": 60
+}

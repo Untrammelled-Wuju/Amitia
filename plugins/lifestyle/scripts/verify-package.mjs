@@ -64,9 +64,12 @@ function main() {
     "integrity/content-tree.json",
     "modules/lifestyle-runtime/package.json",
     "modules/lifestyle-runtime/dist/index.js",
-    "modules/lifestyle-ui/index.html",
-    "modules/lifestyle-ui/app.js",
-    "modules/lifestyle-ui/styles.css",
+    "modules/lifestyle-ui/desktop/index.html",
+    "modules/lifestyle-ui/desktop/app.js",
+    "modules/lifestyle-ui/desktop/styles.css",
+    "modules/lifestyle-ui/mobile/index.html",
+    "modules/lifestyle-ui/mobile/app.js",
+    "modules/lifestyle-ui/mobile/styles.css",
   ];
   for (const path of required) {
     if (!entries.has(path)) throw new Error(`missing package path: ${path}`);
@@ -77,14 +80,23 @@ function main() {
       throw new Error(`package must declare ${platform}`);
     }
   }
-  const uiContribution = manifest.modules
-    ?.flatMap((module) => module.contributions || [])
-    .find((item) => item.kind === "ui_page");
-  if (uiContribution?.spec?.slot?.slot_id !== "character.detail.tab") {
-    throw new Error("character detail ui contribution missing");
-  }
-  if (uiContribution?.spec?.entry?.content_hash !== browserHash(entries.get("modules/lifestyle-ui/index.html"))) {
-    throw new Error("ui entry hash mismatch");
+  for (const contributionId of [
+    "lifestyle-character-tab",
+    "lifestyle-character-tab-mobile",
+    "lifestyle-page",
+  ]) {
+    const contribution = manifest.modules
+      ?.flatMap((module) => module.contributions || [])
+      .find((item) => item.id === contributionId);
+    if (!contribution?.spec?.entry?.path) {
+      throw new Error(`${contributionId} missing`);
+    }
+    if (
+      contribution.spec.entry.content_hash !==
+      browserHash(entries.get(contribution.spec.entry.path))
+    ) {
+      throw new Error(`${contributionId} entry hash mismatch`);
+    }
   }
   const payload = [...entries.entries()].filter(([name]) =>
     name !== "integrity/files.json" &&

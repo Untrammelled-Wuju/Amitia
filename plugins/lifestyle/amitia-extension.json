@@ -8,7 +8,7 @@
     "description": {
       "default": "管理角色生活场景、作息、工作、事件、日程和生活状态。"
     },
-    "version": "1.0.5",
+    "version": "1.0.10",
     "license": "AGPL-3.0-only",
     "homepage": "https://amitia.untrammelled.top",
     "categories": [
@@ -194,7 +194,7 @@
             },
             "entry": {
               "type": "web_restricted",
-              "path": "modules/lifestyle-ui/index.html",
+              "path": "modules/lifestyle-ui/desktop/index.html",
               "content_hash": "pending"
             },
             "sandbox": {
@@ -203,6 +203,13 @@
             },
             "ordering": {
               "priority": 230
+            },
+            "visibility": {
+              "platforms": [
+                "windows",
+                "linux",
+                "macos"
+              ]
             },
             "dispatch": {
               "entry_key": "lifestyle",
@@ -223,6 +230,194 @@
             ],
             "integrity": {
               "definition_hash": "lifestyle-character-tab-v1"
+            }
+          }
+        },
+        {
+          "id": "lifestyle-character-tab-mobile",
+          "kind": "ui_page",
+          "name": {
+            "default": "生活"
+          },
+          "description": {
+            "default": "管理角色生活规则、日程、状态、作息、工作和事件。"
+          },
+          "requiredPermissions": [
+            "tool.invoke"
+          ],
+          "spec": {
+            "contribution_id": "lifestyle-character-tab-mobile",
+            "extension_id": "com.amitia/lifestyle",
+            "module_id": "lifestyle-runtime",
+            "kind": "web_page",
+            "slot": {
+              "slot_id": "character.detail.tab",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "生活"
+              },
+              "description": {
+                "default": "管理角色生活规则、日程、状态、作息、工作和事件。"
+              },
+              "icon": "life-system"
+            },
+            "entry": {
+              "type": "web_restricted",
+              "path": "modules/lifestyle-ui/mobile/index.html",
+              "content_hash": "pending"
+            },
+            "sandbox": {
+              "type": "web_restricted",
+              "enable_scripts": true
+            },
+            "ordering": {
+              "priority": 230
+            },
+            "visibility": {
+              "platforms": [
+                "android",
+                "ios"
+              ]
+            },
+            "dispatch": {
+              "entry_key": "lifestyle",
+              "cell_id": "lifestyle"
+            },
+            "actions": [
+              {
+                "action_id": "command",
+                "title": {
+                  "default": "执行生活系统操作"
+                },
+                "target": {
+                  "type": "tool",
+                  "tool_id": "com.amitia/lifestyle/command"
+                },
+                "risk_level": "medium"
+              }
+            ],
+            "integrity": {
+              "definition_hash": "lifestyle-character-tab-mobile-v1"
+            }
+          }
+        },
+        {
+          "id": "lifestyle-page",
+          "kind": "ui_page",
+          "name": {
+            "default": "生活"
+          },
+          "description": {
+            "default": "管理角色生活规则、日程、状态、作息、工作和事件。"
+          },
+          "requiredPermissions": [
+            "tool.invoke"
+          ],
+          "spec": {
+            "contribution_id": "lifestyle-page",
+            "extension_id": "com.amitia/lifestyle",
+            "module_id": "lifestyle-runtime",
+            "kind": "web_page",
+            "slot": {
+              "slot_id": "provider.page.provider",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "生活"
+              },
+              "description": {
+                "default": "管理角色生活规则、日程、状态、作息、工作和事件。"
+              },
+              "icon": "life-system"
+            },
+            "entry": {
+              "type": "web_restricted",
+              "path": "modules/lifestyle-ui/mobile/index.html",
+              "content_hash": "pending"
+            },
+            "sandbox": {
+              "type": "web_restricted",
+              "enable_scripts": true
+            },
+            "ordering": {
+              "priority": 230
+            },
+            "actions": [
+              {
+                "action_id": "command",
+                "title": {
+                  "default": "执行生活系统操作"
+                },
+                "target": {
+                  "type": "tool",
+                  "tool_id": "com.amitia/lifestyle/command"
+                },
+                "risk_level": "medium"
+              }
+            ],
+            "integrity": {
+              "definition_hash": "lifestyle-page-v1"
+            }
+          }
+        },
+        {
+          "id": "lifestyle-routes",
+          "kind": "ui_provider",
+          "name": {
+            "default": "生活系统路由"
+          },
+          "spec": {
+            "providerId": "lifestyle-routes",
+            "capability": "route.registry",
+            "mode": "replace",
+            "priority": 220,
+            "trustLevel": "official",
+            "entries": {
+              "mobile": {
+                "type": "declarative"
+              }
+            },
+            "metadata": {
+              "routes": [
+                {
+                  "id": "life-rules",
+                  "path": "/characters/:id/life-rules",
+                  "providerId": "lifestyle-page-provider",
+                  "capability": "page.provider",
+                  "title": "生活规则",
+                  "priority": 220
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "lifestyle-page-provider",
+          "kind": "ui_provider",
+          "name": {
+            "default": "生活系统页面 Provider"
+          },
+          "spec": {
+            "providerId": "lifestyle-page-provider",
+            "capability": "page.provider",
+            "mode": "replace",
+            "priority": 220,
+            "trustLevel": "official",
+            "entries": {
+              "mobile": {
+                "type": "web_restricted",
+                "contributionId": "lifestyle-page"
+              }
+            },
+            "metadata": {
+              "routes": [
+                "/characters/:id/life-rules"
+              ]
             }
           }
         }

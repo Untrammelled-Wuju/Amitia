@@ -1384,10 +1384,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     _runtime.sendCode(lang, code);
   }
 
-  void _onSendEmote(String emoteId, String displayText) {
-    _runtime.sendEmote(emoteId, displayText);
-  }
-
   bool _shouldShowAssistantIdentity(int index) {
     if (index < 0 || index >= _runtime.messages.length) return false;
     final message = _runtime.messages[index];
@@ -1943,14 +1939,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
           },
           ConversationUIAction.sendVoice: (input) =>
               input is Map ? _sendProviderVoice(input) : _pickAndSendAudio(),
-          ConversationUIAction.sendEmote: (input) {
-            final row = input is Map ? input : const <String, dynamic>{};
-            final emoteId = row['emoteId']?.toString() ?? '';
-            final displayText =
-                row['displayText']?.toString() ?? row['name']?.toString() ?? '';
-            if (emoteId.isNotEmpty) _runtime.sendEmote(emoteId, displayText);
-            return null;
-          },
           ConversationUIAction.chooseWorkspace: (_) => _showWorkspacePicker(),
           ConversationUIAction.selectWorkspace: (input) async {
             final rawWorkspaceId = input is Map ? input['workspaceId'] : input;
@@ -2264,8 +2252,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                 onPickImage: _pickAndSendImage,
                 onPickVideo: _pickAndSendVideo,
                 onSendCode: _onSendCode,
-                onLoadEmotes: () => ref.read(emoteServiceProvider).listEmotes(),
-                onSendEmote: _onSendEmote,
                 onLoadAgentSkills: () => _loadAgentSkills(),
                 onStartVoiceRecording: _startRecordedVoice,
                 onFinishVoiceRecording: _finishRecordedVoice,

@@ -32,7 +32,9 @@
     "minHostVersion": "0.1.0",
     "platforms": [
       "windows",
-      "linux"
+      "linux",
+      "android",
+      "ios"
     ]
   },
   "modules": [
@@ -193,6 +195,92 @@
           ]
         },
         {
+          "id": "wechat-personal-mobile-page",
+          "kind": "ui_page",
+          "name": {
+            "default": "个人微信（手机）"
+          },
+          "description": {
+            "default": "在手机端显示个人微信登录二维码、账号状态和连接控制。"
+          },
+          "spec": {
+            "actions": [
+              {
+                "action_id": "status",
+                "risk_level": "low",
+                "target": {
+                  "command": "channel.status",
+                  "type": "host_command"
+                },
+                "title": {
+                  "default": "查询个人微信状态"
+                }
+              },
+              {
+                "action_id": "connect",
+                "risk_level": "medium",
+                "target": {
+                  "command": "channel.connect",
+                  "type": "host_command"
+                },
+                "title": {
+                  "default": "获取个人微信二维码"
+                }
+              },
+              {
+                "action_id": "disconnect",
+                "risk_level": "medium",
+                "target": {
+                  "command": "channel.disconnect",
+                  "type": "host_command"
+                },
+                "title": {
+                  "default": "断开个人微信"
+                }
+              }
+            ],
+            "contract_version": 1,
+            "contribution_id": "wechat-personal-mobile-page",
+            "display": {
+              "description": {
+                "default": "通过 Wechaty Web 协议扫码登录独立个人微信账号。"
+              },
+              "icon": "channel",
+              "title": {
+                "default": "个人微信"
+              }
+            },
+            "entry": {
+              "content_hash": "pending",
+              "path": "modules/wechat-personal-channel-ui/mobile/index.html",
+              "type": "web_restricted"
+            },
+            "extension_id": "com.amitia/channel-wechat-personal",
+            "integrity": {
+              "definition_hash": "wechat-personal-mobile-page-v1"
+            },
+            "kind": "web_page",
+            "module_id": "wechat-personal-channel-ui",
+            "sandbox": {
+              "enable_scripts": true,
+              "type": "web_restricted"
+            },
+            "slot": {
+              "contract_version": 1,
+              "slot_id": "provider.page.provider"
+            },
+            "visibility": {
+              "platforms": [
+                "android",
+                "ios"
+              ]
+            }
+          },
+          "requiredPermissions": [
+            "service.network.request"
+          ]
+        },
+        {
           "id": "wechat-personal-messages-page",
           "kind": "ui_page",
           "name": {
@@ -244,6 +332,70 @@
             "slot": {
               "contract_version": 1,
               "slot_id": "provider.page.provider"
+            }
+          },
+          "requiredPermissions": [
+            "conversation.read"
+          ]
+        },
+        {
+          "id": "wechat-personal-mobile-messages-page",
+          "kind": "ui_page",
+          "name": {
+            "default": "个人微信消息（手机）"
+          },
+          "description": {
+            "default": "在手机端查看宿主保存的个人微信渠道消息。"
+          },
+          "spec": {
+            "actions": [
+              {
+                "action_id": "messages",
+                "risk_level": "low",
+                "target": {
+                  "command": "channel.messages",
+                  "type": "host_command"
+                },
+                "title": {
+                  "default": "查看个人微信消息"
+                }
+              }
+            ],
+            "contract_version": 1,
+            "contribution_id": "wechat-personal-mobile-messages-page",
+            "display": {
+              "description": {
+                "default": "查看个人微信渠道消息记录。"
+              },
+              "icon": "channel",
+              "title": {
+                "default": "个人微信消息"
+              }
+            },
+            "entry": {
+              "content_hash": "pending",
+              "path": "modules/wechat-personal-channel-ui/mobile/index.html",
+              "type": "web_restricted"
+            },
+            "extension_id": "com.amitia/channel-wechat-personal",
+            "integrity": {
+              "definition_hash": "wechat-personal-mobile-messages-page-v1"
+            },
+            "kind": "web_page",
+            "module_id": "wechat-personal-channel-ui",
+            "sandbox": {
+              "enable_scripts": true,
+              "type": "web_restricted"
+            },
+            "slot": {
+              "contract_version": 1,
+              "slot_id": "provider.page.provider"
+            },
+            "visibility": {
+              "platforms": [
+                "android",
+                "ios"
+              ]
             }
           },
           "requiredPermissions": [
@@ -370,7 +522,7 @@
             "capability": "page.provider",
             "entries": {
               "mobile": {
-                "contributionId": "wechat-personal-page",
+                "contributionId": "wechat-personal-mobile-page",
                 "type": "web_restricted"
               },
               "electron_windows": {
@@ -406,7 +558,7 @@
             "capability": "page.provider",
             "entries": {
               "mobile": {
-                "contributionId": "wechat-personal-messages-page",
+                "contributionId": "wechat-personal-mobile-messages-page",
                 "type": "web_restricted"
               },
               "electron_windows": {

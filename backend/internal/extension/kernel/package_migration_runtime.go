@@ -269,7 +269,6 @@ func (pmr *packageMigrationRuntime) executeJavaScriptMigration(ctx context.Conte
 			"AMITIA_MIGRATION_RUNTIME=1",
 			"AMITIA_HOST_API_ALLOWLIST=migration.*",
 			"AMITIA_PROCESS_ISOLATION=strict",
-			"NODE_OPTIONS=--no-experimental-fetch --disable-network-imports --no-experimental-global-navigator --no-experimental-global-customevent",
 		},
 	}
 	host, createErr := pmr.runtime.container.JSRuntimeFactory.Create(ctx, migrationResourceLimits)

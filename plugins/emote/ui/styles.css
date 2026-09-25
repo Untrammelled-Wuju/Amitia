@@ -893,6 +893,18 @@ fieldset .el-select {
     min-height: 44px;
   }
 
+  .el-button.circle {
+    min-width: 44px;
+  }
+
+  .search-input input {
+    min-height: 42px;
+  }
+
+  .el-checkbox {
+    min-height: 44px;
+  }
+
   .clear-button {
     width: 44px;
     height: 44px;

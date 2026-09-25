@@ -495,6 +495,7 @@ class _ContributionHostState extends ConsumerState<_ContributionHost> {
           context: runtimeContext,
           actions: actions,
           fallback: widget.fallback,
+          inlineComposerAction: contribution.slotId == 'chat.composer.action',
         );
       default:
         return widget.fallback;
