@@ -2260,34 +2260,18 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                     ? null
                     : _replyExcerpt(_replyTarget!),
                 onCancelReply: () => _setReplyTarget(null),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(12, 0, 12, 6),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: MobileExtensionSlot(
-                        slotId: 'chat.composer.action',
-                        context: {
-                          ...providerContext,
-                          'surface': 'composer-action',
-                        },
-                        actions: providerActions,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: MobileExtensionSlot(
-                        slotId: 'chat.composer.attachment',
-                        context: {
-                          ...providerContext,
-                          'surface': 'composer-attachment',
-                        },
-                        actions: providerActions,
-                      ),
-                    ),
-                  ],
+                extensionActions: MobileExtensionSlot(
+                  slotId: 'chat.composer.action',
+                  context: {...providerContext, 'surface': 'composer-action'},
+                  actions: providerActions,
+                ),
+                extensionAttachments: MobileExtensionSlot(
+                  slotId: 'chat.composer.attachment',
+                  context: {
+                    ...providerContext,
+                    'surface': 'composer-attachment',
+                  },
+                  actions: providerActions,
                 ),
               ),
             ],

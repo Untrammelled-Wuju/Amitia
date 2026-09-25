@@ -1343,6 +1343,8 @@ class AmitiaChatInput extends StatefulWidget {
   final TextEditingController? controller;
   final String? recipientName;
   final Widget? workspaceSelector;
+  final Widget? extensionActions;
+  final Widget? extensionAttachments;
   final FutureOr<void> Function()? onPickFile;
   final FutureOr<void> Function(bool camera)? onPickImage;
   final FutureOr<void> Function(bool camera)? onPickVideo;
@@ -1380,6 +1382,8 @@ class AmitiaChatInput extends StatefulWidget {
     this.controller,
     this.recipientName,
     this.workspaceSelector,
+    this.extensionActions,
+    this.extensionAttachments,
     this.onPickFile,
     this.onPickImage,
     this.onPickVideo,
@@ -2191,15 +2195,23 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
                   Padding(
                     padding: const EdgeInsets.fromLTRB(10, 0, 10, 7),
                     child: SizedBox(
-                      height: 38,
+                      height: 44,
                       child: Row(
                         children: [
+                          if (widget.extensionActions != null) ...[
+                            widget.extensionActions!,
+                            const SizedBox(width: 4),
+                          ],
                           _ComposerRoundButton(
                             key: const ValueKey('composer-add-button'),
                             icon: Icons.add_rounded,
                             tooltip: '添加内容',
                             onTap: _showComposerTools,
                           ),
+                          if (widget.extensionAttachments != null) ...[
+                            const SizedBox(width: 4),
+                            widget.extensionAttachments!,
+                          ],
                           const SizedBox(width: 4),
                           Semantics(
                             button: true,

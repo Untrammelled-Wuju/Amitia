@@ -2,7 +2,10 @@ import 'package:amitia_app/core/ui_runtime/mobile_ui_visibility.dart';
 import 'package:amitia_app/core/ui_runtime/ui_provider.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-UIContributionSnapshotEntry _entry(Map<String, dynamic> visibility) {
+UIContributionSnapshotEntry _entry(
+  Map<String, dynamic> visibility, {
+  String entryPath = '',
+}) {
   return UIContributionSnapshotEntry(
     contributionId: 'entry.test',
     extensionId: 'extension.test',
@@ -11,7 +14,7 @@ UIContributionSnapshotEntry _entry(Map<String, dynamic> visibility) {
     slotId: 'test.slot',
     contractVersion: 1,
     entryType: 'schema_renderer',
-    entryPath: '',
+    entryPath: entryPath,
     permissions: const <String>[],
     dataContract: const <String, dynamic>{},
     visibility: visibility,
@@ -21,6 +24,30 @@ UIContributionSnapshotEntry _entry(Map<String, dynamic> visibility) {
 }
 
 void main() {
+  test('excludes legacy desktop composer entries on mobile', () {
+    final entry = _entry(
+      const <String, dynamic>{},
+      entryPath: 'modules/emote-ui/desktop/composer.html',
+    );
+
+    expect(
+      matchesMobileUIContributionVisibility(
+        entry,
+        const <String, dynamic>{},
+        platform: 'android',
+      ),
+      isFalse,
+    );
+    expect(
+      matchesMobileUIContributionVisibility(
+        entry,
+        const <String, dynamic>{},
+        platform: 'windows',
+      ),
+      isTrue,
+    );
+  });
+
   test('filters contributions by platform', () {
     final entry = _entry(const <String, dynamic>{
       'platforms': <String>['android'],
@@ -50,21 +77,15 @@ void main() {
     });
 
     expect(
-      matchesMobileUIContributionVisibility(
-        entry,
-        const <String, dynamic>{
-          'message': <String, dynamic>{'payload': null},
-        },
-        platform: 'android',
-      ),
+      matchesMobileUIContributionVisibility(entry, const <String, dynamic>{
+        'message': <String, dynamic>{'payload': null},
+      }, platform: 'android'),
       isTrue,
     );
     expect(
-      matchesMobileUIContributionVisibility(
-        entry,
-        const <String, dynamic>{'message': <String, dynamic>{}},
-        platform: 'android',
-      ),
+      matchesMobileUIContributionVisibility(entry, const <String, dynamic>{
+        'message': <String, dynamic>{},
+      }, platform: 'android'),
       isFalse,
     );
   });
@@ -86,25 +107,17 @@ void main() {
     });
 
     expect(
-      matchesMobileUIContributionVisibility(
-        entry,
-        const <String, dynamic>{
-          'route': '/chat',
-          'message': <String, dynamic>{'text': 'Hello Amitia'},
-        },
-        platform: 'android',
-      ),
+      matchesMobileUIContributionVisibility(entry, const <String, dynamic>{
+        'route': '/chat',
+        'message': <String, dynamic>{'text': 'Hello Amitia'},
+      }, platform: 'android'),
       isTrue,
     );
     expect(
-      matchesMobileUIContributionVisibility(
-        entry,
-        const <String, dynamic>{
-          'route': '/blocked',
-          'message': <String, dynamic>{'text': 'Hello Amitia'},
-        },
-        platform: 'android',
-      ),
+      matchesMobileUIContributionVisibility(entry, const <String, dynamic>{
+        'route': '/blocked',
+        'message': <String, dynamic>{'text': 'Hello Amitia'},
+      }, platform: 'android'),
       isFalse,
     );
   });
@@ -121,11 +134,9 @@ void main() {
     });
 
     expect(
-      matchesMobileUIContributionVisibility(
-        entry,
-        const <String, dynamic>{'route': '/chat'},
-        platform: 'android',
-      ),
+      matchesMobileUIContributionVisibility(entry, const <String, dynamic>{
+        'route': '/chat',
+      }, platform: 'android'),
       isFalse,
     );
   });
@@ -136,19 +147,15 @@ void main() {
     });
 
     expect(
-      matchesMobileUIContributionVisibility(
-        entry,
-        const <String, dynamic>{'messageType': 'image'},
-        platform: 'android',
-      ),
+      matchesMobileUIContributionVisibility(entry, const <String, dynamic>{
+        'messageType': 'image',
+      }, platform: 'android'),
       isTrue,
     );
     expect(
-      matchesMobileUIContributionVisibility(
-        entry,
-        const <String, dynamic>{'type': 'image'},
-        platform: 'android',
-      ),
+      matchesMobileUIContributionVisibility(entry, const <String, dynamic>{
+        'type': 'image',
+      }, platform: 'android'),
       isTrue,
     );
   });

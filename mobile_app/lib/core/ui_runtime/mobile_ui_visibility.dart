@@ -9,13 +9,21 @@ bool matchesMobileUIContributionVisibility(
   String? platform,
 }) {
   final visibility = item.visibility;
-  if (visibility.isEmpty) return true;
+  final activePlatform =
+      (platform ?? context['platform']?.toString() ?? currentUIPlatform())
+          .trim();
+  if (visibility.isEmpty) {
+    final segments = item.entryPath
+        .replaceAll('\\', '/')
+        .toLowerCase()
+        .split('/');
+    return !((activePlatform == 'android' || activePlatform == 'ios') &&
+        segments.contains('desktop'));
+  }
 
   final platforms = _strings(
     visibility['platforms'] ?? visibility['platform'],
   ).toSet();
-  final activePlatform =
-      (platform ?? context['platform']?.toString() ?? currentUIPlatform()).trim();
   if (platforms.isNotEmpty && !platforms.contains(activePlatform)) {
     return false;
   }
@@ -31,10 +39,11 @@ bool matchesMobileUIContributionVisibility(
     visibility['message_types'] ?? visibility['messageTypes'],
   ).toSet();
   if (messageTypes.isNotEmpty) {
-    final actual = (context['messageType'] ??
-            context['type'] ??
-            _lookup(context, 'message.type'))
-        ?.toString();
+    final actual =
+        (context['messageType'] ??
+                context['type'] ??
+                _lookup(context, 'message.type'))
+            ?.toString();
     if (actual == null || !messageTypes.contains(actual)) return false;
   }
 
