@@ -254,7 +254,7 @@ class _UserProfilesPageState extends ConsumerState<UserProfilesPage> {
         builder: (sheetContext, setSheetState) => Padding(
           padding: EdgeInsets.fromLTRB(
             AppSpacing.xl,
-            AppSpacing.lg,
+            0,
             AppSpacing.xl,
             MediaQuery.of(sheetContext).viewInsets.bottom + AppSpacing.xl,
           ),
@@ -263,7 +263,6 @@ class _UserProfilesPageState extends ConsumerState<UserProfilesPage> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                SizedBox(height: AppSpacing.lg),
                 Text(
                   isEdit ? '编辑画像' : '新增画像',
                   style: AppTypography.sectionTitle(context),

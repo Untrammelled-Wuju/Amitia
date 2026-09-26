@@ -21,6 +21,7 @@ import '../../../../core/widgets/amitia_message.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/widgets/amitia_drawer.dart';
 import '../../../../core/backend_connection/backend_connection_availability.dart';
+import '../../../../core/backend_transport/backend_service_api.dart';
 import '../../../../core/backend_connection/providers/backend_connection_providers.dart';
 import '../../../../core/realtime/realtime_audio_bridge.dart';
 import '../../../../core/services/providers.dart';
@@ -678,7 +679,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const Padding(
-                padding: EdgeInsets.fromLTRB(20, 2, 20, 10),
+                padding: EdgeInsets.fromLTRB(20, 0, 20, 10),
                 child: Text(
                   '项目',
                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
@@ -2190,6 +2191,30 @@ class _ChatPageState extends ConsumerState<ChatPage> {
           ),
         );
       }
+    } else if (lastVisibleMessage?.role == MessageRole.user &&
+        lastVisibleMessage?.status == MessageStatus.error) {
+      final failedMessage = lastVisibleMessage!;
+      final messageIndex = flowItems.indexWhere(
+        (item) => item.message?.id == failedMessage.id,
+      );
+      if (messageIndex >= 0) {
+        final error = _runtime.lastError;
+        final detail = error is ServiceApiException
+            ? error.message
+            : error?.toString().trim() ?? '';
+        flowItems.insert(
+          messageIndex + 1,
+          _MobileChatFlowItem.error(
+            key: 'error:send:${failedMessage.id}',
+            detail: detail.isEmpty ? '发送失败' : detail,
+            timestamp: failedMessage.time,
+            sequence: failedMessage.sequence,
+            messageIndex: _runtime.messages.indexWhere(
+              (candidate) => candidate.id == failedMessage.id,
+            ),
+          ),
+        );
+      }
     }
 
     final showEmptyState = flowItems.isEmpty;
@@ -2398,6 +2423,13 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                                                   key: ValueKey(item.key),
                                                   child: _ChatErrorNotice(
                                                     detail: item.errorDetail!,
+                                                    title: item.messageIndex == null ? '生成失败' : '发送失败',
+                                                    onRetry:
+                                                        item.messageIndex != null &&
+                                                            item.messageIndex! >= 0 &&
+                                                            _runtime.canRetryMessage(item.messageIndex!)
+                                                        ? () => _retryMessage(item.messageIndex!)
+                                                        : null,
                                                   ),
                                                 );
                                               }
@@ -2777,11 +2809,10 @@ class _ChatProfileSummarySheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const SizedBox(height: 16),
           Text('用户画像摘要', style: AppTypography.pageTitle(context)),
           const SizedBox(height: 4),
           Text('当前角色可用于上下文注入的用户画像事实', style: AppTypography.caption(context)),
@@ -2956,11 +2987,10 @@ class _ChatMemoryContextSheet extends StatelessWidget {
         : const <Map<String, dynamic>>[];
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const SizedBox(height: 16),
           Text('记忆上下文', style: AppTypography.pageTitle(context)),
           const SizedBox(height: 12),
           Expanded(
@@ -3398,11 +3428,13 @@ class _MobileChatFlowItem {
     required String detail,
     required DateTime timestamp,
     int? sequence,
+    int? messageIndex,
   }) => _MobileChatFlowItem._(
     key: key,
     timestamp: timestamp,
     sequence: sequence,
     errorDetail: detail,
+    messageIndex: messageIndex,
   );
 
   final String key;
@@ -3461,8 +3493,10 @@ String _turnErrorDetail(AssistantTurnDto? turn) {
 
 class _ChatErrorNotice extends StatelessWidget {
   final String detail;
+  final String title;
+  final VoidCallback? onRetry;
 
-  const _ChatErrorNotice({required this.detail});
+  const _ChatErrorNotice({required this.detail, required this.title, this.onRetry});
 
   @override
   Widget build(BuildContext context) {
@@ -3478,7 +3512,7 @@ class _ChatErrorNotice extends StatelessWidget {
               TextSpan(
                 children: [
                   TextSpan(
-                    text: '生成失败',
+                    text: title,
                     style: TextStyle(
                       color: context.error,
                       fontSize: 11,
@@ -3495,6 +3529,10 @@ class _ChatErrorNotice extends StatelessWidget {
               textAlign: TextAlign.center,
             ),
           ),
+          if (onRetry != null) ...[
+            const SizedBox(width: 8),
+            TextButton(onPressed: onRetry, child: const Text('重试')),
+          ],
           const SizedBox(width: 10),
           Expanded(child: Divider(color: context.borderPrimary, height: 1)),
         ],

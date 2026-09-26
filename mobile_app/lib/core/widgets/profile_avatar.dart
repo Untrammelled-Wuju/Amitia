@@ -23,7 +23,7 @@ Future<String?> pickProfileAvatar(BuildContext context) async {
       child: Padding(
         padding: EdgeInsets.fromLTRB(
           AppSpacing.md,
-          AppSpacing.md,
+          0,
           AppSpacing.md,
           AppSpacing.lg,
         ),

@@ -163,7 +163,7 @@ class _SafetyContentState extends ConsumerState<_SafetyContent> {
             child: Column(
               children: [
                 Padding(
-                  padding: EdgeInsets.all(AppSpacing.lg),
+                  padding: EdgeInsets.fromLTRB(AppSpacing.lg, 0, AppSpacing.lg, AppSpacing.lg),
                   child: Row(
                     children: [
                       Expanded(
@@ -339,7 +339,7 @@ class _SafetyContentState extends ConsumerState<_SafetyContent> {
             child: Column(
               children: [
                 Padding(
-                  padding: EdgeInsets.all(AppSpacing.lg),
+                  padding: EdgeInsets.fromLTRB(AppSpacing.lg, 0, AppSpacing.lg, AppSpacing.lg),
                   child: Row(
                     children: [
                       Expanded(

@@ -386,7 +386,7 @@ class _AndroidAutomationPageState
         child: Padding(
           padding: EdgeInsets.fromLTRB(
             AppSpacing.lg,
-            AppSpacing.lg,
+            0,
             AppSpacing.lg,
             AppSpacing.xl,
           ),

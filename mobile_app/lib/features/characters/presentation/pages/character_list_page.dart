@@ -374,8 +374,6 @@ class _CharacterListPageState extends ConsumerState<CharacterListPage> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                const SizedBox(height: 8),
-                const SizedBox(height: 20),
                 Text('管理角色', style: AppTypography.pageTitle(context)),
                 const SizedBox(height: 16),
                 AmitiaListTile(
@@ -676,8 +674,6 @@ class _CharacterListPageState extends ConsumerState<CharacterListPage> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const SizedBox(height: 8),
-                const SizedBox(height: 20),
                 Text('排序方式', style: AppTypography.pageTitle(context)),
                 const SizedBox(height: 16),
                 AmitiaListTile(
@@ -740,8 +736,6 @@ class _CharacterListPageState extends ConsumerState<CharacterListPage> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const SizedBox(height: 8),
-                const SizedBox(height: 20),
                 Text(title, style: AppTypography.pageTitle(context)),
                 const SizedBox(height: 16),
                 SizedBox(

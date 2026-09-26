@@ -250,7 +250,7 @@ class _EpisodicMemoryPageState extends ConsumerState<EpisodicMemoryPage> {
         maxChildSize: 0.95,
         expand: false,
         builder: (sheetContext, controller) => Padding(
-          padding: EdgeInsets.all(AppSpacing.xl),
+          padding: EdgeInsets.fromLTRB(AppSpacing.xl, 0, AppSpacing.xl, AppSpacing.xl),
           child: ListView(
             controller: controller,
             children: [

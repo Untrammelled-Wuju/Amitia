@@ -430,6 +430,7 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
     final providerCtrl = TextEditingController(
       text: _providerOf(existing ?? const <String, dynamic>{}),
     );
+    String selectedProtocol = (existing?['protocol'] ?? '').toString();
     final modelCtrl = TextEditingController(
       text: _modelOf(existing ?? const <String, dynamic>{}),
     );
@@ -493,11 +494,57 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
           final selectedProvider = _providers
               .where((p) => (p['id'] ?? '').toString() == providerCtrl.text)
               .firstOrNull;
+          final providerChoices = widget.modelType == 'text'
+              ? _providers
+                    .expand((provider) {
+                      if ((provider['id'] ?? '').toString() == 'openai') {
+                        return <Map<String, dynamic>>[
+                          {
+                            'value': 'openai:openai_chat',
+                            'name': 'OpenAI · Chat Completions',
+                            'provider': provider,
+                            'protocol': 'openai_chat',
+                          },
+                          {
+                            'value': 'openai:openai_responses',
+                            'name': 'OpenAI · Responses',
+                            'provider': provider,
+                            'protocol': 'openai_responses',
+                          },
+                        ];
+                      }
+                      return <Map<String, dynamic>>[
+                        {
+                          'value': (provider['id'] ?? '').toString(),
+                          'name': (provider['name'] ?? provider['id'] ?? '')
+                              .toString(),
+                          'provider': provider,
+                          'protocol': (provider['defaultProtocol'] ?? '')
+                              .toString(),
+                        },
+                      ];
+                    })
+                    .toList(growable: false)
+              : _providers
+                    .map(
+                      (provider) => <String, dynamic>{
+                        'value': (provider['id'] ?? '').toString(),
+                        'name': (provider['name'] ?? provider['id'] ?? '')
+                            .toString(),
+                        'provider': provider,
+                        'protocol': '',
+                      },
+                    )
+                    .toList(growable: false);
+          final selectedChoice =
+              widget.modelType == 'text' && providerCtrl.text == 'openai'
+              ? 'openai:${selectedProtocol.isEmpty ? 'openai_responses' : selectedProtocol}'
+              : providerCtrl.text;
           return SafeArea(
             child: Padding(
               padding: EdgeInsets.fromLTRB(
                 AppSpacing.lg,
-                AppSpacing.lg,
+                0,
                 AppSpacing.lg,
                 MediaQuery.of(sheetContext).viewInsets.bottom + AppSpacing.lg,
               ),
@@ -528,12 +575,10 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
                     else
                       DropdownButtonFormField<String>(
                         value:
-                            _providers.any(
-                              (p) =>
-                                  (p['id'] ?? '').toString() ==
-                                  providerCtrl.text,
+                            providerChoices.any(
+                              (choice) => choice['value'] == selectedChoice,
                             )
-                            ? providerCtrl.text
+                            ? selectedChoice
                             : null,
                         isExpanded: true,
                         decoration: const InputDecoration(
@@ -541,24 +586,25 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
                           isDense: true,
                           hintText: '选择提供商',
                         ),
-                        items: _providers
+                        items: providerChoices
                             .map(
-                              (provider) => DropdownMenuItem<String>(
-                                value: (provider['id'] ?? '').toString(),
-                                child: Text(
-                                  (provider['name'] ?? provider['id'] ?? '')
-                                      .toString(),
-                                ),
+                              (choice) => DropdownMenuItem<String>(
+                                value: choice['value'].toString(),
+                                child: Text(choice['name'].toString()),
                               ),
                             )
                             .toList(growable: false),
                         onChanged: (value) {
                           if (value == null) return;
-                          final provider = _providers.firstWhere(
-                            (p) => (p['id'] ?? '').toString() == value,
+                          final choice = providerChoices.firstWhere(
+                            (item) => item['value'] == value,
                           );
+                          final provider =
+                              choice['provider'] as Map<String, dynamic>;
                           setSheetState(() {
-                            providerCtrl.text = value;
+                            providerCtrl.text = (provider['id'] ?? '')
+                                .toString();
+                            selectedProtocol = choice['protocol'].toString();
                             final defaultBase =
                                 (provider['defaultBaseUrl'] ?? '').toString();
                             final defaultModel =
@@ -857,6 +903,7 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
                                 existing,
                                 name: nameCtrl.text.trim(),
                                 provider: providerCtrl.text.trim(),
+                                protocol: selectedProtocol,
                                 model: modelCtrl.text.trim(),
                                 baseUrl: baseUrlCtrl.text.trim(),
                                 apiKey: apiKeyCtrl.text.trim(),
@@ -915,6 +962,7 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
     Map<String, dynamic>? existing, {
     required String name,
     required String provider,
+    required String protocol,
     required String model,
     required String baseUrl,
     required String apiKey,
@@ -939,6 +987,8 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
     final data = <String, dynamic>{
       'name': name,
       'apiType': provider,
+      if (widget.modelType == 'text' && protocol.isNotEmpty)
+        'protocol': protocol,
       'baseUrl': baseUrl,
       'isActive': isActive ? 1 : 0,
       if (apiKey.isNotEmpty) 'apiKey': apiKey,

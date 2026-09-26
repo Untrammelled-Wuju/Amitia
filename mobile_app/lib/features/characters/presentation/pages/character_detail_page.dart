@@ -1155,8 +1155,6 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const SizedBox(height: 8),
-                const SizedBox(height: 20),
                 Text('角色操作', style: AppTypography.pageTitle(context)),
                 const SizedBox(height: 16),
                 AmitiaListTile(

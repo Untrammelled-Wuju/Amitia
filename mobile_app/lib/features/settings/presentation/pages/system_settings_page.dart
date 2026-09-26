@@ -548,7 +548,7 @@ class _SystemSettingsPageState extends ConsumerState<SystemSettingsPage> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Padding(
-                padding: EdgeInsets.all(AppSpacing.lg),
+                padding: EdgeInsets.fromLTRB(AppSpacing.lg, 0, AppSpacing.lg, AppSpacing.lg),
                 child: Text(title, style: AppTypography.sectionTitle(context)),
               ),
               ...options.map((opt) {

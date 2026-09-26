@@ -352,7 +352,7 @@ class _MemoryGraphPageState extends ConsumerState<MemoryGraphPage> {
         maxChildSize: 0.92,
         builder: (context, controller) => ListView(
           controller: controller,
-          padding: EdgeInsets.all(AppSpacing.pagePadding),
+          padding: EdgeInsets.fromLTRB(AppSpacing.pagePadding, 0, AppSpacing.pagePadding, AppSpacing.pagePadding),
           children: [
             Text(_nodeLabel(node), style: AppTypography.sectionTitle(context)),
             SizedBox(height: AppSpacing.xs),

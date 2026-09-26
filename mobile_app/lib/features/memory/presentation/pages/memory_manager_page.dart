@@ -378,7 +378,7 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
       isScrollControlled: true,
       builder: (ctx) => SafeArea(
         child: Padding(
-          padding: EdgeInsets.all(AppSpacing.xl),
+          padding: EdgeInsets.fromLTRB(AppSpacing.xl, 0, AppSpacing.xl, AppSpacing.xl),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -881,7 +881,7 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
     showModalBottomSheet(
       context: context,
       builder: (ctx) => Container(
-        padding: EdgeInsets.all(AppSpacing.xl),
+        padding: EdgeInsets.fromLTRB(AppSpacing.xl, 0, AppSpacing.xl, AppSpacing.xl),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1060,13 +1060,12 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
       isScrollControlled: true,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setSheetState) => Padding(
-          padding: EdgeInsets.fromLTRB(AppSpacing.xl, AppSpacing.lg, AppSpacing.xl, MediaQuery.of(ctx).viewInsets.bottom + AppSpacing.xl),
+          padding: EdgeInsets.fromLTRB(AppSpacing.xl, 0, AppSpacing.xl, MediaQuery.of(ctx).viewInsets.bottom + AppSpacing.xl),
           child: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-              SizedBox(height: AppSpacing.lg),
               Text(isEdit ? '编辑记忆' : '新建记忆', style: AppTypography.sectionTitle(context)),
               SizedBox(height: AppSpacing.lg),
               Text('记忆内容', style: AppTypography.label(context)),

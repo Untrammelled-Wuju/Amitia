@@ -713,7 +713,7 @@ class _ExtensionPackagesPageState extends ConsumerState<ExtensionPackagesPage> {
         ),
         builder: (sheetContext) => SafeArea(
           child: Padding(
-            padding: EdgeInsets.all(AppSpacing.lg),
+            padding: EdgeInsets.fromLTRB(AppSpacing.lg, 0, AppSpacing.lg, AppSpacing.lg),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1335,12 +1335,11 @@ class _PackagePreviewSheet extends StatelessWidget {
     return SafeArea(
       top: false,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const SizedBox(height: 20),
             Text(
               currentVersion.isEmpty ? '安装扩展包' : '更新扩展包',
               style: AppTypography.pageTitle(context),

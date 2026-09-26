@@ -129,7 +129,7 @@ class _ToolboxWorkspacePageState extends ConsumerState<ToolboxWorkspacePage> {
           child: Padding(
             padding: EdgeInsets.fromLTRB(
               AppSpacing.lg,
-              AppSpacing.lg,
+              0,
               AppSpacing.lg,
               MediaQuery.of(sheetContext).viewInsets.bottom + AppSpacing.lg,
             ),
@@ -329,7 +329,7 @@ class _ToolboxWorkspacePageState extends ConsumerState<ToolboxWorkspacePage> {
               child: Column(
                 children: [
                   Padding(
-                    padding: EdgeInsets.fromLTRB(AppSpacing.pagePadding, AppSpacing.md, AppSpacing.pagePadding, AppSpacing.sm),
+                    padding: EdgeInsets.fromLTRB(AppSpacing.pagePadding, 0, AppSpacing.pagePadding, AppSpacing.sm),
                     child: Row(
                       children: [
                         Expanded(child: Text('Git · ${workspace.name}', style: AppTypography.pageTitle(sheetContext))),

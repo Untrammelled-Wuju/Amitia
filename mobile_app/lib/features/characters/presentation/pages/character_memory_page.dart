@@ -221,7 +221,7 @@ class _CharacterMemoryPageState extends ConsumerState<CharacterMemoryPage> {
         builder: (ctx, setSheetState) => Padding(
           padding: EdgeInsets.fromLTRB(
             AppSpacing.xl,
-            AppSpacing.lg,
+            0,
             AppSpacing.xl,
             MediaQuery.of(ctx).viewInsets.bottom + AppSpacing.xl,
           ),
@@ -229,7 +229,6 @@ class _CharacterMemoryPageState extends ConsumerState<CharacterMemoryPage> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              SizedBox(height: AppSpacing.lg),
               Text(isEdit ? '编辑记忆' : '新建记忆', style: AppTypography.sectionTitle(context)),
               SizedBox(height: AppSpacing.lg),
               Text('记忆内容', style: AppTypography.label(context)),

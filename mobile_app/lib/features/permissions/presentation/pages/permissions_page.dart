@@ -231,7 +231,7 @@ class _PermissionGuideSheet extends StatelessWidget {
       child: Padding(
         padding: EdgeInsets.fromLTRB(
           AppSpacing.lg,
-          AppSpacing.lg,
+          0,
           AppSpacing.lg,
           AppSpacing.xxl,
         ),
@@ -239,7 +239,6 @@ class _PermissionGuideSheet extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            SizedBox(height: AppSpacing.lg),
             Text(item.name, style: AppTypography.sectionTitle(context)),
             SizedBox(height: AppSpacing.sm),
             Text(item.description, style: AppTypography.caption(context)),

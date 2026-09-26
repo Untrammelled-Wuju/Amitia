@@ -355,7 +355,7 @@ class _RemindersPageState extends ConsumerState<RemindersPage> {
           return Padding(
             padding: EdgeInsets.fromLTRB(
               AppSpacing.xl,
-              AppSpacing.lg,
+              0,
               AppSpacing.xl,
               MediaQuery.of(sheetContext).viewInsets.bottom + AppSpacing.xl,
             ),
@@ -708,7 +708,7 @@ class _RemindersPageState extends ConsumerState<RemindersPage> {
         expand: false,
         builder: (sheetContext, controller) => ListView(
           controller: controller,
-          padding: EdgeInsets.all(AppSpacing.xl),
+          padding: EdgeInsets.fromLTRB(AppSpacing.xl, 0, AppSpacing.xl, AppSpacing.xl),
           children: [
             Text('提醒调度器', style: AppTypography.sectionTitle(context)),
             SizedBox(height: AppSpacing.md),

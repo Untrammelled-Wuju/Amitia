@@ -342,7 +342,7 @@ class _UserSettingsPageState extends ConsumerState<UserSettingsPage> {
         child: Padding(
           padding: EdgeInsets.fromLTRB(
             AppSpacing.lg,
-            AppSpacing.lg,
+            0,
             AppSpacing.lg,
             MediaQuery.of(sheetContext).viewInsets.bottom + AppSpacing.lg,
           ),

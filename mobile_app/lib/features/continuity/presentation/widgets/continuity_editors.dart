@@ -107,7 +107,7 @@ class _ContinuityThreadEditorState extends State<_ContinuityThreadEditor> {
     return Padding(
       padding: EdgeInsets.fromLTRB(
         AppSpacing.pagePadding,
-        AppSpacing.lg,
+        0,
         AppSpacing.pagePadding,
         AppSpacing.lg + MediaQuery.viewInsetsOf(context).bottom,
       ),
@@ -266,7 +266,7 @@ class _ContinuityWaitEditorState extends State<_ContinuityWaitEditor> {
     return Padding(
       padding: EdgeInsets.fromLTRB(
         AppSpacing.pagePadding,
-        AppSpacing.lg,
+        0,
         AppSpacing.pagePadding,
         AppSpacing.lg + MediaQuery.viewInsetsOf(context).bottom,
       ),

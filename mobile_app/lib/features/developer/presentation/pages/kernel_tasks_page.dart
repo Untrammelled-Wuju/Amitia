@@ -512,11 +512,10 @@ class _KernelTaskRuntimeSheetState extends State<_KernelTaskRuntimeSheet> {
       child: SizedBox(
         height: MediaQuery.sizeOf(context).height * 0.86,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 10, 20, 22),
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 22),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const SizedBox(height: 14),
               Row(
                 children: [
                   Expanded(child: Text('Runtime Detail', style: AppTypography.pageTitle(context))),

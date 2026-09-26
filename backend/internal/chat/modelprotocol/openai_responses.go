@@ -205,7 +205,9 @@ func (a *OpenAIResponsesAdapter) buildTools(tools []ModelToolDefinition) []map[s
 
 func (a *OpenAIResponsesAdapter) parseResponse(respBytes []byte) (*ModelResult, error) {
 	var result struct {
-		ID     string `json:"id"`
+		ID     string          `json:"id"`
+		Status string          `json:"status"`
+		Error  json.RawMessage `json:"error"`
 		Output []struct {
 			Type    string `json:"type"`
 			Status  string `json:"status"`
@@ -228,6 +230,13 @@ func (a *OpenAIResponsesAdapter) parseResponse(respBytes []byte) (*ModelResult, 
 
 	if err := json.Unmarshal(respBytes, &result); err != nil {
 		return nil, fmt.Errorf("解析响应失败: %w", err)
+	}
+	if result.Status == "failed" || responseFailureDetail(result.Error) != "" {
+		detail := responseFailureDetail(result.Error)
+		if detail == "" {
+			detail = result.Status
+		}
+		return nil, fmt.Errorf("response failed: %s", detail)
 	}
 
 	res := &ModelResult{}
@@ -306,17 +315,22 @@ func (a *OpenAIResponsesAdapter) parseStream(ctx context.Context, body io.Reader
 				}
 
 				var event struct {
-					Type           string `json:"type"`
-					SequenceNumber int    `json:"sequence_number"`
-					Delta          string `json:"delta"`
-					OutputIndex    int    `json:"output_index"`
-					ContentIndex   int    `json:"content_index"`
-					ItemID         string `json:"item_id"`
-					Name           string `json:"name"`
-					Arguments      string `json:"arguments"`
-					Status         string `json:"status"`
-					Text           string `json:"text"`
-					Summary        string `json:"summary"`
+					Type           string          `json:"type"`
+					SequenceNumber int             `json:"sequence_number"`
+					Delta          string          `json:"delta"`
+					OutputIndex    int             `json:"output_index"`
+					ContentIndex   int             `json:"content_index"`
+					ItemID         string          `json:"item_id"`
+					Name           string          `json:"name"`
+					Arguments      string          `json:"arguments"`
+					Status         string          `json:"status"`
+					Error          json.RawMessage `json:"error"`
+					Response       struct {
+						Status string          `json:"status"`
+						Error  json.RawMessage `json:"error"`
+					} `json:"response"`
+					Text    string `json:"text"`
+					Summary string `json:"summary"`
 				}
 
 				if err := json.Unmarshal([]byte(content), &event); err != nil {
@@ -354,15 +368,28 @@ func (a *OpenAIResponsesAdapter) parseStream(ctx context.Context, body io.Reader
 					})
 					return result, nil
 				case "response.failed":
+					detail := responseFailureDetail(event.Response.Error)
+					if detail == "" {
+						detail = responseFailureDetail(event.Error)
+					}
+					if detail == "" {
+						detail = event.Response.Status
+					}
+					if detail == "" {
+						detail = event.Status
+					}
+					if detail == "" {
+						detail = content
+					}
 					sink.Emit(ctx, ModelEvent{
 						Type: ModelEventFailed,
 						Error: &ModelError{
 							Code:     "MODEL_PROVIDER_FAILED",
 							Protocol: ProtocolOpenAIResponses,
-							Message:  event.Status,
+							Message:  detail,
 						},
 					})
-					return result, fmt.Errorf("response failed: %s", event.Status)
+					return result, fmt.Errorf("response failed: %s", detail)
 				}
 			}
 		}
@@ -375,4 +402,12 @@ func (a *OpenAIResponsesAdapter) parseStream(ctx context.Context, body io.Reader
 	}
 
 	return result, nil
+}
+
+func responseFailureDetail(raw json.RawMessage) string {
+	detail := strings.TrimSpace(string(raw))
+	if detail == "" || detail == "null" {
+		return ""
+	}
+	return detail
 }

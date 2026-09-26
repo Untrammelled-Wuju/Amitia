@@ -135,7 +135,7 @@ class _AsrPageState extends ConsumerState<AsrPage> {
           child: Padding(
             padding: EdgeInsets.fromLTRB(
               AppSpacing.lg,
-              AppSpacing.lg,
+              0,
               AppSpacing.lg,
               MediaQuery.of(sheetContext).viewInsets.bottom + AppSpacing.lg,
             ),

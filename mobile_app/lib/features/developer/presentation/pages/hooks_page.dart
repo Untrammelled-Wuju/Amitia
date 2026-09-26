@@ -225,8 +225,6 @@ class _HooksPageState extends ConsumerState<HooksPage> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const SizedBox(height: 8),
-                const SizedBox(height: 20),
                 Text('Hook 贡献详情', style: AppTypography.pageTitle(context)),
                 const SizedBox(height: 16),
                 _buildDetailRow(context, 'Hook 点', point),
@@ -280,8 +278,6 @@ class _HooksPageState extends ConsumerState<HooksPage> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const SizedBox(height: 8),
-                const SizedBox(height: 20),
                 Row(
                   children: [
                     Icon(Icons.error_outline, color: context.error, size: 24),

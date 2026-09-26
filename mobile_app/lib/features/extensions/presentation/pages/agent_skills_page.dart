@@ -724,12 +724,11 @@ class _SkillDetailSheet extends StatelessWidget {
     final requiredMcp = ((skill['mcpDependencies'] as List?) ?? const []).whereType<Map>().map((e) => (e['id'] ?? e['description'] ?? '').toString()).where((e) => e.isNotEmpty).toList();
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 34),
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 34),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const SizedBox(height: 20),
           Row(
             children: [
               Container(

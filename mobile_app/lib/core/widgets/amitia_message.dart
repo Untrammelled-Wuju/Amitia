@@ -223,25 +223,6 @@ class AmitiaMessageBubble extends StatelessWidget {
                   ),
                 ),
               _buildContent(context, true),
-              if (message.status == MessageStatus.error)
-                Padding(
-                  padding: const EdgeInsets.only(top: 4),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.error_outline, size: 14, color: context.error),
-                      const SizedBox(width: 4),
-                      GestureDetector(
-                        onTap: onRetry,
-                        behavior: HitTestBehavior.opaque,
-                        child: Text(
-                          '重试',
-                          style: TextStyle(fontSize: 12, color: context.error),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
             ],
           ),
         ),
@@ -1570,7 +1551,7 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
       ),
       builder: (sheetCtx) => SafeArea(
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1606,7 +1587,7 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
       ),
       builder: (sheetCtx) => SafeArea(
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1653,7 +1634,7 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
       ),
       builder: (sheetCtx) => SafeArea(
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1830,7 +1811,7 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
             child: Column(
               children: [
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 18, 12, 10),
+                  padding: const EdgeInsets.fromLTRB(20, 0, 12, 10),
                   child: Row(
                     children: [
                       Expanded(
@@ -1922,11 +1903,10 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
       ),
       builder: (sheetContext) => SafeArea(
         child: Padding(
-          padding: EdgeInsets.fromLTRB(16, 8, 16, 20),
+          padding: EdgeInsets.fromLTRB(16, 0, 16, 20),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const SizedBox(height: 12),
               _ComposerTool(
                 icon: Icons.photo_library_outlined,
                 label: '添加图片',
@@ -1985,11 +1965,10 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
       ),
       builder: (sheetContext) => SafeArea(
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const SizedBox(height: 14),
               Align(
                 alignment: Alignment.centerLeft,
                 child: Text('工具权限', style: AppTypography.sectionTitle(context)),

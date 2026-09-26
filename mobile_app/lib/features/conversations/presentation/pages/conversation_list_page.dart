@@ -228,7 +228,7 @@ class _ConversationListPageState extends ConsumerState<ConversationListPage> {
           child: Padding(
             padding: EdgeInsets.fromLTRB(
               AppSpacing.lg,
-              AppSpacing.sm,
+              0,
               AppSpacing.lg,
               AppSpacing.lg,
             ),
@@ -236,7 +236,6 @@ class _ConversationListPageState extends ConsumerState<ConversationListPage> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                SizedBox(height: AppSpacing.lg),
                 _SheetActionItem(
                   icon: Icons.edit_outlined,
                   label: '重命名',

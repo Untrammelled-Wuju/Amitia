@@ -212,7 +212,7 @@ class _SchedulesPageState extends ConsumerState<SchedulesPage> {
         child: SizedBox(
           height: MediaQuery.sizeOf(sheetContext).height * .88,
           child: ListView(
-            padding: EdgeInsets.all(AppSpacing.pagePadding),
+            padding: EdgeInsets.fromLTRB(AppSpacing.pagePadding, 0, AppSpacing.pagePadding, AppSpacing.pagePadding),
             children: [
               Row(children: [Expanded(child: Text((definition['name'] ?? id).toString(), style: AppTypography.pageTitle(sheetContext))), IconButton(onPressed: () => Navigator.pop(sheetContext), icon: const Icon(Icons.close))]),
               Text(id, style: AppTypography.caption(sheetContext)),

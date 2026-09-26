@@ -166,7 +166,7 @@ class _ToolboxLogPageState extends ConsumerState<ToolboxLogPage> {
           child: Column(
             children: [
               Padding(
-                padding: EdgeInsets.all(AppSpacing.lg),
+                padding: EdgeInsets.fromLTRB(AppSpacing.lg, 0, AppSpacing.lg, AppSpacing.lg),
                 child: Row(
                   children: [
                     Expanded(child: Text('日志文件 (${_files.length})', style: AppTypography.sectionTitle(context))),

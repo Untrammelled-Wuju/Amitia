@@ -2,6 +2,7 @@ class ModelConfigDto {
   final String id;
   final String name;
   final String provider;
+  final String protocol;
   final String model;
   final String baseUrl;
   final int isActive;
@@ -17,6 +18,7 @@ class ModelConfigDto {
     required this.id,
     this.name = '',
     this.provider = '',
+    this.protocol = '',
     this.model = '',
     this.baseUrl = '',
     this.isActive = 0,
@@ -34,6 +36,7 @@ class ModelConfigDto {
       id: (json['id'] ?? '').toString(),
       name: json['name'] as String? ?? '',
       provider: (json['apiType'] ?? json['provider'] ?? '').toString(),
+      protocol: (json['protocol'] ?? '').toString(),
       model: (json['modelName'] ?? json['model'] ?? '').toString(),
       baseUrl: json['baseUrl'] as String? ?? '',
       isActive: json['isActive'] as int? ?? 0,
@@ -55,6 +58,7 @@ class ModelConfigDto {
       'id': id,
       'name': name,
       'apiType': provider,
+      'protocol': protocol,
       'modelName': model,
       'baseUrl': baseUrl,
       'isActive': isActive,

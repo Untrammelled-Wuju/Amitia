@@ -152,7 +152,7 @@ class _MemoryTimelinePageState extends ConsumerState<MemoryTimelinePage> {
       onTap: () => showModalBottomSheet(
         context: context,
         builder: (ctx) => Container(
-          padding: EdgeInsets.all(AppSpacing.xl),
+          padding: EdgeInsets.fromLTRB(AppSpacing.xl, 0, AppSpacing.xl, AppSpacing.xl),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,

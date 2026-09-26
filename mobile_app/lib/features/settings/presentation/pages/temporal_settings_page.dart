@@ -666,7 +666,7 @@ class _TemporalContentState extends ConsumerState<_TemporalContent> {
           child: Padding(
             padding: EdgeInsets.fromLTRB(
               AppSpacing.lg,
-              AppSpacing.lg,
+              0,
               AppSpacing.lg,
               MediaQuery.of(sheetContext).viewInsets.bottom + AppSpacing.lg,
             ),
@@ -774,7 +774,7 @@ class _TemporalContentState extends ConsumerState<_TemporalContent> {
         child: Padding(
           padding: EdgeInsets.fromLTRB(
             AppSpacing.lg,
-            AppSpacing.lg,
+            0,
             AppSpacing.lg,
             MediaQuery.of(sheetContext).viewInsets.bottom + AppSpacing.lg,
           ),
@@ -994,7 +994,7 @@ class _TemporalContentState extends ConsumerState<_TemporalContent> {
           shrinkWrap: true,
           children: [
             Padding(
-              padding: EdgeInsets.all(AppSpacing.lg),
+              padding: EdgeInsets.fromLTRB(AppSpacing.lg, 0, AppSpacing.lg, AppSpacing.lg),
               child: Text(title, style: AppTypography.sectionTitle(context)),
             ),
             ...options.map(
@@ -1198,7 +1198,7 @@ class _TemporalContentState extends ConsumerState<_TemporalContent> {
             child: SingleChildScrollView(
               padding: EdgeInsets.fromLTRB(
                 AppSpacing.lg,
-                AppSpacing.lg,
+                0,
                 AppSpacing.lg,
                 MediaQuery.of(sheetContext).viewInsets.bottom + AppSpacing.lg,
               ),
@@ -1679,7 +1679,7 @@ class _TemporalContentState extends ConsumerState<_TemporalContent> {
       ),
       builder: (sheetContext) => SafeArea(
         child: Padding(
-          padding: EdgeInsets.all(AppSpacing.lg),
+          padding: EdgeInsets.fromLTRB(AppSpacing.lg, 0, AppSpacing.lg, AppSpacing.lg),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1736,7 +1736,7 @@ class _TemporalContentState extends ConsumerState<_TemporalContent> {
           shrinkWrap: true,
           children: [
             Padding(
-              padding: EdgeInsets.all(AppSpacing.lg),
+              padding: EdgeInsets.fromLTRB(AppSpacing.lg, 0, AppSpacing.lg, AppSpacing.lg),
               child: Text('选择角色', style: AppTypography.sectionTitle(context)),
             ),
             ...characters.map(

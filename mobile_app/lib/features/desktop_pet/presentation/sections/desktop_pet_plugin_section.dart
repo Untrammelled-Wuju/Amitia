@@ -372,8 +372,6 @@ class _PluginDetailSheetState extends State<_PluginDetailSheet> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const SizedBox(height: 8),
-            const SizedBox(height: 20),
             Text(widget.name, style: AppTypography.pageTitle(context)),
             const SizedBox(height: 4),
             Text(widget.description, style: AppTypography.caption(context)),

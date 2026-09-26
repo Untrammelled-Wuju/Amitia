@@ -185,7 +185,7 @@ class _WorldBookPageState extends ConsumerState<WorldBookPage> {
         builder: (sheetContext, setSheetState) => Padding(
           padding: EdgeInsets.fromLTRB(
             AppSpacing.xl,
-            AppSpacing.lg,
+            0,
             AppSpacing.xl,
             MediaQuery.of(sheetContext).viewInsets.bottom + AppSpacing.xl,
           ),
@@ -281,7 +281,7 @@ class _WorldBookPageState extends ConsumerState<WorldBookPage> {
         builder: (sheetContext, setSheetState) => Padding(
           padding: EdgeInsets.fromLTRB(
             AppSpacing.xl,
-            AppSpacing.lg,
+            0,
             AppSpacing.xl,
             MediaQuery.of(sheetContext).viewInsets.bottom + AppSpacing.xl,
           ),
