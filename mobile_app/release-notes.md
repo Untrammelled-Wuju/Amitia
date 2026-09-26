@@ -1,4 +1,4 @@
-# Amitia Android 26.2.0-beta.2
+# Amitia Android 26.2.0-beta.3
 
 - 模型配置新增 OpenAI Responses 协议选项，可分别选择 Chat Completions 与 Responses 接口。
 - 模型调用失败时保留服务端返回的具体错误信息，发送失败的用户消息支持直接重试。
@@ -9,7 +9,7 @@
 - 调整移动端插件页面与对话界面的显示范围，统一插件路由和不可用页面的处理。
 - 更新手机内置运行时、插件宿主及后端相关源码，保持 APK 中的运行时与本次源码一致。
 - 更新 Android 原生运行环境和相关构建配置。
-- 版本升级至 26.2.0-beta.2，versionCode 提升至 4。
+- 版本升级至 26.2.0-beta.3，versionCode 提升至 5。
 - 使用当前后端源码重新构建 Android Runtime Package，并同步内嵌核心。
 - 与桌面端版本号统一，保留更新清单签名、ABI 校验、哈希校验和灰度发布机制。
 
