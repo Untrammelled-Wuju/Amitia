@@ -55,6 +55,7 @@ func (h *AccessibilityHandler) handleStatus(ctx context.Context, request capabil
 	bridgeReq := androidnative.NativeBridgeRequest{
 		ProtocolVersion: request.ProtocolVersion,
 		RequestId:       request.RequestID,
+		Platform:        "android",
 		Operation:       OperationStatus,
 		Payload:         map[string]any{},
 	}
@@ -91,6 +92,7 @@ func (h *AccessibilityHandler) handleOpenSettings(ctx context.Context, request c
 	bridgeReq := androidnative.NativeBridgeRequest{
 		ProtocolVersion: request.ProtocolVersion,
 		RequestId:       request.RequestID,
+		Platform:        "android",
 		Operation:       OperationOpenSettings,
 		Payload:         map[string]any{},
 	}

@@ -4,8 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"sync"
 	"sync/atomic"
+
+	"github.com/google/uuid"
 )
 
 const (
@@ -43,6 +46,8 @@ func (b *AndroidTransportBridge) SetEventSink(sink NativeEventSink) {
 }
 
 func (b *AndroidTransportBridge) Execute(ctx context.Context, req Request) (Response, error) {
+	req = normalizeAndroidRequest(req)
+
 	b.mu.RLock()
 	session := b.session
 	b.mu.RUnlock()
@@ -84,6 +89,19 @@ func (b *AndroidTransportBridge) Execute(ctx context.Context, req Request) (Resp
 		}, &bridgeError{Code: ErrBridgeDisconnected, Message: err.Error()}
 	}
 	return resp, nil
+}
+
+func normalizeAndroidRequest(req Request) Request {
+	if req.ProtocolVersion == 0 {
+		req.ProtocolVersion = AndroidBridgeProtocolVersion
+	}
+	if strings.TrimSpace(req.Platform) == "" {
+		req.Platform = "android"
+	}
+	if strings.TrimSpace(req.RequestId) == "" {
+		req.RequestId = uuid.NewString()
+	}
+	return req
 }
 
 func (b *AndroidTransportBridge) Health(_ context.Context) Health {

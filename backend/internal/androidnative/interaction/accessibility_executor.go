@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/androidnative"
 )
 
@@ -43,7 +44,8 @@ func (e *BridgeAccessibilityExecutor) PerformNodeAction(
 
 	bridgeReq := androidnative.NativeBridgeRequest{
 		ProtocolVersion: 1,
-		RequestId:       "",
+		RequestId:       uuid.NewString(),
+		Platform:        "android",
 		Operation:       "interaction.perform_node_action",
 		Payload: map[string]any{
 			"nativeRef": node.NativeRef,

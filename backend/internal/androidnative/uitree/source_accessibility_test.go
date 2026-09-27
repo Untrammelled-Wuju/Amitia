@@ -8,11 +8,11 @@ import (
 )
 
 type requestIDBridge struct {
-	requestIDs []string
+	requests []androidnative.NativeBridgeRequest
 }
 
 func (b *requestIDBridge) Execute(_ context.Context, request androidnative.NativeBridgeRequest) (androidnative.NativeBridgeResponse, error) {
-	b.requestIDs = append(b.requestIDs, request.RequestId)
+	b.requests = append(b.requests, request)
 	return androidnative.NativeBridgeResponse{
 		ProtocolVersion: request.ProtocolVersion,
 		RequestId:       request.RequestId,
@@ -46,12 +46,15 @@ func TestAccessibilitySourceUsesRequestID(t *testing.T) {
 	if _, err := source.Snapshot(context.Background(), SnapshotRequest{}); err != nil {
 		t.Fatalf("unexpected snapshot error: %v", err)
 	}
-	if len(bridge.requestIDs) != 2 {
-		t.Fatalf("request count = %d, want 2", len(bridge.requestIDs))
+	if len(bridge.requests) != 2 {
+		t.Fatalf("request count = %d, want 2", len(bridge.requests))
 	}
-	for index, requestID := range bridge.requestIDs {
-		if requestID == "" {
+	for index, request := range bridge.requests {
+		if request.RequestId == "" {
 			t.Fatalf("request %d has empty request ID", index)
+		}
+		if request.Platform != "android" {
+			t.Fatalf("request %d platform = %q, want android", index, request.Platform)
 		}
 	}
 }

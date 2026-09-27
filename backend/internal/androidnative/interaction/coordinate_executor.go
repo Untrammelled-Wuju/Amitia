@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/androidnative"
 )
 
@@ -28,7 +29,8 @@ func (e *BridgeCoordinateExecutor) Tap(
 
 	bridgeReq := androidnative.NativeBridgeRequest{
 		ProtocolVersion: 1,
-		RequestId:       "",
+		RequestId:       uuid.NewString(),
+		Platform:        "android",
 		Operation:       "interaction.click",
 		Payload: map[string]any{
 			"displayId": displayID,
@@ -65,7 +67,8 @@ func (e *BridgeCoordinateExecutor) LongPress(
 
 	bridgeReq := androidnative.NativeBridgeRequest{
 		ProtocolVersion: 1,
-		RequestId:       "",
+		RequestId:       uuid.NewString(),
+		Platform:        "android",
 		Operation:       "interaction.long_click",
 		Payload: map[string]any{
 			"displayId":  displayID,
@@ -111,7 +114,8 @@ func (e *BridgeCoordinateExecutor) Swipe(
 
 	bridgeReq := androidnative.NativeBridgeRequest{
 		ProtocolVersion: 1,
-		RequestId:       "",
+		RequestId:       uuid.NewString(),
+		Platform:        "android",
 		Operation:       "interaction.swipe",
 		Payload: map[string]any{
 			"displayId":  request.DisplayID,

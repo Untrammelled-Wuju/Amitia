@@ -32,6 +32,7 @@ func (s *AccessibilitySource) Status(ctx context.Context) SourceStatus {
 	bridgeReq := androidnative.NativeBridgeRequest{
 		ProtocolVersion: 1,
 		RequestId:       uuid.NewString(),
+		Platform:        "android",
 		Operation:       "accessibility.status",
 		Payload:         map[string]any{},
 	}
@@ -74,6 +75,7 @@ func (s *AccessibilitySource) Snapshot(ctx context.Context, request SnapshotRequ
 	bridgeReq := androidnative.NativeBridgeRequest{
 		ProtocolVersion: 1,
 		RequestId:       uuid.NewString(),
+		Platform:        "android",
 		Operation:       OperationSnapshot,
 		Payload:         payload,
 	}

@@ -61,9 +61,11 @@ func (m *mockBridgeForExecutor) Health(ctx context.Context) androidnative.Native
 
 func TestBridgeCoordinateExecutorUsesNativeOperationsAndCompletion(t *testing.T) {
 	var operations []string
+	var requests []androidnative.NativeBridgeRequest
 	bridge := &mockBridgeForExecutor{
 		executeFunc: func(_ context.Context, req androidnative.NativeBridgeRequest) (androidnative.NativeBridgeResponse, error) {
 			operations = append(operations, req.Operation)
+			requests = append(requests, req)
 			return androidnative.NativeBridgeResponse{
 				Status: "success",
 				Result: map[string]any{"performed": true},
@@ -84,6 +86,14 @@ func TestBridgeCoordinateExecutorUsesNativeOperationsAndCompletion(t *testing.T)
 	for index, operation := range want {
 		if operations[index] != operation {
 			t.Fatalf("operation %d: got %s, want %s", index, operations[index], operation)
+		}
+	}
+	for index, request := range requests {
+		if request.RequestId == "" {
+			t.Fatalf("request %d has empty request ID", index)
+		}
+		if request.Platform != "android" {
+			t.Fatalf("request %d platform = %q, want android", index, request.Platform)
 		}
 	}
 
@@ -176,7 +186,18 @@ func TestNewUnknownResult(t *testing.T) {
 }
 
 func TestBridgeAccessibilityExecutor_PerformNodeAction_Success(t *testing.T) {
-	bridge := &mockBridgeForExecutor{}
+	var received androidnative.NativeBridgeRequest
+	bridge := &mockBridgeForExecutor{
+		executeFunc: func(_ context.Context, req androidnative.NativeBridgeRequest) (androidnative.NativeBridgeResponse, error) {
+			received = req
+			return androidnative.NativeBridgeResponse{
+				ProtocolVersion: req.ProtocolVersion,
+				RequestId:       req.RequestId,
+				Status:          "success",
+				Result:          map[string]any{"success": true},
+			}, nil
+		},
+	}
 	executor := NewBridgeAccessibilityExecutor(bridge)
 
 	node := uitree.ResolvedUINode{
@@ -192,6 +213,12 @@ func TestBridgeAccessibilityExecutor_PerformNodeAction_Success(t *testing.T) {
 	err := executor.PerformNodeAction(context.Background(), node, NodeActionClick, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
+	}
+	if received.RequestId == "" {
+		t.Fatal("expected request ID")
+	}
+	if received.Platform != "android" {
+		t.Fatalf("platform = %q, want android", received.Platform)
 	}
 }
 
