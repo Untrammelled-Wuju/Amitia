@@ -42,7 +42,7 @@ internal class AccessibilityStateReader(private val context: Context) {
         val screenshotReady = Build.VERSION.SDK_INT < Build.VERSION_CODES.R || canTakeScreenshot
         val interactionReady = connected && canRetrieveWindowContent && canPerformGestures
         val visualReady = interactionReady && screenshotReady
-        val ready = connected && canRetrieveWindowContent && canPerformGestures && screenshotReady
+        val ready = interactionReady
 
         val userActionRequired = !enabledInSettings
 
