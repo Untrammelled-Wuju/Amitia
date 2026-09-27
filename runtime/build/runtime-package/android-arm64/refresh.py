@@ -282,8 +282,8 @@ def main():
         # it here creates a circular/stale checksum by construction.
         for relative in ["licenses/THIRD_PARTY_NOTICES.md", "metadata/component-index.json", "metadata/component-lock.json", "metadata/file-manifest.json", "metadata/guest-layout.json", "metadata/mount-contract.json"]:
             sums.append(f"{digest(root / relative)}  {relative}")
-        sums.append(f"{digest(root / rootfs_info['path'])}  payload/rootfs")
-        sums.append(f"{runtime_hash}  payload/runtime")
+        sums.append(f"{digest(root / rootfs_info['path'])}  {rootfs_info['path']}")
+        sums.append(f"{runtime_hash}  {runtime_relpath.as_posix()}")
         legacy_sums = root / "SHA256SUMS"
         if legacy_sums.exists():
             legacy_sums.unlink()
