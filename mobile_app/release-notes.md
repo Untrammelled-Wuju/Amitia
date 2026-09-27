@@ -1,5 +1,9 @@
 # Amitia Android 26.2.0-beta.3
 
+- 修复无障碍 Provider 坐标点击、长按和滑动的主线程回调死锁，手势现在可可靠分发与等待。
+- 完全访问模式补齐 Linux 文件、归档、网络、SSH 只读和 chroot 能力，避免已声明能力被误判为 unknown_permission。
+- 修复内置 Runtime 服务启动、停止和异常清理阻塞主线程导致的 ANR，服务操作统一串行到后台线程执行。
+- 本次 Release 使用源码基线 a8ad97536430ec47f91867439c264de34a93f320 重新构建 Android Runtime Package。
 - 模型配置新增 OpenAI Responses 协议选项，可分别选择 Chat Completions 与 Responses 接口。
 - 模型调用失败时保留服务端返回的具体错误信息，发送失败的用户消息支持直接重试。
 - 统一移动端操作面板与底部弹窗的顶部间距，减少重复留白。
