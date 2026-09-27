@@ -66,6 +66,9 @@ func (e *BridgeAccessibilityExecutor) PerformNodeAction(
 		}
 		return &Error{Code: INTERACTION_ACTION_FAILED, Message: resp.Error.Message}
 	}
+	if resp.Status != "success" {
+		return &Error{Code: INTERACTION_ACTION_FAILED, Message: "accessibility node action was not completed"}
+	}
 
 	if resp.Result != nil {
 		if success, ok := resp.Result["success"].(bool); ok && !success {

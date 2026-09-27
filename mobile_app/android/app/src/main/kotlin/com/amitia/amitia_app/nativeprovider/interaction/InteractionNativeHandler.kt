@@ -1,8 +1,12 @@
 package com.amitia.amitia_app.nativeprovider.interaction
 
 import android.content.Context
+import android.accessibilityservice.AccessibilityService
+import android.accessibilityservice.AccessibilityServiceInfo
 import android.accessibilityservice.GestureDescription
 import android.graphics.Path
+import android.os.Handler
+import android.os.Looper
 import android.view.accessibility.AccessibilityNodeInfo
 import com.amitia.amitia_app.nativeprovider.AndroidNativeOperationHandler
 import com.amitia.amitia_app.nativeprovider.model.NativeBridgeError
@@ -15,6 +19,9 @@ import com.amitia.amitia_app.nativeprovider.devicecontrol.DeviceInteractionState
 import com.amitia.amitia_app.nativeprovider.devicecontrol.DeviceInteractionStateReader
 import com.amitia.amitia_app.nativeprovider.uitree.AccessibilityNodeReferenceRegistry
 import java.util.concurrent.atomic.AtomicLong
+import kotlin.coroutines.resume
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withTimeoutOrNull
 
 internal class InteractionNativeHandler(
     private val context: Context,
@@ -63,14 +70,16 @@ internal class InteractionNativeHandler(
             status = NativeBridgeProtocol.STATUS_SUCCESS,
             result = mapOf(
                 "connected" to (service != null),
+                "gestureAvailable" to (service != null && canPerformGestures(service)),
                 "generation" to gestureGeneration.get(),
             ) + interactionState.asMap(),
         )
     }
 
-    private fun handleClick(request: NativeBridgeRequest): NativeBridgeResponse {
+    private suspend fun handleClick(request: NativeBridgeRequest): NativeBridgeResponse {
         val service = AccessibilityServiceRegistry.current()
             ?: return accessibilityNotConnected(request.requestId)
+        if (!canPerformGestures(service)) return gesturesUnavailable(request.requestId)
 
         val x = (request.payload["x"] as? Number)?.toInt() ?: -1
         val y = (request.payload["y"] as? Number)?.toInt() ?: -1
@@ -92,12 +101,12 @@ internal class InteractionNativeHandler(
             val path = Path().apply { moveTo(x.toFloat(), y.toFloat()) }
             val stroke = GestureDescription.StrokeDescription(path, 0, durationMs.coerceAtLeast(1))
             val gesture = GestureDescription.Builder().addStroke(stroke).build()
-            val result = service.dispatchGesture(gesture, null, null)
-            gestureGeneration.incrementAndGet()
+            val result = performGesture(service, gesture)
+            if (result) gestureGeneration.incrementAndGet()
             NativeBridgeResponse(
                 protocolVersion = NativeBridgeProtocol.PROTOCOL_VERSION,
                 requestId = request.requestId,
-                status = NativeBridgeProtocol.STATUS_SUCCESS,
+                status = if (result) NativeBridgeProtocol.STATUS_SUCCESS else NativeBridgeProtocol.STATUS_ERROR,
                 result = mapOf(
                     "performed" to result,
                     "action" to "click",
@@ -117,9 +126,10 @@ internal class InteractionNativeHandler(
         }
     }
 
-    private fun handleLongClick(request: NativeBridgeRequest): NativeBridgeResponse {
+    private suspend fun handleLongClick(request: NativeBridgeRequest): NativeBridgeResponse {
         val service = AccessibilityServiceRegistry.current()
             ?: return accessibilityNotConnected(request.requestId)
+        if (!canPerformGestures(service)) return gesturesUnavailable(request.requestId)
 
         val x = (request.payload["x"] as? Number)?.toInt() ?: -1
         val y = (request.payload["y"] as? Number)?.toInt() ?: -1
@@ -141,12 +151,12 @@ internal class InteractionNativeHandler(
             val path = Path().apply { moveTo(x.toFloat(), y.toFloat()) }
             val stroke = GestureDescription.StrokeDescription(path, 0, durationMs.coerceIn(300, 3000))
             val gesture = GestureDescription.Builder().addStroke(stroke).build()
-            val result = service.dispatchGesture(gesture, null, null)
-            gestureGeneration.incrementAndGet()
+            val result = performGesture(service, gesture)
+            if (result) gestureGeneration.incrementAndGet()
             NativeBridgeResponse(
                 protocolVersion = NativeBridgeProtocol.PROTOCOL_VERSION,
                 requestId = request.requestId,
-                status = NativeBridgeProtocol.STATUS_SUCCESS,
+                status = if (result) NativeBridgeProtocol.STATUS_SUCCESS else NativeBridgeProtocol.STATUS_ERROR,
                 result = mapOf(
                     "performed" to result,
                     "action" to "long_click",
@@ -171,6 +181,7 @@ internal class InteractionNativeHandler(
             ?: return accessibilityNotConnected(request.requestId)
 
         val text = request.payload["text"] as? String ?: ""
+        val targetNode = resolveTargetNode(service, request.payload)
 
         return try {
             val arguments = android.os.Bundle().apply {
@@ -179,8 +190,10 @@ internal class InteractionNativeHandler(
                     text,
                 )
             }
-            val focusedNode = service.rootInActiveWindow?.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
-            val performed = focusedNode?.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments) ?: false
+            val node = targetNode
+                ?: service.rootInActiveWindow?.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
+            node?.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
+            val performed = node?.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments) ?: false
             gestureGeneration.incrementAndGet()
             NativeBridgeResponse(
                 protocolVersion = NativeBridgeProtocol.PROTOCOL_VERSION,
@@ -208,6 +221,7 @@ internal class InteractionNativeHandler(
     private fun handleClearText(request: NativeBridgeRequest): NativeBridgeResponse {
         val service = AccessibilityServiceRegistry.current()
             ?: return accessibilityNotConnected(request.requestId)
+        val targetNode = resolveTargetNode(service, request.payload)
 
         return try {
             val arguments = android.os.Bundle().apply {
@@ -216,8 +230,10 @@ internal class InteractionNativeHandler(
                     "",
                 )
             }
-            val focusedNode = service.rootInActiveWindow?.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
-            val performed = focusedNode?.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments) ?: false
+            val node = targetNode
+                ?: service.rootInActiveWindow?.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
+            node?.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
+            val performed = node?.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments) ?: false
             gestureGeneration.incrementAndGet()
             NativeBridgeResponse(
                 protocolVersion = NativeBridgeProtocol.PROTOCOL_VERSION,
@@ -247,6 +263,7 @@ internal class InteractionNativeHandler(
             ?: return accessibilityNotConnected(request.requestId)
 
         val direction = request.payload["direction"] as? String ?: "down"
+        val targetNode = resolveTargetNode(service, request.payload)
 
         val action = when (direction) {
             "forward", "down", "right" -> AccessibilityNodeInfo.ACTION_SCROLL_FORWARD
@@ -255,9 +272,11 @@ internal class InteractionNativeHandler(
         }
 
         return try {
-            val focusedNode = service.rootInActiveWindow?.findFocus(AccessibilityNodeInfo.FOCUS_ACCESSIBILITY)
+            val node = findScrollableNode(targetNode)
+                ?: service.rootInActiveWindow?.findFocus(AccessibilityNodeInfo.FOCUS_ACCESSIBILITY)
                 ?: service.rootInActiveWindow?.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
-            val performed = focusedNode?.performAction(action) ?: false
+                ?: findFirstScrollable(service.rootInActiveWindow)
+            val performed = node?.performAction(action) ?: false
             gestureGeneration.incrementAndGet()
             NativeBridgeResponse(
                 protocolVersion = NativeBridgeProtocol.PROTOCOL_VERSION,
@@ -283,9 +302,10 @@ internal class InteractionNativeHandler(
         }
     }
 
-    private fun handleSwipe(request: NativeBridgeRequest): NativeBridgeResponse {
+    private suspend fun handleSwipe(request: NativeBridgeRequest): NativeBridgeResponse {
         val service = AccessibilityServiceRegistry.current()
             ?: return accessibilityNotConnected(request.requestId)
+        if (!canPerformGestures(service)) return gesturesUnavailable(request.requestId)
 
         val startX = (request.payload["startX"] as? Number)?.toInt() ?: -1
         val startY = (request.payload["startY"] as? Number)?.toInt() ?: -1
@@ -312,8 +332,8 @@ internal class InteractionNativeHandler(
             }
             val stroke = GestureDescription.StrokeDescription(path, 0, durationMs.coerceAtLeast(1))
             val gesture = GestureDescription.Builder().addStroke(stroke).build()
-            val result = service.dispatchGesture(gesture, null, null)
-            gestureGeneration.incrementAndGet()
+            val result = performGesture(service, gesture)
+            if (result) gestureGeneration.incrementAndGet()
             NativeBridgeResponse(
                 protocolVersion = NativeBridgeProtocol.PROTOCOL_VERSION,
                 requestId = request.requestId,
@@ -336,6 +356,68 @@ internal class InteractionNativeHandler(
             )
         }
     }
+
+    private fun canPerformGestures(service: AccessibilityService): Boolean =
+        service.serviceInfo.capabilities and AccessibilityServiceInfo.CAPABILITY_CAN_PERFORM_GESTURES != 0
+
+    private fun resolveTargetNode(
+        service: AccessibilityService,
+        payload: Map<String, Any?>,
+    ): AccessibilityNodeInfo? {
+        val nativeRef = (payload["nativeRef"] as? String)?.trim().orEmpty()
+        if (nativeRef.isEmpty()) return null
+        return AccessibilityNodeReferenceRegistry.resolve(service, nativeRef)
+    }
+
+    private fun findScrollableNode(node: AccessibilityNodeInfo?): AccessibilityNodeInfo? {
+        if (node == null) return null
+        if (node.isScrollable) return node
+        var parent = node.parent
+        while (parent != null) {
+            if (parent.isScrollable) return parent
+            parent = parent.parent
+        }
+        return findFirstScrollable(node)
+    }
+
+    private fun findFirstScrollable(node: AccessibilityNodeInfo?): AccessibilityNodeInfo? {
+        if (node == null) return null
+        if (node.isScrollable) return node
+        for (index in 0 until node.childCount) {
+            findFirstScrollable(node.getChild(index))?.let { return it }
+        }
+        return null
+    }
+
+    private fun gesturesUnavailable(requestId: String): NativeBridgeResponse = NativeBridgeResponse(
+        protocolVersion = NativeBridgeProtocol.PROTOCOL_VERSION,
+        requestId = requestId,
+        status = NativeBridgeProtocol.STATUS_ERROR,
+        error = NativeBridgeError(
+            code = "INTERACTION_GESTURES_UNAVAILABLE",
+            message = "accessibility gesture capability is not available",
+        ),
+    )
+
+    private suspend fun performGesture(service: AccessibilityService, gesture: GestureDescription): Boolean =
+        withTimeoutOrNull(5000L) {
+            suspendCancellableCoroutine { continuation ->
+                val accepted = service.dispatchGesture(
+                    gesture,
+                    object : AccessibilityService.GestureResultCallback() {
+                        override fun onCompleted(gestureDescription: GestureDescription) {
+                            if (continuation.isActive) continuation.resume(true)
+                        }
+
+                        override fun onCancelled(gestureDescription: GestureDescription) {
+                            if (continuation.isActive) continuation.resume(false)
+                        }
+                    },
+                    Handler(Looper.getMainLooper()),
+                )
+                if (!accepted && continuation.isActive) continuation.resume(false)
+            }
+        } ?: false
 
 
     private fun handlePerformNodeAction(request: NativeBridgeRequest): NativeBridgeResponse {

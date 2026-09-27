@@ -29,7 +29,7 @@ func (e *BridgeCoordinateExecutor) Tap(
 	bridgeReq := androidnative.NativeBridgeRequest{
 		ProtocolVersion: 1,
 		RequestId:       "",
-		Operation:       "interaction.tap",
+		Operation:       "interaction.click",
 		Payload: map[string]any{
 			"displayId": displayID,
 			"x":         x,
@@ -44,6 +44,9 @@ func (e *BridgeCoordinateExecutor) Tap(
 
 	if resp.Error != nil {
 		return &Error{Code: INTERACTION_ACTION_FAILED, Message: resp.Error.Message}
+	}
+	if resp.Status != "success" || resp.Result["performed"] != true {
+		return &Error{Code: INTERACTION_ACTION_FAILED, Message: "tap gesture was not completed"}
 	}
 
 	return nil
@@ -63,7 +66,7 @@ func (e *BridgeCoordinateExecutor) LongPress(
 	bridgeReq := androidnative.NativeBridgeRequest{
 		ProtocolVersion: 1,
 		RequestId:       "",
-		Operation:       "interaction.long_press",
+		Operation:       "interaction.long_click",
 		Payload: map[string]any{
 			"displayId":  displayID,
 			"x":          x,
@@ -79,6 +82,9 @@ func (e *BridgeCoordinateExecutor) LongPress(
 
 	if resp.Error != nil {
 		return &Error{Code: INTERACTION_ACTION_FAILED, Message: resp.Error.Message}
+	}
+	if resp.Status != "success" || resp.Result["performed"] != true {
+		return &Error{Code: INTERACTION_ACTION_FAILED, Message: "long press gesture was not completed"}
 	}
 
 	return nil
@@ -124,6 +130,9 @@ func (e *BridgeCoordinateExecutor) Swipe(
 
 	if resp.Error != nil {
 		return &Error{Code: INTERACTION_ACTION_FAILED, Message: resp.Error.Message}
+	}
+	if resp.Status != "success" || resp.Result["performed"] != true {
+		return &Error{Code: INTERACTION_ACTION_FAILED, Message: "swipe gesture was not completed"}
 	}
 
 	return nil

@@ -71,11 +71,22 @@ func healthFromBridgeResponse(provider string, result map[string]any, err error)
 	}
 	userActionRequired, _ := result["userActionRequired"].(bool)
 	connected, hasConnected := result["connected"].(bool)
+	gestureAvailable, hasGestureAvailable := result["gestureAvailable"].(bool)
+	canRetrieveWindowContent, hasCanRetrieveWindowContent := result["canRetrieveWindowContent"].(bool)
+	interactionReady, hasInteractionReady := result["interactionReady"].(bool)
 
 	lower := strings.ToLower(stateText)
 	switch {
 	case userActionRequired || strings.Contains(lower, "permission") || strings.Contains(lower, "unauthorized") || strings.Contains(lower, "authorization_required"):
 		return newProviderHealth(provider, ProviderStatePermissionRequired, reason, permission, true)
+	case hasConnected && !connected && strings.Contains(lower, "enabled_not_connected"):
+		return newProviderHealth(provider, ProviderStateStarting, "accessibility service is enabled but not connected", permission, true)
+	case hasGestureAvailable && !gestureAvailable:
+		return newProviderHealth(provider, ProviderStateDegraded, "accessibility gesture capability is unavailable", permission, true)
+	case hasCanRetrieveWindowContent && !canRetrieveWindowContent:
+		return newProviderHealth(provider, ProviderStateDegraded, "accessibility window content capability is unavailable", permission, true)
+	case hasInteractionReady && !interactionReady:
+		return newProviderHealth(provider, ProviderStateDegraded, "accessibility interaction capabilities are incomplete", permission, true)
 	case hasConnected && connected:
 		return newProviderHealth(provider, ProviderStateReady, reason, permission, true)
 	case hasConnected && !connected:

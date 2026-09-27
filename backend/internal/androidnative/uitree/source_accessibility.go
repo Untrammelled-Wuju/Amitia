@@ -51,8 +51,11 @@ func (s *AccessibilitySource) Status(ctx context.Context) SourceStatus {
 	if !connected {
 		return SourceStatus{Type: SourceTypeAccessibility, Available: false, Reason: "accessibility service not connected"}
 	}
+	if !canRetrieve {
+		return SourceStatus{Type: SourceTypeAccessibility, Available: false, Reason: "accessibility window content capability is unavailable"}
+	}
 
-	return SourceStatus{Type: SourceTypeAccessibility, Available: canRetrieve, Reason: ""}
+	return SourceStatus{Type: SourceTypeAccessibility, Available: true, Reason: ""}
 }
 
 func (s *AccessibilitySource) Snapshot(ctx context.Context, request SnapshotRequest) (RawSnapshot, error) {

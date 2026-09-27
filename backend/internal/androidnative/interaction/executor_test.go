@@ -59,6 +59,42 @@ func (m *mockBridgeForExecutor) Health(ctx context.Context) androidnative.Native
 	return androidnative.NativeBridgeHealthReady
 }
 
+func TestBridgeCoordinateExecutorUsesNativeOperationsAndCompletion(t *testing.T) {
+	var operations []string
+	bridge := &mockBridgeForExecutor{
+		executeFunc: func(_ context.Context, req androidnative.NativeBridgeRequest) (androidnative.NativeBridgeResponse, error) {
+			operations = append(operations, req.Operation)
+			return androidnative.NativeBridgeResponse{
+				Status: "success",
+				Result: map[string]any{"performed": true},
+			}, nil
+		},
+	}
+	executor := NewBridgeCoordinateExecutor(bridge)
+	if err := executor.Tap(context.Background(), 0, 10, 20); err != nil {
+		t.Fatal(err)
+	}
+	if err := executor.LongPress(context.Background(), 0, 10, 20, time.Second); err != nil {
+		t.Fatal(err)
+	}
+	if err := executor.Swipe(context.Background(), SwipeRequest{StartX: 10, StartY: 20, EndX: 30, EndY: 40}); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"interaction.click", "interaction.long_click", "interaction.swipe"}
+	for index, operation := range want {
+		if operations[index] != operation {
+			t.Fatalf("operation %d: got %s, want %s", index, operations[index], operation)
+		}
+	}
+
+	bridge.executeFunc = func(_ context.Context, _ androidnative.NativeBridgeRequest) (androidnative.NativeBridgeResponse, error) {
+		return androidnative.NativeBridgeResponse{Status: "error", Result: map[string]any{"performed": false}}, nil
+	}
+	if err := executor.Tap(context.Background(), 0, 10, 20); err == nil {
+		t.Fatal("failed gesture must not be reported as success")
+	}
+}
+
 func TestStrategyResult_CanFallback(t *testing.T) {
 	tests := []struct {
 		name     string

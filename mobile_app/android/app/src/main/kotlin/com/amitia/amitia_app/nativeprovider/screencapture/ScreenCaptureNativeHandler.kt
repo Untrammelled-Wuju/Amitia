@@ -1,6 +1,7 @@
 package com.amitia.amitia_app.nativeprovider.screencapture
 
 import android.accessibilityservice.AccessibilityService
+import android.accessibilityservice.AccessibilityServiceInfo
 import android.graphics.Bitmap
 import android.graphics.ColorSpace
 import android.os.Build
@@ -42,21 +43,27 @@ internal class ScreenCaptureNativeHandler : AndroidNativeOperationHandler {
 
     private fun status(request: NativeBridgeRequest): NativeBridgeResponse {
         val supported = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
-        val connected = AccessibilityServiceRegistry.isServiceConnected()
+        val service = AccessibilityServiceRegistry.current()
+        val connected = service != null
+        val capable = service?.serviceInfo?.capabilities?.and(
+            AccessibilityServiceInfo.CAPABILITY_CAN_TAKE_SCREENSHOT,
+        ) != 0 && service != null
         return success(
             request,
             mapOf(
                 "supported" to supported,
-                "available" to (supported && connected),
+                "available" to (supported && connected && capable),
                 "state" to when {
                     !supported -> "unsupported"
                     !connected -> "permission_required"
+                    !capable -> "unsupported"
                     else -> "ready"
                 },
                 "provider" to "accessibility_take_screenshot",
                 "reason" to when {
                     !supported -> "AccessibilityService.takeScreenshot requires Android 11+"
                     !connected -> "accessibility service is not connected"
+                    !capable -> "accessibility screenshot capability is not declared"
                     else -> null
                 },
             ),
@@ -69,6 +76,9 @@ internal class ScreenCaptureNativeHandler : AndroidNativeOperationHandler {
         }
         val service = AccessibilityServiceRegistry.current()
             ?: return error(request, "SCREEN_CAPTURE_PERMISSION_REQUIRED", "accessibility service is not connected")
+        if (service.serviceInfo.capabilities and AccessibilityServiceInfo.CAPABILITY_CAN_TAKE_SCREENSHOT == 0) {
+            return error(request, "SCREEN_CAPTURE_UNSUPPORTED", "accessibility screenshot capability is not declared")
+        }
         val displayId = (request.payload["displayId"] as? Number)?.toInt() ?: 0
         val maxWidth = ((request.payload["maxWidth"] as? Number)?.toInt() ?: DEFAULT_MAX_WIDTH).coerceIn(320, 4096)
         val maxHeight = ((request.payload["maxHeight"] as? Number)?.toInt() ?: DEFAULT_MAX_HEIGHT).coerceIn(320, 4096)

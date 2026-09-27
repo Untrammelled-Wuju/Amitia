@@ -36,6 +36,13 @@ internal class AccessibilityNativeHandler(context: Context) {
             "connected" to state.connected,
             "canRetrieveWindowContent" to state.canRetrieveWindowContent,
             "canRetrieveInteractiveWindows" to state.canRetrieveInteractiveWindows,
+            "includeNotImportantViews" to state.includeNotImportantViews,
+            "enhancedWebAccessibility" to state.enhancedWebAccessibility,
+            "canPerformGestures" to state.canPerformGestures,
+            "canTakeScreenshot" to state.canTakeScreenshot,
+            "interactionReady" to state.interactionReady,
+            "visualReady" to state.visualReady,
+            "ready" to state.ready,
             "userActionRequired" to state.userActionRequired,
             "state" to state.state,
             "generation" to AccessibilityServiceRegistry.generation(),
@@ -52,7 +59,7 @@ internal class AccessibilityNativeHandler(context: Context) {
     }
 
     private fun handleOpenSettings(request: NativeAccessibilityRequest): NativeAccessibilityResponse {
-        if (!settingsLauncher.canOpenSettings()) {
+        if (!settingsLauncher.openSettings()) {
             return NativeAccessibilityResponse(
                 requestId = request.requestId,
                 status = "error",
@@ -63,13 +70,11 @@ internal class AccessibilityNativeHandler(context: Context) {
                 ),
             )
         }
-
-        val opened = settingsLauncher.openSettings()
         return NativeAccessibilityResponse(
             requestId = request.requestId,
             status = "success",
             result = mapOf(
-                "opened" to opened,
+                "opened" to true,
                 "userActionRequired" to true,
             ),
         )

@@ -1,6 +1,7 @@
 package com.amitia.amitia_app.nativeprovider.uitree
 
 import android.content.Context
+import android.accessibilityservice.AccessibilityServiceInfo
 import android.graphics.Rect
 import android.os.Build
 import android.view.accessibility.AccessibilityNodeInfo
@@ -39,7 +40,8 @@ internal class UITreeNativeHandler(
             mapOf(
                 "connected" to (service != null),
                 "rootAvailable" to (service?.rootInActiveWindow != null || windows.any { it.root != null }),
-                "canRetrieveWindowContent" to (service != null),
+                "canRetrieveWindowContent" to (service != null &&
+                    service.serviceInfo.capabilities and AccessibilityServiceInfo.CAPABILITY_CAN_RETRIEVE_WINDOW_CONTENT != 0),
                 "multiWindow" to (windows.size > 1),
                 "windowCount" to windows.size,
                 "generation" to generation.get(),

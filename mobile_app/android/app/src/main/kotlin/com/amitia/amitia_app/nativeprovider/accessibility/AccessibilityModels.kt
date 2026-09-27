@@ -26,6 +26,13 @@ data class AccessibilityCapabilityState(
     val connected: Boolean,
     val canRetrieveWindowContent: Boolean,
     val canRetrieveInteractiveWindows: Boolean,
+    val includeNotImportantViews: Boolean,
+    val enhancedWebAccessibility: Boolean,
+    val canPerformGestures: Boolean,
+    val canTakeScreenshot: Boolean,
+    val interactionReady: Boolean,
+    val visualReady: Boolean,
+    val ready: Boolean,
     val userActionRequired: Boolean,
     val state: String,
 )

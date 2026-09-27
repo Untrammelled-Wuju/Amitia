@@ -37,6 +37,8 @@ func buildStatusTool(runtime capability.RuntimeBinding) capability.ToolDefinitio
 		"type": "object",
 		"properties": {
 			"available": {"type": "boolean"},
+			"connected": {"type": "boolean"},
+			"gestureAvailable": {"type": "boolean"},
 			"accessibilityAction": {"type": "boolean"},
 			"accessibilityGesture": {"type": "boolean"},
 			"coordinateTap": {"type": "boolean"},
@@ -53,11 +55,11 @@ func buildStatusTool(runtime capability.RuntimeBinding) capability.ToolDefinitio
 	}`)
 
 	return capability.ToolDefinition{
-		ID:          "android.interaction.status",
-		ModelName:   "android.interaction.status",
-		Source:      capability.ToolSourceBuiltin,
-		Name:        "Interaction Status",
-		Description: "查询Android Interaction能力状态。检测Accessibility Action/Gesture、Coordinate、Visual Locate等能力可用性。不触发任何副作用。",
+		ID:           "android.interaction.status",
+		ModelName:    "android.interaction.status",
+		Source:       capability.ToolSourceBuiltin,
+		Name:         "Interaction Status",
+		Description:  "查询Android Interaction能力状态。检测Accessibility Action/Gesture、Coordinate、Visual Locate等能力可用性。不触发任何副作用。",
 		InputSchema:  inputSchema,
 		OutputSchema: outputSchema,
 		Permissions: []capability.PermissionRequirement{
@@ -142,11 +144,11 @@ func buildClickTool(runtime capability.RuntimeBinding) capability.ToolDefinition
 	}`)
 
 	return capability.ToolDefinition{
-		ID:          "android.interaction.click",
-		ModelName:   "android.interaction.click",
-		Source:      capability.ToolSourceBuiltin,
-		Name:        "Interaction Click",
-		Description: "点击Android UI目标。优先使用Accessibility ACTION_CLICK，失败时按策略降级到坐标点击、Root/ADB fallback。",
+		ID:           "android.interaction.click",
+		ModelName:    "android.interaction.click",
+		Source:       capability.ToolSourceBuiltin,
+		Name:         "Interaction Click",
+		Description:  "点击Android UI目标。优先使用Accessibility ACTION_CLICK，失败时按策略降级到坐标点击、Root/ADB fallback。",
 		InputSchema:  inputSchema,
 		OutputSchema: outputSchema,
 		Permissions: []capability.PermissionRequirement{
@@ -229,11 +231,11 @@ func buildLongClickTool(runtime capability.RuntimeBinding) capability.ToolDefini
 	}`)
 
 	return capability.ToolDefinition{
-		ID:          "android.interaction.long_click",
-		ModelName:   "android.interaction.long_click",
-		Source:      capability.ToolSourceBuiltin,
-		Name:        "Interaction Long Click",
-		Description: "长按Android UI目标。优先使用Accessibility ACTION_LONG_CLICK，失败时降级到Gesture long press。",
+		ID:           "android.interaction.long_click",
+		ModelName:    "android.interaction.long_click",
+		Source:       capability.ToolSourceBuiltin,
+		Name:         "Interaction Long Click",
+		Description:  "长按Android UI目标。优先使用Accessibility ACTION_LONG_CLICK，失败时降级到Gesture long press。",
 		InputSchema:  inputSchema,
 		OutputSchema: outputSchema,
 		Permissions: []capability.PermissionRequirement{
@@ -305,11 +307,11 @@ func buildInputTextTool(runtime capability.RuntimeBinding) capability.ToolDefini
 	}`)
 
 	return capability.ToolDefinition{
-		ID:          "android.interaction.input_text",
-		ModelName:   "android.interaction.input_text",
-		Source:      capability.ToolSourceBuiltin,
-		Name:        "Interaction Input Text",
-		Description: "向Android UI输入文本。优先使用Accessibility ACTION_SET_TEXT。Password字段默认拒绝。",
+		ID:           "android.interaction.input_text",
+		ModelName:    "android.interaction.input_text",
+		Source:       capability.ToolSourceBuiltin,
+		Name:         "Interaction Input Text",
+		Description:  "向Android UI输入文本。优先使用Accessibility ACTION_SET_TEXT。Password字段默认拒绝。",
 		InputSchema:  inputSchema,
 		OutputSchema: outputSchema,
 		Permissions: []capability.PermissionRequirement{
@@ -379,11 +381,11 @@ func buildClearTextTool(runtime capability.RuntimeBinding) capability.ToolDefini
 	}`)
 
 	return capability.ToolDefinition{
-		ID:          "android.interaction.clear_text",
-		ModelName:   "android.interaction.clear_text",
-		Source:      capability.ToolSourceBuiltin,
-		Name:        "Interaction Clear Text",
-		Description: "清空Android UI文本字段。使用Accessibility ACTION_SET_TEXT(\"\")。",
+		ID:           "android.interaction.clear_text",
+		ModelName:    "android.interaction.clear_text",
+		Source:       capability.ToolSourceBuiltin,
+		Name:         "Interaction Clear Text",
+		Description:  "清空Android UI文本字段。使用Accessibility ACTION_SET_TEXT(\"\")。",
 		InputSchema:  inputSchema,
 		OutputSchema: outputSchema,
 		Permissions: []capability.PermissionRequirement{
@@ -463,11 +465,11 @@ func buildScrollTool(runtime capability.RuntimeBinding) capability.ToolDefinitio
 	}`)
 
 	return capability.ToolDefinition{
-		ID:          "android.interaction.scroll",
-		ModelName:   "android.interaction.scroll",
-		Source:      capability.ToolSourceBuiltin,
-		Name:        "Interaction Scroll",
-		Description: "滚动Android UI。优先使用Accessibility ACTION_SCROLL_FORWARD/BACKWARD，失败时降级到swipe手势。",
+		ID:           "android.interaction.scroll",
+		ModelName:    "android.interaction.scroll",
+		Source:       capability.ToolSourceBuiltin,
+		Name:         "Interaction Scroll",
+		Description:  "滚动Android UI。优先使用Accessibility ACTION_SCROLL_FORWARD/BACKWARD，失败时降级到swipe手势。",
 		InputSchema:  inputSchema,
 		OutputSchema: outputSchema,
 		Permissions: []capability.PermissionRequirement{
@@ -539,11 +541,11 @@ func buildSwipeTool(runtime capability.RuntimeBinding) capability.ToolDefinition
 	}`)
 
 	return capability.ToolDefinition{
-		ID:          "android.interaction.swipe",
-		ModelName:   "android.interaction.swipe",
-		Source:      capability.ToolSourceBuiltin,
-		Name:        "Interaction Swipe",
-		Description: "执行Android滑动手势。使用Accessibility Gesture或Coordinate executor。",
+		ID:           "android.interaction.swipe",
+		ModelName:    "android.interaction.swipe",
+		Source:       capability.ToolSourceBuiltin,
+		Name:         "Interaction Swipe",
+		Description:  "执行Android滑动手势。使用Accessibility Gesture或Coordinate executor。",
 		InputSchema:  inputSchema,
 		OutputSchema: outputSchema,
 		Permissions: []capability.PermissionRequirement{
@@ -619,11 +621,11 @@ func buildVisualLocateTool(runtime capability.RuntimeBinding) capability.ToolDef
 	}`)
 
 	return capability.ToolDefinition{
-		ID:          "android.interaction.visual_locate",
-		ModelName:   "android.interaction.visual_locate",
-		Source:      capability.ToolSourceBuiltin,
-		Name:        "Interaction Visual Locate",
-		Description: "通过截图和Image Intelligence定位Android UI目标。返回候选列表，不执行点击。",
+		ID:           "android.interaction.visual_locate",
+		ModelName:    "android.interaction.visual_locate",
+		Source:       capability.ToolSourceBuiltin,
+		Name:         "Interaction Visual Locate",
+		Description:  "通过截图和Image Intelligence定位Android UI目标。返回候选列表，不执行点击。",
 		InputSchema:  inputSchema,
 		OutputSchema: outputSchema,
 		Permissions: []capability.PermissionRequirement{
@@ -690,11 +692,11 @@ func buildVisualClickTool(runtime capability.RuntimeBinding) capability.ToolDefi
 	}`)
 
 	return capability.ToolDefinition{
-		ID:          "android.interaction.visual_click",
-		ModelName:   "android.interaction.visual_click",
-		Source:      capability.ToolSourceBuiltin,
-		Name:        "Interaction Visual Click",
-		Description: "通过截图和Image Intelligence定位并点击Android UI目标。先visual_locate再coordinate click。",
+		ID:           "android.interaction.visual_click",
+		ModelName:    "android.interaction.visual_click",
+		Source:       capability.ToolSourceBuiltin,
+		Name:         "Interaction Visual Click",
+		Description:  "通过截图和Image Intelligence定位并点击Android UI目标。先visual_locate再coordinate click。",
 		InputSchema:  inputSchema,
 		OutputSchema: outputSchema,
 		Permissions: []capability.PermissionRequirement{

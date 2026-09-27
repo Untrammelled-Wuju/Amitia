@@ -1,6 +1,7 @@
 package accessibility
 
 import (
+	"encoding/json"
 	"testing"
 )
 
@@ -54,6 +55,19 @@ func TestBuildAccessibilityTools(t *testing.T) {
 	}
 	if statusTool.Runtime.HandlerName != "accessibility.status" {
 		t.Fatalf("expected handler name accessibility.status, got %s", statusTool.Runtime.HandlerName)
+	}
+	var outputSchema map[string]any
+	if err := json.Unmarshal(statusTool.OutputSchema, &outputSchema); err != nil {
+		t.Fatalf("invalid output schema: %v", err)
+	}
+	properties, ok := outputSchema["properties"].(map[string]any)
+	if !ok {
+		t.Fatal("output schema properties missing")
+	}
+	for _, field := range []string{"includeNotImportantViews", "enhancedWebAccessibility", "canPerformGestures", "canTakeScreenshot", "interactionReady", "visualReady", "ready"} {
+		if _, ok := properties[field]; !ok {
+			t.Fatalf("output schema missing %s", field)
+		}
 	}
 
 	openSettingsTool := tools[1]

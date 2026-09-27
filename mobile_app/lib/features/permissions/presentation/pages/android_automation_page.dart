@@ -20,8 +20,8 @@ class AndroidAutomationPage extends ConsumerStatefulWidget {
       _AndroidAutomationPageState();
 }
 
-class _AndroidAutomationPageState
-    extends ConsumerState<AndroidAutomationPage> {
+class _AndroidAutomationPageState extends ConsumerState<AndroidAutomationPage>
+    with WidgetsBindingObserver {
   bool _loading = true;
   String? _error;
   String _providerHealth = 'unknown';
@@ -31,7 +31,19 @@ class _AndroidAutomationPageState
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     Future<void>.microtask(_refresh);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _refresh();
   }
 
   Future<void> _refresh() async {
@@ -46,19 +58,29 @@ class _AndroidAutomationPageState
       final api = ref.read(rawDeviceLocalBackendServiceApiProvider);
       Map<String, dynamic> backend = const <String, dynamic>{};
       if (api != null) {
-        backend = await api.get<Map<String, dynamic>>(
-              '/api/android-automation/status',
-            ) ??
-            const <String, dynamic>{};
+        try {
+          backend =
+              await api.get<Map<String, dynamic>>(
+                '/api/android-automation/status',
+              ) ??
+              const <String, dynamic>{};
+        } catch (_) {}
       }
 
+      final accessibility = await _nativeStatus('accessibility.status');
       final screenCapture = await _nativeStatus('screen_capture.status');
-      final capabilities = _buildCapabilities(backend, screenCapture);
+      final capabilities = _buildCapabilities(
+        backend,
+        accessibility,
+        screenCapture,
+      );
       if (!mounted) return;
       setState(() {
-        _providerHealth = backend['providerHealth']?.toString() ??
+        _providerHealth =
+            backend['providerHealth']?.toString() ??
             (backend.isEmpty ? 'unavailable' : 'unknown');
-        _probedAt = DateTime.tryParse(backend['probedAt']?.toString() ?? '') ??
+        _probedAt =
+            DateTime.tryParse(backend['probedAt']?.toString() ?? '') ??
             DateTime.now();
         _capabilities = capabilities;
         _loading = false;
@@ -97,6 +119,7 @@ class _AndroidAutomationPageState
 
   List<_AutomationCapability> _buildCapabilities(
     Map<String, dynamic> backend,
+    Map<String, dynamic> accessibility,
     Map<String, dynamic> screenCapture,
   ) {
     final probes = _asMap(backend['probes']);
@@ -104,10 +127,10 @@ class _AndroidAutomationPageState
     final providers = _asMap(interaction['providers']);
 
     return <_AutomationCapability>[
-      _fromProvider(
+      _fromRawProbe(
         name: 'Accessibility',
         icon: Icons.accessibility_new,
-        provider: _asMap(providers['accessibility']),
+        probe: accessibility,
         description: '语义节点、窗口树与原生节点动作',
         repairOperation: 'accessibility.open_settings',
       ),
@@ -197,8 +220,9 @@ class _AndroidAutomationPageState
       permission: provider['permission']?.toString(),
       reason: provider['reason']?.toString(),
       lastProbeAt: DateTime.tryParse(provider['lastProbeAt']?.toString() ?? ''),
-      lastSuccessAt:
-          DateTime.tryParse(provider['lastSuccessAt']?.toString() ?? ''),
+      lastSuccessAt: DateTime.tryParse(
+        provider['lastSuccessAt']?.toString() ?? '',
+      ),
       recoverable: provider['recoverable'] == true,
       repairOperation: repairOperation,
     );
@@ -229,7 +253,8 @@ class _AndroidAutomationPageState
       state: state,
       description: description,
       provider: result['provider']?.toString(),
-      permission: result['permissionState']?.toString() ??
+      permission:
+          result['permissionState']?.toString() ??
           result['authorizationState']?.toString(),
       reason: reason?.isNotEmpty == true
           ? reason
@@ -253,10 +278,7 @@ class _AndroidAutomationPageState
     return known.contains(value) ? value : 'UNAVAILABLE';
   }
 
-  String _normalizeRawState(
-    String? rawState,
-    Map<String, dynamic> result,
-  ) {
+  String _normalizeRawState(String? rawState, Map<String, dynamic> result) {
     final value = rawState?.trim().toLowerCase() ?? '';
     if (result['userActionRequired'] == true ||
         value.contains('permission') ||
@@ -266,7 +288,17 @@ class _AndroidAutomationPageState
     if (result['supported'] == false || value.contains('unsupported')) {
       return 'UNAVAILABLE';
     }
+    if (result['connected'] == true &&
+        (result['ready'] == false ||
+            result['interactionReady'] == false ||
+            result['gestureAvailable'] == false ||
+            result['canRetrieveWindowContent'] == false)) {
+      return 'DEGRADED';
+    }
     if (result['available'] == true ||
+        result['ready'] == true ||
+        result['interactionReady'] == true ||
+        result['visualReady'] == true ||
         result['connected'] == true ||
         result['listenerConnected'] == true ||
         result['permissionGranted'] == true ||
@@ -292,14 +324,12 @@ class _AndroidAutomationPageState
   Map<String, dynamic> _probeResult(
     Map<String, dynamic> probes,
     String operation,
-  ) =>
-      _asMap(_asMap(probes[operation])['result']);
+  ) => _asMap(_asMap(probes[operation])['result']);
 
   Map<String, dynamic> _probeEnvelope(
     Map<String, dynamic> probes,
     String operation,
-  ) =>
-      _asMap(probes[operation]);
+  ) => _asMap(probes[operation]);
 
   Map<String, dynamic> _asMap(dynamic value) {
     if (value is Map<String, dynamic>) return value;
@@ -352,24 +382,23 @@ class _AndroidAutomationPageState
     try {
       final result = await dispatcher.execute(<String, dynamic>{
         'protocolVersion': 1,
-        'requestId': 'automation_repair_${DateTime.now().microsecondsSinceEpoch}',
+        'requestId':
+            'automation_repair_${DateTime.now().microsecondsSinceEpoch}',
         'platform': 'android',
         'operation': operation,
         'payload': const <String, dynamic>{},
       });
       if (result['status']?.toString() != 'success') {
         final error = _asMap(result['error']);
-        throw StateError(
-          error['message']?.toString() ?? '修复操作未成功执行',
-        );
+        throw StateError(error['message']?.toString() ?? '修复操作未成功执行');
       }
       await Future<void>.delayed(const Duration(milliseconds: 300));
       await _refresh();
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('操作失败：$error')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('操作失败：$error')));
     }
   }
 
@@ -414,10 +443,7 @@ class _AndroidAutomationPageState
                 label: 'Provider',
                 value: capability.provider ?? '未报告',
               ),
-              _DetailRow(
-                label: '权限',
-                value: capability.permission ?? '无额外状态',
-              ),
+              _DetailRow(label: '权限', value: capability.permission ?? '无额外状态'),
               if (capability.lastProbeAt != null)
                 _DetailRow(
                   label: '最近探测',
@@ -597,10 +623,7 @@ class _AutomationSummaryCard extends StatelessWidget {
               Icon(Icons.hub_outlined, color: context.accentPrimary),
               SizedBox(width: AppSpacing.sm),
               Expanded(
-                child: Text(
-                  '设备自动化能力',
-                  style: AppTypography.cardTitle(context),
-                ),
+                child: Text('设备自动化能力', style: AppTypography.cardTitle(context)),
               ),
               if (loading)
                 const SizedBox(
@@ -716,9 +739,7 @@ class _DetailRow extends StatelessWidget {
             width: 84,
             child: Text(label, style: AppTypography.label(context)),
           ),
-          Expanded(
-            child: Text(value, style: AppTypography.bodySmall(context)),
-          ),
+          Expanded(child: Text(value, style: AppTypography.bodySmall(context))),
         ],
       ),
     );

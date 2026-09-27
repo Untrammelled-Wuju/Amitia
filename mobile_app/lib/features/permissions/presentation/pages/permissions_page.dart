@@ -7,6 +7,7 @@ import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_radius.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_misc.dart';
+import '../../../../core/native_bridge/providers/native_bridge_relay_provider.dart';
 import '../../../../shared/models/models.dart';
 
 class PermissionsPage extends ConsumerStatefulWidget {
@@ -16,12 +17,14 @@ class PermissionsPage extends ConsumerStatefulWidget {
   ConsumerState<PermissionsPage> createState() => _PermissionsPageState();
 }
 
-class _PermissionsPageState extends ConsumerState<PermissionsPage> {
+class _PermissionsPageState extends ConsumerState<PermissionsPage>
+    with WidgetsBindingObserver {
   late List<PermissionItem> _permissions;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _permissions = [
       PermissionItem(
         name: '无障碍服务',
@@ -78,6 +81,104 @@ class _PermissionsPageState extends ConsumerState<PermissionsPage> {
         description: '提供高级系统操作能力',
       ),
     ];
+    Future<void>.microtask(_refreshAccessibility);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _refreshAccessibility();
+    }
+  }
+
+  Future<void> _refreshAccessibility() async {
+    try {
+      final response = await ref
+          .read(nativeBridgePlatformDispatcherProvider)
+          .execute({
+            'protocolVersion': 1,
+            'requestId':
+                'accessibility_status_${DateTime.now().microsecondsSinceEpoch}',
+            'platform': 'android',
+            'operation': 'accessibility.status',
+            'payload': <String, dynamic>{},
+          });
+      if (!mounted || response['status'] != 'success') return;
+      final result = Map<String, dynamic>.from(
+        response['result'] as Map? ?? {},
+      );
+      final connected = result['connected'] == true;
+      final enabled = result['enabledInSettings'] == true;
+      final ready = result['ready'] == true;
+      final canRetrieve = result['canRetrieveWindowContent'] == true;
+      final canPerformGestures = result['canPerformGestures'] == true;
+      final canTakeScreenshot = result['canTakeScreenshot'] == true;
+      final limitations = <String>[
+        if (!canRetrieve) '界面读取',
+        if (!canPerformGestures) '手势控制',
+        if (!canTakeScreenshot) '屏幕截图',
+      ];
+      setState(() {
+        _permissions[0] = PermissionItem(
+          name: '无障碍服务',
+          icon: Icons.accessibility_new,
+          status: ready
+              ? '已授权'
+              : connected
+              ? '能力受限'
+              : enabled
+              ? '连接中'
+              : '需要设置',
+          description: ready
+              ? '已连接，可供 AI 读取并操作屏幕'
+              : connected
+              ? '已连接，但缺少：${limitations.join('、')}'
+              : enabled
+              ? '系统已开启，正在等待服务连接'
+              : '允许 Amitia 读取和操作屏幕',
+        );
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _permissions[0] = PermissionItem(
+          name: '无障碍服务',
+          icon: Icons.accessibility_new,
+          status: '不可用',
+          description: '无法读取无障碍服务状态',
+        );
+      });
+    }
+  }
+
+  Future<void> _openAccessibilitySettings() async {
+    try {
+      final response = await ref
+          .read(nativeBridgePlatformDispatcherProvider)
+          .execute({
+            'protocolVersion': 1,
+            'requestId':
+                'accessibility_settings_${DateTime.now().microsecondsSinceEpoch}',
+            'platform': 'android',
+            'operation': 'accessibility.open_settings',
+            'payload': <String, dynamic>{},
+          });
+      if (response['status'] == 'success' &&
+          (response['result'] as Map?)?['opened'] == true) {
+        return;
+      }
+    } catch (_) {}
+    if (mounted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('无法打开系统无障碍设置')));
+    }
   }
 
   BadgeType _badgeType(String status) {
@@ -85,6 +186,8 @@ class _PermissionsPageState extends ConsumerState<PermissionsPage> {
       case '已授权':
         return BadgeType.success;
       case '需要设置':
+      case '连接中':
+      case '能力受限':
         return BadgeType.warning;
       case '不可用':
         return BadgeType.error;
@@ -102,7 +205,13 @@ class _PermissionsPageState extends ConsumerState<PermissionsPage> {
           top: Radius.circular(AppRadius.large),
         ),
       ),
-      builder: (ctx) => _PermissionGuideSheet(item: item),
+      builder: (ctx) => _PermissionGuideSheet(
+        item: item,
+        steps: _guideStepsFor(item.name),
+        onOpenSettings: item.name == '无障碍服务'
+            ? _openAccessibilitySettings
+            : null,
+      ),
     );
   }
 
@@ -113,6 +222,7 @@ class _PermissionsPageState extends ConsumerState<PermissionsPage> {
         '找到「无障碍」或「辅助功能」',
         '选择「Amitia Accessibility Service」',
         '开启服务开关并确认',
+        '若开关不可用，请在应用详情中允许受限设置后重试',
       ];
     }
     if (name == '通知读取') {
@@ -123,18 +233,17 @@ class _PermissionsPageState extends ConsumerState<PermissionsPage> {
         '开启 Amitia 并确认',
       ];
     }
-    return const [
-      '打开系统设置',
-      '找到「应用管理」',
-      '选择 Amitia',
-      '找到权限并开启',
-    ];
+    return const ['打开系统设置', '找到「应用管理」', '选择 Amitia', '找到权限并开启'];
   }
 
   @override
   Widget build(BuildContext context) {
     return AmitiaScaffold(
-      appBar: AmitiaAppBar(title: '系统权限', showBackButton: true, fallbackRoute: AppRoutes.settings),
+      appBar: AmitiaAppBar(
+        title: '系统权限',
+        showBackButton: true,
+        fallbackRoute: AppRoutes.settings,
+      ),
       body: ListView.separated(
         padding: EdgeInsets.symmetric(
           vertical: AppSpacing.md,
@@ -215,18 +324,17 @@ class _PermissionCard extends StatelessWidget {
 
 class _PermissionGuideSheet extends StatelessWidget {
   final PermissionItem item;
+  final List<String> steps;
+  final Future<void> Function()? onOpenSettings;
 
-  const _PermissionGuideSheet({required this.item});
+  const _PermissionGuideSheet({
+    required this.item,
+    required this.steps,
+    this.onOpenSettings,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final state = context.findAncestorStateOfType<_PermissionsPageState>();
-    final steps = state?._guideStepsFor(item.name) ?? <String>[
-      '打开系统设置',
-      '找到「应用管理」',
-      '选择 Amitia',
-      '找到「${item.name}」并开启',
-    ];
     return SafeArea(
       child: Padding(
         padding: EdgeInsets.fromLTRB(
@@ -243,43 +351,54 @@ class _PermissionGuideSheet extends StatelessWidget {
             SizedBox(height: AppSpacing.sm),
             Text(item.description, style: AppTypography.caption(context)),
             SizedBox(height: AppSpacing.lg),
-            ...steps.asMap().entries.map(
-              (entry) {
-                return Padding(
-                  padding: EdgeInsets.only(bottom: AppSpacing.md),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Container(
-                        width: 22,
-                        height: 22,
-                        decoration: BoxDecoration(
-                          color: context.accentSoft,
-                          shape: BoxShape.circle,
-                        ),
-                        child: Center(
-                          child: Text(
-                            '${entry.key + 1}',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: context.accentPrimary,
-                              fontWeight: FontWeight.w600,
-                            ),
+            ...steps.asMap().entries.map((entry) {
+              return Padding(
+                padding: EdgeInsets.only(bottom: AppSpacing.md),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      width: 22,
+                      height: 22,
+                      decoration: BoxDecoration(
+                        color: context.accentSoft,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Center(
+                        child: Text(
+                          '${entry.key + 1}',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: context.accentPrimary,
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
                       ),
-                      SizedBox(width: AppSpacing.md),
-                      Expanded(
-                        child: Text(
-                          entry.value,
-                          style: AppTypography.bodySmall(context),
-                        ),
+                    ),
+                    SizedBox(width: AppSpacing.md),
+                    Expanded(
+                      child: Text(
+                        entry.value,
+                        style: AppTypography.bodySmall(context),
                       ),
-                    ],
-                  ),
-                );
-              },
-            ),
+                    ),
+                  ],
+                ),
+              );
+            }),
+            if (onOpenSettings != null) ...[
+              SizedBox(height: AppSpacing.md),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  onPressed: () async {
+                    Navigator.of(context).pop();
+                    await onOpenSettings!();
+                  },
+                  child: const Text('前往开启无障碍服务'),
+                ),
+              ),
+            ],
           ],
         ),
       ),

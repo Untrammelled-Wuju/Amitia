@@ -60,6 +60,13 @@ func buildStatusTool(runtime capability.RuntimeBinding) capability.ToolDefinitio
 			"connected": {"type": "boolean"},
 			"canRetrieveWindowContent": {"type": "boolean"},
 			"canRetrieveInteractiveWindows": {"type": "boolean"},
+			"includeNotImportantViews": {"type": "boolean"},
+			"enhancedWebAccessibility": {"type": "boolean"},
+			"canPerformGestures": {"type": "boolean"},
+			"canTakeScreenshot": {"type": "boolean"},
+			"interactionReady": {"type": "boolean"},
+			"visualReady": {"type": "boolean"},
+			"ready": {"type": "boolean"},
 			"userActionRequired": {"type": "boolean"},
 			"state": {"type": "string"},
 			"generation": {"type": "integer"}
@@ -67,11 +74,11 @@ func buildStatusTool(runtime capability.RuntimeBinding) capability.ToolDefinitio
 	}`)
 
 	return capability.ToolDefinition{
-		ID:          "android.accessibility.status",
-		ModelName:   "android.accessibility.status",
-		Source:      capability.ToolSourceBuiltin,
-		Name:        "Accessibility Status",
-		Description: "查询Android无障碍服务的授权与连接状态。",
+		ID:           "android.accessibility.status",
+		ModelName:    "android.accessibility.status",
+		Source:       capability.ToolSourceBuiltin,
+		Name:         "Accessibility Status",
+		Description:  "查询Android无障碍服务的授权与连接状态。",
 		InputSchema:  inputSchema,
 		OutputSchema: outputSchema,
 		Permissions: []capability.PermissionRequirement{
@@ -126,11 +133,11 @@ func buildOpenSettingsTool(runtime capability.RuntimeBinding) capability.ToolDef
 	}`)
 
 	return capability.ToolDefinition{
-		ID:          "android.accessibility.open_settings",
-		ModelName:   "android.accessibility.open_settings",
-		Source:      capability.ToolSourceBuiltin,
-		Name:        "Open Accessibility Settings",
-		Description: "打开Android系统无障碍设置页，引导用户手动开启Amitia无障碍服务。",
+		ID:           "android.accessibility.open_settings",
+		ModelName:    "android.accessibility.open_settings",
+		Source:       capability.ToolSourceBuiltin,
+		Name:         "Open Accessibility Settings",
+		Description:  "打开Android系统无障碍设置页，引导用户手动开启Amitia无障碍服务。",
 		InputSchema:  inputSchema,
 		OutputSchema: outputSchema,
 		Permissions: []capability.PermissionRequirement{

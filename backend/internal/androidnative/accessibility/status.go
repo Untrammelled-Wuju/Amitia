@@ -3,15 +3,22 @@ package accessibility
 import "github.com/u-ai/backend/internal/androidnative"
 
 type AccessibilityState struct {
-	PlatformSupported           bool   `json:"platformSupported"`
-	ServiceDeclared             bool   `json:"serviceDeclared"`
-	EnabledInSettings           bool   `json:"enabledInSettings"`
-	Connected                   bool   `json:"connected"`
-	CanRetrieveWindowContent    bool   `json:"canRetrieveWindowContent"`
-	CanRetrieveInteractiveWindows bool `json:"canRetrieveInteractiveWindows"`
-	UserActionRequired          bool   `json:"userActionRequired"`
-	State                       string `json:"state"`
-	Generation                  int64  `json:"generation"`
+	PlatformSupported             bool   `json:"platformSupported"`
+	ServiceDeclared               bool   `json:"serviceDeclared"`
+	EnabledInSettings             bool   `json:"enabledInSettings"`
+	Connected                     bool   `json:"connected"`
+	CanRetrieveWindowContent      bool   `json:"canRetrieveWindowContent"`
+	CanRetrieveInteractiveWindows bool   `json:"canRetrieveInteractiveWindows"`
+	IncludeNotImportantViews      bool   `json:"includeNotImportantViews"`
+	EnhancedWebAccessibility      bool   `json:"enhancedWebAccessibility"`
+	CanPerformGestures            bool   `json:"canPerformGestures"`
+	CanTakeScreenshot             bool   `json:"canTakeScreenshot"`
+	InteractionReady              bool   `json:"interactionReady"`
+	VisualReady                   bool   `json:"visualReady"`
+	Ready                         bool   `json:"ready"`
+	UserActionRequired            bool   `json:"userActionRequired"`
+	State                         string `json:"state"`
+	Generation                    int64  `json:"generation"`
 }
 
 func MapAccessibilityStateFromResult(result map[string]any) AccessibilityState {
@@ -35,6 +42,27 @@ func MapAccessibilityStateFromResult(result map[string]any) AccessibilityState {
 	if v, ok := result["canRetrieveInteractiveWindows"].(bool); ok {
 		state.CanRetrieveInteractiveWindows = v
 	}
+	if v, ok := result["includeNotImportantViews"].(bool); ok {
+		state.IncludeNotImportantViews = v
+	}
+	if v, ok := result["enhancedWebAccessibility"].(bool); ok {
+		state.EnhancedWebAccessibility = v
+	}
+	if v, ok := result["canPerformGestures"].(bool); ok {
+		state.CanPerformGestures = v
+	}
+	if v, ok := result["canTakeScreenshot"].(bool); ok {
+		state.CanTakeScreenshot = v
+	}
+	if v, ok := result["interactionReady"].(bool); ok {
+		state.InteractionReady = v
+	}
+	if v, ok := result["visualReady"].(bool); ok {
+		state.VisualReady = v
+	}
+	if v, ok := result["ready"].(bool); ok {
+		state.Ready = v
+	}
 	if v, ok := result["userActionRequired"].(bool); ok {
 		state.UserActionRequired = v
 	}
@@ -55,12 +83,15 @@ func DeriveAccessibilityState(result map[string]any) string {
 
 	enabledInSettings, _ := result["enabledInSettings"].(bool)
 	connected, _ := result["connected"].(bool)
+	ready, _ := result["ready"].(bool)
 
 	switch {
 	case !enabledInSettings:
 		return androidnative.AccessibilityStateDisabled
 	case !connected:
 		return androidnative.AccessibilityStateEnabledNotConnected
+	case !ready:
+		return androidnative.AccessibilityStateDegraded
 	default:
 		return androidnative.AccessibilityStateConnected
 	}
