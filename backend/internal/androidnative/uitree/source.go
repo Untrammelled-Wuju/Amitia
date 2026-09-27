@@ -9,15 +9,15 @@ type SourceStatus struct {
 }
 
 type RawSnapshot struct {
-	Source         SourceType       `json:"source"`
-	Generation     int64            `json:"generation"`
-	CapturedAt     int64            `json:"capturedAt"`
-	RawWindows     []map[string]any `json:"windows,omitempty"`
-	RawNodes       []map[string]any `json:"nodes,omitempty"`
-	Truncated      bool             `json:"truncated"`
-	MultiWindow    bool             `json:"multiWindow"`
-	StableRef      bool             `json:"stableRef"`
-	AccessibilityOK bool            `json:"accessibilityOk,omitempty"`
+	Source          SourceType       `json:"source"`
+	Generation      int64            `json:"generation"`
+	CapturedAt      int64            `json:"capturedAt"`
+	RawWindows      []map[string]any `json:"windows,omitempty"`
+	RawNodes        []map[string]any `json:"nodes,omitempty"`
+	Truncated       bool             `json:"truncated"`
+	MultiWindow     bool             `json:"multiWindow"`
+	StableRef       bool             `json:"stableRef"`
+	AccessibilityOK bool             `json:"accessibilityOk,omitempty"`
 }
 
 type Source interface {
@@ -63,13 +63,6 @@ func (s SourceSet) SelectSource(req SnapshotRequest, allowRootFallback bool) (So
 			status := s.Accessibility.Status(context.Background())
 			if status.Available {
 				return s.Accessibility, SourceTypeAccessibility, nil
-			}
-		}
-
-		if s.ADB != nil {
-			status := s.ADB.Status(context.Background())
-			if status.Available {
-				return s.ADB, SourceTypeADB, nil
 			}
 		}
 

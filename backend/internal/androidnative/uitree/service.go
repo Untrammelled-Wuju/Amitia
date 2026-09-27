@@ -241,12 +241,6 @@ func (s *Service) preferredSource(ctx context.Context) string {
 			return string(SourceTypeAccessibility)
 		}
 	}
-	if s.sources.ADB != nil {
-		status := s.sources.ADB.Status(ctx)
-		if status.Available {
-			return string(SourceTypeADB)
-		}
-	}
 	if s.sources.Root != nil {
 		status := s.sources.Root.Status(ctx)
 		if status.Available {

@@ -268,7 +268,7 @@ func TestService_Snapshot_ExplicitSource(t *testing.T) {
 	}
 }
 
-func TestService_Snapshot_AutoFallback(t *testing.T) {
+func TestService_Snapshot_AutoDoesNotFallbackToADB(t *testing.T) {
 	sources := SourceSet{
 		Accessibility: &mockUIAccessibilitySource{
 			statusFunc: func(ctx context.Context) SourceStatus {
@@ -293,12 +293,8 @@ func TestService_Snapshot_AutoFallback(t *testing.T) {
 	}
 	service := NewService(sources, DefaultPolicy())
 
-	snapshot, err := service.Snapshot(context.Background(), SnapshotRequest{Source: SourceAuto})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if snapshot.Source != string(SourceTypeADB) {
-		t.Fatalf("expected adb source, got %s", snapshot.Source)
+	if _, err := service.Snapshot(context.Background(), SnapshotRequest{Source: SourceAuto}); err == nil {
+		t.Fatal("expected auto snapshot to fail instead of falling back to ADB")
 	}
 }
 

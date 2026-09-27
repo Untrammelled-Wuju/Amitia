@@ -350,7 +350,7 @@ func (s *service) waitForAndroidUISettle(ctx context.Context, scope extensionker
 }
 
 func (s *service) androidUIObservation(ctx context.Context, scope extensionkernel.InvocationScope, runKey string, index int) (json.RawMessage, string, androidUIObservationQuality, androidUITreeEnvelope, error) {
-	input := json.RawMessage(`{"source":"auto","includeAllWindows":true,"includeInvisible":false,"maxDepth":32,"excludeOwnPackage":true,"allowRootFallback":false}`)
+	input := json.RawMessage(`{"source":"accessibility","includeAllWindows":true,"includeInvisible":false,"maxDepth":32,"excludeOwnPackage":true,"allowRootFallback":false}`)
 	result, found := s.toolFacade.ExecuteTool(ctx, "android.ui_tree.snapshot", input, scope, fmt.Sprintf("%s:uiagent-observe:%d", runKey, index), fmt.Sprintf("%s:uiagent-observe:%d", runKey, index))
 	if !found {
 		return nil, "", androidUIObservationQuality{}, androidUITreeEnvelope{}, errors.New("android.ui_tree.snapshot is unavailable")
