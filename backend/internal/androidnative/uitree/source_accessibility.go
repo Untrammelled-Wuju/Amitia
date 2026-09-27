@@ -2,9 +2,9 @@ package uitree
 
 import (
 	"context"
-	"encoding/json"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/androidnative"
 )
 
@@ -31,7 +31,7 @@ func (s *AccessibilitySource) Status(ctx context.Context) SourceStatus {
 
 	bridgeReq := androidnative.NativeBridgeRequest{
 		ProtocolVersion: 1,
-		RequestId:       "",
+		RequestId:       uuid.NewString(),
 		Operation:       "accessibility.status",
 		Payload:         map[string]any{},
 	}
@@ -73,7 +73,7 @@ func (s *AccessibilitySource) Snapshot(ctx context.Context, request SnapshotRequ
 
 	bridgeReq := androidnative.NativeBridgeRequest{
 		ProtocolVersion: 1,
-		RequestId:       "",
+		RequestId:       uuid.NewString(),
 		Operation:       OperationSnapshot,
 		Payload:         payload,
 	}
@@ -130,8 +130,4 @@ func mapAccessibilityRawSnapshot(result map[string]any) RawSnapshot {
 	}
 
 	return raw
-}
-
-func init() {
-	_ = json.Marshal
 }
