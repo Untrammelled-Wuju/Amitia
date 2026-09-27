@@ -242,16 +242,25 @@ def main():
         file_manifest_path = root / "metadata" / "file-manifest.json"
         if file_manifest_path.is_file():
             file_manifest = json.loads(file_manifest_path.read_text(encoding="utf-8"))
-            runtime_path_text = runtime_relpath.as_posix()
             file_manifest = [
                 item
                 for item in file_manifest
                 if not str(item.get("path", "")).startswith(("sidecar/", "qq-sidecar/"))
             ]
+            manifest_paths = {
+                runtime_relpath.as_posix(),
+                "licenses/THIRD_PARTY_NOTICES.md",
+                "metadata/component-index.json",
+                "metadata/component-lock.json",
+                "metadata/guest-layout.json",
+                "metadata/mount-contract.json",
+            }
             for item in file_manifest:
-                if item.get("path") == runtime_path_text:
-                    item["sha256"] = runtime_hash
-                    item["size"] = runtime_size
+                relative = str(item.get("path", ""))
+                if relative in manifest_paths:
+                    file_path = root / relative
+                    item["sha256"] = digest(file_path)
+                    item["size"] = file_path.stat().st_size
             file_manifest_path.write_text(json.dumps(file_manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
         components = []
         for comp in component_index.get("components", []):
