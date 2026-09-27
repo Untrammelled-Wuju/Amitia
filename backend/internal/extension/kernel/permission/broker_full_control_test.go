@@ -22,7 +22,18 @@ func TestFullControlAllowsDeclaredAndroidCapabilities(t *testing.T) {
 		"runtime.linux.shell.execute",
 		"runtime.linux.terminal.control",
 		"runtime.linux.terminal.read",
+		"runtime.linux.file.read",
+		"runtime.linux.file.write",
+		"runtime.linux.file.control",
+		"runtime.linux.archive.read",
+		"runtime.linux.archive.write",
+		"runtime.linux.network.inspect",
+		"runtime.linux.network.public",
+		"runtime.linux.network.download",
+		"runtime.linux.ssh.read",
 		"runtime.linux.ssh.exec",
+		"runtime.linux.chroot.read",
+		"runtime.linux.chroot.exec",
 	}
 	requirements := make([]PermissionRequirement, 0, len(permissionIDs))
 	for _, permissionID := range permissionIDs {

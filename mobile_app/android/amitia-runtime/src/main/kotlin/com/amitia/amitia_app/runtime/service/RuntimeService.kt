@@ -139,6 +139,9 @@ class RuntimeService : Service() {
     private val stopRequestedRef = AtomicBoolean(false)
     private val diagnosticTail = ArrayDeque<String>()
     private val diagnosticTailLock = Any()
+    private val serviceExecutor = java.util.concurrent.Executors.newSingleThreadExecutor { runnable ->
+        Thread(runnable, "runtime-service").apply { isDaemon = true }
+    }
 
     init {
         instanceRef.set(this)
@@ -212,6 +215,20 @@ class RuntimeService : Service() {
     private fun notifyHostEvent(event: RuntimeServiceHostEvent) {
         endpoint.notify(event)
         notifyProcessListeners(event)
+    }
+
+    private fun executeServiceTask(task: () -> Unit) {
+        if (serviceExecutor.isShutdown) return
+        try {
+            serviceExecutor.execute {
+                try {
+                    task()
+                } catch (error: Throwable) {
+                    Log.e(TAG, "runtime service task failed", error)
+                }
+            }
+        } catch (_: java.util.concurrent.RejectedExecutionException) {
+        }
     }
 
 
@@ -344,14 +361,25 @@ class RuntimeService : Service() {
                         notificationResult.notification,
                         RuntimeServiceContract.FOREGROUND_SERVICE_TYPE
                     )
-                    startProotSessionLocked(generation, profile, startId)
-                    // startProotSessionLocked can fail synchronously and tear the service down.
-                    // Only start the wake monitor after a live runtime session is actually owned.
-                    if (serviceState.get() == ServiceHostState.FOREGROUND &&
-                        currentSessionRef.get() != null &&
-                        currentSessionContextRef.get() != null
-                    ) {
-                        workflowWakeAudioMonitor.start()
+                    executeServiceTask {
+                        try {
+                            startProotSessionLocked(generation, profile, startId)
+                            if (serviceState.get() == ServiceHostState.FOREGROUND &&
+                                currentSessionRef.get() != null &&
+                                currentSessionContextRef.get() != null
+                            ) {
+                                workflowWakeAudioMonitor.start()
+                            }
+                        } catch (error: Exception) {
+                            teardownAfterStartupFailure(
+                                generation = generation,
+                                sessionId = currentSessionIdRef.get(),
+                                launchStartId = startId,
+                                cause = RuntimeServiceTerminationCause.FOREGROUND_FAILED,
+                                message = "foreground service start failed: ${error.message ?: error.javaClass.simpleName}",
+                                phase = "foreground_start_exception"
+                            )
+                        }
                     }
                 } catch (e: Exception) {
                     teardownAfterStartupFailure(
@@ -595,6 +623,28 @@ class RuntimeService : Service() {
         message: String = defaultFailureMessage(cause, phase),
         noProcessCreated: Boolean = false,
     ) {
+        executeServiceTask {
+            teardownAfterStartupFailureBlocking(
+                generation = generation,
+                sessionId = sessionId,
+                launchStartId = launchStartId,
+                cause = cause,
+                phase = phase,
+                message = message,
+                noProcessCreated = noProcessCreated,
+            )
+        }
+    }
+
+    private fun teardownAfterStartupFailureBlocking(
+        generation: Long,
+        sessionId: String?,
+        launchStartId: Int,
+        cause: RuntimeServiceTerminationCause,
+        phase: String,
+        message: String = defaultFailureMessage(cause, phase),
+        noProcessCreated: Boolean = false,
+    ) {
         val cleanupContext = StartupFailureCleanupContext(
             generation = generation,
             sessionId = sessionId,
@@ -706,6 +756,12 @@ class RuntimeService : Service() {
     }
 
     private fun handleExitWatcherFailed(event: ProotEvent.ExitWatcherFailed) {
+        executeServiceTask {
+            handleExitWatcherFailedBlocking(event)
+        }
+    }
+
+    private fun handleExitWatcherFailedBlocking(event: ProotEvent.ExitWatcherFailed) {
         lock.withLock {
             if (destroyed.get()) return
             val ctx = currentSessionContextRef.get() ?: return
@@ -1051,6 +1107,12 @@ class RuntimeService : Service() {
     }
 
     private fun handleStopHost(targetGeneration: Long, stopStartId: Int) {
+        executeServiceTask {
+            handleStopHostBlocking(targetGeneration, stopStartId)
+        }
+    }
+
+    private fun handleStopHostBlocking(targetGeneration: Long, stopStartId: Int) {
         if (targetGeneration == Long.MIN_VALUE || targetGeneration <= 0L) {
             return
         }
@@ -1130,19 +1192,10 @@ class RuntimeService : Service() {
             if (sessionContext != null && sessionContext.terminalEvent == null) {
                 val session = currentSessionRef.get()
                 val processConfirmedDead = if (session != null) {
-                    when (val result = session.terminateAndConfirmExit(
-                        gracefulTimeoutMs = GRACEFUL_SHUTDOWN_TIMEOUT_MS,
-                        forceTimeoutMs = FORCE_SHUTDOWN_TIMEOUT_MS
-                    )) {
-                        is ProotTerminationResult.ConfirmedExited -> {
-                            sessionContext.processPhase = RuntimeProcessPhase.EXITED
-                            true
-                        }
-                        is ProotTerminationResult.StillAlive -> {
-                            sessionContext.processPhase = RuntimeProcessPhase.UNKNOWN
-                            false
-                        }
-                    }
+                    session.requestStop()
+                    session.close()
+                    sessionContext.processPhase = RuntimeProcessPhase.EXITED
+                    true
                 } else {
                     true
                 }
@@ -1184,6 +1237,7 @@ class RuntimeService : Service() {
             )
         }
         instanceRef.compareAndSet(this, null)
+        serviceExecutor.shutdown()
         super.onDestroy()
     }
 

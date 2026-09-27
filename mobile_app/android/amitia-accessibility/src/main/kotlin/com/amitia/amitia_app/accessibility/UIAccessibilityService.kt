@@ -198,27 +198,27 @@ class UIAccessibilityService : AccessibilityService() {
         actionResult(performed, action, if (performed) "" else "accessibility node action returned false").toString()
     }
 
-    fun performClick(x: Int, y: Int): String = runOnMain {
-        if (x < 0 || y < 0) return@runOnMain actionResult(false, "click", "invalid coordinates").toString()
+    fun performClick(x: Int, y: Int): String {
+        if (x < 0 || y < 0) return actionResult(false, "click", "invalid coordinates").toString()
         val path = Path().apply { moveTo(x.toFloat(), y.toFloat()) }
         val gesture = GestureDescription.Builder()
             .addStroke(GestureDescription.StrokeDescription(path, 0L, 50L))
             .build()
-        actionResult(dispatchGestureAndWait(gesture), "click", "").toString()
+        return actionResult(dispatchGestureAndWait(gesture), "click", "").toString()
     }
 
-    fun performLongPress(x: Int, y: Int, durationMs: Long): String = runOnMain {
-        if (x < 0 || y < 0) return@runOnMain actionResult(false, "long_click", "invalid coordinates").toString()
+    fun performLongPress(x: Int, y: Int, durationMs: Long): String {
+        if (x < 0 || y < 0) return actionResult(false, "long_click", "invalid coordinates").toString()
         val path = Path().apply { moveTo(x.toFloat(), y.toFloat()) }
         val gesture = GestureDescription.Builder()
             .addStroke(GestureDescription.StrokeDescription(path, 0L, durationMs.coerceIn(300L, 3000L)))
             .build()
-        actionResult(dispatchGestureAndWait(gesture), "long_click", "").toString()
+        return actionResult(dispatchGestureAndWait(gesture), "long_click", "").toString()
     }
 
-    fun performSwipe(startX: Int, startY: Int, endX: Int, endY: Int, durationMs: Long): String = runOnMain {
+    fun performSwipe(startX: Int, startY: Int, endX: Int, endY: Int, durationMs: Long): String {
         if (startX < 0 || startY < 0 || endX < 0 || endY < 0) {
-            return@runOnMain actionResult(false, "swipe", "invalid coordinates").toString()
+            return actionResult(false, "swipe", "invalid coordinates").toString()
         }
         val path = Path().apply {
             moveTo(startX.toFloat(), startY.toFloat())
@@ -227,7 +227,7 @@ class UIAccessibilityService : AccessibilityService() {
         val gesture = GestureDescription.Builder()
             .addStroke(GestureDescription.StrokeDescription(path, 0L, durationMs.coerceAtLeast(1L)))
             .build()
-        actionResult(dispatchGestureAndWait(gesture), "swipe", "").toString()
+        return actionResult(dispatchGestureAndWait(gesture), "swipe", "").toString()
     }
 
     fun performGlobalActionJson(actionId: Int): String = runOnMain {
@@ -321,24 +321,47 @@ class UIAccessibilityService : AccessibilityService() {
     }
 
     private fun dispatchGestureAndWait(gesture: GestureDescription): Boolean {
+        if (Looper.myLooper() == Looper.getMainLooper()) return false
         val latch = CountDownLatch(1)
         val result = java.util.concurrent.atomic.AtomicBoolean(false)
-        val accepted = dispatchGesture(
-            gesture,
-            object : GestureResultCallback() {
-                override fun onCompleted(gestureDescription: GestureDescription?) {
-                    result.set(true)
-                    latch.countDown()
-                }
+        val dispatchLatch = CountDownLatch(1)
+        val dispatchError = java.util.concurrent.atomic.AtomicReference<Throwable?>()
+        mainHandler.post {
+            try {
+                val accepted = dispatchGesture(
+                    gesture,
+                    object : GestureResultCallback() {
+                        override fun onCompleted(gestureDescription: GestureDescription?) {
+                            result.set(true)
+                            latch.countDown()
+                        }
 
-                override fun onCancelled(gestureDescription: GestureDescription?) {
+                        override fun onCancelled(gestureDescription: GestureDescription?) {
+                            result.set(false)
+                            latch.countDown()
+                        }
+                    },
+                    mainHandler,
+                )
+                if (!accepted) {
                     result.set(false)
                     latch.countDown()
                 }
-            },
-            mainHandler,
-        )
-        if (!accepted) return false
+            } catch (throwable: Throwable) {
+                dispatchError.set(throwable)
+                result.set(false)
+                latch.countDown()
+            } finally {
+                dispatchLatch.countDown()
+            }
+        }
+        try {
+            if (!dispatchLatch.await(5, TimeUnit.SECONDS)) return false
+        } catch (_: InterruptedException) {
+            Thread.currentThread().interrupt()
+            return false
+        }
+        dispatchError.get()?.let { throw it }
         return try {
             latch.await(5, TimeUnit.SECONDS) && result.get()
         } catch (_: InterruptedException) {
