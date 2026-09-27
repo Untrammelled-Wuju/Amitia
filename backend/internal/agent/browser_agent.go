@@ -41,17 +41,7 @@ func (s *service) RunBrowserAgent(ctx context.Context, execCtx tool.ToolExecutio
 	ctx, cancel := context.WithTimeout(ctx, time.Duration(req.TimeoutMS)*time.Millisecond)
 	defer cancel()
 
-	scope := extensionkernel.InvocationScope{
-		SpaceID:        execCtx.SpaceID,
-		CharacterID:    execCtx.CharacterID,
-		ConversationID: execCtx.ConversationID,
-		Channel:        execCtx.Channel,
-		TraceID:        execCtx.CorrelationID,
-		RequestID:      execCtx.RequestID,
-		ToolCallID:     execCtx.ToolCallID,
-		CorrelationID:  execCtx.CorrelationID,
-		CausationID:    execCtx.CausationID,
-	}
+	scope := browserAgentScope(execCtx)
 	runKey := firstNonEmpty(strings.TrimSpace(execCtx.IdempotencyKey), strings.TrimSpace(execCtx.ToolCallID), strings.TrimSpace(execCtx.RequestID), strings.TrimSpace(execCtx.CorrelationID))
 	if runKey == "" {
 		runKey = fmt.Sprintf("browseragent:%d", time.Now().UnixNano())
@@ -214,6 +204,21 @@ func (s *service) RunBrowserAgent(ctx context.Context, execCtx tool.ToolExecutio
 	result.FinalState = "step_limit"
 	result.Result = fmt.Sprintf("Browser agent reached the %d-step limit without declaring the goal complete", req.MaxSteps)
 	return result, nil
+}
+
+func browserAgentScope(execCtx tool.ToolExecutionContext) extensionkernel.InvocationScope {
+	return extensionkernel.InvocationScope{
+		SpaceID:        execCtx.SpaceID,
+		CharacterID:    execCtx.CharacterID,
+		ConversationID: execCtx.ConversationID,
+		Channel:        execCtx.Channel,
+		TraceID:        execCtx.CorrelationID,
+		RequestID:      execCtx.RequestID,
+		ToolCallID:     execCtx.ToolCallID,
+		CorrelationID:  execCtx.CorrelationID,
+		CausationID:    execCtx.CausationID,
+		PermissionMode: execCtx.PermissionMode,
+	}
 }
 
 func (s *service) browserAgentExecute(ctx context.Context, scope extensionkernel.InvocationScope, runKey string, index int, toolID string, input json.RawMessage) (json.RawMessage, error) {

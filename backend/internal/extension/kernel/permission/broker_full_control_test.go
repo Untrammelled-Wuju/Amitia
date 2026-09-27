@@ -85,3 +85,37 @@ func TestFullControlDoesNotBypassHardDeny(t *testing.T) {
 		t.Fatalf("expected remote_execution_denied, reasons = %#v", result.Reasons)
 	}
 }
+
+func TestApprovalModesApplyToEveryCapability(t *testing.T) {
+	ctx := context.Background()
+	broker := NewDefaultPermissionBroker(NewPermissionDefinitionRegistry(), NewMemoryPermissionStorage())
+	requirements := []PermissionRequirement{
+		{PermissionID: "message.send"},
+		{PermissionID: "network.request"},
+		{PermissionID: "workspace.write"},
+	}
+	executionContext := PermissionExecutionContext{
+		Placement: ExecutionPlacementLocal,
+		SpaceID:   runtimeidentity.ParseSpaceID("space-1"),
+		Source:    "model",
+	}
+	request := PermissionEvaluationRequest{
+		Subject:          PermissionSubject{Type: SubjectSystem, ID: "core"},
+		Requirements:     requirements,
+		InvocationID:     "inv-all-capabilities",
+		ScopeSnapshotID:  "scope-all-capabilities",
+		ExecutionContext: executionContext,
+	}
+
+	request.ApprovalMode = string(ApprovalManual)
+	gated := broker.Evaluate(ctx, request)
+	if gated.Decision != DecisionRequireApproval {
+		t.Fatalf("manual decision = %s, want %s, reasons = %#v", gated.Decision, DecisionRequireApproval, gated.Reasons)
+	}
+
+	request.ApprovalMode = string(ApprovalFullControl)
+	allowed := broker.Evaluate(ctx, request)
+	if allowed.Decision != DecisionAllow {
+		t.Fatalf("full control decision = %s, want %s, reasons = %#v", allowed.Decision, DecisionAllow, allowed.Reasons)
+	}
+}
