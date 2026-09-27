@@ -13,6 +13,9 @@ internal class AccessibilityNativeHandlerAdapter(
     override val operations: Set<String> = setOf(
         AccessibilityNativeHandler.OP_STATUS,
         AccessibilityNativeHandler.OP_OPEN_SETTINGS,
+        AccessibilityNativeHandler.OP_PROVIDER_STATUS,
+        AccessibilityNativeHandler.OP_PROVIDER_INSTALL,
+        AccessibilityNativeHandler.OP_PROVIDER_OPEN_SETTINGS,
     )
 
     override suspend fun execute(request: NativeBridgeRequest): NativeBridgeResponse {

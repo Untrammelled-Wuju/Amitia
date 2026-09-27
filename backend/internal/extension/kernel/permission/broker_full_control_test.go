@@ -19,6 +19,10 @@ func TestFullControlAllowsDeclaredAndroidCapabilities(t *testing.T) {
 		"android.interaction.gesture",
 		"android.interaction.global",
 		"android.app.launch",
+		"runtime.linux.shell.execute",
+		"runtime.linux.terminal.control",
+		"runtime.linux.terminal.read",
+		"runtime.linux.ssh.exec",
 	}
 	requirements := make([]PermissionRequirement, 0, len(permissionIDs))
 	for _, permissionID := range permissionIDs {

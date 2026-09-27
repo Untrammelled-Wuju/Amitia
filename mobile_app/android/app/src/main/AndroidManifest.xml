@@ -23,6 +23,7 @@
     <uses-permission android:name="android.permission.KILL_BACKGROUND_PROCESSES" />
     <uses-permission android:name="android.permission.WRITE_SETTINGS" />
     <uses-permission android:name="android.permission.WRITE_SECURE_SETTINGS" />
+    <uses-permission android:name="com.amitia.amitia_app.accessibility.ACCESS_PROVIDER" />
     <uses-permission android:name="net.dinglisch.android.tasker.PERMISSION_RUN_TASKS" />
 
     <application
@@ -171,6 +172,7 @@
          In particular, this is used by the Flutter engine in io.flutter.plugin.text.ProcessTextPlugin. -->
     <queries>
         <package android:name="moe.shizuku.privileged.api" />
+        <package android:name="com.amitia.amitia_app.accessibility" />
         <package android:name="net.dinglisch.android.taskerm" />
         <package android:name="net.dinglisch.android.tasker" />
         <intent>

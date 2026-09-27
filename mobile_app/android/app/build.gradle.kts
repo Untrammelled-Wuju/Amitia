@@ -76,6 +76,10 @@ android {
         }
     }
 
+    buildFeatures {
+        aidl = true
+    }
+
     packaging {
         jniLibs {
             useLegacyPackaging = true
@@ -91,6 +95,7 @@ android {
     sourceSets {
         getByName("main") {
             aidl.srcDirs("src/main/aidl")
+            assets.srcDir(layout.buildDirectory.dir("generated/accessibility-provider/assets"))
         }
     }
 }
@@ -262,6 +267,7 @@ tasks.register("validateBundledRuntimePackage") {
 
 tasks.named("preBuild").configure {
     dependsOn("validateBundledRuntimePackage")
+    dependsOn("copyAccessibilityProviderAsset")
 }
 
 flutter {
@@ -272,4 +278,15 @@ dependencies {
     implementation(project(":amitia-runtime"))
     implementation("dev.rikka.shizuku:api:13.1.5")
     implementation("dev.rikka.shizuku:provider:13.1.5")
+}
+
+val accessibilityProviderProject = project(":amitia-accessibility")
+
+tasks.register<Copy>("copyAccessibilityProviderAsset") {
+    dependsOn(":amitia-accessibility:assembleRelease")
+    from(accessibilityProviderProject.layout.buildDirectory.dir("outputs/apk/release")) {
+        include("*.apk")
+        rename { "amitia-accessibility.apk" }
+    }
+    into(layout.buildDirectory.dir("generated/accessibility-provider/assets/accessibility"))
 }

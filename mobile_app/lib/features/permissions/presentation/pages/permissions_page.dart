@@ -20,6 +20,8 @@ class PermissionsPage extends ConsumerStatefulWidget {
 class _PermissionsPageState extends ConsumerState<PermissionsPage>
     with WidgetsBindingObserver {
   late List<PermissionItem> _permissions;
+  Map<String, dynamic> _providerStatus = const <String, dynamic>{};
+  bool _providerBusy = false;
 
   @override
   void initState() {
@@ -81,7 +83,10 @@ class _PermissionsPageState extends ConsumerState<PermissionsPage>
         description: '提供高级系统操作能力',
       ),
     ];
-    Future<void>.microtask(_refreshAccessibility);
+    Future<void>.microtask(() async {
+      await _refreshProvider();
+      await _refreshAccessibility();
+    });
   }
 
   @override
@@ -93,7 +98,61 @@ class _PermissionsPageState extends ConsumerState<PermissionsPage>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
+      _refreshProvider();
       _refreshAccessibility();
+    }
+  }
+
+  Future<void> _refreshProvider() async {
+    try {
+      final response = await ref
+          .read(nativeBridgePlatformDispatcherProvider)
+          .execute({
+            'protocolVersion': 1,
+            'requestId':
+                'accessibility_provider_status_${DateTime.now().microsecondsSinceEpoch}',
+            'platform': 'android',
+            'operation': 'accessibility.provider.status',
+            'payload': <String, dynamic>{},
+          });
+      if (!mounted || response['status'] != 'success') return;
+      setState(() {
+        _providerStatus = Map<String, dynamic>.from(
+          response['result'] as Map? ?? {},
+        );
+      });
+    } catch (_) {}
+  }
+
+  Future<void> _providerAction(String operation) async {
+    if (_providerBusy) return;
+    setState(() => _providerBusy = true);
+    try {
+      final response = await ref
+          .read(nativeBridgePlatformDispatcherProvider)
+          .execute({
+            'protocolVersion': 1,
+            'requestId':
+                'accessibility_provider_${DateTime.now().microsecondsSinceEpoch}',
+            'platform': 'android',
+            'operation': operation,
+            'payload': <String, dynamic>{},
+          });
+      if (response['status'] != 'success') {
+        throw StateError(
+          (response['error'] as Map?)?['message']?.toString() ?? '操作未成功执行',
+        );
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 400));
+      await _refreshProvider();
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('操作失败：$error')));
+      }
+    } finally {
+      if (mounted) setState(() => _providerBusy = false);
     }
   }
 
@@ -249,9 +308,20 @@ class _PermissionsPageState extends ConsumerState<PermissionsPage>
           vertical: AppSpacing.md,
           horizontal: AppSpacing.pagePadding,
         ),
-        itemCount: _permissions.length,
+        itemCount: _permissions.length + 1,
         separatorBuilder: (_, _) => SizedBox(height: AppSpacing.sm),
         itemBuilder: (context, index) {
+          if (index == 0) {
+            return _AccessibilityProviderCard(
+              status: _providerStatus,
+              busy: _providerBusy,
+              onInstall: () =>
+                  _providerAction('accessibility.provider.install'),
+              onSettings: () =>
+                  _providerAction('accessibility.provider.open_settings'),
+            );
+          }
+          index -= 1;
           final item = _permissions[index];
           return _PermissionCard(
             item: item,
@@ -259,6 +329,91 @@ class _PermissionsPageState extends ConsumerState<PermissionsPage>
             onTap: () => _showGuide(item),
           );
         },
+      ),
+    );
+  }
+}
+
+class _AccessibilityProviderCard extends StatelessWidget {
+  final Map<String, dynamic> status;
+  final bool busy;
+  final VoidCallback onInstall;
+  final VoidCallback onSettings;
+
+  const _AccessibilityProviderCard({
+    required this.status,
+    required this.busy,
+    required this.onInstall,
+    required this.onSettings,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final installed = status['installed'] == true;
+    final connected = status['connected'] == true;
+    final version = status['versionName']?.toString().trim() ?? '';
+    final stateText = connected
+        ? '已连接'
+        : installed
+        ? '已安装未开启'
+        : '未安装';
+    final badgeType = connected
+        ? BadgeType.success
+        : installed
+        ? BadgeType.warning
+        : BadgeType.neutral;
+    return Container(
+      padding: EdgeInsets.all(AppSpacing.cardPadding),
+      decoration: BoxDecoration(
+        color: context.surfacePrimary,
+        borderRadius: AppRadius.brMedium,
+        border: Border.all(color: context.borderPrimary, width: 0.5),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.verified_user_outlined,
+                color: context.accentPrimary,
+              ),
+              SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: Text(
+                  '无障碍 Provider',
+                  style: AppTypography.cardTitle(context),
+                ),
+              ),
+              AmitiaStatusBadge(label: stateText, type: badgeType),
+            ],
+          ),
+          SizedBox(height: AppSpacing.sm),
+          Text(
+            installed
+                ? '独立低权限辅助包${version.isEmpty ? '' : ' $version'}'
+                : '安装独立辅助包，避免主应用风险策略影响无障碍服务',
+            style: AppTypography.label(context),
+          ),
+          SizedBox(height: AppSpacing.md),
+          Row(
+            children: [
+              Expanded(
+                child: FilledButton.icon(
+                  onPressed: busy ? null : onInstall,
+                  icon: const Icon(Icons.download_outlined),
+                  label: Text(installed ? '更新 Provider' : '安装 Provider'),
+                ),
+              ),
+              SizedBox(width: AppSpacing.sm),
+              OutlinedButton.icon(
+                onPressed: busy ? null : onSettings,
+                icon: const Icon(Icons.settings_outlined),
+                label: const Text('设置'),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }

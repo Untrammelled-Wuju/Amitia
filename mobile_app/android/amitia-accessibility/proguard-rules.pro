@@ -1,0 +1,3 @@
+-keep class com.amitia.amitia_app.accessibility.** { *; }
+-keep class com.amitia.amitia_app.accessibility.IAmitiaAccessibilityProvider { *; }
+-keep class com.amitia.amitia_app.accessibility.IAmitiaAccessibilityProvider$Stub { *; }

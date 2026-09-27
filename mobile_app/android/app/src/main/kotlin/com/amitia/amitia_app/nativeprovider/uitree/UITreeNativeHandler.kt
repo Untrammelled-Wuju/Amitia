@@ -7,11 +7,14 @@ import android.os.Build
 import android.view.accessibility.AccessibilityNodeInfo
 import android.view.accessibility.AccessibilityWindowInfo
 import com.amitia.amitia_app.nativeprovider.AndroidNativeOperationHandler
+import com.amitia.amitia_app.nativeprovider.accessibility.AccessibilityProviderClient
 import com.amitia.amitia_app.nativeprovider.accessibility.AccessibilityServiceRegistry
 import com.amitia.amitia_app.nativeprovider.model.NativeBridgeError
 import com.amitia.amitia_app.nativeprovider.model.NativeBridgeProtocol
 import com.amitia.amitia_app.nativeprovider.model.NativeBridgeRequest
 import com.amitia.amitia_app.nativeprovider.model.NativeBridgeResponse
+import org.json.JSONArray
+import org.json.JSONObject
 import java.security.MessageDigest
 import java.util.concurrent.atomic.AtomicLong
 
@@ -32,7 +35,21 @@ internal class UITreeNativeHandler(
         else -> unsupportedOperation(request)
     }
 
-    private fun handleStatus(request: NativeBridgeRequest): NativeBridgeResponse {
+    private suspend fun handleStatus(request: NativeBridgeRequest): NativeBridgeResponse {
+        AccessibilityProviderClient.status(context)?.let { providerStatus ->
+            val result = jsonObjectToMap(JSONObject(providerStatus))
+            if (result["connected"] == true) {
+                return success(
+                    request,
+                    result + mapOf(
+                        "state" to "ready",
+                        "rootAvailable" to true,
+                        "generation" to generation.get(),
+                    ),
+                )
+            }
+        }
+
         val service = AccessibilityServiceRegistry.current()
         val windows = service?.windows.orEmpty()
         return success(
@@ -50,7 +67,26 @@ internal class UITreeNativeHandler(
         )
     }
 
-    private fun handleSnapshot(request: NativeBridgeRequest): NativeBridgeResponse {
+    private suspend fun handleSnapshot(request: NativeBridgeRequest): NativeBridgeResponse {
+        val providerPayload = JSONObject()
+            .put("includeAllWindows", request.payload["includeAllWindows"] as? Boolean ?: true)
+            .put("includeInvisible", request.payload["includeInvisible"] as? Boolean ?: false)
+            .put("maxDepth", (request.payload["maxDepth"] as? Number)?.toInt() ?: DEFAULT_MAX_DEPTH)
+            .toString()
+        AccessibilityProviderClient.snapshot(context, providerPayload)?.let { providerSnapshot ->
+            val result = jsonObjectToMap(JSONObject(providerSnapshot))
+            if (result["connected"] == false) {
+                return error(
+                    request,
+                    "UI_TREE_ACCESSIBILITY_NOT_CONNECTED",
+                    result["message"]?.toString() ?: "accessibility provider is not connected",
+                    "ACCESSIBILITY_NOT_CONNECTED",
+                )
+            }
+            generation.incrementAndGet()
+            return success(request, result)
+        }
+
         val service = AccessibilityServiceRegistry.current()
             ?: return error(request, "UI_TREE_ACCESSIBILITY_NOT_CONNECTED", "accessibility service not connected", "ACCESSIBILITY_NOT_CONNECTED")
 
@@ -258,6 +294,23 @@ internal class UITreeNativeHandler(
         NativeBridgeProtocol.ERR_OPERATION_NOT_SUPPORTED,
         "unknown ui_tree operation: ${request.operation}",
     )
+
+    private fun jsonObjectToMap(value: JSONObject): Map<String, Any?> {
+        val result = LinkedHashMap<String, Any?>()
+        val keys = value.keys()
+        while (keys.hasNext()) {
+            val key = keys.next()
+            result[key] = jsonValue(value.get(key))
+        }
+        return result
+    }
+
+    private fun jsonValue(value: Any?): Any? = when (value) {
+        null, JSONObject.NULL -> null
+        is JSONObject -> jsonObjectToMap(value)
+        is JSONArray -> List(value.length()) { index -> jsonValue(value.get(index)) }
+        else -> value
+    }
 
     companion object {
         const val OP_STATUS = "ui_tree.status"

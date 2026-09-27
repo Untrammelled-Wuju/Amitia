@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Amitia Accessibility</string>
+    <string name="accessibility_service_name">Amitia Accessibility Provider</string>
+    <string name="accessibility_service_description">允许 Amitia AI 读取界面并执行点击、输入和滑动</string>
+</resources>

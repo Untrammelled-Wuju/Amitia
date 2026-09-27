@@ -9,6 +9,7 @@ import android.os.Handler
 import android.os.Looper
 import android.view.accessibility.AccessibilityNodeInfo
 import com.amitia.amitia_app.nativeprovider.AndroidNativeOperationHandler
+import com.amitia.amitia_app.nativeprovider.accessibility.AccessibilityProviderClient
 import com.amitia.amitia_app.nativeprovider.model.NativeBridgeError
 import com.amitia.amitia_app.nativeprovider.model.NativeBridgeProtocol
 import com.amitia.amitia_app.nativeprovider.model.NativeBridgeRequest
@@ -18,6 +19,8 @@ import com.amitia.amitia_app.nativeprovider.devicecontrol.DeviceInteractionAvail
 import com.amitia.amitia_app.nativeprovider.devicecontrol.DeviceInteractionState
 import com.amitia.amitia_app.nativeprovider.devicecontrol.DeviceInteractionStateReader
 import com.amitia.amitia_app.nativeprovider.uitree.AccessibilityNodeReferenceRegistry
+import org.json.JSONArray
+import org.json.JSONObject
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.coroutines.resume
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -61,7 +64,20 @@ internal class InteractionNativeHandler(
         }
     }
 
-    private fun handleStatus(request: NativeBridgeRequest): NativeBridgeResponse {
+    private suspend fun handleStatus(request: NativeBridgeRequest): NativeBridgeResponse {
+        providerStatus()?.let { provider ->
+            return NativeBridgeResponse(
+                protocolVersion = NativeBridgeProtocol.PROTOCOL_VERSION,
+                requestId = request.requestId,
+                status = NativeBridgeProtocol.STATUS_SUCCESS,
+                result = mapOf(
+                    "connected" to (provider["connected"] == true),
+                    "gestureAvailable" to (provider["canPerformGestures"] == true),
+                    "generation" to (provider["generation"] ?: gestureGeneration.get()),
+                ) + interactionStateReader.read().asMap(),
+            )
+        }
+
         val service = AccessibilityServiceRegistry.current()
         val interactionState = interactionStateReader.read()
         return NativeBridgeResponse(
@@ -77,25 +93,18 @@ internal class InteractionNativeHandler(
     }
 
     private suspend fun handleClick(request: NativeBridgeRequest): NativeBridgeResponse {
+        val x = (request.payload["x"] as? Number)?.toInt() ?: -1
+        val y = (request.payload["y"] as? Number)?.toInt() ?: -1
+        if (x < 0 || y < 0) {
+            return invalidCoordinates(request, "click", x, y)
+        }
+        providerAction(AccessibilityProviderClient.click(context, x, y), request, "click")?.let { return it }
+
         val service = AccessibilityServiceRegistry.current()
             ?: return accessibilityNotConnected(request.requestId)
         if (!canPerformGestures(service)) return gesturesUnavailable(request.requestId)
 
-        val x = (request.payload["x"] as? Number)?.toInt() ?: -1
-        val y = (request.payload["y"] as? Number)?.toInt() ?: -1
         val durationMs = (request.payload["durationMs"] as? Number)?.toLong() ?: 50L
-
-        if (x < 0 || y < 0) {
-            return NativeBridgeResponse(
-                protocolVersion = NativeBridgeProtocol.PROTOCOL_VERSION,
-                requestId = request.requestId,
-                status = NativeBridgeProtocol.STATUS_ERROR,
-                error = NativeBridgeError(
-                    code = "INTERACTION_INVALID_COORDINATES",
-                    message = "invalid click coordinates: ($x, $y)",
-                ),
-            )
-        }
 
         return try {
             val path = Path().apply { moveTo(x.toFloat(), y.toFloat()) }
@@ -127,25 +136,21 @@ internal class InteractionNativeHandler(
     }
 
     private suspend fun handleLongClick(request: NativeBridgeRequest): NativeBridgeResponse {
+        val x = (request.payload["x"] as? Number)?.toInt() ?: -1
+        val y = (request.payload["y"] as? Number)?.toInt() ?: -1
+        if (x < 0 || y < 0) {
+            return invalidCoordinates(request, "long_click", x, y)
+        }
+        val durationMs = (request.payload["durationMs"] as? Number)?.toLong() ?: 600L
+        providerAction(
+            AccessibilityProviderClient.longPress(context, x, y, durationMs.coerceIn(300L, 3000L)),
+            request,
+            "long_click",
+        )?.let { return it }
+
         val service = AccessibilityServiceRegistry.current()
             ?: return accessibilityNotConnected(request.requestId)
         if (!canPerformGestures(service)) return gesturesUnavailable(request.requestId)
-
-        val x = (request.payload["x"] as? Number)?.toInt() ?: -1
-        val y = (request.payload["y"] as? Number)?.toInt() ?: -1
-        val durationMs = (request.payload["durationMs"] as? Number)?.toLong() ?: 600L
-
-        if (x < 0 || y < 0) {
-            return NativeBridgeResponse(
-                protocolVersion = NativeBridgeProtocol.PROTOCOL_VERSION,
-                requestId = request.requestId,
-                status = NativeBridgeProtocol.STATUS_ERROR,
-                error = NativeBridgeError(
-                    code = "INTERACTION_INVALID_COORDINATES",
-                    message = "invalid long click coordinates: ($x, $y)",
-                ),
-            )
-        }
 
         return try {
             val path = Path().apply { moveTo(x.toFloat(), y.toFloat()) }
@@ -176,11 +181,21 @@ internal class InteractionNativeHandler(
         }
     }
 
-    private fun handleInputText(request: NativeBridgeRequest): NativeBridgeResponse {
+    private suspend fun handleInputText(request: NativeBridgeRequest): NativeBridgeResponse {
+        val text = request.payload["text"] as? String ?: ""
+        val providerNativeRef = (request.payload["nativeRef"] as? String).orEmpty()
+        if (AccessibilityProviderClient.isProviderReference(providerNativeRef)) {
+            val payload = JSONObject()
+                .put("nativeRef", providerNativeRef)
+                .put("action", "set_text")
+                .put("args", JSONObject().put("text", text))
+                .toString()
+            providerAction(AccessibilityProviderClient.performNodeAction(context, payload), request, "input_text")?.let { return it }
+        }
+
         val service = AccessibilityServiceRegistry.current()
             ?: return accessibilityNotConnected(request.requestId)
 
-        val text = request.payload["text"] as? String ?: ""
         val targetNode = resolveTargetNode(service, request.payload)
 
         return try {
@@ -218,7 +233,17 @@ internal class InteractionNativeHandler(
         }
     }
 
-    private fun handleClearText(request: NativeBridgeRequest): NativeBridgeResponse {
+    private suspend fun handleClearText(request: NativeBridgeRequest): NativeBridgeResponse {
+        val providerNativeRef = (request.payload["nativeRef"] as? String).orEmpty()
+        if (AccessibilityProviderClient.isProviderReference(providerNativeRef)) {
+            val payload = JSONObject()
+                .put("nativeRef", providerNativeRef)
+                .put("action", "clear_text")
+                .put("args", JSONObject())
+                .toString()
+            providerAction(AccessibilityProviderClient.performNodeAction(context, payload), request, "clear_text")?.let { return it }
+        }
+
         val service = AccessibilityServiceRegistry.current()
             ?: return accessibilityNotConnected(request.requestId)
         val targetNode = resolveTargetNode(service, request.payload)
@@ -258,11 +283,22 @@ internal class InteractionNativeHandler(
         }
     }
 
-    private fun handleScroll(request: NativeBridgeRequest): NativeBridgeResponse {
+    private suspend fun handleScroll(request: NativeBridgeRequest): NativeBridgeResponse {
+        val providerNativeRef = (request.payload["nativeRef"] as? String).orEmpty()
+        val direction = request.payload["direction"] as? String ?: "down"
+        if (AccessibilityProviderClient.isProviderReference(providerNativeRef)) {
+            val providerDirection = if (direction in setOf("forward", "down", "right")) "scroll_forward" else "scroll_backward"
+            val payload = JSONObject()
+                .put("nativeRef", providerNativeRef)
+                .put("action", providerDirection)
+                .put("args", JSONObject())
+                .toString()
+            providerAction(AccessibilityProviderClient.performNodeAction(context, payload), request, "scroll")?.let { return it }
+        }
+
         val service = AccessibilityServiceRegistry.current()
             ?: return accessibilityNotConnected(request.requestId)
 
-        val direction = request.payload["direction"] as? String ?: "down"
         val targetNode = resolveTargetNode(service, request.payload)
 
         val action = when (direction) {
@@ -303,16 +339,11 @@ internal class InteractionNativeHandler(
     }
 
     private suspend fun handleSwipe(request: NativeBridgeRequest): NativeBridgeResponse {
-        val service = AccessibilityServiceRegistry.current()
-            ?: return accessibilityNotConnected(request.requestId)
-        if (!canPerformGestures(service)) return gesturesUnavailable(request.requestId)
-
         val startX = (request.payload["startX"] as? Number)?.toInt() ?: -1
         val startY = (request.payload["startY"] as? Number)?.toInt() ?: -1
         val endX = (request.payload["endX"] as? Number)?.toInt() ?: -1
         val endY = (request.payload["endY"] as? Number)?.toInt() ?: -1
         val durationMs = (request.payload["durationMs"] as? Number)?.toLong() ?: 300L
-
         if (startX < 0 || startY < 0 || endX < 0 || endY < 0) {
             return NativeBridgeResponse(
                 protocolVersion = NativeBridgeProtocol.PROTOCOL_VERSION,
@@ -324,6 +355,15 @@ internal class InteractionNativeHandler(
                 ),
             )
         }
+        providerAction(
+            AccessibilityProviderClient.swipe(context, startX, startY, endX, endY, durationMs.coerceAtLeast(1L)),
+            request,
+            "swipe",
+        )?.let { return it }
+
+        val service = AccessibilityServiceRegistry.current()
+            ?: return accessibilityNotConnected(request.requestId)
+        if (!canPerformGestures(service)) return gesturesUnavailable(request.requestId)
 
         return try {
             val path = Path().apply {
@@ -420,9 +460,7 @@ internal class InteractionNativeHandler(
         } ?: false
 
 
-    private fun handlePerformNodeAction(request: NativeBridgeRequest): NativeBridgeResponse {
-        val service = AccessibilityServiceRegistry.current()
-            ?: return accessibilityNotConnected(request.requestId)
+    private suspend fun handlePerformNodeAction(request: NativeBridgeRequest): NativeBridgeResponse {
         val nativeRef = (request.payload["nativeRef"] as? String)?.trim().orEmpty()
         val action = (request.payload["action"] as? String)?.trim().orEmpty()
         if (nativeRef.isEmpty() || action.isEmpty()) {
@@ -436,6 +474,17 @@ internal class InteractionNativeHandler(
                 ),
             )
         }
+        if (AccessibilityProviderClient.isProviderReference(nativeRef)) {
+            val payload = JSONObject()
+                .put("nativeRef", nativeRef)
+                .put("action", action)
+                .put("args", JSONObject(request.payload["args"] as? Map<*, *> ?: emptyMap<Any, Any>()))
+                .toString()
+            providerAction(AccessibilityProviderClient.performNodeAction(context, payload), request, action)?.let { return it }
+        }
+
+        val service = AccessibilityServiceRegistry.current()
+            ?: return accessibilityNotConnected(request.requestId)
         val node = AccessibilityNodeReferenceRegistry.resolve(service, nativeRef)
             ?: return NativeBridgeResponse(
                 protocolVersion = NativeBridgeProtocol.PROTOCOL_VERSION,
@@ -558,6 +607,67 @@ internal class InteractionNativeHandler(
                 message = "unknown interaction operation: ${request.operation}",
             ),
         )
+    }
+
+    private suspend fun providerStatus(): Map<String, Any?>? {
+        val status = AccessibilityProviderClient.status(context) ?: return null
+        return jsonToMap(JSONObject(status))
+    }
+
+    private suspend fun providerAction(
+        rawResult: String?,
+        request: NativeBridgeRequest,
+        action: String,
+    ): NativeBridgeResponse? {
+        val result = rawResult?.let { jsonToMap(JSONObject(it)) } ?: return null
+        val success = result["success"] == true
+        return NativeBridgeResponse(
+            protocolVersion = NativeBridgeProtocol.PROTOCOL_VERSION,
+            requestId = request.requestId,
+            status = if (success) NativeBridgeProtocol.STATUS_SUCCESS else NativeBridgeProtocol.STATUS_ERROR,
+            result = mapOf(
+                "performed" to success,
+                "success" to success,
+                "action" to action,
+                "generation" to gestureGeneration.incrementAndGet(),
+            ),
+            error = if (success) null else NativeBridgeError(
+                code = "INTERACTION_ACTION_FAILED",
+                message = result["message"]?.toString() ?: "accessibility provider action failed",
+            ),
+        )
+    }
+
+    private fun invalidCoordinates(
+        request: NativeBridgeRequest,
+        action: String,
+        x: Int,
+        y: Int,
+    ): NativeBridgeResponse = NativeBridgeResponse(
+        protocolVersion = NativeBridgeProtocol.PROTOCOL_VERSION,
+        requestId = request.requestId,
+        status = NativeBridgeProtocol.STATUS_ERROR,
+        error = NativeBridgeError(
+            code = "INTERACTION_INVALID_COORDINATES",
+            message = "invalid $action coordinates: ($x, $y)",
+        ),
+    )
+
+    private fun jsonToMap(value: JSONObject): Map<String, Any?> {
+        val result = LinkedHashMap<String, Any?>()
+        val keys = value.keys()
+        while (keys.hasNext()) {
+            val key = keys.next()
+            result[key] = jsonValue(value.get(key))
+        }
+        return result
+    }
+
+    private fun jsonValue(value: Any?): Any? = when (value) {
+        null, JSONObject.NULL -> null
+        is JSONObject -> jsonToMap(value)
+        is JSONArray -> List(value.length()) { index -> jsonValue(value.get(index)) }
+        else -> value
     }
 
     companion object {
