@@ -39,16 +39,18 @@ func (s InvocationSource) Valid() bool {
 type ApprovalMode string
 
 const (
-	ApprovalModeAuto    ApprovalMode = "auto"
-	ApprovalModeManual  ApprovalMode = "manual"
-	ApprovalModeSession ApprovalMode = "session"
+	ApprovalModeAuto        ApprovalMode = "auto"
+	ApprovalModeManual      ApprovalMode = "manual"
+	ApprovalModeSession     ApprovalMode = "session"
+	ApprovalModeFullControl ApprovalMode = "full_control"
 )
 
 func (m ApprovalMode) Valid() bool {
 	switch m {
 	case ApprovalModeAuto,
 		ApprovalModeManual,
-		ApprovalModeSession:
+		ApprovalModeSession,
+		ApprovalModeFullControl:
 		return true
 	default:
 		return false

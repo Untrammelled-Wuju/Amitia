@@ -100,6 +100,15 @@ func TestB17AndroidUIAgentUsesOpenAICompatibleModelName(t *testing.T) {
 	}
 }
 
+func TestB17FullAccessUsesFullControlApprovalMode(t *testing.T) {
+	if got := capabilityApprovalMode("full_access"); got != capability.ApprovalModeFullControl {
+		t.Fatalf("expected full_control approval mode, got %s", got)
+	}
+	if got := capabilityApprovalMode("request_approval"); got != capability.ApprovalModeManual {
+		t.Fatalf("expected manual approval mode, got %s", got)
+	}
+}
+
 func TestB17ModelToolsSortByExposurePriority(t *testing.T) {
 	toolRegistry := capability.NewToolRegistry()
 	lowPriority := capability.ToolDefinition{

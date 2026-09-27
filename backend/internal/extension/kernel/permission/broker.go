@@ -238,6 +238,14 @@ func (b *DefaultPermissionBroker) Evaluate(ctx context.Context, request Permissi
 			}
 		}
 
+		if request.ApprovalMode == string(ApprovalFullControl) {
+			result.Reasons = append(result.Reasons, PermissionReason{
+				Code:       "full_control_allowed",
+				Permission: req.PermissionID,
+			})
+			continue
+		}
+
 		if remoteDecision == DecisionRequireApproval {
 			if !b.validateApprovalRecord(req.PermissionID, request) {
 				result.Missing = append(result.Missing, req)

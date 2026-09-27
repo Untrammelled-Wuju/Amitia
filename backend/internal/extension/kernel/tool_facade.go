@@ -1070,7 +1070,7 @@ func (f *ToolFacade) ExecuteModelToolStream(ctx context.Context, modelName strin
 func capabilityApprovalMode(mode string) capability.ApprovalMode {
 	switch agentpermission.Normalize(mode) {
 	case agentpermission.FullAccess:
-		return capability.ApprovalModeAuto
+		return capability.ApprovalModeFullControl
 	default:
 		return capability.ApprovalModeManual
 	}
