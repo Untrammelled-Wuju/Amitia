@@ -170,14 +170,22 @@ function main() {
     join(packageRoot, "src", "index.mjs"),
     join(moduleRoot, "dist", "index.js"),
   );
-  for (const target of ["desktop", "mobile"]) {
-    for (const file of ["index.html", "app.js", "styles.css"]) {
-      copyFileSync(
-        join(packageRoot, "src", "ui", file),
-        join(stagingRoot, "modules", "proactive-ui", target, file),
-      );
-    }
+  for (const file of ["index.html", "app.js", "styles.css"]) {
+    copyFileSync(
+      join(packageRoot, "src", "ui", file),
+      join(stagingRoot, "modules", "proactive-ui", "desktop", file),
+    );
   }
+  for (const file of ["index.html", "styles.css", "shell.js"]) {
+    copyFileSync(
+      join(packageRoot, "src", "ui", "mobile", file),
+      join(stagingRoot, "modules", "proactive-ui", "mobile", file),
+    );
+  }
+  copyFileSync(
+    join(packageRoot, "src", "ui", "app.js"),
+    join(stagingRoot, "modules", "proactive-ui", "mobile", "app.js"),
+  );
   writeFileSync(
     join(moduleRoot, "package.json"),
     `${JSON.stringify({ type: "module" }, null, 2)}\n`,

@@ -69,6 +69,85 @@ func TestB17ToolFacadeModelNameConflictResolved(t *testing.T) {
 	}
 }
 
+func TestB17AndroidUIAgentUsesOpenAICompatibleModelName(t *testing.T) {
+	toolRegistry := capability.NewToolRegistry()
+	if err := registerAndroidUIAgentTool(context.Background(), toolRegistry); err != nil {
+		t.Fatalf("unexpected registerAndroidUIAgentTool error: %v", err)
+	}
+
+	definition, ok := toolRegistry.Get(context.Background(), "android.ui.agent.run")
+	if !ok {
+		t.Fatal("expected android.ui.agent.run to be registered")
+	}
+	if definition.ModelName != "android_ui_agent_run" {
+		t.Fatalf("expected model name android_ui_agent_run, got %s", definition.ModelName)
+	}
+
+	facade := NewToolFacade(toolRegistry, &execution.ExecutionPipeline{})
+	tools, err := facade.ModelTools(context.Background(), InvocationScope{})
+	if err != nil {
+		t.Fatalf("unexpected ModelTools error: %v", err)
+	}
+	found := false
+	for _, item := range tools {
+		if item.Function.Name == "android_ui_agent_run" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("expected android_ui_agent_run in model tools")
+	}
+}
+
+func TestB17ModelToolsSortByExposurePriority(t *testing.T) {
+	toolRegistry := capability.NewToolRegistry()
+	lowPriority := capability.ToolDefinition{
+		ID:          "tool-low",
+		ModelName:   "tool_low",
+		Source:      capability.ToolSourceBuiltin,
+		Name:        "Low",
+		Description: "Low priority tool",
+		Enabled:     true,
+		InputSchema: []byte(`{"type":"object","properties":{}}`),
+		ModelExposure: capability.ModelExposureRule{
+			ExposedByDefault: true,
+			Priority:         1,
+		},
+	}
+	highPriority := capability.ToolDefinition{
+		ID:          "tool-high",
+		ModelName:   "tool_high",
+		Source:      capability.ToolSourceBuiltin,
+		Name:        "High",
+		Description: "High priority tool",
+		Enabled:     true,
+		InputSchema: []byte(`{"type":"object","properties":{}}`),
+		ModelExposure: capability.ModelExposureRule{
+			ExposedByDefault: true,
+			Priority:         100,
+		},
+	}
+	if err := toolRegistry.Register(context.Background(), lowPriority); err != nil {
+		t.Fatalf("unexpected low priority register error: %v", err)
+	}
+	if err := toolRegistry.Register(context.Background(), highPriority); err != nil {
+		t.Fatalf("unexpected high priority register error: %v", err)
+	}
+
+	facade := NewToolFacade(toolRegistry, &execution.ExecutionPipeline{})
+	tools, err := facade.ModelTools(context.Background(), InvocationScope{})
+	if err != nil {
+		t.Fatalf("unexpected ModelTools error: %v", err)
+	}
+	if len(tools) != 2 {
+		t.Fatalf("expected 2 tools, got %d", len(tools))
+	}
+	if tools[0].Function.Name != "tool_high" {
+		t.Fatalf("expected tool_high first, got %s", tools[0].Function.Name)
+	}
+}
+
 func TestBuildModelToolsSkipsInvalidSchema(t *testing.T) {
 	definitions := []capability.ToolDefinition{
 		{

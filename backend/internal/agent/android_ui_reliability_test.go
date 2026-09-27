@@ -3,7 +3,30 @@ package agent
 import (
 	"encoding/json"
 	"testing"
+
+	"github.com/u-ai/backend/internal/agent/tool"
 )
+
+func TestAndroidUIAgentScopeInheritsApprovedExecution(t *testing.T) {
+	scope := androidUIAgentScope(tool.ToolExecutionContext{
+		SpaceID:        "space-1",
+		CharacterID:    "character-1",
+		ConversationID: "conversation-1",
+		Channel:        "web",
+		RequestID:      "request-1",
+		CorrelationID:  "correlation-1",
+		CausationID:    "causation-1",
+		ToolCallID:     "tool-call-1",
+		PermissionMode: "full_access",
+	})
+
+	if scope.PermissionMode != "full_access" {
+		t.Fatalf("expected child scope permission mode full_access, got %s", scope.PermissionMode)
+	}
+	if scope.ConversationID != "conversation-1" || scope.ToolCallID != "tool-call-1" {
+		t.Fatalf("unexpected child scope: %#v", scope)
+	}
+}
 
 func TestAnalyzeAndroidUIObservationLowInformationEscalatesToVisual(t *testing.T) {
 	raw, err := json.Marshal(androidUITreeEnvelope{

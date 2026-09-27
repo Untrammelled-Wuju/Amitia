@@ -1,28 +1,34 @@
 {
-  "version": "5.3.0-amitia.2",
+  "version": "5.1.107.78-amitia.1",
   "componentId": "runtime.proot",
   "provenance": {
-    "upstreamTag": "v5.3.0",
-    "upstreamCommit": "official-static-release",
-    "androidPatchSource": "proot-me",
-    "androidPatchCommit": "official-static-aarch64-fa10b1a7"
+    "upstreamTag": "v5.1.107.78",
+    "upstreamCommit": "a7147b50d708567dbf884d21e0f0c8698bba0d10",
+    "androidPatchSource": "Operit2",
+    "androidPatchCommit": "b184361e5fd4b03a570f111e85cedce28179f379"
   },
   "targetAbi": "arm64-v8a",
   "targetArchitecture": "aarch64",
   "artifact": {
     "fileName": "libamitia_proot.so",
-    "sha256": "fa10b1a7818c2f5b1dcb5834450570c368c9ecf66d31521509621b95c4538a45",
-    "size": 1479432,
+    "sha256": "6eae92a445afd3ea6e5e08d1b4b737ab78ae2341010009ab777e31f35fcee957",
+    "size": 307664,
     "source": "src/main/jniLibs/arm64-v8a/libamitia_proot.so"
+  },
+  "loader": {
+    "fileName": "libamitia_loader.so",
+    "sha256": "134816584a7ffc7eb068648f98da7fc9789909a417326f79811bf8f6c837e23e",
+    "size": 18272,
+    "source": "src/main/jniLibs/arm64-v8a/libamitia_loader.so"
   },
   "elf": {
     "class": "ELF64",
     "machine": 183,
     "machineName": "AArch64",
     "endianness": "little-endian",
-    "type": "ET_EXEC",
-    "linking": "statically-linked"
+    "type": "ET_DYN",
+    "linking": "static-pie"
   },
   "license": "GPL-2.0-or-later",
-  "frozenAt": "2026-08-29"
+  "frozenAt": "2026-09-25"
 }

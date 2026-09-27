@@ -193,7 +193,6 @@ export function useWebChatSend(
       const errMsg = err?.message || "发送失败";
       failPendingAssistant?.(requestEnvelope.requestId);
       modelError.value = errMsg;
-      ElMessage.error(errMsg);
       const index = messages.value.findIndex((message) => message.id === userMsgLocalId);
       if (index >= 0) messages.value[index] = { ...messages.value[index], status: "failed" };
       sending.value = false;

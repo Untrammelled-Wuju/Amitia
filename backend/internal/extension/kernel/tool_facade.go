@@ -758,6 +758,12 @@ func (f *ToolFacade) parseContextContributions(result json.RawMessage) []Context
 
 func (f *ToolFacade) buildKernelModelTools(ctx context.Context, scope InvocationScope) ([]tool.Tool, error) {
 	defs := f.toolRegistry.List(ctx, capability.ToolFilter{Enabled: boolPtr(true)})
+	sort.SliceStable(defs, func(i, j int) bool {
+		if defs[i].ModelExposure.Priority != defs[j].ModelExposure.Priority {
+			return defs[i].ModelExposure.Priority > defs[j].ModelExposure.Priority
+		}
+		return defs[i].ID < defs[j].ID
+	})
 	return buildModelToolsFromDefinitions(defs, scope), nil
 }
 
@@ -956,7 +962,10 @@ func (f *ToolFacade) executeResolvedTool(ctx context.Context, def capability.Too
 		}
 	}
 
-	metadata := map[string]any{"execution_mode": "capability_resolved"}
+	metadata := map[string]any{
+		"execution_mode":               "capability_resolved",
+		tool.MetadataKeyPermissionMode: scope.PermissionMode,
+	}
 	approvalMode := capabilityApprovalMode(scope.PermissionMode)
 	invocation := capability.NewToolInvocationContext(capability.ToolInvocationOptions{
 		ExternalCallID:  externalCallID,
@@ -1021,7 +1030,10 @@ func (f *ToolFacade) ExecuteModelToolStream(ctx context.Context, modelName strin
 	if resolved.missingCapability != "" {
 		return ToolDispatchResult{Status: "FAILED", VisibleText: resolved.resolutionDetail, Error: &ToolDispatchError{Code: resolved.resolutionCode, Message: string(resolved.missingCapability), Detail: resolved.resolutionDetail}}, true, nil
 	}
-	streamMetadata := map[string]any{"execution_mode": "capability_resolved"}
+	streamMetadata := map[string]any{
+		"execution_mode":               "capability_resolved",
+		tool.MetadataKeyPermissionMode: scope.PermissionMode,
+	}
 	approvalMode := capabilityApprovalMode(scope.PermissionMode)
 	invocation := capability.NewToolInvocationContext(capability.ToolInvocationOptions{
 		ExternalCallID:  scope.ToolCallID,

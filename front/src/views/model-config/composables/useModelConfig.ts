@@ -191,6 +191,9 @@ export function useModelConfig(options?: ModelConfigOptions) {
     detectError.value = "";
     const provider = currentProviderSchema.value as any;
     if (provider && applyDefaults) {
+      if (extraFormFields && "protocol" in extraFormFields) {
+        form.protocol = provider.defaultProtocol || "";
+      }
       if (provider.defaultBaseUrl) {
         form.baseUrl = provider.defaultBaseUrl;
       }

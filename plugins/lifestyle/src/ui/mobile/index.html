@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="transparent" />
+    <title>生活系统</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <header class="mobile-topbar">
+      <button type="button" id="mobile-back" class="icon-button" aria-label="返回">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.4 5.4 8.8 12l6.6 6.6-1.4 1.4L6 12l8-8 1.4 1.4Z"/></svg>
+      </button>
+      <div class="title-block">
+        <h1>生活系统</h1>
+        <p>作息、工作与生活状态</p>
+      </div>
+      <button class="icon-button" id="refresh-button" type="button" aria-label="刷新">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.7 6.3A8 8 0 1 0 20 12h-2a6 6 0 1 1-1.8-4.3L14 10h7V3l-3.3 3.3Z"/></svg>
+      </button>
+    </header>
+
+    <main class="life-shell">
+      <header class="life-header">
+        <div>
+          <span class="eyebrow">角色日常</span>
+          <h2>生活状态</h2>
+          <p id="subtitle">正在读取角色生活状态...</p>
+        </div>
+      </header>
+
+      <nav class="life-tabs" aria-label="生活系统视图">
+        <button type="button" data-view="overview" class="active">总览</button>
+        <button type="button" data-view="schedule">日程</button>
+        <button type="button" data-view="routine">作息与工作</button>
+        <button type="button" data-view="events">事件</button>
+        <button type="button" data-view="tendency">倾向</button>
+        <button type="button" data-view="data">数据</button>
+      </nav>
+
+      <div id="message" class="message" role="status" aria-live="polite"></div>
+      <section id="view" class="view"></section>
+    </main>
+
+    <script type="module" src="./shell.js"></script>
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>

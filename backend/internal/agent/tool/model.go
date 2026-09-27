@@ -111,7 +111,10 @@ type ToolExecutionContext struct {
 	Path           string
 	ToolCallID     string
 	IdempotencyKey string
+	PermissionMode string
 }
+
+const MetadataKeyPermissionMode = "amitia.permission_mode"
 
 type ToolStatus string
 

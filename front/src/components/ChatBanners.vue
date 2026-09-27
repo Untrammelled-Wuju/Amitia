@@ -21,12 +21,6 @@ SPDX-License-Identifier: AGPL-3.0-only
       </el-alert>
     </div>
 
-    <div v-if="modelError" class="error-banner">
-      <el-alert type="error" closable show-icon @close="$emit('closeError')">
-        <template #title>{{ modelError }}</template>
-      </el-alert>
-    </div>
-
     <div v-if="importContext" class="import-banner">
       <el-alert
         type="success"
@@ -58,13 +52,11 @@ SPDX-License-Identifier: AGPL-3.0-only
 defineProps<{
   modelMissing: boolean;
   isOffline: boolean;
-  modelError: string;
   importContext: any;
   showImportDetail: boolean;
 }>();
 
 defineEmits<{
-  closeError: [];
   closeImport: [];
   toggleImportDetail: [];
 }>();

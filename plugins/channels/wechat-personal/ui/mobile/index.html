@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta name="theme-color" content="transparent" />
+  <title>个人微信</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <header class="mobile-topbar">
+    <button type="button" id="mobile-back" class="icon-button" aria-label="返回">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.4 5.4 8.8 12l6.6 6.6-1.4 1.4L6 12l8-8 1.4 1.4Z"/></svg>
+    </button>
+    <div class="title-block">
+      <h1>个人微信</h1>
+      <p>独立账号与消息连接</p>
+    </div>
+    <button type="button" id="refresh" class="icon-button" aria-label="刷新">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.7 6.3A8 8 0 1 0 20 12h-2a6 6 0 1 1-1.8-4.3L14 10h7V3l-3.3 3.3Z"/></svg>
+    </button>
+  </header>
+
+  <main id="app">
+    <header class="page-head">
+      <div>
+        <span class="eyebrow">消息渠道</span>
+        <h2>腾讯 iLink 独立账号</h2>
+        <p>不读取本机微信登录状态，也不依赖电脑微信客户端。</p>
+      </div>
+      <span id="badge" class="badge">检测中</span>
+    </header>
+
+    <section id="messages-view" class="view hidden">
+      <div class="section-head">
+        <div>
+          <h2>个人微信消息</h2>
+          <p>查看插件保存的渠道会话与消息。</p>
+        </div>
+        <button id="refresh-messages" class="button ghost">刷新</button>
+      </div>
+      <div id="bindings" class="bindings"></div>
+      <div id="messages" class="messages"></div>
+    </section>
+
+    <div id="connect-view">
+      <section class="card status-card">
+        <div class="section-head">
+          <div>
+            <h2>账号状态</h2>
+            <p id="status-message" class="muted" aria-live="polite">正在检测...</p>
+          </div>
+        </div>
+        <div class="account-row">
+          <div id="avatar" class="avatar">微</div>
+          <div class="account-text">
+            <strong id="nickname">未登录</strong>
+            <span id="account-id">—</span>
+          </div>
+        </div>
+        <div class="stats">
+          <div><span>协议</span><b id="driver">未连接</b></div>
+          <div><span>平台</span><b id="platform">—</b></div>
+          <div><span>登录方式</span><b id="native">—</b></div>
+          <div><span>收到</span><b id="received">0</b></div>
+          <div><span>发送</span><b id="sent">0</b></div>
+          <div><span>角色</span><b>空间默认角色</b></div>
+        </div>
+        <div class="capabilities" aria-label="当前连接能力">
+          <span id="cap-qr" class="capability">二维码</span>
+          <span id="cap-login" class="capability">登录检测</span>
+          <span id="cap-recv" class="capability">接收文本</span>
+          <span id="cap-send" class="capability">发送文本</span>
+        </div>
+      </section>
+
+      <section class="card login-card">
+        <div class="section-head">
+          <div>
+            <h2>登录个人微信</h2>
+            <p class="muted">二维码由插件自己的 iLink 登录会话生成。</p>
+          </div>
+        </div>
+
+        <div class="qr-wrap">
+          <img id="qr" class="qr hidden" alt="微信登录二维码" />
+          <div id="qr-placeholder" class="qr-placeholder">点击下方按钮获取二维码</div>
+        </div>
+
+        <div class="actions">
+          <button id="connect" class="button primary">获取登录二维码</button>
+          <button id="disconnect" class="button danger">断开账号</button>
+        </div>
+
+        <div id="verify-row" class="verify-row hidden">
+          <input id="verify-code" class="input" inputmode="numeric" autocomplete="one-time-code" placeholder="输入手机显示的数字" />
+          <button id="verify" class="button primary">提交验证码</button>
+        </div>
+
+        <div id="error" class="error hidden" role="alert"></div>
+
+        <details class="details">
+          <summary>扫码连接步骤</summary>
+          <div class="guide-step">
+            <span class="guide-step-number">1</span>
+            <div>
+              <strong>获取插件二维码</strong>
+              <p>点击连接按钮后由插件生成独立登录二维码。</p>
+            </div>
+          </div>
+          <div class="guide-step">
+            <span class="guide-step-number">2</span>
+            <div>
+              <strong>使用手机微信扫码</strong>
+              <p>扫码和确认都在手机微信中完成。</p>
+            </div>
+          </div>
+          <div class="guide-step">
+            <span class="guide-step-number">3</span>
+            <div>
+              <strong>等待连接完成</strong>
+              <p>只有 iLink 返回成功后才显示已连接。</p>
+            </div>
+          </div>
+        </details>
+
+        <details class="details">
+          <summary>账号独立说明</summary>
+          <p>登录凭据仅保存在个人微信插件的数据目录。断开不会影响设备上的微信账号。</p>
+        </details>
+      </section>
+    </div>
+  </main>
+
+  <script src="./shell.js" defer></script>
+  <script src="./app.js" defer></script>
+</body>
+</html>

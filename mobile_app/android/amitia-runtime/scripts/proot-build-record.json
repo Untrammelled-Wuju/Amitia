@@ -1,23 +1,26 @@
 {
   "schemaVersion": 1,
-  "version": "5.3.0-amitia.2",
-  "upstreamTag": "v5.3.0",
-  "upstreamCommit": "official-static-release",
-  "androidPatchSource": "proot-me",
-  "androidPatchCommit": "official-static-aarch64-fa10b1a7",
+  "version": "5.1.107.78-amitia.1",
+  "upstreamTag": "v5.1.107.78",
+  "upstreamCommit": "a7147b50d708567dbf884d21e0f0c8698bba0d10",
+  "androidPatchSource": "Operit2",
+  "androidPatchCommit": "b184361e5fd4b03a570f111e85cedce28179f379",
   "targetAbi": "arm64-v8a",
   "architecture": "aarch64",
   "minApi": 21,
   "fileName": "libamitia_proot.so",
-  "sha256": "fa10b1a7818c2f5b1dcb5834450570c368c9ecf66d31521509621b95c4538a45",
-  "size": 1479432,
+  "sha256": "6eae92a445afd3ea6e5e08d1b4b737ab78ae2341010009ab777e31f35fcee957",
+  "size": 307664,
+  "loaderFileName": "libamitia_loader.so",
+  "loaderSha256": "134816584a7ffc7eb068648f98da7fc9789909a417326f79811bf8f6c837e23e",
+  "loaderSize": 18272,
   "elf": {
     "class": "ELF64",
     "data": "little-endian",
     "machine": "AArch64",
     "machineId": 183,
-    "type": "ET_EXEC",
+    "type": "ET_DYN",
     "interpreter": null,
-    "linkage": "static"
+    "linkage": "static-pie"
   }
 }

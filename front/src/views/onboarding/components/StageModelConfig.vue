@@ -122,10 +122,10 @@
                     style="width: 100%"
                   >
                     <el-option
-                      v-for="p in providers"
-                      :key="p.id"
+                      v-for="p in providerChoices"
+                      :key="p.value"
                       :label="p.name"
-                      :value="p.id"
+                      :value="p.value"
                     >
                       <span>{{ p.name }}</span>
                       <span
@@ -310,13 +310,21 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted } from "vue";
+import { ref, watch, onMounted, computed } from "vue";
 import { useApi } from "../../../composables/useApi";
 
 const showApiKey = ref(false);
 const { get } = useApi();
 const providers = ref<any[]>([]);
-const selectedProvider = ref("");
+const selectedProvider = computed(() => props.provider === "openai"
+  ? `openai:${props.protocol || "openai_responses"}`
+  : props.provider);
+const providerChoices = computed(() => providers.value.flatMap((provider: any) => provider.id === "openai"
+  ? [
+      { ...provider, value: "openai:openai_chat", name: "OpenAI · Chat Completions" },
+      { ...provider, value: "openai:openai_responses", name: "OpenAI · Responses" },
+    ]
+  : [{ ...provider, value: provider.id }]));
 
 onMounted(async () => {
   try {
@@ -327,9 +335,13 @@ onMounted(async () => {
 });
 
 function onProviderSelect(providerId: string) {
-  selectedProvider.value = providerId;
-  const provider = providers.value.find((p: any) => p.id === providerId);
+  const apiType = providerId.startsWith("openai:") ? "openai" : providerId;
+  const provider = providers.value.find((p: any) => p.id === apiType);
   if (provider) {
+    emit("update:provider", apiType);
+    emit("update:protocol", providerId.startsWith("openai:")
+      ? providerId.slice("openai:".length)
+      : provider.defaultProtocol || "");
     if (provider.defaultBaseUrl) {
       emit("update:baseUrl", provider.defaultBaseUrl);
     }
@@ -350,6 +362,8 @@ const props = defineProps<{
   apiKey: string;
   modelName: string;
   modelType: string;
+  provider: string;
+  protocol: string;
 }>();
 
 const emit = defineEmits<{
@@ -358,6 +372,8 @@ const emit = defineEmits<{
   "update:apiKey": [value: string];
   "update:modelName": [value: string];
   "update:modelType": [value: string];
+  "update:provider": [value: string];
+  "update:protocol": [value: string];
 }>();
 
 const modelTypes = [
@@ -376,11 +392,14 @@ watch(
     if (val === "local") {
       emit("update:baseUrl", "http://localhost:11434/v1");
       emit("update:apiKey", "ollama");
+      emit("update:provider", "ollama");
+      emit("update:protocol", "ollama_chat");
     } else {
       emit("update:baseUrl", "https://api.deepseek.com/v1");
       emit("update:apiKey", "");
+      emit("update:provider", "deepseek");
+      emit("update:protocol", "openai_chat");
     }
-    selectedProvider.value = "";
   },
 );
 </script>

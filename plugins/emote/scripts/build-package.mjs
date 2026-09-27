@@ -142,7 +142,7 @@ function main() {
   rmSync(outputFile, { force: true });
   copyFileSync(join(packageRoot, "src", "index.mjs"), join(stagingRoot, "modules", "emote-runtime", "dist", "index.js"));
   writeFileSync(join(stagingRoot, "modules", "emote-runtime", "package.json"), `${JSON.stringify({ type: "module" }, null, 2)}\n`);
-  const uiFiles = [
+  const desktopUiFiles = [
     "index.html",
     "index.js",
     "styles.css",
@@ -153,10 +153,24 @@ function main() {
     "message.js",
     "message.css",
   ];
-  for (const target of ["desktop", "mobile"]) {
-    for (const file of uiFiles) {
-      copyFileSync(join(packageRoot, "ui", file), join(stagingRoot, "modules", "emote-ui", target, file));
-    }
+  const mobileUiFiles = [
+    "index.html",
+    "styles.css",
+    "composer.html",
+    "composer.css",
+    "message.html",
+    "message.css",
+    "shell.js",
+  ];
+  const mobileScriptFiles = ["index.js", "composer.js", "message.js"];
+  for (const file of desktopUiFiles) {
+    copyFileSync(join(packageRoot, "ui", file), join(stagingRoot, "modules", "emote-ui", "desktop", file));
+  }
+  for (const file of mobileUiFiles) {
+    copyFileSync(join(packageRoot, "ui", "mobile", file), join(stagingRoot, "modules", "emote-ui", "mobile", file));
+  }
+  for (const file of mobileScriptFiles) {
+    copyFileSync(join(packageRoot, "ui", file), join(stagingRoot, "modules", "emote-ui", "mobile", file));
   }
   writeFileSync(join(stagingRoot, "modules", "emote-ui", "package.json"), `${JSON.stringify({ type: "module" }, null, 2)}\n`);
   for (const module of manifest.modules || []) {

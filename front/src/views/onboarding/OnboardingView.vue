@@ -51,10 +51,14 @@
           :apiKey="modelApiKey"
           :modelName="modelName"
           :modelType="modelType"
+          :provider="modelProvider"
+          :protocol="modelProtocol"
           @update:baseUrl="modelBaseUrl = $event"
           @update:apiKey="modelApiKey = $event"
           @update:modelName="modelName = $event"
           @update:modelType="modelType = $event"
+          @update:provider="modelProvider = $event"
+          @update:protocol="modelProtocol = $event"
           @detect="detectModel"
         />
       </section>
@@ -117,6 +121,8 @@ const {
   modelApiKey,
   modelName,
   modelType,
+  modelProvider,
+  modelProtocol,
   entryPreparing,
   enteringState,
   nextStage,

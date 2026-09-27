@@ -174,11 +174,13 @@ internal class DefaultRuntimeInstaller(
                 rootfsPayloadFile = verifiedPackage.rootfsPayloadFile,
                 expectedRootfsId = rootfsId,
                 expectedPayloadSha256 = rootfsPayloadRef.sha256,
+                allowReplace = request.allowRepairExisting,
             )
 
             val rootfsInfo = when (rootfsResult) {
                 is RootfsPrepareResult.Reused -> rootfsResult.info
                 is RootfsPrepareResult.NewlyInstalled -> rootfsResult.info
+                is RootfsPrepareResult.Replaced -> rootfsResult.info
                 is RootfsPrepareResult.Conflict -> {
                     return RuntimeInstallResult.Failure(
                         code = RuntimeInstallErrorCode.ROOTFS_CONFLICT,
@@ -453,6 +455,7 @@ internal class DefaultRuntimeInstaller(
                     restoreRepairBackup(backup)
                 }
             }
+            rootfsManager.completePreparation(repairCompleted)
         }
     }
 

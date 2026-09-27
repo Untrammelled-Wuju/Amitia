@@ -1264,6 +1264,9 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 			ToolCallID:     invocation.InvocationID,
 			IdempotencyKey: invocation.IdempotencyKey,
 		}
+		if mode, ok := invocation.Metadata[tool.MetadataKeyPermissionMode].(string); ok {
+			execCtx.PermissionMode = mode
+		}
 		result, ok := tool.ExecuteWithContextAndCancel(ctx, execCtx, handlerName, string(input))
 		if !ok {
 			memResult, memOk := tool.ExecuteMemoryWithContextAndCancel(ctx, execCtx, handlerName, string(input))

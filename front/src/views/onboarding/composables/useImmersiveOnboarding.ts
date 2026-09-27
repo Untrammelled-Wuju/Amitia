@@ -27,6 +27,8 @@ export function useImmersiveOnboarding() {
   const modelApiKey = ref("");
   const modelName = ref("");
   const modelType = ref("online");
+  const modelProvider = ref("deepseek");
+  const modelProtocol = ref("openai_chat");
 
   const modelFieldErrors = ref<{
     baseUrl?: boolean;
@@ -493,7 +495,8 @@ const res = await post<any>("/api/model/detect-models", {
     try {
       if (modelApiKey.value && modelBaseUrl.value && modelName.value) {
         await post("/api/model/configs", {
-          apiType: "openai-compatible",
+          apiType: modelProvider.value,
+          protocol: modelProtocol.value,
           baseUrl: modelBaseUrl.value,
           apiKey: modelApiKey.value,
           modelName: modelName.value,
@@ -589,7 +592,8 @@ const res = await post<any>("/api/model/detect-models", {
         modelConfig: modelApiKey.value
           ? {
               name: "default",
-              apiType: "openai-compatible",
+              apiType: modelProvider.value,
+              protocol: modelProtocol.value,
               baseUrl: modelBaseUrl.value,
               apiKey: modelApiKey.value,
               modelName: modelName.value,
@@ -636,6 +640,8 @@ const res = await post<any>("/api/model/detect-models", {
     modelApiKey,
     modelName,
     modelType,
+    modelProvider,
+    modelProtocol,
     visionMode,
     visionModelKey,
     visionModelName,

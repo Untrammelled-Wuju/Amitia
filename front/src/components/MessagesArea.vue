@@ -201,6 +201,7 @@ const props = defineProps<{
   pullLoading: boolean;
   pullText: string;
   characters?: any[];
+  modelError?: string;
   extensionContext?: Record<string, unknown>;
   providerActions?: Record<string, (input?: unknown) => unknown | Promise<unknown>>;
 }>();
@@ -356,6 +357,22 @@ const flowItems = computed<FlowItem[]>(() => {
         kind: "error",
         key: `error:${lastMessage.assistantTurn?.id || lastMessage.id}`,
         detail: turnErrorDetail(lastMessage.assistantTurn),
+        sequence: finiteNumber(lastMessage?.seq ?? lastMessage?.sequence),
+        timestamp: String(lastMessage?.createdAt ?? lastMessage?.timestamp ?? ""),
+      });
+    }
+  } else if (
+    lastMessage?.role === "user" &&
+    normalizeMessageState(lastMessage) === "failed"
+  ) {
+    const messageIndex = ordered.findIndex(
+      (candidate) => candidate.kind === "message" && candidate.message?.id === lastMessage.id,
+    );
+    if (messageIndex >= 0) {
+      ordered.splice(messageIndex + 1, 0, {
+        kind: "error",
+        key: `error:send:${lastMessage.id}`,
+        detail: props.modelError?.trim() || "发送失败",
         sequence: finiteNumber(lastMessage?.seq ?? lastMessage?.sequence),
         timestamp: String(lastMessage?.createdAt ?? lastMessage?.timestamp ?? ""),
       });

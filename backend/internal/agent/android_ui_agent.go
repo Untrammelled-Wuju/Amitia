@@ -49,11 +49,7 @@ func (s *service) RunAndroidUIAgent(ctx context.Context, execCtx tool.ToolExecut
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	scope := extensionkernel.InvocationScope{
-		SpaceID: execCtx.SpaceID, CharacterID: execCtx.CharacterID, ConversationID: execCtx.ConversationID,
-		Channel: execCtx.Channel, TraceID: execCtx.CorrelationID, RequestID: execCtx.RequestID,
-		ToolCallID: execCtx.ToolCallID, CorrelationID: execCtx.CorrelationID, CausationID: execCtx.CausationID,
-	}
+	scope := androidUIAgentScope(execCtx)
 
 	result := androiduiagent.Result{Steps: make([]androiduiagent.Step, 0, req.MaxSteps)}
 	runKey := firstNonEmpty(strings.TrimSpace(execCtx.IdempotencyKey), strings.TrimSpace(execCtx.ToolCallID), strings.TrimSpace(execCtx.RequestID), strings.TrimSpace(execCtx.CorrelationID))
@@ -253,6 +249,15 @@ func (s *service) RunAndroidUIAgent(ctx context.Context, execCtx tool.ToolExecut
 	result.FinalState = "step_limit"
 	result.Result = fmt.Sprintf("Android UI agent reached the %d-step limit without declaring the goal complete", req.MaxSteps)
 	return result, nil
+}
+
+func androidUIAgentScope(execCtx tool.ToolExecutionContext) extensionkernel.InvocationScope {
+	return extensionkernel.InvocationScope{
+		SpaceID: execCtx.SpaceID, CharacterID: execCtx.CharacterID, ConversationID: execCtx.ConversationID,
+		Channel: execCtx.Channel, TraceID: execCtx.CorrelationID, RequestID: execCtx.RequestID,
+		ToolCallID: execCtx.ToolCallID, CorrelationID: execCtx.CorrelationID, CausationID: execCtx.CausationID,
+		PermissionMode: execCtx.PermissionMode,
+	}
 }
 
 func (s *service) executeAndroidUIActionWithRecovery(

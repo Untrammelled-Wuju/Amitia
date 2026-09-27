@@ -17,10 +17,10 @@ func registerAndroidUIAgentTool(ctx context.Context, registry *capability.ToolRe
 	}
 	definition := capability.ToolDefinition{
 		ID:          "android.ui.agent.run",
-		ModelName:   "android.ui.agent.run",
+		ModelName:   "android_ui_agent_run",
 		Source:      capability.ToolSourceBuiltin,
 		Name:        "Android UI Agent",
-		Description: "Run a bounded autonomous Android UI sub-agent. It repeatedly captures a structured UI tree, asks the configured model for exactly one constrained next action, executes only typed Android capabilities, re-observes the screen, and replans until the goal is complete or the step/timeout budget is exhausted.",
+		Description: "Run a bounded autonomous Android UI sub-agent. It repeatedly captures a structured UI tree, asks the configured model for exactly one constrained next action, executes only typed Android capabilities, re-observes the screen, and replans until the goal is complete or the step/timeout budget is exhausted. Canonical tool ID: android.ui.agent.run.",
 		InputSchema: json.RawMessage(`{
 			"type":"object",
 			"required":["goal"],

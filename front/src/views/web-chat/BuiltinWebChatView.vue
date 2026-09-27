@@ -16,10 +16,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 <ChatBanners
       :model-missing="modelMissing"
       :is-offline="isOffline"
-      :model-error="modelError"
       :import-context="importContext"
       :show-import-detail="showImportDetail"
-      @close-error="modelError = ''"
       @close-import="importContext = null"
     />
 
@@ -86,6 +84,7 @@ SPDX-License-Identifier: AGPL-3.0-only
         :actions="conversationHostActions"
         ref="msgAreaRef"
         :messages="messages"
+        :model-error="modelError"
         :history-messages="persistedMessages"
         :char-name="charName"
         :char-avatar="charAvatar"

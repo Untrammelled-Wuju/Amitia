@@ -25,15 +25,15 @@ SPDX-License-Identifier: AGPL-3.0-only
 
       <el-form-item label="类型" prop="apiType">
         <el-select
-          v-model="form.apiType"
+          :model-value="providerSelection"
           style="width: 100%"
-          @change="(v: string) => emit('onProviderChange', v)"
+          @change="selectProvider"
         >
           <el-option
-            v-for="p in providers"
-            :key="p.id"
+            v-for="p in providerChoices"
+            :key="p.value"
             :label="p.name"
-            :value="p.id"
+            :value="p.value"
           >
             <span>{{ p.name }}</span>
             <span
@@ -253,6 +253,31 @@ const showAdvanced = computed(() => props.showAdvanced ?? true);
 const showDetect = computed(() => props.showDetect ?? true);
 const modelPlaceholder = computed(() => props.modelPlaceholder ?? "gpt-4o-mini / qwen2.5:7b / deepseek-chat");
 const showReasoningSettings = computed(() => props.showReasoning === true);
+const providerChoices = computed(() => props.providers.flatMap((provider) => {
+  if (props.showReasoning && provider.id === "openai") {
+    return [
+      { ...provider, value: "openai:openai_chat", name: "OpenAI · Chat Completions" },
+      { ...provider, value: "openai:openai_responses", name: "OpenAI · Responses" },
+    ];
+  }
+  return [{ ...provider, value: provider.id }];
+}));
+const providerSelection = computed(() => {
+  if (props.showReasoning && props.form.apiType === "openai") {
+    return `openai:${props.form.protocol || "openai_responses"}`;
+  }
+  return props.form.apiType;
+});
+function selectProvider(value: string) {
+  const [apiType, protocol] = value.startsWith("openai:")
+    ? ["openai", value.slice("openai:".length)]
+    : [value, ""];
+  props.form.apiType = apiType;
+  emit("onProviderChange", apiType);
+  if (props.showReasoning) {
+    props.form.protocol = protocol || props.providers.find((provider) => provider.id === apiType)?.defaultProtocol || "";
+  }
+}
 
 const formRef = ref<FormInstance>();
 const localDetectError = ref("");

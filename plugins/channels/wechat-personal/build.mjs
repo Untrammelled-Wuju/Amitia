@@ -292,11 +292,13 @@ copyProductionRuntime(join(staging, "modules", "wechat-personal-channel-service"
   "wechaty",
   "wechaty-puppet-wechat4u",
 ]);
-for (const target of ["desktop", "mobile"]) {
-  for (const name of ["index.html", "app.js", "styles.css"]) {
-    copyFileSync(join(root, "ui", "desktop", name), join(staging, "modules", "wechat-personal-channel-ui", target, name));
-  }
+for (const name of ["index.html", "app.js", "styles.css"]) {
+  copyFileSync(join(root, "ui", "desktop", name), join(staging, "modules", "wechat-personal-channel-ui", "desktop", name));
 }
+for (const name of ["index.html", "styles.css", "shell.js"]) {
+  copyFileSync(join(root, "ui", "mobile", name), join(staging, "modules", "wechat-personal-channel-ui", "mobile", name));
+}
+copyFileSync(join(root, "ui", "desktop", "app.js"), join(staging, "modules", "wechat-personal-channel-ui", "mobile", "app.js"));
 for (const doc of ["README.md", "INTEGRATION_REPORT.md"]) {
   const source = join(root, doc);
   if (existsSync(source)) copyFileSync(source, join(staging, "assets", "docs", doc));
