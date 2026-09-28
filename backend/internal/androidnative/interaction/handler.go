@@ -3,8 +3,10 @@ package interaction
 import (
 	"context"
 	"encoding/json"
+	"strings"
 
 	"github.com/u-ai/backend/internal/androidnative"
+	"github.com/u-ai/backend/internal/androidnative/uitree"
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
 )
 
@@ -14,6 +16,32 @@ type Handler struct {
 
 func NewHandler(service *Service) *Handler {
 	return &Handler{service: service}
+}
+
+func applyFallbackDefaults(
+	payload map[string]any,
+	policy Policy,
+	coordinate *bool,
+	shizuku *bool,
+	visual *bool,
+	root *bool,
+	adb *bool,
+) {
+	if _, exists := payload["allowCoordinateFallback"]; !exists && coordinate != nil {
+		*coordinate = policy.AllowCoordinateFallback
+	}
+	if _, exists := payload["allowShizukuFallback"]; !exists && shizuku != nil {
+		*shizuku = policy.AllowShizukuFallback
+	}
+	if _, exists := payload["allowVisualFallback"]; !exists && visual != nil {
+		*visual = policy.AllowVisualFallback
+	}
+	if _, exists := payload["allowRootFallback"]; !exists && root != nil {
+		*root = policy.AllowRootFallback
+	}
+	if _, exists := payload["allowAdbFallback"]; !exists && adb != nil {
+		*adb = policy.AllowADBFallback
+	}
 }
 
 func (h *Handler) Execute(ctx context.Context, request capability.AndroidBridgeRequest) capability.AndroidBridgeResponse {
@@ -32,6 +60,14 @@ func (h *Handler) Execute(ctx context.Context, request capability.AndroidBridgeR
 		return h.handleScroll(ctx, request)
 	case OperationSwipe:
 		return h.handleSwipe(ctx, request)
+	case OperationNodeAction:
+		return h.handleNodeAction(ctx, request)
+	case OperationGlobalAction:
+		return h.handleGlobalAction(ctx, request)
+	case OperationGesture:
+		return h.handleGesture(ctx, request)
+	case OperationScreenshot:
+		return h.handleScreenshot(ctx, request)
 	case OperationVisualLocate:
 		return h.handleVisualLocate(ctx, request)
 	case OperationVisualClick:
@@ -47,6 +83,154 @@ func (h *Handler) Execute(ctx context.Context, request capability.AndroidBridgeR
 			},
 		}
 	}
+}
+
+func (h *Handler) handleNodeAction(ctx context.Context, request capability.AndroidBridgeRequest) capability.AndroidBridgeResponse {
+	if h.service == nil || h.service.accessibility == nil {
+		return h.errorResponse(request, INTERACTION_UNAVAILABLE, "accessibility executor not initialized")
+	}
+	var req NodeActionRequest
+	if err := json.Unmarshal(mustMarshal(request.Payload), &req); err != nil {
+		return h.errorResponse(request, INTERACTION_INVALID_REQUEST, "invalid node action payload")
+	}
+	req.NativeRef = strings.TrimSpace(req.NativeRef)
+	req.Action = strings.TrimSpace(req.Action)
+	if req.NativeRef == "" || req.Action == "" {
+		return h.errorResponse(request, INTERACTION_INVALID_REQUEST, "nativeRef and action are required")
+	}
+	if err := h.service.accessibility.PerformNodeAction(
+		ctx,
+		uitree.ResolvedUINode{NativeRef: req.NativeRef},
+		req.Action,
+		req.Args,
+	); err != nil {
+		if interErr, ok := err.(*Error); ok {
+			return h.errorResponse(request, interErr.Code, interErr.Message)
+		}
+		return h.errorResponse(request, INTERACTION_ACTION_FAILED, err.Error())
+	}
+	return capability.AndroidBridgeResponse{
+		ProtocolVersion: request.ProtocolVersion,
+		RequestID:       request.RequestID,
+		Status:          "success",
+		Result: map[string]any{
+			"success": true,
+			"action":  req.Action,
+		},
+	}
+}
+
+func (h *Handler) handleGlobalAction(ctx context.Context, request capability.AndroidBridgeRequest) capability.AndroidBridgeResponse {
+	advanced, result := h.advancedAccessibility(request)
+	if advanced == nil {
+		return result
+	}
+	var req GlobalActionRequest
+	if err := json.Unmarshal(mustMarshal(request.Payload), &req); err != nil {
+		return h.errorResponse(request, INTERACTION_INVALID_REQUEST, "invalid global action payload")
+	}
+	req.Action = strings.TrimSpace(req.Action)
+	if req.Action == "" {
+		return h.errorResponse(request, INTERACTION_INVALID_REQUEST, "action is required")
+	}
+	output, err := advanced.PerformGlobalAction(ctx, req.Action)
+	if err != nil {
+		if interErr, ok := err.(*Error); ok {
+			return h.errorResponse(request, interErr.Code, interErr.Message)
+		}
+		return h.errorResponse(request, INTERACTION_ACTION_FAILED, err.Error())
+	}
+	return capability.AndroidBridgeResponse{
+		ProtocolVersion: request.ProtocolVersion,
+		RequestID:       request.RequestID,
+		Status:          "success",
+		Result:          output,
+	}
+}
+
+func (h *Handler) handleGesture(ctx context.Context, request capability.AndroidBridgeRequest) capability.AndroidBridgeResponse {
+	advanced, result := h.advancedAccessibility(request)
+	if advanced == nil {
+		return result
+	}
+	var req GestureRequest
+	if err := json.Unmarshal(mustMarshal(request.Payload), &req); err != nil {
+		return h.errorResponse(request, INTERACTION_INVALID_REQUEST, "invalid gesture payload")
+	}
+	if len(req.Strokes) == 0 {
+		return h.errorResponse(request, INTERACTION_INVALID_REQUEST, "strokes is required")
+	}
+	output, err := advanced.PerformGesture(ctx, request.Payload)
+	if err != nil {
+		if interErr, ok := err.(*Error); ok {
+			return h.errorResponse(request, interErr.Code, interErr.Message)
+		}
+		return h.errorResponse(request, INTERACTION_ACTION_FAILED, err.Error())
+	}
+	return capability.AndroidBridgeResponse{
+		ProtocolVersion: request.ProtocolVersion,
+		RequestID:       request.RequestID,
+		Status:          "success",
+		Result:          output,
+	}
+}
+
+func (h *Handler) handleScreenshot(ctx context.Context, request capability.AndroidBridgeRequest) capability.AndroidBridgeResponse {
+	advanced, result := h.advancedAccessibility(request)
+	if advanced == nil {
+		return result
+	}
+	var req ScreenshotRequest
+	if err := json.Unmarshal(mustMarshal(request.Payload), &req); err != nil {
+		return h.errorResponse(request, INTERACTION_INVALID_REQUEST, "invalid screenshot payload")
+	}
+	output, err := advanced.TakeScreenshot(ctx, req.DisplayID)
+	if err != nil {
+		if interErr, ok := err.(*Error); ok {
+			return h.errorResponse(request, interErr.Code, interErr.Message)
+		}
+		return h.errorResponse(request, INTERACTION_ACTION_FAILED, err.Error())
+	}
+	return capability.AndroidBridgeResponse{
+		ProtocolVersion: request.ProtocolVersion,
+		RequestID:       request.RequestID,
+		Status:          "success",
+		Result:          output,
+	}
+}
+
+func (h *Handler) advancedAccessibility(request capability.AndroidBridgeRequest) (AdvancedAccessibilityExecutor, capability.AndroidBridgeResponse) {
+	if h.service == nil || h.service.accessibility == nil {
+		return nil, capability.AndroidBridgeResponse{
+			ProtocolVersion: request.ProtocolVersion,
+			RequestID:       request.RequestID,
+			Status:          "error",
+			Error: &capability.AndroidError{
+				Code:       "PROVIDER_UNAVAILABLE",
+				Message:    "accessibility executor not initialized",
+				DomainCode: INTERACTION_UNAVAILABLE,
+			},
+		}
+	}
+	advanced, ok := h.service.accessibility.(AdvancedAccessibilityExecutor)
+	if !ok {
+		return nil, capability.AndroidBridgeResponse{
+			ProtocolVersion: request.ProtocolVersion,
+			RequestID:       request.RequestID,
+			Status:          "error",
+			Error: &capability.AndroidError{
+				Code:       "PROVIDER_UNAVAILABLE",
+				Message:    "advanced accessibility operations are unavailable",
+				DomainCode: INTERACTION_UNSUPPORTED,
+			},
+		}
+	}
+	return advanced, capability.AndroidBridgeResponse{}
+}
+
+func mustMarshal(value any) []byte {
+	data, _ := json.Marshal(value)
+	return data
 }
 
 func (h *Handler) handleStatus(ctx context.Context, request capability.AndroidBridgeRequest) capability.AndroidBridgeResponse {
@@ -104,6 +288,15 @@ func (h *Handler) handleClick(ctx context.Context, request capability.AndroidBri
 			return h.errorResponse(request, INTERACTION_INVALID_REQUEST, "invalid click payload")
 		}
 	}
+	applyFallbackDefaults(
+		request.Payload,
+		h.service.policy,
+		&req.AllowCoordinateFallback,
+		&req.AllowShizukuFallback,
+		&req.AllowVisualFallback,
+		&req.AllowRootFallback,
+		&req.AllowADBFallback,
+	)
 
 	result, err := h.service.Click(ctx, req)
 	if err != nil {
@@ -136,6 +329,15 @@ func (h *Handler) handleLongClick(ctx context.Context, request capability.Androi
 			return h.errorResponse(request, INTERACTION_INVALID_REQUEST, "invalid long click payload")
 		}
 	}
+	applyFallbackDefaults(
+		request.Payload,
+		h.service.policy,
+		&req.AllowCoordinateFallback,
+		&req.AllowShizukuFallback,
+		&req.AllowVisualFallback,
+		&req.AllowRootFallback,
+		&req.AllowADBFallback,
+	)
 
 	result, err := h.service.LongClick(ctx, req)
 	if err != nil {
@@ -168,6 +370,15 @@ func (h *Handler) handleInputText(ctx context.Context, request capability.Androi
 			return h.errorResponse(request, INTERACTION_INVALID_REQUEST, "invalid input text payload")
 		}
 	}
+	applyFallbackDefaults(
+		request.Payload,
+		h.service.policy,
+		nil,
+		&req.AllowShizukuFallback,
+		nil,
+		&req.AllowRootFallback,
+		&req.AllowADBFallback,
+	)
 
 	result, err := h.service.InputText(ctx, req)
 	if err != nil {
@@ -232,6 +443,15 @@ func (h *Handler) handleScroll(ctx context.Context, request capability.AndroidBr
 			return h.errorResponse(request, INTERACTION_INVALID_REQUEST, "invalid scroll payload")
 		}
 	}
+	applyFallbackDefaults(
+		request.Payload,
+		h.service.policy,
+		&req.AllowCoordinateFallback,
+		&req.AllowShizukuFallback,
+		nil,
+		&req.AllowRootFallback,
+		&req.AllowADBFallback,
+	)
 
 	result, err := h.service.Scroll(ctx, req)
 	if err != nil {
@@ -264,6 +484,15 @@ func (h *Handler) handleSwipe(ctx context.Context, request capability.AndroidBri
 			return h.errorResponse(request, INTERACTION_INVALID_REQUEST, "invalid swipe payload")
 		}
 	}
+	applyFallbackDefaults(
+		request.Payload,
+		h.service.policy,
+		&req.AllowCoordinateFallback,
+		&req.AllowShizukuFallback,
+		nil,
+		&req.AllowRootFallback,
+		&req.AllowADBFallback,
+	)
 
 	result, err := h.service.Swipe(ctx, req)
 	if err != nil {

@@ -1,0 +1,438 @@
+{
+  "schemaVersion": "schema-ui/1",
+  "type": "document",
+  "title": "生活系统（手机端）",
+  "lifecycle": {
+    "onMount": [
+      {
+        "action_id": "command",
+        "target": "tool",
+        "input": {
+          "action": "ui.snapshot"
+        },
+        "statePath": "snapshot"
+      }
+    ]
+  },
+  "actions": [
+    {
+      "actionId": "command",
+      "target": "tool"
+    }
+  ],
+  "children": [
+    {
+      "id": "mobile-life-page",
+      "type": "page",
+      "children": [
+        {
+          "id": "mobile-life-status",
+          "type": "key_value",
+          "props": {
+            "title": "当前生活状态",
+            "columns": 1
+          },
+          "bindings": [
+            {
+              "path": "items",
+              "source": "state",
+              "sourcePath": "snapshot.stateLife"
+            }
+          ]
+        },
+        {
+          "id": "mobile-life-refresh",
+          "type": "button",
+          "props": {
+            "text": "刷新",
+            "type": "primary"
+          },
+          "actions": [
+            {
+              "action_id": "command",
+              "target": "tool",
+              "input": {
+                "action": "ui.snapshot"
+              },
+              "statePath": "snapshot"
+            }
+          ]
+        },
+        {
+          "id": "mobile-life-tabs",
+          "type": "tabs",
+          "children": [
+            {
+              "id": "mobile-life-timeline",
+              "type": "tab_item",
+              "props": {
+                "label": "日程",
+                "name": "timeline"
+              },
+              "children": [
+                {
+                  "id": "mobile-life-timeline-table",
+                  "type": "table",
+                  "props": {
+                    "columns": [
+                      {
+                        "prop": "startTime",
+                        "label": "开始"
+                      },
+                      {
+                        "prop": "state",
+                        "label": "状态"
+                      },
+                      {
+                        "prop": "reason",
+                        "label": "安排"
+                      }
+                    ]
+                  },
+                  "bindings": [
+                    {
+                      "path": "data",
+                      "source": "state",
+                      "sourcePath": "snapshot.timeline.events"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "id": "mobile-life-routine",
+              "type": "tab_item",
+              "props": {
+                "label": "作息",
+                "name": "routine"
+              },
+              "children": [
+                {
+                  "id": "mobile-life-sleep-bed",
+                  "type": "field",
+                  "props": {
+                    "label": "入睡时间",
+                    "variant": "time"
+                  },
+                  "bindings": [
+                    {
+                      "path": "sleep.bedTime",
+                      "source": "form",
+                      "default": "23:00"
+                    }
+                  ]
+                },
+                {
+                  "id": "mobile-life-sleep-wake",
+                  "type": "field",
+                  "props": {
+                    "label": "起床时间",
+                    "variant": "time"
+                  },
+                  "bindings": [
+                    {
+                      "path": "sleep.wakeTime",
+                      "source": "form",
+                      "default": "07:00"
+                    }
+                  ]
+                },
+                {
+                  "id": "mobile-life-sleep-enabled",
+                  "type": "switch",
+                  "props": {
+                    "activeText": "启用睡眠"
+                  },
+                  "bindings": [
+                    {
+                      "path": "sleep.enabled",
+                      "source": "form",
+                      "default": true
+                    }
+                  ]
+                },
+                {
+                  "id": "mobile-life-sleep-save",
+                  "type": "button",
+                  "props": {
+                    "text": "保存睡眠",
+                    "type": "primary"
+                  },
+                  "actions": [
+                    {
+                      "action_id": "command",
+                      "target": "tool",
+                      "input": {
+                        "action": "sleep.update",
+                        "payload": {
+                          "sleep": {
+                            "bedTime": "$form.sleep.bedTime",
+                            "wakeTime": "$form.sleep.wakeTime",
+                            "enabled": "$form.sleep.enabled",
+                            "sleepReplyMode": "$form.sleep.sleepReplyMode"
+                          }
+                        }
+                      },
+                      "statePath": "snapshot"
+                    }
+                  ]
+                },
+                {
+                  "id": "mobile-life-work-enabled",
+                  "type": "switch",
+                  "props": {
+                    "activeText": "启用工作档期"
+                  },
+                  "bindings": [
+                    {
+                      "path": "work.enabled",
+                      "source": "form",
+                      "default": false
+                    }
+                  ]
+                },
+                {
+                  "id": "mobile-life-work-start",
+                  "type": "field",
+                  "props": {
+                    "label": "工作开始",
+                    "variant": "time"
+                  },
+                  "bindings": [
+                    {
+                      "path": "work.workStartTime",
+                      "source": "form",
+                      "default": "09:00"
+                    }
+                  ]
+                },
+                {
+                  "id": "mobile-life-work-end",
+                  "type": "field",
+                  "props": {
+                    "label": "工作结束",
+                    "variant": "time"
+                  },
+                  "bindings": [
+                    {
+                      "path": "work.workEndTime",
+                      "source": "form",
+                      "default": "18:00"
+                    }
+                  ]
+                },
+                {
+                  "id": "mobile-life-work-save",
+                  "type": "button",
+                  "props": {
+                    "text": "保存工作档期",
+                    "type": "primary"
+                  },
+                  "actions": [
+                    {
+                      "action_id": "command",
+                      "target": "tool",
+                      "input": {
+                        "action": "work.update",
+                        "payload": {
+                          "work": {
+                            "enabled": "$form.work.enabled",
+                            "workStartTime": "$form.work.workStartTime",
+                            "workEndTime": "$form.work.workEndTime"
+                          }
+                        }
+                      },
+                      "statePath": "snapshot"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "id": "mobile-life-events",
+              "type": "tab_item",
+              "props": {
+                "label": "事件",
+                "name": "events"
+              },
+              "children": [
+                {
+                  "id": "mobile-life-fixed-events",
+                  "type": "table",
+                  "props": {
+                    "columns": [
+                      {
+                        "prop": "title",
+                        "label": "标题"
+                      },
+                      {
+                        "prop": "startTime",
+                        "label": "开始"
+                      },
+                      {
+                        "prop": "endTime",
+                        "label": "结束"
+                      }
+                    ]
+                  },
+                  "bindings": [
+                    {
+                      "path": "data",
+                      "source": "state",
+                      "sourcePath": "snapshot.fixedEvents"
+                    }
+                  ]
+                },
+                {
+                  "id": "mobile-life-event-title",
+                  "type": "field",
+                  "props": {
+                    "label": "新事件标题"
+                  },
+                  "bindings": [
+                    {
+                      "path": "event.title",
+                      "source": "form",
+                      "default": ""
+                    }
+                  ]
+                },
+                {
+                  "id": "mobile-life-event-start",
+                  "type": "field",
+                  "props": {
+                    "label": "开始",
+                    "variant": "time"
+                  },
+                  "bindings": [
+                    {
+                      "path": "event.startTime",
+                      "source": "form",
+                      "default": "09:00"
+                    }
+                  ]
+                },
+                {
+                  "id": "mobile-life-event-end",
+                  "type": "field",
+                  "props": {
+                    "label": "结束",
+                    "variant": "time"
+                  },
+                  "bindings": [
+                    {
+                      "path": "event.endTime",
+                      "source": "form",
+                      "default": "10:00"
+                    }
+                  ]
+                },
+                {
+                  "id": "mobile-life-event-create",
+                  "type": "button",
+                  "props": {
+                    "text": "新增固定事件",
+                    "type": "primary"
+                  },
+                  "actions": [
+                    {
+                      "action_id": "command",
+                      "target": "tool",
+                      "input": {
+                        "action": "fixed.create",
+                        "payload": {
+                          "title": "$form.event.title",
+                          "eventType": "CUSTOM_BUSY",
+                          "startTime": "$form.event.startTime",
+                          "endTime": "$form.event.endTime"
+                        }
+                      },
+                      "statePath": "snapshot"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "id": "mobile-life-tendency",
+              "type": "tab_item",
+              "props": {
+                "label": "倾向",
+                "name": "tendency"
+              },
+              "children": [
+                {
+                  "id": "mobile-life-tendency-punctuality",
+                  "type": "slider",
+                  "props": {
+                    "label": "守时倾向"
+                  },
+                  "bindings": [
+                    {
+                      "path": "tendencies.punctualityTendency",
+                      "source": "form",
+                      "default": 50
+                    }
+                  ]
+                },
+                {
+                  "id": "mobile-life-tendency-social",
+                  "type": "slider",
+                  "props": {
+                    "label": "社交精力"
+                  },
+                  "bindings": [
+                    {
+                      "path": "tendencies.socialEnergy",
+                      "source": "form",
+                      "default": 50
+                    }
+                  ]
+                },
+                {
+                  "id": "mobile-life-tendency-save",
+                  "type": "button",
+                  "props": {
+                    "text": "保存倾向",
+                    "type": "primary"
+                  },
+                  "actions": [
+                    {
+                      "action_id": "command",
+                      "target": "tool",
+                      "input": {
+                        "action": "tendency.update",
+                        "payload": {
+                          "tendencies": {
+                            "punctualityTendency": "$form.tendencies.punctualityTendency",
+                            "socialEnergy": "$form.tendencies.socialEnergy"
+                          }
+                        }
+                      },
+                      "statePath": "snapshot"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "theme": {
+    "mode": "auto"
+  },
+  "accessibility": {
+    "enabled": true,
+    "keyboardNav": true,
+    "screenReader": true
+  },
+  "performanceBudget": {
+    "maxRenderTimeMs": 120,
+    "maxLayoutCount": 180,
+    "maxNodeCount": 180,
+    "maxDataFetchCount": 1,
+    "maxActionCount": 24
+  }
+}

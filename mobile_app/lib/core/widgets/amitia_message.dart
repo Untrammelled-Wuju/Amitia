@@ -2222,49 +2222,45 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
                             ),
                           ] else
                             const Spacer(),
-                          Builder(
-                            builder: (anchorContext) => MouseRegion(
-                              onEnter: (_) => setState(
-                                () => _modelMenuTriggerHovered = true,
-                              ),
-                              onExit: (_) => setState(
-                                () => _modelMenuTriggerHovered = false,
-                              ),
-                              child: GestureDetector(
-                                onTap: () => _showModelMenu(anchorContext),
-                                child: AnimatedContainer(
-                                  key: const ValueKey('composer-model-trigger'),
-                                  duration: const Duration(milliseconds: 160),
-                                  curve: Curves.easeOut,
-                                  constraints: const BoxConstraints(
-                                    minWidth: 44,
-                                    maxWidth: 64,
+                          MouseRegion(
+                            onEnter: (_) =>
+                                setState(() => _modelMenuTriggerHovered = true),
+                            onExit: (_) => setState(
+                              () => _modelMenuTriggerHovered = false,
+                            ),
+                            child: GestureDetector(
+                              onTap: _showModelMenu,
+                              child: AnimatedContainer(
+                                key: const ValueKey('composer-model-trigger'),
+                                duration: const Duration(milliseconds: 160),
+                                curve: Curves.easeOut,
+                                constraints: const BoxConstraints(
+                                  minWidth: 44,
+                                  maxWidth: 64,
+                                ),
+                                height: 31,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 9,
+                                ),
+                                decoration: BoxDecoration(
+                                  border: Border.all(
+                                    color: _modelMenuTriggerHovered
+                                        ? context.borderPrimary
+                                        : Colors.transparent,
                                   ),
-                                  height: 31,
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 9,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                alignment: Alignment.center,
+                                child: Text(
+                                  _reasoningLabel(),
+                                  key: const ValueKey(
+                                    'composer-reasoning-label',
                                   ),
-                                  decoration: BoxDecoration(
-                                    border: Border.all(
-                                      color: _modelMenuTriggerHovered
-                                          ? context.borderPrimary
-                                          : Colors.transparent,
-                                    ),
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  alignment: Alignment.center,
-                                  child: Text(
-                                    _reasoningLabel(),
-                                    key: const ValueKey(
-                                      'composer-reasoning-label',
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: AppTypography.label(context)
-                                        .copyWith(
-                                          fontSize: 14,
-                                          color: context.textSecondary,
-                                        ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: AppTypography.label(context).copyWith(
+                                    fontSize: 14,
+                                    color: context.textSecondary,
                                   ),
                                 ),
                               ),
@@ -2317,14 +2313,9 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
     );
   }
 
-  Future<void> _showModelMenu(BuildContext anchorContext) async {
+  Future<void> _showModelMenu() async {
     if (_modelMenuOpen) return;
-    final anchorBox = anchorContext.findRenderObject();
-    if (anchorBox is! RenderBox || !anchorBox.hasSize) return;
-    final topLeft = anchorBox.localToGlobal(Offset.zero);
-    final bottomRight = anchorBox.localToGlobal(
-      anchorBox.size.bottomRight(Offset.zero),
-    );
+    _inputFocusNode.unfocus();
     setState(() {
       _modelMenuOpen = true;
       _modelMenuPage = _ComposerModelMenuPage.effort;
@@ -2332,12 +2323,17 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
         widget.reasoningEffort,
       ).toDouble();
     });
-    await showAmitiaPopupSurface<void>(
+    await showModalBottomSheet<void>(
       context: context,
-      anchorRect: Rect.fromPoints(topLeft, bottomRight),
-      menuWidth: 260,
-      estimatedHeight: 380,
-      builder: (popupContext) => StatefulBuilder(
+      isScrollControlled: true,
+      useSafeArea: true,
+      showDragHandle: true,
+      backgroundColor: context.surfacePrimary,
+      barrierColor: Colors.black.withValues(alpha: 0.44),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+      ),
+      builder: (sheetContext) => StatefulBuilder(
         builder: (context, setPopupState) {
           _modelMenuStateSetter = setPopupState;
           return _buildModelMenuSurface(context);
@@ -2412,26 +2408,38 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
   }
 
   Widget _buildModelMenuSurface(BuildContext context) {
-    return AmitiaPopupSurface(
-      width: 260,
-      maxHeight: MediaQuery.sizeOf(context).height * 0.72,
-      padding: const EdgeInsets.all(12),
-      child: AnimatedSwitcher(
-        duration: const Duration(milliseconds: 220),
-        reverseDuration: const Duration(milliseconds: 150),
-        switchInCurve: Curves.easeOutCubic,
-        switchOutCurve: Curves.easeInCubic,
-        transitionBuilder: (child, animation) =>
-            FadeTransition(opacity: animation, child: child),
-        child: KeyedSubtree(
-          key: ValueKey(_modelMenuPage),
-          child: switch (_modelMenuPage) {
-            _ComposerModelMenuPage.models => _buildModelList(context),
-            _ComposerModelMenuPage.reasoning => _buildReasoningModeList(
-              context,
+    return SafeArea(
+      top: false,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.sizeOf(context).height * 0.78,
+        ),
+        child: SizedBox(
+          key: const ValueKey('composer-model-menu-sheet'),
+          width: double.infinity,
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 220),
+              reverseDuration: const Duration(milliseconds: 150),
+              switchInCurve: Curves.easeOutCubic,
+              switchOutCurve: Curves.easeInCubic,
+              transitionBuilder: (child, animation) =>
+                  FadeTransition(opacity: animation, child: child),
+              child: KeyedSubtree(
+                key: ValueKey(_modelMenuPage),
+                child: switch (_modelMenuPage) {
+                  _ComposerModelMenuPage.models => _buildModelList(context),
+                  _ComposerModelMenuPage.reasoning => _buildReasoningModeList(
+                    context,
+                  ),
+                  _ComposerModelMenuPage.effort => _buildModelEffortPanel(
+                    context,
+                  ),
+                },
+              ),
             ),
-            _ComposerModelMenuPage.effort => _buildModelEffortPanel(context),
-          },
+          ),
         ),
       ),
     );

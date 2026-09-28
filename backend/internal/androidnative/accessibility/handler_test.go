@@ -94,6 +94,37 @@ func TestAccessibilityHandler_OpenSettings(t *testing.T) {
 	}
 }
 
+func TestAccessibilityHandler_ProviderOperations(t *testing.T) {
+	operations := []string{
+		OperationProviderStatus,
+		OperationProviderInstall,
+		OperationProviderOpenSettings,
+	}
+	for _, operation := range operations {
+		bridge := &mockAccessibilityBridge{
+			executeFunc: func(ctx context.Context, req androidnative.NativeBridgeRequest) (androidnative.NativeBridgeResponse, error) {
+				if req.Operation != operation {
+					t.Fatalf("operation = %s, want %s", req.Operation, operation)
+				}
+				return androidnative.NativeBridgeResponse{
+					ProtocolVersion: req.ProtocolVersion,
+					RequestId:       req.RequestId,
+					Status:          "success",
+					Result:          map[string]any{"opened": true},
+				}, nil
+			},
+		}
+		resp := NewAccessibilityHandler(bridge).Execute(context.Background(), capability.AndroidBridgeRequest{
+			ProtocolVersion: 1,
+			RequestID:       "req-" + operation,
+			Operation:       operation,
+		})
+		if resp.Status != "success" {
+			t.Fatalf("%s status = %s: %+v", operation, resp.Status, resp.Error)
+		}
+	}
+}
+
 func TestAccessibilityHandler_UnknownOperation(t *testing.T) {
 	bridge := &mockAccessibilityBridge{}
 	handler := NewAccessibilityHandler(bridge)

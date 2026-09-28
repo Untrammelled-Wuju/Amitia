@@ -296,12 +296,57 @@ async function status(host) {
   };
 }
 
+async function dashboard(host, characterId) {
+  const snapshot = await readState(host);
+  const state = snapshot.state;
+  const rules = characterId
+    ? state.rules.filter((rule) => !rule.characterId || rule.characterId === characterId)
+    : state.rules;
+  const pageSize = 20;
+  return {
+    settings: clone(state.settings),
+    rules: clone(rules),
+    status: await status(host),
+    queue: {
+      depth: rules.filter((rule) => rule.enabled).length,
+      pendingCount: 0,
+      recentFailures: state.history.filter((item) => item.state === "failed" && String(item.createdAt || "").slice(0, 10) === dateKey(new Date())).length,
+      backpressure: false,
+    },
+    history: {
+      items: clone(state.history.slice(0, pageSize)),
+      total: state.history.length,
+      page: 1,
+      pageSize,
+    },
+  };
+}
+
 async function dispatchCommand(host, logger, input) {
   const action = String(input && input.action || "");
   const payload = input && input.payload && typeof input.payload === "object" ? input.payload : {};
   const scope = payload.scope && typeof payload.scope === "object" ? payload.scope : {};
   const characterId = String(scope.characterId || payload.characterId || "").trim();
   switch (action) {
+    case "ui.dashboard": {
+      const data = await dashboard(host, characterId);
+      return {
+        ...data,
+        form_state: {
+          settings: clone(data.settings),
+          rule: {
+            id: "",
+            name: "",
+            ruleType: "daily_greeting",
+            scheduleCron: "0 9 * * *",
+            channel: "all",
+            maxPerDay: 1,
+            randomMinutes: 0,
+            promptTemplate: "",
+          },
+        },
+      };
+    }
     case "settings.get": {
       const snapshot = await readState(host);
       return snapshot.state.settings;
@@ -312,7 +357,7 @@ async function dispatchCommand(host, logger, input) {
         delete state.settings.scope;
         return state;
       });
-      return next.settings;
+      return input && input.ui_state === true ? dashboard(host, characterId) : next.settings;
     }
     case "rules.list": {
       const snapshot = await readState(host);
@@ -338,7 +383,7 @@ async function dispatchCommand(host, logger, input) {
         state.rules.push(created);
         return state;
       });
-      return clone(created);
+      return input && input.ui_state === true ? dashboard(host, characterId) : clone(created);
     }
     case "rules.update": {
       const id = Number(payload.id || 0);
@@ -350,7 +395,40 @@ async function dispatchCommand(host, logger, input) {
         state.rules[index] = updated;
         return state;
       });
-      return clone(updated);
+      return input && input.ui_state === true ? dashboard(host, characterId) : clone(updated);
+    }
+    case "rules.save": {
+      if (Number(payload.id || 0) > 0) {
+        const id = Number(payload.id);
+        await mutateState(host, (state) => {
+          const index = state.rules.findIndex((rule) => rule.id === id);
+          if (index < 0) throw new Error("规则不存在");
+          state.rules[index] = normalizeRule({
+            ...state.rules[index],
+            ...payload,
+            id,
+            characterId,
+            updatedAt: new Date().toISOString(),
+          });
+          return state;
+        });
+      } else {
+        const now = new Date().toISOString();
+        await mutateState(host, (state) => {
+          const id = state.nextRuleId || 1;
+          state.nextRuleId = id + 1;
+          state.rules.push(normalizeRule({
+            ...payload,
+            id,
+            spaceId: String(scope.spaceId || ""),
+            characterId,
+            createdAt: now,
+            updatedAt: now,
+          }));
+          return state;
+        });
+      }
+      return input && input.ui_state === true ? dashboard(host, characterId) : { saved: true };
     }
     case "rules.delete": {
       const id = Number(payload.id || 0);
@@ -359,7 +437,7 @@ async function dispatchCommand(host, logger, input) {
         state.history = state.history.filter((item) => item.ruleId !== id);
         return state;
       });
-      return { deleted: true, id };
+      return input && input.ui_state === true ? dashboard(host, characterId) : { deleted: true, id };
     }
     case "rules.toggle": {
       const id = Number(payload.id || 0);
@@ -372,7 +450,7 @@ async function dispatchCommand(host, logger, input) {
         updated = clone(rule);
         return state;
       });
-      return updated;
+      return input && input.ui_state === true ? dashboard(host, characterId) : updated;
     }
     case "rules.test":
     case "rules.trigger": {
@@ -408,7 +486,7 @@ async function dispatchCommand(host, logger, input) {
           return state;
         });
       }
-      return { ok: true, requestId: result.requestId };
+      return input && input.ui_state === true ? dashboard(host, characterId) : { ok: true, requestId: result.requestId };
     }
     case "rules.messages": {
       const id = Number(payload.id || 0);
@@ -452,7 +530,7 @@ async function dispatchCommand(host, logger, input) {
         state.history = [];
         return state;
       });
-      return { ok: true, count: next.rules.length };
+      return input && input.ui_state === true ? dashboard(host, characterId) : { ok: true, count: next.rules.length };
     }
     case "tick":
       return runDue(host, logger);

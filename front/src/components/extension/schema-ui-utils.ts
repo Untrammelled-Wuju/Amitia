@@ -29,6 +29,8 @@ export type SchemaUINodeType =
   | "permission_summary"
   | "runtime_status"
   | "extension_slot"
+  | "gallery"
+  | "file_picker"
   | "tab_item"
   | "column";
 
@@ -40,6 +42,7 @@ export interface UICondition {
 
 export interface SchemaUIBinding {
   path: string;
+  sourcePath?: string;
   source: string;
   format?: string;
   default?: unknown;
@@ -51,6 +54,7 @@ export interface SchemaUIActionBinding {
   target_type?: string;
   input?: Record<string, unknown>;
   confirmation?: string;
+  statePath?: string;
 }
 
 export interface SchemaUINode {
@@ -110,6 +114,11 @@ export interface SchemaUIDocument {
   title?: string;
   root?: SchemaUINode;
   children?: SchemaUINode[];
+  lifecycle?: {
+    onMount?: SchemaUIActionBinding[];
+    onRefresh?: SchemaUIActionBinding[];
+    onSuccess?: SchemaUIActionBinding[];
+  };
   dataSources?: SchemaUIDataSource[];
   actions?: Array<{ actionId: string; target?: string; inputSchema?: unknown }>;
   theme?: ThemeConfig;
@@ -153,6 +162,8 @@ export const ALLOWED_NODE_TYPES = new Set<string>([
   "permission_summary",
   "runtime_status",
   "extension_slot",
+  "gallery",
+  "file_picker",
   "tab_item",
   "column",
 ]);
@@ -310,7 +321,8 @@ export function resolveBinding(
   context: Record<string, unknown>
 ): unknown {
   if (!binding) return undefined;
-  const { source, path, default: def } = binding;
+  const { source, path: targetPath, sourcePath, default: def } = binding;
+  const path = sourcePath ?? targetPath;
   let resolved: unknown;
   switch (source) {
     case "static":
@@ -383,6 +395,46 @@ export function getFormBinding(node: SchemaUINode): SchemaUIBinding | undefined 
     return node.bindings[0];
   }
   return undefined;
+}
+
+export function resolveActionInput(
+  input: unknown,
+  formState: Record<string, unknown>,
+  context: Record<string, unknown>,
+  item?: Record<string, unknown>,
+): unknown {
+  if (Array.isArray(input)) return input.map((entry) => resolveActionInput(entry, formState, context, item));
+  if (input && typeof input === "object") {
+    const result: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(input as Record<string, unknown>)) {
+      result[key] = resolveActionInput(value, formState, context, item);
+    }
+    return result;
+  }
+  if (typeof input !== "string" || !input.startsWith("$")) return input;
+  const path = input.slice(1);
+  const separator = path.indexOf(".");
+  if (separator <= 0) return input;
+  const source = path.slice(0, separator);
+  const lookup = path.slice(separator + 1);
+  switch (source) {
+    case "form":
+    case "form_state":
+      return lookupPath(formState, lookup);
+    case "item":
+      return lookupPath(item, lookup);
+    case "state":
+      return lookupPath(
+        context.localState ?? context.local_state ?? context.state,
+        lookup,
+      );
+    case "input":
+      return lookupPath(context.input, lookup);
+    case "context":
+      return lookupPath(context, lookup);
+    default:
+      return lookupPath(context, path);
+  }
 }
 
 export function countNodes(node: SchemaUINode): number {

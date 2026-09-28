@@ -145,7 +145,9 @@ type InputTextRequest struct {
 
 	Text string `json:"text"`
 
-	AllowADBFallback bool `json:"allowAdbFallback,omitempty"`
+	AllowShizukuFallback bool `json:"allowShizukuFallback,omitempty"`
+	AllowRootFallback    bool `json:"allowRootFallback,omitempty"`
+	AllowADBFallback     bool `json:"allowAdbFallback,omitempty"`
 
 	Verify bool `json:"verify,omitempty"`
 }
@@ -163,6 +165,11 @@ type ScrollRequest struct {
 
 	Amount string `json:"amount,omitempty"`
 
+	AllowCoordinateFallback bool `json:"allowCoordinateFallback,omitempty"`
+	AllowShizukuFallback    bool `json:"allowShizukuFallback,omitempty"`
+	AllowRootFallback       bool `json:"allowRootFallback,omitempty"`
+	AllowADBFallback        bool `json:"allowAdbFallback,omitempty"`
+
 	Verify bool `json:"verify,omitempty"`
 }
 
@@ -176,6 +183,11 @@ type SwipeRequest struct {
 	EndY int `json:"endY"`
 
 	DurationMS int `json:"durationMs,omitempty"`
+
+	AllowCoordinateFallback bool `json:"allowCoordinateFallback,omitempty"`
+	AllowShizukuFallback    bool `json:"allowShizukuFallback,omitempty"`
+	AllowRootFallback       bool `json:"allowRootFallback,omitempty"`
+	AllowADBFallback        bool `json:"allowAdbFallback,omitempty"`
 }
 
 type VisualLocateRequest struct {
@@ -209,6 +221,88 @@ type VisualClickRequest struct {
 	TextMatchMode string `json:"textMatchMode,omitempty"`
 
 	Verify bool `json:"verify,omitempty"`
+}
+
+type NodeActionRequest struct {
+	NativeRef string         `json:"nativeRef"`
+	Action    string         `json:"action"`
+	Args      map[string]any `json:"args,omitempty"`
+}
+
+type GlobalActionRequest struct {
+	Action string `json:"action"`
+}
+
+type GesturePoint struct {
+	X float64 `json:"x"`
+	Y float64 `json:"y"`
+}
+
+type GestureStroke struct {
+	Points       []GesturePoint `json:"points"`
+	StartTimeMS  int64          `json:"startTimeMs,omitempty"`
+	DurationMS   int64          `json:"durationMs,omitempty"`
+	WillContinue bool           `json:"willContinue,omitempty"`
+}
+
+type GestureRequest struct {
+	DisplayID int             `json:"displayId,omitempty"`
+	Strokes   []GestureStroke `json:"strokes"`
+}
+
+type ScreenshotRequest struct {
+	DisplayID int `json:"displayId,omitempty"`
+}
+
+func (r *ClickRequest) applyPolicyDefaults(policy Policy) {
+	if r.AllowCoordinateFallback || r.AllowShizukuFallback || r.AllowVisualFallback || r.AllowRootFallback || r.AllowADBFallback {
+		return
+	}
+	r.AllowCoordinateFallback = policy.AllowCoordinateFallback
+	r.AllowShizukuFallback = policy.AllowShizukuFallback
+	r.AllowVisualFallback = policy.AllowVisualFallback
+	r.AllowRootFallback = policy.AllowRootFallback
+	r.AllowADBFallback = policy.AllowADBFallback
+}
+
+func (r *LongClickRequest) applyPolicyDefaults(policy Policy) {
+	if r.AllowCoordinateFallback || r.AllowShizukuFallback || r.AllowVisualFallback || r.AllowRootFallback || r.AllowADBFallback {
+		return
+	}
+	r.AllowCoordinateFallback = policy.AllowCoordinateFallback
+	r.AllowShizukuFallback = policy.AllowShizukuFallback
+	r.AllowVisualFallback = policy.AllowVisualFallback
+	r.AllowRootFallback = policy.AllowRootFallback
+	r.AllowADBFallback = policy.AllowADBFallback
+}
+
+func (r *InputTextRequest) applyPolicyDefaults(policy Policy) {
+	if r.AllowShizukuFallback || r.AllowRootFallback || r.AllowADBFallback {
+		return
+	}
+	r.AllowShizukuFallback = policy.AllowShizukuFallback
+	r.AllowRootFallback = policy.AllowRootFallback
+	r.AllowADBFallback = policy.AllowADBFallback
+}
+
+func (r *ScrollRequest) applyPolicyDefaults(policy Policy) {
+	if r.AllowCoordinateFallback || r.AllowShizukuFallback || r.AllowRootFallback || r.AllowADBFallback {
+		return
+	}
+	r.AllowCoordinateFallback = policy.AllowCoordinateFallback
+	r.AllowShizukuFallback = policy.AllowShizukuFallback
+	r.AllowRootFallback = policy.AllowRootFallback
+	r.AllowADBFallback = policy.AllowADBFallback
+}
+
+func (r *SwipeRequest) applyPolicyDefaults(policy Policy) {
+	if r.AllowCoordinateFallback || r.AllowShizukuFallback || r.AllowRootFallback || r.AllowADBFallback {
+		return
+	}
+	r.AllowCoordinateFallback = policy.AllowCoordinateFallback
+	r.AllowShizukuFallback = policy.AllowShizukuFallback
+	r.AllowRootFallback = policy.AllowRootFallback
+	r.AllowADBFallback = policy.AllowADBFallback
 }
 
 type InteractionContext struct {

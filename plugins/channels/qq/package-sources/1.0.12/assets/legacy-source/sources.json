@@ -1,0 +1,20 @@
+{
+  "desktop": {
+    "commit": "0ce75d63ad93b8f71f17ff908206ef0cb0db325f",
+    "paths": [
+      "front/src/views/qq-connect/QqConnectView.vue"
+    ]
+  },
+  "mobile": {
+    "commit": "738b407c14183598e28feb835fea05ffcdb59d18",
+    "paths": [
+      "mobile_app/lib/features/channels/presentation/pages/qq_page.dart"
+    ]
+  },
+  "mobilePrototype": {
+    "commit": "7f7259a7c",
+    "paths": [
+      "amitia-mobile-ui/pages/channels.html"
+    ]
+  }
+}

@@ -256,15 +256,47 @@ internal class UITreeNativeHandler(
     }
 
     private fun actionName(action: Int): String? = when (action) {
-        AccessibilityNodeInfo.ACTION_CLICK -> "ACTION_CLICK"
-        AccessibilityNodeInfo.ACTION_LONG_CLICK -> "ACTION_LONG_CLICK"
-        AccessibilityNodeInfo.ACTION_SCROLL_FORWARD -> "ACTION_SCROLL_FORWARD"
-        AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD -> "ACTION_SCROLL_BACKWARD"
-        AccessibilityNodeInfo.ACTION_SET_TEXT -> "ACTION_SET_TEXT"
-        AccessibilityNodeInfo.ACTION_FOCUS -> "ACTION_FOCUS"
-        AccessibilityNodeInfo.ACTION_CLEAR_FOCUS -> "ACTION_CLEAR_FOCUS"
-        AccessibilityNodeInfo.ACTION_SELECT -> "ACTION_SELECT"
-        else -> null
+        AccessibilityNodeInfo.ACTION_CLICK -> "click"
+        AccessibilityNodeInfo.ACTION_LONG_CLICK -> "long_click"
+        AccessibilityNodeInfo.ACTION_FOCUS -> "focus"
+        AccessibilityNodeInfo.ACTION_CLEAR_FOCUS -> "clear_focus"
+        AccessibilityNodeInfo.ACTION_SELECT -> "select"
+        AccessibilityNodeInfo.ACTION_CLEAR_SELECTION -> "clear_selection"
+        AccessibilityNodeInfo.ACTION_SET_TEXT -> "set_text"
+        AccessibilityNodeInfo.ACTION_SET_SELECTION -> "set_selection"
+        AccessibilityNodeInfo.ACTION_COPY -> "copy"
+        AccessibilityNodeInfo.ACTION_CUT -> "cut"
+        AccessibilityNodeInfo.ACTION_PASTE -> "paste"
+        AccessibilityNodeInfo.ACTION_SCROLL_FORWARD -> "scroll_forward"
+        AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD -> "scroll_backward"
+        AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_UP.id -> "scroll_up"
+        AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_DOWN.id -> "scroll_down"
+        AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_LEFT.id -> "scroll_left"
+        AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_RIGHT.id -> "scroll_right"
+        AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_TO_POSITION.id -> "scroll_to_position"
+        AccessibilityNodeInfo.ACTION_EXPAND -> "expand"
+        AccessibilityNodeInfo.ACTION_COLLAPSE -> "collapse"
+        AccessibilityNodeInfo.ACTION_DISMISS -> "dismiss"
+        AccessibilityNodeInfo.AccessibilityAction.ACTION_SHOW_ON_SCREEN.id -> "show_on_screen"
+        AccessibilityNodeInfo.AccessibilityAction.ACTION_CONTEXT_CLICK.id -> "context_click"
+        AccessibilityNodeInfo.ACTION_ACCESSIBILITY_FOCUS -> "accessibility_focus"
+        AccessibilityNodeInfo.ACTION_CLEAR_ACCESSIBILITY_FOCUS -> "clear_accessibility_focus"
+        AccessibilityNodeInfo.ACTION_NEXT_AT_MOVEMENT_GRANULARITY -> "next_at_movement_granularity"
+        AccessibilityNodeInfo.ACTION_PREVIOUS_AT_MOVEMENT_GRANULARITY -> "previous_at_movement_granularity"
+        AccessibilityNodeInfo.ACTION_NEXT_HTML_ELEMENT -> "next_html_element"
+        AccessibilityNodeInfo.ACTION_PREVIOUS_HTML_ELEMENT -> "previous_html_element"
+        AccessibilityNodeInfo.AccessibilityAction.ACTION_SET_PROGRESS.id -> "set_progress"
+        else -> when {
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+                action == AccessibilityNodeInfo.AccessibilityAction.ACTION_PRESS_AND_HOLD.id -> "press_and_hold"
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.P &&
+                action == AccessibilityNodeInfo.AccessibilityAction.ACTION_SHOW_TOOLTIP.id -> "show_tooltip"
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.P &&
+                action == AccessibilityNodeInfo.AccessibilityAction.ACTION_HIDE_TOOLTIP.id -> "hide_tooltip"
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.R &&
+                action == AccessibilityNodeInfo.AccessibilityAction.ACTION_IME_ENTER.id -> "ime_enter"
+            else -> null
+        }
     }
 
     private fun windowId(nativeWindowId: Int): String = "acc-window-$nativeWindowId"

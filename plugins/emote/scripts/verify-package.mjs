@@ -60,21 +60,27 @@ function main() {
     "modules/emote-ui/desktop/index.html",
     "modules/emote-ui/desktop/index.js",
     "modules/emote-ui/desktop/styles.css",
+    "modules/emote-ui/desktop/index.schema.json",
     "modules/emote-ui/desktop/composer.html",
     "modules/emote-ui/desktop/composer.js",
     "modules/emote-ui/desktop/composer.css",
+    "modules/emote-ui/desktop/composer.schema.json",
     "modules/emote-ui/desktop/message.html",
     "modules/emote-ui/desktop/message.js",
     "modules/emote-ui/desktop/message.css",
+    "modules/emote-ui/desktop/message.schema.json",
     "modules/emote-ui/mobile/index.html",
     "modules/emote-ui/mobile/index.js",
     "modules/emote-ui/mobile/styles.css",
+    "modules/emote-ui/mobile/index.schema.json",
     "modules/emote-ui/mobile/composer.html",
     "modules/emote-ui/mobile/composer.js",
     "modules/emote-ui/mobile/composer.css",
+    "modules/emote-ui/mobile/composer.schema.json",
     "modules/emote-ui/mobile/message.html",
     "modules/emote-ui/mobile/message.js",
     "modules/emote-ui/mobile/message.css",
+    "modules/emote-ui/mobile/message.schema.json",
   ];
   for (const path of required) {
     if (!entries.has(path)) throw new Error(`missing package path: ${path}`);
@@ -89,10 +95,10 @@ function main() {
   if (!contributions.some((item) => item.spec?.metadata?.["amitia.message.outputs"] === true)) {
     throw new Error("message output provider contribution missing");
   }
-  if (!contributions.some((item) => item.spec?.entry?.path === "modules/emote-ui/desktop/composer.html")) {
+  if (!contributions.some((item) => item.spec?.entry?.schema_path === "modules/emote-ui/desktop/composer.schema.json")) {
     throw new Error("composer contribution missing");
   }
-  if (!contributions.some((item) => item.spec?.entry?.path === "modules/emote-ui/mobile/composer.html")) {
+  if (!contributions.some((item) => item.spec?.entry?.schema_path === "modules/emote-ui/mobile/composer.schema.json")) {
     throw new Error("mobile composer contribution missing");
   }
   const mobileProviders = [
@@ -104,6 +110,14 @@ function main() {
     const provider = contributions.find((item) => item.spec?.providerId === providerId);
     if (!provider?.spec?.entries?.mobile) {
       throw new Error(`mobile entry missing for ${providerId}`);
+    }
+  }
+  for (const contribution of contributions.filter((item) => ["ui_page"].includes(item.kind))) {
+    if (!contribution.spec?.entry?.schema_path) {
+      throw new Error(`schema path missing for ${contribution.id}`);
+    }
+    if (contribution.spec.entry.type !== "schema_renderer") {
+      throw new Error(`schema renderer missing for ${contribution.id}`);
     }
   }
   for (const target of ["desktop", "mobile"]) {

@@ -17,7 +17,11 @@ func TestFullControlAllowsDeclaredAndroidCapabilities(t *testing.T) {
 		"android.interaction.click",
 		"android.interaction.input",
 		"android.interaction.gesture",
+		"android.interaction.node_action",
 		"android.interaction.global",
+		"android.accessibility.manage",
+		"android.shizuku.system_service",
+		"android.shizuku.binder",
 		"android.app.launch",
 		"runtime.linux.shell.execute",
 		"runtime.linux.terminal.control",
@@ -98,6 +102,51 @@ func TestFullControlDoesNotBypassHardDeny(t *testing.T) {
 	}
 	if !foundDeny {
 		t.Fatalf("expected remote_execution_denied, reasons = %#v", result.Reasons)
+	}
+}
+
+func TestShizukuPermissionsRequireApprovalUnlessFullControl(t *testing.T) {
+	ctx := context.Background()
+	broker := NewDefaultPermissionBroker(NewPermissionDefinitionRegistry(), NewMemoryPermissionStorage())
+	requirements := []PermissionRequirement{
+		{PermissionID: "android.shizuku.inspect"},
+		{PermissionID: "android.shizuku.permission"},
+		{PermissionID: "android.shizuku.manage"},
+		{PermissionID: "android.shizuku.execute"},
+	}
+	executionContext := PermissionExecutionContext{
+		Placement: ExecutionPlacementDevice,
+		SpaceID:   runtimeidentity.ParseSpaceID("space-1"),
+		DeviceID:  runtimeidentity.ParseDeviceID("device-1"),
+		RuntimeID: runtimeidentity.ParseRuntimeID("runtime-1"),
+		Source:    "model",
+	}
+	request := PermissionEvaluationRequest{
+		Subject:          PermissionSubject{Type: SubjectSystem, ID: "core"},
+		Requirements:     requirements,
+		InvocationID:     "inv-shizuku",
+		ExecutionContext: executionContext,
+	}
+
+	request.ApprovalMode = string(ApprovalManual)
+	manual := broker.Evaluate(ctx, request)
+	if manual.Decision != DecisionRequireApproval {
+		t.Fatalf("manual decision = %s, want %s, reasons = %#v", manual.Decision, DecisionRequireApproval, manual.Reasons)
+	}
+
+	request.ApprovalMode = string(ApprovalFullControl)
+	fullControl := broker.Evaluate(ctx, request)
+	if fullControl.Decision != DecisionAllow {
+		t.Fatalf("full control decision = %s, want %s, reasons = %#v", fullControl.Decision, DecisionAllow, fullControl.Reasons)
+	}
+	allowed := 0
+	for _, reason := range fullControl.Reasons {
+		if reason.Code == "full_control_allowed" {
+			allowed++
+		}
+	}
+	if allowed != len(requirements) {
+		t.Fatalf("full_control_allowed reasons = %d, want %d", allowed, len(requirements))
 	}
 }
 

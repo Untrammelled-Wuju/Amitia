@@ -26,6 +26,7 @@ const runtimeModuleId = 'world-game-runtime';
 const supportModuleId = 'world-game-support';
 const runtimeModuleRoot = join(packageStagingDir, 'modules', runtimeModuleId);
 const supportModuleRoot = join(packageStagingDir, 'modules', supportModuleId);
+const uiModuleRoot = join(packageStagingDir, 'modules', 'world-game-ui');
 const generatedAt = '2026-01-01T00:00:00Z';
 
 function clean() {
@@ -76,6 +77,10 @@ function sha256Raw(buffer) {
   return createHash('sha256').update(buffer).digest('hex');
 }
 
+function sha256Browser(buffer) {
+  return `sha256-${createHash('sha256').update(buffer).digest('base64')}`;
+}
+
 function canonicalPackagePath(file) {
   return relative(packageStagingDir, file).replace(/\\/g, '/');
 }
@@ -119,6 +124,15 @@ function createPayloadLayout() {
   // planner, rather than manifest order, is responsible for startup ordering.
   copyRecursively(runtimeModuleRoot, supportModuleRoot);
 
+  for (const platform of ['desktop', 'mobile']) {
+    const uiDirectory = join(uiModuleRoot, platform);
+    mkdirSync(uiDirectory, { recursive: true });
+    copyFileSync(
+      join(projectRoot, 'ui', 'schema', `${platform}.json`),
+      join(uiDirectory, 'schema.json'),
+    );
+  }
+
   const artifactSource = join(projectRoot, 'artifacts');
   if (existsSync(artifactSource)) {
     copyRecursively(artifactSource, join(packageStagingDir, 'artifacts'));
@@ -126,6 +140,14 @@ function createPayloadLayout() {
 
   const manifest = JSON.parse(readFileSync(join(projectRoot, 'amitia-extension.json'), 'utf8'));
   if (packageVersionOverride) manifest.extension.version = packageVersionOverride;
+  for (const module of manifest.modules || []) {
+    for (const contribution of module.contributions || []) {
+      const entry = contribution.spec?.entry;
+      const entryPath = entry?.path || entry?.schema_path;
+      if (!entryPath) continue;
+      entry.content_hash = sha256Browser(readFileSync(join(packageStagingDir, entryPath)));
+    }
+  }
   if (requireCompanionArtifact) {
     const gameContribution = manifest.modules
       ?.flatMap(module => module.contributions || [])

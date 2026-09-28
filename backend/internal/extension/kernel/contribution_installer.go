@@ -887,6 +887,7 @@ func (i *TypedContributionInstaller) buildUIContributionOp(ctx context.Context, 
 		return installOp{}, fmt.Errorf("ui contribution identity does not match manifest contribution")
 	}
 	uiDef.Integrity.Generation = generation
+	i.promoteAdjacentSchema(&uiDef)
 
 	hostRuntimeID := strings.TrimSpace(uiDef.Entry.RuntimeID)
 	hostRuntime := hostRuntimeID != "" && (uiDef.Entry.Type == ui_contribution.SandboxHostNative || uiDef.Sandbox.Type == ui_contribution.SandboxHostNative)
@@ -973,6 +974,42 @@ func (i *TypedContributionInstaller) buildUIContributionOp(ctx context.Context, 
 			}
 		},
 	}, nil
+}
+
+func (i *TypedContributionInstaller) promoteAdjacentSchema(uiDef *ui_contribution.UIContributionDefinition) {
+	if uiDef == nil || uiDef.Kind != ui_contribution.UIContributionWebPage {
+		return
+	}
+	if uiDef.Entry.SchemaPath != "" || strings.TrimSpace(uiDef.Entry.Path) == "" {
+		return
+	}
+	if uiDef.Entry.Type != ui_contribution.SandboxWebRestricted && uiDef.Entry.Type != ui_contribution.SandboxWebIsolated {
+		return
+	}
+	basePath := resolveExtensionBundlePath(i.container.ExtRoot, string(uiDef.ExtensionID))
+	if basePath == "" {
+		return
+	}
+	relativePath := filepath.Clean(filepath.FromSlash(uiDef.Entry.Path))
+	if strings.HasPrefix(relativePath, "..") || filepath.IsAbs(relativePath) {
+		return
+	}
+	extension := filepath.Ext(relativePath)
+	if extension == "" {
+		return
+	}
+	schemaPath := strings.TrimSuffix(relativePath, extension) + ".schema.json"
+	fullPath := filepath.Join(basePath, schemaPath)
+	info, err := os.Stat(fullPath)
+	if err != nil || info.IsDir() {
+		return
+	}
+	uiDef.Kind = ui_contribution.UIContributionSchemaPage
+	uiDef.Entry.Type = ui_contribution.SandboxSchemaRenderer
+	uiDef.Entry.SchemaPath = filepath.ToSlash(schemaPath)
+	uiDef.Sandbox.Type = ui_contribution.SandboxSchemaRenderer
+	uiDef.Sandbox.EnableScripts = false
+	uiDef.Visibility = ui_contribution.UIVisibilityRule{Platforms: []string{"windows", "linux", "macos"}}
 }
 
 func (i *TypedContributionInstaller) buildDesktopContributionOp(ctx context.Context, contrib domain.ContributionDefinition, defData []byte, uiDef ui_contribution.UIContributionDefinition, generation int64) (installOp, error) {

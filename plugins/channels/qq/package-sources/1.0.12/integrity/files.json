@@ -1,0 +1,90 @@
+{
+  "algorithm": "sha256",
+  "files": {
+    "assets/legacy-source/source/amitia-mobile-ui/pages/channels.html": {
+      "path": "assets/legacy-source/source/amitia-mobile-ui/pages/channels.html",
+      "size": 18642,
+      "hash": "28f954f6ebad5909b5ca4c6520e7df7ddd9133362bd6c075bfb109948232490a",
+      "modified": "2026-01-01T00:00:00Z"
+    },
+    "assets/legacy-source/source/front/src/views/qq-connect/QqConnectView.vue": {
+      "path": "assets/legacy-source/source/front/src/views/qq-connect/QqConnectView.vue",
+      "size": 18166,
+      "hash": "fd92bcf07058cf79b17eb731119e441872f0f179d27bb54f3d8df60a7b438407",
+      "modified": "2026-01-01T00:00:00Z"
+    },
+    "assets/legacy-source/source/mobile_app/lib/features/channels/presentation/pages/qq_page.dart": {
+      "path": "assets/legacy-source/source/mobile_app/lib/features/channels/presentation/pages/qq_page.dart",
+      "size": 23036,
+      "hash": "5d2f755d580986717699f7e84ea4b82153173a68eae8690542bf65296b3270df",
+      "modified": "2026-01-01T00:00:00Z"
+    },
+    "assets/legacy-source/sources.json": {
+      "path": "assets/legacy-source/sources.json",
+      "size": 467,
+      "hash": "6911c3b4a277b462364bb520530e2c303c197a3e88e3ca83a1e80524e8a55df4",
+      "modified": "2026-01-01T00:00:00Z"
+    },
+    "manifest.json": {
+      "path": "manifest.json",
+      "size": 20099,
+      "hash": "ff2a81ef5a1024e1352aca74c4d6dd8051dc963907cb742b4946931b8c42a908",
+      "modified": "2026-01-01T00:00:00Z"
+    },
+    "modules/qq-channel-service/bundle.mjs": {
+      "path": "modules/qq-channel-service/bundle.mjs",
+      "size": 1586364,
+      "hash": "1742311adca74792e377bce03b3cb10b9d4752e72a421a48d7a41bb341cba7e4",
+      "modified": "2026-01-01T00:00:00Z"
+    },
+    "modules/qq-channel-service/launcher.mjs": {
+      "path": "modules/qq-channel-service/launcher.mjs",
+      "size": 165,
+      "hash": "410d26380a19a1d7ea670536923989b239a05c008295d780f0ed0e79a0bb7992",
+      "modified": "2026-01-01T00:00:00Z"
+    },
+    "modules/qq-channel-ui/desktop/app.js": {
+      "path": "modules/qq-channel-ui/desktop/app.js",
+      "size": 1019118,
+      "hash": "3d8169d9ca60285f43fd0506d15c7114320834ab06e80997886d2dc7f243796e",
+      "modified": "2026-01-01T00:00:00Z"
+    },
+    "modules/qq-channel-ui/desktop/index.html": {
+      "path": "modules/qq-channel-ui/desktop/index.html",
+      "size": 377,
+      "hash": "2948aa71c74d8f45407e0321163a9aba722d39f6eb914056bd16846180442241",
+      "modified": "2026-01-01T00:00:00Z"
+    },
+    "modules/qq-channel-ui/desktop/styles.css": {
+      "path": "modules/qq-channel-ui/desktop/styles.css",
+      "size": 384796,
+      "hash": "7a30ed66c4c2fadf84f80c527049a19ed87b6c221138903522fa3f338d1cf72d",
+      "modified": "2026-01-01T00:00:00Z"
+    },
+    "modules/qq-channel-ui/mobile/app.js": {
+      "path": "modules/qq-channel-ui/mobile/app.js",
+      "size": 1019118,
+      "hash": "3d8169d9ca60285f43fd0506d15c7114320834ab06e80997886d2dc7f243796e",
+      "modified": "2026-01-01T00:00:00Z"
+    },
+    "modules/qq-channel-ui/mobile/index.html": {
+      "path": "modules/qq-channel-ui/mobile/index.html",
+      "size": 377,
+      "hash": "2948aa71c74d8f45407e0321163a9aba722d39f6eb914056bd16846180442241",
+      "modified": "2026-01-01T00:00:00Z"
+    },
+    "modules/qq-channel-ui/mobile/styles.css": {
+      "path": "modules/qq-channel-ui/mobile/styles.css",
+      "size": 384796,
+      "hash": "7a30ed66c4c2fadf84f80c527049a19ed87b6c221138903522fa3f338d1cf72d",
+      "modified": "2026-01-01T00:00:00Z"
+    },
+    "modules/qq-channel-ui/package.json": {
+      "path": "modules/qq-channel-ui/package.json",
+      "size": 23,
+      "hash": "3ca9d4afd21425087cf31893b8f9f63c81b0b8408db5e343ca76e5f8aa26ab9a",
+      "modified": "2026-01-01T00:00:00Z"
+    }
+  },
+  "generatedAt": "2026-01-01T00:00:00Z"
+}

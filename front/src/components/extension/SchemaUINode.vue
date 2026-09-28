@@ -16,6 +16,7 @@ import {
   toNumber,
   toStringArray,
   toKeyValueItems,
+  resolveActionInput,
   type SchemaUINode,
   type SchemaUIActionBinding,
   type SchemaUIBinding,
@@ -34,7 +35,7 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  (e: "action", payload: { action: SchemaUIActionBinding; node: SchemaUINode }): void;
+  (e: "action", payload: { action: SchemaUIActionBinding; node: SchemaUINode; item?: Record<string, unknown>; files?: Array<Record<string, unknown>> }): void;
   (e: "error", payload: { nodeId: string; message: string }): void;
 }>();
 
@@ -215,8 +216,8 @@ const selectOptions = computed<Array<{ label: string; value: unknown }>>(() => {
       if (o && typeof o === "object") {
         const obj = o as Record<string, unknown>;
         return {
-          label: toText(obj.label ?? obj.text ?? obj.value),
-          value: obj.value,
+          label: toText(obj.label ?? obj.text ?? obj.displayName ?? obj.name ?? obj.value ?? obj.id),
+          value: obj.value ?? obj.id,
         };
       }
       return { label: toText(o), value: o };
@@ -225,6 +226,14 @@ const selectOptions = computed<Array<{ label: string; value: unknown }>>(() => {
   return [];
 });
 
+const galleryItems = computed<Array<Record<string, unknown>>>(() => {
+  const rows = mergedProps.value.items;
+  if (!Array.isArray(rows)) return [];
+  return rows.filter((item): item is Record<string, unknown> => !!item && typeof item === "object");
+});
+
+const filePickerInput = ref<HTMLInputElement>();
+
 function onButtonClick() {
   if (!props.node.actions || props.node.actions.length === 0) return;
   for (const action of props.node.actions) {
@@ -232,7 +241,57 @@ function onButtonClick() {
   }
 }
 
-function onActionFromChild(payload: { action: SchemaUIActionBinding; node: SchemaUINode }) {
+function onGalleryItemClick(item: Record<string, unknown>) {
+  if (!props.node.actions?.length) return;
+  for (const action of props.node.actions) {
+    emit("action", {
+      action,
+      node: props.node,
+      item: {
+        ...item,
+        input: resolveActionInput(action.input, props.formState, props.context, item),
+      },
+    });
+  }
+}
+
+function openFilePicker() {
+  filePickerInput.value?.click();
+}
+
+async function onFilePicked(event: Event) {
+  const input = event.target as HTMLInputElement;
+  const files = Array.from(input.files ?? []);
+  input.value = "";
+  if (files.length === 0) return;
+  const payload = await Promise.all(files.map(async (file) => ({
+    name: file.name,
+    mimeType: file.type,
+    size: file.size,
+    dataBase64: await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const value = typeof reader.result === "string" ? reader.result : "";
+        resolve(value.includes(",") ? value.slice(value.indexOf(",") + 1) : value);
+      };
+      reader.onerror = () => reject(reader.error ?? new Error("文件读取失败"));
+      reader.readAsDataURL(file);
+    }),
+  })));
+  for (const action of props.node.actions ?? []) {
+    emit("action", {
+      action,
+      node: props.node,
+      files: payload,
+      item: {
+        input: resolveActionInput(action.input, props.formState, props.context, { files: payload }),
+        files: payload,
+      },
+    });
+  }
+}
+
+function onActionFromChild(payload: { action: SchemaUIActionBinding; node: SchemaUINode; item?: Record<string, unknown>; files?: Array<Record<string, unknown>> }) {
   emit("action", payload);
 }
 </script>
@@ -623,6 +682,63 @@ function onActionFromChild(payload: { action: SchemaUIActionBinding; node: Schem
       </template>
     </ul>
 
+    <div
+      v-else-if="nodeType === 'gallery'"
+      class="schema-ui-gallery schema-ui-node"
+      :data-node-id="node.id"
+      :style="{ gridTemplateColumns: `repeat(auto-fill, minmax(${toNumber(mergedProps.minItemWidth, 148)}px, 1fr))` }"
+    >
+      <button
+        v-for="(item, index) in galleryItems"
+        :key="toText(item.id ?? item.value ?? index)"
+        type="button"
+        class="schema-ui-gallery__item"
+        :disabled="disabled || mergedProps.disabled === true"
+        @click="onGalleryItemClick(item)"
+      >
+        <img
+          v-if="toText(item[toText(mergedProps.imageField) || 'image'] ?? item.thumbnailUrl ?? item.assetUrl)"
+          class="schema-ui-gallery__image"
+          :src="toText(item[toText(mergedProps.imageField) || 'image'] ?? item.thumbnailUrl ?? item.assetUrl)"
+          :alt="toText(item[toText(mergedProps.titleField) || 'title'] ?? item.name ?? item.label)"
+        />
+        <div v-else class="schema-ui-gallery__placeholder">{{ mergedProps.placeholder ?? "无预览" }}</div>
+        <span class="schema-ui-gallery__title">
+          {{ item[toText(mergedProps.titleField) || "title"] ?? item.name ?? item.label ?? item.id }}
+        </span>
+        <span v-if="item[toText(mergedProps.subtitleField) || 'subtitle'] ?? item.meaning ?? item.description" class="schema-ui-gallery__subtitle">
+          {{ item[toText(mergedProps.subtitleField) || "subtitle"] ?? item.meaning ?? item.description }}
+        </span>
+      </button>
+      <div v-if="galleryItems.length === 0" class="schema-ui-gallery__empty">
+        {{ mergedProps.emptyText ?? "暂无数据" }}
+      </div>
+    </div>
+
+    <div
+      v-else-if="nodeType === 'file_picker'"
+      class="schema-ui-file-picker schema-ui-node"
+      :data-node-id="node.id"
+    >
+      <input
+        ref="filePickerInput"
+        class="schema-ui-file-picker__input"
+        type="file"
+        :accept="toText(mergedProps.accept) || undefined"
+        :multiple="mergedProps.multiple !== false"
+        @change="onFilePicked"
+      />
+      <el-button
+        class="schema-ui-file-picker__button"
+        :type="(mergedProps.type as any) || 'primary'"
+        :disabled="disabled || mergedProps.disabled === true"
+        @click="openFilePicker"
+      >
+        {{ mergedProps.text ?? mergedProps.label ?? "选择文件" }}
+      </el-button>
+      <span v-if="mergedProps.hint" class="schema-ui-file-picker__hint">{{ mergedProps.hint }}</span>
+    </div>
+
     <el-table
       v-else-if="nodeType === 'table'"
       class="schema-ui-table schema-ui-node"
@@ -961,6 +1077,86 @@ function onActionFromChild(payload: { action: SchemaUIActionBinding; node: Schem
 }
 .schema-ui-list__item {
   line-height: 1.6;
+}
+
+.schema-ui-gallery {
+  display: grid;
+  gap: 10px;
+}
+
+.schema-ui-gallery__item {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--amitia-color-border, rgba(127, 127, 127, 0.22));
+  border-radius: 8px;
+  background: var(--amitia-color-surface, transparent);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.schema-ui-gallery__item:hover {
+  border-color: var(--amitia-color-accent, rgba(90, 120, 255, 0.7));
+}
+
+.schema-ui-gallery__image,
+.schema-ui-gallery__placeholder {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  border-radius: 6px;
+  object-fit: contain;
+  background: var(--amitia-color-surface-elevated, rgba(127, 127, 127, 0.08));
+}
+
+.schema-ui-gallery__placeholder,
+.schema-ui-gallery__empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--amitia-color-text-secondary, rgba(127, 127, 127, 0.8));
+  font-size: 12px;
+}
+
+.schema-ui-gallery__empty {
+  min-height: 72px;
+  grid-column: 1 / -1;
+  border: 1px dashed var(--amitia-color-border, rgba(127, 127, 127, 0.25));
+  border-radius: 8px;
+}
+
+.schema-ui-gallery__title {
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.schema-ui-gallery__subtitle {
+  overflow: hidden;
+  color: var(--amitia-color-text-secondary, rgba(127, 127, 127, 0.8));
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.schema-ui-file-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.schema-ui-file-picker__input {
+  display: none;
+}
+
+.schema-ui-file-picker__hint {
+  color: var(--amitia-color-text-secondary, rgba(127, 127, 127, 0.8));
+  font-size: 12px;
 }
 .schema-ui-table {
   width: 100%;

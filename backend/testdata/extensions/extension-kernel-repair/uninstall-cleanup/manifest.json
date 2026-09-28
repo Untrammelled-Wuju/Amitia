@@ -69,7 +69,10 @@
 					"description": {"default": "UI page session that must be removed on uninstall"},
 					"spec": {
 						"route": "/cleanup",
-						"entry": "index.html"
+						"entry": "index.html",
+						"visibility": {
+							"platforms": ["windows"]
+						}
 					}
 				}
 			]

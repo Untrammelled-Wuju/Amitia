@@ -46,3 +46,11 @@
 # Shizuku classes
 -dontwarn dev.rikka.shizuku.**
 -keep class dev.rikka.shizuku.** { *; }
+-dontwarn rikka.shizuku.**
+-keep class rikka.shizuku.** { *; }
+-dontwarn rikka.sui.**
+-keep class rikka.sui.** { *; }
+-keep class com.amitia.amitia_app.nativeprovider.shizuku.ShizukuCommandService { *; }
+-keep class com.amitia.amitia_app.nativeprovider.shizuku.IPrivilegedCommandService$Stub { *; }
+-keep class com.amitia.amitia_app.virtualdisplay.host.** { *; }
+-keep class com.amitia.amitia_app.virtualdisplay.host.IVirtualDisplayHost$Stub { *; }

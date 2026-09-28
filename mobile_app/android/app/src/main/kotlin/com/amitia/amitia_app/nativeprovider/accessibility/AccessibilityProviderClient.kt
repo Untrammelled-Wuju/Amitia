@@ -69,6 +69,12 @@ internal object AccessibilityProviderClient {
         durationMs: Long,
     ): String? = call(context) { it.performSwipe(startX, startY, endX, endY, durationMs) }
 
+    suspend fun gesture(context: Context, payloadJson: String): String? =
+        call(context) { it.performGesture(payloadJson) }
+
+    suspend fun screenshot(context: Context, displayId: Int): String? =
+        call(context) { it.takeScreenshot(displayId) }
+
     suspend fun globalAction(context: Context, actionId: Int): String? =
         call(context) { it.performGlobalAction(actionId) }
 

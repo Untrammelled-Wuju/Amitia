@@ -1,0 +1,119 @@
+{
+  "schemaVersion": "schema-ui/1",
+  "type": "document",
+  "title": "Amitia World Game（桌面端）",
+  "actions": [
+    {
+      "actionId": "move",
+      "target": "tool"
+    }
+  ],
+  "children": [
+    {
+      "id": "world-game-desktop-page",
+      "type": "page",
+      "children": [
+        {
+          "id": "world-game-desktop-summary",
+          "type": "grid",
+          "props": {
+            "columns": 2
+          },
+          "children": [
+            {
+              "id": "world-game-desktop-runtime",
+              "type": "runtime_status",
+              "props": {
+                "label": "GameHost Runtime",
+                "status": "managed",
+                "message": "运行状态由 Amitia GameHost 统一管理"
+              }
+            },
+            {
+              "id": "world-game-desktop-contract",
+              "type": "key_value",
+              "props": {
+                "title": "插件信息",
+                "columns": 1
+              },
+              "bindings": [
+                {
+                  "path": "items",
+                  "source": "host",
+                  "default": [
+                    {
+                      "key": "协议",
+                      "value": "amitia-game-host/1"
+                    },
+                    {
+                      "key": "能力",
+                      "value": "实时控制、状态流、事件流、RPC"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "world-game-desktop-control",
+          "type": "section",
+          "props": {
+            "title": "移动测试",
+            "subtitle": "通过宿主工具调用游戏运行时"
+          },
+          "children": [
+            {
+              "id": "world-game-desktop-direction",
+              "type": "field",
+              "props": {
+                "label": "移动方向",
+                "placeholder": "up / down / left / right"
+              },
+              "bindings": [
+                {
+                  "path": "direction",
+                  "source": "form",
+                  "default": "up"
+                }
+              ]
+            },
+            {
+              "id": "world-game-desktop-move",
+              "type": "button",
+              "props": {
+                "text": "发送移动指令",
+                "type": "primary"
+              },
+              "actions": [
+                {
+                  "action_id": "move",
+                  "target": "tool",
+                  "input": {
+                    "direction": "$form.direction"
+                  },
+                  "statePath": "moveResult"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "theme": {
+    "mode": "auto"
+  },
+  "accessibility": {
+    "enabled": true,
+    "keyboardNav": true,
+    "screenReader": true
+  },
+  "performanceBudget": {
+    "maxRenderTimeMs": 100,
+    "maxLayoutCount": 120,
+    "maxNodeCount": 120,
+    "maxDataFetchCount": 0,
+    "maxActionCount": 8
+  }
+}

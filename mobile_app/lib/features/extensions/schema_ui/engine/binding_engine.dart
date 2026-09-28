@@ -88,22 +88,26 @@ bool evaluateCondition(dynamic value, String op, dynamic expected) {
     case '>':
     case 'gt':
       if (value is num && expected is num) return value > expected;
-      if (value is String && expected is String) return value.compareTo(expected) > 0;
+      if (value is String && expected is String)
+        return value.compareTo(expected) > 0;
       return false;
     case '<':
     case 'lt':
       if (value is num && expected is num) return value < expected;
-      if (value is String && expected is String) return value.compareTo(expected) < 0;
+      if (value is String && expected is String)
+        return value.compareTo(expected) < 0;
       return false;
     case '>=':
     case 'gte':
       if (value is num && expected is num) return value >= expected;
-      if (value is String && expected is String) return value.compareTo(expected) >= 0;
+      if (value is String && expected is String)
+        return value.compareTo(expected) >= 0;
       return false;
     case '<=':
     case 'lte':
       if (value is num && expected is num) return value <= expected;
-      if (value is String && expected is String) return value.compareTo(expected) <= 0;
+      if (value is String && expected is String)
+        return value.compareTo(expected) <= 0;
       return false;
     case 'in':
       if (expected is List) return expected.contains(value);
@@ -118,7 +122,8 @@ bool evaluateCondition(dynamic value, String op, dynamic expected) {
       }
       return true;
     case 'contains':
-      if (value is String && expected is String) return value.contains(expected);
+      if (value is String && expected is String)
+        return value.contains(expected);
       if (value is List) return value.contains(expected);
       return false;
     case 'regex':
@@ -142,7 +147,8 @@ bool evaluateCondition(dynamic value, String op, dynamic expected) {
 bool evaluateVisibility(List<UICondition>? conditions, BindingContext context) {
   if (conditions == null || conditions.isEmpty) return true;
   for (final condition in conditions) {
-    final value = _lookupPath(context.flat, condition.field) ??
+    final value =
+        _lookupPath(context.flat, condition.field) ??
         _lookupPath(context.localState, condition.field) ??
         _lookupPath(context.formState, condition.field) ??
         _lookupPath(context.input, condition.field) ??
@@ -151,7 +157,8 @@ bool evaluateVisibility(List<UICondition>? conditions, BindingContext context) {
         _lookupPath(context.host, condition.field) ??
         _lookupPath(context.dataSources, condition.field) ??
         _lookupPath(context.storage, condition.field);
-    if (!evaluateCondition(value, condition.operator, condition.value)) return false;
+    if (!evaluateCondition(value, condition.operator, condition.value))
+      return false;
   }
   return true;
 }
@@ -162,7 +169,9 @@ class BindingEngine {
   dynamic resolveBinding(SchemaUIBinding? binding, BindingContext context) {
     if (binding == null) return null;
     final source = binding.source;
-    final path = binding.path;
+    final path = binding.sourcePath?.trim().isNotEmpty == true
+        ? binding.sourcePath!.trim()
+        : binding.path;
     dynamic resolved;
 
     switch (source) {
@@ -188,6 +197,9 @@ class BindingEngine {
       case 'host':
         resolved = _lookupPath(context.host, path);
         break;
+      case 'context':
+        resolved = _lookupPath(context.flat, path);
+        break;
       case 'storage':
         resolved = context.storage[path] ?? _lookupPath(context.storage, path);
         break;
@@ -201,10 +213,12 @@ class BindingEngine {
         resolved = null;
     }
 
-    if (resolved == null && {'input', 'form_state', 'form', 'state', 'query'}.contains(source)) {
+    if (resolved == null &&
+        {'input', 'form_state', 'form', 'state', 'query'}.contains(source)) {
       resolved = _lookupPath(context.flat, path);
     }
-    if (resolved == null && binding.defaultValue != null) return binding.defaultValue;
+    if (resolved == null && binding.defaultValue != null)
+      return binding.defaultValue;
     return resolved;
   }
 }

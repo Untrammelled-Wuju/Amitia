@@ -78,9 +78,9 @@ func RegisterBuiltinUtilityTools(ctx context.Context, registry *capability.ToolR
 		},
 		{
 			id: "builtin.press_key", modelName: "press_key", name: "Press Key",
-			description: "Press an Android key by symbolic name or Android key code. Uses normal global/media actions where available and authorized Shizuku/Root input keyevent for arbitrary codes.",
+			description: "Press an Android key by symbolic name or Android key code. Uses normal global/media actions where available and authorized Shizuku input keyevent for arbitrary codes.",
 			input:       `{"type":"object","additionalProperties":false,"properties":{"key":{"type":"string"},"keyCode":{"type":"integer","minimum":0,"maximum":10000},"key_code":{"type":"integer","minimum":0,"maximum":10000}}}`,
-			permissions: []capability.PermissionRequirement{{Capability: "android.interaction.global", Risk: "high"}, {Capability: "android.root.execute", Risk: "high"}}, risk: capability.RiskHigh, side: capability.SideEffectSystem, approval: true, idempotent: false, timeout: 12 * time.Second, maxOutput: 16 * 1024, category: "android",
+			permissions: []capability.PermissionRequirement{{Capability: "android.interaction.global", Risk: "high"}}, risk: capability.RiskHigh, side: capability.SideEffectSystem, approval: true, idempotent: false, timeout: 12 * time.Second, maxOutput: 16 * 1024, category: "android",
 		},
 		{
 			id: "builtin.combined_operation", modelName: "combined_operation", name: "Combined UI Operation",

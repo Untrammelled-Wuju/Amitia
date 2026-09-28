@@ -11,6 +11,8 @@ import ExtensionRenderState from "./ExtensionRenderState.vue";
 import {
   validateDocument,
   countNodes,
+  resolveActionInput,
+  setPath,
   type SchemaUIDocument,
   type SchemaUINode as SchemaUINodeType,
   type SchemaUIActionBinding,
@@ -44,6 +46,8 @@ const sessionGeneration = ref(0);
 let bridgeNonceSequence = 0;
 const actionLoading = reactive<Record<string, boolean>>({});
 const capturedError = ref<string | null>(null);
+const lifecycleMountKey = ref("");
+let lifecycleRunning = false;
 
 const formState = reactive<Record<string, unknown>>({});
 const localContextOverride = reactive<Record<string, unknown>>({});
@@ -60,7 +64,12 @@ function asRecord(value: unknown): Record<string, unknown> {
 function unwrapActionResult(value: unknown): Record<string, unknown> {
   const result = asRecord(value);
   const structured = asRecord(result.structured);
-  return Object.keys(structured).length > 0 ? { ...result, ...structured } : result;
+  const data = asRecord(result.data);
+  const nestedResult = asRecord(result.result);
+  if (Object.keys(structured).length > 0) return { ...result, ...structured };
+  if (Object.keys(data).length > 0) return { ...result, ...data };
+  if (Object.keys(nestedResult).length > 0) return { ...result, ...nestedResult };
+  return result;
 }
 
 function findActionFailure(value: unknown): string {
@@ -445,8 +454,8 @@ async function loadDataSources() {
   }));
 }
 
-async function invokeAction(payload: { action: SchemaUIActionBinding; node: SchemaUINodeType }) {
-  const { action, node } = payload;
+async function invokeAction(payload: { action: SchemaUIActionBinding; node: SchemaUINodeType; item?: Record<string, unknown>; files?: Array<Record<string, unknown>> }, reportFailure = true) {
+  const { action, node, item, files } = payload;
   if (!action?.action_id) {
     ElMessage.warning("操作缺少 action_id");
     return;
@@ -464,18 +473,23 @@ async function invokeAction(payload: { action: SchemaUIActionBinding; node: Sche
   }
   actionLoading[action.action_id] = true;
   try {
+    const resolvedInput = asRecord(resolveActionInput(action.input ?? {}, formState, mergedContext.value, item));
     const localAction = props.hostActions?.[action.action_id];
     if (localAction) {
-      const result = await localAction({ ...(action.input ?? {}), node_id: node.id, form_state: { ...formState } });
+      const result = await localAction({ ...resolvedInput, ...(files ? { files } : {}), node_id: node.id, form_state: { ...formState } });
       if (result && typeof result === "object") {
         const data = result as Record<string, unknown>;
         if (data.form_state && typeof data.form_state === "object") Object.assign(formState, data.form_state);
         if (data.context_update && typeof data.context_update === "object") Object.assign(localContextOverride, data.context_update);
+        if (action.statePath) {
+          setPath(localContextOverride, action.statePath, data);
+        }
       }
       return;
     }
     const actionInput = {
-      ...(action.input ?? {}),
+      ...resolvedInput,
+      ...(files ? { files } : {}),
       node_id: node.id,
       form_state: { ...formState },
     } as Record<string, unknown>;
@@ -511,11 +525,17 @@ async function invokeAction(payload: { action: SchemaUIActionBinding; node: Sche
       if (data.reload_schema === true) {
         await loadSchema();
       }
-      const failureMessage = findActionFailure(data);
-      if (failureMessage) {
-        ElMessage.error(formatActionMessage(failureMessage));
-      } else if (typeof data.message === "string" && data.message) {
-        ElMessage.success(data.message);
+      if (action.statePath) {
+        const explicitState = data.state_update ?? data.stateUpdate;
+        setPath(localContextOverride, action.statePath, explicitState ?? data);
+      }
+      if (reportFailure) {
+        const failureMessage = findActionFailure(data);
+        if (failureMessage) {
+          ElMessage.error(formatActionMessage(failureMessage));
+        } else if (typeof data.message === "string" && data.message) {
+          ElMessage.success(data.message);
+        }
       }
     }
   } catch (e) {
@@ -534,6 +554,40 @@ async function invokeAction(payload: { action: SchemaUIActionBinding; node: Sche
   } finally {
     actionLoading[action.action_id] = false;
   }
+}
+
+async function runLifecycleActions(
+  actions: SchemaUIActionBinding[] | undefined,
+  statePath: string,
+) {
+  if (!actions?.length || lifecycleRunning) return;
+  lifecycleRunning = true;
+  try {
+    for (const action of actions) {
+      await invokeAction({
+        action: {
+          ...action,
+          statePath: action.statePath ?? statePath,
+        },
+        node: {
+          id: `lifecycle:${action.action_id}`,
+          type: "page",
+        },
+      }, false);
+    }
+  } finally {
+    lifecycleRunning = false;
+  }
+}
+
+function runMountLifecycle() {
+  const current = schema.value;
+  if (!current || !sessionReady.value) return;
+  const generation = props.contribution.generation ?? 0;
+  const key = `${props.contribution.contributionId}:${generation}:${sessionId.value}`;
+  if (lifecycleMountKey.value === key) return;
+  lifecycleMountKey.value = key;
+  runLifecycleActions(current.lifecycle?.onMount, "result");
 }
 
 function onNodeError(payload: { nodeId: string; message: string }) {
@@ -555,6 +609,7 @@ watch(
     for (const k of Object.keys(formState)) delete formState[k];
     for (const k of Object.keys(localContextOverride)) delete localContextOverride[k];
     for (const k of Object.keys(dataSourceState)) delete dataSourceState[k];
+    lifecycleMountKey.value = "";
     capturedError.value = null;
     await loadSchema();
   }
@@ -563,11 +618,15 @@ watch(
 watch(
   [schema, sessionReady],
   ([currentSchema, ready]) => {
-    if (currentSchema && ready) loadDataSources();
+    if (currentSchema && ready) {
+      loadDataSources();
+      runMountLifecycle();
+    }
   },
 );
 
 watch(sessionScopeKey, async () => {
+  lifecycleMountKey.value = "";
   await restartSession();
 });
 

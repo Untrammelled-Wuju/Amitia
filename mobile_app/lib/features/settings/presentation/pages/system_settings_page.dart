@@ -313,6 +313,27 @@ class _SystemSettingsPageState extends ConsumerState<SystemSettingsPage> {
             ),
           ),
           SizedBox(height: AppSpacing.sectionGap),
+          Padding(
+            padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+            child: MobileExtensionSlot(
+              slotId: 'extension.settings.page',
+              context: {
+                'route': '/settings/system',
+                'health': _healthData ?? const <String, dynamic>{},
+              },
+            ),
+          ),
+          Padding(
+            padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+            child: MobileExtensionSlot(
+              slotId: 'extension.settings.section',
+              context: {
+                'route': '/settings/system',
+                'health': _healthData ?? const <String, dynamic>{},
+              },
+            ),
+          ),
+          SizedBox(height: AppSpacing.sectionGap),
           _SectionLabel(text: '高级'),
           SizedBox(height: AppSpacing.sm),
           _buildCard([

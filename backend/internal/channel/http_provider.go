@@ -24,6 +24,9 @@ type HTTPProviderOptions struct {
 	DisconnectPath    string
 	ConfigPath        string
 	MessagesPath      string
+	ActionPath        string
+	LogsPath          string
+	PeersPath         string
 	DefaultHeaders    map[string]string
 	UseFallbackImage  bool
 	IdempotencyHeader bool
@@ -41,6 +44,9 @@ type HTTPProvider struct {
 	disconnectPath    string
 	configPath        string
 	messagesPath      string
+	actionPath        string
+	logsPath          string
+	peersPath         string
 	defaultHeaders    map[string]string
 	useFallbackImage  bool
 	idempotencyHeader bool
@@ -61,6 +67,9 @@ func NewHTTPProvider(options HTTPProviderOptions) *HTTPProvider {
 		disconnectPath:    defaultPath(options.DisconnectPath, "/api/disconnect"),
 		configPath:        defaultPath(options.ConfigPath, "/api/config"),
 		messagesPath:      defaultPath(options.MessagesPath, "/api/messages"),
+		actionPath:        defaultPath(options.ActionPath, "/api/action"),
+		logsPath:          defaultPath(options.LogsPath, "/api/logs"),
+		peersPath:         defaultPath(options.PeersPath, "/api/peers"),
 		defaultHeaders:    cloneHeaders(options.DefaultHeaders),
 		useFallbackImage:  options.UseFallbackImage,
 		idempotencyHeader: options.IdempotencyHeader,
@@ -143,6 +152,46 @@ func (p *HTTPProvider) StatusData(ctx context.Context) (map[string]any, error) {
 func (p *HTTPProvider) Messages(ctx context.Context, request map[string]any) (map[string]any, error) {
 	var response map[string]any
 	if err := p.post(ctx, p.messagesPath, request, &response); err != nil {
+		return nil, err
+	}
+	if data, ok := response["data"].(map[string]any); ok {
+		return data, nil
+	}
+	return response, nil
+}
+
+func (p *HTTPProvider) Invoke(ctx context.Context, action string, input map[string]any) (map[string]any, error) {
+	action = strings.TrimSpace(action)
+	if action == "" {
+		return nil, fmt.Errorf("channel %s: action is required", p.definition.ID)
+	}
+	if input == nil {
+		input = map[string]any{}
+	}
+	var response map[string]any
+	if err := p.post(ctx, p.actionPath, map[string]any{"action": action, "input": input}, &response); err != nil {
+		return nil, err
+	}
+	if data, ok := response["data"].(map[string]any); ok {
+		return data, nil
+	}
+	return response, nil
+}
+
+func (p *HTTPProvider) Logs(ctx context.Context, request map[string]any) (map[string]any, error) {
+	var response map[string]any
+	if err := p.post(ctx, p.logsPath, request, &response); err != nil {
+		return nil, err
+	}
+	if data, ok := response["data"].(map[string]any); ok {
+		return data, nil
+	}
+	return response, nil
+}
+
+func (p *HTTPProvider) Peers(ctx context.Context, request map[string]any) (map[string]any, error) {
+	var response map[string]any
+	if err := p.post(ctx, p.peersPath, request, &response); err != nil {
 		return nil, err
 	}
 	if data, ok := response["data"].(map[string]any); ok {

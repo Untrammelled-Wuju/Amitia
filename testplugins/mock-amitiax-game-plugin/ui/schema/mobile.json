@@ -1,0 +1,124 @@
+{
+  "schemaVersion": "schema-ui/1",
+  "type": "document",
+  "title": "Amitia World Game（手机端）",
+  "actions": [
+    {
+      "actionId": "move",
+      "target": "tool"
+    }
+  ],
+  "children": [
+    {
+      "id": "world-game-mobile-page",
+      "type": "page",
+      "children": [
+        {
+          "id": "world-game-mobile-title",
+          "type": "text",
+          "props": {
+            "text": "Amitia World Game"
+          }
+        },
+        {
+          "id": "world-game-mobile-state",
+          "type": "runtime_status",
+          "props": {
+            "label": "游戏运行时",
+            "status": "managed",
+            "message": "手机端通过 GameHost 调用游戏服务"
+          }
+        },
+        {
+          "id": "world-game-mobile-info",
+          "type": "key_value",
+          "props": {
+            "title": "运行信息",
+            "columns": 1
+          },
+          "bindings": [
+            {
+              "path": "items",
+              "source": "host",
+              "default": [
+                {
+                  "key": "协议",
+                  "value": "amitia-game-host/1"
+                },
+                {
+                  "key": "控制",
+                  "value": "由宿主转发"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "world-game-mobile-direction",
+          "type": "select",
+          "props": {
+            "label": "移动方向",
+            "options": [
+              {
+                "label": "上",
+                "value": "up"
+              },
+              {
+                "label": "下",
+                "value": "down"
+              },
+              {
+                "label": "左",
+                "value": "left"
+              },
+              {
+                "label": "右",
+                "value": "right"
+              }
+            ]
+          },
+          "bindings": [
+            {
+              "path": "direction",
+              "source": "form",
+              "default": "up"
+            }
+          ]
+        },
+        {
+          "id": "world-game-mobile-move",
+          "type": "button",
+          "props": {
+            "text": "发送移动指令",
+            "type": "primary"
+          },
+          "actions": [
+            {
+              "action_id": "move",
+              "target": "tool",
+              "input": {
+                "direction": "$form.direction"
+              },
+              "statePath": "moveResult"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "theme": {
+    "mode": "auto"
+  },
+  "accessibility": {
+    "enabled": true,
+    "keyboardNav": true,
+    "screenReader": true
+  },
+  "performanceBudget": {
+    "maxRenderTimeMs": 100,
+    "maxLayoutCount": 120,
+    "maxNodeCount": 120,
+    "maxDataFetchCount": 0,
+    "maxActionCount": 8
+  }
+}

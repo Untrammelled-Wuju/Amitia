@@ -536,6 +536,9 @@ func (f *ToolFacade) ExecuteModelTool(ctx context.Context, modelName string, inp
 		return ToolDispatchResult{Status: "FAILED", VisibleText: "tool registry not configured", Error: &ToolDispatchError{Code: "TOOL_REGISTRY_UNAVAILABLE"}}, false
 	}
 	def, ok := f.toolRegistry.GetByModelName(ctx, modelName)
+	if !ok && strings.Contains(modelName, ".") {
+		def, ok = f.toolRegistry.GetByModelName(ctx, strings.ReplaceAll(modelName, ".", "_"))
+	}
 	if !ok {
 		return ToolDispatchResult{Status: "FAILED", VisibleText: fmt.Sprintf("tool %s not found in kernel registry", modelName), Error: &ToolDispatchError{Code: "TOOL_NOT_FOUND", Message: modelName}}, false
 	}
@@ -1008,6 +1011,9 @@ func (f *ToolFacade) ExecuteModelToolStream(ctx context.Context, modelName strin
 	}
 
 	def, ok := f.toolRegistry.GetByModelName(ctx, modelName)
+	if !ok && strings.Contains(modelName, ".") {
+		def, ok = f.toolRegistry.GetByModelName(ctx, strings.ReplaceAll(modelName, ".", "_"))
+	}
 	if !ok {
 		def, ok = f.toolRegistry.Get(ctx, modelName)
 	}

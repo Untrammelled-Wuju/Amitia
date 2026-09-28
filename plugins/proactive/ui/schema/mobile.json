@@ -1,0 +1,403 @@
+{
+  "schemaVersion": "schema-ui/1",
+  "type": "document",
+  "title": "主动消息（手机端）",
+  "lifecycle": {
+    "onMount": [
+      {
+        "action_id": "command",
+        "target": "tool",
+        "input": {
+          "action": "ui.dashboard"
+        },
+        "statePath": "dashboard"
+      }
+    ]
+  },
+  "actions": [
+    {
+      "actionId": "command",
+      "target": "tool"
+    }
+  ],
+  "children": [
+    {
+      "id": "mobile-proactive-page",
+      "type": "page",
+      "children": [
+        {
+          "id": "mobile-proactive-status",
+          "type": "key_value",
+          "props": {
+            "title": "运行状态",
+            "columns": 1
+          },
+          "bindings": [
+            {
+              "path": "items",
+              "source": "state",
+              "sourcePath": "dashboard.status"
+            }
+          ]
+        },
+        {
+          "id": "mobile-proactive-refresh",
+          "type": "button",
+          "props": {
+            "text": "刷新",
+            "type": "primary"
+          },
+          "actions": [
+            {
+              "action_id": "command",
+              "target": "tool",
+              "input": {
+                "action": "ui.dashboard"
+              },
+              "statePath": "dashboard"
+            }
+          ]
+        },
+        {
+          "id": "mobile-proactive-tabs",
+          "type": "tabs",
+          "children": [
+            {
+              "id": "mobile-proactive-settings",
+              "type": "tab_item",
+              "props": {
+                "label": "参数",
+                "name": "settings"
+              },
+              "children": [
+                {
+                  "id": "mobile-proactive-enabled",
+                  "type": "switch",
+                  "props": {
+                    "activeText": "启用主动消息"
+                  },
+                  "bindings": [
+                    {
+                      "path": "settings.enabled",
+                      "source": "form",
+                      "default": true
+                    }
+                  ]
+                },
+                {
+                  "id": "mobile-proactive-level",
+                  "type": "slider",
+                  "props": {
+                    "label": "主动程度",
+                    "min": 1,
+                    "max": 100
+                  },
+                  "bindings": [
+                    {
+                      "path": "settings.activeLevel",
+                      "source": "form",
+                      "default": 40
+                    }
+                  ]
+                },
+                {
+                  "id": "mobile-proactive-max-day",
+                  "type": "slider",
+                  "props": {
+                    "label": "每天最多",
+                    "min": 1,
+                    "max": 24
+                  },
+                  "bindings": [
+                    {
+                      "path": "settings.maxPerDay",
+                      "source": "form",
+                      "default": 6
+                    }
+                  ]
+                },
+                {
+                  "id": "mobile-proactive-quiet-start",
+                  "type": "field",
+                  "props": {
+                    "label": "静默开始",
+                    "variant": "time"
+                  },
+                  "bindings": [
+                    {
+                      "path": "settings.quietStart",
+                      "source": "form",
+                      "default": "23:00"
+                    }
+                  ]
+                },
+                {
+                  "id": "mobile-proactive-quiet-end",
+                  "type": "field",
+                  "props": {
+                    "label": "静默结束",
+                    "variant": "time"
+                  },
+                  "bindings": [
+                    {
+                      "path": "settings.quietEnd",
+                      "source": "form",
+                      "default": "07:00"
+                    }
+                  ]
+                },
+                {
+                  "id": "mobile-proactive-save",
+                  "type": "button",
+                  "props": {
+                    "text": "保存参数",
+                    "type": "primary"
+                  },
+                  "actions": [
+                    {
+                      "action_id": "command",
+                      "target": "tool",
+                      "input": {
+                        "action": "settings.update",
+                        "ui_state": true,
+                        "payload": {
+                          "enabled": "$form.settings.enabled",
+                          "activeLevel": "$form.settings.activeLevel",
+                          "maxPerDay": "$form.settings.maxPerDay",
+                          "quietStart": "$form.settings.quietStart",
+                          "quietEnd": "$form.settings.quietEnd"
+                        }
+                      },
+                      "statePath": "dashboard"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "id": "mobile-proactive-rules",
+              "type": "tab_item",
+              "props": {
+                "label": "规则",
+                "name": "rules"
+              },
+              "children": [
+                {
+                  "id": "mobile-proactive-rule-table",
+                  "type": "table",
+                  "props": {
+                    "columns": [
+                      {
+                        "prop": "id",
+                        "label": "ID"
+                      },
+                      {
+                        "prop": "name",
+                        "label": "名称"
+                      },
+                      {
+                        "prop": "scheduleCron",
+                        "label": "时间"
+                      }
+                    ]
+                  },
+                  "bindings": [
+                    {
+                      "path": "data",
+                      "source": "state",
+                      "sourcePath": "dashboard.rules"
+                    }
+                  ]
+                },
+                {
+                  "id": "mobile-proactive-rule-id",
+                  "type": "field",
+                  "props": {
+                    "label": "规则 ID",
+                    "variant": "number"
+                  },
+                  "bindings": [
+                    {
+                      "path": "rule.id",
+                      "source": "form",
+                      "default": ""
+                    }
+                  ]
+                },
+                {
+                  "id": "mobile-proactive-rule-name",
+                  "type": "field",
+                  "props": {
+                    "label": "规则名称"
+                  },
+                  "bindings": [
+                    {
+                      "path": "rule.name",
+                      "source": "form",
+                      "default": ""
+                    }
+                  ]
+                },
+                {
+                  "id": "mobile-proactive-rule-cron",
+                  "type": "field",
+                  "props": {
+                    "label": "Cron 时间"
+                  },
+                  "bindings": [
+                    {
+                      "path": "rule.scheduleCron",
+                      "source": "form",
+                      "default": "0 9 * * *"
+                    }
+                  ]
+                },
+                {
+                  "id": "mobile-proactive-rule-prompt",
+                  "type": "field",
+                  "props": {
+                    "label": "消息 Prompt",
+                    "variant": "textarea",
+                    "rows": 4
+                  },
+                  "bindings": [
+                    {
+                      "path": "rule.promptTemplate",
+                      "source": "form",
+                      "default": ""
+                    }
+                  ]
+                },
+                {
+                  "id": "mobile-proactive-rule-save",
+                  "type": "button",
+                  "props": {
+                    "text": "保存规则",
+                    "type": "primary"
+                  },
+                  "actions": [
+                    {
+                      "action_id": "command",
+                      "target": "tool",
+                      "input": {
+                        "action": "rules.save",
+                        "ui_state": true,
+                        "payload": {
+                          "id": "$form.rule.id",
+                          "name": "$form.rule.name",
+                          "ruleType": "custom",
+                          "scheduleCron": "$form.rule.scheduleCron",
+                          "channel": "all",
+                          "maxPerDay": 1,
+                          "randomMinutes": 0,
+                          "promptTemplate": "$form.rule.promptTemplate"
+                        }
+                      },
+                      "statePath": "dashboard"
+                    }
+                  ]
+                },
+                {
+                  "id": "mobile-proactive-rule-toggle",
+                  "type": "button",
+                  "props": {
+                    "text": "启用/停用"
+                  },
+                  "actions": [
+                    {
+                      "action_id": "command",
+                      "target": "tool",
+                      "input": {
+                        "action": "rules.toggle",
+                        "ui_state": true,
+                        "payload": {
+                          "id": "$form.rule.id"
+                        }
+                      },
+                      "statePath": "dashboard"
+                    }
+                  ]
+                },
+                {
+                  "id": "mobile-proactive-rule-delete",
+                  "type": "button",
+                  "props": {
+                    "text": "删除规则",
+                    "type": "danger"
+                  },
+                  "actions": [
+                    {
+                      "action_id": "command",
+                      "target": "tool",
+                      "input": {
+                        "action": "rules.delete",
+                        "ui_state": true,
+                        "payload": {
+                          "id": "$form.rule.id"
+                        }
+                      },
+                      "confirmation": "确认删除该规则？",
+                      "statePath": "dashboard"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "id": "mobile-proactive-history",
+              "type": "tab_item",
+              "props": {
+                "label": "历史",
+                "name": "history"
+              },
+              "children": [
+                {
+                  "id": "mobile-proactive-history-table",
+                  "type": "table",
+                  "props": {
+                    "columns": [
+                      {
+                        "prop": "createdAt",
+                        "label": "时间"
+                      },
+                      {
+                        "prop": "title",
+                        "label": "规则"
+                      },
+                      {
+                        "prop": "state",
+                        "label": "状态"
+                      }
+                    ]
+                  },
+                  "bindings": [
+                    {
+                      "path": "data",
+                      "source": "state",
+                      "sourcePath": "dashboard.history.items"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "theme": {
+    "mode": "auto"
+  },
+  "accessibility": {
+    "enabled": true,
+    "keyboardNav": true,
+    "screenReader": true
+  },
+  "performanceBudget": {
+    "maxRenderTimeMs": 120,
+    "maxLayoutCount": 180,
+    "maxNodeCount": 180,
+    "maxDataFetchCount": 1,
+    "maxActionCount": 24
+  }
+}

@@ -670,6 +670,23 @@ async function dispatchCommand(host, logger, input) {
   const payload = input && input.payload && typeof input.payload === "object" ? input.payload : {};
   const characterId = string(payload.characterId || input && input.characterId);
   switch (action) {
+    case "ui.snapshot": {
+      const loaded = await loadCharacter(host, characterId);
+      return {
+        snapshot: buildSnapshot(loaded.profile, loaded.events, payload.at),
+        form_state: {
+          sleep: clone(loaded.profile.sleep),
+          work: clone(loaded.profile.work),
+          tendencies: clone(loaded.profile.tendencies),
+          event: {
+            id: "",
+            title: "",
+            startTime: "09:00",
+            endTime: "10:00",
+          },
+        },
+      };
+    }
     case "snapshot":
       return snapshot(host, characterId, payload.at);
     case "profile.update":

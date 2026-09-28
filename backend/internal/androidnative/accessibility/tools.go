@@ -29,6 +29,12 @@ func BuildPermissionDefinitions() []PermissionDefinition {
 			Description: "允许Agent打开Android系统无障碍设置页，引导用户手动开启Amitia无障碍服务。",
 			Risk:        "medium",
 		},
+		{
+			ID:          androidnative.PermissionAccessibilityManage,
+			Name:        "android.accessibility.manage",
+			Description: "允许Agent安装、更新或打开Amitia无障碍Provider的设置页。",
+			Risk:        "high",
+		},
 	}
 }
 
@@ -41,6 +47,148 @@ func BuildAccessibilityTools() []capability.ToolDefinition {
 	return []capability.ToolDefinition{
 		buildStatusTool(runtime),
 		buildOpenSettingsTool(runtime),
+		buildProviderStatusTool(runtime),
+		buildProviderInstallTool(runtime),
+		buildProviderOpenSettingsTool(runtime),
+	}
+}
+
+func buildProviderStatusTool(runtime capability.RuntimeBinding) capability.ToolDefinition {
+	return capability.ToolDefinition{
+		ID:           "android.accessibility.provider.status",
+		ModelName:    "android_accessibility_provider_status",
+		Source:       capability.ToolSourceBuiltin,
+		Name:         "Accessibility Provider Status",
+		Description:  "查询Amitia无障碍Provider的安装、连接和版本状态。",
+		InputSchema:  json.RawMessage(`{"type":"object","properties":{},"additionalProperties":false}`),
+		OutputSchema: json.RawMessage(`{"type":"object","properties":{"installed":{"type":"boolean"},"connected":{"type":"boolean"},"ready":{"type":"boolean"},"versionName":{"type":"string"},"packageName":{"type":"string"},"state":{"type":"string"}}}`),
+		Permissions: []capability.PermissionRequirement{
+			{Capability: androidnative.PermissionAccessibilityReadState, Risk: "low"},
+		},
+		RiskLevel:      capability.RiskLow,
+		SideEffect:     capability.SideEffectReadOnly,
+		HasSideEffects: false,
+		Idempotent:     true,
+		Retryable:      true,
+		TimeoutMS:      5000,
+		ToolVersion:    capability.ToolVersion{SchemaVersion: 1, Revision: "b36-accessibility-v2"},
+		ModelExposure:  capability.ModelExposureRule{ExposedByDefault: true, Categories: []string{"android", "accessibility"}, Priority: 44},
+		Metadata: map[string]any{
+			"androidNativeOperation": OperationProviderStatus,
+			"bridgeProtocol":         "android_native",
+			"canonicalModelName":     "android.accessibility.provider.status",
+		},
+		ExecutionPolicy: capability.ToolExecutionPolicy{
+			Timeout:          5 * time.Second,
+			MaxConcurrency:   4,
+			Idempotent:       true,
+			ApprovalRequired: false,
+			AllowBackground:  true,
+		},
+		ResultPolicy: capability.ToolResultPolicy{
+			SanitizeError:  true,
+			MaxOutputBytes: 8192,
+		},
+		Runtime: capability.RuntimeBinding{
+			RuntimeType: runtime.RuntimeType,
+			RuntimeID:   runtime.RuntimeID,
+			HandlerName: OperationProviderStatus,
+		},
+		Enabled: true,
+	}
+}
+
+func buildProviderInstallTool(runtime capability.RuntimeBinding) capability.ToolDefinition {
+	inputSchema := json.RawMessage(`{"type":"object","properties":{},"additionalProperties":false}`)
+	outputSchema := json.RawMessage(`{"type":"object","properties":{"opened":{"type":"boolean"},"userActionRequired":{"type":"boolean"}}}`)
+	return capability.ToolDefinition{
+		ID:           "android.accessibility.provider.install",
+		ModelName:    "android_accessibility_provider_install",
+		Source:       capability.ToolSourceBuiltin,
+		Name:         "Install Accessibility Provider",
+		Description:  "打开Amitia无障碍Provider安装或更新确认流程。",
+		InputSchema:  inputSchema,
+		OutputSchema: outputSchema,
+		Permissions: []capability.PermissionRequirement{
+			{Capability: androidnative.PermissionAccessibilityManage, Risk: "high"},
+		},
+		RiskLevel:      capability.RiskHigh,
+		SideEffect:     capability.SideEffectSystem,
+		HasSideEffects: true,
+		Idempotent:     false,
+		Retryable:      false,
+		TimeoutMS:      10000,
+		ToolVersion:    capability.ToolVersion{SchemaVersion: 1, Revision: "b36-accessibility-v2"},
+		ModelExposure:  capability.ModelExposureRule{ExposedByDefault: true, Categories: []string{"android", "accessibility"}, Priority: 44},
+		Metadata: map[string]any{
+			"androidNativeOperation": OperationProviderInstall,
+			"bridgeProtocol":         "android_native",
+			"canonicalModelName":     "android.accessibility.provider.install",
+		},
+		ExecutionPolicy: capability.ToolExecutionPolicy{
+			Timeout:          10 * time.Second,
+			MaxConcurrency:   1,
+			Idempotent:       false,
+			ApprovalRequired: true,
+			AllowBackground:  true,
+		},
+		ResultPolicy: capability.ToolResultPolicy{
+			SanitizeError:  true,
+			MaxOutputBytes: 8192,
+		},
+		Runtime: capability.RuntimeBinding{
+			RuntimeType: runtime.RuntimeType,
+			RuntimeID:   runtime.RuntimeID,
+			HandlerName: OperationProviderInstall,
+		},
+		Enabled: true,
+	}
+}
+
+func buildProviderOpenSettingsTool(runtime capability.RuntimeBinding) capability.ToolDefinition {
+	inputSchema := json.RawMessage(`{"type":"object","properties":{},"additionalProperties":false}`)
+	outputSchema := json.RawMessage(`{"type":"object","properties":{"opened":{"type":"boolean"},"userActionRequired":{"type":"boolean"}}}`)
+	return capability.ToolDefinition{
+		ID:           "android.accessibility.provider.open_settings",
+		ModelName:    "android_accessibility_provider_open_settings",
+		Source:       capability.ToolSourceBuiltin,
+		Name:         "Open Accessibility Provider Settings",
+		Description:  "打开Amitia无障碍Provider的应用详情或系统设置。",
+		InputSchema:  inputSchema,
+		OutputSchema: outputSchema,
+		Permissions: []capability.PermissionRequirement{
+			{Capability: androidnative.PermissionAccessibilityManage, Risk: "high"},
+		},
+		RiskLevel:      capability.RiskHigh,
+		SideEffect:     capability.SideEffectSystem,
+		HasSideEffects: true,
+		Idempotent:     false,
+		Retryable:      false,
+		TimeoutMS:      10000,
+		ToolVersion:    capability.ToolVersion{SchemaVersion: 1, Revision: "b36-accessibility-v2"},
+		ModelExposure:  capability.ModelExposureRule{ExposedByDefault: true, Categories: []string{"android", "accessibility"}, Priority: 44},
+		Metadata: map[string]any{
+			"androidNativeOperation": OperationProviderOpenSettings,
+			"bridgeProtocol":         "android_native",
+			"canonicalModelName":     "android.accessibility.provider.open_settings",
+		},
+		ExecutionPolicy: capability.ToolExecutionPolicy{
+			Timeout:          10 * time.Second,
+			MaxConcurrency:   1,
+			Idempotent:       false,
+			ApprovalRequired: true,
+			AllowBackground:  true,
+		},
+		ResultPolicy: capability.ToolResultPolicy{
+			SanitizeError:  true,
+			MaxOutputBytes: 8192,
+		},
+		Runtime: capability.RuntimeBinding{
+			RuntimeType: runtime.RuntimeType,
+			RuntimeID:   runtime.RuntimeID,
+			HandlerName: OperationProviderOpenSettings,
+		},
+		Enabled: true,
 	}
 }
 
@@ -75,7 +223,7 @@ func buildStatusTool(runtime capability.RuntimeBinding) capability.ToolDefinitio
 
 	return capability.ToolDefinition{
 		ID:           "android.accessibility.status",
-		ModelName:    "android.accessibility.status",
+		ModelName:    "android_accessibility_status",
 		Source:       capability.ToolSourceBuiltin,
 		Name:         "Accessibility Status",
 		Description:  "查询Android无障碍服务的授权与连接状态。",
@@ -91,9 +239,11 @@ func buildStatusTool(runtime capability.RuntimeBinding) capability.ToolDefinitio
 		Retryable:      true,
 		TimeoutMS:      5000,
 		ToolVersion:    capability.ToolVersion{SchemaVersion: 1, Revision: "b27-accessibility-v1"},
+		ModelExposure:  capability.ModelExposureRule{ExposedByDefault: true, Categories: []string{"android", "accessibility"}, Priority: 45},
 		Metadata: map[string]any{
 			"androidNativeOperation": OperationStatus,
 			"bridgeProtocol":         "android_native",
+			"canonicalModelName":     "android.accessibility.status",
 		},
 		ExecutionPolicy: capability.ToolExecutionPolicy{
 			Timeout:          5 * time.Second,
@@ -134,7 +284,7 @@ func buildOpenSettingsTool(runtime capability.RuntimeBinding) capability.ToolDef
 
 	return capability.ToolDefinition{
 		ID:           "android.accessibility.open_settings",
-		ModelName:    "android.accessibility.open_settings",
+		ModelName:    "android_accessibility_open_settings",
 		Source:       capability.ToolSourceBuiltin,
 		Name:         "Open Accessibility Settings",
 		Description:  "打开Android系统无障碍设置页，引导用户手动开启Amitia无障碍服务。",
@@ -150,9 +300,11 @@ func buildOpenSettingsTool(runtime capability.RuntimeBinding) capability.ToolDef
 		Retryable:      false,
 		TimeoutMS:      5000,
 		ToolVersion:    capability.ToolVersion{SchemaVersion: 1, Revision: "b27-accessibility-v1"},
+		ModelExposure:  capability.ModelExposureRule{ExposedByDefault: true, Categories: []string{"android", "accessibility"}, Priority: 45},
 		Metadata: map[string]any{
 			"androidNativeOperation": OperationOpenSettings,
 			"bridgeProtocol":         "android_native",
+			"canonicalModelName":     "android.accessibility.open_settings",
 		},
 		ExecutionPolicy: capability.ToolExecutionPolicy{
 			Timeout:          5 * time.Second,

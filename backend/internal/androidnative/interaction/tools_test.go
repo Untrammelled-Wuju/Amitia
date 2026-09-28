@@ -1,6 +1,8 @@
 package interaction
 
 import (
+	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
@@ -9,18 +11,22 @@ import (
 func TestBuildInteractionTools(t *testing.T) {
 	tools := BuildInteractionTools()
 
-	if len(tools) != 9 {
-		t.Fatalf("expected 9 tools, got %d", len(tools))
+	if len(tools) != 13 {
+		t.Fatalf("expected 13 tools, got %d", len(tools))
 	}
 
 	expectedIDs := map[string]bool{
-		"android.interaction.status":      false,
-		"android.interaction.click":       false,
-		"android.interaction.long_click":  false,
-		"android.interaction.input_text":  false,
-		"android.interaction.clear_text":  false,
-		"android.interaction.scroll":      false,
-		"android.interaction.swipe":       false,
+		"android.interaction.status":        false,
+		"android.interaction.click":         false,
+		"android.interaction.long_click":    false,
+		"android.interaction.input_text":    false,
+		"android.interaction.clear_text":    false,
+		"android.interaction.scroll":        false,
+		"android.interaction.swipe":         false,
+		"android.interaction.node_action":   false,
+		"android.interaction.global_action": false,
+		"android.interaction.gesture":       false,
+		"android.interaction.screenshot":    false,
 		"android.interaction.visual_locate": false,
 		"android.interaction.visual_click":  false,
 	}
@@ -28,6 +34,16 @@ func TestBuildInteractionTools(t *testing.T) {
 	for _, tool := range tools {
 		if _, exists := expectedIDs[tool.ID]; !exists {
 			t.Fatalf("unexpected tool ID: %s", tool.ID)
+		}
+		if tool.ModelName == "" || tool.ModelName == tool.ID {
+			t.Fatalf("tool %s should expose an OpenAI-compatible model name", tool.ID)
+		}
+		if tool.Metadata["canonicalModelName"] != tool.ID {
+			t.Fatalf("tool %s canonical model name = %v", tool.ID, tool.Metadata["canonicalModelName"])
+		}
+		var schema map[string]any
+		if err := json.Unmarshal(tool.InputSchema, &schema); err != nil {
+			t.Fatalf("tool %s has invalid input schema: %v", tool.ID, err)
 		}
 		expectedIDs[tool.ID] = true
 	}
@@ -80,8 +96,8 @@ func TestStatusTool_Definition(t *testing.T) {
 	if statusTool == nil {
 		t.Fatal("status tool not found")
 	}
-	if statusTool.ModelName != "android.interaction.status" {
-		t.Fatalf("expected model name 'android.interaction.status', got %s", statusTool.ModelName)
+	if statusTool.ModelName != "android_interaction_status" {
+		t.Fatalf("expected model name 'android_interaction_status', got %s", statusTool.ModelName)
 	}
 	if !statusTool.Idempotent {
 		t.Fatal("status tool should be idempotent")
@@ -178,6 +194,32 @@ func TestInputTextTool_Definition(t *testing.T) {
 	}
 	if tool.SideEffect != capability.SideEffectWrite {
 		t.Fatalf("input_text should be Write, got %s", tool.SideEffect)
+	}
+}
+
+func TestInteractionTools_ExposeShizukuFallback(t *testing.T) {
+	expected := map[string]bool{
+		"android.interaction.click":      false,
+		"android.interaction.long_click": false,
+		"android.interaction.input_text": false,
+		"android.interaction.scroll":     false,
+		"android.interaction.swipe":      false,
+	}
+
+	for _, tool := range BuildInteractionTools() {
+		if _, exists := expected[tool.ID]; !exists {
+			continue
+		}
+		if !strings.Contains(string(tool.InputSchema), `"allowShizukuFallback"`) {
+			t.Fatalf("tool %s does not expose allowShizukuFallback", tool.ID)
+		}
+		expected[tool.ID] = true
+	}
+
+	for toolID, found := range expected {
+		if !found {
+			t.Fatalf("tool %s not found", toolID)
+		}
 	}
 }
 

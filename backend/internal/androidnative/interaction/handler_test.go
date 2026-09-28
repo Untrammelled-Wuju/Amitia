@@ -53,6 +53,34 @@ type mockAccessibilityExecutor struct {
 	supportFunc func(node uitree.ResolvedUINode, action string) bool
 }
 
+type mockAdvancedAccessibilityExecutor struct {
+	mockAccessibilityExecutor
+	globalFunc     func(ctx context.Context, action string) (map[string]any, error)
+	gestureFunc    func(ctx context.Context, payload map[string]any) (map[string]any, error)
+	screenshotFunc func(ctx context.Context, displayID int) (map[string]any, error)
+}
+
+func (m *mockAdvancedAccessibilityExecutor) PerformGlobalAction(ctx context.Context, action string) (map[string]any, error) {
+	if m.globalFunc != nil {
+		return m.globalFunc(ctx, action)
+	}
+	return map[string]any{"success": true, "action": action}, nil
+}
+
+func (m *mockAdvancedAccessibilityExecutor) PerformGesture(ctx context.Context, payload map[string]any) (map[string]any, error) {
+	if m.gestureFunc != nil {
+		return m.gestureFunc(ctx, payload)
+	}
+	return map[string]any{"success": true}, nil
+}
+
+func (m *mockAdvancedAccessibilityExecutor) TakeScreenshot(ctx context.Context, displayID int) (map[string]any, error) {
+	if m.screenshotFunc != nil {
+		return m.screenshotFunc(ctx, displayID)
+	}
+	return map[string]any{"success": true, "imageBase64": "AA=="}, nil
+}
+
 func (m *mockAccessibilityExecutor) PerformNodeAction(ctx context.Context, node uitree.ResolvedUINode, action string, args map[string]any) error {
 	if m.performFunc != nil {
 		return m.performFunc(ctx, node, action, args)
@@ -615,6 +643,93 @@ func TestHandler_Swipe_Coordinates(t *testing.T) {
 	}
 }
 
+func TestHandler_NodeAction_Generic(t *testing.T) {
+	accessibility := &mockAdvancedAccessibilityExecutor{
+		mockAccessibilityExecutor: mockAccessibilityExecutor{
+			performFunc: func(ctx context.Context, node uitree.ResolvedUINode, action string, args map[string]any) error {
+				if node.NativeRef != "api:1:2:root" || action != "copy" {
+					t.Fatalf("node=%+v action=%s", node, action)
+				}
+				return nil
+			},
+		},
+	}
+	service := NewService(
+		&mockNodeResolver{},
+		&mockSnapshotResolver{},
+		accessibility,
+		nil,
+		&mockVisualLocator{},
+		nil,
+		nil,
+		nil,
+		&mockVerifier{},
+		DefaultPolicy(),
+	)
+	handler := NewHandler(service)
+	resp := handler.Execute(context.Background(), capability.AndroidBridgeRequest{
+		ProtocolVersion: 1,
+		RequestID:       "node-action",
+		Operation:       OperationNodeAction,
+		Payload: map[string]any{
+			"nativeRef": "api:1:2:root",
+			"action":    "copy",
+		},
+	})
+	if resp.Status != "success" {
+		t.Fatalf("status = %s: %+v", resp.Status, resp.Error)
+	}
+}
+
+func TestHandler_AdvancedAccessibilityOperations(t *testing.T) {
+	accessibility := &mockAdvancedAccessibilityExecutor{}
+	service := NewService(
+		&mockNodeResolver{},
+		&mockSnapshotResolver{},
+		accessibility,
+		nil,
+		&mockVisualLocator{},
+		nil,
+		nil,
+		nil,
+		&mockVerifier{},
+		DefaultPolicy(),
+	)
+	handler := NewHandler(service)
+
+	global := handler.Execute(context.Background(), capability.AndroidBridgeRequest{
+		ProtocolVersion: 1,
+		RequestID:       "global",
+		Operation:       OperationGlobalAction,
+		Payload:         map[string]any{"action": "home"},
+	})
+	if global.Status != "success" || global.Result["success"] != true {
+		t.Fatalf("global = %+v", global)
+	}
+
+	gesture := handler.Execute(context.Background(), capability.AndroidBridgeRequest{
+		ProtocolVersion: 1,
+		RequestID:       "gesture",
+		Operation:       OperationGesture,
+		Payload: map[string]any{
+			"strokes": []any{map[string]any{"points": []any{map[string]any{"x": 1, "y": 2}}}},
+		},
+	})
+	if gesture.Status != "success" || gesture.Result["success"] != true {
+		t.Fatalf("gesture = %+v", gesture)
+	}
+
+	screenshot := handler.Execute(context.Background(), capability.AndroidBridgeRequest{
+		ProtocolVersion: 1,
+		RequestID:       "screenshot",
+		Operation:       OperationScreenshot,
+		Payload:         map[string]any{"displayId": 0},
+	})
+	if screenshot.Status != "success" || screenshot.Result["success"] != true {
+		t.Fatalf("screenshot = %+v", screenshot)
+	}
+}
+
 func TestHandler_VisualLocate_NilService(t *testing.T) {
 	handler := NewHandler(nil)
 
@@ -731,6 +846,57 @@ func TestHandler_RootFallback(t *testing.T) {
 	strategy, _ := resp.Result["strategy"].(string)
 	if strategy != StrategyRoot {
 		t.Fatalf("expected root strategy fallback, got %s", strategy)
+	}
+}
+
+func TestHandler_Click_ShizukuFallbackDefault(t *testing.T) {
+	accessibility := &mockAccessibilityExecutor{
+		supportFunc: func(node uitree.ResolvedUINode, action string) bool {
+			return false
+		},
+	}
+	shizukuCalled := false
+	shizuku := &mockShizukuExecutor{
+		tapFunc: func(ctx context.Context, x, y int) error {
+			shizukuCalled = true
+			return nil
+		},
+	}
+	service := NewService(
+		&mockNodeResolver{},
+		&mockSnapshotResolver{},
+		accessibility,
+		nil,
+		&mockVisualLocator{},
+		nil,
+		nil,
+		shizuku,
+		&mockVerifier{},
+		DefaultPolicy(),
+	)
+	handler := NewHandler(service)
+
+	resp := handler.Execute(context.Background(), capability.AndroidBridgeRequest{
+		ProtocolVersion: 1,
+		RequestID:       "test-shizuku-default",
+		Operation:       OperationClick,
+		Payload: map[string]any{
+			"target": map[string]any{
+				"snapshotId": "snap_1",
+				"nodeId":     "node_1",
+			},
+		},
+	})
+
+	if resp.Status != "success" {
+		t.Fatalf("expected success status, got %s: %+v", resp.Status, resp.Error)
+	}
+	strategy, _ := resp.Result["strategy"].(string)
+	if strategy != StrategyShizuku {
+		t.Fatalf("expected shizuku strategy fallback, got %s", strategy)
+	}
+	if !shizukuCalled {
+		t.Fatal("expected shizuku executor to be called")
 	}
 }
 

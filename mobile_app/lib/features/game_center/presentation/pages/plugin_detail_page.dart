@@ -45,8 +45,9 @@ class _PluginDetailPageState extends ConsumerState<PluginDetailPage> {
   }
 
   Future<void> _loadPlugin({bool refreshUi = false}) async {
-    if (widget.pluginId.trim().isEmpty || widget.extensionId.trim().isEmpty)
+    if (widget.pluginId.trim().isEmpty || widget.extensionId.trim().isEmpty) {
       return;
+    }
     await Future.wait([
       ref
           .read(gameCenterControllerProvider.notifier)
@@ -162,22 +163,37 @@ class _PluginDetailPageState extends ConsumerState<PluginDetailPage> {
       'capabilities': detail.capabilities,
     };
 
-    return MobileExtensionSlot(
-      slotId: 'extension.detail.tab',
-      extensionId: detail.extensionId,
-      context: slotContext,
-      fallback: Card(
-        child: Padding(
-          padding: EdgeInsets.all(AppSpacing.lg),
-          child: Column(
-            children: [
-              Icon(Icons.sports_esports_outlined, size: 36),
-              SizedBox(height: AppSpacing.sm),
-              Text('该游戏扩展暂未提供专属控制界面', style: AppTypography.body(context)),
-            ],
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        MobileExtensionSlot(
+          slotId: 'extension.detail.tab',
+          extensionId: detail.extensionId,
+          context: slotContext,
+          fallback: Card(
+            child: Padding(
+              padding: EdgeInsets.all(AppSpacing.lg),
+              child: Column(
+                children: [
+                  Icon(Icons.sports_esports_outlined, size: 36),
+                  SizedBox(height: AppSpacing.sm),
+                  Text(
+                    '该游戏扩展暂未提供专属控制界面',
+                    style: AppTypography.body(context),
+                  ),
+                ],
+              ),
+            ),
           ),
         ),
-      ),
+        SizedBox(height: AppSpacing.sm),
+        MobileExtensionSlot(
+          slotId: 'extension.detail.action',
+          extensionId: detail.extensionId,
+          context: slotContext,
+          fallback: const SizedBox.shrink(),
+        ),
+      ],
     );
   }
 

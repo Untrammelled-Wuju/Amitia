@@ -3,6 +3,7 @@ package com.amitia.amitia_app.nativeprovider.shizuku
 import android.content.ServiceConnection
 import android.os.IBinder
 import rikka.shizuku.Shizuku
+import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicReference
 
 enum class ShizukuServiceState {
@@ -24,12 +25,16 @@ object ShizukuCommandServiceHolder {
     @Volatile
     private var bindingInProgress = false
 
-    private var serviceConnectedListener: (() -> Unit)? = null
+    private val serviceConnectedListeners = CopyOnWriteArrayList<() -> Unit>()
 
     fun currentState(): ShizukuServiceState = stateRef.get()
 
-    fun setServiceConnectedListener(listener: (() -> Unit)?) {
-        serviceConnectedListener = listener
+    fun addServiceConnectedListener(listener: () -> Unit) {
+        serviceConnectedListeners.addIfAbsent(listener)
+    }
+
+    fun removeServiceConnectedListener(listener: () -> Unit) {
+        serviceConnectedListeners.remove(listener)
     }
 
     fun currentService(): IPrivilegedCommandService? {
@@ -75,7 +80,7 @@ object ShizukuCommandServiceHolder {
                         stateRef.set(ShizukuServiceState.ERROR)
                     }
                     bindingInProgress = false
-                    serviceConnectedListener?.invoke()
+                    notifyServiceStateChanged()
                 }
 
                 override fun onServiceDisconnected(name: android.content.ComponentName?) {
@@ -83,6 +88,7 @@ object ShizukuCommandServiceHolder {
                     stateRef.set(ShizukuServiceState.DEAD)
                     connection = null
                     bindingInProgress = false
+                    notifyServiceStateChanged()
                 }
 
                 override fun onBindingDied(name: android.content.ComponentName?) {
@@ -105,6 +111,17 @@ object ShizukuCommandServiceHolder {
         stateRef.set(ShizukuServiceState.DEAD)
         connection = null
         bindingInProgress = false
+        notifyServiceStateChanged()
+    }
+
+    private fun notifyServiceStateChanged() {
+        serviceConnectedListeners.forEach { listener ->
+            try {
+                listener.invoke()
+            } catch (_: Exception) {
+            }
+        }
+        serviceConnectedListeners.clear()
     }
 
     private var deathRecipient: IBinder.DeathRecipient? = null
@@ -134,6 +151,7 @@ object ShizukuCommandServiceHolder {
             connection = null
             stateRef.set(ShizukuServiceState.DEAD)
             bindingInProgress = false
+            notifyServiceStateChanged()
         }
     }
 
@@ -143,5 +161,6 @@ object ShizukuCommandServiceHolder {
         connection = null
         stateRef.set(ShizukuServiceState.DEAD)
         bindingInProgress = false
+        notifyServiceStateChanged()
     }
 }

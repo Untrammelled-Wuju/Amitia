@@ -12,6 +12,11 @@ const (
 	OperationScroll = "interaction.scroll"
 	OperationSwipe  = "interaction.swipe"
 
+	OperationNodeAction   = "interaction.node_action"
+	OperationGlobalAction = "interaction.global_action"
+	OperationGesture      = "interaction.gesture"
+	OperationScreenshot   = "interaction.screenshot"
+
 	OperationVisualLocate = "interaction.visual_locate"
 	OperationVisualClick  = "interaction.visual_click"
 )
@@ -28,9 +33,9 @@ const (
 )
 
 const (
-	TargetNode        = "node"
-	TargetCoordinate  = "coordinate"
-	TargetVisual      = "visual"
+	TargetNode       = "node"
+	TargetCoordinate = "coordinate"
+	TargetVisual     = "visual"
 )
 
 const (

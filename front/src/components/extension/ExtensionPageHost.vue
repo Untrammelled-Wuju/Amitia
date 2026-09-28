@@ -5,6 +5,7 @@ import { useExtensionUIStore } from "@/stores/extensionUI";
 import type { UIContributionSummary } from "@/stores/extensionUI";
 import { openExtensionPage, pollPageSessionStatus, closePageSession } from "@/api/extension";
 import { resolveHostEnvironment } from "@/composables/useHostEnvironment";
+import { resolvePluginSurface } from "@/ui-runtime/pluginSurfaceResolver";
 
 const SchemaUIRenderer = defineAsyncComponent(() => import("./SchemaUIRenderer.vue"));
 const SandboxWebUIFrame = defineAsyncComponent(() => import("./SandboxWebUIFrame.vue"));
@@ -81,9 +82,6 @@ const isReady = computed(() => pageState.value === "ready");
 const isError = computed(() =>
   ["failed", "disabled", "not_installed", "incompatible"].includes(pageState.value)
 );
-const isSchemaPage = computed(() => pageSpec.value?.entryKind === "schema_page");
-const isWebPage = computed(() => pageSpec.value?.entryKind === "web_page");
-
 const pageContribution = computed<UIContributionSummary | null>(() => {
   if (!pageSpec.value) return null;
   return {
@@ -107,6 +105,11 @@ const pageContribution = computed<UIContributionSummary | null>(() => {
     actions: [],
   };
 });
+const pageSurfaceKind = computed(() =>
+  pageContribution.value ? resolvePluginSurface(pageContribution.value) : "none",
+);
+const isSchemaPage = computed(() => pageSurfaceKind.value === "schema");
+const isWebPage = computed(() => pageSurfaceKind.value === "web");
 
 const pageContext = computed<Record<string, unknown>>(() => {
   const env = resolveHostEnvironment();

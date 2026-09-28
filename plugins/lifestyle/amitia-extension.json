@@ -8,7 +8,7 @@
     "description": {
       "default": "管理角色生活场景、作息、工作、事件、日程和生活状态。"
     },
-    "version": "1.0.10",
+    "version": "1.0.11",
     "license": "AGPL-3.0-only",
     "homepage": "https://amitia.untrammelled.top",
     "categories": [
@@ -177,7 +177,7 @@
             "contribution_id": "lifestyle-character-tab",
             "extension_id": "com.amitia/lifestyle",
             "module_id": "lifestyle-runtime",
-            "kind": "web_page",
+            "kind": "schema_page",
             "slot": {
               "slot_id": "character.detail.tab",
               "contract_version": 1
@@ -193,13 +193,12 @@
               "icon": "life-system"
             },
             "entry": {
-              "type": "web_restricted",
-              "path": "modules/lifestyle-ui/desktop/index.html",
+              "type": "schema_renderer",
+              "schema_path": "modules/lifestyle-ui/desktop/schema.json",
               "content_hash": "pending"
             },
             "sandbox": {
-              "type": "web_restricted",
-              "enable_scripts": true
+              "type": "schema_renderer"
             },
             "ordering": {
               "priority": 230
@@ -249,7 +248,7 @@
             "contribution_id": "lifestyle-character-tab-mobile",
             "extension_id": "com.amitia/lifestyle",
             "module_id": "lifestyle-runtime",
-            "kind": "web_page",
+            "kind": "schema_page",
             "slot": {
               "slot_id": "character.detail.tab",
               "contract_version": 1
@@ -265,13 +264,12 @@
               "icon": "life-system"
             },
             "entry": {
-              "type": "web_restricted",
-              "path": "modules/lifestyle-ui/mobile/index.html",
+              "type": "schema_renderer",
+              "schema_path": "modules/lifestyle-ui/mobile/schema.json",
               "content_hash": "pending"
             },
             "sandbox": {
-              "type": "web_restricted",
-              "enable_scripts": true
+              "type": "schema_renderer"
             },
             "ordering": {
               "priority": 230
@@ -320,7 +318,7 @@
             "contribution_id": "lifestyle-page",
             "extension_id": "com.amitia/lifestyle",
             "module_id": "lifestyle-runtime",
-            "kind": "web_page",
+            "kind": "schema_page",
             "slot": {
               "slot_id": "provider.page.provider",
               "contract_version": 1
@@ -336,16 +334,21 @@
               "icon": "life-system"
             },
             "entry": {
-              "type": "web_restricted",
-              "path": "modules/lifestyle-ui/mobile/index.html",
+              "type": "schema_renderer",
+              "schema_path": "modules/lifestyle-ui/mobile/schema.json",
               "content_hash": "pending"
             },
             "sandbox": {
-              "type": "web_restricted",
-              "enable_scripts": true
+              "type": "schema_renderer"
             },
             "ordering": {
               "priority": 230
+            },
+            "visibility": {
+              "platforms": [
+                "android",
+                "ios"
+              ]
             },
             "actions": [
               {
@@ -366,6 +369,73 @@
           }
         },
         {
+          "id": "lifestyle-desktop-page",
+          "kind": "ui_page",
+          "name": {
+            "default": "生活"
+          },
+          "description": {
+            "default": "管理角色生活规则、日程、状态、作息、工作和事件。"
+          },
+          "requiredPermissions": [
+            "tool.invoke"
+          ],
+          "spec": {
+            "contribution_id": "lifestyle-desktop-page",
+            "extension_id": "com.amitia/lifestyle",
+            "module_id": "lifestyle-runtime",
+            "kind": "schema_page",
+            "slot": {
+              "slot_id": "provider.page.provider",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "生活"
+              },
+              "description": {
+                "default": "管理角色生活规则、日程、状态、作息、工作和事件。"
+              },
+              "icon": "life-system"
+            },
+            "entry": {
+              "type": "schema_renderer",
+              "schema_path": "modules/lifestyle-ui/desktop/schema.json",
+              "content_hash": "pending"
+            },
+            "sandbox": {
+              "type": "schema_renderer"
+            },
+            "ordering": {
+              "priority": 230
+            },
+            "visibility": {
+              "platforms": [
+                "windows",
+                "linux",
+                "macos"
+              ]
+            },
+            "actions": [
+              {
+                "action_id": "command",
+                "title": {
+                  "default": "执行生活系统操作"
+                },
+                "target": {
+                  "type": "tool",
+                  "tool_id": "com.amitia/lifestyle/command"
+                },
+                "risk_level": "medium"
+              }
+            ],
+            "integrity": {
+              "definition_hash": "lifestyle-desktop-page-v1"
+            }
+          }
+        },
+        {
           "id": "lifestyle-routes",
           "kind": "ui_provider",
           "name": {
@@ -378,6 +448,18 @@
             "priority": 220,
             "trustLevel": "official",
             "entries": {
+              "web": {
+                "type": "declarative"
+              },
+              "electron_windows": {
+                "type": "declarative"
+              },
+              "electron_macos": {
+                "type": "declarative"
+              },
+              "electron_linux": {
+                "type": "declarative"
+              },
               "mobile": {
                 "type": "declarative"
               }
@@ -409,8 +491,24 @@
             "priority": 220,
             "trustLevel": "official",
             "entries": {
+              "web": {
+                "type": "schema_renderer",
+                "contributionId": "lifestyle-desktop-page"
+              },
+              "electron_windows": {
+                "type": "schema_renderer",
+                "contributionId": "lifestyle-desktop-page"
+              },
+              "electron_macos": {
+                "type": "schema_renderer",
+                "contributionId": "lifestyle-desktop-page"
+              },
+              "electron_linux": {
+                "type": "schema_renderer",
+                "contributionId": "lifestyle-desktop-page"
+              },
               "mobile": {
-                "type": "web_restricted",
+                "type": "schema_renderer",
                 "contributionId": "lifestyle-page"
               }
             },

@@ -16,6 +16,12 @@ const (
 	OperationList    = "virtual_display.list"
 	OperationResize  = "virtual_display.resize"
 	OperationRelease = "virtual_display.release"
+	OperationLaunch  = "virtual_display.launch"
+	OperationCapture = "virtual_display.capture"
+	OperationTap     = "virtual_display.tap"
+	OperationSwipe   = "virtual_display.swipe"
+	OperationKey     = "virtual_display.key"
+	OperationText    = "virtual_display.text"
 )
 
 const (
@@ -61,6 +67,8 @@ func (h *Handler) Execute(ctx context.Context, request capability.AndroidBridgeR
 		return h.handleResize(ctx, request)
 	case OperationRelease:
 		return h.handleRelease(ctx, request)
+	case OperationLaunch, OperationCapture, OperationTap, OperationSwipe, OperationKey, OperationText:
+		return h.handleDisplayOperation(ctx, request)
 	default:
 		return capability.AndroidBridgeResponse{
 			ProtocolVersion: request.ProtocolVersion,
@@ -71,6 +79,25 @@ func (h *Handler) Execute(ctx context.Context, request capability.AndroidBridgeR
 				Message: "unsupported virtual display operation: " + request.Operation,
 			},
 		}
+	}
+}
+
+func (h *Handler) handleDisplayOperation(ctx context.Context, request capability.AndroidBridgeRequest) capability.AndroidBridgeResponse {
+	if h.service == nil {
+		return errorResponse(request, ErrVirtualDisplayUnavailable, "service not initialized")
+	}
+	result, err := h.service.ExecuteDisplayOperation(ctx, request.Operation, request.Payload)
+	if err != nil {
+		if ve, ok := err.(*Error); ok {
+			return errorResponse(request, ve.Code, ve.Message)
+		}
+		return errorResponse(request, ErrVirtualDisplayNative, err.Error())
+	}
+	return capability.AndroidBridgeResponse{
+		ProtocolVersion: request.ProtocolVersion,
+		RequestID:       request.RequestID,
+		Status:          "success",
+		Result:          result,
 	}
 }
 
@@ -263,10 +290,10 @@ func (s *Service) Status(ctx context.Context) StatusResult {
 		Supported:                 s.bridge != nil,
 		FeatureSecondaryDisplays:  s.bridge != nil,
 		CanCreate:                 s.bridge != nil,
-		FrameSourceSupported:      s.bridge != nil,
-		UITreeSupported:           s.bridge != nil,
-		GestureSupported:          s.bridge != nil,
-		ThirdPartyLaunchSupported: s.bridge != nil,
+		FrameSourceSupported:      false,
+		UITreeSupported:           false,
+		GestureSupported:          false,
+		ThirdPartyLaunchSupported: false,
 		State:                     "unavailable",
 		Reason:                    "native bridge not configured",
 	}
@@ -289,6 +316,10 @@ func (s *Service) Status(ctx context.Context) StatusResult {
 		} else {
 			result.Reason = ""
 		}
+		result.FrameSourceSupported = boolValue(native["frameSourceSupported"], false)
+		result.UITreeSupported = boolValue(native["uiTreeSupported"], false)
+		result.GestureSupported = boolValue(native["gestureSupported"], false)
+		result.ThirdPartyLaunchSupported = boolValue(native["thirdPartyLaunchSupported"], false)
 	} else if err != nil {
 		result.State = "failed"
 		result.Reason = err.Error()
@@ -373,10 +404,10 @@ func (s *Service) Create(ctx context.Context, req CreateRequest) (*CreateResult,
 	info := recordToInfo(stored)
 	return &CreateResult{
 		Display:                   info,
-		FrameSourceReady:          rec.SurfaceAttached,
-		ThirdPartyLaunchSupported: true,
-		UITreeSupported:           true,
-		GestureSupported:          true,
+		FrameSourceReady:          boolValue(result["frameSourceReady"], rec.SurfaceAttached),
+		ThirdPartyLaunchSupported: boolValue(result["thirdPartyLaunchSupported"], false),
+		UITreeSupported:           boolValue(result["uiTreeSupported"], false),
+		GestureSupported:          boolValue(result["gestureSupported"], false),
 	}, nil
 }
 
@@ -439,6 +470,26 @@ func (s *Service) Release(ctx context.Context, req ReleaseRequest) (*ReleaseResu
 		return nil, err
 	}
 	return &ReleaseResult{Released: true, WasActive: wasActive, State: string(StateReleased), Status: "released"}, nil
+}
+
+func (s *Service) ExecuteDisplayOperation(ctx context.Context, operation string, payload map[string]any) (map[string]any, error) {
+	if s.bridge == nil {
+		return nil, NewError(ErrVirtualDisplayUnavailable, "native bridge not configured")
+	}
+	bridgePayload := make(map[string]any, len(payload)+1)
+	for key, value := range payload {
+		if key == "ref" {
+			continue
+		}
+		bridgePayload[key] = value
+	}
+	ref := VirtualDisplayRef(stringValue(payload["ref"], ""))
+	rec := s.store.GetByRef(ref)
+	if rec == nil {
+		return nil, NewError(ErrVirtualDisplayNotFound, "virtual display not found")
+	}
+	bridgePayload["displayId"] = rec.DisplayID
+	return s.bridge.Execute(ctx, operation, bridgePayload)
 }
 
 func numberAsInt(v any) int {

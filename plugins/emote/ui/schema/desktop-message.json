@@ -1,0 +1,100 @@
+{
+  "schemaVersion": "schema-ui/1",
+  "type": "document",
+  "title": "表情消息（桌面端）",
+  "actions": [],
+  "children": [
+    {
+      "id": "emote-message-row",
+      "type": "row",
+      "children": [
+        {
+          "id": "emote-message-image",
+          "type": "image",
+          "props": {
+            "alt": "表情",
+            "fit": "contain",
+            "preview": true,
+            "width": 180,
+            "height": 180
+          },
+          "bindings": [
+            {
+              "path": "src",
+              "source": "context",
+              "sourcePath": "message.originalAssetReference"
+            }
+          ]
+        },
+        {
+          "id": "emote-message-fallback-image",
+          "type": "image",
+          "props": {
+            "alt": "表情",
+            "fit": "contain",
+            "preview": true,
+            "width": 180,
+            "height": 180
+          },
+          "visibleWhen": [
+            {
+              "field": "message.originalAssetReference",
+              "operator": "is_null"
+            }
+          ],
+          "bindings": [
+            {
+              "path": "src",
+              "source": "context",
+              "sourcePath": "message.fallbackAssetReference"
+            }
+          ]
+        },
+        {
+          "id": "emote-message-meta",
+          "type": "stack",
+          "children": [
+            {
+              "id": "emote-message-alt",
+              "type": "text",
+              "props": {
+                "variant": "caption"
+              },
+              "bindings": [
+                {
+                  "path": "text",
+                  "source": "context",
+                  "sourcePath": "message.altText"
+                }
+              ]
+            },
+            {
+              "id": "emote-message-status",
+              "type": "badge",
+              "props": {
+                "type": "info"
+              },
+              "bindings": [
+                {
+                  "path": "text",
+                  "source": "context",
+                  "sourcePath": "message.status"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "theme": {
+    "mode": "auto"
+  },
+  "performanceBudget": {
+    "maxRenderTimeMs": 60,
+    "maxLayoutCount": 40,
+    "maxNodeCount": 40,
+    "maxDataFetchCount": 0,
+    "maxActionCount": 0
+  }
+}

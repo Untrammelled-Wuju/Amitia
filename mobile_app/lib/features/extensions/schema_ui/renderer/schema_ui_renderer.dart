@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart' hide ActionDispatcher;
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -62,6 +63,8 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
   final Map<String, dynamic> _storageState = {};
   final Map<String, DataSourceResult> _dataSources = {};
   final Set<String> _dismissedNodeIds = <String>{};
+  String _lifecycleMountKey = '';
+  bool _lifecycleRunning = false;
 
   @override
   void initState() {
@@ -78,6 +81,9 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
     }
     unawaited(_loadStorageBindings());
     unawaited(_loadDataSources());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) unawaited(_runMountLifecycle());
+    });
   }
 
   @override
@@ -86,12 +92,16 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
     if (!identical(oldWidget.document, widget.document) ||
         oldWidget.extensionId != widget.extensionId ||
         oldWidget.contributionId != widget.contributionId) {
+      _lifecycleMountKey = '';
       widget.dataSourceLoader?.invalidate(
         widget.extensionId,
         widget.contributionId,
       );
       unawaited(_loadStorageBindings());
       unawaited(_loadDataSources());
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) unawaited(_runMountLifecycle());
+      });
     }
   }
 
@@ -280,6 +290,9 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
   Future<void> _handleAction(
     SchemaUIActionBinding action, {
     String nodeId = '',
+    Map<String, dynamic>? item,
+    List<Map<String, dynamic>>? files,
+    bool reportFailure = true,
   }) async {
     if (!mounted || action.actionId.trim().isEmpty) return;
     final confirmation = action.confirmation?.trim() ?? '';
@@ -310,7 +323,8 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
       actionId: action.actionId,
       target: action.target,
       input: <String, dynamic>{
-        ...?action.input,
+        ..._resolvedActionInput(action.input, item: item, files: files),
+        if (files != null) 'files': files,
         if (nodeId.isNotEmpty) 'node_id': nodeId,
         'form_state': Map<String, dynamic>.from(_formState),
         'local_state': Map<String, dynamic>.from(_localState),
@@ -337,6 +351,7 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
       final formState = data['form_state'] ?? data['formState'];
       final localState = data['local_state'] ?? data['localState'];
       final contextUpdate = data['context_update'] ?? data['contextUpdate'];
+      final stateUpdate = data['state_update'] ?? data['stateUpdate'];
       if (data['clientExecute'] == true && data['text'] is String) {
         await Clipboard.setData(ClipboardData(text: data['text'] as String));
       }
@@ -350,6 +365,9 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
         }
         if (contextUpdate is Map) {
           _localState.addAll(contextUpdate.cast<String, dynamic>());
+        }
+        if (action.statePath?.trim().isNotEmpty == true) {
+          _setPath(_localState, action.statePath!.trim(), stateUpdate ?? data);
         }
       });
       final message = data['message']?.toString().trim() ?? '';
@@ -365,7 +383,7 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
       }
     } catch (error) {
       debugPrint('SchemaUI host action failed: $error');
-      if (mounted) {
+      if (mounted && reportFailure) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
@@ -387,6 +405,67 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
     setState(() {
       _setPath(_localState, path, value);
     });
+  }
+
+  Map<String, dynamic> _resolvedActionInput(
+    Map<String, dynamic>? input, {
+    Map<String, dynamic>? item,
+    List<Map<String, dynamic>>? files,
+  }) {
+    dynamic resolve(dynamic value) {
+      if (value is List) return value.map(resolve).toList(growable: false);
+      if (value is Map) {
+        return value.map(
+          (key, entry) => MapEntry(key.toString(), resolve(entry)),
+        );
+      }
+      if (value is! String || !value.startsWith(r'$')) return value;
+      final path = value.substring(1);
+      final separator = path.indexOf('.');
+      if (separator <= 0) return value;
+      final source = path.substring(0, separator);
+      final lookup = path.substring(separator + 1);
+      switch (source) {
+        case 'form':
+        case 'form_state':
+          return _lookupPath(_formState, lookup);
+        case 'item':
+          return _lookupPath(item, lookup);
+        case 'state':
+          return _lookupPath(_localState, lookup);
+        case 'input':
+          return _lookupPath(widget.initialContext?['input'], lookup);
+        case 'context':
+          return _lookupPath(widget.initialContext, lookup);
+        case 'files':
+          return files;
+        default:
+          return _lookupPath(widget.initialContext, path);
+      }
+    }
+
+    final resolved = resolve(input ?? const <String, dynamic>{});
+    return resolved is Map
+        ? resolved.map((key, value) => MapEntry(key.toString(), value))
+        : <String, dynamic>{};
+  }
+
+  dynamic _lookupPath(dynamic source, String path) {
+    dynamic current = source;
+    for (final segment in path.split('.')) {
+      if (current is Map) {
+        current = current[segment];
+        continue;
+      }
+      if (current is List) {
+        final index = int.tryParse(segment);
+        if (index == null || index < 0 || index >= current.length) return null;
+        current = current[index];
+        continue;
+      }
+      return null;
+    }
+    return current;
   }
 
   void _setPath(Map<String, dynamic> map, String path, dynamic value) {
@@ -505,10 +584,40 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
   Future<void> _handleActions(
     List<SchemaUIActionBinding> actions, {
     String nodeId = '',
+    Map<String, dynamic>? item,
+    List<Map<String, dynamic>>? files,
+    bool reportFailure = true,
   }) async {
     for (final action in actions) {
-      await _handleAction(action, nodeId: nodeId);
+      await _handleAction(
+        action,
+        nodeId: nodeId,
+        item: item,
+        files: files,
+        reportFailure: reportFailure,
+      );
       if (!mounted) return;
+    }
+  }
+
+  Future<void> _runMountLifecycle() async {
+    final lifecycle = widget.document.lifecycle;
+    if (lifecycle == null || lifecycle.onMount.isEmpty || _lifecycleRunning) {
+      return;
+    }
+    final key =
+        '${widget.extensionId}:${widget.contributionId}:${widget.document.hashCode}';
+    if (_lifecycleMountKey == key) return;
+    _lifecycleMountKey = key;
+    _lifecycleRunning = true;
+    try {
+      await _handleActions(
+        lifecycle.onMount,
+        nodeId: 'lifecycle:mount',
+        reportFailure: false,
+      );
+    } finally {
+      _lifecycleRunning = false;
     }
   }
 
@@ -601,6 +710,10 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
           return _buildButtonGroup(context, renderedNode);
         case SchemaUI.nodeList:
           return _buildList(context, renderedNode, depth);
+        case SchemaUI.nodeGallery:
+          return _buildGallery(context, renderedNode);
+        case SchemaUI.nodeFilePicker:
+          return _buildFilePicker(context, renderedNode);
         case SchemaUI.nodeTable:
           return _buildTable(context, renderedNode);
         case SchemaUI.nodeEmptyState:
@@ -1602,11 +1715,23 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
         if (raw is Map) {
           final value = raw.containsKey('value')
               ? raw['value']
-              : (raw['id'] ?? raw['label'] ?? raw['text']);
+              : (raw['id'] ??
+                    raw['value'] ??
+                    raw['label'] ??
+                    raw['displayName'] ??
+                    raw['name'] ??
+                    raw['text']);
           options.add(
             _SchemaSelectOption(
               value: value,
-              label: (raw['label'] ?? raw['text'] ?? value ?? '').toString(),
+              label:
+                  (raw['label'] ??
+                          raw['text'] ??
+                          raw['displayName'] ??
+                          raw['name'] ??
+                          value ??
+                          '')
+                      .toString(),
             ),
           );
         } else {
@@ -1998,6 +2123,210 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
           )
           .toList(),
     );
+  }
+
+  Widget _buildGallery(BuildContext context, SchemaUINode node) {
+    final items = node.props?['items'];
+    if (items is! List || items.isEmpty) {
+      return SizedBox(
+        height: 88,
+        child: Center(
+          child: Text(
+            node.props?['emptyText']?.toString() ?? '暂无数据',
+            style: AppTypography.caption(context),
+          ),
+        ),
+      );
+    }
+    final imageField =
+        node.props?['imageField']?.toString().trim().isNotEmpty == true
+        ? node.props!['imageField'].toString().trim()
+        : 'image';
+    final titleField =
+        node.props?['titleField']?.toString().trim().isNotEmpty == true
+        ? node.props!['titleField'].toString().trim()
+        : 'title';
+    final subtitleField =
+        node.props?['subtitleField']?.toString().trim().isNotEmpty == true
+        ? node.props!['subtitleField'].toString().trim()
+        : 'subtitle';
+    final minItemWidth = _dimension(node.props?['minItemWidth'], 148);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final columns = constraints.maxWidth.isFinite
+            ? (constraints.maxWidth / minItemWidth).floor().clamp(1, 8).toInt()
+            : 2;
+        return GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: columns,
+            crossAxisSpacing: AppSpacing.sm,
+            mainAxisSpacing: AppSpacing.sm,
+            childAspectRatio: 0.82,
+          ),
+          itemCount: items.length,
+          itemBuilder: (context, index) {
+            final raw = items[index];
+            final item = raw is Map
+                ? raw.map((key, value) => MapEntry(key.toString(), value))
+                : <String, dynamic>{'title': raw};
+            final image =
+                item[imageField] ??
+                item['thumbnailUrl'] ??
+                item['assetUrl'] ??
+                item['image'];
+            final title =
+                item[titleField] ??
+                item['name'] ??
+                item['label'] ??
+                item['id'] ??
+                '';
+            final subtitle =
+                item[subtitleField] ??
+                item['meaning'] ??
+                item['description'] ??
+                '';
+            final disabled = _isNodeDisabled(node) || node.actions.isEmpty;
+            return InkWell(
+              borderRadius: AppRadius.brMedium,
+              onTap: disabled
+                  ? null
+                  : () => _handleActions(
+                      node.actions,
+                      nodeId: node.id,
+                      item: item,
+                    ),
+              child: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  borderRadius: AppRadius.brMedium,
+                  border: Border.all(color: context.borderPrimary),
+                  color: context.surfacePrimary,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Expanded(
+                      child: ClipRRect(
+                        borderRadius: AppRadius.brSmall,
+                        child: image?.toString().trim().isNotEmpty == true
+                            ? _schemaImage(
+                                context,
+                                image.toString(),
+                                fit: BoxFit.contain,
+                                alt: title.toString(),
+                              )
+                            : ColoredBox(
+                                color: context.surfaceSecondary,
+                                child: Center(
+                                  child: Icon(
+                                    Icons.image_outlined,
+                                    color: context.textTertiary,
+                                  ),
+                                ),
+                              ),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      title.toString(),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTypography.label(context),
+                    ),
+                    if (subtitle.toString().trim().isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        subtitle.toString(),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppTypography.caption(context),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildFilePicker(BuildContext context, SchemaUINode node) {
+    final label = (node.props?['text'] ?? node.props?['label'] ?? '选择文件')
+        .toString();
+    final hint = node.props?['hint']?.toString().trim() ?? '';
+    final disabled = _isNodeDisabled(node) || node.actions.isEmpty;
+    return Wrap(
+      spacing: AppSpacing.sm,
+      runSpacing: AppSpacing.sm,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        AmitiaButton(
+          label: label,
+          isSecondary: node.props?['type'] == 'default',
+          outlined: node.props?['plain'] == true,
+          onPressed: disabled
+              ? null
+              : () async {
+                  final files = await _pickFiles(node);
+                  if (files == null || files.isEmpty || !mounted) return;
+                  await _handleActions(
+                    node.actions,
+                    nodeId: node.id,
+                    files: files,
+                  );
+                },
+        ),
+        if (hint.isNotEmpty) Text(hint, style: AppTypography.caption(context)),
+      ],
+    );
+  }
+
+  Future<List<Map<String, dynamic>>?> _pickFiles(SchemaUINode node) async {
+    final accept = node.props?['accept']?.toString() ?? '';
+    final extensions = accept
+        .split(',')
+        .map((item) => item.trim().replaceFirst('.', ''))
+        .where((item) => item.isNotEmpty && !item.contains('/'))
+        .toList(growable: false);
+    final result = await FilePicker.platform.pickFiles(
+      type: extensions.isNotEmpty ? FileType.custom : FileType.any,
+      allowedExtensions: extensions.isNotEmpty ? extensions : null,
+      allowMultiple: node.props?['multiple'] != false,
+      withData: true,
+    );
+    if (result == null) return null;
+    final files = <Map<String, dynamic>>[];
+    for (final file in result.files) {
+      final bytes = file.bytes;
+      if (bytes == null) continue;
+      files.add(<String, dynamic>{
+        'name': file.name,
+        'mimeType': _mimeTypeForExtension(file.extension),
+        'size': file.size,
+        'dataBase64': base64Encode(bytes),
+      });
+    }
+    return files;
+  }
+
+  String _mimeTypeForExtension(String? extension) {
+    switch (extension?.toLowerCase()) {
+      case 'png':
+        return 'image/png';
+      case 'jpg':
+      case 'jpeg':
+        return 'image/jpeg';
+      case 'gif':
+        return 'image/gif';
+      case 'webp':
+        return 'image/webp';
+      default:
+        return 'application/octet-stream';
+    }
   }
 
   Widget _buildTable(BuildContext context, SchemaUINode node) {

@@ -22,6 +22,12 @@ func BuildVirtualDisplayTools() []capability.ToolDefinition {
 		buildListTool(runtime),
 		buildResizeTool(runtime),
 		buildReleaseTool(runtime),
+		buildLaunchTool(runtime),
+		buildCaptureTool(runtime),
+		buildTapTool(runtime),
+		buildSwipeTool(runtime),
+		buildKeyTool(runtime),
+		buildTextTool(runtime),
 	}
 }
 
@@ -395,6 +401,180 @@ func buildReleaseTool(runtime capability.RuntimeBinding) capability.ToolDefiniti
 			RuntimeType: runtime.RuntimeType,
 			RuntimeID:   runtime.RuntimeID,
 			HandlerName: OperationRelease,
+		},
+		Enabled: true,
+	}
+}
+
+func buildLaunchTool(runtime capability.RuntimeBinding) capability.ToolDefinition {
+	return buildDisplayOperationTool(
+		runtime,
+		"android.virtual_display.launch",
+		"Virtual Display Launch",
+		"在指定 Android VirtualDisplay 上启动第三方应用。",
+		OperationLaunch,
+		`{
+			"type":"object",
+			"additionalProperties":false,
+			"required":["ref","packageName"],
+			"properties":{
+				"ref":{"type":"string"},
+				"packageName":{"type":"string","minLength":1,"maxLength":255},
+				"component":{"type":"string","maxLength":512}
+			}
+		}`,
+	)
+}
+
+func buildCaptureTool(runtime capability.RuntimeBinding) capability.ToolDefinition {
+	return buildDisplayOperationTool(
+		runtime,
+		"android.virtual_display.capture",
+		"Virtual Display Capture",
+		"读取指定 Android VirtualDisplay 的最新画面，返回编码图像和元数据。",
+		OperationCapture,
+		`{
+			"type":"object",
+			"additionalProperties":false,
+			"required":["ref"],
+			"properties":{
+				"ref":{"type":"string"},
+				"format":{"type":"string","enum":["png","jpeg","webp"]},
+				"quality":{"type":"integer","minimum":1,"maximum":100},
+				"maxWidth":{"type":"integer","minimum":320,"maximum":2560},
+				"maxHeight":{"type":"integer","minimum":320,"maximum":2560}
+			}
+		}`,
+	)
+}
+
+func buildTapTool(runtime capability.RuntimeBinding) capability.ToolDefinition {
+	return buildDisplayOperationTool(
+		runtime,
+		"android.virtual_display.tap",
+		"Virtual Display Tap",
+		"向指定 Android VirtualDisplay 注入点击坐标。",
+		OperationTap,
+		`{
+			"type":"object",
+			"additionalProperties":false,
+			"required":["ref","x","y"],
+			"properties":{
+				"ref":{"type":"string"},
+				"x":{"type":"number"},
+				"y":{"type":"number"}
+			}
+		}`,
+	)
+}
+
+func buildSwipeTool(runtime capability.RuntimeBinding) capability.ToolDefinition {
+	return buildDisplayOperationTool(
+		runtime,
+		"android.virtual_display.swipe",
+		"Virtual Display Swipe",
+		"向指定 Android VirtualDisplay 注入滑动手势。",
+		OperationSwipe,
+		`{
+			"type":"object",
+			"additionalProperties":false,
+			"required":["ref","startX","startY","endX","endY"],
+			"properties":{
+				"ref":{"type":"string"},
+				"startX":{"type":"number"},
+				"startY":{"type":"number"},
+				"endX":{"type":"number"},
+				"endY":{"type":"number"},
+				"durationMs":{"type":"integer","minimum":1,"maximum":5000}
+			}
+		}`,
+	)
+}
+
+func buildKeyTool(runtime capability.RuntimeBinding) capability.ToolDefinition {
+	return buildDisplayOperationTool(
+		runtime,
+		"android.virtual_display.key",
+		"Virtual Display Key",
+		"向指定 Android VirtualDisplay 注入按键事件。",
+		OperationKey,
+		`{
+			"type":"object",
+			"additionalProperties":false,
+			"required":["ref","keyCode"],
+			"properties":{
+				"ref":{"type":"string"},
+				"keyCode":{"type":"integer","minimum":1,"maximum":100000},
+				"metaState":{"type":"integer","minimum":0,"maximum":2147483647}
+			}
+		}`,
+	)
+}
+
+func buildTextTool(runtime capability.RuntimeBinding) capability.ToolDefinition {
+	return buildDisplayOperationTool(
+		runtime,
+		"android.virtual_display.text",
+		"Virtual Display Text",
+		"向指定 Android VirtualDisplay 输入文本。",
+		OperationText,
+		`{
+			"type":"object",
+			"additionalProperties":false,
+			"required":["ref","text"],
+			"properties":{
+				"ref":{"type":"string"},
+				"text":{"type":"string","minLength":1,"maxLength":4096}
+			}
+		}`,
+	)
+}
+
+func buildDisplayOperationTool(
+	runtime capability.RuntimeBinding,
+	id string,
+	name string,
+	description string,
+	operation string,
+	inputSchema string,
+) capability.ToolDefinition {
+	return capability.ToolDefinition{
+		ID:             id,
+		ModelName:      id,
+		Source:         capability.ToolSourceBuiltin,
+		Name:           name,
+		Description:    description,
+		InputSchema:    json.RawMessage(inputSchema),
+		OutputSchema:   json.RawMessage(`{"type":"object","additionalProperties":true}`),
+		Permissions:    []capability.PermissionRequirement{{Capability: PermissionVirtualDisplayManage, Risk: "medium"}},
+		RiskLevel:      capability.RiskMedium,
+		SideEffect:     capability.SideEffectWrite,
+		HasSideEffects: true,
+		Idempotent:     false,
+		Retryable:      true,
+		TimeoutMS:      30000,
+		ToolVersion:    capability.ToolVersion{SchemaVersion: 1, Revision: "app-process-host-v1"},
+		Metadata: map[string]any{
+			"androidNativeOperation": operation,
+			"bridgeProtocol":         "android_native",
+		},
+		ExecutionPolicy: capability.ToolExecutionPolicy{
+			Timeout:          30 * time.Second,
+			MaxConcurrency:   1,
+			Idempotent:       false,
+			ApprovalRequired: false,
+			AllowBackground:  false,
+			MaxDepth:         0,
+		},
+		ResultPolicy: capability.ToolResultPolicy{
+			SanitizeError:  true,
+			MaxOutputBytes: 16 * 1024 * 1024,
+			Streaming:      capability.ToolStreamingPolicy{Enabled: false},
+		},
+		Runtime: capability.RuntimeBinding{
+			RuntimeType: runtime.RuntimeType,
+			RuntimeID:   runtime.RuntimeID,
+			HandlerName: operation,
 		},
 		Enabled: true,
 	}

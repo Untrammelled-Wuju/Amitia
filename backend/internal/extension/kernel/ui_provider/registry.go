@@ -254,7 +254,69 @@ func (d ProviderDefinition) Validate() error {
 	if err := validateProviderMetadata(d); err != nil {
 		return err
 	}
+	if err := validateCrossPlatformUIEntries(d); err != nil {
+		return err
+	}
 	return nil
+}
+
+func validateCrossPlatformUIEntries(d ProviderDefinition) error {
+	type entryIdentity struct {
+		family       string
+		contribution string
+		path         string
+		schemaPath   string
+		contentHash  string
+	}
+	identities := make([]entryIdentity, 0)
+	for platform, entry := range d.Entries {
+		family := providerEntryPlatformFamily(platform)
+		if family == "" || entry.Type == EntryDeclarative {
+			continue
+		}
+		identities = append(identities, entryIdentity{
+			family:       family,
+			contribution: strings.TrimSpace(entry.ContributionID),
+			path:         strings.TrimSpace(entry.Path),
+			schemaPath:   strings.TrimSpace(entry.SchemaPath),
+			contentHash:  strings.TrimSpace(entry.ContentHash),
+		})
+	}
+	for left := 0; left < len(identities); left++ {
+		for right := left + 1; right < len(identities); right++ {
+			a := identities[left]
+			b := identities[right]
+			if a.family == b.family {
+				continue
+			}
+			if a.contribution != "" && a.contribution == b.contribution {
+				return fmt.Errorf("ui_provider: desktop and mobile cannot share contributionId %s", a.contribution)
+			}
+			if a.path != "" && a.path == b.path {
+				return fmt.Errorf("ui_provider: desktop and mobile cannot share path %s", a.path)
+			}
+			if a.schemaPath != "" && a.schemaPath == b.schemaPath {
+				return fmt.Errorf("ui_provider: desktop and mobile cannot share schemaPath %s", a.schemaPath)
+			}
+			if a.contentHash != "" && a.contentHash == b.contentHash {
+				return fmt.Errorf("ui_provider: desktop and mobile UI contentHash must differ")
+			}
+		}
+	}
+	return nil
+}
+
+func providerEntryPlatformFamily(platform string) string {
+	normalized := strings.ToLower(strings.TrimSpace(platform))
+	if strings.HasPrefix(normalized, "windows") || strings.HasPrefix(normalized, "linux") || strings.HasPrefix(normalized, "macos") ||
+		strings.HasPrefix(normalized, "electron_windows") || strings.HasPrefix(normalized, "electron_linux") || strings.HasPrefix(normalized, "electron_macos") ||
+		normalized == "desktop" {
+		return "desktop"
+	}
+	if strings.HasPrefix(normalized, "android") || strings.HasPrefix(normalized, "ios") || normalized == "mobile" {
+		return "mobile"
+	}
+	return ""
 }
 
 func validateProviderMetadata(d ProviderDefinition) error {

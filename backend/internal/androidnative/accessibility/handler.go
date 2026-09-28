@@ -8,8 +8,11 @@ import (
 )
 
 const (
-	OperationStatus       = "accessibility.status"
-	OperationOpenSettings = "accessibility.open_settings"
+	OperationStatus               = "accessibility.status"
+	OperationOpenSettings         = "accessibility.open_settings"
+	OperationProviderStatus       = "accessibility.provider.status"
+	OperationProviderInstall      = "accessibility.provider.install"
+	OperationProviderOpenSettings = "accessibility.provider.open_settings"
 )
 
 type AccessibilityHandler struct {
@@ -26,6 +29,12 @@ func (h *AccessibilityHandler) Execute(ctx context.Context, request capability.A
 		return h.handleStatus(ctx, request)
 	case OperationOpenSettings:
 		return h.handleOpenSettings(ctx, request)
+	case OperationProviderStatus:
+		return h.handleBridgeOperation(ctx, request, "accessibility provider status")
+	case OperationProviderInstall:
+		return h.handleBridgeOperation(ctx, request, "accessibility provider install")
+	case OperationProviderOpenSettings:
+		return h.handleBridgeOperation(ctx, request, "accessibility provider settings")
 	default:
 		return capability.AndroidBridgeResponse{
 			ProtocolVersion: request.ProtocolVersion,
@@ -37,6 +46,43 @@ func (h *AccessibilityHandler) Execute(ctx context.Context, request capability.A
 			},
 		}
 	}
+}
+
+func (h *AccessibilityHandler) handleBridgeOperation(
+	ctx context.Context,
+	request capability.AndroidBridgeRequest,
+	label string,
+) capability.AndroidBridgeResponse {
+	if h.bridge == nil {
+		return capability.AndroidBridgeResponse{
+			ProtocolVersion: request.ProtocolVersion,
+			RequestID:       request.RequestID,
+			Status:          "error",
+			Error: &capability.AndroidError{
+				Code:    androidnative.ACCESSIBILITY_BRIDGE_UNAVAILABLE,
+				Message: "android native bridge is not available",
+			},
+		}
+	}
+	resp, err := h.bridge.Execute(ctx, androidnative.NativeBridgeRequest{
+		ProtocolVersion: request.ProtocolVersion,
+		RequestId:       request.RequestID,
+		Platform:        "android",
+		Operation:       request.Operation,
+		Payload:         request.Payload,
+	})
+	if err != nil {
+		return capability.AndroidBridgeResponse{
+			ProtocolVersion: request.ProtocolVersion,
+			RequestID:       request.RequestID,
+			Status:          "error",
+			Error: &capability.AndroidError{
+				Code:    androidnative.ACCESSIBILITY_BRIDGE_UNAVAILABLE,
+				Message: label + " bridge call failed: " + err.Error(),
+			},
+		}
+	}
+	return mapNativeBridgeResponse(resp, request.RequestID)
 }
 
 func (h *AccessibilityHandler) handleStatus(ctx context.Context, request capability.AndroidBridgeRequest) capability.AndroidBridgeResponse {

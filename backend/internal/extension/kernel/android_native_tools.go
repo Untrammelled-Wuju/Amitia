@@ -11,6 +11,7 @@ import (
 	"github.com/u-ai/backend/internal/androidnative/display"
 	"github.com/u-ai/backend/internal/androidnative/interaction"
 	"github.com/u-ai/backend/internal/androidnative/root"
+	"github.com/u-ai/backend/internal/androidnative/shizuku"
 	"github.com/u-ai/backend/internal/androidnative/uitree"
 	"github.com/u-ai/backend/internal/androidnative/virtualdisplay"
 	"github.com/u-ai/backend/internal/androidsystem/clipboard"
@@ -52,6 +53,7 @@ func collectAndroidNativeToolDefinitions() []capability.ToolDefinition {
 	defs = append(defs, interaction.BuildInteractionTools()...)
 	defs = append(defs, virtualdisplay.BuildVirtualDisplayTools()...)
 	defs = append(defs, adb.BuildADBTools()...)
+	defs = append(defs, shizuku.BuildShizukuTools()...)
 	defs = append(defs, overlay.BuildOverlayTools()...)
 	defs = append(defs, externalautomation.BuildExternalAutomationTools()...)
 	defs = append(defs, notification.BuildNotificationTools()...)

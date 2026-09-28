@@ -16,6 +16,7 @@ const (
 const (
 	PermissionAccessibilityReadState    = "android.accessibility.read_state"
 	PermissionAccessibilityOpenSettings = "android.accessibility.open_settings"
+	PermissionAccessibilityManage       = "android.accessibility.manage"
 )
 
 const (

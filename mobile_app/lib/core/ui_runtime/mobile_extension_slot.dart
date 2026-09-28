@@ -10,6 +10,7 @@ import '../../features/extensions/schema_ui/models/schema_ui_types.dart';
 import '../../features/extensions/schema_ui/renderer/schema_ui_renderer.dart';
 import 'mobile_dynamic_runtime.dart';
 import 'mobile_ui_visibility.dart';
+import 'plugin_surface_resolver.dart';
 import 'renderers/sandbox_web_provider_host.dart';
 import 'schema_ui_bridge_controller.dart';
 import 'ui_provider.dart';
@@ -420,8 +421,12 @@ class _ContributionHostState extends ConsumerState<_ContributionHost> {
     final contribution = widget.contribution;
     final runtimeContext = widget.runtimeContext;
     final actions = widget.actions;
-    switch (contribution.entryType) {
-      case 'schema_renderer':
+    final surface = resolveMobilePluginSurface(
+      kind: contribution.kind,
+      entryType: contribution.entryType,
+    );
+    switch (surface) {
+      case MobilePluginSurfaceKind.schema:
         _schemaFuture ??= _fetchSchema();
         return FutureBuilder<Map<String, dynamic>>(
           future: _schemaFuture,
@@ -462,8 +467,7 @@ class _ContributionHostState extends ConsumerState<_ContributionHost> {
             );
           },
         );
-      case 'web_restricted':
-      case 'web_isolated':
+      case MobilePluginSurfaceKind.web:
         final entryType = contribution.entryType == 'web_isolated'
             ? UIProviderEntryType.webIsolated
             : UIProviderEntryType.webRestricted;
@@ -497,7 +501,9 @@ class _ContributionHostState extends ConsumerState<_ContributionHost> {
           fallback: widget.fallback,
           inlineComposerAction: contribution.slotId == 'chat.composer.action',
         );
-      default:
+      case MobilePluginSurfaceKind.hostRuntime:
+      case MobilePluginSurfaceKind.native:
+      case MobilePluginSurfaceKind.none:
         return widget.fallback;
     }
   }

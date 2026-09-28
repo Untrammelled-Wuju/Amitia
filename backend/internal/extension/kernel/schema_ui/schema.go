@@ -50,6 +50,8 @@ const (
 	NodePermissionSummary NodeType = "permission_summary"
 	NodeRuntimeStatus     NodeType = "runtime_status"
 	NodeExtensionSlot     NodeType = "extension_slot"
+	NodeGallery           NodeType = "gallery"
+	NodeFilePicker        NodeType = "file_picker"
 	NodeTabItem           NodeType = "tab_item"
 	NodeColumn            NodeType = "column"
 )
@@ -63,7 +65,8 @@ var allowedNodeTypes = map[NodeType]bool{
 	NodeTable: true, NodeEmptyState: true, NodeAlert: true, NodeProgress: true,
 	NodeCode: true, NodeKeyValue: true, NodeResourceLink: true,
 	NodePermissionSummary: true, NodeRuntimeStatus: true,
-	NodeExtensionSlot: true, NodeTabItem: true, NodeColumn: true,
+	NodeExtensionSlot: true, NodeGallery: true, NodeFilePicker: true,
+	NodeTabItem: true, NodeColumn: true,
 }
 
 var forbiddenNodeTypes = map[string]bool{
@@ -82,6 +85,7 @@ const (
 	SourceForm          BindingSource = "form"
 	SourceFormState     BindingSource = "form_state"
 	SourceStatic        BindingSource = "static"
+	SourceContext       BindingSource = "context"
 	SourceStorage       BindingSource = "storage"
 	SourceRuntimeStatus BindingSource = "runtime_status"
 	SourceResourceList  BindingSource = "resource_list"
@@ -90,15 +94,16 @@ const (
 var allowedBindingSources = map[BindingSource]bool{
 	SourceInput: true, SourceState: true, SourceQuery: true,
 	SourceRuntime: true, SourceHost: true, SourceForm: true, SourceFormState: true,
-	SourceStatic: true, SourceStorage: true,
+	SourceStatic: true, SourceContext: true, SourceStorage: true,
 	SourceRuntimeStatus: true, SourceResourceList: true,
 }
 
 type SchemaUIBinding struct {
-	Path    string          `json:"path"`
-	Source  BindingSource   `json:"source"`
-	Format  string          `json:"format,omitempty"`
-	Default json.RawMessage `json:"default,omitempty"`
+	Path       string          `json:"path"`
+	SourcePath string          `json:"sourcePath,omitempty"`
+	Source     BindingSource   `json:"source"`
+	Format     string          `json:"format,omitempty"`
+	Default    json.RawMessage `json:"default,omitempty"`
 }
 
 type SchemaUIActionBinding struct {
@@ -106,6 +111,13 @@ type SchemaUIActionBinding struct {
 	Target       string          `json:"target"`
 	Input        json.RawMessage `json:"input,omitempty"`
 	Confirmation string          `json:"confirmation,omitempty"`
+	StatePath    string          `json:"statePath,omitempty"`
+}
+
+type SchemaUILifecycle struct {
+	OnMount   []SchemaUIActionBinding `json:"onMount,omitempty"`
+	OnRefresh []SchemaUIActionBinding `json:"onRefresh,omitempty"`
+	OnSuccess []SchemaUIActionBinding `json:"onSuccess,omitempty"`
 }
 
 type UICondition struct {
@@ -135,6 +147,7 @@ type SchemaUIDocument struct {
 	Layout            map[string]any           `json:"layout,omitempty"`
 	Root              *SchemaUINode            `json:"root,omitempty"`
 	Children          []SchemaUINode           `json:"children,omitempty"`
+	Lifecycle         *SchemaUILifecycle       `json:"lifecycle,omitempty"`
 	DataSources       []SchemaUIDataSource     `json:"dataSources,omitempty"`
 	Actions           []SchemaUIDeclaredAction `json:"actions,omitempty"`
 	Theme             *ThemeConfig             `json:"theme,omitempty"`
@@ -352,6 +365,29 @@ func (v *Validator) Validate(doc *SchemaUIDocument) *ValidationResult {
 			result.Errors = append(result.Errors, fmt.Sprintf("data source %s invalid type %s", ds.ID, ds.Type))
 		}
 	}
+	validateAction := func(scope string, action SchemaUIActionBinding) {
+		if action.ActionID == "" {
+			result.Errors = append(result.Errors, scope+": action_id empty")
+			return
+		}
+		if !result.ActionIDs[action.ActionID] {
+			result.Errors = append(result.Errors, fmt.Sprintf("%v: %s", ErrActionNotDeclared, action.ActionID))
+		}
+		if action.StatePath != "" && (len(action.StatePath) > v.limits.MaxExpressionLen || !exprAllowedPattern.MatchString(action.StatePath)) {
+			result.Errors = append(result.Errors, fmt.Sprintf("%v: %s", ErrInvalidExpression, action.StatePath))
+		}
+	}
+	if doc.Lifecycle != nil {
+		for _, action := range doc.Lifecycle.OnMount {
+			validateAction("lifecycle.onMount", action)
+		}
+		for _, action := range doc.Lifecycle.OnRefresh {
+			validateAction("lifecycle.onRefresh", action)
+		}
+		for _, action := range doc.Lifecycle.OnSuccess {
+			validateAction("lifecycle.onSuccess", action)
+		}
+	}
 	seenIDs := make(map[string]bool)
 	for _, root := range roots {
 		v.validateNode(root, 1, result, seenIDs)
@@ -398,6 +434,9 @@ func (v *Validator) validateNode(node *SchemaUINode, depth int, result *Validati
 		if b.Path != "" && (len(b.Path) > v.limits.MaxExpressionLen || !exprAllowedPattern.MatchString(b.Path)) {
 			result.Errors = append(result.Errors, fmt.Sprintf("%v: %s", ErrInvalidExpression, b.Path))
 		}
+		if b.SourcePath != "" && (len(b.SourcePath) > v.limits.MaxExpressionLen || !exprAllowedPattern.MatchString(b.SourcePath)) {
+			result.Errors = append(result.Errors, fmt.Sprintf("%v: %s", ErrInvalidExpression, b.SourcePath))
+		}
 	}
 	for _, b := range node.Bindings {
 		validateBinding(b)
@@ -410,6 +449,9 @@ func (v *Validator) validateNode(node *SchemaUINode, depth int, result *Validati
 			result.Errors = append(result.Errors, "node "+node.ID+": action_id empty")
 		} else if !result.ActionIDs[a.ActionID] {
 			result.Errors = append(result.Errors, fmt.Sprintf("%v: %s", ErrActionNotDeclared, a.ActionID))
+		}
+		if a.StatePath != "" && (len(a.StatePath) > v.limits.MaxExpressionLen || !exprAllowedPattern.MatchString(a.StatePath)) {
+			result.Errors = append(result.Errors, fmt.Sprintf("%v: %s", ErrInvalidExpression, a.StatePath))
 		}
 	}
 	validateConditions := func(conditions []UICondition) {
@@ -436,6 +478,25 @@ func (v *Validator) validateNode(node *SchemaUINode, depth int, result *Validati
 		}
 		if len(node.Props) == 0 || json.Unmarshal(node.Props, &props) != nil || strings.TrimSpace(props.SlotID) == "" {
 			result.Errors = append(result.Errors, "node "+node.ID+": extension_slot requires props.slotId")
+		}
+	}
+	if node.Type == NodeGallery {
+		var props struct {
+			Items any `json:"items"`
+		}
+		if len(node.Props) == 0 || json.Unmarshal(node.Props, &props) != nil {
+			result.Errors = append(result.Errors, "node "+node.ID+": gallery requires props.items")
+		}
+	}
+	if node.Type == NodeFilePicker {
+		var props struct {
+			Accept string `json:"accept"`
+		}
+		if len(node.Props) > 0 {
+			_ = json.Unmarshal(node.Props, &props)
+		}
+		if len(props.Accept) > 512 {
+			result.Errors = append(result.Errors, "node "+node.ID+": file_picker accept is too long")
 		}
 	}
 	if node.Type == NodeTable {

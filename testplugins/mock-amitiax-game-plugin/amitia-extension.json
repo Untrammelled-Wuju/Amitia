@@ -8,7 +8,7 @@
     "description": {
       "default": "Amitia World Game Plugin - a formal game plugin for the Amitia platform with realtime control, state streaming, and RPC capabilities."
     },
-    "version": "1.0.0",
+    "version": "1.0.1",
     "license": "MIT",
     "categories": [
       "game",
@@ -32,7 +32,9 @@
     "platforms": [
       "windows",
       "linux",
-      "macos"
+      "macos",
+      "android",
+      "ios"
     ]
   },
   "modules": [
@@ -216,6 +218,143 @@
       },
       "contributions": [],
       "placement": "device"
+    },
+    {
+      "id": "world-game-ui",
+      "name": {
+        "default": "Amitia World Game UI"
+      },
+      "type": "data_only",
+      "placement": "device",
+      "contributions": [
+        {
+          "id": "world-game-detail-desktop",
+          "kind": "ui_page",
+          "name": {
+            "default": "World Game（桌面）"
+          },
+          "description": {
+            "default": "在游戏插件详情中查看状态并发送移动指令。"
+          },
+          "requiredPermissions": [
+            "tool.invoke"
+          ],
+          "spec": {
+            "contribution_id": "world-game-detail-desktop",
+            "extension_id": "com.amitia/world-game-plugin",
+            "module_id": "world-game-ui",
+            "kind": "schema_page",
+            "slot": {
+              "slot_id": "extension.detail.tab",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "World Game"
+              },
+              "description": {
+                "default": "查看游戏运行时状态并发送移动指令。"
+              },
+              "icon": "game"
+            },
+            "entry": {
+              "type": "schema_renderer",
+              "schema_path": "modules/world-game-ui/desktop/schema.json",
+              "content_hash": "pending"
+            },
+            "sandbox": {
+              "type": "schema_renderer"
+            },
+            "visibility": {
+              "platforms": [
+                "windows",
+                "linux",
+                "macos"
+              ]
+            },
+            "actions": [
+              {
+                "action_id": "move",
+                "title": {
+                  "default": "发送移动指令"
+                },
+                "target": {
+                  "type": "tool",
+                  "tool_id": "worldgame/move"
+                },
+                "risk_level": "medium"
+              }
+            ],
+            "integrity": {
+              "definition_hash": "world-game-detail-desktop-v1"
+            }
+          }
+        },
+        {
+          "id": "world-game-detail-mobile",
+          "kind": "ui_page",
+          "name": {
+            "default": "World Game（手机）"
+          },
+          "description": {
+            "default": "在手机端查看游戏状态并发送移动指令。"
+          },
+          "requiredPermissions": [
+            "tool.invoke"
+          ],
+          "spec": {
+            "contribution_id": "world-game-detail-mobile",
+            "extension_id": "com.amitia/world-game-plugin",
+            "module_id": "world-game-ui",
+            "kind": "schema_page",
+            "slot": {
+              "slot_id": "extension.detail.tab",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "World Game"
+              },
+              "description": {
+                "default": "查看游戏运行时状态并发送移动指令。"
+              },
+              "icon": "game"
+            },
+            "entry": {
+              "type": "schema_renderer",
+              "schema_path": "modules/world-game-ui/mobile/schema.json",
+              "content_hash": "pending"
+            },
+            "sandbox": {
+              "type": "schema_renderer"
+            },
+            "visibility": {
+              "platforms": [
+                "android",
+                "ios"
+              ]
+            },
+            "actions": [
+              {
+                "action_id": "move",
+                "title": {
+                  "default": "发送移动指令"
+                },
+                "target": {
+                  "type": "tool",
+                  "tool_id": "worldgame/move"
+                },
+                "risk_level": "medium"
+              }
+            ],
+            "integrity": {
+              "definition_hash": "world-game-detail-mobile-v1"
+            }
+          }
+        }
+      ]
     }
   ],
   "dependencies": [],
@@ -245,6 +384,12 @@
       "name": "service.network.request",
       "reason": "Required for host-mediated restricted HTTP/TCP/UDP/WebSocket access; the plugin process itself remains network-isolated.",
       "required": false,
+      "scope": "extension"
+    },
+    {
+      "name": "tool.invoke",
+      "reason": "Required for the plugin-provided UI to invoke the declared game movement tool.",
+      "required": true,
       "scope": "extension"
     }
   ],

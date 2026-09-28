@@ -36,7 +36,8 @@ function safeSegment(value, fallback = "item") {
 function normalizeKeywords(values) {
   const result = [];
   const seen = new Set();
-  for (const value of Array.isArray(values) ? values : []) {
+  const source = typeof values === "string" ? [values] : Array.isArray(values) ? values : [];
+  for (const value of source) {
     for (const part of String(value).split(/[,，;；\n]/)) {
       const item = part.trim();
       if (!item || seen.has(item)) continue;
@@ -369,6 +370,132 @@ async function command(host, input) {
   const action = text(input && input.action);
   const payload = input && input.payload && typeof input.payload === "object" ? input.payload : {};
   switch (action) {
+    case "ui.dashboard": {
+      const snapshot = await readState(host);
+      const items = await Promise.all(snapshot.state.emotes.map((item) => hydrateUrls(host, item)));
+      return {
+        emotes: items,
+        groups: snapshot.state.groups,
+        settings: snapshot.state.settings,
+        form_state: {
+          settings: clone(snapshot.state.settings),
+          selected: {
+            id: "",
+            name: "",
+            meaning: "",
+            keywords: "",
+            aiEnabled: false,
+          },
+          group: {
+            name: "",
+          },
+        },
+      };
+    }
+    case "ui.select_emote": {
+      const snapshot = await readState(host);
+      const item = findEmote(snapshot.state, text(payload.id));
+      if (!item) throw new Error("表情不存在");
+      const hydrated = await hydrateUrls(host, item);
+      return {
+        form_state: {
+          selected: {
+            id: hydrated.id,
+            name: hydrated.name,
+            meaning: hydrated.meaning,
+            keywords: hydrated.keywords.join("，"),
+            aiEnabled: hydrated.aiEnabled,
+            groupIds: hydrated.groupIds,
+          },
+        },
+      };
+    }
+    case "ui.composer": {
+      const snapshot = await readState(host);
+      const page = filterList(snapshot.state, {
+        groupId: text(payload.groupId),
+        view: text(payload.groupId) === "recent" ? "recent" : "",
+        page: 1,
+        pageSize: 200,
+      });
+      return {
+        emotes: await Promise.all(page.items.map((item) => hydrateUrls(host, item))),
+        groups: snapshot.state.groups,
+        form_state: {
+          groupId: text(payload.groupId),
+        },
+      };
+    }
+    case "ui.import": {
+      const files = Array.isArray(input && input.files) ? input.files : [];
+      let imported = 0;
+      let duplicate = 0;
+      for (const file of files) {
+        const dataBase64 = text(file && file.dataBase64);
+        if (!dataBase64) continue;
+        const extension = safeSegment(text(file && file.name).split(".").pop() || "png", "png").toLowerCase();
+        const uploadId = crypto.randomUUID();
+        const paths = {
+          original: `uploads/${uploadId}/original.${extension}`,
+          thumbnail: `uploads/${uploadId}/thumbnail.${extension}`,
+          fallback: `uploads/${uploadId}/fallback.${extension}`,
+        };
+        await writeBase64File(host, paths.original, dataBase64);
+        await writeBase64File(host, paths.thumbnail, dataBase64);
+        await writeBase64File(host, paths.fallback, dataBase64);
+        const fileHash = await readFileHash(host, paths.original);
+        let existed = false;
+        let created = null;
+        await mutateState(host, (state) => {
+          existed = state.emotes.some((item) => item.fileHash === fileHash);
+          if (existed) return state;
+          const now = nowISO();
+          created = normalizeEmote({
+            id: crypto.randomUUID(),
+            name: text(file && file.name).replace(/\.[^.]+$/, "") || "表情",
+            meaning: "",
+            keywords: [],
+            originalFilename: text(file && file.name),
+            filePath: paths.original,
+            thumbnailPath: paths.thumbnail,
+            fallbackPath: paths.fallback,
+            mimeType: text(file && file.mimeType),
+            fileExtension: `.${extension}`,
+            fileSize: Math.max(0, number(file && file.size)),
+            width: 0,
+            height: 0,
+            isAnimated: extension === "gif",
+            frameCount: 1,
+            fileHash,
+            enabled: true,
+            aiEnabled: false,
+            groupIds: [],
+            vectorStatus: "disabled",
+            createdAt: now,
+            updatedAt: now,
+          });
+          state.emotes.unshift(created);
+          return state;
+        });
+        if (existed) {
+          duplicate += 1;
+          await deleteResource(host, paths.original);
+          await deleteResource(host, paths.thumbnail);
+          await deleteResource(host, paths.fallback);
+          continue;
+        }
+        created.assetUrl = await resourceLink(host, created.filePath);
+        created.thumbnailUrl = await resourceLink(host, created.thumbnailPath);
+        created.fallbackUrl = await resourceLink(host, created.fallbackPath);
+        await mutateState(host, (state) => {
+          const index = state.emotes.findIndex((item) => item.id === created.id);
+          if (index >= 0) state.emotes[index] = created;
+          return state;
+        });
+        imported += 1;
+      }
+      return { imported, duplicate, total: files.length };
+    }
     case "emotes.list": {
       const snapshot = await readState(host);
       const page = filterList(snapshot.state, payload);

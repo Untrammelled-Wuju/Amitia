@@ -4,8 +4,11 @@ import android.content.ComponentName
 import android.os.IBinder
 import android.os.Parcel
 import android.os.RemoteException
+import org.json.JSONArray
+import org.json.JSONObject
 import rikka.shizuku.Shizuku
 import java.io.BufferedReader
+import java.io.File
 import java.io.InputStreamReader
 import java.util.concurrent.Callable
 import java.util.concurrent.Executors
@@ -16,6 +19,7 @@ class ShizukuCommandService : IPrivilegedCommandService.Stub() {
 
     private val ioExecutor = Executors.newFixedThreadPool(2)
     private val destroyed = AtomicBoolean(false)
+    private val processManager = ShizukuProcessManager()
 
     override fun asBinder(): IBinder = this as IBinder
 
@@ -41,18 +45,28 @@ class ShizukuCommandService : IPrivilegedCommandService.Stub() {
                 request.executable,
                 request.args,
                 request.stdin,
+                request.env,
+                request.workDir,
                 request.timeoutMs,
                 request.maxOutputBytes
             )
             serializeResult(result)
         } catch (e: Exception) {
-            """{"error":{"code":"EXECUTION_ERROR","message":"${e.message?.replace("\"", "\\\"") ?: "unknown"}"}}"""
+            JSONObject()
+                .put(
+                    "error",
+                    JSONObject()
+                        .put("code", "EXECUTION_ERROR")
+                        .put("message", e.message ?: "unknown"),
+                )
+                .toString()
         }
     }
 
     override fun destroy() {
         if (destroyed.compareAndSet(false, true)) {
             try {
+                processManager.destroyAll()
                 ioExecutor.shutdownNow()
                 ioExecutor.awaitTermination(250, TimeUnit.MILLISECONDS)
             } catch (_: Exception) {
@@ -62,104 +76,57 @@ class ShizukuCommandService : IPrivilegedCommandService.Stub() {
         }
     }
 
-    private fun parseRequest(json: String): ShizukuCommandRequest {
-        val map = mutableMapOf<String, Any?>()
-        val cleaned = json.trim().removePrefix("{").removeSuffix("}").trim()
-        if (cleaned.isNotEmpty()) {
-            var i = 0
-            while (i < cleaned.length) {
-                while (i < cleaned.length && cleaned[i] in " \t\r\n") i++
-                if (i >= cleaned.length || cleaned[i] != '"') break
-                i++
-                val keyStart = i
-                while (i < cleaned.length && cleaned[i] != '"') i++
-                val key = cleaned.substring(keyStart, i)
-                i++
-                while (i < cleaned.length && cleaned[i] != ':') i++
-                i++
-                while (i < cleaned.length && cleaned[i] in " \t\r\n") i++
-                if (i >= cleaned.length) break
-                when {
-                    cleaned[i] == '"' -> {
-                        i++
-                        val sb = StringBuilder()
-                        while (i < cleaned.length && cleaned[i] != '"') {
-                            if (cleaned[i] == '\\' && i + 1 < cleaned.length) {
-                                sb.append(cleaned[i + 1])
-                                i += 2
-                            } else {
-                                sb.append(cleaned[i])
-                                i++
-                            }
-                        }
-                        map[key] = sb.toString()
-                        i++
-                    }
-                    cleaned[i] == '[' -> {
-                        val list = mutableListOf<String>()
-                        i++
-                        while (i < cleaned.length && cleaned[i] != ']') {
-                            while (i < cleaned.length && cleaned[i] in " \t\r\n,") i++
-                            if (i < cleaned.length && cleaned[i] == '"') {
-                                i++
-                                val sb = StringBuilder()
-                                while (i < cleaned.length && cleaned[i] != '"') {
-                                    if (cleaned[i] == '\\' && i + 1 < cleaned.length) {
-                                        sb.append(cleaned[i + 1])
-                                        i += 2
-                                    } else {
-                                        sb.append(cleaned[i])
-                                        i++
-                                    }
-                                }
-                                list.add(sb.toString())
-                                i++
-                            } else {
-                                break
-                            }
-                        }
-                        map[key] = list
-                        i++
-                    }
-                    cleaned[i].isDigit() || cleaned[i] == '-' -> {
-                        val numStart = i
-                        while (i < cleaned.length && cleaned[i] in "-0123456789.") i++
-                        val numStr = cleaned.substring(numStart, i)
-                        map[key] = numStr.toLongOrNull() ?: numStr.toDoubleOrNull() ?: 0L
-                    }
-                    cleaned.startsWith("true", i) -> {
-                        map[key] = true
-                        i += 4
-                    }
-                    cleaned.startsWith("false", i) -> {
-                        map[key] = false
-                        i += 5
-                    }
-                    else -> break
-                }
-                while (i < cleaned.length && cleaned[i] in " \t\r\n,") i++
-            }
-        }
+    override fun startProcess(requestJson: String): String = processManager.start(requestJson)
 
+    override fun writeProcess(requestJson: String): String = processManager.write(requestJson)
+
+    override fun readProcess(requestJson: String): String = processManager.read(requestJson)
+
+    override fun waitProcess(requestJson: String): String = processManager.wait(requestJson)
+
+    override fun killProcess(requestJson: String): String = processManager.kill(requestJson)
+
+    private fun parseRequest(json: String): ShizukuCommandRequest {
+        val objectValue = JSONObject(json)
+        val argsArray = objectValue.optJSONArray("args") ?: JSONArray()
+        val args = (0 until argsArray.length()).map { index ->
+            argsArray.opt(index).toString()
+        }
+        val envObject = objectValue.optJSONObject("env") ?: JSONObject()
+        val env = mutableMapOf<String, String>()
+        val envKeys = envObject.keys()
+        while (envKeys.hasNext()) {
+            val key = envKeys.next()
+            env[key] = envObject.optString(key)
+        }
         return ShizukuCommandRequest(
-            executable = map["executable"] as? String ?: "",
-            args = (map["args"] as? List<*>)?.map { it.toString() } ?: emptyList(),
-            stdin = map["stdin"] as? String,
-            timeoutMs = (map["timeoutMs"] as? Number)?.toLong() ?: 30000L,
-            maxOutputBytes = (map["maxOutputBytes"] as? Number)?.toLong() ?: 1048576L,
+            executable = objectValue.optString("executable"),
+            args = args,
+            stdin = if (objectValue.isNull("stdin")) null else objectValue.optString("stdin"),
+            env = env,
+            workDir = if (objectValue.isNull("workDir")) null else objectValue.optString("workDir"),
+            timeoutMs = objectValue.optLong("timeoutMs", 30000L),
+            maxOutputBytes = objectValue.optLong("maxOutputBytes", 1048576L),
         )
     }
 
     private fun serializeResult(result: ShizukuCommandResult): String {
-        val stdoutEscaped = result.stdout.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "\\r")
-        val stderrEscaped = result.stderr.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "\\r")
-        return """{"exitCode":${result.exitCode},"exitCodeAvailable":${result.exitCodeAvailable},"stdout":"$stdoutEscaped","stderr":"$stderrEscaped","durationMs":${result.durationMs},"timedOut":${result.timedOut}}"""
+        return JSONObject()
+            .put("exitCode", result.exitCode)
+            .put("exitCodeAvailable", result.exitCodeAvailable)
+            .put("stdout", result.stdout)
+            .put("stderr", result.stderr)
+            .put("durationMs", result.durationMs)
+            .put("timedOut", result.timedOut)
+            .toString()
     }
 
     private fun executeCommandInternal(
         executable: String,
         args: List<*>,
         stdin: String?,
+        env: Map<String, String>,
+        workDir: String?,
         timeoutMs: Long,
         maxOutputBytes: Long,
     ): ShizukuCommandResult {
@@ -172,6 +139,12 @@ class ShizukuCommandService : IPrivilegedCommandService.Stub() {
 
             val pb = ProcessBuilder(command)
             pb.redirectErrorStream(false)
+            if (env.isNotEmpty()) {
+                pb.environment().putAll(env)
+            }
+            if (!workDir.isNullOrBlank()) {
+                pb.directory(File(workDir))
+            }
             process = pb.start()
 
             if (!stdin.isNullOrEmpty()) {
@@ -261,7 +234,7 @@ class ShizukuCommandService : IPrivilegedCommandService.Stub() {
                 .daemon(false)
                 .processNameSuffix("shizuku_command")
                 .debuggable(false)
-                .version(13)
+                .version(14)
         }
     }
 }

@@ -18,6 +18,16 @@
         </div>
       </template>
       <template #actions>
+        <ExtensionSlot
+          v-if="extensionId"
+          slot-id="extension.detail.action"
+          :extension-id="extensionId"
+          :context="gameSurfaceContext"
+          fallback="none"
+          layout="inline"
+          surface-role="main"
+          bare
+        />
         <el-button :icon="Refresh" :loading="refreshing" @click="refresh">
           刷新
         </el-button>

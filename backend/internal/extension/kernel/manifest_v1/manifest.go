@@ -502,6 +502,7 @@ func (m Manifest) Validate() ValidationReport {
 			}
 		}
 	}
+	validateUIPlatformIsolation(m, &report)
 	if m.Integrity.Algorithm == "" {
 		report.AddError("integrity.algorithm", "missing", "integrity algorithm required")
 	}
@@ -551,6 +552,168 @@ func (m Manifest) Validate() ValidationReport {
 	}
 	checkMetadataSize(m.Extension.Metadata, "extension.metadata", &report)
 	return report
+}
+
+func validateUIPlatformIsolation(m Manifest, report *ValidationReport) {
+	type artifact struct {
+		path         string
+		schemaPath   string
+		contentHash  string
+		contribution string
+		family       string
+	}
+	artifacts := make([]artifact, 0)
+	entryArtifact := func(contributionID, family string, entry map[string]any) {
+		if entry == nil {
+			return
+		}
+		entryType := strings.TrimSpace(stringField(entry, "type"))
+		if entryType == "declarative" || entryType == "" {
+			return
+		}
+		artifacts = append(artifacts, artifact{
+			path:         strings.TrimSpace(stringField(entry, "path")),
+			schemaPath:   strings.TrimSpace(stringField(entry, "schema_path")),
+			contentHash:  strings.TrimSpace(stringField(entry, "content_hash")),
+			contribution: strings.TrimSpace(stringField(entry, "contributionId")),
+			family:       family,
+		})
+		if artifacts[len(artifacts)-1].contribution == "" {
+			artifacts[len(artifacts)-1].contribution = contributionID
+		}
+	}
+	for i, mod := range m.Modules {
+		for j, contribution := range mod.Contributions {
+			contributionPath := fmt.Sprintf("modules[%d].contributions[%d]", i, j)
+			spec := contribution.Spec
+			switch contribution.Kind {
+			case "ui_page", "ui_panel", "ui_chat", "ui_context_action", "ui_desktop":
+				platforms := specPlatforms(spec)
+				if len(platforms) == 0 {
+					platforms = normalizedPlatforms(m.Compatibility.Platforms)
+				}
+				if len(platforms) == 0 {
+					report.AddError(contributionPath+".spec.visibility.platforms", "missing_platforms", "UI component must declare desktop or mobile platforms")
+					continue
+				}
+				family, ok := singleUIPlatformFamily(platforms)
+				if !ok {
+					report.AddError(contributionPath+".spec.visibility.platforms", "mixed_platforms", "UI component cannot mix desktop and mobile platforms")
+					continue
+				}
+				if entry, ok := spec["entry"].(map[string]any); ok {
+					entryArtifact(contribution.ID, family, entry)
+				}
+			case "ui_provider":
+				entries, ok := spec["entries"].(map[string]any)
+				if !ok {
+					continue
+				}
+				for platform, raw := range entries {
+					entry, ok := raw.(map[string]any)
+					if !ok {
+						continue
+					}
+					family := uiPlatformFamily(platform)
+					if family == "" {
+						continue
+					}
+					entryArtifact(contribution.ID, family, entry)
+				}
+			}
+		}
+	}
+	for left := 0; left < len(artifacts); left++ {
+		for right := left + 1; right < len(artifacts); right++ {
+			a := artifacts[left]
+			b := artifacts[right]
+			if a.family == b.family {
+				continue
+			}
+			if a.contribution != "" && a.contribution == b.contribution {
+				report.AddError("ui_platform_isolation", "shared_contribution", fmt.Sprintf("desktop and mobile cannot share UI contribution %s", a.contribution))
+			}
+			if a.path != "" && a.path == b.path {
+				report.AddError("ui_platform_isolation", "shared_path", fmt.Sprintf("desktop and mobile cannot share UI path %s", a.path))
+			}
+			if a.schemaPath != "" && a.schemaPath == b.schemaPath {
+				report.AddError("ui_platform_isolation", "shared_schema", fmt.Sprintf("desktop and mobile cannot share schema path %s", a.schemaPath))
+			}
+			if a.contentHash != "" && a.contentHash != "pending" && a.contentHash == b.contentHash {
+				report.AddError("ui_platform_isolation", "shared_content", "desktop and mobile UI content hash must differ")
+			}
+		}
+	}
+}
+
+func specPlatforms(spec map[string]any) []string {
+	visibility, _ := spec["visibility"].(map[string]any)
+	raw, _ := visibility["platforms"].([]any)
+	return platformsFromAny(raw)
+}
+
+func platformsFromAny(raw []any) []string {
+	result := make([]string, 0, len(raw))
+	for _, value := range raw {
+		platform := strings.TrimSpace(fmt.Sprint(value))
+		if platform != "" {
+			result = append(result, platform)
+		}
+	}
+	return result
+}
+
+func normalizedPlatforms(raw []string) []string {
+	result := make([]string, 0, len(raw))
+	for _, value := range raw {
+		platform := strings.TrimSpace(value)
+		if platform != "" {
+			result = append(result, platform)
+		}
+	}
+	return result
+}
+
+func singleUIPlatformFamily(platforms []string) (string, bool) {
+	family := ""
+	for _, platform := range platforms {
+		current := uiPlatformFamily(platform)
+		if current == "" {
+			continue
+		}
+		if family == "" {
+			family = current
+			continue
+		}
+		if family != current {
+			return "", false
+		}
+	}
+	return family, family != ""
+}
+
+func uiPlatformFamily(platform string) string {
+	normalized := strings.ToLower(strings.TrimSpace(platform))
+	if strings.HasPrefix(normalized, "windows") || strings.HasPrefix(normalized, "linux") || strings.HasPrefix(normalized, "macos") ||
+		strings.HasPrefix(normalized, "electron_windows") || strings.HasPrefix(normalized, "electron_linux") || strings.HasPrefix(normalized, "electron_macos") ||
+		normalized == "desktop" {
+		return "desktop"
+	}
+	if strings.HasPrefix(normalized, "android") || strings.HasPrefix(normalized, "ios") || normalized == "mobile" {
+		return "mobile"
+	}
+	return ""
+}
+
+func stringField(value map[string]any, key string) string {
+	if value == nil {
+		return ""
+	}
+	raw, ok := value[key]
+	if !ok || raw == nil {
+		return ""
+	}
+	return fmt.Sprint(raw)
 }
 
 func (m Manifest) ToExtensionDefinition() (domain.ExtensionDefinition, error) {

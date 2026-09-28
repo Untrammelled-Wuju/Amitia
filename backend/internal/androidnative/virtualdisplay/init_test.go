@@ -102,8 +102,8 @@ func TestRegister_Create_DuplicateRejected(t *testing.T) {
 
 func TestTools_BuildVirtualDisplayTools(t *testing.T) {
 	tools := BuildVirtualDisplayTools()
-	if len(tools) != 6 {
-		t.Fatalf("expected 6 tools, got %d", len(tools))
+	if len(tools) != 12 {
+		t.Fatalf("expected 12 tools, got %d", len(tools))
 	}
 	ids := map[string]bool{}
 	for _, tool := range tools {
@@ -122,6 +122,12 @@ func TestTools_BuildVirtualDisplayTools(t *testing.T) {
 		"android.virtual_display.list",
 		"android.virtual_display.resize",
 		"android.virtual_display.release",
+		"android.virtual_display.launch",
+		"android.virtual_display.capture",
+		"android.virtual_display.tap",
+		"android.virtual_display.swipe",
+		"android.virtual_display.key",
+		"android.virtual_display.text",
 	}
 	for _, id := range expectedIDs {
 		if !ids[id] {

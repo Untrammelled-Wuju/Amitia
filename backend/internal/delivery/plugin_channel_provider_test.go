@@ -42,6 +42,16 @@ func TestPluginChannelProviderRegistryUsesGenericProviderMetadata(t *testing.T) 
 			_ = json.NewEncoder(writer).Encode(map[string]any{"connected": true})
 		case "/api/messages":
 			_ = json.NewEncoder(writer).Encode(map[string]any{"data": map[string]any{"messages": []any{map[string]any{"id": "m1"}}}})
+		case "/api/config":
+			_ = json.NewEncoder(writer).Encode(map[string]any{"channelId": "demo-channel"})
+		case "/api/action":
+			_ = json.NewEncoder(writer).Encode(map[string]any{"data": map[string]any{"synced": true}})
+		case "/api/logs":
+			_ = json.NewEncoder(writer).Encode(map[string]any{"data": map[string]any{"items": []any{map[string]any{"message": "ok"}}}})
+		case "/api/peers":
+			_ = json.NewEncoder(writer).Encode(map[string]any{"data": map[string]any{"items": []any{map[string]any{"id": "friend-1"}}}})
+		case "/api/send":
+			_ = json.NewEncoder(writer).Encode(map[string]any{"accepted": true})
 		default:
 			http.NotFound(writer, request)
 		}
@@ -93,6 +103,41 @@ func TestPluginChannelProviderRegistryUsesGenericProviderMetadata(t *testing.T) 
 	}
 	if connected["connected"] != true {
 		t.Fatalf("unexpected connect result: %#v", connected)
+	}
+	config, err := registry.Config(context.Background(), "demo-channel")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if config["channelId"] != "demo-channel" {
+		t.Fatalf("unexpected config: %#v", config)
+	}
+	action, err := registry.Invoke(context.Background(), "demo-channel", "sync_peers", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if action["synced"] != true {
+		t.Fatalf("unexpected action result: %#v", action)
+	}
+	logs, err := registry.Logs(context.Background(), "demo-channel", map[string]any{"limit": 20})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(logs["items"].([]any)) != 1 {
+		t.Fatalf("unexpected logs: %#v", logs)
+	}
+	peers, err := registry.Peers(context.Background(), "demo-channel", map[string]any{"limit": 20})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(peers["items"].([]any)) != 1 {
+		t.Fatalf("unexpected peers: %#v", peers)
+	}
+	sent, err := registry.Send(context.Background(), "demo-channel", "friend-1", "", "hello", "manual-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sent["accepted"] != true {
+		t.Fatalf("unexpected send result: %#v", sent)
 	}
 }
 

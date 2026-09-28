@@ -1,0 +1,702 @@
+{
+  "schemaVersion": "schema-ui/1",
+  "type": "document",
+  "title": "生活系统（桌面端）",
+  "lifecycle": {
+    "onMount": [
+      {
+        "action_id": "command",
+        "target": "tool",
+        "input": {
+          "action": "ui.snapshot"
+        },
+        "statePath": "snapshot"
+      }
+    ]
+  },
+  "actions": [
+    {
+      "actionId": "command",
+      "target": "tool"
+    }
+  ],
+  "dataSources": [],
+  "children": [
+    {
+      "id": "life-page",
+      "type": "page",
+      "children": [
+        {
+          "id": "life-summary",
+          "type": "grid",
+          "props": {
+            "columns": 4
+          },
+          "children": [
+            {
+              "id": "life-state-value",
+              "type": "key_value",
+              "props": {
+                "title": "当前状态",
+                "columns": 1
+              },
+              "bindings": [
+                {
+                  "path": "items",
+                  "source": "state",
+                  "sourcePath": "snapshot.stateLife"
+                }
+              ]
+            },
+            {
+              "id": "life-energy-value",
+              "type": "progress",
+              "props": {
+                "showText": true
+              },
+              "bindings": [
+                {
+                  "path": "value",
+                  "source": "state",
+                  "sourcePath": "snapshot.stateLife.energy"
+                }
+              ]
+            },
+            {
+              "id": "life-available-value",
+              "type": "badge",
+              "props": {
+                "type": "success"
+              },
+              "bindings": [
+                {
+                  "path": "text",
+                  "source": "state",
+                  "sourcePath": "snapshot.stateLife.available"
+                }
+              ]
+            },
+            {
+              "id": "life-sleeping-value",
+              "type": "badge",
+              "props": {
+                "type": "info"
+              },
+              "bindings": [
+                {
+                  "path": "text",
+                  "source": "state",
+                  "sourcePath": "snapshot.stateLife.sleeping"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "life-refresh-actions",
+          "type": "button_group",
+          "children": [
+            {
+              "id": "life-refresh",
+              "type": "button",
+              "props": {
+                "text": "刷新",
+                "type": "primary"
+              },
+              "actions": [
+                {
+                  "action_id": "command",
+                  "target": "tool",
+                  "input": {
+                    "action": "ui.snapshot"
+                  },
+                  "statePath": "snapshot"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "life-tabs",
+          "type": "tabs",
+          "children": [
+            {
+              "id": "life-tab-overview",
+              "type": "tab_item",
+              "props": {
+                "label": "总览",
+                "name": "overview"
+              },
+              "children": [
+                {
+                  "id": "life-timeline-table",
+                  "type": "table",
+                  "props": {
+                    "columns": [
+                      {
+                        "prop": "startTime",
+                        "label": "开始"
+                      },
+                      {
+                        "prop": "endTime",
+                        "label": "结束"
+                      },
+                      {
+                        "prop": "state",
+                        "label": "状态"
+                      },
+                      {
+                        "prop": "reason",
+                        "label": "原因"
+                      },
+                      {
+                        "prop": "sourceType",
+                        "label": "来源"
+                      }
+                    ]
+                  },
+                  "bindings": [
+                    {
+                      "path": "data",
+                      "source": "state",
+                      "sourcePath": "snapshot.timeline.events"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "id": "life-tab-routine",
+              "type": "tab_item",
+              "props": {
+                "label": "作息与工作",
+                "name": "routine"
+              },
+              "children": [
+                {
+                  "id": "life-sleep-form",
+                  "type": "section",
+                  "props": {
+                    "title": "睡眠设置"
+                  },
+                  "children": [
+                    {
+                      "id": "life-sleep-bed",
+                      "type": "field",
+                      "props": {
+                        "label": "入睡时间",
+                        "variant": "time"
+                      },
+                      "bindings": [
+                        {
+                          "path": "sleep.bedTime",
+                          "source": "form",
+                          "default": "23:00"
+                        }
+                      ]
+                    },
+                    {
+                      "id": "life-sleep-wake",
+                      "type": "field",
+                      "props": {
+                        "label": "起床时间",
+                        "variant": "time"
+                      },
+                      "bindings": [
+                        {
+                          "path": "sleep.wakeTime",
+                          "source": "form",
+                          "default": "07:00"
+                        }
+                      ]
+                    },
+                    {
+                      "id": "life-sleep-enabled",
+                      "type": "switch",
+                      "props": {
+                        "activeText": "启用睡眠"
+                      },
+                      "bindings": [
+                        {
+                          "path": "sleep.enabled",
+                          "source": "form",
+                          "default": true
+                        }
+                      ]
+                    },
+                    {
+                      "id": "life-sleep-mode",
+                      "type": "select",
+                      "props": {
+                        "label": "睡眠回复模式",
+                        "options": [
+                          {
+                            "label": "不回复",
+                            "value": "NO_REPLY"
+                          },
+                          {
+                            "label": "简短回复",
+                            "value": "SHORT_REPLY"
+                          },
+                          {
+                            "label": "正常回复",
+                            "value": "NORMAL_REPLY"
+                          }
+                        ]
+                      },
+                      "bindings": [
+                        {
+                          "path": "sleep.sleepReplyMode",
+                          "source": "form",
+                          "default": "NO_REPLY"
+                        }
+                      ]
+                    },
+                    {
+                      "id": "life-sleep-save",
+                      "type": "button",
+                      "props": {
+                        "text": "保存睡眠设置",
+                        "type": "primary"
+                      },
+                      "actions": [
+                        {
+                          "action_id": "command",
+                          "target": "tool",
+                          "input": {
+                            "action": "sleep.update",
+                            "payload": {
+                              "sleep": {
+                                "bedTime": "$form.sleep.bedTime",
+                                "wakeTime": "$form.sleep.wakeTime",
+                                "enabled": "$form.sleep.enabled",
+                                "sleepReplyMode": "$form.sleep.sleepReplyMode"
+                              }
+                            }
+                          },
+                          "statePath": "snapshot"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "id": "life-work-form",
+                  "type": "section",
+                  "props": {
+                    "title": "工作与通勤"
+                  },
+                  "children": [
+                    {
+                      "id": "life-work-enabled",
+                      "type": "switch",
+                      "props": {
+                        "activeText": "启用工作档期"
+                      },
+                      "bindings": [
+                        {
+                          "path": "work.enabled",
+                          "source": "form",
+                          "default": false
+                        }
+                      ]
+                    },
+                    {
+                      "id": "life-work-start",
+                      "type": "field",
+                      "props": {
+                        "label": "工作开始",
+                        "variant": "time"
+                      },
+                      "bindings": [
+                        {
+                          "path": "work.workStartTime",
+                          "source": "form",
+                          "default": "09:00"
+                        }
+                      ]
+                    },
+                    {
+                      "id": "life-work-end",
+                      "type": "field",
+                      "props": {
+                        "label": "工作结束",
+                        "variant": "time"
+                      },
+                      "bindings": [
+                        {
+                          "path": "work.workEndTime",
+                          "source": "form",
+                          "default": "18:00"
+                        }
+                      ]
+                    },
+                    {
+                      "id": "life-commute-min",
+                      "type": "field",
+                      "props": {
+                        "label": "通勤最短分钟",
+                        "variant": "number"
+                      },
+                      "bindings": [
+                        {
+                          "path": "work.commuteMinMinutes",
+                          "source": "form",
+                          "default": 15
+                        }
+                      ]
+                    },
+                    {
+                      "id": "life-commute-max",
+                      "type": "field",
+                      "props": {
+                        "label": "通勤最长分钟",
+                        "variant": "number"
+                      },
+                      "bindings": [
+                        {
+                          "path": "work.commuteMaxMinutes",
+                          "source": "form",
+                          "default": 45
+                        }
+                      ]
+                    },
+                    {
+                      "id": "life-work-save",
+                      "type": "button",
+                      "props": {
+                        "text": "保存工作档期",
+                        "type": "primary"
+                      },
+                      "actions": [
+                        {
+                          "action_id": "command",
+                          "target": "tool",
+                          "input": {
+                            "action": "work.update",
+                            "payload": {
+                              "work": {
+                                "enabled": "$form.work.enabled",
+                                "workStartTime": "$form.work.workStartTime",
+                                "workEndTime": "$form.work.workEndTime",
+                                "commuteMinMinutes": "$form.work.commuteMinMinutes",
+                                "commuteMaxMinutes": "$form.work.commuteMaxMinutes"
+                              }
+                            }
+                          },
+                          "statePath": "snapshot"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "id": "life-tab-events",
+              "type": "tab_item",
+              "props": {
+                "label": "事件",
+                "name": "events"
+              },
+              "children": [
+                {
+                  "id": "life-fixed-table",
+                  "type": "table",
+                  "props": {
+                    "columns": [
+                      {
+                        "prop": "id",
+                        "label": "ID"
+                      },
+                      {
+                        "prop": "title",
+                        "label": "标题"
+                      },
+                      {
+                        "prop": "startTime",
+                        "label": "开始"
+                      },
+                      {
+                        "prop": "endTime",
+                        "label": "结束"
+                      },
+                      {
+                        "prop": "enabled",
+                        "label": "启用"
+                      }
+                    ]
+                  },
+                  "bindings": [
+                    {
+                      "path": "data",
+                      "source": "state",
+                      "sourcePath": "snapshot.fixedEvents"
+                    }
+                  ]
+                },
+                {
+                  "id": "life-event-id",
+                  "type": "field",
+                  "props": {
+                    "label": "事件 ID",
+                    "placeholder": "输入表中 ID"
+                  },
+                  "bindings": [
+                    {
+                      "path": "event.id",
+                      "source": "form",
+                      "default": ""
+                    }
+                  ]
+                },
+                {
+                  "id": "life-event-actions",
+                  "type": "button_group",
+                  "children": [
+                    {
+                      "id": "life-event-toggle",
+                      "type": "button",
+                      "props": {
+                        "text": "启用/停用"
+                      },
+                      "actions": [
+                        {
+                          "action_id": "command",
+                          "target": "tool",
+                          "input": {
+                            "action": "fixed.toggle",
+                            "payload": {
+                              "id": "$form.event.id"
+                            }
+                          },
+                          "statePath": "snapshot"
+                        }
+                      ]
+                    },
+                    {
+                      "id": "life-event-delete",
+                      "type": "button",
+                      "props": {
+                        "text": "删除",
+                        "type": "danger"
+                      },
+                      "actions": [
+                        {
+                          "action_id": "command",
+                          "target": "tool",
+                          "input": {
+                            "action": "fixed.delete",
+                            "payload": {
+                              "id": "$form.event.id"
+                            }
+                          },
+                          "confirmation": "确认删除该事件？",
+                          "statePath": "snapshot"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "id": "life-fixed-create-title",
+                  "type": "field",
+                  "props": {
+                    "label": "新事件标题"
+                  },
+                  "bindings": [
+                    {
+                      "path": "event.title",
+                      "source": "form",
+                      "default": ""
+                    }
+                  ]
+                },
+                {
+                  "id": "life-fixed-create-start",
+                  "type": "field",
+                  "props": {
+                    "label": "开始时间",
+                    "variant": "time"
+                  },
+                  "bindings": [
+                    {
+                      "path": "event.startTime",
+                      "source": "form",
+                      "default": "09:00"
+                    }
+                  ]
+                },
+                {
+                  "id": "life-fixed-create-end",
+                  "type": "field",
+                  "props": {
+                    "label": "结束时间",
+                    "variant": "time"
+                  },
+                  "bindings": [
+                    {
+                      "path": "event.endTime",
+                      "source": "form",
+                      "default": "10:00"
+                    }
+                  ]
+                },
+                {
+                  "id": "life-fixed-create",
+                  "type": "button",
+                  "props": {
+                    "text": "新增固定事件",
+                    "type": "primary"
+                  },
+                  "actions": [
+                    {
+                      "action_id": "command",
+                      "target": "tool",
+                      "input": {
+                        "action": "fixed.create",
+                        "payload": {
+                          "title": "$form.event.title",
+                          "eventType": "CUSTOM_BUSY",
+                          "startTime": "$form.event.startTime",
+                          "endTime": "$form.event.endTime"
+                        }
+                      },
+                      "statePath": "snapshot"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "id": "life-tab-tendency",
+              "type": "tab_item",
+              "props": {
+                "label": "倾向",
+                "name": "tendency"
+              },
+              "children": [
+                {
+                  "id": "life-tendency-punctuality",
+                  "type": "slider",
+                  "props": {
+                    "label": "守时倾向"
+                  },
+                  "bindings": [
+                    {
+                      "path": "tendencies.punctualityTendency",
+                      "source": "form",
+                      "default": 50
+                    }
+                  ]
+                },
+                {
+                  "id": "life-tendency-prepare",
+                  "type": "slider",
+                  "props": {
+                    "label": "提前准备"
+                  },
+                  "bindings": [
+                    {
+                      "path": "tendencies.earlyPrepareTendency",
+                      "source": "form",
+                      "default": 50
+                    }
+                  ]
+                },
+                {
+                  "id": "life-tendency-discipline",
+                  "type": "slider",
+                  "props": {
+                    "label": "自律程度"
+                  },
+                  "bindings": [
+                    {
+                      "path": "tendencies.selfDisciplineTendency",
+                      "source": "form",
+                      "default": 50
+                    }
+                  ]
+                },
+                {
+                  "id": "life-tendency-social",
+                  "type": "slider",
+                  "props": {
+                    "label": "社交精力"
+                  },
+                  "bindings": [
+                    {
+                      "path": "tendencies.socialEnergy",
+                      "source": "form",
+                      "default": 50
+                    }
+                  ]
+                },
+                {
+                  "id": "life-tendency-save",
+                  "type": "button",
+                  "props": {
+                    "text": "保存生活倾向",
+                    "type": "primary"
+                  },
+                  "actions": [
+                    {
+                      "action_id": "command",
+                      "target": "tool",
+                      "input": {
+                        "action": "tendency.update",
+                        "payload": {
+                          "tendencies": {
+                            "punctualityTendency": "$form.tendencies.punctualityTendency",
+                            "earlyPrepareTendency": "$form.tendencies.earlyPrepareTendency",
+                            "selfDisciplineTendency": "$form.tendencies.selfDisciplineTendency",
+                            "socialEnergy": "$form.tendencies.socialEnergy"
+                          }
+                        }
+                      },
+                      "statePath": "snapshot"
+                    }
+                  ]
+                },
+                {
+                  "id": "life-tendency-reset",
+                  "type": "button",
+                  "props": {
+                    "text": "恢复默认"
+                  },
+                  "actions": [
+                    {
+                      "action_id": "command",
+                      "target": "tool",
+                      "input": {
+                        "action": "tendency.reset",
+                        "payload": {}
+                      },
+                      "confirmation": "确认恢复默认生活倾向？",
+                      "statePath": "snapshot"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "theme": {
+    "mode": "auto"
+  },
+  "accessibility": {
+    "enabled": true,
+    "keyboardNav": true,
+    "screenReader": true
+  },
+  "performanceBudget": {
+    "maxRenderTimeMs": 200,
+    "maxLayoutCount": 300,
+    "maxNodeCount": 300,
+    "maxDataFetchCount": 1,
+    "maxActionCount": 32
+  }
+}

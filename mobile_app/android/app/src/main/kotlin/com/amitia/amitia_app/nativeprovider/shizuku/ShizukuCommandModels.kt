@@ -13,6 +13,8 @@ data class ShizukuCommandRequest(
     val executable: String,
     val args: List<String> = emptyList(),
     val stdin: String? = null,
+    val env: Map<String, String> = emptyMap(),
+    val workDir: String? = null,
     val timeoutMs: Long = 30000,
     val maxOutputBytes: Long = 1048576,
 )

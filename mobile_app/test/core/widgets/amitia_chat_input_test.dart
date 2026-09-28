@@ -1,7 +1,6 @@
 import 'dart:io';
 
 import 'package:amitia_app/core/widgets/amitia_message.dart';
-import 'package:amitia_app/core/widgets/amitia_popup_menu.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -229,11 +228,9 @@ void main() {
 
       await tester.tap(find.byKey(const ValueKey('composer-reasoning-label')));
       await tester.pumpAndSettle();
-      expect(find.byType(AmitiaPopupSurface), findsOneWidget);
-      expect(
-        tester.getSize(find.byType(AmitiaPopupSurface)).width,
-        closeTo(260, 0.1),
-      );
+      final drawer = find.byKey(const ValueKey('composer-model-menu-sheet'));
+      expect(drawer, findsOneWidget);
+      expect(tester.getSize(drawer).width, closeTo(375, 0.1));
       final slider = find.byKey(const ValueKey('composer-reasoning-slider'));
       expect(slider, findsOneWidget);
       expect(find.byType(Switch), findsNothing);
@@ -275,7 +272,7 @@ void main() {
     },
   );
 
-  testWidgets('model menu closes on outside tap with an exit animation', (
+  testWidgets('model drawer closes on outside tap with an exit animation', (
     tester,
   ) async {
     await tester.pumpWidget(
@@ -305,15 +302,16 @@ void main() {
 
     await tester.tap(find.byKey(const ValueKey('composer-reasoning-label')));
     await tester.pumpAndSettle();
-    expect(find.byType(AmitiaPopupSurface), findsOneWidget);
+    final drawer = find.byKey(const ValueKey('composer-model-menu-sheet'));
+    expect(drawer, findsOneWidget);
 
     await tester.tapAt(const Offset(8, 8));
     await tester.pump();
-    expect(find.byType(AmitiaPopupSurface), findsOneWidget);
+    expect(drawer, findsOneWidget);
     await tester.pump(const Duration(milliseconds: 80));
-    expect(find.byType(AmitiaPopupSurface), findsOneWidget);
+    expect(drawer, findsOneWidget);
     await tester.pumpAndSettle();
-    expect(find.byType(AmitiaPopupSurface), findsNothing);
+    expect(drawer, findsNothing);
   });
 
   testWidgets('reasoning slider keeps desktop geometry and low-track fade', (
@@ -450,13 +448,11 @@ void main() {
 
     await tester.tap(find.byKey(const ValueKey('composer-reasoning-label')));
     await tester.pumpAndSettle();
-    final surfaceElement = tester.element(find.byType(AmitiaPopupSurface));
+    final drawer = find.byKey(const ValueKey('composer-model-menu-sheet'));
+    final surfaceElement = tester.element(drawer);
     await tester.tap(find.text('模型'));
     await tester.pump(const Duration(milliseconds: 80));
-    expect(
-      tester.element(find.byType(AmitiaPopupSurface)),
-      same(surfaceElement),
-    );
+    expect(tester.element(drawer), same(surfaceElement));
     await tester.pumpAndSettle();
 
     expect(tester.takeException(), isNull);

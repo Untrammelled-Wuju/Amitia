@@ -1,0 +1,718 @@
+{
+  "manifestVersion": 1,
+  "placement": "device",
+  "extension": {
+    "id": "com.amitia/channel-qq",
+    "name": {
+      "default": "QQ 渠道"
+    },
+    "description": {
+      "default": "通过 QQ Bot WebSocket 接入 QQ 私聊和群聊消息。"
+    },
+    "version": "1.0.13",
+    "license": "AGPL-3.0-only",
+    "homepage": "https://amitia.untrammelled.top",
+    "categories": [
+      "channel",
+      "messaging"
+    ],
+    "keywords": [
+      "qq",
+      "qqbot",
+      "channel"
+    ]
+  },
+  "publisher": {
+    "id": "com.amitia",
+    "displayName": "Amitia",
+    "trustLevel": "official"
+  },
+  "compatibility": {
+    "minHostVersion": "0.1.0",
+    "platforms": [
+      "windows",
+      "linux",
+      "macos",
+      "android",
+      "ios"
+    ]
+  },
+  "modules": [
+    {
+      "id": "qq-channel-service",
+      "name": {
+        "default": "QQ 渠道服务"
+      },
+      "description": {
+        "default": "管理 QQ Bot 连接、账号状态、入站消息和单条消息发送。"
+      },
+      "type": "service",
+      "runtime": {
+        "type": "service",
+        "entryPoint": "launcher.mjs",
+        "timeout": "30s",
+        "memory": 268435456,
+        "maxSubprocesses": 1
+      },
+      "placement": "device",
+      "providedCapabilities": [
+        {
+          "id": "channel.provider",
+          "version": "1.0.0"
+        }
+      ],
+      "provider": {
+        "id": "com.amitia.channel-qq.provider",
+        "priority": 100,
+        "labels": {
+          "channelId": "qq"
+        },
+        "metadata": {
+          "capabilities": {
+            "file": true,
+            "group": true,
+            "image": true,
+            "reply": false,
+            "text": true,
+            "thread": false,
+            "video": false,
+            "voice": true
+          },
+          "id": "qq",
+          "sidecar": {
+            "defaultPort": 19877,
+            "healthPath": "/api/health",
+            "kind": "qq",
+            "subdir": "qq-sidecar"
+          }
+        }
+      },
+      "contributions": []
+    },
+    {
+      "id": "qq-channel-ui",
+      "name": {
+        "default": "QQ 渠道界面"
+      },
+      "description": {
+        "default": "提供 QQ Bot 配置、连接状态和断开操作页面。"
+      },
+      "type": "data_only",
+      "contributions": [
+        {
+          "id": "qq-page",
+          "kind": "ui_page",
+          "name": {
+            "default": "QQ 连接"
+          },
+          "description": {
+            "default": ""
+          },
+          "spec": {
+            "actions": [
+              {
+                "action_id": "status",
+                "risk_level": "low",
+                "target": {
+                  "command": "channel.status",
+                  "type": "host_command"
+                },
+                "title": {
+                  "default": "查询 QQ 状态"
+                }
+              },
+              {
+                "action_id": "config",
+                "risk_level": "low",
+                "target": {
+                  "command": "channel.config",
+                  "type": "host_command"
+                },
+                "title": {
+                  "default": "读取 QQ 配置"
+                }
+              },
+              {
+                "action_id": "connect",
+                "risk_level": "medium",
+                "target": {
+                  "command": "channel.connect",
+                  "type": "host_command"
+                },
+                "title": {
+                  "default": "连接 QQ"
+                }
+              },
+              {
+                "action_id": "disconnect",
+                "risk_level": "medium",
+                "target": {
+                  "command": "channel.disconnect",
+                  "type": "host_command"
+                },
+                "title": {
+                  "default": "断开 QQ"
+                }
+              },
+              {
+                "action_id": "messages",
+                "risk_level": "low",
+                "target": {
+                  "command": "channel.messages",
+                  "type": "host_command"
+                },
+                "title": {
+                  "default": "查看 QQ 消息"
+                }
+              }
+            ],
+            "contract_version": 1,
+            "contribution_id": "qq-page",
+            "display": {
+              "description": {
+                "default": "配置并连接 QQ Bot。"
+              },
+              "icon": "channel",
+              "title": {
+                "default": "QQ 连接"
+              }
+            },
+            "entry": {
+              "content_hash": "sha256-KUiqccdNj0VAfgMhFjqaunItOfbrkUBWvRaEYYBEIkE=",
+              "path": "modules/qq-channel-ui/desktop/index.html",
+              "type": "web_restricted"
+            },
+            "extension_id": "com.amitia/channel-qq",
+            "integrity": {
+              "definition_hash": "qq-page-v1"
+            },
+            "kind": "web_page",
+            "module_id": "qq-channel-ui",
+            "sandbox": {
+              "enable_scripts": true,
+              "type": "web_restricted"
+            },
+            "slot": {
+              "contract_version": 1,
+              "slot_id": "provider.page.provider"
+            },
+            "visibility": {
+              "platforms": [
+                "windows",
+                "linux",
+                "macos"
+              ]
+            }
+          },
+          "requiredPermissions": [
+            "service.network.request"
+          ]
+        },
+        {
+          "id": "qq-messages-page",
+          "kind": "ui_page",
+          "name": {
+            "default": "QQ 消息"
+          },
+          "description": {
+            "default": "查看宿主保存的 QQ 渠道会话和消息。"
+          },
+          "spec": {
+            "actions": [
+              {
+                "action_id": "messages",
+                "risk_level": "low",
+                "target": {
+                  "command": "channel.messages",
+                  "type": "host_command"
+                },
+                "title": {
+                  "default": "查看 QQ 消息"
+                }
+              }
+            ],
+            "contract_version": 1,
+            "contribution_id": "qq-messages-page",
+            "display": {
+              "description": {
+                "default": "查看 QQ 渠道消息记录。"
+              },
+              "icon": "channel",
+              "title": {
+                "default": "QQ 消息"
+              }
+            },
+            "entry": {
+              "content_hash": "sha256-KUiqccdNj0VAfgMhFjqaunItOfbrkUBWvRaEYYBEIkE=",
+              "path": "modules/qq-channel-ui/desktop/index.html",
+              "type": "web_restricted"
+            },
+            "extension_id": "com.amitia/channel-qq",
+            "integrity": {
+              "definition_hash": "qq-messages-page-v1"
+            },
+            "kind": "web_page",
+            "module_id": "qq-channel-ui",
+            "sandbox": {
+              "enable_scripts": true,
+              "type": "web_restricted"
+            },
+            "slot": {
+              "contract_version": 1,
+              "slot_id": "provider.page.provider"
+            },
+            "visibility": {
+              "platforms": [
+                "windows",
+                "linux",
+                "macos"
+              ]
+            }
+          },
+          "requiredPermissions": [
+            "conversation.read"
+          ]
+        },
+        {
+          "id": "qq-mobile-page",
+          "kind": "ui_page",
+          "name": {
+            "default": "QQ 连接（手机）"
+          },
+          "description": {
+            "default": "在手机端配置并连接 QQ Bot。"
+          },
+          "spec": {
+            "actions": [
+              {
+                "action_id": "status",
+                "risk_level": "low",
+                "target": {
+                  "command": "channel.status",
+                  "type": "host_command"
+                },
+                "title": {
+                  "default": "查询 QQ 状态"
+                }
+              },
+              {
+                "action_id": "config",
+                "risk_level": "low",
+                "target": {
+                  "command": "channel.config",
+                  "type": "host_command"
+                },
+                "title": {
+                  "default": "读取 QQ 配置"
+                }
+              },
+              {
+                "action_id": "connect",
+                "risk_level": "medium",
+                "target": {
+                  "command": "channel.connect",
+                  "type": "host_command"
+                },
+                "title": {
+                  "default": "连接 QQ"
+                }
+              },
+              {
+                "action_id": "disconnect",
+                "risk_level": "medium",
+                "target": {
+                  "command": "channel.disconnect",
+                  "type": "host_command"
+                },
+                "title": {
+                  "default": "断开 QQ"
+                }
+              }
+            ],
+            "contract_version": 1,
+            "contribution_id": "qq-mobile-page",
+            "display": {
+              "description": {
+                "default": "配置并连接 QQ Bot。"
+              },
+              "icon": "channel",
+              "title": {
+                "default": "QQ 连接"
+              }
+            },
+            "entry": {
+              "content_hash": "sha256-XWTayB7NqGGXW1d890q1Wlo01e+u7sKFd+FhAC0u74A=",
+              "schema_path": "modules/qq-channel-ui/mobile/schema.json",
+              "type": "schema_renderer"
+            },
+            "extension_id": "com.amitia/channel-qq",
+            "integrity": {
+              "definition_hash": "qq-mobile-page-v1"
+            },
+            "kind": "schema_page",
+            "module_id": "qq-channel-ui",
+            "sandbox": {
+              "type": "schema_renderer"
+            },
+            "slot": {
+              "contract_version": 1,
+              "slot_id": "provider.page.provider"
+            },
+            "visibility": {
+              "platforms": [
+                "android",
+                "ios"
+              ]
+            }
+          },
+          "requiredPermissions": [
+            "service.network.request"
+          ]
+        },
+        {
+          "id": "qq-messages-mobile-page",
+          "kind": "ui_page",
+          "name": {
+            "default": "QQ 消息（手机）"
+          },
+          "description": {
+            "default": "在手机端查看 QQ 渠道消息并发送测试消息。"
+          },
+          "spec": {
+            "actions": [
+              {
+                "action_id": "status",
+                "risk_level": "low",
+                "target": {
+                  "command": "channel.status",
+                  "type": "host_command"
+                },
+                "title": {
+                  "default": "查询 QQ 状态"
+                }
+              },
+              {
+                "action_id": "messages",
+                "risk_level": "low",
+                "target": {
+                  "command": "channel.messages",
+                  "type": "host_command"
+                },
+                "title": {
+                  "default": "查看 QQ 消息"
+                }
+              },
+              {
+                "action_id": "send",
+                "risk_level": "high",
+                "target": {
+                  "command": "channel.send",
+                  "type": "host_command"
+                },
+                "title": {
+                  "default": "发送 QQ 测试消息"
+                }
+              }
+            ],
+            "contract_version": 1,
+            "contribution_id": "qq-messages-mobile-page",
+            "display": {
+              "description": {
+                "default": "查看 QQ 渠道消息记录。"
+              },
+              "icon": "channel",
+              "title": {
+                "default": "QQ 消息"
+              }
+            },
+            "entry": {
+              "content_hash": "sha256-l37CrBTd7crMaBtLgxsOv/6l5Zk93SPy5TbwV96XKTM=",
+              "schema_path": "modules/qq-channel-ui/mobile/messages.schema.json",
+              "type": "schema_renderer"
+            },
+            "extension_id": "com.amitia/channel-qq",
+            "integrity": {
+              "definition_hash": "qq-messages-mobile-page-v1"
+            },
+            "kind": "schema_page",
+            "module_id": "qq-channel-ui",
+            "sandbox": {
+              "type": "schema_renderer"
+            },
+            "slot": {
+              "contract_version": 1,
+              "slot_id": "provider.page.provider"
+            },
+            "visibility": {
+              "platforms": [
+                "android",
+                "ios"
+              ]
+            }
+          },
+          "requiredPermissions": [
+            "conversation.read"
+          ]
+        },
+        {
+          "id": "qq-routes",
+          "kind": "ui_provider",
+          "name": {
+            "default": "QQ 路由"
+          },
+          "description": {
+            "default": ""
+          },
+          "spec": {
+            "capability": "route.registry",
+            "entries": {
+              "electron_linux": {
+                "type": "declarative"
+              },
+              "electron_macos": {
+                "type": "declarative"
+              },
+              "electron_windows": {
+                "type": "declarative"
+              },
+              "mobile": {
+                "type": "declarative"
+              },
+              "web": {
+                "type": "declarative"
+              }
+            },
+            "metadata": {
+              "navigationItems": [],
+              "routes": [
+                {
+                  "capability": "page.provider",
+                  "id": "qq",
+                  "path": "/channels/qq",
+                  "priority": 210,
+                  "providerId": "qq-page-provider",
+                  "title": "QQ 连接"
+                },
+                {
+                  "capability": "page.provider",
+                  "id": "qq-messages",
+                  "path": "/channels/qq/messages",
+                  "priority": 211,
+                  "providerId": "qq-messages-page-provider-v2",
+                  "title": "QQ 消息"
+                }
+              ]
+            },
+            "mode": "replace",
+            "priority": 210,
+            "providerId": "qq-routes",
+            "trustLevel": "official"
+          }
+        },
+        {
+          "id": "qq-page-provider",
+          "kind": "ui_provider",
+          "name": {
+            "default": "QQ 页面 Provider"
+          },
+          "description": {
+            "default": ""
+          },
+          "spec": {
+            "capability": "page.provider",
+            "entries": {
+              "electron_linux": {
+                "contributionId": "qq-page",
+                "type": "web_restricted"
+              },
+              "electron_macos": {
+                "contributionId": "qq-page",
+                "type": "web_restricted"
+              },
+              "electron_windows": {
+                "contributionId": "qq-page",
+                "type": "web_restricted"
+              },
+              "mobile": {
+                "contributionId": "qq-mobile-page",
+                "type": "schema_renderer"
+              },
+              "web": {
+                "contributionId": "qq-page",
+                "type": "web_restricted"
+              }
+            },
+            "metadata": {
+              "routes": [
+                "/channels/qq"
+              ]
+            },
+            "mode": "replace",
+            "priority": 210,
+            "providerId": "qq-page-provider",
+            "trustLevel": "official"
+          }
+        },
+        {
+          "id": "qq-messages-page-provider-v2",
+          "kind": "ui_provider",
+          "name": {
+            "default": "QQ 消息页面 Provider"
+          },
+          "description": {
+            "default": ""
+          },
+          "spec": {
+            "capability": "page.provider",
+            "entries": {
+              "electron_linux": {
+                "contributionId": "qq-messages-page",
+                "type": "web_restricted"
+              },
+              "electron_macos": {
+                "contributionId": "qq-messages-page",
+                "type": "web_restricted"
+              },
+              "electron_windows": {
+                "contributionId": "qq-messages-page",
+                "type": "web_restricted"
+              },
+              "mobile": {
+                "contributionId": "qq-messages-mobile-page",
+                "type": "schema_renderer"
+              },
+              "web": {
+                "contributionId": "qq-messages-page",
+                "type": "web_restricted"
+              }
+            },
+            "metadata": {
+              "routes": [
+                "/channels/qq/messages"
+              ]
+            },
+            "mode": "replace",
+            "priority": 211,
+            "providerId": "qq-messages-page-provider-v2",
+            "trustLevel": "official"
+          }
+        },
+        {
+          "id": "qq-drawer",
+          "kind": "ui_provider",
+          "name": {
+            "default": "QQ 会话抽屉"
+          },
+          "description": {
+            "default": ""
+          },
+          "spec": {
+            "capability": "conversation.drawer",
+            "entries": {
+              "electron_linux": {
+                "type": "declarative"
+              },
+              "electron_macos": {
+                "type": "declarative"
+              },
+              "electron_windows": {
+                "type": "declarative"
+              },
+              "mobile": {
+                "type": "declarative"
+              },
+              "web": {
+                "type": "declarative"
+              }
+            },
+            "metadata": {
+              "navigationItems": [
+                {
+                  "id": "drawer.channel.qq.messages",
+                  "label": "QQ 消息",
+                  "icon": "channel",
+                  "order": 45,
+                  "route": "/channels/qq/messages",
+                  "channelId": "qq",
+                  "platforms": [
+                    "windows",
+                    "macos",
+                    "linux",
+                    "android",
+                    "ios"
+                  ]
+                }
+              ]
+            },
+            "mode": "replace",
+            "priority": 210,
+            "providerId": "qq-drawer",
+            "trustLevel": "official"
+          }
+        }
+      ],
+      "placement": "device"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "conversation.read",
+      "reason": "在渠道消息查看页面读取宿主保存的 QQ 会话和消息。",
+      "required": true,
+      "scope": "global"
+    },
+    {
+      "name": "conversation.write",
+      "reason": "将 QQ 入站消息提交给统一会话管线。",
+      "required": true,
+      "scope": "global"
+    },
+    {
+      "name": "message.send",
+      "reason": "向 QQ 用户或群聊发送角色回复。",
+      "required": true,
+      "scope": "extension"
+    },
+    {
+      "name": "service.provider.register",
+      "reason": "注册并管理 QQ 渠道 Provider。",
+      "required": true,
+      "scope": "extension"
+    },
+    {
+      "name": "service.secret.use",
+      "reason": "读取 QQ Bot AppID 和 Secret 凭据引用。",
+      "required": true,
+      "scope": "extension"
+    },
+    {
+      "name": "service.network.request",
+      "reason": "连接 QQ 开放平台和 WebSocket 网关。",
+      "required": true,
+      "scope": "extension"
+    },
+    {
+      "name": "service.network.listen_loopback",
+      "reason": "在本地回环地址提供渠道状态和发送接口。",
+      "required": true,
+      "scope": "extension"
+    },
+    {
+      "name": "service.background.run",
+      "reason": "保持 QQ 连接和消息接收任务运行。",
+      "required": true,
+      "scope": "extension"
+    }
+  ],
+  "lifecycle": {
+    "autoUpdate": true,
+    "backgroundTasks": true,
+    "networkAccess": true,
+    "sandbox": true
+  },
+  "integrity": {
+    "algorithm": "sha256",
+    "contentTreeHash": ""
+  },
+  "development": {}
+}

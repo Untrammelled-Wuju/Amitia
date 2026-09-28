@@ -373,6 +373,15 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                   context,
                 ).copyWith(color: context.textSecondary),
               ),
+              const SizedBox(height: 16),
+              MobileExtensionSlot(
+                slotId: 'chat.empty_state.card',
+                context: {
+                  'characterName': resolvedCharacterName,
+                  'workspaceName': workspaceName,
+                  'surface': 'empty-state',
+                },
+              ),
             ],
           ),
         ),
@@ -2339,8 +2348,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                                           fit: StackFit.expand,
                                           children: [
                                             ...previousChildren,
-                                            if (currentChild != null)
-                                              currentChild,
+                                            ?currentChild,
                                           ],
                                         );
                                       },

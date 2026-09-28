@@ -181,7 +181,7 @@
             "contribution_id": "emote-page",
             "extension_id": "com.amitia/emote",
             "module_id": "emote-ui",
-            "kind": "web_page",
+            "kind": "schema_page",
             "slot": {
               "slot_id": "provider.page.provider",
               "contract_version": 1
@@ -197,13 +197,19 @@
               "icon": "star"
             },
             "entry": {
-              "type": "web_restricted",
-              "path": "modules/emote-ui/desktop/index.html",
+              "type": "schema_renderer",
+              "schema_path": "modules/emote-ui/desktop/index.schema.json",
               "content_hash": "emote-page-v1"
             },
             "sandbox": {
-              "type": "web_restricted",
-              "enable_scripts": true
+              "type": "schema_renderer"
+            },
+            "visibility": {
+              "platforms": [
+                "windows",
+                "linux",
+                "macos"
+              ]
             },
             "actions": [
               {
@@ -236,7 +242,7 @@
             "contribution_id": "emote-mobile-page",
             "extension_id": "com.amitia/emote",
             "module_id": "emote-ui",
-            "kind": "web_page",
+            "kind": "schema_page",
             "slot": {
               "slot_id": "provider.page.provider",
               "contract_version": 1
@@ -252,13 +258,18 @@
               "icon": "star"
             },
             "entry": {
-              "type": "web_restricted",
-              "path": "modules/emote-ui/mobile/index.html",
+              "type": "schema_renderer",
+              "schema_path": "modules/emote-ui/mobile/index.schema.json",
               "content_hash": "pending"
             },
             "sandbox": {
-              "type": "web_restricted",
-              "enable_scripts": true
+              "type": "schema_renderer"
+            },
+            "visibility": {
+              "platforms": [
+                "android",
+                "ios"
+              ]
             },
             "actions": [
               {
@@ -304,13 +315,12 @@
               "icon": "emote"
             },
             "entry": {
-              "type": "web_restricted",
-              "path": "modules/emote-ui/desktop/composer.html",
+              "type": "schema_renderer",
+              "schema_path": "modules/emote-ui/desktop/composer.schema.json",
               "content_hash": "emote-composer-v1"
             },
             "sandbox": {
-              "type": "web_restricted",
-              "enable_scripts": true
+              "type": "schema_renderer"
             },
             "visibility": {
               "platforms": [
@@ -363,13 +373,12 @@
               "icon": "emote"
             },
             "entry": {
-              "type": "web_restricted",
-              "path": "modules/emote-ui/mobile/composer.html",
+              "type": "schema_renderer",
+              "schema_path": "modules/emote-ui/mobile/composer.schema.json",
               "content_hash": "pending"
             },
             "sandbox": {
-              "type": "web_restricted",
-              "enable_scripts": true
+              "type": "schema_renderer"
             },
             "visibility": {
               "platforms": [
@@ -417,13 +426,19 @@
               }
             },
             "entry": {
-              "type": "web_restricted",
-              "path": "modules/emote-ui/desktop/message.html",
+              "type": "schema_renderer",
+              "schema_path": "modules/emote-ui/desktop/message.schema.json",
               "content_hash": "emote-message-v1"
             },
             "sandbox": {
-              "type": "web_restricted",
-              "enable_scripts": true
+              "type": "schema_renderer"
+            },
+            "visibility": {
+              "platforms": [
+                "windows",
+                "linux",
+                "macos"
+              ]
             },
             "integrity": {
               "definition_hash": "emote-message-v1"
@@ -452,13 +467,18 @@
               }
             },
             "entry": {
-              "type": "web_restricted",
-              "path": "modules/emote-ui/mobile/message.html",
+              "type": "schema_renderer",
+              "schema_path": "modules/emote-ui/mobile/message.schema.json",
               "content_hash": "pending"
             },
             "sandbox": {
-              "type": "web_restricted",
-              "enable_scripts": true
+              "type": "schema_renderer"
+            },
+            "visibility": {
+              "platforms": [
+                "android",
+                "ios"
+              ]
             },
             "integrity": {
               "definition_hash": "emote-mobile-message-v1"
@@ -479,23 +499,23 @@
             "trustLevel": "official",
             "entries": {
               "web": {
-                "type": "web_restricted",
+                "type": "schema_renderer",
                 "contributionId": "emote-page"
               },
               "mobile": {
-                "type": "web_restricted",
+                "type": "schema_renderer",
                 "contributionId": "emote-mobile-page"
               },
               "electron_windows": {
-                "type": "web_restricted",
+                "type": "schema_renderer",
                 "contributionId": "emote-page"
               },
               "electron_macos": {
-                "type": "web_restricted",
+                "type": "schema_renderer",
                 "contributionId": "emote-page"
               },
               "electron_linux": {
-                "type": "web_restricted",
+                "type": "schema_renderer",
                 "contributionId": "emote-page"
               }
             },
@@ -576,23 +596,23 @@
             "fallbackProviderId": "builtin.amitia.message-renderer",
             "entries": {
               "web": {
-                "type": "web_restricted",
+                "type": "schema_renderer",
                 "contributionId": "emote-message"
               },
               "mobile": {
-                "type": "web_restricted",
+                "type": "schema_renderer",
                 "contributionId": "emote-mobile-message"
               },
               "electron_windows": {
-                "type": "web_restricted",
+                "type": "schema_renderer",
                 "contributionId": "emote-message"
               },
               "electron_macos": {
-                "type": "web_restricted",
+                "type": "schema_renderer",
                 "contributionId": "emote-message"
               },
               "electron_linux": {
-                "type": "web_restricted",
+                "type": "schema_renderer",
                 "contributionId": "emote-message"
               }
             },

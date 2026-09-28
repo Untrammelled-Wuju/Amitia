@@ -67,9 +67,11 @@ function main() {
     "modules/lifestyle-ui/desktop/index.html",
     "modules/lifestyle-ui/desktop/app.js",
     "modules/lifestyle-ui/desktop/styles.css",
+    "modules/lifestyle-ui/desktop/schema.json",
     "modules/lifestyle-ui/mobile/index.html",
     "modules/lifestyle-ui/mobile/app.js",
     "modules/lifestyle-ui/mobile/styles.css",
+    "modules/lifestyle-ui/mobile/schema.json",
   ];
   for (const path of required) {
     if (!entries.has(path)) throw new Error(`missing package path: ${path}`);
@@ -88,14 +90,17 @@ function main() {
     const contribution = manifest.modules
       ?.flatMap((module) => module.contributions || [])
       .find((item) => item.id === contributionId);
-    if (!contribution?.spec?.entry?.path) {
+    if (!contribution?.spec?.entry?.schema_path) {
       throw new Error(`${contributionId} missing`);
     }
     if (
       contribution.spec.entry.content_hash !==
-      browserHash(entries.get(contribution.spec.entry.path))
+      browserHash(entries.get(contribution.spec.entry.schema_path))
     ) {
       throw new Error(`${contributionId} entry hash mismatch`);
+    }
+    if (contribution.spec.entry.type !== "schema_renderer") {
+      throw new Error(`${contributionId} must use schema_renderer`);
     }
   }
   const payload = [...entries.entries()].filter(([name]) =>

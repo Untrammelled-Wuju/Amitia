@@ -1,0 +1,122 @@
+{
+  "schemaVersion": "schema-ui/1",
+  "type": "document",
+  "title": "发送表情（手机端）",
+  "lifecycle": {
+    "onMount": [
+      {
+        "action_id": "command",
+        "target": "tool",
+        "input": {
+          "action": "ui.composer"
+        },
+        "statePath": "composer"
+      }
+    ]
+  },
+  "actions": [
+    {
+      "actionId": "command",
+      "target": "tool"
+    }
+  ],
+  "children": [
+    {
+      "id": "mobile-emote-composer",
+      "type": "page",
+      "children": [
+        {
+          "id": "mobile-emote-group",
+          "type": "select",
+          "props": {
+            "placeholder": "全部分组",
+            "clearable": true,
+            "options": [
+              {
+                "label": "最近使用",
+                "value": "recent"
+              }
+            ]
+          },
+          "bindings": [
+            {
+              "path": "groupId",
+              "source": "form",
+              "default": ""
+            },
+            {
+              "path": "options",
+              "source": "state",
+              "sourcePath": "composer.groups"
+            }
+          ]
+        },
+        {
+          "id": "mobile-emote-refresh",
+          "type": "button",
+          "props": {
+            "text": "刷新",
+            "type": "primary"
+          },
+          "actions": [
+            {
+              "action_id": "command",
+              "target": "tool",
+              "input": {
+                "action": "ui.composer",
+                "payload": {
+                  "groupId": "$form.groupId"
+                }
+              },
+              "statePath": "composer"
+            }
+          ]
+        },
+        {
+          "id": "mobile-emote-gallery",
+          "type": "gallery",
+          "props": {
+            "imageField": "thumbnailUrl",
+            "titleField": "name",
+            "subtitleField": "meaning",
+            "minItemWidth": 96,
+            "emptyText": "暂无可发送表情"
+          },
+          "bindings": [
+            {
+              "path": "items",
+              "source": "state",
+              "sourcePath": "composer.emotes"
+            }
+          ],
+          "actions": [
+            {
+              "action_id": "command",
+              "target": "tool",
+              "input": {
+                "action": "emotes.send",
+                "payload": {
+                  "emoteId": "$item.id",
+                  "conversationId": "$context.conversationId",
+                  "characterId": "$context.characterId",
+                  "channel": "$context.channel"
+                }
+              },
+              "statePath": "sendResult"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "theme": {
+    "mode": "auto"
+  },
+  "performanceBudget": {
+    "maxRenderTimeMs": 100,
+    "maxLayoutCount": 120,
+    "maxNodeCount": 80,
+    "maxDataFetchCount": 1,
+    "maxActionCount": 8
+  }
+}

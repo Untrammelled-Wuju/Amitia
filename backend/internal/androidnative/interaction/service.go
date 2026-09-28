@@ -178,6 +178,7 @@ func (s *Service) Status(ctx context.Context) CapabilityState {
 
 func (s *Service) Click(ctx context.Context, req ClickRequest) (InteractionResult, error) {
 	startTime := time.Now()
+	req.applyPolicyDefaults(s.policy)
 
 	target := req.Target
 	targetType := target.EffectiveTargetType()
@@ -371,6 +372,7 @@ func (s *Service) clickVisual(
 
 func (s *Service) LongClick(ctx context.Context, req LongClickRequest) (InteractionResult, error) {
 	startTime := time.Now()
+	req.applyPolicyDefaults(s.policy)
 	target := req.Target
 	if target.EffectiveTargetType() != TargetNode {
 		return InteractionResult{}, &Error{Code: INTERACTION_INVALID_REQUEST, Message: "long click currently only supports node target"}
@@ -434,6 +436,7 @@ func (s *Service) LongClick(ctx context.Context, req LongClickRequest) (Interact
 
 func (s *Service) InputText(ctx context.Context, req InputTextRequest) (InteractionResult, error) {
 	startTime := time.Now()
+	req.applyPolicyDefaults(s.policy)
 	target := req.Target
 	if target.EffectiveTargetType() != TargetNode {
 		return InteractionResult{}, &Error{Code: INTERACTION_INVALID_REQUEST, Message: "input text currently only supports node target"}
@@ -464,10 +467,10 @@ func (s *Service) InputText(ctx context.Context, req InputTextRequest) (Interact
 			return s.accessibility.PerformNodeAction(ctx, node, NodeActionSetText, map[string]any{"text": req.Text})
 		}})
 	}
-	if s.policy.AllowShizukuFallback && s.shizuku != nil {
+	if req.AllowShizukuFallback && s.policy.AllowShizukuFallback && s.shizuku != nil {
 		candidates = append(candidates, providerRouteCandidate{name: "shizuku", strategy: StrategyShizuku, provider: s.shizuku, baseScore: 100, execute: func() error { return s.shizuku.InputText(ctx, req.Text) }})
 	}
-	if s.policy.AllowRootFallback && s.root != nil {
+	if req.AllowRootFallback && s.policy.AllowRootFallback && s.root != nil {
 		candidates = append(candidates, providerRouteCandidate{name: "root", strategy: StrategyRoot, provider: s.root, baseScore: 90, execute: func() error { return s.root.InputText(ctx, req.Text) }})
 	}
 	if req.AllowADBFallback && s.policy.AllowADBFallback && s.adb != nil {
@@ -533,6 +536,7 @@ func (s *Service) ClearText(ctx context.Context, req ClearTextRequest) (Interact
 
 func (s *Service) Scroll(ctx context.Context, req ScrollRequest) (InteractionResult, error) {
 	startTime := time.Now()
+	req.applyPolicyDefaults(s.policy)
 	target := req.Target
 	if target.EffectiveTargetType() != TargetNode {
 		return InteractionResult{}, &Error{Code: INTERACTION_INVALID_REQUEST, Message: "scroll currently only supports node target"}
@@ -571,16 +575,18 @@ func (s *Service) Scroll(ctx context.Context, req ScrollRequest) (InteractionRes
 	if s.accessibility != nil && s.accessibility.SupportsAction(node, action) {
 		candidates = append(candidates, providerRouteCandidate{name: "accessibility", strategy: StrategyAccessibilityAction, provider: s.accessibility, baseScore: 120, execute: func() error { return s.accessibility.PerformNodeAction(ctx, node, action, nil) }})
 	}
-	if bounds.Width() > 0 && bounds.Height() > 0 && s.coordinate != nil {
-		swipe := SwipeRequest{DisplayID: displayID, StartX: startX, StartY: startY, EndX: endX, EndY: endY, DurationMS: DefaultSwipeDurationMS}
-		candidates = append(candidates, providerRouteCandidate{name: "accessibility_gesture", strategy: StrategyNodeBounds, provider: s.coordinate, baseScore: 100, execute: func() error { return s.coordinate.Swipe(ctx, swipe) }})
-		if displayID == 0 && s.policy.AllowShizukuFallback && s.shizuku != nil {
+	if bounds.Width() > 0 && bounds.Height() > 0 {
+		if req.AllowCoordinateFallback && s.coordinate != nil {
+			swipe := SwipeRequest{DisplayID: displayID, StartX: startX, StartY: startY, EndX: endX, EndY: endY, DurationMS: DefaultSwipeDurationMS}
+			candidates = append(candidates, providerRouteCandidate{name: "accessibility_gesture", strategy: StrategyNodeBounds, provider: s.coordinate, baseScore: 100, execute: func() error { return s.coordinate.Swipe(ctx, swipe) }})
+		}
+		if displayID == 0 && req.AllowShizukuFallback && s.policy.AllowShizukuFallback && s.shizuku != nil {
 			candidates = append(candidates, providerRouteCandidate{name: "shizuku", strategy: StrategyShizuku, provider: s.shizuku, baseScore: 95, execute: func() error { return s.shizuku.Swipe(ctx, startX, startY, endX, endY, DefaultSwipeDurationMS) }})
 		}
-		if displayID == 0 && s.policy.AllowRootFallback && s.root != nil {
+		if displayID == 0 && req.AllowRootFallback && s.policy.AllowRootFallback && s.root != nil {
 			candidates = append(candidates, providerRouteCandidate{name: "root", strategy: StrategyRoot, provider: s.root, baseScore: 90, execute: func() error { return s.root.Swipe(ctx, startX, startY, endX, endY, DefaultSwipeDurationMS) }})
 		}
-		if displayID == 0 && s.policy.AllowADBFallback && s.adb != nil {
+		if displayID == 0 && req.AllowADBFallback && s.policy.AllowADBFallback && s.adb != nil {
 			candidates = append(candidates, providerRouteCandidate{name: "adb", strategy: StrategyADB, provider: s.adb, baseScore: 80, execute: func() error { return s.adb.Swipe(ctx, startX, startY, endX, endY, DefaultSwipeDurationMS) }})
 		}
 	}
@@ -600,7 +606,8 @@ func (s *Service) Scroll(ctx context.Context, req ScrollRequest) (InteractionRes
 
 func (s *Service) Swipe(ctx context.Context, req SwipeRequest) (InteractionResult, error) {
 	startTime := time.Now()
-	strategy, err := s.executeSwipeRouted(ctx, req, true, true, true, true)
+	req.applyPolicyDefaults(s.policy)
+	strategy, err := s.executeSwipeRouted(ctx, req, req.AllowCoordinateFallback, req.AllowShizukuFallback, req.AllowRootFallback, req.AllowADBFallback)
 	if err != nil {
 		return InteractionResult{}, err
 	}

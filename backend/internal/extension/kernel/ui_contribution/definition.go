@@ -382,6 +382,7 @@ var (
 	ErrInvalidRiskLevel        = errors.New("ui_contribution: invalid risk level")
 	ErrSlotIDEmpty             = errors.New("ui_contribution: slot_id empty")
 	ErrEntryPathEmpty          = errors.New("ui_contribution: entry path empty")
+	ErrSchemaPathEmpty         = errors.New("ui_contribution: schema path empty")
 	ErrEntryHashEmpty          = errors.New("ui_contribution: entry content_hash empty")
 	ErrIntegrityHashEmpty      = errors.New("ui_contribution: integrity definition_hash empty")
 	ErrContractVersionZero     = errors.New("ui_contribution: contract_version must be > 0")
@@ -413,7 +414,7 @@ func ValidateDefinition(def *UIContributionDefinition) error {
 	if def.ContractVersion <= 0 {
 		return ErrContractVersionZero
 	}
-	if def.Entry.Path == "" {
+	if def.Entry.Path == "" && def.Entry.SchemaPath == "" {
 		return ErrEntryPathEmpty
 	}
 	if def.Entry.ContentHash == "" {
@@ -742,7 +743,7 @@ func allowedSandboxesForKind(kind UIContributionKind) []UISandboxType {
 		UIContributionDesktopCommand:
 		return []UISandboxType{SandboxHostNative}
 	case UIContributionComposerAction:
-		return []UISandboxType{SandboxHostNative, SandboxWebRestricted, SandboxWebIsolated}
+		return []UISandboxType{SandboxHostNative, SandboxSchemaRenderer, SandboxWebRestricted, SandboxWebIsolated}
 	default:
 		return []UISandboxType{kind.DefaultSandbox()}
 	}

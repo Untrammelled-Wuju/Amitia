@@ -1,0 +1,515 @@
+{
+  "schemaVersion": "schema-ui/1",
+  "type": "document",
+  "title": "表情包管理（桌面端）",
+  "lifecycle": {
+    "onMount": [
+      {
+        "action_id": "command",
+        "target": "tool",
+        "input": {
+          "action": "ui.dashboard"
+        },
+        "statePath": "dashboard"
+      }
+    ]
+  },
+  "actions": [
+    {
+      "actionId": "command",
+      "target": "tool"
+    }
+  ],
+  "children": [
+    {
+      "id": "emote-page",
+      "type": "page",
+      "children": [
+        {
+          "id": "emote-actions",
+          "type": "button_group",
+          "children": [
+            {
+              "id": "emote-refresh",
+              "type": "button",
+              "props": {
+                "text": "刷新",
+                "type": "primary"
+              },
+              "actions": [
+                {
+                  "action_id": "command",
+                  "target": "tool",
+                  "input": {
+                    "action": "ui.dashboard"
+                  },
+                  "statePath": "dashboard"
+                }
+              ]
+            },
+            {
+              "id": "emote-import",
+              "type": "file_picker",
+              "props": {
+                "text": "导入表情包",
+                "accept": ".png,.jpg,.jpeg,.gif,.webp",
+                "multiple": true,
+                "hint": "支持 PNG、JPG、GIF、WebP"
+              },
+              "actions": [
+                {
+                  "action_id": "command",
+                  "target": "tool",
+                  "input": {
+                    "action": "ui.import"
+                  },
+                  "statePath": "importResult"
+                },
+                {
+                  "action_id": "command",
+                  "target": "tool",
+                  "input": {
+                    "action": "ui.dashboard"
+                  },
+                  "statePath": "dashboard"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "emote-tabs",
+          "type": "tabs",
+          "children": [
+            {
+              "id": "emote-tab-gallery",
+              "type": "tab_item",
+              "props": {
+                "label": "表情",
+                "name": "emotes"
+              },
+              "children": [
+                {
+                  "id": "emote-gallery",
+                  "type": "gallery",
+                  "props": {
+                    "imageField": "thumbnailUrl",
+                    "titleField": "name",
+                    "subtitleField": "meaning",
+                    "minItemWidth": 150,
+                    "emptyText": "暂无表情"
+                  },
+                  "bindings": [
+                    {
+                      "path": "items",
+                      "source": "state",
+                      "sourcePath": "dashboard.emotes"
+                    }
+                  ],
+                  "actions": [
+                    {
+                      "action_id": "command",
+                      "target": "tool",
+                      "input": {
+                        "action": "ui.select_emote",
+                        "payload": {
+                          "id": "$item.id"
+                        }
+                      }
+                    }
+                  ]
+                },
+                {
+                  "id": "emote-detail",
+                  "type": "section",
+                  "props": {
+                    "title": "选中表情"
+                  },
+                  "children": [
+                    {
+                      "id": "emote-detail-name",
+                      "type": "field",
+                      "props": {
+                        "label": "名称"
+                      },
+                      "bindings": [
+                        {
+                          "path": "selected.name",
+                          "source": "form",
+                          "default": ""
+                        }
+                      ]
+                    },
+                    {
+                      "id": "emote-detail-meaning",
+                      "type": "field",
+                      "props": {
+                        "label": "含义",
+                        "variant": "textarea",
+                        "rows": 3
+                      },
+                      "bindings": [
+                        {
+                          "path": "selected.meaning",
+                          "source": "form",
+                          "default": ""
+                        }
+                      ]
+                    },
+                    {
+                      "id": "emote-detail-keywords",
+                      "type": "field",
+                      "props": {
+                        "label": "关键词",
+                        "placeholder": "使用中英文逗号分隔"
+                      },
+                      "bindings": [
+                        {
+                          "path": "selected.keywords",
+                          "source": "form",
+                          "default": ""
+                        }
+                      ]
+                    },
+                    {
+                      "id": "emote-detail-ai",
+                      "type": "switch",
+                      "props": {
+                        "activeText": "允许 AI 使用"
+                      },
+                      "bindings": [
+                        {
+                          "path": "selected.aiEnabled",
+                          "source": "form",
+                          "default": false
+                        }
+                      ]
+                    },
+                    {
+                      "id": "emote-detail-actions",
+                      "type": "button_group",
+                      "children": [
+                        {
+                          "id": "emote-detail-save",
+                          "type": "button",
+                          "props": {
+                            "text": "保存",
+                            "type": "primary"
+                          },
+                          "actions": [
+                            {
+                              "action_id": "command",
+                              "target": "tool",
+                              "input": {
+                                "action": "emotes.update",
+                                "payload": {
+                                  "id": "$form.selected.id",
+                                  "name": "$form.selected.name",
+                                  "meaning": "$form.selected.meaning",
+                                  "keywords": "$form.selected.keywords",
+                                  "aiEnabled": "$form.selected.aiEnabled"
+                                }
+                              },
+                              "statePath": "detailSaveResult"
+                            },
+                            {
+                              "action_id": "command",
+                              "target": "tool",
+                              "input": {
+                                "action": "ui.dashboard"
+                              },
+                              "statePath": "dashboard"
+                            }
+                          ]
+                        },
+                        {
+                          "id": "emote-detail-delete",
+                          "type": "button",
+                          "props": {
+                            "text": "删除",
+                            "type": "danger"
+                          },
+                          "actions": [
+                            {
+                              "action_id": "command",
+                              "target": "tool",
+                              "input": {
+                                "action": "emotes.delete",
+                                "payload": {
+                                  "id": "$form.selected.id"
+                                }
+                              },
+                              "confirmation": "确认删除该表情？",
+                              "statePath": "detailDeleteResult"
+                            },
+                            {
+                              "action_id": "command",
+                              "target": "tool",
+                              "input": {
+                                "action": "ui.dashboard"
+                              },
+                              "statePath": "dashboard"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "id": "emote-tab-groups",
+              "type": "tab_item",
+              "props": {
+                "label": "分组",
+                "name": "groups"
+              },
+              "children": [
+                {
+                  "id": "emote-groups-table",
+                  "type": "table",
+                  "props": {
+                    "columns": [
+                      {
+                        "prop": "id",
+                        "label": "ID"
+                      },
+                      {
+                        "prop": "name",
+                        "label": "名称"
+                      },
+                      {
+                        "prop": "sortOrder",
+                        "label": "排序"
+                      }
+                    ]
+                  },
+                  "bindings": [
+                    {
+                      "path": "data",
+                      "source": "state",
+                      "sourcePath": "dashboard.groups"
+                    }
+                  ]
+                },
+                {
+                  "id": "emote-group-name",
+                  "type": "field",
+                  "props": {
+                    "label": "新分组名称"
+                  },
+                  "bindings": [
+                    {
+                      "path": "group.name",
+                      "source": "form",
+                      "default": ""
+                    }
+                  ]
+                },
+                {
+                  "id": "emote-group-create",
+                  "type": "button",
+                  "props": {
+                    "text": "新建分组",
+                    "type": "primary"
+                  },
+                  "actions": [
+                    {
+                      "action_id": "command",
+                      "target": "tool",
+                      "input": {
+                        "action": "groups.create",
+                        "payload": {
+                          "name": "$form.group.name"
+                        }
+                      },
+                      "statePath": "groupResult"
+                    },
+                    {
+                      "action_id": "command",
+                      "target": "tool",
+                      "input": {
+                        "action": "ui.dashboard"
+                      },
+                      "statePath": "settingsSaveResult"
+                    },
+                    {
+                      "action_id": "command",
+                      "target": "tool",
+                      "input": {
+                        "action": "ui.dashboard"
+                      },
+                      "statePath": "dashboard"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "id": "emote-tab-settings",
+              "type": "tab_item",
+              "props": {
+                "label": "AI 设置",
+                "name": "settings"
+              },
+              "children": [
+                {
+                  "id": "emote-settings-enabled",
+                  "type": "switch",
+                  "props": {
+                    "activeText": "启用表情回复"
+                  },
+                  "bindings": [
+                    {
+                      "path": "settings.enabled",
+                      "source": "form",
+                      "default": true
+                    }
+                  ]
+                },
+                {
+                  "id": "emote-settings-base",
+                  "type": "slider",
+                  "props": {
+                    "label": "基础概率",
+                    "min": 0,
+                    "max": 1,
+                    "step": 0.01,
+                    "showInput": true
+                  },
+                  "bindings": [
+                    {
+                      "path": "settings.baseProbability",
+                      "source": "form",
+                      "default": 0.1
+                    }
+                  ]
+                },
+                {
+                  "id": "emote-settings-max",
+                  "type": "slider",
+                  "props": {
+                    "label": "最大概率",
+                    "min": 0,
+                    "max": 1,
+                    "step": 0.01,
+                    "showInput": true
+                  },
+                  "bindings": [
+                    {
+                      "path": "settings.maxProbability",
+                      "source": "form",
+                      "default": 0.3
+                    }
+                  ]
+                },
+                {
+                  "id": "emote-settings-hour",
+                  "type": "field",
+                  "props": {
+                    "label": "每小时最多发送",
+                    "variant": "number"
+                  },
+                  "bindings": [
+                    {
+                      "path": "settings.maxPerHour",
+                      "source": "form",
+                      "default": 5
+                    }
+                  ]
+                },
+                {
+                  "id": "emote-settings-gap",
+                  "type": "field",
+                  "props": {
+                    "label": "回复间隔",
+                    "variant": "number"
+                  },
+                  "bindings": [
+                    {
+                      "path": "settings.minReplyGap",
+                      "source": "form",
+                      "default": 3
+                    }
+                  ]
+                },
+                {
+                  "id": "emote-settings-cooldown",
+                  "type": "field",
+                  "props": {
+                    "label": "同表情冷却分钟",
+                    "variant": "number"
+                  },
+                  "bindings": [
+                    {
+                      "path": "settings.sameEmoteCooldownMinutes",
+                      "source": "form",
+                      "default": 30
+                    }
+                  ]
+                },
+                {
+                  "id": "emote-settings-only",
+                  "type": "switch",
+                  "props": {
+                    "activeText": "允许仅发送表情"
+                  },
+                  "bindings": [
+                    {
+                      "path": "settings.allowEmoteOnly",
+                      "source": "form",
+                      "default": false
+                    }
+                  ]
+                },
+                {
+                  "id": "emote-settings-save",
+                  "type": "button",
+                  "props": {
+                    "text": "保存设置",
+                    "type": "primary"
+                  },
+                  "actions": [
+                    {
+                      "action_id": "command",
+                      "target": "tool",
+                      "input": {
+                        "action": "settings.save",
+                        "payload": {
+                          "enabled": "$form.settings.enabled",
+                          "baseProbability": "$form.settings.baseProbability",
+                          "maxProbability": "$form.settings.maxProbability",
+                          "maxPerHour": "$form.settings.maxPerHour",
+                          "minReplyGap": "$form.settings.minReplyGap",
+                          "sameEmoteCooldownMinutes": "$form.settings.sameEmoteCooldownMinutes",
+                          "allowEmoteOnly": "$form.settings.allowEmoteOnly"
+                        }
+                      },
+                      "statePath": "dashboard"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "theme": {
+    "mode": "auto"
+  },
+  "accessibility": {
+    "enabled": true,
+    "keyboardNav": true,
+    "screenReader": true
+  },
+  "performanceBudget": {
+    "maxRenderTimeMs": 200,
+    "maxLayoutCount": 300,
+    "maxNodeCount": 300,
+    "maxDataFetchCount": 1,
+    "maxActionCount": 32
+  }
+}

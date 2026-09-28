@@ -21,7 +21,9 @@ class _PermissionsPageState extends ConsumerState<PermissionsPage>
     with WidgetsBindingObserver {
   late List<PermissionItem> _permissions;
   Map<String, dynamic> _providerStatus = const <String, dynamic>{};
+  Map<String, dynamic> _shizukuStatus = const <String, dynamic>{};
   bool _providerBusy = false;
+  bool _shizukuBusy = false;
 
   @override
   void initState() {
@@ -76,14 +78,9 @@ class _PermissionsPageState extends ConsumerState<PermissionsPage>
         status: '已授权',
         description: '忽略电池优化以保持后台运行',
       ),
-      PermissionItem(
-        name: 'Shizuku',
-        icon: Icons.security,
-        status: '不可用',
-        description: '提供高级系统操作能力',
-      ),
     ];
     Future<void>.microtask(() async {
+      await _refreshShizuku();
       await _refreshProvider();
       await _refreshAccessibility();
     });
@@ -98,8 +95,222 @@ class _PermissionsPageState extends ConsumerState<PermissionsPage>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
+      _refreshShizuku();
       _refreshProvider();
       _refreshAccessibility();
+    }
+  }
+
+  Future<void> _refreshShizuku() async {
+    try {
+      final response = await ref
+          .read(nativeBridgePlatformDispatcherProvider)
+          .execute({
+            'protocolVersion': 1,
+            'requestId':
+                'shizuku_status_${DateTime.now().microsecondsSinceEpoch}',
+            'platform': 'android',
+            'operation': 'shizuku.status',
+            'payload': <String, dynamic>{},
+          });
+      if (!mounted || response['status'] != 'success') return;
+      setState(() {
+        _shizukuStatus = Map<String, dynamic>.from(
+          response['result'] as Map? ?? {},
+        );
+      });
+    } catch (_) {}
+  }
+
+  Future<Map<String, dynamic>> _executeShizuku(
+    String operation, {
+    Map<String, dynamic> payload = const <String, dynamic>{},
+  }) async {
+    return ref.read(nativeBridgePlatformDispatcherProvider).execute({
+      'protocolVersion': 1,
+      'requestId':
+          'shizuku_${DateTime.now().microsecondsSinceEpoch}_$operation',
+      'platform': 'android',
+      'operation': operation,
+      'payload': payload,
+    });
+  }
+
+  Future<void> _handleShizukuToggle(bool enabled) async {
+    if (_shizukuBusy) return;
+    setState(() => _shizukuBusy = true);
+    try {
+      if (!enabled) {
+        final response = await _executeShizuku(
+          'shizuku.set_enabled',
+          payload: const <String, dynamic>{'enabled': false},
+        );
+        if (response['status'] != 'success') {
+          throw StateError(
+            (response['error'] as Map?)?['message']?.toString() ??
+                '关闭 Shizuku 失败',
+          );
+        }
+      } else {
+        final state = _shizukuStatus['state']?.toString() ?? '';
+        if (state == 'not_installed' || state == 'not_running') {
+          final response = await _executeShizuku('shizuku.open_manager');
+          if (response['status'] != 'success') {
+            throw StateError(
+              (response['error'] as Map?)?['message']?.toString() ??
+                  '无法打开 Shizuku',
+            );
+          }
+          final result = response['result'] as Map?;
+          final message = result?['openedInstallPage'] == true
+              ? '已打开 Shizuku 下载页，安装并启动服务后返回'
+              : '已打开 Shizuku，请启动服务后返回';
+          if (mounted) {
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(SnackBar(content: Text(message)));
+          }
+        } else {
+          final response = await _executeShizuku(
+            'shizuku.set_enabled',
+            payload: const <String, dynamic>{'enabled': true},
+          );
+          if (response['status'] != 'success') {
+            throw StateError(
+              (response['error'] as Map?)?['message']?.toString() ??
+                  '启用 Shizuku 失败',
+            );
+          }
+        }
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+      await _refreshShizuku();
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('操作失败：$error')));
+      }
+    } finally {
+      if (mounted) setState(() => _shizukuBusy = false);
+    }
+  }
+
+  Future<void> _runShizukuPrimaryAction() async {
+    if (_shizukuBusy) return;
+    final state = _shizukuStatus['state']?.toString() ?? '';
+    if (state == 'not_installed' || state == 'not_running') {
+      setState(() => _shizukuBusy = true);
+      try {
+        final response = await _executeShizuku('shizuku.open_manager');
+        if (response['status'] != 'success') {
+          throw StateError(
+            (response['error'] as Map?)?['message']?.toString() ??
+                '无法打开 Shizuku',
+          );
+        }
+        final result = response['result'] as Map?;
+        if (mounted) {
+          final message = result?['openedInstallPage'] == true
+              ? '已打开 Shizuku 下载页'
+              : '已打开 Shizuku，请启动服务';
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(message)));
+        }
+      } catch (error) {
+        if (mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('操作失败：$error')));
+        }
+      } finally {
+        if (mounted) setState(() => _shizukuBusy = false);
+      }
+      return;
+    }
+    if (state == 'ready') {
+      setState(() => _shizukuBusy = true);
+      try {
+        final response = await _executeShizuku('shizuku.test');
+        if (response['status'] != 'success') {
+          throw StateError(
+            (response['error'] as Map?)?['message']?.toString() ??
+                'Shizuku 测试失败',
+          );
+        }
+        final result = response['result'] as Map?;
+        final stdout = result?['stdout']?.toString().trim() ?? '';
+        final message = stdout.isEmpty
+            ? 'Shizuku 测试通过'
+            : 'Shizuku 测试通过：$stdout';
+        if (mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(message)));
+        }
+      } catch (error) {
+        if (mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('操作失败：$error')));
+        }
+      } finally {
+        if (mounted) setState(() => _shizukuBusy = false);
+      }
+      return;
+    }
+    await _handleShizukuToggle(true);
+  }
+
+  String _shizukuStateLabel() {
+    switch (_shizukuStatus['state']?.toString()) {
+      case 'ready':
+        return '已就绪';
+      case 'disabled':
+        return '已授权未启用';
+      case 'permission_required':
+        return '需授权';
+      case 'not_running':
+        return '服务未启动';
+      case 'not_installed':
+        return '未安装';
+      case 'error':
+        return '异常';
+      default:
+        return '检测中';
+    }
+  }
+
+  BadgeType _shizukuBadgeType() {
+    switch (_shizukuStatus['state']?.toString()) {
+      case 'ready':
+        return BadgeType.success;
+      case 'disabled':
+      case 'permission_required':
+      case 'not_running':
+        return BadgeType.warning;
+      case 'error':
+        return BadgeType.error;
+      default:
+        return BadgeType.neutral;
+    }
+  }
+
+  String _shizukuPrimaryLabel() {
+    switch (_shizukuStatus['state']?.toString()) {
+      case 'not_installed':
+        return '安装 Shizuku';
+      case 'not_running':
+        return '打开 Shizuku';
+      case 'permission_required':
+        return '申请授权';
+      case 'disabled':
+        return '启用';
+      case 'ready':
+        return '测试';
+      default:
+        return '重试';
     }
   }
 
@@ -308,10 +519,21 @@ class _PermissionsPageState extends ConsumerState<PermissionsPage>
           vertical: AppSpacing.md,
           horizontal: AppSpacing.pagePadding,
         ),
-        itemCount: _permissions.length + 1,
+        itemCount: _permissions.length + 2,
         separatorBuilder: (_, _) => SizedBox(height: AppSpacing.sm),
         itemBuilder: (context, index) {
           if (index == 0) {
+            return _ShizukuPermissionCard(
+              status: _shizukuStatus,
+              busy: _shizukuBusy,
+              stateLabel: _shizukuStateLabel(),
+              badgeType: _shizukuBadgeType(),
+              primaryLabel: _shizukuPrimaryLabel(),
+              onToggle: _handleShizukuToggle,
+              onPrimaryAction: _runShizukuPrimaryAction,
+            );
+          }
+          if (index == 1) {
             return _AccessibilityProviderCard(
               status: _providerStatus,
               busy: _providerBusy,
@@ -321,7 +543,7 @@ class _PermissionsPageState extends ConsumerState<PermissionsPage>
                   _providerAction('accessibility.provider.open_settings'),
             );
           }
-          index -= 1;
+          index -= 2;
           final item = _permissions[index];
           return _PermissionCard(
             item: item,
@@ -329,6 +551,99 @@ class _PermissionsPageState extends ConsumerState<PermissionsPage>
             onTap: () => _showGuide(item),
           );
         },
+      ),
+    );
+  }
+}
+
+class _ShizukuPermissionCard extends StatelessWidget {
+  final Map<String, dynamic> status;
+  final bool busy;
+  final String stateLabel;
+  final BadgeType badgeType;
+  final String primaryLabel;
+  final ValueChanged<bool> onToggle;
+  final VoidCallback onPrimaryAction;
+
+  const _ShizukuPermissionCard({
+    required this.status,
+    required this.busy,
+    required this.stateLabel,
+    required this.badgeType,
+    required this.primaryLabel,
+    required this.onToggle,
+    required this.onPrimaryAction,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final provider = status['provider']?.toString() ?? 'none';
+    final version = status['version']?.toString() ?? '';
+    final uid = status['uid']?.toString() ?? '';
+    final reason = status['reason']?.toString().trim() ?? '';
+    final enabled = status['enabled'] == true;
+    final ready = status['state']?.toString() == 'ready';
+    final providerLabel = switch (provider) {
+      'shizuku' => 'Shizuku',
+      'axmanager' => 'AXManager',
+      'sui' => 'Sui',
+      'none' => '未检测到',
+      _ => provider,
+    };
+    final detail = ready
+        ? '$providerLabel${version.isEmpty ? '' : ' v$version'}${uid.isEmpty ? '' : ' · uid $uid'}'
+        : (reason.isEmpty ? '高权限系统执行通道' : reason);
+    return Container(
+      padding: EdgeInsets.all(AppSpacing.cardPadding),
+      decoration: BoxDecoration(
+        color: context.surfacePrimary,
+        borderRadius: AppRadius.brMedium,
+        border: Border.all(color: context.borderPrimary, width: 0.5),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.security_outlined, color: context.accentPrimary),
+              SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: Text('Shizuku', style: AppTypography.cardTitle(context)),
+              ),
+              AmitiaStatusBadge(label: stateLabel, type: badgeType),
+            ],
+          ),
+          SizedBox(height: AppSpacing.sm),
+          Text(detail, style: AppTypography.label(context)),
+          SizedBox(height: AppSpacing.md),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  '允许 AI 使用 Shizuku',
+                  style: AppTypography.bodySmall(context),
+                ),
+              ),
+              Switch.adaptive(
+                value: enabled,
+                onChanged: busy ? null : onToggle,
+              ),
+            ],
+          ),
+          SizedBox(height: AppSpacing.sm),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: busy ? null : onPrimaryAction,
+              icon: Icon(
+                status['state']?.toString() == 'ready'
+                    ? Icons.play_arrow_outlined
+                    : Icons.build_outlined,
+              ),
+              label: Text(primaryLabel),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -374,10 +689,7 @@ class _AccessibilityProviderCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              Icon(
-                Icons.verified_user_outlined,
-                color: context.accentPrimary,
-              ),
+              Icon(Icons.verified_user_outlined, color: context.accentPrimary),
               SizedBox(width: AppSpacing.sm),
               Expanded(
                 child: Text(

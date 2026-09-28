@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import {
   copyFileSync,
+  existsSync,
   mkdirSync,
   readFileSync,
   readdirSync,
@@ -47,6 +48,13 @@ function collectFiles(root) {
 
 function sha256(buffer) {
   return createHash("sha256").update(buffer).digest("hex");
+}
+
+function uiPlatformFamily(platform) {
+  const normalized = String(platform || "").trim().toLowerCase();
+  if (["windows", "linux", "macos", "electron_windows", "electron_linux", "electron_macos", "desktop"].includes(normalized)) return "desktop";
+  if (["android", "ios", "mobile"].includes(normalized)) return "mobile";
+  return "";
 }
 
 function packagePath(file) {
@@ -186,6 +194,18 @@ function main() {
     join(packageRoot, "src", "ui", "app.js"),
     join(stagingRoot, "modules", "proactive-ui", "mobile", "app.js"),
   );
+  if (existsSync(join(packageRoot, "ui", "schema", "desktop.json"))) {
+    copyFileSync(
+      join(packageRoot, "ui", "schema", "desktop.json"),
+      join(stagingRoot, "modules", "proactive-ui", "desktop", "schema.json"),
+    );
+  }
+  if (existsSync(join(packageRoot, "ui", "schema", "mobile.json"))) {
+    copyFileSync(
+      join(packageRoot, "ui", "schema", "mobile.json"),
+      join(stagingRoot, "modules", "proactive-ui", "mobile", "schema.json"),
+    );
+  }
   writeFileSync(
     join(moduleRoot, "package.json"),
     `${JSON.stringify({ type: "module" }, null, 2)}\n`,
@@ -200,6 +220,31 @@ function main() {
           .update(readFileSync(join(stagingRoot, entryPath)))
           .digest("base64")}`;
       }
+      const schemaPath = contribution.spec?.entry?.schema_path;
+      if (schemaPath) {
+        contribution.spec.entry.content_hash = `sha256-${createHash("sha256")
+          .update(readFileSync(join(stagingRoot, schemaPath)))
+          .digest("base64")}`;
+      }
+    }
+  }
+  const uiEntries = [];
+  for (const module of manifest.modules || []) {
+    for (const contribution of module.contributions || []) {
+      if (!["ui_page", "ui_panel", "ui_chat", "ui_context_action", "ui_desktop"].includes(contribution.kind)) continue;
+      const platforms = contribution.spec?.visibility?.platforms || [];
+      const family = uiPlatformFamily(platforms[0]);
+      if (family) uiEntries.push({ family, entry: contribution.spec?.entry || {} });
+    }
+  }
+  for (let left = 0; left < uiEntries.length; left += 1) {
+    for (let right = left + 1; right < uiEntries.length; right += 1) {
+      const a = uiEntries[left];
+      const b = uiEntries[right];
+      if (a.family === b.family) continue;
+      if (a.entry.path && a.entry.path === b.entry.path) throw new Error("desktop and mobile UI path must differ");
+      if (a.entry.schema_path && a.entry.schema_path === b.entry.schema_path) throw new Error("desktop and mobile schema path must differ");
+      if (a.entry.content_hash && a.entry.content_hash === b.entry.content_hash) throw new Error("desktop and mobile UI content must differ");
     }
   }
   manifest.integrity.algorithm = "sha256";

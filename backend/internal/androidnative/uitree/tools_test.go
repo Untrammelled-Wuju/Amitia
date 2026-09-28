@@ -26,6 +26,12 @@ func TestBuildUITreeTools(t *testing.T) {
 		if !tool.Enabled {
 			t.Fatalf("tool %s should be enabled", tool.ID)
 		}
+		if tool.ModelName == "" || tool.ModelName == tool.ID {
+			t.Fatalf("tool %s should expose an OpenAI-compatible model name", tool.ID)
+		}
+		if tool.Metadata["canonicalModelName"] != tool.ID {
+			t.Fatalf("tool %s canonical model name = %v", tool.ID, tool.Metadata["canonicalModelName"])
+		}
 	}
 }
 

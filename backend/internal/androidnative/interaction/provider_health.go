@@ -77,7 +77,7 @@ func healthFromBridgeResponse(provider string, result map[string]any, err error)
 
 	lower := strings.ToLower(stateText)
 	switch {
-	case userActionRequired || strings.Contains(lower, "permission") || strings.Contains(lower, "unauthorized") || strings.Contains(lower, "authorization_required"):
+	case userActionRequired || strings.Contains(lower, "permission") || strings.Contains(lower, "unauthorized") || strings.Contains(lower, "authorization_required") || strings.Contains(lower, "disabled"):
 		return newProviderHealth(provider, ProviderStatePermissionRequired, reason, permission, true)
 	case hasConnected && !connected && strings.Contains(lower, "enabled_not_connected"):
 		return newProviderHealth(provider, ProviderStateStarting, "accessibility service is enabled but not connected", permission, true)

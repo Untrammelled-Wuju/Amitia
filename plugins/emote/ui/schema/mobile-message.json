@@ -1,0 +1,80 @@
+{
+  "schemaVersion": "schema-ui/1",
+  "type": "document",
+  "title": "表情消息（手机端）",
+  "actions": [],
+  "children": [
+    {
+      "id": "mobile-emote-message",
+      "type": "stack",
+      "children": [
+        {
+          "id": "mobile-emote-message-image",
+          "type": "image",
+          "props": {
+            "alt": "表情",
+            "fit": "contain",
+            "preview": true,
+            "width": 160,
+            "height": 160
+          },
+          "bindings": [
+            {
+              "path": "src",
+              "source": "context",
+              "sourcePath": "message.originalAssetReference"
+            }
+          ]
+        },
+        {
+          "id": "mobile-emote-message-fallback",
+          "type": "image",
+          "props": {
+            "alt": "表情",
+            "fit": "contain",
+            "preview": true,
+            "width": 160,
+            "height": 160
+          },
+          "visibleWhen": [
+            {
+              "field": "message.originalAssetReference",
+              "operator": "is_null"
+            }
+          ],
+          "bindings": [
+            {
+              "path": "src",
+              "source": "context",
+              "sourcePath": "message.fallbackAssetReference"
+            }
+          ]
+        },
+        {
+          "id": "mobile-emote-message-text",
+          "type": "text",
+          "props": {
+            "variant": "caption"
+          },
+          "bindings": [
+            {
+              "path": "text",
+              "source": "context",
+              "sourcePath": "message.altText"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "theme": {
+    "mode": "auto"
+  },
+  "performanceBudget": {
+    "maxRenderTimeMs": 60,
+    "maxLayoutCount": 40,
+    "maxNodeCount": 40,
+    "maxDataFetchCount": 0,
+    "maxActionCount": 0
+  }
+}

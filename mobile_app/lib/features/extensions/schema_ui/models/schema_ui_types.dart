@@ -35,23 +35,60 @@ class SchemaUI {
   static const String nodeTabItem = 'tab_item';
   static const String nodeColumn = 'column';
   static const String nodeExtensionSlot = 'extension_slot';
+  static const String nodeGallery = 'gallery';
+  static const String nodeFilePicker = 'file_picker';
 
   static const Set<String> allowedNodeTypes = {
-    nodePage, nodeSection, nodeStack, nodeRow, nodeGrid, nodeTabs, nodeCard,
-    nodeText, nodeMarkdown, nodeBadge, nodeDivider, nodeIcon, nodeImage,
-    nodeField, nodeSelect, nodeSwitch, nodeSlider, nodeButton, nodeButtonGroup,
-    nodeList, nodeTable, nodeEmptyState, nodeAlert, nodeProgress, nodeCode,
-    nodeKeyValue, nodeResourceLink, nodePermissionSummary, nodeRuntimeStatus,
-    nodeTabItem, nodeColumn, nodeExtensionSlot,
+    nodePage,
+    nodeSection,
+    nodeStack,
+    nodeRow,
+    nodeGrid,
+    nodeTabs,
+    nodeCard,
+    nodeText,
+    nodeMarkdown,
+    nodeBadge,
+    nodeDivider,
+    nodeIcon,
+    nodeImage,
+    nodeField,
+    nodeSelect,
+    nodeSwitch,
+    nodeSlider,
+    nodeButton,
+    nodeButtonGroup,
+    nodeList,
+    nodeTable,
+    nodeEmptyState,
+    nodeAlert,
+    nodeProgress,
+    nodeCode,
+    nodeKeyValue,
+    nodeResourceLink,
+    nodePermissionSummary,
+    nodeRuntimeStatus,
+    nodeGallery,
+    nodeFilePicker,
+    nodeTabItem,
+    nodeColumn,
+    nodeExtensionSlot,
   };
 
   static const Set<String> forbiddenNodeTypes = {
-    'html', 'script', 'style', 'iframe', 'webview', 'canvas', 'template',
+    'html',
+    'script',
+    'style',
+    'iframe',
+    'webview',
+    'canvas',
+    'template',
   };
 
   static bool isAllowed(String? type) {
     if (type == null) return false;
-    return allowedNodeTypes.contains(type) && !forbiddenNodeTypes.contains(type);
+    return allowedNodeTypes.contains(type) &&
+        !forbiddenNodeTypes.contains(type);
   }
 }
 
@@ -73,12 +110,14 @@ class UICondition {
 
 class SchemaUIBinding {
   final String path;
+  final String? sourcePath;
   final String source;
   final String? format;
   final dynamic defaultValue;
 
   const SchemaUIBinding({
     required this.path,
+    this.sourcePath,
     required this.source,
     this.format,
     this.defaultValue,
@@ -87,6 +126,7 @@ class SchemaUIBinding {
   factory SchemaUIBinding.fromJson(Map<String, dynamic> json) {
     return SchemaUIBinding(
       path: json['path'] as String? ?? '',
+      sourcePath: (json['sourcePath'] ?? json['source_path']) as String?,
       source: json['source'] as String? ?? '',
       format: json['format'] as String?,
       defaultValue: json['default'],
@@ -99,12 +139,14 @@ class SchemaUIActionBinding {
   final String target;
   final Map<String, dynamic>? input;
   final String? confirmation;
+  final String? statePath;
 
   const SchemaUIActionBinding({
     required this.actionId,
     required this.target,
     this.input,
     this.confirmation,
+    this.statePath,
   });
 
   factory SchemaUIActionBinding.fromJson(Map<String, dynamic> json) {
@@ -113,6 +155,36 @@ class SchemaUIActionBinding {
       target: json['target'] as String? ?? '',
       input: json['input'] as Map<String, dynamic>?,
       confirmation: json['confirmation'] as String?,
+      statePath: (json['statePath'] ?? json['state_path']) as String?,
+    );
+  }
+}
+
+class SchemaUILifecycle {
+  final List<SchemaUIActionBinding> onMount;
+  final List<SchemaUIActionBinding> onRefresh;
+  final List<SchemaUIActionBinding> onSuccess;
+
+  const SchemaUILifecycle({
+    this.onMount = const [],
+    this.onRefresh = const [],
+    this.onSuccess = const [],
+  });
+
+  factory SchemaUILifecycle.fromJson(Map<String, dynamic> json) {
+    return SchemaUILifecycle(
+      onMount: SchemaUINode._parseList(
+        json['onMount'],
+        SchemaUIActionBinding.fromJson,
+      ),
+      onRefresh: SchemaUINode._parseList(
+        json['onRefresh'],
+        SchemaUIActionBinding.fromJson,
+      ),
+      onSuccess: SchemaUINode._parseList(
+        json['onSuccess'],
+        SchemaUIActionBinding.fromJson,
+      ),
     );
   }
 }
@@ -127,6 +199,7 @@ class SchemaUINode {
   final List<UICondition> disabledWhen;
   final SchemaUIBinding? dataSource;
   final List<SchemaUINode> children;
+  final SchemaUILifecycle? lifecycle;
 
   const SchemaUINode({
     required this.id,
@@ -138,6 +211,7 @@ class SchemaUINode {
     this.disabledWhen = const [],
     this.dataSource,
     this.children = const [],
+    this.lifecycle,
   });
 
   factory SchemaUINode.fromJson(Map<String, dynamic> json) {
@@ -147,10 +221,15 @@ class SchemaUINode {
       props: _parseProps(json['props']),
       bindings: _parseList(json['bindings'], SchemaUIBinding.fromJson),
       actions: _parseList(json['actions'], SchemaUIActionBinding.fromJson),
-      visibility: _parseList(json['visibleWhen'] ?? json['visibility'], UICondition.fromJson),
+      visibility: _parseList(
+        json['visibleWhen'] ?? json['visibility'],
+        UICondition.fromJson,
+      ),
       disabledWhen: _parseList(json['disabledWhen'], UICondition.fromJson),
       dataSource: json['dataSource'] is Map
-          ? SchemaUIBinding.fromJson(Map<String, dynamic>.from(json['dataSource'] as Map))
+          ? SchemaUIBinding.fromJson(
+              Map<String, dynamic>.from(json['dataSource'] as Map),
+            )
           : null,
       children: _parseList(json['children'], SchemaUINode.fromJson),
     );
@@ -168,7 +247,10 @@ class SchemaUINode {
     return null;
   }
 
-  static List<T> _parseList<T>(dynamic raw, T Function(Map<String, dynamic>) fromJson) {
+  static List<T> _parseList<T>(
+    dynamic raw,
+    T Function(Map<String, dynamic>) fromJson,
+  ) {
     if (raw is! List) return [];
     final result = <T>[];
     for (final item in raw) {
@@ -196,7 +278,6 @@ class ThemeConfig {
   }
 }
 
-
 class LocaleConfig {
   final String current;
   final List<String> available;
@@ -206,7 +287,9 @@ class LocaleConfig {
   factory LocaleConfig.fromJson(Map<String, dynamic> json) {
     return LocaleConfig(
       current: json['current'] as String? ?? 'zh-CN',
-      available: ((json['available'] as List?) ?? const []).map((value) => value.toString()).toList(growable: false),
+      available: ((json['available'] as List?) ?? const [])
+          .map((value) => value.toString())
+          .toList(growable: false),
     );
   }
 }
@@ -236,7 +319,6 @@ class AccessibilityConfig {
     );
   }
 }
-
 
 class PerformanceBudget {
   final int maxRenderTimeMs;
@@ -325,6 +407,7 @@ class SchemaUIDocument {
   final String? title;
   final Map<String, dynamic>? layout;
   final List<SchemaUINode> children;
+  final SchemaUILifecycle? lifecycle;
   final List<SchemaUIDataSource> dataSources;
   final List<SchemaUIDeclaredAction> actions;
   final ThemeConfig? theme;
@@ -338,6 +421,7 @@ class SchemaUIDocument {
     this.title,
     this.layout,
     this.children = const [],
+    this.lifecycle,
     this.dataSources = const [],
     this.actions = const [],
     this.theme,
@@ -352,18 +436,47 @@ class SchemaUIDocument {
         ? <SchemaUINode>[SchemaUINode.fromJson(Map<String, dynamic>.from(root))]
         : SchemaUINode._parseList(json['children'], SchemaUINode.fromJson);
     return SchemaUIDocument(
-      schemaVersion: (json['schemaVersion'] ?? json['version'])?.toString() ?? 'schema-ui/1',
+      schemaVersion:
+          (json['schemaVersion'] ?? json['version'])?.toString() ??
+          'schema-ui/1',
       type: json['type'] as String? ?? 'document',
       title: json['title'] as String?,
-      layout: json['layout'] is Map ? Map<String, dynamic>.from(json['layout'] as Map) : null,
+      layout: json['layout'] is Map
+          ? Map<String, dynamic>.from(json['layout'] as Map)
+          : null,
       children: children,
-      dataSources: SchemaUINode._parseList(json['dataSources'], SchemaUIDataSource.fromJson),
-      actions: SchemaUINode._parseList(json['actions'], SchemaUIDeclaredAction.fromJson),
-      theme: json['theme'] is Map ? ThemeConfig.fromJson(Map<String, dynamic>.from(json['theme'] as Map)) : null,
-      locale: json['locale'] is Map ? LocaleConfig.fromJson(Map<String, dynamic>.from(json['locale'] as Map)) : null,
-      accessibility: json['accessibility'] is Map ? AccessibilityConfig.fromJson(Map<String, dynamic>.from(json['accessibility'] as Map)) : null,
+      lifecycle: json['lifecycle'] is Map
+          ? SchemaUILifecycle.fromJson(
+              Map<String, dynamic>.from(json['lifecycle'] as Map),
+            )
+          : null,
+      dataSources: SchemaUINode._parseList(
+        json['dataSources'],
+        SchemaUIDataSource.fromJson,
+      ),
+      actions: SchemaUINode._parseList(
+        json['actions'],
+        SchemaUIDeclaredAction.fromJson,
+      ),
+      theme: json['theme'] is Map
+          ? ThemeConfig.fromJson(
+              Map<String, dynamic>.from(json['theme'] as Map),
+            )
+          : null,
+      locale: json['locale'] is Map
+          ? LocaleConfig.fromJson(
+              Map<String, dynamic>.from(json['locale'] as Map),
+            )
+          : null,
+      accessibility: json['accessibility'] is Map
+          ? AccessibilityConfig.fromJson(
+              Map<String, dynamic>.from(json['accessibility'] as Map),
+            )
+          : null,
       performanceBudget: json['performanceBudget'] is Map
-          ? PerformanceBudget.fromJson(Map<String, dynamic>.from(json['performanceBudget'] as Map))
+          ? PerformanceBudget.fromJson(
+              Map<String, dynamic>.from(json['performanceBudget'] as Map),
+            )
           : null,
     );
   }

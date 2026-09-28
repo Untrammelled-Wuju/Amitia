@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	basechannel "github.com/u-ai/backend/internal/channel"
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
@@ -74,6 +75,9 @@ func (r *PluginChannelProviderRegistry) Provider(channelID string) (*basechannel
 		DisconnectPath:    stringValue(transport["disconnectPath"]),
 		ConfigPath:        stringValue(transport["configPath"]),
 		MessagesPath:      stringValue(transport["messagesPath"]),
+		ActionPath:        stringValue(transport["actionPath"]),
+		LogsPath:          stringValue(transport["logsPath"]),
+		PeersPath:         stringValue(transport["peersPath"]),
 		DefaultHeaders:    headers,
 		UseFallbackImage:  boolValue(transport["preferFallbackImage"]),
 		IdempotencyHeader: true,
@@ -210,6 +214,69 @@ func (r *PluginChannelProviderRegistry) Messages(ctx context.Context, channelID,
 		"limit":          limit,
 		"offset":         offset,
 	})
+}
+
+func (r *PluginChannelProviderRegistry) Config(ctx context.Context, channelID string) (map[string]any, error) {
+	provider, err := r.Provider(channelID)
+	if err != nil {
+		return nil, err
+	}
+	return provider.Config(ctx)
+}
+
+func (r *PluginChannelProviderRegistry) Invoke(ctx context.Context, channelID, action string, input map[string]any) (map[string]any, error) {
+	provider, err := r.Provider(channelID)
+	if err != nil {
+		return nil, err
+	}
+	return provider.Invoke(ctx, action, input)
+}
+
+func (r *PluginChannelProviderRegistry) Logs(ctx context.Context, channelID string, request map[string]any) (map[string]any, error) {
+	provider, err := r.Provider(channelID)
+	if err != nil {
+		return nil, err
+	}
+	return provider.Logs(ctx, request)
+}
+
+func (r *PluginChannelProviderRegistry) Peers(ctx context.Context, channelID string, request map[string]any) (map[string]any, error) {
+	provider, err := r.Provider(channelID)
+	if err != nil {
+		return nil, err
+	}
+	return provider.Peers(ctx, request)
+}
+
+func (r *PluginChannelProviderRegistry) Send(ctx context.Context, channelID, peerID, conversationID, text, deliveryKey string) (map[string]any, error) {
+	provider, err := r.Provider(channelID)
+	if err != nil {
+		return nil, err
+	}
+	request := basechannel.SendRequest{
+		Channel:        basechannel.ID(channelID),
+		PeerID:         strings.TrimSpace(peerID),
+		ConversationID: strings.TrimSpace(conversationID),
+		ContentType:    "text",
+		Text:           strings.TrimSpace(text),
+		IdempotencyKey: strings.TrimSpace(deliveryKey),
+	}
+	if request.PeerID == "" || request.Text == "" {
+		return nil, fmt.Errorf("peerId and text are required")
+	}
+	if request.IdempotencyKey == "" {
+		request.IdempotencyKey = fmt.Sprintf("manual-%d", time.Now().UnixNano())
+	}
+	result, err := provider.Send(ctx, request)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{
+		"accepted":          result.Accepted,
+		"duplicate":         result.Duplicate,
+		"providerMessageId": result.ProviderMessageID,
+		"deliveredAt":       result.DeliveredAt,
+	}, nil
 }
 
 func (r *PluginChannelProviderRegistry) definition(channelID string) (*capability.CapabilityProviderDefinition, error) {

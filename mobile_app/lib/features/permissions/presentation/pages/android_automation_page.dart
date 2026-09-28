@@ -27,6 +27,8 @@ class _AndroidAutomationPageState extends ConsumerState<AndroidAutomationPage>
   String _providerHealth = 'unknown';
   DateTime? _probedAt;
   List<_AutomationCapability> _capabilities = const [];
+  Map<String, dynamic> _virtualDisplayStatus = const <String, dynamic>{};
+  bool _virtualDisplayBusy = false;
 
   @override
   void initState() {
@@ -69,6 +71,9 @@ class _AndroidAutomationPageState extends ConsumerState<AndroidAutomationPage>
 
       final accessibility = await _nativeStatus('accessibility.status');
       final screenCapture = await _nativeStatus('screen_capture.status');
+      final virtualDisplay = await _nativeStatus(
+        'virtual_display.permission.status',
+      );
       final capabilities = _buildCapabilities(
         backend,
         accessibility,
@@ -83,6 +88,7 @@ class _AndroidAutomationPageState extends ConsumerState<AndroidAutomationPage>
             DateTime.tryParse(backend['probedAt']?.toString() ?? '') ??
             DateTime.now();
         _capabilities = capabilities;
+        _virtualDisplayStatus = _asMap(virtualDisplay['result']);
         _loading = false;
       });
     } catch (error) {
@@ -95,6 +101,13 @@ class _AndroidAutomationPageState extends ConsumerState<AndroidAutomationPage>
   }
 
   Future<Map<String, dynamic>> _nativeStatus(String operation) async {
+    return _nativeExecute(operation, const <String, dynamic>{});
+  }
+
+  Future<Map<String, dynamic>> _nativeExecute(
+    String operation,
+    Map<String, dynamic> payload,
+  ) async {
     try {
       final dispatcher = ref.read(nativeBridgePlatformDispatcherProvider);
       final response = await dispatcher.execute(<String, dynamic>{
@@ -103,7 +116,7 @@ class _AndroidAutomationPageState extends ConsumerState<AndroidAutomationPage>
             'automation_${DateTime.now().microsecondsSinceEpoch}_$operation',
         'platform': 'android',
         'operation': operation,
-        'payload': const <String, dynamic>{},
+        'payload': payload,
       });
       return response;
     } catch (error) {
@@ -114,6 +127,65 @@ class _AndroidAutomationPageState extends ConsumerState<AndroidAutomationPage>
           'message': error.toString(),
         },
       };
+    }
+  }
+
+  Future<void> _setVirtualDisplayEnabled(bool enabled) async {
+    if (_virtualDisplayBusy) return;
+    setState(() => _virtualDisplayBusy = true);
+    try {
+      final response = await _nativeExecute(
+        'virtual_display.permission.set',
+        <String, dynamic>{'enabled': enabled},
+      );
+      if (response['status']?.toString() != 'success') {
+        final error = _asMap(response['error']);
+        throw StateError(error['message']?.toString() ?? '虚拟屏设置失败');
+      }
+      await _refresh();
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('虚拟屏设置失败：$error')));
+    } finally {
+      if (mounted) setState(() => _virtualDisplayBusy = false);
+    }
+  }
+
+  Future<void> _requestVirtualDisplayShizuku() async {
+    if (_virtualDisplayBusy) return;
+    setState(() => _virtualDisplayBusy = true);
+    try {
+      final status = await _nativeStatus('shizuku.status');
+      final result = _asMap(status['result']);
+      final operation = result['binderAvailable'] == true
+          ? 'shizuku.request_permission'
+          : 'shizuku.open_manager';
+      final response = await _nativeExecute(
+        operation,
+        const <String, dynamic>{},
+      );
+      if (response['status']?.toString() != 'success') {
+        final error = _asMap(response['error']);
+        throw StateError(error['message']?.toString() ?? 'Shizuku 授权未完成');
+      }
+      final enableResponse = await _nativeExecute(
+        'virtual_display.permission.set',
+        <String, dynamic>{'enabled': true},
+      );
+      if (enableResponse['status']?.toString() != 'success') {
+        final error = _asMap(enableResponse['error']);
+        throw StateError(error['message']?.toString() ?? '虚拟屏启用失败');
+      }
+      await _refresh();
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Shizuku 授权失败：$error')));
+    } finally {
+      if (mounted) setState(() => _virtualDisplayBusy = false);
     }
   }
 
@@ -373,10 +445,17 @@ class _AndroidAutomationPageState extends ConsumerState<AndroidAutomationPage>
   }
 
   Future<void> _repair(_AutomationCapability capability) async {
-    final operation = capability.repairOperation;
+    var operation = capability.repairOperation;
     if (operation == null || operation.isEmpty) {
       if (mounted) context.push(AppRoutes.settingsPermissions);
       return;
+    }
+    if (operation == 'shizuku.request_permission') {
+      final shizuku = await _nativeStatus('shizuku.status');
+      final result = _asMap(shizuku['result']);
+      if (result['binderAvailable'] != true) {
+        operation = 'shizuku.open_manager';
+      }
     }
     final dispatcher = ref.read(nativeBridgePlatformDispatcherProvider);
     try {
@@ -521,6 +600,13 @@ class _AndroidAutomationPageState extends ConsumerState<AndroidAutomationPage>
               capabilities: _capabilities,
             ),
             SizedBox(height: AppSpacing.md),
+            _VirtualDisplayControlCard(
+              status: _virtualDisplayStatus,
+              busy: _virtualDisplayBusy,
+              onChanged: _setVirtualDisplayEnabled,
+              onRequestShizuku: _requestVirtualDisplayShizuku,
+            ),
+            SizedBox(height: AppSpacing.md),
             if (_error != null)
               Container(
                 margin: EdgeInsets.only(bottom: AppSpacing.md),
@@ -644,6 +730,94 @@ class _AutomationSummaryCard extends StatelessWidget {
             Text(
               '最近探测：${probedAt!.toLocal()}',
               style: AppTypography.caption(context),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _VirtualDisplayControlCard extends StatelessWidget {
+  final Map<String, dynamic> status;
+  final bool busy;
+  final ValueChanged<bool> onChanged;
+  final Future<void> Function() onRequestShizuku;
+
+  const _VirtualDisplayControlCard({
+    required this.status,
+    required this.busy,
+    required this.onChanged,
+    required this.onRequestShizuku,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = status['enabled'] == true;
+    final hostRunning = status['hostRunning'] == true;
+    final state = status['state']?.toString() ?? 'disabled';
+    final stateLabel = switch (state) {
+      'ready' => '运行中',
+      'stopped' => '待启动',
+      'disabled' => '未开启',
+      _ => '不可用',
+    };
+    final badgeType = state == 'ready'
+        ? BadgeType.success
+        : state == 'disabled'
+        ? BadgeType.neutral
+        : BadgeType.warning;
+    return Container(
+      padding: EdgeInsets.all(AppSpacing.cardPadding),
+      decoration: BoxDecoration(
+        color: context.surfacePrimary,
+        borderRadius: AppRadius.brMedium,
+        border: Border.all(color: context.borderPrimary, width: 0.5),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.splitscreen_outlined, color: context.accentPrimary),
+              SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: Text('AI 虚拟屏', style: AppTypography.cardTitle(context)),
+              ),
+              AmitiaStatusBadge(label: stateLabel, type: badgeType),
+            ],
+          ),
+          SizedBox(height: AppSpacing.sm),
+          Text(
+            hostRunning
+                ? '独立 app_process Host 已运行，可创建虚拟屏、启动应用并注入操作'
+                : '启用后由 Shizuku 拉起独立 app_process Host，AI 才能真实控制虚拟屏',
+            style: AppTypography.bodySmall(context),
+          ),
+          SizedBox(height: AppSpacing.md),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  '允许 AI 使用虚拟屏',
+                  style: AppTypography.bodySmall(context),
+                ),
+              ),
+              Switch.adaptive(
+                value: enabled,
+                onChanged: busy ? null : onChanged,
+              ),
+            ],
+          ),
+          if (!enabled) ...[
+            SizedBox(height: AppSpacing.sm),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: busy ? null : onRequestShizuku,
+                icon: const Icon(Icons.security_outlined),
+                label: const Text('授权 Shizuku 并开启'),
+              ),
             ),
           ],
         ],

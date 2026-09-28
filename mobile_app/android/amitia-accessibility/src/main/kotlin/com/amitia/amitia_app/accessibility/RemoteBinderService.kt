@@ -37,6 +37,14 @@ class RemoteBinderService : Service() {
             UIAccessibilityService.current()?.performSwipe(startX, startY, endX, endY, durationMs)
                 ?: providerUnavailable().toString()
 
+        override fun performGesture(payloadJson: String): String =
+            UIAccessibilityService.current()?.performGestureJson(payloadJson)
+                ?: providerUnavailable().toString()
+
+        override fun takeScreenshot(displayId: Int): String =
+            UIAccessibilityService.current()?.takeScreenshotJson(displayId)
+                ?: providerUnavailable().toString()
+
         override fun performGlobalAction(actionId: Int): String =
             UIAccessibilityService.current()?.performGlobalActionJson(actionId)
                 ?: providerUnavailable().toString()

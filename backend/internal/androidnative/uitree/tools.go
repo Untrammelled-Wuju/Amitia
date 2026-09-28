@@ -41,11 +41,11 @@ func buildStatusTool(runtime capability.RuntimeBinding) capability.ToolDefinitio
 	}`)
 
 	return capability.ToolDefinition{
-		ID:          "android.ui_tree.status",
-		ModelName:   "android.ui_tree.status",
-		Source:      capability.ToolSourceBuiltin,
-		Name:        "UI Tree Status",
-		Description: "查询Android UI Tree能力状态。检测Accessibility、Root、ADB来源可用性。不触发授权或采集。",
+		ID:           "android.ui_tree.status",
+		ModelName:    "android_ui_tree_status",
+		Source:       capability.ToolSourceBuiltin,
+		Name:         "UI Tree Status",
+		Description:  "查询Android UI Tree能力状态。检测Accessibility、Root、ADB来源可用性。不触发授权或采集。",
 		InputSchema:  inputSchema,
 		OutputSchema: outputSchema,
 		Permissions: []capability.PermissionRequirement{
@@ -58,9 +58,11 @@ func buildStatusTool(runtime capability.RuntimeBinding) capability.ToolDefinitio
 		Retryable:      true,
 		TimeoutMS:      5000,
 		ToolVersion:    capability.ToolVersion{SchemaVersion: 1, Revision: "b29-uitree-v1"},
+		ModelExposure:  capability.ModelExposureRule{ExposedByDefault: true, Categories: []string{"android", "accessibility"}, Priority: 45},
 		Metadata: map[string]any{
 			"androidNativeOperation": OperationStatus,
 			"bridgeProtocol":         "android_native",
+			"canonicalModelName":     "android.ui_tree.status",
 		},
 		ExecutionPolicy: capability.ToolExecutionPolicy{
 			Timeout:          5 * time.Second,
@@ -122,11 +124,11 @@ func buildSnapshotTool(runtime capability.RuntimeBinding) capability.ToolDefinit
 	}`)
 
 	return capability.ToolDefinition{
-		ID:          "android.ui_tree.snapshot",
-		ModelName:   "android.ui_tree.snapshot",
-		Source:      capability.ToolSourceBuiltin,
-		Name:        "UI Tree Snapshot",
-		Description: "获取当前Android UI窗口和节点结构。默认使用Accessibility，可选Root/ADB fallback。",
+		ID:           "android.ui_tree.snapshot",
+		ModelName:    "android_ui_tree_snapshot",
+		Source:       capability.ToolSourceBuiltin,
+		Name:         "UI Tree Snapshot",
+		Description:  "获取当前Android UI窗口和节点结构。默认使用Accessibility，可选Root/ADB fallback。",
 		InputSchema:  inputSchema,
 		OutputSchema: outputSchema,
 		Permissions: []capability.PermissionRequirement{
@@ -139,9 +141,11 @@ func buildSnapshotTool(runtime capability.RuntimeBinding) capability.ToolDefinit
 		Retryable:      true,
 		TimeoutMS:      5000,
 		ToolVersion:    capability.ToolVersion{SchemaVersion: 1, Revision: "b29-uitree-v1"},
+		ModelExposure:  capability.ModelExposureRule{ExposedByDefault: true, Categories: []string{"android", "accessibility"}, Priority: 45},
 		Metadata: map[string]any{
 			"androidNativeOperation": OperationSnapshot,
 			"bridgeProtocol":         "android_native",
+			"canonicalModelName":     "android.ui_tree.snapshot",
 		},
 		ExecutionPolicy: capability.ToolExecutionPolicy{
 			Timeout:          10 * time.Second,
@@ -201,11 +205,11 @@ func buildFindTool(runtime capability.RuntimeBinding) capability.ToolDefinition 
 	}`)
 
 	return capability.ToolDefinition{
-		ID:          "android.ui_tree.find",
-		ModelName:   "android.ui_tree.find",
-		Source:      capability.ToolSourceBuiltin,
-		Name:        "UI Tree Find",
-		Description: "基于结构化条件过滤当前Snapshot节点。支持text/resourceId/className/role等条件。",
+		ID:           "android.ui_tree.find",
+		ModelName:    "android_ui_tree_find",
+		Source:       capability.ToolSourceBuiltin,
+		Name:         "UI Tree Find",
+		Description:  "基于结构化条件过滤当前Snapshot节点。支持text/resourceId/className/role等条件。",
 		InputSchema:  inputSchema,
 		OutputSchema: outputSchema,
 		Permissions: []capability.PermissionRequirement{
@@ -218,9 +222,11 @@ func buildFindTool(runtime capability.RuntimeBinding) capability.ToolDefinition 
 		Retryable:      true,
 		TimeoutMS:      3000,
 		ToolVersion:    capability.ToolVersion{SchemaVersion: 1, Revision: "b29-uitree-v1"},
+		ModelExposure:  capability.ModelExposureRule{ExposedByDefault: true, Categories: []string{"android", "accessibility"}, Priority: 44},
 		Metadata: map[string]any{
 			"androidNativeOperation": OperationFind,
 			"bridgeProtocol":         "android_native",
+			"canonicalModelName":     "android.ui_tree.find",
 		},
 		ExecutionPolicy: capability.ToolExecutionPolicy{
 			Timeout:          3 * time.Second,
@@ -266,11 +272,11 @@ func buildGetTool(runtime capability.RuntimeBinding) capability.ToolDefinition {
 	}`)
 
 	return capability.ToolDefinition{
-		ID:          "android.ui_tree.get",
-		ModelName:   "android.ui_tree.get",
-		Source:      capability.ToolSourceBuiltin,
-		Name:        "UI Tree Get",
-		Description: "根据snapshotId和nodeId获取节点详情。验证Snapshot有效性和Generation未失效。",
+		ID:           "android.ui_tree.get",
+		ModelName:    "android_ui_tree_get",
+		Source:       capability.ToolSourceBuiltin,
+		Name:         "UI Tree Get",
+		Description:  "根据snapshotId和nodeId获取节点详情。验证Snapshot有效性和Generation未失效。",
 		InputSchema:  inputSchema,
 		OutputSchema: outputSchema,
 		Permissions: []capability.PermissionRequirement{
@@ -283,9 +289,11 @@ func buildGetTool(runtime capability.RuntimeBinding) capability.ToolDefinition {
 		Retryable:      true,
 		TimeoutMS:      3000,
 		ToolVersion:    capability.ToolVersion{SchemaVersion: 1, Revision: "b29-uitree-v1"},
+		ModelExposure:  capability.ModelExposureRule{ExposedByDefault: true, Categories: []string{"android", "accessibility"}, Priority: 44},
 		Metadata: map[string]any{
 			"androidNativeOperation": OperationGet,
 			"bridgeProtocol":         "android_native",
+			"canonicalModelName":     "android.ui_tree.get",
 		},
 		ExecutionPolicy: capability.ToolExecutionPolicy{
 			Timeout:          3 * time.Second,

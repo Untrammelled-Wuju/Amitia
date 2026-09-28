@@ -73,9 +73,11 @@ function main() {
     "modules/proactive-ui/desktop/index.html",
     "modules/proactive-ui/desktop/app.js",
     "modules/proactive-ui/desktop/styles.css",
+    "modules/proactive-ui/desktop/schema.json",
     "modules/proactive-ui/mobile/index.html",
     "modules/proactive-ui/mobile/app.js",
     "modules/proactive-ui/mobile/styles.css",
+    "modules/proactive-ui/mobile/schema.json",
   ];
   for (const path of required) {
     if (!entries.has(path)) throw new Error(`missing package path: ${path}`);
@@ -111,16 +113,19 @@ function main() {
     const contribution = manifest.modules
       ?.flatMap((module) => module.contributions || [])
       .find((item) => item.id === contributionId);
-    if (!contribution?.spec?.entry?.path) {
+    if (!contribution?.spec?.entry?.schema_path) {
       throw new Error(`${contributionId} missing`);
     }
     if (
       contribution.spec.entry.content_hash !==
       `sha256-${createHash("sha256")
-        .update(entries.get(contribution.spec.entry.path))
+        .update(entries.get(contribution.spec.entry.schema_path))
         .digest("base64")}`
     ) {
       throw new Error(`${contributionId} entry hash mismatch`);
+    }
+    if (contribution.spec.entry.type !== "schema_renderer") {
+      throw new Error(`${contributionId} must use schema_renderer`);
     }
   }
   if (files.algorithm !== "sha256" || tree.algorithm !== "sha256") {

@@ -5,7 +5,6 @@ import android.accessibilityservice.AccessibilityServiceInfo
 import android.accessibilityservice.GestureDescription
 import android.graphics.Path
 import android.graphics.Rect
-import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.view.accessibility.AccessibilityEvent
@@ -167,35 +166,29 @@ class UIAccessibilityService : AccessibilityService() {
         val args = payload.optJSONObject("args")
         val node = resolveReference(nativeRef)
         if (node == null) return@runOnMain actionResult(false, action, "node reference is stale or expired").toString()
-        val performed = try {
-            when (action) {
-                "click" -> node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
-                "long_click" -> node.performAction(AccessibilityNodeInfo.ACTION_LONG_CLICK)
-                "set_text" -> node.performAction(
-                    AccessibilityNodeInfo.ACTION_SET_TEXT,
-                    Bundle().apply {
-                        putCharSequence(
-                            AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,
-                            args?.optString("text").orEmpty(),
-                        )
-                    },
-                )
-                "clear_text" -> node.performAction(
-                    AccessibilityNodeInfo.ACTION_SET_TEXT,
-                    Bundle().apply {
-                        putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, "")
-                    },
-                )
-                "scroll_forward" -> node.performAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD)
-                "scroll_backward" -> node.performAction(AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD)
-                "focus" -> node.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
-                "select" -> node.performAction(AccessibilityNodeInfo.ACTION_SELECT)
-                else -> false
-            }
-        } catch (error: Throwable) {
-            return@runOnMain actionResult(false, action, error.message ?: error.javaClass.simpleName).toString()
-        }
-        actionResult(performed, action, if (performed) "" else "accessibility node action returned false").toString()
+        val argsMap = args?.let { jsonObjectToMap(it) } ?: emptyMap()
+        val result = AccessibilityNodeActionExecutor.perform(node, action, argsMap)
+        actionResult(result.performed, action, result.message).toString()
+    }
+
+    fun performGestureJson(payloadJson: String): String {
+        val payload = if (payloadJson.isBlank()) JSONObject() else JSONObject(payloadJson)
+        val parsed = AccessibilityGestureFactory.parse(payload)
+        val gesture = parsed.gesture
+            ?: return actionResult(false, "gesture", parsed.message).toString()
+        return actionResult(dispatchGestureAndWait(gesture), "gesture", "").toString()
+    }
+
+    fun takeScreenshotJson(displayId: Int): String {
+        val result = AccessibilityScreenshotCapture.capture(this, displayId)
+        return JSONObject()
+            .put("success", result.success)
+            .put("imageBase64", result.imageBase64)
+            .put("mimeType", result.mimeType)
+            .put("width", result.width)
+            .put("height", result.height)
+            .put("message", result.message)
+            .toString()
     }
 
     fun performClick(x: Int, y: Int): String {
@@ -416,16 +409,23 @@ class UIAccessibilityService : AccessibilityService() {
         else -> "unknown"
     }
 
-    private fun actionName(action: Int): String? = when (action) {
-        AccessibilityNodeInfo.ACTION_CLICK -> "ACTION_CLICK"
-        AccessibilityNodeInfo.ACTION_LONG_CLICK -> "ACTION_LONG_CLICK"
-        AccessibilityNodeInfo.ACTION_SCROLL_FORWARD -> "ACTION_SCROLL_FORWARD"
-        AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD -> "ACTION_SCROLL_BACKWARD"
-        AccessibilityNodeInfo.ACTION_SET_TEXT -> "ACTION_SET_TEXT"
-        AccessibilityNodeInfo.ACTION_FOCUS -> "ACTION_FOCUS"
-        AccessibilityNodeInfo.ACTION_CLEAR_FOCUS -> "ACTION_CLEAR_FOCUS"
-        AccessibilityNodeInfo.ACTION_SELECT -> "ACTION_SELECT"
-        else -> null
+    private fun actionName(action: Int): String? = AccessibilityNodeActionExecutor.actionName(action)
+
+    private fun jsonObjectToMap(value: JSONObject): Map<String, Any?> {
+        val result = LinkedHashMap<String, Any?>()
+        val keys = value.keys()
+        while (keys.hasNext()) {
+            val key = keys.next()
+            result[key] = jsonValue(value.get(key))
+        }
+        return result
+    }
+
+    private fun jsonValue(value: Any?): Any? = when (value) {
+        null, JSONObject.NULL -> null
+        is JSONObject -> jsonObjectToMap(value)
+        is JSONArray -> List(value.length()) { index -> jsonValue(value.get(index)) }
+        else -> value
     }
 
     private data class NodeReference(

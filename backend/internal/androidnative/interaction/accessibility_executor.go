@@ -24,6 +24,12 @@ type BridgeAccessibilityExecutor struct {
 	bridge androidnative.NativeBridge
 }
 
+type AdvancedAccessibilityExecutor interface {
+	PerformGlobalAction(ctx context.Context, action string) (map[string]any, error)
+	PerformGesture(ctx context.Context, payload map[string]any) (map[string]any, error)
+	TakeScreenshot(ctx context.Context, displayID int) (map[string]any, error)
+}
+
 func NewBridgeAccessibilityExecutor(bridge androidnative.NativeBridge) *BridgeAccessibilityExecutor {
 	return &BridgeAccessibilityExecutor{bridge: bridge}
 }
@@ -82,6 +88,52 @@ func (e *BridgeAccessibilityExecutor) PerformNodeAction(
 	}
 
 	return nil
+}
+
+func (e *BridgeAccessibilityExecutor) PerformGlobalAction(ctx context.Context, action string) (map[string]any, error) {
+	return e.executeOperation(ctx, "interaction.global_action", map[string]any{"action": action})
+}
+
+func (e *BridgeAccessibilityExecutor) PerformGesture(ctx context.Context, payload map[string]any) (map[string]any, error) {
+	return e.executeOperation(ctx, "interaction.gesture", payload)
+}
+
+func (e *BridgeAccessibilityExecutor) TakeScreenshot(ctx context.Context, displayID int) (map[string]any, error) {
+	return e.executeOperation(ctx, "interaction.screenshot", map[string]any{"displayId": displayID})
+}
+
+func (e *BridgeAccessibilityExecutor) executeOperation(
+	ctx context.Context,
+	operation string,
+	payload map[string]any,
+) (map[string]any, error) {
+	if e.bridge == nil {
+		return nil, &Error{Code: INTERACTION_NATIVE_HOST_UNAVAILABLE, Message: "native bridge not available"}
+	}
+	resp, err := e.bridge.Execute(ctx, androidnative.NativeBridgeRequest{
+		ProtocolVersion: 1,
+		RequestId:       uuid.NewString(),
+		Platform:        "android",
+		Operation:       operation,
+		Payload:         payload,
+	})
+	if err != nil {
+		return nil, &Error{Code: INTERACTION_ACTION_FAILED, Message: "bridge call failed: " + err.Error()}
+	}
+	if resp.Error != nil {
+		code := INTERACTION_ACTION_FAILED
+		if strings.Contains(strings.ToLower(resp.Error.Message), "unsupported") {
+			code = INTERACTION_ACTION_UNSUPPORTED
+		}
+		return nil, &Error{Code: code, Message: resp.Error.Message}
+	}
+	if resp.Status != "success" {
+		return nil, &Error{Code: INTERACTION_ACTION_FAILED, Message: "accessibility operation was not completed"}
+	}
+	if resp.Result == nil {
+		return map[string]any{}, nil
+	}
+	return resp.Result, nil
 }
 
 func (e *BridgeAccessibilityExecutor) SupportsAction(

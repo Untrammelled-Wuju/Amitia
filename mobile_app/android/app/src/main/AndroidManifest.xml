@@ -112,6 +112,13 @@
             android:name="com.amitia.amitia_app.workflow.WorkflowIntentReceiver"
             android:exported="true" />
         <receiver
+            android:name="com.amitia.amitia_app.virtualdisplay.host.VirtualDisplayHostBinderReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.amitia.amitia_app.action.VIRTUAL_DISPLAY_HOST_READY" />
+            </intent-filter>
+        </receiver>
+        <receiver
             android:name="com.amitia.amitia_app.update.AppUpdateInstallReceiver"
             android:exported="false" />
         <service
@@ -160,6 +167,13 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/share_file_paths" />
         </provider>
+        <provider
+            android:name="rikka.shizuku.ShizukuProvider"
+            android:authorities="${applicationId}.shizuku"
+            android:enabled="true"
+            android:exported="true"
+            android:multiprocess="false"
+            android:permission="android.permission.INTERACT_ACROSS_USERS_FULL" />
         <service
             android:name=".realtime.RealtimeProjectionService"
             android:exported="false"
@@ -172,6 +186,7 @@
          In particular, this is used by the Flutter engine in io.flutter.plugin.text.ProcessTextPlugin. -->
     <queries>
         <package android:name="moe.shizuku.privileged.api" />
+        <package android:name="frb.axeron.manager" />
         <package android:name="com.amitia.amitia_app.accessibility" />
         <package android:name="net.dinglisch.android.taskerm" />
         <package android:name="net.dinglisch.android.tasker" />

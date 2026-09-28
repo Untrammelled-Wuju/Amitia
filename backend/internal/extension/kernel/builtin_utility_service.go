@@ -715,14 +715,11 @@ func (s *BuiltinUtilityService) pressKeyObject(ctx context.Context, obj map[stri
 	}
 
 	args := []any{"keyevent", strconv.Itoa(keyCode)}
-	if result, err := s.androidCall(ctx, invocation, "press-shizuku", "shizuku.execute", map[string]any{"executable": "input", "args": args}); err == nil {
-		return marshalResult(map[string]any{"success": true, "strategy": "shizuku", "keyCode": keyCode, "result": result})
+	result, err := s.androidCall(ctx, invocation, "press-shizuku", "shizuku.execute", map[string]any{"executable": "input", "args": args})
+	if err != nil {
+		return nil, fmt.Errorf("arbitrary key injection unavailable through Shizuku: %w", err)
 	}
-	result, rootErr := s.androidCall(ctx, invocation, "press-root", "root.execute", map[string]any{"executable": "input", "args": args, "mode": "structured", "timeoutMs": 5000})
-	if rootErr != nil {
-		return nil, fmt.Errorf("arbitrary key injection unavailable through both Shizuku and Root: %w", rootErr)
-	}
-	return marshalResult(map[string]any{"success": true, "strategy": "root", "keyCode": keyCode, "result": result})
+	return marshalResult(map[string]any{"success": true, "strategy": "shizuku", "keyCode": keyCode, "result": result})
 }
 
 func normalizeGlobalAction(key string) string {
