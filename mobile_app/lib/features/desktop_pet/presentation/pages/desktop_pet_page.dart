@@ -24,7 +24,6 @@ class DesktopPetPage extends ConsumerStatefulWidget {
 
 class _DesktopPetPageState extends ConsumerState<DesktopPetPage>
     with WidgetsBindingObserver {
-  static const _defaultPetColor = '#8A5728';
   bool _busy = false;
 
   @override
@@ -110,7 +109,7 @@ class _DesktopPetPageState extends ConsumerState<DesktopPetPage>
     DesktopPetMobileRuntimeState runtime,
   ) {
     final petName = runtime.petName.trim().isNotEmpty ? runtime.petName : '未启用桌宠';
-    final color = _parseColor(_defaultPetColor);
+    final color = context.accentPrimary;
     final status = _runtimeStatus(runtime);
 
     return Padding(
@@ -363,11 +362,6 @@ class _DesktopPetPageState extends ConsumerState<DesktopPetPage>
     } finally {
       if (mounted) setState(() => _busy = false);
     }
-  }
-
-  Color _parseColor(String hex) {
-    final cleaned = hex.replaceAll('#', '');
-    return Color(int.parse('FF$cleaned', radix: 16));
   }
 
   String _getInitial(String name) => name.isNotEmpty ? name.substring(0, 1) : '?';

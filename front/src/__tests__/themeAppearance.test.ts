@@ -22,4 +22,13 @@ describe("default appearance", () => {
     expect(useTheme().state.value.accentColor).toBe("#52B788");
     expect(document.documentElement.style.getPropertyValue("--tp-primary")).toBe("#52B788");
   });
+
+  it("passes the current accent to sandbox theme tokens after a color change", async () => {
+    const { useTheme } = await import("../composables/useTheme");
+    const { buildSandboxThemeTokens } = await import("../components/extension/sandboxSessionCache");
+    const theme = useTheme();
+    expect(buildSandboxThemeTokens()["--amitia-color-accent"]).toBe("#8CA8F0");
+    theme.setAccentColor("#52B788");
+    expect(buildSandboxThemeTokens()["--amitia-color-accent"]).toBe("#52B788");
+  });
 });

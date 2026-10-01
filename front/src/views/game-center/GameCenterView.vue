@@ -1187,9 +1187,9 @@ onMounted(() => {
 
 <style scoped>
 .game-mode-page {
-  --game-primary: var(--tp-primary, #8a5728);
-  --game-primary-hover: var(--tp-primary-hover, #74451e);
-  --game-primary-soft: var(--tp-primary-soft, #efe1d2);
+  --game-primary: var(--tp-primary);
+  --game-primary-hover: var(--tp-primary-hover);
+  --game-primary-soft: var(--tp-primary-soft);
   --game-panel: var(--tp-panel, #ffffff);
   --game-panel-soft: var(--tp-panel-soft, #f4f6f8);
   --game-text: var(--tp-text, #24221f);
@@ -1293,7 +1293,7 @@ onMounted(() => {
 }
 
 .current-game-card.is-connected {
-  border-color: var(--tp-primary-border, rgba(138, 87, 40, 0.28));
+  border-color: var(--tp-primary-border);
 }
 
 .current-game-visual {
@@ -1331,7 +1331,7 @@ onMounted(() => {
   font-weight: 700;
   color: var(--game-primary);
   background: color-mix(in srgb, var(--game-panel) 84%, transparent);
-  border: 1px solid var(--tp-primary-border, rgba(138, 87, 40, 0.28));
+  border: 1px solid var(--tp-primary-border);
   box-shadow: var(--tp-shadow-float, 0 18px 48px rgba(36, 32, 27, 0.15));
   backdrop-filter: blur(12px);
 }
@@ -1494,13 +1494,13 @@ onMounted(() => {
 }
 
 .game-card:hover {
-  border-color: var(--tp-primary-border, rgba(138, 87, 40, 0.28));
+  border-color: var(--tp-primary-border);
   transform: translateY(-1px);
 }
 
 .game-card.is-active {
-  border-color: var(--tp-primary-border, rgba(138, 87, 40, 0.28));
-  box-shadow: inset 0 0 0 1px var(--tp-primary-border, rgba(138, 87, 40, 0.14));
+  border-color: var(--tp-primary-border);
+  box-shadow: inset 0 0 0 1px var(--tp-primary-border);
 }
 
 .game-icon {
@@ -1630,7 +1630,7 @@ onMounted(() => {
 .add-game-card:hover,
 .empty-game-state:hover {
   color: var(--game-primary);
-  border-color: var(--tp-primary-border, rgba(138, 87, 40, 0.28));
+  border-color: var(--tp-primary-border);
   background: var(--game-primary-soft);
 }
 
@@ -1767,7 +1767,7 @@ onMounted(() => {
 
 .package-drop-zone:hover,
 .package-drop-zone.has-file {
-  border-color: var(--tp-primary-border, rgba(138, 87, 40, 0.28));
+  border-color: var(--tp-primary-border);
   background: color-mix(in srgb, var(--game-primary-soft) 55%, var(--game-panel));
 }
 

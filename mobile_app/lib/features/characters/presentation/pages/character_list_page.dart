@@ -231,7 +231,7 @@ class _CharacterListPageState extends ConsumerState<CharacterListPage> {
           status: character.status,
           identity: character.identity,
           avatarInitial: character.name.isNotEmpty ? character.name[0] : '?',
-          avatarColor: '#8A5728',
+          avatarColor: '#${context.accentPrimary.toARGB32().toRadixString(16).substring(2)}',
           avatarUrl: _resolveAvatarUrl(character.avatar, backendAvailability),
           mood: '',
           lastActive: _getLastActive(character.isActive == 1),

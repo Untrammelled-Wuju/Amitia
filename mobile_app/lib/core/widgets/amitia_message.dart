@@ -129,9 +129,7 @@ class AmitiaMessageBubble extends StatelessWidget {
           avatarInitial: (avatarInitial ?? '').trim().isEmpty
               ? 'A'
               : avatarInitial!.trim(),
-          avatarColor: (avatarColor ?? '').trim().isEmpty
-              ? '#7060E8'
-              : avatarColor!.trim(),
+          avatarColor: avatarColor?.trim() ?? '',
           showAvatar: showAvatar,
           showHeader: showHeader,
           showThinking: showThinking,

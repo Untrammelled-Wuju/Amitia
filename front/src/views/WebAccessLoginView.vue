@@ -88,7 +88,7 @@ onMounted(async () => {
   place-items: center;
   box-sizing: border-box;
   padding: 28px;
-  background: radial-gradient(circle at 50% 20%, rgba(111, 126, 255, 0.12), transparent 36%), var(--el-bg-color, #fff);
+  background: radial-gradient(circle at 50% 20%, color-mix(in srgb, var(--tp-primary) 12%, transparent), transparent 36%), var(--el-bg-color, #fff);
   color: var(--el-text-color-primary, #1f2329);
 }
 .login-card {
@@ -108,7 +108,7 @@ onMounted(async () => {
   display: grid;
   place-items: center;
   border-radius: 12px;
-  background: var(--el-color-primary, #8a5728);
+  background: var(--el-color-primary, var(--tp-primary));
   color: white;
   font-size: 20px;
   font-weight: 700;
@@ -139,13 +139,13 @@ p {
   outline: none;
 }
 .login-input:focus {
-  border-color: var(--el-color-primary, #8a5728);
+  border-color: var(--el-color-primary, var(--tp-primary));
 }
 .login-button {
   height: 44px;
   border: 0;
   border-radius: 10px;
-  background: var(--el-color-primary, #8a5728);
+  background: var(--el-color-primary, var(--tp-primary));
   color: #fff;
   cursor: pointer;
   font-weight: 600;

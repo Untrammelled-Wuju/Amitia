@@ -33,7 +33,7 @@ class AmitiaMessageView extends StatefulWidget {
     this.characterId = '',
     this.characterName = 'Amitia',
     this.avatarInitial = 'A',
-    this.avatarColor = '#7060E8',
+    this.avatarColor = '',
     this.showAvatar = true,
     this.showHeader = true,
     this.showThinking = false,
@@ -398,7 +398,7 @@ class _Avatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = _parseColor(colorHex);
+    final color = _parseColor(colorHex, AmitiaMessageTheme.of(context).accent);
     return Container(
       width: size,
       height: size,
@@ -418,10 +418,10 @@ class _Avatar extends StatelessWidget {
     );
   }
 
-  Color _parseColor(String value) {
+  Color _parseColor(String value, Color fallback) {
     final normalized = value.replaceFirst('#', '');
     final parsed = int.tryParse(normalized, radix: 16);
-    if (parsed == null) return const Color(0xFF7060E8);
+    if (parsed == null) return fallback;
     return Color(0xFF000000 | parsed);
   }
 }

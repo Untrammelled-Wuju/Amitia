@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../../../app/theme/app_colors.dart';
+import '../../../app/theme/design_tokens.dart';
 
 class AmitiaMessageTheme extends ThemeExtension<AmitiaMessageTheme> {
   final Color background;
@@ -60,41 +62,49 @@ class AmitiaMessageTheme extends ThemeExtension<AmitiaMessageTheme> {
     this.toolFontSize = 12,
   });
 
-  static const light = AmitiaMessageTheme(
-    background: Color(0xFFF7F7F8),
-    text: Color(0xFF19191C),
-    muted: Color(0xFF8C8E95),
-    line: Color(0xFFE8E8EB),
-    userBubble: Color(0xFFECE9FF),
-    codeBackground: Color(0xFF1B1C20),
-    codeHeader: Color(0xFF232429),
-    soft: Color(0xFFF1F1F3),
-    surface: Color(0xFFFFFFFF),
-    accent: Color(0xFF7060E8),
-    accentSoft: Color(0xFFEFEDFF),
-    good: Color(0xFF3E8D5D),
-    danger: Color(0xFFC85353),
+  static final light = AmitiaMessageTheme(
+    background: const Color(0xFFF7F7F8),
+    text: const Color(0xFF19191C),
+    muted: const Color(0xFF8C8E95),
+    line: const Color(0xFFE8E8EB),
+    userBubble: AppColors.light.accentSoft,
+    codeBackground: const Color(0xFF1B1C20),
+    codeHeader: const Color(0xFF232429),
+    soft: const Color(0xFFF1F1F3),
+    surface: const Color(0xFFFFFFFF),
+    accent: AppColors.light.accentPrimary,
+    accentSoft: AppColors.light.accentSoft,
+    good: const Color(0xFF3E8D5D),
+    danger: const Color(0xFFC85353),
   );
 
-  static const dark = AmitiaMessageTheme(
-    background: Color(0xFF17181B),
-    text: Color(0xFFECECEF),
-    muted: Color(0xFF9B9DA5),
-    line: Color(0xFF2A2B30),
-    userBubble: Color(0xFF302D4F),
-    codeBackground: Color(0xFF111216),
-    codeHeader: Color(0xFF1C1D22),
-    soft: Color(0xFF24252A),
-    surface: Color(0xFF1D1E22),
-    accent: Color(0xFF9A8CFF),
-    accentSoft: Color(0xFF2E294D),
-    good: Color(0xFF6FBD8B),
-    danger: Color(0xFFE07878),
+  static final dark = AmitiaMessageTheme(
+    background: const Color(0xFF17181B),
+    text: const Color(0xFFECECEF),
+    muted: const Color(0xFF9B9DA5),
+    line: const Color(0xFF2A2B30),
+    userBubble: AppColors.dark.accentSoft,
+    codeBackground: const Color(0xFF111216),
+    codeHeader: const Color(0xFF1C1D22),
+    soft: const Color(0xFF24252A),
+    surface: const Color(0xFF1D1E22),
+    accent: AppColors.dark.accentPrimary,
+    accentSoft: AppColors.dark.accentSoft,
+    good: const Color(0xFF6FBD8B),
+    danger: const Color(0xFFE07878),
   );
 
   static AmitiaMessageTheme of(BuildContext context) {
-    return Theme.of(context).extension<AmitiaMessageTheme>() ??
-        (Theme.of(context).brightness == Brightness.dark ? dark : light);
+    final theme = Theme.of(context);
+    final base = theme.extension<AmitiaMessageTheme>() ??
+        (theme.brightness == Brightness.dark ? dark : light);
+    final colors = theme.extension<AmitiaColorTokens>();
+    if (colors == null) return base;
+    return base.copyWith(
+      accent: colors.accentPrimary,
+      accentSoft: colors.accentSoft,
+      userBubble: colors.accentSoft,
+    );
   }
 
   AmitiaMessageTheme mobile() {

@@ -534,7 +534,7 @@ function researchStopReasonText(reason: string): string {
 
 .turn-tool-stream-toggle {
   flex: 0 0 auto;
-  color: var(--tp-primary, #7060e8);
+  color: var(--tp-primary);
 }
 
 .turn-tool-stream-body {
@@ -590,7 +590,7 @@ function researchStopReasonText(reason: string): string {
   border: 0;
   padding: 2px 0 2px 6px;
   background: transparent;
-  color: var(--tp-primary, #7060e8);
+  color: var(--tp-primary);
   font: inherit;
   font-size: 10.5px;
   cursor: pointer;

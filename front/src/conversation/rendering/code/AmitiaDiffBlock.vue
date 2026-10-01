@@ -165,8 +165,8 @@ async function copyDiff() {
 }
 
 .amrp-diff-line.hunk {
-  background: rgba(138, 87, 40, 0.18);
-  color: #e0b47f;
+  background: color-mix(in srgb, var(--amrp-accent) 18%, transparent);
+  color: var(--amrp-accent);
 }
 
 .amrp-diff-line.meta {

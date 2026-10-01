@@ -247,7 +247,7 @@ class _DiffLine extends StatelessWidget {
     final color = switch (kind) {
       _DiffLineKind.add => const Color(0xFF9ADCAA),
       _DiffLineKind.remove => const Color(0xFFF0A0A0),
-      _DiffLineKind.hunk => const Color(0xFFBCB3FF),
+      _DiffLineKind.hunk => tokens.accent,
       _DiffLineKind.meta => const Color(0xFF8C8E95),
       _DiffLineKind.context => const Color(0xFFC9CBD0),
     };

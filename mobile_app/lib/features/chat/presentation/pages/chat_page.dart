@@ -2053,7 +2053,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     final avatarInitial = characterName.isNotEmpty
         ? characterName.characters.first
         : 'A';
-    const avatarColor = '#8A5728';
+    final avatarColor = '#${context.accentPrimary.toARGB32().toRadixString(16).substring(2)}';
     final spaceProfile = ref.watch(currentSpaceProfileProvider).valueOrNull;
     final userName = (spaceProfile?.displayName ?? '').trim().isEmpty
         ? '我'

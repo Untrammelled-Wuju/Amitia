@@ -38,7 +38,7 @@
               <div class="bar-list">
                 <div class="bar-item">
                   <span class="bar-label">待处理</span>
-                  <el-progress :percentage="pct(stats.pendingOutbox, outboxTotal)" :stroke-width="16" color="#409eff" />
+                  <el-progress :percentage="pct(stats.pendingOutbox, outboxTotal)" :stroke-width="16" />
                   <span class="bar-num">{{ stats.pendingOutbox }}</span>
                 </div>
                 <div class="bar-item">

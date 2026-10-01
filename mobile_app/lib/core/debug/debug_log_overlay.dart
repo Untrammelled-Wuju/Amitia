@@ -255,7 +255,7 @@ class _DebugLogOverlayState extends ConsumerState<DebugLogOverlay> {
                       ),
                       decoration: BoxDecoration(
                         color: selected
-                            ? const Color(0xFF3D5AFE)
+                            ? Theme.of(context).colorScheme.primary
                             : const Color(0xFF333333),
                         borderRadius: BorderRadius.circular(3),
                       ),
@@ -263,7 +263,7 @@ class _DebugLogOverlayState extends ConsumerState<DebugLogOverlay> {
                         s == 'all' ? '全部' : s,
                         style: TextStyle(
                           color: selected
-                              ? Colors.white
+                              ? Theme.of(context).colorScheme.onPrimary
                               : const Color(0xFFAAAAAA),
                           fontSize: 10,
                         ),
