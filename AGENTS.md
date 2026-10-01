@@ -183,7 +183,9 @@ Android Release 构建方法：
    - flutter pub get
    - flutter build apk --release --target-platform android-arm64 --no-tree-shake-icons --config-only
 6. 在 R:\mobile_app\android 执行：
-   - .\gradlew.bat assembleRelease
+   - 先执行 `.\gradlew.bat :app:lintVitalRelease --no-daemon '-Dorg.gradle.jvmargs=-Xmx512m -XX:MaxMetaspaceSize=448m -XX:ReservedCodeCacheSize=64m -XX:ActiveProcessorCount=2'`
+   - 上一步成功退出后，再执行 `.\gradlew.bat assembleRelease --no-daemon '-Dorg.gradle.jvmargs=-Xmx736m -XX:MaxMetaspaceSize=256m -XX:ReservedCodeCacheSize=32m -XX:ActiveProcessorCount=2'`
+   - 两个阶段必须串行执行，使用同一份源码与新构建的 Runtime Package；禁止跳过 Release lint。两组 JVM 内存配置预算均为 1024 MiB，操作系统实际进程内存还包含原生运行开销，该预算不是进程工作集硬限制。
 7. 必须使用 Gradle 返回码判断构建结果。由于中文路径下 Flutter 包装命令可能在产物查找阶段误报失败，禁止仅凭 flutter build apk 的产物查找结果判定构建失败或成功。
 8. APK 输出路径固定为 R:\mobile_app\android\app\build\outputs\flutter-apk\app-release.apk，等价实际路径为 D:\桌面\跟进项目\U-Ai\mobile_app\android\app\build\outputs\flutter-apk\app-release.apk。
 9. 安装前必须验证：
