@@ -167,9 +167,10 @@ Android 构建与真机安装规则：
 
 Android Release 构建方法：
 
-- APK 构建程序的内存配置预算最多为 1 GiB，禁止通过项目配置、命令行或环境变量提高上限。Gradle JVM 堆、Metaspace 和 CodeCache 的配置上限合计不得超过 1024 MiB；当前分别为 768 MiB、192 MiB、64 MiB。
+- APK 构建程序的内存配置预算最多为 1 GiB，禁止通过项目配置、命令行或环境变量提高总上限。Gradle JVM 堆、Metaspace 和 CodeCache 的配置上限合计不得超过 1024 MiB；默认分别为 512 MiB、448 MiB、64 MiB。允许在总预算内按编译阶段调整三者比例，但必须串行执行。
 - APK 构建使用单个 Gradle worker，关闭 Gradle 并行构建；Kotlin 必须在 Gradle 同一进程中编译，禁止额外启动 Kotlin 编译守护进程扩大内存预算。
 - 构建前必须停止旧的超限 Gradle/Kotlin 构建进程并核验新进程的内存参数。遇到内存不足必须停止并报告，禁止自动提高内存上限。
+- 禁止为 APK 构建启用自动 JVM 堆转储，避免内存不足时生成大体积转储文件。
 
 1. 禁止使用 scripts/build-apk.ps1 的临时源码复制流程。正式构建必须使用项目根目录中的同一份源码。
 2. 项目位于中文路径时，统一从 R: 盘符映射构建。R: 必须映射到 D:\桌面\跟进项目\U-Ai，先执行 subst.exe 检查；缺少映射时执行 subst.exe R: "D:\桌面\跟进项目\U-Ai"。R: 只是同一源码目录的盘符映射，不是源码副本，禁止将源码复制到其他目录构建。
