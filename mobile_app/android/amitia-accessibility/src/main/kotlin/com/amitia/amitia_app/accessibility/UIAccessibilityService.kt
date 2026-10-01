@@ -46,38 +46,42 @@ class UIAccessibilityService : AccessibilityService() {
     }
 
     fun statusJson(): String {
-        return runOnMain {
-            val info = serviceInfo
-            val capabilities = info?.capabilities ?: 0
-            JSONObject()
-                .put("connected", true)
-                .put("enabledInSettings", true)
-                .put("canRetrieveWindowContent", capabilities and AccessibilityServiceInfo.CAPABILITY_CAN_RETRIEVE_WINDOW_CONTENT != 0)
-                .put("canRetrieveInteractiveWindows", info?.flags?.and(AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS) != 0)
-                .put("canPerformGestures", capabilities and AccessibilityServiceInfo.CAPABILITY_CAN_PERFORM_GESTURES != 0)
-                .put("canTakeScreenshot", capabilities and AccessibilityServiceInfo.CAPABILITY_CAN_TAKE_SCREENSHOT != 0)
-                .put("includeNotImportantViews", info?.flags?.and(AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS) != 0)
-                .put("enhancedWebAccessibility", info?.flags?.and(AccessibilityServiceInfo.FLAG_REQUEST_ENHANCED_WEB_ACCESSIBILITY) != 0)
-                .put("packageName", lastPackageName)
-                .put("activityName", lastActivityName)
-                .toString()
-        }
+        val info = serviceInfo
+        val capabilities = info?.capabilities ?: 0
+        return JSONObject()
+            .put("connected", true)
+            .put("enabledInSettings", true)
+            .put("canRetrieveWindowContent", capabilities and AccessibilityServiceInfo.CAPABILITY_CAN_RETRIEVE_WINDOW_CONTENT != 0)
+            .put("canRetrieveInteractiveWindows", info?.flags?.and(AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS) != 0)
+            .put("canPerformGestures", capabilities and AccessibilityServiceInfo.CAPABILITY_CAN_PERFORM_GESTURES != 0)
+            .put("canTakeScreenshot", capabilities and AccessibilityServiceInfo.CAPABILITY_CAN_TAKE_SCREENSHOT != 0)
+            .put("includeNotImportantViews", info?.flags?.and(AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS) != 0)
+            .put("enhancedWebAccessibility", info?.flags?.and(AccessibilityServiceInfo.FLAG_REQUEST_ENHANCED_WEB_ACCESSIBILITY) != 0)
+            .put("packageName", lastPackageName)
+            .put("activityName", lastActivityName)
+            .toString()
     }
 
-    fun snapshotJson(payloadJson: String): String = runOnMain {
+    fun snapshotJson(payloadJson: String): String {
         val payload = if (payloadJson.isBlank()) JSONObject() else JSONObject(payloadJson)
         val includeAllWindows = payload.optBoolean("includeAllWindows", true)
         val includeInvisible = payload.optBoolean("includeInvisible", false)
         val maxDepth = payload.optInt("maxDepth", DEFAULT_MAX_DEPTH).coerceIn(1, HARD_MAX_DEPTH)
+        val requestedDisplayId = if (payload.has("displayId")) payload.optInt("displayId") else null
         val snapshotGeneration = generation.incrementAndGet()
         currentGeneration = snapshotGeneration
         references.clear()
 
-        val allWindows = windows.orEmpty()
-        val selectedWindows = if (includeAllWindows) {
+        val allWindows = allAccessibilityWindows()
+        val baseWindows = if (includeAllWindows) {
             allWindows
         } else {
             allWindows.filter { it.isActive || it.isFocused }.ifEmpty { allWindows.take(1) }
+        }
+        val selectedWindows = if (requestedDisplayId == null) {
+            baseWindows
+        } else {
+            baseWindows.filter { displayId(it) == requestedDisplayId }
         }
 
         val nodes = JSONArray()
@@ -110,7 +114,7 @@ class UIAccessibilityService : AccessibilityService() {
                     break
                 }
             }
-        } else {
+        } else if (requestedDisplayId == null || requestedDisplayId == 0) {
             val root = rootInActiveWindow
             if (root != null) {
                 val sentinel = ACTIVE_WINDOW_SENTINEL
@@ -145,7 +149,7 @@ class UIAccessibilityService : AccessibilityService() {
                 break
             }
         }
-        JSONObject()
+        return JSONObject()
             .put("nodes", nodes)
             .put("windows", outputWindows)
             .put("windowCount", outputWindows.length())
@@ -304,13 +308,29 @@ class UIAccessibilityService : AccessibilityService() {
         var node = if (nativeWindowId == ACTIVE_WINDOW_SENTINEL) {
             rootInActiveWindow ?: return null
         } else {
-            windows.orEmpty().firstOrNull { it.id == nativeWindowId }?.root ?: return null
+            allAccessibilityWindows().firstOrNull { it.id == nativeWindowId }?.root ?: return null
         }
         for (index in path) {
             if (index < 0 || index >= node.childCount) return null
             node = node.getChild(index) ?: return null
         }
         return node
+    }
+
+    private fun allAccessibilityWindows(): List<AccessibilityWindowInfo> {
+        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.R) {
+            return windows.orEmpty()
+        }
+        return try {
+            val value = getWindowsOnAllDisplays()
+            val result = mutableListOf<AccessibilityWindowInfo>()
+            for (index in 0 until value.size()) {
+                value.valueAt(index)?.let { result.addAll(it) }
+            }
+            if (result.isNotEmpty()) result else windows.orEmpty()
+        } catch (_: Throwable) {
+            windows.orEmpty()
+        }
     }
 
     private fun dispatchGestureAndWait(gesture: GestureDescription): Boolean {

@@ -89,6 +89,7 @@ type Service interface {
 	SetReplanner(replanner interaction.Replanner)
 	SetReflectionProcessor(r interaction.ReflectionProcessor)
 	SetArtifactResolver(resolver ArtifactResolver)
+	SetArtifactImporter(importer MessageArtifactImporter)
 	GetArtifactResolver() ArtifactResolver
 	SetWorkspaceAvailabilityResolver(resolver WorkspaceAvailabilityResolver)
 }
@@ -168,6 +169,7 @@ type service struct {
 	replanner           interaction.Replanner
 	reflectionProcessor interaction.ReflectionProcessor
 	artifactResolver    ArtifactResolver
+	artifactImporter    MessageArtifactImporter
 	extensionContext    extensioncontext.Provider
 	localModelMu        sync.Mutex
 	localModels         map[string]LocalModelInfer
@@ -245,6 +247,10 @@ func (s *service) SetReflectionProcessor(r interaction.ReflectionProcessor) {
 
 func (s *service) SetArtifactResolver(resolver ArtifactResolver) {
 	s.artifactResolver = resolver
+}
+
+func (s *service) SetArtifactImporter(importer MessageArtifactImporter) {
+	s.artifactImporter = importer
 }
 
 func (s *service) GetArtifactResolver() ArtifactResolver {

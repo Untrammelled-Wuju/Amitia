@@ -8,6 +8,7 @@ import '../../../../app/theme/app_typography.dart';
 import '../../../../core/services/providers.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
+import '../../../../core/widgets/amitia_editor.dart';
 import '../widgets/voice_clone_manager.dart';
 
 class ModelConfigPage extends ConsumerStatefulWidget {
@@ -482,13 +483,9 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
     bool detecting = false;
     List<Map<String, dynamic>> detectedModels = const <Map<String, dynamic>>[];
 
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: context.surfacePrimary,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
+    await showAmitiaEditor<void>(
+      context,
+      title: existing == null ? '新建$_typeName配置' : '编辑$_typeName配置',
       builder: (sheetContext) => StatefulBuilder(
         builder: (sheetContext, setSheetState) {
           final selectedProvider = _providers
@@ -553,10 +550,6 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
-                    Text(
-                      existing == null ? '新建$_typeName配置' : '编辑$_typeName配置',
-                      style: AppTypography.sectionTitle(context),
-                    ),
                     SizedBox(height: AppSpacing.lg),
                     _SheetField(
                       label: '配置名称',

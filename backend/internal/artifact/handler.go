@@ -2,19 +2,22 @@ package artifact
 
 import (
 	"fmt"
+	"mime"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/u-ai/backend/internal/middleware"
 )
 
 type Handler struct {
-	svc *Service
+	svc          *Service
+	ticketSigner *mediaTicketSigner
 }
 
 func NewHandler(svc *Service) *Handler {
-	return &Handler{svc: svc}
+	return &Handler{svc: svc, ticketSigner: newMediaTicketSigner()}
 }
 
 func (h *Handler) Register(r *gin.RouterGroup) {
@@ -23,8 +26,13 @@ func (h *Handler) Register(r *gin.RouterGroup) {
 		artifacts.POST("", h.Upload)
 		artifacts.GET("/:artifactId", h.GetMetadata)
 		artifacts.GET("/:artifactId/content", h.GetContent)
+		artifacts.GET("/:artifactId/media-ticket", h.GetMediaTicket)
 		artifacts.DELETE("/:artifactId", h.Delete)
 	}
+}
+
+func (h *Handler) RegisterPublicMedia(r *gin.Engine) {
+	r.GET("/media/artifacts/:artifactId/:ticket", h.GetMediaContent)
 }
 
 func (h *Handler) Upload(c *gin.Context) {
@@ -95,6 +103,50 @@ func (h *Handler) GetContent(c *gin.Context) {
 		handleArtifactError(c, err)
 		return
 	}
+	h.serveContent(c, art)
+}
+
+func (h *Handler) GetMediaTicket(c *gin.Context) {
+	id := ID(c.Param("artifactId"))
+	actor, err := middleware.GetActorFromContext(c)
+	if err != nil || actor == nil {
+		c.JSON(401, gin.H{"error": "artifact.unauthorized"})
+		return
+	}
+	owner := string(actor.SpaceID)
+	art, err := h.svc.GetOwned(c.Request.Context(), owner, id)
+	if err != nil {
+		handleArtifactError(c, err)
+		return
+	}
+	ticket, expiresAt, err := h.ticketSigner.Issue(art.ID, art.OwnerSpaceID)
+	if err != nil {
+		c.JSON(500, gin.H{"error": "artifact.media_ticket_failed", "message": err.Error()})
+		return
+	}
+	c.Header("Cache-Control", "no-store")
+	c.JSON(200, gin.H{
+		"url":       fmt.Sprintf("/media/artifacts/%s/%s", art.ID, ticket),
+		"expiresAt": expiresAt.Format(time.RFC3339),
+	})
+}
+
+func (h *Handler) GetMediaContent(c *gin.Context) {
+	id := ID(c.Param("artifactId"))
+	owner, err := h.ticketSigner.Validate(c.Param("ticket"), id)
+	if err != nil {
+		c.JSON(401, gin.H{"error": "artifact.unauthorized", "message": err.Error()})
+		return
+	}
+	art, err := h.svc.GetOwned(c.Request.Context(), owner, id)
+	if err != nil {
+		handleArtifactError(c, err)
+		return
+	}
+	h.serveContent(c, art)
+}
+
+func (h *Handler) serveContent(c *gin.Context, art Artifact) {
 	rc, info, err := h.svc.OpenBlob(c.Request.Context(), art.BlobDigest)
 	if err != nil {
 		handleArtifactError(c, err)
@@ -106,13 +158,15 @@ func (h *Handler) GetContent(c *gin.Context) {
 		filename = string(art.ID) + art.Extension
 	}
 	disposition := "inline"
-	if art.Kind == KindFile || art.Kind == KindArchive {
+	if art.Kind == KindFile || art.Kind == KindArchive || isDownloadRequest(c) {
 		disposition = "attachment"
 	}
 	c.Header("Content-Type", art.MIMEType)
 	c.Header("Content-Length", fmt.Sprintf("%d", info.SizeBytes))
 	c.Header("ETag", fmt.Sprintf(`"%s"`, art.BlobDigest))
-	c.Header("Content-Disposition", fmt.Sprintf(`%s; filename="%s"`, disposition, sanitizeDispositionFilename(filename)))
+	if value := contentDisposition(disposition, filename); value != "" {
+		c.Header("Content-Disposition", value)
+	}
 	c.Header("Cache-Control", "private, max-age=86400")
 	c.Header("X-Content-Type-Options", "nosniff")
 	http.ServeContent(c.Writer, c.Request, filename, art.UpdatedAt, rc)
@@ -166,4 +220,21 @@ func sanitizeDispositionFilename(name string) string {
 	name = strings.ReplaceAll(name, "\n", "")
 	name = strings.ReplaceAll(name, `"`, "")
 	return name
+}
+
+func contentDisposition(disposition, filename string) string {
+	filename = sanitizeDispositionFilename(filename)
+	if filename == "" {
+		return disposition
+	}
+	value := mime.FormatMediaType(disposition, map[string]string{"filename": filename})
+	if value != "" {
+		return value
+	}
+	return fmt.Sprintf(`%s; filename="%s"`, disposition, filename)
+}
+
+func isDownloadRequest(c *gin.Context) bool {
+	value := strings.TrimSpace(strings.ToLower(c.Query("download")))
+	return value == "1" || value == "true" || value == "yes"
 }

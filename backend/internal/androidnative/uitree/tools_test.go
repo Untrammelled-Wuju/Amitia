@@ -1,6 +1,7 @@
 package uitree
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
@@ -96,6 +97,14 @@ func TestBuildUITreeTools_SnapshotTool(t *testing.T) {
 	}
 	if snapshotTool.ExecutionPolicy.MaxConcurrency != 2 {
 		t.Fatalf("expected MaxConcurrency 2, got %d", snapshotTool.ExecutionPolicy.MaxConcurrency)
+	}
+	var schema map[string]any
+	if err := json.Unmarshal(snapshotTool.InputSchema, &schema); err != nil {
+		t.Fatalf("invalid snapshot schema: %v", err)
+	}
+	properties, _ := schema["properties"].(map[string]any)
+	if _, ok := properties["displayId"]; !ok {
+		t.Fatal("snapshot schema must expose displayId for virtual display filtering")
 	}
 }
 

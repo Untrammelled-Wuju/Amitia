@@ -27,6 +27,18 @@ func TestToolResultContent(t *testing.T) {
 			want:     `{"candidates":[{"id":"provider","extensionId":"com.example/ext"}]}`,
 		},
 		{
+			name:     "android ui tree structured output",
+			toolName: "android_ui_tree_snapshot",
+			outcome:  toolExecOutcome{VisibleText: "snapshot ready", Output: []byte(`{"snapshotId":"uis_1","nodeCount":2}`), Found: true},
+			want:     `{"snapshotId":"uis_1","nodeCount":2}`,
+		},
+		{
+			name:     "android virtual display structured output",
+			toolName: "android_virtual_display_status",
+			outcome:  toolExecOutcome{VisibleText: "display ready", Output: []byte(`{"supported":true,"activeCount":1}`), Found: true},
+			want:     `{"supported":true,"activeCount":1}`,
+		},
+		{
 			name:    "empty successful result",
 			outcome: toolExecOutcome{Found: true},
 			want:    "",

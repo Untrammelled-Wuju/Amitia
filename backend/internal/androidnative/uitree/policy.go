@@ -13,7 +13,6 @@ const (
 	DefaultMaxClassNameRunes   = 512
 	DefaultMaxOutputBytes      = 4 * 1024 * 1024
 	DefaultSnapshotTimeout     = 5 * time.Second
-	DefaultSnapshotTTL         = 10 * time.Second
 	DefaultMaxSnapshots        = 4
 	DefaultMaxFindLimit        = 100
 )
@@ -29,7 +28,6 @@ type Policy struct {
 	MaxClassNameRunes   int
 	MaxOutputBytes      int
 	SnapshotTimeout     time.Duration
-	SnapshotTTL         time.Duration
 	MaxSnapshots        int
 	MaxFindLimit        int
 }
@@ -46,7 +44,6 @@ func DefaultPolicy() Policy {
 		MaxClassNameRunes:   DefaultMaxClassNameRunes,
 		MaxOutputBytes:      DefaultMaxOutputBytes,
 		SnapshotTimeout:     DefaultSnapshotTimeout,
-		SnapshotTTL:         DefaultSnapshotTTL,
 		MaxSnapshots:        DefaultMaxSnapshots,
 		MaxFindLimit:        DefaultMaxFindLimit,
 	}

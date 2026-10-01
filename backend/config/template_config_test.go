@@ -49,6 +49,12 @@ func TestConfigTemplatesUseProviderLayout(t *testing.T) {
 			if cfg.Providers.GraphStore.Provider == "" {
 				t.Error("providers.graphStore.provider should be set")
 			}
+			if !cfg.Providers.Search.Enabled {
+				t.Error("providers.search.enabled should be true")
+			}
+			if cfg.Providers.Search.DefaultProvider != "native" {
+				t.Error("providers.search.defaultProvider should be native")
+			}
 			if !cfg.DesktopPetRuntime.Enabled {
 				t.Error("desktopPetRuntime.enabled should be true in templates")
 			}

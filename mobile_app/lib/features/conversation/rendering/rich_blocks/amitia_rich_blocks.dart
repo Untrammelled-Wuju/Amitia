@@ -3,19 +3,51 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:video_player/video_player.dart';
 
+import '../../../../core/artifact/artifact_providers.dart';
+import '../../../../core/artifact/artifact_service.dart';
 import '../amitia_message_theme.dart';
 import '../amrp.dart';
 import '../preview/amitia_html_preview.dart';
 import 'renderer_registry.dart';
 
+Future<ArtifactService> _artifactService(BuildContext context) {
+  final container = ProviderScope.containerOf(context, listen: false);
+  return container.read(artifactServiceProvider.future);
+}
+
+Future<Uri> _resolveMediaUri(BuildContext context, String rawUrl) async {
+  final service = await _artifactService(context);
+  return service.resolveMediaUri(rawUrl);
+}
+
+Future<bool> _saveMedia(
+  BuildContext context, {
+  required String rawUrl,
+  required String fileName,
+  required String mimeType,
+}) async {
+  final service = await _artifactService(context);
+  return service.saveToUserLocation(
+    rawUrl: rawUrl,
+    fileName: fileName,
+    mimeType: mimeType,
+  );
+}
+
 class AmitiaThinkingBlock extends StatefulWidget {
   final AmrpThinkingBlock block;
+  final EdgeInsetsGeometry padding;
 
-  const AmitiaThinkingBlock({super.key, required this.block});
+  const AmitiaThinkingBlock({
+    super.key,
+    required this.block,
+    this.padding = const EdgeInsets.only(bottom: 13),
+  });
 
   @override
   State<AmitiaThinkingBlock> createState() => _AmitiaThinkingBlockState();
@@ -43,7 +75,7 @@ class _AmitiaThinkingBlockState extends State<AmitiaThinkingBlock> {
         : '思考完成（${(widget.block.duration!.inMilliseconds / 1000).toStringAsFixed(1)} 秒）';
     final hasContent = widget.block.content.trim().isNotEmpty;
     return Padding(
-      padding: const EdgeInsets.only(bottom: 13),
+      padding: widget.padding,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -428,8 +460,8 @@ class _AmitiaFileBlockState extends State<AmitiaFileBlock> {
             )
           else if (_status == AmrpAssetStatus.ready)
             TextButton(
-              onPressed: () => _open(context),
-              child: const Text('打开'),
+              onPressed: () => _download(context),
+              child: const Text('下载'),
             ),
         ],
       ),
@@ -445,25 +477,25 @@ class _AmitiaFileBlockState extends State<AmitiaFileBlock> {
     return '$value B';
   }
 
-  Future<void> _open(BuildContext context) async {
+  Future<void> _download(BuildContext context) async {
     final value = widget.block.url.trim();
     if (value.isEmpty) return;
-    final uri = Uri.tryParse(value);
-    if (uri == null) return;
-    if (uri.scheme == 'http' || uri.scheme == 'https') {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-      return;
-    }
-    if (uri.scheme == 'file') {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-      return;
-    }
-    final file = File(value);
-    if (await file.exists()) {
-      await launchUrl(
-        Uri.file(file.path),
-        mode: LaunchMode.externalApplication,
+    try {
+      final saved = await _saveMedia(
+        context,
+        rawUrl: value,
+        fileName: widget.block.name,
+        mimeType: widget.block.mimeType,
       );
+      if (!context.mounted || !saved) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('文件已保存')));
+    } catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('文件保存失败：$error')));
     }
   }
 }
@@ -478,6 +510,8 @@ class AmitiaImageBlock extends StatefulWidget {
 }
 
 class _AmitiaImageBlockState extends State<AmitiaImageBlock> {
+  int _previewPage = 0;
+
   @override
   Widget build(BuildContext context) {
     final tokens = AmitiaMessageTheme.of(context);
@@ -499,6 +533,7 @@ class _AmitiaImageBlockState extends State<AmitiaImageBlock> {
   }
 
   Future<void> _openPreview(int index, AmitiaMessageTheme tokens) async {
+    _previewPage = index;
     await showDialog<void>(
       context: context,
       builder: (context) => Dialog.fullscreen(
@@ -509,6 +544,9 @@ class _AmitiaImageBlockState extends State<AmitiaImageBlock> {
               child: PageView.builder(
                 controller: PageController(initialPage: index),
                 itemCount: widget.images.length,
+                onPageChanged: (page) {
+                  if (mounted) setState(() => _previewPage = page);
+                },
                 itemBuilder: (context, page) => InteractiveViewer(
                   minScale: 0.7,
                   maxScale: 5,
@@ -524,9 +562,10 @@ class _AmitiaImageBlockState extends State<AmitiaImageBlock> {
                   children: [
                     IconButton(
                       tooltip: '保存',
-                      onPressed: () => launchUrl(
-                        Uri.parse(widget.images[index].url),
-                        mode: LaunchMode.externalApplication,
+                      onPressed: () => _saveImage(
+                        context,
+                        widget.images[_previewPage],
+                        _previewPage,
                       ),
                       color: Colors.white,
                       icon: const Icon(Icons.download_rounded),
@@ -548,22 +587,46 @@ class _AmitiaImageBlockState extends State<AmitiaImageBlock> {
   }
 
   Widget _image(AmrpImageBlock image) {
-    final uri = Uri.tryParse(image.url);
-    if (uri == null) {
-      return _ImageFailure(alt: image.alt);
-    }
-    if (uri.scheme == 'http' || uri.scheme == 'https') {
-      return Image.network(
-        image.url,
-        fit: BoxFit.contain,
-        errorBuilder: (_, _, _) => _ImageFailure(alt: image.alt),
+    return _ResolvedImage(image: image, fit: BoxFit.contain);
+  }
+
+  Future<void> _saveImage(
+    BuildContext context,
+    AmrpImageBlock image,
+    int index,
+  ) async {
+    try {
+      final saved = await _saveMedia(
+        context,
+        rawUrl: image.url,
+        fileName: image.alt.trim().isEmpty
+            ? 'image-${index + 1}${_imageExtension(image.mimeType)}'
+            : image.alt,
+        mimeType: image.mimeType,
       );
+      if (!context.mounted || !saved) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('图片已保存')));
+    } catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('图片保存失败：$error')));
     }
-    return Image.file(
-      File(uri.scheme == 'file' ? uri.toFilePath() : image.url),
-      fit: BoxFit.contain,
-      errorBuilder: (_, _, _) => _ImageFailure(alt: image.alt),
-    );
+  }
+
+  String _imageExtension(String mimeType) {
+    switch (mimeType.toLowerCase()) {
+      case 'image/jpeg':
+        return '.jpg';
+      case 'image/gif':
+        return '.gif';
+      case 'image/webp':
+        return '.webp';
+      default:
+        return '.png';
+    }
   }
 }
 
@@ -585,7 +648,7 @@ class _ImageCard extends StatelessWidget {
           child: Stack(
             fit: StackFit.expand,
             children: [
-              _ImageCardImage(image: image),
+              _ResolvedImage(image: image, fit: BoxFit.cover),
               if (image.animated || image.url.toLowerCase().contains('.gif'))
                 Positioned(left: 7, top: 7, child: _Badge(label: 'GIF')),
               Positioned(
@@ -616,29 +679,53 @@ class _ImageCard extends StatelessWidget {
   }
 }
 
-class _ImageCardImage extends StatelessWidget {
+class _ResolvedImage extends StatefulWidget {
   final AmrpImageBlock image;
+  final BoxFit fit;
 
-  const _ImageCardImage({required this.image});
+  const _ResolvedImage({required this.image, required this.fit});
+
+  @override
+  State<_ResolvedImage> createState() => _ResolvedImageState();
+}
+
+class _ResolvedImageState extends State<_ResolvedImage> {
+  Future<Uri>? _future;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _future ??= _resolveMediaUri(context, widget.image.url);
+  }
 
   @override
   Widget build(BuildContext context) {
-    final uri = Uri.tryParse(image.url);
-    if (uri == null) return _ImageFailure(alt: image.alt);
-    if (uri.scheme == 'http' || uri.scheme == 'https') {
-      return Image.network(
-        image.url,
-        fit: BoxFit.cover,
-        loadingBuilder: (context, child, progress) => progress == null
-            ? child
-            : const Center(child: CircularProgressIndicator()),
-        errorBuilder: (_, _, _) => _ImageFailure(alt: image.alt),
-      );
-    }
-    return Image.file(
-      File(uri.scheme == 'file' ? uri.toFilePath() : image.url),
-      fit: BoxFit.cover,
-      errorBuilder: (_, _, _) => _ImageFailure(alt: image.alt),
+    return FutureBuilder<Uri>(
+      future: _future,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        final uri = snapshot.data;
+        if (snapshot.hasError || uri == null) {
+          return _ImageFailure(alt: widget.image.alt);
+        }
+        if (uri.scheme == 'http' || uri.scheme == 'https') {
+          return Image.network(
+            uri.toString(),
+            fit: widget.fit,
+            loadingBuilder: (context, child, progress) => progress == null
+                ? child
+                : const Center(child: CircularProgressIndicator()),
+            errorBuilder: (_, _, _) => _ImageFailure(alt: widget.image.alt),
+          );
+        }
+        return Image.file(
+          File(uri.scheme == 'file' ? uri.toFilePath() : uri.toString()),
+          fit: widget.fit,
+          errorBuilder: (_, _, _) => _ImageFailure(alt: widget.image.alt),
+        );
+      },
     );
   }
 }
@@ -686,13 +773,18 @@ class _AmitiaAudioBlockState extends State<AmitiaAudioBlock> {
   @override
   void initState() {
     super.initState();
-    _load();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _load());
   }
 
   Future<void> _load() async {
     try {
-      await _player.setUrl(widget.block.url);
-      if (mounted) setState(() => _error = null);
+      final uri = await _resolveMediaUri(context, widget.block.url);
+      await _player.setUrl(uri.toString());
+      if (mounted) {
+        setState(() {
+          _error = null;
+        });
+      }
     } catch (error) {
       if (mounted) setState(() => _error = error.toString());
     }
@@ -834,6 +926,11 @@ class _AmitiaAudioBlockState extends State<AmitiaAudioBlock> {
                     ),
                   ),
                 ),
+                IconButton(
+                  tooltip: '下载',
+                  onPressed: () => _download(context),
+                  icon: const Icon(Icons.download_rounded, size: 18),
+                ),
               ],
             ),
         ],
@@ -846,6 +943,28 @@ class _AmitiaAudioBlockState extends State<AmitiaAudioBlock> {
     final minutes = duration.inMinutes.remainder(60).toString().padLeft(2, '0');
     final seconds = duration.inSeconds.remainder(60).toString().padLeft(2, '0');
     return '$minutes:$seconds';
+  }
+
+  Future<void> _download(BuildContext context) async {
+    final value = widget.block.url.trim();
+    if (value.isEmpty) return;
+    try {
+      final saved = await _saveMedia(
+        context,
+        rawUrl: value,
+        fileName: widget.block.title,
+        mimeType: '',
+      );
+      if (!context.mounted || !saved) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('语音已保存')));
+    } catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('语音保存失败：$error')));
+    }
   }
 }
 
@@ -865,12 +984,12 @@ class _AmitiaVideoBlockState extends State<AmitiaVideoBlock> {
   @override
   void initState() {
     super.initState();
-    _load();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _load());
   }
 
   Future<void> _load() async {
     try {
-      final uri = Uri.parse(widget.block.url);
+      final uri = await _resolveMediaUri(context, widget.block.url);
       final controller = uri.scheme == 'file'
           ? VideoPlayerController.file(File(uri.toFilePath()))
           : VideoPlayerController.networkUrl(uri);
@@ -943,6 +1062,19 @@ class _AmitiaVideoBlockState extends State<AmitiaVideoBlock> {
                     maximumSize: const Size(32, 32),
                   ),
                   icon: const Icon(Icons.fullscreen_rounded),
+                ),
+                IconButton(
+                  tooltip: '下载',
+                  onPressed: () => _download(context),
+                  iconSize: 16,
+                  color: tokens.muted,
+                  visualDensity: VisualDensity.compact,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints.tightFor(
+                    width: 32,
+                    height: 32,
+                  ),
+                  icon: const Icon(Icons.download_rounded),
                 ),
               ],
             ),
@@ -1025,6 +1157,28 @@ class _AmitiaVideoBlockState extends State<AmitiaVideoBlock> {
       ),
     );
   }
+
+  Future<void> _download(BuildContext context) async {
+    final value = widget.block.url.trim();
+    if (value.isEmpty) return;
+    try {
+      final saved = await _saveMedia(
+        context,
+        rawUrl: value,
+        fileName: widget.block.title,
+        mimeType: 'video/mp4',
+      );
+      if (!context.mounted || !saved) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('视频已保存')));
+    } catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('视频保存失败：$error')));
+    }
+  }
 }
 
 class _FullscreenVideoDialog extends StatefulWidget {
@@ -1044,12 +1198,12 @@ class _FullscreenVideoDialogState extends State<_FullscreenVideoDialog> {
   @override
   void initState() {
     super.initState();
-    _load();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _load());
   }
 
   Future<void> _load() async {
     try {
-      final uri = Uri.parse(widget.url);
+      final uri = await _resolveMediaUri(context, widget.url);
       final controller = uri.scheme == 'file'
           ? VideoPlayerController.file(File(uri.toFilePath()))
           : VideoPlayerController.networkUrl(uri);
@@ -1320,8 +1474,8 @@ class AmitiaArtifactBlock extends StatelessWidget {
                   ),
                 if (block.url.isNotEmpty)
                   TextButton(
-                    onPressed: () => _open(context),
-                    child: const Text('保存'),
+                    onPressed: () => _save(context),
+                    child: const Text('下载'),
                   ),
                 TextButton(
                   onPressed: () => _copy(context),
@@ -1422,6 +1576,27 @@ class AmitiaArtifactBlock extends StatelessWidget {
     final uri = Uri.tryParse(block.url);
     if (uri == null) return;
     await launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
+
+  Future<void> _save(BuildContext context) async {
+    if (block.url.trim().isEmpty) return;
+    try {
+      final saved = await _saveMedia(
+        context,
+        rawUrl: block.url,
+        fileName: block.title,
+        mimeType: block.mimeType,
+      );
+      if (!context.mounted || !saved) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Artifact 已保存')));
+    } catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Artifact 保存失败：$error')));
+    }
   }
 }
 

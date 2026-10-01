@@ -74,18 +74,23 @@ type Reference struct {
 }
 
 type SearchHit struct {
-	RefID       string     `json:"ref_id"`
-	Rank        int        `json:"rank"`
-	Title       string     `json:"title"`
-	URL         string     `json:"url"`
-	Domain      string     `json:"domain"`
-	Snippet     string     `json:"snippet"`
-	Provider    string     `json:"provider"`
-	Engines     []string   `json:"engines,omitempty"`
-	PublishedAt *time.Time `json:"published_at,omitempty"`
-	RetrievedAt time.Time  `json:"retrieved_at"`
-	Score       float64    `json:"score,omitempty"`
-	SeenCount   int        `json:"seen_count,omitempty"`
+	RefID        string     `json:"ref_id"`
+	Rank         int        `json:"rank"`
+	Kind         string     `json:"kind,omitempty"`
+	Title        string     `json:"title"`
+	URL          string     `json:"url"`
+	Domain       string     `json:"domain"`
+	Snippet      string     `json:"snippet"`
+	Provider     string     `json:"provider"`
+	Engines      []string   `json:"engines,omitempty"`
+	PublishedAt  *time.Time `json:"published_at,omitempty"`
+	RetrievedAt  time.Time  `json:"retrieved_at"`
+	Score        float64    `json:"score,omitempty"`
+	SeenCount    int        `json:"seen_count,omitempty"`
+	MediaURL     string     `json:"media_url,omitempty"`
+	ThumbnailURL string     `json:"thumbnail_url,omitempty"`
+	Width        int        `json:"width,omitempty"`
+	Height       int        `json:"height,omitempty"`
 }
 
 type Link struct {

@@ -7,15 +7,23 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/models/conversation.dart';
 import '../../../core/services/chat_service.dart';
 import '../../../core/services/providers.dart';
+import '../../../core/settings/chat_permission_preferences.dart';
 import '../../../shared/models/models.dart';
 import '../../conversation/rendering/stream/markdown_stream_scheduler.dart';
 import 'agent_event_reducer.dart';
 import 'conversation_message_ledger.dart';
 
 class ConversationRuntimeController extends ChangeNotifier {
-  ConversationRuntimeController(this._chatService);
+  ConversationRuntimeController(
+    this._chatService, {
+    ChatPermissionPreferencesNotifier? permissionPreferences,
+  }) : _permissionPreferences = permissionPreferences,
+       _permissionMode = normalizeChatPermissionMode(
+         permissionPreferences?.mode,
+       );
 
   final ChatService _chatService;
+  final ChatPermissionPreferencesNotifier? _permissionPreferences;
   final ConversationMessageLedger _messages = ConversationMessageLedger();
   final AgentEventReducer _agentReducer = AgentEventReducer();
   final MarkdownStreamScheduler _streamScheduler = MarkdownStreamScheduler();
@@ -31,7 +39,7 @@ class ConversationRuntimeController extends ChangeNotifier {
   int _modelConfigId = 0;
   String _reasoningEffort = 'high';
   bool _reasoningEnabled = true;
-  String _permissionMode = 'request_approval';
+  String _permissionMode;
   bool _disposed = false;
   int _runtimeEpoch = 0;
   ChatStreamCancellation? _eventCancellation;
@@ -110,12 +118,12 @@ class ConversationRuntimeController extends ChangeNotifier {
   }
 
   Future<void> updatePermissionMode(String permissionMode) async {
-    final next = permissionMode == 'full_access'
-        ? 'full_access'
-        : 'request_approval';
-    if (_permissionMode == next) return;
-    _permissionMode = next;
-    notifyListeners();
+    final next = normalizeChatPermissionMode(permissionMode);
+    if (_permissionMode != next) {
+      _permissionMode = next;
+      notifyListeners();
+    }
+    await _permissionPreferences?.setMode(next);
     final id = _conversationId?.trim() ?? '';
     if (id.isEmpty) return;
     await _chatService.updateConversationPermissionMode(id, next);
@@ -366,8 +374,9 @@ class ConversationRuntimeController extends ChangeNotifier {
   }
 
   Future<void> _refreshSnapshot(String conversationId) async {
-    if (_loadingSnapshot || _disposed || _conversationId != conversationId)
+    if (_loadingSnapshot || _disposed || _conversationId != conversationId) {
       return;
+    }
     _loadingSnapshot = true;
     try {
       final snapshot = await _chatService.conversationSnapshot(conversationId);
@@ -390,9 +399,9 @@ class ConversationRuntimeController extends ChangeNotifier {
           ? 'high'
           : conversation.reasoningEffort.trim();
       _reasoningEnabled = conversation.reasoningEnabled != 0;
-      _permissionMode = conversation.permissionMode == 'full_access'
-          ? 'full_access'
-          : 'request_approval';
+      _permissionMode = normalizeChatPermissionMode(
+        conversation.permissionMode,
+      );
     }
     if (snapshot.workspace != null) {
       _workspace = snapshot.workspace;
@@ -652,6 +661,7 @@ class ConversationRuntimeController extends ChangeNotifier {
     final task = type == MessageType.agentTask
         ? _agentTaskPayload(dto.content)
         : const <String, dynamic>{};
+    final altText = dto.altText?.trim() ?? '';
     return ChatMessage(
       id: dto.id,
       renderId: dto.requestId.trim().isEmpty
@@ -684,6 +694,11 @@ class ConversationRuntimeController extends ChangeNotifier {
         'elapsed',
         'elapsedTime',
       ]),
+      fileName: type == MessageType.file
+          ? altText.isNotEmpty
+                ? altText
+                : _fileNameFromContent(dto.content)
+          : null,
       resourceUri: _resourceForDto(dto, null),
       mediaUrl: _resourceForDto(dto, null),
       mimeType: dto.imageUrl.isNotEmpty
@@ -931,9 +946,9 @@ class ConversationRuntimeController extends ChangeNotifier {
           ? 'high'
           : conversation.reasoningEffort.trim();
       _reasoningEnabled = conversation.reasoningEnabled != 0;
-      _permissionMode = conversation.permissionMode == 'full_access'
-          ? 'full_access'
-          : 'request_approval';
+      _permissionMode = normalizeChatPermissionMode(
+        _permissionPreferences?.mode,
+      );
       _conversationUpdateEpoch++;
       _connectEventStream(conversation.id);
       notifyListeners();
@@ -976,6 +991,7 @@ class ConversationRuntimeController extends ChangeNotifier {
     _lastError = null;
     _sending = false;
     _workspace = workspace;
+    _permissionMode = normalizeChatPermissionMode(_permissionPreferences?.mode);
     notifyListeners();
   }
 
@@ -1135,7 +1151,27 @@ class ConversationRuntimeController extends ChangeNotifier {
     if (dto.imageUrl.isNotEmpty) return dto.imageUrl;
     if (dto.videoUrl.isNotEmpty) return dto.videoUrl;
     if (dto.audioUrl.isNotEmpty) return dto.audioUrl;
+    if (dto.originalAssetReference.isNotEmpty) {
+      return dto.originalAssetReference;
+    }
+    if (dto.fallbackAssetReference.isNotEmpty) {
+      return dto.fallbackAssetReference;
+    }
+    final contentUri = RegExp(
+      r'amitia://artifacts/[A-Za-z0-9._-]+',
+    ).firstMatch(dto.content)?.group(0);
+    if (contentUri != null && contentUri.isNotEmpty) return contentUri;
     return existing?.resourceUri;
+  }
+
+  String? _fileNameFromContent(String content) {
+    final firstLine = content
+        .split('\n')
+        .firstWhere((line) => line.trim().isNotEmpty, orElse: () => '')
+        .trim();
+    if (!firstLine.startsWith('[文件]')) return null;
+    final value = firstLine.substring('[文件]'.length).trim();
+    return value.isEmpty ? null : value;
   }
 
   MessageRole _roleFor(String role) {
@@ -1253,6 +1289,9 @@ final conversationRuntimeControllerProvider =
     ChangeNotifierProvider<ConversationRuntimeController>((ref) {
       final controller = ConversationRuntimeController(
         ref.read(chatServiceProvider),
+        permissionPreferences: ref.read(
+          chatPermissionPreferencesProvider.notifier,
+        ),
       );
       ref.onDispose(controller.dispose);
       return controller;

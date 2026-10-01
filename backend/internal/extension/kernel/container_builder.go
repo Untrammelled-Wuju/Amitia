@@ -13,6 +13,7 @@ import (
 
 	appconfig "github.com/u-ai/backend/config"
 	"github.com/u-ai/backend/internal/agent/tool"
+	"github.com/u-ai/backend/internal/artifact"
 	"github.com/u-ai/backend/internal/browser"
 	"github.com/u-ai/backend/internal/conversationstream"
 	"github.com/u-ai/backend/internal/delivery"
@@ -125,6 +126,7 @@ type ContainerBuilder struct {
 	resourceResolver             *resourceuri.PhysicalResolver
 	gameHostArchiveUpdater       GameHostArchiveUpdater
 	mediaService                 *media.Service
+	artifactService              *artifact.Service
 	workspaceService             *workspace.Service
 	browserProvider              browser.BrowserProvider
 	desktopPetPluginCapabilities *integration.DesktopPetPluginCapabilities
@@ -320,6 +322,11 @@ func (b *ContainerBuilder) WithGameHostArchiveUpdater(updater GameHostArchiveUpd
 
 func (b *ContainerBuilder) WithMediaService(svc *media.Service) *ContainerBuilder {
 	b.mediaService = svc
+	return b
+}
+
+func (b *ContainerBuilder) WithArtifactService(svc *artifact.Service) *ContainerBuilder {
+	b.artifactService = svc
 	return b
 }
 
@@ -1243,6 +1250,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	agentAdminTools := newAgentAdminToolService(b.agentAdminController, workflowRegistry, workflowExecutor, toolRegistry)
 	builtinUtilityTools := NewBuiltinUtilityService(BuiltinUtilityDeps{
 		Workspace:    b.workspaceService,
+		Artifact:     b.artifactService,
 		Browser:      b.browserProvider,
 		Android:      b.androidNativeProvider,
 		AndroidLinux: b.androidLinuxProvider,
@@ -1280,16 +1288,16 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 
 	var imageIntelligenceHandler *imageintelligence.ToolHandler
 	if b.visionSvc != nil || b.imagegenSvc != nil {
-		imgIntFactory := imageintelligence.NewImageIntelligenceFactory(b.visionSvc, b.imagegenSvc, b.imageProviderRegistry, b.resourceResolver)
+		imgIntFactory := imageintelligence.NewImageIntelligenceFactory(b.visionSvc, b.imagegenSvc, b.imageProviderRegistry, b.resourceResolver, b.artifactService)
 		imgIntFacade := imgIntFactory.Build()
 		imageIntelligenceHandler = imageintelligence.NewToolHandler(imgIntFacade)
 	}
 
-	internalDispatcher := func(ctx context.Context, handlerName string, input json.RawMessage) (json.RawMessage, error) {
+	internalDispatcher := func(ctx context.Context, handlerName string, input json.RawMessage, invocation capability.ToolInvocationContext) (json.RawMessage, error) {
 		if imageIntelligenceHandler == nil {
 			return nil, fmt.Errorf("image intelligence not configured")
 		}
-		return imageIntelligenceHandler.Dispatch(ctx, handlerName, input)
+		return imageIntelligenceHandler.Dispatch(ctx, handlerName, input, imageintelligence.ToolScope{OwnerSpaceID: invocation.SpaceID})
 	}
 
 	mediaCaller := makeMediaCallFunc(b.mediaService)

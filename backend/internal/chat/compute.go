@@ -408,12 +408,12 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 		"plugin_contribution_sources": pluginSources,
 	}, "process message prompt ready")
 	seenTools := map[string]bool{}
-	turnTimeout := 30 * time.Minute
+	toolExecCtx := ctx
 	if config.AppCfg != nil && config.AppCfg.Chat.AgentTurnTimeoutSeconds > 0 {
-		turnTimeout = time.Duration(config.AppCfg.Chat.AgentTurnTimeoutSeconds) * time.Second
+		var cancelTools context.CancelFunc
+		toolExecCtx, cancelTools = context.WithTimeout(ctx, time.Duration(config.AppCfg.Chat.AgentTurnTimeoutSeconds)*time.Second)
+		defer cancelTools()
 	}
-	toolExecCtx, cancelTools := context.WithTimeout(ctx, turnTimeout)
-	defer cancelTools()
 
 	s.hasActionDirective = false
 	s.actionDirective = decision.ActionDirective{}

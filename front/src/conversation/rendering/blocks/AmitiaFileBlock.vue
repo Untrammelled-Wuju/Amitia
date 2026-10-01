@@ -11,7 +11,9 @@
     </div>
     <div class="amrp-file-actions">
       <button v-if="status === 'failed'" type="button" @click="retry">重试</button>
-      <button v-if="status === 'ready'" type="button" @click="open">打开</button>
+      <button v-if="status === 'ready'" type="button" :disabled="downloading" @click="download">
+        {{ downloading ? "下载中" : "下载" }}
+      </button>
       <slot name="extension" />
     </div>
   </div>
@@ -19,8 +21,10 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
+import { ElMessage } from "element-plus";
 import type { FileBlock } from "../types";
-import { formatBytes, isSafeLink, openSafeLink } from "../utils";
+import { formatBytes } from "../utils";
+import { downloadConversationMedia } from "../media";
 
 const props = defineProps<{
   block: FileBlock;
@@ -28,6 +32,7 @@ const props = defineProps<{
 
 const status = ref(props.block.status);
 const error = ref(props.block.error ?? "");
+const downloading = ref(false);
 
 watch(
   () => props.block,
@@ -43,8 +48,21 @@ const extensionLabel = computed(() => {
   return (match?.[1] ?? "FILE").slice(0, 4).toUpperCase();
 });
 
-function open() {
-  if (isSafeLink(props.block.url)) openSafeLink(props.block.url);
+async function download() {
+  if ((!props.block.url && !props.block.downloadUrl) || downloading.value) return;
+  downloading.value = true;
+  try {
+    const saved = await downloadConversationMedia(
+      props.block.downloadUrl || props.block.url || "",
+      props.block.name,
+      props.block.mimeType,
+    );
+    if (saved) ElMessage.success("文件已保存");
+  } catch (reason) {
+    ElMessage.error(reason instanceof Error ? reason.message : "文件下载失败");
+  } finally {
+    downloading.value = false;
+  }
 }
 
 function retry() {
@@ -113,5 +131,10 @@ button {
   font: inherit;
   font-size: 10px;
   cursor: pointer;
+}
+
+button:disabled {
+  cursor: wait;
+  opacity: 0.65;
 }
 </style>

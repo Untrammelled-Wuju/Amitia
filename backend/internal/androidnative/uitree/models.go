@@ -13,13 +13,13 @@ const (
 type WindowType string
 
 const (
-	WindowTypeApplication      WindowType = "application"
-	WindowTypeSystem           WindowType = "system"
-	WindowTypeInputMethod      WindowType = "input_method"
+	WindowTypeApplication          WindowType = "application"
+	WindowTypeSystem               WindowType = "system"
+	WindowTypeInputMethod          WindowType = "input_method"
 	WindowTypeAccessibilityOverlay WindowType = "accessibility_overlay"
-	WindowTypeSplitScreen      WindowType = "split_screen"
-	WindowTypePictureInPicture WindowType = "picture_in_picture"
-	WindowTypeUnknown          WindowType = "unknown"
+	WindowTypeSplitScreen          WindowType = "split_screen"
+	WindowTypePictureInPicture     WindowType = "picture_in_picture"
+	WindowTypeUnknown              WindowType = "unknown"
 )
 
 type Rect struct {
@@ -99,39 +99,40 @@ type UITreeCapabilityState struct {
 }
 
 type UITreeSnapshot struct {
-	SnapshotID      string                `json:"snapshotId"`
-	Generation      int64                 `json:"generation"`
-	Source          string                `json:"source"`
-	CapturedAt      int64                 `json:"capturedAt"`
-	ActiveWindowID  string                `json:"activeWindowId,omitempty"`
-	Windows         []UIWindow            `json:"windows"`
-	Nodes           []UINode              `json:"nodes"`
-	NodeCount       int                   `json:"nodeCount"`
-	Truncated       bool                  `json:"truncated"`
-	Capability      UITreeCapabilityState `json:"capability"`
+	SnapshotID     string                `json:"snapshotId"`
+	Generation     int64                 `json:"generation"`
+	Source         string                `json:"source"`
+	CapturedAt     int64                 `json:"capturedAt"`
+	ActiveWindowID string                `json:"activeWindowId,omitempty"`
+	Windows        []UIWindow            `json:"windows"`
+	Nodes          []UINode              `json:"nodes"`
+	NodeCount      int                   `json:"nodeCount"`
+	Truncated      bool                  `json:"truncated"`
+	Capability     UITreeCapabilityState `json:"capability"`
 }
 
 type SnapshotRequest struct {
-	Source             string `json:"source,omitempty"`
-	IncludeAllWindows  bool   `json:"includeAllWindows,omitempty"`
-	MaxDepth           *int   `json:"maxDepth,omitempty"`
-	IncludeInvisible   bool   `json:"includeInvisible,omitempty"`
-	ExcludeOwnPackage  bool   `json:"excludeOwnPackage,omitempty"`
-	AllowRootFallback  bool   `json:"allowRootFallback,omitempty"`
+	Source            string `json:"source,omitempty"`
+	DisplayID         *int   `json:"displayId,omitempty"`
+	IncludeAllWindows bool   `json:"includeAllWindows,omitempty"`
+	MaxDepth          *int   `json:"maxDepth,omitempty"`
+	IncludeInvisible  bool   `json:"includeInvisible,omitempty"`
+	ExcludeOwnPackage bool   `json:"excludeOwnPackage,omitempty"`
+	AllowRootFallback bool   `json:"allowRootFallback,omitempty"`
 }
 
 type FindRequest struct {
-	SnapshotID  string `json:"snapshotId,omitempty"`
-	Text        string `json:"text,omitempty"`
-	ResourceID  string `json:"resourceId,omitempty"`
-	ClassName   string `json:"className,omitempty"`
-	Role        string `json:"role,omitempty"`
-	Clickable   *bool  `json:"clickable,omitempty"`
-	Editable    *bool  `json:"editable,omitempty"`
-	Scrollable  *bool  `json:"scrollable,omitempty"`
-	Visible     *bool  `json:"visible,omitempty"`
-	MatchMode   string `json:"matchMode,omitempty"`
-	Limit       int    `json:"limit,omitempty"`
+	SnapshotID string `json:"snapshotId,omitempty"`
+	Text       string `json:"text,omitempty"`
+	ResourceID string `json:"resourceId,omitempty"`
+	ClassName  string `json:"className,omitempty"`
+	Role       string `json:"role,omitempty"`
+	Clickable  *bool  `json:"clickable,omitempty"`
+	Editable   *bool  `json:"editable,omitempty"`
+	Scrollable *bool  `json:"scrollable,omitempty"`
+	Visible    *bool  `json:"visible,omitempty"`
+	MatchMode  string `json:"matchMode,omitempty"`
+	Limit      int    `json:"limit,omitempty"`
 }
 
 type GetRequest struct {
@@ -183,7 +184,7 @@ type StatusResult struct {
 }
 
 type ActionResult struct {
-	Success   bool   `json:"success"`
-	NodeID    string `json:"nodeId,omitempty"`
-	Message   string `json:"message,omitempty"`
+	Success bool   `json:"success"`
+	NodeID  string `json:"nodeId,omitempty"`
+	Message string `json:"message,omitempty"`
 }

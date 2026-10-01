@@ -13,16 +13,18 @@ import (
 	"strings"
 	"time"
 
+	"github.com/u-ai/backend/internal/artifact"
 	"github.com/u-ai/backend/internal/imagegen"
 	"github.com/u-ai/backend/internal/imageprovider"
 )
 
 type ImageGenerateRequest struct {
-	Prompt  string `json:"prompt"`
-	Count   int    `json:"count,omitempty"`
-	Width   int    `json:"width,omitempty"`
-	Height  int    `json:"height,omitempty"`
-	Quality string `json:"quality,omitempty"`
+	Prompt       string `json:"prompt"`
+	Count        int    `json:"count,omitempty"`
+	Width        int    `json:"width,omitempty"`
+	Height       int    `json:"height,omitempty"`
+	Quality      string `json:"quality,omitempty"`
+	OwnerSpaceID string `json:"-"`
 }
 
 type GeneratedImage struct {
@@ -35,19 +37,25 @@ type GeneratedImage struct {
 
 type ImageGenerateResult struct {
 	Images   []GeneratedImage `json:"images"`
-	Provider string            `json:"provider"`
+	Provider string           `json:"provider"`
 }
 
 type GenerateProvider struct {
 	imagegenSvc imagegen.Service
 	registry    *imageprovider.Registry
+	artifacts   ArtifactCreator
 	maxCount    int
 }
 
-func NewGenerateProvider(imagegenSvc imagegen.Service, registry *imageprovider.Registry) *GenerateProvider {
+type ArtifactCreator interface {
+	Create(ctx context.Context, req artifact.CreateRequest) (artifact.Artifact, error)
+}
+
+func NewGenerateProvider(imagegenSvc imagegen.Service, registry *imageprovider.Registry, artifacts ArtifactCreator) *GenerateProvider {
 	return &GenerateProvider{
 		imagegenSvc: imagegenSvc,
 		registry:    registry,
+		artifacts:   artifacts,
 		maxCount:    4,
 	}
 }
@@ -138,7 +146,7 @@ func (p *GenerateProvider) Generate(ctx context.Context, req ImageGenerateReques
 		}
 
 		for _, img := range submission.Result.Images {
-			genImg, convErr := p.resourceifyImage(img)
+			genImg, convErr := p.resourceifyImage(ctx, req.OwnerSpaceID, img)
 			if convErr != nil {
 				return nil, convErr
 			}
@@ -178,7 +186,7 @@ func (p *GenerateProvider) resolveSize(width, height int) (int, int, *Error) {
 	return width, height, nil
 }
 
-func (p *GenerateProvider) resourceifyImage(img imageprovider.GeneratedImage) (*GeneratedImage, *Error) {
+func (p *GenerateProvider) resourceifyImage(ctx context.Context, ownerSpaceID string, img imageprovider.GeneratedImage) (*GeneratedImage, *Error) {
 	if len(img.Bytes) == 0 {
 		return nil, &Error{Code: ErrGenOutputInvalid, Message: "generated image has no data", HTTPStatus: http.StatusBadGateway}
 	}
@@ -199,14 +207,38 @@ func (p *GenerateProvider) resourceifyImage(img imageprovider.GeneratedImage) (*
 		}
 	}
 
-	timestamp := time.Now().UnixNano()
 	ext := ".png"
 	if mime == "image/jpeg" {
 		ext = ".jpg"
 	} else if mime == "image/webp" {
 		ext = ".webp"
 	}
-	filename := fmt.Sprintf("img_%d%s", timestamp, ext)
+	filename := fmt.Sprintf("img_%d%s", time.Now().UnixNano(), ext)
+	if p.artifacts != nil {
+		if strings.TrimSpace(ownerSpaceID) == "" {
+			return nil, &Error{Code: ErrGenFailed, Message: "generated image owner is missing", HTTPStatus: http.StatusInternalServerError}
+		}
+		art, err := p.artifacts.Create(ctx, artifact.CreateRequest{
+			OwnerSpaceID: ownerSpaceID,
+			Kind:         artifact.KindImage,
+			MIMEType:     mime,
+			Filename:     filename,
+			Source:       artifact.SourceGenerated,
+			Width:        w,
+			Height:       h,
+			Reader:       bytes.NewReader(img.Bytes),
+		})
+		if err != nil {
+			return nil, &Error{Code: ErrGenFailed, Message: fmt.Sprintf("failed to persist generated image: %v", err), HTTPStatus: http.StatusInternalServerError}
+		}
+		return &GeneratedImage{
+			ResourceURI: artifact.URI(art.ID),
+			MIMEType:    art.MIMEType,
+			Width:       w,
+			Height:      h,
+			SizeBytes:   art.SizeBytes,
+		}, nil
+	}
 
 	tmpDir := os.TempDir()
 	localPath := filepath.Join(tmpDir, filename)

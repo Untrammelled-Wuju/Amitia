@@ -1,10 +1,10 @@
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_spacing.dart';
 import '../../app/theme/app_radius.dart';
 import '../../app/theme/app_typography.dart';
 import '../../app/theme/design_tokens.dart';
+import 'amitia_visual_scope.dart';
 
 class AmitiaButton extends StatelessWidget {
   final String label;
@@ -52,19 +52,79 @@ class AmitiaButton extends StatelessWidget {
     Color bgColor;
     Color fgColor;
     if (isDestructive) {
-      bgColor = onPressed == null ? context.error.withValues(alpha: 0.3) : context.error;
+      bgColor = onPressed == null
+          ? context.error.withValues(alpha: 0.3)
+          : context.error;
       fgColor = Colors.white;
     } else if (isSecondary) {
       bgColor = context.accentSoft;
       fgColor = context.accentPrimary;
     } else {
-      bgColor = onPressed == null ? context.accentPrimary.withValues(alpha: 0.4) : context.accentPrimary;
+      bgColor = onPressed == null
+          ? context.accentPrimary.withValues(alpha: 0.4)
+          : context.accentPrimary;
       fgColor = Colors.white;
     }
     if (outlined) {
       fgColor = isDestructive ? context.error : context.accentPrimary;
       bgColor = Colors.transparent;
       if (onPressed == null) fgColor = fgColor.withValues(alpha: 0.4);
+    }
+
+    if (!AmitiaVisualScope.preservesComposer(context)) {
+      final button = SizedBox(
+        width: isFullWidth ? double.infinity : width,
+        child: TextButton(
+          onPressed: onPressed,
+          style: TextButton.styleFrom(
+            foregroundColor: fgColor,
+            backgroundColor: bgColor,
+            disabledForegroundColor: context.textDisabled,
+            disabledBackgroundColor: outlined
+                ? Colors.transparent
+                : context.surfaceSecondary,
+            minimumSize: Size(48, effectiveHeight.clamp(48, double.infinity)),
+            padding: EdgeInsets.symmetric(
+              horizontal: number('paddingX', 16),
+              vertical: number('paddingY', 12),
+            ),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(round ? 999 : radius),
+              side: outlined
+                  ? BorderSide(
+                      color: fgColor,
+                      width: context.uiComponents.borderWidth,
+                    )
+                  : BorderSide.none,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              if (icon != null) ...[
+                Icon(icon, size: iconSize),
+                SizedBox(width: gap),
+              ],
+              Flexible(
+                child: Text(
+                  label,
+                  textAlign: TextAlign.center,
+                  style: AppTypography.button(context).copyWith(
+                    color: onPressed == null ? context.textDisabled : fgColor,
+                    fontSize: fontSize,
+                    fontWeight: fontWeight,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+      final opacity = variant['opacity'];
+      return opacity is num
+          ? Opacity(opacity: opacity.toDouble().clamp(0.0, 1.0), child: button)
+          : button;
     }
 
     final button = GestureDetector(
@@ -78,8 +138,15 @@ class AmitiaButton extends StatelessWidget {
         ),
         decoration: BoxDecoration(
           color: bgColor,
-          borderRadius: BorderRadius.circular(round ? effectiveHeight / 2 : radius),
-          border: outlined ? Border.all(color: fgColor, width: context.uiComponents.borderWidth) : null,
+          borderRadius: BorderRadius.circular(
+            round ? effectiveHeight / 2 : radius,
+          ),
+          border: outlined
+              ? Border.all(
+                  color: fgColor,
+                  width: context.uiComponents.borderWidth,
+                )
+              : null,
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -102,7 +169,10 @@ class AmitiaButton extends StatelessWidget {
     );
     final opacity = variant['opacity'];
     return opacity is num
-        ? Opacity(opacity: opacity.toDouble().clamp(0.0, 1.0).toDouble(), child: button)
+        ? Opacity(
+            opacity: opacity.toDouble().clamp(0.0, 1.0).toDouble(),
+            child: button,
+          )
         : button;
   }
 }
@@ -131,6 +201,28 @@ class AmitiaIconButton extends StatelessWidget {
     double number(String key, double fallback) =>
         variant[key] is num ? (variant[key] as num).toDouble() : fallback;
     final buttonSize = number('height', number('minHeight', 40));
+    if (!AmitiaVisualScope.preservesComposer(context)) {
+      final targetSize = buttonSize.clamp(48.0, double.infinity);
+      return IconButton(
+        onPressed: onPressed,
+        tooltip: tooltip,
+        constraints: BoxConstraints(
+          minWidth: targetSize,
+          minHeight: targetSize,
+        ),
+        style: IconButton.styleFrom(
+          backgroundColor: backgroundColor,
+          foregroundColor: color ?? context.textSecondary,
+          disabledForegroundColor: context.textDisabled,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(
+              number('radius', targetSize / 2),
+            ),
+          ),
+        ),
+        icon: Icon(icon, size: number('iconSize', size)),
+      );
+    }
     final btn = GestureDetector(
       onTap: onPressed,
       behavior: HitTestBehavior.opaque,
@@ -141,7 +233,9 @@ class AmitiaIconButton extends StatelessWidget {
           height: buttonSize,
           decoration: BoxDecoration(
             color: backgroundColor ?? Colors.transparent,
-            borderRadius: BorderRadius.circular(number('radius', buttonSize / 2)),
+            borderRadius: BorderRadius.circular(
+              number('radius', buttonSize / 2),
+            ),
           ),
           child: Icon(
             icon,
@@ -218,10 +312,11 @@ class AmitiaTextField extends StatelessWidget {
       maxLength: maxLength,
       buildCounter: showCounter
           ? null
-          : (_, {required currentLength, required isFocused, maxLength}) => null,
-      style: AppTypography.body(context).copyWith(
-        fontSize: number('fontSize', context.uiTypography.bodySize),
-      ),
+          : (_, {required currentLength, required isFocused, maxLength}) =>
+                null,
+      style: AppTypography.body(
+        context,
+      ).copyWith(fontSize: number('fontSize', context.uiTypography.bodySize)),
       decoration: InputDecoration(
         hintText: hintText,
         errorText: errorText,
@@ -267,8 +362,10 @@ class AmitiaSearchField extends StatelessWidget {
     final variant = context.uiComponentVariant('input');
     double number(String key, double fallback) =>
         variant[key] is num ? (variant[key] as num).toDouble() : fallback;
-    return SizedBox(
-      height: number('height', number('minHeight', 44)),
+    return ConstrainedBox(
+      constraints: BoxConstraints(
+        minHeight: number('height', number('minHeight', 48)),
+      ),
       child: TextField(
         controller: controller,
         onChanged: onChanged,
@@ -286,11 +383,13 @@ class AmitiaSearchField extends StatelessWidget {
           ),
           isDense: true,
           contentPadding: EdgeInsets.symmetric(
-            horizontal: number('paddingX', 0),
-            vertical: number('paddingY', 0),
+            horizontal: number('paddingX', 12),
+            vertical: number('paddingY', 12),
           ),
           border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(number('radius', AppRadius.medium)),
+            borderRadius: BorderRadius.circular(
+              number('radius', AppRadius.medium),
+            ),
             borderSide: BorderSide.none,
           ),
         ),
@@ -330,10 +429,7 @@ class AmitiaAvatar extends StatelessWidget {
           Container(
             width: size,
             height: size,
-            decoration: BoxDecoration(
-              color: _bgColor,
-              shape: BoxShape.circle,
-            ),
+            decoration: BoxDecoration(color: _bgColor, shape: BoxShape.circle),
             child: Center(
               child: Text(
                 initial,
@@ -366,17 +462,13 @@ class AmitiaAvatar extends StatelessWidget {
 }
 
 class ConduitStyleToolbarSurface extends StatelessWidget {
-  const ConduitStyleToolbarSurface({
-    super.key,
-    required this.child,
-  });
+  const ConduitStyleToolbarSurface({super.key, required this.child});
 
   final Widget child;
 
   @override
   Widget build(BuildContext context) {
-    final isDark =
-        Theme.of(context).brightness == Brightness.dark;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return SizedBox(
       width: 44,
@@ -384,19 +476,13 @@ class ConduitStyleToolbarSurface extends StatelessWidget {
       child: DecoratedBox(
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          color: isDark
-              ? const Color(0xFF141414)
-              : const Color(0xFFF4F4F4),
+          color: isDark ? const Color(0xFF141414) : const Color(0xFFF4F4F4),
           border: Border.all(
             width: 0.5,
-            color: isDark
-                ? const Color(0xFF1E1E1E)
-                : const Color(0xFFE5E5E5),
+            color: isDark ? const Color(0xFF1E1E1E) : const Color(0xFFE5E5E5),
           ),
         ),
-        child: Center(
-          child: child,
-        ),
+        child: Center(child: child),
       ),
     );
   }
@@ -418,8 +504,7 @@ class ConduitStyleToolbarButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark =
-        Theme.of(context).brightness == Brightness.dark;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     final button = Material(
       color: Colors.transparent,
@@ -432,9 +517,7 @@ class ConduitStyleToolbarButton extends StatelessWidget {
           child: Icon(
             icon,
             size: iconSize,
-            color: isDark
-                ? const Color(0xFFECECEC)
-                : const Color(0xFF000000),
+            color: isDark ? const Color(0xFFECECEC) : const Color(0xFF000000),
           ),
         ),
       ),
@@ -444,9 +527,6 @@ class ConduitStyleToolbarButton extends StatelessWidget {
       return button;
     }
 
-    return Tooltip(
-      message: tooltip!,
-      child: button,
-    );
+    return Tooltip(message: tooltip!, child: button);
   }
 }

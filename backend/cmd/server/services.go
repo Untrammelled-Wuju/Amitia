@@ -326,6 +326,10 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	imagegenRepo := imagegen.NewRepository(ctx.DB)
 	imagegenSvc := imagegen.NewService(imagegenRepo)
 	providerRegistry, _ := desktoppet.NewProviderRegistry()
+	artifactRuntime, artifactErr := BuildArtifactRuntime(ctx.DB, "", nil)
+	if artifactErr != nil {
+		return nil, fmt.Errorf("failed to build artifact runtime: %w", artifactErr)
+	}
 	var resourceResolver *resourceuri.PhysicalResolver
 	if config.AppCfg != nil && config.AppCfg.Storage.DataDir != "" {
 		resolver, resolverErr := resourceuri.NewPhysicalResolver(resourceuri.PhysicalRoots{
@@ -340,7 +344,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 
 	var androidImageIntelligence imageintelligence.ImageIntelligence
 	if resourceResolver != nil {
-		androidImageIntelligence = imageintelligence.NewImageIntelligenceFactory(visionSvc, imagegenSvc, providerRegistry, resourceResolver).Build()
+		androidImageIntelligence = imageintelligence.NewImageIntelligenceFactory(visionSvc, imagegenSvc, providerRegistry, resourceResolver, artifactRuntime.Service).Build()
 	}
 
 	var workspaceRegistry *workspace.Registry
@@ -411,6 +415,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		WithVisionService(visionSvc).
 		WithImageGenService(imagegenSvc).
 		WithImageProviderRegistry(providerRegistry).
+		WithArtifactService(artifactRuntime.Service).
 		WithResourceResolver(resourceResolver).
 		WithMediaService(mediaService).
 		WithWorkspaceService(workspaceService).
@@ -670,13 +675,6 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	)
 	chatSvc.SetReflectionProcessor(reflectionService)
 
-	deadlineCfg := mindruntime.DefaultDeadlineConfig
-	deadlineCfg.TotalTimeout = 180 * time.Second
-	deadlineCfg.GenerationTimeout = 120 * time.Second
-	dp := mindruntime.NewDeadlinePropagator(deadlineCfg)
-	orch.SetDeadlineProvider(func(ctx context.Context, requestID string) (context.Context, context.CancelFunc) {
-		return dp.ContextWithDeadline(ctx, requestID, mindruntime.DeadlineStageGeneration)
-	})
 	defaultCharProvider := &defaultCharacterProvider{repo: charRepo}
 	resolver := interaction.NewScopeResolverWithDefaultChar(interaction.NewConversationScopeBindingLookup(ctx.DB), defaultCharProvider)
 	dataLifecycle := mindruntime.NewDataLifecycleCoordinator(ctx.DB)
@@ -1102,11 +1100,9 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 
 	maintenanceHandler := maintenance.NewHandler(migrationRunner, nil, nil, nil)
 
-	artifactRuntime, artifactErr := BuildArtifactRuntime(ctx.DB, "", kernelContainer.EventService)
-	if artifactErr != nil {
-		return nil, fmt.Errorf("failed to build artifact runtime: %w", artifactErr)
-	}
+	artifactRuntime.SetEventPublisher(kernelContainer.EventService)
 	chatSvc.SetArtifactResolver(&chatArtifactAdapter{resolver: artifactRuntime.Resolver})
+	chatSvc.SetArtifactImporter(artifactRuntime.Service)
 	chat.SetGlobalArtifactResolver(&chatArtifactAdapter{resolver: artifactRuntime.Resolver})
 
 	syncApplier = syncpkg.NewBusinessApplier(ctx.DB)

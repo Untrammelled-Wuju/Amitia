@@ -57,6 +57,16 @@ void main() {
       );
     });
 
+    test('replaces the page when clearing the conversation query', () {
+      expect(
+        resolveDrawerNavigationAction(
+          currentLocation: '/chat?conversationId=one',
+          targetLocation: '/chat',
+        ),
+        DrawerNavigationAction.replace,
+      );
+    });
+
     test('pushes when entering chat from another route', () {
       expect(
         resolveDrawerNavigationAction(

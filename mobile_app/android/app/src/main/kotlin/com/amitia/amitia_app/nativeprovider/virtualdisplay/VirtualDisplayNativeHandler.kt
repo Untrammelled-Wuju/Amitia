@@ -2,6 +2,7 @@ package com.amitia.amitia_app.nativeprovider.virtualdisplay
 
 import android.content.Context
 import com.amitia.amitia_app.nativeprovider.AndroidNativeOperationHandler
+import com.amitia.amitia_app.nativeprovider.accessibility.AccessibilityProviderClient
 import com.amitia.amitia_app.nativeprovider.model.NativeBridgeError
 import com.amitia.amitia_app.nativeprovider.model.NativeBridgeProtocol
 import com.amitia.amitia_app.nativeprovider.model.NativeBridgeRequest
@@ -9,6 +10,7 @@ import com.amitia.amitia_app.nativeprovider.model.NativeBridgeResponse
 import com.amitia.amitia_app.virtualdisplay.host.VirtualDisplayHostError
 import com.amitia.amitia_app.virtualdisplay.host.VirtualDisplayHostManager
 import com.amitia.amitia_app.virtualdisplay.host.VirtualDisplayPermissionStore
+import org.json.JSONObject
 
 internal class VirtualDisplayNativeHandler(
     context: Context,
@@ -138,6 +140,10 @@ internal class VirtualDisplayNativeHandler(
         return try {
             val result = manager.status().toMutableMap()
             result["enabled"] = true
+            val accessibilityReady = accessibilityConnected()
+            result["uiTreeSupported"] = true
+            result["uiTreeAccessibilitySupported"] = accessibilityReady
+            result["uiTreeFallbackSupported"] = true
             if (result["hostRunning"] == false) {
                 result["state"] = "host_unavailable"
             }
@@ -187,7 +193,7 @@ internal class VirtualDisplayNativeHandler(
         }
         return try {
             val result = manager.execute(request.operation, request.payload)
-            success(request, normalizeResult(request.operation, result))
+            success(request, normalizeResult(request.operation, result, accessibilityConnected()))
         } catch (error: VirtualDisplayHostError) {
             failure(request, error.code, error.message ?: "virtual display host error")
         } catch (error: Throwable) {
@@ -195,13 +201,19 @@ internal class VirtualDisplayNativeHandler(
         }
     }
 
-    private fun normalizeResult(operation: String, result: Map<String, Any?>): Map<String, Any?> {
+    private fun normalizeResult(
+        operation: String,
+        result: Map<String, Any?>,
+        uiTreeConnected: Boolean,
+    ): Map<String, Any?> {
         val normalized = LinkedHashMap(result)
         when (operation) {
             OP_CREATE -> {
                 normalized["frameSourceReady"] = result["frameSourceReady"] ?: true
                 normalized["thirdPartyLaunchSupported"] = result["thirdPartyLaunchSupported"] ?: true
-                normalized["uiTreeSupported"] = result["uiTreeSupported"] ?: false
+                normalized["uiTreeSupported"] = true
+                normalized["uiTreeAccessibilitySupported"] = uiTreeConnected
+                normalized["uiTreeFallbackSupported"] = true
                 normalized["gestureSupported"] = result["gestureSupported"] ?: true
             }
             OP_STATUS -> {
@@ -209,6 +221,13 @@ internal class VirtualDisplayNativeHandler(
             }
         }
         return normalized
+    }
+
+    private suspend fun accessibilityConnected(): Boolean {
+        val raw = AccessibilityProviderClient.status(appContext) ?: return false
+        return runCatching {
+            JSONObject(raw).optBoolean("connected", false)
+        }.getOrDefault(false)
     }
 
     private fun success(

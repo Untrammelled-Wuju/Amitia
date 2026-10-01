@@ -3,6 +3,7 @@
     <template v-for="item in orderedItems" :key="timelineItemKey(item)">
       <AmitiaThinkingBlock
         v-if="item.type === 'reasoning'"
+        class="turn-thinking"
         :content="item.content || ''"
         :state="thinkingState(item.status)"
         :duration="thinkingDuration(item)"
@@ -21,28 +22,35 @@
           <span class="turn-tool-stream-toggle">{{ isToolStreamExpanded(item) ? "收起" : "展开" }}</span>
         </button>
         <div v-if="isToolStreamExpanded(item)" class="turn-tool-stream-body">
-          <template v-for="toolItem in item.items" :key="toolItem.id">
-            <div
-              v-if="toolItem.type === 'tool_call'"
-              class="turn-tool-line"
-              :class="statusClass(toolItem.status)"
-            >
-              <span class="turn-tool-dot"></span>
-              <span class="turn-tool-name">{{ toolDisplayName(toolItem.toolName, "工具调用") }}</span>
-              <span class="turn-tool-subject">{{ toolSubject(toolItem) }}</span>
-              <span class="turn-tool-state">{{ toolStateLabel(toolItem) }}</span>
-            </div>
-            <div v-else-if="toolItem.type === 'tool_result'" class="turn-tool-result">
-              <button type="button" class="turn-result-head" @click="toggleResult(toolItem.id)">
-                <span class="turn-tool-dot" :class="statusClass(toolItem.status)"></span>
-                <strong>{{ toolDisplayName(toolItem.toolName, "工具结果") }}</strong>
-                <span>{{ resultSummary(toolItem) }}</span>
-                <span class="turn-result-toggle">{{ expandedResults.has(toolItem.id) ? "收起" : "展开" }}</span>
-              </button>
-              <pre
-                v-if="expandedResults.has(toolItem.id)"
-                class="turn-result-body"
-              >{{ resultText(toolItem) }}</pre>
+          <template v-for="entry in toolEntries(item.items)" :key="entry.key">
+            <div class="turn-tool-item">
+              <div class="turn-tool-line" :class="statusClass(entry.call.status)">
+                <span class="turn-tool-dot"></span>
+                <span class="turn-tool-name">{{ toolDisplayName(entry.call.toolName, "工具调用") }}</span>
+                <span class="turn-tool-subject">{{ toolSubject(entry.call) }}</span>
+                <span class="turn-tool-state">{{ toolStateLabel(entry.call) }}</span>
+                <button
+                  type="button"
+                  class="turn-tool-expand"
+                  @click="toggleToolEntry(entry.key)"
+                >
+                  {{ expandedToolEntries.has(entry.key) ? "收起" : "展开" }}
+                </button>
+              </div>
+              <div v-if="expandedToolEntries.has(entry.key)" class="turn-tool-details">
+                <div class="turn-tool-detail">
+                  <strong>调用工具</strong>
+                  <pre>{{ toolDisplayName(entry.call.toolName, "工具调用") }}</pre>
+                </div>
+                <div class="turn-tool-detail">
+                  <strong>调用参数</strong>
+                  <pre>{{ toolArguments(entry.call) }}</pre>
+                </div>
+                <div class="turn-tool-detail">
+                  <strong>调用结果</strong>
+                  <pre>{{ resultText(entry.result || entry.call) }}</pre>
+                </div>
+              </div>
             </div>
           </template>
         </div>
@@ -90,7 +98,13 @@ type TimelineToolStreamItem = AssistantTurnItem & {
   items?: AssistantTurnItem[];
 };
 
-const expandedResults = reactive(new Set<string>());
+interface TimelineToolEntry {
+  key: string;
+  call: AssistantTurnItem;
+  result?: AssistantTurnItem;
+}
+
+const expandedToolEntries = reactive(new Set<string>());
 const toolStreamOverrides = reactive(new Map<string, boolean>());
 
 const orderedItems = computed(() => {
@@ -98,6 +112,7 @@ const orderedItems = computed(() => {
   const result: Array<AssistantTurnItem & { type: string; items?: AssistantTurnItem[] }> = [];
   let toolGroup: (AssistantTurnItem & { type: string; items?: AssistantTurnItem[] }) | undefined;
   for (const item of items) {
+    if (item.type === "text" && !String(item.content || "").trim()) continue;
     if (item.type === "tool_call" || item.type === "tool_result") {
       if (!toolGroup) {
         toolGroup = { ...item, type: "tool_group", items: [] };
@@ -112,8 +127,8 @@ const orderedItems = computed(() => {
   return result;
 });
 
-function toggleResult(id: string) {
-  expandedResults.has(id) ? expandedResults.delete(id) : expandedResults.add(id);
+function toggleToolEntry(id: string) {
+  expandedToolEntries.has(id) ? expandedToolEntries.delete(id) : expandedToolEntries.add(id);
 }
 
 function toolStreamKey(item: TimelineToolStreamItem): string {
@@ -140,14 +155,63 @@ function hasRunningTool(items?: AssistantTurnItem[]): boolean {
 
 function toolStreamSummary(items?: AssistantTurnItem[]): string {
   const values = items || [];
-  const calls = values.filter((item) => item.type === "tool_call");
-  const failed = values.filter((item) => statusClass(item.status) === "failed").length;
-  if (failed > 0) return `${calls.length || values.length} 个工具 · ${failed} 个失败`;
-  if (values.some((item) => statusClass(item.status) === "running")) {
-    const completed = values.filter((item) => statusClass(item.status) === "completed").length;
-    return `执行中 · ${completed}/${calls.length || values.length} 完成`;
+  const calls = uniqueToolRecords(values.filter((item) => item.type === "tool_call"));
+  const results = uniqueToolRecords(values.filter((item) => item.type === "tool_result"));
+  const counted = calls.length > 0 ? calls : results;
+  const failed = counted.filter((item) => statusClass(item.status) === "failed").length;
+  if (failed > 0) return `${counted.length} 个工具 · ${failed} 个失败`;
+  if (counted.some((item) => statusClass(item.status) === "running")) {
+    const completed = counted.filter((item) => statusClass(item.status) === "completed").length;
+    return `执行中 · ${completed}/${counted.length} 完成`;
   }
-  return `${calls.length || values.length} 个工具 · 已完成`;
+  return `${counted.length} 个工具 · 已完成`;
+}
+
+function uniqueToolRecords(items: AssistantTurnItem[]): AssistantTurnItem[] {
+  const records = new Map<string, AssistantTurnItem>();
+  for (const item of items) {
+    const key = String(item.callId || item.id || "").trim();
+    if (!key) continue;
+    const current = records.get(key);
+    if (!current || Number(item.revision || 0) >= Number(current.revision || 0)) {
+      records.set(key, item);
+    }
+  }
+  return [...records.values()];
+}
+
+function toolEntries(items?: AssistantTurnItem[]): TimelineToolEntry[] {
+  const values = items || [];
+  const results = uniqueToolRecords(values.filter((item) => item.type === "tool_result"));
+  const resultsByCall = new Map<string, AssistantTurnItem>();
+  for (const result of results) {
+    const key = toolKey(result);
+    if (key) resultsByCall.set(key, result);
+  }
+  const entries: TimelineToolEntry[] = [];
+  const matched = new Set<string>();
+  for (const call of uniqueToolRecords(values.filter((item) => item.type === "tool_call"))) {
+    const key = toolKey(call);
+    const result = key ? resultsByCall.get(key) : undefined;
+    if (key) matched.add(key);
+    entries.push({ key: key || call.id, call, result });
+  }
+  for (const result of results) {
+    const key = toolKey(result);
+    if (key && matched.has(key)) continue;
+    entries.push({ key: key || result.id, call: result, result });
+  }
+  return entries;
+}
+
+function toolKey(item: AssistantTurnItem): string {
+  return String(item.callId || item.id || "").trim();
+}
+
+function toolArguments(item: AssistantTurnItem): string {
+  const value = parseJSON(item.argumentsJson);
+  const text = stringify(value).trim();
+  return text || "无参数";
 }
 
 function statusClass(status: string): string {
@@ -407,36 +471,18 @@ function researchStopReasonText(reason: string): string {
   return labels[reason] || reason;
 }
 
-function resultSummary(item: AssistantTurnItem): string {
-  const value = parseJSON(item.resultJson);
-  if (isWebResearchTool(item.toolName) && value && typeof value === "object" && !Array.isArray(value)) {
-    const record = value as Record<string, unknown>;
-    const results = Array.isArray(record.search) ? record.search.length : 0;
-    const pages = Array.isArray(record.pages) ? record.pages.length : 0;
-    const citations = Array.isArray(record.citations) ? record.citations.length : 0;
-    const operation = String(record.operation || "research").trim();
-    const parts = [operation === "search" ? "搜索完成" : operation === "open" ? "网页读取完成" : "研究完成"];
-    if (results > 0) parts.push(`${results} 个来源`);
-    if (pages > 0) parts.push(`读取 ${pages} 页`);
-    if (citations > 0) parts.push(`${citations} 条证据`);
-    const research = record.research;
-    if (research && typeof research === "object" && !Array.isArray(research)) {
-      const rounds = Number((research as Record<string, unknown>).rounds_completed || 0);
-      if (rounds > 1) parts.push(`${rounds} 轮`);
-    }
-    return parts.join(" · ");
-  }
-  const text = resultText(item).replace(/\s+/g, " ").trim();
-  if (!text) return "";
-  return text.length > 80 ? `${text.slice(0, 80)}…` : text;
-}
 </script>
 
 <style scoped>
 .turn-timeline {
   display: flex;
   flex-direction: column;
+  gap: 8px;
   max-width: 700px;
+}
+
+.turn-timeline .turn-thinking {
+  margin: 0;
 }
 
 .turn-chev {
@@ -445,7 +491,7 @@ function resultSummary(item: AssistantTurnItem): string {
 }
 
 .turn-tool-stream {
-  margin: 8px 0 15px;
+  margin: 0;
   overflow: hidden;
   border: 1px solid var(--tp-border, #e8e8eb);
   border-radius: 10px;
@@ -515,8 +561,13 @@ function resultSummary(item: AssistantTurnItem): string {
 }
 
 .turn-tool-name {
+  min-width: 0;
+  flex: 0 1 auto;
+  overflow: hidden;
   color: var(--tp-text, #4d4f55);
   font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .turn-tool-subject {
@@ -532,6 +583,17 @@ function resultSummary(item: AssistantTurnItem): string {
   color: var(--tp-text-tertiary, #989aa0);
   font-size: 11px;
   white-space: nowrap;
+}
+
+.turn-tool-expand {
+  flex: 0 0 auto;
+  border: 0;
+  padding: 2px 0 2px 6px;
+  background: transparent;
+  color: var(--tp-primary, #7060e8);
+  font: inherit;
+  font-size: 10.5px;
+  cursor: pointer;
 }
 
 .turn-tool-dot {
@@ -564,50 +626,26 @@ function resultSummary(item: AssistantTurnItem): string {
   color: var(--tp-danger, #c85353);
 }
 
-.turn-tool-result {
-  margin: 8px 0 15px;
-  overflow: hidden;
-  border: 1px solid var(--tp-border, #e8e8eb);
-  border-radius: 9px;
+.turn-tool-details {
+  border-top: 1px solid var(--tp-border, #e8e8eb);
+  padding: 9px 11px 10px;
 }
 
-.turn-result-head {
-  display: flex;
-  width: 100%;
-  align-items: center;
-  gap: 8px;
-  border: 0;
-  padding: 7px 9px;
-  background: var(--tp-panel-soft, #f1f1f3);
-  color: var(--tp-text-secondary, #64666c);
-  font: inherit;
-  font-size: 11px;
-  text-align: left;
-  cursor: pointer;
+.turn-tool-detail + .turn-tool-detail {
+  margin-top: 9px;
 }
 
-.turn-result-head strong {
+.turn-tool-detail strong {
+  display: block;
+  margin-bottom: 5px;
   color: var(--tp-text, #4d4f55);
+  font-size: 10.5px;
 }
 
-.turn-result-head > span:not(.turn-tool-dot):not(.turn-result-toggle) {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.turn-result-toggle {
-  margin-left: auto;
-  color: var(--tp-primary, #7060e8);
-  white-space: nowrap;
-}
-
-.turn-result-body {
-  max-height: 220px;
+.turn-tool-detail pre {
+  max-height: 240px;
   margin: 0;
   overflow: auto;
-  padding: 9px 11px;
   color: var(--tp-text-secondary, #666);
   font: 10.5px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   white-space: pre-wrap;

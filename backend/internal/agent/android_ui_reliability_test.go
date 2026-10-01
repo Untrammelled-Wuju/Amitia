@@ -2,9 +2,11 @@ package agent
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/u-ai/backend/internal/agent/tool"
+	"github.com/u-ai/backend/internal/androiduiagent"
 )
 
 func TestAndroidUIAgentScopeInheritsApprovedExecution(t *testing.T) {
@@ -177,5 +179,66 @@ func TestSemanticHashIgnoresSnapshotIdentity(t *testing.T) {
 
 	if androidUISemanticHash(base) != androidUISemanticHash(other) {
 		t.Fatal("semantic hash should describe observable UI semantics, not ephemeral snapshot/node ids")
+	}
+}
+
+func TestSemanticHashTracksVisualSnapshotIdentity(t *testing.T) {
+	base := androidUITreeEnvelope{
+		SnapshotID: "visual-a",
+		Capability: androidUICapability{Source: "visual"},
+	}
+	other := base
+	other.SnapshotID = "visual-b"
+
+	if androidUISemanticHash(base) == androidUISemanticHash(other) {
+		t.Fatal("visual semantic hash should change when screenshot content changes")
+	}
+}
+
+func TestAndroidUIObservationImageExtractsScreenshot(t *testing.T) {
+	raw := json.RawMessage(`{"snapshotId":"visual-a","screenshotMimeType":"image/jpeg","screenshotBase64":"abc123","width":480}`)
+	image, mimeType, textObservation := androidUIObservationImage(raw)
+	if image != "abc123" || mimeType != "image/jpeg" {
+		t.Fatalf("unexpected screenshot payload: image=%q mime=%q", image, mimeType)
+	}
+	if string(raw) == textObservation || string(raw) == "" {
+		t.Fatal("text observation must be derived without the raw screenshot payload")
+	}
+	if strings.Contains(textObservation, "abc123") {
+		t.Fatal("text observation must not contain screenshot image data")
+	}
+}
+
+func TestMapAndroidUIAction_InputTextWithoutNodeUsesVirtualDisplayText(t *testing.T) {
+	toolID, raw, err := mapAndroidUIAction(androiduiagent.Request{
+		DisplayID: 34,
+		Ref:       "vd_34_1",
+	}, plannedAndroidUIAction{
+		Action: "input_text",
+		Text:   "hello",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if toolID != "android.virtual_display.text" {
+		t.Fatalf("unexpected tool id %q", toolID)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload["ref"] != "vd_34_1" || payload["text"] != "hello" || payload["replace"] != true {
+		t.Fatalf("unexpected payload: %#v", payload)
+	}
+}
+
+func TestSanitizeUITargetKeepsDisplayID(t *testing.T) {
+	target := sanitizeUITarget(map[string]any{
+		"x":         float64(120),
+		"y":         float64(240),
+		"displayId": float64(34),
+	})
+	if target["x"] != 120 || target["y"] != 240 || target["displayId"] != 34 {
+		t.Fatalf("unexpected sanitized target: %#v", target)
 	}
 }

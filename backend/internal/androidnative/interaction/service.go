@@ -321,7 +321,7 @@ func (s *Service) clickVisual(
 	}
 
 	locateReq := VisualLocateRequest{
-		DisplayID:       0,
+		DisplayID:       target.DisplayID,
 		Description:     target.Description,
 		Text:            target.Text,
 		Role:            target.Role,

@@ -35,16 +35,28 @@ func RegisterBuiltinUtilityTools(ctx context.Context, registry *capability.ToolR
 	const object = `{"type":"object","additionalProperties":true}`
 	specs := []BuiltinUtilityToolSpec{
 		{
+			id: "builtin.list_files", modelName: "list_files", name: "List Files",
+			description: "List files and directories in the current conversation workspace. Relative paths are resolved from the bound workspace root.",
+			input:       `{"type":"object","additionalProperties":false,"properties":{"uri":{"type":"string"},"path":{"type":"string"},"filePath":{"type":"string"},"workspaceId":{"type":"string"},"limit":{"type":"integer","minimum":1,"maximum":1000},"cursor":{"type":"string"}}}`,
+			permissions: []capability.PermissionRequirement{{Capability: "workspace.read", Risk: "low"}}, risk: capability.RiskLow, side: capability.SideEffectReadOnly, background: true, idempotent: true, timeout: 15 * time.Second, maxOutput: 512 * 1024, category: "workspace",
+		},
+		{
 			id: "builtin.read_file_part", modelName: "read_file_part", name: "Read File Part",
-			description: "Read a text file by 1-based inclusive line range. Accepts a workspace URI directly or workspaceId + path/filePath.",
+			description: "Read a text file by 1-based inclusive line range. Relative paths are resolved from the bound conversation workspace.",
 			input:       `{"type":"object","additionalProperties":false,"properties":{"uri":{"type":"string"},"path":{"type":"string"},"filePath":{"type":"string"},"workspaceId":{"type":"string"},"line_start":{"type":"integer","minimum":1},"line_end":{"type":"integer","minimum":1},"startLine":{"type":"integer","minimum":1},"endLine":{"type":"integer","minimum":1},"maxLines":{"type":"integer","minimum":1,"maximum":20000}}}`,
 			permissions: []capability.PermissionRequirement{{Capability: "workspace.read", Risk: "low"}}, risk: capability.RiskLow, side: capability.SideEffectReadOnly, background: true, idempotent: true, timeout: 15 * time.Second, maxOutput: 512 * 1024, category: "workspace",
 		},
 		{
 			id: "builtin.apply_file", modelName: "apply_file", name: "Apply File",
-			description: "Create, overwrite, delete, apply a unified patch, or exact-match replace file content in one call. Uses Amitia workspace storage and rejects ambiguous exact replacements.",
+			description: "Create, overwrite, delete, apply a unified patch, or exact-match replace file content in one call. Relative paths are resolved from the bound conversation workspace.",
 			input:       `{"type":"object","additionalProperties":false,"properties":{"uri":{"type":"string"},"path":{"type":"string"},"filePath":{"type":"string"},"workspaceId":{"type":"string"},"operation":{"type":"string","enum":["replace","create","write","delete","patch"]},"oldText":{"type":"string"},"old_content":{"type":"string"},"newText":{"type":"string"},"new_content":{"type":"string"},"content":{"type":"string"},"expectedOccurrences":{"type":"integer","minimum":0},"recursive":{"type":"boolean"},"patch":{"type":"string"},"baseSha256":{"type":"string"}}}`,
 			permissions: []capability.PermissionRequirement{{Capability: "workspace.write", Risk: "medium"}}, risk: capability.RiskMedium, side: capability.SideEffectWrite, approval: true, idempotent: false, timeout: 30 * time.Second, maxOutput: 32 * 1024, category: "workspace",
+		},
+		{
+			id: "builtin.send_attachment", modelName: "send_attachment", name: "Send Attachment",
+			description: "Attach an image, video, audio, or file to the current assistant reply. Prefer an amitia://artifacts URI or a workspace-relative path. HTTPS URLs are imported into managed artifact storage so preview and download use a stable local URL.",
+			input:       `{"type":"object","additionalProperties":false,"properties":{"type":{"type":"string","enum":["image","audio","video","file"]},"uri":{"type":"string"},"resourceUri":{"type":"string"},"url":{"type":"string"},"path":{"type":"string"},"filePath":{"type":"string"},"workspaceId":{"type":"string"},"fileName":{"type":"string"},"filename":{"type":"string"},"mimeType":{"type":"string"},"altText":{"type":"string"},"caption":{"type":"string"},"title":{"type":"string"},"kind":{"type":"string"}}}`,
+			permissions: []capability.PermissionRequirement{{Capability: "workspace.read", Risk: "low"}, {Capability: "media.send", Risk: "medium"}}, risk: capability.RiskMedium, side: capability.SideEffectExternal, approval: true, idempotent: false, timeout: 45 * time.Second, maxOutput: 64 * 1024, category: "media",
 		},
 		{
 			id: "builtin.visit_web", modelName: "visit_web", name: "Visit Web",

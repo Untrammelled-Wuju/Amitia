@@ -7,6 +7,7 @@ import type {
   ExtensionPackageSelection,
   RuntimeStatus,
   RealtimeCallWindowRequest,
+  SaveConversationAttachmentRequest,
   SaveExtensionPackageRequest,
   LocalVoiceASRFinalEvent,
   WorkspaceDirectorySelection,
@@ -49,6 +50,11 @@ const api = {
     request: SaveExtensionPackageRequest,
   ): Promise<{ saved: boolean; fileName?: string }> {
     return ipcRenderer.invoke(IPC_CHANNELS.saveExtensionPackage, request);
+  },
+  saveConversationAttachment(
+    request: SaveConversationAttachmentRequest,
+  ): Promise<{ saved: boolean; fileName?: string }> {
+    return ipcRenderer.invoke(IPC_CHANNELS.saveConversationAttachment, request);
   },
   minimizeWindow(): Promise<void> {
     return ipcRenderer.invoke(IPC_CHANNELS.minimizeWindow);

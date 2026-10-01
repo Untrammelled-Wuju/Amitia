@@ -20,3 +20,20 @@ func TestDefaultHostEventTypesIncludeConversationUIEvent(t *testing.T) {
 		t.Fatalf("ordering policy = %q, want %q", def.OrderingPolicy, OrderingPerPartition)
 	}
 }
+
+func TestDefaultHostEventTypesIncludeArtifactEvents(t *testing.T) {
+	required := map[EventTypeID]bool{
+		"artifact.created": false,
+		"artifact.deleted": false,
+	}
+	for _, def := range DefaultHostEventTypes() {
+		if _, ok := required[def.EventTypeID]; ok {
+			required[def.EventTypeID] = true
+		}
+	}
+	for eventTypeID, found := range required {
+		if !found {
+			t.Fatalf("missing default artifact event type %s", eventTypeID)
+		}
+	}
+}

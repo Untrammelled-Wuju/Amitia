@@ -15,7 +15,7 @@ func BuildVirtualDisplayTools() []capability.ToolDefinition {
 		RuntimeID:   RuntimeID,
 	}
 
-	return []capability.ToolDefinition{
+	tools := []capability.ToolDefinition{
 		buildStatusTool(runtime),
 		buildCreateTool(runtime),
 		buildGetTool(runtime),
@@ -29,6 +29,14 @@ func BuildVirtualDisplayTools() []capability.ToolDefinition {
 		buildKeyTool(runtime),
 		buildTextTool(runtime),
 	}
+	for index := range tools {
+		tools[index].ModelExposure = capability.ModelExposureRule{
+			ExposedByDefault: true,
+			Categories:       []string{"android", "automation", "virtual_display"},
+			Priority:         48,
+		}
+	}
+	return tools
 }
 
 func buildStatusTool(runtime capability.RuntimeBinding) capability.ToolDefinition {
@@ -50,6 +58,8 @@ func buildStatusTool(runtime capability.RuntimeBinding) capability.ToolDefinitio
 			"uiTreeSupported": {"type": "boolean"},
 			"gestureSupported": {"type": "boolean"},
 			"thirdPartyLaunchSupported": {"type": "boolean"},
+			"uiTreeTool": {"type": "string"},
+			"nodeActionTools": {"type": "array", "items": {"type": "string"}},
 			"state": {"type": "string"},
 			"reason": {"type": "string"}
 		}
@@ -57,10 +67,10 @@ func buildStatusTool(runtime capability.RuntimeBinding) capability.ToolDefinitio
 
 	return capability.ToolDefinition{
 		ID:           "android.virtual_display.status",
-		ModelName:    "android.virtual_display.status",
+		ModelName:    "android_virtual_display_status",
 		Source:       capability.ToolSourceBuiltin,
 		Name:         "Virtual Display Status",
-		Description:  "查询Android虚拟显示能力状态。检测是否支持、是否有活动虚拟显示器。不触发资源创建。",
+		Description:  "查询Android虚拟显示能力状态。虚拟屏优先使用android_virtual_display_capture对displayId截图，再用android_interaction_visual_locate或android_interaction_visual_click传displayId定位并操作；uiTreeSupported=true时可使用android_ui_tree_snapshot增强。",
 		InputSchema:  inputSchema,
 		OutputSchema: outputSchema,
 		Permissions: []capability.PermissionRequirement{
@@ -140,7 +150,7 @@ func buildCreateTool(runtime capability.RuntimeBinding) capability.ToolDefinitio
 
 	return capability.ToolDefinition{
 		ID:           "android.virtual_display.create",
-		ModelName:    "android.virtual_display.create",
+		ModelName:    "android_virtual_display_create",
 		Source:       capability.ToolSourceBuiltin,
 		Name:         "Virtual Display Create",
 		Description:  "创建Android虚拟显示器。默认1080x1920 @ 420dpi。支持同时存在多个活动虚拟显示器，返回真实 Android system displayId。",
@@ -200,7 +210,7 @@ func buildGetTool(runtime capability.RuntimeBinding) capability.ToolDefinition {
 
 	return capability.ToolDefinition{
 		ID:           "android.virtual_display.get",
-		ModelName:    "android.virtual_display.get",
+		ModelName:    "android_virtual_display_get",
 		Source:       capability.ToolSourceBuiltin,
 		Name:         "Virtual Display Get",
 		Description:  "获取当前活动虚拟显示器的详细信息。可指定ref验证一致性。",
@@ -252,7 +262,7 @@ func buildListTool(runtime capability.RuntimeBinding) capability.ToolDefinition 
 		}
 	}`)
 	return capability.ToolDefinition{
-		ID: "android.virtual_display.list", ModelName: "android.virtual_display.list",
+		ID: "android.virtual_display.list", ModelName: "android_virtual_display_list",
 		Source: capability.ToolSourceBuiltin, Name: "Virtual Display List",
 		Description: "列出当前由 AMITIA 管理的全部真实 Android VirtualDisplay 与 system displayId。",
 		InputSchema: inputSchema, OutputSchema: outputSchema,
@@ -301,7 +311,7 @@ func buildResizeTool(runtime capability.RuntimeBinding) capability.ToolDefinitio
 
 	return capability.ToolDefinition{
 		ID:           "android.virtual_display.resize",
-		ModelName:    "android.virtual_display.resize",
+		ModelName:    "android_virtual_display_resize",
 		Source:       capability.ToolSourceBuiltin,
 		Name:         "Virtual Display Resize",
 		Description:  "调整虚拟显示器尺寸和密度。必须指定ref。Generation自增。",
@@ -364,7 +374,7 @@ func buildReleaseTool(runtime capability.RuntimeBinding) capability.ToolDefiniti
 
 	return capability.ToolDefinition{
 		ID:           "android.virtual_display.release",
-		ModelName:    "android.virtual_display.release",
+		ModelName:    "android_virtual_display_release",
 		Source:       capability.ToolSourceBuiltin,
 		Name:         "Virtual Display Release",
 		Description:  "释放虚拟显示器资源。幂等操作：重复释放不会报错。必须指定ref。",
@@ -410,6 +420,7 @@ func buildLaunchTool(runtime capability.RuntimeBinding) capability.ToolDefinitio
 	return buildDisplayOperationTool(
 		runtime,
 		"android.virtual_display.launch",
+		"android_virtual_display_launch",
 		"Virtual Display Launch",
 		"在指定 Android VirtualDisplay 上启动第三方应用。",
 		OperationLaunch,
@@ -430,8 +441,9 @@ func buildCaptureTool(runtime capability.RuntimeBinding) capability.ToolDefiniti
 	return buildDisplayOperationTool(
 		runtime,
 		"android.virtual_display.capture",
+		"android_virtual_display_capture",
 		"Virtual Display Capture",
-		"读取指定 Android VirtualDisplay 的最新画面，返回编码图像和元数据。",
+		"读取指定 Android VirtualDisplay 的最新画面，返回图像资源和元数据。可配合 android_interaction_visual_locate 或 android_interaction_visual_click 使用 displayId 进行截图定位。",
 		OperationCapture,
 		`{
 			"type":"object",
@@ -452,6 +464,7 @@ func buildTapTool(runtime capability.RuntimeBinding) capability.ToolDefinition {
 	return buildDisplayOperationTool(
 		runtime,
 		"android.virtual_display.tap",
+		"android_virtual_display_tap",
 		"Virtual Display Tap",
 		"向指定 Android VirtualDisplay 注入点击坐标。",
 		OperationTap,
@@ -472,6 +485,7 @@ func buildSwipeTool(runtime capability.RuntimeBinding) capability.ToolDefinition
 	return buildDisplayOperationTool(
 		runtime,
 		"android.virtual_display.swipe",
+		"android_virtual_display_swipe",
 		"Virtual Display Swipe",
 		"向指定 Android VirtualDisplay 注入滑动手势。",
 		OperationSwipe,
@@ -495,6 +509,7 @@ func buildKeyTool(runtime capability.RuntimeBinding) capability.ToolDefinition {
 	return buildDisplayOperationTool(
 		runtime,
 		"android.virtual_display.key",
+		"android_virtual_display_key",
 		"Virtual Display Key",
 		"向指定 Android VirtualDisplay 注入按键事件。",
 		OperationKey,
@@ -515,6 +530,7 @@ func buildTextTool(runtime capability.RuntimeBinding) capability.ToolDefinition 
 	return buildDisplayOperationTool(
 		runtime,
 		"android.virtual_display.text",
+		"android_virtual_display_text",
 		"Virtual Display Text",
 		"向指定 Android VirtualDisplay 输入文本。",
 		OperationText,
@@ -533,6 +549,7 @@ func buildTextTool(runtime capability.RuntimeBinding) capability.ToolDefinition 
 func buildDisplayOperationTool(
 	runtime capability.RuntimeBinding,
 	id string,
+	modelName string,
 	name string,
 	description string,
 	operation string,
@@ -540,7 +557,7 @@ func buildDisplayOperationTool(
 ) capability.ToolDefinition {
 	return capability.ToolDefinition{
 		ID:             id,
-		ModelName:      id,
+		ModelName:      modelName,
 		Source:         capability.ToolSourceBuiltin,
 		Name:           name,
 		Description:    description,

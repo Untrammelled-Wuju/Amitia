@@ -68,6 +68,9 @@ func (s *AccessibilitySource) Snapshot(ctx context.Context, request SnapshotRequ
 		"includeAllWindows": request.IncludeAllWindows,
 		"includeInvisible":  request.IncludeInvisible,
 	}
+	if request.DisplayID != nil {
+		payload["displayId"] = *request.DisplayID
+	}
 	if request.MaxDepth != nil {
 		payload["maxDepth"] = *request.MaxDepth
 	}

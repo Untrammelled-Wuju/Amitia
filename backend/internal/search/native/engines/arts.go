@@ -26,6 +26,7 @@ func (e *artInstituteEngine) Descriptor() native.EngineDescriptor {
 		Weight:   0.7,
 		Capabilities: search.ProviderCapabilities{
 			SearchKinds: []search.SearchKind{search.SearchKindImage},
+			SafeSearch:  true,
 			Pagination:  true,
 			MaxResults:  100,
 		},
@@ -95,6 +96,7 @@ func (e *clevelandArtEngine) Descriptor() native.EngineDescriptor {
 		Weight:   0.7,
 		Capabilities: search.ProviderCapabilities{
 			SearchKinds: []search.SearchKind{search.SearchKindImage},
+			SafeSearch:  true,
 			Pagination:  true,
 			MaxResults:  100,
 		},
@@ -171,6 +173,7 @@ func (e *metMuseumEngine) Descriptor() native.EngineDescriptor {
 		Weight:   0.7,
 		Capabilities: search.ProviderCapabilities{
 			SearchKinds: []search.SearchKind{search.SearchKindImage},
+			SafeSearch:  true,
 			Pagination:  true,
 			MaxResults:  40,
 		},

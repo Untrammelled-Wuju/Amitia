@@ -203,6 +203,11 @@ import { useWebChatScroll } from "../../composables/useWebChatScroll";
 import { useWebChatSend } from "../../composables/useWebChatSend";
 import { useWebChatConversation } from "../../composables/useWebChatConversation";
 import { useConversationWorkspace } from "../../composables/useConversationWorkspace";
+import {
+  loadChatPermissionMode,
+  normalizeChatPermissionMode,
+  saveChatPermissionMode,
+} from "../../composables/useChatPermissionPreference";
 import ChatBanners from "../../components/ChatBanners.vue";
 import ChatHeaderBar from "../../components/ChatHeaderBar.vue";
 import MessagesArea from "../../components/MessagesArea.vue";
@@ -310,7 +315,7 @@ const llmModels = ref<any[]>([]);
 const selectedModelId = ref(0);
 const selectedReasoningEffort = ref("high");
 const selectedReasoningEnabled = ref(true);
-const selectedPermissionMode = ref("request_approval");
+const selectedPermissionMode = ref(loadChatPermissionMode());
 const selectedModelSupportsReasoning = computed(() => {
   const model = llmModels.value.find(
     (item: any) => Number(item.id) === selectedModelId.value,
@@ -400,6 +405,7 @@ async function handleNewChat(event?: CustomEvent) {
     convId.value = "";
     convTitle.value = "";
     replyTarget.value = null;
+    selectedPermissionMode.value = loadChatPermissionMode();
     await startDraftConversation();
     await router.replace({ path: "/chat" });
     nextTick(() => inputRef.value?.focus());
@@ -516,8 +522,7 @@ function loadDraftModelSettings() {
     selectedModelId.value = Number(draft.modelConfigId || 0);
     selectedReasoningEffort.value = String(draft.reasoningEffort || "high");
     selectedReasoningEnabled.value = draft.reasoningEnabled === true;
-    selectedPermissionMode.value =
-      draft.permissionMode === "full_access" ? "full_access" : "request_approval";
+    selectedPermissionMode.value = loadChatPermissionMode();
   } catch {}
 }
 
@@ -527,8 +532,9 @@ function applyConversationSettings(conversation?: Record<string, any>) {
   selectedReasoningEffort.value = String(conversation.reasoningEffort || "high");
   selectedReasoningEnabled.value =
     conversation.reasoningEnabled === 1 || conversation.reasoningEnabled === true;
-  selectedPermissionMode.value =
-    conversation.permissionMode === "full_access" ? "full_access" : "request_approval";
+  selectedPermissionMode.value = normalizeChatPermissionMode(
+    conversation.permissionMode,
+  );
   localStorage.removeItem(modelSettingsDraftKey);
 }
 
@@ -544,15 +550,15 @@ function saveModelSettingsDraft(
         modelConfigId: modelId,
         reasoningEffort,
         reasoningEnabled,
-        permissionMode: selectedPermissionMode.value,
       }),
     );
   } catch {}
 }
 
 async function handlePermissionModeChange(mode: string) {
-  const next = mode === "full_access" ? "full_access" : "request_approval";
+  const next = normalizeChatPermissionMode(mode);
   selectedPermissionMode.value = next;
+  saveChatPermissionMode(next);
   if (!convId.value) {
     saveModelSettingsDraft(
       selectedModelId.value,
@@ -828,6 +834,7 @@ watch(
       convId.value = "";
       convTitle.value = "";
       replyTarget.value = null;
+      selectedPermissionMode.value = loadChatPermissionMode();
       await loadConversationWorkspace("", String(route.query.projectId || ""));
       return;
     }

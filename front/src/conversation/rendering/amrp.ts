@@ -60,6 +60,19 @@ function parseJsonValue(value: unknown): unknown {
   }
 }
 
+function firstArtifactUri(value: unknown): string {
+  const text = typeof value === "string" ? value : "";
+  return /amitia:\/\/artifacts\/[A-Za-z0-9._-]+/i.exec(text)?.[0] || "";
+}
+
+function fileNameFromContent(value: unknown): string {
+  const text = typeof value === "string" ? value : "";
+  const firstLine = text.split(/\r?\n/, 1)[0]?.trim() || "";
+  return firstLine.startsWith("[文件]")
+    ? firstLine.slice("[文件]".length).trim()
+    : "";
+}
+
 function normalizeBlock(raw: Record<string, any>, index: number): RichBlock {
   const type = String(raw.kind ?? raw.type ?? raw.blockType ?? "").toLowerCase();
   const id = firstString(raw, ["id", "blockId"]) || `block-${index}`;
@@ -83,6 +96,7 @@ function normalizeBlock(raw: Record<string, any>, index: number): RichBlock {
       mimeType: firstString(raw, ["mimeType", "mime"]) || undefined,
       size: Number(raw.size ?? raw.sizeBytes ?? raw.fileSize ?? 0) || undefined,
       url: firstString(raw, ["url", "resourceUri", "href"]) || undefined,
+      downloadUrl: firstString(raw, ["downloadUrl", "originalAssetReference", "fallbackUrl"]) || undefined,
       status: String(raw.status ?? "ready").toLowerCase() === "failed"
         ? "failed"
         : String(raw.status ?? "ready").toLowerCase() === "loading"
@@ -96,6 +110,7 @@ function normalizeBlock(raw: Record<string, any>, index: number): RichBlock {
       kind: "image",
       id,
       url: firstString(raw, ["url", "imageUrl", "src"]),
+      downloadUrl: firstString(raw, ["downloadUrl", "originalAssetReference", "fallbackUrl"]) || undefined,
       alt: firstString(raw, ["alt", "altText", "title"]) || undefined,
       mimeType: firstString(raw, ["mimeType", "mime"]) || undefined,
       animated: Boolean(raw.animated ?? raw.isAnimated),
@@ -109,6 +124,7 @@ function normalizeBlock(raw: Record<string, any>, index: number): RichBlock {
       kind: "audio",
       id,
       url: firstString(raw, ["url", "audioUrl", "src"]),
+      downloadUrl: firstString(raw, ["downloadUrl", "originalAssetReference", "fallbackUrl"]) || undefined,
       title: firstString(raw, ["title", "fileName", "name"]) || "语音",
       duration: Number(raw.duration ?? raw.durationMs ?? 0) || undefined,
       status: "loading",
@@ -119,6 +135,7 @@ function normalizeBlock(raw: Record<string, any>, index: number): RichBlock {
       kind: "video",
       id,
       url: firstString(raw, ["url", "videoUrl", "src"]),
+      downloadUrl: firstString(raw, ["downloadUrl", "originalAssetReference", "fallbackUrl"]) || undefined,
       title: firstString(raw, ["title", "fileName", "name"]) || "视频",
       poster: firstString(raw, ["poster", "posterUrl"]) || undefined,
       duration: Number(raw.duration ?? raw.durationMs ?? 0) || undefined,
@@ -135,6 +152,7 @@ function normalizeBlock(raw: Record<string, any>, index: number): RichBlock {
       content: typeof raw.content === "string" ? raw.content : undefined,
       fileId: firstString(raw, ["fileId"]) || undefined,
       url: firstString(raw, ["url", "href"]) || undefined,
+      downloadUrl: firstString(raw, ["downloadUrl", "originalAssetReference", "fallbackUrl"]) || undefined,
       size: Number(raw.size ?? raw.sizeBytes ?? 0) || undefined,
     };
   }
@@ -207,13 +225,23 @@ function legacyBlocks(message: Record<string, any>): RichBlock[] {
     blocks.push(normalizeBlock({ ...message, kind: "agent-task" }, 0));
   }
   if (type === "file") {
+    const downloadUrl =
+      firstString(message, ["originalAssetReference", "fallbackAssetReference", "downloadUrl"]) || undefined;
     blocks.push({
       kind: "file",
       id: `${commonId}-file`,
-      name: firstString(message, ["fileName", "name"]) || "未命名文件",
+      name:
+        firstString(message, ["fileName", "name", "altText"]) ||
+        fileNameFromContent(message.content) ||
+        "未命名文件",
       mimeType: firstString(message, ["mimeType", "mime"]) || undefined,
       size: Number(message.fileSizeBytes ?? message.sizeBytes ?? message.fileSize ?? 0) || undefined,
-      url: firstString(message, ["resourceUri", "url", "href"]) || undefined,
+      url:
+        firstString(message, ["resourceUri", "url", "href"]) ||
+        firstArtifactUri(message.content) ||
+        downloadUrl ||
+        undefined,
+      downloadUrl,
       status: String(message.status ?? "").toLowerCase() === "failed" ? "failed" : "ready",
       error: firstString(message, ["error", "errorMessage"]) || undefined,
     } satisfies FileBlock);
@@ -225,6 +253,7 @@ function legacyBlocks(message: Record<string, any>): RichBlock[] {
         kind: "image",
         id: `${commonId}-image`,
         url: imageUrl,
+        downloadUrl: firstString(message, ["originalAssetReference", "fallbackAssetReference", "downloadUrl"]) || undefined,
         alt: firstString(message, ["altText", "alt"]) || undefined,
         mimeType: firstString(message, ["mimeType", "mime"]) || undefined,
         animated: Boolean(message.isAnimated ?? message.is_animated),
@@ -241,6 +270,7 @@ function legacyBlocks(message: Record<string, any>): RichBlock[] {
         kind: "audio",
         id: `${commonId}-audio`,
         url: audioUrl,
+        downloadUrl: firstString(message, ["originalAssetReference", "fallbackAssetReference", "downloadUrl"]) || undefined,
         title: firstString(message, ["fileName", "name"]) || "语音",
         duration: Number(message.audioDuration ?? 0) || undefined,
         status: "loading",
@@ -254,6 +284,7 @@ function legacyBlocks(message: Record<string, any>): RichBlock[] {
         kind: "video",
         id: `${commonId}-video`,
         url: videoUrl,
+        downloadUrl: firstString(message, ["originalAssetReference", "fallbackAssetReference", "downloadUrl"]) || undefined,
         title: firstString(message, ["fileName", "name"]) || "视频",
         poster: firstString(message, ["poster", "posterUrl"]) || undefined,
         duration: Number(message.videoDuration ?? 0) || undefined,

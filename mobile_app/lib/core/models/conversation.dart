@@ -69,6 +69,8 @@ class MessageDto {
   final String audioUrl;
   final double audioDuration;
   final String videoUrl;
+  final String originalAssetReference;
+  final String fallbackAssetReference;
   final String? emoteId;
   final String? altText;
   final int? tokens;
@@ -93,6 +95,8 @@ class MessageDto {
     this.audioUrl = '',
     this.audioDuration = 0,
     this.videoUrl = '',
+    this.originalAssetReference = '',
+    this.fallbackAssetReference = '',
     this.emoteId,
     this.altText,
     this.tokens,
@@ -119,6 +123,8 @@ class MessageDto {
       audioUrl: json['audioUrl'] as String? ?? '',
       audioDuration: (json['audioDuration'] as num?)?.toDouble() ?? 0,
       videoUrl: json['videoUrl'] as String? ?? '',
+      originalAssetReference: json['originalAssetReference'] as String? ?? '',
+      fallbackAssetReference: json['fallbackAssetReference'] as String? ?? '',
       emoteId: json['emoteId'] as String?,
       altText: json['altText'] as String?,
       tokens: (json['tokens'] as num?)?.toInt(),

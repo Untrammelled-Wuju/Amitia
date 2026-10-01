@@ -50,3 +50,21 @@ func TestDefaultRegistryCoversCoreKinds(t *testing.T) {
 		require.Truef(t, covered[kind], "missing engine coverage for %s", kind)
 	}
 }
+
+func TestDefaultRegistryProvidesKeylessSafeImageSearch(t *testing.T) {
+	registry := DefaultRegistry(nil)
+	keylessSafeImageEngines := 0
+	for _, engine := range registry.All() {
+		descriptor := engine.Descriptor()
+		if len(descriptor.CredentialIDs) > 0 || !descriptor.Capabilities.SafeSearch {
+			continue
+		}
+		for _, kind := range descriptor.Capabilities.SearchKinds {
+			if kind == search.SearchKindImage {
+				keylessSafeImageEngines++
+				break
+			}
+		}
+	}
+	require.GreaterOrEqual(t, keylessSafeImageEngines, 2)
+}

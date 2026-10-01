@@ -264,6 +264,20 @@ class AmitiaLayoutTokens extends ThemeExtension<AmitiaLayoutTokens> {
 
 @immutable
 class AmitiaTypographyTokens extends ThemeExtension<AmitiaTypographyTokens> {
+  const AmitiaTypographyTokens.readable()
+    : this(
+        pageTitleSize: 20,
+        pageLargeTitleSize: 30,
+        sectionTitleSize: 18,
+        cardTitleSize: 17,
+        bodySize: 16,
+        bodySmallSize: 14,
+        captionSize: 13,
+        labelSize: 13,
+        statusLabelSize: 12,
+        buttonSize: 16,
+      );
+
   const AmitiaTypographyTokens({
     this.fontFamily,
     this.pageTitleSize = 19,
@@ -344,7 +358,10 @@ class AmitiaTypographyTokens extends ThemeExtension<AmitiaTypographyTokens> {
   }
 
   @override
-  AmitiaTypographyTokens lerp(covariant AmitiaTypographyTokens? other, double t) {
+  AmitiaTypographyTokens lerp(
+    covariant AmitiaTypographyTokens? other,
+    double t,
+  ) {
     if (other == null) return this;
     double l(double a, double b) => a + (b - a) * t;
     int li(int a, int b) => (a + (b - a) * t).round();
@@ -466,18 +483,25 @@ class AmitiaComponentTokens extends ThemeExtension<AmitiaComponentTokens> {
 
 @immutable
 class AmitiaComponentVariants extends ThemeExtension<AmitiaComponentVariants> {
-  const AmitiaComponentVariants({this.values = const <String, Map<String, Object>>{}});
+  const AmitiaComponentVariants({
+    this.values = const <String, Map<String, Object>>{},
+  });
 
   final Map<String, Map<String, Object>> values;
 
-  Map<String, Object> variant(String key) => values[key] ?? const <String, Object>{};
+  Map<String, Object> variant(String key) =>
+      values[key] ?? const <String, Object>{};
 
   @override
-  AmitiaComponentVariants copyWith({Map<String, Map<String, Object>>? values}) =>
-      AmitiaComponentVariants(values: values ?? this.values);
+  AmitiaComponentVariants copyWith({
+    Map<String, Map<String, Object>>? values,
+  }) => AmitiaComponentVariants(values: values ?? this.values);
 
   @override
-  AmitiaComponentVariants lerp(covariant AmitiaComponentVariants? other, double t) {
+  AmitiaComponentVariants lerp(
+    covariant AmitiaComponentVariants? other,
+    double t,
+  ) {
     if (other == null || t < .5) return this;
     return other;
   }
@@ -509,7 +533,8 @@ abstract final class DesignTokenRuntime {
     if (components != null) _components = components;
   }
 
-  static void activateLayout(AmitiaLayoutTokens layout) => activate(layout: layout);
+  static void activateLayout(AmitiaLayoutTokens layout) =>
+      activate(layout: layout);
 
   static void reset() {
     _layout = const AmitiaLayoutTokens();
@@ -521,16 +546,21 @@ abstract final class DesignTokenRuntime {
 
 extension AmitiaDesignTokenContext on BuildContext {
   AmitiaLayoutTokens get uiLayout =>
-      Theme.of(this).extension<AmitiaLayoutTokens>() ?? DesignTokenRuntime.layout;
+      Theme.of(this).extension<AmitiaLayoutTokens>() ??
+      DesignTokenRuntime.layout;
   AmitiaTypographyTokens get uiTypography =>
-      Theme.of(this).extension<AmitiaTypographyTokens>() ?? DesignTokenRuntime.typography;
+      Theme.of(this).extension<AmitiaTypographyTokens>() ??
+      DesignTokenRuntime.typography;
   AmitiaIconTokens get uiIcons =>
       Theme.of(this).extension<AmitiaIconTokens>() ?? DesignTokenRuntime.icons;
   AmitiaComponentTokens get uiComponents =>
-      Theme.of(this).extension<AmitiaComponentTokens>() ?? DesignTokenRuntime.components;
+      Theme.of(this).extension<AmitiaComponentTokens>() ??
+      DesignTokenRuntime.components;
   AmitiaComponentVariants get uiComponentVariants =>
-      Theme.of(this).extension<AmitiaComponentVariants>() ?? const AmitiaComponentVariants();
-  Map<String, Object> uiComponentVariant(String key) => uiComponentVariants.variant(key);
+      Theme.of(this).extension<AmitiaComponentVariants>() ??
+      const AmitiaComponentVariants();
+  Map<String, Object> uiComponentVariant(String key) =>
+      uiComponentVariants.variant(key);
 }
 
 FontWeight designFontWeight(int weight) {

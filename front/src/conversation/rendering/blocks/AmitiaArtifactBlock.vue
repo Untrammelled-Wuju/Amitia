@@ -10,6 +10,9 @@
       </div>
       <div class="amrp-artifact-actions">
         <button type="button" @click="preview = !preview">{{ preview ? "收起" : "预览" }}</button>
+        <button v-if="block.url" type="button" :disabled="downloading" @click="download">
+          {{ downloading ? "下载中" : "下载" }}
+        </button>
         <button type="button" @click="fullscreen = true">全屏</button>
         <button type="button" @click="copyContent">复制</button>
       </div>
@@ -45,6 +48,7 @@ import { ElMessage } from "element-plus";
 import type { ArtifactBlock } from "../types";
 import { copyText, formatBytes, prettyJson } from "../utils";
 import AmitiaHtmlPreview from "../preview/AmitiaHtmlPreview.vue";
+import { downloadConversationMedia } from "../media";
 
 const props = defineProps<{
   block: ArtifactBlock;
@@ -52,6 +56,7 @@ const props = defineProps<{
 
 const preview = ref(false);
 const fullscreen = ref(false);
+const downloading = ref(false);
 const isHtml = computed(() => {
   const kind = props.block.artifactKind.toLowerCase();
   const mime = String(props.block.mimeType ?? "").toLowerCase();
@@ -61,6 +66,23 @@ const isHtml = computed(() => {
 async function copyContent() {
   const copied = await copyText(props.block.content ?? prettyJson(props.block));
   copied ? ElMessage.success("已复制 Artifact") : ElMessage.warning("复制失败");
+}
+
+async function download() {
+  if (!props.block.url || downloading.value) return;
+  downloading.value = true;
+  try {
+    const saved = await downloadConversationMedia(
+      props.block.downloadUrl || props.block.url || "",
+      props.block.title,
+      props.block.mimeType,
+    );
+    if (saved) ElMessage.success("Artifact 已保存");
+  } catch (reason) {
+    ElMessage.error(reason instanceof Error ? reason.message : "Artifact 保存失败");
+  } finally {
+    downloading.value = false;
+  }
 }
 </script>
 
@@ -121,6 +143,11 @@ async function copyContent() {
   font: inherit;
   font-size: 10px;
   cursor: pointer;
+}
+
+.amrp-artifact-actions button:disabled {
+  cursor: wait;
+  opacity: 0.65;
 }
 
 .amrp-artifact-preview {

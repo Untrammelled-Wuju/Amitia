@@ -715,11 +715,18 @@ func (s *Service) resolveURIToMount(uriStr string) (WorkspaceMount, string, erro
 	rel := uri.RelativePath()
 	if strings.HasPrefix(rel, "@") {
 		slashIdx := strings.Index(rel, "/")
+		mountIDText := ""
+		pathPart := ""
 		if slashIdx < 0 {
+			mountIDText = strings.TrimPrefix(rel, "@")
+		} else {
+			mountIDText = rel[1:slashIdx]
+			pathPart = rel[slashIdx+1:]
+		}
+		if mountIDText == "" {
 			return WorkspaceMount{}, "", fmt.Errorf("%w: invalid mount URI", ErrInvalidURI)
 		}
-		mountID := WorkspaceID(rel[1:slashIdx])
-		pathPart := rel[slashIdx+1:]
+		mountID := WorkspaceID(mountIDText)
 		mount, ok := s.registry.GetMount(mountID)
 		if !ok {
 			return WorkspaceMount{}, "", fmt.Errorf("%w: mount %q not found", ErrMountNotFound, mountID)

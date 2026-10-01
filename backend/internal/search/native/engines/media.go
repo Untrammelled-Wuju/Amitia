@@ -195,6 +195,7 @@ func (e *nasaMediaEngine) Descriptor() native.EngineDescriptor {
 		Weight:   0.8,
 		Capabilities: search.ProviderCapabilities{
 			SearchKinds: []search.SearchKind{search.SearchKindImage, search.SearchKindVideo},
+			SafeSearch:  true,
 			Pagination:  true,
 			MaxResults:  100,
 		},

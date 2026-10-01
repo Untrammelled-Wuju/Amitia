@@ -8,7 +8,22 @@ $adminLogDir = Join-Path $root "logs"
 $nodeExe = Join-Path $root "desktop\resources\core\node\node.exe"
 $surrealExe = Join-Path $backendDir "surrealdb\surreal.exe"
 $qdrantExe = Join-Path $backendDir "qdrant\qdrant.exe"
-$serverExe = Join-Path $backendDir "server.exe"
+    $serverExe = Join-Path $backendDir "server.codex2.exe"
+    if (-not (Test-Path $serverExe)) {
+        $serverExe = Join-Path $backendDir "server.codex.exe"
+    }
+    if (-not (Test-Path $serverExe)) {
+        $serverExe = Join-Path $backendDir "server.runtime.exe"
+    }
+    if (-not (Test-Path $serverExe)) {
+        $serverExe = Join-Path $backendDir "server.current.exe"
+    }
+    if (-not (Test-Path $serverExe)) {
+        $serverExe = Join-Path $backendDir "server.new.exe"
+    }
+if (-not (Test-Path $serverExe)) {
+    $serverExe = Join-Path $backendDir "server.exe"
+}
 $adminServerExe = Join-Path $backendDir "admin-server.exe"
 $goExe = "C:\Code\Go\bin\go.exe"
 $surrealPass = "AmitiaSurrealDBRootPassword20260831Securex"

@@ -116,6 +116,7 @@ func buildClickTool(runtime capability.RuntimeBinding) capability.ToolDefinition
 				"properties": {
 					"snapshotId": {"type": "string"},
 					"nodeId": {"type": "string"},
+					"displayId": {"type": "integer", "minimum": 0, "maximum": 256},
 					"x": {"type": "integer"},
 					"y": {"type": "integer"},
 					"text": {"type": "string"},
@@ -157,7 +158,7 @@ func buildClickTool(runtime capability.RuntimeBinding) capability.ToolDefinition
 		ModelName:    "android_interaction_click",
 		Source:       capability.ToolSourceBuiltin,
 		Name:         "Interaction Click",
-		Description:  "点击Android UI目标。优先使用Accessibility ACTION_CLICK，失败时按策略降级到坐标、Shizuku、Root或ADB fallback。",
+		Description:  "点击Android UI目标。节点目标使用snapshotId和nodeId；视觉目标使用text或description并传target.displayId。优先使用Accessibility ACTION_CLICK，失败时按策略降级到坐标、视觉、Shizuku、Root或ADB。",
 		InputSchema:  inputSchema,
 		OutputSchema: outputSchema,
 		Permissions: []capability.PermissionRequirement{
@@ -208,6 +209,7 @@ func buildLongClickTool(runtime capability.RuntimeBinding) capability.ToolDefini
 				"properties": {
 					"snapshotId": {"type": "string"},
 					"nodeId": {"type": "string"},
+					"displayId": {"type": "integer", "minimum": 0, "maximum": 256},
 					"x": {"type": "integer"},
 					"y": {"type": "integer"}
 				}
@@ -247,7 +249,7 @@ func buildLongClickTool(runtime capability.RuntimeBinding) capability.ToolDefini
 		ModelName:    "android_interaction_long_click",
 		Source:       capability.ToolSourceBuiltin,
 		Name:         "Interaction Long Click",
-		Description:  "长按Android UI目标。优先使用Accessibility ACTION_LONG_CLICK，失败时按策略降级到Gesture long press或Shizuku。",
+		Description:  "长按Android UI目标。节点目标使用snapshotId和nodeId；视觉目标使用text或description并传target.displayId。优先使用Accessibility ACTION_LONG_CLICK，失败时按策略降级到Gesture long press或Shizuku。",
 		InputSchema:  inputSchema,
 		OutputSchema: outputSchema,
 		Permissions: []capability.PermissionRequirement{
@@ -621,6 +623,7 @@ func buildVisualLocateTool(runtime capability.RuntimeBinding) capability.ToolDef
 		"type": "object",
 		"additionalProperties": false,
 		"properties": {
+			"displayId": {"type": "integer", "minimum": 0, "maximum": 256},
 			"description": {"type": "string"},
 			"text": {"type": "string"},
 			"role": {"type": "string"},
@@ -657,7 +660,7 @@ func buildVisualLocateTool(runtime capability.RuntimeBinding) capability.ToolDef
 		ModelName:    "android_interaction_visual_locate",
 		Source:       capability.ToolSourceBuiltin,
 		Name:         "Interaction Visual Locate",
-		Description:  "通过截图和Image Intelligence定位Android UI目标。返回候选列表，不执行点击。",
+		Description:  "通过指定 displayId 的截图和Image Intelligence定位Android UI目标。返回候选列表，不执行点击。",
 		InputSchema:  inputSchema,
 		OutputSchema: outputSchema,
 		Permissions: []capability.PermissionRequirement{
@@ -703,6 +706,7 @@ func buildVisualClickTool(runtime capability.RuntimeBinding) capability.ToolDefi
 		"type": "object",
 		"additionalProperties": false,
 		"properties": {
+			"displayId": {"type": "integer", "minimum": 0, "maximum": 256},
 			"description": {"type": "string"},
 			"text": {"type": "string"},
 			"role": {"type": "string"},
@@ -730,7 +734,7 @@ func buildVisualClickTool(runtime capability.RuntimeBinding) capability.ToolDefi
 		ModelName:    "android_interaction_visual_click",
 		Source:       capability.ToolSourceBuiltin,
 		Name:         "Interaction Visual Click",
-		Description:  "通过截图和Image Intelligence定位并点击Android UI目标。先visual_locate再coordinate click。",
+		Description:  "通过指定 displayId 的截图和Image Intelligence定位并点击Android UI目标。先visual_locate再coordinate click。",
 		InputSchema:  inputSchema,
 		OutputSchema: outputSchema,
 		Permissions: []capability.PermissionRequirement{
@@ -881,7 +885,7 @@ func buildGestureTool(runtime capability.RuntimeBinding) capability.ToolDefiniti
 		"required":["strokes"],
 		"additionalProperties":false,
 		"properties":{
-			"displayId":{"type":"integer","minimum":0,"maximum":16},
+			"displayId":{"type":"integer","minimum":0,"maximum":256},
 			"strokes":{
 				"type":"array",
 				"minItems":1,
@@ -953,7 +957,7 @@ func buildGestureTool(runtime capability.RuntimeBinding) capability.ToolDefiniti
 }
 
 func buildScreenshotTool(runtime capability.RuntimeBinding) capability.ToolDefinition {
-	inputSchema := json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"displayId":{"type":"integer","minimum":0,"maximum":16}}}`)
+	inputSchema := json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"displayId":{"type":"integer","minimum":0,"maximum":256}}}`)
 	outputSchema := json.RawMessage(`{"type":"object","properties":{"success":{"type":"boolean"},"imageBase64":{"type":"string"},"mimeType":{"type":"string"},"width":{"type":"integer"},"height":{"type":"integer"}}}`)
 	return capability.ToolDefinition{
 		ID:           "android.interaction.screenshot",

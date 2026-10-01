@@ -30,6 +30,8 @@ func registerAndroidUIAgentTool(ctx context.Context, registry *capability.ToolRe
 				"maxSteps":{"type":"integer","minimum":1,"maximum":30,"default":12},
 				"timeoutMs":{"type":"integer","minimum":5000,"maximum":180000,"default":90000},
 				"allowedApps":{"type":"array","maxItems":32,"items":{"type":"string","minLength":1,"maxLength":255}},
+				"displayId":{"type":"integer","minimum":0,"maximum":256,"default":0},
+				"ref":{"type":"string","minLength":1,"maxLength":255},
 				"allowAdbFallback":{"type":"boolean","default":false},
 				"allowRootFallback":{"type":"boolean","default":false}
 			}
@@ -53,6 +55,7 @@ func registerAndroidUIAgentTool(ctx context.Context, registry *capability.ToolRe
 			{Capability: androidinteraction.PermissionInteractionGesture, Risk: "medium"},
 			{Capability: "android.interaction.global", Risk: "medium"},
 			{Capability: "android.app.launch", Risk: "medium"},
+			{Capability: "android.virtual_display.manage", Risk: "medium"},
 		},
 		RiskLevel:      capability.RiskHigh,
 		SideEffect:     capability.SideEffectWrite,

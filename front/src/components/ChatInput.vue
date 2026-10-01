@@ -691,7 +691,6 @@ SPDX-License-Identifier: AGPL-3.0-only
             <el-button
               v-if="!voiceMode || generating"
               :type="generating ? 'danger' : 'primary'"
-              :icon="generating ? CloseBold : Promotion"
               circle
               size="small"
               :disabled="
@@ -708,7 +707,10 @@ SPDX-License-Identifier: AGPL-3.0-only
               "
               @click="generating ? $emit('stop') : handleSendClick()"
               :title="generating ? '停止生成' : '发送 (Enter)'"
-            />
+            >
+              <span v-if="generating" class="composer-stop-square"></span>
+              <el-icon v-else class="composer-send-arrow"><Top /></el-icon>
+            </el-button>
           </div>
           </div>
 
@@ -730,8 +732,8 @@ import {
   Microphone,
   Picture,
   Plus,
-  Promotion,
   Search,
+  Top,
   VideoCamera,
   Document,
   FolderOpened,
@@ -2721,6 +2723,16 @@ defineExpose({ focus, setText, clear: clearText });
 .add-btn, .voice-mode-toggle {
   width: 30px;
   height: 30px;
+}
+.composer-stop-square {
+  width: 12px;
+  height: 12px;
+  display: block;
+  border-radius: 2px;
+  background: currentColor;
+}
+.composer-send-arrow {
+  font-size: 18px;
 }
 :deep(.el-button--small) {
   min-width: 32px !important;

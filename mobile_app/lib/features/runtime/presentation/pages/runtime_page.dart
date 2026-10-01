@@ -125,14 +125,20 @@ class _RuntimePageState extends ConsumerState<RuntimePage> {
           _showError(stopResult.error!.message);
           return;
         }
-        for (var attempt = 0; attempt < 80; attempt++) {
+        var stopSettled = false;
+        for (var attempt = 0; attempt < 160; attempt++) {
           await Future<void>.delayed(const Duration(milliseconds: 250));
           if (!mounted) return;
           final state = ref.read(runtimeStatusCurrentProvider).runtimeState;
           if (state == RuntimeBridgeState.stopped ||
               state == RuntimeBridgeState.failed) {
+            stopSettled = true;
             break;
           }
+        }
+        if (!stopSettled) {
+          _showError('运行环境停止超时，请稍后重试');
+          return;
         }
       }
 

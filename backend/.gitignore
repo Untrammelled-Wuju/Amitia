@@ -2,6 +2,7 @@ server_linux_arm64
 server_linux_amd64
 server_windows_amd64.exe
 server.exe
+server.new.exe
 server
 server_old.exe.bak
 amitia-ext.exe

@@ -3,9 +3,11 @@ import 'dart:async';
 import 'package:amitia_app/core/backend_transport/backend_service_api.dart';
 import 'package:amitia_app/core/models/conversation.dart';
 import 'package:amitia_app/core/services/chat_service.dart';
+import 'package:amitia_app/core/settings/chat_permission_preferences.dart';
 import 'package:amitia_app/features/chat/runtime/conversation_runtime_controller.dart';
 import 'package:amitia_app/shared/models/models.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class _FakeBackendApi extends Fake implements BackendServiceApi {}
 
@@ -201,6 +203,31 @@ void main() {
     expect(controller.conversationId, 'conversation-1');
     expect(controller.messages, isEmpty);
     expect(controller.activeTurnId, isEmpty);
+
+    controller.dispose();
+    await events.close();
+  });
+
+  test('新草稿恢复持久化的权限模式', () async {
+    SharedPreferences.setMockInitialValues(<String, Object>{
+      chatPermissionModeStorageKey: chatPermissionFullAccess,
+    });
+    final preferences = ChatPermissionPreferencesNotifier();
+    await preferences.init();
+    final events = StreamController<ChatStreamEvent>.broadcast();
+    final service = _FakeChatService(events);
+    final controller = ConversationRuntimeController(
+      service,
+      permissionPreferences: preferences,
+    );
+
+    expect(controller.permissionMode, chatPermissionFullAccess);
+
+    await controller.updatePermissionMode(chatPermissionRequestApproval);
+    controller.startDraft();
+
+    expect(controller.permissionMode, chatPermissionRequestApproval);
+    expect(preferences.state, chatPermissionRequestApproval);
 
     controller.dispose();
     await events.close();

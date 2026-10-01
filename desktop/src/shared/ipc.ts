@@ -15,6 +15,7 @@ export const IPC_CHANNELS = {
   openPath: "amitia:path:open",
   selectExtensionPackage: "amitia:extension-package:select-file",
   saveExtensionPackage: "amitia:extension-package:save",
+  saveConversationAttachment: "amitia:conversation-attachment:save",
   getAutoLaunch: "amitia:auto-launch:get",
   setAutoLaunch: "amitia:auto-launch:set",
   autoLaunchChanged: "amitia:auto-launch:changed",

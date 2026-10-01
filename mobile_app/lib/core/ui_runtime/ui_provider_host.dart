@@ -5,6 +5,9 @@ import 'ui_provider.dart';
 import 'ui_runtime_controller.dart';
 import 'renderers/schema_provider_host.dart';
 import 'renderers/sandbox_web_provider_host.dart';
+import '../../app/theme/design_tokens.dart';
+import '../../app/theme/app_text_scaler.dart';
+import '../widgets/amitia_visual_scope.dart';
 
 class UIProviderHost extends ConsumerStatefulWidget {
   const UIProviderHost({
@@ -98,6 +101,89 @@ class _UIProviderHostState extends ConsumerState<UIProviderHost> {
 
   @override
   Widget build(BuildContext context) {
+    final surface = _buildSurface(context);
+    if (widget.capability != UICapability.conversationComposer) return surface;
+    final theme = Theme.of(context);
+    final typography = context.uiTypography;
+    const readable = AmitiaTypographyTokens.readable();
+    const compact = AmitiaTypographyTokens();
+    double original(double value, double next, double previous) =>
+        value == next ? previous : value;
+    final preserved = typography.copyWith(
+      pageTitleSize: original(
+        typography.pageTitleSize,
+        readable.pageTitleSize,
+        compact.pageTitleSize,
+      ),
+      pageLargeTitleSize: original(
+        typography.pageLargeTitleSize,
+        readable.pageLargeTitleSize,
+        compact.pageLargeTitleSize,
+      ),
+      sectionTitleSize: original(
+        typography.sectionTitleSize,
+        readable.sectionTitleSize,
+        compact.sectionTitleSize,
+      ),
+      cardTitleSize: original(
+        typography.cardTitleSize,
+        readable.cardTitleSize,
+        compact.cardTitleSize,
+      ),
+      bodySize: original(
+        typography.bodySize,
+        readable.bodySize,
+        compact.bodySize,
+      ),
+      bodySmallSize: original(
+        typography.bodySmallSize,
+        readable.bodySmallSize,
+        compact.bodySmallSize,
+      ),
+      captionSize: original(
+        typography.captionSize,
+        readable.captionSize,
+        compact.captionSize,
+      ),
+      labelSize: original(
+        typography.labelSize,
+        readable.labelSize,
+        compact.labelSize,
+      ),
+      statusLabelSize: original(
+        typography.statusLabelSize,
+        readable.statusLabelSize,
+        compact.statusLabelSize,
+      ),
+      buttonSize: original(
+        typography.buttonSize,
+        readable.buttonSize,
+        compact.buttonSize,
+      ),
+    );
+    return AmitiaVisualScope(
+      preserveComposer: true,
+      child: Theme(
+        data: theme.copyWith(
+          extensions: [
+            for (final extension in theme.extensions.values)
+              if (extension is! AmitiaTypographyTokens) extension,
+            preserved,
+          ],
+        ),
+        child: MediaQuery(
+          data: MediaQuery.of(context).copyWith(
+            textScaler: MediaQuery.textScalerOf(context) is AppTextScaler
+                ? (MediaQuery.textScalerOf(context) as AppTextScaler).composer
+                : MediaQuery.textScalerOf(context),
+          ),
+          child: surface,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSurface(BuildContext context) {
     final snapshot = ref.watch(uiRuntimeProvider).valueOrNull;
     final chain =
         snapshot?.fallbackChain(

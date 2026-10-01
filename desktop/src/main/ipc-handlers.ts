@@ -1,7 +1,18 @@
-import { app, BrowserWindow, clipboard, dialog, ipcMain, shell } from "electron";
+import {
+  app,
+  BrowserWindow,
+  clipboard,
+  dialog,
+  ipcMain,
+  net,
+  shell,
+} from "electron";
 import { promises as fs } from "node:fs";
+import { createWriteStream } from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
+import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
 import { IPC_CHANNELS } from "../shared/ipc";
 import type { DeploymentModeConfig } from "../shared/types";
 import { ConfigStore } from "./config-store";
@@ -256,6 +267,92 @@ export function registerIpcHandlers(
       await fs.mkdir(tempRoot, { recursive: true });
       try {
         await fs.writeFile(tempFile, content, { mode: 0o600 });
+        await fs.copyFile(tempFile, result.filePath);
+        return { saved: true, fileName: path.basename(result.filePath) };
+      } finally {
+        await fs.rm(tempFile, { force: true });
+      }
+    },
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.saveConversationAttachment,
+    async (
+      event,
+      request: {
+        url?: unknown;
+        suggestedName?: unknown;
+        headers?: unknown;
+      },
+    ) => {
+      if (
+        !request ||
+        typeof request.url !== "string" ||
+        typeof request.suggestedName !== "string"
+      ) {
+        throw new Error("附件保存参数无效");
+      }
+      const targetUrl = new URL(request.url);
+      if (!["http:", "https:"].includes(targetUrl.protocol)) {
+        throw new Error("附件下载地址无效");
+      }
+      const suggestedName =
+        path
+          .basename(request.suggestedName)
+          .replace(/[\u0000-\u001f<>:"/\\|?*]/g, "-")
+          .trim()
+          .slice(0, 180) || "attachment";
+      const requestHeaders: Record<string, string> = {};
+      if (request.headers && typeof request.headers === "object") {
+        for (const [key, value] of Object.entries(
+          request.headers as Record<string, unknown>,
+        )) {
+          if (
+            typeof value !== "string" ||
+            !/^(authorization|x-amitia-|x-device-timezone|content-type|range)$/i.test(
+              key,
+            )
+          ) {
+            continue;
+          }
+          requestHeaders[key] = value;
+        }
+      }
+      const window = BrowserWindow.fromWebContents(event.sender);
+      const options = {
+        defaultPath: suggestedName,
+        filters: [
+          {
+            name: "附件",
+            extensions: [
+              path.extname(suggestedName).replace(/^\./, "") || "*",
+            ],
+          },
+        ],
+      };
+      const result = window
+        ? await dialog.showSaveDialog(window, options)
+        : await dialog.showSaveDialog(options);
+      if (result.canceled || !result.filePath) return { saved: false };
+
+      const response = await net.fetch(targetUrl.toString(), {
+        method: "GET",
+        headers: requestHeaders,
+      });
+      if (!response.ok || !response.body) {
+        throw new Error(`附件下载失败 (${response.status})`);
+      }
+      const tempRoot = path.join(
+        app.getPath("temp"),
+        "amitia-conversation-attachments",
+      );
+      const tempFile = path.join(tempRoot, randomUUID());
+      await fs.mkdir(tempRoot, { recursive: true });
+      try {
+        await pipeline(
+          Readable.fromWeb(response.body as never),
+          createWriteStream(tempFile, { mode: 0o600 }),
+        );
         await fs.copyFile(tempFile, result.filePath);
         return { saved: true, fileName: path.basename(result.filePath) };
       } finally {

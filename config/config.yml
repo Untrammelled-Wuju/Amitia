@@ -27,7 +27,8 @@ app:
 chat:
   eventReplayRingSize: 4096
   contextWindowMaxRounds: 20
-  agentTurnTimeoutSeconds: 1800
+  agentTurnTimeoutSeconds: 0
+  agentToolRepeatLimit: 0
   agentMaxParallelTools: 4
   agentMaxParallelTurns: 16
 
@@ -76,7 +77,7 @@ providers:
       password: ""
       dataPath: "data/graph.db"
   search:
-    enabled: false
+    enabled: true
     defaultProvider: "native"
     defaultLimit: 8
     maxLimit: 20

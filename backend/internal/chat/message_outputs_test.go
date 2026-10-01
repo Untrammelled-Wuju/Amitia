@@ -3,6 +3,8 @@ package chat
 import (
 	"context"
 	"testing"
+
+	"github.com/u-ai/backend/internal/artifact"
 )
 
 type fixedMessageOutputPlanner struct {
@@ -13,6 +15,15 @@ type fixedMessageOutputPlanner struct {
 
 func (p fixedMessageOutputPlanner) PlanMessageOutputs(context.Context, SkillScope, *MessageOutputPlanningEvent) ([]MessageOutput, error) {
 	return p.outputs, p.err
+}
+
+type fixedMessageArtifactImporter struct {
+	result artifact.Artifact
+	err    error
+}
+
+func (i fixedMessageArtifactImporter) ImportURL(context.Context, artifact.ImportURLRequest) (artifact.Artifact, error) {
+	return i.result, i.err
 }
 
 func TestCommitInteractionAppliesGenericMessageOutputs(t *testing.T) {
@@ -57,6 +68,83 @@ func TestCommitInteractionAppliesGenericMessageOutputs(t *testing.T) {
 	}
 	if image.MsgType != "image" || image.ExtensionType != "media-card" || image.ImageUrl == "" || image.OriginalAsset == "" || image.MediaWidth != 320 {
 		t.Fatalf("unexpected image message: %#v", image)
+	}
+}
+
+func TestCommitInteractionAppliesMediaToolOutputs(t *testing.T) {
+	db, svc, convID := setupCommitCoordinatorTest(t, false)
+	result, err := svc.commitInteraction(t.Context(), messageCommitPlan{
+		Request:       &ProcessMessageRequest{CharacterID: "char-commit", ConversationID: convID, Channel: "web", Source: "manual", RequestID: "req-media-output"},
+		Conversation:  convID,
+		Character:     "char-commit",
+		UserMessageID: "user-commit",
+		Reply:         "图片给你",
+		Source:        "manual",
+		TurnItems: []AssistantTurnItem{
+			{
+				ItemType:   assistantTurnItemToolResult,
+				Status:     assistantTurnStatusCompleted,
+				ToolName:   "media_image_generate",
+				ResultJSON: `{"messageOutputs":[{"outputId":"media.image.generate","placement":"after_text","part":{"type":"image","url":"amitia://artifacts/art_generated","mimeType":"image/png","altText":"生成图片","width":1024,"height":1024}}]}`,
+			},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.MessagePlan == nil || len(result.MessagePlan.Items) != 2 {
+		t.Fatalf("expected text plus generated image output, got %#v", result.MessagePlan)
+	}
+	var image Message
+	if err := db.Where("id = ?", result.MessagePlan.Items[1].MessageID).Take(&image).Error; err != nil {
+		t.Fatal(err)
+	}
+	if image.MsgType != "image" || image.ImageUrl != "amitia://artifacts/art_generated" || image.MediaWidth != 1024 {
+		t.Fatalf("unexpected generated image message: %#v", image)
+	}
+}
+
+func TestCommitInteractionAppliesImageSearchOutputs(t *testing.T) {
+	db, svc, convID := setupCommitCoordinatorTest(t, false)
+	svc.artifactImporter = fixedMessageArtifactImporter{result: artifact.Artifact{
+		ID:        artifact.ID("art_web_image"),
+		Kind:      artifact.KindImage,
+		MIMEType:  "image/jpeg",
+		Width:     640,
+		Height:    480,
+		Status:    artifact.StatusReady,
+		Source:    artifact.SourceToolOutput,
+		Filename:  "cat.jpg",
+		Extension: ".jpg",
+	}}
+	result, err := svc.commitInteraction(t.Context(), messageCommitPlan{
+		Request:       &ProcessMessageRequest{CharacterID: "char-commit", SpaceID: "user:web", ConversationID: convID, Channel: "web", Source: "manual", RequestID: "req-image-search"},
+		Conversation:  convID,
+		Character:     "char-commit",
+		UserMessageID: "user-commit",
+		Reply:         "找到图片了",
+		Source:        "manual",
+		TurnItems: []AssistantTurnItem{
+			{
+				ItemType:   assistantTurnItemToolResult,
+				Status:     assistantTurnStatusCompleted,
+				ToolName:   "web_run",
+				ResultJSON: `{"search":[{"kind":"image","title":"Cat","url":"https://example.com/cat","media_url":"https://cdn.example.com/cat.jpg","width":640,"height":480}]}`,
+			},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.MessagePlan == nil || len(result.MessagePlan.Items) != 2 {
+		t.Fatalf("expected text plus search image output, got %#v", result.MessagePlan)
+	}
+	var image Message
+	if err := db.Where("id = ?", result.MessagePlan.Items[1].MessageID).Take(&image).Error; err != nil {
+		t.Fatal(err)
+	}
+	if image.MsgType != "image" || image.ImageUrl != "amitia://artifacts/art_web_image" || image.OriginalAsset != "amitia://artifacts/art_web_image" || image.FallbackAsset != "https://cdn.example.com/cat.jpg" || image.MediaWidth != 640 {
+		t.Fatalf("unexpected search image message: %#v", image)
 	}
 }
 

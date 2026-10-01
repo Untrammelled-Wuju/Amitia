@@ -66,7 +66,14 @@ describe("AssistantTurnTimeline", () => {
     expect(wrapper.find(".turn-tool-line").exists()).toBe(false);
     await wrapper.find(".turn-tool-stream-head").trigger("click");
     expect(wrapper.find(".turn-tool-line").exists()).toBe(true);
-    expect(wrapper.find(".turn-tool-result").exists()).toBe(true);
+    expect(wrapper.find(".turn-tool-result").exists()).toBe(false);
+    expect(wrapper.find(".turn-tool-details").exists()).toBe(false);
+
+    await wrapper.find(".turn-tool-expand").trigger("click");
+    expect(wrapper.find(".turn-tool-details").exists()).toBe(true);
+    expect(wrapper.text()).toContain("调用工具");
+    expect(wrapper.text()).toContain("调用参数");
+    expect(wrapper.text()).toContain("调用结果");
   });
 
   it("expands only the clicked tool stream", async () => {
@@ -160,5 +167,186 @@ describe("AssistantTurnTimeline", () => {
     ]);
     expect(streams[0].find(".turn-tool-stream-body").exists()).toBe(false);
     expect(streams[1].find(".turn-tool-stream-body").exists()).toBe(true);
+  });
+
+  it("counts failed tools once per call", () => {
+    const wrapper = mount(AssistantTurnTimeline, {
+      props: {
+        turn: {
+          id: "turn-3",
+          conversationId: "conv-1",
+          sequence: 3,
+          status: "completed",
+          items: [
+            {
+              id: "call-1",
+              turnId: "turn-3",
+              conversationId: "conv-1",
+              sequence: 1,
+              type: "tool_call",
+              status: "completed",
+              callId: "call-1",
+              toolName: "read_file",
+            },
+            {
+              id: "call-2",
+              turnId: "turn-3",
+              conversationId: "conv-1",
+              sequence: 2,
+              type: "tool_call",
+              status: "failed",
+              callId: "call-2",
+              toolName: "write_file",
+            },
+            {
+              id: "call-3",
+              turnId: "turn-3",
+              conversationId: "conv-1",
+              sequence: 3,
+              type: "tool_call",
+              status: "completed",
+              callId: "call-3",
+              toolName: "calculate",
+            },
+            {
+              id: "result-1",
+              turnId: "turn-3",
+              conversationId: "conv-1",
+              sequence: 4,
+              type: "tool_result",
+              status: "completed",
+              callId: "call-1",
+              toolName: "read_file",
+            },
+            {
+              id: "result-2",
+              turnId: "turn-3",
+              conversationId: "conv-1",
+              sequence: 5,
+              type: "tool_result",
+              status: "failed",
+              callId: "call-2",
+              toolName: "write_file",
+            },
+            {
+              id: "result-3",
+              turnId: "turn-3",
+              conversationId: "conv-1",
+              sequence: 6,
+              type: "tool_result",
+              status: "completed",
+              callId: "call-3",
+              toolName: "calculate",
+            },
+          ],
+        },
+      },
+    });
+
+    expect(wrapper.find(".turn-tool-stream-summary").text()).toBe("3 个工具 · 1 个失败");
+  });
+
+  it("counts completed tools once while running", () => {
+    const wrapper = mount(AssistantTurnTimeline, {
+      props: {
+        turn: {
+          id: "turn-4",
+          conversationId: "conv-1",
+          sequence: 4,
+          status: "running",
+          items: [
+            {
+              id: "call-1",
+              turnId: "turn-4",
+              conversationId: "conv-1",
+              sequence: 1,
+              type: "tool_call",
+              status: "completed",
+              callId: "call-1",
+              toolName: "read_file",
+            },
+            {
+              id: "call-2",
+              turnId: "turn-4",
+              conversationId: "conv-1",
+              sequence: 2,
+              type: "tool_call",
+              status: "running",
+              callId: "call-2",
+              toolName: "write_file",
+            },
+            {
+              id: "call-3",
+              turnId: "turn-4",
+              conversationId: "conv-1",
+              sequence: 3,
+              type: "tool_call",
+              status: "running",
+              callId: "call-3",
+              toolName: "calculate",
+            },
+            {
+              id: "result-1",
+              turnId: "turn-4",
+              conversationId: "conv-1",
+              sequence: 4,
+              type: "tool_result",
+              status: "completed",
+              callId: "call-1",
+              toolName: "read_file",
+            },
+          ],
+        },
+      },
+    });
+
+    expect(wrapper.find(".turn-tool-stream-summary").text()).toBe("执行中 · 1/3 完成");
+  });
+
+  it("deduplicates legacy results without call records", () => {
+    const wrapper = mount(AssistantTurnTimeline, {
+      props: {
+        turn: {
+          id: "turn-5",
+          conversationId: "conv-1",
+          sequence: 5,
+          status: "completed",
+          items: [
+            {
+              id: "result-1",
+              turnId: "turn-5",
+              conversationId: "conv-1",
+              sequence: 1,
+              type: "tool_result",
+              status: "completed",
+              callId: "call-1",
+              toolName: "read_file",
+            },
+            {
+              id: "result-1-copy",
+              turnId: "turn-5",
+              conversationId: "conv-1",
+              sequence: 2,
+              type: "tool_result",
+              status: "completed",
+              callId: "call-1",
+              toolName: "read_file",
+            },
+            {
+              id: "result-2",
+              turnId: "turn-5",
+              conversationId: "conv-1",
+              sequence: 3,
+              type: "tool_result",
+              status: "completed",
+              callId: "call-2",
+              toolName: "calculate",
+            },
+          ],
+        },
+      },
+    });
+
+    expect(wrapper.find(".turn-tool-stream-summary").text()).toBe("2 个工具 · 已完成");
   });
 });

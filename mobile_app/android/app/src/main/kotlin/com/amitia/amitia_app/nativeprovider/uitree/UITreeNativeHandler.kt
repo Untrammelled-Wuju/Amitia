@@ -1,6 +1,7 @@
 package com.amitia.amitia_app.nativeprovider.uitree
 
 import android.content.Context
+import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.AccessibilityServiceInfo
 import android.graphics.Rect
 import android.os.Build
@@ -13,6 +14,9 @@ import com.amitia.amitia_app.nativeprovider.model.NativeBridgeError
 import com.amitia.amitia_app.nativeprovider.model.NativeBridgeProtocol
 import com.amitia.amitia_app.nativeprovider.model.NativeBridgeRequest
 import com.amitia.amitia_app.nativeprovider.model.NativeBridgeResponse
+import com.amitia.amitia_app.virtualdisplay.host.VirtualDisplayHostError
+import com.amitia.amitia_app.virtualdisplay.host.VirtualDisplayHostManager
+import com.amitia.amitia_app.virtualdisplay.host.VirtualDisplayPermissionStore
 import org.json.JSONArray
 import org.json.JSONObject
 import java.security.MessageDigest
@@ -24,6 +28,7 @@ internal class UITreeNativeHandler(
 ) : AndroidNativeOperationHandler {
 
     private val generation = AtomicLong(0L)
+    private val virtualDisplayManager = VirtualDisplayHostManager(context.applicationContext)
 
     override val operations: Set<String> = setOf(OP_STATUS, OP_SNAPSHOT, OP_FIND, OP_GET)
 
@@ -51,7 +56,7 @@ internal class UITreeNativeHandler(
         }
 
         val service = AccessibilityServiceRegistry.current()
-        val windows = service?.windows.orEmpty()
+        val windows = service?.let { allAccessibilityWindows(it) }.orEmpty()
         return success(
             request,
             mapOf(
@@ -68,14 +73,25 @@ internal class UITreeNativeHandler(
     }
 
     private suspend fun handleSnapshot(request: NativeBridgeRequest): NativeBridgeResponse {
+        val requestedDisplayId = (request.payload["displayId"] as? Number)?.toInt()
         val providerPayload = JSONObject()
             .put("includeAllWindows", request.payload["includeAllWindows"] as? Boolean ?: true)
             .put("includeInvisible", request.payload["includeInvisible"] as? Boolean ?: false)
             .put("maxDepth", (request.payload["maxDepth"] as? Number)?.toInt() ?: DEFAULT_MAX_DEPTH)
+            .apply {
+                requestedDisplayId?.let { put("displayId", it) }
+            }
             .toString()
         AccessibilityProviderClient.snapshot(context, providerPayload)?.let { providerSnapshot ->
             val result = jsonObjectToMap(JSONObject(providerSnapshot))
-            if (result["connected"] == false) {
+            val connected = result["connected"] != false
+            val hasNodes = (result["nodes"] as? List<*>)?.isNotEmpty() == true
+            val containsRequestedDisplay = containsDisplay(result, requestedDisplayId)
+            if (connected && containsRequestedDisplay && !(requestedDisplayId != null && requestedDisplayId != 0 && !hasNodes)) {
+                generation.incrementAndGet()
+                return success(request, result)
+            }
+            if (!connected && requestedDisplayId == null) {
                 return error(
                     request,
                     "UI_TREE_ACCESSIBILITY_NOT_CONNECTED",
@@ -83,9 +99,20 @@ internal class UITreeNativeHandler(
                     "ACCESSIBILITY_NOT_CONNECTED",
                 )
             }
-            generation.incrementAndGet()
-            return success(request, result)
+            virtualDisplaySnapshot(request, requestedDisplayId)?.let { return it }
+            if (connected) {
+                generation.incrementAndGet()
+                return success(request, result)
+            }
+            return error(
+                request,
+                "UI_TREE_ACCESSIBILITY_NOT_CONNECTED",
+                result["message"]?.toString() ?: "accessibility provider is not connected",
+                "ACCESSIBILITY_NOT_CONNECTED",
+            )
         }
+
+        virtualDisplaySnapshot(request, requestedDisplayId)?.let { return it }
 
         val service = AccessibilityServiceRegistry.current()
             ?: return error(request, "UI_TREE_ACCESSIBILITY_NOT_CONNECTED", "accessibility service not connected", "ACCESSIBILITY_NOT_CONNECTED")
@@ -96,11 +123,16 @@ internal class UITreeNativeHandler(
         val snapshotGeneration = generation.incrementAndGet()
         AccessibilityNodeReferenceRegistry.beginSnapshot(snapshotGeneration)
 
-        val nativeWindows = service.windows.orEmpty()
-        val selectedWindows = if (includeAllWindows) {
+        val nativeWindows = allAccessibilityWindows(service)
+        val baseWindows = if (includeAllWindows) {
             nativeWindows
         } else {
             nativeWindows.filter { it.isActive || it.isFocused }.ifEmpty { nativeWindows.take(1) }
+        }
+        val selectedWindows = if (requestedDisplayId == null) {
+            baseWindows
+        } else {
+            baseWindows.filter { displayId(it) == requestedDisplayId }
         }
 
         val nodes = mutableListOf<MutableMap<String, Any?>>()
@@ -133,7 +165,7 @@ internal class UITreeNativeHandler(
                     break
                 }
             }
-        } else {
+        } else if (requestedDisplayId == null || requestedDisplayId == 0) {
             // Some OEMs expose rootInActiveWindow while getWindows() is empty.
             val root = service.rootInActiveWindow
             if (root != null) {
@@ -176,6 +208,45 @@ internal class UITreeNativeHandler(
                 "truncated" to truncated,
             ),
         )
+    }
+
+    private suspend fun virtualDisplaySnapshot(
+        request: NativeBridgeRequest,
+        requestedDisplayId: Int?,
+    ): NativeBridgeResponse? {
+        if (requestedDisplayId == null || requestedDisplayId == 0) return null
+        if (!VirtualDisplayPermissionStore.isEnabled(context)) return null
+        return try {
+            val result = virtualDisplayManager.execute(
+                "virtual_display.ui_tree",
+                mapOf("displayId" to requestedDisplayId),
+            )
+            generation.incrementAndGet()
+            success(request, result)
+        } catch (error: VirtualDisplayHostError) {
+            error(
+                request,
+                error.code,
+                error.message ?: "virtual display ui tree fallback failed",
+                "UI_TREE_VIRTUAL_DISPLAY_FAILED",
+            )
+        } catch (error: Throwable) {
+            error(
+                request,
+                "UI_TREE_VIRTUAL_DISPLAY_FAILED",
+                error.message ?: "virtual display ui tree fallback failed",
+                "UI_TREE_VIRTUAL_DISPLAY_FAILED",
+            )
+        }
+    }
+
+    private fun containsDisplay(result: Map<String, Any?>, requestedDisplayId: Int?): Boolean {
+        if (requestedDisplayId == null || requestedDisplayId == 0) return true
+        val windows = result["windows"] as? List<*> ?: return false
+        return windows.any { window ->
+            val item = window as? Map<*, *> ?: return@any false
+            (item["displayId"] as? Number)?.toInt() == requestedDisplayId
+        }
     }
 
     /** Returns false when node/depth limits require truncation. */
@@ -246,6 +317,22 @@ internal class UITreeNativeHandler(
 
     private fun displayId(window: AccessibilityWindowInfo): Int =
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) window.displayId else 0
+
+    private fun allAccessibilityWindows(service: AccessibilityService): List<AccessibilityWindowInfo> {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+            return service.windows.orEmpty()
+        }
+        return try {
+            val value = service.windowsOnAllDisplays
+            val result = mutableListOf<AccessibilityWindowInfo>()
+            for (index in 0 until value.size()) {
+                value.valueAt(index)?.let { result.addAll(it) }
+            }
+            if (result.isNotEmpty()) result else service.windows.orEmpty()
+        } catch (_: Throwable) {
+            service.windows.orEmpty()
+        }
+    }
 
     private fun mapWindowType(type: Int): String = when (type) {
         AccessibilityWindowInfo.TYPE_APPLICATION -> "application"

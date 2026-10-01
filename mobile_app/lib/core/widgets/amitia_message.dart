@@ -1321,6 +1321,8 @@ const List<String> _codeLanguages = [
 
 class AmitiaChatInput extends StatefulWidget {
   final ValueChanged<String> onSend;
+  final FutureOr<void> Function()? onStop;
+  final bool generating;
   final TextEditingController? controller;
   final String? recipientName;
   final Widget? workspaceSelector;
@@ -1360,6 +1362,8 @@ class AmitiaChatInput extends StatefulWidget {
   const AmitiaChatInput({
     super.key,
     required this.onSend,
+    this.onStop,
+    this.generating = false,
     this.controller,
     this.recipientName,
     this.workspaceSelector,
@@ -2287,6 +2291,32 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
                                     Icons.arrow_upward_rounded,
                                     size: 18,
                                     color: context.surfacePrimary,
+                                  ),
+                                ),
+                              ),
+                            )
+                          else if (widget.generating)
+                            GestureDetector(
+                              behavior: HitTestBehavior.opaque,
+                              onTap: () => widget.onStop?.call(),
+                              child: Tooltip(
+                                message: '停止生成',
+                                child: Container(
+                                  key: const ValueKey('composer-stop-button'),
+                                  width: 31,
+                                  height: 31,
+                                  decoration: BoxDecoration(
+                                    color: context.error,
+                                    shape: BoxShape.circle,
+                                  ),
+                                  alignment: Alignment.center,
+                                  child: Container(
+                                    width: 11,
+                                    height: 11,
+                                    decoration: BoxDecoration(
+                                      color: context.surfacePrimary,
+                                      borderRadius: BorderRadius.circular(2),
+                                    ),
                                   ),
                                 ),
                               ),

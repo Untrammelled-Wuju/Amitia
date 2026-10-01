@@ -19,6 +19,9 @@ import com.amitia.amitia_app.nativeprovider.devicecontrol.DeviceInteractionAvail
 import com.amitia.amitia_app.nativeprovider.devicecontrol.DeviceInteractionState
 import com.amitia.amitia_app.nativeprovider.devicecontrol.DeviceInteractionStateReader
 import com.amitia.amitia_app.nativeprovider.uitree.AccessibilityNodeReferenceRegistry
+import com.amitia.amitia_app.virtualdisplay.host.VirtualDisplayHostError
+import com.amitia.amitia_app.virtualdisplay.host.VirtualDisplayHostManager
+import com.amitia.amitia_app.virtualdisplay.host.VirtualDisplayPermissionStore
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.atomic.AtomicLong
@@ -32,6 +35,7 @@ internal class InteractionNativeHandler(
 
     private val gestureGeneration = AtomicLong(0L)
     private val interactionStateReader = DeviceInteractionStateReader(context)
+    private val virtualDisplayManager = VirtualDisplayHostManager(context.applicationContext)
 
     override val operations: Set<String> = setOf(
         OP_STATUS,
@@ -99,10 +103,19 @@ internal class InteractionNativeHandler(
     }
 
     private suspend fun handleClick(request: NativeBridgeRequest): NativeBridgeResponse {
+        val displayId = (request.payload["displayId"] as? Number)?.toInt() ?: 0
         val x = (request.payload["x"] as? Number)?.toInt() ?: -1
         val y = (request.payload["y"] as? Number)?.toInt() ?: -1
         if (x < 0 || y < 0) {
             return invalidCoordinates(request, "click", x, y)
+        }
+        if (displayId != 0) {
+            return virtualDisplayAction(
+                request,
+                "virtual_display.tap",
+                mapOf("displayId" to displayId, "x" to x, "y" to y),
+                "click",
+            )
         }
         providerAction(AccessibilityProviderClient.click(context, x, y), request, "click")?.let { return it }
 
@@ -142,12 +155,28 @@ internal class InteractionNativeHandler(
     }
 
     private suspend fun handleLongClick(request: NativeBridgeRequest): NativeBridgeResponse {
+        val displayId = (request.payload["displayId"] as? Number)?.toInt() ?: 0
         val x = (request.payload["x"] as? Number)?.toInt() ?: -1
         val y = (request.payload["y"] as? Number)?.toInt() ?: -1
         if (x < 0 || y < 0) {
             return invalidCoordinates(request, "long_click", x, y)
         }
         val durationMs = (request.payload["durationMs"] as? Number)?.toLong() ?: 600L
+        if (displayId != 0) {
+            return virtualDisplayAction(
+                request,
+                "virtual_display.swipe",
+                mapOf(
+                    "displayId" to displayId,
+                    "startX" to x,
+                    "startY" to y,
+                    "endX" to x,
+                    "endY" to y,
+                    "durationMs" to durationMs.coerceIn(300L, 3000L),
+                ),
+                "long_click",
+            )
+        }
         providerAction(
             AccessibilityProviderClient.longPress(context, x, y, durationMs.coerceIn(300L, 3000L)),
             request,
@@ -345,6 +374,7 @@ internal class InteractionNativeHandler(
     }
 
     private suspend fun handleSwipe(request: NativeBridgeRequest): NativeBridgeResponse {
+        val displayId = (request.payload["displayId"] as? Number)?.toInt() ?: 0
         val startX = (request.payload["startX"] as? Number)?.toInt() ?: -1
         val startY = (request.payload["startY"] as? Number)?.toInt() ?: -1
         val endX = (request.payload["endX"] as? Number)?.toInt() ?: -1
@@ -359,6 +389,21 @@ internal class InteractionNativeHandler(
                     code = "INTERACTION_INVALID_COORDINATES",
                     message = "invalid swipe coordinates",
                 ),
+            )
+        }
+        if (displayId != 0) {
+            return virtualDisplayAction(
+                request,
+                "virtual_display.swipe",
+                mapOf(
+                    "displayId" to displayId,
+                    "startX" to startX,
+                    "startY" to startY,
+                    "endX" to endX,
+                    "endY" to endY,
+                    "durationMs" to durationMs.coerceAtLeast(1L),
+                ),
+                "swipe",
             )
         }
         providerAction(
@@ -480,11 +525,18 @@ internal class InteractionNativeHandler(
                 ),
             )
         }
+        val args = (request.payload["args"] as? Map<*, *>)
+            ?.entries
+            ?.associate { it.key.toString() to it.value }
+            ?: emptyMap()
+        if (nativeRef.startsWith("vd:")) {
+            return handleVirtualDisplayNodeAction(request, nativeRef, action, args)
+        }
         if (AccessibilityProviderClient.isProviderReference(nativeRef)) {
             val payload = JSONObject()
                 .put("nativeRef", nativeRef)
                 .put("action", action)
-                .put("args", JSONObject(request.payload["args"] as? Map<*, *> ?: emptyMap<Any, Any>()))
+                .put("args", JSONObject(args))
                 .toString()
             providerAction(AccessibilityProviderClient.performNodeAction(context, payload), request, action)?.let { return it }
         }
@@ -502,10 +554,6 @@ internal class InteractionNativeHandler(
                 ),
             )
 
-        val args = (request.payload["args"] as? Map<*, *>)
-            ?.entries
-            ?.associate { it.key.toString() to it.value }
-            ?: emptyMap()
         val actionResult = performLocalNodeAction(node, action, args)
         gestureGeneration.incrementAndGet()
         return NativeBridgeResponse(
@@ -522,6 +570,208 @@ internal class InteractionNativeHandler(
                 message = actionResult.message,
             ),
         )
+    }
+
+    private suspend fun handleVirtualDisplayNodeAction(
+        request: NativeBridgeRequest,
+        nativeRef: String,
+        action: String,
+        args: Map<String, Any?>,
+    ): NativeBridgeResponse {
+        val target = parseVirtualNodeReference(nativeRef)
+            ?: return virtualFailure(
+                request,
+                action,
+                "INTERACTION_NODE_STALE",
+                "virtual display node reference is invalid",
+            )
+        val centerX = (target.left + target.right) / 2
+        val centerY = (target.top + target.bottom) / 2
+        return try {
+            when (action.trim().lowercase()) {
+                "click", "focus", "select" -> executeVirtualDisplay(
+                    "virtual_display.tap",
+                    mapOf(
+                        "displayId" to target.displayId,
+                        "x" to centerX,
+                        "y" to centerY,
+                    ),
+                )
+                "long_click" -> executeVirtualDisplay(
+                    "virtual_display.swipe",
+                    mapOf(
+                        "displayId" to target.displayId,
+                        "startX" to centerX,
+                        "startY" to centerY,
+                        "endX" to centerX,
+                        "endY" to centerY,
+                        "durationMs" to ((args["durationMs"] as? Number)?.toLong() ?: 700L).coerceIn(300L, 3000L),
+                    ),
+                )
+                "set_text" -> {
+                    executeVirtualDisplay(
+                        "virtual_display.tap",
+                        mapOf(
+                            "displayId" to target.displayId,
+                            "x" to centerX,
+                            "y" to centerY,
+                        ),
+                    )
+                    val text = args["text"]?.toString().orEmpty()
+                    if (text.isEmpty()) {
+                        executeVirtualDisplay(
+                            "virtual_display.clear_text",
+                            mapOf("displayId" to target.displayId),
+                        )
+                    } else {
+                        executeVirtualDisplay(
+                            "virtual_display.text",
+                            mapOf(
+                                "displayId" to target.displayId,
+                                "text" to text,
+                                "replace" to true,
+                            ),
+                        )
+                    }
+                }
+                "clear_text" -> {
+                    executeVirtualDisplay(
+                        "virtual_display.tap",
+                        mapOf(
+                            "displayId" to target.displayId,
+                            "x" to centerX,
+                            "y" to centerY,
+                        ),
+                    )
+                    executeVirtualDisplay(
+                        "virtual_display.clear_text",
+                        mapOf("displayId" to target.displayId),
+                    )
+                }
+                "scroll_forward", "scroll_down" -> executeVirtualDisplay(
+                    "virtual_display.swipe",
+                    mapOf(
+                        "displayId" to target.displayId,
+                        "startX" to centerX,
+                        "startY" to (target.top + target.height() * 3 / 4),
+                        "endX" to centerX,
+                        "endY" to (target.top + target.height() / 4),
+                        "durationMs" to 300L,
+                    ),
+                )
+                "scroll_backward", "scroll_up" -> executeVirtualDisplay(
+                    "virtual_display.swipe",
+                    mapOf(
+                        "displayId" to target.displayId,
+                        "startX" to centerX,
+                        "startY" to (target.top + target.height() / 4),
+                        "endX" to centerX,
+                        "endY" to (target.top + target.height() * 3 / 4),
+                        "durationMs" to 300L,
+                    ),
+                )
+                else -> return virtualFailure(
+                    request,
+                    action,
+                    "INTERACTION_ACTION_UNSUPPORTED",
+                    "unsupported virtual display node action: $action",
+                )
+            }
+            virtualSuccess(request, action)
+        } catch (error: VirtualDisplayHostError) {
+            virtualFailure(request, action, error.code, error.message ?: "virtual display node action failed")
+        } catch (error: Throwable) {
+            virtualFailure(
+                request,
+                action,
+                "INTERACTION_ACTION_FAILED",
+                error.message ?: "virtual display node action failed",
+            )
+        }
+    }
+
+    private suspend fun virtualDisplayAction(
+        request: NativeBridgeRequest,
+        operation: String,
+        payload: Map<String, Any?>,
+        action: String,
+    ): NativeBridgeResponse {
+        return try {
+            executeVirtualDisplay(operation, payload)
+            virtualSuccess(request, action)
+        } catch (error: VirtualDisplayHostError) {
+            virtualFailure(request, action, error.code, error.message ?: "virtual display action failed")
+        } catch (error: Throwable) {
+            virtualFailure(
+                request,
+                action,
+                "INTERACTION_ACTION_FAILED",
+                error.message ?: "virtual display action failed",
+            )
+        }
+    }
+
+    private suspend fun executeVirtualDisplay(operation: String, payload: Map<String, Any?>): Map<String, Any?> {
+        if (!VirtualDisplayPermissionStore.isEnabled(context)) {
+            throw VirtualDisplayHostError(
+                "VIRTUAL_DISPLAY_PERMISSION_REQUIRED",
+                "virtual display access is disabled",
+            )
+        }
+        val result = virtualDisplayManager.execute(operation, payload)
+        gestureGeneration.incrementAndGet()
+        return result
+    }
+
+    private fun virtualSuccess(request: NativeBridgeRequest, action: String): NativeBridgeResponse =
+        NativeBridgeResponse(
+            protocolVersion = NativeBridgeProtocol.PROTOCOL_VERSION,
+            requestId = request.requestId,
+            status = NativeBridgeProtocol.STATUS_SUCCESS,
+            result = mapOf(
+                "performed" to true,
+                "success" to true,
+                "action" to action,
+                "generation" to gestureGeneration.get(),
+            ),
+        )
+
+    private fun virtualFailure(
+        request: NativeBridgeRequest,
+        action: String,
+        code: String,
+        message: String,
+    ): NativeBridgeResponse =
+        NativeBridgeResponse(
+            protocolVersion = NativeBridgeProtocol.PROTOCOL_VERSION,
+            requestId = request.requestId,
+            status = NativeBridgeProtocol.STATUS_ERROR,
+            result = mapOf("performed" to false, "success" to false, "action" to action),
+            error = NativeBridgeError(code = code, message = message),
+        )
+
+    private fun parseVirtualNodeReference(value: String): VirtualNodeReference? {
+        val parts = value.split(':', limit = 4)
+        if (parts.size != 4 || parts[0] != "vd") return null
+        val displayId = parts[1].toIntOrNull() ?: return null
+        val bounds = parts[2].split(',').mapNotNull { it.toIntOrNull() }
+        if (bounds.size != 4) return null
+        val left = minOf(bounds[0], bounds[2])
+        val top = minOf(bounds[1], bounds[3])
+        val right = maxOf(bounds[0], bounds[2])
+        val bottom = maxOf(bounds[1], bounds[3])
+        if (right <= left || bottom <= top) return null
+        return VirtualNodeReference(displayId, left, top, right, bottom)
+    }
+
+    private data class VirtualNodeReference(
+        val displayId: Int,
+        val left: Int,
+        val top: Int,
+        val right: Int,
+        val bottom: Int,
+    ) {
+        fun height(): Int = bottom - top
     }
 
     private fun resolveGlobalAction(name: String): Pair<String, Int>? = when (name.trim().lowercase()) {
@@ -740,6 +990,54 @@ internal class InteractionNativeHandler(
 
     private suspend fun handleScreenshot(request: NativeBridgeRequest): NativeBridgeResponse {
         val displayId = (request.payload["displayId"] as? Number)?.toInt() ?: 0
+        if (displayId != 0) {
+            return try {
+                if (!VirtualDisplayPermissionStore.isEnabled(context)) {
+                    return virtualFailure(
+                        request,
+                        "screenshot",
+                        "VIRTUAL_DISPLAY_PERMISSION_REQUIRED",
+                        "virtual display access is disabled",
+                    )
+                }
+                val result = virtualDisplayManager.execute(
+                    "virtual_display.capture",
+                    mapOf(
+                        "displayId" to displayId,
+                        "format" to "jpeg",
+                        "quality" to 60,
+                        "maxWidth" to 480,
+                        "maxHeight" to 800,
+                    ),
+                )
+                NativeBridgeResponse(
+                    protocolVersion = NativeBridgeProtocol.PROTOCOL_VERSION,
+                    requestId = request.requestId,
+                    status = NativeBridgeProtocol.STATUS_SUCCESS,
+                    result = result,
+                )
+            } catch (error: VirtualDisplayHostError) {
+                NativeBridgeResponse(
+                    protocolVersion = NativeBridgeProtocol.PROTOCOL_VERSION,
+                    requestId = request.requestId,
+                    status = NativeBridgeProtocol.STATUS_ERROR,
+                    error = NativeBridgeError(
+                        code = error.code,
+                        message = error.message ?: "virtual display screenshot failed",
+                    ),
+                )
+            } catch (error: Throwable) {
+                NativeBridgeResponse(
+                    protocolVersion = NativeBridgeProtocol.PROTOCOL_VERSION,
+                    requestId = request.requestId,
+                    status = NativeBridgeProtocol.STATUS_ERROR,
+                    error = NativeBridgeError(
+                        code = "INTERACTION_SCREENSHOT_FAILED",
+                        message = error.message ?: "virtual display screenshot failed",
+                    ),
+                )
+            }
+        }
         AccessibilityProviderClient.screenshot(context, displayId)?.let { raw ->
             val result = jsonToMap(JSONObject(raw))
             if (result["success"] == true) {

@@ -13,7 +13,7 @@ class AppTheme {
       extensions: <ThemeExtension<dynamic>>[
         defaultLightColorTokens(),
         const AmitiaLayoutTokens(),
-        const AmitiaTypographyTokens(),
+        const AmitiaTypographyTokens.readable(),
         const AmitiaIconTokens(),
         const AmitiaComponentTokens(),
         const AmitiaComponentVariants(),
@@ -136,7 +136,7 @@ class AppTheme {
       extensions: <ThemeExtension<dynamic>>[
         defaultDarkColorTokens(),
         const AmitiaLayoutTokens(),
-        const AmitiaTypographyTokens(),
+        const AmitiaTypographyTokens.readable(),
         const AmitiaIconTokens(),
         const AmitiaComponentTokens(),
         const AmitiaComponentVariants(),

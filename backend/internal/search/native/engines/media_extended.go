@@ -25,6 +25,7 @@ func (e *openverseEngine) Descriptor() native.EngineDescriptor {
 		Weight:   0.7,
 		Capabilities: search.ProviderCapabilities{
 			SearchKinds: []search.SearchKind{search.SearchKindImage},
+			SafeSearch:  true,
 			Pagination:  true,
 			MaxResults:  100,
 		},
@@ -37,6 +38,9 @@ func (e *openverseEngine) Search(ctx context.Context, request search.SearchReque
 		"q":         strings.TrimSpace(request.Query),
 		"page_size": fmt.Sprintf("%d", limit),
 		"page":      fmt.Sprintf("%d", pageNumber(request.Offset, limit)),
+	}
+	if request.SafeSearch == search.SafeSearchModerate || request.SafeSearch == search.SafeSearchStrict {
+		values["mature"] = "false"
 	}
 	rawURL := endpoint("https://api.openverse.org/v1/images/", values)
 	body, status, err := e.fetcher.Get(ctx, e.Descriptor().ID, rawURL, nil)

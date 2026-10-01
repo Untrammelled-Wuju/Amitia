@@ -100,6 +100,37 @@ func TestRegister_Create_DuplicateRejected(t *testing.T) {
 	}
 }
 
+func TestRegister_DisplayOperationsAreRegistered(t *testing.T) {
+	bridge := &mockNativeBridge{}
+	provider := androidnative.NewProvider(bridge)
+	svc, err := Register(provider, bridge)
+	if err != nil {
+		t.Fatalf("Register returned error: %v", err)
+	}
+	created, err := svc.Create(context.Background(), CreateRequest{})
+	if err != nil {
+		t.Fatalf("create error: %v", err)
+	}
+	for _, operation := range []string{
+		OperationLaunch,
+		OperationCapture,
+		OperationTap,
+		OperationSwipe,
+		OperationKey,
+		OperationText,
+	} {
+		resp := provider.Execute(context.Background(), capability.AndroidBridgeRequest{
+			ProtocolVersion: 1,
+			RequestID:       "test-" + operation,
+			Operation:       operation,
+			Payload:         map[string]any{"ref": created.Display.Ref},
+		})
+		if resp.Status != "success" {
+			t.Fatalf("%s: expected success, got %s: %+v", operation, resp.Status, resp.Error)
+		}
+	}
+}
+
 func TestTools_BuildVirtualDisplayTools(t *testing.T) {
 	tools := BuildVirtualDisplayTools()
 	if len(tools) != 12 {

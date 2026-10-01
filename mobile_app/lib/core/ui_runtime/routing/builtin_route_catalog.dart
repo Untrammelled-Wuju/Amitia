@@ -106,6 +106,14 @@ import '../../../core/widgets/plugin_unavailable_page.dart';
 /// the shell, and extension supplied routes.
 List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
   GoRoute(
+    path: '/settings/category/:categoryId',
+    pageBuilder: (context, state) => slideFadePage(
+      context: context,
+      state: state,
+      child: SettingsCategoryPage(categoryId: state.pathParameters['categoryId']!),
+    ),
+  ),
+  GoRoute(
     path: '/chat',
     pageBuilder: (context, state) => chatRootPage(
       state: state,

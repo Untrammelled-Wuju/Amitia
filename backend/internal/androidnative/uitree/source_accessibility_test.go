@@ -38,12 +38,13 @@ func (b *requestIDBridge) Health(context.Context) androidnative.NativeBridgeHeal
 func TestAccessibilitySourceUsesRequestID(t *testing.T) {
 	bridge := &requestIDBridge{}
 	source := NewAccessibilitySource(bridge, DefaultPolicy())
+	displayID := 7
 
 	status := source.Status(context.Background())
 	if !status.Available {
 		t.Fatalf("expected accessibility source available, got %#v", status)
 	}
-	if _, err := source.Snapshot(context.Background(), SnapshotRequest{}); err != nil {
+	if _, err := source.Snapshot(context.Background(), SnapshotRequest{DisplayID: &displayID}); err != nil {
 		t.Fatalf("unexpected snapshot error: %v", err)
 	}
 	if len(bridge.requests) != 2 {
@@ -56,5 +57,9 @@ func TestAccessibilitySourceUsesRequestID(t *testing.T) {
 		if request.Platform != "android" {
 			t.Fatalf("request %d platform = %q, want android", index, request.Platform)
 		}
+	}
+	snapshotRequest := bridge.requests[1]
+	if snapshotRequest.Payload["displayId"] != displayID {
+		t.Fatalf("displayId = %v, want %d", snapshotRequest.Payload["displayId"], displayID)
 	}
 }

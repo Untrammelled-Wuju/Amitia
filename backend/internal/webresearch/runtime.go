@@ -329,12 +329,34 @@ func (r *Runtime) executeSearch(ctx context.Context, scope Scope, input ToolInpu
 	} else if rerankErr != nil {
 		output.Stats.SemanticRerankFailures++
 	}
+	queryKinds := make(map[string]string, len(input.SearchQuery))
+	for _, query := range input.SearchQuery {
+		queryKinds[strings.TrimSpace(query.Q)] = strings.ToLower(strings.TrimSpace(query.Kind))
+	}
 	for index, item := range fused {
 		ref, refErr := r.referenceFromSearch(ctx, scope, item, index+1)
 		if refErr != nil {
 			return refErr
 		}
-		hit := SearchHit{RefID: ref.RefID, Rank: index + 1, Title: ref.Title, URL: ref.URL, Domain: domainOf(ref.URL), Snippet: ref.Snippet, Provider: ref.Provider, Engines: append([]string(nil), ref.Engines...), PublishedAt: ref.PublishedAt, RetrievedAt: item.retrievedAt, Score: item.score, SeenCount: item.seenCount}
+		hit := SearchHit{
+			RefID:        ref.RefID,
+			Rank:         index + 1,
+			Kind:         queryKinds[strings.TrimSpace(item.query)],
+			Title:        ref.Title,
+			URL:          ref.URL,
+			Domain:       domainOf(ref.URL),
+			Snippet:      ref.Snippet,
+			Provider:     ref.Provider,
+			Engines:      append([]string(nil), ref.Engines...),
+			PublishedAt:  ref.PublishedAt,
+			RetrievedAt:  item.retrievedAt,
+			Score:        item.score,
+			SeenCount:    item.seenCount,
+			MediaURL:     item.result.Metadata.MediaURL,
+			ThumbnailURL: item.result.Metadata.ThumbnailURL,
+			Width:        item.result.Metadata.Width,
+			Height:       item.result.Metadata.Height,
+		}
 		output.Search = append(output.Search, hit)
 		_ = emitProgress(emit, Progress{Phase: "source_found", RefID: ref.RefID, Title: ref.Title, Completed: index + 1, Total: len(fused), Fraction: float64(index+1) / float64(maxInt(1, len(fused)))})
 	}

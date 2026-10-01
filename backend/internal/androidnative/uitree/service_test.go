@@ -3,7 +3,6 @@ package uitree
 import (
 	"context"
 	"testing"
-	"time"
 )
 
 func TestSnapshotCache_PutAndGet(t *testing.T) {
@@ -66,25 +65,6 @@ func TestSnapshotCache_Nonexistent(t *testing.T) {
 	}
 }
 
-func TestSnapshotCache_TTLExpiration(t *testing.T) {
-	policy := DefaultPolicy()
-	policy.SnapshotTTL = 1 * time.Millisecond
-	cache := NewSnapshotCache(policy)
-
-	snapshot := UITreeSnapshot{
-		SnapshotID: "uis_test_1",
-		Generation: 1,
-	}
-	cache.Put(snapshot)
-
-	time.Sleep(5 * time.Millisecond)
-
-	_, ok := cache.Get("uis_test_1")
-	if ok {
-		t.Fatal("expected snapshot to be expired")
-	}
-}
-
 func TestSnapshotCache_MaxSnapshots(t *testing.T) {
 	policy := DefaultPolicy()
 	policy.MaxSnapshots = 2
@@ -114,7 +94,6 @@ func TestSnapshotCache_Latest(t *testing.T) {
 	}
 
 	cache.Put(UITreeSnapshot{SnapshotID: "uis_1", Generation: 1})
-	time.Sleep(1 * time.Millisecond)
 	cache.Put(UITreeSnapshot{SnapshotID: "uis_2", Generation: 2})
 
 	latest, ok := cache.Latest()

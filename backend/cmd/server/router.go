@@ -461,6 +461,9 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 	// ASR providers such as Volcengine fetch audio by URL. Expose only the
 	// short-lived unguessable provider payload route outside authenticated /api.
 	asr.RegisterPublicAsrRouter(r)
+	if services.Artifact != nil && services.Artifact.Handler != nil {
+		services.Artifact.Handler.RegisterPublicMedia(r)
+	}
 	var channelProviders channelinbound.ProviderDefinitionSource
 	if services.KernelContainer != nil {
 		channelProviders = services.KernelContainer.CapabilityProviders

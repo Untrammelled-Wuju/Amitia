@@ -2,7 +2,7 @@
   <div class="amrp-image-gallery" :class="{ multiple: images.length > 1 }">
     <figure v-for="(image, index) in images" :key="image.id" class="amrp-image-card">
       <div class="amrp-image-stage">
-        <span v-if="image.status === 'loading'" class="amrp-image-state">
+        <span v-if="!resolvedUrls[index] || image.status === 'loading'" class="amrp-image-state">
           <span class="amrp-spinner"></span>
           加载中
         </span>
@@ -11,8 +11,9 @@
           加载失败，点击重试
         </button>
         <img
+          v-show="resolvedUrls[index]"
           :class="{ hidden: image.status === 'loading' }"
-          :src="cacheBustedUrl(image)"
+          :src="cacheBustedUrl(image, index)"
           :alt="image.alt || '图片'"
           loading="lazy"
           decoding="async"
@@ -22,9 +23,10 @@
         />
         <span v-if="image.animated || isGif(image)" class="amrp-gif-badge">GIF</span>
       </div>
-      <figcaption v-if="images.length > 1">
+      <figcaption>
         <span>{{ image.alt || `图片 ${index + 1}` }}</span>
         <button type="button" @click="openPreview(index)">预览</button>
+        <button type="button" @click="downloadImage(index)">保存</button>
       </figcaption>
     </figure>
   </div>
@@ -33,17 +35,21 @@
     <div v-if="previewIndex >= 0" class="amrp-lightbox" @click.self="previewIndex = -1">
       <button type="button" class="amrp-lightbox-close" @click="previewIndex = -1">关闭</button>
       <button v-if="images.length > 1" type="button" class="amrp-lightbox-prev" @click="step(-1)">‹</button>
-      <img :src="images[previewIndex]?.url" :alt="images[previewIndex]?.alt || ''" />
+      <img :src="resolvedUrls[previewIndex]" :alt="images[previewIndex]?.alt || ''" />
       <button v-if="images.length > 1" type="button" class="amrp-lightbox-next" @click="step(1)">›</button>
-      <a v-if="isSafeMediaUrl(images[previewIndex]?.url)" :href="images[previewIndex]?.url" target="_blank" rel="noopener noreferrer">保存</a>
+      <button type="button" class="amrp-lightbox-save" @click="downloadCurrent">保存</button>
     </div>
   </Teleport>
 </template>
 
 <script setup lang="ts">
-import { ref } from "vue";
+import { ref, watch } from "vue";
+import { ElMessage } from "element-plus";
 import type { ImageBlock } from "../types";
-import { isSafeMediaUrl } from "../utils";
+import {
+  downloadConversationMedia,
+  resolveConversationMediaUrl,
+} from "../media";
 
 const props = defineProps<{
   images: ImageBlock[];
@@ -51,19 +57,34 @@ const props = defineProps<{
 
 const previewIndex = ref(-1);
 const retryToken = ref(0);
+const resolvedUrls = ref<string[]>([]);
 
 function isGif(image: ImageBlock): boolean {
   return /\.gif(?:$|\?)/i.test(image.url) || image.mimeType === "image/gif";
 }
 
-function cacheBustedUrl(image: ImageBlock): string {
-  if (image.status !== "failed" || retryToken.value === 0) return image.url;
-  return `${image.url}${image.url.includes("?") ? "&" : "?"}amrpRetry=${retryToken.value}`;
+async function resolveImages() {
+  resolvedUrls.value = await Promise.all(
+    props.images.map(async (image) => {
+      try {
+        return await resolveConversationMediaUrl(image.url);
+      } catch {
+        return "";
+      }
+    }),
+  );
+}
+
+function cacheBustedUrl(image: ImageBlock, index: number): string {
+  const value = resolvedUrls.value[index] || "";
+  if (image.status !== "failed" || retryToken.value === 0) return value;
+  return `${value}${value.includes("?") ? "&" : "?"}amrpRetry=${retryToken.value}`;
 }
 
 function retry(image: ImageBlock) {
   image.status = "loading";
   retryToken.value += 1;
+  void resolveImages();
 }
 
 function openPreview(index: number) {
@@ -75,6 +96,33 @@ function step(delta: number) {
   if (!length) return;
   previewIndex.value = (previewIndex.value + delta + length) % length;
 }
+
+async function downloadCurrent() {
+  await downloadImage(previewIndex.value);
+}
+
+async function downloadImage(index: number) {
+  const image = props.images[index];
+  if (!image) return;
+  try {
+    const saved = await downloadConversationMedia(
+      image.downloadUrl || image.url,
+      image.alt || `image-${index + 1}.png`,
+      image.mimeType,
+    );
+    if (saved) ElMessage.success("图片已保存");
+  } catch (reason) {
+    ElMessage.error(reason instanceof Error ? reason.message : "图片保存失败");
+  }
+}
+
+watch(
+  () => props.images.map((image) => image.url).join("\n"),
+  () => {
+    void resolveImages();
+  },
+  { immediate: true },
+);
 </script>
 
 <style scoped>
@@ -221,7 +269,8 @@ figcaption button {
 }
 
 .amrp-lightbox-close { right: 18px; }
-.amrp-lightbox a { right: 82px; }
+.amrp-lightbox a,
+.amrp-lightbox-save { right: 82px; }
 .amrp-lightbox-prev { left: 18px; top: 50%; font-size: 34px; }
 .amrp-lightbox-next { right: 18px; top: 50%; font-size: 34px; }
 

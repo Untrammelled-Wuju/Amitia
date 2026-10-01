@@ -190,6 +190,12 @@ func (a *androidRuntimeAdapter) normalizeResponse(invocationID string, resp Andr
 	default:
 		result.Status = ToolResultStatusFailed
 		result.Error = a.mapAndroidError(resp.Error)
+		if result.Error != nil {
+			result.Content = []ToolContent{{
+				Type: ToolContentText,
+				Text: result.Error.Code + ": " + result.Error.Message,
+			}}
+		}
 		return result
 	}
 }

@@ -31,6 +31,7 @@ export const DEVICE_LOCAL_ROUTE_PREFIXES = [
   "/api/local/workspaces",
   "/api/workspaces",
   "/api/storage",
+  "/media",
   "/internal/device-mesh",
 ] as const;
 

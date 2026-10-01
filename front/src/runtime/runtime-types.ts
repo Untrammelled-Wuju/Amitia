@@ -57,6 +57,12 @@ export interface SaveExtensionPackageRequest {
   base64: string;
 }
 
+export interface SaveConversationAttachmentRequest {
+  url: string;
+  suggestedName: string;
+  headers?: Record<string, string>;
+}
+
 export interface LocalVoiceASRFinalEvent {
   eventId: string;
   transcript: string;
@@ -94,6 +100,9 @@ export interface AmitiaDesktopAPI {
   selectExtensionPackage(): Promise<ExtensionPackageSelection | null>;
   saveExtensionPackage(
     request: SaveExtensionPackageRequest,
+  ): Promise<{ saved: boolean; fileName?: string }>;
+  saveConversationAttachment(
+    request: SaveConversationAttachmentRequest,
   ): Promise<{ saved: boolean; fileName?: string }>;
   minimizeWindow(): Promise<void>;
   toggleMaximizeWindow(): Promise<boolean>;

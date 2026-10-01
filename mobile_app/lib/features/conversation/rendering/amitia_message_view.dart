@@ -229,29 +229,34 @@ class _AmitiaMessageViewState extends State<AmitiaMessageView> {
     }
     return [
       for (final entry in entries)
-        if (entry.items.isNotEmpty)
-          _TurnToolStream(items: entry.items)
-        else
-          switch (entry.item!.type) {
-            'reasoning' => AmitiaThinkingBlock(
-              block: AmrpThinkingBlock(
-                content: entry.item!.content,
-                state: _isTurnStreaming(entry.item!.status)
-                    ? AmrpMessageState.streaming
-                    : AmrpMessageState.completed,
-                duration: entry.item!.durationMs > 0
-                    ? Duration(milliseconds: entry.item!.durationMs)
-                    : null,
-              ),
-            ),
-            'text' => AmitiaMarkdownView(
-              source: entry.item!.content,
-              streaming: _isTurnStreaming(entry.item!.status),
-              citationIds: citationIds,
-              onCitation: (id) => setState(() => _highlightCitation = id),
-            ),
-            _ => const SizedBox.shrink(),
-          },
+        if (!(entry.item?.type == 'text' && entry.item!.content.trim().isEmpty))
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: entry.items.isNotEmpty
+                ? _TurnToolStream(items: entry.items)
+                : switch (entry.item!.type) {
+                    'reasoning' => AmitiaThinkingBlock(
+                      block: AmrpThinkingBlock(
+                        content: entry.item!.content,
+                        state: _isTurnStreaming(entry.item!.status)
+                            ? AmrpMessageState.streaming
+                            : AmrpMessageState.completed,
+                        duration: entry.item!.durationMs > 0
+                            ? Duration(milliseconds: entry.item!.durationMs)
+                            : null,
+                      ),
+                      padding: EdgeInsets.zero,
+                    ),
+                    'text' => AmitiaMarkdownView(
+                      source: entry.item!.content,
+                      streaming: _isTurnStreaming(entry.item!.status),
+                      citationIds: citationIds,
+                      onCitation: (id) =>
+                          setState(() => _highlightCitation = id),
+                    ),
+                    _ => const SizedBox.shrink(),
+                  },
+          ),
     ];
   }
 
@@ -1111,40 +1116,6 @@ String _turnResultText(AssistantTurnItemDto item) {
   return item.errorCode.trim().isNotEmpty ? item.errorCode : '无返回内容';
 }
 
-String _turnResultSummary(AssistantTurnItemDto item) {
-  final decoded = _decodeTurnJSON(item.resultJson);
-  if (_isWebResearchTool(item.toolName) && decoded is Map) {
-    final operation = decoded['operation']?.toString() ?? 'research';
-    final parts = <String>[
-      operation == 'search'
-          ? '搜索完成'
-          : operation == 'open'
-          ? '网页读取完成'
-          : '研究完成',
-    ];
-    final results = decoded['search'];
-    final pages = decoded['pages'];
-    final citations = decoded['citations'];
-    if (results is List && results.isNotEmpty) {
-      parts.add('${results.length} 个来源');
-    }
-    if (pages is List && pages.isNotEmpty) {
-      parts.add('读取 ${pages.length} 页');
-    }
-    if (citations is List && citations.isNotEmpty) {
-      parts.add('${citations.length} 条证据');
-    }
-    final research = decoded['research'];
-    if (research is Map) {
-      final rounds =
-          int.tryParse(research['rounds_completed']?.toString() ?? '') ?? 0;
-      if (rounds > 1) parts.add('$rounds 轮');
-    }
-    return parts.join(' · ');
-  }
-  return _turnResultText(item).replaceAll(RegExp(r'\s+'), ' ').trim();
-}
-
 class _TurnTimelineEntry {
   final AssistantTurnItemDto? item;
   final List<AssistantTurnItemDto> items;
@@ -1162,14 +1133,26 @@ class _TurnToolStream extends StatefulWidget {
   State<_TurnToolStream> createState() => _TurnToolStreamState();
 }
 
-class _TurnToolStreamState extends State<_TurnToolStream> {
+class _TurnToolStreamState extends State<_TurnToolStream>
+    with SingleTickerProviderStateMixin {
   late bool _expanded;
+  late final AnimationController _expansionController;
+  late final Animation<double> _expansionAnimation;
   bool _touched = false;
 
   @override
   void initState() {
     super.initState();
     _expanded = _hasRunning(widget.items);
+    _expansionController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 180),
+      value: _expanded ? 1 : 0,
+    );
+    _expansionAnimation = CurvedAnimation(
+      parent: _expansionController,
+      curve: Curves.easeOut,
+    );
   }
 
   @override
@@ -1179,8 +1162,23 @@ class _TurnToolStreamState extends State<_TurnToolStream> {
     final next = _hasRunning(widget.items);
     if (next != _expanded) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) setState(() => _expanded = next);
+        if (mounted) _setExpanded(next);
       });
+    }
+  }
+
+  @override
+  void dispose() {
+    _expansionController.dispose();
+    super.dispose();
+  }
+
+  void _setExpanded(bool expanded) {
+    setState(() => _expanded = expanded);
+    if (expanded) {
+      _expansionController.forward();
+    } else {
+      _expansionController.reverse();
     }
   }
 
@@ -1188,30 +1186,83 @@ class _TurnToolStreamState extends State<_TurnToolStream> {
       items.any((item) => _isTurnStreaming(item.status));
 
   String _summary() {
-    final calls = widget.items
-        .where((item) => item.type == 'tool_call')
-        .toList(growable: false);
-    final failed = widget.items
-        .where((item) => item.status.toLowerCase().contains('fail'))
+    final calls = _uniqueToolRecords(
+      widget.items.where((item) => item.type == 'tool_call'),
+    );
+    final results = _uniqueToolRecords(
+      widget.items.where((item) => item.type == 'tool_result'),
+    );
+    final counted = calls.isNotEmpty ? calls : results;
+    final failed = counted
+        .where((item) => _isFailedToolStatus(item.status))
         .length;
-    final running = widget.items.any((item) => _isTurnStreaming(item.status));
-    final total = calls.isEmpty ? widget.items.length : calls.length;
+    final running = counted.any((item) => _isTurnStreaming(item.status));
+    final total = counted.length;
     if (failed > 0) return '$total 个工具 · $failed 个失败';
     if (running) {
-      final completed = widget.items
-          .where((item) => item.status.toLowerCase().contains('complete'))
+      final completed = counted
+          .where((item) => item.status.trim().toLowerCase() == 'completed')
           .length;
       return '执行中 · $completed/$total 完成';
     }
     return '$total 个工具 · 已完成';
   }
 
+  List<AssistantTurnItemDto> _uniqueToolRecords(
+    Iterable<AssistantTurnItemDto> items,
+  ) {
+    final records = <String, AssistantTurnItemDto>{};
+    for (final item in items) {
+      final rawKey = item.callId.trim().isNotEmpty ? item.callId : item.id;
+      final key = rawKey.trim();
+      if (key.isEmpty) continue;
+      final current = records[key];
+      if (current == null || item.revision >= current.revision) {
+        records[key] = item;
+      }
+    }
+    return records.values.toList(growable: false);
+  }
+
+  bool _isFailedToolStatus(String status) {
+    final value = status.trim().toLowerCase();
+    return value == 'failed' || value == 'error' || value == 'unknown';
+  }
+
+  List<_TurnToolEntry> _toolEntries() {
+    final resultsByCall = <String, AssistantTurnItemDto>{};
+    for (final item in _uniqueToolRecords(
+      widget.items.where((item) => item.type == 'tool_result'),
+    )) {
+      final key = _turnToolKey(item);
+      if (key.isNotEmpty) resultsByCall[key] = item;
+    }
+    final entries = <_TurnToolEntry>[];
+    final matched = <String>{};
+    for (final item in _uniqueToolRecords(
+      widget.items.where((item) => item.type == 'tool_call'),
+    )) {
+      final key = _turnToolKey(item);
+      final result = key.isEmpty ? null : resultsByCall[key];
+      if (key.isNotEmpty) matched.add(key);
+      entries.add(_TurnToolEntry(item: item, result: result));
+    }
+    for (final item in _uniqueToolRecords(
+      widget.items.where((item) => item.type == 'tool_result'),
+    )) {
+      final key = _turnToolKey(item);
+      if (key.isNotEmpty && matched.contains(key)) continue;
+      entries.add(_TurnToolEntry(item: item, result: item));
+    }
+    return entries;
+  }
+
   @override
   Widget build(BuildContext context) {
     final tokens = AmitiaMessageTheme.of(context);
     return Container(
+      key: const ValueKey('tool-stream-container'),
       constraints: const BoxConstraints(maxWidth: 700),
-      margin: const EdgeInsets.symmetric(vertical: 8),
       decoration: BoxDecoration(
         border: Border.all(color: tokens.line),
         borderRadius: BorderRadius.circular(10),
@@ -1227,10 +1278,10 @@ class _TurnToolStreamState extends State<_TurnToolStream> {
             label: '工具执行流，${_summary()}',
             child: InkWell(
               key: const ValueKey('tool-stream-toggle'),
-              onTap: () => setState(() {
+              onTap: () {
                 _touched = true;
-                _expanded = !_expanded;
-              }),
+                _setExpanded(!_expanded);
+              },
               child: Padding(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 10,
@@ -1274,91 +1325,31 @@ class _TurnToolStreamState extends State<_TurnToolStream> {
               ),
             ),
           ),
-          AnimatedSize(
-            duration: const Duration(milliseconds: 180),
-            curve: Curves.easeOut,
-            child: _expanded
-                ? Container(
-                    padding: const EdgeInsets.fromLTRB(8, 2, 8, 8),
-                    decoration: BoxDecoration(
-                      border: Border(top: BorderSide(color: tokens.line)),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        for (final item in widget.items)
-                          item.type == 'tool_call'
-                              ? _TurnToolCallRow(item: item)
-                              : _TurnToolResultBlock(item: item),
-                      ],
-                    ),
-                  )
-                : const SizedBox.shrink(),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _TurnToolCallRow extends StatelessWidget {
-  final AssistantTurnItemDto item;
-
-  const _TurnToolCallRow({required this.item});
-
-  @override
-  Widget build(BuildContext context) {
-    final tokens = AmitiaMessageTheme.of(context);
-    final subject = _turnToolSubject(item);
-    final duration = item.durationMs > 0 ? ' · ${item.durationMs} ms' : '';
-    return Container(
-      constraints: const BoxConstraints(maxWidth: 700),
-      margin: const EdgeInsets.symmetric(vertical: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 7),
-      decoration: BoxDecoration(
-        color: tokens.soft,
-        borderRadius: BorderRadius.circular(9),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 7,
-            height: 7,
-            decoration: BoxDecoration(
-              color: _turnStatusColor(item.status),
-              shape: BoxShape.circle,
-            ),
-          ),
-          const SizedBox(width: 9),
-          Text(
-            _turnToolDisplayName(item.toolName),
-            style: TextStyle(
-              color: tokens.text,
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          if (subject.isNotEmpty) ...[
-            const SizedBox(width: 9),
-            Expanded(
-              child: Text(
-                subject,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(color: tokens.muted, fontSize: 11.5),
+          SizeTransition(
+            sizeFactor: _expansionAnimation,
+            axisAlignment: -1,
+            child: IgnorePointer(
+              ignoring: !_expanded,
+              child: ExcludeSemantics(
+                excluding: !_expanded,
+                child: Container(
+                  padding: const EdgeInsets.fromLTRB(8, 2, 8, 8),
+                  decoration: BoxDecoration(
+                    border: Border(top: BorderSide(color: tokens.line)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      for (final entry in _toolEntries())
+                        _TurnToolCallRow(
+                          item: entry.item,
+                          result: entry.result,
+                        ),
+                    ],
+                  ),
+                ),
               ),
             ),
-          ] else
-            const Spacer(),
-          const SizedBox(width: 8),
-          Text(
-            '${_turnStatusLabel(item.status)}$duration',
-            style: TextStyle(
-              color: item.status.toLowerCase().contains('fail')
-                  ? tokens.danger
-                  : tokens.muted,
-              fontSize: 11,
-            ),
           ),
         ],
       ),
@@ -1366,28 +1357,42 @@ class _TurnToolCallRow extends StatelessWidget {
   }
 }
 
-class _TurnToolResultBlock extends StatefulWidget {
+class _TurnToolEntry {
   final AssistantTurnItemDto item;
+  final AssistantTurnItemDto? result;
 
-  const _TurnToolResultBlock({required this.item});
-
-  @override
-  State<_TurnToolResultBlock> createState() => _TurnToolResultBlockState();
+  const _TurnToolEntry({required this.item, required this.result});
 }
 
-class _TurnToolResultBlockState extends State<_TurnToolResultBlock> {
+class _TurnToolCallRow extends StatefulWidget {
+  final AssistantTurnItemDto item;
+  final AssistantTurnItemDto? result;
+
+  const _TurnToolCallRow({required this.item, required this.result});
+
+  @override
+  State<_TurnToolCallRow> createState() => _TurnToolCallRowState();
+}
+
+class _TurnToolCallRowState extends State<_TurnToolCallRow> {
   bool _expanded = false;
 
   @override
   Widget build(BuildContext context) {
     final tokens = AmitiaMessageTheme.of(context);
-    final result = _turnResultText(widget.item);
-    final summary = _turnResultSummary(widget.item);
+    final subject = _turnToolSubject(widget.item);
+    final duration = widget.item.durationMs > 0
+        ? ' · ${widget.item.durationMs} ms'
+        : '';
+    final arguments = _turnJSONText(
+      _decodeTurnJSON(widget.item.argumentsJson),
+    ).trim();
+    final result = widget.result == null ? '' : _turnResultText(widget.result!);
     return Container(
       constraints: const BoxConstraints(maxWidth: 700),
-      margin: const EdgeInsets.only(bottom: 15),
+      margin: const EdgeInsets.symmetric(vertical: 8),
       decoration: BoxDecoration(
-        border: Border.all(color: tokens.line),
+        color: tokens.soft,
         borderRadius: BorderRadius.circular(9),
       ),
       clipBehavior: Clip.antiAlias,
@@ -1395,73 +1400,152 @@ class _TurnToolResultBlockState extends State<_TurnToolResultBlock> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          InkWell(
-            onTap: () => setState(() => _expanded = !_expanded),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 7),
-              color: tokens.soft,
-              child: Row(
-                children: [
-                  Container(
-                    width: 7,
-                    height: 7,
-                    decoration: BoxDecoration(
-                      color: _turnStatusColor(widget.item.status),
-                      shape: BoxShape.circle,
-                    ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 7),
+            child: Row(
+              children: [
+                Container(
+                  width: 7,
+                  height: 7,
+                  decoration: BoxDecoration(
+                    color: _turnStatusColor(widget.item.status),
+                    shape: BoxShape.circle,
                   ),
-                  const SizedBox(width: 8),
-                  Text(
-                    _turnToolDisplayName(
-                      widget.item.toolName,
-                      fallback: '工具结果',
-                    ),
+                ),
+                const SizedBox(width: 9),
+                Expanded(
+                  flex: subject.isEmpty ? 1 : 3,
+                  child: Text(
+                    _turnToolDisplayName(widget.item.toolName),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       color: tokens.text,
-                      fontSize: 11.5,
+                      fontSize: 12,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
-                  if (summary.isNotEmpty) ...[
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        summary.length > 80
-                            ? '${summary.substring(0, 80)}…'
-                            : summary,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(color: tokens.muted, fontSize: 10.5),
-                      ),
+                ),
+                if (subject.isNotEmpty) ...[
+                  const SizedBox(width: 9),
+                  Expanded(
+                    flex: 2,
+                    child: Text(
+                      subject,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(color: tokens.muted, fontSize: 11.5),
                     ),
-                  ] else
-                    const Spacer(),
-                  Text(
-                    _expanded ? '收起' : '展开',
-                    style: TextStyle(color: tokens.accent, fontSize: 10.5),
                   ),
                 ],
-              ),
+                const SizedBox(width: 8),
+                Text(
+                  '${_turnStatusLabel(widget.item.status)}$duration',
+                  style: TextStyle(
+                    color: widget.item.status.toLowerCase().contains('fail')
+                        ? tokens.danger
+                        : tokens.muted,
+                    fontSize: 11,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                TextButton(
+                  key: ValueKey(
+                    'tool-call-expand-${_turnToolKey(widget.item)}',
+                  ),
+                  onPressed: () => setState(() => _expanded = !_expanded),
+                  style: TextButton.styleFrom(
+                    minimumSize: Size.zero,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 4,
+                    ),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    foregroundColor: tokens.accent,
+                  ),
+                  child: Text(
+                    _expanded ? '收起' : '展开',
+                    maxLines: 1,
+                    style: const TextStyle(fontSize: 10.5),
+                  ),
+                ),
+              ],
             ),
           ),
           if (_expanded)
             Container(
-              constraints: const BoxConstraints(maxHeight: 240),
+              key: ValueKey('tool-call-details-${_turnToolKey(widget.item)}'),
               padding: const EdgeInsets.fromLTRB(11, 9, 11, 10),
-              child: SingleChildScrollView(
-                child: SelectableText(
-                  result,
-                  style: TextStyle(
-                    color: tokens.muted,
-                    fontFamily: 'monospace',
-                    fontSize: 10.5,
-                    height: 1.55,
+              decoration: BoxDecoration(
+                border: Border(top: BorderSide(color: tokens.line)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _TurnToolDetailSection(
+                    title: '调用工具',
+                    content: _turnToolDisplayName(widget.item.toolName),
                   ),
-                ),
+                  const SizedBox(height: 9),
+                  _TurnToolDetailSection(
+                    title: '调用参数',
+                    content: arguments.isEmpty ? '无参数' : arguments,
+                  ),
+                  const SizedBox(height: 9),
+                  _TurnToolDetailSection(
+                    title: '调用结果',
+                    content: result.trim().isEmpty ? '无返回内容' : result,
+                  ),
+                ],
               ),
             ),
         ],
       ),
     );
   }
+}
+
+class _TurnToolDetailSection extends StatelessWidget {
+  final String title;
+  final String content;
+
+  const _TurnToolDetailSection({required this.title, required this.content});
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AmitiaMessageTheme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          title,
+          style: TextStyle(
+            color: tokens.text,
+            fontSize: 10.5,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: 5),
+        ConstrainedBox(
+          constraints: const BoxConstraints(maxHeight: 240),
+          child: SingleChildScrollView(
+            child: SelectableText(
+              content,
+              style: TextStyle(
+                color: tokens.muted,
+                fontFamily: 'monospace',
+                fontSize: 10.5,
+                height: 1.55,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+String _turnToolKey(AssistantTurnItemDto item) {
+  final value = item.callId.trim().isNotEmpty ? item.callId : item.id;
+  return value.trim();
 }

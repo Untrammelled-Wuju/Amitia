@@ -554,6 +554,65 @@ func TestService_VisualClick_Success(t *testing.T) {
 	}
 }
 
+func TestService_VisualClick_UsesTargetDisplay(t *testing.T) {
+	requestedDisplayID := -1
+	tappedDisplayID := -1
+	locator := &mockVisualLocator{
+		locateFunc: func(ctx context.Context, request VisualLocateRequest) ([]VisualCandidate, error) {
+			requestedDisplayID = request.DisplayID
+			return []VisualCandidate{
+				{
+					Source:     StrategyVisualOCR,
+					Text:       "文件传输助手",
+					Bounds:     uitree.Rect{Left: 20, Top: 40, Right: 220, Bottom: 100},
+					CenterX:    120,
+					CenterY:    70,
+					DisplayID:  request.DisplayID,
+					Confidence: 1,
+				},
+			}, nil
+		},
+	}
+	coordinate := &mockCoordinateExecutor{
+		tapFunc: func(ctx context.Context, displayID, x, y int) error {
+			tappedDisplayID = displayID
+			return nil
+		},
+	}
+	service := NewService(
+		&mockNodeResolver{},
+		&mockSnapshotResolver{},
+		&mockAccessibilityExecutor{},
+		coordinate,
+		locator,
+		nil,
+		nil,
+		nil,
+		&mockVerifier{},
+		DefaultPolicy(),
+	)
+
+	result, err := service.Click(context.Background(), ClickRequest{
+		Target: InteractionTarget{
+			DisplayID: 28,
+			Text:      "文件传输助手",
+		},
+		AllowVisualFallback: true,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if requestedDisplayID != 28 {
+		t.Fatalf("expected visual locate display 28, got %d", requestedDisplayID)
+	}
+	if tappedDisplayID != 28 {
+		t.Fatalf("expected coordinate tap display 28, got %d", tappedDisplayID)
+	}
+	if result.DisplayID != 28 {
+		t.Fatalf("expected result display 28, got %d", result.DisplayID)
+	}
+}
+
 func TestService_VisualClick_NoLocator(t *testing.T) {
 	service := NewService(
 		nil, nil, nil, nil, nil, nil, nil, nil, nil,

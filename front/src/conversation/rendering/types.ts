@@ -43,6 +43,7 @@ export interface FileBlock {
   mimeType?: string;
   size?: number;
   url?: string;
+  downloadUrl?: string;
   status: "loading" | "ready" | "failed";
   error?: string;
 }
@@ -51,6 +52,7 @@ export interface ImageBlock {
   kind: "image";
   id: string;
   url: string;
+  downloadUrl?: string;
   alt?: string;
   mimeType?: string;
   animated?: boolean;
@@ -63,6 +65,7 @@ export interface AudioBlock {
   kind: "audio";
   id: string;
   url: string;
+  downloadUrl?: string;
   title?: string;
   duration?: number;
   status?: "loading" | "ready" | "failed";
@@ -72,6 +75,7 @@ export interface VideoBlock {
   kind: "video";
   id: string;
   url: string;
+  downloadUrl?: string;
   title?: string;
   poster?: string;
   duration?: number;
@@ -87,6 +91,7 @@ export interface ArtifactBlock {
   content?: string;
   fileId?: string;
   url?: string;
+  downloadUrl?: string;
   size?: number;
 }
 

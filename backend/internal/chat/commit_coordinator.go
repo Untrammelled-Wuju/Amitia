@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/u-ai/backend/internal/artifact"
 	"github.com/u-ai/backend/internal/conversationstream"
 	"github.com/u-ai/backend/internal/interaction"
 	newoutbox "github.com/u-ai/backend/internal/outbox"
@@ -96,6 +97,13 @@ func (s *service) commitInteraction(ctx context.Context, plan messageCommitPlan)
 			message := buildMessageFromOutput(plan, deliveryGroupID, deliverySequence, output)
 			if err := tx.Create(message).Error; err != nil {
 				return err
+			}
+			if s.artifactResolver != nil {
+				if artifactID, parseErr := artifact.ParseURI(output.Part.URL); parseErr == nil {
+					if err := s.artifactResolver.RegisterReferenceGormTx(tx, string(artifactID), "message_attachment", message.ID); err != nil {
+						return err
+					}
+				}
 			}
 			if err := s.recordMessageChangeTx(tx, message, syncapi.OpCreate, 1, plan.Request.SpaceID); err != nil {
 				return err

@@ -18,6 +18,8 @@ type Request struct {
 	MaxSteps          int      `json:"maxSteps,omitempty"`
 	TimeoutMS         int64    `json:"timeoutMs,omitempty"`
 	AllowedApps       []string `json:"allowedApps,omitempty"`
+	DisplayID         int      `json:"displayId,omitempty"`
+	Ref               string   `json:"ref,omitempty"`
 	AllowADBFallback  bool     `json:"allowAdbFallback,omitempty"`
 	AllowRootFallback bool     `json:"allowRootFallback,omitempty"`
 }
@@ -82,6 +84,8 @@ func init() {
 					"maxSteps":          {Type: "integer", Description: "Maximum autonomous action steps, 1-30."},
 					"timeoutMs":         {Type: "integer", Description: "Overall timeout in milliseconds, 5000-180000."},
 					"allowedApps":       {Type: "array", Description: "Optional package-name allowlist the sub-agent may open."},
+					"displayId":         {Type: "integer", Description: "Target Android display ID. Use 0 for the main display."},
+					"ref":               {Type: "string", Description: "Optional virtual display ref used for launching apps and key events on a secondary display."},
 					"allowAdbFallback":  {Type: "boolean", Description: "Allow already-authorized ADB provider fallback. Never grants ADB permission."},
 					"allowRootFallback": {Type: "boolean", Description: "Allow already-authorized root provider fallback. Never elevates privilege."},
 				},
@@ -137,6 +141,13 @@ func runTool(ctx context.Context, execCtx tool.ToolExecutionContext, args map[st
 		}
 		seen[value] = struct{}{}
 		req.AllowedApps[index] = value
+	}
+	if req.DisplayID < 0 || req.DisplayID > 256 {
+		return tool.ErrorResult("android_ui_agent_invalid_request", "displayId must be between 0 and 256")
+	}
+	req.Ref = strings.TrimSpace(req.Ref)
+	if req.DisplayID > 0 && req.Ref == "" {
+		return tool.ErrorResult("android_ui_agent_invalid_request", "ref is required when displayId is non-zero")
 	}
 
 	result, err := r.RunAndroidUIAgent(ctx, execCtx, req)

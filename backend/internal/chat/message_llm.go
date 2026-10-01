@@ -165,16 +165,22 @@ func (s *service) invokeLLMWithTools(ctx context.Context, cfg *ModelConfig, mess
 				}
 			}
 		}
-		allRepeated := len(roundFingerprints) > 0
-		for fingerprint := range roundFingerprints {
-			if fingerprints[fingerprint] < 4 {
-				allRepeated = false
+		repeatLimit := 0
+		if config.AppCfg != nil {
+			repeatLimit = config.AppCfg.Chat.AgentToolRepeatLimit
+		}
+		if repeatLimit > 0 {
+			allRepeated := len(roundFingerprints) > 0
+			for fingerprint := range roundFingerprints {
+				if fingerprints[fingerprint] < repeatLimit {
+					allRepeated = false
+					break
+				}
+			}
+			if allRepeated {
+				reply = aiContent
 				break
 			}
-		}
-		if allRepeated {
-			reply = aiContent
-			break
 		}
 	}
 	citationAudit := turnRecorder.AuditCitationMarkers(reply)

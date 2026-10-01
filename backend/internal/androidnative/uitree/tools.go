@@ -95,6 +95,7 @@ func buildSnapshotTool(runtime capability.RuntimeBinding) capability.ToolDefinit
 				"type": "string",
 				"enum": ["auto", "accessibility", "root", "adb"]
 			},
+			"displayId": {"type": "integer", "minimum": 0},
 			"includeAllWindows": {"type": "boolean"},
 			"includeInvisible": {"type": "boolean"},
 			"maxDepth": {

@@ -44,7 +44,7 @@ func (c *SnapshotCache) Put(snapshot UITreeSnapshot) {
 	}
 
 	c.counter++
-	counter := time.Now().UnixNano()
+	counter := c.counter
 	c.snapshots[snapshot.SnapshotID] = &snapshotRecord{
 		snapshot:   snapshot,
 		createdAt:  counter,
@@ -63,11 +63,6 @@ func (c *SnapshotCache) Get(snapshotID string) (UITreeSnapshot, bool) {
 		return UITreeSnapshot{}, false
 	}
 
-	age := time.Since(time.Unix(0, record.createdAt))
-	if age > c.policy.SnapshotTTL {
-		return UITreeSnapshot{}, false
-	}
-
 	return record.snapshot, true
 }
 
@@ -77,11 +72,6 @@ func (c *SnapshotCache) GetNode(snapshotID string, nodeID string) (UINode, bool)
 
 	record, ok := c.snapshots[snapshotID]
 	if !ok {
-		return UINode{}, false
-	}
-
-	age := time.Since(time.Unix(0, record.createdAt))
-	if age > c.policy.SnapshotTTL {
 		return UINode{}, false
 	}
 
@@ -104,10 +94,6 @@ func (c *SnapshotCache) Latest() (UITreeSnapshot, bool) {
 	var latest *snapshotRecord
 	latestCreatedAt := int64(0)
 	for _, record := range c.snapshots {
-		age := time.Since(time.Unix(0, record.createdAt))
-		if age > c.policy.SnapshotTTL {
-			continue
-		}
 		if latest == nil || record.createdAt > latestCreatedAt {
 			latest = record
 			latestCreatedAt = record.createdAt

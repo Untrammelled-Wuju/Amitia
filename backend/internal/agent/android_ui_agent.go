@@ -67,7 +67,7 @@ func (s *service) RunAndroidUIAgent(ctx context.Context, execCtx tool.ToolExecut
 			return result, err
 		}
 
-		observationRaw, observationSummary, quality, tree, err := s.androidUIObservation(ctx, scope, runKey, index)
+		observationRaw, observationSummary, quality, tree, err := s.androidUIObservation(ctx, scope, runKey, index, req.DisplayID)
 		if err != nil {
 			result.StepCount = len(result.Steps)
 			result.FinalState = "observation_failed"
@@ -207,7 +207,7 @@ func (s *service) RunAndroidUIAgent(ctx context.Context, execCtx tool.ToolExecut
 			continue
 		}
 
-		_, _, afterQuality, afterTree, settleErr := s.waitForAndroidUISettle(ctx, scope, runKey, index)
+		_, _, afterQuality, afterTree, settleErr := s.waitForAndroidUISettle(ctx, scope, runKey, index, req.DisplayID)
 		if settleErr != nil && !errors.Is(settleErr, context.Canceled) && !errors.Is(settleErr, context.DeadlineExceeded) {
 			step.Status = "success"
 			step.VerificationResult = "ACTION_ACCEPTED_VERIFICATION_UNAVAILABLE"
@@ -295,7 +295,7 @@ func (s *service) executeAndroidUIActionWithRecovery(
 		message += " " + strings.ToUpper(result.Error.Message)
 	}
 	if strings.Contains(code, "STALE") || strings.Contains(message, "STALE") {
-		_, _, _, freshTree, observeErr := s.androidUIObservation(ctx, scope, runKey, index*100+1)
+		_, _, _, freshTree, observeErr := s.androidUIObservation(ctx, scope, runKey, index*100+1, req.DisplayID)
 		if observeErr == nil {
 			if rematched, _, ok := semanticRematchTarget(freshTree, action.Target); ok {
 				retryAction := action
@@ -322,7 +322,7 @@ func (s *service) executeAndroidUIActionWithRecovery(
 	return toolID, input, result, found, 0
 }
 
-func (s *service) waitForAndroidUISettle(ctx context.Context, scope extensionkernel.InvocationScope, runKey string, index int) (json.RawMessage, string, androidUIObservationQuality, androidUITreeEnvelope, error) {
+func (s *service) waitForAndroidUISettle(ctx context.Context, scope extensionkernel.InvocationScope, runKey string, index int, displayID int) (json.RawMessage, string, androidUIObservationQuality, androidUITreeEnvelope, error) {
 	delays := []time.Duration{100 * time.Millisecond, 200 * time.Millisecond, 400 * time.Millisecond, 800 * time.Millisecond}
 	var previousHash string
 	var lastRaw json.RawMessage
@@ -335,7 +335,7 @@ func (s *service) waitForAndroidUISettle(ctx context.Context, scope extensionker
 			return nil, "", lastQuality, lastTree, ctx.Err()
 		case <-time.After(delay):
 		}
-		raw, summary, quality, tree, err := s.androidUIObservation(ctx, scope, runKey, index*1000+sample+1)
+		raw, summary, quality, tree, err := s.androidUIObservation(ctx, scope, runKey, index*1000+sample+1, displayID)
 		if err != nil {
 			return lastRaw, lastSummary, lastQuality, lastTree, err
 		}
@@ -349,13 +349,30 @@ func (s *service) waitForAndroidUISettle(ctx context.Context, scope extensionker
 	return lastRaw, lastSummary, lastQuality, lastTree, nil
 }
 
-func (s *service) androidUIObservation(ctx context.Context, scope extensionkernel.InvocationScope, runKey string, index int) (json.RawMessage, string, androidUIObservationQuality, androidUITreeEnvelope, error) {
-	input := json.RawMessage(`{"source":"accessibility","includeAllWindows":true,"includeInvisible":false,"maxDepth":32,"excludeOwnPackage":true,"allowRootFallback":false}`)
+func (s *service) androidUIObservation(ctx context.Context, scope extensionkernel.InvocationScope, runKey string, index int, displayID int) (json.RawMessage, string, androidUIObservationQuality, androidUITreeEnvelope, error) {
+	payload := map[string]any{
+		"source":            "accessibility",
+		"includeAllWindows": true,
+		"includeInvisible":  false,
+		"maxDepth":          32,
+		"excludeOwnPackage": true,
+		"allowRootFallback": false,
+	}
+	if displayID > 0 {
+		payload["displayId"] = displayID
+	}
+	input, _ := json.Marshal(payload)
 	result, found := s.toolFacade.ExecuteTool(ctx, "android.ui_tree.snapshot", input, scope, fmt.Sprintf("%s:uiagent-observe:%d", runKey, index), fmt.Sprintf("%s:uiagent-observe:%d", runKey, index))
 	if !found {
+		if displayID > 0 {
+			return s.androidUIVisualObservation(ctx, scope, runKey, index, displayID)
+		}
 		return nil, "", androidUIObservationQuality{}, androidUITreeEnvelope{}, errors.New("android.ui_tree.snapshot is unavailable")
 	}
 	if !legacyToolSucceeded(result) {
+		if displayID > 0 {
+			return s.androidUIVisualObservation(ctx, scope, runKey, index, displayID)
+		}
 		message := strings.TrimSpace(result.VisibleText)
 		if result.Error != nil && message == "" {
 			message = result.Error.Message
@@ -370,6 +387,9 @@ func (s *service) androidUIObservation(ctx context.Context, scope extensionkerne
 		raw = json.RawMessage(result.VisibleText)
 	}
 	if len(raw) == 0 {
+		if displayID > 0 {
+			return s.androidUIVisualObservation(ctx, scope, runKey, index, displayID)
+		}
 		return nil, "", androidUIObservationQuality{}, androidUITreeEnvelope{}, errors.New("UI tree snapshot returned no structured observation")
 	}
 	quality, tree := analyzeAndroidUIObservation(raw)
@@ -382,6 +402,84 @@ func (s *service) androidUIObservation(ctx context.Context, scope extensionkerne
 	return bounded, summary, quality, tree, nil
 }
 
+func (s *service) androidUIVisualObservation(ctx context.Context, scope extensionkernel.InvocationScope, runKey string, index int, displayID int) (json.RawMessage, string, androidUIObservationQuality, androidUITreeEnvelope, error) {
+	input, _ := json.Marshal(map[string]any{"displayId": displayID})
+	result, found := s.toolFacade.ExecuteTool(ctx, "android.interaction.screenshot", input, scope, fmt.Sprintf("%s:uiagent-visual:%d", runKey, index), fmt.Sprintf("%s:uiagent-visual:%d", runKey, index))
+	if !found {
+		return nil, "", androidUIObservationQuality{}, androidUITreeEnvelope{}, errors.New("android.interaction.screenshot is unavailable")
+	}
+	if !legacyToolSucceeded(result) {
+		message := strings.TrimSpace(result.VisibleText)
+		if result.Error != nil && message == "" {
+			message = result.Error.Message
+		}
+		if message == "" {
+			message = "visual screenshot failed"
+		}
+		return nil, "", androidUIObservationQuality{}, androidUITreeEnvelope{}, errors.New(message)
+	}
+	raw := result.Output
+	if len(raw) == 0 && result.VisibleText != "" {
+		raw = json.RawMessage(result.VisibleText)
+	}
+	var payload map[string]any
+	if len(raw) == 0 || json.Unmarshal(raw, &payload) != nil {
+		return nil, "", androidUIObservationQuality{}, androidUITreeEnvelope{}, errors.New("visual screenshot returned no structured observation")
+	}
+	imageBase64, _ := payload["imageBase64"].(string)
+	if strings.TrimSpace(imageBase64) == "" {
+		return nil, "", androidUIObservationQuality{}, androidUITreeEnvelope{}, errors.New("visual screenshot returned no image data")
+	}
+	mimeType, _ := payload["mimeType"].(string)
+	if strings.TrimSpace(mimeType) == "" {
+		mimeType = "image/jpeg"
+	}
+	width := androidIntValue(payload["width"])
+	height := androidIntValue(payload["height"])
+	capturedAt := time.Now().UnixMilli()
+	snapshotID := "visual_" + androidUIObservationHash(json.RawMessage(imageBase64))
+	quality := androidUIObservationQuality{
+		Level:             "VISUAL",
+		WindowCount:       1,
+		NodeCount:         0,
+		VisualRecommended: true,
+		VisualReason:      "structured UI tree unavailable; screenshot attached",
+	}
+	tree := androidUITreeEnvelope{
+		SnapshotID: snapshotID,
+		CapturedAt: capturedAt,
+		Windows: []androidUIWindow{{
+			WindowID: "visual-window",
+			Active:   true,
+			Focused:  true,
+		}},
+		Capability: androidUICapability{Available: true, Source: "visual", Degraded: true},
+	}
+	observation := map[string]any{
+		"snapshotId":         snapshotID,
+		"source":             "visual",
+		"displayId":          displayID,
+		"capturedAt":         capturedAt,
+		"width":              width,
+		"height":             height,
+		"windows":            []any{},
+		"nodes":              []any{},
+		"screenshotMimeType": mimeType,
+		"screenshotBase64":   imageBase64,
+		"quality":            quality,
+		"visualEscalation": map[string]any{
+			"recommended": true,
+			"reason":      quality.VisualReason,
+		},
+	}
+	encoded, err := json.Marshal(observation)
+	if err != nil {
+		return nil, "", androidUIObservationQuality{}, androidUITreeEnvelope{}, err
+	}
+	summary := fmt.Sprintf("visual observation displayId=%d width=%d height=%d mimeType=%s", displayID, width, height, mimeType)
+	return encoded, summary, quality, tree, nil
+}
+
 func (s *service) planAndroidUIAction(cfg map[string]string, req androiduiagent.Request, observation json.RawMessage, history []androiduiagent.Step) (plannedAndroidUIAction, error) {
 	historyJSON, _ := json.Marshal(historyForPlanner(history, 6))
 	allowedApps, _ := json.Marshal(req.AllowedApps)
@@ -389,13 +487,23 @@ func (s *service) planAndroidUIAction(cfg map[string]string, req androiduiagent.
 You may choose ONLY these actions: click, long_click, input_text, clear_text, scroll, swipe, visual_click, back, home, recents, open_app, wait, done, needs_user, fail.
 Never emit shell, ADB, root commands, arbitrary intents, package installation/uninstallation, permission grants, security-setting changes, purchases/payments, destructive deletion, or message submission with legal/financial impact. For those, return needs_user.
 Prefer stable UI-tree nodeId/snapshotId targets from the current observation. Respect quality.visualRecommended: use visual_click when the structured tree is EMPTY/LOW_INFORMATION or custom-drawn/WebView content prevents reliable semantic targeting.
+When the observation contains screenshotBase64, inspect the attached image and plan from visible coordinates. In screenshot mode use click with target {"x":pixelX,"y":pixelY,"displayId":currentDisplayId} for taps. Use swipe with start/end coordinates for scrolling. After a click focuses a text box, call input_text with text and no target to type into the virtual display.
 Never repeat an action that recent history marks no_effect, failed, or loop_blocked unless the observation changed materially.
 One action per turn. Never claim success unless the current observation itself shows the goal is achieved.
 JSON shape: {"action":"...","reason":"short","target":{...},"text":"...","direction":"forward|backward|up|down|left|right","amount":"small|medium|large","startX":0,"startY":0,"endX":0,"endY":0,"durationMs":300,"packageName":"...","description":"...","role":"...","waitMs":500,"result":"..."}.`
 	user := fmt.Sprintf("Goal:\n%s\n\nAllowed app packages (empty means no explicit open_app allowlist):\n%s\n\nRecent action history:\n%s\n\nCurrent structured Android UI observation:\n%s", req.Goal, allowedApps, historyJSON, observation)
+	screenshotBase64, screenshotMimeType, textObservation := androidUIObservationImage(observation)
+	userContent := any(user)
+	if screenshotBase64 != "" {
+		user = fmt.Sprintf("Goal:\n%s\n\nAllowed app packages (empty means no explicit open_app allowlist):\n%s\n\nRecent action history:\n%s\n\nCurrent Android UI observation:\n%s", req.Goal, allowedApps, historyJSON, textObservation)
+		userContent = []map[string]any{
+			{"type": "text", "text": user},
+			{"type": "image_url", "image_url": map[string]any{"url": "data:" + screenshotMimeType + ";base64," + screenshotBase64, "detail": "high"}},
+		}
+	}
 	content, _, err := s.callLLM(cfg, []map[string]interface{}{
 		{"role": "system", "content": system},
-		{"role": "user", "content": user},
+		{"role": "user", "content": userContent},
 	})
 	if err != nil {
 		return plannedAndroidUIAction{}, err
@@ -435,7 +543,14 @@ func mapAndroidUIAction(req androiduiagent.Request, action plannedAndroidUIActio
 		return "android.interaction.long_click", raw, nil
 	case "input_text":
 		if target["snapshotId"] == nil || target["nodeId"] == nil {
-			return "", nil, errors.New("input_text requires snapshotId and nodeId")
+			if req.DisplayID <= 0 {
+				return "", nil, errors.New("input_text requires snapshotId and nodeId")
+			}
+			if strings.TrimSpace(action.Text) == "" {
+				return "", nil, errors.New("input_text requires text")
+			}
+			raw, _ := json.Marshal(map[string]any{"ref": req.Ref, "text": action.Text, "replace": true})
+			return "android.virtual_display.text", raw, nil
 		}
 		if len([]rune(action.Text)) > 10000 {
 			return "", nil, errors.New("input text exceeds 10000 characters")
@@ -476,7 +591,7 @@ func mapAndroidUIAction(req androiduiagent.Request, action plannedAndroidUIActio
 		if duration > 3000 {
 			duration = 3000
 		}
-		raw, _ := json.Marshal(map[string]any{"startX": action.StartX, "startY": action.StartY, "endX": action.EndX, "endY": action.EndY, "durationMs": duration})
+		raw, _ := json.Marshal(map[string]any{"displayId": req.DisplayID, "startX": action.StartX, "startY": action.StartY, "endX": action.EndX, "endY": action.EndY, "durationMs": duration})
 		return "android.interaction.swipe", raw, nil
 	case "visual_click":
 		description := strings.TrimSpace(action.Description)
@@ -486,7 +601,7 @@ func mapAndroidUIAction(req androiduiagent.Request, action plannedAndroidUIActio
 		if description == "" {
 			return "", nil, errors.New("visual_click requires description or text")
 		}
-		raw, _ := json.Marshal(map[string]any{"description": description, "text": strings.TrimSpace(action.Text), "role": strings.TrimSpace(action.Role), "ocrFirst": true, "verify": true})
+		raw, _ := json.Marshal(map[string]any{"displayId": req.DisplayID, "description": description, "text": strings.TrimSpace(action.Text), "role": strings.TrimSpace(action.Role), "ocrFirst": true, "verify": true})
 		return "android.interaction.visual_click", raw, nil
 	case "back", "home", "recents":
 		raw, _ := json.Marshal(map[string]any{"action": action.Action})
@@ -499,6 +614,11 @@ func mapAndroidUIAction(req androiduiagent.Request, action plannedAndroidUIActio
 		if len(req.AllowedApps) > 0 && !containsString(req.AllowedApps, packageName) {
 			return "", nil, fmt.Errorf("package %s is outside allowedApps", packageName)
 		}
+		if req.DisplayID > 0 {
+			payload := map[string]any{"ref": req.Ref, "packageName": packageName}
+			raw, _ := json.Marshal(payload)
+			return "android.virtual_display.launch", raw, nil
+		}
 		raw, _ := json.Marshal(map[string]any{"packageName": packageName})
 		return "android.app.open", raw, nil
 	default:
@@ -510,7 +630,7 @@ func sanitizeUITarget(input map[string]any) map[string]any {
 	if len(input) == 0 {
 		return nil
 	}
-	allowed := map[string]struct{}{"snapshotId": {}, "nodeId": {}, "x": {}, "y": {}, "text": {}, "resourceId": {}, "role": {}, "description": {}}
+	allowed := map[string]struct{}{"snapshotId": {}, "nodeId": {}, "displayId": {}, "x": {}, "y": {}, "text": {}, "resourceId": {}, "role": {}, "description": {}}
 	out := make(map[string]any)
 	for key, value := range input {
 		if _, ok := allowed[key]; !ok || value == nil {
@@ -522,16 +642,54 @@ func sanitizeUITarget(input map[string]any) map[string]any {
 				out[key] = trimmed
 			}
 		case float64:
-			if key == "x" || key == "y" {
+			if key == "x" || key == "y" || key == "displayId" {
 				out[key] = int(typed)
 			}
 		case int:
-			if key == "x" || key == "y" {
+			if key == "x" || key == "y" || key == "displayId" {
 				out[key] = typed
 			}
 		}
 	}
 	return out
+}
+
+func androidUIObservationImage(raw json.RawMessage) (string, string, string) {
+	var payload map[string]any
+	if json.Unmarshal(raw, &payload) != nil {
+		return "", "", string(raw)
+	}
+	imageBase64, _ := payload["screenshotBase64"].(string)
+	mimeType, _ := payload["screenshotMimeType"].(string)
+	if strings.TrimSpace(imageBase64) == "" {
+		return "", "", string(raw)
+	}
+	delete(payload, "screenshotBase64")
+	if strings.TrimSpace(mimeType) == "" {
+		mimeType = "image/jpeg"
+	}
+	encoded, err := json.Marshal(payload)
+	if err != nil {
+		return imageBase64, mimeType, string(raw)
+	}
+	return imageBase64, mimeType, string(encoded)
+}
+
+func androidIntValue(value any) int {
+	switch typed := value.(type) {
+	case int:
+		return typed
+	case int32:
+		return int(typed)
+	case int64:
+		return int(typed)
+	case float32:
+		return int(typed)
+	case float64:
+		return int(typed)
+	default:
+		return 0
+	}
 }
 
 func compactAndroidObservation(raw json.RawMessage, maxBytes int) json.RawMessage {

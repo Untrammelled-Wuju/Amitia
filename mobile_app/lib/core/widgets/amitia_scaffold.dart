@@ -7,20 +7,22 @@ import '../../app/theme/app_radius.dart';
 import '../../app/theme/app_typography.dart';
 import '../../app/theme/design_tokens.dart';
 
-enum AmitiaAppBarNavigation {
-  drawer,
-  back,
-  none,
-}
+enum AmitiaAppBarNavigation { drawer, back, none }
 
 class ShellDrawerScope extends InheritedWidget {
   final VoidCallback openDrawer;
-  const ShellDrawerScope({super.key, required this.openDrawer, required super.child});
+  const ShellDrawerScope({
+    super.key,
+    required this.openDrawer,
+    required super.child,
+  });
   static ShellDrawerScope? of(BuildContext context) {
     return context.dependOnInheritedWidgetOfExactType<ShellDrawerScope>();
   }
+
   @override
-  bool updateShouldNotify(ShellDrawerScope oldWidget) => openDrawer != oldWidget.openDrawer;
+  bool updateShouldNotify(ShellDrawerScope oldWidget) =>
+      openDrawer != oldWidget.openDrawer;
 }
 
 class AmitiaScaffold extends StatefulWidget {
@@ -66,7 +68,8 @@ class _AmitiaScaffoldState extends State<AmitiaScaffold> {
     final router = GoRouter.of(context);
     final currentLocation = router.routerDelegate.currentConfiguration.fullPath;
     final isChatPage = currentLocation == AppRoutes.chat;
-    final isTopLevelPage = currentLocation == '/onboarding' || currentLocation == '/privacy';
+    final isTopLevelPage =
+        currentLocation == '/onboarding' || currentLocation == '/privacy';
     final canPop = router.canPop();
 
     return PopScope(
@@ -76,7 +79,8 @@ class _AmitiaScaffoldState extends State<AmitiaScaffold> {
         if (canPop) return;
         if (isChatPage || isTopLevelPage) {
           final now = DateTime.now();
-          if (_lastBackPress != null && now.difference(_lastBackPress!) < const Duration(seconds: 2)) {
+          if (_lastBackPress != null &&
+              now.difference(_lastBackPress!) < const Duration(seconds: 2)) {
             _lastBackPress = null;
             Navigator.of(context).maybePop();
           } else {
@@ -130,7 +134,9 @@ class AmitiaAppBar extends StatelessWidget implements PreferredSizeWidget {
 
   @override
   Size get preferredSize => Size.fromHeight(
-        DesignTokenRuntime.components.toolbarHeight + (bottom?.preferredSize.height ?? 0));
+    DesignTokenRuntime.components.toolbarHeight +
+        (bottom?.preferredSize.height ?? 0),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -139,7 +145,8 @@ class AmitiaAppBar extends StatelessWidget implements PreferredSizeWidget {
       if (navigation == AmitiaAppBarNavigation.back || showBackButton) {
         effectiveLeading = IconButton(
           icon: const Icon(Icons.arrow_back_ios_new, size: 18),
-          constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+          tooltip: '返回',
+          constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
           onPressed: () {
             final router = GoRouter.of(context);
             if (router.canPop()) {
@@ -155,7 +162,8 @@ class AmitiaAppBar extends StatelessWidget implements PreferredSizeWidget {
               ShellDrawerScope.of(context) != null)) {
         effectiveLeading = IconButton(
           icon: const Icon(Icons.menu, size: 20),
-          constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+          tooltip: '打开导航',
+          constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
           onPressed: () {
             final scope = ShellDrawerScope.of(context);
             if (scope != null) {
@@ -170,7 +178,16 @@ class AmitiaAppBar extends StatelessWidget implements PreferredSizeWidget {
     return AppBar(
       toolbarHeight: context.uiComponents.toolbarHeight,
       iconTheme: IconThemeData(size: context.uiIcons.navigation),
-      title: titleWidget ?? (title != null ? Text(title!, style: AppTypography.pageTitle(context)) : null),
+      title:
+          titleWidget ??
+          (title != null
+              ? Text(
+                  title!,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTypography.pageTitle(context),
+                )
+              : null),
       actions: actions,
       leading: effectiveLeading,
       centerTitle: centerTitle,
@@ -210,17 +227,33 @@ class AmitiaCard extends StatelessWidget {
     final paddingY = number('paddingY', AppSpacing.cardPadding);
     final radius = number('radius', AppRadius.medium);
     final borderWidth = number('borderWidth', context.uiComponents.borderWidth);
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        margin: margin,
-        padding: padding ?? EdgeInsets.symmetric(horizontal: paddingX, vertical: paddingY),
-        decoration: BoxDecoration(
-          color: backgroundColor ?? context.surfacePrimary,
+    return Padding(
+      padding: margin ?? EdgeInsets.zero,
+      child: Material(
+        color: backgroundColor ?? context.surfacePrimary,
+        borderRadius: borderRadius ?? BorderRadius.circular(radius),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
           borderRadius: borderRadius ?? BorderRadius.circular(radius),
-          border: border ?? Border.all(color: context.borderPrimary, width: borderWidth),
+          child: Container(
+            padding:
+                padding ??
+                EdgeInsets.symmetric(horizontal: paddingX, vertical: paddingY),
+            decoration: BoxDecoration(
+              borderRadius: borderRadius ?? BorderRadius.circular(radius),
+              border:
+                  border ??
+                  (variant.containsKey('borderWidth') && borderWidth > 0
+                      ? Border.all(
+                          color: context.borderPrimary,
+                          width: borderWidth,
+                        )
+                      : null),
+            ),
+            child: child,
+          ),
         ),
-        child: child,
       ),
     );
   }
@@ -249,7 +282,14 @@ class AmitiaSectionHeader extends StatelessWidget {
           if (actionText != null)
             GestureDetector(
               onTap: onAction,
-              child: Text(actionText!, style: TextStyle(fontSize: 13, color: context.accentPrimary, fontWeight: FontWeight.w500)),
+              child: Text(
+                actionText!,
+                style: TextStyle(
+                  fontSize: 13,
+                  color: context.accentPrimary,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
             ),
         ],
       ),
@@ -284,21 +324,22 @@ class AmitiaListTile extends StatelessWidget {
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
       child: Container(
-        constraints: BoxConstraints(minHeight: number('minHeight', context.uiLayout.listItemMinHeight)),
+        constraints: BoxConstraints(
+          minHeight: number('minHeight', context.uiLayout.listItemMinHeight),
+        ),
         padding: EdgeInsets.symmetric(
           horizontal: number('paddingX', AppSpacing.lg),
           vertical: number('paddingY', 14),
         ),
         decoration: BoxDecoration(
           color: isSelected ? context.accentSoft : Colors.transparent,
-          borderRadius: BorderRadius.circular(number('radius', AppRadius.small)),
+          borderRadius: BorderRadius.circular(
+            number('radius', AppRadius.small),
+          ),
         ),
         child: Row(
           children: [
-            if (leading != null) ...[
-              leading!,
-              const SizedBox(width: 12),
-            ],
+            if (leading != null) ...[leading!, const SizedBox(width: 12)],
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -307,7 +348,10 @@ class AmitiaListTile extends StatelessWidget {
                   if (subtitle != null)
                     Padding(
                       padding: EdgeInsets.only(top: 2),
-                      child: Text(subtitle!, style: AppTypography.caption(context)),
+                      child: Text(
+                        subtitle!,
+                        style: AppTypography.caption(context),
+                      ),
                     ),
                 ],
               ),

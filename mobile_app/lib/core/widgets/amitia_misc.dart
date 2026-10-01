@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 import '../../app/theme/app_colors.dart';
-import '../../app/theme/app_motion.dart';
 import '../../app/theme/app_spacing.dart';
 import '../../app/theme/app_radius.dart';
 import '../../app/theme/app_typography.dart';
@@ -20,7 +20,7 @@ class AmitiaStatusBadge extends StatelessWidget {
     super.key,
     required this.label,
     required this.type,
-    this.fontSize = 11,
+    this.fontSize = 12,
   });
 
   @override
@@ -106,30 +106,28 @@ class AmitiaEmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: EdgeInsets.all(AppSpacing.xxl),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, size: iconSize, color: context.textTertiary),
-            SizedBox(height: AppSpacing.md),
-            Text(title, style: AppTypography.cardTitle(context)),
-            if (subtitle != null) ...[
-              const SizedBox(height: 4),
-              Text(
-                subtitle!,
-                style: AppTypography.caption(context),
-                textAlign: TextAlign.center,
-              ),
-            ],
-            if (actionText != null && onAction != null) ...[
-              SizedBox(height: AppSpacing.lg),
-              AmitiaButtonOutline(label: actionText!, onPressed: onAction),
-            ],
-          ],
+    return _StateViewport(
+      children: [
+        Icon(icon, size: iconSize, color: context.textTertiary),
+        SizedBox(height: AppSpacing.md),
+        Text(
+          title,
+          style: AppTypography.cardTitle(context),
+          textAlign: TextAlign.center,
         ),
-      ),
+        if (subtitle != null) ...[
+          const SizedBox(height: 4),
+          Text(
+            subtitle!,
+            style: AppTypography.caption(context),
+            textAlign: TextAlign.center,
+          ),
+        ],
+        if (actionText != null && onAction != null) ...[
+          SizedBox(height: AppSpacing.lg),
+          AmitiaButtonOutline(label: actionText!, onPressed: onAction),
+        ],
+      ],
     );
   }
 }
@@ -142,24 +140,7 @@ class AmitiaButtonOutline extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onPressed,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-        decoration: BoxDecoration(
-          border: Border.all(color: context.accentPrimary, width: 1.5),
-          borderRadius: AppRadius.brMedium,
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            color: context.accentPrimary,
-            fontSize: 14,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-      ),
-    );
+    return AmitiaButton(label: label, onPressed: onPressed, outlined: true);
   }
 }
 
@@ -170,20 +151,17 @@ class AmitiaLoadingState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          CircularProgressIndicator(
-            strokeWidth: 2.5,
-            color: context.accentPrimary,
-          ),
-          if (message != null) ...[
-            SizedBox(height: AppSpacing.md),
-            Text(message!, style: AppTypography.caption(context)),
-          ],
+    return _StateViewport(
+      children: [
+        CircularProgressIndicator(
+          strokeWidth: 2.5,
+          color: context.accentPrimary,
+        ),
+        if (message != null) ...[
+          SizedBox(height: AppSpacing.md),
+          Text(message!, style: AppTypography.caption(context)),
         ],
-      ),
+      ],
     );
   }
 }
@@ -196,26 +174,20 @@ class AmitiaErrorState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: EdgeInsets.all(AppSpacing.xxl),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.error_outline, size: 48, color: context.error),
-            SizedBox(height: AppSpacing.md),
-            Text(
-              message,
-              style: AppTypography.body(context),
-              textAlign: TextAlign.center,
-            ),
-            if (onRetry != null) ...[
-              SizedBox(height: AppSpacing.lg),
-              AmitiaButton(label: '重试', onPressed: onRetry),
-            ],
-          ],
+    return _StateViewport(
+      children: [
+        Icon(Icons.error_outline, size: 48, color: context.error),
+        SizedBox(height: AppSpacing.md),
+        Text(
+          message,
+          style: AppTypography.body(context),
+          textAlign: TextAlign.center,
         ),
-      ),
+        if (onRetry != null) ...[
+          SizedBox(height: AppSpacing.lg),
+          AmitiaButton(label: '重试', onPressed: onRetry),
+        ],
+      ],
     );
   }
 }
@@ -236,29 +208,17 @@ class AmitiaSwitchTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.symmetric(
+    return SwitchListTile.adaptive(
+      contentPadding: EdgeInsets.symmetric(
         horizontal: AppSpacing.lg,
         vertical: 4,
       ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title, style: AppTypography.body(context)),
-                if (subtitle != null)
-                  Padding(
-                    padding: EdgeInsets.only(top: 2),
-                    child: Text(subtitle!, style: AppTypography.label(context)),
-                  ),
-              ],
-            ),
-          ),
-          Switch(value: value, onChanged: onChanged),
-        ],
-      ),
+      title: Text(title, style: AppTypography.body(context)),
+      subtitle: subtitle == null
+          ? null
+          : Text(subtitle!, style: AppTypography.caption(context)),
+      value: value,
+      onChanged: onChanged,
     );
   }
 }
@@ -277,53 +237,111 @@ class AmitiaSegmentedControl extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(
-        color: context.surfaceSecondary,
-        borderRadius: AppRadius.brMedium,
-      ),
-      child: Row(
-        children: List.generate(segments.length, (i) {
-          final isSelected = i == selectedIndex;
-          return Expanded(
-            child: GestureDetector(
-              onTap: () => onChanged(i),
-              child: AnimatedContainer(
-                duration: AppMotion.standard,
-                curve: AppMotion.standardCurve,
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                decoration: BoxDecoration(
-                  color: isSelected
-                      ? context.surfacePrimary
-                      : Colors.transparent,
-                  borderRadius: AppRadius.brSmall,
-                  boxShadow: isSelected
-                      ? [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.04),
-                            blurRadius: 4,
-                            offset: const Offset(0, 1),
-                          ),
-                        ]
-                      : null,
-                ),
+    if (segments.isEmpty) return const SizedBox.shrink();
+    final style = AppTypography.bodySmall(
+      context,
+    ).copyWith(fontWeight: FontWeight.w500);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        double requiredWidth = 8;
+        for (final segment in segments) {
+          final painter = TextPainter(
+            text: TextSpan(text: segment, style: style),
+            textDirection: Directionality.of(context),
+            textScaler: MediaQuery.textScalerOf(context),
+            maxLines: 1,
+          )..layout();
+          final segmentWidth = painter.width + 40;
+          if (segmentWidth > requiredWidth) requiredWidth = segmentWidth;
+          painter.dispose();
+        }
+        requiredWidth = requiredWidth * segments.length + 8;
+        final availableWidth = constraints.hasBoundedWidth
+            ? constraints.maxWidth
+            : requiredWidth;
+        final width = requiredWidth > availableWidth
+            ? requiredWidth
+            : availableWidth;
+        final children = {
+          for (var i = 0; i < segments.length; i++)
+            i: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 44),
+              child: Center(
                 child: Text(
                   segments[i],
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
-                    color: isSelected
-                        ? context.accentPrimary
+                  style: style.copyWith(
+                    color: i == selectedIndex
+                        ? context.textPrimary
                         : context.textSecondary,
                   ),
                 ),
               ),
             ),
-          );
-        }),
-      ),
+        };
+        void select(int value) {
+          if (value != selectedIndex) onChanged(value);
+        }
+
+        final control = SizedBox(
+          width: width,
+          child: requiredWidth > availableWidth
+              ? CupertinoSegmentedControl<int>(
+                  groupValue: selectedIndex.clamp(0, segments.length - 1),
+                  borderColor: context.surfaceSecondary,
+                  unselectedColor: context.surfaceSecondary,
+                  selectedColor: context.surfacePrimary,
+                  pressedColor: context.accentSoft,
+                  onValueChanged: select,
+                  children: children,
+                )
+              : CupertinoSlidingSegmentedControl<int>(
+                  groupValue: selectedIndex.clamp(0, segments.length - 1),
+                  backgroundColor: context.surfaceSecondary,
+                  thumbColor: context.surfacePrimary,
+                  onValueChanged: (value) {
+                    if (value != null) select(value);
+                  },
+                  children: children,
+                ),
+        );
+        return requiredWidth > availableWidth
+            ? SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: control,
+              )
+            : control;
+      },
+    );
+  }
+}
+
+class _StateViewport extends StatelessWidget {
+  const _StateViewport({required this.children});
+
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return SingleChildScrollView(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              minHeight: constraints.hasBoundedHeight
+                  ? constraints.maxHeight
+                  : 0,
+            ),
+            child: Padding(
+              padding: EdgeInsets.all(AppSpacing.xxl),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: children,
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }

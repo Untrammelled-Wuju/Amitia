@@ -35,7 +35,7 @@ void main() {
       'lib/core/widgets/amitia_drawer.dart',
     ).readAsStringSync();
 
-    expect(settingsSource, contains('_settingsOptionFontSize = 15'));
+    expect(settingsSource, contains('_settingsOptionFontSize = 16'));
     expect(settingsSource, contains('width: 32'));
     expect(settingsSource, contains('shape: BoxShape.circle'));
     expect(

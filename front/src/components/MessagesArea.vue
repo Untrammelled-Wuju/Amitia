@@ -137,14 +137,15 @@ SPDX-License-Identifier: AGPL-3.0-only
     </div>
 
     <transition name="fade">
-      <el-button
-        v-if="showScrollBtn"
-        :icon="ArrowDown"
-        circle
-        size="small"
-        class="scroll-btn"
-        @click="$emit('scrollToBottom')"
-      />
+      <div v-if="showScrollBtn" class="scroll-btn-anchor">
+        <el-button
+          :icon="ArrowDown"
+          circle
+          size="small"
+          class="scroll-btn"
+          @click="$emit('scrollToBottom')"
+        />
+      </div>
     </transition>
   </div>
 </template>
@@ -822,13 +823,35 @@ defineExpose({ rootEl });
 
 @media (max-width: 768px) { .messages-area { padding: 12px 8px; } }
 
-.scroll-btn {
+.scroll-btn-anchor {
   position: sticky;
-  bottom: 8px;
-  left: 50%;
-  transform: translateX(-50%);
+  bottom: 0;
+  height: 0;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
   z-index: 10;
+}
+
+.scroll-btn {
+  position: relative;
+  bottom: 8px;
+  width: 32px !important;
+  height: 32px !important;
+  min-width: 32px;
+  padding: 0 !important;
+  border-radius: 50% !important;
+  background-color: var(--tp-control) !important;
+  border-color: var(--tp-border) !important;
+  overflow: hidden;
+  pointer-events: auto;
   box-shadow: var(--ac-shadow-md);
+}
+
+.scroll-btn:hover,
+.scroll-btn:focus-visible {
+  background-color: var(--tp-control-hover) !important;
+  border-color: var(--tp-border-strong) !important;
 }
 
 .fade-enter-active,

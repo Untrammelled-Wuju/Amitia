@@ -10,23 +10,32 @@
     </div>
     <div v-else class="amrp-audio-line">
       <audio
+        v-if="resolvedUrl"
         ref="audioEl"
-        :src="block.url"
+        :src="resolvedUrl"
         controls
         preload="metadata"
         @loadedmetadata="status = 'ready'"
         @error="onError"
       ></audio>
+      <span v-else class="amrp-audio-loading">加载中</span>
       <button type="button" @click="cycleSpeed">{{ speed }}×</button>
-      <a :href="block.url" download>下载</a>
+      <button type="button" :disabled="downloading" @click="download">
+        {{ downloading ? "下载中" : "下载" }}
+      </button>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from "vue";
+import { computed, ref, watch } from "vue";
+import { ElMessage } from "element-plus";
 import type { AudioBlock } from "../types";
 import { formatDuration } from "../utils";
+import {
+  downloadConversationMedia,
+  useResolvedConversationMediaUrl,
+} from "../media";
 
 const props = defineProps<{
   block: AudioBlock;
@@ -37,6 +46,9 @@ const errorMessage = ref("");
 const status = ref(props.block.status ?? "loading");
 const speeds = [1, 1.25, 1.5, 2];
 const speed = ref(1);
+const downloading = ref(false);
+const { resolved: resolvedUrl, error: resolveError } =
+  useResolvedConversationMediaUrl(computed(() => props.block.url));
 
 watch(
   () => props.block.status,
@@ -44,6 +56,12 @@ watch(
     if (value) status.value = value;
   },
 );
+
+watch(resolveError, (value) => {
+  if (!value) return;
+  status.value = "failed";
+  errorMessage.value = value;
+});
 
 function cycleSpeed() {
   const index = speeds.indexOf(speed.value);
@@ -60,6 +78,22 @@ function retry() {
   status.value = "loading";
   errorMessage.value = "";
   if (audioEl.value) audioEl.value.load();
+}
+
+async function download() {
+  if (downloading.value) return;
+  downloading.value = true;
+  try {
+    const saved = await downloadConversationMedia(
+      props.block.downloadUrl || props.block.url,
+      props.block.title || "audio",
+    );
+    if (saved) ElMessage.success("语音已保存");
+  } catch (reason) {
+    ElMessage.error(reason instanceof Error ? reason.message : "语音保存失败");
+  } finally {
+    downloading.value = false;
+  }
 }
 </script>
 
@@ -89,10 +123,18 @@ function retry() {
   gap: 7px;
 }
 
-audio {
+audio,
+.amrp-audio-loading {
   min-width: 0;
   flex: 1;
   height: 36px;
+}
+
+.amrp-audio-loading {
+  display: inline-flex;
+  align-items: center;
+  color: var(--amrp-muted);
+  font-size: 10.5px;
 }
 
 button,
@@ -106,6 +148,11 @@ a {
   font-size: 10px;
   text-decoration: none;
   cursor: pointer;
+}
+
+button:disabled {
+  cursor: wait;
+  opacity: 0.65;
 }
 
 .amrp-media-error {

@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 )
 
-type InternalCallFunc func(ctx context.Context, handlerName string, input json.RawMessage) (json.RawMessage, error)
+type InternalCallFunc func(ctx context.Context, handlerName string, input json.RawMessage, invocation ToolInvocationContext) (json.RawMessage, error)
 
 type InternalRuntimeAdapter struct {
 	dispatcher InternalCallFunc
@@ -37,7 +37,7 @@ func (a *InternalRuntimeAdapter) Execute(
 		}
 	}
 
-	output, err := a.dispatcher(ctx, binding.HandlerName, input)
+	output, err := a.dispatcher(ctx, binding.HandlerName, input, invocation)
 	if err != nil {
 		return UnifiedToolResult{
 			InvocationID: invocation.InvocationID,
@@ -53,6 +53,7 @@ func (a *InternalRuntimeAdapter) Execute(
 	return UnifiedToolResult{
 		InvocationID: invocation.InvocationID,
 		Status:       ToolResultStatusSuccess,
+		Structured:   output,
 		Content: []ToolContent{
 			{Type: ToolContentText, Text: string(output)},
 		},

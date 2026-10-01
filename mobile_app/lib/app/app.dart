@@ -19,11 +19,13 @@ import '../core/ui_runtime/mobile_ui_host_event_client.dart';
 import '../core/ui_runtime/mobile_ui_host_command_host.dart';
 import '../core/ui_runtime/ui_theme.dart';
 import '../core/settings/appearance_preferences.dart';
+import '../core/settings/chat_permission_preferences.dart';
 import '../core/services/providers.dart' show extensionServiceProvider;
 import '../features/desktop_pet/runtime/desktop_pet_mobile_runtime.dart';
 import '../features/extensions/presentation/widgets/mcp_interaction_guard.dart';
 import 'theme/app_theme.dart';
 import 'theme/app_motion.dart';
+import 'theme/app_text_scaler.dart';
 import 'theme/design_tokens.dart';
 import 'app_routes.dart';
 import 'router.dart';
@@ -46,6 +48,7 @@ class _AmitiaAppRootState extends ConsumerState<AmitiaAppRoot> {
 
   Future<void> _initializeBootstrap() async {
     await ref.read(appearancePreferencesProvider.notifier).init();
+    await ref.read(chatPermissionPreferencesProvider.notifier).init();
     final deploymentNotifier = ref.read(
       mobileDeploymentConfigProvider.notifier,
     );
@@ -466,12 +469,8 @@ class AmitiaApp extends ConsumerWidget {
       routerConfig: router,
       builder: (context, child) {
         final media = MediaQuery.of(context);
-        final systemScale = media.textScaler.scale(1.0);
-        final effectiveScale = (systemScale * appearance.fontScale)
-            .clamp(0.8, 2.0)
-            .toDouble();
         final adjustedMedia = media.copyWith(
-          textScaler: TextScaler.linear(effectiveScale),
+          textScaler: AppTextScaler(media.textScaler, appearance.fontScale),
           disableAnimations:
               media.disableAnimations ||
               !appearance.dynamicEffect ||

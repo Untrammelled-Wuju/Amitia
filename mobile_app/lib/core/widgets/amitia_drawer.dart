@@ -62,7 +62,8 @@ class AmitiaDrawer extends ConsumerStatefulWidget {
 class _AmitiaDrawerState extends ConsumerState<AmitiaDrawer> {
   void _navigateTo(String route) {
     final router = GoRouter.of(context);
-    final currentRoute = router.routerDelegate.currentConfiguration.fullPath;
+    final currentRoute = router.routerDelegate.currentConfiguration.uri
+        .toString();
     Navigator.of(context).pop();
     final action = resolveDrawerNavigationAction(
       currentLocation: currentRoute,

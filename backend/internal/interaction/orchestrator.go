@@ -136,7 +136,7 @@ func DefaultOrchestratorConfig() OrchestratorConfig {
 	return OrchestratorConfig{
 		MaxConcurrent:   16,
 		SupersedePolicy: SupersedePolicyLatest,
-		DefaultTimeout:  180 * time.Second,
+		DefaultTimeout:  0,
 	}
 }
 
@@ -191,7 +191,7 @@ func normalizeOrchestratorConfig(cfg OrchestratorConfig) OrchestratorConfig {
 	if cfg.MaxConcurrent <= 0 {
 		cfg.MaxConcurrent = defaults.MaxConcurrent
 	}
-	if cfg.DefaultTimeout <= 0 {
+	if cfg.DefaultTimeout < 0 {
 		cfg.DefaultTimeout = defaults.DefaultTimeout
 	}
 	if cfg.SupersedePolicy == "" {

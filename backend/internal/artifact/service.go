@@ -5,8 +5,14 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"io"
+	"log"
+	"net"
 	"net/http"
+	"net/url"
+	"path"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -24,6 +30,17 @@ type CreateRequest struct {
 	Height       int
 	DurationMS   int64
 	Reader       io.Reader
+	MaxBytes     int64
+}
+
+type ImportURLRequest struct {
+	OwnerSpaceID string
+	WorkspaceID  string
+	URL          string
+	Kind         Kind
+	MIMEType     string
+	Filename     string
+	Source       Source
 	MaxBytes     int64
 }
 
@@ -123,17 +140,120 @@ func (s *Service) Create(ctx context.Context, req CreateRequest) (Artifact, erro
 		return Artifact{}, ErrMetadataWriteFailed(err)
 	}
 
-	if s.eventSink != nil {
-		if err := s.eventSink.PublishCreated(ctx, tx, art); err != nil {
-			return Artifact{}, ErrMetadataWriteFailed(err)
-		}
-	}
-
 	if err := tx.Commit(); err != nil {
 		return Artifact{}, ErrMetadataWriteFailed(err)
 	}
+	if s.eventSink != nil {
+		if err := s.eventSink.PublishCreated(ctx, art); err != nil {
+			log.Printf("artifact: publish created event failed: %v", err)
+		}
+	}
 
 	return *art, nil
+}
+
+func (s *Service) ImportURL(ctx context.Context, req ImportURLRequest) (Artifact, error) {
+	rawURL := strings.TrimSpace(req.URL)
+	if rawURL == "" {
+		return Artifact{}, ErrInvalidUpload("missing url")
+	}
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return Artifact{}, ErrInvalidUpload("invalid url")
+	}
+	scheme := strings.ToLower(strings.TrimSpace(parsed.Scheme))
+	if scheme != "https" && scheme != "http" {
+		return Artifact{}, ErrInvalidUpload("unsupported url scheme")
+	}
+	maxBytes := req.MaxBytes
+	if maxBytes <= 0 {
+		maxBytes = s.limits.MaxBytesForKind(req.Kind)
+	}
+	if maxBytes <= 0 {
+		maxBytes = 32 * 1024 * 1024
+	}
+	client := &http.Client{
+		Timeout: 20 * time.Second,
+		Transport: &http.Transport{
+			Proxy:               nil,
+			ForceAttemptHTTP2:   true,
+			DialContext:         safeArtifactDialContext,
+			TLSHandshakeTimeout: 10 * time.Second,
+		},
+	}
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
+	if err != nil {
+		return Artifact{}, ErrInvalidUpload(err.Error())
+	}
+	httpReq.Header.Set("User-Agent", "Amitia/1.0")
+	resp, err := client.Do(httpReq)
+	if err != nil {
+		return Artifact{}, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return Artifact{}, fmt.Errorf("download failed with status %d", resp.StatusCode)
+	}
+	data, err := io.ReadAll(io.LimitReader(resp.Body, maxBytes+1))
+	if err != nil {
+		return Artifact{}, err
+	}
+	if int64(len(data)) > maxBytes {
+		return Artifact{}, ErrTooLarge(maxBytes)
+	}
+	mimeType := strings.TrimSpace(strings.Split(resp.Header.Get("Content-Type"), ";")[0])
+	if strings.TrimSpace(req.MIMEType) != "" {
+		mimeType = strings.TrimSpace(req.MIMEType)
+	}
+	filename := strings.TrimSpace(req.Filename)
+	if filename == "" {
+		filename = path.Base(parsed.Path)
+	}
+	if filename == "." || filename == "/" || filename == "" {
+		filename = "attachment"
+	}
+	source := req.Source
+	if source == "" {
+		source = SourceImport
+	}
+	return s.Create(ctx, CreateRequest{
+		OwnerSpaceID: req.OwnerSpaceID,
+		WorkspaceID:  req.WorkspaceID,
+		Kind:         req.Kind,
+		MIMEType:     mimeType,
+		Filename:     filename,
+		Source:       source,
+		Reader:       bytes.NewReader(data),
+		MaxBytes:     maxBytes,
+	})
+}
+
+func safeArtifactDialContext(ctx context.Context, network, address string) (net.Conn, error) {
+	host, _, err := net.SplitHostPort(address)
+	if err != nil {
+		return nil, err
+	}
+	ips, err := net.DefaultResolver.LookupIPAddr(ctx, host)
+	if err != nil {
+		return nil, err
+	}
+	for _, ip := range ips {
+		if !isPublicArtifactIP(ip.IP) {
+			return nil, fmt.Errorf("blocked non-public artifact address: %s", ip.IP)
+		}
+	}
+	dialer := &net.Dialer{Timeout: 10 * time.Second, KeepAlive: 30 * time.Second}
+	return dialer.DialContext(ctx, network, address)
+}
+
+func isPublicArtifactIP(ip net.IP) bool {
+	return ip != nil &&
+		!ip.IsPrivate() &&
+		!ip.IsLoopback() &&
+		!ip.IsUnspecified() &&
+		!ip.IsLinkLocalUnicast() &&
+		!ip.IsLinkLocalMulticast() &&
+		!ip.IsMulticast()
 }
 
 func (s *Service) GetByID(ctx context.Context, id ID) (Artifact, error) {
@@ -189,14 +309,13 @@ func (s *Service) Delete(ctx context.Context, ownerSpaceID string, id ID) error 
 		return err
 	}
 
-	if s.eventSink != nil {
-		if err := s.eventSink.PublishDeleted(ctx, tx, art); err != nil {
-			return err
-		}
-	}
-
 	if err := tx.Commit(); err != nil {
 		return err
+	}
+	if s.eventSink != nil {
+		if err := s.eventSink.PublishDeleted(ctx, art); err != nil {
+			log.Printf("artifact: publish deleted event failed: %v", err)
+		}
 	}
 
 	art.Status = StatusDeleted

@@ -103,20 +103,22 @@ func (f *Facade) Status(ctx context.Context) ImageIntelligenceStatus {
 }
 
 type ImageIntelligenceFactory struct {
-	visionSvc       vision.Service
-	imagegenSvc     imagegen.Service
+	visionSvc        vision.Service
+	imagegenSvc      imagegen.Service
 	providerRegistry *imageprovider.Registry
 	resourceResolver *resourceuri.PhysicalResolver
-	mu              sync.Mutex
-	cached          *Facade
+	artifacts        ArtifactCreator
+	mu               sync.Mutex
+	cached           *Facade
 }
 
-func NewImageIntelligenceFactory(visionSvc vision.Service, imagegenSvc imagegen.Service, providerRegistry *imageprovider.Registry, resourceResolver *resourceuri.PhysicalResolver) *ImageIntelligenceFactory {
+func NewImageIntelligenceFactory(visionSvc vision.Service, imagegenSvc imagegen.Service, providerRegistry *imageprovider.Registry, resourceResolver *resourceuri.PhysicalResolver, artifacts ArtifactCreator) *ImageIntelligenceFactory {
 	return &ImageIntelligenceFactory{
-		visionSvc:       visionSvc,
-		imagegenSvc:     imagegenSvc,
+		visionSvc:        visionSvc,
+		imagegenSvc:      imagegenSvc,
 		providerRegistry: providerRegistry,
 		resourceResolver: resourceResolver,
+		artifacts:        artifacts,
 	}
 }
 
@@ -130,7 +132,7 @@ func (factory *ImageIntelligenceFactory) Build() *Facade {
 
 	understand := NewUnderstandProvider(factory.visionSvc)
 	ocr := NewOCRProvider(factory.visionSvc)
-	generate := NewGenerateProvider(factory.imagegenSvc, factory.providerRegistry)
+	generate := NewGenerateProvider(factory.imagegenSvc, factory.providerRegistry, factory.artifacts)
 	resolver := NewImageResourceResolver(factory.resourceResolver)
 	detector := NewCapabilityDetector(factory.visionSvc, factory.providerRegistry)
 

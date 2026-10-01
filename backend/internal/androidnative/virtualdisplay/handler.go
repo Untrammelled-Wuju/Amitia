@@ -2,11 +2,16 @@ package virtualdisplay
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
+	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/u-ai/backend/internal/androidnative"
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
+	"github.com/u-ai/backend/pkg/util"
 )
 
 const (
@@ -54,23 +59,24 @@ func NewHandler(service *Service) *Handler {
 }
 
 func (h *Handler) Execute(ctx context.Context, request capability.AndroidBridgeRequest) capability.AndroidBridgeResponse {
+	var response capability.AndroidBridgeResponse
 	switch request.Operation {
 	case OperationStatus:
-		return h.handleStatus(ctx, request)
+		response = h.handleStatus(ctx, request)
 	case OperationCreate:
-		return h.handleCreate(ctx, request)
+		response = h.handleCreate(ctx, request)
 	case OperationGet:
-		return h.handleGet(ctx, request)
+		response = h.handleGet(ctx, request)
 	case OperationList:
-		return h.handleList(ctx, request)
+		response = h.handleList(ctx, request)
 	case OperationResize:
-		return h.handleResize(ctx, request)
+		response = h.handleResize(ctx, request)
 	case OperationRelease:
-		return h.handleRelease(ctx, request)
+		response = h.handleRelease(ctx, request)
 	case OperationLaunch, OperationCapture, OperationTap, OperationSwipe, OperationKey, OperationText:
-		return h.handleDisplayOperation(ctx, request)
+		response = h.handleDisplayOperation(ctx, request)
 	default:
-		return capability.AndroidBridgeResponse{
+		response = capability.AndroidBridgeResponse{
 			ProtocolVersion: request.ProtocolVersion,
 			RequestID:       request.RequestID,
 			Status:          "error",
@@ -80,6 +86,30 @@ func (h *Handler) Execute(ctx context.Context, request capability.AndroidBridgeR
 			},
 		}
 	}
+	if response.Status == "success" && response.Result != nil {
+		response.Result = withTextResult(response.Result)
+	}
+	return response
+}
+
+func withTextResult(result map[string]any) map[string]any {
+	summary := make(map[string]any, len(result)+1)
+	for key, value := range result {
+		if key == "dataBase64" {
+			if encoded, ok := value.(string); ok {
+				size := len(encoded)
+				summary["dataBase64Bytes"] = size
+				result["dataBase64Bytes"] = size
+			}
+			continue
+		}
+		summary[key] = value
+	}
+	if encoded, err := json.Marshal(summary); err == nil {
+		summary["text"] = string(encoded)
+	}
+	result["text"] = summary["text"]
+	return result
 }
 
 func (h *Handler) handleDisplayOperation(ctx context.Context, request capability.AndroidBridgeRequest) capability.AndroidBridgeResponse {
@@ -93,6 +123,9 @@ func (h *Handler) handleDisplayOperation(ctx context.Context, request capability
 		}
 		return errorResponse(request, ErrVirtualDisplayNative, err.Error())
 	}
+	if request.Operation == OperationCapture {
+		result = materializeCaptureResult(request.RequestID, result)
+	}
 	return capability.AndroidBridgeResponse{
 		ProtocolVersion: request.ProtocolVersion,
 		RequestID:       request.RequestID,
@@ -101,30 +134,91 @@ func (h *Handler) handleDisplayOperation(ctx context.Context, request capability
 	}
 }
 
+func materializeCaptureResult(requestID string, result map[string]any) map[string]any {
+	encoded, _ := result["dataBase64"].(string)
+	if encoded == "" {
+		return result
+	}
+	data, err := base64.StdEncoding.DecodeString(encoded)
+	if err != nil {
+		return result
+	}
+	format := strings.ToLower(stringValue(result["format"], "jpeg"))
+	extension := ".jpg"
+	switch format {
+	case "png":
+		extension = ".png"
+	case "webp":
+		extension = ".webp"
+	}
+	paths := util.DetectRuntimePaths("")
+	dir := filepath.Join(paths.TempDir, "android-media", "virtual-display")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return result
+	}
+	name := safeCaptureName(requestID) + extension
+	if err := os.WriteFile(filepath.Join(dir, name), data, 0o600); err != nil {
+		return result
+	}
+	delete(result, "dataBase64")
+	result["resourceUri"] = "amitia://temp/android-media/virtual-display/" + name
+	result["sizeBytes"] = len(data)
+	return result
+}
+
+func safeCaptureName(value string) string {
+	name := strings.Map(func(r rune) rune {
+		if (r >= 'a' && r <= 'z') ||
+			(r >= 'A' && r <= 'Z') ||
+			(r >= '0' && r <= '9') ||
+			r == '-' ||
+			r == '_' {
+			return r
+		}
+		return '_'
+	}, strings.TrimSpace(value))
+	if name == "" {
+		return "virtual-display-capture"
+	}
+	return name
+}
+
 func (h *Handler) handleStatus(ctx context.Context, request capability.AndroidBridgeRequest) capability.AndroidBridgeResponse {
 	if h.service == nil {
 		return errorResponse(request, ErrVirtualDisplayUnavailable, "service not initialized")
 	}
 	result := h.service.Status(ctx)
+	payload := map[string]any{
+		"supported":                 result.Supported,
+		"featureSecondaryDisplays":  result.FeatureSecondaryDisplays,
+		"canCreate":                 result.CanCreate,
+		"active":                    result.Active,
+		"activeCount":               result.ActiveCount,
+		"displays":                  result.Displays,
+		"frameSourceSupported":      result.FrameSourceSupported,
+		"uiTreeSupported":           result.UITreeSupported,
+		"gestureSupported":          result.GestureSupported,
+		"thirdPartyLaunchSupported": result.ThirdPartyLaunchSupported,
+		"uiTreeTool":                "android_ui_tree_snapshot",
+		"nodeActionTools": []string{
+			"android_interaction_click",
+			"android_interaction_long_click",
+			"android_interaction_input_text",
+			"android_interaction_clear_text",
+			"android_interaction_scroll",
+			"android_interaction_node_action",
+		},
+		"state":  result.State,
+		"reason": result.Reason,
+	}
+	if result.Display != nil {
+		payload["display"] = result.Display
+	}
 	return capability.AndroidBridgeResponse{
 		ProtocolVersion: request.ProtocolVersion,
 		RequestID:       request.RequestID,
 		Status:          "success",
-		Result: map[string]any{
-			"supported":                 result.Supported,
-			"featureSecondaryDisplays":  result.FeatureSecondaryDisplays,
-			"canCreate":                 result.CanCreate,
-			"active":                    result.Active,
-			"activeCount":               result.ActiveCount,
-			"display":                   result.Display,
-			"displays":                  result.Displays,
-			"frameSourceSupported":      result.FrameSourceSupported,
-			"uiTreeSupported":           result.UITreeSupported,
-			"gestureSupported":          result.GestureSupported,
-			"thirdPartyLaunchSupported": result.ThirdPartyLaunchSupported,
-			"state":                     result.State,
-			"reason":                    result.Reason,
-		},
+		Result:          payload,
 	}
 }
 
@@ -286,6 +380,7 @@ func errorResponse(request capability.AndroidBridgeRequest, code, message string
 }
 
 func (s *Service) Status(ctx context.Context) StatusResult {
+	s.syncNativeDisplays(ctx)
 	result := StatusResult{
 		Supported:                 s.bridge != nil,
 		FeatureSecondaryDisplays:  s.bridge != nil,
@@ -343,12 +438,71 @@ func (s *Service) Status(ctx context.Context) StatusResult {
 }
 
 func (s *Service) List(ctx context.Context) []VirtualDisplayInfo {
+	s.syncNativeDisplays(ctx)
 	records := s.store.List()
 	out := make([]VirtualDisplayInfo, 0, len(records))
 	for i := range records {
 		out = append(out, recordToInfo(&records[i]))
 	}
 	return out
+}
+
+func (s *Service) syncNativeDisplays(ctx context.Context) {
+	if s.bridge == nil {
+		return
+	}
+	result, err := s.bridge.Execute(ctx, OperationList, map[string]any{})
+	if err != nil {
+		return
+	}
+	nativeDisplays := mapSlice(result["displays"])
+	if nativeDisplays == nil {
+		return
+	}
+	liveRefs := make(map[VirtualDisplayRef]struct{}, len(nativeDisplays))
+	for _, item := range nativeDisplays {
+		displayID := numberAsInt(item["displayId"])
+		if displayID < 0 {
+			continue
+		}
+		ref := VirtualDisplayRef(stringValue(item["ref"], ""))
+		if ref.IsEmpty() {
+			continue
+		}
+		liveRefs[ref] = struct{}{}
+		record := &VirtualDisplayRecord{
+			Ref:             ref,
+			DisplayID:       displayID,
+			Generation:      uint64(positiveInt(item["generation"], 1)),
+			Name:            stringValue(item["name"], "amitia_virtual"),
+			Width:           positiveInt(item["width"], s.policy.DefaultWidth),
+			Height:          positiveInt(item["height"], s.policy.DefaultHeight),
+			DensityDPI:      positiveInt(item["densityDpi"], s.policy.DefaultDensityDPI),
+			SurfaceAttached: boolValue(item["surfaceAttached"], true),
+			State:           StateReady,
+			CreatedAt:       time.Now(),
+		}
+		if existing := s.store.GetByRef(ref); existing != nil {
+			_ = s.store.Update(ref, func(current *VirtualDisplayRecord) error {
+				current.DisplayID = record.DisplayID
+				current.Generation = record.Generation
+				current.Name = record.Name
+				current.Width = record.Width
+				current.Height = record.Height
+				current.DensityDPI = record.DensityDPI
+				current.SurfaceAttached = record.SurfaceAttached
+				current.State = StateReady
+				return nil
+			})
+			continue
+		}
+		_ = s.store.Insert(record)
+	}
+	for _, record := range s.store.List() {
+		if _, ok := liveRefs[record.Ref]; !ok {
+			_, _ = s.store.Remove(record.Ref)
+		}
+	}
 }
 
 func (s *Service) Create(ctx context.Context, req CreateRequest) (*CreateResult, error) {
@@ -412,6 +566,7 @@ func (s *Service) Create(ctx context.Context, req CreateRequest) (*CreateResult,
 }
 
 func (s *Service) Get(ctx context.Context, req GetRequest) (*VirtualDisplayInfo, error) {
+	s.syncNativeDisplays(ctx)
 	rec := s.store.GetByRef(req.Ref)
 	if rec == nil {
 		return nil, NewError(ErrVirtualDisplayNotFound, "virtual display not found")
@@ -506,6 +661,23 @@ func numberAsInt(v any) int {
 		return int(n)
 	default:
 		return -1
+	}
+}
+
+func mapSlice(v any) []map[string]any {
+	switch typed := v.(type) {
+	case []map[string]any:
+		return typed
+	case []any:
+		out := make([]map[string]any, 0, len(typed))
+		for _, item := range typed {
+			if mapped, ok := item.(map[string]any); ok {
+				out = append(out, mapped)
+			}
+		}
+		return out
+	default:
+		return nil
 	}
 }
 

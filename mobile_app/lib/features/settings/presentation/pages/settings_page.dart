@@ -12,14 +12,14 @@ import '../../../../core/services/providers.dart';
 import '../../../../core/settings/appearance_preferences.dart';
 import '../../../../shared/models/models.dart';
 
-const double _settingsOptionFontSize = 15;
+const double _settingsOptionFontSize = 16;
 
 List<SettingGroup> _settingsGroups({
   required String modelSummary,
   required String appearanceSummary,
 }) => <SettingGroup>[
   SettingGroup(
-    title: 'AI 与个性化',
+    title: 'AI 与对话',
     items: [
       SettingItem(
         title: '模型设置',
@@ -33,6 +33,16 @@ List<SettingGroup> _settingsGroups({
         route: AppRoutes.settingsSearchApi,
       ),
       SettingItem(
+        title: '时间感知',
+        icon: Icons.schedule_outlined,
+        route: AppRoutes.settingsTemporal,
+      ),
+    ],
+  ),
+  SettingGroup(
+    title: '外观与通知',
+    items: [
+      SettingItem(
         title: '外观设置',
         icon: Icons.palette_outlined,
         value: appearanceSummary,
@@ -44,60 +54,15 @@ List<SettingGroup> _settingsGroups({
         route: AppRoutes.settingsUIProviders,
       ),
       SettingItem(
-        title: '时间感知',
-        icon: Icons.schedule_outlined,
-        route: AppRoutes.settingsTemporal,
+        title: '系统设置',
+        icon: Icons.settings_applications_outlined,
+        route: AppRoutes.settingsSystem,
       ),
     ],
   ),
   SettingGroup(
-    title: '系统与维护',
+    title: '数据与隐私',
     items: [
-      SettingItem(
-        title: '运行概览',
-        icon: Icons.monitor_heart_outlined,
-        route: AppRoutes.settingsOverview,
-      ),
-      SettingItem(
-        title: '运行数据',
-        icon: Icons.insights_outlined,
-        route: AppRoutes.settingsData,
-      ),
-      SettingItem(
-        title: 'Runtime',
-        icon: Icons.terminal,
-        route: AppRoutes.settingsRuntime,
-      ),
-      SettingItem(
-        title: '运行模式',
-        icon: Icons.hub_outlined,
-        route: AppRoutes.settingsRuntimeMode,
-      ),
-      SettingItem(
-        title: '长期运行维护',
-        icon: Icons.schedule_send_outlined,
-        route: AppRoutes.settingsLongRunning,
-      ),
-      SettingItem(
-        title: '高级系统',
-        icon: Icons.admin_panel_settings_outlined,
-        route: AppRoutes.settingsAdvanced,
-      ),
-      SettingItem(
-        title: 'BDI 决策可视化',
-        icon: Icons.account_tree_outlined,
-        route: AppRoutes.settingsDecisionViz,
-      ),
-      SettingItem(
-        title: '系统权限',
-        icon: Icons.lock_outlined,
-        route: AppRoutes.settingsPermissions,
-      ),
-      SettingItem(
-        title: 'Android Automation',
-        icon: Icons.smartphone_outlined,
-        route: AppRoutes.settingsAndroidAutomation,
-      ),
       SettingItem(
         title: '存储管理',
         icon: Icons.storage_outlined,
@@ -109,30 +74,14 @@ List<SettingGroup> _settingsGroups({
         route: AppRoutes.chatLogs,
       ),
       SettingItem(
+        title: '备份与恢复',
+        icon: Icons.backup_outlined,
+        route: AppRoutes.settingsBackup,
+      ),
+      SettingItem(
         title: '安全设置',
         icon: Icons.security_outlined,
         route: AppRoutes.settingsSafety,
-      ),
-      SettingItem(
-        title: '维护工具',
-        icon: Icons.build_circle_outlined,
-        route: AppRoutes.settingsMaintenance,
-      ),
-      SettingItem(
-        title: '工具箱',
-        icon: Icons.handyman_outlined,
-        value: '诊断工具',
-        route: AppRoutes.settingsToolbox,
-      ),
-    ],
-  ),
-  SettingGroup(
-    title: '部署与隐私',
-    items: [
-      SettingItem(
-        title: '部署配置',
-        icon: Icons.cloud_upload_outlined,
-        route: AppRoutes.settingsDeployment,
       ),
       SettingItem(
         title: '隐私扫描',
@@ -149,25 +98,91 @@ List<SettingGroup> _settingsGroups({
         icon: Icons.description_outlined,
         route: AppRoutes.settingsUserAgreement,
       ),
+    ],
+  ),
+  SettingGroup(
+    title: '设备与运行',
+    items: [
       SettingItem(
-        title: '系统设置',
-        icon: Icons.settings_applications_outlined,
-        route: AppRoutes.settingsSystem,
+        title: '我的设备',
+        icon: Icons.devices_outlined,
+        route: AppRoutes.settingsDevices,
+      ),
+      SettingItem(
+        title: '部署配置',
+        icon: Icons.cloud_upload_outlined,
+        route: AppRoutes.settingsDeployment,
+      ),
+      SettingItem(
+        title: '系统权限',
+        icon: Icons.lock_outlined,
+        route: AppRoutes.settingsPermissions,
+      ),
+      SettingItem(
+        title: 'Android 自动化',
+        icon: Icons.smartphone_outlined,
+        route: AppRoutes.settingsAndroidAutomation,
+      ),
+      SettingItem(
+        title: '运行概览',
+        icon: Icons.monitor_heart_outlined,
+        route: AppRoutes.settingsOverview,
+      ),
+      SettingItem(
+        title: '运行数据',
+        icon: Icons.insights_outlined,
+        route: AppRoutes.settingsData,
+      ),
+      SettingItem(
+        title: '运行环境',
+        icon: Icons.terminal,
+        route: AppRoutes.settingsRuntime,
+      ),
+      SettingItem(
+        title: 'Core 运行模式',
+        icon: Icons.hub_outlined,
+        route: AppRoutes.settingsRuntimeMode,
       ),
     ],
   ),
   SettingGroup(
-    title: '关于',
+    title: '维护与高级工具',
     items: [
       SettingItem(
-        title: '更新中心',
-        icon: Icons.system_update_outlined,
-        route: AppRoutes.settingsAppUpdate,
+        title: '长期运行维护',
+        icon: Icons.schedule_send_outlined,
+        route: AppRoutes.settingsLongRunning,
       ),
       SettingItem(
-        title: '备份与恢复',
-        icon: Icons.backup_outlined,
-        route: AppRoutes.settingsBackup,
+        title: '维护诊断',
+        icon: Icons.build_circle_outlined,
+        route: AppRoutes.settingsMaintenance,
+      ),
+      SettingItem(
+        title: '工具箱',
+        icon: Icons.handyman_outlined,
+        value: '诊断工具',
+        route: AppRoutes.settingsToolbox,
+      ),
+      SettingItem(
+        title: '高级系统',
+        icon: Icons.admin_panel_settings_outlined,
+        route: AppRoutes.settingsAdvanced,
+      ),
+      SettingItem(
+        title: 'BDI 决策可视化',
+        icon: Icons.account_tree_outlined,
+        route: AppRoutes.settingsDecisionViz,
+      ),
+    ],
+  ),
+  SettingGroup(
+    title: '更新与关于',
+    items: [
+      SettingItem(
+        title: '版本与更新',
+        icon: Icons.system_update_outlined,
+        route: AppRoutes.settingsAppUpdate,
       ),
       SettingItem(
         title: '关于 Amitia',
@@ -177,6 +192,50 @@ List<SettingGroup> _settingsGroups({
     ],
   ),
 ];
+
+const _categoryIds = [
+  'ai',
+  'appearance',
+  'privacy',
+  'devices',
+  'maintenance',
+  'about',
+];
+const _categoryIcons = [
+  Icons.psychology_outlined,
+  Icons.palette_outlined,
+  Icons.shield_outlined,
+  Icons.devices_outlined,
+  Icons.build_outlined,
+  Icons.info_outline,
+];
+
+class SettingsCategoryPage extends ConsumerWidget {
+  const SettingsCategoryPage({super.key, required this.categoryId});
+
+  final String categoryId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final index = _categoryIds.indexOf(categoryId);
+    final groups = _settingsGroups(modelSummary: '', appearanceSummary: '');
+    final group = groups[index < 0 ? 0 : index];
+    return AmitiaScaffold(
+      appBar: AmitiaAppBar(
+        title: group.title,
+        showBackButton: true,
+        fallbackRoute: AppRoutes.settings,
+      ),
+      body: ListView(
+        padding: EdgeInsets.symmetric(vertical: AppSpacing.lg),
+        children: [
+          _SettingGroup(group: group),
+          SizedBox(height: AppSpacing.xxxl),
+        ],
+      ),
+    );
+  }
+}
 
 class SettingsPage extends ConsumerWidget {
   const SettingsPage({super.key});
@@ -221,10 +280,24 @@ class SettingsPage extends ConsumerWidget {
             child: _buildUserInfoCard(context, ref),
           ),
           SizedBox(height: AppSpacing.md),
-          for (int i = 0; i < groups.length; i++) ...[
-            _SettingGroup(group: groups[i]),
-            if (i < groups.length - 1) SizedBox(height: AppSpacing.sectionGap),
-          ],
+          _SettingGroup(
+            group: SettingGroup(
+              title: '偏好与管理',
+              items: [
+                for (var i = 0; i < groups.length; i++)
+                  SettingItem(
+                    title: groups[i].title,
+                    icon: _categoryIcons[i],
+                    value: i == 0
+                        ? modelSummary
+                        : i == 1
+                        ? appearanceSummary
+                        : null,
+                    route: '/settings/category/${_categoryIds[i]}',
+                  ),
+              ],
+            ),
+          ),
           SizedBox(height: AppSpacing.xl),
         ],
       ),
@@ -248,7 +321,6 @@ Widget _buildUserInfoCard(BuildContext context, WidgetRef ref) {
           decoration: BoxDecoration(
             color: context.surfacePrimary,
             borderRadius: AppRadius.brMedium,
-            border: Border.all(color: context.borderPrimary, width: 0.5),
           ),
           child: Row(
             children: [
@@ -267,7 +339,7 @@ Widget _buildUserInfoCard(BuildContext context, WidgetRef ref) {
                     Text(
                       displayName,
                       style: TextStyle(
-                        fontSize: 14.5,
+                        fontSize: 17,
                         fontWeight: FontWeight.w600,
                         color: context.textPrimary,
                       ),
@@ -276,7 +348,7 @@ Widget _buildUserInfoCard(BuildContext context, WidgetRef ref) {
                     Text(
                       spaceId.isEmpty ? '本地个人空间' : spaceId,
                       style: TextStyle(
-                        fontSize: 11.5,
+                        fontSize: 13,
                         color: context.textTertiary,
                       ),
                       maxLines: 1,
@@ -296,7 +368,6 @@ Widget _buildUserInfoCard(BuildContext context, WidgetRef ref) {
       decoration: BoxDecoration(
         color: context.surfacePrimary,
         borderRadius: AppRadius.brMedium,
-        border: Border.all(color: context.borderPrimary, width: 0.5),
       ),
       child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
     ),
@@ -307,7 +378,6 @@ Widget _buildUserInfoCard(BuildContext context, WidgetRef ref) {
         decoration: BoxDecoration(
           color: context.surfacePrimary,
           borderRadius: AppRadius.brMedium,
-          border: Border.all(color: context.borderPrimary, width: 0.5),
         ),
         child: Row(
           children: [
@@ -316,7 +386,7 @@ Widget _buildUserInfoCard(BuildContext context, WidgetRef ref) {
             Expanded(
               child: Text(
                 '个人空间资料暂不可用',
-                style: AppTypography.body(context).copyWith(fontSize: 14.5),
+                style: AppTypography.body(context).copyWith(fontSize: 17),
               ),
             ),
             Icon(Icons.chevron_right, size: 20, color: context.textTertiary),
@@ -346,7 +416,7 @@ class _SettingGroup extends StatelessWidget {
           ),
           child: Text(
             group.title,
-            style: AppTypography.caption(context).copyWith(fontSize: 12.5),
+            style: AppTypography.caption(context).copyWith(fontSize: 13),
           ),
         ),
         Container(
@@ -354,7 +424,6 @@ class _SettingGroup extends StatelessWidget {
           decoration: BoxDecoration(
             color: context.surfacePrimary,
             borderRadius: AppRadius.brMedium,
-            border: Border.all(color: context.borderPrimary, width: 0.5),
           ),
           child: Column(
             children: [
@@ -374,45 +443,49 @@ class _SettingTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: () => context.push(item.route),
-      child: Padding(
-        padding: EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: 13),
-        child: Row(
-          children: [
-            Container(
-              width: 32,
-              height: 32,
-              decoration: BoxDecoration(
-                color: context.accentSoft,
-                shape: BoxShape.circle,
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => context.push(item.route),
+        borderRadius: AppRadius.brMedium,
+        child: Padding(
+          padding: EdgeInsets.symmetric(
+            horizontal: AppSpacing.lg,
+            vertical: 13,
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: context.accentSoft,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(item.icon, size: 17, color: context.accentPrimary),
               ),
-              child: Icon(item.icon, size: 17, color: context.accentPrimary),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    item.title,
-                    style: AppTypography.body(
-                      context,
-                    ).copyWith(fontSize: _settingsOptionFontSize),
-                  ),
-                ],
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      item.title,
+                      style: AppTypography.body(
+                        context,
+                      ).copyWith(fontSize: _settingsOptionFontSize),
+                    ),
+                    if (item.value != null && item.value!.isNotEmpty) ...[
+                      const SizedBox(height: 3),
+                      Text(item.value!, style: AppTypography.caption(context)),
+                    ],
+                  ],
+                ),
               ),
-            ),
-            if (item.value != null) ...[
-              Text(
-                item.value!,
-                style: AppTypography.caption(context).copyWith(fontSize: 13.5),
-              ),
-              const SizedBox(width: 4),
+
+              Icon(Icons.chevron_right, size: 20, color: context.textTertiary),
             ],
-            Icon(Icons.chevron_right, size: 20, color: context.textTertiary),
-          ],
+          ),
         ),
       ),
     );

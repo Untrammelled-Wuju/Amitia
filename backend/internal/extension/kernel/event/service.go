@@ -105,6 +105,9 @@ func NewService(cfg ServiceConfig) (*Service, error) {
 		subscriptionReg:  subscriptionReg,
 		handler:          defaultDeliveryHandler,
 	}
+	if err := svc.ensureSchema(context.Background()); err != nil {
+		return nil, fmt.Errorf("event: ensure schema: %w", err)
+	}
 
 	svc.publisher = NewEventPublisher(schemaRegistry, outboxRepo, cfg.DB, loopGuard, cfg.MaxDepth)
 	svc.dispatcher = NewDispatcher(

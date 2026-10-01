@@ -7,12 +7,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
+	"path"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 	"unicode"
 
+	"github.com/u-ai/backend/internal/artifact"
 	"github.com/u-ai/backend/internal/browser"
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	"github.com/u-ai/backend/internal/workspace"
@@ -20,6 +23,7 @@ import (
 
 type BuiltinUtilityService struct {
 	workspace    *workspace.Service
+	artifact     *artifact.Service
 	precise      workspace.PreciseEditingService
 	browser      browser.BrowserProvider
 	android      capability.AndroidProvider
@@ -43,6 +47,7 @@ type RemoteTerminalSession struct {
 
 type BuiltinUtilityDeps struct {
 	Workspace    *workspace.Service
+	Artifact     *artifact.Service
 	Browser      browser.BrowserProvider
 	Android      capability.AndroidProvider
 	AndroidLinux interface{}
@@ -55,6 +60,7 @@ func NewBuiltinUtilityService(deps BuiltinUtilityDeps) *BuiltinUtilityService {
 	}
 	return &BuiltinUtilityService{
 		workspace:    deps.Workspace,
+		artifact:     deps.Artifact,
 		precise:      precise,
 		browser:      deps.Browser,
 		android:      deps.Android,
@@ -65,8 +71,10 @@ func NewBuiltinUtilityService(deps BuiltinUtilityDeps) *BuiltinUtilityService {
 
 func (s *BuiltinUtilityService) Supports(name string) bool {
 	switch name {
-	case "read_file_part", "apply_file":
+	case "list_files", "read_file_part", "apply_file":
 		return s.workspace != nil
+	case "send_attachment":
+		return s.artifact != nil
 	case "visit_web":
 		if s.browser == nil {
 			return false
@@ -90,10 +98,14 @@ func (s *BuiltinUtilityService) CanHandle(name string) bool { return s.Supports(
 
 func (s *BuiltinUtilityService) Dispatch(ctx context.Context, name string, input json.RawMessage, invocation capability.ToolInvocationContext) (json.RawMessage, error) {
 	switch name {
+	case "list_files":
+		return s.listFiles(ctx, input, invocation)
 	case "read_file_part":
-		return s.readFilePart(ctx, input)
+		return s.readFilePart(ctx, input, invocation)
 	case "apply_file":
-		return s.applyFile(ctx, input)
+		return s.applyFile(ctx, input, invocation)
+	case "send_attachment":
+		return s.sendAttachment(ctx, input, invocation)
 	case "visit_web":
 		return s.visitWeb(ctx, input)
 	case "browser_close_all":
@@ -198,32 +210,84 @@ func normalizeJSONLikeMap(input map[string]any) map[string]any {
 	return out
 }
 
-func resolveWorkspaceURI(obj map[string]any) (string, error) {
-	if uri := stringValue(obj, "uri"); uri != "" {
+func resolveWorkspaceURI(obj map[string]any, invocation capability.ToolInvocationContext) (string, error) {
+	workspaceID := strings.TrimSpace(stringValue(obj, "workspaceId"))
+	rootURI := ""
+	if invocation.ExecContext != nil {
+		if workspaceID == "" {
+			workspaceID = strings.TrimSpace(invocation.ExecContext.WorkspaceID)
+		}
+		if metadata := invocation.ExecContext.Metadata; metadata != nil {
+			if value, ok := metadata["workspaceRootUri"].(string); ok {
+				rootURI = strings.TrimSpace(value)
+			}
+		}
+	}
+	if rootURI == "" && workspaceID != "" {
+		rootURI = workspace.MountURI(workspace.WorkspaceID(workspaceID))
+	}
+
+	uri := strings.TrimSpace(stringValue(obj, "uri"))
+	if uri != "" {
+		if strings.HasPrefix(uri, "workspace://") {
+			if rootURI == "" {
+				return "", errors.New("WORKSPACE_NOT_BOUND: no conversation workspace is bound")
+			}
+			return bindWorkspaceURI(rootURI, strings.TrimPrefix(uri, "workspace://"))
+		}
+		if strings.HasPrefix(uri, "amitia://workspace/") {
+			if rootURI != "" {
+				return bindWorkspaceURI(rootURI, uri)
+			}
+			return uri, nil
+		}
 		return uri, nil
 	}
-	path := stringValue(obj, "path", "filePath")
-	workspaceID := stringValue(obj, "workspaceId")
-	if workspaceID == "" {
-		if strings.HasPrefix(path, "workspace://") {
-			return path, nil
-		}
-		return "", errors.New("uri or workspaceId + path/filePath is required")
+
+	filePath := strings.TrimSpace(stringValue(obj, "path", "filePath"))
+	if rootURI == "" {
+		return "", errors.New("WORKSPACE_NOT_BOUND: uri or workspaceId + path/filePath is required")
 	}
-	path = strings.TrimPrefix(strings.TrimSpace(path), "/")
-	base := workspace.MountURI(workspace.WorkspaceID(workspaceID))
-	if path == "" {
-		return base, nil
-	}
-	return strings.TrimSuffix(base, "/") + "/" + path, nil
+	return bindWorkspaceURI(rootURI, filePath)
 }
 
-func (s *BuiltinUtilityService) readFilePart(ctx context.Context, input json.RawMessage) (json.RawMessage, error) {
+func (s *BuiltinUtilityService) listFiles(ctx context.Context, input json.RawMessage, invocation capability.ToolInvocationContext) (json.RawMessage, error) {
+	obj, err := unmarshalObject(input)
+	if err != nil {
+		return nil, fmt.Errorf("list_files input: %w", err)
+	}
+	uri, err := resolveWorkspaceURI(obj, invocation)
+	if err != nil {
+		return nil, err
+	}
+	limit := intValue(obj, 200, "limit")
+	if limit < 1 {
+		limit = 200
+	}
+	if limit > 1000 {
+		limit = 1000
+	}
+	result, err := s.workspace.List(ctx, uri, workspace.ListOptions{
+		Limit:  limit,
+		Cursor: stringValue(obj, "cursor"),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return marshalResult(map[string]any{
+		"uri":        uri,
+		"entries":    result.Entries,
+		"nextCursor": result.NextCursor,
+		"hasMore":    result.HasMore,
+	})
+}
+
+func (s *BuiltinUtilityService) readFilePart(ctx context.Context, input json.RawMessage, invocation capability.ToolInvocationContext) (json.RawMessage, error) {
 	obj, err := unmarshalObject(input)
 	if err != nil {
 		return nil, fmt.Errorf("read_file_part input: %w", err)
 	}
-	uri, err := resolveWorkspaceURI(obj)
+	uri, err := resolveWorkspaceURI(obj, invocation)
 	if err != nil {
 		return nil, err
 	}
@@ -326,12 +390,12 @@ func (s *BuiltinUtilityService) readFilePart(ctx context.Context, input json.Raw
 	})
 }
 
-func (s *BuiltinUtilityService) applyFile(ctx context.Context, input json.RawMessage) (json.RawMessage, error) {
+func (s *BuiltinUtilityService) applyFile(ctx context.Context, input json.RawMessage, invocation capability.ToolInvocationContext) (json.RawMessage, error) {
 	obj, err := unmarshalObject(input)
 	if err != nil {
 		return nil, fmt.Errorf("apply_file input: %w", err)
 	}
-	uri, err := resolveWorkspaceURI(obj)
+	uri, err := resolveWorkspaceURI(obj, invocation)
 	if err != nil {
 		return nil, err
 	}
@@ -376,7 +440,7 @@ func (s *BuiltinUtilityService) applyFile(ctx context.Context, input json.RawMes
 		if strings.TrimSpace(patchText) == "" {
 			return nil, errors.New("patch is required for patch operation")
 		}
-		workspaceID, filePath, identityErr := resolveWorkspaceIdentity(obj, uri)
+		workspaceID, filePath, identityErr := resolveWorkspaceIdentity(obj, uri, invocation)
 		if identityErr != nil {
 			return nil, identityErr
 		}
@@ -418,9 +482,12 @@ func (s *BuiltinUtilityService) applyFile(ctx context.Context, input json.RawMes
 	}
 }
 
-func resolveWorkspaceIdentity(obj map[string]any, uri string) (string, string, error) {
+func resolveWorkspaceIdentity(obj map[string]any, uri string, invocation capability.ToolInvocationContext) (string, string, error) {
 	workspaceID := strings.TrimSpace(stringValue(obj, "workspaceId"))
 	filePath := strings.TrimPrefix(strings.TrimSpace(stringValue(obj, "path", "filePath")), "/")
+	if workspaceID == "" && invocation.ExecContext != nil {
+		workspaceID = strings.TrimSpace(invocation.ExecContext.WorkspaceID)
+	}
 	if workspaceID != "" && filePath != "" {
 		return workspaceID, filePath, nil
 	}
@@ -434,6 +501,210 @@ func resolveWorkspaceIdentity(obj map[string]any, uri string) (string, string, e
 		}
 	}
 	return "", "", errors.New("patch operation requires workspaceId + path/filePath or an amitia://workspace/@<id>/<path> URI")
+}
+
+func (s *BuiltinUtilityService) sendAttachment(ctx context.Context, input json.RawMessage, invocation capability.ToolInvocationContext) (json.RawMessage, error) {
+	obj, err := unmarshalObject(input)
+	if err != nil {
+		return nil, fmt.Errorf("send_attachment input: %w", err)
+	}
+	if s.artifact == nil {
+		return nil, errors.New("artifact service not configured")
+	}
+	ownerSpaceID := strings.TrimSpace(invocation.SpaceID)
+	if ownerSpaceID == "" {
+		return nil, errors.New("SCOPE_DENIED: missing owner space")
+	}
+	partType := normalizeAttachmentType(stringValue(obj, "type", "partType"))
+	altText := strings.TrimSpace(stringValue(obj, "altText", "caption", "title"))
+
+	source := strings.TrimSpace(stringValue(obj, "uri", "resourceUri", "url"))
+	workspacePath := strings.TrimSpace(stringValue(obj, "path", "filePath"))
+	if source == "" && workspacePath == "" {
+		return nil, errors.New("uri, resourceUri, url, or path/filePath is required")
+	}
+	var art artifact.Artifact
+	var fileName string
+	if id, parseErr := artifact.ParseURI(source); parseErr == nil {
+		art, err = s.artifact.GetOwned(ctx, ownerSpaceID, id)
+		if err != nil {
+			return nil, fmt.Errorf("artifact not available: %w", err)
+		}
+	} else {
+		var data []byte
+		var mimeType string
+		fileName = strings.TrimSpace(stringValue(obj, "fileName", "filename", "name"))
+		if strings.HasPrefix(source, "data:") {
+			data, mimeType, err = decodeAttachmentDataURI(source)
+		} else if parsed, parseErr := url.Parse(source); parseErr == nil && parsed.Scheme != "" {
+			if parsed.Scheme != "https" && parsed.Scheme != "http" {
+				return nil, errors.New("send_attachment only accepts http or https URLs")
+			}
+			if fileName == "" {
+				fileName = path.Base(parsed.Path)
+			}
+			kind := artifact.Kind(strings.ToLower(stringValue(obj, "kind")))
+			if kind == "" {
+				kind = artifact.DeriveKindFromMIME(stringValue(obj, "mimeType"))
+			}
+			art, err = s.artifact.ImportURL(ctx, artifact.ImportURLRequest{
+				OwnerSpaceID: ownerSpaceID,
+				URL:          source,
+				Kind:         kind,
+				MIMEType:     stringValue(obj, "mimeType"),
+				Filename:     fileName,
+				Source:       artifact.SourceToolOutput,
+				MaxBytes:     32 * 1024 * 1024,
+			})
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			workspaceURI, resolveErr := resolveWorkspaceURI(obj, invocation)
+			if resolveErr != nil {
+				return nil, resolveErr
+			}
+			data, err = s.readWorkspaceBytes(ctx, workspaceURI, 64*1024*1024)
+			if err == nil && fileName == "" {
+				fileName = path.Base(strings.TrimSuffix(workspaceURI, "/"))
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		if fileName == "" {
+			fileName = "attachment"
+		}
+		if data != nil || mimeType != "" {
+			kind := artifact.Kind(strings.ToLower(stringValue(obj, "kind")))
+			if kind == "" {
+				kind = artifact.DeriveKindFromMIME(mimeType)
+			}
+			art, err = s.artifact.Create(ctx, artifact.CreateRequest{
+				OwnerSpaceID: ownerSpaceID,
+				Kind:         kind,
+				MIMEType:     mimeType,
+				Filename:     fileName,
+				Source:       artifact.SourceToolOutput,
+				Reader:       bytes.NewReader(data),
+				MaxBytes:     64 * 1024 * 1024,
+			})
+			if err != nil {
+				return nil, fmt.Errorf("create attachment artifact: %w", err)
+			}
+		}
+	}
+
+	if partType == "" {
+		partType = attachmentTypeForKind(art.Kind)
+	}
+	if altText == "" {
+		altText = art.Filename
+	}
+	content := altText
+	if partType == "file" && content == "" {
+		content = art.Filename
+	}
+	part := map[string]any{
+		"type":       partType,
+		"content":    content,
+		"url":        artifact.URI(art.ID),
+		"mimeType":   art.MIMEType,
+		"altText":    altText,
+		"width":      art.Width,
+		"height":     art.Height,
+		"isAnimated": strings.EqualFold(art.MIMEType, "image/gif"),
+	}
+	output := map[string]any{
+		"outputId":  "builtin.send_attachment",
+		"placement": "after_text",
+		"part":      part,
+	}
+	return marshalResult(map[string]any{
+		"attachment": map[string]any{
+			"artifactId": art.ID,
+			"uri":        artifact.URI(art.ID),
+			"type":       partType,
+			"mimeType":   art.MIMEType,
+			"filename":   art.Filename,
+			"sizeBytes":  art.SizeBytes,
+		},
+		"messageOutputs": []map[string]any{output},
+	})
+}
+
+func (s *BuiltinUtilityService) readWorkspaceBytes(ctx context.Context, uri string, maxBytes int64) ([]byte, error) {
+	if s.workspace == nil {
+		return nil, errors.New("workspace service not configured")
+	}
+	if maxBytes <= 0 {
+		maxBytes = 64 * 1024 * 1024
+	}
+	var out bytes.Buffer
+	var offset int64
+	for {
+		result, err := s.workspace.Read(ctx, uri, workspace.ReadOptions{Offset: offset, MaxBytes: 256 * 1024})
+		if err != nil {
+			return nil, err
+		}
+		if len(result.Content) == 0 {
+			break
+		}
+		if int64(out.Len()+len(result.Content)) > maxBytes {
+			return nil, fmt.Errorf("attachment exceeds %d bytes", maxBytes)
+		}
+		out.Write(result.Content)
+		offset += int64(len(result.Content))
+		if len(result.Content) < 256*1024 {
+			break
+		}
+	}
+	if out.Len() == 0 {
+		return nil, errors.New("attachment is empty")
+	}
+	return out.Bytes(), nil
+}
+
+func decodeAttachmentDataURI(raw string) ([]byte, string, error) {
+	header, encoded, ok := strings.Cut(raw, ",")
+	if !ok {
+		return nil, "", errors.New("invalid data URI")
+	}
+	meta := strings.TrimPrefix(header, "data:")
+	if !strings.Contains(strings.ToLower(meta), ";base64") {
+		return nil, "", errors.New("data URI must be base64 encoded")
+	}
+	mimeType := strings.TrimSpace(strings.Split(meta, ";")[0])
+	if mimeType == "" {
+		mimeType = "application/octet-stream"
+	}
+	data, err := base64.StdEncoding.DecodeString(encoded)
+	if err != nil {
+		return nil, "", err
+	}
+	return data, mimeType, nil
+}
+
+func normalizeAttachmentType(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "image", "audio", "video", "file":
+		return strings.ToLower(strings.TrimSpace(value))
+	default:
+		return ""
+	}
+}
+
+func attachmentTypeForKind(kind artifact.Kind) string {
+	switch kind {
+	case artifact.KindImage:
+		return "image"
+	case artifact.KindAudio:
+		return "audio"
+	case artifact.KindVideo:
+		return "video"
+	default:
+		return "file"
+	}
 }
 
 func stringValuePreserveEmpty(obj map[string]any, keys ...string) string {

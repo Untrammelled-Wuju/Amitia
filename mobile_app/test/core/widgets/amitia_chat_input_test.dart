@@ -145,6 +145,55 @@ void main() {
     expect(send.left - trigger.right, closeTo(4, 0.5));
   });
 
+  testWidgets(
+    'generating composer shows stop when empty and send after text entry',
+    (tester) async {
+      var stopCount = 0;
+      final sent = <String>[];
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: AmitiaChatInput(
+              onSend: sent.add,
+              generating: true,
+              onStop: () => stopCount += 1,
+            ),
+          ),
+        ),
+      );
+
+      expect(
+        find.byKey(const ValueKey('composer-stop-button')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('composer-send-button')),
+        findsNothing,
+      );
+
+      await tester.tap(
+        find.byKey(const ValueKey('composer-stop-button')),
+      );
+      await tester.pump();
+      expect(stopCount, 1);
+
+      await tester.enterText(find.byType(TextField), '继续发送');
+      await tester.pump();
+      expect(
+        find.byKey(const ValueKey('composer-send-button')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('composer-stop-button')),
+        findsNothing,
+      );
+
+      await tester.tap(find.byKey(const ValueKey('composer-send-button')));
+      await tester.pump();
+      expect(sent, <String>['继续发送']);
+    },
+  );
+
   test('composer keeps a lower bottom inset when the keyboard is closed', () {
     final source = File(
       'lib/core/widgets/amitia_message.dart',

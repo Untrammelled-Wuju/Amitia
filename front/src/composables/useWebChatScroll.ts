@@ -16,6 +16,7 @@ export function useWebChatScroll(
 ) {
   const { get } = useApi();
   const userScrolledUp = ref(false);
+  const autoFollow = ref(true);
   const isPulling = ref(false);
   const pullReady = ref(false);
   const pullLoading = ref(false);
@@ -25,6 +26,14 @@ export function useWebChatScroll(
   const hasMoreHistory = ref(true);
   const historyBeforeSequence = ref(0);
   const HISTORY_PAGE_SIZE = 50;
+  let lastScrollTop = 0;
+  let pendingScrollFrame: number | null = null;
+
+  function cancelPendingScroll() {
+    if (pendingScrollFrame == null) return;
+    cancelAnimationFrame(pendingScrollFrame);
+    pendingScrollFrame = null;
+  }
 
   watch(convId, () => {
     historyBeforeSequence.value = 0;
@@ -39,12 +48,17 @@ export function useWebChatScroll(
   }
 
   function scrollToBottom(smooth = false) {
-    if (!smooth && userScrolledUp.value) return;
+    if (!smooth && !autoFollow.value) return;
+    autoFollow.value = true;
     userScrolledUp.value = false;
+    cancelPendingScroll();
     nextTick(() => {
-      requestAnimationFrame(() => {
+      pendingScrollFrame = requestAnimationFrame(() => {
+        pendingScrollFrame = null;
+        if (!smooth && !autoFollow.value) return;
         const el = msgAreaRef.value?.rootEl;
         if (!el) return;
+        lastScrollTop = el.scrollTop;
         el.scrollTo({
           top: el.scrollHeight,
           behavior: smooth ? "smooth" : "auto",
@@ -56,10 +70,18 @@ export function useWebChatScroll(
   function onScroll() {
     const el = msgAreaRef.value?.rootEl;
     if (!el) return;
+    const currentScrollTop = el.scrollTop;
+    const previousScrollTop = lastScrollTop;
+    lastScrollTop = currentScrollTop;
     const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
     const threshold = 200;
     showScrollBtn.value = distFromBottom > threshold;
-    userScrolledUp.value = distFromBottom > 100;
+    if (currentScrollTop > previousScrollTop + 1 && distFromBottom <= 24) {
+      autoFollow.value = true;
+      userScrolledUp.value = false;
+    } else if (!autoFollow.value) {
+      userScrolledUp.value = true;
+    }
     if (
       el.scrollTop <= 50 &&
       hasMoreHistory.value &&
@@ -74,6 +96,10 @@ export function useWebChatScroll(
     const el = msgAreaRef.value?.rootEl;
     if (!el) return;
     if (e.deltaY >= 0) return;
+    autoFollow.value = false;
+    userScrolledUp.value = true;
+    cancelPendingScroll();
+    el.scrollTo({ top: el.scrollTop, behavior: "auto" });
     const noOverflow = el.scrollHeight <= el.clientHeight;
     const atTop = el.scrollTop <= 0;
     if (
@@ -144,6 +170,11 @@ export function useWebChatScroll(
   function onMsgTouchMove(e: TouchEvent) {
     if (!isPulling.value) return;
     const dy = e.touches[0].clientY - pullStartY.value;
+    if (dy < -4) {
+      autoFollow.value = false;
+      userScrolledUp.value = true;
+      cancelPendingScroll();
+    }
     if (dy > 60) {
       pullReady.value = true;
       pullText.value = "松开加载";

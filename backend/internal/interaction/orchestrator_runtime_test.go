@@ -59,7 +59,9 @@ func TestOrchestratorAssemblesRuntimeBeforeProcessor(t *testing.T) {
 	processor := &runtimeCaptureProcessor{}
 	tracker := NewInMemoryTracker()
 	var outboxStore *outbox.SQLiteOutboxStore
-	orch := NewOrchestratorWithStores(DefaultOrchestratorConfig(), processor, tracker, outboxStore)
+	cfg := DefaultOrchestratorConfig()
+	cfg.DefaultTimeout = time.Minute
+	orch := NewOrchestratorWithStores(cfg, processor, tracker, outboxStore)
 	registry := NewContextLoaderRegistry()
 	registry.Register(runtimePsycheLoader{})
 	registry.Register(NewChannelContextLoader())

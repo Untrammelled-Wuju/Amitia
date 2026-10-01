@@ -205,6 +205,7 @@ type ChatConfig struct {
 	EventReplayRingSize     int `mapstructure:"eventReplayRingSize"`
 	ContextWindowMaxRounds  int `mapstructure:"contextWindowMaxRounds"`
 	AgentTurnTimeoutSeconds int `mapstructure:"agentTurnTimeoutSeconds"`
+	AgentToolRepeatLimit    int `mapstructure:"agentToolRepeatLimit"`
 	AgentMaxParallelTools   int `mapstructure:"agentMaxParallelTools"`
 	AgentMaxParallelTurns   int `mapstructure:"agentMaxParallelTurns"`
 }
@@ -413,7 +414,8 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("app.deployMode", "desktop-local")
 	v.SetDefault("chat.eventReplayRingSize", 4096)
 	v.SetDefault("chat.contextWindowMaxRounds", 20)
-	v.SetDefault("chat.agentTurnTimeoutSeconds", 1800)
+	v.SetDefault("chat.agentTurnTimeoutSeconds", 0)
+	v.SetDefault("chat.agentToolRepeatLimit", 0)
 	v.SetDefault("chat.agentMaxParallelTools", 4)
 	v.SetDefault("chat.agentMaxParallelTurns", 16)
 	v.SetDefault("embedding.modelName", "doubao-embedding-vision-251215")

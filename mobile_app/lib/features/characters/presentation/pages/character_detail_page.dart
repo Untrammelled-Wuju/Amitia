@@ -163,8 +163,14 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
     bool hasExtensionTab,
     BackendConnectionAvailability? backendAvailability,
   ) {
-    final tabs = <String>[..._tabs, if (hasExtensionTab) '扩展'];
-    final selectedTab = _selectedTab < tabs.length ? _selectedTab : 0;
+    final tabs = <String>[
+      '概览',
+      '设定',
+      _selectedTab >= 2
+          ? '${_selectedTab < _tabs.length ? _tabs[_selectedTab] : '扩展'} ▾'
+          : '更多',
+    ];
+    final selectedTab = _selectedTab < 2 ? _selectedTab : 2;
     final slotContext = _characterSlotContext(character);
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
@@ -208,9 +214,16 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
                 segments: tabs,
                 selectedIndex: selectedTab,
                 onChanged: (index) {
-                  setState(() {
-                    _selectedTab = index;
-                  });
+                  if (index == 2) {
+                    _showSections(
+                      context,
+                      character,
+                      memories,
+                      hasExtensionTab,
+                    );
+                  } else {
+                    setState(() => _selectedTab = index);
+                  }
                 },
               ),
             ),
@@ -369,6 +382,46 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  void _showSections(
+    BuildContext context,
+    CharacterDto character,
+    List<MemoryDto> memories,
+    bool hasExtensionTab,
+  ) {
+    showModalBottomSheet<void>(
+      context: context,
+      useSafeArea: true,
+      isScrollControlled: true,
+      builder: (sheetContext) => SingleChildScrollView(
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(
+            16,
+            0,
+            16,
+            24 + MediaQuery.paddingOf(sheetContext).bottom,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('角色资料', style: AppTypography.sectionTitle(sheetContext)),
+              const SizedBox(height: 12),
+              for (var i = 2; i < _tabs.length + (hasExtensionTab ? 1 : 0); i++)
+                ListTile(
+                  title: Text(i < _tabs.length ? _tabs[i] : '扩展'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    setState(() => _selectedTab = i);
+                  },
+                ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -666,10 +719,18 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
         ),
         SizedBox(height: AppSpacing.sm),
         AmitiaCard(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          child: ExpansionTile(
+            tilePadding: EdgeInsets.zero,
+            childrenPadding: EdgeInsets.only(top: AppSpacing.sm),
+            shape: const Border(),
+            collapsedShape: const Border(),
+            maintainState: true,
+            title: Text('高级人格与场景配置', style: AppTypography.cardTitle(context)),
+            subtitle: Text(
+              '人格、聊天风格与场景规则 JSON',
+              style: AppTypography.caption(context),
+            ),
             children: [
-              Text('高级人格与场景配置', style: AppTypography.cardTitle(context)),
               SizedBox(height: AppSpacing.sm),
               _buildLabeledField(
                 context,
@@ -1326,7 +1387,7 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
                 if (ok) {
                   ref.invalidate(characterListProvider);
                 }
-                if (mounted) {
+                if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
                       content: Text(ok ? '已删除角色：${character.name}' : '删除失败'),

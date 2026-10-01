@@ -1,6 +1,7 @@
 package com.amitia.amitia_app.nativeprovider.uitree
 
 import android.accessibilityservice.AccessibilityService
+import android.os.Build
 import android.view.accessibility.AccessibilityNodeInfo
 
 /**
@@ -34,7 +35,7 @@ internal object AccessibilityNodeReferenceRegistry {
         var node: AccessibilityNodeInfo = if (parsed.windowId == ACTIVE_WINDOW_SENTINEL) {
             service.rootInActiveWindow ?: return null
         } else {
-            val window = service.windows.firstOrNull { it.id == parsed.windowId } ?: return null
+            val window = allWindows(service).firstOrNull { it.id == parsed.windowId } ?: return null
             window.root ?: return null
         }
 
@@ -43,6 +44,20 @@ internal object AccessibilityNodeReferenceRegistry {
             node = node.getChild(index) ?: return null
         }
         return node
+    }
+
+    private fun allWindows(service: AccessibilityService): List<android.view.accessibility.AccessibilityWindowInfo> {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+            return service.windows.orEmpty()
+        }
+        return runCatching {
+            val windows = service.windowsOnAllDisplays
+            val result = mutableListOf<android.view.accessibility.AccessibilityWindowInfo>()
+            for (index in 0 until windows.size()) {
+                windows.valueAt(index)?.let { result.addAll(it) }
+            }
+            if (result.isNotEmpty()) result else service.windows.orEmpty()
+        }.getOrElse { service.windows.orEmpty() }
     }
 
     private fun parse(value: String): ParsedReference? {

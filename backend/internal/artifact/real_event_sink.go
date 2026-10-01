@@ -2,7 +2,6 @@ package artifact
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 
 	"github.com/u-ai/backend/internal/extension/kernel/event"
@@ -26,7 +25,7 @@ func NewRealEventSink(publisher event.DurableEventPublisher) *RealEventSink {
 	return &RealEventSink{publisher: publisher}
 }
 
-func (s *RealEventSink) PublishCreated(ctx context.Context, tx *sql.Tx, artifact *Artifact) error {
+func (s *RealEventSink) PublishCreated(ctx context.Context, artifact *Artifact) error {
 	if s.publisher == nil {
 		return nil
 	}
@@ -43,7 +42,7 @@ func (s *RealEventSink) PublishCreated(ctx context.Context, tx *sql.Tx, artifact
 	if err != nil {
 		return err
 	}
-	_, err = s.publisher.PublishTx(ctx, tx, "artifact.created", 1, payload, event.PublishOptions{
+	_, err = s.publisher.Publish(ctx, "artifact.created", 1, payload, event.PublishOptions{
 		ProducerID:    "artifact-service",
 		ProducerType:  event.EventProducerTypeSystem,
 		AggregateType: "artifact",
@@ -53,7 +52,7 @@ func (s *RealEventSink) PublishCreated(ctx context.Context, tx *sql.Tx, artifact
 	return err
 }
 
-func (s *RealEventSink) PublishDeleted(ctx context.Context, tx *sql.Tx, artifact *Artifact) error {
+func (s *RealEventSink) PublishDeleted(ctx context.Context, artifact *Artifact) error {
 	if s.publisher == nil {
 		return nil
 	}
@@ -70,7 +69,7 @@ func (s *RealEventSink) PublishDeleted(ctx context.Context, tx *sql.Tx, artifact
 	if err != nil {
 		return err
 	}
-	_, err = s.publisher.PublishTx(ctx, tx, "artifact.deleted", 1, payload, event.PublishOptions{
+	_, err = s.publisher.Publish(ctx, "artifact.deleted", 1, payload, event.PublishOptions{
 		ProducerID:    "artifact-service",
 		ProducerType:  event.EventProducerTypeSystem,
 		AggregateType: "artifact",

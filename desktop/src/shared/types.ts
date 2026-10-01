@@ -100,6 +100,17 @@ export interface SaveExtensionPackageRequest {
   base64: string;
 }
 
+export interface SaveConversationAttachmentRequest {
+  url: string;
+  suggestedName: string;
+  headers?: Record<string, string>;
+}
+
+export interface SaveConversationAttachmentResult {
+  saved: boolean;
+  fileName?: string;
+}
+
 export interface LocalVoiceASRFinalEvent {
   eventId: string;
   transcript: string;

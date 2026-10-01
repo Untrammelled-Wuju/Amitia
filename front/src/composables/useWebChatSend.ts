@@ -85,9 +85,37 @@ export function useWebChatSend(
   }
 
   async function handleImageSend(text: string, imageBase64: string) {
+    let resourceUri = imageBase64;
+    let file = currentImageFile.value;
+    if (!file && imageBase64.startsWith("data:")) {
+      try {
+        const blob = await fetch(imageBase64).then((response) => response.blob());
+        file = new File([blob], "image.png", {
+          type: blob.type || "image/png",
+        });
+      } catch {
+        file = null;
+      }
+    }
+    if (file) {
+      try {
+        const form = new FormData();
+        form.append("kind", "image");
+        form.append("source", "chat_upload");
+        form.append("file", file, file.name);
+        const response = await post<any>("/api/artifacts/v1", form);
+        const artifact = response?.artifact ?? response;
+        const artifactId = String(artifact?.artifactId ?? artifact?.id ?? "").trim();
+        if (!artifactId) throw new Error("图片上传结果缺少 artifactId");
+        resourceUri = `amitia://artifacts/${artifactId}`;
+      } catch (error: any) {
+        ElMessage.error(error?.response?.data?.message || error?.message || "图片上传失败");
+        throw error;
+      }
+    }
     currentImageBase64.value = null;
     currentImageFile.value = null;
-    pendingImageBase64.value = imageBase64;
+    pendingImageBase64.value = resourceUri;
     await doActualSend(text && text.trim() ? text : "[图片]");
   }
 

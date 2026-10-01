@@ -381,7 +381,11 @@ func androidUISemanticHash(tree androidUITreeEnvelope) string {
 	for _, window := range tree.Windows {
 		packages = append(packages, window.PackageName)
 	}
-	encoded, _ := json.Marshal(map[string]any{"packages": packages, "nodes": nodes})
+	payload := map[string]any{"packages": packages, "nodes": nodes}
+	if tree.Capability.Source == "visual" {
+		payload["snapshotId"] = tree.SnapshotID
+	}
+	encoded, _ := json.Marshal(payload)
 	sum := sha256.Sum256(encoded)
 	return hex.EncodeToString(sum[:12])
 }

@@ -100,8 +100,10 @@ func (o *Orchestrator) Process(ctx context.Context, req *ProcessRequest) (*Orche
 	var cancel context.CancelFunc
 	if o.deadlineFn != nil {
 		processCtx, cancel = o.deadlineFn(ctx, req.RequestID)
-	} else {
+	} else if o.cfg.DefaultTimeout > 0 {
 		processCtx, cancel = context.WithTimeout(ctx, o.cfg.DefaultTimeout)
+	} else {
+		processCtx, cancel = context.WithCancel(ctx)
 	}
 	defer cancel()
 	o.cancels.Register(record.ID, cancel)

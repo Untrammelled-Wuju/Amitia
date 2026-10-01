@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:dio/dio.dart';
@@ -50,6 +51,7 @@ import '../../runtime/conversation_runtime_controller.dart';
 import '../../../conversation/rendering/assistant_identity.dart';
 import '../../../conversation/rendering/role_switch_divider.dart';
 import '../../../../shared/models/models.dart';
+import '../chat_route_state.dart';
 import '../widgets/agent_approval_guard.dart';
 import 'realtime_call_page.dart';
 
@@ -94,6 +96,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   int _lastConversationUpdateEpoch = 0;
   String _lastSidebarConversationId = '';
   bool _scrollToBottomScheduled = false;
+  bool _autoFollowOutput = true;
   bool _diagnosticLogged = false;
   bool _historyLoadInFlight = false;
 
@@ -122,14 +125,17 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     final newConversationId = widget.initialConversationId?.trim() ?? '';
     final oldProjectId = oldWidget.initialProjectId?.trim() ?? '';
     final newProjectId = widget.initialProjectId?.trim() ?? '';
-    if (oldConversationId == newConversationId &&
-        oldProjectId == newProjectId) {
-      return;
-    }
     final runtimeConversationId = _runtime.conversationId?.trim() ?? '';
-    if (newConversationId.isNotEmpty &&
-        newConversationId == _routeSyncedConversationId &&
-        newConversationId == runtimeConversationId) {
+    final runtimeProjectId = _runtime.workspace?.projectId.trim() ?? '';
+    if (!shouldApplyConversationRoute(
+      previousConversationId: oldConversationId,
+      nextConversationId: newConversationId,
+      previousProjectId: oldProjectId,
+      nextProjectId: newProjectId,
+      runtimeConversationId: runtimeConversationId,
+      runtimeProjectId: runtimeProjectId,
+      routeSyncedConversationId: _routeSyncedConversationId,
+    )) {
       return;
     }
     _routeSyncedConversationId = '';
@@ -186,6 +192,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       ref.invalidate(conversationListProvider);
       ref.invalidate(conversationSidebarProvider);
       ref.read(conversationCollectionRevisionProvider.notifier).state++;
+      _autoFollowOutput = true;
     }
     _lastSidebarConversationId = conversationId;
     ref.read(activeConversationIdProvider.notifier).state = conversationId;
@@ -404,7 +411,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     super.dispose();
   }
 
-  void _scrollToBottom() {
+  void _scrollToBottom({bool force = false}) {
+    if (!force && !_autoFollowOutput) return;
     if (_scrollToBottomScheduled) return;
     _scrollToBottomScheduled = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -426,7 +434,14 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
   void _handleChatScroll() {
     if (!_scrollController.hasClients) return;
-    if (_scrollController.position.pixels <= 96) {
+    final position = _scrollController.position;
+    if (position.userScrollDirection == ScrollDirection.forward) {
+      _autoFollowOutput = false;
+    }
+    if (position.maxScrollExtent - position.pixels <= 24) {
+      _autoFollowOutput = true;
+    }
+    if (position.pixels <= 96) {
       unawaited(_loadOlderMessages());
     }
   }
@@ -456,6 +471,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   }
 
   void _retryMessage(int index) {
+    _autoFollowOutput = true;
     _runtime.retryMessage(index);
   }
 
@@ -810,6 +826,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     if (reply != null) {
       setState(() => _replyTarget = null);
     }
+    _autoFollowOutput = true;
     _runtime.sendText(
       text,
       replyToMessageId: reply?.id,
@@ -920,6 +937,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         source: 'chat_composer',
       );
       if (!mounted) return;
+      _autoFollowOutput = true;
       await _runtime.sendVoice(
         resourceUri: artifact.resourceUri,
         displayUrl: service.contentUrl(artifact.id),
@@ -1119,6 +1137,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     ArtifactService service,
     ArtifactMetadata artifact,
   ) {
+    _autoFollowOutput = true;
     return _runtime.sendImage(
       resourceUri: artifact.resourceUri,
       displayUrl: service.contentUrl(artifact.id),
@@ -1131,6 +1150,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     ArtifactService service,
     ArtifactMetadata artifact,
   ) {
+    _autoFollowOutput = true;
     return _runtime.sendVideo(
       resourceUri: artifact.resourceUri,
       displayUrl: service.contentUrl(artifact.id),
@@ -1144,6 +1164,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     ArtifactService service,
     ArtifactMetadata artifact,
   ) {
+    _autoFollowOutput = true;
     return _runtime.sendVoice(
       resourceUri: artifact.resourceUri,
       displayUrl: service.contentUrl(artifact.id),
@@ -1391,6 +1412,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   }
 
   void _onSendCode(String lang, String code) {
+    _autoFollowOutput = true;
     _runtime.sendCode(lang, code);
   }
 
@@ -2280,6 +2302,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                   _runtime.updatePermissionMode(mode).catchError((_) {});
                 },
                 onSend: _onSend,
+                onStop: _runtime.stop,
+                generating: _runtime.sending,
                 recipientName: characterName,
                 workspaceSelector: _buildWorkspaceBar(context),
                 onPickFile: _pickAndSendFile,

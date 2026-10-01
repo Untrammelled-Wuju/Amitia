@@ -116,13 +116,14 @@ func toolScopeFromExtension(es extension.ExecutionScope) SkillScope {
 }
 
 type toolExecOutcome struct {
-	VisibleText string
-	Status      string
-	ForceVoice  bool
-	ErrorCode   string
-	Output      json.RawMessage
-	HasError    bool
-	Found       bool
+	VisibleText  string
+	Status       string
+	ForceVoice   bool
+	ErrorCode    string
+	ErrorMessage string
+	Output       json.RawMessage
+	HasError     bool
+	Found        bool
 }
 
 func toolResultToOutcome(r ToolResult, found bool) toolExecOutcome {
@@ -135,6 +136,7 @@ func toolResultToOutcome(r ToolResult, found bool) toolExecOutcome {
 	}
 	if r.Error != nil {
 		out.ErrorCode = r.Error.Code
+		out.ErrorMessage = r.Error.Message
 		out.HasError = true
 	}
 	return out
@@ -153,6 +155,9 @@ func toolResultContent(toolName string, outcome toolExecOutcome) string {
 		return ""
 	}
 	if code := strings.TrimSpace(outcome.ErrorCode); code != "" {
+		if message := strings.TrimSpace(outcome.ErrorMessage); message != "" {
+			return "工具执行失败：" + code + ": " + message
+		}
 		return "工具执行失败：" + code
 	}
 	return "工具执行失败"
@@ -162,6 +167,9 @@ func structuredToolResult(toolName string) bool {
 	switch toolName {
 	case "web_run",
 		"web.run",
+		"media_image_generate",
+		"media.image.generate",
+		"send_attachment",
 		"find_capability",
 		"acquire_capability",
 		"use_package",
@@ -171,6 +179,10 @@ func structuredToolResult(toolName string) bool {
 		"materialize_skill_resource":
 		return true
 	default:
-		return false
+		return strings.HasPrefix(toolName, "android_ui_tree_") ||
+			strings.HasPrefix(toolName, "android_interaction_") ||
+			strings.HasPrefix(toolName, "android_virtual_display_") ||
+			strings.HasPrefix(toolName, "android_display_") ||
+			strings.HasPrefix(toolName, "android_accessibility_")
 	}
 }

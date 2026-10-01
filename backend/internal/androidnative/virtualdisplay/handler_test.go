@@ -2,9 +2,14 @@ package virtualdisplay
 
 import (
 	"context"
+	"encoding/base64"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
+	"github.com/u-ai/backend/pkg/util"
 )
 
 type mockVirtualBridge struct {
@@ -57,6 +62,81 @@ func TestHandler_Status_Success(t *testing.T) {
 	result, ok := resp.Result["active"].(bool)
 	if !ok || !result {
 		t.Errorf("expected active=true, got %v", resp.Result["active"])
+	}
+}
+
+func TestHandler_Status_NoActiveDisplayOmitsNullDisplay(t *testing.T) {
+	svc := NewService(&Store{}, &mockVirtualBridge{}, DefaultPolicy(), &PrimaryResolver{})
+	h := NewHandler(svc)
+	resp := h.Execute(context.Background(), capability.AndroidBridgeRequest{
+		ProtocolVersion: 1,
+		RequestID:       "test-status-empty",
+		Operation:       OperationStatus,
+	})
+	if resp.Status != "success" {
+		t.Fatalf("expected success, got %s: %+v", resp.Status, resp.Error)
+	}
+	if _, ok := resp.Result["display"]; ok {
+		t.Fatalf("expected display to be omitted when no virtual display is active")
+	}
+	if text, _ := resp.Result["text"].(string); text == "" {
+		t.Fatalf("expected status text result")
+	}
+}
+
+func TestHandler_CaptureTextResultMasksBase64(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv(util.TempDirEnv, tempDir)
+	encodedImage := base64.StdEncoding.EncodeToString([]byte("image-frame"))
+	store := &Store{}
+	rec := store.Insert(&VirtualDisplayRecord{
+		DisplayID:  100,
+		Width:      1080,
+		Height:     1920,
+		DensityDPI: 420,
+		State:      StateReady,
+	})
+	bridge := &mockVirtualBridge{
+		execFunc: func(ctx context.Context, op string, payload map[string]any) (map[string]any, error) {
+			return map[string]any{
+				"displayId":  100,
+				"ref":        rec.Ref,
+				"width":      1280,
+				"height":     720,
+				"mimeType":   "image/jpeg",
+				"format":     "jpeg",
+				"dataBase64": encodedImage,
+			}, nil
+		},
+	}
+	svc := NewService(store, bridge, DefaultPolicy(), &PrimaryResolver{})
+	h := NewHandler(svc)
+	resp := h.Execute(context.Background(), capability.AndroidBridgeRequest{
+		ProtocolVersion: 1,
+		RequestID:       "test-capture",
+		Operation:       OperationCapture,
+		Payload:         map[string]any{"ref": rec.Ref},
+	})
+	if resp.Status != "success" {
+		t.Fatalf("expected success, got %s: %+v", resp.Status, resp.Error)
+	}
+	text, _ := resp.Result["text"].(string)
+	if text == "" || strings.Contains(text, encodedImage) {
+		t.Fatalf("expected capture text summary without base64 payload, got %q", text)
+	}
+	if _, ok := resp.Result["dataBase64"]; ok {
+		t.Fatalf("expected raw base64 to be replaced by resourceUri")
+	}
+	resourceURI, _ := resp.Result["resourceUri"].(string)
+	if resourceURI == "" {
+		t.Fatalf("expected capture resourceUri")
+	}
+	if bytes, _ := resp.Result["sizeBytes"].(int); bytes != len("image-frame") {
+		t.Fatalf("expected base64 size in text summary")
+	}
+	paths := util.DetectRuntimePaths("")
+	if _, err := os.Stat(filepath.Join(paths.TempDir, "android-media", "virtual-display", "test-capture.jpg")); err != nil {
+		t.Fatalf("expected capture artifact file: %v", err)
 	}
 }
 

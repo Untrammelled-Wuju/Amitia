@@ -1,23 +1,39 @@
 package com.amitia.amitia_app.virtualdisplay.host
 
+import android.annotation.SuppressLint
+import android.app.UiAutomation
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.PixelFormat
+import android.graphics.Rect
 import android.hardware.display.DisplayManager
 import android.hardware.display.VirtualDisplay
 import android.media.Image
 import android.media.ImageReader
 import android.os.Build
+import android.os.Looper
 import android.os.Process
 import android.os.SystemClock
 import android.util.Base64
+import android.util.SparseArray
 import android.view.KeyEvent
+import android.view.accessibility.AccessibilityNodeInfo
+import android.view.accessibility.AccessibilityWindowInfo
 import org.json.JSONArray
 import org.json.JSONObject
+import org.xmlpull.v1.XmlPullParser
+import org.xmlpull.v1.XmlPullParserFactory
 import java.io.BufferedReader
 import java.io.ByteArrayOutputStream
+import java.io.File
 import java.io.InputStreamReader
+import java.io.StringReader
+import java.lang.reflect.Constructor
+import java.security.MessageDigest
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
@@ -42,9 +58,11 @@ internal class VirtualDisplayHostService(
         var lastFrameAt: Long,
     )
 
-    private val displayManager = context.getSystemService(DisplayManager::class.java)
-        ?: throw IllegalStateException("DisplayManager unavailable")
-    private val inputController = VirtualDisplayHostInputController()
+    private val displayManager = createDisplayManager(context)
+    private val inputController by lazy {
+        runCatching { VirtualDisplayHostInputController() }.getOrNull()
+    }
+    private val uiAutomation by lazy { createUiAutomation() }
     private val sessions = ConcurrentHashMap<Int, DisplaySession>()
     private val scheduler = Executors.newSingleThreadScheduledExecutor()
     private val lock = Any()
@@ -81,6 +99,8 @@ internal class VirtualDisplayHostService(
                 "virtual_display.swipe" -> successResponse(requestId, swipe(request))
                 "virtual_display.key" -> successResponse(requestId, key(request))
                 "virtual_display.text" -> successResponse(requestId, text(request))
+                "virtual_display.clear_text" -> successResponse(requestId, clearText(request))
+                "virtual_display.ui_tree" -> successResponse(requestId, uiTree(request))
                 "virtual_display.shutdown" -> {
                     successResponse(requestId, shutdownHost())
                 }
@@ -201,9 +221,10 @@ internal class VirtualDisplayHostService(
         }
         val component = resolveLaunchComponent(packageName, request.optString("component").trim())
             ?: throw HostError("VIRTUAL_DISPLAY_LAUNCH_FAILED", "no launch activity for $packageName")
+        ensureDisplayReady(displayId)
         val result = runCommand(
             listOf(
-                "am",
+                "/system/bin/am",
                 "start",
                 "--display",
                 displayId.toString(),
@@ -222,6 +243,7 @@ internal class VirtualDisplayHostService(
                 result.stderr.ifBlank { result.stdout }.ifBlank { "am start failed" },
             )
         }
+        ensureDisplayReady(displayId)
         pair.second.packageName = packageName
         return sessionJson(displayId, pair.second)
             .put("component", component)
@@ -229,12 +251,22 @@ internal class VirtualDisplayHostService(
 
     private fun capture(request: JSONObject): JSONObject {
         val pair = resolveSession(request)
+        ensureDisplayReady(pair.first)
         val format = request.optString("format", "jpeg").lowercase()
         val quality = request.optInt("quality", 82).coerceIn(1, 100)
         val maxWidth = request.optInt("maxWidth", 1280).coerceIn(320, 2560)
         val maxHeight = request.optInt("maxHeight", 1280).coerceIn(320, 2560)
-        val image = acquireImage(pair.second.reader, 1500L)
-            ?: throw HostError("VIRTUAL_DISPLAY_CAPTURE_FAILED", "no frame available")
+        val image = acquireImage(pair.second.reader, 3000L)
+        if (image == null) {
+            return captureWithSystemScreencap(
+                pair.first,
+                pair.second.ref,
+                format,
+                quality,
+                maxWidth,
+                maxHeight,
+            )
+        }
         val bitmap = try {
             imageToBitmap(image)
         } finally {
@@ -261,6 +293,83 @@ internal class VirtualDisplayHostService(
             .put("capturedAt", pair.second.lastFrameAt)
     }
 
+    private fun captureWithSystemScreencap(
+        displayId: Int,
+        ref: String,
+        format: String,
+        quality: Int,
+        maxWidth: Int,
+        maxHeight: Int,
+    ): JSONObject {
+        val surfaceFlingerDisplayId = resolveSurfaceFlingerDisplayId(displayId)
+            ?: throw HostError("VIRTUAL_DISPLAY_CAPTURE_FAILED", "surfaceflinger display id not found")
+        val file = File(
+            "/data/local/tmp",
+            "amitia_vd_capture_${UUID.randomUUID().toString().replace("-", "")}.png",
+        )
+        val result = runCommand(
+            listOf(
+                "/system/bin/screencap",
+                "-p",
+                "-d",
+                surfaceFlingerDisplayId,
+                file.absolutePath,
+            ),
+            10000L,
+        )
+        if (result.exitCode != 0 || !file.isFile) {
+            file.delete()
+            throw HostError(
+                "VIRTUAL_DISPLAY_CAPTURE_FAILED",
+                result.stderr.ifBlank { result.stdout }.ifBlank { "screencap failed" },
+            )
+        }
+        val bitmap = try {
+            BitmapFactory.decodeFile(file.absolutePath)
+                ?: throw HostError("VIRTUAL_DISPLAY_CAPTURE_FAILED", "screencap bitmap decode failed")
+        } finally {
+            file.delete()
+        }
+        val output = try {
+            val scaled = scale(bitmap, maxWidth, maxHeight)
+            if (scaled !== bitmap) bitmap.recycle()
+            encode(scaled, format, quality).also { scaled.recycle() }
+        } catch (error: Throwable) {
+            bitmap.recycle()
+            throw HostError("VIRTUAL_DISPLAY_CAPTURE_FAILED", error.message ?: "encode failed")
+        }
+        val capturedAt = System.currentTimeMillis()
+        return JSONObject()
+            .put("displayId", displayId)
+            .put("ref", ref)
+            .put("width", output.width)
+            .put("height", output.height)
+            .put("mimeType", output.mimeType)
+            .put("format", format)
+            .put("quality", quality)
+            .put("dataBase64", Base64.encodeToString(output.bytes, Base64.NO_WRAP))
+            .put("capturedAt", capturedAt)
+    }
+
+    private fun resolveSurfaceFlingerDisplayId(displayId: Int): String? {
+        val result = runCommand(
+            listOf("/system/bin/dumpsys", "SurfaceFlinger", "--display-id"),
+            5000L,
+        )
+        if (result.exitCode != 0) return null
+        val surfaceFlingerIds = result.stdout.lineSequence()
+            .filter { it.contains("displayName=\"amitia_virtual\"") }
+            .mapNotNull { line ->
+                Regex("Display\\s+(\\d+)").find(line)?.groupValues?.get(1)
+            }
+            .toList()
+        if (surfaceFlingerIds.isEmpty()) return null
+        val sortedSessionIds = sessions.keys.sorted()
+        val index = sortedSessionIds.indexOf(displayId)
+        if (index < 0) return null
+        return surfaceFlingerIds.getOrNull(index)
+    }
+
     private fun tap(request: JSONObject): JSONObject {
         val pair = resolveSession(request)
         val x = request.optDouble("x", Double.NaN).toFloat()
@@ -268,8 +377,23 @@ internal class VirtualDisplayHostService(
         if (x.isNaN() || y.isNaN()) {
             throw HostError("VIRTUAL_DISPLAY_INVALID_REQUEST", "x and y are required")
         }
-        if (!inputController.tap(pair.first, x, y)) {
-            throw HostError("VIRTUAL_DISPLAY_INPUT_FAILED", "tap injection failed")
+        val injected = inputController?.tap(pair.first, x, y) == true
+        val result = if (injected) null else runCommand(
+            listOf(
+                "/system/bin/input",
+                "-d",
+                pair.first.toString(),
+                "tap",
+                x.toString(),
+                y.toString(),
+            ),
+            5000L,
+        )
+        if (!injected && result?.exitCode != 0) {
+            throw HostError(
+                "VIRTUAL_DISPLAY_INPUT_FAILED",
+                result?.stderr.orEmpty().ifBlank { result?.stdout.orEmpty() }.ifBlank { "tap injection failed" },
+            )
         }
         return JSONObject().put("displayId", pair.first).put("x", x.toDouble()).put("y", y.toDouble())
     }
@@ -284,8 +408,26 @@ internal class VirtualDisplayHostService(
         if (startX.isNaN() || startY.isNaN() || endX.isNaN() || endY.isNaN()) {
             throw HostError("VIRTUAL_DISPLAY_INVALID_REQUEST", "swipe coordinates are required")
         }
-        if (!inputController.swipe(pair.first, startX, startY, endX, endY, durationMs)) {
-            throw HostError("VIRTUAL_DISPLAY_INPUT_FAILED", "swipe injection failed")
+        val injected = inputController?.swipe(pair.first, startX, startY, endX, endY, durationMs) == true
+        val result = if (injected) null else runCommand(
+            listOf(
+                "/system/bin/input",
+                "-d",
+                pair.first.toString(),
+                "swipe",
+                startX.toString(),
+                startY.toString(),
+                endX.toString(),
+                endY.toString(),
+                durationMs.toString(),
+            ),
+            8000L,
+        )
+        if (!injected && result?.exitCode != 0) {
+            throw HostError(
+                "VIRTUAL_DISPLAY_INPUT_FAILED",
+                result?.stderr.orEmpty().ifBlank { result?.stdout.orEmpty() }.ifBlank { "swipe injection failed" },
+            )
         }
         return JSONObject()
             .put("displayId", pair.first)
@@ -303,18 +445,22 @@ internal class VirtualDisplayHostService(
         if (keyCode == KeyEvent.KEYCODE_UNKNOWN) {
             throw HostError("VIRTUAL_DISPLAY_INVALID_REQUEST", "keyCode is required")
         }
-        val injected = inputController.key(pair.first, keyCode, metaState)
-        if (!injected) {
-            val result = runCommand(
-                listOf("input", "-d", pair.first.toString(), "keyevent", keyCode.toString()),
-                5000L,
+        val injected = inputController?.key(pair.first, keyCode, metaState) == true
+        val result = if (injected) null else runCommand(
+            listOf(
+                "/system/bin/input",
+                "-d",
+                pair.first.toString(),
+                "keyevent",
+                keyCode.toString(),
+            ),
+            5000L,
+        )
+        if (!injected && result?.exitCode != 0) {
+            throw HostError(
+                "VIRTUAL_DISPLAY_INPUT_FAILED",
+                result?.stderr.orEmpty().ifBlank { result?.stdout.orEmpty() }.ifBlank { "key injection failed" },
             )
-            if (result.exitCode != 0) {
-                throw HostError(
-                    "VIRTUAL_DISPLAY_INPUT_FAILED",
-                    result.stderr.ifBlank { result.stdout }.ifBlank { "key injection failed" },
-                )
-            }
         }
         return JSONObject()
             .put("displayId", pair.first)
@@ -331,8 +477,16 @@ internal class VirtualDisplayHostService(
         if (value.length > 4096) {
             throw HostError("VIRTUAL_DISPLAY_INVALID_REQUEST", "text exceeds maximum length")
         }
+        if (request.optBoolean("replace", false) && !clearTextSession(pair.first)) {
+            throw HostError("VIRTUAL_DISPLAY_INPUT_FAILED", "failed to clear existing text")
+        }
+        if (pasteText(pair.first, value)) {
+            return JSONObject()
+                .put("displayId", pair.first)
+                .put("length", value.length)
+        }
         val result = runCommand(
-            listOf("input", "-d", pair.first.toString(), "text", value),
+            listOf("/system/bin/input", "-d", pair.first.toString(), "text", value),
             8000L,
         )
         if (result.exitCode != 0) {
@@ -344,6 +498,453 @@ internal class VirtualDisplayHostService(
         return JSONObject()
             .put("displayId", pair.first)
             .put("length", value.length)
+    }
+
+    private fun pasteText(displayId: Int, value: String): Boolean {
+        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager ?: return false
+        return try {
+            clipboard.setPrimaryClip(ClipData.newPlainText("amitia_virtual", value))
+            inputController?.key(displayId, KeyEvent.KEYCODE_PASTE, 0) == true
+        } catch (_: Throwable) {
+            false
+        }
+    }
+
+    private fun clearText(request: JSONObject): JSONObject {
+        val pair = resolveSession(request)
+        if (!clearTextSession(pair.first)) {
+            throw HostError("VIRTUAL_DISPLAY_INPUT_FAILED", "text clear failed")
+        }
+        return JSONObject()
+            .put("displayId", pair.first)
+            .put("cleared", true)
+    }
+
+    private fun clearTextSession(displayId: Int): Boolean {
+        val moveResult = runCommand(
+            listOf(
+                "/system/bin/input",
+                "-d",
+                displayId.toString(),
+                "keyevent",
+                KeyEvent.KEYCODE_MOVE_END.toString(),
+            ),
+            5000L,
+        )
+        val moveSucceeded = moveResult.exitCode == 0 ||
+            inputController?.key(displayId, KeyEvent.KEYCODE_MOVE_END, 0) == true
+        if (!moveSucceeded) return false
+        val deleteCommand = mutableListOf(
+            "/system/bin/input",
+            "-d",
+            displayId.toString(),
+            "keyevent",
+        )
+        repeat(128) {
+            deleteCommand.add(KeyEvent.KEYCODE_DEL.toString())
+        }
+        val deleteResult = runCommand(deleteCommand, 10000L)
+        if (deleteResult.exitCode == 0) return true
+        repeat(128) {
+            if (inputController?.key(displayId, KeyEvent.KEYCODE_DEL, 0) != true) return false
+        }
+        return true
+    }
+
+    private fun uiTree(request: JSONObject): JSONObject {
+        val pair = resolveSession(request)
+        val displayId = pair.first
+        ensureDisplayReady(displayId)
+        uiAutomationTree(displayId)?.let { return it }
+        return uiautomatorTree(pair)
+    }
+
+    private fun uiautomatorTree(pair: Pair<Int, DisplaySession>): JSONObject {
+        val displayId = pair.first
+        val dumpFile = File(
+            "/data/local/tmp",
+            "amitia_vd_ui_${UUID.randomUUID().toString().replace("-", "")}.xml",
+        )
+        val result = runCommand(
+            listOf(
+                "/system/bin/uiautomator",
+                "dump",
+                "--display-id",
+                displayId.toString(),
+                dumpFile.absolutePath,
+            ),
+            12000L,
+        )
+        if (result.exitCode != 0 || !dumpFile.isFile) {
+            dumpFile.delete()
+            throw HostError(
+                "VIRTUAL_DISPLAY_UI_TREE_FAILED",
+                result.stderr.ifBlank { result.stdout }.ifBlank { "uiautomator dump failed" },
+            )
+        }
+        val xml = try {
+            dumpFile.readText()
+        } finally {
+            dumpFile.delete()
+        }
+        val tree = parseUiTree(displayId, xml)
+        validateUiTreeBounds(tree, pair.second)
+        return tree
+    }
+
+    private fun uiAutomationTree(displayId: Int): JSONObject? {
+        val automation = uiAutomation ?: return null
+        return try {
+            automation.clearCache()
+            val allWindows: SparseArray<List<AccessibilityWindowInfo>> =
+                automation.getWindowsOnAllDisplays()
+            val displayWindows = allWindows[displayId] ?: return null
+            if (displayWindows.isEmpty()) return null
+            val nodes = JSONArray()
+            val windows = JSONArray()
+            val capturedAt = System.currentTimeMillis()
+            for (window in displayWindows.sortedBy { it.layer }) {
+                val root = window.root ?: continue
+                val windowId = "vd-ui-window-$displayId-${window.id}"
+                val rootNodeId = uiAutomationNodeId(displayId, window.id, emptyList())
+                val bounds = Rect().also { window.getBoundsInScreen(it) }
+                windows.put(
+                    JSONObject()
+                        .put("windowId", windowId)
+                        .put("type", uiAutomationWindowType(window.type))
+                        .put("packageName", root.packageName?.toString().orEmpty())
+                        .put("title", window.title?.toString().orEmpty())
+                        .put("active", window.isActive)
+                        .put("focused", window.isFocused)
+                        .put("displayId", displayId)
+                        .put("layer", window.layer)
+                        .put("left", bounds.left)
+                        .put("top", bounds.top)
+                        .put("right", bounds.right)
+                        .put("bottom", bounds.bottom)
+                        .put("rootNodeId", rootNodeId),
+                )
+                appendUiAutomationNode(
+                    node = root,
+                    nodes = nodes,
+                    displayId = displayId,
+                    windowId = window.id,
+                    windowRef = windowId,
+                    path = emptyList(),
+                    parentId = null,
+                    depth = 0,
+                )
+            }
+            if (windows.length() == 0 || nodes.length() == 0) return null
+            val activeWindowId = (0 until windows.length())
+                .map { windows.getJSONObject(it) }
+                .firstOrNull { it.optBoolean("active", false) }
+                ?.optString("windowId")
+                .orEmpty()
+            JSONObject()
+                .put("nodes", nodes)
+                .put("windows", windows)
+                .put("windowCount", windows.length())
+                .put("activeWindowId", activeWindowId)
+                .put("generation", capturedAt)
+                .put("capturedAt", capturedAt)
+                .put("accessibilityConnected", true)
+                .put("multiWindow", windows.length() > 1)
+                .put("stableNodeReference", true)
+                .put("truncated", false)
+                .put("source", "ui_automation")
+        } catch (_: Throwable) {
+            null
+        }
+    }
+
+    private fun appendUiAutomationNode(
+        node: AccessibilityNodeInfo,
+        nodes: JSONArray,
+        displayId: Int,
+        windowId: Int,
+        windowRef: String,
+        path: List<Int>,
+        parentId: String?,
+        depth: Int,
+    ) {
+        val nodeId = uiAutomationNodeId(displayId, windowId, path)
+        val bounds = Rect().also { node.getBoundsInScreen(it) }
+        val className = node.className?.toString().orEmpty()
+        val resourceId = node.viewIdResourceName.orEmpty()
+        val editable = node.isEditable
+        val actions = JSONArray()
+        if (node.isClickable) actions.put("ACTION_CLICK")
+        if (node.isLongClickable) actions.put("ACTION_LONG_CLICK")
+        if (node.isScrollable) {
+            actions.put("ACTION_SCROLL_FORWARD")
+            actions.put("ACTION_SCROLL_BACKWARD")
+        }
+        if (editable) actions.put("ACTION_SET_TEXT")
+        val item = JSONObject()
+            .put("nodeId", nodeId)
+            .put("parentId", parentId ?: JSONObject.NULL)
+            .put("windowId", windowRef)
+            .put("className", className)
+            .put("packageName", node.packageName?.toString().orEmpty())
+            .put("text", node.text?.toString().orEmpty())
+            .put("contentDescription", node.contentDescription?.toString().orEmpty())
+            .put("resourceId", resourceId)
+            .put("left", bounds.left)
+            .put("top", bounds.top)
+            .put("right", bounds.right)
+            .put("bottom", bounds.bottom)
+            .put("visibleToUser", node.isVisibleToUser)
+            .put("enabled", node.isEnabled)
+            .put("focusable", node.isFocusable)
+            .put("focused", node.isFocused)
+            .put("selected", node.isSelected)
+            .put("checked", node.isChecked)
+            .put("checkable", node.isCheckable)
+            .put("clickable", node.isClickable)
+            .put("longClickable", node.isLongClickable)
+            .put("scrollable", node.isScrollable)
+            .put("editable", editable)
+            .put("password", node.isPassword)
+            .put("actions", actions)
+            .put("depth", depth)
+            .put("sourceRef", virtualNodeReference(displayId, bounds))
+        nodes.put(item)
+        for (index in 0 until node.childCount) {
+            val child = node.getChild(index) ?: continue
+            appendUiAutomationNode(
+                node = child,
+                nodes = nodes,
+                displayId = displayId,
+                windowId = windowId,
+                windowRef = windowRef,
+                path = path + index,
+                parentId = nodeId,
+                depth = depth + 1,
+            )
+        }
+    }
+
+    private fun uiAutomationNodeId(displayId: Int, windowId: Int, path: List<Int>): String {
+        val digest = MessageDigest.getInstance("SHA-256")
+            .digest("ui:$displayId:$windowId:${path.joinToString("/")}".toByteArray())
+        return "vd_ui_node_" + digest.take(12).joinToString("") { "%02x".format(it) }
+    }
+
+    private fun uiAutomationWindowType(type: Int): String = when (type) {
+        AccessibilityWindowInfo.TYPE_APPLICATION -> "application"
+        AccessibilityWindowInfo.TYPE_INPUT_METHOD -> "input_method"
+        AccessibilityWindowInfo.TYPE_SYSTEM -> "system"
+        AccessibilityWindowInfo.TYPE_ACCESSIBILITY_OVERLAY -> "accessibility_overlay"
+        AccessibilityWindowInfo.TYPE_SPLIT_SCREEN_DIVIDER -> "split_screen_divider"
+        else -> "unknown"
+    }
+
+    private fun ensureDisplayReady(displayId: Int) {
+        if (inputController?.key(displayId, KeyEvent.KEYCODE_WAKEUP, 0) != true) {
+            runCommand(
+                listOf(
+                    "/system/bin/input",
+                    "-d",
+                    displayId.toString(),
+                    "keyevent",
+                    KeyEvent.KEYCODE_WAKEUP.toString(),
+                ),
+                5000L,
+            )
+        }
+        if (inputController?.key(displayId, KeyEvent.KEYCODE_UNKNOWN, 0) != true) {
+            runCommand(
+                listOf(
+                    "/system/bin/input",
+                    "-d",
+                    displayId.toString(),
+                    "keyevent",
+                    KeyEvent.KEYCODE_UNKNOWN.toString(),
+                ),
+                5000L,
+            )
+        }
+        if (isDisplayKeyguardShowing(displayId)) {
+            runCommand(listOf("/system/bin/wm", "dismiss-keyguard"), 5000L)
+            Thread.sleep(250L)
+        }
+    }
+
+    private fun isDisplayKeyguardShowing(displayId: Int): Boolean {
+        val result = runCommand(
+            listOf("/system/bin/dumpsys", "window", "displays"),
+            5000L,
+        )
+        if (result.exitCode != 0) return false
+        val lines = result.stdout.lines()
+        val start = lines.indexOfFirst { it.contains("Display: mDisplayId=$displayId") }
+        if (start < 0) return false
+        val end = (start + 1 until lines.size).firstOrNull { index ->
+            lines[index].contains("Display: mDisplayId=")
+        } ?: lines.size
+        return lines.subList(start, end).any { line ->
+            line.contains("isKeyguardShowing=true") ||
+                (line.contains("mCurrentFocus=Window{") && line.contains("Keyguard"))
+        }
+    }
+
+    private fun validateUiTreeBounds(tree: JSONObject, session: DisplaySession) {
+        val windows = tree.optJSONArray("windows") ?: JSONArray()
+        if (windows.length() == 0) {
+            throw HostError(
+                "VIRTUAL_DISPLAY_UI_TREE_FAILED",
+                "no window found for display ${session.name}",
+            )
+        }
+        val root = windows.optJSONObject(0)
+        val right = root?.optInt("right", 0) ?: 0
+        val bottom = root?.optInt("bottom", 0) ?: 0
+        if (
+            right < session.width * 0.8 ||
+            bottom < session.height * 0.8 ||
+            right > session.width + 8 ||
+            bottom > session.height + 8
+        ) {
+            throw HostError(
+                "VIRTUAL_DISPLAY_UI_TREE_FAILED",
+                "uiautomator returned a tree for a different display",
+            )
+        }
+    }
+
+    private fun parseUiTree(displayId: Int, xml: String): JSONObject {
+        if (xml.isBlank()) {
+            throw HostError("VIRTUAL_DISPLAY_UI_TREE_FAILED", "uiautomator returned empty XML")
+        }
+        val parser = XmlPullParserFactory.newInstance().newPullParser()
+        parser.setInput(StringReader(xml))
+        val nodes = JSONArray()
+        val stack = ArrayDeque<JSONObject>()
+        val windowId = "vd-window-$displayId"
+        var rootNodeId = ""
+        var rootBounds = Rect()
+        var rootPackage = ""
+        var event = parser.eventType
+        while (event != XmlPullParser.END_DOCUMENT) {
+            if (event == XmlPullParser.START_TAG && parser.name == "node") {
+                val parent = stack.lastOrNull()
+                val index = parser.getAttributeValue(null, "index").orEmpty().ifBlank { "0" }
+                val parentPath = parent?.optString("_path").orEmpty()
+                val path = if (parentPath.isBlank()) index else "$parentPath/$index"
+                val className = parser.getAttributeValue(null, "class").orEmpty()
+                val packageName = parser.getAttributeValue(null, "package").orEmpty()
+                val resourceId = parser.getAttributeValue(null, "resource-id").orEmpty()
+                val bounds = parseUiBounds(parser.getAttributeValue(null, "bounds").orEmpty())
+                val clickable = parser.booleanAttribute("clickable")
+                val longClickable = parser.booleanAttribute("long-clickable")
+                val scrollable = parser.booleanAttribute("scrollable")
+                val editable = className.contains("EditText", ignoreCase = true) ||
+                    className.contains("Editor", ignoreCase = true)
+                val actions = JSONArray()
+                if (clickable) actions.put("ACTION_CLICK")
+                if (longClickable) actions.put("ACTION_LONG_CLICK")
+                if (scrollable) {
+                    actions.put("ACTION_SCROLL_FORWARD")
+                    actions.put("ACTION_SCROLL_BACKWARD")
+                }
+                if (editable) actions.put("ACTION_SET_TEXT")
+                val nodeId = uiNodeId(displayId, path, className, resourceId, bounds)
+                val item = JSONObject()
+                    .put("nodeId", nodeId)
+                    .put("parentId", parent?.optString("nodeId")?.takeIf { it.isNotBlank() } ?: JSONObject.NULL)
+                    .put("windowId", windowId)
+                    .put("className", className)
+                    .put("packageName", packageName)
+                    .put("text", parser.getAttributeValue(null, "text").orEmpty())
+                    .put("contentDescription", parser.getAttributeValue(null, "content-desc").orEmpty())
+                    .put("resourceId", resourceId)
+                    .put("left", bounds.left)
+                    .put("top", bounds.top)
+                    .put("right", bounds.right)
+                    .put("bottom", bounds.bottom)
+                    .put("visibleToUser", true)
+                    .put("enabled", parser.booleanAttribute("enabled", true))
+                    .put("focusable", parser.booleanAttribute("focusable"))
+                    .put("focused", parser.booleanAttribute("focused"))
+                    .put("selected", parser.booleanAttribute("selected"))
+                    .put("checked", parser.booleanAttribute("checked"))
+                    .put("checkable", parser.booleanAttribute("checkable"))
+                    .put("clickable", clickable)
+                    .put("longClickable", longClickable)
+                    .put("scrollable", scrollable)
+                    .put("editable", editable)
+                    .put("password", parser.booleanAttribute("password"))
+                    .put("actions", actions)
+                    .put("depth", stack.size)
+                    .put("sourceRef", virtualNodeReference(displayId, bounds))
+                    .put("_path", path)
+                if (parent == null) {
+                    rootNodeId = nodeId
+                    rootBounds = bounds
+                    rootPackage = packageName
+                }
+                nodes.put(item)
+                stack.addLast(item)
+            } else if (event == XmlPullParser.END_TAG && parser.name == "node") {
+                if (stack.isNotEmpty()) stack.removeLast()
+            }
+            event = parser.next()
+        }
+        for (index in 0 until nodes.length()) {
+            nodes.getJSONObject(index).remove("_path")
+        }
+        val windows = JSONArray()
+        if (rootNodeId.isNotBlank() || nodes.length() > 0) {
+            windows.put(
+                JSONObject()
+                    .put("windowId", windowId)
+                    .put("type", "application")
+                    .put("packageName", rootPackage)
+                    .put("title", "")
+                    .put("active", true)
+                    .put("focused", true)
+                    .put("displayId", displayId)
+                    .put("left", rootBounds.left)
+                    .put("top", rootBounds.top)
+                    .put("right", rootBounds.right)
+                    .put("bottom", rootBounds.bottom)
+                    .put("rootNodeId", rootNodeId),
+            )
+        }
+        val capturedAt = System.currentTimeMillis()
+        return JSONObject()
+            .put("nodes", nodes)
+            .put("windows", windows)
+            .put("windowCount", windows.length())
+            .put("activeWindowId", if (windows.length() > 0) windowId else "")
+            .put("generation", capturedAt)
+            .put("capturedAt", capturedAt)
+            .put("accessibilityConnected", false)
+            .put("multiWindow", false)
+            .put("stableNodeReference", true)
+            .put("truncated", false)
+            .put("source", "uiautomator")
+    }
+
+    private fun XmlPullParser.booleanAttribute(name: String, fallback: Boolean = false): Boolean {
+        val value = getAttributeValue(null, name) ?: return fallback
+        return value.equals("true", ignoreCase = true)
+    }
+
+    private fun parseUiBounds(value: String): Rect {
+        val values = Regex("-?\\d+").findAll(value).take(4).map { it.value.toIntOrNull() ?: 0 }.toList()
+        if (values.size != 4) return Rect()
+        return Rect(values[0], values[1], values[2], values[3])
+    }
+
+    private fun virtualNodeReference(displayId: Int, bounds: Rect): String =
+        "vd:$displayId:${bounds.left},${bounds.top},${bounds.right},${bounds.bottom}"
+
+    private fun uiNodeId(displayId: Int, path: String, className: String, resourceId: String, bounds: Rect): String {
+        val digest = MessageDigest.getInstance("SHA-256")
+            .digest("$displayId|$path|$className|$resourceId|$bounds".toByteArray())
+        return "vd_node_" + digest.take(12).joinToString("") { "%02x".format(it) }
     }
 
     private fun status(): JSONObject {
@@ -364,7 +965,7 @@ internal class VirtualDisplayHostService(
             .put("textSupported", true)
             .put("thirdPartyLaunchSupported", true)
             .put("frameSourceSupported", true)
-            .put("uiTreeSupported", false)
+            .put("uiTreeSupported", true)
             .put("activeCount", array.length())
             .put("displays", array)
     }
@@ -417,6 +1018,32 @@ internal class VirtualDisplayHostService(
         } catch (_: Throwable) {
         }
     }
+
+    private fun createDisplayManager(context: Context): DisplayManager {
+        val constructor: Constructor<DisplayManager> =
+            DisplayManager::class.java.getDeclaredConstructor(Context::class.java)
+        constructor.isAccessible = true
+        return constructor.newInstance(context)
+    }
+
+    @SuppressLint("BlockedPrivateApi")
+    private fun createUiAutomation(): UiAutomation? = runCatching {
+        val connectionClass = Class.forName("android.app.UiAutomationConnection")
+        val connection = connectionClass.getDeclaredConstructor().newInstance()
+        val automationClass = UiAutomation::class.java
+        val connectionInterface = Class.forName("android.app.IUiAutomationConnection")
+        val constructor = automationClass.getDeclaredConstructor(Looper::class.java, connectionInterface)
+        constructor.isAccessible = true
+        val automation = constructor.newInstance(Looper.getMainLooper(), connection) as UiAutomation
+        val connect = automationClass.getDeclaredMethod(
+            "connectWithTimeout",
+            Int::class.javaPrimitiveType,
+            Long::class.javaPrimitiveType,
+        )
+        connect.isAccessible = true
+        connect.invoke(automation, 1, 5000L)
+        automation
+    }.getOrNull()
 
     private fun acquireImage(reader: ImageReader, timeoutMs: Long): Image? {
         val deadline = SystemClock.uptimeMillis() + timeoutMs
@@ -502,7 +1129,7 @@ internal class VirtualDisplayHostService(
         }
         val result = runCommand(
             listOf(
-                "cmd",
+                "/system/bin/cmd",
                 "package",
                 "resolve-activity",
                 "--brief",
