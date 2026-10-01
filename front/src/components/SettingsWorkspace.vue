@@ -14,7 +14,7 @@
         <section v-for="(group, index) in settingsGroups" :key="group.title" class="settings-navigation-group" :aria-labelledby="`settings-group-${index}`">
           <h2 :id="`settings-group-${index}`">{{ group.title }}</h2>
           <router-link v-for="item in group.items" :key="item.path" :to="item.path"
-            class="settings-navigation-item" :class="{ 'settings-navigation-item-active': currentEntry === item.path }"
+            class="settings-navigation-item"
             :aria-current="currentEntry === item.path ? 'page' : undefined">
             {{ item.label }}
           </router-link>
@@ -50,8 +50,6 @@ function navigateToSetting(event: Event) {
 .settings-navigation-group h2 { margin: 0 10px 4px; color: var(--text-muted); font-size: var(--ac-font-size-xs); font-weight: 500; line-height: 1.4; }
 .settings-navigation-item { display: flex; align-items: center; min-height: 34px; padding: 6px 10px; box-sizing: border-box; border-radius: var(--ac-radius-sm); color: var(--text-secondary); font-size: var(--ac-font-size-sm); line-height: 1.4; text-decoration: none; transition: background-color var(--ac-transition-fast), color var(--ac-transition-fast); }
 .settings-navigation-item:hover { background: var(--control-hover-bg); color: var(--text-primary); }
-.settings-navigation-item-active { background: var(--control-active-bg); color: var(--text-primary); font-weight: 600; }
-.settings-navigation-item:active { background: var(--control-active-bg); transition: none; }
 .settings-navigation-item:focus-visible, select:focus-visible { outline: 2px solid var(--ac-color-primary); outline-offset: -2px; }
 .settings-compact-navigation { display: none; }
 @media (max-width: 767px) {

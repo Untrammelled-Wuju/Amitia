@@ -22,10 +22,10 @@ class _LightColors {
   final Color surfacePrimary = const Color(0xFFFFFFFF);
   final Color surfaceSecondary = const Color(0xFFF4F6F8);
 
-  final Color accentPrimary = const Color(0xFF8A5728);
-  final Color accentSecondary = const Color(0xFF6E421F);
-  final Color accentSoft = const Color(0xFFEFE1D2);
-  final Color accentPressed = const Color(0xFF6E421F);
+  final Color accentPrimary = const Color(0xFF6C8FEA);
+  final Color accentSecondary = const Color(0xFF6C8FEA);
+  final Color accentSoft = const Color(0xFFEBEFFC);
+  final Color accentPressed = const Color(0xFF5B78C5);
 
   final Color textPrimary = const Color(0xFF1F2329);
   final Color textSecondary = const Color(0xFF646A73);
@@ -52,10 +52,10 @@ class _DarkColors {
   final Color surfacePrimary = const Color(0xFF191A1C);
   final Color surfaceSecondary = const Color(0xFF202124);
 
-  final Color accentPrimary = const Color(0xFF9C8068);
-  final Color accentSecondary = const Color(0xFFC7AD96);
-  final Color accentSoft = const Color(0xFF2C2825);
-  final Color accentPressed = const Color(0xFFC7AD96);
+  final Color accentPrimary = const Color(0xFF8CA8F0);
+  final Color accentSecondary = const Color(0xFF8CA8F0);
+  final Color accentSoft = const Color(0xFF292E3A);
+  final Color accentPressed = const Color(0xFF9EB6F2);
 
   final Color textPrimary = const Color(0xFFF0F0EF);
   final Color textSecondary = const Color(0xFFB7B6B3);

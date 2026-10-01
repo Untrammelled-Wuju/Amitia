@@ -46,7 +46,7 @@ describe("桌面设置分类导航", () => {
       const links = wrapper.findAll("nav a");
       expect(links).toHaveLength(15);
       expect(new Set(links.map(link => link.attributes("href"))).size).toBe(15);
-      expect(wrapper.find('a[href="/settings/model"]').classes()).toContain("settings-navigation-item-active");
+      expect(wrapper.find('a[href="/settings/model"]').attributes('aria-current')).toBe('page');
       expect((wrapper.get("select").element as HTMLSelectElement).value).toBe("/settings/model");
       expect(wrapper.findAll("[data-slot]").map(slot => slot.attributes("data-slot"))).toEqual([
         "system.status.item", "system.settings.section", "extension.settings.section", "extension.settings.page",
@@ -70,6 +70,9 @@ describe("桌面设置分类导航", () => {
         await router.push(path);
         expect(wrapper.find("[data-main-shell]").exists()).toBe(false);
         expect(wrapper.get('.workspace-back').attributes('href')).toBe('/chat?conversationId=test&workspace=local');
+        expect(wrapper.get('.workspace-back').attributes('aria-label')).toBe('返回主界面');
+        expect(wrapper.get('.workspace-back').text()).toBe('');
+        expect(wrapper.get('.secondary-header').element.firstElementChild).toBe(wrapper.get('.workspace-back').element);
         expect(wrapper.find(".settings-navigation").exists()).toBe(path.startsWith("/settings"));
         expect(wrapper.find(".secondary-sidebar").exists()).toBe(true);
         if (!path.startsWith("/settings")) {

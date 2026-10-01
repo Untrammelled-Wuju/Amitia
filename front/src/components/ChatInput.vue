@@ -679,7 +679,7 @@ SPDX-License-Identifier: AGPL-3.0-only
               </div>
             </el-popover>
             <el-button
-              :icon="Microphone"
+              v-if="!generating && (voiceMode || !hasSendableContent)"
               circle
               size="small"
               class="voice-mode-toggle"
@@ -687,9 +687,18 @@ SPDX-License-Identifier: AGPL-3.0-only
               :disabled="isInputDisabled"
               @click="toggleVoiceMode"
               :title="voiceMode ? '切换到文字输入' : '切换到语音输入'"
-            />
+              :aria-label="voiceMode ? '切换到文字输入' : '切换到语音输入'"
+            >
+              <el-icon v-if="voiceMode">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true">
+                  <rect x="2" y="5" width="20" height="14" rx="2" />
+                  <path d="M6 9h2m3 0h2m3 0h2M6 12h2m3 0h2m3 0h2M7 15h10" />
+                </svg>
+              </el-icon>
+              <el-icon v-else><Microphone /></el-icon>
+            </el-button>
             <el-button
-              v-if="!voiceMode || generating"
+              v-else
               :type="generating ? 'danger' : 'primary'"
               circle
               size="small"
@@ -699,14 +708,12 @@ SPDX-License-Identifier: AGPL-3.0-only
                   uploadingVideo ||
                   !!videoUploadError ||
                   processingImage ||
-                  (!text.trim() &&
-                    !attachedImagePreview &&
-                    !attachedVideo &&
-                    !selectedSkillNames.length) ||
+                  !hasSendableContent ||
                   isSubmitting)
               "
               @click="generating ? $emit('stop') : handleSendClick()"
               :title="generating ? '停止生成' : '发送 (Enter)'"
+              :aria-label="generating ? '停止生成' : '发送消息'"
             >
               <span v-if="generating" class="composer-stop-square"></span>
               <el-icon v-else class="composer-send-arrow"><Top /></el-icon>
@@ -1121,6 +1128,9 @@ const hasComposerContext = computed(
     !!attachedImage.value ||
     !!attachedVideo.value ||
     selectedSkillNames.value.length > 0,
+);
+const hasSendableContent = computed(
+  () => !!text.value.trim() || hasComposerContext.value,
 );
 
 const filteredAgentSkills = computed(() => {

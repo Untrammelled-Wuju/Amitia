@@ -1,12 +1,13 @@
 <template>
   <div
     class="thread-row"
-    :class="{ active, compact }"
+    :class="{ compact }"
   >
     <div
       class="thread-main"
       role="button"
       tabindex="0"
+      :aria-current="active ? 'page' : undefined"
       @click="emit('select', conversation)"
       @keydown.enter.prevent="emit('select', conversation)"
       @keydown.space.prevent="emit('select', conversation)"
@@ -113,13 +114,9 @@ function cancelRename() {
   border-radius: 6px;
   color: var(--text-secondary);
 }
-.thread-row:hover,
-.thread-row.active {
+.thread-row:hover {
   background: var(--workbench-sidebar-hover);
   color: var(--text-primary);
-}
-.thread-row.active {
-  background: var(--workbench-sidebar-active);
 }
 .thread-main {
   display: flex;
@@ -208,5 +205,5 @@ function cancelRename() {
 
 button, .thread-main, .thread-name-input { line-height: 1.45; }
 button:not(:disabled):focus-visible { outline: 2px solid var(--ac-color-primary); outline-offset: -2px; }
-button:not(:disabled):active, .thread-main:active { background: var(--control-active-bg); color: var(--text-primary); }
+button:not(:disabled):active { background: var(--control-active-bg); color: var(--text-primary); }
 </style>

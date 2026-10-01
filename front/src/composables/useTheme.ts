@@ -26,7 +26,7 @@ const STORAGE_KEY = "ai-companion-theme";
 const APPEARANCE_STORAGE_KEY = "ai-companion-appearance";
 const VALID_PRESETS: ThemePreset[] = ["system", "light", "dark"];
 const DEFAULT_THEME: ThemePreset = "dark";
-const DEFAULT_ACCENT = "#8A5728";
+const DEFAULT_ACCENT = "#6C8FEA";
 
 export const FONT_SCALE_OPTIONS = [
   { value: 0.9, label: "小" },
@@ -166,9 +166,12 @@ function persistAppearance() {
 }
 
 function applyAccent(html: HTMLElement, accent: string) {
-  const normalized = normalizeAccentColor(accent);
+  const selectedAccent = normalizeAccentColor(accent);
+  const normalized = selectedAccent === "#6C8FEA" && resolvedMode.value === "dark"
+    ? "#8CA8F0"
+    : selectedAccent;
   const isDefaultLightAccent =
-    normalized === DEFAULT_ACCENT && resolvedMode.value === "light";
+    normalized === "#8A5728" && resolvedMode.value === "light";
   html.style.setProperty("--tp-primary", normalized);
   html.style.setProperty(
     "--tp-primary-hover",

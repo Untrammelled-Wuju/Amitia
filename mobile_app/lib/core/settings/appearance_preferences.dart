@@ -14,7 +14,7 @@ class AppearancePreferences {
   const AppearancePreferences({
     this.themeMode = ThemeMode.system,
     this.fontScale = 1.0,
-    this.accentColorIndex = 0,
+    this.accentColorIndex = 1,
     this.cornerStyleIndex = 1,
     this.dynamicEffect = true,
     this.reduceAnimation = false,
@@ -70,7 +70,7 @@ class AppearancePreferencesNotifier extends StateNotifier<AppearancePreferences>
     state = AppearancePreferences(
       themeMode: theme,
       fontScale: (prefs.getDouble(_fontScaleKey) ?? 1.0).clamp(0.8, 1.4).toDouble(),
-      accentColorIndex: (prefs.getInt(_accentKey) ?? 0).clamp(0, 3).toInt(),
+      accentColorIndex: (prefs.getInt(_accentKey) ?? 1).clamp(0, 3).toInt(),
       cornerStyleIndex: (prefs.getInt(_cornerKey) ?? 1).clamp(0, 2).toInt(),
       dynamicEffect: prefs.getBool(_dynamicKey) ?? true,
       reduceAnimation: prefs.getBool(_reduceAnimationKey) ?? false,

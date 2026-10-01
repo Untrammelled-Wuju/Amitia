@@ -502,19 +502,17 @@ onUnmounted(() => {
 .recent-item { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 31px; padding: 0 9px; border: 0; border-radius: 7px; background: transparent; color: var(--text-secondary); cursor: pointer; font: inherit; font-size: var(--ac-font-size-sm); text-align: left; }
 .recent-item .el-icon { flex: 0 0 auto; font-size: var(--ac-font-size-sm); color: var(--text-muted); }
 .recent-item span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.recent-item:hover, .recent-item.active { background: var(--workbench-sidebar-hover); color: var(--text-primary); }
-.recent-item.active { background: var(--workbench-sidebar-active); }
+.recent-item:hover { background: var(--workbench-sidebar-hover); color: var(--text-primary); }
 .thread-sidebar { display: flex; flex-direction: column; padding: 2px 0 8px; }
 .thread-row { display: flex; align-items: center; min-height: 30px; border-radius: 6px; color: var(--text-secondary); }
-.thread-row:hover, .thread-row.active { background: var(--workbench-sidebar-hover); color: var(--text-primary); }
-.thread-row.active { background: var(--workbench-sidebar-active); }
+.thread-row:hover { background: var(--workbench-sidebar-hover); color: var(--text-primary); }
 .thread-main { display: flex; align-items: center; gap: 7px; min-width: 0; flex: 1; min-height: 30px; padding: 0 6px 0 8px; border: 0; background: transparent; color: inherit; cursor: pointer; font: inherit; font-size: var(--ac-font-size-sm); text-align: left; }
 .thread-main span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .thread-name-input { min-width: 0; width: 100%; min-height: 28px; padding: 3px 6px; border: 1px solid var(--ac-color-primary); border-radius: 5px; background: var(--surface-bg); color: var(--text-primary); font: inherit; outline: none; }
 .thread-delete { display: grid; place-items: center; width: 26px; height: 26px; margin-right: 2px; padding: 0; border: 0; border-radius: 5px; background: transparent; color: var(--text-muted); cursor: pointer; opacity: 0; }
-.thread-row:hover .thread-delete, .thread-row.active .thread-delete { opacity: 1; }
+.thread-row:hover .thread-delete { opacity: 1; }
 .thread-actions { opacity: 0; }
-.thread-row:hover .thread-actions, .thread-row.active .thread-actions, .thread-row:focus-within .thread-actions { opacity: 1; }
+.thread-row:hover .thread-actions, .thread-row:focus-within .thread-actions { opacity: 1; }
 .thread-delete:hover { background: var(--control-hover-bg); color: var(--danger-color, #d9534f); }
 .thread-expand { align-self: flex-start; margin: 2px 0 2px 30px; padding: 3px 7px; border: 0; border-radius: 5px; background: transparent; color: var(--ac-color-primary); cursor: pointer; font: inherit; font-size: var(--ac-font-size-xs); }
 .thread-expand:hover { background: var(--workbench-sidebar-hover); }
@@ -537,8 +535,7 @@ onUnmounted(() => {
 .project-threads { display: grid; gap: 1px; padding-left: 18px; }
 .thread-item { display: flex; align-items: center; gap: 7px; width: 100%; min-height: 30px; padding: 0 8px; border: 0; border-radius: 6px; background: transparent; color: var(--text-secondary); cursor: pointer; font: inherit; font-size: var(--ac-font-size-sm); text-align: left; }
 .thread-item span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.thread-item:hover, .thread-item.active { background: var(--workbench-sidebar-hover); color: var(--text-primary); }
-.thread-item.active { background: var(--workbench-sidebar-active); }
+.thread-item:hover { background: var(--workbench-sidebar-hover); color: var(--text-primary); }
 .project-thread { min-height: 27px; font-size: var(--ac-font-size-xs); }
 .thread-empty { padding: 5px 9px; color: var(--text-muted); font-size: var(--ac-font-size-xs); }
 .side-nav-bottom { position: relative; flex: 0 0 auto; margin-top: auto; border-top: 1px solid var(--surface-border); padding: 7px 0 8px; }
@@ -565,7 +562,7 @@ onUnmounted(() => {
 
 .side-nav :deep(button), .thread-name-input, .section-caption { line-height: 1.45; }
 .side-nav :deep(button:not(:disabled):focus-visible), .side-menu :deep(.el-menu-item:focus-visible), .side-menu :deep(.el-sub-menu__title:focus-visible) { outline: 2px solid var(--ac-color-primary); outline-offset: -2px; }
-.side-nav :deep(button:not(:disabled):active) { background: var(--control-active-bg); color: var(--text-primary); }
+.side-nav :deep(button:not(:disabled):not(.user-profile):active) { background: var(--control-active-bg); color: var(--text-primary); }
 .icon-btn:active, .section-add:active, .project-action:active { transform: scale(0.96); }
 .thread-row:focus-within .thread-delete { opacity: 1; }
 </style>

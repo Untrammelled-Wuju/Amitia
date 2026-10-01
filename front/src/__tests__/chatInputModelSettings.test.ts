@@ -25,6 +25,38 @@ vi.mock("../views/extensions/api", () => ({
 }));
 
 describe("ChatInput model settings", () => {
+  it("switches the trailing action between voice, send and stop", async () => {
+    localStorage.clear();
+    const overlayRoot = document.createElement("div");
+    overlayRoot.id = "amitia-overlay-root";
+    document.body.appendChild(overlayRoot);
+    const pinia = createPinia();
+    setActivePinia(pinia);
+    const wrapper = mount(ChatInput, { global: { plugins: [pinia, ElementPlus] } });
+    try {
+      expect(wrapper.find('[aria-label="切换到语音输入"]').exists()).toBe(true);
+      expect(wrapper.find('[aria-label="发送消息"]').exists()).toBe(false);
+      await wrapper.get('textarea').setValue('你好');
+      expect(wrapper.find('[aria-label="切换到语音输入"]').exists()).toBe(false);
+      await wrapper.get('[aria-label="发送消息"]').trigger('click');
+      expect(wrapper.emitted('send')?.[0]).toEqual(['你好']);
+      expect(wrapper.find('[aria-label="切换到语音输入"]').exists()).toBe(true);
+      await wrapper.get('textarea').setValue('   ');
+      expect(wrapper.find('[aria-label="发送消息"]').exists()).toBe(false);
+      await wrapper.get('[aria-label="切换到语音输入"]').trigger('click');
+      expect(wrapper.get('.hold-voice-btn').isVisible()).toBe(true);
+      await wrapper.get('[aria-label="切换到文字输入"]').trigger('click');
+      expect(wrapper.get('textarea').isVisible()).toBe(true);
+      await wrapper.setProps({ generating: true });
+      await wrapper.get('[aria-label="停止生成"]').trigger('click');
+      expect(wrapper.emitted('stop')).toHaveLength(1);
+      expect(wrapper.find('.voice-mode-toggle').exists()).toBe(false);
+    } finally {
+      wrapper.unmount();
+      localStorage.clear();
+    }
+  });
+
   afterEach(() => {
     document.body.innerHTML = "";
   });
