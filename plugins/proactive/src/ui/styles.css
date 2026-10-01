@@ -5,7 +5,7 @@
   --text: var(--amitia-text-primary, #1f2933);
   --muted: var(--amitia-text-secondary, #667085);
   --border: var(--amitia-border, #d7dce2);
-  --accent: var(--amitia-color-accent, #c99557);
+  --accent: var(--amitia-color-accent, var(--amitia-color-primary, currentColor));
   --danger: var(--amitia-color-danger, #c96e6a);
   --success: var(--amitia-color-success, #4e8d68);
   --warning: var(--amitia-color-warning, #b7791f);

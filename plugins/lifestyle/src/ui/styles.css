@@ -40,13 +40,13 @@ button:focus-visible,
 input:focus-visible,
 select:focus-visible,
 textarea:focus-visible {
-  outline: 2px solid var(--amitia-color-accent, #c99557);
+  outline: 2px solid var(--amitia-color-accent, var(--amitia-color-primary, currentColor));
   outline-offset: 2px;
 }
 
 button.primary {
-  border-color: var(--amitia-color-accent, #c99557);
-  background: var(--amitia-color-accent, #c99557);
+  border-color: var(--amitia-color-accent, var(--amitia-color-primary, currentColor));
+  background: var(--amitia-color-accent, var(--amitia-color-primary, currentColor));
   color: #fff;
 }
 
@@ -92,9 +92,9 @@ button.danger {
 }
 
 .life-tabs button.active {
-  border-color: var(--amitia-color-accent, #c99557);
-  color: var(--amitia-color-accent, #c99557);
-  background: color-mix(in srgb, var(--amitia-color-accent, #c99557) 10%, transparent);
+  border-color: var(--amitia-color-accent, var(--amitia-color-primary, currentColor));
+  color: var(--amitia-color-accent, var(--amitia-color-primary, currentColor));
+  background: color-mix(in srgb, var(--amitia-color-accent, var(--amitia-color-primary, currentColor)) 10%, transparent);
 }
 
 .message {

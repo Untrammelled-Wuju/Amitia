@@ -6,7 +6,7 @@
   --border: var(--amitia-border, #d7dce2);
   --hover: var(--amitia-control-hover, #f5f7f9);
   --active: var(--amitia-control-active, #eef1f4);
-  --accent: var(--amitia-color-accent, #c99557);
+  --accent: var(--amitia-color-accent, var(--amitia-color-primary, currentColor));
   --danger: var(--amitia-color-danger, #c96e6a);
   --success: var(--amitia-color-success, #75a184);
   --warning: var(--amitia-color-warning, #c99a56);

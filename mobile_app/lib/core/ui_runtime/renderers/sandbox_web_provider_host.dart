@@ -442,6 +442,7 @@ class _SandboxWebProviderHostState extends ConsumerState<SandboxWebProviderHost>
       'mode': theme.brightness == Brightness.dark ? 'dark' : 'light',
       'tokens': <String, String>{
         '--amitia-color-primary': _cssColor(theme.colorScheme.primary),
+        '--amitia-color-accent': _cssColor(theme.colorScheme.primary),
         '--amitia-color-surface': _cssColor(theme.colorScheme.surface),
         '--amitia-color-on-surface': _cssColor(theme.colorScheme.onSurface),
         '--amitia-color-error': _cssColor(theme.colorScheme.error),

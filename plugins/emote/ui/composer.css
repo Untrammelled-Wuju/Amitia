@@ -5,7 +5,7 @@
   --muted: var(--amitia-text-secondary, #7b828c);
   --border: var(--amitia-border, rgba(127, 127, 127, .24));
   --hover: var(--amitia-control-hover, rgba(127, 127, 127, .08));
-  --accent: var(--amitia-color-accent, #c99557);
+  --accent: var(--amitia-color-accent, var(--amitia-color-primary, currentColor));
 }
 
 * {

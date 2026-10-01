@@ -5,7 +5,7 @@
   --text: var(--amitia-text-primary, #20242a);
   --muted: var(--amitia-text-secondary, #68717d);
   --border: var(--amitia-border, rgba(127, 127, 127, .22));
-  --accent: var(--amitia-color-accent, #8a5728);
+  --accent: var(--amitia-color-accent, var(--amitia-color-primary, currentColor));
   --accent-soft: color-mix(in srgb, var(--accent) 13%, var(--surface));
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   font-family: var(--amitia-font-ui, system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif);
