@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -407,6 +408,37 @@ func (h *Handler) UpdateRoleProfile(c *gin.Context) {
 		return
 	}
 	util.SuccessResponse(c, profile)
+}
+
+func (h *Handler) GetAvatar(c *gin.Context) {
+	var character *Character
+	var err error
+	if scoped, ok := h.service.(readScopedCharacterService); ok {
+		character, err = scoped.GetByIDForSpace(c.Param("id"), requestidentity.ResolveGin(c))
+	} else {
+		character, err = h.service.GetByID(c.Param("id"))
+	}
+	if err != nil || character == nil {
+		c.Status(http.StatusNotFound)
+		return
+	}
+	if version := c.Query("v"); version != "" && version != character.Avatar {
+		c.Status(http.StatusNotFound)
+		return
+	}
+	name := strings.TrimPrefix(character.Avatar, "/avatars/")
+	if name == character.Avatar || name == "" || name != filepath.Base(name) || strings.ContainsAny(name, `/\`) {
+		c.Status(http.StatusNotFound)
+		return
+	}
+	path := filepath.Join("data", "avatars", name)
+	info, err := os.Stat(path)
+	if err != nil || !info.Mode().IsRegular() {
+		c.Status(http.StatusNotFound)
+		return
+	}
+	c.Header("Cache-Control", "private, no-cache")
+	c.File(path)
 }
 
 func (h *Handler) UploadAvatar(c *gin.Context) {

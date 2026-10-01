@@ -12,9 +12,9 @@ import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_radius.dart';
 import '../../../../core/artifact/artifact_providers.dart';
 import '../../../../core/backend_connection/backend_connection_availability.dart';
-import '../../../../core/backend_connection/backend_uri_builder.dart';
 import '../../../../core/backend_connection/providers/backend_connection_providers.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
+import '../../../../core/widgets/character_avatar.dart';
 import '../../../../core/services/providers.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/widgets/amitia_drawer.dart';
@@ -252,7 +252,6 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
         normalizedStatus == '在线' ||
         normalizedStatus == 'enabled';
     final initial = character.name.isNotEmpty ? character.name[0] : '?';
-    final avatarUrl = _resolveAvatarUrl(character.avatar, backendAvailability);
 
     return Padding(
       padding: EdgeInsets.fromLTRB(
@@ -268,39 +267,11 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
             customBorder: const CircleBorder(),
             child: Stack(
               children: [
-                Container(
-                  width: 72,
-                  height: 72,
-                  clipBehavior: Clip.antiAlias,
-                  decoration: BoxDecoration(
-                    color: context.accentPrimary,
-                    shape: BoxShape.circle,
-                  ),
-                  child: avatarUrl.isNotEmpty
-                      ? Image.network(
-                          avatarUrl,
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => Center(
-                            child: Text(
-                              initial,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 28,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                        )
-                      : Center(
-                          child: Text(
-                            initial,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 28,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
+                CharacterAvatar(
+                  characterId: character.id,
+                  avatar: character.avatar,
+                  initial: initial,
+                  size: 72,
                 ),
                 Positioned(
                   right: 0,
@@ -426,21 +397,6 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
     );
   }
 
-  String _resolveAvatarUrl(
-    String raw,
-    BackendConnectionAvailability? availability,
-  ) {
-    final avatar = raw.trim();
-    if (avatar.isEmpty) return '';
-    final uri = Uri.tryParse(avatar);
-    if (uri != null && uri.hasScheme) return avatar;
-    if (!avatar.startsWith('/') ||
-        availability is! BackendConnectionAvailable) {
-      return avatar;
-    }
-    return BackendUriBuilder().http(availability.config, avatar).toString();
-  }
-
   Future<void> _saveCharacterSettings(CharacterDto character) async {
     if (_savingSettings) return;
     final name = _nameController.text.trim();
@@ -522,6 +478,7 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
       allowMultiple: false,
     );
     if (picked == null || picked.files.isEmpty) return;
+    if (!mounted) return;
     final path = picked.files.single.path;
     if (path == null || path.isEmpty) {
       if (mounted) {
@@ -540,8 +497,10 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
       if (avatarUrl.isEmpty) {
         throw StateError('后端未返回头像地址');
       }
-      _loadedCharacterId = '';
-      ref.invalidate(characterListProvider);
+      final refreshed = await ref.refresh(characterListProvider.future);
+      if (!refreshed.any((item) => item.id == character.id && item.avatar == avatarUrl)) {
+        throw StateError('头像已上传，但角色资料尚未同步，请重试刷新');
+      }
       if (mounted) {
         ScaffoldMessenger.of(
           context,

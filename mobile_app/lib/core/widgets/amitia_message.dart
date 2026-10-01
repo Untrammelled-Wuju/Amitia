@@ -70,6 +70,8 @@ class AmitiaMessageBubble extends StatelessWidget {
   final bool compactBottom;
   final String? avatarInitial;
   final String? avatarColor;
+  final String avatarUrl;
+  final String avatarCharacterId;
   final String? characterName;
   final String? userInitial;
   final String? userAvatarColor;
@@ -93,6 +95,8 @@ class AmitiaMessageBubble extends StatelessWidget {
     this.compactBottom = false,
     this.avatarInitial,
     this.avatarColor,
+    this.avatarUrl = '',
+    this.avatarCharacterId = '',
     this.characterName,
     this.userInitial,
     this.userAvatarColor,
@@ -122,7 +126,9 @@ class AmitiaMessageBubble extends StatelessWidget {
         child: AmitiaMessageView(
           key: ValueKey<String>('amrp:${message.renderId}'),
           message: message,
-          characterId: message.characterId,
+          characterId: avatarCharacterId.isEmpty
+              ? message.characterId
+              : avatarCharacterId,
           characterName: (characterName ?? '').trim().isEmpty
               ? 'Amitia'
               : characterName!.trim(),
@@ -130,6 +136,7 @@ class AmitiaMessageBubble extends StatelessWidget {
               ? 'A'
               : avatarInitial!.trim(),
           avatarColor: avatarColor?.trim() ?? '',
+          avatarUrl: avatarUrl,
           showAvatar: showAvatar,
           showHeader: showHeader,
           showThinking: showThinking,

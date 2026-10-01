@@ -286,9 +286,17 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     String characterName,
     String avatarInitial,
     String avatarColor,
+    String avatar,
   ) {
     final currentMessages = _runtime.messages;
+    final cachedCharacter = _cachedProviderContext?['character'];
     if (_cachedProviderContext != null &&
+        cachedCharacter is Map &&
+        cachedCharacter['id'] == characterId &&
+        cachedCharacter['name'] == characterName &&
+        cachedCharacter['avatarInitial'] == avatarInitial &&
+        cachedCharacter['avatarColor'] == avatarColor &&
+        cachedCharacter['avatar'] == avatar &&
         _cachedMessagesForContext != null &&
         _cachedMessagesForContext!.length == currentMessages.length) {
       bool same = true;
@@ -318,6 +326,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         'name': characterName,
         'avatarInitial': avatarInitial,
         'avatarColor': avatarColor,
+        'avatar': avatar,
       },
       'messages': messagesMap,
       'workspace': workspace == null
@@ -2083,6 +2092,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       characterName,
       avatarInitial,
       avatarColor,
+      character?.avatar ?? '',
     );
     providerContext['user'] = {
       'name': userName,
@@ -2536,6 +2546,14 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                                                   avatarInitial:
                                                       messageAvatarInitial,
                                                   avatarColor: avatarColor,
+                                                  avatarCharacterId: messageCharacter?.id ??
+                                                      (message.characterId.trim().isEmpty
+                                                          ? characterId
+                                                          : message.characterId),
+                                                  avatarUrl: messageCharacter?.avatar ??
+                                                      (message.characterId.trim().isEmpty
+                                                          ? character?.avatar ?? ''
+                                                          : ''),
                                                   characterName:
                                                       messageCharacterName,
                                                   userInitial: userInitial,

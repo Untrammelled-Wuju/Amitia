@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import '../../../shared/models/models.dart';
 import '../../../core/widgets/amitia_popup_menu.dart';
+import '../../../core/widgets/character_avatar.dart';
 import '../../../core/models/conversation.dart';
 import 'amitia_message_theme.dart';
 import 'amrp.dart';
@@ -19,6 +20,7 @@ class AmitiaMessageView extends StatefulWidget {
   final String characterName;
   final String avatarInitial;
   final String avatarColor;
+  final String avatarUrl;
   final bool showAvatar;
   final bool showHeader;
   final bool showThinking;
@@ -34,6 +36,7 @@ class AmitiaMessageView extends StatefulWidget {
     this.characterName = 'Amitia',
     this.avatarInitial = 'A',
     this.avatarColor = '',
+    this.avatarUrl = '',
     this.showAvatar = true,
     this.showHeader = true,
     this.showThinking = false,
@@ -107,10 +110,13 @@ class _AmitiaMessageViewState extends State<AmitiaMessageView> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             if (widget.showAvatar)
-              _Avatar(
+              CharacterAvatar(
+                characterId: widget.characterId,
+                avatar: widget.avatarUrl,
                 size: tokens.avatarSize,
                 initial: widget.avatarInitial,
-                colorHex: widget.avatarColor,
+                color: _parseAvatarColor(widget.avatarColor, tokens.accent),
+                borderRadius: BorderRadius.circular(tokens.avatarSize * 0.32),
               )
             else
               SizedBox(width: tokens.avatarSize, height: tokens.avatarSize),
@@ -385,45 +391,9 @@ class _MessageHead extends StatelessWidget {
   }
 }
 
-class _Avatar extends StatelessWidget {
-  final double size;
-  final String initial;
-  final String colorHex;
-
-  const _Avatar({
-    required this.size,
-    required this.initial,
-    required this.colorHex,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final color = _parseColor(colorHex, AmitiaMessageTheme.of(context).accent);
-    return Container(
-      width: size,
-      height: size,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: color,
-        borderRadius: BorderRadius.circular(size * 0.32),
-      ),
-      child: Text(
-        initial.trim().isEmpty ? 'A' : initial.trim().characters.first,
-        style: const TextStyle(
-          color: Colors.white,
-          fontSize: 12,
-          fontWeight: FontWeight.w800,
-        ),
-      ),
-    );
-  }
-
-  Color _parseColor(String value, Color fallback) {
-    final normalized = value.replaceFirst('#', '');
-    final parsed = int.tryParse(normalized, radix: 16);
-    if (parsed == null) return fallback;
-    return Color(0xFF000000 | parsed);
-  }
+Color _parseAvatarColor(String value, Color fallback) {
+  final parsed = int.tryParse(value.replaceFirst('#', ''), radix: 16);
+  return parsed == null ? fallback : Color(0xFF000000 | parsed);
 }
 
 class _StateNotice extends StatelessWidget {

@@ -10,7 +10,6 @@ import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_radius.dart';
 import '../../../../core/artifact/artifact_providers.dart';
 import '../../../../core/backend_connection/backend_connection_availability.dart';
-import '../../../../core/backend_connection/backend_uri_builder.dart';
 import '../../../../core/backend_connection/providers/backend_connection_providers.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_misc.dart';
@@ -227,12 +226,13 @@ class _CharacterListPageState extends ConsumerState<CharacterListPage> {
         final character = characters[index];
         final isDefault = character.isDefault;
         return AmitiaCharacterCard(
+          characterId: character.id,
           name: isDefault ? '${character.name} (默认)' : character.name,
           status: character.status,
           identity: character.identity,
           avatarInitial: character.name.isNotEmpty ? character.name[0] : '?',
           avatarColor: '#${context.accentPrimary.toARGB32().toRadixString(16).substring(2)}',
-          avatarUrl: _resolveAvatarUrl(character.avatar, backendAvailability),
+          avatarUrl: character.avatar,
           mood: '',
           lastActive: _getLastActive(character.isActive == 1),
           onTap: () => context.push(AppRoutes.character(character.id)),
@@ -246,20 +246,6 @@ class _CharacterListPageState extends ConsumerState<CharacterListPage> {
       return '刚刚活跃';
     }
     return '离线';
-  }
-
-  String _resolveAvatarUrl(
-    String raw,
-    BackendConnectionAvailability? availability,
-  ) {
-    final avatar = raw.trim();
-    if (avatar.isEmpty) return '';
-    final parsed = Uri.tryParse(avatar);
-    if (parsed != null && parsed.hasScheme) return avatar;
-    if (!avatar.startsWith('/') || availability is! BackendConnectionAvailable) {
-      return avatar;
-    }
-    return BackendUriBuilder().http(availability.config, avatar).toString();
   }
 
   Future<Dio> _dio() async {

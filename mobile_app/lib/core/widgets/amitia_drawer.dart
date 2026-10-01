@@ -27,6 +27,7 @@ import '../ui_runtime/ui_runtime_controller.dart';
 import 'amitia_misc.dart';
 import 'conversation_visibility.dart';
 import 'profile_avatar.dart';
+import 'character_avatar.dart';
 
 final currentCharacterIdProvider = StateProvider<String>((ref) => '');
 final isDeveloperModeProvider = StateProvider<bool>((ref) => false);
@@ -1864,6 +1865,7 @@ class AmitiaCharacterCard extends StatelessWidget {
   final String avatarInitial;
   final String avatarColor;
   final String avatarUrl;
+  final String characterId;
   final String mood;
   final String lastActive;
   final VoidCallback? onTap;
@@ -1876,6 +1878,7 @@ class AmitiaCharacterCard extends StatelessWidget {
     required this.avatarInitial,
     required this.avatarColor,
     this.avatarUrl = '',
+    this.characterId = '',
     required this.mood,
     required this.lastActive,
     this.onTap,
@@ -1904,21 +1907,12 @@ class AmitiaCharacterCard extends StatelessWidget {
           children: [
             Stack(
               children: [
-                Container(
-                  width: 52,
-                  height: 52,
-                  clipBehavior: Clip.antiAlias,
-                  decoration: BoxDecoration(
-                    color: color,
-                    shape: BoxShape.circle,
-                  ),
-                  child: avatarUrl.trim().isNotEmpty
-                      ? Image.network(
-                          avatarUrl,
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => _initialAvatar(),
-                        )
-                      : _initialAvatar(),
+                CharacterAvatar(
+                  characterId: characterId,
+                  avatar: avatarUrl,
+                  initial: avatarInitial,
+                  size: 52,
+                  color: color,
                 ),
                 if (isOnline)
                   Positioned(
@@ -1974,18 +1968,6 @@ class AmitiaCharacterCard extends StatelessWidget {
     );
   }
 
-  Widget _initialAvatar() {
-    return Center(
-      child: Text(
-        avatarInitial.isEmpty ? '?' : avatarInitial,
-        style: const TextStyle(
-          color: Colors.white,
-          fontSize: 22,
-          fontWeight: FontWeight.w600,
-        ),
-      ),
-    );
-  }
 }
 
 class AmitiaExtensionCard extends StatelessWidget {

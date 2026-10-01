@@ -43,4 +43,5 @@ func RegisterCharacterRouterWithRecorder(r *gin.RouterGroup, ctx *app.AppContext
 	r.GET("/companion/role-profile", handler.GetRoleProfile)
 	r.PUT("/companion/role-profile", handler.UpdateRoleProfile)
 	r.POST("/characters/:id/avatar", handler.UploadAvatar)
+	r.GET("/characters/:id/avatar", handler.GetAvatar)
 }
