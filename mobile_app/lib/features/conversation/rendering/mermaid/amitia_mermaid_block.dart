@@ -64,6 +64,25 @@ class _AmitiaMermaidBlockState extends State<AmitiaMermaidBlock> {
           });
   }
 
+  Widget _toolbarAction({
+    required String label,
+    required IconData icon,
+    required Color color,
+    required VoidCallback? onPressed,
+  }) {
+    return IconButton(
+      tooltip: label,
+      onPressed: onPressed,
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints.tightFor(width: 48, height: 48),
+      style: IconButton.styleFrom(
+        minimumSize: const Size(48, 48),
+        maximumSize: const Size(48, 48),
+      ),
+      icon: Icon(icon, size: 16, color: color),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final tokens = AmitiaMessageTheme.of(context);
@@ -80,7 +99,7 @@ class _AmitiaMermaidBlockState extends State<AmitiaMermaidBlock> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Container(
-            height: tokens.codeToolbarHeight,
+            constraints: const BoxConstraints(minHeight: 48),
             padding: const EdgeInsets.symmetric(horizontal: 10),
             decoration: BoxDecoration(
               color: tokens.soft,
@@ -88,85 +107,46 @@ class _AmitiaMermaidBlockState extends State<AmitiaMermaidBlock> {
             ),
             child: Row(
               children: [
-                Text(
-                  'flowchart',
-                  style: TextStyle(
-                    color: tokens.text,
-                    fontSize: 11.5,
-                    fontWeight: FontWeight.w700,
+                Expanded(
+                  child: Wrap(
+                    spacing: 8,
+                    children: [
+                      Text(
+                        'flowchart',
+                        style: TextStyle(
+                          color: tokens.text,
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      Text(
+                        'Mermaid',
+                        style: TextStyle(color: tokens.muted, fontSize: 10.5),
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(width: 8),
-                Text(
-                  'Mermaid',
-                  style: TextStyle(color: tokens.muted, fontSize: 10.5),
+                _toolbarAction(
+                  label: _showSource ? '预览' : '源码',
+                  icon: _showSource
+                      ? Icons.visibility_outlined
+                      : Icons.code_rounded,
+                  color: tokens.muted,
+                  onPressed: () => setState(() => _showSource = !_showSource),
                 ),
-                const Spacer(),
-                Tooltip(
-                  message: _showSource ? '预览' : '源码',
-                  child: IconButton(
-                    onPressed: () => setState(() => _showSource = !_showSource),
-                    iconSize: 16,
-                    color: tokens.muted,
-                    visualDensity: VisualDensity.compact,
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints.tightFor(
-                      width: 32,
-                      height: 32,
-                    ),
-                    style: IconButton.styleFrom(
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      minimumSize: const Size(32, 32),
-                      maximumSize: const Size(32, 32),
-                    ),
-                    icon: Icon(
-                      _showSource
-                          ? Icons.visibility_outlined
-                          : Icons.code_rounded,
-                    ),
-                  ),
+                _toolbarAction(
+                  label: '复制源码',
+                  icon: Icons.copy_rounded,
+                  color: tokens.muted,
+                  onPressed: () => _copySource(context),
                 ),
-                Tooltip(
-                  message: '复制源码',
-                  child: IconButton(
-                    onPressed: () => _copySource(context),
-                    iconSize: 16,
-                    color: tokens.muted,
-                    visualDensity: VisualDensity.compact,
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints.tightFor(
-                      width: 32,
-                      height: 32,
-                    ),
-                    style: IconButton.styleFrom(
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      minimumSize: const Size(32, 32),
-                      maximumSize: const Size(32, 32),
-                    ),
-                    icon: const Icon(Icons.copy_rounded),
-                  ),
-                ),
-                Tooltip(
-                  message: '全屏',
-                  child: IconButton(
-                    onPressed: _renderFuture == null
-                        ? null
-                        : () => _openFullscreen(context),
-                    iconSize: 16,
-                    color: tokens.muted,
-                    visualDensity: VisualDensity.compact,
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints.tightFor(
-                      width: 32,
-                      height: 32,
-                    ),
-                    style: IconButton.styleFrom(
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      minimumSize: const Size(32, 32),
-                      maximumSize: const Size(32, 32),
-                    ),
-                    icon: const Icon(Icons.fullscreen_rounded),
-                  ),
+                _toolbarAction(
+                  label: '全屏',
+                  icon: Icons.fullscreen_rounded,
+                  color: tokens.muted,
+                  onPressed: _renderFuture == null
+                      ? null
+                      : () => _openFullscreen(context),
                 ),
               ],
             ),

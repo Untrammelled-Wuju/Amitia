@@ -560,8 +560,8 @@ class _MessageActions extends StatelessWidget {
               ),
             ],
             child: SizedBox(
-              width: 32,
-              height: 32,
+              width: 48,
+              height: 48,
               child: Center(
                 child: Icon(Icons.copy_outlined, size: 15, color: tokens.muted),
               ),
@@ -610,7 +610,7 @@ class _CompactMessageAction extends StatelessWidget {
       style: IconButton.styleFrom(
         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
       ),
-      constraints: const BoxConstraints.tightFor(width: 32, height: 32),
+      constraints: const BoxConstraints.tightFor(width: 48, height: 48),
       icon: Icon(icon, size: 15, color: color),
     );
   }

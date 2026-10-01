@@ -49,8 +49,6 @@ import MobileNav from "./MobileNav.vue";
 import UIProviderHost from "./ui-runtime/UIProviderHost.vue";
 import BuiltinWorkspaceHost from "./ui-runtime/BuiltinWorkspaceHost.vue";
 import { useTheme } from "../composables/useTheme";
-import { useUIHostSSE } from "../composables/useUIHostSSE";
-import { isNavigationAllowed } from "../navigation/nav-whitelist";
 import {
   apiClient,
 } from "../composables/useApi";
@@ -61,9 +59,6 @@ import { isDesktopShell } from "../runtime/runtime-capabilities";
 
 const router = useRouter();
 const { items: navigationItems } = useUINavigationRegistry();
-const { connect: connectUIHost, disconnect: disconnectUIHost } = useUIHostSSE();
-let electronNavCleanup: (() => void) | null = null;
-let disposeExtensionListener: (() => void) | null = null;
 let healthInterval: number | null = null;
 const {
   state: theme,
@@ -187,22 +182,9 @@ onMounted(() => {
   fetchHealth();
   fetchActiveCharacter();
   fetchSpaceProfile();
-  connectUIHost();
   extensionUIStore.refreshSnapshot(true).then(() => {
     extensionRuntimeAvailable.value = true;
   });
-  if (disposeExtensionListener) {
-    disposeExtensionListener();
-  }
-  disposeExtensionListener = extensionUIStore.setupExtensionChangeListener();
-
-  if (window.amitiaDesktop?.onUINavigate) {
-    electronNavCleanup = window.amitiaDesktop.onUINavigate((target: string) => {
-      if (target && isNavigationAllowed(target)) {
-        router.push(target).catch(() => {});
-      }
-    });
-  }
 
   healthInterval = window.setInterval(() => {
     void fetchHealth();
@@ -213,16 +195,6 @@ onUnmounted(() => {
   if (healthInterval !== null) {
     window.clearInterval(healthInterval);
     healthInterval = null;
-  }
-  disconnectUIHost();
-  extensionUIStore.invalidateSnapshot();
-  if (electronNavCleanup) {
-    electronNavCleanup();
-    electronNavCleanup = null;
-  }
-  if (disposeExtensionListener) {
-    disposeExtensionListener();
-    disposeExtensionListener = null;
   }
   window.removeEventListener("resize", handleWindowResize);
 });

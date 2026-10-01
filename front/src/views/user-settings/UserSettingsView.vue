@@ -9,7 +9,7 @@
     </header>
 
     <div class="settings-grid" v-loading="loading">
-      <section class="settings-card profile-card">
+      <section id="local-profile" class="settings-card profile-card">
         <div class="section-heading">
           <el-icon><UserFilled /></el-icon>
           <div>
@@ -58,7 +58,7 @@
         </el-form>
       </section>
 
-      <section class="settings-card identity-card">
+      <section id="space-identity" class="settings-card identity-card">
         <div class="section-heading">
           <el-icon><Connection /></el-icon>
           <div>
@@ -73,7 +73,7 @@
         </dl>
       </section>
 
-      <section class="settings-card device-card">
+      <section id="profile-device" class="settings-card device-card">
         <div class="section-heading">
           <el-icon><Monitor /></el-icon>
           <div>
@@ -87,7 +87,7 @@
           <div><dt>连接状态</dt><dd>{{ mesh.state || (deployment.mode === "cloud" ? "未配对" : "本地模式") }}</dd></div>
         </dl>
         <div class="device-actions">
-          <el-button @click="router.push('/settings/devices')">管理设备</el-button>
+          <el-button @click="router.push('/devices')">管理设备</el-button>
           <el-button
             v-if="deployment.mode === 'cloud' && mesh.state && mesh.state !== 'unprovisioned'"
             type="danger"

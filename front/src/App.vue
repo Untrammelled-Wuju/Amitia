@@ -10,7 +10,13 @@ SPDX-License-Identifier: AGPL-3.0-only
   <PrivacyConsent v-if="!isPublicPage && !renderError" />
   <NotFoundView v-if="renderError" :error="capturedError" />
   <Transition v-else name="route-slide" mode="out-in">
-    <AppLayout v-if="!isPublicPage" key="app">
+    <component :is="secondaryPage.kind === 'settings' ? SettingsWorkspace : AccountWorkspace"
+      v-if="secondaryPage" key="secondary" :return-to="returnTo" :title="secondaryPage.title">
+      <router-view v-slot="{ Component }">
+        <RouteSurfaceHost v-if="Component" :fallback="Component" />
+      </router-view>
+    </component>
+    <AppLayout v-else-if="!isPublicPage" key="app">
       <router-view v-slot="{ Component }">
         <RouteSurfaceHost v-if="Component" :fallback="Component" />
       </router-view>
@@ -41,6 +47,10 @@ import { useExtensionUIStore } from "./stores/extensionUI";
 import { syncProviderRoutes } from "./ui-runtime/providerRoutes";
 import { applyProviderTheme } from "./ui-runtime/providerTheme";
 import RouteSurfaceHost from "./components/ui-runtime/RouteSurfaceHost.vue";
+import SettingsWorkspace from "./components/SettingsWorkspace.vue";
+import AccountWorkspace from "./components/AccountWorkspace.vue";
+import { useSecondaryWorkspace } from "./composables/useSecondaryWorkspace";
+import { useAppUIHost } from "./composables/useAppUIHost";
 
 const router = useRouter();
 const route = useRoute();
@@ -63,6 +73,8 @@ const isOnboardingPage = computed(
   () => route.path === "/onboarding" || route.path.startsWith("/onboarding/"),
 );
 const isUIProviderRecoveryPage = computed(() => route.path === "/settings/ui-providers");
+const { secondaryPage, returnTo } = useSecondaryWorkspace();
+useAppUIHost(isPublicPage);
 
 watch(
   isOnboardingPage,

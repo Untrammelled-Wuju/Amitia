@@ -70,15 +70,15 @@ SPDX-License-Identifier: AGPL-3.0-only
         </el-descriptions-item>
         <el-descriptions-item v-if="runtimeStatus?.businessCore" label="业务 Core">
           <div style="display: flex; align-items: center; gap: 8px;">
-            <span style="font-size: 12px; color: var(--ac-color-text-muted);">{{ runtimeStatus.businessCore.baseURL }}</span>
+            <span style="font-size: var(--ac-font-size-xs); color: var(--ac-color-text-muted);">{{ runtimeStatus.businessCore.baseURL }}</span>
             <el-tag :type="endpointStatusType(runtimeStatus.businessCore.state)" size="small">{{ endpointStatusLabel(runtimeStatus.businessCore.state) }}</el-tag>
           </div>
         </el-descriptions-item>
         <el-descriptions-item v-if="runtimeStatus?.localRuntime" label="本机执行节点">
           <div style="display: flex; align-items: center; gap: 8px;">
-            <span style="font-size: 12px; color: var(--ac-color-text-muted);">{{ runtimeStatus.localRuntime.baseURL }}</span>
+            <span style="font-size: var(--ac-font-size-xs); color: var(--ac-color-text-muted);">{{ runtimeStatus.localRuntime.baseURL }}</span>
             <el-tag :type="endpointStatusType(runtimeStatus.localRuntime.state)" size="small">{{ endpointStatusLabel(runtimeStatus.localRuntime.state) }}</el-tag>
-            <span v-if="runtimeStatus.localRuntime.profile" style="font-size: 11px; color: var(--ac-color-text-muted);">({{ runtimeStatus.localRuntime.profile }})</span>
+            <span v-if="runtimeStatus.localRuntime.profile" style="font-size: var(--ac-font-size-xs); color: var(--ac-color-text-muted);">({{ runtimeStatus.localRuntime.profile }})</span>
           </div>
         </el-descriptions-item>
       </el-descriptions>
@@ -282,14 +282,14 @@ onUnmounted(() => {
 }
 
 .mode-label {
-  font-size: 15px;
+  font-size: calc(var(--ac-font-size-base) * 15 / 14);
   font-weight: 600;
   color: var(--ac-color-text);
   margin-bottom: 4px;
 }
 
 .mode-desc {
-  font-size: 12px;
+  font-size: var(--ac-font-size-xs);
   color: var(--ac-color-text-muted);
   line-height: 1.4;
 }
@@ -301,13 +301,13 @@ onUnmounted(() => {
 }
 
 .form-tip {
-  font-size: 12px;
+  font-size: var(--ac-font-size-xs);
   color: var(--ac-color-text-muted);
   margin-top: 4px;
 }
 
 .save-error {
-  font-size: 12px;
+  font-size: var(--ac-font-size-xs);
   color: var(--el-color-danger);
 }
 </style>

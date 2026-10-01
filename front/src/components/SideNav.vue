@@ -482,7 +482,7 @@ onUnmounted(() => {
 .brand-row { display: flex; align-items: center; justify-content: space-between; min-height: 42px; padding: 0 4px 6px; gap: 6px; }
 .brand { display: flex; align-items: center; min-width: 0; gap: 8px; }
 .brand-mark { width: 26px; height: 26px; border-radius: 7px; object-fit: contain; flex: 0 0 auto; }
-.brand-name { color: var(--text-primary); font-size: 14px; font-weight: 650; white-space: nowrap; }
+.brand-name { color: var(--text-primary); font-size: var(--ac-font-size-base); font-weight: 650; white-space: nowrap; }
 .brand-actions { display: flex; align-items: center; gap: 2px; }
 .icon-btn { display: grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 7px; background: transparent; color: var(--text-muted); cursor: pointer; }
 .icon-btn:hover, .icon-btn:focus-visible { background: var(--workbench-sidebar-hover); color: var(--text-primary); outline: none; }
@@ -491,16 +491,16 @@ onUnmounted(() => {
 .side-nav.is-collapsed .brand-actions { width: 100%; justify-content: center; }
 .sidebar-scroll { min-height: 0; flex: 1 1 auto; overflow-y: auto; overflow-x: hidden; }
 .side-menu { border-right: none; background: transparent; width: 100%; margin-bottom: 12px; }
-.side-menu :deep(.el-menu-item), .side-menu :deep(.el-sub-menu__title) { height: 34px; line-height: 34px; min-height: 34px; margin: 1px 0; padding: 0 9px !important; border-radius: 7px; font-size: 13px; color: var(--text-secondary); }
+.side-menu :deep(.el-menu-item), .side-menu :deep(.el-sub-menu__title) { height: auto; line-height: 1.45; min-height: 34px; margin: 1px 0; padding: 6px 9px !important; border-radius: 7px; font-size: var(--ac-font-size-sm); color: var(--text-secondary); }
 .side-menu :deep(.el-icon) { width: 18px; font-size: 15px; margin-right: 8px; }
 .side-menu :deep(.el-menu-item:hover), .side-menu :deep(.el-sub-menu__title:hover) { background: var(--workbench-sidebar-hover); color: var(--text-primary); }
 .side-menu :deep(.el-menu-item.is-active), .side-menu :deep(.el-sub-menu.is-active > .el-sub-menu__title) { background: var(--workbench-sidebar-active); color: var(--text-primary); font-weight: 550; }
 .side-menu :deep(.el-sub-menu .el-menu) { background: transparent; }
-.side-menu :deep(.el-sub-menu .el-menu-item) { padding-left: 34px !important; height: 31px; min-height: 31px; line-height: 31px; font-size: 12px; }
+.side-menu :deep(.el-sub-menu .el-menu-item) { padding-left: 34px !important; height: auto; min-height: 31px; line-height: 1.45; font-size: var(--ac-font-size-sm); }
 .recent-section { min-height: 0; flex: 1 1 auto; overflow-y: auto; padding: 12px 0 8px; }
-.section-caption { padding: 0 9px 5px; color: var(--text-muted); font-size: 11px; font-weight: 550; }
-.recent-item { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 31px; padding: 0 9px; border: 0; border-radius: 7px; background: transparent; color: var(--text-secondary); cursor: pointer; font: inherit; font-size: 12px; text-align: left; }
-.recent-item .el-icon { flex: 0 0 auto; font-size: 13px; color: var(--text-muted); }
+.section-caption { padding: 0 9px 5px; color: var(--text-muted); font-size: var(--ac-font-size-xs); font-weight: 550; }
+.recent-item { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 31px; padding: 0 9px; border: 0; border-radius: 7px; background: transparent; color: var(--text-secondary); cursor: pointer; font: inherit; font-size: var(--ac-font-size-sm); text-align: left; }
+.recent-item .el-icon { flex: 0 0 auto; font-size: var(--ac-font-size-sm); color: var(--text-muted); }
 .recent-item span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .recent-item:hover, .recent-item.active { background: var(--workbench-sidebar-hover); color: var(--text-primary); }
 .recent-item.active { background: var(--workbench-sidebar-active); }
@@ -508,15 +508,15 @@ onUnmounted(() => {
 .thread-row { display: flex; align-items: center; min-height: 30px; border-radius: 6px; color: var(--text-secondary); }
 .thread-row:hover, .thread-row.active { background: var(--workbench-sidebar-hover); color: var(--text-primary); }
 .thread-row.active { background: var(--workbench-sidebar-active); }
-.thread-main { display: flex; align-items: center; gap: 7px; min-width: 0; flex: 1; height: 30px; padding: 0 6px 0 8px; border: 0; background: transparent; color: inherit; cursor: pointer; font: inherit; font-size: 12px; text-align: left; }
+.thread-main { display: flex; align-items: center; gap: 7px; min-width: 0; flex: 1; min-height: 30px; padding: 0 6px 0 8px; border: 0; background: transparent; color: inherit; cursor: pointer; font: inherit; font-size: var(--ac-font-size-sm); text-align: left; }
 .thread-main span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.thread-name-input { min-width: 0; width: 100%; height: 24px; padding: 0 6px; border: 1px solid var(--ac-color-primary); border-radius: 5px; background: var(--surface-bg); color: var(--text-primary); font: inherit; outline: none; }
+.thread-name-input { min-width: 0; width: 100%; min-height: 28px; padding: 3px 6px; border: 1px solid var(--ac-color-primary); border-radius: 5px; background: var(--surface-bg); color: var(--text-primary); font: inherit; outline: none; }
 .thread-delete { display: grid; place-items: center; width: 26px; height: 26px; margin-right: 2px; padding: 0; border: 0; border-radius: 5px; background: transparent; color: var(--text-muted); cursor: pointer; opacity: 0; }
 .thread-row:hover .thread-delete, .thread-row.active .thread-delete { opacity: 1; }
 .thread-actions { opacity: 0; }
 .thread-row:hover .thread-actions, .thread-row.active .thread-actions, .thread-row:focus-within .thread-actions { opacity: 1; }
 .thread-delete:hover { background: var(--control-hover-bg); color: var(--danger-color, #d9534f); }
-.thread-expand { align-self: flex-start; margin: 2px 0 2px 30px; padding: 3px 7px; border: 0; border-radius: 5px; background: transparent; color: var(--ac-color-primary); cursor: pointer; font: inherit; font-size: 11px; }
+.thread-expand { align-self: flex-start; margin: 2px 0 2px 30px; padding: 3px 7px; border: 0; border-radius: 5px; background: transparent; color: var(--ac-color-primary); cursor: pointer; font: inherit; font-size: var(--ac-font-size-xs); }
 .thread-expand:hover { background: var(--workbench-sidebar-hover); }
 .thread-section { display: flex; flex-direction: column; gap: 1px; padding: 4px 0; }
 .thread-section + .thread-section { margin-top: 6px; border-top: 1px solid var(--surface-border); padding-top: 10px; }
@@ -531,35 +531,41 @@ onUnmounted(() => {
 .project-block { display: grid; gap: 1px; }
 .project-row { display: flex; align-items: center; gap: 2px; min-height: 32px; padding: 0 3px 0 7px; border-radius: 7px; color: var(--text-secondary); }
 .project-row:hover, .project-row.active { background: var(--workbench-sidebar-hover); color: var(--text-primary); }
-.project-main { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1; height: 32px; padding: 0; border: 0; background: transparent; color: inherit; cursor: pointer; font: inherit; font-size: 12px; text-align: left; }
+.project-main { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1; min-height: 32px; padding: 0; border: 0; background: transparent; color: inherit; cursor: pointer; font: inherit; font-size: var(--ac-font-size-sm); text-align: left; }
 .project-main span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.project-main small { margin-left: auto; color: var(--text-muted); font-size: 9px; }
+.project-main small { margin-left: auto; color: var(--text-muted); font-size: var(--ac-font-size-xs); }
 .project-threads { display: grid; gap: 1px; padding-left: 18px; }
-.thread-item { display: flex; align-items: center; gap: 7px; width: 100%; min-height: 30px; padding: 0 8px; border: 0; border-radius: 6px; background: transparent; color: var(--text-secondary); cursor: pointer; font: inherit; font-size: 12px; text-align: left; }
+.thread-item { display: flex; align-items: center; gap: 7px; width: 100%; min-height: 30px; padding: 0 8px; border: 0; border-radius: 6px; background: transparent; color: var(--text-secondary); cursor: pointer; font: inherit; font-size: var(--ac-font-size-sm); text-align: left; }
 .thread-item span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .thread-item:hover, .thread-item.active { background: var(--workbench-sidebar-hover); color: var(--text-primary); }
 .thread-item.active { background: var(--workbench-sidebar-active); }
-.project-thread { min-height: 27px; font-size: 11px; }
-.thread-empty { padding: 5px 9px; color: var(--text-muted); font-size: 10px; }
+.project-thread { min-height: 27px; font-size: var(--ac-font-size-xs); }
+.thread-empty { padding: 5px 9px; color: var(--text-muted); font-size: var(--ac-font-size-xs); }
 .side-nav-bottom { position: relative; flex: 0 0 auto; margin-top: auto; border-top: 1px solid var(--surface-border); padding: 7px 0 8px; }
 .profile-menu { position: absolute; right: 0; bottom: calc(100% + 8px); display: grid; gap: 2px; width: 100%; padding: 5px; border: 1px solid var(--surface-border); border-radius: 10px; background: var(--ac-color-surface); }
-.profile-menu__item { display: flex; align-items: center; gap: 9px; min-height: 34px; width: 100%; padding: 0 8px; border: 0; border-radius: 7px; background: transparent; color: var(--text-secondary); cursor: pointer; font: inherit; font-size: 12px; text-align: left; transition: background-color 0.18s ease, color 0.18s ease; }
+.profile-menu__item { display: flex; align-items: center; gap: 9px; min-height: 34px; width: 100%; padding: 0 8px; border: 0; border-radius: 7px; background: transparent; color: var(--text-secondary); cursor: pointer; font: inherit; font-size: var(--ac-font-size-sm); text-align: left; transition: background-color 0.18s ease, color 0.18s ease; }
 .profile-menu__item:hover, .profile-menu__item:focus-visible { background: var(--workbench-sidebar-hover); color: var(--text-primary); outline: none; }
 .profile-menu__item .el-icon { font-size: 15px; }
 .profile-menu__item:disabled { cursor: wait; opacity: 0.7; }
 .user-profile { display: flex; align-items: center; width: 100%; border: 0; border-radius: 7px; background: transparent; color: var(--text-secondary); cursor: pointer; text-align: left; }
 .user-profile { gap: 9px; min-height: 38px; padding: 4px 7px; }
 .user-profile:hover { background: var(--workbench-sidebar-hover); color: var(--text-primary); }
-.user-avatar { display: grid; place-items: center; width: 28px; height: 28px; flex: 0 0 auto; border-radius: 50%; background: color-mix(in srgb, var(--tp-primary) 72%, var(--surface-bg)); color: var(--tp-text-on-primary); font-size: 12px; overflow: hidden; }
+.user-avatar { display: grid; place-items: center; width: 28px; height: 28px; flex: 0 0 auto; border-radius: 50%; background: color-mix(in srgb, var(--tp-primary) 72%, var(--surface-bg)); color: var(--tp-text-on-primary); font-size: var(--ac-font-size-sm); overflow: hidden; }
 .user-avatar img { width: 100%; height: 100%; object-fit: cover; }
 .user-copy { min-width: 0; }
 .user-copy strong, .user-copy span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.user-copy strong { max-width: 132px; color: var(--text-primary); font-size: 12px; font-weight: 550; }
-.user-copy span { margin-top: 1px; color: var(--text-muted); font-size: 10px; }
+.user-copy strong { max-width: 132px; color: var(--text-primary); font-size: var(--ac-font-size-sm); font-weight: 550; }
+.user-copy span { margin-top: 1px; color: var(--text-muted); font-size: var(--ac-font-size-xs); }
 .side-nav.is-collapsed .user-profile { justify-content: center; padding-inline: 0; }
 .side-nav.is-collapsed .profile-menu { width: 188px; }
 
 .side-menu .el-icon {
   font-size: var(--ui-component-icon-size, inherit);
 }
+
+.side-nav :deep(button), .thread-name-input, .section-caption { line-height: 1.45; }
+.side-nav :deep(button:not(:disabled):focus-visible), .side-menu :deep(.el-menu-item:focus-visible), .side-menu :deep(.el-sub-menu__title:focus-visible) { outline: 2px solid var(--ac-color-primary); outline-offset: -2px; }
+.side-nav :deep(button:not(:disabled):active) { background: var(--control-active-bg); color: var(--text-primary); }
+.icon-btn:active, .section-add:active, .project-action:active { transform: scale(0.96); }
+.thread-row:focus-within .thread-delete { opacity: 1; }
 </style>

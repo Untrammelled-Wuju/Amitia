@@ -79,7 +79,38 @@ void main() {
     final copyRect = tester.getRect(find.byIcon(Icons.copy_outlined));
     final replyRect = tester.getRect(find.byIcon(Icons.format_quote_rounded));
     expect(copyRect.width, 15);
-    expect(replyRect.left - copyRect.left, lessThanOrEqualTo(40));
+    expect(replyRect.left - copyRect.left, lessThanOrEqualTo(48));
+  });
+
+  testWidgets('message action accepts taps outside the small icon', (
+    tester,
+  ) async {
+    var replied = false;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: AmitiaMessageView(
+            message: ChatMessage(
+              id: 'touch-target',
+              role: MessageRole.assistant,
+              type: MessageType.text,
+              content: '测试',
+              time: DateTime(2026),
+            ),
+            onReply: () => replied = true,
+          ),
+        ),
+      ),
+    );
+    final button = find.ancestor(
+      of: find.byIcon(Icons.format_quote_rounded),
+      matching: find.byType(IconButton),
+    );
+    final rect = tester.getRect(button);
+    expect(rect.width, greaterThanOrEqualTo(48));
+    expect(rect.height, greaterThanOrEqualTo(48));
+    await tester.tapAt(rect.bottomRight - const Offset(4, 4));
+    expect(replied, isTrue);
   });
 
   testWidgets('assistant streaming hides copy and reply actions', (

@@ -127,19 +127,19 @@ function cancelRename() {
   gap: 7px;
   min-width: 0;
   flex: 1;
-  height: 30px;
+  min-height: 30px; line-height: 1.45;
   padding: 0 4px 0 8px;
   border: 0;
   background: transparent;
   color: inherit;
   cursor: pointer;
   font: inherit;
-  font-size: 12px;
+  font-size: var(--ac-font-size-sm);
   text-align: left;
 }
 .thread-main:focus-visible {
-  outline: 1px solid var(--ac-color-primary);
-  outline-offset: -1px;
+  outline: 2px solid var(--ac-color-primary);
+  outline-offset: -2px;
 }
 .thread-main span {
   min-width: 0;
@@ -150,8 +150,8 @@ function cancelRename() {
 .thread-name-input {
   min-width: 0;
   width: 100%;
-  height: 24px;
-  padding: 0 6px;
+  min-height: 28px;
+  padding: 3px 6px;
   border: 1px solid var(--ac-color-primary);
   border-radius: 5px;
   background: var(--surface-bg);
@@ -196,13 +196,17 @@ function cancelRename() {
 }
 .thread-row.compact {
   min-height: 27px;
-  font-size: 11px;
+  font-size: var(--ac-font-size-xs);
 }
 .thread-row.compact .thread-main {
-  height: 27px;
+  min-height: 27px; line-height: 1.45;
 }
 .thread-row.compact .thread-action {
   width: 22px;
   height: 22px;
 }
+
+button, .thread-main, .thread-name-input { line-height: 1.45; }
+button:not(:disabled):focus-visible { outline: 2px solid var(--ac-color-primary); outline-offset: -2px; }
+button:not(:disabled):active, .thread-main:active { background: var(--control-active-bg); color: var(--text-primary); }
 </style>

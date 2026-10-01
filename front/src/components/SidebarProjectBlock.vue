@@ -124,14 +124,14 @@ const {
   gap: 8px;
   min-width: 0;
   flex: 1;
-  height: 32px;
+  min-height: 32px; line-height: 1.45;
   padding: 0;
   border: 0;
   background: transparent;
   color: inherit;
   cursor: pointer;
   font: inherit;
-  font-size: 12px;
+  font-size: var(--ac-font-size-sm);
   text-align: left;
 }
 .project-main:focus-visible {
@@ -147,7 +147,7 @@ const {
 .project-main small {
   margin-left: auto;
   color: var(--text-muted);
-  font-size: 9px;
+  font-size: var(--ac-font-size-xs);
 }
 .project-action {
   display: grid;
@@ -223,7 +223,7 @@ const {
   color: var(--ac-color-primary);
   cursor: pointer;
   font: inherit;
-  font-size: 11px;
+  font-size: var(--ac-font-size-xs);
 }
 .thread-expand:hover {
   background: var(--workbench-sidebar-hover);
@@ -231,6 +231,10 @@ const {
 .thread-empty {
   padding: 5px 9px;
   color: var(--text-muted);
-  font-size: 10px;
+  font-size: var(--ac-font-size-xs);
 }
+
+button { line-height: 1.45; }
+button:not(:disabled):focus-visible { outline: 2px solid var(--ac-color-primary); outline-offset: -2px; }
+button:not(:disabled):active { background: var(--control-active-bg); color: var(--text-primary); }
 </style>

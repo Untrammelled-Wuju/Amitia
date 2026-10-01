@@ -16,6 +16,7 @@ import '../../../../core/realtime/realtime_audio_bridge.dart';
 import '../../../../core/realtime/realtime_voice_activity_detector.dart';
 import '../../../../core/realtime/realtime_visual_bridge.dart';
 import '../../../../core/widgets/amitia_misc.dart';
+import '../widgets/realtime_call_layout.dart';
 
 enum RealtimeCallMode { voice, video, screen }
 
@@ -599,63 +600,39 @@ class _RealtimeCallPageState extends ConsumerState<RealtimeCallPage> {
 
     return Scaffold(
       backgroundColor: const Color(0xFF121212),
-      body: MediaQuery.removePadding(
-        context: context,
-        removeTop: true,
-        removeBottom: true,
-        removeLeft: true,
-        removeRight: true,
-        child: MediaQuery(
-          data: MediaQuery.of(
-            context,
-          ).copyWith(textScaler: TextScaler.noScaling),
-          child: Stack(
-            fit: StackFit.expand,
-            clipBehavior: Clip.hardEdge,
-            children: [
-              _buildBackground(initial, primaryFrame),
-              if (_screenActive && _cameraActive && _latestCameraFrame != null)
-                Positioned(
-                  right: 16,
-                  top: systemPadding.top + 96,
-                  width: 104,
-                  height: 140,
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(16),
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        color: Colors.black,
-                        border: Border.all(color: Colors.white24),
-                      ),
-                      child: Image.memory(
-                        _latestCameraFrame!,
-                        fit: BoxFit.cover,
-                        gaplessPlayback: true,
-                      ),
-                    ),
+      body: RealtimeCallLayout(
+        background: _buildBackground(initial, primaryFrame),
+        overlays: [
+          if (_screenActive && _cameraActive && _latestCameraFrame != null)
+            Positioned(
+              right: 16,
+              top: systemPadding.top + 96,
+              width: 104,
+              height: 140,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: Colors.black,
+                    border: Border.all(color: Colors.white24),
+                  ),
+                  child: Image.memory(
+                    _latestCameraFrame!,
+                    fit: BoxFit.cover,
+                    gaplessPlayback: true,
                   ),
                 ),
-              Positioned(
-                top: systemPadding.top + 64,
-                left: 0,
-                right: 0,
-                child: _buildCenterSection(
-                  name: name,
-                  initial: initial,
-                  callMode: callMode,
-                  statusText: statusText,
-                  detailText: detailText,
-                ),
               ),
-              Positioned(
-                left: 0,
-                right: 0,
-                bottom: systemPadding.bottom + 52,
-                child: _buildControlBar(connected),
-              ),
-            ],
-          ),
+            ),
+        ],
+        details: _buildCenterSection(
+          name: name,
+          initial: initial,
+          callMode: callMode,
+          statusText: statusText,
+          detailText: detailText,
         ),
+        controls: _buildControlBar(connected),
       ),
     );
   }
@@ -778,7 +755,7 @@ class _RealtimeCallPageState extends ConsumerState<RealtimeCallPage> {
           textAlign: TextAlign.center,
           style: const TextStyle(
             color: Color(0xFFBCBCC0),
-            fontSize: 11,
+            fontSize: 13,
             fontWeight: FontWeight.w400,
           ),
         ),
@@ -791,12 +768,14 @@ class _RealtimeCallPageState extends ConsumerState<RealtimeCallPage> {
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(
-              color: Color(0xFF8E8E93),
-              fontSize: 10,
+              color: Color(0xFFBCBCC0),
+              fontSize: 14,
               fontWeight: FontWeight.w400,
             ),
           ),
         ),
+        if (_state == 'error' && detailText.isNotEmpty)
+          RealtimeCallErrorDetails(message: detailText),
       ],
     );
   }
@@ -826,22 +805,26 @@ class _RealtimeCallPageState extends ConsumerState<RealtimeCallPage> {
       mainAxisAlignment: MainAxisAlignment.center,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _RealtimeCallControl(
-          icon: _muted ? Icons.mic_off_outlined : Icons.mic_none_outlined,
-          label: _muted ? '取消静音' : '静音',
-          selected: _muted,
-          enabled: connected,
-          onTap: _toggleMute,
+        Expanded(
+          child: _RealtimeCallControl(
+            icon: _muted ? Icons.mic_off_outlined : Icons.mic_none_outlined,
+            label: _muted ? '取消静音' : '静音',
+            selected: _muted,
+            enabled: connected,
+            onTap: _toggleMute,
+          ),
         ),
-        const SizedBox(width: 28),
-        modeControl,
-        const SizedBox(width: 28),
-        _RealtimeCallControl(
-          icon: Icons.call_end,
-          label: '挂断',
-          destructive: true,
-          enabled: true,
-          onTap: _endCall,
+        const SizedBox(width: 16),
+        Expanded(child: modeControl),
+        const SizedBox(width: 16),
+        Expanded(
+          child: _RealtimeCallControl(
+            icon: Icons.call_end,
+            label: '挂断',
+            destructive: true,
+            enabled: true,
+            onTap: _endCall,
+          ),
         ),
       ],
     );
@@ -852,29 +835,35 @@ class _RealtimeCallPageState extends ConsumerState<RealtimeCallPage> {
       mainAxisAlignment: MainAxisAlignment.center,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _RealtimeCallControl(
-          icon: Icons.refresh,
-          label: '重试',
-          enabled: true,
-          onTap: () async {
-            await _shutdown(sendStop: false);
-            await _connect();
-          },
+        Expanded(
+          child: _RealtimeCallControl(
+            icon: Icons.refresh,
+            label: '重试',
+            enabled: true,
+            onTap: () async {
+              await _shutdown(sendStop: false);
+              await _connect();
+            },
+          ),
         ),
-        const SizedBox(width: 28),
-        _RealtimeCallControl(
-          icon: Icons.call_end,
-          label: '挂断',
-          destructive: true,
-          enabled: true,
-          onTap: _endCall,
+        const SizedBox(width: 16),
+        Expanded(
+          child: _RealtimeCallControl(
+            icon: Icons.call_end,
+            label: '挂断',
+            destructive: true,
+            enabled: true,
+            onTap: _endCall,
+          ),
         ),
-        const SizedBox(width: 28),
-        _RealtimeCallControl(
-          icon: Icons.close,
-          label: '关闭',
-          enabled: true,
-          onTap: _endCall,
+        const SizedBox(width: 16),
+        Expanded(
+          child: _RealtimeCallControl(
+            icon: Icons.close,
+            label: '关闭',
+            enabled: true,
+            onTap: _endCall,
+          ),
         ),
       ],
     );
@@ -935,7 +924,7 @@ class _RealtimeCallControl extends StatelessWidget {
               label,
               style: const TextStyle(
                 color: Color(0xFFC3C3C6),
-                fontSize: 9,
+                fontSize: 12,
                 fontWeight: FontWeight.w400,
               ),
               textAlign: TextAlign.center,

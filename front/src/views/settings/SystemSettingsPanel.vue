@@ -143,7 +143,7 @@ SPDX-License-Identifier: AGPL-3.0-only
           </el-upload>
           <span
             v-if="importResult"
-            style="font-size: 12px; color: var(--ac-color-text-muted)"
+            style="font-size: var(--ac-font-size-xs); color: var(--ac-color-text-muted)"
             >{{ importResult }}</span
           >
         </div>
@@ -507,13 +507,13 @@ onMounted(async () => {
   min-width: 0;
 }
 .nav-entry-title {
-  font-size: 14px;
+  font-size: var(--ac-font-size-base);
   font-weight: 600;
   color: var(--ac-color-text);
   margin-bottom: 2px;
 }
 .nav-entry-desc {
-  font-size: 12px;
+  font-size: var(--ac-font-size-xs);
   color: var(--ac-color-text-muted);
   line-height: 1.4;
 }

@@ -5,8 +5,10 @@ SPDX-License-Identifier: AGPL-3.0-only
 <template>
   <el-dialog
     v-model="visible"
+    class="model-config-dialog"
     :title="editingId ? '编辑模型配置' : '新增模型配置'"
-    width="520px"
+    width="min(520px, calc(100vw - 32px))"
+    align-center
     destroy-on-close
   >
     <el-form
@@ -313,6 +315,20 @@ function capLabel(key: string | number): string {
 </script>
 
 <style scoped>
+.model-config-dialog {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100dvh - 32px);
+}
+.model-config-dialog :deep(.el-dialog__header),
+.model-config-dialog :deep(.el-dialog__footer) {
+  flex-shrink: 0;
+}
+.model-config-dialog :deep(.el-dialog__body) {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
 .form-hint {
   font-size: var(--ac-font-size-xs);
   color: var(--ac-color-text-muted);
@@ -326,6 +342,7 @@ function capLabel(key: string | number): string {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
+  flex-wrap: wrap;
 }
 
 .model-detect-wrap {
@@ -334,9 +351,11 @@ function capLabel(key: string | number): string {
 .model-detect-row {
   display: flex;
   gap: 8px;
+  flex-wrap: wrap;
 }
 .model-detect-row .model-input {
   flex: 1;
+  min-width: 180px;
 }
 .detect-error {
   color: var(--ac-color-danger);
