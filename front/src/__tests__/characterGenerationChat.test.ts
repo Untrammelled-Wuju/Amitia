@@ -10,6 +10,30 @@ const stubs = {
 };
 describe('character generation draft conversation', () => {
   beforeEach(() => { post.mockReset(); });
+  it('opens editing without generating and displays an assistant greeting', async () => {
+    const draft = { name: '', identity: '', personalityConfig: { warmth: 50 } };
+    const wrapper = mount(CharacterGenerationChat, { props: { draft }, global: { stubs } });
+    expect(wrapper.find('[role="log"]').text()).toContain('你想创建怎样的角色');
+    await wrapper.findAll('button')[1].trigger('click');
+    expect(wrapper.emitted('apply')?.[0][0]).toEqual(draft);
+    expect(post).not.toHaveBeenCalled();
+    wrapper.unmount();
+  });
+  it('shows the sent message immediately and allows editing while generation is pending', async () => {
+    let resolveReply!: (value: any) => void;
+    post.mockReturnValue(new Promise(resolve => { resolveReply = resolve; }));
+    const draft = { name: '' };
+    const wrapper = mount(CharacterGenerationChat, { props: { draft }, global: { stubs } });
+    await wrapper.get('textarea').setValue('设计图书管理员');
+    await wrapper.findAll('button')[0].trigger('click');
+    expect(wrapper.get('.generation-message.user').text()).toContain('设计图书管理员');
+    await wrapper.findAll('button')[1].trigger('click');
+    expect(wrapper.emitted('apply')?.[0][0]).toEqual(draft);
+    resolveReply({ reply: '已生成', draft: { name: '星河' } });
+    await flushPromises();
+    expect(wrapper.emitted('apply')).toHaveLength(1);
+    wrapper.unmount();
+  });
   it('merges multi-turn patches and uses manually edited values after applying', async () => {
     post.mockResolvedValueOnce({ reply:'已生成', draft:{name:'星河',personalityConfig:{warmth:72}} })
       .mockResolvedValueOnce({reply:'身份已完善',draft:{identity:'图书管理员'}})

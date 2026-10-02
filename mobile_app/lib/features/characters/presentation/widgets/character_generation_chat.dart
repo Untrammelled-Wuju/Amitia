@@ -19,15 +19,17 @@ class CharacterGenerationChat extends ConsumerStatefulWidget {
 class _CharacterGenerationChatState
     extends ConsumerState<CharacterGenerationChat> {
   final _input = TextEditingController();
+  final _scroll = ScrollController();
   final _messages = <Map<String, String>>[];
   Map<String, dynamic>? _proposal;
-  bool _hasAppliedDraft = false;
+  String? _pendingMessage;
   bool _busy = false;
   String? _error;
 
   @override
   void dispose() {
     _input.dispose();
+    _scroll.dispose();
     super.dispose();
   }
 
@@ -37,7 +39,9 @@ class _CharacterGenerationChatState
     setState(() {
       _busy = true;
       _error = null;
+      _pendingMessage = text;
     });
+    _scrollToLatest();
     try {
       final history = [
         ..._messages.skip(_messages.length > 30 ? _messages.length - 30 : 0),
@@ -80,85 +84,148 @@ class _CharacterGenerationChatState
           ..addAll(history)
           ..add({'role': 'assistant', 'content': result['reply'] as String});
         _input.clear();
+        _pendingMessage = null;
       });
     } catch (_) {
       if (mounted) setState(() => _error = '生成失败，请检查默认文本模型后重试；现有编辑内容未修改。');
     } finally {
       if (mounted) setState(() => _busy = false);
+      _scrollToLatest();
     }
+  }
+
+  void _scrollToLatest() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _scroll.hasClients) {
+        _scroll.jumpTo(_scroll.position.maxScrollExtent);
+      }
+    });
+  }
+
+  void _next() {
+    FocusManager.instance.primaryFocus?.unfocus();
+    widget.onApply(_proposal ?? widget.currentDraft());
+    setState(() => _proposal = null);
   }
 
   @override
   Widget build(BuildContext context) => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
-      const Text('描述角色设想，或通过多轮对话调整。生成草稿同步后仍可修改，保存后才生效。'),
-      const SizedBox(height: 16),
-      ConstrainedBox(
-        constraints: const BoxConstraints(maxHeight: 320),
-        child: SingleChildScrollView(
+      Expanded(
+        child: ListView(
+          controller: _scroll,
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+          children: [
+            _bubble(
+              context,
+              '你想创建怎样的角色？告诉我角色的身份、性格或故事，我们可以一起完善。也可以直接点击下一步，从空白角色卡开始编辑。',
+              false,
+            ),
+            for (final message in _messages)
+              _bubble(context, message['content']!, message['role'] == 'user'),
+            if (_pendingMessage != null)
+              _bubble(context, _pendingMessage!, true),
+            if (_busy) _bubble(context, '正在整理角色草稿…', false),
+            if (_error != null) _bubble(context, _error!, false),
+            if (_proposal != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  '角色草稿已更新，下一步可手动调整。',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ),
+          ],
+        ),
+      ),
+      Material(
+        color: Theme.of(context).colorScheme.surface,
+        child: Padding(
+          padding: const EdgeInsets.all(12),
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
             children: [
-              for (final message in _messages)
-                Align(
-                  alignment: message['role'] == 'user'
-                      ? Alignment.centerRight
-                      : Alignment.centerLeft,
-                  child: Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: SelectableText(message['content']!),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _input,
+                      enabled: !_busy,
+                      minLines: 1,
+                      maxLines: 4,
+                      maxLength: 4000,
+                      decoration: const InputDecoration(
+                        labelText: '角色需求',
+                        hintText: '描述你想创建的角色…',
+                        counterText: '',
+                      ),
                     ),
                   ),
-                ),
-              if (_busy)
-                const Padding(
-                  padding: EdgeInsets.all(16),
-                  child: Text('正在整理角色草稿…'),
-                ),
+                  const SizedBox(width: 8),
+                  IconButton.filled(
+                    tooltip: '发送',
+                    onPressed: _busy ? null : _send,
+                    icon: const Icon(Icons.arrow_upward),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              FilledButton(onPressed: _next, child: const Text('下一步：编辑角色卡')),
             ],
           ),
         ),
       ),
-      TextField(
-        controller: _input,
-        enabled: !_busy,
-        maxLines: 3,
-        maxLength: 4000,
-        decoration: const InputDecoration(
-          labelText: '角色需求',
-          hintText: '例如：设计一位喜欢天文、说话简洁的图书管理员',
-        ),
-      ),
-      Wrap(
-        spacing: 12,
-        runSpacing: 8,
-        children: [
-          FilledButton(
-            onPressed: _busy ? null : _send,
-            child: const Text('发送'),
-          ),
-          OutlinedButton(
-            onPressed: _busy || (_proposal == null && !_hasAppliedDraft)
-                ? null
-                : () {
-                    widget.onApply(_proposal ?? widget.currentDraft());
-                    setState(() {
-                      _proposal = null;
-                      _hasAppliedDraft = true;
-                    });
-                  },
-            child: const Text('下一步：编辑角色卡'),
-          ),
-        ],
-      ),
-      if (_error != null)
-        Padding(padding: const EdgeInsets.only(top: 12), child: Text(_error!)),
-      if (_proposal != null)
-        const Padding(
-          padding: EdgeInsets.only(top: 12),
-          child: Text('草稿已更新，可以继续对话或进入下一步手动调整。'),
-        ),
     ],
   );
+
+  Widget _bubble(BuildContext context, String content, bool user) {
+    final colors = Theme.of(context).colorScheme;
+    return Align(
+      alignment: user ? Alignment.centerRight : Alignment.centerLeft,
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 16),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxWidth: MediaQuery.sizeOf(context).width * .84,
+          ),
+          child: Column(
+            crossAxisAlignment: user
+                ? CrossAxisAlignment.end
+                : CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Text(
+                  user ? '你' : '角色设计助手',
+                  style: Theme.of(context).textTheme.labelMedium,
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 12,
+                ),
+                decoration: BoxDecoration(
+                  color: user
+                      ? colors.primaryContainer
+                      : colors.surfaceContainerHigh,
+                  borderRadius: BorderRadius.circular(18),
+                ),
+                child: SelectableText(
+                  content,
+                  style: TextStyle(
+                    color: user ? colors.onPrimaryContainer : colors.onSurface,
+                    height: 1.5,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }

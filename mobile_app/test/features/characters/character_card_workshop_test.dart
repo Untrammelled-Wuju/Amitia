@@ -119,7 +119,7 @@ void main() {
       await tester.tap(find.text('创建角色卡').last);
       await tester.pumpAndSettle();
       await tester.enterText(find.byType(TextField).first, '生成图书管理员');
-      await tester.tap(find.text('发送'));
+      await tester.tap(find.byTooltip('发送'));
       await tester.pumpAndSettle();
       expect(service.created, isNull);
       await tester.tap(find.text('下一步：编辑角色卡'));
@@ -147,6 +147,35 @@ void main() {
   );
 
   testWidgets(
+    'next opens a blank editor without generating and keeps manual edits',
+    (tester) async {
+      final service = _Characters();
+      await render(tester, _Api(), service, []);
+      await tester.tap(find.text('创建角色卡').last);
+      await tester.pumpAndSettle();
+      expect(find.text('角色设计助手'), findsOneWidget);
+      await tester.tap(find.text('下一步：编辑角色卡'));
+      await tester.pumpAndSettle();
+      for (final label in ['名称', '身份', '角色描述', 'System Prompt', '场景设定']) {
+        final field = tester.widget<TextField>(
+          find.widgetWithText(TextField, label),
+        );
+        expect(field.controller!.text, isEmpty);
+      }
+      final name = find.widgetWithText(TextField, '名称');
+      await tester.enterText(name, '手动角色');
+      FocusManager.instance.primaryFocus?.unfocus();
+      await tester.tap(find.byTooltip('上一步'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('下一步：编辑角色卡'));
+      await tester.pumpAndSettle();
+      expect(tester.widget<TextField>(name).controller!.text, '手动角色');
+      expect(service.created, isNull);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
     'creation back navigation preserves draft and returns to workshop',
     (tester) async {
       await render(tester, _Api(), _Characters(), []);
@@ -155,7 +184,7 @@ void main() {
       expect(find.text('第 1 步：对话生成'), findsOneWidget);
       expect(find.text('编辑角色'), findsNothing);
       await tester.enterText(find.byType(TextField).first, '生成图书管理员');
-      await tester.tap(find.text('发送'));
+      await tester.tap(find.byTooltip('发送'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('下一步：编辑角色卡'));
       await tester.pumpAndSettle();
@@ -164,11 +193,11 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('已生成角色草稿'), findsOneWidget);
       expect(find.text('第 1 步：对话生成'), findsOneWidget);
-    await tester.tap(find.text('下一步：编辑角色卡'));
-    await tester.pumpAndSettle();
-    expect(find.text('第 2 步：编辑角色卡'), findsOneWidget);
-    await tester.tap(find.byTooltip('上一步'));
-    await tester.pumpAndSettle();
+      await tester.tap(find.text('下一步：编辑角色卡'));
+      await tester.pumpAndSettle();
+      expect(find.text('第 2 步：编辑角色卡'), findsOneWidget);
+      await tester.tap(find.byTooltip('上一步'));
+      await tester.pumpAndSettle();
       await tester.tap(find.byTooltip('返回工坊'));
       await tester.pumpAndSettle();
       expect(find.text('角色卡工坊'), findsOneWidget);

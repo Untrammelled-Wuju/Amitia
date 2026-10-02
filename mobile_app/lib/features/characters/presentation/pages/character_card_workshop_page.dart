@@ -186,6 +186,42 @@ class _CharacterCardWorkshopPageState
     final selected = characters
         .where((item) => item.id == _selectedId)
         .firstOrNull;
+    if (_creating) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: EdgeInsets.all(AppSpacing.pagePadding),
+            child: Text(
+              _editing ? '第 2 步：编辑角色卡' : '第 1 步：对话生成',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+          ),
+          Expanded(
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                Offstage(
+                  offstage: _editing,
+                  child: CharacterGenerationChat(
+                    key: ValueKey(_generationSession),
+                    currentDraft: _draftSnapshot,
+                    onApply: _applyGenerated,
+                  ),
+                ),
+                Offstage(
+                  offstage: !_editing,
+                  child: ListView(
+                    padding: EdgeInsets.all(AppSpacing.pagePadding),
+                    children: [_buildEditor(context, selected)],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      );
+    }
     return ListView(
       padding: EdgeInsets.all(AppSpacing.pagePadding),
       children: [
@@ -217,21 +253,7 @@ class _CharacterCardWorkshopPageState
             onRetry: () => _selectCharacter(selected),
           )
         else if (_inEditor && (selected != null || _creating)) ...[
-          if (_creating)
-            Text(
-              _editing ? '第 2 步：编辑角色卡' : '第 1 步：对话生成',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
           SizedBox(height: AppSpacing.lg),
-          if (_creating)
-            Offstage(
-              offstage: _editing,
-              child: CharacterGenerationChat(
-                key: ValueKey(_generationSession),
-                currentDraft: _draftSnapshot,
-                onApply: _applyGenerated,
-              ),
-            ),
           Offstage(offstage: !_editing, child: _buildEditor(context, selected)),
         ],
       ],

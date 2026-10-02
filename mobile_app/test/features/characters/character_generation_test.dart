@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:amitia_app/core/backend_transport/backend_service_api.dart';
 import 'package:amitia_app/core/backend_transport/providers/backend_transport_providers.dart';
 import 'package:amitia_app/features/characters/presentation/widgets/character_generation_chat.dart';
@@ -26,6 +28,7 @@ class _Api extends Fake implements BackendServiceApi {
     },
   ];
   bool fail = false;
+  Completer<void>? pending;
   @override
   Future<T?> post<T>(
     String path, {
@@ -35,12 +38,36 @@ class _Api extends Fake implements BackendServiceApi {
     T Function(dynamic)? fromJson,
   }) async {
     calls.add(Map<String, dynamic>.from(data as Map));
+    if (pending != null) await pending!.future;
     if (fail) throw StateError('offline');
     return fromJson!(replies.removeAt(0));
   }
 }
 
 void main() {
+  testWidgets('sent message is visible before reply and next stays available', (tester) async {
+    final api = _Api()..pending = Completer<void>();
+    final applied = <Map<String, dynamic>>[];
+    await tester.pumpWidget(ProviderScope(
+      overrides: [backendServiceProvider.overrideWithValue(api)],
+      child: MaterialApp(home: Scaffold(body: CharacterGenerationChat(
+        currentDraft: () => {'name': ''},
+        onApply: applied.add,
+      ))),
+    ));
+    await tester.enterText(find.byType(TextField), '设计图书管理员');
+    await tester.tap(find.byTooltip('发送'));
+    await tester.pump();
+    expect(find.text('设计图书管理员'), findsWidgets);
+    expect(find.text('正在整理角色草稿…'), findsOneWidget);
+    await tester.tap(find.text('下一步：编辑角色卡'));
+    await tester.pump();
+    expect(applied, [{'name': ''}]);
+    api.pending!.complete();
+    await tester.pumpAndSettle();
+    expect(applied.length, 1);
+    expect(tester.takeException(), isNull);
+  });
   test('mobile exposes all 32 personality defaults', () {
     expect(characterPersonalityDefaults.length, 32);
     expect(
@@ -64,11 +91,9 @@ void main() {
         overrides: [backendServiceProvider.overrideWithValue(api)],
         child: MaterialApp(
           home: Scaffold(
-            body: SingleChildScrollView(
-              child: CharacterGenerationChat(
-                currentDraft: () => current,
-                onApply: (value) => applied = value,
-              ),
+            body: CharacterGenerationChat(
+              currentDraft: () => current,
+              onApply: (value) => applied = value,
             ),
           ),
         ),
@@ -76,7 +101,7 @@ void main() {
     );
     Future<void> send(String text) async {
       await tester.enterText(find.byType(TextField), text);
-      await tester.tap(find.text('发送'));
+      await tester.tap(find.byTooltip('发送'));
       await tester.pumpAndSettle();
     }
 
@@ -119,7 +144,7 @@ void main() {
       ),
     );
     await tester.enterText(find.byType(TextField), '完善设定');
-    await tester.tap(find.text('发送'));
+    await tester.tap(find.byTooltip('发送'));
     await tester.pumpAndSettle();
     expect(
       tester.widget<TextField>(find.byType(TextField)).controller!.text,
