@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"io"
 	"sync"
 	"time"
@@ -12,10 +13,10 @@ import (
 )
 
 type Handler struct {
-	policy   Policy
-	decoder  *ImageDecoder
-	reader   ResourceReader
-	mu       sync.Mutex
+	policy  Policy
+	decoder *ImageDecoder
+	reader  ResourceReader
+	mu      sync.Mutex
 }
 
 func NewHandler(policy Policy, resolver *resourceuri.PhysicalResolver) *Handler {
@@ -42,7 +43,7 @@ func (h *Handler) Info(ctx context.Context, uri string) (ImageInfo, error) {
 		return ImageInfo{}, &MediaReadError{Code: MediaReadInvalidURI, Message: "empty resource URI"}
 	}
 
-	ctx, cancel := context.WithTimeout(ctx, h.policy.MaxDecodeTime)
+	ctx, cancel := timeoutpolicy.WithTimeout(ctx, h.policy.MaxDecodeTime)
 	defer cancel()
 
 	rc, res, err := h.reader.Read(ctx, uri)
@@ -67,7 +68,7 @@ func (h *Handler) Image(ctx context.Context, uri string, opts DecodeOptions) (No
 		return NormalizedImage{}, &MediaReadError{Code: MediaReadInvalidURI, Message: "empty resource URI"}
 	}
 
-	ctx, cancel := context.WithTimeout(ctx, h.policy.MaxDecodeTime)
+	ctx, cancel := timeoutpolicy.WithTimeout(ctx, h.policy.MaxDecodeTime)
 	defer cancel()
 
 	rc, res, err := h.reader.Read(ctx, uri)
@@ -140,7 +141,7 @@ func (h *Handler) ResolveImageInput(ctx context.Context, uri string) (ImageInput
 		return ImageInput{}, &MediaReadError{Code: MediaReadInvalidURI, Message: "empty resource URI"}
 	}
 
-	ctx, cancel := context.WithTimeout(ctx, h.policy.MaxDecodeTime)
+	ctx, cancel := timeoutpolicy.WithTimeout(ctx, h.policy.MaxDecodeTime)
 	defer cancel()
 
 	rc, res, err := h.reader.Read(ctx, uri)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"time"
 
 	"github.com/google/uuid"
@@ -149,7 +150,7 @@ func (p *Pipeline) Invoke(ctx context.Context, req InvokeRequest) PipelineResult
 	} else {
 		chainBudget = p.PipelineTimeout
 	}
-	pipelineCtx, pipelineCancel := context.WithTimeout(ctx, chainBudget)
+	pipelineCtx, pipelineCancel := timeoutpolicy.WithTimeout(ctx, chainBudget)
 	defer pipelineCancel()
 
 	point, err := p.PointRegistry.GetPoint(pipelineCtx, req.HookPointID)

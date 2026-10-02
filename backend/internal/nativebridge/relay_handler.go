@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"net/http"
 	"sync"
 	"sync/atomic"
@@ -175,7 +176,7 @@ func (h *RelayHandler) handleBackendActionRequest(conn *RelayConnection, env Rel
 		if handler == nil {
 			payload = json.RawMessage(`{"status":"error","error":{"code":"BACKEND_ACTION_UNAVAILABLE","message":"backend action handler is not configured"}}`)
 		} else {
-			ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
+			ctx, cancel := timeoutpolicy.WithTimeout(context.Background(), 25*time.Second)
 			defer cancel()
 			result, err := handler(ctx, conn.Platform, env.Payload)
 			if err != nil {

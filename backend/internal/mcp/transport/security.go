@@ -3,6 +3,7 @@ package transport
 import (
 	"context"
 	"fmt"
+	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"net"
 	"net/http"
 	"net/url"
@@ -106,7 +107,7 @@ func NewSecureHTTPClient(security EndpointSecurity, policy EndpointPolicy, timeo
 		}
 		return nil, lastErr
 	}
-	return &http.Client{
+	return timeoutpolicy.Client(&http.Client{
 		Transport: transport,
 		Timeout:   timeout,
 		CheckRedirect: func(request *http.Request, via []*http.Request) error {
@@ -121,7 +122,7 @@ func NewSecureHTTPClient(security EndpointSecurity, policy EndpointPolicy, timeo
 			}
 			return nil
 		},
-	}
+	})
 }
 
 func resolveEndpoint(ctx context.Context, host string, resolver *net.Resolver) ([]net.IP, error) {

@@ -4,14 +4,15 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"os/exec"
 	"strings"
 	"time"
 )
 
 type ADBClient struct {
-	config    *ADBConfig
-	policy    *CommandPolicy
+	config *ADBConfig
+	policy *CommandPolicy
 }
 
 func NewADBClient(config *ADBConfig) *ADBClient {
@@ -128,7 +129,7 @@ func (c *ADBClient) isServerAvailable(ctx context.Context) bool {
 }
 
 func (c *ADBClient) listDevices(ctx context.Context) ([]ADBDevice, error) {
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	ctx, cancel := timeoutpolicy.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, c.config.ExecutablePath, "devices", "-l")
@@ -169,7 +170,7 @@ func (c *ADBClient) Execute(ctx context.Context, req ADBExecuteRequest) (ADBExec
 	args := []string{"-s", deviceSerial, "shell", req.Executable}
 	args = append(args, req.Args...)
 
-	ctx, cancel := context.WithTimeout(ctx, timeout)
+	ctx, cancel := timeoutpolicy.WithTimeout(ctx, timeout)
 	defer cancel()
 
 	startTime := time.Now()
@@ -280,7 +281,7 @@ func (c *ADBClient) ExecuteArgs(ctx context.Context, deviceSerial string, args [
 		timeout = maxTimeoutSeconds * time.Second
 	}
 
-	ctx, cancel := context.WithTimeout(ctx, timeout)
+	ctx, cancel := timeoutpolicy.WithTimeout(ctx, timeout)
 	defer cancel()
 
 	startTime := time.Now()

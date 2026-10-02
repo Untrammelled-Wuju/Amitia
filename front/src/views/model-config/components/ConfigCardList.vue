@@ -9,11 +9,13 @@ SPDX-License-Identifier: AGPL-3.0-only
         v-for="cfg in configs"
         :key="cfg.id"
         class="config-card"
-        :class="{ 'is-active': cfg.isActive }"
+        :class="{ 'is-active': cfg.isActive, 'is-suspended': cfg.disabled }"
+        @click.capture="onCardClick($event, cfg)"
       >
         <div class="card-top">
           <div class="card-header">
             <span class="card-name">{{ cfg.name }}</span>
+            <el-tag v-if="cfg.disabled" size="small" type="info">主模型已接管</el-tag>
             <el-tag
               v-if="cfg.isActive"
               type="success"
@@ -123,6 +125,13 @@ function providerName(apiType: string): string {
   return p?.name || apiType;
 }
 
+function onCardClick(event: MouseEvent, cfg: any) {
+  if (!cfg.disabled) return;
+  event.preventDefault();
+  event.stopPropagation();
+  emit("edit", cfg);
+}
+
 function fmtDate(dateStr: string): string {
   if (!dateStr) return "";
   try {
@@ -134,6 +143,10 @@ function fmtDate(dateStr: string): string {
 </script>
 
 <style scoped>
+.is-suspended {
+  opacity: 0.55;
+  cursor: pointer;
+}
 .config-cards {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));

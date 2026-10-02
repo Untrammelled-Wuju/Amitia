@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"io"
 	"net/http"
 	"strings"
@@ -144,7 +145,7 @@ func (s *service) testOpenAICompatibleConnection(cfg *ImageGenConfig) (map[strin
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+cfg.ApiKey)
 	start := time.Now()
-	resp, err := (&http.Client{Timeout: 30 * time.Second}).Do(req)
+	resp, err := (timeoutpolicy.Client(&http.Client{Timeout: 30 * time.Second})).Do(req)
 	latency := time.Since(start).Milliseconds()
 	if err != nil {
 		return map[string]interface{}{"success": false, "message": err.Error(), "latency": latency}, nil
@@ -164,7 +165,7 @@ func (s *service) testStabilityConnection(cfg *ImageGenConfig) (map[string]inter
 	req.Header.Set("Authorization", "Bearer "+cfg.ApiKey)
 	req.Header.Set("Accept", "application/json")
 	start := time.Now()
-	resp, err := (&http.Client{Timeout: 30 * time.Second}).Do(req)
+	resp, err := (timeoutpolicy.Client(&http.Client{Timeout: 30 * time.Second})).Do(req)
 	latency := time.Since(start).Milliseconds()
 	if err != nil {
 		return map[string]interface{}{"success": false, "message": err.Error(), "latency": latency}, nil
@@ -189,7 +190,7 @@ func (s *service) testTongyiConnection(cfg *ImageGenConfig) (map[string]interfac
 	req.Header.Set("Authorization", "Bearer "+cfg.ApiKey)
 	req.Header.Set("X-DashScope-Async", "enable")
 	start := time.Now()
-	resp, err := (&http.Client{Timeout: 30 * time.Second}).Do(req)
+	resp, err := (timeoutpolicy.Client(&http.Client{Timeout: 30 * time.Second})).Do(req)
 	latency := time.Since(start).Milliseconds()
 	if err != nil {
 		return map[string]interface{}{"success": false, "message": err.Error(), "latency": latency}, nil

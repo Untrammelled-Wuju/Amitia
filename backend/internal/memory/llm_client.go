@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"io"
 	"net/http"
 	"strings"
@@ -48,7 +49,7 @@ func (s *service) callLLM(cfg map[string]interface{}, messages []map[string]inte
 	req, _ := http.NewRequest("POST", baseURL+"/chat/completions", bytes.NewReader(jsonBody))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+cfg["apiKey"].(string))
-	resp, err := (&http.Client{Timeout: 120 * time.Second}).Do(req)
+	resp, err := (timeoutpolicy.Client(&http.Client{Timeout: 120 * time.Second})).Do(req)
 	if err != nil {
 		return "", 0, err
 	}
@@ -82,7 +83,7 @@ func (s *service) callOllamaLLM(cfg map[string]interface{}, messages []map[strin
 	jsonBody, _ := json.Marshal(reqBody)
 	req, _ := http.NewRequest("POST", baseURL+"/api/chat", bytes.NewReader(jsonBody))
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := (&http.Client{Timeout: 120 * time.Second}).Do(req)
+	resp, err := (timeoutpolicy.Client(&http.Client{Timeout: 120 * time.Second})).Do(req)
 	if err != nil {
 		return "", 0, err
 	}

@@ -8,6 +8,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
+	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"image"
 	_ "image/jpeg"
 	_ "image/png"
@@ -168,7 +169,7 @@ func (p *VisualPipeline) run(ctx context.Context) {
 				continue
 			}
 			started := time.Now()
-			analysisCtx, cancel := context.WithTimeout(ctx, 22*time.Second)
+			analysisCtx, cancel := timeoutpolicy.WithTimeout(ctx, 22*time.Second)
 			text, err := p.analyzer.Analyze(analysisCtx, frame)
 			cancel()
 			if err != nil {

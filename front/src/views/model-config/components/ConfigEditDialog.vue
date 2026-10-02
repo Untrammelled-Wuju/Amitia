@@ -149,6 +149,11 @@ SPDX-License-Identifier: AGPL-3.0-only
         </div>
       </el-form-item>
 
+      <el-form-item v-if="showReasoningSettings" label="视觉能力">
+        <el-switch v-model="form.supportsVision" active-text="支持识图" />
+        <div class="form-hint">开启并设为默认模型后，主模型承担图片识别，独立视觉模型暂停使用。</div>
+      </el-form-item>
+
       <slot name="extraFields" />
 
       <el-row v-if="showAdvanced" :gutter="12">

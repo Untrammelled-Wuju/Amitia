@@ -2,7 +2,6 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../../../app/app_routes.dart';
 import '../../../../app/theme/app_colors.dart';
@@ -540,15 +539,9 @@ class _SafetyContentState extends ConsumerState<_SafetyContent> {
           _retentionTile(),
         ]),
         SizedBox(height: AppSpacing.sectionGap),
-        const _SectionLabel(text: '隐私与审计'),
+        const _SectionLabel(text: '安全与审计'),
         SizedBox(height: AppSpacing.sm),
         _buildCard([
-          _navTile(
-            Icons.security,
-            '隐私扫描',
-            () => context.push(AppRoutes.settingsPrivacyScan),
-          ),
-          _divider(),
           _navTile(Icons.rule_folder_outlined, 'BDI 安全策略', _showBdiConfig),
           _divider(),
           _navTile(Icons.warning_amber_outlined, '安全事件', _showSafetyEvents),

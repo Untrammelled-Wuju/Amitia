@@ -3,6 +3,7 @@ package capability
 import (
 	"context"
 	"fmt"
+	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"sync"
 	"time"
 )
@@ -42,7 +43,8 @@ func (m *PendingInvocationManager) Register(req DeviceRuntimeInvocationRequest, 
 		deadline = m.defaultTTL
 	}
 	invocationID := req.Invocation.InvocationID
-	deadlineCtx, cancel := context.WithTimeout(context.Background(), deadline)
+	deadline = timeoutpolicy.Duration(deadline)
+	deadlineCtx, cancel := timeoutpolicy.WithTimeout(context.Background(), deadline)
 	pi := &PendingInvocation{
 		InvocationID:   invocationID,
 		CommandID:      commandID,
@@ -55,9 +57,11 @@ func (m *PendingInvocationManager) Register(req DeviceRuntimeInvocationRequest, 
 		IdempotencyKey: req.Invocation.IdempotencyKey,
 		FencingToken:   req.Invocation.FencingToken,
 		CreatedAt:      time.Now().UTC(),
-		DeadlineAt:     time.Now().UTC().Add(deadline),
 		ResultCh:       make(chan UnifiedToolResult, 1),
 		CancelFunc:     cancel,
+	}
+	if deadline > 0 {
+		pi.DeadlineAt = time.Now().UTC().Add(deadline)
 	}
 	m.mu.Lock()
 	if existing, exists := m.pending[invocationID]; exists && existing != nil {

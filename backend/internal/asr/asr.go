@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"io"
 	"mime/multipart"
 	"net/http"
@@ -302,7 +303,7 @@ func submitVolcengine(cfg *AsrConfig, audioURL string, language string) (string,
 	req.Header.Set("X-Api-Resource-Id", resourceId)
 	req.Header.Set("X-Api-Request-Id", taskID)
 	req.Header.Set("X-Api-Sequence", "-1")
-	client := &http.Client{Timeout: 30 * time.Second}
+	client := timeoutpolicy.Client(&http.Client{Timeout: 30 * time.Second})
 	resp, err := client.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("提交ASR任务失败: %w", err)
@@ -332,7 +333,7 @@ func queryVolcengine(cfg *AsrConfig, taskID string) (*AsrQueryResp, error) {
 	req.Header.Set("X-Api-Resource-Id", resourceId)
 	req.Header.Set("X-Api-Request-Id", taskID)
 	req.Header.Set("X-Api-Sequence", "-1")
-	client := &http.Client{Timeout: 30 * time.Second}
+	client := timeoutpolicy.Client(&http.Client{Timeout: 30 * time.Second})
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("查询ASR失败: %w", err)
@@ -391,7 +392,7 @@ func submitOpenAI(cfg *AsrConfig, audioURL string, language string) (string, err
 	req.Header.Set("Authorization", "Bearer "+cfg.ApiKey)
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 
-	client := &http.Client{Timeout: 120 * time.Second}
+	client := timeoutpolicy.Client(&http.Client{Timeout: 120 * time.Second})
 	resp, err := client.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("OpenAI ASR 请求失败: %w", err)
@@ -473,7 +474,7 @@ func submitAzure(cfg *AsrConfig, audioURL string, language string) (string, erro
 	req.Header.Set("Content-Type", "audio/wav; codecs=audio/pcm; samplerate=16000")
 	req.Header.Set("Accept", "application/json")
 
-	client := &http.Client{Timeout: 120 * time.Second}
+	client := timeoutpolicy.Client(&http.Client{Timeout: 120 * time.Second})
 	resp, err := client.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("Azure ASR 请求失败: %w", err)
@@ -531,7 +532,7 @@ func submitAliyun(cfg *AsrConfig, audioURL string, language string) (string, err
 	req.Header.Set("Authorization", "Bearer "+cfg.ApiKey)
 	req.Header.Set("X-NLS-Token", cfg.ApiKey)
 
-	client := &http.Client{Timeout: 30 * time.Second}
+	client := timeoutpolicy.Client(&http.Client{Timeout: 30 * time.Second})
 	resp, err := client.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("阿里云ASR 提交失败: %w", err)
@@ -571,7 +572,7 @@ func queryAliyun(cfg *AsrConfig, taskID string) (*AsrQueryResp, error) {
 	req.Header.Set("Authorization", "Bearer "+cfg.ApiKey)
 	req.Header.Set("X-NLS-Token", cfg.ApiKey)
 
-	client := &http.Client{Timeout: 30 * time.Second}
+	client := timeoutpolicy.Client(&http.Client{Timeout: 30 * time.Second})
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("查询阿里云ASR失败: %w", err)

@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"io"
 	"net/http"
 	"strings"
@@ -61,7 +62,7 @@ func (a *GeminiAdapter) Generate(ctx context.Context, cfg ProviderConfig, req Mo
 	q.Set("key", cfg.APIKey)
 	httpReq.URL.RawQuery = q.Encode()
 
-	client := &http.Client{Timeout: time.Duration(cfg.TimeoutSeconds) * time.Second}
+	client := timeoutpolicy.Client(&http.Client{Timeout: time.Duration(cfg.TimeoutSeconds) * time.Second})
 	resp, err := client.Do(httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("请求失败: %w", err)
@@ -110,7 +111,7 @@ func (a *GeminiAdapter) Stream(ctx context.Context, cfg ProviderConfig, req Mode
 	q.Set("key", cfg.APIKey)
 	httpReq.URL.RawQuery = q.Encode()
 
-	client := &http.Client{Timeout: time.Duration(cfg.TimeoutSeconds) * time.Second}
+	client := timeoutpolicy.Client(&http.Client{Timeout: time.Duration(cfg.TimeoutSeconds) * time.Second})
 	resp, err := client.Do(httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("请求失败: %w", err)
@@ -142,12 +143,7 @@ func (a *GeminiAdapter) buildContents(req ModelRequest) []map[string]interface{}
 					"text": part.Text,
 				})
 			case ContentTypeImage:
-				parts = append(parts, map[string]interface{}{
-					"inlineData": map[string]interface{}{
-						"mimeType": part.MIMEType,
-						"data":     part.ResourceURI,
-					},
-				})
+				parts = append(parts, geminiImagePart(part))
 			}
 		}
 

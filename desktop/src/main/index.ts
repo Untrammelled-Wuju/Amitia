@@ -61,6 +61,10 @@ function notifyStatus(
   }
 }
 
+if (process.platform === "win32") {
+  app.setAppUserModelId("cn.amitia.desktop");
+}
+
 const lock = app.requestSingleInstanceLock();
 if (!lock) {
   app.quit();

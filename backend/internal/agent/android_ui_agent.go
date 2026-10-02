@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"strings"
 	"time"
 
@@ -46,7 +47,7 @@ func (s *service) RunAndroidUIAgent(ctx context.Context, execCtx tool.ToolExecut
 		ctx = context.Background()
 	}
 	timeout := time.Duration(req.TimeoutMS) * time.Millisecond
-	ctx, cancel := context.WithTimeout(ctx, timeout)
+	ctx, cancel := timeoutpolicy.WithTimeout(ctx, timeout)
 	defer cancel()
 
 	scope := androidUIAgentScope(execCtx)

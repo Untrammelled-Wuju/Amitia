@@ -140,10 +140,15 @@ class MainActivity : FlutterActivity() {
 
     override fun onResume() {
         super.onResume()
+        com.amitia.amitia_app.nativeprovider.notification.ReplyNotificationSound.stop()
+        com.amitia.amitia_app.nativeprovider.notification.ReplyNotificationVibration.stop()
         activeActivity = WeakReference(this)
+        com.amitia.amitia_app.runtime.service.BackgroundKeepAlive.restore(applicationContext)
+        com.amitia.amitia_app.nativeprovider.display.ScreenAwakeController.apply(this, true)
     }
 
     override fun onPause() {
+        com.amitia.amitia_app.nativeprovider.display.ScreenAwakeController.apply(this, false)
         if (activeActivity?.get() === this) activeActivity = null
         super.onPause()
     }

@@ -3,6 +3,7 @@ package search
 import (
 	"context"
 	"fmt"
+	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"net"
 	"net/http"
 	"net/url"
@@ -102,7 +103,7 @@ func (t *SecureTransport) NewHTTPClient(timeout time.Duration) *http.Client {
 		d := &net.Dialer{Timeout: 10 * time.Second, KeepAlive: 30 * time.Second}
 		return d.DialContext(ctx, network, address)
 	}
-	return &http.Client{
+	return timeoutpolicy.Client(&http.Client{
 		Transport: tr,
 		Timeout:   timeout,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
@@ -117,7 +118,7 @@ func (t *SecureTransport) NewHTTPClient(timeout time.Duration) *http.Client {
 			}
 			return nil
 		},
-	}
+	})
 }
 
 func (t *SecureTransport) PinHTTPClient(endpoint *validatedEndpoint, timeout time.Duration) *http.Client {
@@ -146,7 +147,7 @@ func (t *SecureTransport) PinHTTPClient(endpoint *validatedEndpoint, timeout tim
 		}
 		return nil, lastErr
 	}
-	return &http.Client{
+	return timeoutpolicy.Client(&http.Client{
 		Transport: tr,
 		Timeout:   timeout,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
@@ -161,7 +162,7 @@ func (t *SecureTransport) PinHTTPClient(endpoint *validatedEndpoint, timeout tim
 			}
 			return nil
 		},
-	}
+	})
 }
 
 func (t *SecureTransport) resolve(ctx context.Context, host string) ([]net.IP, error) {

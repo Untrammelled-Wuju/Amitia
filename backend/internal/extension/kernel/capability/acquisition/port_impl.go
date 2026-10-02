@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"io"
 	"net/http"
 	"os"
@@ -282,7 +283,7 @@ func (b *skillCatalogBridge) readSkillSource(sourceURI string) ([]byte, error) {
 }
 
 func (b *skillCatalogBridge) downloadSkillSource(sourceURI string) ([]byte, error) {
-	client := &http.Client{Timeout: 60 * time.Second}
+	client := timeoutpolicy.Client(&http.Client{Timeout: 60 * time.Second})
 	req, err := http.NewRequest(http.MethodGet, sourceURI, nil)
 	if err != nil {
 		return nil, fmt.Errorf("skill catalog bridge: create request for %s: %w", sourceURI, err)

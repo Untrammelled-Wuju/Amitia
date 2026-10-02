@@ -69,6 +69,7 @@ export function useModelConfig(options?: ModelConfigOptions) {
   const defaultIsActive = options?.defaultIsActive ?? 0;
 
   const configs = ref<any[]>([]);
+  const visionSuspended = ref(false);
   const providers = ref<any[]>([]);
   const currentProviderSchema = ref<any>(null);
 
@@ -167,6 +168,10 @@ export function useModelConfig(options?: ModelConfigOptions) {
   }
 
   async function fetchConfigs() {
+    if (apiBase === "/api/vision") {
+      const status = await get<{ mainModelVision: boolean }>("/api/vision/status");
+      visionSuspended.value = status?.mainModelVision === true;
+    }
     configs.value = ((await get<any[]>(`${apiBase}/configs`)) || []).map(
       (c) => {
         if (transformConfig) c = transformConfig(c);
@@ -227,6 +232,7 @@ export function useModelConfig(options?: ModelConfigOptions) {
   }
 
   async function showDialog(row: any) {
+    if (await blockIndependentVision()) return;
     editingId.value = row?.id || null;
     showApiKey.value = false;
     let fullConfig: any = null;
@@ -277,6 +283,7 @@ export function useModelConfig(options?: ModelConfigOptions) {
   }
 
   async function saveConfig() {
+    if (await blockIndependentVision()) return;
     const valid = await dialogFormRef.value?.validate().catch(() => false);
     if (!valid) return;
 
@@ -318,6 +325,7 @@ export function useModelConfig(options?: ModelConfigOptions) {
   }
 
   async function testConfig(id: number) {
+    if (await blockIndependentVision()) return;
     testingId.value = id;
     try {
       const result = await post<any>(`${apiBase}/configs/${id}/test`, {
@@ -340,6 +348,7 @@ export function useModelConfig(options?: ModelConfigOptions) {
   }
 
   async function setActive(id: number) {
+    if (await blockIndependentVision()) return;
     try {
       await post(`${apiBase}/configs/${id}${activatePath}`);
       ElMessage.success("已设为默认");
@@ -349,6 +358,7 @@ export function useModelConfig(options?: ModelConfigOptions) {
   }
 
   async function delConfig(id: number) {
+    if (await blockIndependentVision()) return;
     const cfg = configs.value.find((c) => c.id === id);
     if (cfg?.isActive && configs.value.length <= 1) {
       ElMessage.warning("不能删除唯一的激活配置");
@@ -418,7 +428,19 @@ export function useModelConfig(options?: ModelConfigOptions) {
     if (withScenario) fetchRoutes();
   });
 
+  async function blockIndependentVision() {
+    if (apiBase !== "/api/vision") return false;
+    const wasSuspended = visionSuspended.value;
+    const status = await get<{ mainModelVision: boolean }>("/api/vision/status");
+    visionSuspended.value = status?.mainModelVision === true;
+    if (wasSuspended !== visionSuspended.value) await fetchConfigs();
+    if (!visionSuspended.value) return false;
+    await ElMessageBox.alert("主模型已开启视觉模式，如需单独启用视觉模型，请先关闭文本模型的支持识图功能", "主模型已接管视觉识别", { confirmButtonText: "知道了" }).catch(() => {});
+    return true;
+  }
+
   return {
+    visionSuspended,
     configs,
     providers,
     currentProviderSchema,

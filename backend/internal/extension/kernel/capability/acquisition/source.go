@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"io"
 	"net/http"
 	"strings"
@@ -765,7 +766,7 @@ type RemoteSkillCatalog struct {
 // NewRemoteSkillCatalog 创建 RemoteSkillCatalog 实例
 func NewRemoteSkillCatalog(apiURL string) *RemoteSkillCatalog {
 	return &RemoteSkillCatalog{
-		client: &http.Client{Timeout: 15 * time.Second},
+		client: timeoutpolicy.Client(&http.Client{Timeout: 15 * time.Second}),
 		apiURL: apiURL,
 	}
 }

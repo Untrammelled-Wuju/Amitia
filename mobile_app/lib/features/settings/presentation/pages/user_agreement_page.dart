@@ -26,7 +26,7 @@ class UserAgreementPage extends ConsumerWidget {
       ('开源许可', Icons.code_outlined, '当前后端返回的开源许可为 $license。第三方依赖分别遵循各自许可证。'),
     ];
     return AmitiaScaffold(
-      appBar: const AmitiaAppBar(title: '用户协议', navigation: AmitiaAppBarNavigation.back),
+      appBar: const AmitiaAppBar(title: '使用边界', navigation: AmitiaAppBarNavigation.back),
       body: ListView(
         padding: EdgeInsets.fromLTRB(AppSpacing.pagePadding, AppSpacing.md, AppSpacing.pagePadding, AppSpacing.xl),
         children: [

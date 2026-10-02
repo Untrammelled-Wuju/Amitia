@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"net/url"
 	"sort"
 	"strings"
@@ -82,7 +83,7 @@ func (r *Runtime) Execute(ctx context.Context, scope Scope, raw json.RawMessage,
 	}
 	if r.config.MaxExecution > 0 {
 		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, r.config.MaxExecution)
+		ctx, cancel = timeoutpolicy.WithTimeout(ctx, r.config.MaxExecution)
 		defer cancel()
 	}
 	ctx = contextWithBrowserBudget(ctx, r.config)
@@ -452,7 +453,7 @@ func (r *Runtime) searchQueries(ctx context.Context, scope Scope, queries []Sear
 			}
 			defer func() { <-sem }()
 			providerStarted := time.Now()
-			searchCtx, cancel := context.WithTimeout(ctx, r.config.SearchTimeout)
+			searchCtx, cancel := timeoutpolicy.WithTimeout(ctx, r.config.SearchTimeout)
 			defer cancel()
 			_ = emitProgress(emit, Progress{Phase: "search_query", Query: item.query.Q, Message: "searching source providers", Indeterminate: true})
 			req := searchRequest(item.query)
@@ -540,7 +541,7 @@ func (r *Runtime) searchQueriesFast(ctx context.Context, scope Scope, queries []
 				attempted = append(attempted, providerID)
 				_ = emitProgress(emit, Progress{Phase: "search_query", Query: query.Q, Message: "searching source provider", Indeterminate: true})
 				providerStarted := time.Now()
-				searchCtx, cancel := context.WithTimeout(ctx, r.config.SearchTimeout)
+				searchCtx, cancel := timeoutpolicy.WithTimeout(ctx, r.config.SearchTimeout)
 				resp, serr := r.search.SearchAdvancedWithProvider(searchCtx, searchRequest(query), scope.InvocationID, providerID)
 				cancel()
 				providerObservation := Observation{Name: "web.search", InvocationID: strings.TrimSpace(scope.InvocationID), Operation: "search", Mode: ModeFast, Provider: providerID, DurationMs: time.Since(providerStarted).Milliseconds()}

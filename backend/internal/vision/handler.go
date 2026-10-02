@@ -15,6 +15,21 @@ type Handler struct{ service Service }
 
 func NewHandler(svc Service) *Handler { return &Handler{service: svc} }
 
+func (h *Handler) Status(c *gin.Context) {
+	if source, ok := h.service.(interface{ mainVisionModel() (*VisionConfig, error) }); ok {
+		cfg, err := source.mainVisionModel()
+		if err != nil {
+			util.ErrorResponse(c, response.InternalError, err.Error(), nil)
+			return
+		}
+		if cfg != nil {
+			util.SuccessResponse(c, gin.H{"mainModelVision": true, "modelId": cfg.ID, "modelName": cfg.ModelName, "message": MainModelVisionNotice})
+			return
+		}
+	}
+	util.SuccessResponse(c, gin.H{"mainModelVision": false})
+}
+
 func (h *Handler) List(c *gin.Context) {
 	configs, err := h.service.List()
 	if err != nil {

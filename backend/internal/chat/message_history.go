@@ -50,6 +50,9 @@ func (s *service) loadHistoryExcluding(convID, excludeID string) []map[string]st
 	history := make([]map[string]string, len(messages))
 	for i, m := range messages {
 		history[i] = map[string]string{"role": m.Role, "content": m.Content}
+		if m.ImageUrl != "" {
+			history[i]["imageUrl"] = m.ImageUrl
+		}
 	}
 	return history
 }

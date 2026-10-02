@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"sync"
 	"time"
 
@@ -41,7 +42,7 @@ func (d *cloudRuntimeDispatcher) Resolve(_ string) agent.RuntimeInvokeHandler {
 		ctx := context.Background()
 		var cancel context.CancelFunc
 		if invoke.DeadlineMs > 0 {
-			ctx, cancel = context.WithTimeout(ctx, time.Duration(invoke.DeadlineMs)*time.Millisecond)
+			ctx, cancel = timeoutpolicy.WithTimeout(ctx, time.Duration(invoke.DeadlineMs)*time.Millisecond)
 		} else {
 			ctx, cancel = context.WithCancel(ctx)
 		}

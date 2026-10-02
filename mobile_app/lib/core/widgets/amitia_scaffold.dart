@@ -6,6 +6,7 @@ import '../../app/theme/app_spacing.dart';
 import '../../app/theme/app_radius.dart';
 import '../../app/theme/app_typography.dart';
 import '../../app/theme/design_tokens.dart';
+import 'application_background.dart';
 
 enum AmitiaAppBarNavigation { drawer, back, none }
 
@@ -99,7 +100,7 @@ class _AmitiaScaffoldState extends State<AmitiaScaffold> {
         floatingActionButton: widget.floatingActionButton,
         bottomNavigationBar: widget.bottomNavigationBar,
         drawer: widget.drawer,
-        backgroundColor: widget.backgroundColor ?? context.backgroundPrimary,
+        backgroundColor: widget.backgroundColor ?? (BackgroundSurfaceScope.isActive(context) ? Colors.transparent : context.backgroundPrimary),
         resizeToAvoidBottomInset: widget.resizeToAvoidBottomInset,
       ),
     );

@@ -1,14 +1,11 @@
 package imageintelligence
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/u-ai/backend/internal/vision"
 )
@@ -40,14 +37,12 @@ type ImageOCRResult struct {
 }
 
 type OCRProvider struct {
-	visionSvc  vision.Service
-	httpClient *http.Client
+	visionSvc vision.Service
 }
 
 func NewOCRProvider(visionSvc vision.Service) *OCRProvider {
 	return &OCRProvider{
-		visionSvc:  visionSvc,
-		httpClient: &http.Client{Timeout: 30 * time.Second},
+		visionSvc: visionSvc,
 	}
 }
 
@@ -56,7 +51,7 @@ func (p *OCRProvider) OCR(ctx context.Context, req ImageOCRRequest, imageData []
 	if err != nil || cfg == nil {
 		return nil, &Error{Code: ErrOCRUnavailable, Message: "no active OCR provider configured", HTTPStatus: http.StatusServiceUnavailable}
 	}
-	if cfg.ApiKey == "" {
+	if cfg.ApiKey == "" && !cfg.IsLocal() {
 		return nil, &Error{Code: ErrProviderAuth, Message: "OCR provider API key not configured", HTTPStatus: http.StatusUnauthorized}
 	}
 
@@ -70,12 +65,12 @@ func (p *OCRProvider) OCR(ctx context.Context, req ImageOCRRequest, imageData []
 
 	dataURI := buildDataURI(summary.MIME, imageData)
 
-	content := []map[string]interface{}{
-		{"type": "input_image", "image_url": dataURI},
-		{"type": "input_text", "text": prompt},
+	result, generateErr := vision.GenerateImages(ctx, cfg, []string{dataURI}, prompt, 0)
+	provErr := ""
+	if generateErr != nil {
+		provErr = generateErr.Error()
 	}
 
-	result, provErr := p.callProvider(ctx, cfg.BaseUrl, cfg.ApiKey, cfg.ModelName, content)
 	if provErr != "" {
 		return nil, &Error{Code: ErrOCRFailed, Message: provErr, Provider: cfg.ApiType, HTTPStatus: http.StatusBadGateway}
 	}
@@ -90,71 +85,6 @@ func (p *OCRProvider) OCR(ctx context.Context, req ImageOCRRequest, imageData []
 
 	result = sanitizeOCRResult(result)
 	return &ImageOCRResult{Text: result, Blocks: []OCRBlock{{Text: result, Confidence: nil}}, Provider: cfg.ApiType}, nil
-}
-
-func (p *OCRProvider) callProvider(ctx context.Context, baseURL, apiKey, modelName string, content []map[string]interface{}) (string, string) {
-	reqBody := map[string]interface{}{
-		"model": modelName,
-		"input": []map[string]interface{}{{
-			"role":    "user",
-			"content": content,
-		}},
-	}
-	bodyBytes, _ := json.Marshal(reqBody)
-
-	req, err := http.NewRequestWithContext(ctx, "POST", strings.TrimRight(baseURL, "/")+"/responses", bytes.NewReader(bodyBytes))
-	if err != nil {
-		return "", err.Error()
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+apiKey)
-
-	resp, err := p.httpClient.Do(req)
-	if err != nil {
-		return "", err.Error()
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != 200 {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		return "", fmt.Sprintf("provider returned %d: %s", resp.StatusCode, string(body))
-	}
-
-	rawBody, _ := io.ReadAll(io.LimitReader(resp.Body, 65536))
-	var result map[string]interface{}
-	if err := json.Unmarshal(rawBody, &result); err != nil {
-		return string(rawBody), ""
-	}
-
-	output, ok := result["output"].([]interface{})
-	if !ok {
-		return string(rawBody), ""
-	}
-
-	var texts []string
-	for _, item := range output {
-		m, ok := item.(map[string]interface{})
-		if !ok {
-			continue
-		}
-		if m["type"] == "message" {
-			contentArr, ok := m["content"].([]interface{})
-			if !ok {
-				continue
-			}
-			for _, c := range contentArr {
-				cm, ok := c.(map[string]interface{})
-				if !ok {
-					continue
-				}
-				if cm["type"] == "output_text" {
-					texts = append(texts, fmt.Sprint(cm["text"]))
-				}
-			}
-		}
-	}
-
-	return strings.Join(texts, ""), ""
 }
 
 func sanitizeOCRResult(text string) string {

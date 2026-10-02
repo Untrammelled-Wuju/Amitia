@@ -53,6 +53,9 @@
   --amitia-color-warning: var(--ac-color-warning);
   --amitia-color-danger: var(--ac-color-danger);
   --ac-color-primary: var(--tp-primary);
+  --ac-color-secondary: var(--tp-secondary, var(--tp-primary));
+  --ac-color-secondary-bg: var(--tp-secondary-soft, var(--tp-primary-soft));
+  --ac-color-text-on-secondary: var(--tp-text-on-secondary, var(--tp-text-on-primary));
   --ac-color-primary-light: var(--tp-primary-light-3);
   --ac-color-primary-dark: var(--tp-primary-active);
   --ac-color-primary-bg: var(--tp-primary-bg);

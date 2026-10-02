@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"io"
 	"net/http"
 	"sort"
@@ -60,7 +61,7 @@ func (a *OpenAIChatAdapter) Generate(ctx context.Context, cfg ProviderConfig, re
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Authorization", "Bearer "+cfg.APIKey)
 
-	client := &http.Client{Timeout: time.Duration(cfg.TimeoutSeconds) * time.Second}
+	client := timeoutpolicy.Client(&http.Client{Timeout: time.Duration(cfg.TimeoutSeconds) * time.Second})
 	resp, err := client.Do(httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("请求失败: %w", err)
@@ -107,7 +108,7 @@ func (a *OpenAIChatAdapter) Stream(ctx context.Context, cfg ProviderConfig, req 
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Authorization", "Bearer "+cfg.APIKey)
 
-	client := &http.Client{Timeout: time.Duration(cfg.TimeoutSeconds) * time.Second}
+	client := timeoutpolicy.Client(&http.Client{Timeout: time.Duration(cfg.TimeoutSeconds) * time.Second})
 	resp, err := client.Do(httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("请求失败: %w", err)

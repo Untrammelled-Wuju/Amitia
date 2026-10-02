@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"strings"
 	"sync"
 	"time"
@@ -1258,7 +1259,7 @@ func (e *WorkflowExecutor) Execute(ctx context.Context, req ExecuteRequest) (res
 	execCtx := ctx
 	var execCancel context.CancelFunc
 	if wf.Limits.MaxExecutionDurationMS > 0 {
-		execCtx, execCancel = context.WithTimeout(ctx, time.Duration(wf.Limits.MaxExecutionDurationMS)*time.Millisecond)
+		execCtx, execCancel = timeoutpolicy.WithTimeout(ctx, time.Duration(wf.Limits.MaxExecutionDurationMS)*time.Millisecond)
 		defer execCancel()
 	}
 
@@ -2384,7 +2385,7 @@ func (e *WorkflowExecutor) executeStep(ctx context.Context, handler StepHandler,
 			timeout = time.Duration(limits.MaxStepDurationMS) * time.Millisecond
 		}
 		if timeout > 0 {
-			stepCtx, cancel = context.WithTimeout(ctx, timeout)
+			stepCtx, cancel = timeoutpolicy.WithTimeout(ctx, timeout)
 		}
 
 		attemptStarted := time.Now().UTC()
@@ -2652,7 +2653,7 @@ func (e *WorkflowExecutor) ExecuteCompiled(ctx context.Context, req CompiledExec
 	var execCancel context.CancelFunc
 	limits := req.DAG.Limits
 	if limits.MaxExecutionDurationMS > 0 {
-		execCtx, execCancel = context.WithTimeout(ctx, time.Duration(limits.MaxExecutionDurationMS)*time.Millisecond)
+		execCtx, execCancel = timeoutpolicy.WithTimeout(ctx, time.Duration(limits.MaxExecutionDurationMS)*time.Millisecond)
 		if execCancel != nil {
 			defer execCancel()
 		}
@@ -3129,7 +3130,7 @@ func (e *WorkflowExecutor) executeStepCompiled(ctx context.Context, handler Step
 			timeout = time.Duration(limits.MaxStepDurationMS) * time.Millisecond
 		}
 		if timeout > 0 {
-			stepCtx, cancel = context.WithTimeout(ctx, timeout)
+			stepCtx, cancel = timeoutpolicy.WithTimeout(ctx, timeout)
 		}
 
 		attemptStarted := time.Now().UTC()

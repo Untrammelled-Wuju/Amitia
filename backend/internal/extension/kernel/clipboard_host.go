@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"strings"
 	"sync"
 	"time"
@@ -150,7 +151,7 @@ func (h *BridgeClipboardHost) WriteText(ctx context.Context, text string) error 
 	select {
 	case result := <-req.resultCh:
 		return result.err
-	case <-time.After(clipboardResponseTimeout):
+	case <-timeoutpolicy.After(clipboardResponseTimeout):
 		return ErrClipboardHostTimeout
 	case <-ctx.Done():
 		return ctx.Err()
@@ -172,7 +173,7 @@ func (h *BridgeClipboardHost) ReadText(ctx context.Context) (string, error) {
 	select {
 	case result := <-req.resultCh:
 		return result.text, result.err
-	case <-time.After(clipboardResponseTimeout):
+	case <-timeoutpolicy.After(clipboardResponseTimeout):
 		return "", ErrClipboardHostTimeout
 	case <-ctx.Done():
 		return "", ctx.Err()

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_motion.dart';
 import '../../app/theme/app_spacing.dart';
@@ -1325,6 +1326,7 @@ const List<String> _codeLanguages = [
 ];
 
 class AmitiaChatInput extends StatefulWidget {
+  final bool sendOnEnter;
   final ValueChanged<String> onSend;
   final FutureOr<void> Function()? onStop;
   final bool generating;
@@ -1367,6 +1369,7 @@ class AmitiaChatInput extends StatefulWidget {
   const AmitiaChatInput({
     super.key,
     required this.onSend,
+    this.sendOnEnter = false,
     this.onStop,
     this.generating = false,
     this.controller,
@@ -1430,6 +1433,18 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
       widget.reasoningEffort,
     ).toDouble();
     _controller.addListener(_syncControllerText);
+    _inputFocusNode.onKeyEvent = _handleComposerKey;
+  }
+
+  KeyEventResult _handleComposerKey(FocusNode node, KeyEvent event) {
+    if (!widget.sendOnEnter || (event.logicalKey != LogicalKeyboardKey.enter && event.logicalKey != LogicalKeyboardKey.numpadEnter) ||
+        HardwareKeyboard.instance.isShiftPressed || HardwareKeyboard.instance.isControlPressed ||
+        HardwareKeyboard.instance.isAltPressed || HardwareKeyboard.instance.isMetaPressed ||
+        !_controller.value.composing.isCollapsed) {
+      return KeyEventResult.ignored;
+    }
+    if (event is KeyDownEvent && !widget.generating) _send();
+    return KeyEventResult.handled;
   }
 
   @override
@@ -2145,7 +2160,11 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
                               maxLines: 2,
                               textAlignVertical: TextAlignVertical.center,
                               textCapitalization: TextCapitalization.sentences,
-                              onSubmitted: (_) => _send(),
+                              keyboardType: TextInputType.multiline,
+                              textInputAction: widget.sendOnEnter ? TextInputAction.send : TextInputAction.newline,
+                              onSubmitted: (_) {
+                                if (widget.sendOnEnter && !widget.generating && _controller.value.composing.isCollapsed) _send();
+                              },
                               style: AppTypography.bodySmall(
                                 context,
                               ).copyWith(fontSize: _composerTextSize),
@@ -2295,7 +2314,7 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
                                   child: Icon(
                                     Icons.arrow_upward_rounded,
                                     size: 18,
-                                    color: context.surfacePrimary,
+                                    color: Theme.of(context).colorScheme.onPrimary,
                                   ),
                                 ),
                               ),

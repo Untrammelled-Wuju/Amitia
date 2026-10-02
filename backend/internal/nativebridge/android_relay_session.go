@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"sync"
 	"time"
 )
@@ -65,6 +66,9 @@ func (s *productionRelaySession) SendRequest(ctx context.Context, req Request) (
 		}, fmt.Errorf("relay transport not available")
 	}
 
+	if settings, active := timeoutpolicy.Current(); active {
+		req.TimeoutPolicy = &settings
+	}
 	payload, err := json.Marshal(req)
 	if err != nil {
 		return Response{
@@ -121,7 +125,7 @@ func (s *productionRelaySession) SendRequest(ctx context.Context, req Request) (
 		}, err
 	}
 
-	sendCtx, cancel := context.WithTimeout(ctx, relaySendTimeout)
+	sendCtx, cancel := timeoutpolicy.WithTimeout(ctx, relaySendTimeout)
 	defer cancel()
 
 	select {

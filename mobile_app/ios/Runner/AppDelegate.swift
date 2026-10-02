@@ -34,6 +34,7 @@ import UIKit
     self.iosNativeHost?.registerHandler(FileNativeHandler())
     self.iosNativeHost?.registerHandler(IOSLocalNotificationNativeHandler())
     self.iosNativeHost?.registerHandler(IOSDeviceTimeNativeHandler())
+    self.iosNativeHost?.registerHandler(IOSScreenAwakeNativeHandler())
 
     if let host = self.iosNativeHost {
       self.nativeTransport = IOSNativeTransport(host: host, delegate: self)
@@ -68,7 +69,18 @@ import UIKit
   func transportDidBecomeUnready(_ transport: IOSNativeTransport) {
   }
 
+  override func applicationDidBecomeActive(_ application: UIApplication) {
+    super.applicationDidBecomeActive(application)
+    IOSScreenAwakeNativeHandler.apply(application, foreground: true)
+  }
+
+  override func applicationWillResignActive(_ application: UIApplication) {
+    IOSScreenAwakeNativeHandler.apply(application, foreground: false)
+    super.applicationWillResignActive(application)
+  }
+
   override func applicationDidEnterBackground(_ application: UIApplication) {
+    IOSScreenAwakeNativeHandler.apply(application, foreground: false)
     IOSSandboxBridge.shared().applicationDidEnterBackground()
     self.iosNativeHost?.didEnterBackground()
     super.applicationDidEnterBackground(application)

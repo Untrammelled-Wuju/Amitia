@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"time"
 )
 
@@ -109,10 +110,11 @@ func (a *TaskRuntimeAdapter) WaitForCompletion(ctx context.Context, taskRunID st
 		return TaskRunStatus{}, fmt.Errorf("task status function not configured")
 	}
 
-	deadline := time.Now().Add(timeout)
+	ctx, cancel := timeoutpolicy.WithTimeout(ctx, timeout)
+	defer cancel()
 	pollInterval := 500 * time.Millisecond
 
-	for time.Now().Before(deadline) {
+	for ctx.Err() == nil {
 		status, err := a.status(ctx, taskRunID)
 		if err != nil {
 			return TaskRunStatus{}, err

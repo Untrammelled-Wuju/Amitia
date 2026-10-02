@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"log"
 	"net/url"
 	"path"
@@ -198,7 +199,7 @@ func (s *service) materializeWebSearchImages(ctx context.Context, plan messageCo
 	if ownerSpaceID == "" {
 		return outputs
 	}
-	importCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
+	importCtx, cancel := timeoutpolicy.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
 	materialized := make([]MessageOutput, 0, len(outputs))
 	for _, output := range outputs {

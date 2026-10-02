@@ -3,19 +3,33 @@
 package vision
 
 type VisionConfig struct {
-	ID        int    `gorm:"column:id;primaryKey;autoIncrement" json:"id"`
-	Name      string `gorm:"column:name;not null" json:"name"`
-	ApiType   string `gorm:"column:api_type;default:volcengine" json:"apiType"`
-	ApiKey    string `gorm:"column:api_key" json:"apiKey"`
-	ModelName string `gorm:"column:model_name;default:doubao-seed-2-0-lite-260428" json:"modelName"`
-	BaseUrl   string `gorm:"column:base_url;default:https://ark.cn-beijing.volces.com/api/v3" json:"baseUrl"`
-	IsActive  int    `gorm:"column:is_active;default:0" json:"isActive"`
-	HasApiKey bool   `gorm:"-" json:"hasApiKey"`
-	CreatedAt string `gorm:"column:created_at" json:"createdAt"`
-	UpdatedAt string `gorm:"column:updated_at" json:"updatedAt"`
+	ID               int    `gorm:"column:id;primaryKey;autoIncrement" json:"id"`
+	Name             string `gorm:"column:name;not null" json:"name"`
+	ApiType          string `gorm:"column:api_type;default:volcengine" json:"apiType"`
+	ApiKey           string `gorm:"column:api_key" json:"apiKey"`
+	ModelName        string `gorm:"column:model_name;default:doubao-seed-2-0-lite-260428" json:"modelName"`
+	BaseUrl          string `gorm:"column:base_url;default:https://ark.cn-beijing.volces.com/api/v3" json:"baseUrl"`
+	IsActive         int    `gorm:"column:is_active;default:0" json:"isActive"`
+	HasApiKey        bool   `gorm:"-" json:"hasApiKey"`
+	Disabled         bool   `gorm:"-" json:"disabled"`
+	FromMainModel    bool   `gorm:"-" json:"fromMainModel"`
+	Protocol         string `gorm:"-" json:"protocol,omitempty"`
+	TimeoutSeconds   int    `gorm:"-" json:"-"`
+	MaxOutputTokens  int    `gorm:"-" json:"-"`
+	CapabilitiesJSON string `gorm:"-" json:"-"`
+	CreatedAt        string `gorm:"column:created_at" json:"createdAt"`
+	UpdatedAt        string `gorm:"column:updated_at" json:"updatedAt"`
 }
 
 func (VisionConfig) TableName() string { return "vision_configs" }
+
+func (cfg *VisionConfig) IsLocal() bool {
+	return cfg != nil && (cfg.ApiType == "mnn" || cfg.ApiType == "llama_cpp" || cfg.ApiType == "ollama")
+}
+
+func (cfg *VisionConfig) Ready() bool {
+	return cfg != nil && cfg.ModelName != "" && (cfg.ApiKey != "" || cfg.IsLocal()) && (cfg.BaseUrl != "" || cfg.ApiType == "mnn" || cfg.ApiType == "llama_cpp")
+}
 
 type ProviderInfo struct {
 	ID             string `json:"id"`

@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"io"
 	"math"
 	"net/http"
@@ -173,7 +174,7 @@ func downloadFileTo(ctx context.Context, uri string, dest io.Writer) error {
 	if err != nil {
 		return fmt.Errorf("create request: %w", err)
 	}
-	client := &http.Client{Timeout: 5 * time.Minute}
+	client := timeoutpolicy.Client(&http.Client{Timeout: 5 * time.Minute})
 	resp, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("execute request: %w", err)

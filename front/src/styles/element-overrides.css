@@ -5,10 +5,10 @@
   --el-button-text-color: var(--tp-text-on-primary);
   --el-button-bg-color: var(--tp-primary);
   --el-button-border-color: var(--tp-primary);
-  --el-button-hover-text-color: var(--tp-text-on-primary);
+  --el-button-hover-text-color: var(--tp-text-on-primary-hover, var(--tp-text-on-primary));
   --el-button-hover-bg-color: var(--tp-primary-hover);
   --el-button-hover-border-color: var(--tp-primary-hover);
-  --el-button-active-text-color: var(--tp-text-on-primary);
+  --el-button-active-text-color: var(--tp-text-on-primary-active, var(--tp-text-on-primary));
   --el-button-active-bg-color: var(--tp-primary-active);
   --el-button-active-border-color: var(--tp-primary-active);
 }
@@ -36,6 +36,12 @@
 .el-button.is-text,
 .el-button.is-link {
   color: var(--tp-primary);
+}
+
+html[data-custom-palette="true"] .el-button:not(.el-button--primary):not(.el-button--success):not(.el-button--warning):not(.el-button--danger):not(.is-text):not(.is-link) {
+  --el-button-hover-bg-color: var(--tp-secondary-soft);
+  --el-button-hover-border-color: var(--tp-secondary);
+  --el-button-active-border-color: var(--tp-secondary);
 }
 
 .el-button--text:hover,

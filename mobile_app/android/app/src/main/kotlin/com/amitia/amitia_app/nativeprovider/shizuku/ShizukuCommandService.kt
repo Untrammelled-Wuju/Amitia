@@ -166,7 +166,7 @@ class ShizukuCommandService : IPrivilegedCommandService.Stub() {
                 readBounded(process.errorStream, maxOutputBytes)
             })
 
-            val finished = process.waitFor(timeoutMs, TimeUnit.MILLISECONDS)
+            val finished = if (timeoutMs <= 0L) { process.waitFor(); true } else process.waitFor(timeoutMs, TimeUnit.MILLISECONDS)
 
             if (!finished) {
                 timedOut.set(true)

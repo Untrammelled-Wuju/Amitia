@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"io"
 	"net/http"
 	"os"
@@ -56,7 +57,7 @@ var (
 
 func NewDownloader(stagingDir string) *Downloader {
 	return &Downloader{
-		httpClient: &http.Client{
+		httpClient: timeoutpolicy.Client(&http.Client{
 			Timeout: defaultDownloadTimeout,
 			CheckRedirect: func(req *http.Request, via []*http.Request) error {
 				if len(via) >= 10 {
@@ -64,7 +65,7 @@ func NewDownloader(stagingDir string) *Downloader {
 				}
 				return nil
 			},
-		},
+		}),
 		stagingDir:  stagingDir,
 		maxFileSize: defaultMaxDownloadSize,
 		timeout:     defaultDownloadTimeout,
@@ -156,7 +157,7 @@ func (d *Downloader) Download(ctx context.Context, source DownloadSource) (*Down
 }
 
 func (d *Downloader) streamDownload(ctx context.Context, source DownloadSource, partPath string, existingSize int64) (int64, error) {
-	reqCtx, cancel := context.WithTimeout(ctx, d.timeout)
+	reqCtx, cancel := timeoutpolicy.WithTimeout(ctx, d.timeout)
 	defer cancel()
 
 	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, source.URL, nil)

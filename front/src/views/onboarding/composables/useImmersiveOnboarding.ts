@@ -501,28 +501,17 @@ const res = await post<any>("/api/model/detect-models", {
           apiKey: modelApiKey.value,
           modelName: modelName.value,
           isActive: 1,
+          supportsVision: visionMode.value === "inherit",
         });
       }
 
-      const inheritVision = visionMode.value === "inherit";
-      const hasVisionCreds = inheritVision
-        ? modelApiKey.value && modelBaseUrl.value
-        : visionModelKey.value && visionModelURL.value;
-      if (visionMode.value !== "disabled" && hasVisionCreds) {
+      if (visionMode.value === "dedicated" && visionModelKey.value && visionModelURL.value) {
         await post("/api/vision/configs", {
           name: "视觉模型",
-          baseUrl:
-            visionMode.value === "inherit"
-              ? modelBaseUrl.value
-              : visionModelURL.value,
-          apiKey:
-            visionMode.value === "inherit"
-              ? modelApiKey.value
-              : visionModelKey.value,
-          modelName:
-            visionMode.value === "inherit"
-              ? modelName.value
-              : visionModelName.value,
+          apiType: "volcengine",
+          baseUrl: visionModelURL.value,
+          apiKey: visionModelKey.value,
+          modelName: visionModelName.value,
           isActive: 1,
         });
       }

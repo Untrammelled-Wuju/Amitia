@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"io"
 	"net/http"
 	"strings"
@@ -154,7 +155,7 @@ func (s *service) TestConnection(id int) (map[string]interface{}, error) {
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+cfg.ApiKey)
 	start := time.Now()
-	resp, err := (&http.Client{Timeout: 30 * time.Second}).Do(req)
+	resp, err := (timeoutpolicy.Client(&http.Client{Timeout: 30 * time.Second})).Do(req)
 	latency := time.Since(start).Milliseconds()
 	if err != nil {
 		return map[string]interface{}{"success": false, "message": err.Error(), "latency": latency}, nil

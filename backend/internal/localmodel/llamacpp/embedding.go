@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"io"
 	"math"
 	"net/http"
@@ -478,7 +479,7 @@ func (r *llamaEmbeddingRuntime) embeddingRequest(ctx context.Context, inputs []s
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	client := &http.Client{Timeout: 120 * time.Second}
+	client := timeoutpolicy.Client(&http.Client{Timeout: 120 * time.Second})
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("embedding request failed: %w", err)

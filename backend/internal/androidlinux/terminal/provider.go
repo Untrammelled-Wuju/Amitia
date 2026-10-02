@@ -4,6 +4,7 @@ package terminal
 
 import (
 	"context"
+	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"os"
 	"path/filepath"
 	"time"
@@ -550,7 +551,7 @@ func (p *Provider) handleRead(ctx context.Context, req AndroidLinuxRequest) (map
 	var state SessionState
 
 	if waitMs > 0 {
-		waitCtx, cancel := context.WithTimeout(ctx, time.Duration(waitMs)*time.Millisecond)
+		waitCtx, cancel := timeoutpolicy.WithTimeout(ctx, time.Duration(waitMs)*time.Millisecond)
 		defer cancel()
 
 		resultCh := make(chan readResult, 1)

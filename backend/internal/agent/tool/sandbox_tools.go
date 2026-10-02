@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -148,6 +149,7 @@ func executeSandboxScriptDirect(callCtx context.Context, execCtx ToolExecutionCo
 		return ErrorResult("invalid_args", fmt.Sprintf("ERROR: script exceeds %d bytes", maxSandboxScriptBytes))
 	}
 	timeoutMS := boundedIntArg(args, "timeout_ms", 5000, 100, 30000)
+	timeoutMS = int(timeoutpolicy.Duration(time.Duration(timeoutMS) * time.Millisecond).Milliseconds())
 	input := args["input"]
 	inputJSON, err := json.Marshal(input)
 	if err != nil {
@@ -195,7 +197,7 @@ func executeSandboxScriptDirect(callCtx context.Context, execCtx ToolExecutionCo
 		return ErrorResult("sandbox_prepare_failed", "ERROR: "+err.Error())
 	}
 
-	runCtx, cancel := context.WithTimeout(callCtx, time.Duration(timeoutMS+1500)*time.Millisecond)
+	runCtx, cancel := timeoutpolicy.WithTimeout(callCtx, time.Duration(timeoutMS+1500)*time.Millisecond)
 	defer cancel()
 	cmd := exec.CommandContext(runCtx, node, "--max-old-space-size=64", "--disable-proto=throw", wrapperPath, userScript, inputPath, envPath)
 	cmd.Dir = tmpDir
@@ -334,7 +336,8 @@ ${source}
 JSON.stringify({result});`+"`"+`;
 const sandbox = Object.create(null);
 const context = vm.createContext(sandbox, {name:"amitia-direct-sandbox", codeGeneration:{strings:false, wasm:false}});
-let output = new vm.Script(bootstrap, {filename:"user.js"}).runInContext(context, {timeout:%d, breakOnSigint:true});
+const timeout = %d;
+let output = new vm.Script(bootstrap, {filename:"user.js"}).runInContext(context, { ...(timeout > 0 ? {timeout} : {}), breakOnSigint:true});
 if (typeof output !== "string") output = JSON.stringify({result:null});
 process.stdout.write(output);
 `, timeoutMS)

@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"sync"
 	"time"
 
@@ -19,11 +20,11 @@ type ProcessResult struct {
 }
 
 type Runner struct {
-	host     runtimehost.RuntimeHost
-	config   Config
-	mu       sync.Mutex
-	running  map[runtimehost.ProcessID]context.CancelFunc
-	sem      chan struct{}
+	host    runtimehost.RuntimeHost
+	config  Config
+	mu      sync.Mutex
+	running map[runtimehost.ProcessID]context.CancelFunc
+	sem     chan struct{}
 }
 
 func NewRunner(host runtimehost.RuntimeHost, config Config) *Runner {
@@ -59,7 +60,7 @@ func (r *Runner) RunProcessWithOptions(ctx context.Context, executable string, a
 	}
 
 	processID := generateProcessID("media.ffmpeg")
-	runCtx, cancel := context.WithTimeout(ctx, r.config.MaxProcessDuration)
+	runCtx, cancel := timeoutpolicy.WithTimeout(ctx, r.config.MaxProcessDuration)
 	defer cancel()
 
 	r.trackProcess(processID, cancel)

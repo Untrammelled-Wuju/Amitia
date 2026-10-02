@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"sort"
 	"strings"
 	"sync"
@@ -143,7 +144,7 @@ func (s *Service) Search(ctx context.Context, req GeneralSearchRequest, invocati
 	}
 	defer releaseCred()
 	start := time.Now()
-	searchCtx, cancel := context.WithTimeout(ctx, s.config.EffectiveTimeout())
+	searchCtx, cancel := timeoutpolicy.WithTimeout(ctx, s.config.EffectiveTimeout())
 	defer cancel()
 	raw, perr := provider.Search(searchCtx, SearchRequest{
 		Query:      req.Query,
@@ -225,7 +226,7 @@ func (s *Service) SearchAdvancedWithProvider(ctx context.Context, req SearchRequ
 		}
 	}
 	start := time.Now()
-	searchCtx, cancel := context.WithTimeout(ctx, s.config.EffectiveTimeout())
+	searchCtx, cancel := timeoutpolicy.WithTimeout(ctx, s.config.EffectiveTimeout())
 	defer cancel()
 	raw, perr := provider.Search(searchCtx, req)
 	if perr != nil {

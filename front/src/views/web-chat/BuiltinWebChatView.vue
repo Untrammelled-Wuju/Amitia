@@ -13,6 +13,7 @@ SPDX-License-Identifier: AGPL-3.0-only
   />
   <div v-else class="webchat-page">
     <section class="chat-surface">
+    <AutomationStatusIndicator :status="automationStatus" />
 <ChatBanners
       :model-missing="modelMissing"
       :is-offline="isOffline"
@@ -199,6 +200,7 @@ import { useApi } from "../../composables/useApi";
 import { useCachedApi } from "../../composables/useCachedApi";
 import { useChatStore } from "@/stores/chat";
 import { useConversationRuntime } from "../../composables/useConversationRuntime";
+import AutomationStatusIndicator from "../../components/AutomationStatusIndicator.vue";
 import { useWebChatScroll } from "../../composables/useWebChatScroll";
 import { useWebChatSend } from "../../composables/useWebChatSend";
 import { useWebChatConversation } from "../../composables/useWebChatConversation";
@@ -651,6 +653,7 @@ const {
 const {
   messages,
   activeTurnId,
+  automationStatus,
   loadSnapshot: reloadConversationSnapshot,
   loadOlderTurns: loadOlderConversationTurns,
   connect: connectSSE,
@@ -1018,7 +1021,7 @@ onUnmounted(() => {
   font-size: 13px;
   line-height: 1.7;
 }
-.chat-surface { display: flex; flex-direction: column; width: min(100%, 1440px); height: 100%; min-height: 0; margin: 0 auto; overflow: hidden; border-radius: var(--radius-lg); background: var(--chat-surface-bg); }
+.chat-surface { position: relative; display: flex; flex-direction: column; width: min(100%, 1440px); height: 100%; min-height: 0; margin: 0 auto; overflow: hidden; border-radius: var(--radius-lg); background: var(--chat-surface-bg); }
 .chat-header-region { order: 1; flex: 0 0 auto; }
 .chat-status-region { order: 2; display: flex; flex-direction: column; gap: 6px; padding: 0 14px; }
 .composer-region { order: 4; flex: 0 0 auto; }

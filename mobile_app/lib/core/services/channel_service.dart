@@ -350,6 +350,11 @@ class VisionService {
 
   VisionService(this._api);
 
+  Future<bool> mainModelVision() async {
+    final status = await _api.get<Map<String, dynamic>>('/api/vision/status');
+    return status?['mainModelVision'] == true;
+  }
+
   Future<List<Map<String, dynamic>>> configs() async {
     final resp = await _api.get<List<dynamic>>('/api/vision/configs');
     if (resp == null) return [];

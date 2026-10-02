@@ -96,7 +96,7 @@ internal class RootNativeHandler(
 
         val args = (payload["args"] as? List<*>)?.mapNotNull { it as? String } ?: emptyList()
         val workDir = payload["workDir"] as? String
-        val timeoutMs = (payload["timeoutMs"] as? Number)?.toLong() ?: 30000L
+        val timeoutMs = request.executionTimeoutMillis((payload["timeoutMs"] as? Number)?.toLong() ?: 30000L)
 
         val state = detectRootState()
         if (!state.suAvailable) {
@@ -129,7 +129,7 @@ internal class RootNativeHandler(
             val stderrBuilder = StringBuilder()
             val maxOutputBytes = 1024 * 1024
 
-            val completed = process.waitFor(timeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS)
+            val completed = if (timeoutMs <= 0L) { process.waitFor(); true } else process.waitFor(timeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS)
             if (!completed) {
                 process.destroyForcibly()
                 stdoutReader.close()

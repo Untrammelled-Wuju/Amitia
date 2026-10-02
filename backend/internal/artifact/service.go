@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"io"
 	"log"
 	"net"
@@ -172,7 +173,7 @@ func (s *Service) ImportURL(ctx context.Context, req ImportURLRequest) (Artifact
 	if maxBytes <= 0 {
 		maxBytes = 32 * 1024 * 1024
 	}
-	client := &http.Client{
+	client := timeoutpolicy.Client(&http.Client{
 		Timeout: 20 * time.Second,
 		Transport: &http.Transport{
 			Proxy:               nil,
@@ -180,7 +181,7 @@ func (s *Service) ImportURL(ctx context.Context, req ImportURLRequest) (Artifact
 			DialContext:         safeArtifactDialContext,
 			TLSHandshakeTimeout: 10 * time.Second,
 		},
-	}
+	})
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 	if err != nil {
 		return Artifact{}, ErrInvalidUpload(err.Error())

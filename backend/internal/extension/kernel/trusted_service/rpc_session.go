@@ -1,10 +1,12 @@
 package trusted_service
 
 import (
+	"context"
 	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"io"
 	"sync"
 	"time"
@@ -197,7 +199,19 @@ func (s *RPCSession) handleMessage(msg *rpcMessage) {
 	}
 }
 
-func (s *RPCSession) sendRequest(method string, params any, timeout time.Duration) (*rpcMessage, error) {
+func (s *RPCSession) sendRequest(method string, params any, timeout time.Duration, parents ...context.Context) (*rpcMessage, error) {
+	parent := context.Background()
+	if len(parents) > 0 {
+		parent = parents[0]
+	}
+	var ctx context.Context
+	var cancel context.CancelFunc
+	if method == "service.invoke" {
+		ctx, cancel = timeoutpolicy.WithTimeout(parent, timeout)
+	} else {
+		ctx, cancel = context.WithTimeout(parent, timeout)
+	}
+	defer cancel()
 	id := s.nextRequestID()
 	paramBytes, err := json.Marshal(params)
 	if err != nil {
@@ -233,7 +247,7 @@ func (s *RPCSession) sendRequest(method string, params any, timeout time.Duratio
 		return resp, nil
 	case <-s.stopCh:
 		return nil, errors.New("rpc: session stopped")
-	case <-time.After(timeout):
+	case <-ctx.Done():
 		return nil, fmt.Errorf("rpc: %s timeout after %s", method, timeout)
 	}
 }
@@ -425,10 +439,14 @@ func (s *RPCSession) Health(timeout time.Duration) (*HealthResult, error) {
 }
 
 func (s *RPCSession) Invoke(operation string, input json.RawMessage, timeout time.Duration) (*InvokeResult, error) {
+	return s.InvokeContext(context.Background(), operation, input, timeout)
+}
+
+func (s *RPCSession) InvokeContext(ctx context.Context, operation string, input json.RawMessage, timeout time.Duration) (*InvokeResult, error) {
 	resp, err := s.sendRequest("service.invoke", InvokeRequest{
 		Operation: operation,
 		Input:     input,
-	}, timeout)
+	}, timeout, ctx)
 	if err != nil {
 		return nil, err
 	}

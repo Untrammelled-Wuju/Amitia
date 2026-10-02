@@ -86,6 +86,7 @@ export interface RealtimeCallWindowRequest {
 }
 
 export interface AmitiaDesktopAPI {
+  showReplyNotification?(options?: { notify: boolean; sound: boolean }): Promise<boolean>;
   getEnvironment(): Promise<DesktopEnvironment>;
   getDeploymentConfig(): Promise<DeploymentModeConfig>;
   saveDeploymentConfig(

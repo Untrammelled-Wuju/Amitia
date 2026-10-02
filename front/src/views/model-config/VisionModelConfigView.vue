@@ -4,6 +4,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 -->
 <template>
   <div>
+    <el-alert v-if="visionSuspended" title="主模型已接管视觉识别，独立视觉配置暂停使用" type="info" :closable="false" show-icon style="margin-bottom: 14px" />
     <el-alert
       type="info"
       :closable="false"
@@ -81,6 +82,7 @@ const modelConfig = useModelConfig({
 });
 
 const {
+  visionSuspended,
   configs,
   providers,
   currentProviderSchema,

@@ -7,7 +7,6 @@ import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_radius.dart';
 import '../../../../app/app_routes.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
-import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/widgets/amitia_drawer.dart';
 import '../../../../core/services/providers.dart';
@@ -72,6 +71,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
   int _selectedAvatarColor = 0;
   final List<bool> _selectedTraits = List.filled(8, false);
   bool _submitting = false;
+  bool _textSupportsVision = false;
   bool _devicePaired = false;
   bool _firstDeviceSetupRequired = false;
   String? _textConfigId;
@@ -330,6 +330,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
     }
     final payload = <String, dynamic>{
       'name': '默认文本模型',
+      'supportsVision': _textSupportsVision,
       'apiType': _apiTypeFor(provider),
       'baseUrl': baseUrl,
       'apiKey': key,
@@ -346,6 +347,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
   }
 
   Future<void> _persistVisionModel() async {
+    if (_textSupportsVision) return;
     final provider = _visionProviderCtrl.text.trim();
     final model = _visionModelCtrl.text.trim();
     final key = _visionKeyCtrl.text.trim();
@@ -516,7 +518,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
       case 5:
         return _textKeyCtrl.text.isNotEmpty;
       case 6:
-        return _visionKeyCtrl.text.isNotEmpty;
+        return _textSupportsVision || _visionKeyCtrl.text.isNotEmpty;
       case 7:
         return _voiceKeyCtrl.text.isNotEmpty;
       case 8:
@@ -644,15 +646,20 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
       case 4:
         return _buildBoundary();
       case 5:
-        return _buildModelConfig(
-          '文本模型',
-          '用于对话生成和文本理解',
-          _textProviderCtrl,
-          _textModelCtrl,
-          _textKeyCtrl,
-          Icons.text_fields,
-        );
+        return Column(children: <Widget>[
+          _buildModelConfig(
+            '文本模型',
+            '用于对话生成和文本理解',
+            _textProviderCtrl,
+            _textModelCtrl,
+            _textKeyCtrl,
+            Icons.text_fields,
+          ),
+          AmitiaSwitchTile(title: '支持识图', value: _textSupportsVision, onChanged: (value) => setState(() => _textSupportsVision = value)),
+          Text('开启后由默认文本模型承担视觉识别，独立视觉模型暂停使用。', style: AppTypography.caption(context)),
+        ]);
       case 6:
+        if (_textSupportsVision) return AmitiaCard(child: Text('主模型已开启视觉模式，图片识别由默认文本模型承担。如需单独启用视觉模型，请返回文本模型步骤关闭支持识图。', style: AppTypography.body(context)));
         return _buildModelConfig(
           '视觉模型',
           '用于图片识别和理解',
@@ -1530,7 +1537,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
       ('个人空间', _profileNameController.text.trim().isNotEmpty ? _profileNameController.text.trim() : '未设置'),
       if (_deployMode == 1) ('设备配对', _devicePaired ? '已完成' : '待完成'),
       ('文本模型', '${_textProviderCtrl.text} / ${_textModelCtrl.text}'),
-      ('视觉模型', '${_visionProviderCtrl.text} / ${_visionModelCtrl.text}'),
+      ('视觉模型', _textSupportsVision ? '使用默认文本模型识图' : '${_visionProviderCtrl.text} / ${_visionModelCtrl.text}'),
       ('语音模型', '${_voiceProviderCtrl.text} / ${_voiceModelCtrl.text}'),
       ('向量模型', '${_vectorProviderCtrl.text} / ${_vectorModelCtrl.text}'),
       ('角色名称', _charNameCtrl.text.isNotEmpty ? _charNameCtrl.text : '未设置'),

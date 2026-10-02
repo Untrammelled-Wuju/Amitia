@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"time"
 
 	"github.com/u-ai/backend/internal/devicemesh/server"
@@ -77,6 +78,7 @@ func (p *MeshDeviceRuntimeInvocationPort) Execute(ctx context.Context, request D
 	if deadline <= 0 {
 		deadline = 30 * time.Second
 	}
+	deadline = timeoutpolicy.Duration(deadline)
 
 	invokePayload := protocol.RuntimeInvokePayload{
 		InvocationID:         request.Invocation.InvocationID,

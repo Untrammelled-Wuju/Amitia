@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"strconv"
 	"strings"
 	"sync"
@@ -483,7 +484,7 @@ func (s *cascadeCall) maybeSummarizeContext() {
 			s.summaryActive = false
 			s.summaryMu.Unlock()
 		}()
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		ctx, cancel := timeoutpolicy.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		summary, err := s.summarizer(ctx, existingSummary, candidateRaw)
 		if err != nil {
@@ -793,7 +794,7 @@ func (s *cascadeCall) speakBackchannel(text string) {
 	gen := s.generation.Add(1)
 	s.writeEvent(map[string]any{"event": "backchannel", "text": text, "generationId": strconv.FormatUint(gen, 10)})
 	go func() {
-		ctx, cancel := context.WithTimeout(s.callCtx, 8*time.Second)
+		ctx, cancel := timeoutpolicy.WithTimeout(s.callCtx, 8*time.Second)
 		defer cancel()
 		var speaking atomic.Bool
 		session, err := newCascadeTTSSession(ctx, s.ttsCfg, s.voiceID, s.language, cascadeMapTTSInstruction(s.params.Instruction, cascadeVoiceExpressionPlanFromInstruction("非常短促自然的倾听回应，不要像正式回答，不要抢话")), s.params.CallID, func(pcm []byte) {

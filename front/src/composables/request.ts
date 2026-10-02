@@ -6,6 +6,7 @@ import axios, {
   type AxiosError,
 } from "axios";
 import { ElMessage, ElMessageBox } from "element-plus";
+import { operationRequestTimeout, readOperationTimeoutHeaders } from "@/runtime/operation-timeout";
 import { ERR, type ApiResponse } from "@/types";
 import {
   getRuntimeConnection,
@@ -200,6 +201,7 @@ request.interceptors.request.use(async (config) => {
     (isDeviceLocalApiPath(requestPath) || gamePackageLocal);
 
   config.baseURL = deviceLocal ? LOCAL_DEVICE_RUNTIME_BASE_URL : runtime.apiBaseURL;
+  config.timeout = operationRequestTimeout(config.baseURL || "");
   delete (config.headers as any)["X-Amitia-Management-Target"];
   (config.headers as any)?.delete?.("X-Amitia-Management-Target");
   (config as any).__amitiaDeviceLocal = deviceLocal;
@@ -229,6 +231,7 @@ request.interceptors.request.use(async (config) => {
 
 request.interceptors.response.use(
   (response: AxiosResponse) => {
+    readOperationTimeoutHeaders(response.config.baseURL || "", response.headers);
     const body = response.data as ApiResponse;
     if (body && typeof body.code === "number") {
       if (body.code === 200) {

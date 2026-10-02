@@ -6,27 +6,28 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"os/exec"
 	"syscall"
 	"time"
 )
 
 type ProcessConfig struct {
-	Argv        []string
-	WorkingDir  string
-	Env         []string
-	Stdin       []byte
-	TimeoutMs   int64
-	Setpgid     bool
+	Argv       []string
+	WorkingDir string
+	Env        []string
+	Stdin      []byte
+	TimeoutMs  int64
+	Setpgid    bool
 }
 
 type ProcessResult struct {
-	ExitCode    int
-	Stdout      []byte
-	Stderr      []byte
-	DurationMs  int64
-	TimedOut    bool
-	Signal      string
+	ExitCode   int
+	Stdout     []byte
+	Stderr     []byte
+	DurationMs int64
+	TimedOut   bool
+	Signal     string
 }
 
 type ProcessManager struct {
@@ -45,7 +46,7 @@ func (pm *ProcessManager) Start(ctx context.Context, cfg ProcessConfig) (*exec.C
 		timeout = int64(DefaultShellPolicy().DefaultTimeout / time.Millisecond)
 	}
 
-	execCtx, cancel := context.WithTimeout(ctx, time.Duration(timeout)*time.Millisecond)
+	execCtx, cancel := timeoutpolicy.WithTimeout(ctx, time.Duration(timeout)*time.Millisecond)
 
 	cmd := exec.CommandContext(execCtx, cfg.Argv[0], cfg.Argv[1:]...)
 	cmd.Dir = cfg.WorkingDir
@@ -78,11 +79,11 @@ func (pm *ProcessManager) Start(ctx context.Context, cfg ProcessConfig) (*exec.C
 	}
 
 	state := &processState{
-		cmd:      cmd,
-		cancel:   cancel,
-		doneCh:   make(chan struct{}),
-		pgid:     getProcessGroup(cmd),
-		hasPgid:  cfg.Setpgid,
+		cmd:     cmd,
+		cancel:  cancel,
+		doneCh:  make(chan struct{}),
+		pgid:    getProcessGroup(cmd),
+		hasPgid: cfg.Setpgid,
 	}
 
 	go func() {
@@ -126,11 +127,11 @@ func (pm *ProcessManager) KillProcessTree(state *processState) error {
 }
 
 type processState struct {
-	cmd      *exec.Cmd
-	cancel   context.CancelFunc
-	doneCh   chan struct{}
-	pgid     int
-	hasPgid  bool
+	cmd     *exec.Cmd
+	cancel  context.CancelFunc
+	doneCh  chan struct{}
+	pgid    int
+	hasPgid bool
 }
 
 func getProcessGroup(cmd *exec.Cmd) int {

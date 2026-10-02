@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"log"
 	"os"
 	"path/filepath"
@@ -231,6 +232,11 @@ func (s *TaskRuntimeService) Enqueue(ctx context.Context, req EnqueueTaskRequest
 	if def.TimeoutPolicy.DefaultTimeout > 0 {
 		deadline = now.Add(def.TimeoutPolicy.DefaultTimeout)
 	}
+	var deadlineAt *time.Time
+	if duration := timeoutpolicy.Duration(deadline.Sub(now)); duration > 0 {
+		deadline = now.Add(duration)
+		deadlineAt = &deadline
+	}
 
 	maxAttempts := def.RetryPolicy.MaxAttempts
 	if maxAttempts <= 0 {
@@ -259,7 +265,7 @@ func (s *TaskRuntimeService) Enqueue(ctx context.Context, req EnqueueTaskRequest
 		MaxAttempts:          maxAttempts,
 		CreatedAt:            now,
 		QueuedAt:             &now,
-		DeadlineAt:           &deadline,
+		DeadlineAt:           deadlineAt,
 		Generation:           1,
 		Revision:             1,
 	}

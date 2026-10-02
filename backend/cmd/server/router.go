@@ -57,6 +57,7 @@ import (
 	"github.com/u-ai/backend/internal/mcpapi"
 	"github.com/u-ai/backend/internal/memory"
 	"github.com/u-ai/backend/internal/middleware"
+	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"github.com/u-ai/backend/internal/middleware/security"
 	"github.com/u-ai/backend/internal/mood"
 	"github.com/u-ai/backend/internal/nativebridge"
@@ -129,6 +130,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 	}
 	r := gin.Default()
 	r.Use(middleware.TraceMiddleware())
+	r.Use(timeoutpolicy.Headers())
 	r.Use(security.CorsMiddleware(security.CorsConfig{
 		AllowedOrigins: config.AppCfg.Security.AllowedOrigins,
 	}))

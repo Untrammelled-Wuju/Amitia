@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"sync"
 	"time"
 
@@ -244,7 +245,7 @@ func (w *WASMManagedRuntime) Invoke(ctx context.Context, request runtime_supervi
 	invCtx := ctx
 	if !request.Deadline.IsZero() {
 		var cancel context.CancelFunc
-		invCtx, cancel = context.WithDeadline(ctx, request.Deadline)
+		invCtx, cancel = timeoutpolicy.WithTimeout(ctx, time.Until(request.Deadline))
 		defer cancel()
 	}
 

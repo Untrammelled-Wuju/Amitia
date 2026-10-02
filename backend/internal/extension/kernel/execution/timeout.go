@@ -3,6 +3,7 @@ package execution
 import (
 	"context"
 	"errors"
+	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"time"
 
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
@@ -20,6 +21,7 @@ const (
 var ErrToolDeadlineExceeded = errors.New("tool invocation deadline exceeded")
 
 type TimeoutBudget struct {
+	Unlimited         bool
 	AcceptedAt        time.Time
 	Deadline          time.Time
 	Source            TimeoutSource
@@ -27,10 +29,16 @@ type TimeoutBudget struct {
 }
 
 func (b TimeoutBudget) Remaining(now time.Time) time.Duration {
+	if b.Unlimited {
+		return time.Duration(1<<63 - 1)
+	}
 	return b.Deadline.Sub(now)
 }
 
 func (b TimeoutBudget) Expired(now time.Time) bool {
+	if b.Unlimited {
+		return false
+	}
 	return !now.Before(b.Deadline)
 }
 
@@ -92,6 +100,20 @@ func (c *TimeoutController) ResolveBudget(ctx context.Context, acceptedAt time.T
 	}
 
 	var candidates []candidate
+	if settings, active := timeoutpolicy.Current(); active {
+		budget := TimeoutBudget{AcceptedAt: acceptedAt, Source: TimeoutSourceKernelDefault, Unlimited: settings.Disabled}
+		if !settings.Disabled {
+			budget.ConfiguredTimeout = time.Duration(settings.Seconds) * time.Second
+			budget.Deadline = acceptedAt.Add(budget.ConfiguredTimeout)
+		}
+		if deadline, ok := ctx.Deadline(); ok && (budget.Unlimited || deadline.Before(budget.Deadline)) {
+			budget.Unlimited = false
+			budget.Deadline = deadline
+			budget.Source = TimeoutSourceCaller
+			budget.ConfiguredTimeout = deadline.Sub(acceptedAt)
+		}
+		return budget, nil
+	}
 
 	if dl, ok := ctx.Deadline(); ok {
 		candidates = append(candidates, candidate{deadline: dl, source: TimeoutSourceCaller})
@@ -148,6 +170,10 @@ func (c *TimeoutController) WithTimeout(ctx context.Context, tool capability.Too
 }
 
 func (c *TimeoutController) Wrap(ctx context.Context, budget TimeoutBudget) (context.Context, context.CancelFunc, error) {
+	if budget.Unlimited {
+		wrapped, cancel := context.WithCancel(ctx)
+		return wrapped, cancel, nil
+	}
 	if budget.Deadline.IsZero() {
 		return ctx, func() {}, errors.New("cannot wrap timeout context without deadline")
 	}

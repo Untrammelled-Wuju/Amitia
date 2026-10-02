@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"math"
 	"sort"
 	"strconv"
@@ -223,7 +224,7 @@ func (n *SSEUIHostNotifier) Dialog(ctx context.Context, extensionID string, dial
 		return result, nil
 	case err := <-pd.errCh:
 		return "", err
-	case <-time.After(dialogResponseTimeout):
+	case <-timeoutpolicy.After(dialogResponseTimeout):
 		return "", fmt.Errorf("dialog %s timed out waiting for host response", dialogID)
 	case <-ctx.Done():
 		return "", ctx.Err()
@@ -613,7 +614,7 @@ func (n *SSEUIHostNotifier) requestClientRuntimeApproval(ctx context.Context, sp
 		}
 	case err := <-pd.errCh:
 		return "", err
-	case <-time.After(dialogResponseTimeout):
+	case <-timeoutpolicy.After(dialogResponseTimeout):
 		return "", fmt.Errorf("dynamic client package approval timed out")
 	case <-ctx.Done():
 		return "", ctx.Err()
@@ -740,8 +741,8 @@ func (n *SSEUIHostNotifier) ExecuteClientRuntimeCommand(ctx context.Context, act
 
 	hostResults := make([]map[string]interface{}, 0, len(targets))
 	acknowledged := make(map[string]struct{}, len(targets))
-	timer := time.NewTimer(clientRuntimeCommandTimeout)
-	defer timer.Stop()
+	commandCtx, cancel := timeoutpolicy.WithTimeout(ctx, clientRuntimeCommandTimeout)
+	defer cancel()
 collect:
 	for len(acknowledged) < len(targets) {
 		select {
@@ -758,7 +759,7 @@ collect:
 				entry["error"] = response.Error
 			}
 			hostResults = append(hostResults, entry)
-		case <-timer.C:
+		case <-commandCtx.Done():
 			break collect
 		case <-ctx.Done():
 			return nil, ctx.Err()

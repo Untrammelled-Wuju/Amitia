@@ -1,4 +1,5 @@
 export const IPC_CHANNELS = {
+  showReplyNotification: "amitia:notification:reply-completed",
   getEnvironment: "amitia:environment:get",
   getDeploymentConfig: "amitia:deployment:get",
   saveDeploymentConfig: "amitia:deployment:save",

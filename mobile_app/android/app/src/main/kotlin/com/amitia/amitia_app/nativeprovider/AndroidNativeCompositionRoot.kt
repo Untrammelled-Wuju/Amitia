@@ -8,8 +8,10 @@ import com.amitia.amitia_app.nativeprovider.camera.CameraNativeHandler
 import com.amitia.amitia_app.nativeprovider.clipboard.ClipboardNativeHandler
 import com.amitia.amitia_app.nativeprovider.clipboard.ClipboardNativeHandlerAdapter
 import com.amitia.amitia_app.nativeprovider.display.DisplayNativeHandler
+import com.amitia.amitia_app.nativeprovider.display.ScreenAwakeNativeHandler
 import com.amitia.amitia_app.nativeprovider.desktoppet.DesktopPetRendererNativeHandler
 import com.amitia.amitia_app.nativeprovider.devicecontrol.DeviceAutomationNativeHandler
+import com.amitia.amitia_app.nativeprovider.devicecontrol.BackgroundKeepAliveNativeHandler
 import com.amitia.amitia_app.nativeprovider.externalautomation.ExternalAutomationNativeHandler
 import com.amitia.amitia_app.nativeprovider.interaction.InteractionNativeHandler
 import com.amitia.amitia_app.nativeprovider.notification.NotificationNativeHandler
@@ -63,12 +65,14 @@ internal object AndroidNativeCompositionRoot {
             UITreeNativeHandler(context),
             InteractionNativeHandler(context),
             DisplayNativeHandler(context),
+            ScreenAwakeNativeHandler(context),
             VirtualDisplayNativeHandler(context),
             CameraNativeHandler(context),
             OverlayNativeHandler(context),
             DesktopPetRendererNativeHandler(context),
             ExternalAutomationNativeHandler(context),
             DeviceAutomationNativeHandler(context),
+            BackgroundKeepAliveNativeHandler(context),
             WorkspaceSafNativeHandler(context),
         )
     }

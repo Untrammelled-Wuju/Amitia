@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -225,7 +226,7 @@ func (d *InvocationDispatcher) Dispatch(ctx context.Context, handlerType Handler
 			Error:        cancelSignal.Reason(),
 			Duration:     time.Since(invocation.StartedAt),
 		}
-	case <-time.After(timeout):
+	case <-timeoutpolicy.After(timeout):
 		now := time.Now().UTC()
 		invocation.FinishedAt = &now
 		invocation.Status = InvocationStatusTimedOut

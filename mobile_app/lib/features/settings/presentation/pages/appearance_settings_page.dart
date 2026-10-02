@@ -8,6 +8,8 @@ import '../../../../app/theme/app_radius.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/settings/appearance_preferences.dart';
+import '../widgets/custom_theme_settings.dart';
+import '../widgets/background_settings.dart';
 
 class AppearanceSettingsPage extends ConsumerStatefulWidget {
   const AppearanceSettingsPage({super.key});
@@ -93,6 +95,16 @@ class _AppearanceSettingsPageState extends ConsumerState<AppearanceSettingsPage>
                 ],
               ],
             ),
+          ),
+          SizedBox(height: AppSpacing.sectionGap),
+          Padding(
+            padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+            child: const CustomThemeSettings(),
+          ),
+          SizedBox(height: AppSpacing.sectionGap),
+          Padding(
+            padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+            child: const BackgroundSettings(),
           ),
           SizedBox(height: AppSpacing.sectionGap),
           const _SectionLabel(text: '圆角风格'),

@@ -1,5 +1,5 @@
 <template>
-  <SecondaryWorkspace :title="title" :return-to="returnTo">
+  <SecondaryWorkspace :title="title" :return-to="returnTo" :class="{ 'settings-refined': refinedAppearance }">
     <template #navigation>
       <div class="settings-compact-navigation">
         <label for="settings-section">设置分类</label>
@@ -35,6 +35,9 @@ defineProps<{ returnTo: string; title: string }>();
 const route = useRoute();
 const router = useRouter();
 const currentEntry = computed(() => resolveSettingsEntry(route.path));
+const refinedAppearance = computed(() => ![
+  "/settings/about", "/settings/system-logs", "/settings/prompt-trace",
+].some(path => route.path === path || route.path.startsWith(`${path}/`)));
 
 function navigateToSetting(event: Event) {
   const path = (event.target as HTMLSelectElement).value;
@@ -52,6 +55,24 @@ function navigateToSetting(event: Event) {
 .settings-navigation-item:hover { background: var(--control-hover-bg); color: var(--text-primary); }
 .settings-navigation-item:focus-visible, select:focus-visible { outline: 2px solid var(--ac-color-primary); outline-offset: -2px; }
 .settings-compact-navigation { display: none; }
+@media (min-width: 768px) {
+  .settings-refined :deep(.secondary-main) { background: transparent; }
+  .settings-refined :deep(.secondary-sidebar) { background: var(--workbench-bg); }
+  .settings-refined :deep(.el-card) {
+    background: transparent;
+    border: 0;
+    border-bottom: 1px solid var(--surface-border);
+    border-radius: 0;
+    box-shadow: none;
+    margin-bottom: 24px;
+  }
+  .settings-refined :deep(.el-card__header) {
+    padding: 8px 0 12px;
+    border-bottom: 0;
+    font-weight: 600;
+  }
+  .settings-refined :deep(.el-card__body) { padding: 8px 0 24px; }
+}
 @media (max-width: 767px) {
   .settings-navigation { display: none; }
   .settings-compact-navigation { display: flex; align-items: center; gap: 12px; padding: 0 16px 12px; }

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/google/uuid"
+	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"io"
 	"net/http"
 	"time"
@@ -59,7 +60,7 @@ func CloneVoice(apiKey string, appKey string, accessKey string, audioData []byte
 	}
 	req.Header.Set("X-Api-Request-Id", uuid.New().String())
 
-	client := &http.Client{Timeout: 120 * time.Second}
+	client := timeoutpolicy.Client(&http.Client{Timeout: 120 * time.Second})
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("音色复刻请求失败: %w", err)
@@ -103,7 +104,7 @@ func DeleteClonedVoice(apiKey string, appKey string, accessKey string, speakerID
 	}
 	req.Header.Set("X-Api-Request-Id", uuid.New().String())
 
-	client := &http.Client{Timeout: 30 * time.Second}
+	client := timeoutpolicy.Client(&http.Client{Timeout: 30 * time.Second})
 	resp, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("删除请求失败: %w", err)
@@ -157,7 +158,7 @@ func CloneVoiceV1(accessToken string, appId string, speakerId string, audioData 
 	req.Header.Set("Authorization", "Bearer;"+accessToken)
 	req.Header.Set("Resource-Id", "seed-icl-2.0")
 
-	client := &http.Client{Timeout: 60 * time.Second}
+	client := timeoutpolicy.Client(&http.Client{Timeout: 60 * time.Second})
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("V1 复刻请求失败: %w", err)

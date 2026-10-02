@@ -1,6 +1,7 @@
 <template>
   <div class="panel">
     <div class="head"><div><h2>通知设置</h2><p>管理系统通知订阅并发送测试通知。</p></div><el-button :loading="loading" @click="load">刷新</el-button></div>
+    <ReplyNotificationSettings />
     <el-card shadow="never">
       <el-form label-position="left" label-width="150px">
         <el-form-item label="启用通知"><el-switch v-model="settings.enabled" :loading="saving" @change="saveSettings" /></el-form-item>
@@ -17,6 +18,7 @@
 </template>
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue';
+import ReplyNotificationSettings from '@/components/ReplyNotificationSettings.vue';
 import { ElMessage } from 'element-plus';
 import { apiClient } from '@/composables/useApi';
 import { resolveUIHostDeviceId } from '@/ui-runtime/deviceIdentity';

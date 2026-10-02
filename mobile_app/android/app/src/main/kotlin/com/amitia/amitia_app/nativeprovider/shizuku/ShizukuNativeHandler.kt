@@ -583,7 +583,7 @@ internal class ShizukuNativeHandler(
             ?: emptyMap()
         val workDir = (payload["workDir"] as? String)
             ?: (payload["cwd"] as? String)
-        val timeoutMs = (payload["timeoutMs"] as? Number)?.toLong() ?: 30000L
+        val timeoutMs = request.executionTimeoutMillis((payload["timeoutMs"] as? Number)?.toLong() ?: 30000L)
         val maxOutputBytes = (payload["maxOutputBytes"] as? Number)?.toLong() ?: 1048576L
 
         if (command.isNotEmpty() && executable.isNotEmpty()) {

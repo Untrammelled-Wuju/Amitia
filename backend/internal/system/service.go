@@ -7,6 +7,7 @@ import (
 	"github.com/u-ai/backend/internal/runtimeprofile"
 	"github.com/u-ai/backend/internal/system/dataportability"
 	"github.com/u-ai/backend/internal/temporal"
+	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"os"
 	"strconv"
 	"sync"
@@ -17,6 +18,7 @@ import (
 )
 
 type Service interface {
+	UpdateTimeoutSettings(timeoutpolicy.Settings) error
 	AppConfig() map[string]interface{}
 	CheckDBIntegrity() map[string]interface{}
 	CheckSafety(text string) map[string]interface{}
@@ -136,7 +138,9 @@ type service struct {
 }
 
 func NewService(ctx *app.AppContext, profile runtimeprofile.Profile) Service {
-	return &service{db: ctx.DB, startTime: time.Now(), dataDir: "data", runtimeProfile: profile}
+	s := &service{db: ctx.DB, startTime: time.Now(), dataDir: "data", runtimeProfile: profile}
+	s.loadTimeoutSettings()
+	return s
 }
 
 func (s *service) AttachTemporalService(temporalSvc *temporal.Service) {

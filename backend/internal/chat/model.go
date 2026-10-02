@@ -180,6 +180,7 @@ type ModelConfig struct {
 	MaxOutputTokens        int      `gorm:"column:max_output_tokens;default:0" json:"maxOutputTokens"`
 	CapabilitiesJSON       string   `gorm:"column:capabilities_json" json:"capabilitiesJson"`
 	SupportsReasoning      bool     `gorm:"-" json:"supportsReasoning"`
+	SupportsVision         bool     `gorm:"-" json:"supportsVision"`
 	DefaultReasoningEffort string   `gorm:"-" json:"defaultReasoningEffort"`
 	ReasoningLevels        []string `gorm:"-" json:"reasoningLevels"`
 	ReasoningEffort        string   `gorm:"-" json:"-"`

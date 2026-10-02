@@ -116,6 +116,8 @@ func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, chatSvc chat.
 	r.POST("/runtime/mode/validate", sharedCoreAdminOnly(), handler.ValidateMode)
 	r.POST("/runtime/rotate-logs", sharedCoreAdminOnly(), handler.RotateLogs)
 	r.GET("/runtime/long-running/config", sharedCoreAdminOnly(), handler.LongRunningConfig)
+	r.GET("/runtime/timeout/config", sharedCoreAdminOnly(), handler.TimeoutSettings)
+	r.PUT("/runtime/timeout/config", sharedCoreAdminOnly(), handler.UpdateTimeoutSettings)
 	r.PUT("/runtime/long-running/config", sharedCoreAdminOnly(), handler.UpdateLongRunningConfig)
 	r.GET("/runtime/long-running/status", sharedCoreAdminOnly(), handler.LongRunningStatus)
 	r.PUT("/runtime/mode", sharedCoreAdminOnly(), handler.UpdateRuntimeMode)

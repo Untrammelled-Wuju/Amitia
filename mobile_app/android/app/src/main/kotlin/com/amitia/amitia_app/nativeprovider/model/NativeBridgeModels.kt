@@ -6,7 +6,14 @@ data class NativeBridgeRequest(
     val platform: String,
     val operation: String,
     val payload: Map<String, Any?> = emptyMap(),
-)
+    val timeoutPolicy: Map<String, Any?>? = null,
+) {
+    fun executionTimeoutMillis(fallback: Long): Long {
+        val seconds = (timeoutPolicy?.get("seconds") as? Number)?.toLong()
+        if (seconds == null || seconds !in 30L..1800L) return fallback
+        return if (timeoutPolicy?.get("disabled") == true) 0L else seconds * 1000L
+    }
+}
 
 data class NativeBridgeResponse(
     val protocolVersion: Int,

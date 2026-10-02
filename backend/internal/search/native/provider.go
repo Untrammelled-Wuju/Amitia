@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"sort"
 	"strings"
 	"sync"
@@ -263,7 +264,7 @@ func (p *Provider) Search(ctx context.Context, request search.SearchRequest) (se
 			if timeout <= 0 {
 				timeout = 8 * time.Second
 			}
-			callCtx, cancel := context.WithTimeout(engineCtx, timeout)
+			callCtx, cancel := timeoutpolicy.WithTimeout(engineCtx, timeout)
 			response, err := planned.Engine.Search(callCtx, request)
 			callErr := callCtx.Err()
 			cancel()

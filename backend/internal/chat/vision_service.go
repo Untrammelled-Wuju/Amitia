@@ -5,17 +5,17 @@ package chat
 import (
 	"bytes"
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"io"
 	"net/http"
-	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/u-ai/backend/config"
+	"github.com/u-ai/backend/internal/vision"
 )
 
 var globalArtifactResolver ArtifactResolver
@@ -29,52 +29,24 @@ func analyzeImageInternal(ownerSpaceID, imageUrl string) (string, string) {
 	if err != nil {
 		return "", err.Error()
 	}
-	imageData := imageUrl
-	if strings.HasPrefix(imageUrl, "amitia://artifacts/") {
-		if globalArtifactResolver != nil {
-			rc, res, openErr := globalArtifactResolver.Open(context.Background(), ownerSpaceID, imageUrl)
-			if openErr == nil {
-				defer rc.Close()
-				data, readErr := io.ReadAll(rc)
-				if readErr == nil {
-					mimeType := res.MIMEType
-					if mimeType == "" {
-						mimeType = "image/png"
-					}
-					imageData = "data:" + mimeType + ";base64," + base64.StdEncoding.EncodeToString(data)
-				}
-			}
-		}
-	} else if strings.HasPrefix(imageUrl, "/images/") {
-		ext := filepath.Ext(imageUrl)
-		mimeType := "image/png"
-		switch ext {
-		case ".jpg", ".jpeg":
-			mimeType = "image/jpeg"
-		case ".gif":
-			mimeType = "image/gif"
-		case ".webp":
-			mimeType = "image/webp"
-		case ".bmp":
-			mimeType = "image/bmp"
-		}
-		filePath := filepath.Join(config.AppCfg.Storage.DataDir, "images", filepath.Base(imageUrl))
-		data, err := os.ReadFile(filePath)
-		if err == nil {
-			imageData = "data:" + mimeType + ";base64," + base64.StdEncoding.EncodeToString(data)
-		}
+	imageData, readErr := resolveVisionImage(context.Background(), ownerSpaceID, imageUrl)
+	if readErr != nil {
+		return "", readErr.Error()
 	}
-	content := []map[string]interface{}{
-		{"type": "input_image", "image_url": imageData},
-		{"type": "input_text", "text": "请详细描述这张图片的内容，包括场景、物体、人物、文字、表情、氛围等所有可见信息，严禁描述不存在于图片中的信息"},
+	text, generateErr := vision.GenerateImages(context.Background(), cfg, []string{imageData}, "请详细描述这张图片的内容，包括场景、物体、人物、文字、表情、氛围等所有可见信息，严禁描述不存在于图片中的信息", 0)
+	if generateErr != nil {
+		return "", generateErr.Error()
 	}
-	return callDoubaoVision(cfg.BaseUrl, cfg.ApiKey, cfg.ModelName, content)
+	return text, ""
 }
 
 func analyzeVideoInternal(ownerSpaceID, videoUrl string) (string, string) {
 	cfg, err := getVisionModelConfig()
 	if err != nil {
 		return "", err.Error()
+	}
+	if cfg.FromMainModel {
+		return analyzeMainModelVideo(ownerSpaceID, videoUrl, cfg)
 	}
 	if strings.HasPrefix(videoUrl, "data:video/") {
 		content := []map[string]interface{}{
@@ -138,7 +110,7 @@ func callDoubaoVision(baseURL, apiKey, modelName string, content []map[string]in
 	req, _ := http.NewRequest("POST", strings.TrimRight(baseURL, "/")+"/responses", bytes.NewReader(bodyBytes))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+apiKey)
-	client := &http.Client{Timeout: 120 * time.Second}
+	client := timeoutpolicy.Client(&http.Client{Timeout: 120 * time.Second})
 	resp, err := client.Do(req)
 	if err != nil {
 		return "", err.Error()

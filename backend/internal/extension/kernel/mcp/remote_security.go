@@ -5,6 +5,7 @@ package mcp
 import (
 	"context"
 	"fmt"
+	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"net"
 	"net/http"
 	"net/url"
@@ -115,7 +116,7 @@ func NewRemoteSecureHTTPClient(security RemoteEndpointSecurity, policy RemoteEnd
 		return nil, lastErr
 	}
 
-	return &http.Client{
+	return timeoutpolicy.Client(&http.Client{
 		Transport: transport,
 		Timeout:   timeout,
 		CheckRedirect: func(request *http.Request, via []*http.Request) error {
@@ -130,7 +131,7 @@ func NewRemoteSecureHTTPClient(security RemoteEndpointSecurity, policy RemoteEnd
 			}
 			return nil
 		},
-	}
+	})
 }
 
 func resolveRemoteEndpoint(ctx context.Context, host string, resolver *net.Resolver) ([]net.IP, error) {

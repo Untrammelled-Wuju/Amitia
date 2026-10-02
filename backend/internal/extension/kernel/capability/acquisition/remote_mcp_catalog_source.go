@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"io"
 	"net/http"
 	"time"
@@ -34,7 +35,7 @@ type RemoteMCPCatalogSource struct {
 }
 
 func NewRemoteMCPCatalogSource(apiURL string) *RemoteMCPCatalogSource {
-	return &RemoteMCPCatalogSource{client: &http.Client{Timeout: 15 * time.Second}, apiURL: apiURL}
+	return &RemoteMCPCatalogSource{client: timeoutpolicy.Client(&http.Client{Timeout: 15 * time.Second}), apiURL: apiURL}
 }
 
 func (s *RemoteMCPCatalogSource) ID() string          { return "remote_mcp_catalog" }

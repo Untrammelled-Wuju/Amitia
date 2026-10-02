@@ -4,6 +4,11 @@ import type { AgentUIEvent } from "@/conversation/runtime/agentEventReducer";
 
 const mocks = vi.hoisted(() => ({
   get: vi.fn(),
+  notifyReplyCompleted: vi.fn(),
+}));
+
+vi.mock("@/composables/useReplyNotifications", () => ({
+  notifyReplyCompleted: mocks.notifyReplyCompleted,
 }));
 
 vi.mock("@/composables/useApi", () => ({
@@ -45,6 +50,47 @@ function event(
 }
 
 describe("conversation runtime projection", () => {
+  it("updates automation indication from live tool events and clears on completion or navigation", async () => {
+    const runtime = useConversationRuntime(ref("conversation-1"), ref<any[]>([]), ref(false), () => undefined);
+    await runtime.applyEvent(event(1, "turn.started", { status: "running" }));
+    await runtime.applyEvent(event(2, "tool.running", {
+      blockId: "automation", blockSequence: 1, revision: 1, status: "running",
+      payload: { toolName: "browser_interact_click" },
+    }));
+    expect(runtime.automationStatus.value?.label).toBe("正在点击");
+    await runtime.applyEvent(event(3, "tool.completed", {
+      blockId: "automation", blockSequence: 1, revision: 2, status: "completed",
+    }));
+    expect(runtime.automationStatus.value).toBeNull();
+    await runtime.applyEvent(event(4, "tool.running", {
+      blockId: "next", blockSequence: 2, revision: 1, status: "running",
+      payload: { toolName: "android_interaction_screenshot" },
+    }));
+    expect(runtime.automationStatus.value?.phase).toBe("observing");
+    runtime.disconnect();
+    expect(runtime.automationStatus.value).toBeNull();
+    runtime.clear();
+    runtime.cleanup();
+  });
+  it("only notifies completed root turns once", async () => {
+    mocks.notifyReplyCompleted.mockClear();
+    mocks.get.mockResolvedValue({ version: 1, turns: [], lastEventSequence: 5 });
+    for (const candidate of [
+      event(2, "turn.failed", { status: "failed" }),
+      event(3, "turn.interrupted", { status: "interrupted" }),
+      event(4, "turn.completed", { status: "completed", turnId: "child", parentTurnId: "root" }),
+    ]) {
+      const runtime = useConversationRuntime(ref("conversation-1"), ref<any[]>([]), ref(false), () => undefined);
+      await runtime.applyEvent(candidate);
+    }
+    expect(mocks.notifyReplyCompleted).not.toHaveBeenCalled();
+    const runtime = useConversationRuntime(ref("conversation-1"), ref<any[]>([]), ref(false), () => undefined);
+    const completed = event(5, "turn.completed", { status: "completed", turnId: "root" });
+    await runtime.applyEvent(completed);
+    await runtime.applyEvent(completed);
+    expect(mocks.notifyReplyCompleted).toHaveBeenCalledTimes(1);
+    expect(mocks.notifyReplyCompleted).toHaveBeenCalledWith("conversation-1", "root");
+  });
   it("keeps the live message identity stable until persistence replaces it", async () => {
     const conversationId = ref("conversation-1");
     const persistedMessages = ref<any[]>([

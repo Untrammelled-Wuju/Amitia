@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"strings"
 	"time"
 
@@ -386,6 +387,9 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 		ProactiveMemory:           req.ProactiveMemory,
 		UserContent:               userContent,
 	})
+	if err := attachMainVisionImages(ctx, messages, history, req.SpaceID, req.ImageUrl, cfg.ID); err != nil {
+		return nil, fmt.Errorf("主模型视觉输入失败：%w", err)
+	}
 	var toolDefs []tool.Tool
 	if s.toolRuntime != nil {
 		toolScope := prepareToolScope()
@@ -409,9 +413,13 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 	}, "process message prompt ready")
 	seenTools := map[string]bool{}
 	toolExecCtx := ctx
-	if config.AppCfg != nil && config.AppCfg.Chat.AgentTurnTimeoutSeconds > 0 {
+	if _, active := timeoutpolicy.Current(); active {
 		var cancelTools context.CancelFunc
-		toolExecCtx, cancelTools = context.WithTimeout(ctx, time.Duration(config.AppCfg.Chat.AgentTurnTimeoutSeconds)*time.Second)
+		toolExecCtx, cancelTools = timeoutpolicy.WithTimeout(ctx, 0)
+		defer cancelTools()
+	} else if config.AppCfg != nil && config.AppCfg.Chat.AgentTurnTimeoutSeconds > 0 {
+		var cancelTools context.CancelFunc
+		toolExecCtx, cancelTools = timeoutpolicy.WithTimeout(ctx, time.Duration(config.AppCfg.Chat.AgentTurnTimeoutSeconds)*time.Second)
 		defer cancelTools()
 	}
 

@@ -5,6 +5,7 @@ package local
 import (
 	"context"
 	"fmt"
+	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"image"
 	"image/color"
 	"math"
@@ -137,7 +138,7 @@ func (p *LocalProvider) RemoveBackgroundV2(ctx context.Context, req backgroundre
 
 	if req.Timeout > 0 {
 		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, req.Timeout)
+		ctx, cancel = timeoutpolicy.WithTimeout(ctx, req.Timeout)
 		defer cancel()
 	}
 

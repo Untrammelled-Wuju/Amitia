@@ -39,13 +39,29 @@ async function renderSettings(path: string) {
 }
 
 describe("桌面设置分类导航", () => {
+  it("普通设置使用精简背景，切换关于和日志页面时恢复原样式", async () => {
+    const { wrapper, router } = await renderSettings("/settings/system");
+    try {
+      expect(wrapper.get(".secondary-workspace").classes()).toContain("settings-refined");
+      for (const path of ["/settings/about", "/settings/system-logs", "/settings/prompt-trace"]) {
+        await router.push(path);
+        expect(wrapper.get(".secondary-workspace").classes()).not.toContain("settings-refined");
+      }
+      await router.push("/settings/model/providers");
+      expect(wrapper.get(".secondary-workspace").classes()).toContain("settings-refined");
+    } finally { wrapper.unmount(); }
+  });
   it("保留全部入口及插件插槽，并识别模型子页面", async () => {
     const { wrapper } = await renderSettings("/settings/model/providers");
     try {
-      expect(wrapper.findAll("nav section")).toHaveLength(6);
+      expect(wrapper.findAll("nav section")).toHaveLength(7);
       const links = wrapper.findAll("nav a");
-      expect(links).toHaveLength(15);
-      expect(new Set(links.map(link => link.attributes("href"))).size).toBe(15);
+      expect(links).toHaveLength(21);
+      expect(new Set(links.map(link => link.attributes("href"))).size).toBe(21);
+      const privacyGroup = wrapper.findAll("nav section").find(section => section.text().startsWith("隐私"));
+      expect(privacyGroup?.findAll("a").map(link => link.text())).toEqual(["隐私说明", "使用边界", "隐私扫描"]);
+      expect(links.slice(0, 4).map(link => link.text())).toEqual(["通用", "外观", "通知", "时间与地区"]);
+      expect(wrapper.find('a[href="/settings/data-management"]').exists()).toBe(true);
       expect(wrapper.find('a[href="/settings/model"]').attributes('aria-current')).toBe('page');
       expect((wrapper.get("select").element as HTMLSelectElement).value).toBe("/settings/model");
       expect(wrapper.findAll("[data-slot]").map(slot => slot.attributes("data-slot"))).toEqual([

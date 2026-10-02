@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"io"
 	"net/http"
 	"net/url"
@@ -46,12 +47,12 @@ type Adapter struct {
 }
 
 func New() *Adapter {
-	return &Adapter{httpClient: &http.Client{Timeout: DefaultTimeout}}
+	return &Adapter{httpClient: timeoutpolicy.Client(&http.Client{Timeout: DefaultTimeout})}
 }
 
 func NewWithClient(client *http.Client) *Adapter {
 	if client == nil {
-		client = &http.Client{Timeout: DefaultTimeout}
+		client = timeoutpolicy.Client(&http.Client{Timeout: DefaultTimeout})
 	}
 	return &Adapter{httpClient: client}
 }
@@ -331,9 +332,9 @@ func parseImageItem(ctx context.Context, item map[string]any, client *http.Clien
 	if urlStr, ok := item["url"].(string); ok && urlStr != "" {
 		dlClient := client
 		if dlClient == nil {
-			dlClient = &http.Client{Timeout: DefaultDownloadTimeout}
+			dlClient = timeoutpolicy.Client(&http.Client{Timeout: DefaultDownloadTimeout})
 		}
-		dlCtx, cancel := context.WithTimeout(ctx, DefaultDownloadTimeout)
+		dlCtx, cancel := timeoutpolicy.WithTimeout(ctx, DefaultDownloadTimeout)
 		defer cancel()
 		req, err := http.NewRequestWithContext(dlCtx, http.MethodGet, urlStr, nil)
 		if err != nil {

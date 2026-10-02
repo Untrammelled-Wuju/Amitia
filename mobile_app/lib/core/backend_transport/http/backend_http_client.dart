@@ -19,32 +19,30 @@ class BackendHttpClient implements BackendHttpTransport {
   final Dio _dio;
   BackendHttpState _state = BackendHttpState.idle;
   bool _closed = false;
+  Duration? _operationTimeout;
 
-  BackendHttpClient(
-    this._config, {
-    BackendUriBuilder? uriBuilder,
-    Dio? dio,
-  })  : _uriBuilder = uriBuilder ?? BackendUriBuilder(),
-        _dio = dio ?? _createDio(_config) {
+  BackendHttpClient(this._config, {BackendUriBuilder? uriBuilder, Dio? dio})
+    : _uriBuilder = uriBuilder ?? BackendUriBuilder(),
+      _dio = dio ?? _createDio(_config) {
     _state = BackendHttpState.available;
   }
 
   static Dio _createDio(BackendConnectionConfig config) {
     final baseUri = BackendUriBuilder().httpBase(config);
-    return Dio(BaseOptions(
-      baseUrl: baseUri.toString(),
-      connectTimeout: const Duration(seconds: 5),
-      receiveTimeout: const Duration(seconds: 30),
-    ));
+    return Dio(
+      BaseOptions(
+        baseUrl: baseUri.toString(),
+        connectTimeout: const Duration(seconds: 5),
+        receiveTimeout: const Duration(seconds: 185),
+      ),
+    );
   }
 
   @override
   BackendHttpState get state => _closed ? BackendHttpState.closed : _state;
 
   @override
-  Future<BackendHttpResponse> send(
-    BackendHttpRequest request,
-  ) async {
+  Future<BackendHttpResponse> send(BackendHttpRequest request) async {
     if (_closed) {
       throw BackendTransportError(
         code: BackendTransportErrorCode.transportClosed,
@@ -102,14 +100,40 @@ class BackendHttpClient implements BackendHttpTransport {
         options: Options(
           method: request.method.value,
           headers: headers,
-          validateStatus: (status) => status != null && status >= 200 && status < 300,
+          validateStatus: (status) =>
+              status != null && status >= 200 && status < 300,
           receiveTimeout: request.streamResponse
-              ? (request.timeout ?? Duration.zero)
-              : request.timeout,
+              ? Duration.zero
+              : (_operationTimeout ?? request.timeout),
+          sendTimeout: _operationTimeout,
           responseType: request.streamResponse ? ResponseType.stream : null,
         ),
         cancelToken: request.cancelToken,
       );
+
+      final disabled = response.headers.value('x-amitia-timeout-disabled');
+      final seconds = int.tryParse(
+        response.headers.value('x-amitia-timeout-seconds') ?? '',
+      );
+      if ((disabled == 'true' || disabled == 'false') &&
+          seconds != null &&
+          seconds >= 30 &&
+          seconds <= 1800) {
+        _operationTimeout = disabled == 'true'
+            ? Duration.zero
+            : Duration(seconds: seconds + 5);
+      }
+      if (request.path == '/api/runtime/timeout/config' &&
+          response.data is Map) {
+        final raw = response.data as Map;
+        final value = raw['data'] is Map ? raw['data'] as Map : raw;
+        final duration = value['seconds'];
+        if (duration is num && duration >= 30 && duration <= 1800) {
+          _operationTimeout = value['disabled'] == true
+              ? Duration.zero
+              : Duration(seconds: duration.toInt() + 5);
+        }
+      }
 
       final statusCode = response.statusCode ?? 0;
       final responseHeaders = <String, String>{};

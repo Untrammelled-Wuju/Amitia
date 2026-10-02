@@ -361,6 +361,7 @@ class RuntimeService : Service() {
                         notificationResult.notification,
                         RuntimeServiceContract.FOREGROUND_SERVICE_TYPE
                     )
+                    BackgroundKeepAlive.runtimeStarted(applicationContext)
                     executeServiceTask {
                         try {
                             startProotSessionLocked(generation, profile, startId)
@@ -1238,6 +1239,7 @@ class RuntimeService : Service() {
         }
         instanceRef.compareAndSet(this, null)
         serviceExecutor.shutdown()
+        BackgroundKeepAlive.runtimeStopped(applicationContext)
         super.onDestroy()
     }
 

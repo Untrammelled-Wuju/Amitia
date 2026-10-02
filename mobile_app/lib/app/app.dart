@@ -19,6 +19,7 @@ import '../core/ui_runtime/mobile_ui_host_event_client.dart';
 import '../core/ui_runtime/mobile_ui_host_command_host.dart';
 import '../core/ui_runtime/ui_theme.dart';
 import '../core/settings/appearance_preferences.dart';
+import '../core/settings/background_preferences.dart';
 import '../core/settings/chat_permission_preferences.dart';
 import '../core/services/providers.dart' show extensionServiceProvider;
 import '../features/desktop_pet/runtime/desktop_pet_mobile_runtime.dart';
@@ -27,6 +28,8 @@ import 'theme/app_theme.dart';
 import 'theme/app_motion.dart';
 import 'theme/app_text_scaler.dart';
 import 'theme/design_tokens.dart';
+import 'theme/appearance_colors.dart';
+import '../core/settings/custom_palette.dart';
 import 'app_routes.dart';
 import 'router.dart';
 
@@ -48,6 +51,7 @@ class _AmitiaAppRootState extends ConsumerState<AmitiaAppRoot> {
 
   Future<void> _initializeBootstrap() async {
     await ref.read(appearancePreferencesProvider.notifier).init();
+    try { await ref.read(backgroundPreferencesProvider.notifier).init(); } catch (_) {}
     await ref.read(chatPermissionPreferencesProvider.notifier).init();
     final deploymentNotifier = ref.read(
       mobileDeploymentConfigProvider.notifier,
@@ -374,36 +378,9 @@ class AmitiaApp extends ConsumerWidget {
           theme.extension<AmitiaLayoutTokens>() ?? const AmitiaLayoutTokens();
       if (colors == null) return theme;
 
-      const lightAccents = [
-        Color(0xFF8A5728),
-        Color(0xFF6C8FEA),
-        Color(0xFF52B788),
-        Color(0xFFE9A23B),
-      ];
-      const darkAccents = [
-        Color(0xFF9C8068),
-        Color(0xFF8CA8F0),
-        Color(0xFF78C99A),
-        Color(0xFFF0B65D),
-      ];
-      final accent = (theme.brightness == Brightness.dark
-          ? darkAccents
-          : lightAccents)[appearance.accentColorIndex];
-      final accentPressed = Color.lerp(
-        accent,
-        theme.brightness == Brightness.dark ? Colors.white : Colors.black,
-        0.16,
-      )!;
-      final accentSoft = Color.alphaBlend(
-        accent.withValues(alpha: 0.14),
-        colors.surfacePrimary,
-      );
-      final userColors = colors.copyWith(
-        accentPrimary: accent,
-        accentSecondary: accent,
-        accentPressed: accentPressed,
-        accentSoft: accentSoft,
-      );
+      final userColors = resolveAppearanceColors(colors, theme.brightness, appearance);
+      final accent = userColors.accentPrimary;
+      final accentSoft = userColors.accentSoft;
 
       final userLayout = switch (appearance.cornerStyleIndex) {
         0 => layout.copyWith(
@@ -442,9 +419,16 @@ class AmitiaApp extends ConsumerWidget {
         colorScheme: theme.colorScheme.copyWith(
           primary: accent,
           primaryContainer: accentSoft,
-          secondary: accent,
-          secondaryContainer: accentSoft,
+          onPrimary: appearance.customPalette.enabled ? readableForeground(accent) : theme.colorScheme.onPrimary,
+          secondary: userColors.accentSecondary,
+          onSecondary: readableForeground(userColors.accentSecondary),
+          secondaryContainer: Color.alphaBlend(userColors.accentSecondary.withValues(alpha: 0.14), colors.surfacePrimary),
+          onSurface: userColors.textPrimary,
+          onSurfaceVariant: userColors.textSecondary,
         ),
+        textTheme: appearance.customPalette.enabled ? theme.textTheme.apply(bodyColor: userColors.textPrimary, displayColor: userColors.textPrimary) : theme.textTheme,
+        appBarTheme: appearance.customPalette.enabled ? theme.appBarTheme.copyWith(foregroundColor: userColors.textPrimary) : theme.appBarTheme,
+        inputDecorationTheme: appearance.customPalette.enabled ? theme.inputDecorationTheme.copyWith(hintStyle: theme.inputDecorationTheme.hintStyle?.copyWith(color: userColors.textTertiary)) : theme.inputDecorationTheme,
         extensions: extensions,
       );
     }

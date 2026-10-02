@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"fmt"
+	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"sync"
 	"time"
 
@@ -96,7 +97,7 @@ func (d *defaultRuntimeDispatcher) Resolve(handlerName string) RuntimeInvokeHand
 			ctx := context.Background()
 			var cancel context.CancelFunc
 			if invoke.DeadlineMs > 0 {
-				ctx, cancel = context.WithTimeout(ctx, time.Duration(invoke.DeadlineMs)*time.Millisecond)
+				ctx, cancel = timeoutpolicy.WithTimeout(ctx, time.Duration(invoke.DeadlineMs)*time.Millisecond)
 			} else {
 				ctx, cancel = context.WithCancel(ctx)
 			}
@@ -161,11 +162,11 @@ func (d *defaultRuntimeDispatcher) withReliability(handler RuntimeInvokeHandler)
 			if flight, ok := d.inflight[idemKey]; ok && flight != nil {
 				d.mu.Unlock()
 				if invoke.DeadlineMs > 0 {
-					timer := time.NewTimer(time.Duration(invoke.DeadlineMs) * time.Millisecond)
-					defer timer.Stop()
+					waitCtx, stop := timeoutpolicy.WithTimeout(context.Background(), time.Duration(invoke.DeadlineMs)*time.Millisecond)
+					defer stop()
 					select {
 					case <-flight.done:
-					case <-timer.C:
+					case <-waitCtx.Done():
 						return nil, fmt.Errorf("duplicate invocation wait timed out")
 					}
 				} else {

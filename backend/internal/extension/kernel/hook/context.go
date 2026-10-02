@@ -3,6 +3,7 @@ package hook
 import (
 	"context"
 	"encoding/json"
+	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"time"
 )
 
@@ -50,7 +51,7 @@ func NewInvocationContext(parent context.Context, input HookInvocationInput, poi
 	if timeout <= 0 || timeout > point.MaxTimeout {
 		timeout = point.DefaultTimeout
 	}
-	ctx, cancel := context.WithTimeout(parent, timeout)
+	ctx, cancel := timeoutpolicy.WithTimeout(parent, timeout)
 	return InvocationContext{
 		Input:         input,
 		Point:         point,

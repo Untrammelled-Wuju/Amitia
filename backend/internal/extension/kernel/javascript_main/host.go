@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"io"
 	"os"
 	"os/exec"
@@ -755,7 +756,7 @@ func (h *PluginHost) Invoke(ctx context.Context, contributionID string, input in
 			timeout = d
 		}
 	}
-	callCtx, cancel := context.WithTimeout(ctx, timeout)
+	callCtx, cancel := timeoutpolicy.WithTimeout(ctx, timeout)
 	defer cancel()
 	resp, err := h.sendRequest(callCtx, "runtime.invoke", params)
 	if err != nil {

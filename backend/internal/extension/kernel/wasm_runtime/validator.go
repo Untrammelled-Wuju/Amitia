@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"io"
 	"os"
 	"sync"
@@ -305,7 +306,7 @@ func (r *Runtime) Invoke(ctx context.Context, req InvokeRequest) (*InvocationRes
 	if timeout <= 0 {
 		timeout = 5 * time.Second
 	}
-	callCtx, cancel := context.WithTimeout(ctx, timeout)
+	callCtx, cancel := timeoutpolicy.WithTimeout(ctx, timeout)
 	defer cancel()
 	raw, err := instance.Invoke(callCtx, req.Definition.EntryExport, req.Input, InvokeOptions{
 		FuelLimit:    req.Definition.FuelLimit,

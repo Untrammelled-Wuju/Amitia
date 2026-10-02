@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"sync"
 	"time"
 )
@@ -399,7 +400,7 @@ func (d *Dispatcher) executeDelivery(ctx context.Context, delivery Delivery) {
 	if timeout == 0 {
 		timeout = 5 * time.Second
 	}
-	callCtx, cancel := context.WithTimeout(ctx, timeout)
+	callCtx, cancel := timeoutpolicy.WithTimeout(ctx, timeout)
 	defer cancel()
 	delivery.Start("delivery-dispatcher")
 	inv := d.traceRecorder.StartInvocation("", delivery.EventID, delivery.DeliveryID, delivery.SubscriptionID, delivery.Attempt)

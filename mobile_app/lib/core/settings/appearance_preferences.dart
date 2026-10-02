@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'custom_palette.dart';
 
 @immutable
 class AppearancePreferences {
@@ -10,6 +11,7 @@ class AppearancePreferences {
   final int cornerStyleIndex;
   final bool dynamicEffect;
   final bool reduceAnimation;
+  final CustomPalette customPalette;
 
   const AppearancePreferences({
     this.themeMode = ThemeMode.system,
@@ -18,6 +20,7 @@ class AppearancePreferences {
     this.cornerStyleIndex = 1,
     this.dynamicEffect = true,
     this.reduceAnimation = false,
+    this.customPalette = const CustomPalette(),
   });
 
   AppearancePreferences copyWith({
@@ -27,6 +30,7 @@ class AppearancePreferences {
     int? cornerStyleIndex,
     bool? dynamicEffect,
     bool? reduceAnimation,
+    CustomPalette? customPalette,
   }) {
     return AppearancePreferences(
       themeMode: themeMode ?? this.themeMode,
@@ -35,6 +39,7 @@ class AppearancePreferences {
       cornerStyleIndex: cornerStyleIndex ?? this.cornerStyleIndex,
       dynamicEffect: dynamicEffect ?? this.dynamicEffect,
       reduceAnimation: reduceAnimation ?? this.reduceAnimation,
+      customPalette: customPalette ?? this.customPalette,
     );
   }
 }
@@ -74,6 +79,7 @@ class AppearancePreferencesNotifier extends StateNotifier<AppearancePreferences>
       cornerStyleIndex: (prefs.getInt(_cornerKey) ?? 1).clamp(0, 2).toInt(),
       dynamicEffect: prefs.getBool(_dynamicKey) ?? true,
       reduceAnimation: prefs.getBool(_reduceAnimationKey) ?? false,
+      customPalette: CustomPalette.decode(prefs.getString('appearance.customPalette.v1')),
     );
   }
 
@@ -81,6 +87,14 @@ class AppearancePreferencesNotifier extends StateNotifier<AppearancePreferences>
     state = state.copyWith(themeMode: value);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_themeKey, value.name);
+  }
+
+  Future<void> setCustomPalette(CustomPalette value) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!await prefs.setString('appearance.customPalette.v1', value.encode())) {
+      throw StateError('保存自定义配色失败');
+    }
+    if (mounted) state = state.copyWith(customPalette: value);
   }
 
   Future<void> setFontScale(double value) async {
@@ -92,9 +106,10 @@ class AppearancePreferencesNotifier extends StateNotifier<AppearancePreferences>
 
   Future<void> setAccentColorIndex(int value) async {
     final next = value.clamp(0, 3).toInt();
-    state = state.copyWith(accentColorIndex: next);
+    state = state.copyWith(accentColorIndex: next, customPalette: state.customPalette.copyWith(enabled: false));
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_accentKey, next);
+    await prefs.setString('appearance.customPalette.v1', state.customPalette.encode());
   }
 
   Future<void> setCornerStyleIndex(int value) async {

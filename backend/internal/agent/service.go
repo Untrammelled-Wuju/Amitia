@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"io"
 	"log"
 	"net/http"
@@ -255,7 +256,7 @@ func (s *service) Webhook(ctx context.Context, req WebhookRequest) (map[string]i
 	if s.unifiedEntry == nil {
 		return nil, fmt.Errorf("统一入口未初始化")
 	}
-	reqCtx, cancel := context.WithTimeout(ctx, 180*time.Second)
+	reqCtx, cancel := timeoutpolicy.WithTimeout(ctx, 180*time.Second)
 	defer cancel()
 	result, err := s.unifiedEntry.Handle(reqCtx, &interaction.UnifiedEntryRequest{
 		Message:        messageText,
@@ -389,7 +390,7 @@ func (s *service) callLLM(cfg map[string]string, messages []map[string]interface
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+cfg["apiKey"])
-	resp, err := (&http.Client{Timeout: 180 * time.Second}).Do(req)
+	resp, err := (timeoutpolicy.Client(&http.Client{Timeout: 180 * time.Second})).Do(req)
 	if err != nil {
 		return "", 0, err
 	}
@@ -425,7 +426,7 @@ func (s *service) callOllamaLLM(cfg map[string]string, messages []map[string]int
 	jsonBody, _ := json.Marshal(reqBody)
 	req, _ := http.NewRequest("POST", baseURL+"/api/chat", bytes.NewReader(jsonBody))
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := (&http.Client{Timeout: 180 * time.Second}).Do(req)
+	resp, err := (timeoutpolicy.Client(&http.Client{Timeout: 180 * time.Second})).Do(req)
 	if err != nil {
 		return "", 0, err
 	}

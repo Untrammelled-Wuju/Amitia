@@ -65,6 +65,8 @@ SPDX-License-Identifier: AGPL-3.0-only
       </div>
     </el-card>
 
+    <CustomThemeSettings />
+    <BackgroundSettings />
     <el-card shadow="never" class="section-card">
       <template #header><span class="section-title">圆角风格</span></template>
       <div class="option-grid option-grid--three">
@@ -138,6 +140,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 <script setup lang="ts">
 import { Check } from "@element-plus/icons-vue";
 import { useTheme } from "../../composables/useTheme";
+import CustomThemeSettings from "../../components/CustomThemeSettings.vue";
+import BackgroundSettings from "../../components/BackgroundSettings.vue";
 
 const {
   state: themeState,

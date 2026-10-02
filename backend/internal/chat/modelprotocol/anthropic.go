@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"io"
 	"net/http"
 	"strings"
@@ -59,7 +60,7 @@ func (a *AnthropicAdapter) Generate(ctx context.Context, cfg ProviderConfig, req
 	httpReq.Header.Set("x-api-key", cfg.APIKey)
 	httpReq.Header.Set("anthropic-version", "2023-06-01")
 
-	client := &http.Client{Timeout: time.Duration(cfg.TimeoutSeconds) * time.Second}
+	client := timeoutpolicy.Client(&http.Client{Timeout: time.Duration(cfg.TimeoutSeconds) * time.Second})
 	resp, err := client.Do(httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("请求失败: %w", err)
@@ -107,7 +108,7 @@ func (a *AnthropicAdapter) Stream(ctx context.Context, cfg ProviderConfig, req M
 	httpReq.Header.Set("x-api-key", cfg.APIKey)
 	httpReq.Header.Set("anthropic-version", "2023-06-01")
 
-	client := &http.Client{Timeout: time.Duration(cfg.TimeoutSeconds) * time.Second}
+	client := timeoutpolicy.Client(&http.Client{Timeout: time.Duration(cfg.TimeoutSeconds) * time.Second})
 	resp, err := client.Do(httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("请求失败: %w", err)
@@ -190,12 +191,8 @@ func (a *AnthropicAdapter) buildContent(parts []ModelContentPart) interface{} {
 			})
 		case ContentTypeImage:
 			content = append(content, map[string]interface{}{
-				"type": "image",
-				"source": map[string]interface{}{
-					"type":       "base64",
-					"media_type": part.MIMEType,
-					"data":       part.ResourceURI,
-				},
+				"type":   "image",
+				"source": anthropicImageSource(part),
 			})
 		}
 	}

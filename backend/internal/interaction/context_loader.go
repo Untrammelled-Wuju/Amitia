@@ -2,6 +2,7 @@ package interaction
 
 import (
 	"context"
+	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"sync"
 	"time"
 )
@@ -73,7 +74,7 @@ func (r *ContextLoaderRegistry) LoadAll(ctx context.Context, scope InteractionSc
 				IsRequired: l.IsRequired(),
 			}
 
-			loaderCtx, cancel := context.WithTimeout(ctx, l.Timeout())
+			loaderCtx, cancel := timeoutpolicy.WithTimeout(ctx, l.Timeout())
 			defer cancel()
 
 			field, err := l.Load(loaderCtx, scope, version)

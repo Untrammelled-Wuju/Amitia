@@ -2,6 +2,7 @@ package interaction
 
 import (
 	"context"
+	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"strings"
 	"time"
 
@@ -39,7 +40,7 @@ func (v *DefaultVerifier) Verify(
 	before InteractionContext,
 	result InteractionResult,
 ) (VerificationResult, error) {
-	verifyCtx, cancel := context.WithTimeout(ctx, DefaultVerificationTimeoutMS*time.Millisecond)
+	verifyCtx, cancel := timeoutpolicy.WithTimeout(ctx, DefaultVerificationTimeoutMS*time.Millisecond)
 	defer cancel()
 
 	if result.Strategy == StrategyAccessibilityAction || result.Strategy == StrategyNodeBounds || result.Strategy == StrategyCoordinate {

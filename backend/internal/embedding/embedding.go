@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"io"
 	"net/http"
 	"strings"
@@ -127,7 +128,7 @@ func (s *Service) EmbedWithRawError(text string) ([]float32, string, error) {
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+apiKey)
 
-	client := &http.Client{Timeout: 30 * time.Second}
+	client := timeoutpolicy.Client(&http.Client{Timeout: 30 * time.Second})
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err.Error(), fmt.Errorf("嵌入请求失败: %w", err)
@@ -197,7 +198,7 @@ func (s *Service) BatchEmbed(texts []string) ([][]float32, error) {
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+apiKey)
 
-	client := &http.Client{Timeout: 60 * time.Second}
+	client := timeoutpolicy.Client(&http.Client{Timeout: 60 * time.Second})
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("批量嵌入请求失败: %w", err)

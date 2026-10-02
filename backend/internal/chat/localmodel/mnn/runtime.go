@@ -10,6 +10,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"io"
 	"net"
 	"net/http"
@@ -313,7 +314,7 @@ func (r *mnnRuntime) chatNonStream(ctx context.Context, request localmodel.Local
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	client := &http.Client{Timeout: 300 * time.Second}
+	client := timeoutpolicy.Client(&http.Client{Timeout: 300 * time.Second})
 	resp, err := client.Do(req)
 	if err != nil {
 		return localmodel.LocalModelResult{}, fmt.Errorf("request failed: %w", err)
@@ -345,7 +346,7 @@ func (r *mnnRuntime) chatStream(ctx context.Context, request localmodel.LocalMod
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	client := &http.Client{Timeout: 600 * time.Second}
+	client := timeoutpolicy.Client(&http.Client{Timeout: 600 * time.Second})
 	resp, err := client.Do(req)
 	if err != nil {
 		return localmodel.LocalModelResult{}, fmt.Errorf("request failed: %w", err)

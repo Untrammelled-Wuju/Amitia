@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"io"
 	"net/http"
 	"strconv"
@@ -330,6 +331,9 @@ func redactModelConfigForResponse(cfg *ModelConfig) {
 	}
 	cfg.HasAPIKey = cfg.APIKey != ""
 	cfg.APIKey = ""
+	var capabilities ModelCapabilities
+	_ = json.Unmarshal([]byte(cfg.CapabilitiesJSON), &capabilities)
+	cfg.SupportsVision = capabilities.SupportsImage
 	applyReasoningCapabilities(cfg)
 }
 
@@ -376,6 +380,9 @@ func mergeReasoningCapabilities(raw map[string]interface{}, existingJSON string)
 	}
 	if value, ok := raw["supportsReasoning"]; ok {
 		current["supportsReasoning"] = value == true || fmt.Sprint(value) == "1"
+	}
+	if value, ok := raw["supportsVision"]; ok {
+		current["supportsImage"] = value == true || fmt.Sprint(value) == "1"
 	}
 	if value, ok := raw["defaultReasoningEffort"]; ok {
 		current["defaultReasoningEffort"] = normalizeReasoningEffort(fmt.Sprint(value))
@@ -535,7 +542,9 @@ func (h *Handler) UpdateModel(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
 		return
 	}
-	if _, hasSupport := updates["supportsReasoning"]; hasSupport {
+	_, hasReasoning := updates["supportsReasoning"]
+	_, hasVision := updates["supportsVision"]
+	if hasReasoning || hasVision {
 		existing, err := h.service.GetModel(id)
 		if err != nil {
 			util.ErrorResponse(c, response.NotFound, "模型配置不存在", nil)
@@ -545,6 +554,7 @@ func (h *Handler) UpdateModel(c *gin.Context) {
 		delete(updates, "supportsReasoning")
 		delete(updates, "defaultReasoningEffort")
 		delete(updates, "reasoningLevels")
+		delete(updates, "supportsVision")
 	}
 	result, err := h.service.UpdateModel(id, updates)
 	if err != nil {
@@ -819,7 +829,7 @@ func (h *Handler) doTestConnection(c *gin.Context, baseURL, apiKey, modelName, a
 	if apiType != "ollama" {
 		req.Header.Set("Authorization", "Bearer "+apiKey)
 	}
-	client := &http.Client{Timeout: 15 * time.Second}
+	client := timeoutpolicy.Client(&http.Client{Timeout: 15 * time.Second})
 	resp, err := client.Do(req)
 	latency := int(time.Since(start).Milliseconds())
 

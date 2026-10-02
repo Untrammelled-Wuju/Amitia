@@ -15,6 +15,7 @@ func RegisterVisionRouter(r *gin.RouterGroup, ctx *app.AppContext) {
 
 	g := r.Group("/vision")
 	{
+		g.GET("/status", handler.Status)
 		g.GET("/configs", security.SharedCoreAdminOnly(), handler.List)
 		g.GET("/configs/:id", security.SharedCoreAdminOnly(), handler.Get)
 		g.POST("/configs", security.SharedCoreAdminOnly(), handler.Create)

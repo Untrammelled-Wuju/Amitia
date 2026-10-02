@@ -10,6 +10,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"io"
 	"net"
 	"net/http"
@@ -26,22 +27,22 @@ import (
 )
 
 type llamaRuntime struct {
-	config         LlamaCppProviderConfig
-	mu             sync.Mutex
-	state          string
-	loadedAt       string
-	lastError      string
-	manifest       *gguf.GGUFModelManifest
-	host           runtimehost.RuntimeHost
-	processID      runtimehost.ProcessID
-	baseURL        string
-	port           int
-	supervisor     runtimehost.ProcessSupervisor
-	materializer   media.ResourceMaterializer
-	modelPath      string
-	mmprojPath     string
-	modelCleanup   func() error
-	mmprojCleanup  func() error
+	config        LlamaCppProviderConfig
+	mu            sync.Mutex
+	state         string
+	loadedAt      string
+	lastError     string
+	manifest      *gguf.GGUFModelManifest
+	host          runtimehost.RuntimeHost
+	processID     runtimehost.ProcessID
+	baseURL       string
+	port          int
+	supervisor    runtimehost.ProcessSupervisor
+	materializer  media.ResourceMaterializer
+	modelPath     string
+	mmprojPath    string
+	modelCleanup  func() error
+	mmprojCleanup func() error
 }
 
 var (
@@ -76,10 +77,10 @@ func releasePort(p int) {
 
 func newLlamaRuntime(config LlamaCppProviderConfig) *llamaRuntime {
 	return &llamaRuntime{
-		config:      config,
-		state:       "unloaded",
-		port:        0,
-		processID:   runtimehost.ProcessID("llama-cpp-" + config.LocalModelID + "-" + llamaConfigFingerprint(config)),
+		config:       config,
+		state:        "unloaded",
+		port:         0,
+		processID:    runtimehost.ProcessID("llama-cpp-" + config.LocalModelID + "-" + llamaConfigFingerprint(config)),
 		materializer: localmodel.GetGlobalMediaMaterializer(),
 	}
 }
@@ -390,7 +391,7 @@ func (r *llamaRuntime) chatNonStream(ctx context.Context, request localmodel.Loc
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	client := &http.Client{Timeout: 300 * time.Second}
+	client := timeoutpolicy.Client(&http.Client{Timeout: 300 * time.Second})
 	resp, err := client.Do(req)
 	if err != nil {
 		return localmodel.LocalModelResult{}, fmt.Errorf("request failed: %w", err)
@@ -422,7 +423,7 @@ func (r *llamaRuntime) chatStream(ctx context.Context, request localmodel.LocalM
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	client := &http.Client{Timeout: 600 * time.Second}
+	client := timeoutpolicy.Client(&http.Client{Timeout: 600 * time.Second})
 	resp, err := client.Do(req)
 	if err != nil {
 		return localmodel.LocalModelResult{}, fmt.Errorf("request failed: %w", err)
@@ -534,7 +535,7 @@ func (r *llamaRuntime) embeddingRequest(ctx context.Context, inputs []string) ([
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	client := &http.Client{Timeout: 120 * time.Second}
+	client := timeoutpolicy.Client(&http.Client{Timeout: 120 * time.Second})
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("embedding request failed: %w", err)

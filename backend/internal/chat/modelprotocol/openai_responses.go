@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"io"
 	"net/http"
 	"strings"
@@ -74,7 +75,7 @@ func (a *OpenAIResponsesAdapter) Generate(ctx context.Context, cfg ProviderConfi
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Authorization", "Bearer "+cfg.APIKey)
 
-	client := &http.Client{Timeout: time.Duration(cfg.TimeoutSeconds) * time.Second}
+	client := timeoutpolicy.Client(&http.Client{Timeout: time.Duration(cfg.TimeoutSeconds) * time.Second})
 	resp, err := client.Do(httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("请求失败: %w", err)
@@ -128,7 +129,7 @@ func (a *OpenAIResponsesAdapter) Stream(ctx context.Context, cfg ProviderConfig,
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Authorization", "Bearer "+cfg.APIKey)
 
-	client := &http.Client{Timeout: time.Duration(cfg.TimeoutSeconds) * time.Second}
+	client := timeoutpolicy.Client(&http.Client{Timeout: time.Duration(cfg.TimeoutSeconds) * time.Second})
 	resp, err := client.Do(httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("请求失败: %w", err)
@@ -160,10 +161,14 @@ func (a *OpenAIResponsesAdapter) buildInput(req ModelRequest) []map[string]inter
 					"text": part.Text,
 				})
 			case ContentTypeImage:
+				detail := part.Detail
+				if detail == "" {
+					detail = "auto"
+				}
 				content = append(content, map[string]interface{}{
 					"type":      "input_image",
 					"image_url": part.ResourceURI,
-					"detail":    part.Detail,
+					"detail":    detail,
 				})
 			case ContentTypeFile:
 				content = append(content, map[string]interface{}{

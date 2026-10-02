@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"sort"
 	"sync"
 	"time"
@@ -120,7 +121,7 @@ func (e *TaskExecutor) Execute(ctx context.Context, req ExecuteRequest) ExecuteR
 		maxDuration = 30 * time.Minute
 	}
 
-	taskCtx, cancel := context.WithTimeout(ctx, maxDuration)
+	taskCtx, cancel := timeoutpolicy.WithTimeout(ctx, maxDuration)
 	defer cancel()
 
 	go func() {

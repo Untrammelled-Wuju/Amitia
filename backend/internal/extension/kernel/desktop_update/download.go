@@ -6,6 +6,7 @@ import (
 	"crypto/sha512"
 	"encoding/hex"
 	"fmt"
+	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"io"
 	"net"
 	"net/http"
@@ -62,7 +63,7 @@ func NewDownloadManager(baseDir string) *DownloadManager {
 		timeout:      30 * time.Minute,
 		baseDir:      filepath.Join(baseDir, "extensions", "update-downloads"),
 		cancelFuncs:  make(map[string]context.CancelFunc),
-		client: &http.Client{
+		client: timeoutpolicy.Client(&http.Client{
 			Timeout: 30 * time.Minute,
 			CheckRedirect: func(req *http.Request, via []*http.Request) error {
 				if len(via) >= 3 {
@@ -70,7 +71,7 @@ func NewDownloadManager(baseDir string) *DownloadManager {
 				}
 				return nil
 			},
-		},
+		}),
 	}
 }
 
@@ -160,7 +161,7 @@ func (dm *DownloadManager) StartDownload(ctx context.Context, operationID, rawUR
 		return fmt.Errorf("%w: expected size %d exceeds max %d", ErrDownloadSizeExceeded, expectedSize, dm.maxSize)
 	}
 
-	downloadCtx, cancel := context.WithTimeout(ctx, dm.timeout)
+	downloadCtx, cancel := timeoutpolicy.WithTimeout(ctx, dm.timeout)
 
 	dm.mu.Lock()
 	dm.cancelFuncs[operationID] = cancel
@@ -425,7 +426,7 @@ func (dm *DownloadManager) ResumeDownload(ctx context.Context, operationID strin
 	s.Status = DownloadStatusDownloading
 	dm.mu.Unlock()
 
-	downloadCtx, cancel := context.WithTimeout(ctx, dm.timeout)
+	downloadCtx, cancel := timeoutpolicy.WithTimeout(ctx, dm.timeout)
 	dm.mu.Lock()
 	dm.cancelFuncs[operationID] = cancel
 	dm.mu.Unlock()

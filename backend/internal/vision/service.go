@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"io"
 	"net/http"
 	"strings"
@@ -36,17 +37,28 @@ func redactConfigForResponse(cfg *VisionConfig) {
 	cfg.ApiKey = ""
 }
 func (s *service) List() ([]VisionConfig, error) {
+	main, err := s.mainVisionModel()
+	if err != nil {
+		return nil, err
+	}
 	configs, err := s.repo.List()
 	if err != nil {
 		return nil, err
 	}
 	for i := range configs {
+		if main != nil {
+			configs[i].Disabled = true
+			configs[i].IsActive = 0
+		}
 		redactConfigForResponse(&configs[i])
 	}
 	return configs, nil
 }
 
 func (s *service) GetByID(id int) (*VisionConfig, error) {
+	if err := s.requireIndependentVision(); err != nil {
+		return nil, err
+	}
 	cfg, err := s.repo.GetByID(id)
 	if err != nil {
 		return nil, fmt.Errorf("视觉模型配置不存在")
@@ -56,6 +68,9 @@ func (s *service) GetByID(id int) (*VisionConfig, error) {
 }
 
 func (s *service) Create(req *CreateVisionConfigRequest) (*VisionConfig, error) {
+	if err := s.requireIndependentVision(); err != nil {
+		return nil, err
+	}
 	if req.Name == "" {
 		return nil, fmt.Errorf("名称不能为空")
 	}
@@ -95,6 +110,9 @@ func (s *service) Create(req *CreateVisionConfigRequest) (*VisionConfig, error) 
 }
 
 func (s *service) Update(id int, updates map[string]interface{}) (*VisionConfig, error) {
+	if err := s.requireIndependentVision(); err != nil {
+		return nil, err
+	}
 	if err := s.repo.Update(id, normalizeConfigUpdates(updates)); err != nil {
 		return nil, fmt.Errorf("更新失败: %w", err)
 	}
@@ -105,9 +123,17 @@ func (s *service) Update(id int, updates map[string]interface{}) (*VisionConfig,
 	return cfg, nil
 }
 
-func (s *service) Delete(id int) error { return s.repo.Delete(id) }
+func (s *service) Delete(id int) error {
+	if err := s.requireIndependentVision(); err != nil {
+		return err
+	}
+	return s.repo.Delete(id)
+}
 
 func (s *service) Activate(id int) (*VisionConfig, error) {
+	if err := s.requireIndependentVision(); err != nil {
+		return nil, err
+	}
 	if err := s.repo.Activate(id); err != nil {
 		return nil, fmt.Errorf("激活失败: %w", err)
 	}
@@ -119,6 +145,14 @@ func (s *service) Activate(id int) (*VisionConfig, error) {
 }
 
 func (s *service) GetActive() (*VisionConfig, error) {
+	main, err := s.mainVisionModel()
+	if err != nil {
+		return nil, err
+	}
+	if main != nil {
+		main.HasApiKey = main.ApiKey != ""
+		return main, nil
+	}
 	cfg, err := s.repo.GetActive()
 	if err != nil {
 		return nil, err
@@ -141,6 +175,9 @@ func (s *service) ListProviders() []ProviderInfo {
 }
 
 func (s *service) TestConnection(id int) (map[string]interface{}, error) {
+	if err := s.requireIndependentVision(); err != nil {
+		return nil, err
+	}
 	cfg, err := s.repo.GetByID(id)
 	if err != nil {
 		return nil, fmt.Errorf("视觉模型配置不存在")
@@ -176,7 +213,7 @@ func (s *service) testVolcengineConnection(cfg *VisionConfig) (map[string]interf
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+cfg.ApiKey)
 	start := time.Now()
-	resp, err := (&http.Client{Timeout: 30 * time.Second}).Do(req)
+	resp, err := (timeoutpolicy.Client(&http.Client{Timeout: 30 * time.Second})).Do(req)
 	latency := time.Since(start).Milliseconds()
 	if err != nil {
 		return map[string]interface{}{"success": false, "message": err.Error(), "latency": latency}, nil
@@ -207,7 +244,7 @@ func (s *service) testOpenAICompatibleConnection(cfg *VisionConfig) (map[string]
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+cfg.ApiKey)
 	start := time.Now()
-	resp, err := (&http.Client{Timeout: 30 * time.Second}).Do(req)
+	resp, err := (timeoutpolicy.Client(&http.Client{Timeout: 30 * time.Second})).Do(req)
 	latency := time.Since(start).Milliseconds()
 	if err != nil {
 		return map[string]interface{}{"success": false, "message": err.Error(), "latency": latency}, nil
@@ -239,7 +276,7 @@ func (s *service) testGeminiConnection(cfg *VisionConfig) (map[string]interface{
 	req, _ := http.NewRequest("POST", url, bytes.NewReader(jsonBody))
 	req.Header.Set("Content-Type", "application/json")
 	start := time.Now()
-	resp, err := (&http.Client{Timeout: 30 * time.Second}).Do(req)
+	resp, err := (timeoutpolicy.Client(&http.Client{Timeout: 30 * time.Second})).Do(req)
 	latency := time.Since(start).Milliseconds()
 	if err != nil {
 		return map[string]interface{}{"success": false, "message": err.Error(), "latency": latency}, nil

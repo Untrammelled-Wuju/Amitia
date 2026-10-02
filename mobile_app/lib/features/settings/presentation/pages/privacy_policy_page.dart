@@ -32,7 +32,7 @@ class PrivacyPolicyPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AmitiaScaffold(
-      appBar: const AmitiaAppBar(title: '隐私政策', navigation: AmitiaAppBarNavigation.back),
+      appBar: const AmitiaAppBar(title: '隐私说明', navigation: AmitiaAppBarNavigation.back),
       body: ListView(
         padding: EdgeInsets.fromLTRB(AppSpacing.pagePadding, AppSpacing.md, AppSpacing.pagePadding, AppSpacing.xl),
         children: [

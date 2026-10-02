@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"sync"
 	"time"
 
@@ -271,7 +272,7 @@ func (i *wazeroInstance) Invoke(ctx context.Context, export string, input []byte
 	callCtx := ctx
 	if opts.Timeout > 0 {
 		var cancel context.CancelFunc
-		callCtx, cancel = context.WithTimeout(ctx, opts.Timeout)
+		callCtx, cancel = timeoutpolicy.WithTimeout(ctx, opts.Timeout)
 		defer cancel()
 	}
 

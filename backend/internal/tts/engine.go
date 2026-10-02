@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/google/uuid"
+	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"io"
 	"net/http"
 	"os"
@@ -189,7 +190,7 @@ func synthesizeVolcengine(cfg *TtsConfig, text string) ([]byte, error) {
 	req.Header.Set("X-Api-Resource-Id", resourceId)
 	req.Header.Set("X-Api-Connect-Id", uuid.New().String())
 
-	client := &http.Client{Timeout: 60 * time.Second}
+	client := timeoutpolicy.Client(&http.Client{Timeout: 60 * time.Second})
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("TTS 请求失败: %w", err)
@@ -271,7 +272,7 @@ func synthesizeOpenAI(cfg *TtsConfig, text string) ([]byte, error) {
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+cfg.ApiKey)
 
-	client := &http.Client{Timeout: 60 * time.Second}
+	client := timeoutpolicy.Client(&http.Client{Timeout: 60 * time.Second})
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("OpenAI TTS 请求失败: %w", err)
@@ -321,7 +322,7 @@ func synthesizeAzure(cfg *TtsConfig, text string) ([]byte, error) {
 	req.Header.Set("Authorization", "Bearer "+cfg.ApiKey)
 	req.Header.Set("X-Microsoft-OutputFormat", "audio-16khz-128kbitrate-mono-mp3")
 
-	client := &http.Client{Timeout: 60 * time.Second}
+	client := timeoutpolicy.Client(&http.Client{Timeout: 60 * time.Second})
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("Azure TTS 请求失败: %w", err)
@@ -374,7 +375,7 @@ func synthesizeEdge(cfg *TtsConfig, text string) ([]byte, error) {
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	client := &http.Client{Timeout: 60 * time.Second}
+	client := timeoutpolicy.Client(&http.Client{Timeout: 60 * time.Second})
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("Edge TTS 请求失败: %w", err)
@@ -447,7 +448,7 @@ func synthesizeElevenLabs(cfg *TtsConfig, text string) ([]byte, error) {
 	req.Header.Set("xi-api-key", cfg.ApiKey)
 	req.Header.Set("Accept", "audio/mpeg")
 
-	client := &http.Client{Timeout: 60 * time.Second}
+	client := timeoutpolicy.Client(&http.Client{Timeout: 60 * time.Second})
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("ElevenLabs TTS 请求失败: %w", err)
@@ -507,7 +508,7 @@ func synthesizeMiniMax(cfg *TtsConfig, text string) ([]byte, error) {
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+cfg.ApiKey)
 
-	client := &http.Client{Timeout: 60 * time.Second}
+	client := timeoutpolicy.Client(&http.Client{Timeout: 60 * time.Second})
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("MiniMax TTS 请求失败: %w", err)
@@ -577,7 +578,7 @@ func synthesizeAliyun(cfg *TtsConfig, text string) ([]byte, error) {
 	req.Header.Set("Authorization", "Bearer "+cfg.ApiKey)
 	req.Header.Set("X-NLS-Token", cfg.ApiKey)
 
-	client := &http.Client{Timeout: 60 * time.Second}
+	client := timeoutpolicy.Client(&http.Client{Timeout: 60 * time.Second})
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("阿里云 TTS 请求失败: %w", err)
@@ -643,7 +644,7 @@ func synthesizeCosyVoice(cfg *TtsConfig, text string) ([]byte, error) {
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	client := &http.Client{Timeout: 60 * time.Second}
+	client := timeoutpolicy.Client(&http.Client{Timeout: 60 * time.Second})
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("CosyVoice TTS 请求失败: %w", err)

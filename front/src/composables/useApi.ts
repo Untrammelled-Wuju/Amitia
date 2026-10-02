@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import axios, { type AxiosInstance, type AxiosRequestConfig } from "axios";
 import type { AxiosError } from "axios";
+import { operationRequestTimeout, readOperationTimeoutHeaders } from "@/runtime/operation-timeout";
 import { ref } from "vue";
 import type { ApiResponse } from "@/types";
 import {
@@ -62,6 +63,7 @@ apiClient.interceptors.request.use(async (config) => {
   const deviceLocal =
     Boolean(window.amitiaDesktop) && (isDeviceLocalApiPath(requestPath) || gamePackageLocal);
   config.baseURL = deviceLocal ? LOCAL_DEVICE_RUNTIME_BASE_URL : runtime.apiBaseURL;
+  config.timeout = operationRequestTimeout(config.baseURL || "");
   delete (config.headers as any)["X-Amitia-Management-Target"];
   (config.headers as any)?.delete?.("X-Amitia-Management-Target");
 
@@ -107,6 +109,7 @@ apiClient.interceptors.request.use(async (config) => {
 
 apiClient.interceptors.response.use(
   (response) => {
+    readOperationTimeoutHeaders(response.config.baseURL || "", response.headers);
     const body = response.data as ApiResponse;
     if (body && typeof body.code === "number") {
       if (body.code === 200) {

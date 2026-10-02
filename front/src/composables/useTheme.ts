@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 彭旭
 // SPDX-License-Identifier: AGPL-3.0-only
 import { ref, watch } from "vue";
+import { normalizeCustomPalette, paletteText, readableText, supportingText, type CustomPalette } from "./customPalette";
 
 export type ThemePreset = "system" | "dark" | "light";
 export type CornerStyle = 0 | 1 | 2;
@@ -12,6 +13,7 @@ export interface ThemeState {
   cornerStyle: CornerStyle;
   dynamicEffect: boolean;
   reduceAnimation: boolean;
+  customPalette: CustomPalette;
 }
 
 interface StoredAppearance {
@@ -20,6 +22,7 @@ interface StoredAppearance {
   cornerStyle?: unknown;
   dynamicEffect?: unknown;
   reduceAnimation?: unknown;
+  customPalette?: unknown;
 }
 
 const STORAGE_KEY = "ai-companion-theme";
@@ -99,6 +102,7 @@ function loadStoredAppearance(): StoredAppearance {
 const storedAppearance = loadStoredAppearance();
 
 const state = ref<ThemeState>({
+  customPalette: normalizeCustomPalette(storedAppearance.customPalette),
   preset: normalizePreset(localStorage.getItem(STORAGE_KEY)),
   accentColor: normalizeAccentColor(storedAppearance.accentColor),
   fontScale: normalizeFontScale(storedAppearance.fontScale),
@@ -161,13 +165,14 @@ function persistAppearance() {
       cornerStyle: state.value.cornerStyle,
       dynamicEffect: state.value.dynamicEffect,
       reduceAnimation: state.value.reduceAnimation,
+      customPalette: state.value.customPalette,
     }),
   );
 }
 
 function applyAccent(html: HTMLElement, accent: string) {
   const selectedAccent = normalizeAccentColor(accent);
-  const normalized = selectedAccent === "#6C8FEA" && resolvedMode.value === "dark"
+  const normalized = !state.value.customPalette.enabled && selectedAccent === "#6C8FEA" && resolvedMode.value === "dark"
     ? "#8CA8F0"
     : selectedAccent;
   const isDefaultLightAccent =
@@ -252,7 +257,27 @@ function applyTheme(preset: ThemePreset) {
   }
   html.setAttribute("data-theme", effective);
 
-  applyAccent(html, state.value.accentColor);
+  const palette = state.value.customPalette;
+  html.dataset.customPalette = palette.enabled ? "true" : "false";
+  applyAccent(html, palette.enabled ? palette.primary : state.value.accentColor);
+  for (const token of ["--tp-text", "--tp-text-secondary", "--tp-text-muted", "--tp-text-placeholder", "--tp-text-on-primary"]) html.style.removeProperty(token);
+  html.style.setProperty("--tp-secondary", palette.enabled ? palette.secondary : html.style.getPropertyValue("--tp-primary"));
+  html.style.setProperty("--tp-secondary-soft", rgba(palette.enabled ? palette.secondary : state.value.accentColor, 0.14));
+  html.style.setProperty("--tp-text-on-secondary", readableText(palette.enabled ? palette.secondary : state.value.accentColor));
+  if (palette.enabled) {
+    const background = getComputedStyle(html).getPropertyValue("--tp-panel").trim() || (effective === "dark" ? "#121214" : "#FFFFFF");
+    const text = paletteText(palette, background);
+    html.style.setProperty("--tp-text", text);
+    html.style.setProperty("--tp-text-secondary", supportingText(text, background, 0.2));
+    html.style.setProperty("--tp-text-muted", supportingText(text, background, 0.35));
+    html.style.setProperty("--tp-text-placeholder", supportingText(text, background, 0.35));
+    html.style.setProperty("--tp-text-on-primary", readableText(palette.primary));
+    html.style.setProperty("--tp-text-on-primary-hover", readableText(html.style.getPropertyValue("--tp-primary-hover")));
+    html.style.setProperty("--tp-text-on-primary-active", readableText(html.style.getPropertyValue("--tp-primary-active")));
+  } else {
+    html.style.removeProperty("--tp-text-on-primary-hover");
+    html.style.removeProperty("--tp-text-on-primary-active");
+  }
   applyFontScale(html, state.value.fontScale);
   applyCornerStyle(html, state.value.cornerStyle);
   applyMotion(html);
@@ -292,6 +317,15 @@ async function loadFromServer() {
 }
 
 export function useTheme() {
+  function setCustomPalette(value: Partial<CustomPalette>) {
+    const previous = state.value.customPalette;
+    state.value.customPalette = normalizeCustomPalette({ ...state.value.customPalette, ...value });
+    try { applyAppearance(); } catch (error) {
+      state.value.customPalette = previous;
+      applyTheme(state.value.preset);
+      throw error;
+    }
+  }
   function setPreset(preset: ThemePreset) {
     state.value.preset = normalizePreset(preset);
     if (state.value.preset === "light") preferredLight.value = "light";
@@ -304,6 +338,7 @@ export function useTheme() {
 
   function setAccentColor(value: string) {
     state.value.accentColor = normalizeAccentColor(value);
+    state.value.customPalette = { ...state.value.customPalette, enabled: false };
     applyAppearance();
   }
 
@@ -332,6 +367,7 @@ export function useTheme() {
 
   return {
     state,
+    setCustomPalette,
     resolvedMode,
     themeLoaded,
     presets: THEME_PRESETS,

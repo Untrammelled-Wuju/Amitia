@@ -2,6 +2,7 @@ package com.amitia.amitia_app.nativeprovider.notification
 
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.Context
 import android.os.Build
 import androidx.core.app.NotificationCompat
@@ -24,7 +25,7 @@ internal class NotificationPoster(private val context: Context) {
         return nm.getNotificationChannel(CHANNEL_AGENT_ID) != null
     }
 
-    fun post(title: String, body: String, channel: String, silent: Boolean): String {
+    fun post(title: String, body: String, channel: String, silent: Boolean, openApp: Boolean = false): String {
         val actualChannel = if (channel == CHANNEL_TASK_ID) CHANNEL_TASK_ID else CHANNEL_AGENT_ID
         val tag = generateTag()
         val id = idCounter.incrementAndGet()
@@ -39,6 +40,11 @@ internal class NotificationPoster(private val context: Context) {
 
         if (silent) {
             builder.setSilent(true)
+        }
+        if (openApp) {
+            context.packageManager.getLaunchIntentForPackage(context.packageName)?.let { intent ->
+                builder.setContentIntent(PendingIntent.getActivity(context, id, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE))
+            }
         }
 
         val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager

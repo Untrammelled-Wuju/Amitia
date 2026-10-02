@@ -353,6 +353,35 @@ private let supportedProtocolVersions: Set<Int> = [1]
 }
 
 
+@objc public class IOSScreenAwakeNativeHandler: NSObject, IOSNativeOperationHandler {
+    public let operations: Set<String> = ["display.keep_awake.status", "display.keep_awake.set"]
+    private static let preferenceKey = "amitia.keep-screen-on.ios.v1"
+
+    public func capabilitySnapshot() -> IOSNativeCapability {
+        IOSNativeCapability(available: true, authorized: true)
+    }
+
+    @MainActor public static func apply(_ application: UIApplication, foreground: Bool) {
+        application.isIdleTimerDisabled = foreground && UserDefaults.standard.bool(forKey: preferenceKey)
+    }
+
+    public func execute(_ request: IOSNativeRequest) async -> IOSNativeResponse {
+        guard operations.contains(request.operation) else {
+            return IOSNativeResponse(protocolVersion: request.protocolVersion, requestId: request.requestId, status: "error", result: nil, error: IOSNativeError(code: "OPERATION_NOT_SUPPORTED", message: "unsupported screen awake operation"))
+        }
+        if request.operation == "display.keep_awake.set", !(request.payload?["enabled"] is Bool) {
+            return IOSNativeResponse(protocolVersion: request.protocolVersion, requestId: request.requestId, status: "error", result: nil, error: IOSNativeError(code: "INVALID_REQUEST", message: "enabled must be a boolean"))
+        }
+        return await MainActor.run {
+            if let enabled = request.payload?["enabled"] as? Bool, request.operation == "display.keep_awake.set" {
+                UserDefaults.standard.set(enabled, forKey: Self.preferenceKey)
+            }
+            Self.apply(UIApplication.shared, foreground: UIApplication.shared.applicationState == .active)
+            return IOSNativeResponse(protocolVersion: request.protocolVersion, requestId: request.requestId, status: "success", result: ["enabled": UserDefaults.standard.bool(forKey: Self.preferenceKey)], error: nil)
+        }
+    }
+}
+
 @objc public class IOSLocalNotificationNativeHandler: NSObject, IOSNativeOperationHandler {
     public let operations: Set<String> = ["notification.status", "notification.request_permission", "notification.post"]
     private let stateLock = NSLock()
@@ -422,6 +451,7 @@ private let supportedProtocolVersions: Set<Int> = [1]
         let body = (request.payload?["body"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         let channel = (request.payload?["channel"] as? String ?? "amitia_agent").trimmingCharacters(in: .whitespacesAndNewlines)
         let silent = request.payload?["silent"] as? Bool ?? false
+        let soundOnly = request.payload?["soundOnly"] as? Bool ?? false
 
         guard !title.isEmpty || !body.isEmpty else {
             return error(request, code: "NOTIFICATION_POST_FAILED", message: "both title and body are empty")
@@ -447,14 +477,18 @@ private let supportedProtocolVersions: Set<Int> = [1]
         }
 
         let content = UNMutableNotificationContent()
-        content.title = String(title.prefix(256))
-        content.body = String(body.prefix(4096))
+        content.title = soundOnly ? "" : String(title.prefix(256))
+        content.body = soundOnly ? "" : String(body.prefix(4096))
         content.categoryIdentifier = channel.isEmpty ? "amitia_agent" : String(channel.prefix(128))
         if !silent {
             content.sound = .default
         }
 
         let identifier = "amitia.local.\(UUID().uuidString)"
+        if request.payload?["backgroundOnly"] as? Bool == true {
+            let foreground = await MainActor.run { UIApplication.shared.applicationState != .background }
+            if foreground { return success(request, result: ["posted": false, "reason": "app_foreground"]) }
+        }
         let notificationRequest = UNNotificationRequest(identifier: identifier, content: content, trigger: nil)
         do {
             try await add(notificationRequest)

@@ -66,6 +66,7 @@ func CorsMiddleware(cfg CorsConfig) gin.HandlerFunc {
 		if allowed {
 			c.Header("Access-Control-Allow-Methods", methods)
 			c.Header("Access-Control-Allow-Headers", headers)
+			c.Header("Access-Control-Expose-Headers", "X-Amitia-Timeout-Disabled, X-Amitia-Timeout-Seconds")
 			c.Header("Access-Control-Max-Age", fmt.Sprintf("%d", cfg.MaxAge))
 		}
 

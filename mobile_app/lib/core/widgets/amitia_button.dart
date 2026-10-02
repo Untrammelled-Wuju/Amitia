@@ -57,13 +57,13 @@ class AmitiaButton extends StatelessWidget {
           : context.error;
       fgColor = Colors.white;
     } else if (isSecondary) {
-      bgColor = context.accentSoft;
-      fgColor = context.accentPrimary;
+      bgColor = Color.alphaBlend(context.accentSecondary.withValues(alpha: 0.14), context.surfacePrimary);
+      fgColor = context.accentSecondary;
     } else {
       bgColor = onPressed == null
           ? context.accentPrimary.withValues(alpha: 0.4)
           : context.accentPrimary;
-      fgColor = Colors.white;
+      fgColor = Theme.of(context).colorScheme.onPrimary;
     }
     if (outlined) {
       fgColor = isDestructive ? context.error : context.accentPrimary;

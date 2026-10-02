@@ -5,6 +5,7 @@ package chroot
 import (
 	"context"
 	"fmt"
+	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -36,13 +37,13 @@ func (s *Service) Status(ctx context.Context, workspace string) ChrootStatus {
 	}
 
 	return ChrootStatus{
-		Enabled:          s.policy.Enabled,
-		DefaultRootFSP:   workspace,
-		KnownFSPs:        envs,
-		MaxFSBytes:       s.policy.MaxFSBytes,
-		MaxEnvironments:  s.policy.MaxEnvironments,
+		Enabled:               s.policy.Enabled,
+		DefaultRootFSP:        workspace,
+		KnownFSPs:             envs,
+		MaxFSBytes:            s.policy.MaxFSBytes,
+		MaxEnvironments:       s.policy.MaxEnvironments,
 		AvailableEnvironments: envs,
-		ExecBackends:     execBackends,
+		ExecBackends:          execBackends,
 	}
 }
 
@@ -175,7 +176,7 @@ func (s *Service) execProot(ctx context.Context, req ChrootExecRequest, timeout 
 
 	args = append(args, "sh", "-c", req.Command)
 
-	cmdCtx, cancel := context.WithTimeout(ctx, timeout)
+	cmdCtx, cancel := timeoutpolicy.WithTimeout(ctx, timeout)
 	defer cancel()
 
 	cmd := exec.CommandContext(cmdCtx, "proot", args...)

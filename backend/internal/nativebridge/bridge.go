@@ -1,13 +1,15 @@
 package nativebridge
 
 import "context"
+import "github.com/u-ai/backend/internal/timeoutpolicy"
 
 type Request struct {
-	ProtocolVersion int            `json:"protocolVersion"`
-	RequestId       string         `json:"requestId"`
-	Platform        string         `json:"platform"`
-	Operation       string         `json:"operation"`
-	Payload         map[string]any `json:"payload,omitempty"`
+	TimeoutPolicy   *timeoutpolicy.Settings `json:"timeoutPolicy,omitempty"`
+	ProtocolVersion int                     `json:"protocolVersion"`
+	RequestId       string                  `json:"requestId"`
+	Platform        string                  `json:"platform"`
+	Operation       string                  `json:"operation"`
+	Payload         map[string]any          `json:"payload,omitempty"`
 }
 
 type Response struct {

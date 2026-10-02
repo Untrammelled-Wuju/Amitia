@@ -5,6 +5,7 @@ package system
 import (
 	"context"
 	"fmt"
+	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"os"
 	"path/filepath"
 	"strings"
@@ -93,7 +94,7 @@ func (h *Handler) SetSearchCredentialSecretBroker(broker *secret.Broker) {
 		return
 	}
 	h.searchCredentials.WithVault(newSearchCredentialVault(broker))
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	ctx, cancel := timeoutpolicy.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	if err := h.searchCredentials.MigrateLegacyCredentials(ctx); err != nil {
 		applog.Warn("system search credential migration to SecretBroker failed", "error", err)
@@ -149,6 +150,8 @@ func ttsSynthesizeWithTimeout(cfg *tts.TtsConfig, text string, timeout time.Dura
 		err error
 	}
 	ch := make(chan result, 1)
+	ctx, cancel := timeoutpolicy.WithTimeout(context.Background(), timeout)
+	defer cancel()
 	go func() {
 		r, e := tts.Synthesize(cfg, text)
 		ch <- result{r, e}
@@ -156,7 +159,7 @@ func ttsSynthesizeWithTimeout(cfg *tts.TtsConfig, text string, timeout time.Dura
 	select {
 	case res := <-ch:
 		return res.res, res.err
-	case <-time.After(timeout):
+	case <-ctx.Done():
 		return nil, fmt.Errorf("tts timeout after %v", timeout)
 	}
 }

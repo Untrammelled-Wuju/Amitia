@@ -465,62 +465,15 @@ SPDX-License-Identifier: AGPL-3.0-only
       />
     </el-card>
 
-    <el-card shadow="never" class="section-card">
-      <template #header><span class="section-title">隐私入口</span></template>
-      <div class="privacy-grid">
-        <div class="privacy-card" @click="goPrivacy">
-          <el-icon size="22" color="var(--ac-color-primary)"><Lock /></el-icon>
-          <div class="pc-body">
-            <div class="pc-title">隐私说明</div>
-            <div class="pc-desc">
-              查看数据存储位置、模型 API 数据处理方式以及你的控制权说明
-            </div>
-          </div>
-          <el-icon><ArrowRight /></el-icon>
-        </div>
-        <div class="privacy-card" @click="goBoundary">
-          <el-icon size="22" color="var(--ac-color-primary)"
-            ><WarningFilled
-          /></el-icon>
-          <div class="pc-body">
-            <div class="pc-title">使用边界</div>
-            <div class="pc-desc">
-              了解 AI 角色的能力限制、安全边界和理性使用建议
-            </div>
-          </div>
-          <el-icon><ArrowRight /></el-icon>
-        </div>
-        <div class="privacy-card" @click="goPrivacyScan">
-          <el-icon size="22" color="var(--ac-color-primary)"
-            ><Search
-          /></el-icon>
-          <div class="pc-body">
-            <div class="pc-title">隐私扫描</div>
-            <div class="pc-desc">
-              扫描消息记录中的敏感信息，识别潜在隐私泄露风险
-            </div>
-          </div>
-          <el-icon><ArrowRight /></el-icon>
-        </div>
-      </div>
-    </el-card>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from "vue";
-import { useRouter } from "vue-router";
 import { ElMessage, ElMessageBox } from "element-plus";
-import {
-  Lock,
-  WarningFilled,
-  Search,
-  ArrowRight,
-} from "@element-plus/icons-vue";
 import { useApi } from "../../composables/useApi";
 
 const { get, put, del } = useApi();
-const router = useRouter();
 
 
 const saving = ref(false);
@@ -704,15 +657,6 @@ function fmtDate(d: string) {
   }
 }
 
-function goPrivacy() {
-  router.push("/privacy");
-}
-function goBoundary() {
-  router.push("/usage-boundary");
-}
-function goPrivacyScan() {
-  router.push("/privacy-scan");
-}
 
 onMounted(() => {
   fetchConfig();
@@ -743,41 +687,6 @@ onMounted(() => {
   justify-content: space-between;
 }
 
-.privacy-grid {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.privacy-card {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 14px;
-  border: 1px solid var(--ac-color-border-light);
-  border-radius: var(--ac-radius-md);
-  cursor: pointer;
-  transition: all 0.15s;
-  background: var(--ac-color-surface);
-}
-.privacy-card:hover {
-  border-color: var(--ac-color-primary);
-  background: var(--ac-color-surface-hover);
-}
-.privacy-card .pc-body {
-  flex: 1;
-  min-width: 0;
-}
-.privacy-card .pc-title {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--ac-color-text);
-  margin-bottom: 2px;
-}
-.privacy-card .pc-desc {
-  font-size: 12px;
-  color: var(--ac-color-text-muted);
-  line-height: 1.4;
-}
 
 .coping-section {
   display: flex;

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -47,7 +48,7 @@ func NewRequestManager(target transport.MCPTransport) *RequestManager {
 func (m *RequestManager) Call(ctx context.Context, method string, params any, options CallOptions) (json.RawMessage, error) {
 	if options.Timeout > 0 {
 		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, options.Timeout)
+		ctx, cancel = timeoutpolicy.WithTimeout(ctx, options.Timeout)
 		defer cancel()
 	}
 	id := m.nextID.Add(1)

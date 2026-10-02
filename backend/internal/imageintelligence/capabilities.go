@@ -25,29 +25,29 @@ const (
 )
 
 type ImageCapabilities struct {
-	Understand         bool                `json:"understand"`
-	OCR                bool                `json:"ocr"`
-	Generate           bool                `json:"generate"`
-	SupportedInputMIMEs []string           `json:"supportedInputMIMEs"`
-	MaxInputBytes      int64               `json:"maxInputBytes"`
-	MaxWidth           int                 `json:"maxWidth"`
-	MaxHeight          int                 `json:"maxHeight"`
-	MaxPixels          int64               `json:"maxPixels"`
-	GenerationFormats  []string           `json:"generationFormats,omitempty"`
-	SupportsLocalInput bool                `json:"supportsLocalInput"`
-	SupportsRemoteModel bool               `json:"supportsRemoteModel"`
-	Provider           string              `json:"provider,omitempty"`
-	Model              string              `json:"model,omitempty"`
-	ExecutionLocation  ExecutionLocation   `json:"executionLocation,omitempty"`
+	Understand          bool              `json:"understand"`
+	OCR                 bool              `json:"ocr"`
+	Generate            bool              `json:"generate"`
+	SupportedInputMIMEs []string          `json:"supportedInputMIMEs"`
+	MaxInputBytes       int64             `json:"maxInputBytes"`
+	MaxWidth            int               `json:"maxWidth"`
+	MaxHeight           int               `json:"maxHeight"`
+	MaxPixels           int64             `json:"maxPixels"`
+	GenerationFormats   []string          `json:"generationFormats,omitempty"`
+	SupportsLocalInput  bool              `json:"supportsLocalInput"`
+	SupportsRemoteModel bool              `json:"supportsRemoteModel"`
+	Provider            string            `json:"provider,omitempty"`
+	Model               string            `json:"model,omitempty"`
+	ExecutionLocation   ExecutionLocation `json:"executionLocation,omitempty"`
 }
 
 type CapabilityDetector struct {
-	visionSvc  vision.Service
+	visionSvc        vision.Service
 	providerRegistry *imageprovider.Registry
-	mu         sync.RWMutex
-	cached     *ImageCapabilities
-	cachedAt   time.Time
-	ttl        time.Duration
+	mu               sync.RWMutex
+	cached           *ImageCapabilities
+	cachedAt         time.Time
+	ttl              time.Duration
 }
 
 func NewCapabilityDetector(visionSvc vision.Service, providerRegistry *imageprovider.Registry) *CapabilityDetector {
@@ -83,12 +83,15 @@ func (d *CapabilityDetector) Detect(ctx context.Context) ImageCapabilities {
 
 	if d.visionSvc != nil {
 		active, err := d.visionSvc.GetActive()
-		if err == nil && active != nil && active.ApiKey != "" {
+		if err == nil && active.Ready() {
 			cap.Understand = true
 			cap.OCR = true
 			cap.Provider = active.ApiType
 			cap.Model = active.ModelName
 			cap.ExecutionLocation = LocationCloud
+			if active.IsLocal() {
+				cap.ExecutionLocation = LocationLocal
+			}
 		}
 	}
 

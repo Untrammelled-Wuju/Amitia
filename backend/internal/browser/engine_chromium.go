@@ -2,6 +2,7 @@ package browser
 
 import (
 	"context"
+	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"sync"
 	"time"
 
@@ -706,10 +707,20 @@ func (c *chromiumPageController) Navigate(ctx context.Context, targetID TargetID
 	}
 
 	if waitUntil != "" && waitUntil != "none" {
-		deadline := time.Now().Add(timeout)
-		for time.Now().Before(deadline) {
-			time.Sleep(200 * time.Millisecond)
-			if time.Now().After(deadline) {
+		waitCtx, cancel := timeoutpolicy.WithTimeout(ctx, timeout)
+		defer cancel()
+		for {
+			var state struct {
+				Result struct {
+					Value string `json:"value"`
+				} `json:"result"`
+			}
+			if err := client.Call(waitCtx, "Runtime.evaluate", sessionID, map[string]any{"expression": "document.readyState", "returnByValue": true}, &state); err == nil {
+				if state.Result.Value == "complete" || (waitUntil == "domcontentloaded" && state.Result.Value == "interactive") {
+					break
+				}
+			}
+			if waitCtx.Err() == context.DeadlineExceeded {
 				return &pageNavigateResult{
 					FrameID:   result.FrameID,
 					LoaderID:  result.LoaderID,
@@ -717,6 +728,11 @@ func (c *chromiumPageController) Navigate(ctx context.Context, targetID TargetID
 					FinalURL:  url,
 					TimedOut:  true,
 				}, nil
+			}
+			select {
+			case <-waitCtx.Done():
+				return nil, waitCtx.Err()
+			case <-time.After(200 * time.Millisecond):
 			}
 		}
 	}

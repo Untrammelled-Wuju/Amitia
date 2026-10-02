@@ -117,6 +117,32 @@ Map<String, dynamic> _event({
 }
 
 void main() {
+  test('自动化指示随工具事件更新，断线后等待确认，完成后撤下', () async {
+    final events = StreamController<ChatStreamEvent>.broadcast();
+    final controller = ConversationRuntimeController(_FakeChatService(events));
+    await controller.openConversation('conversation-1');
+    Future<void> emit(int sequence, String type, String status) async {
+      events.add(ChatStreamEvent('agent_ui_event', {
+        ..._event(sequence: sequence, id: 'automation-$sequence', type: type, status: status),
+        'blockId': 'automation',
+        'blockSequence': 1,
+        'revision': sequence,
+        'payload': {'toolName': 'android_interaction_click'},
+      }));
+      await Future<void>.delayed(const Duration(milliseconds: 30));
+    }
+    await emit(1, 'turn.started', 'running');
+    await emit(2, 'tool.running', 'running');
+    expect(controller.automationStatus?.label, '正在点击');
+    events.addError(StateError('disconnected'));
+    await Future<void>.delayed(const Duration(milliseconds: 30));
+    expect(controller.automationStatus?.label, '正在同步自动化状态');
+    await Future<void>.delayed(const Duration(milliseconds: 950));
+    await emit(3, 'tool.completed', 'completed');
+    expect(controller.automationStatus, isNull);
+    controller.dispose();
+    await events.close();
+  });
   test('Command ACK 不在客户端伪造 Turn 状态，queued 必须来自服务端事件', () async {
     final events = StreamController<ChatStreamEvent>.broadcast();
     final service = _FakeChatService(events);

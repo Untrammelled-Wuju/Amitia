@@ -11,204 +11,9 @@ import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/services/providers.dart';
 import '../../../../core/settings/appearance_preferences.dart';
 import '../../../../shared/models/models.dart';
+import '../../../../core/settings/settings_navigation.dart';
 
 const double _settingsOptionFontSize = 16;
-
-List<SettingGroup> _settingsGroups({
-  required String modelSummary,
-  required String appearanceSummary,
-}) => <SettingGroup>[
-  SettingGroup(
-    title: 'AI 与对话',
-    items: [
-      SettingItem(
-        title: '模型设置',
-        icon: Icons.psychology_outlined,
-        value: modelSummary,
-        route: AppRoutes.settingsModels,
-      ),
-      SettingItem(
-        title: '搜索 API',
-        icon: Icons.manage_search_outlined,
-        route: AppRoutes.settingsSearchApi,
-      ),
-      SettingItem(
-        title: '时间感知',
-        icon: Icons.schedule_outlined,
-        route: AppRoutes.settingsTemporal,
-      ),
-    ],
-  ),
-  SettingGroup(
-    title: '外观与通知',
-    items: [
-      SettingItem(
-        title: '外观设置',
-        icon: Icons.palette_outlined,
-        value: appearanceSummary,
-        route: AppRoutes.settingsAppearance,
-      ),
-      SettingItem(
-        title: '界面提供者',
-        icon: Icons.dashboard_customize_outlined,
-        route: AppRoutes.settingsUIProviders,
-      ),
-      SettingItem(
-        title: '系统设置',
-        icon: Icons.settings_applications_outlined,
-        route: AppRoutes.settingsSystem,
-      ),
-    ],
-  ),
-  SettingGroup(
-    title: '数据与隐私',
-    items: [
-      SettingItem(
-        title: '存储管理',
-        icon: Icons.storage_outlined,
-        route: AppRoutes.settingsStorage,
-      ),
-      SettingItem(
-        title: '归档对话',
-        icon: Icons.archive_outlined,
-        route: AppRoutes.chatLogs,
-      ),
-      SettingItem(
-        title: '备份与恢复',
-        icon: Icons.backup_outlined,
-        route: AppRoutes.settingsBackup,
-      ),
-      SettingItem(
-        title: '安全设置',
-        icon: Icons.security_outlined,
-        route: AppRoutes.settingsSafety,
-      ),
-      SettingItem(
-        title: '隐私扫描',
-        icon: Icons.privacy_tip_outlined,
-        route: AppRoutes.settingsPrivacyScan,
-      ),
-      SettingItem(
-        title: '隐私政策',
-        icon: Icons.policy_outlined,
-        route: AppRoutes.settingsPrivacyPolicy,
-      ),
-      SettingItem(
-        title: '用户协议',
-        icon: Icons.description_outlined,
-        route: AppRoutes.settingsUserAgreement,
-      ),
-    ],
-  ),
-  SettingGroup(
-    title: '设备与运行',
-    items: [
-      SettingItem(
-        title: '我的设备',
-        icon: Icons.devices_outlined,
-        route: AppRoutes.settingsDevices,
-      ),
-      SettingItem(
-        title: '部署配置',
-        icon: Icons.cloud_upload_outlined,
-        route: AppRoutes.settingsDeployment,
-      ),
-      SettingItem(
-        title: '系统权限',
-        icon: Icons.lock_outlined,
-        route: AppRoutes.settingsPermissions,
-      ),
-      SettingItem(
-        title: 'Android 自动化',
-        icon: Icons.smartphone_outlined,
-        route: AppRoutes.settingsAndroidAutomation,
-      ),
-      SettingItem(
-        title: '运行概览',
-        icon: Icons.monitor_heart_outlined,
-        route: AppRoutes.settingsOverview,
-      ),
-      SettingItem(
-        title: '运行数据',
-        icon: Icons.insights_outlined,
-        route: AppRoutes.settingsData,
-      ),
-      SettingItem(
-        title: '运行环境',
-        icon: Icons.terminal,
-        route: AppRoutes.settingsRuntime,
-      ),
-      SettingItem(
-        title: 'Core 运行模式',
-        icon: Icons.hub_outlined,
-        route: AppRoutes.settingsRuntimeMode,
-      ),
-    ],
-  ),
-  SettingGroup(
-    title: '维护与高级工具',
-    items: [
-      SettingItem(
-        title: '长期运行维护',
-        icon: Icons.schedule_send_outlined,
-        route: AppRoutes.settingsLongRunning,
-      ),
-      SettingItem(
-        title: '维护诊断',
-        icon: Icons.build_circle_outlined,
-        route: AppRoutes.settingsMaintenance,
-      ),
-      SettingItem(
-        title: '工具箱',
-        icon: Icons.handyman_outlined,
-        value: '诊断工具',
-        route: AppRoutes.settingsToolbox,
-      ),
-      SettingItem(
-        title: '高级系统',
-        icon: Icons.admin_panel_settings_outlined,
-        route: AppRoutes.settingsAdvanced,
-      ),
-      SettingItem(
-        title: 'BDI 决策可视化',
-        icon: Icons.account_tree_outlined,
-        route: AppRoutes.settingsDecisionViz,
-      ),
-    ],
-  ),
-  SettingGroup(
-    title: '更新与关于',
-    items: [
-      SettingItem(
-        title: '版本与更新',
-        icon: Icons.system_update_outlined,
-        route: AppRoutes.settingsAppUpdate,
-      ),
-      SettingItem(
-        title: '关于 Amitia',
-        icon: Icons.info_outline,
-        route: AppRoutes.settingsAbout,
-      ),
-    ],
-  ),
-];
-
-const _categoryIds = [
-  'ai',
-  'appearance',
-  'privacy',
-  'devices',
-  'maintenance',
-  'about',
-];
-const _categoryIcons = [
-  Icons.psychology_outlined,
-  Icons.palette_outlined,
-  Icons.shield_outlined,
-  Icons.devices_outlined,
-  Icons.build_outlined,
-  Icons.info_outline,
-];
 
 class SettingsCategoryPage extends ConsumerWidget {
   const SettingsCategoryPage({super.key, required this.categoryId});
@@ -217,9 +22,8 @@ class SettingsCategoryPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final index = _categoryIds.indexOf(categoryId);
-    final groups = _settingsGroups(modelSummary: '', appearanceSummary: '');
-    final group = groups[index < 0 ? 0 : index];
+    final categories = buildSettingsCategories(modelSummary: '', appearanceSummary: '');
+    final group = categories.where((category) => category.id == categoryId).firstOrNull?.group ?? categories.first.group;
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
         title: group.title,
@@ -263,7 +67,7 @@ class SettingsPage extends ConsumerWidget {
     const accentNames = ['暖棕', '蓝色', '绿色', '琥珀'];
     final appearanceSummary =
         '$themeSummary · ${accentNames[appearance.accentColorIndex]}';
-    final groups = _settingsGroups(
+    final categories = buildSettingsCategories(
       modelSummary: modelSummary,
       appearanceSummary: appearanceSummary,
     );
@@ -280,24 +84,24 @@ class SettingsPage extends ConsumerWidget {
             child: _buildUserInfoCard(context, ref),
           ),
           SizedBox(height: AppSpacing.md),
+          _SettingGroup(group: categories.firstWhere((category) => category.id == 'appearance').group),
+          SizedBox(height: AppSpacing.sectionGap),
           _SettingGroup(
             group: SettingGroup(
-              title: '偏好与管理',
+              title: '功能与管理',
               items: [
-                for (var i = 0; i < groups.length; i++)
+                for (final category in categories.where((category) => category.id != 'appearance' && category.id != 'about'))
                   SettingItem(
-                    title: groups[i].title,
-                    icon: _categoryIcons[i],
-                    value: i == 0
-                        ? modelSummary
-                        : i == 1
-                        ? appearanceSummary
-                        : null,
-                    route: '/settings/category/${_categoryIds[i]}',
+                    title: category.group.title,
+                    icon: category.icon,
+                    value: category.id == 'ai' ? modelSummary : null,
+                    route: '/settings/category/${category.id}',
                   ),
               ],
             ),
           ),
+          SizedBox(height: AppSpacing.sectionGap),
+          _SettingGroup(group: categories.firstWhere((category) => category.id == 'about').group),
           SizedBox(height: AppSpacing.xl),
         ],
       ),

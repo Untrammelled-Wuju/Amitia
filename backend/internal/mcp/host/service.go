@@ -7,6 +7,7 @@ package host
 import (
 	"context"
 	"encoding/json"
+	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"net/url"
 	"regexp"
 	"strings"
@@ -154,7 +155,7 @@ func (s *Service) createMessage(serverID string) client.RequestHandler {
 		if rpcErr != nil {
 			return nil, rpcErr
 		}
-		limited, cancel := context.WithTimeout(ctx, time.Duration(config.TimeoutSeconds)*time.Second)
+		limited, cancel := timeoutpolicy.WithTimeout(ctx, time.Duration(config.TimeoutSeconds)*time.Second)
 		defer cancel()
 		result, err := s.sampling.CreateMessage(limited, serverID, params)
 		if err != nil {
@@ -175,7 +176,7 @@ func (s *Service) elicit(serverID string) client.RequestHandler {
 		if s.elicitation == nil {
 			return map[string]any{"action": "decline"}, nil
 		}
-		limited, cancel := context.WithTimeout(ctx, 5*time.Minute)
+		limited, cancel := timeoutpolicy.WithTimeout(ctx, 5*time.Minute)
 		defer cancel()
 		result, err := s.elicitation.Elicit(limited, serverID, params)
 		if err != nil {

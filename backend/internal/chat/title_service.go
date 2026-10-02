@@ -3,6 +3,7 @@ package chat
 import (
 	"context"
 	"fmt"
+	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"strings"
 	"time"
 	"unicode"
@@ -67,7 +68,7 @@ func (s *service) generateConversationTitle(
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+	ctx, cancel := timeoutpolicy.WithTimeout(context.Background(), 45*time.Second)
 	defer cancel()
 	messages := []map[string]interface{}{
 		{

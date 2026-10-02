@@ -1,22 +1,16 @@
 package imageintelligence
 
 import (
-	"bytes"
 	"context"
 	"encoding/base64"
-	"encoding/json"
-	"fmt"
-	"io"
 	"net/http"
-	"strings"
-	"time"
 
 	"github.com/u-ai/backend/internal/vision"
 )
 
 type ImageUnderstandRequest struct {
 	Image  ImageInput       `json:"image"`
-Prompt string            `json:"prompt,omitempty"`
+	Prompt string           `json:"prompt,omitempty"`
 	Detail ImageDetailLevel `json:"detail,omitempty"`
 }
 
@@ -36,13 +30,11 @@ type UsageSummary struct {
 
 type UnderstandProvider struct {
 	visionSvc vision.Service
-	httpClient *http.Client
 }
 
 func NewUnderstandProvider(visionSvc vision.Service) *UnderstandProvider {
 	return &UnderstandProvider{
 		visionSvc: visionSvc,
-		httpClient: &http.Client{Timeout: 60 * time.Second},
 	}
 }
 
@@ -51,7 +43,7 @@ func (p *UnderstandProvider) Understand(ctx context.Context, req ImageUnderstand
 	if err != nil || cfg == nil {
 		return nil, &Error{Code: ErrUnAvailable, Message: "no active vision provider configured", HTTPStatus: http.StatusServiceUnavailable}
 	}
-	if cfg.ApiKey == "" {
+	if cfg.ApiKey == "" && !cfg.IsLocal() {
 		return nil, &Error{Code: ErrProviderAuth, Message: "vision provider API key not configured", HTTPStatus: http.StatusUnauthorized}
 	}
 
@@ -65,12 +57,12 @@ func (p *UnderstandProvider) Understand(ctx context.Context, req ImageUnderstand
 
 	dataURI := buildDataURI(summary.MIME, imageData)
 
-	content := []map[string]interface{}{
-		{"type": "input_image", "image_url": dataURI},
-		{"type": "input_text", "text": prompt},
+	result, generateErr := vision.GenerateImages(ctx, cfg, []string{dataURI}, prompt, 0)
+	provErr := ""
+	if generateErr != nil {
+		provErr = generateErr.Error()
 	}
 
-	result, provErr := p.callProvider(ctx, cfg.BaseUrl, cfg.ApiKey, cfg.ModelName, content)
 	if provErr != "" {
 		return nil, mapImageErrorToDomain(provErr, false)
 	}
@@ -81,71 +73,6 @@ func (p *UnderstandProvider) Understand(ctx context.Context, req ImageUnderstand
 		Model:    cfg.ModelName,
 		Input:    summary,
 	}, nil
-}
-
-func (p *UnderstandProvider) callProvider(ctx context.Context, baseURL, apiKey, modelName string, content []map[string]interface{}) (string, string) {
-	reqBody := map[string]interface{}{
-		"model": modelName,
-		"input": []map[string]interface{}{{
-			"role":    "user",
-			"content": content,
-		}},
-	}
-	bodyBytes, _ := json.Marshal(reqBody)
-
-	req, err := http.NewRequestWithContext(ctx, "POST", strings.TrimRight(baseURL, "/")+"/responses", bytes.NewReader(bodyBytes))
-	if err != nil {
-		return "", err.Error()
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+apiKey)
-
-	resp, err := p.httpClient.Do(req)
-	if err != nil {
-		return "", err.Error()
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != 200 {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		return "", fmt.Sprintf("provider returned %d: %s", resp.StatusCode, string(body))
-	}
-
-	rawBody, _ := io.ReadAll(io.LimitReader(resp.Body, 65536))
-	var result map[string]interface{}
-	if err := json.Unmarshal(rawBody, &result); err != nil {
-		return string(rawBody), ""
-	}
-
-	output, ok := result["output"].([]interface{})
-	if !ok {
-		return string(rawBody), ""
-	}
-
-	var texts []string
-	for _, item := range output {
-		m, ok := item.(map[string]interface{})
-		if !ok {
-			continue
-		}
-		if m["type"] == "message" {
-			contentArr, ok := m["content"].([]interface{})
-			if !ok {
-				continue
-			}
-			for _, c := range contentArr {
-				cm, ok := c.(map[string]interface{})
-				if !ok {
-					continue
-				}
-				if cm["type"] == "output_text" {
-					texts = append(texts, fmt.Sprint(cm["text"]))
-				}
-			}
-		}
-	}
-
-	return strings.Join(texts, ""), ""
 }
 
 func encodeBase64Std(data []byte) string {

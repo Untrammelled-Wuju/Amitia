@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"log"
 	"strings"
 	"time"
@@ -101,7 +102,7 @@ func (o *Orchestrator) Process(ctx context.Context, req *ProcessRequest) (*Orche
 	if o.deadlineFn != nil {
 		processCtx, cancel = o.deadlineFn(ctx, req.RequestID)
 	} else if o.cfg.DefaultTimeout > 0 {
-		processCtx, cancel = context.WithTimeout(ctx, o.cfg.DefaultTimeout)
+		processCtx, cancel = timeoutpolicy.WithTimeout(ctx, o.cfg.DefaultTimeout)
 	} else {
 		processCtx, cancel = context.WithCancel(ctx)
 	}

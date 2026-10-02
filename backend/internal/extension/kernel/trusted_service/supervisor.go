@@ -1415,7 +1415,7 @@ func (s *ProcessSupervisor) Invoke(ctx context.Context, serviceID, operation str
 	if timeout <= 0 {
 		timeout = 30 * time.Second
 	}
-	result, err := inst.rpcSession.Invoke(operation, input, timeout)
+	result, err := inst.rpcSession.InvokeContext(ctx, operation, input, timeout)
 	if err != nil {
 		inst.circuit.RecordFailure()
 		return nil, err

@@ -34,6 +34,7 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
   List<Map<String, dynamic>> _providers = const <Map<String, dynamic>>[];
   bool _loading = true;
   bool _busy = false;
+  bool _visionSuspended = false;
   String? _error;
 
   String get _typeName => _typeLabels[widget.modelType] ?? '模型配置';
@@ -61,11 +62,15 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
       _error = null;
     });
     try {
+      final visionSuspended = widget.modelType == 'vision'
+          ? await ref.read(visionServiceProvider).mainModelVision()
+          : false;
       final configs = await _loadConfigs();
       final providers = await _loadProviders();
       if (!mounted) return;
       setState(() {
         _configs = configs;
+        _visionSuspended = visionSuspended;
         _providers = providers;
         _loading = false;
       });
@@ -189,6 +194,10 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
         AppSpacing.xxxl,
       ),
       children: <Widget>[
+        if (_visionSuspended) ...<Widget>[
+          Text('主模型已接管视觉识别，独立视觉配置暂停使用', style: AppTypography.caption(context)),
+          SizedBox(height: AppSpacing.md),
+        ],
         Row(
           children: <Widget>[
             Icon(
@@ -226,7 +235,7 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
     final id = _idOf(config);
     final testState = _testStates[id] ?? 0;
     final name = (config['name'] ?? '未命名配置').toString();
-    return Container(
+    final card = Container(
       margin: EdgeInsets.only(bottom: AppSpacing.md),
       padding: EdgeInsets.all(AppSpacing.cardPadding),
       decoration: BoxDecoration(
@@ -243,7 +252,11 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
                 child: Text(name, style: AppTypography.cardTitle(context)),
               ),
               AmitiaStatusBadge(
-                label: _activeOf(config) ? '已激活' : '未激活',
+                label: _visionSuspended
+                    ? '主模型已接管'
+                    : _activeOf(config)
+                    ? '已激活'
+                    : '未激活',
                 type: _activeOf(config) ? BadgeType.success : BadgeType.neutral,
               ),
             ],
@@ -361,9 +374,42 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
         ],
       ),
     );
+    if (!_visionSuspended) return card;
+    return GestureDetector(
+      onTap: _blockIndependentVision,
+      child: Opacity(opacity: 0.55, child: AbsorbPointer(child: card)),
+    );
+  }
+
+  Future<bool> _blockIndependentVision() async {
+    if (widget.modelType != 'vision') return false;
+    final blocked = await ref.read(visionServiceProvider).mainModelVision();
+    if (!mounted) return true;
+    if (_visionSuspended != blocked) {
+      await _load();
+      if (!mounted) return true;
+    }
+    setState(() => _visionSuspended = blocked);
+    if (!blocked) return false;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('主模型已接管视觉识别'),
+        content: const Text('主模型已开启视觉模式，如需单独启用视觉模型，请先关闭文本模型的支持识图功能'),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('知道了'),
+          ),
+        ],
+      ),
+    );
+    return true;
   }
 
   Future<void> _testConnection(Map<String, dynamic> config) async {
+    if (await _blockIndependentVision()) return;
+    if (!mounted) return;
     final id = _idOf(config);
     setState(() => _testStates[id] = 1);
     try {
@@ -393,6 +439,8 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
   }
 
   Future<void> _activate(Map<String, dynamic> config) async {
+    if (await _blockIndependentVision()) return;
+    if (!mounted) return;
     final id = _idOf(config);
     if (id.isEmpty) return;
     setState(() => _busy = true);
@@ -425,6 +473,8 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
   }
 
   Future<void> _showConfigSheet(Map<String, dynamic>? existing) async {
+    if (await _blockIndependentVision()) return;
+    if (!mounted) return;
     final nameCtrl = TextEditingController(
       text: (existing?['name'] ?? '').toString(),
     );
@@ -478,6 +528,7 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
     bool supportsReasoning = existing == null
         ? true
         : existing['supportsReasoning'] == true;
+    bool supportsVision = existing?['supportsVision'] == true;
     String defaultReasoningEffort =
         (existing?['defaultReasoningEffort'] ?? 'high').toString();
     bool detecting = false;
@@ -793,6 +844,16 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
                           onChanged: (value) =>
                               setSheetState(() => supportsReasoning = value),
                         ),
+                        AmitiaSwitchTile(
+                          title: '支持识图',
+                          value: supportsVision,
+                          onChanged: (value) =>
+                              setSheetState(() => supportsVision = value),
+                        ),
+                        Text(
+                          '开启并设为默认模型后，主模型承担图片识别，独立视觉模型暂停使用。',
+                          style: AppTypography.caption(context),
+                        ),
                         const SizedBox(height: 4),
                         DropdownButtonFormField<String>(
                           value:
@@ -907,6 +968,7 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
                                 timeoutSeconds: timeoutCtrl.text.trim(),
                                 retryCount: retryCtrl.text.trim(),
                                 supportsReasoning: supportsReasoning,
+                                supportsVision: supportsVision,
                                 defaultReasoningEffort: defaultReasoningEffort,
                                 speed: speedCtrl.text.trim(),
                                 pitch: pitchCtrl.text.trim(),
@@ -966,6 +1028,7 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
     required String timeoutSeconds,
     required String retryCount,
     required bool supportsReasoning,
+    required bool supportsVision,
     required String defaultReasoningEffort,
     required String speed,
     required String pitch,
@@ -976,6 +1039,8 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
     required String realtimeSecretKey,
     required bool isActive,
   }) async {
+    if (await _blockIndependentVision()) return;
+    if (!mounted) return;
     final id = existing == null ? '' : _idOf(existing);
     final data = <String, dynamic>{
       'name': name,
@@ -1025,6 +1090,7 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
         );
         data['retryCount'] = (int.tryParse(retryCount) ?? 1).clamp(0, 10);
         data['supportsReasoning'] = supportsReasoning;
+        data['supportsVision'] = supportsVision;
         data['defaultReasoningEffort'] = defaultReasoningEffort;
       }
     }
@@ -1069,6 +1135,8 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
   }
 
   Future<void> _confirmDelete(Map<String, dynamic> config) async {
+    if (await _blockIndependentVision()) return;
+    if (!mounted) return;
     final id = _idOf(config);
     if (id.isEmpty) return;
     final confirmed = await showDialog<bool>(

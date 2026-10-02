@@ -13,6 +13,7 @@ import '../core/ui_runtime/ui_route_registry.dart';
 import '../core/ui_runtime/ui_runtime_controller.dart';
 import '../core/widgets/amitia_drawer.dart';
 import '../core/widgets/amitia_scaffold.dart';
+import '../core/widgets/application_background.dart';
 import '../features/error/presentation/pages/not_found_page.dart';
 import '../features/onboarding/presentation/pages/onboarding_page.dart';
 import '../features/privacy/presentation/pages/privacy_page.dart';
@@ -161,14 +162,16 @@ RoutingConfig _routingConfigFor(UIProviderSnapshot? providerSnapshot) {
               child: surface,
             ),
           );
-          return MobileExtensionSlot(
-            slotId: 'root',
-            context: {
-              'route': state.matchedLocation,
-              'surfaceRole': 'main',
-              'slotFallback': 'default',
-            },
-            fallback: shell,
+          return ApplicationBackground(
+            child: MobileExtensionSlot(
+              slotId: 'root',
+              context: {
+                'route': state.matchedLocation,
+                'surfaceRole': 'main',
+                'slotFallback': 'default',
+              },
+              fallback: shell,
+            ),
           );
         },
         routes: <RouteBase>[

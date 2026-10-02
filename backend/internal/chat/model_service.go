@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"io"
 	"net"
 	"net/http"
@@ -100,7 +101,7 @@ func modelDetectHTTPClient() *http.Client {
 		}
 		return nil, lastErr
 	}
-	return &http.Client{
+	return timeoutpolicy.Client(&http.Client{
 		Timeout:   60 * time.Second,
 		Transport: transport,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
@@ -115,7 +116,7 @@ func modelDetectHTTPClient() *http.Client {
 			}
 			return nil
 		},
-	}
+	})
 }
 
 func newModelDetectRequest(rawURL string) (*http.Request, error) {

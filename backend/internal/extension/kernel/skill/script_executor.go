@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"path/filepath"
 	"sync"
 	"time"
@@ -117,7 +118,7 @@ func (e *scriptExecutor) Execute(ctx context.Context, plan *SkillScriptExecution
 		return nil, ErrScriptInterpreterUnavailable
 	}
 
-	execCtx, cancel := context.WithTimeout(ctx, plan.Timeout)
+	execCtx, cancel := timeoutpolicy.WithTimeout(ctx, plan.Timeout)
 	defer cancel()
 
 	e.registerExecution(executionID, cancel)

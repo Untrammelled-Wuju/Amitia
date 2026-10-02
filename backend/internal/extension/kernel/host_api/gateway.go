@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"sync"
 	"time"
 
@@ -202,7 +203,7 @@ func (g *DefaultGateway) Call(ctx context.Context, request CallRequest) CallResu
 	timeoutCtx := ctx
 	if route.Timeout > 0 {
 		var cancel context.CancelFunc
-		timeoutCtx, cancel = context.WithTimeout(ctx, route.Timeout)
+		timeoutCtx, cancel = timeoutpolicy.WithTimeout(ctx, route.Timeout)
 		defer cancel()
 	}
 	output, err := route.Handler(timeoutCtx, request)

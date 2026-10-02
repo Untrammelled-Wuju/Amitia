@@ -496,7 +496,10 @@ func (h *Handler) WebChatSubmitMessage(c *gin.Context) {
 				h.finalizeWebChatTurnRuntime(queuedTurn, msgID, "failed", "runtime_panic", true, "Agent 运行时异常中止", fmt.Sprint(r))
 			}
 		}()
-		imageContext, visionError := chat.AnalyzeImageContext(spaceID, body.ImageUrl)
+		imageContext, visionError := "", ""
+		if !chat.UseNativeMainVision(body.ModelConfigID) {
+			imageContext, visionError = chat.AnalyzeImageContext(spaceID, body.ImageUrl)
+		}
 		if visionError != "" {
 			h.publishModelError(modelerror.Event{ModelType: "vision", ConversationID: convID, RequestID: requestID, Channel: "web", RawError: visionError})
 		}

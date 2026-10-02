@@ -2,6 +2,7 @@ package mindruntime
 
 import (
 	"context"
+	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"sync"
 	"time"
 )
@@ -66,12 +67,19 @@ func (dp *DeadlinePropagator) NewDeadline(requestID string) *Deadline {
 	defer dp.mu.Unlock()
 
 	now := time.Now().UTC()
+	total := timeoutpolicy.Duration(dp.config.TotalTimeout)
+	deadline := time.Time{}
+	remaining := time.Duration(1<<63 - 1)
+	if total > 0 {
+		deadline = now.Add(total)
+		remaining = total
+	}
 	d := &Deadline{
-		Total:     dp.config.TotalTimeout,
-		Remaining: dp.config.TotalTimeout,
+		Total:     total,
+		Remaining: remaining,
 		Stage:     DeadlineStageQueue,
 		CreatedAt: now,
-		Deadline:  now.Add(dp.config.TotalTimeout),
+		Deadline:  deadline,
 	}
 	dp.active[requestID] = d
 	return d
@@ -87,7 +95,10 @@ func (dp *DeadlinePropagator) Propagate(requestID string, stage DeadlineStage) *
 	}
 
 	dp.mu.Lock()
-	d.Remaining = time.Until(d.Deadline)
+	d.Remaining = time.Duration(1<<63 - 1)
+	if !d.Deadline.IsZero() {
+		d.Remaining = time.Until(d.Deadline)
+	}
 	if d.Remaining < 0 {
 		d.Remaining = 0
 	}
@@ -102,10 +113,13 @@ func (dp *DeadlinePropagator) Propagate(requestID string, stage DeadlineStage) *
 func (dp *DeadlinePropagator) ContextWithDeadline(ctx context.Context, requestID string, stage DeadlineStage) (context.Context, context.CancelFunc) {
 	d := dp.Propagate(requestID, stage)
 
-	if d.Remaining <= 0 {
+	if d.Remaining <= 0 || d.CancelReason != "" {
 		cctx, cancel := context.WithCancel(ctx)
 		cancel()
 		return cctx, cancel
+	}
+	if d.Deadline.IsZero() {
+		return context.WithCancel(ctx)
 	}
 
 	return context.WithDeadline(ctx, d.Deadline)
@@ -120,7 +134,7 @@ func (dp *DeadlinePropagator) IsExpired(requestID string) bool {
 		return true
 	}
 
-	return time.Now().UTC().After(d.Deadline)
+	return d.CancelReason != "" || (!d.Deadline.IsZero() && time.Now().UTC().After(d.Deadline))
 }
 
 func (dp *DeadlinePropagator) Remaining(requestID string) time.Duration {
@@ -132,7 +146,13 @@ func (dp *DeadlinePropagator) Remaining(requestID string) time.Duration {
 		return 0
 	}
 
-	remaining := time.Until(d.Deadline)
+	if d.CancelReason != "" {
+		return 0
+	}
+	remaining := time.Duration(1<<63 - 1)
+	if !d.Deadline.IsZero() {
+		remaining = time.Until(d.Deadline)
+	}
 	if remaining < 0 {
 		remaining = 0
 	}
@@ -169,7 +189,7 @@ func (dp *DeadlinePropagator) ValidateBeforePersist(requestID string) bool {
 		return false
 	}
 
-	if time.Now().UTC().After(d.Deadline) && d.Stage == DeadlineStagePersist {
+	if !d.Deadline.IsZero() && time.Now().UTC().After(d.Deadline) && d.Stage == DeadlineStagePersist {
 		return false
 	}
 

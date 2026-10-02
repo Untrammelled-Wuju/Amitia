@@ -1,5 +1,7 @@
 import { type Ref, ref, shallowRef, watch } from "vue";
 import { useApi } from "./useApi";
+import { notifyReplyCompleted } from "./useReplyNotifications";
+import { projectAutomationStatus, type AutomationStatus } from "@/conversation/runtime/automationStatus";
 import { resolveApiUrl } from "../runtime/runtime-adapter";
 import { createAuthenticatedFetchInit } from "../runtime/request-auth";
 import type { AssistantTurnData } from "@/conversation/rendering/types";
@@ -54,6 +56,7 @@ export function useConversationRuntime(
   const messages = shallowRef<any[]>([]);
   const activeTurnId = ref("");
   const activeExecutionId = ref("");
+  const automationStatus = shallowRef<AutomationStatus | null>(null);
   const lastEventSequence = ref(0);
   const turnHistoryBefore = ref(0);
   const hasMoreTurnHistory = ref(false);
@@ -68,6 +71,7 @@ export function useConversationRuntime(
   let disposed = false;
 
   function syncReducerState() {
+    automationStatus.value = projectAutomationStatus(reducer.turns);
     activeTurnId.value = reducer.activeTurnId;
     activeExecutionId.value = reducer.activeExecutionId;
     lastEventSequence.value = reducer.lastEventSequence;
@@ -291,6 +295,9 @@ export function useConversationRuntime(
 
     if (["turn.completed", "turn.failed", "turn.interrupted"].includes(event.type)) {
       sending.value = false;
+      if (event.type === "turn.completed" && !event.parentTurnId && !turn?.parentTurnId) {
+        void notifyReplyCompleted(event.conversationId, event.turnId || "");
+      }
       if (event.type === "turn.failed") {
         notifyDesktopPetChatState(
           "assistant_error",
@@ -389,6 +396,12 @@ export function useConversationRuntime(
 
   function scheduleReconnect() {
     if (disposed || !conversationId.value || reconnectTimer) return;
+    if (automationStatus.value) automationStatus.value = {
+      ...automationStatus.value,
+      phase: "waiting",
+      label: "正在同步自动化状态",
+      detail: "连接恢复后确认操作状态",
+    };
     reconnectTimer = setTimeout(() => {
       reconnectTimer = null;
       void connect(false);
@@ -458,6 +471,7 @@ export function useConversationRuntime(
   }
 
   function disconnect() {
+    automationStatus.value = null;
     if (reconnectTimer) {
       clearTimeout(reconnectTimer);
       reconnectTimer = null;
@@ -494,6 +508,7 @@ export function useConversationRuntime(
 
   function cleanup() {
     disposed = true;
+    automationStatus.value = null;
     disconnect();
     disconnectProactiveMessages();
     if (renderTimer) {
@@ -507,6 +522,7 @@ export function useConversationRuntime(
 
   return {
     messages,
+    automationStatus,
     activeTurnId,
     activeExecutionId,
     lastEventSequence,

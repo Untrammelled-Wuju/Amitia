@@ -234,6 +234,16 @@ internal class NotificationNativeHandler(context: Context) {
     }
 
     private fun handlePost(request: NativeNotificationRequest): NativeNotificationResponse {
+        if (request.payload["backgroundOnly"] == true && MainActivity.currentActivity() != null) {
+            return NativeNotificationResponse(requestId = request.requestId, status = "success", result = mapOf("posted" to false, "reason" to "app_foreground"))
+        }
+        val replySound = request.payload["replySound"] == true && request.payload["backgroundOnly"] == true
+        val replyVibration = request.payload["replyVibration"] == true && request.payload["backgroundOnly"] == true
+        if (request.payload["soundOnly"] == true) {
+            if (replySound) ReplyNotificationSound.play(appContext)
+            if (replyVibration) ReplyNotificationVibration.play(appContext)
+            return NativeNotificationResponse(requestId = request.requestId, status = "success", result = mapOf("posted" to false, "soundRequested" to replySound, "vibrationRequested" to replyVibration))
+        }
         val title = (request.payload["title"] as? String) ?: ""
         val body = (request.payload["body"] as? String) ?: ""
         val channel = (request.payload["channel"] as? String) ?: "amitia_agent"
@@ -250,6 +260,8 @@ internal class NotificationNativeHandler(context: Context) {
             )
         }
 
+        if (replySound) ReplyNotificationSound.play(appContext)
+        if (replyVibration) ReplyNotificationVibration.play(appContext)
         val state = stateReader.readState()
         if (!state.canPost) {
             return if (state.notificationsEnabled) {
@@ -277,7 +289,8 @@ internal class NotificationNativeHandler(context: Context) {
             title = title.take(256),
             body = body.take(4096),
             channel = channel,
-            silent = silent,
+            silent = if (request.payload["backgroundOnly"] == true) true else silent,
+            openApp = request.payload["backgroundOnly"] == true,
         )
 
         return NativeNotificationResponse(

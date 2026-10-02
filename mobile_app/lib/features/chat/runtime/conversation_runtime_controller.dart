@@ -6,23 +6,27 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/models/conversation.dart';
 import '../../../core/services/chat_service.dart';
+import '../../../core/services/reply_notification_service.dart';
 import '../../../core/services/providers.dart';
 import '../../../core/settings/chat_permission_preferences.dart';
 import '../../../shared/models/models.dart';
 import '../../conversation/rendering/stream/markdown_stream_scheduler.dart';
 import 'agent_event_reducer.dart';
+import 'automation_status.dart';
 import 'conversation_message_ledger.dart';
 
 class ConversationRuntimeController extends ChangeNotifier {
   ConversationRuntimeController(
     this._chatService, {
     ChatPermissionPreferencesNotifier? permissionPreferences,
+    this.replyNotifications,
   }) : _permissionPreferences = permissionPreferences,
        _permissionMode = normalizeChatPermissionMode(
          permissionPreferences?.mode,
        );
 
   final ChatService _chatService;
+  final ReplyNotificationService? replyNotifications;
   final ChatPermissionPreferencesNotifier? _permissionPreferences;
   final ConversationMessageLedger _messages = ConversationMessageLedger();
   final AgentEventReducer _agentReducer = AgentEventReducer();
@@ -48,6 +52,7 @@ class ConversationRuntimeController extends ChangeNotifier {
   int _messageBeforeSequence = 0;
   bool _hasMoreMessageHistory = false;
   bool _hasMoreTurnHistory = false;
+  bool _automationStateUncertain = false;
   int _oldestTurnSequence = 0;
 
   List<ChatMessage> get messages => _messages.messages;
@@ -66,6 +71,16 @@ class ConversationRuntimeController extends ChangeNotifier {
   int get conversationUpdateEpoch => _conversationUpdateEpoch;
   String get activeTurnId => _agentReducer.activeTurnId;
   String get activeExecutionId => _agentReducer.activeExecutionId;
+  AutomationStatus? get automationStatus {
+    final status = projectAutomationStatus(_agentReducer.turns);
+    if (status == null || !_automationStateUncertain) return status;
+    return AutomationStatus(
+      phase: 'waiting',
+      label: '正在同步自动化状态',
+      detail: '连接恢复后确认操作状态',
+      count: status.count,
+    );
+  }
   List<Map<String, dynamic>> get pendingApprovals => _pendingApprovals.values
       .map((item) => Map<String, dynamic>.from(item))
       .toList(growable: false);
@@ -391,6 +406,7 @@ class ConversationRuntimeController extends ChangeNotifier {
     if (snapshot.version != 1) {
       throw StateError('不支持的会话快照版本: ${snapshot.version}');
     }
+    _automationStateUncertain = false;
     final conversation = snapshot.conversation;
     if (conversation != null) {
       _conversationId = conversation.id;
@@ -497,6 +513,10 @@ class ConversationRuntimeController extends ChangeNotifier {
         if (identical(_eventCancellation, cancellation)) {
           _eventCancellation = null;
         }
+        if (!_disposed && epoch == _runtimeEpoch && _conversationId == conversationId) {
+          _automationStateUncertain = true;
+          notifyListeners();
+        }
       }
       if (_disposed ||
           epoch != _runtimeEpoch ||
@@ -508,6 +528,7 @@ class ConversationRuntimeController extends ChangeNotifier {
   }
 
   void _handleAppliedEvent(AgentUIEvent event) {
+    _automationStateUncertain = false;
     final type = event.type;
     if (type == 'approval.requested') {
       final approvalId = (event.payload['approvalId'] ?? '').toString().trim();
@@ -539,6 +560,17 @@ class ConversationRuntimeController extends ChangeNotifier {
         type == 'turn.failed' ||
         type == 'turn.interrupted';
     if (terminal) {
+      final completedTurn = _agentReducer.turns
+          .where((turn) => turn.id == event.turnId)
+          .firstOrNull;
+      if (type == 'turn.completed' &&
+          event.parentTurnId.isEmpty &&
+          (completedTurn?.parentTurnId.isEmpty ?? true)) {
+        unawaited(
+          replyNotifications?.completed(event.conversationId, event.turnId) ??
+              Future<void>.value(),
+        );
+      }
       _sending = false;
       _conversationUpdateEpoch++;
       _streamScheduler.schedule(_flushStreamingProjection);
@@ -1289,6 +1321,7 @@ final conversationRuntimeControllerProvider =
     ChangeNotifierProvider<ConversationRuntimeController>((ref) {
       final controller = ConversationRuntimeController(
         ref.read(chatServiceProvider),
+        replyNotifications: ref.read(replyNotificationServiceProvider),
         permissionPreferences: ref.read(
           chatPermissionPreferencesProvider.notifier,
         ),

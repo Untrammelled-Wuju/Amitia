@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import '../../../app/app_routes.dart';
 import '../../../app/route_transitions.dart';
 import '../../../features/chat/presentation/pages/chat_page.dart';
+import '../../../features/settings/presentation/pages/notification_settings_page.dart';
 import '../../../features/conversations/presentation/pages/conversation_list_page.dart';
 import '../../../features/agent/presentation/pages/agent_page.dart';
 import '../../../features/agent/presentation/pages/agent_task_detail_page.dart';
@@ -540,6 +541,14 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
       context: context,
       state: state,
       child: const AppearanceSettingsPage(),
+    ),
+  ),
+  GoRoute(
+    path: AppRoutes.settingsNotifications,
+    pageBuilder: (context, state) => slideFadePage(
+      context: context,
+      state: state,
+      child: const NotificationSettingsPage(),
     ),
   ),
   GoRoute(

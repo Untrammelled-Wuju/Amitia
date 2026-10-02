@@ -103,6 +103,7 @@ class AndroidNativeBridgePlugin : FlutterPlugin {
             platform = platform,
             operation = operation,
             payload = payload,
+            timeoutPolicy = map["timeoutPolicy"] as? Map<String, Any?>,
         )
     }
 

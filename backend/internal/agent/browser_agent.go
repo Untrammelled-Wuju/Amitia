@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"net/url"
 	"strings"
 	"time"
@@ -38,7 +39,7 @@ func (s *service) RunBrowserAgent(ctx context.Context, execCtx tool.ToolExecutio
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	ctx, cancel := context.WithTimeout(ctx, time.Duration(req.TimeoutMS)*time.Millisecond)
+	ctx, cancel := timeoutpolicy.WithTimeout(ctx, time.Duration(req.TimeoutMS)*time.Millisecond)
 	defer cancel()
 
 	scope := browserAgentScope(execCtx)

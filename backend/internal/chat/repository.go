@@ -257,11 +257,26 @@ func (r *repository) CountModels() (int64, error) {
 }
 
 func (r *repository) CreateModel(cfg *ModelConfig) error {
-	return r.db.Create(cfg).Error
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		if cfg.IsActive == 1 {
+			if err := tx.Model(&ModelConfig{}).Where("is_active = 1").Update("is_active", 0).Error; err != nil {
+				return err
+			}
+		}
+		return tx.Create(cfg).Error
+	})
 }
 
 func (r *repository) UpdateModel(id int, updates map[string]interface{}) error {
-	return r.db.Model(&ModelConfig{}).Where("id = ?", id).Updates(updates).Error
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		active := updates["is_active"]
+		if active == true || active == 1 || active == float64(1) {
+			if err := tx.Model(&ModelConfig{}).Where("is_active = 1 AND id <> ?", id).Update("is_active", 0).Error; err != nil {
+				return err
+			}
+		}
+		return tx.Model(&ModelConfig{}).Where("id = ?", id).Updates(updates).Error
+	})
 }
 
 func (r *repository) DeleteModel(id int) error {
@@ -269,8 +284,16 @@ func (r *repository) DeleteModel(id int) error {
 }
 
 func (r *repository) ActivateModel(id int) error {
-	r.db.Model(&ModelConfig{}).Where("is_active = 1").Update("is_active", 0)
-	return r.db.Model(&ModelConfig{}).Where("id = ?", id).Update("is_active", 1).Error
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		var target ModelConfig
+		if err := tx.First(&target, id).Error; err != nil {
+			return err
+		}
+		if err := tx.Model(&ModelConfig{}).Where("is_active = 1").Update("is_active", 0).Error; err != nil {
+			return err
+		}
+		return tx.Model(&ModelConfig{}).Where("id = ?", id).Update("is_active", 1).Error
+	})
 }
 
 func (r *repository) GetModelRoutes() ([]map[string]interface{}, error) {

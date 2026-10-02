@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../../../../core/settings/chat_input_preferences.dart';
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/cupertino.dart';
@@ -53,6 +54,7 @@ import '../../../conversation/rendering/role_switch_divider.dart';
 import '../../../../shared/models/models.dart';
 import '../chat_route_state.dart';
 import '../widgets/agent_approval_guard.dart';
+import '../widgets/automation_status_indicator.dart';
 import 'realtime_call_page.dart';
 
 class ChatPage extends ConsumerStatefulWidget {
@@ -107,6 +109,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       activeConversationIdProvider.notifier,
     );
     _runtime = ref.read(conversationRuntimeControllerProvider);
+    unawaited(ref.read(chatInputPreferencesProvider.notifier).init().catchError((Object _) {}));
     _lastDraftEpoch = _runtime.draftEpoch;
     _lastConversationUpdateEpoch = _runtime.conversationUpdateEpoch;
     _lastSidebarConversationId = _runtime.conversationId?.trim() ?? '';
@@ -2281,6 +2284,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                 actions: providerActions,
               ),
               AmitiaChatInput(
+                sendOnEnter: ref.watch(chatInputPreferencesProvider),
                 controller: _composerController,
                 models: modelConfigs
                     .map(
@@ -2787,6 +2791,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
             ),
           ),
           AgentApprovalGuard(conversationId: _runtime.conversationId ?? ''),
+          if (_runtime.automationStatus case final status?)
+            Positioned.fill(child: AutomationStatusIndicator(status: status)),
           if (hasSidebarProvider || hasSidebarExtensions)
             Positioned(
               top: _chatTopBarHeight,

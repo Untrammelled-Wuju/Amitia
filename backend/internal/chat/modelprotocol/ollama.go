@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"io"
 	"net/http"
 	"strings"
@@ -65,7 +66,7 @@ func (a *OllamaAdapter) Generate(ctx context.Context, cfg ProviderConfig, req Mo
 
 	httpReq.Header.Set("Content-Type", "application/json")
 
-	client := &http.Client{Timeout: time.Duration(cfg.TimeoutSeconds) * time.Second}
+	client := timeoutpolicy.Client(&http.Client{Timeout: time.Duration(cfg.TimeoutSeconds) * time.Second})
 	resp, err := client.Do(httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("请求失败: %w", err)
@@ -113,7 +114,7 @@ func (a *OllamaAdapter) Stream(ctx context.Context, cfg ProviderConfig, req Mode
 
 	httpReq.Header.Set("Content-Type", "application/json")
 
-	client := &http.Client{Timeout: time.Duration(cfg.TimeoutSeconds) * time.Second}
+	client := timeoutpolicy.Client(&http.Client{Timeout: time.Duration(cfg.TimeoutSeconds) * time.Second})
 	resp, err := client.Do(httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("请求失败: %w", err)
@@ -140,10 +141,12 @@ func (a *OllamaAdapter) buildMessages(req ModelRequest) []map[string]interface{}
 
 	for _, msg := range req.Messages {
 		content := a.buildContent(msg.Parts)
-		messages = append(messages, map[string]interface{}{
-			"role":    msg.Role,
-			"content": content,
-		})
+		if body, ok := content.(map[string]interface{}); ok {
+			body["role"] = msg.Role
+			messages = append(messages, body)
+		} else {
+			messages = append(messages, map[string]interface{}{"role": msg.Role, "content": content})
+		}
 	}
 
 	for _, tr := range req.ToolResults {
@@ -161,11 +164,15 @@ func (a *OllamaAdapter) buildContent(parts []ModelContentPart) interface{} {
 		return parts[0].Text
 	}
 
-	content := parts[0].Text
+	content := ""
 	var images []string
 	for _, part := range parts {
+		if part.Type == ContentTypeText {
+			content += part.Text
+		}
 		if part.Type == ContentTypeImage {
-			images = append(images, part.ResourceURI)
+			_, data := imagePayload(part)
+			images = append(images, data)
 		}
 	}
 

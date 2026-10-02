@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"strconv"
 	"strings"
 	"sync"
@@ -430,7 +431,9 @@ func (d *chromiumDevTools) waitFor(ctx context.Context, client *cdpClient, sessi
 	default:
 		expr = "Boolean(document.body && document.body.innerText.includes(" + strconv.Quote(req.Text) + "))"
 	}
-	deadline := time.Now().Add(time.Duration(req.TimeoutMS) * time.Millisecond)
+	ctx, cancel := timeoutpolicy.WithTimeout(ctx, time.Duration(req.TimeoutMS)*time.Millisecond)
+	defer cancel()
+	started := time.Now()
 	attempts := 0
 	for {
 		attempts++
@@ -442,10 +445,10 @@ func (d *chromiumDevTools) waitFor(ctx context.Context, client *cdpClient, sessi
 		}
 		if err := client.Call(ctx, "Runtime.evaluate", session, map[string]any{"expression": expr, "returnByValue": true, "awaitPromise": true}, &response); err == nil && response.ExceptionDetails == nil {
 			if ok, _ := response.Result.Value.(bool); ok {
-				return map[string]any{"ok": true, "matched": true, "attempts": attempts, "elapsedMs": req.TimeoutMS - int(time.Until(deadline).Milliseconds())}, nil
+				return map[string]any{"ok": true, "matched": true, "attempts": attempts, "elapsedMs": time.Since(started).Milliseconds()}, nil
 			}
 		}
-		if time.Now().After(deadline) {
+		if ctx.Err() == context.DeadlineExceeded {
 			return map[string]any{"ok": false, "matched": false, "timedOut": true, "attempts": attempts}, nil
 		}
 		select {

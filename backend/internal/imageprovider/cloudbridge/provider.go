@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"io"
 	"net/http"
 	"os"
@@ -28,7 +29,7 @@ type Provider struct {
 func NewProvider(dataDir string) *Provider {
 	return &Provider{
 		credentialStore: agent.NewCredentialStore(dataDir),
-		client:          &http.Client{Timeout: 3 * time.Minute},
+		client:          timeoutpolicy.Client(&http.Client{Timeout: 3 * time.Minute}),
 	}
 }
 

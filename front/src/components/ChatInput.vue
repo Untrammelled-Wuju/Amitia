@@ -712,7 +712,7 @@ SPDX-License-Identifier: AGPL-3.0-only
                   isSubmitting)
               "
               @click="generating ? $emit('stop') : handleSendClick()"
-              :title="generating ? '停止生成' : '发送 (Enter)'"
+              :title="generating ? '停止生成' : (sendOnEnter ? '发送 (Enter)' : '发送')"
               :aria-label="generating ? '停止生成' : '发送消息'"
             >
               <span v-if="generating" class="composer-stop-square"></span>
@@ -748,6 +748,7 @@ import {
   Unlock,
 } from "@element-plus/icons-vue";
 import { useTextInput } from "../composables/useTextInput";
+import { useChatInputPreference, shouldEnterSend } from "../composables/useChatInputPreference";
 import { useMediaUpload } from "../composables/useMediaUpload";
 import { useVoiceInput } from "../composables/useVoiceInput";
 import { fetchAgentSkills } from "../views/extensions/api";
@@ -761,6 +762,7 @@ import {
 } from "../composables/useConversationWorkspace";
 
 const env = resolveHostEnvironment();
+const { sendOnEnter } = useChatInputPreference();
 const props = withDefaults(defineProps<{
   disabled?: boolean;
   sending?: boolean;
@@ -1326,14 +1328,7 @@ function handleComposerKeydown(event: KeyboardEvent) {
       return;
     }
   }
-  if (
-    event.key === "Enter" &&
-    !event.shiftKey &&
-    !event.ctrlKey &&
-    !event.altKey &&
-    !event.metaKey &&
-    !event.isComposing
-  ) {
+  if (shouldEnterSend(event, sendOnEnter.value)) {
     handleEnterSend(event);
   }
 }

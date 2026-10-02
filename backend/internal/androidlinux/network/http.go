@@ -8,6 +8,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/base64"
+	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"io"
 	"net"
 	"net/http"
@@ -167,7 +168,7 @@ func buildPinnedHTTPClient(sec EndpointSecurity, policy Policy, timeout time.Dur
 	}
 
 	maxRedirects := policy.MaxRedirects
-	return &http.Client{
+	return timeoutpolicy.Client(&http.Client{
 		Transport: transport,
 		Timeout:   timeout,
 		CheckRedirect: func(request *http.Request, via []*http.Request) error {
@@ -176,7 +177,7 @@ func buildPinnedHTTPClient(sec EndpointSecurity, policy Policy, timeout time.Dur
 			}
 			return nil
 		},
-	}
+	})
 }
 
 func readHTTPResponse(resp *http.Response, req HTTPRequest, policy Policy, startURL string, start time.Time) (HTTPResponse, error) {

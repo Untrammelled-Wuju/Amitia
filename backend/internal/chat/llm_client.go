@@ -12,6 +12,7 @@ import (
 	"github.com/u-ai/backend/internal/agent/tool"
 	"github.com/u-ai/backend/internal/chat/localmodel"
 	"github.com/u-ai/backend/internal/chat/modelprotocol"
+	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"io"
 	"net/http"
 	"strings"
@@ -275,10 +276,13 @@ func toLocalModelRequest(req ModelRequest, messages []map[string]interface{}) lo
 	}
 	for _, msg := range messages {
 		role, _ := msg["role"].(string)
-		content, _ := msg["content"].(string)
+		var parts []localmodel.LocalModelContent
+		for _, part := range extractContentParts(msg) {
+			parts = append(parts, localmodel.LocalModelContent{Type: string(part.Type), Text: part.Text, ResourceURI: part.ResourceURI, MIMEType: part.MIMEType})
+		}
 		localReq.Messages = append(localReq.Messages, localmodel.LocalModelMessage{
 			Role:  role,
-			Parts: []localmodel.LocalModelContent{{Type: "text", Text: content}},
+			Parts: parts,
 		})
 	}
 	return localReq
@@ -327,7 +331,7 @@ func (s *service) callOpenAIMode(ctx context.Context, cfg *ModelConfig, messages
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+cfg.APIKey)
-	client := &http.Client{Timeout: 180 * time.Second}
+	client := timeoutpolicy.Client(&http.Client{Timeout: 180 * time.Second})
 	resp, err := client.Do(req)
 	if err != nil {
 		return "", 0, fmt.Errorf("请求失败: %w", err)
@@ -397,7 +401,7 @@ func (s *service) callOllamaMode(ctx context.Context, cfg *ModelConfig, messages
 		return "", 0, err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	client := &http.Client{Timeout: 180 * time.Second}
+	client := timeoutpolicy.Client(&http.Client{Timeout: 180 * time.Second})
 	resp, err := client.Do(req)
 	if err != nil {
 		return "", 0, fmt.Errorf("请求失败: %w", err)
@@ -508,14 +512,14 @@ func modelToolCallsFromLegacy(value interface{}) []ModelToolCall {
 }
 
 func extractContentParts(m map[string]interface{}) []ModelContentPart {
+	if parts, ok := m["parts"].([]ModelContentPart); ok {
+		return parts
+	}
 	if content, ok := m["content"].(string); ok {
 		if content == "" {
 			return nil
 		}
 		return []ModelContentPart{{Type: ContentTypeText, Text: content}}
-	}
-	if parts, ok := m["parts"].([]ModelContentPart); ok {
-		return parts
 	}
 	return nil
 }
@@ -681,7 +685,7 @@ func (s *service) callAnthropicMode(ctx context.Context, cfg *ModelConfig, messa
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("x-api-key", cfg.APIKey)
 	req.Header.Set("anthropic-version", "2023-06-01")
-	client := &http.Client{Timeout: 180 * time.Second}
+	client := timeoutpolicy.Client(&http.Client{Timeout: 180 * time.Second})
 	resp, err := client.Do(req)
 	if err != nil {
 		return "", 0, fmt.Errorf("请求失败: %w", err)
@@ -762,7 +766,7 @@ func (s *service) callGeminiMode(ctx context.Context, cfg *ModelConfig, messages
 	q := req.URL.Query()
 	q.Set("key", cfg.APIKey)
 	req.URL.RawQuery = q.Encode()
-	client := &http.Client{Timeout: 180 * time.Second}
+	client := timeoutpolicy.Client(&http.Client{Timeout: 180 * time.Second})
 	resp, err := client.Do(req)
 	if err != nil {
 		return "", 0, fmt.Errorf("请求失败: %w", err)

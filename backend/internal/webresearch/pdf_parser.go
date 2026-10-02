@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"os"
 	"os/exec"
 	"sort"
@@ -67,7 +68,7 @@ func (p *popplerPDFParser) Parse(ctx context.Context, raw []byte) (PDFDocument, 
 	parseCtx := ctx
 	cancel := func() {}
 	if p.timeout > 0 {
-		parseCtx, cancel = context.WithTimeout(ctx, p.timeout)
+		parseCtx, cancel = timeoutpolicy.WithTimeout(ctx, p.timeout)
 	}
 	defer cancel()
 

@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"net/http"
 	"net/url"
 	"strings"
@@ -45,7 +46,7 @@ func NewRegistryClient(baseURL string) *RegistryClient {
 	}
 	return &RegistryClient{
 		baseURL: strings.TrimSuffix(baseURL, "/"),
-		client:  &http.Client{Timeout: 30 * time.Second},
+		client:  timeoutpolicy.Client(&http.Client{Timeout: 30 * time.Second}),
 	}
 }
 

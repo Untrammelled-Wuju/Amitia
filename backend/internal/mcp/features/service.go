@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"strings"
 	"time"
 
@@ -144,7 +145,7 @@ func (s *Service) Complete(ctx context.Context, serverID string, reference map[s
 	if len(argument["name"]) > 200 || len(argument["value"]) > 2000 || sensitiveCompletion(argument["value"]) {
 		return CompletionResult{}, fmt.Errorf("MCP_COMPLETION_INVALID")
 	}
-	limited, cancel := context.WithTimeout(ctx, 5*time.Second)
+	limited, cancel := timeoutpolicy.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	raw, err := s.caller.Call(limited, serverID, "completion/complete", map[string]any{"ref": reference, "argument": argument, "context": map[string]any{"arguments": contextArguments}}, client.CallOptions{Timeout: 5 * time.Second})
 	if err != nil {

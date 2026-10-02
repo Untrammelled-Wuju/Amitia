@@ -405,7 +405,7 @@ func getVisionModelConfig() (*visioncfg.VisionConfig, error) {
 	if err != nil {
 		return nil, err
 	}
-	if cfg == nil || cfg.ApiKey == "" || cfg.BaseUrl == "" || cfg.ModelName == "" {
+	if !cfg.Ready() {
 		return nil, fmt.Errorf("未找到可用的模型配置")
 	}
 	return cfg, nil
@@ -444,7 +444,9 @@ func NewService(repo Repository, ctx *app.AppContext, memPort MemoryPort, profPo
 	if len(recorder) > 0 {
 		r = recorder[0]
 	}
-	return &service{repo: repo, charRepo: character.NewRepository(ctx), db: ctx.DB, changeRecorder: r, psycheStore: psycheStore, emotion: emotionstate.NewService(ctx.DB), memoryPort: memPort, profilePort: profPort, episodicPort: epiPort, worldBookPort: wbPort, visionPort: visionPort, wmCache: wmCache, stateProvider: stateProvider, compressor: comp, pipeline: p, localModels: make(map[string]LocalModelInfer), cleanupPlans: make(map[string]cleanupPlan)}
+	svc := &service{repo: repo, charRepo: character.NewRepository(ctx), db: ctx.DB, changeRecorder: r, psycheStore: psycheStore, emotion: emotionstate.NewService(ctx.DB), memoryPort: memPort, profilePort: profPort, episodicPort: epiPort, worldBookPort: wbPort, visionPort: visionPort, wmCache: wmCache, stateProvider: stateProvider, compressor: comp, pipeline: p, localModels: make(map[string]LocalModelInfer), cleanupPlans: make(map[string]cleanupPlan)}
+	visioncfg.SetLocalImageGenerator(svc.generateLocalVision)
+	return svc
 }
 
 func (s *service) SetExtensionContextProvider(provider extensioncontext.Provider) {

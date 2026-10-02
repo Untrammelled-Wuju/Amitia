@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"io"
 	"net/http"
 	"time"
@@ -39,7 +40,7 @@ type RemoteCatalogSource struct {
 // NewRemoteCatalogSource creates a RemoteCatalogSource with the given API URL.
 func NewRemoteCatalogSource(apiURL string) *RemoteCatalogSource {
 	return &RemoteCatalogSource{
-		client: &http.Client{Timeout: 15 * time.Second},
+		client: timeoutpolicy.Client(&http.Client{Timeout: 15 * time.Second}),
 		apiURL: apiURL,
 	}
 }

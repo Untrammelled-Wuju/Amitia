@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"io"
 	"net/http"
 	"strings"
@@ -164,7 +165,7 @@ func (c *Compressor) generateSummary(ctx context.Context, conversationText, pare
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+apiKey)
 
-	resp, err := (&http.Client{Timeout: 120 * time.Second}).Do(req)
+	resp, err := (timeoutpolicy.Client(&http.Client{Timeout: 120 * time.Second})).Do(req)
 	if err != nil {
 		return ""
 	}
@@ -200,7 +201,7 @@ func (c *Compressor) generateOllamaSummary(ctx context.Context, baseURL, modelNa
 		return ""
 	}
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := (&http.Client{Timeout: 120 * time.Second}).Do(req)
+	resp, err := (timeoutpolicy.Client(&http.Client{Timeout: 120 * time.Second})).Do(req)
 	if err != nil {
 		return ""
 	}

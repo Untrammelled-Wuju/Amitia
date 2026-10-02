@@ -2,6 +2,7 @@ package realtime
 
 import (
 	"context"
+	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"strings"
 	"sync"
 	"time"
@@ -100,7 +101,7 @@ func (s *cascadeCall) loadEmotionContext(ctx context.Context) {
 	if provider == nil {
 		return
 	}
-	loadCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	loadCtx, cancel := timeoutpolicy.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
 	emotionContext, err := provider.Load(loadCtx, s.params.SpaceID, s.params.CharacterID)
 	if err != nil {
@@ -127,7 +128,7 @@ func (s *cascadeCall) commitEmotion(tracker *cascadePlaybackTracker, deliveredTe
 		Signals:       signals,
 	}
 	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		ctx, cancel := timeoutpolicy.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		if err := s.emotionProvider.Commit(ctx, s.params.SpaceID, s.params.CharacterID, commit); err != nil {
 			appLog.Warn("failed to commit realtime emotion state:", err.Error())

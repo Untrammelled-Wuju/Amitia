@@ -2,6 +2,7 @@ package webresearch
 
 import (
 	"context"
+	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"sync"
 	"time"
 )
@@ -22,6 +23,10 @@ func newBrowserExecutionBudget(maxPages int, maxTime time.Duration) *browserExec
 	}
 	if maxTime <= 0 {
 		maxTime = 15 * time.Second
+	}
+	maxTime = timeoutpolicy.Duration(maxTime)
+	if maxTime == 0 {
+		maxTime = time.Duration(1<<63 - 1)
 	}
 	return &browserExecutionBudget{
 		gate:      make(chan struct{}, 1),
@@ -62,7 +67,10 @@ func (b *browserExecutionBudget) acquire(ctx context.Context) (context.Context, 
 	remaining := b.timeLeft
 	b.mu.Unlock()
 
-	child, cancel := context.WithTimeout(ctx, remaining)
+	child, cancel := context.WithCancel(ctx)
+	if settings, active := timeoutpolicy.Current(); !active || !settings.Disabled {
+		child, cancel = context.WithTimeout(ctx, remaining)
+	}
 	started := time.Now()
 	release := func() {
 		cancel()

@@ -12,6 +12,7 @@ class ModelConfigDto {
   final int retryCount;
   final bool hasApiKey;
   final bool supportsReasoning;
+  final bool supportsVision;
   final String defaultReasoningEffort;
 
   ModelConfigDto({
@@ -28,6 +29,7 @@ class ModelConfigDto {
     this.retryCount = 1,
     this.hasApiKey = false,
     this.supportsReasoning = true,
+    this.supportsVision = false,
     this.defaultReasoningEffort = 'high',
   });
 
@@ -45,6 +47,7 @@ class ModelConfigDto {
       timeoutSeconds: (json['timeoutSeconds'] as num?)?.toInt() ?? 60,
       retryCount: (json['retryCount'] as num?)?.toInt() ?? 1,
       hasApiKey: json['hasApiKey'] == true,
+      supportsVision: json['supportsVision'] == true,
       supportsReasoning: json['supportsReasoning'] == null
           ? true
           : json['supportsReasoning'] == true,
@@ -68,6 +71,7 @@ class ModelConfigDto {
       'retryCount': retryCount,
       'hasApiKey': hasApiKey,
       'supportsReasoning': supportsReasoning,
+      'supportsVision': supportsVision,
       'defaultReasoningEffort': defaultReasoningEffort,
     };
   }

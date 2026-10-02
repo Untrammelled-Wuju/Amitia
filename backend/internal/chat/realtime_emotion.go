@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"strings"
 	"time"
 
@@ -212,7 +213,7 @@ func (s *service) trackUserAffectFromMessage(spaceID, characterID, message strin
 	}
 	affect := inferUserAffect(appraisal)
 	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		ctx, cancel := timeoutpolicy.WithTimeout(context.Background(), 3*time.Second)
 		defer cancel()
 		_, _ = s.emotion.Commit(ctx, spaceID, characterID, affect, relationshipEmotionDeltaFromAppraisal(appraisal), emotionstate.Signals{})
 	}()

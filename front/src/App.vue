@@ -9,26 +9,27 @@ SPDX-License-Identifier: AGPL-3.0-only
   <AgentApprovalGuard />
   <PrivacyConsent v-if="!isPublicPage && !renderError" />
   <NotFoundView v-if="renderError" :error="capturedError" />
-  <Transition v-else name="route-slide" mode="out-in">
-    <component :is="secondaryPage.kind === 'settings' ? SettingsWorkspace : AccountWorkspace"
-      v-if="secondaryPage" key="secondary" :return-to="returnTo" :title="secondaryPage.title">
-      <router-view v-slot="{ Component }">
-        <RouteSurfaceHost v-if="Component" :fallback="Component" />
-      </router-view>
-    </component>
-    <AppLayout v-else-if="!isPublicPage" key="app">
-      <router-view v-slot="{ Component }">
-        <RouteSurfaceHost v-if="Component" :fallback="Component" />
-      </router-view>
-    </AppLayout>
-    <div
-      v-else
-      key="public"
-      class="public-root"
-    >
-      <router-view />
+  <div v-else class="workspace-root">
+    <ApplicationBackground :visible="!isPublicPage" />
+    <div class="workspace-foreground">
+      <Transition name="route-slide" mode="out-in">
+        <component :is="secondaryPage.kind === 'settings' ? SettingsWorkspace : AccountWorkspace"
+          v-if="secondaryPage" key="secondary" :return-to="returnTo" :title="secondaryPage.title">
+          <router-view v-slot="{ Component }">
+            <RouteSurfaceHost v-if="Component" :fallback="Component" />
+          </router-view>
+        </component>
+        <AppLayout v-else-if="!isPublicPage" key="app">
+          <router-view v-slot="{ Component }">
+            <RouteSurfaceHost v-if="Component" :fallback="Component" />
+          </router-view>
+        </AppLayout>
+        <div v-else key="public" class="public-root">
+          <router-view />
+        </div>
+      </Transition>
     </div>
-  </Transition>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -51,6 +52,7 @@ import SettingsWorkspace from "./components/SettingsWorkspace.vue";
 import AccountWorkspace from "./components/AccountWorkspace.vue";
 import { useSecondaryWorkspace } from "./composables/useSecondaryWorkspace";
 import { useAppUIHost } from "./composables/useAppUIHost";
+import ApplicationBackground from "./components/ApplicationBackground.vue";
 
 const router = useRouter();
 const route = useRoute();
@@ -160,6 +162,8 @@ onUnmounted(() => {
 </script>
 
 <style>
+.workspace-root { height: 100%; }
+.workspace-foreground { position: relative; z-index: 1; height: 100%; }
 /* Cross-platform declarative ui.components primitives. These variables are
    emitted by providerTheme.ts from metadata.componentVariants. */
 :root {
