@@ -13,10 +13,10 @@ describe("default appearance", () => {
   it("adapts the default blue to light and dark mode", async () => {
     const { useTheme } = await import("../composables/useTheme");
     const theme = useTheme();
-    expect(theme.state.value.accentColor).toBe("#416FAE");
-    expect(document.documentElement.style.getPropertyValue("--tp-primary")).toBe("#82A7DC");
+    expect(theme.state.value.accentColor).toBe("#0066CC");
+    expect(document.documentElement.style.getPropertyValue("--tp-primary")).toBe("#0A84FF");
     theme.setPreset("light");
-    await vi.waitFor(() => expect(document.documentElement.style.getPropertyValue("--tp-primary")).toBe("#416FAE"));
+    await vi.waitFor(() => expect(document.documentElement.style.getPropertyValue("--tp-primary")).toBe("#0066CC"));
   });
 
   it("preserves a saved accent instead of overwriting it with blue", async () => {
@@ -28,11 +28,11 @@ describe("default appearance", () => {
   });
 
   it("updates the previous default blue and adapts button text across modes", async () => {
-    localStorage.setItem("ai-companion-appearance", JSON.stringify({ accentColor: "#0066CC" }));
+    localStorage.setItem("ai-companion-appearance", JSON.stringify({ accentColor: "#416FAE" }));
     const { useTheme } = await import("../composables/useTheme");
     const theme = useTheme();
     const style = document.documentElement.style;
-    expect(theme.state.value.accentColor).toBe("#416FAE");
+    expect(theme.state.value.accentColor).toBe("#0066CC");
     expect(style.getPropertyValue("--tp-action-text")).toBe("#000000");
     theme.setPreset("light");
     await vi.waitFor(() => expect(style.getPropertyValue("--tp-action-text")).toBe("#FFFFFF"));
@@ -45,25 +45,25 @@ describe("default appearance", () => {
     }));
     const { useTheme } = await import("../composables/useTheme");
     const theme = useTheme();
-    expect(theme.state.value.accentColor).toBe("#416FAE");
+    expect(theme.state.value.accentColor).toBe("#0066CC");
     expect(document.documentElement.style.getPropertyValue("--tp-primary")).toBe("#6C8FEA");
     theme.setCustomPalette({ enabled: false });
-    expect(document.documentElement.style.getPropertyValue("--tp-primary")).toBe("#82A7DC");
+    expect(document.documentElement.style.getPropertyValue("--tp-primary")).toBe("#0A84FF");
   });
 
   it("keeps dark tinted surfaces dark and refreshes them when switching modes", async () => {
     const { useTheme } = await import("../composables/useTheme");
     const theme = useTheme();
     const style = document.documentElement.style;
-    expect(style.getPropertyValue("--tp-primary-light-9")).toBe("#262a2f");
-    expect(style.getPropertyValue("--tp-primary-hover")).toBe("#96b5e2");
-    expect(style.getPropertyValue("--tp-secondary")).toBe("#82A7DC");
-    expect(style.getPropertyValue("--tp-secondary-soft")).toBe("rgba(130, 167, 220, 0.16)");
+    expect(style.getPropertyValue("--tp-primary-light-9")).toBe("#1a2635");
+    expect(style.getPropertyValue("--tp-primary-hover")).toBe("#3198ff");
+    expect(style.getPropertyValue("--tp-secondary")).toBe("#0A84FF");
+    expect(style.getPropertyValue("--tp-secondary-soft")).toBe("rgba(10, 132, 255, 0.16)");
     theme.setPreset("light");
-    await vi.waitFor(() => expect(style.getPropertyValue("--tp-primary-light-9")).toBe("#ecf1f7"));
+    await vi.waitFor(() => expect(style.getPropertyValue("--tp-primary-light-9")).toBe("#e6f0fa"));
     expect(style.getPropertyValue("--tp-text-on-secondary")).toBe("#FFFFFF");
     theme.setPreset("dark");
-    await vi.waitFor(() => expect(style.getPropertyValue("--tp-primary-light-9")).toBe("#262a2f"));
+    await vi.waitFor(() => expect(style.getPropertyValue("--tp-primary-light-9")).toBe("#1a2635"));
     expect(style.getPropertyValue("--tp-text-on-secondary")).toBe("#000000");
   });
 
@@ -71,7 +71,7 @@ describe("default appearance", () => {
     const { useTheme } = await import("../composables/useTheme");
     const { buildSandboxThemeTokens } = await import("../components/extension/sandboxSessionCache");
     const theme = useTheme();
-    expect(buildSandboxThemeTokens()["--amitia-color-accent"]).toBe("#82A7DC");
+    expect(buildSandboxThemeTokens()["--amitia-color-accent"]).toBe("#0A84FF");
     theme.setAccentColor("#52B788");
     expect(buildSandboxThemeTokens()["--amitia-color-accent"]).toBe("#52B788");
   });

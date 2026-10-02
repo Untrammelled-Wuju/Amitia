@@ -121,7 +121,6 @@ function cancelRename() {
 .thread-row:has([aria-current="page"]) {
   background: var(--workbench-sidebar-active);
   color: var(--text-primary);
-  box-shadow: inset 2px 0 var(--tp-primary);
 }
 .thread-main {
   display: flex;

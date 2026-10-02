@@ -29,7 +29,7 @@ const STORAGE_KEY = "ai-companion-theme";
 const APPEARANCE_STORAGE_KEY = "ai-companion-appearance";
 const VALID_PRESETS: ThemePreset[] = ["system", "light", "dark"];
 const DEFAULT_THEME: ThemePreset = "dark";
-const DEFAULT_ACCENT = "#416FAE";
+const DEFAULT_ACCENT = "#0066CC";
 
 export const FONT_SCALE_OPTIONS = [
   { value: 0.9, label: "小" },
@@ -40,7 +40,7 @@ export const FONT_SCALE_OPTIONS = [
 
 export const ACCENT_COLOR_OPTIONS = [
   { value: "#8A5728", label: "暖棕" },
-  { value: DEFAULT_ACCENT, label: "柔和蓝" },
+  { value: DEFAULT_ACCENT, label: "系统蓝" },
   { value: "#52B788", label: "薄荷绿" },
   { value: "#E9A23B", label: "琥珀" },
 ] as const;
@@ -104,7 +104,7 @@ const storedAppearance = loadStoredAppearance();
 const state = ref<ThemeState>({
   customPalette: normalizeCustomPalette(storedAppearance.customPalette),
   preset: normalizePreset(localStorage.getItem(STORAGE_KEY)),
-  accentColor: ["#6C8FEA", "#0066CC"].includes(normalizeAccentColor(storedAppearance.accentColor))
+  accentColor: ["#6C8FEA", "#416FAE"].includes(normalizeAccentColor(storedAppearance.accentColor))
     ? DEFAULT_ACCENT
     : normalizeAccentColor(storedAppearance.accentColor),
   fontScale: normalizeFontScale(storedAppearance.fontScale),
@@ -176,7 +176,7 @@ function applyAccent(html: HTMLElement, accent: string) {
   const selectedAccent = normalizeAccentColor(accent);
   const dark = resolvedMode.value === "dark";
   const normalized = !state.value.customPalette.enabled && selectedAccent === DEFAULT_ACCENT && dark
-    ? "#82A7DC"
+    ? "#0A84FF"
     : selectedAccent;
   const isDefaultLightAccent =
     normalized === "#8A5728" && resolvedMode.value === "light";
@@ -202,7 +202,7 @@ function applyAccent(html: HTMLElement, accent: string) {
   );
   html.style.setProperty("--tp-primary-ring", rgba(normalized, dark ? 0.3 : 0.24));
   const background = getComputedStyle(html).getPropertyValue("--tp-panel").trim();
-  const tintTarget = dark ? hexToRgb(/^#[0-9a-f]{6}$/i.test(background) ? background : "#1C1C1C") : [255, 255, 255] as [number, number, number];
+  const tintTarget = dark ? hexToRgb(/^#[0-9a-f]{6}$/i.test(background) ? background : "#1C1C1E") : [255, 255, 255] as [number, number, number];
   for (const level of [3, 5, 7, 8, 9]) {
     html.style.setProperty(`--tp-primary-light-${level}`, mixHex(normalized, tintTarget, level / 10));
   }
@@ -271,7 +271,7 @@ function applyTheme(preset: ThemePreset) {
   html.style.setProperty("--tp-secondary-soft", rgba(secondary, effective === "dark" ? 0.16 : 0.1));
   html.style.setProperty("--tp-text-on-secondary", readableText(secondary));
   if (palette.enabled) {
-    const background = getComputedStyle(html).getPropertyValue("--tp-panel").trim() || (effective === "dark" ? "#1C1C1C" : "#FAFAFA");
+    const background = getComputedStyle(html).getPropertyValue("--tp-panel").trim() || (effective === "dark" ? "#1C1C1E" : "#FFFFFF");
     const text = paletteText(palette, background);
     html.style.setProperty("--tp-text", text);
     html.style.setProperty("--tp-text-secondary", supportingText(text, background, 0.2));

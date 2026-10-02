@@ -1386,6 +1386,11 @@ class _ExpandableConversationListState
           Padding(
             padding: EdgeInsets.only(left: widget.compact ? 12 : 20, bottom: 4),
             child: TextButton(
+              style: TextButton.styleFrom(
+                alignment: Alignment.centerLeft,
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                minimumSize: const Size(64, 48),
+              ),
               onPressed: () => setState(() {
                 _visibleCount = hasMore
                     ? expandSidebarConversationCount(

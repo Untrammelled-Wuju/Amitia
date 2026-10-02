@@ -280,9 +280,11 @@ html[data-custom-palette="true"] .el-button:not(.el-button--primary):not(.el-but
 .el-dialog,
 .el-drawer,
 .el-popper {
-  background: var(--overlay-bg);
+  background: var(--tp-glass-bg-strong);
   border-color: var(--overlay-border);
   box-shadow: var(--tp-shadow-float);
+  -webkit-backdrop-filter: blur(var(--tp-glass-blur)) saturate(var(--tp-glass-saturate));
+  backdrop-filter: blur(var(--tp-glass-blur)) saturate(var(--tp-glass-saturate));
 }
 
 .el-popper { z-index: 30; }
@@ -371,6 +373,19 @@ html[data-custom-palette="true"] .el-button:not(.el-button--primary):not(.el-but
   .el-dropdown-menu,
   .el-select-dropdown,
   .el-popper {
-    background: var(--tp-glass-bg-strong);
+    background: var(--tp-float);
+  }
+}
+
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+  .el-dialog,
+  .el-drawer,
+  .el-popper,
+  .glass-surface,
+  .glass-surface--strong {
+    background: var(--tp-float);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    border-color: var(--tp-border-strong);
   }
 }

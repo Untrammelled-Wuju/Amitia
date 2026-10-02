@@ -495,7 +495,7 @@ onUnmounted(() => {
 .side-menu :deep(.el-menu-item), .side-menu :deep(.el-sub-menu__title) { height: auto; line-height: 1.45; min-height: 34px; margin: 1px 0; padding: 6px 9px !important; border-radius: 7px; font-size: var(--ac-font-size-sm); color: var(--text-secondary); }
 .side-menu :deep(.el-icon) { width: 18px; font-size: 15px; margin-right: 8px; }
 .side-menu :deep(.el-menu-item:hover), .side-menu :deep(.el-sub-menu__title:hover) { background: var(--workbench-sidebar-hover); color: var(--text-primary); }
-.side-menu :deep(.el-menu-item.is-active), .side-menu :deep(.el-sub-menu.is-active > .el-sub-menu__title) { background: var(--workbench-sidebar-active); color: var(--text-primary); font-weight: 550; box-shadow: inset 2px 0 var(--tp-primary); }
+.side-menu :deep(.el-menu-item.is-active), .side-menu :deep(.el-sub-menu.is-active > .el-sub-menu__title) { background: var(--workbench-sidebar-active); color: var(--text-primary); font-weight: 550; }
 .side-menu :deep(.el-sub-menu .el-menu) { background: transparent; }
 .side-menu :deep(.el-sub-menu .el-menu-item) { padding-left: 34px !important; height: auto; min-height: 31px; line-height: 1.45; font-size: var(--ac-font-size-sm); }
 .recent-section { min-height: 0; flex: 1 1 auto; overflow-y: auto; padding: 12px 0 8px; }
@@ -515,7 +515,7 @@ onUnmounted(() => {
 .thread-actions { opacity: 0; }
 .thread-row:hover .thread-actions, .thread-row:focus-within .thread-actions { opacity: 1; }
 .thread-delete:hover { background: var(--control-hover-bg); color: var(--danger-color, #d9534f); }
-.thread-expand { align-self: flex-start; margin: 2px 0 2px 30px; padding: 3px 7px; border: 0; border-radius: 5px; background: transparent; color: var(--ac-color-primary); cursor: pointer; font: inherit; font-size: var(--ac-font-size-xs); }
+.thread-expand { align-self: flex-start; margin: 2px 0; padding: 3px 8px; border: 0; border-radius: 5px; background: transparent; color: var(--ac-color-primary); cursor: pointer; font: inherit; font-size: var(--ac-font-size-xs); }
 .thread-expand:hover { background: var(--workbench-sidebar-hover); }
 .thread-section { display: flex; flex-direction: column; gap: 1px; padding: 4px 0; }
 .thread-section + .thread-section { margin-top: 6px; border-top: 1px solid var(--surface-border); padding-top: 10px; }
