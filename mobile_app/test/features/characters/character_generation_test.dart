@@ -45,16 +45,24 @@ class _Api extends Fake implements BackendServiceApi {
 }
 
 void main() {
-  testWidgets('sent message is visible before reply and next stays available', (tester) async {
+  testWidgets('sent message is visible before reply and next stays available', (
+    tester,
+  ) async {
     final api = _Api()..pending = Completer<void>();
     final applied = <Map<String, dynamic>>[];
-    await tester.pumpWidget(ProviderScope(
-      overrides: [backendServiceProvider.overrideWithValue(api)],
-      child: MaterialApp(home: Scaffold(body: CharacterGenerationChat(
-        currentDraft: () => {'name': ''},
-        onApply: applied.add,
-      ))),
-    ));
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [backendServiceProvider.overrideWithValue(api)],
+        child: MaterialApp(
+          home: Scaffold(
+            body: CharacterGenerationChat(
+              currentDraft: () => {'name': ''},
+              onApply: applied.add,
+            ),
+          ),
+        ),
+      ),
+    );
     await tester.enterText(find.byType(TextField), '设计图书管理员');
     await tester.tap(find.byTooltip('发送'));
     await tester.pump();
@@ -62,7 +70,9 @@ void main() {
     expect(find.text('正在整理角色草稿…'), findsOneWidget);
     await tester.tap(find.text('下一步：编辑角色卡'));
     await tester.pump();
-    expect(applied, [{'name': ''}]);
+    expect(applied, [
+      {'name': ''},
+    ]);
     api.pending!.complete();
     await tester.pumpAndSettle();
     expect(applied.length, 1);
