@@ -37,6 +37,7 @@ dependencies:
   path_provider: ^2.1.6
 
 dev_dependencies:
+  image_picker_platform_interface: ^2.11.1
   video_player_platform_interface: ^6.9.0
   flutter_test:
     sdk: flutter

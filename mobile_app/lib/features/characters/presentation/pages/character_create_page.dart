@@ -1,5 +1,8 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../../../app/app_routes.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_motion.dart';
@@ -10,6 +13,7 @@ import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/services/providers.dart';
+import '../../../../core/widgets/profile_avatar.dart';
 
 class CharacterCreatePage extends ConsumerStatefulWidget {
   const CharacterCreatePage({super.key});
@@ -27,21 +31,12 @@ class _CharacterCreatePageState extends ConsumerState<CharacterCreatePage> {
   final _personalityController = TextEditingController();
   final _speakingStyleController = TextEditingController();
   final _promptController = TextEditingController();
-  String _selectedColor = '#8A5728';
+  XFile? _avatarFile;
+  String _avatarPreview = '';
+  bool _isPickingAvatar = false;
   bool _isCreating = false;
 
   final _steps = ['基础形象', '名字', '身份', '性格', '说话方式', '提示词', '完成预览'];
-
-  final _colors = [
-    '#8A5728',
-    '#52B788',
-    '#6C8FEA',
-    '#E9A23B',
-    '#E76F51',
-    '#9B5DE5',
-    '#F15BB5',
-    '#00BBF9',
-  ];
 
   @override
   void dispose() {
@@ -79,6 +74,7 @@ class _CharacterCreatePageState extends ConsumerState<CharacterCreatePage> {
     setState(() => _isCreating = true);
     try {
       final svc = ref.read(characterServiceProvider);
+      final avatarService = ref.read(characterDetailServiceProvider);
       final data = {
         'name': _nameController.text,
         'identity': _identityController.text,
@@ -89,18 +85,42 @@ class _CharacterCreatePageState extends ConsumerState<CharacterCreatePage> {
         'voiceSpeed': 1.0,
       };
       final character = await svc.create(data);
-      ref.invalidate(characterListProvider);
+      if (character == null || character.id.isEmpty) {
+        throw StateError('角色创建结果为空，请确认服务连接后重试');
+      }
+      String? avatarError;
+      final avatarFile = _avatarFile;
+      if (avatarFile != null) {
+        try {
+          final result = await avatarService.uploadAvatar(
+            character.id,
+            avatarFile.path,
+          );
+          if ((result?['avatarUrl'] ?? '').toString().isEmpty) {
+            throw StateError('服务未返回头像地址');
+          }
+        } catch (error) {
+          avatarError = '头像上传失败，可在角色详情中重新上传';
+        }
+      }
       if (mounted) {
+        ref.invalidate(characterListProvider);
+        final messenger = ScaffoldMessenger.of(context);
         Navigator.of(context).pop();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('角色「${character?.name ?? '未命名'}」已创建')),
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(
+              '角色「${character.name.isEmpty ? '未命名' : character.name}」已创建'
+              '${avatarError == null ? '' : '，$avatarError'}',
+            ),
+          ),
         );
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('创建失败: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('创建失败: $e')));
       }
     } finally {
       if (mounted) setState(() => _isCreating = false);
@@ -168,7 +188,9 @@ class _CharacterCreatePageState extends ConsumerState<CharacterCreatePage> {
                         label: '上一步',
                         isSecondary: true,
                         isFullWidth: true,
-                        onPressed: _prevStep,
+                        onPressed: _isCreating || _isPickingAvatar
+                            ? null
+                            : _prevStep,
                       ),
                     ),
                   if (_currentStep > 0) SizedBox(width: AppSpacing.md),
@@ -180,7 +202,7 @@ class _CharacterCreatePageState extends ConsumerState<CharacterCreatePage> {
                       isFullWidth: true,
                       onPressed: _currentStep == _steps.length - 1
                           ? (_isCreating ? null : _finish)
-                          : _nextStep,
+                          : (_isPickingAvatar ? null : _nextStep),
                     ),
                   ),
                 ],
@@ -215,65 +237,79 @@ class _CharacterCreatePageState extends ConsumerState<CharacterCreatePage> {
     );
   }
 
+  Future<void> _pickAvatar() async {
+    if (_isPickingAvatar || _isCreating) return;
+    setState(() => _isPickingAvatar = true);
+    try {
+      final file = await ImagePicker().pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 1024,
+        maxHeight: 1024,
+        imageQuality: 85,
+      );
+      if (file == null) return;
+      final bytes = await file.readAsBytes();
+      if (bytes.isEmpty) throw StateError('无法读取所选头像');
+      if (bytes.length > 3 * 1024 * 1024) {
+        throw StateError('头像图片不能超过 3 MB');
+      }
+      if (!mounted) return;
+      setState(() {
+        _avatarFile = file;
+        _avatarPreview = 'data:image/jpeg;base64,${base64Encode(bytes)}';
+      });
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('选择头像失败：$error')));
+      }
+    } finally {
+      if (mounted) setState(() => _isPickingAvatar = false);
+    }
+  }
+
+  Widget _buildAvatar(double size) => ProfileAvatar(
+    avatar: _avatarPreview,
+    initial: _nameController.text.trim(),
+    size: size,
+  );
+
   Widget _buildAppearanceStep() {
-    return Padding(
+    return ListView(
       padding: EdgeInsets.all(AppSpacing.pagePadding),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('选择角色主题色', style: AppTypography.sectionTitle(context)),
-          SizedBox(height: AppSpacing.lg),
-          Center(
-            child: Container(
-              width: 80,
-              height: 80,
-              decoration: BoxDecoration(
-                color: Color(
-                  int.parse(
-                    'FF${_selectedColor.replaceAll('#', '')}',
-                    radix: 16,
-                  ),
-                ),
-                shape: BoxShape.circle,
-              ),
-              child: Center(
-                child: Text(
-                  _nameController.text.isEmpty ? '?' : _nameController.text[0],
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 32,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ),
-          ),
-          SizedBox(height: AppSpacing.xl),
-          Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            children: _colors.map((color) {
-              final isSelected = color == _selectedColor;
-              return GestureDetector(
-                onTap: () => setState(() => _selectedColor = color),
-                child: Container(
-                  width: 44,
-                  height: 44,
-                  decoration: BoxDecoration(
-                    color: Color(
-                      int.parse('FF${color.replaceAll('#', '')}', radix: 16),
-                    ),
-                    shape: BoxShape.circle,
-                    border: isSelected
-                        ? Border.all(color: context.accentPrimary, width: 3)
-                        : null,
-                  ),
-                ),
-              );
-            }).toList(),
+      children: [
+        Text('上传角色头像', style: AppTypography.sectionTitle(context)),
+        SizedBox(height: AppSpacing.sm),
+        Text(
+          '可选。不上传时使用角色名字的首字作为文字头像，之后也可以在角色详情中修改。',
+          style: AppTypography.caption(context),
+        ),
+        SizedBox(height: AppSpacing.xl),
+        Center(child: _buildAvatar(80)),
+        SizedBox(height: AppSpacing.xl),
+        AmitiaButton(
+          label: _isPickingAvatar
+              ? '读取中...'
+              : (_avatarFile == null ? '选择图片' : '更换头像'),
+          icon: Icons.photo_library_outlined,
+          isSecondary: true,
+          isFullWidth: true,
+          onPressed: _isPickingAvatar ? null : _pickAvatar,
+        ),
+        if (_avatarFile != null) ...[
+          SizedBox(height: AppSpacing.sm),
+          TextButton(
+            onPressed: _isPickingAvatar
+                ? null
+                : () => setState(() {
+                    _avatarFile = null;
+                    _avatarPreview = '';
+                  }),
+            child: const Text('使用文字头像'),
           ),
         ],
-      ),
+      ],
     );
   }
 
@@ -307,9 +343,6 @@ class _CharacterCreatePageState extends ConsumerState<CharacterCreatePage> {
   );
 
   Widget _buildPreviewStep() {
-    final color = Color(
-      int.parse('FF${_selectedColor.replaceAll('#', '')}', radix: 16),
-    );
     return Padding(
       padding: EdgeInsets.all(AppSpacing.pagePadding),
       child: Column(
@@ -327,26 +360,7 @@ class _CharacterCreatePageState extends ConsumerState<CharacterCreatePage> {
               ),
               child: Column(
                 children: [
-                  Container(
-                    width: 64,
-                    height: 64,
-                    decoration: BoxDecoration(
-                      color: color,
-                      shape: BoxShape.circle,
-                    ),
-                    child: Center(
-                      child: Text(
-                        _nameController.text.isEmpty
-                            ? '?'
-                            : _nameController.text[0],
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 26,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                  ),
+                  _buildAvatar(64),
                   const SizedBox(height: 12),
                   Text(
                     _nameController.text.isEmpty ? '未命名' : _nameController.text,
