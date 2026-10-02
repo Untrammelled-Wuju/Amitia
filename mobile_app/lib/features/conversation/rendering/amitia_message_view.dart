@@ -6,6 +6,8 @@ import 'package:flutter/services.dart';
 import '../../../shared/models/models.dart';
 import '../../../core/widgets/amitia_popup_menu.dart';
 import '../../../core/widgets/character_avatar.dart';
+import '../../../core/settings/chat_appearance_preferences.dart';
+import '../../../app/theme/app_colors.dart';
 import '../../../core/models/conversation.dart';
 import 'amitia_message_theme.dart';
 import 'amrp.dart';
@@ -16,6 +18,7 @@ import 'rich_blocks/renderer_registry.dart';
 
 class AmitiaMessageView extends StatefulWidget {
   final ChatMessage message;
+  final ChatMessageStyle messageStyle;
   final String characterId;
   final String characterName;
   final String avatarInitial;
@@ -32,6 +35,7 @@ class AmitiaMessageView extends StatefulWidget {
   const AmitiaMessageView({
     super.key,
     required this.message,
+    this.messageStyle = ChatMessageStyle.flow,
     this.characterId = '',
     this.characterName = 'Amitia',
     this.avatarInitial = 'A',
@@ -103,9 +107,15 @@ class _AmitiaMessageViewState extends State<AmitiaMessageView> {
     if (message.role == AmrpMessageRole.user) {
       return _UserMessage(message: message, tokens: tokens);
     }
-    return Center(
+    final bubble = widget.messageStyle == ChatMessageStyle.bubble;
+    return Align(
+      alignment: bubble ? Alignment.topLeft : Alignment.topCenter,
       child: ConstrainedBox(
-        constraints: BoxConstraints(maxWidth: tokens.messageMaxWidth),
+        constraints: BoxConstraints(
+          maxWidth: bubble
+              ? MediaQuery.sizeOf(context).width * 0.86
+              : tokens.messageMaxWidth,
+        ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -122,63 +132,85 @@ class _AmitiaMessageViewState extends State<AmitiaMessageView> {
               SizedBox(width: tokens.avatarSize, height: tokens.avatarSize),
             SizedBox(width: tokens.messageGap),
             Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (widget.showHeader)
-                    _MessageHead(
-                      name: widget.characterName,
-                      time: _formatTime(message.createdAt),
-                      tokens: tokens,
-                    ),
-                  if (_stateNotice(message.state) != null)
-                    _StateNotice(
-                      data: _stateNotice(message.state)!,
-                      state: message.state,
-                      tokens: tokens,
-                    ),
-                  if (showThinkingPlaceholder)
-                    AmitiaThinkingBlock(
-                      block: const AmrpThinkingBlock(
-                        content: '',
-                        state: AmrpMessageState.streaming,
+              child: Container(
+                padding: bubble
+                    ? const EdgeInsets.symmetric(horizontal: 12, vertical: 10)
+                    : null,
+                decoration: bubble
+                    ? BoxDecoration(
+                        color: context.surfacePrimary,
+                        border: Border.all(
+                          color: context.borderPrimary,
+                          width: 0.5,
+                        ),
+                        borderRadius: const BorderRadius.only(
+                          topLeft: Radius.circular(4),
+                          topRight: Radius.circular(16),
+                          bottomLeft: Radius.circular(16),
+                          bottomRight: Radius.circular(16),
+                        ),
+                      )
+                    : null,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (widget.showHeader)
+                      _MessageHead(
+                        name: widget.characterName,
+                        time: _formatTime(message.createdAt),
+                        tokens: tokens,
                       ),
-                    )
-                  else if (widget.message.assistantTurn?.items.isNotEmpty ==
-                      true)
-                    ..._renderAssistantTurn(
-                      widget.message.assistantTurn!,
-                      citationIds,
-                    )
-                  else ...[
-                    if (message.thinking != null)
-                      AmitiaThinkingBlock(block: message.thinking!),
-                    if (message.markdown.isNotEmpty)
-                      AmitiaMarkdownView(
-                        source: message.markdown,
-                        streaming: message.state == AmrpMessageState.streaming,
-                        citationIds: citationIds,
-                        onCitation: (id) =>
-                            setState(() => _highlightCitation = id),
+                    if (_stateNotice(message.state) != null)
+                      _StateNotice(
+                        data: _stateNotice(message.state)!,
+                        state: message.state,
+                        tokens: tokens,
                       ),
-                    ..._renderBlocks(message.blocks, message.id),
-                    for (final tool in widget.toolBlocks)
-                      AmitiaToolBlock(block: tool),
+                    if (showThinkingPlaceholder)
+                      AmitiaThinkingBlock(
+                        block: const AmrpThinkingBlock(
+                          content: '',
+                          state: AmrpMessageState.streaming,
+                        ),
+                      )
+                    else if (widget.message.assistantTurn?.items.isNotEmpty ==
+                        true)
+                      ..._renderAssistantTurn(
+                        widget.message.assistantTurn!,
+                        citationIds,
+                      )
+                    else ...[
+                      if (message.thinking != null)
+                        AmitiaThinkingBlock(block: message.thinking!),
+                      if (message.markdown.isNotEmpty)
+                        AmitiaMarkdownView(
+                          source: message.markdown,
+                          streaming:
+                              message.state == AmrpMessageState.streaming,
+                          citationIds: citationIds,
+                          onCitation: (id) =>
+                              setState(() => _highlightCitation = id),
+                        ),
+                      ..._renderBlocks(message.blocks, message.id),
+                      for (final tool in widget.toolBlocks)
+                        AmitiaToolBlock(block: tool),
+                    ],
+                    AmitiaCitationList(
+                      sources: citationSources,
+                      highlightId: _highlightCitation,
+                    ),
+                    if (!streaming &&
+                        !(widget.showThinking &&
+                            message.markdown.trim().isEmpty))
+                      _MessageActions(
+                        streaming: streaming,
+                        onCopy: () => _copy(context, message.plainText),
+                        onCopyMarkdown: () => _copy(context, message.markdown),
+                        onReply: widget.onReply,
+                        onRetry: widget.onRetry,
+                      ),
                   ],
-                  AmitiaCitationList(
-                    sources: citationSources,
-                    highlightId: _highlightCitation,
-                  ),
-                  if (!streaming &&
-                      !(widget.showThinking && message.markdown.trim().isEmpty))
-                    _MessageActions(
-                      streaming: streaming,
-                      onCopy: () => _copy(context, message.plainText),
-                      onCopyMarkdown: () => _copy(context, message.markdown),
-                      onReply: widget.onReply,
-                      onRetry: widget.onRetry,
-                    ),
-                ],
+                ),
               ),
             ),
           ],

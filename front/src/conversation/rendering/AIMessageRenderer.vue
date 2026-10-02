@@ -1,5 +1,5 @@
 <template>
-  <div class="amrp-root" :class="{ 'amrp-dark': resolvedMode === 'dark' }">
+  <div class="amrp-root" :class="{ 'amrp-dark': resolvedMode === 'dark', 'amrp-bubbles': messageStyle === 'bubble' }">
     <div v-if="message.role === 'system'" class="amrp-system-notice">
       <slot name="badges" :message="message" />
       {{ message.markdown }}
@@ -38,13 +38,13 @@
       class="amrp-message"
       :class="{ 'amrp-message--compact-bottom': compactBottom }"
     >
-      <div v-if="showAvatar" class="amrp-avatar">
+      <div v-if="showAvatar || messageStyle === 'bubble'" class="amrp-avatar">
         <img v-if="character.avatar" :src="character.avatar" alt="" />
         <span v-else>{{ characterInitial }}</span>
       </div>
       <div v-else class="amrp-avatar-spacer"></div>
       <div class="amrp-message-body">
-        <header v-if="showHeader" class="amrp-head">
+        <header v-if="showHeader || messageStyle === 'bubble'" class="amrp-head">
           <span class="amrp-name">{{ character.name || "Amitia" }}</span>
           <span class="amrp-time">{{ formatTime(message.createdAt) }}</span>
           <slot name="badges" :message="message" />
@@ -137,6 +137,7 @@ import {
   EditPen,
 } from "@element-plus/icons-vue";
 import { useTheme } from "@/composables/useTheme";
+import { useChatAppearancePreference } from "@/composables/useChatAppearancePreference";
 import type {
   AIMessageData,
   AssistantTurnData,
@@ -194,6 +195,7 @@ const emit = defineEmits<{
 }>();
 
 const { resolvedMode } = useTheme();
+const { messageStyle } = useChatAppearancePreference();
 const activeCitationId = ref("");
 const copyMenuOpen = ref(false);
 const message = computed<AIMessageData>(() =>
@@ -418,6 +420,37 @@ async function handleCopy(mode: "plain" | "markdown") {
 .amrp-message-body {
   min-width: 0;
   max-width: 820px;
+}
+
+.amrp-bubbles .amrp-message {
+  max-width: 820px;
+  grid-template-columns: 34px minmax(0, 1fr);
+  padding-right: 12%;
+  box-sizing: border-box;
+  margin-bottom: 20px;
+}
+
+.amrp-bubbles .amrp-message-body {
+  width: fit-content;
+  max-width: 100%;
+  padding: 10px 14px;
+  border-radius: 4px 16px 16px 16px;
+  background: var(--ac-color-surface);
+  border: 1px solid var(--ac-color-border-light);
+  color: var(--ac-color-text);
+  overflow-wrap: anywhere;
+}
+
+.amrp-bubbles .amrp-head { min-height: 20px; margin-bottom: 6px; flex-wrap: wrap; }
+.amrp-bubbles .amrp-user-row { margin-bottom: 20px; }
+.amrp-bubbles .amrp-user-bubble {
+  border-radius: 16px 4px 16px 16px;
+  background: var(--ac-color-primary-bg);
+  color: var(--ac-color-text);
+}
+
+@media (max-width: 600px) {
+  .amrp-bubbles .amrp-message { padding-right: 5%; }
 }
 
 .amrp-head {

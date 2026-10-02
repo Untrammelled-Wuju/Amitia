@@ -14,6 +14,7 @@ import '../../features/conversation/rendering/amrp.dart';
 import 'amitia_button.dart';
 import 'amitia_misc.dart';
 import 'amitia_popup_menu.dart';
+import '../settings/chat_appearance_preferences.dart';
 
 enum _UserMessageAction { showTime, reply, copy, edit }
 
@@ -66,6 +67,7 @@ class AmitiaAgentActivity {
 
 class AmitiaMessageBubble extends StatelessWidget {
   final ChatMessage message;
+  final ChatMessageStyle messageStyle;
   final bool showAvatar;
   final bool showHeader;
   final bool compactBottom;
@@ -91,6 +93,7 @@ class AmitiaMessageBubble extends StatelessWidget {
   const AmitiaMessageBubble({
     super.key,
     required this.message,
+    this.messageStyle = ChatMessageStyle.flow,
     this.showAvatar = true,
     this.showHeader = true,
     this.compactBottom = false,
@@ -122,11 +125,14 @@ class AmitiaMessageBubble extends StatelessWidget {
           AppSpacing.lg,
           0,
           AppSpacing.lg,
-          compactBottom ? 10 : 38,
+          messageStyle == ChatMessageStyle.bubble
+              ? 20
+              : (compactBottom ? 10 : 38),
         ),
         child: AmitiaMessageView(
           key: ValueKey<String>('amrp:${message.renderId}'),
           message: message,
+          messageStyle: messageStyle,
           characterId: avatarCharacterId.isEmpty
               ? message.characterId
               : avatarCharacterId,
@@ -138,8 +144,8 @@ class AmitiaMessageBubble extends StatelessWidget {
               : avatarInitial!.trim(),
           avatarColor: avatarColor?.trim() ?? '',
           avatarUrl: avatarUrl,
-          showAvatar: showAvatar,
-          showHeader: showHeader,
+          showAvatar: showAvatar || messageStyle == ChatMessageStyle.bubble,
+          showHeader: showHeader || messageStyle == ChatMessageStyle.bubble,
           showThinking: showThinking,
           toolBlocks: [
             for (final activity in agentActivities)
@@ -158,78 +164,91 @@ class AmitiaMessageBubble extends StatelessWidget {
     }
 
     final messageColumn = Flexible(
-      child: Builder(
-        builder: (bubbleContext) => GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onLongPressStart: (_) => _showUserActions(bubbleContext, message),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              if ((message.replyToMessageId ?? '').isNotEmpty) ...[
-                Container(
-                  constraints: const BoxConstraints(maxWidth: 280),
-                  margin: const EdgeInsets.only(bottom: 5),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 9,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: context.surfaceSecondary,
-                    borderRadius: AppRadius.brSmall,
-                    border: Border(
-                      left: BorderSide(color: context.accentPrimary, width: 2),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxWidth: messageStyle == ChatMessageStyle.bubble
+              ? math.max(
+                  0,
+                  (MediaQuery.sizeOf(context).width - AppSpacing.lg * 2) * 0.82,
+                )
+              : double.infinity,
+        ),
+        child: Builder(
+          builder: (bubbleContext) => GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onLongPressStart: (_) => _showUserActions(bubbleContext, message),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                if ((message.replyToMessageId ?? '').isNotEmpty) ...[
+                  Container(
+                    constraints: const BoxConstraints(maxWidth: 280),
+                    margin: const EdgeInsets.only(bottom: 5),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 9,
+                      vertical: 6,
                     ),
-                  ),
-                  child: Text(
-                    '引用：${(message.replyToExcerpt ?? '原消息').trim()}',
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: AppTypography.label(
-                      context,
-                    ).copyWith(color: context.textSecondary),
-                  ),
-                ),
-              ],
-              if (message.reasoningContent.trim().isNotEmpty)
-                Theme(
-                  data: Theme.of(
-                    context,
-                  ).copyWith(dividerColor: Colors.transparent),
-                  child: ExpansionTile(
-                    tilePadding: EdgeInsets.zero,
-                    childrenPadding: const EdgeInsets.only(bottom: 6),
-                    dense: true,
-                    iconColor: context.textTertiary,
-                    collapsedIconColor: context.textTertiary,
-                    title: Text(
-                      '思考内容',
-                      style: AppTypography.label(
-                        context,
-                      ).copyWith(color: context.textTertiary),
-                    ),
-                    children: [
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 8,
-                        ),
-                        decoration: BoxDecoration(
-                          color: context.surfaceSecondary,
-                          borderRadius: AppRadius.brSmall,
-                        ),
-                        child: SelectableText(
-                          message.reasoningContent,
-                          style: AppTypography.bodySmall(
-                            context,
-                          ).copyWith(color: context.textSecondary),
+                    decoration: BoxDecoration(
+                      color: context.surfaceSecondary,
+                      borderRadius: AppRadius.brSmall,
+                      border: Border(
+                        left: BorderSide(
+                          color: context.accentPrimary,
+                          width: 2,
                         ),
                       ),
-                    ],
+                    ),
+                    child: Text(
+                      '引用：${(message.replyToExcerpt ?? '原消息').trim()}',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTypography.label(
+                        context,
+                      ).copyWith(color: context.textSecondary),
+                    ),
                   ),
-                ),
-              _buildContent(context, true),
-            ],
+                ],
+                if (message.reasoningContent.trim().isNotEmpty)
+                  Theme(
+                    data: Theme.of(
+                      context,
+                    ).copyWith(dividerColor: Colors.transparent),
+                    child: ExpansionTile(
+                      tilePadding: EdgeInsets.zero,
+                      childrenPadding: const EdgeInsets.only(bottom: 6),
+                      dense: true,
+                      iconColor: context.textTertiary,
+                      collapsedIconColor: context.textTertiary,
+                      title: Text(
+                        '思考内容',
+                        style: AppTypography.label(
+                          context,
+                        ).copyWith(color: context.textTertiary),
+                      ),
+                      children: [
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 8,
+                          ),
+                          decoration: BoxDecoration(
+                            color: context.surfaceSecondary,
+                            borderRadius: AppRadius.brSmall,
+                          ),
+                          child: SelectableText(
+                            message.reasoningContent,
+                            style: AppTypography.bodySmall(
+                              context,
+                            ).copyWith(color: context.textSecondary),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                _buildContent(context, true),
+              ],
+            ),
           ),
         ),
       ),
@@ -392,7 +411,14 @@ class AmitiaMessageBubble extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 10),
       decoration: BoxDecoration(
         color: isUser ? context.accentSoft : context.surfacePrimary,
-        borderRadius: BorderRadius.circular(17),
+        borderRadius: messageStyle == ChatMessageStyle.bubble
+            ? const BorderRadius.only(
+                topLeft: Radius.circular(16),
+                topRight: Radius.circular(4),
+                bottomLeft: Radius.circular(16),
+                bottomRight: Radius.circular(16),
+              )
+            : BorderRadius.circular(17),
         border: isUser
             ? null
             : Border.all(color: context.borderPrimary, width: 0.6),
@@ -1437,9 +1463,13 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
   }
 
   KeyEventResult _handleComposerKey(FocusNode node, KeyEvent event) {
-    if (!widget.sendOnEnter || (event.logicalKey != LogicalKeyboardKey.enter && event.logicalKey != LogicalKeyboardKey.numpadEnter) ||
-        HardwareKeyboard.instance.isShiftPressed || HardwareKeyboard.instance.isControlPressed ||
-        HardwareKeyboard.instance.isAltPressed || HardwareKeyboard.instance.isMetaPressed ||
+    if (!widget.sendOnEnter ||
+        (event.logicalKey != LogicalKeyboardKey.enter &&
+            event.logicalKey != LogicalKeyboardKey.numpadEnter) ||
+        HardwareKeyboard.instance.isShiftPressed ||
+        HardwareKeyboard.instance.isControlPressed ||
+        HardwareKeyboard.instance.isAltPressed ||
+        HardwareKeyboard.instance.isMetaPressed ||
         !_controller.value.composing.isCollapsed) {
       return KeyEventResult.ignored;
     }
@@ -2161,9 +2191,14 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
                               textAlignVertical: TextAlignVertical.center,
                               textCapitalization: TextCapitalization.sentences,
                               keyboardType: TextInputType.multiline,
-                              textInputAction: widget.sendOnEnter ? TextInputAction.send : TextInputAction.newline,
+                              textInputAction: widget.sendOnEnter
+                                  ? TextInputAction.send
+                                  : TextInputAction.newline,
                               onSubmitted: (_) {
-                                if (widget.sendOnEnter && !widget.generating && _controller.value.composing.isCollapsed) _send();
+                                if (widget.sendOnEnter &&
+                                    !widget.generating &&
+                                    _controller.value.composing.isCollapsed)
+                                  _send();
                               },
                               style: AppTypography.bodySmall(
                                 context,
@@ -2314,7 +2349,9 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
                                   child: Icon(
                                     Icons.arrow_upward_rounded,
                                     size: 18,
-                                    color: Theme.of(context).colorScheme.onPrimary,
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.onPrimary,
                                   ),
                                 ),
                               ),

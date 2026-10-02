@@ -10,6 +10,7 @@ import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/settings/appearance_preferences.dart';
 import '../widgets/custom_theme_settings.dart';
 import '../widgets/background_settings.dart';
+import '../widgets/chat_appearance_settings.dart';
 
 class AppearanceSettingsPage extends ConsumerStatefulWidget {
   const AppearanceSettingsPage({super.key});
@@ -19,7 +20,8 @@ class AppearanceSettingsPage extends ConsumerStatefulWidget {
       _AppearanceSettingsPageState();
 }
 
-class _AppearanceSettingsPageState extends ConsumerState<AppearanceSettingsPage> {
+class _AppearanceSettingsPageState
+    extends ConsumerState<AppearanceSettingsPage> {
   static const _fontScales = <double>[0.9, 1.0, 1.15, 1.3];
   static const _accentColors = <Color>[
     Color(0xFF8A5728),
@@ -51,7 +53,11 @@ class _AppearanceSettingsPageState extends ConsumerState<AppearanceSettingsPage>
     final fontSizeIndex = _fontIndex(appearance.fontScale);
 
     return AmitiaScaffold(
-      appBar: AmitiaAppBar(title: '外观设置', showBackButton: true, fallbackRoute: AppRoutes.settings),
+      appBar: AmitiaAppBar(
+        title: '外观设置',
+        showBackButton: true,
+        fallbackRoute: AppRoutes.settings,
+      ),
       body: ListView(
         padding: EdgeInsets.symmetric(vertical: AppSpacing.md),
         children: [
@@ -62,11 +68,19 @@ class _AppearanceSettingsPageState extends ConsumerState<AppearanceSettingsPage>
               segments: const ['亮色', '暗色', '跟随系统'],
               selectedIndex: themeIndex,
               onChanged: (i) {
-                notifier.setThemeMode(i == 0
-                    ? ThemeMode.light
-                    : (i == 1 ? ThemeMode.dark : ThemeMode.system));
+                notifier.setThemeMode(
+                  i == 0
+                      ? ThemeMode.light
+                      : (i == 1 ? ThemeMode.dark : ThemeMode.system),
+                );
               },
             ),
+          ),
+          SizedBox(height: AppSpacing.sectionGap),
+          const _SectionLabel(text: '聊天界面风格'),
+          Padding(
+            padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+            child: const ChatAppearanceSettings(),
           ),
           SizedBox(height: AppSpacing.sectionGap),
           const _SectionLabel(text: '字体大小'),
@@ -255,10 +269,7 @@ class _ColorDot extends StatelessWidget {
           child: Container(
             width: 28,
             height: 28,
-            decoration: BoxDecoration(
-              color: color,
-              shape: BoxShape.circle,
-            ),
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
             child: isSelected
                 ? const Icon(Icons.check, size: 16, color: Colors.white)
                 : null,

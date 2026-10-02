@@ -65,6 +65,7 @@ SPDX-License-Identifier: AGPL-3.0-only
       </div>
     </el-card>
 
+    <ChatAppearanceSettings />
     <CustomThemeSettings />
     <BackgroundSettings />
     <el-card shadow="never" class="section-card">
@@ -142,6 +143,7 @@ import { Check } from "@element-plus/icons-vue";
 import { useTheme } from "../../composables/useTheme";
 import CustomThemeSettings from "../../components/CustomThemeSettings.vue";
 import BackgroundSettings from "../../components/BackgroundSettings.vue";
+import ChatAppearanceSettings from "../../components/ChatAppearanceSettings.vue";
 
 const {
   state: themeState,

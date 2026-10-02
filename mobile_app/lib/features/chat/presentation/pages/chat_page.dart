@@ -1,5 +1,6 @@
 import 'dart:async';
 import '../../../../core/settings/chat_input_preferences.dart';
+import '../../../../core/settings/chat_appearance_preferences.dart';
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/cupertino.dart';
@@ -109,7 +110,18 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       activeConversationIdProvider.notifier,
     );
     _runtime = ref.read(conversationRuntimeControllerProvider);
-    unawaited(ref.read(chatInputPreferencesProvider.notifier).init().catchError((Object _) {}));
+    unawaited(
+      ref
+          .read(chatInputPreferencesProvider.notifier)
+          .init()
+          .catchError((Object _) {}),
+    );
+    unawaited(
+      ref
+          .read(chatAppearancePreferencesProvider.notifier)
+          .init()
+          .catchError((Object _) {}),
+    );
     _lastDraftEpoch = _runtime.draftEpoch;
     _lastConversationUpdateEpoch = _runtime.conversationUpdateEpoch;
     _lastSidebarConversationId = _runtime.conversationId?.trim() ?? '';
@@ -2065,7 +2077,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     final avatarInitial = characterName.isNotEmpty
         ? characterName.characters.first
         : 'A';
-    final avatarColor = '#${context.accentPrimary.toARGB32().toRadixString(16).substring(2)}';
+    final avatarColor =
+        '#${context.accentPrimary.toARGB32().toRadixString(16).substring(2)}';
     final spaceProfile = ref.watch(currentSpaceProfileProvider).valueOrNull;
     final userName = (spaceProfile?.displayName ?? '').trim().isEmpty
         ? '我'
@@ -2469,12 +2482,22 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                                                   key: ValueKey(item.key),
                                                   child: _ChatErrorNotice(
                                                     detail: item.errorDetail!,
-                                                    title: item.messageIndex == null ? '生成失败' : '发送失败',
+                                                    title:
+                                                        item.messageIndex ==
+                                                            null
+                                                        ? '生成失败'
+                                                        : '发送失败',
                                                     onRetry:
-                                                        item.messageIndex != null &&
-                                                            item.messageIndex! >= 0 &&
-                                                            _runtime.canRetryMessage(item.messageIndex!)
-                                                        ? () => _retryMessage(item.messageIndex!)
+                                                        item.messageIndex !=
+                                                                null &&
+                                                            item.messageIndex! >=
+                                                                0 &&
+                                                            _runtime.canRetryMessage(
+                                                              item.messageIndex!,
+                                                            )
+                                                        ? () => _retryMessage(
+                                                            item.messageIndex!,
+                                                          )
                                                         : null,
                                                   ),
                                                 );
@@ -2535,6 +2558,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                                               final builtinMessage = RepaintBoundary(
                                                 child: AmitiaMessageBubble(
                                                   message: message,
+                                                  messageStyle: ref.watch(
+                                                    chatAppearancePreferencesProvider,
+                                                  ),
                                                   showAvatar:
                                                       _shouldShowAssistantIdentity(
                                                         index,
@@ -2550,13 +2576,22 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                                                   avatarInitial:
                                                       messageAvatarInitial,
                                                   avatarColor: avatarColor,
-                                                  avatarCharacterId: messageCharacter?.id ??
-                                                      (message.characterId.trim().isEmpty
+                                                  avatarCharacterId:
+                                                      messageCharacter?.id ??
+                                                      (message.characterId
+                                                              .trim()
+                                                              .isEmpty
                                                           ? characterId
-                                                          : message.characterId),
-                                                  avatarUrl: messageCharacter?.avatar ??
-                                                      (message.characterId.trim().isEmpty
-                                                          ? character?.avatar ?? ''
+                                                          : message
+                                                                .characterId),
+                                                  avatarUrl:
+                                                      messageCharacter
+                                                          ?.avatar ??
+                                                      (message.characterId
+                                                              .trim()
+                                                              .isEmpty
+                                                          ? character?.avatar ??
+                                                                ''
                                                           : ''),
                                                   characterName:
                                                       messageCharacterName,
@@ -3552,7 +3587,11 @@ class _ChatErrorNotice extends StatelessWidget {
   final String title;
   final VoidCallback? onRetry;
 
-  const _ChatErrorNotice({required this.detail, required this.title, this.onRetry});
+  const _ChatErrorNotice({
+    required this.detail,
+    required this.title,
+    this.onRetry,
+  });
 
   @override
   Widget build(BuildContext context) {
