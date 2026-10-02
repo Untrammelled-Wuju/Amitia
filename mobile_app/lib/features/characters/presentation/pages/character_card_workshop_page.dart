@@ -15,7 +15,14 @@ import '../widgets/character_generation_chat.dart';
 import '../widgets/character_personality_editor.dart';
 
 class CharacterCardWorkshopPage extends ConsumerStatefulWidget {
-  const CharacterCardWorkshopPage({super.key});
+  final bool creating;
+  final CharacterDto? character;
+
+  const CharacterCardWorkshopPage({
+    super.key,
+    this.creating = false,
+    this.character,
+  });
 
   @override
   ConsumerState<CharacterCardWorkshopPage> createState() =>
@@ -59,6 +66,39 @@ class _CharacterCardWorkshopPageState
   bool _importing = false;
   bool _exporting = false;
 
+  bool get _inEditor => widget.creating || widget.character != null;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.creating) _newDraft();
+    if (widget.character != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _selectCharacter(widget.character!);
+      });
+    }
+  }
+
+  Future<void> _openEditor({CharacterDto? character}) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => CharacterCardWorkshopPage(
+          creating: character == null,
+          character: character,
+        ),
+      ),
+    );
+    if (mounted) ref.invalidate(characterListProvider);
+  }
+
+  void _back() {
+    if (_creating && _editing) {
+      setState(() => _editing = false);
+    } else {
+      Navigator.of(context).pop();
+    }
+  }
+
   @override
   void dispose() {
     for (final controller in _profile.values) {
@@ -79,37 +119,54 @@ class _CharacterCardWorkshopPageState
   @override
   Widget build(BuildContext context) {
     final charactersAsync = ref.watch(characterListProvider);
-    return AmitiaScaffold(
-      appBar: AmitiaAppBar(
-        title: '角色卡工坊',
-        showBackButton: true,
-        fallbackRoute: AppRoutes.workshop,
-        actions: [
-          AmitiaIconButton(
-            icon: Icons.file_upload_outlined,
-            tooltip: '导入角色卡',
-            onPressed: _importing || _saving || _loading ? null : _importCard,
-          ),
-          AmitiaIconButton(
-            icon: Icons.file_download_outlined,
-            tooltip: '导出 CHARX',
-            onPressed: _exporting || _saving || _loading || _selectedId.isEmpty
-                ? null
-                : _exportCard,
-          ),
-        ],
-      ),
-      body: SafeArea(
-        top: false,
-        child: IgnorePointer(
-          ignoring: _saving,
-          child: charactersAsync.when(
-            loading: () => const AmitiaLoadingState(message: '正在加载角色...'),
-            error: (err, _) => AmitiaErrorState(
-              message: '角色加载失败：$err',
-              onRetry: () => ref.invalidate(characterListProvider),
+    return PopScope(
+      canPop: !_saving && !(_creating && _editing),
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop && !_saving && _creating && _editing) _back();
+      },
+      child: AmitiaScaffold(
+        appBar: AmitiaAppBar(
+          title: _inEditor ? (_creating ? '创建角色卡' : '编辑角色卡') : '角色卡工坊',
+          leading: _inEditor
+              ? IconButton(
+                  icon: const Icon(Icons.arrow_back_ios_new, size: 18),
+                  tooltip: _creating && _editing ? '上一步' : '返回工坊',
+                  onPressed: _saving ? null : _back,
+                )
+              : null,
+          showBackButton: true,
+          fallbackRoute: AppRoutes.workshop,
+          actions: [
+            if (!_inEditor)
+              AmitiaIconButton(
+                icon: Icons.file_upload_outlined,
+                tooltip: '导入角色卡',
+                onPressed: _importing || _saving || _loading
+                    ? null
+                    : _importCard,
+              ),
+            AmitiaIconButton(
+              icon: Icons.file_download_outlined,
+              tooltip: '导出 CHARX',
+              onPressed:
+                  _exporting || _saving || _loading || _selectedId.isEmpty
+                  ? null
+                  : _exportCard,
             ),
-            data: (characters) => _buildBody(context, characters),
+          ],
+        ),
+        body: SafeArea(
+          top: false,
+          child: IgnorePointer(
+            ignoring: _saving,
+            child: charactersAsync.when(
+              loading: () => const AmitiaLoadingState(message: '正在加载角色...'),
+              error: (err, _) => AmitiaErrorState(
+                message: '角色加载失败：$err',
+                onRetry: () => ref.invalidate(characterListProvider),
+              ),
+              data: (characters) => _buildBody(context, characters),
+            ),
           ),
         ),
       ),
@@ -117,55 +174,35 @@ class _CharacterCardWorkshopPageState
   }
 
   Widget _buildBody(BuildContext context, List<CharacterDto> characters) {
-    if (characters.isEmpty && !_creating) {
+    if (!_inEditor && characters.isEmpty) {
       return AmitiaEmptyState(
         icon: Icons.badge_outlined,
         title: '还没有角色卡',
-        subtitle: '通过对话生成角色草稿，或直接编辑角色卡',
-        actionText: '创建角色',
-        onAction: _newDraft,
+        subtitle: '创建角色卡，通过对话生成后手动调整',
+        actionText: '创建角色卡',
+        onAction: () => _openEditor(),
       );
     }
     final selected = characters
         .where((item) => item.id == _selectedId)
         .firstOrNull;
-    if (selected == null && _selectedId.isEmpty && !_creating) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && characters.isNotEmpty) {
-          _selectCharacter(characters.first);
-        }
-      });
-    }
     return ListView(
       padding: EdgeInsets.all(AppSpacing.pagePadding),
       children: [
-        OutlinedButton.icon(
-          onPressed: _saving || _loading ? null : _newDraft,
-          icon: const Icon(Icons.add),
-          label: const Text('创建角色卡'),
-        ),
-        if (!_creating)
-          DropdownButtonFormField<String>(
-            key: ValueKey(_selectedId),
-            initialValue: selected?.id,
-            decoration: const InputDecoration(labelText: '选择角色'),
-            items: characters
-                .map(
-                  (character) => DropdownMenuItem(
-                    value: character.id,
-                    child: Text(character.name),
-                  ),
-                )
-                .toList(),
-            onChanged: _loading || _saving
-                ? null
-                : (id) {
-                    final character = characters
-                        .where((item) => item.id == id)
-                        .firstOrNull;
-                    if (character != null) _selectCharacter(character);
-                  },
+        if (!_inEditor) ...[
+          OutlinedButton.icon(
+            onPressed: () => _openEditor(),
+            icon: const Icon(Icons.add),
+            label: const Text('创建角色卡'),
           ),
+          for (final character in characters)
+            ListTile(
+              title: Text(character.name),
+              subtitle: Text(character.identity),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => _openEditor(character: character),
+            ),
+        ],
         SizedBox(height: AppSpacing.lg),
         if (_loading)
           const Center(
@@ -174,30 +211,26 @@ class _CharacterCardWorkshopPageState
               child: CircularProgressIndicator(),
             ),
           )
-        else if (_cardLoadFailed && selected != null)
+        else if (_inEditor && _cardLoadFailed && selected != null)
           AmitiaErrorState(
             message: '角色卡加载失败，请重试后再编辑',
             onRetry: () => _selectCharacter(selected),
           )
-        else if (selected != null || _creating) ...[
-          AmitiaSegmentedControl(
-            segments: const ['对话生成', '编辑角色'],
-            selectedIndex: _editing ? 1 : 0,
-            onChanged: (index) => setState(() => _editing = index == 1),
-          ),
-          SizedBox(height: AppSpacing.lg),
-          Offstage(
-            offstage: _editing,
-            child: CharacterGenerationChat(
-              key: ValueKey(_generationSession),
-              currentDraft: _draftSnapshot,
-              onApply: _applyGenerated,
+        else if (_inEditor && (selected != null || _creating)) ...[
+          if (_creating)
+            Text(
+              _editing ? '第 2 步：编辑角色卡' : '第 1 步：对话生成',
+              style: Theme.of(context).textTheme.titleMedium,
             ),
-          ),
-          if (!_editing)
-            TextButton(
-              onPressed: () => setState(() => _editing = true),
-              child: const Text('跳过生成，直接编辑'),
+          SizedBox(height: AppSpacing.lg),
+          if (_creating)
+            Offstage(
+              offstage: _editing,
+              child: CharacterGenerationChat(
+                key: ValueKey(_generationSession),
+                currentDraft: _draftSnapshot,
+                onApply: _applyGenerated,
+              ),
             ),
           Offstage(offstage: !_editing, child: _buildEditor(context, selected)),
         ],
@@ -404,12 +437,17 @@ class _CharacterCardWorkshopPageState
         await ref.read(characterServiceProvider).setActive(_selectedId);
       }
       ref.invalidate(characterListProvider);
-      final refreshed = await ref.read(characterListProvider.future);
-      final saved = refreshed
-          .where((item) => item.id == _selectedId)
-          .firstOrNull;
-      if (mounted && saved != null) await _selectCharacter(saved);
-      if (mounted) amitiaSnackBar(context, '角色卡已保存');
+      await ref.read(characterListProvider.future);
+      if (mounted) {
+        amitiaSnackBar(context, '角色卡已保存');
+        setState(() {
+          _creating = false;
+          _saving = false;
+        });
+        await WidgetsBinding.instance.endOfFrame;
+        if (!mounted) return;
+        Navigator.of(context).pop();
+      }
     } catch (error) {
       if (mounted) amitiaSnackBar(context, '角色卡保存失败：$error');
     } finally {
@@ -566,7 +604,7 @@ class _CharacterCardWorkshopPageState
         final imported = chars
             .where((item) => item.id == characterId)
             .firstOrNull;
-        if (imported != null) await _selectCharacter(imported);
+        if (imported != null) await _openEditor(character: imported);
       }
       if (mounted) amitiaSnackBar(context, '角色卡导入成功');
     } catch (error) {

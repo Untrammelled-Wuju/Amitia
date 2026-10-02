@@ -114,13 +114,15 @@ void main() {
       final api = _Api();
       final service = _Characters();
       await render(tester, api, service, []);
-      await tester.tap(find.text('创建角色'));
+      expect(find.text('第 1 步：对话生成'), findsNothing);
+      expect(find.text('保存角色卡'), findsNothing);
+      await tester.tap(find.text('创建角色卡').last);
       await tester.pumpAndSettle();
       await tester.enterText(find.byType(TextField).first, '生成图书管理员');
       await tester.tap(find.text('发送'));
       await tester.pumpAndSettle();
       expect(service.created, isNull);
-      await tester.tap(find.text('同步到编辑角色'));
+      await tester.tap(find.text('下一步：编辑角色卡'));
       await tester.pumpAndSettle();
       final name = find.widgetWithText(TextField, '名称');
       await tester.ensureVisible(name);
@@ -139,6 +141,38 @@ void main() {
       expect((service.created?['personalityConfig'] as Map)['warmth'], 72);
       expect(api.savedCard?['systemPrompt'], '你是星河');
       expect(api.savedCard?['scenario'], '夜晚的图书馆');
+      expect(find.text('角色卡工坊'), findsOneWidget);
+      expect(find.text('角色需求'), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'creation back navigation preserves draft and returns to workshop',
+    (tester) async {
+      await render(tester, _Api(), _Characters(), []);
+      await tester.tap(find.text('创建角色卡').last);
+      await tester.pumpAndSettle();
+      expect(find.text('第 1 步：对话生成'), findsOneWidget);
+      expect(find.text('编辑角色'), findsNothing);
+      await tester.enterText(find.byType(TextField).first, '生成图书管理员');
+      await tester.tap(find.text('发送'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('下一步：编辑角色卡'));
+      await tester.pumpAndSettle();
+      expect(find.text('第 2 步：编辑角色卡'), findsOneWidget);
+      await tester.tap(find.byTooltip('上一步'));
+      await tester.pumpAndSettle();
+      expect(find.text('已生成角色草稿'), findsOneWidget);
+      expect(find.text('第 1 步：对话生成'), findsOneWidget);
+    await tester.tap(find.text('下一步：编辑角色卡'));
+    await tester.pumpAndSettle();
+    expect(find.text('第 2 步：编辑角色卡'), findsOneWidget);
+    await tester.tap(find.byTooltip('上一步'));
+    await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('返回工坊'));
+      await tester.pumpAndSettle();
+      expect(find.text('角色卡工坊'), findsOneWidget);
+      expect(find.text('角色需求'), findsNothing);
     },
   );
 
@@ -149,6 +183,9 @@ void main() {
     await render(tester, api, _Characters(), [
       CharacterDto(id: 'existing', name: '原角色'),
     ]);
+    expect(find.text('角色需求'), findsNothing);
+    await tester.tap(find.text('原角色'));
+    await tester.pumpAndSettle();
     expect(find.text('角色卡加载失败，请重试后再编辑'), findsOneWidget);
     expect(find.text('保存角色卡'), findsNothing);
     api.failLoad = false;
@@ -165,6 +202,8 @@ void main() {
     await render(tester, api, service, [
       CharacterDto(id: 'existing', name: '原角色', characterBase: '原提示词'),
     ]);
+    await tester.tap(find.text('原角色'));
+    await tester.pumpAndSettle();
     final save = find.text('保存角色卡');
     await tester.ensureVisible(save);
     await tester.pumpAndSettle();

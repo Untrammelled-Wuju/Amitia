@@ -84,7 +84,7 @@ void main() {
     await send('图书管理员');
     expect((api.calls[1]['messages'] as List).length, 3);
     expect((api.calls[1]['draft'] as Map)['name'], '星河');
-    await tester.tap(find.text('同步到编辑角色'));
+    await tester.tap(find.text('下一步：编辑角色卡'));
     await tester.pumpAndSettle();
     expect(applied?['name'], '星河');
     expect(applied?['identity'], '图书管理员');

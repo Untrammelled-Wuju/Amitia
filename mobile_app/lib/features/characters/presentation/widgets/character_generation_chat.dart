@@ -21,6 +21,7 @@ class _CharacterGenerationChatState
   final _input = TextEditingController();
   final _messages = <Map<String, String>>[];
   Map<String, dynamic>? _proposal;
+  bool _hasAppliedDraft = false;
   bool _busy = false;
   String? _error;
 
@@ -138,13 +139,16 @@ class _CharacterGenerationChatState
             child: const Text('发送'),
           ),
           OutlinedButton(
-            onPressed: _busy || _proposal == null
+            onPressed: _busy || (_proposal == null && !_hasAppliedDraft)
                 ? null
                 : () {
-                    widget.onApply(_proposal!);
-                    setState(() => _proposal = null);
+                    widget.onApply(_proposal ?? widget.currentDraft());
+                    setState(() {
+                      _proposal = null;
+                      _hasAppliedDraft = true;
+                    });
                   },
-            child: const Text('同步到编辑角色'),
+            child: const Text('下一步：编辑角色卡'),
           ),
         ],
       ),
@@ -153,7 +157,7 @@ class _CharacterGenerationChatState
       if (_proposal != null)
         const Padding(
           padding: EdgeInsets.only(top: 12),
-          child: Text('草稿已更新，可以继续对话或同步到编辑角色。'),
+          child: Text('草稿已更新，可以继续对话或进入下一步手动调整。'),
         ),
     ],
   );
