@@ -60,7 +60,7 @@
         <RendererErrorBoundary label="Turn Text Renderer">
           <MarkdownContent
             v-if="item.content"
-            :source="item.content"
+            :source="flowBubbleText(item.content)"
             :streaming="isStreamingStatus(item.status)"
             :citation-ids="citationIds"
             @citation="emit('citation', $event)"
@@ -81,6 +81,7 @@ import type {
 import AmitiaThinkingBlock from "./blocks/AmitiaThinkingBlock.vue";
 import MarkdownContent from "./markdown/MarkdownContent.vue";
 import RendererErrorBoundary from "./blocks/RendererErrorBoundary.vue";
+import { flowBubbleText } from "./bubbleMessageProjection";
 
 const props = defineProps<{
   turn: AssistantTurnData;

@@ -27,6 +27,7 @@ const (
 	GwSectionAntiFlatteryContract     GwSectionType = "anti_flattery_contract"
 	GwSectionTechnicalTaskContract    GwSectionType = "technical_task_contract"
 	GwSectionCharacterContract        GwSectionType = "character_contract"
+	GwSectionChatDeliveryContract     GwSectionType = "chat_delivery_contract"
 	GwSectionRuntimePlan              GwSectionType = "runtime_plan"
 	GwSectionExpressionPlan           GwSectionType = "expression_plan"
 	GwSectionMemoryContext            GwSectionType = "memory_context"

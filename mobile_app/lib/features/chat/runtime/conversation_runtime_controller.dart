@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../../../../core/settings/chat_appearance_preferences.dart';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
@@ -19,8 +20,10 @@ class ConversationRuntimeController extends ChangeNotifier {
   ConversationRuntimeController(
     this._chatService, {
     ChatPermissionPreferencesNotifier? permissionPreferences,
+    ChatAppearancePreferencesNotifier? appearancePreferences,
     this.replyNotifications,
   }) : _permissionPreferences = permissionPreferences,
+       _appearancePreferences = appearancePreferences,
        _permissionMode = normalizeChatPermissionMode(
          permissionPreferences?.mode,
        );
@@ -28,6 +31,7 @@ class ConversationRuntimeController extends ChangeNotifier {
   final ChatService _chatService;
   final ReplyNotificationService? replyNotifications;
   final ChatPermissionPreferencesNotifier? _permissionPreferences;
+  final ChatAppearancePreferencesNotifier? _appearancePreferences;
   final ConversationMessageLedger _messages = ConversationMessageLedger();
   final AgentEventReducer _agentReducer = AgentEventReducer();
   final MarkdownStreamScheduler _streamScheduler = MarkdownStreamScheduler();
@@ -81,6 +85,7 @@ class ConversationRuntimeController extends ChangeNotifier {
       count: status.count,
     );
   }
+
   List<Map<String, dynamic>> get pendingApprovals => _pendingApprovals.values
       .map((item) => Map<String, dynamic>.from(item))
       .toList(growable: false);
@@ -327,6 +332,7 @@ class ConversationRuntimeController extends ChangeNotifier {
     _sending = true;
     notifyListeners();
     try {
+      await _appearancePreferences?.init();
       final result = await _chatService.submitMessage(
         message: message,
         clientMessageId: requestId,
@@ -341,6 +347,7 @@ class ConversationRuntimeController extends ChangeNotifier {
         reasoningEffort: _reasoningEffort,
         reasoningEnabled: _reasoningEnabled,
         permissionMode: _permissionMode,
+        messageStyle: _appearancePreferences?.messageStyle.name ?? 'flow',
         workspace: _workspace,
       );
       final authoritativeConversation = result.conversationId.trim();
@@ -513,7 +520,9 @@ class ConversationRuntimeController extends ChangeNotifier {
         if (identical(_eventCancellation, cancellation)) {
           _eventCancellation = null;
         }
-        if (!_disposed && epoch == _runtimeEpoch && _conversationId == conversationId) {
+        if (!_disposed &&
+            epoch == _runtimeEpoch &&
+            _conversationId == conversationId) {
           _automationStateUncertain = true;
           notifyListeners();
         }
@@ -815,7 +824,12 @@ class ConversationRuntimeController extends ChangeNotifier {
     final conv = _conversationId?.trim() ?? '';
     if (turn != null && conv.isNotEmpty) {
       try {
-        await _chatService.retryTurn(conv, turn.id);
+        await _appearancePreferences?.init();
+        await _chatService.retryTurn(
+          conv,
+          turn.id,
+          messageStyle: _appearancePreferences?.messageStyle.name ?? 'flow',
+        );
         _sending = true;
         _lastError = null;
         _connectEventStream(conv);
@@ -1322,6 +1336,9 @@ final conversationRuntimeControllerProvider =
       final controller = ConversationRuntimeController(
         ref.read(chatServiceProvider),
         replyNotifications: ref.read(replyNotificationServiceProvider),
+        appearancePreferences: ref.read(
+          chatAppearancePreferencesProvider.notifier,
+        ),
         permissionPreferences: ref.read(
           chatPermissionPreferencesProvider.notifier,
         ),

@@ -11,6 +11,7 @@ import (
 )
 
 type processPromptInput struct {
+	MessageStyle                                                                                                                                                                                                                                             string
 	BaseIdentity, CharacterConfig, PersonalityConfig, PersonalityRaw, ProfileContext, MemoryContext, Worldbook, PluginContext, AgentSkillContext, EmotionFusionRaw, AdultIntimacyRaw, MemoryInjectRaw, AntiRepeatRaw                                         string
 	History                                                                                                                                                                                                                                                  []map[string]string
 	Runtime                                                                                                                                                                                                                                                  *interaction.RuntimeAssembly
@@ -32,6 +33,9 @@ func buildProcessPromptMessages(input processPromptInput) ([]map[string]interfac
 		}
 	}
 	request := promptir.BuildRequest{CharacterConfig: input.CharacterConfig, CompiledPersonality: input.PersonalityConfig, BaseIdentity: input.BaseIdentity, CharacterBase: input.CharacterBase, PersonalityRaw: input.PersonalityRaw, EmotionFusionRaw: input.EmotionFusionRaw, AdultIntimacyRaw: input.AdultIntimacyRaw, MemoryInjectRaw: input.MemoryInjectRaw, AntiRepeatRaw: input.AntiRepeatRaw, ProfileContext: input.ProfileContext, TemporalContext: input.TemporalContext, ContinuityContext: input.ContinuityContext, RelationshipTimeContext: input.RelationshipTimeContext, MemoryContext: input.MemoryContext, Worldbook: input.Worldbook, PluginContext: input.PluginContext, AgentSkillContext: input.AgentSkillContext, AgentSkillCatalogIncluded: input.AgentSkillCatalogIncluded, AgentSkillTrace: input.AgentSkillTrace, RuntimePlan: runtimePlan, ExpressionPlan: expressionPlan, History: renderHistoryForPromptIR(input.History), CurrentUserInput: input.UserContent, ProactiveTaskInstruction: input.ProactiveTaskInstruction, ProactiveScene: input.ProactiveScene, ProactiveTimeContext: input.ProactiveTimeContext, ProactiveRecentContext: input.ProactiveRecentContext, ProactivePersonality: input.ProactivePersonality, ProactiveRelationship: input.ProactiveRelationship, ProactiveEmotion: input.ProactiveEmotion, ProactiveMemory: input.ProactiveMemory}
+	if input.MessageStyle == "bubble" {
+		request.ChatDeliveryContract = bubbleMessageInstruction
+	}
 	gwMessages, promptTrace, err := gateway.BuildMessages(request)
 	if err != nil {
 		applog.Warn("prompt gateway build failed, trying minimal build", applog.Fields{"error": err.Error()})

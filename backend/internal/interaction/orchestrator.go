@@ -50,6 +50,7 @@ type ProcessRequest struct {
 	ReplyToMessageID         *string                    `json:"replyToMessageId,omitempty"`
 	ModelConfigID            int                        `json:"modelConfigId,omitempty"`
 	ReasoningEffort          string                     `json:"reasoningEffort,omitempty"`
+	MessageStyle             string                     `json:"messageStyle,omitempty"`
 	ReasoningEnabled         *bool                      `json:"reasoningEnabled,omitempty"`
 	PermissionMode           string                     `json:"permissionMode,omitempty"`
 	RequestID                string                     `json:"requestId,omitempty"`

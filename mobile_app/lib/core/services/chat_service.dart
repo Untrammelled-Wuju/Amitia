@@ -75,8 +75,12 @@ class ConversationSnapshotDto {
     final rawTurns = json['turns'];
     final rawMessageHistory = json['messageHistory'];
     final rawTurnHistory = json['turnHistory'];
-    final messageHistory = rawMessageHistory is Map ? Map<String, dynamic>.from(rawMessageHistory) : const <String, dynamic>{};
-    final turnHistory = rawTurnHistory is Map ? Map<String, dynamic>.from(rawTurnHistory) : const <String, dynamic>{};
+    final messageHistory = rawMessageHistory is Map
+        ? Map<String, dynamic>.from(rawMessageHistory)
+        : const <String, dynamic>{};
+    final turnHistory = rawTurnHistory is Map
+        ? Map<String, dynamic>.from(rawTurnHistory)
+        : const <String, dynamic>{};
     final rawActiveTurn = json['activeTurn'];
     final rawApprovals = json['approvals'];
     return ConversationSnapshotDto(
@@ -87,18 +91,27 @@ class ConversationSnapshotDto {
           ? ConversationDto.fromJson(Map<String, dynamic>.from(rawConversation))
           : null,
       workspace: rawWorkspace is Map
-          ? ConversationWorkspaceDto.fromJson(Map<String, dynamic>.from(rawWorkspace))
+          ? ConversationWorkspaceDto.fromJson(
+              Map<String, dynamic>.from(rawWorkspace),
+            )
           : null,
       messages: rawMessages is List
           ? rawMessages
                 .whereType<Map>()
-                .map((item) => MessageDto.fromJson(Map<String, dynamic>.from(item)))
+                .map(
+                  (item) =>
+                      MessageDto.fromJson(Map<String, dynamic>.from(item)),
+                )
                 .toList(growable: false)
           : const <MessageDto>[],
       turns: rawTurns is List
           ? rawTurns
                 .whereType<Map>()
-                .map((item) => AssistantTurnDto.fromJson(Map<String, dynamic>.from(item)))
+                .map(
+                  (item) => AssistantTurnDto.fromJson(
+                    Map<String, dynamic>.from(item),
+                  ),
+                )
                 .toList(growable: false)
           : const <AssistantTurnDto>[],
       messageNextBefore: (messageHistory['nextBefore'] as num?)?.toInt() ?? 0,
@@ -233,7 +246,9 @@ class ChatService {
         .toList(growable: false);
   }
 
-  Future<ConversationDto?> createRealtimeConversation({String? projectId}) async {
+  Future<ConversationDto?> createRealtimeConversation({
+    String? projectId,
+  }) async {
     final id = projectId?.trim() ?? '';
     final resp = await _api.post<Map<String, dynamic>>(
       '/api/web-chat/realtime-conversations',
@@ -388,7 +403,8 @@ class ChatService {
               .toList(growable: false);
     return MessageHistoryPageDto(
       items: items,
-      nextBefore: (resp?['nextBefore'] as num?)?.toInt() ??
+      nextBefore:
+          (resp?['nextBefore'] as num?)?.toInt() ??
           (items.isEmpty ? 0 : items.first.sequence),
       hasMore: resp?['hasMore'] == true,
     );
@@ -410,7 +426,10 @@ class ChatService {
     final items = rows is List
         ? rows
               .whereType<Map>()
-              .map((row) => AssistantTurnDto.fromJson(Map<String, dynamic>.from(row)))
+              .map(
+                (row) =>
+                    AssistantTurnDto.fromJson(Map<String, dynamic>.from(row)),
+              )
               .toList(growable: false)
         : const <AssistantTurnDto>[];
     return AssistantTurnPageDto(
@@ -428,7 +447,9 @@ class ChatService {
     return page.items;
   }
 
-  Future<ConversationSnapshotDto> conversationSnapshot(String conversationId) async {
+  Future<ConversationSnapshotDto> conversationSnapshot(
+    String conversationId,
+  ) async {
     final resp = await _api.get<Map<String, dynamic>>(
       '/api/web-chat/conversations/${Uri.encodeComponent(conversationId)}/snapshot',
     );
@@ -605,7 +626,6 @@ class ChatService {
 
   ChatStreamCancellation createStreamCancellation() => ChatStreamCancellation();
 
-
   Stream<ChatStreamEvent> _decodeEventStream(Stream<List<int>> source) async* {
     final text = source.transform(utf8.decoder);
     var buffer = '';
@@ -683,6 +703,7 @@ class ChatService {
     String? reasoningEffort,
     bool? reasoningEnabled,
     String? permissionMode,
+    String messageStyle = 'flow',
     ConversationWorkspaceDto? workspace,
   }) async {
     final now = DateTime.now().microsecondsSinceEpoch;
@@ -694,6 +715,7 @@ class ChatService {
       '/api/web-chat/messages',
       data: {
         'content': message,
+        'messageStyle': messageStyle,
         if (conversationId != null && conversationId.isNotEmpty)
           'conversationId': conversationId,
         if (characterId != null && characterId.isNotEmpty)
@@ -716,7 +738,8 @@ class ChatService {
           'permissionMode': permissionMode,
         if (workspace != null && workspace.projectId.isNotEmpty)
           'projectId': workspace.projectId,
-        if (workspace != null && workspace.projectId.isEmpty) ...<String, dynamic>{
+        if (workspace != null &&
+            workspace.projectId.isEmpty) ...<String, dynamic>{
           'workspaceId': workspace.workspaceId,
           if (workspace.deviceId.isNotEmpty)
             'workspaceDeviceId': workspace.deviceId,
@@ -734,24 +757,31 @@ class ChatService {
     return ChatSubmitResult.fromJson(resp);
   }
 
-
-
   Future<void> interruptTurn(String conversationId, String turnId) async {
     await _api.post<Map<String, dynamic>>(
       '/api/web-chat/conversations/${Uri.encodeComponent(conversationId)}/turns/${Uri.encodeComponent(turnId)}/interrupt',
     );
   }
 
-  Future<void> steerTurn(String conversationId, String turnId, String content) async {
+  Future<void> steerTurn(
+    String conversationId,
+    String turnId,
+    String content,
+  ) async {
     await _api.post<Map<String, dynamic>>(
       '/api/web-chat/conversations/${Uri.encodeComponent(conversationId)}/turns/${Uri.encodeComponent(turnId)}/steer',
       data: <String, dynamic>{'content': content.trim()},
     );
   }
 
-  Future<ChatSubmitResult> retryTurn(String conversationId, String turnId) async {
+  Future<ChatSubmitResult> retryTurn(
+    String conversationId,
+    String turnId, {
+    String messageStyle = 'flow',
+  }) async {
     final resp = await _api.post<Map<String, dynamic>>(
       '/api/web-chat/conversations/${Uri.encodeComponent(conversationId)}/turns/${Uri.encodeComponent(turnId)}/retry',
+      data: {'messageStyle': messageStyle},
     );
     if (resp == null) {
       throw StateError('重试未返回结果');

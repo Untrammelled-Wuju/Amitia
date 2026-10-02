@@ -4,6 +4,9 @@ SPDX-License-Identifier: AGPL-3.0-only
 -->
 <template>
   <el-tabs v-model="activeTabModel">
+    <el-tab-pane label="对话生成" name="generate">
+      <slot name="generate" />
+    </el-tab-pane>
     <el-tab-pane label="编辑角色" name="edit">
       <el-form label-position="top" class="char-form">
         <div class="form-grid">

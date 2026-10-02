@@ -3,7 +3,6 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../../../app/app_routes.dart';
 import '../../../../app/theme/app_spacing.dart';
@@ -12,15 +11,37 @@ import '../../../../core/models/character.dart';
 import '../../../../core/services/providers.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
+import '../widgets/character_generation_chat.dart';
+import '../widgets/character_personality_editor.dart';
 
 class CharacterCardWorkshopPage extends ConsumerStatefulWidget {
   const CharacterCardWorkshopPage({super.key});
 
   @override
-  ConsumerState<CharacterCardWorkshopPage> createState() => _CharacterCardWorkshopPageState();
+  ConsumerState<CharacterCardWorkshopPage> createState() =>
+      _CharacterCardWorkshopPageState();
 }
 
-class _CharacterCardWorkshopPageState extends ConsumerState<CharacterCardWorkshopPage> {
+class _CharacterCardWorkshopPageState
+    extends ConsumerState<CharacterCardWorkshopPage> {
+  static const _profileLabels = {
+    'name': '名称',
+    'avatar': '头像 URL',
+    'identity': '身份',
+    'personality': '性格',
+    'speakingStyle': '说话风格',
+    'relationshipStyle': '关系氛围',
+    'boundaryRules': '安全边界规则',
+  };
+  final _profile = {
+    for (final key in _profileLabels.keys) key: TextEditingController(),
+  };
+  Map<String, dynamic> _personalityConfig = {...characterPersonalityDefaults};
+  bool _creating = false;
+  bool _editing = false;
+  bool _isActive = false;
+  int _generationSession = 0;
+  String? _pendingAvatarPath;
   final _description = TextEditingController();
   final _scenario = TextEditingController();
   final _systemPrompt = TextEditingController();
@@ -33,12 +54,16 @@ class _CharacterCardWorkshopPageState extends ConsumerState<CharacterCardWorksho
   Map<String, dynamic> _cardData = <String, dynamic>{};
   String _selectedId = '';
   bool _loading = false;
+  bool _cardLoadFailed = false;
   bool _saving = false;
   bool _importing = false;
   bool _exporting = false;
 
   @override
   void dispose() {
+    for (final controller in _profile.values) {
+      controller.dispose();
+    }
     _description.dispose();
     _scenario.dispose();
     _systemPrompt.dispose();
@@ -60,65 +85,142 @@ class _CharacterCardWorkshopPageState extends ConsumerState<CharacterCardWorksho
         showBackButton: true,
         fallbackRoute: AppRoutes.workshop,
         actions: [
-          AmitiaIconButton(icon: Icons.file_upload_outlined, tooltip: '导入角色卡', onPressed: _importing ? null : _importCard),
-          AmitiaIconButton(icon: Icons.file_download_outlined, tooltip: '导出 CHARX', onPressed: _exporting || _selectedId.isEmpty ? null : _exportCard),
+          AmitiaIconButton(
+            icon: Icons.file_upload_outlined,
+            tooltip: '导入角色卡',
+            onPressed: _importing || _saving || _loading ? null : _importCard,
+          ),
+          AmitiaIconButton(
+            icon: Icons.file_download_outlined,
+            tooltip: '导出 CHARX',
+            onPressed: _exporting || _saving || _loading || _selectedId.isEmpty
+                ? null
+                : _exportCard,
+          ),
         ],
       ),
       body: SafeArea(
         top: false,
-        child: charactersAsync.when(
-          loading: () => const AmitiaLoadingState(message: '正在加载角色...'),
-          error: (err, _) => AmitiaErrorState(message: '角色加载失败：$err', onRetry: () => ref.invalidate(characterListProvider)),
-          data: (characters) => _buildBody(context, characters),
+        child: IgnorePointer(
+          ignoring: _saving,
+          child: charactersAsync.when(
+            loading: () => const AmitiaLoadingState(message: '正在加载角色...'),
+            error: (err, _) => AmitiaErrorState(
+              message: '角色加载失败：$err',
+              onRetry: () => ref.invalidate(characterListProvider),
+            ),
+            data: (characters) => _buildBody(context, characters),
+          ),
         ),
       ),
     );
   }
 
   Widget _buildBody(BuildContext context, List<CharacterDto> characters) {
-    if (characters.isEmpty) {
+    if (characters.isEmpty && !_creating) {
       return AmitiaEmptyState(
         icon: Icons.badge_outlined,
         title: '还没有角色卡',
-        subtitle: '先创建角色，再在这里编辑角色卡并导出 CHARX',
+        subtitle: '通过对话生成角色草稿，或直接编辑角色卡',
         actionText: '创建角色',
-        onAction: () => context.push(AppRoutes.charactersCreate),
+        onAction: _newDraft,
       );
     }
-    final selected = characters.where((item) => item.id == _selectedId).firstOrNull;
-    if (selected == null && _selectedId.isEmpty) {
+    final selected = characters
+        .where((item) => item.id == _selectedId)
+        .firstOrNull;
+    if (selected == null && _selectedId.isEmpty && !_creating) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && characters.isNotEmpty) _selectCharacter(characters.first);
+        if (mounted && characters.isNotEmpty) {
+          _selectCharacter(characters.first);
+        }
       });
     }
     return ListView(
       padding: EdgeInsets.all(AppSpacing.pagePadding),
       children: [
-        DropdownButtonFormField<String>(
-          key: ValueKey(_selectedId),
-          initialValue: selected?.id,
-          decoration: const InputDecoration(labelText: '选择角色'),
-          items: characters
-              .map((character) => DropdownMenuItem(value: character.id, child: Text(character.name)))
-              .toList(),
-          onChanged: _loading ? null : (id) {
-            final character = characters.where((item) => item.id == id).firstOrNull;
-            if (character != null) _selectCharacter(character);
-          },
+        OutlinedButton.icon(
+          onPressed: _saving || _loading ? null : _newDraft,
+          icon: const Icon(Icons.add),
+          label: const Text('创建角色卡'),
         ),
+        if (!_creating)
+          DropdownButtonFormField<String>(
+            key: ValueKey(_selectedId),
+            initialValue: selected?.id,
+            decoration: const InputDecoration(labelText: '选择角色'),
+            items: characters
+                .map(
+                  (character) => DropdownMenuItem(
+                    value: character.id,
+                    child: Text(character.name),
+                  ),
+                )
+                .toList(),
+            onChanged: _loading || _saving
+                ? null
+                : (id) {
+                    final character = characters
+                        .where((item) => item.id == id)
+                        .firstOrNull;
+                    if (character != null) _selectCharacter(character);
+                  },
+          ),
         SizedBox(height: AppSpacing.lg),
         if (_loading)
-          const Center(child: Padding(padding: EdgeInsets.all(24), child: CircularProgressIndicator()))
-        else if (selected != null)
-          _buildEditor(context, selected),
+          const Center(
+            child: Padding(
+              padding: EdgeInsets.all(24),
+              child: CircularProgressIndicator(),
+            ),
+          )
+        else if (_cardLoadFailed && selected != null)
+          AmitiaErrorState(
+            message: '角色卡加载失败，请重试后再编辑',
+            onRetry: () => _selectCharacter(selected),
+          )
+        else if (selected != null || _creating) ...[
+          AmitiaSegmentedControl(
+            segments: const ['对话生成', '编辑角色'],
+            selectedIndex: _editing ? 1 : 0,
+            onChanged: (index) => setState(() => _editing = index == 1),
+          ),
+          SizedBox(height: AppSpacing.lg),
+          Offstage(
+            offstage: _editing,
+            child: CharacterGenerationChat(
+              key: ValueKey(_generationSession),
+              currentDraft: _draftSnapshot,
+              onApply: _applyGenerated,
+            ),
+          ),
+          if (!_editing)
+            TextButton(
+              onPressed: () => setState(() => _editing = true),
+              child: const Text('跳过生成，直接编辑'),
+            ),
+          Offstage(offstage: !_editing, child: _buildEditor(context, selected)),
+        ],
       ],
     );
   }
 
-  Widget _buildEditor(BuildContext context, CharacterDto character) {
+  Widget _buildEditor(BuildContext context, CharacterDto? character) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        for (final field in _profileLabels.entries)
+          _field(
+            field.value,
+            _profile[field.key]!,
+            maxLines: field.key == 'boundaryRules' ? 4 : 1,
+          ),
+        OutlinedButton.icon(
+          onPressed: _saving ? null : _pickAvatar,
+          icon: const Icon(Icons.add_photo_alternate_outlined),
+          label: Text(_pendingAvatarPath == null ? '上传角色头像' : '已选择头像，保存时上传'),
+        ),
+        SizedBox(height: AppSpacing.lg),
         _field('角色描述', _description, maxLines: 3),
         _field('场景设定', _scenario, maxLines: 3),
         _field('System Prompt', _systemPrompt, maxLines: 8),
@@ -128,6 +230,17 @@ class _CharacterCardWorkshopPageState extends ConsumerState<CharacterCardWorksho
         _field('创作者', _creator),
         _field('角色卡版本', _characterVersion),
         _field('标签', _tags, hint: '使用英文逗号分隔'),
+        CharacterPersonalityEditor(
+          value: _personalityConfig,
+          onChanged: (value) => setState(() => _personalityConfig = value),
+        ),
+        CheckboxListTile(
+          title: const Text('设为当前启用角色'),
+          value: _isActive,
+          onChanged: character?.isActive == 1 || _saving
+              ? null
+              : (value) => setState(() => _isActive = value ?? false),
+        ),
         SizedBox(height: AppSpacing.lg),
         AmitiaButton(
           label: _saving ? '保存中...' : '保存角色卡',
@@ -139,7 +252,12 @@ class _CharacterCardWorkshopPageState extends ConsumerState<CharacterCardWorksho
     );
   }
 
-  Widget _field(String label, TextEditingController controller, {int maxLines = 1, String? hint}) {
+  Widget _field(
+    String label,
+    TextEditingController controller, {
+    int maxLines = 1,
+    String? hint,
+  }) {
     return Padding(
       padding: EdgeInsets.only(bottom: AppSpacing.md),
       child: TextField(
@@ -154,63 +272,240 @@ class _CharacterCardWorkshopPageState extends ConsumerState<CharacterCardWorksho
     setState(() {
       _selectedId = character.id;
       _loading = true;
+      _cardLoadFailed = false;
+      _cardData = {};
+      _creating = false;
+      _editing = true;
+      _generationSession++;
+      _pendingAvatarPath = null;
+      _isActive = character.isActive == 1;
     });
+    final profile = {
+      'name': character.name,
+      'avatar': character.avatar,
+      'identity': character.identity,
+      'personality': character.personality,
+      'speakingStyle': character.speakingStyle,
+      'relationshipStyle': character.relationshipStyle,
+      'boundaryRules': character.boundaryRules,
+    };
+    for (final entry in profile.entries) {
+      _profile[entry.key]!.text = entry.value;
+    }
+    _personalityConfig = {
+      ...characterPersonalityDefaults,
+      ...character.personalityConfig,
+    };
     _description.text = character.description;
     try {
-      final data = await ref.read(backendServiceProvider).get<Map<String, dynamic>>(
-        '/api/characters/${character.id}/card-data',
-        fromJson: (value) => Map<String, dynamic>.from(value as Map),
-      );
-      if (!mounted) return;
+      final data = await ref
+          .read(backendServiceProvider)
+          .get<Map<String, dynamic>>(
+            '/api/characters/${character.id}/card-data',
+            fromJson: (value) => Map<String, dynamic>.from(value as Map),
+          );
+      if (!mounted || _selectedId != character.id) return;
       _cardData = data ?? <String, dynamic>{};
-      _description.text = (data?['description'] ?? character.description).toString();
+      _description.text = (data?['description'] ?? character.description)
+          .toString();
       _scenario.text = (_cardData['scenario'] ?? '').toString();
-      _systemPrompt.text = (_cardData['systemPrompt'] ?? character.characterBase).toString();
+      _systemPrompt.text =
+          (_cardData['systemPrompt'] ?? character.characterBase).toString();
       _exampleMessages.text = (_cardData['exampleMessages'] ?? '').toString();
-      _alternateGreetings.text = (_cardData['alternateGreetings'] as List?)?.map((item) => item.toString()).join('\n') ?? '';
-      _postHistory.text = (_cardData['postHistoryInstructions'] ?? '').toString();
+      _alternateGreetings.text =
+          (_cardData['alternateGreetings'] as List?)
+              ?.map((item) => item.toString())
+              .join('\n') ??
+          '';
+      _postHistory.text = (_cardData['postHistoryInstructions'] ?? '')
+          .toString();
       _creator.text = (_cardData['creator'] ?? '').toString();
       _characterVersion.text = (_cardData['characterVersion'] ?? '').toString();
-      _tags.text = (_cardData['tags'] as List?)?.map((item) => item.toString()).join(', ') ?? '';
+      _tags.text =
+          (_cardData['tags'] as List?)
+              ?.map((item) => item.toString())
+              .join(', ') ??
+          '';
     } catch (error) {
-      if (mounted) amitiaSnackBar(context, '角色卡加载失败：$error');
+      if (mounted && _selectedId == character.id) {
+        _cardLoadFailed = true;
+        amitiaSnackBar(context, '角色卡加载失败：$error');
+      }
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted && _selectedId == character.id) {
+        setState(() => _loading = false);
+      }
     }
   }
 
-  Future<void> _saveCard(CharacterDto character) async {
+  Future<void> _saveCard(CharacterDto? character) async {
+    if (_saving || _loading || _cardLoadFailed) return;
+    if (_profile['name']!.text.trim().isEmpty) {
+      amitiaSnackBar(context, '请输入角色名称');
+      return;
+    }
     setState(() => _saving = true);
     try {
       final api = ref.read(backendServiceProvider);
+      final payload = {
+        for (final entry in _profile.entries)
+          entry.key: entry.value.text.trim(),
+        'description': _description.text.trim(),
+        'characterBase': _systemPrompt.text.trim(),
+        'personalityConfig': _personalityConfig,
+      };
+      if (_selectedId.isEmpty) {
+        final created = await ref
+            .read(characterServiceProvider)
+            .create(payload);
+        if (created == null || created.id.isEmpty) throw StateError('角色创建失败');
+        if (!mounted) return;
+        setState(() => _selectedId = created.id);
+      } else {
+        await ref.read(characterServiceProvider).update(_selectedId, payload);
+      }
+      if (_pendingAvatarPath != null) {
+        final uploaded = await ref
+            .read(characterDetailServiceProvider)
+            .uploadAvatar(_selectedId, _pendingAvatarPath!);
+        final avatarUrl = uploaded?['avatarUrl'];
+        if (avatarUrl is! String || avatarUrl.isEmpty) {
+          throw StateError('头像上传未返回有效地址');
+        }
+        if (!mounted) return;
+        _profile['avatar']!.text = avatarUrl;
+        _pendingAvatarPath = null;
+      }
       await api.put<Map<String, dynamic>>(
-        '/api/characters/${character.id}',
-        data: {'description': _description.text.trim()},
-        fromJson: (value) => Map<String, dynamic>.from(value as Map),
-      );
-      await api.put<Map<String, dynamic>>(
-        '/api/characters/${character.id}/card-data',
+        '/api/characters/$_selectedId/card-data',
         data: {
           ..._cardData,
           'description': _description.text.trim(),
           'scenario': _scenario.text.trim(),
           'systemPrompt': _systemPrompt.text.trim(),
           'exampleMessages': _exampleMessages.text.trim(),
-          'alternateGreetings': _alternateGreetings.text.split('\n').map((item) => item.trim()).where((item) => item.isNotEmpty).toList(),
+          'alternateGreetings': _alternateGreetings.text
+              .split('\n')
+              .map((item) => item.trim())
+              .where((item) => item.isNotEmpty)
+              .toList(),
           'postHistoryInstructions': _postHistory.text.trim(),
           'creator': _creator.text.trim(),
           'characterVersion': _characterVersion.text.trim(),
-          'tags': _tags.text.split(',').map((item) => item.trim()).where((item) => item.isNotEmpty).toList(),
+          'tags': _tags.text
+              .split(',')
+              .map((item) => item.trim())
+              .where((item) => item.isNotEmpty)
+              .toList(),
         },
         fromJson: (value) => Map<String, dynamic>.from(value as Map),
       );
+      if (_isActive) {
+        await ref.read(characterServiceProvider).setActive(_selectedId);
+      }
       ref.invalidate(characterListProvider);
+      final refreshed = await ref.read(characterListProvider.future);
+      final saved = refreshed
+          .where((item) => item.id == _selectedId)
+          .firstOrNull;
+      if (mounted && saved != null) await _selectCharacter(saved);
       if (mounted) amitiaSnackBar(context, '角色卡已保存');
     } catch (error) {
       if (mounted) amitiaSnackBar(context, '角色卡保存失败：$error');
     } finally {
       if (mounted) setState(() => _saving = false);
     }
+  }
+
+  void _newDraft() {
+    setState(() {
+      _creating = true;
+      _editing = false;
+      _selectedId = '';
+      _generationSession++;
+      _isActive = true;
+      _pendingAvatarPath = null;
+      _cardData = {};
+      _cardLoadFailed = false;
+      for (final controller in [
+        ..._profile.values,
+        _description,
+        _scenario,
+        _systemPrompt,
+        _exampleMessages,
+        _alternateGreetings,
+        _postHistory,
+        _creator,
+        _characterVersion,
+        _tags,
+      ]) {
+        controller.clear();
+      }
+      _personalityConfig = {...characterPersonalityDefaults};
+    });
+  }
+
+  Map<String, dynamic> _draftSnapshot() => {
+    for (final entry in _profile.entries) entry.key: entry.value.text,
+    'description': _description.text,
+    'scenario': _scenario.text,
+    'characterBase': _systemPrompt.text,
+    'exampleMessages': _exampleMessages.text,
+    'alternateGreetings': _alternateGreetings.text
+        .split('\n')
+        .where((value) => value.trim().isNotEmpty)
+        .toList(),
+    'postHistoryInstructions': _postHistory.text,
+    'creator': _creator.text,
+    'characterVersion': _characterVersion.text,
+    'tags': _tags.text
+        .split(',')
+        .map((value) => value.trim())
+        .where((value) => value.isNotEmpty)
+        .toList(),
+    'personalityConfig': _personalityConfig,
+  };
+
+  void _applyGenerated(Map<String, dynamic> draft) {
+    setState(() {
+      final controllers = {
+        ..._profile,
+        'description': _description,
+        'scenario': _scenario,
+        'characterBase': _systemPrompt,
+        'exampleMessages': _exampleMessages,
+        'postHistoryInstructions': _postHistory,
+        'creator': _creator,
+        'characterVersion': _characterVersion,
+      };
+      for (final entry in controllers.entries) {
+        if (draft[entry.key] is String) {
+          entry.value.text = draft[entry.key] as String;
+        }
+      }
+      if (draft['tags'] is List) {
+        _tags.text = (draft['tags'] as List).join(', ');
+      }
+      if (draft['alternateGreetings'] is List) {
+        _alternateGreetings.text = (draft['alternateGreetings'] as List).join(
+          '\n',
+        );
+      }
+      if (draft['personalityConfig'] is Map) {
+        _personalityConfig = {
+          ..._personalityConfig,
+          ...Map<String, dynamic>.from(draft['personalityConfig'] as Map),
+        };
+      }
+      _editing = true;
+    });
+  }
+
+  Future<void> _pickAvatar() async {
+    final picked = await FilePicker.platform.pickFiles(type: FileType.image);
+    if (!mounted) return;
+    final path = picked?.files.single.path;
+    if (path != null) setState(() => _pendingAvatarPath = path);
   }
 
   Future<void> _importCard() async {
@@ -225,10 +520,14 @@ class _CharacterCardWorkshopPageState extends ConsumerState<CharacterCardWorksho
       final api = ref.read(backendServiceProvider);
       final previewResult = await api.postMultipart<Map<String, dynamic>>(
         '/api/characters/import-card/preview',
-        files: {'card': [path]},
+        files: {
+          'card': [path],
+        },
         fromJson: (value) => Map<String, dynamic>.from(value as Map),
       );
-      final preview = previewResult?['preview'] is Map ? Map<String, dynamic>.from(previewResult!['preview'] as Map) : <String, dynamic>{};
+      final preview = previewResult?['preview'] is Map
+          ? Map<String, dynamic>.from(previewResult!['preview'] as Map)
+          : <String, dynamic>{};
       if (!mounted) return;
       final confirmed = await showDialog<bool>(
         context: context,
@@ -240,15 +539,23 @@ class _CharacterCardWorkshopPageState extends ConsumerState<CharacterCardWorksho
             '世界书条目：${preview['lorebookEntryCount'] ?? 0}\n\n确认导入吗？',
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('取消')),
-            TextButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('确认导入')),
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('取消'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('确认导入'),
+            ),
           ],
         ),
       );
       if (confirmed != true) return;
       final result = await api.postMultipart<Map<String, dynamic>>(
         '/api/characters/import-card/confirm',
-        files: {'card': [path]},
+        files: {
+          'card': [path],
+        },
         fromJson: (value) => Map<String, dynamic>.from(value as Map),
       );
       ref.invalidate(characterListProvider);
@@ -256,7 +563,9 @@ class _CharacterCardWorkshopPageState extends ConsumerState<CharacterCardWorksho
       if (characterId.isNotEmpty && mounted) {
         setState(() => _selectedId = characterId);
         final chars = await ref.read(characterListProvider.future);
-        final imported = chars.where((item) => item.id == characterId).firstOrNull;
+        final imported = chars
+            .where((item) => item.id == characterId)
+            .firstOrNull;
         if (imported != null) await _selectCharacter(imported);
       }
       if (mounted) amitiaSnackBar(context, '角色卡导入成功');
@@ -271,10 +580,12 @@ class _CharacterCardWorkshopPageState extends ConsumerState<CharacterCardWorksho
     if (_selectedId.isEmpty) return;
     setState(() => _exporting = true);
     try {
-      final stream = await ref.read(backendServiceProvider).getStream(
-        '/api/characters/$_selectedId/export-card',
-        queryParameters: const {'format': 'v3_charx', 'download': 'true'},
-      );
+      final stream = await ref
+          .read(backendServiceProvider)
+          .getStream(
+            '/api/characters/$_selectedId/export-card',
+            queryParameters: const {'format': 'v3_charx', 'download': 'true'},
+          );
       final chunks = await stream.toList();
       final bytes = chunks.expand((chunk) => chunk).toList();
       final target = await FilePicker.platform.saveFile(

@@ -13,6 +13,7 @@ import '../../features/conversation/rendering/amitia_message_view.dart';
 import '../../features/conversation/rendering/amrp.dart';
 import 'amitia_button.dart';
 import 'amitia_misc.dart';
+import 'user_message_surface.dart';
 import 'amitia_popup_menu.dart';
 import '../settings/chat_appearance_preferences.dart';
 
@@ -68,7 +69,10 @@ class AmitiaAgentActivity {
 class AmitiaMessageBubble extends StatelessWidget {
   final ChatMessage message;
   final ChatMessageStyle messageStyle;
+  final UserMessageMaterial userMessageMaterial;
   final bool showAvatar;
+  final bool aiAvatarEnabled;
+  final bool aiNameEnabled;
   final bool showHeader;
   final bool compactBottom;
   final String? avatarInitial;
@@ -94,7 +98,10 @@ class AmitiaMessageBubble extends StatelessWidget {
     super.key,
     required this.message,
     this.messageStyle = ChatMessageStyle.flow,
+    this.userMessageMaterial = UserMessageMaterial.solid,
     this.showAvatar = true,
+    this.aiAvatarEnabled = true,
+    this.aiNameEnabled = true,
     this.showHeader = true,
     this.compactBottom = false,
     this.avatarInitial,
@@ -119,6 +126,25 @@ class AmitiaMessageBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (messageStyle == ChatMessageStyle.bubble &&
+        message.role == MessageRole.user) {
+      return Padding(
+        padding: EdgeInsets.fromLTRB(AppSpacing.lg, 0, AppSpacing.lg, 14),
+        child: Builder(
+          builder: (bubbleContext) => GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onLongPressStart: (_) => _showUserActions(bubbleContext, message),
+            child: AmitiaMessageView(
+              message: message,
+              messageStyle: messageStyle,
+              userMessageMaterial: userMessageMaterial,
+              onReply: onReply,
+              onCopy: onCopy,
+            ),
+          ),
+        ),
+      );
+    }
     if (message.role != MessageRole.user) {
       return Padding(
         padding: EdgeInsets.fromLTRB(
@@ -133,6 +159,7 @@ class AmitiaMessageBubble extends StatelessWidget {
           key: ValueKey<String>('amrp:${message.renderId}'),
           message: message,
           messageStyle: messageStyle,
+          userMessageMaterial: userMessageMaterial,
           characterId: avatarCharacterId.isEmpty
               ? message.characterId
               : avatarCharacterId,
@@ -145,6 +172,8 @@ class AmitiaMessageBubble extends StatelessWidget {
           avatarColor: avatarColor?.trim() ?? '',
           avatarUrl: avatarUrl,
           showAvatar: showAvatar || messageStyle == ChatMessageStyle.bubble,
+          aiAvatarEnabled: aiAvatarEnabled,
+          aiNameEnabled: aiNameEnabled,
           showHeader: showHeader || messageStyle == ChatMessageStyle.bubble,
           showThinking: showThinking,
           toolBlocks: [
@@ -374,18 +403,21 @@ class AmitiaMessageBubble extends StatelessWidget {
           name: message.fileName ?? '图片',
           url: message.mediaUrl,
           isUser: isUser,
+          material: isUser ? userMessageMaterial : UserMessageMaterial.solid,
         );
       case MessageType.video:
         return _VideoMessage(
           title: message.fileName ?? '视频',
           durationMs: message.durationMs ?? 0,
           isUser: isUser,
+          material: isUser ? userMessageMaterial : UserMessageMaterial.solid,
         );
       case MessageType.audio:
         return _AudioMessage(
           title: message.fileName ?? '语音消息',
           durationMs: message.durationMs ?? 0,
           isUser: isUser,
+          material: isUser ? userMessageMaterial : UserMessageMaterial.solid,
         );
       case MessageType.emote:
         return _EmoteMessage(emoji: message.content, name: '', isUser: isUser);
@@ -397,6 +429,7 @@ class AmitiaMessageBubble extends StatelessWidget {
           fileName: message.fileName ?? message.content,
           fileSizeKB: message.fileSizeKB ?? 0,
           isUser: isUser,
+          material: isUser ? userMessageMaterial : UserMessageMaterial.solid,
         );
       case MessageType.text:
       case MessageType.agentTask:
@@ -404,7 +437,8 @@ class AmitiaMessageBubble extends StatelessWidget {
       case MessageType.systemNotice:
         break;
     }
-    return Container(
+    return UserMessageSurface(
+      material: isUser ? userMessageMaterial : UserMessageMaterial.solid,
       constraints: BoxConstraints(
         maxWidth: MediaQuery.sizeOf(context).width * (isUser ? 0.76 : 0.80),
       ),
@@ -712,11 +746,13 @@ class _AgentActivityRow extends StatelessWidget {
 }
 
 class _FileMessage extends StatelessWidget {
+  final UserMessageMaterial material;
   final String fileName;
   final int fileSizeKB;
   final bool isUser;
 
   const _FileMessage({
+    this.material = UserMessageMaterial.solid,
     required this.fileName,
     required this.fileSizeKB,
     required this.isUser,
@@ -724,7 +760,8 @@ class _FileMessage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return UserMessageSurface(
+      material: material,
       constraints: BoxConstraints(
         maxWidth: MediaQuery.sizeOf(context).width * 0.7,
       ),
@@ -777,17 +814,24 @@ class _FileMessage extends StatelessWidget {
 }
 
 class _ImageMessage extends StatelessWidget {
+  final UserMessageMaterial material;
   final String name;
   final String? url;
   final bool isUser;
-  const _ImageMessage({required this.name, this.url, required this.isUser});
+  const _ImageMessage({
+    required this.name,
+    this.url,
+    required this.isUser,
+    this.material = UserMessageMaterial.solid,
+  });
 
   @override
   Widget build(BuildContext context) {
     final hasUrl = url != null && url!.isNotEmpty;
     return GestureDetector(
       onTap: hasUrl ? () => _preview(context) : null,
-      child: Container(
+      child: UserMessageSurface(
+        material: material,
         constraints: BoxConstraints(
           maxWidth: MediaQuery.sizeOf(context).width * 0.6,
         ),
@@ -872,10 +916,12 @@ class _ImageMessage extends StatelessWidget {
 }
 
 class _VideoMessage extends StatelessWidget {
+  final UserMessageMaterial material;
   final String title;
   final int durationMs;
   final bool isUser;
   const _VideoMessage({
+    this.material = UserMessageMaterial.solid,
     required this.title,
     required this.durationMs,
     required this.isUser,
@@ -891,7 +937,8 @@ class _VideoMessage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return UserMessageSurface(
+      material: material,
       constraints: BoxConstraints(
         maxWidth: MediaQuery.sizeOf(context).width * 0.6,
       ),
@@ -937,10 +984,12 @@ class _VideoMessage extends StatelessWidget {
 }
 
 class _AudioMessage extends StatelessWidget {
+  final UserMessageMaterial material;
   final String title;
   final int durationMs;
   final bool isUser;
   const _AudioMessage({
+    this.material = UserMessageMaterial.solid,
     required this.title,
     required this.durationMs,
     required this.isUser,
@@ -956,7 +1005,8 @@ class _AudioMessage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return UserMessageSurface(
+      material: material,
       constraints: BoxConstraints(
         maxWidth: MediaQuery.sizeOf(context).width * 0.62,
       ),

@@ -6,9 +6,16 @@ import "../styles/theme-dark.css";
 import "../styles/variables.css";
 import "../styles/element-overrides.css";
 import AIMessageRenderer from "@/conversation/rendering/AIMessageRenderer.vue";
+import { useChatAppearancePreference } from "@/composables/useChatAppearancePreference";
 
 const params = new URLSearchParams(window.location.search);
 const theme = params.get("theme") === "dark" ? "dark" : "light";
+const appearance = useChatAppearancePreference();
+if (params.get("style") === "bubble" || params.get("style") === "flow") {
+  appearance.setMessageStyle(params.get("style") as "bubble" | "flow");
+}
+if (params.has("avatar")) appearance.setAiAvatarEnabled(params.get("avatar") !== "off");
+if (params.has("name")) appearance.setAiNameEnabled(params.get("name") !== "off");
 document.documentElement.setAttribute("data-theme", theme);
 
 const markdown = [

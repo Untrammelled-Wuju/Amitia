@@ -126,6 +126,7 @@ func (s *service) ProcessMessageCtx(ctx context.Context, req *interaction.Proces
 		ReplyToMessageID:         req.ReplyToMessageID,
 		ModelConfigID:            req.ModelConfigID,
 		ReasoningEffort:          req.ReasoningEffort,
+		MessageStyle:             req.MessageStyle,
 		ReasoningEnabled:         req.ReasoningEnabled,
 		PermissionMode:           req.PermissionMode,
 		ExpectedStatusVersion:    req.ExpectedStatusVersion,

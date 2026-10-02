@@ -19,6 +19,7 @@ func RegisterCharacterRouterWithRecorder(r *gin.RouterGroup, ctx *app.AppContext
 	handler.chatTester = chatTester
 
 	r.GET("/characters", handler.List)
+	r.POST("/characters/generate-card", handler.GenerateCard)
 	r.GET("/characters/:id", handler.Get)
 	r.GET("/characters/:id/card-data", handler.GetCardData)
 	r.PUT("/characters/:id/card-data", handler.UpdateCardData)

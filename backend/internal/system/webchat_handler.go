@@ -59,6 +59,7 @@ type webChatSendRequest struct {
 	ReplyToMessageID  *string `json:"replyToMessageId,omitempty"`
 	ModelConfigID     int     `json:"modelConfigId"`
 	ReasoningEffort   string  `json:"reasoningEffort"`
+	MessageStyle      string  `json:"messageStyle"`
 	ReasoningEnabled  *bool   `json:"reasoningEnabled"`
 	PermissionMode    string  `json:"permissionMode"`
 }
@@ -370,6 +371,12 @@ func (h *Handler) WebChatSubmitMessage(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, "无效请求体", nil)
 		return
 	}
+	messageStyle, styleErr := chat.NormalizeMessageStyle(body.MessageStyle)
+	if styleErr != nil {
+		util.ErrorResponse(c, response.InvalidParams, styleErr.Error(), nil)
+		return
+	}
+	body.MessageStyle = messageStyle
 	msgContent := strings.TrimSpace(body.Content)
 	if msgContent == "" && strings.TrimSpace(body.ImageUrl) == "" && strings.TrimSpace(body.AudioUrl) == "" && strings.TrimSpace(body.VideoUrl) == "" {
 		util.ErrorResponse(c, response.InvalidParams, "消息不能为空", nil)
@@ -538,6 +545,7 @@ func (h *Handler) WebChatSubmitMessage(c *gin.Context) {
 			ReplyToMessageID: body.ReplyToMessageID,
 			ModelConfigID:    body.ModelConfigID,
 			ReasoningEffort:  body.ReasoningEffort,
+			MessageStyle:     body.MessageStyle,
 			ReasoningEnabled: body.ReasoningEnabled,
 			PermissionMode:   body.PermissionMode,
 			TurnID:           queuedTurn.ID,

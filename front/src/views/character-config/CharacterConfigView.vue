@@ -86,6 +86,9 @@ SPDX-License-Identifier: AGPL-3.0-only
             @save="saveChar"
             @upload-avatar="onUploadAvatar"
           >
+            <template #generate>
+              <CharacterGenerationChat :key="generationSession" :draft="generationDraft" @apply="applyGeneratedDraft" />
+            </template>
             <template #test>
               <CharacterTestChat
                 :messages="testMessages"
@@ -170,6 +173,7 @@ import { useCharacterTestChat } from "./composables/useCharacterTestChat";
 import { useCharacterImportExport } from "./composables/useCharacterImportExport";
 import CharacterSidebar from "./components/CharacterSidebar.vue";
 import CharacterEditForm from "./components/CharacterEditForm.vue";
+import CharacterGenerationChat from "./components/CharacterGenerationChat.vue";
 import CharacterTestChat from "./components/CharacterTestChat.vue";
 import TemplatePickerDialog from "./components/TemplatePickerDialog.vue";
 import ImportPackDialog from "./components/ImportPackDialog.vue";
@@ -177,6 +181,7 @@ import ExtensionSlot from "@/components/extension/ExtensionSlot.vue";
 import ExtensionPageHeader from "@/views/extensions/components/ExtensionPageHeader.vue";
 
 const {
+  generationSession,
   templates,
   showTemplateDialog,
   templateLoading,
@@ -203,6 +208,20 @@ const {
   avatarUploading,
   uploadAvatar,
 } = useCharacterConfig();
+
+const generationDraft = computed(() => ({
+  ...form,
+  tags: form.tagsText.split(',').map(value => value.trim()).filter(Boolean),
+  alternateGreetings: form.alternateGreetingsText.split('\n').filter(Boolean),
+}));
+function applyGeneratedDraft(draft: Record<string, any>) {
+  const textFields = ['name', 'identity', 'personality', 'speakingStyle', 'relationshipStyle', 'characterBase', 'boundaryRules', 'description', 'scenario', 'exampleMessages', 'postHistoryInstructions', 'creator', 'characterVersion'] as const;
+  for (const key of textFields) if (typeof draft[key] === 'string') form[key] = draft[key];
+  if (Array.isArray(draft.tags)) form.tagsText = draft.tags.join(', ');
+  if (Array.isArray(draft.alternateGreetings)) form.alternateGreetingsText = draft.alternateGreetings.join('\n');
+  if (draft.personalityConfig) form.personalityConfig = { ...form.personalityConfig, ...draft.personalityConfig };
+  activeTab.value = 'edit';
+}
 
 const { testMessages, testMsg, testLoading, sendTest, clearTestMessages } =
   useCharacterTestChat();

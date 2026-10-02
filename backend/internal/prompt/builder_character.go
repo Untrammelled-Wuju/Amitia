@@ -2,6 +2,9 @@ package prompt
 
 func appendCharacterSections(ctx *buildContext) {
 	req := ctx.req
+	if req.ChatDeliveryContract != "" {
+		ctx.appendSection("chat_delivery_contract", GwSectionChatDeliveryContract, TrustTrusted, ModeAuthoritative, "chat_interface", 790, req.ChatDeliveryContract, "GwSectionChatDeliveryContract")
+	}
 	if req.BaseIdentity != "" {
 		ctx.appendSection("base_identity", GwSectionBaseIdentity, TrustTrusted, ModeAuthoritative, "base_identity", 880, req.BaseIdentity, "GwSectionBaseIdentity")
 	}

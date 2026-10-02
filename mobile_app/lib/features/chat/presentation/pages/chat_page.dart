@@ -123,6 +123,24 @@ class _ChatPageState extends ConsumerState<ChatPage> {
           .catchError((Object _) {}),
     );
     _lastDraftEpoch = _runtime.draftEpoch;
+    unawaited(
+      ref
+          .read(aiNamePreferencesProvider.notifier)
+          .init()
+          .catchError((Object _) {}),
+    );
+    unawaited(
+      ref
+          .read(aiAvatarPreferencesProvider.notifier)
+          .init()
+          .catchError((Object _) {}),
+    );
+    unawaited(
+      ref
+          .read(userMessageMaterialProvider.notifier)
+          .init()
+          .catchError((Object _) {}),
+    );
     _lastConversationUpdateEpoch = _runtime.conversationUpdateEpoch;
     _lastSidebarConversationId = _runtime.conversationId?.trim() ?? '';
     _runtime.addListener(_onRuntimeChanged);
@@ -2557,6 +2575,15 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                                                   MessageType.agentTask;
                                               final builtinMessage = RepaintBoundary(
                                                 child: AmitiaMessageBubble(
+                                                  aiNameEnabled: ref.watch(
+                                                    aiNamePreferencesProvider,
+                                                  ),
+                                                  aiAvatarEnabled: ref.watch(
+                                                    aiAvatarPreferencesProvider,
+                                                  ),
+                                                  userMessageMaterial: ref.watch(
+                                                    userMessageMaterialProvider,
+                                                  ),
                                                   message: message,
                                                   messageStyle: ref.watch(
                                                     chatAppearancePreferencesProvider,

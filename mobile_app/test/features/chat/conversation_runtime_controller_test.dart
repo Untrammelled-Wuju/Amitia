@@ -4,6 +4,7 @@ import 'package:amitia_app/core/backend_transport/backend_service_api.dart';
 import 'package:amitia_app/core/models/conversation.dart';
 import 'package:amitia_app/core/services/chat_service.dart';
 import 'package:amitia_app/core/settings/chat_permission_preferences.dart';
+import 'package:amitia_app/core/settings/chat_appearance_preferences.dart';
 import 'package:amitia_app/features/chat/runtime/conversation_runtime_controller.dart';
 import 'package:amitia_app/shared/models/models.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -18,6 +19,7 @@ class _FakeChatService extends ChatService {
   final Object? submitError;
   String submittedMessage = '';
   String submittedRequestId = '';
+  String submittedStyle = '';
   int submitCount = 0;
 
   @override
@@ -35,11 +37,13 @@ class _FakeChatService extends ChatService {
     String? reasoningEffort,
     bool? reasoningEnabled,
     String? permissionMode,
+    String messageStyle = 'flow',
     ConversationWorkspaceDto? workspace,
   }) async {
     if (submitError != null) throw submitError!;
     submitCount += 1;
     submittedMessage = message;
+    submittedStyle = messageStyle;
     submittedRequestId = clientMessageId ?? 'request-1';
     return ChatSubmitResult(
       conversationId: conversationId?.isNotEmpty == true
@@ -117,20 +121,45 @@ Map<String, dynamic> _event({
 }
 
 void main() {
+  test('loads saved bubble mode before sending the request', () async {
+    SharedPreferences.setMockInitialValues({
+      chatMessageStyleStorageKey: 'bubble',
+    });
+    final appearance = ChatAppearancePreferencesNotifier();
+    final events = StreamController<ChatStreamEvent>.broadcast();
+    final service = _FakeChatService(events);
+    final controller = ConversationRuntimeController(
+      service,
+      appearancePreferences: appearance,
+    );
+    await controller.sendText('你好');
+    expect(service.submittedStyle, 'bubble');
+    controller.dispose();
+    appearance.dispose();
+    await events.close();
+  });
   test('自动化指示随工具事件更新，断线后等待确认，完成后撤下', () async {
     final events = StreamController<ChatStreamEvent>.broadcast();
     final controller = ConversationRuntimeController(_FakeChatService(events));
     await controller.openConversation('conversation-1');
     Future<void> emit(int sequence, String type, String status) async {
-      events.add(ChatStreamEvent('agent_ui_event', {
-        ..._event(sequence: sequence, id: 'automation-$sequence', type: type, status: status),
-        'blockId': 'automation',
-        'blockSequence': 1,
-        'revision': sequence,
-        'payload': {'toolName': 'android_interaction_click'},
-      }));
+      events.add(
+        ChatStreamEvent('agent_ui_event', {
+          ..._event(
+            sequence: sequence,
+            id: 'automation-$sequence',
+            type: type,
+            status: status,
+          ),
+          'blockId': 'automation',
+          'blockSequence': 1,
+          'revision': sequence,
+          'payload': {'toolName': 'android_interaction_click'},
+        }),
+      );
       await Future<void>.delayed(const Duration(milliseconds: 30));
     }
+
     await emit(1, 'turn.started', 'running');
     await emit(2, 'tool.running', 'running');
     expect(controller.automationStatus?.label, '正在点击');

@@ -50,7 +50,7 @@ function toggle() {
   max-width: 100%;
   flex-direction: column;
   align-items: flex-start;
-  margin: 2px 0 13px;
+  margin: 2px 0 2px;
   color: var(--amrp-muted);
   font-size: 12px;
 }

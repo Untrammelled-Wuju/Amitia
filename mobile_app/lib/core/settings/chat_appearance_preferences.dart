@@ -3,6 +3,104 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 enum ChatMessageStyle { flow, bubble }
 
+const aiAvatarStorageKey = 'amitia.chat.ai-avatar.mobile.v1';
+final aiAvatarPreferencesProvider =
+    StateNotifierProvider<AiAvatarPreferencesNotifier, bool>(
+      (ref) => AiAvatarPreferencesNotifier(),
+    );
+
+class AiAvatarPreferencesNotifier extends StateNotifier<bool> {
+  AiAvatarPreferencesNotifier() : super(true);
+  Future<void>? _initialization;
+  Future<void> init() => _initialization ??= _load();
+
+  Future<void> _load() async {
+    final preferences = await SharedPreferences.getInstance();
+    if (mounted) {
+      state = preferences.getBool(aiAvatarStorageKey) ?? true;
+    }
+  }
+
+  Future<void> setEnabled(bool value) async {
+    await init();
+    final preferences = await SharedPreferences.getInstance();
+    if (!await preferences.setBool(aiAvatarStorageKey, value)) {
+      throw StateError('保存 AI 头像设置失败');
+    }
+    if (mounted) state = value;
+  }
+}
+
+const userMessageGlassStorageKey = 'amitia.chat.user-message-glass.mobile.v1';
+const aiNameStorageKey = 'amitia.chat.ai-name.mobile.v1';
+final aiNamePreferencesProvider =
+    StateNotifierProvider<AiNamePreferencesNotifier, bool>(
+      (ref) => AiNamePreferencesNotifier(),
+    );
+
+class AiNamePreferencesNotifier extends StateNotifier<bool> {
+  AiNamePreferencesNotifier() : super(true);
+  Future<void>? _initialization;
+  Future<void> init() => _initialization ??= _load();
+
+  Future<void> _load() async {
+    final preferences = await SharedPreferences.getInstance();
+    if (mounted) {
+      state = preferences.getBool(aiNameStorageKey) ?? true;
+    }
+  }
+
+  Future<void> setEnabled(bool value) async {
+    await init();
+    final preferences = await SharedPreferences.getInstance();
+    if (!await preferences.setBool(aiNameStorageKey, value)) {
+      throw StateError('保存 AI 名称设置失败');
+    }
+    if (mounted) state = value;
+  }
+}
+
+enum UserMessageMaterial { solid, frosted, water }
+
+const userMessageMaterialStorageKey =
+    'amitia.chat.user-message-material.mobile.v1';
+final userMessageMaterialProvider =
+    StateNotifierProvider<UserMessageMaterialNotifier, UserMessageMaterial>(
+      (ref) => UserMessageMaterialNotifier(),
+    );
+
+class UserMessageMaterialNotifier extends StateNotifier<UserMessageMaterial> {
+  UserMessageMaterialNotifier() : super(UserMessageMaterial.solid);
+  Future<void>? _initialization;
+  Future<void> init() => _initialization ??= _load();
+
+  Future<void> _load() async {
+    final preferences = await SharedPreferences.getInstance();
+    if (mounted) {
+      final saved = preferences.getString(userMessageMaterialStorageKey);
+      state =
+          UserMessageMaterial.values
+              .where((value) => value.name == saved)
+              .firstOrNull ??
+          (preferences.getBool(userMessageGlassStorageKey) == true
+              ? UserMessageMaterial.frosted
+              : UserMessageMaterial.solid);
+    }
+  }
+
+  Future<void> setMaterial(UserMessageMaterial value) async {
+    await init();
+    final preferences = await SharedPreferences.getInstance();
+    if (!await preferences.setString(
+      userMessageMaterialStorageKey,
+      value.name,
+    )) {
+      throw StateError('保存用户消息背景材质失败');
+    }
+    if (mounted) state = value;
+  }
+}
+
 const chatMessageStyleStorageKey = 'amitia.chat.message-style.mobile.v1';
 final chatAppearancePreferencesProvider =
     StateNotifierProvider<ChatAppearancePreferencesNotifier, ChatMessageStyle>(
@@ -12,6 +110,7 @@ final chatAppearancePreferencesProvider =
 class ChatAppearancePreferencesNotifier
     extends StateNotifier<ChatMessageStyle> {
   ChatAppearancePreferencesNotifier() : super(ChatMessageStyle.flow);
+  ChatMessageStyle get messageStyle => state;
   Future<void>? _initialization;
 
   Future<void> init() => _initialization ??= _load();

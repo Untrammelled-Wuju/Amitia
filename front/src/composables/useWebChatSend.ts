@@ -8,6 +8,7 @@ import { createAuthenticatedFetchInit } from "../runtime/request-auth";
 import { createRequestEnvelope } from "../utils/requestEnvelope";
 import { notifyDesktopPetChatState } from "@/runtime/desktop-pet-chat-state";
 import { useConversationWorkspace } from "./useConversationWorkspace";
+import { useChatAppearancePreference } from "./useChatAppearancePreference";
 
 export function useWebChatSend(
   messages: Ref<any[]>,
@@ -36,6 +37,7 @@ export function useWebChatSend(
   failPendingAssistant?: (requestId: string) => void,
 ) {
   const { post, del } = useApi();
+  const { messageStyle } = useChatAppearancePreference();
   const { currentWorkspace, getWorkspaceRequestFields } = useConversationWorkspace();
   const isSubmitting = ref(false);
   const generating = sending;
@@ -194,6 +196,7 @@ export function useWebChatSend(
         replyToMessageId: replyTarget?.value?.id || undefined,
         modelConfigId: modelConfigId?.value || undefined,
         reasoningEffort: reasoningEffort?.value || undefined,
+        messageStyle: messageStyle.value,
         reasoningEnabled: reasoningEnabled?.value,
         permissionMode: permissionMode?.value || undefined,
         ...getWorkspaceRequestFields(),
@@ -251,7 +254,7 @@ export function useWebChatSend(
       return;
     }
     try {
-      await post(`/api/web-chat/conversations/${encodeURIComponent(conversationId)}/turns/${encodeURIComponent(turnId)}/retry`);
+      await post(`/api/web-chat/conversations/${encodeURIComponent(conversationId)}/turns/${encodeURIComponent(turnId)}/retry`, { messageStyle: messageStyle.value });
     } catch (err: any) {
       ElMessage.error(err?.message || "重试失败");
     }

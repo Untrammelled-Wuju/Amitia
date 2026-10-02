@@ -1,5 +1,5 @@
 <template>
-  <div class="amrp-root" :class="{ 'amrp-dark': resolvedMode === 'dark', 'amrp-bubbles': messageStyle === 'bubble' }">
+  <div class="amrp-root" :class="{ 'amrp-dark': resolvedMode === 'dark', 'amrp-bubbles': messageStyle === 'bubble', 'amrp-user-glass': userMessageGlass && message.role === 'user', 'amrp-user-water': userMessageWaterGlass && message.role === 'user' }">
     <div v-if="message.role === 'system'" class="amrp-system-notice">
       <slot name="badges" :message="message" />
       {{ message.markdown }}
@@ -14,7 +14,8 @@
             <div class="amrp-quote-text">{{ replyText }}</div>
           </div>
         </div>
-        <div class="amrp-user-bubble">{{ message.markdown }}</div>
+        <BubbleMessageContent v-if="messageStyle === 'bubble'" :message="message" />
+        <div v-else class="amrp-user-bubble">{{ message.markdown }}</div>
         <div class="amrp-user-tools">
           <slot name="badges" :message="message" />
           <span class="amrp-user-time">{{ formatTime(message.createdAt) }}</span>
@@ -36,16 +37,16 @@
     <article
       v-else
       class="amrp-message"
-      :class="{ 'amrp-message--compact-bottom': compactBottom }"
+      :class="{ 'amrp-message--compact-bottom': compactBottom, 'amrp-message--single-column': messageStyle === 'bubble' || !aiAvatarEnabled }"
     >
-      <div v-if="showAvatar || messageStyle === 'bubble'" class="amrp-avatar">
+      <div v-if="messageStyle !== 'bubble' && aiAvatarEnabled && showAvatar" class="amrp-avatar">
         <img v-if="character.avatar" :src="character.avatar" alt="" />
         <span v-else>{{ characterInitial }}</span>
       </div>
-      <div v-else class="amrp-avatar-spacer"></div>
+      <div v-else-if="messageStyle !== 'bubble' && aiAvatarEnabled" class="amrp-avatar-spacer"></div>
       <div class="amrp-message-body">
         <header v-if="showHeader || messageStyle === 'bubble'" class="amrp-head">
-          <span class="amrp-name">{{ character.name || "Amitia" }}</span>
+          <span v-if="aiNameEnabled && messageStyle !== 'bubble'" class="amrp-name">{{ character.name || "Amitia" }}</span>
           <span class="amrp-time">{{ formatTime(message.createdAt) }}</span>
           <slot name="badges" :message="message" />
         </header>
@@ -55,8 +56,29 @@
           <span>{{ stateNotice.detail }}</span>
         </div>
 
+        <BubbleMessageContent
+          v-if="messageStyle === 'bubble'"
+          :message="message"
+          :turn="assistantTurn"
+          :pending="streaming"
+          :citation-ids="citationSources.map((source) => source.id)"
+          @citation="activeCitationId = $event"
+        >
+          <template #avatar>
+              <div v-if="aiAvatarEnabled" class="amrp-avatar bubble-avatar">
+                <img v-if="character.avatar" :src="character.avatar" alt="" />
+                <span v-else>{{ characterInitial }}</span>
+              </div>
+          </template>
+          <template #identity>
+            <div v-if="aiNameEnabled" class="bubble-identity">
+              <span class="amrp-name">{{ character.name || 'Amitia' }}</span>
+            </div>
+          </template>
+        </BubbleMessageContent>
+
         <AmitiaThinkingBlock
-          v-if="showPendingThinking"
+          v-else-if="showPendingThinking"
           content=""
           state="streaming"
           :duration="0"
@@ -80,7 +102,7 @@
           <RendererErrorBoundary label="Markdown Renderer">
             <MarkdownContent
               v-if="message.markdown"
-              :source="message.markdown"
+              :source="flowBubbleText(message.markdown)"
               :streaming="message.state === 'streaming'"
               :citation-ids="citationSources.map((source) => source.id)"
               @citation="activeCitationId = $event"
@@ -145,6 +167,8 @@ import type {
   RichBlock,
 } from "./types";
 import AssistantTurnTimeline from "./AssistantTurnTimeline.vue";
+import BubbleMessageContent from "./BubbleMessageContent.vue";
+import { flowBubbleText } from "./bubbleMessageProjection";
 import { aimMessagePlainText, normalizeAIMessage } from "./amrp";
 import { copyText } from "./utils";
 import MarkdownContent from "./markdown/MarkdownContent.vue";
@@ -195,7 +219,7 @@ const emit = defineEmits<{
 }>();
 
 const { resolvedMode } = useTheme();
-const { messageStyle } = useChatAppearancePreference();
+const { messageStyle, userMessageGlass, userMessageWaterGlass, aiAvatarEnabled, aiNameEnabled } = useChatAppearancePreference();
 const activeCitationId = ref("");
 const copyMenuOpen = ref(false);
 const message = computed<AIMessageData>(() =>
@@ -424,21 +448,21 @@ async function handleCopy(mode: "plain" | "markdown") {
 
 .amrp-bubbles .amrp-message {
   max-width: 820px;
-  grid-template-columns: 34px minmax(0, 1fr);
   padding-right: 12%;
   box-sizing: border-box;
   margin-bottom: 20px;
 }
 
 .amrp-bubbles .amrp-message-body {
-  width: fit-content;
+  width: 100%;
   max-width: 100%;
-  padding: 10px 14px;
-  border-radius: 4px 16px 16px 16px;
-  background: var(--ac-color-surface);
-  border: 1px solid var(--ac-color-border-light);
   color: var(--ac-color-text);
   overflow-wrap: anywhere;
+}
+
+.amrp-message.amrp-message--single-column {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
 }
 
 .amrp-bubbles .amrp-head { min-height: 20px; margin-bottom: 6px; flex-wrap: wrap; }
@@ -677,4 +701,28 @@ async function handleCopy(mode: "plain" | "markdown") {
     max-width: 85%;
   }
 }
+@supports ((backdrop-filter: blur(12px)) or (-webkit-backdrop-filter: blur(12px))) {
+  .amrp-user-glass .amrp-user-bubble,
+  .amrp-user-glass :deep(.bubble-content--user .message-piece) {
+    background: color-mix(in srgb, var(--ac-color-primary-bg) 65%, transparent);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ac-color-text-primary) 10%, transparent);
+  }
+}
+.amrp-user-water .amrp-user-bubble,
+.amrp-user-water :deep(.bubble-content--user .message-piece) {
+  background-image: linear-gradient(135deg, rgb(255 255 255 / 24%), transparent 45%, rgb(255 255 255 / 8%));
+  box-shadow: inset 0 1px 1px rgb(255 255 255 / 50%), inset 0 -1px 1px color-mix(in srgb, var(--ac-color-primary) 18%, transparent), 0 3px 12px rgb(0 0 0 / 6%);
+}
+@supports ((backdrop-filter: blur(4px)) or (-webkit-backdrop-filter: blur(4px))) {
+  .amrp-user-water .amrp-user-bubble,
+  .amrp-user-water :deep(.bubble-content--user .message-piece) {
+    background-color: color-mix(in srgb, var(--ac-color-primary-bg) 42%, transparent);
+    backdrop-filter: blur(4px) saturate(140%);
+    -webkit-backdrop-filter: blur(4px) saturate(140%);
+  }
+}
+.bubble-identity { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.bubble-avatar { width: 28px; height: 28px; flex: 0 0 28px; }
 </style>

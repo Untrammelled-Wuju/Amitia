@@ -29,6 +29,7 @@ export function useCharacterConfig() {
   const selected = ref<any>(null);
   const selectedId = ref("");
   const activeTab = ref("edit");
+  const generationSession = ref(0);
   const saving = ref(false);
   const showFullPrompt = ref(false);
   const showFullBounds = ref(false);
@@ -101,6 +102,7 @@ export function useCharacterConfig() {
   }
 
   function selectChar(c: any) {
+    generationSession.value++;
     const cardData = parseCardData(c.cardData);
     cardDataExtra.value = cardData;
     selected.value = c;
@@ -134,10 +136,11 @@ export function useCharacterConfig() {
   }
 
   function createNew() {
+    generationSession.value++;
     cardDataExtra.value = {};
     selected.value = { id: "", name: "", isActive: false };
     selectedId.value = "";
-    activeTab.value = "edit";
+    activeTab.value = "generate";
     form.name = "";
     form.avatar = "";
     form.identity = "";
@@ -155,6 +158,7 @@ export function useCharacterConfig() {
     form.creator = "";
     form.characterVersion = "";
     form.tagsText = "";
+    form.personalityConfig = { ...DEFAULT_PERSONALITY_CONFIG };
   }
 
   async function createFromTemplate(tpl: TemplateItem) {
@@ -359,6 +363,7 @@ export function useCharacterConfig() {
   }
 
   return {
+    generationSession,
     templates,
     showTemplateDialog,
     templateLoading,

@@ -7,11 +7,12 @@ import (
 type BuildRequest struct {
 	CharacterBase string
 
-	CharacterName       string
-	CharacterConfig     string
-	CompiledPersonality string
-	RuntimePlan         string
-	ExpressionPlan      string
+	CharacterName        string
+	CharacterConfig      string
+	CompiledPersonality  string
+	RuntimePlan          string
+	ExpressionPlan       string
+	ChatDeliveryContract string
 
 	BaseIdentity     string
 	PersonalityRaw   string

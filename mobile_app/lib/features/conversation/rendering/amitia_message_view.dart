@@ -5,12 +5,14 @@ import 'package:flutter/services.dart';
 
 import '../../../shared/models/models.dart';
 import '../../../core/widgets/amitia_popup_menu.dart';
+import '../../../core/widgets/user_message_surface.dart';
 import '../../../core/widgets/character_avatar.dart';
 import '../../../core/settings/chat_appearance_preferences.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../core/models/conversation.dart';
 import 'amitia_message_theme.dart';
 import 'amrp.dart';
+import 'bubble_message_projection.dart';
 import 'markdown/amitia_markdown.dart';
 import 'rich_blocks/amitia_citation_list.dart';
 import 'rich_blocks/amitia_rich_blocks.dart';
@@ -19,12 +21,15 @@ import 'rich_blocks/renderer_registry.dart';
 class AmitiaMessageView extends StatefulWidget {
   final ChatMessage message;
   final ChatMessageStyle messageStyle;
+  final UserMessageMaterial userMessageMaterial;
   final String characterId;
   final String characterName;
   final String avatarInitial;
   final String avatarColor;
   final String avatarUrl;
   final bool showAvatar;
+  final bool aiAvatarEnabled;
+  final bool aiNameEnabled;
   final bool showHeader;
   final bool showThinking;
   final List<AmrpToolBlock> toolBlocks;
@@ -36,12 +41,15 @@ class AmitiaMessageView extends StatefulWidget {
     super.key,
     required this.message,
     this.messageStyle = ChatMessageStyle.flow,
+    this.userMessageMaterial = UserMessageMaterial.solid,
     this.characterId = '',
     this.characterName = 'Amitia',
     this.avatarInitial = 'A',
     this.avatarColor = '',
     this.avatarUrl = '',
     this.showAvatar = true,
+    this.aiAvatarEnabled = true,
+    this.aiNameEnabled = true,
     this.showHeader = true,
     this.showThinking = false,
     this.toolBlocks = const <AmrpToolBlock>[],
@@ -105,7 +113,40 @@ class _AmitiaMessageViewState extends State<AmitiaMessageView> {
       return _SystemNotice(message: message, tokens: tokens);
     }
     if (message.role == AmrpMessageRole.user) {
-      return _UserMessage(message: message, tokens: tokens);
+      if (widget.messageStyle == ChatMessageStyle.bubble) {
+        return Align(
+          alignment: Alignment.topRight,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: MediaQuery.sizeOf(context).width * 0.78,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                if ((widget.message.replyToMessageId ?? '').isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Text(
+                      '引用：${widget.message.replyToExcerpt ?? '原消息'}',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: context.textSecondary,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                ..._renderBubbleContent(message, const {}, pending: false),
+              ],
+            ),
+          ),
+        );
+      }
+      return _UserMessage(
+        message: message,
+        tokens: tokens,
+        material: widget.userMessageMaterial,
+      );
     }
     final bubble = widget.messageStyle == ChatMessageStyle.bubble;
     return Align(
@@ -119,7 +160,7 @@ class _AmitiaMessageViewState extends State<AmitiaMessageView> {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (widget.showAvatar)
+            if (!bubble && widget.aiAvatarEnabled && widget.showAvatar)
               CharacterAvatar(
                 characterId: widget.characterId,
                 avatar: widget.avatarUrl,
@@ -128,89 +169,75 @@ class _AmitiaMessageViewState extends State<AmitiaMessageView> {
                 color: _parseAvatarColor(widget.avatarColor, tokens.accent),
                 borderRadius: BorderRadius.circular(tokens.avatarSize * 0.32),
               )
-            else
+            else if (!bubble && widget.aiAvatarEnabled)
               SizedBox(width: tokens.avatarSize, height: tokens.avatarSize),
-            SizedBox(width: tokens.messageGap),
+            if (!bubble && widget.aiAvatarEnabled)
+              SizedBox(width: tokens.messageGap),
             Expanded(
-              child: Container(
-                padding: bubble
-                    ? const EdgeInsets.symmetric(horizontal: 12, vertical: 10)
-                    : null,
-                decoration: bubble
-                    ? BoxDecoration(
-                        color: context.surfacePrimary,
-                        border: Border.all(
-                          color: context.borderPrimary,
-                          width: 0.5,
-                        ),
-                        borderRadius: const BorderRadius.only(
-                          topLeft: Radius.circular(4),
-                          topRight: Radius.circular(16),
-                          bottomLeft: Radius.circular(16),
-                          bottomRight: Radius.circular(16),
-                        ),
-                      )
-                    : null,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (widget.showHeader)
-                      _MessageHead(
-                        name: widget.characterName,
-                        time: _formatTime(message.createdAt),
-                        tokens: tokens,
-                      ),
-                    if (_stateNotice(message.state) != null)
-                      _StateNotice(
-                        data: _stateNotice(message.state)!,
-                        state: message.state,
-                        tokens: tokens,
-                      ),
-                    if (showThinkingPlaceholder)
-                      AmitiaThinkingBlock(
-                        block: const AmrpThinkingBlock(
-                          content: '',
-                          state: AmrpMessageState.streaming,
-                        ),
-                      )
-                    else if (widget.message.assistantTurn?.items.isNotEmpty ==
-                        true)
-                      ..._renderAssistantTurn(
-                        widget.message.assistantTurn!,
-                        citationIds,
-                      )
-                    else ...[
-                      if (message.thinking != null)
-                        AmitiaThinkingBlock(block: message.thinking!),
-                      if (message.markdown.isNotEmpty)
-                        AmitiaMarkdownView(
-                          source: message.markdown,
-                          streaming:
-                              message.state == AmrpMessageState.streaming,
-                          citationIds: citationIds,
-                          onCitation: (id) =>
-                              setState(() => _highlightCitation = id),
-                        ),
-                      ..._renderBlocks(message.blocks, message.id),
-                      for (final tool in widget.toolBlocks)
-                        AmitiaToolBlock(block: tool),
-                    ],
-                    AmitiaCitationList(
-                      sources: citationSources,
-                      highlightId: _highlightCitation,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (widget.showHeader)
+                    _MessageHead(
+                      name: widget.characterName,
+                      showName: !bubble && widget.aiNameEnabled,
+                      time: _formatTime(message.createdAt),
+                      tokens: tokens,
                     ),
-                    if (!streaming &&
-                        !(widget.showThinking &&
-                            message.markdown.trim().isEmpty))
-                      _MessageActions(
-                        streaming: streaming,
-                        onCopy: () => _copy(context, message.plainText),
-                        onCopyMarkdown: () => _copy(context, message.markdown),
-                        onReply: widget.onReply,
-                        onRetry: widget.onRetry,
+                  if (_stateNotice(message.state) != null)
+                    _StateNotice(
+                      data: _stateNotice(message.state)!,
+                      state: message.state,
+                      tokens: tokens,
+                    ),
+                  if (bubble)
+                    ..._renderBubbleContent(
+                      message,
+                      citationIds,
+                      pending: streaming,
+                    )
+                  else if (showThinkingPlaceholder)
+                    AmitiaThinkingBlock(
+                      block: const AmrpThinkingBlock(
+                        content: '',
+                        state: AmrpMessageState.streaming,
                       ),
+                    )
+                  else if (widget.message.assistantTurn?.items.isNotEmpty ==
+                      true)
+                    ..._renderAssistantTurn(
+                      widget.message.assistantTurn!,
+                      citationIds,
+                    )
+                  else ...[
+                    if (message.thinking != null)
+                      AmitiaThinkingBlock(block: message.thinking!),
+                    if (message.markdown.isNotEmpty)
+                      AmitiaMarkdownView(
+                        source: flowBubbleText(message.markdown),
+                        streaming: message.state == AmrpMessageState.streaming,
+                        citationIds: citationIds,
+                        onCitation: (id) =>
+                            setState(() => _highlightCitation = id),
+                      ),
+                    ..._renderBlocks(message.blocks, message.id),
+                    for (final tool in widget.toolBlocks)
+                      AmitiaToolBlock(block: tool),
                   ],
-                ),
+                  AmitiaCitationList(
+                    sources: citationSources,
+                    highlightId: _highlightCitation,
+                  ),
+                  if (!streaming &&
+                      !(widget.showThinking && message.markdown.trim().isEmpty))
+                    _MessageActions(
+                      streaming: streaming,
+                      onCopy: () => _copy(context, message.plainText),
+                      onCopyMarkdown: () => _copy(context, message.markdown),
+                      onReply: widget.onReply,
+                      onRetry: widget.onRetry,
+                    ),
+                ],
               ),
             ),
           ],
@@ -243,6 +270,127 @@ class _AmitiaMessageViewState extends State<AmitiaMessageView> {
     }
     flushImages();
     return widgets;
+  }
+
+  List<Widget> _renderBubbleContent(
+    AmrpMessage message,
+    Set<String> citationIds, {
+    required bool pending,
+  }) {
+    final user = message.role == AmrpMessageRole.user;
+    final items = projectBubbleContent(
+      message: message,
+      turn: widget.message.assistantTurn,
+      toolBlocks: widget.toolBlocks,
+    );
+    Widget frame(String key, Widget child) {
+      final surface = UserMessageSurface(
+        material: user ? widget.userMessageMaterial : UserMessageMaterial.solid,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: user ? context.accentSoft : context.surfacePrimary,
+          border: user
+              ? null
+              : Border.all(color: context.borderPrimary, width: 0.5),
+          borderRadius: BorderRadius.only(
+            topLeft: Radius.circular(user ? 16 : 4),
+            topRight: Radius.circular(user ? 4 : 16),
+            bottomLeft: const Radius.circular(16),
+            bottomRight: const Radius.circular(16),
+          ),
+        ),
+        child: child,
+      );
+      final body = Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: user
+            ? CrossAxisAlignment.end
+            : CrossAxisAlignment.start,
+        children: [
+          if (!user && widget.aiNameEnabled)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Text(
+                widget.characterName,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: context.textPrimary,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          surface,
+        ],
+      );
+      return Padding(
+        key: ValueKey<String>('bubble:$key'),
+        padding: const EdgeInsets.only(bottom: 10),
+        child: user || !widget.aiAvatarEnabled
+            ? body
+            : Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CharacterAvatar(
+                    characterId: widget.characterId,
+                    avatar: widget.avatarUrl,
+                    size: 28,
+                    initial: widget.avatarInitial,
+                    color: _parseAvatarColor(
+                      widget.avatarColor,
+                      Theme.of(context).colorScheme.primary,
+                    ),
+                    borderRadius: BorderRadius.circular(9),
+                  ),
+                  const SizedBox(width: 8),
+                  Flexible(child: body),
+                ],
+              ),
+      );
+    }
+
+    return [
+      for (final item in items)
+        frame(item.key, switch (item) {
+          BubbleText() =>
+            user
+                ? Text(
+                    item.content,
+                    style: TextStyle(
+                      color: context.textPrimary,
+                      fontSize: 14,
+                      height: 1.52,
+                    ),
+                  )
+                : AmitiaMarkdownView(
+                    source: item.content,
+                    streaming: false,
+                    citationIds: citationIds,
+                    onCitation: (id) => setState(() => _highlightCitation = id),
+                  ),
+          BubbleThinking() => AmitiaThinkingBlock(
+            block: item.block,
+            padding: EdgeInsets.zero,
+          ),
+          BubbleTools() => _TurnToolStream(items: item.items),
+          BubbleRichContent() => AmitiaRichBlockRenderer(block: item.block),
+        }),
+      if (pending &&
+          !items.any(
+            (item) =>
+                item is BubbleThinking &&
+                item.block.state == AmrpMessageState.streaming,
+          ))
+        frame(
+          '${message.id}:pending',
+          Text(
+            '正在回复…',
+            style: TextStyle(color: context.textSecondary, fontSize: 13),
+          ),
+        ),
+    ];
   }
 
   List<Widget> _renderAssistantTurn(
@@ -286,7 +434,7 @@ class _AmitiaMessageViewState extends State<AmitiaMessageView> {
                       padding: EdgeInsets.zero,
                     ),
                     'text' => AmitiaMarkdownView(
-                      source: entry.item!.content,
+                      source: flowBubbleText(entry.item!.content),
                       streaming: _isTurnStreaming(entry.item!.status),
                       citationIds: citationIds,
                       onCitation: (id) =>
@@ -381,11 +529,13 @@ class _AmitiaMessageViewState extends State<AmitiaMessageView> {
 }
 
 class _MessageHead extends StatelessWidget {
+  final bool showName;
   final String name;
   final String time;
   final AmitiaMessageTheme tokens;
 
   const _MessageHead({
+    this.showName = true,
     required this.name,
     required this.time,
     required this.tokens,
@@ -397,19 +547,20 @@ class _MessageHead extends StatelessWidget {
       height: tokens.avatarSize,
       child: Row(
         children: [
-          Flexible(
-            child: Text(
-              name,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: tokens.text,
-                fontSize: 14,
-                fontWeight: FontWeight.w700,
+          if (showName)
+            Flexible(
+              child: Text(
+                name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: tokens.text,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
             ),
-          ),
-          const SizedBox(width: 7),
+          if (showName) const SizedBox(width: 7),
           Text(
             time,
             style: TextStyle(
@@ -646,17 +797,23 @@ class _SystemNotice extends StatelessWidget {
 }
 
 class _UserMessage extends StatelessWidget {
+  final UserMessageMaterial material;
   final AmrpMessage message;
   final AmitiaMessageTheme tokens;
 
-  const _UserMessage({required this.message, required this.tokens});
+  const _UserMessage({
+    required this.message,
+    required this.tokens,
+    this.material = UserMessageMaterial.solid,
+  });
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     return Align(
       alignment: Alignment.centerRight,
-      child: Container(
+      child: UserMessageSurface(
+        material: material,
         constraints: const BoxConstraints(maxWidth: 620),
         margin: const EdgeInsets.only(bottom: 34),
         padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 11),

@@ -81,6 +81,7 @@ class _CharacterCreatePageState extends ConsumerState<CharacterCreatePage> {
         'personality': _personalityController.text,
         'speakingStyle': _speakingStyleController.text,
         'description': _personalityController.text,
+        'characterBase': _promptController.text,
         'status': '在线',
         'voiceSpeed': 1.0,
       };

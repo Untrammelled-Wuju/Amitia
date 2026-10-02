@@ -355,6 +355,7 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 		}
 	}
 	messages, promptTrace := buildProcessPromptMessages(processPromptInput{
+		MessageStyle:              req.MessageStyle,
 		BaseIdentity:              promptir.BaseIdentitySection(),
 		CharacterBase:             runtimeProfile.CharacterBase,
 		CharacterConfig:           sys1Result.CharacterConfig,

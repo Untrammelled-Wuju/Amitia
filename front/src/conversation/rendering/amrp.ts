@@ -247,7 +247,7 @@ function legacyBlocks(message: Record<string, any>): RichBlock[] {
     } satisfies FileBlock);
   }
   if (type === "image" || firstString(message, ["imageUrl"])) {
-    const imageUrl = firstString(message, ["imageUrl", "image_url"]);
+    const imageUrl = firstString(message, type === "image" ? ["imageUrl", "image_url", "resourceUri", "mediaUrl"] : ["imageUrl", "image_url"]);
     if (imageUrl) {
       blocks.push({
         kind: "image",
@@ -264,7 +264,7 @@ function legacyBlocks(message: Record<string, any>): RichBlock[] {
     }
   }
   if (type === "audio" || type === "voice" || firstString(message, ["audioUrl"])) {
-    const audioUrl = firstString(message, ["audioUrl", "audio_url"]);
+    const audioUrl = firstString(message, ["audioUrl", "audio_url", "resourceUri", "mediaUrl"]);
     if (audioUrl) {
       blocks.push({
         kind: "audio",
@@ -278,7 +278,7 @@ function legacyBlocks(message: Record<string, any>): RichBlock[] {
     }
   }
   if (type === "video" || firstString(message, ["videoUrl"])) {
-    const videoUrl = firstString(message, ["videoUrl", "video_url"]);
+    const videoUrl = firstString(message, ["videoUrl", "video_url", "resourceUri", "mediaUrl"]);
     if (videoUrl) {
       blocks.push({
         kind: "video",

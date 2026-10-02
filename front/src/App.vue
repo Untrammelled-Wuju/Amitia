@@ -162,6 +162,10 @@ onUnmounted(() => {
 </script>
 
 <style>
+details {
+  margin: 2px 0 2px;
+}
+
 .workspace-root { height: 100%; }
 .workspace-foreground { position: relative; z-index: 1; height: 100%; }
 /* Cross-platform declarative ui.components primitives. These variables are

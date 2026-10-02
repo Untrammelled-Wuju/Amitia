@@ -252,6 +252,20 @@ func (h *Handler) WebChatSteerTurn(c *gin.Context) {
 }
 
 func (h *Handler) WebChatRetryTurn(c *gin.Context) {
+	var body struct {
+		MessageStyle string `json:"messageStyle"`
+	}
+	if c.Request.ContentLength != 0 {
+		if err := c.ShouldBindJSON(&body); err != nil {
+			util.ErrorResponse(c, response.InvalidParams, "无效请求体", nil)
+			return
+		}
+	}
+	messageStyle, styleErr := chat.NormalizeMessageStyle(body.MessageStyle)
+	if styleErr != nil {
+		util.ErrorResponse(c, response.InvalidParams, styleErr.Error(), nil)
+		return
+	}
 	conversationID := strings.TrimSpace(c.Param("id"))
 	turnID := strings.TrimSpace(c.Param("turnId"))
 	spaceID := webChatSpaceID(c)
@@ -307,6 +321,7 @@ func (h *Handler) WebChatRetryTurn(c *gin.Context) {
 			CharacterID: sourceTurn.CharacterID, Message: userMessage.Content, AudioUrl: userMessage.AudioUrl, AudioDuration: userMessage.AudioDuration, ImageUrl: userMessage.ImageUrl, VideoUrl: userMessage.VideoUrl,
 			ReplyToMessageID: userMessage.ReplyToMessageID, ModelConfigID: conversation.ModelConfigID, ReasoningEffort: conversation.ReasoningEffort, PermissionMode: conversation.PermissionMode,
 			TurnID: newTurn.ID, ExecutionID: newTurn.ExecutionID, ForceRegenerate: true,
+			MessageStyle: messageStyle,
 		}, binding)
 		if runErr != nil {
 			if genCtx.Err() != nil {
