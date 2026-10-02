@@ -727,6 +727,9 @@ const {
       query: { conversationId },
     });
     void connectSSE(false);
+    void chatStore.fetchSidebar().catch(() => {
+      ElMessage.warning("消息已发送，侧栏刷新失败，请稍后重试");
+    });
   },
   selectedModelId,
   selectedReasoningEffort,

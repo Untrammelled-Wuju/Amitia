@@ -1542,7 +1542,7 @@ defineExpose({ focus, setText, clear: clearText });
   padding: 8px 9px;
   border: 1px solid var(--composer-border);
   border-radius: var(--radius-composer);
-  background: var(--workbench-sidebar-bg);
+  background: var(--composer-bg);
   box-shadow: var(--composer-shadow);
   transition:
     border-color 0.18s ease,
@@ -2208,7 +2208,7 @@ defineExpose({ focus, setText, clear: clearText });
 }
 
 .model-list-header button:hover {
-  background: var(--ac-color-primary-bg);
+  background: var(--control-hover-bg);
 }
 
 .model-list-item {
@@ -2229,7 +2229,7 @@ defineExpose({ focus, setText, clear: clearText });
 
 .model-list-item:hover,
 .model-list-item.active {
-  background: var(--ac-color-primary-bg);
+  background: var(--control-active-bg);
 }
 
 .model-list-item span {
@@ -2688,10 +2688,13 @@ defineExpose({ focus, setText, clear: clearText });
 .input-wrapper {
   gap: 4px;
   padding: 8px 10px 9px;
-  border-color: color-mix(in srgb, var(--composer-border) 88%, transparent);
-  border-radius: 14px;
-  background: var(--workbench-sidebar-bg);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  border-color: var(--composer-border);
+  border-radius: var(--radius-composer);
+  background: var(--composer-bg);
+  box-shadow: var(--composer-shadow);
+}
+.input-wrapper:focus-within {
+  border-color: var(--composer-border-focus);
 }
 .input-row {
   display: grid;
@@ -2721,9 +2724,9 @@ defineExpose({ focus, setText, clear: clearText });
 .input-field {
   min-height: 44px;
   max-height: 180px;
-  padding: 8px 3px 7px;
-  font-size: 13px;
-  line-height: 1.5;
+  padding: 10px 4px 9px;
+  font-size: var(--ac-font-size-base);
+  line-height: 1.6;
 }
 .add-btn, .voice-mode-toggle {
   width: 30px;

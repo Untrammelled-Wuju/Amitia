@@ -5,7 +5,7 @@
   --workbench-bg: var(--tp-page);
   --workbench-sidebar-bg: var(--tp-shell);
   --workbench-sidebar-hover: var(--tp-control-hover);
-  --workbench-sidebar-active: var(--tp-primary-soft);
+  --workbench-sidebar-active: var(--tp-selection);
   --surface-bg: var(--tp-panel);
   --surface-bg-elevated: var(--tp-float);
   --surface-border: var(--tp-border);
@@ -13,10 +13,10 @@
   --surface-border-focus: var(--tp-primary);
   --chat-surface-bg: var(--workbench-bg);
   --chat-header-bg: var(--workbench-bg);
-  --composer-bg: var(--surface-bg-elevated);
-  --composer-border: var(--tp-border);
-  --composer-border-focus: var(--tp-primary);
-  --composer-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  --composer-bg: var(--tp-composer);
+  --composer-border: var(--tp-composer-border);
+  --composer-border-focus: var(--tp-border-strong);
+  --composer-shadow: var(--tp-composer-shadow);
   --plugin-surface-bg: var(--tp-panel-soft);
   --plugin-surface-border: var(--tp-border);
   --plugin-muted-bg: var(--tp-control);
@@ -26,7 +26,7 @@
   --text-secondary: var(--tp-text-secondary);
   --text-muted: var(--tp-text-muted);
   --control-hover-bg: var(--tp-control-hover);
-  --control-active-bg: var(--tp-primary-soft);
+  --control-active-bg: var(--tp-selection);
   --radius-xs: 4px;
   --radius-sm: 8px;
   --radius-md: 12px;

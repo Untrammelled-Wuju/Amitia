@@ -149,7 +149,7 @@ function handleMoreCommand(command: string | number | object) {
 .header-actions { display: flex; align-items: center; gap: 2px; flex: 0 0 auto; }
 .header-icon-btn { display: grid; place-items: center; width: 30px; height: 30px; padding: 0; border: 0; border-radius: 7px; background: transparent; color: var(--text-muted); cursor: pointer; font-size: 15px; }
 .header-icon-btn:hover, .header-icon-btn:focus-visible { background: var(--control-hover-bg); color: var(--text-primary); outline: none; }
-.header-icon-btn.active { background: var(--control-active-bg); color: var(--ac-color-primary); }
+.header-icon-btn.active { background: var(--control-active-bg); color: var(--text-primary); }
 @media (max-width: 760px) {
   .chat-header { padding-inline: 8px; }
   .header-brand-desc { display: none; }

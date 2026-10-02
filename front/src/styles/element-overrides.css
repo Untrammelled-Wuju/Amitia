@@ -1,16 +1,38 @@
 /* SPDX-FileCopyrightText: 2026 彭旭 */
 /* SPDX-License-Identifier: AGPL-3.0-only */
 
-.el-button--primary {
-  --el-button-text-color: var(--tp-text-on-primary);
-  --el-button-bg-color: var(--tp-primary);
-  --el-button-border-color: var(--tp-primary);
+.el-button--primary:not(.is-text):not(.is-link) {
+  --el-button-text-color: var(--tp-action-text);
+  --el-button-bg-color: var(--tp-action);
+  --el-button-border-color: var(--tp-action);
+  --el-button-hover-text-color: var(--tp-action-text);
+  --el-button-hover-bg-color: var(--tp-action-hover);
+  --el-button-hover-border-color: var(--tp-action-hover);
+  --el-button-active-text-color: var(--tp-action-text);
+  --el-button-active-bg-color: var(--tp-action-active);
+  --el-button-active-border-color: var(--tp-action-active);
+  --el-button-disabled-text-color: color-mix(in srgb, var(--tp-action-text) 55%, var(--tp-action));
+  --el-button-disabled-bg-color: color-mix(in srgb, var(--tp-action) 40%, var(--tp-panel));
+  --el-button-disabled-border-color: transparent;
+}
+
+.el-button--primary.is-plain:not(.is-text):not(.is-link) {
+  --el-button-text-color: var(--tp-text);
+  --el-button-bg-color: transparent;
+  --el-button-border-color: var(--tp-border-strong);
+}
+
+html[data-custom-palette="true"] {
+  --tp-action: var(--tp-primary);
+  --tp-action-hover: var(--tp-primary-hover);
+  --tp-action-active: var(--tp-primary-active);
+  --tp-action-text: var(--tp-text-on-primary);
+  --tp-selection: var(--tp-primary-soft);
+}
+
+html[data-custom-palette="true"] .el-button--primary:not(.is-text):not(.is-link) {
   --el-button-hover-text-color: var(--tp-text-on-primary-hover, var(--tp-text-on-primary));
-  --el-button-hover-bg-color: var(--tp-primary-hover);
-  --el-button-hover-border-color: var(--tp-primary-hover);
   --el-button-active-text-color: var(--tp-text-on-primary-active, var(--tp-text-on-primary));
-  --el-button-active-bg-color: var(--tp-primary-active);
-  --el-button-active-border-color: var(--tp-primary-active);
 }
 
 .el-button--success {
@@ -227,7 +249,7 @@ html[data-custom-palette="true"] .el-button:not(.el-button--primary):not(.el-but
 
 .el-card {
   background: var(--tp-panel);
-  border-color: var(--tp-border);
+  border-color: var(--tp-border-light);
   border-radius: var(--ac-radius-md);
   box-shadow: none;
 }

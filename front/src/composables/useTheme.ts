@@ -29,7 +29,7 @@ const STORAGE_KEY = "ai-companion-theme";
 const APPEARANCE_STORAGE_KEY = "ai-companion-appearance";
 const VALID_PRESETS: ThemePreset[] = ["system", "light", "dark"];
 const DEFAULT_THEME: ThemePreset = "dark";
-const DEFAULT_ACCENT = "#6C8FEA";
+const DEFAULT_ACCENT = "#416FAE";
 
 export const FONT_SCALE_OPTIONS = [
   { value: 0.9, label: "小" },
@@ -40,7 +40,7 @@ export const FONT_SCALE_OPTIONS = [
 
 export const ACCENT_COLOR_OPTIONS = [
   { value: "#8A5728", label: "暖棕" },
-  { value: "#6C8FEA", label: "静谧蓝" },
+  { value: DEFAULT_ACCENT, label: "柔和蓝" },
   { value: "#52B788", label: "薄荷绿" },
   { value: "#E9A23B", label: "琥珀" },
 ] as const;
@@ -58,7 +58,7 @@ export const THEME_PRESETS: {
 }[] = [
   { id: "system", name: "跟随系统", description: "自动跟随操作系统主题设置" },
   { id: "light", name: "亮色", description: "明亮浅色模式" },
-  { id: "dark", name: "暗色", description: "深色控制台模式" },
+  { id: "dark", name: "暗色", description: "中性深灰模式" },
 ];
 
 function normalizePreset(preset: unknown): ThemePreset {
@@ -104,7 +104,9 @@ const storedAppearance = loadStoredAppearance();
 const state = ref<ThemeState>({
   customPalette: normalizeCustomPalette(storedAppearance.customPalette),
   preset: normalizePreset(localStorage.getItem(STORAGE_KEY)),
-  accentColor: normalizeAccentColor(storedAppearance.accentColor),
+  accentColor: ["#6C8FEA", "#0066CC"].includes(normalizeAccentColor(storedAppearance.accentColor))
+    ? DEFAULT_ACCENT
+    : normalizeAccentColor(storedAppearance.accentColor),
   fontScale: normalizeFontScale(storedAppearance.fontScale),
   cornerStyle: normalizeCornerStyle(storedAppearance.cornerStyle),
   dynamicEffect:
@@ -172,37 +174,40 @@ function persistAppearance() {
 
 function applyAccent(html: HTMLElement, accent: string) {
   const selectedAccent = normalizeAccentColor(accent);
-  const normalized = !state.value.customPalette.enabled && selectedAccent === "#6C8FEA" && resolvedMode.value === "dark"
-    ? "#8CA8F0"
+  const dark = resolvedMode.value === "dark";
+  const normalized = !state.value.customPalette.enabled && selectedAccent === DEFAULT_ACCENT && dark
+    ? "#82A7DC"
     : selectedAccent;
   const isDefaultLightAccent =
     normalized === "#8A5728" && resolvedMode.value === "light";
   html.style.setProperty("--tp-primary", normalized);
   html.style.setProperty(
     "--tp-primary-hover",
-    isDefaultLightAccent ? "#6E421F" : mixHex(normalized, [0, 0, 0], 0.12),
+    isDefaultLightAccent ? "#6E421F" : mixHex(normalized, dark ? [255, 255, 255] : [0, 0, 0], dark ? 0.16 : 0.12),
   );
   html.style.setProperty(
     "--tp-primary-active",
-    isDefaultLightAccent ? "#5E3518" : mixHex(normalized, [0, 0, 0], 0.2),
+    isDefaultLightAccent ? "#5E3518" : mixHex(normalized, dark ? [255, 255, 255] : [0, 0, 0], dark ? 0.3 : 0.2),
   );
   if (isDefaultLightAccent) {
     html.style.setProperty("--tp-primary-soft", "#EFE1D2");
     html.style.setProperty("--tp-primary-bg", "#EFE1D2");
   } else {
-    html.style.setProperty("--tp-primary-soft", rgba(normalized, 0.14));
-    html.style.setProperty("--tp-primary-bg", rgba(normalized, 0.12));
+    html.style.setProperty("--tp-primary-soft", rgba(normalized, dark ? 0.16 : 0.1));
+    html.style.setProperty("--tp-primary-bg", rgba(normalized, dark ? 0.12 : 0.08));
   }
   html.style.setProperty(
     "--tp-primary-border",
     rgba(normalized, resolvedMode.value === "light" ? 0.24 : 0.3),
   );
-  html.style.setProperty("--tp-primary-light-3", mixHex(normalized, [255, 255, 255], 0.3));
-  html.style.setProperty("--tp-primary-light-5", mixHex(normalized, [255, 255, 255], 0.5));
-  html.style.setProperty("--tp-primary-light-7", mixHex(normalized, [255, 255, 255], 0.7));
-  html.style.setProperty("--tp-primary-light-8", mixHex(normalized, [255, 255, 255], 0.8));
-  html.style.setProperty("--tp-primary-light-9", mixHex(normalized, [255, 255, 255], 0.9));
+  html.style.setProperty("--tp-primary-ring", rgba(normalized, dark ? 0.3 : 0.24));
+  const background = getComputedStyle(html).getPropertyValue("--tp-panel").trim();
+  const tintTarget = dark ? hexToRgb(/^#[0-9a-f]{6}$/i.test(background) ? background : "#1C1C1C") : [255, 255, 255] as [number, number, number];
+  for (const level of [3, 5, 7, 8, 9]) {
+    html.style.setProperty(`--tp-primary-light-${level}`, mixHex(normalized, tintTarget, level / 10));
+  }
   html.style.setProperty("--el-color-primary", normalized);
+  html.style.setProperty("--tp-action-text", readableText(normalized));
 }
 
 function applyFontScale(html: HTMLElement, scale: number) {
@@ -262,10 +267,11 @@ function applyTheme(preset: ThemePreset) {
   applyAccent(html, palette.enabled ? palette.primary : state.value.accentColor);
   for (const token of ["--tp-text", "--tp-text-secondary", "--tp-text-muted", "--tp-text-placeholder", "--tp-text-on-primary"]) html.style.removeProperty(token);
   html.style.setProperty("--tp-secondary", palette.enabled ? palette.secondary : html.style.getPropertyValue("--tp-primary"));
-  html.style.setProperty("--tp-secondary-soft", rgba(palette.enabled ? palette.secondary : state.value.accentColor, 0.14));
-  html.style.setProperty("--tp-text-on-secondary", readableText(palette.enabled ? palette.secondary : state.value.accentColor));
+  const secondary = palette.enabled ? palette.secondary : html.style.getPropertyValue("--tp-primary");
+  html.style.setProperty("--tp-secondary-soft", rgba(secondary, effective === "dark" ? 0.16 : 0.1));
+  html.style.setProperty("--tp-text-on-secondary", readableText(secondary));
   if (palette.enabled) {
-    const background = getComputedStyle(html).getPropertyValue("--tp-panel").trim() || (effective === "dark" ? "#121214" : "#FFFFFF");
+    const background = getComputedStyle(html).getPropertyValue("--tp-panel").trim() || (effective === "dark" ? "#1C1C1C" : "#FAFAFA");
     const text = paletteText(palette, background);
     html.style.setProperty("--tp-text", text);
     html.style.setProperty("--tp-text-secondary", supportingText(text, background, 0.2));

@@ -412,6 +412,7 @@ async function handleOpenProject(project: ProjectItem) {
 
 const activeIndex = computed(() => {
   const path = route.path;
+  if (path === "/chat" && activeConversationId.value) return "";
   const active = navigationItems.value.find((item) => isUINavigationItemActive(path, item));
   return active?.route ?? path;
 });
@@ -494,7 +495,7 @@ onUnmounted(() => {
 .side-menu :deep(.el-menu-item), .side-menu :deep(.el-sub-menu__title) { height: auto; line-height: 1.45; min-height: 34px; margin: 1px 0; padding: 6px 9px !important; border-radius: 7px; font-size: var(--ac-font-size-sm); color: var(--text-secondary); }
 .side-menu :deep(.el-icon) { width: 18px; font-size: 15px; margin-right: 8px; }
 .side-menu :deep(.el-menu-item:hover), .side-menu :deep(.el-sub-menu__title:hover) { background: var(--workbench-sidebar-hover); color: var(--text-primary); }
-.side-menu :deep(.el-menu-item.is-active), .side-menu :deep(.el-sub-menu.is-active > .el-sub-menu__title) { background: var(--workbench-sidebar-active); color: var(--text-primary); font-weight: 550; }
+.side-menu :deep(.el-menu-item.is-active), .side-menu :deep(.el-sub-menu.is-active > .el-sub-menu__title) { background: var(--workbench-sidebar-active); color: var(--text-primary); font-weight: 550; box-shadow: inset 2px 0 var(--tp-primary); }
 .side-menu :deep(.el-sub-menu .el-menu) { background: transparent; }
 .side-menu :deep(.el-sub-menu .el-menu-item) { padding-left: 34px !important; height: auto; min-height: 31px; line-height: 1.45; font-size: var(--ac-font-size-sm); }
 .recent-section { min-height: 0; flex: 1 1 auto; overflow-y: auto; padding: 12px 0 8px; }
@@ -547,7 +548,7 @@ onUnmounted(() => {
 .user-profile { display: flex; align-items: center; width: 100%; border: 0; border-radius: 7px; background: transparent; color: var(--text-secondary); cursor: pointer; text-align: left; }
 .user-profile { gap: 9px; min-height: 38px; padding: 4px 7px; }
 .user-profile:hover { background: var(--workbench-sidebar-hover); color: var(--text-primary); }
-.user-avatar { display: grid; place-items: center; width: 28px; height: 28px; flex: 0 0 auto; border-radius: 50%; background: color-mix(in srgb, var(--tp-primary) 72%, var(--surface-bg)); color: var(--tp-text-on-primary); font-size: var(--ac-font-size-sm); overflow: hidden; }
+.user-avatar { display: grid; place-items: center; width: 28px; height: 28px; flex: 0 0 auto; border-radius: 50%; background: var(--tp-selection); color: var(--text-primary); font-size: var(--ac-font-size-sm); overflow: hidden; }
 .user-avatar img { width: 100%; height: 100%; object-fit: cover; }
 .user-copy { min-width: 0; }
 .user-copy strong, .user-copy span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

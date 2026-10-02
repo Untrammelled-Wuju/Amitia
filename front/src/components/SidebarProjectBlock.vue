@@ -118,6 +118,10 @@ const {
   background: var(--workbench-sidebar-hover);
   color: var(--text-primary);
 }
+.project-row.active {
+  background: var(--workbench-sidebar-active);
+  box-shadow: inset 2px 0 var(--tp-primary);
+}
 .project-main {
   display: flex;
   align-items: center;
