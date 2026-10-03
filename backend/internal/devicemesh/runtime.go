@@ -59,6 +59,9 @@ func NewCloudRuntimeWithHubAndSessions(
 	hub *server.ConnectionHub,
 	sessions *deviceruntime.Service,
 ) (*Runtime, error) {
+	if db == nil || deviceReg == nil || deviceReg.Database() != db {
+		return nil, fmt.Errorf("devicemesh: credentials and device registry must share the authoritative database")
+	}
 	if err := EnsureSchema(context.Background(), db); err != nil {
 		return nil, err
 	}

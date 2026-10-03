@@ -23,7 +23,7 @@
         @keydown.esc.prevent="cancelRename"
         @blur="saveRename"
       />
-      <span v-else @dblclick.stop.prevent="beginRename">{{ conversation.title || "新对话" }}</span>
+      <span v-else :title="conversation.title || '新对话'" @dblclick.stop.prevent="beginRename">{{ conversation.title || "新对话" }}</span>
     </div>
     <button
       type="button"
@@ -109,6 +109,7 @@ function cancelRename() {
 <style scoped>
 .thread-row {
   display: flex;
+  min-width: 0;
   align-items: center;
   min-height: 30px;
   border-radius: 6px;
@@ -143,12 +144,14 @@ function cancelRename() {
   outline-offset: -2px;
 }
 .thread-main span {
+  flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .thread-name-input {
+  flex: 1;
   min-width: 0;
   width: 100%;
   min-height: 28px;

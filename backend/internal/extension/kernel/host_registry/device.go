@@ -76,6 +76,14 @@ func (r *Registry) GetDevice(ctx context.Context, deviceID runtimeidentity.Devic
 	return r.repo.GetDevice(ctx, deviceID)
 }
 
+func (r *Registry) GetDeviceTx(ctx context.Context, tx *sql.Tx, deviceID runtimeidentity.DeviceID) (*DeviceRecord, error) {
+	return r.repo.GetDeviceTx(ctx, tx, deviceID)
+}
+
+func (r *Registry) SaveDeviceTx(ctx context.Context, tx *sql.Tx, record *DeviceRecord) error {
+	return r.repo.SaveDeviceTx(ctx, tx, record)
+}
+
 func (r *Registry) ListDevicesBySpace(ctx context.Context, spaceID runtimeidentity.SpaceID) ([]*DeviceRecord, error) {
 	return r.repo.ListDevicesBySpace(ctx, spaceID)
 }
@@ -129,4 +137,9 @@ func (r *Registry) MarkDeviceSeen(ctx context.Context, deviceID runtimeidentity.
 func (r *Registry) RevokeDevice(ctx context.Context, deviceID runtimeidentity.DeviceID) error {
 	now := time.Now().UTC()
 	return r.repo.UpdateDeviceTrust(ctx, deviceID, DeviceTrustRevoked, &now)
+}
+
+func (r *Registry) RevokeDeviceTx(ctx context.Context, tx *sql.Tx, deviceID runtimeidentity.DeviceID) error {
+	now := time.Now().UTC()
+	return r.repo.UpdateDeviceTrustTx(ctx, tx, deviceID, DeviceTrustRevoked, &now)
 }

@@ -179,7 +179,19 @@ func (r *Repository) RevokeByID(ctx context.Context, credentialID string, revoke
 }
 
 func (r *Repository) RevokeAllForDevice(ctx context.Context, spaceID runtimeidentity.SpaceID, deviceID runtimeidentity.DeviceID, revokedAt time.Time) error {
-	_, err := r.db.ExecContext(ctx,
+	return revokeDeviceCredentials(ctx, r.db, spaceID, deviceID, revokedAt)
+}
+
+func (r *Repository) RevokeAllForDeviceTx(ctx context.Context, tx *sql.Tx, spaceID runtimeidentity.SpaceID, deviceID runtimeidentity.DeviceID, revokedAt time.Time) error {
+	return revokeDeviceCredentials(ctx, tx, spaceID, deviceID, revokedAt)
+}
+
+type credentialExecutor interface {
+	ExecContext(context.Context, string, ...any) (sql.Result, error)
+}
+
+func revokeDeviceCredentials(ctx context.Context, executor credentialExecutor, spaceID runtimeidentity.SpaceID, deviceID runtimeidentity.DeviceID, revokedAt time.Time) error {
+	_, err := executor.ExecContext(ctx,
 		`UPDATE kernel_device_runtime_credentials
 		SET status = ?, revoked_at = ?, revision = revision + 1
 		WHERE space_id = ? AND device_id = ? AND status = ?`,

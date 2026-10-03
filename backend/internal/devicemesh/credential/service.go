@@ -2,6 +2,7 @@ package credential
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"time"
@@ -110,6 +111,10 @@ func (s *Service) Revoke(ctx context.Context, callerID runtimeidentity.SpaceID, 
 
 func (s *Service) RevokeAllForDevice(ctx context.Context, callerID runtimeidentity.SpaceID, deviceID runtimeidentity.DeviceID) error {
 	return s.repo.RevokeAllForDevice(ctx, callerID, deviceID, s.clock.Now())
+}
+
+func (s *Service) RevokeAllForDeviceTx(ctx context.Context, tx *sql.Tx, callerID runtimeidentity.SpaceID, deviceID runtimeidentity.DeviceID) error {
+	return s.repo.RevokeAllForDeviceTx(ctx, tx, callerID, deviceID, s.clock.Now())
 }
 
 func (s *Service) ListBySpace(ctx context.Context, callerID runtimeidentity.SpaceID) ([]*DeviceRuntimeCredential, error) {

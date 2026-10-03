@@ -26,6 +26,15 @@ const (
 	bootstrapFile   = "device-pairing-bootstrap"
 )
 
+var (
+	ErrSelfPairing    = errors.New("不能添加当前设备自身")
+	ErrAlreadyPaired  = errors.New("该设备已添加，无需重复扫码")
+	ErrPairingPending = errors.New("该设备正在配对，请勿重复添加")
+	ErrOfferNotFound  = errors.New("配对码无效")
+	ErrOfferExpired   = errors.New("配对码已过期，请重新生成")
+	ErrOfferConsumed  = errors.New("配对码已使用，请重新生成")
+)
+
 type Service struct {
 	db           *sql.DB
 	dataDir      string
@@ -61,6 +70,9 @@ type ClaimResult struct {
 func NewService(db *sql.DB, dataDir string, spaceID runtimeidentity.SpaceID, devices *host_registry.Registry, bootstrapSvc *bootstrap.Service) (*Service, error) {
 	if db == nil || devices == nil || bootstrapSvc == nil || strings.TrimSpace(spaceID.String()) == "" {
 		return nil, errors.New("pairing: incomplete service dependencies")
+	}
+	if devices.Database() != db {
+		return nil, errors.New("pairing: device registry and pairing state must share the authoritative database")
 	}
 	s := &Service{db: db, dataDir: dataDir, spaceID: spaceID, devices: devices, bootstrapSvc: bootstrapSvc}
 	if err := s.ensureSchema(context.Background()); err != nil {
@@ -105,38 +117,87 @@ func (s *Service) CreateOffer(ctx context.Context, creator runtimeidentity.Devic
 }
 
 func (s *Service) Claim(ctx context.Context, req ClaimRequest) (*ClaimResult, error) {
-	if req.DeviceID == "" || req.RuntimeID == "" || req.Platform == runtimeidentity.PlatformUnknown {
+	req.DeviceID = runtimeidentity.ParseDeviceID(req.DeviceID.String())
+	req.RuntimeID = runtimeidentity.ParseRuntimeID(req.RuntimeID.String())
+	if req.DeviceID == "" || req.RuntimeID == "" || req.Platform == runtimeidentity.PlatformUnknown || !req.Platform.IsKnown() {
 		return nil, errors.New("pairing: deviceId, runtimeId and platform are required")
 	}
 	if strings.TrimSpace(req.OfferToken) == "" && strings.TrimSpace(req.SetupCode) == "" {
 		return nil, errors.New("pairing: offerToken or setupCode is required")
 	}
 
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx, `UPDATE kernel_devices SET revision=revision WHERE device_id=?`, req.DeviceID.String()); err != nil {
+		return nil, err
+	}
+	now := time.Now().UTC()
+	offerID := ""
 	if strings.TrimSpace(req.OfferToken) != "" {
-		if err := s.consumeOffer(ctx, strings.TrimSpace(req.OfferToken)); err != nil {
-			return nil, err
-		}
+		offerID, err = s.validateOfferTx(ctx, tx, strings.TrimSpace(req.OfferToken), req.DeviceID, now)
 	} else {
-		if err := s.authorizeFirstDevice(ctx, strings.TrimSpace(req.SetupCode)); err != nil {
-			return nil, err
-		}
+		err = s.authorizeFirstDeviceTx(ctx, tx, strings.TrimSpace(req.SetupCode))
+	}
+	if err != nil {
+		return nil, err
 	}
 
-	existing, err := s.devices.GetDevice(ctx, req.DeviceID)
+	existing, err := s.devices.GetDeviceTx(ctx, tx, req.DeviceID)
 	if err != nil {
 		return nil, err
 	}
 	if existing != nil && existing.SpaceID != s.spaceID {
 		return nil, host_registry.ErrDeviceOwnedByOther
 	}
-	if _, err := s.devices.EnsureDevice(ctx, host_registry.DeviceRecord{
-		SpaceID: s.spaceID, DeviceID: req.DeviceID, Platform: req.Platform,
-		Label: strings.TrimSpace(req.Label), TrustState: host_registry.DeviceTrustPending,
-	}); err != nil {
+	if existing != nil && existing.TrustState == host_registry.DeviceTrustTrusted {
+		return nil, ErrAlreadyPaired
+	}
+	var activeTickets int
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(1) FROM kernel_device_mesh_bootstrap_tickets
+		WHERE space_id=? AND device_id=? AND status='active' AND julianday(expires_at)>julianday(?)`,
+		s.spaceID.String(), req.DeviceID.String(), now.Format(time.RFC3339Nano)).Scan(&activeTickets); err != nil {
 		return nil, err
 	}
-	ticket, rawTicket, err := s.bootstrapSvc.Issue(ctx, s.spaceID, req.DeviceID, req.RuntimeID, req.Platform)
+	if existing != nil && existing.TrustState == host_registry.DeviceTrustPending && activeTickets > 0 {
+		return nil, ErrPairingPending
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE kernel_device_mesh_bootstrap_tickets SET status='revoked', updated_at=?
+		WHERE space_id=? AND device_id=? AND status='active'`, now.Format(time.RFC3339Nano), s.spaceID.String(), req.DeviceID.String()); err != nil {
+		return nil, err
+	}
+	record := host_registry.DeviceRecord{
+		SpaceID: s.spaceID, DeviceID: req.DeviceID, Platform: req.Platform,
+		Label: strings.TrimSpace(req.Label), TrustState: host_registry.DeviceTrustPending,
+		CreatedAt: now, LastSeenAt: now, Revision: 1,
+	}
+	if existing != nil {
+		record.CreatedAt = existing.CreatedAt
+		record.Revision = existing.Revision + 1
+	}
+	if err := s.devices.SaveDeviceTx(ctx, tx, &record); err != nil {
+		return nil, err
+	}
+	ticket, rawTicket, err := s.bootstrapSvc.IssueTx(ctx, tx, s.spaceID, req.DeviceID, req.RuntimeID, req.Platform)
 	if err != nil {
+		return nil, err
+	}
+	if offerID != "" {
+		res, err := tx.ExecContext(ctx, `UPDATE kernel_device_pairing_offers SET status='consumed', consumed_at=? WHERE offer_id=? AND status='active'`, now.Format(time.RFC3339Nano), offerID)
+		if err != nil {
+			return nil, err
+		}
+		count, err := res.RowsAffected()
+		if err != nil {
+			return nil, err
+		}
+		if count != 1 {
+			return nil, ErrOfferConsumed
+		}
+	}
+	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
 	return &ClaimResult{Ticket: ticket, RawTicket: rawTicket}, nil
@@ -150,50 +211,67 @@ func (s *Service) Status(ctx context.Context) (trustedDevices int64, firstDevice
 	return trustedDevices, trustedDevices == 0, nil
 }
 
+func (s *Service) RevokeDevicePairingTx(ctx context.Context, tx *sql.Tx, deviceID runtimeidentity.DeviceID) error {
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	if _, err := tx.ExecContext(ctx, `UPDATE kernel_device_mesh_bootstrap_tickets SET status='revoked', updated_at=?
+		WHERE space_id=? AND device_id=? AND status='active'`, now, s.spaceID.String(), deviceID.String()); err != nil {
+		return err
+	}
+	_, err := tx.ExecContext(ctx, `UPDATE kernel_device_pairing_offers SET status='revoked'
+		WHERE space_id=? AND created_by_device_id=? AND status='active'`, s.spaceID.String(), deviceID.String())
+	return err
+}
+
 // BootstrapCode returns the one-time-owner setup secret. Callers must enforce a
 // loopback-only transport boundary. Once one trusted device exists the code can
 // no longer be used for pairing.
 func (s *Service) BootstrapCode() (string, error) { return s.ensureBootstrapCode() }
 
-func (s *Service) consumeOffer(ctx context.Context, raw string) error {
-	now := time.Now().UTC()
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-	var offerID, status, expires string
-	err = tx.QueryRowContext(ctx, `SELECT offer_id, status, expires_at FROM kernel_device_pairing_offers WHERE offer_hash = ? AND space_id = ?`, hash(raw), s.spaceID.String()).Scan(&offerID, &status, &expires)
+func (s *Service) validateOfferTx(ctx context.Context, tx *sql.Tx, raw string, deviceID runtimeidentity.DeviceID, now time.Time) (string, error) {
+	var offerID, creator, status, expires string
+	err := tx.QueryRowContext(ctx, `SELECT offer_id, created_by_device_id, status, expires_at FROM kernel_device_pairing_offers WHERE offer_hash = ? AND space_id = ?`, hash(raw), s.spaceID.String()).Scan(&offerID, &creator, &status, &expires)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return errors.New("pairing: offer not found")
+			return "", ErrOfferNotFound
 		}
-		return err
+		return "", err
+	}
+	if runtimeidentity.ParseDeviceID(creator) == deviceID {
+		return "", ErrSelfPairing
+	}
+	existing, err := s.devices.GetDeviceTx(ctx, tx, deviceID)
+	if err != nil {
+		return "", err
+	}
+	if existing != nil && existing.SpaceID == s.spaceID && existing.TrustState == host_registry.DeviceTrustTrusted {
+		return "", ErrAlreadyPaired
 	}
 	expiresAt, err := time.Parse(time.RFC3339Nano, expires)
 	if err != nil {
-		return err
+		return "", err
 	}
-	if status != "active" || !now.Before(expiresAt) {
-		return errors.New("pairing: offer expired or consumed")
+	if status != "active" {
+		return "", ErrOfferConsumed
 	}
-	res, err := tx.ExecContext(ctx, `UPDATE kernel_device_pairing_offers SET status='consumed', consumed_at=? WHERE offer_id=? AND status='active'`, now.Format(time.RFC3339Nano), offerID)
+	if !now.Before(expiresAt) {
+		return "", ErrOfferExpired
+	}
+	issuer, err := s.devices.GetDeviceTx(ctx, tx, runtimeidentity.ParseDeviceID(creator))
 	if err != nil {
-		return err
+		return "", err
 	}
-	n, _ := res.RowsAffected()
-	if n != 1 {
-		return errors.New("pairing: offer already consumed")
+	if issuer == nil || issuer.SpaceID != s.spaceID || issuer.TrustState != host_registry.DeviceTrustTrusted {
+		return "", host_registry.ErrDeviceNotTrusted
 	}
-	return tx.Commit()
+	return offerID, nil
 }
 
-func (s *Service) authorizeFirstDevice(ctx context.Context, setupCode string) error {
-	trusted, first, err := s.Status(ctx)
-	if err != nil {
+func (s *Service) authorizeFirstDeviceTx(ctx context.Context, tx *sql.Tx, setupCode string) error {
+	var trusted int64
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(1) FROM kernel_devices WHERE space_id=? AND trust_state='trusted'`, s.spaceID.String()).Scan(&trusted); err != nil {
 		return err
 	}
-	if !first || trusted != 0 {
+	if trusted != 0 {
 		return errors.New("pairing: bootstrap setup is closed; create a pairing offer from a trusted device")
 	}
 	expected, err := s.ensureBootstrapCode()

@@ -323,11 +323,23 @@ func (r *registryRepository) SaveDevice(ctx context.Context, record *DeviceRecor
 	if r.db == nil {
 		return nil
 	}
+	return saveDevice(ctx, r.db, record)
+}
+
+func (r *registryRepository) SaveDeviceTx(ctx context.Context, tx *sql.Tx, record *DeviceRecord) error {
+	return saveDevice(ctx, tx, record)
+}
+
+type deviceExecutor interface {
+	ExecContext(context.Context, string, ...any) (sql.Result, error)
+}
+
+func saveDevice(ctx context.Context, executor deviceExecutor, record *DeviceRecord) error {
 	var trustedAt sql.NullString
 	if record.TrustedAt != nil {
 		trustedAt = sql.NullString{String: record.TrustedAt.Format(time.RFC3339Nano), Valid: true}
 	}
-	_, err := r.db.ExecContext(ctx,
+	_, err := executor.ExecContext(ctx,
 		`INSERT OR REPLACE INTO kernel_devices (
 			device_id, space_id, platform, label, trust_state, created_at, trusted_at, last_seen_at, revision
 		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -354,6 +366,12 @@ func (r *registryRepository) GetDevice(ctx context.Context, deviceID runtimeiden
 		deviceID.String(),
 	)
 	return scanDevice(row)
+}
+
+func (r *registryRepository) GetDeviceTx(ctx context.Context, tx *sql.Tx, deviceID runtimeidentity.DeviceID) (*DeviceRecord, error) {
+	return scanDevice(tx.QueryRowContext(ctx,
+		`SELECT device_id, space_id, platform, label, trust_state, created_at, trusted_at, last_seen_at, revision
+		FROM kernel_devices WHERE device_id = ?`, deviceID.String()))
 }
 
 func (r *registryRepository) ListDevicesBySpace(ctx context.Context, spaceID runtimeidentity.SpaceID) ([]*DeviceRecord, error) {

@@ -102,10 +102,13 @@ const {
 <style scoped>
 .project-block {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
   gap: 1px;
 }
 .project-row {
   display: flex;
+  min-width: 0;
   align-items: center;
   gap: 2px;
   min-height: 32px;
@@ -142,17 +145,20 @@ const {
   outline-offset: -1px;
 }
 .project-main span {
+  flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .project-main small {
+  flex: 0 0 auto;
   margin-left: auto;
   color: var(--text-muted);
   font-size: var(--ac-font-size-xs);
 }
 .project-action {
+  flex: 0 0 24px;
   display: grid;
   place-items: center;
   width: 24px;
@@ -172,6 +178,13 @@ const {
   cursor: not-allowed;
   opacity: 0.35;
 }
+.project-main > .el-icon {
+  flex: 0 0 auto;
+}
+.project-action-wrap {
+  flex: 0 0 24px;
+  width: 24px;
+}
 .project-create-action,
 .project-action-wrap {
   opacity: 0;
@@ -187,6 +200,8 @@ const {
 }
 .project-threads {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
   gap: 1px;
   padding-left: 18px;
 }
@@ -217,9 +232,9 @@ const {
   }
 }
 .thread-expand {
-  align-self: flex-start;
-  margin: 2px 0 2px 12px;
-  padding: 3px 7px;
+  justify-self: start;
+  margin: 2px 0;
+  padding: 3px 8px;
   border: 0;
   border-radius: 5px;
   background: transparent;
@@ -239,5 +254,5 @@ const {
 
 button { line-height: 1.45; }
 button:not(:disabled):focus-visible { outline: 2px solid var(--ac-color-primary); outline-offset: -2px; }
-button:not(:disabled):active { background: var(--control-active-bg); color: var(--text-primary); }
+button:not(:disabled):not(.project-main):active { background: var(--control-active-bg); color: var(--text-primary); }
 </style>

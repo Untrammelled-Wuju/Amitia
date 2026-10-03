@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	goruntime "runtime"
 	"strings"
 	"time"
 
@@ -36,6 +37,7 @@ import (
 	"github.com/u-ai/backend/internal/desktoppet/runtime"
 	runtimev1 "github.com/u-ai/backend/internal/desktoppet/runtime/protocol/v1"
 	desktoppetsecurity "github.com/u-ai/backend/internal/desktoppet/security"
+	devicemeshagent "github.com/u-ai/backend/internal/devicemesh/agent"
 	devicemeshpairing "github.com/u-ai/backend/internal/devicemesh/pairing"
 	devicemeshserver "github.com/u-ai/backend/internal/devicemesh/server"
 	"github.com/u-ai/backend/internal/deviceruntime/protocol"
@@ -45,6 +47,7 @@ import (
 	extensionkernel "github.com/u-ai/backend/internal/extension/kernel"
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	"github.com/u-ai/backend/internal/extension/kernel/extension_center"
+	"github.com/u-ai/backend/internal/extension/kernel/host_registry"
 	"github.com/u-ai/backend/internal/extension/kernel/wasm_runtime"
 	workflowkernel "github.com/u-ai/backend/internal/extension/kernel/workflow"
 	"github.com/u-ai/backend/internal/feedback"
@@ -57,7 +60,6 @@ import (
 	"github.com/u-ai/backend/internal/mcpapi"
 	"github.com/u-ai/backend/internal/memory"
 	"github.com/u-ai/backend/internal/middleware"
-	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"github.com/u-ai/backend/internal/middleware/security"
 	"github.com/u-ai/backend/internal/mood"
 	"github.com/u-ai/backend/internal/nativebridge"
@@ -72,6 +74,7 @@ import (
 	"github.com/u-ai/backend/internal/sync"
 	"github.com/u-ai/backend/internal/system"
 	"github.com/u-ai/backend/internal/temporal"
+	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"github.com/u-ai/backend/internal/tts"
 	"github.com/u-ai/backend/internal/vision"
 	"github.com/u-ai/backend/internal/workspace"
@@ -232,11 +235,35 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 		return nil, fmt.Errorf("recover local token rotation: %w", err)
 	}
 
+	var localMeshIdentity *devicemeshagent.LocalIdentity
+	if services.RuntimeProfile == runtimeprofile.ProfileLocal {
+		localMeshIdentity, err = devicemeshagent.NewIdentityStore(config.AppCfg.Storage.DataDir).Load()
+		if err != nil {
+			return nil, fmt.Errorf("initialize local mesh identity: %w", err)
+		}
+		if services.DeviceMesh == nil || services.DeviceMesh.DeviceReg == nil {
+			return nil, fmt.Errorf("local mesh identity requires device registry")
+		}
+		platform, err := runtimeidentity.ParsePlatform(goruntime.GOOS)
+		if err != nil {
+			return nil, fmt.Errorf("initialize local mesh platform: %w", err)
+		}
+		if _, err := services.DeviceMesh.DeviceReg.EnsureDevice(context.Background(), host_registry.DeviceRecord{
+			SpaceID: runtimeidentity.ParseSpaceID(spaceID), DeviceID: localMeshIdentity.DeviceID,
+			Platform: platform, TrustState: host_registry.DeviceTrustTrusted,
+		}); err != nil {
+			return nil, fmt.Errorf("register local mesh identity: %w", err)
+		}
+	}
 	newAuthConfig := func(mode string) security.AuthConfig {
 		cfg := security.AuthConfig{
 			Mode: mode, LocalCredentials: localCredentialStore, SpaceID: spaceID,
 			ListenAddress: config.AppCfg.Server.Host, AllowedOrigins: config.AppCfg.Security.AllowedOrigins,
 			SessionService: sessionSvc,
+		}
+		if localMeshIdentity != nil {
+			cfg.LocalDeviceID = localMeshIdentity.DeviceID
+			cfg.LocalRuntimeID = localMeshIdentity.RuntimeID
 		}
 		if services.DeviceMesh != nil {
 			cfg.DeviceCredentials = services.DeviceMesh.CredentialSvc
@@ -754,9 +781,9 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 				deviceMeshWebAccessMW = security.RequireWebAccessForWebDevice(webAccessSvc, services.DeviceMesh.DeviceReg)
 			}
 			deviceMeshPublicWebAccessMW := security.RequireWebAccessForDeclaredBrowser(webAccessSvc)
-			meshSQLDB, meshDBErr := ctx.DB.DB()
-			if meshDBErr != nil {
-				return nil, fmt.Errorf("device mesh: resolve sql db: %w", meshDBErr)
+			meshSQLDB := services.DeviceMesh.DB
+			if meshSQLDB == nil {
+				return nil, fmt.Errorf("device mesh: authoritative sql db is required")
 			}
 			pairingSvc, pairingErr := devicemeshpairing.NewService(meshSQLDB, config.AppCfg.Storage.DataDir, runtimeidentity.ParseSpaceID(spaceID), services.DeviceMesh.DeviceReg, services.DeviceMesh.BootstrapSvc)
 			if pairingErr != nil {

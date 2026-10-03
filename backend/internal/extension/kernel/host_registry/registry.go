@@ -37,6 +37,10 @@ func NewHostRegistry(db *sql.DB) *HostRegistry {
 	return NewRegistry(db)
 }
 
+func (r *Registry) Database() *sql.DB {
+	return r.db
+}
+
 func MigrateSessionTokens(ctx context.Context, db *sql.DB) error {
 	return (&registryRepository{db: db}).MigrateSessionTokens(ctx)
 }

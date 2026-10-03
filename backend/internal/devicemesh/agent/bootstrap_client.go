@@ -35,7 +35,7 @@ func (c *BootstrapClient) Exchange(ctx context.Context, cloudBaseURL, rawTicket,
 		return nil, fmt.Errorf("bootstrap client: marshal request: %w", err)
 	}
 
-	url := cloudBaseURL + "/api/device-mesh/v1/bootstrap/exchange"
+	url := cloudBaseURL + "/api/public/device-mesh/v1/bootstrap/exchange"
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(bodyBytes))
 	if err != nil {
 		return nil, fmt.Errorf("bootstrap client: create request: %w", err)

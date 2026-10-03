@@ -26,6 +26,8 @@ type AuthConfig struct {
 	Mode                     string
 	LocalCredentials         *LocalCredentialStore
 	SpaceID                  string
+	LocalDeviceID            runtimeidentity.DeviceID
+	LocalRuntimeID           runtimeidentity.RuntimeID
 	ListenAddress            string
 	AllowedOrigins           []string
 	SessionService           *DesktopSessionService
@@ -286,14 +288,14 @@ func buildLocalActor(cfg AuthConfig, method string) *auth.ActorContext {
 	if spaceID == "" {
 		spaceID = "space_local"
 	}
-	return &auth.ActorContext{PrincipalType: auth.PrincipalLocalUI, SpaceID: runtimeidentity.SpaceID(spaceID), Capabilities: []string{"*"}, Permissions: auth.OwnerDevicePermissions(), AuthMethod: method, RequestID: generateRequestID(), IsLocalTrusted: true}
+	return &auth.ActorContext{PrincipalType: auth.PrincipalLocalUI, SpaceID: runtimeidentity.SpaceID(spaceID), DeviceID: cfg.LocalDeviceID, RuntimeID: cfg.LocalRuntimeID, Capabilities: []string{"*"}, Permissions: auth.OwnerDevicePermissions(), AuthMethod: method, RequestID: generateRequestID(), IsLocalTrusted: true}
 }
 func buildDesktopSessionActor(session *DesktopSession, cfg AuthConfig) *auth.ActorContext {
 	spaceID := session.SpaceID
 	if spaceID == "" {
 		spaceID = cfg.SpaceID
 	}
-	return &auth.ActorContext{PrincipalType: auth.PrincipalLocalUI, SpaceID: runtimeidentity.SpaceID(spaceID), Capabilities: []string{"*"}, Permissions: auth.OwnerDevicePermissions(), AuthMethod: AuthMethodDesktopSession, SessionID: session.ID, RequestID: generateRequestID(), IsLocalTrusted: true}
+	return &auth.ActorContext{PrincipalType: auth.PrincipalLocalUI, SpaceID: runtimeidentity.SpaceID(spaceID), DeviceID: cfg.LocalDeviceID, RuntimeID: cfg.LocalRuntimeID, Capabilities: []string{"*"}, Permissions: auth.OwnerDevicePermissions(), AuthMethod: AuthMethodDesktopSession, SessionID: session.ID, RequestID: generateRequestID(), IsLocalTrusted: true}
 }
 func applyActorToContext(c *gin.Context, actor *auth.ActorContext) {
 	c.Set("actorContext", actor)

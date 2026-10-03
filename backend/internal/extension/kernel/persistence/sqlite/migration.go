@@ -2524,6 +2524,21 @@ var schemaMigrations = []string{
 	)`,
 	`CREATE INDEX IF NOT EXISTS idx_web_turn_citation_evidence_number ON web_turn_citation_evidence(turn_id, citation_number)`,
 	`CREATE INDEX IF NOT EXISTS idx_web_turn_citation_evidence_ref ON web_turn_citation_evidence(ref_id)`,
+	`CREATE TABLE IF NOT EXISTS kernel_device_pairing_offers (
+		offer_id TEXT PRIMARY KEY,
+		offer_hash TEXT NOT NULL UNIQUE,
+		space_id TEXT NOT NULL,
+		created_by_device_id TEXT NOT NULL,
+		status TEXT NOT NULL DEFAULT 'active',
+		expires_at TEXT NOT NULL,
+		consumed_at TEXT,
+		created_at TEXT NOT NULL
+	)`,
+	`CREATE INDEX IF NOT EXISTS idx_kernel_device_pairing_offers_space_status ON kernel_device_pairing_offers(space_id, status, expires_at)`,
+	`CREATE TABLE IF NOT EXISTS kernel_device_mesh_cutovers (
+		cutover_id TEXT PRIMARY KEY,
+		completed_at TEXT NOT NULL
+	)`,
 }
 
 type dbExecutor interface {

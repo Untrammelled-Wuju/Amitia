@@ -1276,8 +1276,15 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		if kernelContainer.DeviceRuntimeSessions == nil {
 			return nil, fmt.Errorf("cloud/local device mesh requires kernel DeviceRuntimeSessions authority")
 		}
+		if kernelContainer.DeviceRegistry == nil || kernelContainer.DeviceRegistry.Database() == nil {
+			return nil, fmt.Errorf("cloud/local device mesh requires kernel device registry database")
+		}
+		meshDB := kernelContainer.DeviceRegistry.Database()
+		if err := devicemesh.ImportLegacyState(context.Background(), sqlDB, meshDB); err != nil {
+			return nil, fmt.Errorf("consolidate device mesh authority: %w", err)
+		}
 		deviceMeshRuntime, meshErr := devicemesh.NewCloudRuntimeWithHubAndSessions(
-			sqlDB, kernelContainer.DeviceRegistry, meshHub, kernelContainer.DeviceRuntimeSessions,
+			meshDB, kernelContainer.DeviceRegistry, meshHub, kernelContainer.DeviceRuntimeSessions,
 		)
 		if meshErr != nil {
 			return nil, fmt.Errorf("failed to construct device mesh runtime: %w", meshErr)

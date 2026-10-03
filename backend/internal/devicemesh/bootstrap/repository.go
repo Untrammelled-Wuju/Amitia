@@ -19,7 +19,19 @@ func NewRepository(db *sql.DB) *Repository {
 }
 
 func (r *Repository) Create(ctx context.Context, ticket *BootstrapTicket) error {
-	_, err := r.db.ExecContext(ctx,
+	return createTicket(ctx, r.db, ticket)
+}
+
+func (r *Repository) CreateTx(ctx context.Context, tx *sql.Tx, ticket *BootstrapTicket) error {
+	return createTicket(ctx, tx, ticket)
+}
+
+type ticketExecutor interface {
+	ExecContext(context.Context, string, ...any) (sql.Result, error)
+}
+
+func createTicket(ctx context.Context, executor ticketExecutor, ticket *BootstrapTicket) error {
+	_, err := executor.ExecContext(ctx,
 		`INSERT INTO kernel_device_mesh_bootstrap_tickets (
 			ticket_id, ticket_hash, space_id, device_id, runtime_id, platform,
 			status, expires_at, consumed_at, created_at, updated_at

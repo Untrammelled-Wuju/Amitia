@@ -563,7 +563,7 @@ onUnmounted(() => {
 
 .side-nav :deep(button), .thread-name-input, .section-caption { line-height: 1.45; }
 .side-nav :deep(button:not(:disabled):focus-visible), .side-menu :deep(.el-menu-item:focus-visible), .side-menu :deep(.el-sub-menu__title:focus-visible) { outline: 2px solid var(--ac-color-primary); outline-offset: -2px; }
-.side-nav :deep(button:not(:disabled):not(.user-profile):active) { background: var(--control-active-bg); color: var(--text-primary); }
+.side-nav :deep(button:not(:disabled):not(.user-profile):not(.project-main):active) { background: var(--control-active-bg); color: var(--text-primary); }
 .icon-btn:active, .section-add:active, .project-action:active { transform: scale(0.96); }
 .thread-row:focus-within .thread-delete { opacity: 1; }
 </style>

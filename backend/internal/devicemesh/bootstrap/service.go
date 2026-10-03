@@ -42,6 +42,17 @@ func NewServiceWithDependencies(repo *Repository, db *sql.DB, exchangeFn CredExc
 }
 
 func (s *Service) Issue(ctx context.Context, spaceID runtimeidentity.SpaceID, deviceID runtimeidentity.DeviceID, runtimeID runtimeidentity.RuntimeID, platform runtimeidentity.Platform) (*BootstrapTicket, string, error) {
+	return s.issue(ctx, nil, spaceID, deviceID, runtimeID, platform)
+}
+
+func (s *Service) IssueTx(ctx context.Context, tx *sql.Tx, spaceID runtimeidentity.SpaceID, deviceID runtimeidentity.DeviceID, runtimeID runtimeidentity.RuntimeID, platform runtimeidentity.Platform) (*BootstrapTicket, string, error) {
+	if tx == nil {
+		return nil, "", fmt.Errorf("bootstrap: transaction is required")
+	}
+	return s.issue(ctx, tx, spaceID, deviceID, runtimeID, platform)
+}
+
+func (s *Service) issue(ctx context.Context, tx *sql.Tx, spaceID runtimeidentity.SpaceID, deviceID runtimeidentity.DeviceID, runtimeID runtimeidentity.RuntimeID, platform runtimeidentity.Platform) (*BootstrapTicket, string, error) {
 	raw, err := GenerateRawTicket()
 	if err != nil {
 		return nil, "", err
@@ -62,7 +73,12 @@ func (s *Service) Issue(ctx context.Context, spaceID runtimeidentity.SpaceID, de
 		UpdatedAt:  now,
 	}
 
-	if err := s.repo.Create(ctx, ticket); err != nil {
+	if tx == nil {
+		err = s.repo.Create(ctx, ticket)
+	} else {
+		err = s.repo.CreateTx(ctx, tx, ticket)
+	}
+	if err != nil {
 		return nil, "", fmt.Errorf("bootstrap: issue: %w", err)
 	}
 
