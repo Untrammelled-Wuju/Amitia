@@ -24,6 +24,12 @@ import (
 )
 
 func testTaskOwnerRPCOverActualTLS(t *testing.T, rt *devicemesh.Runtime, db, sourceDB *sql.DB, services *AppServices, signer *agent.IdentityStore, device runtimeidentity.DeviceID, credential string, server *httptest.Server, definition *task_runtime.TaskDefinition) {
+	for _, coordinated := range []bool{false, true} {
+		testTaskOwnerRPCModeOverActualTLS(t, rt, db, sourceDB, services, signer, device, credential, server, definition, coordinated)
+	}
+}
+
+func testTaskOwnerRPCModeOverActualTLS(t *testing.T, rt *devicemesh.Runtime, db, sourceDB *sql.DB, services *AppServices, signer *agent.IdentityStore, device runtimeidentity.DeviceID, credential string, server *httptest.Server, definition *task_runtime.TaskDefinition, coordinated bool) {
 	t.Helper()
 	corePort := setupMeshLocalDataPort(t)
 	corePort.ownerID = "core"
@@ -34,10 +40,16 @@ func testTaskOwnerRPCOverActualTLS(t *testing.T, rt *devicemesh.Runtime, db, sou
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := rt.Coordination.ChangeMode(t.Context(), "core", device.String(), policy.ModeRevision, true, "one"); err != nil {
-		t.Fatal(err)
+	if policy.Coordinated != coordinated {
+		if _, err := rt.Coordination.ChangeMode(t.Context(), "core", device.String(), policy.ModeRevision, coordinated, "one"); err != nil {
+			t.Fatal(err)
+		}
 	}
-	ctx, authority, finish, err := rt.Coordination.Begin(t.Context(), "core", "caller", device.String(), "core", "one", "core-task-owner")
+	id := "core-owner-rpc-task"
+	if !coordinated {
+		id = "device-owner-rpc-task"
+	}
+	ctx, authority, finish, err := rt.Coordination.Begin(t.Context(), "core", "caller", device.String(), "core", "one", id)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -66,7 +78,7 @@ func testTaskOwnerRPCOverActualTLS(t *testing.T, rt *devicemesh.Runtime, db, sou
 	fingerprint := sha256.Sum256(encoded)
 	input := json.RawMessage(`{"private":"core-owned-input"}`)
 	inputHash := sha256.Sum256(input)
-	run := &task_runtime.TaskRun{TaskRunID: "core-owner-rpc-task", TaskDefinitionID: definition.TaskID, ExtensionID: definition.ExtensionID, ModuleID: definition.ModuleID, InvocationID: "core-owner-invocation", ScopeSnapshotID: "core-owner-snapshot", DefinitionFingerprint: hex.EncodeToString(fingerprint[:]), InputHash: hex.EncodeToString(inputHash[:]), Input: input, Generation: 1, Revision: 1, Status: task_runtime.RunStatusRunning, ExecutionPlacement: task_runtime.TaskExecutionPlacementDevice, ExecutionAttemptID: "core-owner-attempt", ExecutionTarget: task_runtime.TaskExecutionTarget{SpaceID: "core", DeviceID: device, RuntimeID: connection.RuntimeID, RuntimeSessionID: connection.SessionID, ConnectionGeneration: connection.Generation}, CreatedAt: time.Now().UTC()}
+	run := &task_runtime.TaskRun{TaskRunID: id, TaskDefinitionID: definition.TaskID, ExtensionID: definition.ExtensionID, ModuleID: definition.ModuleID, InvocationID: id + "-invocation", ScopeSnapshotID: id + "-snapshot", DefinitionFingerprint: hex.EncodeToString(fingerprint[:]), InputHash: hex.EncodeToString(inputHash[:]), Input: input, Generation: 1, Revision: 1, Status: task_runtime.RunStatusRunning, ExecutionPlacement: task_runtime.TaskExecutionPlacementDevice, ExecutionAttemptID: "core-owner-attempt", ExecutionTarget: task_runtime.TaskExecutionTarget{SpaceID: "core", DeviceID: device, RuntimeID: connection.RuntimeID, RuntimeSessionID: connection.SessionID, ConnectionGeneration: connection.Generation}, CreatedAt: time.Now().UTC()}
 	encodedScope, _ := json.Marshal(authority)
 	if err := snapshots.SaveSnapshot(ctx, scope.ScopeSnapshot{SnapshotID: run.ScopeSnapshotID, SpaceID: "core", InvocationID: run.InvocationID, ExtensionID: run.ExtensionID, ModuleID: run.ModuleID, CharacterID: "one", OwnedExecutionScope: encodedScope}); err != nil {
 		t.Fatal(err)
@@ -92,7 +104,12 @@ func testTaskOwnerRPCOverActualTLS(t *testing.T, rt *devicemesh.Runtime, db, sou
 	if err := pending.BindAuthority(run.TaskRunID, run.ExecutionAttemptID.String(), connection.SessionID.String(), connection.Generation, func(context.Context) error { return nil }, callID); err != nil {
 		t.Fatal(err)
 	}
-	request := task_runtime.RemoteTaskOwnerRequest{Scope: authority, AuthorityCallID: callID, TaskGeneration: 1, AttemptID: run.ExecutionAttemptID.String(), LeaseID: entry.LeaseID, SessionID: connection.SessionID.String(), ConnectionGeneration: connection.Generation, RequestID: "source-request", Method: "task.storage.set", Params: json.RawMessage(`{"task_run_id":"core-owner-rpc-task","key":"private","value":{"location":"core-only"}}`)}
+	params := func(values map[string]any) json.RawMessage {
+		values["task_run_id"] = id
+		raw, _ := json.Marshal(values)
+		return raw
+	}
+	request := task_runtime.RemoteTaskOwnerRequest{Scope: authority, AuthorityCallID: callID, TaskGeneration: 1, AttemptID: run.ExecutionAttemptID.String(), LeaseID: entry.LeaseID, SessionID: connection.SessionID.String(), ConnectionGeneration: connection.Generation, RequestID: "source-request", Method: "task.storage.set", Params: params(map[string]any{"key": "private", "value": map[string]string{"location": "core-only"}})}
 	invoke := func(value task_runtime.RemoteTaskOwnerRequest, sign bool, expected int) []byte {
 		t.Helper()
 		body, _ := json.Marshal(value)
@@ -124,21 +141,21 @@ func testTaskOwnerRPCOverActualTLS(t *testing.T, rt *devicemesh.Runtime, db, sou
 		t.Fatal("task lease was not claimed")
 	}
 	invoke(request, true, http.StatusOK)
-	request.Method, request.RequestID, request.Params = "task.storage.get", "read-request", json.RawMessage(`{"task_run_id":"core-owner-rpc-task","key":"private"}`)
+	request.Method, request.RequestID, request.Params = "task.storage.get", "read-request", params(map[string]any{"key": "private"})
 	if result := invoke(request, true, http.StatusOK); !bytes.Contains(result, []byte(`"location":"core-only"`)) {
 		t.Fatalf("Core owner data not returned: %s", result)
 	}
 	checkpointRequest := request
-	checkpointRequest.Method, checkpointRequest.RequestID, checkpointRequest.Params = "task.checkpoint.save", "checkpoint-request", json.RawMessage(`{"task_run_id":"core-owner-rpc-task","version":1,"payload":{"cursor":1,"data":{"location":"core-only"}}}`)
+	checkpointRequest.Method, checkpointRequest.RequestID, checkpointRequest.Params = "task.checkpoint.save", "checkpoint-request", params(map[string]any{"version": 1, "payload": map[string]any{"cursor": 1, "data": map[string]string{"location": "core-only"}}})
 	invoke(checkpointRequest, true, http.StatusOK)
 	metadata, err := repository.GetLatestCheckpoint(t.Context(), run.TaskRunID)
 	if err != nil || metadata == nil || metadata.Version != 1 || len(metadata.Payload) != 0 {
 		t.Fatalf("Core task metadata lost checkpoint or copied its body: %+v %v", metadata, err)
 	}
 	progressRequest := request
-	progressRequest.Method, progressRequest.RequestID, progressRequest.Params = "task.progress.save", "progress-request", json.RawMessage(`{"task_run_id":"core-owner-rpc-task","sequence":1,"stage":"working","message":"core-owned progress"}`)
+	progressRequest.Method, progressRequest.RequestID, progressRequest.Params = "task.progress.save", "progress-request", params(map[string]any{"sequence": 1, "stage": "working", "message": "core-owned progress"})
 	invoke(progressRequest, true, http.StatusOK)
-	progressRequest.RequestID, progressRequest.Params = "progress-request-2", json.RawMessage(`{"task_run_id":"core-owner-rpc-task","sequence":2,"stage":"working","message":"core-owned progress next"}`)
+	progressRequest.RequestID, progressRequest.Params = "progress-request-2", params(map[string]any{"sequence": 2, "stage": "working", "message": "core-owned progress next"})
 	invoke(progressRequest, true, http.StatusOK)
 	progress, err := repository.GetProgress(t.Context(), run.TaskRunID)
 	if err != nil || progress == nil || progress.Sequence != 2 || progress.Message != "" || progress.Stage != "" {
@@ -150,10 +167,14 @@ func testTaskOwnerRPCOverActualTLS(t *testing.T, rt *devicemesh.Runtime, db, sou
 		invoke(invalid, true, http.StatusConflict)
 	}
 	var copies int
-	if err := sourceDB.QueryRow(`SELECT count(*) FROM kernel_device_owned_resources WHERE resource_id=?`, "task/storage/"+run.TaskRunID).Scan(&copies); err != nil || copies != 0 {
+	sourceCopies, coreCopies := 0, 1
+	if !coordinated {
+		sourceCopies, coreCopies = 1, 0
+	}
+	if err := sourceDB.QueryRow(`SELECT count(*) FROM kernel_device_owned_resources WHERE resource_id=?`, "task/storage/"+run.TaskRunID).Scan(&copies); err != nil || copies != sourceCopies {
 		t.Fatalf("source device mirrored Core task body: %d %v", copies, err)
 	}
-	if err := db.QueryRow(`SELECT count(*) FROM kernel_device_owned_resources WHERE owner_id='core' AND resource_id=?`, "task/storage/"+run.TaskRunID).Scan(&copies); err != nil || copies != 1 {
+	if err := db.QueryRow(`SELECT count(*) FROM kernel_device_owned_resources WHERE resource_id=?`, "task/storage/"+run.TaskRunID).Scan(&copies); err != nil || copies != coreCopies {
 		t.Fatalf("Core owner body was not stored in the Core kernel: %d %v", copies, err)
 	}
 	pending.Cancel(run.TaskRunID, "execution cancelled")
